@@ -14,19 +14,20 @@ MCPKit is a Go library for building production-grade MCP (Model Context Protocol
 │  │  Transport  │  │ MCP Middleware   │  │ Dispatch ││
 │  │ HTTP+SSE    │  │ Auth (bearer)    │  │tools/list││
 │  │ stdio       │  │ Tool timeout     │  │tools/call││
-│  │ (future:    │  │ Allowed-roots    │  │initialize││
-│  │  Streamable │  │ Tool authz       │  │resources/││
-│  │  HTTP)      │  │ MCP metrics      │  │ prompts/ ││
-│  └────────────┘  └─────────────────┘  └──────────┘│
-│  ┌────────────┐  ┌─────────────────────────────┐  │
-│  │ Session Hub │  │ servicekit (v0.0.7+)        │  │
-│  │ (SSE mgmt)  │  │ CORS, RateLimiter, Logger,  │  │
-│  └────────────┘  │ Recovery, BodyLimit, Health, │  │
-│                  │ RequestID, ServerTimeouts    │  │
-│                  └─────────────────────────────┘  │
+│  │ Streamable  │  │ Allowed-roots    │  │initialize││
+│  │  HTTP       │  │ Tool authz       │  │resources/││
+│  └────────────┘  │ MCP metrics      │  │ prompts/ ││
+│                  └─────────────────┘  └──────────┘│
+│  ┌─────────────────────────────────────────────┐  │
+│  │ servicekit (v0.0.10+)                        │  │
+│  │ SSEConn, SSEHub, ListenAndServeGraceful,     │  │
+│  │ StreamableServe, CORS, RateLimiter, Logger,  │  │
+│  │ Recovery, BodyLimit, Health, RequestID,       │  │
+│  │ ServerTimeouts, Guard, OriginChecker         │  │
+│  └─────────────────────────────────────────────┘  │
 ├──────────────────────────────────────────────────┤
 │     Sub-module: mcpkit/auth (separate go.mod)     │
-│     Imports oneauth (v0.0.45+) for JWT, OIDC      │
+│     Imports oneauth (v0.0.51+) for JWT, OIDC      │
 └──────────────────────────────────────────────────┘
 ```
 
@@ -34,7 +35,7 @@ MCPKit is a Go library for building production-grade MCP (Model Context Protocol
 
 1. **Transport is not protocol** — HTTP+SSE and stdio are transports. JSON-RPC dispatch is shared. Adding Streamable HTTP (MCP 2025-03-26) means adding a transport, not changing dispatch.
 
-2. **Generic middleware from servicekit, MCP-specific here** — CORS, rate limiting, request logging, recovery, body limits, health checks, request IDs, and server timeouts come from servicekit (v0.0.7+). mcpkit only implements MCP-specific middleware: session hub, tool timeout, allowed-roots, tool authz, MCP metrics.
+2. **Generic infrastructure from servicekit, MCP-specific here** — SSEConn/SSEHub, graceful shutdown, Streamable HTTP, CORS, rate limiting, request logging, recovery, body limits, health checks, request IDs, and server timeouts come from servicekit (v0.0.10+). mcpkit only implements MCP-specific middleware: tool timeout, allowed-roots, tool authz, MCP metrics.
 
 3. **Sub-module for heavy auth** — The core module ships `BearerTokenValidator` (constant-time compare, zero deps). JWT/OIDC lives in `mcpkit/auth`, a separate Go module with its own `go.mod` that imports oneauth. Apps that don't need JWT never pull in oneauth.
 
@@ -53,11 +54,11 @@ mcpkit/                     # module: github.com/panyam/mcpkit
 ├── tool.go                 # Tool registration, ToolHandler interface
 ├── transport/
 │   ├── sse/                # HTTP+SSE transport (MCP 2024-11-05)
-│   │   ├── handler.go      # SSE + POST handlers
-│   │   └── hub.go          # Session hub with per-session mutex
+│   │   └── handler.go      # SSE + POST handlers (uses servicekit SSEConn/SSEHub)
 │   ├── stdio/              # Content-Length framed stdio transport
 │   │   └── stdio.go
-│   └── streamhttp/         # (future) Streamable HTTP (MCP 2025-03-26)
+│   └── streamhttp/         # Streamable HTTP (MCP 2025-03-26)
+│       └── handler.go      # Uses servicekit StreamableServe
 ├── middleware/              # MCP-specific middleware only
 │   ├── auth.go             # AuthValidator interface + BearerTokenValidator (constant-time)
 │   ├── timeout.go          # Tool execution timeout (context.WithTimeout)
@@ -95,16 +96,20 @@ type AuthValidator interface {
 
 ## Session Lifecycle (HTTP+SSE)
 
-1. Client opens `GET /sse` → server creates session, sends `endpoint` event with POST URL
-2. Client sends JSON-RPC via `POST /message?session=<id>` → middleware chain → dispatch → response via SSE `message` event
-3. Server sends periodic `:ping` SSE comments to keep connection alive
-4. Client disconnects → `r.Context().Done()` fires → session cleanup
+Uses servicekit's `SSEConn[O]` and `SSEHub[O]`:
+
+1. Client opens `GET /sse` → handler creates `SSEConn`, registers in `SSEHub`, sends `endpoint` event with POST URL
+2. Client sends JSON-RPC via `POST /message?session=<id>` → middleware chain → dispatch → response pushed via `SSEHub.Send()`
+3. `SSEConn` sends periodic `:ping` keepalive comments automatically (configurable interval)
+4. Client disconnects → `r.Context().Done()` fires → `SSEHub.Unregister()` cleans up
 5. POST to expired session → `410 Gone`
 
 ## Graceful Shutdown
 
-1. SIGTERM received → stop accepting new SSE connections
-2. Send SSE close event to all active sessions
-3. Wait for in-flight tool executions (up to drain timeout)
-4. Close HTTP listener
+Uses servicekit's `ListenAndServeGraceful`:
+
+1. SIGTERM/SIGINT received → stops accepting new connections
+2. `OnShutdown` callback calls `SSEHub.CloseAll()` — notifies active SSE clients
+3. Waits for in-flight tool executions (configurable drain timeout)
+4. `http.Server.Shutdown()` closes listener
 5. Exit
