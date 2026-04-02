@@ -7,20 +7,14 @@
 - mcp-http-transport: Production-grade MCP HTTP+SSE server with session management
 - mcp-stdio-transport: Content-Length framed JSON-RPC stdio transport
 - mcp-auth-middleware: Bearer token, JWT (via oneauth), API key authentication for MCP endpoints
-- mcp-rate-limiter: Per-session and per-IP token-bucket rate limiting
-- mcp-request-logger: Structured logging (slog) with method, session, latency, caller
-- mcp-metrics: Prometheus-compatible metrics (request count, error rate, active sessions, tool duration)
-- mcp-health: /healthz endpoint for load balancer and k8s probes
 - mcp-session-hub: Concurrency-safe SSE session manager with per-session mutex
 - mcp-tool-timeout: context.WithTimeout wrapper for tool/subprocess execution
-- mcp-body-limit: http.MaxBytesReader middleware for request body size limits
-- mcp-server-timeouts: Sensible defaults for ReadTimeout, WriteTimeout, IdleTimeout
 - mcp-graceful-shutdown: SIGTERM handler with SSE drain and clean exit
 - mcp-sse-keepalive: Periodic SSE ping comments to survive proxy idle timeouts
 - mcp-allowed-roots: Restrict tool cwd to a set of allowed directories
-- mcp-cors: Configurable CORS with OPTIONS preflight handler
 - mcp-tool-authz: Per-tool authorization (role/scope to allowed tool names)
 - mcp-constant-time-auth: Timing-safe token comparison
+- mcp-metrics: MCP-specific metrics (tool call counters, session gauges, tool execution duration)
 
 ## Module
 github.com/panyam/mcpkit
@@ -31,10 +25,11 @@ newstack/mcpkit/main
 ## Stack Dependencies
 
 ### Core module (github.com/panyam/mcpkit)
+- servicekit (github.com/panyam/servicekit) v0.0.7+ — HTTP middleware (CORS, rate limiting, request logging, recovery, body limit, health check, request ID, server timeouts)
 - goutils (github.com/panyam/goutils) — concurrency utilities
 
 ### Sub-module: auth (github.com/panyam/mcpkit/auth)
-- oneauth (github.com/panyam/oneauth) — JWT/OIDC validation; separate go.mod so core has no oneauth dependency
+- oneauth (github.com/panyam/oneauth) v0.0.45+ — JWT/OIDC validation; separate go.mod so core has no oneauth dependency
 
 ## Integration
 
@@ -81,8 +76,8 @@ Active
 
 ## Conventions
 - Functional options pattern for server configuration
-- Middleware chain (auth → rate-limit → log → dispatch)
+- Generic HTTP middleware from servicekit (CORS, rate limiting, logging, health, body limit, request ID, server timeouts); MCP-specific middleware in mcpkit (session hub, tool timeout, allowed-roots, tool authz)
 - Transport/protocol separation (HTTP+SSE, stdio share dispatch layer)
-- oneauth is an optional dependency — bearer token works without it
+- oneauth is an optional dependency via sub-module — bearer token works without it
 - Per-session mutex for SSE write safety
 - slog for structured logging (no custom logger interface)

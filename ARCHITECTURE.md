@@ -10,23 +10,23 @@ MCPKit is a Go library for building production-grade MCP (Model Context Protocol
 │         (registers tools, handles calls)          │
 ├──────────────────────────────────────────────────┤
 │                    MCPKit                          │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐  │
-│  │  Transport  │  │ Middleware  │  │  Dispatch   │  │
-│  │ HTTP+SSE    │  │ Auth       │  │ tools/list  │  │
-│  │ stdio       │  │ RateLimit  │  │ tools/call  │  │
-│  │ (future:    │  │ Logger     │  │ initialize  │  │
-│  │  Streamable │  │ Metrics    │  │ resources/* │  │
-│  │  HTTP)      │  │ BodyLimit  │  │ prompts/*   │  │
-│  └────────────┘  │ CORS       │  └────────────┘  │
-│                  │ Timeout    │                    │
-│                  └────────────┘                    │
-│  ┌────────────┐  ┌────────────┐                   │
-│  │ Session Hub │  │  Health /  │                   │
-│  │ (SSE mgmt)  │  │  Metrics   │                   │
-│  └────────────┘  └────────────┘                   │
+│  ┌────────────┐  ┌─────────────────┐  ┌──────────┐│
+│  │  Transport  │  │ MCP Middleware   │  │ Dispatch ││
+│  │ HTTP+SSE    │  │ Auth (bearer)    │  │tools/list││
+│  │ stdio       │  │ Tool timeout     │  │tools/call││
+│  │ (future:    │  │ Allowed-roots    │  │initialize││
+│  │  Streamable │  │ Tool authz       │  │resources/││
+│  │  HTTP)      │  │ MCP metrics      │  │ prompts/ ││
+│  └────────────┘  └─────────────────┘  └──────────┘│
+│  ┌────────────┐  ┌─────────────────────────────┐  │
+│  │ Session Hub │  │ servicekit (v0.0.7+)        │  │
+│  │ (SSE mgmt)  │  │ CORS, RateLimiter, Logger,  │  │
+│  └────────────┘  │ Recovery, BodyLimit, Health, │  │
+│                  │ RequestID, ServerTimeouts    │  │
+│                  └─────────────────────────────┘  │
 ├──────────────────────────────────────────────────┤
 │     Sub-module: mcpkit/auth (separate go.mod)     │
-│     Imports oneauth for JWT, OIDC, API keys       │
+│     Imports oneauth (v0.0.45+) for JWT, OIDC      │
 └──────────────────────────────────────────────────┘
 ```
 
@@ -34,7 +34,7 @@ MCPKit is a Go library for building production-grade MCP (Model Context Protocol
 
 1. **Transport is not protocol** — HTTP+SSE and stdio are transports. JSON-RPC dispatch is shared. Adding Streamable HTTP (MCP 2025-03-26) means adding a transport, not changing dispatch.
 
-2. **Middleware chain, not monolith** — Each cross-cutting concern (auth, rate limiting, logging, metrics) is a separate middleware. Applications compose what they need via functional options.
+2. **Generic middleware from servicekit, MCP-specific here** — CORS, rate limiting, request logging, recovery, body limits, health checks, request IDs, and server timeouts come from servicekit (v0.0.7+). mcpkit only implements MCP-specific middleware: session hub, tool timeout, allowed-roots, tool authz, MCP metrics.
 
 3. **Sub-module for heavy auth** — The core module ships `BearerTokenValidator` (constant-time compare, zero deps). JWT/OIDC lives in `mcpkit/auth`, a separate Go module with its own `go.mod` that imports oneauth. Apps that don't need JWT never pull in oneauth.
 
@@ -58,17 +58,14 @@ mcpkit/                     # module: github.com/panyam/mcpkit
 │   ├── stdio/              # Content-Length framed stdio transport
 │   │   └── stdio.go
 │   └── streamhttp/         # (future) Streamable HTTP (MCP 2025-03-26)
-├── middleware/
+├── middleware/              # MCP-specific middleware only
 │   ├── auth.go             # AuthValidator interface + BearerTokenValidator (constant-time)
-│   ├── ratelimit.go        # Token-bucket per-session/IP
-│   ├── logger.go           # Structured request logging (slog)
-│   ├── metrics.go          # Prometheus counters/histograms
-│   ├── bodylimit.go        # MaxBytesReader
-│   ├── cors.go             # CORS + OPTIONS preflight
-│   ├── timeout.go          # Tool execution timeout
-│   └── roots.go            # Allowed-roots cwd restriction
-├── health/
-│   └── health.go           # /healthz handler
+│   ├── timeout.go          # Tool execution timeout (context.WithTimeout)
+│   ├── roots.go            # Allowed-roots cwd restriction
+│   ├── authz.go            # Per-tool authorization (role/scope → tool names)
+│   └── metrics.go          # MCP-specific metrics (tool calls, session gauges)
+│   # Generic HTTP middleware (CORS, rate limiting, logging, recovery,
+│   # body limit, health, request ID, server timeouts) from servicekit
 ├── jsonrpc/
 │   └── types.go            # JSON-RPC 2.0 request/response types
 │
