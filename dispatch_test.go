@@ -528,3 +528,125 @@ func TestDispatchPingBeforeInitialized(t *testing.T) {
 		t.Fatalf("ping should work before init, got error: %s", resp.Error.Message)
 	}
 }
+
+// TestDispatchLoggingSetLevel verifies that logging/setLevel accepts a valid log level,
+// stores it on the dispatcher, and returns an empty result object. This is the happy path
+// for clients configuring the MCP log stream.
+func TestDispatchLoggingSetLevel(t *testing.T) {
+	d := testDispatcher()
+	resp := d.Dispatch(context.Background(), &Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`10`),
+		Method:  "logging/setLevel",
+		Params:  json.RawMessage(`{"level":"warning"}`),
+	})
+
+	if resp == nil {
+		t.Fatal("response is nil")
+	}
+	if resp.Error != nil {
+		t.Fatalf("unexpected error: %s", resp.Error.Message)
+	}
+
+	// Verify the level was stored
+	stored := d.logLevel.Load()
+	if stored == nil {
+		t.Fatal("logLevel not set")
+	}
+	if *stored != LogWarning {
+		t.Errorf("logLevel = %v, want LogWarning", *stored)
+	}
+}
+
+// TestDispatchLoggingSetLevelAllLevels verifies that all 8 syslog-based log levels
+// are accepted by logging/setLevel. The MCP spec defines these as: debug, info, notice,
+// warning, error, critical, alert, emergency.
+func TestDispatchLoggingSetLevelAllLevels(t *testing.T) {
+	for _, level := range []string{"debug", "info", "notice", "warning", "error", "critical", "alert", "emergency"} {
+		t.Run(level, func(t *testing.T) {
+			d := testDispatcher()
+			resp := d.Dispatch(context.Background(), &Request{
+				JSONRPC: "2.0",
+				ID:      json.RawMessage(`1`),
+				Method:  "logging/setLevel",
+				Params:  json.RawMessage(`{"level":"` + level + `"}`),
+			})
+			if resp.Error != nil {
+				t.Fatalf("logging/setLevel(%q) failed: %s", level, resp.Error.Message)
+			}
+		})
+	}
+}
+
+// TestDispatchLoggingSetLevelInvalid verifies that logging/setLevel rejects unknown
+// level strings with a JSON-RPC invalid params error (-32602).
+func TestDispatchLoggingSetLevelInvalid(t *testing.T) {
+	d := testDispatcher()
+	resp := d.Dispatch(context.Background(), &Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`11`),
+		Method:  "logging/setLevel",
+		Params:  json.RawMessage(`{"level":"trace"}`),
+	})
+
+	if resp == nil {
+		t.Fatal("response is nil")
+	}
+	if resp.Error == nil {
+		t.Fatal("expected error for unknown level")
+	}
+	if resp.Error.Code != ErrCodeInvalidParams {
+		t.Errorf("error code = %d, want %d", resp.Error.Code, ErrCodeInvalidParams)
+	}
+}
+
+// TestDispatchLoggingSetLevelBeforeInit verifies that logging/setLevel is rejected
+// before the initialization handshake completes, consistent with MCP init gating.
+func TestDispatchLoggingSetLevelBeforeInit(t *testing.T) {
+	d := NewDispatcher(ServerInfo{Name: "test", Version: "1.0"})
+	resp := d.Dispatch(context.Background(), &Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "logging/setLevel",
+		Params:  json.RawMessage(`{"level":"info"}`),
+	})
+
+	if resp == nil {
+		t.Fatal("response is nil")
+	}
+	if resp.Error == nil {
+		t.Fatal("expected error before initialization")
+	}
+	if resp.Error.Code != ErrCodeInvalidRequest {
+		t.Errorf("error code = %d, want %d", resp.Error.Code, ErrCodeInvalidRequest)
+	}
+}
+
+// TestDispatchLoggingCapability verifies that the server advertises the logging
+// capability in the initialize response. Clients check this to know whether
+// logging/setLevel is supported.
+func TestDispatchLoggingCapability(t *testing.T) {
+	d := testDispatcher()
+	resp := d.Dispatch(context.Background(), &Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "initialize",
+		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+	})
+
+	if resp.Error != nil {
+		t.Fatalf("init failed: %s", resp.Error.Message)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatal(err)
+	}
+	caps, ok := result["capabilities"].(map[string]any)
+	if !ok {
+		t.Fatal("capabilities not a map")
+	}
+	if _, ok := caps["logging"]; !ok {
+		t.Error("capabilities missing logging")
+	}
+}

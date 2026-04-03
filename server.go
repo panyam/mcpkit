@@ -101,6 +101,9 @@ func (s *Server) Dispatch(ctx context.Context, req *Request) *Response {
 // middleware (e.g. tool timeout). Used by transports to dispatch on per-session
 // dispatchers.
 func (s *Server) dispatchWith(d *Dispatcher, ctx context.Context, req *Request) *Response {
+	// Inject session context so tool handlers can send notifications (logging, progress, etc.)
+	ctx = contextWithSession(ctx, d.notifyFunc, &d.logLevel)
+
 	if s.options.toolTimeout > 0 && req.Method == "tools/call" {
 		tctx, cancel := context.WithTimeout(ctx, s.options.toolTimeout)
 		defer cancel()

@@ -180,7 +180,22 @@ func (c *mcpSSEConn) OnStart(w http.ResponseWriter, r *http.Request) error {
 
 	// Register in hub and create per-session dispatcher
 	c.transport.hub.Register(&c.BaseSSEConn)
-	c.transport.sessions.Store(c.sessionID, c.transport.server.newSession())
+	dispatcher := c.transport.server.newSession()
+
+	// Wire up server-to-client notifications via the SSE stream.
+	// This closure captures the sessionID and hub, allowing tool handlers
+	// to push notifications (logging, progress, etc.) during execution.
+	sessionID := c.sessionID
+	hub := c.transport.hub
+	dispatcher.notifyFunc = func(method string, params any) {
+		raw, err := marshalNotification(method, params)
+		if err != nil {
+			return
+		}
+		hub.SendEvent(sessionID, "message", SSEJSON(raw))
+	}
+
+	c.transport.sessions.Store(c.sessionID, dispatcher)
 
 	// Send endpoint event with the POST URL as raw text.
 	// MCP clients expect the SSE data field to be a plain URL, not JSON-encoded.
