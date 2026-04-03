@@ -16,8 +16,27 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Run tests
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run unit tests
         run: go test ./... -v
 
       - name: Vet
         run: go vet ./...
+
+      - name: Start test server
+        run: |
+          STREAMABLE=1 PORT=18799 go run ./cmd/testserver &
+          for i in $(seq 1 30); do
+            curl -s -o /dev/null -X POST http://localhost:18799/mcp \
+              -H "Content-Type: application/json" \
+              -H "Accept: application/json, text/event-stream" \
+              -d '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"0.0"}}}' \
+              2>/dev/null && break
+            sleep 1
+          done
+
+      - name: Run conformance suite
+        run: npx -y @modelcontextprotocol/conformance server --url http://localhost:18799/mcp --expected-failures conformance/baseline.yml
