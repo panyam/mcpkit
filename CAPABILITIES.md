@@ -1,7 +1,7 @@
 # MCPKit
 
 ## Version
-0.0.4
+0.0.6
 
 ## Provides
 - mcp-protocol-negotiation: Version negotiation supporting MCP 2025-11-25 and 2024-11-05
@@ -20,7 +20,10 @@
 - mcp-cancellation: notifications/cancelled with inflight request tracking and context cancellation
 - mcp-logging: logging/setLevel + notifications/message via EmitLog() with per-session atomic log level
 - mcp-streamable-sse-streaming: Streamable HTTP POST returns SSE stream when Accept: text/event-stream, enabling mid-request notifications
-- mcp-conformance: Official MCP conformance test suite integration (20/30 passing)
+- mcp-progress: notifications/progress via EmitProgress() with _meta.progressToken
+- mcp-completion: completion/complete for argument autocompletion
+- mcp-dns-rebinding-protection: Origin header validation on Streamable HTTP (WithAllowedOrigins)
+- mcp-conformance: Official MCP conformance test suite integration (24/30 passing)
 
 ## Module
 github.com/panyam/mcpkit
