@@ -1,6 +1,7 @@
 package mcpkit
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -40,11 +41,13 @@ func testStreamableServer(opts ...TransportOption) *httptest.Server {
 
 // streamablePost sends a JSON-RPC request to the streamable endpoint and returns
 // the HTTP response. Adds Mcp-Session-Id header if sessionID is non-empty.
+// streamablePost sends a JSON-RPC request expecting a synchronous JSON response.
+// Uses Accept: application/json only — no SSE streaming.
 func streamablePost(url, sessionID string, body any) (*http.Response, error) {
 	raw, _ := json.Marshal(body)
 	req, _ := http.NewRequest(http.MethodPost, url, bytes.NewReader(raw))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("Accept", "application/json")
 	if sessionID != "" {
 		req.Header.Set(mcpSessionIDHeader, sessionID)
 	}
@@ -481,6 +484,245 @@ func TestStreamableCustomPrefix(t *testing.T) {
 	}
 	if resp.Header.Get(mcpSessionIDHeader) == "" {
 		t.Error("missing Mcp-Session-Id header")
+	}
+}
+
+// testStreamableServerWithLogging creates a test server that has a tool which emits
+// log notifications during execution, for testing SSE streaming responses.
+func testStreamableServerWithLogging(opts ...TransportOption) *httptest.Server {
+	srv := NewServer(ServerInfo{Name: "test-streamable-sse", Version: "0.1.0"})
+	srv.RegisterTool(
+		ToolDef{Name: "echo", Description: "Echoes input", InputSchema: map[string]any{"type": "object"}},
+		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
+			return TextResult("ok"), nil
+		},
+	)
+	srv.RegisterTool(
+		ToolDef{Name: "log_tool", Description: "Emits logs", InputSchema: map[string]any{"type": "object"}},
+		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
+			EmitLog(ctx, LogInfo, "test", "step one")
+			EmitLog(ctx, LogInfo, "test", "step two")
+			return TextResult("done"), nil
+		},
+	)
+	allOpts := append([]TransportOption{WithStreamableHTTP(true), WithSSE(false)}, opts...)
+	return httptest.NewServer(srv.Handler(allOpts...))
+}
+
+// streamableInitWithLogging initializes a session and enables logging on it.
+func streamableInitWithLogging(t *testing.T, url string) string {
+	t.Helper()
+	sessionID := streamableInit(t, url)
+
+	// Enable logging at debug level
+	resp, err := streamablePost(url+"/mcp", sessionID, &Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`99`),
+		Method:  "logging/setLevel",
+		Params:  json.RawMessage(`{"level":"debug"}`),
+	})
+	if err != nil {
+		t.Fatalf("logging/setLevel failed: %v", err)
+	}
+	resp.Body.Close()
+	return sessionID
+}
+
+// streamablePostSSE sends a JSON-RPC request with Accept: text/event-stream
+// and returns the raw response for SSE parsing.
+func streamablePostSSE(url, sessionID string, body any) (*http.Response, error) {
+	raw, _ := json.Marshal(body)
+	req, _ := http.NewRequest(http.MethodPost, url, bytes.NewReader(raw))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "text/event-stream")
+	if sessionID != "" {
+		req.Header.Set(mcpSessionIDHeader, sessionID)
+	}
+	return http.DefaultClient.Do(req)
+}
+
+// readSSEEvents reads all SSE events from a response body until EOF.
+func readSSEEvents(t *testing.T, body io.Reader) []sseEvent {
+	t.Helper()
+	var events []sseEvent
+	scanner := bufio.NewScanner(body)
+	var event, data string
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" {
+			if data != "" || event != "" {
+				events = append(events, sseEvent{Event: event, Data: data})
+				event, data = "", ""
+			}
+			continue
+		}
+		if strings.HasPrefix(line, "event:") {
+			event = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+		} else if strings.HasPrefix(line, "data:") {
+			data = strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		}
+	}
+	return events
+}
+
+// TestStreamableSSEResponse verifies that when a tool emits log notifications during
+// execution and the client sends Accept: text/event-stream, the response is an SSE
+// stream containing notification events followed by the JSON-RPC response.
+func TestStreamableSSEResponse(t *testing.T) {
+	ts := testStreamableServerWithLogging()
+	defer ts.Close()
+
+	sessionID := streamableInitWithLogging(t, ts.URL)
+
+	resp, err := streamablePostSSE(ts.URL+"/mcp", sessionID, &Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "tools/call",
+		Params:  json.RawMessage(`{"name":"log_tool","arguments":{}}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
+		t.Fatalf("Content-Type = %q, want text/event-stream", ct)
+	}
+
+	events := readSSEEvents(t, resp.Body)
+	if len(events) < 3 {
+		t.Fatalf("got %d events, want at least 3 (2 notifications + 1 response)", len(events))
+	}
+
+	// First two events should be log notifications
+	for i := 0; i < 2; i++ {
+		if !strings.Contains(events[i].Data, "notifications/message") {
+			t.Errorf("event[%d] = %q, want notifications/message", i, events[i].Data)
+		}
+	}
+
+	// Last event should be the JSON-RPC response
+	last := events[len(events)-1]
+	if !strings.Contains(last.Data, `"id":1`) {
+		t.Errorf("last event missing response id: %q", last.Data)
+	}
+	if !strings.Contains(last.Data, `"result"`) {
+		t.Errorf("last event missing result: %q", last.Data)
+	}
+}
+
+// TestStreamableSSEFallback verifies that when the client does NOT include
+// Accept: text/event-stream, the response is synchronous JSON (not SSE),
+// preserving backward compatibility.
+func TestStreamableSSEFallback(t *testing.T) {
+	ts := testStreamableServerWithLogging()
+	defer ts.Close()
+
+	sessionID := streamableInitWithLogging(t, ts.URL)
+
+	// POST with Accept: application/json only (no text/event-stream) — should get JSON
+	body, _ := json.Marshal(&Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "tools/call",
+		Params:  json.RawMessage(`{"name":"log_tool","arguments":{}}`),
+	})
+	httpReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(body))
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "application/json") // no text/event-stream
+	httpReq.Header.Set(mcpSessionIDHeader, sessionID)
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Fatalf("Content-Type = %q, want application/json", ct)
+	}
+
+	var rpcResp Response
+	json.NewDecoder(resp.Body).Decode(&rpcResp)
+	if rpcResp.Error != nil {
+		t.Fatalf("JSON-RPC error: %s", rpcResp.Error.Message)
+	}
+}
+
+// TestStreamableSSENotificationOrder verifies that notifications appear before
+// the JSON-RPC response in the SSE event stream.
+func TestStreamableSSENotificationOrder(t *testing.T) {
+	ts := testStreamableServerWithLogging()
+	defer ts.Close()
+
+	sessionID := streamableInitWithLogging(t, ts.URL)
+
+	resp, err := streamablePostSSE(ts.URL+"/mcp", sessionID, &Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "tools/call",
+		Params:  json.RawMessage(`{"name":"log_tool","arguments":{}}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	events := readSSEEvents(t, resp.Body)
+	// Find the response event (has "id" field)
+	responseIdx := -1
+	for i, ev := range events {
+		if strings.Contains(ev.Data, `"id":1`) && strings.Contains(ev.Data, `"result"`) {
+			responseIdx = i
+			break
+		}
+	}
+	if responseIdx < 0 {
+		t.Fatal("no response event found in SSE stream")
+	}
+
+	// All events before the response should be notifications
+	for i := 0; i < responseIdx; i++ {
+		if !strings.Contains(events[i].Data, "notifications/") {
+			t.Errorf("event[%d] before response is not a notification: %q", i, events[i].Data)
+		}
+	}
+
+	// Response should be the last event
+	if responseIdx != len(events)-1 {
+		t.Errorf("response at index %d, but %d events total — response should be last", responseIdx, len(events))
+	}
+}
+
+// TestStreamableSSENoNotifications verifies that when a tool doesn't emit any
+// notifications, the SSE stream still works — containing only the response event.
+func TestStreamableSSENoNotifications(t *testing.T) {
+	ts := testStreamableServerWithLogging()
+	defer ts.Close()
+
+	sessionID := streamableInitWithLogging(t, ts.URL)
+
+	// Call echo tool which doesn't emit logs
+	resp, err := streamablePostSSE(ts.URL+"/mcp", sessionID, &Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "tools/call",
+		Params:  json.RawMessage(`{"name":"echo","arguments":{}}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
+		t.Fatalf("Content-Type = %q, want text/event-stream", ct)
+	}
+
+	events := readSSEEvents(t, resp.Body)
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1 (response only)", len(events))
+	}
+	if !strings.Contains(events[0].Data, `"result"`) {
+		t.Errorf("event missing result: %q", events[0].Data)
 	}
 }
 

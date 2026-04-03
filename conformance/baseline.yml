@@ -18,8 +18,7 @@ server:
   - elicitation-sep1034-defaults   # Issue: #23
   - elicitation-sep1330-enums      # Issue: #23
 
-  # Tool scenarios requiring server-to-client features (Streamable HTTP SSE response)
-  - tools-call-with-logging     # Logging works over SSE but Streamable HTTP POST can't push notifications yet
+  # Tool scenarios requiring server-to-client features
   - tools-call-with-progress    # Requires progress notifications (#18)
   - tools-call-sampling         # Requires sampling/createMessage (#22)
   - tools-call-elicitation      # Requires elicitation/create (#23)
