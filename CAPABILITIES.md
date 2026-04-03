@@ -1,20 +1,20 @@
 # MCPKit
 
 ## Version
-0.0.1
+0.0.2
 
 ## Provides
 - mcp-protocol-negotiation: Version negotiation supporting MCP 2025-11-25 and 2024-11-05
 - mcp-initialization-gating: Enforces initialize/initialized handshake before accepting requests
 - mcp-tool-error-semantics: Spec-compliant isError tool results (not JSON-RPC errors) for handler failures
-- mcp-http-transport: Production-grade MCP HTTP+SSE server with session management
-- mcp-stdio-transport: Content-Length framed JSON-RPC stdio transport
-- mcp-auth-middleware: Bearer token, JWT (via oneauth), API key authentication for MCP endpoints
-- mcp-tool-timeout: context.WithTimeout wrapper for tool/subprocess execution
-- mcp-allowed-roots: Restrict tool cwd to a set of allowed directories
-- mcp-tool-authz: Per-tool authorization (role/scope to allowed tool names)
-- mcp-constant-time-auth: Timing-safe token comparison
-- mcp-metrics: MCP-specific metrics (tool call counters, session gauges, tool execution duration)
+- mcp-sse-transport: HTTP+SSE transport (MCP 2024-11-05) with per-session SSE streams
+- mcp-streamable-http-transport: Streamable HTTP transport (MCP 2025-03-26) with Mcp-Session-Id header sessions
+- mcp-dual-transport: Both SSE and Streamable HTTP simultaneously via WithSSE/WithStreamableHTTP options
+- mcp-graceful-shutdown: ListenAndServeGraceful with SSE hub drain on SIGTERM
+- mcp-auth-middleware: Bearer token (constant-time), JWT/OIDC via oneauth sub-module
+- mcp-tool-timeout: context.WithTimeout wrapper for tool execution
+- mcp-allowed-roots: Restrict tool cwd to allowed directories (option registered, not enforced yet)
+- mcp-conformance: Official MCP conformance test suite integration (9/30 passing)
 
 ## Module
 github.com/panyam/mcpkit
@@ -25,59 +25,42 @@ newstack/mcpkit/main
 ## Stack Dependencies
 
 ### Core module (github.com/panyam/mcpkit)
-- servicekit (github.com/panyam/servicekit) v0.0.10+ — HTTP middleware, SSEConn/SSEHub, ListenAndServeGraceful, StreamableServe
-- goutils (github.com/panyam/goutils) — concurrency utilities
+- servicekit (github.com/panyam/servicekit) v0.0.14 — SSEConn/SSEHub, ListenAndServeGraceful, StreamableServe
 
 ### Sub-module: auth (github.com/panyam/mcpkit/auth)
-- oneauth (github.com/panyam/oneauth) v0.0.51+ — JWT/OIDC validation; separate go.mod so core has no oneauth dependency
+- oneauth (github.com/panyam/oneauth) — JWT/OIDC validation; separate go.mod
 
 ## Integration
 
 ### Go Module
 ```go
-// go.mod
-require github.com/panyam/mcpkit v0.0.1
-
-// Local development
-replace github.com/panyam/mcpkit => ~/newstack/mcpkit/main
+require github.com/panyam/mcpkit v0.0.2
 ```
 
-### Basic Server
+### Basic Server (Streamable HTTP)
 ```go
-import "github.com/panyam/mcpkit"
-
 srv := mcpkit.NewServer(
+    mcpkit.ServerInfo{Name: "my-server", Version: "0.1.0"},
     mcpkit.WithListen(":8787"),
     mcpkit.WithBearerToken("secret"),
     mcpkit.WithToolTimeout(30 * time.Second),
-    mcpkit.WithHealthCheck(true),
 )
-srv.RegisterTool("mytool", myHandler)
-srv.ListenAndServe(ctx)
+srv.RegisterTool(def, handler)
+srv.ListenAndServe(mcpkit.WithStreamableHTTP(true))
 ```
 
-### With OneAuth JWT
+### Both Transports
 ```go
-import (
-    "github.com/panyam/mcpkit"
-    "github.com/panyam/mcpkit/auth"
-)
-
-srv := mcpkit.NewServer(
-    mcpkit.WithListen(":8787"),
-    mcpkit.WithAuth(auth.JWTValidator(keyStore)),
-    mcpkit.WithAllowedRoots("/data/decks", "/data/projects"),
-    mcpkit.WithMetrics(true),
-)
+srv.ListenAndServe(mcpkit.WithStreamableHTTP(true), mcpkit.WithSSE(true))
 ```
 
 ## Status
 Active
 
 ## Conventions
-- Functional options pattern for server configuration
-- Generic HTTP middleware + SSE infrastructure from servicekit (CORS, rate limiting, logging, health, body limit, request ID, server timeouts, SSEConn, SSEHub, graceful shutdown, Streamable HTTP); MCP-specific middleware in mcpkit (tool timeout, allowed-roots, tool authz)
-- Transport/protocol separation (HTTP+SSE, stdio share dispatch layer)
-- oneauth is an optional dependency via sub-module — bearer token works without it
-- Per-session mutex for SSE write safety
-- slog for structured logging (no custom logger interface)
+- Functional options pattern for server and transport configuration
+- SSE infrastructure from servicekit (SSEConn, SSEHub); MCP-specific middleware in mcpkit
+- Transport/protocol separation: dispatch layer shared across SSE and Streamable HTTP
+- Per-session Dispatchers via newSession() (tool registry shared by reference)
+- SSEData union type for SSE wire format (text for URLs, JSON for responses)
+- Conformance suite validates spec compliance via baseline.yml
