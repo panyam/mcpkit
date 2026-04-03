@@ -45,8 +45,28 @@ func (t *sseTransport) handler() http.Handler {
 		KeepalivePeriod: t.config.keepalivePeriod,
 	}
 
-	mux.HandleFunc(prefix+"/sse", gohttp.SSEServe[any](sseHandler, sseConfig))
+	sseServeFunc := gohttp.SSEServe[any](sseHandler, sseConfig)
+
+	// Canonical SSE endpoints per MCP 2024-11-05 spec.
+	mux.HandleFunc(prefix+"/sse", sseServeFunc)
 	mux.HandleFunc(prefix+"/message", t.handleMessage)
+
+	// Base prefix handler: many MCP clients (including the MCP Inspector)
+	// connect to the base URL rather than appending /sse. Route by method:
+	//   GET  → SSE stream (same as /sse)
+	//   POST → JSON-RPC message (same as /message)
+	// This also provides forward-compatibility with Streamable HTTP (MCP 2025-03-26)
+	// where a single endpoint handles both GET (SSE) and POST (JSON-RPC).
+	mux.HandleFunc(prefix, func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			sseServeFunc(w, r)
+		case http.MethodPost:
+			t.handleMessage(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
 
 	return mux
 }
