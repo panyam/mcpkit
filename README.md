@@ -95,10 +95,11 @@ handler := srv.Handler(
 | **Tools** | `tools/list`, `tools/call` |
 | **Resources** | `resources/list`, `resources/read`, `resources/templates/list` |
 | **Prompts** | `prompts/list`, `prompts/get` |
+| **Logging** | `logging/setLevel`, `notifications/message` via `EmitLog()` |
 | **Cancellation** | `notifications/cancelled` with context propagation |
 | **Pagination** | Cursor-based pagination for all list methods |
 
-Capabilities are auto-advertised in the `initialize` response when the corresponding handlers are registered.
+Capabilities are auto-advertised in the `initialize` response when the corresponding handlers are registered. Logging is always advertised.
 
 ## Protocol Support
 
@@ -109,7 +110,7 @@ Capabilities are auto-advertised in the `initialize` response when the correspon
 ## Testing
 
 ```bash
-make test         # Unit tests (64 tests)
+make test         # Unit tests (80 tests)
 make testconf     # MCP conformance suite (requires Node.js)
 make testall      # Both unit + conformance
 make smoke        # Curl-based transport tests (SSE + Streamable HTTP)
@@ -120,7 +121,7 @@ make serve-streamable  # Streamable HTTP on :8787
 
 ### Conformance Suite
 
-Validated against the [official MCP conformance test suite](https://github.com/modelcontextprotocol/conformance). Current status: **18/30 scenarios passing** (remaining require logging, sampling, elicitation, and subscriptions — tracked in `conformance/baseline.yml`).
+Validated against the [official MCP conformance test suite](https://github.com/modelcontextprotocol/conformance). Current status: **19/30 scenarios passing** (remaining require progress, sampling, elicitation, subscriptions, and Streamable HTTP SSE streaming — tracked in `conformance/baseline.yml`).
 
 ```bash
 bash scripts/conformance-test.sh                    # full suite

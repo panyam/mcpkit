@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"time"
 
 	"github.com/panyam/mcpkit"
 )
@@ -93,6 +94,26 @@ func registerConformanceTools(srv *mcpkit.Server) {
 					{Type: "image", MimeType: "image/png", Data: base64.StdEncoding.EncodeToString(pngBytes)},
 				},
 			}, nil
+		},
+	)
+
+	// test_tool_with_logging: emits 3 log notifications during tool execution.
+	// The conformance suite calls this tool after setting the log level to verify
+	// that notifications/message events are sent on the transport during execution.
+	// Sends 3 info-level log notifications with 50ms delays to test streaming.
+	srv.RegisterTool(
+		mcpkit.ToolDef{
+			Name:        "test_tool_with_logging",
+			Description: "Emits log notifications during execution for conformance testing",
+			InputSchema: map[string]any{"type": "object"},
+		},
+		func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
+			mcpkit.EmitLog(ctx, mcpkit.LogInfo, "test", "Tool execution started")
+			time.Sleep(50 * time.Millisecond)
+			mcpkit.EmitLog(ctx, mcpkit.LogInfo, "test", "Tool processing data")
+			time.Sleep(50 * time.Millisecond)
+			mcpkit.EmitLog(ctx, mcpkit.LogInfo, "test", "Tool execution completed")
+			return mcpkit.TextResult("Execution complete"), nil
 		},
 	)
 

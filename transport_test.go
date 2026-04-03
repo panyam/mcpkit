@@ -454,3 +454,224 @@ func TestSSEPublicURL(t *testing.T) {
 		t.Errorf("endpoint URL = %q, want https://proxy.example.com prefix", postURL)
 	}
 }
+
+// TestSSELoggingNotification verifies the full MCP logging lifecycle over SSE:
+// 1. Connect SSE and complete the init handshake
+// 2. Set log level via logging/setLevel
+// 3. Call a tool that emits a log notification via EmitLog
+// 4. Verify the notifications/message event arrives on the SSE stream before the tool result
+//
+// This exercises the complete notification pipeline: EmitLog → NotifyFunc → hub.SendEvent → SSE stream.
+func TestSSELoggingNotification(t *testing.T) {
+	srv := NewServer(ServerInfo{Name: "test-logging", Version: "0.1.0"})
+
+	// Register a tool that emits a log notification
+	srv.RegisterTool(
+		ToolDef{
+			Name:        "log_emitter",
+			Description: "Emits a log notification then returns a result",
+			InputSchema: map[string]any{"type": "object"},
+		},
+		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
+			EmitLog(ctx, LogInfo, "test-logger", "hello from tool")
+			return TextResult("done"), nil
+		},
+	)
+
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	// Connect SSE
+	sseResp, postURL, err := connectSSE(ts, "/mcp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sseResp.Body.Close()
+	reader := bufio.NewReader(sseResp.Body)
+
+	// Initialize
+	resp, err := postJSON(postURL, &Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "initialize",
+		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	// Consume init response from SSE
+	if _, err := readSSEEvent(reader); err != nil {
+		t.Fatal(err)
+	}
+
+	// Send notifications/initialized
+	resp, err = postJSON(postURL, &Request{
+		JSONRPC: "2.0",
+		Method:  "notifications/initialized",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	// Set log level to debug (accept everything)
+	resp, err = postJSON(postURL, &Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`2`),
+		Method:  "logging/setLevel",
+		Params:  json.RawMessage(`{"level":"debug"}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	// Consume logging/setLevel response from SSE
+	if _, err := readSSEEvent(reader); err != nil {
+		t.Fatal(err)
+	}
+
+	// Call the tool that emits a log
+	resp, err = postJSON(postURL, &Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`3`),
+		Method:  "tools/call",
+		Params:  json.RawMessage(`{"name":"log_emitter","arguments":{}}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	// Read the log notification from SSE (should arrive before or with the tool result)
+	// We expect two events: the notifications/message and the tool result.
+	var logNotification, toolResult *sseEvent
+	for i := 0; i < 2; i++ {
+		ev, err := readSSEEvent(reader)
+		if err != nil {
+			t.Fatalf("reading event %d: %v", i, err)
+		}
+
+		// Determine if this is a notification (no id) or a response (has id)
+		var obj map[string]json.RawMessage
+		if err := json.Unmarshal([]byte(ev.Data), &obj); err != nil {
+			t.Fatalf("event %d: unmarshal: %v", i, err)
+		}
+		if _, hasMethod := obj["method"]; hasMethod {
+			logNotification = &ev
+		} else {
+			toolResult = &ev
+		}
+	}
+
+	if logNotification == nil {
+		t.Fatal("did not receive log notification")
+	}
+	if toolResult == nil {
+		t.Fatal("did not receive tool result")
+	}
+
+	// Verify the log notification structure
+	var notif struct {
+		JSONRPC string     `json:"jsonrpc"`
+		Method  string     `json:"method"`
+		Params  LogMessage `json:"params"`
+	}
+	if err := json.Unmarshal([]byte(logNotification.Data), &notif); err != nil {
+		t.Fatalf("unmarshal notification: %v", err)
+	}
+	if notif.JSONRPC != "2.0" {
+		t.Errorf("jsonrpc = %q, want 2.0", notif.JSONRPC)
+	}
+	if notif.Method != "notifications/message" {
+		t.Errorf("method = %q, want notifications/message", notif.Method)
+	}
+	if notif.Params.Level != "info" {
+		t.Errorf("level = %q, want info", notif.Params.Level)
+	}
+	if notif.Params.Logger != "test-logger" {
+		t.Errorf("logger = %q, want test-logger", notif.Params.Logger)
+	}
+
+	// Verify the tool result
+	var toolResp Response
+	if err := json.Unmarshal([]byte(toolResult.Data), &toolResp); err != nil {
+		t.Fatalf("unmarshal tool response: %v", err)
+	}
+	if toolResp.Error != nil {
+		t.Fatalf("tool error: %s", toolResp.Error.Message)
+	}
+}
+
+// TestSSELoggingFilteredByLevel verifies that log notifications are not sent
+// when the message level is below the session's minimum. The tool emits a debug
+// message but the session level is set to error, so no notification should arrive.
+func TestSSELoggingFilteredByLevel(t *testing.T) {
+	srv := NewServer(ServerInfo{Name: "test-filter", Version: "0.1.0"})
+
+	srv.RegisterTool(
+		ToolDef{
+			Name:        "debug_logger",
+			Description: "Emits a debug log",
+			InputSchema: map[string]any{"type": "object"},
+		},
+		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
+			EmitLog(ctx, LogDebug, "test", "debug msg")
+			return TextResult("ok"), nil
+		},
+	)
+
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	sseResp, postURL, err := connectSSE(ts, "/mcp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sseResp.Body.Close()
+	reader := bufio.NewReader(sseResp.Body)
+
+	// Init handshake
+	resp, _ := postJSON(postURL, &Request{
+		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "initialize",
+		Params: json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+	})
+	resp.Body.Close()
+	readSSEEvent(reader) // consume init response
+
+	resp, _ = postJSON(postURL, &Request{JSONRPC: "2.0", Method: "notifications/initialized"})
+	resp.Body.Close()
+
+	// Set level to error (high threshold)
+	resp, _ = postJSON(postURL, &Request{
+		JSONRPC: "2.0", ID: json.RawMessage(`2`), Method: "logging/setLevel",
+		Params: json.RawMessage(`{"level":"error"}`),
+	})
+	resp.Body.Close()
+	readSSEEvent(reader) // consume setLevel response
+
+	// Call tool that emits debug (should be filtered)
+	resp, _ = postJSON(postURL, &Request{
+		JSONRPC: "2.0", ID: json.RawMessage(`3`), Method: "tools/call",
+		Params: json.RawMessage(`{"name":"debug_logger","arguments":{}}`),
+	})
+	resp.Body.Close()
+
+	// Should only get the tool result, no notification
+	ev, err := readSSEEvent(reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify this is the tool result (has id), not a notification
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(ev.Data), &obj); err != nil {
+		t.Fatal(err)
+	}
+	if _, hasMethod := obj["method"]; hasMethod {
+		t.Error("received a notification despite debug level being filtered")
+	}
+	if _, hasID := obj["id"]; !hasID {
+		t.Error("expected tool result with id")
+	}
+}

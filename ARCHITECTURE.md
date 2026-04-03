@@ -7,7 +7,7 @@ MCPKit is a Go library for building production-grade MCP (Model Context Protocol
 ```
 ┌──────────────────────────────────────────────────┐
 │                   Application                     │
-│         (registers tools, handles calls)          │
+│    (registers tools/resources/prompts, handles)   │
 ├──────────────────────────────────────────────────┤
 │                    MCPKit                          │
 │  ┌────────────┐  ┌─────────────────┐  ┌──────────┐│
@@ -17,7 +17,12 @@ MCPKit is a Go library for building production-grade MCP (Model Context Protocol
 │  │  HTTP       │  │ Allowed-roots    │  │initialize││
 │  │ stdio (tbd) │  │ Tool authz       │  │resources/││
 │  └────────────┘  │ MCP metrics      │  │ prompts/ ││
-│                  └─────────────────┘  └──────────┘│
+│                  └─────────────────┘  │ logging/ ││
+│  ┌────────────────────────────────┐   └──────────┘│
+│  │ Notifications (logging.go)     │               │
+│  │ NotifyFunc, EmitLog, LogLevel  │               │
+│  │ Context-based session injection│               │
+│  └────────────────────────────────┘               │
 │  ┌─────────────────────────────────────────────┐  │
 │  │ servicekit (v0.0.14)                         │  │
 │  │ SSEConn, SSEHub, ListenAndServeGraceful,     │  │
@@ -46,7 +51,8 @@ MCPKit is a Go library for building production-grade MCP (Model Context Protocol
 ```
 mcpkit/                          # module: github.com/panyam/mcpkit
 ├── go.mod                       # servicekit v0.0.14
-├── dispatch.go                  # Dispatcher: JSON-RPC routing, version negotiation, init gating
+├── dispatch.go                  # Dispatcher: JSON-RPC routing, version negotiation, init gating, logging/setLevel
+├── logging.go                   # LogLevel, LogMessage, NotifyFunc, EmitLog, context helpers
 ├── server.go                    # Server, options, Handler(), ListenAndServe(), transport config
 ├── tool.go                      # ToolDef, ToolRequest, ToolResult, Content, ToolHandler
 ├── resource.go                  # ResourceDef, ResourceTemplate, ResourceHandler types
@@ -62,7 +68,7 @@ mcpkit/                          # module: github.com/panyam/mcpkit
 │   ├── conformance_resources.go # Resources + templates for conformance
 │   └── conformance_prompts.go   # Prompts for conformance
 ├── conformance/
-│   └── baseline.yml             # Expected conformance failures (13 scenarios)
+│   └── baseline.yml             # Expected conformance failures (12 scenarios)
 ├── scripts/
 │   ├── smoke-test.sh            # Curl-based tests for SSE + Streamable HTTP
 │   └── conformance-test.sh      # Runs @modelcontextprotocol/conformance
@@ -140,6 +146,24 @@ Supports `2025-11-25` and `2024-11-05`. During `initialize`, server checks if cl
 2. Client sends `notifications/initialized` → server marks session as ready
 3. Only after step 2 does the server accept `tools/list`, `tools/call`, etc.
 4. `ping` is exempt — allowed at any time
+
+## Server-to-Client Notifications
+
+MCPKit supports server-initiated notifications via `NotifyFunc`, a generic `func(method string, params any)` callback. This is the foundation for logging, progress, and list-changed notifications.
+
+### How it works
+
+1. Transport creates a session dispatcher and sets `dispatcher.notifyFunc` to a transport-specific sender
+2. `Server.dispatchWith` injects the notify func + log level into the context via `contextWithSession`
+3. Tool handlers call `EmitLog(ctx, level, logger, data)` which checks the session's log level and calls the notify func
+4. SSE transport: `notifyFunc` pushes via `hub.SendEvent` (real-time delivery)
+5. Streamable HTTP: `notifyFunc` is nil (notifications silently dropped until GET SSE stream ships)
+
+### Logging
+
+- Client sends `logging/setLevel` → dispatcher stores minimum level per-session via `atomic.Pointer[LogLevel]`
+- Tool handler calls `EmitLog(ctx, LogInfo, "logger", "message")` → filtered by level → pushed as `notifications/message`
+- Thread-safe: atomic read of log level from tool goroutines while `logging/setLevel` writes
 
 ## Tool Error Semantics
 

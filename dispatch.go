@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 // supportedProtocolVersions lists the MCP protocol versions this server supports,
@@ -38,6 +39,16 @@ type Dispatcher struct {
 	clientCaps        ClientCapabilities // set by initialize
 	clientInfo        ClientInfo         // set by initialize
 	initialized       bool               // set to true by notifications/initialized
+
+	// Logging state (per-session).
+	// logLevel stores the minimum log level set by the client via logging/setLevel.
+	// nil means logging is disabled (client has not called logging/setLevel).
+	// Accessed atomically because tool handlers read it from concurrent goroutines.
+	logLevel atomic.Pointer[LogLevel]
+
+	// notifyFunc is set by the transport to push server-to-client notifications.
+	// nil means no push capability (e.g., Streamable HTTP without GET SSE stream).
+	notifyFunc NotifyFunc
 }
 
 type toolEntry struct {
@@ -203,6 +214,8 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *Request) *Response {
 			return d.handlePromptsList(id, req.Params)
 		case "prompts/get":
 			return d.handlePromptsGet(ctx, id, req.Params)
+		case "logging/setLevel":
+			return d.handleLoggingSetLevel(id, req.Params)
 		default:
 			return NewErrorResponse(id, ErrCodeMethodNotFound, "method not found: "+req.Method)
 		}
@@ -233,7 +246,8 @@ func (d *Dispatcher) handleInitialize(id json.RawMessage, params json.RawMessage
 	d.clientInfo = p.ClientInfo
 
 	caps := map[string]any{
-		"tools": map[string]any{},
+		"tools":   map[string]any{},
+		"logging": map[string]any{},
 	}
 	if len(d.resources) > 0 || len(d.templates) > 0 {
 		caps["resources"] = map[string]any{}
@@ -397,6 +411,26 @@ func (d *Dispatcher) handleCancelled(params json.RawMessage) {
 	if cancelFn, ok := d.inflight.LoadAndDelete(string(p.RequestID)); ok {
 		cancelFn.(context.CancelFunc)()
 	}
+}
+
+// --- Logging ---
+
+// handleLoggingSetLevel handles the logging/setLevel method.
+// It sets the minimum log level for this session. After this call, the server
+// will send notifications/message for log entries at or above the specified level.
+func (d *Dispatcher) handleLoggingSetLevel(id json.RawMessage, params json.RawMessage) *Response {
+	var p struct {
+		Level string `json:"level"`
+	}
+	if err := json.Unmarshal(params, &p); err != nil {
+		return NewErrorResponse(id, ErrCodeInvalidParams, "invalid logging/setLevel params: "+err.Error())
+	}
+	level, ok := ParseLogLevel(p.Level)
+	if !ok {
+		return NewErrorResponse(id, ErrCodeInvalidParams, "unknown log level: "+p.Level)
+	}
+	d.logLevel.Store(&level)
+	return NewResponse(id, map[string]any{})
 }
 
 // --- Template matching ---
