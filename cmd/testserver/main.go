@@ -104,8 +104,10 @@ func main() {
 		},
 	)
 
-	// Register conformance suite tools (test_simple_text, test_error_handling, etc.)
+	// Register conformance suite tools, resources, and prompts
 	registerConformanceTools(srv)
+	registerConformanceResources(srv)
+	registerConformancePrompts(srv)
 
 	var transportOpts []mcpkit.TransportOption
 	switch {
