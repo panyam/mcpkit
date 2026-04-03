@@ -52,7 +52,7 @@ See `ARCHITECTURE.md` for transport design, type definitions, and protocol detai
 
 ## Conformance Status
 
-22/30 MCP conformance scenarios passing. Failing scenarios are tracked in `conformance/baseline.yml` with issue references. See `README.md` for testing instructions.
+24/30 MCP conformance scenarios passing. Failing scenarios are tracked in `conformance/baseline.yml` with issue references. See `README.md` for testing instructions.
 
 ## What's Not Implemented Yet
 
