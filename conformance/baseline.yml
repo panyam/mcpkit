@@ -13,27 +13,18 @@ server:
   - completion-complete         # Issue: #21 (completion/complete)
   - server-sse-multiple-streams # Requires GET SSE stream (Streamable HTTP phase 2)
 
-  # Missing capabilities (resources, prompts, elicitation, sampling)
-  - resources-list              # Issue: #13
-  - resources-read-text         # Issue: #13
-  - resources-read-binary       # Issue: #13
-  - resources-templates-read    # Issue: #13
+  # Missing capabilities (subscriptions, elicitation, sampling)
   - resources-subscribe         # Issue: #24
   - resources-unsubscribe       # Issue: #24
-  - prompts-list                # Issue: #14
-  - prompts-get-simple          # Issue: #14
-  - prompts-get-with-args       # Issue: #14
-  - prompts-get-embedded-resource  # Issue: #14
-  - prompts-get-with-image      # Issue: #14
   - elicitation-sep1034-defaults   # Issue: #23
   - elicitation-sep1330-enums      # Issue: #23
 
-  # Tool scenarios requiring server-to-client features (sampling, progress, logging, elicitation)
+  # Tool scenarios requiring server-to-client features
   - tools-call-with-logging     # Requires logging notifications (#19)
   - tools-call-with-progress    # Requires progress notifications (#18)
   - tools-call-sampling         # Requires sampling/createMessage (#22)
   - tools-call-elicitation      # Requires elicitation/create (#23)
-  - tools-call-mixed-content    # Expected response format mismatch (needs embedded resource in mixed content)
+  - tools-call-mixed-content    # Expected response format mismatch
 
   # Security
-  - dns-rebinding-protection    # Requires Origin header validation (partial pass, 1 of 2 checks)
+  - dns-rebinding-protection    # Requires Origin header validation (partial pass)

@@ -77,6 +77,21 @@ func (s *Server) RegisterTool(def ToolDef, handler ToolHandler) {
 	s.dispatcher.RegisterTool(def, handler)
 }
 
+// RegisterResource adds a resource to the server.
+func (s *Server) RegisterResource(def ResourceDef, handler ResourceHandler) {
+	s.dispatcher.RegisterResource(def, handler)
+}
+
+// RegisterResourceTemplate adds a URI template resource to the server.
+func (s *Server) RegisterResourceTemplate(def ResourceTemplate, handler TemplateHandler) {
+	s.dispatcher.RegisterResourceTemplate(def, handler)
+}
+
+// RegisterPrompt adds a prompt to the server.
+func (s *Server) RegisterPrompt(def PromptDef, handler PromptHandler) {
+	s.dispatcher.RegisterPrompt(def, handler)
+}
+
 // Dispatch routes a JSON-RPC request through the server's dispatch layer.
 func (s *Server) Dispatch(ctx context.Context, req *Request) *Response {
 	return s.dispatchWith(s.dispatcher, ctx, req)
