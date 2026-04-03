@@ -104,6 +104,9 @@ func main() {
 		},
 	)
 
+	// Register conformance suite tools (test_simple_text, test_error_handling, etc.)
+	registerConformanceTools(srv)
+
 	var transportOpts []mcpkit.TransportOption
 	switch {
 	case os.Getenv("BOTH") == "1":

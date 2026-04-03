@@ -19,6 +19,11 @@ test-v: ## Run unit tests with verbose output
 smoke: ## Run smoke tests (starts test servers, tests both transports via curl)
 	bash scripts/smoke-test.sh
 
+testconf: ## Run MCP conformance test suite (requires Node.js/npx)
+	bash scripts/conformance-test.sh
+
+testall: test testconf ## Run unit tests + conformance suite
+
 vet: ## Run go vet
 	go vet ./...
 
@@ -95,5 +100,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-race test-v smoke vet lint vulncheck seccheck secrets audit ci ci-full serve serve-streamable serve-both tidy setup-tools setup-hooks setup help
+.PHONY: build test test-race test-v smoke testconf testall vet lint vulncheck seccheck secrets audit ci ci-full serve serve-streamable serve-both tidy setup-tools setup-hooks setup help
 .DEFAULT_GOAL := help
