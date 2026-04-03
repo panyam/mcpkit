@@ -42,7 +42,7 @@ make serve-both   # Both transports
 - **Conformance baseline**: when a feature passes its conformance test, remove it from `conformance/baseline.yml`. Stale entries cause CI failure.
 - **SSE transport sessions** die with the connection (no TTL needed). **Streamable HTTP sessions** persist until DELETE or server restart.
 - **Capabilities auto-advertise**: resources/prompts capabilities only appear in initialize response when resources/prompts are actually registered. Logging is always advertised.
-- **Server-to-client notifications** (logging, progress) work over SSE transport but are silently dropped over Streamable HTTP (no GET SSE stream yet). The `NotifyFunc` is nil for Streamable HTTP sessions. Use `EmitLog(ctx, level, logger, data)` in tool handlers — it's a safe no-op when notifications can't be delivered.
+- **Server-to-client notifications** (logging, progress) work over both transports. SSE: pushed via hub. Streamable HTTP: POST response switches to SSE streaming (`Content-Type: text/event-stream`) when client sends `Accept: text/event-stream`. Falls back to synchronous JSON if client doesn't accept SSE.
 
 ## Architecture
 
@@ -50,7 +50,7 @@ See `ARCHITECTURE.md` for transport design, type definitions, and protocol detai
 
 ## Conformance Status
 
-19/30 MCP conformance scenarios passing. Failing scenarios are tracked in `conformance/baseline.yml` with issue references. See `README.md` for testing instructions.
+20/30 MCP conformance scenarios passing. Failing scenarios are tracked in `conformance/baseline.yml` with issue references. See `README.md` for testing instructions.
 
 ## What's Not Implemented Yet
 

@@ -3,6 +3,7 @@ package mcpkit
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -120,16 +121,24 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	// Dispatch
+	// If client supports SSE and this is a request (not notification), use SSE streaming
+	// so server-to-client notifications (logging, progress) can be delivered mid-request.
+	wantsSSE := strings.Contains(r.Header.Get("Accept"), "text/event-stream")
+	isRequest := !req.IsNotification()
+
+	if wantsSSE && isRequest {
+		t.handlePostSSE(w, r, dispatcher, &req)
+		return
+	}
+
+	// Synchronous JSON path (no mid-request notifications)
 	resp := t.server.dispatchWith(dispatcher, r.Context(), &req)
 
-	// Notification/response (no JSON-RPC response expected)
 	if resp == nil {
 		w.WriteHeader(http.StatusAccepted)
 		return
 	}
 
-	// Request → JSON response
 	w.Header().Set("Content-Type", "application/json")
 	raw, err := json.Marshal(resp)
 	if err != nil {
@@ -137,6 +146,63 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	w.Write(raw)
+}
+
+// handlePostSSE handles a POST request using SSE streaming, allowing the server
+// to send notifications (logging, progress) as SSE events before the final
+// JSON-RPC response. Per MCP spec: "the server MUST either return
+// Content-Type: text/event-stream, to initiate an SSE stream, or
+// Content-Type: application/json, to return one JSON object."
+func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Request, d *Dispatcher, req *Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		// Fall back to synchronous JSON if flushing not supported
+		resp := t.server.dispatchWith(d, r.Context(), req)
+		if resp == nil {
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		raw, _ := json.Marshal(resp)
+		w.Write(raw)
+		return
+	}
+
+	// Set SSE headers
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+
+	var mu sync.Mutex
+	writeSSE := func(data []byte) {
+		mu.Lock()
+		defer mu.Unlock()
+		fmt.Fprintf(w, "event: message\ndata: %s\n\n", data)
+		flusher.Flush()
+	}
+
+	// Wire notifyFunc to SSE writer for this request.
+	// This enables EmitLog() and Notify() calls in tool handlers to push
+	// notifications as SSE events during request execution.
+	prevNotify := d.notifyFunc
+	d.notifyFunc = func(method string, params any) {
+		raw, err := marshalNotification(method, params)
+		if err != nil {
+			return
+		}
+		writeSSE(raw)
+	}
+	defer func() { d.notifyFunc = prevNotify }()
+
+	// Dispatch (synchronous — notifications stream as events during execution)
+	resp := t.server.dispatchWith(d, r.Context(), req)
+
+	// Write the JSON-RPC response as the final SSE event
+	if resp != nil {
+		raw, _ := json.Marshal(resp)
+		writeSSE(raw)
+	}
 }
 
 // handleInitialize handles POST initialize: creates session, dispatches, returns

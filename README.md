@@ -121,7 +121,7 @@ make serve-streamable  # Streamable HTTP on :8787
 
 ### Conformance Suite
 
-Validated against the [official MCP conformance test suite](https://github.com/modelcontextprotocol/conformance). Current status: **19/30 scenarios passing** (remaining require progress, sampling, elicitation, subscriptions, and Streamable HTTP SSE streaming — tracked in `conformance/baseline.yml`).
+Validated against the [official MCP conformance test suite](https://github.com/modelcontextprotocol/conformance). Current status: **20/30 scenarios passing** (remaining require progress, sampling, elicitation, subscriptions, and Streamable HTTP SSE streaming — tracked in `conformance/baseline.yml`).
 
 ```bash
 bash scripts/conformance-test.sh                    # full suite
