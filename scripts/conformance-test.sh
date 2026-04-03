@@ -24,9 +24,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Check for npx
+# Check for npx (Node.js 22+ required for @modelcontextprotocol/conformance)
 if ! command -v npx &>/dev/null; then
-    echo "FAIL: npx not found. Install Node.js to run conformance tests."
+    echo "FAIL: npx not found. Install Node.js 22+ to run conformance tests."
     exit 1
 fi
 
