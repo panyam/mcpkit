@@ -9,6 +9,21 @@ import (
 	"time"
 )
 
+// initServer performs the full MCP initialization handshake on a server
+// (initialize + notifications/initialized) so subsequent tool calls are accepted.
+func initServer(srv *Server) {
+	srv.Dispatch(context.Background(), &Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`0`),
+		Method:  "initialize",
+		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+	})
+	srv.Dispatch(context.Background(), &Request{
+		JSONRPC: "2.0",
+		Method:  "notifications/initialized",
+	})
+}
+
 func TestServerDispatch(t *testing.T) {
 	srv := NewServer(ServerInfo{Name: "test", Version: "0.1.0"})
 	srv.RegisterTool(
@@ -17,6 +32,7 @@ func TestServerDispatch(t *testing.T) {
 			return TextResult("hi"), nil
 		},
 	)
+	initServer(srv)
 
 	resp := srv.Dispatch(context.Background(), &Request{
 		JSONRPC: "2.0",
@@ -51,6 +67,7 @@ func TestServerToolTimeout(t *testing.T) {
 			}
 		},
 	)
+	initServer(srv)
 
 	resp := srv.Dispatch(context.Background(), &Request{
 		JSONRPC: "2.0",

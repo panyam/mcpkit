@@ -3,8 +3,24 @@ package mcpkit
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 )
+
+// initDispatcher performs the full MCP initialization handshake on a dispatcher
+// (initialize + notifications/initialized) so subsequent tool calls are accepted.
+func initDispatcher(d *Dispatcher) {
+	d.Dispatch(context.Background(), &Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`0`),
+		Method:  "initialize",
+		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+	})
+	d.Dispatch(context.Background(), &Request{
+		JSONRPC: "2.0",
+		Method:  "notifications/initialized",
+	})
+}
 
 func testDispatcher() *Dispatcher {
 	d := NewDispatcher(ServerInfo{Name: "test-server", Version: "1.0.0"})
@@ -30,6 +46,7 @@ func testDispatcher() *Dispatcher {
 			return TextResult("echo: " + args.Message), nil
 		},
 	)
+	initDispatcher(d)
 	return d
 }
 
@@ -240,6 +257,51 @@ func TestDispatchNullID(t *testing.T) {
 	}
 }
 
+// TestDispatchToolsCallHandlerError verifies that when a ToolHandler returns a Go error,
+// the dispatcher wraps it as a JSON-RPC success with isError: true in the tool result,
+// NOT as a JSON-RPC error response. Per the MCP spec, JSON-RPC errors are reserved for
+// protocol-level failures (bad params, unknown tool). Tool execution failures use isError.
+func TestDispatchToolsCallHandlerError(t *testing.T) {
+	d := testDispatcher()
+	// Register a tool that always returns a Go error
+	d.RegisterTool(
+		ToolDef{Name: "failing", Description: "always fails"},
+		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
+			return ToolResult{}, fmt.Errorf("something broke")
+		},
+	)
+
+	resp := d.Dispatch(context.Background(), &Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`10`),
+		Method:  "tools/call",
+		Params:  json.RawMessage(`{"name":"failing","arguments":{}}`),
+	})
+
+	if resp == nil {
+		t.Fatal("response is nil")
+	}
+	// Must NOT be a JSON-RPC error — tool failures are reported via isError in the result
+	if resp.Error != nil {
+		t.Fatalf("got JSON-RPC error (code %d: %s), want JSON-RPC success with isError in result",
+			resp.Error.Code, resp.Error.Message)
+	}
+
+	var result ToolResult
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatalf("failed to unmarshal result: %v", err)
+	}
+	if !result.IsError {
+		t.Error("result.IsError = false, want true")
+	}
+	if len(result.Content) == 0 {
+		t.Fatal("result has no content")
+	}
+	if result.Content[0].Text == "" {
+		t.Error("error content text is empty")
+	}
+}
+
 func TestDispatchToolOrder(t *testing.T) {
 	d := NewDispatcher(ServerInfo{Name: "test", Version: "1.0"})
 	for _, name := range []string{"charlie", "alpha", "bravo"} {
@@ -247,6 +309,7 @@ func TestDispatchToolOrder(t *testing.T) {
 			return TextResult(name), nil
 		})
 	}
+	initDispatcher(d)
 
 	resp := d.Dispatch(context.Background(), &Request{
 		JSONRPC: "2.0",
@@ -269,5 +332,199 @@ func TestDispatchToolOrder(t *testing.T) {
 		if result.Tools[i].Name != name {
 			t.Errorf("tools[%d].Name = %q, want %q", i, result.Tools[i].Name, name)
 		}
+	}
+}
+
+// TestDispatchInitializeVersion2025 verifies that the server correctly negotiates
+// protocol version 2025-11-25 when the client requests it. The server should respond
+// with the same version in protocolVersion, confirming mutual support.
+func TestDispatchInitializeVersion2025(t *testing.T) {
+	d := testDispatcher()
+	resp := d.Dispatch(context.Background(), &Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "initialize",
+		Params:  json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+	})
+
+	if resp == nil {
+		t.Fatal("response is nil")
+	}
+	if resp.Error != nil {
+		t.Fatalf("unexpected error: code=%d msg=%s", resp.Error.Code, resp.Error.Message)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatal(err)
+	}
+	if result["protocolVersion"] != "2025-11-25" {
+		t.Errorf("protocolVersion = %v, want 2025-11-25", result["protocolVersion"])
+	}
+}
+
+// TestDispatchInitializeUnsupportedVersion verifies that the server rejects an unknown
+// protocol version with a JSON-RPC error code -32602 (invalid params) and includes
+// the list of supported versions in the error data, per the MCP spec.
+func TestDispatchInitializeUnsupportedVersion(t *testing.T) {
+	d := testDispatcher()
+	resp := d.Dispatch(context.Background(), &Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "initialize",
+		Params:  json.RawMessage(`{"protocolVersion":"1999-01-01","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+	})
+
+	if resp == nil {
+		t.Fatal("response is nil")
+	}
+	if resp.Error == nil {
+		t.Fatal("expected error for unsupported version, got success")
+	}
+	if resp.Error.Code != ErrCodeInvalidParams {
+		t.Errorf("error code = %d, want %d", resp.Error.Code, ErrCodeInvalidParams)
+	}
+	// Error data must contain a "supported" array listing valid versions.
+	// Round-trip through JSON to normalize types (the in-memory struct uses
+	// concrete Go types, but a real client would see JSON).
+	raw, err := json.Marshal(resp.Error.Data)
+	if err != nil {
+		t.Fatalf("failed to marshal error data: %v", err)
+	}
+	var data map[string][]string
+	if err := json.Unmarshal(raw, &data); err != nil {
+		t.Fatalf("failed to unmarshal error data: %v", err)
+	}
+	versions := data["supported"]
+	if len(versions) < 2 {
+		t.Errorf("expected at least 2 supported versions, got %d", len(versions))
+	}
+}
+
+// TestDispatchInitializeMissingParams verifies that sending initialize with nil params
+// returns a JSON-RPC error (invalid params), not a panic or success.
+func TestDispatchInitializeMissingParams(t *testing.T) {
+	d := testDispatcher()
+	resp := d.Dispatch(context.Background(), &Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "initialize",
+	})
+
+	if resp == nil {
+		t.Fatal("response is nil")
+	}
+	if resp.Error == nil {
+		t.Fatal("expected error for missing params")
+	}
+	if resp.Error.Code != ErrCodeInvalidParams {
+		t.Errorf("error code = %d, want %d", resp.Error.Code, ErrCodeInvalidParams)
+	}
+}
+
+// TestDispatchInitializeStoresClientInfo verifies that the dispatcher stores the
+// client info and capabilities from the initialize request, making them available
+// for server-to-client feature detection.
+func TestDispatchInitializeStoresClientInfo(t *testing.T) {
+	d := NewDispatcher(ServerInfo{Name: "test", Version: "1.0"})
+	d.Dispatch(context.Background(), &Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "initialize",
+		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{"roots":{"listChanged":true}},"clientInfo":{"name":"my-client","version":"2.0"}}`),
+	})
+
+	if d.clientInfo.Name != "my-client" {
+		t.Errorf("clientInfo.Name = %q, want my-client", d.clientInfo.Name)
+	}
+	if d.clientInfo.Version != "2.0" {
+		t.Errorf("clientInfo.Version = %q, want 2.0", d.clientInfo.Version)
+	}
+	if d.negotiatedVersion != "2024-11-05" {
+		t.Errorf("negotiatedVersion = %q, want 2024-11-05", d.negotiatedVersion)
+	}
+}
+
+// TestDispatchBeforeInitialized verifies that the server rejects tool calls when
+// initialize has been called but notifications/initialized has not yet been received.
+// The MCP spec requires the full initialization handshake before processing requests.
+func TestDispatchBeforeInitialized(t *testing.T) {
+	d := NewDispatcher(ServerInfo{Name: "test", Version: "1.0"})
+	d.RegisterTool(
+		ToolDef{Name: "echo", Description: "echoes"},
+		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
+			return TextResult("hi"), nil
+		},
+	)
+	// Send initialize but NOT notifications/initialized
+	d.Dispatch(context.Background(), &Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "initialize",
+		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+	})
+
+	resp := d.Dispatch(context.Background(), &Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`2`),
+		Method:  "tools/list",
+	})
+
+	if resp == nil {
+		t.Fatal("response is nil")
+	}
+	if resp.Error == nil {
+		t.Fatal("expected error for request before initialized notification")
+	}
+	if resp.Error.Code != ErrCodeInvalidRequest {
+		t.Errorf("error code = %d, want %d", resp.Error.Code, ErrCodeInvalidRequest)
+	}
+}
+
+// TestDispatchToolsCallBeforeAnyInit verifies that tool calls are rejected when
+// no initialization has occurred at all (neither initialize nor notifications/initialized).
+func TestDispatchToolsCallBeforeAnyInit(t *testing.T) {
+	d := NewDispatcher(ServerInfo{Name: "test", Version: "1.0"})
+	d.RegisterTool(
+		ToolDef{Name: "echo", Description: "echoes"},
+		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
+			return TextResult("hi"), nil
+		},
+	)
+
+	resp := d.Dispatch(context.Background(), &Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "tools/call",
+		Params:  json.RawMessage(`{"name":"echo","arguments":{}}`),
+	})
+
+	if resp == nil {
+		t.Fatal("response is nil")
+	}
+	if resp.Error == nil {
+		t.Fatal("expected error for request before any initialization")
+	}
+	if resp.Error.Code != ErrCodeInvalidRequest {
+		t.Errorf("error code = %d, want %d", resp.Error.Code, ErrCodeInvalidRequest)
+	}
+}
+
+// TestDispatchPingBeforeInitialized verifies that ping works at any time,
+// even before the initialization handshake is complete. The MCP spec allows
+// ping as a keepalive mechanism regardless of session state.
+func TestDispatchPingBeforeInitialized(t *testing.T) {
+	d := NewDispatcher(ServerInfo{Name: "test", Version: "1.0"})
+	resp := d.Dispatch(context.Background(), &Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "ping",
+	})
+
+	if resp == nil {
+		t.Fatal("response is nil")
+	}
+	if resp.Error != nil {
+		t.Fatalf("ping should work before init, got error: %s", resp.Error.Message)
 	}
 }

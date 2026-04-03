@@ -4,6 +4,9 @@
 0.0.1
 
 ## Provides
+- mcp-protocol-negotiation: Version negotiation supporting MCP 2025-11-25 and 2024-11-05
+- mcp-initialization-gating: Enforces initialize/initialized handshake before accepting requests
+- mcp-tool-error-semantics: Spec-compliant isError tool results (not JSON-RPC errors) for handler failures
 - mcp-http-transport: Production-grade MCP HTTP+SSE server with session management
 - mcp-stdio-transport: Content-Length framed JSON-RPC stdio transport
 - mcp-auth-middleware: Bearer token, JWT (via oneauth), API key authentication for MCP endpoints
