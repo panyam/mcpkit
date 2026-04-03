@@ -13,146 +13,134 @@ MCPKit is a Go library for building production-grade MCP (Model Context Protocol
 │  ┌────────────┐  ┌─────────────────┐  ┌──────────┐│
 │  │  Transport  │  │ MCP Middleware   │  │ Dispatch ││
 │  │ HTTP+SSE    │  │ Auth (bearer)    │  │tools/list││
-│  │ stdio       │  │ Tool timeout     │  │tools/call││
-│  │ Streamable  │  │ Allowed-roots    │  │initialize││
-│  │  HTTP       │  │ Tool authz       │  │resources/││
+│  │ Streamable  │  │ Tool timeout     │  │tools/call││
+│  │  HTTP       │  │ Allowed-roots    │  │initialize││
+│  │ stdio (tbd) │  │ Tool authz       │  │resources/││
 │  └────────────┘  │ MCP metrics      │  │ prompts/ ││
 │                  └─────────────────┘  └──────────┘│
 │  ┌─────────────────────────────────────────────┐  │
-│  │ servicekit (v0.0.10+)                        │  │
+│  │ servicekit (v0.0.14)                         │  │
 │  │ SSEConn, SSEHub, ListenAndServeGraceful,     │  │
-│  │ StreamableServe, CORS, RateLimiter, Logger,  │  │
-│  │ Recovery, BodyLimit, Health, RequestID,       │  │
-│  │ ServerTimeouts, Guard, OriginChecker         │  │
+│  │ StreamableServe, CORS, RateLimiter, Logger   │  │
 │  └─────────────────────────────────────────────┘  │
 ├──────────────────────────────────────────────────┤
 │     Sub-module: mcpkit/auth (separate go.mod)     │
-│     Imports oneauth (v0.0.51+) for JWT, OIDC      │
+│     Imports oneauth for JWT, OIDC                 │
 └──────────────────────────────────────────────────┘
 ```
 
 ## Design Principles
 
-1. **Transport is not protocol** — HTTP+SSE and stdio are transports. JSON-RPC dispatch is shared. Adding Streamable HTTP (MCP 2025-03-26) means adding a transport, not changing dispatch.
+1. **Transport is not protocol** — HTTP+SSE and Streamable HTTP are transports. JSON-RPC dispatch is shared. Adding a transport means adding a handler, not changing dispatch.
 
-2. **Generic infrastructure from servicekit, MCP-specific here** — SSEConn/SSEHub, graceful shutdown, Streamable HTTP, CORS, rate limiting, request logging, recovery, body limits, health checks, request IDs, and server timeouts come from servicekit (v0.0.10+). mcpkit only implements MCP-specific middleware: tool timeout, allowed-roots, tool authz, MCP metrics.
+2. **Generic infrastructure from servicekit, MCP-specific here** — SSEConn/SSEHub, graceful shutdown, Streamable HTTP, CORS, rate limiting come from servicekit. mcpkit only implements MCP-specific logic: tool timeout, allowed-roots, tool authz.
 
-3. **Sub-module for heavy auth** — The core module ships `BearerTokenValidator` (constant-time compare, zero deps). JWT/OIDC lives in `mcpkit/auth`, a separate Go module with its own `go.mod` that imports oneauth. Apps that don't need JWT never pull in oneauth.
+3. **Sub-module for heavy auth** — The core module ships `BearerTokenValidator` (constant-time compare, zero deps). JWT/OIDC lives in `mcpkit/auth`, a separate Go module that imports oneauth.
 
-4. **Tools are the app's job** — MCPKit handles transport, security, and operations. The application registers tool handlers that receive validated, authenticated, rate-limited requests.
+4. **Tools are the app's job** — MCPKit handles transport, security, and operations. The application registers tool handlers.
 
-5. **Safe defaults** — Server timeouts, body size limits, loopback-only binding, and constant-time token comparison are on by default. You opt out, not in.
+5. **Safe defaults** — Constant-time token comparison, initialization gating, SSE keepalive are on by default.
 
-## Package Structure
+## Actual Package Structure
 
 ```
-mcpkit/                     # module: github.com/panyam/mcpkit
-├── go.mod                  # core module — no oneauth dependency
-├── server.go               # Server type, functional options, ListenAndServe
-├── options.go              # WithListen, WithAuth, WithToolTimeout, etc.
-├── dispatch.go             # JSON-RPC method routing (initialize, tools/*, resources/*)
-├── tool.go                 # Tool registration, ToolHandler interface
-├── transport/
-│   ├── sse/                # HTTP+SSE transport (MCP 2024-11-05)
-│   │   └── handler.go      # SSE + POST handlers (uses servicekit SSEConn/SSEHub)
-│   ├── stdio/              # Content-Length framed stdio transport
-│   │   └── stdio.go
-│   └── streamhttp/         # Streamable HTTP (MCP 2025-03-26)
-│       └── handler.go      # Uses servicekit StreamableServe
-├── middleware/              # MCP-specific middleware only
-│   ├── auth.go             # AuthValidator interface + BearerTokenValidator (constant-time)
-│   ├── timeout.go          # Tool execution timeout (context.WithTimeout)
-│   ├── roots.go            # Allowed-roots cwd restriction
-│   ├── authz.go            # Per-tool authorization (role/scope → tool names)
-│   └── metrics.go          # MCP-specific metrics (tool calls, session gauges)
-│   # Generic HTTP middleware (CORS, rate limiting, logging, recovery,
-│   # body limit, health, request ID, server timeouts) from servicekit
-├── jsonrpc/
-│   └── types.go            # JSON-RPC 2.0 request/response types
-│
-└── auth/                   # SEPARATE module: github.com/panyam/mcpkit/auth
-    ├── go.mod              # requires mcpkit + oneauth
-    └── jwt.go              # JWTValidator, OIDCValidator — implements AuthValidator via oneauth
+mcpkit/                          # module: github.com/panyam/mcpkit
+├── go.mod                       # servicekit v0.0.14
+├── dispatch.go                  # Dispatcher: JSON-RPC routing, version negotiation, init gating
+├── server.go                    # Server, options, Handler(), ListenAndServe(), transport config
+├── tool.go                      # ToolDef, ToolRequest, ToolResult, Content, ToolHandler
+├── jsonrpc.go                   # JSON-RPC 2.0 Request/Response/Error types
+├── transport.go                 # SSE transport (sseTransport, mcpSSEConn, SSEData)
+├── streamable_transport.go      # Streamable HTTP transport (streamableTransport)
+├── Makefile                     # test, testconf, smoke, audit, serve, ci targets
+├── cmd/testserver/              # Minimal MCP server for testing
+│   ├── main.go                  # echo, add, fail tools + transport selection
+│   └── conformance_tools.go     # Tools expected by MCP conformance suite
+├── conformance/
+│   └── baseline.yml             # Expected conformance failures (22 scenarios)
+├── scripts/
+│   ├── smoke-test.sh            # Curl-based tests for SSE + Streamable HTTP
+│   └── conformance-test.sh      # Runs @modelcontextprotocol/conformance
+└── auth/                        # SEPARATE module (not yet implemented)
+    ├── go.mod
+    └── jwt.go
 ```
 
-### Sub-module pattern
+## Two Transports
 
-Go has no optional dependencies. `mcpkit/auth` is a **separate Go module** (`go.mod` in `auth/`) that imports both `mcpkit` (for `AuthValidator` interface) and `oneauth` (for JWT/OIDC). Apps that only need bearer token auth import `github.com/panyam/mcpkit` alone — oneauth never enters their dependency tree. Apps that need JWT import `github.com/panyam/mcpkit/auth` as well.
+### SSE Transport (MCP 2024-11-05) — `transport.go`
+
+- `GET /mcp/sse` → long-lived SSE stream, sends `endpoint` event with POST URL
+- `POST /mcp/message?sessionId=<id>` → JSON-RPC dispatch, response pushed on SSE
+- Session lifetime = SSE connection lifetime (cleanup on disconnect)
+- Uses servicekit `BaseSSEConn[SSEData]` + `SSEHub[SSEData]`
+- `SSEData` union type: `SSEText(url)` for raw text, `SSEJSON(bytes)` for JSON-RPC
+
+### Streamable HTTP (MCP 2025-03-26) — `streamable_transport.go`
+
+- `POST /mcp` → JSON-RPC dispatch, response in HTTP body (synchronous)
+- `DELETE /mcp` → terminate session
+- Session tracked via `Mcp-Session-Id` header (created on initialize)
+- No long-lived connections — each request is independent HTTP
+- `MCP-Protocol-Version` header validated if present
+
+### Dual Transport Mode
+
+```go
+srv.Handler(WithStreamableHTTP(true), WithSSE(true))
+// SSE at /mcp/sse + /mcp/message, Streamable HTTP at /mcp
+```
 
 ## Key Types
 
 ```go
-// ToolHandler is what applications implement
 type ToolHandler func(ctx context.Context, req ToolRequest) (ToolResult, error)
 
-// Middleware wraps the JSON-RPC dispatch
-type Middleware func(next http.Handler) http.Handler
-
-// AuthValidator is the interface for auth strategies
 type AuthValidator interface {
     Validate(r *http.Request) error
 }
 
-// ServerInfo identifies this MCP server (with optional 2025-11-25 fields)
 type ServerInfo struct {
     Name, Version                          string
     Title, Description, Instructions       string // optional
     WebsiteURL                             string // optional
 }
 
-// ClientInfo + ClientCapabilities are stored after initialize
 type ClientInfo struct { Name, Version string }
 type ClientCapabilities struct {
     Sampling, Elicitation *struct{}
     Roots                 *RootsCap
 }
+
+type Content struct {
+    Type     string           // "text", "image", "audio", "resource"
+    Text     string           // for text
+    MimeType string           // for image/audio
+    Data     string           // base64 for image/audio
+    Resource *ResourceContent // for embedded resources
+}
 ```
 
 ## Protocol Version Negotiation
 
-The dispatcher supports MCP protocol versions `2025-11-25` and `2024-11-05`. During `initialize`:
-
-1. Client sends `protocolVersion` in params
-2. Server checks if the version is in its supported list
-3. If supported → responds with that version as `protocolVersion`
-4. If not → returns JSON-RPC error `-32602` with `{"supported": [...]}` in error data
+Supports `2025-11-25` and `2024-11-05`. During `initialize`, server checks if client's version is in supported list. If not → JSON-RPC error `-32602` with `{"supported": [...]}`.
 
 ## Initialization Lifecycle
-
-The MCP spec requires a strict initialization handshake before the server processes requests:
 
 1. Client sends `initialize` → server responds with capabilities and negotiated version
 2. Client sends `notifications/initialized` → server marks session as ready
 3. Only after step 2 does the server accept `tools/list`, `tools/call`, etc.
-4. `ping` is exempt — allowed at any time as a keepalive
-
-Requests sent before the handshake completes receive a JSON-RPC error `-32600` ("server not initialized").
+4. `ping` is exempt — allowed at any time
 
 ## Tool Error Semantics
 
-Per the MCP spec, tool execution failures and protocol errors are handled differently:
-
-- **Handler returns `error`** → JSON-RPC success with `isError: true` in the tool result. The error message is included in the content.
-- **Protocol failure** (bad params, unknown tool, malformed JSON) → JSON-RPC error response with appropriate error code.
-
-This distinction matters: clients should check `result.isError` for tool-level failures, not the JSON-RPC error field.
-
-## Session Lifecycle (HTTP+SSE)
-
-Uses servicekit's `SSEConn[O]` and `SSEHub[O]`:
-
-1. Client opens `GET /sse` → handler creates `SSEConn`, registers in `SSEHub`, sends `endpoint` event with POST URL
-2. Client sends JSON-RPC via `POST /message?session=<id>` → middleware chain → dispatch → response pushed via `SSEHub.Send()`
-3. `SSEConn` sends periodic `:ping` keepalive comments automatically (configurable interval)
-4. Client disconnects → `r.Context().Done()` fires → `SSEHub.Unregister()` cleans up
-5. POST to expired session → `410 Gone`
+- **Handler returns `error`** → JSON-RPC success with `isError: true` in tool result
+- **Protocol failure** (bad params, unknown tool) → JSON-RPC error response
 
 ## Graceful Shutdown
 
 Uses servicekit's `ListenAndServeGraceful`:
-
-1. SIGTERM/SIGINT received → stops accepting new connections
-2. `OnShutdown` callback calls `SSEHub.CloseAll()` — notifies active SSE clients
-3. Waits for in-flight tool executions (configurable drain timeout)
-4. `http.Server.Shutdown()` closes listener
-5. Exit
+1. SIGTERM/SIGINT → stops accepting new connections
+2. `OnShutdown` callback calls `SSEHub.CloseAll()` for SSE sessions
+3. Waits for in-flight requests (configurable drain timeout)
+4. Exit
