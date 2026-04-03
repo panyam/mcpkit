@@ -726,3 +726,64 @@ func TestStreamableSSENoNotifications(t *testing.T) {
 	}
 }
 
+// TestStreamableDNSRebindingRejectsInvalidOrigin verifies that requests with
+// a non-localhost Origin header are rejected with 403 Forbidden, preventing
+// DNS rebinding attacks per the MCP spec.
+func TestStreamableDNSRebindingRejectsInvalidOrigin(t *testing.T) {
+	ts := testStreamableServer()
+	defer ts.Close()
+
+	body, _ := json.Marshal(&Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "initialize",
+		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+	})
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Origin", "http://evil.example.com")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("status = %d, want 403 for non-localhost Origin", resp.StatusCode)
+	}
+}
+
+// TestStreamableDNSRebindingAcceptsLocalhost verifies that requests with
+// localhost Origin headers are accepted normally.
+func TestStreamableDNSRebindingAcceptsLocalhost(t *testing.T) {
+	ts := testStreamableServer()
+	defer ts.Close()
+
+	for _, origin := range []string{"http://localhost", "http://localhost:8787", "http://127.0.0.1:9999", "http://[::1]:3000"} {
+		t.Run(origin, func(t *testing.T) {
+			body, _ := json.Marshal(&Request{
+				JSONRPC: "2.0",
+				ID:      json.RawMessage(`1`),
+				Method:  "initialize",
+				Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+			})
+			req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Accept", "application/json")
+			req.Header.Set("Origin", origin)
+
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp.Body.Close()
+
+			if resp.StatusCode == http.StatusForbidden {
+				t.Errorf("status = 403 for localhost Origin %q, should be accepted", origin)
+			}
+		})
+	}
+}
+

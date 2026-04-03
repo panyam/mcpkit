@@ -49,7 +49,13 @@ func (t *streamableTransport) handler() http.Handler {
 }
 
 // handleRoot routes requests by HTTP method at the base prefix.
+// Validates Origin/Host headers to prevent DNS rebinding attacks per MCP spec.
 func (t *streamableTransport) handleRoot(w http.ResponseWriter, r *http.Request) {
+	if !t.validateOrigin(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
 	switch r.Method {
 	case http.MethodPost:
 		t.handlePost(w, r)
@@ -265,4 +271,61 @@ func (t *streamableTransport) sessionCount() int {
 		return true
 	})
 	return count
+}
+
+// validateOrigin checks the Origin and Host headers to prevent DNS rebinding attacks.
+// Per MCP spec: "Servers MUST validate the Origin header on all incoming connections.
+// If the Origin header is present and invalid, servers MUST respond with HTTP 403."
+//
+// When allowedOrigins is configured, only those origins are accepted.
+// When allowedOrigins is empty (default), only localhost variants are accepted.
+func (t *streamableTransport) validateOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		// No Origin header — check Host instead
+		host := r.Host
+		if host == "" {
+			host = r.Header.Get("Host")
+		}
+		if host == "" {
+			return true // No origin info to validate
+		}
+		return isLocalhostHost(host)
+	}
+
+	if len(t.config.allowedOrigins) > 0 {
+		for _, allowed := range t.config.allowedOrigins {
+			if origin == allowed {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Default: accept only localhost origins
+	return isLocalhostOrigin(origin)
+}
+
+// isLocalhostOrigin checks if an Origin header value is a localhost variant.
+func isLocalhostOrigin(origin string) bool {
+	for _, prefix := range []string{
+		"http://localhost", "https://localhost",
+		"http://127.0.0.1", "https://127.0.0.1",
+		"http://[::1]", "https://[::1]",
+	} {
+		if origin == prefix || strings.HasPrefix(origin, prefix+":") {
+			return true
+		}
+	}
+	return false
+}
+
+// isLocalhostHost checks if a Host header value is a localhost variant.
+func isLocalhostHost(host string) bool {
+	// Strip port if present
+	h := host
+	if idx := strings.LastIndex(h, ":"); idx != -1 {
+		h = h[:idx]
+	}
+	return h == "localhost" || h == "127.0.0.1" || h == "::1" || h == "[::1]"
 }
