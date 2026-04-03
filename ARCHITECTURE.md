@@ -49,15 +49,20 @@ mcpkit/                          # module: github.com/panyam/mcpkit
 ├── dispatch.go                  # Dispatcher: JSON-RPC routing, version negotiation, init gating
 ├── server.go                    # Server, options, Handler(), ListenAndServe(), transport config
 ├── tool.go                      # ToolDef, ToolRequest, ToolResult, Content, ToolHandler
+├── resource.go                  # ResourceDef, ResourceTemplate, ResourceHandler types
+├── prompt.go                    # PromptDef, PromptArgument, PromptHandler types
+├── pagination.go                # Generic cursor-based pagination helper
 ├── jsonrpc.go                   # JSON-RPC 2.0 Request/Response/Error types
 ├── transport.go                 # SSE transport (sseTransport, mcpSSEConn, SSEData)
 ├── streamable_transport.go      # Streamable HTTP transport (streamableTransport)
 ├── Makefile                     # test, testconf, smoke, audit, serve, ci targets
 ├── cmd/testserver/              # Minimal MCP server for testing
 │   ├── main.go                  # echo, add, fail tools + transport selection
-│   └── conformance_tools.go     # Tools expected by MCP conformance suite
+│   ├── conformance_tools.go     # Tools expected by MCP conformance suite
+│   ├── conformance_resources.go # Resources + templates for conformance
+│   └── conformance_prompts.go   # Prompts for conformance
 ├── conformance/
-│   └── baseline.yml             # Expected conformance failures (22 scenarios)
+│   └── baseline.yml             # Expected conformance failures (13 scenarios)
 ├── scripts/
 │   ├── smoke-test.sh            # Curl-based tests for SSE + Streamable HTTP
 │   └── conformance-test.sh      # Runs @modelcontextprotocol/conformance
@@ -119,6 +124,10 @@ type Content struct {
     Data     string           // base64 for image/audio
     Resource *ResourceContent // for embedded resources
 }
+
+type ResourceHandler func(ctx context.Context, req ResourceRequest) (ResourceResult, error)
+type TemplateHandler func(ctx context.Context, uri string, params map[string]string) (ResourceResult, error)
+type PromptHandler func(ctx context.Context, req PromptRequest) (PromptResult, error)
 ```
 
 ## Protocol Version Negotiation

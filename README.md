@@ -2,7 +2,7 @@
 
 Production-grade MCP (Model Context Protocol) server library for Go.
 
-MCPKit handles the transport, authentication, rate limiting, observability, and operational concerns so you can focus on registering tools. It supports both **stdio** (editor-spawned) and **HTTP+SSE** (remote/hosted) transports.
+MCPKit handles the transport, protocol negotiation, session management, and auth so you can focus on registering tools, resources, and prompts. Supports both **HTTP+SSE** (MCP 2024-11-05) and **Streamable HTTP** (MCP 2025-03-26) transports.
 
 ## Quick Start
 
@@ -12,7 +12,6 @@ package main
 import (
     "context"
     "log"
-    "net/http"
     "time"
     "github.com/panyam/mcpkit"
 )
@@ -20,7 +19,7 @@ import (
 func main() {
     srv := mcpkit.NewServer(
         mcpkit.ServerInfo{Name: "my-server", Version: "0.1.0"},
-        mcpkit.WithBearerToken("my-secret"),
+        mcpkit.WithListen(":8787"),
         mcpkit.WithToolTimeout(30 * time.Second),
     )
 
@@ -47,100 +46,104 @@ func main() {
         },
     )
 
-    handler := srv.Handler() // serves GET /mcp/sse + POST /mcp/message
-    log.Println("MCP server on :8787")
-    http.ListenAndServe(":8787", handler)
+    // Streamable HTTP (recommended) — responses in HTTP body
+    srv.ListenAndServe(mcpkit.WithStreamableHTTP(true))
 }
 ```
 
-## HTTP+SSE Transport
+## Transports
 
-The `srv.Handler()` method returns an `http.Handler` implementing the MCP HTTP+SSE transport (2024-11-05 spec):
+### Streamable HTTP (MCP 2025-03-26) — recommended
 
-- **`GET /mcp/sse`** — Opens an SSE stream. The server sends an `endpoint` event with the POST URL.
-- **`POST /mcp/message?sessionId=<id>`** — Receives JSON-RPC requests. Responses are pushed on the SSE stream as `message` events.
+Single endpoint, responses in HTTP body. Session via `Mcp-Session-Id` header.
 
-Each SSE connection is an independent MCP session with its own initialization state.
+```go
+srv.ListenAndServe(mcpkit.WithStreamableHTTP(true))
+```
+
+### HTTP+SSE (MCP 2024-11-05) — legacy
+
+Long-lived SSE stream + POST endpoint. Session tied to SSE connection.
+
+```go
+srv.ListenAndServe() // SSE is the default
+```
+
+### Both simultaneously
+
+```go
+srv.ListenAndServe(mcpkit.WithStreamableHTTP(true), mcpkit.WithSSE(true))
+// SSE at /mcp/sse + /mcp/message, Streamable HTTP at /mcp
+```
 
 ### Transport options
 
 ```go
 handler := srv.Handler(
-    mcpkit.WithPrefix("/custom"),                    // URL prefix (default: /mcp)
-    mcpkit.WithPublicURL("https://proxy.example.com"), // for reverse proxy
-    mcpkit.WithMaxSessions(100),                     // limit concurrent sessions
-    mcpkit.WithKeepalivePeriod(15 * time.Second),    // SSE keepalive interval
+    mcpkit.WithPrefix("/custom"),                       // URL prefix (default: /mcp)
+    mcpkit.WithPublicURL("https://proxy.example.com"),  // for reverse proxy
+    mcpkit.WithMaxSessions(100),                        // limit concurrent sessions
+    mcpkit.WithKeepalivePeriod(15 * time.Second),       // SSE keepalive interval
+    mcpkit.WithStreamableHTTP(true),                    // enable Streamable HTTP
 )
 ```
 
-### Manual testing
+## Capabilities
 
-```bash
-# Terminal 1: Start test server
-go run ./cmd/testserver
+| Capability | Methods |
+|-----------|---------|
+| **Tools** | `tools/list`, `tools/call` |
+| **Resources** | `resources/list`, `resources/read`, `resources/templates/list` |
+| **Prompts** | `prompts/list`, `prompts/get` |
+| **Cancellation** | `notifications/cancelled` with context propagation |
+| **Pagination** | Cursor-based pagination for all list methods |
 
-# Terminal 2: Open SSE stream
-curl -N http://localhost:8787/mcp/sse
-
-# Terminal 3: Send initialize (use sessionId from Terminal 2)
-curl -X POST 'http://localhost:8787/mcp/message?sessionId=<id>' \
-  -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"curl","version":"1.0"}}}'
-```
-
-Or use the MCP Inspector:
-```bash
-npx @modelcontextprotocol/inspector
-# Point it at http://localhost:8787/mcp in the web UI
-```
+Capabilities are auto-advertised in the `initialize` response when the corresponding handlers are registered.
 
 ## Protocol Support
 
-MCPKit supports MCP protocol versions **2025-11-25** and **2024-11-05** with automatic version negotiation during the `initialize` handshake. The server validates the client's requested version and responds with the negotiated version, or rejects with the list of supported versions.
-
-## Features
-
-- **HTTP+SSE transport**: Per-session SSE streams with session management, keepalive, and graceful cleanup
-- **Protocol negotiation**: Supports MCP 2025-11-25 and 2024-11-05 with version handshake
-- **Initialization gating**: Enforces the MCP lifecycle — requests are rejected until the full `initialize` / `notifications/initialized` handshake completes
-- **Auth**: Constant-time bearer token, JWT/OIDC via oneauth (optional)
-- **Safety**: Tool execution timeouts, configurable session limits
-- **Session management**: Concurrency-safe SSE hub via servicekit, per-session dispatchers
-
-## Tool Error Handling
-
-MCPKit follows the MCP spec for error semantics:
-
-- **Tool execution failures** (handler returns `error`) → JSON-RPC success with `isError: true` in the tool result
-- **Protocol errors** (bad params, unknown tool) → JSON-RPC error response
-
-This means clients should check `result.isError`, not the JSON-RPC error field, to detect tool-level failures.
+- MCP **2025-11-25** and **2024-11-05** with automatic version negotiation
+- Initialization gating: requests rejected until `initialize` + `notifications/initialized` handshake completes
+- Tool error semantics: handler errors → `isError: true` in result (not JSON-RPC errors)
 
 ## Testing
 
 ```bash
-make test        # Unit tests (50 tests)
-make testconf    # MCP conformance suite (requires Node.js)
-make testall     # Both unit + conformance
-make smoke       # Curl-based smoke tests (both transports)
-make audit       # Security: govulncheck + gosec + gitleaks + race detection
+make test         # Unit tests (64 tests)
+make testconf     # MCP conformance suite (requires Node.js)
+make testall      # Both unit + conformance
+make smoke        # Curl-based transport tests (SSE + Streamable HTTP)
+make audit        # Security: govulncheck + gosec + gitleaks + race detection
+make serve        # Start SSE test server on :8787
+make serve-streamable  # Streamable HTTP on :8787
 ```
 
 ### Conformance Suite
 
-MCPKit is validated against the [official MCP conformance test suite](https://github.com/modelcontextprotocol/conformance). Current status: **9/30 scenarios passing** (remaining require resources, prompts, logging, and other unimplemented capabilities — tracked in `conformance/baseline.yml`).
+Validated against the [official MCP conformance test suite](https://github.com/modelcontextprotocol/conformance). Current status: **18/30 scenarios passing** (remaining require logging, sampling, elicitation, and subscriptions — tracked in `conformance/baseline.yml`).
 
-Run a single scenario:
 ```bash
-bash scripts/conformance-test.sh tools-call-simple-text
+bash scripts/conformance-test.sh                    # full suite
+bash scripts/conformance-test.sh tools-call-simple-text  # single scenario
 ```
 
-When you implement a new feature and its conformance scenario starts passing, **remove it from `conformance/baseline.yml`** — leaving stale entries causes CI to fail.
+When a feature's conformance scenario starts passing, **remove it from `conformance/baseline.yml`** — stale entries cause CI failure.
+
+### Manual testing
+
+```bash
+# Start test server (Streamable HTTP)
+STREAMABLE=1 go run ./cmd/testserver
+
+# MCP Inspector
+npx @modelcontextprotocol/inspector
+# Point it at http://localhost:8787/mcp
+```
 
 ## Stack Dependencies
 
 **Core module** (`github.com/panyam/mcpkit`):
-- `servicekit` — SSE connection/hub infrastructure, HTTP middleware
+- `servicekit` v0.0.14 — SSE connection/hub, graceful shutdown, HTTP middleware
 
 **Sub-module** (`github.com/panyam/mcpkit/auth`) — separate `go.mod`:
 - `oneauth` — JWT/OIDC validation (only pulled in when you import this sub-module)
