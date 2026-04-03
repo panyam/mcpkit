@@ -12,10 +12,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/panyam/mcpkit"
 )
+
+func listenAddr() string {
+	if port := os.Getenv("PORT"); port != "" {
+		return ":" + port
+	}
+	return ":8787"
+}
 
 func main() {
 	srv := mcpkit.NewServer(
@@ -23,7 +31,7 @@ func main() {
 			Name:    "mcpkit-testserver",
 			Version: "0.1.0",
 		},
-		mcpkit.WithListen(":8787"),
+		mcpkit.WithListen(listenAddr()),
 		mcpkit.WithToolTimeout(30*time.Second),
 	)
 
@@ -93,7 +101,7 @@ func main() {
 		},
 	)
 
-	log.Println("MCP test server listening on :8787 (SSE at /mcp/sse)")
+	log.Printf("MCP test server listening on %s (SSE at /mcp/sse)", listenAddr())
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
