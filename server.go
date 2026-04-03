@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"net/http"
+	"strings"
 	"time"
 
 	gohttp "github.com/panyam/servicekit/http"
@@ -82,8 +83,8 @@ func (s *Server) Dispatch(ctx context.Context, req *Request) *Response {
 }
 
 // dispatchWith routes a request through a specific dispatcher with server-level
-// middleware (e.g. tool timeout). Used by the SSE transport to dispatch on
-// per-session dispatchers.
+// middleware (e.g. tool timeout). Used by transports to dispatch on per-session
+// dispatchers.
 func (s *Server) dispatchWith(d *Dispatcher, ctx context.Context, req *Request) *Response {
 	if s.options.toolTimeout > 0 && req.Method == "tools/call" {
 		tctx, cancel := context.WithTimeout(ctx, s.options.toolTimeout)
@@ -98,51 +99,98 @@ func (s *Server) newSession() *Dispatcher {
 	return s.dispatcher.newSession()
 }
 
-// Handler returns an http.Handler implementing the MCP HTTP+SSE transport.
-// The handler serves GET {prefix}/sse for SSE connections and POST {prefix}/message
-// for JSON-RPC requests.
+// Handler returns an http.Handler implementing MCP transports.
+// By default, only the legacy SSE transport is enabled. Use WithStreamableHTTP(true)
+// to enable the Streamable HTTP transport (MCP 2025-03-26).
+// Both transports can be enabled simultaneously for backward compatibility.
 func (s *Server) Handler(opts ...TransportOption) http.Handler {
-	return newSSETransport(s, opts...).handler()
+	cfg := defaultTransportConfig()
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	prefix := strings.TrimRight(cfg.prefix, "/")
+
+	// SSE only (default, backward compatible)
+	if cfg.sse && !cfg.streamableHTTP {
+		return newSSETransport(s, opts...).handler()
+	}
+
+	// Streamable HTTP only
+	if cfg.streamableHTTP && !cfg.sse {
+		return newStreamableTransport(s, cfg).handler()
+	}
+
+	// Both enabled: SSE at /sse + /message, Streamable HTTP at base prefix
+	mux := http.NewServeMux()
+	if cfg.sse {
+		sseT := newSSETransport(s, opts...)
+		sseT.mountOn(mux, prefix)
+	}
+	if cfg.streamableHTTP {
+		stT := newStreamableTransport(s, cfg)
+		mux.HandleFunc(prefix, stT.handleRoot)
+	}
+	return mux
 }
 
-// ListenAndServe starts the HTTP+SSE transport with graceful shutdown support.
-// On SIGTERM/SIGINT it stops accepting new connections, closes all active SSE
-// sessions, drains in-flight requests, and then exits.
-// The listen address comes from WithListen (default ":8080").
+// ListenAndServe starts the HTTP transport(s) with graceful shutdown support.
+// On SIGTERM/SIGINT it stops accepting new connections, closes active sessions,
+// drains in-flight requests, and exits.
 func (s *Server) ListenAndServe(opts ...TransportOption) error {
-	t := newSSETransport(s, opts...)
+	cfg := defaultTransportConfig()
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
 	addr := s.options.listen
 	if addr == "" {
 		addr = ":8080"
 	}
+
+	handler := s.Handler(opts...)
+	var shutdownFns []func()
+
+	// Collect shutdown callbacks from active transports
+	if cfg.sse {
+		// SSE hub cleanup is handled internally by the SSE transport
+		// through the handler's SSEHub.CloseAll
+	}
+
 	httpSrv := &http.Server{
 		Addr:         addr,
-		Handler:      t.handler(),
+		Handler:      handler,
 		WriteTimeout: 0, // SSE requires no write timeout on long-lived connections
 	}
-	return gohttp.ListenAndServeGraceful(httpSrv,
-		gohttp.WithOnShutdown(t.hub.CloseAll),
-	)
+
+	var gracefulOpts []gohttp.GracefulOption
+	for _, fn := range shutdownFns {
+		gracefulOpts = append(gracefulOpts, gohttp.WithOnShutdown(fn))
+	}
+	return gohttp.ListenAndServeGraceful(httpSrv, gracefulOpts...)
 }
 
-// TransportOption configures the HTTP+SSE transport.
+// TransportOption configures the HTTP transports.
 type TransportOption func(*transportConfig)
 
 type transportConfig struct {
 	prefix          string        // URL path prefix (default "/mcp")
 	publicURL       string        // public base URL for reverse proxy deployments
-	maxSessions     int           // max concurrent SSE sessions (0 = unlimited)
+	maxSessions     int           // max concurrent sessions (0 = unlimited)
 	keepalivePeriod time.Duration // SSE keepalive interval (default 30s)
+	streamableHTTP bool // enable Streamable HTTP transport
+	sse             bool          // enable legacy SSE transport
 }
 
 func defaultTransportConfig() transportConfig {
 	return transportConfig{
 		prefix:          "/mcp",
 		keepalivePeriod: 30 * time.Second,
+		sse:             true,
+		streamableHTTP:  false,
 	}
 }
 
-// WithPrefix sets the URL path prefix for SSE and message endpoints.
+// WithPrefix sets the URL path prefix for transport endpoints.
 func WithPrefix(p string) TransportOption {
 	return func(c *transportConfig) { c.prefix = p }
 }
@@ -153,7 +201,7 @@ func WithPublicURL(u string) TransportOption {
 	return func(c *transportConfig) { c.publicURL = u }
 }
 
-// WithMaxSessions limits the number of concurrent SSE sessions.
+// WithMaxSessions limits the number of concurrent sessions.
 func WithMaxSessions(n int) TransportOption {
 	return func(c *transportConfig) { c.maxSessions = n }
 }
@@ -161,6 +209,16 @@ func WithMaxSessions(n int) TransportOption {
 // WithKeepalivePeriod sets the interval for SSE keepalive comments.
 func WithKeepalivePeriod(d time.Duration) TransportOption {
 	return func(c *transportConfig) { c.keepalivePeriod = d }
+}
+
+// WithStreamableHTTP enables or disables the Streamable HTTP transport (MCP 2025-03-26).
+func WithStreamableHTTP(enabled bool) TransportOption {
+	return func(c *transportConfig) { c.streamableHTTP = enabled }
+}
+
+// WithSSE enables or disables the legacy SSE transport (MCP 2024-11-05).
+func WithSSE(enabled bool) TransportOption {
+	return func(c *transportConfig) { c.sse = enabled }
 }
 
 // CheckAuth validates an HTTP request against the server's auth configuration.

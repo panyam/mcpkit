@@ -36,27 +36,18 @@ func newSSETransport(s *Server, opts ...TransportOption) *sseTransport {
 }
 
 // handler returns an http.Handler that serves the SSE and message endpoints.
+// Used when SSE is the only transport. Includes base prefix routing.
 func (t *sseTransport) handler() http.Handler {
 	mux := http.NewServeMux()
 	prefix := strings.TrimRight(t.config.prefix, "/")
 
-	sseHandler := &mcpSSEHandler{transport: t}
-	sseConfig := &gohttp.SSEConnConfig{
-		KeepalivePeriod: t.config.keepalivePeriod,
-	}
-
-	sseServeFunc := gohttp.SSEServe[SSEData](sseHandler, sseConfig)
-
-	// Canonical SSE endpoints per MCP 2024-11-05 spec.
-	mux.HandleFunc(prefix+"/sse", sseServeFunc)
-	mux.HandleFunc(prefix+"/message", t.handleMessage)
+	t.mountOn(mux, prefix)
 
 	// Base prefix handler: many MCP clients (including the MCP Inspector)
 	// connect to the base URL rather than appending /sse. Route by method:
 	//   GET  → SSE stream (same as /sse)
 	//   POST → JSON-RPC message (same as /message)
-	// This also provides forward-compatibility with Streamable HTTP (MCP 2025-03-26)
-	// where a single endpoint handles both GET (SSE) and POST (JSON-RPC).
+	sseServeFunc := t.sseServeFunc()
 	mux.HandleFunc(prefix, func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -69,6 +60,23 @@ func (t *sseTransport) handler() http.Handler {
 	})
 
 	return mux
+}
+
+// mountOn registers the SSE transport's canonical endpoints on an external mux.
+// Used when composing SSE with Streamable HTTP (which owns the base prefix).
+func (t *sseTransport) mountOn(mux *http.ServeMux, prefix string) {
+	sseServeFunc := t.sseServeFunc()
+	mux.HandleFunc(prefix+"/sse", sseServeFunc)
+	mux.HandleFunc(prefix+"/message", t.handleMessage)
+}
+
+// sseServeFunc returns the HTTP handler for SSE connections.
+func (t *sseTransport) sseServeFunc() http.HandlerFunc {
+	sseHandler := &mcpSSEHandler{transport: t}
+	sseConfig := &gohttp.SSEConnConfig{
+		KeepalivePeriod: t.config.keepalivePeriod,
+	}
+	return gohttp.SSEServe[SSEData](sseHandler, sseConfig)
 }
 
 // postURL builds the POST URL for the endpoint event.
