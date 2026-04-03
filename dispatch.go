@@ -86,6 +86,12 @@ func (d *Dispatcher) newSession() *Dispatcher {
 	}
 }
 
+// NegotiatedVersion returns the protocol version negotiated during initialization.
+// Returns "" if initialization has not completed.
+func (d *Dispatcher) NegotiatedVersion() string {
+	return d.negotiatedVersion
+}
+
 // RegisterTool adds a tool to the dispatcher.
 func (d *Dispatcher) RegisterTool(def ToolDef, handler ToolHandler) {
 	d.tools[def.Name] = toolEntry{def: def, handler: handler}
