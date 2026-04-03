@@ -1,7 +1,7 @@
 # MCPKit
 
 ## Version
-0.0.2
+0.0.3
 
 ## Provides
 - mcp-protocol-negotiation: Version negotiation supporting MCP 2025-11-25 and 2024-11-05
@@ -14,7 +14,11 @@
 - mcp-auth-middleware: Bearer token (constant-time), JWT/OIDC via oneauth sub-module
 - mcp-tool-timeout: context.WithTimeout wrapper for tool execution
 - mcp-allowed-roots: Restrict tool cwd to allowed directories (option registered, not enforced yet)
-- mcp-conformance: Official MCP conformance test suite integration (9/30 passing)
+- mcp-resources: resources/list, resources/read, resources/templates/list with URI template matching
+- mcp-prompts: prompts/list, prompts/get with argument passing
+- mcp-pagination: Generic cursor-based pagination for all list methods
+- mcp-cancellation: notifications/cancelled with inflight request tracking and context cancellation
+- mcp-conformance: Official MCP conformance test suite integration (18/30 passing)
 
 ## Module
 github.com/panyam/mcpkit
