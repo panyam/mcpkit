@@ -49,6 +49,42 @@ func TestNewErrorResponse(t *testing.T) {
 	}
 }
 
+// TestNewErrorResponseWithData verifies that the error response constructor correctly
+// sets the Data field, which is used to carry machine-readable context like the list
+// of supported protocol versions in a version negotiation failure.
+func TestNewErrorResponseWithData(t *testing.T) {
+	id := json.RawMessage(`1`)
+	data := map[string]any{"supported": []string{"2025-11-25", "2024-11-05"}}
+	resp := NewErrorResponseWithData(id, ErrCodeInvalidParams, "unsupported version", data)
+
+	if resp.Error == nil {
+		t.Fatal("Error is nil")
+	}
+	if resp.Error.Code != ErrCodeInvalidParams {
+		t.Errorf("Error.Code = %d, want %d", resp.Error.Code, ErrCodeInvalidParams)
+	}
+	if resp.Error.Data == nil {
+		t.Fatal("Error.Data is nil")
+	}
+
+	// Verify data round-trips through JSON
+	raw, err := json.Marshal(resp.Error)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parsed struct {
+		Data struct {
+			Supported []string `json:"supported"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		t.Fatal(err)
+	}
+	if len(parsed.Data.Supported) != 2 {
+		t.Errorf("got %d supported versions, want 2", len(parsed.Data.Supported))
+	}
+}
+
 func TestRequestIsNotification(t *testing.T) {
 	tests := []struct {
 		name string

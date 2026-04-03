@@ -90,9 +90,52 @@ type Middleware func(next http.Handler) http.Handler
 
 // AuthValidator is the interface for auth strategies
 type AuthValidator interface {
-    Validate(r *http.Request) (Claims, error)
+    Validate(r *http.Request) error
+}
+
+// ServerInfo identifies this MCP server (with optional 2025-11-25 fields)
+type ServerInfo struct {
+    Name, Version                          string
+    Title, Description, Instructions       string // optional
+    WebsiteURL                             string // optional
+}
+
+// ClientInfo + ClientCapabilities are stored after initialize
+type ClientInfo struct { Name, Version string }
+type ClientCapabilities struct {
+    Sampling, Elicitation *struct{}
+    Roots                 *RootsCap
 }
 ```
+
+## Protocol Version Negotiation
+
+The dispatcher supports MCP protocol versions `2025-11-25` and `2024-11-05`. During `initialize`:
+
+1. Client sends `protocolVersion` in params
+2. Server checks if the version is in its supported list
+3. If supported → responds with that version as `protocolVersion`
+4. If not → returns JSON-RPC error `-32602` with `{"supported": [...]}` in error data
+
+## Initialization Lifecycle
+
+The MCP spec requires a strict initialization handshake before the server processes requests:
+
+1. Client sends `initialize` → server responds with capabilities and negotiated version
+2. Client sends `notifications/initialized` → server marks session as ready
+3. Only after step 2 does the server accept `tools/list`, `tools/call`, etc.
+4. `ping` is exempt — allowed at any time as a keepalive
+
+Requests sent before the handshake completes receive a JSON-RPC error `-32600` ("server not initialized").
+
+## Tool Error Semantics
+
+Per the MCP spec, tool execution failures and protocol errors are handled differently:
+
+- **Handler returns `error`** → JSON-RPC success with `isError: true` in the tool result. The error message is included in the content.
+- **Protocol failure** (bad params, unknown tool, malformed JSON) → JSON-RPC error response with appropriate error code.
+
+This distinction matters: clients should check `result.isError` for tool-level failures, not the JSON-RPC error field.
 
 ## Session Lifecycle (HTTP+SSE)
 

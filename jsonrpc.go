@@ -55,3 +55,13 @@ func NewErrorResponse(id json.RawMessage, code int, message string) *Response {
 		Error:   &Error{Code: code, Message: message},
 	}
 }
+
+// NewErrorResponseWithData creates an error response with additional structured data.
+// Used for protocol errors that carry machine-readable context (e.g., supported versions).
+func NewErrorResponseWithData(id json.RawMessage, code int, message string, data any) *Response {
+	return &Response{
+		JSONRPC: "2.0",
+		ID:      id,
+		Error:   &Error{Code: code, Message: message, Data: data},
+	}
+}
