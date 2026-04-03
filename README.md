@@ -110,7 +110,7 @@ Capabilities are auto-advertised in the `initialize` response when the correspon
 ## Testing
 
 ```bash
-make test         # Unit tests (80 tests)
+make test         # Unit tests (83 tests)
 make testconf     # MCP conformance suite (requires Node.js)
 make testall      # Both unit + conformance
 make smoke        # Curl-based transport tests (SSE + Streamable HTTP)

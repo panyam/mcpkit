@@ -7,7 +7,7 @@ Go library for building production-grade MCP servers. Handles transports (SSE + 
 ## Quick Commands
 
 ```bash
-make test         # Unit tests (80 tests)
+make test         # Unit tests (83 tests)
 make testconf     # MCP conformance suite (needs Node.js)
 make testall      # Both
 make smoke        # Curl-based transport tests
