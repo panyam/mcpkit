@@ -28,6 +28,11 @@ type ToolRequest struct {
 
 	// RequestID is the JSON-RPC request ID.
 	RequestID json.RawMessage
+
+	// ProgressToken is the token from the request's _meta.progressToken field.
+	// Nil if the client did not request progress reporting. Pass this to
+	// EmitProgress to send notifications/progress notifications.
+	ProgressToken any
 }
 
 // ToolResult is the response from a tool handler.

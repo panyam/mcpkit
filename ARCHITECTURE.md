@@ -51,8 +51,10 @@ MCPKit is a Go library for building production-grade MCP (Model Context Protocol
 ```
 mcpkit/                          # module: github.com/panyam/mcpkit
 ├── go.mod                       # servicekit v0.0.14
-├── dispatch.go                  # Dispatcher: JSON-RPC routing, version negotiation, init gating, logging/setLevel
+├── dispatch.go                  # Dispatcher: JSON-RPC routing, version negotiation, init gating, logging, completion
 ├── logging.go                   # LogLevel, LogMessage, NotifyFunc, EmitLog, context helpers
+├── progress.go                  # ProgressNotification, EmitProgress
+├── completion.go                # CompletionRef, CompletionArgument, CompletionResult, CompletionHandler
 ├── server.go                    # Server, options, Handler(), ListenAndServe(), transport config
 ├── tool.go                      # ToolDef, ToolRequest, ToolResult, Content, ToolHandler
 ├── resource.go                  # ResourceDef, ResourceTemplate, ResourceHandler types
@@ -68,7 +70,7 @@ mcpkit/                          # module: github.com/panyam/mcpkit
 │   ├── conformance_resources.go # Resources + templates for conformance
 │   └── conformance_prompts.go   # Prompts for conformance
 ├── conformance/
-│   └── baseline.yml             # Expected conformance failures (12 scenarios)
+│   └── baseline.yml             # Expected conformance failures (11 scenarios)
 ├── scripts/
 │   ├── smoke-test.sh            # Curl-based tests for SSE + Streamable HTTP
 │   └── conformance-test.sh      # Runs @modelcontextprotocol/conformance

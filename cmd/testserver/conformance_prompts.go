@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"strings"
 
 	"github.com/panyam/mcpkit"
 )
@@ -99,6 +100,30 @@ func registerConformancePrompts(srv *mcpkit.Server) {
 						Data:     base64.StdEncoding.EncodeToString(pngBytes),
 					},
 				}},
+			}, nil
+		},
+	)
+
+	// Register completion handler for test_prompt_with_arguments.
+	// The conformance suite sends completion/complete with ref/prompt for this prompt
+	// and expects a valid response with completion suggestions.
+	srv.RegisterCompletion("ref/prompt", "test_prompt_with_arguments",
+		func(ctx context.Context, ref mcpkit.CompletionRef, arg mcpkit.CompletionArgument) (mcpkit.CompletionResult, error) {
+			// Provide sample completions filtered by partial input
+			allValues := []string{"value1", "value2", "value3"}
+			var filtered []string
+			for _, v := range allValues {
+				if strings.HasPrefix(v, arg.Value) {
+					filtered = append(filtered, v)
+				}
+			}
+			if filtered == nil {
+				filtered = allValues
+			}
+			return mcpkit.CompletionResult{
+				Values:  filtered,
+				Total:   len(filtered),
+				HasMore: false,
 			}, nil
 		},
 	)

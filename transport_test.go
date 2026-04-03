@@ -675,3 +675,102 @@ func TestSSELoggingFilteredByLevel(t *testing.T) {
 		t.Error("expected tool result with id")
 	}
 }
+
+// TestSSEProgressNotification verifies the full MCP progress notification lifecycle over SSE:
+// 1. Connect SSE and complete the init handshake
+// 2. Call a tool with _meta.progressToken that emits progress notifications via EmitProgress
+// 3. Verify notifications/progress events arrive on the SSE stream with the correct token
+//
+// This exercises: _meta.progressToken extraction → EmitProgress → NotifyFunc → hub.SendEvent → SSE stream.
+func TestSSEProgressNotification(t *testing.T) {
+	srv := NewServer(ServerInfo{Name: "test-progress", Version: "0.1.0"})
+
+	srv.RegisterTool(
+		ToolDef{
+			Name:        "progress_tool",
+			Description: "Emits progress notifications then returns a result",
+			InputSchema: map[string]any{"type": "object"},
+		},
+		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
+			EmitProgress(ctx, req.ProgressToken, 0, 100, "start")
+			EmitProgress(ctx, req.ProgressToken, 50, 100, "mid")
+			EmitProgress(ctx, req.ProgressToken, 100, 100, "done")
+			return TextResult("complete"), nil
+		},
+	)
+
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	sseResp, postURL, err := connectSSE(ts, "/mcp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sseResp.Body.Close()
+	reader := bufio.NewReader(sseResp.Body)
+
+	// Initialize
+	resp, _ := postJSON(postURL, &Request{
+		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "initialize",
+		Params: json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+	})
+	resp.Body.Close()
+	readSSEEvent(reader)
+
+	resp, _ = postJSON(postURL, &Request{JSONRPC: "2.0", Method: "notifications/initialized"})
+	resp.Body.Close()
+
+	// Call tool with progress token
+	resp, _ = postJSON(postURL, &Request{
+		JSONRPC: "2.0", ID: json.RawMessage(`2`), Method: "tools/call",
+		Params: json.RawMessage(`{"name":"progress_tool","arguments":{},"_meta":{"progressToken":"test-token"}}`),
+	})
+	resp.Body.Close()
+
+	// Read 4 events: 3 progress notifications + 1 tool result
+	var notifications []ProgressNotification
+	var toolResult *sseEvent
+	for i := 0; i < 4; i++ {
+		ev, err := readSSEEvent(reader)
+		if err != nil {
+			t.Fatalf("reading event %d: %v", i, err)
+		}
+
+		var obj map[string]json.RawMessage
+		if err := json.Unmarshal([]byte(ev.Data), &obj); err != nil {
+			t.Fatalf("event %d: unmarshal: %v", i, err)
+		}
+
+		if methodRaw, ok := obj["method"]; ok {
+			var method string
+			json.Unmarshal(methodRaw, &method)
+			if method == "notifications/progress" {
+				var notif struct {
+					Params ProgressNotification `json:"params"`
+				}
+				json.Unmarshal([]byte(ev.Data), &notif)
+				notifications = append(notifications, notif.Params)
+			}
+		} else {
+			toolResult = &ev
+		}
+	}
+
+	if len(notifications) != 3 {
+		t.Fatalf("got %d progress notifications, want 3", len(notifications))
+	}
+	if toolResult == nil {
+		t.Fatal("did not receive tool result")
+	}
+
+	// Verify progress values are monotonically increasing
+	wantProgress := []float64{0, 50, 100}
+	for i, want := range wantProgress {
+		if notifications[i].Progress != want {
+			t.Errorf("notification[%d].Progress = %v, want %v", i, notifications[i].Progress, want)
+		}
+		if notifications[i].ProgressToken != "test-token" {
+			t.Errorf("notification[%d].ProgressToken = %v, want test-token", i, notifications[i].ProgressToken)
+		}
+	}
+}

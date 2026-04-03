@@ -117,6 +117,26 @@ func registerConformanceTools(srv *mcpkit.Server) {
 		},
 	)
 
+	// test_tool_with_progress: emits 3 progress notifications during tool execution.
+	// The conformance suite calls this tool with _meta.progressToken and verifies
+	// that notifications/progress events arrive with monotonically increasing progress.
+	// Sends progress at 0/100, 50/100, 100/100 with 50ms delays between them.
+	srv.RegisterTool(
+		mcpkit.ToolDef{
+			Name:        "test_tool_with_progress",
+			Description: "Emits progress notifications during execution for conformance testing",
+			InputSchema: map[string]any{"type": "object"},
+		},
+		func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
+			mcpkit.EmitProgress(ctx, req.ProgressToken, 0, 100, "Starting")
+			time.Sleep(50 * time.Millisecond)
+			mcpkit.EmitProgress(ctx, req.ProgressToken, 50, 100, "Processing")
+			time.Sleep(50 * time.Millisecond)
+			mcpkit.EmitProgress(ctx, req.ProgressToken, 100, 100, "Complete")
+			return mcpkit.TextResult("Progress complete"), nil
+		},
+	)
+
 	// test_embedded_resource: returns a resource content item
 	srv.RegisterTool(
 		mcpkit.ToolDef{

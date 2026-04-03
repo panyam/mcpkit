@@ -7,7 +7,7 @@ Go library for building production-grade MCP servers. Handles transports (SSE + 
 ## Quick Commands
 
 ```bash
-make test         # Unit tests (83 tests)
+make test         # Unit tests (94 tests)
 make testconf     # MCP conformance suite (needs Node.js)
 make testall      # Both
 make smoke        # Curl-based transport tests
@@ -21,8 +21,10 @@ make serve-both   # Both transports
 
 | File | Purpose |
 |------|---------|
-| `dispatch.go` | JSON-RPC routing, Dispatcher, version negotiation, init gating, cancellation, logging/setLevel |
+| `dispatch.go` | JSON-RPC routing, Dispatcher, version negotiation, init gating, cancellation, logging/setLevel, completion/complete |
 | `logging.go` | LogLevel, LogMessage, NotifyFunc, EmitLog, context-based notification delivery |
+| `progress.go` | ProgressNotification, EmitProgress for long-running tool reporting |
+| `completion.go` | CompletionRef, CompletionArgument, CompletionResult, CompletionHandler |
 | `server.go` | Server, options, Handler(), ListenAndServe(), transport config |
 | `tool.go` | ToolDef, ToolRequest, ToolResult, Content types |
 | `resource.go` | ResourceDef, ResourceTemplate, ResourceHandler types |
@@ -41,7 +43,7 @@ make serve-both   # Both transports
 - **`go.mod` must use published servicekit** (not local replace) — CI doesn't have the local source. Currently `v0.0.14`.
 - **Conformance baseline**: when a feature passes its conformance test, remove it from `conformance/baseline.yml`. Stale entries cause CI failure.
 - **SSE transport sessions** die with the connection (no TTL needed). **Streamable HTTP sessions** persist until DELETE or server restart.
-- **Capabilities auto-advertise**: resources/prompts capabilities only appear in initialize response when resources/prompts are actually registered. Logging is always advertised.
+- **Capabilities auto-advertise**: resources/prompts capabilities only appear in initialize response when resources/prompts are actually registered. Logging and completions are always advertised.
 - **Server-to-client notifications** (logging, progress) work over both transports. SSE: pushed via hub. Streamable HTTP: POST response switches to SSE streaming (`Content-Type: text/event-stream`) when client sends `Accept: text/event-stream`. Falls back to synchronous JSON if client doesn't accept SSE.
 
 ## Architecture
@@ -50,14 +52,12 @@ See `ARCHITECTURE.md` for transport design, type definitions, and protocol detai
 
 ## Conformance Status
 
-20/30 MCP conformance scenarios passing. Failing scenarios are tracked in `conformance/baseline.yml` with issue references. See `README.md` for testing instructions.
+22/30 MCP conformance scenarios passing. Failing scenarios are tracked in `conformance/baseline.yml` with issue references. See `README.md` for testing instructions.
 
 ## What's Not Implemented Yet
 
 - stdio transport (#3)
-- Progress (#18)
 - Sampling (#22), Elicitation (#23)
 - Resource subscriptions (#24)
-- Completion (#21)
-- Streamable HTTP GET SSE stream (server-initiated notifications)
+- Streamable HTTP GET SSE stream (server-initiated notifications without a request)
 - mcpkit/auth sub-module (JWT/OIDC via oneauth)

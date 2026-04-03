@@ -650,3 +650,56 @@ func TestDispatchLoggingCapability(t *testing.T) {
 		t.Error("capabilities missing logging")
 	}
 }
+
+// TestDispatchToolsCallWithProgressToken verifies that when a tools/call request
+// includes _meta.progressToken, the token is extracted and populated in the
+// ToolRequest.ProgressToken field, making it available for EmitProgress calls.
+func TestDispatchToolsCallWithProgressToken(t *testing.T) {
+	d := NewDispatcher(ServerInfo{Name: "test", Version: "1.0"})
+	var gotToken any
+	d.RegisterTool(
+		ToolDef{Name: "progress_tool", Description: "captures progress token"},
+		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
+			gotToken = req.ProgressToken
+			return TextResult("ok"), nil
+		},
+	)
+	initDispatcher(d)
+
+	d.Dispatch(context.Background(), &Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "tools/call",
+		Params:  json.RawMessage(`{"name":"progress_tool","arguments":{},"_meta":{"progressToken":"my-token"}}`),
+	})
+
+	if gotToken != "my-token" {
+		t.Errorf("ProgressToken = %v (%T), want my-token", gotToken, gotToken)
+	}
+}
+
+// TestDispatchToolsCallWithoutProgressToken verifies that when _meta is absent,
+// ProgressToken remains nil, so EmitProgress is a safe no-op.
+func TestDispatchToolsCallWithoutProgressToken(t *testing.T) {
+	d := NewDispatcher(ServerInfo{Name: "test", Version: "1.0"})
+	var gotToken any = "sentinel"
+	d.RegisterTool(
+		ToolDef{Name: "no_progress", Description: "no progress token"},
+		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
+			gotToken = req.ProgressToken
+			return TextResult("ok"), nil
+		},
+	)
+	initDispatcher(d)
+
+	d.Dispatch(context.Background(), &Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "tools/call",
+		Params:  json.RawMessage(`{"name":"no_progress","arguments":{}}`),
+	})
+
+	if gotToken != nil {
+		t.Errorf("ProgressToken = %v, want nil", gotToken)
+	}
+}

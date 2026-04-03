@@ -31,6 +31,8 @@ type Dispatcher struct {
 	prompts     map[string]promptEntry
 	promptOrder []string
 
+	completions map[string]CompletionHandler // key: "ref/prompt:name" or "ref/resource:uri"
+
 	// inflight tracks cancellable in-flight requests by ID.
 	inflight sync.Map // requestID (string) → context.CancelFunc
 
@@ -109,11 +111,12 @@ type initializeParams struct {
 // NewDispatcher creates a dispatcher with the given server identity.
 func NewDispatcher(info ServerInfo) *Dispatcher {
 	return &Dispatcher{
-		tools:     make(map[string]toolEntry),
-		resources: make(map[string]resourceEntry),
-		templates: make(map[string]templateEntry),
-		prompts:   make(map[string]promptEntry),
-		serverInfo: info,
+		tools:       make(map[string]toolEntry),
+		resources:   make(map[string]resourceEntry),
+		templates:   make(map[string]templateEntry),
+		prompts:     make(map[string]promptEntry),
+		completions: make(map[string]CompletionHandler),
+		serverInfo:  info,
 	}
 }
 
@@ -131,6 +134,7 @@ func (d *Dispatcher) newSession() *Dispatcher {
 		templateOrder: d.templateOrder,
 		prompts:       d.prompts,
 		promptOrder:   d.promptOrder,
+		completions:   d.completions,
 		serverInfo:    d.serverInfo,
 	}
 }
@@ -162,6 +166,12 @@ func (d *Dispatcher) RegisterResourceTemplate(def ResourceTemplate, handler Temp
 func (d *Dispatcher) RegisterPrompt(def PromptDef, handler PromptHandler) {
 	d.prompts[def.Name] = promptEntry{def: def, handler: handler}
 	d.promptOrder = append(d.promptOrder, def.Name)
+}
+
+// RegisterCompletion registers a completion handler for a specific reference.
+// refType is "ref/prompt" or "ref/resource". name is the prompt name or resource URI template.
+func (d *Dispatcher) RegisterCompletion(refType, name string, handler CompletionHandler) {
+	d.completions[refType+":"+name] = handler
 }
 
 // Dispatch routes a JSON-RPC request and returns the response.
@@ -216,6 +226,8 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *Request) *Response {
 			return d.handlePromptsGet(ctx, id, req.Params)
 		case "logging/setLevel":
 			return d.handleLoggingSetLevel(id, req.Params)
+		case "completion/complete":
+			return d.handleCompletionComplete(ctx, id, req.Params)
 		default:
 			return NewErrorResponse(id, ErrCodeMethodNotFound, "method not found: "+req.Method)
 		}
@@ -246,8 +258,9 @@ func (d *Dispatcher) handleInitialize(id json.RawMessage, params json.RawMessage
 	d.clientInfo = p.ClientInfo
 
 	caps := map[string]any{
-		"tools":   map[string]any{},
-		"logging": map[string]any{},
+		"tools":       map[string]any{},
+		"logging":     map[string]any{},
+		"completions": map[string]any{},
 	}
 	if len(d.resources) > 0 || len(d.templates) > 0 {
 		caps["resources"] = map[string]any{}
@@ -278,6 +291,9 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, pa
 	var envelope struct {
 		Name      string          `json:"name"`
 		Arguments json.RawMessage `json:"arguments"`
+		Meta      *struct {
+			ProgressToken any `json:"progressToken"`
+		} `json:"_meta"`
 	}
 	if err := json.Unmarshal(params, &envelope); err != nil {
 		return NewErrorResponse(id, ErrCodeInvalidParams, err.Error())
@@ -292,6 +308,9 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, pa
 		Name:      envelope.Name,
 		Arguments: envelope.Arguments,
 		RequestID: id,
+	}
+	if envelope.Meta != nil {
+		req.ProgressToken = envelope.Meta.ProgressToken
 	}
 
 	result, err := entry.handler(ctx, req)
@@ -393,6 +412,45 @@ func (d *Dispatcher) handlePromptsGet(ctx context.Context, id json.RawMessage, p
 	}
 
 	return NewResponse(id, result)
+}
+
+// --- Completion ---
+
+// handleCompletionComplete handles the completion/complete method.
+// It looks up a registered CompletionHandler by ref type + name/URI,
+// calls it, and returns the completion suggestions. If no handler is
+// registered, returns an empty result (graceful fallback).
+func (d *Dispatcher) handleCompletionComplete(ctx context.Context, id json.RawMessage, params json.RawMessage) *Response {
+	var p struct {
+		Ref      CompletionRef      `json:"ref"`
+		Argument CompletionArgument `json:"argument"`
+	}
+	if err := json.Unmarshal(params, &p); err != nil {
+		return NewErrorResponse(id, ErrCodeInvalidParams, "invalid completion/complete params: "+err.Error())
+	}
+
+	// Build lookup key from ref type + name or URI
+	key := p.Ref.Type + ":"
+	if p.Ref.Name != "" {
+		key += p.Ref.Name
+	} else {
+		key += p.Ref.URI
+	}
+
+	handler, ok := d.completions[key]
+	if !ok {
+		// No handler registered — return empty completion (graceful fallback)
+		return NewResponse(id, map[string]any{
+			"completion": CompletionResult{Values: []string{}, HasMore: false},
+		})
+	}
+
+	result, err := handler(ctx, p.Ref, p.Argument)
+	if err != nil {
+		return NewErrorResponse(id, ErrCodeInternal, fmt.Sprintf("completion %q: %v", key, err))
+	}
+
+	return NewResponse(id, map[string]any{"completion": result})
 }
 
 // --- Cancellation ---
