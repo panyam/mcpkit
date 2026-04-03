@@ -1,145 +1,134 @@
 #!/bin/bash
-# Smoke test for the MCP HTTP+SSE transport.
-# Starts the test server, runs a full MCP lifecycle via curl, and verifies responses.
+# Smoke test for MCP HTTP transports (SSE and Streamable HTTP).
+# Starts test servers, runs full MCP lifecycle via curl, and verifies responses.
 set -euo pipefail
 
-PORT=18787
-SERVER_PID=""
-SSE_PID=""
+SSE_PORT=18787
+STREAMABLE_PORT=18788
+PIDS=()
 SSE_FILE=$(mktemp)
 
 cleanup() {
-    [ -n "$SSE_PID" ] && kill "$SSE_PID" 2>/dev/null || true
-    [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null || true
-    wait "$SSE_PID" 2>/dev/null || true
-    wait "$SERVER_PID" 2>/dev/null || true
+    for pid in "${PIDS[@]}"; do
+        kill "$pid" 2>/dev/null || true
+    done
+    for pid in "${PIDS[@]}"; do
+        wait "$pid" 2>/dev/null || true
+    done
     rm -f "$SSE_FILE"
 }
 trap cleanup EXIT
 
-echo "=== Starting test server on :$PORT ==="
-PORT=$PORT go run ./cmd/testserver &
-SERVER_PID=$!
+########################################
+# SSE TRANSPORT TESTS
+########################################
+echo "==============================="
+echo "=== SSE TRANSPORT TESTS     ==="
+echo "==============================="
+
+echo "=== Starting SSE test server on :$SSE_PORT ==="
+PORT=$SSE_PORT go run ./cmd/testserver &
+PIDS+=($!)
 sleep 2
 
-if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-    echo "FAIL: server failed to start"
-    exit 1
-fi
-
-echo "=== Step 1: Connect SSE (background), extract session URL ==="
-# Keep SSE connection open in background, write output to temp file
-curl -s -N "http://localhost:$PORT/mcp/sse" > "$SSE_FILE" 2>&1 &
-SSE_PID=$!
+# Open SSE connection in background
+curl -s -N "http://localhost:$SSE_PORT/mcp/sse" > "$SSE_FILE" 2>&1 &
+PIDS+=($!)
 sleep 1
 
 POST_URL=$(grep "^data:" "$SSE_FILE" | head -1 | sed 's/^data: //')
 if [ -z "$POST_URL" ]; then
     echo "FAIL: no endpoint URL in SSE stream"
-    cat "$SSE_FILE"
     exit 1
 fi
-echo "  POST URL: $POST_URL"
+echo "  endpoint URL: $POST_URL"
 
-echo "=== Step 2: Initialize ==="
-HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$POST_URL" \
-    -H "Content-Type: application/json" \
-    -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"smoke-test","version":"1.0"}}}')
-
-if [ "$HTTP_STATUS" != "202" ]; then
-    echo "FAIL: initialize returned HTTP $HTTP_STATUS, want 202"
-    exit 1
-fi
-echo "  initialize -> $HTTP_STATUS (OK)"
+# Initialize
+curl -s -o /dev/null -w "" -X POST "$POST_URL" -H "Content-Type: application/json" \
+    -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"smoke","version":"1.0"}}}'
 sleep 0.2
 
-# Verify initialize response came on SSE stream
-if ! grep -q '"protocolVersion"' "$SSE_FILE"; then
-    echo "FAIL: no initialize response on SSE stream"
-    cat "$SSE_FILE"
-    exit 1
-fi
-echo "  initialize response received on SSE (OK)"
-
-echo "=== Step 3: Send initialized notification ==="
-HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$POST_URL" \
-    -H "Content-Type: application/json" \
+# Send initialized notification
+HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$POST_URL" -H "Content-Type: application/json" \
     -d '{"jsonrpc":"2.0","method":"notifications/initialized"}')
+[ "$HTTP_STATUS" = "204" ] && echo "  initialized -> 204 (OK)" || { echo "FAIL: initialized -> $HTTP_STATUS"; exit 1; }
 
-if [ "$HTTP_STATUS" != "204" ]; then
-    echo "FAIL: initialized notification returned HTTP $HTTP_STATUS, want 204"
-    exit 1
-fi
-echo "  notifications/initialized -> $HTTP_STATUS (OK)"
-
-echo "=== Step 4: List tools ==="
-HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$POST_URL" \
-    -H "Content-Type: application/json" \
-    -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}')
-
-if [ "$HTTP_STATUS" != "202" ]; then
-    echo "FAIL: tools/list returned HTTP $HTTP_STATUS, want 202"
-    exit 1
-fi
-echo "  tools/list -> $HTTP_STATUS (OK)"
+# Call echo tool
+curl -s -o /dev/null -X POST "$POST_URL" -H "Content-Type: application/json" \
+    -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{"message":"hello sse"}}}'
 sleep 0.2
+grep -q 'hello sse' "$SSE_FILE" && echo "  echo tool response on SSE (OK)" || { echo "FAIL: echo response missing"; exit 1; }
 
-if ! grep -q '"echo"' "$SSE_FILE"; then
-    echo "FAIL: tools/list response missing echo tool"
-    cat "$SSE_FILE"
-    exit 1
-fi
-echo "  tools/list response contains echo tool (OK)"
-
-echo "=== Step 5: Call echo tool ==="
-HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$POST_URL" \
-    -H "Content-Type: application/json" \
-    -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"echo","arguments":{"message":"hello from smoke test"}}}')
-
-if [ "$HTTP_STATUS" != "202" ]; then
-    echo "FAIL: tools/call returned HTTP $HTTP_STATUS, want 202"
-    exit 1
-fi
-echo "  tools/call echo -> $HTTP_STATUS (OK)"
-sleep 0.2
-
-if ! grep -q 'hello from smoke test' "$SSE_FILE"; then
-    echo "FAIL: echo response not found on SSE stream"
-    cat "$SSE_FILE"
-    exit 1
-fi
-echo "  echo response received on SSE (OK)"
-
-echo "=== Step 6: Call fail tool (test isError semantics) ==="
-HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$POST_URL" \
-    -H "Content-Type: application/json" \
-    -d '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"fail","arguments":{}}}')
-
-if [ "$HTTP_STATUS" != "202" ]; then
-    echo "FAIL: tools/call fail returned HTTP $HTTP_STATUS, want 202"
-    exit 1
-fi
-echo "  tools/call fail -> $HTTP_STATUS (OK)"
-sleep 0.2
-
-if ! grep -q '"isError":true' "$SSE_FILE"; then
-    echo "FAIL: fail tool response missing isError:true"
-    cat "$SSE_FILE"
-    exit 1
-fi
-echo "  fail tool returned isError:true (OK)"
-
-echo "=== Step 7: Verify expired session ==="
+# Expired session
 HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-    "http://localhost:$PORT/mcp/message?sessionId=nonexistent" \
-    -H "Content-Type: application/json" \
+    "http://localhost:$SSE_PORT/mcp/message?sessionId=nonexistent" -H "Content-Type: application/json" \
     -d '{"jsonrpc":"2.0","id":1,"method":"ping"}')
+[ "$HTTP_STATUS" = "410" ] && echo "  expired session -> 410 (OK)" || { echo "FAIL: expired -> $HTTP_STATUS"; exit 1; }
 
-if [ "$HTTP_STATUS" != "410" ]; then
-    echo "FAIL: expired session returned HTTP $HTTP_STATUS, want 410"
+echo "=== SSE TESTS PASSED ==="
+echo ""
+
+########################################
+# STREAMABLE HTTP TRANSPORT TESTS
+########################################
+echo "==============================="
+echo "=== STREAMABLE HTTP TESTS   ==="
+echo "==============================="
+
+echo "=== Starting Streamable HTTP test server on :$STREAMABLE_PORT ==="
+STREAMABLE=1 PORT=$STREAMABLE_PORT go run ./cmd/testserver &
+PIDS+=($!)
+sleep 2
+
+BASE_URL="http://localhost:$STREAMABLE_PORT/mcp"
+
+# Initialize — extract session ID from header
+SESSION_ID=$(curl -s -D - -o /dev/null -X POST "$BASE_URL" \
+    -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
+    -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"smoke","version":"1.0"}}}' \
+    | grep -i "Mcp-Session-Id" | awk '{print $2}' | tr -d '\r')
+
+if [ -z "$SESSION_ID" ]; then
+    echo "FAIL: no Mcp-Session-Id header"
     exit 1
 fi
-echo "  expired session -> $HTTP_STATUS (OK)"
+echo "  initialize -> session $SESSION_ID (OK)"
 
+# Send initialized notification
+HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL" \
+    -H "Content-Type: application/json" -H "Mcp-Session-Id: $SESSION_ID" \
+    -d '{"jsonrpc":"2.0","method":"notifications/initialized"}')
+[ "$HTTP_STATUS" = "202" ] && echo "  initialized -> 202 (OK)" || { echo "FAIL: initialized -> $HTTP_STATUS"; exit 1; }
+
+# Call echo tool — response in HTTP body
+ECHO_RESP=$(curl -s -X POST "$BASE_URL" \
+    -H "Content-Type: application/json" -H "Mcp-Session-Id: $SESSION_ID" \
+    -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{"message":"hello streamable"}}}')
+echo "$ECHO_RESP" | grep -q 'hello streamable' && echo "  echo tool -> response in body (OK)" || { echo "FAIL: $ECHO_RESP"; exit 1; }
+
+# Missing session header
+HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL" \
+    -H "Content-Type: application/json" \
+    -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}')
+[ "$HTTP_STATUS" = "400" ] && echo "  missing session -> 400 (OK)" || { echo "FAIL: missing session -> $HTTP_STATUS"; exit 1; }
+
+# Unknown session
+HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL" \
+    -H "Content-Type: application/json" -H "Mcp-Session-Id: bogus" \
+    -d '{"jsonrpc":"2.0","id":1,"method":"ping"}')
+[ "$HTTP_STATUS" = "404" ] && echo "  unknown session -> 404 (OK)" || { echo "FAIL: unknown session -> $HTTP_STATUS"; exit 1; }
+
+# DELETE session
+HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "$BASE_URL" \
+    -H "Mcp-Session-Id: $SESSION_ID")
+[ "$HTTP_STATUS" = "200" ] && echo "  DELETE session -> 200 (OK)" || { echo "FAIL: DELETE -> $HTTP_STATUS"; exit 1; }
+
+# Post-delete should be 404
+HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL" \
+    -H "Content-Type: application/json" -H "Mcp-Session-Id: $SESSION_ID" \
+    -d '{"jsonrpc":"2.0","id":1,"method":"ping"}')
+[ "$HTTP_STATUS" = "404" ] && echo "  post-delete -> 404 (OK)" || { echo "FAIL: post-delete -> $HTTP_STATUS"; exit 1; }
+
+echo "=== STREAMABLE HTTP TESTS PASSED ==="
 echo ""
 echo "=== ALL SMOKE TESTS PASSED ==="

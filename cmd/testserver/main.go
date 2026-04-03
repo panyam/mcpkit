@@ -1,10 +1,13 @@
 // testserver is a minimal MCP server for manual testing and conformance validation.
-// It registers three tools (echo, add, fail) and serves HTTP+SSE on :8787.
+// It registers three tools (echo, add, fail) and serves MCP transports on :8787.
+//
+// By default, serves SSE transport. Set STREAMABLE=1 for Streamable HTTP,
+// or BOTH=1 for both transports simultaneously.
 //
 // Usage:
 //
 //	go run ./cmd/testserver
-//	curl -N http://localhost:8787/mcp/sse
+//	STREAMABLE=1 go run ./cmd/testserver
 package main
 
 import (
@@ -101,8 +104,18 @@ func main() {
 		},
 	)
 
-	log.Printf("MCP test server listening on %s (SSE at /mcp/sse)", listenAddr())
-	if err := srv.ListenAndServe(); err != nil {
+	var transportOpts []mcpkit.TransportOption
+	switch {
+	case os.Getenv("BOTH") == "1":
+		transportOpts = append(transportOpts, mcpkit.WithStreamableHTTP(true), mcpkit.WithSSE(true))
+		log.Printf("MCP test server listening on %s (SSE + Streamable HTTP at /mcp)", listenAddr())
+	case os.Getenv("STREAMABLE") == "1":
+		transportOpts = append(transportOpts, mcpkit.WithStreamableHTTP(true), mcpkit.WithSSE(false))
+		log.Printf("MCP test server listening on %s (Streamable HTTP at /mcp)", listenAddr())
+	default:
+		log.Printf("MCP test server listening on %s (SSE at /mcp/sse)", listenAddr())
+	}
+	if err := srv.ListenAndServe(transportOpts...); err != nil {
 		log.Fatal(err)
 	}
 }
