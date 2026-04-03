@@ -92,6 +92,12 @@ func (s *Server) RegisterPrompt(def PromptDef, handler PromptHandler) {
 	s.dispatcher.RegisterPrompt(def, handler)
 }
 
+// RegisterCompletion registers a completion handler for argument autocompletion.
+// refType is "ref/prompt" or "ref/resource". name is the prompt name or resource URI template.
+func (s *Server) RegisterCompletion(refType, name string, handler CompletionHandler) {
+	s.dispatcher.RegisterCompletion(refType, name, handler)
+}
+
 // Dispatch routes a JSON-RPC request through the server's dispatch layer.
 func (s *Server) Dispatch(ctx context.Context, req *Request) *Response {
 	return s.dispatchWith(s.dispatcher, ctx, req)

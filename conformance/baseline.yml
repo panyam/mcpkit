@@ -9,7 +9,6 @@
 
 server:
   # Missing protocol features (not yet implemented in mcpkit)
-  - completion-complete         # Issue: #21 (completion/complete)
   - server-sse-multiple-streams # Requires GET SSE stream (Streamable HTTP phase 2)
 
   # Missing capabilities (subscriptions, elicitation, sampling)
@@ -19,7 +18,6 @@ server:
   - elicitation-sep1330-enums      # Issue: #23
 
   # Tool scenarios requiring server-to-client features
-  - tools-call-with-progress    # Requires progress notifications (#18)
   - tools-call-sampling         # Requires sampling/createMessage (#22)
   - tools-call-elicitation      # Requires elicitation/create (#23)
   - tools-call-mixed-content    # Expected response format mismatch
