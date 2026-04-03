@@ -116,6 +116,27 @@ MCPKit follows the MCP spec for error semantics:
 
 This means clients should check `result.isError`, not the JSON-RPC error field, to detect tool-level failures.
 
+## Testing
+
+```bash
+make test        # Unit tests (50 tests)
+make testconf    # MCP conformance suite (requires Node.js)
+make testall     # Both unit + conformance
+make smoke       # Curl-based smoke tests (both transports)
+make audit       # Security: govulncheck + gosec + gitleaks + race detection
+```
+
+### Conformance Suite
+
+MCPKit is validated against the [official MCP conformance test suite](https://github.com/modelcontextprotocol/conformance). Current status: **9/30 scenarios passing** (remaining require resources, prompts, logging, and other unimplemented capabilities — tracked in `conformance/baseline.yml`).
+
+Run a single scenario:
+```bash
+bash scripts/conformance-test.sh tools-call-simple-text
+```
+
+When you implement a new feature and its conformance scenario starts passing, **remove it from `conformance/baseline.yml`** — leaving stale entries causes CI to fail.
+
 ## Stack Dependencies
 
 **Core module** (`github.com/panyam/mcpkit`):

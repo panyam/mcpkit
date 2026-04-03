@@ -40,9 +40,21 @@ type ToolResult struct {
 }
 
 // Content is a single content item in a tool result.
+// Supports text, image, audio, and embedded resource types per MCP spec.
 type Content struct {
-	Type string `json:"type"`
-	Text string `json:"text,omitempty"`
+	Type     string           `json:"type"`
+	Text     string           `json:"text,omitempty"`
+	MimeType string           `json:"mimeType,omitempty"`
+	Data     string           `json:"data,omitempty"`
+	Resource *ResourceContent `json:"resource,omitempty"`
+}
+
+// ResourceContent is an embedded resource reference in a tool result.
+type ResourceContent struct {
+	URI      string `json:"uri"`
+	MimeType string `json:"mimeType,omitempty"`
+	Text     string `json:"text,omitempty"`
+	Blob     string `json:"blob,omitempty"`
 }
 
 // TextResult creates a ToolResult with a single text content item.
