@@ -97,14 +97,7 @@ func connectSSE(ts *httptest.Server, prefix string) (*http.Response, string, err
 		return nil, "", fmt.Errorf("expected endpoint event, got %q", ev.Event)
 	}
 
-	// The endpoint URL comes through JSONCodec, so it's a JSON string — unquote it.
-	var postURL string
-	if err := json.Unmarshal([]byte(ev.Data), &postURL); err != nil {
-		resp.Body.Close()
-		return nil, "", fmt.Errorf("parsing endpoint URL %q: %w", ev.Data, err)
-	}
-
-	return resp, postURL, nil
+	return resp, ev.Data, nil
 }
 
 // postJSON sends a JSON-RPC request to the given URL and returns the HTTP response.
