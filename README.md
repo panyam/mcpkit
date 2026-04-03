@@ -11,6 +11,8 @@ package main
 
 import (
     "context"
+    "log"
+    "net/http"
     "time"
     "github.com/panyam/mcpkit"
 )
@@ -18,7 +20,6 @@ import (
 func main() {
     srv := mcpkit.NewServer(
         mcpkit.ServerInfo{Name: "my-server", Version: "0.1.0"},
-        mcpkit.WithListen(":8787"),
         mcpkit.WithBearerToken("my-secret"),
         mcpkit.WithToolTimeout(30 * time.Second),
     )
@@ -46,8 +47,51 @@ func main() {
         },
     )
 
-    srv.ListenAndServe(context.Background())
+    handler := srv.Handler() // serves GET /mcp/sse + POST /mcp/message
+    log.Println("MCP server on :8787")
+    http.ListenAndServe(":8787", handler)
 }
+```
+
+## HTTP+SSE Transport
+
+The `srv.Handler()` method returns an `http.Handler` implementing the MCP HTTP+SSE transport (2024-11-05 spec):
+
+- **`GET /mcp/sse`** — Opens an SSE stream. The server sends an `endpoint` event with the POST URL.
+- **`POST /mcp/message?sessionId=<id>`** — Receives JSON-RPC requests. Responses are pushed on the SSE stream as `message` events.
+
+Each SSE connection is an independent MCP session with its own initialization state.
+
+### Transport options
+
+```go
+handler := srv.Handler(
+    mcpkit.WithPrefix("/custom"),                    // URL prefix (default: /mcp)
+    mcpkit.WithPublicURL("https://proxy.example.com"), // for reverse proxy
+    mcpkit.WithMaxSessions(100),                     // limit concurrent sessions
+    mcpkit.WithKeepalivePeriod(15 * time.Second),    // SSE keepalive interval
+)
+```
+
+### Manual testing
+
+```bash
+# Terminal 1: Start test server
+go run ./cmd/testserver
+
+# Terminal 2: Open SSE stream
+curl -N http://localhost:8787/mcp/sse
+
+# Terminal 3: Send initialize (use sessionId from Terminal 2)
+curl -X POST 'http://localhost:8787/mcp/message?sessionId=<id>' \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"curl","version":"1.0"}}}'
+```
+
+Or use the MCP Inspector:
+```bash
+npx @modelcontextprotocol/inspector
+# Point it at http://localhost:8787/mcp in the web UI
 ```
 
 ## Protocol Support
@@ -56,16 +100,12 @@ MCPKit supports MCP protocol versions **2025-11-25** and **2024-11-05** with aut
 
 ## Features
 
-- **Two transports**: HTTP+SSE (MCP 2024-11-05) and stdio (Content-Length framed)
+- **HTTP+SSE transport**: Per-session SSE streams with session management, keepalive, and graceful cleanup
 - **Protocol negotiation**: Supports MCP 2025-11-25 and 2024-11-05 with version handshake
 - **Initialization gating**: Enforces the MCP lifecycle — requests are rejected until the full `initialize` / `notifications/initialized` handshake completes
 - **Auth**: Constant-time bearer token, JWT/OIDC via oneauth (optional)
-- **Rate limiting**: Per-session and per-IP token bucket
-- **Observability**: Structured logging (slog), Prometheus metrics, health endpoint
-- **Safety**: Server timeouts, body size limits, subprocess timeouts, allowed-roots
-- **Graceful shutdown**: SIGTERM → drain SSE → exit
-- **Session management**: Concurrency-safe SSE hub with per-session write mutex
-- **CORS**: Configurable origins with OPTIONS preflight
+- **Safety**: Tool execution timeouts, configurable session limits
+- **Session management**: Concurrency-safe SSE hub via servicekit, per-session dispatchers
 
 ## Tool Error Handling
 
@@ -79,7 +119,7 @@ This means clients should check `result.isError`, not the JSON-RPC error field, 
 ## Stack Dependencies
 
 **Core module** (`github.com/panyam/mcpkit`):
-- `goutils` — concurrency utilities
+- `servicekit` — SSE connection/hub infrastructure, HTTP middleware
 
 **Sub-module** (`github.com/panyam/mcpkit/auth`) — separate `go.mod`:
 - `oneauth` — JWT/OIDC validation (only pulled in when you import this sub-module)

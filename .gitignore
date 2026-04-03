@@ -26,3 +26,4 @@ locallinks/
 # OS
 .DS_Store
 Thumbs.db
+/testserver

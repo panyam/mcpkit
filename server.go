@@ -5,6 +5,8 @@ import (
 	"crypto/subtle"
 	"net/http"
 	"time"
+
+	gohttp "github.com/panyam/servicekit/http"
 )
 
 // Server is an MCP server that can run over multiple transports.
@@ -14,10 +16,10 @@ type Server struct {
 }
 
 type serverOptions struct {
-	listen       string
-	bearerToken  string
-	toolTimeout  time.Duration
-	allowedRoots []string
+	listen        string
+	bearerToken   string
+	toolTimeout   time.Duration
+	allowedRoots  []string
 	authValidator AuthValidator
 }
 
@@ -76,12 +78,89 @@ func (s *Server) RegisterTool(def ToolDef, handler ToolHandler) {
 
 // Dispatch routes a JSON-RPC request through the server's dispatch layer.
 func (s *Server) Dispatch(ctx context.Context, req *Request) *Response {
+	return s.dispatchWith(s.dispatcher, ctx, req)
+}
+
+// dispatchWith routes a request through a specific dispatcher with server-level
+// middleware (e.g. tool timeout). Used by the SSE transport to dispatch on
+// per-session dispatchers.
+func (s *Server) dispatchWith(d *Dispatcher, ctx context.Context, req *Request) *Response {
 	if s.options.toolTimeout > 0 && req.Method == "tools/call" {
 		tctx, cancel := context.WithTimeout(ctx, s.options.toolTimeout)
 		defer cancel()
-		return s.dispatcher.Dispatch(tctx, req)
+		return d.Dispatch(tctx, req)
 	}
-	return s.dispatcher.Dispatch(ctx, req)
+	return d.Dispatch(ctx, req)
+}
+
+// newSession creates a per-session Dispatcher clone with fresh session state.
+func (s *Server) newSession() *Dispatcher {
+	return s.dispatcher.newSession()
+}
+
+// Handler returns an http.Handler implementing the MCP HTTP+SSE transport.
+// The handler serves GET {prefix}/sse for SSE connections and POST {prefix}/message
+// for JSON-RPC requests.
+func (s *Server) Handler(opts ...TransportOption) http.Handler {
+	return newSSETransport(s, opts...).handler()
+}
+
+// ListenAndServe starts the HTTP+SSE transport with graceful shutdown support.
+// On SIGTERM/SIGINT it stops accepting new connections, closes all active SSE
+// sessions, drains in-flight requests, and then exits.
+// The listen address comes from WithListen (default ":8080").
+func (s *Server) ListenAndServe(opts ...TransportOption) error {
+	t := newSSETransport(s, opts...)
+	addr := s.options.listen
+	if addr == "" {
+		addr = ":8080"
+	}
+	httpSrv := &http.Server{
+		Addr:         addr,
+		Handler:      t.handler(),
+		WriteTimeout: 0, // SSE requires no write timeout on long-lived connections
+	}
+	return gohttp.ListenAndServeGraceful(httpSrv,
+		gohttp.WithOnShutdown(t.hub.CloseAll),
+	)
+}
+
+// TransportOption configures the HTTP+SSE transport.
+type TransportOption func(*transportConfig)
+
+type transportConfig struct {
+	prefix          string        // URL path prefix (default "/mcp")
+	publicURL       string        // public base URL for reverse proxy deployments
+	maxSessions     int           // max concurrent SSE sessions (0 = unlimited)
+	keepalivePeriod time.Duration // SSE keepalive interval (default 30s)
+}
+
+func defaultTransportConfig() transportConfig {
+	return transportConfig{
+		prefix:          "/mcp",
+		keepalivePeriod: 30 * time.Second,
+	}
+}
+
+// WithPrefix sets the URL path prefix for SSE and message endpoints.
+func WithPrefix(p string) TransportOption {
+	return func(c *transportConfig) { c.prefix = p }
+}
+
+// WithPublicURL sets the public base URL used in the SSE endpoint event.
+// Use this when the server is behind a reverse proxy.
+func WithPublicURL(u string) TransportOption {
+	return func(c *transportConfig) { c.publicURL = u }
+}
+
+// WithMaxSessions limits the number of concurrent SSE sessions.
+func WithMaxSessions(n int) TransportOption {
+	return func(c *transportConfig) { c.maxSessions = n }
+}
+
+// WithKeepalivePeriod sets the interval for SSE keepalive comments.
+func WithKeepalivePeriod(d time.Duration) TransportOption {
+	return func(c *transportConfig) { c.keepalivePeriod = d }
 }
 
 // CheckAuth validates an HTTP request against the server's auth configuration.
