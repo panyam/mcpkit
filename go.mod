@@ -2,9 +2,7 @@ module github.com/panyam/mcpkit
 
 go 1.25.0
 
-replace github.com/panyam/servicekit => ../../servicekit/master
-
-require github.com/panyam/servicekit v0.0.0-00010101000000-000000000000
+require github.com/panyam/servicekit v0.0.14
 
 require (
 	github.com/gorilla/websocket v1.5.0 // indirect
