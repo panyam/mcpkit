@@ -17,10 +17,6 @@ server:
   - elicitation-sep1034-defaults   # Issue: #23
   - elicitation-sep1330-enums      # Issue: #23
 
-  # Tool scenarios requiring server-to-client features
+  # Tool scenarios requiring server-to-client requests (bidirectional)
   - tools-call-sampling         # Requires sampling/createMessage (#22)
   - tools-call-elicitation      # Requires elicitation/create (#23)
-  - tools-call-mixed-content    # Expected response format mismatch
-
-  # Security
-  - dns-rebinding-protection    # Requires Origin header validation (partial pass)

@@ -79,11 +79,11 @@ func registerConformanceTools(srv *mcpkit.Server) {
 		},
 	)
 
-	// test_mixed_content: returns text + image content
+	// test_multiple_content_types: returns text + image + embedded resource content
 	srv.RegisterTool(
 		mcpkit.ToolDef{
 			Name:        "test_multiple_content_types",
-			Description: "Returns mixed text and image content for conformance testing",
+			Description: "Returns mixed text, image, and resource content for conformance testing",
 			InputSchema: map[string]any{"type": "object"},
 		},
 		func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
@@ -92,6 +92,11 @@ func registerConformanceTools(srv *mcpkit.Server) {
 				Content: []mcpkit.Content{
 					{Type: "text", Text: "Here is an image:"},
 					{Type: "image", MimeType: "image/png", Data: base64.StdEncoding.EncodeToString(pngBytes)},
+					{Type: "resource", Resource: &mcpkit.ResourceContent{
+						URI:      "test://mixed/resource",
+						MimeType: "text/plain",
+						Text:     "This is an embedded resource in mixed content.",
+					}},
 				},
 			}, nil
 		},

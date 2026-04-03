@@ -201,8 +201,9 @@ type transportConfig struct {
 	publicURL       string        // public base URL for reverse proxy deployments
 	maxSessions     int           // max concurrent sessions (0 = unlimited)
 	keepalivePeriod time.Duration // SSE keepalive interval (default 30s)
-	streamableHTTP bool // enable Streamable HTTP transport
-	sse             bool          // enable legacy SSE transport
+	allowedOrigins []string // allowed Origin values for DNS rebinding protection
+	streamableHTTP bool     // enable Streamable HTTP transport
+	sse            bool     // enable legacy SSE transport
 }
 
 func defaultTransportConfig() transportConfig {
@@ -233,6 +234,12 @@ func WithMaxSessions(n int) TransportOption {
 // WithKeepalivePeriod sets the interval for SSE keepalive comments.
 func WithKeepalivePeriod(d time.Duration) TransportOption {
 	return func(c *transportConfig) { c.keepalivePeriod = d }
+}
+
+// WithAllowedOrigins sets the allowed Origin header values for DNS rebinding protection.
+// When empty (default), only localhost origins are accepted.
+func WithAllowedOrigins(origins ...string) TransportOption {
+	return func(c *transportConfig) { c.allowedOrigins = origins }
 }
 
 // WithStreamableHTTP enables or disables the Streamable HTTP transport (MCP 2025-03-26).
