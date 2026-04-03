@@ -74,6 +74,18 @@ func NewDispatcher(info ServerInfo) *Dispatcher {
 	}
 }
 
+// newSession creates a new Dispatcher that shares the tool registry from d
+// but has fresh session state (not initialized, no client info).
+// The tool registry is shared by reference — safe because tools are registered
+// before serving begins and never modified after.
+func (d *Dispatcher) newSession() *Dispatcher {
+	return &Dispatcher{
+		tools:      d.tools,
+		toolOrder:  d.toolOrder,
+		serverInfo: d.serverInfo,
+	}
+}
+
 // RegisterTool adds a tool to the dispatcher.
 func (d *Dispatcher) RegisterTool(def ToolDef, handler ToolHandler) {
 	d.tools[def.Name] = toolEntry{def: def, handler: handler}
