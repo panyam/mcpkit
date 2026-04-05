@@ -24,6 +24,8 @@
 - mcp-completion: completion/complete for argument autocompletion
 - mcp-dns-rebinding-protection: Origin header validation on Streamable HTTP (WithAllowedOrigins)
 - mcp-conformance: Official MCP conformance test suite integration (24/30 passing)
+- mcp-client: Go MCP client for Streamable HTTP — Connect, ToolCall, ReadResource, ListTools, ListResources
+- mcp-testutil: TestClient wrapper for e2e testing MCP servers (httptest + testing.T integration)
 
 ## Module
 github.com/panyam/mcpkit
