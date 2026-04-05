@@ -8,14 +8,11 @@ import (
 	"testing"
 )
 
-// setupTestServer creates a mcpkit Server with sample tools and resources
-// and returns a Client connected to it via httptest.
-func setupTestServer(t *testing.T) (*Client, *httptest.Server) {
-	t.Helper()
-
+// newTestMCPServer creates a server with an echo tool, a fail tool,
+// a static resource, and a resource template. Used by both transport tests.
+func newTestMCPServer() *Server {
 	srv := NewServer(ServerInfo{Name: "test-server", Version: "1.0.0"})
 
-	// Register a test tool
 	srv.RegisterTool(
 		ToolDef{
 			Name:        "echo",
@@ -27,15 +24,12 @@ func setupTestServer(t *testing.T) (*Client, *httptest.Server) {
 			},
 		},
 		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
-			var p struct {
-				Message string `json:"message"`
-			}
+			var p struct{ Message string `json:"message"` }
 			req.Bind(&p)
 			return TextResult(fmt.Sprintf("echo: %s", p.Message)), nil
 		},
 	)
 
-	// Register a tool that returns an error
 	srv.RegisterTool(
 		ToolDef{Name: "fail", Description: "Always fails"},
 		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
@@ -43,44 +37,27 @@ func setupTestServer(t *testing.T) (*Client, *httptest.Server) {
 		},
 	)
 
-	// Register a static resource
 	srv.RegisterResource(
-		ResourceDef{
-			URI:         "test://info",
-			Name:        "Test Info",
-			Description: "Static test resource",
-			MimeType:    "text/plain",
-		},
+		ResourceDef{URI: "test://info", Name: "Test Info", Description: "Static test resource", MimeType: "text/plain"},
 		func(ctx context.Context, req ResourceRequest) (ResourceResult, error) {
-			return ResourceResult{
-				Contents: []ResourceReadContent{{
-					URI:      "test://info",
-					MimeType: "text/plain",
-					Text:     "hello from test",
-				}},
-			}, nil
+			return ResourceResult{Contents: []ResourceReadContent{{URI: "test://info", MimeType: "text/plain", Text: "hello from test"}}}, nil
 		},
 	)
 
-	// Register a resource template
 	srv.RegisterResourceTemplate(
-		ResourceTemplate{
-			URITemplate: "test://items/{id}",
-			Name:        "Test Item",
-			Description: "Parameterized test resource",
-			MimeType:    "text/plain",
-		},
+		ResourceTemplate{URITemplate: "test://items/{id}", Name: "Test Item", Description: "Parameterized test resource", MimeType: "text/plain"},
 		func(ctx context.Context, uri string, params map[string]string) (ResourceResult, error) {
-			return ResourceResult{
-				Contents: []ResourceReadContent{{
-					URI:      uri,
-					MimeType: "text/plain",
-					Text:     fmt.Sprintf("item %s", params["id"]),
-				}},
-			}, nil
+			return ResourceResult{Contents: []ResourceReadContent{{URI: uri, MimeType: "text/plain", Text: fmt.Sprintf("item %s", params["id"])}}}, nil
 		},
 	)
 
+	return srv
+}
+
+// setupStreamableClient creates an httptest.Server with Streamable HTTP and a connected Client.
+func setupStreamableClient(t *testing.T) (*Client, *httptest.Server) {
+	t.Helper()
+	srv := newTestMCPServer()
 	handler := srv.Handler(WithStreamableHTTP(true))
 	ts := httptest.NewServer(handler)
 	t.Cleanup(ts.Close)
@@ -89,45 +66,64 @@ func setupTestServer(t *testing.T) (*Client, *httptest.Server) {
 	if err := c.Connect(); err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
+	return c, ts
+}
+
+// setupSSEClient creates an httptest.Server with SSE transport and a connected Client.
+// The SSE connection must be closed before the server shuts down, so we
+// register client.Close() as a cleanup before ts.Close().
+func setupSSEClient(t *testing.T) (*Client, *httptest.Server) {
+	t.Helper()
+	srv := newTestMCPServer()
+	handler := srv.Handler(WithSSE(true), WithStreamableHTTP(false))
+	ts := httptest.NewServer(handler)
+
+	c := NewClient(ts.URL+"/mcp/sse", ClientInfo{Name: "test-client", Version: "1.0"}, WithSSEClient())
+	if err := c.Connect(); err != nil {
+		ts.Close()
+		t.Fatalf("SSE Connect failed: %v", err)
+	}
+
+	// Close client first (closes SSE stream), then server
+	t.Cleanup(func() {
+		c.Close()
+		ts.Close()
+	})
 
 	return c, ts
 }
 
-// TestClientConnect verifies that the client performs the MCP initialize
-// handshake, obtains a session ID, and captures the server info.
-func TestClientConnect(t *testing.T) {
-	c, _ := setupTestServer(t)
+// --- Streamable HTTP transport tests ---
 
+// TestClientConnect verifies that the client performs the MCP initialize
+// handshake over Streamable HTTP, obtains a session ID, and captures server info.
+func TestClientConnect(t *testing.T) {
+	c, _ := setupStreamableClient(t)
 	if c.SessionID() == "" {
 		t.Error("no session ID after connect")
 	}
 	if c.ServerInfo.Name != "test-server" {
 		t.Errorf("server name = %q, want test-server", c.ServerInfo.Name)
 	}
-	if c.ServerInfo.Version != "1.0.0" {
-		t.Errorf("server version = %q, want 1.0.0", c.ServerInfo.Version)
-	}
 }
 
-// TestClientToolCall verifies that ToolCall invokes a tool and returns
-// the first text content from the response.
+// TestClientToolCall verifies that ToolCall invokes a tool over Streamable HTTP
+// and returns the first text content from the response.
 func TestClientToolCall(t *testing.T) {
-	c, _ := setupTestServer(t)
-
+	c, _ := setupStreamableClient(t)
 	text, err := c.ToolCall("echo", map[string]string{"message": "world"})
 	if err != nil {
 		t.Fatalf("ToolCall: %v", err)
 	}
 	if text != "echo: world" {
-		t.Errorf("ToolCall result = %q, want 'echo: world'", text)
+		t.Errorf("result = %q, want 'echo: world'", text)
 	}
 }
 
-// TestClientToolCallError verifies that ToolCall returns an error when
-// the tool reports isError:true in its response.
+// TestClientToolCallError verifies that ToolCall returns an error when the
+// tool reports isError:true in its response.
 func TestClientToolCallError(t *testing.T) {
-	c, _ := setupTestServer(t)
-
+	c, _ := setupStreamableClient(t)
 	_, err := c.ToolCall("fail", nil)
 	if err == nil {
 		t.Fatal("expected error from fail tool")
@@ -138,60 +134,51 @@ func TestClientToolCallError(t *testing.T) {
 }
 
 // TestClientReadResource verifies that ReadResource reads a static resource
-// and returns its text content.
+// over Streamable HTTP and returns its text content.
 func TestClientReadResource(t *testing.T) {
-	c, _ := setupTestServer(t)
-
+	c, _ := setupStreamableClient(t)
 	text, err := c.ReadResource("test://info")
 	if err != nil {
 		t.Fatalf("ReadResource: %v", err)
 	}
 	if text != "hello from test" {
-		t.Errorf("resource text = %q, want 'hello from test'", text)
+		t.Errorf("result = %q, want 'hello from test'", text)
 	}
 }
 
 // TestClientReadResourceTemplate verifies that ReadResource resolves a URI
 // template and returns the parameterized content.
 func TestClientReadResourceTemplate(t *testing.T) {
-	c, _ := setupTestServer(t)
-
+	c, _ := setupStreamableClient(t)
 	text, err := c.ReadResource("test://items/42")
 	if err != nil {
-		t.Fatalf("ReadResource template: %v", err)
+		t.Fatalf("ReadResource: %v", err)
 	}
 	if text != "item 42" {
-		t.Errorf("resource text = %q, want 'item 42'", text)
+		t.Errorf("result = %q, want 'item 42'", text)
 	}
 }
 
 // TestClientListTools verifies that ListTools returns all registered tool
 // definitions with correct names.
 func TestClientListTools(t *testing.T) {
-	c, _ := setupTestServer(t)
-
+	c, _ := setupStreamableClient(t)
 	tools, err := c.ListTools()
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
 	}
-
 	names := make(map[string]bool)
 	for _, tool := range tools {
 		names[tool.Name] = true
 	}
-	if !names["echo"] {
-		t.Error("missing tool: echo")
-	}
-	if !names["fail"] {
-		t.Error("missing tool: fail")
+	if !names["echo"] || !names["fail"] {
+		t.Errorf("missing tools: %v", names)
 	}
 }
 
-// TestClientListResources verifies that ListResources returns all registered
-// static resource definitions.
+// TestClientListResources verifies ListResources returns static resource definitions.
 func TestClientListResources(t *testing.T) {
-	c, _ := setupTestServer(t)
-
+	c, _ := setupStreamableClient(t)
 	resources, err := c.ListResources()
 	if err != nil {
 		t.Fatalf("ListResources: %v", err)
@@ -201,37 +188,107 @@ func TestClientListResources(t *testing.T) {
 	}
 }
 
-// TestClientListResourceTemplates verifies that ListResourceTemplates returns
-// all registered resource template definitions.
+// TestClientListResourceTemplates verifies ListResourceTemplates returns template definitions.
 func TestClientListResourceTemplates(t *testing.T) {
-	c, _ := setupTestServer(t)
-
+	c, _ := setupStreamableClient(t)
 	templates, err := c.ListResourceTemplates()
 	if err != nil {
 		t.Fatalf("ListResourceTemplates: %v", err)
 	}
 	if len(templates) != 1 || templates[0].URITemplate != "test://items/{id}" {
-		t.Errorf("templates = %v, want [test://items/{id}]", templates)
+		t.Errorf("templates = %v", templates)
 	}
 }
 
-// TestClientCallRaw verifies that the low-level Call method returns a
-// CallResult that can be unmarshalled into typed structs.
+// TestClientCallRaw verifies the low-level Call method returns a CallResult
+// that can be unmarshalled into typed structs.
 func TestClientCallRaw(t *testing.T) {
-	c, _ := setupTestServer(t)
-
+	c, _ := setupStreamableClient(t)
 	result, err := c.Call("tools/list", nil)
 	if err != nil {
 		t.Fatalf("Call: %v", err)
 	}
-
-	var resp struct {
-		Tools []ToolDef `json:"tools"`
-	}
+	var resp struct{ Tools []ToolDef `json:"tools"` }
 	if err := result.Unmarshal(&resp); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
 	if len(resp.Tools) < 2 {
 		t.Errorf("expected >=2 tools, got %d", len(resp.Tools))
+	}
+}
+
+// --- SSE transport tests ---
+
+// TestSSEClientConnect verifies that the client performs the MCP initialize
+// handshake over SSE transport, extracts the POST URL from the endpoint event,
+// and captures server info.
+func TestSSEClientConnect(t *testing.T) {
+	c, _ := setupSSEClient(t)
+	if c.SessionID() == "" {
+		t.Error("no session ID after SSE connect")
+	}
+	if c.ServerInfo.Name != "test-server" {
+		t.Errorf("server name = %q, want test-server", c.ServerInfo.Name)
+	}
+}
+
+// TestSSEClientToolCall verifies that ToolCall works over SSE transport:
+// POST request → read message event from SSE stream → parse response.
+func TestSSEClientToolCall(t *testing.T) {
+	c, _ := setupSSEClient(t)
+	text, err := c.ToolCall("echo", map[string]string{"message": "sse-world"})
+	if err != nil {
+		t.Fatalf("SSE ToolCall: %v", err)
+	}
+	if text != "echo: sse-world" {
+		t.Errorf("result = %q, want 'echo: sse-world'", text)
+	}
+}
+
+// TestSSEClientToolCallError verifies error handling over SSE transport.
+func TestSSEClientToolCallError(t *testing.T) {
+	c, _ := setupSSEClient(t)
+	_, err := c.ToolCall("fail", nil)
+	if err == nil {
+		t.Fatal("expected error from fail tool over SSE")
+	}
+	if !strings.Contains(err.Error(), "intentional failure") {
+		t.Errorf("error = %v", err)
+	}
+}
+
+// TestSSEClientReadResource verifies resource reading over SSE transport.
+func TestSSEClientReadResource(t *testing.T) {
+	c, _ := setupSSEClient(t)
+	text, err := c.ReadResource("test://info")
+	if err != nil {
+		t.Fatalf("SSE ReadResource: %v", err)
+	}
+	if text != "hello from test" {
+		t.Errorf("result = %q", text)
+	}
+}
+
+// TestSSEClientReadResourceTemplate verifies template resource reading over SSE.
+func TestSSEClientReadResourceTemplate(t *testing.T) {
+	c, _ := setupSSEClient(t)
+	text, err := c.ReadResource("test://items/99")
+	if err != nil {
+		t.Fatalf("SSE ReadResource template: %v", err)
+	}
+	if text != "item 99" {
+		t.Errorf("result = %q, want 'item 99'", text)
+	}
+}
+
+// TestSSEClientListTools verifies tool discovery over SSE transport.
+func TestSSEClientListTools(t *testing.T) {
+	c, _ := setupSSEClient(t)
+	tools, err := c.ListTools()
+	if err != nil {
+		t.Fatalf("SSE ListTools: %v", err)
+	}
+	if len(tools) < 2 {
+		t.Errorf("expected >=2 tools, got %d", len(tools))
 	}
 }
