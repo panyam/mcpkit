@@ -1,41 +1,79 @@
 package mcpkit
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 )
 
-// Client is an MCP client that communicates over Streamable HTTP.
-// Use ClientInfo (defined in dispatch.go) for initialization.
+// clientTransport abstracts the transport layer for the MCP client.
+type clientTransport interface {
+	// connect establishes the transport connection.
+	connect() error
+	// call sends a JSON-RPC request and returns the response.
+	call(data []byte) (*rpcResponse, error)
+	// notify sends a JSON-RPC notification (no response expected).
+	notify(data []byte) error
+	// close shuts down the transport.
+	close() error
+}
+
+// ClientOption configures a Client.
+type ClientOption func(*Client)
+
+// WithSSEClient configures the client to use SSE transport instead of Streamable HTTP.
+// The URL should point to the SSE endpoint (e.g., "http://localhost:8787/mcp/sse").
+func WithSSEClient() ClientOption {
+	return func(c *Client) { c.useSSE = true }
+}
+
+// Client is an MCP client that communicates over Streamable HTTP or SSE.
 type Client struct {
-	url        string
-	info       ClientInfo
-	sessionID  string
-	nextID     int
-	mu         sync.Mutex
-	httpClient *http.Client
+	url       string
+	info      ClientInfo
+	useSSE    bool
+	nextID    int
+	mu        sync.Mutex
+	transport clientTransport
 
 	// ServerInfo is populated after Connect.
 	ServerInfo ServerInfo
 }
 
 // NewClient creates a new MCP client targeting the given server URL.
+// By default uses Streamable HTTP. Use WithSSEClient() for SSE transport.
 // Call Connect() to perform the protocol handshake.
-func NewClient(url string, info ClientInfo) *Client {
-	return &Client{
-		url:        url,
-		info:       info,
-		nextID:     1,
-		httpClient: http.DefaultClient,
+func NewClient(url string, info ClientInfo, opts ...ClientOption) *Client {
+	c := &Client{
+		url:    url,
+		info:   info,
+		nextID: 1,
 	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
 }
 
-// Connect performs the MCP initialize handshake and stores the session ID.
+// Connect establishes the transport and performs the MCP initialize handshake.
 func (c *Client) Connect() error {
+	// Create transport
+	if c.useSSE {
+		c.transport = newSSEClientTransport(c.url)
+	} else {
+		c.transport = newStreamableClientTransport(c.url)
+	}
+
+	if err := c.transport.connect(); err != nil {
+		return fmt.Errorf("transport connect: %w", err)
+	}
+
+	// Initialize handshake
 	resp, err := c.rawCall("initialize", map[string]any{
 		"protocolVersion": "2024-11-05",
 		"capabilities":    map[string]any{},
@@ -54,18 +92,26 @@ func (c *Client) Connect() error {
 	}
 
 	// Send initialized notification
-	return c.notify("notifications/initialized", nil)
+	return c.notifyMethod("notifications/initialized", nil)
 }
 
-// Close terminates the client session.
+// Close terminates the client session and transport.
 func (c *Client) Close() error {
-	c.sessionID = ""
+	if c.transport != nil {
+		return c.transport.close()
+	}
 	return nil
 }
 
 // SessionID returns the current session ID.
 func (c *Client) SessionID() string {
-	return c.sessionID
+	if st, ok := c.transport.(*streamableClientTransport); ok {
+		return st.sessionID
+	}
+	if sse, ok := c.transport.(*sseClientTransport); ok {
+		return sse.sessionID
+	}
+	return ""
 }
 
 // Call makes a JSON-RPC call and returns the parsed response.
@@ -171,10 +217,10 @@ func (c *Client) ListResourceTemplates() ([]ResourceTemplate, error) {
 // --- Internal ---
 
 type rpcResponse struct {
-	JSONRPC string         `json:"jsonrpc"`
-	ID      any            `json:"id"`
-	Result  any            `json:"result,omitempty"`
-	Error   *Error         `json:"error,omitempty"`
+	JSONRPC string `json:"jsonrpc"`
+	ID      any    `json:"id"`
+	Result  any    `json:"result,omitempty"`
+	Error   *Error `json:"error,omitempty"`
 }
 
 func (c *Client) nextRequestID() int {
@@ -195,25 +241,54 @@ func (c *Client) rawCall(method string, params any) (*rpcResponse, error) {
 		reqBody["params"] = params
 	}
 	data, _ := json.Marshal(reqBody)
+	return c.transport.call(data)
+}
 
-	req, err := http.NewRequest("POST", c.url, bytes.NewReader(data))
+func (c *Client) notifyMethod(method string, params any) error {
+	reqBody := map[string]any{
+		"jsonrpc": "2.0",
+		"method":  method,
+	}
+	if params != nil {
+		reqBody["params"] = params
+	}
+	data, _ := json.Marshal(reqBody)
+	return c.transport.notify(data)
+}
+
+// --- Streamable HTTP transport ---
+
+type streamableClientTransport struct {
+	url        string
+	sessionID  string
+	httpClient *http.Client
+}
+
+func newStreamableClientTransport(url string) *streamableClientTransport {
+	return &streamableClientTransport{url: url, httpClient: http.DefaultClient}
+}
+
+func (t *streamableClientTransport) connect() error { return nil }
+func (t *streamableClientTransport) close() error   { return nil }
+
+func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
+	req, err := http.NewRequest("POST", t.url, bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if c.sessionID != "" {
-		req.Header.Set("Mcp-Session-Id", c.sessionID)
+	if t.sessionID != "" {
+		req.Header.Set("Mcp-Session-Id", t.sessionID)
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := t.httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	// Capture session ID from response headers
 	if sid := resp.Header.Get("Mcp-Session-Id"); sid != "" {
-		c.sessionID = sid
+		t.sessionID = sid
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -228,32 +303,153 @@ func (c *Client) rawCall(method string, params any) (*rpcResponse, error) {
 	return &result, nil
 }
 
-func (c *Client) notify(method string, params any) error {
-	reqBody := map[string]any{
-		"jsonrpc": "2.0",
-		"method":  method,
-	}
-	if params != nil {
-		reqBody["params"] = params
-	}
-	data, _ := json.Marshal(reqBody)
-
-	req, err := http.NewRequest("POST", c.url, bytes.NewReader(data))
+func (t *streamableClientTransport) notify(data []byte) error {
+	req, err := http.NewRequest("POST", t.url, bytes.NewReader(data))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if c.sessionID != "" {
-		req.Header.Set("Mcp-Session-Id", c.sessionID)
+	if t.sessionID != "" {
+		req.Header.Set("Mcp-Session-Id", t.sessionID)
 	}
-
-	resp, err := c.httpClient.Do(req)
+	resp, err := t.httpClient.Do(req)
 	if err != nil {
 		return err
 	}
 	resp.Body.Close()
 	return nil
 }
+
+// --- SSE transport ---
+
+// sseClientTransport implements the MCP SSE transport (2024-11-05).
+// Protocol: GET /sse → SSE stream with "endpoint" event containing POST URL →
+// POST JSON-RPC to that URL → read "message" events from SSE for responses.
+type sseClientTransport struct {
+	sseURL     string
+	postURL    string
+	sessionID  string
+	httpClient *http.Client
+	sseResp    *http.Response
+	sseReader  *bufio.Reader
+	mu         sync.Mutex
+}
+
+func newSSEClientTransport(sseURL string) *sseClientTransport {
+	return &sseClientTransport{sseURL: sseURL, httpClient: http.DefaultClient}
+}
+
+func (t *sseClientTransport) connect() error {
+	// Open SSE stream
+	resp, err := t.httpClient.Get(t.sseURL)
+	if err != nil {
+		return fmt.Errorf("GET %s: %w", t.sseURL, err)
+	}
+
+	t.sseResp = resp
+	t.sseReader = bufio.NewReader(resp.Body)
+
+	// Read the endpoint event
+	ev, err := t.readSSEEvent()
+	if err != nil {
+		resp.Body.Close()
+		return fmt.Errorf("reading endpoint event: %w", err)
+	}
+	if ev.event != "endpoint" {
+		resp.Body.Close()
+		return fmt.Errorf("expected endpoint event, got %q", ev.event)
+	}
+
+	t.postURL = ev.data
+
+	// Extract sessionId from POST URL
+	if idx := strings.Index(t.postURL, "sessionId="); idx >= 0 {
+		t.sessionID = t.postURL[idx+len("sessionId="):]
+		if amp := strings.Index(t.sessionID, "&"); amp >= 0 {
+			t.sessionID = t.sessionID[:amp]
+		}
+	}
+
+	return nil
+}
+
+func (t *sseClientTransport) close() error {
+	if t.sseResp != nil {
+		t.sseResp.Body.Close()
+		t.sseResp = nil
+	}
+	return nil
+}
+
+func (t *sseClientTransport) call(data []byte) (*rpcResponse, error) {
+	// POST the request
+	resp, err := t.httpClient.Post(t.postURL, "application/json", bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("POST %s: %w", t.postURL, err)
+	}
+	resp.Body.Close()
+
+	// Read the response from the SSE stream
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	ev, err := t.readSSEEvent()
+	if err != nil {
+		return nil, fmt.Errorf("reading SSE response: %w", err)
+	}
+	if ev.event != "message" {
+		return nil, fmt.Errorf("expected message event, got %q", ev.event)
+	}
+
+	var result rpcResponse
+	if err := json.Unmarshal([]byte(ev.data), &result); err != nil {
+		return nil, fmt.Errorf("invalid JSON in SSE message: %s", ev.data)
+	}
+	return &result, nil
+}
+
+func (t *sseClientTransport) notify(data []byte) error {
+	resp, err := t.httpClient.Post(t.postURL, "application/json", bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("POST %s: %w", t.postURL, err)
+	}
+	resp.Body.Close()
+	return nil
+}
+
+type sseClientEvent struct {
+	event string
+	data  string
+}
+
+// readSSEEvent reads the next SSE event from the stream, skipping keepalive comments.
+func (t *sseClientTransport) readSSEEvent() (sseClientEvent, error) {
+	var event, data string
+	for {
+		line, err := t.sseReader.ReadString('\n')
+		if err != nil {
+			return sseClientEvent{}, fmt.Errorf("reading SSE: %w", err)
+		}
+		line = strings.TrimRight(line, "\r\n")
+
+		if line == "" {
+			if data != "" || event != "" {
+				return sseClientEvent{event: event, data: data}, nil
+			}
+			continue
+		}
+		if strings.HasPrefix(line, ":") {
+			continue // keepalive comment
+		}
+		if strings.HasPrefix(line, "event:") {
+			event = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+		} else if strings.HasPrefix(line, "data:") {
+			data = strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		}
+	}
+}
+
+// --- Response extraction helpers ---
 
 // extractToolText pulls the first text content from a tools/call result.
 func extractToolText(raw any) (string, error) {
