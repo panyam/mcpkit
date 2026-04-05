@@ -2,12 +2,12 @@
 
 ## What This Is
 
-Go library for building production-grade MCP servers. Handles transports (SSE + Streamable HTTP), protocol negotiation, session management, auth. Applications register tools, resources, and prompts.
+Go library for building production-grade MCP servers and clients. Handles transports (SSE + Streamable HTTP), protocol negotiation, session management, auth. Applications register tools, resources, and prompts. Includes a Go MCP client for agents and testing.
 
 ## Quick Commands
 
 ```bash
-make test         # Unit tests (94 tests)
+make test         # Unit tests (115 tests)
 make testconf     # MCP conformance suite (needs Node.js)
 make testall      # Both
 make smoke        # Curl-based transport tests
@@ -33,6 +33,8 @@ make serve-both   # Both transports
 | `jsonrpc.go` | JSON-RPC 2.0 Request/Response/Error |
 | `transport.go` | SSE transport (sseTransport, mcpSSEConn, SSEData) |
 | `streamable_transport.go` | Streamable HTTP transport (streamableTransport) |
+| `client.go` | MCP client: Connect, ToolCall, ReadResource, ListTools, ListResources |
+| `testutil/testclient.go` | TestClient: wraps Client + httptest.Server + testing.T for e2e tests |
 | `cmd/testserver/` | Test server with conformance tools, resources, and prompts |
 | `conformance/baseline.yml` | Expected conformance failures — remove entries as features ship |
 
