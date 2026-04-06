@@ -188,12 +188,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("auth request: %v", err)
 	}
-	io.Copy(io.Discard, authResp.Body)
-	authResp.Body.Close()
 
 	// The mock AS should redirect with code
 	var code string
 	if authResp.StatusCode == 302 || authResp.StatusCode == 303 {
+		io.Copy(io.Discard, authResp.Body)
+		authResp.Body.Close()
 		location := authResp.Header.Get("Location")
 		log.Printf("Auth redirect: %s", location)
 		redirectURL, _ := url.Parse(location)
@@ -203,8 +203,8 @@ func main() {
 			log.Printf("WARNING: state mismatch: got %s, want %s", returnedState, state)
 		}
 	} else {
-		// Some mock AS may return the code directly in the response body
 		body, _ := io.ReadAll(authResp.Body)
+		authResp.Body.Close()
 		log.Printf("Auth response %d: %s", authResp.StatusCode, body)
 		log.Fatal("expected redirect from authorization endpoint")
 	}
@@ -231,13 +231,13 @@ func main() {
 	// Per OAuth 2.1: client MUST use the token_endpoint_auth_method from its registration
 	// or one supported by the AS.
 	// https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-13#section-3.2.1
-	applyTokenEndpointAuth(tokenParams, clientID, clientSecret, asMeta.TokenAuthMethods)
+	authMethod := applyTokenEndpointAuth(tokenParams, clientID, clientSecret, asMeta.TokenAuthMethods)
 
 	tokenReq, _ := http.NewRequest("POST", asMeta.TokenEndpoint, strings.NewReader(tokenParams.Encode()))
 	tokenReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	// If using client_secret_basic, set the Basic auth header
-	if selectAuthMethod(asMeta.TokenAuthMethods, clientSecret) == "client_secret_basic" {
+	if authMethod == "client_secret_basic" {
 		tokenReq.SetBasicAuth(clientID, clientSecret)
 	}
 
@@ -449,8 +449,9 @@ func selectAuthMethod(supported []string, clientSecret string) string {
 
 // applyTokenEndpointAuth adds client credentials to the token request params
 // when using client_secret_post. For client_secret_basic, credentials go in
-// the Authorization header (handled separately).
-func applyTokenEndpointAuth(params url.Values, clientID, clientSecret string, supportedMethods []string) {
+// the Authorization header (handled by the caller using the returned method).
+// Returns the selected auth method so the caller can set Basic auth if needed.
+func applyTokenEndpointAuth(params url.Values, clientID, clientSecret string, supportedMethods []string) string {
 	method := selectAuthMethod(supportedMethods, clientSecret)
 	log.Printf("Token endpoint auth method: %s", method)
 
@@ -464,6 +465,7 @@ func applyTokenEndpointAuth(params url.Values, clientID, clientSecret string, su
 	case "none":
 		// Public client — client_id already in params.
 	}
+	return method
 }
 
 // --- Types ---

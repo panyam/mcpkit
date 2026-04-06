@@ -27,3 +27,4 @@ locallinks/
 .DS_Store
 Thumbs.db
 /testserver
+/testclient
