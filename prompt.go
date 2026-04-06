@@ -15,6 +15,9 @@ type PromptDef struct {
 
 	// Arguments defines the parameters this prompt accepts.
 	Arguments []PromptArgument `json:"arguments,omitempty"`
+
+	// Annotations holds optional metadata for this prompt.
+	Annotations map[string]any `json:"annotations,omitempty"`
 }
 
 // PromptArgument describes a single argument to a prompt.

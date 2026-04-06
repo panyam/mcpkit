@@ -2,7 +2,6 @@ package mcpkit
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +15,12 @@ const (
 
 	// mcpProtocolVersionHeader is the HTTP header for protocol version per MCP spec.
 	mcpProtocolVersionHeader = "MCP-Protocol-Version"
+
+	// StreamableHTTPAccept is the required Accept header value for Streamable HTTP requests.
+	// Per MCP spec (2025-11-25, Streamable HTTP transport): clients MUST accept both
+	// application/json and text/event-stream.
+	// https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#sending-messages-to-the-server
+	StreamableHTTPAccept = "application/json, text/event-stream"
 )
 
 // streamableTransport implements the MCP Streamable HTTP transport (2025-03-26 spec).
@@ -71,14 +76,17 @@ func (t *streamableTransport) handleRoot(w http.ResponseWriter, r *http.Request)
 
 // handlePost handles POST requests: JSON-RPC dispatch with session management.
 func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request) {
+	// NOTE: Per MCP spec (2025-11-25, Streamable HTTP transport), clients MUST include
+	// Accept header that accepts both application/json and text/event-stream.
+	// https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#sending-messages-to-the-server
+	// We validate this client-side (StreamableHTTPAccept constant) but do NOT reject
+	// non-conforming requests server-side — the spec places the MUST on the client,
+	// and rejecting would break backward compatibility with older clients.
+
 	// Auth check
-	if err := t.server.CheckAuth(r); err != nil {
-		var authErr *AuthError
-		if errors.As(err, &authErr) {
-			http.Error(w, authErr.Message, authErr.Code)
-		} else {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-		}
+	claims, err := t.server.CheckAuth(r)
+	if err != nil {
+		writeAuthError(w, err)
 		return
 	}
 
@@ -101,7 +109,7 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 
 	// Route: initialize creates a new session; everything else requires one
 	if req.Method == "initialize" {
-		t.handleInitialize(w, r, &req)
+		t.handleInitialize(w, r, claims, &req)
 		return
 	}
 
@@ -127,18 +135,13 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	// If client supports SSE and this is a request (not notification), use SSE streaming
-	// so server-to-client notifications (logging, progress) can be delivered mid-request.
-	wantsSSE := strings.Contains(r.Header.Get("Accept"), "text/event-stream")
-	isRequest := !req.IsNotification()
-
-	if wantsSSE && isRequest {
-		t.handlePostSSE(w, r, dispatcher, &req)
+	if shouldStreamSSE(r.Header.Get("Accept"), &req) {
+		t.handlePostSSE(w, r, claims, dispatcher, &req)
 		return
 	}
 
 	// Synchronous JSON path (no mid-request notifications)
-	resp := t.server.dispatchWith(dispatcher, r.Context(), &req)
+	resp := t.server.dispatchWith(dispatcher, r.Context(), claims, &req)
 
 	if resp == nil {
 		w.WriteHeader(http.StatusAccepted)
@@ -159,11 +162,11 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 // JSON-RPC response. Per MCP spec: "the server MUST either return
 // Content-Type: text/event-stream, to initiate an SSE stream, or
 // Content-Type: application/json, to return one JSON object."
-func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Request, d *Dispatcher, req *Request) {
+func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Request, claims *Claims, d *Dispatcher, req *Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		// Fall back to synchronous JSON if flushing not supported
-		resp := t.server.dispatchWith(d, r.Context(), req)
+		resp := t.server.dispatchWith(d, r.Context(), claims, req)
 		if resp == nil {
 			w.WriteHeader(http.StatusAccepted)
 			return
@@ -188,21 +191,20 @@ func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Reque
 		flusher.Flush()
 	}
 
-	// Wire notifyFunc to SSE writer for this request.
-	// This enables EmitLog() and Notify() calls in tool handlers to push
-	// notifications as SSE events during request execution.
-	prevNotify := d.notifyFunc
-	d.notifyFunc = func(method string, params any) {
+	// Build a request-scoped notifyFunc that writes to this SSE stream.
+	// Passed through context (not mutating d.notifyFunc) to avoid races
+	// when concurrent SSE-streaming POSTs share the same session dispatcher.
+	requestNotify := NotifyFunc(func(method string, params any) {
 		raw, err := marshalNotification(method, params)
 		if err != nil {
 			return
 		}
 		writeSSE(raw)
-	}
-	defer func() { d.notifyFunc = prevNotify }()
+	})
 
-	// Dispatch (synchronous — notifications stream as events during execution)
-	resp := t.server.dispatchWith(d, r.Context(), req)
+	// Dispatch with the request-scoped notify — contextWithSession will use it
+	// instead of d.notifyFunc.
+	resp := t.server.dispatchWithNotify(d, r.Context(), claims, requestNotify, req)
 
 	// Write the JSON-RPC response as the final SSE event
 	if resp != nil {
@@ -213,7 +215,7 @@ func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Reque
 
 // handleInitialize handles POST initialize: creates session, dispatches, returns
 // the response with Mcp-Session-Id header.
-func (t *streamableTransport) handleInitialize(w http.ResponseWriter, r *http.Request, req *Request) {
+func (t *streamableTransport) handleInitialize(w http.ResponseWriter, r *http.Request, claims *Claims, req *Request) {
 	// Enforce max sessions
 	if t.config.maxSessions > 0 && t.sessionCount() >= t.config.maxSessions {
 		http.Error(w, "too many sessions", http.StatusServiceUnavailable)
@@ -222,7 +224,7 @@ func (t *streamableTransport) handleInitialize(w http.ResponseWriter, r *http.Re
 
 	// Create session dispatcher and dispatch initialize
 	dispatcher := t.server.newSession()
-	resp := t.server.dispatchWith(dispatcher, r.Context(), req)
+	resp := t.server.dispatchWith(dispatcher, r.Context(), claims, req)
 
 	if resp == nil {
 		w.WriteHeader(http.StatusAccepted)
@@ -249,6 +251,12 @@ func (t *streamableTransport) handleInitialize(w http.ResponseWriter, r *http.Re
 
 // handleDelete handles DELETE requests: terminates a session.
 func (t *streamableTransport) handleDelete(w http.ResponseWriter, r *http.Request) {
+	// Auth check — prevent unauthenticated session termination
+	if _, err := t.server.CheckAuth(r); err != nil {
+		writeAuthError(w, err)
+		return
+	}
+
 	sessionID := r.Header.Get(mcpSessionIDHeader)
 	if sessionID == "" {
 		http.Error(w, "missing "+mcpSessionIDHeader+" header", http.StatusBadRequest)
@@ -271,6 +279,72 @@ func (t *streamableTransport) sessionCount() int {
 		return true
 	})
 	return count
+}
+
+// shouldStreamSSE decides whether the server should return an SSE stream or a
+// synchronous JSON response. The decision is deterministic, based on the client's
+// Accept header and the JSON-RPC method.
+//
+// Per MCP spec (2025-11-25, Streamable HTTP transport):
+//
+//	"the server MUST either return Content-Type: text/event-stream, to initiate
+//	 an SSE stream, or Content-Type: application/json, to return one JSON object."
+//
+// https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#sending-messages-to-the-server
+//
+// Decision logic:
+//
+//	Accept has ONLY text/event-stream  → SSE for all requests (client's sole option)
+//	Accept has ONLY application/json   → JSON always (no mid-request streaming possible)
+//	Accept has BOTH                    → method-dependent:
+//	  tools/call, prompts/get          → SSE (may emit progress/log notifications mid-execution)
+//	  everything else                  → JSON (pure request-response, no streaming needed)
+//	Notifications                      → never SSE (no response expected)
+//
+// Why not always JSON when both are accepted? Tool handlers call EmitProgress/EmitLog
+// mid-execution. These notifications must reach the client *during* execution (e.g., for
+// progress bars), not buffered until after the response. SSE is the only way to deliver
+// them in real time over HTTP.
+func shouldStreamSSE(accept string, req *Request) bool {
+	if req.IsNotification() {
+		return false
+	}
+
+	acceptsJSON, acceptsSSE := parseAcceptTypes(accept)
+
+	if !acceptsSSE {
+		return false
+	}
+	if !acceptsJSON {
+		// Client only accepts SSE — use it for everything
+		return true
+	}
+	// Client accepts both — SSE only for methods that may emit mid-request
+	// notifications (progress, logging). All other methods use synchronous JSON.
+	return req.Method == "tools/call" || req.Method == "prompts/get"
+}
+
+// parseAcceptTypes parses the Accept header into a set of accepted media types.
+// Returns whether application/json and text/event-stream are present.
+// Handles quality values (q=) and whitespace per RFC 7231 §5.3.2.
+func parseAcceptTypes(accept string) (acceptsJSON, acceptsSSE bool) {
+	for _, part := range strings.Split(accept, ",") {
+		// Strip quality value and whitespace: "text/event-stream;q=0.9" → "text/event-stream"
+		mediaType := strings.TrimSpace(part)
+		if semi := strings.Index(mediaType, ";"); semi >= 0 {
+			mediaType = strings.TrimSpace(mediaType[:semi])
+		}
+		switch mediaType {
+		case "application/json":
+			acceptsJSON = true
+		case "text/event-stream":
+			acceptsSSE = true
+		case "*/*":
+			acceptsJSON = true
+			acceptsSSE = true
+		}
+	}
+	return
 }
 
 // validateOrigin checks the Origin and Host headers to prevent DNS rebinding attacks.
