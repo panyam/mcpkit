@@ -71,9 +71,12 @@ func (s *OAuthTokenSource) Token() (string, error) {
 	}
 
 	// Full browser login flow
+	// Per MCP spec (2025-11-25): MUST include resource parameter (RFC 8707),
+	// oneauth#66 adds Resource field; oneauth#65 verifies PKCE S256 support.
 	cred, err := s.client.LoginWithBrowser(client.BrowserLoginConfig{
 		ClientID:    s.ClientID,
 		Scopes:      s.Scopes,
+		Resource:    s.ServerURL, // RFC 8707: bind token to this MCP server
 		OpenBrowser: s.OpenBrowser,
 	})
 	if err != nil {
