@@ -36,59 +36,62 @@ testkcl: ## Run Keycloak auth interop tests (requires Docker, run upkcl first)
 
 REPORT_DIR := test-reports
 
-testall: ## Run ALL tests (starts Keycloak if needed) + generate report
+STAGES :=
+
+testall: ## Run ALL tests (starts Keycloak if needed) + generate HTML report
 	@mkdir -p $(REPORT_DIR)
 	@echo "=== MCPKit Comprehensive Test Suite ===" | tee $(REPORT_DIR)/run.log
 	@echo "Started: $$(date)" | tee -a $(REPORT_DIR)/run.log
-	@PASS=0; FAIL=0; \
+	@PASS=0; FAIL=0; STAGES=""; \
 	echo "" | tee -a $(REPORT_DIR)/run.log; \
 	echo "--- [1/7] Unit tests ---" | tee -a $(REPORT_DIR)/run.log; \
 	if go test ./... -count=1 -timeout 30s -v >> $(REPORT_DIR)/run.log 2>&1; then \
-		echo "  PASS: unit" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); \
+		echo "  PASS: unit" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); STAGES="$$STAGES unit:PASS"; \
 	else \
-		echo "  FAIL: unit" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); \
+		echo "  FAIL: unit" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); STAGES="$$STAGES unit:FAIL"; \
 	fi; \
 	echo "--- [2/7] Race detector ---" | tee -a $(REPORT_DIR)/run.log; \
 	if go test -race ./... -count=1 -timeout 60s >> $(REPORT_DIR)/run.log 2>&1; then \
-		echo "  PASS: race" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); \
+		echo "  PASS: race" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); STAGES="$$STAGES race:PASS"; \
 	else \
-		echo "  FAIL: race" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); \
+		echo "  FAIL: race" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); STAGES="$$STAGES race:FAIL"; \
 	fi; \
 	echo "--- [3/7] Auth module ---" | tee -a $(REPORT_DIR)/run.log; \
 	if (cd auth && go test ./... -count=1 -timeout 30s -v) >> $(REPORT_DIR)/run.log 2>&1; then \
-		echo "  PASS: auth" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); \
+		echo "  PASS: auth" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); STAGES="$$STAGES auth:PASS"; \
 	else \
-		echo "  FAIL: auth" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); \
+		echo "  FAIL: auth" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); STAGES="$$STAGES auth:FAIL"; \
 	fi; \
 	echo "--- [4/7] E2E auth ---" | tee -a $(REPORT_DIR)/run.log; \
 	if (cd tests/e2e && go test ./... -count=1 -timeout 60s -v) >> $(REPORT_DIR)/run.log 2>&1; then \
-		echo "  PASS: e2e" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); \
+		echo "  PASS: e2e" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); STAGES="$$STAGES e2e:PASS"; \
 	else \
-		echo "  FAIL: e2e" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); \
+		echo "  FAIL: e2e" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); STAGES="$$STAGES e2e:FAIL"; \
 	fi; \
 	echo "--- [5/7] Conformance ---" | tee -a $(REPORT_DIR)/run.log; \
 	if bash scripts/conformance-test.sh >> $(REPORT_DIR)/run.log 2>&1; then \
-		echo "  PASS: conformance" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); \
+		echo "  PASS: conformance" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); STAGES="$$STAGES conformance:PASS"; \
 	else \
-		echo "  FAIL: conformance" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); \
+		echo "  FAIL: conformance" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); STAGES="$$STAGES conformance:FAIL"; \
 	fi; \
 	echo "--- [6/7] Auth conformance ---" | tee -a $(REPORT_DIR)/run.log; \
 	if bash scripts/conformance-auth-test.sh >> $(REPORT_DIR)/run.log 2>&1; then \
-		echo "  PASS: auth-conformance" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); \
+		echo "  PASS: auth-conformance" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); STAGES="$$STAGES auth-conformance:PASS"; \
 	else \
-		echo "  FAIL: auth-conformance" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); \
+		echo "  FAIL: auth-conformance" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); STAGES="$$STAGES auth-conformance:FAIL"; \
 	fi; \
 	echo "--- [7/7] Keycloak interop ---" | tee -a $(REPORT_DIR)/run.log; \
-	$(MAKE) -s testkcl-auto >> $(REPORT_DIR)/run.log 2>&1; \
-	if [ $$? -eq 0 ]; then \
-		echo "  PASS: keycloak" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); \
+	if $(MAKE) -s testkcl-auto >> $(REPORT_DIR)/run.log 2>&1; then \
+		echo "  PASS: keycloak" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); STAGES="$$STAGES keycloak:PASS"; \
 	else \
-		echo "  FAIL: keycloak" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); \
+		echo "  FAIL: keycloak" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); STAGES="$$STAGES keycloak:FAIL"; \
 	fi; \
 	echo "" | tee -a $(REPORT_DIR)/run.log; \
 	echo "=== Results: $$PASS passed, $$FAIL failed ===" | tee -a $(REPORT_DIR)/run.log; \
 	echo "Finished: $$(date)" | tee -a $(REPORT_DIR)/run.log; \
 	echo "Full log: $(REPORT_DIR)/run.log"; \
+	STAGES="$$STAGES" $(MAKE) -s test-report; \
+	echo "HTML report: $(REPORT_DIR)/report.html"; \
 	[ $$FAIL -eq 0 ]
 
 testkcl-auto: ## Start Keycloak if needed, run interop tests, stop after
@@ -107,12 +110,59 @@ testkcl-auto: ## Start Keycloak if needed, run interop tests, stop after
 	if [ "$${KC_STARTED:-}" = "1" ]; then $(MAKE) downkcl; fi; \
 	exit $$EXIT
 
-test-report: ## View last test run report
-	@if [ -f $(REPORT_DIR)/run.log ]; then \
-		cat $(REPORT_DIR)/run.log; \
+test-report: ## Generate HTML report from last testall run
+	@mkdir -p $(REPORT_DIR)
+	@TIMESTAMP=$$(date '+%Y-%m-%d %H:%M:%S'); \
+	COMMIT=$$(git rev-parse --short HEAD 2>/dev/null || echo "unknown"); \
+	BRANCH=$$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown"); \
+	echo '<!DOCTYPE html>' > $(REPORT_DIR)/report.html; \
+	echo '<html><head><meta charset="utf-8"><title>MCPKit Test Report</title>' >> $(REPORT_DIR)/report.html; \
+	echo '<style>' >> $(REPORT_DIR)/report.html; \
+	echo 'body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; color: #333; }' >> $(REPORT_DIR)/report.html; \
+	echo 'h1 { border-bottom: 2px solid #333; padding-bottom: 10px; }' >> $(REPORT_DIR)/report.html; \
+	echo '.meta { color: #666; font-size: 14px; margin-bottom: 20px; }' >> $(REPORT_DIR)/report.html; \
+	echo 'table { border-collapse: collapse; width: 100%; margin: 20px 0; }' >> $(REPORT_DIR)/report.html; \
+	echo 'th, td { border: 1px solid #ddd; padding: 10px 14px; text-align: left; }' >> $(REPORT_DIR)/report.html; \
+	echo 'th { background: #f5f5f5; font-weight: 600; }' >> $(REPORT_DIR)/report.html; \
+	echo '.pass { color: #22863a; font-weight: 600; }' >> $(REPORT_DIR)/report.html; \
+	echo '.fail { color: #cb2431; font-weight: 600; }' >> $(REPORT_DIR)/report.html; \
+	echo '.skip { color: #6a737d; font-weight: 600; }' >> $(REPORT_DIR)/report.html; \
+	echo '.summary-pass { background: #dcffe4; padding: 12px 20px; border-radius: 6px; font-size: 18px; }' >> $(REPORT_DIR)/report.html; \
+	echo '.summary-fail { background: #ffdce0; padding: 12px 20px; border-radius: 6px; font-size: 18px; }' >> $(REPORT_DIR)/report.html; \
+	echo 'pre { background: #f6f8fa; padding: 16px; border-radius: 6px; overflow-x: auto; font-size: 13px; max-height: 400px; overflow-y: auto; }' >> $(REPORT_DIR)/report.html; \
+	echo '</style></head><body>' >> $(REPORT_DIR)/report.html; \
+	echo "<h1>MCPKit Test Report</h1>" >> $(REPORT_DIR)/report.html; \
+	echo "<div class='meta'>Branch: <strong>$$BRANCH</strong> | Commit: <code>$$COMMIT</code> | Date: $$TIMESTAMP</div>" >> $(REPORT_DIR)/report.html; \
+	\
+	PASS=0; FAIL=0; \
+	echo "<table><tr><th>Stage</th><th>Result</th></tr>" >> $(REPORT_DIR)/report.html; \
+	for entry in $(STAGES); do \
+		STAGE=$$(echo $$entry | cut -d: -f1); \
+		RESULT=$$(echo $$entry | cut -d: -f2); \
+		if [ "$$RESULT" = "PASS" ]; then \
+			echo "<tr><td>$$STAGE</td><td class='pass'>PASS</td></tr>" >> $(REPORT_DIR)/report.html; \
+			PASS=$$((PASS+1)); \
+		elif [ "$$RESULT" = "SKIP" ]; then \
+			echo "<tr><td>$$STAGE</td><td class='skip'>SKIP</td></tr>" >> $(REPORT_DIR)/report.html; \
+		else \
+			echo "<tr><td>$$STAGE</td><td class='fail'>FAIL</td></tr>" >> $(REPORT_DIR)/report.html; \
+			FAIL=$$((FAIL+1)); \
+		fi; \
+	done; \
+	echo "</table>" >> $(REPORT_DIR)/report.html; \
+	\
+	if [ $$FAIL -eq 0 ]; then \
+		echo "<div class='summary-pass'>All $$PASS stages passed</div>" >> $(REPORT_DIR)/report.html; \
 	else \
-		echo "No report found. Run 'make testall' first."; \
-	fi
+		echo "<div class='summary-fail'>$$PASS passed, $$FAIL failed</div>" >> $(REPORT_DIR)/report.html; \
+	fi; \
+	\
+	if [ -f $(REPORT_DIR)/run.log ]; then \
+		echo "<h2>Full Log</h2><pre>" >> $(REPORT_DIR)/report.html; \
+		sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' $(REPORT_DIR)/run.log >> $(REPORT_DIR)/report.html; \
+		echo "</pre>" >> $(REPORT_DIR)/report.html; \
+	fi; \
+	echo "</body></html>" >> $(REPORT_DIR)/report.html
 
 # =============================================================================
 # Keycloak (for interop tests)
