@@ -37,6 +37,9 @@ client-auth:
   # ✓ auth/pre-registration
   # ⚠ auth/basic-cimd (passing with 1 warning — CIMD not implemented)
 
+  # Required — CIMD (warning: not using Client ID Metadata Documents yet)
+  - auth/basic-cimd                         # Client ID Metadata Document flow (warning)
+
   # Required — scope step-up (blocked on #53: client transport 401/403 handling)
   - auth/scope-step-up                      # 403 flow with scope escalation
   - auth/scope-retry-limit                  # Max retry attempts on repeated 403
