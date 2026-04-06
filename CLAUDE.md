@@ -64,8 +64,8 @@ See `ARCHITECTURE.md` for transport design, type definitions, and protocol detai
 ### Server conformance
 24/30 MCP server conformance scenarios passing. Failing scenarios tracked in `conformance/baseline.yml` under `server:`.
 
-### Auth conformance (north star)
-0/22 MCP auth conformance scenarios passing. All 22 are expected failures tracked in `conformance/baseline.yml` under `client-auth:`. These are client-side OAuth flow tests that require `mcpkit/auth` Phase 3C-3E. Run via `make testconfauth`.
+### Auth conformance
+12/14 required MCP auth conformance scenarios passing (150/153 checks). Remaining 2 blocked on #53 (client transport 401/403 step-up handling). Run via `make testconfauth`.
 
 ## What's Not Implemented Yet
 

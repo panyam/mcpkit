@@ -290,6 +290,9 @@ func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	// Per MCP spec (2025-11-25): clients MUST accept both application/json and text/event-stream
+	// https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#sending-messages-to-the-server
+	req.Header.Set("Accept", StreamableHTTPAccept)
 	if t.sessionID != "" {
 		req.Header.Set("Mcp-Session-Id", t.sessionID)
 	}
@@ -307,6 +310,13 @@ func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
 		t.sessionID = sid
 	}
 
+	// Per MCP spec (2025-11-25): server returns either application/json or text/event-stream.
+	// https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#sending-messages-to-the-server
+	ct := resp.Header.Get("Content-Type")
+	if strings.Contains(ct, "text/event-stream") {
+		return readSSEResponse(resp.Body)
+	}
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
@@ -319,12 +329,58 @@ func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
 	return &result, nil
 }
 
+// readSSEResponse reads SSE events from a Streamable HTTP response, discarding
+// notification events and returning the final JSON-RPC response.
+// Per MCP spec: "All SSE events that are not JSON-RPC responses or notifications
+// SHOULD be ignored." Notifications arrive as intermediate events; the last
+// JSON-RPC response with an "id" field is the result.
+func readSSEResponse(body io.Reader) (*rpcResponse, error) {
+	scanner := bufio.NewReader(body)
+	var lastResponse *rpcResponse
+
+	for {
+		line, err := scanner.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			if lastResponse != nil {
+				return lastResponse, nil
+			}
+			return nil, fmt.Errorf("reading SSE: %w", err)
+		}
+		line = strings.TrimRight(line, "\r\n")
+
+		if strings.HasPrefix(line, "data:") {
+			data := strings.TrimSpace(line[5:])
+			if data == "" {
+				continue
+			}
+			var resp rpcResponse
+			if json.Unmarshal([]byte(data), &resp) == nil {
+				if resp.ID != nil {
+					// This is the JSON-RPC response (has an id)
+					lastResponse = &resp
+				}
+				// else: notification (no id) — discard
+			}
+		}
+		// Skip event:, id:, comments, blank lines
+	}
+
+	if lastResponse != nil {
+		return lastResponse, nil
+	}
+	return nil, fmt.Errorf("no JSON-RPC response in SSE stream")
+}
+
 func (t *streamableClientTransport) notify(data []byte) error {
 	req, err := http.NewRequest("POST", t.url, bytes.NewReader(data))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", StreamableHTTPAccept)
 	if t.sessionID != "" {
 		req.Header.Set("Mcp-Session-Id", t.sessionID)
 	}

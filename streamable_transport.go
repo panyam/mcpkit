@@ -15,6 +15,12 @@ const (
 
 	// mcpProtocolVersionHeader is the HTTP header for protocol version per MCP spec.
 	mcpProtocolVersionHeader = "MCP-Protocol-Version"
+
+	// StreamableHTTPAccept is the required Accept header value for Streamable HTTP requests.
+	// Per MCP spec (2025-11-25, Streamable HTTP transport): clients MUST accept both
+	// application/json and text/event-stream.
+	// https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#sending-messages-to-the-server
+	StreamableHTTPAccept = "application/json, text/event-stream"
 )
 
 // streamableTransport implements the MCP Streamable HTTP transport (2025-03-26 spec).
@@ -70,6 +76,13 @@ func (t *streamableTransport) handleRoot(w http.ResponseWriter, r *http.Request)
 
 // handlePost handles POST requests: JSON-RPC dispatch with session management.
 func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request) {
+	// NOTE: Per MCP spec (2025-11-25, Streamable HTTP transport), clients MUST include
+	// Accept header that accepts both application/json and text/event-stream.
+	// https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#sending-messages-to-the-server
+	// We validate this client-side (StreamableHTTPAccept constant) but do NOT reject
+	// non-conforming requests server-side — the spec places the MUST on the client,
+	// and rejecting would break backward compatibility with older clients.
+
 	// Auth check
 	claims, err := t.server.CheckAuth(r)
 	if err != nil {
@@ -122,12 +135,7 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	// If client supports SSE and this is a request (not notification), use SSE streaming
-	// so server-to-client notifications (logging, progress) can be delivered mid-request.
-	wantsSSE := strings.Contains(r.Header.Get("Accept"), "text/event-stream")
-	isRequest := !req.IsNotification()
-
-	if wantsSSE && isRequest {
+	if shouldStreamSSE(r.Header.Get("Accept"), &req) {
 		t.handlePostSSE(w, r, claims, dispatcher, &req)
 		return
 	}
@@ -272,6 +280,72 @@ func (t *streamableTransport) sessionCount() int {
 		return true
 	})
 	return count
+}
+
+// shouldStreamSSE decides whether the server should return an SSE stream or a
+// synchronous JSON response. The decision is deterministic, based on the client's
+// Accept header and the JSON-RPC method.
+//
+// Per MCP spec (2025-11-25, Streamable HTTP transport):
+//
+//	"the server MUST either return Content-Type: text/event-stream, to initiate
+//	 an SSE stream, or Content-Type: application/json, to return one JSON object."
+//
+// https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#sending-messages-to-the-server
+//
+// Decision logic:
+//
+//	Accept has ONLY text/event-stream  → SSE for all requests (client's sole option)
+//	Accept has ONLY application/json   → JSON always (no mid-request streaming possible)
+//	Accept has BOTH                    → method-dependent:
+//	  tools/call, prompts/get          → SSE (may emit progress/log notifications mid-execution)
+//	  everything else                  → JSON (pure request-response, no streaming needed)
+//	Notifications                      → never SSE (no response expected)
+//
+// Why not always JSON when both are accepted? Tool handlers call EmitProgress/EmitLog
+// mid-execution. These notifications must reach the client *during* execution (e.g., for
+// progress bars), not buffered until after the response. SSE is the only way to deliver
+// them in real time over HTTP.
+func shouldStreamSSE(accept string, req *Request) bool {
+	if req.IsNotification() {
+		return false
+	}
+
+	acceptsJSON, acceptsSSE := parseAcceptTypes(accept)
+
+	if !acceptsSSE {
+		return false
+	}
+	if !acceptsJSON {
+		// Client only accepts SSE — use it for everything
+		return true
+	}
+	// Client accepts both — SSE only for methods that may emit mid-request
+	// notifications (progress, logging). All other methods use synchronous JSON.
+	return req.Method == "tools/call" || req.Method == "prompts/get"
+}
+
+// parseAcceptTypes parses the Accept header into a set of accepted media types.
+// Returns whether application/json and text/event-stream are present.
+// Handles quality values (q=) and whitespace per RFC 7231 §5.3.2.
+func parseAcceptTypes(accept string) (acceptsJSON, acceptsSSE bool) {
+	for _, part := range strings.Split(accept, ",") {
+		// Strip quality value and whitespace: "text/event-stream;q=0.9" → "text/event-stream"
+		mediaType := strings.TrimSpace(part)
+		if semi := strings.Index(mediaType, ";"); semi >= 0 {
+			mediaType = strings.TrimSpace(mediaType[:semi])
+		}
+		switch mediaType {
+		case "application/json":
+			acceptsJSON = true
+		case "text/event-stream":
+			acceptsSSE = true
+		case "*/*":
+			acceptsJSON = true
+			acceptsSSE = true
+		}
+	}
+	return
 }
 
 // validateOrigin checks the Origin and Host headers to prevent DNS rebinding attacks.

@@ -30,27 +30,16 @@ server:
 # Remove entries as the client OAuth flow is implemented.
 
 client-auth:
-  # Required (Tier 1) — PRM + AS metadata discovery
-  - auth/metadata-default                   # PRM at path-based + WWW-Auth, OAuth AS at root
-  - auth/metadata-var1                      # PRM at path-based, no WWW-Auth, OIDC discovery
-  - auth/metadata-var2                      # PRM at root, OAuth AS with path component
-  - auth/metadata-var3                      # PRM at custom URL in WWW-Auth, OIDC appended path
+  # Passing (12/14 required):
+  # ✓ auth/metadata-default, metadata-var1, metadata-var2, metadata-var3
+  # ✓ auth/scope-from-www-authenticate, scope-from-scopes-supported, scope-omitted-when-undefined
+  # ✓ auth/token-endpoint-auth-basic, token-endpoint-auth-post, token-endpoint-auth-none
+  # ✓ auth/pre-registration
+  # ⚠ auth/basic-cimd (passing with 1 warning — CIMD not implemented)
 
-  # Required (Tier 1) — Client registration
-  - auth/basic-cimd                         # Client ID Metadata Document flow
-  - auth/pre-registration                   # Pre-registered client credentials
-
-  # Required (Tier 1) — Scope handling
-  - auth/scope-from-www-authenticate        # Client uses scope from WWW-Authenticate header
-  - auth/scope-from-scopes-supported        # Fallback to PRM scopes_supported
-  - auth/scope-omitted-when-undefined       # Omit scope when scopes_supported absent
-  - auth/scope-step-up                      # 401 → 403 flow with scope escalation
-  - auth/scope-retry-limit                  # Max 3 retry attempts on repeated 403
-
-  # Required (Tier 1) — Token endpoint auth methods
-  - auth/token-endpoint-auth-basic          # client_secret_basic
-  - auth/token-endpoint-auth-post           # client_secret_post
-  - auth/token-endpoint-auth-none           # public client (no secret)
+  # Required — scope step-up (blocked on #53: client transport 401/403 handling)
+  - auth/scope-step-up                      # 403 flow with scope escalation
+  - auth/scope-retry-limit                  # Max retry attempts on repeated 403
 
   # Back-compat (optional) — 2025-03-26 spec
   - auth/2025-03-26-oauth-metadata-backcompat  # Legacy OAuth metadata discovery
