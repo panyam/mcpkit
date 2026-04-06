@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"context"
 	"net/http"
 	"strings"
 	"sync"
@@ -11,10 +10,6 @@ import (
 	"github.com/panyam/oneauth/core"
 	"github.com/panyam/oneauth/keys"
 )
-
-// claimsCtxKey is used to stash parsed claims during Validate so Claims()
-// doesn't re-parse the token.
-type claimsCtxKey struct{}
 
 // JWTValidator validates MCP requests using JWT Bearer tokens.
 // It implements mcpkit.AuthValidator and mcpkit.ClaimsProvider by wrapping
@@ -43,8 +38,10 @@ type JWTValidator struct {
 	// Per spec: clients use this to request scopes upfront, reducing step-up round-trips.
 	AllScopes []string
 
-	// mu protects request-scoped claims stash via context.
-	mu sync.Mutex
+	// recentClaims caches the most recently validated claims by token string.
+	// Used by Claims(r) to retrieve claims without re-parsing.
+	// A sync.Map is used for concurrent safety across requests.
+	recentClaims sync.Map // token string → *mcpkit.Claims
 }
 
 // JWTConfig configures a JWTValidator.
@@ -132,18 +129,26 @@ func (v *JWTValidator) Validate(r *http.Request) error {
 		claims.Audience = []string{v.auth.JWTAudience}
 	}
 
-	// Stash claims so Claims(r) can retrieve them without re-parsing.
-	// We use a context value on the request.
-	*r = *r.WithContext(context.WithValue(r.Context(), claimsCtxKey{}, claims))
+	// Cache claims by token so Claims(r) can retrieve them without re-parsing.
+	// This avoids the fragile *r = *r.WithContext(...) pattern.
+	v.recentClaims.Store(token, claims)
 
 	return nil
 }
 
 // Claims implements mcpkit.ClaimsProvider.
-// Returns the claims parsed during Validate.
+// Returns the claims parsed during the most recent Validate call for the same token.
 func (v *JWTValidator) Claims(r *http.Request) *mcpkit.Claims {
-	claims, _ := r.Context().Value(claimsCtxKey{}).(*mcpkit.Claims)
-	return claims
+	authHeader := r.Header.Get("Authorization")
+	const prefix = "Bearer "
+	if !strings.HasPrefix(authHeader, prefix) {
+		return nil
+	}
+	token := authHeader[len(prefix):]
+	if val, ok := v.recentClaims.LoadAndDelete(token); ok {
+		return val.(*mcpkit.Claims)
+	}
+	return nil
 }
 
 // unauthorized returns an AuthError with 401 and a WWW-Authenticate header

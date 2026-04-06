@@ -8,6 +8,11 @@ import (
 	"github.com/panyam/oneauth/client"
 )
 
+// tokenExpiryBuffer is subtracted from token expiry times to account for clock
+// skew and network latency. Without this, tokens could expire between the freshness
+// check and the server receiving the request, causing spurious 401s.
+const tokenExpiryBuffer = 30 * time.Second
+
 // OAuthTokenSource implements mcpkit.TokenSource using oneauth's AuthClient.
 // It handles the full MCP OAuth flow: cached token → refresh → discovery → browser auth.
 //
@@ -46,8 +51,8 @@ func (s *OAuthTokenSource) Token() (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Return cached token if still valid
-	if s.token != "" && time.Now().Before(s.expiry) {
+	// Return cached token if still valid (with buffer for clock skew / network latency)
+	if s.token != "" && time.Now().Add(tokenExpiryBuffer).Before(s.expiry) {
 		return s.token, nil
 	}
 
@@ -119,8 +124,8 @@ func (s *ClientCredentialsSource) Token() (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Return cached token if still valid
-	if s.token != "" && time.Now().Before(s.expiry) {
+	// Return cached token if still valid (with buffer for clock skew / network latency)
+	if s.token != "" && time.Now().Add(tokenExpiryBuffer).Before(s.expiry) {
 		return s.token, nil
 	}
 

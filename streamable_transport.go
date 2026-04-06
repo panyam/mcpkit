@@ -191,21 +191,20 @@ func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Reque
 		flusher.Flush()
 	}
 
-	// Wire notifyFunc to SSE writer for this request.
-	// This enables EmitLog() and Notify() calls in tool handlers to push
-	// notifications as SSE events during request execution.
-	prevNotify := d.notifyFunc
-	d.notifyFunc = func(method string, params any) {
+	// Build a request-scoped notifyFunc that writes to this SSE stream.
+	// Passed through context (not mutating d.notifyFunc) to avoid races
+	// when concurrent SSE-streaming POSTs share the same session dispatcher.
+	requestNotify := NotifyFunc(func(method string, params any) {
 		raw, err := marshalNotification(method, params)
 		if err != nil {
 			return
 		}
 		writeSSE(raw)
-	}
-	defer func() { d.notifyFunc = prevNotify }()
+	})
 
-	// Dispatch (synchronous — notifications stream as events during execution)
-	resp := t.server.dispatchWith(d, r.Context(), claims, req)
+	// Dispatch with the request-scoped notify — contextWithSession will use it
+	// instead of d.notifyFunc.
+	resp := t.server.dispatchWithNotify(d, r.Context(), claims, requestNotify, req)
 
 	// Write the JSON-RPC response as the final SSE event
 	if resp != nil {
