@@ -19,12 +19,17 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strings"
+	"sync"
+
+	"github.com/panyam/mcpkit"
 )
 
 func main() {
@@ -67,8 +72,13 @@ func main() {
 
 	if probeResp.StatusCode != 401 {
 		log.Printf("probe returned %d (not 401) — server may not require auth, trying direct initialize", probeResp.StatusCode)
-		// Try direct initialize without auth
-		doInitialize(httpClient, serverURL, "")
+		client := mcpkit.NewClient(serverURL,
+			mcpkit.ClientInfo{Name: "mcpkit-testclient", Version: "0.1.0"})
+		if err := client.Connect(); err != nil {
+			log.Fatalf("initialize (no auth): %v", err)
+		}
+		client.Close()
+		log.Println("SUCCESS: connected without auth")
 		return
 	}
 
@@ -263,55 +273,167 @@ func main() {
 	}
 	log.Printf("Got access token (type=%s, expires_in=%d)", tokenResult.TokenType, tokenResult.ExpiresIn)
 
-	// Step 8: Initialize MCP with token
-	log.Println("Step 8: MCP initialize with token...")
-	doInitialize(httpClient, serverURL, tokenResult.AccessToken)
+	// Step 8: Initialize MCP with token using mcpkit Client.
+	// The Client's transport handles 401 (token refresh) and 403 (scope step-up)
+	// automatically via doWithAuthRetry + ScopeAwareTokenSource.
+	log.Println("Step 8: MCP initialize with token (using mcpkit Client)...")
+
+	ts := &conformanceTokenSource{
+		httpClient:   httpClient,
+		token:        tokenResult.AccessToken,
+		asMeta:       asMeta,
+		clientID:     clientID,
+		clientSecret: clientSecret,
+		resource:     prm.Resource,
+	}
+
+	client := mcpkit.NewClient(
+		serverURL,
+		mcpkit.ClientInfo{Name: "mcpkit-testclient", Version: "0.1.0"},
+		mcpkit.WithTokenSource(ts),
+	)
+	if err := client.Connect(); err != nil {
+		log.Fatalf("MCP connect: %v", err)
+	}
+	client.Close()
 
 	log.Println("SUCCESS: auth flow complete")
 }
 
-// doInitialize sends the MCP initialize + initialized handshake.
-func doInitialize(httpClient *http.Client, serverURL, token string) {
-	initBody := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"mcpkit-testclient","version":"0.1.0"}}}`
+// conformanceTokenSource implements mcpkit.ScopeAwareTokenSource for the
+// conformance test client. It returns the initially obtained token on Token(),
+// and on TokenForScopes() re-does the PKCE + token exchange flow with the
+// requested scopes merged in.
+type conformanceTokenSource struct {
+	mu           sync.Mutex
+	httpClient   *http.Client
+	token        string
+	asMeta       asMetadata
+	clientID     string
+	clientSecret string
+	resource     string
+}
 
-	req, _ := http.NewRequest("POST", serverURL, strings.NewReader(initBody))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json, text/event-stream")
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
+// Token implements mcpkit.TokenSource. Returns the current access token.
+func (s *conformanceTokenSource) Token() (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.token, nil
+}
+
+// TokenForScopes implements mcpkit.ScopeAwareTokenSource. Re-does the full
+// PKCE + token exchange flow with the requested scopes, updating the cached
+// token. The conformance mock AS auto-approves, so the browser step is a
+// simple HTTP GET → redirect with code.
+func (s *conformanceTokenSource) TokenForScopes(scopes []string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	scopeStr := strings.Join(scopes, " ")
+	log.Printf("Scope step-up: re-authenticating with scopes=%s", scopeStr)
+
+	// PKCE
+	verifier := generateCodeVerifier()
+	challenge := computeS256Challenge(verifier)
+	stateBytes := make([]byte, 16)
+	rand.Read(stateBytes)
+	state := base64.RawURLEncoding.EncodeToString(stateBytes)
+
+	// Build authorization URL with new scopes
+	authParams := url.Values{
+		"response_type":         {"code"},
+		"client_id":             {s.clientID},
+		"redirect_uri":          {"http://127.0.0.1:0/callback"},
+		"code_challenge":        {challenge},
+		"code_challenge_method": {"S256"},
+		"state":                 {state},
+		"scope":                 {scopeStr},
+	}
+	if s.resource != "" {
+		authParams.Set("resource", s.resource)
 	}
 
-	resp, err := httpClient.Do(req)
+	authURL := s.asMeta.AuthorizationEndpoint + "?" + authParams.Encode()
+
+	// Follow auth flow (mock AS auto-approves)
+	authResp, err := s.httpClient.Get(authURL)
 	if err != nil {
-		log.Fatalf("initialize: %v", err)
-	}
-	body, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		log.Fatalf("initialize returned %d: %s", resp.StatusCode, body)
+		return "", fmt.Errorf("scope step-up auth: %w", err)
 	}
 
-	log.Printf("Initialize response: %s", body)
-
-	// Send notifications/initialized
-	notifBody := `{"jsonrpc":"2.0","method":"notifications/initialized"}`
-	req2, _ := http.NewRequest("POST", serverURL, strings.NewReader(notifBody))
-	req2.Header.Set("Content-Type", "application/json")
-	req2.Header.Set("Accept", "application/json, text/event-stream")
-	if token != "" {
-		req2.Header.Set("Authorization", "Bearer "+token)
+	var code string
+	if authResp.StatusCode == 302 || authResp.StatusCode == 303 {
+		io.Copy(io.Discard, authResp.Body)
+		authResp.Body.Close()
+		location := authResp.Header.Get("Location")
+		redirectURL, _ := url.Parse(location)
+		code = redirectURL.Query().Get("code")
+	} else {
+		body, _ := io.ReadAll(authResp.Body)
+		authResp.Body.Close()
+		return "", fmt.Errorf("scope step-up: expected redirect, got %d: %s", authResp.StatusCode, body)
 	}
-	if sessionID := resp.Header.Get("Mcp-Session-Id"); sessionID != "" {
-		req2.Header.Set("Mcp-Session-Id", sessionID)
+
+	if code == "" {
+		return "", fmt.Errorf("scope step-up: no authorization code")
 	}
 
-	resp2, err := httpClient.Do(req2)
+	// Token exchange
+	tokenParams := url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"code_verifier": {verifier},
+		"redirect_uri":  {"http://127.0.0.1:0/callback"},
+		"client_id":     {s.clientID},
+	}
+	if s.resource != "" {
+		tokenParams.Set("resource", s.resource)
+	}
+	authMethod := applyTokenEndpointAuth(tokenParams, s.clientID, s.clientSecret, s.asMeta.TokenAuthMethods)
+
+	tokenReq, _ := http.NewRequest("POST", s.asMeta.TokenEndpoint, strings.NewReader(tokenParams.Encode()))
+	tokenReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if authMethod == "client_secret_basic" {
+		tokenReq.SetBasicAuth(s.clientID, s.clientSecret)
+	}
+
+	tokenResp, err := s.httpClient.Do(tokenReq)
 	if err != nil {
-		log.Fatalf("initialized notification: %v", err)
+		return "", fmt.Errorf("scope step-up token exchange: %w", err)
 	}
-	io.Copy(io.Discard, resp2.Body)
-	resp2.Body.Close()
+	tokenBody, _ := io.ReadAll(tokenResp.Body)
+	tokenResp.Body.Close()
+
+	var result struct {
+		AccessToken string `json:"access_token"`
+	}
+	if err := json.Unmarshal(tokenBody, &result); err != nil {
+		return "", fmt.Errorf("scope step-up token parse: %w", err)
+	}
+	if result.AccessToken == "" {
+		return "", fmt.Errorf("scope step-up: no access_token in response: %s", tokenBody)
+	}
+
+	log.Printf("Scope step-up: got new token with scopes=%s", scopeStr)
+	s.token = result.AccessToken
+	return s.token, nil
+}
+
+// mergeScopes returns the union of existing and required scopes, sorted.
+func mergeScopes(existing, required []string) []string {
+	set := make(map[string]struct{}, len(existing)+len(required))
+	for _, s := range existing {
+		set[s] = struct{}{}
+	}
+	for _, s := range required {
+		set[s] = struct{}{}
+	}
+	result := make([]string, 0, len(set))
+	for s := range set {
+		result = append(result, s)
+	}
+	sort.Strings(result)
+	return result
 }
 
 // discoverAS tries OAuth AS metadata endpoints with RFC 8414 + OIDC fallback.
