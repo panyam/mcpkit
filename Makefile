@@ -1,5 +1,8 @@
 # MCPKit Makefile
 
+# Sub-modules that get tagged alongside the root module
+SUB_MODS_TO_TAG := auth tests/e2e tests/keycloak
+
 # =============================================================================
 # Build & test
 # =============================================================================
@@ -247,6 +250,26 @@ tidy: ## Run go mod tidy
 	go mod tidy
 
 # =============================================================================
+# Release
+# =============================================================================
+
+tag: ## Tag root + all sub-modules (usage: make tag V=v0.0.11)
+	@if [ -z "$(V)" ]; then echo "Usage: make tag V=v0.0.11"; exit 1; fi
+	@echo "Tagging $(V) across all modules..."
+	git tag -a $(V) -m "$(V)"
+	@for mod in $(SUB_MODS_TO_TAG); do \
+		echo "  $$mod/$(V)"; \
+		git tag -a $$mod/$(V) -m "$$mod/$(V)"; \
+	done
+	@echo ""
+	@echo "Tags created locally. Push with:"
+	@echo "  git push origin $(V) $$(echo '$(SUB_MODS_TO_TAG)' | tr ' ' '\n' | sed 's|$$|/$(V)|' | tr '\n' ' ')"
+
+tag-push: ## Tag and push in one step (usage: make tag-push V=v0.0.11)
+	@$(MAKE) tag V=$(V)
+	git push origin $(V) $$(echo '$(SUB_MODS_TO_TAG)' | tr ' ' '\n' | sed 's|$$|/$(V)|' | tr '\n' ' ')
+
+# =============================================================================
 # Setup
 # =============================================================================
 
@@ -266,5 +289,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-race test-v test-auth test-auth-e2e testkcl testkcl-auto testall test-report smoke testconf testconfauth vet lint vulncheck seccheck secrets audit ci ci-full serve serve-streamable serve-both tidy setup-tools setup-hooks setup upkcl downkcl kcllogs help
+.PHONY: build test test-race test-v test-auth test-auth-e2e testkcl testkcl-auto testall test-report smoke testconf testconfauth vet lint vulncheck seccheck secrets audit ci ci-full serve serve-streamable serve-both tidy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs help
 .DEFAULT_GOAL := help
