@@ -1,19 +1,27 @@
 package auth
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/panyam/mcpkit"
 	"github.com/panyam/oneauth/apiauth"
 	"github.com/panyam/oneauth/core"
 	"github.com/panyam/oneauth/keys"
+	"github.com/panyam/oneauth/utils"
 )
 
 // JWTValidator validates MCP requests using JWT Bearer tokens.
 // It implements mcpkit.AuthValidator and mcpkit.ClaimsProvider by wrapping
-// oneauth's APIAuth for JWT signature verification, issuer/audience/scope checks.
+// oneauth's APIMiddleware for JWKS-based JWT signature verification, and
+// APIAuth for issuer/audience/scope checks.
+//
+// Uses APIMiddleware (not APIAuth.ValidateAccessTokenFull) because the middleware
+// supports kid-based key lookup from a KeyStore (including JWKSKeyStore), while
+// APIAuth's jwtKeyFunc only supports fixed symmetric/asymmetric keys.
 //
 // Usage:
 //
@@ -76,8 +84,6 @@ func NewJWTValidator(cfg JWTConfig) *JWTValidator {
 		JWTIssuer:   cfg.Issuer,
 		JWTAudience: cfg.Audience,
 	}
-	// Wire the JWKS key store as the key lookup for JWT verification.
-	// APIAuth uses this to resolve kid → public key for signature verification.
 	auth.ClientKeyStore = ks
 
 	return &JWTValidator{
@@ -101,10 +107,66 @@ func (v *JWTValidator) Validate(r *http.Request) error {
 	}
 	token := authHeader[len(prefix):]
 
-	// Validate via oneauth: signature, iss, aud, exp, blacklist
-	userID, scopes, customClaims, err := v.auth.ValidateAccessTokenFull(token)
+	// Validate JWT with kid-based JWKS key lookup. We use jwt.Parse directly
+	// with a custom keyfunc because APIAuth.ValidateAccessTokenFull only supports
+	// fixed keys, not kid-based KeyStore lookup needed for JWKS.
+	parsed, err := jwt.Parse(token, v.jwksKeyFunc)
 	if err != nil {
 		return v.unauthorized("invalid token: " + err.Error())
+	}
+	if !parsed.Valid {
+		return v.unauthorized("invalid token")
+	}
+
+	mapClaims, ok := parsed.Claims.(jwt.MapClaims)
+	if !ok {
+		return v.unauthorized("invalid claims")
+	}
+
+	// Verify issuer
+	if v.auth.JWTIssuer != "" {
+		if iss, _ := mapClaims["iss"].(string); iss != v.auth.JWTIssuer {
+			return v.unauthorized("invalid issuer")
+		}
+	}
+
+	// Verify audience (RFC 8707 resource indicator)
+	if v.auth.JWTAudience != "" {
+		audOK := false
+		switch aud := mapClaims["aud"].(type) {
+		case string:
+			audOK = aud == v.auth.JWTAudience
+		case []any:
+			for _, a := range aud {
+				if s, ok := a.(string); ok && s == v.auth.JWTAudience {
+					audOK = true
+					break
+				}
+			}
+		}
+		if !audOK {
+			return v.unauthorized(fmt.Sprintf("invalid audience: expected %q", v.auth.JWTAudience))
+		}
+	}
+
+	// Extract user ID
+	userID, _ := mapClaims["sub"].(string)
+	if userID == "" {
+		return v.unauthorized("missing subject")
+	}
+
+	// Extract scopes — handle both formats:
+	//   "scopes": ["read", "write"]  (oneauth array format)
+	//   "scope": "read write"        (Keycloak/RFC 6749 space-delimited string)
+	var scopes []string
+	if scopesRaw, ok := mapClaims["scopes"].([]any); ok {
+		for _, s := range scopesRaw {
+			if str, ok := s.(string); ok {
+				scopes = append(scopes, str)
+			}
+		}
+	} else if scopeStr, ok := mapClaims["scope"].(string); ok && scopeStr != "" {
+		scopes = strings.Fields(scopeStr)
 	}
 
 	// Check required scopes
@@ -116,7 +178,19 @@ func (v *JWTValidator) Validate(r *http.Request) error {
 		}
 	}
 
-	// Build claims and stash in request context
+	// Extract custom claims
+	standardClaims := map[string]bool{
+		"sub": true, "iss": true, "aud": true, "exp": true,
+		"iat": true, "nbf": true, "jti": true, "type": true, "scopes": true,
+	}
+	customClaims := make(map[string]any)
+	for k, v := range mapClaims {
+		if !standardClaims[k] {
+			customClaims[k] = v
+		}
+	}
+
+	// Build claims
 	claims := &mcpkit.Claims{
 		Subject: userID,
 		Scopes:  scopes,
@@ -149,6 +223,25 @@ func (v *JWTValidator) Claims(r *http.Request) *mcpkit.Claims {
 		return val.(*mcpkit.Claims)
 	}
 	return nil
+}
+
+// jwksKeyFunc resolves the verification key for a JWT by looking up the kid
+// header in the JWKS key store. This enables RS256/ES256 token verification
+// via dynamically fetched JWKS keys.
+func (v *JWTValidator) jwksKeyFunc(token *jwt.Token) (any, error) {
+	kid, ok := token.Header["kid"].(string)
+	if !ok || kid == "" {
+		return nil, fmt.Errorf("missing kid header")
+	}
+	rec, err := v.ks.GetKeyByKid(kid)
+	if err != nil {
+		return nil, fmt.Errorf("key not found for kid %q: %w", kid, err)
+	}
+	alg, _ := token.Header["alg"].(string)
+	if alg != rec.Algorithm {
+		return nil, fmt.Errorf("algorithm mismatch: token has %s, key expects %s", alg, rec.Algorithm)
+	}
+	return utils.DecodeVerifyKey(rec.Key, rec.Algorithm)
 }
 
 // unauthorized returns an AuthError with 401 and a WWW-Authenticate header
