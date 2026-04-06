@@ -71,7 +71,7 @@ mcpkit/                          # module: github.com/panyam/mcpkit
 │   ├── conformance_resources.go # Resources + templates for conformance
 │   └── conformance_prompts.go   # Prompts for conformance
 ├── conformance/
-│   └── baseline.yml             # Expected failures: 7 server + 22 auth (north star)
+│   └── baseline.yml             # Expected failures: 7 server + 3 auth
 ├── scripts/
 │   ├── smoke-test.sh            # Curl-based tests for SSE + Streamable HTTP
 │   ├── conformance-test.sh      # Runs @modelcontextprotocol/conformance (server)
@@ -80,15 +80,20 @@ mcpkit/                          # module: github.com/panyam/mcpkit
 │   ├── ARCHITECTURE.md          # This file
 │   ├── AUTH_DESIGN.md           # Auth architecture, sequence diagrams, spec compliance
 │   └── GATEWAY_DESIGN.md       # MCP Gateway design for proxying HTTP/gRPC backends
-└── auth/                        # SEPARATE module (github.com/panyam/mcpkit/auth)
-    ├── go.mod                   # depends on mcpkit + oneauth
-    ├── extension.go             # AuthExtension (ExtensionProvider)
-    ├── jwt_validator.go         # JWTValidator (AuthValidator + ClaimsProvider)
-    ├── server_auth.go           # MountAuth (PRM endpoint via oneauth)
-    ├── www_authenticate.go      # MCP-specific WWW-Authenticate builders
-    ├── scopes.go                # RequireScope for tool handlers
-    ├── token_source.go          # OAuthTokenSource, ClientCredentialsSource
-    └── discovery.go             # DiscoverMCPAuth (MCP discovery orchestration)
+├── client.go                    # MCP client: Connect, ToolCall, ReadResource, WithClientBearerToken
+├── testutil/testclient.go       # TestClient wrapper for e2e testing
+├── auth/                        # SEPARATE module (github.com/panyam/mcpkit/auth)
+│   ├── go.mod                   # depends on mcpkit + oneauth v0.0.64
+│   ├── jwt_validator.go         # JWTValidator (jwt.Parse + JWKS keyfunc)
+│   ├── server_auth.go           # MountAuth (PRM endpoint via oneauth)
+│   ├── www_authenticate.go      # MCP-specific WWW-Authenticate builders
+│   ├── scopes.go                # RequireScope for tool handlers
+│   ├── token_source.go          # OAuthTokenSource, ClientCredentialsSource
+│   └── discovery.go             # DiscoverMCPAuth (MCP discovery orchestration)
+├── tests/e2e/                   # E2E auth tests (separate module, oneauth v0.0.64)
+│   └── (22 tests: JWT, transport, scope, PRM, WWW-Authenticate)
+└── tests/keycloak/              # Keycloak interop (separate module, needs Docker)
+    └── (7 tests: Keycloak JWT → mcpkit JWTValidator)
 ```
 
 ## Two Transports
@@ -185,7 +190,7 @@ MCPKit supports server-initiated notifications via `NotifyFunc`, a generic `func
 2. `Server.dispatchWith` injects the notify func, log level, and auth claims into the context via `contextWithSession`
 3. Tool handlers call `EmitLog(ctx, level, logger, data)` which checks the session's log level and calls the notify func
 4. SSE transport: `notifyFunc` pushes via `hub.SendEvent` (real-time delivery)
-5. Streamable HTTP: `notifyFunc` is nil (notifications silently dropped until GET SSE stream ships)
+5. Streamable HTTP: when client sends `Accept: text/event-stream`, `handlePostSSE` passes a request-scoped notifyFunc via `dispatchWithNotify` (no shared state mutation)
 
 ### Logging
 

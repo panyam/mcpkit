@@ -28,7 +28,7 @@
 - mcp-progress: notifications/progress via EmitProgress() with _meta.progressToken
 - mcp-completion: completion/complete for argument autocompletion
 - mcp-dns-rebinding-protection: Origin header validation on Streamable HTTP (WithAllowedOrigins)
-- mcp-conformance: Official MCP conformance test suite integration (24/30 server passing, 12/14 auth passing)
+- mcp-conformance: Official MCP conformance test suite integration (24/30 server passing, 12/14 auth passing, 3 expected failures)
 - mcp-client: Go MCP client for Streamable HTTP — Connect, ToolCall, ReadResource, ListTools, ListResources
 - mcp-testutil: TestClient wrapper for e2e testing MCP servers (httptest + testing.T integration)
 - mcp-auth-e2e: E2E auth tests with real oneauth AS (22 tests: JWT validation, transport auth, scopes, PRM, WWW-Authenticate)
