@@ -2,6 +2,7 @@ package auth
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -93,6 +94,21 @@ func (s *OAuthTokenSource) Token() (string, error) {
 	return s.token, nil
 }
 
+// TokenForScopes implements mcpkit.ScopeAwareTokenSource.
+// Invalidates the cached token and triggers a new OAuth flow with the
+// requested scopes merged into the existing scope set.
+func (s *OAuthTokenSource) TokenForScopes(scopes []string) (string, error) {
+	s.mu.Lock()
+	// Invalidate cached token
+	s.token = ""
+	s.expiry = time.Time{}
+	// Merge scopes
+	s.Scopes = mergeScopes(s.Scopes, scopes)
+	s.mu.Unlock()
+
+	return s.Token()
+}
+
 // ClientCredentialsSource implements mcpkit.TokenSource for machine-to-machine auth.
 // Uses the OAuth client_credentials grant (RFC 6749 §4.4).
 //
@@ -142,4 +158,34 @@ func (s *ClientCredentialsSource) Token() (string, error) {
 	s.token = cred.AccessToken
 	s.expiry = cred.ExpiresAt
 	return s.token, nil
+}
+
+// TokenForScopes implements mcpkit.ScopeAwareTokenSource.
+// Invalidates the cached token and triggers a new client_credentials flow
+// with the requested scopes merged into the existing scope set.
+func (s *ClientCredentialsSource) TokenForScopes(scopes []string) (string, error) {
+	s.mu.Lock()
+	s.token = ""
+	s.expiry = time.Time{}
+	s.Scopes = mergeScopes(s.Scopes, scopes)
+	s.mu.Unlock()
+
+	return s.Token()
+}
+
+// mergeScopes returns the union of existing and required scopes, sorted.
+func mergeScopes(existing, required []string) []string {
+	set := make(map[string]struct{}, len(existing)+len(required))
+	for _, s := range existing {
+		set[s] = struct{}{}
+	}
+	for _, s := range required {
+		set[s] = struct{}{}
+	}
+	result := make([]string, 0, len(set))
+	for s := range set {
+		result = append(result, s)
+	}
+	sort.Strings(result)
+	return result
 }
