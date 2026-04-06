@@ -155,7 +155,9 @@ func (v *JWTValidator) Validate(r *http.Request) error {
 		return v.unauthorized("missing subject")
 	}
 
-	// Extract scopes
+	// Extract scopes — handle both formats:
+	//   "scopes": ["read", "write"]  (oneauth array format)
+	//   "scope": "read write"        (Keycloak/RFC 6749 space-delimited string)
 	var scopes []string
 	if scopesRaw, ok := mapClaims["scopes"].([]any); ok {
 		for _, s := range scopesRaw {
@@ -163,6 +165,8 @@ func (v *JWTValidator) Validate(r *http.Request) error {
 				scopes = append(scopes, str)
 			}
 		}
+	} else if scopeStr, ok := mapClaims["scope"].(string); ok && scopeStr != "" {
+		scopes = strings.Fields(scopeStr)
 	}
 
 	// Check required scopes
