@@ -34,12 +34,24 @@ test-auth-e2e: ## Run E2E auth tests (in-process oneauth AS, no Docker)
 test-auth-keycloak: ## Run Keycloak auth interop tests (requires Docker, run upkcl first)
 	cd tests/keycloak && go test ./... -count=1 -timeout 120s -v
 
-testall: test test-race test-auth test-auth-e2e testconf testconfauth ## Run all tests (expensive)
+testall: test test-race test-auth test-auth-e2e testconf testconfauth ## Run all tests (no Docker)
 
-test-report: ## Run all tests with JSON output for reporting
-	@echo "=== Root module ===" && go test ./... -count=1 -timeout 30s -v 2>&1
-	@echo "=== Auth module ===" && cd auth && go test ./... -count=1 -timeout 30s -v 2>&1
-	@echo "=== E2E auth ===" && cd tests/e2e && go test ./... -count=1 -timeout 60s -v 2>&1
+test-all: testall test-auth-keycloak ## Run ALL tests including Keycloak (needs Docker)
+
+test-report: ## Run all tests with verbose output (includes Keycloak — skips if not running)
+	@echo "=== Root module ==="
+	@go test ./... -count=1 -timeout 30s -v 2>&1
+	@echo ""
+	@echo "=== Auth module ==="
+	@cd auth && go test ./... -count=1 -timeout 30s -v 2>&1
+	@echo ""
+	@echo "=== E2E auth ==="
+	@cd tests/e2e && go test ./... -count=1 -timeout 60s -v 2>&1
+	@echo ""
+	@echo "=== Keycloak interop (skips if not running) ==="
+	@cd tests/keycloak && go test ./... -count=1 -timeout 120s -v 2>&1
+	@echo ""
+	@echo "=== Test report complete ==="
 
 # =============================================================================
 # Keycloak (for interop tests)
@@ -142,5 +154,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-race test-v test-auth test-auth-e2e test-auth-keycloak testall test-report smoke testconf testconfauth vet lint vulncheck seccheck secrets audit ci ci-full serve serve-streamable serve-both tidy setup-tools setup-hooks setup upkcl downkcl kcllogs help
+.PHONY: build test test-race test-v test-auth test-auth-e2e test-auth-keycloak testall test-all test-report smoke testconf testconfauth vet lint vulncheck seccheck secrets audit ci ci-full serve serve-streamable serve-both tidy setup-tools setup-hooks setup upkcl downkcl kcllogs help
 .DEFAULT_GOAL := help
