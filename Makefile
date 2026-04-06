@@ -34,7 +34,7 @@ test-auth-e2e: ## Run E2E auth tests (in-process oneauth AS, no Docker)
 testkcl: ## Run Keycloak auth interop tests (requires Docker, run upkcl first)
 	cd tests/keycloak && go test ./... -count=1 -timeout 120s -v
 
-REPORT_DIR := test-reports
+REPORT_DIR := tests/reports
 
 STAGES :=
 
