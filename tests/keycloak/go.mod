@@ -1,14 +1,8 @@
-module github.com/panyam/mcpkit/tests/e2e
+module github.com/panyam/mcpkit/tests/keycloak
 
 go 1.26.1
 
-replace (
-	github.com/panyam/mcpkit => ../..
-	github.com/panyam/mcpkit/auth => ../../auth
-)
-
 require (
-	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/panyam/mcpkit v0.0.0
 	github.com/panyam/mcpkit/auth v0.0.0
 	github.com/panyam/oneauth v0.0.64
@@ -19,6 +13,7 @@ require (
 	github.com/alexedwards/scs/v2 v2.8.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fernet/fernet-go v0.0.0-20240119011108-303da6aec611 // indirect
+	github.com/golang-jwt/jwt/v5 v5.2.2 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/panyam/gocurrent v0.0.13 // indirect
@@ -33,4 +28,9 @@ require (
 	google.golang.org/grpc v1.78.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+)
+
+replace (
+	github.com/panyam/mcpkit => ../..
+	github.com/panyam/mcpkit/auth => ../../auth
 )
