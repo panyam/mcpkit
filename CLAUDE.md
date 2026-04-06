@@ -10,16 +10,19 @@ Go library for building production-grade MCP servers and clients. Handles transp
 make test         # Unit tests (160+ tests)
 make testconf     # MCP conformance suite (needs Node.js)
 make testconfauth # MCP Auth conformance — client OAuth tests (needs mcpkit/auth)
-make testall      # All tests (unit + race + e2e + conformance)
+make testall      # ALL tests + Keycloak + HTML report (test-reports/report.html)
 make smoke        # Curl-based transport tests
 make audit        # govulncheck + gosec + gitleaks + race detection
 make serve        # Start SSE test server on :8787
 make serve-streamable  # Streamable HTTP on :8787
 make serve-both   # Both transports
 
-# Auth E2E tests (separate module, requires local oneauth checkout)
-cd tests/e2e && go test ./... -v    # 22 E2E auth tests (in-process oneauth AS)
-cd auth && go test ./...            # Auth sub-module unit tests
+# Auth tests (separate modules, published oneauth v0.0.64)
+make test-auth        # Auth sub-module unit tests
+make test-auth-e2e    # 22 E2E auth tests (in-process oneauth AS)
+make test-auth-keycloak  # 7 Keycloak interop tests (needs Docker)
+make upkcl            # Start Keycloak container
+make downkcl          # Stop Keycloak container
 ```
 
 ## Key Files
@@ -85,4 +88,3 @@ See `docs/ARCHITECTURE.md` for transport design, type definitions, and protocol 
 - Streamable HTTP GET SSE stream (server-initiated notifications without a request)
 - `DiscoverMCPAuth` PRM fetch — steps 4-5 return error "not yet implemented"
 - Scope step-up (client 401/403 handling) — blocked on #53
-- Keycloak interop tests (#55, Tier 2) — infrastructure in progress
