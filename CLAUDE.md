@@ -7,15 +7,22 @@ Go library for building production-grade MCP servers and clients. Handles transp
 ## Quick Commands
 
 ```bash
-make test         # Unit tests (160 tests)
+make test         # Unit tests (160+ tests)
 make testconf     # MCP conformance suite (needs Node.js)
 make testconfauth # MCP Auth conformance — client OAuth tests (needs mcpkit/auth)
-make testall      # Both
+make testall      # ALL tests + Keycloak + HTML report (test-reports/report.html)
 make smoke        # Curl-based transport tests
 make audit        # govulncheck + gosec + gitleaks + race detection
 make serve        # Start SSE test server on :8787
 make serve-streamable  # Streamable HTTP on :8787
 make serve-both   # Both transports
+
+# Auth tests (separate modules, published oneauth v0.0.64)
+make test-auth        # Auth sub-module unit tests
+make test-auth-e2e    # 22 E2E auth tests (in-process oneauth AS)
+make test-auth-keycloak  # 7 Keycloak interop tests (needs Docker)
+make upkcl            # Start Keycloak container
+make downkcl          # Stop Keycloak container
 ```
 
 ## Key Files
@@ -39,7 +46,10 @@ make serve-both   # Both transports
 | `docs/AUTH_DESIGN.md` | MCP Auth architecture, sequence diagrams, extension system, oneauth integration map |
 | `testutil/testclient.go` | TestClient: wraps Client + httptest.Server + testing.T for e2e tests |
 | `cmd/testserver/` | Test server with conformance tools, resources, and prompts |
+| `cmd/testclient/` | Headless OAuth conformance client (PKCE, PRM discovery, token exchange) |
 | `conformance/baseline.yml` | Expected conformance failures — remove entries as features ship |
+| `tests/e2e/` | E2E auth tests: real oneauth AS + mcpkit MCP server (separate Go module) |
+| `tests/keycloak/` | Keycloak interop tests (separate Go module, requires Docker) |
 
 ## Gotchas
 
@@ -51,9 +61,12 @@ make serve-both   # Both transports
 - **Capabilities auto-advertise**: resources/prompts capabilities only appear in initialize response when resources/prompts are actually registered. Logging and completions are always advertised.
 - **Server-to-client notifications** (logging, progress) work over both transports. SSE: pushed via hub. Streamable HTTP: POST response switches to SSE streaming (`Content-Type: text/event-stream`) when client sends `Accept: text/event-stream`. Falls back to synchronous JSON if client doesn't accept SSE.
 - **Auth checks on ALL endpoints**: SSE `GET /sse`, Streamable HTTP `POST /mcp`, and Streamable `DELETE /mcp` all call `CheckAuth`. The SSE GET was previously unauthenticated — fixed in this auth work.
-- **`auth/` is a separate Go module** with its own `go.mod`. Root `go test ./...` does NOT test it. Use `cd auth && go test ./...` or test explicitly. Uses `replace` directives for local oneauth.
+- **`auth/` is a separate Go module** with its own `go.mod`. Root `go test ./...` does NOT test it. Use `cd auth && go test ./...` or `make test-auth`. Uses published `oneauth v0.0.64`; only `mcpkit` itself uses a `replace` directive (same-repo reference).
 - **Extension metadata in initialize**: extensions registered via `WithExtension` appear under `capabilities.extensions` in the initialize response, with `specVersion` and `stability`.
 - **Auth spec is 2025-11-25**: See `docs/AUTH_DESIGN.md` for spec compliance checklist. Key: `resource` param (RFC 8707) is MUST, PKCE S256 is MUST, audience validation is MUST.
+- **JWTValidator uses direct jwt.Parse with JWKS keyfunc**, NOT `APIAuth.ValidateAccessTokenFull` (which doesn't support kid-based JWKS lookup). The custom `jwksKeyFunc` method on `JWTValidator` resolves keys via `JWKSKeyStore.GetKeyByKid`.
+- **`tests/e2e/` and `tests/keycloak/` are separate Go modules**. They use published `oneauth v0.0.64` and `replace` directives only for same-repo mcpkit references. NOT tested by root `go test ./...`. Run via `make test-auth-e2e` or `make test-auth-keycloak`.
+- **oneauth/testutil.TestAuthServer** provides the in-process auth server for E2E tests. It generates RSA keys, serves JWKS, and mints tokens. Set audience after creation via `AS.APIAuth.JWTAudience` (the `WithAudience` option is set at creation time, before server URL is known).
 
 ## Architecture
 
@@ -73,5 +86,5 @@ See `docs/ARCHITECTURE.md` for transport design, type definitions, and protocol 
 - Sampling (#22), Elicitation (#23)
 - Resource subscriptions (#24)
 - Streamable HTTP GET SSE stream (server-initiated notifications without a request)
-- MCP Auth client OAuth flow — OAuthTokenSource needs `resource` param (blocked on oneauth #66), PKCE verification (oneauth #65)
-- `cmd/testclient` — needed for `make testconfauth` to actually run auth conformance
+- `DiscoverMCPAuth` PRM fetch — steps 4-5 return error "not yet implemented"
+- Scope step-up (client 401/403 handling) — blocked on #53

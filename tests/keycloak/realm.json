@@ -1,0 +1,101 @@
+{
+  "realm": "mcpkit-test",
+  "enabled": true,
+  "sslRequired": "none",
+  "defaultSignatureAlgorithm": "RS256",
+  "accessTokenLifespan": 300,
+  "clients": [
+    {
+      "clientId": "mcp-confidential",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "mcp-test-secret-for-confidential",
+      "serviceAccountsEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": true,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "redirectUris": ["http://localhost:*", "http://127.0.0.1:*"],
+      "webOrigins": ["*"],
+      "defaultClientScopes": ["openid", "email", "profile"],
+      "optionalClientScopes": ["tools-read", "tools-call", "admin-write"],
+      "protocolMappers": [
+        {
+          "name": "subject",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "config": {
+            "id.token.claim": "true",
+            "access.token.claim": "true"
+          }
+        },
+        {
+          "name": "preferred_username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "username",
+            "claim.name": "preferred_username",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "jsonType.label": "String"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "mcp-public",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "protocol": "openid-connect",
+      "defaultClientScopes": ["openid"],
+      "optionalClientScopes": ["tools-read", "tools-call"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "redirectUris": ["http://localhost:*", "http://127.0.0.1:*"]
+    }
+  ],
+  "clientScopes": [
+    {
+      "name": "tools-read",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true"
+      }
+    },
+    {
+      "name": "tools-call",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true"
+      }
+    },
+    {
+      "name": "admin-write",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "mcp-testuser",
+      "enabled": true,
+      "email": "mcp-testuser@example.com",
+      "emailVerified": true,
+      "firstName": "MCP",
+      "lastName": "TestUser",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "testpassword",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}

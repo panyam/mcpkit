@@ -1,0 +1,776 @@
+=== MCPKit Comprehensive Test Suite ===
+Started: Mon Apr  6 14:57:53 PDT 2026
+
+--- [1/7] Unit tests ---
+=== RUN   TestAuthClaimsFromContext
+--- PASS: TestAuthClaimsFromContext (0.00s)
+=== RUN   TestAuthClaimsNilWithoutSession
+--- PASS: TestAuthClaimsNilWithoutSession (0.00s)
+=== RUN   TestAuthClaimsNilWithoutAuth
+--- PASS: TestAuthClaimsNilWithoutAuth (0.00s)
+=== RUN   TestHasScope
+--- PASS: TestHasScope (0.00s)
+=== RUN   TestHasScopeWithoutClaims
+--- PASS: TestHasScopeWithoutClaims (0.00s)
+=== RUN   TestCheckAuthWithClaimsProvider
+--- PASS: TestCheckAuthWithClaimsProvider (0.00s)
+=== RUN   TestCheckAuthWithoutClaimsProvider
+--- PASS: TestCheckAuthWithoutClaimsProvider (0.00s)
+=== RUN   TestStaticTokenSource
+--- PASS: TestStaticTokenSource (0.00s)
+=== RUN   TestExtensionRegistration
+--- PASS: TestExtensionRegistration (0.00s)
+=== RUN   TestAnnotationsOnToolDef
+--- PASS: TestAnnotationsOnToolDef (0.00s)
+=== RUN   TestAuthErrorWithWWWAuthenticate
+--- PASS: TestAuthErrorWithWWWAuthenticate (0.00s)
+=== RUN   TestClientConnect
+--- PASS: TestClientConnect (0.00s)
+=== RUN   TestClientToolCall
+--- PASS: TestClientToolCall (0.00s)
+=== RUN   TestClientToolCallError
+--- PASS: TestClientToolCallError (0.00s)
+=== RUN   TestClientReadResource
+--- PASS: TestClientReadResource (0.00s)
+=== RUN   TestClientReadResourceTemplate
+--- PASS: TestClientReadResourceTemplate (0.00s)
+=== RUN   TestClientListTools
+--- PASS: TestClientListTools (0.00s)
+=== RUN   TestClientListResources
+--- PASS: TestClientListResources (0.00s)
+=== RUN   TestClientListResourceTemplates
+--- PASS: TestClientListResourceTemplates (0.00s)
+=== RUN   TestClientCallRaw
+--- PASS: TestClientCallRaw (0.00s)
+=== RUN   TestSSEClientConnect
+2026/04/06 14:57:54 Starting MCP SSE connection: e950556da98996e0b9dc6d0bff390426
+2026/04/06 14:57:54 SSEHub: registered connection e950556da98996e0b9dc6d0bff390426 (total: 1)
+2026/04/06 14:57:54 SSEHub: unregistered connection e950556da98996e0b9dc6d0bff390426 (total: 0)
+2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x395835fdad20
+2026/04/06 14:57:54 Cleaning up writer...
+2026/04/06 14:57:54 Finished cleaning up writer:  0x395835fdad20
+2026/04/06 14:57:54 Closed MCP SSE connection: e950556da98996e0b9dc6d0bff390426
+--- PASS: TestSSEClientConnect (0.00s)
+=== RUN   TestSSEClientToolCall
+2026/04/06 14:57:54 Starting MCP SSE connection: dfba9e3e28a2afebc62fd82fe49a7422
+2026/04/06 14:57:54 SSEHub: registered connection dfba9e3e28a2afebc62fd82fe49a7422 (total: 1)
+2026/04/06 14:57:54 SSEHub: unregistered connection dfba9e3e28a2afebc62fd82fe49a7422 (total: 0)
+2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x395836122fc0
+2026/04/06 14:57:54 Cleaning up writer...
+2026/04/06 14:57:54 Finished cleaning up writer:  0x395836122fc0
+2026/04/06 14:57:54 Closed MCP SSE connection: dfba9e3e28a2afebc62fd82fe49a7422
+--- PASS: TestSSEClientToolCall (0.00s)
+=== RUN   TestSSEClientToolCallError
+2026/04/06 14:57:54 Starting MCP SSE connection: 9be45e2c36d0ff344637209c865707ac
+2026/04/06 14:57:54 SSEHub: registered connection 9be45e2c36d0ff344637209c865707ac (total: 1)
+2026/04/06 14:57:54 SSEHub: unregistered connection 9be45e2c36d0ff344637209c865707ac (total: 0)
+2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x395835fdb1f0
+2026/04/06 14:57:54 Cleaning up writer...
+2026/04/06 14:57:54 Finished cleaning up writer:  0x395835fdb1f0
+2026/04/06 14:57:54 Closed MCP SSE connection: 9be45e2c36d0ff344637209c865707ac
+--- PASS: TestSSEClientToolCallError (0.00s)
+=== RUN   TestSSEClientReadResource
+2026/04/06 14:57:54 Starting MCP SSE connection: c46d9d4a971c3fce1b4f234bc3c2719a
+2026/04/06 14:57:54 SSEHub: registered connection c46d9d4a971c3fce1b4f234bc3c2719a (total: 1)
+2026/04/06 14:57:54 SSEHub: unregistered connection c46d9d4a971c3fce1b4f234bc3c2719a (total: 0)
+2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x395836091ce0
+2026/04/06 14:57:54 Cleaning up writer...
+2026/04/06 14:57:54 Finished cleaning up writer:  0x395836091ce0
+2026/04/06 14:57:54 Closed MCP SSE connection: c46d9d4a971c3fce1b4f234bc3c2719a
+--- PASS: TestSSEClientReadResource (0.00s)
+=== RUN   TestSSEClientReadResourceTemplate
+2026/04/06 14:57:54 Starting MCP SSE connection: 1df4476e2cdb3f4f0cc465bc256eae6c
+2026/04/06 14:57:54 SSEHub: registered connection 1df4476e2cdb3f4f0cc465bc256eae6c (total: 1)
+2026/04/06 14:57:54 SSEHub: unregistered connection 1df4476e2cdb3f4f0cc465bc256eae6c (total: 0)
+2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x395835fdbdc0
+2026/04/06 14:57:54 Cleaning up writer...
+2026/04/06 14:57:54 Finished cleaning up writer:  0x395835fdbdc0
+2026/04/06 14:57:54 Closed MCP SSE connection: 1df4476e2cdb3f4f0cc465bc256eae6c
+--- PASS: TestSSEClientReadResourceTemplate (0.00s)
+=== RUN   TestSSEClientListTools
+2026/04/06 14:57:54 Starting MCP SSE connection: 9deaa2b7b541c5385c40e4e3a6804951
+2026/04/06 14:57:54 SSEHub: registered connection 9deaa2b7b541c5385c40e4e3a6804951 (total: 1)
+2026/04/06 14:57:54 SSEHub: unregistered connection 9deaa2b7b541c5385c40e4e3a6804951 (total: 0)
+2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x3958363241c0
+2026/04/06 14:57:54 Cleaning up writer...
+2026/04/06 14:57:54 Finished cleaning up writer:  0x3958363241c0
+2026/04/06 14:57:54 Closed MCP SSE connection: 9deaa2b7b541c5385c40e4e3a6804951
+--- PASS: TestSSEClientListTools (0.00s)
+=== RUN   TestCompletionComplete
+--- PASS: TestCompletionComplete (0.00s)
+=== RUN   TestCompletionCompleteNoHandler
+--- PASS: TestCompletionCompleteNoHandler (0.00s)
+=== RUN   TestCompletionCompleteBeforeInit
+--- PASS: TestCompletionCompleteBeforeInit (0.00s)
+=== RUN   TestCompletionCapability
+--- PASS: TestCompletionCapability (0.00s)
+=== RUN   TestCompletionCompleteResourceRef
+--- PASS: TestCompletionCompleteResourceRef (0.00s)
+=== RUN   TestCompletionCompleteBadParams
+--- PASS: TestCompletionCompleteBadParams (0.00s)
+=== RUN   TestDispatchInitialize
+--- PASS: TestDispatchInitialize (0.00s)
+=== RUN   TestDispatchNotification
+--- PASS: TestDispatchNotification (0.00s)
+=== RUN   TestDispatchPing
+--- PASS: TestDispatchPing (0.00s)
+=== RUN   TestDispatchToolsList
+--- PASS: TestDispatchToolsList (0.00s)
+=== RUN   TestDispatchToolsCall
+--- PASS: TestDispatchToolsCall (0.00s)
+=== RUN   TestDispatchToolsCallUnknown
+--- PASS: TestDispatchToolsCallUnknown (0.00s)
+=== RUN   TestDispatchToolsCallBadParams
+--- PASS: TestDispatchToolsCallBadParams (0.00s)
+=== RUN   TestDispatchMethodNotFound
+--- PASS: TestDispatchMethodNotFound (0.00s)
+=== RUN   TestDispatchNullID
+--- PASS: TestDispatchNullID (0.00s)
+=== RUN   TestDispatchToolsCallHandlerError
+--- PASS: TestDispatchToolsCallHandlerError (0.00s)
+=== RUN   TestDispatchToolOrder
+--- PASS: TestDispatchToolOrder (0.00s)
+=== RUN   TestDispatchInitializeVersion2025
+--- PASS: TestDispatchInitializeVersion2025 (0.00s)
+=== RUN   TestDispatchInitializeUnsupportedVersion
+--- PASS: TestDispatchInitializeUnsupportedVersion (0.00s)
+=== RUN   TestDispatchInitializeMissingParams
+--- PASS: TestDispatchInitializeMissingParams (0.00s)
+=== RUN   TestDispatchInitializeStoresClientInfo
+--- PASS: TestDispatchInitializeStoresClientInfo (0.00s)
+=== RUN   TestDispatchBeforeInitialized
+--- PASS: TestDispatchBeforeInitialized (0.00s)
+=== RUN   TestDispatchToolsCallBeforeAnyInit
+--- PASS: TestDispatchToolsCallBeforeAnyInit (0.00s)
+=== RUN   TestDispatchPingBeforeInitialized
+--- PASS: TestDispatchPingBeforeInitialized (0.00s)
+=== RUN   TestDispatchLoggingSetLevel
+--- PASS: TestDispatchLoggingSetLevel (0.00s)
+=== RUN   TestDispatchLoggingSetLevelAllLevels
+=== RUN   TestDispatchLoggingSetLevelAllLevels/debug
+=== RUN   TestDispatchLoggingSetLevelAllLevels/info
+=== RUN   TestDispatchLoggingSetLevelAllLevels/notice
+=== RUN   TestDispatchLoggingSetLevelAllLevels/warning
+=== RUN   TestDispatchLoggingSetLevelAllLevels/error
+=== RUN   TestDispatchLoggingSetLevelAllLevels/critical
+=== RUN   TestDispatchLoggingSetLevelAllLevels/alert
+=== RUN   TestDispatchLoggingSetLevelAllLevels/emergency
+--- PASS: TestDispatchLoggingSetLevelAllLevels (0.00s)
+    --- PASS: TestDispatchLoggingSetLevelAllLevels/debug (0.00s)
+    --- PASS: TestDispatchLoggingSetLevelAllLevels/info (0.00s)
+    --- PASS: TestDispatchLoggingSetLevelAllLevels/notice (0.00s)
+    --- PASS: TestDispatchLoggingSetLevelAllLevels/warning (0.00s)
+    --- PASS: TestDispatchLoggingSetLevelAllLevels/error (0.00s)
+    --- PASS: TestDispatchLoggingSetLevelAllLevels/critical (0.00s)
+    --- PASS: TestDispatchLoggingSetLevelAllLevels/alert (0.00s)
+    --- PASS: TestDispatchLoggingSetLevelAllLevels/emergency (0.00s)
+=== RUN   TestDispatchLoggingSetLevelInvalid
+--- PASS: TestDispatchLoggingSetLevelInvalid (0.00s)
+=== RUN   TestDispatchLoggingSetLevelBeforeInit
+--- PASS: TestDispatchLoggingSetLevelBeforeInit (0.00s)
+=== RUN   TestDispatchLoggingCapability
+--- PASS: TestDispatchLoggingCapability (0.00s)
+=== RUN   TestDispatchToolsCallWithProgressToken
+--- PASS: TestDispatchToolsCallWithProgressToken (0.00s)
+=== RUN   TestDispatchToolsCallWithoutProgressToken
+--- PASS: TestDispatchToolsCallWithoutProgressToken (0.00s)
+=== RUN   TestNewResponse
+--- PASS: TestNewResponse (0.00s)
+=== RUN   TestNewErrorResponse
+--- PASS: TestNewErrorResponse (0.00s)
+=== RUN   TestNewErrorResponseWithData
+--- PASS: TestNewErrorResponseWithData (0.00s)
+=== RUN   TestRequestIsNotification
+=== RUN   TestRequestIsNotification/nil_ID
+=== RUN   TestRequestIsNotification/null_ID
+=== RUN   TestRequestIsNotification/numeric_ID
+=== RUN   TestRequestIsNotification/string_ID
+--- PASS: TestRequestIsNotification (0.00s)
+    --- PASS: TestRequestIsNotification/nil_ID (0.00s)
+    --- PASS: TestRequestIsNotification/null_ID (0.00s)
+    --- PASS: TestRequestIsNotification/numeric_ID (0.00s)
+    --- PASS: TestRequestIsNotification/string_ID (0.00s)
+=== RUN   TestLogLevelParsing
+=== RUN   TestLogLevelParsing/debug
+=== RUN   TestLogLevelParsing/info
+=== RUN   TestLogLevelParsing/notice
+=== RUN   TestLogLevelParsing/warning
+=== RUN   TestLogLevelParsing/error
+=== RUN   TestLogLevelParsing/critical
+=== RUN   TestLogLevelParsing/alert
+=== RUN   TestLogLevelParsing/emergency
+--- PASS: TestLogLevelParsing (0.00s)
+    --- PASS: TestLogLevelParsing/debug (0.00s)
+    --- PASS: TestLogLevelParsing/info (0.00s)
+    --- PASS: TestLogLevelParsing/notice (0.00s)
+    --- PASS: TestLogLevelParsing/warning (0.00s)
+    --- PASS: TestLogLevelParsing/error (0.00s)
+    --- PASS: TestLogLevelParsing/critical (0.00s)
+    --- PASS: TestLogLevelParsing/alert (0.00s)
+    --- PASS: TestLogLevelParsing/emergency (0.00s)
+=== RUN   TestLogLevelParsingInvalid
+--- PASS: TestLogLevelParsingInvalid (0.00s)
+=== RUN   TestEmitLogFiltering
+--- PASS: TestEmitLogFiltering (0.00s)
+=== RUN   TestEmitLogNoSession
+--- PASS: TestEmitLogNoSession (0.00s)
+=== RUN   TestEmitLogDisabled
+--- PASS: TestEmitLogDisabled (0.00s)
+=== RUN   TestEmitLogAllLevelsPassAtDebug
+--- PASS: TestEmitLogAllLevelsPassAtDebug (0.00s)
+=== RUN   TestNotifyFunc
+--- PASS: TestNotifyFunc (0.00s)
+=== RUN   TestNotifyNoSession
+--- PASS: TestNotifyNoSession (0.00s)
+=== RUN   TestMarshalNotification
+--- PASS: TestMarshalNotification (0.00s)
+=== RUN   TestEmitProgressSendsNotification
+--- PASS: TestEmitProgressSendsNotification (0.00s)
+=== RUN   TestEmitProgressNilToken
+--- PASS: TestEmitProgressNilToken (0.00s)
+=== RUN   TestEmitProgressNoSession
+--- PASS: TestEmitProgressNoSession (0.00s)
+=== RUN   TestEmitProgressMultiple
+--- PASS: TestEmitProgressMultiple (0.00s)
+=== RUN   TestEmitProgressNumericToken
+--- PASS: TestEmitProgressNumericToken (0.00s)
+=== RUN   TestPromptsList
+--- PASS: TestPromptsList (0.00s)
+=== RUN   TestPromptsListEmpty
+--- PASS: TestPromptsListEmpty (0.00s)
+=== RUN   TestPromptsGetSimple
+--- PASS: TestPromptsGetSimple (0.00s)
+=== RUN   TestPromptsGetWithArgs
+--- PASS: TestPromptsGetWithArgs (0.00s)
+=== RUN   TestPromptsGetUnknown
+--- PASS: TestPromptsGetUnknown (0.00s)
+=== RUN   TestPromptsCapabilities
+--- PASS: TestPromptsCapabilities (0.00s)
+=== RUN   TestResourcesList
+--- PASS: TestResourcesList (0.00s)
+=== RUN   TestResourcesListEmpty
+--- PASS: TestResourcesListEmpty (0.00s)
+=== RUN   TestResourcesRead
+--- PASS: TestResourcesRead (0.00s)
+=== RUN   TestResourcesReadBinary
+--- PASS: TestResourcesReadBinary (0.00s)
+=== RUN   TestResourcesReadUnknown
+--- PASS: TestResourcesReadUnknown (0.00s)
+=== RUN   TestResourcesTemplatesList
+--- PASS: TestResourcesTemplatesList (0.00s)
+=== RUN   TestResourcesTemplateRead
+--- PASS: TestResourcesTemplateRead (0.00s)
+=== RUN   TestResourcesCapabilities
+--- PASS: TestResourcesCapabilities (0.00s)
+=== RUN   TestServerDispatch
+--- PASS: TestServerDispatch (0.00s)
+=== RUN   TestServerToolTimeout
+--- PASS: TestServerToolTimeout (0.05s)
+=== RUN   TestBearerTokenValidatorConstantTime
+=== RUN   TestBearerTokenValidatorConstantTime/valid
+=== RUN   TestBearerTokenValidatorConstantTime/wrong_token
+=== RUN   TestBearerTokenValidatorConstantTime/no_header
+=== RUN   TestBearerTokenValidatorConstantTime/no_bearer_prefix
+--- PASS: TestBearerTokenValidatorConstantTime (0.00s)
+    --- PASS: TestBearerTokenValidatorConstantTime/valid (0.00s)
+    --- PASS: TestBearerTokenValidatorConstantTime/wrong_token (0.00s)
+    --- PASS: TestBearerTokenValidatorConstantTime/no_header (0.00s)
+    --- PASS: TestBearerTokenValidatorConstantTime/no_bearer_prefix (0.00s)
+=== RUN   TestNoAuthConfigured
+--- PASS: TestNoAuthConfigured (0.00s)
+=== RUN   TestStreamableInitAndToolCall
+--- PASS: TestStreamableInitAndToolCall (0.00s)
+=== RUN   TestStreamableInitReturnsSessionID
+--- PASS: TestStreamableInitReturnsSessionID (0.00s)
+=== RUN   TestStreamableMissingSessionID
+--- PASS: TestStreamableMissingSessionID (0.00s)
+=== RUN   TestStreamableUnknownSessionID
+--- PASS: TestStreamableUnknownSessionID (0.00s)
+=== RUN   TestStreamableNotification
+--- PASS: TestStreamableNotification (0.00s)
+=== RUN   TestStreamableDeleteSession
+--- PASS: TestStreamableDeleteSession (0.00s)
+=== RUN   TestStreamableDeleteMissingSession
+--- PASS: TestStreamableDeleteMissingSession (0.00s)
+=== RUN   TestStreamableDeleteNoSessionHeader
+--- PASS: TestStreamableDeleteNoSessionHeader (0.00s)
+=== RUN   TestStreamableGetReturns405
+--- PASS: TestStreamableGetReturns405 (0.00s)
+=== RUN   TestStreamableParseError
+--- PASS: TestStreamableParseError (0.00s)
+=== RUN   TestStreamableAuthRequired
+--- PASS: TestStreamableAuthRequired (0.00s)
+=== RUN   TestStreamableMaxSessions
+--- PASS: TestStreamableMaxSessions (0.00s)
+=== RUN   TestStreamableProtocolVersionHeader
+--- PASS: TestStreamableProtocolVersionHeader (0.00s)
+=== RUN   TestStreamableCustomPrefix
+--- PASS: TestStreamableCustomPrefix (0.00s)
+=== RUN   TestStreamableSSEResponse
+--- PASS: TestStreamableSSEResponse (0.00s)
+=== RUN   TestStreamableSSEFallback
+--- PASS: TestStreamableSSEFallback (0.00s)
+=== RUN   TestStreamableSSENotificationOrder
+--- PASS: TestStreamableSSENotificationOrder (0.00s)
+=== RUN   TestStreamableSSENoNotifications
+--- PASS: TestStreamableSSENoNotifications (0.00s)
+=== RUN   TestStreamableDNSRebindingRejectsInvalidOrigin
+--- PASS: TestStreamableDNSRebindingRejectsInvalidOrigin (0.00s)
+=== RUN   TestStreamableDNSRebindingAcceptsLocalhost
+=== RUN   TestStreamableDNSRebindingAcceptsLocalhost/http://localhost
+=== RUN   TestStreamableDNSRebindingAcceptsLocalhost/http://localhost:8787
+=== RUN   TestStreamableDNSRebindingAcceptsLocalhost/http://127.0.0.1:9999
+=== RUN   TestStreamableDNSRebindingAcceptsLocalhost/http://[::1]:3000
+--- PASS: TestStreamableDNSRebindingAcceptsLocalhost (0.00s)
+    --- PASS: TestStreamableDNSRebindingAcceptsLocalhost/http://localhost (0.00s)
+    --- PASS: TestStreamableDNSRebindingAcceptsLocalhost/http://localhost:8787 (0.00s)
+    --- PASS: TestStreamableDNSRebindingAcceptsLocalhost/http://127.0.0.1:9999 (0.00s)
+    --- PASS: TestStreamableDNSRebindingAcceptsLocalhost/http://[::1]:3000 (0.00s)
+=== RUN   TestSSEEndpointEvent
+2026/04/06 14:57:54 Starting MCP SSE connection: 9007aeab59d3defec600765047e3152e
+2026/04/06 14:57:54 SSEHub: registered connection 9007aeab59d3defec600765047e3152e (total: 1)
+2026/04/06 14:57:54 SSEHub: unregistered connection 9007aeab59d3defec600765047e3152e (total: 0)
+2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x3958360bc690
+2026/04/06 14:57:54 Cleaning up writer...
+2026/04/06 14:57:54 Finished cleaning up writer:  0x3958360bc690
+2026/04/06 14:57:54 Closed MCP SSE connection: 9007aeab59d3defec600765047e3152e
+--- PASS: TestSSEEndpointEvent (0.00s)
+=== RUN   TestSSEInitAndToolCall
+2026/04/06 14:57:54 Starting MCP SSE connection: db441e4c5869cf4a94b977d9f16abfc5
+2026/04/06 14:57:54 SSEHub: registered connection db441e4c5869cf4a94b977d9f16abfc5 (total: 1)
+2026/04/06 14:57:54 SSEHub: unregistered connection db441e4c5869cf4a94b977d9f16abfc5 (total: 0)
+2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x3958360bc8c0
+2026/04/06 14:57:54 Cleaning up writer...
+2026/04/06 14:57:54 Finished cleaning up writer:  0x3958360bc8c0
+2026/04/06 14:57:54 Closed MCP SSE connection: db441e4c5869cf4a94b977d9f16abfc5
+--- PASS: TestSSEInitAndToolCall (0.00s)
+=== RUN   TestSSESessionNotFound
+--- PASS: TestSSESessionNotFound (0.00s)
+=== RUN   TestSSENotification
+2026/04/06 14:57:54 Starting MCP SSE connection: 65d83aab664ff5d65382364456438687
+2026/04/06 14:57:54 SSEHub: registered connection 65d83aab664ff5d65382364456438687 (total: 1)
+2026/04/06 14:57:54 SSEHub: unregistered connection 65d83aab664ff5d65382364456438687 (total: 0)
+2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x395836188930
+2026/04/06 14:57:54 Cleaning up writer...
+2026/04/06 14:57:54 Finished cleaning up writer:  0x395836188930
+2026/04/06 14:57:54 Closed MCP SSE connection: 65d83aab664ff5d65382364456438687
+--- PASS: TestSSENotification (0.00s)
+=== RUN   TestSSEAuthRequired
+2026/04/06 14:57:54 Starting MCP SSE connection: e701ad55b67c9a58e2905bee531ff9d1
+2026/04/06 14:57:54 SSEHub: registered connection e701ad55b67c9a58e2905bee531ff9d1 (total: 1)
+2026/04/06 14:57:54 SSEHub: unregistered connection e701ad55b67c9a58e2905bee531ff9d1 (total: 0)
+2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x3958364ea690
+2026/04/06 14:57:54 Cleaning up writer...
+2026/04/06 14:57:54 Finished cleaning up writer:  0x3958364ea690
+2026/04/06 14:57:54 Closed MCP SSE connection: e701ad55b67c9a58e2905bee531ff9d1
+--- PASS: TestSSEAuthRequired (0.00s)
+=== RUN   TestSSEMaxSessions
+2026/04/06 14:57:54 Starting MCP SSE connection: ade32a009f9b4844b8cac7faccbf55a2
+2026/04/06 14:57:54 SSEHub: registered connection ade32a009f9b4844b8cac7faccbf55a2 (total: 1)
+2026/04/06 14:57:54 SSEHub: unregistered connection ade32a009f9b4844b8cac7faccbf55a2 (total: 0)
+2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x395836188c40
+2026/04/06 14:57:54 Cleaning up writer...
+2026/04/06 14:57:54 Finished cleaning up writer:  0x395836188c40
+2026/04/06 14:57:54 Closed MCP SSE connection: ade32a009f9b4844b8cac7faccbf55a2
+--- PASS: TestSSEMaxSessions (0.00s)
+=== RUN   TestSSEClientDisconnect
+2026/04/06 14:57:54 Starting MCP SSE connection: 5fff01ee9af510a51dd839aec5a24441
+2026/04/06 14:57:54 SSEHub: registered connection 5fff01ee9af510a51dd839aec5a24441 (total: 1)
+2026/04/06 14:57:54 SSEHub: unregistered connection 5fff01ee9af510a51dd839aec5a24441 (total: 0)
+2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x3958360bd730
+2026/04/06 14:57:54 Cleaning up writer...
+2026/04/06 14:57:54 Finished cleaning up writer:  0x3958360bd730
+2026/04/06 14:57:54 Closed MCP SSE connection: 5fff01ee9af510a51dd839aec5a24441
+--- PASS: TestSSEClientDisconnect (0.05s)
+=== RUN   TestSSEParseError
+2026/04/06 14:57:54 Starting MCP SSE connection: 22e5ebb0f804fd8b0bf9ccde84cef61a
+2026/04/06 14:57:54 SSEHub: registered connection 22e5ebb0f804fd8b0bf9ccde84cef61a (total: 1)
+2026/04/06 14:57:54 SSEHub: unregistered connection 22e5ebb0f804fd8b0bf9ccde84cef61a (total: 0)
+2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x3958364eacb0
+2026/04/06 14:57:54 Cleaning up writer...
+2026/04/06 14:57:54 Finished cleaning up writer:  0x3958364eacb0
+2026/04/06 14:57:54 Closed MCP SSE connection: 22e5ebb0f804fd8b0bf9ccde84cef61a
+--- PASS: TestSSEParseError (0.00s)
+=== RUN   TestSSECustomPrefix
+2026/04/06 14:57:54 Starting MCP SSE connection: fdeef9ac166ce5bc96206db626e14428
+2026/04/06 14:57:54 SSEHub: registered connection fdeef9ac166ce5bc96206db626e14428 (total: 1)
+2026/04/06 14:57:54 SSEHub: unregistered connection fdeef9ac166ce5bc96206db626e14428 (total: 0)
+2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x3958362211f0
+2026/04/06 14:57:54 Cleaning up writer...
+2026/04/06 14:57:54 Finished cleaning up writer:  0x3958362211f0
+2026/04/06 14:57:54 Closed MCP SSE connection: fdeef9ac166ce5bc96206db626e14428
+--- PASS: TestSSECustomPrefix (0.00s)
+=== RUN   TestSSEPublicURL
+2026/04/06 14:57:54 Starting MCP SSE connection: 436426a65d8efa39cd013fbc530f1b98
+2026/04/06 14:57:54 SSEHub: registered connection 436426a65d8efa39cd013fbc530f1b98 (total: 1)
+2026/04/06 14:57:54 SSEHub: unregistered connection 436426a65d8efa39cd013fbc530f1b98 (total: 0)
+2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x3958364eaee0
+2026/04/06 14:57:54 Cleaning up writer...
+2026/04/06 14:57:54 Finished cleaning up writer:  0x3958364eaee0
+2026/04/06 14:57:54 Closed MCP SSE connection: 436426a65d8efa39cd013fbc530f1b98
+--- PASS: TestSSEPublicURL (0.00s)
+=== RUN   TestSSELoggingNotification
+2026/04/06 14:57:54 Starting MCP SSE connection: cd83d52e85349ade22638fc7b0cd03f5
+2026/04/06 14:57:54 SSEHub: registered connection cd83d52e85349ade22638fc7b0cd03f5 (total: 1)
+2026/04/06 14:57:54 SSEHub: unregistered connection cd83d52e85349ade22638fc7b0cd03f5 (total: 0)
+2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x3958360bdd50
+2026/04/06 14:57:54 Cleaning up writer...
+2026/04/06 14:57:54 Finished cleaning up writer:  0x3958360bdd50
+2026/04/06 14:57:54 Closed MCP SSE connection: cd83d52e85349ade22638fc7b0cd03f5
+--- PASS: TestSSELoggingNotification (0.00s)
+=== RUN   TestSSELoggingFilteredByLevel
+2026/04/06 14:57:54 Starting MCP SSE connection: 489b9f30fcca2aabea5fa440f648722e
+2026/04/06 14:57:54 SSEHub: registered connection 489b9f30fcca2aabea5fa440f648722e (total: 1)
+2026/04/06 14:57:54 SSEHub: unregistered connection 489b9f30fcca2aabea5fa440f648722e (total: 0)
+2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x3958364eb960
+2026/04/06 14:57:54 Cleaning up writer...
+2026/04/06 14:57:54 Finished cleaning up writer:  0x3958364eb960
+2026/04/06 14:57:54 Closed MCP SSE connection: 489b9f30fcca2aabea5fa440f648722e
+--- PASS: TestSSELoggingFilteredByLevel (0.00s)
+=== RUN   TestSSEProgressNotification
+2026/04/06 14:57:54 Starting MCP SSE connection: 7b739d529a96d055cc8a77e41115a4b9
+2026/04/06 14:57:54 SSEHub: registered connection 7b739d529a96d055cc8a77e41115a4b9 (total: 1)
+2026/04/06 14:57:54 SSEHub: unregistered connection 7b739d529a96d055cc8a77e41115a4b9 (total: 0)
+2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x3958362201c0
+2026/04/06 14:57:54 Cleaning up writer...
+2026/04/06 14:57:54 Finished cleaning up writer:  0x3958362201c0
+2026/04/06 14:57:54 Closed MCP SSE connection: 7b739d529a96d055cc8a77e41115a4b9
+--- PASS: TestSSEProgressNotification (0.00s)
+PASS
+ok  	github.com/panyam/mcpkit	0.524s
+?   	github.com/panyam/mcpkit/cmd/testclient	[no test files]
+?   	github.com/panyam/mcpkit/cmd/testserver	[no test files]
+=== RUN   TestTestClientToolCall
+--- PASS: TestTestClientToolCall (0.00s)
+=== RUN   TestTestClientReadResource
+--- PASS: TestTestClientReadResource (0.00s)
+=== RUN   TestTestClientListTools
+--- PASS: TestTestClientListTools (0.00s)
+=== RUN   TestTestClientListResources
+--- PASS: TestTestClientListResources (0.00s)
+=== RUN   TestTestClientServerInfo
+--- PASS: TestTestClientServerInfo (0.00s)
+=== RUN   TestTestClientSessionID
+--- PASS: TestTestClientSessionID (0.00s)
+PASS
+ok  	github.com/panyam/mcpkit/testutil	0.700s
+  PASS: unit
+--- [2/7] Race detector ---
+ok  	github.com/panyam/mcpkit	1.550s
+?   	github.com/panyam/mcpkit/cmd/testclient	[no test files]
+?   	github.com/panyam/mcpkit/cmd/testserver	[no test files]
+ok  	github.com/panyam/mcpkit/testutil	1.610s
+  PASS: race
+--- [3/7] Auth module ---
+=== RUN   TestWWWAuth401
+=== RUN   TestWWWAuth401/with_scopes
+=== RUN   TestWWWAuth401/without_scopes
+--- PASS: TestWWWAuth401 (0.00s)
+    --- PASS: TestWWWAuth401/with_scopes (0.00s)
+    --- PASS: TestWWWAuth401/without_scopes (0.00s)
+=== RUN   TestWWWAuth403
+--- PASS: TestWWWAuth403 (0.00s)
+=== RUN   TestParseWWWAuthenticate
+=== RUN   TestParseWWWAuthenticate/full_header
+=== RUN   TestParseWWWAuthenticate/no_scope
+=== RUN   TestParseWWWAuthenticate/insufficient_scope_error
+=== RUN   TestParseWWWAuthenticate/empty
+--- PASS: TestParseWWWAuthenticate (0.00s)
+    --- PASS: TestParseWWWAuthenticate/full_header (0.00s)
+    --- PASS: TestParseWWWAuthenticate/no_scope (0.00s)
+    --- PASS: TestParseWWWAuthenticate/insufficient_scope_error (0.00s)
+    --- PASS: TestParseWWWAuthenticate/empty (0.00s)
+=== RUN   TestExtension
+--- PASS: TestExtension (0.00s)
+PASS
+ok  	github.com/panyam/mcpkit/auth	0.312s
+  PASS: auth
+--- [4/7] E2E auth ---
+=== RUN   TestE2E_ValidToken_ToolCall
+--- PASS: TestE2E_ValidToken_ToolCall (0.03s)
+=== RUN   TestE2E_ValidToken_ClaimsPropagation
+--- PASS: TestE2E_ValidToken_ClaimsPropagation (0.09s)
+=== RUN   TestE2E_ExpiredToken_Rejected
+--- PASS: TestE2E_ExpiredToken_Rejected (0.03s)
+=== RUN   TestE2E_WrongIssuer_Rejected
+--- PASS: TestE2E_WrongIssuer_Rejected (0.05s)
+=== RUN   TestE2E_WrongAudience_Rejected
+--- PASS: TestE2E_WrongAudience_Rejected (0.11s)
+=== RUN   TestE2E_TamperedToken_Rejected
+--- PASS: TestE2E_TamperedToken_Rejected (0.07s)
+=== RUN   TestE2E_NoAuthHeader_Rejected
+--- PASS: TestE2E_NoAuthHeader_Rejected (0.11s)
+=== RUN   TestE2E_ClientCredentials_FullFlow
+--- PASS: TestE2E_ClientCredentials_FullFlow (0.04s)
+=== RUN   TestE2E_PRM_PathBased
+--- PASS: TestE2E_PRM_PathBased (0.06s)
+=== RUN   TestE2E_PRM_RootFallback
+--- PASS: TestE2E_PRM_RootFallback (0.08s)
+=== RUN   TestE2E_PRM_Content
+--- PASS: TestE2E_PRM_Content (0.03s)
+=== RUN   TestE2E_Scope_Allowed
+--- PASS: TestE2E_Scope_Allowed (0.09s)
+=== RUN   TestE2E_Scope_Denied
+--- PASS: TestE2E_Scope_Denied (0.10s)
+=== RUN   TestE2E_AdminScope_Denied
+--- PASS: TestE2E_AdminScope_Denied (0.03s)
+=== RUN   TestE2E_GlobalRequiredScopes
+    scope_test.go:68: Requires custom JWTValidator with RequiredScopes — tracked as follow-up
+--- SKIP: TestE2E_GlobalRequiredScopes (0.00s)
+=== RUN   TestE2E_Streamable_AuthRequired
+--- PASS: TestE2E_Streamable_AuthRequired (0.02s)
+=== RUN   TestE2E_Streamable_DeleteRequiresAuth
+--- PASS: TestE2E_Streamable_DeleteRequiresAuth (0.06s)
+=== RUN   TestE2E_Streamable_ValidAuth_Works
+--- PASS: TestE2E_Streamable_ValidAuth_Works (0.01s)
+=== RUN   TestE2E_SSE_AuthOnGET
+--- PASS: TestE2E_SSE_AuthOnGET (0.07s)
+=== RUN   TestE2E_SSE_AuthOnPOST
+--- PASS: TestE2E_SSE_AuthOnPOST (0.02s)
+=== RUN   TestE2E_401_WWWAuthenticate_Present
+--- PASS: TestE2E_401_WWWAuthenticate_Present (0.01s)
+=== RUN   TestE2E_401_WWWAuthenticate_HasResourceMetadata
+--- PASS: TestE2E_401_WWWAuthenticate_HasResourceMetadata (0.08s)
+=== RUN   TestE2E_401_WWWAuthenticate_Parseable
+--- PASS: TestE2E_401_WWWAuthenticate_Parseable (0.05s)
+PASS
+ok  	github.com/panyam/mcpkit/tests/e2e	1.568s
+  PASS: e2e
+--- [5/7] Conformance ---
+=== Starting test server on :18799 (Streamable HTTP) ===
+Waiting for server... ready
+
+=== Running MCP conformance suite ===
+Command: npx -y @modelcontextprotocol/conformance server --url http://localhost:18799/mcp --expected-failures conformance/baseline.yml
+
+2026/04/06 14:57:59 MCP test server listening on :18799 (Streamable HTTP at /mcp)
+2026/04/06 14:57:59 listen tcp :18799: bind: address already in use
+exit status 1
+Running active suite (30 scenarios) against http://localhost:18799/mcp
+
+
+=== Running scenario: server-initialize ===
+Running client scenario 'server-initialize' against server: http://localhost:18799/mcp
+
+=== Running scenario: logging-set-level ===
+Running client scenario 'logging-set-level' against server: http://localhost:18799/mcp
+
+=== Running scenario: ping ===
+Running client scenario 'ping' against server: http://localhost:18799/mcp
+
+=== Running scenario: completion-complete ===
+Running client scenario 'completion-complete' against server: http://localhost:18799/mcp
+
+=== Running scenario: tools-list ===
+Running client scenario 'tools-list' against server: http://localhost:18799/mcp
+
+=== Running scenario: tools-call-simple-text ===
+Running client scenario 'tools-call-simple-text' against server: http://localhost:18799/mcp
+
+=== Running scenario: tools-call-image ===
+Running client scenario 'tools-call-image' against server: http://localhost:18799/mcp
+
+=== Running scenario: tools-call-audio ===
+Running client scenario 'tools-call-audio' against server: http://localhost:18799/mcp
+
+=== Running scenario: tools-call-embedded-resource ===
+Running client scenario 'tools-call-embedded-resource' against server: http://localhost:18799/mcp
+
+=== Running scenario: tools-call-mixed-content ===
+Running client scenario 'tools-call-mixed-content' against server: http://localhost:18799/mcp
+
+=== Running scenario: tools-call-with-logging ===
+Running client scenario 'tools-call-with-logging' against server: http://localhost:18799/mcp
+
+=== Running scenario: tools-call-error ===
+Running client scenario 'tools-call-error' against server: http://localhost:18799/mcp
+
+=== Running scenario: tools-call-with-progress ===
+Running client scenario 'tools-call-with-progress' against server: http://localhost:18799/mcp
+
+=== Running scenario: tools-call-sampling ===
+Running client scenario 'tools-call-sampling' against server: http://localhost:18799/mcp
+
+=== Running scenario: tools-call-elicitation ===
+Running client scenario 'tools-call-elicitation' against server: http://localhost:18799/mcp
+
+=== Running scenario: elicitation-sep1034-defaults ===
+Running client scenario 'elicitation-sep1034-defaults' against server: http://localhost:18799/mcp
+
+=== Running scenario: server-sse-multiple-streams ===
+Running client scenario 'server-sse-multiple-streams' against server: http://localhost:18799/mcp
+
+=== Running scenario: elicitation-sep1330-enums ===
+Running client scenario 'elicitation-sep1330-enums' against server: http://localhost:18799/mcp
+
+=== Running scenario: resources-list ===
+Running client scenario 'resources-list' against server: http://localhost:18799/mcp
+
+=== Running scenario: resources-read-text ===
+Running client scenario 'resources-read-text' against server: http://localhost:18799/mcp
+
+=== Running scenario: resources-read-binary ===
+Running client scenario 'resources-read-binary' against server: http://localhost:18799/mcp
+
+=== Running scenario: resources-templates-read ===
+Running client scenario 'resources-templates-read' against server: http://localhost:18799/mcp
+
+=== Running scenario: resources-subscribe ===
+Running client scenario 'resources-subscribe' against server: http://localhost:18799/mcp
+
+=== Running scenario: resources-unsubscribe ===
+Running client scenario 'resources-unsubscribe' against server: http://localhost:18799/mcp
+
+=== Running scenario: prompts-list ===
+Running client scenario 'prompts-list' against server: http://localhost:18799/mcp
+
+=== Running scenario: prompts-get-simple ===
+Running client scenario 'prompts-get-simple' against server: http://localhost:18799/mcp
+
+=== Running scenario: prompts-get-with-args ===
+Running client scenario 'prompts-get-with-args' against server: http://localhost:18799/mcp
+
+=== Running scenario: prompts-get-embedded-resource ===
+Running client scenario 'prompts-get-embedded-resource' against server: http://localhost:18799/mcp
+
+=== Running scenario: prompts-get-with-image ===
+Running client scenario 'prompts-get-with-image' against server: http://localhost:18799/mcp
+
+=== Running scenario: dns-rebinding-protection ===
+Running client scenario 'dns-rebinding-protection' against server: http://localhost:18799/mcp
+
+
+=== SUMMARY ===
+✓ server-initialize: 1 passed, 0 failed
+✓ logging-set-level: 1 passed, 0 failed
+✓ ping: 1 passed, 0 failed
+✓ completion-complete: 1 passed, 0 failed
+✓ tools-list: 1 passed, 0 failed
+✓ tools-call-simple-text: 1 passed, 0 failed
+✓ tools-call-image: 1 passed, 0 failed
+✓ tools-call-audio: 1 passed, 0 failed
+✓ tools-call-embedded-resource: 1 passed, 0 failed
+✓ tools-call-mixed-content: 1 passed, 0 failed
+✓ tools-call-with-logging: 1 passed, 0 failed
+✓ tools-call-error: 1 passed, 0 failed
+✓ tools-call-with-progress: 1 passed, 0 failed
+✗ tools-call-sampling: 0 passed, 1 failed
+✗ tools-call-elicitation: 0 passed, 1 failed
+✗ elicitation-sep1034-defaults: 0 passed, 1 failed
+✗ server-sse-multiple-streams: 0 passed, 1 failed
+✗ elicitation-sep1330-enums: 0 passed, 1 failed
+✓ resources-list: 1 passed, 0 failed
+✓ resources-read-text: 1 passed, 0 failed
+✓ resources-read-binary: 1 passed, 0 failed
+✓ resources-templates-read: 1 passed, 0 failed
+✗ resources-subscribe: 0 passed, 1 failed
+✗ resources-unsubscribe: 0 passed, 1 failed
+✓ prompts-list: 1 passed, 0 failed
+✓ prompts-get-simple: 1 passed, 0 failed
+✓ prompts-get-with-args: 1 passed, 0 failed
+✓ prompts-get-embedded-resource: 1 passed, 0 failed
+✓ prompts-get-with-image: 1 passed, 0 failed
+✓ dns-rebinding-protection: 2 passed, 0 failed
+
+Total: 24 passed, 7 failed
+
+[33mExpected failures (in baseline):[0m
+  ~ tools-call-sampling
+  ~ tools-call-elicitation
+  ~ elicitation-sep1034-defaults
+  ~ server-sse-multiple-streams
+  ~ elicitation-sep1330-enums
+  ~ resources-subscribe
+  ~ resources-unsubscribe
+
+[32mBaseline check passed: all failures are expected.[0m
+
+=== CONFORMANCE TESTS PASSED ===
+  PASS: conformance
+--- [6/7] Auth conformance ---
+=== Running MCP Auth conformance suite ===
+Command: npx -y @modelcontextprotocol/conformance client --suite auth --command "go run ./cmd/testclient" --expected-failures conformance/baseline.yml
+
+Running auth suite (14 scenarios) in parallel...
+
+Starting scenario: auth/metadata-default
+Starting scenario: auth/metadata-var1
+Starting scenario: auth/metadata-var2
+Starting scenario: auth/metadata-var3
+Starting scenario: auth/basic-cimd
+Starting scenario: auth/scope-from-www-authenticate
+Starting scenario: auth/scope-from-scopes-supported
+Starting scenario: auth/scope-omitted-when-undefined
+Starting scenario: auth/scope-step-up
+Starting scenario: auth/scope-retry-limit
+Starting scenario: auth/token-endpoint-auth-basic
+Starting scenario: auth/token-endpoint-auth-post
+Starting scenario: auth/token-endpoint-auth-none
+Starting scenario: auth/pre-registration
+Executing client: go run ./cmd/testclient http://localhost:59298/mcp
+Executing client: go run ./cmd/testclient http://localhost:59299/mcp
+Executing client: go run ./cmd/testclient http://localhost:59300/mcp
+Executing client: go run ./cmd/testclient http://localhost:59301/mcp
+Executing client: go run ./cmd/testclient http://localhost:59302/mcp
+Executing client: go run ./cmd/testclient http://localhost:59303/mcp
+Executing client: go run ./cmd/testclient http://localhost:59304/mcp
+Executing client: go run ./cmd/testclient http://localhost:59305/mcp
+Executing client: go run ./cmd/testclient http://localhost:59306/mcp
+Executing client: go run ./cmd/testclient http://localhost:59307/mcp
+Executing client: go run ./cmd/testclient http://localhost:59308/mcp
+Executing client: go run ./cmd/testclient http://localhost:59309/mcp
+Executing client: go run ./cmd/testclient http://localhost:59310/mcp
+Executing client: go run ./cmd/testclient http://localhost:59311/mcp
+With context: {"client_id":"pre-registered-client","client_secret":"pre-registered-secret"}
+(node:97668) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+=== SUITE SUMMARY ===
+
+✓ auth/metadata-default: 11 passed, 0 failed
+✓ auth/metadata-var1: 11 passed, 0 failed
+✓ auth/metadata-var2: 11 passed, 0 failed
+✓ auth/metadata-var3: 11 passed, 0 failed
+✗ auth/basic-cimd: 11 passed, 0 failed, 1 warnings
+✓ auth/scope-from-www-authenticate: 12 passed, 0 failed
+✓ auth/scope-from-scopes-supported: 12 passed, 0 failed
+✓ auth/scope-omitted-when-undefined: 12 passed, 0 failed
+✗ auth/scope-step-up: 0 passed, 2 failed
+✗ auth/scope-retry-limit: 0 passed, 1 failed
+✓ auth/token-endpoint-auth-basic: 16 passed, 0 failed
+✓ auth/token-endpoint-auth-post: 16 passed, 0 failed
+✓ auth/token-endpoint-auth-none: 16 passed, 0 failed
+✓ auth/pre-registration: 11 passed, 0 failed
+
+Total: 150 passed, 3 failed, 1 warnings
+
+[33mExpected failures (in baseline):[0m
+  ~ auth/basic-cimd
+  ~ auth/scope-step-up
+  ~ auth/scope-retry-limit
+
+[32mBaseline check passed: all failures are expected.[0m
+
+=== AUTH CONFORMANCE TESTS PASSED ===
+  PASS: auth-conformance
+--- [7/7] Keycloak interop ---
+=== RUN   TestKeycloak_MCPServer_ValidToken
+--- PASS: TestKeycloak_MCPServer_ValidToken (0.03s)
+=== RUN   TestKeycloak_MCPServer_TamperedToken
+--- PASS: TestKeycloak_MCPServer_TamperedToken (0.02s)
+=== RUN   TestKeycloak_MCPServer_ScopeAllowed
+--- PASS: TestKeycloak_MCPServer_ScopeAllowed (0.01s)
+=== RUN   TestKeycloak_MCPServer_ScopeDenied
+--- PASS: TestKeycloak_MCPServer_ScopeDenied (0.01s)
+=== RUN   TestKeycloak_MCPServer_PRM
+--- PASS: TestKeycloak_MCPServer_PRM (0.01s)
+=== RUN   TestKeycloak_MCPServer_WWWAuthenticate
+--- PASS: TestKeycloak_MCPServer_WWWAuthenticate (0.01s)
+=== RUN   TestKeycloak_MCPServer_PasswordGrant
+--- PASS: TestKeycloak_MCPServer_PasswordGrant (0.04s)
+PASS
+ok  	github.com/panyam/mcpkit/tests/keycloak	0.444s
+  PASS: keycloak
+
+=== Results: 7 passed, 0 failed ===
+Finished: Mon Apr  6 14:58:05 PDT 2026
