@@ -36,7 +36,7 @@ make serve-both   # Both transports
 | `transport.go` | SSE transport (sseTransport, mcpSSEConn, SSEData) |
 | `streamable_transport.go` | Streamable HTTP transport (streamableTransport) |
 | `client.go` | MCP client: Connect, ToolCall, ReadResource, ListTools, ListResources, WithClientBearerToken, WithTokenSource |
-| `AUTH_DESIGN.md` | MCP Auth architecture, sequence diagrams, extension system, oneauth integration map |
+| `docs/AUTH_DESIGN.md` | MCP Auth architecture, sequence diagrams, extension system, oneauth integration map |
 | `testutil/testclient.go` | TestClient: wraps Client + httptest.Server + testing.T for e2e tests |
 | `cmd/testserver/` | Test server with conformance tools, resources, and prompts |
 | `conformance/baseline.yml` | Expected conformance failures — remove entries as features ship |
@@ -53,11 +53,11 @@ make serve-both   # Both transports
 - **Auth checks on ALL endpoints**: SSE `GET /sse`, Streamable HTTP `POST /mcp`, and Streamable `DELETE /mcp` all call `CheckAuth`. The SSE GET was previously unauthenticated — fixed in this auth work.
 - **`auth/` is a separate Go module** with its own `go.mod`. Root `go test ./...` does NOT test it. Use `cd auth && go test ./...` or test explicitly. Uses `replace` directives for local oneauth.
 - **Extension metadata in initialize**: extensions registered via `WithExtension` appear under `capabilities.extensions` in the initialize response, with `specVersion` and `stability`.
-- **Auth spec is 2025-11-25**: See `AUTH_DESIGN.md` for spec compliance checklist. Key: `resource` param (RFC 8707) is MUST, PKCE S256 is MUST, audience validation is MUST.
+- **Auth spec is 2025-11-25**: See `docs/AUTH_DESIGN.md` for spec compliance checklist. Key: `resource` param (RFC 8707) is MUST, PKCE S256 is MUST, audience validation is MUST.
 
 ## Architecture
 
-See `ARCHITECTURE.md` for transport design, type definitions, and protocol details.
+See `docs/ARCHITECTURE.md` for transport design, type definitions, and protocol details.
 
 ## Conformance Status
 

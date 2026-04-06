@@ -76,7 +76,10 @@ mcpkit/                          # module: github.com/panyam/mcpkit
 │   ├── smoke-test.sh            # Curl-based tests for SSE + Streamable HTTP
 │   ├── conformance-test.sh      # Runs @modelcontextprotocol/conformance (server)
 │   └── conformance-auth-test.sh # Runs auth conformance suite (client)
-├── AUTH_DESIGN.md               # Auth architecture, sequence diagrams, spec compliance
+├── docs/
+│   ├── ARCHITECTURE.md          # This file
+│   ├── AUTH_DESIGN.md           # Auth architecture, sequence diagrams, spec compliance
+│   └── GATEWAY_DESIGN.md       # MCP Gateway design for proxying HTTP/gRPC backends
 └── auth/                        # SEPARATE module (github.com/panyam/mcpkit/auth)
     ├── go.mod                   # depends on mcpkit + oneauth
     ├── extension.go             # AuthExtension (ExtensionProvider)
