@@ -40,3 +40,18 @@ jobs:
 
       - name: Run conformance suite
         run: npx -y @modelcontextprotocol/conformance server --url http://localhost:18799/mcp --expected-failures conformance/baseline.yml
+
+  test-auth:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run auth sub-module tests
+        run: cd auth && go test ./... -v
+
+      - name: Run E2E auth tests
+        run: cd tests/e2e && go test ./... -v -count=1 -timeout 60s

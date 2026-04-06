@@ -25,7 +25,46 @@ testconf: ## Run MCP conformance test suite (requires Node.js/npx)
 testconfauth: ## Run MCP Auth conformance suite (client-side, requires mcpkit/auth)
 	bash scripts/conformance-auth-test.sh
 
-testall: test test-race testconf testconfauth ## Run unit tests + conformance suite
+test-auth: ## Run auth sub-module tests
+	cd auth && go test ./... -count=1 -timeout 30s
+
+test-auth-e2e: ## Run E2E auth tests (in-process oneauth AS, no Docker)
+	cd tests/e2e && go test ./... -count=1 -timeout 60s
+
+test-auth-keycloak: ## Run Keycloak auth interop tests (requires Docker, run upkcl first)
+	cd tests/keycloak && go test ./... -count=1 -timeout 120s -v
+
+testall: test test-race test-auth test-auth-e2e testconf testconfauth ## Run all tests (expensive)
+
+test-report: ## Run all tests with JSON output for reporting
+	@echo "=== Root module ===" && go test ./... -count=1 -timeout 30s -v 2>&1
+	@echo "=== Auth module ===" && cd auth && go test ./... -count=1 -timeout 30s -v 2>&1
+	@echo "=== E2E auth ===" && cd tests/e2e && go test ./... -count=1 -timeout 60s -v 2>&1
+
+# =============================================================================
+# Keycloak (for interop tests)
+# =============================================================================
+
+KC_IMAGE := quay.io/keycloak/keycloak:26.0
+KC_PORT := 8180
+KC_CONTAINER := mcpkit-keycloak
+
+upkcl: ## Start Keycloak container for interop tests
+	@docker rm -f $(KC_CONTAINER) 2>/dev/null || true
+	docker run -d --name $(KC_CONTAINER) \
+		-p $(KC_PORT):8080 \
+		-e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
+		-e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
+		-v $(PWD)/tests/keycloak/realm.json:/opt/keycloak/data/import/realm.json \
+		$(KC_IMAGE) start-dev --import-realm
+	@echo "Keycloak starting on port $(KC_PORT)... (realm import takes ~30s)"
+	@echo "Run 'make kcllogs' to watch startup, 'make test-auth-keycloak' when ready"
+
+downkcl: ## Stop Keycloak container
+	docker rm -f $(KC_CONTAINER) 2>/dev/null || true
+
+kcllogs: ## View Keycloak container logs
+	docker logs -f $(KC_CONTAINER)
 
 vet: ## Run go vet
 	go vet ./...
@@ -103,5 +142,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-race test-v smoke testconf testall vet lint vulncheck seccheck secrets audit ci ci-full serve serve-streamable serve-both tidy setup-tools setup-hooks setup help
+.PHONY: build test test-race test-v test-auth test-auth-e2e test-auth-keycloak testall test-report smoke testconf testconfauth vet lint vulncheck seccheck secrets audit ci ci-full serve serve-streamable serve-both tidy setup-tools setup-hooks setup upkcl downkcl kcllogs help
 .DEFAULT_GOAL := help
