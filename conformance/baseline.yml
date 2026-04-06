@@ -29,7 +29,7 @@ server:
 #
 # Remove entries as the client OAuth flow is implemented.
 
-client-auth:
+client:
   # Passing (12/14 required):
   # ✓ auth/metadata-default, metadata-var1, metadata-var2, metadata-var3
   # ✓ auth/scope-from-www-authenticate, scope-from-scopes-supported, scope-omitted-when-undefined
