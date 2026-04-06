@@ -109,7 +109,7 @@ func TestBearerTokenValidatorConstantTime(t *testing.T) {
 			if tt.auth != "" {
 				r.Header.Set("Authorization", tt.auth)
 			}
-			err := srv.CheckAuth(r)
+			_, err := srv.CheckAuth(r)
 			if tt.wantErr && err == nil {
 				t.Error("expected error, got nil")
 			}
@@ -123,7 +123,7 @@ func TestBearerTokenValidatorConstantTime(t *testing.T) {
 func TestNoAuthConfigured(t *testing.T) {
 	srv := NewServer(ServerInfo{Name: "test", Version: "0.1.0"})
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
-	if err := srv.CheckAuth(r); err != nil {
+	if _, err := srv.CheckAuth(r); err != nil {
 		t.Errorf("no auth configured should pass, got: %v", err)
 	}
 }

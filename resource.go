@@ -18,6 +18,9 @@ type ResourceDef struct {
 
 	// MimeType is the MIME type of the resource content.
 	MimeType string `json:"mimeType,omitempty"`
+
+	// Annotations holds optional metadata for this resource.
+	Annotations map[string]any `json:"annotations,omitempty"`
 }
 
 // ResourceTemplate describes a parameterized resource URI template.
@@ -36,6 +39,9 @@ type ResourceTemplate struct {
 
 	// MimeType is the default MIME type for resources matching this template.
 	MimeType string `json:"mimeType,omitempty"`
+
+	// Annotations holds optional metadata for this template.
+	Annotations map[string]any `json:"annotations,omitempty"`
 }
 
 // ResourceReadContent is a single content item returned by resources/read.

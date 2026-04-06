@@ -43,6 +43,9 @@ func testStreamableServer(opts ...TransportOption) *httptest.Server {
 // the HTTP response. Adds Mcp-Session-Id header if sessionID is non-empty.
 // streamablePost sends a JSON-RPC request expecting a synchronous JSON response.
 // Uses Accept: application/json only — no SSE streaming.
+// streamablePost sends a Streamable HTTP POST requesting JSON-only responses.
+// Use this for tests that verify the synchronous JSON path.
+// For SSE streaming tests, use streamablePostSSE.
 func streamablePost(url, sessionID string, body any) (*http.Response, error) {
 	raw, _ := json.Marshal(body)
 	req, _ := http.NewRequest(http.MethodPost, url, bytes.NewReader(raw))
@@ -338,6 +341,7 @@ func TestStreamableParseError(t *testing.T) {
 
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", strings.NewReader("not json"))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set(mcpSessionIDHeader, sessionID)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -432,6 +436,7 @@ func TestStreamableProtocolVersionHeader(t *testing.T) {
 	})
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(raw))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set(mcpSessionIDHeader, sessionID)
 	req.Header.Set(mcpProtocolVersionHeader, "1999-01-01")
 
@@ -448,6 +453,7 @@ func TestStreamableProtocolVersionHeader(t *testing.T) {
 	// Request with correct protocol version → 200
 	req2, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(raw))
 	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("Accept", "application/json, text/event-stream")
 	req2.Header.Set(mcpSessionIDHeader, sessionID)
 	req2.Header.Set(mcpProtocolVersionHeader, "2024-11-05")
 
@@ -530,11 +536,14 @@ func streamableInitWithLogging(t *testing.T, url string) string {
 
 // streamablePostSSE sends a JSON-RPC request with Accept: text/event-stream
 // and returns the raw response for SSE parsing.
+// streamablePostSSE sends a Streamable HTTP POST requesting SSE streaming.
+// Per MCP spec: when Accept includes text/event-stream, the server may stream
+// notifications before the final response.
 func streamablePostSSE(url, sessionID string, body any) (*http.Response, error) {
 	raw, _ := json.Marshal(body)
 	req, _ := http.NewRequest(http.MethodPost, url, bytes.NewReader(raw))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "text/event-stream")
+	req.Header.Set("Accept", "application/json, text/event-stream")
 	if sessionID != "" {
 		req.Header.Set(mcpSessionIDHeader, sessionID)
 	}
@@ -629,7 +638,7 @@ func TestStreamableSSEFallback(t *testing.T) {
 	})
 	httpReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(body))
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Accept", "application/json") // no text/event-stream
+	httpReq.Header.Set("Accept", "application/json") // intentionally JSON-only to test fallback path
 	httpReq.Header.Set(mcpSessionIDHeader, sessionID)
 	resp, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
@@ -741,7 +750,7 @@ func TestStreamableDNSRebindingRejectsInvalidOrigin(t *testing.T) {
 	})
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("Origin", "http://evil.example.com")
 
 	resp, err := http.DefaultClient.Do(req)
@@ -771,7 +780,7 @@ func TestStreamableDNSRebindingAcceptsLocalhost(t *testing.T) {
 			})
 			req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("Accept", "application/json")
+			req.Header.Set("Accept", "application/json, text/event-stream")
 			req.Header.Set("Origin", origin)
 
 			resp, err := http.DefaultClient.Do(req)

@@ -55,10 +55,11 @@ mcpkit/                          # module: github.com/panyam/mcpkit
 ├── logging.go                   # LogLevel, LogMessage, NotifyFunc, EmitLog, context helpers
 ├── progress.go                  # ProgressNotification, EmitProgress
 ├── completion.go                # CompletionRef, CompletionArgument, CompletionResult, CompletionHandler
-├── server.go                    # Server, options, Handler(), ListenAndServe(), transport config
-├── tool.go                      # ToolDef, ToolRequest, ToolResult, Content, ToolHandler
-├── resource.go                  # ResourceDef, ResourceTemplate, ResourceHandler types
-├── prompt.go                    # PromptDef, PromptArgument, PromptHandler types
+├── auth.go                      # Claims, ClaimsProvider, TokenSource, Extension, Stability, ExtensionProvider
+├── server.go                    # Server, options, Handler(), ListenAndServe(), CheckAuth, writeAuthError
+├── tool.go                      # ToolDef (with Annotations), ToolRequest, ToolResult, Content, ToolHandler
+├── resource.go                  # ResourceDef (with Annotations), ResourceTemplate, ResourceHandler types
+├── prompt.go                    # PromptDef (with Annotations), PromptArgument, PromptHandler types
 ├── pagination.go                # Generic cursor-based pagination helper
 ├── jsonrpc.go                   # JSON-RPC 2.0 Request/Response/Error types
 ├── transport.go                 # SSE transport (sseTransport, mcpSSEConn, SSEData)
@@ -70,13 +71,21 @@ mcpkit/                          # module: github.com/panyam/mcpkit
 │   ├── conformance_resources.go # Resources + templates for conformance
 │   └── conformance_prompts.go   # Prompts for conformance
 ├── conformance/
-│   └── baseline.yml             # Expected conformance failures (11 scenarios)
+│   └── baseline.yml             # Expected failures: 7 server + 22 auth (north star)
 ├── scripts/
 │   ├── smoke-test.sh            # Curl-based tests for SSE + Streamable HTTP
-│   └── conformance-test.sh      # Runs @modelcontextprotocol/conformance
-└── auth/                        # SEPARATE module (not yet implemented)
-    ├── go.mod
-    └── jwt.go
+│   ├── conformance-test.sh      # Runs @modelcontextprotocol/conformance (server)
+│   └── conformance-auth-test.sh # Runs auth conformance suite (client)
+├── AUTH_DESIGN.md               # Auth architecture, sequence diagrams, spec compliance
+└── auth/                        # SEPARATE module (github.com/panyam/mcpkit/auth)
+    ├── go.mod                   # depends on mcpkit + oneauth
+    ├── extension.go             # AuthExtension (ExtensionProvider)
+    ├── jwt_validator.go         # JWTValidator (AuthValidator + ClaimsProvider)
+    ├── server_auth.go           # MountAuth (PRM endpoint via oneauth)
+    ├── www_authenticate.go      # MCP-specific WWW-Authenticate builders
+    ├── scopes.go                # RequireScope for tool handlers
+    ├── token_source.go          # OAuthTokenSource, ClientCredentialsSource
+    └── discovery.go             # DiscoverMCPAuth (MCP discovery orchestration)
 ```
 
 ## Two Transports
@@ -111,6 +120,20 @@ type ToolHandler func(ctx context.Context, req ToolRequest) (ToolResult, error)
 
 type AuthValidator interface {
     Validate(r *http.Request) error
+}
+
+// Optional: validators that also implement ClaimsProvider
+// propagate identity to tool handlers via context.
+type ClaimsProvider interface {
+    Claims(r *http.Request) *Claims
+}
+
+type TokenSource interface {
+    Token() (string, error) // for client-side auth
+}
+
+type ExtensionProvider interface {
+    Extension() Extension // sub-modules declare their extension metadata
 }
 
 type ServerInfo struct {
@@ -156,7 +179,7 @@ MCPKit supports server-initiated notifications via `NotifyFunc`, a generic `func
 ### How it works
 
 1. Transport creates a session dispatcher and sets `dispatcher.notifyFunc` to a transport-specific sender
-2. `Server.dispatchWith` injects the notify func + log level into the context via `contextWithSession`
+2. `Server.dispatchWith` injects the notify func, log level, and auth claims into the context via `contextWithSession`
 3. Tool handlers call `EmitLog(ctx, level, logger, data)` which checks the session's log level and calls the notify func
 4. SSE transport: `notifyFunc` pushes via `hub.SendEvent` (real-time delivery)
 5. Streamable HTTP: `notifyFunc` is nil (notifications silently dropped until GET SSE stream ships)

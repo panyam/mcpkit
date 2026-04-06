@@ -33,6 +33,9 @@ type Dispatcher struct {
 
 	completions map[string]CompletionHandler // key: "ref/prompt:name" or "ref/resource:uri"
 
+	// extensions registered via WithExtension, keyed by extension ID.
+	extensions map[string]Extension
+
 	// inflight tracks cancellable in-flight requests by ID.
 	inflight sync.Map // requestID (string) → context.CancelFunc
 
@@ -116,6 +119,7 @@ func NewDispatcher(info ServerInfo) *Dispatcher {
 		templates:   make(map[string]templateEntry),
 		prompts:     make(map[string]promptEntry),
 		completions: make(map[string]CompletionHandler),
+		extensions:  make(map[string]Extension),
 		serverInfo:  info,
 	}
 }
@@ -135,6 +139,7 @@ func (d *Dispatcher) newSession() *Dispatcher {
 		prompts:       d.prompts,
 		promptOrder:   d.promptOrder,
 		completions:   d.completions,
+		extensions:    d.extensions,
 		serverInfo:    d.serverInfo,
 	}
 }
@@ -267,6 +272,16 @@ func (d *Dispatcher) handleInitialize(id json.RawMessage, params json.RawMessage
 	}
 	if len(d.prompts) > 0 {
 		caps["prompts"] = map[string]any{}
+	}
+	if len(d.extensions) > 0 {
+		exts := make(map[string]any, len(d.extensions))
+		for id, ext := range d.extensions {
+			exts[id] = map[string]any{
+				"specVersion": ext.SpecVersion,
+				"stability":  string(ext.Stability),
+			}
+		}
+		caps["extensions"] = exts
 	}
 
 	result := map[string]any{

@@ -20,3 +20,40 @@ server:
   # Tool scenarios requiring server-to-client requests (bidirectional)
   - tools-call-sampling         # Requires sampling/createMessage (#22)
   - tools-call-elicitation      # Requires elicitation/create (#23)
+
+# --- MCP Auth Conformance (client-side tests, spec 2025-11-25) ---
+# Spec: https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization
+# These test the MCP client's OAuth flow: discovery, registration, PKCE, scopes.
+# Run via: npx @modelcontextprotocol/conformance client --suite auth
+# All scenarios are expected failures until mcpkit/auth Phase 3C-3E ships.
+#
+# Remove entries as the client OAuth flow is implemented.
+
+client:
+  # Passing (12/14 required):
+  # ✓ auth/metadata-default, metadata-var1, metadata-var2, metadata-var3
+  # ✓ auth/scope-from-www-authenticate, scope-from-scopes-supported, scope-omitted-when-undefined
+  # ✓ auth/token-endpoint-auth-basic, token-endpoint-auth-post, token-endpoint-auth-none
+  # ✓ auth/pre-registration
+  # ⚠ auth/basic-cimd (passing with 1 warning — CIMD not implemented)
+
+  # Required — CIMD (warning: not using Client ID Metadata Documents yet)
+  - auth/basic-cimd                         # Client ID Metadata Document flow (warning)
+
+  # Required — scope step-up (blocked on #53: client transport 401/403 handling)
+  - auth/scope-step-up                      # 403 flow with scope escalation
+  - auth/scope-retry-limit                  # Max retry attempts on repeated 403
+
+  # Back-compat (optional) — 2025-03-26 spec
+  - auth/2025-03-26-oauth-metadata-backcompat  # Legacy OAuth metadata discovery
+  - auth/2025-03-26-oauth-endpoint-fallback    # Legacy endpoint fallback paths
+
+  # Extensions (optional)
+  - auth/client-credentials-jwt             # JWT bearer assertion (M2M)
+  - auth/client-credentials-basic           # Client credentials with secret (M2M)
+  - auth/cross-app-access-complete-flow     # Enterprise managed authorization (ID-JAG)
+
+  # Draft (informational)
+  - auth/resource-mismatch                  # Client rejects mismatched PRM resource
+  - auth/offline-access-scope               # offline_access handling
+  - auth/offline-access-not-supported       # offline_access not in AS metadata

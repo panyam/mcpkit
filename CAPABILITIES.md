@@ -1,7 +1,7 @@
 # MCPKit
 
 ## Version
-0.0.6
+0.0.7
 
 ## Provides
 - mcp-protocol-negotiation: Version negotiation supporting MCP 2025-11-25 and 2024-11-05
@@ -11,7 +11,12 @@
 - mcp-streamable-http-transport: Streamable HTTP transport (MCP 2025-03-26) with Mcp-Session-Id header sessions
 - mcp-dual-transport: Both SSE and Streamable HTTP simultaneously via WithSSE/WithStreamableHTTP options
 - mcp-graceful-shutdown: ListenAndServeGraceful with SSE hub drain on SIGTERM
-- mcp-auth-middleware: Bearer token (constant-time), JWT/OIDC via oneauth sub-module
+- mcp-auth-middleware: Bearer token (constant-time), Claims propagation via ClaimsProvider, JWT/OIDC via oneauth sub-module
+- mcp-auth-submodule: mcpkit/auth — JWTValidator, MountAuth (PRM), WWW-Authenticate builders, RequireScope, OAuthTokenSource, ClientCredentialsSource
+- mcp-extensions: Extension/Stability/ExtensionProvider system — sub-modules declare spec version + stability in initialize
+- mcp-annotations: Annotations field on ToolDef/ResourceDef/PromptDef + RegisterExperimental* helpers
+- mcp-client-auth: WithClientBearerToken, WithTokenSource — auth header injection on all client requests
+- mcp-auth-conformance: 22 auth conformance scenarios tracked as expected failures (north star)
 - mcp-tool-timeout: context.WithTimeout wrapper for tool execution
 - mcp-allowed-roots: Restrict tool cwd to allowed directories (option registered, not enforced yet)
 - mcp-resources: resources/list, resources/read, resources/templates/list with URI template matching
@@ -23,7 +28,7 @@
 - mcp-progress: notifications/progress via EmitProgress() with _meta.progressToken
 - mcp-completion: completion/complete for argument autocompletion
 - mcp-dns-rebinding-protection: Origin header validation on Streamable HTTP (WithAllowedOrigins)
-- mcp-conformance: Official MCP conformance test suite integration (24/30 passing)
+- mcp-conformance: Official MCP conformance test suite integration (24/30 server passing, 0/22 auth tracked)
 - mcp-client: Go MCP client for Streamable HTTP — Connect, ToolCall, ReadResource, ListTools, ListResources
 - mcp-testutil: TestClient wrapper for e2e testing MCP servers (httptest + testing.T integration)
 
