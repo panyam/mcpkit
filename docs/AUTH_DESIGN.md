@@ -445,8 +445,8 @@ Source: https://modelcontextprotocol.io/specification/2025-11-25/basic/authoriza
 | C16 | Auth MUST be included in every HTTP request | Done | Both client transports inject on every call/notify |
 | C17 | MUST NOT send tokens to servers other than the intended audience | Phase 3C | Token bound to specific `OAuthTokenSource.ServerURL` |
 | C18 | Scope selection: use WWW-Authenticate scope > scopes_supported > omit | Phase 3E | `DiscoverMCPAuth` returns scopes with priority |
-| C19 | SHOULD implement step-up auth (re-auth on 403 insufficient_scope) | Phase 3C | `OAuthTokenSource` retry logic |
-| C20 | SHOULD implement retry limits for scope step-up | Phase 3C | Max 3 retries in `OAuthTokenSource` |
+| C19 | SHOULD implement step-up auth (re-auth on 403 insufficient_scope) | Done | `doWithAuthRetry` + `ScopeAwareTokenSource.TokenForScopes` in client transport |
+| C20 | SHOULD implement retry limits for scope step-up | Done | Max 1 retry per status code (401 + 403) in `doWithAuthRetry` |
 | C21 | SHOULD use and verify state parameters | Phase 3C | oneauth `LoginWithBrowser` generates random state |
 | C22 | MUST have redirect URIs registered with AS | Phase 3C | Via CIMD or DCR |
 | C23 | Secure token storage | Phase 3C | oneauth `CredentialStore` |
