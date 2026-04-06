@@ -100,6 +100,33 @@ func connectSSE(ts *httptest.Server, prefix string) (*http.Response, string, err
 	return resp, ev.Data, nil
 }
 
+// connectSSEWithAuth is like connectSSE but sends an Authorization: Bearer header.
+func connectSSEWithAuth(ts *httptest.Server, prefix string, token string) (*http.Response, string, error) {
+	req, err := http.NewRequest("GET", ts.URL+prefix+"/sse", nil)
+	if err != nil {
+		return nil, "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, "", fmt.Errorf("GET /sse: %w", err)
+	}
+
+	reader := bufio.NewReader(resp.Body)
+	ev, err := readSSEEvent(reader)
+	if err != nil {
+		resp.Body.Close()
+		return nil, "", fmt.Errorf("reading endpoint event: %w", err)
+	}
+	if ev.Event != "endpoint" {
+		resp.Body.Close()
+		return nil, "", fmt.Errorf("expected endpoint event, got %q", ev.Event)
+	}
+
+	return resp, ev.Data, nil
+}
+
 // postJSON sends a JSON-RPC request to the given URL and returns the HTTP response.
 func postJSON(url string, body any) (*http.Response, error) {
 	raw, _ := json.Marshal(body)
@@ -282,7 +309,7 @@ func TestSSENotification(t *testing.T) {
 }
 
 // TestSSEAuthRequired verifies that when bearer token auth is configured,
-// POSTing without an Authorization header returns 401 Unauthorized.
+// both the SSE GET endpoint and POST message endpoint require auth.
 func TestSSEAuthRequired(t *testing.T) {
 	srv := NewServer(
 		ServerInfo{Name: "test", Version: "0.1.0"},
@@ -297,15 +324,26 @@ func TestSSEAuthRequired(t *testing.T) {
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
-	// Connect SSE (no auth on SSE endpoint itself)
-	sseResp, postURL, err := connectSSE(ts, "/mcp")
+	// SSE GET without auth should return 401
+	sseURL := ts.URL + "/mcp/sse"
+	resp, err := http.Get(sseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("SSE GET without auth: status = %d, want 401", resp.StatusCode)
+	}
+
+	// SSE GET with auth should succeed (connect and get endpoint event)
+	sseResp, postURL, err := connectSSEWithAuth(ts, "/mcp", "secret")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer sseResp.Body.Close()
 
-	// POST without auth
-	resp, err := postJSON(postURL, &Request{
+	// POST without auth should return 401
+	noAuthResp, err := postJSON(postURL, &Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "ping",
@@ -313,10 +351,10 @@ func TestSSEAuthRequired(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer noAuthResp.Body.Close()
 
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Errorf("status = %d, want 401", resp.StatusCode)
+	if noAuthResp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("POST without auth: status = %d, want 401", noAuthResp.StatusCode)
 	}
 }
 
