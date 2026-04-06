@@ -25,7 +25,7 @@ testconf: ## Run MCP conformance test suite (requires Node.js/npx)
 testconfauth: ## Run MCP Auth conformance suite (client-side, requires mcpkit/auth)
 	bash scripts/conformance-auth-test.sh
 
-testall: test testconf ## Run unit tests + conformance suite
+testall: test test-race testconf testconfauth ## Run unit tests + conformance suite
 
 vet: ## Run go vet
 	go vet ./...
