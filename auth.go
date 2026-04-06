@@ -83,6 +83,22 @@ type staticTokenSource struct {
 
 func (s *staticTokenSource) Token() (string, error) { return s.token, nil }
 
+// ScopeAwareTokenSource extends TokenSource with scope step-up capability.
+// When the server returns 403 with required scopes in the WWW-Authenticate
+// header, the client transport calls TokenForScopes to re-authenticate with
+// broader permissions.
+//
+// Implementations that support interactive re-auth (like OAuthTokenSource)
+// should implement this interface. Static tokens and implementations that
+// cannot acquire new scopes need not implement it — the transport will
+// return a ClientAuthError instead of retrying.
+type ScopeAwareTokenSource interface {
+	TokenSource
+	// TokenForScopes invalidates the cached token and triggers a new
+	// authorization flow with the given scopes merged into the existing set.
+	TokenForScopes(scopes []string) (string, error)
+}
+
 // Stability represents the maturity level of an extension.
 type Stability string
 

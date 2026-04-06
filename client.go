@@ -285,22 +285,20 @@ func (t *streamableClientTransport) connect() error { return nil }
 func (t *streamableClientTransport) close() error   { return nil }
 
 func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
-	req, err := http.NewRequest("POST", t.url, bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	// Per MCP spec (2025-11-25): clients MUST accept both application/json and text/event-stream
-	// https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#sending-messages-to-the-server
-	req.Header.Set("Accept", StreamableHTTPAccept)
-	if t.sessionID != "" {
-		req.Header.Set("Mcp-Session-Id", t.sessionID)
-	}
-	if err := setAuthHeader(req, t.tokenSource); err != nil {
-		return nil, fmt.Errorf("auth: %w", err)
+	buildReq := func() (*http.Request, error) {
+		req, err := http.NewRequest("POST", t.url, bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", StreamableHTTPAccept)
+		if t.sessionID != "" {
+			req.Header.Set("Mcp-Session-Id", t.sessionID)
+		}
+		return req, nil
 	}
 
-	resp, err := t.httpClient.Do(req)
+	resp, err := doWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
 	if err != nil {
 		return nil, err
 	}
@@ -310,8 +308,6 @@ func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
 		t.sessionID = sid
 	}
 
-	// Per MCP spec (2025-11-25): server returns either application/json or text/event-stream.
-	// https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#sending-messages-to-the-server
 	ct := resp.Header.Get("Content-Type")
 	if strings.Contains(ct, "text/event-stream") {
 		return readSSEResponse(resp.Body)
@@ -375,19 +371,20 @@ func readSSEResponse(body io.Reader) (*rpcResponse, error) {
 }
 
 func (t *streamableClientTransport) notify(data []byte) error {
-	req, err := http.NewRequest("POST", t.url, bytes.NewReader(data))
-	if err != nil {
-		return err
+	buildReq := func() (*http.Request, error) {
+		req, err := http.NewRequest("POST", t.url, bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", StreamableHTTPAccept)
+		if t.sessionID != "" {
+			req.Header.Set("Mcp-Session-Id", t.sessionID)
+		}
+		return req, nil
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", StreamableHTTPAccept)
-	if t.sessionID != "" {
-		req.Header.Set("Mcp-Session-Id", t.sessionID)
-	}
-	if err := setAuthHeader(req, t.tokenSource); err != nil {
-		return fmt.Errorf("auth: %w", err)
-	}
-	resp, err := t.httpClient.Do(req)
+
+	resp, err := doWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
 	if err != nil {
 		return err
 	}
@@ -416,15 +413,11 @@ func newSSEClientTransport(sseURL string, ts TokenSource) *sseClientTransport {
 }
 
 func (t *sseClientTransport) connect() error {
-	// Open SSE stream with auth
-	req, err := http.NewRequest("GET", t.sseURL, nil)
-	if err != nil {
-		return err
+	buildReq := func() (*http.Request, error) {
+		return http.NewRequest("GET", t.sseURL, nil)
 	}
-	if err := setAuthHeader(req, t.tokenSource); err != nil {
-		return fmt.Errorf("auth: %w", err)
-	}
-	resp, err := t.httpClient.Do(req)
+
+	resp, err := doWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
 	if err != nil {
 		return fmt.Errorf("GET %s: %w", t.sseURL, err)
 	}
@@ -432,7 +425,6 @@ func (t *sseClientTransport) connect() error {
 	t.sseResp = resp
 	t.sseReader = bufio.NewReader(resp.Body)
 
-	// Read the endpoint event
 	ev, err := t.readSSEEvent()
 	if err != nil {
 		resp.Body.Close()
@@ -445,7 +437,6 @@ func (t *sseClientTransport) connect() error {
 
 	t.postURL = ev.data
 
-	// Extract sessionId from POST URL
 	if idx := strings.Index(t.postURL, "sessionId="); idx >= 0 {
 		t.sessionID = t.postURL[idx+len("sessionId="):]
 		if amp := strings.Index(t.sessionID, "&"); amp >= 0 {
@@ -465,22 +456,21 @@ func (t *sseClientTransport) close() error {
 }
 
 func (t *sseClientTransport) call(data []byte) (*rpcResponse, error) {
-	// POST the request with auth
-	req, err := http.NewRequest("POST", t.postURL, bytes.NewReader(data))
-	if err != nil {
-		return nil, fmt.Errorf("POST %s: %w", t.postURL, err)
+	buildReq := func() (*http.Request, error) {
+		req, err := http.NewRequest("POST", t.postURL, bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		return req, nil
 	}
-	req.Header.Set("Content-Type", "application/json")
-	if err := setAuthHeader(req, t.tokenSource); err != nil {
-		return nil, fmt.Errorf("auth: %w", err)
-	}
-	resp, err := t.httpClient.Do(req)
+
+	resp, err := doWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
 	if err != nil {
 		return nil, fmt.Errorf("POST %s: %w", t.postURL, err)
 	}
 	resp.Body.Close()
 
-	// Read the response from the SSE stream
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -500,15 +490,16 @@ func (t *sseClientTransport) call(data []byte) (*rpcResponse, error) {
 }
 
 func (t *sseClientTransport) notify(data []byte) error {
-	req, err := http.NewRequest("POST", t.postURL, bytes.NewReader(data))
-	if err != nil {
-		return fmt.Errorf("POST %s: %w", t.postURL, err)
+	buildReq := func() (*http.Request, error) {
+		req, err := http.NewRequest("POST", t.postURL, bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		return req, nil
 	}
-	req.Header.Set("Content-Type", "application/json")
-	if err := setAuthHeader(req, t.tokenSource); err != nil {
-		return fmt.Errorf("auth: %w", err)
-	}
-	resp, err := t.httpClient.Do(req)
+
+	resp, err := doWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
 	if err != nil {
 		return fmt.Errorf("POST %s: %w", t.postURL, err)
 	}
@@ -560,6 +551,111 @@ func setAuthHeader(req *http.Request, ts TokenSource) error {
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	return nil
+}
+
+// ClientAuthError is returned by the client transport when the server rejects
+// a request with 401 or 403 and the transport has exhausted its retry budget.
+type ClientAuthError struct {
+	// StatusCode is the HTTP status (401 or 403).
+	StatusCode int
+	// Message describes the failure.
+	Message string
+	// WWWAuthenticate is the raw WWW-Authenticate header from the server response.
+	WWWAuthenticate string
+	// RequiredScopes are the scopes parsed from the WWW-Authenticate header (403 only).
+	RequiredScopes []string
+}
+
+func (e *ClientAuthError) Error() string {
+	return fmt.Sprintf("auth error %d: %s", e.StatusCode, e.Message)
+}
+
+// doWithAuthRetry executes an HTTP request with automatic retry on 401/403.
+//
+// Retry budget: max 1 retry for 401 (token refresh), max 1 retry for 403
+// (scope step-up). Total max 2 retries per request.
+//
+// On 401: calls TokenSource.Token() to get a fresh token, retries once.
+// On 403: parses WWW-Authenticate for required scopes, calls
+// ScopeAwareTokenSource.TokenForScopes if available, retries once.
+//
+// buildReq must create a new *http.Request each call (body may be consumed).
+// do is typically httpClient.Do.
+func doWithAuthRetry(
+	ts TokenSource,
+	buildReq func() (*http.Request, error),
+	do func(*http.Request) (*http.Response, error),
+) (*http.Response, error) {
+	var tried401, tried403 bool
+
+	for {
+		req, err := buildReq()
+		if err != nil {
+			return nil, err
+		}
+		if err := setAuthHeader(req, ts); err != nil {
+			return nil, fmt.Errorf("auth: %w", err)
+		}
+
+		resp, err := do(req)
+		if err != nil {
+			return nil, err
+		}
+
+		switch resp.StatusCode {
+		case http.StatusUnauthorized: // 401
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if tried401 || ts == nil {
+				return nil, &ClientAuthError{
+					StatusCode:      401,
+					Message:         strings.TrimSpace(string(body)),
+					WWWAuthenticate: resp.Header.Get("WWW-Authenticate"),
+				}
+			}
+			tried401 = true
+			// Token() on a dynamic source will refresh; on a static source
+			// it returns the same token and the retry will fail → gives up.
+			if _, err := ts.Token(); err != nil {
+				return nil, fmt.Errorf("token refresh: %w", err)
+			}
+			continue
+
+		case http.StatusForbidden: // 403
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			wwa := resp.Header.Get("WWW-Authenticate")
+			var scopes []string
+			if wwa != "" {
+				_, scopes, _ = ParseWWWAuthenticate(wwa)
+			}
+			if tried403 || ts == nil {
+				return nil, &ClientAuthError{
+					StatusCode:      403,
+					Message:         strings.TrimSpace(string(body)),
+					WWWAuthenticate: wwa,
+					RequiredScopes:  scopes,
+				}
+			}
+			tried403 = true
+			sats, ok := ts.(ScopeAwareTokenSource)
+			if !ok || len(scopes) == 0 {
+				return nil, &ClientAuthError{
+					StatusCode:      403,
+					Message:         "insufficient scope (token source does not support step-up)",
+					WWWAuthenticate: wwa,
+					RequiredScopes:  scopes,
+				}
+			}
+			if _, err := sats.TokenForScopes(scopes); err != nil {
+				return nil, fmt.Errorf("scope step-up: %w", err)
+			}
+			continue
+
+		default:
+			return resp, nil
+		}
+	}
 }
 
 // --- Response extraction helpers ---
