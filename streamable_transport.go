@@ -2,7 +2,6 @@ package mcpkit
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -72,13 +71,9 @@ func (t *streamableTransport) handleRoot(w http.ResponseWriter, r *http.Request)
 // handlePost handles POST requests: JSON-RPC dispatch with session management.
 func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request) {
 	// Auth check
-	if err := t.server.CheckAuth(r); err != nil {
-		var authErr *AuthError
-		if errors.As(err, &authErr) {
-			http.Error(w, authErr.Message, authErr.Code)
-		} else {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-		}
+	claims, err := t.server.CheckAuth(r)
+	if err != nil {
+		writeAuthError(w, err)
 		return
 	}
 
@@ -101,7 +96,7 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 
 	// Route: initialize creates a new session; everything else requires one
 	if req.Method == "initialize" {
-		t.handleInitialize(w, r, &req)
+		t.handleInitialize(w, r, claims, &req)
 		return
 	}
 
@@ -133,12 +128,12 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 	isRequest := !req.IsNotification()
 
 	if wantsSSE && isRequest {
-		t.handlePostSSE(w, r, dispatcher, &req)
+		t.handlePostSSE(w, r, claims, dispatcher, &req)
 		return
 	}
 
 	// Synchronous JSON path (no mid-request notifications)
-	resp := t.server.dispatchWith(dispatcher, r.Context(), &req)
+	resp := t.server.dispatchWith(dispatcher, r.Context(), claims, &req)
 
 	if resp == nil {
 		w.WriteHeader(http.StatusAccepted)
@@ -159,11 +154,11 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 // JSON-RPC response. Per MCP spec: "the server MUST either return
 // Content-Type: text/event-stream, to initiate an SSE stream, or
 // Content-Type: application/json, to return one JSON object."
-func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Request, d *Dispatcher, req *Request) {
+func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Request, claims *Claims, d *Dispatcher, req *Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		// Fall back to synchronous JSON if flushing not supported
-		resp := t.server.dispatchWith(d, r.Context(), req)
+		resp := t.server.dispatchWith(d, r.Context(), claims, req)
 		if resp == nil {
 			w.WriteHeader(http.StatusAccepted)
 			return
@@ -202,7 +197,7 @@ func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Reque
 	defer func() { d.notifyFunc = prevNotify }()
 
 	// Dispatch (synchronous — notifications stream as events during execution)
-	resp := t.server.dispatchWith(d, r.Context(), req)
+	resp := t.server.dispatchWith(d, r.Context(), claims, req)
 
 	// Write the JSON-RPC response as the final SSE event
 	if resp != nil {
@@ -213,7 +208,7 @@ func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Reque
 
 // handleInitialize handles POST initialize: creates session, dispatches, returns
 // the response with Mcp-Session-Id header.
-func (t *streamableTransport) handleInitialize(w http.ResponseWriter, r *http.Request, req *Request) {
+func (t *streamableTransport) handleInitialize(w http.ResponseWriter, r *http.Request, claims *Claims, req *Request) {
 	// Enforce max sessions
 	if t.config.maxSessions > 0 && t.sessionCount() >= t.config.maxSessions {
 		http.Error(w, "too many sessions", http.StatusServiceUnavailable)
@@ -222,7 +217,7 @@ func (t *streamableTransport) handleInitialize(w http.ResponseWriter, r *http.Re
 
 	// Create session dispatcher and dispatch initialize
 	dispatcher := t.server.newSession()
-	resp := t.server.dispatchWith(dispatcher, r.Context(), req)
+	resp := t.server.dispatchWith(dispatcher, r.Context(), claims, req)
 
 	if resp == nil {
 		w.WriteHeader(http.StatusAccepted)
@@ -249,6 +244,12 @@ func (t *streamableTransport) handleInitialize(w http.ResponseWriter, r *http.Re
 
 // handleDelete handles DELETE requests: terminates a session.
 func (t *streamableTransport) handleDelete(w http.ResponseWriter, r *http.Request) {
+	// Auth check — prevent unauthenticated session termination
+	if _, err := t.server.CheckAuth(r); err != nil {
+		writeAuthError(w, err)
+		return
+	}
+
 	sessionID := r.Header.Get(mcpSessionIDHeader)
 	if sessionID == "" {
 		http.Error(w, "missing "+mcpSessionIDHeader+" header", http.StatusBadRequest)

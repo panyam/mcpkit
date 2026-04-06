@@ -19,7 +19,8 @@ type TestClient struct {
 // NewTestClient creates a TestClient from an mcpkit.Server.
 // It starts an httptest.Server (Streamable HTTP), performs the MCP
 // initialize handshake, and registers cleanup.
-func NewTestClient(t *testing.T, srv *mcpkit.Server) *TestClient {
+// Optional ClientOption values (e.g., WithClientBearerToken) are passed to the client.
+func NewTestClient(t *testing.T, srv *mcpkit.Server, opts ...mcpkit.ClientOption) *TestClient {
 	t.Helper()
 
 	handler := srv.Handler(mcpkit.WithStreamableHTTP(true))
@@ -29,7 +30,7 @@ func NewTestClient(t *testing.T, srv *mcpkit.Server) *TestClient {
 	c := mcpkit.NewClient(ts.URL+"/mcp", mcpkit.ClientInfo{
 		Name:    "test-client",
 		Version: "0.0.1",
-	})
+	}, opts...)
 	if err := c.Connect(); err != nil {
 		t.Fatalf("MCP connect failed: %v", err)
 	}

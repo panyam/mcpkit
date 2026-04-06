@@ -32,14 +32,26 @@ func WithSSEClient() ClientOption {
 	return func(c *Client) { c.useSSE = true }
 }
 
+// WithClientBearerToken sets a static bearer token for all client requests.
+func WithClientBearerToken(token string) ClientOption {
+	return func(c *Client) { c.tokenSource = &staticTokenSource{token: token} }
+}
+
+// WithTokenSource sets a dynamic token source for all client requests.
+// Use this for OAuth flows where tokens are refreshed automatically.
+func WithTokenSource(ts TokenSource) ClientOption {
+	return func(c *Client) { c.tokenSource = ts }
+}
+
 // Client is an MCP client that communicates over Streamable HTTP or SSE.
 type Client struct {
-	url       string
-	info      ClientInfo
-	useSSE    bool
-	nextID    int
-	mu        sync.Mutex
-	transport clientTransport
+	url         string
+	info        ClientInfo
+	useSSE      bool
+	tokenSource TokenSource
+	nextID      int
+	mu          sync.Mutex
+	transport   clientTransport
 
 	// ServerInfo is populated after Connect.
 	ServerInfo ServerInfo
@@ -64,9 +76,9 @@ func NewClient(url string, info ClientInfo, opts ...ClientOption) *Client {
 func (c *Client) Connect() error {
 	// Create transport
 	if c.useSSE {
-		c.transport = newSSEClientTransport(c.url)
+		c.transport = newSSEClientTransport(c.url, c.tokenSource)
 	} else {
-		c.transport = newStreamableClientTransport(c.url)
+		c.transport = newStreamableClientTransport(c.url, c.tokenSource)
 	}
 
 	if err := c.transport.connect(); err != nil {
@@ -259,13 +271,14 @@ func (c *Client) notifyMethod(method string, params any) error {
 // --- Streamable HTTP transport ---
 
 type streamableClientTransport struct {
-	url        string
-	sessionID  string
-	httpClient *http.Client
+	url         string
+	sessionID   string
+	httpClient  *http.Client
+	tokenSource TokenSource
 }
 
-func newStreamableClientTransport(url string) *streamableClientTransport {
-	return &streamableClientTransport{url: url, httpClient: http.DefaultClient}
+func newStreamableClientTransport(url string, ts TokenSource) *streamableClientTransport {
+	return &streamableClientTransport{url: url, httpClient: http.DefaultClient, tokenSource: ts}
 }
 
 func (t *streamableClientTransport) connect() error { return nil }
@@ -279,6 +292,9 @@ func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
 	req.Header.Set("Content-Type", "application/json")
 	if t.sessionID != "" {
 		req.Header.Set("Mcp-Session-Id", t.sessionID)
+	}
+	if err := setAuthHeader(req, t.tokenSource); err != nil {
+		return nil, fmt.Errorf("auth: %w", err)
 	}
 
 	resp, err := t.httpClient.Do(req)
@@ -312,6 +328,9 @@ func (t *streamableClientTransport) notify(data []byte) error {
 	if t.sessionID != "" {
 		req.Header.Set("Mcp-Session-Id", t.sessionID)
 	}
+	if err := setAuthHeader(req, t.tokenSource); err != nil {
+		return fmt.Errorf("auth: %w", err)
+	}
 	resp, err := t.httpClient.Do(req)
 	if err != nil {
 		return err
@@ -326,22 +345,30 @@ func (t *streamableClientTransport) notify(data []byte) error {
 // Protocol: GET /sse → SSE stream with "endpoint" event containing POST URL →
 // POST JSON-RPC to that URL → read "message" events from SSE for responses.
 type sseClientTransport struct {
-	sseURL     string
-	postURL    string
-	sessionID  string
-	httpClient *http.Client
-	sseResp    *http.Response
-	sseReader  *bufio.Reader
-	mu         sync.Mutex
+	sseURL      string
+	postURL     string
+	sessionID   string
+	httpClient  *http.Client
+	tokenSource TokenSource
+	sseResp     *http.Response
+	sseReader   *bufio.Reader
+	mu          sync.Mutex
 }
 
-func newSSEClientTransport(sseURL string) *sseClientTransport {
-	return &sseClientTransport{sseURL: sseURL, httpClient: http.DefaultClient}
+func newSSEClientTransport(sseURL string, ts TokenSource) *sseClientTransport {
+	return &sseClientTransport{sseURL: sseURL, httpClient: http.DefaultClient, tokenSource: ts}
 }
 
 func (t *sseClientTransport) connect() error {
-	// Open SSE stream
-	resp, err := t.httpClient.Get(t.sseURL)
+	// Open SSE stream with auth
+	req, err := http.NewRequest("GET", t.sseURL, nil)
+	if err != nil {
+		return err
+	}
+	if err := setAuthHeader(req, t.tokenSource); err != nil {
+		return fmt.Errorf("auth: %w", err)
+	}
+	resp, err := t.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("GET %s: %w", t.sseURL, err)
 	}
@@ -382,8 +409,16 @@ func (t *sseClientTransport) close() error {
 }
 
 func (t *sseClientTransport) call(data []byte) (*rpcResponse, error) {
-	// POST the request
-	resp, err := t.httpClient.Post(t.postURL, "application/json", bytes.NewReader(data))
+	// POST the request with auth
+	req, err := http.NewRequest("POST", t.postURL, bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("POST %s: %w", t.postURL, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if err := setAuthHeader(req, t.tokenSource); err != nil {
+		return nil, fmt.Errorf("auth: %w", err)
+	}
+	resp, err := t.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("POST %s: %w", t.postURL, err)
 	}
@@ -409,7 +444,15 @@ func (t *sseClientTransport) call(data []byte) (*rpcResponse, error) {
 }
 
 func (t *sseClientTransport) notify(data []byte) error {
-	resp, err := t.httpClient.Post(t.postURL, "application/json", bytes.NewReader(data))
+	req, err := http.NewRequest("POST", t.postURL, bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("POST %s: %w", t.postURL, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if err := setAuthHeader(req, t.tokenSource); err != nil {
+		return fmt.Errorf("auth: %w", err)
+	}
+	resp, err := t.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("POST %s: %w", t.postURL, err)
 	}
@@ -447,6 +490,20 @@ func (t *sseClientTransport) readSSEEvent() (sseClientEvent, error) {
 			data = strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 		}
 	}
+}
+
+// setAuthHeader sets the Authorization: Bearer header from a TokenSource.
+// No-op if ts is nil.
+func setAuthHeader(req *http.Request, ts TokenSource) error {
+	if ts == nil {
+		return nil
+	}
+	token, err := ts.Token()
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	return nil
 }
 
 // --- Response extraction helpers ---
