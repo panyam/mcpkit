@@ -66,6 +66,7 @@ make downkcl          # Stop Keycloak container
 - **Auth spec is 2025-11-25**: See `docs/AUTH_DESIGN.md` for spec compliance checklist. Key: `resource` param (RFC 8707) is MUST, PKCE S256 is MUST, audience validation is MUST.
 - **JWTValidator uses direct jwt.Parse with JWKS keyfunc**, NOT `APIAuth.ValidateAccessTokenFull` (which doesn't support kid-based JWKS lookup). The custom `jwksKeyFunc` method on `JWTValidator` resolves keys via `JWKSKeyStore.GetKeyByKid`.
 - **`tests/e2e/` and `tests/keycloak/` are separate Go modules**. They use published `oneauth v0.0.64` and `replace` directives only for same-repo mcpkit references. NOT tested by root `go test ./...`. Run via `make test-auth-e2e` or `make test-auth-keycloak`.
+- **Client transport retries on 401/403**: `doWithAuthRetry` handles token refresh (401) and scope step-up (403 via `ScopeAwareTokenSource.TokenForScopes`). Max 1 retry per status code. Static tokens (`WithClientBearerToken`) cannot refresh — 401 returns `ClientAuthError` immediately. `ParseWWWAuthenticate` lives in core (not `auth/`) so the transport can parse scope hints without depending on the auth sub-module.
 - **oneauth/testutil.TestAuthServer** provides the in-process auth server for E2E tests. It generates RSA keys, serves JWKS, and mints tokens. Set audience after creation via `AS.APIAuth.JWTAudience` (the `WithAudience` option is set at creation time, before server URL is known).
 
 ## Architecture
@@ -87,4 +88,4 @@ See `docs/ARCHITECTURE.md` for transport design, type definitions, and protocol 
 - Resource subscriptions (#24)
 - Streamable HTTP GET SSE stream (server-initiated notifications without a request)
 - `DiscoverMCPAuth` PRM fetch — steps 4-5 return error "not yet implemented"
-- Scope step-up (client 401/403 handling) — blocked on #53
+- `cmd/testclient` auth conformance: scope-step-up and scope-retry-limit need testclient to use mcpkit Client (with retry) instead of raw HTTP
