@@ -112,18 +112,25 @@ Capabilities are auto-advertised in the `initialize` response when the correspon
 ## Testing
 
 ```bash
-make test         # Unit tests (94 tests)
+make test         # Unit tests (160+ tests)
+make test-auth    # Auth sub-module tests
+make test-auth-e2e # E2E auth tests (in-process oneauth AS)
 make testconf     # MCP conformance suite (requires Node.js)
-make testall      # Both unit + conformance
+make testall      # ALL tests + Keycloak + HTML report
 make smoke        # Curl-based transport tests (SSE + Streamable HTTP)
 make audit        # Security: govulncheck + gosec + gitleaks + race detection
 make serve        # Start SSE test server on :8787
 make serve-streamable  # Streamable HTTP on :8787
+
+# Keycloak interop tests (optional, requires Docker)
+make upkcl                # Start Keycloak
+make test-auth-keycloak   # Run Keycloak interop tests
+make downkcl              # Stop Keycloak
 ```
 
 ### Conformance Suite
 
-Validated against the [official MCP conformance test suite](https://github.com/modelcontextprotocol/conformance). Current status: **22/30 scenarios passing** (remaining require sampling, elicitation, subscriptions, and Streamable HTTP SSE streaming — tracked in `conformance/baseline.yml`).
+Validated against the [official MCP conformance test suite](https://github.com/modelcontextprotocol/conformance). Current status: **24/30 server scenarios passing**, **12/14 auth conformance passing** (remaining tracked in `conformance/baseline.yml`).
 
 ```bash
 bash scripts/conformance-test.sh                    # full suite
