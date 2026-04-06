@@ -19,7 +19,7 @@ func TestEmitProgressSendsNotification(t *testing.T) {
 	}
 
 	var logLevel atomic.Pointer[LogLevel]
-	ctx := contextWithSession(context.Background(), notify, &logLevel)
+	ctx := contextWithSession(context.Background(), notify, &logLevel, nil)
 
 	EmitProgress(ctx, "token-1", 50, 100, "halfway")
 
@@ -54,7 +54,7 @@ func TestEmitProgressNilToken(t *testing.T) {
 	}
 
 	var logLevel atomic.Pointer[LogLevel]
-	ctx := contextWithSession(context.Background(), notify, &logLevel)
+	ctx := contextWithSession(context.Background(), notify, &logLevel, nil)
 
 	EmitProgress(ctx, nil, 50, 100, "should not send")
 
@@ -85,7 +85,7 @@ func TestEmitProgressMultiple(t *testing.T) {
 	}
 
 	var logLevel atomic.Pointer[LogLevel]
-	ctx := contextWithSession(context.Background(), notify, &logLevel)
+	ctx := contextWithSession(context.Background(), notify, &logLevel, nil)
 
 	EmitProgress(ctx, "tok", 0, 100, "start")
 	EmitProgress(ctx, "tok", 50, 100, "mid")
@@ -113,7 +113,7 @@ func TestEmitProgressNumericToken(t *testing.T) {
 	}
 
 	var logLevel atomic.Pointer[LogLevel]
-	ctx := contextWithSession(context.Background(), notify, &logLevel)
+	ctx := contextWithSession(context.Background(), notify, &logLevel, nil)
 
 	EmitProgress(ctx, float64(42), 10, 100, "")
 

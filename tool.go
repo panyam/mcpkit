@@ -16,6 +16,10 @@ type ToolDef struct {
 	// InputSchema is the JSON Schema for the tool's arguments.
 	// Typically a map[string]any with "type": "object", "properties": {...}, "required": [...].
 	InputSchema any `json:"inputSchema"`
+
+	// Annotations holds optional metadata for this tool.
+	// Convention: {"experimental": true} marks experimental tools.
+	Annotations map[string]any `json:"annotations,omitempty"`
 }
 
 // ToolRequest is the validated input passed to a ToolHandler.

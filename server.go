@@ -3,6 +3,7 @@ package mcpkit
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -22,6 +23,7 @@ type serverOptions struct {
 	toolTimeout   time.Duration
 	allowedRoots  []string
 	authValidator AuthValidator
+	extensions    []ExtensionProvider
 }
 
 // AuthValidator validates an HTTP request and returns claims on success.
@@ -51,6 +53,13 @@ func WithAuth(v AuthValidator) Option {
 	return func(o *serverOptions) { o.authValidator = v }
 }
 
+// WithExtension registers a protocol extension that will be advertised
+// in the initialize response. Extensions declare their ID, spec version,
+// and stability level.
+func WithExtension(ext ExtensionProvider) Option {
+	return func(o *serverOptions) { o.extensions = append(o.extensions, ext) }
+}
+
 // WithToolTimeout sets the maximum duration for tool execution.
 func WithToolTimeout(d time.Duration) Option {
 	return func(o *serverOptions) { o.toolTimeout = d }
@@ -68,6 +77,11 @@ func NewServer(info ServerInfo, opts ...Option) *Server {
 	}
 	for _, opt := range opts {
 		opt(&s.options)
+	}
+	// Register extensions on the dispatcher so they appear in initialize response
+	for _, ext := range s.options.extensions {
+		e := ext.Extension()
+		s.dispatcher.extensions[e.ID] = e
 	}
 	return s
 }
@@ -92,6 +106,33 @@ func (s *Server) RegisterPrompt(def PromptDef, handler PromptHandler) {
 	s.dispatcher.RegisterPrompt(def, handler)
 }
 
+// RegisterExperimentalTool registers a tool marked as experimental via annotations.
+func (s *Server) RegisterExperimentalTool(def ToolDef, handler ToolHandler) {
+	if def.Annotations == nil {
+		def.Annotations = make(map[string]any)
+	}
+	def.Annotations["experimental"] = true
+	s.RegisterTool(def, handler)
+}
+
+// RegisterExperimentalResource registers a resource marked as experimental via annotations.
+func (s *Server) RegisterExperimentalResource(def ResourceDef, handler ResourceHandler) {
+	if def.Annotations == nil {
+		def.Annotations = make(map[string]any)
+	}
+	def.Annotations["experimental"] = true
+	s.RegisterResource(def, handler)
+}
+
+// RegisterExperimentalPrompt registers a prompt marked as experimental via annotations.
+func (s *Server) RegisterExperimentalPrompt(def PromptDef, handler PromptHandler) {
+	if def.Annotations == nil {
+		def.Annotations = make(map[string]any)
+	}
+	def.Annotations["experimental"] = true
+	s.RegisterPrompt(def, handler)
+}
+
 // RegisterCompletion registers a completion handler for argument autocompletion.
 // refType is "ref/prompt" or "ref/resource". name is the prompt name or resource URI template.
 func (s *Server) RegisterCompletion(refType, name string, handler CompletionHandler) {
@@ -100,15 +141,16 @@ func (s *Server) RegisterCompletion(refType, name string, handler CompletionHand
 
 // Dispatch routes a JSON-RPC request through the server's dispatch layer.
 func (s *Server) Dispatch(ctx context.Context, req *Request) *Response {
-	return s.dispatchWith(s.dispatcher, ctx, req)
+	return s.dispatchWith(s.dispatcher, ctx, nil, req)
 }
 
 // dispatchWith routes a request through a specific dispatcher with server-level
 // middleware (e.g. tool timeout). Used by transports to dispatch on per-session
-// dispatchers.
-func (s *Server) dispatchWith(d *Dispatcher, ctx context.Context, req *Request) *Response {
+// dispatchers. The claims parameter carries the authenticated identity from CheckAuth.
+func (s *Server) dispatchWith(d *Dispatcher, ctx context.Context, claims *Claims, req *Request) *Response {
 	// Inject session context so tool handlers can send notifications (logging, progress, etc.)
-	ctx = contextWithSession(ctx, d.notifyFunc, &d.logLevel)
+	// and access authenticated claims.
+	ctx = contextWithSession(ctx, d.notifyFunc, &d.logLevel, claims)
 
 	if s.options.toolTimeout > 0 && req.Method == "tools/call" {
 		tctx, cancel := context.WithTimeout(ctx, s.options.toolTimeout)
@@ -253,12 +295,34 @@ func WithSSE(enabled bool) TransportOption {
 }
 
 // CheckAuth validates an HTTP request against the server's auth configuration.
-// Returns nil if no auth is configured or if the request is valid.
-func (s *Server) CheckAuth(r *http.Request) error {
+// Returns the authenticated claims (if the validator provides them) and any error.
+// Returns (nil, nil) if no auth is configured.
+func (s *Server) CheckAuth(r *http.Request) (*Claims, error) {
 	if s.options.authValidator == nil {
-		return nil
+		return nil, nil
 	}
-	return s.options.authValidator.Validate(r)
+	if err := s.options.authValidator.Validate(r); err != nil {
+		return nil, err
+	}
+	if cp, ok := s.options.authValidator.(ClaimsProvider); ok {
+		return cp.Claims(r), nil
+	}
+	return nil, nil
+}
+
+// writeAuthError writes an authentication/authorization error to the response.
+// If the error is an *AuthError with a WWWAuthenticate field, the WWW-Authenticate
+// header is set. Used by both transports for consistent error responses.
+func writeAuthError(w http.ResponseWriter, err error) {
+	var authErr *AuthError
+	if errors.As(err, &authErr) {
+		if authErr.WWWAuthenticate != "" {
+			w.Header().Set("WWW-Authenticate", authErr.WWWAuthenticate)
+		}
+		http.Error(w, authErr.Message, authErr.Code)
+	} else {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	}
 }
 
 // bearerTokenValidator uses constant-time comparison.
@@ -283,8 +347,9 @@ var errUnauthorized = &AuthError{Code: http.StatusUnauthorized, Message: "unauth
 
 // AuthError is returned when authentication fails.
 type AuthError struct {
-	Code    int
-	Message string
+	Code            int
+	Message         string
+	WWWAuthenticate string // optional WWW-Authenticate header value
 }
 
 func (e *AuthError) Error() string { return e.Message }

@@ -20,3 +20,48 @@ server:
   # Tool scenarios requiring server-to-client requests (bidirectional)
   - tools-call-sampling         # Requires sampling/createMessage (#22)
   - tools-call-elicitation      # Requires elicitation/create (#23)
+
+# --- MCP Auth Conformance (client-side tests, spec 2025-11-25) ---
+# Spec: https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization
+# These test the MCP client's OAuth flow: discovery, registration, PKCE, scopes.
+# Run via: npx @modelcontextprotocol/conformance client --suite auth
+# All scenarios are expected failures until mcpkit/auth Phase 3C-3E ships.
+#
+# Remove entries as the client OAuth flow is implemented.
+
+client-auth:
+  # Required (Tier 1) — PRM + AS metadata discovery
+  - auth/metadata-default                   # PRM at path-based + WWW-Auth, OAuth AS at root
+  - auth/metadata-var1                      # PRM at path-based, no WWW-Auth, OIDC discovery
+  - auth/metadata-var2                      # PRM at root, OAuth AS with path component
+  - auth/metadata-var3                      # PRM at custom URL in WWW-Auth, OIDC appended path
+
+  # Required (Tier 1) — Client registration
+  - auth/basic-cimd                         # Client ID Metadata Document flow
+  - auth/pre-registration                   # Pre-registered client credentials
+
+  # Required (Tier 1) — Scope handling
+  - auth/scope-from-www-authenticate        # Client uses scope from WWW-Authenticate header
+  - auth/scope-from-scopes-supported        # Fallback to PRM scopes_supported
+  - auth/scope-omitted-when-undefined       # Omit scope when scopes_supported absent
+  - auth/scope-step-up                      # 401 → 403 flow with scope escalation
+  - auth/scope-retry-limit                  # Max 3 retry attempts on repeated 403
+
+  # Required (Tier 1) — Token endpoint auth methods
+  - auth/token-endpoint-auth-basic          # client_secret_basic
+  - auth/token-endpoint-auth-post           # client_secret_post
+  - auth/token-endpoint-auth-none           # public client (no secret)
+
+  # Back-compat (optional) — 2025-03-26 spec
+  - auth/2025-03-26-oauth-metadata-backcompat  # Legacy OAuth metadata discovery
+  - auth/2025-03-26-oauth-endpoint-fallback    # Legacy endpoint fallback paths
+
+  # Extensions (optional)
+  - auth/client-credentials-jwt             # JWT bearer assertion (M2M)
+  - auth/client-credentials-basic           # Client credentials with secret (M2M)
+  - auth/cross-app-access-complete-flow     # Enterprise managed authorization (ID-JAG)
+
+  # Draft (informational)
+  - auth/resource-mismatch                  # Client rejects mismatched PRM resource
+  - auth/offline-access-scope               # offline_access handling
+  - auth/offline-access-not-supported       # offline_access not in AS metadata

@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -102,13 +101,9 @@ func (t *sseTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Auth check
-	if err := t.server.CheckAuth(r); err != nil {
-		var authErr *AuthError
-		if errors.As(err, &authErr) {
-			http.Error(w, authErr.Message, authErr.Code)
-		} else {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-		}
+	claims, err := t.server.CheckAuth(r)
+	if err != nil {
+		writeAuthError(w, err)
 		return
 	}
 
@@ -141,7 +136,7 @@ func (t *sseTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := t.server.dispatchWith(dispatcher, r.Context(), &req)
+	resp := t.server.dispatchWith(dispatcher, r.Context(), claims, &req)
 
 	// Notifications have no response
 	if resp == nil {
@@ -219,6 +214,12 @@ type mcpSSEHandler struct {
 }
 
 func (h *mcpSSEHandler) Validate(w http.ResponseWriter, r *http.Request) (*mcpSSEConn, bool) {
+	// Auth check — prevent unauthenticated session creation
+	if _, err := h.transport.server.CheckAuth(r); err != nil {
+		writeAuthError(w, err)
+		return nil, false
+	}
+
 	// Enforce max sessions
 	if h.transport.config.maxSessions > 0 && h.transport.hub.Count() >= h.transport.config.maxSessions {
 		http.Error(w, "too many sessions", http.StatusServiceUnavailable)
