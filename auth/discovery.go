@@ -70,17 +70,7 @@ func DiscoverMCPAuth(serverURL string) (*MCPAuthInfo, error) {
 	}
 
 	// Step 4-5: Fetch PRM and extract authorization_servers
-	// (In a full implementation, we'd HTTP GET the PRM URL and parse JSON.
-	// For now, the PRM is served by MountAuth and discovered via the URL.)
-
-	// Step 6: Discover AS metadata
-	if len(info.AuthorizationServers) > 0 {
-		asMeta, err := client.DiscoverAS(info.AuthorizationServers[0])
-		if err != nil {
-			return nil, fmt.Errorf("discover AS: %w", err)
-		}
-		info.ASMetadata = asMeta
-	}
-
-	return info, nil
+	// TODO: HTTP GET the PRM URL, parse JSON, extract authorization_servers.
+	// The PRM endpoint is served by MountAuth — this function needs to fetch it.
+	return nil, fmt.Errorf("DiscoverMCPAuth: PRM fetch not yet implemented (have PRM URL: %s)", info.ResourceMetadataURL)
 }

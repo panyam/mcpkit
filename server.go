@@ -148,9 +148,17 @@ func (s *Server) Dispatch(ctx context.Context, req *Request) *Response {
 // middleware (e.g. tool timeout). Used by transports to dispatch on per-session
 // dispatchers. The claims parameter carries the authenticated identity from CheckAuth.
 func (s *Server) dispatchWith(d *Dispatcher, ctx context.Context, claims *Claims, req *Request) *Response {
+	return s.dispatchWithNotify(d, ctx, claims, d.notifyFunc, req)
+}
+
+// dispatchWithNotify is like dispatchWith but accepts an explicit NotifyFunc.
+// Used by handlePostSSE to pass a request-scoped notify function that writes
+// to the current SSE stream, avoiding races on d.notifyFunc when concurrent
+// SSE-streaming POSTs share the same session dispatcher.
+func (s *Server) dispatchWithNotify(d *Dispatcher, ctx context.Context, claims *Claims, notify NotifyFunc, req *Request) *Response {
 	// Inject session context so tool handlers can send notifications (logging, progress, etc.)
 	// and access authenticated claims.
-	ctx = contextWithSession(ctx, d.notifyFunc, &d.logLevel, claims)
+	ctx = contextWithSession(ctx, notify, &d.logLevel, claims)
 
 	if s.options.toolTimeout > 0 && req.Method == "tools/call" {
 		tctx, cancel := context.WithTimeout(ctx, s.options.toolTimeout)
@@ -333,7 +341,7 @@ type bearerTokenValidator struct {
 func (v *bearerTokenValidator) Validate(r *http.Request) error {
 	auth := r.Header.Get("Authorization")
 	const prefix = "Bearer "
-	if len(auth) < len(prefix) {
+	if !strings.HasPrefix(auth, prefix) {
 		return errUnauthorized
 	}
 	token := auth[len(prefix):]

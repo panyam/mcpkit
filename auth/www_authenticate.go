@@ -58,9 +58,21 @@ func ParseWWWAuthenticate(header string) (resourceMetadata string, scopes []stri
 // extractParam extracts a named parameter value from a WWW-Authenticate header.
 // Handles both quoted ("value") and unquoted (value) parameter formats.
 func extractParam(header, name string) string {
-	// Look for name="value" or name=value
+	// Look for name="value" or name=value, ensuring we match the full parameter
+	// name (not a suffix like "noscope" when searching for "scope").
 	search := name + "="
 	idx := strings.Index(header, search)
+	for idx >= 0 {
+		if idx == 0 || header[idx-1] == ' ' || header[idx-1] == ',' {
+			break // valid match: at start or preceded by delimiter
+		}
+		// False positive — search further
+		next := strings.Index(header[idx+1:], search)
+		if next < 0 {
+			return ""
+		}
+		idx = idx + 1 + next
+	}
 	if idx < 0 {
 		return ""
 	}

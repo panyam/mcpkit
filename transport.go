@@ -15,10 +15,11 @@ import (
 // sseTransport implements the MCP HTTP+SSE transport (2024-11-05 spec).
 // Each SSE connection is an independent MCP session with its own Dispatcher.
 type sseTransport struct {
-	server   *Server
-	hub      *gohttp.SSEHub[SSEData]
-	sessions sync.Map // sessionID → *Dispatcher
-	config   transportConfig
+	server          *Server
+	hub             *gohttp.SSEHub[SSEData]
+	sessions        sync.Map // sessionID → *Dispatcher
+	sessionSubjects sync.Map // sessionID → subject string (for principal binding)
+	config          transportConfig
 }
 
 // newSSETransport creates an SSE transport for the given server.
@@ -120,6 +121,15 @@ func (t *sseTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	dispatcher := dispVal.(*Dispatcher)
 
+	// Verify the POST principal matches the session-opening principal.
+	// Prevents user B (with a valid token) from posting to user A's session.
+	if subj, ok := t.sessionSubjects.Load(sessionID); ok {
+		if claims == nil || claims.Subject != subj.(string) {
+			http.Error(w, "forbidden: session principal mismatch", http.StatusForbidden)
+			return
+		}
+	}
+
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "failed to read body", http.StatusBadRequest)
@@ -205,6 +215,7 @@ func (c *mcpSSEConn) OnStart(w http.ResponseWriter, r *http.Request) error {
 func (c *mcpSSEConn) OnClose() {
 	c.transport.hub.Unregister(c.ConnId())
 	c.transport.sessions.Delete(c.sessionID)
+	c.transport.sessionSubjects.Delete(c.sessionID)
 	c.BaseSSEConn.OnClose()
 }
 
@@ -215,7 +226,8 @@ type mcpSSEHandler struct {
 
 func (h *mcpSSEHandler) Validate(w http.ResponseWriter, r *http.Request) (*mcpSSEConn, bool) {
 	// Auth check — prevent unauthenticated session creation
-	if _, err := h.transport.server.CheckAuth(r); err != nil {
+	claims, err := h.transport.server.CheckAuth(r)
+	if err != nil {
 		writeAuthError(w, err)
 		return nil, false
 	}
@@ -227,6 +239,13 @@ func (h *mcpSSEHandler) Validate(w http.ResponseWriter, r *http.Request) (*mcpSS
 	}
 
 	sessionID := generateSessionID()
+
+	// Bind the authenticated principal to this session so POST /message
+	// can verify the same principal is making requests.
+	if claims != nil && claims.Subject != "" {
+		h.transport.sessionSubjects.Store(sessionID, claims.Subject)
+	}
+
 	conn := &mcpSSEConn{
 		BaseSSEConn: gohttp.BaseSSEConn[SSEData]{
 			Codec:     &sseDataCodec{},
