@@ -75,10 +75,11 @@ Client                    Transport Layer              CheckAuth            JWTV
   │                           │──────────────────────────>│                        │                           │
   │                           │                           │  Validate(r)           │                           │
   │                           │                           │───────────────────────>│                           │
-  │                           │                           │                        │  APIAuth.ValidateAccessToken(jwt)
+  │                           │                           │                        │  jwt.Parse(jwt, jwksKeyFunc)
   │                           │                           │                        │──────────────────────────>│
-  │                           │                           │                        │  ✓ sig, iss, aud, exp     │
+  │                           │                           │                        │  JWKS kid lookup → verify │
   │                           │                           │                        │<──────────────────────────│
+  │                           │                           │                        │  ✓ sig, iss, aud, exp     │
   │                           │                           │                        │  check RequiredScopes     │
   │                           │                           │                        │  (core.ContainsAllScopes) │
   │                           │                           │  nil (success)         │                           │
@@ -333,7 +334,7 @@ type AuthError struct {
 
 | Type | Implements | Wraps (oneauth) |
 |------|-----------|----------------|
-| `JWTValidator` | `AuthValidator` + `ClaimsProvider` | `apiauth.APIAuth.ValidateAccessToken` |
+| `JWTValidator` | `AuthValidator` + `ClaimsProvider` | `jwt.Parse` with JWKS keyfunc (`JWKSKeyStore.GetKeyByKid`) |
 | `OAuthTokenSource` | `TokenSource` | `client.LoginWithBrowser` + `client.DiscoverAS` |
 | `ClientCredentialsSource` | `TokenSource` | `client.ClientCredentialsToken` |
 | `AuthExtension` | `ExtensionProvider` | (none — declares MCP auth extension metadata) |
@@ -412,7 +413,7 @@ Source: https://modelcontextprotocol.io/specification/2025-11-25/basic/authoriza
 | S2 | PRM document MUST include `authorization_servers` field | Phase 2 | Via `AuthConfig.AuthorizationServers` |
 | S3 | Implement at least one PRM discovery: WWW-Authenticate header OR well-known URI | Phase 2 | Both: `JWTValidator` returns WWW-Authenticate, `MountAuth` serves well-known |
 | S4 | SHOULD include `scope` in WWW-Authenticate header | Phase 2 | `WWWAuth401(url, scopes...)` |
-| S5 | Validate access tokens per OAuth 2.1 Section 5.2 | Phase 2 | `JWTValidator` wraps `apiauth.ValidateAccessToken` |
+| S5 | Validate access tokens per OAuth 2.1 Section 5.2 | Done | `JWTValidator` uses `jwt.Parse` with JWKS keyfunc for kid-based key lookup |
 | S6 | MUST validate tokens were issued specifically for this server (audience per RFC 8707) | Phase 2 | oneauth `JWTAudience` field + `matchesAudience` (array-aware) |
 | S7 | Invalid/expired tokens → HTTP 401 | Done | `CheckAuth` + `writeAuthError` |
 | S8 | MUST NOT accept or transit tokens from other issuers | Phase 2 | Issuer check in `JWTValidator` |
@@ -464,7 +465,7 @@ Source: https://modelcontextprotocol.io/specification/2025-11-25/basic/authoriza
 
 | mcpkit/auth component | oneauth function | oneauth file |
 |---|---|---|
-| JWTValidator.Validate | `apiauth.APIAuth.ValidateAccessToken` | `apiauth/auth.go` |
+| JWTValidator.Validate | `jwt.Parse` + `keys.JWKSKeyStore.GetKeyByKid` | `keys/jwks_keystore.go` |
 | JWTValidator (keys) | `keys.NewJWKSKeyStore` | `keys/jwks_keystore.go` |
 | MountAuth (PRM) | `apiauth.NewProtectedResourceHandler` | `apiauth/protected_resource.go` |
 | MountAuth (AS metadata) | `apiauth.NewASMetadataHandler` | `apiauth/as_metadata.go` |
@@ -498,4 +499,31 @@ mcpkit/
     scopes.go               # RequireScope
     token_source.go         # OAuthTokenSource, ClientCredentialsSource
     discovery.go            # DiscoverMCPAuth, MCPAuthInfo
+  tests/
+    e2e/                    # E2E auth tests (separate Go module)
+      testenv_test.go       # TestEnv: oneauth TestAuthServer + mcpkit MCP server
+      jwt_validation_test.go # 8 tests: valid, expired, wrong iss/aud, tampered
+      transport_auth_test.go # 5 tests: Streamable + SSE auth enforcement
+      scope_test.go         # 4 tests: RequireScope allowed/denied
+      prm_test.go           # 3 tests: PRM well-known endpoints
+      www_authenticate_test.go # 3 tests: 401/403 header format
+    keycloak/               # Keycloak interop tests (separate Go module)
+      realm.json            # mcpkit-test realm (RS256, 2 clients, test user)
+      interop_test.go       # 7 tests: Keycloak JWT → mcpkit JWTValidator
 ```
+
+## Testing
+
+Auth is tested at three levels:
+
+1. **Unit tests** (`auth_test.go`, `auth/www_authenticate_test.go`) — mock validators, claims propagation, header format
+2. **E2E tests** (`tests/e2e/`) — real oneauth AS (in-process via `testutil.TestAuthServer`) + real mcpkit MCP server with JWTValidator. RS256 JWTs validated through JWKS. 22 tests covering JWT validation, transport auth, scopes, PRM, WWW-Authenticate.
+3. **Keycloak interop** (`tests/keycloak/`) — real Keycloak instance (Docker) issuing tokens validated by mcpkit. 7 tests. Skips gracefully without Docker.
+
+### Scope format compatibility
+
+JWTValidator reads scopes from both formats:
+- `"scopes": ["read", "write"]` — oneauth array format
+- `"scope": "read write"` — Keycloak/RFC 6749 space-delimited string
+
+This was discovered during Keycloak interop testing (oneauth#68).
