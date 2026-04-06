@@ -3,13 +3,13 @@ module github.com/panyam/mcpkit/auth
 go 1.26.1
 
 require (
+	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/panyam/mcpkit v0.0.0
-	github.com/panyam/oneauth v0.0.0
+	github.com/panyam/oneauth v0.0.64
 )
 
 require (
 	github.com/fernet/fernet-go v0.0.0-20240119011108-303da6aec611 // indirect
-	github.com/golang-jwt/jwt/v5 v5.2.2 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/panyam/gocurrent v0.0.13 // indirect
 	github.com/panyam/goutils v0.1.8 // indirect
@@ -23,7 +23,4 @@ require (
 	google.golang.org/protobuf v1.36.10 // indirect
 )
 
-replace (
-	github.com/panyam/mcpkit => ../
-	github.com/panyam/oneauth => ../../../oneauth/main
-)
+replace github.com/panyam/mcpkit => ../

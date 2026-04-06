@@ -1,0 +1,54 @@
+name: Keycloak Interop
+
+on:
+  workflow_dispatch:
+
+jobs:
+  keycloak:
+    runs-on: ubuntu-latest
+    services:
+      keycloak:
+        image: quay.io/keycloak/keycloak:26.0
+        ports:
+          - 8180:8080
+        env:
+          KC_BOOTSTRAP_ADMIN_USERNAME: admin
+          KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+        options: >-
+          --health-cmd "curl -sf http://localhost:8080/health/ready || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Import realm via Admin REST API
+        run: |
+          TOKEN=$(curl -sf -X POST http://localhost:8180/realms/master/protocol/openid-connect/token \
+            -d "grant_type=client_credentials&client_id=admin-cli" \
+            -d "username=admin&password=admin&grant_type=password" \
+            | jq -r '.access_token')
+          curl -sf -X POST http://localhost:8180/admin/realms \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d @tests/keycloak/realm.json
+
+      - name: Wait for realm
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8180/realms/mcpkit-test > /dev/null 2>&1; then
+              echo "Realm ready"
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Run Keycloak interop tests
+        run: cd tests/keycloak && go test ./... -v -count=1 -timeout 120s
+        env:
+          KEYCLOAK_URL: http://localhost:8180
