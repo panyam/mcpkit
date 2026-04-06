@@ -34,9 +34,23 @@ test-auth-e2e: ## Run E2E auth tests (in-process oneauth AS, no Docker)
 test-auth-keycloak: ## Run Keycloak auth interop tests (requires Docker, run upkcl first)
 	cd tests/keycloak && go test ./... -count=1 -timeout 120s -v
 
-testall: test test-race test-auth test-auth-e2e testconf testconfauth ## Run all tests (no Docker)
+testall: test test-race test-auth test-auth-e2e testconf testconfauth test-auth-keycloak-auto ## Run ALL tests (starts Keycloak if needed)
 
-test-all: testall test-auth-keycloak ## Run ALL tests including Keycloak (needs Docker)
+test-auth-keycloak-auto: ## Start Keycloak if needed, run interop tests, stop after
+	@if ! curl -sf http://localhost:$(KC_PORT)/realms/$(KC_REALM) > /dev/null 2>&1; then \
+		echo "Starting Keycloak for interop tests..."; \
+		$(MAKE) upkcl; \
+		echo "Waiting for Keycloak realm..."; \
+		for i in $$(seq 1 60); do \
+			curl -sf http://localhost:$(KC_PORT)/realms/$(KC_REALM) > /dev/null 2>&1 && break; \
+			sleep 2; \
+		done; \
+		KC_STARTED=1; \
+	fi; \
+	cd tests/keycloak && go test ./... -count=1 -timeout 120s -v; \
+	EXIT=$$?; \
+	if [ "$${KC_STARTED:-}" = "1" ]; then $(MAKE) downkcl; fi; \
+	exit $$EXIT
 
 test-report: ## Run all tests with verbose output (includes Keycloak — skips if not running)
 	@echo "=== Root module ==="
@@ -60,6 +74,7 @@ test-report: ## Run all tests with verbose output (includes Keycloak — skips i
 KC_IMAGE := quay.io/keycloak/keycloak:26.0
 KC_PORT := 8180
 KC_CONTAINER := mcpkit-keycloak
+KC_REALM := mcpkit-test
 
 upkcl: ## Start Keycloak container for interop tests
 	@docker rm -f $(KC_CONTAINER) 2>/dev/null || true
@@ -154,5 +169,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-race test-v test-auth test-auth-e2e test-auth-keycloak testall test-all test-report smoke testconf testconfauth vet lint vulncheck seccheck secrets audit ci ci-full serve serve-streamable serve-both tidy setup-tools setup-hooks setup upkcl downkcl kcllogs help
+.PHONY: build test test-race test-v test-auth test-auth-e2e test-auth-keycloak test-auth-keycloak-auto testall test-report smoke testconf testconfauth vet lint vulncheck seccheck secrets audit ci ci-full serve serve-streamable serve-both tidy setup-tools setup-hooks setup upkcl downkcl kcllogs help
 .DEFAULT_GOAL := help
