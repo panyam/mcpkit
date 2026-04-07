@@ -32,5 +32,5 @@ require (
 
 replace (
 	github.com/panyam/mcpkit => ../..
-	github.com/panyam/mcpkit/ext/auth => ../../auth
+	github.com/panyam/mcpkit/ext/auth => ../../ext/auth
 )
