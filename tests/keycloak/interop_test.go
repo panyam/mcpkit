@@ -1,6 +1,6 @@
 package keycloak_test
 
-// Keycloak interop tests for mcpkit. These prove that mcpkit's JWTValidator
+// Keycloak interop tests for core. These prove that mcpkit's JWTValidator
 // correctly validates tokens issued by a real Keycloak instance, not just
 // in-process oneauth tokens. This is the highest-confidence auth validation:
 // real IdP → real JWKS → real JWT verification → real MCP tool call.
@@ -20,7 +20,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/panyam/mcpkit"
+	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/server"
 	"github.com/panyam/oneauth/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,10 +36,10 @@ func TestKeycloak_MCPServer_ValidToken(t *testing.T) {
 
 	tok := getClientCredentialsToken(t, env.OIDC.TokenEndpoint, scopeToolsRead, scopeToolsCall)
 
-	client := mcpkit.NewClient(
+	client := core.NewClient(
 		env.MCPServer.URL+"/mcp",
-		mcpkit.ClientInfo{Name: "keycloak-test", Version: "0.1.0"},
-		mcpkit.WithClientBearerToken(tok.AccessToken),
+		core.ClientInfo{Name: "keycloak-test", Version: "0.1.0"},
+		core.WithClientBearerToken(tok.AccessToken),
 	)
 	require.NoError(t, client.Connect())
 	defer client.Close()
@@ -80,10 +81,10 @@ func TestKeycloak_MCPServer_ScopeAllowed(t *testing.T) {
 
 	tok := getClientCredentialsToken(t, env.OIDC.TokenEndpoint, scopeToolsRead, scopeToolsCall)
 
-	client := mcpkit.NewClient(
+	client := core.NewClient(
 		env.MCPServer.URL+"/mcp",
-		mcpkit.ClientInfo{Name: "keycloak-test", Version: "0.1.0"},
-		mcpkit.WithClientBearerToken(tok.AccessToken),
+		core.ClientInfo{Name: "keycloak-test", Version: "0.1.0"},
+		core.WithClientBearerToken(tok.AccessToken),
 	)
 	require.NoError(t, client.Connect())
 	defer client.Close()
@@ -103,10 +104,10 @@ func TestKeycloak_MCPServer_ScopeDenied(t *testing.T) {
 	// Token with only tools-read, NOT tools-call
 	tok := getClientCredentialsToken(t, env.OIDC.TokenEndpoint, scopeToolsRead)
 
-	client := mcpkit.NewClient(
+	client := core.NewClient(
 		env.MCPServer.URL+"/mcp",
-		mcpkit.ClientInfo{Name: "keycloak-test", Version: "0.1.0"},
-		mcpkit.WithClientBearerToken(tok.AccessToken),
+		core.ClientInfo{Name: "keycloak-test", Version: "0.1.0"},
+		core.WithClientBearerToken(tok.AccessToken),
 	)
 	require.NoError(t, client.Connect())
 	defer client.Close()
@@ -172,10 +173,10 @@ func TestKeycloak_MCPServer_PasswordGrant(t *testing.T) {
 	claims := testutil.ParseJWTClaims(t, tok.AccessToken)
 	assert.NotEmpty(t, claims["sub"], "password grant token should have sub claim")
 
-	client := mcpkit.NewClient(
+	client := core.NewClient(
 		env.MCPServer.URL+"/mcp",
-		mcpkit.ClientInfo{Name: "keycloak-test", Version: "0.1.0"},
-		mcpkit.WithClientBearerToken(tok.AccessToken),
+		core.ClientInfo{Name: "keycloak-test", Version: "0.1.0"},
+		core.WithClientBearerToken(tok.AccessToken),
 	)
 	require.NoError(t, client.Connect())
 	defer client.Close()

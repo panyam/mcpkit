@@ -1,4 +1,4 @@
-package mcpkit
+package client
 
 // Client reconnection tests. Verify that transient transport failures trigger
 // automatic reconnection with exponential backoff, and that terminal errors

@@ -4,13 +4,13 @@ go 1.26.1
 
 replace (
 	github.com/panyam/mcpkit => ../..
-	github.com/panyam/mcpkit/auth => ../../auth
+	github.com/panyam/mcpkit/ext/auth => ../../auth
 )
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/panyam/mcpkit v0.0.0
-	github.com/panyam/mcpkit/auth v0.0.0
+	github.com/panyam/mcpkit/ext/auth v0.0.0
 	github.com/panyam/oneauth v0.0.64
 	github.com/stretchr/testify v1.11.1
 )

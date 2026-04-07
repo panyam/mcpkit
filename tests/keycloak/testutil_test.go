@@ -18,8 +18,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/panyam/mcpkit"
-	"github.com/panyam/mcpkit/auth"
+	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/server"
+	"github.com/panyam/mcpkit/ext/auth"
 	"github.com/panyam/oneauth/testutil"
 )
 
@@ -126,20 +127,20 @@ func NewMCPTestEnv(t *testing.T) *MCPTestEnv {
 	validator.Start()
 	t.Cleanup(validator.Stop)
 
-	srv := mcpkit.NewServer(
-		mcpkit.ServerInfo{Name: "mcp-keycloak-test", Version: "0.1.0"},
-		mcpkit.WithAuth(validator),
+	srv := server.NewServer(
+		core.ServerInfo{Name: "mcp-keycloak-test", Version: "0.1.0"},
+		server.WithAuth(validator),
 	)
 
 	// Echo tool — returns claims info, no scope required
 	srv.RegisterTool(
-		mcpkit.ToolDef{
+		core.ToolDef{
 			Name:        "echo",
 			Description: "Echoes input and reports claims. No scope required.",
 			InputSchema: json.RawMessage(`{"type":"object","properties":{"msg":{"type":"string"}}}`),
 		},
-		func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
-			claims := mcpkit.AuthClaims(ctx)
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			claims := core.AuthClaims(ctx)
 			var args map[string]any
 			json.Unmarshal(req.Arguments, &args)
 			result := map[string]any{"msg": args["msg"]}
@@ -148,28 +149,28 @@ func NewMCPTestEnv(t *testing.T) *MCPTestEnv {
 				result["scopes"] = claims.Scopes
 			}
 			raw, _ := json.Marshal(result)
-			return mcpkit.TextResult(string(raw)), nil
+			return core.TextResult(string(raw)), nil
 		},
 	)
 
 	// Scoped tool — requires tools-call scope
 	srv.RegisterTool(
-		mcpkit.ToolDef{
+		core.ToolDef{
 			Name:        "scoped-tool",
 			Description: "Requires tools-call scope.",
 			InputSchema: json.RawMessage(`{"type":"object"}`),
 		},
-		func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
 			if err := auth.RequireScope(ctx, scopeToolsCall); err != nil {
-				return mcpkit.TextResult("error: " + err.Error()), nil
+				return core.TextResult("error: " + err.Error()), nil
 			}
-			return mcpkit.TextResult("ok"), nil
+			return core.TextResult("ok"), nil
 		},
 	)
 
 	// Wire mux
 	mux := http.NewServeMux()
-	mux.Handle("/mcp", srv.Handler(mcpkit.WithStreamableHTTP(true)))
+	mux.Handle("/mcp", srv.Handler(server.WithStreamableHTTP(true)))
 	auth.MountAuth(mux, auth.AuthConfig{
 		ResourceURI:          ts.URL,
 		AuthorizationServers: []string{cfg.Issuer},

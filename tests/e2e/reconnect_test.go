@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/panyam/mcpkit"
+	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/server"
+	"github.com/panyam/mcpkit/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -30,12 +32,12 @@ func TestE2E_Reconnect_WithTokenRefresh(t *testing.T) {
 		tokens: []string{expiredToken, validToken},
 	}
 
-	client := mcpkit.NewClient(
+	client := client.NewClient(
 		env.MCPServerURL+"/mcp",
-		mcpkit.ClientInfo{Name: "reconnect-test", Version: "0.1.0"},
-		mcpkit.WithTokenSource(ts),
-		mcpkit.WithMaxRetries(2),
-		mcpkit.WithReconnectBackoff(10*time.Millisecond),
+		core.ClientInfo{Name: "reconnect-test", Version: "0.1.0"},
+		client.WithTokenSource(ts),
+		client.WithMaxRetries(2),
+		client.WithReconnectBackoff(10*time.Millisecond),
 	)
 
 	// Connect should succeed: 401 on expired token → refresh → retry succeeds
@@ -57,12 +59,12 @@ func TestE2E_Reconnect_TransientErrorClassification(t *testing.T) {
 	// Token with wrong audience — this is a terminal auth error, not transient
 	wrongAudToken := env.MintTokenWithAudience(t, "wrong-aud-user", "https://wrong.example.com")
 
-	client := mcpkit.NewClient(
+	client := client.NewClient(
 		env.MCPServerURL+"/mcp",
-		mcpkit.ClientInfo{Name: "classify-test", Version: "0.1.0"},
-		mcpkit.WithClientBearerToken(wrongAudToken),
-		mcpkit.WithMaxRetries(3),
-		mcpkit.WithReconnectBackoff(10*time.Millisecond),
+		core.ClientInfo{Name: "classify-test", Version: "0.1.0"},
+		client.WithClientBearerToken(wrongAudToken),
+		client.WithMaxRetries(3),
+		client.WithReconnectBackoff(10*time.Millisecond),
 	)
 
 	// Should fail fast (auth error, not transient) — no reconnection attempts
@@ -99,12 +101,12 @@ func TestE2E_Reconnect_RecentlyExpiredJWT(t *testing.T) {
 		tokens: []string{shortLivedToken, validToken},
 	}
 
-	client := mcpkit.NewClient(
+	client := client.NewClient(
 		env.MCPServerURL+"/mcp",
-		mcpkit.ClientInfo{Name: "expiry-test", Version: "0.1.0"},
-		mcpkit.WithTokenSource(ts),
-		mcpkit.WithMaxRetries(2),
-		mcpkit.WithReconnectBackoff(10*time.Millisecond),
+		core.ClientInfo{Name: "expiry-test", Version: "0.1.0"},
+		client.WithTokenSource(ts),
+		client.WithMaxRetries(2),
+		client.WithReconnectBackoff(10*time.Millisecond),
 	)
 
 	// Connect with the short-lived token (still valid)
