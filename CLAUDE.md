@@ -51,6 +51,10 @@ make downkcl          # Stop Keycloak container
 | `client_reconnect.go` | Client reconnection: WithMaxRetries, WithReconnectBackoff, isTransientError |
 | `client_memory.go` | In-memory transport: WithInMemoryServer, no HTTP overhead |
 | `www_authenticate.go` | ParseWWWAuthenticate in core (client transport needs it, core must not depend on auth/) |
+| `auth/discovery.go` | DiscoverMCPAuth: PRM fetch, AS metadata discovery, scope selection (C1-C5, C18) |
+| `auth/token_source.go` | OAuthTokenSource (full MCP OAuth flow), ClientCredentialsSource, ValidatePKCES256, ValidateCIMDURL |
+| `auth/dcr.go` | RegisterClient: client-side RFC 7591 Dynamic Client Registration |
+| `auth/server_auth.go` | MountAuth: serves PRM endpoints (/.well-known/oauth-protected-resource) |
 | `docs/AUTH_DESIGN.md` | MCP Auth architecture, sequence diagrams, extension system, oneauth integration map |
 | `testutil/testclient.go` | TestClient: wraps Client + httptest.Server + testing.T for e2e tests |
 | `cmd/testserver/` | Test server with conformance tools, resources, and prompts |
@@ -89,6 +93,10 @@ make downkcl          # Stop Keycloak container
 - **SSE client background reader**: The SSE client transport uses a background goroutine (started in `connect()`) that demuxes all SSE events — responses to pending calls by ID, server requests to handler. The old synchronous `call()` → `readSSEEvent()` pattern is replaced with `pendingCalls sync.Map` + channel per request.
 - **Streamable HTTP client handles server requests inline**: During `readSSEResponse`, server requests (events with `method` field) are handled and responses POSTed back before continuing to read the final tool result. No background goroutine needed — server requests arrive on the same SSE stream as the tool response.
 - **In-memory transport bidirectional support**: `memoryTransport.connect()` wires `dispatcher.pushRequest` to call `client.handleServerRequest` directly. Server-to-client requests are dispatched synchronously in-process — no channels, no HTTP.
+- **`DiscoverMCPAuth`** performs the full MCP OAuth discovery chain: probe server → 401 → parse WWW-Authenticate → fetch PRM (path-based then root fallback) → extract authorization_servers → discover AS metadata via oneauth `client.DiscoverAS`. Returns `MCPAuthInfo` with PRM, AS metadata, and scopes. Accepts `WithHTTPClient` option for testability.
+- **`OAuthTokenSource` discovery flow**: Calls `DiscoverMCPAuth` on first `Token()` call, caches result. Passes discovered endpoints explicitly to `LoginWithBrowser` — bypasses oneauth's internal re-discovery which would incorrectly treat the MCP server URL as an OAuth issuer. PKCE S256 pre-flight validation (C11/C12) and HTTPS enforcement (X1) run before login.
+- **Client registration priority (C6)**: `OAuthTokenSource.resolveClientID()` follows: pre-registered `ClientID` → CIMD `ClientMetadataURL` → DCR (if `EnableDCR` and AS has `registration_endpoint`) → error. CIMD URL validated per C8 (https, has path). DCR via `RegisterClient()` in `auth/dcr.go`.
+- **Well-known PRM URL construction**: `scheme://host/.well-known/oauth-protected-resource` + path (NOT `serverURL + "/.well-known/..."`). E.g., for `http://host/mcp` → `http://host/.well-known/oauth-protected-resource/mcp`.
 - **oneauth/testutil.TestAuthServer** provides the in-process auth server for E2E tests. It generates RSA keys, serves JWKS, and mints tokens. Set audience after creation via `AS.APIAuth.JWTAudience` (the `WithAudience` option is set at creation time, before server URL is known).
 
 ## Architecture
@@ -107,4 +115,3 @@ See `docs/ARCHITECTURE.md` for transport design, type definitions, and protocol 
 
 - stdio transport (#3)
 - Streamable HTTP GET SSE stream (server-initiated notifications without a request)
-- `DiscoverMCPAuth` PRM fetch — steps 4-5 return error "not yet implemented"

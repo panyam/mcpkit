@@ -374,39 +374,39 @@ Source: https://modelcontextprotocol.io/specification/2025-11-25/basic/authoriza
 
 | # | Requirement | Status | Notes |
 |---|-------------|--------|-------|
-| C1 | MUST support PRM discovery via both WWW-Authenticate header and well-known URI | Phase 3E | `DiscoverMCPAuth` |
-| C2 | MUST use resource_metadata from WWW-Authenticate when present, fallback to well-known | Phase 3E | `ParseWWWAuthenticate` + well-known fallback |
-| C3 | Well-known fallback: try path-based first, then root | Phase 3E | Implemented in `DiscoverMCPAuth` |
-| C4 | MUST support both OAuth AS metadata (RFC 8414) and OIDC discovery | Phase 3E | oneauth `client.DiscoverAS` with full fallback chain |
-| C5 | AS metadata fallback chain (3 URLs for path, 2 for no-path) | Phase 3E | oneauth `client.DiscoverAS` |
-| C6 | Client registration priority: pre-registered > CIMD > DCR > prompt user | Phase 3E | `OAuthTokenSource` config |
-| C7 | SHOULD support Client ID Metadata Documents | Phase 3E | `OAuthTokenSource.ClientMetadataURL` |
-| C8 | CIMD: client_id URL MUST use https, contain path, match document URL | Phase 3E | Application provides valid CIMD URL |
-| C9 | MAY support Dynamic Client Registration (RFC 7591) | Phase 3E | Via oneauth `admin.DCRHandler` (server) — client-side DCR call TBD |
-| C10 | MUST implement PKCE with S256 | Phase 3C | oneauth `LoginWithBrowser` uses S256 PKCE |
-| C11 | MUST verify PKCE support in AS metadata (`code_challenge_methods_supported`) | Phase 3C | Check in `OAuthTokenSource` before proceeding |
-| C12 | If `code_challenge_methods_supported` absent → MUST refuse to proceed | Phase 3C | Fail-fast in `OAuthTokenSource` |
-| C13 | MUST include `resource` parameter in both auth and token requests (RFC 8707) | Phase 3C | Pass through `BrowserLoginConfig` + token exchange |
-| C14 | MUST send `resource` parameter regardless of AS support | Phase 3C | Always include |
+| C1 | MUST support PRM discovery via both WWW-Authenticate header and well-known URI | Done | `DiscoverMCPAuth` — probes server, parses header, falls back to well-known |
+| C2 | MUST use resource_metadata from WWW-Authenticate when present, fallback to well-known | Done | `DiscoverMCPAuth` step 2-3 |
+| C3 | Well-known fallback: try path-based first, then root | Done | `DiscoverMCPAuth` — `/.well-known/oauth-protected-resource/<path>` then root |
+| C4 | MUST support both OAuth AS metadata (RFC 8414) and OIDC discovery | Done | oneauth `client.DiscoverAS` with full fallback chain |
+| C5 | AS metadata fallback chain (3 URLs for path, 2 for no-path) | Done | oneauth `client.DiscoverAS` |
+| C6 | Client registration priority: pre-registered > CIMD > DCR > prompt user | Done | `OAuthTokenSource.resolveClientID()` |
+| C7 | SHOULD support Client ID Metadata Documents | Done | `OAuthTokenSource.ClientMetadataURL` + `ValidateCIMDURL` |
+| C8 | CIMD: client_id URL MUST use https, contain path, match document URL | Done | `ValidateCIMDURL` in `token_source.go` |
+| C9 | MAY support Dynamic Client Registration (RFC 7591) | Done | `RegisterClient` in `auth/dcr.go` + `OAuthTokenSource.EnableDCR` |
+| C10 | MUST implement PKCE with S256 | Done | oneauth `LoginWithBrowser` uses S256 PKCE |
+| C11 | MUST verify PKCE support in AS metadata (`code_challenge_methods_supported`) | Done | `ValidatePKCES256` in `token_source.go` |
+| C12 | If `code_challenge_methods_supported` absent → MUST refuse to proceed | Done | `ValidatePKCES256` returns error |
+| C13 | MUST include `resource` parameter in both auth and token requests (RFC 8707) | Done | `BrowserLoginConfig.Resource = ServerURL` |
+| C14 | MUST send `resource` parameter regardless of AS support | Done | Always set in `OAuthTokenSource.Token()` |
 | C15 | MUST use `Authorization: Bearer` header (not query string) | Done | `setAuthHeader` in client transports |
 | C16 | Auth MUST be included in every HTTP request | Done | Both client transports inject on every call/notify |
-| C17 | MUST NOT send tokens to servers other than the intended audience | Phase 3C | Token bound to specific `OAuthTokenSource.ServerURL` |
-| C18 | Scope selection: use WWW-Authenticate scope > scopes_supported > omit | Phase 3E | `DiscoverMCPAuth` returns scopes with priority |
+| C17 | MUST NOT send tokens to servers other than the intended audience | Done | Token bound to specific `OAuthTokenSource.ServerURL` |
+| C18 | Scope selection: use WWW-Authenticate scope > scopes_supported > omit | Done | `DiscoverMCPAuth` scope priority logic |
 | C19 | SHOULD implement step-up auth (re-auth on 403 insufficient_scope) | Done | `doWithAuthRetry` + `ScopeAwareTokenSource.TokenForScopes` in client transport |
 | C20 | SHOULD implement retry limits for scope step-up | Done | Max 1 retry per status code (401 + 403) in `doWithAuthRetry` |
-| C21 | SHOULD use and verify state parameters | Phase 3C | oneauth `LoginWithBrowser` generates random state |
-| C22 | MUST have redirect URIs registered with AS | Phase 3C | Via CIMD or DCR |
-| C23 | Secure token storage | Phase 3C | oneauth `CredentialStore` |
+| C21 | SHOULD use and verify state parameters | Done | oneauth `LoginWithBrowser` generates random state |
+| C22 | MUST have redirect URIs registered with AS | Done | Via CIMD or DCR |
+| C23 | Secure token storage | Done | oneauth `CredentialStore` |
 
 ### Security requirements
 
 | # | Requirement | Status | Notes |
 |---|-------------|--------|-------|
-| X1 | All AS endpoints MUST be HTTPS | Phase 3C | Validated in `OAuthTokenSource` |
-| X2 | Redirect URIs MUST be localhost or HTTPS | Phase 3C | oneauth `LoginWithBrowser` uses localhost |
-| X3 | Refresh token rotation for public clients | Phase 3C | AS responsibility, client stores new tokens |
+| X1 | All AS endpoints MUST be HTTPS | Done | `validateHTTPS` in `token_source.go` (localhost exempt) |
+| X2 | Redirect URIs MUST be localhost or HTTPS | Done | oneauth `LoginWithBrowser` uses localhost |
+| X3 | Refresh token rotation for public clients | Done | AS responsibility, client stores new tokens via `CredentialStore` |
 | X4 | Short-lived access tokens | N/A | AS configuration |
-| X5 | Secure token storage | Phase 3C | oneauth `CredentialStore` (filesystem) |
+| X5 | Secure token storage | Done | oneauth `CredentialStore` (filesystem) |
 
 ## oneauth Integration Map
 
