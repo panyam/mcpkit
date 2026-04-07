@@ -212,6 +212,8 @@ Clients can subscribe to resource URIs and receive `notifications/resources/upda
 
 **Why store `*Dispatcher` not `NotifyFunc`:** The `notifyFunc` on a Dispatcher can change — Streamable HTTP wires it when a GET SSE stream opens. Storing the Dispatcher pointer and reading `d.notifyFunc` at notification time handles this correctly.
 
+**Session cleanup:** All per-session teardown is centralized in `Dispatcher.Close()`. Transports call it in their disconnect path (SSE `OnClose`, Streamable `handleDelete`/`closeSession`, memory `close`). New per-session state should add its cleanup to `Close()` — not to each transport individually.
+
 ## Tool Error Semantics
 
 - **Handler returns `error`** → JSON-RPC success with `isError: true` in tool result
