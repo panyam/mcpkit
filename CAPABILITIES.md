@@ -12,7 +12,7 @@
 - mcp-dual-transport: Both SSE and Streamable HTTP simultaneously via WithSSE/WithStreamableHTTP options
 - mcp-graceful-shutdown: ListenAndServeGraceful with SSE hub drain on SIGTERM
 - mcp-auth-middleware: Bearer token (constant-time), Claims propagation via ClaimsProvider, JWT/OIDC via oneauth sub-module
-- mcp-auth-submodule: mcpkit/auth — JWTValidator, MountAuth (PRM), WWW-Authenticate builders, RequireScope, OAuthTokenSource, ClientCredentialsSource
+- mcp-auth-submodule: mcpkit/auth — JWTValidator, MountAuth (PRM), WWW-Authenticate builders, RequireScope, OAuthTokenSource, ClientCredentialsSource, DiscoverMCPAuth, RegisterClient (DCR), ValidateCIMDURL
 - mcp-extensions: Extension/Stability/ExtensionProvider system — sub-modules declare spec version + stability in initialize
 - mcp-annotations: Annotations field on ToolDef/ResourceDef/PromptDef + RegisterExperimental* helpers
 - mcp-client-auth: WithClientBearerToken, WithTokenSource — auth header injection on all client requests
