@@ -6,7 +6,7 @@
 // mcpkit's JWTValidator via JWKS.
 //
 // No external dependencies — everything runs in-process. Use "go test ./..."
-// from this directory, or "make test-auth-e2e" from the project root.
+// from this directory, or "make test-e2e" from the project root.
 package e2e_test
 
 import (
