@@ -24,6 +24,18 @@ type ClientCapabilities struct {
 	Sampling    *struct{} `json:"sampling,omitempty"`
 	Roots       *RootsCap `json:"roots,omitempty"`
 	Elicitation *struct{} `json:"elicitation,omitempty"`
+
+	// Extensions maps extension IDs to the client's capability declaration
+	// for that extension. Sent during initialize to advertise extension support.
+	Extensions map[string]ClientExtensionCap `json:"extensions,omitempty"`
+}
+
+// ClientExtensionCap describes a client's support for a specific extension.
+// The contents are extension-specific; MCP Apps uses MIMETypes to declare
+// which app content types the client can render.
+type ClientExtensionCap struct {
+	// MIMETypes lists content types the client supports for this extension.
+	MIMETypes []string `json:"mimeTypes,omitempty"`
 }
 
 // RootsCap describes the client's roots capability.
