@@ -78,3 +78,22 @@ func NewErrorResponseWithData(id json.RawMessage, code int, message string, data
 		Error:   &Error{Code: code, Message: message, Data: data},
 	}
 }
+
+// isJSONRPCResponse detects whether raw JSON is a JSON-RPC response (not a request).
+// A response has an "id" field and either "result" or "error", but no "method" field.
+// Used by transports to route incoming client messages that are responses to
+// server-to-client requests (sampling/createMessage, elicitation/create).
+func isJSONRPCResponse(data []byte) bool {
+	var probe struct {
+		Method string          `json:"method"`
+		ID     json.RawMessage `json:"id"`
+		Result json.RawMessage `json:"result"`
+		Error  json.RawMessage `json:"error"`
+	}
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return false
+	}
+	// Has ID, no method, and has result or error → it's a response.
+	return probe.Method == "" && probe.ID != nil && string(probe.ID) != "null" &&
+		(probe.Result != nil || probe.Error != nil)
+}

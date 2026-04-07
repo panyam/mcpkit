@@ -100,6 +100,29 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Detect if the incoming message is a JSON-RPC response (from the client
+	// answering a server-to-client request like sampling/createMessage).
+	// Must check before parsing as Request since responses have no "method" field.
+	if isJSONRPCResponse(body) {
+		sessionID := r.Header.Get(mcpSessionIDHeader)
+		if sessionID == "" {
+			http.Error(w, "missing "+mcpSessionIDHeader+" header", http.StatusBadRequest)
+			return
+		}
+		dispVal, ok := t.sessions.Load(sessionID)
+		if !ok {
+			http.Error(w, "session not found", http.StatusNotFound)
+			return
+		}
+		dispatcher := dispVal.(*Dispatcher)
+		var resp Response
+		if err := json.Unmarshal(body, &resp); err == nil {
+			dispatcher.RouteResponse(&resp)
+		}
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+
 	var req Request
 	if err := json.Unmarshal(body, &req); err != nil {
 		// Parse error → JSON-RPC error in response body
@@ -223,7 +246,7 @@ func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Reque
 		flusher.Flush()
 	}
 
-	// Build a request-scoped notifyFunc that writes to this SSE stream.
+	// Build request-scoped notifyFunc and requestFunc that write to this SSE stream.
 	// Passed through context (not mutating d.notifyFunc) to avoid races
 	// when concurrent SSE-streaming POSTs share the same session dispatcher.
 	requestNotify := NotifyFunc(func(method string, params any) {
@@ -234,9 +257,15 @@ func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Reque
 		writeSSE(raw)
 	})
 
-	// Dispatch with the request-scoped notify — contextWithSession will use it
-	// instead of d.notifyFunc.
-	resp := t.server.dispatchWithNotify(d, r.Context(), claims, requestNotify, req)
+	// RequestFunc scoped to this SSE stream — server-to-client requests
+	// (sampling/createMessage, elicitation/create) are pushed as SSE events
+	// on this open response stream. The client must POST the response back.
+	requestFunc := d.makeRequestFunc(func(raw json.RawMessage) {
+		writeSSE(raw)
+	})
+
+	// Dispatch with request-scoped notify and request funcs.
+	resp := t.server.dispatchWithNotifyAndRequest(d, r.Context(), claims, requestNotify, requestFunc, req)
 
 	// Write the JSON-RPC response as the final SSE event
 	if resp != nil {
