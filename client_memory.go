@@ -29,9 +29,11 @@ func WithInMemoryServer(srv *Server) ClientOption {
 	}
 }
 
-// WithNotificationHandler sets a callback for server-to-client notifications
-// received by the in-memory transport. Use in tests to verify notification
-// delivery (e.g., notifications/resources/updated from resource subscriptions).
+// WithNotificationHandler sets a callback for server-to-client notifications.
+// Works across all transports (Streamable HTTP, SSE, and in-memory).
+// Notifications emitted during a tool call (logging, progress) are delivered
+// to the handler before the tool result is returned. Params are always
+// map[string]any (JSON-roundtripped for cross-transport consistency).
 func WithNotificationHandler(fn func(method string, params any)) ClientOption {
 	return func(c *Client) { c.onNotify = fn }
 }
@@ -51,9 +53,18 @@ func (t *memoryTransport) connect() error {
 	t.dispatcher.sessionID = "memory"
 
 	// Wire notifyFunc for server-to-client notifications (subscriptions, logging, progress).
+	// JSON-roundtrip params so the callback receives map[string]any — consistent with
+	// HTTP transports where params go through JSON serialization.
 	t.dispatcher.notifyFunc = func(method string, params any) {
 		if t.onNotify != nil {
-			t.onNotify(method, params)
+			normalized := params
+			if raw, err := json.Marshal(params); err == nil {
+				var parsed any
+				if json.Unmarshal(raw, &parsed) == nil {
+					normalized = parsed
+				}
+			}
+			t.onNotify(method, normalized)
 		}
 	}
 
