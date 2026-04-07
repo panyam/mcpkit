@@ -152,7 +152,7 @@ make downkcl              # Stop Keycloak
 
 ### Conformance Suite
 
-Validated against the [official MCP conformance test suite](https://github.com/modelcontextprotocol/conformance). Current status: **28/30 server scenarios passing**, **14/14 auth conformance passing** (remaining tracked in `conformance/baseline.yml`).
+Validated against the [official MCP conformance test suite](https://github.com/modelcontextprotocol/conformance). Current status: **30/30 server scenarios passing**, **14/14 auth conformance passing**.
 
 ```bash
 bash scripts/conformance-test.sh                    # full suite

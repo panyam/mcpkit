@@ -202,9 +202,15 @@ func (s *Server) dispatchWith(d *Dispatcher, ctx context.Context, claims *Claims
 // to the current SSE stream, avoiding races on d.notifyFunc when concurrent
 // SSE-streaming POSTs share the same session dispatcher.
 func (s *Server) dispatchWithNotify(d *Dispatcher, ctx context.Context, claims *Claims, notify NotifyFunc, req *Request) *Response {
-	// Inject session context so tool handlers can send notifications (logging, progress, etc.)
-	// and access authenticated claims.
-	ctx = contextWithSession(ctx, notify, &d.logLevel, claims)
+	return s.dispatchWithNotifyAndRequest(d, ctx, claims, notify, nil, req)
+}
+
+// dispatchWithNotifyAndRequest is the full dispatch entry point that accepts both
+// a NotifyFunc and RequestFunc. Used by transports that support server-to-client requests.
+func (s *Server) dispatchWithNotifyAndRequest(d *Dispatcher, ctx context.Context, claims *Claims, notify NotifyFunc, request RequestFunc, req *Request) *Response {
+	// Inject session context so tool handlers can send notifications, requests,
+	// and access authenticated claims and client capabilities.
+	ctx = contextWithSession(ctx, notify, request, &d.logLevel, &d.clientCaps, claims)
 
 	// Build the terminal handler: dispatch with optional tool timeout.
 	handler := MiddlewareFunc(func(ctx context.Context, req *Request) *Response {

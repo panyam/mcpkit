@@ -43,7 +43,10 @@ make downkcl          # Stop Keycloak container
 | `transport.go` | SSE transport (sseTransport, mcpSSEConn, SSEData) |
 | `streamable_transport.go` | Streamable HTTP transport (streamableTransport) |
 | `middleware.go` | Server-side Middleware type, WithMiddleware, LoggingMiddleware |
-| `client.go` | MCP client: Connect, ToolCall, ReadResource, ListTools, ListResources, SubscribeResource, UnsubscribeResource, WithClientBearerToken, WithTokenSource |
+| `request.go` | RequestFunc type, server-to-client request infrastructure (sendServerRequest, routeServerResponse) |
+| `sampling.go` | CreateMessageRequest/Result, SamplingMessage, Sample() — server-to-client LLM sampling |
+| `elicitation.go` | ElicitationRequest/Result, Elicit() — server-to-client user input |
+| `client.go` | MCP client: Connect, ToolCall, ReadResource, ListTools, ListResources, SubscribeResource, UnsubscribeResource, WithClientBearerToken, WithTokenSource, WithSamplingHandler, WithElicitationHandler |
 | `client_logging.go` | Client-side loggingTransport, WithClientLogging |
 | `client_reconnect.go` | Client reconnection: WithMaxRetries, WithReconnectBackoff, isTransientError |
 | `client_memory.go` | In-memory transport: WithInMemoryServer, WithNotificationHandler, no HTTP overhead |
@@ -80,6 +83,11 @@ make downkcl          # Stop Keycloak container
 - **Stateless mode** (`WithStateless(true)`) auto-initializes a fresh dispatcher per request — no sessions, no `Mcp-Session-Id`. For serverless, CLI wrappers, single-shot APIs.
 - **Don't brute-force failing tests** — when a test is hard to debug, check if there are open issues for dev-ex improvements (logging, in-memory transport, middleware) that would make the code more testable. In this project, #69 (WithClientLogging) and #68 (in-memory transport) directly unblocked the scope-step-up conformance fix.
 - **Resource subscriptions** require `WithSubscriptions()` server option. Subscription registry lives on `Server`; per-session subscription state on `Dispatcher`. `Server.NotifyResourceUpdated(uri)` fans out to all subscribed sessions. Transports clean up subscriptions on session close. In-memory transport supports notifications via `WithNotificationHandler`.
+- **Server-to-client requests** (sampling, elicitation) use `RequestFunc` — analogous to `NotifyFunc` but blocks for a response. The flow: tool handler calls `Sample(ctx, req)` or `Elicit(ctx, req)` → extracts `RequestFunc` from session context → `sendServerRequest` generates `"srv-N"` ID, registers pending channel, pushes JSON-RPC request to client stream, waits on channel with context timeout → client handles request, POSTs response back → transport detects response (no `method` field via `isJSONRPCResponse`), routes via `Dispatcher.RouteResponse()` → pending channel unblocks.
+- **Client-side handler registration**: `WithSamplingHandler(h)` and `WithElicitationHandler(h)` register client-side handlers. When set, the client advertises `sampling`/`elicitation` capabilities during `initialize`. Server checks `clientCaps` before sending requests — returns `ErrSamplingNotSupported`/`ErrElicitationNotSupported` if capability not declared.
+- **SSE client background reader**: The SSE client transport uses a background goroutine (started in `connect()`) that demuxes all SSE events — responses to pending calls by ID, server requests to handler. The old synchronous `call()` → `readSSEEvent()` pattern is replaced with `pendingCalls sync.Map` + channel per request.
+- **Streamable HTTP client handles server requests inline**: During `readSSEResponse`, server requests (events with `method` field) are handled and responses POSTed back before continuing to read the final tool result. No background goroutine needed — server requests arrive on the same SSE stream as the tool response.
+- **In-memory transport bidirectional support**: `memoryTransport.connect()` wires `dispatcher.pushRequest` to call `client.handleServerRequest` directly. Server-to-client requests are dispatched synchronously in-process — no channels, no HTTP.
 - **oneauth/testutil.TestAuthServer** provides the in-process auth server for E2E tests. It generates RSA keys, serves JWKS, and mints tokens. Set audience after creation via `AS.APIAuth.JWTAudience` (the `WithAudience` option is set at creation time, before server URL is known).
 
 ## Architecture
@@ -89,7 +97,7 @@ See `docs/ARCHITECTURE.md` for transport design, type definitions, and protocol 
 ## Conformance Status
 
 ### Server conformance
-28/30 MCP server conformance scenarios passing. Failing scenarios tracked in `conformance/baseline.yml` under `server:`.
+30/30 MCP server conformance scenarios passing. All server features implemented.
 
 ### Auth conformance
 14/14 required MCP auth conformance scenarios passing (210/210 checks). 1 warning on basic-cimd (CIMD not implemented). Run via `make testconfauth`.
@@ -97,6 +105,5 @@ See `docs/ARCHITECTURE.md` for transport design, type definitions, and protocol 
 ## What's Not Implemented Yet
 
 - stdio transport (#3)
-- Sampling (#22), Elicitation (#23)
 - Streamable HTTP GET SSE stream (server-initiated notifications without a request)
 - `DiscoverMCPAuth` PRM fetch — steps 4-5 return error "not yet implemented"
