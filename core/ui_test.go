@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 )
@@ -327,6 +328,57 @@ func TestToolDefMetaPrefersBorderTriState(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestClientSupportsExtension verifies the context-based extension capability
+// check. With a session context containing the UI extension in clientCaps,
+// ClientSupportsExtension returns true. Without the extension or without a
+// session context, it returns false. This is the general mechanism any
+// extension uses to check client support at runtime.
+func TestClientSupportsExtension(t *testing.T) {
+	caps := &ClientCapabilities{
+		Extensions: map[string]ClientExtensionCap{
+			UIExtensionID: {MIMETypes: []string{AppMIMEType}},
+		},
+	}
+	ctx := ContextWithSession(context.Background(), nil, nil, nil, caps, nil)
+
+	if !ClientSupportsExtension(ctx, UIExtensionID) {
+		t.Error("should return true when extension is in clientCaps")
+	}
+	if ClientSupportsExtension(ctx, "io.example/nonexistent") {
+		t.Error("should return false for unknown extension")
+	}
+	if ClientSupportsExtension(context.Background(), UIExtensionID) {
+		t.Error("should return false with no session context")
+	}
+}
+
+// TestClientSupportsUI verifies the convenience wrapper that checks for the
+// MCP Apps extension specifically. This is what tool handlers call to decide
+// whether to include UI-specific content or fall back to text-only responses.
+func TestClientSupportsUI(t *testing.T) {
+	caps := &ClientCapabilities{
+		Extensions: map[string]ClientExtensionCap{
+			UIExtensionID: {},
+		},
+	}
+	ctx := ContextWithSession(context.Background(), nil, nil, nil, caps, nil)
+
+	if !ClientSupportsUI(ctx) {
+		t.Error("should return true when UI extension is declared")
+	}
+	if ClientSupportsUI(context.Background()) {
+		t.Error("should return false with no session context")
+	}
+}
+
+// TestUIExtensionIDConstant verifies the extension ID constant matches the
+// MCP Apps spec value exactly.
+func TestUIExtensionIDConstant(t *testing.T) {
+	if UIExtensionID != "io.modelcontextprotocol/ui" {
+		t.Errorf("UIExtensionID = %q, want %q", UIExtensionID, "io.modelcontextprotocol/ui")
 	}
 }
 

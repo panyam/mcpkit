@@ -872,3 +872,72 @@ func TestToolsListMeta(t *testing.T) {
 		t.Error("plain_tool: _meta key should be absent")
 	}
 }
+
+// TestInitializeWithClientExtensions verifies that the server correctly parses
+// client extension capabilities from the initialize request and includes its
+// own registered extensions in the response. This is the foundation for
+// extension negotiation — both client→server and server→client directions.
+func TestInitializeWithClientExtensions(t *testing.T) {
+	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
+	d.extensions[core.UIExtensionID] = core.Extension{
+		ID:          core.UIExtensionID,
+		SpecVersion: "2026-01-26",
+		Stability:   core.Experimental,
+	}
+
+	// Client sends initialize with UI extension support
+	resp := d.Dispatch(context.Background(), &core.Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "initialize",
+		Params: json.RawMessage(`{
+			"protocolVersion": "2024-11-05",
+			"capabilities": {
+				"extensions": {
+					"io.modelcontextprotocol/ui": {
+						"mimeTypes": ["text/html;profile=mcp-app"]
+					}
+				}
+			},
+			"clientInfo": {"name": "test-client", "version": "1.0"}
+		}`),
+	})
+	if resp.Error != nil {
+		t.Fatalf("initialize error: %s", resp.Error.Message)
+	}
+
+	// Verify client caps were parsed
+	if d.clientCaps.Extensions == nil {
+		t.Fatal("clientCaps.Extensions is nil after initialize")
+	}
+	uiCap, ok := d.clientCaps.Extensions[core.UIExtensionID]
+	if !ok {
+		t.Fatal("UI extension not found in parsed client caps")
+	}
+	if len(uiCap.MIMETypes) != 1 || uiCap.MIMETypes[0] != core.AppMIMEType {
+		t.Errorf("MIMETypes = %v, want [%s]", uiCap.MIMETypes, core.AppMIMEType)
+	}
+
+	// Verify server response includes its extensions
+	var result map[string]json.RawMessage
+	json.Unmarshal(resp.Result, &result)
+
+	var caps map[string]json.RawMessage
+	json.Unmarshal(result["capabilities"], &caps)
+	if _, ok := caps["extensions"]; !ok {
+		t.Fatal("server response missing extensions in capabilities")
+	}
+
+	var exts map[string]map[string]string
+	json.Unmarshal(caps["extensions"], &exts)
+	uiExt, ok := exts[core.UIExtensionID]
+	if !ok {
+		t.Fatal("UI extension not in server response")
+	}
+	if uiExt["specVersion"] != "2026-01-26" {
+		t.Errorf("specVersion = %q, want %q", uiExt["specVersion"], "2026-01-26")
+	}
+	if uiExt["stability"] != "experimental" {
+		t.Errorf("stability = %q, want %q", uiExt["stability"], "experimental")
+	}
+}

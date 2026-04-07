@@ -1,7 +1,7 @@
 # MCPKit Makefile
 
 # Sub-modules that get tagged alongside the root module
-SUB_MODS_TO_TAG := ext/auth tests/e2e tests/keycloak
+SUB_MODS_TO_TAG := ext/auth ext/ui tests/e2e tests/keycloak
 
 # =============================================================================
 # Build & test
@@ -33,6 +33,9 @@ testconfauth: ## Run MCP Auth conformance suite (client-side, requires mcpkit/au
 test-auth: ## Run auth sub-module tests
 	cd ext/auth && go test ./... -count=1 -timeout 30s
 
+test-ui: ## Run UI extension sub-module tests
+	cd ext/ui && go test ./... -count=1 -timeout 30s
+
 test-e2e: ## Run all E2E tests (auth, apps — no Docker)
 	cd tests/e2e && go test ./... -count=1 -timeout 60s
 
@@ -59,13 +62,14 @@ testall: ## Run ALL tests (starts Keycloak if needed) + generate HTML report
 	@echo "Started: $$(date)" | tee -a $(REPORT_DIR)/run.log
 	@PASS=0; FAIL=0; STAGES=""; \
 	echo "" | tee -a $(REPORT_DIR)/run.log; \
-	$(call run_stage,1,7,unit,test) \
-	$(call run_stage,2,7,race,test-race) \
-	$(call run_stage,3,7,auth,test-auth) \
-	$(call run_stage,4,7,e2e,test-e2e) \
-	$(call run_stage,5,7,conformance,testconf) \
-	$(call run_stage,6,7,auth-conformance,testconfauth) \
-	$(call run_stage,7,7,keycloak,testkcl-auto) \
+	$(call run_stage,1,8,unit,test) \
+	$(call run_stage,2,8,race,test-race) \
+	$(call run_stage,3,8,auth,test-auth) \
+	$(call run_stage,4,8,ui,test-ui) \
+	$(call run_stage,5,8,e2e,test-e2e) \
+	$(call run_stage,6,8,conformance,testconf) \
+	$(call run_stage,7,8,auth-conformance,testconfauth) \
+	$(call run_stage,8,8,keycloak,testkcl-auto) \
 	echo "" | tee -a $(REPORT_DIR)/run.log; \
 	echo "=== Results: $$PASS passed, $$FAIL failed ===" | tee -a $(REPORT_DIR)/run.log; \
 	echo "Finished: $$(date)" | tee -a $(REPORT_DIR)/run.log; \
@@ -267,5 +271,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-race test-v test-auth test-e2e testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth vet lint vulncheck seccheck secrets audit ci ci-full serve serve-streamable serve-both tidy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs help
+.PHONY: build test test-race test-v test-auth test-ui test-e2e testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth vet lint vulncheck seccheck secrets audit ci ci-full serve serve-streamable serve-both tidy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs help
 .DEFAULT_GOAL := help

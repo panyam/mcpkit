@@ -100,6 +100,24 @@ func sessionFromContext(ctx context.Context) *sessionCtx {
 	return sc
 }
 
+// ClientSupportsExtension checks whether the connected client declared support
+// for the given extension ID during the initialize handshake. Returns false if
+// no session context is present or the client did not advertise the extension.
+//
+// Usage in a tool handler:
+//
+//	if core.ClientSupportsExtension(ctx, "io.modelcontextprotocol/ui") {
+//	    // client can render MCP Apps
+//	}
+func ClientSupportsExtension(ctx context.Context, extensionID string) bool {
+	sc := sessionFromContext(ctx)
+	if sc == nil || sc.clientCaps == nil {
+		return false
+	}
+	_, ok := sc.clientCaps.Extensions[extensionID]
+	return ok
+}
+
 // EmitLog sends a notifications/message to the connected client if the session's
 // log level allows it. Safe to call even if no session context is present (no-op).
 //
