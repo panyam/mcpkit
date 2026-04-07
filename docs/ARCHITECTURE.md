@@ -65,6 +65,7 @@ mcpkit/                          # module: github.com/panyam/mcpkit
 │   ├── request.go               # RequestFunc, ErrNoRequestFunc
 │   ├── protocol.go              # ServerInfo, ClientInfo, ClientCapabilities
 │   ├── interfaces.go            # Transport, ServerRequestHandler, NotificationHandler
+│   ├── ui.go                    # UIMetadata, UICSPConfig, UIVisibility, AppMIMEType, ToolMeta, ResourceContentMeta
 │   └── www_authenticate.go      # ParseWWWAuthenticate
 ├── server/                      # Server + Dispatcher + transports
 │   ├── server.go                # Server, NewServer, options, Handler(), Run()
