@@ -28,6 +28,10 @@ type ToolDef struct {
 	// Annotations holds optional metadata for this tool.
 	// Convention: {"experimental": true} marks experimental tools.
 	Annotations map[string]any `json:"annotations,omitempty"`
+
+	// Meta holds protocol-level metadata (e.g., UI presentation hints).
+	// Serialized as "_meta" in the tools/list response.
+	Meta *ToolMeta `json:"_meta,omitempty"`
 }
 
 // ToolRequest is the validated input passed to a ToolHandler.

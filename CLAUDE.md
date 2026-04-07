@@ -20,7 +20,7 @@ make audit        # govulncheck + gosec + gitleaks + race detection
 
 # Auth tests (ext/auth is a separate Go module)
 make test-auth        # Auth sub-module unit tests (cd ext/auth)
-make test-auth-e2e    # 31 E2E auth tests (in-process oneauth AS)
+make test-e2e         # All E2E tests (auth + apps, no Docker)
 make testkcl          # 7 Keycloak interop tests (needs Docker)
 make upkcl            # Start Keycloak container (with event logging)
 make downkcl          # Stop Keycloak container
@@ -33,8 +33,8 @@ make kcllogs          # View Keycloak logs (shows token events)
 mcpkit/
 ├── core/                    ← Protocol types + tool-handler APIs
 │   ├── jsonrpc.go             Request, Response, Error, ErrCode*, IsJSONRPCResponse
-│   ├── tool.go                ToolDef, ToolRequest, ToolResult, Content, ToolHandler
-│   ├── resource.go            ResourceDef, ResourceTemplate, ResourceHandler
+│   ├── tool.go                ToolDef (+_meta), ToolRequest, ToolResult, Content, ToolHandler
+│   ├── resource.go            ResourceDef, ResourceTemplate, ResourceReadContent (+_meta), ResourceHandler
 │   ├── prompt.go              PromptDef, PromptHandler
 │   ├── completion.go          CompletionHandler, CompletionRef, CompletionResult
 │   ├── auth.go                Claims, TokenSource, AuthValidator, AuthError, Extension
@@ -45,6 +45,7 @@ mcpkit/
 │   ├── request.go             RequestFunc, ErrNoRequestFunc
 │   ├── protocol.go            ServerInfo, ClientInfo, ClientCapabilities
 │   ├── interfaces.go          Transport, ServerRequestHandler, NotificationHandler
+│   ├── ui.go                  UIMetadata, UICSPConfig, UIVisibility, AppMIMEType, ToolMeta, ResourceContentMeta
 │   └── www_authenticate.go    ParseWWWAuthenticate
 │
 ├── server/                  ← Server + Dispatcher + transports

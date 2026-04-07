@@ -791,3 +791,84 @@ func TestDispatchToolsListExtraSchemaFields(t *testing.T) {
 		t.Error("$defs.Address missing")
 	}
 }
+
+// TestToolsListMeta verifies that tools/list preserves the _meta field through
+// JSON-RPC dispatch. The _meta mechanism is how MCP extensions attach metadata
+// to tools — any extension (apps/ui, future ones) relies on _meta surviving
+// the dispatch round-trip. Uses UI metadata as the concrete test payload.
+func TestToolsListMeta(t *testing.T) {
+	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
+	d.RegisterTool(
+		core.ToolDef{
+			Name:        "ui_tool",
+			Description: "Tool with UI metadata",
+			InputSchema: map[string]any{"type": "object"},
+			Meta: &core.ToolMeta{
+				UI: &core.UIMetadata{
+					ResourceUri: "ui://myapp/view",
+					Visibility:  []core.UIVisibility{core.UIVisibilityModel},
+				},
+			},
+		},
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			return core.TextResult("ok"), nil
+		},
+	)
+	d.RegisterTool(
+		core.ToolDef{
+			Name:        "plain_tool",
+			Description: "Tool without UI metadata",
+			InputSchema: map[string]any{"type": "object"},
+		},
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			return core.TextResult("ok"), nil
+		},
+	)
+	initDispatcher(d)
+
+	resp := d.Dispatch(context.Background(), &core.Request{
+		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "tools/list",
+	})
+	if resp.Error != nil {
+		t.Fatalf("error: %s", resp.Error.Message)
+	}
+
+	// Parse into raw JSON to verify _meta wire format
+	var raw struct {
+		Tools []json.RawMessage `json:"tools"`
+	}
+	if err := json.Unmarshal(resp.Result, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if len(raw.Tools) != 2 {
+		t.Fatalf("got %d tools, want 2", len(raw.Tools))
+	}
+
+	// First tool should have _meta.ui.resourceUri
+	var tool0 map[string]json.RawMessage
+	json.Unmarshal(raw.Tools[0], &tool0)
+	metaRaw, ok := tool0["_meta"]
+	if !ok {
+		t.Fatal("ui_tool: _meta key missing from tools/list response")
+	}
+	var meta core.ToolMeta
+	if err := json.Unmarshal(metaRaw, &meta); err != nil {
+		t.Fatal(err)
+	}
+	if meta.UI == nil {
+		t.Fatal("ui_tool: _meta.ui is nil")
+	}
+	if meta.UI.ResourceUri != "ui://myapp/view" {
+		t.Errorf("ui_tool: resourceUri = %q, want %q", meta.UI.ResourceUri, "ui://myapp/view")
+	}
+	if len(meta.UI.Visibility) != 1 || meta.UI.Visibility[0] != core.UIVisibilityModel {
+		t.Errorf("ui_tool: visibility = %v, want [model]", meta.UI.Visibility)
+	}
+
+	// Second tool should NOT have _meta
+	var tool1 map[string]json.RawMessage
+	json.Unmarshal(raw.Tools[1], &tool1)
+	if _, ok := tool1["_meta"]; ok {
+		t.Error("plain_tool: _meta key should be absent")
+	}
+}

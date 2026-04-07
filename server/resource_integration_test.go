@@ -472,3 +472,101 @@ func TestResourcesSubscribeMultipleSessions(t *testing.T) {
 		t.Errorf("session-2 got %d notifications, want 1", counts["session-2"])
 	}
 }
+
+// TestResourcesReadMeta verifies that resources/read preserves the _meta field
+// through JSON-RPC dispatch. The _meta mechanism is how MCP extensions attach
+// per-content metadata to resource responses — any extension (apps/ui, future
+// ones) relies on _meta surviving the dispatch round-trip. Per-content _meta
+// takes precedence over resource-level metadata from resources/list.
+func TestResourcesReadMeta(t *testing.T) {
+	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
+	d.RegisterResource(
+		core.ResourceDef{URI: "ui://app/view", Name: "App View", MimeType: core.AppMIMEType},
+		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+			return core.ResourceResult{Contents: []core.ResourceReadContent{{
+				URI:      req.URI,
+				MimeType: core.AppMIMEType,
+				Text:     "<html><body>Hello</body></html>",
+				Meta: &core.ResourceContentMeta{
+					UI: &core.UIMetadata{
+						ResourceUri:   "ui://app/view",
+						Permissions:   []string{"clipboard-write"},
+						PrefersBorder: boolPtr(false),
+					},
+				},
+			}}}, nil
+		},
+	)
+	d.RegisterResource(
+		core.ResourceDef{URI: "test://plain", Name: "Plain", MimeType: "text/plain"},
+		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+			return core.ResourceResult{Contents: []core.ResourceReadContent{{
+				URI: req.URI, MimeType: "text/plain", Text: "no meta",
+			}}}, nil
+		},
+	)
+	initDispatcher(d)
+
+	// Resource with _meta
+	resp := d.Dispatch(context.Background(), &core.Request{
+		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/read",
+		Params: json.RawMessage(`{"uri":"ui://app/view"}`),
+	})
+	if resp.Error != nil {
+		t.Fatalf("error: %s", resp.Error.Message)
+	}
+
+	// Verify _meta at the wire level
+	var raw struct {
+		Contents []json.RawMessage `json:"contents"`
+	}
+	if err := json.Unmarshal(resp.Result, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if len(raw.Contents) != 1 {
+		t.Fatalf("got %d contents, want 1", len(raw.Contents))
+	}
+
+	var content map[string]json.RawMessage
+	json.Unmarshal(raw.Contents[0], &content)
+	metaRaw, ok := content["_meta"]
+	if !ok {
+		t.Fatal("_meta key missing from resources/read response content")
+	}
+	var meta core.ResourceContentMeta
+	if err := json.Unmarshal(metaRaw, &meta); err != nil {
+		t.Fatal(err)
+	}
+	if meta.UI == nil {
+		t.Fatal("_meta.ui is nil")
+	}
+	if meta.UI.ResourceUri != "ui://app/view" {
+		t.Errorf("resourceUri = %q, want %q", meta.UI.ResourceUri, "ui://app/view")
+	}
+	if len(meta.UI.Permissions) != 1 || meta.UI.Permissions[0] != "clipboard-write" {
+		t.Errorf("permissions = %v, want [clipboard-write]", meta.UI.Permissions)
+	}
+	if meta.UI.PrefersBorder == nil || *meta.UI.PrefersBorder != false {
+		t.Errorf("prefersBorder = %v, want false", meta.UI.PrefersBorder)
+	}
+
+	// Resource without _meta
+	resp2 := d.Dispatch(context.Background(), &core.Request{
+		JSONRPC: "2.0", ID: json.RawMessage(`2`), Method: "resources/read",
+		Params: json.RawMessage(`{"uri":"test://plain"}`),
+	})
+	if resp2.Error != nil {
+		t.Fatalf("error: %s", resp2.Error.Message)
+	}
+	var raw2 struct {
+		Contents []json.RawMessage `json:"contents"`
+	}
+	json.Unmarshal(resp2.Result, &raw2)
+	var content2 map[string]json.RawMessage
+	json.Unmarshal(raw2.Contents[0], &content2)
+	if _, ok := content2["_meta"]; ok {
+		t.Error("plain resource: _meta key should be absent")
+	}
+}
+
+func boolPtr(b bool) *bool { return &b }

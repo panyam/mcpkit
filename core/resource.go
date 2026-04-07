@@ -51,6 +51,10 @@ type ResourceReadContent struct {
 	MimeType string `json:"mimeType,omitempty"`
 	Text     string `json:"text,omitempty"`
 	Blob     string `json:"blob,omitempty"`
+
+	// Meta holds per-content metadata (e.g., UI overrides).
+	// Takes precedence over the resource-level _meta from resources/list.
+	Meta *ResourceContentMeta `json:"_meta,omitempty"`
 }
 
 // ResourceRequest is the validated input passed to a ResourceHandler.
