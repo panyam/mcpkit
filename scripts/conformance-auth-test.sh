@@ -18,10 +18,11 @@ set -euo pipefail
 SCENARIO="${1:-}"
 BASELINE="conformance/baseline.yml"
 
-# The client command that the conformance runner will invoke.
-# It must accept a --server-url flag pointing to the mock MCP+AS server.
-# TODO: build cmd/testclient once Phase 3C-3E ships
-CLIENT_CMD="go run ./cmd/testclient"
+# Build the testclient binary (separate Go module).
+# The conformance runner invokes this binary with the server URL as an argument.
+echo "Building testclient..."
+(cd cmd/testclient && go build -buildvcs=false -o ../../bin/testclient .) || exit 1
+CLIENT_CMD="./bin/testclient"
 
 # Check prerequisites
 if ! command -v npx &>/dev/null; then
