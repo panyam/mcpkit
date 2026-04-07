@@ -4,8 +4,8 @@ github.com/fernet/fernet-go v0.0.0-20240119011108-303da6aec611 h1:JwYtKJ/DVEoIA5
 github.com/fernet/fernet-go v0.0.0-20240119011108-303da6aec611/go.mod h1:zHMNeYgqrTpKyjawjitDg0Osd1P/FmeA0SZLYK3RfLQ=
 github.com/golang-jwt/jwt/v5 v5.2.2 h1:Rl4B7itRWVtYIHFrSNd7vhTiz9UpLdi6gZhZ3wEeDy8=
 github.com/golang-jwt/jwt/v5 v5.2.2/go.mod h1:pqrtFR0X4osieyHYxtmOUWsAWrfe1Q5UVIyoH402zdk=
-github.com/panyam/oneauth v0.0.66 h1:6u5Oq5hUmvemDXf9825CTW0kUZonogFuD7KCrqjvmIM=
-github.com/panyam/oneauth v0.0.66/go.mod h1:Gz0xF9sRHlBAMhrX9gwDkCVXDbJjowcVKAp8xO+wJP8=
+github.com/panyam/oneauth v0.0.67 h1:OELljtuqZkANlAUykUbTO6lObjWLy30cG93zhXmFeT8=
+github.com/panyam/oneauth v0.0.67/go.mod h1:Gz0xF9sRHlBAMhrX9gwDkCVXDbJjowcVKAp8xO+wJP8=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
