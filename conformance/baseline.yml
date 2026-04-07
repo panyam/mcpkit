@@ -8,11 +8,9 @@
 # As features are implemented, remove the corresponding entries.
 
 server:
-  # 26/30 passing. Remaining 6 are feature gaps:
+  # 28/30 passing. Remaining 4 are feature gaps:
 
-  # Missing capabilities (subscriptions, elicitation, sampling)
-  - resources-subscribe         # Issue: #24
-  - resources-unsubscribe       # Issue: #24
+  # Missing capabilities (elicitation, sampling)
   - elicitation-sep1034-defaults   # Issue: #23
   - elicitation-sep1330-enums      # Issue: #23
 
