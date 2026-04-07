@@ -63,7 +63,7 @@ newstack/mcpkit/main
 
 ### Go Module
 ```go
-require github.com/panyam/mcpkit v0.0.11
+require github.com/panyam/mcpkit v0.0.14
 ```
 
 ### Basic Server (Streamable HTTP)
