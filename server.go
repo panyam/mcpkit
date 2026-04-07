@@ -24,6 +24,7 @@ type serverOptions struct {
 	allowedRoots  []string
 	authValidator AuthValidator
 	extensions    []ExtensionProvider
+	middleware    []Middleware
 }
 
 // AuthValidator validates an HTTP request and returns claims on success.
@@ -160,12 +161,26 @@ func (s *Server) dispatchWithNotify(d *Dispatcher, ctx context.Context, claims *
 	// and access authenticated claims.
 	ctx = contextWithSession(ctx, notify, &d.logLevel, claims)
 
-	if s.options.toolTimeout > 0 && req.Method == "tools/call" {
-		tctx, cancel := context.WithTimeout(ctx, s.options.toolTimeout)
-		defer cancel()
-		return d.Dispatch(tctx, req)
+	// Build the terminal handler: dispatch with optional tool timeout.
+	handler := MiddlewareFunc(func(ctx context.Context, req *Request) *Response {
+		if s.options.toolTimeout > 0 && req.Method == "tools/call" {
+			tctx, cancel := context.WithTimeout(ctx, s.options.toolTimeout)
+			defer cancel()
+			return d.Dispatch(tctx, req)
+		}
+		return d.Dispatch(ctx, req)
+	})
+
+	// Wrap with user middleware (reverse order: first registered = outermost).
+	for i := len(s.options.middleware) - 1; i >= 0; i-- {
+		next := handler
+		mw := s.options.middleware[i]
+		handler = func(ctx context.Context, req *Request) *Response {
+			return mw(ctx, req, next)
+		}
 	}
-	return d.Dispatch(ctx, req)
+
+	return handler(ctx, req)
 }
 
 // newSession creates a per-session Dispatcher clone with fresh session state.
