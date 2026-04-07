@@ -17,12 +17,6 @@ const (
 
 	// mcpProtocolVersionHeader is the HTTP header for protocol version per MCP spec.
 	mcpProtocolVersionHeader = "MCP-Protocol-Version"
-
-	// StreamableHTTPAccept is the required Accept header value for Streamable HTTP requests.
-	// Per MCP spec (2025-11-25, Streamable HTTP transport): clients MUST accept both
-	// application/json and text/event-stream.
-	// https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#sending-messages-to-the-server
-	StreamableHTTPAccept = "application/json, text/event-stream"
 )
 
 // streamableTransport implements the MCP Streamable HTTP transport (2025-03-26 spec).
@@ -250,7 +244,7 @@ func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Reque
 	// Passed through context (not mutating d.notifyFunc) to avoid races
 	// when concurrent SSE-streaming POSTs share the same session dispatcher.
 	requestNotify := NotifyFunc(func(method string, params any) {
-		raw, err := marshalNotification(method, params)
+		raw, err := MarshalNotification(method, params)
 		if err != nil {
 			return
 		}
@@ -395,7 +389,7 @@ func (c *streamableSSEConn) OnStart(w http.ResponseWriter, r *http.Request) erro
 	sessionID := c.sessionID
 	hub := c.transport.sseHub
 	c.dispatcher.notifyFunc = func(method string, params any) {
-		raw, err := marshalNotification(method, params)
+		raw, err := MarshalNotification(method, params)
 		if err != nil {
 			return
 		}

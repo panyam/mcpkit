@@ -36,7 +36,7 @@ func TestAuthClaimsFromContext(t *testing.T) {
 	}
 
 	var logLevel atomic.Pointer[LogLevel]
-	ctx := contextWithSession(context.Background(), nil, nil, &logLevel, nil, claims)
+	ctx := ContextWithSession(context.Background(), nil, nil, &logLevel, nil, claims)
 
 	got := AuthClaims(ctx)
 	if got == nil {
@@ -68,7 +68,7 @@ func TestAuthClaimsNilWithoutSession(t *testing.T) {
 
 func TestAuthClaimsNilWithoutAuth(t *testing.T) {
 	var logLevel atomic.Pointer[LogLevel]
-	ctx := contextWithSession(context.Background(), nil, nil, &logLevel, nil, nil)
+	ctx := ContextWithSession(context.Background(), nil, nil, &logLevel, nil, nil)
 
 	got := AuthClaims(ctx)
 	if got != nil {
@@ -79,7 +79,7 @@ func TestAuthClaimsNilWithoutAuth(t *testing.T) {
 func TestHasScope(t *testing.T) {
 	claims := &Claims{Scopes: []string{"tools:read", "admin:write"}}
 	var logLevel atomic.Pointer[LogLevel]
-	ctx := contextWithSession(context.Background(), nil, nil, &logLevel, nil, claims)
+	ctx := ContextWithSession(context.Background(), nil, nil, &logLevel, nil, claims)
 
 	if !HasScope(ctx, "tools:read") {
 		t.Error("HasScope(tools:read) = false, want true")
@@ -98,7 +98,7 @@ func TestHasScopeWithoutClaims(t *testing.T) {
 	}
 
 	var logLevel atomic.Pointer[LogLevel]
-	ctx := contextWithSession(context.Background(), nil, nil, &logLevel, nil, nil)
+	ctx := ContextWithSession(context.Background(), nil, nil, &logLevel, nil, nil)
 	if HasScope(ctx, "anything") {
 		t.Error("HasScope without claims = true, want false")
 	}
