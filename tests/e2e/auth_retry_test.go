@@ -162,12 +162,12 @@ func TestE2E_Client_RetryLimit(t *testing.T) {
 		tokens: []string{expiredToken}, // same expired token every time
 	}
 
-	client := client.NewClient(
+	clnt := client.NewClient(
 		env.MCPServerURL+"/mcp",
 		core.ClientInfo{Name: "limit-test", Version: "0.1.0"},
 		client.WithTokenSource(ts),
 	)
-	err := client.Connect()
+	err := clnt.Connect()
 	require.Error(t, err, "Connect should fail after retry limit")
 
 	// Verify it's a ClientAuthError
