@@ -38,8 +38,8 @@ mcpkit/
 │   ├── resource.go            ResourceDef, ResourceTemplate, ResourceReadContent (+_meta), ResourceHandler
 │   ├── prompt.go              PromptDef, PromptHandler
 │   ├── completion.go          CompletionHandler, CompletionRef, CompletionResult
-│   ├── auth.go                Claims, TokenSource, AuthValidator, AuthError, Extension
-│   ├── logging.go             LogLevel, NotifyFunc, EmitLog, ContextWithSession
+│   ├── auth.go                Claims, TokenSource, AuthValidator, AuthError, Extension, RefValidator
+│   ├── logging.go             LogLevel, NotifyFunc, EmitLog, NotifyResourcesChanged, ContextWithSession
 │   ├── progress.go            EmitProgress
 │   ├── sampling.go            CreateMessageRequest/Result, Sample()
 │   ├── elicitation.go         ElicitationRequest/Result, Elicit()
@@ -74,7 +74,7 @@ mcpkit/
 │   └── docs/DESIGN.md         Auth architecture + spec compliance
 │
 ├── ext/ui/                 ← Separate Go module (ext/ui/go.mod)
-│   └── extension.go          UIExtension implementing ExtensionProvider
+│   └── extension.go          UIExtension (ExtensionProvider + RefValidator), RegisterAppTool, AppToolConfig
 │
 ├── testutil/                ← Test helpers
 ├── cmd/testserver/          ← Conformance test server

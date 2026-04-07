@@ -91,7 +91,7 @@ mcpkit/                          # module: github.com/panyam/mcpkit
 │   └── docs/DESIGN.md           # Auth architecture, spec compliance
 ├── ext/ui/                      # SEPARATE module (github.com/panyam/mcpkit/ext/ui)
 │   ├── go.mod                   # depends on mcpkit only (zero external deps)
-│   └── extension.go             # UIExtension implementing ExtensionProvider
+│   └── extension.go             # UIExtension (ExtensionProvider + RefValidator), RegisterAppTool
 ├── testutil/testclient.go       # TestClient wrapper for e2e testing
 ├── cmd/testserver/              # Conformance test server
 ├── cmd/testclient/              # Headless OAuth conformance client
