@@ -83,16 +83,18 @@ func NewClient(url string, info ClientInfo, opts ...ClientOption) *Client {
 
 // Connect establishes the transport and performs the MCP initialize handshake.
 func (c *Client) Connect() error {
-	// Create transport
-	if c.useSSE {
-		c.transport = newSSEClientTransport(c.url, c.tokenSource)
-	} else {
-		c.transport = newStreamableClientTransport(c.url, c.tokenSource)
-	}
+	// Create transport (skip if already set, e.g., by WithInMemoryServer)
+	if c.transport == nil {
+		if c.useSSE {
+			c.transport = newSSEClientTransport(c.url, c.tokenSource)
+		} else {
+			c.transport = newStreamableClientTransport(c.url, c.tokenSource)
+		}
 
-	// Wrap with logging if configured
-	if c.logger != nil {
-		c.transport = &loggingTransport{inner: c.transport, logger: c.logger}
+		// Wrap with logging if configured
+		if c.logger != nil {
+			c.transport = &loggingTransport{inner: c.transport, logger: c.logger}
+		}
 	}
 
 	if err := c.transport.connect(); err != nil {

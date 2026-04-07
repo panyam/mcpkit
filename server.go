@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	gohttp "github.com/panyam/servicekit/http"
@@ -13,8 +14,11 @@ import (
 
 // Server is an MCP server that can run over multiple transports.
 type Server struct {
-	dispatcher *Dispatcher
-	options    serverOptions
+	dispatcher         *Dispatcher
+	options            serverOptions
+	mu                 sync.Mutex
+	sessionClosers     []sessionCloser
+	allSessionClosers  []func()
 }
 
 type serverOptions struct {
@@ -188,6 +192,49 @@ func (s *Server) newSession() *Dispatcher {
 	return s.dispatcher.newSession()
 }
 
+// sessionCloser is called to close sessions on a transport.
+type sessionCloser func(id string) bool
+
+// sessionClosers tracks active transports for session management.
+var _ = sessionCloser(nil) // type check
+
+// CloseSession terminates an active session by ID across all transports.
+// Returns true if the session was found and closed.
+func (s *Server) CloseSession(id string) bool {
+	s.mu.Lock()
+	closers := make([]sessionCloser, len(s.sessionClosers))
+	copy(closers, s.sessionClosers)
+	s.mu.Unlock()
+
+	for _, closer := range closers {
+		if closer(id) {
+			return true
+		}
+	}
+	return false
+}
+
+// CloseAllSessions terminates all active sessions across all transports.
+func (s *Server) CloseAllSessions() {
+	s.mu.Lock()
+	allClosers := make([]func(), len(s.allSessionClosers))
+	copy(allClosers, s.allSessionClosers)
+	s.mu.Unlock()
+
+	for _, closer := range allClosers {
+		closer()
+	}
+}
+
+// registerTransportSessions registers a transport's session management callbacks.
+// Called by transports during Handler() creation.
+func (s *Server) registerTransportSessions(closeOne sessionCloser, closeAll func()) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sessionClosers = append(s.sessionClosers, closeOne)
+	s.allSessionClosers = append(s.allSessionClosers, closeAll)
+}
+
 // Handler returns an http.Handler implementing MCP transports.
 // By default, only the legacy SSE transport is enabled. Use WithStreamableHTTP(true)
 // to enable the Streamable HTTP transport (MCP 2025-03-26).
@@ -201,25 +248,65 @@ func (s *Server) Handler(opts ...TransportOption) http.Handler {
 
 	// SSE only (default, backward compatible)
 	if cfg.sse && !cfg.streamableHTTP {
-		return newSSETransport(s, opts...).handler()
+		sseT := newSSETransport(s, opts...)
+		s.registerTransportSessions(sseT.closeSession, sseT.closeAllSessions)
+		return sseT.handler()
 	}
 
 	// Streamable HTTP only
 	if cfg.streamableHTTP && !cfg.sse {
-		return newStreamableTransport(s, cfg).handler()
+		stT := newStreamableTransport(s, cfg)
+		s.registerTransportSessions(stT.closeSession, stT.closeAllSessions)
+		return stT.handler()
 	}
 
 	// Both enabled: SSE at /sse + /message, Streamable HTTP at base prefix
 	mux := http.NewServeMux()
 	if cfg.sse {
 		sseT := newSSETransport(s, opts...)
+		s.registerTransportSessions(sseT.closeSession, sseT.closeAllSessions)
 		sseT.mountOn(mux, prefix)
 	}
 	if cfg.streamableHTTP {
 		stT := newStreamableTransport(s, cfg)
+		s.registerTransportSessions(stT.closeSession, stT.closeAllSessions)
 		mux.HandleFunc(prefix, stT.handleRoot)
 	}
 	return mux
+}
+
+// Run is a convenience entry point that starts the server with Streamable HTTP
+// on the given address. It is equivalent to:
+//
+//	srv.ListenAndServe(mcpkit.WithStreamableHTTP(true))
+//
+// with the address set via WithListen. For more control over transport options,
+// use ListenAndServe directly.
+//
+// Example:
+//
+//	srv := mcpkit.NewServer(mcpkit.ServerInfo{Name: "my-server", Version: "1.0"})
+//	srv.RegisterTool(def, handler)
+//	srv.Run(":8787")
+func (s *Server) Run(addr string, opts ...TransportOption) error {
+	if addr != "" {
+		s.options.listen = addr
+	}
+	// Default to Streamable HTTP if no transport option explicitly set
+	hasTransport := false
+	for _, opt := range opts {
+		// Check if any transport option was provided by applying to a temp config
+		tc := transportConfig{}
+		opt(&tc)
+		if tc.streamableHTTP || tc.sse {
+			hasTransport = true
+			break
+		}
+	}
+	if !hasTransport {
+		opts = append([]TransportOption{WithStreamableHTTP(true)}, opts...)
+	}
+	return s.ListenAndServe(opts...)
 }
 
 // ListenAndServe starts the HTTP transport(s) with graceful shutdown support.
@@ -269,6 +356,7 @@ type transportConfig struct {
 	allowedOrigins []string // allowed Origin values for DNS rebinding protection
 	streamableHTTP bool     // enable Streamable HTTP transport
 	sse            bool     // enable legacy SSE transport
+	stateless      bool     // stateless mode: no sessions, fresh dispatcher per request
 }
 
 func defaultTransportConfig() transportConfig {
@@ -315,6 +403,17 @@ func WithStreamableHTTP(enabled bool) TransportOption {
 // WithSSE enables or disables the legacy SSE transport (MCP 2024-11-05).
 func WithSSE(enabled bool) TransportOption {
 	return func(c *transportConfig) { c.sse = enabled }
+}
+
+// WithStateless enables stateless mode for the Streamable HTTP transport.
+// In stateless mode, every request gets a fresh Dispatcher — no session storage,
+// no Mcp-Session-Id header, no state carried across requests. The initialize
+// handshake is auto-performed per request.
+//
+// Use for simple tool servers that don't need session state (e.g., single-tool
+// APIs, serverless functions, CLI wrappers).
+func WithStateless(enabled bool) TransportOption {
+	return func(c *transportConfig) { c.stateless = enabled }
 }
 
 // CheckAuth validates an HTTP request against the server's auth configuration.
