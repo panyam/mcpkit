@@ -51,7 +51,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Run auth sub-module tests
-        run: cd auth && go test ./... -v
+        run: cd ext/auth && go test ./... -v
 
       - name: Run E2E auth tests
         run: cd tests/e2e && go test ./... -v -count=1 -timeout 60s
