@@ -3,6 +3,7 @@ package mcpkit
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -47,6 +48,26 @@ func WithTokenSource(ts TokenSource) ClientOption {
 	return func(c *Client) { c.tokenSource = ts }
 }
 
+// SamplingHandler handles a server-to-client sampling/createMessage request.
+// The client performs LLM inference and returns the result.
+type SamplingHandler func(context.Context, CreateMessageRequest) (CreateMessageResult, error)
+
+// ElicitationHandler handles a server-to-client elicitation/create request.
+// The client prompts the user for input and returns the result.
+type ElicitationHandler func(context.Context, ElicitationRequest) (ElicitationResult, error)
+
+// WithSamplingHandler registers a handler for server-to-client sampling requests.
+// When set, the client advertises the "sampling" capability during initialization.
+func WithSamplingHandler(h SamplingHandler) ClientOption {
+	return func(c *Client) { c.samplingHandler = h }
+}
+
+// WithElicitationHandler registers a handler for server-to-client elicitation requests.
+// When set, the client advertises the "elicitation" capability during initialization.
+func WithElicitationHandler(h ElicitationHandler) ClientOption {
+	return func(c *Client) { c.elicitationHandler = h }
+}
+
 // Client is an MCP client that communicates over Streamable HTTP or SSE.
 type Client struct {
 	url         string
@@ -57,6 +78,10 @@ type Client struct {
 	mu          sync.Mutex
 	transport   clientTransport
 	logger      *log.Logger // optional transport logging (nil = disabled)
+
+	// Server-to-client request handlers
+	samplingHandler    SamplingHandler
+	elicitationHandler ElicitationHandler
 
 	// Reconnection settings (zero values = disabled)
 	maxRetries int
@@ -90,9 +115,13 @@ func (c *Client) Connect() error {
 	// Create transport (skip if already set, e.g., by WithInMemoryServer)
 	if c.transport == nil {
 		if c.useSSE {
-			c.transport = newSSEClientTransport(c.url, c.tokenSource)
+			st := newSSEClientTransport(c.url, c.tokenSource)
+			st.serverReqHandler = c.handleServerRequest
+			c.transport = st
 		} else {
-			c.transport = newStreamableClientTransport(c.url, c.tokenSource)
+			st := newStreamableClientTransport(c.url, c.tokenSource)
+			st.serverReqHandler = c.handleServerRequest
+			c.transport = st
 		}
 
 		// Wrap with logging if configured
@@ -110,10 +139,19 @@ func (c *Client) Connect() error {
 		return fmt.Errorf("transport connect: %w", err)
 	}
 
+	// Build client capabilities based on registered handlers
+	caps := map[string]any{}
+	if c.samplingHandler != nil {
+		caps["sampling"] = map[string]any{}
+	}
+	if c.elicitationHandler != nil {
+		caps["elicitation"] = map[string]any{}
+	}
+
 	// Initialize handshake
 	resp, err := c.rawCall("initialize", map[string]any{
 		"protocolVersion": "2024-11-05",
-		"capabilities":    map[string]any{},
+		"capabilities":    caps,
 		"clientInfo":      c.info,
 	})
 	if err != nil {
@@ -138,6 +176,44 @@ func (c *Client) Close() error {
 		return c.transport.close()
 	}
 	return nil
+}
+
+// handleServerRequest dispatches an incoming server-to-client JSON-RPC request
+// to the appropriate registered handler (sampling or elicitation).
+// Returns a JSON-RPC response to send back to the server.
+func (c *Client) handleServerRequest(req *Request) *Response {
+	switch req.Method {
+	case "sampling/createMessage":
+		if c.samplingHandler == nil {
+			return NewErrorResponse(req.ID, ErrCodeMethodNotFound, "sampling not supported")
+		}
+		var params CreateMessageRequest
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			return NewErrorResponse(req.ID, ErrCodeInvalidParams, "invalid sampling params: "+err.Error())
+		}
+		result, err := c.samplingHandler(context.Background(), params)
+		if err != nil {
+			return NewErrorResponse(req.ID, ErrCodeInternal, err.Error())
+		}
+		return NewResponse(req.ID, result)
+
+	case "elicitation/create":
+		if c.elicitationHandler == nil {
+			return NewErrorResponse(req.ID, ErrCodeMethodNotFound, "elicitation not supported")
+		}
+		var params ElicitationRequest
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			return NewErrorResponse(req.ID, ErrCodeInvalidParams, "invalid elicitation params: "+err.Error())
+		}
+		result, err := c.elicitationHandler(context.Background(), params)
+		if err != nil {
+			return NewErrorResponse(req.ID, ErrCodeInternal, err.Error())
+		}
+		return NewResponse(req.ID, result)
+
+	default:
+		return NewErrorResponse(req.ID, ErrCodeMethodNotFound, "unknown server request: "+req.Method)
+	}
 }
 
 // SessionID returns the current session ID.
@@ -324,10 +400,11 @@ func (c *Client) notifyMethod(method string, params any) error {
 // --- Streamable HTTP transport ---
 
 type streamableClientTransport struct {
-	url         string
-	sessionID   string
-	httpClient  *http.Client
-	tokenSource TokenSource
+	url              string
+	sessionID        string
+	httpClient       *http.Client
+	tokenSource      TokenSource
+	serverReqHandler func(*Request) *Response // set by Client before connect
 }
 
 func newStreamableClientTransport(url string, ts TokenSource) *streamableClientTransport {
@@ -364,7 +441,7 @@ func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
 
 	ct := resp.Header.Get("Content-Type")
 	if strings.Contains(ct, "text/event-stream") {
-		return readSSEResponse(resp.Body)
+		return t.readSSEResponse(resp.Body)
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -379,12 +456,15 @@ func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
 	return &result, nil
 }
 
-// readSSEResponse reads SSE events from a Streamable HTTP response, discarding
-// notification events and returning the final JSON-RPC response.
+// readSSEResponse reads SSE events from a Streamable HTTP response, handling
+// server-to-client requests inline and returning the final JSON-RPC response.
 // Per MCP spec: "All SSE events that are not JSON-RPC responses or notifications
 // SHOULD be ignored." Notifications arrive as intermediate events; the last
 // JSON-RPC response with an "id" field is the result.
-func readSSEResponse(body io.Reader) (*rpcResponse, error) {
+//
+// When a server-to-client request arrives (e.g., sampling/createMessage during
+// a tool call), the handler is called and the response is POSTed back to the server.
+func (t *streamableClientTransport) readSSEResponse(body io.Reader) (*rpcResponse, error) {
 	scanner := bufio.NewReader(body)
 	var lastResponse *rpcResponse
 
@@ -406,10 +486,32 @@ func readSSEResponse(body io.Reader) (*rpcResponse, error) {
 			if data == "" {
 				continue
 			}
+
+			// Probe to distinguish server requests from responses/notifications
+			var probe struct {
+				ID     any    `json:"id"`
+				Method string `json:"method"`
+			}
+			if json.Unmarshal([]byte(data), &probe) != nil {
+				continue
+			}
+
+			// Server-to-client request (has method + id)
+			if probe.Method != "" && probe.ID != nil && t.serverReqHandler != nil {
+				var req Request
+				if json.Unmarshal([]byte(data), &req) == nil {
+					resp := t.serverReqHandler(&req)
+					if resp != nil {
+						t.postResponse(resp)
+					}
+				}
+				continue
+			}
+
+			// JSON-RPC response or notification
 			var resp rpcResponse
 			if json.Unmarshal([]byte(data), &resp) == nil {
 				if resp.ID != nil {
-					// This is the JSON-RPC response (has an id)
 					lastResponse = &resp
 				}
 				// else: notification (no id) — discard
@@ -422,6 +524,32 @@ func readSSEResponse(body io.Reader) (*rpcResponse, error) {
 		return lastResponse, nil
 	}
 	return nil, fmt.Errorf("no JSON-RPC response in SSE stream")
+}
+
+// postResponse sends a JSON-RPC response back to the server via POST.
+// Used when the client handles a server-to-client request during an SSE stream.
+func (t *streamableClientTransport) postResponse(resp *Response) {
+	raw, err := json.Marshal(resp)
+	if err != nil {
+		return
+	}
+	buildReq := func() (*http.Request, error) {
+		req, err := http.NewRequest("POST", t.url, bytes.NewReader(raw))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", StreamableHTTPAccept)
+		if t.sessionID != "" {
+			req.Header.Set("Mcp-Session-Id", t.sessionID)
+		}
+		return req, nil
+	}
+	httpResp, err := doWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
+	if err != nil {
+		return
+	}
+	httpResp.Body.Close()
 }
 
 func (t *streamableClientTransport) notify(data []byte) error {
@@ -451,6 +579,10 @@ func (t *streamableClientTransport) notify(data []byte) error {
 // sseClientTransport implements the MCP SSE transport (2024-11-05).
 // Protocol: GET /sse → SSE stream with "endpoint" event containing POST URL →
 // POST JSON-RPC to that URL → read "message" events from SSE for responses.
+//
+// The transport runs a background reader goroutine that demultiplexes incoming
+// SSE events into: (1) responses to pending client requests (routed by ID),
+// (2) server-to-client requests (sampling, elicitation) dispatched to a handler.
 type sseClientTransport struct {
 	sseURL      string
 	postURL     string
@@ -459,7 +591,12 @@ type sseClientTransport struct {
 	tokenSource TokenSource
 	sseResp     *http.Response
 	sseReader   *bufio.Reader
-	mu          sync.Mutex
+
+	// Background reader state
+	pendingCalls    sync.Map    // requestID (string) → chan *rpcResponse
+	serverReqHandler func(*Request) *Response // set by Client before connect
+	done            chan struct{} // closed when background reader exits
+	readerErr       error         // last error from background reader
 }
 
 func newSSEClientTransport(sseURL string, ts TokenSource) *sseClientTransport {
@@ -498,7 +635,97 @@ func (t *sseClientTransport) connect() error {
 		}
 	}
 
+	// Start background reader to demux SSE events.
+	t.done = make(chan struct{})
+	go t.backgroundReader()
+
 	return nil
+}
+
+// backgroundReader continuously reads SSE events from the stream and routes them:
+// - Events with "id" + "result"/"error" (no "method") → response to a pending call
+// - Events with "method" field → server-to-client request → dispatch and POST response
+// - Everything else → discard (notifications, keepalives, etc.)
+func (t *sseClientTransport) backgroundReader() {
+	defer close(t.done)
+	for {
+		ev, err := t.readSSEEvent()
+		if err != nil {
+			t.readerErr = err
+			// Wake up any pending callers
+			t.pendingCalls.Range(func(key, value any) bool {
+				ch := value.(chan *rpcResponse)
+				select {
+				case ch <- nil:
+				default:
+				}
+				return true
+			})
+			return
+		}
+		if ev.event != "message" || ev.data == "" {
+			continue
+		}
+
+		// Try to determine if this is a response or a server request.
+		// Probe the JSON for "method" field presence.
+		var probe struct {
+			ID     any             `json:"id"`
+			Method string          `json:"method"`
+			Result json.RawMessage `json:"result"`
+			Error  json.RawMessage `json:"error"`
+		}
+		if json.Unmarshal([]byte(ev.data), &probe) != nil {
+			continue
+		}
+
+		if probe.Method != "" {
+			// Server-to-client request — dispatch to handler
+			if t.serverReqHandler != nil {
+				var req Request
+				if json.Unmarshal([]byte(ev.data), &req) == nil {
+					resp := t.serverReqHandler(&req)
+					if resp != nil {
+						t.postResponse(resp)
+					}
+				}
+			}
+			continue
+		}
+
+		// Response to a pending call — route by ID
+		if probe.ID != nil {
+			var resp rpcResponse
+			if json.Unmarshal([]byte(ev.data), &resp) == nil {
+				idStr := normalizeID(probe.ID)
+				if ch, ok := t.pendingCalls.LoadAndDelete(idStr); ok {
+					ch.(chan *rpcResponse) <- &resp
+				}
+			}
+		}
+	}
+}
+
+// postResponse sends a JSON-RPC response back to the server via POST.
+// Used when the client handles a server-to-client request (sampling, elicitation).
+func (t *sseClientTransport) postResponse(resp *Response) {
+	raw, err := json.Marshal(resp)
+	if err != nil {
+		return
+	}
+	buildReq := func() (*http.Request, error) {
+		req, err := http.NewRequest("POST", t.postURL, bytes.NewReader(raw))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		return req, nil
+	}
+	httpResp, err := doWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
+	if err != nil {
+		return
+	}
+	httpResp.Body.Close()
 }
 
 func (t *sseClientTransport) close() error {
@@ -506,12 +733,31 @@ func (t *sseClientTransport) close() error {
 		t.sseResp.Body.Close()
 		t.sseResp = nil
 	}
+	// Wait for background reader to exit
+	if t.done != nil {
+		<-t.done
+	}
 	return nil
 }
 
 func (t *sseClientTransport) getSessionID() string { return t.sessionID }
 
 func (t *sseClientTransport) call(data []byte) (*rpcResponse, error) {
+	// Extract request ID from the outgoing data to match the response
+	var outgoing struct {
+		ID any `json:"id"`
+	}
+	if err := json.Unmarshal(data, &outgoing); err != nil {
+		return nil, fmt.Errorf("invalid request data: %w", err)
+	}
+	idStr := normalizeID(outgoing.ID)
+
+	// Register pending channel before POSTing to avoid race with background reader
+	ch := make(chan *rpcResponse, 1)
+	t.pendingCalls.Store(idStr, ch)
+	defer t.pendingCalls.Delete(idStr)
+
+	// POST the request
 	buildReq := func() (*http.Request, error) {
 		req, err := http.NewRequest("POST", t.postURL, bytes.NewReader(data))
 		if err != nil {
@@ -527,22 +773,15 @@ func (t *sseClientTransport) call(data []byte) (*rpcResponse, error) {
 	}
 	resp.Body.Close()
 
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	ev, err := t.readSSEEvent()
-	if err != nil {
-		return nil, fmt.Errorf("reading SSE response: %w", err)
+	// Wait for the background reader to deliver the response
+	result := <-ch
+	if result == nil {
+		if t.readerErr != nil {
+			return nil, fmt.Errorf("SSE stream closed: %w", t.readerErr)
+		}
+		return nil, fmt.Errorf("SSE stream closed unexpectedly")
 	}
-	if ev.event != "message" {
-		return nil, fmt.Errorf("expected message event, got %q", ev.event)
-	}
-
-	var result rpcResponse
-	if err := json.Unmarshal([]byte(ev.data), &result); err != nil {
-		return nil, fmt.Errorf("invalid JSON in SSE message: %s", ev.data)
-	}
-	return &result, nil
+	return result, nil
 }
 
 func (t *sseClientTransport) notify(data []byte) error {
@@ -592,6 +831,21 @@ func (t *sseClientTransport) readSSEEvent() (sseClientEvent, error) {
 		} else if strings.HasPrefix(line, "data:") {
 			data = strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 		}
+	}
+}
+
+// normalizeID converts a JSON-RPC ID (int or string) to a consistent string
+// representation for use as a map key.
+func normalizeID(id any) string {
+	switch v := id.(type) {
+	case string:
+		return v
+	case float64:
+		return fmt.Sprintf("%d", int(v))
+	case json.Number:
+		return v.String()
+	default:
+		return fmt.Sprintf("%v", v)
 	}
 }
 
