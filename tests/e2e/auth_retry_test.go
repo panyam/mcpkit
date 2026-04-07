@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/panyam/mcpkit"
+	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/server"
+	"github.com/panyam/mcpkit/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -78,10 +80,10 @@ func TestE2E_Client_401_TokenRefresh(t *testing.T) {
 		tokens: []string{expiredToken, validToken},
 	}
 
-	client := mcpkit.NewClient(
+	client := client.NewClient(
 		env.MCPServerURL+"/mcp",
-		mcpkit.ClientInfo{Name: "retry-test", Version: "0.1.0"},
-		mcpkit.WithTokenSource(ts),
+		core.ClientInfo{Name: "retry-test", Version: "0.1.0"},
+		client.WithTokenSource(ts),
 	)
 	err := client.Connect()
 	require.NoError(t, err, "Connect should succeed after 401 retry with refreshed token")
@@ -134,10 +136,10 @@ func TestE2E_Client_403_ScopeStepUp(t *testing.T) {
 	// Full 403 transport-level testing requires a custom MCP server with
 	// JWTValidator.RequiredScopes — tracked as follow-up.
 
-	client := mcpkit.NewClient(
+	client := client.NewClient(
 		env.MCPServerURL+"/mcp",
-		mcpkit.ClientInfo{Name: "stepup-test", Version: "0.1.0"},
-		mcpkit.WithTokenSource(ts),
+		core.ClientInfo{Name: "stepup-test", Version: "0.1.0"},
+		client.WithTokenSource(ts),
 	)
 	err = client.Connect()
 	require.NoError(t, err)
@@ -161,16 +163,16 @@ func TestE2E_Client_RetryLimit(t *testing.T) {
 		tokens: []string{expiredToken}, // same expired token every time
 	}
 
-	client := mcpkit.NewClient(
+	client := client.NewClient(
 		env.MCPServerURL+"/mcp",
-		mcpkit.ClientInfo{Name: "limit-test", Version: "0.1.0"},
-		mcpkit.WithTokenSource(ts),
+		core.ClientInfo{Name: "limit-test", Version: "0.1.0"},
+		client.WithTokenSource(ts),
 	)
 	err := client.Connect()
 	require.Error(t, err, "Connect should fail after retry limit")
 
 	// Verify it's a ClientAuthError
-	var authErr *mcpkit.ClientAuthError
+	var authErr *core.ClientAuthError
 	assert.True(t, errors.As(err, &authErr), "error should be ClientAuthError, got: %T: %v", err, err)
 }
 
@@ -195,10 +197,10 @@ func TestE2E_Client_401_WithExpiredJWT(t *testing.T) {
 		tokens: []string{recentlyExpired, validToken},
 	}
 
-	client := mcpkit.NewClient(
+	client := client.NewClient(
 		env.MCPServerURL+"/mcp",
-		mcpkit.ClientInfo{Name: "expire-test", Version: "0.1.0"},
-		mcpkit.WithTokenSource(ts),
+		core.ClientInfo{Name: "expire-test", Version: "0.1.0"},
+		client.WithTokenSource(ts),
 	)
 	err = client.Connect()
 	require.NoError(t, err, "should succeed after refreshing expired token")

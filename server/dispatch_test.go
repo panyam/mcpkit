@@ -1,4 +1,4 @@
-package mcpkit
+package server
 
 import (
 	"context"

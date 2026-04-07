@@ -9,7 +9,9 @@ import (
 	"log"
 	"testing"
 
-	"github.com/panyam/mcpkit"
+	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/server"
+	"github.com/panyam/mcpkit/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -49,11 +51,11 @@ func TestE2E_Middleware_LoggingWithRealAuth(t *testing.T) {
 
 	token := env.MintToken(t, "log-user", []string{"tools:read"})
 
-	client := mcpkit.NewClient(
+	client := client.NewClient(
 		env.MCPServerURL+"/mcp",
-		mcpkit.ClientInfo{Name: "log-test", Version: "0.1.0"},
-		mcpkit.WithClientBearerToken(token),
-		mcpkit.WithClientLogging(logger),
+		core.ClientInfo{Name: "log-test", Version: "0.1.0"},
+		client.WithClientBearerToken(token),
+		client.WithClientLogging(logger),
 	)
 	require.NoError(t, client.Connect())
 	defer client.Close()

@@ -1,4 +1,4 @@
-package mcpkit
+package client
 
 // Client logging transport tests. Verify that the loggingTransport wrapper
 // correctly logs method names, latency, errors, and delegates sessionID.
