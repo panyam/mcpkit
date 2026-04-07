@@ -107,6 +107,24 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Stateless mode: every request gets a fresh dispatcher, no session tracking.
+	// The dispatcher is auto-initialized so tool calls work without a separate
+	// initialize handshake.
+	if t.config.stateless {
+		dispatcher := t.server.newSession()
+		// Auto-initialize the dispatcher so it accepts any method
+		dispatcher.initialized = true
+		resp := t.server.dispatchWith(dispatcher, r.Context(), claims, &req)
+		if resp == nil {
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		raw, _ := json.Marshal(resp)
+		w.Write(raw)
+		return
+	}
+
 	// Route: initialize creates a new session; everything else requires one
 	if req.Method == "initialize" {
 		t.handleInitialize(w, r, claims, &req)
@@ -269,6 +287,20 @@ func (t *streamableTransport) handleDelete(w http.ResponseWriter, r *http.Reques
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+// closeSession terminates a single session by ID. Returns true if found.
+func (t *streamableTransport) closeSession(id string) bool {
+	_, ok := t.sessions.LoadAndDelete(id)
+	return ok
+}
+
+// closeAllSessions terminates all active sessions.
+func (t *streamableTransport) closeAllSessions() {
+	t.sessions.Range(func(key, _ any) bool {
+		t.sessions.Delete(key)
+		return true
+	})
 }
 
 // sessionCount returns the number of active sessions.

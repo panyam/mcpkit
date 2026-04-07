@@ -30,16 +30,14 @@ server:
 # Remove entries as the client OAuth flow is implemented.
 
 client:
-  # Passing (12/14 required):
+  # ALL 14/14 required scenarios passing (210/210 checks)!
   # ✓ auth/metadata-default, metadata-var1, metadata-var2, metadata-var3
   # ✓ auth/scope-from-www-authenticate, scope-from-scopes-supported, scope-omitted-when-undefined
   # ✓ auth/token-endpoint-auth-basic, token-endpoint-auth-post, token-endpoint-auth-none
   # ✓ auth/pre-registration
+  # ✓ auth/scope-step-up (20/20 checks — full scope escalation flow)
+  # ✓ auth/scope-retry-limit (16/16 checks)
   # ⚠ auth/basic-cimd (passing with 1 warning — CIMD not implemented)
 
   # Required — CIMD (warning: not using Client ID Metadata Documents yet)
   - auth/basic-cimd                         # Client ID Metadata Document flow (warning)
-
-  # Required — scope step-up (blocked on #53: client transport 401/403 handling)
-  - auth/scope-step-up                      # 403 flow with scope escalation
-  - auth/scope-retry-limit                  # Max retry attempts on repeated 403
