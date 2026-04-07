@@ -703,3 +703,90 @@ func TestDispatchToolsCallWithoutProgressToken(t *testing.T) {
 		t.Errorf("ProgressToken = %v, want nil", gotToken)
 	}
 }
+
+// TestDispatchToolsListExtraSchemaFields verifies that extra JSON Schema fields
+// beyond the MCP spec minimum (type, properties, required) — such as $schema,
+// $defs, $ref, and additionalProperties — are preserved in tools/list responses.
+// This guards against regressions where InputSchema might be replaced with a
+// typed struct that drops unknown fields.
+func TestDispatchToolsListExtraSchemaFields(t *testing.T) {
+	d := NewDispatcher(ServerInfo{Name: "test-server", Version: "1.0.0"})
+	d.RegisterTool(
+		ToolDef{
+			Name:        "schema_extra",
+			Description: "Tool with extra JSON Schema fields",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"name": map[string]any{"type": "string"},
+				},
+				"required":            []string{"name"},
+				"additionalProperties": false,
+				"$schema":             "http://json-schema.org/draft-07/schema#",
+				"$defs": map[string]any{
+					"Address": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"street": map[string]any{"type": "string"},
+						},
+					},
+				},
+			},
+		},
+		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
+			return TextResult("ok"), nil
+		},
+	)
+	initDispatcher(d)
+
+	resp := d.Dispatch(context.Background(), &Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "tools/list",
+	})
+	if resp.Error != nil {
+		t.Fatalf("unexpected error: %v", resp.Error)
+	}
+
+	var result struct {
+		Tools []struct {
+			Name        string         `json:"name"`
+			InputSchema map[string]any `json:"inputSchema"`
+		} `json:"tools"`
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Tools) != 1 {
+		t.Fatalf("got %d tools, want 1", len(result.Tools))
+	}
+
+	schema := result.Tools[0].InputSchema
+
+	// additionalProperties must be preserved as false (boolean).
+	if ap, ok := schema["additionalProperties"]; !ok {
+		t.Error("additionalProperties missing from schema")
+	} else if ap != false {
+		t.Errorf("additionalProperties = %v (%T), want false", ap, ap)
+	}
+
+	// $schema must be preserved as a string.
+	if s, ok := schema["$schema"]; !ok {
+		t.Error("$schema missing from schema")
+	} else if s != "http://json-schema.org/draft-07/schema#" {
+		t.Errorf("$schema = %v, want draft-07 URI", s)
+	}
+
+	// $defs must be preserved as a nested object.
+	defs, ok := schema["$defs"]
+	if !ok {
+		t.Fatal("$defs missing from schema")
+	}
+	defsMap, ok := defs.(map[string]any)
+	if !ok {
+		t.Fatalf("$defs is %T, want map[string]any", defs)
+	}
+	if _, ok := defsMap["Address"]; !ok {
+		t.Error("$defs.Address missing")
+	}
+}

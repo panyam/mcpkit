@@ -447,3 +447,144 @@ func TestClientSubscriptionNotificationDelivery(t *testing.T) {
 		t.Errorf("method = %q, want notifications/resources/updated", received[0])
 	}
 }
+
+// newExtraSchemaServer creates a Server with a tool whose InputSchema includes
+// extra JSON Schema fields ($schema, $defs, additionalProperties) beyond the
+// MCP spec minimum. Used to verify round-trip preservation across transports.
+func newExtraSchemaServer() *Server {
+	srv := NewServer(ServerInfo{Name: "test-server", Version: "1.0.0"})
+	srv.RegisterTool(
+		ToolDef{
+			Name:        "extra_schema",
+			Description: "Tool with extra JSON Schema fields",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"name": map[string]any{
+						"type": "string",
+						"$ref": "#/$defs/NameType",
+					},
+				},
+				"required":            []string{"name"},
+				"additionalProperties": false,
+				"$schema":             "http://json-schema.org/draft-07/schema#",
+				"$defs": map[string]any{
+					"NameType": map[string]any{
+						"type":      "string",
+						"minLength": 1,
+					},
+				},
+			},
+		},
+		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
+			return TextResult("ok"), nil
+		},
+	)
+	return srv
+}
+
+// TestClientListToolsExtraSchemaFields verifies that extra JSON Schema fields
+// in a tool's InputSchema (e.g. $schema, $defs, $ref, additionalProperties)
+// survive the full round-trip through server serialization, transport, and
+// client deserialization across all three transports (Streamable HTTP, SSE,
+// in-memory). This guards against regressions where the InputSchema type might
+// be changed from `any` to a typed struct that drops unknown fields.
+func TestClientListToolsExtraSchemaFields(t *testing.T) {
+	runTest := func(t *testing.T, c *Client) {
+		tools, err := c.ListTools()
+		if err != nil {
+			t.Fatalf("ListTools: %v", err)
+		}
+
+		// Find the extra_schema tool.
+		var found *ToolDef
+		for i := range tools {
+			if tools[i].Name == "extra_schema" {
+				found = &tools[i]
+				break
+			}
+		}
+		if found == nil {
+			t.Fatal("extra_schema tool not found in ListTools response")
+		}
+
+		schema, ok := found.InputSchema.(map[string]any)
+		if !ok {
+			t.Fatalf("InputSchema is %T, want map[string]any", found.InputSchema)
+		}
+
+		// additionalProperties must be preserved as false.
+		if ap, ok := schema["additionalProperties"]; !ok {
+			t.Error("additionalProperties missing from schema")
+		} else if ap != false {
+			t.Errorf("additionalProperties = %v (%T), want false", ap, ap)
+		}
+
+		// $schema must be preserved.
+		if s, ok := schema["$schema"]; !ok {
+			t.Error("$schema missing from schema")
+		} else if s != "http://json-schema.org/draft-07/schema#" {
+			t.Errorf("$schema = %v, want draft-07 URI", s)
+		}
+
+		// $defs must be preserved with nested structure.
+		defs, ok := schema["$defs"]
+		if !ok {
+			t.Fatal("$defs missing from schema")
+		}
+		defsMap, ok := defs.(map[string]any)
+		if !ok {
+			t.Fatalf("$defs is %T, want map[string]any", defs)
+		}
+		if _, ok := defsMap["NameType"]; !ok {
+			t.Error("$defs.NameType missing")
+		}
+
+		// $ref in property must be preserved.
+		props, _ := schema["properties"].(map[string]any)
+		nameProp, _ := props["name"].(map[string]any)
+		if ref, ok := nameProp["$ref"]; !ok {
+			t.Error("$ref missing from name property")
+		} else if ref != "#/$defs/NameType" {
+			t.Errorf("$ref = %v, want #/$defs/NameType", ref)
+		}
+	}
+
+	t.Run("streamable", func(t *testing.T) {
+		srv := newExtraSchemaServer()
+		handler := srv.Handler(WithStreamableHTTP(true))
+		ts := httptest.NewServer(handler)
+		t.Cleanup(ts.Close)
+		c := NewClient(ts.URL+"/mcp", ClientInfo{Name: "test-client", Version: "1.0"})
+		if err := c.Connect(); err != nil {
+			t.Fatalf("Connect failed: %v", err)
+		}
+		runTest(t, c)
+	})
+
+	t.Run("sse", func(t *testing.T) {
+		srv := newExtraSchemaServer()
+		handler := srv.Handler(WithSSE(true), WithStreamableHTTP(false))
+		ts := httptest.NewServer(handler)
+		c := NewClient(ts.URL+"/mcp/sse", ClientInfo{Name: "test-client", Version: "1.0"}, WithSSEClient())
+		if err := c.Connect(); err != nil {
+			ts.Close()
+			t.Fatalf("SSE Connect failed: %v", err)
+		}
+		t.Cleanup(func() {
+			c.Close()
+			ts.Close()
+		})
+		runTest(t, c)
+	})
+
+	t.Run("memory", func(t *testing.T) {
+		c := NewClient("memory://", ClientInfo{Name: "test-client", Version: "1.0"},
+			WithInMemoryServer(newExtraSchemaServer()))
+		if err := c.Connect(); err != nil {
+			t.Fatalf("Connect failed: %v", err)
+		}
+		t.Cleanup(func() { c.Close() })
+		runTest(t, c)
+	})
+}
