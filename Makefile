@@ -185,7 +185,8 @@ upkcl: ## Start Keycloak container for interop tests
 		-e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
 		-e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
 		-v $(PWD)/tests/keycloak/realm.json:/opt/keycloak/data/import/realm.json \
-		$(KC_IMAGE) start-dev --import-realm
+		$(KC_IMAGE) start-dev --import-realm \
+		--log-level=INFO,org.keycloak.events:DEBUG
 	@echo "Keycloak starting on port $(KC_PORT)... (realm import takes ~30s)"
 	@echo "Run 'make kcllogs' to watch startup, 'make testkcl' when ready"
 
