@@ -1,5 +1,18 @@
 package core
 
+import "context"
+
+// UIExtensionID is the extension identifier for MCP Apps.
+// Used in initialize handshake for both server advertisement and client capability declaration.
+const UIExtensionID = "io.modelcontextprotocol/ui"
+
+// ClientSupportsUI checks whether the connected client declared support for the
+// MCP Apps extension during the initialize handshake. Tool handlers can use this
+// to decide whether to include UI-specific content or fall back to text-only.
+func ClientSupportsUI(ctx context.Context) bool {
+	return ClientSupportsExtension(ctx, UIExtensionID)
+}
+
 // UIMetadata describes UI presentation metadata for tools and resources.
 // Serialized as the "_meta.ui" object in tools/list and resources/read responses.
 // Part of the MCP Apps extension (io.modelcontextprotocol/ui).
