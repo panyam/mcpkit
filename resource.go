@@ -69,3 +69,9 @@ type ResourceHandler func(ctx context.Context, req ResourceRequest) (ResourceRes
 // TemplateHandler reads a resource matched by a URI template.
 // The uri parameter is the full resolved URI, params contains the extracted template variables.
 type TemplateHandler func(ctx context.Context, uri string, params map[string]string) (ResourceResult, error)
+
+// ResourceUpdatedNotification is the params payload for notifications/resources/updated.
+// Sent by the server to subscribed clients when a resource's content has changed.
+type ResourceUpdatedNotification struct {
+	URI string `json:"uri"`
+}

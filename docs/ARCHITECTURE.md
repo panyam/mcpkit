@@ -51,14 +51,14 @@ MCPKit is a Go library for building production-grade MCP (Model Context Protocol
 ```
 mcpkit/                          # module: github.com/panyam/mcpkit
 ├── go.mod                       # servicekit v0.0.14
-├── dispatch.go                  # Dispatcher: JSON-RPC routing, version negotiation, init gating, logging, completion
+├── dispatch.go                  # Dispatcher: JSON-RPC routing, version negotiation, init gating, logging, completion, resources/subscribe, resources/unsubscribe
 ├── logging.go                   # LogLevel, LogMessage, NotifyFunc, EmitLog, context helpers
 ├── progress.go                  # ProgressNotification, EmitProgress
 ├── completion.go                # CompletionRef, CompletionArgument, CompletionResult, CompletionHandler
 ├── auth.go                      # Claims, ClaimsProvider, TokenSource, Extension, Stability, ExtensionProvider
-├── server.go                    # Server, options, Handler(), ListenAndServe(), CheckAuth, writeAuthError
+├── server.go                    # Server, options, Handler(), ListenAndServe(), CheckAuth, writeAuthError, subscriptionRegistry, NotifyResourceUpdated
 ├── tool.go                      # ToolDef (with Annotations), ToolRequest, ToolResult, Content, ToolHandler
-├── resource.go                  # ResourceDef (with Annotations), ResourceTemplate, ResourceHandler types
+├── resource.go                  # ResourceDef, ResourceTemplate, ResourceHandler, ResourceUpdatedNotification types
 ├── prompt.go                    # PromptDef (with Annotations), PromptArgument, PromptHandler types
 ├── pagination.go                # Generic cursor-based pagination helper
 ├── jsonrpc.go                   # JSON-RPC 2.0 Request/Response/Error types
@@ -71,7 +71,7 @@ mcpkit/                          # module: github.com/panyam/mcpkit
 │   ├── conformance_resources.go # Resources + templates for conformance
 │   └── conformance_prompts.go   # Prompts for conformance
 ├── conformance/
-│   └── baseline.yml             # Expected failures: 7 server + 3 auth
+│   └── baseline.yml             # Expected failures: 4 server + 1 auth (with warning)
 ├── scripts/
 │   ├── smoke-test.sh            # Curl-based tests for SSE + Streamable HTTP
 │   ├── conformance-test.sh      # Runs @modelcontextprotocol/conformance (server)
@@ -80,7 +80,7 @@ mcpkit/                          # module: github.com/panyam/mcpkit
 │   ├── ARCHITECTURE.md          # This file
 │   ├── AUTH_DESIGN.md           # Auth architecture, sequence diagrams, spec compliance
 │   └── GATEWAY_DESIGN.md       # MCP Gateway design for proxying HTTP/gRPC backends
-├── client.go                    # MCP client: Connect, ToolCall, ReadResource, WithClientBearerToken
+├── client.go                    # MCP client: Connect, ToolCall, ReadResource, SubscribeResource, UnsubscribeResource, WithClientBearerToken
 ├── testutil/testclient.go       # TestClient wrapper for e2e testing
 ├── auth/                        # SEPARATE module (github.com/panyam/mcpkit/auth)
 │   ├── go.mod                   # depends on mcpkit + oneauth v0.0.64
@@ -197,6 +197,20 @@ MCPKit supports server-initiated notifications via `NotifyFunc`, a generic `func
 - Client sends `logging/setLevel` → dispatcher stores minimum level per-session via `atomic.Pointer[LogLevel]`
 - Tool handler calls `EmitLog(ctx, LogInfo, "logger", "message")` → filtered by level → pushed as `notifications/message`
 - Thread-safe: atomic read of log level from tool goroutines while `logging/setLevel` writes
+
+### Resource Subscriptions
+
+Clients can subscribe to resource URIs and receive `notifications/resources/updated` when the resource changes. Requires `WithSubscriptions()` server option.
+
+**Architecture:**
+- `subscriptionRegistry` on `Server` maps URI → sessionID → `*Dispatcher`
+- Per-session `Dispatcher` holds `sessionID` and `subManager` (pointer to Server's registry)
+- `resources/subscribe` handler registers the session's Dispatcher under the URI
+- `resources/unsubscribe` handler removes it
+- `Server.NotifyResourceUpdated(uri)` iterates subscribers under read lock, copies dispatcher list, then calls each `d.notifyFunc` outside the lock
+- Transport `OnClose` / `closeSession` calls `subManager.unsubscribeAll(sessionID)` to clean up
+
+**Why store `*Dispatcher` not `NotifyFunc`:** The `notifyFunc` on a Dispatcher can change — Streamable HTTP wires it when a GET SSE stream opens. Storing the Dispatcher pointer and reading `d.notifyFunc` at notification time handles this correctly.
 
 ## Tool Error Semantics
 

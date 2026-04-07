@@ -186,6 +186,7 @@ func (c *mcpSSEConn) OnStart(w http.ResponseWriter, r *http.Request) error {
 	// Register in hub and create per-session dispatcher
 	c.transport.hub.Register(&c.BaseSSEConn)
 	dispatcher := c.transport.server.newSession()
+	dispatcher.sessionID = c.sessionID
 
 	// Wire up server-to-client notifications via the SSE stream.
 	// This closure captures the sessionID and hub, allowing tool handlers
@@ -213,6 +214,12 @@ func (c *mcpSSEConn) OnStart(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (c *mcpSSEConn) OnClose() {
+	// Clean up resource subscriptions before removing the session
+	if d, ok := c.transport.sessions.Load(c.sessionID); ok {
+		if disp := d.(*Dispatcher); disp.subManager != nil {
+			disp.subManager.unsubscribeAll(c.sessionID)
+		}
+	}
 	c.transport.hub.Unregister(c.ConnId())
 	c.transport.sessions.Delete(c.sessionID)
 	c.transport.sessionSubjects.Delete(c.sessionID)
@@ -222,7 +229,10 @@ func (c *mcpSSEConn) OnClose() {
 // closeSession terminates a single SSE session by ID.
 // Unregisters from the hub (closing the SSE stream) and removes from session maps.
 func (t *sseTransport) closeSession(id string) bool {
-	if _, ok := t.sessions.LoadAndDelete(id); ok {
+	if d, ok := t.sessions.LoadAndDelete(id); ok {
+		if disp := d.(*Dispatcher); disp.subManager != nil {
+			disp.subManager.unsubscribeAll(id)
+		}
 		t.hub.Unregister(id)
 		t.sessionSubjects.Delete(id)
 		return true
@@ -232,8 +242,11 @@ func (t *sseTransport) closeSession(id string) bool {
 
 // closeAllSessions terminates all active SSE sessions.
 func (t *sseTransport) closeAllSessions() {
-	t.sessions.Range(func(key, _ any) bool {
+	t.sessions.Range(func(key, value any) bool {
 		id := key.(string)
+		if disp := value.(*Dispatcher); disp.subManager != nil {
+			disp.subManager.unsubscribeAll(id)
+		}
 		t.hub.Unregister(id)
 		t.sessions.Delete(key)
 		t.sessionSubjects.Delete(key)

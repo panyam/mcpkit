@@ -54,6 +54,11 @@ type Dispatcher struct {
 	// notifyFunc is set by the transport to push server-to-client notifications.
 	// nil means no push capability (e.g., Streamable HTTP without GET SSE stream).
 	notifyFunc NotifyFunc
+
+	// Subscription state (per-session).
+	subscriptionsEnabled bool                    // advertise "subscribe": true in resources capability
+	sessionID            string                  // set by transport, used as key in subscription registry
+	subManager           *subscriptionRegistry   // shared pointer to Server's registry (nil if disabled)
 }
 
 type toolEntry struct {
@@ -130,17 +135,19 @@ func NewDispatcher(info ServerInfo) *Dispatcher {
 // before serving begins and never modified after.
 func (d *Dispatcher) newSession() *Dispatcher {
 	return &Dispatcher{
-		tools:         d.tools,
-		toolOrder:     d.toolOrder,
-		resources:     d.resources,
-		resourceOrder: d.resourceOrder,
-		templates:     d.templates,
-		templateOrder: d.templateOrder,
-		prompts:       d.prompts,
-		promptOrder:   d.promptOrder,
-		completions:   d.completions,
-		extensions:    d.extensions,
-		serverInfo:    d.serverInfo,
+		tools:                d.tools,
+		toolOrder:            d.toolOrder,
+		resources:            d.resources,
+		resourceOrder:        d.resourceOrder,
+		templates:            d.templates,
+		templateOrder:        d.templateOrder,
+		prompts:              d.prompts,
+		promptOrder:          d.promptOrder,
+		completions:          d.completions,
+		extensions:           d.extensions,
+		serverInfo:           d.serverInfo,
+		subscriptionsEnabled: d.subscriptionsEnabled,
+		subManager:           d.subManager,
 	}
 }
 
@@ -225,6 +232,10 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *Request) *Response {
 			return d.handleResourcesRead(ctx, id, req.Params)
 		case "resources/templates/list":
 			return d.handleResourcesTemplatesList(id, req.Params)
+		case "resources/subscribe":
+			return d.handleResourcesSubscribe(id, req.Params)
+		case "resources/unsubscribe":
+			return d.handleResourcesUnsubscribe(id, req.Params)
 		case "prompts/list":
 			return d.handlePromptsList(id, req.Params)
 		case "prompts/get":
@@ -268,7 +279,11 @@ func (d *Dispatcher) handleInitialize(id json.RawMessage, params json.RawMessage
 		"completions": map[string]any{},
 	}
 	if len(d.resources) > 0 || len(d.templates) > 0 {
-		caps["resources"] = map[string]any{}
+		resCap := map[string]any{}
+		if d.subscriptionsEnabled {
+			resCap["subscribe"] = true
+		}
+		caps["resources"] = resCap
 	}
 	if len(d.prompts) > 0 {
 		caps["prompts"] = map[string]any{}
@@ -388,6 +403,39 @@ func (d *Dispatcher) handleResourcesTemplatesList(id json.RawMessage, params jso
 		}
 	}
 	return NewResponse(id, map[string]any{"resourceTemplates": templates})
+}
+
+// --- Resource Subscriptions ---
+
+// handleResourcesSubscribe registers the current session's interest in a resource URI.
+// The server will send notifications/resources/updated to this session when the
+// resource changes (triggered by Server.NotifyResourceUpdated).
+func (d *Dispatcher) handleResourcesSubscribe(id json.RawMessage, params json.RawMessage) *Response {
+	var p struct {
+		URI string `json:"uri"`
+	}
+	if err := json.Unmarshal(params, &p); err != nil {
+		return NewErrorResponse(id, ErrCodeInvalidParams, err.Error())
+	}
+	if d.subManager != nil {
+		d.subManager.subscribe(d.sessionID, d, p.URI)
+	}
+	return NewResponse(id, map[string]any{})
+}
+
+// handleResourcesUnsubscribe removes the current session's subscription for a resource URI.
+// The server will no longer send notifications/resources/updated for this URI to this session.
+func (d *Dispatcher) handleResourcesUnsubscribe(id json.RawMessage, params json.RawMessage) *Response {
+	var p struct {
+		URI string `json:"uri"`
+	}
+	if err := json.Unmarshal(params, &p); err != nil {
+		return NewErrorResponse(id, ErrCodeInvalidParams, err.Error())
+	}
+	if d.subManager != nil {
+		d.subManager.unsubscribe(d.sessionID, p.URI)
+	}
+	return NewResponse(id, map[string]any{})
 }
 
 // --- Prompts ---
