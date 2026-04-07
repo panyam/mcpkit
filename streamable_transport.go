@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+
+	gohttp "github.com/panyam/servicekit/http"
 )
 
 const (
@@ -34,6 +36,7 @@ const (
 type streamableTransport struct {
 	server   *Server
 	sessions sync.Map // sessionID → *Dispatcher
+	sseHub   *gohttp.SSEHub[SSEData] // for GET SSE streams (server-initiated notifications)
 	config   transportConfig
 }
 
@@ -41,6 +44,7 @@ type streamableTransport struct {
 func newStreamableTransport(s *Server, cfg transportConfig) *streamableTransport {
 	return &streamableTransport{
 		server: s,
+		sseHub: gohttp.NewSSEHub[SSEData](),
 		config: cfg,
 	}
 }
@@ -67,8 +71,7 @@ func (t *streamableTransport) handleRoot(w http.ResponseWriter, r *http.Request)
 	case http.MethodDelete:
 		t.handleDelete(w, r)
 	case http.MethodGet:
-		// Future: SSE stream for server-initiated notifications.
-		http.Error(w, "GET SSE stream not yet supported", http.StatusMethodNotAllowed)
+		t.handleGet(w, r)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -265,6 +268,105 @@ func (t *streamableTransport) handleInitialize(w http.ResponseWriter, r *http.Re
 	w.Header().Set("Content-Type", "application/json")
 	raw, _ := json.Marshal(resp)
 	w.Write(raw)
+}
+
+// handleGet handles GET requests: opens a long-lived SSE stream for
+// server-initiated notifications (list-changed, resource updates, logging).
+// Per MCP spec (2025-11-25, Streamable HTTP transport):
+//
+//	"Clients can open an HTTP GET request on the MCP endpoint to open an SSE stream.
+//	 The server can use this stream to send notifications and requests to the client."
+//
+// The stream lives until the client disconnects or the session is deleted.
+// Multiple GET streams can be open simultaneously for the same session.
+// Uses servicekit's SSEServe/SSEHandler pattern for proper lifecycle management.
+func (t *streamableTransport) handleGet(w http.ResponseWriter, r *http.Request) {
+	handler := &streamableSSEHandler{transport: t}
+	sseConfig := &gohttp.SSEConnConfig{
+		KeepalivePeriod: t.config.keepalivePeriod,
+	}
+	gohttp.SSEServe[SSEData](handler, sseConfig)(w, r)
+}
+
+// streamableSSEHandler implements gohttp.SSEHandler for Streamable HTTP GET SSE.
+// It validates auth + session, creates an SSE connection, and wires the session's
+// notifyFunc to push to the SSE hub.
+type streamableSSEHandler struct {
+	transport *streamableTransport
+}
+
+// streamableSSEConn is the SSE connection for Streamable HTTP GET streams.
+type streamableSSEConn struct {
+	gohttp.BaseSSEConn[SSEData]
+	sessionID  string
+	transport  *streamableTransport
+	dispatcher *Dispatcher
+}
+
+func (h *streamableSSEHandler) Validate(w http.ResponseWriter, r *http.Request) (*streamableSSEConn, bool) {
+	// Auth check
+	if _, err := h.transport.server.CheckAuth(r); err != nil {
+		writeAuthError(w, err)
+		return nil, false
+	}
+
+	// Session ID is optional on GET — if provided, attach to existing session;
+	// if not, the stream is session-independent (receives broadcast notifications).
+	sessionID := r.Header.Get(mcpSessionIDHeader)
+	var dispatcher *Dispatcher
+	if sessionID != "" {
+		dispVal, ok := h.transport.sessions.Load(sessionID)
+		if !ok {
+			http.Error(w, "session not found", http.StatusNotFound)
+			return nil, false
+		}
+		dispatcher = dispVal.(*Dispatcher)
+	} else {
+		// No session — create a temporary dispatcher for this SSE stream
+		sessionID = generateSessionID()
+		dispatcher = h.transport.server.newSession()
+		dispatcher.initialized = true
+	}
+
+	conn := &streamableSSEConn{
+		BaseSSEConn: gohttp.BaseSSEConn[SSEData]{
+			Codec:     &sseDataCodec{},
+			ConnIdStr: sessionID,
+			NameStr:   "MCP-GET-SSE",
+		},
+		sessionID:  sessionID,
+		transport:  h.transport,
+		dispatcher: dispatcher,
+	}
+	return conn, true
+}
+
+func (c *streamableSSEConn) OnStart(w http.ResponseWriter, r *http.Request) error {
+	if err := c.BaseSSEConn.OnStart(w, r); err != nil {
+		return err
+	}
+
+	// Register in hub for notification delivery
+	c.transport.sseHub.Register(&c.BaseSSEConn)
+
+	// Wire the dispatcher's notifyFunc to push to the SSE hub.
+	// This enables EmitLog/Notify from tool handlers to reach the GET stream.
+	sessionID := c.sessionID
+	hub := c.transport.sseHub
+	c.dispatcher.notifyFunc = func(method string, params any) {
+		raw, err := marshalNotification(method, params)
+		if err != nil {
+			return
+		}
+		hub.SendEvent(sessionID, "message", SSEJSON(raw))
+	}
+
+	return nil
+}
+
+func (c *streamableSSEConn) OnClose() {
+	c.transport.sseHub.Unregister(c.ConnId())
+	c.BaseSSEConn.OnClose()
 }
 
 // handleDelete handles DELETE requests: terminates a session.
