@@ -1,4 +1,4 @@
-package testutil
+package testutil_test
 
 import (
 	"context"
@@ -6,17 +6,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/panyam/mcpkit"
+	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/server"
+	"github.com/panyam/mcpkit/testutil"
 )
 
 // newTestServer creates a minimal MCP server with an echo tool and
 // a static resource for testing the TestClient wrapper.
-func newTestServer(t *testing.T) *mcpkit.Server {
+func newTestServer(t *testing.T) *server.Server {
 	t.Helper()
-	srv := mcpkit.NewServer(mcpkit.ServerInfo{Name: "testutil-server", Version: "0.1.0"})
+	srv := server.NewServer(core.ServerInfo{Name: "testutil-server", Version: "0.1.0"})
 
 	srv.RegisterTool(
-		mcpkit.ToolDef{
+		core.ToolDef{
 			Name:        "greet",
 			Description: "Returns a greeting",
 			InputSchema: map[string]any{
@@ -24,18 +26,20 @@ func newTestServer(t *testing.T) *mcpkit.Server {
 				"properties": map[string]any{"name": map[string]any{"type": "string"}},
 			},
 		},
-		func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
-			var p struct{ Name string `json:"name"` }
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			var p struct {
+				Name string `json:"name"`
+			}
 			req.Bind(&p)
-			return mcpkit.TextResult(fmt.Sprintf("hello %s", p.Name)), nil
+			return core.TextResult(fmt.Sprintf("hello %s", p.Name)), nil
 		},
 	)
 
 	srv.RegisterResource(
-		mcpkit.ResourceDef{URI: "test://data", Name: "Test Data", MimeType: "text/plain"},
-		func(ctx context.Context, req mcpkit.ResourceRequest) (mcpkit.ResourceResult, error) {
-			return mcpkit.ResourceResult{
-				Contents: []mcpkit.ResourceReadContent{{URI: "test://data", Text: "test data"}},
+		core.ResourceDef{URI: "test://data", Name: "Test Data", MimeType: "text/plain"},
+		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+			return core.ResourceResult{
+				Contents: []core.ResourceReadContent{{URI: "test://data", Text: "test data"}},
 			}, nil
 		},
 	)
@@ -48,7 +52,7 @@ func newTestServer(t *testing.T) *mcpkit.Server {
 // requiring manual error handling.
 func TestTestClientToolCall(t *testing.T) {
 	srv := newTestServer(t)
-	c := NewTestClient(t, srv)
+	c := testutil.NewTestClient(t, srv)
 
 	text := c.ToolCall("greet", map[string]string{"name": "world"})
 	if text != "hello world" {
@@ -60,7 +64,7 @@ func TestTestClientToolCall(t *testing.T) {
 // convenience method reads a static resource and returns its content.
 func TestTestClientReadResource(t *testing.T) {
 	srv := newTestServer(t)
-	c := NewTestClient(t, srv)
+	c := testutil.NewTestClient(t, srv)
 
 	text := c.ReadResource("test://data")
 	if text != "test data" {
@@ -72,7 +76,7 @@ func TestTestClientReadResource(t *testing.T) {
 // tool definitions via the TestClient wrapper.
 func TestTestClientListTools(t *testing.T) {
 	srv := newTestServer(t)
-	c := NewTestClient(t, srv)
+	c := testutil.NewTestClient(t, srv)
 
 	tools := c.ListTools()
 	if len(tools) != 1 || tools[0].Name != "greet" {
@@ -84,7 +88,7 @@ func TestTestClientListTools(t *testing.T) {
 // registered static resource definitions.
 func TestTestClientListResources(t *testing.T) {
 	srv := newTestServer(t)
-	c := NewTestClient(t, srv)
+	c := testutil.NewTestClient(t, srv)
 
 	resources := c.ListResources()
 	if len(resources) != 1 || resources[0].URI != "test://data" {
@@ -96,7 +100,7 @@ func TestTestClientListResources(t *testing.T) {
 // server info from the initialize handshake.
 func TestTestClientServerInfo(t *testing.T) {
 	srv := newTestServer(t)
-	c := NewTestClient(t, srv)
+	c := testutil.NewTestClient(t, srv)
 
 	if c.ServerInfo.Name != "testutil-server" {
 		t.Errorf("server name = %q, want 'testutil-server'", c.ServerInfo.Name)
@@ -107,7 +111,7 @@ func TestTestClientServerInfo(t *testing.T) {
 // session ID after connection.
 func TestTestClientSessionID(t *testing.T) {
 	srv := newTestServer(t)
-	c := NewTestClient(t, srv)
+	c := testutil.NewTestClient(t, srv)
 
 	if c.SessionID() == "" {
 		t.Error("no session ID")

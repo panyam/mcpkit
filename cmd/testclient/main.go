@@ -30,7 +30,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/panyam/mcpkit"
+	"github.com/panyam/mcpkit/client"
+	"github.com/panyam/mcpkit/core"
 )
 
 func main() {
@@ -77,9 +78,9 @@ func main() {
 
 	if probeResp.StatusCode != 401 {
 		log.Printf("probe returned %d (not 401) — server may not require auth, trying direct initialize", probeResp.StatusCode)
-		noAuthClient := mcpkit.NewClient(serverURL,
-			mcpkit.ClientInfo{Name: "mcpkit-testclient", Version: "0.1.0"},
-			mcpkit.WithClientLogging(log.Default()))
+		noAuthClient := client.NewClient(serverURL,
+			core.ClientInfo{Name: "mcpkit-testclient", Version: "0.1.0"},
+			client.WithClientLogging(log.Default()))
 		if err := noAuthClient.Connect(); err != nil {
 			log.Fatalf("initialize (no auth): %v", err)
 		}
@@ -94,13 +95,13 @@ func main() {
 
 			// Check if the error is a 403 auth error — if so, we need to
 			// discover auth and re-connect with a token.
-			var authErr *mcpkit.ClientAuthError
+			var authErr *client.ClientAuthError
 			if errors.As(err, &authErr) && (authErr.StatusCode == 401 || authErr.StatusCode == 403) {
 				log.Printf("Server requires auth (%d): WWW-Authenticate=%s", authErr.StatusCode, authErr.WWWAuthenticate)
 				log.Printf("Required scopes: %v", authErr.RequiredScopes)
 
 				// Parse resource_metadata from WWW-Authenticate for PRM discovery
-				rm, reqScopes, _ := mcpkit.ParseWWWAuthenticate(authErr.WWWAuthenticate)
+				rm, reqScopes, _ := core.ParseWWWAuthenticate(authErr.WWWAuthenticate)
 				if rm != "" {
 					resourceMetadataURL = rm
 				}
@@ -325,11 +326,11 @@ func main() {
 		resource:     prm.Resource,
 	}
 
-	client := mcpkit.NewClient(
+	client := client.NewClient(
 		serverURL,
-		mcpkit.ClientInfo{Name: "mcpkit-testclient", Version: "0.1.0"},
-		mcpkit.WithTokenSource(ts),
-		mcpkit.WithClientLogging(log.Default()),
+		core.ClientInfo{Name: "mcpkit-testclient", Version: "0.1.0"},
+		client.WithTokenSource(ts),
+		client.WithClientLogging(log.Default()),
 	)
 	if err := client.Connect(); err != nil {
 		log.Fatalf("MCP connect: %v", err)
@@ -367,7 +368,7 @@ func main() {
 	log.Println("SUCCESS: auth flow complete")
 }
 
-// conformanceTokenSource implements mcpkit.ScopeAwareTokenSource for the
+// conformanceTokenSource implements core.ScopeAwareTokenSource for the
 // conformance test client. It returns the initially obtained token on Token(),
 // and on TokenForScopes() re-does the PKCE + token exchange flow with the
 // requested scopes merged in.
@@ -381,14 +382,14 @@ type conformanceTokenSource struct {
 	resource     string
 }
 
-// Token implements mcpkit.TokenSource. Returns the current access token.
+// Token implements core.TokenSource. Returns the current access token.
 func (s *conformanceTokenSource) Token() (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.token, nil
 }
 
-// TokenForScopes implements mcpkit.ScopeAwareTokenSource. Re-does the full
+// TokenForScopes implements core.ScopeAwareTokenSource. Re-does the full
 // PKCE + token exchange flow with the requested scopes, updating the cached
 // token. The conformance mock AS auto-approves, so the browser step is a
 // simple HTTP GET → redirect with code.

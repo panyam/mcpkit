@@ -8,22 +8,23 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	"github.com/panyam/mcpkit"
+	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/server"
 )
 
 // registerConformanceResources adds all resources required by the MCP conformance suite.
-func registerConformanceResources(srv *mcpkit.Server) {
+func registerConformanceResources(srv *server.Server) {
 	// test://static-text — returns plain text content
 	srv.RegisterResource(
-		mcpkit.ResourceDef{
+		core.ResourceDef{
 			URI:         "test://static-text",
 			Name:        "Static Text Resource",
 			Description: "A static text resource for conformance testing",
 			MimeType:    "text/plain",
 		},
-		func(ctx context.Context, req mcpkit.ResourceRequest) (mcpkit.ResourceResult, error) {
-			return mcpkit.ResourceResult{
-				Contents: []mcpkit.ResourceReadContent{{
+		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+			return core.ResourceResult{
+				Contents: []core.ResourceReadContent{{
 					URI:      "test://static-text",
 					MimeType: "text/plain",
 					Text:     "This is a test resource",
@@ -34,16 +35,16 @@ func registerConformanceResources(srv *mcpkit.Server) {
 
 	// test://static-binary — returns base64 binary content
 	srv.RegisterResource(
-		mcpkit.ResourceDef{
+		core.ResourceDef{
 			URI:         "test://static-binary",
 			Name:        "Static Binary Resource",
 			Description: "A static binary resource for conformance testing",
 			MimeType:    "application/octet-stream",
 		},
-		func(ctx context.Context, req mcpkit.ResourceRequest) (mcpkit.ResourceResult, error) {
+		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
 			data := []byte("binary test data")
-			return mcpkit.ResourceResult{
-				Contents: []mcpkit.ResourceReadContent{{
+			return core.ResourceResult{
+				Contents: []core.ResourceReadContent{{
 					URI:      "test://static-binary",
 					MimeType: "application/octet-stream",
 					Blob:     base64.StdEncoding.EncodeToString(data),
@@ -54,16 +55,16 @@ func registerConformanceResources(srv *mcpkit.Server) {
 
 	// test://template/{id}/data — URI template resource
 	srv.RegisterResourceTemplate(
-		mcpkit.ResourceTemplate{
+		core.ResourceTemplate{
 			URITemplate: "test://template/{id}/data",
 			Name:        "Template Resource",
 			Description: "A parameterized resource template for conformance testing",
 			MimeType:    "text/plain",
 		},
-		func(ctx context.Context, uri string, params map[string]string) (mcpkit.ResourceResult, error) {
+		func(ctx context.Context, uri string, params map[string]string) (core.ResourceResult, error) {
 			id := params["id"]
-			return mcpkit.ResourceResult{
-				Contents: []mcpkit.ResourceReadContent{{
+			return core.ResourceResult{
+				Contents: []core.ResourceReadContent{{
 					URI:      uri,
 					MimeType: "text/plain",
 					Text:     fmt.Sprintf("Template data for ID: %s", id),

@@ -1,7 +1,7 @@
 # MCPKit Makefile
 
 # Sub-modules that get tagged alongside the root module
-SUB_MODS_TO_TAG := auth tests/e2e tests/keycloak
+SUB_MODS_TO_TAG := ext/auth tests/e2e tests/keycloak
 
 # =============================================================================
 # Build & test
@@ -31,7 +31,7 @@ testconfauth: ## Run MCP Auth conformance suite (client-side, requires mcpkit/au
 	bash scripts/conformance-auth-test.sh
 
 test-auth: ## Run auth sub-module tests
-	cd auth && go test ./... -count=1 -timeout 30s
+	cd ext/auth && go test ./... -count=1 -timeout 30s
 
 test-auth-e2e: ## Run E2E auth tests (in-process oneauth AS, no Docker)
 	cd tests/e2e && go test ./... -count=1 -timeout 60s
@@ -62,7 +62,7 @@ testall: ## Run ALL tests (starts Keycloak if needed) + generate HTML report
 		echo "  FAIL: race" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); STAGES="$$STAGES race:FAIL"; \
 	fi; \
 	echo "--- [3/7] Auth module ---" | tee -a $(REPORT_DIR)/run.log; \
-	if (cd auth && go test ./... -count=1 -timeout 30s -v) >> $(REPORT_DIR)/run.log 2>&1; then \
+	if (cd ext/auth && go test ./... -count=1 -timeout 30s -v) >> $(REPORT_DIR)/run.log 2>&1; then \
 		echo "  PASS: auth" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); STAGES="$$STAGES auth:PASS"; \
 	else \
 		echo "  FAIL: auth" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); STAGES="$$STAGES auth:FAIL"; \
@@ -185,7 +185,8 @@ upkcl: ## Start Keycloak container for interop tests
 		-e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
 		-e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
 		-v $(PWD)/tests/keycloak/realm.json:/opt/keycloak/data/import/realm.json \
-		$(KC_IMAGE) start-dev --import-realm
+		$(KC_IMAGE) start-dev --import-realm \
+		--log-level=INFO,org.keycloak.events:DEBUG
 	@echo "Keycloak starting on port $(KC_PORT)... (realm import takes ~30s)"
 	@echo "Run 'make kcllogs' to watch startup, 'make testkcl' when ready"
 

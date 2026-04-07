@@ -1,7 +1,7 @@
 # MCPKit
 
 ## Version
-0.0.16
+0.1.0
 
 ## Provides
 - mcp-protocol-negotiation: Version negotiation supporting MCP 2025-11-25 and 2024-11-05
@@ -12,7 +12,7 @@
 - mcp-dual-transport: Both SSE and Streamable HTTP simultaneously via WithSSE/WithStreamableHTTP options
 - mcp-graceful-shutdown: ListenAndServeGraceful with SSE hub drain on SIGTERM
 - mcp-auth-middleware: Bearer token (constant-time), Claims propagation via ClaimsProvider, JWT/OIDC via oneauth sub-module
-- mcp-auth-submodule: mcpkit/auth — JWTValidator, MountAuth (PRM), WWW-Authenticate builders, RequireScope, OAuthTokenSource, ClientCredentialsSource, DiscoverMCPAuth, RegisterClient (DCR), ValidateCIMDURL
+- mcp-auth-submodule: mcpkit/ext/auth — JWTValidator, MountAuth (PRM), WWW-Authenticate builders, RequireScope, OAuthTokenSource, ClientCredentialsSource, DiscoverMCPAuth, RegisterClient (DCR), ValidateCIMDURL
 - mcp-extensions: Extension/Stability/ExtensionProvider system — sub-modules declare spec version + stability in initialize
 - mcp-annotations: Annotations field on ToolDef/ResourceDef/PromptDef + RegisterExperimental* helpers
 - mcp-client-auth: WithClientBearerToken, WithTokenSource — auth header injection on all client requests
@@ -40,7 +40,8 @@
 - mcp-client-logging: Transport debug logging (WithClientLogging) — logs method, latency, errors for every operation
 - mcp-client-reconnect: Automatic reconnection with exponential backoff (WithMaxRetries, WithReconnectBackoff) �� re-initializes MCP session on transient errors
 - mcp-client-auth-retry: Client transport 401/403 handling — doWithAuthRetry, ScopeAwareTokenSource, ClientAuthError
-- mcp-in-memory-transport: WithInMemoryServer — client calls Server.Dispatch directly, no HTTP (for tests/embedded)
+- mcp-sub-packages: core/server/client package split — types in core, server+transports in server/, client in client/
+- mcp-in-process-transport: server.NewInProcessTransport + client.WithTransport — typed *Request/*Response, no HTTP (for tests/embedded)
 - mcp-stateless-mode: WithStateless — no sessions, fresh dispatcher per request (for serverless/CLI)
 - mcp-session-management: Server.CloseSession/CloseAllSessions — programmatic session teardown
 - mcp-structured-output: StructuredContent + OutputSchema on ToolDef/ToolResult — typed tool output
@@ -59,30 +60,42 @@ newstack/mcpkit/main
 ### Core module (github.com/panyam/mcpkit)
 - servicekit (github.com/panyam/servicekit) v0.0.14 — SSEConn/SSEHub, ListenAndServeGraceful, StreamableServe
 
-### Sub-module: auth (github.com/panyam/mcpkit/auth)
+### Sub-module: ext/auth (github.com/panyam/mcpkit/ext/auth)
 - oneauth (github.com/panyam/oneauth) v0.0.64 — JWT/OIDC validation, testutil.TestAuthServer; separate go.mod
 
 ## Integration
 
 ### Go Module
 ```go
-require github.com/panyam/mcpkit v0.0.14
+require github.com/panyam/mcpkit v0.1.0
 ```
 
 ### Basic Server (Streamable HTTP)
 ```go
-srv := mcpkit.NewServer(
-    mcpkit.ServerInfo{Name: "my-server", Version: "0.1.0"},
-    mcpkit.WithBearerToken("secret"),
-    mcpkit.WithToolTimeout(30 * time.Second),
+import (
+    "github.com/panyam/mcpkit/core"
+    "github.com/panyam/mcpkit/server"
+)
+
+srv := server.NewServer(
+    core.ServerInfo{Name: "my-server", Version: "0.1.0"},
+    server.WithBearerToken("secret"),
+    server.WithToolTimeout(30 * time.Second),
 )
 srv.RegisterTool(def, handler)
 srv.Run(":8787")  // defaults to Streamable HTTP
 ```
 
-### Both Transports
+### Client
 ```go
-srv.ListenAndServe(mcpkit.WithStreamableHTTP(true), mcpkit.WithSSE(true))
+import (
+    "github.com/panyam/mcpkit/client"
+    "github.com/panyam/mcpkit/core"
+)
+
+c := client.NewClient(url, core.ClientInfo{Name: "my-client", Version: "1.0"})
+c.Connect()
+result, _ := c.ToolCall("greet", map[string]any{"name": "world"})
 ```
 
 ## Status
