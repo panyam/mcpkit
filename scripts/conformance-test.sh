@@ -30,6 +30,13 @@ if ! command -v npx &>/dev/null; then
     exit 1
 fi
 
+# Kill any stale test server on the port to avoid connecting to old code
+if lsof -i ":$PORT" -t >/dev/null 2>&1; then
+    echo "Killing stale process on port $PORT..."
+    lsof -i ":$PORT" -t | xargs kill 2>/dev/null || true
+    sleep 1
+fi
+
 echo "=== Starting test server on :$PORT (Streamable HTTP) ==="
 STREAMABLE=1 PORT=$PORT go run ./cmd/testserver &
 SERVER_PID=$!
