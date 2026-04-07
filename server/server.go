@@ -341,7 +341,7 @@ func requestLoggingHandler(logger *log.Logger, next http.Handler) http.Handler {
 		next.ServeHTTP(rw, r)
 
 		// Log response
-		ct := rw.Header().Get("core.Content-Type")
+		ct := rw.Header().Get("Content-Type")
 		logger.Printf("[http] ← %d %s content-type=%q",
 			rw.status, r.URL.Path, ct)
 	})

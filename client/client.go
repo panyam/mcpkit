@@ -6,13 +6,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	core "github.com/panyam/mcpkit/core"
 	"io"
 	"log"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
+
+	core "github.com/panyam/mcpkit/core"
 )
 
 // clientTransport abstracts the transport layer for the MCP client.
@@ -72,6 +73,12 @@ func WithSamplingHandler(h SamplingHandler) ClientOption {
 // When set, the client advertises the "elicitation" capability during initialization.
 func WithElicitationHandler(h ElicitationHandler) ClientOption {
 	return func(c *Client) { c.elicitationHandler = h }
+}
+
+// WithNotificationCallback sets a callback for server-to-client notifications
+// (logging, progress, resource updates). Works across all transports.
+func WithNotificationCallback(fn func(method string, params any)) ClientOption {
+	return func(c *Client) { c.onNotify = fn }
 }
 
 // WithTransport sets a core.Transport for the client, bypassing the default
@@ -187,14 +194,14 @@ func (c *Client) Connect() error {
 	if c.transport == nil {
 		if c.useSSE {
 			st := newSSEClientTransport(c.url, c.tokenSource)
-			st.serverReqHandler = c.handleServerRequest
+			st.serverReqHandler = c.HandleServerRequest
 			if c.onNotify != nil {
 				st.notifyHandler = c.makeNotifyAdapter()
 			}
 			c.transport = st
 		} else {
 			st := newStreamableClientTransport(c.url, c.tokenSource)
-			st.serverReqHandler = c.handleServerRequest
+			st.serverReqHandler = c.HandleServerRequest
 			if c.onNotify != nil {
 				st.notifyHandler = c.makeNotifyAdapter()
 			}
@@ -265,7 +272,7 @@ func (c *Client) makeNotifyAdapter() func(string, json.RawMessage) {
 // handleServerRequest dispatches an incoming server-to-client JSON-RPC request
 // to the appropriate registered handler (sampling or elicitation).
 // Returns a JSON-RPC response to send back to the server.
-func (c *Client) handleServerRequest(req *core.Request) *core.Response {
+func (c *Client) HandleServerRequest(req *core.Request) *core.Response {
 	switch req.Method {
 	case "sampling/createMessage":
 		if c.samplingHandler == nil {
@@ -307,6 +314,21 @@ func (c *Client) SessionID() string {
 	}
 	return ""
 }
+
+// SetTransport sets the transport for the client. Use when the transport needs
+// to reference the client (e.g., InProcessTransport with ServerRequestHandler
+// that delegates to the client's sampling/elicitation handlers).
+// Must be called before Connect().
+func (c *Client) SetTransport(t core.Transport) {
+	c.transport = &coreTransportAdapter{inner: t}
+}
+
+// URL returns the client's target URL.
+func (c *Client) URL() string { return c.url }
+
+// SetURL updates the client's target URL. Used in reconnection tests
+// to simulate DNS/load balancer changes.
+func (c *Client) SetURL(url string) { c.url = url }
 
 // Call makes a JSON-RPC call and returns the parsed response.
 func (c *Client) Call(method string, params any) (*CallResult, error) {
@@ -506,7 +528,7 @@ func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Set("core.Content-Type", "application/json")
+		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Accept", core.StreamableHTTPAccept)
 		if t.sessionID != "" {
 			req.Header.Set("Mcp-Session-Id", t.sessionID)
@@ -524,7 +546,7 @@ func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
 		t.sessionID = sid
 	}
 
-	ct := resp.Header.Get("core.Content-Type")
+	ct := resp.Header.Get("Content-Type")
 	if strings.Contains(ct, "text/event-stream") {
 		return t.readSSEResponse(resp.Body)
 	}
@@ -632,7 +654,7 @@ func (t *streamableClientTransport) postResponse(resp *core.Response) {
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Set("core.Content-Type", "application/json")
+		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Accept", core.StreamableHTTPAccept)
 		if t.sessionID != "" {
 			req.Header.Set("Mcp-Session-Id", t.sessionID)
@@ -652,7 +674,7 @@ func (t *streamableClientTransport) notify(data []byte) error {
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Set("core.Content-Type", "application/json")
+		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Accept", core.StreamableHTTPAccept)
 		if t.sessionID != "" {
 			req.Header.Set("Mcp-Session-Id", t.sessionID)
@@ -824,7 +846,7 @@ func (t *sseClientTransport) postResponse(resp *core.Response) {
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Set("core.Content-Type", "application/json")
+		req.Header.Set("Content-Type", "application/json")
 		return req, nil
 	}
 	httpResp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
@@ -869,7 +891,7 @@ func (t *sseClientTransport) call(data []byte) (*rpcResponse, error) {
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Set("core.Content-Type", "application/json")
+		req.Header.Set("Content-Type", "application/json")
 		return req, nil
 	}
 
@@ -896,7 +918,7 @@ func (t *sseClientTransport) notify(data []byte) error {
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Set("core.Content-Type", "application/json")
+		req.Header.Set("Content-Type", "application/json")
 		return req, nil
 	}
 
