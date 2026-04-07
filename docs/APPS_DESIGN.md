@@ -240,197 +240,107 @@ func (UIExtension) Extension() mcpkit.Extension {
 
 ### Flow A: Capability negotiation (initialize)
 
-```
-Client                                  Server
-  │                                       │
-  │  initialize {                         │
-  │    protocolVersion: "2025-11-25",     │
-  │    capabilities: {                    │
-  │      extensions: {                    │
-  │        "io.modelcontextprotocol/ui":  │
-  │          { mimeTypes: ["text/html;    │
-  │            profile=mcp-app"] }        │
-  │      }                                │
-  │    }                                  │
-  │  }                                    │
-  │ ─────────────────────────────────────>│
-  │                                       │  Store client extension caps
-  │                                       │  ClientSupportsUI() = true
-  │  initialize result {                  │
-  │    protocolVersion: "2025-11-25",     │
-  │    capabilities: {                    │
-  │      tools: {},                       │
-  │      resources: {},                   │
-  │      extensions: {                    │
-  │        "io.modelcontextprotocol/ui":  │
-  │          { specVersion: "2026-01-26", │
-  │            stability: "experimental"} │
-  │      }                                │
-  │    }                                  │
-  │  }                                    │
-  │<──────────────────────────────────────│
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant S as Server
+
+    C->>S: initialize with UI extension support
+    Note over C: extensions - io.modelcontextprotocol/ui<br/>mimeTypes - text/html, profile=mcp-app
+    Note right of S: Store client extension caps<br/>ClientSupportsUI = true
+    S-->>C: initialize result with UI extension
+    Note over S: io.modelcontextprotocol/ui<br/>specVersion 2026-01-26<br/>stability experimental
 ```
 
 ### Flow B: Tool with UI — full lifecycle (host perspective)
 
-```
-User          Host/LLM         MCP Client        MCP Server          iframe
-  │               │                │                  │                  │
-  │ "show slides" │                │                  │                  │
-  │──────────────>│                │                  │                  │
-  │               │                │                  │                  │
-  │               │ tools/list     │                  │                  │
-  │               │───────────────>│  tools/list      │                  │
-  │               │                │─────────────────>│                  │
-  │               │                │                  │                  │
-  │               │                │  [{name:"build", │                  │
-  │               │                │    _meta:{ui:{   │                  │
-  │               │                │      resourceUri:│                  │
-  │               │                │      "ui://decks/│                  │
-  │               │                │       demo/view" │                  │
-  │               │                │    }}}]          │                  │
-  │               │                │<─────────────────│                  │
-  │               │                │                  │                  │
-  │               │ LLM decides    │                  │                  │
-  │               │ to call build  │                  │                  │
-  │               │                │                  │                  │
-  │               │           ┌────┴─────┐            │                  │
-  │               │           │ PARALLEL │            │                  │
-  │               │           └────┬─────┘            │                  │
-  │               │                │                  │                  │
-  │               │  (1) tools/call│ "build_deck"     │                  │
-  │               │───────────────>│─────────────────>│                  │
-  │               │                │                  │  execute build   │
-  │               │                │                  │                  │
-  │               │  (2) resources/│read              │                  │
-  │               │  "ui://decks/  │                  │                  │
-  │               │   demo/view"   │                  │                  │
-  │               │───────────────>│─────────────────>│                  │
-  │               │                │  {contents:[{    │                  │
-  │               │                │    uri:"ui://...",│                  │
-  │               │                │    mimeType:      │                  │
-  │               │                │      "text/html;  │                  │
-  │               │                │       profile=    │                  │
-  │               │                │       mcp-app",   │                  │
-  │               │                │    text:"<html>..."│                 │
-  │               │                │  }]}              │                  │
-  │               │                │<─────────────────│                  │
-  │               │                │                  │                  │
-  │               │  Render iframe │                  │                  │
-  │               │────────────────┼──────────────────┼─────────────────>│
-  │               │                │                  │                  │
-  │               │                │  tool result     │                  │
-  │               │                │<─────────────────│                  │
-  │               │                │                  │                  │
-  │               │  Push result   │                  │                  │
-  │               │  to iframe via │                  │                  │
-  │               │  postMessage   │                  │                  │
-  │               │────────────────┼──────────────────┼─────────────────>│
-  │               │                │                  │      ui/notif/   │
-  │               │                │                  │      tool-result │
-  │               │                │                  │                  │
-  │  Interactive  │                │                  │                  │
-  │  slide deck   │                │                  │                  │
-  │  renders      │                │                  │                  │
-  │<──────────────┼────────────────┼──────────────────┼──────────────────│
+```mermaid
+sequenceDiagram
+    participant User
+    participant Host as Host/LLM
+    participant Client as MCP Client
+    participant Server as MCP Server
+    participant App as iframe
+
+    User->>Host: show slides
+    Host->>Client: tools/list
+    Client->>Server: tools/list
+    Server-->>Client: tools with _meta.ui.resourceUri
+
+    Note over Host: LLM decides to call build
+
+    par Parallel requests
+        Host->>Client: tools/call build_deck
+        Client->>Server: tools/call build_deck
+        Note right of Server: execute build
+    and
+        Host->>Client: resources/read ui://decks/demo/view
+        Client->>Server: resources/read
+        Server-->>Client: HTML content, mimeType text/html profile=mcp-app
+    end
+
+    Host->>App: Render iframe with HTML
+    Server-->>Client: tool result
+    Client-->>Host: tool result
+    Host->>App: postMessage ui/notifications/tool-result
+    App-->>User: Interactive slide deck renders
 ```
 
 ### Flow C: Interactive tool call from iframe (bidirectional)
 
-```
-User          Host              MCP Client        MCP Server          iframe
-  │               │                │                  │                  │
-  │ clicks "Edit  │                │                  │                  │
-  │  slide 3"     │                │                  │                  │
-  │───────────────┼────────────────┼──────────────────┼─────────────────>│
-  │               │                │                  │                  │
-  │               │                │                  │    postMessage:  │
-  │               │                │                  │    tools/call    │
-  │               │                │                  │    {name:        │
-  │               │                │                  │     "edit_slide",│
-  │               │  tools/call    │                  │     args:{pos:3}}│
-  │               │<───────────────┼──────────────────┼──────────────────│
-  │               │───────────────>│                  │                  │
-  │               │                │  tools/call      │                  │
-  │               │                │─────────────────>│                  │
-  │               │                │                  │  execute edit    │
-  │               │                │  result          │                  │
-  │               │                │<─────────────────│                  │
-  │               │  result        │                  │                  │
-  │               │<───────────────│                  │                  │
-  │               │                │                  │                  │
-  │               │  postMessage:  │                  │                  │
-  │               │  tools/call    │                  │                  │
-  │               │  result        │                  │                  │
-  │               │────────────────┼──────────────────┼─────────────────>│
-  │               │                │                  │                  │
-  │               │                │                  │      App updates │
-  │               │                │                  │      slide DOM   │
-  │  Slide 3      │                │                  │                  │
-  │  updated live │                │                  │                  │
-  │<──────────────┼────────────────┼──────────────────┼──────────────────│
+```mermaid
+sequenceDiagram
+    participant User
+    participant Host
+    participant Client as MCP Client
+    participant Server as MCP Server
+    participant App as iframe
+
+    User->>App: clicks Edit slide 3
+    App->>Host: postMessage tools/call edit_slide pos=3
+    Host->>Client: tools/call edit_slide
+    Client->>Server: tools/call edit_slide
+    Note right of Server: execute edit
+    Server-->>Client: result
+    Client-->>Host: result
+    Host->>App: postMessage tools/call result
+    Note right of App: App updates slide DOM
+    App-->>User: Slide 3 updated live
 ```
 
 ### Flow D: Text-only fallback (client without UI support)
 
-```
-Client (no UI)                    Server
-  │                                 │
-  │  initialize {                   │
-  │    capabilities: {}             │  (no extensions field)
-  │  }                              │
-  │────────────────────────────────>│
-  │                                 │  ClientSupportsUI() = false
-  │  result (no UI extension)       │
-  │<────────────────────────────────│
-  │                                 │
-  │  tools/list                     │
-  │────────────────────────────────>│
-  │  [{name:"build_deck",           │
-  │    description:"...",           │  _meta.ui still present
-  │    _meta:{ui:{resourceUri:...}} │  (informational; client ignores)
-  │  }]                             │
-  │<────────────────────────────────│
-  │                                 │
-  │  tools/call "build_deck"        │
-  │────────────────────────────────>│
-  │  {content:[                     │
-  │    {type:"text",                │  Tool result has text content
-  │     text:"Built: 8 slides..."}  │  regardless of UI support
-  │  ]}                             │
-  │<────────────────────────────────│
-  │                                 │
-  │  (client displays text only,    │
-  │   ignores _meta.ui)             │
+```mermaid
+sequenceDiagram
+    participant C as Client - no UI
+    participant S as Server
+
+    C->>S: initialize, capabilities empty, no extensions
+    Note right of S: No extensions field<br/>ClientSupportsUI = false
+    S-->>C: result, no UI extension advertised
+
+    C->>S: tools/list
+    S-->>C: tools with _meta.ui.resourceUri still present
+    Note left of C: _meta.ui still present<br/>informational, client ignores
+
+    C->>S: tools/call build_deck
+    S-->>C: text result - Built 8 slides
+    Note left of C: Client displays text only<br/>ignores _meta.ui
 ```
 
 ### Flow E: Tool visibility filtering
 
-```
-Host/LLM                         Server                    iframe
-  │                                 │                         │
-  │  tools/list                     │                         │
-  │────────────────────────────────>│                         │
-  │                                 │                         │
-  │  Full list (unfiltered):        │                         │
-  │  ┌──────────────────────────┐   │                         │
-  │  │ build_deck               │   │                         │
-  │  │   visibility: [model,app]│   │  ← LLM sees, app sees  │
-  │  │ edit_slide               │   │                         │
-  │  │   visibility: [model,app]│   │  ← LLM sees, app sees  │
-  │  │ navigate_slide           │   │                         │
-  │  │   visibility: [app]      │   │  ← LLM hidden, app only│
-  │  │ get_theme_css            │   │                         │
-  │  │   visibility: [app]      │   │  ← LLM hidden, app only│
-  │  └──────────────────────────┘   │                         │
-  │<────────────────────────────────│                         │
-  │                                 │                         │
-  │  Host filters for LLM:         │                         │
-  │  [build_deck, edit_slide]       │                         │
-  │                                 │                         │
-  │  Host allows app to call:       │                         │
-  │  [build_deck, edit_slide,       │                         │
-  │   navigate_slide, get_theme_css]│                         │
+```mermaid
+sequenceDiagram
+    participant Host as Host/LLM
+    participant S as Server
+    participant App as iframe
+
+    Host->>S: tools/list
+    S-->>Host: Full unfiltered list<br/>build_deck visibility model+app<br/>edit_slide visibility model+app<br/>navigate_slide visibility app only<br/>get_theme_css visibility app only
+
+    Note over Host: Host filters for LLM -<br/>build_deck, edit_slide
+    Note over Host,App: Host allows app to call -<br/>build_deck, edit_slide,<br/>navigate_slide, get_theme_css
 ```
 
 ## Edge Cases and Challenges
@@ -873,33 +783,29 @@ Your app needs:
 
 When a host like Claude or ChatGPT calls your tool, here's what happens behind the scenes:
 
-```
-Host                        Your MCP Server
-  │                              │
-  │  1. initialize               │
-  │  (with extensions:           │
-  │   io.modelcontextprotocol/ui)│
-  │─────────────────────────────>│  Server sees client supports UI
-  │                              │
-  │  2. tools/list               │
-  │─────────────────────────────>│
-  │  ← tools with _meta.ui       │  Server returns tools with UI metadata
-  │                              │
-  │  3. LLM decides to call tool │
-  │                              │
-  │  4. resources/read           │
-  │     "ui://your-app/view"     │
-  │─────────────────────────────>│  Server returns HTML
-  │  ← HTML content              │
-  │                              │
-  │  5. Render HTML in iframe    │
-  │                              │
-  │  6. tools/call "your-tool"   │
-  │─────────────────────────────>│  Server executes tool
-  │  ← tool result               │
-  │                              │
-  │  7. Push result to iframe    │
-  │     (postMessage)            │
+```mermaid
+sequenceDiagram
+    participant Host
+    participant S as Your MCP Server
+
+    Host->>S: 1. initialize with io.modelcontextprotocol/ui
+    Note right of S: Server sees client supports UI
+    S-->>Host: initialize result with UI extension
+
+    Host->>S: 2. tools/list
+    S-->>Host: tools with _meta.ui metadata
+
+    Note over Host: 3. LLM decides to call tool
+
+    Host->>S: 4. resources/read ui://your-app/view
+    S-->>Host: HTML content
+
+    Note over Host: 5. Render HTML in iframe
+
+    Host->>S: 6. tools/call your-tool
+    S-->>Host: tool result
+
+    Note over Host: 7. Push result to iframe via postMessage
 ```
 
 The host needs three things from your server:
@@ -1336,43 +1242,54 @@ Deployment:
 
 ### End-to-End Example: Slyds on ChatGPT
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                     │
-│  1. slyds MCP server starts                                         │
-│     slyds mcp --deck-root ~/decks/ --listen :8787                   │
-│                                                                     │
-│  2. Tunnel (dev) or deploy (prod)                                   │
-│     npx cloudflared tunnel --url http://localhost:8787              │
-│     → https://slyds-xyz.trycloudflare.com                           │
-│                                                                     │
-│  3. Register in ChatGPT as custom connector                         │
-│     URL: https://slyds-xyz.trycloudflare.com/mcp                    │
-│                                                                     │
-│  4. User chats:                                                     │
-│     "Create a presentation about distributed systems"               │
-│                                                                     │
-│  5. ChatGPT calls:                                                  │
-│     initialize → tools/list → create_deck → edit_slide (x5)         │
-│     → build_deck                                                    │
-│                                                                     │
-│  6. ChatGPT sees _meta.ui.resourceUri on build_deck result          │
-│     Calls: resources/read "ui://decks/distributed-systems/preview"  │
-│     Gets: self-contained HTML with all slides                       │
-│                                                                     │
-│  7. ChatGPT renders HTML in sandboxed iframe inline in chat         │
-│     User sees interactive slide deck with navigation, themes        │
-│                                                                     │
-│  8. User clicks "Next slide" → slyds.js handles locally             │
-│     User clicks "Edit slide 3" → callMCPTool("edit_slide", ...)     │
-│     → postMessage → ChatGPT → tools/call → slyds server             │
-│     → response → postMessage → iframe updates                       │
-│                                                                     │
-│  9. User says "Make the title slide more dramatic"                  │
-│     ChatGPT calls edit_slide → server updates → NotifyResources     │
-│     Changed → ChatGPT re-fetches ui:// resource → iframe refreshes  │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+sequenceDiagram
+    participant User
+    participant GPT as ChatGPT
+    participant Slyds as Slyds MCP Server
+    participant App as Slide Deck iframe
+
+    Note over Slyds: 1. slyds mcp --deck-root ~/decks/ --listen 8787
+    Note over GPT,Slyds: 2. Tunnel via cloudflared<br/>3. Register as custom connector in ChatGPT
+
+    User->>GPT: Create a presentation about distributed systems
+
+    GPT->>Slyds: initialize
+    Slyds-->>GPT: capabilities with io.modelcontextprotocol/ui
+    GPT->>Slyds: tools/list
+    Slyds-->>GPT: tools with _meta.ui
+    GPT->>Slyds: create_deck
+    Slyds-->>GPT: deck created
+    loop 5 slides
+        GPT->>Slyds: edit_slide
+        Slyds-->>GPT: slide updated
+    end
+    GPT->>Slyds: build_deck
+    Slyds-->>GPT: result text summary
+
+    GPT->>Slyds: resources/read ui://decks/distributed-systems/preview
+    Slyds-->>GPT: self-contained HTML with all slides
+
+    GPT->>App: Render in sandboxed iframe
+    App-->>User: Interactive slide deck with navigation and themes
+
+    User->>App: clicks Next slide
+    Note right of App: slyds.js handles locally
+
+    User->>App: clicks Edit slide 3
+    App->>GPT: postMessage tools/call edit_slide
+    GPT->>Slyds: tools/call edit_slide
+    Slyds-->>GPT: result
+    GPT->>App: postMessage result
+    Note right of App: iframe updates slide 3
+
+    User->>GPT: Make the title slide more dramatic
+    GPT->>Slyds: tools/call edit_slide for slide 1
+    Note right of Slyds: NotifyResourcesChanged
+    Slyds-->>GPT: result + resources/list_changed notification
+    GPT->>Slyds: resources/read re-fetch
+    Slyds-->>GPT: updated HTML
+    GPT->>App: iframe refreshes with new content
 ```
 
 ## Implementation Plan
