@@ -20,7 +20,7 @@ make audit        # govulncheck + gosec + gitleaks + race detection
 
 # Auth tests (ext/auth is a separate Go module)
 make test-auth        # Auth sub-module unit tests (cd ext/auth)
-make test-auth-e2e    # 31 E2E auth tests (in-process oneauth AS)
+make test-e2e         # All E2E tests (auth + apps, no Docker)
 make testkcl          # 7 Keycloak interop tests (needs Docker)
 make upkcl            # Start Keycloak container (with event logging)
 make downkcl          # Stop Keycloak container
