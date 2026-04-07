@@ -93,7 +93,7 @@ testall: ## Run ALL tests (starts Keycloak if needed) + generate HTML report
 	echo "=== Results: $$PASS passed, $$FAIL failed ===" | tee -a $(REPORT_DIR)/run.log; \
 	echo "Finished: $$(date)" | tee -a $(REPORT_DIR)/run.log; \
 	echo "Full log: $(REPORT_DIR)/run.log"; \
-	STAGES="$$STAGES" $(MAKE) -s test-report; \
+	$(MAKE) -s test-report STAGES="$$STAGES"; \
 	echo "HTML report: $(REPORT_DIR)/report.html"; \
 	[ $$FAIL -eq 0 ]
 
