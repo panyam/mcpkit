@@ -32,13 +32,26 @@ func (r *Request) IsNotification() bool {
 	return r.ID == nil || string(r.ID) == "null"
 }
 
-// Standard JSON-RPC error codes.
+// Standard JSON-RPC 2.0 error codes (https://www.jsonrpc.org/specification#error_object).
+//
+// Reserved ranges:
+//
+//	-32700           Parse error (invalid JSON)
+//	-32600           Invalid Request (not a valid JSON-RPC request)
+//	-32601           Method not found
+//	-32602           Invalid params
+//	-32603           Internal error
+//	-32000 to -32099 Server error (implementation-defined)
 const (
 	ErrCodeParse          = -32700
 	ErrCodeInvalidRequest = -32600
 	ErrCodeMethodNotFound = -32601
 	ErrCodeInvalidParams  = -32602
 	ErrCodeInternal       = -32603
+
+	// ErrCodeServerError is the base code for custom server errors (-32000 to -32099).
+	// Use this for application-specific errors that are not covered by standard codes.
+	ErrCodeServerError = -32000
 )
 
 // NewResponse creates a success response for the given request ID.
