@@ -1,12 +1,12 @@
 package client
 
 import (
-	core "github.com/panyam/mcpkit/core"
 	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	core "github.com/panyam/mcpkit/core"
 	"io"
 	"log"
 	"net/http"
@@ -424,9 +424,9 @@ func (c *Client) ListResourceTemplates() ([]core.ResourceTemplate, error) {
 // --- Internal ---
 
 type rpcResponse struct {
-	JSONRPC string `json:"jsonrpc"`
-	ID      any    `json:"id"`
-	Result  any    `json:"result,omitempty"`
+	JSONRPC string      `json:"jsonrpc"`
+	ID      any         `json:"id"`
+	Result  any         `json:"result,omitempty"`
 	Error   *core.Error `json:"error,omitempty"`
 }
 
@@ -450,7 +450,7 @@ func (c *Client) rawCall(method string, params any) (*rpcResponse, error) {
 	data, _ := json.Marshal(reqBody)
 
 	resp, err := c.transport.call(data)
-	if err != nil && c.maxRetries > 0 && isTransientError(err) {
+	if err != nil && c.maxRetries > 0 && IsTransientError(err) {
 		return c.retryWithReconnect(func() (*rpcResponse, error) {
 			// Re-build with new ID (old may have been consumed)
 			reqBody["id"] = c.nextRequestID()
@@ -472,7 +472,7 @@ func (c *Client) notifyMethod(method string, params any) error {
 	data, _ := json.Marshal(reqBody)
 
 	err := c.transport.notify(data)
-	if err != nil && c.maxRetries > 0 && isTransientError(err) {
+	if err != nil && c.maxRetries > 0 && IsTransientError(err) {
 		return c.retryNotifyWithReconnect(func() error {
 			data, _ = json.Marshal(reqBody)
 			return c.transport.notify(data)
@@ -488,7 +488,7 @@ type streamableClientTransport struct {
 	sessionID        string
 	httpClient       *http.Client
 	tokenSource      core.TokenSource
-	serverReqHandler func(*core.Request) *core.Response                // set by Client before connect
+	serverReqHandler func(*core.Request) *core.Response          // set by Client before connect
 	notifyHandler    func(method string, params json.RawMessage) // set by Client before connect
 }
 
@@ -496,8 +496,8 @@ func newStreamableClientTransport(url string, ts core.TokenSource) *streamableCl
 	return &streamableClientTransport{url: url, httpClient: http.DefaultClient, tokenSource: ts}
 }
 
-func (t *streamableClientTransport) connect() error      { return nil }
-func (t *streamableClientTransport) close() error        { return nil }
+func (t *streamableClientTransport) connect() error       { return nil }
+func (t *streamableClientTransport) close() error         { return nil }
 func (t *streamableClientTransport) getSessionID() string { return t.sessionID }
 
 func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
@@ -514,7 +514,7 @@ func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
 		return req, nil
 	}
 
-	resp, err := doWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
+	resp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
 	if err != nil {
 		return nil, err
 	}
@@ -639,7 +639,7 @@ func (t *streamableClientTransport) postResponse(resp *core.Response) {
 		}
 		return req, nil
 	}
-	httpResp, err := doWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
+	httpResp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
 	if err != nil {
 		return
 	}
@@ -660,7 +660,7 @@ func (t *streamableClientTransport) notify(data []byte) error {
 		return req, nil
 	}
 
-	resp, err := doWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
+	resp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
 	if err != nil {
 		return err
 	}
@@ -688,9 +688,9 @@ type sseClientTransport struct {
 
 	// Background reader state
 	pendingCalls     sync.Map                                    // requestID (string) → chan *rpcResponse
-	serverReqHandler func(*core.Request) *core.Response                    // set by Client before connect
+	serverReqHandler func(*core.Request) *core.Response          // set by Client before connect
 	notifyHandler    func(method string, params json.RawMessage) // set by Client before connect
-	done             chan struct{}                                // closed when background reader exits
+	done             chan struct{}                               // closed when background reader exits
 	readerErr        error                                       // last error from background reader
 }
 
@@ -703,7 +703,7 @@ func (t *sseClientTransport) connect() error {
 		return http.NewRequest("GET", t.sseURL, nil)
 	}
 
-	resp, err := doWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
+	resp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
 	if err != nil {
 		return fmt.Errorf("GET %s: %w", t.sseURL, err)
 	}
@@ -827,7 +827,7 @@ func (t *sseClientTransport) postResponse(resp *core.Response) {
 		req.Header.Set("core.Content-Type", "application/json")
 		return req, nil
 	}
-	httpResp, err := doWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
+	httpResp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
 	if err != nil {
 		return
 	}
@@ -873,7 +873,7 @@ func (t *sseClientTransport) call(data []byte) (*rpcResponse, error) {
 		return req, nil
 	}
 
-	resp, err := doWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
+	resp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
 	if err != nil {
 		return nil, fmt.Errorf("POST %s: %w", t.postURL, err)
 	}
@@ -900,7 +900,7 @@ func (t *sseClientTransport) notify(data []byte) error {
 		return req, nil
 	}
 
-	resp, err := doWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
+	resp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
 	if err != nil {
 		return fmt.Errorf("POST %s: %w", t.postURL, err)
 	}
@@ -986,7 +986,7 @@ func (e *ClientAuthError) Error() string {
 	return fmt.Sprintf("auth error %d: %s", e.StatusCode, e.Message)
 }
 
-// doWithAuthRetry executes an HTTP request with automatic retry on 401/403.
+// DoWithAuthRetry executes an HTTP request with automatic retry on 401/403.
 //
 // Retry budget: max 1 retry for 401 (token refresh), max 1 retry for 403
 // (scope step-up). Total max 2 retries per request.
@@ -997,7 +997,7 @@ func (e *ClientAuthError) Error() string {
 //
 // buildReq must create a new *http.Request each call (body may be consumed).
 // do is typically httpClient.Do.
-func doWithAuthRetry(
+func DoWithAuthRetry(
 	ts core.TokenSource,
 	buildReq func() (*http.Request, error),
 	do func(*http.Request) (*http.Response, error),

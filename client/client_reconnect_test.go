@@ -1,4 +1,4 @@
-package client
+package client_test
 
 // Client reconnection tests. Verify that transient transport failures trigger
 // automatic reconnection with exponential backoff, and that terminal errors
@@ -14,6 +14,9 @@ import (
 	"testing"
 	"time"
 
+	client "github.com/panyam/mcpkit/client"
+	core "github.com/panyam/mcpkit/core"
+	server "github.com/panyam/mcpkit/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,14 +26,14 @@ import (
 // between calls — the client should reconnect and retry successfully.
 func TestReconnect_OnDisconnect(t *testing.T) {
 	srv := newTestMCPServer()
-	handler := srv.Handler(WithStreamableHTTP(true))
+	handler := srv.Handler(server.WithStreamableHTTP(true))
 
 	// Start server
 	ts := httptest.NewServer(handler)
 
-	c := NewClient(ts.URL+"/mcp", ClientInfo{Name: "reconnect-test", Version: "1.0"},
-		WithMaxRetries(2),
-		WithReconnectBackoff(10*time.Millisecond))
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "reconnect-test", Version: "1.0"},
+		client.WithMaxRetries(2),
+		client.WithReconnectBackoff(10*time.Millisecond))
 	require.NoError(t, c.Connect())
 
 	// First call should work
@@ -61,12 +64,12 @@ func TestReconnect_OnDisconnect(t *testing.T) {
 // the configured number of reconnection attempts.
 func TestReconnect_MaxRetries(t *testing.T) {
 	srv := newTestMCPServer()
-	handler := srv.Handler(WithStreamableHTTP(true))
+	handler := srv.Handler(server.WithStreamableHTTP(true))
 	ts := httptest.NewServer(handler)
 
-	c := NewClient(ts.URL+"/mcp", ClientInfo{Name: "reconnect-test", Version: "1.0"},
-		WithMaxRetries(2),
-		WithReconnectBackoff(10*time.Millisecond))
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "reconnect-test", Version: "1.0"},
+		client.WithMaxRetries(2),
+		client.WithReconnectBackoff(10*time.Millisecond))
 	require.NoError(t, c.Connect())
 
 	// Stop server permanently
@@ -82,23 +85,23 @@ func TestReconnect_MaxRetries(t *testing.T) {
 // does NOT trigger reconnection — these are terminal server rejections, not
 // transient network issues.
 func TestReconnect_TerminalErrorNoRetry(t *testing.T) {
-	assert.False(t, isTransientError(&ClientAuthError{StatusCode: 401}),
+	assert.False(t, client.IsTransientError(&client.ClientAuthError{StatusCode: 401}),
 		"401 should not be transient")
-	assert.False(t, isTransientError(&ClientAuthError{StatusCode: 403}),
+	assert.False(t, client.IsTransientError(&client.ClientAuthError{StatusCode: 403}),
 		"403 should not be transient")
 }
 
 // TestReconnect_TransientErrors verifies that the expected error types are
 // classified as transient (eligible for reconnection retry).
 func TestReconnect_TransientErrors(t *testing.T) {
-	assert.True(t, isTransientError(io.EOF), "EOF should be transient")
-	assert.True(t, isTransientError(io.ErrUnexpectedEOF), "UnexpectedEOF should be transient")
-	assert.True(t, isTransientError(errors.New("connection reset by peer")),
+	assert.True(t, client.IsTransientError(io.EOF), "EOF should be transient")
+	assert.True(t, client.IsTransientError(io.ErrUnexpectedEOF), "UnexpectedEOF should be transient")
+	assert.True(t, client.IsTransientError(errors.New("connection reset by peer")),
 		"connection reset should be transient")
-	assert.True(t, isTransientError(errors.New("read: connection refused")),
+	assert.True(t, client.IsTransientError(errors.New("read: connection refused")),
 		"connection refused should be transient")
-	assert.False(t, isTransientError(nil), "nil should not be transient")
-	assert.False(t, isTransientError(errors.New("invalid JSON")),
+	assert.False(t, client.IsTransientError(nil), "nil should not be transient")
+	assert.False(t, client.IsTransientError(errors.New("invalid JSON")),
 		"JSON error should not be transient")
 }
 
@@ -106,10 +109,10 @@ func TestReconnect_TransientErrors(t *testing.T) {
 // when WithMaxRetries is not set (default maxRetries=0).
 func TestReconnect_DisabledByDefault(t *testing.T) {
 	srv := newTestMCPServer()
-	handler := srv.Handler(WithStreamableHTTP(true))
+	handler := srv.Handler(server.WithStreamableHTTP(true))
 	ts := httptest.NewServer(handler)
 
-	c := NewClient(ts.URL+"/mcp", ClientInfo{Name: "reconnect-test", Version: "1.0"})
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "reconnect-test", Version: "1.0"})
 	// No WithMaxRetries — reconnection disabled
 	require.NoError(t, c.Connect())
 
@@ -125,22 +128,22 @@ func TestReconnect_DisabledByDefault(t *testing.T) {
 // client logging is enabled (the logging wrapper must survive reconnection).
 func TestReconnect_WithLogging(t *testing.T) {
 	var callCount atomic.Int32
-	srv := NewServer(ServerInfo{Name: "reconnect-test", Version: "1.0"})
+	srv := server.NewServer(core.ServerInfo{Name: "reconnect-test", Version: "1.0"})
 	srv.RegisterTool(
-		ToolDef{Name: "count", Description: "counts calls"},
-		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
+		core.ToolDef{Name: "count", Description: "counts calls"},
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
 			n := callCount.Add(1)
-			return TextResult(fmt.Sprintf("call-%d", n)), nil
+			return core.TextResult(fmt.Sprintf("call-%d", n)), nil
 		},
 	)
-	handler := srv.Handler(WithStreamableHTTP(true))
+	handler := srv.Handler(server.WithStreamableHTTP(true))
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
-	c := NewClient(ts.URL+"/mcp", ClientInfo{Name: "test", Version: "1.0"},
-		WithMaxRetries(1),
-		WithReconnectBackoff(10*time.Millisecond),
-		WithClientLogging(nil)) // use default logger
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"},
+		client.WithMaxRetries(1),
+		client.WithReconnectBackoff(10*time.Millisecond),
+		client.WithClientLogging(nil)) // use default logger
 	require.NoError(t, c.Connect())
 	defer c.Close()
 

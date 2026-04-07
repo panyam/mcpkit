@@ -1,8 +1,11 @@
-package client
+package client_test
 
 import (
 	"context"
 	"fmt"
+	client "github.com/panyam/mcpkit/client"
+	core "github.com/panyam/mcpkit/core"
+	server "github.com/panyam/mcpkit/server"
 	"net/http/httptest"
 	"strings"
 	"sync"
@@ -12,11 +15,11 @@ import (
 
 // newTestMCPServer creates a server with an echo tool, a fail tool,
 // a static resource, and a resource template. Used by both transport tests.
-func newTestMCPServer() *Server {
-	srv := NewServer(ServerInfo{Name: "test-server", Version: "1.0.0"})
+func newTestMCPServer() *server.Server {
+	srv := server.NewServer(core.ServerInfo{Name: "test-server", Version: "1.0.0"})
 
 	srv.RegisterTool(
-		ToolDef{
+		core.ToolDef{
 			Name:        "echo",
 			Description: "Echoes the input message back",
 			InputSchema: map[string]any{
@@ -25,31 +28,33 @@ func newTestMCPServer() *Server {
 				"required":   []string{"message"},
 			},
 		},
-		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
-			var p struct{ Message string `json:"message"` }
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			var p struct {
+				Message string `json:"message"`
+			}
 			req.Bind(&p)
-			return TextResult(fmt.Sprintf("echo: %s", p.Message)), nil
+			return core.TextResult(fmt.Sprintf("echo: %s", p.Message)), nil
 		},
 	)
 
 	srv.RegisterTool(
-		ToolDef{Name: "fail", Description: "Always fails"},
-		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
-			return ErrorResult("intentional failure"), nil
+		core.ToolDef{Name: "fail", Description: "Always fails"},
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			return core.ErrorResult("intentional failure"), nil
 		},
 	)
 
 	srv.RegisterResource(
-		ResourceDef{URI: "test://info", Name: "Test Info", Description: "Static test resource", MimeType: "text/plain"},
-		func(ctx context.Context, req ResourceRequest) (ResourceResult, error) {
-			return ResourceResult{Contents: []ResourceReadContent{{URI: "test://info", MimeType: "text/plain", Text: "hello from test"}}}, nil
+		core.ResourceDef{URI: "test://info", Name: "Test Info", Description: "Static test resource", MimeType: "text/plain"},
+		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+			return core.ResourceResult{Contents: []core.ResourceReadContent{{URI: "test://info", MimeType: "text/plain", Text: "hello from test"}}}, nil
 		},
 	)
 
 	srv.RegisterResourceTemplate(
-		ResourceTemplate{URITemplate: "test://items/{id}", Name: "Test Item", Description: "Parameterized test resource", MimeType: "text/plain"},
-		func(ctx context.Context, uri string, params map[string]string) (ResourceResult, error) {
-			return ResourceResult{Contents: []ResourceReadContent{{URI: uri, MimeType: "text/plain", Text: fmt.Sprintf("item %s", params["id"])}}}, nil
+		core.ResourceTemplate{URITemplate: "test://items/{id}", Name: "Test Item", Description: "Parameterized test resource", MimeType: "text/plain"},
+		func(ctx context.Context, uri string, params map[string]string) (core.ResourceResult, error) {
+			return core.ResourceResult{Contents: []core.ResourceReadContent{{URI: uri, MimeType: "text/plain", Text: fmt.Sprintf("item %s", params["id"])}}}, nil
 		},
 	)
 
@@ -57,14 +62,14 @@ func newTestMCPServer() *Server {
 }
 
 // setupStreamableClient creates an httptest.Server with Streamable HTTP and a connected Client.
-func setupStreamableClient(t *testing.T) (*Client, *httptest.Server) {
+func setupStreamableClient(t *testing.T) (*client.Client, *httptest.Server) {
 	t.Helper()
 	srv := newTestMCPServer()
-	handler := srv.Handler(WithStreamableHTTP(true))
+	handler := srv.Handler(server.WithStreamableHTTP(true))
 	ts := httptest.NewServer(handler)
 	t.Cleanup(ts.Close)
 
-	c := NewClient(ts.URL+"/mcp", ClientInfo{Name: "test-client", Version: "1.0"})
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test-client", Version: "1.0"})
 	if err := c.Connect(); err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
@@ -74,13 +79,13 @@ func setupStreamableClient(t *testing.T) (*Client, *httptest.Server) {
 // setupSSEClient creates an httptest.Server with SSE transport and a connected Client.
 // The SSE connection must be closed before the server shuts down, so we
 // register client.Close() as a cleanup before ts.Close().
-func setupSSEClient(t *testing.T) (*Client, *httptest.Server) {
+func setupSSEClient(t *testing.T) (*client.Client, *httptest.Server) {
 	t.Helper()
 	srv := newTestMCPServer()
-	handler := srv.Handler(WithSSE(true), WithStreamableHTTP(false))
+	handler := srv.Handler(server.WithSSE(true), server.WithStreamableHTTP(false))
 	ts := httptest.NewServer(handler)
 
-	c := NewClient(ts.URL+"/mcp/sse", ClientInfo{Name: "test-client", Version: "1.0"}, WithSSEClient())
+	c := client.NewClient(ts.URL+"/mcp/sse", core.ClientInfo{Name: "test-client", Version: "1.0"}, client.WithSSEClient())
 	if err := c.Connect(); err != nil {
 		ts.Close()
 		t.Fatalf("SSE Connect failed: %v", err)
@@ -98,7 +103,7 @@ func setupSSEClient(t *testing.T) (*Client, *httptest.Server) {
 // forAllTransports runs a test function against all 3 client transports:
 // Streamable HTTP, SSE, and in-memory. This is the Go equivalent of
 // parametric tests — each transport variant runs as a subtest.
-func forAllTransports(t *testing.T, fn func(t *testing.T, c *Client)) {
+func forAllTransports(t *testing.T, fn func(t *testing.T, c *client.Client)) {
 	t.Helper()
 
 	t.Run("streamable", func(t *testing.T) {
@@ -110,7 +115,7 @@ func forAllTransports(t *testing.T, fn func(t *testing.T, c *Client)) {
 		fn(t, c)
 	})
 	t.Run("memory", func(t *testing.T) {
-		c := NewClient("memory://", ClientInfo{Name: "test-client", Version: "1.0"},
+		c := client.NewClient("memory://", core.ClientInfo{Name: "test-client", Version: "1.0"},
 			WithInMemoryServer(newTestMCPServer()))
 		if err := c.Connect(); err != nil {
 			t.Fatalf("Connect failed: %v", err)
@@ -125,7 +130,7 @@ func forAllTransports(t *testing.T, fn func(t *testing.T, c *Client)) {
 // TestClientConnect verifies that the client performs the MCP initialize
 // handshake, obtains a session ID, and captures server info across all transports.
 func TestClientConnect(t *testing.T) {
-	forAllTransports(t, func(t *testing.T, c *Client) {
+	forAllTransports(t, func(t *testing.T, c *client.Client) {
 		if c.SessionID() == "" {
 			t.Error("no session ID after connect")
 		}
@@ -138,7 +143,7 @@ func TestClientConnect(t *testing.T) {
 // TestClientToolCall verifies that ToolCall invokes a tool and returns the
 // first text content from the response across all transports.
 func TestClientToolCall(t *testing.T) {
-	forAllTransports(t, func(t *testing.T, c *Client) {
+	forAllTransports(t, func(t *testing.T, c *client.Client) {
 		text, err := c.ToolCall("echo", map[string]string{"message": "world"})
 		if err != nil {
 			t.Fatalf("ToolCall: %v", err)
@@ -152,7 +157,7 @@ func TestClientToolCall(t *testing.T) {
 // TestClientToolCallError verifies that ToolCall returns an error when the
 // tool reports isError:true in its response across all transports.
 func TestClientToolCallError(t *testing.T) {
-	forAllTransports(t, func(t *testing.T, c *Client) {
+	forAllTransports(t, func(t *testing.T, c *client.Client) {
 		_, err := c.ToolCall("fail", nil)
 		if err == nil {
 			t.Fatal("expected error from fail tool")
@@ -166,7 +171,7 @@ func TestClientToolCallError(t *testing.T) {
 // TestClientReadResource verifies that ReadResource reads a static resource
 // and returns its text content across all transports.
 func TestClientReadResource(t *testing.T) {
-	forAllTransports(t, func(t *testing.T, c *Client) {
+	forAllTransports(t, func(t *testing.T, c *client.Client) {
 		text, err := c.ReadResource("test://info")
 		if err != nil {
 			t.Fatalf("ReadResource: %v", err)
@@ -180,7 +185,7 @@ func TestClientReadResource(t *testing.T) {
 // TestClientReadResourceTemplate verifies that ReadResource resolves a URI
 // template and returns the parameterized content across all transports.
 func TestClientReadResourceTemplate(t *testing.T) {
-	forAllTransports(t, func(t *testing.T, c *Client) {
+	forAllTransports(t, func(t *testing.T, c *client.Client) {
 		text, err := c.ReadResource("test://items/42")
 		if err != nil {
 			t.Fatalf("ReadResource: %v", err)
@@ -194,7 +199,7 @@ func TestClientReadResourceTemplate(t *testing.T) {
 // TestClientListTools verifies that ListTools returns all registered tool
 // definitions with correct names across all transports.
 func TestClientListTools(t *testing.T) {
-	forAllTransports(t, func(t *testing.T, c *Client) {
+	forAllTransports(t, func(t *testing.T, c *client.Client) {
 		tools, err := c.ListTools()
 		if err != nil {
 			t.Fatalf("ListTools: %v", err)
@@ -212,7 +217,7 @@ func TestClientListTools(t *testing.T) {
 // TestClientListResources verifies ListResources returns static resource definitions
 // across all transports.
 func TestClientListResources(t *testing.T) {
-	forAllTransports(t, func(t *testing.T, c *Client) {
+	forAllTransports(t, func(t *testing.T, c *client.Client) {
 		resources, err := c.ListResources()
 		if err != nil {
 			t.Fatalf("ListResources: %v", err)
@@ -226,7 +231,7 @@ func TestClientListResources(t *testing.T) {
 // TestClientListResourceTemplates verifies ListResourceTemplates returns template
 // definitions across all transports.
 func TestClientListResourceTemplates(t *testing.T) {
-	forAllTransports(t, func(t *testing.T, c *Client) {
+	forAllTransports(t, func(t *testing.T, c *client.Client) {
 		templates, err := c.ListResourceTemplates()
 		if err != nil {
 			t.Fatalf("ListResourceTemplates: %v", err)
@@ -240,12 +245,14 @@ func TestClientListResourceTemplates(t *testing.T) {
 // TestClientCallRaw verifies the low-level Call method returns a CallResult
 // that can be unmarshalled into typed structs across all transports.
 func TestClientCallRaw(t *testing.T) {
-	forAllTransports(t, func(t *testing.T, c *Client) {
+	forAllTransports(t, func(t *testing.T, c *client.Client) {
 		result, err := c.Call("tools/list", nil)
 		if err != nil {
 			t.Fatalf("Call: %v", err)
 		}
-		var resp struct{ Tools []ToolDef `json:"tools"` }
+		var resp struct {
+			Tools []core.ToolDef `json:"tools"`
+		}
 		if err := result.Unmarshal(&resp); err != nil {
 			t.Fatalf("Unmarshal: %v", err)
 		}
@@ -335,12 +342,12 @@ func TestSSEClientListTools(t *testing.T) {
 
 // newSubscriptionTestServer creates an MCP server with subscriptions enabled
 // and a subscribable resource for integration testing.
-func newSubscriptionTestServer() *Server {
-	srv := NewServer(ServerInfo{Name: "sub-test", Version: "1.0"}, WithSubscriptions())
+func newSubscriptionTestServer() *server.Server {
+	srv := server.NewServer(core.ServerInfo{Name: "sub-test", Version: "1.0"}, server.WithSubscriptions())
 	srv.RegisterResource(
-		ResourceDef{URI: "test://config", Name: "Config", MimeType: "text/plain"},
-		func(ctx context.Context, req ResourceRequest) (ResourceResult, error) {
-			return ResourceResult{Contents: []ResourceReadContent{{
+		core.ResourceDef{URI: "test://config", Name: "Config", MimeType: "text/plain"},
+		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+			return core.ResourceResult{Contents: []core.ResourceReadContent{{
 				URI: req.URI, MimeType: "text/plain", Text: "config data",
 			}}}, nil
 		},
@@ -354,11 +361,11 @@ func newSubscriptionTestServer() *Server {
 func TestClientSubscribeUnsubscribeResource(t *testing.T) {
 	t.Run("streamable", func(t *testing.T) {
 		srv := newSubscriptionTestServer()
-		handler := srv.Handler(WithStreamableHTTP(true))
+		handler := srv.Handler(server.WithStreamableHTTP(true))
 		ts := httptest.NewServer(handler)
 		t.Cleanup(ts.Close)
 
-		c := NewClient(ts.URL+"/mcp", ClientInfo{Name: "test", Version: "1.0"})
+		c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
 		if err := c.Connect(); err != nil {
 			t.Fatalf("Connect: %v", err)
 		}
@@ -373,10 +380,10 @@ func TestClientSubscribeUnsubscribeResource(t *testing.T) {
 
 	t.Run("sse", func(t *testing.T) {
 		srv := newSubscriptionTestServer()
-		handler := srv.Handler(WithSSE(true), WithStreamableHTTP(false))
+		handler := srv.Handler(server.WithSSE(true), server.WithStreamableHTTP(false))
 		ts := httptest.NewServer(handler)
 
-		c := NewClient(ts.URL+"/mcp/sse", ClientInfo{Name: "test", Version: "1.0"}, WithSSEClient())
+		c := client.NewClient(ts.URL+"/mcp/sse", core.ClientInfo{Name: "test", Version: "1.0"}, client.WithSSEClient())
 		if err := c.Connect(); err != nil {
 			ts.Close()
 			t.Fatalf("Connect: %v", err)
@@ -393,7 +400,7 @@ func TestClientSubscribeUnsubscribeResource(t *testing.T) {
 
 	t.Run("memory", func(t *testing.T) {
 		srv := newSubscriptionTestServer()
-		c := NewClient("memory://", ClientInfo{Name: "test", Version: "1.0"},
+		c := client.NewClient("memory://", core.ClientInfo{Name: "test", Version: "1.0"},
 			WithInMemoryServer(srv))
 		if err := c.Connect(); err != nil {
 			t.Fatalf("Connect: %v", err)
@@ -419,9 +426,9 @@ func TestClientSubscriptionNotificationDelivery(t *testing.T) {
 	var mu sync.Mutex
 	var received []string
 
-	c := NewClient("memory://", ClientInfo{Name: "test", Version: "1.0"},
+	c := client.NewClient("memory://", core.ClientInfo{Name: "test", Version: "1.0"},
 		WithInMemoryServer(srv),
-		WithNotificationHandler(func(method string, params any) {
+		server.WithNotificationHandler(func(method string, params any) {
 			mu.Lock()
 			defer mu.Unlock()
 			received = append(received, method)
@@ -452,10 +459,10 @@ func TestClientSubscriptionNotificationDelivery(t *testing.T) {
 // newExtraSchemaServer creates a Server with a tool whose InputSchema includes
 // extra JSON Schema fields ($schema, $defs, additionalProperties) beyond the
 // MCP spec minimum. Used to verify round-trip preservation across transports.
-func newExtraSchemaServer() *Server {
-	srv := NewServer(ServerInfo{Name: "test-server", Version: "1.0.0"})
+func newExtraSchemaServer() *server.Server {
+	srv := server.NewServer(core.ServerInfo{Name: "test-server", Version: "1.0.0"})
 	srv.RegisterTool(
-		ToolDef{
+		core.ToolDef{
 			Name:        "extra_schema",
 			Description: "Tool with extra JSON Schema fields",
 			InputSchema: map[string]any{
@@ -466,9 +473,9 @@ func newExtraSchemaServer() *Server {
 						"$ref": "#/$defs/NameType",
 					},
 				},
-				"required":            []string{"name"},
+				"required":             []string{"name"},
 				"additionalProperties": false,
-				"$schema":             "http://json-schema.org/draft-07/schema#",
+				"$schema":              "http://json-schema.org/draft-07/schema#",
 				"$defs": map[string]any{
 					"NameType": map[string]any{
 						"type":      "string",
@@ -477,8 +484,8 @@ func newExtraSchemaServer() *Server {
 				},
 			},
 		},
-		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
-			return TextResult("ok"), nil
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			return core.TextResult("ok"), nil
 		},
 	)
 	return srv
@@ -491,14 +498,14 @@ func newExtraSchemaServer() *Server {
 // in-memory). This guards against regressions where the InputSchema type might
 // be changed from `any` to a typed struct that drops unknown fields.
 func TestClientListToolsExtraSchemaFields(t *testing.T) {
-	runTest := func(t *testing.T, c *Client) {
+	runTest := func(t *testing.T, c *client.Client) {
 		tools, err := c.ListTools()
 		if err != nil {
 			t.Fatalf("ListTools: %v", err)
 		}
 
 		// Find the extra_schema tool.
-		var found *ToolDef
+		var found *core.ToolDef
 		for i := range tools {
 			if tools[i].Name == "extra_schema" {
 				found = &tools[i]
@@ -553,10 +560,10 @@ func TestClientListToolsExtraSchemaFields(t *testing.T) {
 
 	t.Run("streamable", func(t *testing.T) {
 		srv := newExtraSchemaServer()
-		handler := srv.Handler(WithStreamableHTTP(true))
+		handler := srv.Handler(server.WithStreamableHTTP(true))
 		ts := httptest.NewServer(handler)
 		t.Cleanup(ts.Close)
-		c := NewClient(ts.URL+"/mcp", ClientInfo{Name: "test-client", Version: "1.0"})
+		c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test-client", Version: "1.0"})
 		if err := c.Connect(); err != nil {
 			t.Fatalf("Connect failed: %v", err)
 		}
@@ -565,9 +572,9 @@ func TestClientListToolsExtraSchemaFields(t *testing.T) {
 
 	t.Run("sse", func(t *testing.T) {
 		srv := newExtraSchemaServer()
-		handler := srv.Handler(WithSSE(true), WithStreamableHTTP(false))
+		handler := srv.Handler(server.WithSSE(true), server.WithStreamableHTTP(false))
 		ts := httptest.NewServer(handler)
-		c := NewClient(ts.URL+"/mcp/sse", ClientInfo{Name: "test-client", Version: "1.0"}, WithSSEClient())
+		c := client.NewClient(ts.URL+"/mcp/sse", core.ClientInfo{Name: "test-client", Version: "1.0"}, client.WithSSEClient())
 		if err := c.Connect(); err != nil {
 			ts.Close()
 			t.Fatalf("SSE Connect failed: %v", err)
@@ -580,7 +587,7 @@ func TestClientListToolsExtraSchemaFields(t *testing.T) {
 	})
 
 	t.Run("memory", func(t *testing.T) {
-		c := NewClient("memory://", ClientInfo{Name: "test-client", Version: "1.0"},
+		c := client.NewClient("memory://", core.ClientInfo{Name: "test-client", Version: "1.0"},
 			WithInMemoryServer(newExtraSchemaServer()))
 		if err := c.Connect(); err != nil {
 			t.Fatalf("Connect failed: %v", err)
@@ -594,11 +601,11 @@ func TestClientListToolsExtraSchemaFields(t *testing.T) {
 
 // newNotifyTestServer creates a server with a tool that emits 3 log notifications
 // before returning a result. Used to verify notification ordering guarantees.
-func newNotifyTestServer() *Server {
-	srv := NewServer(ServerInfo{Name: "test-server", Version: "1.0.0"})
+func newNotifyTestServer() *server.Server {
+	srv := server.NewServer(core.ServerInfo{Name: "test-server", Version: "1.0.0"})
 
 	srv.RegisterTool(
-		ToolDef{
+		core.ToolDef{
 			Name:        "notify-tool",
 			Description: "Emits 3 log notifications then returns a result",
 			InputSchema: map[string]any{
@@ -606,32 +613,36 @@ func newNotifyTestServer() *Server {
 				"properties": map[string]any{"tag": map[string]any{"type": "string"}},
 			},
 		},
-		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
-			var p struct{ Tag string `json:"tag"` }
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			var p struct {
+				Tag string `json:"tag"`
+			}
 			req.Bind(&p)
 			tag := p.Tag
 			if tag == "" {
 				tag = "default"
 			}
-			EmitLog(ctx, LogInfo, "test", fmt.Sprintf("%s-msg-1", tag))
-			EmitLog(ctx, LogInfo, "test", fmt.Sprintf("%s-msg-2", tag))
-			EmitLog(ctx, LogInfo, "test", fmt.Sprintf("%s-msg-3", tag))
-			return TextResult(fmt.Sprintf("done:%s", tag)), nil
+			core.EmitLog(ctx, core.LogInfo, "test", fmt.Sprintf("%s-msg-1", tag))
+			core.EmitLog(ctx, core.LogInfo, "test", fmt.Sprintf("%s-msg-2", tag))
+			core.EmitLog(ctx, core.LogInfo, "test", fmt.Sprintf("%s-msg-3", tag))
+			return core.TextResult(fmt.Sprintf("done:%s", tag)), nil
 		},
 	)
 
 	// Also register basic tools so forAllTransports-style setup can reuse this server.
 	srv.RegisterTool(
-		ToolDef{Name: "echo", Description: "Echoes input",
+		core.ToolDef{Name: "echo", Description: "Echoes input",
 			InputSchema: map[string]any{
 				"type":       "object",
 				"properties": map[string]any{"message": map[string]any{"type": "string"}},
 				"required":   []string{"message"},
 			}},
-		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
-			var p struct{ Message string `json:"message"` }
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			var p struct {
+				Message string `json:"message"`
+			}
 			req.Bind(&p)
-			return TextResult(fmt.Sprintf("echo: %s", p.Message)), nil
+			return core.TextResult(fmt.Sprintf("echo: %s", p.Message)), nil
 		},
 	)
 
@@ -640,15 +651,15 @@ func newNotifyTestServer() *Server {
 
 // setupStreamableWithOpts creates an httptest.Server with Streamable HTTP and a
 // connected Client, using the provided server and client options.
-func setupStreamableWithOpts(t *testing.T, srv *Server, opts ...ClientOption) *Client {
+func setupStreamableWithOpts(t *testing.T, srv *server.Server, opts ...client.ClientOption) *client.Client {
 	t.Helper()
-	handler := srv.Handler(WithStreamableHTTP(true))
+	handler := srv.Handler(server.WithStreamableHTTP(true))
 	ts := httptest.NewServer(handler)
 	t.Cleanup(ts.Close)
 
-	allOpts := []ClientOption{}
+	allOpts := []client.ClientOption{}
 	allOpts = append(allOpts, opts...)
-	c := NewClient(ts.URL+"/mcp", ClientInfo{Name: "test-client", Version: "1.0"}, allOpts...)
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test-client", Version: "1.0"}, allOpts...)
 	if err := c.Connect(); err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
@@ -658,14 +669,14 @@ func setupStreamableWithOpts(t *testing.T, srv *Server, opts ...ClientOption) *C
 
 // setupSSEWithOpts creates an httptest.Server with SSE transport and a connected
 // Client, using the provided server and client options.
-func setupSSEWithOpts(t *testing.T, srv *Server, opts ...ClientOption) *Client {
+func setupSSEWithOpts(t *testing.T, srv *server.Server, opts ...client.ClientOption) *client.Client {
 	t.Helper()
-	handler := srv.Handler(WithSSE(true), WithStreamableHTTP(false))
+	handler := srv.Handler(server.WithSSE(true), server.WithStreamableHTTP(false))
 	ts := httptest.NewServer(handler)
 
-	allOpts := []ClientOption{WithSSEClient()}
+	allOpts := []client.ClientOption{client.WithSSEClient()}
 	allOpts = append(allOpts, opts...)
-	c := NewClient(ts.URL+"/mcp/sse", ClientInfo{Name: "test-client", Version: "1.0"}, allOpts...)
+	c := client.NewClient(ts.URL+"/mcp/sse", core.ClientInfo{Name: "test-client", Version: "1.0"}, allOpts...)
 	if err := c.Connect(); err != nil {
 		ts.Close()
 		t.Fatalf("SSE Connect failed: %v", err)
@@ -678,11 +689,11 @@ func setupSSEWithOpts(t *testing.T, srv *Server, opts ...ClientOption) *Client {
 }
 
 // setupMemoryWithOpts creates an in-memory client with the provided server and options.
-func setupMemoryWithOpts(t *testing.T, srv *Server, opts ...ClientOption) *Client {
+func setupMemoryWithOpts(t *testing.T, srv *server.Server, opts ...client.ClientOption) *client.Client {
 	t.Helper()
-	allOpts := []ClientOption{WithInMemoryServer(srv)}
+	allOpts := []client.ClientOption{WithInMemoryServer(srv)}
 	allOpts = append(allOpts, opts...)
-	c := NewClient("memory://", ClientInfo{Name: "test-client", Version: "1.0"}, allOpts...)
+	c := client.NewClient("memory://", core.ClientInfo{Name: "test-client", Version: "1.0"}, allOpts...)
 	if err := c.Connect(); err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
@@ -697,7 +708,7 @@ func setupMemoryWithOpts(t *testing.T, srv *Server, opts ...ClientOption) *Clien
 func TestNotificationDeliveryOrder(t *testing.T) {
 	type testCase struct {
 		name  string
-		setup func(t *testing.T, srv *Server, opts ...ClientOption) *Client
+		setup func(t *testing.T, srv *server.Server, opts ...client.ClientOption) *client.Client
 	}
 	cases := []testCase{
 		{"streamable", setupStreamableWithOpts},
@@ -712,7 +723,7 @@ func TestNotificationDeliveryOrder(t *testing.T) {
 			var mu sync.Mutex
 			var notifications []string
 
-			c := tc.setup(t, srv, WithNotificationHandler(func(method string, params any) {
+			c := tc.setup(t, srv, server.WithNotificationHandler(func(method string, params any) {
 				mu.Lock()
 				defer mu.Unlock()
 				if method == "notifications/message" {
@@ -783,7 +794,7 @@ func TestStreamableConcurrentNotificationIsolation(t *testing.T) {
 	var mu sync.Mutex
 	var allNotifications []string
 
-	c := setupStreamableWithOpts(t, srv, WithNotificationHandler(func(method string, params any) {
+	c := setupStreamableWithOpts(t, srv, server.WithNotificationHandler(func(method string, params any) {
 		mu.Lock()
 		defer mu.Unlock()
 		if method == "notifications/message" {
