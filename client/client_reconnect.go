@@ -1,4 +1,4 @@
-package mcpkit
+package client
 
 // Client reconnection with exponential backoff. When a transport call fails
 // with a transient error (network disconnect, EOF, connection reset), the

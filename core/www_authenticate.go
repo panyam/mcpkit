@@ -1,4 +1,4 @@
-package mcpkit
+package core
 
 // WWW-Authenticate header parsing for MCP clients.
 //

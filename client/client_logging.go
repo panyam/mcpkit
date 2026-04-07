@@ -1,4 +1,4 @@
-package mcpkit
+package client
 
 // Client-side transport logging. Wraps a clientTransport to log every
 // connect, call, notify, and close operation with method name, latency,

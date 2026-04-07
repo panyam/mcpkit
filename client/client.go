@@ -1,6 +1,7 @@
-package mcpkit
+package client
 
 import (
+	core "github.com/panyam/mcpkit/core"
 	"bufio"
 	"bytes"
 	"context"
@@ -39,22 +40,27 @@ func WithSSEClient() ClientOption {
 
 // WithClientBearerToken sets a static bearer token for all client requests.
 func WithClientBearerToken(token string) ClientOption {
-	return func(c *Client) { c.tokenSource = &staticTokenSource{token: token} }
+	return func(c *Client) { c.tokenSource = &staticToken{token: token} }
 }
+
+// staticToken is a TokenSource that always returns the same token.
+type staticToken struct{ token string }
+
+func (s *staticToken) Token() (string, error) { return s.token, nil }
 
 // WithTokenSource sets a dynamic token source for all client requests.
 // Use this for OAuth flows where tokens are refreshed automatically.
-func WithTokenSource(ts TokenSource) ClientOption {
+func WithTokenSource(ts core.TokenSource) ClientOption {
 	return func(c *Client) { c.tokenSource = ts }
 }
 
 // SamplingHandler handles a server-to-client sampling/createMessage request.
 // The client performs LLM inference and returns the result.
-type SamplingHandler func(context.Context, CreateMessageRequest) (CreateMessageResult, error)
+type SamplingHandler func(context.Context, core.CreateMessageRequest) (core.CreateMessageResult, error)
 
 // ElicitationHandler handles a server-to-client elicitation/create request.
 // The client prompts the user for input and returns the result.
-type ElicitationHandler func(context.Context, ElicitationRequest) (ElicitationResult, error)
+type ElicitationHandler func(context.Context, core.ElicitationRequest) (core.ElicitationResult, error)
 
 // WithSamplingHandler registers a handler for server-to-client sampling requests.
 // When set, the client advertises the "sampling" capability during initialization.
@@ -68,12 +74,77 @@ func WithElicitationHandler(h ElicitationHandler) ClientOption {
 	return func(c *Client) { c.elicitationHandler = h }
 }
 
+// WithTransport sets a core.Transport for the client, bypassing the default
+// HTTP transport creation. Use with server.NewInProcessTransport for testing
+// or embedded scenarios.
+//
+// Example:
+//
+//	transport := server.NewInProcessTransport(srv)
+//	c := client.New("memory://", info, client.WithTransport(transport))
+func WithTransport(t core.Transport) ClientOption {
+	return func(c *Client) {
+		c.transport = &coreTransportAdapter{inner: t}
+	}
+}
+
+// coreTransportAdapter wraps a core.Transport into the internal clientTransport
+// interface. Handles JSON marshaling/unmarshaling between the typed core interface
+// and the byte-oriented internal interface used by the client.
+type coreTransportAdapter struct {
+	inner core.Transport
+}
+
+func (a *coreTransportAdapter) connect() error {
+	return a.inner.Connect(context.Background())
+}
+
+func (a *coreTransportAdapter) call(data []byte) (*rpcResponse, error) {
+	var req core.Request
+	if err := json.Unmarshal(data, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+	resp, err := a.inner.Call(context.Background(), &req)
+	if err != nil {
+		return nil, err
+	}
+	if resp == nil {
+		return nil, nil
+	}
+	// Convert core.Response → rpcResponse
+	raw, err := json.Marshal(resp)
+	if err != nil {
+		return nil, err
+	}
+	var rr rpcResponse
+	if err := json.Unmarshal(raw, &rr); err != nil {
+		return nil, err
+	}
+	return &rr, nil
+}
+
+func (a *coreTransportAdapter) notify(data []byte) error {
+	var req core.Request
+	if err := json.Unmarshal(data, &req); err != nil {
+		return fmt.Errorf("invalid notification: %w", err)
+	}
+	return a.inner.Notify(context.Background(), &req)
+}
+
+func (a *coreTransportAdapter) close() error {
+	return a.inner.Close()
+}
+
+func (a *coreTransportAdapter) getSessionID() string {
+	return a.inner.SessionID()
+}
+
 // Client is an MCP client that communicates over Streamable HTTP or SSE.
 type Client struct {
 	url         string
-	info        ClientInfo
+	info        core.ClientInfo
 	useSSE      bool
-	tokenSource TokenSource
+	tokenSource core.TokenSource
 	nextID      int
 	mu          sync.Mutex
 	transport   clientTransport
@@ -88,7 +159,7 @@ type Client struct {
 	baseDelay  time.Duration
 
 	// ServerInfo is populated after Connect.
-	ServerInfo ServerInfo
+	ServerInfo core.ServerInfo
 
 	// onNotify is an optional callback for server-to-client notifications.
 	// Currently only used by the in-memory transport.
@@ -98,7 +169,7 @@ type Client struct {
 // NewClient creates a new MCP client targeting the given server URL.
 // By default uses Streamable HTTP. Use WithSSEClient() for SSE transport.
 // Call Connect() to perform the protocol handshake.
-func NewClient(url string, info ClientInfo, opts ...ClientOption) *Client {
+func NewClient(url string, info core.ClientInfo, opts ...ClientOption) *Client {
 	c := &Client{
 		url:    url,
 		info:   info,
@@ -134,11 +205,6 @@ func (c *Client) Connect() error {
 		if c.logger != nil {
 			c.transport = &loggingTransport{inner: c.transport, logger: c.logger}
 		}
-	}
-
-	// Propagate notification handler to memory transport before connecting
-	if mt, ok := c.transport.(*memoryTransport); ok && c.onNotify != nil {
-		mt.onNotify = c.onNotify
 	}
 
 	if err := c.transport.connect(); err != nil {
@@ -199,38 +265,38 @@ func (c *Client) makeNotifyAdapter() func(string, json.RawMessage) {
 // handleServerRequest dispatches an incoming server-to-client JSON-RPC request
 // to the appropriate registered handler (sampling or elicitation).
 // Returns a JSON-RPC response to send back to the server.
-func (c *Client) handleServerRequest(req *Request) *Response {
+func (c *Client) handleServerRequest(req *core.Request) *core.Response {
 	switch req.Method {
 	case "sampling/createMessage":
 		if c.samplingHandler == nil {
-			return NewErrorResponse(req.ID, ErrCodeMethodNotFound, "sampling not supported")
+			return core.NewErrorResponse(req.ID, core.ErrCodeMethodNotFound, "sampling not supported")
 		}
-		var params CreateMessageRequest
+		var params core.CreateMessageRequest
 		if err := json.Unmarshal(req.Params, &params); err != nil {
-			return NewErrorResponse(req.ID, ErrCodeInvalidParams, "invalid sampling params: "+err.Error())
+			return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams, "invalid sampling params: "+err.Error())
 		}
 		result, err := c.samplingHandler(context.Background(), params)
 		if err != nil {
-			return NewErrorResponse(req.ID, ErrCodeInternal, err.Error())
+			return core.NewErrorResponse(req.ID, core.ErrCodeInternal, err.Error())
 		}
-		return NewResponse(req.ID, result)
+		return core.NewResponse(req.ID, result)
 
 	case "elicitation/create":
 		if c.elicitationHandler == nil {
-			return NewErrorResponse(req.ID, ErrCodeMethodNotFound, "elicitation not supported")
+			return core.NewErrorResponse(req.ID, core.ErrCodeMethodNotFound, "elicitation not supported")
 		}
-		var params ElicitationRequest
+		var params core.ElicitationRequest
 		if err := json.Unmarshal(req.Params, &params); err != nil {
-			return NewErrorResponse(req.ID, ErrCodeInvalidParams, "invalid elicitation params: "+err.Error())
+			return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams, "invalid elicitation params: "+err.Error())
 		}
 		result, err := c.elicitationHandler(context.Background(), params)
 		if err != nil {
-			return NewErrorResponse(req.ID, ErrCodeInternal, err.Error())
+			return core.NewErrorResponse(req.ID, core.ErrCodeInternal, err.Error())
 		}
-		return NewResponse(req.ID, result)
+		return core.NewResponse(req.ID, result)
 
 	default:
-		return NewErrorResponse(req.ID, ErrCodeMethodNotFound, "unknown server request: "+req.Method)
+		return core.NewErrorResponse(req.ID, core.ErrCodeMethodNotFound, "unknown server request: "+req.Method)
 	}
 }
 
@@ -311,13 +377,13 @@ func (c *Client) UnsubscribeResource(uri string) error {
 }
 
 // ListTools returns all registered tool definitions.
-func (c *Client) ListTools() ([]ToolDef, error) {
+func (c *Client) ListTools() ([]core.ToolDef, error) {
 	result, err := c.Call("tools/list", nil)
 	if err != nil {
 		return nil, err
 	}
 	var resp struct {
-		Tools []ToolDef `json:"tools"`
+		Tools []core.ToolDef `json:"tools"`
 	}
 	if err := result.Unmarshal(&resp); err != nil {
 		return nil, err
@@ -326,13 +392,13 @@ func (c *Client) ListTools() ([]ToolDef, error) {
 }
 
 // ListResources returns all registered static resources.
-func (c *Client) ListResources() ([]ResourceDef, error) {
+func (c *Client) ListResources() ([]core.ResourceDef, error) {
 	result, err := c.Call("resources/list", nil)
 	if err != nil {
 		return nil, err
 	}
 	var resp struct {
-		Resources []ResourceDef `json:"resources"`
+		Resources []core.ResourceDef `json:"resources"`
 	}
 	if err := result.Unmarshal(&resp); err != nil {
 		return nil, err
@@ -341,13 +407,13 @@ func (c *Client) ListResources() ([]ResourceDef, error) {
 }
 
 // ListResourceTemplates returns all registered resource templates.
-func (c *Client) ListResourceTemplates() ([]ResourceTemplate, error) {
+func (c *Client) ListResourceTemplates() ([]core.ResourceTemplate, error) {
 	result, err := c.Call("resources/templates/list", nil)
 	if err != nil {
 		return nil, err
 	}
 	var resp struct {
-		ResourceTemplates []ResourceTemplate `json:"resourceTemplates"`
+		ResourceTemplates []core.ResourceTemplate `json:"resourceTemplates"`
 	}
 	if err := result.Unmarshal(&resp); err != nil {
 		return nil, err
@@ -361,7 +427,7 @@ type rpcResponse struct {
 	JSONRPC string `json:"jsonrpc"`
 	ID      any    `json:"id"`
 	Result  any    `json:"result,omitempty"`
-	Error   *Error `json:"error,omitempty"`
+	Error   *core.Error `json:"error,omitempty"`
 }
 
 func (c *Client) nextRequestID() int {
@@ -421,12 +487,12 @@ type streamableClientTransport struct {
 	url              string
 	sessionID        string
 	httpClient       *http.Client
-	tokenSource      TokenSource
-	serverReqHandler func(*Request) *Response                // set by Client before connect
+	tokenSource      core.TokenSource
+	serverReqHandler func(*core.Request) *core.Response                // set by Client before connect
 	notifyHandler    func(method string, params json.RawMessage) // set by Client before connect
 }
 
-func newStreamableClientTransport(url string, ts TokenSource) *streamableClientTransport {
+func newStreamableClientTransport(url string, ts core.TokenSource) *streamableClientTransport {
 	return &streamableClientTransport{url: url, httpClient: http.DefaultClient, tokenSource: ts}
 }
 
@@ -440,8 +506,8 @@ func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", StreamableHTTPAccept)
+		req.Header.Set("core.Content-Type", "application/json")
+		req.Header.Set("Accept", core.StreamableHTTPAccept)
 		if t.sessionID != "" {
 			req.Header.Set("Mcp-Session-Id", t.sessionID)
 		}
@@ -458,7 +524,7 @@ func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
 		t.sessionID = sid
 	}
 
-	ct := resp.Header.Get("Content-Type")
+	ct := resp.Header.Get("core.Content-Type")
 	if strings.Contains(ct, "text/event-stream") {
 		return t.readSSEResponse(resp.Body)
 	}
@@ -517,7 +583,7 @@ func (t *streamableClientTransport) readSSEResponse(body io.Reader) (*rpcRespons
 
 			// Server-to-client request (has method + id)
 			if probe.Method != "" && probe.ID != nil && t.serverReqHandler != nil {
-				var req Request
+				var req core.Request
 				if json.Unmarshal([]byte(data), &req) == nil {
 					resp := t.serverReqHandler(&req)
 					if resp != nil {
@@ -556,7 +622,7 @@ func (t *streamableClientTransport) readSSEResponse(body io.Reader) (*rpcRespons
 
 // postResponse sends a JSON-RPC response back to the server via POST.
 // Used when the client handles a server-to-client request during an SSE stream.
-func (t *streamableClientTransport) postResponse(resp *Response) {
+func (t *streamableClientTransport) postResponse(resp *core.Response) {
 	raw, err := json.Marshal(resp)
 	if err != nil {
 		return
@@ -566,8 +632,8 @@ func (t *streamableClientTransport) postResponse(resp *Response) {
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", StreamableHTTPAccept)
+		req.Header.Set("core.Content-Type", "application/json")
+		req.Header.Set("Accept", core.StreamableHTTPAccept)
 		if t.sessionID != "" {
 			req.Header.Set("Mcp-Session-Id", t.sessionID)
 		}
@@ -586,8 +652,8 @@ func (t *streamableClientTransport) notify(data []byte) error {
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", StreamableHTTPAccept)
+		req.Header.Set("core.Content-Type", "application/json")
+		req.Header.Set("Accept", core.StreamableHTTPAccept)
 		if t.sessionID != "" {
 			req.Header.Set("Mcp-Session-Id", t.sessionID)
 		}
@@ -616,19 +682,19 @@ type sseClientTransport struct {
 	postURL     string
 	sessionID   string
 	httpClient  *http.Client
-	tokenSource TokenSource
+	tokenSource core.TokenSource
 	sseResp     *http.Response
 	sseReader   *bufio.Reader
 
 	// Background reader state
 	pendingCalls     sync.Map                                    // requestID (string) → chan *rpcResponse
-	serverReqHandler func(*Request) *Response                    // set by Client before connect
+	serverReqHandler func(*core.Request) *core.Response                    // set by Client before connect
 	notifyHandler    func(method string, params json.RawMessage) // set by Client before connect
 	done             chan struct{}                                // closed when background reader exits
 	readerErr        error                                       // last error from background reader
 }
 
-func newSSEClientTransport(sseURL string, ts TokenSource) *sseClientTransport {
+func newSSEClientTransport(sseURL string, ts core.TokenSource) *sseClientTransport {
 	return &sseClientTransport{sseURL: sseURL, httpClient: http.DefaultClient, tokenSource: ts}
 }
 
@@ -712,7 +778,7 @@ func (t *sseClientTransport) backgroundReader() {
 			if probe.ID != nil {
 				// Server-to-client request (has method + id) — dispatch to handler
 				if t.serverReqHandler != nil {
-					var req Request
+					var req core.Request
 					if json.Unmarshal([]byte(ev.data), &req) == nil {
 						resp := t.serverReqHandler(&req)
 						if resp != nil {
@@ -733,7 +799,7 @@ func (t *sseClientTransport) backgroundReader() {
 			continue
 		}
 
-		// Response to a pending call — route by ID
+		// core.Response to a pending call — route by ID
 		if probe.ID != nil {
 			var resp rpcResponse
 			if json.Unmarshal([]byte(ev.data), &resp) == nil {
@@ -748,7 +814,7 @@ func (t *sseClientTransport) backgroundReader() {
 
 // postResponse sends a JSON-RPC response back to the server via POST.
 // Used when the client handles a server-to-client request (sampling, elicitation).
-func (t *sseClientTransport) postResponse(resp *Response) {
+func (t *sseClientTransport) postResponse(resp *core.Response) {
 	raw, err := json.Marshal(resp)
 	if err != nil {
 		return
@@ -758,7 +824,7 @@ func (t *sseClientTransport) postResponse(resp *Response) {
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("core.Content-Type", "application/json")
 		return req, nil
 	}
 	httpResp, err := doWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
@@ -803,7 +869,7 @@ func (t *sseClientTransport) call(data []byte) (*rpcResponse, error) {
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("core.Content-Type", "application/json")
 		return req, nil
 	}
 
@@ -830,7 +896,7 @@ func (t *sseClientTransport) notify(data []byte) error {
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("core.Content-Type", "application/json")
 		return req, nil
 	}
 
@@ -889,9 +955,9 @@ func normalizeID(id any) string {
 	}
 }
 
-// setAuthHeader sets the Authorization: Bearer header from a TokenSource.
+// setAuthHeader sets the Authorization: Bearer header from a core.TokenSource.
 // No-op if ts is nil.
-func setAuthHeader(req *http.Request, ts TokenSource) error {
+func setAuthHeader(req *http.Request, ts core.TokenSource) error {
 	if ts == nil {
 		return nil
 	}
@@ -925,14 +991,14 @@ func (e *ClientAuthError) Error() string {
 // Retry budget: max 1 retry for 401 (token refresh), max 1 retry for 403
 // (scope step-up). Total max 2 retries per request.
 //
-// On 401: calls TokenSource.Token() to get a fresh token, retries once.
+// On 401: calls core.TokenSource.Token() to get a fresh token, retries once.
 // On 403: parses WWW-Authenticate for required scopes, calls
-// ScopeAwareTokenSource.TokenForScopes if available, retries once.
+// core.ScopeAwareTokenSource.TokenForScopes if available, retries once.
 //
 // buildReq must create a new *http.Request each call (body may be consumed).
 // do is typically httpClient.Do.
 func doWithAuthRetry(
-	ts TokenSource,
+	ts core.TokenSource,
 	buildReq func() (*http.Request, error),
 	do func(*http.Request) (*http.Response, error),
 ) (*http.Response, error) {
@@ -977,7 +1043,7 @@ func doWithAuthRetry(
 			wwa := resp.Header.Get("WWW-Authenticate")
 			var scopes []string
 			if wwa != "" {
-				_, scopes, _ = ParseWWWAuthenticate(wwa)
+				_, scopes, _ = core.ParseWWWAuthenticate(wwa)
 			}
 			if tried403 || ts == nil {
 				return nil, &ClientAuthError{
@@ -988,7 +1054,7 @@ func doWithAuthRetry(
 				}
 			}
 			tried403 = true
-			sats, ok := ts.(ScopeAwareTokenSource)
+			sats, ok := ts.(core.ScopeAwareTokenSource)
 			if !ok || len(scopes) == 0 {
 				return nil, &ClientAuthError{
 					StatusCode:      403,
@@ -1008,7 +1074,7 @@ func doWithAuthRetry(
 	}
 }
 
-// --- Response extraction helpers ---
+// --- core.Response extraction helpers ---
 
 // extractToolText pulls the first text content from a tools/call result.
 func extractToolText(raw any) (string, error) {
