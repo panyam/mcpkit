@@ -121,7 +121,7 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 	var req core.Request
 	if err := json.Unmarshal(body, &req); err != nil {
 		// Parse error → JSON-RPC error in response body
-		w.Header().Set("core.Content-Type", "application/json")
+		w.Header().Set("Content-Type", "application/json")
 		errResp := core.NewErrorResponse(json.RawMessage("null"), core.ErrCodeParse, "parse error: "+err.Error())
 		raw, _ := json.Marshal(errResp)
 		w.Write(raw)
@@ -140,7 +140,7 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 			w.WriteHeader(http.StatusAccepted)
 			return
 		}
-		w.Header().Set("core.Content-Type", "application/json")
+		w.Header().Set("Content-Type", "application/json")
 		raw, _ := json.Marshal(resp)
 		w.Write(raw)
 		return
@@ -198,7 +198,7 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	w.Header().Set("core.Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/json")
 	raw, err := json.Marshal(resp)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -210,8 +210,8 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 // handlePostSSE handles a POST request using SSE streaming, allowing the server
 // to send notifications (logging, progress) as SSE events before the final
 // JSON-RPC response. Per MCP spec: "the server MUST either return
-// core.Content-Type: text/event-stream, to initiate an SSE stream, or
-// core.Content-Type: application/json, to return one JSON object."
+// Content-Type: text/event-stream, to initiate an SSE stream, or
+// Content-Type: application/json, to return one JSON object."
 func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Request, claims *core.Claims, d *Dispatcher, req *core.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -221,14 +221,14 @@ func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Reque
 			w.WriteHeader(http.StatusAccepted)
 			return
 		}
-		w.Header().Set("core.Content-Type", "application/json")
+		w.Header().Set("Content-Type", "application/json")
 		raw, _ := json.Marshal(resp)
 		w.Write(raw)
 		return
 	}
 
 	// Set SSE headers
-	w.Header().Set("core.Content-Type", "text/event-stream")
+	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
@@ -289,7 +289,7 @@ func (t *streamableTransport) handleInitialize(w http.ResponseWriter, r *http.Re
 
 	// If initialize failed (JSON-RPC error), return it without creating a session
 	if resp.Error != nil {
-		w.Header().Set("core.Content-Type", "application/json")
+		w.Header().Set("Content-Type", "application/json")
 		raw, _ := json.Marshal(resp)
 		w.Write(raw)
 		return
@@ -301,7 +301,7 @@ func (t *streamableTransport) handleInitialize(w http.ResponseWriter, r *http.Re
 	t.sessions.Store(sessionID, dispatcher)
 
 	w.Header().Set(mcpSessionIDHeader, sessionID)
-	w.Header().Set("core.Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/json")
 	raw, _ := json.Marshal(resp)
 	w.Write(raw)
 }
@@ -463,8 +463,8 @@ func (t *streamableTransport) sessionCount() int {
 //
 // Per MCP spec (2025-11-25, Streamable HTTP transport):
 //
-//	"the server MUST either return core.Content-Type: text/event-stream, to initiate
-//	 an SSE stream, or core.Content-Type: application/json, to return one JSON object."
+//	"the server MUST either return Content-Type: text/event-stream, to initiate
+//	 an SSE stream, or Content-Type: application/json, to return one JSON object."
 //
 // https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#sending-messages-to-the-server
 //

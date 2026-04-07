@@ -51,7 +51,7 @@ func TestReconnect_OnDisconnect(t *testing.T) {
 	defer ts2.Close()
 
 	// Update client URL to new server (simulates DNS/load balancer)
-	c.url = ts2.URL + "/mcp"
+	c.SetURL(ts2.URL + "/mcp")
 
 	// This call should fail on old transport, reconnect to new server, and succeed
 	result, err = c.ToolCall("echo", map[string]any{"message": "after"})

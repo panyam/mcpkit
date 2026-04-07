@@ -1,4 +1,4 @@
-package mcpkit
+package server_test
 
 // Tests for developer experience features:
 // #71 Server.Run(), #61 Stateless mode, #68 In-memory transport,
@@ -13,9 +13,47 @@ import (
 	"strings"
 	"testing"
 
+	client "github.com/panyam/mcpkit/client"
+	core "github.com/panyam/mcpkit/core"
+	server "github.com/panyam/mcpkit/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// newTestMCPServer creates a server with echo + fail tools, a static resource,
+// and a resource template — matching the original test server from client_test.go.
+func newTestMCPServer() *server.Server {
+	srv := server.NewServer(core.ServerInfo{Name: "test-server", Version: "1.0.0"})
+	srv.RegisterTool(
+		core.ToolDef{Name: "echo", Description: "Echoes input", InputSchema: map[string]any{
+			"type": "object", "properties": map[string]any{"message": map[string]any{"type": "string"}}, "required": []string{"message"},
+		}},
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			var p struct{ Message string `json:"message"` }
+			req.Bind(&p)
+			return core.TextResult(fmt.Sprintf("echo: %s", p.Message)), nil
+		},
+	)
+	srv.RegisterTool(
+		core.ToolDef{Name: "fail", Description: "Always fails"},
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			return core.ErrorResult("intentional failure"), nil
+		},
+	)
+	srv.RegisterResource(
+		core.ResourceDef{URI: "test://info", Name: "Test Info", Description: "Static test resource", MimeType: "text/plain"},
+		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+			return core.ResourceResult{Contents: []core.ResourceReadContent{{URI: "test://info", MimeType: "text/plain", Text: "hello from test"}}}, nil
+		},
+	)
+	srv.RegisterResourceTemplate(
+		core.ResourceTemplate{URITemplate: "test://items/{id}", Name: "Test Item", Description: "Parameterized test resource", MimeType: "text/plain"},
+		func(ctx context.Context, uri string, params map[string]string) (core.ResourceResult, error) {
+			return core.ResourceResult{Contents: []core.ResourceReadContent{{URI: uri, MimeType: "text/plain", Text: fmt.Sprintf("item %s", params["id"])}}}, nil
+		},
+	)
+	return srv
+}
 
 // =============================================================================
 // #74: JSON-RPC Error Codes
@@ -24,8 +62,8 @@ import (
 // TestErrCodeServerError verifies that the ErrCodeServerError constant is in
 // the JSON-RPC 2.0 server error range (-32000 to -32099).
 func TestErrCodeServerError(t *testing.T) {
-	assert.Equal(t, -32000, ErrCodeServerError)
-	assert.True(t, ErrCodeServerError >= -32099 && ErrCodeServerError <= -32000,
+	assert.Equal(t, -32000, core.ErrCodeServerError)
+	assert.True(t, core.ErrCodeServerError >= -32099 && core.ErrCodeServerError <= -32000,
 		"ErrCodeServerError should be in the server error range")
 }
 
@@ -37,7 +75,7 @@ func TestErrCodeServerError(t *testing.T) {
 // with both text content and structured data.
 func TestStructuredResult(t *testing.T) {
 	data := map[string]any{"count": 42, "status": "ok"}
-	result := StructuredResult("42 items found", data)
+	result := core.StructuredResult("42 items found", data)
 
 	assert.False(t, result.IsError)
 	require.Len(t, result.Content, 1)
@@ -49,7 +87,7 @@ func TestStructuredResult(t *testing.T) {
 // marked as an error with both text and structured error data.
 func TestStructuredError(t *testing.T) {
 	data := map[string]any{"code": "NOT_FOUND", "resource": "user-123"}
-	result := StructuredError("user not found", data)
+	result := core.StructuredError("user not found", data)
 
 	assert.True(t, result.IsError)
 	require.Len(t, result.Content, 1)
@@ -60,7 +98,7 @@ func TestStructuredError(t *testing.T) {
 // TestOutputSchemaOnToolDef verifies that ToolDef supports OutputSchema field
 // for tools that produce structured output.
 func TestOutputSchemaOnToolDef(t *testing.T) {
-	def := ToolDef{
+	def := core.ToolDef{
 		Name:        "search",
 		Description: "Search for items",
 		InputSchema: map[string]any{"type": "object"},
@@ -83,26 +121,26 @@ func TestOutputSchemaOnToolDef(t *testing.T) {
 // TestStructuredContentInDispatch verifies that StructuredContent flows through
 // the dispatch layer correctly — the JSON-RPC response includes structuredContent.
 func TestStructuredContentInDispatch(t *testing.T) {
-	srv := NewServer(ServerInfo{Name: "test", Version: "1.0"})
+	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
 	srv.RegisterTool(
-		ToolDef{
+		core.ToolDef{
 			Name:         "structured",
 			Description:  "returns structured data",
 			InputSchema:  map[string]any{"type": "object"},
 			OutputSchema: map[string]any{"type": "object", "properties": map[string]any{"count": map[string]any{"type": "integer"}}},
 		},
-		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
-			return StructuredResult("3 items", map[string]any{"count": 3}), nil
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			return core.StructuredResult("3 items", map[string]any{"count": 3}), nil
 		},
 	)
 
 	// Initialize
-	initReq := &Request{ID: json.RawMessage(`1`), Method: "initialize", Params: json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)}
+	initReq := &core.Request{ID: json.RawMessage(`1`), Method: "initialize", Params: json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)}
 	srv.Dispatch(context.Background(), initReq)
-	srv.Dispatch(context.Background(), &Request{Method: "notifications/initialized"})
+	srv.Dispatch(context.Background(), &core.Request{Method: "notifications/initialized"})
 
 	// Call tool
-	resp := srv.Dispatch(context.Background(), &Request{
+	resp := srv.Dispatch(context.Background(), &core.Request{
 		ID:     json.RawMessage(`2`),
 		Method: "tools/call",
 		Params: json.RawMessage(`{"name":"structured"}`),
@@ -126,8 +164,9 @@ func TestStructuredContentInDispatch(t *testing.T) {
 func TestInMemoryTransport_Connect(t *testing.T) {
 	srv := newTestMCPServer()
 
-	c := NewClient("memory://", ClientInfo{Name: "mem-test", Version: "1.0"},
-		WithInMemoryServer(srv))
+	c := client.NewClient("memory://", core.ClientInfo{Name: "mem-test", Version: "1.0"}, client.WithTransport(
+		server.NewInProcessTransport(srv)),
+	)
 	require.NoError(t, c.Connect())
 	defer c.Close()
 
@@ -140,8 +179,9 @@ func TestInMemoryTransport_Connect(t *testing.T) {
 func TestInMemoryTransport_ToolCall(t *testing.T) {
 	srv := newTestMCPServer()
 
-	c := NewClient("memory://", ClientInfo{Name: "mem-test", Version: "1.0"},
-		WithInMemoryServer(srv))
+	c := client.NewClient("memory://", core.ClientInfo{Name: "mem-test", Version: "1.0"}, client.WithTransport(
+		server.NewInProcessTransport(srv)),
+	)
 	require.NoError(t, c.Connect())
 	defer c.Close()
 
@@ -155,8 +195,9 @@ func TestInMemoryTransport_ToolCall(t *testing.T) {
 func TestInMemoryTransport_ReadResource(t *testing.T) {
 	srv := newTestMCPServer()
 
-	c := NewClient("memory://", ClientInfo{Name: "mem-test", Version: "1.0"},
-		WithInMemoryServer(srv))
+	c := client.NewClient("memory://", core.ClientInfo{Name: "mem-test", Version: "1.0"}, client.WithTransport(
+		server.NewInProcessTransport(srv)),
+	)
 	require.NoError(t, c.Connect())
 	defer c.Close()
 
@@ -170,8 +211,9 @@ func TestInMemoryTransport_ReadResource(t *testing.T) {
 func TestInMemoryTransport_ListTools(t *testing.T) {
 	srv := newTestMCPServer()
 
-	c := NewClient("memory://", ClientInfo{Name: "mem-test", Version: "1.0"},
-		WithInMemoryServer(srv))
+	c := client.NewClient("memory://", core.ClientInfo{Name: "mem-test", Version: "1.0"}, client.WithTransport(
+		server.NewInProcessTransport(srv)),
+	)
 	require.NoError(t, c.Connect())
 	defer c.Close()
 
@@ -188,15 +230,15 @@ func TestInMemoryTransport_ListTools(t *testing.T) {
 // without session tracking — no Mcp-Session-Id header, every request uses
 // a fresh dispatcher.
 func TestStatelessMode_NoSession(t *testing.T) {
-	srv := NewServer(ServerInfo{Name: "stateless", Version: "1.0"})
+	srv := server.NewServer(core.ServerInfo{Name: "stateless", Version: "1.0"})
 	srv.RegisterTool(
-		ToolDef{Name: "ping", Description: "ping", InputSchema: map[string]any{"type": "object"}},
-		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
-			return TextResult("pong"), nil
+		core.ToolDef{Name: "ping", Description: "ping", InputSchema: map[string]any{"type": "object"}},
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			return core.TextResult("pong"), nil
 		},
 	)
 
-	handler := srv.Handler(WithStreamableHTTP(true), WithStateless(true))
+	handler := srv.Handler(server.WithStreamableHTTP(true), server.WithStateless(true))
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
@@ -218,16 +260,16 @@ func TestStatelessMode_NoSession(t *testing.T) {
 // gets its own dispatcher — no state leaks between requests.
 func TestStatelessMode_IndependentRequests(t *testing.T) {
 	var callCount int
-	srv := NewServer(ServerInfo{Name: "stateless", Version: "1.0"})
+	srv := server.NewServer(core.ServerInfo{Name: "stateless", Version: "1.0"})
 	srv.RegisterTool(
-		ToolDef{Name: "count", Description: "count", InputSchema: map[string]any{"type": "object"}},
-		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
+		core.ToolDef{Name: "count", Description: "count", InputSchema: map[string]any{"type": "object"}},
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
 			callCount++
-			return TextResult(fmt.Sprintf("call-%d", callCount)), nil
+			return core.TextResult(fmt.Sprintf("call-%d", callCount)), nil
 		},
 	)
 
-	handler := srv.Handler(WithStreamableHTTP(true), WithStateless(true))
+	handler := srv.Handler(server.WithStreamableHTTP(true), server.WithStateless(true))
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
@@ -247,11 +289,11 @@ func TestStatelessMode_IndependentRequests(t *testing.T) {
 // session, making subsequent requests with that session ID fail.
 func TestCloseSession(t *testing.T) {
 	srv := newTestMCPServer()
-	handler := srv.Handler(WithStreamableHTTP(true))
+	handler := srv.Handler(server.WithStreamableHTTP(true))
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
-	c := NewClient(ts.URL+"/mcp", ClientInfo{Name: "close-test", Version: "1.0"})
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "close-test", Version: "1.0"})
 	require.NoError(t, c.Connect())
 	sid := c.SessionID()
 	require.NotEmpty(t, sid)
@@ -269,14 +311,14 @@ func TestCloseSession(t *testing.T) {
 // all active sessions.
 func TestCloseAllSessions(t *testing.T) {
 	srv := newTestMCPServer()
-	handler := srv.Handler(WithStreamableHTTP(true))
+	handler := srv.Handler(server.WithStreamableHTTP(true))
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 
 	// Create two clients
-	c1 := NewClient(ts.URL+"/mcp", ClientInfo{Name: "close-test-1", Version: "1.0"})
+	c1 := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "close-test-1", Version: "1.0"})
 	require.NoError(t, c1.Connect())
-	c2 := NewClient(ts.URL+"/mcp", ClientInfo{Name: "close-test-2", Version: "1.0"})
+	c2 := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "close-test-2", Version: "1.0"})
 	require.NoError(t, c2.Connect())
 
 	// Close all sessions
@@ -295,7 +337,7 @@ func TestCloseAllSessions(t *testing.T) {
 // returns false without error.
 func TestCloseSession_NotFound(t *testing.T) {
 	srv := newTestMCPServer()
-	_ = srv.Handler(WithStreamableHTTP(true)) // create transport so closers are registered
+	_ = srv.Handler(server.WithStreamableHTTP(true)) // create transport so closers are registered
 	assert.False(t, srv.CloseSession("nonexistent-id"))
 }
 
@@ -304,19 +346,5 @@ func TestCloseSession_NotFound(t *testing.T) {
 // that it correctly sets defaults.
 // =============================================================================
 
-// TestRunDefaultsToStreamableHTTP verifies that Run() uses Streamable HTTP
-// by default (not SSE). We test this indirectly by checking the transport
-// config detection logic.
-func TestRunDefaultsToStreamableHTTP(t *testing.T) {
-	// Verify WithStreamableHTTP is detected
-	tc := transportConfig{}
-	opt := WithStreamableHTTP(true)
-	opt(&tc)
-	assert.True(t, tc.streamableHTTP, "WithStreamableHTTP should set streamableHTTP")
-
-	// Verify WithSSE is detected
-	tc2 := transportConfig{}
-	opt2 := WithSSE(true)
-	opt2(&tc2)
-	assert.True(t, tc2.sse, "WithSSE should set sse")
-}
+// TestRunDefaultsToStreamableHTTP moved to server/server_internal_test.go
+// (needs access to unexported transportConfig)

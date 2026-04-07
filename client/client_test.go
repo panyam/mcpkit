@@ -1,6 +1,7 @@
 package client_test
 
 import (
+	"encoding/json"
 	"context"
 	"fmt"
 	client "github.com/panyam/mcpkit/client"
@@ -116,7 +117,7 @@ func forAllTransports(t *testing.T, fn func(t *testing.T, c *client.Client)) {
 	})
 	t.Run("memory", func(t *testing.T) {
 		c := client.NewClient("memory://", core.ClientInfo{Name: "test-client", Version: "1.0"},
-			WithInMemoryServer(newTestMCPServer()))
+			client.WithTransport(server.NewInProcessTransport(newTestMCPServer())))
 		if err := c.Connect(); err != nil {
 			t.Fatalf("Connect failed: %v", err)
 		}
@@ -401,7 +402,7 @@ func TestClientSubscribeUnsubscribeResource(t *testing.T) {
 	t.Run("memory", func(t *testing.T) {
 		srv := newSubscriptionTestServer()
 		c := client.NewClient("memory://", core.ClientInfo{Name: "test", Version: "1.0"},
-			WithInMemoryServer(srv))
+			client.WithTransport(server.NewInProcessTransport(srv)))
 		if err := c.Connect(); err != nil {
 			t.Fatalf("Connect: %v", err)
 		}
@@ -426,13 +427,15 @@ func TestClientSubscriptionNotificationDelivery(t *testing.T) {
 	var mu sync.Mutex
 	var received []string
 
-	c := client.NewClient("memory://", core.ClientInfo{Name: "test", Version: "1.0"},
-		WithInMemoryServer(srv),
-		server.WithNotificationHandler(func(method string, params any) {
+	transport := server.NewInProcessTransport(srv,
+		server.WithNotificationHandler(func(method string, params []byte) {
 			mu.Lock()
 			defer mu.Unlock()
 			received = append(received, method)
 		}),
+	)
+	c := client.NewClient("memory://", core.ClientInfo{Name: "test", Version: "1.0"},
+		client.WithTransport(transport),
 	)
 	if err := c.Connect(); err != nil {
 		t.Fatalf("Connect: %v", err)
@@ -587,8 +590,7 @@ func TestClientListToolsExtraSchemaFields(t *testing.T) {
 	})
 
 	t.Run("memory", func(t *testing.T) {
-		c := client.NewClient("memory://", core.ClientInfo{Name: "test-client", Version: "1.0"},
-			WithInMemoryServer(newExtraSchemaServer()))
+		c := client.NewClient("memory://", core.ClientInfo{Name: "test-client", Version: "1.0"}, client.WithTransport(server.NewInProcessTransport(newExtraSchemaServer())))
 		if err := c.Connect(); err != nil {
 			t.Fatalf("Connect failed: %v", err)
 		}
@@ -688,12 +690,25 @@ func setupSSEWithOpts(t *testing.T, srv *server.Server, opts ...client.ClientOpt
 	return c
 }
 
-// setupMemoryWithOpts creates an in-memory client with the provided server and options.
-func setupMemoryWithOpts(t *testing.T, srv *server.Server, opts ...client.ClientOption) *client.Client {
+// notifyCallback is a function that receives server-to-client notifications.
+// Used by notification tests across all transports.
+type notifyCallback func(method string, params any)
+
+// setupMemoryWithNotify creates an in-memory client with notification capture.
+func setupMemoryWithNotify(t *testing.T, srv *server.Server, onNotify notifyCallback) *client.Client {
 	t.Helper()
-	allOpts := []client.ClientOption{WithInMemoryServer(srv)}
-	allOpts = append(allOpts, opts...)
-	c := client.NewClient("memory://", core.ClientInfo{Name: "test-client", Version: "1.0"}, allOpts...)
+	var transportOpts []server.InProcessOption
+	if onNotify != nil {
+		transportOpts = append(transportOpts, server.WithNotificationHandler(func(method string, params []byte) {
+			// Unmarshal to any for consistent interface across transports
+			var parsed any
+			json.Unmarshal(params, &parsed)
+			onNotify(method, parsed)
+		}))
+	}
+	transport := server.NewInProcessTransport(srv, transportOpts...)
+	c := client.NewClient("memory://", core.ClientInfo{Name: "test-client", Version: "1.0"},
+		client.WithTransport(transport))
 	if err := c.Connect(); err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
@@ -708,12 +723,16 @@ func setupMemoryWithOpts(t *testing.T, srv *server.Server, opts ...client.Client
 func TestNotificationDeliveryOrder(t *testing.T) {
 	type testCase struct {
 		name  string
-		setup func(t *testing.T, srv *server.Server, opts ...client.ClientOption) *client.Client
+		setup func(t *testing.T, srv *server.Server, onNotify notifyCallback) *client.Client
 	}
 	cases := []testCase{
-		{"streamable", setupStreamableWithOpts},
-		{"sse", setupSSEWithOpts},
-		{"memory", setupMemoryWithOpts},
+		{"streamable", func(t *testing.T, srv *server.Server, onNotify notifyCallback) *client.Client {
+			return setupStreamableWithOpts(t, srv, client.WithNotificationCallback(onNotify))
+		}},
+		{"sse", func(t *testing.T, srv *server.Server, onNotify notifyCallback) *client.Client {
+			return setupSSEWithOpts(t, srv, client.WithNotificationCallback(onNotify))
+		}},
+		{"memory", setupMemoryWithNotify},
 	}
 
 	for _, tc := range cases {
@@ -723,18 +742,17 @@ func TestNotificationDeliveryOrder(t *testing.T) {
 			var mu sync.Mutex
 			var notifications []string
 
-			c := tc.setup(t, srv, server.WithNotificationHandler(func(method string, params any) {
+			c := tc.setup(t, srv, func(method string, params any) {
 				mu.Lock()
 				defer mu.Unlock()
 				if method == "notifications/message" {
-					// Extract the log data to verify ordering
 					if m, ok := params.(map[string]any); ok {
 						if data, ok := m["data"].(string); ok {
 							notifications = append(notifications, data)
 						}
 					}
 				}
-			}))
+			})
 
 			// Enable logging so EmitLog notifications are sent
 			if _, err := c.Call("logging/setLevel", map[string]string{"level": "debug"}); err != nil {
@@ -794,7 +812,7 @@ func TestStreamableConcurrentNotificationIsolation(t *testing.T) {
 	var mu sync.Mutex
 	var allNotifications []string
 
-	c := setupStreamableWithOpts(t, srv, server.WithNotificationHandler(func(method string, params any) {
+	c := setupStreamableWithOpts(t, srv, client.WithNotificationCallback(func(method string, params any) {
 		mu.Lock()
 		defer mu.Unlock()
 		if method == "notifications/message" {

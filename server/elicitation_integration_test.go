@@ -1,28 +1,28 @@
 package server_test
 
 import (
-	core "github.com/panyam/mcpkit/core"
-	"github.com/panyam/mcpkit/client"
-	"github.com/panyam/mcpkit/server"
 	"context"
 	"encoding/json"
+	client "github.com/panyam/mcpkit/client"
+	core "github.com/panyam/mcpkit/core"
+	server "github.com/panyam/mcpkit/server"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 )
 
-// TestElicitNoContext verifies that core.Elicit() returns core.ErrNoRequestFunc when called
+// TestElicitNoContext verifies that Elicit() returns ErrNoRequestFunc when called
 // without a session context (e.g., outside a tool handler or with no transport).
 func TestElicitNoContext(t *testing.T) {
 	_, err := core.Elicit(context.Background(), core.ElicitationRequest{
 		Message: "Pick a color",
 	})
 	if err != core.ErrNoRequestFunc {
-		t.Fatalf("expected core.ErrNoRequestFunc, got %v", err)
+		t.Fatalf("expected ErrNoRequestFunc, got %v", err)
 	}
 }
 
-// TestElicitNotSupported verifies that core.Elicit() returns core.ErrElicitationNotSupported
+// TestElicitNotSupported verifies that Elicit() returns ErrElicitationNotSupported
 // when the client did not declare elicitation capability during initialization.
 func TestElicitNotSupported(t *testing.T) {
 	var logLevel atomic.Pointer[core.LogLevel]
@@ -35,12 +35,12 @@ func TestElicitNotSupported(t *testing.T) {
 
 	_, err := core.Elicit(ctx, core.ElicitationRequest{Message: "test"})
 	if err != core.ErrElicitationNotSupported {
-		t.Fatalf("expected core.ErrElicitationNotSupported, got %v", err)
+		t.Fatalf("expected ErrElicitationNotSupported, got %v", err)
 	}
 }
 
 // TestElicitAccept verifies the full elicitation round-trip with action "accept"
-// across all 3 transports. The server tool calls core.Elicit() to ask for user input,
+// across all 3 transports. The server tool calls Elicit() to ask for user input,
 // the client handler returns an "accept" response with content.
 func TestElicitAccept(t *testing.T) {
 	forAllElicitationTransports(t, "accept", map[string]any{"color": "blue"}, func(t *testing.T, c *client.Client) {
@@ -82,7 +82,7 @@ func TestElicitCancel(t *testing.T) {
 
 // --- Test helpers ---
 
-// newElicitationTestServer creates a server with an "elicit-tool" that calls core.Elicit()
+// newElicitationTestServer creates a server with an "elicit-tool" that calls Elicit()
 // and returns the user's response.
 func newElicitationTestServer() *server.Server {
 	srv := server.NewServer(core.ServerInfo{Name: "test-elicitation-server", Version: "1.0.0"})
@@ -127,7 +127,7 @@ func forAllElicitationTransports(t *testing.T, action string, content map[string
 
 	t.Run("streamable", func(t *testing.T) {
 		srv := newElicitationTestServer()
-		h := srv.Handler(WithStreamableHTTP(true))
+		h := srv.Handler(server.WithStreamableHTTP(true))
 		ts := httptest.NewServer(h)
 		t.Cleanup(ts.Close)
 
@@ -142,7 +142,7 @@ func forAllElicitationTransports(t *testing.T, action string, content map[string
 
 	t.Run("sse", func(t *testing.T) {
 		srv := newElicitationTestServer()
-		h := srv.Handler(WithSSE(true), WithStreamableHTTP(false))
+		h := srv.Handler(server.WithSSE(true), server.WithStreamableHTTP(false))
 		ts := httptest.NewServer(h)
 
 		c := client.NewClient(ts.URL+"/mcp/sse", core.ClientInfo{Name: "test-client", Version: "1.0"},
@@ -161,7 +161,13 @@ func forAllElicitationTransports(t *testing.T, action string, content map[string
 	t.Run("memory", func(t *testing.T) {
 		srv := newElicitationTestServer()
 		c := client.NewClient("memory://", core.ClientInfo{Name: "test-client", Version: "1.0"},
-			client.WithInMemoryServer(srv), client.WithElicitationHandler(handler))
+			client.WithElicitationHandler(handler))
+		transport := server.NewInProcessTransport(srv,
+			server.WithServerRequestHandler(func(ctx context.Context, req *core.Request) *core.Response {
+				return c.HandleServerRequest(req)
+			}),
+		)
+		c.SetTransport(transport)
 		if err := c.Connect(); err != nil {
 			t.Fatalf("Connect failed: %v", err)
 		}
