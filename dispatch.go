@@ -17,6 +17,9 @@ var supportedProtocolVersions = []string{"2025-11-25", "2025-03-26", "2024-11-05
 // ErrCodeCancelled is the JSON-RPC error code for a cancelled request.
 const ErrCodeCancelled = -32800
 
+// pendingMap is a typed alias for sync.Map used to track pending server-to-client requests.
+type pendingMap = sync.Map
+
 // Dispatcher routes JSON-RPC requests to the appropriate handler.
 type Dispatcher struct {
 	tools      map[string]toolEntry
@@ -59,6 +62,14 @@ type Dispatcher struct {
 	subscriptionsEnabled bool                    // advertise "subscribe": true in resources capability
 	sessionID            string                  // set by transport, used as key in subscription registry
 	subManager           *subscriptionRegistry   // shared pointer to Server's registry (nil if disabled)
+
+	// Server-to-client request infrastructure.
+	// pushRequest pushes a raw JSON-RPC request to the client stream (set by transport).
+	// pending tracks in-flight server-to-client requests awaiting responses.
+	// nextServerReqID generates unique IDs for outgoing requests ("srv-1", "srv-2", ...).
+	pushRequest    func(json.RawMessage)
+	pending        pendingMap
+	nextServerReqID atomic.Int64
 }
 
 // Close tears down all per-session state on the Dispatcher. Transports must call
@@ -563,6 +574,23 @@ func (d *Dispatcher) handleLoggingSetLevel(id json.RawMessage, params json.RawMe
 	}
 	d.logLevel.Store(&level)
 	return NewResponse(id, map[string]any{})
+}
+
+// --- Server-to-client requests ---
+
+// RouteResponse routes an incoming JSON-RPC response from the client to a
+// pending server-to-client request. Returns true if matched, false if no
+// pending request was found for the response ID.
+func (d *Dispatcher) RouteResponse(resp *Response) bool {
+	return routeServerResponse(&d.pending, resp)
+}
+
+// makeRequestFunc builds a RequestFunc that uses sendServerRequest with the
+// dispatcher's pending map and ID counter, and the given push function.
+func (d *Dispatcher) makeRequestFunc(pushFunc func(json.RawMessage)) RequestFunc {
+	return func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		return sendServerRequest(ctx, method, params, &d.nextServerReqID, &d.pending, pushFunc)
+	}
 }
 
 // --- Template matching ---

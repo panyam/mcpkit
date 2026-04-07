@@ -66,25 +66,29 @@ type LogMessage struct {
 type NotifyFunc func(method string, params any)
 
 // sessionCtx holds per-session state injected into context for tool handlers.
-// It carries the transport's notification sender, the dispatcher's log level,
-// and the authenticated claims (if auth is configured with a ClaimsProvider).
+// It carries the transport's notification sender, request sender, the dispatcher's
+// log level, client capabilities, and the authenticated claims.
 type sessionCtx struct {
-	notify   NotifyFunc
-	logLevel *atomic.Pointer[LogLevel] // nil pointer in atomic = logging disabled
-	claims   *Claims                   // nil when no auth or validator doesn't provide claims
+	notify     NotifyFunc
+	request    RequestFunc                // nil when transport doesn't support server-to-client requests
+	logLevel   *atomic.Pointer[LogLevel]  // nil pointer in atomic = logging disabled
+	clientCaps *ClientCapabilities        // parsed from initialize; nil before handshake
+	claims     *Claims                    // nil when no auth or validator doesn't provide claims
 }
 
 type ctxKey int
 
 const sessionCtxKey ctxKey = iota
 
-// contextWithSession returns a context carrying the session's notification state
-// and authenticated claims.
-func contextWithSession(ctx context.Context, notify NotifyFunc, logLevel *atomic.Pointer[LogLevel], claims *Claims) context.Context {
+// contextWithSession returns a context carrying the session's notification state,
+// request sender, client capabilities, and authenticated claims.
+func contextWithSession(ctx context.Context, notify NotifyFunc, request RequestFunc, logLevel *atomic.Pointer[LogLevel], clientCaps *ClientCapabilities, claims *Claims) context.Context {
 	return context.WithValue(ctx, sessionCtxKey, &sessionCtx{
-		notify:   notify,
-		logLevel: logLevel,
-		claims:   claims,
+		notify:     notify,
+		request:    request,
+		logLevel:   logLevel,
+		clientCaps: clientCaps,
+		claims:     claims,
 	})
 }
 
