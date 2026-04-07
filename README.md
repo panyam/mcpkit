@@ -93,7 +93,7 @@ handler := srv.Handler(
 | Capability | Methods |
 |-----------|---------|
 | **Tools** | `tools/list`, `tools/call` |
-| **Resources** | `resources/list`, `resources/read`, `resources/templates/list` |
+| **Resources** | `resources/list`, `resources/read`, `resources/templates/list`, `resources/subscribe`, `resources/unsubscribe`, `notifications/resources/updated` |
 | **Prompts** | `prompts/list`, `prompts/get` |
 | **Logging** | `logging/setLevel`, `notifications/message` via `EmitLog()` |
 | **Progress** | `notifications/progress` via `EmitProgress()` with `_meta.progressToken` |
@@ -102,6 +102,28 @@ handler := srv.Handler(
 | **Pagination** | Cursor-based pagination for all list methods |
 
 Capabilities are auto-advertised in the `initialize` response when the corresponding handlers are registered. Logging and completions are always advertised.
+
+### Resource Subscriptions
+
+Enable clients to subscribe to resource changes and receive push notifications:
+
+```go
+srv := mcpkit.NewServer(info, mcpkit.WithSubscriptions())
+
+srv.RegisterResource(mcpkit.ResourceDef{
+    URI: "file:///data/config.yaml", Name: "Config",
+}, handler)
+
+// When the resource changes, notify all subscribed clients:
+srv.NotifyResourceUpdated("file:///data/config.yaml")
+```
+
+Client side:
+```go
+client.SubscribeResource("file:///data/config.yaml")
+// ... receive notifications/resources/updated when resource changes
+client.UnsubscribeResource("file:///data/config.yaml")
+```
 
 ## Protocol Support
 
@@ -112,7 +134,7 @@ Capabilities are auto-advertised in the `initialize` response when the correspon
 ## Testing
 
 ```bash
-make test         # Unit tests (160+ tests)
+make test         # Unit tests (200+ tests)
 make test-auth    # Auth sub-module tests
 make test-auth-e2e # E2E auth tests (in-process oneauth AS)
 make testconf     # MCP conformance suite (requires Node.js)
@@ -130,7 +152,7 @@ make downkcl              # Stop Keycloak
 
 ### Conformance Suite
 
-Validated against the [official MCP conformance test suite](https://github.com/modelcontextprotocol/conformance). Current status: **24/30 server scenarios passing**, **12/14 auth conformance passing** (remaining tracked in `conformance/baseline.yml`).
+Validated against the [official MCP conformance test suite](https://github.com/modelcontextprotocol/conformance). Current status: **28/30 server scenarios passing**, **14/14 auth conformance passing** (remaining tracked in `conformance/baseline.yml`).
 
 ```bash
 bash scripts/conformance-test.sh                    # full suite

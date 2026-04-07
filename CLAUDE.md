@@ -29,24 +29,24 @@ make downkcl          # Stop Keycloak container
 
 | File | Purpose |
 |------|---------|
-| `dispatch.go` | JSON-RPC routing, Dispatcher, version negotiation, init gating, cancellation, logging/setLevel, completion/complete |
+| `dispatch.go` | JSON-RPC routing, Dispatcher, version negotiation, init gating, cancellation, logging/setLevel, completion/complete, resources/subscribe, resources/unsubscribe |
 | `logging.go` | LogLevel, LogMessage, NotifyFunc, EmitLog, context-based notification delivery |
 | `progress.go` | ProgressNotification, EmitProgress for long-running tool reporting |
 | `completion.go` | CompletionRef, CompletionArgument, CompletionResult, CompletionHandler |
 | `auth.go` | Claims, ClaimsProvider, TokenSource, Extension, Stability, ExtensionProvider, AuthClaims(), HasScope() |
-| `server.go` | Server, options, Handler(), ListenAndServe(), transport config, CheckAuth, writeAuthError, RegisterExperimental* |
+| `server.go` | Server, options, Handler(), ListenAndServe(), transport config, CheckAuth, writeAuthError, RegisterExperimental*, subscriptionRegistry, NotifyResourceUpdated |
 | `tool.go` | ToolDef (with Annotations), ToolRequest, ToolResult, Content types |
-| `resource.go` | ResourceDef, ResourceTemplate, ResourceHandler types |
+| `resource.go` | ResourceDef, ResourceTemplate, ResourceHandler, ResourceUpdatedNotification types |
 | `prompt.go` | PromptDef, PromptArgument, PromptHandler types |
 | `pagination.go` | Generic cursor-based pagination helper |
 | `jsonrpc.go` | JSON-RPC 2.0 Request/Response/Error |
 | `transport.go` | SSE transport (sseTransport, mcpSSEConn, SSEData) |
 | `streamable_transport.go` | Streamable HTTP transport (streamableTransport) |
 | `middleware.go` | Server-side Middleware type, WithMiddleware, LoggingMiddleware |
-| `client.go` | MCP client: Connect, ToolCall, ReadResource, ListTools, ListResources, WithClientBearerToken, WithTokenSource |
+| `client.go` | MCP client: Connect, ToolCall, ReadResource, ListTools, ListResources, SubscribeResource, UnsubscribeResource, WithClientBearerToken, WithTokenSource |
 | `client_logging.go` | Client-side loggingTransport, WithClientLogging |
 | `client_reconnect.go` | Client reconnection: WithMaxRetries, WithReconnectBackoff, isTransientError |
-| `client_memory.go` | In-memory transport: WithInMemoryServer, no HTTP overhead |
+| `client_memory.go` | In-memory transport: WithInMemoryServer, WithNotificationHandler, no HTTP overhead |
 | `www_authenticate.go` | ParseWWWAuthenticate in core (client transport needs it, core must not depend on auth/) |
 | `docs/AUTH_DESIGN.md` | MCP Auth architecture, sequence diagrams, extension system, oneauth integration map |
 | `testutil/testclient.go` | TestClient: wraps Client + httptest.Server + testing.T for e2e tests |
@@ -79,6 +79,7 @@ make downkcl          # Stop Keycloak container
 - **In-memory transport** (`WithInMemoryServer(srv)`) calls `Server.Dispatch()` directly — no HTTP, no serialization. Use for fast tests and embedded scenarios. `Connect()` skips transport creation when one is already set (by `WithInMemoryServer`).
 - **Stateless mode** (`WithStateless(true)`) auto-initializes a fresh dispatcher per request — no sessions, no `Mcp-Session-Id`. For serverless, CLI wrappers, single-shot APIs.
 - **Don't brute-force failing tests** — when a test is hard to debug, check if there are open issues for dev-ex improvements (logging, in-memory transport, middleware) that would make the code more testable. In this project, #69 (WithClientLogging) and #68 (in-memory transport) directly unblocked the scope-step-up conformance fix.
+- **Resource subscriptions** require `WithSubscriptions()` server option. Subscription registry lives on `Server`; per-session subscription state on `Dispatcher`. `Server.NotifyResourceUpdated(uri)` fans out to all subscribed sessions. Transports clean up subscriptions on session close. In-memory transport supports notifications via `WithNotificationHandler`.
 - **oneauth/testutil.TestAuthServer** provides the in-process auth server for E2E tests. It generates RSA keys, serves JWKS, and mints tokens. Set audience after creation via `AS.APIAuth.JWTAudience` (the `WithAudience` option is set at creation time, before server URL is known).
 
 ## Architecture
@@ -88,7 +89,7 @@ See `docs/ARCHITECTURE.md` for transport design, type definitions, and protocol 
 ## Conformance Status
 
 ### Server conformance
-24/30 MCP server conformance scenarios passing. Failing scenarios tracked in `conformance/baseline.yml` under `server:`.
+28/30 MCP server conformance scenarios passing. Failing scenarios tracked in `conformance/baseline.yml` under `server:`.
 
 ### Auth conformance
 14/14 required MCP auth conformance scenarios passing (210/210 checks). 1 warning on basic-cimd (CIMD not implemented). Run via `make testconfauth`.
@@ -97,6 +98,5 @@ See `docs/ARCHITECTURE.md` for transport design, type definitions, and protocol 
 
 - stdio transport (#3)
 - Sampling (#22), Elicitation (#23)
-- Resource subscriptions (#24)
 - Streamable HTTP GET SSE stream (server-initiated notifications without a request)
 - `DiscoverMCPAuth` PRM fetch — steps 4-5 return error "not yet implemented"
