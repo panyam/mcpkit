@@ -581,15 +581,15 @@ mcpkit adds conformance tests for the server-side Apps protocol surface. These v
 
 #### Test Categories
 
-| Category | Tests | What's Validated |
-|----------|-------|------------------|
-| **Capability negotiation** | 3 | Server advertises `io.modelcontextprotocol/ui` extension; client extensions parsed; extension absent when not registered |
-| **Tool metadata** | 5 | `_meta.ui.resourceUri` present; visibility defaults; CSP serialization; permissions array; prefersBorder |
-| **Resource serving** | 4 | `ui://` resource returns HTML; MIME type is `text/html;profile=mcp-app`; text and blob delivery; template matching for parameterized URIs |
-| **Metadata precedence** | 2 | `_meta.ui` on `ResourceReadContent` overrides `ResourceDef`; absent `_meta` on read inherits from list |
-| **Visibility** | 3 | tools/list includes all tools; `ListToolsForModel()` filters app-only; app-only tools callable via tools/call |
-| **Text fallback** | 2 | Tools return text content alongside UI metadata; result is valid without UI rendering |
-| **Integration** | 2 | Auth + UI (token required for ui:// read); resource change notification after mutation |
+| Category                   | Tests | What's Validated                                                                                                                          |
+|----------------------------|-------|-------------------------------------------------------------------------------------------------------------------------------------------|
+| **Capability negotiation** | 3     | Server advertises `io.modelcontextprotocol/ui` extension; client extensions parsed; extension absent when not registered                  |
+| **Tool metadata**          | 5     | `_meta.ui.resourceUri` present; visibility defaults; CSP serialization; permissions array; prefersBorder                                  |
+| **Resource serving**       | 4     | `ui://` resource returns HTML; MIME type is `text/html;profile=mcp-app`; text and blob delivery; template matching for parameterized URIs |
+| **Metadata precedence**    | 2     | `_meta.ui` on `ResourceReadContent` overrides `ResourceDef`; absent `_meta` on read inherits from list                                    |
+| **Visibility**             | 3     | tools/list includes all tools; `ListToolsForModel()` filters app-only; app-only tools callable via tools/call                             |
+| **Text fallback**          | 2     | Tools return text content alongside UI metadata; result is valid without UI rendering                                                     |
+| **Integration**            | 2     | Auth + UI (token required for ui:// read); resource change notification after mutation                                                    |
 
 **Total: ~21 conformance scenarios**
 
@@ -709,10 +709,10 @@ This is Phase 4 work — requires Node.js + Playwright + a basic host harness.
 │  ├─ check_deck                   (serves editor HTML, phase 3)    │
 │  └─ build_deck *                                                  │
 │       ↑                                                           │
-│       └─ _meta.ui.resourceUri: "ui://decks/{name}/preview"       │
+│       └─ _meta.ui.resourceUri: "ui://decks/{name}/preview"        │
 │                                                                   │
 │  EXISTING RESOURCES:         APP BRIDGE (phase 3):                │
-│  ├─ slyds://server/info      Thin vanilla JS in slyds.js:        │
+│  ├─ slyds://server/info      Thin vanilla JS in slyds.js:         │
 │  ├─ slyds://decks            ├─ postMessage JSON-RPC handler      │
 │  ├─ slyds://decks/{name}     ├─ callServerTool() wrapper          │
 │  └─ ...                      └─ onToolResult() callback           │
@@ -837,14 +837,14 @@ srv.RegisterResourceTemplate(mcpkit.ResourceTemplate{
 │  │  │                                                     │  │   │
 │  │  │           Go Concurrency Patterns                   │  │   │
 │  │  │                                                     │  │   │
-│  │  │    ┌──────────┐  ┌──────────┐  ┌──────────┐        │  │   │
-│  │  │    │Goroutines│  │ Channels │  │  Select  │        │  │   │
-│  │  │    └──────────┘  └──────────┘  └──────────┘        │  │   │
+│  │  │    ┌──────────┐  ┌──────────┐  ┌──────────┐         │  │   │
+│  │  │    │Goroutines│  │ Channels │  │  Select  │         │  │   │
+│  │  │    └──────────┘  └──────────┘  └──────────┘         │  │   │
 │  │  │                                                     │  │   │
 │  │  │                                                     │  │   │
-│  │  │  ◄ 1/8 ►    🎨 Theme    📥 Export    📝 Notes     │  │   │
+│  │  │  ◄ 1/8 ►    🎨 Theme    📥 Export    📝 Notes       │  │   │
 │  │  └─────────────────────────────────────────────────────┘  │   │
-│  │  ↑ Interactive slide deck rendered inline                  │   │
+│  │  ↑ Interactive slide deck rendered inline                 │   │
 │  │  ↑ User clicks through slides, changes themes             │   │
 │  │  ↑ "Edit" button → calls edit_slide via postMessage       │   │
 │  └───────────────────────────────────────────────────────────┘   │
@@ -883,7 +883,7 @@ Host                        Your MCP Server
   │                              │
   │  2. tools/list               │
   │─────────────────────────────>│
-  │  ← tools with _meta.ui      │  Server returns tools with UI metadata
+  │  ← tools with _meta.ui       │  Server returns tools with UI metadata
   │                              │
   │  3. LLM decides to call tool │
   │                              │
@@ -960,14 +960,14 @@ srv.RegisterTool(mcpkit.ToolDef{
 
 **Key fields in `UIMetadata`:**
 
-| Field | Required | Purpose | Example |
-|-------|----------|---------|---------|
-| `ResourceUri` | Yes | `ui://` URI pointing to the HTML resource | `"ui://decks/demo/preview"` |
-| `Visibility` | No | Who can see/call this tool. Default: `["model", "app"]` | `[]UIVisibility{UIVisibilityApp}` for iframe-only tools |
-| `CSP` | No | External domains the HTML needs to load | `{ResourceDomains: ["cdn.jsdelivr.net"]}` |
-| `Permissions` | No | Browser capabilities (camera, mic, clipboard) | `["clipboardWrite"]` |
-| `PrefersBorder` | No | Whether host should draw a border around the iframe | `boolPtr(false)` |
-| `Domain` | No | Request a dedicated sandbox origin | `"slyds"` |
+| Field           | Required | Purpose                                                 | Example                                                 |
+|-----------------|----------|---------------------------------------------------------|---------------------------------------------------------|
+| `ResourceUri`   | Yes      | `ui://` URI pointing to the HTML resource               | `"ui://decks/demo/preview"`                             |
+| `Visibility`    | No       | Who can see/call this tool. Default: `["model", "app"]` | `[]UIVisibility{UIVisibilityApp}` for iframe-only tools |
+| `CSP`           | No       | External domains the HTML needs to load                 | `{ResourceDomains: ["cdn.jsdelivr.net"]}`               |
+| `Permissions`   | No       | Browser capabilities (camera, mic, clipboard)           | `["clipboardWrite"]`                                    |
+| `PrefersBorder` | No       | Whether host should draw a border around the iframe     | `boolPtr(false)`                                        |
+| `Domain`        | No       | Request a dedicated sandbox origin                      | `"slyds"`                                               |
 
 **Important:** Your tool handler MUST still return useful text content. Non-UI clients (CLI tools, older hosts) ignore `_meta.ui` and only see the text:
 
@@ -1096,17 +1096,17 @@ This means: no external fetches, no external scripts/images. Self-contained HTML
 
 #### HTML gotchas in the sandbox
 
-| What | Works? | Notes |
-|------|--------|-------|
-| Inline `<script>` | Yes | `'unsafe-inline'` is in default CSP |
-| Inline `<style>` | Yes | Same |
-| `<script src="cdn...">` | Only with CSP | Declare domain in `ResourceDomains` |
-| `<img src="data:...">` | Yes | `data:` is in default `img-src` |
-| `<img src="https://...">` | Only with CSP | Declare domain in `ResourceDomains` |
-| `fetch()` / `XMLHttpRequest` | Only with CSP | Declare domain in `ConnectDomains` |
-| `localStorage` / cookies | No | Sandbox blocks these |
-| `window.open()` / `target="_blank"` | No | Use `ui/open-link` via postMessage instead |
-| `navigator.clipboard` | Only with permission | Declare `"clipboardWrite"` in `Permissions` |
+| What                                | Works?               | Notes                                       |
+|-------------------------------------|----------------------|---------------------------------------------|
+| Inline `<script>`                   | Yes                  | `'unsafe-inline'` is in default CSP         |
+| Inline `<style>`                    | Yes                  | Same                                        |
+| `<script src="cdn...">`             | Only with CSP        | Declare domain in `ResourceDomains`         |
+| `<img src="data:...">`              | Yes                  | `data:` is in default `img-src`             |
+| `<img src="https://...">`           | Only with CSP        | Declare domain in `ResourceDomains`         |
+| `fetch()` / `XMLHttpRequest`        | Only with CSP        | Declare domain in `ConnectDomains`          |
+| `localStorage` / cookies            | No                   | Sandbox blocks these                        |
+| `window.open()` / `target="_blank"` | No                   | Use `ui/open-link` via postMessage instead  |
+| `navigator.clipboard`               | Only with permission | Declare `"clipboardWrite"` in `Permissions` |
 
 ### Step 6: Choose Your Transport
 
@@ -1168,14 +1168,14 @@ In production, your MCP server runs behind HTTPS (not a tunnel). The same `/mcp`
 Production deployment:
 
 ┌──────────────┐     ┌──────────────────┐     ┌──────────────────┐
-│  Host         │     │  Load balancer   │     │  Your MCP server │
-│  (Claude,     │────>│  (HTTPS term.)   │────>│  :8787/mcp       │
-│   ChatGPT)    │     │                  │     │                  │
+│  Host        │     │  Load balancer   │     │  Your MCP server │
+│  (Claude,    │────>│  (HTTPS term.)   │────>│  :8787/mcp       │
+│   ChatGPT)   │     │                  │     │                  │
 └──────────────┘     └──────────────────┘     │  tools/list      │
-                                               │  tools/call      │
-                                               │  resources/read  │
-                                               │  (all same endpoint)
-                                               └──────────────────┘
+                                              │  tools/call      │
+                                              │  resources/read  │
+                                              │  (all same endpoint)
+                                              └──────────────────┘
 ```
 
 ### Step 8: Add Interactivity (optional)
@@ -1339,11 +1339,11 @@ Deployment:
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                                                                     │
-│  1. slyds MCP server starts                                        │
+│  1. slyds MCP server starts                                         │
 │     slyds mcp --deck-root ~/decks/ --listen :8787                   │
 │                                                                     │
 │  2. Tunnel (dev) or deploy (prod)                                   │
-│     npx cloudflared tunnel --url http://localhost:8787               │
+│     npx cloudflared tunnel --url http://localhost:8787              │
 │     → https://slyds-xyz.trycloudflare.com                           │
 │                                                                     │
 │  3. Register in ChatGPT as custom connector                         │
@@ -1364,7 +1364,7 @@ Deployment:
 │     User sees interactive slide deck with navigation, themes        │
 │                                                                     │
 │  8. User clicks "Next slide" → slyds.js handles locally             │
-│     User clicks "Edit slide 3" → callMCPTool("edit_slide", ...)    │
+│     User clicks "Edit slide 3" → callMCPTool("edit_slide", ...)     │
 │     → postMessage → ChatGPT → tools/call → slyds server             │
 │     → response → postMessage → iframe updates                       │
 │                                                                     │
@@ -1381,51 +1381,51 @@ Deployment:
 
 **Goal:** Server can declare UI extension, tools carry `_meta.ui`, resources serve with correct MIME type, clients detect support.
 
-| Step | File(s) | Change |
-|------|---------|--------|
-| 1.1 | `tool.go` | Add `Meta *ToolMeta`, `ToolMeta`, `UIMetadata`, `UICSPConfig`, `UIVisibility`, `AppMIMEType` |
-| 1.2 | `resource.go` | Add `Meta` to `ResourceDef` and `ResourceReadContent` |
-| 1.3 | `dispatch.go` | Parse `extensions` from `initializeParams`; add `Extensions` to `ClientCapabilities`; add `ClientSupportsUI(ctx)` helper |
-| 1.4 | `dispatch.go` | `handleToolsList` — serialize `_meta` on tool definitions |
-| 1.5 | `dispatch.go` | `handleResourcesRead` — serialize `_meta` on read content |
-| 1.6 | `client.go` | `WithUIExtension()` option; `ServerSupportsUI()` method; `ListToolsForModel()` helper |
-| 1.7 | `ui/extension.go` | `UIExtension` implementing `ExtensionProvider` |
-| 1.8 | Unit tests | Capability negotiation, tool serialization, resource MIME type, visibility filtering |
+| Step | File(s)           | Change                                                                                                                   |
+|------|-------------------|--------------------------------------------------------------------------------------------------------------------------|
+| 1.1  | `tool.go`         | Add `Meta *ToolMeta`, `ToolMeta`, `UIMetadata`, `UICSPConfig`, `UIVisibility`, `AppMIMEType`                             |
+| 1.2  | `resource.go`     | Add `Meta` to `ResourceDef` and `ResourceReadContent`                                                                    |
+| 1.3  | `dispatch.go`     | Parse `extensions` from `initializeParams`; add `Extensions` to `ClientCapabilities`; add `ClientSupportsUI(ctx)` helper |
+| 1.4  | `dispatch.go`     | `handleToolsList` — serialize `_meta` on tool definitions                                                                |
+| 1.5  | `dispatch.go`     | `handleResourcesRead` — serialize `_meta` on read content                                                                |
+| 1.6  | `client.go`       | `WithUIExtension()` option; `ServerSupportsUI()` method; `ListToolsForModel()` helper                                    |
+| 1.7  | `ui/extension.go` | `UIExtension` implementing `ExtensionProvider`                                                                           |
+| 1.8  | Unit tests        | Capability negotiation, tool serialization, resource MIME type, visibility filtering                                     |
 
 ### Phase 2: Slyds Integration — Read-Only Preview
 
 **Goal:** `build_deck` tool produces inline slide preview in Claude/ChatGPT.
 
-| Step | File(s) | Change |
-|------|---------|--------|
-| 2.1 | slyds `cmd/mcp_tools.go` | Add `_meta.ui.resourceUri` to `build_deck` |
-| 2.2 | slyds `cmd/mcp_resources.go` | Register `ui://decks/{name}/preview` template |
-| 2.3 | slyds `core/builder.go` | Optional: `--mcp-app` build mode (external assets via CSP) |
-| 2.4 | slyds `go.mod` | Bump mcpkit dependency |
-| 2.5 | Manual test | Connect slyds to Claude via cloudflared tunnel, verify inline rendering |
+| Step | File(s)                      | Change                                                                  |
+|------|------------------------------|-------------------------------------------------------------------------|
+| 2.1  | slyds `cmd/mcp_tools.go`     | Add `_meta.ui.resourceUri` to `build_deck`                              |
+| 2.2  | slyds `cmd/mcp_resources.go` | Register `ui://decks/{name}/preview` template                           |
+| 2.3  | slyds `core/builder.go`      | Optional: `--mcp-app` build mode (external assets via CSP)              |
+| 2.4  | slyds `go.mod`               | Bump mcpkit dependency                                                  |
+| 2.5  | Manual test                  | Connect slyds to Claude via cloudflared tunnel, verify inline rendering |
 
 ### Phase 3: Slyds Interactive Bridge
 
 **Goal:** Users interact with slides directly; edits flow back through MCP tools.
 
-| Step | File(s) | Change |
-|------|---------|--------|
-| 3.1 | slyds `assets/slyds.js` | Add MCP App bridge (postMessage JSON-RPC, callServerTool) |
-| 3.2 | slyds `cmd/mcp_tools.go` | Add app-only tools: `navigate_slide`, `get_theme_css`, `refresh_preview` |
-| 3.3 | slyds `cmd/mcp_resources.go` | `NotifyResourcesChanged` after mutations |
-| 3.4 | Integration test | E2E: create → build → verify HTML → call app-only tool |
+| Step | File(s)                      | Change                                                                   |
+|------|------------------------------|--------------------------------------------------------------------------|
+| 3.1  | slyds `assets/slyds.js`      | Add MCP App bridge (postMessage JSON-RPC, callServerTool)                |
+| 3.2  | slyds `cmd/mcp_tools.go`     | Add app-only tools: `navigate_slide`, `get_theme_css`, `refresh_preview` |
+| 3.3  | slyds `cmd/mcp_resources.go` | `NotifyResourcesChanged` after mutations                                 |
+| 3.4  | Integration test             | E2E: create → build → verify HTML → call app-only tool                   |
 
 ### Phase 4: Conformance
 
 **Goal:** Automated validation of mcpkit's Apps support.
 
-| Step | File(s) | Change |
-|------|---------|--------|
-| 4.1 | `cmd/testserver/main.go` | Add UI-enabled tools + resources |
-| 4.2 | `tests/apps/` | New test module with ~21 scenarios |
-| 4.3 | `conformance/baseline.yml` | Add `apps:` section tracking expected results |
-| 4.4 | `Makefile` | `make test-apps` target |
-| 4.5 | (Optional) ext-apps Playwright | Run upstream e2e suite against mcpkit test server |
+| Step | File(s)                        | Change                                            |
+|------|--------------------------------|---------------------------------------------------|
+| 4.1  | `cmd/testserver/main.go`       | Add UI-enabled tools + resources                  |
+| 4.2  | `tests/apps/`                  | New test module with ~21 scenarios                |
+| 4.3  | `conformance/baseline.yml`     | Add `apps:` section tracking expected results     |
+| 4.4  | `Makefile`                     | `make test-apps` target                           |
+| 4.5  | (Optional) ext-apps Playwright | Run upstream e2e suite against mcpkit test server |
 
 ## What Belongs Where: mcpkit vs oneauth vs Application
 
@@ -1433,18 +1433,18 @@ Unlike the auth extension (which heavily wraps oneauth), MCP Apps is almost enti
 
 ### Everything is mcpkit (or application)
 
-| Concern | Where | Why |
-|---------|-------|-----|
-| `UIMetadata`, `UICSPConfig`, `UIVisibility` types | mcpkit core | Pure MCP protocol types, no auth/crypto/identity involved |
-| `UIExtension` (`ExtensionProvider`) | mcpkit/ui | MCP extension declaration, no external deps |
-| `_meta.ui` serialization on tools/resources | mcpkit core | JSON marshaling in dispatch layer |
-| `ClientCapabilities.Extensions` parsing | mcpkit core | Protocol negotiation |
-| `ClientSupportsUI()` helper | mcpkit core | Session state query |
-| `ui://` resource serving | mcpkit core | Standard `resources/read` — no special handling |
-| Tool visibility filtering | mcpkit client | Client-side convenience |
-| HTML content (building, inlining, templating) | Application (slyds) | App-specific, not library concern |
-| postMessage bridge JS | Application (slyds) | Runs in iframe, browser-only |
-| CSP enforcement | Host (Claude, ChatGPT) | Host controls the iframe sandbox |
+| Concern                                           | Where                  | Why                                                       |
+|---------------------------------------------------|------------------------|-----------------------------------------------------------|
+| `UIMetadata`, `UICSPConfig`, `UIVisibility` types | mcpkit core            | Pure MCP protocol types, no auth/crypto/identity involved |
+| `UIExtension` (`ExtensionProvider`)               | mcpkit/ui              | MCP extension declaration, no external deps               |
+| `_meta.ui` serialization on tools/resources       | mcpkit core            | JSON marshaling in dispatch layer                         |
+| `ClientCapabilities.Extensions` parsing           | mcpkit core            | Protocol negotiation                                      |
+| `ClientSupportsUI()` helper                       | mcpkit core            | Session state query                                       |
+| `ui://` resource serving                          | mcpkit core            | Standard `resources/read` — no special handling           |
+| Tool visibility filtering                         | mcpkit client          | Client-side convenience                                   |
+| HTML content (building, inlining, templating)     | Application (slyds)    | App-specific, not library concern                         |
+| postMessage bridge JS                             | Application (slyds)    | Runs in iframe, browser-only                              |
+| CSP enforcement                                   | Host (Claude, ChatGPT) | Host controls the iframe sandbox                          |
 
 ### Nothing goes to oneauth
 
