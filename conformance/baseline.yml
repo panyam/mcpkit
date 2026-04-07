@@ -7,16 +7,9 @@
 #
 # As features are implemented, remove the corresponding entries.
 
-server:
-  # 28/30 passing. Remaining 4 are feature gaps:
-
-  # Missing capabilities (elicitation, sampling)
-  - elicitation-sep1034-defaults   # Issue: #23
-  - elicitation-sep1330-enums      # Issue: #23
-
-  # Tool scenarios requiring server-to-client requests (bidirectional)
-  - tools-call-sampling         # Requires sampling/createMessage (#22)
-  - tools-call-elicitation      # Requires elicitation/create (#23)
+# 30/30 server conformance scenarios passing!
+# Resource subscriptions (#24), sampling (#22), and elicitation (#23) all implemented.
+server: []
 
 # --- MCP Auth Conformance (client-side tests, spec 2025-11-25) ---
 # Spec: https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization

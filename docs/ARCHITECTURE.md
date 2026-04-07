@@ -71,7 +71,7 @@ mcpkit/                          # module: github.com/panyam/mcpkit
 │   ├── conformance_resources.go # Resources + templates for conformance
 │   └── conformance_prompts.go   # Prompts for conformance
 ├── conformance/
-│   └── baseline.yml             # Expected failures: 4 server + 1 auth (with warning)
+│   └── baseline.yml             # Expected failures: 0 server + 1 auth (with warning)
 ├── scripts/
 │   ├── smoke-test.sh            # Curl-based tests for SSE + Streamable HTTP
 │   ├── conformance-test.sh      # Runs @modelcontextprotocol/conformance (server)

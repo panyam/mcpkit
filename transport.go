@@ -136,6 +136,18 @@ func (t *sseTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Detect if the incoming message is a JSON-RPC response (from the client
+	// answering a server-to-client request like sampling/createMessage).
+	// Responses have an "id" field but no "method" field.
+	if isJSONRPCResponse(body) {
+		var resp Response
+		if err := json.Unmarshal(body, &resp); err == nil {
+			dispatcher.RouteResponse(&resp)
+		}
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+
 	var req Request
 	if err := json.Unmarshal(body, &req); err != nil {
 		// JSON parse error — push error response on SSE stream
@@ -146,7 +158,12 @@ func (t *sseTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := t.server.dispatchWith(dispatcher, r.Context(), claims, &req)
+	// Build request func scoped to this session's SSE stream.
+	requestFunc := dispatcher.makeRequestFunc(func(raw json.RawMessage) {
+		hub := t.hub
+		hub.SendEvent(sessionID, "message", SSEJSON(raw))
+	})
+	resp := t.server.dispatchWithNotifyAndRequest(dispatcher, r.Context(), claims, dispatcher.notifyFunc, requestFunc, &req)
 
 	// Notifications have no response
 	if resp == nil {
