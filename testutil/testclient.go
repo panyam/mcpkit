@@ -90,6 +90,24 @@ func (tc *TestClient) ListResourceTemplates() []mcpkit.ResourceTemplate {
 	return templates
 }
 
+// SubscribeResource subscribes to change notifications for a resource URI.
+// Calls t.Fatal on error.
+func (tc *TestClient) SubscribeResource(uri string) {
+	tc.t.Helper()
+	if err := tc.Client.SubscribeResource(uri); err != nil {
+		tc.t.Fatalf("SubscribeResource(%s): %v", uri, err)
+	}
+}
+
+// UnsubscribeResource removes a subscription for a resource URI.
+// Calls t.Fatal on error.
+func (tc *TestClient) UnsubscribeResource(uri string) {
+	tc.t.Helper()
+	if err := tc.Client.UnsubscribeResource(uri); err != nil {
+		tc.t.Fatalf("UnsubscribeResource(%s): %v", uri, err)
+	}
+}
+
 // Call makes a raw JSON-RPC call. Calls t.Fatal on error.
 func (tc *TestClient) Call(method string, params any) *mcpkit.CallResult {
 	tc.t.Helper()
