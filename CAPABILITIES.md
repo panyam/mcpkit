@@ -29,7 +29,9 @@
 - mcp-completion: completion/complete for argument autocompletion
 - mcp-dns-rebinding-protection: Origin header validation on Streamable HTTP (WithAllowedOrigins)
 - mcp-resource-subscriptions: resources/subscribe, resources/unsubscribe, notifications/resources/updated via WithSubscriptions() + Server.NotifyResourceUpdated()
-- mcp-conformance: Official MCP conformance test suite integration (28/30 server passing, 14/14 auth passing)
+- mcp-sampling: Server-to-client sampling/createMessage via Sample() — server asks client LLM for inference
+- mcp-elicitation: Server-to-client elicitation/create via Elicit() — server asks client for user input
+- mcp-conformance: Official MCP conformance test suite integration (30/30 server passing, 14/14 auth passing)
 - mcp-client: Go MCP client for Streamable HTTP — Connect, ToolCall, ReadResource, ListTools, ListResources
 - mcp-testutil: TestClient wrapper for e2e testing MCP servers (httptest + testing.T integration)
 - mcp-auth-e2e: E2E auth tests with real oneauth AS (31 tests: JWT validation, transport auth, scopes, PRM, WWW-Authenticate, reconnection, middleware)

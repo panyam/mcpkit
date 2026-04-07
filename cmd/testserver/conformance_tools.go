@@ -7,6 +7,7 @@ package main
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -160,6 +161,150 @@ func registerConformanceTools(srv *mcpkit.Server) {
 					},
 				}},
 			}, nil
+		},
+	)
+
+	// test_sampling: calls sampling/createMessage during tool execution.
+	// The conformance suite's client must respond to the server-to-client request
+	// with an LLM inference result. The tool returns the model's response text.
+	srv.RegisterTool(
+		mcpkit.ToolDef{
+			Name:        "test_sampling",
+			Description: "Calls sampling/createMessage and returns the LLM response for conformance testing",
+			InputSchema: map[string]any{"type": "object"},
+		},
+		func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
+			result, err := mcpkit.Sample(ctx, mcpkit.CreateMessageRequest{
+				Messages: []mcpkit.SamplingMessage{{
+					Role:    "user",
+					Content: mcpkit.Content{Type: "text", Text: "What is the capital of France?"},
+				}},
+				MaxTokens: 100,
+			})
+			if err != nil {
+				return mcpkit.ErrorResult(fmt.Sprintf("sampling failed: %v", err)), nil
+			}
+			return mcpkit.TextResult(fmt.Sprintf("model=%s role=%s text=%s", result.Model, result.Role, result.Content.Text)), nil
+		},
+	)
+
+	// test_elicitation: calls elicitation/create during tool execution.
+	// The conformance suite's client must respond to the server-to-client request
+	// with user input. The tool returns the user's action and content.
+	srv.RegisterTool(
+		mcpkit.ToolDef{
+			Name:        "test_elicitation",
+			Description: "Calls elicitation/create and returns user input for conformance testing",
+			InputSchema: map[string]any{"type": "object"},
+		},
+		func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
+			result, err := mcpkit.Elicit(ctx, mcpkit.ElicitationRequest{
+				Message:         "Please provide your name",
+				RequestedSchema: json.RawMessage(`{"type":"object","properties":{"name":{"type":"string","description":"Your name"}}}`),
+			})
+			if err != nil {
+				return mcpkit.ErrorResult(fmt.Sprintf("elicitation failed: %v", err)), nil
+			}
+			if result.Action == "accept" {
+				name, _ := result.Content["name"].(string)
+				return mcpkit.TextResult(fmt.Sprintf("action=accept name=%s", name)), nil
+			}
+			return mcpkit.TextResult(fmt.Sprintf("action=%s", result.Action)), nil
+		},
+	)
+
+	// test_elicitation_sep1034_defaults: calls elicitation/create with a schema
+	// containing default values for all primitive types (SEP-1034 conformance).
+	// Schema includes: string, integer, number, enum with default, and boolean,
+	// each with a default value set.
+	srv.RegisterTool(
+		mcpkit.ToolDef{
+			Name:        "test_elicitation_sep1034_defaults",
+			Description: "Calls elicitation/create with default values for all primitive types (SEP-1034)",
+			InputSchema: map[string]any{"type": "object"},
+		},
+		func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
+			schema := json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"name":     {"type": "string",  "default": "John Doe"},
+					"age":      {"type": "integer", "default": 30},
+					"score":    {"type": "number",  "default": 95.5},
+					"status":   {"type": "string",  "enum": ["active", "inactive", "pending"], "default": "active"},
+					"verified": {"type": "boolean", "default": true}
+				}
+			}`)
+			result, err := mcpkit.Elicit(ctx, mcpkit.ElicitationRequest{
+				Message:         "Please provide your information",
+				RequestedSchema: schema,
+			})
+			if err != nil {
+				return mcpkit.ErrorResult(fmt.Sprintf("elicitation failed: %v", err)), nil
+			}
+			contentJSON, _ := json.Marshal(result.Content)
+			return mcpkit.TextResult(fmt.Sprintf("Elicitation completed: action=%s, content=%s", result.Action, string(contentJSON))), nil
+		},
+	)
+
+	// test_elicitation_sep1330_enums: calls elicitation/create with all 5 enum
+	// variants defined in SEP-1330 conformance: untitled single-select, titled
+	// single-select (oneOf), legacy titled (enumNames), untitled multi-select,
+	// and titled multi-select (anyOf).
+	srv.RegisterTool(
+		mcpkit.ToolDef{
+			Name:        "test_elicitation_sep1330_enums",
+			Description: "Calls elicitation/create with all 5 enum variants (SEP-1330)",
+			InputSchema: map[string]any{"type": "object"},
+		},
+		func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
+			schema := json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"untitledSingle": {
+						"type": "string",
+						"enum": ["option1", "option2", "option3"]
+					},
+					"titledSingle": {
+						"type": "string",
+						"oneOf": [
+							{"const": "value1", "title": "First Option"},
+							{"const": "value2", "title": "Second Option"},
+							{"const": "value3", "title": "Third Option"}
+						]
+					},
+					"legacyEnum": {
+						"type": "string",
+						"enum": ["opt1", "opt2", "opt3"],
+						"enumNames": ["Option One", "Option Two", "Option Three"]
+					},
+					"untitledMulti": {
+						"type": "array",
+						"items": {
+							"type": "string",
+							"enum": ["option1", "option2", "option3"]
+						}
+					},
+					"titledMulti": {
+						"type": "array",
+						"items": {
+							"anyOf": [
+								{"const": "value1", "title": "First Choice"},
+								{"const": "value2", "title": "Second Choice"},
+								{"const": "value3", "title": "Third Choice"}
+							]
+						}
+					}
+				}
+			}`)
+			result, err := mcpkit.Elicit(ctx, mcpkit.ElicitationRequest{
+				Message:         "Please make your selections",
+				RequestedSchema: schema,
+			})
+			if err != nil {
+				return mcpkit.ErrorResult(fmt.Sprintf("elicitation failed: %v", err)), nil
+			}
+			contentJSON, _ := json.Marshal(result.Content)
+			return mcpkit.TextResult(fmt.Sprintf("Elicitation completed: action=%s, content=%s", result.Action, string(contentJSON))), nil
 		},
 	)
 }
