@@ -1,181 +1,66 @@
 # MCPKit
 
-Production-grade MCP (Model Context Protocol) server library for Go.
-
-MCPKit handles the transport, protocol negotiation, session management, and auth so you can focus on registering tools, resources, and prompts. Supports both **HTTP+SSE** (MCP 2024-11-05) and **Streamable HTTP** (MCP 2025-03-26) transports.
+Production-grade MCP (Model Context Protocol) server and client library for Go.
 
 ## Quick Start
 
 ```go
-package main
-
 import (
     "context"
-    "log"
-    "time"
-    "github.com/panyam/mcpkit"
+    "github.com/panyam/mcpkit/core"
+    "github.com/panyam/mcpkit/server"
 )
 
-func main() {
-    srv := mcpkit.NewServer(
-        mcpkit.ServerInfo{Name: "my-server", Version: "0.1.0"},
-        mcpkit.WithListen(":8787"),
-        mcpkit.WithToolTimeout(30 * time.Second),
-    )
-
-    srv.RegisterTool(
-        mcpkit.ToolDef{
-            Name:        "greet",
-            Description: "Say hello",
-            InputSchema: map[string]any{
-                "type": "object",
-                "properties": map[string]any{
-                    "name": map[string]any{"type": "string"},
-                },
-                "required": []string{"name"},
-            },
-        },
-        func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
-            var args struct {
-                Name string `json:"name"`
-            }
-            if err := req.Bind(&args); err != nil {
-                return mcpkit.ErrorResult(err.Error()), nil
-            }
-            return mcpkit.TextResult("Hello, " + args.Name + "!"), nil
-        },
-    )
-
-    // Streamable HTTP (recommended) — responses in HTTP body
-    srv.ListenAndServe(mcpkit.WithStreamableHTTP(true))
-}
-```
-
-## Transports
-
-### Streamable HTTP (MCP 2025-03-26) — recommended
-
-Single endpoint, responses in HTTP body. Session via `Mcp-Session-Id` header.
-
-```go
-srv.ListenAndServe(mcpkit.WithStreamableHTTP(true))
-```
-
-### HTTP+SSE (MCP 2024-11-05) — legacy
-
-Long-lived SSE stream + POST endpoint. Session tied to SSE connection.
-
-```go
-srv.ListenAndServe() // SSE is the default
-```
-
-### Both simultaneously
-
-```go
-srv.ListenAndServe(mcpkit.WithStreamableHTTP(true), mcpkit.WithSSE(true))
-// SSE at /mcp/sse + /mcp/message, Streamable HTTP at /mcp
-```
-
-### Transport options
-
-```go
-handler := srv.Handler(
-    mcpkit.WithPrefix("/custom"),                       // URL prefix (default: /mcp)
-    mcpkit.WithPublicURL("https://proxy.example.com"),  // for reverse proxy
-    mcpkit.WithMaxSessions(100),                        // limit concurrent sessions
-    mcpkit.WithKeepalivePeriod(15 * time.Second),       // SSE keepalive interval
-    mcpkit.WithStreamableHTTP(true),                    // enable Streamable HTTP
+srv := server.NewServer(
+    core.ServerInfo{Name: "my-server", Version: "0.1.0"},
+    server.WithToolTimeout(30 * time.Second),
 )
+
+srv.RegisterTool(core.ToolDef{
+    Name: "greet", Description: "Say hello",
+    InputSchema: map[string]any{"type": "object", "properties": map[string]any{"name": map[string]any{"type": "string"}}},
+}, func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+    var args struct{ Name string `json:"name"` }
+    req.Bind(&args)
+    return core.TextResult("Hello, " + args.Name + "!"), nil
+})
+
+srv.Run(":8787") // Streamable HTTP
 ```
 
-## Capabilities
+## Packages
 
-| Capability | Methods |
-|-----------|---------|
-| **Tools** | `tools/list`, `tools/call` |
-| **Resources** | `resources/list`, `resources/read`, `resources/templates/list`, `resources/subscribe`, `resources/unsubscribe`, `notifications/resources/updated` |
-| **Prompts** | `prompts/list`, `prompts/get` |
-| **Logging** | `logging/setLevel`, `notifications/message` via `EmitLog()` |
-| **Progress** | `notifications/progress` via `EmitProgress()` with `_meta.progressToken` |
-| **Completion** | `completion/complete` for argument autocompletion |
-| **Cancellation** | `notifications/cancelled` with context propagation |
-| **Pagination** | Cursor-based pagination for all list methods |
+| Package | Import | What |
+|---------|--------|------|
+| **core** | `github.com/panyam/mcpkit/core` | Protocol types (Request, ToolDef, Content, Claims) + tool-handler APIs (Sample, Elicit, EmitLog) |
+| **server** | `github.com/panyam/mcpkit/server` | Server, Dispatcher, transports (SSE + Streamable HTTP), middleware |
+| **client** | `github.com/panyam/mcpkit/client` | Client, HTTP transports, reconnection, logging |
+| **ext/auth** | `github.com/panyam/mcpkit/ext/auth` | Separate module: JWT, PRM, OAuth discovery, DCR, CIMD |
+| **testutil** | `github.com/panyam/mcpkit/testutil` | TestClient wrapper for e2e tests |
 
-Capabilities are auto-advertised in the `initialize` response when the corresponding handlers are registered. Logging and completions are always advertised.
+## Conformance
 
-### Resource Subscriptions
-
-Enable clients to subscribe to resource changes and receive push notifications:
-
-```go
-srv := mcpkit.NewServer(info, mcpkit.WithSubscriptions())
-
-srv.RegisterResource(mcpkit.ResourceDef{
-    URI: "file:///data/config.yaml", Name: "Config",
-}, handler)
-
-// When the resource changes, notify all subscribed clients:
-srv.NotifyResourceUpdated("file:///data/config.yaml")
-```
-
-Client side:
-```go
-client.SubscribeResource("file:///data/config.yaml")
-// ... receive notifications/resources/updated when resource changes
-client.UnsubscribeResource("file:///data/config.yaml")
-```
-
-## Protocol Support
-
-- MCP **2025-11-25** and **2024-11-05** with automatic version negotiation
-- Initialization gating: requests rejected until `initialize` + `notifications/initialized` handshake completes
-- Tool error semantics: handler errors → `isError: true` in result (not JSON-RPC errors)
+**30/30** server scenarios, **14/14** auth scenarios passing against the [official MCP conformance suite](https://github.com/modelcontextprotocol/conformance).
 
 ## Testing
 
 ```bash
-make test         # Unit tests (200+ tests)
-make test-auth    # Auth sub-module tests
-make test-auth-e2e # E2E auth tests (in-process oneauth AS)
-make testconf     # MCP conformance suite (requires Node.js)
-make testall      # ALL tests + Keycloak + HTML report
-make smoke        # Curl-based transport tests (SSE + Streamable HTTP)
-make audit        # Security: govulncheck + gosec + gitleaks + race detection
-make serve        # Start SSE test server on :8787
-make serve-streamable  # Streamable HTTP on :8787
-
-# Keycloak interop tests (optional, requires Docker)
-make upkcl                # Start Keycloak
-make test-auth-keycloak   # Run Keycloak interop tests
-make downkcl              # Stop Keycloak
+make test          # Unit tests (200+ across core/server/client)
+make testall       # ALL tests + Keycloak + conformance + HTML report
+make testconf      # MCP conformance suite
+make testconfauth  # Auth conformance
 ```
 
-### Conformance Suite
+## Documentation
 
-Validated against the [official MCP conformance test suite](https://github.com/modelcontextprotocol/conformance). Current status: **30/30 server scenarios passing**, **14/14 auth conformance passing**.
+| Doc | What |
+|-----|------|
+| [CLAUDE.md](CLAUDE.md) | Quick reference: commands, package structure, gotchas |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Transport design, type definitions, protocol details |
+| [ext/auth/docs/DESIGN.md](ext/auth/docs/DESIGN.md) | Auth architecture, spec compliance (C1-C23, X1-X5) |
+| [CAPABILITIES.md](CAPABILITIES.md) | Stack component: all 50 capabilities listed |
 
-```bash
-bash scripts/conformance-test.sh                    # full suite
-bash scripts/conformance-test.sh tools-call-simple-text  # single scenario
-```
+## Dependencies
 
-When a feature's conformance scenario starts passing, **remove it from `conformance/baseline.yml`** — stale entries cause CI failure.
-
-### Manual testing
-
-```bash
-# Start test server (Streamable HTTP)
-STREAMABLE=1 go run ./cmd/testserver
-
-# MCP Inspector
-npx @modelcontextprotocol/inspector
-# Point it at http://localhost:8787/mcp
-```
-
-## Stack Dependencies
-
-**Core module** (`github.com/panyam/mcpkit`):
-- `servicekit` v0.0.14 — SSE connection/hub, graceful shutdown, HTTP middleware
-
-**Sub-module** (`github.com/panyam/mcpkit/auth`) — separate `go.mod`:
-- `oneauth` — JWT/OIDC validation (only pulled in when you import this sub-module)
+- `servicekit` v0.0.14 — SSE hub, graceful shutdown
+- `oneauth` v0.0.64 — JWT/OIDC (only via `ext/auth` sub-module)
