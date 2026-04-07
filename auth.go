@@ -68,6 +68,20 @@ func HasScope(ctx context.Context, scope string) bool {
 	return false
 }
 
+// AuthValidator validates an HTTP request and returns claims on success.
+type AuthValidator interface {
+	Validate(r *http.Request) error
+}
+
+// AuthError is returned when authentication fails.
+type AuthError struct {
+	Code            int
+	Message         string
+	WWWAuthenticate string // optional WWW-Authenticate header value
+}
+
+func (e *AuthError) Error() string { return e.Message }
+
 // TokenSource provides access tokens for the MCP client.
 // Simple implementations return a static token; OAuth implementations
 // handle the full flow including discovery, browser auth, and refresh.
