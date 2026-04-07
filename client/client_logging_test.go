@@ -1,4 +1,4 @@
-package client
+package client_test
 
 // Client logging transport tests. Verify that the loggingTransport wrapper
 // correctly logs method names, latency, errors, and delegates sessionID.
@@ -12,6 +12,9 @@ import (
 	"strings"
 	"testing"
 
+	client "github.com/panyam/mcpkit/client"
+	core "github.com/panyam/mcpkit/core"
+	server "github.com/panyam/mcpkit/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,11 +26,11 @@ func TestLoggingTransport_LogsCallMethod(t *testing.T) {
 	logger := log.New(&buf, "", 0)
 
 	srv := newTestMCPServer()
-	ts := httptest.NewServer(srv.Handler(WithStreamableHTTP(true)))
+	ts := httptest.NewServer(srv.Handler(server.WithStreamableHTTP(true)))
 	defer ts.Close()
 
-	c := NewClient(ts.URL+"/mcp", ClientInfo{Name: "test", Version: "1.0"},
-		WithClientLogging(logger))
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"},
+		client.WithClientLogging(logger))
 	require.NoError(t, c.Connect())
 	defer c.Close()
 
@@ -48,11 +51,11 @@ func TestLoggingTransport_LogsErrors(t *testing.T) {
 	logger := log.New(&buf, "", 0)
 
 	srv := newTestMCPServer()
-	ts := httptest.NewServer(srv.Handler(WithStreamableHTTP(true)))
+	ts := httptest.NewServer(srv.Handler(server.WithStreamableHTTP(true)))
 	defer ts.Close()
 
-	c := NewClient(ts.URL+"/mcp", ClientInfo{Name: "test", Version: "1.0"},
-		WithClientLogging(logger))
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"},
+		client.WithClientLogging(logger))
 	require.NoError(t, c.Connect())
 	defer c.Close()
 
@@ -71,11 +74,11 @@ func TestLoggingTransport_LogsLatency(t *testing.T) {
 	logger := log.New(&buf, "", 0)
 
 	srv := newTestMCPServer()
-	ts := httptest.NewServer(srv.Handler(WithStreamableHTTP(true)))
+	ts := httptest.NewServer(srv.Handler(server.WithStreamableHTTP(true)))
 	defer ts.Close()
 
-	c := NewClient(ts.URL+"/mcp", ClientInfo{Name: "test", Version: "1.0"},
-		WithClientLogging(logger))
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"},
+		client.WithClientLogging(logger))
 	require.NoError(t, c.Connect())
 	defer c.Close()
 
@@ -92,11 +95,11 @@ func TestLoggingTransport_SessionIDPassthrough(t *testing.T) {
 	logger := log.New(&buf, "", 0)
 
 	srv := newTestMCPServer()
-	ts := httptest.NewServer(srv.Handler(WithStreamableHTTP(true)))
+	ts := httptest.NewServer(srv.Handler(server.WithStreamableHTTP(true)))
 	defer ts.Close()
 
-	c := NewClient(ts.URL+"/mcp", ClientInfo{Name: "test", Version: "1.0"},
-		WithClientLogging(logger))
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"},
+		client.WithClientLogging(logger))
 	require.NoError(t, c.Connect())
 	defer c.Close()
 
@@ -118,7 +121,7 @@ func TestExtractMethodFromJSON(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("input=%s", tt.input[:min(len(tt.input), 30)]), func(t *testing.T) {
-			assert.Equal(t, tt.expected, extractMethodFromJSON([]byte(tt.input)))
+			assert.Equal(t, tt.expected, client.ExtractMethodFromJSON([]byte(tt.input)))
 		})
 	}
 }

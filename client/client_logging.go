@@ -54,7 +54,7 @@ func (t *loggingTransport) connect() error {
 
 // call logs the JSON-RPC method name, latency, and result status.
 func (t *loggingTransport) call(data []byte) (*rpcResponse, error) {
-	method := extractMethodFromJSON(data)
+	method := ExtractMethodFromJSON(data)
 	start := time.Now()
 	resp, err := t.inner.call(data)
 	elapsed := time.Since(start)
@@ -71,7 +71,7 @@ func (t *loggingTransport) call(data []byte) (*rpcResponse, error) {
 
 // notify logs the JSON-RPC notification method and any error.
 func (t *loggingTransport) notify(data []byte) error {
-	method := extractMethodFromJSON(data)
+	method := ExtractMethodFromJSON(data)
 	start := time.Now()
 	err := t.inner.notify(data)
 	elapsed := time.Since(start)
@@ -99,7 +99,7 @@ func (t *loggingTransport) getSessionID() string {
 
 // extractMethodFromJSON extracts the "method" field from a JSON-RPC envelope
 // without full deserialization. Returns "<unknown>" if extraction fails.
-func extractMethodFromJSON(data []byte) string {
+func ExtractMethodFromJSON(data []byte) string {
 	var envelope struct {
 		Method string `json:"method"`
 	}

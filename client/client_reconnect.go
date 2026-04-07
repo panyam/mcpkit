@@ -123,7 +123,7 @@ func (c *Client) retryWithReconnect(fn func() (*rpcResponse, error)) (*rpcRespon
 		if err == nil {
 			return resp, nil
 		}
-		if !isTransientError(err) {
+		if !IsTransientError(err) {
 			return nil, err // terminal error, stop retrying
 		}
 		lastErr = err
@@ -152,7 +152,7 @@ func (c *Client) retryNotifyWithReconnect(fn func() error) error {
 
 		if err := fn(); err == nil {
 			return nil
-		} else if !isTransientError(err) {
+		} else if !IsTransientError(err) {
 			return err
 		} else {
 			lastErr = err
@@ -165,7 +165,7 @@ func (c *Client) retryNotifyWithReconnect(fn func() error) error {
 // failure that may succeed on reconnection. Network errors (EOF, connection
 // reset, refused) are transient. Auth errors (401/403) and JSON-RPC errors
 // are NOT transient — the server responded, just said no.
-func isTransientError(err error) bool {
+func IsTransientError(err error) bool {
 	if err == nil {
 		return false
 	}

@@ -1,4 +1,4 @@
-package client
+package client_test
 
 // Unit tests for client-side 401/403 auth retry logic (doWithAuthRetry).
 // These use mock HTTP servers and token sources to test retry behavior
@@ -6,13 +6,13 @@ package client
 // tests/e2e/auth_retry_test.go.
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
 
+	client "github.com/panyam/mcpkit/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -65,7 +65,7 @@ func TestClient_401_RetryWithRefresh(t *testing.T) {
 		return http.NewRequest("POST", ts.URL, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`))
 	}
 
-	resp, err := doWithAuthRetry(tokenSrc, buildReq, http.DefaultClient.Do)
+	resp, err := client.DoWithAuthRetry(tokenSrc, buildReq, http.DefaultClient.Do)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -85,16 +85,16 @@ func TestClient_401_StaticTokenGivesUp(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	tokenSrc := &staticTokenSource{token: "static-token"}
+	tokenSrc := &localStaticToken{token: "static-token"}
 
 	buildReq := func() (*http.Request, error) {
 		return http.NewRequest("POST", ts.URL, strings.NewReader(`{}`))
 	}
 
-	_, err := doWithAuthRetry(tokenSrc, buildReq, http.DefaultClient.Do)
+	_, err := client.DoWithAuthRetry(tokenSrc, buildReq, http.DefaultClient.Do)
 	require.Error(t, err)
 
-	var authErr *ClientAuthError
+	var authErr *client.ClientAuthError
 	require.ErrorAs(t, err, &authErr)
 	assert.Equal(t, 401, authErr.StatusCode)
 }
@@ -124,7 +124,7 @@ func TestClient_403_ScopeStepUp(t *testing.T) {
 		return http.NewRequest("POST", ts.URL, strings.NewReader(`{}`))
 	}
 
-	resp, err := doWithAuthRetry(tokenSrc, buildReq, http.DefaultClient.Do)
+	resp, err := client.DoWithAuthRetry(tokenSrc, buildReq, http.DefaultClient.Do)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -149,10 +149,10 @@ func TestClient_403_NoScopeAware(t *testing.T) {
 		return http.NewRequest("POST", ts.URL, strings.NewReader(`{}`))
 	}
 
-	_, err := doWithAuthRetry(tokenSrc, buildReq, http.DefaultClient.Do)
+	_, err := client.DoWithAuthRetry(tokenSrc, buildReq, http.DefaultClient.Do)
 	require.Error(t, err)
 
-	var authErr *ClientAuthError
+	var authErr *client.ClientAuthError
 	require.ErrorAs(t, err, &authErr)
 	assert.Equal(t, 403, authErr.StatusCode)
 	assert.Contains(t, authErr.RequiredScopes, "admin:write")
@@ -186,7 +186,7 @@ func TestClient_RetryLimit_401Then403(t *testing.T) {
 		return http.NewRequest("POST", ts.URL, strings.NewReader(`{}`))
 	}
 
-	resp, err := doWithAuthRetry(tokenSrc, buildReq, http.DefaultClient.Do)
+	resp, err := client.DoWithAuthRetry(tokenSrc, buildReq, http.DefaultClient.Do)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -209,66 +209,18 @@ func TestClient_RetryLimit_Double401(t *testing.T) {
 		return http.NewRequest("POST", ts.URL, strings.NewReader(`{}`))
 	}
 
-	_, err := doWithAuthRetry(tokenSrc, buildReq, http.DefaultClient.Do)
+	_, err := client.DoWithAuthRetry(tokenSrc, buildReq, http.DefaultClient.Do)
 	require.Error(t, err)
 
-	var authErr *ClientAuthError
+	var authErr *client.ClientAuthError
 	require.ErrorAs(t, err, &authErr)
 	assert.Equal(t, 401, authErr.StatusCode)
 }
 
-// TestClient_Streamable_401Integration verifies that the full Streamable HTTP
-// client transport handles 401 on initialize correctly — the server returns
-// 401, the transport refreshes the token, and the retry succeeds.
-func TestClient_Streamable_401Integration(t *testing.T) {
-	srv := NewServer(ServerInfo{Name: "auth-test", Version: "1.0"},
-		WithBearerToken("valid-token"))
-	srv.RegisterTool(
-		ToolDef{Name: "echo", Description: "echo", InputSchema: map[string]any{"type": "object", "properties": map[string]any{"message": map[string]any{"type": "string"}}}},
-		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
-			var p struct{ Message string `json:"message"` }
-			req.Bind(&p)
-			return TextResult("echo: " + p.Message), nil
-		},
-	)
-	handler := srv.Handler(WithStreamableHTTP(true))
-	ts := httptest.NewServer(handler)
-	defer ts.Close()
+// TestClient_Streamable_401Integration and TestClient_Streamable_AuthErrorType
+// moved to server/auth_retry_integration_test.go (they create servers).
 
-	// Token source: first returns wrong token, then valid one
-	tokenSrc := &mockTokenSource{tokens: []string{"wrong-token", "valid-token"}}
+// localStaticToken is a trivial TokenSource for testing.
+type localStaticToken struct{ token string }
 
-	c := NewClient(ts.URL+"/mcp", ClientInfo{Name: "test", Version: "1.0"},
-		WithTokenSource(tokenSrc))
-
-	err := c.Connect()
-	require.NoError(t, err, "Connect should succeed after 401 retry")
-	defer c.Close()
-
-	result, err := c.ToolCall("echo", map[string]any{"message": "hello"})
-	require.NoError(t, err)
-	assert.Contains(t, result, "hello")
-}
-
-// TestClient_Streamable_AuthErrorType verifies that ClientAuthError is
-// properly returned and inspectable when the server permanently rejects auth.
-func TestClient_Streamable_AuthErrorType(t *testing.T) {
-	srv := NewServer(ServerInfo{Name: "auth-test", Version: "1.0"},
-		WithBearerToken("valid-token"))
-	srv.RegisterTool(
-		ToolDef{Name: "echo", Description: "echo"},
-		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
-			return TextResult("ok"), nil
-		},
-	)
-	handler := srv.Handler(WithStreamableHTTP(true))
-	ts := httptest.NewServer(handler)
-	defer ts.Close()
-
-	c := NewClient(ts.URL+"/mcp", ClientInfo{Name: "test", Version: "1.0"},
-		WithClientBearerToken("wrong-token"))
-
-	err := c.Connect()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "401", "error should mention 401")
-}
+func (s *localStaticToken) Token() (string, error) { return s.token, nil }
