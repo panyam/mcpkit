@@ -137,7 +137,7 @@ func (s *OAuthTokenSource) Token() (string, error) {
 	}
 
 	// Client registration (C6): pre-registered > CIMD > DCR > error
-	clientID, _, err := s.resolveClientID()
+	clientID, clientSecret, err := s.resolveClientID()
 	if err != nil {
 		return "", fmt.Errorf("client registration: %w", err)
 	}
@@ -153,12 +153,13 @@ func (s *OAuthTokenSource) Token() (string, error) {
 	}
 
 	// Full browser login flow with explicit endpoints from discovery.
-	// Bypasses oneauth's internal re-discovery which would incorrectly
-	// treat the MCP server URL as an OAuth issuer.
+	// NOTE: once oneauth#74 is fixed, auth method negotiation will work
+	// correctly even with explicit endpoints.
 	loginCfg := client.BrowserLoginConfig{
 		AuthorizationEndpoint: s.authInfo.ASMetadata.AuthorizationEndpoint,
 		TokenEndpoint:         s.authInfo.ASMetadata.TokenEndpoint,
 		ClientID:              clientID,
+		ClientSecret:          clientSecret,
 		Scopes:                scopes,
 		Resource:              s.ServerURL, // RFC 8707: bind token to this MCP server
 		OpenBrowser:           s.OpenBrowser,
@@ -166,9 +167,8 @@ func (s *OAuthTokenSource) Token() (string, error) {
 	if s.HTTPClient != nil {
 		loginCfg.HTTPClient = s.HTTPClient
 	}
-	// Only pass client secret for confidential clients
-	// (BrowserLoginConfig doesn't have a ClientSecret field — it's passed
-	// through the client, which handles token endpoint auth internally)
+	// ClientSecret is passed in BrowserLoginConfig above — oneauth's
+	// SelectAuthMethod handles negotiation (basic/post/none) based on AS metadata.
 
 	cred, err := s.oaClient.LoginWithBrowser(loginCfg)
 	if err != nil {
