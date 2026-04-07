@@ -64,6 +64,10 @@ type Client struct {
 
 	// ServerInfo is populated after Connect.
 	ServerInfo ServerInfo
+
+	// onNotify is an optional callback for server-to-client notifications.
+	// Currently only used by the in-memory transport.
+	onNotify func(method string, params any)
 }
 
 // NewClient creates a new MCP client targeting the given server URL.
@@ -95,6 +99,11 @@ func (c *Client) Connect() error {
 		if c.logger != nil {
 			c.transport = &loggingTransport{inner: c.transport, logger: c.logger}
 		}
+	}
+
+	// Propagate notification handler to memory transport before connecting
+	if mt, ok := c.transport.(*memoryTransport); ok && c.onNotify != nil {
+		mt.onNotify = c.onNotify
 	}
 
 	if err := c.transport.connect(); err != nil {
@@ -192,6 +201,19 @@ func (c *Client) ReadResource(uri string) (string, error) {
 		return "", err
 	}
 	return extractResourceText(result.Raw)
+}
+
+// SubscribeResource subscribes to change notifications for a resource URI.
+// The server will send notifications/resources/updated when the resource changes.
+func (c *Client) SubscribeResource(uri string) error {
+	_, err := c.Call("resources/subscribe", map[string]string{"uri": uri})
+	return err
+}
+
+// UnsubscribeResource removes a subscription for a resource URI.
+func (c *Client) UnsubscribeResource(uri string) error {
+	_, err := c.Call("resources/unsubscribe", map[string]string{"uri": uri})
+	return err
 }
 
 // ListTools returns all registered tool definitions.

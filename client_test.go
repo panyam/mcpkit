@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -326,5 +327,123 @@ func TestSSEClientListTools(t *testing.T) {
 	}
 	if len(tools) < 2 {
 		t.Errorf("expected >=2 tools, got %d", len(tools))
+	}
+}
+
+// --- Resource Subscription Integration Tests ---
+
+// newSubscriptionTestServer creates an MCP server with subscriptions enabled
+// and a subscribable resource for integration testing.
+func newSubscriptionTestServer() *Server {
+	srv := NewServer(ServerInfo{Name: "sub-test", Version: "1.0"}, WithSubscriptions())
+	srv.RegisterResource(
+		ResourceDef{URI: "test://config", Name: "Config", MimeType: "text/plain"},
+		func(ctx context.Context, req ResourceRequest) (ResourceResult, error) {
+			return ResourceResult{Contents: []ResourceReadContent{{
+				URI: req.URI, MimeType: "text/plain", Text: "config data",
+			}}}, nil
+		},
+	)
+	return srv
+}
+
+// TestClientSubscribeUnsubscribeResource verifies that the client can subscribe
+// to and unsubscribe from a resource URI across all transports. Both operations
+// should succeed without error.
+func TestClientSubscribeUnsubscribeResource(t *testing.T) {
+	t.Run("streamable", func(t *testing.T) {
+		srv := newSubscriptionTestServer()
+		handler := srv.Handler(WithStreamableHTTP(true))
+		ts := httptest.NewServer(handler)
+		t.Cleanup(ts.Close)
+
+		c := NewClient(ts.URL+"/mcp", ClientInfo{Name: "test", Version: "1.0"})
+		if err := c.Connect(); err != nil {
+			t.Fatalf("Connect: %v", err)
+		}
+
+		if err := c.SubscribeResource("test://config"); err != nil {
+			t.Fatalf("SubscribeResource: %v", err)
+		}
+		if err := c.UnsubscribeResource("test://config"); err != nil {
+			t.Fatalf("UnsubscribeResource: %v", err)
+		}
+	})
+
+	t.Run("sse", func(t *testing.T) {
+		srv := newSubscriptionTestServer()
+		handler := srv.Handler(WithSSE(true), WithStreamableHTTP(false))
+		ts := httptest.NewServer(handler)
+
+		c := NewClient(ts.URL+"/mcp/sse", ClientInfo{Name: "test", Version: "1.0"}, WithSSEClient())
+		if err := c.Connect(); err != nil {
+			ts.Close()
+			t.Fatalf("Connect: %v", err)
+		}
+		t.Cleanup(func() { c.Close(); ts.Close() })
+
+		if err := c.SubscribeResource("test://config"); err != nil {
+			t.Fatalf("SubscribeResource: %v", err)
+		}
+		if err := c.UnsubscribeResource("test://config"); err != nil {
+			t.Fatalf("UnsubscribeResource: %v", err)
+		}
+	})
+
+	t.Run("memory", func(t *testing.T) {
+		srv := newSubscriptionTestServer()
+		c := NewClient("memory://", ClientInfo{Name: "test", Version: "1.0"},
+			WithInMemoryServer(srv))
+		if err := c.Connect(); err != nil {
+			t.Fatalf("Connect: %v", err)
+		}
+		t.Cleanup(func() { c.Close() })
+
+		if err := c.SubscribeResource("test://config"); err != nil {
+			t.Fatalf("SubscribeResource: %v", err)
+		}
+		if err := c.UnsubscribeResource("test://config"); err != nil {
+			t.Fatalf("UnsubscribeResource: %v", err)
+		}
+	})
+}
+
+// TestClientSubscriptionNotificationDelivery verifies that after subscribing,
+// the client's notification handler receives a notifications/resources/updated
+// notification when the server calls NotifyResourceUpdated. Uses the in-memory
+// transport with WithNotificationHandler to capture notifications.
+func TestClientSubscriptionNotificationDelivery(t *testing.T) {
+	srv := newSubscriptionTestServer()
+
+	var mu sync.Mutex
+	var received []string
+
+	c := NewClient("memory://", ClientInfo{Name: "test", Version: "1.0"},
+		WithInMemoryServer(srv),
+		WithNotificationHandler(func(method string, params any) {
+			mu.Lock()
+			defer mu.Unlock()
+			received = append(received, method)
+		}),
+	)
+	if err := c.Connect(); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	t.Cleanup(func() { c.Close() })
+
+	if err := c.SubscribeResource("test://config"); err != nil {
+		t.Fatalf("SubscribeResource: %v", err)
+	}
+
+	// Trigger from server side
+	srv.NotifyResourceUpdated("test://config")
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(received) != 1 {
+		t.Fatalf("got %d notifications, want 1", len(received))
+	}
+	if received[0] != "notifications/resources/updated" {
+		t.Errorf("method = %q, want notifications/resources/updated", received[0])
 	}
 }

@@ -33,6 +33,7 @@ func main() {
 	serverOpts = append(serverOpts,
 		mcpkit.WithListen(listenAddr()),
 		mcpkit.WithToolTimeout(30*time.Second),
+		mcpkit.WithSubscriptions(),
 	)
 	// Enable HTTP-level request logging if VERBOSE is set
 	if os.Getenv("VERBOSE") == "1" {
