@@ -163,6 +163,24 @@ func Notify(ctx context.Context, method string, params any) bool {
 	return true
 }
 
+// NotifyResourcesChanged sends a notifications/resources/list_changed notification
+// to the connected client, signaling that the set of available resources has changed.
+// MCP App tool handlers should call this after mutating state that affects the UI
+// resource, so clients know to re-fetch resources/list.
+//
+// Safe to call even if no session context is present (no-op).
+//
+// Usage in a tool handler:
+//
+//	func myHandler(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+//	    // ... mutate state ...
+//	    core.NotifyResourcesChanged(ctx)
+//	    return core.TextResult("done"), nil
+//	}
+func NotifyResourcesChanged(ctx context.Context) {
+	Notify(ctx, "notifications/resources/list_changed", nil)
+}
+
 // MarshalNotification builds a JSON-RPC notification (no id field).
 // Exported for use by the server transport sub-package.
 func MarshalNotification(method string, params any) (json.RawMessage, error) {
