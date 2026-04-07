@@ -1,6 +1,7 @@
 package server
 
 import (
+	core "github.com/panyam/mcpkit/core"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,22 +11,22 @@ import (
 // initDispatcher performs the full MCP initialization handshake on a dispatcher
 // (initialize + notifications/initialized) so subsequent tool calls are accepted.
 func initDispatcher(d *Dispatcher) {
-	d.Dispatch(context.Background(), &Request{
+	d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`0`),
 		Method:  "initialize",
 		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
 	})
-	d.Dispatch(context.Background(), &Request{
+	d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		Method:  "notifications/initialized",
 	})
 }
 
 func testDispatcher() *Dispatcher {
-	d := NewDispatcher(ServerInfo{Name: "test-server", Version: "1.0.0"})
+	d := NewDispatcher(core.ServerInfo{Name: "test-server", Version: "1.0.0"})
 	d.RegisterTool(
-		ToolDef{
+		core.ToolDef{
 			Name:        "echo",
 			Description: "Echoes the input",
 			InputSchema: map[string]any{
@@ -36,14 +37,14 @@ func testDispatcher() *Dispatcher {
 				"required": []string{"message"},
 			},
 		},
-		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
 			var args struct {
 				Message string `json:"message"`
 			}
 			if err := req.Bind(&args); err != nil {
-				return ErrorResult(err.Error()), nil
+				return core.ErrorResult(err.Error()), nil
 			}
-			return TextResult("echo: " + args.Message), nil
+			return core.TextResult("echo: " + args.Message), nil
 		},
 	)
 	initDispatcher(d)
@@ -52,7 +53,7 @@ func testDispatcher() *Dispatcher {
 
 func TestDispatchInitialize(t *testing.T) {
 	d := testDispatcher()
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
@@ -95,7 +96,7 @@ func TestDispatchInitialize(t *testing.T) {
 func TestDispatchNotification(t *testing.T) {
 	d := testDispatcher()
 	for _, method := range []string{"notifications/initialized", "initialized"} {
-		resp := d.Dispatch(context.Background(), &Request{
+		resp := d.Dispatch(context.Background(), &core.Request{
 			JSONRPC: "2.0",
 			Method:  method,
 		})
@@ -107,7 +108,7 @@ func TestDispatchNotification(t *testing.T) {
 
 func TestDispatchPing(t *testing.T) {
 	d := testDispatcher()
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`99`),
 		Method:  "ping",
@@ -125,7 +126,7 @@ func TestDispatchPing(t *testing.T) {
 
 func TestDispatchToolsList(t *testing.T) {
 	d := testDispatcher()
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`2`),
 		Method:  "tools/list",
@@ -139,7 +140,7 @@ func TestDispatchToolsList(t *testing.T) {
 	}
 
 	var result struct {
-		Tools []ToolDef `json:"tools"`
+		Tools []core.ToolDef `json:"tools"`
 	}
 	if err := json.Unmarshal(resp.Result, &result); err != nil {
 		t.Fatal(err)
@@ -154,7 +155,7 @@ func TestDispatchToolsList(t *testing.T) {
 
 func TestDispatchToolsCall(t *testing.T) {
 	d := testDispatcher()
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`3`),
 		Method:  "tools/call",
@@ -168,7 +169,7 @@ func TestDispatchToolsCall(t *testing.T) {
 		t.Fatalf("unexpected error: %v", resp.Error)
 	}
 
-	var result ToolResult
+	var result core.ToolResult
 	if err := json.Unmarshal(resp.Result, &result); err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +186,7 @@ func TestDispatchToolsCall(t *testing.T) {
 
 func TestDispatchToolsCallUnknown(t *testing.T) {
 	d := testDispatcher()
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`4`),
 		Method:  "tools/call",
@@ -198,14 +199,14 @@ func TestDispatchToolsCallUnknown(t *testing.T) {
 	if resp.Error == nil {
 		t.Fatal("expected error response")
 	}
-	if resp.Error.Code != ErrCodeInvalidParams {
-		t.Errorf("error code = %d, want %d", resp.Error.Code, ErrCodeInvalidParams)
+	if resp.Error.Code != core.ErrCodeInvalidParams {
+		t.Errorf("error code = %d, want %d", resp.Error.Code, core.ErrCodeInvalidParams)
 	}
 }
 
 func TestDispatchToolsCallBadParams(t *testing.T) {
 	d := testDispatcher()
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`5`),
 		Method:  "tools/call",
@@ -218,14 +219,14 @@ func TestDispatchToolsCallBadParams(t *testing.T) {
 	if resp.Error == nil {
 		t.Fatal("expected error response")
 	}
-	if resp.Error.Code != ErrCodeInvalidParams {
-		t.Errorf("error code = %d, want %d", resp.Error.Code, ErrCodeInvalidParams)
+	if resp.Error.Code != core.ErrCodeInvalidParams {
+		t.Errorf("error code = %d, want %d", resp.Error.Code, core.ErrCodeInvalidParams)
 	}
 }
 
 func TestDispatchMethodNotFound(t *testing.T) {
 	d := testDispatcher()
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`6`),
 		Method:  "unknown/method",
@@ -237,14 +238,14 @@ func TestDispatchMethodNotFound(t *testing.T) {
 	if resp.Error == nil {
 		t.Fatal("expected error response")
 	}
-	if resp.Error.Code != ErrCodeMethodNotFound {
-		t.Errorf("error code = %d, want %d", resp.Error.Code, ErrCodeMethodNotFound)
+	if resp.Error.Code != core.ErrCodeMethodNotFound {
+		t.Errorf("error code = %d, want %d", resp.Error.Code, core.ErrCodeMethodNotFound)
 	}
 }
 
 func TestDispatchNullID(t *testing.T) {
 	d := testDispatcher()
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      nil,
 		Method:  "ping",
@@ -257,7 +258,7 @@ func TestDispatchNullID(t *testing.T) {
 	}
 }
 
-// TestDispatchToolsCallHandlerError verifies that when a ToolHandler returns a Go error,
+// TestDispatchToolsCallHandlerError verifies that when a core.ToolHandler returns a Go error,
 // the dispatcher wraps it as a JSON-RPC success with isError: true in the tool result,
 // NOT as a JSON-RPC error response. Per the MCP spec, JSON-RPC errors are reserved for
 // protocol-level failures (bad params, unknown tool). Tool execution failures use isError.
@@ -265,13 +266,13 @@ func TestDispatchToolsCallHandlerError(t *testing.T) {
 	d := testDispatcher()
 	// Register a tool that always returns a Go error
 	d.RegisterTool(
-		ToolDef{Name: "failing", Description: "always fails"},
-		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
-			return ToolResult{}, fmt.Errorf("something broke")
+		core.ToolDef{Name: "failing", Description: "always fails"},
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			return core.ToolResult{}, fmt.Errorf("something broke")
 		},
 	)
 
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`10`),
 		Method:  "tools/call",
@@ -287,7 +288,7 @@ func TestDispatchToolsCallHandlerError(t *testing.T) {
 			resp.Error.Code, resp.Error.Message)
 	}
 
-	var result ToolResult
+	var result core.ToolResult
 	if err := json.Unmarshal(resp.Result, &result); err != nil {
 		t.Fatalf("failed to unmarshal result: %v", err)
 	}
@@ -303,22 +304,22 @@ func TestDispatchToolsCallHandlerError(t *testing.T) {
 }
 
 func TestDispatchToolOrder(t *testing.T) {
-	d := NewDispatcher(ServerInfo{Name: "test", Version: "1.0"})
+	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
 	for _, name := range []string{"charlie", "alpha", "bravo"} {
-		d.RegisterTool(ToolDef{Name: name, Description: name}, func(ctx context.Context, req ToolRequest) (ToolResult, error) {
-			return TextResult(name), nil
+		d.RegisterTool(core.ToolDef{Name: name, Description: name}, func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			return core.TextResult(name), nil
 		})
 	}
 	initDispatcher(d)
 
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "tools/list",
 	})
 
 	var result struct {
-		Tools []ToolDef `json:"tools"`
+		Tools []core.ToolDef `json:"tools"`
 	}
 	if err := json.Unmarshal(resp.Result, &result); err != nil {
 		t.Fatal(err)
@@ -340,7 +341,7 @@ func TestDispatchToolOrder(t *testing.T) {
 // with the same version in protocolVersion, confirming mutual support.
 func TestDispatchInitializeVersion2025(t *testing.T) {
 	d := testDispatcher()
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
@@ -368,7 +369,7 @@ func TestDispatchInitializeVersion2025(t *testing.T) {
 // the list of supported versions in the error data, per the MCP spec.
 func TestDispatchInitializeUnsupportedVersion(t *testing.T) {
 	d := testDispatcher()
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
@@ -381,10 +382,10 @@ func TestDispatchInitializeUnsupportedVersion(t *testing.T) {
 	if resp.Error == nil {
 		t.Fatal("expected error for unsupported version, got success")
 	}
-	if resp.Error.Code != ErrCodeInvalidParams {
-		t.Errorf("error code = %d, want %d", resp.Error.Code, ErrCodeInvalidParams)
+	if resp.Error.Code != core.ErrCodeInvalidParams {
+		t.Errorf("error code = %d, want %d", resp.Error.Code, core.ErrCodeInvalidParams)
 	}
-	// Error data must contain a "supported" array listing valid versions.
+	// core.Error data must contain a "supported" array listing valid versions.
 	// Round-trip through JSON to normalize types (the in-memory struct uses
 	// concrete Go types, but a real client would see JSON).
 	raw, err := json.Marshal(resp.Error.Data)
@@ -405,7 +406,7 @@ func TestDispatchInitializeUnsupportedVersion(t *testing.T) {
 // returns a JSON-RPC error (invalid params), not a panic or success.
 func TestDispatchInitializeMissingParams(t *testing.T) {
 	d := testDispatcher()
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
@@ -417,8 +418,8 @@ func TestDispatchInitializeMissingParams(t *testing.T) {
 	if resp.Error == nil {
 		t.Fatal("expected error for missing params")
 	}
-	if resp.Error.Code != ErrCodeInvalidParams {
-		t.Errorf("error code = %d, want %d", resp.Error.Code, ErrCodeInvalidParams)
+	if resp.Error.Code != core.ErrCodeInvalidParams {
+		t.Errorf("error code = %d, want %d", resp.Error.Code, core.ErrCodeInvalidParams)
 	}
 }
 
@@ -426,8 +427,8 @@ func TestDispatchInitializeMissingParams(t *testing.T) {
 // client info and capabilities from the initialize request, making them available
 // for server-to-client feature detection.
 func TestDispatchInitializeStoresClientInfo(t *testing.T) {
-	d := NewDispatcher(ServerInfo{Name: "test", Version: "1.0"})
-	d.Dispatch(context.Background(), &Request{
+	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
+	d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
@@ -449,22 +450,22 @@ func TestDispatchInitializeStoresClientInfo(t *testing.T) {
 // initialize has been called but notifications/initialized has not yet been received.
 // The MCP spec requires the full initialization handshake before processing requests.
 func TestDispatchBeforeInitialized(t *testing.T) {
-	d := NewDispatcher(ServerInfo{Name: "test", Version: "1.0"})
+	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
 	d.RegisterTool(
-		ToolDef{Name: "echo", Description: "echoes"},
-		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
-			return TextResult("hi"), nil
+		core.ToolDef{Name: "echo", Description: "echoes"},
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			return core.TextResult("hi"), nil
 		},
 	)
 	// Send initialize but NOT notifications/initialized
-	d.Dispatch(context.Background(), &Request{
+	d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
 		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
 	})
 
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`2`),
 		Method:  "tools/list",
@@ -476,23 +477,23 @@ func TestDispatchBeforeInitialized(t *testing.T) {
 	if resp.Error == nil {
 		t.Fatal("expected error for request before initialized notification")
 	}
-	if resp.Error.Code != ErrCodeInvalidRequest {
-		t.Errorf("error code = %d, want %d", resp.Error.Code, ErrCodeInvalidRequest)
+	if resp.Error.Code != core.ErrCodeInvalidRequest {
+		t.Errorf("error code = %d, want %d", resp.Error.Code, core.ErrCodeInvalidRequest)
 	}
 }
 
 // TestDispatchToolsCallBeforeAnyInit verifies that tool calls are rejected when
 // no initialization has occurred at all (neither initialize nor notifications/initialized).
 func TestDispatchToolsCallBeforeAnyInit(t *testing.T) {
-	d := NewDispatcher(ServerInfo{Name: "test", Version: "1.0"})
+	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
 	d.RegisterTool(
-		ToolDef{Name: "echo", Description: "echoes"},
-		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
-			return TextResult("hi"), nil
+		core.ToolDef{Name: "echo", Description: "echoes"},
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			return core.TextResult("hi"), nil
 		},
 	)
 
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "tools/call",
@@ -505,8 +506,8 @@ func TestDispatchToolsCallBeforeAnyInit(t *testing.T) {
 	if resp.Error == nil {
 		t.Fatal("expected error for request before any initialization")
 	}
-	if resp.Error.Code != ErrCodeInvalidRequest {
-		t.Errorf("error code = %d, want %d", resp.Error.Code, ErrCodeInvalidRequest)
+	if resp.Error.Code != core.ErrCodeInvalidRequest {
+		t.Errorf("error code = %d, want %d", resp.Error.Code, core.ErrCodeInvalidRequest)
 	}
 }
 
@@ -514,8 +515,8 @@ func TestDispatchToolsCallBeforeAnyInit(t *testing.T) {
 // even before the initialization handshake is complete. The MCP spec allows
 // ping as a keepalive mechanism regardless of session state.
 func TestDispatchPingBeforeInitialized(t *testing.T) {
-	d := NewDispatcher(ServerInfo{Name: "test", Version: "1.0"})
-	resp := d.Dispatch(context.Background(), &Request{
+	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "ping",
@@ -534,7 +535,7 @@ func TestDispatchPingBeforeInitialized(t *testing.T) {
 // for clients configuring the MCP log stream.
 func TestDispatchLoggingSetLevel(t *testing.T) {
 	d := testDispatcher()
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`10`),
 		Method:  "logging/setLevel",
@@ -553,8 +554,8 @@ func TestDispatchLoggingSetLevel(t *testing.T) {
 	if stored == nil {
 		t.Fatal("logLevel not set")
 	}
-	if *stored != LogWarning {
-		t.Errorf("logLevel = %v, want LogWarning", *stored)
+	if *stored != core.LogWarning {
+		t.Errorf("logLevel = %v, want core.LogWarning", *stored)
 	}
 }
 
@@ -565,7 +566,7 @@ func TestDispatchLoggingSetLevelAllLevels(t *testing.T) {
 	for _, level := range []string{"debug", "info", "notice", "warning", "error", "critical", "alert", "emergency"} {
 		t.Run(level, func(t *testing.T) {
 			d := testDispatcher()
-			resp := d.Dispatch(context.Background(), &Request{
+			resp := d.Dispatch(context.Background(), &core.Request{
 				JSONRPC: "2.0",
 				ID:      json.RawMessage(`1`),
 				Method:  "logging/setLevel",
@@ -582,7 +583,7 @@ func TestDispatchLoggingSetLevelAllLevels(t *testing.T) {
 // level strings with a JSON-RPC invalid params error (-32602).
 func TestDispatchLoggingSetLevelInvalid(t *testing.T) {
 	d := testDispatcher()
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`11`),
 		Method:  "logging/setLevel",
@@ -595,16 +596,16 @@ func TestDispatchLoggingSetLevelInvalid(t *testing.T) {
 	if resp.Error == nil {
 		t.Fatal("expected error for unknown level")
 	}
-	if resp.Error.Code != ErrCodeInvalidParams {
-		t.Errorf("error code = %d, want %d", resp.Error.Code, ErrCodeInvalidParams)
+	if resp.Error.Code != core.ErrCodeInvalidParams {
+		t.Errorf("error code = %d, want %d", resp.Error.Code, core.ErrCodeInvalidParams)
 	}
 }
 
 // TestDispatchLoggingSetLevelBeforeInit verifies that logging/setLevel is rejected
 // before the initialization handshake completes, consistent with MCP init gating.
 func TestDispatchLoggingSetLevelBeforeInit(t *testing.T) {
-	d := NewDispatcher(ServerInfo{Name: "test", Version: "1.0"})
-	resp := d.Dispatch(context.Background(), &Request{
+	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "logging/setLevel",
@@ -617,8 +618,8 @@ func TestDispatchLoggingSetLevelBeforeInit(t *testing.T) {
 	if resp.Error == nil {
 		t.Fatal("expected error before initialization")
 	}
-	if resp.Error.Code != ErrCodeInvalidRequest {
-		t.Errorf("error code = %d, want %d", resp.Error.Code, ErrCodeInvalidRequest)
+	if resp.Error.Code != core.ErrCodeInvalidRequest {
+		t.Errorf("error code = %d, want %d", resp.Error.Code, core.ErrCodeInvalidRequest)
 	}
 }
 
@@ -627,7 +628,7 @@ func TestDispatchLoggingSetLevelBeforeInit(t *testing.T) {
 // logging/setLevel is supported.
 func TestDispatchLoggingCapability(t *testing.T) {
 	d := testDispatcher()
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
@@ -653,20 +654,20 @@ func TestDispatchLoggingCapability(t *testing.T) {
 
 // TestDispatchToolsCallWithProgressToken verifies that when a tools/call request
 // includes _meta.progressToken, the token is extracted and populated in the
-// ToolRequest.ProgressToken field, making it available for EmitProgress calls.
+// core.ToolRequest.ProgressToken field, making it available for core.EmitProgress calls.
 func TestDispatchToolsCallWithProgressToken(t *testing.T) {
-	d := NewDispatcher(ServerInfo{Name: "test", Version: "1.0"})
+	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
 	var gotToken any
 	d.RegisterTool(
-		ToolDef{Name: "progress_tool", Description: "captures progress token"},
-		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
+		core.ToolDef{Name: "progress_tool", Description: "captures progress token"},
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
 			gotToken = req.ProgressToken
-			return TextResult("ok"), nil
+			return core.TextResult("ok"), nil
 		},
 	)
 	initDispatcher(d)
 
-	d.Dispatch(context.Background(), &Request{
+	d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "tools/call",
@@ -679,20 +680,20 @@ func TestDispatchToolsCallWithProgressToken(t *testing.T) {
 }
 
 // TestDispatchToolsCallWithoutProgressToken verifies that when _meta is absent,
-// ProgressToken remains nil, so EmitProgress is a safe no-op.
+// ProgressToken remains nil, so core.EmitProgress is a safe no-op.
 func TestDispatchToolsCallWithoutProgressToken(t *testing.T) {
-	d := NewDispatcher(ServerInfo{Name: "test", Version: "1.0"})
+	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
 	var gotToken any = "sentinel"
 	d.RegisterTool(
-		ToolDef{Name: "no_progress", Description: "no progress token"},
-		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
+		core.ToolDef{Name: "no_progress", Description: "no progress token"},
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
 			gotToken = req.ProgressToken
-			return TextResult("ok"), nil
+			return core.TextResult("ok"), nil
 		},
 	)
 	initDispatcher(d)
 
-	d.Dispatch(context.Background(), &Request{
+	d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "tools/call",
@@ -710,9 +711,9 @@ func TestDispatchToolsCallWithoutProgressToken(t *testing.T) {
 // This guards against regressions where InputSchema might be replaced with a
 // typed struct that drops unknown fields.
 func TestDispatchToolsListExtraSchemaFields(t *testing.T) {
-	d := NewDispatcher(ServerInfo{Name: "test-server", Version: "1.0.0"})
+	d := NewDispatcher(core.ServerInfo{Name: "test-server", Version: "1.0.0"})
 	d.RegisterTool(
-		ToolDef{
+		core.ToolDef{
 			Name:        "schema_extra",
 			Description: "Tool with extra JSON Schema fields",
 			InputSchema: map[string]any{
@@ -733,13 +734,13 @@ func TestDispatchToolsListExtraSchemaFields(t *testing.T) {
 				},
 			},
 		},
-		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
-			return TextResult("ok"), nil
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			return core.TextResult("ok"), nil
 		},
 	)
 	initDispatcher(d)
 
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "tools/list",
