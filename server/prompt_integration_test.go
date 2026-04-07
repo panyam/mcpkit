@@ -1,6 +1,7 @@
-package core
+package server
 
 import (
+	core "github.com/panyam/mcpkit/core"
 	"context"
 	"encoding/json"
 	"testing"
@@ -8,32 +9,32 @@ import (
 
 // testPromptDispatcher creates an initialized dispatcher with test prompts.
 func testPromptDispatcher() *Dispatcher {
-	d := NewDispatcher(ServerInfo{Name: "test", Version: "1.0"})
+	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
 	d.RegisterPrompt(
-		PromptDef{
+		core.PromptDef{
 			Name:        "greet",
 			Description: "Greeting prompt",
-			Arguments: []PromptArgument{
+			Arguments: []core.PromptArgument{
 				{Name: "name", Description: "Name to greet", Required: true},
 			},
 		},
-		func(ctx context.Context, req PromptRequest) (PromptResult, error) {
-			return PromptResult{
+		func(ctx context.Context, req core.PromptRequest) (core.PromptResult, error) {
+			return core.PromptResult{
 				Description: "Greeting",
-				Messages: []PromptMessage{{
+				Messages: []core.PromptMessage{{
 					Role:    "user",
-					Content: Content{Type: "text", Text: "Hello, " + req.Arguments["name"] + "!"},
+					Content: core.Content{Type: "text", Text: "Hello, " + req.Arguments["name"] + "!"},
 				}},
 			}, nil
 		},
 	)
 	d.RegisterPrompt(
-		PromptDef{Name: "simple", Description: "No-args prompt"},
-		func(ctx context.Context, req PromptRequest) (PromptResult, error) {
-			return PromptResult{
-				Messages: []PromptMessage{{
+		core.PromptDef{Name: "simple", Description: "No-args prompt"},
+		func(ctx context.Context, req core.PromptRequest) (core.PromptResult, error) {
+			return core.PromptResult{
+				Messages: []core.PromptMessage{{
 					Role:    "user",
-					Content: Content{Type: "text", Text: "Simple prompt text"},
+					Content: core.Content{Type: "text", Text: "Simple prompt text"},
 				}},
 			}, nil
 		},
@@ -46,14 +47,14 @@ func testPromptDispatcher() *Dispatcher {
 // in registration order.
 func TestPromptsList(t *testing.T) {
 	d := testPromptDispatcher()
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "prompts/list",
 	})
 	if resp.Error != nil {
 		t.Fatalf("error: %s", resp.Error.Message)
 	}
 	var result struct {
-		Prompts []PromptDef `json:"prompts"`
+		Prompts []core.PromptDef `json:"prompts"`
 	}
 	json.Unmarshal(resp.Result, &result)
 	if len(result.Prompts) != 2 {
@@ -67,16 +68,16 @@ func TestPromptsList(t *testing.T) {
 // TestPromptsListEmpty verifies that prompts/list returns an empty list
 // when no prompts are registered.
 func TestPromptsListEmpty(t *testing.T) {
-	d := NewDispatcher(ServerInfo{Name: "test", Version: "1.0"})
+	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
 	initDispatcher(d)
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "prompts/list",
 	})
 	if resp.Error != nil {
 		t.Fatalf("error: %s", resp.Error.Message)
 	}
 	var result struct {
-		Prompts []PromptDef `json:"prompts"`
+		Prompts []core.PromptDef `json:"prompts"`
 	}
 	json.Unmarshal(resp.Result, &result)
 	if len(result.Prompts) != 0 {
@@ -88,14 +89,14 @@ func TestPromptsListEmpty(t *testing.T) {
 // prompt without arguments.
 func TestPromptsGetSimple(t *testing.T) {
 	d := testPromptDispatcher()
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "prompts/get",
 		Params: json.RawMessage(`{"name":"simple"}`),
 	})
 	if resp.Error != nil {
 		t.Fatalf("error: %s", resp.Error.Message)
 	}
-	var result PromptResult
+	var result core.PromptResult
 	json.Unmarshal(resp.Result, &result)
 	if len(result.Messages) != 1 {
 		t.Fatalf("got %d messages, want 1", len(result.Messages))
@@ -109,14 +110,14 @@ func TestPromptsGetSimple(t *testing.T) {
 // handler and returns the interpolated result.
 func TestPromptsGetWithArgs(t *testing.T) {
 	d := testPromptDispatcher()
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "prompts/get",
 		Params: json.RawMessage(`{"name":"greet","arguments":{"name":"World"}}`),
 	})
 	if resp.Error != nil {
 		t.Fatalf("error: %s", resp.Error.Message)
 	}
-	var result PromptResult
+	var result core.PromptResult
 	json.Unmarshal(resp.Result, &result)
 	if result.Messages[0].Content.Text != "Hello, World!" {
 		t.Errorf("text = %q, want Hello, World!", result.Messages[0].Content.Text)
@@ -127,15 +128,15 @@ func TestPromptsGetWithArgs(t *testing.T) {
 // an unknown prompt name.
 func TestPromptsGetUnknown(t *testing.T) {
 	d := testPromptDispatcher()
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "prompts/get",
 		Params: json.RawMessage(`{"name":"nonexistent"}`),
 	})
 	if resp.Error == nil {
 		t.Fatal("expected error for unknown prompt")
 	}
-	if resp.Error.Code != ErrCodeInvalidParams {
-		t.Errorf("code = %d, want %d", resp.Error.Code, ErrCodeInvalidParams)
+	if resp.Error.Code != core.ErrCodeInvalidParams {
+		t.Errorf("code = %d, want %d", resp.Error.Code, core.ErrCodeInvalidParams)
 	}
 }
 
@@ -143,7 +144,7 @@ func TestPromptsGetUnknown(t *testing.T) {
 // prompts capability when prompts are registered.
 func TestPromptsCapabilities(t *testing.T) {
 	d := testPromptDispatcher()
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "initialize",
 		Params: json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
 	})

@@ -1,6 +1,7 @@
-package core
+package server
 
 import (
+	core "github.com/panyam/mcpkit/core"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -8,26 +9,26 @@ import (
 	"testing"
 )
 
-// testClaimsValidator is an AuthValidator + ClaimsProvider for testing.
+// testClaimsValidator is an core.AuthValidator + core.ClaimsProvider for testing.
 type testClaimsValidator struct {
 	validToken string
-	claims     *Claims
+	claims     *core.Claims
 }
 
 func (v *testClaimsValidator) Validate(r *http.Request) error {
 	auth := r.Header.Get("Authorization")
 	if auth != "Bearer "+v.validToken {
-		return &AuthError{Code: http.StatusUnauthorized, Message: "unauthorized"}
+		return &core.AuthError{Code: http.StatusUnauthorized, Message: "unauthorized"}
 	}
 	return nil
 }
 
-func (v *testClaimsValidator) Claims(r *http.Request) *Claims {
+func (v *testClaimsValidator) Claims(r *http.Request) *core.Claims {
 	return v.claims
 }
 
 func TestAuthClaimsFromContext(t *testing.T) {
-	claims := &Claims{
+	claims := &core.Claims{
 		Subject:  "user-123",
 		Issuer:   "https://auth.example.com",
 		Audience: []string{"https://mcp.example.com"},
@@ -35,12 +36,12 @@ func TestAuthClaimsFromContext(t *testing.T) {
 		Extra:    map[string]any{"org": "acme"},
 	}
 
-	var logLevel atomic.Pointer[LogLevel]
-	ctx := ContextWithSession(context.Background(), nil, nil, &logLevel, nil, claims)
+	var logLevel atomic.Pointer[core.LogLevel]
+	ctx := core.ContextWithSession(context.Background(), nil, nil, &logLevel, nil, claims)
 
-	got := AuthClaims(ctx)
+	got := core.AuthClaims(ctx)
 	if got == nil {
-		t.Fatal("AuthClaims returned nil")
+		t.Fatal("core.AuthClaims returned nil")
 	}
 	if got.Subject != "user-123" {
 		t.Errorf("Subject = %q, want %q", got.Subject, "user-123")
@@ -60,52 +61,52 @@ func TestAuthClaimsFromContext(t *testing.T) {
 }
 
 func TestAuthClaimsNilWithoutSession(t *testing.T) {
-	got := AuthClaims(context.Background())
+	got := core.AuthClaims(context.Background())
 	if got != nil {
-		t.Errorf("AuthClaims without session = %v, want nil", got)
+		t.Errorf("core.AuthClaims without session = %v, want nil", got)
 	}
 }
 
 func TestAuthClaimsNilWithoutAuth(t *testing.T) {
-	var logLevel atomic.Pointer[LogLevel]
-	ctx := ContextWithSession(context.Background(), nil, nil, &logLevel, nil, nil)
+	var logLevel atomic.Pointer[core.LogLevel]
+	ctx := core.ContextWithSession(context.Background(), nil, nil, &logLevel, nil, nil)
 
-	got := AuthClaims(ctx)
+	got := core.AuthClaims(ctx)
 	if got != nil {
-		t.Errorf("AuthClaims without auth = %v, want nil", got)
+		t.Errorf("core.AuthClaims without auth = %v, want nil", got)
 	}
 }
 
 func TestHasScope(t *testing.T) {
-	claims := &Claims{Scopes: []string{"tools:read", "admin:write"}}
-	var logLevel atomic.Pointer[LogLevel]
-	ctx := ContextWithSession(context.Background(), nil, nil, &logLevel, nil, claims)
+	claims := &core.Claims{Scopes: []string{"tools:read", "admin:write"}}
+	var logLevel atomic.Pointer[core.LogLevel]
+	ctx := core.ContextWithSession(context.Background(), nil, nil, &logLevel, nil, claims)
 
-	if !HasScope(ctx, "tools:read") {
-		t.Error("HasScope(tools:read) = false, want true")
+	if !core.HasScope(ctx, "tools:read") {
+		t.Error("core.HasScope(tools:read) = false, want true")
 	}
-	if !HasScope(ctx, "admin:write") {
-		t.Error("HasScope(admin:write) = false, want true")
+	if !core.HasScope(ctx, "admin:write") {
+		t.Error("core.HasScope(admin:write) = false, want true")
 	}
-	if HasScope(ctx, "admin:read") {
-		t.Error("HasScope(admin:read) = true, want false")
+	if core.HasScope(ctx, "admin:read") {
+		t.Error("core.HasScope(admin:read) = true, want false")
 	}
 }
 
 func TestHasScopeWithoutClaims(t *testing.T) {
-	if HasScope(context.Background(), "anything") {
-		t.Error("HasScope without session = true, want false")
+	if core.HasScope(context.Background(), "anything") {
+		t.Error("core.HasScope without session = true, want false")
 	}
 
-	var logLevel atomic.Pointer[LogLevel]
-	ctx := ContextWithSession(context.Background(), nil, nil, &logLevel, nil, nil)
-	if HasScope(ctx, "anything") {
-		t.Error("HasScope without claims = true, want false")
+	var logLevel atomic.Pointer[core.LogLevel]
+	ctx := core.ContextWithSession(context.Background(), nil, nil, &logLevel, nil, nil)
+	if core.HasScope(ctx, "anything") {
+		t.Error("core.HasScope without claims = true, want false")
 	}
 }
 
 func TestCheckAuthWithClaimsProvider(t *testing.T) {
-	expectedClaims := &Claims{
+	expectedClaims := &core.Claims{
 		Subject: "user-456",
 		Scopes:  []string{"read"},
 	}
@@ -114,7 +115,7 @@ func TestCheckAuthWithClaimsProvider(t *testing.T) {
 		claims:     expectedClaims,
 	}
 	srv := NewServer(
-		ServerInfo{Name: "test", Version: "0.1.0"},
+		core.ServerInfo{Name: "test", Version: "0.1.0"},
 		WithAuth(validator),
 	)
 
@@ -145,9 +146,9 @@ func TestCheckAuthWithClaimsProvider(t *testing.T) {
 }
 
 func TestCheckAuthWithoutClaimsProvider(t *testing.T) {
-	// bearerTokenValidator does NOT implement ClaimsProvider
+	// bearerTokenValidator does NOT implement core.ClaimsProvider
 	srv := NewServer(
-		ServerInfo{Name: "test", Version: "0.1.0"},
+		core.ServerInfo{Name: "test", Version: "0.1.0"},
 		WithBearerToken("secret"),
 	)
 
@@ -163,7 +164,7 @@ func TestCheckAuthWithoutClaimsProvider(t *testing.T) {
 }
 
 func TestStaticTokenSource(t *testing.T) {
-	ts := &staticTokenSource{token: "my-token"}
+	ts := &simpleTokenSource{token: "my-token"}
 	token, err := ts.Token()
 	if err != nil {
 		t.Fatalf("Token error: %v", err)
@@ -175,15 +176,15 @@ func TestStaticTokenSource(t *testing.T) {
 
 func TestExtensionRegistration(t *testing.T) {
 	ext := testExtension{
-		ext: Extension{
+		ext: core.Extension{
 			ID:          "io.test/foo",
 			SpecVersion: "2025-01-01",
-			Stability:   Experimental,
+			Stability:   core.Experimental,
 		},
 	}
 
 	srv := NewServer(
-		ServerInfo{Name: "test", Version: "0.1.0"},
+		core.ServerInfo{Name: "test", Version: "0.1.0"},
 		WithExtension(ext),
 	)
 
@@ -193,7 +194,7 @@ func TestExtensionRegistration(t *testing.T) {
 	}
 
 	// Verify initialize response includes extensions
-	resp := srv.Dispatch(context.Background(), &Request{
+	resp := srv.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      []byte(`1`),
 		Method:  "initialize",
@@ -229,18 +230,19 @@ func TestExtensionRegistration(t *testing.T) {
 	}
 }
 
+// testExtension wraps a core.Extension for testing.
 type testExtension struct {
-	ext Extension
+	ext core.Extension
 }
 
-func (e testExtension) Extension() Extension { return e.ext }
+func (e testExtension) Extension() core.Extension { return e.ext }
 
 func TestAnnotationsOnToolDef(t *testing.T) {
-	srv := NewServer(ServerInfo{Name: "test", Version: "0.1.0"})
+	srv := NewServer(core.ServerInfo{Name: "test", Version: "0.1.0"})
 	srv.RegisterExperimentalTool(
-		ToolDef{Name: "beta-tool", Description: "experimental"},
-		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
-			return TextResult("ok"), nil
+		core.ToolDef{Name: "beta-tool", Description: "experimental"},
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			return core.TextResult("ok"), nil
 		},
 	)
 
@@ -257,16 +259,20 @@ func TestAnnotationsOnToolDef(t *testing.T) {
 }
 
 func TestAuthErrorWithWWWAuthenticate(t *testing.T) {
-	err := &AuthError{
+	err := &core.AuthError{
 		Code:            401,
 		Message:         "unauthorized",
 		WWWAuthenticate: `Bearer resource_metadata="https://example.com/.well-known/oauth-protected-resource"`,
 	}
 
 	if err.Error() != "unauthorized" {
-		t.Errorf("Error() = %q, want %q", err.Error(), "unauthorized")
+		t.Errorf("core.Error() = %q, want %q", err.Error(), "unauthorized")
 	}
 	if err.WWWAuthenticate == "" {
 		t.Error("WWWAuthenticate should not be empty")
 	}
 }
+
+// simpleTokenSource is a trivial core.TokenSource for testing.
+type simpleTokenSource struct{ token string }
+func (s *simpleTokenSource) Token() (string, error) { return s.token, nil }
