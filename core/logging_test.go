@@ -227,3 +227,35 @@ func TestMarshalNotification(t *testing.T) {
 		t.Errorf("params.level = %v, want info", params["level"])
 	}
 }
+
+// TestNotifyResourcesChanged verifies that NotifyResourcesChanged sends the
+// correct JSON-RPC notification method (notifications/resources/list_changed)
+// through the session's notification channel. MCP App tool handlers call this
+// after mutating state so clients know to re-fetch resources/list.
+func TestNotifyResourcesChanged(t *testing.T) {
+	var mu sync.Mutex
+	var capturedMethod string
+
+	notify := NotifyFunc(func(method string, params any) {
+		mu.Lock()
+		capturedMethod = method
+		mu.Unlock()
+	})
+
+	ctx := ContextWithSession(context.Background(), notify, nil, nil, nil, nil)
+	NotifyResourcesChanged(ctx)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if capturedMethod != "notifications/resources/list_changed" {
+		t.Errorf("method = %q, want %q", capturedMethod, "notifications/resources/list_changed")
+	}
+}
+
+// TestNotifyResourcesChangedNoSession verifies that NotifyResourcesChanged
+// is a safe no-op when called without a session context (e.g., in tests or
+// when the handler is invoked outside of an MCP request).
+func TestNotifyResourcesChangedNoSession(t *testing.T) {
+	// Should not panic
+	NotifyResourcesChanged(context.Background())
+}
