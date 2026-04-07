@@ -33,7 +33,7 @@ testconfauth: ## Run MCP Auth conformance suite (client-side, requires mcpkit/au
 test-auth: ## Run auth sub-module tests
 	cd ext/auth && go test ./... -count=1 -timeout 30s
 
-test-auth-e2e: ## Run E2E auth tests (in-process oneauth AS, no Docker)
+test-e2e: ## Run all E2E tests (auth, apps — no Docker)
 	cd tests/e2e && go test ./... -count=1 -timeout 60s
 
 testkcl: ## Run Keycloak auth interop tests (requires Docker, run upkcl first)
@@ -67,7 +67,7 @@ testall: ## Run ALL tests (starts Keycloak if needed) + generate HTML report
 	else \
 		echo "  FAIL: auth" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); STAGES="$$STAGES auth:FAIL"; \
 	fi; \
-	echo "--- [4/7] E2E auth ---" | tee -a $(REPORT_DIR)/run.log; \
+	echo "--- [4/7] E2E (auth + apps) ---" | tee -a $(REPORT_DIR)/run.log; \
 	if (cd tests/e2e && go test ./... -count=1 -timeout 60s -v) >> $(REPORT_DIR)/run.log 2>&1; then \
 		echo "  PASS: e2e" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); STAGES="$$STAGES e2e:PASS"; \
 	else \
@@ -292,5 +292,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-race test-v test-auth test-auth-e2e testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth vet lint vulncheck seccheck secrets audit ci ci-full serve serve-streamable serve-both tidy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs help
+.PHONY: build test test-race test-v test-auth test-e2e testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth vet lint vulncheck seccheck secrets audit ci ci-full serve serve-streamable serve-both tidy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs help
 .DEFAULT_GOAL := help

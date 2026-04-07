@@ -53,5 +53,5 @@ jobs:
       - name: Run auth sub-module tests
         run: cd ext/auth && go test ./... -v
 
-      - name: Run E2E auth tests
+      - name: Run E2E tests (auth + apps)
         run: cd tests/e2e && go test ./... -v -count=1 -timeout 60s
