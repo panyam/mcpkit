@@ -85,7 +85,7 @@ See `docs/ARCHITECTURE.md` for transport design, type definitions, and protocol 
 24/30 MCP server conformance scenarios passing. Failing scenarios tracked in `conformance/baseline.yml` under `server:`.
 
 ### Auth conformance
-12/14 required MCP auth conformance scenarios passing (150/153 checks). Remaining 2 blocked on #53 (client transport 401/403 step-up handling). Run via `make testconfauth`.
+14/14 required MCP auth conformance scenarios passing (210/210 checks). 1 warning on basic-cimd (CIMD not implemented). Run via `make testconfauth`.
 
 ## What's Not Implemented Yet
 
@@ -94,4 +94,3 @@ See `docs/ARCHITECTURE.md` for transport design, type definitions, and protocol 
 - Resource subscriptions (#24)
 - Streamable HTTP GET SSE stream (server-initiated notifications without a request)
 - `DiscoverMCPAuth` PRM fetch — steps 4-5 return error "not yet implemented"
-- `cmd/testclient` auth conformance: scope-step-up and scope-retry-limit need testclient to use mcpkit Client (with retry) instead of raw HTTP

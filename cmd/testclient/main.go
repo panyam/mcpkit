@@ -336,16 +336,32 @@ func main() {
 	}
 	defer client.Close()
 
-	// Step 9: Make a tools/list call to verify the session works.
-	// For scope-step-up scenarios, the server may accept initialize without
-	// auth but return 403 on subsequent requests — the Client's doWithAuthRetry
-	// handles this via ScopeAwareTokenSource.TokenForScopes.
+	// Step 9: Verify session with tools/list, then try tools/call.
+	// The Client's doWithAuthRetry handles 401 (token refresh) and 403 (scope
+	// step-up via ScopeAwareTokenSource.TokenForScopes) automatically.
 	log.Println("Step 9: Verifying session with tools/list...")
 	tools, err := client.ListTools()
 	if err != nil {
-		log.Printf("tools/list: %v (non-fatal — server may not have tools)", err)
+		log.Printf("tools/list: %v (non-fatal)", err)
 	} else {
 		log.Printf("tools/list: %d tools available", len(tools))
+
+		// Step 10: Try calling a tool — for scope-step-up scenarios, the
+		// mock server may return 403 requiring escalated scopes. The transport
+		// retry handles this via conformanceTokenSource.TokenForScopes.
+		if len(tools) > 0 {
+			toolName := tools[0].Name
+			log.Printf("Step 10: Calling tool '%s'...", toolName)
+			_, err := client.Call("tools/call", map[string]any{
+				"name":      toolName,
+				"arguments": map[string]any{},
+			})
+			if err != nil {
+				log.Printf("tools/call '%s': %v (may be expected)", toolName, err)
+			} else {
+				log.Printf("tools/call '%s': ok", toolName)
+			}
+		}
 	}
 
 	log.Println("SUCCESS: auth flow complete")
