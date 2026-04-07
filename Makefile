@@ -39,6 +39,9 @@ test-ui: ## Run UI extension sub-module tests
 test-e2e: ## Run all E2E tests (auth, apps — no Docker)
 	cd tests/e2e && go test ./... -count=1 -timeout 60s
 
+test-apps-playwright: ## Run ext-apps Playwright tests against testserver (needs Node.js + Playwright)
+	bash scripts/apps-playwright-test.sh
+
 testkcl: ## Run Keycloak auth interop tests (requires Docker, run upkcl first)
 	cd tests/keycloak && go test ./... -count=1 -timeout 120s -v
 
@@ -271,5 +274,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-race test-v test-auth test-ui test-e2e testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth vet lint vulncheck seccheck secrets audit ci ci-full serve serve-streamable serve-both tidy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs help
+.PHONY: build test test-race test-v test-auth test-ui test-e2e test-apps-playwright testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth vet lint vulncheck seccheck secrets audit ci ci-full serve serve-streamable serve-both tidy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs help
 .DEFAULT_GOAL := help
