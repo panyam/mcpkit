@@ -18,8 +18,9 @@ make testall      # ALL tests + Keycloak + HTML report (test-reports/report.html
 make smoke        # Curl-based transport tests
 make audit        # govulncheck + gosec + gitleaks + race detection
 
-# Auth tests (ext/auth is a separate Go module)
+# Extension sub-module tests (separate Go modules)
 make test-auth        # Auth sub-module unit tests (cd ext/auth)
+make test-ui          # UI sub-module unit tests (cd ext/ui)
 make test-e2e         # All E2E tests (auth + apps, no Docker)
 make testkcl          # 7 Keycloak interop tests (needs Docker)
 make upkcl            # Start Keycloak container (with event logging)
@@ -71,6 +72,9 @@ mcpkit/
 │   ├── server_auth.go         MountAuth (PRM endpoints)
 │   ├── scopes.go              RequireScope
 │   └── docs/DESIGN.md         Auth architecture + spec compliance
+│
+├── ext/ui/                 ← Separate Go module (ext/ui/go.mod)
+│   └── extension.go          UIExtension implementing ExtensionProvider
 │
 ├── testutil/                ← Test helpers
 ├── cmd/testserver/          ← Conformance test server
