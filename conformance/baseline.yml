@@ -8,8 +8,7 @@
 # As features are implemented, remove the corresponding entries.
 
 server:
-  # Missing protocol features (not yet implemented in mcpkit)
-  - server-sse-multiple-streams # Requires GET SSE stream (Streamable HTTP phase 2)
+  # 26/30 passing. Remaining 6 are feature gaps:
 
   # Missing capabilities (subscriptions, elicitation, sampling)
   - resources-subscribe         # Issue: #24
