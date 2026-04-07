@@ -314,9 +314,10 @@ func TestStreamableDeleteNoSessionHeader(t *testing.T) {
 	}
 }
 
-// TestStreamableGetReturns405 verifies that GET requests return 405 Method Not Allowed
-// in phase 1 (server-initiated SSE notifications are future work).
-func TestStreamableGetReturns405(t *testing.T) {
+// TestStreamableGetSSE_RequiresSession verifies that GET /mcp without a
+// Mcp-Session-Id header returns 400, since the GET SSE stream only works
+// on existing sessions.
+func TestStreamableGetSSE_RequiresSession(t *testing.T) {
 	ts := testStreamableServer()
 	defer ts.Close()
 
@@ -326,8 +327,8 @@ func TestStreamableGetReturns405(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	if resp.StatusCode != http.StatusMethodNotAllowed {
-		t.Errorf("status = %d, want 405", resp.StatusCode)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400 (missing session)", resp.StatusCode)
 	}
 }
 
