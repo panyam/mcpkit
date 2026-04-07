@@ -1,7 +1,7 @@
 # MCPKit Makefile
 
 # Sub-modules that get tagged alongside the root module
-SUB_MODS_TO_TAG := ext/auth ext/ui tests/e2e tests/keycloak
+SUB_MODS_TO_TAG := ext/auth ext/ui cmd/testclient tests/e2e tests/keycloak
 
 # =============================================================================
 # Build & test
