@@ -211,7 +211,7 @@ func (c *mcpSSEConn) OnStart(w http.ResponseWriter, r *http.Request) error {
 	sessionID := c.sessionID
 	hub := c.transport.hub
 	dispatcher.notifyFunc = func(method string, params any) {
-		raw, err := marshalNotification(method, params)
+		raw, err := MarshalNotification(method, params)
 		if err != nil {
 			return
 		}

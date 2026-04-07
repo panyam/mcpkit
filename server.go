@@ -35,11 +35,6 @@ type serverOptions struct {
 	subscriptionsEnabled bool        // enable resources/subscribe and resources/unsubscribe
 }
 
-// AuthValidator validates an HTTP request and returns claims on success.
-type AuthValidator interface {
-	Validate(r *http.Request) error
-}
-
 // Option configures a Server.
 type Option func(*serverOptions)
 
@@ -210,7 +205,7 @@ func (s *Server) dispatchWithNotify(d *Dispatcher, ctx context.Context, claims *
 func (s *Server) dispatchWithNotifyAndRequest(d *Dispatcher, ctx context.Context, claims *Claims, notify NotifyFunc, request RequestFunc, req *Request) *Response {
 	// Inject session context so tool handlers can send notifications, requests,
 	// and access authenticated claims and client capabilities.
-	ctx = contextWithSession(ctx, notify, request, &d.logLevel, &d.clientCaps, claims)
+	ctx = ContextWithSession(ctx, notify, request, &d.logLevel, &d.clientCaps, claims)
 
 	// Build the terminal handler: dispatch with optional tool timeout.
 	handler := MiddlewareFunc(func(ctx context.Context, req *Request) *Response {
@@ -562,15 +557,6 @@ func (v *bearerTokenValidator) Validate(r *http.Request) error {
 }
 
 var errUnauthorized = &AuthError{Code: http.StatusUnauthorized, Message: "unauthorized"}
-
-// AuthError is returned when authentication fails.
-type AuthError struct {
-	Code            int
-	Message         string
-	WWWAuthenticate string // optional WWW-Authenticate header value
-}
-
-func (e *AuthError) Error() string { return e.Message }
 
 // --- Resource Subscriptions ---
 

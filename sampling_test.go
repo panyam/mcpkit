@@ -38,7 +38,7 @@ func TestSampleNotSupported(t *testing.T) {
 		t.Fatal("request func should not be called")
 		return nil, nil
 	})
-	ctx := contextWithSession(context.Background(), nil, request, &logLevel, caps, nil)
+	ctx := ContextWithSession(context.Background(), nil, request, &logLevel, caps, nil)
 
 	_, err := Sample(ctx, CreateMessageRequest{
 		Messages:  []SamplingMessage{{Role: "user", Content: Content{Type: "text", Text: "test"}}},
