@@ -80,9 +80,11 @@ type ctxKey int
 
 const sessionCtxKey ctxKey = iota
 
-// contextWithSession returns a context carrying the session's notification state,
+// ContextWithSession returns a context carrying the session's notification state,
 // request sender, client capabilities, and authenticated claims.
-func contextWithSession(ctx context.Context, notify NotifyFunc, request RequestFunc, logLevel *atomic.Pointer[LogLevel], clientCaps *ClientCapabilities, claims *Claims) context.Context {
+// Exported for use by the server sub-package; tool handlers should use
+// EmitLog, Sample, Elicit, AuthClaims instead.
+func ContextWithSession(ctx context.Context, notify NotifyFunc, request RequestFunc, logLevel *atomic.Pointer[LogLevel], clientCaps *ClientCapabilities, claims *Claims) context.Context {
 	return context.WithValue(ctx, sessionCtxKey, &sessionCtx{
 		notify:     notify,
 		request:    request,
@@ -143,8 +145,9 @@ func Notify(ctx context.Context, method string, params any) bool {
 	return true
 }
 
-// marshalNotification builds a JSON-RPC notification (no id field).
-func marshalNotification(method string, params any) (json.RawMessage, error) {
+// MarshalNotification builds a JSON-RPC notification (no id field).
+// Exported for use by the server transport sub-package.
+func MarshalNotification(method string, params any) (json.RawMessage, error) {
 	notification := struct {
 		JSONRPC string `json:"jsonrpc"`
 		Method  string `json:"method"`
