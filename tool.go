@@ -15,6 +15,9 @@ type ToolDef struct {
 
 	// InputSchema is the JSON Schema for the tool's arguments.
 	// Typically a map[string]any with "type": "object", "properties": {...}, "required": [...].
+	// Arbitrary JSON Schema fields (e.g. "$schema", "$defs", "$ref",
+	// "additionalProperties") are preserved as-is through registration,
+	// serialization, and client-side deserialization.
 	InputSchema any `json:"inputSchema"`
 
 	// OutputSchema is an optional JSON Schema for the tool's structuredContent output.
