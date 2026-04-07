@@ -65,166 +65,113 @@ Standard `WWW-Authenticate: Bearer` is defined in RFC 6750. MCP adds a non-stand
 
 ### Flow A: Server-side JWT validation (every authenticated request)
 
-```
-Client                    Transport Layer              CheckAuth            JWTValidator (mcpkit/auth)        oneauth
-  │                           │                           │                        │                           │
-  │  POST /mcp               │                           │                        │                           │
-  │  Authorization: Bearer <jwt>                         │                        │                           │
-  │ ─────────────────────────>│                           │                        │                           │
-  │                           │  CheckAuth(r)             │                        │                           │
-  │                           │──────────────────────────>│                        │                           │
-  │                           │                           │  Validate(r)           │                           │
-  │                           │                           │───────────────────────>│                           │
-  │                           │                           │                        │  jwt.Parse(jwt, jwksKeyFunc)
-  │                           │                           │                        │──────────────────────────>│
-  │                           │                           │                        │  JWKS kid lookup → verify │
-  │                           │                           │                        │<──────────────────────────│
-  │                           │                           │                        │  ✓ sig, iss, aud, exp     │
-  │                           │                           │                        │  check RequiredScopes     │
-  │                           │                           │                        │  (core.ContainsAllScopes) │
-  │                           │                           │  nil (success)         │                           │
-  │                           │                           │<───────────────────────│                           │
-  │                           │                           │  Claims(r)             │                           │
-  │                           │                           │───────────────────────>│                           │
-  │                           │                           │  *Claims{Sub,Iss,Aud,Scopes}                      │
-  │                           │                           │<───────────────────────│                           │
-  │                           │  (*Claims, nil)           │                        │                           │
-  │                           │<──────────────────────────│                        │                           │
-  │                           │                           │                        │                           │
-  │                           │  contextWithSession(ctx, notify, logLevel, claims) │                           │
-  │                           │  dispatchWith(dispatcher, ctx, req)                │                           │
-  │                           │                           │                        │                           │
-  │                           │  Tool handler can call:   │                        │                           │
-  │                           │  mcpkit.AuthClaims(ctx) → *Claims                  │                           │
-  │                           │  mcpkit.HasScope(ctx, "admin:write") → bool        │                           │
-  │                           │  auth.RequireScope(ctx, "admin:write") → error     │                           │
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant T as Transport Layer
+    participant CA as CheckAuth
+    participant JV as JWTValidator (mcpkit/auth)
+    participant OA as oneauth
+
+    C->>T: POST /mcp, Authorization: Bearer jwt
+    T->>CA: CheckAuth(r)
+    CA->>JV: Validate(r)
+    JV->>OA: jwt.Parse(jwt, jwksKeyFunc)
+    OA-->>JV: JWKS kid lookup, verify
+    Note right of JV: sig, iss, aud, exp OK<br/>check RequiredScopes<br/>(core.ContainsAllScopes)
+    JV-->>CA: nil (success)
+    CA->>JV: Claims(r)
+    JV-->>CA: *Claims [Sub, Iss, Aud, Scopes]
+    CA-->>T: (*Claims, nil)
+    Note over T: contextWithSession(ctx, notify, logLevel, claims)<br/>dispatchWith(dispatcher, ctx, req)
+    Note over T: Tool handler can call:<br/>mcpkit.AuthClaims(ctx)<br/>mcpkit.HasScope(ctx, "admin:write")<br/>auth.RequireScope(ctx, "admin:write")
 ```
 
 ### Flow B: Auth failure with WWW-Authenticate (401)
 
-```
-Client                    Transport Layer              CheckAuth            JWTValidator
-  │                           │                           │                        │
-  │  POST /mcp (no token)     │                           │                        │
-  │ ─────────────────────────>│                           │                        │
-  │                           │  CheckAuth(r)             │                        │
-  │                           │──────────────────────────>│                        │
-  │                           │                           │  Validate(r)           │
-  │                           │                           │───────────────────────>│
-  │                           │                           │  *AuthError{           │
-  │                           │                           │    Code: 401,          │
-  │                           │                           │    WWWAuthenticate:     │
-  │                           │                           │      Bearer resource_metadata="https://mcp.example.com
-  │                           │                           │        /.well-known/oauth-protected-resource/mcp"
-  │                           │                           │  }                     │
-  │                           │                           │<───────────────────────│
-  │                           │  (nil, *AuthError)        │                        │
-  │                           │<──────────────────────────│                        │
-  │                           │                           │                        │
-  │                           │  writeAuthError(w, err)   │                        │
-  │                           │  → w.Header("WWW-Authenticate", ...)              │
-  │                           │  → http.Error(w, 401)     │                        │
-  │                           │                           │                        │
-  │  HTTP 401                 │                           │                        │
-  │  WWW-Authenticate: Bearer resource_metadata="..."     │                        │
-  │<──────────────────────────│                           │                        │
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant T as Transport Layer
+    participant CA as CheckAuth
+    participant JV as JWTValidator
+
+    C->>T: POST /mcp (no token)
+    T->>CA: CheckAuth(r)
+    CA->>JV: Validate(r)
+    JV-->>CA: *AuthError (Code:401, WWWAuthenticate:<br/>Bearer resource_metadata=".../.well-known/oauth-protected-resource/mcp")
+    CA-->>T: (nil, *AuthError)
+    Note over T: writeAuthError(w, err)<br/>Set WWW-Authenticate header<br/>http.Error(w, 401)
+    T-->>C: HTTP 401<br/>WWW-Authenticate: Bearer resource_metadata="..."
 ```
 
 ### Flow C: Client-side OAuth (OAuthTokenSource, interactive)
 
-```
-MCP Client         OAuthTokenSource (mcpkit/auth)           oneauth                    External AS
-  │                        │                                    │                           │
-  │  Token()               │                                    │                           │
-  │───────────────────────>│                                    │                           │
-  │                        │  (no cached token)                 │                           │
-  │                        │                                    │                           │
-  │                        │  DiscoverMCPAuth(serverURL)        │                           │
-  │                        │  ┌──────────────────────────┐      │                           │
-  │                        │  │ 1. GET server → 401      │      │                           │
-  │                        │  │ 2. Parse WWW-Authenticate│      │                           │
-  │                        │  │    → resource_metadata URL│     │                           │
-  │                        │  │ 3. GET PRM document       │     │                           │
-  │                        │  │    → authorization_servers│     │                           │
-  │                        │  └──────────────────────────┘      │                           │
-  │                        │                                    │                           │
-  │                        │  client.DiscoverAS(issuerURL)      │                           │
-  │                        │───────────────────────────────────>│                           │
-  │                        │                                    │  GET /.well-known/oauth-authorization-server
-  │                        │                                    │──────────────────────────>│
-  │                        │                                    │  {token_endpoint, authorization_endpoint, ...}
-  │                        │                                    │<──────────────────────────│
-  │                        │  ASMetadata                        │                           │
-  │                        │<───────────────────────────────────│                           │
-  │                        │                                    │                           │
-  │                        │  authClient.LoginWithBrowser(cfg)  │                           │
-  │                        │───────────────────────────────────>│                           │
-  │                        │                                    │  1. Generate PKCE verifier│
-  │                        │                                    │  2. Start localhost:PORT  │
-  │                        │                                    │  3. Open browser → AS /authorize
-  │                        │                                    │  ─────────────────────────>
-  │                        │                                    │  4. User authenticates    │
-  │                        │                                    │  5. AS redirects → localhost:PORT/callback?code=XYZ
-  │                        │                                    │  <─────────────────────────
-  │                        │                                    │  6. POST /token (code + code_verifier + resource)
-  │                        │                                    │──────────────────────────>│
-  │                        │                                    │  {access_token, refresh_token}
-  │                        │                                    │<──────────────────────────│
-  │                        │  ServerCredential                  │                           │
-  │                        │<───────────────────────────────────│                           │
-  │                        │                                    │                           │
-  │  "Bearer <access_token>"                                    │                           │
-  │<───────────────────────│                                    │                           │
-  │                        │                                    │                           │
-  │  (subsequent calls: returns cached token, refreshes if expired)                        │
+```mermaid
+sequenceDiagram
+    participant MC as MCP Client
+    participant OTS as OAuthTokenSource (mcpkit/auth)
+    participant OA as oneauth
+    participant AS as External AS
+
+    MC->>OTS: Token()
+    Note right of OTS: no cached token
+
+    rect rgb(240, 240, 255)
+        Note over OTS: DiscoverMCPAuth(serverURL)
+        Note over OTS: 1. GET server -> 401<br/>2. Parse WWW-Authenticate -> resource_metadata URL<br/>3. GET PRM document -> authorization_servers
+    end
+
+    OTS->>OA: client.DiscoverAS(issuerURL)
+    OA->>AS: GET /.well-known/oauth-authorization-server
+    AS-->>OA: token_endpoint, authorization_endpoint, ...
+    OA-->>OTS: ASMetadata
+
+    OTS->>OA: authClient.LoginWithBrowser(cfg)
+    Note right of OA: 1. Generate PKCE verifier<br/>2. Start localhost:PORT<br/>3. Open browser to AS /authorize
+    OA->>AS: Browser redirect to /authorize
+    Note right of AS: 4. User authenticates
+    AS-->>OA: Redirect to localhost:PORT/callback?code=XYZ
+    OA->>AS: POST /token (code + code_verifier + resource)
+    AS-->>OA: access_token, refresh_token
+    OA-->>OTS: ServerCredential
+
+    OTS-->>MC: "Bearer access_token"
+    Note over MC,OTS: Subsequent calls: cached token,<br/>refreshes if expired
 ```
 
 ### Flow D: Client Credentials (ClientCredentialsSource, machine-to-machine)
 
-```
-MCP Agent          ClientCredSource (mcpkit/auth)            oneauth                    External AS
-  │                        │                                    │                           │
-  │  Token()               │                                    │                           │
-  │───────────────────────>│                                    │                           │
-  │                        │  authClient.ClientCredentialsToken(id, secret, scopes)        │
-  │                        │───────────────────────────────────>│                           │
-  │                        │                                    │  POST /token              │
-  │                        │                                    │  grant_type=client_credentials
-  │                        │                                    │  client_id=...            │
-  │                        │                                    │  client_secret=...        │
-  │                        │                                    │  scope=...                │
-  │                        │                                    │──────────────────────────>│
-  │                        │                                    │  {access_token, expires_in}│
-  │                        │                                    │<──────────────────────────│
-  │                        │  ServerCredential                  │                           │
-  │                        │<───────────────────────────────────│                           │
-  │  "Bearer <token>"      │                                    │                           │
-  │<───────────────────────│                                    │                           │
+```mermaid
+sequenceDiagram
+    participant A as MCP Agent
+    participant CS as ClientCredSource (mcpkit/auth)
+    participant OA as oneauth
+    participant AS as External AS
+
+    A->>CS: Token()
+    CS->>OA: authClient.ClientCredentialsToken(id, secret, scopes)
+    OA->>AS: POST /token<br/>grant_type=client_credentials<br/>client_id=..., client_secret=..., scope=...
+    AS-->>OA: access_token, expires_in
+    OA-->>CS: ServerCredential
+    CS-->>A: "Bearer token"
 ```
 
 ### Flow E: Scope step-up (403 → re-auth with broader scopes)
 
-```
-Client                    MCP Server                     Tool Handler
-  │                           │                              │
-  │  tools/call "admin-tool"  │                              │
-  │  Authorization: Bearer <token with scope=read>           │
-  │ ─────────────────────────>│                              │
-  │                           │  CheckAuth ✓ (token valid)   │
-  │                           │  dispatch → handler          │
-  │                           │─────────────────────────────>│
-  │                           │                              │  auth.RequireScope(ctx, "admin:write")
-  │                           │                              │  → HasScope(ctx, "admin:write") = false
-  │                           │                              │  → return *AuthError{Code:403,
-  │                           │                              │      WWWAuthenticate: Bearer error="insufficient_scope",
-  │                           │                              │        scope="admin:write"}
-  │                           │  ErrorResult("insufficient_scope: admin:write")
-  │                           │<─────────────────────────────│
-  │  JSON-RPC result with isError:true                       │
-  │<──────────────────────────│                              │
-  │                           │                              │
-  │  (client re-authenticates with scope=read+admin:write)   │
-  │  (retry request with new broader-scoped token)           │
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant S as MCP Server
+    participant TH as Tool Handler
+
+    C->>S: tools/call "admin-tool"<br/>Authorization: Bearer (scope=read)
+    Note right of S: CheckAuth OK (token valid)
+    S->>TH: dispatch to handler
+    Note right of TH: auth.RequireScope(ctx, "admin:write")<br/>HasScope(ctx, "admin:write") = false
+    TH-->>S: *AuthError (Code:403, WWWAuthenticate:<br/>Bearer error="insufficient_scope", scope="admin:write")
+    S-->>C: JSON-RPC result with isError:true<br/>ErrorResult("insufficient_scope: admin:write")
+    Note left of C: Client re-authenticates with<br/>scope=read+admin:write<br/>Retries with broader-scoped token
 ```
 
 ## Extension and Experimental Marking
