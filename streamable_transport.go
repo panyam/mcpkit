@@ -400,9 +400,7 @@ func (t *streamableTransport) handleDelete(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
 	}
-	if disp := d.(*Dispatcher); disp.subManager != nil {
-		disp.subManager.unsubscribeAll(sessionID)
-	}
+	d.(*Dispatcher).Close()
 
 	w.WriteHeader(http.StatusOK)
 }
@@ -411,9 +409,7 @@ func (t *streamableTransport) handleDelete(w http.ResponseWriter, r *http.Reques
 func (t *streamableTransport) closeSession(id string) bool {
 	d, ok := t.sessions.LoadAndDelete(id)
 	if ok {
-		if disp := d.(*Dispatcher); disp.subManager != nil {
-			disp.subManager.unsubscribeAll(id)
-		}
+		d.(*Dispatcher).Close()
 	}
 	return ok
 }
@@ -421,9 +417,7 @@ func (t *streamableTransport) closeSession(id string) bool {
 // closeAllSessions terminates all active sessions.
 func (t *streamableTransport) closeAllSessions() {
 	t.sessions.Range(func(key, value any) bool {
-		if disp := value.(*Dispatcher); disp.subManager != nil {
-			disp.subManager.unsubscribeAll(key.(string))
-		}
+		value.(*Dispatcher).Close()
 		t.sessions.Delete(key)
 		return true
 	})
