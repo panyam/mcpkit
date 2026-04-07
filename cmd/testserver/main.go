@@ -35,6 +35,7 @@ func main() {
 		server.WithListen(listenAddr()),
 		server.WithToolTimeout(30*time.Second),
 		server.WithSubscriptions(),
+		server.WithExtension(testUIExtension{}),
 	)
 	// Enable HTTP-level request logging if VERBOSE is set
 	if os.Getenv("VERBOSE") == "1" {
@@ -118,6 +119,7 @@ func main() {
 	registerConformanceTools(srv)
 	registerConformanceResources(srv)
 	registerConformancePrompts(srv)
+	registerConformanceApps(srv)
 
 	var transportOpts []server.TransportOption
 	switch {
