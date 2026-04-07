@@ -59,6 +59,42 @@ func newTestMCPServer() *server.Server {
 		},
 	)
 
+	// Tool with _meta for extension metadata wire tests
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "ui_tool",
+			Description: "Tool with _meta.ui",
+			InputSchema: map[string]any{"type": "object"},
+			Meta: &core.ToolMeta{
+				UI: &core.UIMetadata{
+					ResourceUri: "ui://test/view",
+					Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
+				},
+			},
+		},
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			return core.TextResult("ui ok"), nil
+		},
+	)
+
+	// Resource with _meta for extension metadata wire tests
+	srv.RegisterResource(
+		core.ResourceDef{URI: "ui://test/view", Name: "Test App", MimeType: core.AppMIMEType},
+		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+			return core.ResourceResult{Contents: []core.ResourceReadContent{{
+				URI:      req.URI,
+				MimeType: core.AppMIMEType,
+				Text:     "<html><body>app</body></html>",
+				Meta: &core.ResourceContentMeta{
+					UI: &core.UIMetadata{
+						ResourceUri: "ui://test/view",
+						Permissions: []string{"clipboard-write"},
+					},
+				},
+			}}}, nil
+		},
+	)
+
 	return srv
 }
 
@@ -223,8 +259,12 @@ func TestClientListResources(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListResources: %v", err)
 		}
-		if len(resources) != 1 || resources[0].URI != "test://info" {
-			t.Errorf("resources = %v, want [test://info]", resources)
+		uris := make(map[string]bool)
+		for _, r := range resources {
+			uris[r.URI] = true
+		}
+		if !uris["test://info"] || !uris["ui://test/view"] {
+			t.Errorf("resources = %v, want test://info and ui://test/view", uris)
 		}
 	})
 }
@@ -239,6 +279,86 @@ func TestClientListResourceTemplates(t *testing.T) {
 		}
 		if len(templates) != 1 || templates[0].URITemplate != "test://items/{id}" {
 			t.Errorf("templates = %v", templates)
+		}
+	})
+}
+
+// TestClientListToolsMeta verifies that _meta on ToolDef survives the full
+// wire path (server → transport → client) across all 3 transports. The _meta
+// mechanism is how MCP extensions attach metadata to tools; this test ensures
+// the plumbing works end-to-end regardless of transport serialization.
+func TestClientListToolsMeta(t *testing.T) {
+	forAllTransports(t, func(t *testing.T, c *client.Client) {
+		tools, err := c.ListTools()
+		if err != nil {
+			t.Fatalf("ListTools: %v", err)
+		}
+
+		// Find the ui_tool and verify _meta.ui survived the wire
+		var uiTool *core.ToolDef
+		for i := range tools {
+			if tools[i].Name == "ui_tool" {
+				uiTool = &tools[i]
+				break
+			}
+		}
+		if uiTool == nil {
+			t.Fatal("ui_tool not found in tools/list response")
+		}
+		if uiTool.Meta == nil {
+			t.Fatal("ui_tool: Meta is nil — _meta lost in transport")
+		}
+		if uiTool.Meta.UI == nil {
+			t.Fatal("ui_tool: Meta.UI is nil")
+		}
+		if uiTool.Meta.UI.ResourceUri != "ui://test/view" {
+			t.Errorf("resourceUri = %q, want %q", uiTool.Meta.UI.ResourceUri, "ui://test/view")
+		}
+		if len(uiTool.Meta.UI.Visibility) != 2 {
+			t.Errorf("visibility length = %d, want 2", len(uiTool.Meta.UI.Visibility))
+		}
+
+		// Verify echo tool does NOT have _meta
+		for _, tool := range tools {
+			if tool.Name == "echo" && tool.Meta != nil {
+				t.Error("echo tool should not have _meta")
+			}
+		}
+	})
+}
+
+// TestClientReadResourceMeta verifies that _meta on ResourceReadContent survives
+// the full wire path across all 3 transports. Uses the raw Call method since
+// ReadResource only returns text content. Per-content _meta is how extensions
+// attach metadata to individual resource items in resources/read responses.
+func TestClientReadResourceMeta(t *testing.T) {
+	forAllTransports(t, func(t *testing.T, c *client.Client) {
+		result, err := c.Call("resources/read", map[string]string{"uri": "ui://test/view"})
+		if err != nil {
+			t.Fatalf("Call: %v", err)
+		}
+		var resp core.ResourceResult
+		if err := result.Unmarshal(&resp); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if len(resp.Contents) != 1 {
+			t.Fatalf("got %d contents, want 1", len(resp.Contents))
+		}
+		content := resp.Contents[0]
+		if content.MimeType != core.AppMIMEType {
+			t.Errorf("mimeType = %q, want %q", content.MimeType, core.AppMIMEType)
+		}
+		if content.Meta == nil {
+			t.Fatal("Meta is nil — _meta lost in transport")
+		}
+		if content.Meta.UI == nil {
+			t.Fatal("Meta.UI is nil")
+		}
+		if content.Meta.UI.ResourceUri != "ui://test/view" {
+			t.Errorf("resourceUri = %q, want %q", content.Meta.UI.ResourceUri, "ui://test/view")
+		}
+		if len(content.Meta.UI.Permissions) != 1 || content.Meta.UI.Permissions[0] != "clipboard-write" {
+			t.Errorf("permissions = %v, want [clipboard-write]", content.Meta.UI.Permissions)
 		}
 	})
 }
