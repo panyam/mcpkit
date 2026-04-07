@@ -148,10 +148,21 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 	}
 	dispatcher := dispVal.(*Dispatcher)
 
-	// Validate MCP-Protocol-Version if present
+	// Validate MCP-Protocol-Version if present.
+	// Per spec: "If the server receives a request with an invalid or unsupported
+	// MCP-Protocol-Version, it MUST respond with 400 Bad Request."
+	// We accept any supported version (not just the negotiated one) because
+	// some clients may send a different supported version than was negotiated.
 	if protoVer := r.Header.Get(mcpProtocolVersionHeader); protoVer != "" {
-		if negotiated := dispatcher.NegotiatedVersion(); negotiated != "" && protoVer != negotiated {
-			http.Error(w, "protocol version mismatch", http.StatusBadRequest)
+		supported := false
+		for _, sv := range supportedProtocolVersions {
+			if protoVer == sv {
+				supported = true
+				break
+			}
+		}
+		if !supported {
+			http.Error(w, "unsupported protocol version: "+protoVer, http.StatusBadRequest)
 			return
 		}
 	}
@@ -430,32 +441,30 @@ func (t *streamableTransport) sessionCount() int {
 //
 //	Accept has ONLY text/event-stream  → SSE for all requests (client's sole option)
 //	Accept has ONLY application/json   → JSON always (no mid-request streaming possible)
-//	Accept has BOTH                    → method-dependent:
-//	  tools/call, prompts/get          → SSE (may emit progress/log notifications mid-execution)
-//	  everything else                  → JSON (pure request-response, no streaming needed)
+//	Accept has BOTH                    → SSE (server prefers streaming for all request types)
 //	Notifications                      → never SSE (no response expected)
 //
-// Why not always JSON when both are accepted? Tool handlers call EmitProgress/EmitLog
-// mid-execution. These notifications must reach the client *during* execution (e.g., for
-// progress bars), not buffered until after the response. SSE is the only way to deliver
-// them in real time over HTTP.
+// Per MCP spec: the server MUST return either text/event-stream or application/json.
+// When the client accepts both, we prefer SSE because it enables mid-request
+// notifications (progress, logging) and supports multiple concurrent streams
+// (conformance requirement: server-sse-multiple-streams).
 func shouldStreamSSE(accept string, req *Request) bool {
 	if req.IsNotification() {
 		return false
 	}
 
-	acceptsJSON, acceptsSSE := parseAcceptTypes(accept)
-
+	_, acceptsSSE := parseAcceptTypes(accept)
 	if !acceptsSSE {
 		return false
 	}
-	if !acceptsJSON {
-		// Client only accepts SSE — use it for everything
-		return true
+
+	// Never stream SSE for initialize — the handshake must return JSON
+	// so the client can parse the session ID and server capabilities.
+	if req.Method == "initialize" {
+		return false
 	}
-	// Client accepts both — SSE only for methods that may emit mid-request
-	// notifications (progress, logging). All other methods use synchronous JSON.
-	return req.Method == "tools/call" || req.Method == "prompts/get"
+
+	return true
 }
 
 // parseAcceptTypes parses the Accept header into a set of accepted media types.
