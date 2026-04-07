@@ -51,42 +51,51 @@ MCPKit is a Go library for building production-grade MCP (Model Context Protocol
 ```
 mcpkit/                          # module: github.com/panyam/mcpkit
 ├── go.mod                       # servicekit v0.0.14
-├── dispatch.go                  # Dispatcher: JSON-RPC routing, version negotiation, init gating, logging, completion, resources/subscribe, resources/unsubscribe
-├── logging.go                   # LogLevel, LogMessage, NotifyFunc, EmitLog, context helpers
-├── progress.go                  # ProgressNotification, EmitProgress
-├── completion.go                # CompletionRef, CompletionArgument, CompletionResult, CompletionHandler
-├── auth.go                      # Claims, ClaimsProvider, TokenSource, Extension, Stability, ExtensionProvider
-├── server.go                    # Server, options, Handler(), ListenAndServe(), CheckAuth, writeAuthError, subscriptionRegistry, NotifyResourceUpdated
-├── tool.go                      # ToolDef (with Annotations), ToolRequest, ToolResult, Content, ToolHandler
-├── resource.go                  # ResourceDef, ResourceTemplate, ResourceHandler, ResourceUpdatedNotification types
-├── prompt.go                    # PromptDef (with Annotations), PromptArgument, PromptHandler types
-├── pagination.go                # Generic cursor-based pagination helper
-├── jsonrpc.go                   # JSON-RPC 2.0 Request/Response/Error types
-├── transport.go                 # SSE transport (sseTransport, mcpSSEConn, SSEData)
-├── streamable_transport.go      # Streamable HTTP transport (streamableTransport)
-├── Makefile                     # test, testconf, smoke, audit, serve, ci targets
-├── cmd/testserver/              # Minimal MCP server for testing
-│   ├── main.go                  # echo, add, fail tools + transport selection
-│   ├── conformance_tools.go     # Tools expected by MCP conformance suite
-│   ├── conformance_resources.go # Resources + templates for conformance
-│   └── conformance_prompts.go   # Prompts for conformance
-├── conformance/
-│   └── baseline.yml             # Expected failures: 0 server + 1 auth (with warning)
-├── scripts/
-│   ├── smoke-test.sh            # Curl-based tests for SSE + Streamable HTTP
-│   ├── conformance-test.sh      # Runs @modelcontextprotocol/conformance (server)
-│   └── conformance-auth-test.sh # Runs auth conformance suite (client)
-├── docs/
-│   ├── ARCHITECTURE.md          # This file
-│   ├── AUTH_DESIGN.md           # Auth architecture, sequence diagrams, spec compliance
-│   └── GATEWAY_DESIGN.md       # MCP Gateway design for proxying HTTP/gRPC backends
-├── client.go                    # MCP client: Connect, ToolCall, ReadResource, SubscribeResource, UnsubscribeResource, WithClientBearerToken
-├── testutil/testclient.go       # TestClient wrapper for e2e testing
-├── auth/                        # SEPARATE module (github.com/panyam/mcpkit/auth)
+├── core/                        # Protocol types + tool-handler APIs
+│   ├── jsonrpc.go               # Request, Response, Error, ErrCode*
+│   ├── tool.go                  # ToolDef, ToolRequest, ToolResult, Content, ToolHandler
+│   ├── resource.go              # ResourceDef, ResourceTemplate, ResourceHandler
+│   ├── prompt.go                # PromptDef, PromptHandler
+│   ├── completion.go            # CompletionHandler, CompletionRef, CompletionResult
+│   ├── auth.go                  # Claims, TokenSource, AuthValidator, AuthError, Extension
+│   ├── logging.go               # LogLevel, NotifyFunc, EmitLog, ContextWithSession
+│   ├── progress.go              # EmitProgress
+│   ├── sampling.go              # CreateMessageRequest/Result, Sample()
+│   ├── elicitation.go           # ElicitationRequest/Result, Elicit()
+│   ├── request.go               # RequestFunc, ErrNoRequestFunc
+│   ├── protocol.go              # ServerInfo, ClientInfo, ClientCapabilities
+│   ├── interfaces.go            # Transport, ServerRequestHandler, NotificationHandler
+│   └── www_authenticate.go      # ParseWWWAuthenticate
+├── server/                      # Server + Dispatcher + transports
+│   ├── server.go                # Server, NewServer, options, Handler(), Run()
+│   ├── dispatch.go              # Dispatcher, routing, handlers, subscriptions
+│   ├── transport.go             # SSE server transport
+│   ├── streamable_transport.go  # Streamable HTTP transport
+│   ├── memory_transport.go      # InProcessTransport (core.Transport)
+│   ├── request.go               # sendServerRequest, routeServerResponse
+│   ├── middleware.go            # Middleware, LoggingMiddleware
+│   └── pagination.go            # cursor-based pagination
+├── client/                      # Client + HTTP transports
+│   ├── client.go                # Client, NewClient, Connect, ToolCall, WithTransport
+│   ├── client_logging.go        # loggingTransport, WithClientLogging
+│   └── client_reconnect.go      # WithMaxRetries, WithReconnectBackoff
+├── ext/auth/                    # SEPARATE module (github.com/panyam/mcpkit/ext/auth)
 │   ├── go.mod                   # depends on mcpkit + oneauth v0.0.64
-│   ├── jwt_validator.go         # JWTValidator (jwt.Parse + JWKS keyfunc)
-│   ├── server_auth.go           # MountAuth (PRM endpoint via oneauth)
-│   ├── www_authenticate.go      # MCP-specific WWW-Authenticate builders
+│   ├── discovery.go             # DiscoverMCPAuth (PRM + AS metadata)
+│   ├── token_source.go          # OAuthTokenSource, ClientCredentialsSource
+│   ├── dcr.go                   # RegisterClient (RFC 7591)
+│   ├── jwt_validator.go         # JWTValidator (JWKS-based)
+│   ├── server_auth.go           # MountAuth (PRM endpoints)
+│   ├── scopes.go                # RequireScope
+│   └── docs/DESIGN.md           # Auth architecture, spec compliance
+├── testutil/testclient.go       # TestClient wrapper for e2e testing
+├── cmd/testserver/              # Conformance test server
+├── cmd/testclient/              # Headless OAuth conformance client
+├── conformance/baseline.yml     # Expected failures: 0 server + 1 auth (warning)
+├── scripts/                     # smoke-test.sh, conformance-test.sh
+├── docs/                        # ARCHITECTURE.md, APPS_DESIGN.md, GATEWAY_DESIGN.md
+├── tests/e2e/                   # E2E auth tests (separate Go module)
+└── tests/keycloak/              # Keycloak interop tests (separate Go module)
 │   ├── scopes.go                # RequireScope for tool handlers
 │   ├── token_source.go          # OAuthTokenSource, ClientCredentialsSource
 │   └── discovery.go             # DiscoverMCPAuth (MCP discovery orchestration)
