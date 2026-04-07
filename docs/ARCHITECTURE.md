@@ -214,6 +214,20 @@ Clients can subscribe to resource URIs and receive `notifications/resources/upda
 
 **Session cleanup:** All per-session teardown is centralized in `Dispatcher.Close()`. Transports call it in their disconnect path (SSE `OnClose`, Streamable `handleDelete`/`closeSession`, memory `close`). New per-session state should add its cleanup to `Close()` — not to each transport individually.
 
+## Notification Delivery Order Guarantees
+
+Notifications emitted during a tool call (logging, progress) are delivered to the client **before** the tool result. The ordering guarantee is per-transport:
+
+| Transport | Guarantee | Mechanism |
+|-----------|-----------|-----------|
+| **Streamable HTTP** (SSE streaming) | Notifications arrive on the **same POST response stream** as the tool result, in emission order, before the result. | `handlePostSSE` creates a request-scoped `requestNotify` closure. Notifications and the final response share a mutex-protected `writeSSE` function. The response is written last. |
+| **SSE** | Notifications arrive on the shared SSE stream in emission order. The background reader delivers them to `notifyHandler` before routing the response to the pending call channel. | Single `backgroundReader` goroutine processes events sequentially: notification delivery completes before the response is sent to the blocked `call()`. |
+| **In-memory** | Fully synchronous — notifications are delivered inline during `call()`, before the response is returned. | `dispatchWithNotifyAndRequest` calls `notifyFunc` synchronously within the tool handler. |
+
+**Cross-request isolation (Streamable HTTP):** Each POST gets its own `requestNotify` closure. Notifications from concurrent tool calls never leak to other requests' response streams.
+
+**Client-side delivery:** `WithNotificationHandler(fn)` works across all three transports. The handler receives `(method string, params any)` where params is always `map[string]any` (JSON-roundtripped for consistency, including in-memory).
+
 ## Tool Error Semantics
 
 - **Handler returns `error`** → JSON-RPC success with `isError: true` in tool result
