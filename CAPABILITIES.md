@@ -24,7 +24,8 @@
 - mcp-pagination: Generic cursor-based pagination for all list methods
 - mcp-cancellation: notifications/cancelled with inflight request tracking and context cancellation
 - mcp-logging: logging/setLevel + notifications/message via EmitLog() with per-session atomic log level
-- mcp-streamable-sse-streaming: Streamable HTTP POST returns SSE stream when Accept: text/event-stream, enabling mid-request notifications
+- mcp-streamable-sse-streaming: Streamable HTTP POST returns SSE stream when Accept: text/event-stream, enabling mid-request notifications with delivery order guarantees
+- mcp-notification-ordering: Client receives notifications (logging, progress) before tool results across all transports; WithNotificationHandler works on Streamable HTTP, SSE, and in-memory
 - mcp-progress: notifications/progress via EmitProgress() with _meta.progressToken
 - mcp-completion: completion/complete for argument autocompletion
 - mcp-dns-rebinding-protection: Origin header validation on Streamable HTTP (WithAllowedOrigins)
