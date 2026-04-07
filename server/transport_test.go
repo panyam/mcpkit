@@ -1,6 +1,7 @@
 package server
 
 import (
+	core "github.com/panyam/mcpkit/core"
 	"bufio"
 	"bytes"
 	"context"
@@ -52,9 +53,9 @@ func readSSEEvent(r *bufio.Reader) (sseEvent, error) {
 
 // testMCPServer creates an httptest.Server with an MCP server that has an echo tool.
 func testMCPServer(opts ...TransportOption) (*httptest.Server, *Server) {
-	srv := NewServer(ServerInfo{Name: "test-sse", Version: "0.1.0"})
+	srv := NewServer(core.ServerInfo{Name: "test-sse", Version: "0.1.0"})
 	srv.RegisterTool(
-		ToolDef{
+		core.ToolDef{
 			Name:        "echo",
 			Description: "Echoes the input",
 			InputSchema: map[string]any{
@@ -64,12 +65,12 @@ func testMCPServer(opts ...TransportOption) (*httptest.Server, *Server) {
 				},
 			},
 		},
-		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
 			var args struct {
 				Message string `json:"message"`
 			}
 			req.Bind(&args)
-			return TextResult("echo: " + args.Message), nil
+			return core.TextResult("echo: " + args.Message), nil
 		},
 	)
 	handler := srv.Handler(opts...)
@@ -167,7 +168,7 @@ func TestSSEInitAndToolCall(t *testing.T) {
 	reader := bufio.NewReader(sseResp.Body)
 
 	// Initialize
-	resp, err := postJSON(postURL, &Request{
+	resp, err := postJSON(postURL, &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
@@ -189,7 +190,7 @@ func TestSSEInitAndToolCall(t *testing.T) {
 	if ev.Event != "message" {
 		t.Fatalf("expected message event, got %q", ev.Event)
 	}
-	var initResp Response
+	var initResp core.Response
 	if err := json.Unmarshal([]byte(ev.Data), &initResp); err != nil {
 		t.Fatalf("unmarshal init response: %v", err)
 	}
@@ -198,7 +199,7 @@ func TestSSEInitAndToolCall(t *testing.T) {
 	}
 
 	// Send notifications/initialized
-	resp, err = postJSON(postURL, &Request{
+	resp, err = postJSON(postURL, &core.Request{
 		JSONRPC: "2.0",
 		Method:  "notifications/initialized",
 	})
@@ -211,7 +212,7 @@ func TestSSEInitAndToolCall(t *testing.T) {
 	resp.Body.Close()
 
 	// Call tool
-	resp, err = postJSON(postURL, &Request{
+	resp, err = postJSON(postURL, &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`2`),
 		Method:  "tools/call",
@@ -233,14 +234,14 @@ func TestSSEInitAndToolCall(t *testing.T) {
 	if ev.Event != "message" {
 		t.Fatalf("expected message event, got %q", ev.Event)
 	}
-	var toolResp Response
+	var toolResp core.Response
 	if err := json.Unmarshal([]byte(ev.Data), &toolResp); err != nil {
 		t.Fatalf("unmarshal tool response: %v", err)
 	}
 	if toolResp.Error != nil {
 		t.Fatalf("tool error: %s", toolResp.Error.Message)
 	}
-	var result ToolResult
+	var result core.ToolResult
 	if err := json.Unmarshal(toolResp.Result, &result); err != nil {
 		t.Fatal(err)
 	}
@@ -254,7 +255,7 @@ func TestSSESessionNotFound(t *testing.T) {
 	ts, _ := testMCPServer()
 	defer ts.Close()
 
-	resp, err := postJSON(ts.URL+"/mcp/message?sessionId=nonexistent", &Request{
+	resp, err := postJSON(ts.URL+"/mcp/message?sessionId=nonexistent", &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "ping",
@@ -270,7 +271,7 @@ func TestSSESessionNotFound(t *testing.T) {
 }
 
 // TestSSENotification verifies that POSTing a JSON-RPC notification (no ID) returns
-// HTTP 204 No Content, since notifications have no response to push on the SSE stream.
+// HTTP 204 No core.Content, since notifications have no response to push on the SSE stream.
 func TestSSENotification(t *testing.T) {
 	ts, _ := testMCPServer()
 	defer ts.Close()
@@ -282,7 +283,7 @@ func TestSSENotification(t *testing.T) {
 	defer sseResp.Body.Close()
 
 	// Send initialize first (required before notifications/initialized)
-	resp, err := postJSON(postURL, &Request{
+	resp, err := postJSON(postURL, &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
@@ -294,7 +295,7 @@ func TestSSENotification(t *testing.T) {
 	resp.Body.Close()
 
 	// Send notification (no ID = notification)
-	resp, err = postJSON(postURL, &Request{
+	resp, err = postJSON(postURL, &core.Request{
 		JSONRPC: "2.0",
 		Method:  "notifications/initialized",
 	})
@@ -312,13 +313,13 @@ func TestSSENotification(t *testing.T) {
 // both the SSE GET endpoint and POST message endpoint require auth.
 func TestSSEAuthRequired(t *testing.T) {
 	srv := NewServer(
-		ServerInfo{Name: "test", Version: "0.1.0"},
+		core.ServerInfo{Name: "test", Version: "0.1.0"},
 		WithBearerToken("secret"),
 	)
 	srv.RegisterTool(
-		ToolDef{Name: "echo", Description: "echo"},
-		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
-			return TextResult("ok"), nil
+		core.ToolDef{Name: "echo", Description: "echo"},
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			return core.TextResult("ok"), nil
 		},
 	)
 	ts := httptest.NewServer(srv.Handler())
@@ -343,7 +344,7 @@ func TestSSEAuthRequired(t *testing.T) {
 	defer sseResp.Body.Close()
 
 	// POST without auth should return 401
-	noAuthResp, err := postJSON(postURL, &Request{
+	noAuthResp, err := postJSON(postURL, &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "ping",
@@ -401,7 +402,7 @@ func TestSSEClientDisconnect(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// POST should now get 410
-	resp, err := postJSON(postURL, &Request{
+	resp, err := postJSON(postURL, &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "ping",
@@ -447,15 +448,15 @@ func TestSSEParseError(t *testing.T) {
 	if ev.Event != "message" {
 		t.Fatalf("expected message event, got %q", ev.Event)
 	}
-	var errResp Response
+	var errResp core.Response
 	if err := json.Unmarshal([]byte(ev.Data), &errResp); err != nil {
 		t.Fatal(err)
 	}
 	if errResp.Error == nil {
 		t.Fatal("expected JSON-RPC error")
 	}
-	if errResp.Error.Code != ErrCodeParse {
-		t.Errorf("error code = %d, want %d", errResp.Error.Code, ErrCodeParse)
+	if errResp.Error.Code != core.ErrCodeParse {
+		t.Errorf("error code = %d, want %d", errResp.Error.Code, core.ErrCodeParse)
 	}
 }
 
@@ -496,23 +497,23 @@ func TestSSEPublicURL(t *testing.T) {
 // TestSSELoggingNotification verifies the full MCP logging lifecycle over SSE:
 // 1. Connect SSE and complete the init handshake
 // 2. Set log level via logging/setLevel
-// 3. Call a tool that emits a log notification via EmitLog
+// 3. Call a tool that emits a log notification via core.EmitLog
 // 4. Verify the notifications/message event arrives on the SSE stream before the tool result
 //
-// This exercises the complete notification pipeline: EmitLog → NotifyFunc → hub.SendEvent → SSE stream.
+// This exercises the complete notification pipeline: core.EmitLog → core.NotifyFunc → hub.SendEvent → SSE stream.
 func TestSSELoggingNotification(t *testing.T) {
-	srv := NewServer(ServerInfo{Name: "test-logging", Version: "0.1.0"})
+	srv := NewServer(core.ServerInfo{Name: "test-logging", Version: "0.1.0"})
 
 	// Register a tool that emits a log notification
 	srv.RegisterTool(
-		ToolDef{
+		core.ToolDef{
 			Name:        "log_emitter",
 			Description: "Emits a log notification then returns a result",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
-			EmitLog(ctx, LogInfo, "test-logger", "hello from tool")
-			return TextResult("done"), nil
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			core.EmitLog(ctx, core.LogInfo, "test-logger", "hello from tool")
+			return core.TextResult("done"), nil
 		},
 	)
 
@@ -528,7 +529,7 @@ func TestSSELoggingNotification(t *testing.T) {
 	reader := bufio.NewReader(sseResp.Body)
 
 	// Initialize
-	resp, err := postJSON(postURL, &Request{
+	resp, err := postJSON(postURL, &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
@@ -544,7 +545,7 @@ func TestSSELoggingNotification(t *testing.T) {
 	}
 
 	// Send notifications/initialized
-	resp, err = postJSON(postURL, &Request{
+	resp, err = postJSON(postURL, &core.Request{
 		JSONRPC: "2.0",
 		Method:  "notifications/initialized",
 	})
@@ -554,7 +555,7 @@ func TestSSELoggingNotification(t *testing.T) {
 	resp.Body.Close()
 
 	// Set log level to debug (accept everything)
-	resp, err = postJSON(postURL, &Request{
+	resp, err = postJSON(postURL, &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`2`),
 		Method:  "logging/setLevel",
@@ -570,7 +571,7 @@ func TestSSELoggingNotification(t *testing.T) {
 	}
 
 	// Call the tool that emits a log
-	resp, err = postJSON(postURL, &Request{
+	resp, err = postJSON(postURL, &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`3`),
 		Method:  "tools/call",
@@ -613,7 +614,7 @@ func TestSSELoggingNotification(t *testing.T) {
 	var notif struct {
 		JSONRPC string     `json:"jsonrpc"`
 		Method  string     `json:"method"`
-		Params  LogMessage `json:"params"`
+		Params  core.LogMessage `json:"params"`
 	}
 	if err := json.Unmarshal([]byte(logNotification.Data), &notif); err != nil {
 		t.Fatalf("unmarshal notification: %v", err)
@@ -632,7 +633,7 @@ func TestSSELoggingNotification(t *testing.T) {
 	}
 
 	// Verify the tool result
-	var toolResp Response
+	var toolResp core.Response
 	if err := json.Unmarshal([]byte(toolResult.Data), &toolResp); err != nil {
 		t.Fatalf("unmarshal tool response: %v", err)
 	}
@@ -645,17 +646,17 @@ func TestSSELoggingNotification(t *testing.T) {
 // when the message level is below the session's minimum. The tool emits a debug
 // message but the session level is set to error, so no notification should arrive.
 func TestSSELoggingFilteredByLevel(t *testing.T) {
-	srv := NewServer(ServerInfo{Name: "test-filter", Version: "0.1.0"})
+	srv := NewServer(core.ServerInfo{Name: "test-filter", Version: "0.1.0"})
 
 	srv.RegisterTool(
-		ToolDef{
+		core.ToolDef{
 			Name:        "debug_logger",
 			Description: "Emits a debug log",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
-			EmitLog(ctx, LogDebug, "test", "debug msg")
-			return TextResult("ok"), nil
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			core.EmitLog(ctx, core.LogDebug, "test", "debug msg")
+			return core.TextResult("ok"), nil
 		},
 	)
 
@@ -670,18 +671,18 @@ func TestSSELoggingFilteredByLevel(t *testing.T) {
 	reader := bufio.NewReader(sseResp.Body)
 
 	// Init handshake
-	resp, _ := postJSON(postURL, &Request{
+	resp, _ := postJSON(postURL, &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "initialize",
 		Params: json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
 	})
 	resp.Body.Close()
 	readSSEEvent(reader) // consume init response
 
-	resp, _ = postJSON(postURL, &Request{JSONRPC: "2.0", Method: "notifications/initialized"})
+	resp, _ = postJSON(postURL, &core.Request{JSONRPC: "2.0", Method: "notifications/initialized"})
 	resp.Body.Close()
 
 	// Set level to error (high threshold)
-	resp, _ = postJSON(postURL, &Request{
+	resp, _ = postJSON(postURL, &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`2`), Method: "logging/setLevel",
 		Params: json.RawMessage(`{"level":"error"}`),
 	})
@@ -689,7 +690,7 @@ func TestSSELoggingFilteredByLevel(t *testing.T) {
 	readSSEEvent(reader) // consume setLevel response
 
 	// Call tool that emits debug (should be filtered)
-	resp, _ = postJSON(postURL, &Request{
+	resp, _ = postJSON(postURL, &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`3`), Method: "tools/call",
 		Params: json.RawMessage(`{"name":"debug_logger","arguments":{}}`),
 	})
@@ -716,24 +717,24 @@ func TestSSELoggingFilteredByLevel(t *testing.T) {
 
 // TestSSEProgressNotification verifies the full MCP progress notification lifecycle over SSE:
 // 1. Connect SSE and complete the init handshake
-// 2. Call a tool with _meta.progressToken that emits progress notifications via EmitProgress
+// 2. Call a tool with _meta.progressToken that emits progress notifications via core.EmitProgress
 // 3. Verify notifications/progress events arrive on the SSE stream with the correct token
 //
-// This exercises: _meta.progressToken extraction → EmitProgress → NotifyFunc → hub.SendEvent → SSE stream.
+// This exercises: _meta.progressToken extraction → core.EmitProgress → core.NotifyFunc → hub.SendEvent → SSE stream.
 func TestSSEProgressNotification(t *testing.T) {
-	srv := NewServer(ServerInfo{Name: "test-progress", Version: "0.1.0"})
+	srv := NewServer(core.ServerInfo{Name: "test-progress", Version: "0.1.0"})
 
 	srv.RegisterTool(
-		ToolDef{
+		core.ToolDef{
 			Name:        "progress_tool",
 			Description: "Emits progress notifications then returns a result",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
-			EmitProgress(ctx, req.ProgressToken, 0, 100, "start")
-			EmitProgress(ctx, req.ProgressToken, 50, 100, "mid")
-			EmitProgress(ctx, req.ProgressToken, 100, 100, "done")
-			return TextResult("complete"), nil
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			core.EmitProgress(ctx, req.ProgressToken, 0, 100, "start")
+			core.EmitProgress(ctx, req.ProgressToken, 50, 100, "mid")
+			core.EmitProgress(ctx, req.ProgressToken, 100, 100, "done")
+			return core.TextResult("complete"), nil
 		},
 	)
 
@@ -748,25 +749,25 @@ func TestSSEProgressNotification(t *testing.T) {
 	reader := bufio.NewReader(sseResp.Body)
 
 	// Initialize
-	resp, _ := postJSON(postURL, &Request{
+	resp, _ := postJSON(postURL, &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "initialize",
 		Params: json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
 	})
 	resp.Body.Close()
 	readSSEEvent(reader)
 
-	resp, _ = postJSON(postURL, &Request{JSONRPC: "2.0", Method: "notifications/initialized"})
+	resp, _ = postJSON(postURL, &core.Request{JSONRPC: "2.0", Method: "notifications/initialized"})
 	resp.Body.Close()
 
 	// Call tool with progress token
-	resp, _ = postJSON(postURL, &Request{
+	resp, _ = postJSON(postURL, &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`2`), Method: "tools/call",
 		Params: json.RawMessage(`{"name":"progress_tool","arguments":{},"_meta":{"progressToken":"test-token"}}`),
 	})
 	resp.Body.Close()
 
 	// Read 4 events: 3 progress notifications + 1 tool result
-	var notifications []ProgressNotification
+	var notifications []core.ProgressNotification
 	var toolResult *sseEvent
 	for i := 0; i < 4; i++ {
 		ev, err := readSSEEvent(reader)
@@ -784,7 +785,7 @@ func TestSSEProgressNotification(t *testing.T) {
 			json.Unmarshal(methodRaw, &method)
 			if method == "notifications/progress" {
 				var notif struct {
-					Params ProgressNotification `json:"params"`
+					Params core.ProgressNotification `json:"params"`
 				}
 				json.Unmarshal([]byte(ev.Data), &notif)
 				notifications = append(notifications, notif.Params)

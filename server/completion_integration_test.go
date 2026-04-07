@@ -1,18 +1,19 @@
-package core
+package server
 
 import (
+	core "github.com/panyam/mcpkit/core"
 	"context"
 	"encoding/json"
 	"testing"
 )
 
 // TestCompletionComplete verifies that completion/complete dispatches to a registered
-// CompletionHandler and returns the handler's suggestions wrapped in a "completion" object.
+// core.CompletionHandler and returns the handler's suggestions wrapped in a "completion" object.
 // This is the happy path for argument autocompletion.
 func TestCompletionComplete(t *testing.T) {
-	d := NewDispatcher(ServerInfo{Name: "test", Version: "1.0"})
-	d.RegisterCompletion("ref/prompt", "my-prompt", func(ctx context.Context, ref CompletionRef, arg CompletionArgument) (CompletionResult, error) {
-		return CompletionResult{
+	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
+	d.RegisterCompletion("ref/prompt", "my-prompt", func(ctx context.Context, ref core.CompletionRef, arg core.CompletionArgument) (core.CompletionResult, error) {
+		return core.CompletionResult{
 			Values:  []string{"val1", "val2"},
 			Total:   2,
 			HasMore: false,
@@ -20,7 +21,7 @@ func TestCompletionComplete(t *testing.T) {
 	})
 	initDispatcher(d)
 
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "completion/complete",
@@ -35,7 +36,7 @@ func TestCompletionComplete(t *testing.T) {
 	}
 
 	var result struct {
-		Completion CompletionResult `json:"completion"`
+		Completion core.CompletionResult `json:"completion"`
 	}
 	if err := json.Unmarshal(resp.Result, &result); err != nil {
 		t.Fatal(err)
@@ -49,13 +50,13 @@ func TestCompletionComplete(t *testing.T) {
 }
 
 // TestCompletionCompleteNoHandler verifies that completion/complete returns an empty
-// result (not an error) when no CompletionHandler is registered for the requested ref.
+// result (not an error) when no core.CompletionHandler is registered for the requested ref.
 // This allows clients to always try completion without needing to check capabilities first.
 func TestCompletionCompleteNoHandler(t *testing.T) {
-	d := NewDispatcher(ServerInfo{Name: "test", Version: "1.0"})
+	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
 	initDispatcher(d)
 
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "completion/complete",
@@ -70,7 +71,7 @@ func TestCompletionCompleteNoHandler(t *testing.T) {
 	}
 
 	var result struct {
-		Completion CompletionResult `json:"completion"`
+		Completion core.CompletionResult `json:"completion"`
 	}
 	if err := json.Unmarshal(resp.Result, &result); err != nil {
 		t.Fatal(err)
@@ -86,9 +87,9 @@ func TestCompletionCompleteNoHandler(t *testing.T) {
 // TestCompletionCompleteBeforeInit verifies that completion/complete is rejected
 // before the initialization handshake completes, consistent with MCP init gating.
 func TestCompletionCompleteBeforeInit(t *testing.T) {
-	d := NewDispatcher(ServerInfo{Name: "test", Version: "1.0"})
+	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
 
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "completion/complete",
@@ -101,8 +102,8 @@ func TestCompletionCompleteBeforeInit(t *testing.T) {
 	if resp.Error == nil {
 		t.Fatal("expected error before init")
 	}
-	if resp.Error.Code != ErrCodeInvalidRequest {
-		t.Errorf("error code = %d, want %d", resp.Error.Code, ErrCodeInvalidRequest)
+	if resp.Error.Code != core.ErrCodeInvalidRequest {
+		t.Errorf("error code = %d, want %d", resp.Error.Code, core.ErrCodeInvalidRequest)
 	}
 }
 
@@ -110,10 +111,10 @@ func TestCompletionCompleteBeforeInit(t *testing.T) {
 // capability in the initialize response. Clients check this to know whether
 // completion/complete is supported.
 func TestCompletionCapability(t *testing.T) {
-	d := NewDispatcher(ServerInfo{Name: "test", Version: "1.0"})
+	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
 	initDispatcher(d)
 
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
@@ -133,13 +134,13 @@ func TestCompletionCapability(t *testing.T) {
 // TestCompletionCompleteResourceRef verifies that completion/complete works with
 // "ref/resource" references (URI-based) in addition to "ref/prompt" references.
 func TestCompletionCompleteResourceRef(t *testing.T) {
-	d := NewDispatcher(ServerInfo{Name: "test", Version: "1.0"})
-	d.RegisterCompletion("ref/resource", "file:///{path}", func(ctx context.Context, ref CompletionRef, arg CompletionArgument) (CompletionResult, error) {
-		return CompletionResult{Values: []string{"/etc", "/usr"}, HasMore: false}, nil
+	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
+	d.RegisterCompletion("ref/resource", "file:///{path}", func(ctx context.Context, ref core.CompletionRef, arg core.CompletionArgument) (core.CompletionResult, error) {
+		return core.CompletionResult{Values: []string{"/etc", "/usr"}, HasMore: false}, nil
 	})
 	initDispatcher(d)
 
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "completion/complete",
@@ -151,7 +152,7 @@ func TestCompletionCompleteResourceRef(t *testing.T) {
 	}
 
 	var result struct {
-		Completion CompletionResult `json:"completion"`
+		Completion core.CompletionResult `json:"completion"`
 	}
 	json.Unmarshal(resp.Result, &result)
 	if len(result.Completion.Values) != 2 {
@@ -162,10 +163,10 @@ func TestCompletionCompleteResourceRef(t *testing.T) {
 // TestCompletionCompleteBadParams verifies that completion/complete returns an
 // invalid params error when the request body cannot be parsed.
 func TestCompletionCompleteBadParams(t *testing.T) {
-	d := NewDispatcher(ServerInfo{Name: "test", Version: "1.0"})
+	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
 	initDispatcher(d)
 
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "completion/complete",
@@ -175,7 +176,7 @@ func TestCompletionCompleteBadParams(t *testing.T) {
 	if resp.Error == nil {
 		t.Fatal("expected error for bad params")
 	}
-	if resp.Error.Code != ErrCodeInvalidParams {
-		t.Errorf("error code = %d, want %d", resp.Error.Code, ErrCodeInvalidParams)
+	if resp.Error.Code != core.ErrCodeInvalidParams {
+		t.Errorf("error code = %d, want %d", resp.Error.Code, core.ErrCodeInvalidParams)
 	}
 }

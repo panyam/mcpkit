@@ -1,6 +1,7 @@
 package server
 
 import (
+	core "github.com/panyam/mcpkit/core"
 	"bufio"
 	"bytes"
 	"context"
@@ -15,9 +16,9 @@ import (
 // testStreamableServer creates an httptest.Server with a Streamable HTTP MCP server
 // that has an echo tool. Returns the server and its base URL.
 func testStreamableServer(opts ...TransportOption) *httptest.Server {
-	srv := NewServer(ServerInfo{Name: "test-streamable", Version: "0.1.0"})
+	srv := NewServer(core.ServerInfo{Name: "test-streamable", Version: "0.1.0"})
 	srv.RegisterTool(
-		ToolDef{
+		core.ToolDef{
 			Name:        "echo",
 			Description: "Echoes the input",
 			InputSchema: map[string]any{
@@ -27,12 +28,12 @@ func testStreamableServer(opts ...TransportOption) *httptest.Server {
 				},
 			},
 		},
-		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
 			var args struct {
 				Message string `json:"message"`
 			}
 			req.Bind(&args)
-			return TextResult("echo: " + args.Message), nil
+			return core.TextResult("echo: " + args.Message), nil
 		},
 	)
 	allOpts := append([]TransportOption{WithStreamableHTTP(true), WithSSE(false)}, opts...)
@@ -49,7 +50,7 @@ func testStreamableServer(opts ...TransportOption) *httptest.Server {
 func streamablePost(url, sessionID string, body any) (*http.Response, error) {
 	raw, _ := json.Marshal(body)
 	req, _ := http.NewRequest(http.MethodPost, url, bytes.NewReader(raw))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("core.Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	if sessionID != "" {
 		req.Header.Set(mcpSessionIDHeader, sessionID)
@@ -60,7 +61,7 @@ func streamablePost(url, sessionID string, body any) (*http.Response, error) {
 // streamableInit performs the initialize handshake and returns the session ID.
 func streamableInit(t *testing.T, url string) string {
 	t.Helper()
-	resp, err := streamablePost(url+"/mcp", "", &Request{
+	resp, err := streamablePost(url+"/mcp", "", &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
@@ -82,7 +83,7 @@ func streamableInit(t *testing.T, url string) string {
 	}
 
 	// Send initialized notification
-	resp2, err := streamablePost(url+"/mcp", sessionID, &Request{
+	resp2, err := streamablePost(url+"/mcp", sessionID, &core.Request{
 		JSONRPC: "2.0",
 		Method:  "notifications/initialized",
 	})
@@ -107,7 +108,7 @@ func TestStreamableInitAndToolCall(t *testing.T) {
 	sessionID := streamableInit(t, ts.URL)
 
 	// Call tool
-	resp, err := streamablePost(ts.URL+"/mcp", sessionID, &Request{
+	resp, err := streamablePost(ts.URL+"/mcp", sessionID, &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`2`),
 		Method:  "tools/call",
@@ -122,7 +123,7 @@ func TestStreamableInitAndToolCall(t *testing.T) {
 		t.Fatalf("tools/call status = %d, want 200", resp.StatusCode)
 	}
 
-	var rpcResp Response
+	var rpcResp core.Response
 	if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -130,7 +131,7 @@ func TestStreamableInitAndToolCall(t *testing.T) {
 		t.Fatalf("JSON-RPC error: %s", rpcResp.Error.Message)
 	}
 
-	var result ToolResult
+	var result core.ToolResult
 	json.Unmarshal(rpcResp.Result, &result)
 	if len(result.Content) == 0 || result.Content[0].Text != "echo: hello" {
 		t.Errorf("tool result = %+v, want echo: hello", result)
@@ -143,7 +144,7 @@ func TestStreamableInitReturnsSessionID(t *testing.T) {
 	ts := testStreamableServer()
 	defer ts.Close()
 
-	resp, err := streamablePost(ts.URL+"/mcp", "", &Request{
+	resp, err := streamablePost(ts.URL+"/mcp", "", &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
@@ -163,7 +164,7 @@ func TestStreamableInitReturnsSessionID(t *testing.T) {
 	}
 
 	// Verify response is valid JSON-RPC
-	var rpcResp Response
+	var rpcResp core.Response
 	json.NewDecoder(resp.Body).Decode(&rpcResp)
 	if rpcResp.Error != nil {
 		t.Fatalf("init error: %s", rpcResp.Error.Message)
@@ -176,12 +177,12 @@ func TestStreamableInitReturnsSessionID(t *testing.T) {
 }
 
 // TestStreamableMissingSessionID verifies that non-initialize POST requests
-// without a Mcp-Session-Id header return 400 Bad Request.
+// without a Mcp-Session-Id header return 400 Bad core.Request.
 func TestStreamableMissingSessionID(t *testing.T) {
 	ts := testStreamableServer()
 	defer ts.Close()
 
-	resp, err := streamablePost(ts.URL+"/mcp", "", &Request{
+	resp, err := streamablePost(ts.URL+"/mcp", "", &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "tools/list",
@@ -202,7 +203,7 @@ func TestStreamableUnknownSessionID(t *testing.T) {
 	ts := testStreamableServer()
 	defer ts.Close()
 
-	resp, err := streamablePost(ts.URL+"/mcp", "nonexistent-session-id", &Request{
+	resp, err := streamablePost(ts.URL+"/mcp", "nonexistent-session-id", &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "tools/list",
@@ -225,7 +226,7 @@ func TestStreamableNotification(t *testing.T) {
 
 	sessionID := streamableInit(t, ts.URL)
 
-	resp, err := streamablePost(ts.URL+"/mcp", sessionID, &Request{
+	resp, err := streamablePost(ts.URL+"/mcp", sessionID, &core.Request{
 		JSONRPC: "2.0",
 		Method:  "notifications/initialized",
 	})
@@ -262,7 +263,7 @@ func TestStreamableDeleteSession(t *testing.T) {
 	}
 
 	// Subsequent POST should get 404
-	resp2, err := streamablePost(ts.URL+"/mcp", sessionID, &Request{
+	resp2, err := streamablePost(ts.URL+"/mcp", sessionID, &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "ping",
@@ -297,7 +298,7 @@ func TestStreamableDeleteMissingSession(t *testing.T) {
 }
 
 // TestStreamableDeleteNoSessionHeader verifies that DELETE without a
-// Mcp-Session-Id header returns 400 Bad Request.
+// Mcp-Session-Id header returns 400 Bad core.Request.
 func TestStreamableDeleteNoSessionHeader(t *testing.T) {
 	ts := testStreamableServer()
 	defer ts.Close()
@@ -331,9 +332,9 @@ func TestStreamableGetSSE_OpensStream(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("status = %d, want 200", resp.StatusCode)
 	}
-	ct := resp.Header.Get("Content-Type")
+	ct := resp.Header.Get("core.Content-Type")
 	if !strings.Contains(ct, "text/event-stream") {
-		t.Errorf("Content-Type = %q, want text/event-stream", ct)
+		t.Errorf("core.Content-Type = %q, want text/event-stream", ct)
 	}
 }
 
@@ -346,7 +347,7 @@ func TestStreamableParseError(t *testing.T) {
 	sessionID := streamableInit(t, ts.URL)
 
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", strings.NewReader("not json"))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("core.Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set(mcpSessionIDHeader, sessionID)
 	resp, err := http.DefaultClient.Do(req)
@@ -355,15 +356,15 @@ func TestStreamableParseError(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	var rpcResp Response
+	var rpcResp core.Response
 	if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if rpcResp.Error == nil {
 		t.Fatal("expected JSON-RPC error")
 	}
-	if rpcResp.Error.Code != ErrCodeParse {
-		t.Errorf("error code = %d, want %d", rpcResp.Error.Code, ErrCodeParse)
+	if rpcResp.Error.Code != core.ErrCodeParse {
+		t.Errorf("error code = %d, want %d", rpcResp.Error.Code, core.ErrCodeParse)
 	}
 }
 
@@ -371,19 +372,19 @@ func TestStreamableParseError(t *testing.T) {
 // POST requests without an Authorization header return 401 Unauthorized.
 func TestStreamableAuthRequired(t *testing.T) {
 	srv := NewServer(
-		ServerInfo{Name: "test", Version: "0.1.0"},
+		core.ServerInfo{Name: "test", Version: "0.1.0"},
 		WithBearerToken("secret"),
 	)
 	srv.RegisterTool(
-		ToolDef{Name: "echo", Description: "echo"},
-		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
-			return TextResult("ok"), nil
+		core.ToolDef{Name: "echo", Description: "echo"},
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			return core.TextResult("ok"), nil
 		},
 	)
 	ts := httptest.NewServer(srv.Handler(WithStreamableHTTP(true), WithSSE(false)))
 	defer ts.Close()
 
-	resp, err := streamablePost(ts.URL+"/mcp", "", &Request{
+	resp, err := streamablePost(ts.URL+"/mcp", "", &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
@@ -409,7 +410,7 @@ func TestStreamableMaxSessions(t *testing.T) {
 	_ = streamableInit(t, ts.URL)
 
 	// Second should fail
-	resp, err := streamablePost(ts.URL+"/mcp", "", &Request{
+	resp, err := streamablePost(ts.URL+"/mcp", "", &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
@@ -434,14 +435,14 @@ func TestStreamableProtocolVersionHeader(t *testing.T) {
 
 	sessionID := streamableInit(t, ts.URL)
 
-	// Request with wrong protocol version → 400
-	raw, _ := json.Marshal(&Request{
+	// core.Request with wrong protocol version → 400
+	raw, _ := json.Marshal(&core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "ping",
 	})
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(raw))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("core.Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set(mcpSessionIDHeader, sessionID)
 	req.Header.Set(mcpProtocolVersionHeader, "1999-01-01")
@@ -456,9 +457,9 @@ func TestStreamableProtocolVersionHeader(t *testing.T) {
 		t.Errorf("wrong version status = %d, want 400", resp.StatusCode)
 	}
 
-	// Request with correct protocol version → 200
+	// core.Request with correct protocol version → 200
 	req2, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(raw))
-	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("core.Content-Type", "application/json")
 	req2.Header.Set("Accept", "application/json, text/event-stream")
 	req2.Header.Set(mcpSessionIDHeader, sessionID)
 	req2.Header.Set(mcpProtocolVersionHeader, "2024-11-05")
@@ -480,7 +481,7 @@ func TestStreamableCustomPrefix(t *testing.T) {
 	ts := testStreamableServer(WithPrefix("/custom"))
 	defer ts.Close()
 
-	resp, err := streamablePost(ts.URL+"/custom", "", &Request{
+	resp, err := streamablePost(ts.URL+"/custom", "", &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
@@ -502,19 +503,19 @@ func TestStreamableCustomPrefix(t *testing.T) {
 // testStreamableServerWithLogging creates a test server that has a tool which emits
 // log notifications during execution, for testing SSE streaming responses.
 func testStreamableServerWithLogging(opts ...TransportOption) *httptest.Server {
-	srv := NewServer(ServerInfo{Name: "test-streamable-sse", Version: "0.1.0"})
+	srv := NewServer(core.ServerInfo{Name: "test-streamable-sse", Version: "0.1.0"})
 	srv.RegisterTool(
-		ToolDef{Name: "echo", Description: "Echoes input", InputSchema: map[string]any{"type": "object"}},
-		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
-			return TextResult("ok"), nil
+		core.ToolDef{Name: "echo", Description: "Echoes input", InputSchema: map[string]any{"type": "object"}},
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			return core.TextResult("ok"), nil
 		},
 	)
 	srv.RegisterTool(
-		ToolDef{Name: "log_tool", Description: "Emits logs", InputSchema: map[string]any{"type": "object"}},
-		func(ctx context.Context, req ToolRequest) (ToolResult, error) {
-			EmitLog(ctx, LogInfo, "test", "step one")
-			EmitLog(ctx, LogInfo, "test", "step two")
-			return TextResult("done"), nil
+		core.ToolDef{Name: "log_tool", Description: "Emits logs", InputSchema: map[string]any{"type": "object"}},
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			core.EmitLog(ctx, core.LogInfo, "test", "step one")
+			core.EmitLog(ctx, core.LogInfo, "test", "step two")
+			return core.TextResult("done"), nil
 		},
 	)
 	allOpts := append([]TransportOption{WithStreamableHTTP(true), WithSSE(false)}, opts...)
@@ -527,7 +528,7 @@ func streamableInitWithLogging(t *testing.T, url string) string {
 	sessionID := streamableInit(t, url)
 
 	// Enable logging at debug level
-	resp, err := streamablePost(url+"/mcp", sessionID, &Request{
+	resp, err := streamablePost(url+"/mcp", sessionID, &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`99`),
 		Method:  "logging/setLevel",
@@ -548,7 +549,7 @@ func streamableInitWithLogging(t *testing.T, url string) string {
 func streamablePostSSE(url, sessionID string, body any) (*http.Response, error) {
 	raw, _ := json.Marshal(body)
 	req, _ := http.NewRequest(http.MethodPost, url, bytes.NewReader(raw))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("core.Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	if sessionID != "" {
 		req.Header.Set(mcpSessionIDHeader, sessionID)
@@ -589,7 +590,7 @@ func TestStreamableSSEResponse(t *testing.T) {
 
 	sessionID := streamableInitWithLogging(t, ts.URL)
 
-	resp, err := streamablePostSSE(ts.URL+"/mcp", sessionID, &Request{
+	resp, err := streamablePostSSE(ts.URL+"/mcp", sessionID, &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "tools/call",
@@ -600,8 +601,8 @@ func TestStreamableSSEResponse(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
-		t.Fatalf("Content-Type = %q, want text/event-stream", ct)
+	if ct := resp.Header.Get("core.Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
+		t.Fatalf("core.Content-Type = %q, want text/event-stream", ct)
 	}
 
 	events := readSSEEvents(t, resp.Body)
@@ -636,14 +637,14 @@ func TestStreamableSSEFallback(t *testing.T) {
 	sessionID := streamableInitWithLogging(t, ts.URL)
 
 	// POST with Accept: application/json only (no text/event-stream) — should get JSON
-	body, _ := json.Marshal(&Request{
+	body, _ := json.Marshal(&core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "tools/call",
 		Params:  json.RawMessage(`{"name":"log_tool","arguments":{}}`),
 	})
 	httpReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(body))
-	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("core.Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "application/json") // intentionally JSON-only to test fallback path
 	httpReq.Header.Set(mcpSessionIDHeader, sessionID)
 	resp, err := http.DefaultClient.Do(httpReq)
@@ -652,11 +653,11 @@ func TestStreamableSSEFallback(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
-		t.Fatalf("Content-Type = %q, want application/json", ct)
+	if ct := resp.Header.Get("core.Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Fatalf("core.Content-Type = %q, want application/json", ct)
 	}
 
-	var rpcResp Response
+	var rpcResp core.Response
 	json.NewDecoder(resp.Body).Decode(&rpcResp)
 	if rpcResp.Error != nil {
 		t.Fatalf("JSON-RPC error: %s", rpcResp.Error.Message)
@@ -671,7 +672,7 @@ func TestStreamableSSENotificationOrder(t *testing.T) {
 
 	sessionID := streamableInitWithLogging(t, ts.URL)
 
-	resp, err := streamablePostSSE(ts.URL+"/mcp", sessionID, &Request{
+	resp, err := streamablePostSSE(ts.URL+"/mcp", sessionID, &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "tools/call",
@@ -702,7 +703,7 @@ func TestStreamableSSENotificationOrder(t *testing.T) {
 		}
 	}
 
-	// Response should be the last event
+	// core.Response should be the last event
 	if responseIdx != len(events)-1 {
 		t.Errorf("response at index %d, but %d events total — response should be last", responseIdx, len(events))
 	}
@@ -717,7 +718,7 @@ func TestStreamableSSENoNotifications(t *testing.T) {
 	sessionID := streamableInitWithLogging(t, ts.URL)
 
 	// Call echo tool which doesn't emit logs
-	resp, err := streamablePostSSE(ts.URL+"/mcp", sessionID, &Request{
+	resp, err := streamablePostSSE(ts.URL+"/mcp", sessionID, &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "tools/call",
@@ -728,8 +729,8 @@ func TestStreamableSSENoNotifications(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
-		t.Fatalf("Content-Type = %q, want text/event-stream", ct)
+	if ct := resp.Header.Get("core.Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
+		t.Fatalf("core.Content-Type = %q, want text/event-stream", ct)
 	}
 
 	events := readSSEEvents(t, resp.Body)
@@ -748,14 +749,14 @@ func TestStreamableDNSRebindingRejectsInvalidOrigin(t *testing.T) {
 	ts := testStreamableServer()
 	defer ts.Close()
 
-	body, _ := json.Marshal(&Request{
+	body, _ := json.Marshal(&core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
 		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
 	})
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("core.Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("Origin", "http://evil.example.com")
 
@@ -778,14 +779,14 @@ func TestStreamableDNSRebindingAcceptsLocalhost(t *testing.T) {
 
 	for _, origin := range []string{"http://localhost", "http://localhost:8787", "http://127.0.0.1:9999", "http://[::1]:3000"} {
 		t.Run(origin, func(t *testing.T) {
-			body, _ := json.Marshal(&Request{
+			body, _ := json.Marshal(&core.Request{
 				JSONRPC: "2.0",
 				ID:      json.RawMessage(`1`),
 				Method:  "initialize",
 				Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
 			})
 			req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(body))
-			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("core.Content-Type", "application/json")
 			req.Header.Set("Accept", "application/json, text/event-stream")
 			req.Header.Set("Origin", origin)
 

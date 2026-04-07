@@ -1,6 +1,7 @@
-package core
+package server
 
 import (
+	core "github.com/panyam/mcpkit/core"
 	"context"
 	"encoding/json"
 	"sync"
@@ -10,27 +11,27 @@ import (
 
 // testResourceDispatcher creates an initialized dispatcher with test resources.
 func testResourceDispatcher() *Dispatcher {
-	d := NewDispatcher(ServerInfo{Name: "test", Version: "1.0"})
+	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
 	d.RegisterResource(
-		ResourceDef{URI: "test://doc", Name: "Test Doc", MimeType: "text/plain"},
-		func(ctx context.Context, req ResourceRequest) (ResourceResult, error) {
-			return ResourceResult{Contents: []ResourceReadContent{{
+		core.ResourceDef{URI: "test://doc", Name: "Test Doc", MimeType: "text/plain"},
+		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+			return core.ResourceResult{Contents: []core.ResourceReadContent{{
 				URI: req.URI, MimeType: "text/plain", Text: "hello from resource",
 			}}}, nil
 		},
 	)
 	d.RegisterResource(
-		ResourceDef{URI: "test://binary", Name: "Binary", MimeType: "application/octet-stream"},
-		func(ctx context.Context, req ResourceRequest) (ResourceResult, error) {
-			return ResourceResult{Contents: []ResourceReadContent{{
+		core.ResourceDef{URI: "test://binary", Name: "Binary", MimeType: "application/octet-stream"},
+		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+			return core.ResourceResult{Contents: []core.ResourceReadContent{{
 				URI: req.URI, MimeType: "application/octet-stream", Blob: "AQID",
 			}}}, nil
 		},
 	)
 	d.RegisterResourceTemplate(
-		ResourceTemplate{URITemplate: "test://items/{id}", Name: "Item", MimeType: "text/plain"},
-		func(ctx context.Context, uri string, params map[string]string) (ResourceResult, error) {
-			return ResourceResult{Contents: []ResourceReadContent{{
+		core.ResourceTemplate{URITemplate: "test://items/{id}", Name: "Item", MimeType: "text/plain"},
+		func(ctx context.Context, uri string, params map[string]string) (core.ResourceResult, error) {
+			return core.ResourceResult{Contents: []core.ResourceReadContent{{
 				URI: uri, MimeType: "text/plain", Text: "item " + params["id"],
 			}}}, nil
 		},
@@ -43,14 +44,14 @@ func testResourceDispatcher() *Dispatcher {
 // in registration order.
 func TestResourcesList(t *testing.T) {
 	d := testResourceDispatcher()
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/list",
 	})
 	if resp.Error != nil {
 		t.Fatalf("error: %s", resp.Error.Message)
 	}
 	var result struct {
-		Resources []ResourceDef `json:"resources"`
+		Resources []core.ResourceDef `json:"resources"`
 	}
 	json.Unmarshal(resp.Result, &result)
 	if len(result.Resources) != 2 {
@@ -64,16 +65,16 @@ func TestResourcesList(t *testing.T) {
 // TestResourcesListEmpty verifies that resources/list returns an empty list
 // when no resources are registered.
 func TestResourcesListEmpty(t *testing.T) {
-	d := NewDispatcher(ServerInfo{Name: "test", Version: "1.0"})
+	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
 	initDispatcher(d)
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/list",
 	})
 	if resp.Error != nil {
 		t.Fatalf("error: %s", resp.Error.Message)
 	}
 	var result struct {
-		Resources []ResourceDef `json:"resources"`
+		Resources []core.ResourceDef `json:"resources"`
 	}
 	json.Unmarshal(resp.Result, &result)
 	if len(result.Resources) != 0 {
@@ -84,14 +85,14 @@ func TestResourcesListEmpty(t *testing.T) {
 // TestResourcesRead verifies that resources/read returns text content for a known URI.
 func TestResourcesRead(t *testing.T) {
 	d := testResourceDispatcher()
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/read",
 		Params: json.RawMessage(`{"uri":"test://doc"}`),
 	})
 	if resp.Error != nil {
 		t.Fatalf("error: %s", resp.Error.Message)
 	}
-	var result ResourceResult
+	var result core.ResourceResult
 	json.Unmarshal(resp.Result, &result)
 	if len(result.Contents) != 1 {
 		t.Fatalf("got %d contents, want 1", len(result.Contents))
@@ -104,14 +105,14 @@ func TestResourcesRead(t *testing.T) {
 // TestResourcesReadBinary verifies that resources/read returns blob content.
 func TestResourcesReadBinary(t *testing.T) {
 	d := testResourceDispatcher()
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/read",
 		Params: json.RawMessage(`{"uri":"test://binary"}`),
 	})
 	if resp.Error != nil {
 		t.Fatalf("error: %s", resp.Error.Message)
 	}
-	var result ResourceResult
+	var result core.ResourceResult
 	json.Unmarshal(resp.Result, &result)
 	if result.Contents[0].Blob != "AQID" {
 		t.Errorf("blob = %q, want AQID", result.Contents[0].Blob)
@@ -122,15 +123,15 @@ func TestResourcesReadBinary(t *testing.T) {
 // an unknown URI.
 func TestResourcesReadUnknown(t *testing.T) {
 	d := testResourceDispatcher()
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/read",
 		Params: json.RawMessage(`{"uri":"test://nonexistent"}`),
 	})
 	if resp.Error == nil {
 		t.Fatal("expected error for unknown resource")
 	}
-	if resp.Error.Code != ErrCodeInvalidParams {
-		t.Errorf("code = %d, want %d", resp.Error.Code, ErrCodeInvalidParams)
+	if resp.Error.Code != core.ErrCodeInvalidParams {
+		t.Errorf("code = %d, want %d", resp.Error.Code, core.ErrCodeInvalidParams)
 	}
 }
 
@@ -138,14 +139,14 @@ func TestResourcesReadUnknown(t *testing.T) {
 // registered templates.
 func TestResourcesTemplatesList(t *testing.T) {
 	d := testResourceDispatcher()
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/templates/list",
 	})
 	if resp.Error != nil {
 		t.Fatalf("error: %s", resp.Error.Message)
 	}
 	var result struct {
-		ResourceTemplates []ResourceTemplate `json:"resourceTemplates"`
+		ResourceTemplates []core.ResourceTemplate `json:"resourceTemplates"`
 	}
 	json.Unmarshal(resp.Result, &result)
 	if len(result.ResourceTemplates) != 1 {
@@ -160,14 +161,14 @@ func TestResourcesTemplatesList(t *testing.T) {
 // a registered template and returns the parameterized content.
 func TestResourcesTemplateRead(t *testing.T) {
 	d := testResourceDispatcher()
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/read",
 		Params: json.RawMessage(`{"uri":"test://items/42"}`),
 	})
 	if resp.Error != nil {
 		t.Fatalf("error: %s", resp.Error.Message)
 	}
-	var result ResourceResult
+	var result core.ResourceResult
 	json.Unmarshal(resp.Result, &result)
 	if result.Contents[0].Text != "item 42" {
 		t.Errorf("text = %q, want item 42", result.Contents[0].Text)
@@ -179,7 +180,7 @@ func TestResourcesTemplateRead(t *testing.T) {
 func TestResourcesCapabilities(t *testing.T) {
 	d := testResourceDispatcher()
 	// Re-initialize to check capabilities (testResourceDispatcher already initializes)
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "initialize",
 		Params: json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
 	})
@@ -198,11 +199,11 @@ func TestResourcesCapabilities(t *testing.T) {
 // the dispatcher, the Server (for calling NotifyResourceUpdated), and a channel
 // that receives (method, params) tuples for each notification sent.
 func testSubscriptionDispatcher() (*Dispatcher, *Server) {
-	srv := NewServer(ServerInfo{Name: "test", Version: "1.0"}, WithSubscriptions())
+	srv := NewServer(core.ServerInfo{Name: "test", Version: "1.0"}, WithSubscriptions())
 	srv.RegisterResource(
-		ResourceDef{URI: "test://doc", Name: "Test Doc", MimeType: "text/plain"},
-		func(ctx context.Context, req ResourceRequest) (ResourceResult, error) {
-			return ResourceResult{Contents: []ResourceReadContent{{
+		core.ResourceDef{URI: "test://doc", Name: "Test Doc", MimeType: "text/plain"},
+		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+			return core.ResourceResult{Contents: []core.ResourceReadContent{{
 				URI: req.URI, MimeType: "text/plain", Text: "hello",
 			}}}, nil
 		},
@@ -217,7 +218,7 @@ func testSubscriptionDispatcher() (*Dispatcher, *Server) {
 // result object when subscribing to a known resource URI.
 func TestResourcesSubscribe(t *testing.T) {
 	d, _ := testSubscriptionDispatcher()
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/subscribe",
 		Params: json.RawMessage(`{"uri":"test://doc"}`),
 	})
@@ -236,12 +237,12 @@ func TestResourcesSubscribe(t *testing.T) {
 func TestResourcesUnsubscribe(t *testing.T) {
 	d, _ := testSubscriptionDispatcher()
 	// Subscribe first
-	d.Dispatch(context.Background(), &Request{
+	d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/subscribe",
 		Params: json.RawMessage(`{"uri":"test://doc"}`),
 	})
 	// Unsubscribe
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`2`), Method: "resources/unsubscribe",
 		Params: json.RawMessage(`{"uri":"test://doc"}`),
 	})
@@ -257,24 +258,24 @@ func TestResourcesUnsubscribe(t *testing.T) {
 // TestResourcesSubscribeNotInitialized verifies that resources/subscribe returns
 // an error when the server has not been initialized yet (init gating).
 func TestResourcesSubscribeNotInitialized(t *testing.T) {
-	srv := NewServer(ServerInfo{Name: "test", Version: "1.0"}, WithSubscriptions())
+	srv := NewServer(core.ServerInfo{Name: "test", Version: "1.0"}, WithSubscriptions())
 	srv.RegisterResource(
-		ResourceDef{URI: "test://doc", Name: "Doc"},
-		func(ctx context.Context, req ResourceRequest) (ResourceResult, error) {
-			return ResourceResult{}, nil
+		core.ResourceDef{URI: "test://doc", Name: "Doc"},
+		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+			return core.ResourceResult{}, nil
 		},
 	)
 	d := srv.newSession()
 	// Do NOT call initDispatcher — session is not initialized
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/subscribe",
 		Params: json.RawMessage(`{"uri":"test://doc"}`),
 	})
 	if resp.Error == nil {
 		t.Fatal("expected error for subscribe before initialization")
 	}
-	if resp.Error.Code != ErrCodeInvalidRequest {
-		t.Errorf("error code = %d, want %d", resp.Error.Code, ErrCodeInvalidRequest)
+	if resp.Error.Code != core.ErrCodeInvalidRequest {
+		t.Errorf("error code = %d, want %d", resp.Error.Code, core.ErrCodeInvalidRequest)
 	}
 }
 
@@ -282,7 +283,7 @@ func TestResourcesSubscribeNotInitialized(t *testing.T) {
 // the initialize response includes "subscribe": true in the resources capability.
 func TestResourcesSubscribeCapabilities(t *testing.T) {
 	d, _ := testSubscriptionDispatcher()
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "initialize",
 		Params: json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
 	})
@@ -306,7 +307,7 @@ func TestResourcesSubscribeCapabilities(t *testing.T) {
 // NOT enabled, the resources capability does not contain "subscribe".
 func TestResourcesSubscribeCapabilitiesDisabled(t *testing.T) {
 	d := testResourceDispatcher() // uses default dispatcher without subscriptions
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "initialize",
 		Params: json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
 	})
@@ -345,7 +346,7 @@ func TestResourcesSubscribeNotification(t *testing.T) {
 	}
 
 	// Subscribe
-	resp := d.Dispatch(context.Background(), &Request{
+	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/subscribe",
 		Params: json.RawMessage(`{"uri":"test://doc"}`),
 	})
@@ -365,9 +366,9 @@ func TestResourcesSubscribeNotification(t *testing.T) {
 	if notifications[0].method != "notifications/resources/updated" {
 		t.Errorf("method = %q, want notifications/resources/updated", notifications[0].method)
 	}
-	n, ok := notifications[0].params.(ResourceUpdatedNotification)
+	n, ok := notifications[0].params.(core.ResourceUpdatedNotification)
 	if !ok {
-		t.Fatalf("params type = %T, want ResourceUpdatedNotification", notifications[0].params)
+		t.Fatalf("params type = %T, want core.ResourceUpdatedNotification", notifications[0].params)
 	}
 	if n.URI != "test://doc" {
 		t.Errorf("notification URI = %q, want test://doc", n.URI)
@@ -388,13 +389,13 @@ func TestResourcesUnsubscribeStopsNotification(t *testing.T) {
 	}
 
 	// Subscribe
-	d.Dispatch(context.Background(), &Request{
+	d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/subscribe",
 		Params: json.RawMessage(`{"uri":"test://doc"}`),
 	})
 
 	// Unsubscribe
-	d.Dispatch(context.Background(), &Request{
+	d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`2`), Method: "resources/unsubscribe",
 		Params: json.RawMessage(`{"uri":"test://doc"}`),
 	})
@@ -413,11 +414,11 @@ func TestResourcesUnsubscribeStopsNotification(t *testing.T) {
 // subscribe to the same URI, all of them receive the update notification when
 // the server triggers NotifyResourceUpdated.
 func TestResourcesSubscribeMultipleSessions(t *testing.T) {
-	srv := NewServer(ServerInfo{Name: "test", Version: "1.0"}, WithSubscriptions())
+	srv := NewServer(core.ServerInfo{Name: "test", Version: "1.0"}, WithSubscriptions())
 	srv.RegisterResource(
-		ResourceDef{URI: "test://shared", Name: "Shared"},
-		func(ctx context.Context, req ResourceRequest) (ResourceResult, error) {
-			return ResourceResult{Contents: []ResourceReadContent{{
+		core.ResourceDef{URI: "test://shared", Name: "Shared"},
+		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+			return core.ResourceResult{Contents: []core.ResourceReadContent{{
 				URI: req.URI, Text: "shared",
 			}}}, nil
 		},
@@ -447,11 +448,11 @@ func TestResourcesSubscribeMultipleSessions(t *testing.T) {
 	}
 
 	// Both subscribe
-	d1.Dispatch(context.Background(), &Request{
+	d1.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/subscribe",
 		Params: json.RawMessage(`{"uri":"test://shared"}`),
 	})
-	d2.Dispatch(context.Background(), &Request{
+	d2.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/subscribe",
 		Params: json.RawMessage(`{"uri":"test://shared"}`),
 	})
