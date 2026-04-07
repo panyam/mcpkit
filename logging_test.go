@@ -84,7 +84,7 @@ func TestEmitLogFiltering(t *testing.T) {
 	warnLevel := LogWarning
 	logLevel.Store(&warnLevel)
 
-	ctx := contextWithSession(context.Background(), notify, nil, &logLevel, nil, nil)
+	ctx := ContextWithSession(context.Background(), notify, nil, &logLevel, nil, nil)
 
 	// These should be filtered out (below warning)
 	EmitLog(ctx, LogDebug, "test", "debug msg")
@@ -128,7 +128,7 @@ func TestEmitLogDisabled(t *testing.T) {
 
 	var logLevel atomic.Pointer[LogLevel]
 	// logLevel is nil (default) — logging disabled
-	ctx := contextWithSession(context.Background(), notify, nil, &logLevel, nil, nil)
+	ctx := ContextWithSession(context.Background(), notify, nil, &logLevel, nil, nil)
 
 	EmitLog(ctx, LogEmergency, "test", "should be dropped even at emergency")
 
@@ -148,7 +148,7 @@ func TestEmitLogAllLevelsPassAtDebug(t *testing.T) {
 	var logLevel atomic.Pointer[LogLevel]
 	debugLevel := LogDebug
 	logLevel.Store(&debugLevel)
-	ctx := contextWithSession(context.Background(), notify, nil, &logLevel, nil, nil)
+	ctx := ContextWithSession(context.Background(), notify, nil, &logLevel, nil, nil)
 
 	EmitLog(ctx, LogDebug, "t", "d")
 	EmitLog(ctx, LogInfo, "t", "i")
@@ -170,7 +170,7 @@ func TestNotifyFunc(t *testing.T) {
 	}
 
 	var logLevel atomic.Pointer[LogLevel]
-	ctx := contextWithSession(context.Background(), notify, nil, &logLevel, nil, nil)
+	ctx := ContextWithSession(context.Background(), notify, nil, &logLevel, nil, nil)
 
 	ok := Notify(ctx, "notifications/progress", map[string]any{"token": "abc"})
 	if !ok {
@@ -193,10 +193,10 @@ func TestNotifyNoSession(t *testing.T) {
 	}
 }
 
-// TestMarshalNotification verifies that marshalNotification produces valid
+// TestMarshalNotification verifies that MarshalNotification produces valid
 // JSON-RPC 2.0 notification objects (no "id" field, correct structure).
 func TestMarshalNotification(t *testing.T) {
-	raw, err := marshalNotification("notifications/message", LogMessage{
+	raw, err := MarshalNotification("notifications/message", LogMessage{
 		Level:  "info",
 		Logger: "test",
 		Data:   "hello",
