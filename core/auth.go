@@ -146,3 +146,12 @@ type Extension struct {
 type ExtensionProvider interface {
 	Extension() Extension
 }
+
+// RefValidator is an optional interface that ExtensionProviders can implement
+// to validate tool-to-resource references at server startup. The server calls
+// ValidateRefs for each extension that implements this interface, passing all
+// registered tools and the URIs of registered resources and templates.
+// Returns a list of human-readable warning messages (empty if all refs resolve).
+type RefValidator interface {
+	ValidateRefs(tools []ToolDef, resourceURIs []string, templateURIs []string) []string
+}
