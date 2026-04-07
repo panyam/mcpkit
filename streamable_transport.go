@@ -310,19 +310,23 @@ func (h *streamableSSEHandler) Validate(w http.ResponseWriter, r *http.Request) 
 		return nil, false
 	}
 
-	// Require session ID
+	// Session ID is optional on GET — if provided, attach to existing session;
+	// if not, the stream is session-independent (receives broadcast notifications).
 	sessionID := r.Header.Get(mcpSessionIDHeader)
-	if sessionID == "" {
-		http.Error(w, "missing "+mcpSessionIDHeader+" header", http.StatusBadRequest)
-		return nil, false
+	var dispatcher *Dispatcher
+	if sessionID != "" {
+		dispVal, ok := h.transport.sessions.Load(sessionID)
+		if !ok {
+			http.Error(w, "session not found", http.StatusNotFound)
+			return nil, false
+		}
+		dispatcher = dispVal.(*Dispatcher)
+	} else {
+		// No session — create a temporary dispatcher for this SSE stream
+		sessionID = generateSessionID()
+		dispatcher = h.transport.server.newSession()
+		dispatcher.initialized = true
 	}
-
-	dispVal, ok := h.transport.sessions.Load(sessionID)
-	if !ok {
-		http.Error(w, "session not found", http.StatusNotFound)
-		return nil, false
-	}
-	dispatcher := dispVal.(*Dispatcher)
 
 	conn := &streamableSSEConn{
 		BaseSSEConn: gohttp.BaseSSEConn[SSEData]{

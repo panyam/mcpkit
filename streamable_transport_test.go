@@ -314,10 +314,11 @@ func TestStreamableDeleteNoSessionHeader(t *testing.T) {
 	}
 }
 
-// TestStreamableGetSSE_RequiresSession verifies that GET /mcp without a
-// Mcp-Session-Id header returns 400, since the GET SSE stream only works
-// on existing sessions.
-func TestStreamableGetSSE_RequiresSession(t *testing.T) {
+// TestStreamableGetSSE_OpensStream verifies that GET /mcp opens an SSE stream.
+// Per MCP spec: clients can open a GET on the MCP endpoint for server-initiated
+// notifications. Session ID is optional — if not provided, a temporary session
+// is created for the stream.
+func TestStreamableGetSSE_OpensStream(t *testing.T) {
 	ts := testStreamableServer()
 	defer ts.Close()
 
@@ -325,10 +326,14 @@ func TestStreamableGetSSE_RequiresSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Errorf("status = %d, want 400 (missing session)", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+	ct := resp.Header.Get("Content-Type")
+	if !strings.Contains(ct, "text/event-stream") {
+		t.Errorf("Content-Type = %q, want text/event-stream", ct)
 	}
 }
 
