@@ -245,9 +245,9 @@ sequenceDiagram
     participant C as Client
     participant S as Server
 
-    C->>S: initialize { protocolVersion: "2025-11-25",<br/>capabilities: { extensions: {<br/>"io.modelcontextprotocol/ui":<br/>{ mimeTypes: ["text/html;profile=mcp-app"] } } } }
+    C->>S: initialize (protocolVersion: "2025-11-25",<br/>extensions: "io.modelcontextprotocol/ui",<br/>mimeTypes: "text/html;profile=mcp-app")
     Note right of S: Store client extension caps<br/>ClientSupportsUI() = true
-    S-->>C: initialize result { protocolVersion: "2025-11-25",<br/>capabilities: { tools: {}, resources: {},<br/>extensions: { "io.modelcontextprotocol/ui":<br/>{ specVersion: "2026-01-26",<br/>stability: "experimental" } } } }
+    S-->>C: initialize result (protocolVersion: "2025-11-25",<br/>extensions: "io.modelcontextprotocol/ui",<br/>specVersion: "2026-01-26", stability: "experimental")
 ```
 
 ### Flow B: Tool with UI — full lifecycle (host perspective)
@@ -263,7 +263,7 @@ sequenceDiagram
     User->>Host: "show slides"
     Host->>Client: tools/list
     Client->>Server: tools/list
-    Server-->>Client: [{name:"build", _meta:{ui:{<br/>resourceUri:"ui://decks/demo/view"}}}]
+    Server-->>Client: tools list with _meta.ui.resourceUri:<br/>"ui://decks/demo/view"
 
     Note over Host: LLM decides to call build
 
@@ -274,7 +274,7 @@ sequenceDiagram
     and
         Host->>Client: resources/read "ui://decks/demo/view"
         Client->>Server: resources/read
-        Server-->>Client: {contents:[{uri:"ui://...",<br/>mimeType:"text/html;profile=mcp-app",<br/>text:"<html>..."}]}
+        Server-->>Client: HTML content<br/>(mimeType: text/html;profile=mcp-app)
     end
 
     Host->>App: Render iframe with HTML
@@ -295,7 +295,7 @@ sequenceDiagram
     participant App as iframe
 
     User->>App: clicks "Edit slide 3"
-    App->>Host: postMessage: tools/call<br/>{name:"edit_slide", args:{pos:3}}
+    App->>Host: postMessage: tools/call<br/>(name: "edit_slide", args: pos=3)
     Host->>Client: tools/call "edit_slide"
     Client->>Server: tools/call "edit_slide"
     Note right of Server: execute edit
@@ -313,16 +313,16 @@ sequenceDiagram
     participant C as Client (no UI)
     participant S as Server
 
-    C->>S: initialize { capabilities: {} }
+    C->>S: initialize (capabilities: empty, no extensions)
     Note right of S: No extensions field<br/>ClientSupportsUI() = false
     S-->>C: result (no UI extension advertised)
 
     C->>S: tools/list
-    S-->>C: [{name:"build_deck", _meta:{ui:{resourceUri:...}}}]
+    S-->>C: tools with _meta.ui.resourceUri (still present)
     Note left of C: _meta.ui still present<br/>(informational; client ignores)
 
     C->>S: tools/call "build_deck"
-    S-->>C: {content:[{type:"text",<br/>text:"Built: 8 slides..."}]}
+    S-->>C: text result: "Built: 8 slides..."
     Note left of C: Client displays text only,<br/>ignores _meta.ui
 ```
 
@@ -1244,7 +1244,7 @@ Deployment:
 sequenceDiagram
     participant User
     participant GPT as ChatGPT
-    participant Slyds as Slyds MCP Server<br/>(:8787 via tunnel)
+    participant Slyds as Slyds MCP Server (:8787 via tunnel)
     participant App as Slide Deck iframe
 
     Note over Slyds: 1. slyds mcp --deck-root ~/decks/ --listen :8787
