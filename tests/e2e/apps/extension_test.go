@@ -49,23 +49,17 @@ func TestUIExtensionNegotiationE2E(t *testing.T) {
 	ts := httptest.NewServer(handler)
 	t.Cleanup(ts.Close)
 
-	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "ui-test-client", Version: "1.0"})
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "ui-test-client", Version: "1.0"},
+		client.WithUIExtension(),
+	)
 	if err := c.Connect(); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
 
-	// Verify server advertised UI extension in initialize response
-	result, err := c.Call("tools/list", nil)
-	if err != nil {
-		t.Fatalf("tools/list: %v", err)
-	}
-	var toolsResp struct {
-		Tools []core.ToolDef `json:"tools"`
-	}
-	result.Unmarshal(&toolsResp)
-	if len(toolsResp.Tools) != 1 {
-		t.Fatalf("expected 1 tool, got %d", len(toolsResp.Tools))
+	// Verify server advertised UI extension — client should detect it
+	if !c.ServerSupportsUI() {
+		t.Error("ServerSupportsUI() should be true")
 	}
 
 	// Call the tool to check ClientSupportsUI from handler context
@@ -73,11 +67,9 @@ func TestUIExtensionNegotiationE2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ToolCall: %v", err)
 	}
-	// Note: the standard client doesn't send extensions in initialize yet
-	// (that's a client-side feature), so ClientSupportsUI will be false.
-	// This test validates the server-side plumbing works.
-	if text != "ui: no" {
-		t.Errorf("result = %q, want 'ui: no' (client doesn't advertise extensions yet)", text)
+	// Client sends WithUIExtension(), so server-side ClientSupportsUI(ctx) is true
+	if text != "ui: yes" {
+		t.Errorf("result = %q, want 'ui: yes'", text)
 	}
 }
 
