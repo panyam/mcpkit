@@ -1,4 +1,4 @@
-package mcpkit
+package client
 
 // Unit tests for client-side 401/403 auth retry logic (doWithAuthRetry).
 // These use mock HTTP servers and token sources to test retry behavior

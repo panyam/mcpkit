@@ -1,4 +1,4 @@
-package mcpkit
+package server
 
 // Server-side middleware tests. Verify that middleware intercepts all JSON-RPC
 // requests, executes in registration order, can short-circuit dispatch, and
