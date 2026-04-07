@@ -15,13 +15,20 @@ th { background: #f5f5f5; font-weight: 600; }
 pre { background: #f6f8fa; padding: 16px; border-radius: 6px; overflow-x: auto; font-size: 13px; max-height: 400px; overflow-y: auto; }
 </style></head><body>
 <h1>MCPKit Test Report</h1>
-<div class='meta'>Branch: <strong>feat/e2e-auth-tests</strong> | Commit: <code>ac44b8e</code> | Date: 2026-04-06 14:58:05</div>
+<div class='meta'>Branch: <strong>feat/conformance-stepup-keycloak-reconnect</strong> | Commit: <code>b5cd46e</code> | Date: 2026-04-06 22:00:32</div>
 <table><tr><th>Stage</th><th>Result</th></tr>
+<tr><td>unit</td><td class='pass'>PASS</td></tr>
+<tr><td>race</td><td class='pass'>PASS</td></tr>
+<tr><td>auth</td><td class='pass'>PASS</td></tr>
+<tr><td>e2e</td><td class='pass'>PASS</td></tr>
+<tr><td>conformance</td><td class='pass'>PASS</td></tr>
+<tr><td>auth-conformance</td><td class='pass'>PASS</td></tr>
+<tr><td>keycloak</td><td class='pass'>PASS</td></tr>
 </table>
-<div class='summary-pass'>All 0 stages passed</div>
+<div class='summary-pass'>All 7 stages passed</div>
 <h2>Full Log</h2><pre>
 === MCPKit Comprehensive Test Suite ===
-Started: Mon Apr  6 14:57:53 PDT 2026
+Started: Mon Apr  6 22:00:18 PDT 2026
 
 --- [1/7] Unit tests ---
 === RUN   TestAuthClaimsFromContext
@@ -46,77 +53,247 @@ Started: Mon Apr  6 14:57:53 PDT 2026
 --- PASS: TestAnnotationsOnToolDef (0.00s)
 === RUN   TestAuthErrorWithWWWAuthenticate
 --- PASS: TestAuthErrorWithWWWAuthenticate (0.00s)
+=== RUN   TestClient_401_RetryWithRefresh
+--- PASS: TestClient_401_RetryWithRefresh (0.00s)
+=== RUN   TestClient_401_StaticTokenGivesUp
+--- PASS: TestClient_401_StaticTokenGivesUp (0.00s)
+=== RUN   TestClient_403_ScopeStepUp
+--- PASS: TestClient_403_ScopeStepUp (0.00s)
+=== RUN   TestClient_403_NoScopeAware
+--- PASS: TestClient_403_NoScopeAware (0.00s)
+=== RUN   TestClient_RetryLimit_401Then403
+--- PASS: TestClient_RetryLimit_401Then403 (0.00s)
+=== RUN   TestClient_RetryLimit_Double401
+--- PASS: TestClient_RetryLimit_Double401 (0.00s)
+=== RUN   TestClient_Streamable_401Integration
+--- PASS: TestClient_Streamable_401Integration (0.00s)
+=== RUN   TestClient_Streamable_AuthErrorType
+--- PASS: TestClient_Streamable_AuthErrorType (0.00s)
+=== RUN   TestLoggingTransport_LogsCallMethod
+--- PASS: TestLoggingTransport_LogsCallMethod (0.00s)
+=== RUN   TestLoggingTransport_LogsErrors
+--- PASS: TestLoggingTransport_LogsErrors (0.00s)
+=== RUN   TestLoggingTransport_LogsLatency
+--- PASS: TestLoggingTransport_LogsLatency (0.00s)
+=== RUN   TestLoggingTransport_SessionIDPassthrough
+--- PASS: TestLoggingTransport_SessionIDPassthrough (0.00s)
+=== RUN   TestExtractMethodFromJSON
+=== RUN   TestExtractMethodFromJSON/input={"jsonrpc":"2.0","id":1,"metho
+=== RUN   TestExtractMethodFromJSON/input={"method":"initialize"}
+=== RUN   TestExtractMethodFromJSON/input={"id":1}
+=== RUN   TestExtractMethodFromJSON/input=invalid_json
+=== RUN   TestExtractMethodFromJSON/input=
+--- PASS: TestExtractMethodFromJSON (0.00s)
+    --- PASS: TestExtractMethodFromJSON/input={"jsonrpc":"2.0","id":1,"metho (0.00s)
+    --- PASS: TestExtractMethodFromJSON/input={"method":"initialize"} (0.00s)
+    --- PASS: TestExtractMethodFromJSON/input={"id":1} (0.00s)
+    --- PASS: TestExtractMethodFromJSON/input=invalid_json (0.00s)
+    --- PASS: TestExtractMethodFromJSON/input= (0.00s)
+=== RUN   TestReconnect_OnDisconnect
+--- PASS: TestReconnect_OnDisconnect (0.02s)
+=== RUN   TestReconnect_MaxRetries
+--- PASS: TestReconnect_MaxRetries (0.03s)
+=== RUN   TestReconnect_TerminalErrorNoRetry
+--- PASS: TestReconnect_TerminalErrorNoRetry (0.00s)
+=== RUN   TestReconnect_TransientErrors
+--- PASS: TestReconnect_TransientErrors (0.00s)
+=== RUN   TestReconnect_DisabledByDefault
+--- PASS: TestReconnect_DisabledByDefault (0.00s)
+=== RUN   TestReconnect_WithLogging
+2026/04/06 22:00:20 [mcpkit] connect ok [83ns]
+2026/04/06 22:00:20 [mcpkit] → initialize ok [502.292µs]
+2026/04/06 22:00:20 [mcpkit] → notifications/initialized (notify) ok [158.417µs]
+2026/04/06 22:00:20 [mcpkit] → tools/call ok [169.292µs]
+2026/04/06 22:00:20 [mcpkit] close ok
+--- PASS: TestReconnect_WithLogging (0.00s)
 === RUN   TestClientConnect
+=== RUN   TestClientConnect/streamable
+=== RUN   TestClientConnect/sse
+2026/04/06 22:00:20 Starting MCP SSE connection: f430af9b7a683ccdf1c387bbdd963d81
+2026/04/06 22:00:20 SSEHub: registered connection f430af9b7a683ccdf1c387bbdd963d81 (total: 1)
+2026/04/06 22:00:20 SSEHub: unregistered connection f430af9b7a683ccdf1c387bbdd963d81 (total: 0)
+2026/04/06 22:00:20 Received kill signal.  Quitting Writer. stop 0x6c0d1eaa6fc0
+2026/04/06 22:00:20 Cleaning up writer...
+2026/04/06 22:00:20 Finished cleaning up writer:  0x6c0d1eaa6fc0
+2026/04/06 22:00:20 Closed MCP SSE connection: f430af9b7a683ccdf1c387bbdd963d81
+=== RUN   TestClientConnect/memory
 --- PASS: TestClientConnect (0.00s)
+    --- PASS: TestClientConnect/streamable (0.00s)
+    --- PASS: TestClientConnect/sse (0.00s)
+    --- PASS: TestClientConnect/memory (0.00s)
 === RUN   TestClientToolCall
+=== RUN   TestClientToolCall/streamable
+=== RUN   TestClientToolCall/sse
+2026/04/06 22:00:20 Starting MCP SSE connection: 798a770cf71afae7c3af5161c1b30a03
+2026/04/06 22:00:20 SSEHub: registered connection 798a770cf71afae7c3af5161c1b30a03 (total: 1)
+2026/04/06 22:00:20 SSEHub: unregistered connection 798a770cf71afae7c3af5161c1b30a03 (total: 0)
+2026/04/06 22:00:20 Received kill signal.  Quitting Writer. stop 0x6c0d1eaa75e0
+2026/04/06 22:00:20 Cleaning up writer...
+2026/04/06 22:00:20 Finished cleaning up writer:  0x6c0d1eaa75e0
+2026/04/06 22:00:20 Closed MCP SSE connection: 798a770cf71afae7c3af5161c1b30a03
+=== RUN   TestClientToolCall/memory
 --- PASS: TestClientToolCall (0.00s)
+    --- PASS: TestClientToolCall/streamable (0.00s)
+    --- PASS: TestClientToolCall/sse (0.00s)
+    --- PASS: TestClientToolCall/memory (0.00s)
 === RUN   TestClientToolCallError
+=== RUN   TestClientToolCallError/streamable
+=== RUN   TestClientToolCallError/sse
+2026/04/06 22:00:20 Starting MCP SSE connection: e659babc59ec91554f313c43629a93da
+2026/04/06 22:00:20 SSEHub: registered connection e659babc59ec91554f313c43629a93da (total: 1)
+2026/04/06 22:00:20 SSEHub: unregistered connection e659babc59ec91554f313c43629a93da (total: 0)
+2026/04/06 22:00:20 Received kill signal.  Quitting Writer. stop 0x6c0d1eaa7ce0
+2026/04/06 22:00:20 Cleaning up writer...
+2026/04/06 22:00:20 Finished cleaning up writer:  0x6c0d1eaa7ce0
+2026/04/06 22:00:20 Closed MCP SSE connection: e659babc59ec91554f313c43629a93da
+=== RUN   TestClientToolCallError/memory
 --- PASS: TestClientToolCallError (0.00s)
+    --- PASS: TestClientToolCallError/streamable (0.00s)
+    --- PASS: TestClientToolCallError/sse (0.00s)
+    --- PASS: TestClientToolCallError/memory (0.00s)
 === RUN   TestClientReadResource
+=== RUN   TestClientReadResource/streamable
+=== RUN   TestClientReadResource/sse
+2026/04/06 22:00:20 Starting MCP SSE connection: 4c237c22c8f10c6b0833e09c61f28655
+2026/04/06 22:00:20 SSEHub: registered connection 4c237c22c8f10c6b0833e09c61f28655 (total: 1)
+2026/04/06 22:00:20 SSEHub: unregistered connection 4c237c22c8f10c6b0833e09c61f28655 (total: 0)
+2026/04/06 22:00:20 Received kill signal.  Quitting Writer. stop 0x6c0d1eb8efc0
+2026/04/06 22:00:20 Cleaning up writer...
+2026/04/06 22:00:20 Finished cleaning up writer:  0x6c0d1eb8efc0
+2026/04/06 22:00:20 Closed MCP SSE connection: 4c237c22c8f10c6b0833e09c61f28655
+=== RUN   TestClientReadResource/memory
 --- PASS: TestClientReadResource (0.00s)
+    --- PASS: TestClientReadResource/streamable (0.00s)
+    --- PASS: TestClientReadResource/sse (0.00s)
+    --- PASS: TestClientReadResource/memory (0.00s)
 === RUN   TestClientReadResourceTemplate
+=== RUN   TestClientReadResourceTemplate/streamable
+=== RUN   TestClientReadResourceTemplate/sse
+2026/04/06 22:00:20 Starting MCP SSE connection: 421485bfa03af3a1e09a097b7e874351
+2026/04/06 22:00:20 SSEHub: registered connection 421485bfa03af3a1e09a097b7e874351 (total: 1)
+2026/04/06 22:00:20 SSEHub: unregistered connection 421485bfa03af3a1e09a097b7e874351 (total: 0)
+2026/04/06 22:00:20 Received kill signal.  Quitting Writer. stop 0x6c0d1eacd490
+2026/04/06 22:00:20 Cleaning up writer...
+2026/04/06 22:00:20 Finished cleaning up writer:  0x6c0d1eacd490
+2026/04/06 22:00:20 Closed MCP SSE connection: 421485bfa03af3a1e09a097b7e874351
+=== RUN   TestClientReadResourceTemplate/memory
 --- PASS: TestClientReadResourceTemplate (0.00s)
+    --- PASS: TestClientReadResourceTemplate/streamable (0.00s)
+    --- PASS: TestClientReadResourceTemplate/sse (0.00s)
+    --- PASS: TestClientReadResourceTemplate/memory (0.00s)
 === RUN   TestClientListTools
+=== RUN   TestClientListTools/streamable
+=== RUN   TestClientListTools/sse
+2026/04/06 22:00:20 Starting MCP SSE connection: 3ba5dc69099f1df9c9d472dda36ddc16
+2026/04/06 22:00:20 SSEHub: registered connection 3ba5dc69099f1df9c9d472dda36ddc16 (total: 1)
+2026/04/06 22:00:20 SSEHub: unregistered connection 3ba5dc69099f1df9c9d472dda36ddc16 (total: 0)
+2026/04/06 22:00:20 Received kill signal.  Quitting Writer. stop 0x6c0d1eb8f810
+2026/04/06 22:00:20 Cleaning up writer...
+2026/04/06 22:00:20 Finished cleaning up writer:  0x6c0d1eb8f810
+2026/04/06 22:00:20 Closed MCP SSE connection: 3ba5dc69099f1df9c9d472dda36ddc16
+=== RUN   TestClientListTools/memory
 --- PASS: TestClientListTools (0.00s)
+    --- PASS: TestClientListTools/streamable (0.00s)
+    --- PASS: TestClientListTools/sse (0.00s)
+    --- PASS: TestClientListTools/memory (0.00s)
 === RUN   TestClientListResources
+=== RUN   TestClientListResources/streamable
+=== RUN   TestClientListResources/sse
+2026/04/06 22:00:20 Starting MCP SSE connection: 6255931cc5f950a60bf18cdf14e73b92
+2026/04/06 22:00:20 SSEHub: registered connection 6255931cc5f950a60bf18cdf14e73b92 (total: 1)
+2026/04/06 22:00:20 SSEHub: unregistered connection 6255931cc5f950a60bf18cdf14e73b92 (total: 0)
+2026/04/06 22:00:20 Received kill signal.  Quitting Writer. stop 0x6c0d1eb18230
+2026/04/06 22:00:20 Cleaning up writer...
+2026/04/06 22:00:20 Finished cleaning up writer:  0x6c0d1eb18230
+2026/04/06 22:00:20 Closed MCP SSE connection: 6255931cc5f950a60bf18cdf14e73b92
+=== RUN   TestClientListResources/memory
 --- PASS: TestClientListResources (0.00s)
+    --- PASS: TestClientListResources/streamable (0.00s)
+    --- PASS: TestClientListResources/sse (0.00s)
+    --- PASS: TestClientListResources/memory (0.00s)
 === RUN   TestClientListResourceTemplates
+=== RUN   TestClientListResourceTemplates/streamable
+=== RUN   TestClientListResourceTemplates/sse
+2026/04/06 22:00:20 Starting MCP SSE connection: 23b916a2026bdf377db9c57a0f4a1352
+2026/04/06 22:00:20 SSEHub: registered connection 23b916a2026bdf377db9c57a0f4a1352 (total: 1)
+2026/04/06 22:00:20 SSEHub: unregistered connection 23b916a2026bdf377db9c57a0f4a1352 (total: 0)
+2026/04/06 22:00:20 Received kill signal.  Quitting Writer. stop 0x6c0d1ec590a0
+2026/04/06 22:00:20 Cleaning up writer...
+2026/04/06 22:00:20 Finished cleaning up writer:  0x6c0d1ec590a0
+2026/04/06 22:00:20 Closed MCP SSE connection: 23b916a2026bdf377db9c57a0f4a1352
+=== RUN   TestClientListResourceTemplates/memory
 --- PASS: TestClientListResourceTemplates (0.00s)
+    --- PASS: TestClientListResourceTemplates/streamable (0.00s)
+    --- PASS: TestClientListResourceTemplates/sse (0.00s)
+    --- PASS: TestClientListResourceTemplates/memory (0.00s)
 === RUN   TestClientCallRaw
+=== RUN   TestClientCallRaw/streamable
+=== RUN   TestClientCallRaw/sse
+2026/04/06 22:00:20 Starting MCP SSE connection: 129e7a8ad317760790c5bc7c63725f12
+2026/04/06 22:00:20 SSEHub: registered connection 129e7a8ad317760790c5bc7c63725f12 (total: 1)
+2026/04/06 22:00:20 SSEHub: unregistered connection 129e7a8ad317760790c5bc7c63725f12 (total: 0)
+2026/04/06 22:00:20 Received kill signal.  Quitting Writer. stop 0x6c0d1e7b2460
+2026/04/06 22:00:20 Cleaning up writer...
+2026/04/06 22:00:20 Finished cleaning up writer:  0x6c0d1e7b2460
+2026/04/06 22:00:20 Closed MCP SSE connection: 129e7a8ad317760790c5bc7c63725f12
+=== RUN   TestClientCallRaw/memory
 --- PASS: TestClientCallRaw (0.00s)
+    --- PASS: TestClientCallRaw/streamable (0.00s)
+    --- PASS: TestClientCallRaw/sse (0.00s)
+    --- PASS: TestClientCallRaw/memory (0.00s)
 === RUN   TestSSEClientConnect
-2026/04/06 14:57:54 Starting MCP SSE connection: e950556da98996e0b9dc6d0bff390426
-2026/04/06 14:57:54 SSEHub: registered connection e950556da98996e0b9dc6d0bff390426 (total: 1)
-2026/04/06 14:57:54 SSEHub: unregistered connection e950556da98996e0b9dc6d0bff390426 (total: 0)
-2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x395835fdad20
-2026/04/06 14:57:54 Cleaning up writer...
-2026/04/06 14:57:54 Finished cleaning up writer:  0x395835fdad20
-2026/04/06 14:57:54 Closed MCP SSE connection: e950556da98996e0b9dc6d0bff390426
+2026/04/06 22:00:20 Starting MCP SSE connection: e8e2acf582139458a6a61ded98ab16fe
+2026/04/06 22:00:20 SSEHub: registered connection e8e2acf582139458a6a61ded98ab16fe (total: 1)
+2026/04/06 22:00:20 SSEHub: unregistered connection e8e2acf582139458a6a61ded98ab16fe (total: 0)
+2026/04/06 22:00:20 Received kill signal.  Quitting Writer. stop 0x6c0d1e892770
+2026/04/06 22:00:20 Cleaning up writer...
+2026/04/06 22:00:20 Finished cleaning up writer:  0x6c0d1e892770
+2026/04/06 22:00:20 Closed MCP SSE connection: e8e2acf582139458a6a61ded98ab16fe
 --- PASS: TestSSEClientConnect (0.00s)
 === RUN   TestSSEClientToolCall
-2026/04/06 14:57:54 Starting MCP SSE connection: dfba9e3e28a2afebc62fd82fe49a7422
-2026/04/06 14:57:54 SSEHub: registered connection dfba9e3e28a2afebc62fd82fe49a7422 (total: 1)
-2026/04/06 14:57:54 SSEHub: unregistered connection dfba9e3e28a2afebc62fd82fe49a7422 (total: 0)
-2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x395836122fc0
-2026/04/06 14:57:54 Cleaning up writer...
-2026/04/06 14:57:54 Finished cleaning up writer:  0x395836122fc0
-2026/04/06 14:57:54 Closed MCP SSE connection: dfba9e3e28a2afebc62fd82fe49a7422
+2026/04/06 22:00:20 Starting MCP SSE connection: e42394cb28a095fa802c93ead68d6624
+2026/04/06 22:00:20 SSEHub: registered connection e42394cb28a095fa802c93ead68d6624 (total: 1)
+2026/04/06 22:00:20 SSEHub: unregistered connection e42394cb28a095fa802c93ead68d6624 (total: 0)
+2026/04/06 22:00:20 Received kill signal.  Quitting Writer. stop 0x6c0d1ec59b90
+2026/04/06 22:00:20 Cleaning up writer...
+2026/04/06 22:00:20 Finished cleaning up writer:  0x6c0d1ec59b90
+2026/04/06 22:00:20 Closed MCP SSE connection: e42394cb28a095fa802c93ead68d6624
 --- PASS: TestSSEClientToolCall (0.00s)
 === RUN   TestSSEClientToolCallError
-2026/04/06 14:57:54 Starting MCP SSE connection: 9be45e2c36d0ff344637209c865707ac
-2026/04/06 14:57:54 SSEHub: registered connection 9be45e2c36d0ff344637209c865707ac (total: 1)
-2026/04/06 14:57:54 SSEHub: unregistered connection 9be45e2c36d0ff344637209c865707ac (total: 0)
-2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x395835fdb1f0
-2026/04/06 14:57:54 Cleaning up writer...
-2026/04/06 14:57:54 Finished cleaning up writer:  0x395835fdb1f0
-2026/04/06 14:57:54 Closed MCP SSE connection: 9be45e2c36d0ff344637209c865707ac
+2026/04/06 22:00:20 Starting MCP SSE connection: 78c6b028cc931f344db1577a88f25102
+2026/04/06 22:00:20 SSEHub: registered connection 78c6b028cc931f344db1577a88f25102 (total: 1)
+2026/04/06 22:00:20 SSEHub: unregistered connection 78c6b028cc931f344db1577a88f25102 (total: 0)
+2026/04/06 22:00:20 Received kill signal.  Quitting Writer. stop 0x6c0d1e893030
+2026/04/06 22:00:20 Cleaning up writer...
+2026/04/06 22:00:20 Finished cleaning up writer:  0x6c0d1e893030
+2026/04/06 22:00:20 Closed MCP SSE connection: 78c6b028cc931f344db1577a88f25102
 --- PASS: TestSSEClientToolCallError (0.00s)
 === RUN   TestSSEClientReadResource
-2026/04/06 14:57:54 Starting MCP SSE connection: c46d9d4a971c3fce1b4f234bc3c2719a
-2026/04/06 14:57:54 SSEHub: registered connection c46d9d4a971c3fce1b4f234bc3c2719a (total: 1)
-2026/04/06 14:57:54 SSEHub: unregistered connection c46d9d4a971c3fce1b4f234bc3c2719a (total: 0)
-2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x395836091ce0
-2026/04/06 14:57:54 Cleaning up writer...
-2026/04/06 14:57:54 Finished cleaning up writer:  0x395836091ce0
-2026/04/06 14:57:54 Closed MCP SSE connection: c46d9d4a971c3fce1b4f234bc3c2719a
+2026/04/06 22:00:20 Starting MCP SSE connection: 6e7f3ea07b14985fe1709338aed441fb
+2026/04/06 22:00:20 SSEHub: registered connection 6e7f3ea07b14985fe1709338aed441fb (total: 1)
+2026/04/06 22:00:20 SSEHub: unregistered connection 6e7f3ea07b14985fe1709338aed441fb (total: 0)
+2026/04/06 22:00:20 Received kill signal.  Quitting Writer. stop 0x6c0d1e893420
+2026/04/06 22:00:20 Cleaning up writer...
+2026/04/06 22:00:20 Finished cleaning up writer:  0x6c0d1e893420
+2026/04/06 22:00:20 Closed MCP SSE connection: 6e7f3ea07b14985fe1709338aed441fb
 --- PASS: TestSSEClientReadResource (0.00s)
 === RUN   TestSSEClientReadResourceTemplate
-2026/04/06 14:57:54 Starting MCP SSE connection: 1df4476e2cdb3f4f0cc465bc256eae6c
-2026/04/06 14:57:54 SSEHub: registered connection 1df4476e2cdb3f4f0cc465bc256eae6c (total: 1)
-2026/04/06 14:57:54 SSEHub: unregistered connection 1df4476e2cdb3f4f0cc465bc256eae6c (total: 0)
-2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x395835fdbdc0
-2026/04/06 14:57:54 Cleaning up writer...
-2026/04/06 14:57:54 Finished cleaning up writer:  0x395835fdbdc0
-2026/04/06 14:57:54 Closed MCP SSE connection: 1df4476e2cdb3f4f0cc465bc256eae6c
+2026/04/06 22:00:20 Starting MCP SSE connection: 4c67e60bc7630a1607f7a84a62d075fd
+2026/04/06 22:00:20 SSEHub: registered connection 4c67e60bc7630a1607f7a84a62d075fd (total: 1)
+2026/04/06 22:00:20 SSEHub: unregistered connection 4c67e60bc7630a1607f7a84a62d075fd (total: 0)
+2026/04/06 22:00:20 Received kill signal.  Quitting Writer. stop 0x6c0d1e7b2930
+2026/04/06 22:00:20 Cleaning up writer...
+2026/04/06 22:00:20 Finished cleaning up writer:  0x6c0d1e7b2930
+2026/04/06 22:00:20 Closed MCP SSE connection: 4c67e60bc7630a1607f7a84a62d075fd
 --- PASS: TestSSEClientReadResourceTemplate (0.00s)
 === RUN   TestSSEClientListTools
-2026/04/06 14:57:54 Starting MCP SSE connection: 9deaa2b7b541c5385c40e4e3a6804951
-2026/04/06 14:57:54 SSEHub: registered connection 9deaa2b7b541c5385c40e4e3a6804951 (total: 1)
-2026/04/06 14:57:54 SSEHub: unregistered connection 9deaa2b7b541c5385c40e4e3a6804951 (total: 0)
-2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x3958363241c0
-2026/04/06 14:57:54 Cleaning up writer...
-2026/04/06 14:57:54 Finished cleaning up writer:  0x3958363241c0
-2026/04/06 14:57:54 Closed MCP SSE connection: 9deaa2b7b541c5385c40e4e3a6804951
+2026/04/06 22:00:20 Starting MCP SSE connection: a8deebf0aae7599a39e69a304a377c31
+2026/04/06 22:00:20 SSEHub: registered connection a8deebf0aae7599a39e69a304a377c31 (total: 1)
+2026/04/06 22:00:20 SSEHub: unregistered connection a8deebf0aae7599a39e69a304a377c31 (total: 0)
+2026/04/06 22:00:20 Received kill signal.  Quitting Writer. stop 0x6c0d1e893dc0
+2026/04/06 22:00:20 Cleaning up writer...
+2026/04/06 22:00:20 Finished cleaning up writer:  0x6c0d1e893dc0
+2026/04/06 22:00:20 Closed MCP SSE connection: a8deebf0aae7599a39e69a304a377c31
 --- PASS: TestSSEClientListTools (0.00s)
 === RUN   TestCompletionComplete
 --- PASS: TestCompletionComplete (0.00s)
@@ -130,6 +307,36 @@ Started: Mon Apr  6 14:57:53 PDT 2026
 --- PASS: TestCompletionCompleteResourceRef (0.00s)
 === RUN   TestCompletionCompleteBadParams
 --- PASS: TestCompletionCompleteBadParams (0.00s)
+=== RUN   TestErrCodeServerError
+--- PASS: TestErrCodeServerError (0.00s)
+=== RUN   TestStructuredResult
+--- PASS: TestStructuredResult (0.00s)
+=== RUN   TestStructuredError
+--- PASS: TestStructuredError (0.00s)
+=== RUN   TestOutputSchemaOnToolDef
+--- PASS: TestOutputSchemaOnToolDef (0.00s)
+=== RUN   TestStructuredContentInDispatch
+--- PASS: TestStructuredContentInDispatch (0.00s)
+=== RUN   TestInMemoryTransport_Connect
+--- PASS: TestInMemoryTransport_Connect (0.00s)
+=== RUN   TestInMemoryTransport_ToolCall
+--- PASS: TestInMemoryTransport_ToolCall (0.00s)
+=== RUN   TestInMemoryTransport_ReadResource
+--- PASS: TestInMemoryTransport_ReadResource (0.00s)
+=== RUN   TestInMemoryTransport_ListTools
+--- PASS: TestInMemoryTransport_ListTools (0.00s)
+=== RUN   TestStatelessMode_NoSession
+--- PASS: TestStatelessMode_NoSession (0.00s)
+=== RUN   TestStatelessMode_IndependentRequests
+--- PASS: TestStatelessMode_IndependentRequests (0.00s)
+=== RUN   TestCloseSession
+--- PASS: TestCloseSession (0.00s)
+=== RUN   TestCloseAllSessions
+--- PASS: TestCloseAllSessions (0.00s)
+=== RUN   TestCloseSession_NotFound
+--- PASS: TestCloseSession_NotFound (0.00s)
+=== RUN   TestRunDefaultsToStreamableHTTP
+--- PASS: TestRunDefaultsToStreamableHTTP (0.00s)
 === RUN   TestDispatchInitialize
 --- PASS: TestDispatchInitialize (0.00s)
 === RUN   TestDispatchNotification
@@ -246,6 +453,18 @@ Started: Mon Apr  6 14:57:53 PDT 2026
 --- PASS: TestNotifyNoSession (0.00s)
 === RUN   TestMarshalNotification
 --- PASS: TestMarshalNotification (0.00s)
+=== RUN   TestMiddleware_SeesAllRequests
+--- PASS: TestMiddleware_SeesAllRequests (0.00s)
+=== RUN   TestMiddleware_ChainOrder
+--- PASS: TestMiddleware_ChainOrder (0.00s)
+=== RUN   TestMiddleware_ShortCircuit
+--- PASS: TestMiddleware_ShortCircuit (0.00s)
+=== RUN   TestMiddleware_AccessContext
+--- PASS: TestMiddleware_AccessContext (0.00s)
+=== RUN   TestMiddleware_ToolTimeoutPreserved
+--- PASS: TestMiddleware_ToolTimeoutPreserved (0.05s)
+=== RUN   TestLoggingMiddleware
+--- PASS: TestLoggingMiddleware (0.00s)
 === RUN   TestEmitProgressSendsNotification
 --- PASS: TestEmitProgressSendsNotification (0.00s)
 === RUN   TestEmitProgressNilToken
@@ -349,117 +568,117 @@ Started: Mon Apr  6 14:57:53 PDT 2026
     --- PASS: TestStreamableDNSRebindingAcceptsLocalhost/http://127.0.0.1:9999 (0.00s)
     --- PASS: TestStreamableDNSRebindingAcceptsLocalhost/http://[::1]:3000 (0.00s)
 === RUN   TestSSEEndpointEvent
-2026/04/06 14:57:54 Starting MCP SSE connection: 9007aeab59d3defec600765047e3152e
-2026/04/06 14:57:54 SSEHub: registered connection 9007aeab59d3defec600765047e3152e (total: 1)
-2026/04/06 14:57:54 SSEHub: unregistered connection 9007aeab59d3defec600765047e3152e (total: 0)
-2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x3958360bc690
-2026/04/06 14:57:54 Cleaning up writer...
-2026/04/06 14:57:54 Finished cleaning up writer:  0x3958360bc690
-2026/04/06 14:57:54 Closed MCP SSE connection: 9007aeab59d3defec600765047e3152e
+2026/04/06 22:00:20 Starting MCP SSE connection: c156cc9d45ebcaadd2dd9d529d55d364
+2026/04/06 22:00:20 SSEHub: registered connection c156cc9d45ebcaadd2dd9d529d55d364 (total: 1)
+2026/04/06 22:00:20 SSEHub: unregistered connection c156cc9d45ebcaadd2dd9d529d55d364 (total: 0)
+2026/04/06 22:00:20 Received kill signal.  Quitting Writer. stop 0x6c0d1e9a9ce0
+2026/04/06 22:00:20 Cleaning up writer...
+2026/04/06 22:00:20 Finished cleaning up writer:  0x6c0d1e9a9ce0
+2026/04/06 22:00:20 Closed MCP SSE connection: c156cc9d45ebcaadd2dd9d529d55d364
 --- PASS: TestSSEEndpointEvent (0.00s)
 === RUN   TestSSEInitAndToolCall
-2026/04/06 14:57:54 Starting MCP SSE connection: db441e4c5869cf4a94b977d9f16abfc5
-2026/04/06 14:57:54 SSEHub: registered connection db441e4c5869cf4a94b977d9f16abfc5 (total: 1)
-2026/04/06 14:57:54 SSEHub: unregistered connection db441e4c5869cf4a94b977d9f16abfc5 (total: 0)
-2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x3958360bc8c0
-2026/04/06 14:57:54 Cleaning up writer...
-2026/04/06 14:57:54 Finished cleaning up writer:  0x3958360bc8c0
-2026/04/06 14:57:54 Closed MCP SSE connection: db441e4c5869cf4a94b977d9f16abfc5
+2026/04/06 22:00:20 Starting MCP SSE connection: afd76d008a02d1bbedbca9ce152126c3
+2026/04/06 22:00:20 SSEHub: registered connection afd76d008a02d1bbedbca9ce152126c3 (total: 1)
+2026/04/06 22:00:20 SSEHub: unregistered connection afd76d008a02d1bbedbca9ce152126c3 (total: 0)
+2026/04/06 22:00:20 Received kill signal.  Quitting Writer. stop 0x6c0d1e9a9f10
+2026/04/06 22:00:20 Cleaning up writer...
+2026/04/06 22:00:20 Finished cleaning up writer:  0x6c0d1e9a9f10
+2026/04/06 22:00:20 Closed MCP SSE connection: afd76d008a02d1bbedbca9ce152126c3
 --- PASS: TestSSEInitAndToolCall (0.00s)
 === RUN   TestSSESessionNotFound
 --- PASS: TestSSESessionNotFound (0.00s)
 === RUN   TestSSENotification
-2026/04/06 14:57:54 Starting MCP SSE connection: 65d83aab664ff5d65382364456438687
-2026/04/06 14:57:54 SSEHub: registered connection 65d83aab664ff5d65382364456438687 (total: 1)
-2026/04/06 14:57:54 SSEHub: unregistered connection 65d83aab664ff5d65382364456438687 (total: 0)
-2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x395836188930
-2026/04/06 14:57:54 Cleaning up writer...
-2026/04/06 14:57:54 Finished cleaning up writer:  0x395836188930
-2026/04/06 14:57:54 Closed MCP SSE connection: 65d83aab664ff5d65382364456438687
+2026/04/06 22:00:20 Starting MCP SSE connection: 7a1c37c15f50b9c9a452b32a07085504
+2026/04/06 22:00:20 SSEHub: registered connection 7a1c37c15f50b9c9a452b32a07085504 (total: 1)
+2026/04/06 22:00:20 SSEHub: unregistered connection 7a1c37c15f50b9c9a452b32a07085504 (total: 0)
+2026/04/06 22:00:20 Received kill signal.  Quitting Writer. stop 0x6c0d1eaeea10
+2026/04/06 22:00:20 Cleaning up writer...
+2026/04/06 22:00:20 Finished cleaning up writer:  0x6c0d1eaeea10
+2026/04/06 22:00:20 Closed MCP SSE connection: 7a1c37c15f50b9c9a452b32a07085504
 --- PASS: TestSSENotification (0.00s)
 === RUN   TestSSEAuthRequired
-2026/04/06 14:57:54 Starting MCP SSE connection: e701ad55b67c9a58e2905bee531ff9d1
-2026/04/06 14:57:54 SSEHub: registered connection e701ad55b67c9a58e2905bee531ff9d1 (total: 1)
-2026/04/06 14:57:54 SSEHub: unregistered connection e701ad55b67c9a58e2905bee531ff9d1 (total: 0)
-2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x3958364ea690
-2026/04/06 14:57:54 Cleaning up writer...
-2026/04/06 14:57:54 Finished cleaning up writer:  0x3958364ea690
-2026/04/06 14:57:54 Closed MCP SSE connection: e701ad55b67c9a58e2905bee531ff9d1
+2026/04/06 22:00:20 Starting MCP SSE connection: 5cf177a93b65c4eb0e7c939d1754057e
+2026/04/06 22:00:20 SSEHub: registered connection 5cf177a93b65c4eb0e7c939d1754057e (total: 1)
+2026/04/06 22:00:20 SSEHub: unregistered connection 5cf177a93b65c4eb0e7c939d1754057e (total: 0)
+2026/04/06 22:00:20 Received kill signal.  Quitting Writer. stop 0x6c0d1e9f8620
+2026/04/06 22:00:20 Cleaning up writer...
+2026/04/06 22:00:20 Finished cleaning up writer:  0x6c0d1e9f8620
+2026/04/06 22:00:20 Closed MCP SSE connection: 5cf177a93b65c4eb0e7c939d1754057e
 --- PASS: TestSSEAuthRequired (0.00s)
 === RUN   TestSSEMaxSessions
-2026/04/06 14:57:54 Starting MCP SSE connection: ade32a009f9b4844b8cac7faccbf55a2
-2026/04/06 14:57:54 SSEHub: registered connection ade32a009f9b4844b8cac7faccbf55a2 (total: 1)
-2026/04/06 14:57:54 SSEHub: unregistered connection ade32a009f9b4844b8cac7faccbf55a2 (total: 0)
-2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x395836188c40
-2026/04/06 14:57:54 Cleaning up writer...
-2026/04/06 14:57:54 Finished cleaning up writer:  0x395836188c40
-2026/04/06 14:57:54 Closed MCP SSE connection: ade32a009f9b4844b8cac7faccbf55a2
+2026/04/06 22:00:20 Starting MCP SSE connection: f37fafb47efad77b54a0ef950b702c93
+2026/04/06 22:00:20 SSEHub: registered connection f37fafb47efad77b54a0ef950b702c93 (total: 1)
+2026/04/06 22:00:20 SSEHub: unregistered connection f37fafb47efad77b54a0ef950b702c93 (total: 0)
+2026/04/06 22:00:20 Received kill signal.  Quitting Writer. stop 0x6c0d1e964380
+2026/04/06 22:00:20 Cleaning up writer...
+2026/04/06 22:00:20 Finished cleaning up writer:  0x6c0d1e964380
+2026/04/06 22:00:20 Closed MCP SSE connection: f37fafb47efad77b54a0ef950b702c93
 --- PASS: TestSSEMaxSessions (0.00s)
 === RUN   TestSSEClientDisconnect
-2026/04/06 14:57:54 Starting MCP SSE connection: 5fff01ee9af510a51dd839aec5a24441
-2026/04/06 14:57:54 SSEHub: registered connection 5fff01ee9af510a51dd839aec5a24441 (total: 1)
-2026/04/06 14:57:54 SSEHub: unregistered connection 5fff01ee9af510a51dd839aec5a24441 (total: 0)
-2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x3958360bd730
-2026/04/06 14:57:54 Cleaning up writer...
-2026/04/06 14:57:54 Finished cleaning up writer:  0x3958360bd730
-2026/04/06 14:57:54 Closed MCP SSE connection: 5fff01ee9af510a51dd839aec5a24441
+2026/04/06 22:00:20 Starting MCP SSE connection: 655331ef8d1a5805512b05651e43326d
+2026/04/06 22:00:20 SSEHub: registered connection 655331ef8d1a5805512b05651e43326d (total: 1)
+2026/04/06 22:00:20 SSEHub: unregistered connection 655331ef8d1a5805512b05651e43326d (total: 0)
+2026/04/06 22:00:20 Received kill signal.  Quitting Writer. stop 0x6c0d1e964620
+2026/04/06 22:00:20 Cleaning up writer...
+2026/04/06 22:00:20 Finished cleaning up writer:  0x6c0d1e964620
+2026/04/06 22:00:20 Closed MCP SSE connection: 655331ef8d1a5805512b05651e43326d
 --- PASS: TestSSEClientDisconnect (0.05s)
 === RUN   TestSSEParseError
-2026/04/06 14:57:54 Starting MCP SSE connection: 22e5ebb0f804fd8b0bf9ccde84cef61a
-2026/04/06 14:57:54 SSEHub: registered connection 22e5ebb0f804fd8b0bf9ccde84cef61a (total: 1)
-2026/04/06 14:57:54 SSEHub: unregistered connection 22e5ebb0f804fd8b0bf9ccde84cef61a (total: 0)
-2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x3958364eacb0
-2026/04/06 14:57:54 Cleaning up writer...
-2026/04/06 14:57:54 Finished cleaning up writer:  0x3958364eacb0
-2026/04/06 14:57:54 Closed MCP SSE connection: 22e5ebb0f804fd8b0bf9ccde84cef61a
+2026/04/06 22:00:20 Starting MCP SSE connection: e07bdc40395ffe4c0b30df06cb37bb12
+2026/04/06 22:00:20 SSEHub: registered connection e07bdc40395ffe4c0b30df06cb37bb12 (total: 1)
+2026/04/06 22:00:20 SSEHub: unregistered connection e07bdc40395ffe4c0b30df06cb37bb12 (total: 0)
+2026/04/06 22:00:20 Received kill signal.  Quitting Writer. stop 0x6c0d1eb80930
+2026/04/06 22:00:20 Cleaning up writer...
+2026/04/06 22:00:20 Finished cleaning up writer:  0x6c0d1eb80930
+2026/04/06 22:00:20 Closed MCP SSE connection: e07bdc40395ffe4c0b30df06cb37bb12
 --- PASS: TestSSEParseError (0.00s)
 === RUN   TestSSECustomPrefix
-2026/04/06 14:57:54 Starting MCP SSE connection: fdeef9ac166ce5bc96206db626e14428
-2026/04/06 14:57:54 SSEHub: registered connection fdeef9ac166ce5bc96206db626e14428 (total: 1)
-2026/04/06 14:57:54 SSEHub: unregistered connection fdeef9ac166ce5bc96206db626e14428 (total: 0)
-2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x3958362211f0
-2026/04/06 14:57:54 Cleaning up writer...
-2026/04/06 14:57:54 Finished cleaning up writer:  0x3958362211f0
-2026/04/06 14:57:54 Closed MCP SSE connection: fdeef9ac166ce5bc96206db626e14428
+2026/04/06 22:00:20 Starting MCP SSE connection: 0b758be7e210dedd92c9d2084b46cfac
+2026/04/06 22:00:20 SSEHub: registered connection 0b758be7e210dedd92c9d2084b46cfac (total: 1)
+2026/04/06 22:00:20 SSEHub: unregistered connection 0b758be7e210dedd92c9d2084b46cfac (total: 0)
+2026/04/06 22:00:20 Received kill signal.  Quitting Writer. stop 0x6c0d1e9f88c0
+2026/04/06 22:00:20 Cleaning up writer...
+2026/04/06 22:00:20 Finished cleaning up writer:  0x6c0d1e9f88c0
+2026/04/06 22:00:20 Closed MCP SSE connection: 0b758be7e210dedd92c9d2084b46cfac
 --- PASS: TestSSECustomPrefix (0.00s)
 === RUN   TestSSEPublicURL
-2026/04/06 14:57:54 Starting MCP SSE connection: 436426a65d8efa39cd013fbc530f1b98
-2026/04/06 14:57:54 SSEHub: registered connection 436426a65d8efa39cd013fbc530f1b98 (total: 1)
-2026/04/06 14:57:54 SSEHub: unregistered connection 436426a65d8efa39cd013fbc530f1b98 (total: 0)
-2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x3958364eaee0
-2026/04/06 14:57:54 Cleaning up writer...
-2026/04/06 14:57:54 Finished cleaning up writer:  0x3958364eaee0
-2026/04/06 14:57:54 Closed MCP SSE connection: 436426a65d8efa39cd013fbc530f1b98
+2026/04/06 22:00:20 Starting MCP SSE connection: 812205fa5882c79569e1e4b23c2e03fd
+2026/04/06 22:00:20 SSEHub: registered connection 812205fa5882c79569e1e4b23c2e03fd (total: 1)
+2026/04/06 22:00:20 SSEHub: unregistered connection 812205fa5882c79569e1e4b23c2e03fd (total: 0)
+2026/04/06 22:00:20 Received kill signal.  Quitting Writer. stop 0x6c0d1e9f8b60
+2026/04/06 22:00:20 Cleaning up writer...
+2026/04/06 22:00:20 Finished cleaning up writer:  0x6c0d1e9f8b60
+2026/04/06 22:00:20 Closed MCP SSE connection: 812205fa5882c79569e1e4b23c2e03fd
 --- PASS: TestSSEPublicURL (0.00s)
 === RUN   TestSSELoggingNotification
-2026/04/06 14:57:54 Starting MCP SSE connection: cd83d52e85349ade22638fc7b0cd03f5
-2026/04/06 14:57:54 SSEHub: registered connection cd83d52e85349ade22638fc7b0cd03f5 (total: 1)
-2026/04/06 14:57:54 SSEHub: unregistered connection cd83d52e85349ade22638fc7b0cd03f5 (total: 0)
-2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x3958360bdd50
-2026/04/06 14:57:54 Cleaning up writer...
-2026/04/06 14:57:54 Finished cleaning up writer:  0x3958360bdd50
-2026/04/06 14:57:54 Closed MCP SSE connection: cd83d52e85349ade22638fc7b0cd03f5
+2026/04/06 22:00:20 Starting MCP SSE connection: 78116b1cedb63a7d40472253b59d2bbc
+2026/04/06 22:00:20 SSEHub: registered connection 78116b1cedb63a7d40472253b59d2bbc (total: 1)
+2026/04/06 22:00:20 SSEHub: unregistered connection 78116b1cedb63a7d40472253b59d2bbc (total: 0)
+2026/04/06 22:00:20 Received kill signal.  Quitting Writer. stop 0x6c0d1eb813b0
+2026/04/06 22:00:20 Cleaning up writer...
+2026/04/06 22:00:20 Finished cleaning up writer:  0x6c0d1eb813b0
+2026/04/06 22:00:20 Closed MCP SSE connection: 78116b1cedb63a7d40472253b59d2bbc
 --- PASS: TestSSELoggingNotification (0.00s)
 === RUN   TestSSELoggingFilteredByLevel
-2026/04/06 14:57:54 Starting MCP SSE connection: 489b9f30fcca2aabea5fa440f648722e
-2026/04/06 14:57:54 SSEHub: registered connection 489b9f30fcca2aabea5fa440f648722e (total: 1)
-2026/04/06 14:57:54 SSEHub: unregistered connection 489b9f30fcca2aabea5fa440f648722e (total: 0)
-2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x3958364eb960
-2026/04/06 14:57:54 Cleaning up writer...
-2026/04/06 14:57:54 Finished cleaning up writer:  0x3958364eb960
-2026/04/06 14:57:54 Closed MCP SSE connection: 489b9f30fcca2aabea5fa440f648722e
+2026/04/06 22:00:20 Starting MCP SSE connection: 05aa89964bcd02d9fea13889fad6e357
+2026/04/06 22:00:20 SSEHub: registered connection 05aa89964bcd02d9fea13889fad6e357 (total: 1)
+2026/04/06 22:00:20 SSEHub: unregistered connection 05aa89964bcd02d9fea13889fad6e357 (total: 0)
+2026/04/06 22:00:20 Received kill signal.  Quitting Writer. stop 0x6c0d1e964230
+2026/04/06 22:00:20 Cleaning up writer...
+2026/04/06 22:00:20 Finished cleaning up writer:  0x6c0d1e964230
+2026/04/06 22:00:20 Closed MCP SSE connection: 05aa89964bcd02d9fea13889fad6e357
 --- PASS: TestSSELoggingFilteredByLevel (0.00s)
 === RUN   TestSSEProgressNotification
-2026/04/06 14:57:54 Starting MCP SSE connection: 7b739d529a96d055cc8a77e41115a4b9
-2026/04/06 14:57:54 SSEHub: registered connection 7b739d529a96d055cc8a77e41115a4b9 (total: 1)
-2026/04/06 14:57:54 SSEHub: unregistered connection 7b739d529a96d055cc8a77e41115a4b9 (total: 0)
-2026/04/06 14:57:54 Received kill signal.  Quitting Writer. stop 0x3958362201c0
-2026/04/06 14:57:54 Cleaning up writer...
-2026/04/06 14:57:54 Finished cleaning up writer:  0x3958362201c0
-2026/04/06 14:57:54 Closed MCP SSE connection: 7b739d529a96d055cc8a77e41115a4b9
+2026/04/06 22:00:20 Starting MCP SSE connection: 9ed28a3c40017730f85eb147a6b1ccc6
+2026/04/06 22:00:20 SSEHub: registered connection 9ed28a3c40017730f85eb147a6b1ccc6 (total: 1)
+2026/04/06 22:00:20 SSEHub: unregistered connection 9ed28a3c40017730f85eb147a6b1ccc6 (total: 0)
+2026/04/06 22:00:20 Received kill signal.  Quitting Writer. stop 0x6c0d1e892540
+2026/04/06 22:00:20 Cleaning up writer...
+2026/04/06 22:00:20 Finished cleaning up writer:  0x6c0d1e892540
+2026/04/06 22:00:20 Closed MCP SSE connection: 9ed28a3c40017730f85eb147a6b1ccc6
 --- PASS: TestSSEProgressNotification (0.00s)
 PASS
-ok  	github.com/panyam/mcpkit	0.524s
+ok  	github.com/panyam/mcpkit	0.591s
 ?   	github.com/panyam/mcpkit/cmd/testclient	[no test files]
 ?   	github.com/panyam/mcpkit/cmd/testserver	[no test files]
 === RUN   TestTestClientToolCall
@@ -475,13 +694,13 @@ ok  	github.com/panyam/mcpkit	0.524s
 === RUN   TestTestClientSessionID
 --- PASS: TestTestClientSessionID (0.00s)
 PASS
-ok  	github.com/panyam/mcpkit/testutil	0.700s
+ok  	github.com/panyam/mcpkit/testutil	0.518s
   PASS: unit
 --- [2/7] Race detector ---
-ok  	github.com/panyam/mcpkit	1.550s
+ok  	github.com/panyam/mcpkit	1.673s
 ?   	github.com/panyam/mcpkit/cmd/testclient	[no test files]
 ?   	github.com/panyam/mcpkit/cmd/testserver	[no test files]
-ok  	github.com/panyam/mcpkit/testutil	1.610s
+ok  	github.com/panyam/mcpkit/testutil	1.576s
   PASS: race
 --- [3/7] Auth module ---
 === RUN   TestWWWAuth401
@@ -505,58 +724,76 @@ ok  	github.com/panyam/mcpkit/testutil	1.610s
 === RUN   TestExtension
 --- PASS: TestExtension (0.00s)
 PASS
-ok  	github.com/panyam/mcpkit/auth	0.312s
+ok  	github.com/panyam/mcpkit/auth	0.376s
   PASS: auth
 --- [4/7] E2E auth ---
+=== RUN   TestE2E_Client_401_TokenRefresh
+--- PASS: TestE2E_Client_401_TokenRefresh (0.08s)
+=== RUN   TestE2E_Client_403_ScopeStepUp
+--- PASS: TestE2E_Client_403_ScopeStepUp (0.05s)
+=== RUN   TestE2E_Client_RetryLimit
+--- PASS: TestE2E_Client_RetryLimit (0.04s)
+=== RUN   TestE2E_Client_401_WithExpiredJWT
+--- PASS: TestE2E_Client_401_WithExpiredJWT (0.02s)
 === RUN   TestE2E_ValidToken_ToolCall
---- PASS: TestE2E_ValidToken_ToolCall (0.03s)
+--- PASS: TestE2E_ValidToken_ToolCall (0.07s)
 === RUN   TestE2E_ValidToken_ClaimsPropagation
---- PASS: TestE2E_ValidToken_ClaimsPropagation (0.09s)
+--- PASS: TestE2E_ValidToken_ClaimsPropagation (0.02s)
 === RUN   TestE2E_ExpiredToken_Rejected
---- PASS: TestE2E_ExpiredToken_Rejected (0.03s)
+--- PASS: TestE2E_ExpiredToken_Rejected (0.06s)
 === RUN   TestE2E_WrongIssuer_Rejected
---- PASS: TestE2E_WrongIssuer_Rejected (0.05s)
+--- PASS: TestE2E_WrongIssuer_Rejected (0.09s)
 === RUN   TestE2E_WrongAudience_Rejected
---- PASS: TestE2E_WrongAudience_Rejected (0.11s)
+--- PASS: TestE2E_WrongAudience_Rejected (0.03s)
 === RUN   TestE2E_TamperedToken_Rejected
---- PASS: TestE2E_TamperedToken_Rejected (0.07s)
+--- PASS: TestE2E_TamperedToken_Rejected (0.05s)
 === RUN   TestE2E_NoAuthHeader_Rejected
---- PASS: TestE2E_NoAuthHeader_Rejected (0.11s)
+--- PASS: TestE2E_NoAuthHeader_Rejected (0.03s)
 === RUN   TestE2E_ClientCredentials_FullFlow
---- PASS: TestE2E_ClientCredentials_FullFlow (0.04s)
+--- PASS: TestE2E_ClientCredentials_FullFlow (0.06s)
+=== RUN   TestE2E_Middleware_SeesAuthClaims
+--- PASS: TestE2E_Middleware_SeesAuthClaims (0.09s)
+=== RUN   TestE2E_Middleware_LoggingWithRealAuth
+--- PASS: TestE2E_Middleware_LoggingWithRealAuth (0.05s)
 === RUN   TestE2E_PRM_PathBased
---- PASS: TestE2E_PRM_PathBased (0.06s)
+--- PASS: TestE2E_PRM_PathBased (0.05s)
 === RUN   TestE2E_PRM_RootFallback
---- PASS: TestE2E_PRM_RootFallback (0.08s)
+--- PASS: TestE2E_PRM_RootFallback (0.07s)
 === RUN   TestE2E_PRM_Content
---- PASS: TestE2E_PRM_Content (0.03s)
+--- PASS: TestE2E_PRM_Content (0.05s)
+=== RUN   TestE2E_Reconnect_WithTokenRefresh
+--- PASS: TestE2E_Reconnect_WithTokenRefresh (0.02s)
+=== RUN   TestE2E_Reconnect_TransientErrorClassification
+--- PASS: TestE2E_Reconnect_TransientErrorClassification (0.10s)
+=== RUN   TestE2E_Reconnect_RecentlyExpiredJWT
+--- PASS: TestE2E_Reconnect_RecentlyExpiredJWT (0.32s)
 === RUN   TestE2E_Scope_Allowed
---- PASS: TestE2E_Scope_Allowed (0.09s)
+--- PASS: TestE2E_Scope_Allowed (0.04s)
 === RUN   TestE2E_Scope_Denied
---- PASS: TestE2E_Scope_Denied (0.10s)
+--- PASS: TestE2E_Scope_Denied (0.05s)
 === RUN   TestE2E_AdminScope_Denied
---- PASS: TestE2E_AdminScope_Denied (0.03s)
+--- PASS: TestE2E_AdminScope_Denied (0.10s)
 === RUN   TestE2E_GlobalRequiredScopes
     scope_test.go:68: Requires custom JWTValidator with RequiredScopes — tracked as follow-up
 --- SKIP: TestE2E_GlobalRequiredScopes (0.00s)
 === RUN   TestE2E_Streamable_AuthRequired
---- PASS: TestE2E_Streamable_AuthRequired (0.02s)
+--- PASS: TestE2E_Streamable_AuthRequired (0.07s)
 === RUN   TestE2E_Streamable_DeleteRequiresAuth
---- PASS: TestE2E_Streamable_DeleteRequiresAuth (0.06s)
+--- PASS: TestE2E_Streamable_DeleteRequiresAuth (0.13s)
 === RUN   TestE2E_Streamable_ValidAuth_Works
---- PASS: TestE2E_Streamable_ValidAuth_Works (0.01s)
+--- PASS: TestE2E_Streamable_ValidAuth_Works (0.13s)
 === RUN   TestE2E_SSE_AuthOnGET
---- PASS: TestE2E_SSE_AuthOnGET (0.07s)
+--- PASS: TestE2E_SSE_AuthOnGET (0.01s)
 === RUN   TestE2E_SSE_AuthOnPOST
---- PASS: TestE2E_SSE_AuthOnPOST (0.02s)
+--- PASS: TestE2E_SSE_AuthOnPOST (0.03s)
 === RUN   TestE2E_401_WWWAuthenticate_Present
---- PASS: TestE2E_401_WWWAuthenticate_Present (0.01s)
+--- PASS: TestE2E_401_WWWAuthenticate_Present (0.04s)
 === RUN   TestE2E_401_WWWAuthenticate_HasResourceMetadata
---- PASS: TestE2E_401_WWWAuthenticate_HasResourceMetadata (0.08s)
+--- PASS: TestE2E_401_WWWAuthenticate_HasResourceMetadata (0.10s)
 === RUN   TestE2E_401_WWWAuthenticate_Parseable
---- PASS: TestE2E_401_WWWAuthenticate_Parseable (0.05s)
+--- PASS: TestE2E_401_WWWAuthenticate_Parseable (0.03s)
 PASS
-ok  	github.com/panyam/mcpkit/tests/e2e	1.568s
+ok  	github.com/panyam/mcpkit/tests/e2e	2.436s
   PASS: e2e
 --- [5/7] Conformance ---
 === Starting test server on :18799 (Streamable HTTP) ===
@@ -565,8 +802,8 @@ Waiting for server... ready
 === Running MCP conformance suite ===
 Command: npx -y @modelcontextprotocol/conformance server --url http://localhost:18799/mcp --expected-failures conformance/baseline.yml
 
-2026/04/06 14:57:59 MCP test server listening on :18799 (Streamable HTTP at /mcp)
-2026/04/06 14:57:59 listen tcp :18799: bind: address already in use
+2026/04/06 22:00:27 MCP test server listening on :18799 (Streamable HTTP at /mcp)
+2026/04/06 22:00:27 listen tcp :18799: bind: address already in use
 exit status 1
 Running active suite (30 scenarios) against http://localhost:18799/mcp
 
@@ -729,47 +966,45 @@ Starting scenario: auth/token-endpoint-auth-basic
 Starting scenario: auth/token-endpoint-auth-post
 Starting scenario: auth/token-endpoint-auth-none
 Starting scenario: auth/pre-registration
-Executing client: go run ./cmd/testclient http://localhost:59298/mcp
-Executing client: go run ./cmd/testclient http://localhost:59299/mcp
-Executing client: go run ./cmd/testclient http://localhost:59300/mcp
-Executing client: go run ./cmd/testclient http://localhost:59301/mcp
-Executing client: go run ./cmd/testclient http://localhost:59302/mcp
-Executing client: go run ./cmd/testclient http://localhost:59303/mcp
-Executing client: go run ./cmd/testclient http://localhost:59304/mcp
-Executing client: go run ./cmd/testclient http://localhost:59305/mcp
-Executing client: go run ./cmd/testclient http://localhost:59306/mcp
-Executing client: go run ./cmd/testclient http://localhost:59307/mcp
-Executing client: go run ./cmd/testclient http://localhost:59308/mcp
-Executing client: go run ./cmd/testclient http://localhost:59309/mcp
-Executing client: go run ./cmd/testclient http://localhost:59310/mcp
-Executing client: go run ./cmd/testclient http://localhost:59311/mcp
+Executing client: go run ./cmd/testclient http://localhost:58337/mcp
+Executing client: go run ./cmd/testclient http://localhost:58338/mcp
+Executing client: go run ./cmd/testclient http://localhost:58339/mcp
+Executing client: go run ./cmd/testclient http://localhost:58340/mcp
+Executing client: go run ./cmd/testclient http://localhost:58341/mcp
+Executing client: go run ./cmd/testclient http://localhost:58342/mcp
+Executing client: go run ./cmd/testclient http://localhost:58343/mcp
+Executing client: go run ./cmd/testclient http://localhost:58344/mcp
+Executing client: go run ./cmd/testclient http://localhost:58345/mcp
+Executing client: go run ./cmd/testclient http://localhost:58346/mcp
+Executing client: go run ./cmd/testclient http://localhost:58347/mcp
+Executing client: go run ./cmd/testclient http://localhost:58348/mcp
+Executing client: go run ./cmd/testclient http://localhost:58349/mcp
+Executing client: go run ./cmd/testclient http://localhost:58350/mcp
 With context: {"client_id":"pre-registered-client","client_secret":"pre-registered-secret"}
-(node:97668) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(node:72422) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
 (Use `node --trace-deprecation ...` to show where the warning was created)
 
 === SUITE SUMMARY ===
 
-✓ auth/metadata-default: 11 passed, 0 failed
-✓ auth/metadata-var1: 11 passed, 0 failed
-✓ auth/metadata-var2: 11 passed, 0 failed
-✓ auth/metadata-var3: 11 passed, 0 failed
-✗ auth/basic-cimd: 11 passed, 0 failed, 1 warnings
-✓ auth/scope-from-www-authenticate: 12 passed, 0 failed
-✓ auth/scope-from-scopes-supported: 12 passed, 0 failed
-✓ auth/scope-omitted-when-undefined: 12 passed, 0 failed
-✗ auth/scope-step-up: 0 passed, 2 failed
-✗ auth/scope-retry-limit: 0 passed, 1 failed
-✓ auth/token-endpoint-auth-basic: 16 passed, 0 failed
-✓ auth/token-endpoint-auth-post: 16 passed, 0 failed
-✓ auth/token-endpoint-auth-none: 16 passed, 0 failed
-✓ auth/pre-registration: 11 passed, 0 failed
+✓ auth/metadata-default: 13 passed, 0 failed
+✓ auth/metadata-var1: 13 passed, 0 failed
+✓ auth/metadata-var2: 13 passed, 0 failed
+✓ auth/metadata-var3: 13 passed, 0 failed
+✗ auth/basic-cimd: 13 passed, 0 failed, 1 warnings
+✓ auth/scope-from-www-authenticate: 14 passed, 0 failed
+✓ auth/scope-from-scopes-supported: 14 passed, 0 failed
+✓ auth/scope-omitted-when-undefined: 14 passed, 0 failed
+✓ auth/scope-step-up: 20 passed, 0 failed
+✓ auth/scope-retry-limit: 16 passed, 0 failed
+✓ auth/token-endpoint-auth-basic: 18 passed, 0 failed
+✓ auth/token-endpoint-auth-post: 18 passed, 0 failed
+✓ auth/token-endpoint-auth-none: 18 passed, 0 failed
+✓ auth/pre-registration: 13 passed, 0 failed
 
-Total: 150 passed, 3 failed, 1 warnings
+Total: 210 passed, 0 failed, 1 warnings
 
 [33mExpected failures (in baseline):[0m
   ~ auth/basic-cimd
-  ~ auth/scope-step-up
-  ~ auth/scope-retry-limit
 
 [32mBaseline check passed: all failures are expected.[0m
 
@@ -789,12 +1024,12 @@ Total: 150 passed, 3 failed, 1 warnings
 === RUN   TestKeycloak_MCPServer_WWWAuthenticate
 --- PASS: TestKeycloak_MCPServer_WWWAuthenticate (0.01s)
 === RUN   TestKeycloak_MCPServer_PasswordGrant
---- PASS: TestKeycloak_MCPServer_PasswordGrant (0.04s)
+--- PASS: TestKeycloak_MCPServer_PasswordGrant (0.05s)
 PASS
-ok  	github.com/panyam/mcpkit/tests/keycloak	0.444s
+ok  	github.com/panyam/mcpkit/tests/keycloak	0.449s
   PASS: keycloak
 
 === Results: 7 passed, 0 failed ===
-Finished: Mon Apr  6 14:58:05 PDT 2026
+Finished: Mon Apr  6 22:00:32 PDT 2026
 </pre>
 </body></html>
