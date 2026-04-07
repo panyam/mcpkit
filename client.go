@@ -117,10 +117,16 @@ func (c *Client) Connect() error {
 		if c.useSSE {
 			st := newSSEClientTransport(c.url, c.tokenSource)
 			st.serverReqHandler = c.handleServerRequest
+			if c.onNotify != nil {
+				st.notifyHandler = c.makeNotifyAdapter()
+			}
 			c.transport = st
 		} else {
 			st := newStreamableClientTransport(c.url, c.tokenSource)
 			st.serverReqHandler = c.handleServerRequest
+			if c.onNotify != nil {
+				st.notifyHandler = c.makeNotifyAdapter()
+			}
 			c.transport = st
 		}
 
@@ -176,6 +182,18 @@ func (c *Client) Close() error {
 		return c.transport.close()
 	}
 	return nil
+}
+
+// makeNotifyAdapter creates a transport-level notification handler that
+// unmarshals JSON params and delegates to the client's onNotify callback.
+func (c *Client) makeNotifyAdapter() func(string, json.RawMessage) {
+	return func(method string, params json.RawMessage) {
+		var parsed any
+		if len(params) > 0 {
+			json.Unmarshal(params, &parsed)
+		}
+		c.onNotify(method, parsed)
+	}
 }
 
 // handleServerRequest dispatches an incoming server-to-client JSON-RPC request
@@ -404,7 +422,8 @@ type streamableClientTransport struct {
 	sessionID        string
 	httpClient       *http.Client
 	tokenSource      TokenSource
-	serverReqHandler func(*Request) *Response // set by Client before connect
+	serverReqHandler func(*Request) *Response                // set by Client before connect
+	notifyHandler    func(method string, params json.RawMessage) // set by Client before connect
 }
 
 func newStreamableClientTransport(url string, ts TokenSource) *streamableClientTransport {
@@ -508,13 +527,22 @@ func (t *streamableClientTransport) readSSEResponse(body io.Reader) (*rpcRespons
 				continue
 			}
 
-			// JSON-RPC response or notification
-			var resp rpcResponse
-			if json.Unmarshal([]byte(data), &resp) == nil {
-				if resp.ID != nil {
-					lastResponse = &resp
+			// Notification (method set, no id) — deliver to handler
+			if probe.Method != "" && probe.ID == nil {
+				if t.notifyHandler != nil {
+					var notif struct {
+						Params json.RawMessage `json:"params"`
+					}
+					json.Unmarshal([]byte(data), &notif)
+					t.notifyHandler(probe.Method, notif.Params)
 				}
-				// else: notification (no id) — discard
+				continue
+			}
+
+			// JSON-RPC response (has id)
+			var resp rpcResponse
+			if json.Unmarshal([]byte(data), &resp) == nil && resp.ID != nil {
+				lastResponse = &resp
 			}
 		}
 		// Skip event:, id:, comments, blank lines
@@ -593,10 +621,11 @@ type sseClientTransport struct {
 	sseReader   *bufio.Reader
 
 	// Background reader state
-	pendingCalls    sync.Map    // requestID (string) → chan *rpcResponse
-	serverReqHandler func(*Request) *Response // set by Client before connect
-	done            chan struct{} // closed when background reader exits
-	readerErr       error         // last error from background reader
+	pendingCalls     sync.Map                                    // requestID (string) → chan *rpcResponse
+	serverReqHandler func(*Request) *Response                    // set by Client before connect
+	notifyHandler    func(method string, params json.RawMessage) // set by Client before connect
+	done             chan struct{}                                // closed when background reader exits
+	readerErr        error                                       // last error from background reader
 }
 
 func newSSEClientTransport(sseURL string, ts TokenSource) *sseClientTransport {
@@ -680,14 +709,25 @@ func (t *sseClientTransport) backgroundReader() {
 		}
 
 		if probe.Method != "" {
-			// Server-to-client request — dispatch to handler
-			if t.serverReqHandler != nil {
-				var req Request
-				if json.Unmarshal([]byte(ev.data), &req) == nil {
-					resp := t.serverReqHandler(&req)
-					if resp != nil {
-						t.postResponse(resp)
+			if probe.ID != nil {
+				// Server-to-client request (has method + id) — dispatch to handler
+				if t.serverReqHandler != nil {
+					var req Request
+					if json.Unmarshal([]byte(ev.data), &req) == nil {
+						resp := t.serverReqHandler(&req)
+						if resp != nil {
+							t.postResponse(resp)
+						}
 					}
+				}
+			} else {
+				// Notification (method, no id) — deliver to handler
+				if t.notifyHandler != nil {
+					var notif struct {
+						Params json.RawMessage `json:"params"`
+					}
+					json.Unmarshal([]byte(ev.data), &notif)
+					t.notifyHandler(probe.Method, notif.Params)
 				}
 			}
 			continue
