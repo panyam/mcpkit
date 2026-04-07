@@ -1,4 +1,4 @@
-module github.com/panyam/mcpkit/auth
+module github.com/panyam/mcpkit/ext/auth
 
 go 1.26.1
 
@@ -23,4 +23,4 @@ require (
 	google.golang.org/protobuf v1.36.10 // indirect
 )
 
-replace github.com/panyam/mcpkit => ../
+replace github.com/panyam/mcpkit => ../../

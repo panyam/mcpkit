@@ -11,47 +11,48 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/panyam/mcpkit"
+	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/server"
 )
 
 // registerConformanceTools adds all tools required by the MCP conformance suite.
-func registerConformanceTools(srv *mcpkit.Server) {
+func registerConformanceTools(srv *server.Server) {
 	// test_simple_text: returns a fixed text response (no arguments)
 	srv.RegisterTool(
-		mcpkit.ToolDef{
+		core.ToolDef{
 			Name:        "test_simple_text",
 			Description: "Returns a simple text response for conformance testing",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
-			return mcpkit.TextResult("This is a simple text response for testing."), nil
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			return core.TextResult("This is a simple text response for testing."), nil
 		},
 	)
 
 	// test_error_handling: always returns isError: true
 	srv.RegisterTool(
-		mcpkit.ToolDef{
+		core.ToolDef{
 			Name:        "test_error_handling",
 			Description: "Returns an error result for conformance testing",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
-			return mcpkit.ToolResult{}, fmt.Errorf("Test error from tool")
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			return core.ToolResult{}, fmt.Errorf("Test error from tool")
 		},
 	)
 
 	// test_image_content: returns base64 PNG image content
 	srv.RegisterTool(
-		mcpkit.ToolDef{
+		core.ToolDef{
 			Name:        "test_image_content",
 			Description: "Returns image content for conformance testing",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
 			// Minimal 1x1 red PNG
 			pngBytes := minimalPNG()
-			return mcpkit.ToolResult{
-				Content: []mcpkit.Content{{
+			return core.ToolResult{
+				Content: []core.Content{{
 					Type:     "image",
 					MimeType: "image/png",
 					Data:     base64.StdEncoding.EncodeToString(pngBytes),
@@ -62,16 +63,16 @@ func registerConformanceTools(srv *mcpkit.Server) {
 
 	// test_audio_content: returns base64 audio content
 	srv.RegisterTool(
-		mcpkit.ToolDef{
+		core.ToolDef{
 			Name:        "test_audio_content",
 			Description: "Returns audio content for conformance testing",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
 			// Minimal WAV header (44 bytes, no samples)
 			wavBytes := minimalWAV()
-			return mcpkit.ToolResult{
-				Content: []mcpkit.Content{{
+			return core.ToolResult{
+				Content: []core.Content{{
 					Type:     "audio",
 					MimeType: "audio/wav",
 					Data:     base64.StdEncoding.EncodeToString(wavBytes),
@@ -82,18 +83,18 @@ func registerConformanceTools(srv *mcpkit.Server) {
 
 	// test_multiple_content_types: returns text + image + embedded resource content
 	srv.RegisterTool(
-		mcpkit.ToolDef{
+		core.ToolDef{
 			Name:        "test_multiple_content_types",
 			Description: "Returns mixed text, image, and resource content for conformance testing",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
 			pngBytes := minimalPNG()
-			return mcpkit.ToolResult{
-				Content: []mcpkit.Content{
+			return core.ToolResult{
+				Content: []core.Content{
 					{Type: "text", Text: "Here is an image:"},
 					{Type: "image", MimeType: "image/png", Data: base64.StdEncoding.EncodeToString(pngBytes)},
-					{Type: "resource", Resource: &mcpkit.ResourceContent{
+					{Type: "resource", Resource: &core.ResourceContent{
 						URI:      "test://mixed/resource",
 						MimeType: "text/plain",
 						Text:     "This is an embedded resource in mixed content.",
@@ -108,18 +109,18 @@ func registerConformanceTools(srv *mcpkit.Server) {
 	// that notifications/message events are sent on the transport during execution.
 	// Sends 3 info-level log notifications with 50ms delays to test streaming.
 	srv.RegisterTool(
-		mcpkit.ToolDef{
+		core.ToolDef{
 			Name:        "test_tool_with_logging",
 			Description: "Emits log notifications during execution for conformance testing",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
-			mcpkit.EmitLog(ctx, mcpkit.LogInfo, "test", "Tool execution started")
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			core.EmitLog(ctx, core.LogInfo, "test", "Tool execution started")
 			time.Sleep(50 * time.Millisecond)
-			mcpkit.EmitLog(ctx, mcpkit.LogInfo, "test", "Tool processing data")
+			core.EmitLog(ctx, core.LogInfo, "test", "Tool processing data")
 			time.Sleep(50 * time.Millisecond)
-			mcpkit.EmitLog(ctx, mcpkit.LogInfo, "test", "Tool execution completed")
-			return mcpkit.TextResult("Execution complete"), nil
+			core.EmitLog(ctx, core.LogInfo, "test", "Tool execution completed")
+			return core.TextResult("Execution complete"), nil
 		},
 	)
 
@@ -128,33 +129,33 @@ func registerConformanceTools(srv *mcpkit.Server) {
 	// that notifications/progress events arrive with monotonically increasing progress.
 	// Sends progress at 0/100, 50/100, 100/100 with 50ms delays between them.
 	srv.RegisterTool(
-		mcpkit.ToolDef{
+		core.ToolDef{
 			Name:        "test_tool_with_progress",
 			Description: "Emits progress notifications during execution for conformance testing",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
-			mcpkit.EmitProgress(ctx, req.ProgressToken, 0, 100, "Starting")
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			core.EmitProgress(ctx, req.ProgressToken, 0, 100, "Starting")
 			time.Sleep(50 * time.Millisecond)
-			mcpkit.EmitProgress(ctx, req.ProgressToken, 50, 100, "Processing")
+			core.EmitProgress(ctx, req.ProgressToken, 50, 100, "Processing")
 			time.Sleep(50 * time.Millisecond)
-			mcpkit.EmitProgress(ctx, req.ProgressToken, 100, 100, "Complete")
-			return mcpkit.TextResult("Progress complete"), nil
+			core.EmitProgress(ctx, req.ProgressToken, 100, 100, "Complete")
+			return core.TextResult("Progress complete"), nil
 		},
 	)
 
 	// test_embedded_resource: returns a resource content item
 	srv.RegisterTool(
-		mcpkit.ToolDef{
+		core.ToolDef{
 			Name:        "test_embedded_resource",
 			Description: "Returns embedded resource content for conformance testing",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
-			return mcpkit.ToolResult{
-				Content: []mcpkit.Content{{
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			return core.ToolResult{
+				Content: []core.Content{{
 					Type: "resource",
-					Resource: &mcpkit.ResourceContent{
+					Resource: &core.ResourceContent{
 						URI:      "file:///test/resource.txt",
 						MimeType: "text/plain",
 						Text:     "This is an embedded resource for testing.",
@@ -168,23 +169,23 @@ func registerConformanceTools(srv *mcpkit.Server) {
 	// The conformance suite's client must respond to the server-to-client request
 	// with an LLM inference result. The tool returns the model's response text.
 	srv.RegisterTool(
-		mcpkit.ToolDef{
+		core.ToolDef{
 			Name:        "test_sampling",
 			Description: "Calls sampling/createMessage and returns the LLM response for conformance testing",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
-			result, err := mcpkit.Sample(ctx, mcpkit.CreateMessageRequest{
-				Messages: []mcpkit.SamplingMessage{{
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			result, err := core.Sample(ctx, core.CreateMessageRequest{
+				Messages: []core.SamplingMessage{{
 					Role:    "user",
-					Content: mcpkit.Content{Type: "text", Text: "What is the capital of France?"},
+					Content: core.Content{Type: "text", Text: "What is the capital of France?"},
 				}},
 				MaxTokens: 100,
 			})
 			if err != nil {
-				return mcpkit.ErrorResult(fmt.Sprintf("sampling failed: %v", err)), nil
+				return core.ErrorResult(fmt.Sprintf("sampling failed: %v", err)), nil
 			}
-			return mcpkit.TextResult(fmt.Sprintf("model=%s role=%s text=%s", result.Model, result.Role, result.Content.Text)), nil
+			return core.TextResult(fmt.Sprintf("model=%s role=%s text=%s", result.Model, result.Role, result.Content.Text)), nil
 		},
 	)
 
@@ -192,24 +193,24 @@ func registerConformanceTools(srv *mcpkit.Server) {
 	// The conformance suite's client must respond to the server-to-client request
 	// with user input. The tool returns the user's action and content.
 	srv.RegisterTool(
-		mcpkit.ToolDef{
+		core.ToolDef{
 			Name:        "test_elicitation",
 			Description: "Calls elicitation/create and returns user input for conformance testing",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
-			result, err := mcpkit.Elicit(ctx, mcpkit.ElicitationRequest{
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			result, err := core.Elicit(ctx, core.ElicitationRequest{
 				Message:         "Please provide your name",
 				RequestedSchema: json.RawMessage(`{"type":"object","properties":{"name":{"type":"string","description":"Your name"}}}`),
 			})
 			if err != nil {
-				return mcpkit.ErrorResult(fmt.Sprintf("elicitation failed: %v", err)), nil
+				return core.ErrorResult(fmt.Sprintf("elicitation failed: %v", err)), nil
 			}
 			if result.Action == "accept" {
 				name, _ := result.Content["name"].(string)
-				return mcpkit.TextResult(fmt.Sprintf("action=accept name=%s", name)), nil
+				return core.TextResult(fmt.Sprintf("action=accept name=%s", name)), nil
 			}
-			return mcpkit.TextResult(fmt.Sprintf("action=%s", result.Action)), nil
+			return core.TextResult(fmt.Sprintf("action=%s", result.Action)), nil
 		},
 	)
 
@@ -218,12 +219,12 @@ func registerConformanceTools(srv *mcpkit.Server) {
 	// Schema includes: string, integer, number, enum with default, and boolean,
 	// each with a default value set.
 	srv.RegisterTool(
-		mcpkit.ToolDef{
+		core.ToolDef{
 			Name:        "test_elicitation_sep1034_defaults",
 			Description: "Calls elicitation/create with default values for all primitive types (SEP-1034)",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
 			schema := json.RawMessage(`{
 				"type": "object",
 				"properties": {
@@ -234,15 +235,15 @@ func registerConformanceTools(srv *mcpkit.Server) {
 					"verified": {"type": "boolean", "default": true}
 				}
 			}`)
-			result, err := mcpkit.Elicit(ctx, mcpkit.ElicitationRequest{
+			result, err := core.Elicit(ctx, core.ElicitationRequest{
 				Message:         "Please provide your information",
 				RequestedSchema: schema,
 			})
 			if err != nil {
-				return mcpkit.ErrorResult(fmt.Sprintf("elicitation failed: %v", err)), nil
+				return core.ErrorResult(fmt.Sprintf("elicitation failed: %v", err)), nil
 			}
 			contentJSON, _ := json.Marshal(result.Content)
-			return mcpkit.TextResult(fmt.Sprintf("Elicitation completed: action=%s, content=%s", result.Action, string(contentJSON))), nil
+			return core.TextResult(fmt.Sprintf("Elicitation completed: action=%s, content=%s", result.Action, string(contentJSON))), nil
 		},
 	)
 
@@ -251,12 +252,12 @@ func registerConformanceTools(srv *mcpkit.Server) {
 	// single-select (oneOf), legacy titled (enumNames), untitled multi-select,
 	// and titled multi-select (anyOf).
 	srv.RegisterTool(
-		mcpkit.ToolDef{
+		core.ToolDef{
 			Name:        "test_elicitation_sep1330_enums",
 			Description: "Calls elicitation/create with all 5 enum variants (SEP-1330)",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
 			schema := json.RawMessage(`{
 				"type": "object",
 				"properties": {
@@ -296,15 +297,15 @@ func registerConformanceTools(srv *mcpkit.Server) {
 					}
 				}
 			}`)
-			result, err := mcpkit.Elicit(ctx, mcpkit.ElicitationRequest{
+			result, err := core.Elicit(ctx, core.ElicitationRequest{
 				Message:         "Please make your selections",
 				RequestedSchema: schema,
 			})
 			if err != nil {
-				return mcpkit.ErrorResult(fmt.Sprintf("elicitation failed: %v", err)), nil
+				return core.ErrorResult(fmt.Sprintf("elicitation failed: %v", err)), nil
 			}
 			contentJSON, _ := json.Marshal(result.Content)
-			return mcpkit.TextResult(fmt.Sprintf("Elicitation completed: action=%s, content=%s", result.Action, string(contentJSON))), nil
+			return core.TextResult(fmt.Sprintf("Elicitation completed: action=%s, content=%s", result.Action, string(contentJSON))), nil
 		},
 	)
 }

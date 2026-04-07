@@ -18,7 +18,7 @@ import (
 // check and the server receiving the request, causing spurious 401s.
 const tokenExpiryBuffer = 30 * time.Second
 
-// OAuthTokenSource implements mcpkit.TokenSource using the full MCP OAuth flow:
+// OAuthTokenSource implements core.TokenSource using the full MCP OAuth flow:
 // PRM discovery → AS metadata → PKCE authorization code → token.
 //
 // Per MCP spec (2025-11-25): clients MUST implement PKCE with S256,
@@ -84,7 +84,7 @@ type OAuthTokenSource struct {
 	dcrClientSecret string
 }
 
-// Token implements mcpkit.TokenSource.
+// Token implements core.TokenSource.
 // Returns a cached token if valid, or runs the full MCP OAuth discovery + auth flow.
 func (s *OAuthTokenSource) Token() (string, error) {
 	s.mu.Lock()
@@ -180,7 +180,7 @@ func (s *OAuthTokenSource) Token() (string, error) {
 	return s.token, nil
 }
 
-// TokenForScopes implements mcpkit.ScopeAwareTokenSource.
+// TokenForScopes implements core.ScopeAwareTokenSource.
 // Invalidates the cached token and triggers a new OAuth flow with the
 // requested scopes merged into the existing scope set.
 func (s *OAuthTokenSource) TokenForScopes(scopes []string) (string, error) {
@@ -305,7 +305,7 @@ func ValidateCIMDURL(rawURL string) error {
 
 // --- ClientCredentialsSource (unchanged) ---
 
-// ClientCredentialsSource implements mcpkit.TokenSource for machine-to-machine auth.
+// ClientCredentialsSource implements core.TokenSource for machine-to-machine auth.
 // Uses the OAuth client_credentials grant (RFC 6749 §4.4).
 //
 // Per MCP spec extensions: io.modelcontextprotocol/oauth-client-credentials
@@ -331,7 +331,7 @@ type ClientCredentialsSource struct {
 	expiry time.Time
 }
 
-// Token implements mcpkit.TokenSource.
+// Token implements core.TokenSource.
 func (s *ClientCredentialsSource) Token() (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -354,7 +354,7 @@ func (s *ClientCredentialsSource) Token() (string, error) {
 	return s.token, nil
 }
 
-// TokenForScopes implements mcpkit.ScopeAwareTokenSource.
+// TokenForScopes implements core.ScopeAwareTokenSource.
 func (s *ClientCredentialsSource) TokenForScopes(scopes []string) (string, error) {
 	s.mu.Lock()
 	s.token = ""
