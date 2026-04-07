@@ -273,6 +273,7 @@ func (t *streamableTransport) handleInitialize(w http.ResponseWriter, r *http.Re
 
 	// Success: create session and return with Mcp-Session-Id
 	sessionID := generateSessionID()
+	dispatcher.sessionID = sessionID
 	t.sessions.Store(sessionID, dispatcher)
 
 	w.Header().Set(mcpSessionIDHeader, sessionID)
@@ -394,9 +395,13 @@ func (t *streamableTransport) handleDelete(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if _, ok := t.sessions.LoadAndDelete(sessionID); !ok {
+	d, ok := t.sessions.LoadAndDelete(sessionID)
+	if !ok {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
+	}
+	if disp := d.(*Dispatcher); disp.subManager != nil {
+		disp.subManager.unsubscribeAll(sessionID)
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -404,13 +409,21 @@ func (t *streamableTransport) handleDelete(w http.ResponseWriter, r *http.Reques
 
 // closeSession terminates a single session by ID. Returns true if found.
 func (t *streamableTransport) closeSession(id string) bool {
-	_, ok := t.sessions.LoadAndDelete(id)
+	d, ok := t.sessions.LoadAndDelete(id)
+	if ok {
+		if disp := d.(*Dispatcher); disp.subManager != nil {
+			disp.subManager.unsubscribeAll(id)
+		}
+	}
 	return ok
 }
 
 // closeAllSessions terminates all active sessions.
 func (t *streamableTransport) closeAllSessions() {
-	t.sessions.Range(func(key, _ any) bool {
+	t.sessions.Range(func(key, value any) bool {
+		if disp := value.(*Dispatcher); disp.subManager != nil {
+			disp.subManager.unsubscribeAll(key.(string))
+		}
 		t.sessions.Delete(key)
 		return true
 	})

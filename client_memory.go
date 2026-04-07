@@ -29,15 +29,31 @@ func WithInMemoryServer(srv *Server) ClientOption {
 	}
 }
 
+// WithNotificationHandler sets a callback for server-to-client notifications
+// received by the in-memory transport. Use in tests to verify notification
+// delivery (e.g., notifications/resources/updated from resource subscriptions).
+func WithNotificationHandler(fn func(method string, params any)) ClientOption {
+	return func(c *Client) { c.onNotify = fn }
+}
+
 // memoryTransport implements clientTransport by dispatching directly to a Server.
 type memoryTransport struct {
 	server     *Server
 	dispatcher *Dispatcher
+	onNotify   func(method string, params any)
 }
 
 // connect creates a per-session dispatcher (same as what HTTP transports do).
+// Wires a notifyFunc so server-to-client notifications (subscriptions, logging,
+// progress) are delivered to the onNotify callback.
 func (t *memoryTransport) connect() error {
 	t.dispatcher = t.server.newSession()
+	t.dispatcher.sessionID = "memory"
+	t.dispatcher.notifyFunc = func(method string, params any) {
+		if t.onNotify != nil {
+			t.onNotify(method, params)
+		}
+	}
 	return nil
 }
 
@@ -76,5 +92,10 @@ func (t *memoryTransport) notify(data []byte) error {
 	return nil
 }
 
-func (t *memoryTransport) close() error        { return nil }
+func (t *memoryTransport) close() error {
+	if t.dispatcher != nil && t.dispatcher.subManager != nil {
+		t.dispatcher.subManager.unsubscribeAll(t.dispatcher.sessionID)
+	}
+	return nil
+}
 func (t *memoryTransport) getSessionID() string { return "memory" }

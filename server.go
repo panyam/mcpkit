@@ -15,22 +15,24 @@ import (
 
 // Server is an MCP server that can run over multiple transports.
 type Server struct {
-	dispatcher         *Dispatcher
-	options            serverOptions
-	mu                 sync.Mutex
-	sessionClosers     []sessionCloser
-	allSessionClosers  []func()
+	dispatcher        *Dispatcher
+	options           serverOptions
+	mu                sync.Mutex
+	sessionClosers    []sessionCloser
+	allSessionClosers []func()
+	subRegistry       *subscriptionRegistry // nil when subscriptions not enabled
 }
 
 type serverOptions struct {
-	listen        string
-	bearerToken   string
-	toolTimeout   time.Duration
-	allowedRoots  []string
-	authValidator AuthValidator
-	extensions    []ExtensionProvider
-	middleware    []Middleware
-	requestLogger *log.Logger // HTTP-level request/response logging
+	listen               string
+	bearerToken          string
+	toolTimeout          time.Duration
+	allowedRoots         []string
+	authValidator        AuthValidator
+	extensions           []ExtensionProvider
+	middleware           []Middleware
+	requestLogger        *log.Logger // HTTP-level request/response logging
+	subscriptionsEnabled bool        // enable resources/subscribe and resources/unsubscribe
 }
 
 // AuthValidator validates an HTTP request and returns claims on success.
@@ -85,6 +87,17 @@ func WithRequestLogging(logger *log.Logger) Option {
 	}
 }
 
+// WithSubscriptions enables resource subscription support (resources/subscribe,
+// resources/unsubscribe, and notifications/resources/updated). When enabled,
+// the server advertises "subscribe": true in the resources capability and
+// accepts subscription requests from clients.
+//
+// Use Server.NotifyResourceUpdated(uri) to push change notifications to all
+// sessions that have subscribed to the given URI.
+func WithSubscriptions() Option {
+	return func(o *serverOptions) { o.subscriptionsEnabled = true }
+}
+
 // WithToolTimeout sets the maximum duration for tool execution.
 func WithToolTimeout(d time.Duration) Option {
 	return func(o *serverOptions) { o.toolTimeout = d }
@@ -107,6 +120,14 @@ func NewServer(info ServerInfo, opts ...Option) *Server {
 	for _, ext := range s.options.extensions {
 		e := ext.Extension()
 		s.dispatcher.extensions[e.ID] = e
+	}
+	// Initialize subscription support if enabled
+	if s.options.subscriptionsEnabled {
+		s.subRegistry = &subscriptionRegistry{
+			subscribers: make(map[string]map[string]*Dispatcher),
+		}
+		s.dispatcher.subscriptionsEnabled = true
+		s.dispatcher.subManager = s.subRegistry
 	}
 	return s
 }
@@ -544,3 +565,86 @@ type AuthError struct {
 }
 
 func (e *AuthError) Error() string { return e.Message }
+
+// --- Resource Subscriptions ---
+
+// subscriptionRegistry tracks which sessions have subscribed to which resource URIs.
+// It lives on the Server so it can fan out notifications across all sessions.
+// Thread-safe: all methods acquire the mutex.
+type subscriptionRegistry struct {
+	mu          sync.RWMutex
+	subscribers map[string]map[string]*Dispatcher // uri → sessionID → dispatcher
+}
+
+// subscribe registers a session's interest in a resource URI.
+func (r *subscriptionRegistry) subscribe(sessionID string, d *Dispatcher, uri string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	subs, ok := r.subscribers[uri]
+	if !ok {
+		subs = make(map[string]*Dispatcher)
+		r.subscribers[uri] = subs
+	}
+	subs[sessionID] = d
+}
+
+// unsubscribe removes a session's subscription for a resource URI.
+func (r *subscriptionRegistry) unsubscribe(sessionID, uri string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if subs, ok := r.subscribers[uri]; ok {
+		delete(subs, sessionID)
+		if len(subs) == 0 {
+			delete(r.subscribers, uri)
+		}
+	}
+}
+
+// unsubscribeAll removes all subscriptions for a session (called on disconnect).
+func (r *subscriptionRegistry) unsubscribeAll(sessionID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for uri, subs := range r.subscribers {
+		delete(subs, sessionID)
+		if len(subs) == 0 {
+			delete(r.subscribers, uri)
+		}
+	}
+}
+
+// notify sends a notifications/resources/updated to all sessions subscribed to the URI.
+// Copies the dispatcher list under read lock, then calls notifyFunc outside the lock
+// to avoid holding the lock during potentially slow I/O.
+func (r *subscriptionRegistry) notify(uri string) {
+	r.mu.RLock()
+	subs := r.subscribers[uri]
+	dispatchers := make([]*Dispatcher, 0, len(subs))
+	for _, d := range subs {
+		dispatchers = append(dispatchers, d)
+	}
+	r.mu.RUnlock()
+
+	notification := ResourceUpdatedNotification{URI: uri}
+	for _, d := range dispatchers {
+		if d.notifyFunc != nil {
+			d.notifyFunc("notifications/resources/updated", notification)
+		}
+	}
+}
+
+// NotifyResourceUpdated sends a notifications/resources/updated notification to
+// all clients that have subscribed to the given resource URI. This is the
+// application-facing API for triggering resource change notifications.
+//
+// Safe to call from any goroutine. No-op if subscriptions are not enabled or
+// no clients are subscribed to the URI.
+//
+// Example:
+//
+//	// After updating config.yaml on disk:
+//	srv.NotifyResourceUpdated("file:///data/config.yaml")
+func (s *Server) NotifyResourceUpdated(uri string) {
+	if s.subRegistry != nil {
+		s.subRegistry.notify(uri)
+	}
+}
