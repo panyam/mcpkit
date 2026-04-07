@@ -7,7 +7,7 @@ package e2e_test
 import (
 	"testing"
 
-	"github.com/panyam/mcpkit/auth"
+	"github.com/panyam/mcpkit/ext/auth"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

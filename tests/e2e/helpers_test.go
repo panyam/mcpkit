@@ -10,8 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/panyam/mcpkit"
-	"github.com/panyam/mcpkit/auth"
+	client "github.com/panyam/mcpkit/client"
+	core "github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/ext/auth"
 )
 
 // StreamableHTTPAccept is the Accept header value required by the MCP Streamable
@@ -109,13 +110,13 @@ func toolCallJSON(id int, name string, args map[string]any) string {
 
 // ConnectMCPClient creates an mcpkit Client connected to the MCP server with
 // the given bearer token. Performs the initialize handshake.
-func (e *TestEnv) ConnectMCPClient(t *testing.T, token string) *mcpkit.Client {
+func (e *TestEnv) ConnectMCPClient(t *testing.T, token string) *client.Client {
 	t.Helper()
 	// Default transport is Streamable HTTP — no option needed.
-	client := mcpkit.NewClient(
+	client := client.NewClient(
 		e.MCPServerURL+"/mcp",
-		mcpkit.ClientInfo{Name: "e2e-test", Version: "0.1.0"},
-		mcpkit.WithClientBearerToken(token),
+		core.ClientInfo{Name: "e2e-test", Version: "0.1.0"},
+		client.WithClientBearerToken(token),
 	)
 	if err := client.Connect(); err != nil {
 		t.Fatalf("ConnectMCPClient: %v", err)
@@ -127,4 +128,4 @@ func (e *TestEnv) ConnectMCPClient(t *testing.T, token string) *mcpkit.Client {
 // These are used to verify that the auth module is imported correctly.
 // The _ imports ensure the test binary links against mcpkit/auth.
 var _ = auth.RequireScope
-var _ mcpkit.Claims
+var _ core.Claims

@@ -1,0 +1,99 @@
+package core
+
+import "encoding/json"
+
+// JSON-RPC 2.0 types for MCP protocol communication.
+
+// Request is a JSON-RPC 2.0 request envelope.
+type Request struct {
+	JSONRPC string          `json:"jsonrpc"`
+	ID      json.RawMessage `json:"id"`
+	Method  string          `json:"method"`
+	Params  json.RawMessage `json:"params,omitempty"`
+}
+
+// Response is a JSON-RPC 2.0 response.
+type Response struct {
+	JSONRPC string          `json:"jsonrpc"`
+	ID      json.RawMessage `json:"id"`
+	Result  json.RawMessage `json:"result,omitempty"`
+	Error   *Error          `json:"error,omitempty"`
+}
+
+// Error is a JSON-RPC 2.0 error object.
+type Error struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    any    `json:"data,omitempty"`
+}
+
+// IsNotification returns true if this request has no ID (JSON-RPC notification).
+func (r *Request) IsNotification() bool {
+	return r.ID == nil || string(r.ID) == "null"
+}
+
+// Standard JSON-RPC 2.0 error codes (https://www.jsonrpc.org/specification#error_object).
+//
+// Reserved ranges:
+//
+//	-32700           Parse error (invalid JSON)
+//	-32600           Invalid Request (not a valid JSON-RPC request)
+//	-32601           Method not found
+//	-32602           Invalid params
+//	-32603           Internal error
+//	-32000 to -32099 Server error (implementation-defined)
+const (
+	ErrCodeParse          = -32700
+	ErrCodeInvalidRequest = -32600
+	ErrCodeMethodNotFound = -32601
+	ErrCodeInvalidParams  = -32602
+	ErrCodeInternal       = -32603
+
+	// ErrCodeServerError is the base code for custom server errors (-32000 to -32099).
+	// Use this for application-specific errors that are not covered by standard codes.
+	ErrCodeServerError = -32000
+)
+
+// NewResponse creates a success response for the given request ID.
+func NewResponse(id json.RawMessage, result any) *Response {
+	raw, _ := json.Marshal(result)
+	return &Response{JSONRPC: "2.0", ID: id, Result: raw}
+}
+
+// NewErrorResponse creates an error response for the given request ID.
+func NewErrorResponse(id json.RawMessage, code int, message string) *Response {
+	return &Response{
+		JSONRPC: "2.0",
+		ID:      id,
+		Error:   &Error{Code: code, Message: message},
+	}
+}
+
+// NewErrorResponseWithData creates an error response with additional structured data.
+// Used for protocol errors that carry machine-readable context (e.g., supported versions).
+func NewErrorResponseWithData(id json.RawMessage, code int, message string, data any) *Response {
+	return &Response{
+		JSONRPC: "2.0",
+		ID:      id,
+		Error:   &Error{Code: code, Message: message, Data: data},
+	}
+}
+
+// isJSONRPCResponse detects whether raw JSON is a JSON-RPC response (not a request).
+// A response has an "id" field and either "result" or "error", but no "method" field.
+// Used by transports to route incoming client messages that are responses to
+// server-to-client requests (sampling/createMessage, elicitation/create).
+func IsJSONRPCResponse(data []byte) bool {
+	var probe struct {
+		Method string          `json:"method"`
+		ID     json.RawMessage `json:"id"`
+		Result json.RawMessage `json:"result"`
+		Error  json.RawMessage `json:"error"`
+	}
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return false
+	}
+	// Has ID, no method, and has result or error → it's a response.
+	return probe.Method == "" && probe.ID != nil && string(probe.ID) != "null" &&
+		(probe.Result != nil || probe.Error != nil)
+}
