@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 )
 
 // clientTransport abstracts the transport layer for the MCP client.
@@ -21,6 +23,8 @@ type clientTransport interface {
 	notify(data []byte) error
 	// close shuts down the transport.
 	close() error
+	// getSessionID returns the current session ID (empty if none).
+	getSessionID() string
 }
 
 // ClientOption configures a Client.
@@ -52,6 +56,11 @@ type Client struct {
 	nextID      int
 	mu          sync.Mutex
 	transport   clientTransport
+	logger      *log.Logger // optional transport logging (nil = disabled)
+
+	// Reconnection settings (zero values = disabled)
+	maxRetries int
+	baseDelay  time.Duration
 
 	// ServerInfo is populated after Connect.
 	ServerInfo ServerInfo
@@ -79,6 +88,11 @@ func (c *Client) Connect() error {
 		c.transport = newSSEClientTransport(c.url, c.tokenSource)
 	} else {
 		c.transport = newStreamableClientTransport(c.url, c.tokenSource)
+	}
+
+	// Wrap with logging if configured
+	if c.logger != nil {
+		c.transport = &loggingTransport{inner: c.transport, logger: c.logger}
 	}
 
 	if err := c.transport.connect(); err != nil {
@@ -117,11 +131,8 @@ func (c *Client) Close() error {
 
 // SessionID returns the current session ID.
 func (c *Client) SessionID() string {
-	if st, ok := c.transport.(*streamableClientTransport); ok {
-		return st.sessionID
-	}
-	if sse, ok := c.transport.(*sseClientTransport); ok {
-		return sse.sessionID
+	if c.transport != nil {
+		return c.transport.getSessionID()
 	}
 	return ""
 }
@@ -253,7 +264,17 @@ func (c *Client) rawCall(method string, params any) (*rpcResponse, error) {
 		reqBody["params"] = params
 	}
 	data, _ := json.Marshal(reqBody)
-	return c.transport.call(data)
+
+	resp, err := c.transport.call(data)
+	if err != nil && c.maxRetries > 0 && isTransientError(err) {
+		return c.retryWithReconnect(func() (*rpcResponse, error) {
+			// Re-build with new ID (old may have been consumed)
+			reqBody["id"] = c.nextRequestID()
+			data, _ = json.Marshal(reqBody)
+			return c.transport.call(data)
+		})
+	}
+	return resp, err
 }
 
 func (c *Client) notifyMethod(method string, params any) error {
@@ -265,7 +286,15 @@ func (c *Client) notifyMethod(method string, params any) error {
 		reqBody["params"] = params
 	}
 	data, _ := json.Marshal(reqBody)
-	return c.transport.notify(data)
+
+	err := c.transport.notify(data)
+	if err != nil && c.maxRetries > 0 && isTransientError(err) {
+		return c.retryNotifyWithReconnect(func() error {
+			data, _ = json.Marshal(reqBody)
+			return c.transport.notify(data)
+		})
+	}
+	return err
 }
 
 // --- Streamable HTTP transport ---
@@ -281,8 +310,9 @@ func newStreamableClientTransport(url string, ts TokenSource) *streamableClientT
 	return &streamableClientTransport{url: url, httpClient: http.DefaultClient, tokenSource: ts}
 }
 
-func (t *streamableClientTransport) connect() error { return nil }
-func (t *streamableClientTransport) close() error   { return nil }
+func (t *streamableClientTransport) connect() error      { return nil }
+func (t *streamableClientTransport) close() error        { return nil }
+func (t *streamableClientTransport) getSessionID() string { return t.sessionID }
 
 func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
 	buildReq := func() (*http.Request, error) {
@@ -454,6 +484,8 @@ func (t *sseClientTransport) close() error {
 	}
 	return nil
 }
+
+func (t *sseClientTransport) getSessionID() string { return t.sessionID }
 
 func (t *sseClientTransport) call(data []byte) (*rpcResponse, error) {
 	buildReq := func() (*http.Request, error) {

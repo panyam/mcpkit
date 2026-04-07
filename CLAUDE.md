@@ -42,7 +42,10 @@ make downkcl          # Stop Keycloak container
 | `jsonrpc.go` | JSON-RPC 2.0 Request/Response/Error |
 | `transport.go` | SSE transport (sseTransport, mcpSSEConn, SSEData) |
 | `streamable_transport.go` | Streamable HTTP transport (streamableTransport) |
+| `middleware.go` | Server-side Middleware type, WithMiddleware, LoggingMiddleware |
 | `client.go` | MCP client: Connect, ToolCall, ReadResource, ListTools, ListResources, WithClientBearerToken, WithTokenSource |
+| `client_logging.go` | Client-side loggingTransport, WithClientLogging |
+| `client_reconnect.go` | Client reconnection: WithMaxRetries, WithReconnectBackoff, isTransientError |
 | `docs/AUTH_DESIGN.md` | MCP Auth architecture, sequence diagrams, extension system, oneauth integration map |
 | `testutil/testclient.go` | TestClient: wraps Client + httptest.Server + testing.T for e2e tests |
 | `cmd/testserver/` | Test server with conformance tools, resources, and prompts |
@@ -67,6 +70,9 @@ make downkcl          # Stop Keycloak container
 - **JWTValidator uses direct jwt.Parse with JWKS keyfunc**, NOT `APIAuth.ValidateAccessTokenFull` (which doesn't support kid-based JWKS lookup). The custom `jwksKeyFunc` method on `JWTValidator` resolves keys via `JWKSKeyStore.GetKeyByKid`.
 - **`tests/e2e/` and `tests/keycloak/` are separate Go modules**. They use published `oneauth v0.0.64` and `replace` directives only for same-repo mcpkit references. NOT tested by root `go test ./...`. Run via `make test-auth-e2e` or `make test-auth-keycloak`.
 - **Client transport retries on 401/403**: `doWithAuthRetry` handles token refresh (401) and scope step-up (403 via `ScopeAwareTokenSource.TokenForScopes`). Max 1 retry per status code. Static tokens (`WithClientBearerToken`) cannot refresh — 401 returns `ClientAuthError` immediately. `ParseWWWAuthenticate` lives in core (not `auth/`) so the transport can parse scope hints without depending on the auth sub-module.
+- **Server middleware** runs after auth but before dispatch. `WithMiddleware(mw...)` — first registered = outermost. Tool timeout is now the innermost handler in the middleware chain. Middleware sees claims via `AuthClaims(ctx)`.
+- **Client reconnection** (`WithMaxRetries`, `WithReconnectBackoff`) — on transient transport errors (EOF, connection reset), client tears down, re-creates transport, re-initializes MCP session, and retries. Auth errors (401/403) are NOT transient — handled by `doWithAuthRetry` instead.
+- **Client logging** (`WithClientLogging(logger)`) wraps the transport decorator pattern. Logs method name, latency, errors for every connect/call/notify/close.
 - **oneauth/testutil.TestAuthServer** provides the in-process auth server for E2E tests. It generates RSA keys, serves JWKS, and mints tokens. Set audience after creation via `AS.APIAuth.JWTAudience` (the `WithAudience` option is set at creation time, before server URL is known).
 
 ## Architecture
