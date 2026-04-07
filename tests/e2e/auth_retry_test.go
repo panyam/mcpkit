@@ -12,9 +12,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/panyam/mcpkit/core"
-	"github.com/panyam/mcpkit/server"
-	"github.com/panyam/mcpkit/client"
+	client "github.com/panyam/mcpkit/client"
+	core "github.com/panyam/mcpkit/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,9 +21,9 @@ import (
 // refreshableTokenSource is a test TokenSource that returns a bad token first,
 // then a good token on refresh. Simulates token expiry → refresh.
 type refreshableTokenSource struct {
-	mu       sync.Mutex
-	tokens   []string // tokens returned on successive Token() calls
-	callIdx  int
+	mu      sync.Mutex
+	tokens  []string // tokens returned on successive Token() calls
+	callIdx int
 }
 
 func (s *refreshableTokenSource) Token() (string, error) {
@@ -172,7 +171,7 @@ func TestE2E_Client_RetryLimit(t *testing.T) {
 	require.Error(t, err, "Connect should fail after retry limit")
 
 	// Verify it's a ClientAuthError
-	var authErr *core.ClientAuthError
+	var authErr *client.ClientAuthError
 	assert.True(t, errors.As(err, &authErr), "error should be ClientAuthError, got: %T: %v", err, err)
 }
 

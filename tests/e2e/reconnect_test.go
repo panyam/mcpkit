@@ -9,9 +9,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/panyam/mcpkit/core"
-	"github.com/panyam/mcpkit/server"
-	"github.com/panyam/mcpkit/client"
+	client "github.com/panyam/mcpkit/client"
+	core "github.com/panyam/mcpkit/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
