@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -29,6 +30,7 @@ type serverOptions struct {
 	authValidator AuthValidator
 	extensions    []ExtensionProvider
 	middleware    []Middleware
+	requestLogger *log.Logger // HTTP-level request/response logging
 }
 
 // AuthValidator validates an HTTP request and returns claims on success.
@@ -63,6 +65,24 @@ func WithAuth(v AuthValidator) Option {
 // and stability level.
 func WithExtension(ext ExtensionProvider) Option {
 	return func(o *serverOptions) { o.extensions = append(o.extensions, ext) }
+}
+
+// WithRequestLogging enables HTTP-level request/response logging on the server.
+// Logs every incoming HTTP request with method, path, headers (Mcp-Session-Id,
+// Accept, Authorization presence), and the response status code and content-type.
+// This is transport-level logging — for JSON-RPC dispatch-level logging, use
+// WithMiddleware(LoggingMiddleware(logger)).
+//
+// Example:
+//
+//	srv := mcpkit.NewServer(info, mcpkit.WithRequestLogging(log.Default()))
+func WithRequestLogging(logger *log.Logger) Option {
+	return func(o *serverOptions) {
+		if logger == nil {
+			logger = log.Default()
+		}
+		o.requestLogger = logger
+	}
 }
 
 // WithToolTimeout sets the maximum duration for tool execution.
@@ -246,33 +266,82 @@ func (s *Server) Handler(opts ...TransportOption) http.Handler {
 	}
 	prefix := strings.TrimRight(cfg.prefix, "/")
 
+	var handler http.Handler
+
 	// SSE only (default, backward compatible)
 	if cfg.sse && !cfg.streamableHTTP {
 		sseT := newSSETransport(s, opts...)
 		s.registerTransportSessions(sseT.closeSession, sseT.closeAllSessions)
-		return sseT.handler()
-	}
-
-	// Streamable HTTP only
-	if cfg.streamableHTTP && !cfg.sse {
+		handler = sseT.handler()
+	} else if cfg.streamableHTTP && !cfg.sse {
+		// Streamable HTTP only
 		stT := newStreamableTransport(s, cfg)
 		s.registerTransportSessions(stT.closeSession, stT.closeAllSessions)
-		return stT.handler()
+		handler = stT.handler()
+	} else {
+		// Both enabled: SSE at /sse + /message, Streamable HTTP at base prefix
+		mux := http.NewServeMux()
+		if cfg.sse {
+			sseT := newSSETransport(s, opts...)
+			s.registerTransportSessions(sseT.closeSession, sseT.closeAllSessions)
+			sseT.mountOn(mux, prefix)
+		}
+		if cfg.streamableHTTP {
+			stT := newStreamableTransport(s, cfg)
+			s.registerTransportSessions(stT.closeSession, stT.closeAllSessions)
+			mux.HandleFunc(prefix, stT.handleRoot)
+		}
+		handler = mux
 	}
 
-	// Both enabled: SSE at /sse + /message, Streamable HTTP at base prefix
-	mux := http.NewServeMux()
-	if cfg.sse {
-		sseT := newSSETransport(s, opts...)
-		s.registerTransportSessions(sseT.closeSession, sseT.closeAllSessions)
-		sseT.mountOn(mux, prefix)
+	// Wrap with HTTP-level request logging if configured
+	if s.options.requestLogger != nil {
+		handler = requestLoggingHandler(s.options.requestLogger, handler)
 	}
-	if cfg.streamableHTTP {
-		stT := newStreamableTransport(s, cfg)
-		s.registerTransportSessions(stT.closeSession, stT.closeAllSessions)
-		mux.HandleFunc(prefix, stT.handleRoot)
+
+	return handler
+}
+
+// requestLoggingHandler wraps an http.Handler with request/response logging.
+// Logs method, path, key headers, and response status for every HTTP request.
+func requestLoggingHandler(logger *log.Logger, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Log request
+		sessionID := r.Header.Get("Mcp-Session-Id")
+		accept := r.Header.Get("Accept")
+		hasAuth := r.Header.Get("Authorization") != ""
+		logger.Printf("[http] → %s %s session=%q accept=%q auth=%v",
+			r.Method, r.URL.Path, sessionID, accept, hasAuth)
+
+		// Wrap ResponseWriter to capture status code
+		rw := &statusCapture{ResponseWriter: w, status: 200}
+		next.ServeHTTP(rw, r)
+
+		// Log response
+		ct := rw.Header().Get("Content-Type")
+		logger.Printf("[http] ← %d %s content-type=%q",
+			rw.status, r.URL.Path, ct)
+	})
+}
+
+// statusCapture wraps http.ResponseWriter to capture the status code.
+// It preserves the http.Flusher interface so SSE streaming still works.
+type statusCapture struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *statusCapture) WriteHeader(code int) {
+	w.status = code
+	w.ResponseWriter.WriteHeader(code)
+}
+
+// Flush delegates to the underlying ResponseWriter if it implements http.Flusher.
+// This is critical — without it, SSE streaming breaks because the flusher check fails.
+func (w *statusCapture) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
 	}
-	return mux
 }
 
 // Run is a convenience entry point that starts the server with Streamable HTTP

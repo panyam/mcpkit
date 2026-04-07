@@ -29,13 +29,21 @@ func listenAddr() string {
 }
 
 func main() {
+	var serverOpts []mcpkit.Option
+	serverOpts = append(serverOpts,
+		mcpkit.WithListen(listenAddr()),
+		mcpkit.WithToolTimeout(30*time.Second),
+	)
+	// Enable HTTP-level request logging if VERBOSE is set
+	if os.Getenv("VERBOSE") == "1" {
+		serverOpts = append(serverOpts, mcpkit.WithRequestLogging(log.Default()))
+	}
 	srv := mcpkit.NewServer(
 		mcpkit.ServerInfo{
 			Name:    "mcpkit-testserver",
 			Version: "0.1.0",
 		},
-		mcpkit.WithListen(listenAddr()),
-		mcpkit.WithToolTimeout(30*time.Second),
+		serverOpts...,
 	)
 
 	// echo: returns the input message as-is
