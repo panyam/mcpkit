@@ -153,16 +153,17 @@ func (s *OAuthTokenSource) Token() (string, error) {
 	}
 
 	// Full browser login flow with explicit endpoints from discovery.
-	// NOTE: once oneauth#74 is fixed, auth method negotiation will work
-	// correctly even with explicit endpoints.
+	// Pass TokenEndpointAuthMethods from AS metadata so auth method negotiation
+	// works correctly even with explicit endpoints (oneauth#74).
 	loginCfg := client.BrowserLoginConfig{
-		AuthorizationEndpoint: s.authInfo.ASMetadata.AuthorizationEndpoint,
-		TokenEndpoint:         s.authInfo.ASMetadata.TokenEndpoint,
-		ClientID:              clientID,
-		ClientSecret:          clientSecret,
-		Scopes:                scopes,
-		Resource:              s.ServerURL, // RFC 8707: bind token to this MCP server
-		OpenBrowser:           s.OpenBrowser,
+		AuthorizationEndpoint:   s.authInfo.ASMetadata.AuthorizationEndpoint,
+		TokenEndpoint:           s.authInfo.ASMetadata.TokenEndpoint,
+		TokenEndpointAuthMethods: s.authInfo.ASMetadata.TokenEndpointAuthMethods,
+		ClientID:                clientID,
+		ClientSecret:            clientSecret,
+		Scopes:                  scopes,
+		Resource:                s.ServerURL, // RFC 8707: bind token to this MCP server
+		OpenBrowser:             s.OpenBrowser,
 	}
 	if s.HTTPClient != nil {
 		loginCfg.HTTPClient = s.HTTPClient
