@@ -93,8 +93,8 @@ func (t *memoryTransport) notify(data []byte) error {
 }
 
 func (t *memoryTransport) close() error {
-	if t.dispatcher != nil && t.dispatcher.subManager != nil {
-		t.dispatcher.subManager.unsubscribeAll(t.dispatcher.sessionID)
+	if t.dispatcher != nil {
+		t.dispatcher.Close()
 	}
 	return nil
 }
