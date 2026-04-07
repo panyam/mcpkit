@@ -10,8 +10,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/panyam/mcpkit"
-	"github.com/panyam/mcpkit/auth"
+	core "github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/ext/auth"
+	server "github.com/panyam/mcpkit/server"
 )
 
 // buildMCPServer creates and starts an mcpkit MCP server with:
@@ -50,21 +51,21 @@ func (e *TestEnv) buildMCPServer(t *testing.T) {
 	t.Cleanup(validator.Stop)
 
 	// MCP server with auth
-	srv := mcpkit.NewServer(
-		mcpkit.ServerInfo{Name: "mcp-e2e-test", Version: "0.1.0"},
-		mcpkit.WithAuth(validator),
-		mcpkit.WithExtension(auth.AuthExtension{}),
+	srv := server.NewServer(
+		core.ServerInfo{Name: "mcp-e2e-test", Version: "0.1.0"},
+		server.WithAuth(validator),
+		server.WithExtension(auth.AuthExtension{}),
 	)
 
 	// Public tool — no scope required, echoes the input and reports claims
 	srv.RegisterTool(
-		mcpkit.ToolDef{
+		core.ToolDef{
 			Name:        "echo",
 			Description: "Echoes input and reports authenticated claims. No scope required.",
 			InputSchema: json.RawMessage(`{"type":"object","properties":{"msg":{"type":"string"}}}`),
 		},
-		func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
-			claims := mcpkit.AuthClaims(ctx)
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			claims := core.AuthClaims(ctx)
 			var args map[string]any
 			json.Unmarshal(req.Arguments, &args)
 			result := map[string]any{"msg": args["msg"]}
@@ -75,37 +76,37 @@ func (e *TestEnv) buildMCPServer(t *testing.T) {
 				result["scopes"] = claims.Scopes
 			}
 			raw, _ := json.Marshal(result)
-			return mcpkit.TextResult(string(raw)), nil
+			return core.TextResult(string(raw)), nil
 		},
 	)
 
 	// Scoped tool — requires "tools:call" scope
 	srv.RegisterTool(
-		mcpkit.ToolDef{
+		core.ToolDef{
 			Name:        "scoped-tool",
 			Description: "Requires tools:call scope. Returns 'ok' on success.",
 			InputSchema: json.RawMessage(`{"type":"object"}`),
 		},
-		func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
 			if err := auth.RequireScope(ctx, "tools:call"); err != nil {
-				return mcpkit.TextResult("error: " + err.Error()), nil
+				return core.TextResult("error: " + err.Error()), nil
 			}
-			return mcpkit.TextResult("ok"), nil
+			return core.TextResult("ok"), nil
 		},
 	)
 
 	// Admin tool — requires "admin:write" scope
 	srv.RegisterTool(
-		mcpkit.ToolDef{
+		core.ToolDef{
 			Name:        "admin-tool",
 			Description: "Requires admin:write scope. Returns 'admin ok' on success.",
 			InputSchema: json.RawMessage(`{"type":"object"}`),
 		},
-		func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
 			if err := auth.RequireScope(ctx, "admin:write"); err != nil {
-				return mcpkit.TextResult("error: " + err.Error()), nil
+				return core.TextResult("error: " + err.Error()), nil
 			}
-			return mcpkit.TextResult("admin ok"), nil
+			return core.TextResult("admin ok"), nil
 		},
 	)
 
@@ -116,8 +117,8 @@ func (e *TestEnv) buildMCPServer(t *testing.T) {
 	// Handler() returns a mux with: Streamable at /mcp, SSE at /mcp/sse + /mcp/message.
 	// Use prefix "/" so the inner mux handles all routing.
 	mcpHandler := srv.Handler(
-		mcpkit.WithStreamableHTTP(true),
-		mcpkit.WithSSE(true),
+		server.WithStreamableHTTP(true),
+		server.WithSSE(true),
 	)
 	mux.Handle("/mcp/", mcpHandler) // catch /mcp/sse, /mcp/message
 	mux.Handle("/mcp", mcpHandler)  // catch /mcp (Streamable HTTP POST)

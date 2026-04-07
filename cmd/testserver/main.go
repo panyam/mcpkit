@@ -18,7 +18,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/panyam/mcpkit"
+	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/server"
 )
 
 func listenAddr() string {
@@ -29,18 +30,18 @@ func listenAddr() string {
 }
 
 func main() {
-	var serverOpts []mcpkit.Option
+	var serverOpts []server.Option
 	serverOpts = append(serverOpts,
-		mcpkit.WithListen(listenAddr()),
-		mcpkit.WithToolTimeout(30*time.Second),
-		mcpkit.WithSubscriptions(),
+		server.WithListen(listenAddr()),
+		server.WithToolTimeout(30*time.Second),
+		server.WithSubscriptions(),
 	)
 	// Enable HTTP-level request logging if VERBOSE is set
 	if os.Getenv("VERBOSE") == "1" {
-		serverOpts = append(serverOpts, mcpkit.WithRequestLogging(log.Default()))
+		serverOpts = append(serverOpts, server.WithRequestLogging(log.Default()))
 	}
-	srv := mcpkit.NewServer(
-		mcpkit.ServerInfo{
+	srv := server.NewServer(
+		core.ServerInfo{
 			Name:    "mcpkit-testserver",
 			Version: "0.1.0",
 		},
@@ -49,7 +50,7 @@ func main() {
 
 	// echo: returns the input message as-is
 	srv.RegisterTool(
-		mcpkit.ToolDef{
+		core.ToolDef{
 			Name:        "echo",
 			Description: "Echoes the input message",
 			InputSchema: map[string]any{
@@ -60,20 +61,20 @@ func main() {
 				"required": []string{"message"},
 			},
 		},
-		func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
 			var args struct {
 				Message string `json:"message"`
 			}
 			if err := req.Bind(&args); err != nil {
-				return mcpkit.ErrorResult(err.Error()), nil
+				return core.ErrorResult(err.Error()), nil
 			}
-			return mcpkit.TextResult("echo: " + args.Message), nil
+			return core.TextResult("echo: " + args.Message), nil
 		},
 	)
 
 	// add: adds two numbers
 	srv.RegisterTool(
-		mcpkit.ToolDef{
+		core.ToolDef{
 			Name:        "add",
 			Description: "Adds two numbers",
 			InputSchema: map[string]any{
@@ -85,31 +86,31 @@ func main() {
 				"required": []string{"a", "b"},
 			},
 		},
-		func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
 			var args struct {
 				A json.Number `json:"a"`
 				B json.Number `json:"b"`
 			}
 			if err := req.Bind(&args); err != nil {
-				return mcpkit.ErrorResult(err.Error()), nil
+				return core.ErrorResult(err.Error()), nil
 			}
 			a, _ := args.A.Float64()
 			b, _ := args.B.Float64()
-			return mcpkit.TextResult(fmt.Sprintf("%g", a+b)), nil
+			return core.TextResult(fmt.Sprintf("%g", a+b)), nil
 		},
 	)
 
 	// fail: always returns an error (for testing isError semantics)
 	srv.RegisterTool(
-		mcpkit.ToolDef{
+		core.ToolDef{
 			Name:        "fail",
 			Description: "Always fails with an error",
 			InputSchema: map[string]any{
 				"type": "object",
 			},
 		},
-		func(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
-			return mcpkit.ToolResult{}, fmt.Errorf("intentional failure for testing")
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			return core.ToolResult{}, fmt.Errorf("intentional failure for testing")
 		},
 	)
 
@@ -118,13 +119,13 @@ func main() {
 	registerConformanceResources(srv)
 	registerConformancePrompts(srv)
 
-	var transportOpts []mcpkit.TransportOption
+	var transportOpts []server.TransportOption
 	switch {
 	case os.Getenv("BOTH") == "1":
-		transportOpts = append(transportOpts, mcpkit.WithStreamableHTTP(true), mcpkit.WithSSE(true))
+		transportOpts = append(transportOpts, server.WithStreamableHTTP(true), server.WithSSE(true))
 		log.Printf("MCP test server listening on %s (SSE + Streamable HTTP at /mcp)", listenAddr())
 	case os.Getenv("STREAMABLE") == "1":
-		transportOpts = append(transportOpts, mcpkit.WithStreamableHTTP(true), mcpkit.WithSSE(false))
+		transportOpts = append(transportOpts, server.WithStreamableHTTP(true), server.WithSSE(false))
 		log.Printf("MCP test server listening on %s (Streamable HTTP at /mcp)", listenAddr())
 	default:
 		log.Printf("MCP test server listening on %s (SSE at /mcp/sse)", listenAddr())

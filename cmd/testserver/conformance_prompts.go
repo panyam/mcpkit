@@ -9,23 +9,24 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/panyam/mcpkit"
+	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/server"
 )
 
 // registerConformancePrompts adds all prompts required by the MCP conformance suite.
-func registerConformancePrompts(srv *mcpkit.Server) {
+func registerConformancePrompts(srv *server.Server) {
 	// test_simple_prompt — no arguments, returns a simple text message
 	srv.RegisterPrompt(
-		mcpkit.PromptDef{
+		core.PromptDef{
 			Name:        "test_simple_prompt",
 			Description: "A simple prompt for conformance testing",
 		},
-		func(ctx context.Context, req mcpkit.PromptRequest) (mcpkit.PromptResult, error) {
-			return mcpkit.PromptResult{
+		func(ctx context.Context, req core.PromptRequest) (core.PromptResult, error) {
+			return core.PromptResult{
 				Description: "A simple test prompt",
-				Messages: []mcpkit.PromptMessage{{
+				Messages: []core.PromptMessage{{
 					Role:    "user",
-					Content: mcpkit.Content{Type: "text", Text: "This is a simple prompt for testing."},
+					Content: core.Content{Type: "text", Text: "This is a simple prompt for testing."},
 				}},
 			}, nil
 		},
@@ -33,22 +34,22 @@ func registerConformancePrompts(srv *mcpkit.Server) {
 
 	// test_prompt_with_arguments — takes arg1 and arg2 arguments
 	srv.RegisterPrompt(
-		mcpkit.PromptDef{
+		core.PromptDef{
 			Name:        "test_prompt_with_arguments",
 			Description: "A prompt with arguments for conformance testing",
-			Arguments: []mcpkit.PromptArgument{
+			Arguments: []core.PromptArgument{
 				{Name: "arg1", Description: "First test argument", Required: true},
 				{Name: "arg2", Description: "Second test argument", Required: true},
 			},
 		},
-		func(ctx context.Context, req mcpkit.PromptRequest) (mcpkit.PromptResult, error) {
+		func(ctx context.Context, req core.PromptRequest) (core.PromptResult, error) {
 			arg1 := req.Arguments["arg1"]
 			arg2 := req.Arguments["arg2"]
-			return mcpkit.PromptResult{
+			return core.PromptResult{
 				Description: "A prompt with arguments",
-				Messages: []mcpkit.PromptMessage{{
+				Messages: []core.PromptMessage{{
 					Role:    "user",
-					Content: mcpkit.Content{Type: "text", Text: fmt.Sprintf("Prompt with arguments: arg1='%s', arg2='%s'", arg1, arg2)},
+					Content: core.Content{Type: "text", Text: fmt.Sprintf("Prompt with arguments: arg1='%s', arg2='%s'", arg1, arg2)},
 				}},
 			}, nil
 		},
@@ -56,22 +57,22 @@ func registerConformancePrompts(srv *mcpkit.Server) {
 
 	// test_prompt_with_embedded_resource — returns message with embedded resource content
 	srv.RegisterPrompt(
-		mcpkit.PromptDef{
+		core.PromptDef{
 			Name:        "test_prompt_with_embedded_resource",
 			Description: "A prompt that includes an embedded resource",
-			Arguments: []mcpkit.PromptArgument{
+			Arguments: []core.PromptArgument{
 				{Name: "resourceUri", Description: "URI of the resource to embed", Required: true},
 			},
 		},
-		func(ctx context.Context, req mcpkit.PromptRequest) (mcpkit.PromptResult, error) {
+		func(ctx context.Context, req core.PromptRequest) (core.PromptResult, error) {
 			uri := req.Arguments["resourceUri"]
-			return mcpkit.PromptResult{
+			return core.PromptResult{
 				Description: "A prompt with an embedded resource",
-				Messages: []mcpkit.PromptMessage{{
+				Messages: []core.PromptMessage{{
 					Role: "user",
-					Content: mcpkit.Content{
+					Content: core.Content{
 						Type: "resource",
-						Resource: &mcpkit.ResourceContent{
+						Resource: &core.ResourceContent{
 							URI:      uri,
 							MimeType: "text/plain",
 							Text:     "Embedded resource content for testing.",
@@ -84,17 +85,17 @@ func registerConformancePrompts(srv *mcpkit.Server) {
 
 	// test_prompt_with_image — returns message with image content
 	srv.RegisterPrompt(
-		mcpkit.PromptDef{
+		core.PromptDef{
 			Name:        "test_prompt_with_image",
 			Description: "A prompt that includes an image",
 		},
-		func(ctx context.Context, req mcpkit.PromptRequest) (mcpkit.PromptResult, error) {
+		func(ctx context.Context, req core.PromptRequest) (core.PromptResult, error) {
 			pngBytes := minimalPNG() // reuse from conformance_tools.go
-			return mcpkit.PromptResult{
+			return core.PromptResult{
 				Description: "A prompt with image content",
-				Messages: []mcpkit.PromptMessage{{
+				Messages: []core.PromptMessage{{
 					Role: "user",
-					Content: mcpkit.Content{
+					Content: core.Content{
 						Type:     "image",
 						MimeType: "image/png",
 						Data:     base64.StdEncoding.EncodeToString(pngBytes),
@@ -108,7 +109,7 @@ func registerConformancePrompts(srv *mcpkit.Server) {
 	// The conformance suite sends completion/complete with ref/prompt for this prompt
 	// and expects a valid response with completion suggestions.
 	srv.RegisterCompletion("ref/prompt", "test_prompt_with_arguments",
-		func(ctx context.Context, ref mcpkit.CompletionRef, arg mcpkit.CompletionArgument) (mcpkit.CompletionResult, error) {
+		func(ctx context.Context, ref core.CompletionRef, arg core.CompletionArgument) (core.CompletionResult, error) {
 			// Provide sample completions filtered by partial input
 			allValues := []string{"value1", "value2", "value3"}
 			var filtered []string
@@ -120,7 +121,7 @@ func registerConformancePrompts(srv *mcpkit.Server) {
 			if filtered == nil {
 				filtered = allValues
 			}
-			return mcpkit.CompletionResult{
+			return core.CompletionResult{
 				Values:  filtered,
 				Total:   len(filtered),
 				HasMore: false,
