@@ -143,6 +143,35 @@ func (s *Server) RegisterResourceTemplate(def core.ResourceTemplate, handler cor
 	s.dispatcher.RegisterResourceTemplate(def, handler)
 }
 
+// validateExtensionRefs iterates registered extensions and calls ValidateRefs
+// on any that implement core.RefValidator. Logs warnings for unresolvable refs.
+func (s *Server) validateExtensionRefs() {
+	logger := s.options.requestLogger
+	if logger == nil {
+		logger = log.Default()
+	}
+
+	// Collect tool defs, resource URIs, and template URIs
+	tools := make([]core.ToolDef, 0, len(s.dispatcher.toolOrder))
+	for _, name := range s.dispatcher.toolOrder {
+		if entry, ok := s.dispatcher.tools[name]; ok {
+			tools = append(tools, entry.def)
+		}
+	}
+	resourceURIs := make([]string, len(s.dispatcher.resourceOrder))
+	copy(resourceURIs, s.dispatcher.resourceOrder)
+	templateURIs := make([]string, len(s.dispatcher.templateOrder))
+	copy(templateURIs, s.dispatcher.templateOrder)
+
+	for _, ext := range s.options.extensions {
+		if rv, ok := ext.(core.RefValidator); ok {
+			for _, warning := range rv.ValidateRefs(tools, resourceURIs, templateURIs) {
+				logger.Printf("mcpkit: %s", warning)
+			}
+		}
+	}
+}
+
 // RegisterPrompt adds a prompt to the server.
 func (s *Server) RegisterPrompt(def core.PromptDef, handler core.PromptHandler) {
 	s.dispatcher.RegisterPrompt(def, handler)
@@ -283,6 +312,9 @@ func (s *Server) registerTransportSessions(closeOne sessionCloser, closeAll func
 // to enable the Streamable HTTP transport (MCP 2025-03-26).
 // Both transports can be enabled simultaneously for backward compatibility.
 func (s *Server) Handler(opts ...TransportOption) http.Handler {
+	// Let extensions validate tool-to-resource references at startup
+	s.validateExtensionRefs()
+
 	cfg := defaultTransportConfig()
 	for _, opt := range opts {
 		opt(&cfg)

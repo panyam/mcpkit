@@ -13,11 +13,17 @@
 //	)
 package ui
 
-import "github.com/panyam/mcpkit/core"
+import (
+	"fmt"
+	"strings"
+
+	"github.com/panyam/mcpkit/core"
+)
 
 // UIExtension declares support for the MCP Apps extension.
 // Register it on the server to advertise UI rendering capability
-// in the initialize response.
+// in the initialize response. Also validates that tools referencing
+// ui:// resources have matching resource registrations (via RefValidator).
 type UIExtension struct{}
 
 // Extension returns the MCP Apps extension metadata.
@@ -27,4 +33,149 @@ func (UIExtension) Extension() core.Extension {
 		SpecVersion: "2026-01-26",
 		Stability:   core.Experimental,
 	}
+}
+
+// ValidateRefs checks that all tools with _meta.ui.resourceUri reference a
+// registered resource or matching template. Returns warnings for unresolvable
+// references. Implements core.RefValidator.
+func (UIExtension) ValidateRefs(tools []core.ToolDef, resourceURIs []string, templateURIs []string) []string {
+	resourceSet := make(map[string]bool, len(resourceURIs))
+	for _, uri := range resourceURIs {
+		resourceSet[uri] = true
+	}
+
+	var warnings []string
+	for _, t := range tools {
+		if t.Meta == nil || t.Meta.UI == nil || t.Meta.UI.ResourceUri == "" {
+			continue
+		}
+		uri := t.Meta.UI.ResourceUri
+
+		// Check exact resource match
+		if resourceSet[uri] {
+			continue
+		}
+
+		// Check template match
+		if matchesAnyTemplate(uri, templateURIs) {
+			continue
+		}
+
+		warnings = append(warnings, fmt.Sprintf("warning: tool %q references resource %q but no resource or template is registered for that URI", t.Name, uri))
+	}
+	return warnings
+}
+
+// ToolResourceRegistrar is the interface needed by RegisterAppTool to register
+// tools and resources. Satisfied by *server.Server without importing it.
+type ToolResourceRegistrar interface {
+	RegisterTool(def core.ToolDef, handler core.ToolHandler)
+	RegisterResource(def core.ResourceDef, handler core.ResourceHandler)
+}
+
+// AppToolConfig configures a tool + resource pair for RegisterAppTool.
+type AppToolConfig struct {
+	// Name is the tool identifier used in tools/call.
+	Name string
+
+	// Description is a human-readable summary of what the tool does.
+	Description string
+
+	// InputSchema is the JSON Schema for the tool's arguments.
+	InputSchema any
+
+	// ResourceURI is the ui:// URI for the app's HTML resource.
+	ResourceURI string
+
+	// ToolHandler handles tool invocations.
+	ToolHandler core.ToolHandler
+
+	// ResourceHandler serves the HTML content for the ui:// resource.
+	ResourceHandler core.ResourceHandler
+
+	// Visibility controls who can see/call this tool.
+	// Nil means default (both model and app).
+	Visibility []core.UIVisibility
+
+	// CSP declares external domains the app needs.
+	CSP *core.UICSPConfig
+
+	// Permissions lists browser capabilities the app requests.
+	Permissions []string
+
+	// PrefersBorder hints whether the host should draw a visible border.
+	PrefersBorder *bool
+
+	// Domain requests a dedicated sandbox origin for the app.
+	Domain string
+}
+
+// RegisterAppTool registers both a tool (with _meta.ui metadata) and its
+// matching ui:// resource in one call. Ensures the tool's resourceUri and
+// the resource URI are consistent, and sets the correct MIME type automatically.
+//
+// Example:
+//
+//	ui.RegisterAppTool(srv, ui.AppToolConfig{
+//	    Name:        "build_deck",
+//	    Description: "Build a slide deck",
+//	    InputSchema: map[string]any{"type": "object"},
+//	    ResourceURI: "ui://decks/view",
+//	    ToolHandler: buildDeckHandler,
+//	    ResourceHandler: serveDeckHTML,
+//	})
+func RegisterAppTool(reg ToolResourceRegistrar, cfg AppToolConfig) {
+	uiMeta := &core.UIMetadata{
+		ResourceUri:   cfg.ResourceURI,
+		Visibility:    cfg.Visibility,
+		CSP:           cfg.CSP,
+		Permissions:   cfg.Permissions,
+		PrefersBorder: cfg.PrefersBorder,
+		Domain:        cfg.Domain,
+	}
+
+	reg.RegisterTool(
+		core.ToolDef{
+			Name:        cfg.Name,
+			Description: cfg.Description,
+			InputSchema: cfg.InputSchema,
+			Meta:        &core.ToolMeta{UI: uiMeta},
+		},
+		cfg.ToolHandler,
+	)
+
+	reg.RegisterResource(
+		core.ResourceDef{
+			URI:      cfg.ResourceURI,
+			Name:     cfg.Name + " UI",
+			MimeType: core.AppMIMEType,
+		},
+		cfg.ResourceHandler,
+	)
+}
+
+// matchesAnyTemplate checks if a URI matches any of the given URI templates.
+// Uses simple segment-based matching (same logic as server dispatch).
+func matchesAnyTemplate(uri string, templates []string) bool {
+	uParts := strings.Split(uri, "/")
+	for _, tmpl := range templates {
+		tParts := strings.Split(tmpl, "/")
+		if len(tParts) != len(uParts) {
+			continue
+		}
+		matched := true
+		for i, tp := range tParts {
+			if strings.HasPrefix(tp, "{") && strings.HasSuffix(tp, "}") {
+				continue // template variable matches anything
+			}
+			if tp != uParts[i] {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return true
+		}
+	}
+	return false
 }
