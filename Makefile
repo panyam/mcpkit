@@ -33,7 +33,7 @@ testconfauth: ## Run MCP Auth conformance suite (client-side, requires mcpkit/au
 test-auth: ## Run auth sub-module tests
 	cd ext/auth && go test ./... -count=1 -timeout 30s
 
-test-auth-e2e: ## Run E2E auth tests (in-process oneauth AS, no Docker)
+test-e2e: ## Run all E2E tests (auth, apps — no Docker)
 	cd tests/e2e && go test ./... -count=1 -timeout 60s
 
 testkcl: ## Run Keycloak auth interop tests (requires Docker, run upkcl first)
@@ -41,7 +41,17 @@ testkcl: ## Run Keycloak auth interop tests (requires Docker, run upkcl first)
 
 REPORT_DIR := tests/reports
 
-STAGES :=
+# run_stage runs a make target as a testall stage with logging and pass/fail tracking.
+# Usage: $(call run_stage,STEP_NUM,TOTAL,LABEL,MAKE_TARGET)
+# Shell vars PASS, FAIL, STAGES must be initialized by the caller.
+define run_stage
+	echo "--- [$(1)/$(2)] $(3) ---" | tee -a $(REPORT_DIR)/run.log; \
+	if $(MAKE) -s $(4) >> $(REPORT_DIR)/run.log 2>&1; then \
+		echo "  PASS: $(3)" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); STAGES="$$STAGES $(3):PASS"; \
+	else \
+		echo "  FAIL: $(3)" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); STAGES="$$STAGES $(3):FAIL"; \
+	fi;
+endef
 
 testall: ## Run ALL tests (starts Keycloak if needed) + generate HTML report
 	@mkdir -p $(REPORT_DIR)
@@ -49,48 +59,13 @@ testall: ## Run ALL tests (starts Keycloak if needed) + generate HTML report
 	@echo "Started: $$(date)" | tee -a $(REPORT_DIR)/run.log
 	@PASS=0; FAIL=0; STAGES=""; \
 	echo "" | tee -a $(REPORT_DIR)/run.log; \
-	echo "--- [1/7] Unit tests ---" | tee -a $(REPORT_DIR)/run.log; \
-	if go test ./... -count=1 -timeout 30s -v >> $(REPORT_DIR)/run.log 2>&1; then \
-		echo "  PASS: unit" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); STAGES="$$STAGES unit:PASS"; \
-	else \
-		echo "  FAIL: unit" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); STAGES="$$STAGES unit:FAIL"; \
-	fi; \
-	echo "--- [2/7] Race detector ---" | tee -a $(REPORT_DIR)/run.log; \
-	if go test -race ./... -count=1 -timeout 60s >> $(REPORT_DIR)/run.log 2>&1; then \
-		echo "  PASS: race" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); STAGES="$$STAGES race:PASS"; \
-	else \
-		echo "  FAIL: race" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); STAGES="$$STAGES race:FAIL"; \
-	fi; \
-	echo "--- [3/7] Auth module ---" | tee -a $(REPORT_DIR)/run.log; \
-	if (cd ext/auth && go test ./... -count=1 -timeout 30s -v) >> $(REPORT_DIR)/run.log 2>&1; then \
-		echo "  PASS: auth" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); STAGES="$$STAGES auth:PASS"; \
-	else \
-		echo "  FAIL: auth" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); STAGES="$$STAGES auth:FAIL"; \
-	fi; \
-	echo "--- [4/7] E2E auth ---" | tee -a $(REPORT_DIR)/run.log; \
-	if (cd tests/e2e && go test ./... -count=1 -timeout 60s -v) >> $(REPORT_DIR)/run.log 2>&1; then \
-		echo "  PASS: e2e" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); STAGES="$$STAGES e2e:PASS"; \
-	else \
-		echo "  FAIL: e2e" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); STAGES="$$STAGES e2e:FAIL"; \
-	fi; \
-	echo "--- [5/7] Conformance ---" | tee -a $(REPORT_DIR)/run.log; \
-	if bash scripts/conformance-test.sh >> $(REPORT_DIR)/run.log 2>&1; then \
-		echo "  PASS: conformance" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); STAGES="$$STAGES conformance:PASS"; \
-	else \
-		echo "  FAIL: conformance" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); STAGES="$$STAGES conformance:FAIL"; \
-	fi; \
-	echo "--- [6/7] Auth conformance ---" | tee -a $(REPORT_DIR)/run.log; \
-	if bash scripts/conformance-auth-test.sh >> $(REPORT_DIR)/run.log 2>&1; then \
-		echo "  PASS: auth-conformance" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); STAGES="$$STAGES auth-conformance:PASS"; \
-	else \
-		echo "  FAIL: auth-conformance" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); STAGES="$$STAGES auth-conformance:FAIL"; \
-	fi; \
-	echo "--- [7/7] Keycloak interop ---" | tee -a $(REPORT_DIR)/run.log; \
-	if $(MAKE) -s testkcl-auto >> $(REPORT_DIR)/run.log 2>&1; then \
-		echo "  PASS: keycloak" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); STAGES="$$STAGES keycloak:PASS"; \
-	else \
-		echo "  FAIL: keycloak" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); STAGES="$$STAGES keycloak:FAIL"; \
-	fi; \
+	$(call run_stage,1,7,unit,test) \
+	$(call run_stage,2,7,race,test-race) \
+	$(call run_stage,3,7,auth,test-auth) \
+	$(call run_stage,4,7,e2e,test-e2e) \
+	$(call run_stage,5,7,conformance,testconf) \
+	$(call run_stage,6,7,auth-conformance,testconfauth) \
+	$(call run_stage,7,7,keycloak,testkcl-auto) \
 	echo "" | tee -a $(REPORT_DIR)/run.log; \
 	echo "=== Results: $$PASS passed, $$FAIL failed ===" | tee -a $(REPORT_DIR)/run.log; \
 	echo "Finished: $$(date)" | tee -a $(REPORT_DIR)/run.log; \
@@ -292,5 +267,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-race test-v test-auth test-auth-e2e testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth vet lint vulncheck seccheck secrets audit ci ci-full serve serve-streamable serve-both tidy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs help
+.PHONY: build test test-race test-v test-auth test-e2e testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth vet lint vulncheck seccheck secrets audit ci ci-full serve serve-streamable serve-both tidy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs help
 .DEFAULT_GOAL := help
