@@ -50,7 +50,7 @@ define run_stage
 		echo "  PASS: $(3)" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); STAGES="$$STAGES $(3):PASS"; \
 	else \
 		echo "  FAIL: $(3)" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); STAGES="$$STAGES $(3):FAIL"; \
-	fi
+	fi;
 endef
 
 testall: ## Run ALL tests (starts Keycloak if needed) + generate HTML report
