@@ -93,128 +93,164 @@ func setupSSEClient(t *testing.T) (*Client, *httptest.Server) {
 	return c, ts
 }
 
-// --- Streamable HTTP transport tests ---
+// forAllTransports runs a test function against all 3 client transports:
+// Streamable HTTP, SSE, and in-memory. This is the Go equivalent of
+// parametric tests — each transport variant runs as a subtest.
+func forAllTransports(t *testing.T, fn func(t *testing.T, c *Client)) {
+	t.Helper()
 
-// TestClientConnect verifies that the client performs the MCP initialize
-// handshake over Streamable HTTP, obtains a session ID, and captures server info.
-func TestClientConnect(t *testing.T) {
-	c, _ := setupStreamableClient(t)
-	if c.SessionID() == "" {
-		t.Error("no session ID after connect")
-	}
-	if c.ServerInfo.Name != "test-server" {
-		t.Errorf("server name = %q, want test-server", c.ServerInfo.Name)
-	}
+	t.Run("streamable", func(t *testing.T) {
+		c, _ := setupStreamableClient(t)
+		fn(t, c)
+	})
+	t.Run("sse", func(t *testing.T) {
+		c, _ := setupSSEClient(t)
+		fn(t, c)
+	})
+	t.Run("memory", func(t *testing.T) {
+		c := NewClient("memory://", ClientInfo{Name: "test-client", Version: "1.0"},
+			WithInMemoryServer(newTestMCPServer()))
+		if err := c.Connect(); err != nil {
+			t.Fatalf("Connect failed: %v", err)
+		}
+		t.Cleanup(func() { c.Close() })
+		fn(t, c)
+	})
 }
 
-// TestClientToolCall verifies that ToolCall invokes a tool over Streamable HTTP
-// and returns the first text content from the response.
+// --- Parametric transport tests (run against Streamable, SSE, and in-memory) ---
+
+// TestClientConnect verifies that the client performs the MCP initialize
+// handshake, obtains a session ID, and captures server info across all transports.
+func TestClientConnect(t *testing.T) {
+	forAllTransports(t, func(t *testing.T, c *Client) {
+		if c.SessionID() == "" {
+			t.Error("no session ID after connect")
+		}
+		if c.ServerInfo.Name != "test-server" {
+			t.Errorf("server name = %q, want test-server", c.ServerInfo.Name)
+		}
+	})
+}
+
+// TestClientToolCall verifies that ToolCall invokes a tool and returns the
+// first text content from the response across all transports.
 func TestClientToolCall(t *testing.T) {
-	c, _ := setupStreamableClient(t)
-	text, err := c.ToolCall("echo", map[string]string{"message": "world"})
-	if err != nil {
-		t.Fatalf("ToolCall: %v", err)
-	}
-	if text != "echo: world" {
-		t.Errorf("result = %q, want 'echo: world'", text)
-	}
+	forAllTransports(t, func(t *testing.T, c *Client) {
+		text, err := c.ToolCall("echo", map[string]string{"message": "world"})
+		if err != nil {
+			t.Fatalf("ToolCall: %v", err)
+		}
+		if text != "echo: world" {
+			t.Errorf("result = %q, want 'echo: world'", text)
+		}
+	})
 }
 
 // TestClientToolCallError verifies that ToolCall returns an error when the
-// tool reports isError:true in its response.
+// tool reports isError:true in its response across all transports.
 func TestClientToolCallError(t *testing.T) {
-	c, _ := setupStreamableClient(t)
-	_, err := c.ToolCall("fail", nil)
-	if err == nil {
-		t.Fatal("expected error from fail tool")
-	}
-	if !strings.Contains(err.Error(), "intentional failure") {
-		t.Errorf("error = %v, want 'intentional failure'", err)
-	}
+	forAllTransports(t, func(t *testing.T, c *Client) {
+		_, err := c.ToolCall("fail", nil)
+		if err == nil {
+			t.Fatal("expected error from fail tool")
+		}
+		if !strings.Contains(err.Error(), "intentional failure") {
+			t.Errorf("error = %v, want 'intentional failure'", err)
+		}
+	})
 }
 
 // TestClientReadResource verifies that ReadResource reads a static resource
-// over Streamable HTTP and returns its text content.
+// and returns its text content across all transports.
 func TestClientReadResource(t *testing.T) {
-	c, _ := setupStreamableClient(t)
-	text, err := c.ReadResource("test://info")
-	if err != nil {
-		t.Fatalf("ReadResource: %v", err)
-	}
-	if text != "hello from test" {
-		t.Errorf("result = %q, want 'hello from test'", text)
-	}
+	forAllTransports(t, func(t *testing.T, c *Client) {
+		text, err := c.ReadResource("test://info")
+		if err != nil {
+			t.Fatalf("ReadResource: %v", err)
+		}
+		if text != "hello from test" {
+			t.Errorf("result = %q, want 'hello from test'", text)
+		}
+	})
 }
 
 // TestClientReadResourceTemplate verifies that ReadResource resolves a URI
-// template and returns the parameterized content.
+// template and returns the parameterized content across all transports.
 func TestClientReadResourceTemplate(t *testing.T) {
-	c, _ := setupStreamableClient(t)
-	text, err := c.ReadResource("test://items/42")
-	if err != nil {
-		t.Fatalf("ReadResource: %v", err)
-	}
-	if text != "item 42" {
-		t.Errorf("result = %q, want 'item 42'", text)
-	}
+	forAllTransports(t, func(t *testing.T, c *Client) {
+		text, err := c.ReadResource("test://items/42")
+		if err != nil {
+			t.Fatalf("ReadResource: %v", err)
+		}
+		if text != "item 42" {
+			t.Errorf("result = %q, want 'item 42'", text)
+		}
+	})
 }
 
 // TestClientListTools verifies that ListTools returns all registered tool
-// definitions with correct names.
+// definitions with correct names across all transports.
 func TestClientListTools(t *testing.T) {
-	c, _ := setupStreamableClient(t)
-	tools, err := c.ListTools()
-	if err != nil {
-		t.Fatalf("ListTools: %v", err)
-	}
-	names := make(map[string]bool)
-	for _, tool := range tools {
-		names[tool.Name] = true
-	}
-	if !names["echo"] || !names["fail"] {
-		t.Errorf("missing tools: %v", names)
-	}
+	forAllTransports(t, func(t *testing.T, c *Client) {
+		tools, err := c.ListTools()
+		if err != nil {
+			t.Fatalf("ListTools: %v", err)
+		}
+		names := make(map[string]bool)
+		for _, tool := range tools {
+			names[tool.Name] = true
+		}
+		if !names["echo"] || !names["fail"] {
+			t.Errorf("missing tools: %v", names)
+		}
+	})
 }
 
-// TestClientListResources verifies ListResources returns static resource definitions.
+// TestClientListResources verifies ListResources returns static resource definitions
+// across all transports.
 func TestClientListResources(t *testing.T) {
-	c, _ := setupStreamableClient(t)
-	resources, err := c.ListResources()
-	if err != nil {
-		t.Fatalf("ListResources: %v", err)
-	}
-	if len(resources) != 1 || resources[0].URI != "test://info" {
-		t.Errorf("resources = %v, want [test://info]", resources)
-	}
+	forAllTransports(t, func(t *testing.T, c *Client) {
+		resources, err := c.ListResources()
+		if err != nil {
+			t.Fatalf("ListResources: %v", err)
+		}
+		if len(resources) != 1 || resources[0].URI != "test://info" {
+			t.Errorf("resources = %v, want [test://info]", resources)
+		}
+	})
 }
 
-// TestClientListResourceTemplates verifies ListResourceTemplates returns template definitions.
+// TestClientListResourceTemplates verifies ListResourceTemplates returns template
+// definitions across all transports.
 func TestClientListResourceTemplates(t *testing.T) {
-	c, _ := setupStreamableClient(t)
-	templates, err := c.ListResourceTemplates()
-	if err != nil {
-		t.Fatalf("ListResourceTemplates: %v", err)
-	}
-	if len(templates) != 1 || templates[0].URITemplate != "test://items/{id}" {
-		t.Errorf("templates = %v", templates)
-	}
+	forAllTransports(t, func(t *testing.T, c *Client) {
+		templates, err := c.ListResourceTemplates()
+		if err != nil {
+			t.Fatalf("ListResourceTemplates: %v", err)
+		}
+		if len(templates) != 1 || templates[0].URITemplate != "test://items/{id}" {
+			t.Errorf("templates = %v", templates)
+		}
+	})
 }
 
 // TestClientCallRaw verifies the low-level Call method returns a CallResult
-// that can be unmarshalled into typed structs.
+// that can be unmarshalled into typed structs across all transports.
 func TestClientCallRaw(t *testing.T) {
-	c, _ := setupStreamableClient(t)
-	result, err := c.Call("tools/list", nil)
-	if err != nil {
-		t.Fatalf("Call: %v", err)
-	}
-	var resp struct{ Tools []ToolDef `json:"tools"` }
-	if err := result.Unmarshal(&resp); err != nil {
-		t.Fatalf("Unmarshal: %v", err)
-	}
-	if len(resp.Tools) < 2 {
-		t.Errorf("expected >=2 tools, got %d", len(resp.Tools))
-	}
+	forAllTransports(t, func(t *testing.T, c *Client) {
+		result, err := c.Call("tools/list", nil)
+		if err != nil {
+			t.Fatalf("Call: %v", err)
+		}
+		var resp struct{ Tools []ToolDef `json:"tools"` }
+		if err := result.Unmarshal(&resp); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if len(resp.Tools) < 2 {
+			t.Errorf("expected >=2 tools, got %d", len(resp.Tools))
+		}
+	})
 }
 
 // --- SSE transport tests ---

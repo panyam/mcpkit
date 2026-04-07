@@ -7,7 +7,7 @@ Go library for building production-grade MCP servers and clients. Handles transp
 ## Quick Commands
 
 ```bash
-make test         # Unit tests (160+ tests)
+make test         # Unit tests (200+ tests, includes parametric 3-transport variants)
 make testconf     # MCP conformance suite (needs Node.js)
 make testconfauth # MCP Auth conformance — client OAuth tests (needs mcpkit/auth)
 make testall      # ALL tests + Keycloak + HTML report (test-reports/report.html)
@@ -19,7 +19,7 @@ make serve-both   # Both transports
 
 # Auth tests (separate modules, published oneauth v0.0.64)
 make test-auth        # Auth sub-module unit tests
-make test-auth-e2e    # 22 E2E auth tests (in-process oneauth AS)
+make test-auth-e2e    # 31 E2E auth tests (in-process oneauth AS)
 make test-auth-keycloak  # 7 Keycloak interop tests (needs Docker)
 make upkcl            # Start Keycloak container
 make downkcl          # Stop Keycloak container
@@ -46,6 +46,8 @@ make downkcl          # Stop Keycloak container
 | `client.go` | MCP client: Connect, ToolCall, ReadResource, ListTools, ListResources, WithClientBearerToken, WithTokenSource |
 | `client_logging.go` | Client-side loggingTransport, WithClientLogging |
 | `client_reconnect.go` | Client reconnection: WithMaxRetries, WithReconnectBackoff, isTransientError |
+| `client_memory.go` | In-memory transport: WithInMemoryServer, no HTTP overhead |
+| `www_authenticate.go` | ParseWWWAuthenticate in core (client transport needs it, core must not depend on auth/) |
 | `docs/AUTH_DESIGN.md` | MCP Auth architecture, sequence diagrams, extension system, oneauth integration map |
 | `testutil/testclient.go` | TestClient: wraps Client + httptest.Server + testing.T for e2e tests |
 | `cmd/testserver/` | Test server with conformance tools, resources, and prompts |
@@ -73,6 +75,10 @@ make downkcl          # Stop Keycloak container
 - **Server middleware** runs after auth but before dispatch. `WithMiddleware(mw...)` — first registered = outermost. Tool timeout is now the innermost handler in the middleware chain. Middleware sees claims via `AuthClaims(ctx)`.
 - **Client reconnection** (`WithMaxRetries`, `WithReconnectBackoff`) — on transient transport errors (EOF, connection reset), client tears down, re-creates transport, re-initializes MCP session, and retries. Auth errors (401/403) are NOT transient — handled by `doWithAuthRetry` instead.
 - **Client logging** (`WithClientLogging(logger)`) wraps the transport decorator pattern. Logs method name, latency, errors for every connect/call/notify/close.
+- **Parametric tests via `forAllTransports`**: Core client tests run against all 3 transports (Streamable HTTP, SSE, in-memory) as subtests. Use this pattern for any test that should work across transports.
+- **In-memory transport** (`WithInMemoryServer(srv)`) calls `Server.Dispatch()` directly — no HTTP, no serialization. Use for fast tests and embedded scenarios. `Connect()` skips transport creation when one is already set (by `WithInMemoryServer`).
+- **Stateless mode** (`WithStateless(true)`) auto-initializes a fresh dispatcher per request — no sessions, no `Mcp-Session-Id`. For serverless, CLI wrappers, single-shot APIs.
+- **Don't brute-force failing tests** — when a test is hard to debug, check if there are open issues for dev-ex improvements (logging, in-memory transport, middleware) that would make the code more testable. In this project, #69 (WithClientLogging) and #68 (in-memory transport) directly unblocked the scope-step-up conformance fix.
 - **oneauth/testutil.TestAuthServer** provides the in-process auth server for E2E tests. It generates RSA keys, serves JWKS, and mints tokens. Set audience after creation via `AS.APIAuth.JWTAudience` (the `WithAudience` option is set at creation time, before server URL is known).
 
 ## Architecture
@@ -85,7 +91,7 @@ See `docs/ARCHITECTURE.md` for transport design, type definitions, and protocol 
 24/30 MCP server conformance scenarios passing. Failing scenarios tracked in `conformance/baseline.yml` under `server:`.
 
 ### Auth conformance
-12/14 required MCP auth conformance scenarios passing (150/153 checks). Remaining 2 blocked on #53 (client transport 401/403 step-up handling). Run via `make testconfauth`.
+14/14 required MCP auth conformance scenarios passing (210/210 checks). 1 warning on basic-cimd (CIMD not implemented). Run via `make testconfauth`.
 
 ## What's Not Implemented Yet
 
@@ -94,4 +100,3 @@ See `docs/ARCHITECTURE.md` for transport design, type definitions, and protocol 
 - Resource subscriptions (#24)
 - Streamable HTTP GET SSE stream (server-initiated notifications without a request)
 - `DiscoverMCPAuth` PRM fetch — steps 4-5 return error "not yet implemented"
-- `cmd/testclient` auth conformance: scope-step-up and scope-retry-limit need testclient to use mcpkit Client (with retry) instead of raw HTTP

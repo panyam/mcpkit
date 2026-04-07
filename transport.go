@@ -219,6 +219,28 @@ func (c *mcpSSEConn) OnClose() {
 	c.BaseSSEConn.OnClose()
 }
 
+// closeSession terminates a single SSE session by ID.
+// Unregisters from the hub (closing the SSE stream) and removes from session maps.
+func (t *sseTransport) closeSession(id string) bool {
+	if _, ok := t.sessions.LoadAndDelete(id); ok {
+		t.hub.Unregister(id)
+		t.sessionSubjects.Delete(id)
+		return true
+	}
+	return false
+}
+
+// closeAllSessions terminates all active SSE sessions.
+func (t *sseTransport) closeAllSessions() {
+	t.sessions.Range(func(key, _ any) bool {
+		id := key.(string)
+		t.hub.Unregister(id)
+		t.sessions.Delete(key)
+		t.sessionSubjects.Delete(key)
+		return true
+	})
+}
+
 // mcpSSEHandler implements gohttp.SSEHandler for MCP session creation.
 type mcpSSEHandler struct {
 	transport *sseTransport

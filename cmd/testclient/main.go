@@ -19,6 +19,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -70,24 +71,61 @@ func main() {
 	io.Copy(io.Discard, probeResp.Body)
 	probeResp.Body.Close()
 
+	// These are set either from the 401 WWW-Authenticate header (normal path)
+	// or from a 403 response during scope-step-up (no-auth path).
+	var resourceMetadataURL, scopeStr string
+
 	if probeResp.StatusCode != 401 {
 		log.Printf("probe returned %d (not 401) — server may not require auth, trying direct initialize", probeResp.StatusCode)
-		client := mcpkit.NewClient(serverURL,
-			mcpkit.ClientInfo{Name: "mcpkit-testclient", Version: "0.1.0"})
-		if err := client.Connect(); err != nil {
+		noAuthClient := mcpkit.NewClient(serverURL,
+			mcpkit.ClientInfo{Name: "mcpkit-testclient", Version: "0.1.0"},
+			mcpkit.WithClientLogging(log.Default()))
+		if err := noAuthClient.Connect(); err != nil {
 			log.Fatalf("initialize (no auth): %v", err)
 		}
-		client.Close()
-		log.Println("SUCCESS: connected without auth")
-		return
+
+		// Verify session works — for scope-step-up scenarios, the server
+		// accepts initialize without auth but returns 403 on subsequent
+		// requests, expecting the client to discover auth and re-auth.
+		_, err = noAuthClient.ListTools()
+		if err != nil {
+			log.Printf("tools/list (no auth) failed: %v — checking for auth requirement", err)
+			noAuthClient.Close()
+
+			// Check if the error is a 403 auth error — if so, we need to
+			// discover auth and re-connect with a token.
+			var authErr *mcpkit.ClientAuthError
+			if errors.As(err, &authErr) && (authErr.StatusCode == 401 || authErr.StatusCode == 403) {
+				log.Printf("Server requires auth (%d): WWW-Authenticate=%s", authErr.StatusCode, authErr.WWWAuthenticate)
+				log.Printf("Required scopes: %v", authErr.RequiredScopes)
+
+				// Parse resource_metadata from WWW-Authenticate for PRM discovery
+				rm, reqScopes, _ := mcpkit.ParseWWWAuthenticate(authErr.WWWAuthenticate)
+				if rm != "" {
+					resourceMetadataURL = rm
+				}
+				if len(reqScopes) > 0 {
+					scopeStr = strings.Join(reqScopes, " ")
+				}
+				// Fall through to the main OAuth flow below
+			} else {
+				log.Printf("tools/list error (non-auth): %v (non-fatal)", err)
+				log.Println("SUCCESS: connected without auth")
+				return
+			}
+		} else {
+			noAuthClient.Close()
+			log.Println("SUCCESS: connected without auth")
+			return
+		}
 	}
 
 	// Step 2: Parse WWW-Authenticate header
 	wwwAuth := probeResp.Header.Get("WWW-Authenticate")
 	log.Printf("Step 2: WWW-Authenticate: %s", wwwAuth)
 
-	resourceMetadataURL := extractParam(wwwAuth, "resource_metadata")
-	scopeStr := extractParam(wwwAuth, "scope")
+	resourceMetadataURL = extractParam(wwwAuth, "resource_metadata")
+	scopeStr = extractParam(wwwAuth, "scope")
 
 	// Step 3: Fetch Protected Resource Metadata
 	log.Println("Step 3: Fetching PRM...")
@@ -291,11 +329,40 @@ func main() {
 		serverURL,
 		mcpkit.ClientInfo{Name: "mcpkit-testclient", Version: "0.1.0"},
 		mcpkit.WithTokenSource(ts),
+		mcpkit.WithClientLogging(log.Default()),
 	)
 	if err := client.Connect(); err != nil {
 		log.Fatalf("MCP connect: %v", err)
 	}
-	client.Close()
+	defer client.Close()
+
+	// Step 9: Verify session with tools/list, then try tools/call.
+	// The Client's doWithAuthRetry handles 401 (token refresh) and 403 (scope
+	// step-up via ScopeAwareTokenSource.TokenForScopes) automatically.
+	log.Println("Step 9: Verifying session with tools/list...")
+	tools, err := client.ListTools()
+	if err != nil {
+		log.Printf("tools/list: %v (non-fatal)", err)
+	} else {
+		log.Printf("tools/list: %d tools available", len(tools))
+
+		// Step 10: Try calling a tool — for scope-step-up scenarios, the
+		// mock server may return 403 requiring escalated scopes. The transport
+		// retry handles this via conformanceTokenSource.TokenForScopes.
+		if len(tools) > 0 {
+			toolName := tools[0].Name
+			log.Printf("Step 10: Calling tool '%s'...", toolName)
+			_, err := client.Call("tools/call", map[string]any{
+				"name":      toolName,
+				"arguments": map[string]any{},
+			})
+			if err != nil {
+				log.Printf("tools/call '%s': %v (may be expected)", toolName, err)
+			} else {
+				log.Printf("tools/call '%s': ok", toolName)
+			}
+		}
+	}
 
 	log.Println("SUCCESS: auth flow complete")
 }
