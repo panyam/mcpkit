@@ -279,68 +279,90 @@ func (t *streamableTransport) handleInitialize(w http.ResponseWriter, r *http.Re
 //
 // The stream lives until the client disconnects or the session is deleted.
 // Multiple GET streams can be open simultaneously for the same session.
+// Uses servicekit's SSEServe/SSEHandler pattern for proper lifecycle management.
 func (t *streamableTransport) handleGet(w http.ResponseWriter, r *http.Request) {
+	handler := &streamableSSEHandler{transport: t}
+	sseConfig := &gohttp.SSEConnConfig{
+		KeepalivePeriod: t.config.keepalivePeriod,
+	}
+	gohttp.SSEServe[SSEData](handler, sseConfig)(w, r)
+}
+
+// streamableSSEHandler implements gohttp.SSEHandler for Streamable HTTP GET SSE.
+// It validates auth + session, creates an SSE connection, and wires the session's
+// notifyFunc to push to the SSE hub.
+type streamableSSEHandler struct {
+	transport *streamableTransport
+}
+
+// streamableSSEConn is the SSE connection for Streamable HTTP GET streams.
+type streamableSSEConn struct {
+	gohttp.BaseSSEConn[SSEData]
+	sessionID  string
+	transport  *streamableTransport
+	dispatcher *Dispatcher
+}
+
+func (h *streamableSSEHandler) Validate(w http.ResponseWriter, r *http.Request) (*streamableSSEConn, bool) {
 	// Auth check
-	if _, err := t.server.CheckAuth(r); err != nil {
+	if _, err := h.transport.server.CheckAuth(r); err != nil {
 		writeAuthError(w, err)
-		return
+		return nil, false
 	}
 
-	// Require session ID — GET SSE only works on existing sessions
+	// Require session ID
 	sessionID := r.Header.Get(mcpSessionIDHeader)
 	if sessionID == "" {
 		http.Error(w, "missing "+mcpSessionIDHeader+" header", http.StatusBadRequest)
-		return
+		return nil, false
 	}
 
-	dispVal, ok := t.sessions.Load(sessionID)
+	dispVal, ok := h.transport.sessions.Load(sessionID)
 	if !ok {
 		http.Error(w, "session not found", http.StatusNotFound)
-		return
+		return nil, false
 	}
 	dispatcher := dispVal.(*Dispatcher)
 
-	if _, ok := w.(http.Flusher); !ok {
-		http.Error(w, "streaming not supported", http.StatusInternalServerError)
-		return
+	conn := &streamableSSEConn{
+		BaseSSEConn: gohttp.BaseSSEConn[SSEData]{
+			Codec:     &sseDataCodec{},
+			ConnIdStr: sessionID,
+			NameStr:   "MCP-GET-SSE",
+		},
+		sessionID:  sessionID,
+		transport:  h.transport,
+		dispatcher: dispatcher,
+	}
+	return conn, true
+}
+
+func (c *streamableSSEConn) OnStart(w http.ResponseWriter, r *http.Request) error {
+	if err := c.BaseSSEConn.OnStart(w, r); err != nil {
+		return err
 	}
 
-	// Set SSE headers
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
-
-	// Create an SSE connection and register in the hub for this session.
-	// The connID is sessionID so notifications sent via hub.SendEvent(sessionID, ...)
-	// are delivered to this stream.
-	conn := &gohttp.BaseSSEConn[SSEData]{
-		Codec:     &sseDataCodec{},
-		ConnIdStr: sessionID,
-		NameStr:   "MCP-GET-SSE",
-	}
-	if err := conn.OnStart(w, r); err != nil {
-		http.Error(w, "failed to start SSE stream", http.StatusInternalServerError)
-		return
-	}
-	t.sseHub.Register(conn)
-	defer func() {
-		t.sseHub.Unregister(sessionID)
-		conn.OnClose()
-	}()
+	// Register in hub for notification delivery
+	c.transport.sseHub.Register(&c.BaseSSEConn)
 
 	// Wire the dispatcher's notifyFunc to push to the SSE hub.
 	// This enables EmitLog/Notify from tool handlers to reach the GET stream.
-	dispatcher.notifyFunc = func(method string, params any) {
+	sessionID := c.sessionID
+	hub := c.transport.sseHub
+	c.dispatcher.notifyFunc = func(method string, params any) {
 		raw, err := marshalNotification(method, params)
 		if err != nil {
 			return
 		}
-		t.sseHub.SendEvent(sessionID, "message", SSEJSON(raw))
+		hub.SendEvent(sessionID, "message", SSEJSON(raw))
 	}
 
-	// Block until client disconnects
-	<-r.Context().Done()
+	return nil
+}
+
+func (c *streamableSSEConn) OnClose() {
+	c.transport.sseHub.Unregister(c.ConnId())
+	c.BaseSSEConn.OnClose()
 }
 
 // handleDelete handles DELETE requests: terminates a session.
