@@ -18,9 +18,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/panyam/mcpkit/core"
-	"github.com/panyam/mcpkit/server"
+	core "github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/ext/auth"
+	server "github.com/panyam/mcpkit/server"
 	"github.com/panyam/oneauth/testutil"
 )
 

@@ -10,10 +10,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/panyam/mcpkit/core"
-	"github.com/panyam/mcpkit/server"
-	"github.com/panyam/mcpkit/client"
+	core "github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/ext/auth"
+	server "github.com/panyam/mcpkit/server"
 )
 
 // buildMCPServer creates and starts an mcpkit MCP server with:
@@ -55,7 +54,7 @@ func (e *TestEnv) buildMCPServer(t *testing.T) {
 	srv := server.NewServer(
 		core.ServerInfo{Name: "mcp-e2e-test", Version: "0.1.0"},
 		server.WithAuth(validator),
-		core.WithExtension(auth.AuthExtension{}),
+		server.WithExtension(auth.AuthExtension{}),
 	)
 
 	// Public tool — no scope required, echoes the input and reports claims

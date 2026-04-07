@@ -4,7 +4,7 @@ go 1.26.1
 
 replace (
 	github.com/panyam/mcpkit => ../..
-	github.com/panyam/mcpkit/ext/auth => ../../auth
+	github.com/panyam/mcpkit/ext/auth => ../../ext/auth
 )
 
 require (

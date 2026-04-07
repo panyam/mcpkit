@@ -10,9 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/panyam/mcpkit/core"
-	"github.com/panyam/mcpkit/server"
-	"github.com/panyam/mcpkit/client"
+	client "github.com/panyam/mcpkit/client"
+	core "github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/ext/auth"
 )
 
@@ -111,7 +110,7 @@ func toolCallJSON(id int, name string, args map[string]any) string {
 
 // ConnectMCPClient creates an mcpkit Client connected to the MCP server with
 // the given bearer token. Performs the initialize handshake.
-func (e *TestEnv) ConnectMCPClient(t *testing.T, token string) *core.Client {
+func (e *TestEnv) ConnectMCPClient(t *testing.T, token string) *client.Client {
 	t.Helper()
 	// Default transport is Streamable HTTP — no option needed.
 	client := client.NewClient(
