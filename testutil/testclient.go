@@ -5,29 +5,31 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/panyam/mcpkit"
+	"github.com/panyam/mcpkit/client"
+	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/server"
 )
 
-// TestClient wraps an mcpkit.Client with testing.T error handling and
+// TestClient wraps a client.Client with testing.T error handling and
 // an in-process httptest.Server. Methods call t.Fatal on errors.
 type TestClient struct {
-	*mcpkit.Client
+	*client.Client
 	t      *testing.T
 	Server *httptest.Server
 }
 
-// NewTestClient creates a TestClient from an mcpkit.Server.
+// NewTestClient creates a TestClient from a server.Server.
 // It starts an httptest.Server (Streamable HTTP), performs the MCP
 // initialize handshake, and registers cleanup.
-// Optional ClientOption values (e.g., WithClientBearerToken) are passed to the client.
-func NewTestClient(t *testing.T, srv *mcpkit.Server, opts ...mcpkit.ClientOption) *TestClient {
+// Optional ClientOption values (e.g., client.WithClientBearerToken) are passed to the client.
+func NewTestClient(t *testing.T, srv *server.Server, opts ...client.ClientOption) *TestClient {
 	t.Helper()
 
-	handler := srv.Handler(mcpkit.WithStreamableHTTP(true))
+	handler := srv.Handler(server.WithStreamableHTTP(true))
 	ts := httptest.NewServer(handler)
 	t.Cleanup(ts.Close)
 
-	c := mcpkit.NewClient(ts.URL+"/mcp", mcpkit.ClientInfo{
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{
 		Name:    "test-client",
 		Version: "0.0.1",
 	}, opts...)
@@ -61,7 +63,7 @@ func (tc *TestClient) ReadResource(uri string) string {
 }
 
 // ListTools returns all registered tools. Calls t.Fatal on error.
-func (tc *TestClient) ListTools() []mcpkit.ToolDef {
+func (tc *TestClient) ListTools() []core.ToolDef {
 	tc.t.Helper()
 	tools, err := tc.Client.ListTools()
 	if err != nil {
@@ -71,7 +73,7 @@ func (tc *TestClient) ListTools() []mcpkit.ToolDef {
 }
 
 // ListResources returns all registered static resources. Calls t.Fatal on error.
-func (tc *TestClient) ListResources() []mcpkit.ResourceDef {
+func (tc *TestClient) ListResources() []core.ResourceDef {
 	tc.t.Helper()
 	resources, err := tc.Client.ListResources()
 	if err != nil {
@@ -81,7 +83,7 @@ func (tc *TestClient) ListResources() []mcpkit.ResourceDef {
 }
 
 // ListResourceTemplates returns all registered resource templates. Calls t.Fatal on error.
-func (tc *TestClient) ListResourceTemplates() []mcpkit.ResourceTemplate {
+func (tc *TestClient) ListResourceTemplates() []core.ResourceTemplate {
 	tc.t.Helper()
 	templates, err := tc.Client.ListResourceTemplates()
 	if err != nil {
@@ -109,7 +111,7 @@ func (tc *TestClient) UnsubscribeResource(uri string) {
 }
 
 // Call makes a raw JSON-RPC call. Calls t.Fatal on error.
-func (tc *TestClient) Call(method string, params any) *mcpkit.CallResult {
+func (tc *TestClient) Call(method string, params any) *client.CallResult {
 	tc.t.Helper()
 	result, err := tc.Client.Call(method, params)
 	if err != nil {

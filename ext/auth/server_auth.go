@@ -32,7 +32,7 @@ type AuthConfig struct {
 // Usage:
 //
 //	mux := http.NewServeMux()
-//	mux.Handle("/mcp", srv.Handler(mcpkit.WithStreamableHTTP(true)))
+//	mux.Handle("/mcp", srv.Handler(core.WithStreamableHTTP(true)))
 //	auth.MountAuth(mux, auth.AuthConfig{
 //	    ResourceURI:          "https://mcp.example.com",
 //	    AuthorizationServers: []string{"https://auth.example.com"},
