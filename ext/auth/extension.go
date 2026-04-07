@@ -8,7 +8,7 @@
 // when you need JWT validation, OAuth flows, or PRM endpoints.
 package auth
 
-import "github.com/panyam/mcpkit"
+import "github.com/panyam/mcpkit/core"
 
 // AuthExtension declares the MCP auth extension with its spec version
 // and stability level. Register it on the server to advertise auth
@@ -16,17 +16,17 @@ import "github.com/panyam/mcpkit"
 //
 // Usage:
 //
-//	srv := mcpkit.NewServer(info,
-//	    mcpkit.WithAuth(jwtValidator),
-//	    mcpkit.WithExtension(auth.AuthExtension{}),
+//	srv := core.NewServer(info,
+//	    core.WithAuth(jwtValidator),
+//	    core.WithExtension(auth.AuthExtension{}),
 //	)
 type AuthExtension struct{}
 
 // Extension returns the MCP auth extension metadata.
-func (AuthExtension) Extension() mcpkit.Extension {
-	return mcpkit.Extension{
+func (AuthExtension) Extension() core.Extension {
+	return core.Extension{
 		ID:          "io.mcpkit/auth",
 		SpecVersion: "2025-11-25",
-		Stability:   mcpkit.Experimental,
+		Stability:   core.Experimental,
 	}
 }

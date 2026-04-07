@@ -7,15 +7,15 @@ import (
 	"sync"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/panyam/mcpkit"
+	mcpcore "github.com/panyam/mcpkit/core"
 	"github.com/panyam/oneauth/apiauth"
-	"github.com/panyam/oneauth/core"
+	oacore "github.com/panyam/oneauth/core"
 	"github.com/panyam/oneauth/keys"
 	"github.com/panyam/oneauth/utils"
 )
 
 // JWTValidator validates MCP requests using JWT Bearer tokens.
-// It implements mcpkit.AuthValidator and mcpkit.ClaimsProvider by wrapping
+// It implements mcpcore.AuthValidator and mcpmcpcore.ClaimsProvider by wrapping
 // oneauth's APIMiddleware for JWKS-based JWT signature verification, and
 // APIAuth for issuer/audience/scope checks.
 //
@@ -31,7 +31,7 @@ import (
 //	    Audience:            "https://mcp.example.com",
 //	    ResourceMetadataURL: "https://mcp.example.com/.well-known/oauth-protected-resource/mcp",
 //	})
-//	srv := mcpkit.NewServer(info, mcpkit.WithAuth(validator))
+//	srv := mcpcore.NewServer(info, core.WithAuth(validator))
 type JWTValidator struct {
 	auth *apiauth.APIAuth
 	ks   *keys.JWKSKeyStore
@@ -49,7 +49,7 @@ type JWTValidator struct {
 	// recentClaims caches the most recently validated claims by token string.
 	// Used by Claims(r) to retrieve claims without re-parsing.
 	// A sync.Map is used for concurrent safety across requests.
-	recentClaims sync.Map // token string → *mcpkit.Claims
+	recentClaims sync.Map // token string → *mcpcore.Claims
 }
 
 // JWTConfig configures a JWTValidator.
@@ -95,7 +95,7 @@ func NewJWTValidator(cfg JWTConfig) *JWTValidator {
 	}
 }
 
-// Validate implements mcpkit.AuthValidator.
+// Validate implements mcpcore.AuthValidator.
 // Extracts the Bearer token, validates signature/issuer/audience/expiry via oneauth,
 // checks required scopes, and stashes parsed claims for Claims() to read.
 func (v *JWTValidator) Validate(r *http.Request) error {
@@ -170,8 +170,8 @@ func (v *JWTValidator) Validate(r *http.Request) error {
 	}
 
 	// Check required scopes
-	if len(v.RequiredScopes) > 0 && !core.ContainsAllScopes(scopes, v.RequiredScopes) {
-		return &mcpkit.AuthError{
+	if len(v.RequiredScopes) > 0 && !oacore.ContainsAllScopes(scopes, v.RequiredScopes) {
+		return &mcpcore.AuthError{
 			Code:            http.StatusForbidden,
 			Message:         "insufficient scope",
 			WWWAuthenticate: WWWAuth403(v.RequiredScopes...),
@@ -191,7 +191,7 @@ func (v *JWTValidator) Validate(r *http.Request) error {
 	}
 
 	// Build claims
-	claims := &mcpkit.Claims{
+	claims := &mcpcore.Claims{
 		Subject: userID,
 		Scopes:  scopes,
 		Extra:   customClaims,
@@ -210,9 +210,9 @@ func (v *JWTValidator) Validate(r *http.Request) error {
 	return nil
 }
 
-// Claims implements mcpkit.ClaimsProvider.
+// Claims implements mcpmcpcore.ClaimsProvider.
 // Returns the claims parsed during the most recent Validate call for the same token.
-func (v *JWTValidator) Claims(r *http.Request) *mcpkit.Claims {
+func (v *JWTValidator) Claims(r *http.Request) *mcpcore.Claims {
 	authHeader := r.Header.Get("Authorization")
 	const prefix = "Bearer "
 	if !strings.HasPrefix(authHeader, prefix) {
@@ -220,7 +220,7 @@ func (v *JWTValidator) Claims(r *http.Request) *mcpkit.Claims {
 	}
 	token := authHeader[len(prefix):]
 	if val, ok := v.recentClaims.LoadAndDelete(token); ok {
-		return val.(*mcpkit.Claims)
+		return val.(*mcpcore.Claims)
 	}
 	return nil
 }
@@ -246,8 +246,8 @@ func (v *JWTValidator) jwksKeyFunc(token *jwt.Token) (any, error) {
 
 // unauthorized returns an AuthError with 401 and a WWW-Authenticate header
 // pointing to this server's PRM endpoint.
-func (v *JWTValidator) unauthorized(msg string) *mcpkit.AuthError {
-	return &mcpkit.AuthError{
+func (v *JWTValidator) unauthorized(msg string) *mcpcore.AuthError {
+	return &mcpcore.AuthError{
 		Code:            http.StatusUnauthorized,
 		Message:         msg,
 		WWWAuthenticate: WWWAuth401(v.ResourceMetadataURL, v.AllScopes...),

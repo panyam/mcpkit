@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/panyam/mcpkit"
+	"github.com/panyam/mcpkit/core"
 )
 
 // WWWAuth401 builds a WWW-Authenticate header value for 401 Unauthorized responses.
@@ -42,8 +42,8 @@ func WWWAuth403(scopes ...string) string {
 //
 // Per spec: clients MUST use resource_metadata from WWW-Authenticate when present.
 //
-// Delegates to mcpkit.ParseWWWAuthenticate (core module) — the parser lives in
+// Delegates to core.ParseWWWAuthenticate (core module) — the parser lives in
 // core so the client transport can use it without depending on the auth sub-module.
 func ParseWWWAuthenticate(header string) (resourceMetadata string, scopes []string, err error) {
-	return mcpkit.ParseWWWAuthenticate(header)
+	return core.ParseWWWAuthenticate(header)
 }
