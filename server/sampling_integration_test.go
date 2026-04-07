@@ -1,12 +1,12 @@
 package server_test
 
 import (
-	core "github.com/panyam/mcpkit/core"
-	"github.com/panyam/mcpkit/client"
-	"github.com/panyam/mcpkit/server"
 	"context"
 	"encoding/json"
 	"fmt"
+	client "github.com/panyam/mcpkit/client"
+	core "github.com/panyam/mcpkit/core"
+	server "github.com/panyam/mcpkit/server"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
@@ -19,21 +19,21 @@ var (
 	_ = fmt.Sprintf
 )
 
-// TestSampleNoContext verifies that core.Sample() returns core.ErrNoRequestFunc when called
+// TestSampleNoContext verifies that Sample() returns ErrNoRequestFunc when called
 // without a session context (e.g., outside a tool handler or with no transport).
 func TestSampleNoContext(t *testing.T) {
 	_, err := core.Sample(context.Background(), core.CreateMessageRequest{
-		Messages:  []core.SamplingMessage{{Role: "user", core.Content: core.Content{Type: "text", Text: "test"}}},
+		Messages:  []core.SamplingMessage{{Role: "user", Content: core.Content{Type: "text", Text: "test"}}},
 		MaxTokens: 100,
 	})
 	if err != core.ErrNoRequestFunc {
-		t.Fatalf("expected core.ErrNoRequestFunc, got %v", err)
+		t.Fatalf("expected ErrNoRequestFunc, got %v", err)
 	}
 }
 
-// TestSampleNotSupported verifies that core.Sample() returns core.ErrSamplingNotSupported
+// TestSampleNotSupported verifies that Sample() returns ErrSamplingNotSupported
 // when the client did not declare sampling capability during initialization.
-// This simulates a session context with a core.RequestFunc but no sampling capability.
+// This simulates a session context with a RequestFunc but no sampling capability.
 func TestSampleNotSupported(t *testing.T) {
 	var logLevel atomic.Pointer[core.LogLevel]
 	caps := &core.ClientCapabilities{} // no sampling capability
@@ -44,16 +44,16 @@ func TestSampleNotSupported(t *testing.T) {
 	ctx := core.ContextWithSession(context.Background(), nil, request, &logLevel, caps, nil)
 
 	_, err := core.Sample(ctx, core.CreateMessageRequest{
-		Messages:  []core.SamplingMessage{{Role: "user", core.Content: core.Content{Type: "text", Text: "test"}}},
+		Messages:  []core.SamplingMessage{{Role: "user", Content: core.Content{Type: "text", Text: "test"}}},
 		MaxTokens: 100,
 	})
 	if err != core.ErrSamplingNotSupported {
-		t.Fatalf("expected core.ErrSamplingNotSupported, got %v", err)
+		t.Fatalf("expected ErrSamplingNotSupported, got %v", err)
 	}
 }
 
 // TestSampleRoundTrip verifies the full sampling round-trip across all 3 transports
-// (Streamable HTTP, SSE, in-memory). A server tool calls core.Sample() to request LLM
+// (Streamable HTTP, SSE, in-memory). A server tool calls Sample() to request LLM
 // inference from the client. The client's sampling handler returns a canned response.
 // The tool returns the LLM response as text.
 func TestSampleRoundTrip(t *testing.T) {
@@ -68,20 +68,20 @@ func TestSampleRoundTrip(t *testing.T) {
 	})
 }
 
-// TestSampleTimeout verifies that core.Sample() returns context.DeadlineExceeded when
+// TestSampleTimeout verifies that Sample() returns context.DeadlineExceeded when
 // the client takes too long to respond. Uses a slow sampling handler with a short
 // tool timeout to trigger the deadline.
 func TestSampleTimeout(t *testing.T) {
 	srv := newSamplingTestServer(nil) // no tool timeout on server
-	handler := srv.Handler(WithStreamableHTTP(true))
+	handler := srv.Handler(server.WithStreamableHTTP(true))
 	ts := httptest.NewServer(handler)
 	t.Cleanup(ts.Close)
 
 	// Client with a handler that takes too long
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test-client", Version: "1.0"},
-		Withclient.SamplingHandler(func(ctx context.Context, req core.CreateMessageRequest) (core.CreateMessageResult, error) {
+		client.WithSamplingHandler(func(ctx context.Context, req core.CreateMessageRequest) (core.CreateMessageResult, error) {
 			time.Sleep(5 * time.Second)
-			return core.CreateMessageResult{Model: "slow", Role: "assistant", core.Content: core.Content{Type: "text", Text: "too late"}}, nil
+			return core.CreateMessageResult{Model: "slow", Role: "assistant", Content: core.Content{Type: "text", Text: "too late"}}, nil
 		}),
 	)
 	if err := c.Connect(); err != nil {
@@ -97,15 +97,15 @@ func TestSampleTimeout(t *testing.T) {
 }
 
 // TestSampleClientError verifies that when the client's sampling handler returns
-// an error, it propagates back to the core.Sample() call in the tool handler.
+// an error, it propagates back to the Sample() call in the tool handler.
 func TestSampleClientError(t *testing.T) {
 	srv := newSamplingTestServer(nil)
-	handler := srv.Handler(WithStreamableHTTP(true))
+	handler := srv.Handler(server.WithStreamableHTTP(true))
 	ts := httptest.NewServer(handler)
 	t.Cleanup(ts.Close)
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test-client", Version: "1.0"},
-		Withclient.SamplingHandler(func(ctx context.Context, req core.CreateMessageRequest) (core.CreateMessageResult, error) {
+		client.WithSamplingHandler(func(ctx context.Context, req core.CreateMessageRequest) (core.CreateMessageResult, error) {
 			return core.CreateMessageResult{}, fmt.Errorf("LLM unavailable")
 		}),
 	)
@@ -122,16 +122,16 @@ func TestSampleClientError(t *testing.T) {
 
 // --- Test helpers ---
 
-// newSamplingTestServer creates a server with a "sample-tool" that calls core.Sample()
+// newSamplingTestServer creates a server with a "sample-tool" that calls Sample()
 // and a "sample-timeout-tool" that uses a short context timeout.
 func newSamplingTestServer(toolTimeout *time.Duration) *server.Server {
-	var opts []Option
+	var opts []server.Option
 	if toolTimeout != nil {
-		opts = append(opts, WithToolTimeout(*toolTimeout))
+		opts = append(opts, server.WithToolTimeout(*toolTimeout))
 	}
 	srv := server.NewServer(core.ServerInfo{Name: "test-sampling-server", Version: "1.0.0"}, opts...)
 
-	// sample-tool: calls core.Sample() and returns the LLM response text
+	// sample-tool: calls Sample() and returns the LLM response text
 	srv.RegisterTool(
 		core.ToolDef{
 			Name:        "sample-tool",
@@ -140,7 +140,7 @@ func newSamplingTestServer(toolTimeout *time.Duration) *server.Server {
 		},
 		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
 			result, err := core.Sample(ctx, core.CreateMessageRequest{
-				Messages:  []core.SamplingMessage{{Role: "user", core.Content: core.Content{Type: "text", Text: "Say hello"}}},
+				Messages:  []core.SamplingMessage{{Role: "user", Content: core.Content{Type: "text", Text: "Say hello"}}},
 				MaxTokens: 100,
 			})
 			if err != nil {
@@ -150,18 +150,18 @@ func newSamplingTestServer(toolTimeout *time.Duration) *server.Server {
 		},
 	)
 
-	// sample-timeout-tool: calls core.Sample() with a short deadline
+	// sample-timeout-tool: calls Sample() with a short deadline
 	srv.RegisterTool(
 		core.ToolDef{
 			Name:        "sample-timeout-tool",
-			Description: "Calls core.Sample() with a short deadline to test timeout",
+			Description: "Calls Sample() with a short deadline to test timeout",
 			InputSchema: map[string]any{"type": "object"},
 		},
 		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
 			tctx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
 			defer cancel()
 			result, err := core.Sample(tctx, core.CreateMessageRequest{
-				Messages:  []core.SamplingMessage{{Role: "user", core.Content: core.Content{Type: "text", Text: "timeout test"}}},
+				Messages:  []core.SamplingMessage{{Role: "user", Content: core.Content{Type: "text", Text: "timeout test"}}},
 				MaxTokens: 100,
 			})
 			if err != nil {
@@ -183,7 +183,7 @@ func forAllSamplingTransports(t *testing.T, fn func(t *testing.T, c *client.Clie
 		return core.CreateMessageResult{
 			Model: "test-model",
 			Role:  "assistant",
-			core.Content: core.Content{
+			Content: core.Content{
 				Type: "text",
 				Text: "Hello from LLM",
 			},
@@ -192,7 +192,7 @@ func forAllSamplingTransports(t *testing.T, fn func(t *testing.T, c *client.Clie
 
 	t.Run("streamable", func(t *testing.T) {
 		srv := newSamplingTestServer(nil)
-		handler := srv.Handler(WithStreamableHTTP(true))
+		handler := srv.Handler(server.WithStreamableHTTP(true))
 		ts := httptest.NewServer(handler)
 		t.Cleanup(ts.Close)
 
@@ -207,7 +207,7 @@ func forAllSamplingTransports(t *testing.T, fn func(t *testing.T, c *client.Clie
 
 	t.Run("sse", func(t *testing.T) {
 		srv := newSamplingTestServer(nil)
-		handler := srv.Handler(WithSSE(true), WithStreamableHTTP(false))
+		handler := srv.Handler(server.WithSSE(true), server.WithStreamableHTTP(false))
 		ts := httptest.NewServer(handler)
 
 		c := client.NewClient(ts.URL+"/mcp/sse", core.ClientInfo{Name: "test-client", Version: "1.0"},
@@ -225,8 +225,15 @@ func forAllSamplingTransports(t *testing.T, fn func(t *testing.T, c *client.Clie
 
 	t.Run("memory", func(t *testing.T) {
 		srv := newSamplingTestServer(nil)
+		// Build client first to get its HandleServerRequest, then wire to transport
 		c := client.NewClient("memory://", core.ClientInfo{Name: "test-client", Version: "1.0"},
-			client.WithInMemoryServer(srv), client.WithSamplingHandler(samplingHandler))
+			client.WithSamplingHandler(samplingHandler))
+		transport := server.NewInProcessTransport(srv,
+			server.WithServerRequestHandler(func(ctx context.Context, req *core.Request) *core.Response {
+				return c.HandleServerRequest(req)
+			}),
+		)
+		c.SetTransport(transport)
 		if err := c.Connect(); err != nil {
 			t.Fatalf("Connect failed: %v", err)
 		}

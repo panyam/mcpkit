@@ -50,7 +50,7 @@ func testStreamableServer(opts ...TransportOption) *httptest.Server {
 func streamablePost(url, sessionID string, body any) (*http.Response, error) {
 	raw, _ := json.Marshal(body)
 	req, _ := http.NewRequest(http.MethodPost, url, bytes.NewReader(raw))
-	req.Header.Set("core.Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	if sessionID != "" {
 		req.Header.Set(mcpSessionIDHeader, sessionID)
@@ -332,9 +332,9 @@ func TestStreamableGetSSE_OpensStream(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("status = %d, want 200", resp.StatusCode)
 	}
-	ct := resp.Header.Get("core.Content-Type")
+	ct := resp.Header.Get("Content-Type")
 	if !strings.Contains(ct, "text/event-stream") {
-		t.Errorf("core.Content-Type = %q, want text/event-stream", ct)
+		t.Errorf("Content-Type = %q, want text/event-stream", ct)
 	}
 }
 
@@ -347,7 +347,7 @@ func TestStreamableParseError(t *testing.T) {
 	sessionID := streamableInit(t, ts.URL)
 
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", strings.NewReader("not json"))
-	req.Header.Set("core.Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set(mcpSessionIDHeader, sessionID)
 	resp, err := http.DefaultClient.Do(req)
@@ -442,7 +442,7 @@ func TestStreamableProtocolVersionHeader(t *testing.T) {
 		Method:  "ping",
 	})
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(raw))
-	req.Header.Set("core.Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set(mcpSessionIDHeader, sessionID)
 	req.Header.Set(mcpProtocolVersionHeader, "1999-01-01")
@@ -459,7 +459,7 @@ func TestStreamableProtocolVersionHeader(t *testing.T) {
 
 	// core.Request with correct protocol version → 200
 	req2, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(raw))
-	req2.Header.Set("core.Content-Type", "application/json")
+	req2.Header.Set("Content-Type", "application/json")
 	req2.Header.Set("Accept", "application/json, text/event-stream")
 	req2.Header.Set(mcpSessionIDHeader, sessionID)
 	req2.Header.Set(mcpProtocolVersionHeader, "2024-11-05")
@@ -549,7 +549,7 @@ func streamableInitWithLogging(t *testing.T, url string) string {
 func streamablePostSSE(url, sessionID string, body any) (*http.Response, error) {
 	raw, _ := json.Marshal(body)
 	req, _ := http.NewRequest(http.MethodPost, url, bytes.NewReader(raw))
-	req.Header.Set("core.Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	if sessionID != "" {
 		req.Header.Set(mcpSessionIDHeader, sessionID)
@@ -601,8 +601,8 @@ func TestStreamableSSEResponse(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if ct := resp.Header.Get("core.Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
-		t.Fatalf("core.Content-Type = %q, want text/event-stream", ct)
+	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
+		t.Fatalf("Content-Type = %q, want text/event-stream", ct)
 	}
 
 	events := readSSEEvents(t, resp.Body)
@@ -644,7 +644,7 @@ func TestStreamableSSEFallback(t *testing.T) {
 		Params:  json.RawMessage(`{"name":"log_tool","arguments":{}}`),
 	})
 	httpReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(body))
-	httpReq.Header.Set("core.Content-Type", "application/json")
+	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "application/json") // intentionally JSON-only to test fallback path
 	httpReq.Header.Set(mcpSessionIDHeader, sessionID)
 	resp, err := http.DefaultClient.Do(httpReq)
@@ -653,8 +653,8 @@ func TestStreamableSSEFallback(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if ct := resp.Header.Get("core.Content-Type"); !strings.HasPrefix(ct, "application/json") {
-		t.Fatalf("core.Content-Type = %q, want application/json", ct)
+	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Fatalf("Content-Type = %q, want application/json", ct)
 	}
 
 	var rpcResp core.Response
@@ -729,8 +729,8 @@ func TestStreamableSSENoNotifications(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if ct := resp.Header.Get("core.Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
-		t.Fatalf("core.Content-Type = %q, want text/event-stream", ct)
+	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
+		t.Fatalf("Content-Type = %q, want text/event-stream", ct)
 	}
 
 	events := readSSEEvents(t, resp.Body)
@@ -756,7 +756,7 @@ func TestStreamableDNSRebindingRejectsInvalidOrigin(t *testing.T) {
 		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
 	})
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(body))
-	req.Header.Set("core.Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("Origin", "http://evil.example.com")
 
@@ -786,7 +786,7 @@ func TestStreamableDNSRebindingAcceptsLocalhost(t *testing.T) {
 				Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
 			})
 			req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(body))
-			req.Header.Set("core.Content-Type", "application/json")
+			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("Accept", "application/json, text/event-stream")
 			req.Header.Set("Origin", origin)
 
