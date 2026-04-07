@@ -13,7 +13,7 @@ require (
 	github.com/panyam/mcpkit v0.0.0
 	github.com/panyam/mcpkit/ext/auth v0.0.0
 	github.com/panyam/mcpkit/ext/ui v0.0.0-00010101000000-000000000000
-	github.com/panyam/oneauth v0.0.66
+	github.com/panyam/oneauth v0.0.67
 	github.com/stretchr/testify v1.11.1
 )
 
