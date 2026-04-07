@@ -81,6 +81,27 @@ func WithNotificationCallback(fn func(method string, params any)) ClientOption {
 	return func(c *Client) { c.onNotify = fn }
 }
 
+// WithExtension advertises support for an extension during the initialize
+// handshake. The extension ID and capability are included in the client's
+// capabilities.extensions map, allowing the server to detect client support
+// via core.ClientSupportsExtension(ctx, id) in tool handlers.
+func WithExtension(id string, cap core.ClientExtensionCap) ClientOption {
+	return func(c *Client) {
+		if c.extensions == nil {
+			c.extensions = make(map[string]core.ClientExtensionCap)
+		}
+		c.extensions[id] = cap
+	}
+}
+
+// WithUIExtension is a convenience wrapper that advertises MCP Apps
+// (io.modelcontextprotocol/ui) support with the standard app MIME type.
+func WithUIExtension() ClientOption {
+	return WithExtension(core.UIExtensionID, core.ClientExtensionCap{
+		MIMETypes: []string{core.AppMIMEType},
+	})
+}
+
 // WithTransport sets a core.Transport for the client, bypassing the default
 // HTTP transport creation. Use with server.NewInProcessTransport for testing
 // or embedded scenarios.
@@ -157,6 +178,10 @@ type Client struct {
 	transport   clientTransport
 	logger      *log.Logger // optional transport logging (nil = disabled)
 
+	// Extension support
+	extensions       map[string]core.ClientExtensionCap // client extensions to advertise in initialize
+	serverExtensions map[string]json.RawMessage         // parsed from server's initialize response
+
 	// Server-to-client request handlers
 	samplingHandler    SamplingHandler
 	elicitationHandler ElicitationHandler
@@ -226,6 +251,13 @@ func (c *Client) Connect() error {
 	if c.elicitationHandler != nil {
 		caps["elicitation"] = map[string]any{}
 	}
+	if len(c.extensions) > 0 {
+		exts := make(map[string]any, len(c.extensions))
+		for id, cap := range c.extensions {
+			exts[id] = cap
+		}
+		caps["extensions"] = exts
+	}
 
 	// Initialize handshake
 	resp, err := c.rawCall("initialize", map[string]any{
@@ -237,11 +269,22 @@ func (c *Client) Connect() error {
 		return fmt.Errorf("initialize failed: %w", err)
 	}
 
-	// Extract server info
+	// Extract server info and capabilities from initialize response
 	if result, ok := resp.Result.(map[string]any); ok {
 		if si, ok := result["serverInfo"].(map[string]any); ok {
 			c.ServerInfo.Name, _ = si["name"].(string)
 			c.ServerInfo.Version, _ = si["version"].(string)
+		}
+		// Parse server extensions from capabilities
+		if capObj, ok := result["capabilities"].(map[string]any); ok {
+			if exts, ok := capObj["extensions"].(map[string]any); ok {
+				c.serverExtensions = make(map[string]json.RawMessage, len(exts))
+				for id, v := range exts {
+					if raw, err := json.Marshal(v); err == nil {
+						c.serverExtensions[id] = raw
+					}
+				}
+			}
 		}
 	}
 
@@ -411,6 +454,53 @@ func (c *Client) ListTools() ([]core.ToolDef, error) {
 		return nil, err
 	}
 	return resp.Tools, nil
+}
+
+// ListToolsForModel returns tools visible to the LLM, filtering out tools
+// that are only visible to apps (visibility: ["app"]). Tools with no visibility
+// set (nil/empty) are included — the default means visible to both model and app.
+// This is a client-side convenience; the server always returns all tools.
+func (c *Client) ListToolsForModel() ([]core.ToolDef, error) {
+	tools, err := c.ListTools()
+	if err != nil {
+		return nil, err
+	}
+	var filtered []core.ToolDef
+	for _, t := range tools {
+		if isModelVisible(t) {
+			filtered = append(filtered, t)
+		}
+	}
+	return filtered, nil
+}
+
+// isModelVisible returns true if the tool should be visible to the LLM.
+// A tool is model-visible if it has no visibility set (default) or if its
+// visibility list includes "model".
+func isModelVisible(t core.ToolDef) bool {
+	if t.Meta == nil || t.Meta.UI == nil || len(t.Meta.UI.Visibility) == 0 {
+		return true // default: visible to model
+	}
+	for _, v := range t.Meta.UI.Visibility {
+		if v == core.UIVisibilityModel {
+			return true
+		}
+	}
+	return false
+}
+
+// ServerSupportsExtension checks whether the server advertised support for the
+// given extension ID in its initialize response. Call after Connect().
+func (c *Client) ServerSupportsExtension(id string) bool {
+	_, ok := c.serverExtensions[id]
+	return ok
+}
+
+// ServerSupportsUI checks whether the server advertised MCP Apps
+// (io.modelcontextprotocol/ui) support. Convenience wrapper around
+// ServerSupportsExtension.
+func (c *Client) ServerSupportsUI() bool {
+	return c.ServerSupportsExtension(core.UIExtensionID)
 }
 
 // ListResources returns all registered static resources.

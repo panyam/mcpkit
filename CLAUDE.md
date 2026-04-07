@@ -60,7 +60,7 @@ mcpkit/
 │   └── pagination.go          cursor-based pagination
 │
 ├── client/                  ← Client + all client transports
-│   ├── client.go              Client, NewClient, Connect, ToolCall, WithTransport
+│   ├── client.go              Client, NewClient, Connect, ToolCall, WithTransport, WithExtension, WithUIExtension, ServerSupportsExtension, ServerSupportsUI, ListToolsForModel
 │   ├── client_logging.go      loggingTransport, WithClientLogging
 │   └── client_reconnect.go    WithMaxRetries, WithReconnectBackoff
 │
