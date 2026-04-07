@@ -61,6 +61,17 @@ type Dispatcher struct {
 	subManager           *subscriptionRegistry   // shared pointer to Server's registry (nil if disabled)
 }
 
+// Close tears down all per-session state on the Dispatcher. Transports must call
+// this when a session disconnects (SSE stream closes, DELETE request, client close).
+// Centralizes cleanup so that adding new per-session state (subscriptions, sampling,
+// elicitation) only requires updating this method, not every transport.
+// Safe to call multiple times and on dispatchers with no session state.
+func (d *Dispatcher) Close() {
+	if d.subManager != nil && d.sessionID != "" {
+		d.subManager.unsubscribeAll(d.sessionID)
+	}
+}
+
 type toolEntry struct {
 	def     ToolDef
 	handler ToolHandler
