@@ -1,6 +1,7 @@
-package mcpkit
+package server
 
 import (
+	core "github.com/panyam/mcpkit/core"
 	"context"
 	"crypto/subtle"
 	"errors"
@@ -28,8 +29,8 @@ type serverOptions struct {
 	bearerToken          string
 	toolTimeout          time.Duration
 	allowedRoots         []string
-	authValidator        AuthValidator
-	extensions           []ExtensionProvider
+	authValidator        core.AuthValidator
+	extensions           []core.ExtensionProvider
 	middleware           []Middleware
 	requestLogger        *log.Logger // HTTP-level request/response logging
 	subscriptionsEnabled bool        // enable resources/subscribe and resources/unsubscribe
@@ -53,14 +54,14 @@ func WithBearerToken(token string) Option {
 }
 
 // WithAuth sets a custom auth validator (e.g. JWT via mcpkit/auth).
-func WithAuth(v AuthValidator) Option {
+func WithAuth(v core.AuthValidator) Option {
 	return func(o *serverOptions) { o.authValidator = v }
 }
 
 // WithExtension registers a protocol extension that will be advertised
 // in the initialize response. Extensions declare their ID, spec version,
 // and stability level.
-func WithExtension(ext ExtensionProvider) Option {
+func WithExtension(ext core.ExtensionProvider) Option {
 	return func(o *serverOptions) { o.extensions = append(o.extensions, ext) }
 }
 
@@ -104,7 +105,7 @@ func WithAllowedRoots(roots ...string) Option {
 }
 
 // NewServer creates an MCP server with the given identity and options.
-func NewServer(info ServerInfo, opts ...Option) *Server {
+func NewServer(info core.ServerInfo, opts ...Option) *Server {
 	s := &Server{
 		dispatcher: NewDispatcher(info),
 	}
@@ -128,27 +129,27 @@ func NewServer(info ServerInfo, opts ...Option) *Server {
 }
 
 // RegisterTool adds a tool to the server.
-func (s *Server) RegisterTool(def ToolDef, handler ToolHandler) {
+func (s *Server) RegisterTool(def core.ToolDef, handler core.ToolHandler) {
 	s.dispatcher.RegisterTool(def, handler)
 }
 
 // RegisterResource adds a resource to the server.
-func (s *Server) RegisterResource(def ResourceDef, handler ResourceHandler) {
+func (s *Server) RegisterResource(def core.ResourceDef, handler core.ResourceHandler) {
 	s.dispatcher.RegisterResource(def, handler)
 }
 
 // RegisterResourceTemplate adds a URI template resource to the server.
-func (s *Server) RegisterResourceTemplate(def ResourceTemplate, handler TemplateHandler) {
+func (s *Server) RegisterResourceTemplate(def core.ResourceTemplate, handler core.TemplateHandler) {
 	s.dispatcher.RegisterResourceTemplate(def, handler)
 }
 
 // RegisterPrompt adds a prompt to the server.
-func (s *Server) RegisterPrompt(def PromptDef, handler PromptHandler) {
+func (s *Server) RegisterPrompt(def core.PromptDef, handler core.PromptHandler) {
 	s.dispatcher.RegisterPrompt(def, handler)
 }
 
 // RegisterExperimentalTool registers a tool marked as experimental via annotations.
-func (s *Server) RegisterExperimentalTool(def ToolDef, handler ToolHandler) {
+func (s *Server) RegisterExperimentalTool(def core.ToolDef, handler core.ToolHandler) {
 	if def.Annotations == nil {
 		def.Annotations = make(map[string]any)
 	}
@@ -157,7 +158,7 @@ func (s *Server) RegisterExperimentalTool(def ToolDef, handler ToolHandler) {
 }
 
 // RegisterExperimentalResource registers a resource marked as experimental via annotations.
-func (s *Server) RegisterExperimentalResource(def ResourceDef, handler ResourceHandler) {
+func (s *Server) RegisterExperimentalResource(def core.ResourceDef, handler core.ResourceHandler) {
 	if def.Annotations == nil {
 		def.Annotations = make(map[string]any)
 	}
@@ -166,7 +167,7 @@ func (s *Server) RegisterExperimentalResource(def ResourceDef, handler ResourceH
 }
 
 // RegisterExperimentalPrompt registers a prompt marked as experimental via annotations.
-func (s *Server) RegisterExperimentalPrompt(def PromptDef, handler PromptHandler) {
+func (s *Server) RegisterExperimentalPrompt(def core.PromptDef, handler core.PromptHandler) {
 	if def.Annotations == nil {
 		def.Annotations = make(map[string]any)
 	}
@@ -176,39 +177,39 @@ func (s *Server) RegisterExperimentalPrompt(def PromptDef, handler PromptHandler
 
 // RegisterCompletion registers a completion handler for argument autocompletion.
 // refType is "ref/prompt" or "ref/resource". name is the prompt name or resource URI template.
-func (s *Server) RegisterCompletion(refType, name string, handler CompletionHandler) {
+func (s *Server) RegisterCompletion(refType, name string, handler core.CompletionHandler) {
 	s.dispatcher.RegisterCompletion(refType, name, handler)
 }
 
 // Dispatch routes a JSON-RPC request through the server's dispatch layer.
-func (s *Server) Dispatch(ctx context.Context, req *Request) *Response {
+func (s *Server) Dispatch(ctx context.Context, req *core.Request) *core.Response {
 	return s.dispatchWith(s.dispatcher, ctx, nil, req)
 }
 
 // dispatchWith routes a request through a specific dispatcher with server-level
 // middleware (e.g. tool timeout). Used by transports to dispatch on per-session
 // dispatchers. The claims parameter carries the authenticated identity from CheckAuth.
-func (s *Server) dispatchWith(d *Dispatcher, ctx context.Context, claims *Claims, req *Request) *Response {
+func (s *Server) dispatchWith(d *Dispatcher, ctx context.Context, claims *core.Claims, req *core.Request) *core.Response {
 	return s.dispatchWithNotify(d, ctx, claims, d.notifyFunc, req)
 }
 
-// dispatchWithNotify is like dispatchWith but accepts an explicit NotifyFunc.
+// dispatchWithNotify is like dispatchWith but accepts an explicit core.NotifyFunc.
 // Used by handlePostSSE to pass a request-scoped notify function that writes
 // to the current SSE stream, avoiding races on d.notifyFunc when concurrent
 // SSE-streaming POSTs share the same session dispatcher.
-func (s *Server) dispatchWithNotify(d *Dispatcher, ctx context.Context, claims *Claims, notify NotifyFunc, req *Request) *Response {
+func (s *Server) dispatchWithNotify(d *Dispatcher, ctx context.Context, claims *core.Claims, notify core.NotifyFunc, req *core.Request) *core.Response {
 	return s.dispatchWithNotifyAndRequest(d, ctx, claims, notify, nil, req)
 }
 
 // dispatchWithNotifyAndRequest is the full dispatch entry point that accepts both
-// a NotifyFunc and RequestFunc. Used by transports that support server-to-client requests.
-func (s *Server) dispatchWithNotifyAndRequest(d *Dispatcher, ctx context.Context, claims *Claims, notify NotifyFunc, request RequestFunc, req *Request) *Response {
+// a core.NotifyFunc and core.RequestFunc. Used by transports that support server-to-client requests.
+func (s *Server) dispatchWithNotifyAndRequest(d *Dispatcher, ctx context.Context, claims *core.Claims, notify core.NotifyFunc, request core.RequestFunc, req *core.Request) *core.Response {
 	// Inject session context so tool handlers can send notifications, requests,
 	// and access authenticated claims and client capabilities.
-	ctx = ContextWithSession(ctx, notify, request, &d.logLevel, &d.clientCaps, claims)
+	ctx = core.ContextWithSession(ctx, notify, request, &d.logLevel, &d.clientCaps, claims)
 
 	// Build the terminal handler: dispatch with optional tool timeout.
-	handler := MiddlewareFunc(func(ctx context.Context, req *Request) *Response {
+	handler := MiddlewareFunc(func(ctx context.Context, req *core.Request) *core.Response {
 		if s.options.toolTimeout > 0 && req.Method == "tools/call" {
 			tctx, cancel := context.WithTimeout(ctx, s.options.toolTimeout)
 			defer cancel()
@@ -221,7 +222,7 @@ func (s *Server) dispatchWithNotifyAndRequest(d *Dispatcher, ctx context.Context
 	for i := len(s.options.middleware) - 1; i >= 0; i-- {
 		next := handler
 		mw := s.options.middleware[i]
-		handler = func(ctx context.Context, req *Request) *Response {
+		handler = func(ctx context.Context, req *core.Request) *core.Response {
 			return mw(ctx, req, next)
 		}
 	}
@@ -340,7 +341,7 @@ func requestLoggingHandler(logger *log.Logger, next http.Handler) http.Handler {
 		next.ServeHTTP(rw, r)
 
 		// Log response
-		ct := rw.Header().Get("Content-Type")
+		ct := rw.Header().Get("core.Content-Type")
 		logger.Printf("[http] ← %d %s content-type=%q",
 			rw.status, r.URL.Path, ct)
 	})
@@ -510,24 +511,24 @@ func WithStateless(enabled bool) TransportOption {
 // CheckAuth validates an HTTP request against the server's auth configuration.
 // Returns the authenticated claims (if the validator provides them) and any error.
 // Returns (nil, nil) if no auth is configured.
-func (s *Server) CheckAuth(r *http.Request) (*Claims, error) {
+func (s *Server) CheckAuth(r *http.Request) (*core.Claims, error) {
 	if s.options.authValidator == nil {
 		return nil, nil
 	}
 	if err := s.options.authValidator.Validate(r); err != nil {
 		return nil, err
 	}
-	if cp, ok := s.options.authValidator.(ClaimsProvider); ok {
+	if cp, ok := s.options.authValidator.(core.ClaimsProvider); ok {
 		return cp.Claims(r), nil
 	}
 	return nil, nil
 }
 
 // writeAuthError writes an authentication/authorization error to the response.
-// If the error is an *AuthError with a WWWAuthenticate field, the WWW-Authenticate
+// If the error is an *core.AuthError with a WWWAuthenticate field, the WWW-Authenticate
 // header is set. Used by both transports for consistent error responses.
 func writeAuthError(w http.ResponseWriter, err error) {
-	var authErr *AuthError
+	var authErr *core.AuthError
 	if errors.As(err, &authErr) {
 		if authErr.WWWAuthenticate != "" {
 			w.Header().Set("WWW-Authenticate", authErr.WWWAuthenticate)
@@ -556,7 +557,7 @@ func (v *bearerTokenValidator) Validate(r *http.Request) error {
 	return nil
 }
 
-var errUnauthorized = &AuthError{Code: http.StatusUnauthorized, Message: "unauthorized"}
+var errUnauthorized = &core.AuthError{Code: http.StatusUnauthorized, Message: "unauthorized"}
 
 // --- Resource Subscriptions ---
 
@@ -616,7 +617,7 @@ func (r *subscriptionRegistry) notify(uri string) {
 	}
 	r.mu.RUnlock()
 
-	notification := ResourceUpdatedNotification{URI: uri}
+	notification := core.ResourceUpdatedNotification{URI: uri}
 	for _, d := range dispatchers {
 		if d.notifyFunc != nil {
 			d.notifyFunc("notifications/resources/updated", notification)

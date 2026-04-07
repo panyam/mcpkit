@@ -1,6 +1,7 @@
-package mcpkit
+package server
 
 import (
+	core "github.com/panyam/mcpkit/core"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -24,7 +25,7 @@ type pendingMap = sync.Map
 type Dispatcher struct {
 	tools      map[string]toolEntry
 	toolOrder  []string // preserves registration order for tools/list
-	serverInfo ServerInfo
+	serverInfo core.ServerInfo
 
 	resources     map[string]resourceEntry
 	resourceOrder []string
@@ -34,29 +35,29 @@ type Dispatcher struct {
 	prompts     map[string]promptEntry
 	promptOrder []string
 
-	completions map[string]CompletionHandler // key: "ref/prompt:name" or "ref/resource:uri"
+	completions map[string]core.CompletionHandler // key: "ref/prompt:name" or "ref/resource:uri"
 
 	// extensions registered via WithExtension, keyed by extension ID.
-	extensions map[string]Extension
+	extensions map[string]core.Extension
 
 	// inflight tracks cancellable in-flight requests by ID.
 	inflight sync.Map // requestID (string) → context.CancelFunc
 
 	// Session state set during initialization handshake.
 	negotiatedVersion string             // set by initialize
-	clientCaps        ClientCapabilities // set by initialize
-	clientInfo        ClientInfo         // set by initialize
+	clientCaps        core.ClientCapabilities // set by initialize
+	clientInfo        core.ClientInfo         // set by initialize
 	initialized       bool               // set to true by notifications/initialized
 
 	// Logging state (per-session).
 	// logLevel stores the minimum log level set by the client via logging/setLevel.
 	// nil means logging is disabled (client has not called logging/setLevel).
 	// Accessed atomically because tool handlers read it from concurrent goroutines.
-	logLevel atomic.Pointer[LogLevel]
+	logLevel atomic.Pointer[core.LogLevel]
 
 	// notifyFunc is set by the transport to push server-to-client notifications.
 	// nil means no push capability (e.g., Streamable HTTP without GET SSE stream).
-	notifyFunc NotifyFunc
+	notifyFunc core.NotifyFunc
 
 	// Subscription state (per-session).
 	subscriptionsEnabled bool                    // advertise "subscribe": true in resources capability
@@ -84,41 +85,41 @@ func (d *Dispatcher) Close() {
 }
 
 type toolEntry struct {
-	def     ToolDef
-	handler ToolHandler
+	def     core.ToolDef
+	handler core.ToolHandler
 }
 
 type resourceEntry struct {
-	def     ResourceDef
-	handler ResourceHandler
+	def     core.ResourceDef
+	handler core.ResourceHandler
 }
 
 type templateEntry struct {
-	def     ResourceTemplate
-	handler TemplateHandler
+	def     core.ResourceTemplate
+	handler core.TemplateHandler
 }
 
 type promptEntry struct {
-	def     PromptDef
-	handler PromptHandler
+	def     core.PromptDef
+	handler core.PromptHandler
 }
 
 // initializeParams is the params object sent by the client in an initialize request.
 type initializeParams struct {
 	ProtocolVersion string             `json:"protocolVersion"`
-	Capabilities    ClientCapabilities `json:"capabilities"`
-	ClientInfo      ClientInfo         `json:"clientInfo"`
+	Capabilities    core.ClientCapabilities `json:"capabilities"`
+	ClientInfo      core.ClientInfo         `json:"clientInfo"`
 }
 
 // NewDispatcher creates a dispatcher with the given server identity.
-func NewDispatcher(info ServerInfo) *Dispatcher {
+func NewDispatcher(info core.ServerInfo) *Dispatcher {
 	return &Dispatcher{
 		tools:       make(map[string]toolEntry),
 		resources:   make(map[string]resourceEntry),
 		templates:   make(map[string]templateEntry),
 		prompts:     make(map[string]promptEntry),
-		completions: make(map[string]CompletionHandler),
-		extensions:  make(map[string]Extension),
+		completions: make(map[string]core.CompletionHandler),
+		extensions:  make(map[string]core.Extension),
 		serverInfo:  info,
 	}
 }
@@ -151,38 +152,38 @@ func (d *Dispatcher) NegotiatedVersion() string {
 }
 
 // RegisterTool adds a tool to the dispatcher.
-func (d *Dispatcher) RegisterTool(def ToolDef, handler ToolHandler) {
+func (d *Dispatcher) RegisterTool(def core.ToolDef, handler core.ToolHandler) {
 	d.tools[def.Name] = toolEntry{def: def, handler: handler}
 	d.toolOrder = append(d.toolOrder, def.Name)
 }
 
 // RegisterResource adds a resource to the dispatcher.
-func (d *Dispatcher) RegisterResource(def ResourceDef, handler ResourceHandler) {
+func (d *Dispatcher) RegisterResource(def core.ResourceDef, handler core.ResourceHandler) {
 	d.resources[def.URI] = resourceEntry{def: def, handler: handler}
 	d.resourceOrder = append(d.resourceOrder, def.URI)
 }
 
 // RegisterResourceTemplate adds a URI template resource to the dispatcher.
-func (d *Dispatcher) RegisterResourceTemplate(def ResourceTemplate, handler TemplateHandler) {
+func (d *Dispatcher) RegisterResourceTemplate(def core.ResourceTemplate, handler core.TemplateHandler) {
 	d.templates[def.URITemplate] = templateEntry{def: def, handler: handler}
 	d.templateOrder = append(d.templateOrder, def.URITemplate)
 }
 
 // RegisterPrompt adds a prompt to the dispatcher.
-func (d *Dispatcher) RegisterPrompt(def PromptDef, handler PromptHandler) {
+func (d *Dispatcher) RegisterPrompt(def core.PromptDef, handler core.PromptHandler) {
 	d.prompts[def.Name] = promptEntry{def: def, handler: handler}
 	d.promptOrder = append(d.promptOrder, def.Name)
 }
 
 // RegisterCompletion registers a completion handler for a specific reference.
 // refType is "ref/prompt" or "ref/resource". name is the prompt name or resource URI template.
-func (d *Dispatcher) RegisterCompletion(refType, name string, handler CompletionHandler) {
+func (d *Dispatcher) RegisterCompletion(refType, name string, handler core.CompletionHandler) {
 	d.completions[refType+":"+name] = handler
 }
 
 // Dispatch routes a JSON-RPC request and returns the response.
 // Returns nil for notifications (no response expected).
-func (d *Dispatcher) Dispatch(ctx context.Context, req *Request) *Response {
+func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) *core.Response {
 	id := req.ID
 	if id == nil {
 		id = json.RawMessage("null")
@@ -201,11 +202,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *Request) *Response {
 		return nil
 
 	case "ping":
-		return NewResponse(id, map[string]any{})
+		return core.NewResponse(id, map[string]any{})
 
 	default:
 		if !d.initialized {
-			return NewErrorResponse(id, ErrCodeInvalidRequest, "server not initialized")
+			return core.NewErrorResponse(id, core.ErrCodeInvalidRequest, "server not initialized")
 		}
 
 		// Track in-flight request for cancellation support
@@ -239,15 +240,15 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *Request) *Response {
 		case "completion/complete":
 			return d.handleCompletionComplete(ctx, id, req.Params)
 		default:
-			return NewErrorResponse(id, ErrCodeMethodNotFound, "method not found: "+req.Method)
+			return core.NewErrorResponse(id, core.ErrCodeMethodNotFound, "method not found: "+req.Method)
 		}
 	}
 }
 
-func (d *Dispatcher) handleInitialize(id json.RawMessage, params json.RawMessage) *Response {
+func (d *Dispatcher) handleInitialize(id json.RawMessage, params json.RawMessage) *core.Response {
 	var p initializeParams
 	if err := json.Unmarshal(params, &p); err != nil {
-		return NewErrorResponse(id, ErrCodeInvalidParams, "invalid initialize params: "+err.Error())
+		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "invalid initialize params: "+err.Error())
 	}
 
 	negotiated := ""
@@ -258,7 +259,7 @@ func (d *Dispatcher) handleInitialize(id json.RawMessage, params json.RawMessage
 		}
 	}
 	if negotiated == "" {
-		return NewErrorResponseWithData(id, ErrCodeInvalidParams,
+		return core.NewErrorResponseWithData(id, core.ErrCodeInvalidParams,
 			"unsupported protocol version: "+p.ProtocolVersion,
 			map[string]any{"supported": supportedProtocolVersions})
 	}
@@ -298,20 +299,20 @@ func (d *Dispatcher) handleInitialize(id json.RawMessage, params json.RawMessage
 		"capabilities":    caps,
 		"serverInfo":      d.serverInfo,
 	}
-	return NewResponse(id, result)
+	return core.NewResponse(id, result)
 }
 
-func (d *Dispatcher) handleToolsList(id json.RawMessage, params json.RawMessage) *Response {
-	tools := make([]ToolDef, 0, len(d.toolOrder))
+func (d *Dispatcher) handleToolsList(id json.RawMessage, params json.RawMessage) *core.Response {
+	tools := make([]core.ToolDef, 0, len(d.toolOrder))
 	for _, name := range d.toolOrder {
 		if entry, ok := d.tools[name]; ok {
 			tools = append(tools, entry.def)
 		}
 	}
-	return NewResponse(id, map[string]any{"tools": tools})
+	return core.NewResponse(id, map[string]any{"tools": tools})
 }
 
-func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, params json.RawMessage) *Response {
+func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
 	var envelope struct {
 		Name      string          `json:"name"`
 		Arguments json.RawMessage `json:"arguments"`
@@ -320,15 +321,15 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, pa
 		} `json:"_meta"`
 	}
 	if err := json.Unmarshal(params, &envelope); err != nil {
-		return NewErrorResponse(id, ErrCodeInvalidParams, err.Error())
+		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 	}
 
 	entry, ok := d.tools[envelope.Name]
 	if !ok {
-		return NewErrorResponse(id, ErrCodeInvalidParams, "unknown tool: "+envelope.Name)
+		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "unknown tool: "+envelope.Name)
 	}
 
-	req := ToolRequest{
+	req := core.ToolRequest{
 		Name:      envelope.Name,
 		Arguments: envelope.Arguments,
 		RequestID: id,
@@ -339,39 +340,39 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, pa
 
 	result, err := entry.handler(ctx, req)
 	if err != nil {
-		result = ErrorResult(fmt.Sprintf("tool %q: %v", envelope.Name, err))
+		result = core.ErrorResult(fmt.Sprintf("tool %q: %v", envelope.Name, err))
 	}
 
-	return NewResponse(id, result)
+	return core.NewResponse(id, result)
 }
 
 // --- Resources ---
 
-func (d *Dispatcher) handleResourcesList(id json.RawMessage, params json.RawMessage) *Response {
-	resources := make([]ResourceDef, 0, len(d.resourceOrder))
+func (d *Dispatcher) handleResourcesList(id json.RawMessage, params json.RawMessage) *core.Response {
+	resources := make([]core.ResourceDef, 0, len(d.resourceOrder))
 	for _, uri := range d.resourceOrder {
 		if entry, ok := d.resources[uri]; ok {
 			resources = append(resources, entry.def)
 		}
 	}
-	return NewResponse(id, map[string]any{"resources": resources})
+	return core.NewResponse(id, map[string]any{"resources": resources})
 }
 
-func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage, params json.RawMessage) *Response {
+func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
 	var envelope struct {
 		URI string `json:"uri"`
 	}
 	if err := json.Unmarshal(params, &envelope); err != nil {
-		return NewErrorResponse(id, ErrCodeInvalidParams, err.Error())
+		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 	}
 
 	// Try exact match first
 	if entry, ok := d.resources[envelope.URI]; ok {
-		result, err := entry.handler(ctx, ResourceRequest{URI: envelope.URI})
+		result, err := entry.handler(ctx, core.ResourceRequest{URI: envelope.URI})
 		if err != nil {
-			return NewErrorResponse(id, ErrCodeInternal, fmt.Sprintf("resource %q: %v", envelope.URI, err))
+			return core.NewErrorResponse(id, core.ErrCodeInternal, fmt.Sprintf("resource %q: %v", envelope.URI, err))
 		}
-		return NewResponse(id, result)
+		return core.NewResponse(id, result)
 	}
 
 	// Try template match
@@ -380,23 +381,23 @@ func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage
 		if params, matched := matchTemplate(entry.def.URITemplate, envelope.URI); matched {
 			result, err := entry.handler(ctx, envelope.URI, params)
 			if err != nil {
-				return NewErrorResponse(id, ErrCodeInternal, fmt.Sprintf("resource template %q: %v", tmplURI, err))
+				return core.NewErrorResponse(id, core.ErrCodeInternal, fmt.Sprintf("resource template %q: %v", tmplURI, err))
 			}
-			return NewResponse(id, result)
+			return core.NewResponse(id, result)
 		}
 	}
 
-	return NewErrorResponse(id, ErrCodeInvalidParams, "unknown resource: "+envelope.URI)
+	return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "unknown resource: "+envelope.URI)
 }
 
-func (d *Dispatcher) handleResourcesTemplatesList(id json.RawMessage, params json.RawMessage) *Response {
-	templates := make([]ResourceTemplate, 0, len(d.templateOrder))
+func (d *Dispatcher) handleResourcesTemplatesList(id json.RawMessage, params json.RawMessage) *core.Response {
+	templates := make([]core.ResourceTemplate, 0, len(d.templateOrder))
 	for _, uri := range d.templateOrder {
 		if entry, ok := d.templates[uri]; ok {
 			templates = append(templates, entry.def)
 		}
 	}
-	return NewResponse(id, map[string]any{"resourceTemplates": templates})
+	return core.NewResponse(id, map[string]any{"resourceTemplates": templates})
 }
 
 // --- Resource Subscriptions ---
@@ -404,86 +405,86 @@ func (d *Dispatcher) handleResourcesTemplatesList(id json.RawMessage, params jso
 // handleResourcesSubscribe registers the current session's interest in a resource URI.
 // The server will send notifications/resources/updated to this session when the
 // resource changes (triggered by Server.NotifyResourceUpdated).
-func (d *Dispatcher) handleResourcesSubscribe(id json.RawMessage, params json.RawMessage) *Response {
+func (d *Dispatcher) handleResourcesSubscribe(id json.RawMessage, params json.RawMessage) *core.Response {
 	var p struct {
 		URI string `json:"uri"`
 	}
 	if err := json.Unmarshal(params, &p); err != nil {
-		return NewErrorResponse(id, ErrCodeInvalidParams, err.Error())
+		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 	}
 	if d.subManager != nil {
 		d.subManager.subscribe(d.sessionID, d, p.URI)
 	}
-	return NewResponse(id, map[string]any{})
+	return core.NewResponse(id, map[string]any{})
 }
 
 // handleResourcesUnsubscribe removes the current session's subscription for a resource URI.
 // The server will no longer send notifications/resources/updated for this URI to this session.
-func (d *Dispatcher) handleResourcesUnsubscribe(id json.RawMessage, params json.RawMessage) *Response {
+func (d *Dispatcher) handleResourcesUnsubscribe(id json.RawMessage, params json.RawMessage) *core.Response {
 	var p struct {
 		URI string `json:"uri"`
 	}
 	if err := json.Unmarshal(params, &p); err != nil {
-		return NewErrorResponse(id, ErrCodeInvalidParams, err.Error())
+		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 	}
 	if d.subManager != nil {
 		d.subManager.unsubscribe(d.sessionID, p.URI)
 	}
-	return NewResponse(id, map[string]any{})
+	return core.NewResponse(id, map[string]any{})
 }
 
 // --- Prompts ---
 
-func (d *Dispatcher) handlePromptsList(id json.RawMessage, params json.RawMessage) *Response {
-	prompts := make([]PromptDef, 0, len(d.promptOrder))
+func (d *Dispatcher) handlePromptsList(id json.RawMessage, params json.RawMessage) *core.Response {
+	prompts := make([]core.PromptDef, 0, len(d.promptOrder))
 	for _, name := range d.promptOrder {
 		if entry, ok := d.prompts[name]; ok {
 			prompts = append(prompts, entry.def)
 		}
 	}
-	return NewResponse(id, map[string]any{"prompts": prompts})
+	return core.NewResponse(id, map[string]any{"prompts": prompts})
 }
 
-func (d *Dispatcher) handlePromptsGet(ctx context.Context, id json.RawMessage, params json.RawMessage) *Response {
+func (d *Dispatcher) handlePromptsGet(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
 	var envelope struct {
 		Name      string            `json:"name"`
 		Arguments map[string]string `json:"arguments"`
 	}
 	if err := json.Unmarshal(params, &envelope); err != nil {
-		return NewErrorResponse(id, ErrCodeInvalidParams, err.Error())
+		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 	}
 
 	entry, ok := d.prompts[envelope.Name]
 	if !ok {
-		return NewErrorResponse(id, ErrCodeInvalidParams, "unknown prompt: "+envelope.Name)
+		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "unknown prompt: "+envelope.Name)
 	}
 
-	req := PromptRequest{
+	req := core.PromptRequest{
 		Name:      envelope.Name,
 		Arguments: envelope.Arguments,
 	}
 
 	result, err := entry.handler(ctx, req)
 	if err != nil {
-		return NewErrorResponse(id, ErrCodeInternal, fmt.Sprintf("prompt %q: %v", envelope.Name, err))
+		return core.NewErrorResponse(id, core.ErrCodeInternal, fmt.Sprintf("prompt %q: %v", envelope.Name, err))
 	}
 
-	return NewResponse(id, result)
+	return core.NewResponse(id, result)
 }
 
 // --- Completion ---
 
 // handleCompletionComplete handles the completion/complete method.
-// It looks up a registered CompletionHandler by ref type + name/URI,
+// It looks up a registered core.CompletionHandler by ref type + name/URI,
 // calls it, and returns the completion suggestions. If no handler is
 // registered, returns an empty result (graceful fallback).
-func (d *Dispatcher) handleCompletionComplete(ctx context.Context, id json.RawMessage, params json.RawMessage) *Response {
+func (d *Dispatcher) handleCompletionComplete(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
 	var p struct {
-		Ref      CompletionRef      `json:"ref"`
-		Argument CompletionArgument `json:"argument"`
+		Ref      core.CompletionRef      `json:"ref"`
+		Argument core.CompletionArgument `json:"argument"`
 	}
 	if err := json.Unmarshal(params, &p); err != nil {
-		return NewErrorResponse(id, ErrCodeInvalidParams, "invalid completion/complete params: "+err.Error())
+		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "invalid completion/complete params: "+err.Error())
 	}
 
 	// Build lookup key from ref type + name or URI
@@ -497,17 +498,17 @@ func (d *Dispatcher) handleCompletionComplete(ctx context.Context, id json.RawMe
 	handler, ok := d.completions[key]
 	if !ok {
 		// No handler registered — return empty completion (graceful fallback)
-		return NewResponse(id, map[string]any{
-			"completion": CompletionResult{Values: []string{}, HasMore: false},
+		return core.NewResponse(id, map[string]any{
+			"completion": core.CompletionResult{Values: []string{}, HasMore: false},
 		})
 	}
 
 	result, err := handler(ctx, p.Ref, p.Argument)
 	if err != nil {
-		return NewErrorResponse(id, ErrCodeInternal, fmt.Sprintf("completion %q: %v", key, err))
+		return core.NewErrorResponse(id, core.ErrCodeInternal, fmt.Sprintf("completion %q: %v", key, err))
 	}
 
-	return NewResponse(id, map[string]any{"completion": result})
+	return core.NewResponse(id, map[string]any{"completion": result})
 }
 
 // --- Cancellation ---
@@ -533,19 +534,19 @@ func (d *Dispatcher) handleCancelled(params json.RawMessage) {
 // handleLoggingSetLevel handles the logging/setLevel method.
 // It sets the minimum log level for this session. After this call, the server
 // will send notifications/message for log entries at or above the specified level.
-func (d *Dispatcher) handleLoggingSetLevel(id json.RawMessage, params json.RawMessage) *Response {
+func (d *Dispatcher) handleLoggingSetLevel(id json.RawMessage, params json.RawMessage) *core.Response {
 	var p struct {
 		Level string `json:"level"`
 	}
 	if err := json.Unmarshal(params, &p); err != nil {
-		return NewErrorResponse(id, ErrCodeInvalidParams, "invalid logging/setLevel params: "+err.Error())
+		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "invalid logging/setLevel params: "+err.Error())
 	}
-	level, ok := ParseLogLevel(p.Level)
+	level, ok := core.ParseLogLevel(p.Level)
 	if !ok {
-		return NewErrorResponse(id, ErrCodeInvalidParams, "unknown log level: "+p.Level)
+		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "unknown log level: "+p.Level)
 	}
 	d.logLevel.Store(&level)
-	return NewResponse(id, map[string]any{})
+	return core.NewResponse(id, map[string]any{})
 }
 
 // --- Server-to-client requests ---
@@ -553,13 +554,13 @@ func (d *Dispatcher) handleLoggingSetLevel(id json.RawMessage, params json.RawMe
 // RouteResponse routes an incoming JSON-RPC response from the client to a
 // pending server-to-client request. Returns true if matched, false if no
 // pending request was found for the response ID.
-func (d *Dispatcher) RouteResponse(resp *Response) bool {
+func (d *Dispatcher) RouteResponse(resp *core.Response) bool {
 	return routeServerResponse(&d.pending, resp)
 }
 
-// makeRequestFunc builds a RequestFunc that uses sendServerRequest with the
+// makeRequestFunc builds a core.RequestFunc that uses sendServerRequest with the
 // dispatcher's pending map and ID counter, and the given push function.
-func (d *Dispatcher) makeRequestFunc(pushFunc func(json.RawMessage)) RequestFunc {
+func (d *Dispatcher) makeRequestFunc(pushFunc func(json.RawMessage)) core.RequestFunc {
 	return func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 		return sendServerRequest(ctx, method, params, &d.nextServerReqID, &d.pending, pushFunc)
 	}

@@ -1,4 +1,4 @@
-package mcpkit
+package core
 
 // Protocol-level types shared between server and client packages.
 // These are MCP spec types that appear in both directions of communication.

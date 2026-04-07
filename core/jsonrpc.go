@@ -1,4 +1,4 @@
-package mcpkit
+package core
 
 import "encoding/json"
 
@@ -83,7 +83,7 @@ func NewErrorResponseWithData(id json.RawMessage, code int, message string, data
 // A response has an "id" field and either "result" or "error", but no "method" field.
 // Used by transports to route incoming client messages that are responses to
 // server-to-client requests (sampling/createMessage, elicitation/create).
-func isJSONRPCResponse(data []byte) bool {
+func IsJSONRPCResponse(data []byte) bool {
 	var probe struct {
 		Method string          `json:"method"`
 		ID     json.RawMessage `json:"id"`

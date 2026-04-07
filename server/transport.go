@@ -1,6 +1,7 @@
-package mcpkit
+package server
 
 import (
+	core "github.com/panyam/mcpkit/core"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -139,8 +140,8 @@ func (t *sseTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 	// Detect if the incoming message is a JSON-RPC response (from the client
 	// answering a server-to-client request like sampling/createMessage).
 	// Responses have an "id" field but no "method" field.
-	if isJSONRPCResponse(body) {
-		var resp Response
+	if core.IsJSONRPCResponse(body) {
+		var resp core.Response
 		if err := json.Unmarshal(body, &resp); err == nil {
 			dispatcher.RouteResponse(&resp)
 		}
@@ -148,10 +149,10 @@ func (t *sseTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req Request
+	var req core.Request
 	if err := json.Unmarshal(body, &req); err != nil {
 		// JSON parse error — push error response on SSE stream
-		errResp := NewErrorResponse(json.RawMessage("null"), ErrCodeParse, "parse error: "+err.Error())
+		errResp := core.NewErrorResponse(json.RawMessage("null"), core.ErrCodeParse, "parse error: "+err.Error())
 		raw, _ := json.Marshal(errResp)
 		t.hub.SendEvent(sessionID, "message", SSEJSON(raw))
 		w.WriteHeader(http.StatusAccepted)
@@ -211,7 +212,7 @@ func (c *mcpSSEConn) OnStart(w http.ResponseWriter, r *http.Request) error {
 	sessionID := c.sessionID
 	hub := c.transport.hub
 	dispatcher.notifyFunc = func(method string, params any) {
-		raw, err := MarshalNotification(method, params)
+		raw, err := core.MarshalNotification(method, params)
 		if err != nil {
 			return
 		}

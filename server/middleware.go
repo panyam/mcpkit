@@ -1,4 +1,4 @@
-package mcpkit
+package server
 
 // Server-side middleware for intercepting JSON-RPC requests before and after
 // dispatch. Middleware runs after auth (claims are in context) but before
@@ -6,16 +6,17 @@ package mcpkit
 // or custom per-method authorization.
 
 import (
+	core "github.com/panyam/mcpkit/core"
 	"context"
 	"log"
 	"time"
 )
 
 // Middleware intercepts a JSON-RPC request. Call next to continue the chain,
-// or return a *Response directly to short-circuit (e.g., reject a request).
+// or return a *core.Response directly to short-circuit (e.g., reject a request).
 //
 // Middleware sees the full request (method, params, ID) and the context
-// (which includes auth claims via AuthClaims(ctx) and session notification
+// (which includes auth claims via core.AuthClaims(ctx) and session notification
 // state). The response from next can be inspected or modified before returning.
 //
 // Example — logging middleware:
@@ -32,10 +33,10 @@ import (
 //	        return next(ctx, req)
 //	    }
 //	}
-type Middleware func(ctx context.Context, req *Request, next MiddlewareFunc) *Response
+type Middleware func(ctx context.Context, req *core.Request, next MiddlewareFunc) *core.Response
 
 // MiddlewareFunc is the signature for the next handler in the middleware chain.
-type MiddlewareFunc func(context.Context, *Request) *Response
+type MiddlewareFunc func(context.Context, *core.Request) *core.Response
 
 // WithMiddleware registers server-side middleware that intercepts all JSON-RPC
 // requests. Middleware executes in registration order: the first registered
@@ -58,7 +59,7 @@ func WithMiddleware(mw ...Middleware) Option {
 //	MCP tools/call ok [45.3ms]
 //	MCP tools/call error=-32602 (invalid params) [0.1ms]
 func LoggingMiddleware(logger *log.Logger) Middleware {
-	return func(ctx context.Context, req *Request, next MiddlewareFunc) *Response {
+	return func(ctx context.Context, req *core.Request, next MiddlewareFunc) *core.Response {
 		start := time.Now()
 		resp := next(ctx, req)
 		elapsed := time.Since(start)
