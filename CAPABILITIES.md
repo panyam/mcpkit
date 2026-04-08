@@ -30,6 +30,7 @@
 - mcp-completion: completion/complete for argument autocompletion
 - mcp-dns-rebinding-protection: Origin header validation on Streamable HTTP (WithAllowedOrigins)
 - mcp-resource-subscriptions: resources/subscribe, resources/unsubscribe, notifications/resources/updated via WithSubscriptions() + Server.NotifyResourceUpdated()
+- mcp-broadcast: Server.Broadcast(method, params) sends notifications to ALL connected sessions unconditionally (no subscription required)
 - mcp-sampling: Server-to-client sampling/createMessage via Sample() — server asks client LLM for inference
 - mcp-elicitation: Server-to-client elicitation/create via Elicit() — server asks client for user input
 - mcp-conformance: Official MCP conformance test suite integration (30/30 server passing, 14/14 auth passing)
@@ -42,12 +43,13 @@
 - mcp-client-auth-retry: Client transport 401/403 handling — doWithAuthRetry, ScopeAwareTokenSource, ClientAuthError
 - mcp-sub-packages: core/server/client package split — types in core, server+transports in server/, client in client/
 - mcp-in-process-transport: server.NewInProcessTransport + client.WithTransport — typed *Request/*Response, no HTTP (for tests/embedded)
+- mcp-stdio-transport: Content-Length framed JSON-RPC over stdin/stdout — Server.RunStdio() + client.WithStdioTransport() for editor-spawned MCP servers (Cursor, Claude Desktop)
 - mcp-stateless-mode: WithStateless — no sessions, fresh dispatcher per request (for serverless/CLI)
 - mcp-session-management: Server.CloseSession/CloseAllSessions — programmatic session teardown
 - mcp-structured-output: StructuredContent + OutputSchema on ToolDef/ToolResult — typed tool output
 - mcp-server-run: Server.Run(addr) — simple blocking entry point defaulting to Streamable HTTP
 - mcp-error-codes: ErrCodeServerError (-32000) + documented JSON-RPC error code ranges
-- mcp-parametric-tests: forAllTransports — core client tests run against all 3 transports as subtests
+- mcp-parametric-tests: forAllTransports — core client tests run against all 4 transports as subtests (Streamable HTTP, SSE, in-memory, stdio)
 - mcp-apps-extension: MCP Apps (io.modelcontextprotocol/ui) extension negotiation — server advertises via WithExtension(UIExtension{}), client detects via ServerSupportsUI()
 - mcp-apps-ui-metadata: UIMetadata, UICSPConfig, UIVisibility types on ToolDef._meta.ui and ResourceReadContent._meta.ui
 - mcp-apps-resource-serving: ui:// resources with text/html;profile=mcp-app MIME type, template resources for parameterized URIs

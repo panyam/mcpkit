@@ -19,9 +19,10 @@ type Server struct {
 	dispatcher        *Dispatcher
 	options           serverOptions
 	mu                sync.Mutex
-	sessionClosers    []sessionCloser
-	allSessionClosers []func()
-	subRegistry       *subscriptionRegistry // nil when subscriptions not enabled
+	sessionClosers      []sessionCloser
+	allSessionClosers   []func()
+	sessionBroadcasters []func(method string, params any)
+	subRegistry         *subscriptionRegistry // nil when subscriptions not enabled
 }
 
 type serverOptions struct {
@@ -298,13 +299,46 @@ func (s *Server) CloseAllSessions() {
 	}
 }
 
+// Broadcast sends a JSON-RPC notification to ALL connected sessions across
+// all transports. Unlike NotifyResourceUpdated (which targets only sessions
+// that have called resources/subscribe for a specific URI), Broadcast fans
+// out unconditionally to every session with push capability.
+//
+// Typical use cases: notifications/tools/list_changed,
+// notifications/prompts/list_changed, or application-level broadcasts.
+//
+// Safe to call from any goroutine. No-op if no sessions are connected.
+// Sessions without push capability (e.g., Streamable HTTP without GET SSE
+// stream) are silently skipped. Does not hold the server mutex during
+// notification delivery.
+//
+// Note: only reaches sessions registered through Handler() (SSE and
+// Streamable HTTP transports). In-process transports manage their own
+// notification delivery via WithNotificationHandler.
+//
+// Example:
+//
+//	// After registering a new tool at runtime:
+//	srv.Broadcast("notifications/tools/list_changed", nil)
+func (s *Server) Broadcast(method string, params any) {
+	s.mu.Lock()
+	broadcasters := make([]func(string, any), len(s.sessionBroadcasters))
+	copy(broadcasters, s.sessionBroadcasters)
+	s.mu.Unlock()
+
+	for _, bc := range broadcasters {
+		bc(method, params)
+	}
+}
+
 // registerTransportSessions registers a transport's session management callbacks.
 // Called by transports during Handler() creation.
-func (s *Server) registerTransportSessions(closeOne sessionCloser, closeAll func()) {
+func (s *Server) registerTransportSessions(closeOne sessionCloser, closeAll func(), broadcast func(method string, params any)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.sessionClosers = append(s.sessionClosers, closeOne)
 	s.allSessionClosers = append(s.allSessionClosers, closeAll)
+	s.sessionBroadcasters = append(s.sessionBroadcasters, broadcast)
 }
 
 // Handler returns an http.Handler implementing MCP transports.
@@ -326,24 +360,24 @@ func (s *Server) Handler(opts ...TransportOption) http.Handler {
 	// SSE only (default, backward compatible)
 	if cfg.sse && !cfg.streamableHTTP {
 		sseT := newSSETransport(s, opts...)
-		s.registerTransportSessions(sseT.closeSession, sseT.closeAllSessions)
+		s.registerTransportSessions(sseT.closeSession, sseT.closeAllSessions, sseT.broadcast)
 		handler = sseT.handler()
 	} else if cfg.streamableHTTP && !cfg.sse {
 		// Streamable HTTP only
 		stT := newStreamableTransport(s, cfg)
-		s.registerTransportSessions(stT.closeSession, stT.closeAllSessions)
+		s.registerTransportSessions(stT.closeSession, stT.closeAllSessions, stT.broadcast)
 		handler = stT.handler()
 	} else {
 		// Both enabled: SSE at /sse + /message, Streamable HTTP at base prefix
 		mux := http.NewServeMux()
 		if cfg.sse {
 			sseT := newSSETransport(s, opts...)
-			s.registerTransportSessions(sseT.closeSession, sseT.closeAllSessions)
+			s.registerTransportSessions(sseT.closeSession, sseT.closeAllSessions, sseT.broadcast)
 			sseT.mountOn(mux, prefix)
 		}
 		if cfg.streamableHTTP {
 			stT := newStreamableTransport(s, cfg)
-			s.registerTransportSessions(stT.closeSession, stT.closeAllSessions)
+			s.registerTransportSessions(stT.closeSession, stT.closeAllSessions, stT.broadcast)
 			mux.HandleFunc(prefix, stT.handleRoot)
 		}
 		handler = mux
