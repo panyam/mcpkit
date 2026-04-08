@@ -447,6 +447,18 @@ func (t *streamableTransport) closeAllSessions() {
 	})
 }
 
+// broadcast sends a notification to all active Streamable HTTP sessions.
+// Sessions without a GET SSE stream have nil notifyFunc and are skipped safely.
+func (t *streamableTransport) broadcast(method string, params any) {
+	t.sessions.Range(func(key, value any) bool {
+		d := value.(*Dispatcher)
+		if d.notifyFunc != nil {
+			d.notifyFunc(method, params)
+		}
+		return true
+	})
+}
+
 // sessionCount returns the number of active sessions.
 func (t *streamableTransport) sessionCount() int {
 	count := 0

@@ -264,6 +264,18 @@ func (t *sseTransport) closeAllSessions() {
 	})
 }
 
+// broadcast sends a notification to all active SSE sessions.
+// Sessions with nil notifyFunc are skipped safely.
+func (t *sseTransport) broadcast(method string, params any) {
+	t.sessions.Range(func(key, value any) bool {
+		d := value.(*Dispatcher)
+		if d.notifyFunc != nil {
+			d.notifyFunc(method, params)
+		}
+		return true
+	})
+}
+
 // mcpSSEHandler implements gohttp.SSEHandler for MCP session creation.
 type mcpSSEHandler struct {
 	transport *sseTransport
