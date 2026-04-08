@@ -11,6 +11,7 @@ MCP server implementation: Dispatcher, transports, middleware, subscriptions.
 - Middleware chain (`WithMiddleware`, `LoggingMiddleware`)
 - Server-to-client request infrastructure (`sendServerRequest`, `routeServerResponse`)
 - Resource subscriptions (`WithSubscriptions`, `NotifyResourceUpdated`)
+- Broadcast notifications (`Broadcast`) — fan out to all connected sessions
 - Extension registration (`WithExtension`) — extensions declare capabilities in initialize response
 - Startup validation (`validateExtensionRefs`) — calls `RefValidator` on registered extensions to warn about unresolvable resource references
 
