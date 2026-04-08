@@ -44,6 +44,16 @@ type ResourceTemplate struct {
 	Annotations map[string]any `json:"annotations,omitempty"`
 }
 
+// ResourcesListResult is the typed result for resources/list responses.
+type ResourcesListResult struct {
+	Resources []ResourceDef `json:"resources"`
+}
+
+// ResourceTemplatesListResult is the typed result for resources/templates/list responses.
+type ResourceTemplatesListResult struct {
+	ResourceTemplates []ResourceTemplate `json:"resourceTemplates"`
+}
+
 // ResourceReadContent is a single content item returned by resources/read.
 // Either Text or Blob is set, not both.
 type ResourceReadContent struct {

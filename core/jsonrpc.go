@@ -32,6 +32,10 @@ func (r *Request) IsNotification() bool {
 	return r.ID == nil || string(r.ID) == "null"
 }
 
+// PingResult is the typed result for ping responses.
+// Currently empty per spec, but typed to allow future extension.
+type PingResult struct{}
+
 // Standard JSON-RPC 2.0 error codes (https://www.jsonrpc.org/specification#error_object).
 //
 // Reserved ranges:

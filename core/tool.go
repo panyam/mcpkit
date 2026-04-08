@@ -34,6 +34,11 @@ type ToolDef struct {
 	Meta *ToolMeta `json:"_meta,omitempty"`
 }
 
+// ToolsListResult is the typed result for tools/list responses.
+type ToolsListResult struct {
+	Tools []ToolDef `json:"tools"`
+}
+
 // ToolRequest is the validated input passed to a ToolHandler.
 type ToolRequest struct {
 	// Name of the tool being called.

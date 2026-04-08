@@ -35,6 +35,11 @@ type CompletionResult struct {
 	HasMore bool `json:"hasMore"`
 }
 
+// CompletionCompleteResult is the typed result for completion/complete responses.
+type CompletionCompleteResult struct {
+	Completion CompletionResult `json:"completion"`
+}
+
 // CompletionHandler provides autocompletion suggestions for a specific reference.
 // ref identifies the prompt or resource being completed, arg contains the argument
 // name and partial value. Return matching suggestions.
