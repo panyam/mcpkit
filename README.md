@@ -36,11 +36,12 @@ srv.Run(":8787") // Streamable HTTP
 | **server** | `github.com/panyam/mcpkit/server` | Server, Dispatcher, transports (SSE + Streamable HTTP), middleware |
 | **client** | `github.com/panyam/mcpkit/client` | Client, HTTP transports, reconnection, logging |
 | **ext/auth** | `github.com/panyam/mcpkit/ext/auth` | Separate module: JWT, PRM, OAuth discovery, DCR, CIMD |
+| **ext/ui** | `github.com/panyam/mcpkit/ext/ui` | Separate module: MCP Apps extension (UIExtension, RegisterAppTool) |
 | **testutil** | `github.com/panyam/mcpkit/testutil` | TestClient wrapper for e2e tests |
 
 ## Conformance
 
-**30/30** server scenarios, **14/14** auth scenarios passing against the [official MCP conformance suite](https://github.com/modelcontextprotocol/conformance).
+**30/30** server scenarios, **14/14** auth scenarios, **21** MCP Apps conformance tests passing against the [official MCP conformance suite](https://github.com/modelcontextprotocol/conformance) and internal test suites.
 
 ## Testing
 
@@ -49,6 +50,8 @@ make test          # Unit tests (200+ across core/server/client)
 make testall       # ALL tests + Keycloak + conformance + HTML report
 make testconf      # MCP conformance suite
 make testconfauth  # Auth conformance
+make test-e2e      # E2E tests (auth + apps)
+make test-apps-playwright  # ext-apps Playwright suite (needs Node.js)
 ```
 
 ## Documentation
@@ -58,7 +61,8 @@ make testconfauth  # Auth conformance
 | [CLAUDE.md](CLAUDE.md) | Quick reference: commands, package structure, gotchas |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Transport design, type definitions, protocol details |
 | [ext/auth/docs/DESIGN.md](ext/auth/docs/DESIGN.md) | Auth architecture, spec compliance (C1-C23, X1-X5) |
-| [CAPABILITIES.md](CAPABILITIES.md) | Stack component: all 50 capabilities listed |
+| [docs/APPS_DESIGN.md](docs/APPS_DESIGN.md) | MCP Apps extension design, protocol flows, conformance strategy |
+| [CAPABILITIES.md](CAPABILITIES.md) | Stack component: all capabilities listed |
 
 ## Dependencies
 

@@ -253,3 +253,16 @@ Uses servicekit's `ListenAndServeGraceful`:
 2. `OnShutdown` callback calls `SSEHub.CloseAll()` for SSE sessions
 3. Waits for in-flight requests (configurable drain timeout)
 4. Exit
+
+## MCP Apps Extension
+
+MCPKit supports the [MCP Apps extension](https://modelcontextprotocol.io/extensions/apps/overview) (`io.modelcontextprotocol/ui`), enabling servers to return interactive HTML UIs that render inline in host conversations.
+
+**mcpkit's scope:** capability negotiation, `_meta.ui` metadata on tools/resources, `ui://` resource serving, visibility filtering, text-only fallback. The iframe rendering and `postMessage` bridge are the host's responsibility.
+
+**Package split:**
+- `core/ui.go` — Protocol types (`UIMetadata`, `UICSPConfig`, `UIVisibility`, `AppMIMEType`, `ToolMeta`, `ResourceContentMeta`) and context helpers (`ClientSupportsUI`, `NotifyResourcesChanged`)
+- `ext/ui/` — Extension implementation (`UIExtension`, `RegisterAppTool`, `RefValidator`)
+- `client/client.go` — `WithExtension`, `WithUIExtension`, `ServerSupportsUI`, `ListToolsForModel`
+
+See [docs/APPS_DESIGN.md](APPS_DESIGN.md) for the full design: protocol flows, edge cases, conformance strategy, and slyds reference integration.
