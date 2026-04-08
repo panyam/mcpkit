@@ -58,6 +58,9 @@
 - mcp-apps-resource-notification: NotifyResourcesChanged(ctx) — tool handlers signal resource list changes to clients
 - mcp-apps-register-helper: RegisterAppTool (ext/ui) — registers tool + resource pair in one call via ToolResourceRegistrar interface
 - mcp-apps-conformance: 21 MCP Apps conformance tests (tool metadata, resources, visibility, fallback, negotiation)
+- mcp-dynamic-registration: Registry.AddTool/RemoveTool/AddResource/RemoveResource/AddPrompt/RemovePrompt — thread-safe runtime registration with automatic notifications/*/list_changed broadcast via OnChange callback
+- mcp-session-timeout: WithSessionTimeout — idle session cleanup for Streamable HTTP (timer + ref counting to avoid closing mid-execution)
+- mcp-server-capabilities-typed: core.ServerCapabilities, ToolsCap, ResourcesCap, PromptsCap — typed structs for initialize response capabilities
 
 ## Module
 github.com/panyam/mcpkit

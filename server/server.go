@@ -118,6 +118,11 @@ func NewServer(info core.ServerInfo, opts ...Option) *Server {
 		e := ext.Extension()
 		s.dispatcher.extensions[e.ID] = e
 	}
+	// Wire registry change notifications to Server.Broadcast so that
+	// dynamic adds/removes automatically notify all connected sessions.
+	s.dispatcher.Reg.OnChange = func(method string) {
+		s.Broadcast(method, nil)
+	}
 	// Initialize subscription support if enabled
 	if s.options.subscriptionsEnabled {
 		s.subRegistry = &subscriptionRegistry{
@@ -152,17 +157,20 @@ func (s *Server) validateExtensionRefs() {
 		logger = log.Default()
 	}
 
-	// Collect tool defs, resource URIs, and template URIs
-	tools := make([]core.ToolDef, 0, len(s.dispatcher.toolOrder))
-	for _, name := range s.dispatcher.toolOrder {
-		if entry, ok := s.dispatcher.tools[name]; ok {
+	// Collect tool defs, resource URIs, and template URIs under read lock
+	reg := s.dispatcher.Reg
+	reg.mu.RLock()
+	tools := make([]core.ToolDef, 0, len(reg.toolOrder))
+	for _, name := range reg.toolOrder {
+		if entry, ok := reg.tools[name]; ok {
 			tools = append(tools, entry.def)
 		}
 	}
-	resourceURIs := make([]string, len(s.dispatcher.resourceOrder))
-	copy(resourceURIs, s.dispatcher.resourceOrder)
-	templateURIs := make([]string, len(s.dispatcher.templateOrder))
-	copy(templateURIs, s.dispatcher.templateOrder)
+	resourceURIs := make([]string, len(reg.resourceOrder))
+	copy(resourceURIs, reg.resourceOrder)
+	templateURIs := make([]string, len(reg.templateOrder))
+	copy(templateURIs, reg.templateOrder)
+	reg.mu.RUnlock()
 
 	for _, ext := range s.options.extensions {
 		if rv, ok := ext.(core.RefValidator); ok {
@@ -209,6 +217,15 @@ func (s *Server) RegisterExperimentalPrompt(def core.PromptDef, handler core.Pro
 // refType is "ref/prompt" or "ref/resource". name is the prompt name or resource URI template.
 func (s *Server) RegisterCompletion(refType, name string, handler core.CompletionHandler) {
 	s.dispatcher.RegisterCompletion(refType, name, handler)
+}
+
+// Registry returns the server's shared registry. All session dispatchers
+// share this registry, so changes (AddTool, RemoveTool, etc.) are
+// immediately visible to every session. When the server has active
+// sessions, mutations automatically broadcast the appropriate
+// notifications/*/list_changed notification.
+func (s *Server) Registry() *Registry {
+	return s.dispatcher.Reg
 }
 
 // Dispatch routes a JSON-RPC request through the server's dispatch layer.
@@ -514,7 +531,8 @@ type transportConfig struct {
 	allowedOrigins []string // allowed Origin values for DNS rebinding protection
 	streamableHTTP bool     // enable Streamable HTTP transport
 	sse            bool     // enable legacy SSE transport
-	stateless      bool     // stateless mode: no sessions, fresh dispatcher per request
+	stateless      bool          // stateless mode: no sessions, fresh dispatcher per request
+	sessionTimeout time.Duration // idle timeout for Streamable HTTP sessions (0 = no timeout)
 }
 
 func defaultTransportConfig() transportConfig {
@@ -561,6 +579,15 @@ func WithStreamableHTTP(enabled bool) TransportOption {
 // WithSSE enables or disables the legacy SSE transport (MCP 2024-11-05).
 func WithSSE(enabled bool) TransportOption {
 	return func(c *transportConfig) { c.sse = enabled }
+}
+
+// WithSessionTimeout sets the idle timeout for Streamable HTTP sessions.
+// Sessions that receive no POST requests for this duration are automatically
+// expired and cleaned up. Active requests (in-flight tool calls, open GET SSE
+// streams) pause the timer so sessions are never closed mid-execution.
+// Default is 0 (no timeout — sessions persist until explicit DELETE or server restart).
+func WithSessionTimeout(d time.Duration) TransportOption {
+	return func(c *transportConfig) { c.sessionTimeout = d }
 }
 
 // WithStateless enables stateless mode for the Streamable HTTP transport.
