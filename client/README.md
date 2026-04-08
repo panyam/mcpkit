@@ -33,6 +33,24 @@ c.Connect()
 result, _ := c.ToolCall("greet", map[string]any{"name": "world"})
 ```
 
+## Extension support
+
+```go
+c := client.NewClient(url, info,
+    client.WithUIExtension(),  // advertise MCP Apps support
+)
+c.Connect()
+
+if c.ServerSupportsUI() { /* server can serve app UIs */ }
+
+modelTools, _ := c.ListToolsForModel() // excludes app-only tools
+```
+
+- `WithExtension(id, cap)` — general extension advertisement
+- `WithUIExtension()` — convenience for MCP Apps
+- `ServerSupportsExtension(id)` / `ServerSupportsUI()` — detect server support
+- `ListToolsForModel()` — filters out tools with visibility `["app"]` only
+
 ## Transport interface
 
 The client accepts any `core.Transport` via `WithTransport()`. This enables:

@@ -17,9 +17,18 @@ MCP Apps combines two existing MCP primitives — tools declare a UI resource vi
 ## Spec Reference
 
 - Extension ID: `io.modelcontextprotocol/ui`
-- Spec version: `2026-01-26` (current stable), `draft` (development)
+- Feature name: "MCP Apps" (the extension ID uses `ui`, but the feature is called "Apps")
+- Spec version: `2026-01-26` (current stable)
+- Overview: [modelcontextprotocol.io/extensions/apps/overview](https://modelcontextprotocol.io/extensions/apps/overview)
 - Repository: [github.com/modelcontextprotocol/ext-apps](https://github.com/modelcontextprotocol/ext-apps)
 - Specification: [specification/2026-01-26/apps.mdx](https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx)
+- Supported hosts: Claude, Claude Desktop, VS Code GitHub Copilot, Goose, Postman, MCPJam
+
+### Implementation notes
+
+- Standard `Permissions` values: `"camera"`, `"microphone"`, `"geolocation"`, `"clipboardWrite"`
+- `PrefersBorder` and `Domain` fields may be host-specific — not all hosts honor them
+- Hosts may preload `ui://` resources before tools/call for faster rendering
 
 ## Architecture
 
