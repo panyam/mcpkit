@@ -153,16 +153,13 @@ func (a *coreTransportAdapter) call(data []byte) (*rpcResponse, error) {
 	if resp == nil {
 		return nil, nil
 	}
-	// Convert core.Response → rpcResponse
-	raw, err := json.Marshal(resp)
-	if err != nil {
-		return nil, err
-	}
-	var rr rpcResponse
-	if err := json.Unmarshal(raw, &rr); err != nil {
-		return nil, err
-	}
-	return &rr, nil
+	// core.Response and rpcResponse have identical field types now
+	return &rpcResponse{
+		JSONRPC: resp.JSONRPC,
+		ID:      resp.ID,
+		Result:  resp.Result,
+		Error:   resp.Error,
+	}, nil
 }
 
 func (a *coreTransportAdapter) notify(data []byte) error {
@@ -282,45 +279,39 @@ func (c *Client) Connect() error {
 	}
 
 	// Build client capabilities based on registered handlers
-	caps := map[string]any{}
+	caps := core.ClientCapabilities{}
 	if c.samplingHandler != nil {
-		caps["sampling"] = map[string]any{}
+		caps.Sampling = &struct{}{}
 	}
 	if c.elicitationHandler != nil {
-		caps["elicitation"] = map[string]any{}
+		caps.Elicitation = &struct{}{}
 	}
 	if len(c.extensions) > 0 {
-		exts := make(map[string]any, len(c.extensions))
+		caps.Extensions = make(map[string]core.ClientExtensionCap, len(c.extensions))
 		for id, cap := range c.extensions {
-			exts[id] = cap
+			caps.Extensions[id] = cap
 		}
-		caps["extensions"] = exts
 	}
 
 	// Initialize handshake
-	resp, err := c.rawCall("initialize", map[string]any{
-		"protocolVersion": "2024-11-05",
-		"capabilities":    caps,
-		"clientInfo":      c.info,
+	resp, err := c.rawCall("initialize", initializeParams{
+		ProtocolVersion: "2024-11-05",
+		Capabilities:    caps,
+		ClientInfo:      c.info,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize failed: %w", err)
 	}
 
 	// Extract server info and capabilities from initialize response
-	if result, ok := resp.Result.(map[string]any); ok {
-		if si, ok := result["serverInfo"].(map[string]any); ok {
-			c.ServerInfo.Name, _ = si["name"].(string)
-			c.ServerInfo.Version, _ = si["version"].(string)
-		}
-		// Parse server extensions from capabilities
-		if capObj, ok := result["capabilities"].(map[string]any); ok {
-			if exts, ok := capObj["extensions"].(map[string]any); ok {
-				c.serverExtensions = make(map[string]json.RawMessage, len(exts))
-				for id, v := range exts {
-					if raw, err := json.Marshal(v); err == nil {
-						c.serverExtensions[id] = raw
-					}
+	var initResult core.InitializeResult
+	if err := json.Unmarshal(resp.Result, &initResult); err == nil {
+		c.ServerInfo = initResult.ServerInfo
+		if initResult.Capabilities.Extensions != nil {
+			c.serverExtensions = make(map[string]json.RawMessage, len(initResult.Capabilities.Extensions))
+			for id, ext := range initResult.Capabilities.Extensions {
+				if raw, err := json.Marshal(ext); err == nil {
+					c.serverExtensions[id] = raw
 				}
 			}
 		}
@@ -449,24 +440,22 @@ func (c *Client) Call(method string, params any) (*CallResult, error) {
 	return &CallResult{Raw: resp.Result}, nil
 }
 
-// CallResult holds the raw result from a JSON-RPC call.
+// CallResult holds the raw JSON result from a JSON-RPC call.
 type CallResult struct {
-	Raw any
+	Raw json.RawMessage
 }
 
 // JSON returns the result as indented JSON.
 func (r *CallResult) JSON() string {
-	data, _ := json.MarshalIndent(r.Raw, "", "  ")
+	var v any
+	json.Unmarshal(r.Raw, &v)
+	data, _ := json.MarshalIndent(v, "", "  ")
 	return string(data)
 }
 
 // Unmarshal decodes the result into the given value.
 func (r *CallResult) Unmarshal(v any) error {
-	data, err := json.Marshal(r.Raw)
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(data, v)
+	return json.Unmarshal(r.Raw, v)
 }
 
 // --- Convenience methods ---
@@ -599,11 +588,18 @@ func (c *Client) ListResourceTemplates() ([]core.ResourceTemplate, error) {
 
 // --- Internal ---
 
+// initializeParams is the params object sent in an initialize request.
+type initializeParams struct {
+	ProtocolVersion string                   `json:"protocolVersion"`
+	Capabilities    core.ClientCapabilities  `json:"capabilities"`
+	ClientInfo      core.ClientInfo          `json:"clientInfo"`
+}
+
 type rpcResponse struct {
-	JSONRPC string      `json:"jsonrpc"`
-	ID      any         `json:"id"`
-	Result  any         `json:"result,omitempty"`
-	Error   *core.Error `json:"error,omitempty"`
+	JSONRPC string          `json:"jsonrpc"`
+	ID      json.RawMessage `json:"id"`
+	Result  json.RawMessage `json:"result,omitempty"`
+	Error   *core.Error     `json:"error,omitempty"`
 }
 
 func (c *Client) nextRequestID() int {
@@ -615,42 +611,48 @@ func (c *Client) nextRequestID() int {
 }
 
 func (c *Client) rawCall(method string, params any) (*rpcResponse, error) {
-	reqBody := map[string]any{
-		"jsonrpc": "2.0",
-		"id":      c.nextRequestID(),
-		"method":  method,
+	req := core.Request{
+		JSONRPC: "2.0",
+		ID:      marshalID(c.nextRequestID()),
+		Method:  method,
 	}
 	if params != nil {
-		reqBody["params"] = params
+		req.Params, _ = json.Marshal(params)
 	}
-	data, _ := json.Marshal(reqBody)
+	data, _ := json.Marshal(req)
 
 	resp, err := c.transport.call(data)
 	if err != nil && c.maxRetries > 0 && IsTransientError(err) {
 		return c.retryWithReconnect(func() (*rpcResponse, error) {
 			// Re-build with new ID (old may have been consumed)
-			reqBody["id"] = c.nextRequestID()
-			data, _ = json.Marshal(reqBody)
+			req.ID = marshalID(c.nextRequestID())
+			data, _ = json.Marshal(req)
 			return c.transport.call(data)
 		})
 	}
 	return resp, err
 }
 
+// marshalID converts an integer request ID to json.RawMessage.
+func marshalID(id int) json.RawMessage {
+	raw, _ := json.Marshal(id)
+	return raw
+}
+
 func (c *Client) notifyMethod(method string, params any) error {
-	reqBody := map[string]any{
-		"jsonrpc": "2.0",
-		"method":  method,
+	req := core.Request{
+		JSONRPC: "2.0",
+		Method:  method,
 	}
 	if params != nil {
-		reqBody["params"] = params
+		req.Params, _ = json.Marshal(params)
 	}
-	data, _ := json.Marshal(reqBody)
+	data, _ := json.Marshal(req)
 
 	err := c.transport.notify(data)
 	if err != nil && c.maxRetries > 0 && IsTransientError(err) {
 		return c.retryNotifyWithReconnect(func() error {
-			data, _ = json.Marshal(reqBody)
+			data, _ = json.Marshal(req)
 			return c.transport.notify(data)
 		})
 	}
@@ -1426,40 +1428,31 @@ func ResolveEndpointURL(baseSSEURL, endpointRef string) (string, error) {
 // --- core.Response extraction helpers ---
 
 // extractToolText pulls the first text content from a tools/call result.
-func extractToolText(raw any) (string, error) {
-	m, ok := raw.(map[string]any)
-	if !ok {
-		return "", fmt.Errorf("unexpected result type: %T", raw)
+func extractToolText(raw json.RawMessage) (string, error) {
+	var result core.ToolResult
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return "", fmt.Errorf("unexpected result: %w", err)
 	}
-	if isErr, _ := m["isError"].(bool); isErr {
-		content, _ := m["content"].([]any)
-		if len(content) > 0 {
-			item, _ := content[0].(map[string]any)
-			text, _ := item["text"].(string)
-			return "", fmt.Errorf("tool error: %s", text)
+	if result.IsError {
+		if len(result.Content) > 0 {
+			return "", fmt.Errorf("tool error: %s", result.Content[0].Text)
 		}
 		return "", fmt.Errorf("tool error (no content)")
 	}
-	content, _ := m["content"].([]any)
-	if len(content) == 0 {
+	if len(result.Content) == 0 {
 		return "", nil
 	}
-	item, _ := content[0].(map[string]any)
-	text, _ := item["text"].(string)
-	return text, nil
+	return result.Content[0].Text, nil
 }
 
 // extractResourceText pulls the first text content from a resources/read result.
-func extractResourceText(raw any) (string, error) {
-	m, ok := raw.(map[string]any)
-	if !ok {
-		return "", fmt.Errorf("unexpected result type: %T", raw)
+func extractResourceText(raw json.RawMessage) (string, error) {
+	var result core.ResourceResult
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return "", fmt.Errorf("unexpected result: %w", err)
 	}
-	contents, _ := m["contents"].([]any)
-	if len(contents) == 0 {
+	if len(result.Contents) == 0 {
 		return "", fmt.Errorf("no contents in resource response")
 	}
-	item, _ := contents[0].(map[string]any)
-	text, _ := item["text"].(string)
-	return text, nil
+	return result.Contents[0].Text, nil
 }

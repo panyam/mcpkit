@@ -195,7 +195,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) *core.Resp
 		return nil
 
 	case "ping":
-		return core.NewResponse(id, map[string]any{})
+		return core.NewResponse(id, core.PingResult{})
 
 	default:
 		if !d.initialized {
@@ -273,22 +273,21 @@ func (d *Dispatcher) handleInitialize(id json.RawMessage, params json.RawMessage
 		Completions: &struct{}{},
 	}
 	if len(d.extensions) > 0 {
-		exts := make(map[string]any, len(d.extensions))
+		exts := make(map[string]core.ExtensionCapability, len(d.extensions))
 		for id, ext := range d.extensions {
-			exts[id] = map[string]any{
-				"specVersion": ext.SpecVersion,
-				"stability":  string(ext.Stability),
+			exts[id] = core.ExtensionCapability{
+				SpecVersion: ext.SpecVersion,
+				Stability:   string(ext.Stability),
 			}
 		}
 		caps.Extensions = exts
 	}
 
-	result := map[string]any{
-		"protocolVersion": negotiated,
-		"capabilities":    caps,
-		"serverInfo":      d.serverInfo,
-	}
-	return core.NewResponse(id, result)
+	return core.NewResponse(id, core.InitializeResult{
+		ProtocolVersion: negotiated,
+		Capabilities:    caps,
+		ServerInfo:      d.serverInfo,
+	})
 }
 
 func (d *Dispatcher) handleToolsList(id json.RawMessage, params json.RawMessage) *core.Response {
@@ -300,7 +299,7 @@ func (d *Dispatcher) handleToolsList(id json.RawMessage, params json.RawMessage)
 		}
 	}
 	d.Reg.mu.RUnlock()
-	return core.NewResponse(id, map[string]any{"tools": tools})
+	return core.NewResponse(id, core.ToolsListResult{Tools: tools})
 }
 
 func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
@@ -350,7 +349,7 @@ func (d *Dispatcher) handleResourcesList(id json.RawMessage, params json.RawMess
 		}
 	}
 	d.Reg.mu.RUnlock()
-	return core.NewResponse(id, map[string]any{"resources": resources})
+	return core.NewResponse(id, core.ResourcesListResult{Resources: resources})
 }
 
 func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
@@ -408,7 +407,7 @@ func (d *Dispatcher) handleResourcesTemplatesList(id json.RawMessage, params jso
 		}
 	}
 	d.Reg.mu.RUnlock()
-	return core.NewResponse(id, map[string]any{"resourceTemplates": templates})
+	return core.NewResponse(id, core.ResourceTemplatesListResult{ResourceTemplates: templates})
 }
 
 // --- Resource Subscriptions ---
@@ -426,7 +425,7 @@ func (d *Dispatcher) handleResourcesSubscribe(id json.RawMessage, params json.Ra
 	if d.subManager != nil {
 		d.subManager.subscribe(d.sessionID, d, p.URI)
 	}
-	return core.NewResponse(id, map[string]any{})
+	return core.NewResponse(id, struct{}{})
 }
 
 // handleResourcesUnsubscribe removes the current session's subscription for a resource URI.
@@ -441,7 +440,7 @@ func (d *Dispatcher) handleResourcesUnsubscribe(id json.RawMessage, params json.
 	if d.subManager != nil {
 		d.subManager.unsubscribe(d.sessionID, p.URI)
 	}
-	return core.NewResponse(id, map[string]any{})
+	return core.NewResponse(id, struct{}{})
 }
 
 // --- Prompts ---
@@ -455,7 +454,7 @@ func (d *Dispatcher) handlePromptsList(id json.RawMessage, params json.RawMessag
 		}
 	}
 	d.Reg.mu.RUnlock()
-	return core.NewResponse(id, map[string]any{"prompts": prompts})
+	return core.NewResponse(id, core.PromptsListResult{Prompts: prompts})
 }
 
 func (d *Dispatcher) handlePromptsGet(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
@@ -515,8 +514,8 @@ func (d *Dispatcher) handleCompletionComplete(ctx context.Context, id json.RawMe
 	d.Reg.mu.RUnlock()
 	if !ok {
 		// No handler registered — return empty completion (graceful fallback)
-		return core.NewResponse(id, map[string]any{
-			"completion": core.CompletionResult{Values: []string{}, HasMore: false},
+		return core.NewResponse(id, core.CompletionCompleteResult{
+			Completion: core.CompletionResult{Values: []string{}, HasMore: false},
 		})
 	}
 
@@ -525,7 +524,7 @@ func (d *Dispatcher) handleCompletionComplete(ctx context.Context, id json.RawMe
 		return core.NewErrorResponse(id, core.ErrCodeInternal, fmt.Sprintf("completion %q: %v", key, err))
 	}
 
-	return core.NewResponse(id, map[string]any{"completion": result})
+	return core.NewResponse(id, core.CompletionCompleteResult{Completion: result})
 }
 
 // --- Cancellation ---
@@ -563,7 +562,7 @@ func (d *Dispatcher) handleLoggingSetLevel(id json.RawMessage, params json.RawMe
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "unknown log level: "+p.Level)
 	}
 	d.logLevel.Store(&level)
-	return core.NewResponse(id, map[string]any{})
+	return core.NewResponse(id, struct{}{})
 }
 
 // --- Server-to-client requests ---
