@@ -8,6 +8,7 @@ package client
 // Enable via WithMaxRetries(n). Disabled by default (maxRetries=0).
 
 import (
+	core "github.com/panyam/mcpkit/core"
 	"encoding/json"
 	"errors"
 	"io"
@@ -76,36 +77,34 @@ func (c *Client) reconnect() error {
 
 	// Re-initialize MCP handshake (use transport directly, not rawCall which
 	// would trigger reconnection recursion)
-	initBody := map[string]any{
-		"jsonrpc": "2.0",
-		"id":      c.nextRequestID(),
-		"method":  "initialize",
-		"params": map[string]any{
-			"protocolVersion": "2024-11-05",
-			"capabilities":    map[string]any{},
-			"clientInfo":      c.info,
-		},
+	initReq := core.Request{
+		JSONRPC: "2.0",
+		ID:      marshalID(c.nextRequestID()),
+		Method:  "initialize",
 	}
-	data, _ := json.Marshal(initBody)
+	initReq.Params, _ = json.Marshal(initializeParams{
+		ProtocolVersion: "2024-11-05",
+		Capabilities:    core.ClientCapabilities{},
+		ClientInfo:      c.info,
+	})
+	data, _ := json.Marshal(initReq)
 	resp, err := c.transport.call(data)
 	if err != nil {
 		return err
 	}
 
 	// Extract server info
-	if result, ok := resp.Result.(map[string]any); ok {
-		if si, ok := result["serverInfo"].(map[string]any); ok {
-			c.ServerInfo.Name, _ = si["name"].(string)
-			c.ServerInfo.Version, _ = si["version"].(string)
-		}
+	var initResult core.InitializeResult
+	if err := json.Unmarshal(resp.Result, &initResult); err == nil {
+		c.ServerInfo = initResult.ServerInfo
 	}
 
 	// Send initialized notification (directly, not via notifyMethod)
-	notifBody := map[string]any{
-		"jsonrpc": "2.0",
-		"method":  "notifications/initialized",
+	notifReq := core.Request{
+		JSONRPC: "2.0",
+		Method:  "notifications/initialized",
 	}
-	data, _ = json.Marshal(notifBody)
+	data, _ = json.Marshal(notifReq)
 	if err := c.transport.notify(data); err != nil {
 		return err
 	}
