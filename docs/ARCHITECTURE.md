@@ -221,6 +221,7 @@ Clients can subscribe to resource URIs and receive `notifications/resources/upda
 - `resources/subscribe` handler registers the session's Dispatcher under the URI
 - `resources/unsubscribe` handler removes it
 - `Server.NotifyResourceUpdated(uri)` iterates subscribers under read lock, copies dispatcher list, then calls each `d.notifyFunc` outside the lock
+- `Server.Broadcast(method, params)` fans out to ALL connected sessions across all transports, unconditionally (no subscription required). Uses `sessionBroadcasters` — each transport registers a closure that iterates its session map. Pattern mirrors `CloseAllSessions`.
 - Transport `OnClose` / `closeSession` calls `subManager.unsubscribeAll(sessionID)` to clean up
 
 **Why store `*Dispatcher` not `NotifyFunc`:** The `notifyFunc` on a Dispatcher can change — Streamable HTTP wires it when a GET SSE stream opens. Storing the Dispatcher pointer and reading `d.notifyFunc` at notification time handles this correctly.

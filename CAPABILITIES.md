@@ -30,6 +30,7 @@
 - mcp-completion: completion/complete for argument autocompletion
 - mcp-dns-rebinding-protection: Origin header validation on Streamable HTTP (WithAllowedOrigins)
 - mcp-resource-subscriptions: resources/subscribe, resources/unsubscribe, notifications/resources/updated via WithSubscriptions() + Server.NotifyResourceUpdated()
+- mcp-broadcast: Server.Broadcast(method, params) sends notifications to ALL connected sessions unconditionally (no subscription required)
 - mcp-sampling: Server-to-client sampling/createMessage via Sample() — server asks client LLM for inference
 - mcp-elicitation: Server-to-client elicitation/create via Elicit() — server asks client for user input
 - mcp-conformance: Official MCP conformance test suite integration (30/30 server passing, 14/14 auth passing)
