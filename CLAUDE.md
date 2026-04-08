@@ -60,9 +60,9 @@ mcpkit/
 │   └── pagination.go          cursor-based pagination
 │
 ├── client/                  ← Client + all client transports
-│   ├── client.go              Client, NewClient, Connect, ToolCall, WithTransport, WithExtension, WithUIExtension, ServerSupportsExtension, ServerSupportsUI, ListToolsForModel
+│   ├── client.go              Client, NewClient, Connect, ToolCall, WithTransport, WithExtension, WithUIExtension, ServerSupportsExtension, ServerSupportsUI, ListToolsForModel, ResolveEndpointURL, HTTPStatusError, DoWithAuthRetry
 │   ├── client_logging.go      loggingTransport, WithClientLogging
-│   └── client_reconnect.go    WithMaxRetries, WithReconnectBackoff
+│   └── client_reconnect.go    WithMaxRetries, WithReconnectBackoff, IsTransientError
 │
 ├── ext/auth/                ← Separate Go module (ext/auth/go.mod)
 │   ├── discovery.go           DiscoverMCPAuth (PRM + AS metadata)
@@ -95,9 +95,12 @@ mcpkit/
 
 ### Transports
 - **SSE endpoint event data must be raw text**, not JSON-encoded. Use `SSEText(url)` not `SSEJSON()`.
+- **SSE endpoint URL resolution**: Client resolves the endpoint event URL against the SSE connection URL via `ResolveEndpointURL` (RFC 3986). Handles absolute URLs, absolute paths, and relative paths.
 - **Per-session Dispatchers**: each connection gets its own `Dispatcher` via `newSession()`. Registries shared by reference.
 - **SSE transport sessions** die with the connection. **Streamable HTTP sessions** persist until DELETE or server restart.
 - **Notification delivery order**: notifications arrive before tool results across all transports.
+- **HTTP error classification**: Both transports return `HTTPStatusError` for non-2xx responses (excluding 401/403, handled by `DoWithAuthRetry`). `IsTransientError` classifies 5xx as transient (retriable via `WithMaxRetries`), 4xx as terminal.
+- **SSE reader death**: `call()` uses dual-select on the response channel and the done channel — returns a transient error immediately if the background reader dies, instead of blocking forever.
 
 ### Auth
 - **Auth spec is 2025-11-25**: See `ext/auth/docs/DESIGN.md` for spec compliance (all C1-C23, X1-X5 requirements Done).
