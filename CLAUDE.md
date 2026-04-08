@@ -33,18 +33,18 @@ make kcllogs          # View Keycloak logs (shows token events)
 ```
 mcpkit/
 ├── core/                    ← Protocol types + tool-handler APIs
-│   ├── jsonrpc.go             Request, Response, Error, ErrCode*, IsJSONRPCResponse
-│   ├── tool.go                ToolDef (+_meta), ToolRequest, ToolResult, Content, ToolHandler
-│   ├── resource.go            ResourceDef, ResourceTemplate, ResourceReadContent (+_meta), ResourceHandler
-│   ├── prompt.go              PromptDef, PromptHandler
-│   ├── completion.go          CompletionHandler, CompletionRef, CompletionResult
+│   ├── jsonrpc.go             Request, Response, Error, ErrCode*, IsJSONRPCResponse, PingResult
+│   ├── tool.go                ToolDef (+_meta), ToolRequest, ToolResult, ToolsListResult, Content, ToolHandler
+│   ├── resource.go            ResourceDef, ResourceTemplate, ResourcesListResult, ResourceTemplatesListResult, ResourceReadContent (+_meta), ResourceHandler
+│   ├── prompt.go              PromptDef, PromptsListResult, PromptHandler
+│   ├── completion.go          CompletionHandler, CompletionRef, CompletionResult, CompletionCompleteResult
 │   ├── auth.go                Claims, TokenSource, AuthValidator, AuthError, Extension, RefValidator
 │   ├── logging.go             LogLevel, NotifyFunc, EmitLog, NotifyResourcesChanged, ContextWithSession
 │   ├── progress.go            EmitProgress
 │   ├── sampling.go            CreateMessageRequest/Result, Sample()
 │   ├── elicitation.go         ElicitationRequest/Result, Elicit()
 │   ├── request.go             RequestFunc, ErrNoRequestFunc
-│   ├── protocol.go            ServerInfo, ClientInfo, ClientCapabilities, ServerCapabilities, ToolsCap, ResourcesCap, PromptsCap
+│   ├── protocol.go            ServerInfo, ClientInfo, ClientCapabilities, ServerCapabilities, ToolsCap, ResourcesCap, PromptsCap, InitializeResult, ExtensionCapability
 │   ├── interfaces.go          Transport, ServerRequestHandler, NotificationHandler
 │   ├── ui.go                  UIMetadata, UICSPConfig, UIVisibility, AppMIMEType, ToolMeta, ResourceContentMeta
 │   └── www_authenticate.go    ParseWWWAuthenticate
