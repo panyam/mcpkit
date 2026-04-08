@@ -1,17 +1,19 @@
 package client_test
 
 import (
-	"encoding/json"
 	"context"
+	"encoding/json"
 	"fmt"
-	client "github.com/panyam/mcpkit/client"
-	core "github.com/panyam/mcpkit/core"
-	server "github.com/panyam/mcpkit/server"
+	"io"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	client "github.com/panyam/mcpkit/client"
+	core "github.com/panyam/mcpkit/core"
+	server "github.com/panyam/mcpkit/server"
 )
 
 // newTestMCPServer creates a server with an echo tool, a fail tool,
@@ -137,8 +139,8 @@ func setupSSEClient(t *testing.T) (*client.Client, *httptest.Server) {
 	return c, ts
 }
 
-// forAllTransports runs a test function against all 3 client transports:
-// Streamable HTTP, SSE, and in-memory. This is the Go equivalent of
+// forAllTransports runs a test function against all 4 client transports:
+// Streamable HTTP, SSE, in-memory, and stdio. This is the Go equivalent of
 // parametric tests — each transport variant runs as a subtest.
 func forAllTransports(t *testing.T, fn func(t *testing.T, c *client.Client)) {
 	t.Helper()
@@ -160,6 +162,43 @@ func forAllTransports(t *testing.T, fn func(t *testing.T, c *client.Client)) {
 		t.Cleanup(func() { c.Close() })
 		fn(t, c)
 	})
+	t.Run("stdio", func(t *testing.T) {
+		c := setupStdioClient(t)
+		fn(t, c)
+	})
+}
+
+// setupStdioClient creates a server with stdio transport and a connected Client.
+// Uses io.Pipe pairs to connect client and server over Content-Length framed JSON-RPC.
+func setupStdioClient(t *testing.T) *client.Client {
+	t.Helper()
+	srv := newTestMCPServer()
+
+	// Two pipes: server reads what client writes, client reads what server writes.
+	sr, cw := io.Pipe() // server reads from sr, client writes to cw
+	cr, sw := io.Pipe() // client reads from cr, server writes to sw
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		srv.RunStdio(ctx, server.WithStdioInput(sr), server.WithStdioOutput(sw))
+		// Close the server's write end so the client's read loop sees EOF.
+		sw.Close()
+	}()
+
+	c := client.NewClient("stdio://", core.ClientInfo{Name: "test-client", Version: "1.0"},
+		client.WithStdioTransport(cr, cw))
+	if err := c.Connect(); err != nil {
+		cancel()
+		t.Fatalf("Stdio Connect failed: %v", err)
+	}
+
+	t.Cleanup(func() {
+		c.Close()
+		cancel()
+	})
+
+	return c
 }
 
 // --- Parametric transport tests (run against Streamable, SSE, and in-memory) ---
