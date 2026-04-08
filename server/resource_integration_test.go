@@ -336,14 +336,14 @@ func TestResourcesSubscribeNotification(t *testing.T) {
 		method string
 		params any
 	}
-	d.notifyFunc = func(method string, params any) {
+	d.SetNotifyFunc(func(method string, params any) {
 		mu.Lock()
 		defer mu.Unlock()
 		notifications = append(notifications, struct {
 			method string
 			params any
 		}{method, params})
-	}
+	})
 
 	// Subscribe
 	resp := d.Dispatch(context.Background(), &core.Request{
@@ -382,11 +382,11 @@ func TestResourcesUnsubscribeStopsNotification(t *testing.T) {
 
 	var mu sync.Mutex
 	var count int
-	d.notifyFunc = func(method string, params any) {
+	d.SetNotifyFunc(func(method string, params any) {
 		mu.Lock()
 		defer mu.Unlock()
 		count++
-	}
+	})
 
 	// Subscribe
 	d.Dispatch(context.Background(), &core.Request{
@@ -436,16 +436,16 @@ func TestResourcesSubscribeMultipleSessions(t *testing.T) {
 	var mu sync.Mutex
 	counts := map[string]int{}
 
-	d1.notifyFunc = func(method string, params any) {
+	d1.SetNotifyFunc(func(method string, params any) {
 		mu.Lock()
 		defer mu.Unlock()
 		counts["session-1"]++
-	}
-	d2.notifyFunc = func(method string, params any) {
+	})
+	d2.SetNotifyFunc(func(method string, params any) {
 		mu.Lock()
 		defer mu.Unlock()
 		counts["session-2"]++
-	}
+	})
 
 	// Both subscribe
 	d1.Dispatch(context.Background(), &core.Request{

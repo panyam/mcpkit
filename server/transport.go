@@ -164,7 +164,7 @@ func (t *sseTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 		hub := t.hub
 		hub.SendEvent(sessionID, "message", SSEJSON(raw))
 	})
-	resp := t.server.dispatchWithNotifyAndRequest(dispatcher, r.Context(), claims, dispatcher.notifyFunc, requestFunc, &req)
+	resp := t.server.dispatchWithNotifyAndRequest(dispatcher, r.Context(), claims, dispatcher.getNotifyFunc(), requestFunc, &req)
 
 	// Notifications have no response
 	if resp == nil {
@@ -211,13 +211,13 @@ func (c *mcpSSEConn) OnStart(w http.ResponseWriter, r *http.Request) error {
 	// to push notifications (logging, progress, etc.) during execution.
 	sessionID := c.sessionID
 	hub := c.transport.hub
-	dispatcher.notifyFunc = func(method string, params any) {
+	dispatcher.SetNotifyFunc(func(method string, params any) {
 		raw, err := core.MarshalNotification(method, params)
 		if err != nil {
 			return
 		}
 		hub.SendEvent(sessionID, "message", SSEJSON(raw))
-	}
+	})
 
 	c.transport.sessions.Store(c.sessionID, dispatcher)
 

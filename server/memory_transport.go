@@ -83,7 +83,7 @@ func (t *InProcessTransport) Connect(ctx context.Context) error {
 	t.dispatcher.sessionID = "memory"
 
 	// Wire notifyFunc for server-to-client notifications.
-	t.dispatcher.notifyFunc = func(method string, params any) {
+	t.dispatcher.SetNotifyFunc(func(method string, params any) {
 		if t.notifyHandler != nil {
 			raw, err := json.Marshal(params)
 			if err != nil {
@@ -91,7 +91,7 @@ func (t *InProcessTransport) Connect(ctx context.Context) error {
 			}
 			t.notifyHandler(method, raw)
 		}
-	}
+	})
 
 	// Wire pushRequest for server-to-client requests (sampling, elicitation).
 	// The server pushes a JSON-RPC request; we dispatch to the handler and
@@ -122,7 +122,7 @@ func (t *InProcessTransport) Call(ctx context.Context, req *core.Request) (*core
 
 	resp := t.server.dispatchWithNotifyAndRequest(
 		t.dispatcher, ctx, nil,
-		t.dispatcher.notifyFunc, requestFunc, req,
+		t.dispatcher.getNotifyFunc(), requestFunc, req,
 	)
 	return resp, nil
 }

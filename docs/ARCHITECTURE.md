@@ -199,11 +199,12 @@ MCPKit supports server-initiated notifications via `NotifyFunc`, a generic `func
 
 ### How it works
 
-1. Transport creates a session dispatcher and sets `dispatcher.notifyFunc` to a transport-specific sender
+1. Transport creates a session dispatcher and sets `dispatcher.SetNotifyFunc()` to a transport-specific sender
 2. `Server.dispatchWith` injects the notify func, log level, and auth claims into the context via `contextWithSession`
 3. Tool handlers call `EmitLog(ctx, level, logger, data)` which checks the session's log level and calls the notify func
 4. SSE transport: `notifyFunc` pushes via `hub.SendEvent` (real-time delivery)
-5. Streamable HTTP: when client sends `Accept: text/event-stream`, `handlePostSSE` passes a request-scoped notifyFunc via `dispatchWithNotify` (no shared state mutation)
+5. Streamable HTTP POST: when client sends `Accept: text/event-stream`, `handlePostSSE` passes a request-scoped notifyFunc via `dispatchWithNotify` (no shared state mutation)
+6. Streamable HTTP GET: client opens `GET /mcp` with `Mcp-Session-Id` header, server wires `dispatcher.SetNotifyFunc()` to push via SSEHub. Client enables this via `WithGetSSEStream()` — notifications arrive on the background GET stream
 
 ### Logging
 
@@ -220,10 +221,10 @@ Clients can subscribe to resource URIs and receive `notifications/resources/upda
 - Per-session `Dispatcher` holds `sessionID` and `subManager` (pointer to Server's registry)
 - `resources/subscribe` handler registers the session's Dispatcher under the URI
 - `resources/unsubscribe` handler removes it
-- `Server.NotifyResourceUpdated(uri)` iterates subscribers under read lock, copies dispatcher list, then calls each `d.notifyFunc` outside the lock
+- `Server.NotifyResourceUpdated(uri)` iterates subscribers under read lock, copies dispatcher list, then calls each `d.getNotifyFunc()` outside the lock
 - Transport `OnClose` / `closeSession` calls `subManager.unsubscribeAll(sessionID)` to clean up
 
-**Why store `*Dispatcher` not `NotifyFunc`:** The `notifyFunc` on a Dispatcher can change — Streamable HTTP wires it when a GET SSE stream opens. Storing the Dispatcher pointer and reading `d.notifyFunc` at notification time handles this correctly.
+**Why store `*Dispatcher` not `NotifyFunc`:** The `notifyFunc` on a Dispatcher can change — Streamable HTTP wires it when a GET SSE stream opens. Storing the Dispatcher pointer and reading `d.getNotifyFunc()` at notification time handles this correctly. Access to `notifyFunc` is protected by `notifyMu` (RWMutex) to handle concurrent GET SSE stream setup and subscription notifications.
 
 **Session cleanup:** All per-session teardown is centralized in `Dispatcher.Close()`. Transports call it in their disconnect path (SSE `OnClose`, Streamable `handleDelete`/`closeSession`, memory `close`). New per-session state should add its cleanup to `Close()` — not to each transport individually.
 
@@ -233,13 +234,14 @@ Notifications emitted during a tool call (logging, progress) are delivered to th
 
 | Transport | Guarantee | Mechanism |
 |-----------|-----------|-----------|
-| **Streamable HTTP** (SSE streaming) | Notifications arrive on the **same POST response stream** as the tool result, in emission order, before the result. | `handlePostSSE` creates a request-scoped `requestNotify` closure. Notifications and the final response share a mutex-protected `writeSSE` function. The response is written last. |
+| **Streamable HTTP POST** (SSE streaming) | Notifications arrive on the **same POST response stream** as the tool result, in emission order, before the result. | `handlePostSSE` creates a request-scoped `requestNotify` closure. Notifications and the final response share a mutex-protected `writeSSE` function. The response is written last. |
+| **Streamable HTTP GET** (opt-in) | Server-initiated notifications arrive on the background GET SSE stream. Ordering relative to POST responses is not guaranteed. | Client opens `GET /mcp` via `WithGetSSEStream()`. Server wires `dispatcher.notifyFunc` to SSEHub. `backgroundGetReader` dispatches events to `notifyHandler`. |
 | **SSE** | Notifications arrive on the shared SSE stream in emission order. The background reader delivers them to `notifyHandler` before routing the response to the pending call channel. | Single `backgroundReader` goroutine processes events sequentially: notification delivery completes before the response is sent to the blocked `call()`. |
 | **In-memory** | Fully synchronous — notifications are delivered inline during `call()`, before the response is returned. | `dispatchWithNotifyAndRequest` calls `notifyFunc` synchronously within the tool handler. |
 
 **Cross-request isolation (Streamable HTTP):** Each POST gets its own `requestNotify` closure. Notifications from concurrent tool calls never leak to other requests' response streams.
 
-**Client-side delivery:** `WithNotificationHandler(fn)` works across all three transports. The handler receives `(method string, params any)` where params is always `map[string]any` (JSON-roundtripped for consistency, including in-memory).
+**Client-side delivery:** `WithNotificationCallback(fn)` works across all transports. The handler receives `(method string, params any)` where params is always `map[string]any` (JSON-roundtripped for consistency, including in-memory). When `WithGetSSEStream()` is enabled, notifications may arrive concurrently from the GET stream and POST SSE responses — the callback must be goroutine-safe.
 
 ## Tool Error Semantics
 
