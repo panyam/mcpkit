@@ -50,7 +50,7 @@ mcpkit/
 │   └── www_authenticate.go    ParseWWWAuthenticate
 │
 ├── server/                  ← Server + Dispatcher + transports
-│   ├── server.go              Server, NewServer, options, Handler(), Run()
+│   ├── server.go              Server, NewServer, options, Handler(), Run(), Broadcast()
 │   ├── dispatch.go            Dispatcher, JSON-RPC routing, all method handlers
 │   ├── transport.go           SSE transport
 │   ├── streamable_transport.go Streamable HTTP transport
@@ -101,6 +101,7 @@ mcpkit/
 - **Notification delivery order**: notifications arrive before tool results across all transports.
 - **HTTP error classification**: Both transports return `HTTPStatusError` for non-2xx responses (excluding 401/403, handled by `DoWithAuthRetry`). `IsTransientError` classifies 5xx as transient (retriable via `WithMaxRetries`), 4xx as terminal.
 - **SSE reader death**: `call()` uses dual-select on the response channel and the done channel — returns a transient error immediately if the background reader dies, instead of blocking forever.
+- **Broadcast vs NotifyResourceUpdated**: `Server.Broadcast(method, params)` fans out to ALL connected sessions unconditionally. `NotifyResourceUpdated(uri)` only targets sessions that called `resources/subscribe`. Broadcast only reaches HTTP transport sessions (SSE + Streamable HTTP), not in-process — consistent with `CloseSession`/`CloseAllSessions`.
 
 ### Auth
 - **Auth spec is 2025-11-25**: See `ext/auth/docs/DESIGN.md` for spec compliance (all C1-C23, X1-X5 requirements Done).
