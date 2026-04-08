@@ -44,13 +44,14 @@ mcpkit/
 │   ├── sampling.go            CreateMessageRequest/Result, Sample()
 │   ├── elicitation.go         ElicitationRequest/Result, Elicit()
 │   ├── request.go             RequestFunc, ErrNoRequestFunc
-│   ├── protocol.go            ServerInfo, ClientInfo, ClientCapabilities
+│   ├── protocol.go            ServerInfo, ClientInfo, ClientCapabilities, ServerCapabilities, ToolsCap, ResourcesCap, PromptsCap
 │   ├── interfaces.go          Transport, ServerRequestHandler, NotificationHandler
 │   ├── ui.go                  UIMetadata, UICSPConfig, UIVisibility, AppMIMEType, ToolMeta, ResourceContentMeta
 │   └── www_authenticate.go    ParseWWWAuthenticate
 │
 ├── server/                  ← Server + Dispatcher + transports
-│   ├── server.go              Server, NewServer, options, Handler(), Run(), Broadcast()
+│   ├── server.go              Server, NewServer, options, Handler(), Run(), Broadcast(), Registry()
+│   ├── registry.go            Registry, AddTool/RemoveTool, AddResource/RemoveResource, AddPrompt/RemovePrompt, OnChange
 │   ├── dispatch.go            Dispatcher, JSON-RPC routing, all method handlers
 │   ├── transport.go           SSE transport
 │   ├── streamable_transport.go Streamable HTTP transport
@@ -98,8 +99,9 @@ mcpkit/
 ### Transports
 - **SSE endpoint event data must be raw text**, not JSON-encoded. Use `SSEText(url)` not `SSEJSON()`.
 - **SSE endpoint URL resolution**: Client resolves the endpoint event URL against the SSE connection URL via `ResolveEndpointURL` (RFC 3986). Handles absolute URLs, absolute paths, and relative paths.
-- **Per-session Dispatchers**: each connection gets its own `Dispatcher` via `newSession()`. Registries shared by reference.
-- **SSE transport sessions** die with the connection. **Streamable HTTP sessions** persist until DELETE or server restart. **Stdio sessions** last for the process lifetime (1:1 mapping).
+- **Per-session Dispatchers**: each connection gets its own `Dispatcher` via `newSession()`. The `Registry` is shared by pointer — all sessions see the same tools/resources/prompts.
+- **SSE transport sessions** die with the connection. **Streamable HTTP sessions** persist until DELETE, idle timeout, or server restart. **Stdio sessions** last for the process lifetime (1:1 mapping).
+- **Session idle timeout**: `WithSessionTimeout(d)` enables automatic cleanup of abandoned Streamable HTTP sessions. Timer pauses during active requests (ref counting via `sessionEntry.acquire/release`). Default is 0 (no timeout).
 - **Stdio transport** uses Content-Length framed JSON-RPC over stdin/stdout. Server-side: `srv.RunStdio(ctx)`. Client-side: `client.WithStdioTransport(reader, writer)`. No HTTP, no auth — process boundary is the trust boundary. Debug logging goes to stderr.
 - **Notification delivery order**: notifications arrive before tool results across all transports.
 - **HTTP error classification**: Both transports return `HTTPStatusError` for non-2xx responses (excluding 401/403, handled by `DoWithAuthRetry`). `IsTransientError` classifies 5xx as transient (retriable via `WithMaxRetries`), 4xx as terminal.
@@ -107,6 +109,13 @@ mcpkit/
 - **Client GET SSE stream**: Opt-in via `WithGetSSEStream()`. Opens a background `GET /mcp` SSE stream after Connect() for receiving server-initiated notifications outside POST request-response cycles (Streamable HTTP only). Notification callback (`WithNotificationCallback`) must be goroutine-safe when enabled. Re-established automatically on reconnection.
 - **Dispatcher.notifyFunc thread safety**: `notifyFunc` is protected by `notifyMu` (RWMutex). Use `SetNotifyFunc()` / `getNotifyFunc()` — never access the field directly.
 - **Broadcast vs NotifyResourceUpdated**: `Server.Broadcast(method, params)` fans out to ALL connected sessions unconditionally. `NotifyResourceUpdated(uri)` only targets sessions that called `resources/subscribe`. Broadcast only reaches HTTP transport sessions (SSE + Streamable HTTP), not in-process — consistent with `CloseSession`/`CloseAllSessions`.
+
+### Dynamic Registration
+- **`Registry`** is the shared, thread-safe registry for tools, resources, prompts, and completions. Access via `srv.Registry()`. All session dispatchers share the same `*Registry` pointer.
+- **`Registry.AddTool` / `RemoveTool`** (and Resource, Prompt variants) acquire write lock, modify the registry, then call `OnChange` to broadcast `notifications/*/list_changed` to all sessions.
+- **`Registry.OnChange`** is wired by `NewServer` to `Server.Broadcast`. Pre-serve `RegisterTool` calls also trigger OnChange but Broadcast is a no-op with zero sessions.
+- **RLock scoping in handlers**: `handleToolsCall` acquires RLock only for the map lookup, releases before executing the handler. Tool execution is never under lock.
+- **`listChanged: true`** is always advertised in capabilities for tools, resources, and prompts, regardless of current registry contents.
 
 ### Auth
 - **Auth spec is 2025-11-25**: See `ext/auth/docs/DESIGN.md` for spec compliance (all C1-C23, X1-X5 requirements Done).
