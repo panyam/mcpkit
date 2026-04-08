@@ -48,6 +48,14 @@
 - mcp-server-run: Server.Run(addr) — simple blocking entry point defaulting to Streamable HTTP
 - mcp-error-codes: ErrCodeServerError (-32000) + documented JSON-RPC error code ranges
 - mcp-parametric-tests: forAllTransports — core client tests run against all 3 transports as subtests
+- mcp-apps-extension: MCP Apps (io.modelcontextprotocol/ui) extension negotiation — server advertises via WithExtension(UIExtension{}), client detects via ServerSupportsUI()
+- mcp-apps-ui-metadata: UIMetadata, UICSPConfig, UIVisibility types on ToolDef._meta.ui and ResourceReadContent._meta.ui
+- mcp-apps-resource-serving: ui:// resources with text/html;profile=mcp-app MIME type, template resources for parameterized URIs
+- mcp-apps-visibility: Tool visibility filtering — UIVisibilityModel/UIVisibilityApp, client-side ListToolsForModel() excludes app-only tools
+- mcp-apps-ref-validation: RefValidator interface — extensions validate tool-to-resource references at server startup
+- mcp-apps-resource-notification: NotifyResourcesChanged(ctx) — tool handlers signal resource list changes to clients
+- mcp-apps-register-helper: RegisterAppTool (ext/ui) — registers tool + resource pair in one call via ToolResourceRegistrar interface
+- mcp-apps-conformance: 21 MCP Apps conformance tests (tool metadata, resources, visibility, fallback, negotiation)
 
 ## Module
 github.com/panyam/mcpkit

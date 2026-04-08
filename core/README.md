@@ -8,7 +8,10 @@ This package defines the shared types used by both `server/` and `client/`. It h
 
 - JSON-RPC types: `Request`, `Response`, `Error`
 - MCP domain types: `ToolDef`, `ResourceDef`, `PromptDef`, `Content`, `Claims`
-- Tool-handler APIs: `Sample()`, `Elicit()`, `EmitLog()`, `EmitProgress()`
+- Tool-handler APIs: `Sample()`, `Elicit()`, `EmitLog()`, `EmitProgress()`, `NotifyResourcesChanged()`
+- UI metadata types: `UIMetadata`, `UICSPConfig`, `UIVisibility`, `AppMIMEType`, `ToolMeta`, `ResourceContentMeta`
+- Extension types: `Extension`, `ExtensionProvider`, `RefValidator`, `ClientExtensionCap`, `UIExtensionID`
+- Context helpers: `ClientSupportsExtension()`, `ClientSupportsUI()`
 - Interfaces: `Transport`, `TokenSource`, `AuthValidator`
 - Protocol constants: `ServerInfo`, `ClientInfo`, `ClientCapabilities`
 

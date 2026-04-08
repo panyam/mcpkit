@@ -106,6 +106,20 @@ mcpkit/
 - **Client registration priority (C6)**: pre-registered `ClientID` → CIMD `ClientMetadataURL` → DCR (if `EnableDCR`) → error.
 - **Keycloak container** runs with `--log-level=INFO,org.keycloak.events:DEBUG` for token event visibility.
 
+### MCP Apps (io.modelcontextprotocol/ui)
+- **"Apps" = feature name, "ui" = extension ID**. The spec repo is `ext-apps`, the wire ID is `io.modelcontextprotocol/ui`. Our package is `ext/ui/` to match the ID.
+- **`ext/ui/` is a separate Go module** — tested via `make test-ui`, not by root `go test ./...`.
+- **`UIExtensionID`** constant in `core/ui.go` — use this instead of hardcoding the string.
+- **Server-side detection**: `core.ClientSupportsUI(ctx)` in tool handlers checks if client declared UI extension support.
+- **Client-side detection**: `client.ServerSupportsUI()` checks if server advertised the extension.
+- **`NotifyResourcesChanged(ctx)`** — call from tool handlers after mutating state so clients know to re-fetch resources.
+- **`RegisterAppTool`** lives in `ext/ui/`, takes a `ToolResourceRegistrar` interface (not `*server.Server`) to avoid cross-module import.
+- **`RefValidator`** interface on `ExtensionProvider` — `UIExtension` validates `_meta.ui.resourceUri` refs at `Handler()` startup. Warnings only, no errors.
+- **`PrefersBorder`** is `*bool` tri-state: nil (host decides), true (border), false (no border).
+- **`ListToolsForModel()`** is client-side filtering — server always returns all tools including app-only. Visibility is a presentation hint, not access control.
+- **Playwright tests**: `make test-apps-playwright` runs the upstream ext-apps Playwright suite against our testserver. Not in `testall` — run manually when needed.
+- **Design doc**: see `docs/APPS_DESIGN.md` for full architecture, protocol flows, and conformance strategy.
+
 ### Testing
 - **`forAllTransports`**: parametric tests run against Streamable HTTP, SSE, and in-memory. Use for any cross-transport test.
 - **In-process transport skips JSON envelope serialization** — catches logic bugs. HTTP tests catch wire format bugs. Both needed.
@@ -118,6 +132,9 @@ mcpkit/
 
 ### Auth conformance
 14/14 required MCP auth conformance scenarios passing (210/210 checks). Run via `make testconfauth`.
+
+### Apps conformance
+21 MCP Apps conformance tests passing (tool metadata, resources, visibility, fallback, negotiation). Run via `make test-e2e`.
 
 ## What's Not Implemented Yet
 
