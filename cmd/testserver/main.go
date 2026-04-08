@@ -2,12 +2,14 @@
 // It registers three tools (echo, add, fail) and serves MCP transports on :8787.
 //
 // By default, serves SSE transport. Set STREAMABLE=1 for Streamable HTTP,
-// or BOTH=1 for both transports simultaneously.
+// BOTH=1 for both transports simultaneously, or STDIO=1 for stdio transport
+// (Content-Length framed JSON-RPC over stdin/stdout).
 //
 // Usage:
 //
 //	go run ./cmd/testserver
 //	STREAMABLE=1 go run ./cmd/testserver
+//	STDIO=1 go run ./cmd/testserver
 package main
 
 import (
@@ -120,6 +122,18 @@ func main() {
 	registerConformanceResources(srv)
 	registerConformancePrompts(srv)
 	registerConformanceApps(srv)
+
+	// Stdio mode: Content-Length framed JSON-RPC over stdin/stdout.
+	// No HTTP server — the process communicates directly via stdio.
+	if os.Getenv("STDIO") == "1" {
+		log.SetOutput(os.Stderr) // Keep debug output on stderr, not stdout
+		log.Printf("MCP test server running on stdio")
+		ctx := context.Background()
+		if err := srv.RunStdio(ctx, server.WithStdioLogger(log.Default())); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 
 	var transportOpts []server.TransportOption
 	switch {
