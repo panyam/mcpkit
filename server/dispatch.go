@@ -23,19 +23,8 @@ type pendingMap = sync.Map
 
 // Dispatcher routes JSON-RPC requests to the appropriate handler.
 type Dispatcher struct {
-	tools      map[string]toolEntry
-	toolOrder  []string // preserves registration order for tools/list
+	Reg        *Registry
 	serverInfo core.ServerInfo
-
-	resources     map[string]resourceEntry
-	resourceOrder []string
-	templates     map[string]templateEntry
-	templateOrder []string
-
-	prompts     map[string]promptEntry
-	promptOrder []string
-
-	completions map[string]core.CompletionHandler // key: "ref/prompt:name" or "ref/resource:uri"
 
 	// extensions registered via WithExtension, keyed by extension ID.
 	extensions map[string]core.Extension
@@ -134,31 +123,19 @@ type initializeParams struct {
 // NewDispatcher creates a dispatcher with the given server identity.
 func NewDispatcher(info core.ServerInfo) *Dispatcher {
 	return &Dispatcher{
-		tools:       make(map[string]toolEntry),
-		resources:   make(map[string]resourceEntry),
-		templates:   make(map[string]templateEntry),
-		prompts:     make(map[string]promptEntry),
-		completions: make(map[string]core.CompletionHandler),
-		extensions:  make(map[string]core.Extension),
-		serverInfo:  info,
+		Reg:        NewRegistry(),
+		extensions: make(map[string]core.Extension),
+		serverInfo: info,
 	}
 }
 
-// newSession creates a new Dispatcher that shares all registries from d
+// newSession creates a new Dispatcher that shares the registry from d
 // but has fresh session state (not initialized, no client info).
-// Registries are shared by reference — safe because they are populated
-// before serving begins and never modified after.
+// The registry pointer is shared — all sessions see the same tools,
+// resources, and prompts. Thread-safe via registry.mu.
 func (d *Dispatcher) newSession() *Dispatcher {
 	return &Dispatcher{
-		tools:                d.tools,
-		toolOrder:            d.toolOrder,
-		resources:            d.resources,
-		resourceOrder:        d.resourceOrder,
-		templates:            d.templates,
-		templateOrder:        d.templateOrder,
-		prompts:              d.prompts,
-		promptOrder:          d.promptOrder,
-		completions:          d.completions,
+		Reg:                  d.Reg,
 		extensions:           d.extensions,
 		serverInfo:           d.serverInfo,
 		subscriptionsEnabled: d.subscriptionsEnabled,
@@ -171,34 +148,30 @@ func (d *Dispatcher) NegotiatedVersion() string {
 	return d.negotiatedVersion
 }
 
-// RegisterTool adds a tool to the dispatcher.
+// RegisterTool adds a tool to the dispatcher's registry.
 func (d *Dispatcher) RegisterTool(def core.ToolDef, handler core.ToolHandler) {
-	d.tools[def.Name] = toolEntry{def: def, handler: handler}
-	d.toolOrder = append(d.toolOrder, def.Name)
+	d.Reg.AddTool(def, handler)
 }
 
-// RegisterResource adds a resource to the dispatcher.
+// RegisterResource adds a resource to the dispatcher's registry.
 func (d *Dispatcher) RegisterResource(def core.ResourceDef, handler core.ResourceHandler) {
-	d.resources[def.URI] = resourceEntry{def: def, handler: handler}
-	d.resourceOrder = append(d.resourceOrder, def.URI)
+	d.Reg.AddResource(def, handler)
 }
 
-// RegisterResourceTemplate adds a URI template resource to the dispatcher.
+// RegisterResourceTemplate adds a URI template resource to the dispatcher's registry.
 func (d *Dispatcher) RegisterResourceTemplate(def core.ResourceTemplate, handler core.TemplateHandler) {
-	d.templates[def.URITemplate] = templateEntry{def: def, handler: handler}
-	d.templateOrder = append(d.templateOrder, def.URITemplate)
+	d.Reg.AddResourceTemplate(def, handler)
 }
 
-// RegisterPrompt adds a prompt to the dispatcher.
+// RegisterPrompt adds a prompt to the dispatcher's registry.
 func (d *Dispatcher) RegisterPrompt(def core.PromptDef, handler core.PromptHandler) {
-	d.prompts[def.Name] = promptEntry{def: def, handler: handler}
-	d.promptOrder = append(d.promptOrder, def.Name)
+	d.Reg.AddPrompt(def, handler)
 }
 
 // RegisterCompletion registers a completion handler for a specific reference.
 // refType is "ref/prompt" or "ref/resource". name is the prompt name or resource URI template.
 func (d *Dispatcher) RegisterCompletion(refType, name string, handler core.CompletionHandler) {
-	d.completions[refType+":"+name] = handler
+	d.Reg.AddCompletion(refType, name, handler)
 }
 
 // Dispatch routes a JSON-RPC request and returns the response.
@@ -288,20 +261,16 @@ func (d *Dispatcher) handleInitialize(id json.RawMessage, params json.RawMessage
 	d.clientCaps = p.Capabilities
 	d.clientInfo = p.ClientInfo
 
-	caps := map[string]any{
-		"tools":       map[string]any{},
-		"logging":     map[string]any{},
-		"completions": map[string]any{},
-	}
-	if len(d.resources) > 0 || len(d.templates) > 0 {
-		resCap := map[string]any{}
-		if d.subscriptionsEnabled {
-			resCap["subscribe"] = true
-		}
-		caps["resources"] = resCap
-	}
-	if len(d.prompts) > 0 {
-		caps["prompts"] = map[string]any{}
+	// Advertise listChanged: true for tools, resources, and prompts so
+	// clients know to listen for list_changed notifications. This is always
+	// safe — it just means "I might send list_changed notifications." Servers
+	// that never mutate the registry will simply never send them.
+	caps := core.ServerCapabilities{
+		Tools:       &core.ToolsCap{ListChanged: true},
+		Resources:   &core.ResourcesCap{ListChanged: true, Subscribe: d.subscriptionsEnabled},
+		Prompts:     &core.PromptsCap{ListChanged: true},
+		Logging:     &struct{}{},
+		Completions: &struct{}{},
 	}
 	if len(d.extensions) > 0 {
 		exts := make(map[string]any, len(d.extensions))
@@ -311,7 +280,7 @@ func (d *Dispatcher) handleInitialize(id json.RawMessage, params json.RawMessage
 				"stability":  string(ext.Stability),
 			}
 		}
-		caps["extensions"] = exts
+		caps.Extensions = exts
 	}
 
 	result := map[string]any{
@@ -323,12 +292,14 @@ func (d *Dispatcher) handleInitialize(id json.RawMessage, params json.RawMessage
 }
 
 func (d *Dispatcher) handleToolsList(id json.RawMessage, params json.RawMessage) *core.Response {
-	tools := make([]core.ToolDef, 0, len(d.toolOrder))
-	for _, name := range d.toolOrder {
-		if entry, ok := d.tools[name]; ok {
+	d.Reg.mu.RLock()
+	tools := make([]core.ToolDef, 0, len(d.Reg.toolOrder))
+	for _, name := range d.Reg.toolOrder {
+		if entry, ok := d.Reg.tools[name]; ok {
 			tools = append(tools, entry.def)
 		}
 	}
+	d.Reg.mu.RUnlock()
 	return core.NewResponse(id, map[string]any{"tools": tools})
 }
 
@@ -344,7 +315,9 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, pa
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 	}
 
-	entry, ok := d.tools[envelope.Name]
+	d.Reg.mu.RLock()
+	entry, ok := d.Reg.tools[envelope.Name]
+	d.Reg.mu.RUnlock()
 	if !ok {
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "unknown tool: "+envelope.Name)
 	}
@@ -369,12 +342,14 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, pa
 // --- Resources ---
 
 func (d *Dispatcher) handleResourcesList(id json.RawMessage, params json.RawMessage) *core.Response {
-	resources := make([]core.ResourceDef, 0, len(d.resourceOrder))
-	for _, uri := range d.resourceOrder {
-		if entry, ok := d.resources[uri]; ok {
+	d.Reg.mu.RLock()
+	resources := make([]core.ResourceDef, 0, len(d.Reg.resourceOrder))
+	for _, uri := range d.Reg.resourceOrder {
+		if entry, ok := d.Reg.resources[uri]; ok {
 			resources = append(resources, entry.def)
 		}
 	}
+	d.Reg.mu.RUnlock()
 	return core.NewResponse(id, map[string]any{"resources": resources})
 }
 
@@ -386,8 +361,10 @@ func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 	}
 
-	// Try exact match first
-	if entry, ok := d.resources[envelope.URI]; ok {
+	// Look up handler under RLock, execute outside lock
+	d.Reg.mu.RLock()
+	if entry, ok := d.Reg.resources[envelope.URI]; ok {
+		d.Reg.mu.RUnlock()
 		result, err := entry.handler(ctx, core.ResourceRequest{URI: envelope.URI})
 		if err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInternal, fmt.Sprintf("resource %q: %v", envelope.URI, err))
@@ -396,27 +373,41 @@ func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage
 	}
 
 	// Try template match
-	for _, tmplURI := range d.templateOrder {
-		entry := d.templates[tmplURI]
-		if params, matched := matchTemplate(entry.def.URITemplate, envelope.URI); matched {
-			result, err := entry.handler(ctx, envelope.URI, params)
-			if err != nil {
-				return core.NewErrorResponse(id, core.ErrCodeInternal, fmt.Sprintf("resource template %q: %v", tmplURI, err))
-			}
-			return core.NewResponse(id, result)
+	var matchedHandler core.TemplateHandler
+	var matchedURI, matchedTmplURI string
+	var matchedParams map[string]string
+	for _, tmplURI := range d.Reg.templateOrder {
+		entry := d.Reg.templates[tmplURI]
+		if p, matched := matchTemplate(entry.def.URITemplate, envelope.URI); matched {
+			matchedHandler = entry.handler
+			matchedURI = envelope.URI
+			matchedTmplURI = tmplURI
+			matchedParams = p
+			break
 		}
+	}
+	d.Reg.mu.RUnlock()
+
+	if matchedHandler != nil {
+		result, err := matchedHandler(ctx, matchedURI, matchedParams)
+		if err != nil {
+			return core.NewErrorResponse(id, core.ErrCodeInternal, fmt.Sprintf("resource template %q: %v", matchedTmplURI, err))
+		}
+		return core.NewResponse(id, result)
 	}
 
 	return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "unknown resource: "+envelope.URI)
 }
 
 func (d *Dispatcher) handleResourcesTemplatesList(id json.RawMessage, params json.RawMessage) *core.Response {
-	templates := make([]core.ResourceTemplate, 0, len(d.templateOrder))
-	for _, uri := range d.templateOrder {
-		if entry, ok := d.templates[uri]; ok {
+	d.Reg.mu.RLock()
+	templates := make([]core.ResourceTemplate, 0, len(d.Reg.templateOrder))
+	for _, uri := range d.Reg.templateOrder {
+		if entry, ok := d.Reg.templates[uri]; ok {
 			templates = append(templates, entry.def)
 		}
 	}
+	d.Reg.mu.RUnlock()
 	return core.NewResponse(id, map[string]any{"resourceTemplates": templates})
 }
 
@@ -456,12 +447,14 @@ func (d *Dispatcher) handleResourcesUnsubscribe(id json.RawMessage, params json.
 // --- Prompts ---
 
 func (d *Dispatcher) handlePromptsList(id json.RawMessage, params json.RawMessage) *core.Response {
-	prompts := make([]core.PromptDef, 0, len(d.promptOrder))
-	for _, name := range d.promptOrder {
-		if entry, ok := d.prompts[name]; ok {
+	d.Reg.mu.RLock()
+	prompts := make([]core.PromptDef, 0, len(d.Reg.promptOrder))
+	for _, name := range d.Reg.promptOrder {
+		if entry, ok := d.Reg.prompts[name]; ok {
 			prompts = append(prompts, entry.def)
 		}
 	}
+	d.Reg.mu.RUnlock()
 	return core.NewResponse(id, map[string]any{"prompts": prompts})
 }
 
@@ -474,7 +467,9 @@ func (d *Dispatcher) handlePromptsGet(ctx context.Context, id json.RawMessage, p
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 	}
 
-	entry, ok := d.prompts[envelope.Name]
+	d.Reg.mu.RLock()
+	entry, ok := d.Reg.prompts[envelope.Name]
+	d.Reg.mu.RUnlock()
 	if !ok {
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "unknown prompt: "+envelope.Name)
 	}
@@ -515,7 +510,9 @@ func (d *Dispatcher) handleCompletionComplete(ctx context.Context, id json.RawMe
 		key += p.Ref.URI
 	}
 
-	handler, ok := d.completions[key]
+	d.Reg.mu.RLock()
+	handler, ok := d.Reg.completions[key]
+	d.Reg.mu.RUnlock()
 	if !ok {
 		// No handler registered — return empty completion (graceful fallback)
 		return core.NewResponse(id, map[string]any{

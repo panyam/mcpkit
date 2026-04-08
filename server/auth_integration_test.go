@@ -246,7 +246,7 @@ func TestAnnotationsOnToolDef(t *testing.T) {
 		},
 	)
 
-	entry, ok := srv.dispatcher.tools["beta-tool"]
+	entry, ok := srv.dispatcher.Reg.tools["beta-tool"]
 	if !ok {
 		t.Fatal("tool not registered")
 	}
