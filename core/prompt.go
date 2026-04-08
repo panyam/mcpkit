@@ -20,6 +20,11 @@ type PromptDef struct {
 	Annotations map[string]any `json:"annotations,omitempty"`
 }
 
+// PromptsListResult is the typed result for prompts/list responses.
+type PromptsListResult struct {
+	Prompts []PromptDef `json:"prompts"`
+}
+
 // PromptArgument describes a single argument to a prompt.
 type PromptArgument struct {
 	Name        string `json:"name"`

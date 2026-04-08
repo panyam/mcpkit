@@ -51,7 +51,7 @@ type ServerCapabilities struct {
 	Prompts     *PromptsCap     `json:"prompts,omitempty"`
 	Logging     *struct{}       `json:"logging,omitempty"`
 	Completions *struct{}       `json:"completions,omitempty"`
-	Extensions  map[string]any  `json:"extensions,omitempty"`
+	Extensions  map[string]ExtensionCapability `json:"extensions,omitempty"`
 }
 
 // ToolsCap describes the server's tools capability.
@@ -68,6 +68,20 @@ type ResourcesCap struct {
 // PromptsCap describes the server's prompts capability.
 type PromptsCap struct {
 	ListChanged bool `json:"listChanged,omitempty"`
+}
+
+// InitializeResult is the typed result for the initialize response.
+type InitializeResult struct {
+	ProtocolVersion string             `json:"protocolVersion"`
+	Capabilities    ServerCapabilities `json:"capabilities"`
+	ServerInfo      ServerInfo         `json:"serverInfo"`
+}
+
+// ExtensionCapability describes a server extension's metadata in the
+// initialize response capabilities.
+type ExtensionCapability struct {
+	SpecVersion string `json:"specVersion"`
+	Stability   string `json:"stability"`
 }
 
 // StreamableHTTPAccept is the Accept header value for Streamable HTTP requests.
