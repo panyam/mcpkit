@@ -220,7 +220,7 @@ func (s *Server) Dispatch(ctx context.Context, req *core.Request) *core.Response
 // middleware (e.g. tool timeout). Used by transports to dispatch on per-session
 // dispatchers. The claims parameter carries the authenticated identity from CheckAuth.
 func (s *Server) dispatchWith(d *Dispatcher, ctx context.Context, claims *core.Claims, req *core.Request) *core.Response {
-	return s.dispatchWithNotify(d, ctx, claims, d.notifyFunc, req)
+	return s.dispatchWithNotify(d, ctx, claims, d.getNotifyFunc(), req)
 }
 
 // dispatchWithNotify is like dispatchWith but accepts an explicit core.NotifyFunc.
@@ -685,8 +685,8 @@ func (r *subscriptionRegistry) notify(uri string) {
 
 	notification := core.ResourceUpdatedNotification{URI: uri}
 	for _, d := range dispatchers {
-		if d.notifyFunc != nil {
-			d.notifyFunc("notifications/resources/updated", notification)
+		if fn := d.getNotifyFunc(); fn != nil {
+			fn("notifications/resources/updated", notification)
 		}
 	}
 }

@@ -389,13 +389,13 @@ func (c *streamableSSEConn) OnStart(w http.ResponseWriter, r *http.Request) erro
 	// This enables core.EmitLog/core.Notify from tool handlers to reach the GET stream.
 	sessionID := c.sessionID
 	hub := c.transport.sseHub
-	c.dispatcher.notifyFunc = func(method string, params any) {
+	c.dispatcher.SetNotifyFunc(func(method string, params any) {
 		raw, err := core.MarshalNotification(method, params)
 		if err != nil {
 			return
 		}
 		hub.SendEvent(sessionID, "message", SSEJSON(raw))
-	}
+	})
 
 	return nil
 }
@@ -452,8 +452,8 @@ func (t *streamableTransport) closeAllSessions() {
 func (t *streamableTransport) broadcast(method string, params any) {
 	t.sessions.Range(func(key, value any) bool {
 		d := value.(*Dispatcher)
-		if d.notifyFunc != nil {
-			d.notifyFunc(method, params)
+		if fn := d.getNotifyFunc(); fn != nil {
+			fn(method, params)
 		}
 		return true
 	})
