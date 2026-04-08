@@ -46,11 +46,22 @@ func (c *Client) reconnect() error {
 		c.transport = nil
 	}
 
-	// Re-create transport
+	// Re-create transport with handlers and options
 	if c.useSSE {
-		c.transport = newSSEClientTransport(c.url, c.tokenSource)
+		st := newSSEClientTransport(c.url, c.tokenSource)
+		st.serverReqHandler = c.HandleServerRequest
+		if c.onNotify != nil {
+			st.notifyHandler = c.makeNotifyAdapter()
+		}
+		c.transport = st
 	} else {
-		c.transport = newStreamableClientTransport(c.url, c.tokenSource)
+		st := newStreamableClientTransport(c.url, c.tokenSource)
+		st.serverReqHandler = c.HandleServerRequest
+		st.enableGetSSE = c.enableGetSSE
+		if c.onNotify != nil {
+			st.notifyHandler = c.makeNotifyAdapter()
+		}
+		c.transport = st
 	}
 
 	// Re-wrap with logging if configured
@@ -95,7 +106,18 @@ func (c *Client) reconnect() error {
 		"method":  "notifications/initialized",
 	}
 	data, _ = json.Marshal(notifBody)
-	return c.transport.notify(data)
+	if err := c.transport.notify(data); err != nil {
+		return err
+	}
+
+	// Re-open GET SSE stream if it was enabled (best-effort, don't fail reconnect)
+	if c.enableGetSSE {
+		if st := c.unwrapStreamableTransport(); st != nil {
+			st.openGetSSEStream()
+		}
+	}
+
+	return nil
 }
 
 // retryWithReconnect attempts reconnection with exponential backoff, then
