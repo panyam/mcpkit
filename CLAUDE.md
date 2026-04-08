@@ -60,7 +60,7 @@ mcpkit/
 │   └── pagination.go          cursor-based pagination
 │
 ├── client/                  ← Client + all client transports
-│   ├── client.go              Client, NewClient, Connect, ToolCall, WithTransport, WithExtension, WithUIExtension, ServerSupportsExtension, ServerSupportsUI, ListToolsForModel, ResolveEndpointURL, HTTPStatusError, DoWithAuthRetry
+│   ├── client.go              Client, NewClient, Connect, ToolCall, WithTransport, WithExtension, WithUIExtension, WithGetSSEStream, ServerSupportsExtension, ServerSupportsUI, ListToolsForModel, ResolveEndpointURL, HTTPStatusError, DoWithAuthRetry
 │   ├── client_logging.go      loggingTransport, WithClientLogging
 │   └── client_reconnect.go    WithMaxRetries, WithReconnectBackoff, IsTransientError
 │
@@ -101,6 +101,8 @@ mcpkit/
 - **Notification delivery order**: notifications arrive before tool results across all transports.
 - **HTTP error classification**: Both transports return `HTTPStatusError` for non-2xx responses (excluding 401/403, handled by `DoWithAuthRetry`). `IsTransientError` classifies 5xx as transient (retriable via `WithMaxRetries`), 4xx as terminal.
 - **SSE reader death**: `call()` uses dual-select on the response channel and the done channel — returns a transient error immediately if the background reader dies, instead of blocking forever.
+- **Client GET SSE stream**: Opt-in via `WithGetSSEStream()`. Opens a background `GET /mcp` SSE stream after Connect() for receiving server-initiated notifications outside POST request-response cycles (Streamable HTTP only). Notification callback (`WithNotificationCallback`) must be goroutine-safe when enabled. Re-established automatically on reconnection.
+- **Dispatcher.notifyFunc thread safety**: `notifyFunc` is protected by `notifyMu` (RWMutex). Use `SetNotifyFunc()` / `getNotifyFunc()` — never access the field directly.
 
 ### Auth
 - **Auth spec is 2025-11-25**: See `ext/auth/docs/DESIGN.md` for spec compliance (all C1-C23, X1-X5 requirements Done).
@@ -142,4 +144,3 @@ mcpkit/
 ## What's Not Implemented Yet
 
 - stdio transport (#3)
-- Streamable HTTP GET SSE stream (server-initiated notifications without a request)
