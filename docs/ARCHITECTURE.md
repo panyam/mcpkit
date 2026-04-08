@@ -15,7 +15,7 @@ MCPKit is a Go library for building production-grade MCP (Model Context Protocol
 │  │ HTTP+SSE    │  │ Auth (bearer)    │  │tools/list││
 │  │ Streamable  │  │ Tool timeout     │  │tools/call││
 │  │  HTTP       │  │ Allowed-roots    │  │initialize││
-│  │ stdio (tbd) │  │ Tool authz       │  │resources/││
+│  │ stdio       │  │ Tool authz       │  │resources/││
 │  └────────────┘  │ MCP metrics      │  │ prompts/ ││
 │                  └─────────────────┘  │ logging/ ││
 │  ┌────────────────────────────────┐   └──────────┘│
@@ -72,12 +72,14 @@ mcpkit/                          # module: github.com/panyam/mcpkit
 │   ├── dispatch.go              # Dispatcher, routing, handlers, subscriptions
 │   ├── transport.go             # SSE server transport
 │   ├── streamable_transport.go  # Streamable HTTP transport
+│   ├── stdio_transport.go       # Stdio transport (Content-Length framed JSON-RPC)
 │   ├── memory_transport.go      # InProcessTransport (core.Transport)
 │   ├── request.go               # sendServerRequest, routeServerResponse
 │   ├── middleware.go            # Middleware, LoggingMiddleware
 │   └── pagination.go            # cursor-based pagination
-├── client/                      # Client + HTTP transports
+├── client/                      # Client + transports
 │   ├── client.go                # Client, NewClient, Connect, ToolCall, WithTransport
+│   ├── stdio_transport.go       # StdioTransport, NewStdioTransport, WithStdioTransport
 │   ├── client_logging.go        # loggingTransport, WithClientLogging
 │   └── client_reconnect.go      # WithMaxRetries, WithReconnectBackoff
 ├── ext/auth/                    # SEPARATE module (github.com/panyam/mcpkit/ext/auth)
@@ -222,6 +224,7 @@ Clients can subscribe to resource URIs and receive `notifications/resources/upda
 - `resources/subscribe` handler registers the session's Dispatcher under the URI
 - `resources/unsubscribe` handler removes it
 - `Server.NotifyResourceUpdated(uri)` iterates subscribers under read lock, copies dispatcher list, then calls each `d.getNotifyFunc()` outside the lock
+- `Server.Broadcast(method, params)` fans out to ALL connected sessions across all transports, unconditionally (no subscription required). Uses `sessionBroadcasters` — each transport registers a closure that iterates its session map. Pattern mirrors `CloseAllSessions`.
 - Transport `OnClose` / `closeSession` calls `subManager.unsubscribeAll(sessionID)` to clean up
 
 **Why store `*Dispatcher` not `NotifyFunc`:** The `notifyFunc` on a Dispatcher can change — Streamable HTTP wires it when a GET SSE stream opens. Storing the Dispatcher pointer and reading `d.getNotifyFunc()` at notification time handles this correctly. Access to `notifyFunc` is protected by `notifyMu` (RWMutex) to handle concurrent GET SSE stream setup and subscription notifications.
