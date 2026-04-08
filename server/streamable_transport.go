@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	gohttp "github.com/panyam/servicekit/http"
 )
@@ -22,17 +24,61 @@ const (
 
 // streamableTransport implements the MCP Streamable HTTP transport (2025-03-26 spec).
 // Each session is tracked via the Mcp-Session-Id header. Sessions are created on
-// initialize and cleaned up via DELETE or server restart.
+// initialize and cleaned up via DELETE, idle timeout (WithSessionTimeout), or
+// server restart.
 //
 // Unlike the SSE transport, there are no long-lived connections — each request is
 // independent HTTP with the response returned directly in the body. Sessions are
-// lightweight map entries (a Dispatcher with negotiation state), so abandoned
-// sessions have minimal cost.
+// wrapped in sessionEntry which adds idle-timeout support with ref counting to
+// prevent expiry during active requests.
 type streamableTransport struct {
 	server   *Server
-	sessions sync.Map // sessionID → *Dispatcher
+	sessions sync.Map // sessionID → *sessionEntry
 	sseHub   *gohttp.SSEHub[SSEData] // for GET SSE streams (server-initiated notifications)
 	config   transportConfig
+}
+
+// sessionEntry wraps a Dispatcher with idle-timeout support. When a session
+// timeout is configured, the timer fires after the session has been idle
+// (no active POST requests or GET SSE streams) for the configured duration.
+// Active requests are tracked via acquire/release to prevent expiry mid-execution.
+type sessionEntry struct {
+	dispatcher *Dispatcher
+	timer      *time.Timer   // nil if no timeout configured
+	mu         sync.Mutex    // protects active count and timer reset
+	active     int           // number of in-flight requests (POST dispatch + GET SSE)
+	timeout    time.Duration // 0 means no timeout
+}
+
+// acquire marks a request as active and stops the idle timer.
+// Must be paired with a deferred release().
+func (e *sessionEntry) acquire() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.active++
+	if e.timer != nil {
+		e.timer.Stop()
+	}
+}
+
+// release marks a request as complete. If no requests remain active and a
+// timeout is configured, the idle timer is restarted.
+func (e *sessionEntry) release() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.active--
+	if e.active == 0 && e.timer != nil {
+		e.timer.Reset(e.timeout)
+	}
+}
+
+// stopTimer stops the idle timer if one is running. Safe to call multiple times.
+func (e *sessionEntry) stopTimer() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.timer != nil {
+		e.timer.Stop()
+	}
 }
 
 // newStreamableTransport creates a Streamable HTTP transport.
@@ -72,6 +118,29 @@ func (t *streamableTransport) handleRoot(w http.ResponseWriter, r *http.Request)
 	}
 }
 
+// expireSession removes an idle session and cleans up its resources.
+// Called by the session timer when the idle timeout fires.
+func (t *streamableTransport) expireSession(id string) {
+	val, ok := t.sessions.LoadAndDelete(id)
+	if !ok {
+		return
+	}
+	entry := val.(*sessionEntry)
+	entry.dispatcher.Close()
+	// Close any GET SSE streams for this session
+	t.sseHub.Unregister(id)
+	log.Printf("mcpkit: session %s expired after %s idle", id, entry.timeout)
+}
+
+// loadSession loads a sessionEntry by ID. Returns (entry, true) or (nil, false).
+func (t *streamableTransport) loadSession(id string) (*sessionEntry, bool) {
+	val, ok := t.sessions.Load(id)
+	if !ok {
+		return nil, false
+	}
+	return val.(*sessionEntry), true
+}
+
 // handlePost handles POST requests: JSON-RPC dispatch with session management.
 func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request) {
 	// NOTE: Per MCP spec (2025-11-25, Streamable HTTP transport), clients MUST include
@@ -104,15 +173,16 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 			http.Error(w, "missing "+mcpSessionIDHeader+" header", http.StatusBadRequest)
 			return
 		}
-		dispVal, ok := t.sessions.Load(sessionID)
+		entry, ok := t.loadSession(sessionID)
 		if !ok {
 			http.Error(w, "session not found", http.StatusNotFound)
 			return
 		}
-		dispatcher := dispVal.(*Dispatcher)
+		entry.acquire()
+		defer entry.release()
 		var resp core.Response
 		if err := json.Unmarshal(body, &resp); err == nil {
-			dispatcher.RouteResponse(&resp)
+			entry.dispatcher.RouteResponse(&resp)
 		}
 		w.WriteHeader(http.StatusAccepted)
 		return
@@ -159,12 +229,14 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	dispVal, ok := t.sessions.Load(sessionID)
+	entry, ok := t.loadSession(sessionID)
 	if !ok {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
 	}
-	dispatcher := dispVal.(*Dispatcher)
+	entry.acquire()
+	defer entry.release()
+	dispatcher := entry.dispatcher
 
 	// Validate MCP-Protocol-Version if present.
 	// Per spec: "If the server receives a request with an invalid or unsupported
@@ -298,7 +370,16 @@ func (t *streamableTransport) handleInitialize(w http.ResponseWriter, r *http.Re
 	// Success: create session and return with Mcp-Session-Id
 	sessionID := generateSessionID()
 	dispatcher.sessionID = sessionID
-	t.sessions.Store(sessionID, dispatcher)
+	entry := &sessionEntry{
+		dispatcher: dispatcher,
+		timeout:    t.config.sessionTimeout,
+	}
+	if t.config.sessionTimeout > 0 {
+		entry.timer = time.AfterFunc(t.config.sessionTimeout, func() {
+			t.expireSession(sessionID)
+		})
+	}
+	t.sessions.Store(sessionID, entry)
 
 	w.Header().Set(mcpSessionIDHeader, sessionID)
 	w.Header().Set("Content-Type", "application/json")
@@ -337,6 +418,7 @@ type streamableSSEConn struct {
 	sessionID  string
 	transport  *streamableTransport
 	dispatcher *Dispatcher
+	entry      *sessionEntry // non-nil if attached to an existing session (for release on close)
 }
 
 func (h *streamableSSEHandler) Validate(w http.ResponseWriter, r *http.Request) (*streamableSSEConn, bool) {
@@ -351,12 +433,13 @@ func (h *streamableSSEHandler) Validate(w http.ResponseWriter, r *http.Request) 
 	sessionID := r.Header.Get(mcpSessionIDHeader)
 	var dispatcher *Dispatcher
 	if sessionID != "" {
-		dispVal, ok := h.transport.sessions.Load(sessionID)
+		entry, ok := h.transport.loadSession(sessionID)
 		if !ok {
 			http.Error(w, "session not found", http.StatusNotFound)
 			return nil, false
 		}
-		dispatcher = dispVal.(*Dispatcher)
+		entry.acquire() // released in OnClose
+		dispatcher = entry.dispatcher
 	} else {
 		// No session — create a temporary dispatcher for this SSE stream
 		sessionID = generateSessionID()
@@ -364,6 +447,11 @@ func (h *streamableSSEHandler) Validate(w http.ResponseWriter, r *http.Request) 
 		dispatcher.initialized = true
 	}
 
+	// Look up the entry for release tracking (nil for session-independent streams)
+	var connEntry *sessionEntry
+	if r.Header.Get(mcpSessionIDHeader) != "" {
+		connEntry, _ = h.transport.loadSession(sessionID)
+	}
 	conn := &streamableSSEConn{
 		BaseSSEConn: gohttp.BaseSSEConn[SSEData]{
 			Codec:     &sseDataCodec{},
@@ -373,6 +461,7 @@ func (h *streamableSSEHandler) Validate(w http.ResponseWriter, r *http.Request) 
 		sessionID:  sessionID,
 		transport:  h.transport,
 		dispatcher: dispatcher,
+		entry:      connEntry,
 	}
 	return conn, true
 }
@@ -402,6 +491,9 @@ func (c *streamableSSEConn) OnStart(w http.ResponseWriter, r *http.Request) erro
 
 func (c *streamableSSEConn) OnClose() {
 	c.transport.sseHub.Unregister(c.ConnId())
+	if c.entry != nil {
+		c.entry.release()
+	}
 	c.BaseSSEConn.OnClose()
 }
 
@@ -419,21 +511,25 @@ func (t *streamableTransport) handleDelete(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	d, ok := t.sessions.LoadAndDelete(sessionID)
+	val, ok := t.sessions.LoadAndDelete(sessionID)
 	if !ok {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
 	}
-	d.(*Dispatcher).Close()
+	entry := val.(*sessionEntry)
+	entry.stopTimer()
+	entry.dispatcher.Close()
 
 	w.WriteHeader(http.StatusOK)
 }
 
 // closeSession terminates a single session by ID. Returns true if found.
 func (t *streamableTransport) closeSession(id string) bool {
-	d, ok := t.sessions.LoadAndDelete(id)
+	val, ok := t.sessions.LoadAndDelete(id)
 	if ok {
-		d.(*Dispatcher).Close()
+		entry := val.(*sessionEntry)
+		entry.stopTimer()
+		entry.dispatcher.Close()
 	}
 	return ok
 }
@@ -441,7 +537,9 @@ func (t *streamableTransport) closeSession(id string) bool {
 // closeAllSessions terminates all active sessions.
 func (t *streamableTransport) closeAllSessions() {
 	t.sessions.Range(func(key, value any) bool {
-		value.(*Dispatcher).Close()
+		entry := value.(*sessionEntry)
+		entry.stopTimer()
+		entry.dispatcher.Close()
 		t.sessions.Delete(key)
 		return true
 	})
@@ -451,7 +549,7 @@ func (t *streamableTransport) closeAllSessions() {
 // Sessions without a GET SSE stream have nil notifyFunc and are skipped safely.
 func (t *streamableTransport) broadcast(method string, params any) {
 	t.sessions.Range(func(key, value any) bool {
-		d := value.(*Dispatcher)
+		d := value.(*sessionEntry).dispatcher
 		if fn := d.getNotifyFunc(); fn != nil {
 			fn(method, params)
 		}
