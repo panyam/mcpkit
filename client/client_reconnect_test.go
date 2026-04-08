@@ -103,6 +103,16 @@ func TestReconnect_TransientErrors(t *testing.T) {
 	assert.False(t, client.IsTransientError(nil), "nil should not be transient")
 	assert.False(t, client.IsTransientError(errors.New("invalid JSON")),
 		"JSON error should not be transient")
+
+	// HTTPStatusError: 5xx is transient, 4xx is terminal
+	assert.True(t, client.IsTransientError(&client.HTTPStatusError{StatusCode: 500}),
+		"HTTP 500 should be transient")
+	assert.True(t, client.IsTransientError(&client.HTTPStatusError{StatusCode: 503}),
+		"HTTP 503 should be transient")
+	assert.False(t, client.IsTransientError(&client.HTTPStatusError{StatusCode: 400}),
+		"HTTP 400 should not be transient")
+	assert.False(t, client.IsTransientError(&client.HTTPStatusError{StatusCode: 404}),
+		"HTTP 404 should not be transient")
 }
 
 // TestReconnect_DisabledByDefault verifies that reconnection is not attempted
