@@ -176,6 +176,13 @@ func IsTransientError(err error) bool {
 		return false
 	}
 
+	// HTTP 5xx errors are transient (server overload, gateway timeout, etc.)
+	// 4xx errors (other than 401/403 handled above) are terminal.
+	var httpErr *HTTPStatusError
+	if errors.As(err, &httpErr) {
+		return httpErr.StatusCode >= 500
+	}
+
 	// Network-level errors
 	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 		return true

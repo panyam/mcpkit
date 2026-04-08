@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -632,6 +633,12 @@ func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
 	}
 	defer resp.Body.Close()
 
+	// Non-2xx responses (401/403 already handled by DoWithAuthRetry).
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &HTTPStatusError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(body))}
+	}
+
 	if sid := resp.Header.Get("Mcp-Session-Id"); sid != "" {
 		t.sessionID = sid
 	}
@@ -776,7 +783,13 @@ func (t *streamableClientTransport) notify(data []byte) error {
 	if err != nil {
 		return err
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
+
+	// Non-2xx responses (401/403 already handled by DoWithAuthRetry).
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return &HTTPStatusError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(body))}
+	}
 	return nil
 }
 
@@ -833,13 +846,16 @@ func (t *sseClientTransport) connect() error {
 		return fmt.Errorf("expected endpoint event, got %q", ev.event)
 	}
 
-	t.postURL = ev.data
+	resolved, err := ResolveEndpointURL(t.sseURL, ev.data)
+	if err != nil {
+		resp.Body.Close()
+		return fmt.Errorf("resolving endpoint URL: %w", err)
+	}
+	t.postURL = resolved
 
-	if idx := strings.Index(t.postURL, "sessionId="); idx >= 0 {
-		t.sessionID = t.postURL[idx+len("sessionId="):]
-		if amp := strings.Index(t.sessionID, "&"); amp >= 0 {
-			t.sessionID = t.sessionID[:amp]
-		}
+	// Extract sessionId from the resolved URL's query parameters.
+	if parsed, parseErr := url.Parse(t.postURL); parseErr == nil {
+		t.sessionID = parsed.Query().Get("sessionId")
 	}
 
 	// Start background reader to demux SSE events.
@@ -961,6 +977,16 @@ func (t *sseClientTransport) close() error {
 func (t *sseClientTransport) getSessionID() string { return t.sessionID }
 
 func (t *sseClientTransport) call(data []byte) (*rpcResponse, error) {
+	// Check if the background reader is already dead before doing any work.
+	select {
+	case <-t.done:
+		if t.readerErr != nil {
+			return nil, fmt.Errorf("SSE stream closed: %w", t.readerErr)
+		}
+		return nil, fmt.Errorf("SSE stream closed unexpectedly")
+	default:
+	}
+
 	// Extract request ID from the outgoing data to match the response
 	var outgoing struct {
 		ID any `json:"id"`
@@ -991,18 +1017,37 @@ func (t *sseClientTransport) call(data []byte) (*rpcResponse, error) {
 	}
 	resp.Body.Close()
 
-	// Wait for the background reader to deliver the response
-	result := <-ch
-	if result == nil {
+	// Wait for EITHER the background reader to deliver the response OR the
+	// reader to die. Without the t.done case, a dead reader causes call()
+	// to block forever — the old bug.
+	select {
+	case result := <-ch:
+		if result == nil {
+			if t.readerErr != nil {
+				return nil, fmt.Errorf("SSE stream closed: %w", t.readerErr)
+			}
+			return nil, fmt.Errorf("SSE stream closed unexpectedly")
+		}
+		return result, nil
+	case <-t.done:
 		if t.readerErr != nil {
 			return nil, fmt.Errorf("SSE stream closed: %w", t.readerErr)
 		}
 		return nil, fmt.Errorf("SSE stream closed unexpectedly")
 	}
-	return result, nil
 }
 
 func (t *sseClientTransport) notify(data []byte) error {
+	// Check if the background reader is already dead before POSTing.
+	select {
+	case <-t.done:
+		if t.readerErr != nil {
+			return fmt.Errorf("SSE stream closed: %w", t.readerErr)
+		}
+		return fmt.Errorf("SSE stream closed unexpectedly")
+	default:
+	}
+
 	buildReq := func() (*http.Request, error) {
 		req, err := http.NewRequest("POST", t.postURL, bytes.NewReader(data))
 		if err != nil {
@@ -1016,7 +1061,13 @@ func (t *sseClientTransport) notify(data []byte) error {
 	if err != nil {
 		return fmt.Errorf("POST %s: %w", t.postURL, err)
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
+
+	// Non-2xx responses (401/403 already handled by DoWithAuthRetry).
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return &HTTPStatusError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(body))}
+	}
 	return nil
 }
 
@@ -1096,6 +1147,21 @@ type ClientAuthError struct {
 
 func (e *ClientAuthError) Error() string {
 	return fmt.Sprintf("auth error %d: %s", e.StatusCode, e.Message)
+}
+
+// HTTPStatusError is returned when the server responds with a non-2xx HTTP
+// status code that is not 401/403 (those are handled by DoWithAuthRetry).
+// This allows IsTransientError to classify 5xx responses as retriable.
+type HTTPStatusError struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *HTTPStatusError) Error() string {
+	if e.Body != "" {
+		return fmt.Sprintf("HTTP %d: %s", e.StatusCode, e.Body)
+	}
+	return fmt.Sprintf("HTTP %d", e.StatusCode)
 }
 
 // DoWithAuthRetry executes an HTTP request with automatic retry on 401/403.
@@ -1184,6 +1250,23 @@ func DoWithAuthRetry(
 			return resp, nil
 		}
 	}
+}
+
+// ResolveEndpointURL resolves an SSE endpoint event URL against the base SSE
+// connection URL per RFC 3986. This handles three cases:
+//   - Absolute URL (e.g., "http://host/path?q=1"): returned unchanged
+//   - Absolute path (e.g., "/path?q=1"): inherits scheme+host from base
+//   - Relative path (e.g., "message?q=1"): inherits scheme+host+directory from base
+func ResolveEndpointURL(baseSSEURL, endpointRef string) (string, error) {
+	base, err := url.Parse(baseSSEURL)
+	if err != nil {
+		return "", fmt.Errorf("parsing SSE URL: %w", err)
+	}
+	ref, err := url.Parse(endpointRef)
+	if err != nil {
+		return "", fmt.Errorf("parsing endpoint URL %q: %w", endpointRef, err)
+	}
+	return base.ResolveReference(ref).String(), nil
 }
 
 // --- core.Response extraction helpers ---
