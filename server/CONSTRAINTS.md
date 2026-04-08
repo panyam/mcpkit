@@ -11,5 +11,5 @@ If you're adding a type that the client also needs, put it in core/, not here.
 Examples: Request, Response, ToolDef, ServerInfo.
 
 ## C3: Transport implementations are server-internal
-SSE transport, Streamable HTTP transport, and InProcessTransport live here.
+SSE, Streamable HTTP, stdio, and InProcessTransport live here.
 They satisfy `core.Transport` but their internals (hub, session map, etc.) are unexported.
