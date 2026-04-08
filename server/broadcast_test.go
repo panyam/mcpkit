@@ -23,22 +23,22 @@ func TestBroadcastSingleSession(t *testing.T) {
 		method string
 		params any
 	}
-	d.notifyFunc = func(method string, params any) {
+	d.SetNotifyFunc(func(method string, params any) {
 		mu.Lock()
 		defer mu.Unlock()
 		captured = append(captured, struct {
 			method string
 			params any
 		}{method, params})
-	}
+	})
 
 	// Register a broadcaster that iterates our test session
 	srv.registerTransportSessions(
 		func(id string) bool { return false },
 		func() {},
 		func(method string, params any) {
-			if d.notifyFunc != nil {
-				d.notifyFunc(method, params)
+			if fn := d.getNotifyFunc(); fn != nil {
+				fn(method, params)
 			}
 		},
 	)
@@ -73,18 +73,18 @@ func TestBroadcastMultipleSessions(t *testing.T) {
 		id := id
 		d := srv.newSession()
 		d.sessionID = id
-		d.notifyFunc = func(method string, params any) {
+		d.SetNotifyFunc(func(method string, params any) {
 			mu.Lock()
 			defer mu.Unlock()
 			counts[id]++
-		}
+		})
 
 		srv.registerTransportSessions(
 			func(sid string) bool { return false },
 			func() {},
 			func(method string, params any) {
-				if d.notifyFunc != nil {
-					d.notifyFunc(method, params)
+				if fn := d.getNotifyFunc(); fn != nil {
+					fn(method, params)
 				}
 			},
 		)
@@ -119,9 +119,9 @@ func TestBroadcastSkipsNilNotifyFunc(t *testing.T) {
 	// Session with working notifyFunc
 	dOk := srv.newSession()
 	dOk.sessionID = "ok-session"
-	dOk.notifyFunc = func(method string, params any) {
+	dOk.SetNotifyFunc(func(method string, params any) {
 		received = true
-	}
+	})
 
 	// Register a broadcaster that iterates both sessions
 	srv.registerTransportSessions(
@@ -129,8 +129,8 @@ func TestBroadcastSkipsNilNotifyFunc(t *testing.T) {
 		func() {},
 		func(method string, params any) {
 			for _, d := range []*Dispatcher{dNil, dOk} {
-				if d.notifyFunc != nil {
-					d.notifyFunc(method, params)
+				if fn := d.getNotifyFunc(); fn != nil {
+					fn(method, params)
 				}
 			}
 		},
@@ -165,17 +165,17 @@ func TestBroadcastDoesNotRequireSubscription(t *testing.T) {
 	initDispatcher(d)
 
 	var received bool
-	d.notifyFunc = func(method string, params any) {
+	d.SetNotifyFunc(func(method string, params any) {
 		received = true
-	}
+	})
 
 	// Register broadcaster
 	srv.registerTransportSessions(
 		func(id string) bool { return false },
 		func() {},
 		func(method string, params any) {
-			if d.notifyFunc != nil {
-				d.notifyFunc(method, params)
+			if fn := d.getNotifyFunc(); fn != nil {
+				fn(method, params)
 			}
 		},
 	)
@@ -198,16 +198,16 @@ func TestBroadcastWithParams(t *testing.T) {
 	d.sessionID = "params-test"
 
 	var capturedParams any
-	d.notifyFunc = func(method string, params any) {
+	d.SetNotifyFunc(func(method string, params any) {
 		capturedParams = params
-	}
+	})
 
 	srv.registerTransportSessions(
 		func(id string) bool { return false },
 		func() {},
 		func(method string, params any) {
-			if d.notifyFunc != nil {
-				d.notifyFunc(method, params)
+			if fn := d.getNotifyFunc(); fn != nil {
+				fn(method, params)
 			}
 		},
 	)

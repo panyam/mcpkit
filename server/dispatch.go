@@ -57,7 +57,10 @@ type Dispatcher struct {
 
 	// notifyFunc is set by the transport to push server-to-client notifications.
 	// nil means no push capability (e.g., Streamable HTTP without GET SSE stream).
+	// Protected by notifyMu because the GET SSE handler may set it concurrently
+	// with subscription notifications reading it.
 	notifyFunc core.NotifyFunc
+	notifyMu   sync.RWMutex
 
 	// Subscription state (per-session).
 	subscriptionsEnabled bool                    // advertise "subscribe": true in resources capability
@@ -71,6 +74,23 @@ type Dispatcher struct {
 	pushRequest    func(json.RawMessage)
 	pending        pendingMap
 	nextServerReqID atomic.Int64
+}
+
+// SetNotifyFunc sets the notification delivery function for this dispatcher.
+// Thread-safe: can be called concurrently with getNotifyFunc reads.
+func (d *Dispatcher) SetNotifyFunc(fn core.NotifyFunc) {
+	d.notifyMu.Lock()
+	d.notifyFunc = fn
+	d.notifyMu.Unlock()
+}
+
+// getNotifyFunc returns the current notification delivery function.
+// Thread-safe: can be called concurrently with SetNotifyFunc writes.
+func (d *Dispatcher) getNotifyFunc() core.NotifyFunc {
+	d.notifyMu.RLock()
+	fn := d.notifyFunc
+	d.notifyMu.RUnlock()
+	return fn
 }
 
 // Close tears down all per-session state on the Dispatcher. Transports must call

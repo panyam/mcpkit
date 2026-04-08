@@ -82,6 +82,19 @@ func WithNotificationCallback(fn func(method string, params any)) ClientOption {
 	return func(c *Client) { c.onNotify = fn }
 }
 
+// WithGetSSEStream enables a background GET SSE stream on the Streamable HTTP
+// endpoint after Connect(). The stream receives server-initiated notifications
+// (list-changed, log messages, resource updates) that arrive outside POST
+// request-response cycles. Only applies to Streamable HTTP transport; ignored
+// for SSE and in-memory transports.
+//
+// The notification callback (set via WithNotificationCallback) must be
+// goroutine-safe when WithGetSSEStream is enabled, as notifications may arrive
+// concurrently from both the GET SSE stream and POST SSE responses.
+func WithGetSSEStream() ClientOption {
+	return func(c *Client) { c.enableGetSSE = true }
+}
+
 // WithExtension advertises support for an extension during the initialize
 // handshake. The extension ID and capability are included in the client's
 // capabilities.extensions map, allowing the server to detect client support
@@ -195,8 +208,12 @@ type Client struct {
 	ServerInfo core.ServerInfo
 
 	// onNotify is an optional callback for server-to-client notifications.
-	// Currently only used by the in-memory transport.
+	// Used by all transports: in-memory (inline), SSE (background reader),
+	// and Streamable HTTP (POST SSE responses + optional GET SSE stream).
 	onNotify func(method string, params any)
+
+	// enableGetSSE opts into the background GET SSE stream (Streamable HTTP only).
+	enableGetSSE bool
 
 	// Stdio transport fields (set by WithStdioTransport).
 	stdioReader io.Reader
@@ -247,6 +264,7 @@ func (c *Client) Connect() error {
 		} else {
 			st := newStreamableClientTransport(c.url, c.tokenSource)
 			st.serverReqHandler = c.HandleServerRequest
+			st.enableGetSSE = c.enableGetSSE
 			if c.onNotify != nil {
 				st.notifyHandler = c.makeNotifyAdapter()
 			}
@@ -309,13 +327,39 @@ func (c *Client) Connect() error {
 	}
 
 	// Send initialized notification
-	return c.notifyMethod("notifications/initialized", nil)
+	if err := c.notifyMethod("notifications/initialized", nil); err != nil {
+		return err
+	}
+
+	// Open GET SSE stream for server-initiated notifications (Streamable HTTP only).
+	// Non-fatal: the client can still function via POST-only mode.
+	if c.enableGetSSE {
+		if st := c.unwrapStreamableTransport(); st != nil {
+			st.openGetSSEStream()
+		}
+	}
+
+	return nil
 }
 
 // Close terminates the client session and transport.
 func (c *Client) Close() error {
 	if c.transport != nil {
 		return c.transport.close()
+	}
+	return nil
+}
+
+// unwrapStreamableTransport returns the underlying *streamableClientTransport
+// if the client uses Streamable HTTP. Peels through loggingTransport wrappers.
+// Returns nil for SSE and in-memory transports.
+func (c *Client) unwrapStreamableTransport() *streamableClientTransport {
+	t := c.transport
+	if lt, ok := t.(*loggingTransport); ok {
+		t = lt.inner
+	}
+	if st, ok := t.(*streamableClientTransport); ok {
+		return st
 	}
 	return nil
 }
@@ -622,6 +666,12 @@ type streamableClientTransport struct {
 	tokenSource      core.TokenSource
 	serverReqHandler func(*core.Request) *core.Response          // set by Client before connect
 	notifyHandler    func(method string, params json.RawMessage) // set by Client before connect
+
+	// GET SSE stream state (opt-in via WithGetSSEStream)
+	enableGetSSE bool
+	getSSEResp   *http.Response       // open GET response (for close)
+	getSSEDone   chan struct{}         // closed when background reader exits
+	getSSECancel context.CancelFunc   // cancels the GET request context
 }
 
 func newStreamableClientTransport(url string, ts core.TokenSource) *streamableClientTransport {
@@ -629,8 +679,128 @@ func newStreamableClientTransport(url string, ts core.TokenSource) *streamableCl
 }
 
 func (t *streamableClientTransport) connect() error       { return nil }
-func (t *streamableClientTransport) close() error         { return nil }
 func (t *streamableClientTransport) getSessionID() string { return t.sessionID }
+
+// close shuts down the transport, including the background GET SSE stream if open.
+func (t *streamableClientTransport) close() error {
+	if t.getSSECancel != nil {
+		t.getSSECancel()
+	}
+	if t.getSSEResp != nil {
+		t.getSSEResp.Body.Close()
+	}
+	if t.getSSEDone != nil {
+		<-t.getSSEDone
+	}
+	return nil
+}
+
+// openGetSSEStream opens a background GET SSE stream on the MCP endpoint for
+// receiving server-initiated notifications outside POST request-response cycles.
+// Per MCP spec (2025-03-26): "Clients can open an HTTP GET request on the MCP
+// endpoint to open an SSE stream." The session ID header attaches the stream
+// to the existing session so notifications for this session are delivered here.
+func (t *streamableClientTransport) openGetSSEStream() {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	buildReq := func() (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, "GET", t.url, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Accept", "text/event-stream")
+		if t.sessionID != "" {
+			req.Header.Set("Mcp-Session-Id", t.sessionID)
+		}
+		return req, nil
+	}
+
+	resp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
+	if err != nil {
+		cancel()
+		return // non-fatal: client works in POST-only mode
+	}
+
+	t.getSSECancel = cancel
+	t.getSSEResp = resp
+	t.getSSEDone = make(chan struct{})
+	go t.backgroundGetReader(resp.Body)
+}
+
+// backgroundGetReader reads SSE events from a GET SSE stream and dispatches
+// notifications and server-to-client requests to the appropriate handlers.
+// Runs until the stream is closed (via close() canceling the context) or
+// encounters a read error. Defers closing the done channel to signal shutdown.
+func (t *streamableClientTransport) backgroundGetReader(body io.Reader) {
+	defer close(t.getSSEDone)
+	scanner := bufio.NewReader(body)
+	for {
+		line, err := scanner.ReadString('\n')
+		if err != nil {
+			return // stream closed or context canceled
+		}
+		line = strings.TrimRight(line, "\r\n")
+
+		if !strings.HasPrefix(line, "data:") {
+			continue // skip event:, id:, comments, blank lines
+		}
+		data := strings.TrimSpace(line[5:])
+		if data == "" {
+			continue
+		}
+
+		t.dispatchSSEEvent(data)
+	}
+}
+
+// dispatchSSEEvent parses a single SSE data payload and routes it:
+//   - Server-to-client request (method + id): dispatched to serverReqHandler,
+//     response POSTed back
+//   - Notification (method, no id): delivered to notifyHandler
+//   - JSON-RPC response (id, no method): returned for readSSEResponse to use
+//
+// Shared by both readSSEResponse (POST SSE) and backgroundGetReader (GET SSE)
+// to avoid duplicating the probe-and-dispatch logic.
+func (t *streamableClientTransport) dispatchSSEEvent(data string) *rpcResponse {
+	var probe struct {
+		ID     any    `json:"id"`
+		Method string `json:"method"`
+	}
+	if json.Unmarshal([]byte(data), &probe) != nil {
+		return nil
+	}
+
+	// Server-to-client request (has method + id)
+	if probe.Method != "" && probe.ID != nil && t.serverReqHandler != nil {
+		var req core.Request
+		if json.Unmarshal([]byte(data), &req) == nil {
+			resp := t.serverReqHandler(&req)
+			if resp != nil {
+				t.postResponse(resp)
+			}
+		}
+		return nil
+	}
+
+	// Notification (method set, no id) — deliver to handler
+	if probe.Method != "" && probe.ID == nil {
+		if t.notifyHandler != nil {
+			var notif struct {
+				Params json.RawMessage `json:"params"`
+			}
+			json.Unmarshal([]byte(data), &notif)
+			t.notifyHandler(probe.Method, notif.Params)
+		}
+		return nil
+	}
+
+	// JSON-RPC response (has id, no method) — return for caller to handle
+	var resp rpcResponse
+	if json.Unmarshal([]byte(data), &resp) == nil && resp.ID != nil {
+		return &resp
+	}
+	return nil
+}
 
 func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
 	buildReq := func() (*http.Request, error) {
@@ -710,43 +880,8 @@ func (t *streamableClientTransport) readSSEResponse(body io.Reader) (*rpcRespons
 				continue
 			}
 
-			// Probe to distinguish server requests from responses/notifications
-			var probe struct {
-				ID     any    `json:"id"`
-				Method string `json:"method"`
-			}
-			if json.Unmarshal([]byte(data), &probe) != nil {
-				continue
-			}
-
-			// Server-to-client request (has method + id)
-			if probe.Method != "" && probe.ID != nil && t.serverReqHandler != nil {
-				var req core.Request
-				if json.Unmarshal([]byte(data), &req) == nil {
-					resp := t.serverReqHandler(&req)
-					if resp != nil {
-						t.postResponse(resp)
-					}
-				}
-				continue
-			}
-
-			// Notification (method set, no id) — deliver to handler
-			if probe.Method != "" && probe.ID == nil {
-				if t.notifyHandler != nil {
-					var notif struct {
-						Params json.RawMessage `json:"params"`
-					}
-					json.Unmarshal([]byte(data), &notif)
-					t.notifyHandler(probe.Method, notif.Params)
-				}
-				continue
-			}
-
-			// JSON-RPC response (has id)
-			var resp rpcResponse
-			if json.Unmarshal([]byte(data), &resp) == nil && resp.ID != nil {
-				lastResponse = &resp
+			if resp := t.dispatchSSEEvent(data); resp != nil {
+				lastResponse = resp
 			}
 		}
 		// Skip event:, id:, comments, blank lines
