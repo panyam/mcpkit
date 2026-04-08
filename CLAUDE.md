@@ -4,7 +4,7 @@
 
 Go library for building production-grade MCP servers and clients. Split into three packages:
 - **`core/`** — Protocol types (Request, Response, ToolDef, Content, Claims, etc.) and tool-handler APIs (Sample, Elicit, EmitLog)
-- **`server/`** — Server, Dispatcher, transports (SSE + Streamable HTTP), middleware, subscriptions
+- **`server/`** — Server, Dispatcher, transports (SSE + Streamable HTTP + Stdio), middleware, subscriptions
 - **`client/`** — Client, HTTP transports, reconnection, logging
 - **`ext/auth/`** — Separate Go module: JWTValidator, MountAuth (PRM), OAuthTokenSource, DCR, CIMD
 
@@ -54,6 +54,7 @@ mcpkit/
 │   ├── dispatch.go            Dispatcher, JSON-RPC routing, all method handlers
 │   ├── transport.go           SSE transport
 │   ├── streamable_transport.go Streamable HTTP transport
+│   ├── stdio_transport.go     Stdio transport (Content-Length framed JSON-RPC)
 │   ├── memory_transport.go    InProcessTransport (core.Transport impl)
 │   ├── request.go             sendServerRequest, routeServerResponse, pending map
 │   ├── middleware.go          Middleware, LoggingMiddleware, WithMiddleware
@@ -61,6 +62,7 @@ mcpkit/
 │
 ├── client/                  ← Client + all client transports
 │   ├── client.go              Client, NewClient, Connect, ToolCall, WithTransport, WithExtension, WithUIExtension, ServerSupportsExtension, ServerSupportsUI, ListToolsForModel, ResolveEndpointURL, HTTPStatusError, DoWithAuthRetry
+│   ├── stdio_transport.go     StdioTransport, NewStdioTransport, WithStdioTransport
 │   ├── client_logging.go      loggingTransport, WithClientLogging
 │   └── client_reconnect.go    WithMaxRetries, WithReconnectBackoff, IsTransientError
 │
@@ -97,7 +99,8 @@ mcpkit/
 - **SSE endpoint event data must be raw text**, not JSON-encoded. Use `SSEText(url)` not `SSEJSON()`.
 - **SSE endpoint URL resolution**: Client resolves the endpoint event URL against the SSE connection URL via `ResolveEndpointURL` (RFC 3986). Handles absolute URLs, absolute paths, and relative paths.
 - **Per-session Dispatchers**: each connection gets its own `Dispatcher` via `newSession()`. Registries shared by reference.
-- **SSE transport sessions** die with the connection. **Streamable HTTP sessions** persist until DELETE or server restart.
+- **SSE transport sessions** die with the connection. **Streamable HTTP sessions** persist until DELETE or server restart. **Stdio sessions** last for the process lifetime (1:1 mapping).
+- **Stdio transport** uses Content-Length framed JSON-RPC over stdin/stdout. Server-side: `srv.RunStdio(ctx)`. Client-side: `client.WithStdioTransport(reader, writer)`. No HTTP, no auth — process boundary is the trust boundary. Debug logging goes to stderr.
 - **Notification delivery order**: notifications arrive before tool results across all transports.
 - **HTTP error classification**: Both transports return `HTTPStatusError` for non-2xx responses (excluding 401/403, handled by `DoWithAuthRetry`). `IsTransientError` classifies 5xx as transient (retriable via `WithMaxRetries`), 4xx as terminal.
 - **SSE reader death**: `call()` uses dual-select on the response channel and the done channel — returns a transient error immediately if the background reader dies, instead of blocking forever.
@@ -124,8 +127,8 @@ mcpkit/
 - **Design doc**: see `docs/APPS_DESIGN.md` for full architecture, protocol flows, and conformance strategy.
 
 ### Testing
-- **`forAllTransports`**: parametric tests run against Streamable HTTP, SSE, and in-memory. Use for any cross-transport test.
-- **In-process transport skips JSON envelope serialization** — catches logic bugs. HTTP tests catch wire format bugs. Both needed.
+- **`forAllTransports`**: parametric tests run against Streamable HTTP, SSE, in-memory, and stdio. Use for any cross-transport test.
+- **In-process transport skips JSON envelope serialization** — catches logic bugs. HTTP tests catch wire format bugs. Stdio tests catch Content-Length framing bugs. All needed.
 - **Conformance baseline**: when a feature passes, remove from `conformance/baseline.yml`. Stale entries cause CI failure.
 
 ## Conformance Status
@@ -141,5 +144,4 @@ mcpkit/
 
 ## What's Not Implemented Yet
 
-- stdio transport (#3)
 - Streamable HTTP GET SSE stream (server-initiated notifications without a request)

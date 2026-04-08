@@ -197,6 +197,10 @@ type Client struct {
 	// onNotify is an optional callback for server-to-client notifications.
 	// Currently only used by the in-memory transport.
 	onNotify func(method string, params any)
+
+	// Stdio transport fields (set by WithStdioTransport).
+	stdioReader io.Reader
+	stdioWriter io.Writer
 }
 
 // NewClient creates a new MCP client targeting the given server URL.
@@ -218,7 +222,22 @@ func NewClient(url string, info core.ClientInfo, opts ...ClientOption) *Client {
 func (c *Client) Connect() error {
 	// Create transport (skip if already set, e.g., by WithInMemoryServer)
 	if c.transport == nil {
-		if c.useSSE {
+		if c.stdioReader != nil && c.stdioWriter != nil {
+			st := NewStdioTransport(c.stdioReader, c.stdioWriter)
+			st.serverReqHandler = func(_ context.Context, req *core.Request) *core.Response {
+				return c.HandleServerRequest(req)
+			}
+			if c.onNotify != nil {
+				st.notifyHandler = func(method string, params []byte) {
+					var parsed any
+					if len(params) > 0 {
+						json.Unmarshal(params, &parsed)
+					}
+					c.onNotify(method, parsed)
+				}
+			}
+			c.transport = &coreTransportAdapter{inner: st}
+		} else if c.useSSE {
 			st := newSSEClientTransport(c.url, c.tokenSource)
 			st.serverReqHandler = c.HandleServerRequest
 			if c.onNotify != nil {
