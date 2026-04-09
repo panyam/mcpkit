@@ -42,44 +42,11 @@ type streamableTransport struct {
 // sessionEntry wraps a Dispatcher with idle-timeout support. When a session
 // timeout is configured, the timer fires after the session has been idle
 // (no active POST requests or GET SSE streams) for the configured duration.
-// Active requests are tracked via acquire/release to prevent expiry mid-execution.
+// Active requests are tracked via IdleTimer.Acquire/Release to prevent expiry mid-execution.
 type sessionEntry struct {
 	dispatcher *Dispatcher
-	timer      *time.Timer   // nil if no timeout configured
-	mu         sync.Mutex    // protects active count and timer reset
-	active     int           // number of in-flight requests (POST dispatch + GET SSE)
-	timeout    time.Duration // 0 means no timeout
-}
-
-// acquire marks a request as active and stops the idle timer.
-// Must be paired with a deferred release().
-func (e *sessionEntry) acquire() {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.active++
-	if e.timer != nil {
-		e.timer.Stop()
-	}
-}
-
-// release marks a request as complete. If no requests remain active and a
-// timeout is configured, the idle timer is restarted.
-func (e *sessionEntry) release() {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.active--
-	if e.active == 0 && e.timer != nil {
-		e.timer.Reset(e.timeout)
-	}
-}
-
-// stopTimer stops the idle timer if one is running. Safe to call multiple times.
-func (e *sessionEntry) stopTimer() {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if e.timer != nil {
-		e.timer.Stop()
-	}
+	idleTimer  *conc.IdleTimer // nil-safe: all methods are no-ops on nil
+	timeout    time.Duration   // retained for log messages on expiry
 }
 
 // newStreamableTransport creates a Streamable HTTP transport.
@@ -174,8 +141,8 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 			http.Error(w, "session not found", http.StatusNotFound)
 			return
 		}
-		entry.acquire()
-		defer entry.release()
+		entry.idleTimer.Acquire()
+		defer entry.idleTimer.Release()
 		var resp core.Response
 		if err := json.Unmarshal(body, &resp); err == nil {
 			entry.dispatcher.RouteResponse(&resp)
@@ -230,8 +197,8 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
 	}
-	entry.acquire()
-	defer entry.release()
+	entry.idleTimer.Acquire()
+	defer entry.idleTimer.Release()
 	dispatcher := entry.dispatcher
 
 	// Validate MCP-Protocol-Version if present.
@@ -368,12 +335,8 @@ func (t *streamableTransport) handleInitialize(w http.ResponseWriter, r *http.Re
 	dispatcher.sessionID = sessionID
 	entry := &sessionEntry{
 		dispatcher: dispatcher,
+		idleTimer:  conc.NewIdleTimer(t.config.sessionTimeout, func() { t.expireSession(sessionID) }),
 		timeout:    t.config.sessionTimeout,
-	}
-	if t.config.sessionTimeout > 0 {
-		entry.timer = time.AfterFunc(t.config.sessionTimeout, func() {
-			t.expireSession(sessionID)
-		})
 	}
 	t.sessions.Store(sessionID, entry)
 
@@ -434,7 +397,7 @@ func (h *streamableSSEHandler) Validate(w http.ResponseWriter, r *http.Request) 
 			http.Error(w, "session not found", http.StatusNotFound)
 			return nil, false
 		}
-		entry.acquire() // released in OnClose
+		entry.idleTimer.Acquire() // released in OnClose
 		dispatcher = entry.dispatcher
 	} else {
 		// No session — create a temporary dispatcher for this SSE stream
@@ -488,7 +451,7 @@ func (c *streamableSSEConn) OnStart(w http.ResponseWriter, r *http.Request) erro
 func (c *streamableSSEConn) OnClose() {
 	c.transport.sseHub.Unregister(c.ConnId())
 	if c.entry != nil {
-		c.entry.release()
+		c.entry.idleTimer.Release()
 	}
 	c.BaseSSEConn.OnClose()
 }
@@ -512,7 +475,7 @@ func (t *streamableTransport) handleDelete(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
 	}
-	entry.stopTimer()
+	entry.idleTimer.Stop()
 	entry.dispatcher.Close()
 
 	w.WriteHeader(http.StatusOK)
@@ -522,7 +485,7 @@ func (t *streamableTransport) handleDelete(w http.ResponseWriter, r *http.Reques
 func (t *streamableTransport) closeSession(id string) bool {
 	entry, ok := t.sessions.LoadAndDelete(id)
 	if ok {
-		entry.stopTimer()
+		entry.idleTimer.Stop()
 		entry.dispatcher.Close()
 	}
 	return ok
@@ -531,7 +494,7 @@ func (t *streamableTransport) closeSession(id string) bool {
 // closeAllSessions terminates all active sessions.
 func (t *streamableTransport) closeAllSessions() {
 	t.sessions.Range(func(key string, entry *sessionEntry) bool {
-		entry.stopTimer()
+		entry.idleTimer.Stop()
 		entry.dispatcher.Close()
 		t.sessions.Delete(key)
 		return true
