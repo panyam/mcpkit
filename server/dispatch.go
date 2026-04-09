@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	conc "github.com/panyam/gocurrent"
 	core "github.com/panyam/mcpkit/core"
@@ -331,6 +332,13 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, pa
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "unknown tool: "+envelope.Name)
 	}
 
+	// Apply per-tool timeout if set (overrides server-wide WithToolTimeout)
+	if entry.def.Timeout > 0 {
+		tctx, cancel := context.WithTimeout(ctx, entry.def.Timeout)
+		defer cancel()
+		ctx = tctx
+	}
+
 	req := core.ToolRequest{
 		Name:      envelope.Name,
 		Arguments: envelope.Arguments,
@@ -374,6 +382,11 @@ func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage
 	d.Reg.mu.RLock()
 	if entry, ok := d.Reg.resources[envelope.URI]; ok {
 		d.Reg.mu.RUnlock()
+		if entry.def.Timeout > 0 {
+			tctx, cancel := context.WithTimeout(ctx, entry.def.Timeout)
+			defer cancel()
+			ctx = tctx
+		}
 		result, err := entry.handler(ctx, core.ResourceRequest{URI: envelope.URI})
 		if err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeResourceError, fmt.Sprintf("resource %q: %v", envelope.URI, err))
@@ -385,6 +398,7 @@ func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage
 	var matchedHandler core.TemplateHandler
 	var matchedURI, matchedTmplURI string
 	var matchedParams map[string]string
+	var matchedTmplTimeout time.Duration
 	for _, tmplURI := range d.Reg.templateOrder {
 		entry := d.Reg.templates[tmplURI]
 		if p, matched := matchTemplate(entry.def.URITemplate, envelope.URI); matched {
@@ -392,12 +406,18 @@ func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage
 			matchedURI = envelope.URI
 			matchedTmplURI = tmplURI
 			matchedParams = p
+			matchedTmplTimeout = entry.def.Timeout
 			break
 		}
 	}
 	d.Reg.mu.RUnlock()
 
 	if matchedHandler != nil {
+		if matchedTmplTimeout > 0 {
+			tctx, cancel := context.WithTimeout(ctx, matchedTmplTimeout)
+			defer cancel()
+			ctx = tctx
+		}
 		result, err := matchedHandler(ctx, matchedURI, matchedParams)
 		if err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeResourceError, fmt.Sprintf("resource template %q: %v", matchedTmplURI, err))
@@ -481,6 +501,12 @@ func (d *Dispatcher) handlePromptsGet(ctx context.Context, id json.RawMessage, p
 	d.Reg.mu.RUnlock()
 	if !ok {
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "unknown prompt: "+envelope.Name)
+	}
+
+	if entry.def.Timeout > 0 {
+		tctx, cancel := context.WithTimeout(ctx, entry.def.Timeout)
+		defer cancel()
+		ctx = tctx
 	}
 
 	req := core.PromptRequest{
