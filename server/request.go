@@ -14,9 +14,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync/atomic"
 
 	core "github.com/panyam/mcpkit/core"
+	gohttp "github.com/panyam/servicekit/http"
 )
 
 // PendingMap is a type alias for SyncMap used to track pending server-to-client requests.
@@ -52,15 +52,17 @@ func marshalRequest(id string, method string, params any) (json.RawMessage, erro
 
 // sendServerRequest generates a unique request ID, pushes a JSON-RPC request
 // to the client via pushFunc, and waits for the client's response.
+// The idGen parameter generates unique opaque string IDs (decoupled from
+// any specific counter implementation via servicekit's IDGen interface).
 func sendServerRequest(
 	ctx context.Context,
 	method string,
 	params any,
-	nextID *atomic.Int64,
+	idGen gohttp.IDGen,
 	pending *PendingMap,
 	pushFunc func(raw json.RawMessage),
 ) (json.RawMessage, error) {
-	id := fmt.Sprintf("srv-%d", nextID.Add(1))
+	id := "srv-" + idGen.Next()
 
 	raw, err := marshalRequest(id, method, params)
 	if err != nil {

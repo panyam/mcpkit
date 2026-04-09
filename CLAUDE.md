@@ -99,6 +99,13 @@ mcpkit/
 - **In-process transport** uses `core.Transport` interface. Create via `server.NewInProcessTransport(srv)`, pass to client via `client.WithTransport(transport)`. For bidirectional (sampling/elicitation), wire `server.WithServerRequestHandler(client.HandleServerRequest)`.
 - **`core.ContextWithSession`** is exported so `server/` can inject session state. Tool handlers use `core.EmitLog`, `core.Sample`, `core.AuthClaims` — they extract from context internally.
 
+### JSON-RPC Protocol Compliance
+- **JSON-RPC batching**: Both transports accept batch requests (JSON arrays). Each element is dispatched sequentially, responses collected as JSON array. Notifications produce no response entry. Empty batch → Invalid Request error. Streamable HTTP returns JSON array body; SSE pushes individual response events.
+- **Content-Type enforcement**: POST requests must have `Content-Type: application/json`. Non-conforming requests are rejected with 415 Unsupported Media Type (CSRF defense-in-depth against cross-origin form submissions).
+- **Ping before initialize**: `ping` is always handled, regardless of initialization state. It's in the pre-init switch block alongside `initialize`, `notifications/initialized`, and `notifications/cancelled`.
+- **MCP error codes**: Application errors use codes outside JSON-RPC reserved ranges: `ErrCodeToolExecutionError` (-31000), `ErrCodeResourceError` (-31001), `ErrCodePromptError` (-31002), `ErrCodeCompletionError` (-31003). Standard JSON-RPC codes (-32700, -32600 to -32603) are used only for protocol errors.
+- **ID generation decoupled**: `sendServerRequest` uses `gohttp.IDGen` interface (servicekit) instead of `*atomic.Int64`. Both `eventIDs` and `requestIDs` on Dispatcher use the interface.
+
 ### Transports
 - **SSE endpoint event data must be raw text**, not JSON-encoded. Use `SSEText(url)` not `SSEJSON()`.
 - **SSE endpoint URL resolution**: Client resolves the endpoint event URL against the SSE connection URL via `ResolveEndpointURL` (RFC 3986). Handles absolute URLs, absolute paths, and relative paths.

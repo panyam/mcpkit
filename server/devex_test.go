@@ -33,6 +33,29 @@ func TestErrCodeServerError(t *testing.T) {
 		"ErrCodeServerError should be in the server error range")
 }
 
+// TestMCPErrorCodesOutsideReservedRange verifies that MCP application error
+// codes (tool, resource, prompt, completion errors) are outside the JSON-RPC
+// 2.0 reserved ranges: -32700 (parse), -32600 to -32603 (standard), and
+// -32000 to -32099 (implementation-defined). This prevents collision with
+// JSON-RPC protocol errors and keeps MCP semantics separate.
+func TestMCPErrorCodesOutsideReservedRange(t *testing.T) {
+	mcpCodes := map[string]int{
+		"ErrCodeToolExecutionError": core.ErrCodeToolExecutionError,
+		"ErrCodeResourceError":      core.ErrCodeResourceError,
+		"ErrCodePromptError":        core.ErrCodePromptError,
+		"ErrCodeCompletionError":    core.ErrCodeCompletionError,
+		"ErrCodeCancelled":          server.ErrCodeCancelled,
+	}
+
+	for name, code := range mcpCodes {
+		// Must not be in standard JSON-RPC range (-32700, -32600 to -32603)
+		assert.NotEqual(t, -32700, code, "%s should not be ErrCodeParse", name)
+		assert.False(t, code >= -32603 && code <= -32600, "%s (%d) should not be in standard range", name, code)
+		// Must not be in implementation-defined range (-32000 to -32099)
+		assert.False(t, code >= -32099 && code <= -32000, "%s (%d) should not be in server error range", name, code)
+	}
+}
+
 // =============================================================================
 // #77: Structured Error Output
 // =============================================================================
