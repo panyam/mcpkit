@@ -63,9 +63,9 @@ type Dispatcher struct {
 	// pushRequest pushes a raw JSON-RPC request to the client stream (set by transport).
 	// pending tracks in-flight server-to-client requests awaiting responses.
 	// nextServerReqID generates unique IDs for outgoing requests ("srv-1", "srv-2", ...).
-	pushRequest    func(json.RawMessage)
-	pending        pendingMap
-	nextServerReqID atomic.Int64
+	pushRequest func(json.RawMessage)
+	pending     pendingMap
+	requestIDs  gohttp.IDGen // generates unique IDs for server-to-client requests
 
 	// eventIDs generates unique SSE event IDs for this session's streams.
 	// Used by transports to assign id: fields to SSE events, enabling
@@ -149,6 +149,7 @@ func (d *Dispatcher) newSession() *Dispatcher {
 		subscriptionsEnabled: d.subscriptionsEnabled,
 		subManager:           d.subManager,
 		eventIDs:             newEventIDGen(),
+		requestIDs:           newEventIDGen(),
 	}
 }
 
@@ -375,7 +376,7 @@ func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage
 		d.Reg.mu.RUnlock()
 		result, err := entry.handler(ctx, core.ResourceRequest{URI: envelope.URI})
 		if err != nil {
-			return core.NewErrorResponse(id, core.ErrCodeInternal, fmt.Sprintf("resource %q: %v", envelope.URI, err))
+			return core.NewErrorResponse(id, core.ErrCodeResourceError, fmt.Sprintf("resource %q: %v", envelope.URI, err))
 		}
 		return core.NewResponse(id, result)
 	}
@@ -399,7 +400,7 @@ func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage
 	if matchedHandler != nil {
 		result, err := matchedHandler(ctx, matchedURI, matchedParams)
 		if err != nil {
-			return core.NewErrorResponse(id, core.ErrCodeInternal, fmt.Sprintf("resource template %q: %v", matchedTmplURI, err))
+			return core.NewErrorResponse(id, core.ErrCodeResourceError, fmt.Sprintf("resource template %q: %v", matchedTmplURI, err))
 		}
 		return core.NewResponse(id, result)
 	}
@@ -489,7 +490,7 @@ func (d *Dispatcher) handlePromptsGet(ctx context.Context, id json.RawMessage, p
 
 	result, err := entry.handler(ctx, req)
 	if err != nil {
-		return core.NewErrorResponse(id, core.ErrCodeInternal, fmt.Sprintf("prompt %q: %v", envelope.Name, err))
+		return core.NewErrorResponse(id, core.ErrCodePromptError, fmt.Sprintf("prompt %q: %v", envelope.Name, err))
 	}
 
 	return core.NewResponse(id, result)
@@ -530,7 +531,7 @@ func (d *Dispatcher) handleCompletionComplete(ctx context.Context, id json.RawMe
 
 	result, err := handler(ctx, p.Ref, p.Argument)
 	if err != nil {
-		return core.NewErrorResponse(id, core.ErrCodeInternal, fmt.Sprintf("completion %q: %v", key, err))
+		return core.NewErrorResponse(id, core.ErrCodeCompletionError, fmt.Sprintf("completion %q: %v", key, err))
 	}
 
 	return core.NewResponse(id, core.CompletionCompleteResult{Completion: result})
@@ -587,7 +588,7 @@ func (d *Dispatcher) RouteResponse(resp *core.Response) bool {
 // dispatcher's pending map and ID counter, and the given push function.
 func (d *Dispatcher) makeRequestFunc(pushFunc func(json.RawMessage)) core.RequestFunc {
 	return func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-		return sendServerRequest(ctx, method, params, &d.nextServerReqID, &d.pending, pushFunc)
+		return sendServerRequest(ctx, method, params, d.requestIDs, &d.pending, pushFunc)
 	}
 }
 

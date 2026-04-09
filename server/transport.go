@@ -100,6 +100,12 @@ func (t *sseTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Content-Type validation: reject non-JSON POST requests (CSRF defense-in-depth).
+	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+		http.Error(w, "Content-Type must be application/json", http.StatusUnsupportedMediaType)
+		return
+	}
+
 	// Auth check
 	claims, err := t.server.CheckAuth(r)
 	if err != nil {
@@ -141,6 +147,40 @@ func (t *sseTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 		var resp core.Response
 		if err := json.Unmarshal(body, &resp); err == nil {
 			dispatcher.RouteResponse(&resp)
+		}
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+
+	// JSON-RPC 2.0 batch request: dispatch each, push responses as SSE events.
+	if gohttp.DetectBatch(body) {
+		parts, splitErr := gohttp.SplitBatch(body)
+		if splitErr != nil {
+			errResp := core.NewErrorResponse(json.RawMessage("null"), core.ErrCodeParse, "invalid batch: "+splitErr.Error())
+			raw, _ := json.Marshal(errResp)
+			emitSSEEvent(dispatcher.eventIDs, t.config.eventStore, sessionID, raw, func(id string, data json.RawMessage) {
+				t.hub.SendEventWithID(sessionID, "message", id, SSEJSON(data))
+			})
+		} else {
+			for _, part := range parts {
+				var batchReq core.Request
+				if err := json.Unmarshal(part, &batchReq); err != nil {
+					errResp := core.NewErrorResponse(json.RawMessage("null"), core.ErrCodeParse, "parse error in batch element: "+err.Error())
+					raw, _ := json.Marshal(errResp)
+					emitSSEEvent(dispatcher.eventIDs, t.config.eventStore, sessionID, raw, func(id string, data json.RawMessage) {
+						t.hub.SendEventWithID(sessionID, "message", id, SSEJSON(data))
+					})
+					continue
+				}
+				resp := t.server.dispatchWith(dispatcher, r.Context(), claims, &batchReq)
+				if resp == nil {
+					continue // notification — no response
+				}
+				raw, _ := json.Marshal(resp)
+				emitSSEEvent(dispatcher.eventIDs, t.config.eventStore, sessionID, raw, func(id string, data json.RawMessage) {
+					t.hub.SendEventWithID(sessionID, "message", id, SSEJSON(data))
+				})
+			}
 		}
 		w.WriteHeader(http.StatusAccepted)
 		return
