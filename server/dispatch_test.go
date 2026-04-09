@@ -1,15 +1,18 @@
 package server
 
 import (
-	core "github.com/panyam/mcpkit/core"
 	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
+
+	core "github.com/panyam/mcpkit/core"
 )
 
 // initDispatcher performs the full MCP initialization handshake on a dispatcher
 // (initialize + notifications/initialized) so subsequent tool calls are accepted.
+// Note: Cannot use testutil.InitHandshake due to import cycle (package server
+// tests cannot import testutil which imports server).
 func initDispatcher(d *Dispatcher) {
 	d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",

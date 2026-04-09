@@ -1,17 +1,20 @@
 package server
 
 import (
-	core "github.com/panyam/mcpkit/core"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	core "github.com/panyam/mcpkit/core"
 )
 
 // initServer performs the full MCP initialization handshake on a server
 // (initialize + notifications/initialized) so subsequent tool calls are accepted.
+// Note: Cannot use testutil.InitHandshake due to import cycle (package server
+// tests cannot import testutil which imports server).
 func initServer(srv *Server) {
 	srv.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
