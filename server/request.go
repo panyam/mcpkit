@@ -14,14 +14,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync"
 	"sync/atomic"
 
 	core "github.com/panyam/mcpkit/core"
 )
 
-// PendingMap is a typed alias for sync.Map used to track pending server-to-client requests.
-type PendingMap = sync.Map
+// PendingMap is a type alias for SyncMap used to track pending server-to-client requests.
+// Exported because it's referenced by transport implementations.
+type PendingMap = pendingMap
 
 // pendingServerRequest tracks an in-flight server-to-client request awaiting a response.
 type pendingServerRequest struct {
@@ -94,11 +94,10 @@ func routeServerResponse(pending *PendingMap, resp *core.Response) bool {
 	if err := json.Unmarshal(resp.ID, &id); err != nil {
 		id = string(resp.ID)
 	}
-	val, ok := pending.Load(id)
+	pr, ok := pending.Load(id)
 	if !ok {
 		return false
 	}
-	pr := val.(*pendingServerRequest)
 	pr.ch <- serverResponse{Result: resp.Result, Error: resp.Error}
 	return true
 }

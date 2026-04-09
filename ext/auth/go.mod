@@ -4,6 +4,7 @@ go 1.26.1
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.2.2
+	github.com/panyam/gocurrent v0.0.14
 	github.com/panyam/mcpkit v0.0.0
 	github.com/panyam/oneauth v0.0.67
 )

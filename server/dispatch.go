@@ -1,13 +1,15 @@
 package server
 
 import (
-	core "github.com/panyam/mcpkit/core"
 	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	conc "github.com/panyam/gocurrent"
+	core "github.com/panyam/mcpkit/core"
 )
 
 // supportedProtocolVersions lists the MCP protocol versions this server supports,
@@ -18,8 +20,8 @@ var supportedProtocolVersions = []string{"2025-11-25", "2025-03-26", "2024-11-05
 // ErrCodeCancelled is the JSON-RPC error code for a cancelled request.
 const ErrCodeCancelled = -32800
 
-// pendingMap is a typed alias for sync.Map used to track pending server-to-client requests.
-type pendingMap = sync.Map
+// pendingMap is a type alias for SyncMap used to track pending server-to-client requests.
+type pendingMap = conc.SyncMap[string, *pendingServerRequest]
 
 // Dispatcher routes JSON-RPC requests to the appropriate handler.
 type Dispatcher struct {
@@ -30,7 +32,7 @@ type Dispatcher struct {
 	extensions map[string]core.Extension
 
 	// inflight tracks cancellable in-flight requests by ID.
-	inflight sync.Map // requestID (string) → context.CancelFunc
+	inflight conc.SyncMap[string, context.CancelFunc]
 
 	// Session state set during initialization handshake.
 	negotiatedVersion string             // set by initialize
@@ -541,7 +543,7 @@ func (d *Dispatcher) handleCancelled(params json.RawMessage) {
 		return
 	}
 	if cancelFn, ok := d.inflight.LoadAndDelete(string(p.RequestID)); ok {
-		cancelFn.(context.CancelFunc)()
+		cancelFn()
 	}
 }
 
