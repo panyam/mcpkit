@@ -3,7 +3,7 @@ module github.com/panyam/mcpkit
 go 1.25.0
 
 require (
-	github.com/panyam/servicekit v0.0.14
+	github.com/panyam/servicekit v0.0.16-0.20260409001307-5ca4390579d8
 	github.com/stretchr/testify v1.10.0
 )
 

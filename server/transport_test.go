@@ -1,7 +1,6 @@
 package server
 
 import (
-	core "github.com/panyam/mcpkit/core"
 	"bufio"
 	"bytes"
 	"context"
@@ -12,6 +11,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	core "github.com/panyam/mcpkit/core"
+	ssehttp "github.com/panyam/servicekit/http"
 )
 
 // sseEvent represents a parsed SSE event from the stream.
@@ -20,34 +22,19 @@ type sseEvent struct {
 	Data  string
 }
 
-// readSSEEvent reads the next SSE event from a bufio.Reader.
-// It skips keepalive comments and returns the event type and data.
-// Returns an error if the stream ends before a complete event is read.
+// readSSEEvent reads the next SSE event from a bufio.Reader using the shared
+// SSEEventReader. Skips comment-only and empty events (keepalives).
 func readSSEEvent(r *bufio.Reader) (sseEvent, error) {
-	var event, data string
+	reader := ssehttp.NewSSEEventReader(r)
 	for {
-		line, err := r.ReadString('\n')
+		ev, err := reader.ReadEvent()
 		if err != nil {
-			return sseEvent{}, fmt.Errorf("reading SSE: %w", err)
+			return sseEvent{}, err
 		}
-		line = strings.TrimRight(line, "\r\n")
-
-		if line == "" {
-			// Empty line = end of event
-			if data != "" || event != "" {
-				return sseEvent{Event: event, Data: data}, nil
-			}
-			continue
+		if ev.Event == "" && ev.Data == "" {
+			continue // skip comment-only events
 		}
-		if strings.HasPrefix(line, ":") {
-			// Comment (keepalive), skip
-			continue
-		}
-		if strings.HasPrefix(line, "event:") {
-			event = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
-		} else if strings.HasPrefix(line, "data:") {
-			data = strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-		}
+		return sseEvent{Event: ev.Event, Data: ev.Data}, nil
 	}
 }
 

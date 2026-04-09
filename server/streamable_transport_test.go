@@ -1,8 +1,6 @@
 package server
 
 import (
-	core "github.com/panyam/mcpkit/core"
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -11,6 +9,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	core "github.com/panyam/mcpkit/core"
+	ssehttp "github.com/panyam/servicekit/http"
 )
 
 // testStreamableServer creates an httptest.Server with a Streamable HTTP MCP server
@@ -557,25 +558,19 @@ func streamablePostSSE(url, sessionID string, body any) (*http.Response, error) 
 	return http.DefaultClient.Do(req)
 }
 
-// readSSEEvents reads all SSE events from a response body until EOF.
+// readSSEEvents reads all SSE events from a response body until EOF using the
+// shared SSEEventReader. Skips comment-only events.
 func readSSEEvents(t *testing.T, body io.Reader) []sseEvent {
 	t.Helper()
+	reader := ssehttp.NewSSEEventReader(body)
 	var events []sseEvent
-	scanner := bufio.NewScanner(body)
-	var event, data string
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "" {
-			if data != "" || event != "" {
-				events = append(events, sseEvent{Event: event, Data: data})
-				event, data = "", ""
-			}
-			continue
+	for {
+		ev, err := reader.ReadEvent()
+		if ev.Event != "" || ev.Data != "" {
+			events = append(events, sseEvent{Event: ev.Event, Data: ev.Data})
 		}
-		if strings.HasPrefix(line, "event:") {
-			event = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
-		} else if strings.HasPrefix(line, "data:") {
-			data = strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if err != nil {
+			break
 		}
 	}
 	return events

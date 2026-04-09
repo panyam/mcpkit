@@ -1,7 +1,6 @@
 package client
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -15,6 +14,7 @@ import (
 	"time"
 
 	core "github.com/panyam/mcpkit/core"
+	ssehttp "github.com/panyam/servicekit/http"
 )
 
 // clientTransport abstracts the transport layer for the MCP client.
@@ -735,23 +735,16 @@ func (t *streamableClientTransport) openGetSSEStream() {
 // encounters a read error. Defers closing the done channel to signal shutdown.
 func (t *streamableClientTransport) backgroundGetReader(body io.Reader) {
 	defer close(t.getSSEDone)
-	scanner := bufio.NewReader(body)
+	reader := ssehttp.NewSSEEventReader(body)
 	for {
-		line, err := scanner.ReadString('\n')
+		ev, err := reader.ReadEvent()
 		if err != nil {
 			return // stream closed or context canceled
 		}
-		line = strings.TrimRight(line, "\r\n")
-
-		if !strings.HasPrefix(line, "data:") {
-			continue // skip event:, id:, comments, blank lines
+		if ev.Data == "" {
+			continue // comment-only or empty event
 		}
-		data := strings.TrimSpace(line[5:])
-		if data == "" {
-			continue
-		}
-
-		t.dispatchSSEEvent(data)
+		t.dispatchSSEEvent(ev.Data)
 	}
 }
 
@@ -860,12 +853,18 @@ func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
 // When a server-to-client request arrives (e.g., sampling/createMessage during
 // a tool call), the handler is called and the response is POSTed back to the server.
 func (t *streamableClientTransport) readSSEResponse(body io.Reader) (*rpcResponse, error) {
-	scanner := bufio.NewReader(body)
+	reader := ssehttp.NewSSEEventReader(body)
 	var lastResponse *rpcResponse
 
 	for {
-		line, err := scanner.ReadString('\n')
+		ev, err := reader.ReadEvent()
 		if err != nil {
+			// EOF (or EOF-mid-event) — process any final data, then break.
+			if ev.Data != "" {
+				if resp := t.dispatchSSEEvent(ev.Data); resp != nil {
+					lastResponse = resp
+				}
+			}
 			if err == io.EOF {
 				break
 			}
@@ -874,19 +873,12 @@ func (t *streamableClientTransport) readSSEResponse(body io.Reader) (*rpcRespons
 			}
 			return nil, fmt.Errorf("reading SSE: %w", err)
 		}
-		line = strings.TrimRight(line, "\r\n")
-
-		if strings.HasPrefix(line, "data:") {
-			data := strings.TrimSpace(line[5:])
-			if data == "" {
-				continue
-			}
-
-			if resp := t.dispatchSSEEvent(data); resp != nil {
-				lastResponse = resp
-			}
+		if ev.Data == "" {
+			continue
 		}
-		// Skip event:, id:, comments, blank lines
+		if resp := t.dispatchSSEEvent(ev.Data); resp != nil {
+			lastResponse = resp
+		}
 	}
 
 	if lastResponse != nil {
@@ -965,7 +957,7 @@ type sseClientTransport struct {
 	httpClient  *http.Client
 	tokenSource core.TokenSource
 	sseResp     *http.Response
-	sseReader   *bufio.Reader
+	sseReader   *ssehttp.SSEEventReader
 
 	// Background reader state
 	pendingCalls     sync.Map                                    // requestID (string) → chan *rpcResponse
@@ -990,7 +982,7 @@ func (t *sseClientTransport) connect() error {
 	}
 
 	t.sseResp = resp
-	t.sseReader = bufio.NewReader(resp.Body)
+	t.sseReader = ssehttp.NewSSEEventReader(resp.Body)
 
 	ev, err := t.readSSEEvent()
 	if err != nil {
@@ -1232,30 +1224,20 @@ type sseClientEvent struct {
 	data  string
 }
 
-// readSSEEvent reads the next SSE event from the stream, skipping keepalive comments.
+// readSSEEvent reads the next SSE event from the stream using the shared
+// SSEEventReader. Skips comment-only and empty events automatically.
 func (t *sseClientTransport) readSSEEvent() (sseClientEvent, error) {
-	var event, data string
 	for {
-		line, err := t.sseReader.ReadString('\n')
+		ev, err := t.sseReader.ReadEvent()
 		if err != nil {
 			return sseClientEvent{}, fmt.Errorf("reading SSE: %w", err)
 		}
-		line = strings.TrimRight(line, "\r\n")
-
-		if line == "" {
-			if data != "" || event != "" {
-				return sseClientEvent{event: event, data: data}, nil
-			}
+		// Skip comment-only events (keepalives) — only return events
+		// that have an event type or data payload.
+		if ev.Event == "" && ev.Data == "" {
 			continue
 		}
-		if strings.HasPrefix(line, ":") {
-			continue // keepalive comment
-		}
-		if strings.HasPrefix(line, "event:") {
-			event = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
-		} else if strings.HasPrefix(line, "data:") {
-			data = strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-		}
+		return sseClientEvent{event: ev.Event, data: ev.Data}, nil
 	}
 }
 
