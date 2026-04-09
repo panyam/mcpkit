@@ -1290,17 +1290,7 @@ func (e *ClientAuthError) Error() string {
 // HTTPStatusError is returned when the server responds with a non-2xx HTTP
 // status code that is not 401/403 (those are handled by DoWithAuthRetry).
 // This allows IsTransientError to classify 5xx responses as retriable.
-type HTTPStatusError struct {
-	StatusCode int
-	Body       string
-}
-
-func (e *HTTPStatusError) Error() string {
-	if e.Body != "" {
-		return fmt.Sprintf("HTTP %d: %s", e.StatusCode, e.Body)
-	}
-	return fmt.Sprintf("HTTP %d", e.StatusCode)
-}
+type HTTPStatusError = ssehttp.HTTPStatusError
 
 // DoWithAuthRetry executes an HTTP request with automatic retry on 401/403.
 //
@@ -1391,20 +1381,9 @@ func DoWithAuthRetry(
 }
 
 // ResolveEndpointURL resolves an SSE endpoint event URL against the base SSE
-// connection URL per RFC 3986. This handles three cases:
-//   - Absolute URL (e.g., "http://host/path?q=1"): returned unchanged
-//   - Absolute path (e.g., "/path?q=1"): inherits scheme+host from base
-//   - Relative path (e.g., "message?q=1"): inherits scheme+host+directory from base
+// connection URL per RFC 3986. Delegates to servicekit's ResolveURL.
 func ResolveEndpointURL(baseSSEURL, endpointRef string) (string, error) {
-	base, err := url.Parse(baseSSEURL)
-	if err != nil {
-		return "", fmt.Errorf("parsing SSE URL: %w", err)
-	}
-	ref, err := url.Parse(endpointRef)
-	if err != nil {
-		return "", fmt.Errorf("parsing endpoint URL %q: %w", endpointRef, err)
-	}
-	return base.ResolveReference(ref).String(), nil
+	return ssehttp.ResolveURL(baseSSEURL, endpointRef)
 }
 
 // --- core.Response extraction helpers ---

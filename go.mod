@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/panyam/gocurrent v0.0.14
-	github.com/panyam/servicekit v0.0.16
+	github.com/panyam/servicekit v0.0.17-0.20260409034408-125bdc80a1ed
 	github.com/stretchr/testify v1.10.0
 )
 
