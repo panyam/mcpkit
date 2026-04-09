@@ -16,9 +16,9 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.2.2 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/kr/text v0.2.0 // indirect
-	github.com/panyam/gocurrent v0.0.13 // indirect
+	github.com/panyam/gocurrent v0.0.15 // indirect
 	github.com/panyam/goutils v0.1.8 // indirect
-	github.com/panyam/servicekit v0.0.14 // indirect
+	github.com/panyam/servicekit v0.0.17 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	golang.org/x/crypto v0.46.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
