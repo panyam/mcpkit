@@ -97,6 +97,47 @@ func WithGetSSEStream() ClientOption {
 	return func(c *Client) { c.enableGetSSE = true }
 }
 
+// WithModifyRequest sets a callback that is invoked on every outgoing HTTP
+// request before authentication headers are applied. Use it to add custom
+// headers (API keys, tracing IDs, tenant identifiers) without needing a
+// custom http.RoundTripper.
+//
+// The callback must not modify the request body or URL.
+// Only applies to HTTP transports (Streamable HTTP, SSE); ignored for
+// stdio and in-process transports.
+//
+// Example:
+//
+//	c := client.NewClient(url, info,
+//	    client.WithModifyRequest(func(req *http.Request) {
+//	        req.Header.Set("X-Tenant-ID", "acme")
+//	        req.Header.Set("X-Request-ID", uuid.New().String())
+//	    }),
+//	)
+func WithModifyRequest(fn func(*http.Request)) ClientOption {
+	return func(c *Client) { c.modifyRequest = fn }
+}
+
+// WithCommandTransport configures the client to spawn a subprocess MCP server
+// and communicate over stdin/stdout. A fresh process is started on each
+// Connect() (and on each reconnection if WithMaxRetries is set).
+//
+// Example:
+//
+//	c := client.NewClient("", info,
+//	    client.WithCommandTransport("python", []string{"my_server.py"},
+//	        client.WithEnv("DEBUG=1"),
+//	    ),
+//	)
+//	err := c.Connect()
+func WithCommandTransport(name string, args []string, opts ...CommandOption) ClientOption {
+	return func(c *Client) {
+		c.commandName = name
+		c.commandArgs = args
+		c.commandOpts = opts
+	}
+}
+
 // WithClientKeepalive enables application-level keepalive pings. The client
 // periodically sends JSON-RPC ping requests to the server. If maxFailures
 // consecutive pings fail (timeout or error), the client triggers reconnection
@@ -238,6 +279,14 @@ type Client struct {
 	// Stdio transport fields (set by WithStdioTransport).
 	stdioReader io.Reader
 	stdioWriter io.Writer
+
+	// ModifyRequest hook for outgoing HTTP requests (set by WithModifyRequest).
+	modifyRequest func(*http.Request)
+
+	// Command transport fields (set by WithCommandTransport).
+	commandName string
+	commandArgs []string
+	commandOpts []CommandOption
 }
 
 // NewClient creates a new MCP client targeting the given server URL.
@@ -259,7 +308,22 @@ func NewClient(url string, info core.ClientInfo, opts ...ClientOption) *Client {
 func (c *Client) Connect() error {
 	// Create transport (skip if already set, e.g., by WithInMemoryServer)
 	if c.transport == nil {
-		if c.stdioReader != nil && c.stdioWriter != nil {
+		if c.commandName != "" {
+			ct := NewCommandTransport(c.commandName, c.commandArgs, c.commandOpts...)
+			ct.serverReqHandler = func(_ context.Context, req *core.Request) *core.Response {
+				return c.HandleServerRequest(req)
+			}
+			if c.onNotify != nil {
+				ct.notifyHandler = func(method string, params []byte) {
+					var parsed any
+					if len(params) > 0 {
+						json.Unmarshal(params, &parsed)
+					}
+					c.onNotify(method, parsed)
+				}
+			}
+			c.transport = &coreTransportAdapter{inner: ct}
+		} else if c.stdioReader != nil && c.stdioWriter != nil {
 			st := NewStdioTransport(c.stdioReader, c.stdioWriter)
 			st.serverReqHandler = func(_ context.Context, req *core.Request) *core.Response {
 				return c.HandleServerRequest(req)
@@ -277,6 +341,7 @@ func (c *Client) Connect() error {
 		} else if c.useSSE {
 			st := newSSEClientTransport(c.url, c.tokenSource)
 			st.serverReqHandler = c.HandleServerRequest
+			st.modifyReq = c.modifyRequest
 			if c.onNotify != nil {
 				st.notifyHandler = c.makeNotifyAdapter()
 			}
@@ -286,6 +351,7 @@ func (c *Client) Connect() error {
 			st.client = c
 			st.serverReqHandler = c.HandleServerRequest
 			st.enableGetSSE = c.enableGetSSE
+			st.modifyReq = c.modifyRequest
 			if c.onNotify != nil {
 				st.notifyHandler = c.makeNotifyAdapter()
 			}
@@ -799,6 +865,9 @@ type streamableClientTransport struct {
 	getSSEResp   *http.Response       // open GET response (for close)
 	getSSEDone   chan struct{}         // closed when background reader exits
 	getSSECancel context.CancelFunc   // cancels the GET request context
+
+	// ModifyRequest hook called inside buildReq before auth is applied.
+	modifyReq func(*http.Request)
 }
 
 func newStreamableClientTransport(url string, ts core.TokenSource) *streamableClientTransport {
@@ -844,6 +913,9 @@ func (t *streamableClientTransport) openGetSSEStream() {
 			if lastID, ok := t.client.lastEventID.Load().(string); ok && lastID != "" {
 				req.Header.Set("Last-Event-ID", lastID)
 			}
+		}
+		if t.modifyReq != nil {
+			t.modifyReq(req)
 		}
 		return req, nil
 	}
@@ -942,6 +1014,9 @@ func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
 		if t.sessionID != "" {
 			req.Header.Set("Mcp-Session-Id", t.sessionID)
 		}
+		if t.modifyReq != nil {
+			t.modifyReq(req)
+		}
 		return req, nil
 	}
 
@@ -1038,6 +1113,9 @@ func (t *streamableClientTransport) postResponse(resp *core.Response) {
 		if t.sessionID != "" {
 			req.Header.Set("Mcp-Session-Id", t.sessionID)
 		}
+		if t.modifyReq != nil {
+			t.modifyReq(req)
+		}
 		return req, nil
 	}
 	httpResp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
@@ -1057,6 +1135,9 @@ func (t *streamableClientTransport) notify(data []byte) error {
 		req.Header.Set("Accept", core.StreamableHTTPAccept)
 		if t.sessionID != "" {
 			req.Header.Set("Mcp-Session-Id", t.sessionID)
+		}
+		if t.modifyReq != nil {
+			t.modifyReq(req)
 		}
 		return req, nil
 	}
@@ -1099,6 +1180,9 @@ type sseClientTransport struct {
 	notifyHandler    func(method string, params json.RawMessage) // set by Client before connect
 	done             chan struct{}                               // closed when background reader exits
 	readerErr        error                                       // last error from background reader
+
+	// ModifyRequest hook called inside buildReq before auth is applied.
+	modifyReq func(*http.Request)
 }
 
 func newSSEClientTransport(sseURL string, ts core.TokenSource) *sseClientTransport {
@@ -1107,7 +1191,14 @@ func newSSEClientTransport(sseURL string, ts core.TokenSource) *sseClientTranspo
 
 func (t *sseClientTransport) connect() error {
 	buildReq := func() (*http.Request, error) {
-		return http.NewRequest("GET", t.sseURL, nil)
+		req, err := http.NewRequest("GET", t.sseURL, nil)
+		if err != nil {
+			return nil, err
+		}
+		if t.modifyReq != nil {
+			t.modifyReq(req)
+		}
+		return req, nil
 	}
 
 	resp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
@@ -1234,6 +1325,9 @@ func (t *sseClientTransport) postResponse(resp *core.Response) {
 			return nil, err
 		}
 		req.Header.Set("Content-Type", "application/json")
+		if t.modifyReq != nil {
+			t.modifyReq(req)
+		}
 		return req, nil
 	}
 	httpResp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
@@ -1289,6 +1383,9 @@ func (t *sseClientTransport) call(data []byte) (*rpcResponse, error) {
 			return nil, err
 		}
 		req.Header.Set("Content-Type", "application/json")
+		if t.modifyReq != nil {
+			t.modifyReq(req)
+		}
 		return req, nil
 	}
 
@@ -1335,6 +1432,9 @@ func (t *sseClientTransport) notify(data []byte) error {
 			return nil, err
 		}
 		req.Header.Set("Content-Type", "application/json")
+		if t.modifyReq != nil {
+			t.modifyReq(req)
+		}
 		return req, nil
 	}
 

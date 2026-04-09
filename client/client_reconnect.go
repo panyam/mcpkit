@@ -8,7 +8,7 @@ package client
 // Enable via WithMaxRetries(n). Disabled by default (maxRetries=0).
 
 import (
-	core "github.com/panyam/mcpkit/core"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -16,6 +16,8 @@ import (
 	"net"
 	"strings"
 	"time"
+
+	core "github.com/panyam/mcpkit/core"
 )
 
 // WithMaxRetries sets the maximum number of reconnection attempts on
@@ -48,9 +50,25 @@ func (c *Client) reconnect() error {
 	}
 
 	// Re-create transport with handlers and options
-	if c.useSSE {
+	if c.commandName != "" {
+		ct := NewCommandTransport(c.commandName, c.commandArgs, c.commandOpts...)
+		ct.serverReqHandler = func(_ context.Context, req *core.Request) *core.Response {
+			return c.HandleServerRequest(req)
+		}
+		if c.onNotify != nil {
+			ct.notifyHandler = func(method string, params []byte) {
+				var parsed any
+				if len(params) > 0 {
+					json.Unmarshal(params, &parsed)
+				}
+				c.onNotify(method, parsed)
+			}
+		}
+		c.transport = &coreTransportAdapter{inner: ct}
+	} else if c.useSSE {
 		st := newSSEClientTransport(c.url, c.tokenSource)
 		st.serverReqHandler = c.HandleServerRequest
+		st.modifyReq = c.modifyRequest
 		if c.onNotify != nil {
 			st.notifyHandler = c.makeNotifyAdapter()
 		}
@@ -60,6 +78,7 @@ func (c *Client) reconnect() error {
 		st.client = c
 		st.serverReqHandler = c.HandleServerRequest
 		st.enableGetSSE = c.enableGetSSE
+		st.modifyReq = c.modifyRequest
 		if c.onNotify != nil {
 			st.notifyHandler = c.makeNotifyAdapter()
 		}
