@@ -16,3 +16,5 @@ require (
 )
 
 replace github.com/panyam/mcpkit => ../../
+
+replace github.com/panyam/oneauth => /home/user/oneauth
