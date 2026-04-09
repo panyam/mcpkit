@@ -134,8 +134,8 @@ func TestClient_403_ScopeStepUp(t *testing.T) {
 }
 
 // TestClient_403_NoScopeAware verifies that 403 with a plain TokenSource
-// (not ScopeAwareTokenSource) returns an error indicating scope step-up is
-// not supported, instead of retrying.
+// (not ScopeAwareTokenSource) returns a ClientAuthError with status code 403
+// and RequiredScopes parsed from the WWW-Authenticate header.
 func TestClient_403_NoScopeAware(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("WWW-Authenticate", `Bearer error="insufficient_scope", scope="admin:write tools:call"`)
@@ -151,7 +151,12 @@ func TestClient_403_NoScopeAware(t *testing.T) {
 
 	_, err := client.DoWithAuthRetry(tokenSrc, buildReq, http.DefaultClient.Do)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "insufficient scope")
+
+	var authErr *client.ClientAuthError
+	require.ErrorAs(t, err, &authErr)
+	assert.Equal(t, 403, authErr.StatusCode)
+	assert.Contains(t, authErr.RequiredScopes, "admin:write")
+	assert.Contains(t, authErr.RequiredScopes, "tools:call")
 }
 
 // TestClient_RetryLimit_401Then403 verifies that the retry budget allows
