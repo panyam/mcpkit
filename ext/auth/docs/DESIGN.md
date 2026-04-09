@@ -31,21 +31,26 @@ MCPKit implements the MCP Authorization specification (draft, based on OAuth 2.1
 │  IMPLEMENTATIONS:                                               │
 │  ├─ JWTValidator        → implements AuthValidator+ClaimsProvider│
 │  ├─ OAuthTokenSource    → implements TokenSource                │
-│  ├─ ClientCredSource    → implements TokenSource                │
+│  ├─ ClientCredSource    → alias for client.ClientCredentialsSource│
 │  └─ AuthExtension       → implements ExtensionProvider          │
 │                                                                 │
 │  ADAPTERS (wraps oneauth):                                      │
 │  ├─ MountAuth()         → oneauth ProtectedResourceHandler      │
 │  ├─ DiscoverMCPAuth()   → oneauth client.DiscoverAS             │
-│  └─ RequireScope()      → oneauth core.ContainsScope            │
+│  ├─ RequireScope()      → oneauth core.ContainsScope            │
+│  ├─ RegisterClient      → re-export of client.RegisterClient    │
+│  └─ ValidatePKCES256()  → MCP-specific PKCE S256 check          │
 │                                                                 │
 │  MCP-SPECIFIC (not in oneauth):                                 │
 │  ├─ WWWAuth401/403()    → MCP resource_metadata parameter       │
-│  └─ ParseWWWAuth()      → client-side header parsing            │
+│  ├─ ParseWWWAuth()      → client-side header parsing            │
+│  └─ DefaultClientReg()  → MCP-specific DCR defaults             │
 ├─────────────────────────────────────────────────────────────────┤
 │  oneauth (external module)                                      │
 │  apiauth.APIAuth, keys.JWKSKeyStore, client.DiscoverAS,         │
 │  client.LoginWithBrowser, client.ClientCredentialsToken,        │
+│  client.RegisterClient, client.ValidateHTTPS, client.ValidateCIMDURL,│
+│  client.ClientCredentialsSource, core.UnionScopes,              │
 │  core.ContainsScope, apiauth.ProtectedResourceHandler, etc.     │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -380,9 +385,9 @@ Source: https://modelcontextprotocol.io/specification/2025-11-25/basic/authoriza
 | C4 | MUST support both OAuth AS metadata (RFC 8414) and OIDC discovery | Done | oneauth `client.DiscoverAS` with full fallback chain |
 | C5 | AS metadata fallback chain (3 URLs for path, 2 for no-path) | Done | oneauth `client.DiscoverAS` |
 | C6 | Client registration priority: pre-registered > CIMD > DCR > prompt user | Done | `OAuthTokenSource.resolveClientID()` |
-| C7 | SHOULD support Client ID Metadata Documents | Done | `OAuthTokenSource.ClientMetadataURL` + `ValidateCIMDURL` |
-| C8 | CIMD: client_id URL MUST use https, contain path, match document URL | Done | `ValidateCIMDURL` in `token_source.go` |
-| C9 | MAY support Dynamic Client Registration (RFC 7591) | Done | `RegisterClient` in `auth/dcr.go` + `OAuthTokenSource.EnableDCR` |
+| C7 | SHOULD support Client ID Metadata Documents | Done | `OAuthTokenSource.ClientMetadataURL` + `client.ValidateCIMDURL` (oneauth) |
+| C8 | CIMD: client_id URL MUST use https, contain path, match document URL | Done | `client.ValidateCIMDURL` (oneauth/client/validation.go) |
+| C9 | MAY support Dynamic Client Registration (RFC 7591) | Done | `client.RegisterClient` (oneauth) + `OAuthTokenSource.EnableDCR` |
 | C10 | MUST implement PKCE with S256 | Done | oneauth `LoginWithBrowser` uses S256 PKCE |
 | C11 | MUST verify PKCE support in AS metadata (`code_challenge_methods_supported`) | Done | `ValidatePKCES256` in `token_source.go` |
 | C12 | If `code_challenge_methods_supported` absent → MUST refuse to proceed | Done | `ValidatePKCES256` returns error |
@@ -402,7 +407,7 @@ Source: https://modelcontextprotocol.io/specification/2025-11-25/basic/authoriza
 
 | # | Requirement | Status | Notes |
 |---|-------------|--------|-------|
-| X1 | All AS endpoints MUST be HTTPS | Done | `validateHTTPS` in `token_source.go` (localhost exempt) |
+| X1 | All AS endpoints MUST be HTTPS | Done | `client.ValidateHTTPS` (oneauth/client/validation.go, localhost exempt) |
 | X2 | Redirect URIs MUST be localhost or HTTPS | Done | oneauth `LoginWithBrowser` uses localhost |
 | X3 | Refresh token rotation for public clients | Done | AS responsibility, client stores new tokens via `CredentialStore` |
 | X4 | Short-lived access tokens | N/A | AS configuration |

@@ -264,9 +264,8 @@ setup-tools: ## Install development tools
 	go install honnef.co/go/tools/cmd/staticcheck@latest
 	go install github.com/gitleaks/gitleaks/v8@latest
 
-setup-hooks: ## Install git hooks
-	cp -f .git/hooks/pre-push.sample .git/hooks/pre-push 2>/dev/null || true
-	echo '#!/bin/sh\nset -e\ncd "$$(git rev-parse --show-toplevel)"\ngo test ./...' > .git/hooks/pre-push
+setup-hooks: ## Install git hooks (runs root + ext/auth tests on push)
+	@printf '#!/bin/sh\nset -e\ncd "$$(git rev-parse --show-toplevel)"\necho "Running root module tests..."\ngo test ./...\necho "Running ext/auth tests..."\ncd ext/auth && go test ./...\n' > .git/hooks/pre-push
 	chmod +x .git/hooks/pre-push
 
 setup: setup-tools setup-hooks ## Full development setup
