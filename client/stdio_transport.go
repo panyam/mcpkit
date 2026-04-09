@@ -17,12 +17,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"strconv"
-	"strings"
 	"sync"
 
 	conc "github.com/panyam/gocurrent"
 	core "github.com/panyam/mcpkit/core"
+	gohttp "github.com/panyam/servicekit/http"
 )
 
 // StdioTransport implements core.Transport over Content-Length framed JSON-RPC.
@@ -145,12 +144,7 @@ func (t *StdioTransport) SessionID() string { return "stdio" }
 func (t *StdioTransport) writeFrame(data []byte) error {
 	t.writeMu.Lock()
 	defer t.writeMu.Unlock()
-	header := fmt.Sprintf("Content-Length: %d\r\n\r\n", len(data))
-	if _, err := io.WriteString(t.w, header); err != nil {
-		return err
-	}
-	_, err := t.w.Write(data)
-	return err
+	return gohttp.WriteFrame(t.w, data)
 }
 
 // readLoop reads Content-Length framed messages and routes them.
@@ -158,7 +152,7 @@ func (t *StdioTransport) readLoop() {
 	defer close(t.done)
 
 	for {
-		data, err := readClientFrame(t.reader)
+		data, err := gohttp.ReadFrame(t.reader)
 		if err != nil {
 			if err != io.EOF {
 				t.closeErr = err
@@ -219,43 +213,3 @@ func (t *StdioTransport) routeResponse(resp *core.Response) {
 	}
 }
 
-// readClientFrame reads a Content-Length framed message from a bufio.Reader.
-// Same framing as the server side — shared protocol, separate implementation
-// to keep the client package independent of the server package.
-func readClientFrame(r *bufio.Reader) ([]byte, error) {
-	contentLength := -1
-
-	for {
-		line, err := r.ReadString('\n')
-		if err != nil {
-			return nil, err
-		}
-		line = strings.TrimRight(line, "\r\n")
-		if line == "" {
-			break
-		}
-		parts := strings.SplitN(line, ":", 2)
-		if len(parts) != 2 {
-			return nil, fmt.Errorf("malformed header: %q", line)
-		}
-		name := strings.TrimSpace(parts[0])
-		value := strings.TrimSpace(parts[1])
-		if strings.EqualFold(name, "Content-Length") {
-			n, err := strconv.Atoi(value)
-			if err != nil {
-				return nil, fmt.Errorf("invalid Content-Length %q: %w", value, err)
-			}
-			contentLength = n
-		}
-	}
-
-	if contentLength < 0 {
-		return nil, fmt.Errorf("missing Content-Length header")
-	}
-
-	body := make([]byte, contentLength)
-	if _, err := io.ReadFull(r, body); err != nil {
-		return nil, fmt.Errorf("reading body (%d bytes): %w", contentLength, err)
-	}
-	return body, nil
-}

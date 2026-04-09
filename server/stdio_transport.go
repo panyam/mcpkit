@@ -24,11 +24,10 @@ import (
 	"io"
 	"log"
 	"os"
-	"strconv"
-	"strings"
 	"sync"
 
 	core "github.com/panyam/mcpkit/core"
+	gohttp "github.com/panyam/servicekit/http"
 )
 
 // StdioOption configures the stdio transport.
@@ -102,7 +101,7 @@ func (s *Server) RunStdio(ctx context.Context, opts ...StdioOption) error {
 	writeFrameLocked := func(data []byte) error {
 		writeMu.Lock()
 		defer writeMu.Unlock()
-		return writeFrame(writer, data)
+		return gohttp.WriteFrame(writer, data)
 	}
 
 	// Wire notifyFunc for server-to-client notifications (logging, progress, etc.).
@@ -145,7 +144,7 @@ func (s *Server) RunStdio(ctx context.Context, opts ...StdioOption) error {
 	for {
 		// Start a read in a goroutine so we can select on ctx.Done().
 		go func() {
-			data, err := readFrame(reader)
+			data, err := gohttp.ReadFrame(reader)
 			readCh <- readResult{data, err}
 		}()
 
@@ -219,67 +218,3 @@ func (s *Server) RunStdio(ctx context.Context, opts ...StdioOption) error {
 	}
 }
 
-// writeFrame writes a Content-Length framed message.
-// Format: Content-Length: <n>\r\n\r\n<body>
-func writeFrame(w io.Writer, data []byte) error {
-	header := fmt.Sprintf("Content-Length: %d\r\n\r\n", len(data))
-	if _, err := io.WriteString(w, header); err != nil {
-		return err
-	}
-	_, err := w.Write(data)
-	return err
-}
-
-// readFrame reads a Content-Length framed message.
-// Parses HTTP-like headers until \r\n\r\n, extracts Content-Length, reads the body.
-// Handles multiple headers (only Content-Length is used, others are ignored).
-func readFrame(r *bufio.Reader) ([]byte, error) {
-	contentLength := -1
-
-	// Read headers until empty line (\r\n).
-	for {
-		line, err := r.ReadString('\n')
-		if err != nil {
-			return nil, err
-		}
-
-		// Trim trailing \r\n or \n.
-		line = strings.TrimRight(line, "\r\n")
-
-		// Empty line = end of headers.
-		if line == "" {
-			break
-		}
-
-		// Parse header.
-		parts := strings.SplitN(line, ":", 2)
-		if len(parts) != 2 {
-			return nil, fmt.Errorf("malformed header: %q", line)
-		}
-		name := strings.TrimSpace(parts[0])
-		value := strings.TrimSpace(parts[1])
-
-		if strings.EqualFold(name, "Content-Length") {
-			n, err := strconv.Atoi(value)
-			if err != nil {
-				return nil, fmt.Errorf("invalid Content-Length %q: %w", value, err)
-			}
-			if n < 0 {
-				return nil, fmt.Errorf("negative Content-Length: %d", n)
-			}
-			contentLength = n
-		}
-		// Ignore other headers per spec.
-	}
-
-	if contentLength < 0 {
-		return nil, fmt.Errorf("missing Content-Length header")
-	}
-
-	body := make([]byte, contentLength)
-	if _, err := io.ReadFull(r, body); err != nil {
-		return nil, fmt.Errorf("reading body (%d bytes): %w", contentLength, err)
-	}
-
-	return body, nil
-}

@@ -364,7 +364,7 @@ func (t *streamableTransport) handleInitialize(w http.ResponseWriter, r *http.Re
 	}
 
 	// Success: create session and return with Mcp-Session-Id
-	sessionID := generateSessionID()
+	sessionID := gohttp.GenerateSessionID()
 	dispatcher.sessionID = sessionID
 	entry := &sessionEntry{
 		dispatcher: dispatcher,
@@ -438,7 +438,7 @@ func (h *streamableSSEHandler) Validate(w http.ResponseWriter, r *http.Request) 
 		dispatcher = entry.dispatcher
 	} else {
 		// No session — create a temporary dispatcher for this SSE stream
-		sessionID = generateSessionID()
+		sessionID = gohttp.GenerateSessionID()
 		dispatcher = h.transport.server.newSession()
 		dispatcher.initialized = true
 	}
@@ -587,7 +587,7 @@ func shouldStreamSSE(accept string, req *core.Request) bool {
 		return false
 	}
 
-	_, acceptsSSE := parseAcceptTypes(accept)
+	_, acceptsSSE := gohttp.ParseAcceptTypes(accept)
 	if !acceptsSSE {
 		return false
 	}
@@ -601,28 +601,6 @@ func shouldStreamSSE(accept string, req *core.Request) bool {
 	return true
 }
 
-// parseAcceptTypes parses the Accept header into a set of accepted media types.
-// Returns whether application/json and text/event-stream are present.
-// Handles quality values (q=) and whitespace per RFC 7231 §5.3.2.
-func parseAcceptTypes(accept string) (acceptsJSON, acceptsSSE bool) {
-	for _, part := range strings.Split(accept, ",") {
-		// Strip quality value and whitespace: "text/event-stream;q=0.9" → "text/event-stream"
-		mediaType := strings.TrimSpace(part)
-		if semi := strings.Index(mediaType, ";"); semi >= 0 {
-			mediaType = strings.TrimSpace(mediaType[:semi])
-		}
-		switch mediaType {
-		case "application/json":
-			acceptsJSON = true
-		case "text/event-stream":
-			acceptsSSE = true
-		case "*/*":
-			acceptsJSON = true
-			acceptsSSE = true
-		}
-	}
-	return
-}
 
 // validateOrigin checks the Origin and Host headers to prevent DNS rebinding attacks.
 // Per MCP spec: "Servers MUST validate the Origin header on all incoming connections.
