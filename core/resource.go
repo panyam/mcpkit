@@ -1,6 +1,9 @@
 package core
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // ResourceDef describes a resource exposed via MCP.
 type ResourceDef struct {
@@ -21,6 +24,9 @@ type ResourceDef struct {
 
 	// Annotations holds optional metadata for this resource.
 	Annotations map[string]any `json:"annotations,omitempty"`
+
+	// Timeout is a per-resource execution timeout. Not serialized to clients.
+	Timeout time.Duration `json:"-"`
 }
 
 // ResourceTemplate describes a parameterized resource URI template.
@@ -42,6 +48,9 @@ type ResourceTemplate struct {
 
 	// Annotations holds optional metadata for this template.
 	Annotations map[string]any `json:"annotations,omitempty"`
+
+	// Timeout is a per-template execution timeout. Not serialized to clients.
+	Timeout time.Duration `json:"-"`
 }
 
 // ResourcesListResult is the typed result for resources/list responses.

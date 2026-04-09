@@ -1,9 +1,12 @@
 package auth
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	conc "github.com/panyam/gocurrent"
 	"github.com/golang-jwt/jwt/v5"
@@ -50,6 +53,29 @@ type JWTValidator struct {
 	// Used by Claims(r) to retrieve claims without re-parsing.
 	// A SyncMap is used for concurrent safety across requests.
 	recentClaims conc.SyncMap[string, *mcpcore.Claims]
+
+	// CacheTTL enables a validated-token cache when > 0. Tokens validated
+	// within the TTL window return cached claims without re-verifying the
+	// JWT signature. This avoids redundant crypto during LLM agent loops
+	// making rapid sequential tool calls with the same token.
+	// Default: 0 (no caching). Recommended: 30s-60s.
+	CacheTTL time.Duration
+
+	// CacheMaxSize limits the number of cached tokens to prevent memory
+	// growth under token flooding. When the cache exceeds this size, new
+	// tokens are validated but not cached. Default: 1000.
+	// Future: consider hashicorp/golang-lru for proper LRU eviction.
+	CacheMaxSize int
+
+	// tokenCache stores validated claims keyed by SHA-256 hash of the token.
+	// Lazy eviction: expired entries are removed on access, not by background goroutine.
+	tokenCache conc.SyncMap[string, *cachedClaims]
+}
+
+// cachedClaims wraps claims with an expiry time for TTL-based caching.
+type cachedClaims struct {
+	claims *mcpcore.Claims
+	expiry time.Time
 }
 
 // JWTConfig configures a JWTValidator.
@@ -106,6 +132,20 @@ func (v *JWTValidator) Validate(r *http.Request) error {
 		return v.unauthorized("missing or invalid Authorization header")
 	}
 	token := authHeader[len(prefix):]
+
+	// Check token cache for a previously validated result (avoids redundant crypto).
+	if v.CacheTTL > 0 {
+		tokenHash := hashToken(token)
+		if cached, ok := v.tokenCache.Load(tokenHash); ok {
+			if time.Now().Before(cached.expiry) {
+				// Cache hit — stash claims for Claims() and return
+				v.recentClaims.Store(token, cached.claims)
+				return nil
+			}
+			// Expired — remove and fall through to full validation
+			v.tokenCache.Delete(tokenHash)
+		}
+	}
 
 	// Validate JWT with kid-based JWKS key lookup. We use jwt.Parse directly
 	// with a custom keyfunc because APIAuth.ValidateAccessTokenFull only supports
@@ -207,7 +247,35 @@ func (v *JWTValidator) Validate(r *http.Request) error {
 	// This avoids the fragile *r = *r.WithContext(...) pattern.
 	v.recentClaims.Store(token, claims)
 
+	// Store in TTL cache for subsequent requests with the same token.
+	if v.CacheTTL > 0 {
+		maxSize := v.CacheMaxSize
+		if maxSize <= 0 {
+			maxSize = 1000
+		}
+		tokenHash := hashToken(token)
+		// Simple size bound: skip caching if over capacity (no eviction).
+		count := 0
+		v.tokenCache.Range(func(_ string, _ *cachedClaims) bool {
+			count++
+			return count < maxSize
+		})
+		if count < maxSize {
+			v.tokenCache.Store(tokenHash, &cachedClaims{
+				claims: claims,
+				expiry: time.Now().Add(v.CacheTTL),
+			})
+		}
+	}
+
 	return nil
+}
+
+// hashToken returns the SHA-256 hex digest of a token string.
+// Used as the cache key to avoid storing raw tokens in memory.
+func hashToken(token string) string {
+	h := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(h[:])
 }
 
 // Claims implements mcpmcpcore.ClaimsProvider.
