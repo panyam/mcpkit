@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -22,12 +21,11 @@ type sseEvent struct {
 	Data  string
 }
 
-// readSSEEvent reads the next SSE event from a bufio.Reader using the shared
-// SSEEventReader. Skips comment-only and empty events (keepalives).
-func readSSEEvent(r *bufio.Reader) (sseEvent, error) {
-	reader := ssehttp.NewSSEEventReader(r)
+// readSSEEvent reads the next SSE event from an SSEEventReader, skipping
+// comment-only and empty events (keepalives).
+func readSSEEvent(r *ssehttp.SSEEventReader) (sseEvent, error) {
 	for {
-		ev, err := reader.ReadEvent()
+		ev, err := r.ReadEvent()
 		if err != nil {
 			return sseEvent{}, err
 		}
@@ -66,53 +64,53 @@ func testMCPServer(opts ...TransportOption) (*httptest.Server, *Server) {
 }
 
 // connectSSE opens an SSE connection to the test server and reads the endpoint event.
-// Returns the SSE response (keep open for reading more events), the POST URL from the
-// endpoint event, and any error.
-func connectSSE(ts *httptest.Server, prefix string) (*http.Response, string, error) {
+// Returns the SSE response (keep open for reading more events), the SSE reader for
+// subsequent events, the POST URL from the endpoint event, and any error.
+func connectSSE(ts *httptest.Server, prefix string) (*http.Response, *ssehttp.SSEEventReader, string, error) {
 	resp, err := http.Get(ts.URL + prefix + "/sse")
 	if err != nil {
-		return nil, "", fmt.Errorf("GET /sse: %w", err)
+		return nil, nil, "", fmt.Errorf("GET /sse: %w", err)
 	}
 
-	reader := bufio.NewReader(resp.Body)
+	reader := ssehttp.NewSSEEventReader(resp.Body)
 	ev, err := readSSEEvent(reader)
 	if err != nil {
 		resp.Body.Close()
-		return nil, "", fmt.Errorf("reading endpoint event: %w", err)
+		return nil, nil, "", fmt.Errorf("reading endpoint event: %w", err)
 	}
 	if ev.Event != "endpoint" {
 		resp.Body.Close()
-		return nil, "", fmt.Errorf("expected endpoint event, got %q", ev.Event)
+		return nil, nil, "", fmt.Errorf("expected endpoint event, got %q", ev.Event)
 	}
 
-	return resp, ev.Data, nil
+	return resp, reader, ev.Data, nil
 }
 
 // connectSSEWithAuth is like connectSSE but sends an Authorization: Bearer header.
-func connectSSEWithAuth(ts *httptest.Server, prefix string, token string) (*http.Response, string, error) {
+func connectSSEWithAuth(ts *httptest.Server, prefix string, token string) (*http.Response, *ssehttp.SSEEventReader, string, error) {
 	req, err := http.NewRequest("GET", ts.URL+prefix+"/sse", nil)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, "", err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, "", fmt.Errorf("GET /sse: %w", err)
+		return nil, nil, "", fmt.Errorf("GET /sse: %w", err)
 	}
 
-	reader := bufio.NewReader(resp.Body)
+	reader := ssehttp.NewSSEEventReader(resp.Body)
 	ev, err := readSSEEvent(reader)
 	if err != nil {
 		resp.Body.Close()
-		return nil, "", fmt.Errorf("reading endpoint event: %w", err)
+		return nil, nil, "", fmt.Errorf("reading endpoint event: %w", err)
 	}
 	if ev.Event != "endpoint" {
 		resp.Body.Close()
-		return nil, "", fmt.Errorf("expected endpoint event, got %q", ev.Event)
+		return nil, nil, "", fmt.Errorf("expected endpoint event, got %q", ev.Event)
 	}
 
-	return resp, ev.Data, nil
+	return resp, reader, ev.Data, nil
 }
 
 // postJSON sends a JSON-RPC request to the given URL and returns the HTTP response.
@@ -127,7 +125,7 @@ func TestSSEEndpointEvent(t *testing.T) {
 	ts, _ := testMCPServer()
 	defer ts.Close()
 
-	sseResp, postURL, err := connectSSE(ts, "/mcp")
+	sseResp, _, postURL, err := connectSSE(ts, "/mcp")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,12 +145,11 @@ func TestSSEInitAndToolCall(t *testing.T) {
 	ts, _ := testMCPServer()
 	defer ts.Close()
 
-	sseResp, postURL, err := connectSSE(ts, "/mcp")
+	sseResp, reader, postURL, err := connectSSE(ts, "/mcp")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer sseResp.Body.Close()
-	reader := bufio.NewReader(sseResp.Body)
 
 	// Initialize
 	resp, err := postJSON(postURL, &core.Request{
@@ -263,7 +260,7 @@ func TestSSENotification(t *testing.T) {
 	ts, _ := testMCPServer()
 	defer ts.Close()
 
-	sseResp, postURL, err := connectSSE(ts, "/mcp")
+	sseResp, _, postURL, err := connectSSE(ts, "/mcp")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -324,7 +321,7 @@ func TestSSEAuthRequired(t *testing.T) {
 	}
 
 	// SSE GET with auth should succeed (connect and get endpoint event)
-	sseResp, postURL, err := connectSSEWithAuth(ts, "/mcp", "secret")
+	sseResp, _, postURL, err := connectSSEWithAuth(ts, "/mcp", "secret")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -353,7 +350,7 @@ func TestSSEMaxSessions(t *testing.T) {
 	defer ts.Close()
 
 	// First connection succeeds
-	sseResp1, _, err := connectSSE(ts, "/mcp")
+	sseResp1, _, _, err := connectSSE(ts, "/mcp")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -377,7 +374,7 @@ func TestSSEClientDisconnect(t *testing.T) {
 	ts, _ := testMCPServer()
 	defer ts.Close()
 
-	sseResp, postURL, err := connectSSE(ts, "/mcp")
+	sseResp, _, postURL, err := connectSSE(ts, "/mcp")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -410,12 +407,11 @@ func TestSSEParseError(t *testing.T) {
 	ts, _ := testMCPServer()
 	defer ts.Close()
 
-	sseResp, postURL, err := connectSSE(ts, "/mcp")
+	sseResp, reader, postURL, err := connectSSE(ts, "/mcp")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer sseResp.Body.Close()
-	reader := bufio.NewReader(sseResp.Body)
 
 	// POST malformed JSON
 	resp, err := http.Post(postURL, "application/json", strings.NewReader("not json"))
@@ -453,7 +449,7 @@ func TestSSECustomPrefix(t *testing.T) {
 	ts, _ := testMCPServer(WithPrefix("/custom"))
 	defer ts.Close()
 
-	sseResp, postURL, err := connectSSE(ts, "/custom")
+	sseResp, _, postURL, err := connectSSE(ts, "/custom")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -470,7 +466,7 @@ func TestSSEPublicURL(t *testing.T) {
 	ts, _ := testMCPServer(WithPublicURL("https://proxy.example.com"))
 	defer ts.Close()
 
-	sseResp, postURL, err := connectSSE(ts, "/mcp")
+	sseResp, _, postURL, err := connectSSE(ts, "/mcp")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -508,12 +504,11 @@ func TestSSELoggingNotification(t *testing.T) {
 	defer ts.Close()
 
 	// Connect SSE
-	sseResp, postURL, err := connectSSE(ts, "/mcp")
+	sseResp, reader, postURL, err := connectSSE(ts, "/mcp")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer sseResp.Body.Close()
-	reader := bufio.NewReader(sseResp.Body)
 
 	// Initialize
 	resp, err := postJSON(postURL, &core.Request{
@@ -650,12 +645,11 @@ func TestSSELoggingFilteredByLevel(t *testing.T) {
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
-	sseResp, postURL, err := connectSSE(ts, "/mcp")
+	sseResp, reader, postURL, err := connectSSE(ts, "/mcp")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer sseResp.Body.Close()
-	reader := bufio.NewReader(sseResp.Body)
 
 	// Init handshake
 	resp, _ := postJSON(postURL, &core.Request{
@@ -728,12 +722,11 @@ func TestSSEProgressNotification(t *testing.T) {
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
-	sseResp, postURL, err := connectSSE(ts, "/mcp")
+	sseResp, reader, postURL, err := connectSSE(ts, "/mcp")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer sseResp.Body.Close()
-	reader := bufio.NewReader(sseResp.Body)
 
 	// Initialize
 	resp, _ := postJSON(postURL, &core.Request{
