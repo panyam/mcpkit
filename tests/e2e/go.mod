@@ -12,8 +12,8 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/panyam/mcpkit v0.0.0
 	github.com/panyam/mcpkit/ext/auth v0.0.0
-	github.com/panyam/mcpkit/ext/ui v0.0.0-00010101000000-000000000000
-	github.com/panyam/oneauth v0.0.67
+	github.com/panyam/mcpkit/ext/ui v0.0.0
+	github.com/panyam/oneauth v0.0.68
 	github.com/stretchr/testify v1.11.1
 )
 
