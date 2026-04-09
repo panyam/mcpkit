@@ -6,6 +6,7 @@ replace (
 	github.com/panyam/mcpkit => ../..
 	github.com/panyam/mcpkit/ext/auth => ../../ext/auth
 	github.com/panyam/mcpkit/ext/ui => ../../ext/ui
+	github.com/panyam/oneauth => /home/user/oneauth
 )
 
 require (
