@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	conc "github.com/panyam/gocurrent"
 	core "github.com/panyam/mcpkit/core"
 	ssehttp "github.com/panyam/servicekit/http"
 )
@@ -960,7 +961,7 @@ type sseClientTransport struct {
 	sseReader   *ssehttp.SSEEventReader
 
 	// Background reader state
-	pendingCalls     sync.Map                                    // requestID (string) → chan *rpcResponse
+	pendingCalls     conc.SyncMap[string, chan *rpcResponse]       // requestID → response channel
 	serverReqHandler func(*core.Request) *core.Response          // set by Client before connect
 	notifyHandler    func(method string, params json.RawMessage) // set by Client before connect
 	done             chan struct{}                               // closed when background reader exits
@@ -1024,8 +1025,7 @@ func (t *sseClientTransport) backgroundReader() {
 		if err != nil {
 			t.readerErr = err
 			// Wake up any pending callers
-			t.pendingCalls.Range(func(key, value any) bool {
-				ch := value.(chan *rpcResponse)
+			t.pendingCalls.Range(func(_ string, ch chan *rpcResponse) bool {
 				select {
 				case ch <- nil:
 				default:
@@ -1081,7 +1081,7 @@ func (t *sseClientTransport) backgroundReader() {
 			if json.Unmarshal([]byte(ev.data), &resp) == nil {
 				idStr := normalizeID(probe.ID)
 				if ch, ok := t.pendingCalls.LoadAndDelete(idStr); ok {
-					ch.(chan *rpcResponse) <- &resp
+					ch <- &resp
 				}
 			}
 		}
