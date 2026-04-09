@@ -10,6 +10,7 @@ import (
 
 	conc "github.com/panyam/gocurrent"
 	core "github.com/panyam/mcpkit/core"
+	gohttp "github.com/panyam/servicekit/http"
 )
 
 // supportedProtocolVersions lists the MCP protocol versions this server supports,
@@ -65,6 +66,11 @@ type Dispatcher struct {
 	pushRequest    func(json.RawMessage)
 	pending        pendingMap
 	nextServerReqID atomic.Int64
+
+	// eventIDs generates unique SSE event IDs for this session's streams.
+	// Used by transports to assign id: fields to SSE events, enabling
+	// client reconnection via Last-Event-ID.
+	eventIDs gohttp.IDGen
 }
 
 // SetNotifyFunc sets the notification delivery function for this dispatcher.
@@ -142,6 +148,7 @@ func (d *Dispatcher) newSession() *Dispatcher {
 		serverInfo:           d.serverInfo,
 		subscriptionsEnabled: d.subscriptionsEnabled,
 		subManager:           d.subManager,
+		eventIDs:             newEventIDGen(),
 	}
 }
 
