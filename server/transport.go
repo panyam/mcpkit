@@ -1,8 +1,6 @@
 package server
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -293,7 +291,7 @@ func (h *mcpSSEHandler) Validate(w http.ResponseWriter, r *http.Request) (*mcpSS
 		return nil, false
 	}
 
-	sessionID := generateSessionID()
+	sessionID := gohttp.GenerateSessionID()
 
 	// Bind the authenticated principal to this session so POST /message
 	// can verify the same principal is making requests.
@@ -344,11 +342,3 @@ func (c *sseDataCodec) Decode(data []byte, msgType gohttp.MessageType) (any, err
 	return data, nil
 }
 
-// generateSessionID returns a cryptographically random 32-character hex string.
-func generateSessionID() string {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		panic("crypto/rand failed: " + err.Error())
-	}
-	return hex.EncodeToString(b)
-}

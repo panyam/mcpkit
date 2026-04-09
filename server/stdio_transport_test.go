@@ -12,6 +12,7 @@ import (
 	"time"
 
 	core "github.com/panyam/mcpkit/core"
+	gohttp "github.com/panyam/servicekit/http"
 )
 
 // TestStdioFrameRoundTrip verifies that writeFrame and readFrame produce and
@@ -21,7 +22,7 @@ func TestStdioFrameRoundTrip(t *testing.T) {
 	msg := `{"jsonrpc":"2.0","id":1,"method":"test"}`
 
 	var buf bytes.Buffer
-	if err := writeFrame(&buf, []byte(msg)); err != nil {
+	if err := gohttp.WriteFrame(&buf, []byte(msg)); err != nil {
 		t.Fatalf("writeFrame: %v", err)
 	}
 
@@ -34,7 +35,7 @@ func TestStdioFrameRoundTrip(t *testing.T) {
 
 	// Read it back.
 	reader := bufio.NewReader(&buf)
-	body, err := readFrame(reader)
+	body, err := gohttp.ReadFrame(reader)
 	if err != nil {
 		t.Fatalf("readFrame: %v", err)
 	}
@@ -51,7 +52,7 @@ func TestStdioFrameMultipleHeaders(t *testing.T) {
 	frame := "Content-Type: application/json\r\nContent-Length: 13\r\nX-Custom: foo\r\n\r\n" + msg
 
 	reader := bufio.NewReader(strings.NewReader(frame))
-	body, err := readFrame(reader)
+	body, err := gohttp.ReadFrame(reader)
 	if err != nil {
 		t.Fatalf("readFrame: %v", err)
 	}
@@ -65,7 +66,7 @@ func TestStdioFrameMultipleHeaders(t *testing.T) {
 func TestStdioFrameMalformedHeader(t *testing.T) {
 	frame := "BADHEADER\r\n\r\n"
 	reader := bufio.NewReader(strings.NewReader(frame))
-	_, err := readFrame(reader)
+	_, err := gohttp.ReadFrame(reader)
 	if err == nil {
 		t.Fatal("expected error for malformed header")
 	}
@@ -79,7 +80,7 @@ func TestStdioFrameMalformedHeader(t *testing.T) {
 func TestStdioFrameInvalidContentLength(t *testing.T) {
 	frame := "Content-Length: abc\r\n\r\n"
 	reader := bufio.NewReader(strings.NewReader(frame))
-	_, err := readFrame(reader)
+	_, err := gohttp.ReadFrame(reader)
 	if err == nil {
 		t.Fatal("expected error for invalid Content-Length")
 	}
@@ -93,7 +94,7 @@ func TestStdioFrameInvalidContentLength(t *testing.T) {
 func TestStdioFrameMissingContentLength(t *testing.T) {
 	frame := "Content-Type: application/json\r\n\r\n"
 	reader := bufio.NewReader(strings.NewReader(frame))
-	_, err := readFrame(reader)
+	_, err := gohttp.ReadFrame(reader)
 	if err == nil {
 		t.Fatal("expected error for missing Content-Length")
 	}
@@ -107,7 +108,7 @@ func TestStdioFrameMissingContentLength(t *testing.T) {
 func TestStdioFrameNegativeContentLength(t *testing.T) {
 	frame := "Content-Length: -5\r\n\r\n"
 	reader := bufio.NewReader(strings.NewReader(frame))
-	_, err := readFrame(reader)
+	_, err := gohttp.ReadFrame(reader)
 	if err == nil {
 		t.Fatal("expected error for negative Content-Length")
 	}
@@ -121,7 +122,7 @@ func TestStdioFrameNegativeContentLength(t *testing.T) {
 func TestStdioFramePartialRead(t *testing.T) {
 	frame := "Content-Length: 100\r\n\r\nshort"
 	reader := bufio.NewReader(strings.NewReader(frame))
-	_, err := readFrame(reader)
+	_, err := gohttp.ReadFrame(reader)
 	if err == nil {
 		t.Fatal("expected error for partial body read")
 	}
@@ -135,7 +136,7 @@ func TestStdioParseError(t *testing.T) {
 	// Send a valid frame with invalid JSON content.
 	badJSON := "not json at all"
 	var input bytes.Buffer
-	writeFrame(&input, []byte(badJSON))
+	gohttp.WriteFrame(&input, []byte(badJSON))
 
 	var output bytes.Buffer
 	srv := newTestServer()
@@ -161,7 +162,7 @@ func TestStdioParseError(t *testing.T) {
 
 	// Read the error response from output.
 	reader := bufio.NewReader(&output)
-	body, err := readFrame(reader)
+	body, err := gohttp.ReadFrame(reader)
 	if err != nil {
 		t.Fatalf("readFrame from output: %v", err)
 	}
@@ -246,11 +247,11 @@ func TestStdioRequestResponse(t *testing.T) {
 
 	// Send initialize request.
 	initReq := `{"jsonrpc":"2.0","id":"1","method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}`
-	writeFrame(cw, []byte(initReq))
+	gohttp.WriteFrame(cw, []byte(initReq))
 
 	// Read response.
 	reader := bufio.NewReader(cr)
-	body, err := readFrame(reader)
+	body, err := gohttp.ReadFrame(reader)
 	if err != nil {
 		t.Fatalf("readFrame: %v", err)
 	}
@@ -303,27 +304,27 @@ func TestStdioNotificationDelivery(t *testing.T) {
 
 	// Initialize.
 	initReq := `{"jsonrpc":"2.0","id":"1","method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}`
-	writeFrame(cw, []byte(initReq))
-	readFrame(reader) // consume init response
+	gohttp.WriteFrame(cw, []byte(initReq))
+	gohttp.ReadFrame(reader) // consume init response
 
 	// Send initialized notification.
 	initedNotif := `{"jsonrpc":"2.0","method":"notifications/initialized"}`
-	writeFrame(cw, []byte(initedNotif))
+	gohttp.WriteFrame(cw, []byte(initedNotif))
 
 	// Set log level so notifications are emitted.
 	setLevel := `{"jsonrpc":"2.0","id":"2","method":"logging/setLevel","params":{"level":"info"}}`
-	writeFrame(cw, []byte(setLevel))
-	readFrame(reader) // consume setLevel response
+	gohttp.WriteFrame(cw, []byte(setLevel))
+	gohttp.ReadFrame(reader) // consume setLevel response
 
 	// Call the tool that emits a log.
 	toolCall := `{"jsonrpc":"2.0","id":"3","method":"tools/call","params":{"name":"log-test","arguments":{}}}`
-	writeFrame(cw, []byte(toolCall))
+	gohttp.WriteFrame(cw, []byte(toolCall))
 
 	// We should receive a notification before the tool result.
 	// Read frames until we get the tool response.
 	var gotNotification bool
 	for i := 0; i < 5; i++ {
-		body, err := readFrame(reader)
+		body, err := gohttp.ReadFrame(reader)
 		if err != nil {
 			t.Fatalf("readFrame: %v", err)
 		}
@@ -361,14 +362,14 @@ func TestStdioMultipleFrames(t *testing.T) {
 		`{"c":3}`,
 	}
 	for _, msg := range msgs {
-		if err := writeFrame(&buf, []byte(msg)); err != nil {
+		if err := gohttp.WriteFrame(&buf, []byte(msg)); err != nil {
 			t.Fatalf("writeFrame: %v", err)
 		}
 	}
 
 	reader := bufio.NewReader(&buf)
 	for _, want := range msgs {
-		body, err := readFrame(reader)
+		body, err := gohttp.ReadFrame(reader)
 		if err != nil {
 			t.Fatalf("readFrame: %v", err)
 		}

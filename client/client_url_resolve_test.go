@@ -89,7 +89,7 @@ func TestResolveEndpointURL_PreservesQueryParams(t *testing.T) {
 func TestResolveEndpointURL_InvalidBase(t *testing.T) {
 	_, err := client.ResolveEndpointURL("://invalid", "message")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parsing SSE URL")
+	assert.Contains(t, err.Error(), "parsing base URL")
 }
 
 // TestResolveEndpointURL_InvalidEndpoint verifies that an unparseable endpoint
@@ -97,7 +97,7 @@ func TestResolveEndpointURL_InvalidBase(t *testing.T) {
 func TestResolveEndpointURL_InvalidEndpoint(t *testing.T) {
 	_, err := client.ResolveEndpointURL("http://localhost/sse", "://bad")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parsing endpoint URL")
+	assert.Contains(t, err.Error(), "parsing reference URL")
 }
 
 // TestSSE_SessionIDFromQuery verifies that the sessionId is correctly extracted
