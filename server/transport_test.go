@@ -36,7 +36,9 @@ func readSSEEvent(r *ssehttp.SSEEventReader) (sseEvent, error) {
 	}
 }
 
-// testMCPServer creates an httptest.Server with an MCP server that has an echo tool.
+// testMCPServer creates an httptest.Server with an echo tool and the given
+// transport options. Note: Cannot use testutil.NewTestServer due to import
+// cycle (package server tests cannot import testutil which imports server).
 func testMCPServer(opts ...TransportOption) (*httptest.Server, *Server) {
 	srv := NewServer(core.ServerInfo{Name: "test-sse", Version: "0.1.0"})
 	srv.RegisterTool(
