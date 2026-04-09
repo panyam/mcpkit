@@ -5,10 +5,16 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/panyam/oneauth/client"
 )
 
-// TestRegisterClient_Success verifies that RegisterClient correctly POSTs a
-// DCR request and parses the response containing client_id and client_secret.
+// TestRegisterClient_Success verifies that RegisterClient (re-exported from
+// oneauth/client) correctly POSTs a DCR request and parses the response
+// containing client_id and client_secret. This is an integration test
+// ensuring the oneauth function works correctly from mcpkit's context.
+//
+// See: https://www.rfc-editor.org/rfc/rfc7591#section-3.2.1
 func TestRegisterClient_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -20,7 +26,7 @@ func TestRegisterClient_Success(t *testing.T) {
 			return
 		}
 
-		var req ClientRegistrationRequest
+		var req client.ClientRegistrationRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
@@ -34,7 +40,7 @@ func TestRegisterClient_Success(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(ClientRegistrationResponse{
+		json.NewEncoder(w).Encode(client.ClientRegistrationResponse{
 			ClientID:     "registered-client-123",
 			ClientSecret: "secret-456",
 		})
@@ -55,6 +61,8 @@ func TestRegisterClient_Success(t *testing.T) {
 
 // TestRegisterClient_ServerError verifies that RegisterClient returns an error
 // when the DCR endpoint responds with a non-success status.
+//
+// See: https://www.rfc-editor.org/rfc/rfc7591#section-3.2.2
 func TestRegisterClient_ServerError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "registration disabled", http.StatusForbidden)
@@ -69,6 +77,8 @@ func TestRegisterClient_ServerError(t *testing.T) {
 
 // TestRegisterClient_EmptyClientID verifies that RegisterClient returns an error
 // when the DCR endpoint returns a response without a client_id.
+//
+// See: https://www.rfc-editor.org/rfc/rfc7591#section-3.2.1
 func TestRegisterClient_EmptyClientID(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -83,17 +93,24 @@ func TestRegisterClient_EmptyClientID(t *testing.T) {
 	}
 }
 
-// TestDefaultClientRegistration verifies that the default DCR request has
-// sensible values for an MCP client.
+// TestDefaultClientRegistration verifies that the MCP-specific default DCR
+// request has sensible values: a client name, redirect URIs for loopback,
+// authorization_code grant type, and "none" auth method (public client).
 func TestDefaultClientRegistration(t *testing.T) {
 	meta := DefaultClientRegistration()
 	if meta.ClientName == "" {
 		t.Error("missing client_name")
+	}
+	if meta.ClientName != "mcpkit-client" {
+		t.Errorf("client_name = %q, want %q", meta.ClientName, "mcpkit-client")
 	}
 	if len(meta.RedirectURIs) == 0 {
 		t.Error("missing redirect_uris")
 	}
 	if len(meta.GrantTypes) == 0 {
 		t.Error("missing grant_types")
+	}
+	if meta.TokenEndpointAuthMethod != "none" {
+		t.Errorf("token_endpoint_auth_method = %q, want %q", meta.TokenEndpointAuthMethod, "none")
 	}
 }
