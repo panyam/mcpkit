@@ -318,9 +318,14 @@ func (c *Client) Connect() error {
 		}
 	}
 
-	// Send initialized notification
+	// Send initialized notification. Non-fatal: the initialize handshake
+	// already completed successfully. Some servers may not accept notifications
+	// at this endpoint, or may return errors for notifications.
 	if err := c.notifyMethod("notifications/initialized", nil); err != nil {
-		return err
+		// Log but don't fail — the session is usable regardless.
+		if c.logger != nil {
+			c.logger.Printf("notifications/initialized: %v (non-fatal)", err)
+		}
 	}
 
 	// Open GET SSE stream for server-initiated notifications (Streamable HTTP only).
