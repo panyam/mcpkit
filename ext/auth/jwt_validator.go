@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
 
+	conc "github.com/panyam/gocurrent"
 	"github.com/golang-jwt/jwt/v5"
 	mcpcore "github.com/panyam/mcpkit/core"
 	"github.com/panyam/oneauth/apiauth"
@@ -48,8 +48,8 @@ type JWTValidator struct {
 
 	// recentClaims caches the most recently validated claims by token string.
 	// Used by Claims(r) to retrieve claims without re-parsing.
-	// A sync.Map is used for concurrent safety across requests.
-	recentClaims sync.Map // token string → *mcpcore.Claims
+	// A SyncMap is used for concurrent safety across requests.
+	recentClaims conc.SyncMap[string, *mcpcore.Claims]
 }
 
 // JWTConfig configures a JWTValidator.
@@ -219,8 +219,8 @@ func (v *JWTValidator) Claims(r *http.Request) *mcpcore.Claims {
 		return nil
 	}
 	token := authHeader[len(prefix):]
-	if val, ok := v.recentClaims.LoadAndDelete(token); ok {
-		return val.(*mcpcore.Claims)
+	if claims, ok := v.recentClaims.LoadAndDelete(token); ok {
+		return claims
 	}
 	return nil
 }
