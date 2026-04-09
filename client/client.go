@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	conc "github.com/panyam/gocurrent"
@@ -94,6 +95,17 @@ func WithNotificationCallback(fn func(method string, params any)) ClientOption {
 // concurrently from both the GET SSE stream and POST SSE responses.
 func WithGetSSEStream() ClientOption {
 	return func(c *Client) { c.enableGetSSE = true }
+}
+
+// WithClientKeepalive enables application-level keepalive pings. The client
+// periodically sends JSON-RPC ping requests to the server. If maxFailures
+// consecutive pings fail (timeout or error), the client triggers reconnection
+// (if retries are configured) or closes.
+func WithClientKeepalive(interval time.Duration, maxFailures int) ClientOption {
+	return func(c *Client) {
+		c.keepaliveInterval = interval
+		c.keepaliveMaxFails = maxFailures
+	}
 }
 
 // WithExtension advertises support for an extension during the initialize
@@ -213,6 +225,16 @@ type Client struct {
 	// enableGetSSE opts into the background GET SSE stream (Streamable HTTP only).
 	enableGetSSE bool
 
+	// lastEventID tracks the most recent SSE event ID received from the server.
+	// Used to send Last-Event-ID header on reconnection for stream resumption.
+	// Written by background SSE readers, read during reconnection.
+	lastEventID atomic.Value // stores string
+
+	// Client keepalive: periodic ping to detect dead server.
+	keepaliveInterval time.Duration     // 0 = disabled
+	keepaliveMaxFails int               // max consecutive failures before close/reconnect
+	keepaliveCancel   context.CancelFunc // cancels keepalive goroutine
+
 	// Stdio transport fields (set by WithStdioTransport).
 	stdioReader io.Reader
 	stdioWriter io.Writer
@@ -261,6 +283,7 @@ func (c *Client) Connect() error {
 			c.transport = st
 		} else {
 			st := newStreamableClientTransport(c.url, c.tokenSource)
+			st.client = c
 			st.serverReqHandler = c.HandleServerRequest
 			st.enableGetSSE = c.enableGetSSE
 			if c.onNotify != nil {
@@ -336,11 +359,59 @@ func (c *Client) Connect() error {
 		}
 	}
 
+	// Start client keepalive if configured
+	c.startKeepalive()
+
 	return nil
+}
+
+// startKeepalive starts the client-side keepalive goroutine if configured.
+// Sends periodic JSON-RPC ping requests to the server.
+func (c *Client) startKeepalive() {
+	if c.keepaliveInterval <= 0 {
+		return
+	}
+	maxFails := c.keepaliveMaxFails
+	if maxFails <= 0 {
+		maxFails = 3
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	c.keepaliveCancel = cancel
+
+	go func() {
+		ticker := time.NewTicker(c.keepaliveInterval)
+		defer ticker.Stop()
+
+		failures := 0
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				_, err := c.rawCall("ping", nil)
+				if err != nil {
+					failures++
+					if failures >= maxFails {
+						// Trigger reconnection or close
+						if c.maxRetries > 0 {
+							c.transport.close()
+						}
+						return
+					}
+				} else {
+					failures = 0
+				}
+			}
+		}
+	}()
 }
 
 // Close terminates the client session and transport.
 func (c *Client) Close() error {
+	if c.keepaliveCancel != nil {
+		c.keepaliveCancel()
+	}
 	if c.transport != nil {
 		return c.transport.close()
 	}
@@ -672,6 +743,7 @@ type streamableClientTransport struct {
 	sessionID        string
 	httpClient       *http.Client
 	tokenSource      core.TokenSource
+	client           *Client                                     // back-pointer for lastEventID tracking
 	serverReqHandler func(*core.Request) *core.Response          // set by Client before connect
 	notifyHandler    func(method string, params json.RawMessage) // set by Client before connect
 
@@ -720,6 +792,12 @@ func (t *streamableClientTransport) openGetSSEStream() {
 		if t.sessionID != "" {
 			req.Header.Set("Mcp-Session-Id", t.sessionID)
 		}
+		// Send Last-Event-ID for stream resumption if we have one
+		if t.client != nil {
+			if lastID, ok := t.client.lastEventID.Load().(string); ok && lastID != "" {
+				req.Header.Set("Last-Event-ID", lastID)
+			}
+		}
 		return req, nil
 	}
 
@@ -746,6 +824,9 @@ func (t *streamableClientTransport) backgroundGetReader(body io.Reader) {
 		ev, err := reader.ReadEvent()
 		if err != nil {
 			return // stream closed or context canceled
+		}
+		if ev.ID != "" && t.client != nil {
+			t.client.lastEventID.Store(ev.ID)
 		}
 		if ev.Data == "" {
 			continue // comment-only or empty event
@@ -1227,6 +1308,7 @@ func (t *sseClientTransport) notify(data []byte) error {
 type sseClientEvent struct {
 	event string
 	data  string
+	id    string
 }
 
 // readSSEEvent reads the next SSE event from the stream using the shared
@@ -1242,7 +1324,7 @@ func (t *sseClientTransport) readSSEEvent() (sseClientEvent, error) {
 		if ev.Event == "" && ev.Data == "" {
 			continue
 		}
-		return sseClientEvent{event: ev.Event, data: ev.Data}, nil
+		return sseClientEvent{event: ev.Event, data: ev.Data, id: ev.ID}, nil
 	}
 }
 

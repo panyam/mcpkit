@@ -151,15 +151,19 @@ func (t *sseTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 		// JSON parse error — push error response on SSE stream
 		errResp := core.NewErrorResponse(json.RawMessage("null"), core.ErrCodeParse, "parse error: "+err.Error())
 		raw, _ := json.Marshal(errResp)
-		t.hub.SendEvent(sessionID, "message", SSEJSON(raw))
+		emitSSEEvent(dispatcher.eventIDs, t.config.eventStore, sessionID, raw, func(id string, data json.RawMessage) {
+			t.hub.SendEventWithID(sessionID, "message", id, SSEJSON(data))
+		})
 		w.WriteHeader(http.StatusAccepted)
 		return
 	}
 
 	// Build request func scoped to this session's SSE stream.
+	hubSend := func(id string, data json.RawMessage) {
+		t.hub.SendEventWithID(sessionID, "message", id, SSEJSON(data))
+	}
 	requestFunc := dispatcher.makeRequestFunc(func(raw json.RawMessage) {
-		hub := t.hub
-		hub.SendEvent(sessionID, "message", SSEJSON(raw))
+		emitSSEEvent(dispatcher.eventIDs, t.config.eventStore, sessionID, raw, hubSend)
 	})
 	resp := t.server.dispatchWithNotifyAndRequest(dispatcher, r.Context(), claims, dispatcher.getNotifyFunc(), requestFunc, &req)
 
@@ -175,11 +179,7 @@ func (t *sseTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !t.hub.SendEvent(sessionID, "message", SSEJSON(raw)) {
-		http.Error(w, "session disconnected", http.StatusGone)
-		return
-	}
-
+	emitSSEEvent(dispatcher.eventIDs, t.config.eventStore, sessionID, raw, hubSend)
 	w.WriteHeader(http.StatusAccepted)
 }
 
@@ -189,7 +189,8 @@ type mcpSSEConn struct {
 	gohttp.BaseSSEConn[SSEData]
 	sessionID string
 	transport *sseTransport
-	request   *http.Request // stored for building the POST URL
+	request   *http.Request     // stored for building the POST URL
+	keepalive *sessionKeepalive // non-nil if keepalive is configured
 }
 
 func (c *mcpSSEConn) OnStart(w http.ResponseWriter, r *http.Request) error {
@@ -208,15 +209,39 @@ func (c *mcpSSEConn) OnStart(w http.ResponseWriter, r *http.Request) error {
 	// to push notifications (logging, progress, etc.) during execution.
 	sessionID := c.sessionID
 	hub := c.transport.hub
+	store := c.transport.config.eventStore
 	dispatcher.SetNotifyFunc(func(method string, params any) {
 		raw, err := core.MarshalNotification(method, params)
 		if err != nil {
 			return
 		}
-		hub.SendEvent(sessionID, "message", SSEJSON(raw))
+		emitSSEEvent(dispatcher.eventIDs, store, sessionID, raw, func(id string, data json.RawMessage) {
+			hub.SendEventWithID(sessionID, "message", id, SSEJSON(data))
+		})
 	})
 
 	c.transport.sessions.Store(c.sessionID, dispatcher)
+
+	// Start keepalive pings if configured
+	cfg := c.transport.config
+	if cfg.keepaliveInterval > 0 {
+		pushFunc := func(raw json.RawMessage) {
+			emitSSEEvent(dispatcher.eventIDs, cfg.eventStore, sessionID, raw, func(id string, data json.RawMessage) {
+				hub.SendEventWithID(sessionID, "message", id, SSEJSON(data))
+			})
+		}
+		maxFails := cfg.keepaliveMaxFails
+		if maxFails <= 0 {
+			maxFails = 3
+		}
+		c.keepalive = &sessionKeepalive{
+			interval:    cfg.keepaliveInterval,
+			maxFailures: maxFails,
+			requestFunc: dispatcher.makeRequestFunc(pushFunc),
+			onDeath:     func() { c.transport.closeSession(sessionID) },
+		}
+		c.keepalive.start()
+	}
 
 	// Send endpoint event with the POST URL as raw text.
 	// MCP clients expect the SSE data field to be a plain URL, not JSON-encoded.
@@ -229,12 +254,18 @@ func (c *mcpSSEConn) OnStart(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (c *mcpSSEConn) OnClose() {
+	if c.keepalive != nil {
+		c.keepalive.stop()
+	}
 	if d, ok := c.transport.sessions.Load(c.sessionID); ok {
 		d.Close()
 	}
 	c.transport.hub.Unregister(c.ConnId())
 	c.transport.sessions.Delete(c.sessionID)
 	c.transport.sessionSubjects.Delete(c.sessionID)
+	if store := c.transport.config.eventStore; store != nil {
+		store.Trim(c.sessionID)
+	}
 	c.BaseSSEConn.OnClose()
 }
 

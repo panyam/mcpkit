@@ -107,6 +107,9 @@ func (t *streamableTransport) expireSession(id string) {
 	entry.dispatcher.Close()
 	// Close any GET SSE streams for this session
 	t.sseHub.Unregister(id)
+	if t.config.eventStore != nil {
+		t.config.eventStore.Trim(id)
+	}
 	log.Printf("mcpkit: session %s expired after %s idle", id, entry.timeout)
 }
 
@@ -283,8 +286,10 @@ func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Reque
 	writeSSE := func(data []byte) {
 		mu.Lock()
 		defer mu.Unlock()
-		fmt.Fprintf(w, "event: message\ndata: %s\n\n", data)
-		flusher.Flush()
+		emitSSEEvent(d.eventIDs, t.config.eventStore, d.sessionID, data, func(id string, data json.RawMessage) {
+			fmt.Fprintf(w, "id: %s\nevent: message\ndata: %s\n\n", id, data)
+			flusher.Flush()
+		})
 	}
 
 	// Build request-scoped notifyFunc and requestFunc that write to this SSE stream.
@@ -388,7 +393,8 @@ type streamableSSEConn struct {
 	sessionID  string
 	transport  *streamableTransport
 	dispatcher *Dispatcher
-	entry      *sessionEntry // non-nil if attached to an existing session (for release on close)
+	entry      *sessionEntry        // non-nil if attached to an existing session (for release on close)
+	keepalive  *sessionKeepalive    // non-nil if keepalive is configured
 }
 
 func (h *streamableSSEHandler) Validate(w http.ResponseWriter, r *http.Request) (*streamableSSEConn, bool) {
@@ -448,18 +454,52 @@ func (c *streamableSSEConn) OnStart(w http.ResponseWriter, r *http.Request) erro
 	// This enables core.EmitLog/core.Notify from tool handlers to reach the GET stream.
 	sessionID := c.sessionID
 	hub := c.transport.sseHub
+	store := c.transport.config.eventStore
 	c.dispatcher.SetNotifyFunc(func(method string, params any) {
 		raw, err := core.MarshalNotification(method, params)
 		if err != nil {
 			return
 		}
-		hub.SendEvent(sessionID, "message", SSEJSON(raw))
+		emitSSEEvent(c.dispatcher.eventIDs, store, sessionID, raw, func(id string, data json.RawMessage) {
+			hub.SendEventWithID(sessionID, "message", id, SSEJSON(data))
+		})
 	})
+
+	// Replay missed events if client reconnected with Last-Event-ID
+	if lastID := r.Header.Get("Last-Event-ID"); lastID != "" && store != nil {
+		events, _ := store.Replay(sessionID, lastID)
+		for _, ev := range events {
+			c.SendEventWithID(ev.Event, ev.ID, SSEJSON(ev.Data))
+		}
+	}
+
+	// Start keepalive pings if configured. Uses the GET SSE stream's hub
+	// connection as the push function for server-to-client requests.
+	cfg := c.transport.config
+	if cfg.keepaliveInterval > 0 && c.entry != nil {
+		pushFunc := func(raw json.RawMessage) {
+			hub.SendEventWithID(sessionID, "message", c.dispatcher.eventIDs.Next(), SSEJSON(raw))
+		}
+		maxFails := cfg.keepaliveMaxFails
+		if maxFails <= 0 {
+			maxFails = 3
+		}
+		c.keepalive = &sessionKeepalive{
+			interval:    cfg.keepaliveInterval,
+			maxFailures: maxFails,
+			requestFunc: c.dispatcher.makeRequestFunc(pushFunc),
+			onDeath:     func() { c.transport.expireSession(sessionID) },
+		}
+		c.keepalive.start()
+	}
 
 	return nil
 }
 
 func (c *streamableSSEConn) OnClose() {
+	if c.keepalive != nil {
+		c.keepalive.stop()
+	}
 	c.transport.sseHub.Unregister(c.ConnId())
 	if c.entry != nil {
 		c.entry.idleTimer.Release()
@@ -488,6 +528,9 @@ func (t *streamableTransport) handleDelete(w http.ResponseWriter, r *http.Reques
 	}
 	entry.idleTimer.Stop()
 	entry.dispatcher.Close()
+	if t.config.eventStore != nil {
+		t.config.eventStore.Trim(sessionID)
+	}
 
 	w.WriteHeader(http.StatusOK)
 }
@@ -498,6 +541,9 @@ func (t *streamableTransport) closeSession(id string) bool {
 	if ok {
 		entry.idleTimer.Stop()
 		entry.dispatcher.Close()
+		if t.config.eventStore != nil {
+			t.config.eventStore.Trim(id)
+		}
 	}
 	return ok
 }

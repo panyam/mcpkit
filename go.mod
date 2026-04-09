@@ -8,6 +8,9 @@ require (
 	github.com/stretchr/testify v1.10.0
 )
 
+// TODO: Remove replace after servicekit PR #19 is merged and released
+replace github.com/panyam/servicekit => ../../servicekit/master
+
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
