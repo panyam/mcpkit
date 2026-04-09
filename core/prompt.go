@@ -1,6 +1,9 @@
 package core
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // PromptDef describes a prompt exposed via MCP.
 type PromptDef struct {
@@ -18,6 +21,9 @@ type PromptDef struct {
 
 	// Annotations holds optional metadata for this prompt.
 	Annotations map[string]any `json:"annotations,omitempty"`
+
+	// Timeout is a per-prompt execution timeout. Not serialized to clients.
+	Timeout time.Duration `json:"-"`
 }
 
 // PromptsListResult is the typed result for prompts/list responses.

@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"time"
 )
 
 // ToolDef describes a tool exposed via MCP.
@@ -32,6 +33,10 @@ type ToolDef struct {
 	// Meta holds protocol-level metadata (e.g., UI presentation hints).
 	// Serialized as "_meta" in the tools/list response.
 	Meta *ToolMeta `json:"_meta,omitempty"`
+
+	// Timeout is a per-tool execution timeout. If set, overrides the
+	// server-wide WithToolTimeout for this tool. Not serialized to clients.
+	Timeout time.Duration `json:"-"`
 }
 
 // ToolsListResult is the typed result for tools/list responses.

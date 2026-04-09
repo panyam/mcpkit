@@ -131,6 +131,15 @@ mcpkit/
 - **Session cleanup trims store**: `expireSession`, `handleDelete`, and `closeSession` all call `store.Trim(sessionID)` to prevent unbounded memory growth.
 - **Client tracks `lastEventID`**: `atomic.Value` on `Client`, updated by background SSE readers. Survives transport recreation during reconnection.
 
+### Per-Handler Timeout
+- **`ToolDef.Timeout`**, **`ResourceDef.Timeout`**, **`ResourceTemplate.Timeout`**, **`PromptDef.Timeout`**: Per-handler execution timeout. When set, overrides the server-wide `WithToolTimeout` for that specific handler. `json:"-"` — not serialized to clients.
+- **Fallback chain**: per-handler `Timeout` → server-wide `WithToolTimeout` (tools only) → no timeout.
+- **Applied in Dispatcher**: `handleToolsCall`, `handleResourcesRead` (both direct and template), `handlePromptsGet`.
+
+### Client Typed Tool Calls
+- **`ToolCallTyped[T](c, name, args)`**: Generic function that calls a tool and unmarshals `structuredContent` into T. For tools with `OutputSchema`. Returns error if no structured content.
+- **Complements `ToolCall`**: `ToolCall` returns text, `ToolCallTyped` returns typed structs.
+
 ### Application-Level Keepalive
 - **`WithKeepalive(interval, maxFailures)`**: Server-side option. Sends JSON-RPC `ping` requests to clients via GET SSE stream at the configured interval. After `maxFailures` consecutive timeouts, the session is expired.
 - **`WithClientKeepalive(interval, maxFailures)`**: Client-side option. Periodically sends `ping` to the server. On max failures, triggers reconnection (if retries configured) or closes transport.
@@ -150,6 +159,8 @@ mcpkit/
 - **`OAuthTokenSource` calls `DiscoverMCPAuth`** on first `Token()`, caches result. Passes discovered endpoints explicitly to `LoginWithBrowser`.
 - **Client registration priority (C6)**: pre-registered `ClientID` → CIMD `ClientMetadataURL` → DCR (if `EnableDCR`) → error.
 - **Keycloak container** runs with `--log-level=INFO,org.keycloak.events:DEBUG` for token event visibility.
+- **JWT validated-token cache**: `JWTValidator.CacheTTL` enables SHA-256-keyed TTL cache. Avoids redundant JWT signature verification during LLM agent loops with rapid sequential tool calls. Lazy eviction, bounded by `CacheMaxSize` (default 1000). Future: consider `hashicorp/golang-lru` for LRU eviction.
+- **RFC 9207 issuer validation**: `JWTValidator.Validate()` checks `iss` claim against configured issuer on every request (line 127-131). Prevents OAuth mixup attacks.
 - **Generic OAuth pushed to oneauth (#158)**: `RegisterClient`, `ClientRegistrationRequest/Response`, `ValidateHTTPS`, `IsLocalhost`, `ValidateCIMDURL`, `ClientCredentialsSource`, `mergeScopes` (now `core.UnionScopes`) all live in `oneauth/client` and `oneauth/core`. Type aliases in `ext/auth/` preserve backward compat. Only `DefaultClientRegistration()` (MCP-specific defaults) and `ValidatePKCES256` (MCP requirement C11/C12) remain local.
 
 ### MCP Apps (io.modelcontextprotocol/ui)
