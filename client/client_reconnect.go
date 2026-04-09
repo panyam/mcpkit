@@ -57,6 +57,7 @@ func (c *Client) reconnect() error {
 		c.transport = st
 	} else {
 		st := newStreamableClientTransport(c.url, c.tokenSource)
+		st.client = c
 		st.serverReqHandler = c.HandleServerRequest
 		st.enableGetSSE = c.enableGetSSE
 		if c.onNotify != nil {
