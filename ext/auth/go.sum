@@ -6,6 +6,8 @@ github.com/golang-jwt/jwt/v5 v5.2.2 h1:Rl4B7itRWVtYIHFrSNd7vhTiz9UpLdi6gZhZ3wEeD
 github.com/golang-jwt/jwt/v5 v5.2.2/go.mod h1:pqrtFR0X4osieyHYxtmOUWsAWrfe1Q5UVIyoH402zdk=
 github.com/panyam/gocurrent v0.0.15 h1:dTeGkQtivuNVxowdP18mAlxxZAOmDZFcAbpFdGMKmwQ=
 github.com/panyam/gocurrent v0.0.15/go.mod h1:jIIhcNfNnnIe2JXH8aY2+ba+/5G1fzwCWoZXdcMNw6o=
+github.com/panyam/oneauth v0.0.68 h1:QwjZvqxBBDgYghBH8XpjjRNXGY1CaK9BHUD4gcwZgUs=
+github.com/panyam/oneauth v0.0.68/go.mod h1:Gz0xF9sRHlBAMhrX9gwDkCVXDbJjowcVKAp8xO+wJP8=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=

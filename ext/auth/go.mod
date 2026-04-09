@@ -6,7 +6,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/panyam/gocurrent v0.0.15
 	github.com/panyam/mcpkit v0.0.0
-	github.com/panyam/oneauth v0.0.67
+	github.com/panyam/oneauth v0.0.68
 )
 
 require (
@@ -16,5 +16,3 @@ require (
 )
 
 replace github.com/panyam/mcpkit => ../../
-
-replace github.com/panyam/oneauth => /home/user/oneauth
