@@ -47,15 +47,23 @@ type PingResult struct{}
 //	-32603           Internal error
 //	-32000 to -32099 Server error (implementation-defined)
 const (
-	ErrCodeParse          = -32700
-	ErrCodeInvalidRequest = -32600
-	ErrCodeMethodNotFound = -32601
-	ErrCodeInvalidParams  = -32602
-	ErrCodeInternal       = -32603
+	// Standard JSON-RPC 2.0 error codes — use only for JSON-RPC protocol errors.
+	ErrCodeParse          = -32700 // Invalid JSON
+	ErrCodeInvalidRequest = -32600 // Not a valid JSON-RPC request
+	ErrCodeMethodNotFound = -32601 // Method not found
+	ErrCodeInvalidParams  = -32602 // Invalid params
+	ErrCodeInternal       = -32603 // Internal JSON-RPC error (marshaling, framework bugs)
 
-	// ErrCodeServerError is the base code for custom server errors (-32000 to -32099).
-	// Use this for application-specific errors that are not covered by standard codes.
+	// ErrCodeServerError is the base of the implementation-defined range (-32000 to -32099).
+	// Avoid using this directly — prefer the MCP-specific codes below.
 	ErrCodeServerError = -32000
+
+	// MCP application error codes — outside the JSON-RPC reserved range.
+	// These indicate application-level failures in tool, resource, or prompt handlers.
+	ErrCodeToolExecutionError = -31000 // Tool handler returned an error
+	ErrCodeResourceError      = -31001 // Resource handler returned an error
+	ErrCodePromptError        = -31002 // Prompt handler returned an error
+	ErrCodeCompletionError    = -31003 // Completion handler returned an error
 )
 
 // NewResponse creates a success response for the given request ID.

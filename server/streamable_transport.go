@@ -127,6 +127,14 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 	// non-conforming requests server-side — the spec places the MUST on the client,
 	// and rejecting would break backward compatibility with older clients.
 
+	// Content-Type validation: reject non-JSON POST requests (CSRF defense-in-depth).
+	// Per MCP spec: "HTTP clients sending requests to the server MUST set the
+	// Content-Type header to application/json."
+	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+		http.Error(w, "Content-Type must be application/json", http.StatusUnsupportedMediaType)
+		return
+	}
+
 	// Auth check
 	claims, err := t.server.CheckAuth(r)
 	if err != nil {
@@ -162,6 +170,13 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 			entry.dispatcher.RouteResponse(&resp)
 		}
 		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+
+	// JSON-RPC 2.0 batch request: array of request objects.
+	// Per spec Section 6: dispatch each, collect responses, return as JSON array.
+	if gohttp.DetectBatch(body) {
+		t.handleBatchPost(w, r, claims, body)
 		return
 	}
 
@@ -556,6 +571,79 @@ func (t *streamableTransport) closeAllSessions() {
 		t.sessions.Delete(key)
 		return true
 	})
+}
+
+// handleBatchPost handles a JSON-RPC 2.0 batch request (JSON array of
+// request objects). Each request is dispatched sequentially, responses are
+// collected, and the combined response array is returned as JSON.
+// Notifications (requests with no ID) produce no response entry.
+// Per JSON-RPC 2.0 spec Section 6.
+func (t *streamableTransport) handleBatchPost(w http.ResponseWriter, r *http.Request, claims *core.Claims, body []byte) {
+	parts, err := gohttp.SplitBatch(body)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		errResp := core.NewErrorResponse(json.RawMessage("null"), core.ErrCodeParse, "invalid batch: "+err.Error())
+		raw, _ := json.Marshal(errResp)
+		w.Write(raw)
+		return
+	}
+
+	if len(parts) == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		errResp := core.NewErrorResponse(json.RawMessage("null"), core.ErrCodeInvalidRequest, "empty batch")
+		raw, _ := json.Marshal(errResp)
+		w.Write(raw)
+		return
+	}
+
+	// Require session for batch (batch cannot contain initialize as first request)
+	sessionID := r.Header.Get(mcpSessionIDHeader)
+	if sessionID == "" {
+		http.Error(w, "missing "+mcpSessionIDHeader+" header for batch request", http.StatusBadRequest)
+		return
+	}
+	entry, ok := t.loadSession(sessionID)
+	if !ok {
+		http.Error(w, "session not found", http.StatusNotFound)
+		return
+	}
+	entry.idleTimer.Acquire()
+	defer entry.idleTimer.Release()
+
+	var responses []json.RawMessage
+	for _, part := range parts {
+		var req core.Request
+		if err := json.Unmarshal(part, &req); err != nil {
+			errResp := core.NewErrorResponse(json.RawMessage("null"), core.ErrCodeParse, "parse error in batch element: "+err.Error())
+			raw, _ := json.Marshal(errResp)
+			responses = append(responses, raw)
+			continue
+		}
+
+		resp := t.server.dispatchWith(entry.dispatcher, r.Context(), claims, &req)
+		if resp == nil {
+			continue // notification — no response entry
+		}
+		raw, _ := json.Marshal(resp)
+		responses = append(responses, raw)
+	}
+
+	if len(responses) == 0 {
+		// All were notifications — no response body
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	// Build JSON array manually to avoid double-encoding
+	w.Write([]byte("["))
+	for i, r := range responses {
+		if i > 0 {
+			w.Write([]byte(","))
+		}
+		w.Write(r)
+	}
+	w.Write([]byte("]"))
 }
 
 // broadcast sends a notification to all active Streamable HTTP sessions.
