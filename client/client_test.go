@@ -14,54 +14,15 @@ import (
 	client "github.com/panyam/mcpkit/client"
 	core "github.com/panyam/mcpkit/core"
 	server "github.com/panyam/mcpkit/server"
+	"github.com/panyam/mcpkit/testutil"
 )
 
-// newTestMCPServer creates a server with an echo tool, a fail tool,
-// a static resource, and a resource template. Used by both transport tests.
+// newTestMCPServer creates a server with the standard test fixtures (echo, fail,
+// resource, template) plus UI extension tools for metadata wire tests.
 func newTestMCPServer() *server.Server {
-	srv := server.NewServer(core.ServerInfo{Name: "test-server", Version: "1.0.0"})
+	srv := testutil.NewTestServer()
 
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "echo",
-			Description: "Echoes the input message back",
-			InputSchema: map[string]any{
-				"type":       "object",
-				"properties": map[string]any{"message": map[string]any{"type": "string"}},
-				"required":   []string{"message"},
-			},
-		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
-			var p struct {
-				Message string `json:"message"`
-			}
-			req.Bind(&p)
-			return core.TextResult(fmt.Sprintf("echo: %s", p.Message)), nil
-		},
-	)
-
-	srv.RegisterTool(
-		core.ToolDef{Name: "fail", Description: "Always fails"},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
-			return core.ErrorResult("intentional failure"), nil
-		},
-	)
-
-	srv.RegisterResource(
-		core.ResourceDef{URI: "test://info", Name: "Test Info", Description: "Static test resource", MimeType: "text/plain"},
-		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
-			return core.ResourceResult{Contents: []core.ResourceReadContent{{URI: "test://info", MimeType: "text/plain", Text: "hello from test"}}}, nil
-		},
-	)
-
-	srv.RegisterResourceTemplate(
-		core.ResourceTemplate{URITemplate: "test://items/{id}", Name: "Test Item", Description: "Parameterized test resource", MimeType: "text/plain"},
-		func(ctx context.Context, uri string, params map[string]string) (core.ResourceResult, error) {
-			return core.ResourceResult{Contents: []core.ResourceReadContent{{URI: uri, MimeType: "text/plain", Text: fmt.Sprintf("item %s", params["id"])}}}, nil
-		},
-	)
-
-	// Tool with _meta for extension metadata wire tests
+	// UI-specific fixtures for extension metadata wire tests.
 	srv.RegisterTool(
 		core.ToolDef{
 			Name:        "ui_tool",
@@ -79,7 +40,6 @@ func newTestMCPServer() *server.Server {
 		},
 	)
 
-	// Resource with _meta for extension metadata wire tests
 	srv.RegisterResource(
 		core.ResourceDef{URI: "ui://test/view", Name: "Test App", MimeType: core.AppMIMEType},
 		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
@@ -140,32 +100,11 @@ func setupSSEClient(t *testing.T) (*client.Client, *httptest.Server) {
 }
 
 // forAllTransports runs a test function against all 4 client transports:
-// Streamable HTTP, SSE, in-memory, and stdio. This is the Go equivalent of
-// parametric tests — each transport variant runs as a subtest.
+// Streamable HTTP, SSE, in-memory, and stdio. Delegates to testutil.ForAllTransports
+// with the standard test server (including UI fixtures).
 func forAllTransports(t *testing.T, fn func(t *testing.T, c *client.Client)) {
 	t.Helper()
-
-	t.Run("streamable", func(t *testing.T) {
-		c, _ := setupStreamableClient(t)
-		fn(t, c)
-	})
-	t.Run("sse", func(t *testing.T) {
-		c, _ := setupSSEClient(t)
-		fn(t, c)
-	})
-	t.Run("memory", func(t *testing.T) {
-		c := client.NewClient("memory://", core.ClientInfo{Name: "test-client", Version: "1.0"},
-			client.WithTransport(server.NewInProcessTransport(newTestMCPServer())))
-		if err := c.Connect(); err != nil {
-			t.Fatalf("Connect failed: %v", err)
-		}
-		t.Cleanup(func() { c.Close() })
-		fn(t, c)
-	})
-	t.Run("stdio", func(t *testing.T) {
-		c := setupStdioClient(t)
-		fn(t, c)
-	})
+	testutil.ForAllTransports(t, newTestMCPServer(), fn)
 }
 
 // setupStdioClient creates a server with stdio transport and a connected Client.

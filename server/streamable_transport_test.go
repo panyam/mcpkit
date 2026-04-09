@@ -14,8 +14,9 @@ import (
 	ssehttp "github.com/panyam/servicekit/http"
 )
 
-// testStreamableServer creates an httptest.Server with a Streamable HTTP MCP server
-// that has an echo tool. Returns the server and its base URL.
+// testStreamableServer creates an httptest.Server with an echo tool using
+// Streamable HTTP transport. Note: Cannot use testutil.NewTestServer due to
+// import cycle (package server tests cannot import testutil which imports server).
 func testStreamableServer(opts ...TransportOption) *httptest.Server {
 	srv := NewServer(core.ServerInfo{Name: "test-streamable", Version: "0.1.0"})
 	srv.RegisterTool(
