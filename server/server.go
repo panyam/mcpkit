@@ -533,6 +533,9 @@ type transportConfig struct {
 	sse            bool     // enable legacy SSE transport
 	stateless      bool          // stateless mode: no sessions, fresh dispatcher per request
 	sessionTimeout time.Duration // idle timeout for Streamable HTTP sessions (0 = no timeout)
+	eventStore     gohttp.EventStore // optional: persists SSE events for Last-Event-ID replay
+	keepaliveInterval time.Duration  // 0 = disabled; interval for JSON-RPC ping requests
+	keepaliveMaxFails int            // max consecutive ping failures before session cleanup (default 3)
 }
 
 func defaultTransportConfig() transportConfig {
@@ -588,6 +591,32 @@ func WithSSE(enabled bool) TransportOption {
 // Default is 0 (no timeout — sessions persist until explicit DELETE or server restart).
 func WithSessionTimeout(d time.Duration) TransportOption {
 	return func(c *transportConfig) { c.sessionTimeout = d }
+}
+
+// WithEventStore sets an optional EventStore for SSE event persistence.
+// When configured, all SSE events (GET SSE stream notifications and POST SSE
+// response events) are stored with unique IDs. Clients that reconnect with a
+// Last-Event-ID header receive missed events via replay.
+//
+// Pass nil to disable (default). Use gohttp.NewMemoryEventStore(maxPerStream)
+// for an in-memory implementation.
+func WithEventStore(store gohttp.EventStore) TransportOption {
+	return func(c *transportConfig) { c.eventStore = store }
+}
+
+// WithKeepalive enables application-level keepalive pings for session liveness
+// detection. When enabled, the server periodically sends JSON-RPC ping requests
+// to clients via their GET SSE stream. If maxFailures consecutive pings fail
+// (timeout or error), the session is expired.
+//
+// interval controls how often pings are sent (e.g., 30*time.Second).
+// maxFailures is the threshold before session cleanup (e.g., 3).
+// Set interval to 0 to disable (default).
+func WithKeepalive(interval time.Duration, maxFailures int) TransportOption {
+	return func(c *transportConfig) {
+		c.keepaliveInterval = interval
+		c.keepaliveMaxFails = maxFailures
+	}
 }
 
 // WithStateless enables stateless mode for the Streamable HTTP transport.
