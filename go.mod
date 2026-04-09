@@ -4,12 +4,9 @@ go 1.25.0
 
 require (
 	github.com/panyam/gocurrent v0.0.15
-	github.com/panyam/servicekit v0.0.18
+	github.com/panyam/servicekit v0.0.19
 	github.com/stretchr/testify v1.10.0
 )
-
-// TODO: Remove replace after servicekit PR #19 is merged and released
-replace github.com/panyam/servicekit => ../../servicekit/master
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
