@@ -1,15 +1,15 @@
 package server
 
 import (
-	core "github.com/panyam/mcpkit/core"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
-	"sync"
 
+	conc "github.com/panyam/gocurrent"
+	core "github.com/panyam/mcpkit/core"
 	gohttp "github.com/panyam/servicekit/http"
 )
 
@@ -18,8 +18,8 @@ import (
 type sseTransport struct {
 	server          *Server
 	hub             *gohttp.SSEHub[SSEData]
-	sessions        sync.Map // sessionID → *Dispatcher
-	sessionSubjects sync.Map // sessionID → subject string (for principal binding)
+	sessions        conc.SyncMap[string, *Dispatcher]
+	sessionSubjects conc.SyncMap[string, string] // sessionID → subject (principal binding)
 	config          transportConfig
 }
 
@@ -115,17 +115,16 @@ func (t *sseTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dispVal, ok := t.sessions.Load(sessionID)
+	dispatcher, ok := t.sessions.Load(sessionID)
 	if !ok {
 		http.Error(w, "session not found or expired", http.StatusGone)
 		return
 	}
-	dispatcher := dispVal.(*Dispatcher)
 
 	// Verify the POST principal matches the session-opening principal.
 	// Prevents user B (with a valid token) from posting to user A's session.
 	if subj, ok := t.sessionSubjects.Load(sessionID); ok {
-		if claims == nil || claims.Subject != subj.(string) {
+		if claims == nil || claims.Subject != subj {
 			http.Error(w, "forbidden: session principal mismatch", http.StatusForbidden)
 			return
 		}
@@ -233,7 +232,7 @@ func (c *mcpSSEConn) OnStart(w http.ResponseWriter, r *http.Request) error {
 
 func (c *mcpSSEConn) OnClose() {
 	if d, ok := c.transport.sessions.Load(c.sessionID); ok {
-		d.(*Dispatcher).Close()
+		d.Close()
 	}
 	c.transport.hub.Unregister(c.ConnId())
 	c.transport.sessions.Delete(c.sessionID)
@@ -245,7 +244,7 @@ func (c *mcpSSEConn) OnClose() {
 // Unregisters from the hub (closing the SSE stream) and removes from session maps.
 func (t *sseTransport) closeSession(id string) bool {
 	if d, ok := t.sessions.LoadAndDelete(id); ok {
-		d.(*Dispatcher).Close()
+		d.Close()
 		t.hub.Unregister(id)
 		t.sessionSubjects.Delete(id)
 		return true
@@ -255,9 +254,9 @@ func (t *sseTransport) closeSession(id string) bool {
 
 // closeAllSessions terminates all active SSE sessions.
 func (t *sseTransport) closeAllSessions() {
-	t.sessions.Range(func(key, value any) bool {
-		value.(*Dispatcher).Close()
-		t.hub.Unregister(key.(string))
+	t.sessions.Range(func(key string, d *Dispatcher) bool {
+		d.Close()
+		t.hub.Unregister(key)
 		t.sessions.Delete(key)
 		t.sessionSubjects.Delete(key)
 		return true
@@ -267,8 +266,7 @@ func (t *sseTransport) closeAllSessions() {
 // broadcast sends a notification to all active SSE sessions.
 // Sessions with nil notifyFunc are skipped safely.
 func (t *sseTransport) broadcast(method string, params any) {
-	t.sessions.Range(func(key, value any) bool {
-		d := value.(*Dispatcher)
+	t.sessions.Range(func(_ string, d *Dispatcher) bool {
 		if fn := d.getNotifyFunc(); fn != nil {
 			fn(method, params)
 		}
