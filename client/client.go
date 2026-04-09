@@ -1256,36 +1256,9 @@ func normalizeID(id any) string {
 	}
 }
 
-// setAuthHeader sets the Authorization: Bearer header from a core.TokenSource.
-// No-op if ts is nil.
-func setAuthHeader(req *http.Request, ts core.TokenSource) error {
-	if ts == nil {
-		return nil
-	}
-	token, err := ts.Token()
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	return nil
-}
-
 // ClientAuthError is returned by the client transport when the server rejects
 // a request with 401 or 403 and the transport has exhausted its retry budget.
-type ClientAuthError struct {
-	// StatusCode is the HTTP status (401 or 403).
-	StatusCode int
-	// Message describes the failure.
-	Message string
-	// WWWAuthenticate is the raw WWW-Authenticate header from the server response.
-	WWWAuthenticate string
-	// RequiredScopes are the scopes parsed from the WWW-Authenticate header (403 only).
-	RequiredScopes []string
-}
-
-func (e *ClientAuthError) Error() string {
-	return fmt.Sprintf("auth error %d: %s", e.StatusCode, e.Message)
-}
+type ClientAuthError = ssehttp.AuthRetryError
 
 // HTTPStatusError is returned when the server responds with a non-2xx HTTP
 // status code that is not 401/403 (those are handled by DoWithAuthRetry).
@@ -1293,91 +1266,48 @@ func (e *ClientAuthError) Error() string {
 type HTTPStatusError = ssehttp.HTTPStatusError
 
 // DoWithAuthRetry executes an HTTP request with automatic retry on 401/403.
+// Wraps core.TokenSource into servicekit's callback-based auth retry.
 //
-// Retry budget: max 1 retry for 401 (token refresh), max 1 retry for 403
-// (scope step-up). Total max 2 retries per request.
-//
-// On 401: calls core.TokenSource.Token() to get a fresh token, retries once.
+// On 401: calls ts.Token() to refresh, retries once.
 // On 403: parses WWW-Authenticate for required scopes, calls
 // core.ScopeAwareTokenSource.TokenForScopes if available, retries once.
-//
-// buildReq must create a new *http.Request each call (body may be consumed).
-// do is typically httpClient.Do.
 func DoWithAuthRetry(
 	ts core.TokenSource,
 	buildReq func() (*http.Request, error),
 	do func(*http.Request) (*http.Response, error),
 ) (*http.Response, error) {
-	var tried401, tried403 bool
+	if ts == nil {
+		return ssehttp.DoWithAuthRetry(nil, buildReq, do)
+	}
 
-	for {
-		req, err := buildReq()
-		if err != nil {
-			return nil, err
-		}
-		if err := setAuthHeader(req, ts); err != nil {
-			return nil, fmt.Errorf("auth: %w", err)
-		}
-
-		resp, err := do(req)
-		if err != nil {
-			return nil, err
-		}
-
-		switch resp.StatusCode {
-		case http.StatusUnauthorized: // 401
-			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
-			if tried401 || ts == nil {
-				return nil, &ClientAuthError{
-					StatusCode:      401,
-					Message:         strings.TrimSpace(string(body)),
-					WWWAuthenticate: resp.Header.Get("WWW-Authenticate"),
-				}
+	cfg := &ssehttp.AuthRetryConfig{
+		SetAuth: func(req *http.Request) error {
+			token, err := ts.Token()
+			if err != nil {
+				return err
 			}
-			tried401 = true
+			req.Header.Set("Authorization", "Bearer "+token)
+			return nil
+		},
+		OnUnauthorized: func(resp *http.Response) error {
 			// Token() on a dynamic source will refresh; on a static source
 			// it returns the same token and the retry will fail → gives up.
-			if _, err := ts.Token(); err != nil {
-				return nil, fmt.Errorf("token refresh: %w", err)
-			}
-			continue
-
-		case http.StatusForbidden: // 403
-			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
+			_, err := ts.Token()
+			return err
+		},
+		OnForbidden: func(resp *http.Response) error {
 			wwa := resp.Header.Get("WWW-Authenticate")
-			var scopes []string
-			if wwa != "" {
-				_, scopes, _ = core.ParseWWWAuthenticate(wwa)
-			}
-			if tried403 || ts == nil {
-				return nil, &ClientAuthError{
-					StatusCode:      403,
-					Message:         strings.TrimSpace(string(body)),
-					WWWAuthenticate: wwa,
-					RequiredScopes:  scopes,
-				}
-			}
-			tried403 = true
+			_, scopes, _ := ssehttp.ParseWWWAuthenticate(wwa)
 			sats, ok := ts.(core.ScopeAwareTokenSource)
 			if !ok || len(scopes) == 0 {
-				return nil, &ClientAuthError{
-					StatusCode:      403,
-					Message:         "insufficient scope (token source does not support step-up)",
-					WWWAuthenticate: wwa,
-					RequiredScopes:  scopes,
-				}
+				return fmt.Errorf("insufficient scope (token source does not support step-up)")
 			}
-			if _, err := sats.TokenForScopes(scopes); err != nil {
-				return nil, fmt.Errorf("scope step-up: %w", err)
-			}
-			continue
-
-		default:
-			return resp, nil
-		}
+			_, err := sats.TokenForScopes(scopes)
+			return err
+		},
 	}
+
+	return ssehttp.DoWithAuthRetry(cfg, buildReq, do)
 }
 
 // ResolveEndpointURL resolves an SSE endpoint event URL against the base SSE
