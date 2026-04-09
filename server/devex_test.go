@@ -16,44 +16,10 @@ import (
 	client "github.com/panyam/mcpkit/client"
 	core "github.com/panyam/mcpkit/core"
 	server "github.com/panyam/mcpkit/server"
+	"github.com/panyam/mcpkit/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// newTestMCPServer creates a server with echo + fail tools, a static resource,
-// and a resource template — matching the original test server from client_test.go.
-func newTestMCPServer() *server.Server {
-	srv := server.NewServer(core.ServerInfo{Name: "test-server", Version: "1.0.0"})
-	srv.RegisterTool(
-		core.ToolDef{Name: "echo", Description: "Echoes input", InputSchema: map[string]any{
-			"type": "object", "properties": map[string]any{"message": map[string]any{"type": "string"}}, "required": []string{"message"},
-		}},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
-			var p struct{ Message string `json:"message"` }
-			req.Bind(&p)
-			return core.TextResult(fmt.Sprintf("echo: %s", p.Message)), nil
-		},
-	)
-	srv.RegisterTool(
-		core.ToolDef{Name: "fail", Description: "Always fails"},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
-			return core.ErrorResult("intentional failure"), nil
-		},
-	)
-	srv.RegisterResource(
-		core.ResourceDef{URI: "test://info", Name: "Test Info", Description: "Static test resource", MimeType: "text/plain"},
-		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
-			return core.ResourceResult{Contents: []core.ResourceReadContent{{URI: "test://info", MimeType: "text/plain", Text: "hello from test"}}}, nil
-		},
-	)
-	srv.RegisterResourceTemplate(
-		core.ResourceTemplate{URITemplate: "test://items/{id}", Name: "Test Item", Description: "Parameterized test resource", MimeType: "text/plain"},
-		func(ctx context.Context, uri string, params map[string]string) (core.ResourceResult, error) {
-			return core.ResourceResult{Contents: []core.ResourceReadContent{{URI: uri, MimeType: "text/plain", Text: fmt.Sprintf("item %s", params["id"])}}}, nil
-		},
-	)
-	return srv
-}
 
 // =============================================================================
 // #74: JSON-RPC Error Codes
@@ -162,7 +128,7 @@ func TestStructuredContentInDispatch(t *testing.T) {
 // TestInMemoryTransport_Connect verifies that an in-memory client can connect
 // to a server without HTTP, perform the initialize handshake, and make tool calls.
 func TestInMemoryTransport_Connect(t *testing.T) {
-	srv := newTestMCPServer()
+	srv := testutil.NewTestServer()
 
 	c := client.NewClient("memory://", core.ClientInfo{Name: "mem-test", Version: "1.0"}, client.WithTransport(
 		server.NewInProcessTransport(srv)),
@@ -177,7 +143,7 @@ func TestInMemoryTransport_Connect(t *testing.T) {
 // TestInMemoryTransport_ToolCall verifies that tool calls work correctly
 // through the in-memory transport — no HTTP overhead.
 func TestInMemoryTransport_ToolCall(t *testing.T) {
-	srv := newTestMCPServer()
+	srv := testutil.NewTestServer()
 
 	c := client.NewClient("memory://", core.ClientInfo{Name: "mem-test", Version: "1.0"}, client.WithTransport(
 		server.NewInProcessTransport(srv)),
@@ -193,7 +159,7 @@ func TestInMemoryTransport_ToolCall(t *testing.T) {
 // TestInMemoryTransport_ReadResource verifies that resource reads work
 // through the in-memory transport.
 func TestInMemoryTransport_ReadResource(t *testing.T) {
-	srv := newTestMCPServer()
+	srv := testutil.NewTestServer()
 
 	c := client.NewClient("memory://", core.ClientInfo{Name: "mem-test", Version: "1.0"}, client.WithTransport(
 		server.NewInProcessTransport(srv)),
@@ -209,7 +175,7 @@ func TestInMemoryTransport_ReadResource(t *testing.T) {
 // TestInMemoryTransport_ListTools verifies that tools/list works through
 // the in-memory transport.
 func TestInMemoryTransport_ListTools(t *testing.T) {
-	srv := newTestMCPServer()
+	srv := testutil.NewTestServer()
 
 	c := client.NewClient("memory://", core.ClientInfo{Name: "mem-test", Version: "1.0"}, client.WithTransport(
 		server.NewInProcessTransport(srv)),
@@ -288,7 +254,7 @@ func TestStatelessMode_IndependentRequests(t *testing.T) {
 // TestCloseSession verifies that Server.CloseSession terminates an active
 // session, making subsequent requests with that session ID fail.
 func TestCloseSession(t *testing.T) {
-	srv := newTestMCPServer()
+	srv := testutil.NewTestServer()
 	handler := srv.Handler(server.WithStreamableHTTP(true))
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
@@ -310,7 +276,7 @@ func TestCloseSession(t *testing.T) {
 // TestCloseAllSessions verifies that Server.CloseAllSessions terminates
 // all active sessions.
 func TestCloseAllSessions(t *testing.T) {
-	srv := newTestMCPServer()
+	srv := testutil.NewTestServer()
 	handler := srv.Handler(server.WithStreamableHTTP(true))
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
@@ -336,7 +302,7 @@ func TestCloseAllSessions(t *testing.T) {
 // TestCloseSession_NotFound verifies that closing a non-existent session
 // returns false without error.
 func TestCloseSession_NotFound(t *testing.T) {
-	srv := newTestMCPServer()
+	srv := testutil.NewTestServer()
 	_ = srv.Handler(server.WithStreamableHTTP(true)) // create transport so closers are registered
 	assert.False(t, srv.CloseSession("nonexistent-id"))
 }

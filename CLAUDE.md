@@ -79,7 +79,7 @@ mcpkit/
 ├── ext/ui/                 ← Separate Go module (ext/ui/go.mod)
 │   └── extension.go          UIExtension (ExtensionProvider + RefValidator), RegisterAppTool, AppToolConfig
 │
-├── testutil/                ← Test helpers
+├── testutil/                ← Test helpers (NewTestServer, ForAllTransports, TestClient)
 ├── cmd/testserver/          ← Conformance test server
 ├── cmd/testclient/          ← Headless OAuth conformance client
 ├── conformance/baseline.yml ← Expected conformance failures
@@ -139,7 +139,11 @@ mcpkit/
 - **Design doc**: see `docs/APPS_DESIGN.md` for full architecture, protocol flows, and conformance strategy.
 
 ### Testing
-- **`forAllTransports`**: parametric tests run against Streamable HTTP, SSE, in-memory, and stdio. Use for any cross-transport test.
+- **`testutil.NewTestServer()`**: standard test server with echo, fail, resource, and template fixtures. Use as the base for all test servers; add custom tools after creation.
+- **`testutil.ForAllTransports(t, srv, fn)`**: parametric test runner for all 4 transports (Streamable HTTP, SSE, in-memory, stdio). Use for any transport-agnostic test. Exported from `testutil/` so it's reusable across `client_test` and `server_test` packages.
+- **`testutil.InitHandshake(d)`**: performs initialize + notifications/initialized handshake on any `Dispatch`-compatible type. Use for raw Dispatcher/Server tests that don't go through a client.
+- **`testutil.NewTestClient(t, srv)`**: wraps `client.Client` with `t.Fatal` error handling. Currently Streamable HTTP only.
+- **Import cycle constraint**: `server/` package white-box tests (`package server`) cannot import `testutil` because `testutil` imports `server`. These tests keep local handshake helpers (`initDispatcher`, `initServer`) and local server factories. Only black-box tests (`package server_test`, `package client_test`) can use `testutil`.
 - **In-process transport skips JSON envelope serialization** — catches logic bugs. HTTP tests catch wire format bugs. Stdio tests catch Content-Length framing bugs. All needed.
 - **Conformance baseline**: when a feature passes, remove from `conformance/baseline.yml`. Stale entries cause CI failure.
 

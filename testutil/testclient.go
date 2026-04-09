@@ -18,10 +18,14 @@ type TestClient struct {
 	Server *httptest.Server
 }
 
-// NewTestClient creates a TestClient from a server.Server.
+// NewTestClient creates a TestClient from a [server.Server].
 // It starts an httptest.Server (Streamable HTTP), performs the MCP
 // initialize handshake, and registers cleanup.
 // Optional ClientOption values (e.g., client.WithClientBearerToken) are passed to the client.
+//
+// For a server with standard test fixtures, use [NewTestServer]:
+//
+//	tc := testutil.NewTestClient(t, testutil.NewTestServer())
 func NewTestClient(t *testing.T, srv *server.Server, opts ...client.ClientOption) *TestClient {
 	t.Helper()
 
