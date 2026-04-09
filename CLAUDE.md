@@ -62,8 +62,9 @@ mcpkit/
 │   └── pagination.go          cursor-based pagination
 │
 ├── client/                  ← Client + all client transports
-│   ├── client.go              Client, NewClient, Connect, ToolCall, WithTransport, WithExtension, WithUIExtension, WithGetSSEStream, ServerSupportsExtension, ServerSupportsUI, ListToolsForModel, ResolveEndpointURL, HTTPStatusError, DoWithAuthRetry
+│   ├── client.go              Client, NewClient, Connect, ToolCall, ToolCallTyped, WithTransport, WithExtension, WithUIExtension, WithGetSSEStream, WithModifyRequest, WithCommandTransport, ServerSupportsExtension, ServerSupportsUI, ListToolsForModel, ResolveEndpointURL, HTTPStatusError, DoWithAuthRetry
 │   ├── stdio_transport.go     StdioTransport, NewStdioTransport, WithStdioTransport
+│   ├── command_transport.go   CommandTransport, NewCommandTransport, WithEnv, WithDir, WithShutdownTimeout, WithStderr
 │   ├── client_logging.go      loggingTransport, WithClientLogging
 │   └── client_reconnect.go    WithMaxRetries, WithReconnectBackoff, IsTransientError
 │
@@ -139,6 +140,18 @@ mcpkit/
 ### Client Typed Tool Calls
 - **`ToolCallTyped[T](c, name, args)`**: Generic function that calls a tool and unmarshals `structuredContent` into T. For tools with `OutputSchema`. Returns error if no structured content.
 - **Complements `ToolCall`**: `ToolCall` returns text, `ToolCallTyped` returns typed structs.
+
+### CommandTransport (Subprocess MCP Servers)
+- **`NewCommandTransport(name, args, opts...)`**: Spawns a subprocess and communicates via Content-Length framed JSON-RPC over stdin/stdout. Wraps `StdioTransport` for the wire protocol.
+- **Options**: `WithEnv(env...)` appends env vars, `WithDir(dir)` sets working directory, `WithShutdownTimeout(d)` controls SIGTERM→SIGKILL escalation (default 5s), `WithStderr(w)` tees stderr to a writer.
+- **Lifecycle**: Process starts on `Connect()`, shuts down on `Close()` (stdin EOF → SIGTERM → SIGKILL after timeout). Stderr captured in internal buffer, accessible via `Stderr()`.
+- **`WithCommandTransport(name, args, opts...)`**: Client option that stores command config; creates a fresh `CommandTransport` on each `Connect()` and `reconnect()`. Supports `WithMaxRetries` for automatic process restart on failure.
+- **`WithTransport(NewCommandTransport(...))`** also works but does NOT support reconnection (the transport is not recreated).
+
+### ModifyRequest Hook
+- **`WithModifyRequest(fn func(*http.Request))`**: Client option. Callback invoked on every outgoing HTTP request inside `buildReq`, before `DoWithAuthRetry` applies the `Authorization` header. Cannot accidentally clobber auth.
+- **Applies to HTTP transports only** (Streamable HTTP and SSE). Ignored for stdio and in-process. Survives reconnection.
+- **8 call sites**: 4 in `streamableClientTransport` (call, notify, postResponse, openGetSSEStream) + 4 in `sseClientTransport` (connect, call, notify, postResponse).
 
 ### Application-Level Keepalive
 - **`WithKeepalive(interval, maxFailures)`**: Server-side option. Sends JSON-RPC `ping` requests to clients via GET SSE stream at the configured interval. After `maxFailures` consecutive timeouts, the session is expired.

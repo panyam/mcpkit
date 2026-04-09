@@ -61,6 +61,8 @@
 - mcp-dynamic-registration: Registry.AddTool/RemoveTool/AddResource/RemoveResource/AddPrompt/RemovePrompt — thread-safe runtime registration with automatic notifications/*/list_changed broadcast via OnChange callback
 - mcp-session-timeout: WithSessionTimeout — idle session cleanup for Streamable HTTP (timer + ref counting to avoid closing mid-execution)
 - mcp-server-capabilities-typed: core.ServerCapabilities, ToolsCap, ResourcesCap, PromptsCap — typed structs for initialize response capabilities
+- mcp-command-transport: CommandTransport — spawn subprocess MCP servers, communicate via stdio, graceful SIGTERM/SIGKILL shutdown, stderr capture, env passthrough. WithCommandTransport client option supports reconnection (auto-restart).
+- mcp-modify-request: WithModifyRequest — client-side HTTP request hook for injecting custom headers (tracing, tenant IDs). Runs before auth, applies to Streamable HTTP + SSE transports.
 
 ## Module
 github.com/panyam/mcpkit

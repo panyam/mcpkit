@@ -34,7 +34,7 @@ srv.Run(":8787") // Streamable HTTP
 |---------|--------|------|
 | **core** | `github.com/panyam/mcpkit/core` | Protocol types (Request, ToolDef, Content, Claims) + tool-handler APIs (Sample, Elicit, EmitLog) |
 | **server** | `github.com/panyam/mcpkit/server` | Server, Dispatcher, transports (SSE + Streamable HTTP), middleware |
-| **client** | `github.com/panyam/mcpkit/client` | Client, HTTP transports, reconnection, logging |
+| **client** | `github.com/panyam/mcpkit/client` | Client, HTTP/stdio/command transports, reconnection, logging |
 | **ext/auth** | `github.com/panyam/mcpkit/ext/auth` | Separate module: JWT, PRM, OAuth discovery, DCR, CIMD |
 | **ext/ui** | `github.com/panyam/mcpkit/ext/ui` | Separate module: MCP Apps extension (UIExtension, RegisterAppTool) |
 | **testutil** | `github.com/panyam/mcpkit/testutil` | TestClient wrapper for e2e tests |
@@ -63,6 +63,37 @@ make test-apps-playwright  # ext-apps Playwright suite (needs Node.js)
 | [ext/auth/docs/DESIGN.md](ext/auth/docs/DESIGN.md) | Auth architecture, spec compliance (C1-C23, X1-X5) |
 | [docs/APPS_DESIGN.md](docs/APPS_DESIGN.md) | MCP Apps extension design, protocol flows, conformance strategy |
 | [CAPABILITIES.md](CAPABILITIES.md) | Stack component: all capabilities listed |
+
+## Client Features
+
+### Subprocess MCP Servers
+
+Spawn and manage subprocess MCP servers with `CommandTransport`:
+
+```go
+c := client.NewClient("", info,
+    client.WithCommandTransport("python", []string{"my_server.py"},
+        client.WithEnv("DEBUG=1"),
+        client.WithShutdownTimeout(10*time.Second),
+    ),
+    client.WithMaxRetries(3), // auto-restart on crash
+)
+c.Connect()
+defer c.Close()
+```
+
+### Custom Request Headers
+
+Inject headers into all outgoing HTTP requests:
+
+```go
+c := client.NewClient(url, info,
+    client.WithModifyRequest(func(req *http.Request) {
+        req.Header.Set("X-Tenant-ID", "acme")
+        req.Header.Set("X-Request-ID", uuid.New().String())
+    }),
+)
+```
 
 ## Dependencies
 
