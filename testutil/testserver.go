@@ -130,6 +130,32 @@ func InitHandshake(d interface {
 	})
 }
 
+// ToolCallRequest builds a JSON-RPC tools/call request for direct dispatch testing.
+func ToolCallRequest(name string, args map[string]any) *core.Request {
+	params := map[string]any{"name": name}
+	if args != nil {
+		params["arguments"] = args
+	}
+	raw, _ := json.Marshal(params)
+	return &core.Request{JSONRPC: "2.0", ID: json.RawMessage(`99`), Method: "tools/call", Params: raw}
+}
+
+// ResourceReadRequest builds a JSON-RPC resources/read request for direct dispatch testing.
+func ResourceReadRequest(uri string) *core.Request {
+	raw, _ := json.Marshal(map[string]string{"uri": uri})
+	return &core.Request{JSONRPC: "2.0", ID: json.RawMessage(`99`), Method: "resources/read", Params: raw}
+}
+
+// PromptGetRequest builds a JSON-RPC prompts/get request for direct dispatch testing.
+func PromptGetRequest(name string, args map[string]string) *core.Request {
+	params := map[string]any{"name": name}
+	if args != nil {
+		params["arguments"] = args
+	}
+	raw, _ := json.Marshal(params)
+	return &core.Request{JSONRPC: "2.0", ID: json.RawMessage(`99`), Method: "prompts/get", Params: raw}
+}
+
 // ForAllTransports runs fn as a subtest against all 4 MCP transport types:
 // Streamable HTTP, SSE, in-process memory, and stdio. Each subtest creates
 // its own server instance, connected client, and cleanup handlers.

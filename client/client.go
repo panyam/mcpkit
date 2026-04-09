@@ -537,6 +537,53 @@ func (r *CallResult) Unmarshal(v any) error {
 
 // --- Convenience methods ---
 
+// ToolCallTyped invokes a tool and unmarshals the structured content into T.
+// This is for tools that declare an OutputSchema and return StructuredContent.
+// Returns an error if the tool has no structured content or if unmarshaling fails.
+//
+// Example:
+//
+//	type SearchResult struct {
+//	    Results []string `json:"results"`
+//	    Total   int      `json:"total"`
+//	}
+//	result, err := client.ToolCallTyped[SearchResult](c, "search", map[string]any{"query": "test"})
+func ToolCallTyped[T any](c *Client, name string, args any) (T, error) {
+	var zero T
+	result, err := c.Call("tools/call", map[string]any{
+		"name":      name,
+		"arguments": args,
+	})
+	if err != nil {
+		return zero, err
+	}
+
+	// Parse the tool result to extract structuredContent
+	var toolResult struct {
+		IsError           bool            `json:"isError"`
+		Content           []core.Content  `json:"content"`
+		StructuredContent json.RawMessage `json:"structuredContent"`
+	}
+	if err := json.Unmarshal(result.Raw, &toolResult); err != nil {
+		return zero, fmt.Errorf("unmarshal tool result: %w", err)
+	}
+	if toolResult.IsError {
+		if len(toolResult.Content) > 0 {
+			return zero, fmt.Errorf("tool error: %s", toolResult.Content[0].Text)
+		}
+		return zero, fmt.Errorf("tool error (no content)")
+	}
+	if toolResult.StructuredContent == nil {
+		return zero, fmt.Errorf("tool %q returned no structured content", name)
+	}
+
+	var typed T
+	if err := json.Unmarshal(toolResult.StructuredContent, &typed); err != nil {
+		return zero, fmt.Errorf("unmarshal structured content: %w", err)
+	}
+	return typed, nil
+}
+
 // ToolCall invokes a tool and returns the first text content.
 func (c *Client) ToolCall(name string, args any) (string, error) {
 	result, err := c.Call("tools/call", map[string]any{
