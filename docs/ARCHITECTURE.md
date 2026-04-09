@@ -83,14 +83,16 @@ mcpkit/                          # module: github.com/panyam/mcpkit
 │   ├── client_logging.go        # loggingTransport, WithClientLogging
 │   └── client_reconnect.go      # WithMaxRetries, WithReconnectBackoff
 ├── ext/auth/                    # SEPARATE module (github.com/panyam/mcpkit/ext/auth)
-│   ├── go.mod                   # depends on mcpkit + oneauth v0.0.64
+│   ├── go.mod                   # depends on mcpkit + oneauth
 │   ├── discovery.go             # DiscoverMCPAuth (PRM + AS metadata)
-│   ├── token_source.go          # OAuthTokenSource, ClientCredentialsSource
-│   ├── dcr.go                   # RegisterClient (RFC 7591)
+│   ├── token_source.go          # OAuthTokenSource, ValidatePKCES256 (MCP-specific)
+│   ├── dcr.go                   # DefaultClientRegistration (MCP defaults), type aliases for oneauth
 │   ├── jwt_validator.go         # JWTValidator (JWKS-based)
 │   ├── server_auth.go           # MountAuth (PRM endpoints)
 │   ├── scopes.go                # RequireScope
 │   └── docs/DESIGN.md           # Auth architecture, spec compliance
+│   NOTE: Generic OAuth (RegisterClient, ClientCredentialsSource, ValidateHTTPS,
+│         ValidateCIMDURL, mergeScopes) pushed to oneauth (#158). Type aliases preserved.
 ├── ext/ui/                      # SEPARATE module (github.com/panyam/mcpkit/ext/ui)
 │   ├── go.mod                   # depends on mcpkit only (zero external deps)
 │   └── extension.go             # UIExtension (ExtensionProvider + RefValidator), RegisterAppTool
@@ -100,12 +102,7 @@ mcpkit/                          # module: github.com/panyam/mcpkit
 ├── conformance/baseline.yml     # Expected failures: 0 server + 1 auth (warning)
 ├── scripts/                     # smoke-test.sh, conformance-test.sh
 ├── docs/                        # ARCHITECTURE.md, APPS_DESIGN.md, GATEWAY_DESIGN.md
-├── tests/e2e/                   # E2E auth tests (separate Go module)
-└── tests/keycloak/              # Keycloak interop tests (separate Go module)
-│   ├── scopes.go                # RequireScope for tool handlers
-│   ├── token_source.go          # OAuthTokenSource, ClientCredentialsSource
-│   └── discovery.go             # DiscoverMCPAuth (MCP discovery orchestration)
-├── tests/e2e/                   # E2E auth tests (separate module, oneauth v0.0.64)
+├── tests/e2e/                   # E2E auth tests (separate module)
 │   └── (22 tests: JWT, transport, scope, PRM, WWW-Authenticate)
 └── tests/keycloak/              # Keycloak interop (separate module, needs Docker)
     └── (7 tests: Keycloak JWT → mcpkit JWTValidator)

@@ -4,13 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
-	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/panyam/oneauth/client"
+	"github.com/panyam/oneauth/core"
 )
 
 // tokenExpiryBuffer is subtracted from token expiry times to account for clock
@@ -125,7 +124,7 @@ func (s *OAuthTokenSource) Token() (string, error) {
 
 	// HTTPS enforcement (X1): AS endpoints MUST be HTTPS
 	if !s.AllowInsecure {
-		if err := validateHTTPS(s.authInfo.ASMetadata); err != nil {
+		if err := client.ValidateHTTPS(s.authInfo.ASMetadata); err != nil {
 			return "", err
 		}
 	}
@@ -188,7 +187,7 @@ func (s *OAuthTokenSource) TokenForScopes(scopes []string) (string, error) {
 	s.mu.Lock()
 	s.token = ""
 	s.expiry = time.Time{}
-	s.Scopes = mergeScopes(s.Scopes, scopes)
+	s.Scopes = core.UnionScopes(s.Scopes, scopes)
 	s.mu.Unlock()
 
 	return s.Token()
@@ -207,7 +206,7 @@ func (s *OAuthTokenSource) resolveClientID() (clientID, clientSecret string, err
 
 	// 2. CIMD (C7/C8)
 	if s.ClientMetadataURL != "" {
-		if err := ValidateCIMDURL(s.ClientMetadataURL); err != nil {
+		if err := client.ValidateCIMDURL(s.ClientMetadataURL); err != nil {
 			// Log warning but fall through to DCR
 			_ = err
 		} else {
@@ -225,7 +224,7 @@ func (s *OAuthTokenSource) resolveClientID() (clientID, clientSecret string, err
 		if s.DCRMeta != nil {
 			meta = *s.DCRMeta
 		}
-		resp, err := RegisterClient(s.authInfo.ASMetadata.RegistrationEndpoint, meta, s.HTTPClient)
+		resp, err := client.RegisterClient(s.authInfo.ASMetadata.RegistrationEndpoint, meta, s.HTTPClient)
 		if err != nil {
 			return "", "", fmt.Errorf("DCR: %w", err)
 		}
@@ -254,131 +253,6 @@ func ValidatePKCES256(meta *client.ASMetadata) error {
 	return fmt.Errorf("AS does not support PKCE S256 (supported: %v)", meta.CodeChallengeMethodsSupported)
 }
 
-// validateHTTPS checks that AS endpoints use HTTPS (X1).
-// Localhost URLs are exempt for development/testing.
-func validateHTTPS(meta *client.ASMetadata) error {
-	if meta == nil {
-		return nil
-	}
-	endpoints := []struct{ name, url string }{
-		{"authorization_endpoint", meta.AuthorizationEndpoint},
-		{"token_endpoint", meta.TokenEndpoint},
-	}
-	for _, ep := range endpoints {
-		if ep.url == "" {
-			continue
-		}
-		if isLocalhost(ep.url) {
-			continue
-		}
-		if !strings.HasPrefix(ep.url, "https://") {
-			return fmt.Errorf("AS %s must be HTTPS: %s", ep.name, ep.url)
-		}
-	}
-	return nil
-}
-
-// isLocalhost returns true if the URL points to a loopback address.
-func isLocalhost(rawURL string) bool {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return false
-	}
-	host := u.Hostname()
-	return host == "localhost" || host == "127.0.0.1" || host == "::1"
-}
-
-// ValidateCIMDURL validates a Client ID Metadata Document URL (C8).
-// Per spec: MUST use https (except localhost for testing), MUST contain a path.
-func ValidateCIMDURL(rawURL string) error {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return fmt.Errorf("invalid CIMD URL: %w", err)
-	}
-	if !isLocalhost(rawURL) && u.Scheme != "https" {
-		return fmt.Errorf("CIMD URL must use https: %s", rawURL)
-	}
-	if u.Path == "" || u.Path == "/" {
-		return fmt.Errorf("CIMD URL must contain a path: %s", rawURL)
-	}
-	return nil
-}
-
-// --- ClientCredentialsSource (unchanged) ---
-
-// ClientCredentialsSource implements core.TokenSource for machine-to-machine auth.
-// Uses the OAuth client_credentials grant (RFC 6749 §4.4).
-//
-// Per MCP spec extensions: io.modelcontextprotocol/oauth-client-credentials
-type ClientCredentialsSource struct {
-	// TokenEndpoint is the authorization server's token URL.
-	TokenEndpoint string
-
-	// ClientID identifies this client to the authorization server.
-	ClientID string
-
-	// ClientSecret authenticates this client.
-	ClientSecret string
-
-	// Scopes to request.
-	Scopes []string
-
-	// Audience is the MCP server's canonical URI (RFC 8707 resource indicator).
-	Audience string
-
-	mu     sync.Mutex
-	client *client.AuthClient
-	token  string
-	expiry time.Time
-}
-
-// Token implements core.TokenSource.
-func (s *ClientCredentialsSource) Token() (string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.token != "" && time.Now().Add(tokenExpiryBuffer).Before(s.expiry) {
-		return s.token, nil
-	}
-
-	if s.client == nil {
-		s.client = client.NewAuthClient(s.TokenEndpoint, nil)
-	}
-
-	cred, err := s.client.ClientCredentialsToken(s.ClientID, s.ClientSecret, s.Scopes)
-	if err != nil {
-		return "", fmt.Errorf("client credentials: %w", err)
-	}
-
-	s.token = cred.AccessToken
-	s.expiry = cred.ExpiresAt
-	return s.token, nil
-}
-
-// TokenForScopes implements core.ScopeAwareTokenSource.
-func (s *ClientCredentialsSource) TokenForScopes(scopes []string) (string, error) {
-	s.mu.Lock()
-	s.token = ""
-	s.expiry = time.Time{}
-	s.Scopes = mergeScopes(s.Scopes, scopes)
-	s.mu.Unlock()
-
-	return s.Token()
-}
-
-// mergeScopes returns the union of existing and required scopes, sorted.
-func mergeScopes(existing, required []string) []string {
-	set := make(map[string]struct{}, len(existing)+len(required))
-	for _, s := range existing {
-		set[s] = struct{}{}
-	}
-	for _, s := range required {
-		set[s] = struct{}{}
-	}
-	result := make([]string, 0, len(set))
-	for s := range set {
-		result = append(result, s)
-	}
-	sort.Strings(result)
-	return result
-}
+// Type aliases re-exported from oneauth/client for backward compatibility.
+// These types were moved to oneauth as part of mcpkit#158 (generic OAuth pushdown).
+type ClientCredentialsSource = client.ClientCredentialsSource
