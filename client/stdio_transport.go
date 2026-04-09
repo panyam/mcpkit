@@ -21,6 +21,7 @@ import (
 	"strings"
 	"sync"
 
+	conc "github.com/panyam/gocurrent"
 	core "github.com/panyam/mcpkit/core"
 )
 
@@ -38,7 +39,7 @@ type StdioTransport struct {
 	// Internal state.
 	reader   *bufio.Reader
 	writeMu  sync.Mutex
-	pending  sync.Map // id (string) → chan *core.Response
+	pending  conc.SyncMap[string, chan *core.Response]
 	done     chan struct{}
 	closeErr error
 }
@@ -213,8 +214,7 @@ func (t *StdioTransport) routeResponse(resp *core.Response) {
 	if err := json.Unmarshal(resp.ID, &idStr); err != nil {
 		idStr = string(resp.ID)
 	}
-	if val, ok := t.pending.Load(idStr); ok {
-		ch := val.(chan *core.Response)
+	if ch, ok := t.pending.Load(idStr); ok {
 		ch <- resp
 	}
 }

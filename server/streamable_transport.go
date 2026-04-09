@@ -1,7 +1,6 @@
 package server
 
 import (
-	core "github.com/panyam/mcpkit/core"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	conc "github.com/panyam/gocurrent"
+	core "github.com/panyam/mcpkit/core"
 	gohttp "github.com/panyam/servicekit/http"
 )
 
@@ -33,7 +34,7 @@ const (
 // prevent expiry during active requests.
 type streamableTransport struct {
 	server   *Server
-	sessions sync.Map // sessionID → *sessionEntry
+	sessions conc.SyncMap[string, *sessionEntry]
 	sseHub   *gohttp.SSEHub[SSEData] // for GET SSE streams (server-initiated notifications)
 	config   transportConfig
 }
@@ -121,11 +122,10 @@ func (t *streamableTransport) handleRoot(w http.ResponseWriter, r *http.Request)
 // expireSession removes an idle session and cleans up its resources.
 // Called by the session timer when the idle timeout fires.
 func (t *streamableTransport) expireSession(id string) {
-	val, ok := t.sessions.LoadAndDelete(id)
+	entry, ok := t.sessions.LoadAndDelete(id)
 	if !ok {
 		return
 	}
-	entry := val.(*sessionEntry)
 	entry.dispatcher.Close()
 	// Close any GET SSE streams for this session
 	t.sseHub.Unregister(id)
@@ -134,11 +134,7 @@ func (t *streamableTransport) expireSession(id string) {
 
 // loadSession loads a sessionEntry by ID. Returns (entry, true) or (nil, false).
 func (t *streamableTransport) loadSession(id string) (*sessionEntry, bool) {
-	val, ok := t.sessions.Load(id)
-	if !ok {
-		return nil, false
-	}
-	return val.(*sessionEntry), true
+	return t.sessions.Load(id)
 }
 
 // handlePost handles POST requests: JSON-RPC dispatch with session management.
@@ -511,12 +507,11 @@ func (t *streamableTransport) handleDelete(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	val, ok := t.sessions.LoadAndDelete(sessionID)
+	entry, ok := t.sessions.LoadAndDelete(sessionID)
 	if !ok {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
 	}
-	entry := val.(*sessionEntry)
 	entry.stopTimer()
 	entry.dispatcher.Close()
 
@@ -525,9 +520,8 @@ func (t *streamableTransport) handleDelete(w http.ResponseWriter, r *http.Reques
 
 // closeSession terminates a single session by ID. Returns true if found.
 func (t *streamableTransport) closeSession(id string) bool {
-	val, ok := t.sessions.LoadAndDelete(id)
+	entry, ok := t.sessions.LoadAndDelete(id)
 	if ok {
-		entry := val.(*sessionEntry)
 		entry.stopTimer()
 		entry.dispatcher.Close()
 	}
@@ -536,8 +530,7 @@ func (t *streamableTransport) closeSession(id string) bool {
 
 // closeAllSessions terminates all active sessions.
 func (t *streamableTransport) closeAllSessions() {
-	t.sessions.Range(func(key, value any) bool {
-		entry := value.(*sessionEntry)
+	t.sessions.Range(func(key string, entry *sessionEntry) bool {
 		entry.stopTimer()
 		entry.dispatcher.Close()
 		t.sessions.Delete(key)
@@ -548,8 +541,8 @@ func (t *streamableTransport) closeAllSessions() {
 // broadcast sends a notification to all active Streamable HTTP sessions.
 // Sessions without a GET SSE stream have nil notifyFunc and are skipped safely.
 func (t *streamableTransport) broadcast(method string, params any) {
-	t.sessions.Range(func(key, value any) bool {
-		d := value.(*sessionEntry).dispatcher
+	t.sessions.Range(func(_ string, entry *sessionEntry) bool {
+		d := entry.dispatcher
 		if fn := d.getNotifyFunc(); fn != nil {
 			fn(method, params)
 		}
@@ -560,7 +553,7 @@ func (t *streamableTransport) broadcast(method string, params any) {
 // sessionCount returns the number of active sessions.
 func (t *streamableTransport) sessionCount() int {
 	count := 0
-	t.sessions.Range(func(_, _ any) bool {
+	t.sessions.Range(func(_ string, _ *sessionEntry) bool {
 		count++
 		return true
 	})
