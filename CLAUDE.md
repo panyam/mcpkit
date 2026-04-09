@@ -69,12 +69,15 @@ mcpkit/
 │
 ├── ext/auth/                ← Separate Go module (ext/auth/go.mod)
 │   ├── discovery.go           DiscoverMCPAuth (PRM + AS metadata)
-│   ├── token_source.go        OAuthTokenSource, ClientCredentialsSource
-│   ├── dcr.go                 RegisterClient (RFC 7591)
+│   ├── token_source.go        OAuthTokenSource, ValidatePKCES256
+│   ├── dcr.go                 DefaultClientRegistration (MCP defaults), type aliases for client.RegisterClient/types
 │   ├── jwt_validator.go       JWTValidator (JWKS-based)
 │   ├── server_auth.go         MountAuth (PRM endpoints)
 │   ├── scopes.go              RequireScope
 │   └── docs/DESIGN.md         Auth architecture + spec compliance
+│   NOTE: Generic OAuth code moved to oneauth (#158): RegisterClient,
+│         ValidateHTTPS, ValidateCIMDURL, ClientCredentialsSource → oneauth/client;
+│         mergeScopes → core.UnionScopes. Type aliases preserved for compat.
 │
 ├── ext/ui/                 ← Separate Go module (ext/ui/go.mod)
 │   └── extension.go          UIExtension (ExtensionProvider + RefValidator), RegisterAppTool, AppToolConfig
@@ -125,6 +128,7 @@ mcpkit/
 - **`OAuthTokenSource` calls `DiscoverMCPAuth`** on first `Token()`, caches result. Passes discovered endpoints explicitly to `LoginWithBrowser`.
 - **Client registration priority (C6)**: pre-registered `ClientID` → CIMD `ClientMetadataURL` → DCR (if `EnableDCR`) → error.
 - **Keycloak container** runs with `--log-level=INFO,org.keycloak.events:DEBUG` for token event visibility.
+- **Generic OAuth pushed to oneauth (#158)**: `RegisterClient`, `ClientRegistrationRequest/Response`, `ValidateHTTPS`, `IsLocalhost`, `ValidateCIMDURL`, `ClientCredentialsSource`, `mergeScopes` (now `core.UnionScopes`) all live in `oneauth/client` and `oneauth/core`. Type aliases in `ext/auth/` preserve backward compat. Only `DefaultClientRegistration()` (MCP-specific defaults) and `ValidatePKCES256` (MCP requirement C11/C12) remain local.
 
 ### MCP Apps (io.modelcontextprotocol/ui)
 - **"Apps" = feature name, "ui" = extension ID**. The spec repo is `ext-apps`, the wire ID is `io.modelcontextprotocol/ui`. Our package is `ext/ui/` to match the ID.
