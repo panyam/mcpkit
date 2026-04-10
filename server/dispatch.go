@@ -60,6 +60,13 @@ type Dispatcher struct {
 	sessionID            string                  // set by transport, used as key in subscription registry
 	subManager           *subscriptionRegistry   // shared pointer to Server's registry (nil if disabled)
 
+	// Roots state — tracked per session.
+	// rootsStale is set when the client sends notifications/roots/list_changed.
+	// On the next tool call with a requestFunc, the server fetches roots/list.
+	rootsStale    bool
+	roots         []core.Root
+	onRootsChanged func([]core.Root) // optional callback, set via WithOnRootsChanged
+
 	// Server-to-client request infrastructure.
 	// pushRequest pushes a raw JSON-RPC request to the client stream (set by transport).
 	// pending tracks in-flight server-to-client requests awaiting responses.
@@ -149,6 +156,7 @@ func (d *Dispatcher) newSession() *Dispatcher {
 		serverInfo:           d.serverInfo,
 		subscriptionsEnabled: d.subscriptionsEnabled,
 		subManager:           d.subManager,
+		onRootsChanged:       d.onRootsChanged,
 		eventIDs:             newEventIDGen(),
 		requestIDs:           newEventIDGen(),
 	}
@@ -205,6 +213,13 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) *core.Resp
 		d.handleCancelled(req.Params)
 		return nil
 
+	case "notifications/roots/list_changed":
+		d.rootsStale = true
+		if d.onRootsChanged != nil {
+			d.onRootsChanged(d.roots)
+		}
+		return nil
+
 	case "ping":
 		return core.NewResponse(id, core.PingResult{})
 
@@ -213,11 +228,16 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) *core.Resp
 			return core.NewErrorResponse(id, core.ErrCodeInvalidRequest, "server not initialized")
 		}
 
-		// Track in-flight request for cancellation support
+		// Track in-flight request for cancellation support.
+		// Reject duplicate request IDs within the same session to prevent
+		// cancellation confusion (the old cancelFn would be overwritten).
 		ctx, cancel := context.WithCancel(ctx)
-		defer cancel()
 		reqID := string(id)
-		d.inflight.Store(reqID, cancel)
+		if _, loaded := d.inflight.LoadOrStore(reqID, cancel); loaded {
+			cancel()
+			return core.NewErrorResponse(id, core.ErrCodeInvalidRequest, "duplicate request ID: "+reqID)
+		}
+		defer cancel()
 		defer d.inflight.Delete(reqID)
 
 		switch req.Method {
@@ -302,6 +322,8 @@ func (d *Dispatcher) handleInitialize(id json.RawMessage, params json.RawMessage
 }
 
 func (d *Dispatcher) handleToolsList(id json.RawMessage, params json.RawMessage) *core.Response {
+	cursor, _ := parsePaginationParams(params)
+
 	d.Reg.mu.RLock()
 	tools := make([]core.ToolDef, 0, len(d.Reg.toolOrder))
 	for _, name := range d.Reg.toolOrder {
@@ -310,7 +332,21 @@ func (d *Dispatcher) handleToolsList(id json.RawMessage, params json.RawMessage)
 		}
 	}
 	d.Reg.mu.RUnlock()
-	return core.NewResponse(id, core.ToolsListResult{Tools: tools})
+
+	page, nextCursor, _ := paginate(tools, cursor, defaultPageSize)
+	return core.NewResponse(id, core.ToolsListResult{Tools: page, NextCursor: nextCursor})
+}
+
+// parsePaginationParams extracts cursor from request params.
+func parsePaginationParams(params json.RawMessage) (cursor string, pageSize int) {
+	if params == nil {
+		return "", defaultPageSize
+	}
+	var p struct {
+		Cursor string `json:"cursor"`
+	}
+	json.Unmarshal(params, &p)
+	return p.Cursor, defaultPageSize
 }
 
 func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
@@ -359,6 +395,8 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, pa
 // --- Resources ---
 
 func (d *Dispatcher) handleResourcesList(id json.RawMessage, params json.RawMessage) *core.Response {
+	cursor, _ := parsePaginationParams(params)
+
 	d.Reg.mu.RLock()
 	resources := make([]core.ResourceDef, 0, len(d.Reg.resourceOrder))
 	for _, uri := range d.Reg.resourceOrder {
@@ -367,7 +405,9 @@ func (d *Dispatcher) handleResourcesList(id json.RawMessage, params json.RawMess
 		}
 	}
 	d.Reg.mu.RUnlock()
-	return core.NewResponse(id, core.ResourcesListResult{Resources: resources})
+
+	page, nextCursor, _ := paginate(resources, cursor, defaultPageSize)
+	return core.NewResponse(id, core.ResourcesListResult{Resources: page, NextCursor: nextCursor})
 }
 
 func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
@@ -429,6 +469,8 @@ func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage
 }
 
 func (d *Dispatcher) handleResourcesTemplatesList(id json.RawMessage, params json.RawMessage) *core.Response {
+	cursor, _ := parsePaginationParams(params)
+
 	d.Reg.mu.RLock()
 	templates := make([]core.ResourceTemplate, 0, len(d.Reg.templateOrder))
 	for _, uri := range d.Reg.templateOrder {
@@ -437,7 +479,9 @@ func (d *Dispatcher) handleResourcesTemplatesList(id json.RawMessage, params jso
 		}
 	}
 	d.Reg.mu.RUnlock()
-	return core.NewResponse(id, core.ResourceTemplatesListResult{ResourceTemplates: templates})
+
+	page, nextCursor, _ := paginate(templates, cursor, defaultPageSize)
+	return core.NewResponse(id, core.ResourceTemplatesListResult{ResourceTemplates: page, NextCursor: nextCursor})
 }
 
 // --- Resource Subscriptions ---
@@ -476,6 +520,8 @@ func (d *Dispatcher) handleResourcesUnsubscribe(id json.RawMessage, params json.
 // --- Prompts ---
 
 func (d *Dispatcher) handlePromptsList(id json.RawMessage, params json.RawMessage) *core.Response {
+	cursor, _ := parsePaginationParams(params)
+
 	d.Reg.mu.RLock()
 	prompts := make([]core.PromptDef, 0, len(d.Reg.promptOrder))
 	for _, name := range d.Reg.promptOrder {
@@ -484,7 +530,9 @@ func (d *Dispatcher) handlePromptsList(id json.RawMessage, params json.RawMessag
 		}
 	}
 	d.Reg.mu.RUnlock()
-	return core.NewResponse(id, core.PromptsListResult{Prompts: prompts})
+
+	page, nextCursor, _ := paginate(prompts, cursor, defaultPageSize)
+	return core.NewResponse(id, core.PromptsListResult{Prompts: page, NextCursor: nextCursor})
 }
 
 func (d *Dispatcher) handlePromptsGet(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {

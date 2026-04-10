@@ -37,6 +37,7 @@ type serverOptions struct {
 	subscriptionsEnabled bool        // enable resources/subscribe and resources/unsubscribe
 	errorHandler         ErrorHandler // optional out-of-band error callback
 	contentChunkMethod   string       // custom notification method for streaming content (empty = default)
+	onRootsChanged       func([]core.Root) // optional callback when client sends roots/list_changed
 }
 
 // ErrorHandler receives out-of-band errors that aren't returned to a
@@ -128,6 +129,14 @@ func WithErrorHandler(h ErrorHandler) Option {
 	return func(o *serverOptions) { o.errorHandler = h }
 }
 
+// WithOnRootsChanged sets a callback invoked when the client sends
+// notifications/roots/list_changed. The callback receives the root list
+// (which may be empty if the client hasn't provided roots yet).
+// Use this to dynamically update allowed roots or trigger re-validation.
+func WithOnRootsChanged(fn func([]core.Root)) Option {
+	return func(o *serverOptions) { o.onRootsChanged = fn }
+}
+
 // WithContentChunkMethod sets a custom notification method name for streaming
 // tool content chunks. When not set, defaults to core.DefaultContentChunkMethod
 // ("notifications/tools/content_chunk"). Use this if clients expect a different
@@ -174,6 +183,10 @@ func NewServer(info core.ServerInfo, opts ...Option) *Server {
 	// dynamic adds/removes automatically notify all connected sessions.
 	s.dispatcher.Reg.OnChange = func(method string) {
 		s.Broadcast(method, nil)
+	}
+	// Wire roots callback
+	if s.options.onRootsChanged != nil {
+		s.dispatcher.onRootsChanged = s.options.onRootsChanged
 	}
 	// Initialize subscription support if enabled
 	if s.options.subscriptionsEnabled {
