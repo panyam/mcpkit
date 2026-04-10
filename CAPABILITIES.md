@@ -62,6 +62,7 @@
 - mcp-session-timeout: WithSessionTimeout — idle session cleanup for Streamable HTTP (timer + ref counting to avoid closing mid-execution)
 - mcp-server-capabilities-typed: core.ServerCapabilities, ToolsCap, ResourcesCap, PromptsCap — typed structs for initialize response capabilities
 - mcp-command-transport: CommandTransport — spawn subprocess MCP servers, communicate via stdio, graceful SIGTERM/SIGKILL shutdown, stderr capture, env passthrough. WithCommandTransport client option supports reconnection (auto-restart).
+- mcp-tool-exec: ToolExec — wrap CLI binaries as MCP tools with structured I/O. ExecConfig supports static/dynamic args, env, dir, timeout. BuildArgs callback maps JSON tool arguments to CLI flags.
 - mcp-modify-request: WithModifyRequest — client-side HTTP request hook for injecting custom headers (tracing, tenant IDs). Runs before auth, applies to Streamable HTTP + SSE transports.
 
 ## Module
@@ -73,7 +74,7 @@ newstack/mcpkit/main
 ## Stack Dependencies
 
 ### Core module (github.com/panyam/mcpkit)
-- servicekit (github.com/panyam/servicekit) v0.0.14 — SSEConn/SSEHub, ListenAndServeGraceful, StreamableServe
+- servicekit (github.com/panyam/servicekit) v0.0.22 — SSEConn/SSEHub, ListenAndServeGraceful, StreamableServe, HTTPStatusError (with Header), MaxErrorBodySize
 
 ### Sub-module: ext/auth (github.com/panyam/mcpkit/ext/auth)
 - oneauth (github.com/panyam/oneauth) v0.0.64 — JWT/OIDC validation, testutil.TestAuthServer; separate go.mod
