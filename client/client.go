@@ -118,6 +118,17 @@ func WithModifyRequest(fn func(*http.Request)) ClientOption {
 	return func(c *Client) { c.modifyRequest = fn }
 }
 
+// WithContentChunkHandler sets a callback for streaming tool content chunks.
+// The callback is invoked for each content chunk notification received during
+// tool execution (method matching the server's configured content chunk method,
+// default "notifications/tools/content_chunk").
+//
+// If not set, content chunk notifications are silently ignored and the client
+// relies on the final ToolResult for the complete response.
+func WithContentChunkHandler(fn func(chunk core.ContentChunk)) ClientOption {
+	return func(c *Client) { c.onContentChunk = fn }
+}
+
 // WithCommandTransport configures the client to spawn a subprocess MCP server
 // and communicate over stdin/stdout. A fresh process is started on each
 // Connect() (and on each reconnection if WithMaxRetries is set).
@@ -266,6 +277,9 @@ type Client struct {
 	// enableGetSSE opts into the background GET SSE stream (Streamable HTTP only).
 	enableGetSSE bool
 
+	// onContentChunk is an optional callback for streaming tool content chunks.
+	onContentChunk func(chunk core.ContentChunk)
+
 	// lastEventID tracks the most recent SSE event ID received from the server.
 	// Used to send Last-Event-ID header on reconnection for stream resumption.
 	// Written by background SSE readers, read during reconnection.
@@ -342,7 +356,7 @@ func (c *Client) Connect() error {
 			st := newSSEClientTransport(c.url, c.tokenSource)
 			st.serverReqHandler = c.HandleServerRequest
 			st.modifyReq = c.modifyRequest
-			if c.onNotify != nil {
+			if c.onNotify != nil || c.onContentChunk != nil {
 				st.notifyHandler = c.makeNotifyAdapter()
 			}
 			c.transport = st
@@ -352,7 +366,7 @@ func (c *Client) Connect() error {
 			st.serverReqHandler = c.HandleServerRequest
 			st.enableGetSSE = c.enableGetSSE
 			st.modifyReq = c.modifyRequest
-			if c.onNotify != nil {
+			if c.onNotify != nil || c.onContentChunk != nil {
 				st.notifyHandler = c.makeNotifyAdapter()
 			}
 			c.transport = st
@@ -500,13 +514,25 @@ func (c *Client) unwrapStreamableTransport() *streamableClientTransport {
 
 // makeNotifyAdapter creates a transport-level notification handler that
 // unmarshals JSON params and delegates to the client's onNotify callback.
+// Also intercepts content chunk notifications for the onContentChunk handler.
 func (c *Client) makeNotifyAdapter() func(string, json.RawMessage) {
 	return func(method string, params json.RawMessage) {
-		var parsed any
-		if len(params) > 0 {
-			json.Unmarshal(params, &parsed)
+		// Intercept content chunk notifications for the dedicated handler.
+		// Matches the default method or any custom method containing "content_chunk".
+		if c.onContentChunk != nil && method == core.DefaultContentChunkMethod {
+			var chunk core.ContentChunk
+			if json.Unmarshal(params, &chunk) == nil {
+				c.onContentChunk(chunk)
+				return // Don't also deliver to generic onNotify
+			}
 		}
-		c.onNotify(method, parsed)
+		if c.onNotify != nil {
+			var parsed any
+			if len(params) > 0 {
+				json.Unmarshal(params, &parsed)
+			}
+			c.onNotify(method, parsed)
+		}
 	}
 }
 
