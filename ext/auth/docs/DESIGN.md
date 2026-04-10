@@ -479,3 +479,17 @@ JWTValidator reads scopes from both formats:
 - `"scope": "read write"` — Keycloak/RFC 6749 space-delimited string
 
 This was discovered during Keycloak interop testing (oneauth#68).
+
+### JWT algorithm performance
+
+MCPKit's JWTValidator supports any algorithm the JWKS key store provides (RS256, ES256, EdDSA, etc.). For new deployments, **ES256 (ECDSA P-256) is recommended** over RS256 (RSA-2048) for three reasons:
+
+1. **Verification speed**: ES256 verification is roughly 10x faster than RS256 on modern hardware (~0.01ms vs ~0.1ms per verify). In MCP agent loops with rapid sequential tool calls, this compounds — at 1000 RPS with 10 tool calls per agent turn, RS256 burns ~100ms/s of CPU on signature verification vs ~10ms/s for ES256.
+
+2. **Key size**: ES256 public keys are 64 bytes vs 256 bytes for RSA-2048. Smaller JWKS responses, faster key rotation.
+
+3. **Token size**: ES256 signatures are 64 bytes vs 256 bytes for RS256. Smaller JWTs mean smaller `Authorization` headers on every request.
+
+The validated-token cache (`JWTValidator.CacheTTL`) mitigates verification cost for repeated tokens in steady-state. But cold starts, cache misses, and high-cardinality token scenarios (many distinct users) still hit the verification path, where ES256 has a clear advantage.
+
+**Caveat**: RS256 remains the default signing algorithm in most identity providers (including Keycloak, as configured in our test realm). Switching to ES256 requires explicit authorization server configuration. Consult your IdP documentation for key generation and algorithm settings.
