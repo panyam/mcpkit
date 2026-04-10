@@ -144,6 +144,14 @@ mcpkit/
 ### URI Template Matching (#143)
 - **RFC 6570 Level 4**: Uses `yosida95/uritemplate/v3` for proper URI template matching. Replaces naive segment-based matcher.
 
+### Streaming Tool Results (#82)
+- **`core.EmitContent(ctx, requestID, content)`**: Emits a partial content block during tool execution. Delivered as SSE event on streaming transports, silently dropped on JSON path.
+- **Default method**: `notifications/tools/content_chunk`. Override via `server.WithContentChunkMethod(method)`.
+- **Configurable via context**: `core.WithContentChunkMethod(ctx, method)` for per-request override.
+- **Client handler**: `client.WithContentChunkHandler(fn)` receives chunks. If not set, chunks are ignored and client uses final ToolResult only.
+- **No transport changes**: Uses existing notify infrastructure. All transports automatically support streaming.
+- **Final result is authoritative**: Streaming chunks are a preview for responsive UX.
+
 ### Per-Handler Timeout
 - **`ToolDef.Timeout`**, **`ResourceDef.Timeout`**, **`ResourceTemplate.Timeout`**, **`PromptDef.Timeout`**: Per-handler execution timeout. When set, overrides the server-wide `WithToolTimeout` for that specific handler. `json:"-"` — not serialized to clients.
 - **Fallback chain**: per-handler `Timeout` → server-wide `WithToolTimeout` (tools only) → no timeout.
