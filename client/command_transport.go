@@ -104,11 +104,17 @@ func NewCommandTransport(name string, args []string, opts ...CommandOption) *Com
 }
 
 // Connect starts the subprocess and establishes the stdio transport.
+// The context is used only to bound the connect/handshake phase — the subprocess
+// outlives it. If the context expires before the handshake completes, Connect
+// returns an error and Close() should be called to clean up the process.
 func (ct *CommandTransport) Connect(ctx context.Context) error {
 	ct.mu.Lock()
 	defer ct.mu.Unlock()
 
-	cmd := exec.CommandContext(ctx, ct.name, ct.args...)
+	// Use exec.Command (not CommandContext) so the process isn't killed when
+	// the connect timeout context expires. Process lifecycle is managed by
+	// Close() via SIGTERM/SIGKILL, not by context cancellation.
+	cmd := exec.Command(ct.name, ct.args...)
 	if ct.opts.dir != "" {
 		cmd.Dir = ct.opts.dir
 	}
@@ -178,10 +184,15 @@ func (ct *CommandTransport) Notify(ctx context.Context, req *core.Request) error
 // SessionID returns "command" for the command transport.
 func (ct *CommandTransport) SessionID() string { return "command" }
 
-// Close gracefully shuts down the subprocess. It closes the stdio transport
-// (which closes stdin, causing the server to see EOF), then sends SIGTERM.
-// If the process does not exit within the shutdown timeout, it sends SIGKILL.
-// The returned error includes stderr output if the process exited abnormally.
+// Close gracefully shuts down the subprocess. It first closes the stdin pipe
+// (via StdioTransport) so well-behaved servers exit on EOF. If the process
+// doesn't exit within a short grace period, it sends SIGTERM. If SIGTERM
+// doesn't work within the shutdown timeout, it escalates to SIGKILL.
+//
+// The grace period before SIGTERM handles servers that don't exit on stdin EOF
+// (e.g., started in HTTP mode by mistake). Without this, StdioTransport.Close()
+// would block forever waiting for readLoop to see EOF on a stdout pipe held
+// open by a still-running process.
 func (ct *CommandTransport) Close() error {
 	ct.mu.Lock()
 	defer ct.mu.Unlock()
@@ -190,36 +201,60 @@ func (ct *CommandTransport) Close() error {
 		return nil
 	}
 
-	// Close stdio transport first — closes stdin pipe, waits for read loop.
+	// Check if process already exited.
+	select {
+	case <-ct.done:
+		if ct.stdio != nil {
+			ct.stdio.Close()
+			ct.stdio = nil
+		}
+		return ct.exitError()
+	default:
+	}
+
+	// Close stdin pipe to signal EOF. Well-behaved stdio servers exit here.
+	if ct.stdio != nil {
+		// Close the writer (stdin) without waiting for readLoop — readLoop
+		// will unblock when the process exits and closes stdout.
+		if closer, ok := ct.stdio.w.(io.Closer); ok {
+			closer.Close()
+		}
+	}
+
+	// Short grace period for stdin-EOF-based shutdown.
+	select {
+	case <-ct.done:
+		// Process exited cleanly on stdin EOF.
+		if ct.stdio != nil {
+			ct.stdio.Close()
+			ct.stdio = nil
+		}
+		return ct.exitError()
+	case <-time.After(2 * time.Second):
+	}
+
+	// Process didn't exit on stdin EOF — send SIGTERM.
+	if ct.cmd.Process != nil {
+		ct.cmd.Process.Signal(syscall.SIGTERM)
+	}
+
+	// Wait for SIGTERM or escalate to SIGKILL.
+	select {
+	case <-ct.done:
+	case <-time.After(ct.opts.shutdownTimeout):
+		if ct.cmd.Process != nil {
+			ct.cmd.Process.Kill()
+		}
+		<-ct.done
+	}
+
+	// Now safe to close stdio — readLoop will see EOF from the dead process.
 	if ct.stdio != nil {
 		ct.stdio.Close()
 		ct.stdio = nil
 	}
 
-	// Check if process already exited (e.g., due to stdin close).
-	select {
-	case <-ct.done:
-		return ct.exitError()
-	default:
-	}
-
-	// Send SIGTERM for graceful shutdown.
-	if ct.cmd.Process != nil {
-		ct.cmd.Process.Signal(syscall.SIGTERM)
-	}
-
-	// Wait for exit or timeout.
-	select {
-	case <-ct.done:
-		return ct.exitError()
-	case <-time.After(ct.opts.shutdownTimeout):
-		// Escalate to SIGKILL.
-		if ct.cmd.Process != nil {
-			ct.cmd.Process.Kill()
-		}
-		<-ct.done
-		return ct.exitError()
-	}
+	return ct.exitError()
 }
 
 // Stderr returns the captured stderr output from the subprocess. Safe to call

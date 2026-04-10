@@ -138,6 +138,20 @@ func WithCommandTransport(name string, args []string, opts ...CommandOption) Cli
 	}
 }
 
+// WithConnectTimeout sets a deadline for Connect() to complete. This covers
+// both the transport connection (subprocess start, SSE stream open) and the
+// MCP initialize handshake. If the timeout expires, Connect() returns an error
+// immediately instead of blocking indefinitely.
+//
+// This is especially important for CommandTransport: if the subprocess starts
+// but doesn't speak Content-Length framed JSON-RPC (e.g., wrong mode, missing
+// env vars), Connect() would block forever without a timeout.
+//
+// Default is 0 (no timeout).
+func WithConnectTimeout(d time.Duration) ClientOption {
+	return func(c *Client) { c.connectTimeout = d }
+}
+
 // WithClientKeepalive enables application-level keepalive pings. The client
 // periodically sends JSON-RPC ping requests to the server. If maxFailures
 // consecutive pings fail (timeout or error), the client triggers reconnection
@@ -287,6 +301,12 @@ type Client struct {
 	commandName string
 	commandArgs []string
 	commandOpts []CommandOption
+
+	// connectTimeout limits how long Connect() waits for the transport to
+	// become ready (process start + initial handshake). Zero means no timeout.
+	// Particularly important for CommandTransport where a misconfigured
+	// subprocess may start but never speak the expected protocol.
+	connectTimeout time.Duration
 }
 
 // NewClient creates a new MCP client targeting the given server URL.
@@ -304,8 +324,58 @@ func NewClient(url string, info core.ClientInfo, opts ...ClientOption) *Client {
 	return c
 }
 
+// defaultCommandConnectTimeout is the default connect timeout for command and
+// stdio transports. These communicate over pipes where a misconfigured
+// subprocess can block forever (e.g., started in HTTP mode instead of stdio).
+// HTTP transports have their own network-level timeouts and don't need this.
+const defaultCommandConnectTimeout = 30 * time.Second
+
 // Connect establishes the transport and performs the MCP initialize handshake.
+//
+// For command and stdio transports, Connect is bounded by a default 30s timeout
+// to prevent indefinite hangs when the subprocess doesn't speak the expected
+// protocol. Override with WithConnectTimeout. HTTP transports are not bounded
+// by this default (set WithConnectTimeout explicitly if needed).
 func (c *Client) Connect() error {
+	timeout := c.connectTimeout
+	// Auto-apply default timeout for command/stdio transports.
+	if timeout <= 0 && c.isSubprocessTransport() {
+		timeout = defaultCommandConnectTimeout
+	}
+	if timeout > 0 {
+		done := make(chan error, 1)
+		go func() { done <- c.doConnect() }()
+		select {
+		case err := <-done:
+			return err
+		case <-time.After(timeout):
+			return fmt.Errorf("connect timed out after %s: subprocess started but did not complete MCP handshake — verify the server is in stdio mode (e.g., STDIO=1 env var) and check stderr for startup errors", timeout)
+		}
+	}
+	return c.doConnect()
+}
+
+// isSubprocessTransport returns true if the client is configured to use a
+// command or stdio transport (pipe-based, no network timeouts).
+func (c *Client) isSubprocessTransport() bool {
+	return c.commandName != "" || c.stdioReader != nil ||
+		(c.transport != nil && isCommandOrStdioAdapter(c.transport))
+}
+
+func isCommandOrStdioAdapter(t clientTransport) bool {
+	adapter, ok := t.(*coreTransportAdapter)
+	if !ok {
+		return false
+	}
+	switch adapter.inner.(type) {
+	case *CommandTransport, *StdioTransport:
+		return true
+	}
+	return false
+}
+
+// doConnect performs the actual transport connection and MCP handshake.
+func (c *Client) doConnect() error {
 	// Create transport (skip if already set, e.g., by WithInMemoryServer)
 	if c.transport == nil {
 		if c.commandName != "" {
