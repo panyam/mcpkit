@@ -36,6 +36,7 @@ type serverOptions struct {
 	requestLogger        *log.Logger // HTTP-level request/response logging
 	subscriptionsEnabled bool        // enable resources/subscribe and resources/unsubscribe
 	errorHandler         ErrorHandler // optional out-of-band error callback
+	contentChunkMethod   string       // custom notification method for streaming content (empty = default)
 }
 
 // ErrorHandler receives out-of-band errors that aren't returned to a
@@ -125,6 +126,14 @@ func WithRequestLogging(logger *log.Logger) Option {
 // only logged via log.Printf.
 func WithErrorHandler(h ErrorHandler) Option {
 	return func(o *serverOptions) { o.errorHandler = h }
+}
+
+// WithContentChunkMethod sets a custom notification method name for streaming
+// tool content chunks. When not set, defaults to core.DefaultContentChunkMethod
+// ("notifications/tools/content_chunk"). Use this if clients expect a different
+// method name for streaming content delivery.
+func WithContentChunkMethod(method string) Option {
+	return func(o *serverOptions) { o.contentChunkMethod = method }
 }
 
 // WithSubscriptions enables resource subscription support (resources/subscribe,
@@ -297,6 +306,11 @@ func (s *Server) dispatchWithNotifyAndRequest(d *Dispatcher, ctx context.Context
 	// Inject session context so tool handlers can send notifications, requests,
 	// and access authenticated claims and client capabilities.
 	ctx = core.ContextWithSession(ctx, notify, request, &d.logLevel, &d.clientCaps, claims)
+
+	// Inject custom content chunk method if configured.
+	if s.options.contentChunkMethod != "" {
+		ctx = core.WithContentChunkMethod(ctx, s.options.contentChunkMethod)
+	}
 
 	// Build the terminal handler: dispatch with optional tool timeout.
 	handler := MiddlewareFunc(func(ctx context.Context, req *core.Request) *core.Response {
