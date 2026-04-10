@@ -137,20 +137,33 @@ func TestCommandTransport_ProcessCrash(t *testing.T) {
 // via WithEnv are passed to the subprocess. We use STDIO=1 itself as proof —
 // if the env var wasn't passed, the server would start in HTTP mode and the
 // stdio handshake would fail.
+//
+// Bug context: without STDIO=1, the testserver starts an HTTP listener and
+// never writes Content-Length framed data to stdout. Previously this caused
+// Connect() to block forever. The default 30s connect timeout for command
+// transports now catches this automatically with a diagnostic error message.
+// We use a shorter timeout here to keep the test fast.
 func TestCommandTransport_EnvPassthrough(t *testing.T) {
 	bin := buildTestServer(t)
 
 	// Without STDIO=1, the server starts HTTP and stdin/stdout handshake fails.
-	transport := client.NewCommandTransport(bin, nil)
+	// Use PORT=0 so the server binds a random port (avoids "address in use"
+	// crash that masks the real failure mode). The connect timeout catches
+	// the hang with a diagnostic message.
+	transport := client.NewCommandTransport(bin, nil,
+		client.WithEnv("PORT=0"),
+	)
 	c := client.NewClient("", core.ClientInfo{Name: "test", Version: "1.0"},
 		client.WithTransport(transport),
+		client.WithConnectTimeout(3*time.Second),
 	)
 	err := c.Connect()
-	// Should fail because the server is in HTTP mode, not stdio.
 	assert.Error(t, err, "without STDIO=1, connect should fail")
+	assert.Contains(t, err.Error(), "timed out",
+		"error should clearly indicate a timeout with diagnostic guidance")
 	c.Close()
 
-	// With STDIO=1, it should work.
+	// With STDIO=1, it should work (default timeout is plenty).
 	transport2 := client.NewCommandTransport(bin, nil,
 		client.WithEnv("STDIO=1"),
 	)
