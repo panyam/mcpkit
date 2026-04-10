@@ -111,6 +111,7 @@ func (t *streamableTransport) expireSession(id string) {
 		t.config.eventStore.Trim(id)
 	}
 	log.Printf("mcpkit: session %s expired after %s idle", id, entry.timeout)
+	t.server.notifySessionExpire(id, fmt.Errorf("idle timeout (%s)", entry.timeout))
 }
 
 // loadSession loads a sessionEntry by ID. Returns (entry, true) or (nil, false).
@@ -504,6 +505,7 @@ func (c *streamableSSEConn) OnStart(w http.ResponseWriter, r *http.Request) erro
 			maxFailures: maxFails,
 			requestFunc: c.dispatcher.makeRequestFunc(pushFunc),
 			onDeath:     func() { c.transport.expireSession(sessionID) },
+			onPingFail:  func(failures int) { c.transport.server.notifyKeepaliveFailure(sessionID, failures) },
 		}
 		c.keepalive.start()
 	}
