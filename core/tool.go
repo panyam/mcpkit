@@ -41,7 +41,8 @@ type ToolDef struct {
 
 // ToolsListResult is the typed result for tools/list responses.
 type ToolsListResult struct {
-	Tools []ToolDef `json:"tools"`
+	Tools      []ToolDef `json:"tools"`
+	NextCursor string    `json:"nextCursor,omitempty"`
 }
 
 // ToolRequest is the validated input passed to a ToolHandler.
@@ -74,6 +75,16 @@ type ToolResult struct {
 	// that schema. On error (IsError=true), it can carry structured error details.
 	// Per MCP spec: "If outputSchema is present, structuredContent SHOULD be included."
 	StructuredContent any `json:"structuredContent,omitempty"`
+
+	// Meta holds optional result metadata (e.g., pagination cursor).
+	Meta *ToolResultMeta `json:"_meta,omitempty"`
+}
+
+// ToolResultMeta carries optional metadata on a tool result.
+type ToolResultMeta struct {
+	// NextCursor is a pagination cursor for fetching the next page.
+	// Empty when there are no more pages.
+	NextCursor string `json:"nextCursor,omitempty"`
 }
 
 // Content is a single content item in a tool result.
