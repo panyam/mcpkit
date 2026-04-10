@@ -420,3 +420,4 @@ func assertToolCount(t *testing.T, resp *core.Response, n int) {
 		t.Fatalf("expected %d tools, got %d", n, len(result.Tools))
 	}
 }
+
