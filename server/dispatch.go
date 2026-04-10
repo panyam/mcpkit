@@ -307,6 +307,8 @@ func (d *Dispatcher) handleInitialize(id json.RawMessage, params json.RawMessage
 }
 
 func (d *Dispatcher) handleToolsList(id json.RawMessage, params json.RawMessage) *core.Response {
+	cursor, _ := parsePaginationParams(params)
+
 	d.Reg.mu.RLock()
 	tools := make([]core.ToolDef, 0, len(d.Reg.toolOrder))
 	for _, name := range d.Reg.toolOrder {
@@ -315,7 +317,21 @@ func (d *Dispatcher) handleToolsList(id json.RawMessage, params json.RawMessage)
 		}
 	}
 	d.Reg.mu.RUnlock()
-	return core.NewResponse(id, core.ToolsListResult{Tools: tools})
+
+	page, nextCursor, _ := paginate(tools, cursor, defaultPageSize)
+	return core.NewResponse(id, core.ToolsListResult{Tools: page, NextCursor: nextCursor})
+}
+
+// parsePaginationParams extracts cursor from request params.
+func parsePaginationParams(params json.RawMessage) (cursor string, pageSize int) {
+	if params == nil {
+		return "", defaultPageSize
+	}
+	var p struct {
+		Cursor string `json:"cursor"`
+	}
+	json.Unmarshal(params, &p)
+	return p.Cursor, defaultPageSize
 }
 
 func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
@@ -364,6 +380,8 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, pa
 // --- Resources ---
 
 func (d *Dispatcher) handleResourcesList(id json.RawMessage, params json.RawMessage) *core.Response {
+	cursor, _ := parsePaginationParams(params)
+
 	d.Reg.mu.RLock()
 	resources := make([]core.ResourceDef, 0, len(d.Reg.resourceOrder))
 	for _, uri := range d.Reg.resourceOrder {
@@ -372,7 +390,9 @@ func (d *Dispatcher) handleResourcesList(id json.RawMessage, params json.RawMess
 		}
 	}
 	d.Reg.mu.RUnlock()
-	return core.NewResponse(id, core.ResourcesListResult{Resources: resources})
+
+	page, nextCursor, _ := paginate(resources, cursor, defaultPageSize)
+	return core.NewResponse(id, core.ResourcesListResult{Resources: page, NextCursor: nextCursor})
 }
 
 func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
@@ -434,6 +454,8 @@ func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage
 }
 
 func (d *Dispatcher) handleResourcesTemplatesList(id json.RawMessage, params json.RawMessage) *core.Response {
+	cursor, _ := parsePaginationParams(params)
+
 	d.Reg.mu.RLock()
 	templates := make([]core.ResourceTemplate, 0, len(d.Reg.templateOrder))
 	for _, uri := range d.Reg.templateOrder {
@@ -442,7 +464,9 @@ func (d *Dispatcher) handleResourcesTemplatesList(id json.RawMessage, params jso
 		}
 	}
 	d.Reg.mu.RUnlock()
-	return core.NewResponse(id, core.ResourceTemplatesListResult{ResourceTemplates: templates})
+
+	page, nextCursor, _ := paginate(templates, cursor, defaultPageSize)
+	return core.NewResponse(id, core.ResourceTemplatesListResult{ResourceTemplates: page, NextCursor: nextCursor})
 }
 
 // --- Resource Subscriptions ---
@@ -481,6 +505,8 @@ func (d *Dispatcher) handleResourcesUnsubscribe(id json.RawMessage, params json.
 // --- Prompts ---
 
 func (d *Dispatcher) handlePromptsList(id json.RawMessage, params json.RawMessage) *core.Response {
+	cursor, _ := parsePaginationParams(params)
+
 	d.Reg.mu.RLock()
 	prompts := make([]core.PromptDef, 0, len(d.Reg.promptOrder))
 	for _, name := range d.Reg.promptOrder {
@@ -489,7 +515,9 @@ func (d *Dispatcher) handlePromptsList(id json.RawMessage, params json.RawMessag
 		}
 	}
 	d.Reg.mu.RUnlock()
-	return core.NewResponse(id, core.PromptsListResult{Prompts: prompts})
+
+	page, nextCursor, _ := paginate(prompts, cursor, defaultPageSize)
+	return core.NewResponse(id, core.PromptsListResult{Prompts: page, NextCursor: nextCursor})
 }
 
 func (d *Dispatcher) handlePromptsGet(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
