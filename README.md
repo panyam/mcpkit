@@ -95,7 +95,11 @@ c := client.NewClient(url, info,
 )
 ```
 
+## Auth Performance
+
+For best performance, configure your authorization server to use **ES256 (ECDSA P-256)** instead of RS256. ES256 verification is ~10x faster, with smaller keys and tokens. See [auth design doc](ext/auth/docs/DESIGN.md#jwt-algorithm-performance) for details.
+
 ## Dependencies
 
-- `servicekit` v0.0.14 — SSE hub, graceful shutdown
+- `servicekit` v0.0.22 — SSE hub, graceful shutdown, HTTP error types
 - `oneauth` v0.0.64 — JWT/OIDC (only via `ext/auth` sub-module)

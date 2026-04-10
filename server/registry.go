@@ -59,8 +59,11 @@ func (r *Registry) notify(method string) {
 // Broadcasts notifications/tools/list_changed if OnChange is set.
 func (r *Registry) AddTool(def core.ToolDef, handler core.ToolHandler) {
 	r.mu.Lock()
+	_, exists := r.tools[def.Name]
 	r.tools[def.Name] = toolEntry{def: def, handler: handler}
-	r.toolOrder = append(r.toolOrder, def.Name)
+	if !exists {
+		r.toolOrder = append(r.toolOrder, def.Name)
+	}
 	r.mu.Unlock()
 	r.notify("notifications/tools/list_changed")
 }
@@ -85,8 +88,11 @@ func (r *Registry) RemoveTool(name string) bool {
 // Broadcasts notifications/resources/list_changed if OnChange is set.
 func (r *Registry) AddResource(def core.ResourceDef, handler core.ResourceHandler) {
 	r.mu.Lock()
+	_, exists := r.resources[def.URI]
 	r.resources[def.URI] = resourceEntry{def: def, handler: handler}
-	r.resourceOrder = append(r.resourceOrder, def.URI)
+	if !exists {
+		r.resourceOrder = append(r.resourceOrder, def.URI)
+	}
 	r.mu.Unlock()
 	r.notify("notifications/resources/list_changed")
 }
@@ -111,8 +117,11 @@ func (r *Registry) RemoveResource(uri string) bool {
 // Broadcasts notifications/resources/list_changed if OnChange is set.
 func (r *Registry) AddResourceTemplate(def core.ResourceTemplate, handler core.TemplateHandler) {
 	r.mu.Lock()
+	_, exists := r.templates[def.URITemplate]
 	r.templates[def.URITemplate] = templateEntry{def: def, handler: handler}
-	r.templateOrder = append(r.templateOrder, def.URITemplate)
+	if !exists {
+		r.templateOrder = append(r.templateOrder, def.URITemplate)
+	}
 	r.mu.Unlock()
 	r.notify("notifications/resources/list_changed")
 }
@@ -138,8 +147,11 @@ func (r *Registry) RemoveResourceTemplate(uriTemplate string) bool {
 // Broadcasts notifications/prompts/list_changed if OnChange is set.
 func (r *Registry) AddPrompt(def core.PromptDef, handler core.PromptHandler) {
 	r.mu.Lock()
+	_, exists := r.prompts[def.Name]
 	r.prompts[def.Name] = promptEntry{def: def, handler: handler}
-	r.promptOrder = append(r.promptOrder, def.Name)
+	if !exists {
+		r.promptOrder = append(r.promptOrder, def.Name)
+	}
 	r.mu.Unlock()
 	r.notify("notifications/prompts/list_changed")
 }
