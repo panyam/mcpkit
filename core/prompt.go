@@ -28,7 +28,8 @@ type PromptDef struct {
 
 // PromptsListResult is the typed result for prompts/list responses.
 type PromptsListResult struct {
-	Prompts []PromptDef `json:"prompts"`
+	Prompts    []PromptDef `json:"prompts"`
+	NextCursor string      `json:"nextCursor,omitempty"`
 }
 
 // PromptArgument describes a single argument to a prompt.
