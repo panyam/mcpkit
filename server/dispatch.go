@@ -213,11 +213,16 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) *core.Resp
 			return core.NewErrorResponse(id, core.ErrCodeInvalidRequest, "server not initialized")
 		}
 
-		// Track in-flight request for cancellation support
+		// Track in-flight request for cancellation support.
+		// Reject duplicate request IDs within the same session to prevent
+		// cancellation confusion (the old cancelFn would be overwritten).
 		ctx, cancel := context.WithCancel(ctx)
-		defer cancel()
 		reqID := string(id)
-		d.inflight.Store(reqID, cancel)
+		if _, loaded := d.inflight.LoadOrStore(reqID, cancel); loaded {
+			cancel()
+			return core.NewErrorResponse(id, core.ErrCodeInvalidRequest, "duplicate request ID: "+reqID)
+		}
+		defer cancel()
 		defer d.inflight.Delete(reqID)
 
 		switch req.Method {
