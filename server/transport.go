@@ -279,6 +279,7 @@ func (c *mcpSSEConn) OnStart(w http.ResponseWriter, r *http.Request) error {
 			maxFailures: maxFails,
 			requestFunc: dispatcher.makeRequestFunc(pushFunc),
 			onDeath:     func() { c.transport.closeSession(sessionID) },
+			onPingFail:  func(failures int) { c.transport.server.notifyKeepaliveFailure(sessionID, failures) },
 		}
 		c.keepalive.start()
 	}
