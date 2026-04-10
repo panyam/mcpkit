@@ -60,6 +60,12 @@ type OAuthTokenSource struct {
 	// CredStore persists tokens across sessions (optional).
 	CredStore client.CredentialStore
 
+	// ASMetadataStore caches authorization server metadata across discovery
+	// calls. Share a single store across multiple OAuthTokenSource instances
+	// connecting to MCP servers behind the same AS to avoid redundant
+	// discovery fetches. Optional.
+	ASMetadataStore client.ASMetadataStore
+
 	// OpenBrowser opens the authorization URL (nil = platform default).
 	OpenBrowser func(url string) error
 
@@ -109,6 +115,9 @@ func (s *OAuthTokenSource) Token() (string, error) {
 		var opts []DiscoverOption
 		if s.HTTPClient != nil {
 			opts = append(opts, WithHTTPClient(s.HTTPClient))
+		}
+		if s.ASMetadataStore != nil {
+			opts = append(opts, WithASMetadataStore(s.ASMetadataStore))
 		}
 		info, err := DiscoverMCPAuth(s.ServerURL, opts...)
 		if err != nil {
@@ -191,6 +200,27 @@ func (s *OAuthTokenSource) TokenForScopes(scopes []string) (string, error) {
 	s.mu.Unlock()
 
 	return s.Token()
+}
+
+// Close stops any background goroutines started by underlying token sources
+// (e.g., proactive refresh in ClientCredentialsSource). Safe to call multiple
+// times. Implements io.Closer.
+//
+// After Close, subsequent Token() calls still work — they fall back to
+// reactive refresh. Close is typically called from the owning Client.Close()
+// on shutdown.
+func (s *OAuthTokenSource) Close() error {
+	// If oaClient has a client credentials source with proactive refresh,
+	// stop it. We check via the optional io.Closer interface to avoid
+	// tight coupling to oneauth's concrete types.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.oaClient != nil {
+		if closer, ok := any(s.oaClient).(interface{ Close() error }); ok {
+			return closer.Close()
+		}
+	}
+	return nil
 }
 
 // resolveClientID implements the MCP client registration priority (C6):
