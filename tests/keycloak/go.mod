@@ -5,7 +5,7 @@ go 1.26.1
 require (
 	github.com/panyam/mcpkit v0.0.0
 	github.com/panyam/mcpkit/ext/auth v0.0.0
-	github.com/panyam/oneauth v0.0.68
+	github.com/panyam/oneauth v0.0.69
 	github.com/stretchr/testify v1.11.1
 )
 
@@ -15,7 +15,6 @@ require (
 	github.com/fernet/fernet-go v0.0.0-20240119011108-303da6aec611 // indirect
 	github.com/golang-jwt/jwt/v5 v5.2.2 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
-	github.com/kr/text v0.2.0 // indirect
 	github.com/panyam/gocurrent v0.1.0 // indirect
 	github.com/panyam/goutils v0.1.8 // indirect
 	github.com/panyam/servicekit v0.0.22 // indirect
