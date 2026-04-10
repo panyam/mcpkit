@@ -2,23 +2,38 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	conc "github.com/panyam/gocurrent"
 	core "github.com/panyam/mcpkit/core"
 	gohttp "github.com/panyam/servicekit/http"
 )
 
+// sseSessionEntry wraps a Dispatcher with session metadata and an optional
+// grace period timer. When a grace period is configured, the session survives
+// brief disconnects — the Dispatcher stays alive while the timer counts down,
+// allowing reconnection without re-initialization.
+type sseSessionEntry struct {
+	dispatcher  *Dispatcher
+	graceTimer  *conc.IdleTimer // nil when grace period not configured; nil-safe
+	subject     string          // auth principal binding (empty if no auth)
+	connID      string          // current SSE hub connection ID (empty during grace period)
+	gracePeriod time.Duration   // retained for log messages
+}
+
 // sseTransport implements the MCP HTTP+SSE transport (2024-11-05 spec).
 // Each SSE connection is an independent MCP session with its own Dispatcher.
+// With WithSSEGracePeriod, sessions can survive brief disconnects.
 type sseTransport struct {
-	server          *Server
-	hub             *gohttp.SSEHub[SSEData]
-	sessions        conc.SyncMap[string, *Dispatcher]
-	sessionSubjects conc.SyncMap[string, string] // sessionID → subject (principal binding)
-	config          transportConfig
+	server   *Server
+	hub      *gohttp.SSEHub[SSEData]
+	sessions conc.SyncMap[string, *sseSessionEntry]
+	config   transportConfig
 }
 
 // newSSETransport creates an SSE transport for the given server.
@@ -119,16 +134,17 @@ func (t *sseTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dispatcher, ok := t.sessions.Load(sessionID)
+	entry, ok := t.sessions.Load(sessionID)
 	if !ok {
 		http.Error(w, "session not found or expired", http.StatusGone)
 		return
 	}
+	dispatcher := entry.dispatcher
 
 	// Verify the POST principal matches the session-opening principal.
 	// Prevents user B (with a valid token) from posting to user A's session.
-	if subj, ok := t.sessionSubjects.Load(sessionID); ok {
-		if claims == nil || claims.Subject != subj {
+	if entry.subject != "" {
+		if claims == nil || claims.Subject != entry.subject {
 			http.Error(w, "forbidden: session principal mismatch", http.StatusForbidden)
 			return
 		}
@@ -225,12 +241,16 @@ func (t *sseTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 
 // mcpSSEConn is the per-session SSE connection for MCP.
 // It embeds BaseSSEConn[any] and adds session tracking.
+// When reconnecting is true, the connection reuses an existing session entry
+// instead of creating a new Dispatcher.
 type mcpSSEConn struct {
 	gohttp.BaseSSEConn[SSEData]
-	sessionID string
-	transport *sseTransport
-	request   *http.Request     // stored for building the POST URL
-	keepalive *sessionKeepalive // non-nil if keepalive is configured
+	sessionID    string
+	transport    *sseTransport
+	request      *http.Request      // stored for building the POST URL
+	keepalive    *sessionKeepalive  // non-nil if keepalive is configured
+	reconnecting bool               // true when resuming an existing session
+	entry        *sseSessionEntry   // non-nil when reconnecting
 }
 
 func (c *mcpSSEConn) OnStart(w http.ResponseWriter, r *http.Request) error {
@@ -239,17 +259,54 @@ func (c *mcpSSEConn) OnStart(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	// Register in hub and create per-session dispatcher
+	// Register new hub connection.
 	c.transport.hub.Register(&c.BaseSSEConn)
-	dispatcher := c.transport.server.newSession()
-	dispatcher.sessionID = c.sessionID
 
-	// Wire up server-to-client notifications via the SSE stream.
-	// This closure captures the sessionID and hub, allowing tool handlers
-	// to push notifications (logging, progress, etc.) during execution.
 	sessionID := c.sessionID
 	hub := c.transport.hub
 	store := c.transport.config.eventStore
+	cfg := c.transport.config
+
+	var dispatcher *Dispatcher
+	var entry *sseSessionEntry
+
+	if c.reconnecting && c.entry != nil {
+		// Reconnecting to an existing session within grace period.
+		entry = c.entry
+		dispatcher = entry.dispatcher
+		entry.connID = c.ConnId()
+	} else {
+		// New session — create Dispatcher and session entry.
+		dispatcher = c.transport.server.newSession()
+		dispatcher.sessionID = sessionID
+
+		// Extract subject from the temporary entry set in Validate().
+		subject := ""
+		if c.entry != nil {
+			subject = c.entry.subject
+		}
+
+		var graceTimer *conc.IdleTimer
+		if cfg.sseGracePeriod > 0 {
+			graceTimer = conc.NewIdleTimer(cfg.sseGracePeriod, func() {
+				c.transport.expireSSESession(sessionID)
+			})
+			graceTimer.Acquire() // connection is active
+		}
+
+		entry = &sseSessionEntry{
+			dispatcher:  dispatcher,
+			graceTimer:  graceTimer,
+			subject:     subject,
+			connID:      c.ConnId(),
+			gracePeriod: cfg.sseGracePeriod,
+		}
+		c.transport.sessions.Store(sessionID, entry)
+	}
+
+	// Wire up (or re-wire) server-to-client notifications via the SSE stream.
+	// The closure captures the current hub connection, so it must be refreshed
+	// on reconnect to point to the new connection.
 	dispatcher.SetNotifyFunc(func(method string, params any) {
 		raw, err := core.MarshalNotification(method, params)
 		if err != nil {
@@ -260,10 +317,7 @@ func (c *mcpSSEConn) OnStart(w http.ResponseWriter, r *http.Request) error {
 		})
 	})
 
-	c.transport.sessions.Store(c.sessionID, dispatcher)
-
-	// Start keepalive pings if configured
-	cfg := c.transport.config
+	// Start keepalive pings if configured.
 	if cfg.keepaliveInterval > 0 {
 		pushFunc := func(raw json.RawMessage) {
 			emitSSEEvent(dispatcher.eventIDs, cfg.eventStore, sessionID, raw, func(id string, data json.RawMessage) {
@@ -285,11 +339,19 @@ func (c *mcpSSEConn) OnStart(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// Send endpoint event with the POST URL as raw text.
-	// MCP clients expect the SSE data field to be a plain URL, not JSON-encoded.
-	// We send it directly through the Writer to bypass the JSONCodec which
-	// would add JSON quotes around the string.
 	postURL := c.transport.postURL(r) + "?sessionId=" + c.sessionID
 	c.SendEvent("endpoint", SSEText(postURL))
+
+	// Replay missed events after the endpoint event so the client knows
+	// where to POST before receiving replayed responses.
+	if c.reconnecting {
+		if lastID := r.Header.Get("Last-Event-ID"); lastID != "" && store != nil {
+			events, _ := store.Replay(sessionID, lastID)
+			for _, ev := range events {
+				c.SendEventWithID(ev.Event, ev.ID, SSEJSON(ev.Data))
+			}
+		}
+	}
 
 	return nil
 }
@@ -298,37 +360,78 @@ func (c *mcpSSEConn) OnClose() {
 	if c.keepalive != nil {
 		c.keepalive.stop()
 	}
-	if d, ok := c.transport.sessions.Load(c.sessionID); ok {
-		d.Close()
+
+	entry, ok := c.transport.sessions.Load(c.sessionID)
+	if !ok {
+		c.transport.hub.Unregister(c.ConnId())
+		c.BaseSSEConn.OnClose()
+		return
 	}
+
+	// Unregister the physical SSE connection from the hub.
 	c.transport.hub.Unregister(c.ConnId())
-	c.transport.sessions.Delete(c.sessionID)
-	c.transport.sessionSubjects.Delete(c.sessionID)
-	if store := c.transport.config.eventStore; store != nil {
-		store.Trim(c.sessionID)
+	entry.connID = ""
+
+	if entry.graceTimer != nil {
+		// Grace period configured — keep the session alive. The timer starts
+		// counting down when Release is called (active count drops to 0).
+		// If no reconnection arrives, expireSSESession cleans up.
+		entry.graceTimer.Release()
+	} else {
+		// No grace period — immediate cleanup (backward compatible).
+		entry.dispatcher.Close()
+		c.transport.sessions.Delete(c.sessionID)
+		if store := c.transport.config.eventStore; store != nil {
+			store.Trim(c.sessionID)
+		}
 	}
+
 	c.BaseSSEConn.OnClose()
+}
+
+// expireSSESession cleans up a session after its grace period expires
+// without reconnection. Called by the IdleTimer callback.
+func (t *sseTransport) expireSSESession(id string) {
+	entry, ok := t.sessions.LoadAndDelete(id)
+	if !ok {
+		return
+	}
+	entry.dispatcher.Close()
+	if t.config.eventStore != nil {
+		t.config.eventStore.Trim(id)
+	}
+	log.Printf("mcpkit: SSE session %s expired after %s grace period", id, entry.gracePeriod)
+	t.server.notifySessionExpire(id, fmt.Errorf("grace period expired (%s)", entry.gracePeriod))
 }
 
 // closeSession terminates a single SSE session by ID.
 // Unregisters from the hub (closing the SSE stream) and removes from session maps.
 func (t *sseTransport) closeSession(id string) bool {
-	if d, ok := t.sessions.LoadAndDelete(id); ok {
-		d.Close()
-		t.hub.Unregister(id)
-		t.sessionSubjects.Delete(id)
-		return true
+	entry, ok := t.sessions.LoadAndDelete(id)
+	if !ok {
+		return false
 	}
-	return false
+	entry.dispatcher.Close()
+	if entry.graceTimer != nil {
+		entry.graceTimer.Stop()
+	}
+	if entry.connID != "" {
+		t.hub.Unregister(entry.connID)
+	}
+	return true
 }
 
 // closeAllSessions terminates all active SSE sessions.
 func (t *sseTransport) closeAllSessions() {
-	t.sessions.Range(func(key string, d *Dispatcher) bool {
-		d.Close()
-		t.hub.Unregister(key)
+	t.sessions.Range(func(key string, entry *sseSessionEntry) bool {
+		entry.dispatcher.Close()
+		if entry.graceTimer != nil {
+			entry.graceTimer.Stop()
+		}
+		if entry.connID != "" {
+			t.hub.Unregister(entry.connID)
+		}
 		t.sessions.Delete(key)
-		t.sessionSubjects.Delete(key)
 		return true
 	})
 }
@@ -336,8 +439,8 @@ func (t *sseTransport) closeAllSessions() {
 // broadcast sends a notification to all active SSE sessions.
 // Sessions with nil notifyFunc are skipped safely.
 func (t *sseTransport) broadcast(method string, params any) {
-	t.sessions.Range(func(_ string, d *Dispatcher) bool {
-		if fn := d.getNotifyFunc(); fn != nil {
+	t.sessions.Range(func(_ string, entry *sseSessionEntry) bool {
+		if fn := entry.dispatcher.getNotifyFunc(); fn != nil {
 			fn(method, params)
 		}
 		return true
@@ -350,14 +453,48 @@ type mcpSSEHandler struct {
 }
 
 func (h *mcpSSEHandler) Validate(w http.ResponseWriter, r *http.Request) (*mcpSSEConn, bool) {
-	// Auth check — prevent unauthenticated session creation
+	// Auth check — required for both new connections and reconnections.
 	claims, err := h.transport.server.CheckAuth(r)
 	if err != nil {
 		writeAuthError(w, err)
 		return nil, false
 	}
 
-	// Enforce max sessions
+	// Check for reconnection: client provides sessionId query param from
+	// a previous connection. If the session is still alive (within grace
+	// period), reuse it instead of creating a new one.
+	if reqSessionID := r.URL.Query().Get("sessionId"); reqSessionID != "" {
+		if entry, ok := h.transport.sessions.Load(reqSessionID); ok {
+			// Verify principal matches — prevents session hijacking.
+			if entry.subject != "" {
+				if claims == nil || claims.Subject != entry.subject {
+					http.Error(w, "forbidden: session principal mismatch", http.StatusForbidden)
+					return nil, false
+				}
+			}
+			// Cancel the grace timer — session is being resumed.
+			if entry.graceTimer != nil {
+				entry.graceTimer.Acquire()
+			}
+			conn := &mcpSSEConn{
+				BaseSSEConn: gohttp.BaseSSEConn[SSEData]{
+					Codec:     &sseDataCodec{},
+					ConnIdStr: reqSessionID, // reuse session ID as hub connection ID
+					NameStr:   "MCP",
+				},
+				sessionID:    reqSessionID,
+				transport:    h.transport,
+				reconnecting: true,
+				entry:        entry,
+			}
+			return conn, true
+		}
+		// Session expired — return 410 Gone.
+		http.Error(w, "session not found or expired", http.StatusGone)
+		return nil, false
+	}
+
+	// New session — enforce max sessions limit.
 	if h.transport.config.maxSessions > 0 && h.transport.hub.Count() >= h.transport.config.maxSessions {
 		http.Error(w, "too many sessions", http.StatusServiceUnavailable)
 		return nil, false
@@ -365,10 +502,10 @@ func (h *mcpSSEHandler) Validate(w http.ResponseWriter, r *http.Request) (*mcpSS
 
 	sessionID := gohttp.GenerateSessionID()
 
-	// Bind the authenticated principal to this session so POST /message
-	// can verify the same principal is making requests.
+	// Determine the authenticated subject for principal binding.
+	subject := ""
 	if claims != nil && claims.Subject != "" {
-		h.transport.sessionSubjects.Store(sessionID, claims.Subject)
+		subject = claims.Subject
 	}
 
 	conn := &mcpSSEConn{
@@ -380,6 +517,9 @@ func (h *mcpSSEHandler) Validate(w http.ResponseWriter, r *http.Request) (*mcpSS
 		sessionID: sessionID,
 		transport: h.transport,
 	}
+	// Store subject temporarily on the conn so OnStart can use it when
+	// creating the sseSessionEntry. For new sessions, entry is nil.
+	conn.entry = &sseSessionEntry{subject: subject}
 	return conn, true
 }
 
