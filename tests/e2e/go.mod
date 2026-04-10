@@ -6,6 +6,9 @@ replace (
 	github.com/panyam/mcpkit => ../..
 	github.com/panyam/mcpkit/ext/auth => ../../ext/auth
 	github.com/panyam/mcpkit/ext/ui => ../../ext/ui
+	// TEMP: pointing to local oneauth branch until #47/#48 are released.
+	// Remove this line before merging.
+	github.com/panyam/oneauth => ../../../../oneauth/main
 )
 
 require (

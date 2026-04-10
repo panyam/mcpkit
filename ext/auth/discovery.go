@@ -44,12 +44,29 @@ type DiscoverOption func(*discoverConfig)
 
 type discoverConfig struct {
 	httpClient *http.Client
+	asStore    client.ASMetadataStore
 }
 
 // WithHTTPClient sets a custom HTTP client for discovery requests.
 // Use in tests with httptest.Server to avoid real network calls.
 func WithHTTPClient(c *http.Client) DiscoverOption {
 	return func(cfg *discoverConfig) { cfg.httpClient = c }
+}
+
+// WithASMetadataStore enables caching of authorization server metadata
+// across multiple discovery calls. When multiple MCP servers share the
+// same authorization server, the first discovery fetches from the network
+// and subsequent discoveries hit the cache.
+//
+// Typical usage: share a single store across all OAuthTokenSource instances
+// in a process that connects to multiple MCP servers behind one IdP.
+//
+//	cache := client.NewMemoryASMetadataStore(0) // default TTL 1h
+//	info1, _ := auth.DiscoverMCPAuth(url1, auth.WithASMetadataStore(cache))
+//	info2, _ := auth.DiscoverMCPAuth(url2, auth.WithASMetadataStore(cache))
+//	// If url1 and url2 share an AS, info2 hits the cache — no second fetch.
+func WithASMetadataStore(s client.ASMetadataStore) DiscoverOption {
+	return func(cfg *discoverConfig) { cfg.asStore = s }
 }
 
 // DiscoverMCPAuth performs the MCP-specific discovery chain:
@@ -166,7 +183,11 @@ func DiscoverMCPAuth(serverURL string, opts ...DiscoverOption) (*MCPAuthInfo, er
 
 	// Step 6: Discover AS metadata via oneauth (RFC 8414 + OIDC fallback)
 	issuer := info.AuthorizationServers[0]
-	asMeta, err := client.DiscoverAS(issuer, client.WithHTTPClientForDiscovery(httpClient))
+	asOpts := []client.DiscoveryOption{client.WithHTTPClientForDiscovery(httpClient)}
+	if cfg.asStore != nil {
+		asOpts = append(asOpts, client.WithASMetadataStore(cfg.asStore))
+	}
+	asMeta, err := client.DiscoverAS(issuer, asOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("discover AS metadata for %s: %w", issuer, err)
 	}
