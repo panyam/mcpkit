@@ -147,8 +147,12 @@ func TestCommandTransport_EnvPassthrough(t *testing.T) {
 	bin := buildTestServer(t)
 
 	// Without STDIO=1, the server starts HTTP and stdin/stdout handshake fails.
-	// The default connect timeout catches this — we shorten it for test speed.
-	transport := client.NewCommandTransport(bin, nil)
+	// Use PORT=0 so the server binds a random port (avoids "address in use"
+	// crash that masks the real failure mode). The connect timeout catches
+	// the hang with a diagnostic message.
+	transport := client.NewCommandTransport(bin, nil,
+		client.WithEnv("PORT=0"),
+	)
 	c := client.NewClient("", core.ClientInfo{Name: "test", Version: "1.0"},
 		client.WithTransport(transport),
 		client.WithConnectTimeout(3*time.Second),
@@ -156,7 +160,7 @@ func TestCommandTransport_EnvPassthrough(t *testing.T) {
 	err := c.Connect()
 	assert.Error(t, err, "without STDIO=1, connect should fail")
 	assert.Contains(t, err.Error(), "timed out",
-		"error should indicate a timeout, not a cryptic pipe error")
+		"error should clearly indicate a timeout with diagnostic guidance")
 	c.Close()
 
 	// With STDIO=1, it should work (default timeout is plenty).
