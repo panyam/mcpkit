@@ -424,6 +424,7 @@ func (c *Client) doConnect() error {
 			c.transport = &coreTransportAdapter{inner: st}
 		} else if c.useSSE {
 			st := newSSEClientTransport(c.url, c.tokenSource)
+			st.client = c
 			st.serverReqHandler = c.HandleServerRequest
 			st.modifyReq = c.modifyRequest
 			if c.onNotify != nil || c.onContentChunk != nil {
@@ -1270,6 +1271,10 @@ type sseClientTransport struct {
 	sseResp     *http.Response
 	sseReader   *ssehttp.SSEEventReader
 
+	// Back-pointer to the owning Client for lastEventID tracking.
+	// Set during Connect() and reconnect().
+	client *Client
+
 	// Background reader state
 	pendingCalls     conc.SyncMap[string, chan *rpcResponse]       // requestID → response channel
 	serverReqHandler func(*core.Request) *core.Response          // set by Client before connect
@@ -1287,9 +1292,26 @@ func newSSEClientTransport(sseURL string, ts core.TokenSource) *sseClientTranspo
 
 func (t *sseClientTransport) connect() error {
 	buildReq := func() (*http.Request, error) {
-		req, err := http.NewRequest("GET", t.sseURL, nil)
+		// On reconnect, include session ID so the server can resume
+		// the existing session within its grace period.
+		sseURL := t.sseURL
+		if t.sessionID != "" {
+			sep := "?"
+			if strings.Contains(sseURL, "?") {
+				sep = "&"
+			}
+			sseURL += sep + "sessionId=" + t.sessionID
+		}
+		req, err := http.NewRequest("GET", sseURL, nil)
 		if err != nil {
 			return nil, err
+		}
+		// Send Last-Event-ID for stream resumption — the server replays
+		// missed events from its EventStore before starting live delivery.
+		if t.client != nil {
+			if lastID, ok := t.client.lastEventID.Load().(string); ok && lastID != "" {
+				req.Header.Set("Last-Event-ID", lastID)
+			}
 		}
 		if t.modifyReq != nil {
 			t.modifyReq(req)
@@ -1354,6 +1376,11 @@ func (t *sseClientTransport) backgroundReader() {
 			})
 			return
 		}
+		// Track the last event ID for stream resumption on reconnect.
+		if ev.id != "" && t.client != nil {
+			t.client.lastEventID.Store(ev.id)
+		}
+
 		if ev.event != "message" || ev.data == "" {
 			continue
 		}
