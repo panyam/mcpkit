@@ -6,7 +6,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/panyam/gocurrent v0.1.0
 	github.com/panyam/mcpkit v0.0.0
-	github.com/panyam/oneauth v0.0.68
+	github.com/panyam/oneauth v0.0.69
 	github.com/stretchr/testify v1.11.1
 )
 
@@ -21,7 +21,3 @@ require (
 )
 
 replace github.com/panyam/mcpkit => ../../
-
-// TEMP: pointing to local oneauth branch until #47/#48 are released.
-// Remove this line before merging.
-replace github.com/panyam/oneauth => ../../../../oneauth/main
