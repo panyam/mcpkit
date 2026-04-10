@@ -537,8 +537,8 @@ func (d *Dispatcher) handlePromptsList(id json.RawMessage, params json.RawMessag
 
 func (d *Dispatcher) handlePromptsGet(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
 	var envelope struct {
-		Name      string            `json:"name"`
-		Arguments map[string]string `json:"arguments"`
+		Name      string         `json:"name"`
+		Arguments map[string]any `json:"arguments"`
 	}
 	if err := json.Unmarshal(params, &envelope); err != nil {
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())

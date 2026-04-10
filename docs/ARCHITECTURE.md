@@ -176,10 +176,40 @@ type Content struct {
     Resource *ResourceContent // for embedded resources
 }
 
+type PromptArgument struct {
+    Name, Description string
+    Required          bool
+    Schema            any // optional JSON Schema (#87)
+}
+
+type PromptRequest struct {
+    Name      string
+    Arguments map[string]any // pre-decoded JSON values; handlers type-assert (#87)
+}
+
 type ResourceHandler func(ctx context.Context, req ResourceRequest) (ResourceResult, error)
 type TemplateHandler func(ctx context.Context, uri string, params map[string]string) (ResourceResult, error)
 type PromptHandler func(ctx context.Context, req PromptRequest) (PromptResult, error)
 ```
+
+### Content Cardinality Tolerance (#81)
+
+Several message types have a `content` field whose JSON cardinality varies in
+the wild. MCPKit defensively accepts both forms on read and always emits
+spec-canonical shape on write:
+
+| Type | Spec | Read tolerance | Write |
+|---|---|---|---|
+| `PromptMessage.content` | single | object or array (first element) | object |
+| `SamplingMessage.content` | single | object or array (first element) | object |
+| `CreateMessageResult.content` | single | object or array (first element) | object |
+| `Content.resource` | single | object or array (first element) | object |
+| `ToolResult.content` | array | object (wrapped) or array | array |
+| `ResourceResult.contents` | array | object (wrapped) or array | array |
+
+Logic lives in `core/cardinality.go`. Widening (e.g., #141 multi-part sampling)
+replaces a call to `decodeContentSingle` with `decodeContentSlice` at the
+UnmarshalJSON call site — the helper semantics do not change.
 
 ## Protocol Version Negotiation
 

@@ -21,6 +21,8 @@
 - mcp-allowed-roots: Restrict tool cwd to allowed directories (option registered, not enforced yet)
 - mcp-resources: resources/list, resources/read, resources/templates/list with URI template matching
 - mcp-prompts: prompts/list, prompts/get with argument passing
+- mcp-prompt-argument-schema: PromptArgument.Schema — declarative JSON Schema on prompt arguments (mirrors ToolDef.InputSchema). Clients render typed inputs; server-side validation tracked by #184 (#87)
+- mcp-content-cardinality-tolerance: Defensive parsing of `content` field cardinality across PromptMessage/SamplingMessage/ToolResult/ResourceResult/Content.resource. Accepts both single-object and array forms on read; always emits spec-canonical form on write (#81)
 - mcp-pagination: Generic cursor-based pagination for all list methods
 - mcp-cancellation: notifications/cancelled with inflight request tracking and context cancellation
 - mcp-logging: logging/setLevel + notifications/message via EmitLog() with per-session atomic log level

@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 )
 
@@ -37,6 +38,19 @@ type PromptArgument struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
 	Required    bool   `json:"required,omitempty"`
+
+	// Schema is an optional JSON Schema describing the expected value shape
+	// for this argument. Mirrors ToolDef.InputSchema: typically a
+	// map[string]any with "type", "enum", "minimum", etc. Arbitrary JSON
+	// Schema keywords ($ref, $defs, additionalProperties, ...) are preserved
+	// as-is through registration, serialization, and client deserialization.
+	//
+	// The schema is declarative. Clients use it to render typed inputs
+	// (number pickers, dropdowns). Server-side validation of incoming
+	// argument values against this schema is tracked by #184 and is not
+	// enforced by the dispatcher today — handlers are responsible for
+	// validating their inputs.
+	Schema any `json:"schema,omitempty"`
 }
 
 // PromptMessage is a single message in a prompt result.
@@ -45,10 +59,34 @@ type PromptMessage struct {
 	Content Content `json:"content"` // reuses Content from tool.go
 }
 
+// UnmarshalJSON decodes a PromptMessage, tolerating an array-form `content`
+// field from peers that emit the array shape by mistake. First element wins.
+// See #81.
+func (m *PromptMessage) UnmarshalJSON(data []byte) error {
+	var aux struct {
+		Role    string          `json:"role"`
+		Content json.RawMessage `json:"content"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	m.Role = aux.Role
+	m.Content = Content{}
+	return decodeContentSingle(aux.Content, &m.Content)
+}
+
 // PromptRequest is the validated input passed to a PromptHandler.
+//
+// Arguments holds the decoded JSON values from the prompts/get request, keyed
+// by argument name. Values retain their JSON types after decode: strings stay
+// as string, numbers become float64, booleans stay bool, objects become
+// map[string]any, arrays become []any. Handlers type-assert as needed. This
+// shape mirrors how tool handlers receive ToolRequest.Arguments (raw JSON),
+// but pre-decoded for ergonomic access — a prompt argument count is tiny, so
+// eager decode is fine. See #87.
 type PromptRequest struct {
 	Name      string
-	Arguments map[string]string
+	Arguments map[string]any
 }
 
 // PromptResult is the response from a prompt handler.
