@@ -59,7 +59,8 @@ mcpkit/
 │   ├── memory_transport.go    InProcessTransport (core.Transport impl)
 │   ├── request.go             sendServerRequest, routeServerResponse, pending map
 │   ├── middleware.go          Middleware, LoggingMiddleware, WithMiddleware
-│   └── pagination.go          cursor-based pagination
+│   ├── pagination.go          cursor-based pagination
+│   └── exec.go                ToolExec: wrap CLI binaries as MCP tools
 │
 ├── client/                  ← Client + all client transports
 │   ├── client.go              Client, NewClient, Connect, ToolCall, ToolCallTyped, WithTransport, WithExtension, WithUIExtension, WithGetSSEStream, WithModifyRequest, WithCommandTransport, ServerSupportsExtension, ServerSupportsUI, ListToolsForModel, ResolveEndpointURL, HTTPStatusError, DoWithAuthRetry
@@ -115,7 +116,7 @@ mcpkit/
 - **Session idle timeout**: `WithSessionTimeout(d)` enables automatic cleanup of abandoned Streamable HTTP sessions. Uses `gocurrent.IdleTimer` for ref-counted idle tracking — timer pauses during active requests (Acquire/Release). Default is 0 (no timeout).
 - **Stdio transport** uses Content-Length framed JSON-RPC over stdin/stdout (framing via `servicekit/http.WriteFrame`/`ReadFrame`). Server-side: `srv.RunStdio(ctx)`. Client-side: `client.WithStdioTransport(reader, writer)`. No HTTP, no auth — process boundary is the trust boundary. Debug logging goes to stderr.
 - **Notification delivery order**: notifications arrive before tool results across all transports.
-- **HTTP error classification**: Both transports return `HTTPStatusError` (alias for `servicekit/http.HTTPStatusError`) for non-2xx responses (excluding 401/403, handled by `DoWithAuthRetry`). `IsTransientError` classifies 5xx as transient (retriable via `WithMaxRetries`), 4xx as terminal. `servicekit/http.IsHTTPTransient` provides the status-code-only classification.
+- **HTTP error classification**: Both transports return `HTTPStatusError` (alias for `servicekit/http.HTTPStatusError`) for non-2xx responses (excluding 401/403, handled by `DoWithAuthRetry`). `IsTransientError` classifies 5xx as transient (retriable via `WithMaxRetries`), 4xx as terminal. `servicekit/http.IsHTTPTransient` provides the status-code-only classification. `HTTPStatusError.Header` contains the cloned response headers (e.g., `Retry-After`, `X-Request-Id`) for programmatic inspection. Error response bodies are capped at `servicekit/http.MaxErrorBodySize` (16 KB) to prevent memory exhaustion.
 - **Auth retry**: `DoWithAuthRetry` wraps `core.TokenSource` into servicekit's callback-based `http.DoWithAuthRetry` (401 refresh + 403 scope step-up). `ClientAuthError` is an alias for `servicekit/http.AuthRetryError`.
 - **Origin validation**: `streamableTransport` uses servicekit's `middleware.OriginChecker.CheckRequest()` for DNS rebinding protection. Defaults to localhost-only when no `WithAllowedOrigins` configured. Falls back to Host header when Origin is absent.
 - **SSE reader death**: `call()` uses dual-select on the response channel and the done channel — returns a transient error immediately if the background reader dies, instead of blocking forever.
@@ -153,6 +154,12 @@ mcpkit/
 - **`ToolCallTyped[T](c, name, args)`**: Generic function that calls a tool and unmarshals `structuredContent` into T. For tools with `OutputSchema`. Returns error if no structured content.
 - **Complements `ToolCall`**: `ToolCall` returns text, `ToolCallTyped` returns typed structs.
 
+### ToolExec (CLI Binary Wrapper)
+- **`server.ToolExec(ExecConfig)`**: Creates a `server.Tool` that wraps a CLI binary as an MCP tool. Returns a single-struct `Tool` compatible with `srv.Register()`.
+- **`ExecConfig`**: `Name`, `Command`, `Args` (static), `BuildArgs` (dynamic from JSON), `Env`, `Dir`, `Timeout`, `InputSchema`.
+- **Handler**: runs `exec.CommandContext`, returns `TextResult(stdout)` on success, `ErrorResult(output + exit code)` on failure. Non-zero exit is a tool error, not a transport error.
+- **Use case**: wrapping existing CLI tools (build systems, linters, code generators) as MCP tools without reimplementing their logic.
+
 ### CommandTransport (Subprocess MCP Servers)
 - **`NewCommandTransport(name, args, opts...)`**: Spawns a subprocess and communicates via Content-Length framed JSON-RPC over stdin/stdout. Wraps `StdioTransport` for the wire protocol.
 - **Options**: `WithEnv(env...)` appends env vars, `WithDir(dir)` sets working directory, `WithShutdownTimeout(d)` controls SIGTERM→SIGKILL escalation (default 5s), `WithStderr(w)` tees stderr to a writer.
@@ -176,6 +183,7 @@ mcpkit/
 - **`Registry.AddTool` / `RemoveTool`** (and Resource, Prompt variants) acquire write lock, modify the registry, then call `OnChange` to broadcast `notifications/*/list_changed` to all sessions.
 - **`Registry.OnChange`** is wired by `NewServer` to `Server.Broadcast`. Pre-serve `RegisterTool` calls also trigger OnChange but Broadcast is a no-op with zero sessions.
 - **RLock scoping in handlers**: `handleToolsCall` acquires RLock only for the map lookup, releases before executing the handler. Tool execution is never under lock.
+- **Overwrite semantics**: `AddTool`, `AddResource`, `AddResourceTemplate`, and `AddPrompt` use identity keys (tool name, resource URI, URI template string, prompt name). Re-registering with the same key overwrites the entry and handler without creating duplicates in the ordering slice.
 - **`listChanged: true`** is always advertised in capabilities for tools, resources, and prompts, regardless of current registry contents.
 
 ### Auth

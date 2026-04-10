@@ -24,7 +24,7 @@ MCPKit is a Go library for building production-grade MCP (Model Context Protocol
 │  │ Context-based session injection│               │
 │  └────────────────────────────────┘               │
 │  ┌─────────────────────────────────────────────┐  │
-│  │ servicekit (v0.0.14)                         │  │
+│  │ servicekit (v0.0.22)                         │  │
 │  │ SSEConn, SSEHub, ListenAndServeGraceful,     │  │
 │  │ StreamableServe, CORS, RateLimiter, Logger   │  │
 │  └─────────────────────────────────────────────┘  │
@@ -50,7 +50,7 @@ MCPKit is a Go library for building production-grade MCP (Model Context Protocol
 
 ```
 mcpkit/                          # module: github.com/panyam/mcpkit
-├── go.mod                       # servicekit v0.0.14
+├── go.mod                       # servicekit v0.0.22
 ├── core/                        # Protocol types + tool-handler APIs
 │   ├── jsonrpc.go               # Request, Response, Error, ErrCode*
 │   ├── tool.go                  # ToolDef, ToolRequest, ToolResult, Content, ToolHandler
