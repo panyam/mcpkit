@@ -65,7 +65,7 @@ func registerConformancePrompts(srv *server.Server) {
 			},
 		},
 		func(ctx context.Context, req core.PromptRequest) (core.PromptResult, error) {
-			uri := req.Arguments["resourceUri"]
+			uri, _ := req.Arguments["resourceUri"].(string)
 			return core.PromptResult{
 				Description: "A prompt with an embedded resource",
 				Messages: []core.PromptMessage{{

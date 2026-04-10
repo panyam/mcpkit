@@ -15,6 +15,23 @@ type SamplingMessage struct {
 	Content Content `json:"content"`
 }
 
+// UnmarshalJSON decodes a SamplingMessage, tolerating an array-form `content`
+// field (first element wins). The spec currently specifies single-content for
+// SamplingMessage; widening to multi-part is tracked by #141 and will reuse
+// this hook by switching to decodeContentSlice. See #81.
+func (m *SamplingMessage) UnmarshalJSON(data []byte) error {
+	var aux struct {
+		Role    string          `json:"role"`
+		Content json.RawMessage `json:"content"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	m.Role = aux.Role
+	m.Content = Content{}
+	return decodeContentSingle(aux.Content, &m.Content)
+}
+
 // ModelHint provides hints about which model the server prefers for sampling.
 type ModelHint struct {
 	Name string `json:"name,omitempty"`
@@ -48,6 +65,26 @@ type CreateMessageResult struct {
 	StopReason string  `json:"stopReason,omitempty"`
 	Role       string  `json:"role"`
 	Content    Content `json:"content"`
+}
+
+// UnmarshalJSON decodes a CreateMessageResult, tolerating an array-form
+// `content` field (first element wins) from peers that emit the array shape.
+// See #81.
+func (r *CreateMessageResult) UnmarshalJSON(data []byte) error {
+	var aux struct {
+		Model      string          `json:"model"`
+		StopReason string          `json:"stopReason,omitempty"`
+		Role       string          `json:"role"`
+		Content    json.RawMessage `json:"content"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	r.Model = aux.Model
+	r.StopReason = aux.StopReason
+	r.Role = aux.Role
+	r.Content = Content{}
+	return decodeContentSingle(aux.Content, &r.Content)
 }
 
 // Sample sends a sampling/createMessage request to the connected client and blocks

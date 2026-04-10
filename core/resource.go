@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 )
 
@@ -89,6 +90,21 @@ type ResourceRequest struct {
 // ResourceResult is the response from a resource handler.
 type ResourceResult struct {
 	Contents []ResourceReadContent `json:"contents"`
+}
+
+// UnmarshalJSON decodes a ResourceResult, tolerating a single-object
+// `contents` form from peers that emit a bare object instead of the
+// spec-canonical array. Single objects are wrapped into a 1-element slice.
+// See #81.
+func (r *ResourceResult) UnmarshalJSON(data []byte) error {
+	var aux struct {
+		Contents json.RawMessage `json:"contents"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	r.Contents = nil
+	return decodeResourceReadSlice(aux.Contents, &r.Contents)
 }
 
 // ResourceHandler reads a resource by URI.
