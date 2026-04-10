@@ -21,6 +21,16 @@ type AuthConfig struct {
 	// MCPPath is the MCP endpoint path (e.g., "/mcp"). Used to construct
 	// the well-known URI: /.well-known/oauth-protected-resource/<mcpPath>
 	MCPPath string
+
+	// Validator, if set, is automatically wired with ScopesSupported as its
+	// AllScopes field (if not already populated). This ensures that 401
+	// WWW-Authenticate responses include the full scope list, allowing clients
+	// to request broad scopes upfront and avoid scope step-up round-trips.
+	//
+	// Without this wiring, Validator.AllScopes defaults to empty and 401
+	// responses omit the scope= parameter, forcing clients through a
+	// narrow-to-broad scope dance. See #50.
+	Validator *JWTValidator
 }
 
 // MountAuth registers the OAuth Protected Resource Metadata endpoint (RFC 9728)
@@ -40,6 +50,13 @@ type AuthConfig struct {
 //	    MCPPath:              "/mcp",
 //	})
 func MountAuth(mux *http.ServeMux, cfg AuthConfig) {
+	// Auto-wire AllScopes from ScopesSupported for the provided validator.
+	// This ensures 401 responses include all scopes the server supports,
+	// reducing scope step-up round-trips for LLM clients.
+	if cfg.Validator != nil && len(cfg.Validator.AllScopes) == 0 {
+		cfg.Validator.AllScopes = cfg.ScopesSupported
+	}
+
 	meta := &apiauth.ProtectedResourceMetadata{
 		Resource:             cfg.ResourceURI,
 		AuthorizationServers: cfg.AuthorizationServers,
