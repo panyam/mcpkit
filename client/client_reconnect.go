@@ -67,6 +67,8 @@ func (c *Client) reconnect() error {
 		c.transport = &coreTransportAdapter{inner: ct}
 	} else if c.useSSE {
 		st := newSSEClientTransport(c.url, c.tokenSource)
+		st.client = c
+		st.sessionID = c.transport.getSessionID() // preserve for reconnection
 		st.serverReqHandler = c.HandleServerRequest
 		st.modifyReq = c.modifyRequest
 		if c.onNotify != nil {
