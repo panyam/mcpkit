@@ -32,6 +32,9 @@ type ResourceDef struct {
 // ResourceTemplate describes a parameterized resource URI template.
 type ResourceTemplate struct {
 	// URITemplate is an RFC 6570 URI template (e.g., "file:///{path}").
+	// This serves as the unique identifier for the template in the registry —
+	// registering a template with the same URI template string overwrites the
+	// previous registration.
 	URITemplate string `json:"uriTemplate"`
 
 	// Name is a human-readable short name.
