@@ -19,11 +19,12 @@ func testPromptDispatcher() *Dispatcher {
 			},
 		},
 		func(ctx context.Context, req core.PromptRequest) (core.PromptResult, error) {
+			name, _ := req.Arguments["name"].(string)
 			return core.PromptResult{
 				Description: "Greeting",
 				Messages: []core.PromptMessage{{
 					Role:    "user",
-					Content: core.Content{Type: "text", Text: "Hello, " + req.Arguments["name"] + "!"},
+					Content: core.Content{Type: "text", Text: "Hello, " + name + "!"},
 				}},
 			}, nil
 		},

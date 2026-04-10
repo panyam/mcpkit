@@ -80,6 +80,26 @@ type ToolResult struct {
 	Meta *ToolResultMeta `json:"_meta,omitempty"`
 }
 
+// UnmarshalJSON decodes a ToolResult, tolerating a single-object `content`
+// form from peers that haven't caught up to the array-form spec. Single
+// objects are wrapped into a 1-element slice. See #81.
+func (r *ToolResult) UnmarshalJSON(data []byte) error {
+	var aux struct {
+		Content           json.RawMessage `json:"content"`
+		IsError           bool            `json:"isError,omitempty"`
+		StructuredContent any             `json:"structuredContent,omitempty"`
+		Meta              *ToolResultMeta `json:"_meta,omitempty"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	r.IsError = aux.IsError
+	r.StructuredContent = aux.StructuredContent
+	r.Meta = aux.Meta
+	r.Content = nil
+	return decodeContentSlice(aux.Content, &r.Content)
+}
+
 // ToolResultMeta carries optional metadata on a tool result.
 type ToolResultMeta struct {
 	// NextCursor is a pagination cursor for fetching the next page.
@@ -95,6 +115,31 @@ type Content struct {
 	MimeType string           `json:"mimeType,omitempty"`
 	Data     string           `json:"data,omitempty"`
 	Resource *ResourceContent `json:"resource,omitempty"`
+}
+
+// UnmarshalJSON decodes a Content, tolerating an array-form `resource` field
+// from peers that confuse EmbeddedResource (single) with ReadResourceResult
+// (array). The first array element wins. See #81 for cardinality rationale.
+func (c *Content) UnmarshalJSON(data []byte) error {
+	// Use an alias that still has `resource` typed loosely so a sibling decode
+	// can route it through the cardinality helper.
+	type scalarFields struct {
+		Type     string          `json:"type"`
+		Text     string          `json:"text,omitempty"`
+		MimeType string          `json:"mimeType,omitempty"`
+		Data     string          `json:"data,omitempty"`
+		Resource json.RawMessage `json:"resource,omitempty"`
+	}
+	var aux scalarFields
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	c.Type = aux.Type
+	c.Text = aux.Text
+	c.MimeType = aux.MimeType
+	c.Data = aux.Data
+	c.Resource = nil
+	return decodeResourceContentSingle(aux.Resource, &c.Resource)
 }
 
 // ResourceContent is an embedded resource reference in a tool result.
