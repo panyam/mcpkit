@@ -7,12 +7,21 @@ require (
 	github.com/panyam/gocurrent v0.1.0
 	github.com/panyam/mcpkit v0.0.0
 	github.com/panyam/oneauth v0.0.68
+	github.com/stretchr/testify v1.11.1
 )
 
 require (
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fernet/fernet-go v0.0.0-20240119011108-303da6aec611 // indirect
+	github.com/kr/text v0.2.0 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	golang.org/x/crypto v0.46.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
 replace github.com/panyam/mcpkit => ../../
+
+// TEMP: pointing to local oneauth branch until #47/#48 are released.
+// Remove this line before merging.
+replace github.com/panyam/oneauth => ../../../../oneauth/main
