@@ -43,6 +43,21 @@ type RootsCap struct {
 	ListChanged bool `json:"listChanged,omitempty"`
 }
 
+// Root represents a filesystem root provided by the client.
+// Roots inform the server about available directories for tool execution.
+type Root struct {
+	// URI is the root's location (e.g., "file:///home/user/project").
+	URI string `json:"uri"`
+
+	// Name is an optional human-readable label for this root.
+	Name string `json:"name,omitempty"`
+}
+
+// RootsListResult is the response to a roots/list server-to-client request.
+type RootsListResult struct {
+	Roots []Root `json:"roots"`
+}
+
 // ServerCapabilities describes the features the server supports,
 // returned in the initialize response.
 type ServerCapabilities struct {

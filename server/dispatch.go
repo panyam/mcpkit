@@ -60,6 +60,13 @@ type Dispatcher struct {
 	sessionID            string                  // set by transport, used as key in subscription registry
 	subManager           *subscriptionRegistry   // shared pointer to Server's registry (nil if disabled)
 
+	// Roots state — tracked per session.
+	// rootsStale is set when the client sends notifications/roots/list_changed.
+	// On the next tool call with a requestFunc, the server fetches roots/list.
+	rootsStale    bool
+	roots         []core.Root
+	onRootsChanged func([]core.Root) // optional callback, set via WithOnRootsChanged
+
 	// Server-to-client request infrastructure.
 	// pushRequest pushes a raw JSON-RPC request to the client stream (set by transport).
 	// pending tracks in-flight server-to-client requests awaiting responses.
@@ -149,6 +156,7 @@ func (d *Dispatcher) newSession() *Dispatcher {
 		serverInfo:           d.serverInfo,
 		subscriptionsEnabled: d.subscriptionsEnabled,
 		subManager:           d.subManager,
+		onRootsChanged:       d.onRootsChanged,
 		eventIDs:             newEventIDGen(),
 		requestIDs:           newEventIDGen(),
 	}
@@ -203,6 +211,13 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) *core.Resp
 
 	case "notifications/cancelled":
 		d.handleCancelled(req.Params)
+		return nil
+
+	case "notifications/roots/list_changed":
+		d.rootsStale = true
+		if d.onRootsChanged != nil {
+			d.onRootsChanged(d.roots)
+		}
 		return nil
 
 	case "ping":
