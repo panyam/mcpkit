@@ -75,6 +75,90 @@ func TestHTTPStatusError_Unwrap(t *testing.T) {
 	assert.Equal(t, 503, target.StatusCode)
 }
 
+// TestHTTPStatusError_HeaderExposed verifies that when the server returns a
+// non-2xx response with custom headers, those headers are captured in the
+// HTTPStatusError and accessible via errors.As. This enables callers to inspect
+// response metadata (e.g., X-Request-Id for correlation, Retry-After for
+// backoff) from error responses without losing information at the transport layer.
+func TestHTTPStatusError_HeaderExposed(t *testing.T) {
+	srv := newTestMCPServer()
+	realHandler := srv.Handler(server.WithStreamableHTTP(true))
+	realServer := httptest.NewServer(realHandler)
+	t.Cleanup(realServer.Close)
+
+	var callCount int32
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&callCount, 1)
+		if r.Method == http.MethodPost && n == 3 {
+			// 3rd POST = first tool call (after initialize + initialized)
+			w.Header().Set("X-Request-Id", "req-abc123")
+			w.Header().Set("Retry-After", "30")
+			http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		// Proxy to real server
+		body, _ := io.ReadAll(r.Body)
+		proxyReq, _ := http.NewRequest(r.Method, realServer.URL+r.URL.Path, strings.NewReader(string(body)))
+		for k, vv := range r.Header {
+			for _, v := range vv {
+				proxyReq.Header.Add(k, v)
+			}
+		}
+		resp, err := http.DefaultClient.Do(proxyReq)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		defer resp.Body.Close()
+		for k, vv := range resp.Header {
+			for _, v := range vv {
+				w.Header().Add(k, v)
+			}
+		}
+		w.WriteHeader(resp.StatusCode)
+		io.Copy(w, resp.Body)
+	}))
+	t.Cleanup(proxy.Close)
+
+	c := client.NewClient(proxy.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
+	require.NoError(t, c.Connect())
+	t.Cleanup(func() { c.Close() })
+
+	_, err := c.ToolCall("echo", map[string]any{"message": "fail"})
+	require.Error(t, err)
+
+	var httpErr *client.HTTPStatusError
+	require.True(t, errors.As(err, &httpErr), "error should be HTTPStatusError, got: %T: %v", err, err)
+	assert.Equal(t, 503, httpErr.StatusCode)
+	assert.Equal(t, "req-abc123", httpErr.Header.Get("X-Request-Id"),
+		"custom header X-Request-Id should be preserved in HTTPStatusError")
+	assert.Equal(t, "30", httpErr.Header.Get("Retry-After"),
+		"Retry-After header should be preserved in HTTPStatusError")
+}
+
+// TestHTTPStatusError_429WithRetryAfter verifies that a 429 Too Many Requests
+// response (which is NOT handled by DoWithAuthRetry — only 401/403 are) flows
+// through as an HTTPStatusError with headers intact. This is important because
+// 429 is a common rate-limiting response that callers need Retry-After from.
+func TestHTTPStatusError_429WithRetryAfter(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "5")
+		http.Error(w, "rate limited", http.StatusTooManyRequests)
+	}))
+	t.Cleanup(ts.Close)
+
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
+	err := c.Connect()
+
+	// Connect sends initialize which will get 429
+	require.Error(t, err)
+	var httpErr *client.HTTPStatusError
+	require.True(t, errors.As(err, &httpErr), "error should be HTTPStatusError, got: %T: %v", err, err)
+	assert.Equal(t, 429, httpErr.StatusCode)
+	assert.Equal(t, "5", httpErr.Header.Get("Retry-After"),
+		"Retry-After header should be accessible from 429 HTTPStatusError")
+}
+
 // TestStreamable_5xxReturnsHTTPStatusError verifies that when the server
 // returns a 503 for a Streamable HTTP POST, the client produces an
 // HTTPStatusError (not a confusing "invalid JSON response" error). The error
