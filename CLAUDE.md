@@ -142,6 +142,20 @@ mcpkit/
 - **`ErrorHandler` interface**: `OnSessionExpire`, `OnTransportError`, `OnKeepaliveFailure`.
 - **`BaseErrorHandler`**: Embed for no-op defaults, override only what you need.
 
+### Client-Suggested Session IDs (#88)
+- **`_suggestedSessionId`** in initialize params: client suggests a session ID, server validates (<=128 chars, alphanumeric/-/_/., unique) and uses it or falls back to server-generated.
+
+### Cursor-Based Pagination (#85)
+- **All list handlers** support `cursor` param. `NextCursor` in all list results + `ToolResultMeta.NextCursor` for tool output.
+- **`defaultPageSize = 0`** — returns all by default (backward compatible).
+
+### Roots Lifecycle (#26)
+- **`notifications/roots/list_changed`** handled — marks stale, calls `WithOnRootsChanged(fn)` callback.
+- **`core.Root`** type. Server-to-client `roots/list` fetch deferred.
+
+### Concurrent Request Handling (#86)
+- **Duplicate request IDs rejected** via `LoadOrStore` on inflight map.
+
 ### URI Template Matching (#143)
 - **RFC 6570 Level 4**: Uses `yosida95/uritemplate/v3` for proper URI template matching. Replaces naive segment-based matcher.
 
