@@ -362,8 +362,9 @@ func (t *streamableTransport) handleInitialize(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Success: create session and return with Mcp-Session-Id
-	sessionID := gohttp.GenerateSessionID()
+	// Success: create session and return with Mcp-Session-Id.
+	// Check if client suggested a session ID via _suggestedSessionId.
+	sessionID := t.resolveSessionID(req.Params)
 	dispatcher.sessionID = sessionID
 	entry := &sessionEntry{
 		dispatcher: dispatcher,
@@ -658,6 +659,39 @@ func (t *streamableTransport) broadcast(method string, params any) {
 		}
 		return true
 	})
+}
+
+// resolveSessionID determines the session ID to use for a new session.
+// If the client suggested a valid, unique ID via _suggestedSessionId in the
+// initialize params, it's used. Otherwise a random ID is generated.
+func (t *streamableTransport) resolveSessionID(params json.RawMessage) string {
+	var p struct {
+		SuggestedSessionID string `json:"_suggestedSessionId"`
+	}
+	if params != nil {
+		json.Unmarshal(params, &p)
+	}
+	if id := p.SuggestedSessionID; id != "" && validateSessionID(id) {
+		// Check uniqueness — reject if already in use
+		if _, exists := t.sessions.Load(id); !exists {
+			return id
+		}
+	}
+	return gohttp.GenerateSessionID()
+}
+
+// validateSessionID checks if a client-suggested session ID is valid:
+// non-empty, <= 128 chars, alphanumeric + hyphens + underscores + dots.
+func validateSessionID(id string) bool {
+	if len(id) == 0 || len(id) > 128 {
+		return false
+	}
+	for _, c := range id {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.') {
+			return false
+		}
+	}
+	return true
 }
 
 // sessionCount returns the number of active sessions.
