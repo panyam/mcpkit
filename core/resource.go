@@ -58,12 +58,14 @@ type ResourceTemplate struct {
 
 // ResourcesListResult is the typed result for resources/list responses.
 type ResourcesListResult struct {
-	Resources []ResourceDef `json:"resources"`
+	Resources  []ResourceDef `json:"resources"`
+	NextCursor string        `json:"nextCursor,omitempty"`
 }
 
 // ResourceTemplatesListResult is the typed result for resources/templates/list responses.
 type ResourceTemplatesListResult struct {
 	ResourceTemplates []ResourceTemplate `json:"resourceTemplates"`
+	NextCursor        string             `json:"nextCursor,omitempty"`
 }
 
 // ResourceReadContent is a single content item returned by resources/read.
