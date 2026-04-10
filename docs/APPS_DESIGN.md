@@ -640,6 +640,12 @@ This is Phase 4 work — requires Node.js + Playwright + a basic host harness.
 
 ### Phase 2: Read-Only Preview (slyds changes)
 
+> **Note**: For tools that wrap a CLI binary (e.g., `slyds build`), consider using
+> `server.ToolExec(server.ExecConfig{Command: "slyds", Args: []string{"build"}, ...})`
+> instead of a manual handler. ToolExec handles subprocess lifecycle, timeout,
+> and output capture automatically. Use a custom handler (as shown below) when
+> the tool needs to return structured data or UI resource URIs.
+
 ```go
 // In slyds cmd/mcp_tools.go — enhance build_deck tool
 
