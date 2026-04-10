@@ -1029,7 +1029,7 @@ func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
 	// Non-2xx responses (401/403 already handled by DoWithAuthRetry).
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, &HTTPStatusError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(body))}
+		return nil, &HTTPStatusError{StatusCode: resp.StatusCode, Header: resp.Header.Clone(), Body: strings.TrimSpace(string(body))}
 	}
 
 	if sid := resp.Header.Get("Mcp-Session-Id"); sid != "" {
@@ -1151,7 +1151,7 @@ func (t *streamableClientTransport) notify(data []byte) error {
 	// Non-2xx responses (401/403 already handled by DoWithAuthRetry).
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
-		return &HTTPStatusError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(body))}
+		return &HTTPStatusError{StatusCode: resp.StatusCode, Header: resp.Header.Clone(), Body: strings.TrimSpace(string(body))}
 	}
 	return nil
 }
@@ -1447,7 +1447,7 @@ func (t *sseClientTransport) notify(data []byte) error {
 	// Non-2xx responses (401/403 already handled by DoWithAuthRetry).
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
-		return &HTTPStatusError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(body))}
+		return &HTTPStatusError{StatusCode: resp.StatusCode, Header: resp.Header.Clone(), Body: strings.TrimSpace(string(body))}
 	}
 	return nil
 }
