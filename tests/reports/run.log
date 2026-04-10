@@ -27,6 +27,8 @@ ok  	github.com/panyam/mcpkit/tests/e2e/apps	0.402s
   PASS: e2e
 --- [6/8] conformance ---
 Killing stale process on port 18799...
+2026/04/10 14:47:36 Received signal terminated, shutting down...
+2026/04/10 14:47:36 Server shut down gracefully
 === Starting test server on :18799 (Streamable HTTP) ===
 Waiting for server....2026/04/10 16:32:34 MCP test server listening on :18799 (Streamable HTTP at /mcp)
  ready
@@ -68,6 +70,8 @@ Running client scenario 'ping' against server: http://localhost:18799/mcp
 2026/04/10 16:32:36 Closed MCP-GET-SSE SSE connection: b35a21510911055cd2d8fcea85c3ab0b
 
 === Running scenario: completion-complete ===
+2026/04/10 14:47:40 Finished cleaning up writer:  0x2715f2db6620
+2026/04/10 14:47:40 Closed MCP-GET-SSE SSE connection: 1638dda00f9f3e9707bfe867a864a2d3
 Running client scenario 'completion-complete' against server: http://localhost:18799/mcp
 2026/04/10 16:32:36 Starting MCP-GET-SSE SSE connection: 6d5665376eba18f81fd3937b9112371b
 2026/04/10 16:32:36 SSEHub: registered connection 6d5665376eba18f81fd3937b9112371b (total: 1)
@@ -88,6 +92,8 @@ Running client scenario 'tools-list' against server: http://localhost:18799/mcp
 2026/04/10 16:32:36 Closed MCP-GET-SSE SSE connection: 4c4ef9ca2353fdcd26affbdcbc231a50
 
 === Running scenario: tools-call-simple-text ===
+2026/04/10 14:47:40 Received kill signal.  Quitting Writer. stop 0x2715f2db69a0
+2026/04/10 14:47:40 Cleaning up writer...
 Running client scenario 'tools-call-simple-text' against server: http://localhost:18799/mcp
 2026/04/10 16:32:36 Starting MCP-GET-SSE SSE connection: 4c18209b8892090103de57476e4f36f7
 2026/04/10 16:32:36 SSEHub: registered connection 4c18209b8892090103de57476e4f36f7 (total: 1)
@@ -98,6 +104,8 @@ Running client scenario 'tools-call-simple-text' against server: http://localhos
 2026/04/10 16:32:36 Closed MCP-GET-SSE SSE connection: 4c18209b8892090103de57476e4f36f7
 
 === Running scenario: tools-call-image ===
+2026/04/10 14:47:40 Finished cleaning up writer:  0x2715f2e1e2a0
+2026/04/10 14:47:40 Closed MCP-GET-SSE SSE connection: 43406389aa92bfc73d1424295af804ba
 Running client scenario 'tools-call-image' against server: http://localhost:18799/mcp
 2026/04/10 16:32:36 Starting MCP-GET-SSE SSE connection: 092b4b6ef4c198b4ab2a24b5560ff950
 2026/04/10 16:32:36 SSEHub: registered connection 092b4b6ef4c198b4ab2a24b5560ff950 (total: 1)
@@ -138,6 +146,8 @@ Running client scenario 'tools-call-mixed-content' against server: http://localh
 2026/04/10 16:32:36 Closed MCP-GET-SSE SSE connection: d0a579c4f00cb7ed9150da92eeb42775
 
 === Running scenario: tools-call-with-logging ===
+2026/04/10 14:47:40 Finished cleaning up writer:  0x2715f2e1eaf0
+2026/04/10 14:47:40 Closed MCP-GET-SSE SSE connection: 3ef565e39b6e5abff8eb2c644bd2961a
 Running client scenario 'tools-call-with-logging' against server: http://localhost:18799/mcp
 2026/04/10 16:32:36 Starting MCP-GET-SSE SSE connection: 62d7db13aaebea0e44ac9f066c34c68b
 2026/04/10 16:32:36 SSEHub: registered connection 62d7db13aaebea0e44ac9f066c34c68b (total: 1)
@@ -173,6 +183,7 @@ Running client scenario 'tools-call-sampling' against server: http://localhost:1
 2026/04/10 16:32:37 SSEHub: registered connection 61008f5aff14a3e21510682df39e5a28 (total: 1)
 
 === Running scenario: tools-call-elicitation ===
+2026/04/10 14:47:40 Closed MCP-GET-SSE SSE connection: b1229552ef7b0ec411f3a161d6613f3d
 Running client scenario 'tools-call-elicitation' against server: http://localhost:18799/mcp
 2026/04/10 16:32:37 SSEHub: unregistered connection 61008f5aff14a3e21510682df39e5a28 (total: 0)
 2026/04/10 16:32:37 Received kill signal.  Quitting Writer. stop 0x5421418851f0

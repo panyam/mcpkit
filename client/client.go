@@ -563,6 +563,14 @@ func (c *Client) Close() error {
 	if c.keepaliveCancel != nil {
 		c.keepaliveCancel()
 	}
+	// Stop background goroutines on the token source (e.g., proactive
+	// token refresh). Uses io.Closer interface to avoid coupling to
+	// specific token source implementations.
+	if c.tokenSource != nil {
+		if closer, ok := c.tokenSource.(interface{ Close() error }); ok {
+			_ = closer.Close()
+		}
+	}
 	if c.transport != nil {
 		return c.transport.close()
 	}
