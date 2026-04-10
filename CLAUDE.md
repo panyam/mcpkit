@@ -132,6 +132,18 @@ mcpkit/
 - **Session cleanup trims store**: `expireSession`, `handleDelete`, and `closeSession` all call `store.Trim(sessionID)` to prevent unbounded memory growth.
 - **Client tracks `lastEventID`**: `atomic.Value` on `Client`, updated by background SSE readers. Survives transport recreation during reconnection.
 
+### Single-Struct Registration (#41)
+- **`server.Register(items ...any)`**: Accepts `server.Tool`, `server.Resource`, `server.ResourceTemplate`, `server.Prompt` — bundles def + handler in one struct.
+- **Backward compatible**: Existing two-arg `RegisterTool(def, handler)` methods remain.
+
+### Error Handler (#136)
+- **`WithErrorHandler(h ErrorHandler)`**: Receives out-of-band errors (session lifecycle, transport, keepalive).
+- **`ErrorHandler` interface**: `OnSessionExpire`, `OnTransportError`, `OnKeepaliveFailure`.
+- **`BaseErrorHandler`**: Embed for no-op defaults, override only what you need.
+
+### URI Template Matching (#143)
+- **RFC 6570 Level 4**: Uses `yosida95/uritemplate/v3` for proper URI template matching. Replaces naive segment-based matcher.
+
 ### Per-Handler Timeout
 - **`ToolDef.Timeout`**, **`ResourceDef.Timeout`**, **`ResourceTemplate.Timeout`**, **`PromptDef.Timeout`**: Per-handler execution timeout. When set, overrides the server-wide `WithToolTimeout` for that specific handler. `json:"-"` — not serialized to clients.
 - **Fallback chain**: per-handler `Timeout` → server-wide `WithToolTimeout` (tools only) → no timeout.

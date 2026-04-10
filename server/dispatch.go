@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -12,6 +11,7 @@ import (
 	conc "github.com/panyam/gocurrent"
 	core "github.com/panyam/mcpkit/core"
 	gohttp "github.com/panyam/servicekit/http"
+	uritemplate "github.com/yosida95/uritemplate/v3"
 )
 
 // supportedProtocolVersions lists the MCP protocol versions this server supports,
@@ -620,25 +620,24 @@ func (d *Dispatcher) makeRequestFunc(pushFunc func(json.RawMessage)) core.Reques
 
 // --- Template matching ---
 
-// matchTemplate matches a URI against a simple URI template like "test://template/{id}/data".
-// Returns the extracted parameters and whether it matched.
+// matchTemplate matches a URI against an RFC 6570 URI template using the
+// yosida95/uritemplate library. Returns extracted parameters and whether
+// the URI matched. Supports RFC 6570 Level 4 expressions including
+// backreference detection, reserved expansion, and modifiers.
 func matchTemplate(template, uri string) (map[string]string, bool) {
-	params := make(map[string]string)
-	tParts := strings.Split(template, "/")
-	uParts := strings.Split(uri, "/")
-
-	if len(tParts) != len(uParts) {
+	tmpl, err := uritemplate.New(template)
+	if err != nil {
 		return nil, false
 	}
-
-	for i, tp := range tParts {
-		if strings.HasPrefix(tp, "{") && strings.HasSuffix(tp, "}") {
-			key := tp[1 : len(tp)-1]
-			params[key] = uParts[i]
-		} else if tp != uParts[i] {
-			return nil, false
+	match := tmpl.Match(uri)
+	if match == nil {
+		return nil, false
+	}
+	params := make(map[string]string)
+	for _, name := range tmpl.Varnames() {
+		if v := match.Get(name); v.Valid() {
+			params[name] = v.String()
 		}
 	}
-
 	return params, true
 }

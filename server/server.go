@@ -35,7 +35,43 @@ type serverOptions struct {
 	middleware           []Middleware
 	requestLogger        *log.Logger // HTTP-level request/response logging
 	subscriptionsEnabled bool        // enable resources/subscribe and resources/unsubscribe
+	errorHandler         ErrorHandler // optional out-of-band error callback
 }
+
+// ErrorHandler receives out-of-band errors that aren't returned to a
+// specific client request — session lifecycle errors, transport failures,
+// keepalive timeouts. Implement for observability, alerting, or diagnostics.
+//
+// Embed [BaseErrorHandler] to only override the methods you care about.
+type ErrorHandler interface {
+	// OnSessionExpire is called when a session is terminated due to idle
+	// timeout, keepalive failure, or explicit close.
+	OnSessionExpire(sessionID string, reason error)
+
+	// OnTransportError is called for transport-level errors that don't
+	// result in a client response (connection drops, body read failures).
+	OnTransportError(err error)
+
+	// OnKeepaliveFailure is called each time a keepalive ping fails.
+	// consecutiveFailures is the current streak count.
+	OnKeepaliveFailure(sessionID string, consecutiveFailures int)
+}
+
+// BaseErrorHandler provides no-op defaults for all [ErrorHandler] methods.
+// Embed this in your implementation to only override specific methods:
+//
+//	type MyHandler struct {
+//	    server.BaseErrorHandler
+//	    logger *slog.Logger
+//	}
+//	func (h *MyHandler) OnSessionExpire(id string, err error) {
+//	    h.logger.Error("session expired", "id", id, "err", err)
+//	}
+type BaseErrorHandler struct{}
+
+func (BaseErrorHandler) OnSessionExpire(string, error)  {}
+func (BaseErrorHandler) OnTransportError(error)         {}
+func (BaseErrorHandler) OnKeepaliveFailure(string, int) {}
 
 // Option configures a Server.
 type Option func(*serverOptions)
@@ -82,6 +118,13 @@ func WithRequestLogging(logger *log.Logger) Option {
 		}
 		o.requestLogger = logger
 	}
+}
+
+// WithErrorHandler sets a callback for out-of-band errors (session lifecycle,
+// transport failures, keepalive timeouts). When not set, these errors are
+// only logged via log.Printf.
+func WithErrorHandler(h ErrorHandler) Option {
+	return func(o *serverOptions) { o.errorHandler = h }
 }
 
 // WithSubscriptions enables resource subscription support (resources/subscribe,
@@ -628,6 +671,26 @@ func WithKeepalive(interval time.Duration, maxFailures int) TransportOption {
 // APIs, serverless functions, CLI wrappers).
 func WithStateless(enabled bool) TransportOption {
 	return func(c *transportConfig) { c.stateless = enabled }
+}
+
+// notifyError calls the configured ErrorHandler method if one is set.
+// Safe to call when errorHandler is nil (no-op).
+func (s *Server) notifySessionExpire(sessionID string, reason error) {
+	if s.options.errorHandler != nil {
+		s.options.errorHandler.OnSessionExpire(sessionID, reason)
+	}
+}
+
+func (s *Server) notifyTransportError(err error) {
+	if s.options.errorHandler != nil {
+		s.options.errorHandler.OnTransportError(err)
+	}
+}
+
+func (s *Server) notifyKeepaliveFailure(sessionID string, failures int) {
+	if s.options.errorHandler != nil {
+		s.options.errorHandler.OnKeepaliveFailure(sessionID, failures)
+	}
 }
 
 // CheckAuth validates an HTTP request against the server's auth configuration.

@@ -18,6 +18,7 @@ type sessionKeepalive struct {
 	maxFailures int
 	requestFunc func(ctx context.Context, method string, params any) (json.RawMessage, error)
 	onDeath     func()
+	onPingFail  func(failures int) // optional callback on each ping failure (for ErrorHandler)
 	cancel      context.CancelFunc
 }
 
@@ -53,6 +54,9 @@ func (k *sessionKeepalive) run(ctx context.Context) {
 			if err != nil {
 				failures++
 				log.Printf("mcpkit: keepalive ping failed (%d/%d): %v", failures, k.maxFailures, err)
+				if k.onPingFail != nil {
+					k.onPingFail(failures)
+				}
 				if failures >= k.maxFailures {
 					log.Printf("mcpkit: keepalive max failures reached, closing session")
 					k.onDeath()
