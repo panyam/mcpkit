@@ -606,6 +606,7 @@ type transportConfig struct {
 	eventStore     gohttp.EventStore // optional: persists SSE events for Last-Event-ID replay
 	keepaliveInterval time.Duration  // 0 = disabled; interval for JSON-RPC ping requests
 	keepaliveMaxFails int            // max consecutive ping failures before session cleanup (default 3)
+	sseGracePeriod    time.Duration  // 0 = immediate cleanup on SSE disconnect (backward compat)
 }
 
 func defaultTransportConfig() transportConfig {
@@ -661,6 +662,21 @@ func WithSSE(enabled bool) TransportOption {
 // Default is 0 (no timeout — sessions persist until explicit DELETE or server restart).
 func WithSessionTimeout(d time.Duration) TransportOption {
 	return func(c *transportConfig) { c.sessionTimeout = d }
+}
+
+// WithSSEGracePeriod sets the grace period for SSE sessions after disconnect.
+// When an SSE connection closes, the session stays alive for this duration.
+// If the client reconnects with the same session ID (via ?sessionId= query
+// param), it resumes the existing session and replays missed events via
+// Last-Event-ID. Requires WithEventStore for event replay.
+//
+// Default is 0 (no grace period — sessions die immediately on disconnect,
+// backward compatible with pre-v0.1.17 behavior).
+//
+// Security: reconnection requires the same auth principal as the original
+// session. Session IDs are cryptographically random.
+func WithSSEGracePeriod(d time.Duration) TransportOption {
+	return func(c *transportConfig) { c.sseGracePeriod = d }
 }
 
 // WithEventStore sets an optional EventStore for SSE event persistence.
