@@ -107,6 +107,7 @@ mcpkit/
 - **Ping before initialize**: `ping` is always handled, regardless of initialization state. It's in the pre-init switch block alongside `initialize`, `notifications/initialized`, and `notifications/cancelled`.
 - **MCP error codes**: Application errors use codes outside JSON-RPC reserved ranges: `ErrCodeToolExecutionError` (-31000), `ErrCodeResourceError` (-31001), `ErrCodePromptError` (-31002), `ErrCodeCompletionError` (-31003). Standard JSON-RPC codes (-32700, -32600 to -32603) are used only for protocol errors.
 - **ID generation decoupled**: `sendServerRequest` uses `gohttp.IDGen` interface (servicekit) instead of `*atomic.Int64`. Both `eventIDs` and `requestIDs` on Dispatcher use the interface.
+- **Content cardinality tolerance (#81)**: Peers in the wild disagree on whether `content` is an array or a single object. `PromptMessage`, `SamplingMessage`, `CreateMessageResult`, and `Content.Resource` accept both forms on the read path — array-form decodes to the first element (empty array → zero value). `ToolResult.Content` and `ResourceResult.Contents` accept a single object as well, wrapping it into a 1-element slice. The write path always emits spec-canonical form (single for prompt/sampling, array for tool/resource). Logic lives in `core/cardinality.go`; migrating to multi-element (e.g., #141 widening SamplingMessage) is a one-line helper swap at the UnmarshalJSON call site.
 
 ### Transports
 - **SSE endpoint event data must be raw text**, not JSON-encoded. Use `SSEText(url)` not `SSEJSON()`.
@@ -166,6 +167,11 @@ mcpkit/
 - **Client handler**: `client.WithContentChunkHandler(fn)` receives chunks. If not set, chunks are ignored and client uses final ToolResult only.
 - **No transport changes**: Uses existing notify infrastructure. All transports automatically support streaming.
 - **Final result is authoritative**: Streaming chunks are a preview for responsive UX.
+
+### Prompt Argument Schemas (#87)
+- **`PromptArgument.Schema any`**: optional JSON Schema describing the expected shape of a prompt argument. Mirrors `ToolDef.InputSchema` — typically a `map[string]any` with `"type"`, `"enum"`, etc. Arbitrary JSON Schema keywords (`$ref`, `$defs`, `additionalProperties`) are preserved verbatim through registration and serialization.
+- **Declarative today**: clients use the schema to render typed inputs (number pickers, dropdowns). The dispatcher does NOT validate incoming argument values against the schema — handlers are responsible for validation. Server-side validation is tracked by #184 and will cover tools and prompts together.
+- **`PromptRequest.Arguments map[string]any`** (changed from `map[string]string`): prompt handlers receive pre-decoded JSON values. Strings stay strings, numbers become `float64`, booleans stay `bool`, objects become `map[string]any`. Handlers type-assert as needed: `name, _ := req.Arguments["name"].(string)`. Widening was required so schema'd non-string args (integers, booleans) reach handlers meaningfully.
 
 ### Per-Handler Timeout
 - **`ToolDef.Timeout`**, **`ResourceDef.Timeout`**, **`ResourceTemplate.Timeout`**, **`PromptDef.Timeout`**: Per-handler execution timeout. When set, overrides the server-wide `WithToolTimeout` for that specific handler. `json:"-"` — not serialized to clients.
