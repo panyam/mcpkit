@@ -66,6 +66,25 @@ type OAuthTokenSource struct {
 	// discovery fetches. Optional.
 	ASMetadataStore client.ASMetadataStore
 
+	// OnToken is an optional callback invoked after a successful token
+	// acquisition or refresh by the underlying oneauth AuthClient. Use
+	// this to persist tokens to an external store (disk, database, secret
+	// manager) without implementing a full CredentialStore.
+	//
+	// Fires ONLY for the refresh_token grant path in the underlying
+	// AuthClient — not for initial LoginWithBrowser calls in today's
+	// OAuthTokenSource.Token() flow (which re-runs the full browser flow
+	// instead of using refresh tokens). This is a latent capability until
+	// the browser-login flow learns to use refresh tokens (follow-up).
+	//
+	// Thread safety: the callback is invoked synchronously while the
+	// underlying AuthClient mutex is held (same contract as
+	// CredentialStore.SetCredential). Callbacks must not re-enter
+	// AuthClient or OAuthTokenSource methods, or they will deadlock.
+	//
+	// See oneauth#82 for the underlying pushdown. Issue #137.
+	OnToken func(*client.ServerCredential)
+
 	// OpenBrowser opens the authorization URL (nil = platform default).
 	OpenBrowser func(url string) error
 
@@ -150,7 +169,9 @@ func (s *OAuthTokenSource) Token() (string, error) {
 		return "", fmt.Errorf("client registration: %w", err)
 	}
 
-	// Lazy-init the AuthClient with the discovered AS URL
+	// Lazy-init the AuthClient with the discovered AS URL. Pass through the
+	// OnToken callback so refresh_token grant exchanges in the underlying
+	// client fire the consumer's persistence hook (#137, oneauth#82).
 	if s.oaClient == nil {
 		issuer := s.authInfo.AuthorizationServers[0]
 		var store client.CredentialStore
@@ -158,6 +179,9 @@ func (s *OAuthTokenSource) Token() (string, error) {
 			store = s.CredStore
 		}
 		s.oaClient = client.NewAuthClient(issuer, store)
+		if s.OnToken != nil {
+			s.oaClient.OnToken = s.OnToken
+		}
 	}
 
 	// Full browser login flow with explicit endpoints from discovery.
