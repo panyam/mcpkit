@@ -45,11 +45,12 @@ type PromptArgument struct {
 	// Schema keywords ($ref, $defs, additionalProperties, ...) are preserved
 	// as-is through registration, serialization, and client deserialization.
 	//
-	// The schema is declarative. Clients use it to render typed inputs
-	// (number pickers, dropdowns). Server-side validation of incoming
-	// argument values against this schema is tracked by #184 and is not
-	// enforced by the dispatcher today — handlers are responsible for
-	// validating their inputs.
+	// Enforced server-side: when set, the dispatcher validates incoming
+	// argument values against the schema before invoking the handler and
+	// returns -32602 Invalid Params with a structured errors list on
+	// failure (#184). Arguments without a Schema bypass validation.
+	// Use server.WithSchemaValidation(false) to opt out of call-time
+	// validation if you prefer to validate in the handler.
 	Schema any `json:"schema,omitempty"`
 }
 
