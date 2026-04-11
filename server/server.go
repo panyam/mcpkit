@@ -38,6 +38,7 @@ type serverOptions struct {
 	errorHandler         ErrorHandler // optional out-of-band error callback
 	contentChunkMethod   string       // custom notification method for streaming content (empty = default)
 	onRootsChanged       func([]core.Root) // optional callback when client sends roots/list_changed
+	skipSchemaValidation bool              // WithSchemaValidation(false) disables call-time validation
 }
 
 // ErrorHandler receives out-of-band errors that aren't returned to a
@@ -161,6 +162,25 @@ func WithToolTimeout(d time.Duration) Option {
 	return func(o *serverOptions) { o.toolTimeout = d }
 }
 
+// WithSchemaValidation toggles call-time JSON Schema validation of tool
+// arguments and prompt arguments against their declared schemas. When
+// enabled (the default), the dispatcher validates incoming arguments
+// before the handler is invoked and returns -32602 Invalid Params with
+// structured error data on failure. When disabled, handlers receive
+// arguments unchecked and are responsible for validation themselves.
+//
+// Registration-time schema compilation is not affected by this option —
+// malformed schemas still fail fast at RegisterTool/RegisterPrompt time.
+// This option only controls whether the compiled schemas are applied to
+// incoming requests.
+//
+// Example — opt out of validation:
+//
+//	srv := mcpkit.NewServer(info, mcpkit.WithSchemaValidation(false))
+func WithSchemaValidation(enabled bool) Option {
+	return func(o *serverOptions) { o.skipSchemaValidation = !enabled }
+}
+
 // WithAllowedRoots restricts tool cwd to the given directory prefixes.
 func WithAllowedRoots(roots ...string) Option {
 	return func(o *serverOptions) { o.allowedRoots = roots }
@@ -179,6 +199,9 @@ func NewServer(info core.ServerInfo, opts ...Option) *Server {
 		e := ext.Extension()
 		s.dispatcher.extensions[e.ID] = e
 	}
+	// Propagate schema validation opt-out to the dispatcher so per-session
+	// clones inherit it via newSession().
+	s.dispatcher.skipSchemaValidation = s.options.skipSchemaValidation
 	// Wire registry change notifications to Server.Broadcast so that
 	// dynamic adds/removes automatically notify all connected sessions.
 	s.dispatcher.Reg.OnChange = func(method string) {
