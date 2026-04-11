@@ -10,10 +10,10 @@ replace (
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
-	github.com/panyam/mcpkit v0.0.0
+	github.com/panyam/mcpkit v0.1.22
 	github.com/panyam/mcpkit/ext/auth v0.0.0
 	github.com/panyam/mcpkit/ext/ui v0.0.0
-	github.com/panyam/oneauth v0.0.69
+	github.com/panyam/oneauth v0.0.70
 	github.com/stretchr/testify v1.11.1
 )
 
@@ -24,7 +24,7 @@ require (
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/panyam/gocurrent v0.1.0 // indirect
 	github.com/panyam/goutils v0.1.8 // indirect
-	github.com/panyam/servicekit v0.0.22 // indirect
+	github.com/panyam/servicekit v0.0.23 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect

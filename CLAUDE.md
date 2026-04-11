@@ -134,6 +134,12 @@ mcpkit/
 - **Session cleanup trims store**: `expireSession`, `handleDelete`, and `closeSession` all call `store.Trim(sessionID)` to prevent unbounded memory growth.
 - **Client tracks `lastEventID`**: `atomic.Value` on `Client`, updated by background SSE readers. Survives transport recreation during reconnection.
 
+### SSE Retry Hint (#72)
+- **`core.EmitSSERetry(ctx, retryAfter)`**: tool/resource/prompt handlers call this to emit a raw SSE `retry:` field on the current stream. Clients treat it as the next reconnection delay (per WHATWG SSE spec). Non-positive durations are dropped. Only supported on the **2024-11-25 SSE transport** today — stdio, in-process, and Streamable HTTP paths silently no-op. Streamable HTTP GET SSE support is a follow-up.
+- **Mechanism**: `sseSessionEntry.conn` holds a live `*mcpSSEConn` pointer per session. `dispatchWithOpts` wires a closure `func(ms int) { entry.conn.SendRetry(ms) }` into `sessionCtx.sseRetry` via `core.SetSSERetryHint`. `EmitSSERetry` reads `sessionCtx.sseRetry` and calls it. Reconnect paths refresh `entry.conn` so a long-running handler's retry hint always reaches the current stream.
+- **Hint-only, not close**: the server does NOT disconnect the stream when `EmitSSERetry` is called. It's a forward-looking reconnect delay. Combine with `WithSSEGracePeriod` + `WithEventStore` for the full "drop and resume" pattern.
+- **Servicekit support**: requires `servicekit v0.0.23+` (`SSEOutgoingMessage.Retry` field + `BaseSSEConn.SendRetry`).
+
 ### Single-Struct Registration (#41)
 - **`server.Register(items ...any)`**: Accepts `server.Tool`, `server.Resource`, `server.ResourceTemplate`, `server.Prompt` — bundles def + handler in one struct.
 - **Backward compatible**: Existing two-arg `RegisterTool(def, handler)` methods remain.
@@ -237,6 +243,7 @@ mcpkit/
 - **Proactive token refresh (#48)**: oneauth's `ClientCredentialsSource.Refresher` enables background token refresh before expiry. `ProactiveRefresher{Buffer: 30*time.Second}` starts a goroutine on first `Token()` call. `Client.Close()` automatically stops the refresh goroutine via `io.Closer` delegation (the client checks if its `tokenSource` implements `io.Closer`). For long-running M2M agents with short-lived tokens — avoids latency spikes on the hot path.
 - **AllScopes auto-wiring (#50)**: `MountAuth` now auto-populates `Validator.AllScopes` from `ScopesSupported` (if unset), so 401 `WWW-Authenticate` responses advertise all supported scopes upfront. Reduces scope step-up round-trips for LLM clients. Callers can still set `AllScopes` explicitly on the validator to override.
 - **Scope accumulation (#138)**: `TokenForScopes` uses `core.UnionScopes` — scopes accumulate across step-up calls, never replaced. Edge-case verified: concurrent calls accumulate correctly via mutex, empty slice leaves scopes unchanged, cache is invalidated to force refetch with broader scope set.
+- **Token refresh callback (#137)**: `OAuthTokenSource.OnToken func(*client.ServerCredential)` fires after a successful refresh_token grant exchange in the underlying oneauth `AuthClient`. Use it to persist tokens to an external store (file/DB/secret manager) without implementing a full `CredentialStore`. Callback runs under the AuthClient mutex (same contract as `CredentialStore.SetCredential`) — must not re-enter `AuthClient` or `OAuthTokenSource` methods. Requires oneauth v0.0.70+. **Latent for browser-login**: `OAuthTokenSource.Token()` currently re-runs `LoginWithBrowser` on expiry instead of using refresh tokens, so `OnToken` only fires when the underlying `AuthClient` is driven through its refresh path (e.g. via `GetToken`). Forks follow-up: "adopt refresh tokens in OAuthTokenSource.Token()".
 
 ### MCP Apps (io.modelcontextprotocol/ui)
 - **"Apps" = feature name, "ui" = extension ID**. The spec repo is `ext-apps`, the wire ID is `io.modelcontextprotocol/ui`. Our package is `ext/ui/` to match the ID.
@@ -260,6 +267,20 @@ mcpkit/
 - **Import cycle constraint**: `server/` package white-box tests (`package server`) cannot import `testutil` because `testutil` imports `server`. These tests keep local handshake helpers (`initDispatcher`, `initServer`) and local server factories. Only black-box tests (`package server_test`, `package client_test`) can use `testutil`.
 - **In-process transport skips JSON envelope serialization** — catches logic bugs. HTTP tests catch wire format bugs. Stdio tests catch Content-Length framing bugs. All needed.
 - **Conformance baseline**: when a feature passes, remove from `conformance/baseline.yml`. Stale entries cause CI failure.
+
+### Releasing Sub-Modules (#189)
+- **`ext/auth` and `ext/ui` are independently tagged Go modules** with their own `go.mod`. Their `go.mod` files contain `replace github.com/panyam/mcpkit => ../../` so local dev works against unreleased root changes, but the `require github.com/panyam/mcpkit vX.Y.Z` line must point to a **real, released root tag** — Go ignores `replace` directives in non-main (dependency) modules, so downstream consumers need a resolvable version.
+- **The v0.0.0 placeholder bug**: before #189, sub-module `go.mod` files said `require github.com/panyam/mcpkit v0.0.0`. This worked locally but broke any downstream `go get github.com/panyam/mcpkit/ext/auth@vX` because `v0.0.0` has never been tagged. Caught by `scripts/verify-submodule-deps.sh` (wired into `make ci`, `make audit`, and the pre-push hook).
+- **Release order** when cutting a new root tag:
+  1. Commit root-only changes.
+  2. Tag root: `git tag -a v0.1.N -m "v0.1.N"`.
+  3. Push the root tag: `git push origin v0.1.N`.
+  4. `make bump-root V=v0.1.N` — updates every sub-module's `require github.com/panyam/mcpkit` line, runs `tidy-all`, re-verifies.
+  5. Commit the sub-module bumps: `chore: bump sub-modules to v0.1.N`.
+  6. Tag sub-modules (`make tag V=v0.1.N` or manually: `git tag ext/auth/v0.1.M`, same for `ext/ui`). Sub-module numbers drift from root — tag only when content changes.
+  7. Push the sub-module tags.
+- **`make tidy-all`** runs `go mod tidy` across root + every sub-module (ext/auth, ext/ui, tests/e2e, tests/keycloak).
+- **Don't retag published sub-module versions.** Go module proxies cache aggressively; retagging `ext/auth/v0.1.15` after the fact is a known footgun. Ship a new version (`v0.1.16`) instead.
 
 ## Conformance Status
 
