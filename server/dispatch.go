@@ -79,6 +79,13 @@ type Dispatcher struct {
 	// Used by transports to assign id: fields to SSE events, enabling
 	// client reconnection via Last-Event-ID.
 	eventIDs gohttp.IDGen
+
+	// skipSchemaValidation disables call-time argument validation against
+	// compiled schemas. Registration still compiles schemas (so malformed
+	// schemas still fail fast), but handlers see raw arguments unchecked.
+	// Set via WithSchemaValidation(false) for servers that prefer to handle
+	// validation themselves. Default: validation enabled.
+	skipSchemaValidation bool
 }
 
 // SetNotifyFunc sets the notification delivery function for this dispatcher.
@@ -112,6 +119,10 @@ func (d *Dispatcher) Close() {
 type toolEntry struct {
 	def     core.ToolDef
 	handler core.ToolHandler
+	// schema is the compiled InputSchema, used to validate incoming tool
+	// arguments before the handler is invoked. nil if the tool declared
+	// no schema (bypass validation).
+	schema *compiledSchema
 }
 
 type resourceEntry struct {
@@ -127,6 +138,10 @@ type templateEntry struct {
 type promptEntry struct {
 	def     core.PromptDef
 	handler core.PromptHandler
+	// argSchemas maps argument name → compiled schema for prompt arguments
+	// that declared a Schema field. Arguments without a schema are not in
+	// the map and bypass validation.
+	argSchemas map[string]*compiledSchema
 }
 
 // initializeParams is the params object sent by the client in an initialize request.
@@ -159,6 +174,7 @@ func (d *Dispatcher) newSession() *Dispatcher {
 		onRootsChanged:       d.onRootsChanged,
 		eventIDs:             newEventIDGen(),
 		requestIDs:           newEventIDGen(),
+		skipSchemaValidation: d.skipSchemaValidation,
 	}
 }
 
@@ -168,8 +184,14 @@ func (d *Dispatcher) NegotiatedVersion() string {
 }
 
 // RegisterTool adds a tool to the dispatcher's registry.
+// Panics if def.InputSchema is set but invalid — schema compilation failures
+// at registration time are programmer errors (the schema is hard-coded in the
+// server binary), so fail-fast is preferred. Use [Registry.AddTool] directly
+// if you need to handle schema errors programmatically.
 func (d *Dispatcher) RegisterTool(def core.ToolDef, handler core.ToolHandler) {
-	d.Reg.AddTool(def, handler)
+	if err := d.Reg.AddTool(def, handler); err != nil {
+		panic(err)
+	}
 }
 
 // RegisterResource adds a resource to the dispatcher's registry.
@@ -183,8 +205,12 @@ func (d *Dispatcher) RegisterResourceTemplate(def core.ResourceTemplate, handler
 }
 
 // RegisterPrompt adds a prompt to the dispatcher's registry.
+// Panics if any argument Schema is set but invalid — see [Dispatcher.RegisterTool]
+// for rationale. Use [Registry.AddPrompt] directly to handle schema errors.
 func (d *Dispatcher) RegisterPrompt(def core.PromptDef, handler core.PromptHandler) {
-	d.Reg.AddPrompt(def, handler)
+	if err := d.Reg.AddPrompt(def, handler); err != nil {
+		panic(err)
+	}
 }
 
 // RegisterCompletion registers a completion handler for a specific reference.
@@ -368,6 +394,17 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, pa
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "unknown tool: "+envelope.Name)
 	}
 
+	// Validate arguments against the advertised InputSchema before invoking
+	// the handler. Failures return -32602 Invalid Params with structured
+	// error data so agents can self-correct on the next call. Skipped when
+	// the tool declared no schema or WithSchemaValidation(false) is set.
+	if !d.skipSchemaValidation && entry.schema != nil {
+		if ve := entry.schema.validate(envelope.Arguments); ve != nil {
+			return core.NewErrorResponseWithData(id, core.ErrCodeInvalidParams,
+				"argument validation failed", ve)
+		}
+	}
+
 	// Apply per-tool timeout if set (overrides server-wide WithToolTimeout)
 	if entry.def.Timeout > 0 {
 		tctx, cancel := context.WithTimeout(ctx, entry.def.Timeout)
@@ -549,6 +586,31 @@ func (d *Dispatcher) handlePromptsGet(ctx context.Context, id json.RawMessage, p
 	d.Reg.mu.RUnlock()
 	if !ok {
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "unknown prompt: "+envelope.Name)
+	}
+
+	// Validate arguments against declared schemas. Arguments without a
+	// declared schema bypass validation; arguments declared in the schema
+	// but missing from the request are validated as missing (the per-arg
+	// compiled schema sees a nil value). All violations are collected so
+	// the caller gets every mistake at once rather than one-at-a-time.
+	if !d.skipSchemaValidation && len(entry.argSchemas) > 0 {
+		var allErrors []ValidationError
+		for argName, sch := range entry.argSchemas {
+			ve := sch.validateValue(envelope.Arguments[argName])
+			if ve == nil {
+				continue
+			}
+			// Prefix each error path with the argument name so the client
+			// can tell which field failed.
+			for _, e := range ve.Errors {
+				e.Path = "/" + argName + e.Path
+				allErrors = append(allErrors, e)
+			}
+		}
+		if len(allErrors) > 0 {
+			return core.NewErrorResponseWithData(id, core.ErrCodeInvalidParams,
+				"argument validation failed", &ValidationErrors{Errors: allErrors})
+		}
 	}
 
 	if entry.def.Timeout > 0 {

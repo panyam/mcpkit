@@ -170,8 +170,18 @@ mcpkit/
 
 ### Prompt Argument Schemas (#87)
 - **`PromptArgument.Schema any`**: optional JSON Schema describing the expected shape of a prompt argument. Mirrors `ToolDef.InputSchema` — typically a `map[string]any` with `"type"`, `"enum"`, etc. Arbitrary JSON Schema keywords (`$ref`, `$defs`, `additionalProperties`) are preserved verbatim through registration and serialization.
-- **Declarative today**: clients use the schema to render typed inputs (number pickers, dropdowns). The dispatcher does NOT validate incoming argument values against the schema — handlers are responsible for validation. Server-side validation is tracked by #184 and will cover tools and prompts together.
+- **Enforced server-side (#184)**: the dispatcher validates incoming arguments against declared schemas before invoking the handler. See "Schema Validation (#184)" below.
 - **`PromptRequest.Arguments map[string]any`** (changed from `map[string]string`): prompt handlers receive pre-decoded JSON values. Strings stay strings, numbers become `float64`, booleans stay `bool`, objects become `map[string]any`. Handlers type-assert as needed: `name, _ := req.Arguments["name"].(string)`. Widening was required so schema'd non-string args (integers, booleans) reach handlers meaningfully.
+
+### Schema Validation (#184, #142)
+- **What gets validated**: `ToolDef.InputSchema` for `tools/call` and `PromptArgument.Schema` for `prompts/get`. Both use JSON Schema 2020-12 via `github.com/santhosh-tekuri/jsonschema/v6`.
+- **Compile-time failure is fast**: `Server.RegisterTool` / `Server.RegisterPrompt` (and the `Registry.AddTool` / `Registry.AddPrompt` form) compile the schema at registration and **panic** on a malformed schema — programmer errors surface at startup, not at first request. Use the `Registry.AddTool` / `Registry.AddPrompt` methods directly if you want an `error` return instead of a panic.
+- **Call-time validation**: the dispatcher validates `envelope.Arguments` (tools) and each declared prompt argument (prompts) before invoking the handler. Tools without `InputSchema` and prompt arguments without a `Schema` bypass validation — full backward compat.
+- **Error shape**: validation failures return `-32602 Invalid Params` with `error.data = {"errors":[{"path":"/age","keyword":"type","message":"..."}]}`. Agents parse `data.errors[*].path` to know which field to correct. Prompt error paths are prefixed with the argument name (e.g. `/count/0`).
+- **Null arguments are empty objects**: `arguments: null` or omitted arguments validate as `{}`. Tools declaring `{"type":"object"}` with no properties stay callable.
+- **Network `$ref` forbidden**: the compiler uses a `noNetworkLoader` that rejects any remote `$ref`. All `$ref`s must resolve within the advertised schema via `$defs` or fragment pointers.
+- **Opt-out**: `server.WithSchemaValidation(false)` disables call-time validation (registration-time compilation still runs). Handlers then see arguments unchecked.
+- **2020-12 features verified**: `$defs`, `$ref`, `prefixItems`, `dependentRequired`, `format` are all enforced. See `server/schema_validator_test.go::TestValidate2020_12Features` and `server/schema_validation_test.go::TestSchema2020_12Conformance`.
 
 ### Per-Handler Timeout
 - **`ToolDef.Timeout`**, **`ResourceDef.Timeout`**, **`ResourceTemplate.Timeout`**, **`PromptDef.Timeout`**: Per-handler execution timeout. When set, overrides the server-wide `WithToolTimeout` for that specific handler. `json:"-"` — not serialized to clients.

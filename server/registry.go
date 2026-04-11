@@ -1,8 +1,10 @@
 package server
 
 import (
-	core "github.com/panyam/mcpkit/core"
+	"fmt"
 	"sync"
+
+	core "github.com/panyam/mcpkit/core"
 )
 
 // RegistryChangeFunc is called after a registry mutation with the
@@ -57,15 +59,25 @@ func (r *Registry) notify(method string) {
 
 // AddTool adds a tool to the registry. Thread-safe.
 // Broadcasts notifications/tools/list_changed if OnChange is set.
-func (r *Registry) AddTool(def core.ToolDef, handler core.ToolHandler) {
+//
+// If def.InputSchema is set, it is compiled at registration time. Invalid
+// schemas are rejected with a descriptive error (fail-fast). Compiled
+// schemas are cached on the internal tool entry and used by the dispatcher
+// to validate arguments before handler invocation.
+func (r *Registry) AddTool(def core.ToolDef, handler core.ToolHandler) error {
+	compiled, err := compileSchema(def.InputSchema)
+	if err != nil {
+		return fmt.Errorf("tool %q: invalid input schema: %w", def.Name, err)
+	}
 	r.mu.Lock()
 	_, exists := r.tools[def.Name]
-	r.tools[def.Name] = toolEntry{def: def, handler: handler}
+	r.tools[def.Name] = toolEntry{def: def, handler: handler, schema: compiled}
 	if !exists {
 		r.toolOrder = append(r.toolOrder, def.Name)
 	}
 	r.mu.Unlock()
 	r.notify("notifications/tools/list_changed")
+	return nil
 }
 
 // RemoveTool removes a tool by name. Returns true if it existed. Thread-safe.
@@ -145,15 +157,34 @@ func (r *Registry) RemoveResourceTemplate(uriTemplate string) bool {
 
 // AddPrompt adds a prompt to the registry. Thread-safe.
 // Broadcasts notifications/prompts/list_changed if OnChange is set.
-func (r *Registry) AddPrompt(def core.PromptDef, handler core.PromptHandler) {
+//
+// Compiles any per-argument Schema fields at registration time. Arguments
+// without a Schema bypass validation. Invalid schemas are rejected with
+// a descriptive error (fail-fast).
+func (r *Registry) AddPrompt(def core.PromptDef, handler core.PromptHandler) error {
+	var argSchemas map[string]*compiledSchema
+	for _, arg := range def.Arguments {
+		if arg.Schema == nil {
+			continue
+		}
+		compiled, err := compileSchema(arg.Schema)
+		if err != nil {
+			return fmt.Errorf("prompt %q argument %q: invalid schema: %w", def.Name, arg.Name, err)
+		}
+		if argSchemas == nil {
+			argSchemas = make(map[string]*compiledSchema)
+		}
+		argSchemas[arg.Name] = compiled
+	}
 	r.mu.Lock()
 	_, exists := r.prompts[def.Name]
-	r.prompts[def.Name] = promptEntry{def: def, handler: handler}
+	r.prompts[def.Name] = promptEntry{def: def, handler: handler, argSchemas: argSchemas}
 	if !exists {
 		r.promptOrder = append(r.promptOrder, def.Name)
 	}
 	r.mu.Unlock()
 	r.notify("notifications/prompts/list_changed")
+	return nil
 }
 
 // RemovePrompt removes a prompt by name. Returns true if it existed. Thread-safe.
