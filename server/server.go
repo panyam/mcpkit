@@ -339,9 +339,23 @@ func (s *Server) dispatchWithNotify(d *Dispatcher, ctx context.Context, claims *
 // dispatchWithNotifyAndRequest is the full dispatch entry point that accepts both
 // a core.NotifyFunc and core.RequestFunc. Used by transports that support server-to-client requests.
 func (s *Server) dispatchWithNotifyAndRequest(d *Dispatcher, ctx context.Context, claims *core.Claims, notify core.NotifyFunc, request core.RequestFunc, req *core.Request) *core.Response {
+	return s.dispatchWithOpts(d, ctx, claims, notify, request, nil, req)
+}
+
+// dispatchWithOpts is the full dispatch entry point including the optional
+// SSE retry-hint emitter (#72). SSE-capable transports (sseTransport, the
+// streamable HTTP SSE POST path) pass a non-nil sseRetry so handlers calling
+// core.EmitSSERetry can emit a "retry:" field on the current stream.
+// Non-SSE transports pass nil and EmitSSERetry becomes a silent no-op.
+func (s *Server) dispatchWithOpts(d *Dispatcher, ctx context.Context, claims *core.Claims, notify core.NotifyFunc, request core.RequestFunc, sseRetry func(ms int), req *core.Request) *core.Response {
 	// Inject session context so tool handlers can send notifications, requests,
 	// and access authenticated claims and client capabilities.
 	ctx = core.ContextWithSession(ctx, notify, request, &d.logLevel, &d.clientCaps, claims)
+
+	// Wire the SSE retry-hint emitter if provided by the transport layer.
+	if sseRetry != nil {
+		ctx = core.SetSSERetryHint(ctx, sseRetry)
+	}
 
 	// Inject custom content chunk method if configured.
 	if s.options.contentChunkMethod != "" {

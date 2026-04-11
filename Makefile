@@ -197,7 +197,10 @@ seccheck: ## Run gosec security scanner (install: go install github.com/securego
 secrets: ## Scan for accidentally committed secrets (install: go install github.com/gitleaks/gitleaks/v8@latest)
 	gitleaks detect --source . -v
 
-audit: vulncheck ## Full security audit: dependency vulns + code patterns + secrets
+verify-submodule-deps: ## Verify sub-module go.mod files reference a real root version (not v0.0.0)
+	@bash scripts/verify-submodule-deps.sh
+
+audit: vulncheck verify-submodule-deps ## Full security audit: dependency vulns + code patterns + secrets
 	@echo ""
 	@echo "=== gosec (informational) ==="
 	@gosec -quiet -severity=high ./... || true
@@ -214,7 +217,7 @@ audit: vulncheck ## Full security audit: dependency vulns + code patterns + secr
 # CI (what GitHub Actions runs)
 # =============================================================================
 
-ci: test vet ## Run tests + vet (CI pipeline)
+ci: test vet verify-submodule-deps ## Run tests + vet + sub-module go.mod verification (CI pipeline)
 
 ci-full: test-race vet lint audit ## Full CI: race detection, vet, lint, security audit
 
@@ -231,8 +234,37 @@ serve-streamable: ## Start test server (Streamable HTTP transport)
 serve-both: ## Start test server (both transports)
 	BOTH=1 go run ./cmd/testserver
 
-tidy: ## Run go mod tidy
+tidy: ## Run go mod tidy on root module only
 	go mod tidy
+
+# All sub-modules (including tests/*) that have their own go.mod and require
+# the root module. Used by tidy-all and bump-root targets.
+SUB_MODS_ALL := ext/auth ext/ui cmd/testclient tests/e2e tests/keycloak
+
+tidy-all: ## Run go mod tidy across root + every sub-module
+	@echo "==> tidy root"
+	@go mod tidy
+	@for mod in $(SUB_MODS_ALL); do \
+		if [ -f "$$mod/go.mod" ]; then \
+			echo "==> tidy $$mod"; \
+			(cd $$mod && go mod tidy) || exit 1; \
+		fi; \
+	done
+
+bump-root: ## Update sub-modules to require a specific root version (usage: make bump-root V=v0.1.22)
+	@if [ -z "$(V)" ]; then echo "Usage: make bump-root V=v0.1.22"; exit 1; fi
+	@# Only touches the root self-reference (github.com/panyam/mcpkit). Sub-module
+	@# cross-references (github.com/panyam/mcpkit/ext/auth, /ext/ui) have their
+	@# own independent tag timelines and must be bumped manually to a real ext/*
+	@# tag — or left alone when a `replace` directive is in play.
+	@for mod in $(SUB_MODS_ALL); do \
+		if [ ! -f "$$mod/go.mod" ]; then continue; fi; \
+		if ! grep -q "github.com/panyam/mcpkit v" "$$mod/go.mod"; then continue; fi; \
+		echo "==> $$mod/go.mod: require github.com/panyam/mcpkit $(V)"; \
+		(cd $$mod && go mod edit -require=github.com/panyam/mcpkit@$(V)) || exit 1; \
+	done
+	@$(MAKE) -s tidy-all
+	@$(MAKE) -s verify-submodule-deps
 
 # =============================================================================
 # Release
@@ -264,8 +296,8 @@ setup-tools: ## Install development tools
 	go install honnef.co/go/tools/cmd/staticcheck@latest
 	go install github.com/gitleaks/gitleaks/v8@latest
 
-setup-hooks: ## Install git hooks (runs root + ext/auth tests on push)
-	@printf '#!/bin/sh\nset -e\ncd "$$(git rev-parse --show-toplevel)"\necho "Running root module tests..."\ngo test ./...\necho "Running ext/auth tests..."\ncd ext/auth && go test ./...\n' > .git/hooks/pre-push
+setup-hooks: ## Install git hooks (sub-module go.mod check + root + ext/auth tests on push)
+	@printf '#!/bin/sh\nset -e\ncd "$$(git rev-parse --show-toplevel)"\necho "Verifying sub-module go.mod..."\nbash scripts/verify-submodule-deps.sh\necho "Running root module tests..."\ngo test ./...\necho "Running ext/auth tests..."\ncd ext/auth && go test ./...\n' > .git/hooks/pre-push
 	chmod +x .git/hooks/pre-push
 
 setup: setup-tools setup-hooks ## Full development setup
@@ -273,5 +305,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-race test-v test-auth test-ui test-e2e test-apps-playwright testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth vet lint vulncheck seccheck secrets audit ci ci-full serve serve-streamable serve-both tidy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs help
+.PHONY: build test test-race test-v test-auth test-ui test-e2e test-apps-playwright testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs help
 .DEFAULT_GOAL := help

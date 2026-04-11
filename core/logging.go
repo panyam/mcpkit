@@ -74,6 +74,12 @@ type sessionCtx struct {
 	logLevel   *atomic.Pointer[LogLevel]  // nil pointer in atomic = logging disabled
 	clientCaps *ClientCapabilities        // parsed from initialize; nil before handshake
 	claims     *Claims                    // nil when no auth or validator doesn't provide claims
+
+	// sseRetry emits a raw SSE "retry:" hint on the session's stream.
+	// Non-SSE transports (stdio, in-process, Streamable HTTP JSON path) leave
+	// this nil. Set via SetSSERetryHint during session establishment. Reads
+	// flow through EmitSSERetry.
+	sseRetry func(ms int)
 }
 
 type ctxKey int

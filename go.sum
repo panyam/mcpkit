@@ -14,8 +14,8 @@ github.com/panyam/gocurrent v0.1.0 h1:AW8ctsSQHtoj8QXN55e9n+TYxtq+noF/ikPsRLiihi
 github.com/panyam/gocurrent v0.1.0/go.mod h1:jIIhcNfNnnIe2JXH8aY2+ba+/5G1fzwCWoZXdcMNw6o=
 github.com/panyam/goutils v0.1.8 h1:5UscYTP892k54+Nyb01tKGGwZxczZ5k7BC+c0nXmcoc=
 github.com/panyam/goutils v0.1.8/go.mod h1:ntucs8GJOHQ0LmlRGRjeup3aDC2t7xPMudrRwUHrJNM=
-github.com/panyam/servicekit v0.0.22 h1:08kOkPrkaXh0ukuBXc3WrrlFD7VCF6rLTeZj3ftHHPM=
-github.com/panyam/servicekit v0.0.22/go.mod h1:9TkF2LRqiPC9bgu0bYVdky7rnHEuBvzGzrsoL++Ra5c=
+github.com/panyam/servicekit v0.0.23 h1:HdTAN0+M81zqWfvtpsE+wWyeC/uwa8i4o37/bBhPIok=
+github.com/panyam/servicekit v0.0.23/go.mod h1:9TkF2LRqiPC9bgu0bYVdky7rnHEuBvzGzrsoL++Ra5c=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 h1:KRzFb2m7YtdldCEkzs6KqmJw4nqEVZGK7IN2kJkjTuQ=
