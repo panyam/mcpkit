@@ -443,3 +443,17 @@ func TestExtractTemplateParams(t *testing.T) {
 		})
 	}
 }
+
+// templateAwareRegistrar extends mockRegistrar with a RegisterResourceTemplate
+// method. RegisterAppTool does not currently call it (see
+// TestRegisterAppTool_TemplateURI_ShouldRegisterAsTemplate), which is the gap.
+// When the fix lands, RegisterAppTool (or a dedicated helper) must route
+// template URIs here instead of to RegisterResource.
+type templateAwareRegistrar struct {
+	mockRegistrar
+	resourceTemplates []core.ResourceTemplate
+}
+
+func (m *templateAwareRegistrar) RegisterResourceTemplate(def core.ResourceTemplate, _ core.TemplateHandler) {
+	m.resourceTemplates = append(m.resourceTemplates, def)
+}
