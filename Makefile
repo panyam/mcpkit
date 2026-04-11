@@ -296,9 +296,10 @@ setup-tools: ## Install development tools
 	go install honnef.co/go/tools/cmd/staticcheck@latest
 	go install github.com/gitleaks/gitleaks/v8@latest
 
-setup-hooks: ## Install git hooks (sub-module go.mod check + root + ext/auth tests on push)
-	@printf '#!/bin/sh\nset -e\ncd "$$(git rev-parse --show-toplevel)"\necho "Verifying sub-module go.mod..."\nbash scripts/verify-submodule-deps.sh\necho "Running root module tests..."\ngo test ./...\necho "Running ext/auth tests..."\ncd ext/auth && go test ./...\n' > .git/hooks/pre-push
-	chmod +x .git/hooks/pre-push
+setup-hooks: ## Install git hooks (runs scripts/pre-push-hook.sh — skips tests when only test-report artifacts changed)
+	@cp scripts/pre-push-hook.sh .git/hooks/pre-push
+	@chmod +x .git/hooks/pre-push
+	@echo "Installed .git/hooks/pre-push -> scripts/pre-push-hook.sh"
 
 setup: setup-tools setup-hooks ## Full development setup
 
