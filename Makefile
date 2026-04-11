@@ -197,7 +197,10 @@ seccheck: ## Run gosec security scanner (install: go install github.com/securego
 secrets: ## Scan for accidentally committed secrets (install: go install github.com/gitleaks/gitleaks/v8@latest)
 	gitleaks detect --source . -v
 
-audit: vulncheck ## Full security audit: dependency vulns + code patterns + secrets
+verify-submodule-deps: ## Verify sub-module go.mod files reference a real root version (not v0.0.0)
+	bash scripts/verify-submodule-deps.sh
+
+audit: vulncheck verify-submodule-deps ## Full security audit: dependency vulns + code patterns + secrets
 	@echo ""
 	@echo "=== gosec (informational) ==="
 	@gosec -quiet -severity=high ./... || true
@@ -214,7 +217,7 @@ audit: vulncheck ## Full security audit: dependency vulns + code patterns + secr
 # CI (what GitHub Actions runs)
 # =============================================================================
 
-ci: test vet ## Run tests + vet (CI pipeline)
+ci: test vet verify-submodule-deps ## Run tests + vet + sub-module go.mod verification (CI pipeline)
 
 ci-full: test-race vet lint audit ## Full CI: race detection, vet, lint, security audit
 
@@ -264,8 +267,8 @@ setup-tools: ## Install development tools
 	go install honnef.co/go/tools/cmd/staticcheck@latest
 	go install github.com/gitleaks/gitleaks/v8@latest
 
-setup-hooks: ## Install git hooks (runs root + ext/auth tests on push)
-	@printf '#!/bin/sh\nset -e\ncd "$$(git rev-parse --show-toplevel)"\necho "Running root module tests..."\ngo test ./...\necho "Running ext/auth tests..."\ncd ext/auth && go test ./...\n' > .git/hooks/pre-push
+setup-hooks: ## Install git hooks (runs root + ext/auth tests + sub-module go.mod check on push)
+	@printf '#!/bin/sh\nset -e\ncd "$$(git rev-parse --show-toplevel)"\necho "Verifying sub-module go.mod..."\nbash scripts/verify-submodule-deps.sh\necho "Running root module tests..."\ngo test ./...\necho "Running ext/auth tests..."\ncd ext/auth && go test ./...\n' > .git/hooks/pre-push
 	chmod +x .git/hooks/pre-push
 
 setup: setup-tools setup-hooks ## Full development setup
@@ -273,5 +276,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-race test-v test-auth test-ui test-e2e test-apps-playwright testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth vet lint vulncheck seccheck secrets audit ci ci-full serve serve-streamable serve-both tidy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs help
+.PHONY: build test test-race test-v test-auth test-ui test-e2e test-apps-playwright testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs help
 .DEFAULT_GOAL := help
