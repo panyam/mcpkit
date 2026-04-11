@@ -24,6 +24,12 @@ type sseSessionEntry struct {
 	subject     string          // auth principal binding (empty if no auth)
 	connID      string          // current SSE hub connection ID (empty during grace period)
 	gracePeriod time.Duration   // retained for log messages
+
+	// conn points at the live mcpSSEConn for this session. Used by the retry
+	// hint path (#72) to emit raw SSE "retry:" fields to the current stream
+	// without going through the hub's SendEventWithID abstraction. Reset on
+	// reconnect. Nil during grace period (between OnClose and OnStart).
+	conn *mcpSSEConn
 }
 
 // sseTransport implements the MCP HTTP+SSE transport (2024-11-05 spec).
@@ -221,7 +227,14 @@ func (t *sseTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 	requestFunc := dispatcher.makeRequestFunc(func(raw json.RawMessage) {
 		emitSSEEvent(dispatcher.eventIDs, t.config.eventStore, sessionID, raw, hubSend)
 	})
-	resp := t.server.dispatchWithNotifyAndRequest(dispatcher, r.Context(), claims, dispatcher.getNotifyFunc(), requestFunc, &req)
+	// Retry-hint emitter: looks up the live conn each time so a reconnect
+	// during a long-running tool picks up the new conn automatically (#72).
+	sseRetry := func(ms int) {
+		if cur, ok := t.sessions.Load(sessionID); ok && cur.conn != nil {
+			cur.conn.SendRetry(ms)
+		}
+	}
+	resp := t.server.dispatchWithOpts(dispatcher, r.Context(), claims, dispatcher.getNotifyFunc(), requestFunc, sseRetry, &req)
 
 	// Notifications have no response
 	if resp == nil {
@@ -275,6 +288,7 @@ func (c *mcpSSEConn) OnStart(w http.ResponseWriter, r *http.Request) error {
 		entry = c.entry
 		dispatcher = entry.dispatcher
 		entry.connID = c.ConnId()
+		entry.conn = c
 	} else {
 		// New session — create Dispatcher and session entry.
 		dispatcher = c.transport.server.newSession()
@@ -300,6 +314,7 @@ func (c *mcpSSEConn) OnStart(w http.ResponseWriter, r *http.Request) error {
 			subject:     subject,
 			connID:      c.ConnId(),
 			gracePeriod: cfg.sseGracePeriod,
+			conn:        c,
 		}
 		c.transport.sessions.Store(sessionID, entry)
 	}
@@ -371,6 +386,7 @@ func (c *mcpSSEConn) OnClose() {
 	// Unregister the physical SSE connection from the hub.
 	c.transport.hub.Unregister(c.ConnId())
 	entry.connID = ""
+	entry.conn = nil
 
 	if entry.graceTimer != nil {
 		// Grace period configured — keep the session alive. The timer starts
