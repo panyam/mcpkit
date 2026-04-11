@@ -55,3 +55,15 @@ jobs:
 
       - name: Run E2E tests (auth + apps)
         run: cd tests/e2e && go test ./... -v -count=1 -timeout 60s
+
+  test-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run ui sub-module tests
+        run: cd ext/ui && go test ./... -v -count=1 -timeout 30s
