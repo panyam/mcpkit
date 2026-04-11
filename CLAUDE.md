@@ -251,6 +251,21 @@ mcpkit/
 - **In-process transport skips JSON envelope serialization** — catches logic bugs. HTTP tests catch wire format bugs. Stdio tests catch Content-Length framing bugs. All needed.
 - **Conformance baseline**: when a feature passes, remove from `conformance/baseline.yml`. Stale entries cause CI failure.
 
+### Releasing Sub-Modules (#189)
+- **`ext/auth` and `ext/ui` are independently tagged Go modules** with their own `go.mod`. Their `go.mod` files contain `replace github.com/panyam/mcpkit => ../../` so local dev works against unreleased root changes, but the `require github.com/panyam/mcpkit vX.Y.Z` line must point to a **real, released root tag** — Go ignores `replace` directives in non-main (dependency) modules, so downstream consumers need a resolvable version.
+- **The v0.0.0 placeholder bug**: before #189, sub-module `go.mod` files said `require github.com/panyam/mcpkit v0.0.0`. This worked locally but broke any downstream `go get github.com/panyam/mcpkit/ext/auth@vX` because `v0.0.0` has never been tagged. Caught by `scripts/verify-submodule-deps.sh` (wired into `make ci`, `make audit`, and the pre-push hook).
+- **Release order** when cutting a new root tag:
+  1. Commit root-only changes.
+  2. Tag root: `git tag -a v0.1.N -m "v0.1.N"`.
+  3. Push the root tag: `git push origin v0.1.N`.
+  4. In each sub-module's `go.mod`, bump `require github.com/panyam/mcpkit vX.Y.Z` to the new root tag. Keep the `replace` line.
+  5. Run `go mod tidy` in each sub-module.
+  6. Commit the sub-module bumps: `chore: bump sub-modules to v0.1.N`.
+  7. Tag sub-modules: `git tag -a ext/auth/v0.1.M -m "ext/auth/v0.1.M"`, same for `ext/ui`. Note that sub-module tag numbers drift from root — tag only when the sub-module actually changes.
+  8. Push the sub-module tags.
+- **Don't retag published sub-module versions.** Go module proxies cache aggressively; retagging `ext/auth/v0.1.15` after the fact is a known footgun. Ship a new version (`v0.1.16`) instead.
+- **Test modules are not tagged**: `tests/e2e` and `tests/keycloak` also have their own `go.mod` with replace directives, but they are never published or imported externally — no tagging needed.
+
 ## Conformance Status
 
 ### Server conformance
