@@ -63,11 +63,13 @@ type Dispatcher struct {
 	// Roots state — tracked per session. See refreshRoots for the full state
 	// machine. rootsMu guards roots, rootsStale, and rootsFetching; it must
 	// NOT be held across user-callback invocations or network round trips.
-	rootsMu        sync.Mutex
-	roots          []core.Root
-	rootsStale     bool
-	rootsFetching  bool
-	onRootsChanged func([]core.Root) // optional callback, set via WithOnRootsChanged
+	rootsMu            sync.Mutex
+	roots              []core.Root
+	rootsStale         bool
+	rootsFetching      bool
+	rootsFetchTimeout  time.Duration     // from WithRootsFetchTimeout; 0 = default 30s
+	onRootsChanged     func([]core.Root) // optional callback, set via WithOnRootsChanged
+	allowedRoots       []string          // static allowlist from WithAllowedRoots
 
 	// Server-to-client request infrastructure.
 	// pushRequest pushes a raw JSON-RPC request to the client stream (set by
@@ -196,6 +198,8 @@ func (d *Dispatcher) newSession() *Dispatcher {
 		subscriptionsEnabled: d.subscriptionsEnabled,
 		subManager:           d.subManager,
 		onRootsChanged:       d.onRootsChanged,
+		rootsFetchTimeout:    d.rootsFetchTimeout,
+		allowedRoots:         d.allowedRoots,
 		eventIDs:             newEventIDGen(),
 		requestIDs:           newEventIDGen(),
 		skipSchemaValidation: d.skipSchemaValidation,

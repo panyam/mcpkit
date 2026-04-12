@@ -169,11 +169,16 @@ mcpkit/
 - **Capability gate**: only clients that declared `capabilities.roots.listChanged` during `initialize` receive the `roots/list` request. Clients without the capability silently skip the fetch.
 - **Persistent `pushRequest` required**: the fetch uses `Dispatcher.pushRequest` to issue the outbound request. Stdio, in-process, and the SSE/Streamable-HTTP GET SSE stream all wire this persistently on the session dispatcher via `Dispatcher.SetPushRequest`. Streamable HTTP sessions without an open GET SSE stream (or between stream reconnects) have `pushRequest == nil`; in that state a `list_changed` notification marks `rootsStale = true` without fetching, and the next notification after a stream opens will drive the fetch.
 - **`Dispatcher.Roots() []core.Root`** returns a defensive copy of the most recently fetched roots (nil until the first successful fetch). Safe to call concurrently.
-- **Fetch timeout** is a hardcoded 30s. Follow-up for `WithRootsFetchTimeout(d)` option.
+- **`WithRootsFetchTimeout(d)`** (#198): sets the deadline for `roots/list` requests. Default 30s. Propagated to per-session dispatchers via `newSession`.
 - **De-duplication**: a burst of `list_changed` notifications coalesces to at most one in-flight fetch + one coalesced re-fetch via `rootsFetching`/`rootsStale` under `rootsMu`. The in-flight goroutine's defer block re-dispatches if another notification landed mid-flight.
 - **Concurrency rule**: `rootsMu` must never be held across the outbound RPC or the user callback. Enforced by keeping all `rootsMu` uses inside `server/roots.go`.
 - **`core.Root`** / `core.RootsListResult` types live in `core/protocol.go`.
-- **Not yet integrated**: dynamic `WithAllowedRoots` update from client-provided roots. Deferred to its own issue — crosses a design boundary (client-provided roots as server-enforced sandbox).
+- **Allowed-roots enforcement (#197)**: `core.IsPathAllowed(ctx, path)` checks whether a file path falls within the session's enforced roots. `core.AllowedRoots(ctx)` returns the current snapshot. Enforcement is opt-in (handler-side helper, not automatic middleware). The enforced set is computed by `Dispatcher.effectiveAllowedRoots()`:
+  - If `WithAllowedRoots` is set AND client roots exist: **intersection** (path must be within both the static and dynamic sets).
+  - If only `WithAllowedRoots` is set: static list only.
+  - If only client roots exist: client roots converted from `file://` URIs via `core.FileURIToPath`.
+  - If neither: `nil` (no restriction — `IsPathAllowed` returns true for all paths).
+- **`core.FileURIToPath(uri)`**: strips `file://` prefix for path matching. Does NOT URL-decode (follow-up if needed).
 
 ### Concurrent Request Handling (#86)
 - **Duplicate request IDs rejected** via `LoadOrStore` on inflight map.
