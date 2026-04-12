@@ -93,11 +93,11 @@ func (t *InProcessTransport) Connect(ctx context.Context) error {
 		}
 	})
 
-	// Wire pushRequest for server-to-client requests (sampling, elicitation).
-	// The server pushes a JSON-RPC request; we dispatch to the handler and
-	// route the response back to the dispatcher's pending map.
+	// Wire pushRequest for server-to-client requests (sampling, elicitation,
+	// roots/list). The server pushes a JSON-RPC request; we dispatch to the
+	// handler and route the response back to the dispatcher's pending map.
 	if t.reqHandler != nil {
-		t.dispatcher.pushRequest = func(raw json.RawMessage) {
+		t.dispatcher.SetPushRequest(func(raw json.RawMessage) {
 			var req core.Request
 			if err := json.Unmarshal(raw, &req); err != nil {
 				return
@@ -106,7 +106,7 @@ func (t *InProcessTransport) Connect(ctx context.Context) error {
 			if resp != nil {
 				t.dispatcher.RouteResponse(resp)
 			}
-		}
+		})
 	}
 	return nil
 }
@@ -116,8 +116,8 @@ func (t *InProcessTransport) Connect(ctx context.Context) error {
 func (t *InProcessTransport) Call(ctx context.Context, req *core.Request) (*core.Response, error) {
 	// Build request func from dispatcher's push + pending infrastructure
 	var requestFunc core.RequestFunc
-	if t.dispatcher.pushRequest != nil {
-		requestFunc = t.dispatcher.makeRequestFunc(t.dispatcher.pushRequest)
+	if push := t.dispatcher.getPushRequest(); push != nil {
+		requestFunc = t.dispatcher.makeRequestFunc(push)
 	}
 
 	resp := t.server.dispatchWithNotifyAndRequest(

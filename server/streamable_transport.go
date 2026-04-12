@@ -482,6 +482,16 @@ func (c *streamableSSEConn) OnStart(w http.ResponseWriter, r *http.Request) erro
 		})
 	})
 
+	// Persistent push function for server-initiated JSON-RPC requests
+	// (roots/list, keepalive, etc.). Writes via emitSSEEvent so event IDs and
+	// the optional event store stay consistent with notifyFunc's output.
+	pushFunc := func(raw json.RawMessage) {
+		emitSSEEvent(c.dispatcher.eventIDs, store, sessionID, raw, func(id string, data json.RawMessage) {
+			hub.SendEventWithID(sessionID, "message", id, SSEJSON(data))
+		})
+	}
+	c.dispatcher.SetPushRequest(pushFunc)
+
 	// Replay missed events if client reconnected with Last-Event-ID
 	if lastID := r.Header.Get("Last-Event-ID"); lastID != "" && store != nil {
 		events, _ := store.Replay(sessionID, lastID)
@@ -490,13 +500,9 @@ func (c *streamableSSEConn) OnStart(w http.ResponseWriter, r *http.Request) erro
 		}
 	}
 
-	// Start keepalive pings if configured. Uses the GET SSE stream's hub
-	// connection as the push function for server-to-client requests.
+	// Start keepalive pings if configured. Reuses the persistent pushFunc.
 	cfg := c.transport.config
 	if cfg.keepaliveInterval > 0 && c.entry != nil {
-		pushFunc := func(raw json.RawMessage) {
-			hub.SendEventWithID(sessionID, "message", c.dispatcher.eventIDs.Next(), SSEJSON(raw))
-		}
 		maxFails := cfg.keepaliveMaxFails
 		if maxFails <= 0 {
 			maxFails = 3
@@ -518,6 +524,9 @@ func (c *streamableSSEConn) OnClose() {
 	if c.keepalive != nil {
 		c.keepalive.stop()
 	}
+	// Clear the persistent push function: the underlying hub connection is
+	// about to go away. A later GET SSE stream will re-wire via OnStart.
+	c.dispatcher.SetPushRequest(nil)
 	c.transport.sseHub.Unregister(c.ConnId())
 	if c.entry != nil {
 		c.entry.idleTimer.Release()
