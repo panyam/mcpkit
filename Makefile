@@ -19,6 +19,34 @@ test-race: ## Run unit tests with race detector
 test-v: ## Run unit tests with verbose output
 	go test ./... -count=1 -timeout 30s -v
 
+cover: ## Run tests with coverage summary (root module only)
+	go test -cover ./... -count=1 -timeout 30s
+
+cover-html: ## Run tests with coverage and generate HTML report (root module only)
+	@mkdir -p $(REPORT_DIR)
+	go test -coverprofile=$(REPORT_DIR)/coverage.out ./... -count=1 -timeout 30s
+	go tool cover -html=$(REPORT_DIR)/coverage.out -o $(REPORT_DIR)/coverage.html
+	@echo "Coverage report: $(REPORT_DIR)/coverage.html"
+
+cover-func: ## Show per-function coverage sorted by lowest (root module only)
+	@mkdir -p $(REPORT_DIR)
+	go test -coverprofile=$(REPORT_DIR)/coverage.out ./... -count=1 -timeout 30s
+	go tool cover -func=$(REPORT_DIR)/coverage.out | sort -k3 -n | head -30
+
+cover-all: ## Run coverage across root + all sub-modules, generate per-module HTML reports
+	@mkdir -p $(REPORT_DIR)
+	@echo "==> coverage: root module"
+	@go test -coverprofile=$(REPORT_DIR)/coverage-root.out ./... -count=1 -timeout 30s
+	@go tool cover -html=$(REPORT_DIR)/coverage-root.out -o $(REPORT_DIR)/coverage-root.html
+	@for mod in ext/auth ext/ui; do \
+		echo "==> coverage: $$mod"; \
+		(cd $$mod && go test -coverprofile=../../$(REPORT_DIR)/coverage-$$(echo $$mod | tr / -).out ./... -count=1 -timeout 30s) || true; \
+		go tool cover -html=$(REPORT_DIR)/coverage-$$(echo $$mod | tr / -).out -o $(REPORT_DIR)/coverage-$$(echo $$mod | tr / -).html 2>/dev/null || true; \
+	done
+	@echo ""
+	@echo "Coverage reports:"
+	@ls -1 $(REPORT_DIR)/coverage-*.html 2>/dev/null
+
 smoke: ## Run smoke tests (starts test servers, tests both transports via curl)
 	bash scripts/smoke-test.sh
 
@@ -65,7 +93,7 @@ testall: ## Run ALL tests (starts Keycloak if needed) + generate HTML report
 	@echo "Started: $$(date)" | tee -a $(REPORT_DIR)/run.log
 	@PASS=0; FAIL=0; STAGES=""; \
 	echo "" | tee -a $(REPORT_DIR)/run.log; \
-	$(call run_stage,1,8,unit,test) \
+	$(call run_stage,1,8,unit+coverage,cover-html) \
 	$(call run_stage,2,8,race,test-race) \
 	$(call run_stage,3,8,auth,test-auth) \
 	$(call run_stage,4,8,ui,test-ui) \
@@ -306,5 +334,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-race test-v test-auth test-ui test-e2e test-apps-playwright testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs help
+.PHONY: build test test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-e2e test-apps-playwright testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs help
 .DEFAULT_GOAL := help
