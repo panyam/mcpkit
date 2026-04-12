@@ -157,8 +157,15 @@ mcpkit/
 - **`defaultPageSize = 0`** — returns all by default (backward compatible).
 
 ### Roots Lifecycle (#26)
-- **`notifications/roots/list_changed`** handled — marks stale, calls `WithOnRootsChanged(fn)` callback.
-- **`core.Root`** type. Server-to-client `roots/list` fetch deferred.
+- **`notifications/roots/list_changed`** handled — the server issues a server-to-client `roots/list` request, stores the response on the per-session dispatcher, and invokes `WithOnRootsChanged(fn)` **with the populated list**. The callback fires *after* the fetch completes (not at notification time), so it always sees real data; if the fetch fails, the callback does not fire and the error is logged.
+- **Capability gate**: only clients that declared `capabilities.roots.listChanged` during `initialize` receive the `roots/list` request. Clients without the capability silently skip the fetch.
+- **Persistent `pushRequest` required**: the fetch uses `Dispatcher.pushRequest` to issue the outbound request. Stdio, in-process, and the SSE/Streamable-HTTP GET SSE stream all wire this persistently on the session dispatcher via `Dispatcher.SetPushRequest`. Streamable HTTP sessions without an open GET SSE stream (or between stream reconnects) have `pushRequest == nil`; in that state a `list_changed` notification marks `rootsStale = true` without fetching, and the next notification after a stream opens will drive the fetch.
+- **`Dispatcher.Roots() []core.Root`** returns a defensive copy of the most recently fetched roots (nil until the first successful fetch). Safe to call concurrently.
+- **Fetch timeout** is a hardcoded 30s. Follow-up for `WithRootsFetchTimeout(d)` option.
+- **De-duplication**: a burst of `list_changed` notifications coalesces to at most one in-flight fetch + one coalesced re-fetch via `rootsFetching`/`rootsStale` under `rootsMu`. The in-flight goroutine's defer block re-dispatches if another notification landed mid-flight.
+- **Concurrency rule**: `rootsMu` must never be held across the outbound RPC or the user callback. Enforced by keeping all `rootsMu` uses inside `server/roots.go`.
+- **`core.Root`** / `core.RootsListResult` types live in `core/protocol.go`.
+- **Not yet integrated**: dynamic `WithAllowedRoots` update from client-provided roots. Deferred to its own issue — crosses a design boundary (client-provided roots as server-enforced sandbox).
 
 ### Concurrent Request Handling (#86)
 - **Duplicate request IDs rejected** via `LoadOrStore` on inflight map.
