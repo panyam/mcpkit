@@ -103,26 +103,44 @@ type OAuthTokenSource struct {
 	token    string
 	expiry   time.Time
 
+	// memoryStore is the default backing store for the AuthClient when
+	// s.CredStore is nil. Allocated lazily on first Token() call; holds
+	// refresh tokens between Token() invocations so the refresh path can
+	// fire without forcing external persistence. Mutated only under s.mu.
+	memoryStore *MemoryCredentialStore
+
 	// dcrClientID/dcrClientSecret are cached from a successful DCR call.
 	dcrClientID     string
 	dcrClientSecret string
 }
 
 // Token implements core.TokenSource.
-// Returns a cached token if valid, or runs the full MCP OAuth discovery + auth flow.
+//
+// Attempts are ordered cheap-to-expensive:
+//  1. In-memory cached token still valid                        -> return it
+//  2. CredStore has a non-expired credential (fast path)        -> cache + return
+//  3. Refresh path: if the stored credential has a refresh token
+//     and the scope set still covers s.Scopes, exchange it for a
+//     new access token via AuthClient.GetToken -> refreshTokenLocked
+//  4. Full LoginWithBrowser flow (opens a browser tab)
+//
+// The refresh path requires a non-nil CredentialStore on the
+// AuthClient; when s.CredStore is nil, an internal in-memory store is
+// used so refresh tokens issued by LoginWithBrowser can be exercised on
+// subsequent calls without forcing external persistence.
 func (s *OAuthTokenSource) Token() (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Return cached token if still valid
+	// (1) Return cached token if still valid.
 	if s.token != "" && time.Now().Add(tokenExpiryBuffer).Before(s.expiry) {
 		return s.token, nil
 	}
 
-	// Try loading from credential store
+	// (2) Try loading from the external credential store.
 	if s.CredStore != nil {
 		cred, err := s.CredStore.GetCredential(s.ServerURL)
-		if err == nil && cred != nil && !cred.IsExpired() {
+		if err == nil && cred != nil && !cred.IsExpired() && credentialCoversScopes(cred, s.Scopes) {
 			s.token = cred.AccessToken
 			s.expiry = cred.ExpiresAt
 			return s.token, nil
@@ -169,22 +187,42 @@ func (s *OAuthTokenSource) Token() (string, error) {
 		return "", fmt.Errorf("client registration: %w", err)
 	}
 
-	// Lazy-init the AuthClient with the discovered AS URL. Pass through the
-	// OnToken callback so refresh_token grant exchanges in the underlying
-	// client fire the consumer's persistence hook (#137, oneauth#82).
+	// Lazy-init the AuthClient with the discovered AS URL. Always supply a
+	// non-nil store so AuthClient.GetToken (the refresh path) has
+	// somewhere to read the current credential from; fall back to an
+	// internal MemoryCredentialStore when no external CredStore is set.
+	// Pass through the OnToken callback so refresh_token grant exchanges
+	// fire the consumer's persistence hook (#137, oneauth#82).
 	if s.oaClient == nil {
 		issuer := s.authInfo.AuthorizationServers[0]
-		var store client.CredentialStore
-		if s.CredStore != nil {
-			store = s.CredStore
-		}
+		store := s.credStore()
 		s.oaClient = client.NewAuthClient(issuer, store)
 		if s.OnToken != nil {
 			s.oaClient.OnToken = s.OnToken
 		}
 	}
 
-	// Full browser login flow with explicit endpoints from discovery.
+	// (3) Refresh path: ask the AuthClient for a valid token. GetToken
+	// checks the stored credential, sees it's expiring soon, and calls
+	// refreshTokenLocked automatically. Returns empty if the store is
+	// empty (first run) or the refresh fails — we treat either case as
+	// "fall through to browser login" below.
+	//
+	// Skipped if the stored credential no longer covers the requested
+	// scope set — a refresh exchange with the same scopes would not
+	// help, so we re-run the full flow to widen the grant.
+	if s.canTryRefresh() {
+		if tok, err := s.oaClient.GetToken(); err == nil && tok != "" {
+			cred, _ := s.oaClient.GetCredential()
+			if cred != nil && !cred.IsExpired() && credentialCoversScopes(cred, scopes) {
+				s.token = tok
+				s.expiry = cred.ExpiresAt
+				return tok, nil
+			}
+		}
+	}
+
+	// (4) Full browser login flow with explicit endpoints from discovery.
 	// Pass TokenEndpointAuthMethods from AS metadata so auth method negotiation
 	// works correctly even with explicit endpoints (oneauth#74).
 	loginCfg := client.BrowserLoginConfig{
@@ -213,14 +251,88 @@ func (s *OAuthTokenSource) Token() (string, error) {
 	return s.token, nil
 }
 
+// credStore returns the CredentialStore the underlying AuthClient should
+// use. Prefers the caller-supplied s.CredStore for external persistence;
+// falls back to an internal MemoryCredentialStore so the refresh path has
+// somewhere to read the current credential from even when the caller
+// doesn't care about cross-process persistence.
+//
+// Called only while s.mu is held. The internal memory store is allocated
+// once and cached on s.memoryStore.
+func (s *OAuthTokenSource) credStore() client.CredentialStore {
+	if s.CredStore != nil {
+		return s.CredStore
+	}
+	if s.memoryStore == nil {
+		s.memoryStore = NewMemoryCredentialStore()
+	}
+	return s.memoryStore
+}
+
+// canTryRefresh reports whether the refresh path has a chance of
+// returning a usable token. Called only while s.mu is held.
+func (s *OAuthTokenSource) canTryRefresh() bool {
+	if s.oaClient == nil {
+		return false
+	}
+	cred, err := s.oaClient.GetCredential()
+	if err != nil || cred == nil {
+		return false
+	}
+	if !cred.HasRefreshToken() {
+		return false
+	}
+	return credentialCoversScopes(cred, s.Scopes)
+}
+
+// credentialCoversScopes reports whether the stored credential's scope
+// set is a superset of the requested scopes. A credential issued for
+// [read] cannot be refreshed into [read, write] via the refresh_token
+// grant on most AS implementations — we have to re-run the full flow to
+// widen the grant. Returns true when required is empty (nothing to
+// cover).
+//
+// Scope comparison is space-separated per RFC 6749 §3.3.
+func credentialCoversScopes(cred *client.ServerCredential, required []string) bool {
+	if cred == nil {
+		return false
+	}
+	if len(required) == 0 {
+		return true
+	}
+	have := make(map[string]struct{})
+	for _, s := range strings.Fields(cred.Scope) {
+		have[s] = struct{}{}
+	}
+	for _, s := range required {
+		if _, ok := have[s]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 // TokenForScopes implements core.ScopeAwareTokenSource.
-// Invalidates the cached token and triggers a new OAuth flow with the
-// requested scopes merged into the existing scope set.
+// Invalidates the cached token and the stored credential (if any), merges
+// the requested scopes into the existing scope set, and triggers a fresh
+// OAuth flow. Stored-credential invalidation is required so the refresh
+// path cannot silently return a token scoped to the old grant — step-up
+// must re-run LoginWithBrowser to widen the scope set.
 func (s *OAuthTokenSource) TokenForScopes(scopes []string) (string, error) {
 	s.mu.Lock()
 	s.token = ""
 	s.expiry = time.Time{}
 	s.Scopes = core.UnionScopes(s.Scopes, scopes)
+	// Wipe the stored credential so Token() skips the refresh path and
+	// goes straight to LoginWithBrowser on the next call. Applies to
+	// both user-provided CredStore and the internal memoryStore — both
+	// are aliased by s.credStore() and managed through the same
+	// AuthClient. Errors are logged-and-swallowed because the fallback
+	// (full re-login) is still correct; we only care that the refresh
+	// path doesn't short-circuit.
+	if store := s.credStore(); store != nil {
+		_ = store.RemoveCredential(s.ServerURL)
+	}
 	s.mu.Unlock()
 
 	return s.Token()
