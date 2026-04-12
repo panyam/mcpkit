@@ -135,10 +135,18 @@ mcpkit/
 - **Client tracks `lastEventID`**: `atomic.Value` on `Client`, updated by background SSE readers. Survives transport recreation during reconnection.
 
 ### SSE Retry Hint (#72)
-- **`core.EmitSSERetry(ctx, retryAfter)`**: tool/resource/prompt handlers call this to emit a raw SSE `retry:` field on the current stream. Clients treat it as the next reconnection delay (per WHATWG SSE spec). Non-positive durations are dropped. Only supported on the **2024-11-25 SSE transport** today — stdio, in-process, and Streamable HTTP paths silently no-op. Streamable HTTP GET SSE support is a follow-up.
-- **Mechanism**: `sseSessionEntry.conn` holds a live `*mcpSSEConn` pointer per session. `dispatchWithOpts` wires a closure `func(ms int) { entry.conn.SendRetry(ms) }` into `sessionCtx.sseRetry` via `core.SetSSERetryHint`. `EmitSSERetry` reads `sessionCtx.sseRetry` and calls it. Reconnect paths refresh `entry.conn` so a long-running handler's retry hint always reaches the current stream.
+- **`core.EmitSSERetry(ctx, retryAfter)`**: tool/resource/prompt handlers call this to emit a raw SSE `retry:` field on the current stream. Clients treat it as the next reconnection delay (per WHATWG SSE spec). Non-positive durations are dropped. Supported on **both SSE transport (2024-11-25) and Streamable HTTP** — stdio and in-process silently no-op.
+- **SSE transport**: `sseSessionEntry.conn` holds a live `*mcpSSEConn` pointer. The retry hint goes to the session's long-lived SSE stream.
+- **Streamable HTTP (#202)**: `sessionEntry.getConn` holds a live `*streamableSSEConn` pointer to the session's GET SSE stream (if one is open). POST handlers calling `EmitSSERetry` route the hint to the GET stream via `dispatchWithOpts`. When no GET stream is open, the hint is a silent no-op. The `getConn` pointer is refreshed on reconnect (identity-checked on close to prevent stale clears).
 - **Hint-only, not close**: the server does NOT disconnect the stream when `EmitSSERetry` is called. It's a forward-looking reconnect delay. Combine with `WithSSEGracePeriod` + `WithEventStore` for the full "drop and resume" pattern.
 - **Servicekit support**: requires `servicekit v0.0.23+` (`SSEOutgoingMessage.Retry` field + `BaseSSEConn.SendRetry`).
+
+### Tool Context Detachment (#203)
+- **`core.DetachFromClient(ctx)`**: returns a context that preserves all session state (EmitLog, EmitSSERetry, Sample, Elicit, AuthClaims) but is NOT cancelled when the client's HTTP request context or per-tool timeout fires. Uses `context.WithoutCancel` (Go 1.21+).
+- **Use case**: long-running tools that need to continue processing after the client disconnects. Combine with `EmitSSERetry` (hint the client to reconnect later) + `WithSSEGracePeriod` + `WithEventStore` (buffer the result for replay on reconnection).
+- **Strips inherited timeouts**: `ToolDef.Timeout` and `WithToolTimeout` are applied BEFORE the handler runs. `DetachFromClient` removes them. Handlers that need a deadline after detach must set their own via `context.WithTimeout`.
+- **Session reaping caveat**: `WithSessionTimeout` may still reap the session while a detached tool runs if the client doesn't reconnect within the idle window. Use a generous `WithSSEGracePeriod` to keep the session alive.
+- **Opt-in, per-handler**: the default behavior (tool cancelled on disconnect/timeout) is unchanged. Only tools that call `DetachFromClient` get the detached behavior. This is a handler-level decision, not a ToolDef flag — the handler knows whether it needs to survive disconnection.
 
 ### Single-Struct Registration (#41)
 - **`server.Register(items ...any)`**: Accepts `server.Tool`, `server.Resource`, `server.ResourceTemplate`, `server.Prompt` — bundles def + handler in one struct.
