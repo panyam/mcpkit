@@ -170,6 +170,8 @@ Running client scenario 'tools-call-with-progress' against server: http://localh
 2026/04/11 20:29:37 Closed MCP-GET-SSE SSE connection: 325a46c9486f4a2acf51af8eefdce762
 
 === Running scenario: tools-call-sampling ===
+2026/04/11 18:07:23 Finished cleaning up writer:  0x1351fab867e0
+2026/04/11 18:07:23 Closed MCP-GET-SSE SSE connection: be7f7a9c61c6448f7457c97703e167a3
 Running client scenario 'tools-call-sampling' against server: http://localhost:18799/mcp
 2026/04/11 20:29:37 Starting MCP-GET-SSE SSE connection: 3c32fc4a51be8317a2609370255a5258
 2026/04/11 20:29:37 SSEHub: registered connection 3c32fc4a51be8317a2609370255a5258 (total: 1)
@@ -180,6 +182,7 @@ Running client scenario 'tools-call-sampling' against server: http://localhost:1
 2026/04/11 20:29:37 Closed MCP-GET-SSE SSE connection: 3c32fc4a51be8317a2609370255a5258
 
 === Running scenario: tools-call-elicitation ===
+2026/04/11 18:07:23 SSEHub: unregistered connection b5238a38d54e2b566f5365be2a0619c4 (total: 0)
 Running client scenario 'tools-call-elicitation' against server: http://localhost:18799/mcp
 2026/04/11 20:29:37 Starting MCP-GET-SSE SSE connection: dffbb1cc4cd3f6bb2fbd965aa542c7ec
 2026/04/11 20:29:37 SSEHub: registered connection dffbb1cc4cd3f6bb2fbd965aa542c7ec (total: 1)
@@ -220,6 +223,7 @@ Running client scenario 'elicitation-sep1330-enums' against server: http://local
 2026/04/11 20:29:37 Closed MCP-GET-SSE SSE connection: 929b552c989c94e586229432ce251e20
 
 === Running scenario: resources-list ===
+2026/04/11 18:07:23 Cleaning up writer...
 Running client scenario 'resources-list' against server: http://localhost:18799/mcp
 2026/04/11 20:29:37 Starting MCP-GET-SSE SSE connection: a1c81086a2948d1a4ce6f338416c6609
 2026/04/11 20:29:37 SSEHub: registered connection a1c81086a2948d1a4ce6f338416c6609 (total: 1)
@@ -270,6 +274,8 @@ Running client scenario 'resources-subscribe' against server: http://localhost:1
 2026/04/11 20:29:37 Closed MCP-GET-SSE SSE connection: 8cb7f819a4c8ee6358d945b08092a422
 
 === Running scenario: resources-unsubscribe ===
+2026/04/11 18:07:23 Finished cleaning up writer:  0x1351fab87880
+2026/04/11 18:07:23 Closed MCP-GET-SSE SSE connection: a908310287022bc5e580dac68ce43d5d
 Running client scenario 'resources-unsubscribe' against server: http://localhost:18799/mcp
 2026/04/11 20:29:37 Starting MCP-GET-SSE SSE connection: 11fc92957c8a6778cd20de5c2a6e3a1a
 2026/04/11 20:29:37 SSEHub: registered connection 11fc92957c8a6778cd20de5c2a6e3a1a (total: 1)
@@ -320,6 +326,8 @@ Running client scenario 'prompts-get-embedded-resource' against server: http://l
 2026/04/11 20:29:37 Closed MCP-GET-SSE SSE connection: a36bebbbf74b1ef45000f443f6bb869b
 
 === Running scenario: prompts-get-with-image ===
+2026/04/11 18:07:23 Received kill signal.  Quitting Writer. stop 0x1351faa37880
+2026/04/11 18:07:23 Cleaning up writer...
 Running client scenario 'prompts-get-with-image' against server: http://localhost:18799/mcp
 2026/04/11 20:29:37 Starting MCP-GET-SSE SSE connection: cdc8ee68e1cf17b13ebd97fb2edcda36
 2026/04/11 20:29:37 SSEHub: registered connection cdc8ee68e1cf17b13ebd97fb2edcda36 (total: 1)
