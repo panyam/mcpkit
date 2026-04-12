@@ -18,7 +18,8 @@
 - mcp-client-auth: WithClientBearerToken, WithTokenSource — auth header injection on all client requests
 - mcp-auth-conformance: 14/14 required auth conformance scenarios passing (210/210 checks)
 - mcp-tool-timeout: context.WithTimeout wrapper for tool execution
-- mcp-allowed-roots: Restrict tool cwd to allowed directories (option registered, not enforced yet)
+- mcp-allowed-roots: WithAllowedRoots + core.IsPathAllowed — per-session sandbox enforcement using intersection of static server roots and dynamic client roots. Handler-side helper, not automatic middleware. (#197)
+- mcp-roots-fetch-timeout: WithRootsFetchTimeout — configurable deadline for server-to-client roots/list requests. Default 30s. (#198)
 - mcp-resources: resources/list, resources/read, resources/templates/list with URI template matching
 - mcp-prompts: prompts/list, prompts/get with argument passing
 - mcp-prompt-argument-schema: PromptArgument.Schema — declarative JSON Schema on prompt arguments (mirrors ToolDef.InputSchema). Clients render typed inputs; server-side validation tracked by #184 (#87)
