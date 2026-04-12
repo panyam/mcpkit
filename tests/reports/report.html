@@ -15,7 +15,7 @@ th { background: #f5f5f5; font-weight: 600; }
 pre { background: #f6f8fa; padding: 16px; border-radius: 6px; overflow-x: auto; font-size: 13px; max-height: 400px; overflow-y: auto; }
 </style></head><body>
 <h1>MCPKit Test Report</h1>
-<div class='meta'>Branch: <strong>feature/streamable-sse-retry-202</strong> | Commit: <code>af9926c</code> | Date: 2026-04-12 01:40:30</div>
+<div class='meta'>Branch: <strong>feature/roots-timeout-and-sandbox-197-198</strong> | Commit: <code>40bb4d1</code> | Date: 2026-04-12 02:25:36</div>
 <table><tr><th>Stage</th><th>Result</th></tr>
 <tr><td>unit+coverage</td><td class='pass'>PASS</td></tr>
 <tr><td>race</td><td class='pass'>PASS</td></tr>
@@ -29,37 +29,37 @@ pre { background: #f6f8fa; padding: 16px; border-radius: 6px; overflow-x: auto; 
 <div class='summary-pass'>All 8 stages passed</div>
 <h2>Full Log</h2><pre>
 === MCPKit Comprehensive Test Suite ===
-Started: Sun Apr 12 01:39:46 PDT 2026
+Started: Sun Apr 12 02:24:48 PDT 2026
 
 --- [1/8] unit+coverage ---
-ok  	github.com/panyam/mcpkit/client	8.376s	coverage: 67.4% of statements
+ok  	github.com/panyam/mcpkit/client	7.625s	coverage: 67.4% of statements
 	github.com/panyam/mcpkit/cmd/testserver		coverage: 0.0% of statements
-ok  	github.com/panyam/mcpkit/core	0.647s	coverage: 60.0% of statements
-ok  	github.com/panyam/mcpkit/server	13.963s	coverage: 79.2% of statements
-ok  	github.com/panyam/mcpkit/testutil	1.288s	coverage: 70.5% of statements
+ok  	github.com/panyam/mcpkit/core	0.786s	coverage: 61.4% of statements
+ok  	github.com/panyam/mcpkit/server	14.023s	coverage: 77.9% of statements
+ok  	github.com/panyam/mcpkit/testutil	1.114s	coverage: 70.5% of statements
 Coverage report: tests/reports/coverage.html
   PASS: unit+coverage
 --- [2/8] race ---
-ok  	github.com/panyam/mcpkit/client	8.663s
+ok  	github.com/panyam/mcpkit/client	8.983s
 ?   	github.com/panyam/mcpkit/cmd/testserver	[no test files]
-ok  	github.com/panyam/mcpkit/core	1.697s
-ok  	github.com/panyam/mcpkit/server	15.255s
-ok  	github.com/panyam/mcpkit/testutil	2.437s
+ok  	github.com/panyam/mcpkit/core	1.422s
+ok  	github.com/panyam/mcpkit/server	15.437s
+ok  	github.com/panyam/mcpkit/testutil	2.316s
   PASS: race
 --- [3/8] auth ---
-ok  	github.com/panyam/mcpkit/ext/auth	0.383s
+ok  	github.com/panyam/mcpkit/ext/auth	0.285s
   PASS: auth
 --- [4/8] ui ---
-ok  	github.com/panyam/mcpkit/ext/ui	0.310s
+ok  	github.com/panyam/mcpkit/ext/ui	0.497s
   PASS: ui
 --- [5/8] e2e ---
-ok  	github.com/panyam/mcpkit/tests/e2e	3.761s
-ok  	github.com/panyam/mcpkit/tests/e2e/apps	0.420s
+ok  	github.com/panyam/mcpkit/tests/e2e	4.086s
+ok  	github.com/panyam/mcpkit/tests/e2e/apps	0.658s
   PASS: e2e
 --- [6/8] conformance ---
 Killing stale process on port 18799...
 === Starting test server on :18799 (Streamable HTTP) ===
-Waiting for server....2026/04/12 01:40:24 MCP test server listening on :18799 (Streamable HTTP at /mcp)
+Waiting for server....2026/04/12 02:25:31 MCP test server listening on :18799 (Streamable HTTP at /mcp)
  ready
 
 === Running MCP conformance suite ===
@@ -70,296 +70,296 @@ Running active suite (30 scenarios) against http://localhost:18799/mcp
 
 === Running scenario: server-initialize ===
 Running client scenario 'server-initialize' against server: http://localhost:18799/mcp
-2026/04/12 01:40:26 Starting MCP-GET-SSE SSE connection: da5b224cf9a23670db7d1b8f699bd70e
-2026/04/12 01:40:26 SSEHub: registered connection da5b224cf9a23670db7d1b8f699bd70e (total: 1)
-2026/04/12 01:40:26 SSEHub: unregistered connection da5b224cf9a23670db7d1b8f699bd70e (total: 0)
-2026/04/12 01:40:26 Received kill signal.  Quitting Writer. stop 0x328b7bc50b60
-2026/04/12 01:40:26 Cleaning up writer...
-2026/04/12 01:40:26 Finished cleaning up writer:  0x328b7bc50b60
-2026/04/12 01:40:26 Closed MCP-GET-SSE SSE connection: da5b224cf9a23670db7d1b8f699bd70e
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: 0d0448cc3b8932134d76f7e2846be896
+2026/04/12 02:25:32 SSEHub: registered connection 0d0448cc3b8932134d76f7e2846be896 (total: 1)
+2026/04/12 02:25:32 SSEHub: unregistered connection 0d0448cc3b8932134d76f7e2846be896 (total: 0)
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f8bbe230
+2026/04/12 02:25:32 Cleaning up writer...
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f8bbe230
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: 0d0448cc3b8932134d76f7e2846be896
 
 === Running scenario: logging-set-level ===
 Running client scenario 'logging-set-level' against server: http://localhost:18799/mcp
-2026/04/12 01:40:27 Starting MCP-GET-SSE SSE connection: b29a4027e58d30c8c004d48e6fc66457
-2026/04/12 01:40:27 SSEHub: registered connection b29a4027e58d30c8c004d48e6fc66457 (total: 1)
-2026/04/12 01:40:27 SSEHub: unregistered connection b29a4027e58d30c8c004d48e6fc66457 (total: 0)
-2026/04/12 01:40:27 Received kill signal.  Quitting Writer. stop 0x328b7bd3c310
-2026/04/12 01:40:27 Cleaning up writer...
-2026/04/12 01:40:27 Finished cleaning up writer:  0x328b7bd3c310
-2026/04/12 01:40:27 Closed MCP-GET-SSE SSE connection: b29a4027e58d30c8c004d48e6fc66457
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: 716a5e0e07cec74c5d38c6f774345138
+2026/04/12 02:25:32 SSEHub: registered connection 716a5e0e07cec74c5d38c6f774345138 (total: 1)
+2026/04/12 02:25:32 SSEHub: unregistered connection 716a5e0e07cec74c5d38c6f774345138 (total: 0)
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f8bbe4d0
+2026/04/12 02:25:32 Cleaning up writer...
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f8bbe4d0
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: 716a5e0e07cec74c5d38c6f774345138
 
 === Running scenario: ping ===
 Running client scenario 'ping' against server: http://localhost:18799/mcp
-2026/04/12 01:40:27 Starting MCP-GET-SSE SSE connection: b55d834a0fb640e975b42985815b27bd
-2026/04/12 01:40:27 SSEHub: registered connection b55d834a0fb640e975b42985815b27bd (total: 1)
-2026/04/12 01:40:27 SSEHub: unregistered connection b55d834a0fb640e975b42985815b27bd (total: 0)
-2026/04/12 01:40:27 Received kill signal.  Quitting Writer. stop 0x328b7bd3c5b0
-2026/04/12 01:40:27 Cleaning up writer...
-2026/04/12 01:40:27 Finished cleaning up writer:  0x328b7bd3c5b0
-2026/04/12 01:40:27 Closed MCP-GET-SSE SSE connection: b55d834a0fb640e975b42985815b27bd
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: e2a64f1855fd7274a785e2a93919c006
+2026/04/12 02:25:32 SSEHub: registered connection e2a64f1855fd7274a785e2a93919c006 (total: 1)
+2026/04/12 02:25:32 SSEHub: unregistered connection e2a64f1855fd7274a785e2a93919c006 (total: 0)
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f8bbe770
+2026/04/12 02:25:32 Cleaning up writer...
 
 === Running scenario: completion-complete ===
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f8bbe770
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: e2a64f1855fd7274a785e2a93919c006
 Running client scenario 'completion-complete' against server: http://localhost:18799/mcp
-2026/04/12 01:40:27 Starting MCP-GET-SSE SSE connection: d49fbd24267ba11e17ed435a3d12adf6
-2026/04/12 01:40:27 SSEHub: registered connection d49fbd24267ba11e17ed435a3d12adf6 (total: 1)
-2026/04/12 01:40:27 SSEHub: unregistered connection d49fbd24267ba11e17ed435a3d12adf6 (total: 0)
-2026/04/12 01:40:27 Received kill signal.  Quitting Writer. stop 0x328b7bd3c850
-2026/04/12 01:40:27 Cleaning up writer...
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: 9703a8fedfc60779aca4d9ecf7bf76d0
+2026/04/12 02:25:32 SSEHub: registered connection 9703a8fedfc60779aca4d9ecf7bf76d0 (total: 1)
+2026/04/12 02:25:32 SSEHub: unregistered connection 9703a8fedfc60779aca4d9ecf7bf76d0 (total: 0)
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f8bbea10
+2026/04/12 02:25:32 Cleaning up writer...
 
 === Running scenario: tools-list ===
-2026/04/12 01:40:27 Finished cleaning up writer:  0x328b7bd3c850
-2026/04/12 01:40:27 Closed MCP-GET-SSE SSE connection: d49fbd24267ba11e17ed435a3d12adf6
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f8bbea10
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: 9703a8fedfc60779aca4d9ecf7bf76d0
 Running client scenario 'tools-list' against server: http://localhost:18799/mcp
-2026/04/12 01:40:27 Starting MCP-GET-SSE SSE connection: 1434e440e4a827ecaa020db5cf17883f
-2026/04/12 01:40:27 SSEHub: registered connection 1434e440e4a827ecaa020db5cf17883f (total: 1)
-2026/04/12 01:40:27 SSEHub: unregistered connection 1434e440e4a827ecaa020db5cf17883f (total: 0)
-2026/04/12 01:40:27 Received kill signal.  Quitting Writer. stop 0x328b7bc50e00
-2026/04/12 01:40:27 Cleaning up writer...
-2026/04/12 01:40:27 Finished cleaning up writer:  0x328b7bc50e00
-2026/04/12 01:40:27 Closed MCP-GET-SSE SSE connection: 1434e440e4a827ecaa020db5cf17883f
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: c00f26e5aa3c62421bbafe3e2fc73e82
+2026/04/12 02:25:32 SSEHub: registered connection c00f26e5aa3c62421bbafe3e2fc73e82 (total: 1)
 
 === Running scenario: tools-call-simple-text ===
+2026/04/12 02:25:32 SSEHub: unregistered connection c00f26e5aa3c62421bbafe3e2fc73e82 (total: 0)
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f883c310
 Running client scenario 'tools-call-simple-text' against server: http://localhost:18799/mcp
-2026/04/12 01:40:27 Starting MCP-GET-SSE SSE connection: 8018963241ad36bd4b7da27904549f0f
-2026/04/12 01:40:27 SSEHub: registered connection 8018963241ad36bd4b7da27904549f0f (total: 1)
-2026/04/12 01:40:27 SSEHub: unregistered connection 8018963241ad36bd4b7da27904549f0f (total: 0)
-2026/04/12 01:40:27 Received kill signal.  Quitting Writer. stop 0x328b7bc51030
-2026/04/12 01:40:27 Cleaning up writer...
-2026/04/12 01:40:27 Finished cleaning up writer:  0x328b7bc51030
-2026/04/12 01:40:27 Closed MCP-GET-SSE SSE connection: 8018963241ad36bd4b7da27904549f0f
+2026/04/12 02:25:32 Cleaning up writer...
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f883c310
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: c00f26e5aa3c62421bbafe3e2fc73e82
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: 981e43a292521907464f4c7ae2c73786
+2026/04/12 02:25:32 SSEHub: registered connection 981e43a292521907464f4c7ae2c73786 (total: 1)
+2026/04/12 02:25:32 SSEHub: unregistered connection 981e43a292521907464f4c7ae2c73786 (total: 0)
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f8726cb0
+2026/04/12 02:25:32 Cleaning up writer...
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f8726cb0
 
 === Running scenario: tools-call-image ===
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: 981e43a292521907464f4c7ae2c73786
 Running client scenario 'tools-call-image' against server: http://localhost:18799/mcp
-2026/04/12 01:40:27 Starting MCP-GET-SSE SSE connection: 3ca1189b076c267aef0467cea9eb90d1
-2026/04/12 01:40:27 SSEHub: registered connection 3ca1189b076c267aef0467cea9eb90d1 (total: 1)
-2026/04/12 01:40:27 SSEHub: unregistered connection 3ca1189b076c267aef0467cea9eb90d1 (total: 0)
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: b8259d05703c97fb8234d66be474cdec
+2026/04/12 02:25:32 SSEHub: registered connection b8259d05703c97fb8234d66be474cdec (total: 1)
+2026/04/12 02:25:32 SSEHub: unregistered connection b8259d05703c97fb8234d66be474cdec (total: 0)
 
 === Running scenario: tools-call-audio ===
-2026/04/12 01:40:27 Received kill signal.  Quitting Writer. stop 0x328b7c0b22a0
-2026/04/12 01:40:27 Cleaning up writer...
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f883c620
+2026/04/12 02:25:32 Cleaning up writer...
 Running client scenario 'tools-call-audio' against server: http://localhost:18799/mcp
-2026/04/12 01:40:27 Finished cleaning up writer:  0x328b7c0b22a0
-2026/04/12 01:40:27 Closed MCP-GET-SSE SSE connection: 3ca1189b076c267aef0467cea9eb90d1
-2026/04/12 01:40:27 Starting MCP-GET-SSE SSE connection: 08605a10b22d1fc3b3740c7ccd165809
-2026/04/12 01:40:27 SSEHub: registered connection 08605a10b22d1fc3b3740c7ccd165809 (total: 1)
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f883c620
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: b8259d05703c97fb8234d66be474cdec
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: 6162a1c2b7ac6d8efa418d89361e2d06
+2026/04/12 02:25:32 SSEHub: registered connection 6162a1c2b7ac6d8efa418d89361e2d06 (total: 1)
 
 === Running scenario: tools-call-embedded-resource ===
-2026/04/12 01:40:27 SSEHub: unregistered connection 08605a10b22d1fc3b3740c7ccd165809 (total: 0)
+2026/04/12 02:25:32 SSEHub: unregistered connection 6162a1c2b7ac6d8efa418d89361e2d06 (total: 0)
 Running client scenario 'tools-call-embedded-resource' against server: http://localhost:18799/mcp
-2026/04/12 01:40:27 Received kill signal.  Quitting Writer. stop 0x328b7c0b24d0
-2026/04/12 01:40:27 Cleaning up writer...
-2026/04/12 01:40:27 Finished cleaning up writer:  0x328b7c0b24d0
-2026/04/12 01:40:27 Closed MCP-GET-SSE SSE connection: 08605a10b22d1fc3b3740c7ccd165809
-2026/04/12 01:40:27 Starting MCP-GET-SSE SSE connection: 5005f68697a6ee4aa9757808f3a0c89d
-2026/04/12 01:40:27 SSEHub: registered connection 5005f68697a6ee4aa9757808f3a0c89d (total: 1)
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f87270a0
+2026/04/12 02:25:32 Cleaning up writer...
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f87270a0
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: 6162a1c2b7ac6d8efa418d89361e2d06
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: 590d5815524ac1ab96823b8b9b903021
+2026/04/12 02:25:32 SSEHub: registered connection 590d5815524ac1ab96823b8b9b903021 (total: 1)
+2026/04/12 02:25:32 SSEHub: unregistered connection 590d5815524ac1ab96823b8b9b903021 (total: 0)
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f8bbee70
 
 === Running scenario: tools-call-mixed-content ===
-2026/04/12 01:40:27 SSEHub: unregistered connection 5005f68697a6ee4aa9757808f3a0c89d (total: 0)
-2026/04/12 01:40:27 Received kill signal.  Quitting Writer. stop 0x328b7c0b2770
-2026/04/12 01:40:27 Cleaning up writer...
+2026/04/12 02:25:32 Cleaning up writer...
 Running client scenario 'tools-call-mixed-content' against server: http://localhost:18799/mcp
-2026/04/12 01:40:27 Finished cleaning up writer:  0x328b7c0b2770
-2026/04/12 01:40:27 Closed MCP-GET-SSE SSE connection: 5005f68697a6ee4aa9757808f3a0c89d
-2026/04/12 01:40:27 Starting MCP-GET-SSE SSE connection: f1ff3465f7d3bd2a56c5ae19f15048a4
-2026/04/12 01:40:27 SSEHub: registered connection f1ff3465f7d3bd2a56c5ae19f15048a4 (total: 1)
-2026/04/12 01:40:27 SSEHub: unregistered connection f1ff3465f7d3bd2a56c5ae19f15048a4 (total: 0)
-2026/04/12 01:40:27 Received kill signal.  Quitting Writer. stop 0x328b7c034310
-2026/04/12 01:40:27 Cleaning up writer...
-2026/04/12 01:40:27 Finished cleaning up writer:  0x328b7c034310
-2026/04/12 01:40:27 Closed MCP-GET-SSE SSE connection: f1ff3465f7d3bd2a56c5ae19f15048a4
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f8bbee70
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: 590d5815524ac1ab96823b8b9b903021
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: c42698a7e801d2427e41bbbd60682ff4
+2026/04/12 02:25:32 SSEHub: registered connection c42698a7e801d2427e41bbbd60682ff4 (total: 1)
+2026/04/12 02:25:32 SSEHub: unregistered connection c42698a7e801d2427e41bbbd60682ff4 (total: 0)
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f8bbef50
+2026/04/12 02:25:32 Cleaning up writer...
 
 === Running scenario: tools-call-with-logging ===
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f8bbef50
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: c42698a7e801d2427e41bbbd60682ff4
 Running client scenario 'tools-call-with-logging' against server: http://localhost:18799/mcp
-2026/04/12 01:40:27 Starting MCP-GET-SSE SSE connection: b735ae20a1f5476e9f44577374b311a2
-2026/04/12 01:40:27 SSEHub: registered connection b735ae20a1f5476e9f44577374b311a2 (total: 1)
-2026/04/12 01:40:27 SSEHub: unregistered connection b735ae20a1f5476e9f44577374b311a2 (total: 0)
-2026/04/12 01:40:27 Received kill signal.  Quitting Writer. stop 0x328b7c0b2a80
-2026/04/12 01:40:27 Cleaning up writer...
-2026/04/12 01:40:27 Finished cleaning up writer:  0x328b7c0b2a80
-2026/04/12 01:40:27 Closed MCP-GET-SSE SSE connection: b735ae20a1f5476e9f44577374b311a2
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: 909d4e39ec148ab0039e88b3881209ca
+2026/04/12 02:25:32 SSEHub: registered connection 909d4e39ec148ab0039e88b3881209ca (total: 1)
+2026/04/12 02:25:32 SSEHub: unregistered connection 909d4e39ec148ab0039e88b3881209ca (total: 0)
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f883c770
+2026/04/12 02:25:32 Cleaning up writer...
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f883c770
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: 909d4e39ec148ab0039e88b3881209ca
 
 === Running scenario: tools-call-error ===
 Running client scenario 'tools-call-error' against server: http://localhost:18799/mcp
-2026/04/12 01:40:27 Starting MCP-GET-SSE SSE connection: 175088e5f6de20829826c032db761ee5
-2026/04/12 01:40:27 SSEHub: registered connection 175088e5f6de20829826c032db761ee5 (total: 1)
-2026/04/12 01:40:27 SSEHub: unregistered connection 175088e5f6de20829826c032db761ee5 (total: 0)
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: 1a3c248f9dc2477885fb63b93a991653
+2026/04/12 02:25:32 SSEHub: registered connection 1a3c248f9dc2477885fb63b93a991653 (total: 1)
+2026/04/12 02:25:32 SSEHub: unregistered connection 1a3c248f9dc2477885fb63b93a991653 (total: 0)
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f8dae380
+2026/04/12 02:25:32 Cleaning up writer...
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f8dae380
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: 1a3c248f9dc2477885fb63b93a991653
 
 === Running scenario: tools-call-with-progress ===
-2026/04/12 01:40:27 Received kill signal.  Quitting Writer. stop 0x328b7c0b2e00
-2026/04/12 01:40:27 Cleaning up writer...
 Running client scenario 'tools-call-with-progress' against server: http://localhost:18799/mcp
-2026/04/12 01:40:27 Finished cleaning up writer:  0x328b7c0b2e00
-2026/04/12 01:40:27 Closed MCP-GET-SSE SSE connection: 175088e5f6de20829826c032db761ee5
-2026/04/12 01:40:27 Starting MCP-GET-SSE SSE connection: f4c75cdc02356566590195e98a1d6bbb
-2026/04/12 01:40:27 SSEHub: registered connection f4c75cdc02356566590195e98a1d6bbb (total: 1)
-2026/04/12 01:40:27 SSEHub: unregistered connection f4c75cdc02356566590195e98a1d6bbb (total: 0)
-2026/04/12 01:40:27 Received kill signal.  Quitting Writer. stop 0x328b7bd3cc40
-2026/04/12 01:40:27 Cleaning up writer...
-2026/04/12 01:40:27 Finished cleaning up writer:  0x328b7bd3cc40
-2026/04/12 01:40:27 Closed MCP-GET-SSE SSE connection: f4c75cdc02356566590195e98a1d6bbb
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: 1d5356706819ae049f287c28b7c65b5f
+2026/04/12 02:25:32 SSEHub: registered connection 1d5356706819ae049f287c28b7c65b5f (total: 1)
+2026/04/12 02:25:32 SSEHub: unregistered connection 1d5356706819ae049f287c28b7c65b5f (total: 0)
 
 === Running scenario: tools-call-sampling ===
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f8bbf340
+2026/04/12 02:25:32 Cleaning up writer...
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f8bbf340
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: 1d5356706819ae049f287c28b7c65b5f
 Running client scenario 'tools-call-sampling' against server: http://localhost:18799/mcp
-2026/04/12 01:40:27 Starting MCP-GET-SSE SSE connection: ab511200c201fcf8ae8a1c9211909e00
-2026/04/12 01:40:27 SSEHub: registered connection ab511200c201fcf8ae8a1c9211909e00 (total: 1)
-2026/04/12 01:40:27 SSEHub: unregistered connection ab511200c201fcf8ae8a1c9211909e00 (total: 0)
-2026/04/12 01:40:27 Received kill signal.  Quitting Writer. stop 0x328b7bd3cfc0
-2026/04/12 01:40:27 Cleaning up writer...
-2026/04/12 01:40:27 Finished cleaning up writer:  0x328b7bd3cfc0
-2026/04/12 01:40:27 Closed MCP-GET-SSE SSE connection: ab511200c201fcf8ae8a1c9211909e00
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: b93048e88f54d1a71080ef5e8900e0f9
+2026/04/12 02:25:32 SSEHub: registered connection b93048e88f54d1a71080ef5e8900e0f9 (total: 1)
+2026/04/12 02:25:32 SSEHub: unregistered connection b93048e88f54d1a71080ef5e8900e0f9 (total: 0)
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f8dae700
 
 === Running scenario: tools-call-elicitation ===
+2026/04/12 02:25:32 Cleaning up writer...
 Running client scenario 'tools-call-elicitation' against server: http://localhost:18799/mcp
-2026/04/12 01:40:27 Starting MCP-GET-SSE SSE connection: a199589e246d8e826b311f4df7465847
-2026/04/12 01:40:27 SSEHub: registered connection a199589e246d8e826b311f4df7465847 (total: 1)
-2026/04/12 01:40:27 SSEHub: unregistered connection a199589e246d8e826b311f4df7465847 (total: 0)
-2026/04/12 01:40:27 Received kill signal.  Quitting Writer. stop 0x328b7bd3d3b0
-2026/04/12 01:40:27 Cleaning up writer...
-2026/04/12 01:40:27 Finished cleaning up writer:  0x328b7bd3d3b0
-2026/04/12 01:40:27 Closed MCP-GET-SSE SSE connection: a199589e246d8e826b311f4df7465847
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f8dae700
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: b93048e88f54d1a71080ef5e8900e0f9
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: ad2273c0616cabdf9fa054a3213080f0
+2026/04/12 02:25:32 SSEHub: registered connection ad2273c0616cabdf9fa054a3213080f0 (total: 1)
+2026/04/12 02:25:32 SSEHub: unregistered connection ad2273c0616cabdf9fa054a3213080f0 (total: 0)
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f8bbf570
+2026/04/12 02:25:32 Cleaning up writer...
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f8bbf570
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: ad2273c0616cabdf9fa054a3213080f0
 
 === Running scenario: elicitation-sep1034-defaults ===
 Running client scenario 'elicitation-sep1034-defaults' against server: http://localhost:18799/mcp
-2026/04/12 01:40:27 Starting MCP-GET-SSE SSE connection: 47d030300f2b17ff532a854e96f4f9be
-2026/04/12 01:40:27 SSEHub: registered connection 47d030300f2b17ff532a854e96f4f9be (total: 1)
-2026/04/12 01:40:27 SSEHub: unregistered connection 47d030300f2b17ff532a854e96f4f9be (total: 0)
-2026/04/12 01:40:27 Received kill signal.  Quitting Writer. stop 0x328b7bd3d5e0
-2026/04/12 01:40:27 Cleaning up writer...
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: bcf90a1f1dedb3e5358df982888d0774
+2026/04/12 02:25:32 SSEHub: registered connection bcf90a1f1dedb3e5358df982888d0774 (total: 1)
 
 === Running scenario: server-sse-multiple-streams ===
-2026/04/12 01:40:27 Finished cleaning up writer:  0x328b7bd3d5e0
+2026/04/12 02:25:32 SSEHub: unregistered connection bcf90a1f1dedb3e5358df982888d0774 (total: 0)
 Running client scenario 'server-sse-multiple-streams' against server: http://localhost:18799/mcp
-2026/04/12 01:40:27 Closed MCP-GET-SSE SSE connection: 47d030300f2b17ff532a854e96f4f9be
-2026/04/12 01:40:27 Starting MCP-GET-SSE SSE connection: 18dd74db3233101b87875505411d11d0
-2026/04/12 01:40:27 SSEHub: registered connection 18dd74db3233101b87875505411d11d0 (total: 1)
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f8bbf7a0
+2026/04/12 02:25:32 Cleaning up writer...
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f8bbf7a0
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: bcf90a1f1dedb3e5358df982888d0774
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: 9a93bfdc1f08107b1871870cb62eb440
+2026/04/12 02:25:32 SSEHub: registered connection 9a93bfdc1f08107b1871870cb62eb440 (total: 1)
 
 === Running scenario: elicitation-sep1330-enums ===
-2026/04/12 01:40:27 SSEHub: unregistered connection 18dd74db3233101b87875505411d11d0 (total: 0)
 Running client scenario 'elicitation-sep1330-enums' against server: http://localhost:18799/mcp
-2026/04/12 01:40:27 Received kill signal.  Quitting Writer. stop 0x328b7bc51650
-2026/04/12 01:40:27 Cleaning up writer...
-2026/04/12 01:40:27 Finished cleaning up writer:  0x328b7bc51650
-2026/04/12 01:40:27 Closed MCP-GET-SSE SSE connection: 18dd74db3233101b87875505411d11d0
-2026/04/12 01:40:27 Starting MCP-GET-SSE SSE connection: 49f3aeac11eb29a79386f49f3010922a
-2026/04/12 01:40:27 SSEHub: registered connection 49f3aeac11eb29a79386f49f3010922a (total: 1)
-2026/04/12 01:40:27 SSEHub: unregistered connection 49f3aeac11eb29a79386f49f3010922a (total: 0)
-2026/04/12 01:40:27 Received kill signal.  Quitting Writer. stop 0x328b7bf402a0
-2026/04/12 01:40:27 Cleaning up writer...
-2026/04/12 01:40:27 Finished cleaning up writer:  0x328b7bf402a0
-2026/04/12 01:40:27 Closed MCP-GET-SSE SSE connection: 49f3aeac11eb29a79386f49f3010922a
+2026/04/12 02:25:32 SSEHub: unregistered connection 9a93bfdc1f08107b1871870cb62eb440 (total: 0)
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f883cd20
+2026/04/12 02:25:32 Cleaning up writer...
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f883cd20
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: 9a93bfdc1f08107b1871870cb62eb440
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: 8cee62732078cf623d6c72fae3c04194
+2026/04/12 02:25:32 SSEHub: registered connection 8cee62732078cf623d6c72fae3c04194 (total: 1)
+2026/04/12 02:25:32 SSEHub: unregistered connection 8cee62732078cf623d6c72fae3c04194 (total: 0)
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f8daeb60
+2026/04/12 02:25:32 Cleaning up writer...
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f8daeb60
 
 === Running scenario: resources-list ===
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: 8cee62732078cf623d6c72fae3c04194
 Running client scenario 'resources-list' against server: http://localhost:18799/mcp
-2026/04/12 01:40:27 Starting MCP-GET-SSE SSE connection: cd987860f6bda2249da3a5336090e195
-2026/04/12 01:40:27 SSEHub: registered connection cd987860f6bda2249da3a5336090e195 (total: 1)
-2026/04/12 01:40:27 SSEHub: unregistered connection cd987860f6bda2249da3a5336090e195 (total: 0)
-2026/04/12 01:40:27 Received kill signal.  Quitting Writer. stop 0x328b7bc51ab0
-2026/04/12 01:40:27 Cleaning up writer...
-2026/04/12 01:40:27 Finished cleaning up writer:  0x328b7bc51ab0
-2026/04/12 01:40:27 Closed MCP-GET-SSE SSE connection: cd987860f6bda2249da3a5336090e195
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: a4411a48ec1b2b9d9957bd28b62085ba
+2026/04/12 02:25:32 SSEHub: registered connection a4411a48ec1b2b9d9957bd28b62085ba (total: 1)
+2026/04/12 02:25:32 SSEHub: unregistered connection a4411a48ec1b2b9d9957bd28b62085ba (total: 0)
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f87276c0
+2026/04/12 02:25:32 Cleaning up writer...
 
 === Running scenario: resources-read-text ===
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f87276c0
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: a4411a48ec1b2b9d9957bd28b62085ba
 Running client scenario 'resources-read-text' against server: http://localhost:18799/mcp
-2026/04/12 01:40:27 Starting MCP-GET-SSE SSE connection: 3beee50fc647058c19992c402b04a973
-2026/04/12 01:40:27 SSEHub: registered connection 3beee50fc647058c19992c402b04a973 (total: 1)
-2026/04/12 01:40:27 SSEHub: unregistered connection 3beee50fc647058c19992c402b04a973 (total: 0)
-2026/04/12 01:40:27 Received kill signal.  Quitting Writer. stop 0x328b7c0b3490
-2026/04/12 01:40:27 Cleaning up writer...
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: e14782edde27bef2e6df8519c0400bbd
+2026/04/12 02:25:32 SSEHub: registered connection e14782edde27bef2e6df8519c0400bbd (total: 1)
+2026/04/12 02:25:32 SSEHub: unregistered connection e14782edde27bef2e6df8519c0400bbd (total: 0)
 
 === Running scenario: resources-read-binary ===
-2026/04/12 01:40:27 Finished cleaning up writer:  0x328b7c0b3490
-2026/04/12 01:40:27 Closed MCP-GET-SSE SSE connection: 3beee50fc647058c19992c402b04a973
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f8bbfa40
 Running client scenario 'resources-read-binary' against server: http://localhost:18799/mcp
-2026/04/12 01:40:27 Starting MCP-GET-SSE SSE connection: 5dfe8205e6d89e4e88cb93ad8332ea15
-2026/04/12 01:40:27 SSEHub: registered connection 5dfe8205e6d89e4e88cb93ad8332ea15 (total: 1)
-2026/04/12 01:40:27 SSEHub: unregistered connection 5dfe8205e6d89e4e88cb93ad8332ea15 (total: 0)
+2026/04/12 02:25:32 Cleaning up writer...
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f8bbfa40
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: e14782edde27bef2e6df8519c0400bbd
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: 5db8ff0c5c4b43fb93362cf2e3ba64d3
+2026/04/12 02:25:32 SSEHub: registered connection 5db8ff0c5c4b43fb93362cf2e3ba64d3 (total: 1)
+2026/04/12 02:25:32 SSEHub: unregistered connection 5db8ff0c5c4b43fb93362cf2e3ba64d3 (total: 0)
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f8916230
+2026/04/12 02:25:32 Cleaning up writer...
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f8916230
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: 5db8ff0c5c4b43fb93362cf2e3ba64d3
 
 === Running scenario: resources-templates-read ===
-2026/04/12 01:40:27 Received kill signal.  Quitting Writer. stop 0x328b7bc51dc0
 Running client scenario 'resources-templates-read' against server: http://localhost:18799/mcp
-2026/04/12 01:40:27 Cleaning up writer...
-2026/04/12 01:40:27 Finished cleaning up writer:  0x328b7bc51dc0
-2026/04/12 01:40:27 Closed MCP-GET-SSE SSE connection: 5dfe8205e6d89e4e88cb93ad8332ea15
-2026/04/12 01:40:27 Starting MCP-GET-SSE SSE connection: 15fb2663124359ea43ea095287edd46f
-2026/04/12 01:40:27 SSEHub: registered connection 15fb2663124359ea43ea095287edd46f (total: 1)
-2026/04/12 01:40:27 SSEHub: unregistered connection 15fb2663124359ea43ea095287edd46f (total: 0)
-2026/04/12 01:40:27 Received kill signal.  Quitting Writer. stop 0x328b7bd3d880
-2026/04/12 01:40:27 Cleaning up writer...
-2026/04/12 01:40:27 Finished cleaning up writer:  0x328b7bd3d880
-2026/04/12 01:40:27 Closed MCP-GET-SSE SSE connection: 15fb2663124359ea43ea095287edd46f
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: 7b3e5e89439db21dfce24add99a77ada
+2026/04/12 02:25:32 SSEHub: registered connection 7b3e5e89439db21dfce24add99a77ada (total: 1)
+2026/04/12 02:25:32 SSEHub: unregistered connection 7b3e5e89439db21dfce24add99a77ada (total: 0)
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f8daee00
+2026/04/12 02:25:32 Cleaning up writer...
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f8daee00
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: 7b3e5e89439db21dfce24add99a77ada
 
 === Running scenario: resources-subscribe ===
 Running client scenario 'resources-subscribe' against server: http://localhost:18799/mcp
-2026/04/12 01:40:27 Starting MCP-GET-SSE SSE connection: 5174f0aa07a373132726b6de638ed698
-2026/04/12 01:40:27 SSEHub: registered connection 5174f0aa07a373132726b6de638ed698 (total: 1)
-2026/04/12 01:40:27 SSEHub: unregistered connection 5174f0aa07a373132726b6de638ed698 (total: 0)
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: 33840f12f06ad121d6f5648e62a90029
+2026/04/12 02:25:32 SSEHub: registered connection 33840f12f06ad121d6f5648e62a90029 (total: 1)
+2026/04/12 02:25:32 SSEHub: unregistered connection 33840f12f06ad121d6f5648e62a90029 (total: 0)
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f89164d0
+2026/04/12 02:25:32 Cleaning up writer...
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f89164d0
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: 33840f12f06ad121d6f5648e62a90029
 
 === Running scenario: resources-unsubscribe ===
-2026/04/12 01:40:27 Received kill signal.  Quitting Writer. stop 0x328b7bd3db90
-2026/04/12 01:40:27 Cleaning up writer...
 Running client scenario 'resources-unsubscribe' against server: http://localhost:18799/mcp
-2026/04/12 01:40:27 Finished cleaning up writer:  0x328b7bd3db90
-2026/04/12 01:40:27 Closed MCP-GET-SSE SSE connection: 5174f0aa07a373132726b6de638ed698
-2026/04/12 01:40:27 Starting MCP-GET-SSE SSE connection: 66e35900595dcafc8144225d602f71ef
-2026/04/12 01:40:27 SSEHub: registered connection 66e35900595dcafc8144225d602f71ef (total: 1)
-2026/04/12 01:40:27 SSEHub: unregistered connection 66e35900595dcafc8144225d602f71ef (total: 0)
-2026/04/12 01:40:27 Received kill signal.  Quitting Writer. stop 0x328b7bd3ddc0
-2026/04/12 01:40:27 Cleaning up writer...
-2026/04/12 01:40:27 Finished cleaning up writer:  0x328b7bd3ddc0
-2026/04/12 01:40:27 Closed MCP-GET-SSE SSE connection: 66e35900595dcafc8144225d602f71ef
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: 3ba20314631323a049f8a6b511f68e4b
+2026/04/12 02:25:32 SSEHub: registered connection 3ba20314631323a049f8a6b511f68e4b (total: 1)
+2026/04/12 02:25:32 SSEHub: unregistered connection 3ba20314631323a049f8a6b511f68e4b (total: 0)
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f8916700
+2026/04/12 02:25:32 Cleaning up writer...
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f8916700
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: 3ba20314631323a049f8a6b511f68e4b
 
 === Running scenario: prompts-list ===
 Running client scenario 'prompts-list' against server: http://localhost:18799/mcp
-2026/04/12 01:40:27 Starting MCP-GET-SSE SSE connection: 1a6f02359e49f10b831fe9e00c6b6bf8
-2026/04/12 01:40:27 SSEHub: registered connection 1a6f02359e49f10b831fe9e00c6b6bf8 (total: 1)
-2026/04/12 01:40:27 SSEHub: unregistered connection 1a6f02359e49f10b831fe9e00c6b6bf8 (total: 0)
-2026/04/12 01:40:27 Received kill signal.  Quitting Writer. stop 0x328b7c0b37a0
-2026/04/12 01:40:27 Cleaning up writer...
-2026/04/12 01:40:27 Finished cleaning up writer:  0x328b7c0b37a0
-2026/04/12 01:40:27 Closed MCP-GET-SSE SSE connection: 1a6f02359e49f10b831fe9e00c6b6bf8
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: aafce81c0339912478343e72bb1d64ab
+2026/04/12 02:25:32 SSEHub: registered connection aafce81c0339912478343e72bb1d64ab (total: 1)
+2026/04/12 02:25:32 SSEHub: unregistered connection aafce81c0339912478343e72bb1d64ab (total: 0)
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f8daf180
+2026/04/12 02:25:32 Cleaning up writer...
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f8daf180
 
 === Running scenario: prompts-get-simple ===
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: aafce81c0339912478343e72bb1d64ab
 Running client scenario 'prompts-get-simple' against server: http://localhost:18799/mcp
-2026/04/12 01:40:27 Starting MCP-GET-SSE SSE connection: 1b47d24070587ba4d04344aa791b8a10
-2026/04/12 01:40:27 SSEHub: registered connection 1b47d24070587ba4d04344aa791b8a10 (total: 1)
-2026/04/12 01:40:27 SSEHub: unregistered connection 1b47d24070587ba4d04344aa791b8a10 (total: 0)
-2026/04/12 01:40:27 Received kill signal.  Quitting Writer. stop 0x328b7be3a150
-2026/04/12 01:40:27 Cleaning up writer...
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: 40285a1207c031224355c6f1ec33b267
+2026/04/12 02:25:32 SSEHub: registered connection 40285a1207c031224355c6f1ec33b267 (total: 1)
+2026/04/12 02:25:32 SSEHub: unregistered connection 40285a1207c031224355c6f1ec33b267 (total: 0)
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f8916a80
+2026/04/12 02:25:32 Cleaning up writer...
 
 === Running scenario: prompts-get-with-args ===
-2026/04/12 01:40:27 Finished cleaning up writer:  0x328b7be3a150
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f8916a80
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: 40285a1207c031224355c6f1ec33b267
 Running client scenario 'prompts-get-with-args' against server: http://localhost:18799/mcp
-2026/04/12 01:40:27 Closed MCP-GET-SSE SSE connection: 1b47d24070587ba4d04344aa791b8a10
-2026/04/12 01:40:27 Starting MCP-GET-SSE SSE connection: 52bc1d18524068e31735043e9fbe8ef2
-2026/04/12 01:40:27 SSEHub: registered connection 52bc1d18524068e31735043e9fbe8ef2 (total: 1)
-2026/04/12 01:40:27 SSEHub: unregistered connection 52bc1d18524068e31735043e9fbe8ef2 (total: 0)
-2026/04/12 01:40:27 Received kill signal.  Quitting Writer. stop 0x328b7c0b8310
-2026/04/12 01:40:27 Cleaning up writer...
-2026/04/12 01:40:27 Finished cleaning up writer:  0x328b7c0b8310
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: 627f6b60008857bb87fc3bfc69746ed8
+2026/04/12 02:25:32 SSEHub: registered connection 627f6b60008857bb87fc3bfc69746ed8 (total: 1)
+2026/04/12 02:25:32 SSEHub: unregistered connection 627f6b60008857bb87fc3bfc69746ed8 (total: 0)
 
 === Running scenario: prompts-get-embedded-resource ===
-2026/04/12 01:40:27 Closed MCP-GET-SSE SSE connection: 52bc1d18524068e31735043e9fbe8ef2
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f8bbff10
+2026/04/12 02:25:32 Cleaning up writer...
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f8bbff10
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: 627f6b60008857bb87fc3bfc69746ed8
 Running client scenario 'prompts-get-embedded-resource' against server: http://localhost:18799/mcp
-2026/04/12 01:40:27 Starting MCP-GET-SSE SSE connection: 89daf1ac49d484eded5906edb8eb857d
-2026/04/12 01:40:27 SSEHub: registered connection 89daf1ac49d484eded5906edb8eb857d (total: 1)
-2026/04/12 01:40:27 SSEHub: unregistered connection 89daf1ac49d484eded5906edb8eb857d (total: 0)
-2026/04/12 01:40:27 Received kill signal.  Quitting Writer. stop 0x328b7c0b8540
-2026/04/12 01:40:27 Cleaning up writer...
-2026/04/12 01:40:27 Finished cleaning up writer:  0x328b7c0b8540
-2026/04/12 01:40:27 Closed MCP-GET-SSE SSE connection: 89daf1ac49d484eded5906edb8eb857d
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: 16ff5640166a40ba4bf10822520dd9c4
+2026/04/12 02:25:32 SSEHub: registered connection 16ff5640166a40ba4bf10822520dd9c4 (total: 1)
+2026/04/12 02:25:32 SSEHub: unregistered connection 16ff5640166a40ba4bf10822520dd9c4 (total: 0)
 
 === Running scenario: prompts-get-with-image ===
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f8916d20
+2026/04/12 02:25:32 Cleaning up writer...
 Running client scenario 'prompts-get-with-image' against server: http://localhost:18799/mcp
-2026/04/12 01:40:27 Starting MCP-GET-SSE SSE connection: b14e2f6dbb24f640a4c138f8533dc4bc
-2026/04/12 01:40:27 SSEHub: registered connection b14e2f6dbb24f640a4c138f8533dc4bc (total: 1)
-2026/04/12 01:40:27 SSEHub: unregistered connection b14e2f6dbb24f640a4c138f8533dc4bc (total: 0)
-2026/04/12 01:40:27 Received kill signal.  Quitting Writer. stop 0x328b7bf407e0
-2026/04/12 01:40:27 Cleaning up writer...
-2026/04/12 01:40:27 Finished cleaning up writer:  0x328b7bf407e0
-2026/04/12 01:40:27 Closed MCP-GET-SSE SSE connection: b14e2f6dbb24f640a4c138f8533dc4bc
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f8916d20
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: 16ff5640166a40ba4bf10822520dd9c4
+2026/04/12 02:25:32 Starting MCP-GET-SSE SSE connection: 2840f66c143fb7b8d91cd516e900ffc5
+2026/04/12 02:25:32 SSEHub: registered connection 2840f66c143fb7b8d91cd516e900ffc5 (total: 1)
+2026/04/12 02:25:32 SSEHub: unregistered connection 2840f66c143fb7b8d91cd516e900ffc5 (total: 0)
 
 === Running scenario: dns-rebinding-protection ===
+2026/04/12 02:25:32 Received kill signal.  Quitting Writer. stop 0x5ef1f8b662a0
 Running client scenario 'dns-rebinding-protection' against server: http://localhost:18799/mcp
+2026/04/12 02:25:32 Cleaning up writer...
+2026/04/12 02:25:32 Finished cleaning up writer:  0x5ef1f8b662a0
+2026/04/12 02:25:32 Closed MCP-GET-SSE SSE connection: 2840f66c143fb7b8d91cd516e900ffc5
 
 
 === SUMMARY ===
@@ -421,22 +421,22 @@ Starting scenario: auth/token-endpoint-auth-basic
 Starting scenario: auth/token-endpoint-auth-post
 Starting scenario: auth/token-endpoint-auth-none
 Starting scenario: auth/pre-registration
-Executing client: ./bin/testclient http://localhost:65150/mcp
-Executing client: ./bin/testclient http://localhost:65151/mcp
-Executing client: ./bin/testclient http://localhost:65152/mcp
-Executing client: ./bin/testclient http://localhost:65153/mcp
-Executing client: ./bin/testclient http://localhost:65154/mcp
-Executing client: ./bin/testclient http://localhost:65155/mcp
-Executing client: ./bin/testclient http://localhost:65156/mcp
-Executing client: ./bin/testclient http://localhost:65157/mcp
-Executing client: ./bin/testclient http://localhost:65158/mcp
-Executing client: ./bin/testclient http://localhost:65159/mcp
-Executing client: ./bin/testclient http://localhost:65160/mcp
-Executing client: ./bin/testclient http://localhost:65161/mcp
-Executing client: ./bin/testclient http://localhost:65162/mcp
-Executing client: ./bin/testclient http://localhost:65163/mcp
+Executing client: ./bin/testclient http://localhost:51591/mcp
+Executing client: ./bin/testclient http://localhost:51592/mcp
+Executing client: ./bin/testclient http://localhost:51593/mcp
+Executing client: ./bin/testclient http://localhost:51594/mcp
+Executing client: ./bin/testclient http://localhost:51595/mcp
+Executing client: ./bin/testclient http://localhost:51596/mcp
+Executing client: ./bin/testclient http://localhost:51597/mcp
+Executing client: ./bin/testclient http://localhost:51598/mcp
+Executing client: ./bin/testclient http://localhost:51599/mcp
+Executing client: ./bin/testclient http://localhost:51600/mcp
+Executing client: ./bin/testclient http://localhost:51601/mcp
+Executing client: ./bin/testclient http://localhost:51602/mcp
+Executing client: ./bin/testclient http://localhost:51603/mcp
+Executing client: ./bin/testclient http://localhost:51604/mcp
 With context: {"client_id":"pre-registered-client","client_secret":"pre-registered-secret"}
-(node:10242) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(node:27867) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
 (Use `node --trace-deprecation ...` to show where the warning was created)
 
 === SUITE SUMMARY ===
@@ -467,7 +467,7 @@ Total: 210 passed, 0 failed, 1 warnings
   PASS: auth-conformance
 --- [8/8] keycloak ---
 === RUN   TestKeycloak_MCPServer_ValidToken
---- PASS: TestKeycloak_MCPServer_ValidToken (0.02s)
+--- PASS: TestKeycloak_MCPServer_ValidToken (0.03s)
 === RUN   TestKeycloak_MCPServer_TamperedToken
 --- PASS: TestKeycloak_MCPServer_TamperedToken (0.01s)
 === RUN   TestKeycloak_MCPServer_ScopeAllowed
@@ -479,12 +479,12 @@ Total: 210 passed, 0 failed, 1 warnings
 === RUN   TestKeycloak_MCPServer_WWWAuthenticate
 --- PASS: TestKeycloak_MCPServer_WWWAuthenticate (0.01s)
 === RUN   TestKeycloak_MCPServer_PasswordGrant
---- PASS: TestKeycloak_MCPServer_PasswordGrant (0.03s)
+--- PASS: TestKeycloak_MCPServer_PasswordGrant (0.05s)
 PASS
-ok  	github.com/panyam/mcpkit/tests/keycloak	0.520s
+ok  	github.com/panyam/mcpkit/tests/keycloak	0.759s
   PASS: keycloak
 
 === Results: 8 passed, 0 failed ===
-Finished: Sun Apr 12 01:40:30 PDT 2026
+Finished: Sun Apr 12 02:25:36 PDT 2026
 </pre>
 </body></html>
