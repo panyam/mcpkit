@@ -332,13 +332,18 @@ func (c *mcpSSEConn) OnStart(w http.ResponseWriter, r *http.Request) error {
 		})
 	})
 
+	// Persistent push function for server-initiated JSON-RPC requests
+	// (roots/list, keepalive ping, any future out-of-band request). Re-wired
+	// on reconnect so the closure points to the current hub connection.
+	pushFunc := func(raw json.RawMessage) {
+		emitSSEEvent(dispatcher.eventIDs, cfg.eventStore, sessionID, raw, func(id string, data json.RawMessage) {
+			hub.SendEventWithID(sessionID, "message", id, SSEJSON(data))
+		})
+	}
+	dispatcher.SetPushRequest(pushFunc)
+
 	// Start keepalive pings if configured.
 	if cfg.keepaliveInterval > 0 {
-		pushFunc := func(raw json.RawMessage) {
-			emitSSEEvent(dispatcher.eventIDs, cfg.eventStore, sessionID, raw, func(id string, data json.RawMessage) {
-				hub.SendEventWithID(sessionID, "message", id, SSEJSON(data))
-			})
-		}
 		maxFails := cfg.keepaliveMaxFails
 		if maxFails <= 0 {
 			maxFails = 3
@@ -376,7 +381,13 @@ func (c *mcpSSEConn) OnClose() {
 		c.keepalive.stop()
 	}
 
+	// Clear the persistent push function: the hub connection is going away.
+	// If the session survives a grace-period reconnect, OnStart re-wires it.
 	entry, ok := c.transport.sessions.Load(c.sessionID)
+	if ok && entry.dispatcher != nil {
+		entry.dispatcher.SetPushRequest(nil)
+	}
+
 	if !ok {
 		c.transport.hub.Unregister(c.ConnId())
 		c.BaseSSEConn.OnClose()
