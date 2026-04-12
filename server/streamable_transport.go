@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	conc "github.com/panyam/gocurrent"
@@ -49,6 +50,16 @@ type sessionEntry struct {
 	dispatcher *Dispatcher
 	idleTimer  *conc.IdleTimer // nil-safe: all methods are no-ops on nil
 	timeout    time.Duration   // retained for log messages on expiry
+
+	// getConn points at the live streamableSSEConn for this session's GET
+	// SSE stream, if any. Set in OnStart, cleared in OnClose. Used by the
+	// retry-hint path (#202) to emit raw SSE "retry:" fields to the
+	// ongoing GET stream when a tool handler calls core.EmitSSERetry
+	// during a POST. Nil when no GET stream is attached.
+	//
+	// Accessed atomically: the POST dispatch goroutine reads it (via the
+	// sseRetry closure) while the GET stream's OnClose goroutine writes nil.
+	getConn atomic.Pointer[streamableSSEConn]
 }
 
 // newStreamableTransport creates a Streamable HTTP transport.
@@ -326,8 +337,20 @@ func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Reque
 		writeSSE(raw)
 	})
 
-	// Dispatch with request-scoped notify and request funcs.
-	resp := t.server.dispatchWithNotifyAndRequest(d, r.Context(), claims, requestNotify, requestFunc, req)
+	// Retry-hint emitter: routes EmitSSERetry from the POST handler to the
+	// session's long-lived GET SSE stream (if one is open). Looks up the
+	// conn on each call so a reconnect during a long-running tool picks up
+	// the new stream automatically (#202).
+	sseRetry := func(ms int) {
+		if entry, ok := t.loadSession(d.sessionID); ok {
+			if conn := entry.getConn.Load(); conn != nil {
+				conn.SendRetry(ms)
+			}
+		}
+	}
+
+	// Dispatch with request-scoped notify, request, and retry funcs.
+	resp := t.server.dispatchWithOpts(d, r.Context(), claims, requestNotify, requestFunc, sseRetry, req)
 
 	// Write the JSON-RPC response as the final SSE event
 	if resp != nil {
@@ -467,6 +490,12 @@ func (c *streamableSSEConn) OnStart(w http.ResponseWriter, r *http.Request) erro
 	// Register in hub for notification delivery
 	c.transport.sseHub.Register(&c.BaseSSEConn)
 
+	// Track the live GET conn on the session entry so the POST dispatch
+	// path can route EmitSSERetry hints to it (#202).
+	if c.entry != nil {
+		c.entry.getConn.Store(c)
+	}
+
 	// Wire the dispatcher's notifyFunc to push to the SSE hub.
 	// This enables core.EmitLog/core.Notify from tool handlers to reach the GET stream.
 	sessionID := c.sessionID
@@ -529,6 +558,9 @@ func (c *streamableSSEConn) OnClose() {
 	c.dispatcher.SetPushRequest(nil)
 	c.transport.sseHub.Unregister(c.ConnId())
 	if c.entry != nil {
+		// Clear the GET conn pointer only if it still points at us —
+		// a rapid close+reconnect could have replaced it already (#202).
+		c.entry.getConn.CompareAndSwap(c, nil)
 		c.entry.idleTimer.Release()
 	}
 	c.BaseSSEConn.OnClose()
