@@ -50,8 +50,8 @@ type Dispatcher struct {
 
 	// notifyFunc is set by the transport to push server-to-client notifications.
 	// nil means no push capability (e.g., Streamable HTTP without GET SSE stream).
-	// Protected by notifyMu because the GET SSE handler may set it concurrently
-	// with subscription notifications reading it.
+	// pushRequest (below) is guarded by the same RWMutex because the two are
+	// always wired and torn down together by every transport.
 	notifyFunc core.NotifyFunc
 	notifyMu   sync.RWMutex
 
@@ -60,17 +60,20 @@ type Dispatcher struct {
 	sessionID            string                  // set by transport, used as key in subscription registry
 	subManager           *subscriptionRegistry   // shared pointer to Server's registry (nil if disabled)
 
-	// Roots state — tracked per session.
-	// rootsStale is set when the client sends notifications/roots/list_changed.
-	// On the next tool call with a requestFunc, the server fetches roots/list.
-	rootsStale    bool
-	roots         []core.Root
+	// Roots state — tracked per session. See refreshRoots for the full state
+	// machine. rootsMu guards roots, rootsStale, and rootsFetching; it must
+	// NOT be held across user-callback invocations or network round trips.
+	rootsMu        sync.Mutex
+	roots          []core.Root
+	rootsStale     bool
+	rootsFetching  bool
 	onRootsChanged func([]core.Root) // optional callback, set via WithOnRootsChanged
 
 	// Server-to-client request infrastructure.
-	// pushRequest pushes a raw JSON-RPC request to the client stream (set by transport).
+	// pushRequest pushes a raw JSON-RPC request to the client stream (set by
+	// transport, guarded by notifyMu — same lifecycle as notifyFunc).
 	// pending tracks in-flight server-to-client requests awaiting responses.
-	// nextServerReqID generates unique IDs for outgoing requests ("srv-1", "srv-2", ...).
+	// requestIDs generates unique IDs for outgoing requests ("srv-1", ...).
 	pushRequest func(json.RawMessage)
 	pending     pendingMap
 	requestIDs  gohttp.IDGen // generates unique IDs for server-to-client requests
@@ -101,6 +104,27 @@ func (d *Dispatcher) SetNotifyFunc(fn core.NotifyFunc) {
 func (d *Dispatcher) getNotifyFunc() core.NotifyFunc {
 	d.notifyMu.RLock()
 	fn := d.notifyFunc
+	d.notifyMu.RUnlock()
+	return fn
+}
+
+// SetPushRequest installs the transport's push function for server-initiated
+// JSON-RPC requests (e.g. roots/list, sampling/createMessage). Called once per
+// persistent stream by stdio, in-process, and the SSE/Streamable-HTTP GET SSE
+// handlers; not called by the per-POST request path (which wires its own
+// request-scoped closure). Thread-safe.
+func (d *Dispatcher) SetPushRequest(fn func(json.RawMessage)) {
+	d.notifyMu.Lock()
+	d.pushRequest = fn
+	d.notifyMu.Unlock()
+}
+
+// getPushRequest returns the currently installed push function, or nil if
+// the transport does not support server-initiated requests outside of POST
+// response cycles. Thread-safe.
+func (d *Dispatcher) getPushRequest() func(json.RawMessage) {
+	d.notifyMu.RLock()
+	fn := d.pushRequest
 	d.notifyMu.RUnlock()
 	return fn
 }
@@ -240,10 +264,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) *core.Resp
 		return nil
 
 	case "notifications/roots/list_changed":
-		d.rootsStale = true
-		if d.onRootsChanged != nil {
-			d.onRootsChanged(d.roots)
-		}
+		d.handleRootsListChanged()
 		return nil
 
 	case "ping":

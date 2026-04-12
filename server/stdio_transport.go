@@ -105,7 +105,7 @@ func (s *Server) RunStdio(ctx context.Context, opts ...StdioOption) error {
 	}
 
 	// Wire notifyFunc for server-to-client notifications (logging, progress, etc.).
-	dispatcher.notifyFunc = func(method string, params any) {
+	dispatcher.SetNotifyFunc(func(method string, params any) {
 		raw, err := core.MarshalNotification(method, params)
 		if err != nil {
 			if cfg.logger != nil {
@@ -118,19 +118,21 @@ func (s *Server) RunStdio(ctx context.Context, opts ...StdioOption) error {
 				cfg.logger.Printf("stdio: write notification: %v", err)
 			}
 		}
-	}
+	})
 
-	// Wire pushRequest for server-to-client requests (sampling, elicitation).
-	dispatcher.pushRequest = func(raw json.RawMessage) {
+	// Wire pushRequest for server-to-client requests (sampling, elicitation,
+	// roots/list). Persistent for the lifetime of the stdio session.
+	stdioPush := func(raw json.RawMessage) {
 		if err := writeFrameLocked(raw); err != nil {
 			if cfg.logger != nil {
 				cfg.logger.Printf("stdio: write server request: %v", err)
 			}
 		}
 	}
+	dispatcher.SetPushRequest(stdioPush)
 
 	// Build request func for server-to-client request/response matching.
-	requestFunc := dispatcher.makeRequestFunc(dispatcher.pushRequest)
+	requestFunc := dispatcher.makeRequestFunc(stdioPush)
 
 	reader := bufio.NewReader(cfg.input)
 
@@ -196,7 +198,7 @@ func (s *Server) RunStdio(ctx context.Context, opts ...StdioOption) error {
 			// Dispatch through the standard server pipeline.
 			resp := s.dispatchWithNotifyAndRequest(
 				dispatcher, ctx, nil,
-				dispatcher.notifyFunc, requestFunc, &req,
+				dispatcher.getNotifyFunc(), requestFunc, &req,
 			)
 
 			// Notifications produce no response.
