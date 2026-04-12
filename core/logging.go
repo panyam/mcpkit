@@ -80,6 +80,12 @@ type sessionCtx struct {
 	// this nil. Set via SetSSERetryHint during session establishment. Reads
 	// flow through EmitSSERetry.
 	sseRetry func(ms int)
+
+	// allowedRoots returns the current enforced filesystem roots for this
+	// session. Computed by the server dispatch layer as the intersection
+	// of static WithAllowedRoots and dynamic client roots. Nil = no sandbox.
+	// Set via SetAllowedRoots during dispatch.
+	allowedRoots func() []string
 }
 
 type ctxKey int
