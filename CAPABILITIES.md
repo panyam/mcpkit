@@ -68,7 +68,8 @@
 - mcp-tool-exec: ToolExec — wrap CLI binaries as MCP tools with structured I/O. ExecConfig supports static/dynamic args, env, dir, timeout. BuildArgs callback maps JSON tool arguments to CLI flags.
 - mcp-modify-request: WithModifyRequest — client-side HTTP request hook for injecting custom headers (tracing, tenant IDs). Runs before auth, applies to Streamable HTTP + SSE transports.
 - mcp-sse-retry-hint: core.EmitSSERetry — tool/resource/prompt handlers emit raw SSE `retry:` field to tell clients how long to wait before reconnecting. 2024-11-25 SSE transport only. Hint-only (no disconnect). Combines with WithSSEGracePeriod + WithEventStore for drop-and-resume patterns. (#72)
-- mcp-auth-refresh-callback: OAuthTokenSource.OnToken — optional callback fired after successful refresh_token grant by the underlying oneauth AuthClient. Use for external persistence without implementing CredentialStore. Latent for browser-login flow until Token() adopts refresh-token reuse. (#137)
+- mcp-auth-refresh-callback: OAuthTokenSource.OnToken — optional callback fired after successful refresh_token grant by the underlying oneauth AuthClient. Use for external persistence without implementing CredentialStore. (#137)
+- mcp-auth-refresh-flow: OAuthTokenSource.Token() attempts the refresh_token grant before falling back to LoginWithBrowser. Long-running clients (agents, CLI tools) no longer re-prompt for browser consent on every token expiry. Default in-memory cred store when CredStore is nil; TokenForScopes wipes stored credential to force full re-login on scope step-up; scope-coverage check skips refresh when stored credential doesn't cover requested scopes. (#196)
 
 ## Module
 github.com/panyam/mcpkit
