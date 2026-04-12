@@ -38,6 +38,7 @@ type serverOptions struct {
 	errorHandler         ErrorHandler // optional out-of-band error callback
 	contentChunkMethod   string       // custom notification method for streaming content (empty = default)
 	onRootsChanged       func([]core.Root) // optional callback when client sends roots/list_changed
+	rootsFetchTimeout    time.Duration     // timeout for server-to-client roots/list requests (0 = default 30s)
 	skipSchemaValidation bool              // WithSchemaValidation(false) disables call-time validation
 }
 
@@ -186,6 +187,14 @@ func WithAllowedRoots(roots ...string) Option {
 	return func(o *serverOptions) { o.allowedRoots = roots }
 }
 
+// WithRootsFetchTimeout sets the deadline for server-to-client roots/list
+// requests issued after notifications/roots/list_changed. Default is 30s.
+// Decrease for aggressive fail-fast; increase for slow clients with large
+// root enumerations (monorepos, network mounts). Issue #198.
+func WithRootsFetchTimeout(d time.Duration) Option {
+	return func(o *serverOptions) { o.rootsFetchTimeout = d }
+}
+
 // NewServer creates an MCP server with the given identity and options.
 func NewServer(info core.ServerInfo, opts ...Option) *Server {
 	s := &Server{
@@ -207,10 +216,12 @@ func NewServer(info core.ServerInfo, opts ...Option) *Server {
 	s.dispatcher.Reg.OnChange = func(method string) {
 		s.Broadcast(method, nil)
 	}
-	// Wire roots callback
+	// Wire roots configuration
 	if s.options.onRootsChanged != nil {
 		s.dispatcher.onRootsChanged = s.options.onRootsChanged
 	}
+	s.dispatcher.rootsFetchTimeout = s.options.rootsFetchTimeout
+	s.dispatcher.allowedRoots = s.options.allowedRoots
 	// Initialize subscription support if enabled
 	if s.options.subscriptionsEnabled {
 		s.subRegistry = &subscriptionRegistry{
@@ -355,6 +366,16 @@ func (s *Server) dispatchWithOpts(d *Dispatcher, ctx context.Context, claims *co
 	// Wire the SSE retry-hint emitter if provided by the transport layer.
 	if sseRetry != nil {
 		ctx = core.SetSSERetryHint(ctx, sseRetry)
+	}
+
+	// Wire allowed-roots enforcement (#197). The closure computes the
+	// effective roots on each call: intersection of static WithAllowedRoots
+	// and dynamic client roots. If no static list is set, client roots are
+	// the full policy. If no client roots fetched yet, static list only.
+	if len(d.allowedRoots) > 0 || d.onRootsChanged != nil {
+		ctx = core.SetAllowedRoots(ctx, func() []string {
+			return d.effectiveAllowedRoots()
+		})
 	}
 
 	// Inject custom content chunk method if configured.
