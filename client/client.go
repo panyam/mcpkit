@@ -66,6 +66,10 @@ type SamplingHandler func(context.Context, core.CreateMessageRequest) (core.Crea
 // The client prompts the user for input and returns the result.
 type ElicitationHandler func(context.Context, core.ElicitationRequest) (core.ElicitationResult, error)
 
+// RootsHandler handles a server-to-client roots/list request.
+// The client returns its current filesystem roots.
+type RootsHandler func(context.Context) ([]core.Root, error)
+
 // WithSamplingHandler registers a handler for server-to-client sampling requests.
 // When set, the client advertises the "sampling" capability during initialization.
 func WithSamplingHandler(h SamplingHandler) ClientOption {
@@ -76,6 +80,14 @@ func WithSamplingHandler(h SamplingHandler) ClientOption {
 // When set, the client advertises the "elicitation" capability during initialization.
 func WithElicitationHandler(h ElicitationHandler) ClientOption {
 	return func(c *Client) { c.elicitationHandler = h }
+}
+
+// WithRootsHandler registers a handler for server-to-client roots/list requests.
+// When set, the client advertises the "roots" capability (with listChanged: true)
+// during initialization, enabling the server to fetch the client's filesystem roots
+// after receiving a notifications/roots/list_changed notification.
+func WithRootsHandler(h RootsHandler) ClientOption {
+	return func(c *Client) { c.rootsHandler = h }
 }
 
 // WithNotificationCallback sets a callback for server-to-client notifications
@@ -275,6 +287,7 @@ type Client struct {
 	// Server-to-client request handlers
 	samplingHandler    SamplingHandler
 	elicitationHandler ElicitationHandler
+	rootsHandler       RootsHandler
 
 	// Reconnection settings (zero values = disabled)
 	maxRetries int
@@ -460,6 +473,9 @@ func (c *Client) doConnect() error {
 	}
 	if c.elicitationHandler != nil {
 		caps.Elicitation = &struct{}{}
+	}
+	if c.rootsHandler != nil {
+		caps.Roots = &core.RootsCap{ListChanged: true}
 	}
 	if len(c.extensions) > 0 {
 		caps.Extensions = make(map[string]core.ClientExtensionCap, len(c.extensions))
@@ -648,9 +664,26 @@ func (c *Client) HandleServerRequest(req *core.Request) *core.Response {
 		}
 		return core.NewResponse(req.ID, result)
 
+	case "roots/list":
+		if c.rootsHandler == nil {
+			return core.NewErrorResponse(req.ID, core.ErrCodeMethodNotFound, "roots not supported")
+		}
+		roots, err := c.rootsHandler(context.Background())
+		if err != nil {
+			return core.NewErrorResponse(req.ID, core.ErrCodeInternal, err.Error())
+		}
+		return core.NewResponse(req.ID, core.RootsListResult{Roots: roots})
+
 	default:
 		return core.NewErrorResponse(req.ID, core.ErrCodeMethodNotFound, "unknown server request: "+req.Method)
 	}
+}
+
+// NotifyRootsChanged sends a notifications/roots/list_changed notification
+// to the server. Call this after the client's filesystem roots have changed
+// so the server can re-fetch the current list via a roots/list request.
+func (c *Client) NotifyRootsChanged() error {
+	return c.notifyMethod("notifications/roots/list_changed", nil)
 }
 
 // SessionID returns the current session ID.

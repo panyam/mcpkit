@@ -115,8 +115,10 @@ func (d *Dispatcher) refreshRoots(push func(json.RawMessage)) {
 
 	// Defensive copy: decouple the slice we expose to d.roots / callbacks
 	// from the decoded response's backing array so later mutations on
-	// either side don't leak.
-	stored := append([]core.Root(nil), result.Roots...)
+	// either side don't leak. make()+copy ensures the result is non-nil
+	// even when the client returned an empty roots list (append(nil) is nil).
+	stored := make([]core.Root, len(result.Roots))
+	copy(stored, result.Roots)
 
 	d.rootsMu.Lock()
 	d.roots = stored
@@ -129,7 +131,9 @@ func (d *Dispatcher) refreshRoots(push func(json.RawMessage)) {
 	if d.onRootsChanged != nil {
 		// Pass a fresh copy so a misbehaving callback cannot corrupt the
 		// stored slice via append/mutation.
-		d.onRootsChanged(append([]core.Root(nil), stored...))
+		cbCopy := make([]core.Root, len(stored))
+		copy(cbCopy, stored)
+		d.onRootsChanged(cbCopy)
 	}
 }
 
