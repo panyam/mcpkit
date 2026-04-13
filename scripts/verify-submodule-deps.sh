@@ -19,6 +19,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SUBMODULES=(
     "ext/auth"
     "ext/ui"
+    "ext/protogen"
     "cmd/testclient"
 )
 
