@@ -496,53 +496,30 @@ func (c *streamableSSEConn) OnStart(w http.ResponseWriter, r *http.Request) erro
 		c.entry.getConn.Store(c)
 	}
 
-	// Wire the dispatcher's notifyFunc to push to the SSE hub.
-	// This enables core.EmitLog/core.Notify from tool handlers to reach the GET stream.
+	// Wire notifyFunc, pushRequest, and keepalive via the shared SSE
+	// transport wiring helper (#199).
 	sessionID := c.sessionID
-	hub := c.transport.sseHub
-	store := c.transport.config.eventStore
-	c.dispatcher.SetNotifyFunc(func(method string, params any) {
-		raw, err := core.MarshalNotification(method, params)
-		if err != nil {
-			return
-		}
-		emitSSEEvent(c.dispatcher.eventIDs, store, sessionID, raw, func(id string, data json.RawMessage) {
-			hub.SendEventWithID(sessionID, "message", id, SSEJSON(data))
-		})
-	})
-
-	// Persistent push function for server-initiated JSON-RPC requests
-	// (roots/list, keepalive, etc.). Writes via emitSSEEvent so event IDs and
-	// the optional event store stay consistent with notifyFunc's output.
-	pushFunc := func(raw json.RawMessage) {
-		emitSSEEvent(c.dispatcher.eventIDs, store, sessionID, raw, func(id string, data json.RawMessage) {
-			hub.SendEventWithID(sessionID, "message", id, SSEJSON(data))
-		})
+	wiring := &sseWiring{
+		dispatcher: c.dispatcher,
+		hub:        c.transport.sseHub,
+		sessionID:  sessionID,
+		store:      c.transport.config.eventStore,
+		cfg:        c.transport.config,
+		onDeath:    func() { c.transport.expireSession(sessionID) },
+		onPingFail: func(failures int) { c.transport.server.notifyKeepaliveFailure(sessionID, failures) },
 	}
-	c.dispatcher.SetPushRequest(pushFunc)
+	_, c.keepalive = wiring.wire()
 
-	// Replay missed events if client reconnected with Last-Event-ID
-	if lastID := r.Header.Get("Last-Event-ID"); lastID != "" && store != nil {
-		events, _ := store.Replay(sessionID, lastID)
+	// Replay missed events if client reconnected with Last-Event-ID.
+	// Must happen AFTER wiring so pushFunc is set (replay uses the hub).
+	if lastID := r.Header.Get("Last-Event-ID"); lastID != "" && c.transport.config.eventStore != nil {
+		events, _ := c.transport.config.eventStore.Replay(sessionID, lastID)
 		for _, ev := range events {
 			c.SendEventWithID(ev.Event, ev.ID, SSEJSON(ev.Data))
 		}
 	}
 
-	// Start keepalive pings if configured. Reuses the persistent pushFunc.
-	cfg := c.transport.config
-	if cfg.keepaliveInterval > 0 && c.entry != nil {
-		maxFails := cfg.keepaliveMaxFails
-		if maxFails <= 0 {
-			maxFails = 3
-		}
-		c.keepalive = &sessionKeepalive{
-			interval:    cfg.keepaliveInterval,
-			maxFailures: maxFails,
-			requestFunc: c.dispatcher.makeRequestFunc(pushFunc),
-			onDeath:     func() { c.transport.expireSession(sessionID) },
-			onPingFail:  func(failures int) { c.transport.server.notifyKeepaliveFailure(sessionID, failures) },
-		}
+	if c.keepalive != nil && c.entry != nil {
 		c.keepalive.start()
 	}
 
