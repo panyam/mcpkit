@@ -1,0 +1,95 @@
+// Annotations for exposing gRPC/Connect services as MCP tools, resources, and prompts.
+//
+// Usage:
+//   import "mcp/v1/annotations.proto";
+//
+//   service UserService {
+//     option (mcp.v1.mcp_service) = { namespace: "users" };
+//
+//     rpc GetUser(GetUserRequest) returns (User) {
+//       option (mcp.v1.mcp_tool) = {
+//         name: "get_user"
+//         description: "Retrieve a user by ID"
+//         structured_output: true
+//       };
+//     }
+//
+//     rpc GetUserProfile(GetUserProfileRequest) returns (UserProfile) {
+//       option (mcp.v1.mcp_resource) = {
+//         uri_template: "user://{user_id}/profile"
+//         name: "User Profile"
+//         mime_type: "application/json"
+//       };
+//     }
+//   }
+syntax = "proto3";
+package mcp.v1;
+
+option go_package = "github.com/panyam/mcpkit/ext/protogen/proto/mcp/v1;mcpv1";
+
+import "google/protobuf/descriptor.proto";
+
+// MCPToolOptions configures how a gRPC method is exposed as an MCP tool.
+message MCPToolOptions {
+  // Custom tool name. Defaults to snake_case of the method name.
+  // Must match [a-z][a-z0-9_]*, max 64 characters.
+  string name = 1;
+
+  // Human-readable description for LLM consumption.
+  // Defaults to the method's leading comment.
+  string description = 2;
+
+  // Per-tool execution timeout (e.g. "30s", "5m").
+  // Overrides server-wide WithToolTimeout.
+  string timeout = 3;
+
+  // When true, the response message is emitted as OutputSchema
+  // and the result uses StructuredResult instead of TextResult.
+  bool structured_output = 4;
+}
+
+// MCPResourceOptions exposes a gRPC method as an MCP resource or resource template.
+// Use uri_template with {param} placeholders for templated resources.
+message MCPResourceOptions {
+  // URI or URI template (RFC 6570). Required.
+  // Static: "config://app/settings"
+  // Templated: "user://{user_id}/profile"
+  string uri_template = 1;
+
+  // Display name for the resource.
+  string name = 2;
+
+  // MIME type of the resource content.
+  string mime_type = 3;
+
+  // Human-readable description.
+  string description = 4;
+}
+
+// MCPPromptOptions exposes a gRPC method as an MCP prompt.
+message MCPPromptOptions {
+  // Custom prompt name. Defaults to snake_case of the method name.
+  string name = 1;
+
+  // Human-readable description.
+  string description = 2;
+}
+
+// MCPServiceOptions configures service-level MCP settings.
+message MCPServiceOptions {
+  // Namespace prefix for all tools in this service.
+  // e.g. namespace="users" → tool "get" becomes "users_get".
+  string namespace = 1;
+}
+
+// Method-level annotations.
+extend google.protobuf.MethodOptions {
+  MCPToolOptions mcp_tool = 51001;
+  MCPResourceOptions mcp_resource = 51002;
+  MCPPromptOptions mcp_prompt = 51003;
+}
+
+// Service-level annotations.
+extend google.protobuf.ServiceOptions {
+  MCPServiceOptions mcp_service = 51010;
+}
