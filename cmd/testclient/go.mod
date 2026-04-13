@@ -3,7 +3,7 @@ module github.com/panyam/mcpkit/cmd/testclient
 go 1.26.1
 
 require (
-	github.com/panyam/mcpkit v0.2.0
+	github.com/panyam/mcpkit v0.2.3
 	github.com/panyam/mcpkit/ext/auth v0.0.0
 	github.com/panyam/oneauth v0.0.71
 )
@@ -14,7 +14,7 @@ require (
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/panyam/gocurrent v0.1.0 // indirect
 	github.com/panyam/goutils v0.1.8 // indirect
-	github.com/panyam/servicekit v0.0.24 // indirect
+	github.com/panyam/servicekit v0.0.25 // indirect
 	golang.org/x/crypto v0.46.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sys v0.39.0 // indirect
