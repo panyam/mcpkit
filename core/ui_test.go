@@ -219,7 +219,7 @@ func TestUIMetadataOmitEmpty(t *testing.T) {
 	if _, ok := raw["resourceUri"]; !ok {
 		t.Error("resourceUri should be present")
 	}
-	for _, key := range []string{"visibility", "csp", "permissions", "prefersBorder", "domain"} {
+	for _, key := range []string{"visibility", "csp", "permissions", "prefersBorder", "domain", "supportedDisplayModes"} {
 		if _, ok := raw[key]; ok {
 			t.Errorf("key %q should be omitted for zero value, got %s", key, raw[key])
 		}
@@ -379,6 +379,67 @@ func TestClientSupportsUI(t *testing.T) {
 func TestUIExtensionIDConstant(t *testing.T) {
 	if UIExtensionID != "io.modelcontextprotocol/ui" {
 		t.Errorf("UIExtensionID = %q, want %q", UIExtensionID, "io.modelcontextprotocol/ui")
+	}
+}
+
+// TestDisplayModeConstants verifies the wire values of DisplayMode constants.
+func TestDisplayModeConstants(t *testing.T) {
+	if DisplayModeInline != "inline" {
+		t.Errorf("DisplayModeInline = %q, want %q", DisplayModeInline, "inline")
+	}
+	if DisplayModeFullscreen != "fullscreen" {
+		t.Errorf("DisplayModeFullscreen = %q, want %q", DisplayModeFullscreen, "fullscreen")
+	}
+	if DisplayModePIP != "pip" {
+		t.Errorf("DisplayModePIP = %q, want %q", DisplayModePIP, "pip")
+	}
+}
+
+// TestUIMetadataDisplayModesRoundTrip verifies that SupportedDisplayModes
+// survives a JSON round-trip on UIMetadata.
+func TestUIMetadataDisplayModesRoundTrip(t *testing.T) {
+	original := UIMetadata{
+		ResourceUri:           "ui://app/view",
+		SupportedDisplayModes: []DisplayMode{DisplayModeInline, DisplayModeFullscreen},
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got UIMetadata
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(got.SupportedDisplayModes) != 2 {
+		t.Fatalf("SupportedDisplayModes length = %d, want 2", len(got.SupportedDisplayModes))
+	}
+	if got.SupportedDisplayModes[0] != DisplayModeInline {
+		t.Errorf("[0] = %q, want %q", got.SupportedDisplayModes[0], DisplayModeInline)
+	}
+	if got.SupportedDisplayModes[1] != DisplayModeFullscreen {
+		t.Errorf("[1] = %q, want %q", got.SupportedDisplayModes[1], DisplayModeFullscreen)
+	}
+}
+
+// TestUIMetadataDisplayModesOmitEmpty verifies that SupportedDisplayModes
+// is omitted from JSON when nil.
+func TestUIMetadataDisplayModesOmitEmpty(t *testing.T) {
+	meta := UIMetadata{ResourceUri: "ui://minimal"}
+
+	data, err := json.Marshal(meta)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := raw["supportedDisplayModes"]; ok {
+		t.Errorf("supportedDisplayModes should be omitted when nil, got %s", raw["supportedDisplayModes"])
 	}
 }
 

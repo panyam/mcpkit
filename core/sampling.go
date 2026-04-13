@@ -46,6 +46,14 @@ type ModelPreferences struct {
 	IntelligencePriority *float64   `json:"intelligencePriority,omitempty"`
 }
 
+// SamplingMeta holds protocol-level metadata for a sampling request.
+// Serialized as "_meta" in the sampling/createMessage params.
+type SamplingMeta struct {
+	// UI contains MCP Apps presentation metadata.
+	// When set, the host can associate the sampling request with a UI resource.
+	UI *UIMetadata `json:"ui,omitempty"`
+}
+
 // CreateMessageRequest is the params for a sampling/createMessage server-to-client request.
 // The server sends this to ask the client to perform LLM inference.
 type CreateMessageRequest struct {
@@ -57,6 +65,7 @@ type CreateMessageRequest struct {
 	ModelPreferences *ModelPreferences `json:"modelPreferences,omitempty"`
 	StopSequences    []string          `json:"stopSequences,omitempty"`
 	Metadata         map[string]any    `json:"metadata,omitempty"`
+	Meta             *SamplingMeta     `json:"_meta,omitempty"`
 }
 
 // CreateMessageResult is the client's response to a sampling/createMessage request.
