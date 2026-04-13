@@ -378,6 +378,14 @@ func (s *Server) dispatchWithOpts(d *Dispatcher, ctx context.Context, claims *co
 		})
 	}
 
+	// Wire handler-accessible NotifyResourceUpdated (#208). Routes through
+	// the subscription registry to fan out to all subscribed sessions.
+	if s.subRegistry != nil {
+		ctx = core.SetNotifyResourceUpdated(ctx, func(uri string) {
+			s.subRegistry.notify(uri)
+		})
+	}
+
 	// Inject custom content chunk method if configured.
 	if s.options.contentChunkMethod != "" {
 		ctx = core.WithContentChunkMethod(ctx, s.options.contentChunkMethod)
