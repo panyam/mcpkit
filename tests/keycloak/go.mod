@@ -3,7 +3,7 @@ module github.com/panyam/mcpkit/tests/keycloak
 go 1.26.1
 
 require (
-	github.com/panyam/mcpkit v0.1.22
+	github.com/panyam/mcpkit v0.2.0
 	github.com/panyam/mcpkit/ext/auth v0.0.0
 	github.com/panyam/oneauth v0.0.71
 	github.com/stretchr/testify v1.11.1
