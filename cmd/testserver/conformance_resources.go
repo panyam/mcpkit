@@ -4,7 +4,6 @@ package main
 // MCP conformance test suite (@modelcontextprotocol/conformance).
 
 import (
-	"context"
 	"encoding/base64"
 	"fmt"
 
@@ -22,7 +21,7 @@ func registerConformanceResources(srv *server.Server) {
 			Description: "A static text resource for conformance testing",
 			MimeType:    "text/plain",
 		},
-		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{
 				Contents: []core.ResourceReadContent{{
 					URI:      "test://static-text",
@@ -41,7 +40,7 @@ func registerConformanceResources(srv *server.Server) {
 			Description: "A static binary resource for conformance testing",
 			MimeType:    "application/octet-stream",
 		},
-		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			data := []byte("binary test data")
 			return core.ResourceResult{
 				Contents: []core.ResourceReadContent{{
@@ -61,7 +60,7 @@ func registerConformanceResources(srv *server.Server) {
 			Description: "A parameterized resource template for conformance testing",
 			MimeType:    "text/plain",
 		},
-		func(ctx context.Context, uri string, params map[string]string) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, uri string, params map[string]string) (core.ResourceResult, error) {
 			id := params["id"]
 			return core.ResourceResult{
 				Contents: []core.ResourceReadContent{{

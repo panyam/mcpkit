@@ -8,7 +8,6 @@ package e2e_test
 // and client reconnection infrastructure.
 
 import (
-	"context"
 	"net/http/httptest"
 	"sync"
 	"testing"
@@ -35,7 +34,7 @@ func TestE2E_StreamingToolResults(t *testing.T) {
 			Description: "Simulates a long analysis emitting incremental results",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		Handler: func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		Handler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			steps := []string{"Fetching data...", "Processing rows...", "Generating report..."}
 			for _, step := range steps {
 				core.EmitContent(ctx, req.RequestID, core.Content{
@@ -101,7 +100,7 @@ func TestE2E_StreamingWithoutHandler(t *testing.T) {
 			Description: "Emits chunks but client has no handler",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		Handler: func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		Handler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			core.EmitContent(ctx, req.RequestID, core.Content{Type: "text", Text: "ignored chunk"})
 			return core.TextResult("final only"), nil
 		},

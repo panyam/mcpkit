@@ -1,7 +1,6 @@
 package apps_test
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http/httptest"
@@ -41,7 +40,7 @@ func newAppTestServer() *server.Server {
 				},
 			},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			var p struct{ Title string `json:"title"` }
 			req.Bind(&p)
 			return core.TextResult(fmt.Sprintf("built: %s", p.Title)), nil
@@ -55,7 +54,7 @@ func newAppTestServer() *server.Server {
 			Description: "Echo input",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("echo"), nil
 		},
 	)
@@ -63,7 +62,7 @@ func newAppTestServer() *server.Server {
 	// UI resource with per-content _meta
 	srv.RegisterResource(
 		core.ResourceDef{URI: "ui://decks/view", Name: "Deck Viewer", MimeType: core.AppMIMEType},
-		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{Contents: []core.ResourceReadContent{{
 				URI:      req.URI,
 				MimeType: core.AppMIMEType,
@@ -81,7 +80,7 @@ func newAppTestServer() *server.Server {
 	// Plain resource without _meta
 	srv.RegisterResource(
 		core.ResourceDef{URI: "test://plain", Name: "Plain", MimeType: "text/plain"},
-		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{Contents: []core.ResourceReadContent{{
 				URI: req.URI, MimeType: "text/plain", Text: "plain content",
 			}}}, nil

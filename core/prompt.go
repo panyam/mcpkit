@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"encoding/json"
 	"time"
 )
@@ -97,4 +96,4 @@ type PromptResult struct {
 }
 
 // PromptHandler generates prompt messages, optionally using arguments.
-type PromptHandler func(ctx context.Context, req PromptRequest) (PromptResult, error)
+type PromptHandler func(ctx PromptContext, req PromptRequest) (PromptResult, error)

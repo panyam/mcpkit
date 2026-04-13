@@ -28,7 +28,7 @@ func TestPromptsListAdvertisesSchema(t *testing.T) {
 				},
 			},
 		},
-		func(ctx context.Context, req core.PromptRequest) (core.PromptResult, error) {
+		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResult, error) {
 			return core.PromptResult{}, nil
 		},
 	)
@@ -75,7 +75,7 @@ func TestPromptsGetPassesTypedArguments(t *testing.T) {
 				{Name: "verbose", Schema: map[string]any{"type": "boolean"}},
 			},
 		},
-		func(ctx context.Context, req core.PromptRequest) (core.PromptResult, error) {
+		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResult, error) {
 			captured = req.Arguments
 			return core.PromptResult{
 				Messages: []core.PromptMessage{{

@@ -5,7 +5,6 @@ package client_test
 // (auth failures, JSON-RPC errors) do NOT trigger reconnection.
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -141,7 +140,7 @@ func TestReconnect_WithLogging(t *testing.T) {
 	srv := server.NewServer(core.ServerInfo{Name: "reconnect-test", Version: "1.0"})
 	srv.RegisterTool(
 		core.ToolDef{Name: "count", Description: "counts calls"},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			n := callCount.Add(1)
 			return core.TextResult(fmt.Sprintf("call-%d", n)), nil
 		},
