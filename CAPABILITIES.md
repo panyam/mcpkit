@@ -59,7 +59,10 @@
 - mcp-apps-visibility: Tool visibility filtering — UIVisibilityModel/UIVisibilityApp, client-side ListToolsForModel() excludes app-only tools
 - mcp-apps-ref-validation: RefValidator interface — extensions validate tool-to-resource references at server startup
 - mcp-apps-resource-notification: NotifyResourcesChanged(ctx) — tool handlers signal resource list changes to clients
-- mcp-apps-register-helper: RegisterAppTool (ext/ui) — registers tool + resource pair in one call via ToolResourceRegistrar interface
+- mcp-apps-register-helper: RegisterAppTool (ext/ui) — registers tool + resource pair in one call via ToolResourceRegistrar interface. Auto-detects template URIs (containing `{`) and routes to RegisterResourceTemplate; concrete URIs use RegisterResource.
+- mcp-apps-display-modes: UIMetadata.SupportedDisplayModes — apps declare inline/fullscreen/pip support. RequestDisplayMode(ctx, mode) emits notifications/ui/displayMode. (#185)
+- mcp-apps-template-resources: RegisterAppTool auto-detects template URIs and registers resource templates. TemplateHandler field on AppToolConfig for parameterized HTML serving (SSR). (#190)
+- mcp-apps-elicitation-meta: ElicitationRequest._meta.ui and CreateMessageRequest._meta.ui — app metadata on server-to-client requests. ElicitWithApp/SampleWithApp helpers in ext/ui. (#191)
 - mcp-apps-conformance: 21 MCP Apps conformance tests (tool metadata, resources, visibility, fallback, negotiation)
 - mcp-dynamic-registration: Registry.AddTool/RemoveTool/AddResource/RemoveResource/AddPrompt/RemovePrompt — thread-safe runtime registration with automatic notifications/*/list_changed broadcast via OnChange callback
 - mcp-session-timeout: WithSessionTimeout — idle session cleanup for Streamable HTTP (timer + ref counting to avoid closing mid-execution)
