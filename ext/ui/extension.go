@@ -170,6 +170,9 @@ func RegisterAppTool(reg ToolResourceRegistrar, cfg AppToolConfig) {
 			cfg.TemplateHandler,
 		)
 	} else {
+		if cfg.ResourceHandler == nil {
+			panic("RegisterAppTool: concrete URI " + cfg.ResourceURI + " requires ResourceHandler, got nil")
+		}
 		reg.RegisterResource(
 			core.ResourceDef{
 				URI:      cfg.ResourceURI,
@@ -197,7 +200,10 @@ func RequestDisplayMode(ctx context.Context, mode core.DisplayMode) {
 // This is a convenience wrapper around core.Elicit that populates _meta.ui
 // so the host can render a UI resource during input collection.
 func ElicitWithApp(ctx context.Context, req core.ElicitationRequest, ui *core.UIMetadata) (core.ElicitationResult, error) {
-	req.Meta = &core.ElicitationMeta{UI: ui}
+	if req.Meta == nil {
+		req.Meta = &core.ElicitationMeta{}
+	}
+	req.Meta.UI = ui
 	return core.Elicit(ctx, req)
 }
 
@@ -205,7 +211,10 @@ func ElicitWithApp(ctx context.Context, req core.ElicitationRequest, ui *core.UI
 // This is a convenience wrapper around core.Sample that populates _meta.ui
 // so the host can associate the sampling request with a UI resource.
 func SampleWithApp(ctx context.Context, req core.CreateMessageRequest, ui *core.UIMetadata) (core.CreateMessageResult, error) {
-	req.Meta = &core.SamplingMeta{UI: ui}
+	if req.Meta == nil {
+		req.Meta = &core.SamplingMeta{}
+	}
+	req.Meta.UI = ui
 	return core.Sample(ctx, req)
 }
 

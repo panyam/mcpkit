@@ -134,6 +134,8 @@ func registerConformanceApps(srv *server.Server) {
 			},
 		},
 		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			// Uses raw core.Notify instead of ui.RequestDisplayMode to avoid
+			// importing ext/ui from the root module (see testUIExtension above).
 			core.Notify(ctx, "notifications/ui/displayMode", map[string]any{
 				"displayMode": core.DisplayModeFullscreen,
 			})
