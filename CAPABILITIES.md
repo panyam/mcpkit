@@ -18,7 +18,8 @@
 - mcp-client-auth: WithClientBearerToken, WithTokenSource — auth header injection on all client requests
 - mcp-auth-conformance: 14/14 required auth conformance scenarios passing (210/210 checks)
 - mcp-tool-timeout: context.WithTimeout wrapper for tool execution
-- mcp-allowed-roots: Restrict tool cwd to allowed directories (option registered, not enforced yet)
+- mcp-allowed-roots: WithAllowedRoots + core.IsPathAllowed — per-session sandbox enforcement using intersection of static server roots and dynamic client roots. Handler-side helper, not automatic middleware. (#197)
+- mcp-roots-fetch-timeout: WithRootsFetchTimeout — configurable deadline for server-to-client roots/list requests. Default 30s. (#198)
 - mcp-resources: resources/list, resources/read, resources/templates/list with URI template matching
 - mcp-prompts: prompts/list, prompts/get with argument passing
 - mcp-prompt-argument-schema: PromptArgument.Schema — declarative JSON Schema on prompt arguments (mirrors ToolDef.InputSchema). Clients render typed inputs; server-side validation tracked by #184 (#87)
@@ -58,7 +59,10 @@
 - mcp-apps-visibility: Tool visibility filtering — UIVisibilityModel/UIVisibilityApp, client-side ListToolsForModel() excludes app-only tools
 - mcp-apps-ref-validation: RefValidator interface — extensions validate tool-to-resource references at server startup
 - mcp-apps-resource-notification: NotifyResourcesChanged(ctx) — tool handlers signal resource list changes to clients
-- mcp-apps-register-helper: RegisterAppTool (ext/ui) — registers tool + resource pair in one call via ToolResourceRegistrar interface
+- mcp-apps-register-helper: RegisterAppTool (ext/ui) — registers tool + resource pair in one call via ToolResourceRegistrar interface. Auto-detects template URIs (containing `{`) and routes to RegisterResourceTemplate; concrete URIs use RegisterResource.
+- mcp-apps-display-modes: UIMetadata.SupportedDisplayModes — apps declare inline/fullscreen/pip support. RequestDisplayMode(ctx, mode) emits notifications/ui/displayMode. (#185)
+- mcp-apps-template-resources: RegisterAppTool auto-detects template URIs and registers resource templates. TemplateHandler field on AppToolConfig for parameterized HTML serving (SSR). (#190)
+- mcp-apps-elicitation-meta: ElicitationRequest._meta.ui and CreateMessageRequest._meta.ui — app metadata on server-to-client requests. ElicitWithApp/SampleWithApp helpers in ext/ui. (#191)
 - mcp-apps-conformance: 21 MCP Apps conformance tests (tool metadata, resources, visibility, fallback, negotiation)
 - mcp-dynamic-registration: Registry.AddTool/RemoveTool/AddResource/RemoveResource/AddPrompt/RemovePrompt — thread-safe runtime registration with automatic notifications/*/list_changed broadcast via OnChange callback
 - mcp-session-timeout: WithSessionTimeout — idle session cleanup for Streamable HTTP (timer + ref counting to avoid closing mid-execution)
@@ -67,7 +71,8 @@
 - mcp-command-transport: CommandTransport — spawn subprocess MCP servers, communicate via stdio, graceful SIGTERM/SIGKILL shutdown, stderr capture, env passthrough. WithCommandTransport client option supports reconnection (auto-restart).
 - mcp-tool-exec: ToolExec — wrap CLI binaries as MCP tools with structured I/O. ExecConfig supports static/dynamic args, env, dir, timeout. BuildArgs callback maps JSON tool arguments to CLI flags.
 - mcp-modify-request: WithModifyRequest — client-side HTTP request hook for injecting custom headers (tracing, tenant IDs). Runs before auth, applies to Streamable HTTP + SSE transports.
-- mcp-sse-retry-hint: core.EmitSSERetry — tool/resource/prompt handlers emit raw SSE `retry:` field to tell clients how long to wait before reconnecting. 2024-11-25 SSE transport only. Hint-only (no disconnect). Combines with WithSSEGracePeriod + WithEventStore for drop-and-resume patterns. (#72)
+- mcp-sse-retry-hint: core.EmitSSERetry — tool/resource/prompt handlers emit raw SSE `retry:` field to tell clients how long to wait before reconnecting. Both SSE (2024-11-25) and Streamable HTTP transports. Streamable HTTP routes the hint from the POST handler to the session's GET SSE stream. Hint-only (no disconnect). Combines with WithSSEGracePeriod + WithEventStore for drop-and-resume patterns. (#72, #202)
+- mcp-tool-context-detach: core.DetachFromClient — tool handlers opt into surviving client disconnect and per-tool timeout. Uses context.WithoutCancel to strip cancellation while preserving session state. Combine with EmitSSERetry + GracePeriod + EventStore for long-running tools with result replay on reconnect. (#203)
 - mcp-auth-refresh-callback: OAuthTokenSource.OnToken — optional callback fired after successful refresh_token grant by the underlying oneauth AuthClient. Use for external persistence without implementing CredentialStore. (#137)
 - mcp-auth-refresh-flow: OAuthTokenSource.Token() attempts the refresh_token grant before falling back to LoginWithBrowser. Long-running clients (agents, CLI tools) no longer re-prompt for browser consent on every token expiry. Default in-memory cred store when CredStore is nil; TokenForScopes wipes stored credential to force full re-login on scope step-up; scope-coverage check skips refresh when stored credential doesn't cover requested scopes. (#196)
 

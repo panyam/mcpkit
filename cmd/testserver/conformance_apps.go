@@ -45,8 +45,9 @@ func registerConformanceApps(srv *server.Server) {
 					CSP: &core.UICSPConfig{
 						ResourceDomains: []string{"cdn.example.com"},
 					},
-					Permissions:   []string{"clipboard-write"},
-					PrefersBorder: &border,
+					Permissions:           []string{"clipboard-write"},
+					PrefersBorder:         &border,
+					SupportedDisplayModes: []core.DisplayMode{core.DisplayModeInline, core.DisplayModeFullscreen},
 				},
 			},
 		},
@@ -115,6 +116,57 @@ func registerConformanceApps(srv *server.Server) {
 		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
 			core.NotifyResourcesChanged(ctx)
 			return core.TextResult("Dashboard mutated"), nil
+		},
+	)
+
+	// request-fullscreen: requests display mode change via notification
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "request-fullscreen",
+			Description: "Requests fullscreen display mode",
+			InputSchema: map[string]any{"type": "object"},
+			Meta: &core.ToolMeta{
+				UI: &core.UIMetadata{
+					ResourceUri:           "ui://dashboard/view",
+					Visibility:            []core.UIVisibility{core.UIVisibilityApp},
+					SupportedDisplayModes: []core.DisplayMode{core.DisplayModeInline, core.DisplayModeFullscreen},
+				},
+			},
+		},
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			core.Notify(ctx, "notifications/ui/displayMode", map[string]any{
+				"displayMode": core.DisplayModeFullscreen,
+			})
+			return core.TextResult("Fullscreen requested"), nil
+		},
+	)
+
+	// elicit-with-ui: demonstrates app-backed elicitation with _meta.ui
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "elicit-with-ui",
+			Description: "Elicits input using an MCP App UI",
+			InputSchema: map[string]any{"type": "object"},
+			Meta: &core.ToolMeta{
+				UI: &core.UIMetadata{
+					ResourceUri: "ui://dashboard/view",
+					Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
+				},
+			},
+		},
+		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			result, err := core.Elicit(ctx, core.ElicitationRequest{
+				Message: "Choose a dashboard widget",
+				Meta: &core.ElicitationMeta{
+					UI: &core.UIMetadata{
+						ResourceUri: "ui://dashboard/view",
+					},
+				},
+			})
+			if err != nil {
+				return core.ErrorResult(err.Error()), nil
+			}
+			return core.TextResult(fmt.Sprintf("Action: %s", result.Action)), nil
 		},
 	)
 

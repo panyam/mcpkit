@@ -14,6 +14,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -67,10 +68,11 @@ func (UIExtension) ValidateRefs(tools []core.ToolDef, resourceURIs []string, tem
 }
 
 // ToolResourceRegistrar is the interface needed by RegisterAppTool to register
-// tools and resources. Satisfied by *server.Server without importing it.
+// tools, resources, and resource templates. Satisfied by *server.Server without importing it.
 type ToolResourceRegistrar interface {
 	RegisterTool(def core.ToolDef, handler core.ToolHandler)
 	RegisterResource(def core.ResourceDef, handler core.ResourceHandler)
+	RegisterResourceTemplate(def core.ResourceTemplate, handler core.TemplateHandler)
 }
 
 // AppToolConfig configures a tool + resource pair for RegisterAppTool.
@@ -108,6 +110,16 @@ type AppToolConfig struct {
 
 	// Domain requests a dedicated sandbox origin for the app.
 	Domain string
+
+	// SupportedDisplayModes declares which display modes this app supports.
+	// Nil means the host decides.
+	SupportedDisplayModes []core.DisplayMode
+
+	// TemplateHandler serves HTML content for a ui:// resource template.
+	// Required when ResourceURI contains "{" (template variable).
+	// When set, RegisterAppTool registers a resource template instead of
+	// a concrete resource.
+	TemplateHandler core.TemplateHandler
 }
 
 // RegisterAppTool registers both a tool (with _meta.ui metadata) and its
@@ -126,12 +138,13 @@ type AppToolConfig struct {
 //	})
 func RegisterAppTool(reg ToolResourceRegistrar, cfg AppToolConfig) {
 	uiMeta := &core.UIMetadata{
-		ResourceUri:   cfg.ResourceURI,
-		Visibility:    cfg.Visibility,
-		CSP:           cfg.CSP,
-		Permissions:   cfg.Permissions,
-		PrefersBorder: cfg.PrefersBorder,
-		Domain:        cfg.Domain,
+		ResourceUri:           cfg.ResourceURI,
+		Visibility:            cfg.Visibility,
+		CSP:                   cfg.CSP,
+		Permissions:           cfg.Permissions,
+		PrefersBorder:         cfg.PrefersBorder,
+		Domain:                cfg.Domain,
+		SupportedDisplayModes: cfg.SupportedDisplayModes,
 	}
 
 	reg.RegisterTool(
@@ -144,14 +157,56 @@ func RegisterAppTool(reg ToolResourceRegistrar, cfg AppToolConfig) {
 		cfg.ToolHandler,
 	)
 
-	reg.RegisterResource(
-		core.ResourceDef{
-			URI:      cfg.ResourceURI,
-			Name:     cfg.Name + " UI",
-			MimeType: core.AppMIMEType,
-		},
-		cfg.ResourceHandler,
-	)
+	if strings.Contains(cfg.ResourceURI, "{") {
+		if cfg.TemplateHandler == nil {
+			panic("RegisterAppTool: template URI " + cfg.ResourceURI + " requires TemplateHandler, got nil")
+		}
+		reg.RegisterResourceTemplate(
+			core.ResourceTemplate{
+				URITemplate: cfg.ResourceURI,
+				Name:        cfg.Name + " UI",
+				MimeType:    core.AppMIMEType,
+			},
+			cfg.TemplateHandler,
+		)
+	} else {
+		reg.RegisterResource(
+			core.ResourceDef{
+				URI:      cfg.ResourceURI,
+				Name:     cfg.Name + " UI",
+				MimeType: core.AppMIMEType,
+			},
+			cfg.ResourceHandler,
+		)
+	}
+}
+
+// RequestDisplayMode sends a display mode change notification to the client.
+// Call this from a tool handler to request the host to change how the app
+// is displayed (e.g., switch from inline to fullscreen).
+//
+// The notification is fire-and-forget; the host may ignore it if the
+// requested mode is not supported.
+func RequestDisplayMode(ctx context.Context, mode core.DisplayMode) {
+	core.Notify(ctx, "notifications/ui/displayMode", map[string]any{
+		"displayMode": mode,
+	})
+}
+
+// ElicitWithApp sends an elicitation/create request with MCP Apps metadata.
+// This is a convenience wrapper around core.Elicit that populates _meta.ui
+// so the host can render a UI resource during input collection.
+func ElicitWithApp(ctx context.Context, req core.ElicitationRequest, ui *core.UIMetadata) (core.ElicitationResult, error) {
+	req.Meta = &core.ElicitationMeta{UI: ui}
+	return core.Elicit(ctx, req)
+}
+
+// SampleWithApp sends a sampling/createMessage request with MCP Apps metadata.
+// This is a convenience wrapper around core.Sample that populates _meta.ui
+// so the host can associate the sampling request with a UI resource.
+func SampleWithApp(ctx context.Context, req core.CreateMessageRequest, ui *core.UIMetadata) (core.CreateMessageResult, error) {
+	req.Meta = &core.SamplingMeta{UI: ui}
+	return core.Sample(ctx, req)
 }
 
 // matchesAnyTemplate checks if a URI matches any of the given URI templates.

@@ -20,15 +20,17 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"strings"
 	"time"
 
 	core "github.com/panyam/mcpkit/core"
 )
 
-// rootsFetchTimeout bounds the duration of a single server-to-client
-// roots/list request. Hardcoded for now; if we need tunability we'll
-// promote it to a WithRootsFetchTimeout server option.
-const rootsFetchTimeout = 30 * time.Second
+// defaultRootsFetchTimeout is the deadline for server-to-client roots/list
+// requests when WithRootsFetchTimeout is not set. 30 seconds covers common
+// use cases (local filesystems, small monorepos) without being so long that
+// a stuck client blocks server startup perceptibly.
+const defaultRootsFetchTimeout = 30 * time.Second
 
 // handleRootsListChanged is the entry point for the
 // notifications/roots/list_changed notification. It gates on the client's
@@ -95,7 +97,11 @@ func (d *Dispatcher) refreshRoots(push func(json.RawMessage)) {
 		}
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), rootsFetchTimeout)
+	timeout := d.rootsFetchTimeout
+	if timeout <= 0 {
+		timeout = defaultRootsFetchTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	reqFunc := d.makeRequestFunc(push)
@@ -148,4 +154,66 @@ func (d *Dispatcher) Roots() []core.Root {
 		return nil
 	}
 	return append([]core.Root(nil), d.roots...)
+}
+
+// effectiveAllowedRoots computes the enforced filesystem roots for the
+// current session. The result depends on two inputs:
+//
+//   - d.allowedRoots: static list from WithAllowedRoots (may be nil/empty).
+//   - d.roots: dynamic client-provided roots from roots/list (may be nil).
+//
+// Rules:
+//   - If both are set: intersection (paths must appear in BOTH lists).
+//   - If only static is set: use the static list.
+//   - If only client roots are set: convert file:// URIs to paths, use those.
+//   - If neither is set: return nil (no restriction).
+//
+// Thread-safe: reads d.roots under rootsMu.
+func (d *Dispatcher) effectiveAllowedRoots() []string {
+	d.rootsMu.Lock()
+	clientRoots := d.roots
+	d.rootsMu.Unlock()
+
+	hasStatic := len(d.allowedRoots) > 0
+	hasClient := len(clientRoots) > 0
+
+	if !hasStatic && !hasClient {
+		return nil
+	}
+
+	if !hasStatic {
+		// Client roots only — convert URIs to paths.
+		paths := make([]string, len(clientRoots))
+		for i, r := range clientRoots {
+			paths[i] = core.FileURIToPath(r.URI)
+		}
+		return paths
+	}
+
+	if !hasClient {
+		// Static roots only.
+		return append([]string(nil), d.allowedRoots...)
+	}
+
+	// Intersection: a client root must fall within at least one static root.
+	// Convert client URIs to paths, then filter by static containment.
+	staticSet := make(map[string]bool, len(d.allowedRoots))
+	for _, s := range d.allowedRoots {
+		staticSet[s] = true
+	}
+	var result []string
+	for _, cr := range clientRoots {
+		p := core.FileURIToPath(cr.URI)
+		for _, s := range d.allowedRoots {
+			if p == s || strings.HasPrefix(p, s+"/") || strings.HasPrefix(s, p+"/") || staticSet[p] {
+				result = append(result, p)
+				break
+			}
+		}
+	}
+	if result == nil {
+		// Explicit empty: intersection produced nothing → deny all.
+		return []string{}
+	}
+	return result
 }
