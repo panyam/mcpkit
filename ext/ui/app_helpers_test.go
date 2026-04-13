@@ -122,26 +122,33 @@ func TestValidateRefsNoMetaSkipped(t *testing.T) {
 
 // mockRegistrar captures RegisterTool, RegisterResource, and RegisterResourceTemplate calls for testing.
 type mockRegistrar struct {
-	tools     []core.ToolDef
-	resources []core.ResourceDef
-	templates []core.ResourceTemplate
+	tools            []core.ToolDef
+	toolHandlers     []core.ToolHandler
+	resources        []core.ResourceDef
+	resourceHandlers []core.ResourceHandler
+	templates        []core.ResourceTemplate
+	templateHandlers []core.TemplateHandler
 }
 
-func (m *mockRegistrar) RegisterTool(def core.ToolDef, _ core.ToolHandler) {
+func (m *mockRegistrar) RegisterTool(def core.ToolDef, h core.ToolHandler) {
 	m.tools = append(m.tools, def)
+	m.toolHandlers = append(m.toolHandlers, h)
 }
 
-func (m *mockRegistrar) RegisterResource(def core.ResourceDef, _ core.ResourceHandler) {
+func (m *mockRegistrar) RegisterResource(def core.ResourceDef, h core.ResourceHandler) {
 	m.resources = append(m.resources, def)
+	m.resourceHandlers = append(m.resourceHandlers, h)
 }
 
-func (m *mockRegistrar) RegisterResourceTemplate(def core.ResourceTemplate, _ core.TemplateHandler) {
+func (m *mockRegistrar) RegisterResourceTemplate(def core.ResourceTemplate, h core.TemplateHandler) {
 	m.templates = append(m.templates, def)
+	m.templateHandlers = append(m.templateHandlers, h)
 }
 
 // TestRegisterAppToolTemplate verifies that RegisterAppTool detects a template
-// URI (contains "{") and routes registration to RegisterResourceTemplate instead
-// of RegisterResource.
+// URI, registers both a template resource and a concrete fallback, and
+// advertises the concrete fallback URI in the tool's _meta.ui.resourceUri
+// so hosts that don't support template variable substitution can fetch it.
 func TestRegisterAppToolTemplate(t *testing.T) {
 	reg := &mockRegistrar{}
 
@@ -158,11 +165,9 @@ func TestRegisterAppToolTemplate(t *testing.T) {
 		},
 	})
 
+	// Template resource is always registered for smart clients.
 	if len(reg.templates) != 1 {
 		t.Fatalf("expected 1 template, got %d", len(reg.templates))
-	}
-	if len(reg.resources) != 0 {
-		t.Errorf("expected 0 resources, got %d", len(reg.resources))
 	}
 	tmpl := reg.templates[0]
 	if tmpl.URITemplate != "ui://pizzas/{pizzaId}/details" {
@@ -172,15 +177,24 @@ func TestRegisterAppToolTemplate(t *testing.T) {
 		t.Errorf("MimeType = %q, want %q", tmpl.MimeType, core.AppMIMEType)
 	}
 
-	// Tool should still have the correct _meta.ui.resourceUri
+	// Concrete fallback resource is auto-generated for current hosts.
+	wantConcreteURI := "ui://pizzas/show_pizza/latest"
+	if len(reg.resources) != 1 {
+		t.Fatalf("expected 1 concrete fallback resource, got %d", len(reg.resources))
+	}
+	if reg.resources[0].URI != wantConcreteURI {
+		t.Errorf("concrete resource URI = %q, want %q", reg.resources[0].URI, wantConcreteURI)
+	}
+
+	// Tool's _meta.ui.resourceUri should point to the concrete fallback.
 	if len(reg.tools) != 1 {
 		t.Fatalf("expected 1 tool, got %d", len(reg.tools))
 	}
 	if reg.tools[0].Meta == nil || reg.tools[0].Meta.UI == nil {
 		t.Fatal("tool Meta.UI is nil")
 	}
-	if reg.tools[0].Meta.UI.ResourceUri != "ui://pizzas/{pizzaId}/details" {
-		t.Errorf("resourceUri = %q, want template URI", reg.tools[0].Meta.UI.ResourceUri)
+	if reg.tools[0].Meta.UI.ResourceUri != wantConcreteURI {
+		t.Errorf("resourceUri = %q, want %q", reg.tools[0].Meta.UI.ResourceUri, wantConcreteURI)
 	}
 }
 
@@ -257,5 +271,117 @@ func TestRegisterAppToolSupportedDisplayModes(t *testing.T) {
 	}
 	if ui.SupportedDisplayModes[1] != core.DisplayModeFullscreen {
 		t.Errorf("SupportedDisplayModes[1] = %q, want %q", ui.SupportedDisplayModes[1], core.DisplayModeFullscreen)
+	}
+}
+
+// TestTemplateManualHybrid verifies that providing a template URI with a
+// ResourceHandler (no TemplateHandler) falls through to the manual hybrid
+// path — no auto-generated fallback, consumer owns the concrete resource.
+func TestTemplateManualHybrid(t *testing.T) {
+	reg := &mockRegistrar{}
+
+	RegisterAppTool(reg, AppToolConfig{
+		Name:        "manual_tool",
+		Description: "Manual hybrid",
+		InputSchema: map[string]any{"type": "object"},
+		ResourceURI: "ui://app/{id}/view",
+		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			return core.TextResult("ok"), nil
+		},
+		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
+			return core.ResourceResult{}, nil
+		},
+		// TemplateHandler intentionally nil — manual hybrid
+	})
+
+	// No template registered (manual pattern owns everything).
+	if len(reg.templates) != 0 {
+		t.Errorf("expected 0 templates, got %d", len(reg.templates))
+	}
+	// Resource registered with the original template URI as-is.
+	if len(reg.resources) != 1 {
+		t.Fatalf("expected 1 resource, got %d", len(reg.resources))
+	}
+	if reg.resources[0].URI != "ui://app/{id}/view" {
+		t.Errorf("resource URI = %q, want %q", reg.resources[0].URI, "ui://app/{id}/view")
+	}
+	// Tool's resourceUri is the original (consumer manages it).
+	if reg.tools[0].Meta.UI.ResourceUri != "ui://app/{id}/view" {
+		t.Errorf("resourceUri = %q, want original template URI", reg.tools[0].Meta.UI.ResourceUri)
+	}
+}
+
+// TestConcreteFallbackURI verifies the synthetic URI generation.
+func TestConcreteFallbackURI(t *testing.T) {
+	tests := []struct {
+		templateURI string
+		toolName    string
+		want        string
+	}{
+		{"ui://slyds/decks/{deck}/preview", "preview_deck", "ui://slyds/preview_deck/latest"},
+		{"ui://pizzas/{pizzaId}/details", "show_pizza", "ui://pizzas/show_pizza/latest"},
+		{"ui://app/{a}/{b}/view", "my_tool", "ui://app/my_tool/latest"},
+		{"not-a-uri", "tool", "ui://tool/latest"}, // malformed URI fallback
+	}
+	for _, tt := range tests {
+		got := concreteFallbackURI(tt.templateURI, tt.toolName)
+		if got != tt.want {
+			t.Errorf("concreteFallbackURI(%q, %q) = %q, want %q", tt.templateURI, tt.toolName, got, tt.want)
+		}
+	}
+}
+
+// TestExtractTemplateParams verifies extraction of template variable values
+// from tool arguments JSON.
+func TestExtractTemplateParams(t *testing.T) {
+	tests := []struct {
+		name string
+		vars []string
+		args string
+		want map[string]string
+	}{
+		{
+			name: "string values",
+			vars: []string{"deck", "slide"},
+			args: `{"deck": "q3-review", "slide": "intro", "extra": "ignored"}`,
+			want: map[string]string{"deck": "q3-review", "slide": "intro"},
+		},
+		{
+			name: "numeric value stringified",
+			vars: []string{"id"},
+			args: `{"id": 42}`,
+			want: map[string]string{"id": "42"},
+		},
+		{
+			name: "missing var",
+			vars: []string{"deck", "missing"},
+			args: `{"deck": "hello"}`,
+			want: map[string]string{"deck": "hello"},
+		},
+		{
+			name: "empty args",
+			vars: []string{"x"},
+			args: ``,
+			want: map[string]string{},
+		},
+		{
+			name: "null args",
+			vars: []string{"x"},
+			args: `null`,
+			want: map[string]string{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractTemplateParams(tt.vars, []byte(tt.args))
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %v, want %v", got, tt.want)
+			}
+			for k, v := range tt.want {
+				if got[k] != v {
+					t.Errorf("params[%q] = %q, want %q", k, got[k], v)
+				}
+			}
+		})
 	}
 }

@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Go library for building production-grade MCP servers and clients. Three packages (`core/`, `server/`, `client/`) plus sub-modules (`ext/auth/`, `ext/ui/`).
+Go library for building production-grade MCP servers and clients. Three packages (`core/`, `server/`, `client/`) plus sub-modules (`ext/auth/`, `ext/ui/`, `ext/protogen/`).
 
 ## Quick Commands
 
@@ -27,6 +27,7 @@ make upkcl / downkcl  # Keycloak container lifecycle
 - **`client/`** — Client, HTTP/Stdio/Command transports, reconnection, auth retry
 - **`ext/auth/`** — Separate Go module: JWT validation, PRM, OAuth token sources. See `ext/auth/docs/DESIGN.md`
 - **`ext/ui/`** — Separate Go module: MCP Apps extension. See `docs/APPS_DESIGN.md`
+- **`ext/protogen/`** — Separate Go module: proto annotation-driven MCP code generation. See `ext/protogen/docs/DESIGN.md`
 - **`testutil/`** — `NewTestServer`, `ForAllTransports`, `TestClient`
 - **`cmd/testserver/`** — Conformance test server
 - **`tests/e2e/`, `tests/keycloak/`** — Separate Go modules with `replace` directives
@@ -45,13 +46,15 @@ func myTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error)
 
 ### Registration
 - Two-arg: `srv.RegisterTool(def, handler)` / Single-struct: `srv.Register(server.Tool{Def, Handler})`
-- `ext/ui.RegisterAppTool(reg, cfg)` — registers tool + resource in one call, auto-detects template URIs
+- `ext/ui.RegisterAppTool(reg, cfg)` — registers tool + resource in one call, auto-detects template URIs. With `TemplateHandler`: auto-generates concrete fallback for hosts that don't substitute template vars. Without: manual hybrid path.
 - Schema validation panics at registration for malformed schemas
 
 ### Sub-Modules
-- `ext/auth/` and `ext/ui/` have separate `go.mod` — `make test` does NOT cover them
-- Release order: tag root → `make bump-root V=vX.Y.Z` → tag sub-modules. Don't retag published versions.
+- `ext/auth/`, `ext/ui/`, and `ext/protogen/` have separate `go.mod` — `make test` does NOT cover them
+- Release order: tag root → `make bump-root V=vX.Y.Z` → tag sub-modules (`ext/auth/vX.Y.Z`, `ext/ui/vX.Y.Z`, `ext/protogen/vX.Y.Z`). Don't retag published versions.
 - `scripts/verify-submodule-deps.sh` catches `v0.0.0` placeholder bugs (wired into pre-push hook)
+- `SUB_MODS_ALL` in Makefile lists all sub-modules for `tidy-all` and `bump-root`
+- **New core deps propagate**: adding imports to `core/` (e.g., `uritemplate`) requires `go mod tidy` in every sub-module to update their `go.sum`
 
 ## Gotchas
 
@@ -61,6 +64,8 @@ func myTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error)
 - **Ping before initialize**: Always handled regardless of init state.
 - **Error codes**: App errors use -31xxx range, JSON-RPC reserved range is -32xxx.
 - **`GH_TOKEN="$GH_PERSONAL_TOKEN"`**: Use personal token for GitHub operations (EMU account can't access personal repos).
+- **Template URI detection**: Use `core.IsTemplateURI()` (RFC 6570 parsing), not `strings.Contains("{")`.
+- **Sub-module go.sum drift**: Adding a new import in `core/` breaks sub-module builds until `make tidy-all` runs. Always run `make testall` after touching core imports.
 
 ## Deeper Documentation
 
@@ -69,6 +74,7 @@ func myTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error)
 | Architecture | `docs/ARCHITECTURE.md` |
 | Auth design & spec compliance | `ext/auth/docs/DESIGN.md` |
 | MCP Apps design | `docs/APPS_DESIGN.md` |
+| Protogen design | `ext/protogen/docs/DESIGN.md` |
 | Capabilities list | `CAPABILITIES.md` |
 | Constraints | `core/CONSTRAINTS.md`, `server/CONSTRAINTS.md`, `client/CONSTRAINTS.md` |
 | Conformance baseline | `conformance/baseline.yml` |
