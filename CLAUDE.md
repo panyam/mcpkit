@@ -46,7 +46,7 @@ mcpkit/
 │   ├── request.go             RequestFunc, ErrNoRequestFunc
 │   ├── protocol.go            ServerInfo, ClientInfo, ClientCapabilities, ServerCapabilities, ToolsCap, ResourcesCap, PromptsCap, InitializeResult, ExtensionCapability
 │   ├── interfaces.go          Transport, ServerRequestHandler, NotificationHandler
-│   ├── ui.go                  UIMetadata, UICSPConfig, UIVisibility, AppMIMEType, ToolMeta, ResourceContentMeta
+│   ├── ui.go                  UIMetadata, UICSPConfig, UIVisibility, DisplayMode, AppMIMEType, ToolMeta, ResourceContentMeta
 │   └── www_authenticate.go    ParseWWWAuthenticate
 │
 ├── server/                  ← Server + Dispatcher + transports
@@ -82,7 +82,7 @@ mcpkit/
 │         mergeScopes → core.UnionScopes. Type aliases preserved for compat.
 │
 ├── ext/ui/                 ← Separate Go module (ext/ui/go.mod)
-│   └── extension.go          UIExtension (ExtensionProvider + RefValidator), RegisterAppTool, AppToolConfig
+│   └── extension.go          UIExtension (ExtensionProvider + RefValidator), RegisterAppTool, AppToolConfig, RequestDisplayMode, ElicitWithApp, SampleWithApp
 │
 ├── testutil/                ← Test helpers (NewTestServer, ForAllTransports, TestClient)
 ├── cmd/testserver/          ← Conformance test server
@@ -135,10 +135,18 @@ mcpkit/
 - **Client tracks `lastEventID`**: `atomic.Value` on `Client`, updated by background SSE readers. Survives transport recreation during reconnection.
 
 ### SSE Retry Hint (#72)
-- **`core.EmitSSERetry(ctx, retryAfter)`**: tool/resource/prompt handlers call this to emit a raw SSE `retry:` field on the current stream. Clients treat it as the next reconnection delay (per WHATWG SSE spec). Non-positive durations are dropped. Only supported on the **2024-11-25 SSE transport** today — stdio, in-process, and Streamable HTTP paths silently no-op. Streamable HTTP GET SSE support is a follow-up.
-- **Mechanism**: `sseSessionEntry.conn` holds a live `*mcpSSEConn` pointer per session. `dispatchWithOpts` wires a closure `func(ms int) { entry.conn.SendRetry(ms) }` into `sessionCtx.sseRetry` via `core.SetSSERetryHint`. `EmitSSERetry` reads `sessionCtx.sseRetry` and calls it. Reconnect paths refresh `entry.conn` so a long-running handler's retry hint always reaches the current stream.
+- **`core.EmitSSERetry(ctx, retryAfter)`**: tool/resource/prompt handlers call this to emit a raw SSE `retry:` field on the current stream. Clients treat it as the next reconnection delay (per WHATWG SSE spec). Non-positive durations are dropped. Supported on **both SSE transport (2024-11-25) and Streamable HTTP** — stdio and in-process silently no-op.
+- **SSE transport**: `sseSessionEntry.conn` holds a live `*mcpSSEConn` pointer. The retry hint goes to the session's long-lived SSE stream.
+- **Streamable HTTP (#202)**: `sessionEntry.getConn` holds a live `*streamableSSEConn` pointer to the session's GET SSE stream (if one is open). POST handlers calling `EmitSSERetry` route the hint to the GET stream via `dispatchWithOpts`. When no GET stream is open, the hint is a silent no-op. The `getConn` pointer is refreshed on reconnect (identity-checked on close to prevent stale clears).
 - **Hint-only, not close**: the server does NOT disconnect the stream when `EmitSSERetry` is called. It's a forward-looking reconnect delay. Combine with `WithSSEGracePeriod` + `WithEventStore` for the full "drop and resume" pattern.
 - **Servicekit support**: requires `servicekit v0.0.23+` (`SSEOutgoingMessage.Retry` field + `BaseSSEConn.SendRetry`).
+
+### Tool Context Detachment (#203)
+- **`core.DetachFromClient(ctx)`**: returns a context that preserves all session state (EmitLog, EmitSSERetry, Sample, Elicit, AuthClaims) but is NOT cancelled when the client's HTTP request context or per-tool timeout fires. Uses `context.WithoutCancel` (Go 1.21+).
+- **Use case**: long-running tools that need to continue processing after the client disconnects. Combine with `EmitSSERetry` (hint the client to reconnect later) + `WithSSEGracePeriod` + `WithEventStore` (buffer the result for replay on reconnection).
+- **Strips inherited timeouts**: `ToolDef.Timeout` and `WithToolTimeout` are applied BEFORE the handler runs. `DetachFromClient` removes them. Handlers that need a deadline after detach must set their own via `context.WithTimeout`.
+- **Session reaping caveat**: `WithSessionTimeout` may still reap the session while a detached tool runs if the client doesn't reconnect within the idle window. Use a generous `WithSSEGracePeriod` to keep the session alive.
+- **Opt-in, per-handler**: the default behavior (tool cancelled on disconnect/timeout) is unchanged. Only tools that call `DetachFromClient` get the detached behavior. This is a handler-level decision, not a ToolDef flag — the handler knows whether it needs to survive disconnection.
 
 ### Single-Struct Registration (#41)
 - **`server.Register(items ...any)`**: Accepts `server.Tool`, `server.Resource`, `server.ResourceTemplate`, `server.Prompt` — bundles def + handler in one struct.
@@ -161,11 +169,16 @@ mcpkit/
 - **Capability gate**: only clients that declared `capabilities.roots.listChanged` during `initialize` receive the `roots/list` request. Clients without the capability silently skip the fetch.
 - **Persistent `pushRequest` required**: the fetch uses `Dispatcher.pushRequest` to issue the outbound request. Stdio, in-process, and the SSE/Streamable-HTTP GET SSE stream all wire this persistently on the session dispatcher via `Dispatcher.SetPushRequest`. Streamable HTTP sessions without an open GET SSE stream (or between stream reconnects) have `pushRequest == nil`; in that state a `list_changed` notification marks `rootsStale = true` without fetching, and the next notification after a stream opens will drive the fetch.
 - **`Dispatcher.Roots() []core.Root`** returns a defensive copy of the most recently fetched roots (nil until the first successful fetch). Safe to call concurrently.
-- **Fetch timeout** is a hardcoded 30s. Follow-up for `WithRootsFetchTimeout(d)` option.
+- **`WithRootsFetchTimeout(d)`** (#198): sets the deadline for `roots/list` requests. Default 30s. Propagated to per-session dispatchers via `newSession`.
 - **De-duplication**: a burst of `list_changed` notifications coalesces to at most one in-flight fetch + one coalesced re-fetch via `rootsFetching`/`rootsStale` under `rootsMu`. The in-flight goroutine's defer block re-dispatches if another notification landed mid-flight.
 - **Concurrency rule**: `rootsMu` must never be held across the outbound RPC or the user callback. Enforced by keeping all `rootsMu` uses inside `server/roots.go`.
 - **`core.Root`** / `core.RootsListResult` types live in `core/protocol.go`.
-- **Not yet integrated**: dynamic `WithAllowedRoots` update from client-provided roots. Deferred to its own issue — crosses a design boundary (client-provided roots as server-enforced sandbox).
+- **Allowed-roots enforcement (#197)**: `core.IsPathAllowed(ctx, path)` checks whether a file path falls within the session's enforced roots. `core.AllowedRoots(ctx)` returns the current snapshot. Enforcement is opt-in (handler-side helper, not automatic middleware). The enforced set is computed by `Dispatcher.effectiveAllowedRoots()`:
+  - If `WithAllowedRoots` is set AND client roots exist: **intersection** (path must be within both the static and dynamic sets).
+  - If only `WithAllowedRoots` is set: static list only.
+  - If only client roots exist: client roots converted from `file://` URIs via `core.FileURIToPath`.
+  - If neither: `nil` (no restriction — `IsPathAllowed` returns true for all paths).
+- **`core.FileURIToPath(uri)`**: strips `file://` prefix for path matching. Does NOT URL-decode (follow-up if needed).
 
 ### Concurrent Request Handling (#86)
 - **Duplicate request IDs rejected** via `LoadOrStore` on inflight map.
@@ -263,9 +276,11 @@ mcpkit/
 - **Server-side detection**: `core.ClientSupportsUI(ctx)` in tool handlers checks if client declared UI extension support.
 - **Client-side detection**: `client.ServerSupportsUI()` checks if server advertised the extension.
 - **`NotifyResourcesChanged(ctx)`** — call from tool handlers after mutating state so clients know to re-fetch resources.
-- **`RegisterAppTool`** lives in `ext/ui/`, takes a `ToolResourceRegistrar` interface (not `*server.Server`) to avoid cross-module import.
+- **`RegisterAppTool`** lives in `ext/ui/`, takes a `ToolResourceRegistrar` interface (not `*server.Server`) to avoid cross-module import. Auto-detects template URIs (containing `{`) and routes to `RegisterResourceTemplate` instead of `RegisterResource`. Template URIs require `TemplateHandler` in `AppToolConfig` (panics if nil).
 - **`RefValidator`** interface on `ExtensionProvider` — `UIExtension` validates `_meta.ui.resourceUri` refs at `Handler()` startup. Warnings only, no errors.
 - **`PrefersBorder`** is `*bool` tri-state: nil (host decides), true (border), false (no border).
+- **Display mode negotiation (#185)**: `UIMetadata.SupportedDisplayModes []DisplayMode` declares which modes an app supports (`inline`, `fullscreen`, `pip`). `ui.RequestDisplayMode(ctx, mode)` sends `notifications/ui/displayMode` to request the host change display. Fire-and-forget; host may ignore.
+- **App metadata on elicitation/sampling (#191)**: `ElicitationRequest.Meta *ElicitationMeta` and `CreateMessageRequest.Meta *SamplingMeta` carry `_meta.ui` on the wire. `ui.ElicitWithApp(ctx, req, uiMeta)` and `ui.SampleWithApp(ctx, req, uiMeta)` are convenience wrappers.
 - **`ListToolsForModel()`** is client-side filtering — server always returns all tools including app-only. Visibility is a presentation hint, not access control.
 - **Playwright tests**: `make test-apps-playwright` runs the upstream ext-apps Playwright suite against our testserver. Not in `testall` — run manually when needed.
 - **Design doc**: see `docs/APPS_DESIGN.md` for full architecture, protocol flows, and conformance strategy.
