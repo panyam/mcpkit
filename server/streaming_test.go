@@ -1,7 +1,6 @@
 package server_test
 
 import (
-	"context"
 	"net/http/httptest"
 	"sync"
 	"testing"
@@ -28,7 +27,7 @@ func TestStreamingToolResultsOverSSE(t *testing.T) {
 			Description: "Emits 3 content chunks then returns final result",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		Handler: func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		Handler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			for i := 1; i <= 3; i++ {
 				core.EmitContent(ctx, req.RequestID, core.Content{
 					Type: "text",
@@ -87,7 +86,7 @@ func TestStreamingToolErrorMidStream(t *testing.T) {
 			Description: "Emits chunks then fails",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		Handler: func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		Handler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			core.EmitContent(ctx, req.RequestID, core.Content{Type: "text", Text: "partial-1"})
 			core.EmitContent(ctx, req.RequestID, core.Content{Type: "text", Text: "partial-2"})
 			return core.ErrorResult("failed mid-stream"), nil
@@ -128,7 +127,7 @@ func TestStreamingToolNoHandler(t *testing.T) {
 			Description: "Emits chunks but client ignores them",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		Handler: func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		Handler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			core.EmitContent(ctx, req.RequestID, core.Content{Type: "text", Text: "ignored"})
 			return core.TextResult("final only"), nil
 		},
@@ -161,7 +160,7 @@ func TestStreamingToolCustomMethod(t *testing.T) {
 			Description: "Uses custom chunk method",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		Handler: func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		Handler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			core.EmitContent(ctx, req.RequestID, core.Content{Type: "text", Text: "custom chunk"})
 			return core.TextResult("done"), nil
 		},

@@ -47,6 +47,7 @@ mcpkit/
 │   ├── protocol.go            ServerInfo, ClientInfo, ClientCapabilities, ServerCapabilities, ToolsCap, ResourcesCap, PromptsCap, InitializeResult, ExtensionCapability
 │   ├── interfaces.go          Transport, ServerRequestHandler, NotificationHandler
 │   ├── ui.go                  UIMetadata, UICSPConfig, UIVisibility, DisplayMode, AppMIMEType, ToolMeta, ResourceContentMeta
+│   ├── handler_context.go     BaseContext, ToolContext, ResourceContext, PromptContext, NewToolContext, NewResourceContext, NewPromptContext
 │   └── www_authenticate.go    ParseWWWAuthenticate
 │
 ├── server/                  ← Server + Dispatcher + transports
@@ -99,7 +100,9 @@ mcpkit/
 - **`ext/auth/` is a separate Go module** with its own `go.mod`. Root `go test ./...` does NOT test it. Use `make test-auth`.
 - **`tests/e2e/` and `tests/keycloak/` are separate Go modules** with `replace` directives pointing to `../../` (root) and `../../ext/auth`.
 - **In-process transport** uses `core.Transport` interface. Create via `server.NewInProcessTransport(srv)`, pass to client via `client.WithTransport(transport)`. For bidirectional (sampling/elicitation), wire `server.WithServerRequestHandler(client.HandleServerRequest)`.
-- **`core.ContextWithSession`** is exported so `server/` can inject session state. Tool handlers use `core.EmitLog`, `core.Sample`, `core.AuthClaims` — they extract from context internally.
+- **Typed handler contexts (#179)**: Handlers receive typed contexts (`ToolContext`, `ResourceContext`, `PromptContext`) instead of `context.Context`. All embed `context.Context` so stdlib functions work. `BaseContext` provides shared methods (EmitLog, Sample, Elicit, AuthClaims, Notify, etc.). `ToolContext` adds `EmitProgress` and `EmitContent`. Free functions (`core.EmitLog(ctx, ...)`) still work as thin wrappers.
+- **`core.ContextWithSession`** is exported so `server/` can inject session state. The dispatch layer calls `core.NewToolContext(ctx)` / `core.NewResourceContext(ctx)` / `core.NewPromptContext(ctx)` to construct typed contexts before invoking handlers.
+- **`DetachFromClient`**: Returns the same typed context (not `context.Context`). Use `ctx = ctx.DetachFromClient()` inside handlers — the free function `core.DetachFromClient(ctx)` returns `context.Context` and can't be assigned back to a typed context variable.
 
 ### JSON-RPC Protocol Compliance
 - **JSON-RPC batching**: Both transports accept batch requests (JSON arrays). Each element is dispatched sequentially, responses collected as JSON array. Notifications produce no response entry. Empty batch → Invalid Request error. Streamable HTTP returns JSON array body; SSE pushes individual response events.

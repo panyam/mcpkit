@@ -1,7 +1,6 @@
 package client_test
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -32,7 +31,7 @@ func newGetSSETestServer() *server.Server {
 				"required":   []string{"msg"},
 			},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			var p struct {
 				Msg string `json:"msg"`
 			}
@@ -44,7 +43,7 @@ func newGetSSETestServer() *server.Server {
 
 	srv.RegisterResource(
 		core.ResourceDef{URI: "test://counter", Name: "Counter", MimeType: "text/plain"},
-		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{Contents: []core.ResourceReadContent{
 				{URI: "test://counter", MimeType: "text/plain", Text: "0"},
 			}}, nil

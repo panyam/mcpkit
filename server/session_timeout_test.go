@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -21,7 +20,7 @@ func testStreamableServerWithTimeout(timeout time.Duration, opts ...TransportOpt
 		core.ToolDef{Name: "echo", Description: "Echoes input", InputSchema: map[string]any{
 			"type": "object", "properties": map[string]any{"message": map[string]any{"type": "string"}},
 		}},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			var p struct{ Message string `json:"message"` }
 			req.Bind(&p)
 			return core.TextResult("echo: " + p.Message), nil
@@ -97,7 +96,7 @@ func TestSessionTimeoutPausesDuringActiveRequest(t *testing.T) {
 	var called atomic.Bool
 	srv.RegisterTool(
 		core.ToolDef{Name: "slow", Description: "Takes a while"},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			called.Store(true)
 			time.Sleep(300 * time.Millisecond)
 			return core.TextResult("done"), nil

@@ -1,7 +1,5 @@
 package core
 
-import "context"
-
 // CompletionRef identifies what is being completed — a prompt argument or resource URI.
 type CompletionRef struct {
 	// Type is "ref/prompt" for prompt argument completion or "ref/resource" for resource URI completion.
@@ -43,4 +41,4 @@ type CompletionCompleteResult struct {
 // CompletionHandler provides autocompletion suggestions for a specific reference.
 // ref identifies the prompt or resource being completed, arg contains the argument
 // name and partial value. Return matching suggestions.
-type CompletionHandler func(ctx context.Context, ref CompletionRef, arg CompletionArgument) (CompletionResult, error)
+type CompletionHandler func(ctx PromptContext, ref CompletionRef, arg CompletionArgument) (CompletionResult, error)
