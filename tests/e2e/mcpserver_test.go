@@ -4,7 +4,6 @@ package e2e_test
 // JWTValidator, PRM endpoints, and test tools with varying scope requirements.
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -64,7 +63,7 @@ func (e *TestEnv) buildMCPServer(t *testing.T) {
 			Description: "Echoes input and reports authenticated claims. No scope required.",
 			InputSchema: json.RawMessage(`{"type":"object","properties":{"msg":{"type":"string"}}}`),
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			claims := core.AuthClaims(ctx)
 			var args map[string]any
 			json.Unmarshal(req.Arguments, &args)
@@ -87,7 +86,7 @@ func (e *TestEnv) buildMCPServer(t *testing.T) {
 			Description: "Requires tools:call scope. Returns 'ok' on success.",
 			InputSchema: json.RawMessage(`{"type":"object"}`),
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			if err := auth.RequireScope(ctx, "tools:call"); err != nil {
 				return core.TextResult("error: " + err.Error()), nil
 			}
@@ -102,7 +101,7 @@ func (e *TestEnv) buildMCPServer(t *testing.T) {
 			Description: "Requires admin:write scope. Returns 'admin ok' on success.",
 			InputSchema: json.RawMessage(`{"type":"object"}`),
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			if err := auth.RequireScope(ctx, "admin:write"); err != nil {
 				return core.TextResult("error: " + err.Error()), nil
 			}

@@ -14,7 +14,7 @@ func testResourceDispatcher() *Dispatcher {
 	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
 	d.RegisterResource(
 		core.ResourceDef{URI: "test://doc", Name: "Test Doc", MimeType: "text/plain"},
-		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{Contents: []core.ResourceReadContent{{
 				URI: req.URI, MimeType: "text/plain", Text: "hello from resource",
 			}}}, nil
@@ -22,7 +22,7 @@ func testResourceDispatcher() *Dispatcher {
 	)
 	d.RegisterResource(
 		core.ResourceDef{URI: "test://binary", Name: "Binary", MimeType: "application/octet-stream"},
-		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{Contents: []core.ResourceReadContent{{
 				URI: req.URI, MimeType: "application/octet-stream", Blob: "AQID",
 			}}}, nil
@@ -30,7 +30,7 @@ func testResourceDispatcher() *Dispatcher {
 	)
 	d.RegisterResourceTemplate(
 		core.ResourceTemplate{URITemplate: "test://items/{id}", Name: "Item", MimeType: "text/plain"},
-		func(ctx context.Context, uri string, params map[string]string) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, uri string, params map[string]string) (core.ResourceResult, error) {
 			return core.ResourceResult{Contents: []core.ResourceReadContent{{
 				URI: uri, MimeType: "text/plain", Text: "item " + params["id"],
 			}}}, nil
@@ -202,7 +202,7 @@ func testSubscriptionDispatcher() (*Dispatcher, *Server) {
 	srv := NewServer(core.ServerInfo{Name: "test", Version: "1.0"}, WithSubscriptions())
 	srv.RegisterResource(
 		core.ResourceDef{URI: "test://doc", Name: "Test Doc", MimeType: "text/plain"},
-		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{Contents: []core.ResourceReadContent{{
 				URI: req.URI, MimeType: "text/plain", Text: "hello",
 			}}}, nil
@@ -261,7 +261,7 @@ func TestResourcesSubscribeNotInitialized(t *testing.T) {
 	srv := NewServer(core.ServerInfo{Name: "test", Version: "1.0"}, WithSubscriptions())
 	srv.RegisterResource(
 		core.ResourceDef{URI: "test://doc", Name: "Doc"},
-		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{}, nil
 		},
 	)
@@ -417,7 +417,7 @@ func TestResourcesSubscribeMultipleSessions(t *testing.T) {
 	srv := NewServer(core.ServerInfo{Name: "test", Version: "1.0"}, WithSubscriptions())
 	srv.RegisterResource(
 		core.ResourceDef{URI: "test://shared", Name: "Shared"},
-		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{Contents: []core.ResourceReadContent{{
 				URI: req.URI, Text: "shared",
 			}}}, nil
@@ -482,7 +482,7 @@ func TestResourcesReadMeta(t *testing.T) {
 	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
 	d.RegisterResource(
 		core.ResourceDef{URI: "ui://app/view", Name: "App View", MimeType: core.AppMIMEType},
-		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{Contents: []core.ResourceReadContent{{
 				URI:      req.URI,
 				MimeType: core.AppMIMEType,
@@ -499,7 +499,7 @@ func TestResourcesReadMeta(t *testing.T) {
 	)
 	d.RegisterResource(
 		core.ResourceDef{URI: "test://plain", Name: "Plain", MimeType: "text/plain"},
-		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{Contents: []core.ResourceReadContent{{
 				URI: req.URI, MimeType: "text/plain", Text: "no meta",
 			}}}, nil

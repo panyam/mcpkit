@@ -12,7 +12,7 @@ import core "github.com/panyam/mcpkit/core"
 //
 //	srv.Register(server.Tool{
 //	    ToolDef: core.ToolDef{Name: "echo", Description: "Echo input", InputSchema: schema},
-//	    Handler: func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+//	    Handler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 //	        return core.TextResult("echoed"), nil
 //	    },
 //	})

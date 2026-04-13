@@ -35,14 +35,14 @@ func newTestMCPServer() *server.Server {
 				},
 			},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("ui ok"), nil
 		},
 	)
 
 	srv.RegisterResource(
 		core.ResourceDef{URI: "ui://test/view", Name: "Test App", MimeType: core.AppMIMEType},
-		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{Contents: []core.ResourceReadContent{{
 				URI:      req.URI,
 				MimeType: core.AppMIMEType,
@@ -445,7 +445,7 @@ func newSubscriptionTestServer() *server.Server {
 	srv := server.NewServer(core.ServerInfo{Name: "sub-test", Version: "1.0"}, server.WithSubscriptions())
 	srv.RegisterResource(
 		core.ResourceDef{URI: "test://config", Name: "Config", MimeType: "text/plain"},
-		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{Contents: []core.ResourceReadContent{{
 				URI: req.URI, MimeType: "text/plain", Text: "config data",
 			}}}, nil
@@ -585,7 +585,7 @@ func newExtraSchemaServer() *server.Server {
 				},
 			},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("ok"), nil
 		},
 	)
@@ -713,7 +713,7 @@ func newNotifyTestServer() *server.Server {
 				"properties": map[string]any{"tag": map[string]any{"type": "string"}},
 			},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			var p struct {
 				Tag string `json:"tag"`
 			}
@@ -737,7 +737,7 @@ func newNotifyTestServer() *server.Server {
 				"properties": map[string]any{"message": map[string]any{"type": "string"}},
 				"required":   []string{"message"},
 			}},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			var p struct {
 				Message string `json:"message"`
 			}

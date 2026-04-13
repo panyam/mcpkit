@@ -52,6 +52,7 @@
 - mcp-structured-output: StructuredContent + OutputSchema on ToolDef/ToolResult — typed tool output
 - mcp-server-run: Server.Run(addr) — simple blocking entry point defaulting to Streamable HTTP
 - mcp-error-codes: ErrCodeServerError (-32000) + documented JSON-RPC error code ranges
+- mcp-typed-handler-contexts: ToolContext, ResourceContext, PromptContext — typed handler contexts with IDE-discoverable methods (EmitLog, EmitProgress, Sample, Elicit, AuthClaims, etc.). BaseContext shared across all handler types. ToolContext adds EmitProgress/EmitContent. Free functions preserved as thin wrappers. (#179)
 - mcp-parametric-tests: forAllTransports — core client tests run against all 4 transports as subtests (Streamable HTTP, SSE, in-memory, stdio)
 - mcp-apps-extension: MCP Apps (io.modelcontextprotocol/ui) extension negotiation — server advertises via WithExtension(UIExtension{}), client detects via ServerSupportsUI()
 - mcp-apps-ui-metadata: UIMetadata, UICSPConfig, UIVisibility types on ToolDef._meta.ui and ResourceReadContent._meta.ui

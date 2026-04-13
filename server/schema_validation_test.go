@@ -80,12 +80,12 @@ func getPrompt(t *testing.T, srv *server.Server, name string, args map[string]an
 
 // okHandler is a trivial tool handler that returns "ok". Used whenever the
 // test only cares about whether the call reached the handler.
-func okHandler(_ context.Context, _ core.ToolRequest) (core.ToolResult, error) {
+func okHandler(_ core.ToolContext, _ core.ToolRequest) (core.ToolResult, error) {
 	return core.TextResult("ok"), nil
 }
 
 // okPromptHandler is the prompt-side analogue of okHandler.
-func okPromptHandler(_ context.Context, _ core.PromptRequest) (core.PromptResult, error) {
+func okPromptHandler(_ core.PromptContext, _ core.PromptRequest) (core.PromptResult, error) {
 	return core.PromptResult{Description: "ok"}, nil
 }
 

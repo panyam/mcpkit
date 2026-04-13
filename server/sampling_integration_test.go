@@ -138,7 +138,7 @@ func newSamplingTestServer(toolTimeout *time.Duration) *server.Server {
 			Description: "Calls sampling/createMessage and returns the result",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			result, err := core.Sample(ctx, core.CreateMessageRequest{
 				Messages:  []core.SamplingMessage{{Role: "user", Content: core.Content{Type: "text", Text: "Say hello"}}},
 				MaxTokens: 100,
@@ -157,7 +157,7 @@ func newSamplingTestServer(toolTimeout *time.Duration) *server.Server {
 			Description: "Calls Sample() with a short deadline to test timeout",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			tctx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
 			defer cancel()
 			result, err := core.Sample(tctx, core.CreateMessageRequest{

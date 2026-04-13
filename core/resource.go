@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"encoding/json"
 	"time"
 )
@@ -108,11 +107,11 @@ func (r *ResourceResult) UnmarshalJSON(data []byte) error {
 }
 
 // ResourceHandler reads a resource by URI.
-type ResourceHandler func(ctx context.Context, req ResourceRequest) (ResourceResult, error)
+type ResourceHandler func(ctx ResourceContext, req ResourceRequest) (ResourceResult, error)
 
 // TemplateHandler reads a resource matched by a URI template.
 // The uri parameter is the full resolved URI, params contains the extracted template variables.
-type TemplateHandler func(ctx context.Context, uri string, params map[string]string) (ResourceResult, error)
+type TemplateHandler func(ctx ResourceContext, uri string, params map[string]string) (ResourceResult, error)
 
 // ResourceUpdatedNotification is the params payload for notifications/resources/updated.
 // Sent by the server to subscribed clients when a resource's content has changed.

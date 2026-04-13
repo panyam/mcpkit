@@ -1,7 +1,6 @@
 package testutil_test
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -26,7 +25,7 @@ func newTestServer(t *testing.T) *server.Server {
 				"properties": map[string]any{"name": map[string]any{"type": "string"}},
 			},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			var p struct {
 				Name string `json:"name"`
 			}
@@ -37,7 +36,7 @@ func newTestServer(t *testing.T) *server.Server {
 
 	srv.RegisterResource(
 		core.ResourceDef{URI: "test://data", Name: "Test Data", MimeType: "text/plain"},
-		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{
 				Contents: []core.ResourceReadContent{{URI: "test://data", Text: "test data"}},
 			}, nil
