@@ -207,6 +207,28 @@ func TestRegisterAppToolTemplateNilHandlerPanics(t *testing.T) {
 	})
 }
 
+// TestRegisterAppToolConcreteNilHandlerPanics verifies that RegisterAppTool
+// panics when a concrete URI is used without a ResourceHandler.
+func TestRegisterAppToolConcreteNilHandlerPanics(t *testing.T) {
+	reg := &mockRegistrar{}
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for concrete URI without ResourceHandler")
+		}
+	}()
+
+	RegisterAppTool(reg, AppToolConfig{
+		Name:        "bad_concrete",
+		ResourceURI: "ui://items/view",
+		ToolHandler: func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			return core.TextResult("ok"), nil
+		},
+		// ResourceHandler intentionally nil
+	})
+}
+
 // TestRegisterAppToolSupportedDisplayModes verifies that SupportedDisplayModes
 // flows through from AppToolConfig to the tool's _meta.ui.
 func TestRegisterAppToolSupportedDisplayModes(t *testing.T) {
