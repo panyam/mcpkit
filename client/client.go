@@ -800,6 +800,25 @@ func (c *Client) ToolCall(name string, args any) (string, error) {
 	return extractToolText(result.Raw)
 }
 
+// ToolCallFull invokes a tool and returns the complete result including
+// IsError, all content blocks, and the raw JSON. Unlike ToolCall, tool-level
+// errors (isError: true) are returned in the result, not as Go errors.
+// Only transport/protocol failures produce a Go error.
+func (c *Client) ToolCallFull(name string, args any) (*core.ToolResult, error) {
+	result, err := c.Call("tools/call", map[string]any{
+		"name":      name,
+		"arguments": args,
+	})
+	if err != nil {
+		return nil, err
+	}
+	var toolResult core.ToolResult
+	if err := json.Unmarshal(result.Raw, &toolResult); err != nil {
+		return nil, fmt.Errorf("unmarshal tool result: %w", err)
+	}
+	return &toolResult, nil
+}
+
 // ReadResource reads a resource by URI and returns the first text content.
 func (c *Client) ReadResource(uri string) (string, error) {
 	result, err := c.Call("resources/read", map[string]string{"uri": uri})
