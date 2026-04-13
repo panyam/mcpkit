@@ -1,7 +1,7 @@
 # MCPKit
 
 ## Version
-0.1.1
+0.2.3
 
 ## Provides
 - mcp-protocol-negotiation: Version negotiation supporting MCP 2025-11-25 and 2024-11-05
@@ -63,8 +63,11 @@
 - mcp-apps-register-helper: RegisterAppTool (ext/ui) — registers tool + resource pair in one call via ToolResourceRegistrar interface. Auto-detects template URIs (containing `{`) and routes to RegisterResourceTemplate; concrete URIs use RegisterResource.
 - mcp-apps-display-modes: UIMetadata.SupportedDisplayModes — apps declare inline/fullscreen/pip support. RequestDisplayMode(ctx, mode) emits notifications/ui/displayMode. (#185)
 - mcp-apps-template-resources: RegisterAppTool auto-detects template URIs and registers resource templates. TemplateHandler field on AppToolConfig for parameterized HTML serving (SSR). (#190)
+- mcp-apps-template-fallback: RegisterAppTool auto-generates concrete fallback resource (`ui://{host}/{tool}/latest`) for template URIs when TemplateHandler is provided. Wraps tool handler to capture args, delegates fallback to TemplateHandler with stored params. Transparent to consumers — removed when hosts support template substitution. (#213)
+- mcp-uri-template-helpers: core.URITemplateVars/core.IsTemplateURI — RFC 6570 template detection using yosida95/uritemplate (replaces string-based `{` checks)
 - mcp-apps-elicitation-meta: ElicitationRequest._meta.ui and CreateMessageRequest._meta.ui — app metadata on server-to-client requests. ElicitWithApp/SampleWithApp helpers in ext/ui. (#191)
 - mcp-apps-conformance: 21 MCP Apps conformance tests (tool metadata, resources, visibility, fallback, negotiation)
+- mcp-protogen: ext/protogen — protoc plugin (protoc-gen-go-mcp) generates MCP tool registrations from proto service definitions. In-process, gRPC forwarding, and ConnectRPC forwarding variants. Proto annotations (mcp_tool, mcp_resource, mcp_prompt) for semantic mapping. JSON Schema derived from proto messages. Uses typed handler contexts (core.ToolContext). (#211)
 - mcp-dynamic-registration: Registry.AddTool/RemoveTool/AddResource/RemoveResource/AddPrompt/RemovePrompt — thread-safe runtime registration with automatic notifications/*/list_changed broadcast via OnChange callback
 - mcp-session-timeout: WithSessionTimeout — idle session cleanup for Streamable HTTP (timer + ref counting to avoid closing mid-execution)
 - mcp-sse-resumption: WithSSEGracePeriod — SSE sessions survive brief disconnects with grace timer. Client reconnects via ?sessionId= query param; server replays missed events via Last-Event-ID header. Principal-bound for security.
@@ -86,10 +89,13 @@ newstack/mcpkit/main
 ## Stack Dependencies
 
 ### Core module (github.com/panyam/mcpkit)
-- servicekit (github.com/panyam/servicekit) v0.0.22 — SSEConn/SSEHub, ListenAndServeGraceful, StreamableServe, HTTPStatusError (with Header), MaxErrorBodySize
+- servicekit (github.com/panyam/servicekit) v0.0.25 — SSEConn/SSEHub, ListenAndServeGraceful, StreamableServe, HTTPStatusError (with Header), MaxErrorBodySize
 
 ### Sub-module: ext/auth (github.com/panyam/mcpkit/ext/auth)
-- oneauth (github.com/panyam/oneauth) v0.0.64 — JWT/OIDC validation, testutil.TestAuthServer; separate go.mod
+- oneauth (github.com/panyam/oneauth) v0.0.71 — JWT/OIDC validation, testutil.TestAuthServer; separate go.mod
+
+### Sub-module: ext/protogen (github.com/panyam/mcpkit/ext/protogen)
+- protokit (github.com/panyam/protokit) v0.0.2 — proto descriptor test utilities
 
 ## Integration
 

@@ -15,8 +15,11 @@ package ui
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
+	"sync/atomic"
 
 	"github.com/panyam/mcpkit/core"
 )
@@ -147,6 +150,78 @@ func RegisterAppTool(reg ToolResourceRegistrar, cfg AppToolConfig) {
 		SupportedDisplayModes: cfg.SupportedDisplayModes,
 	}
 
+	templateVars := core.URITemplateVars(cfg.ResourceURI)
+	if len(templateVars) > 0 && cfg.TemplateHandler != nil {
+		// Auto-fallback path: consumer provides a TemplateHandler and mcpkit
+		// generates the concrete fallback transparently. If TemplateHandler
+		// is nil the template URI falls through to the concrete path below,
+		// letting consumers manage the hybrid pattern manually.
+
+		// Always register the template resource for clients that support
+		// template variable substitution.
+		reg.RegisterResourceTemplate(
+			core.ResourceTemplate{
+				URITemplate: cfg.ResourceURI,
+				Name:        cfg.Name + " UI",
+				MimeType:    core.AppMIMEType,
+			},
+			cfg.TemplateHandler,
+		)
+
+		// Generate a concrete fallback for current hosts that fetch
+		// _meta.ui.resourceUri literally without substituting variables.
+		concreteURI := concreteFallbackURI(cfg.ResourceURI, cfg.Name)
+		uiMeta.ResourceUri = concreteURI
+
+		// Atomic storage for the last tool-call params.
+		var lastParams atomic.Pointer[map[string]string]
+
+		// Wrap the tool handler to capture template variable values
+		// from tool arguments after each successful call.
+		origHandler := cfg.ToolHandler
+		wrappedHandler := func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			result, err := origHandler(ctx, req)
+			if err == nil {
+				params := extractTemplateParams(templateVars, req.Arguments)
+				lastParams.Store(&params)
+			}
+			return result, err
+		}
+
+		// Concrete fallback handler delegates to TemplateHandler with
+		// the params captured from the most recent tool call.
+		tmplHandler := cfg.TemplateHandler
+		reg.RegisterResource(
+			core.ResourceDef{
+				URI:      concreteURI,
+				Name:     cfg.Name + " UI",
+				MimeType: core.AppMIMEType,
+			},
+			func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
+				params := lastParams.Load()
+				if params == nil {
+					empty := map[string]string{}
+					params = &empty
+				}
+				return tmplHandler(ctx, req.URI, *params)
+			},
+		)
+
+		// Register tool with the wrapped handler and concrete
+		// resourceUri in _meta.ui.
+		reg.RegisterTool(
+			core.ToolDef{
+				Name:        cfg.Name,
+				Description: cfg.Description,
+				InputSchema: cfg.InputSchema,
+				Meta:        &core.ToolMeta{UI: uiMeta},
+			},
+			wrappedHandler,
+		)
+		return
+	}
+
+	// Concrete URI path: register tool and resource directly.
 	reg.RegisterTool(
 		core.ToolDef{
 			Name:        cfg.Name,
@@ -157,31 +232,20 @@ func RegisterAppTool(reg ToolResourceRegistrar, cfg AppToolConfig) {
 		cfg.ToolHandler,
 	)
 
-	if strings.Contains(cfg.ResourceURI, "{") {
-		if cfg.TemplateHandler == nil {
-			panic("RegisterAppTool: template URI " + cfg.ResourceURI + " requires TemplateHandler, got nil")
+	if cfg.ResourceHandler == nil {
+		if core.IsTemplateURI(cfg.ResourceURI) {
+			panic("RegisterAppTool: template URI " + cfg.ResourceURI + " requires TemplateHandler or ResourceHandler, got neither")
 		}
-		reg.RegisterResourceTemplate(
-			core.ResourceTemplate{
-				URITemplate: cfg.ResourceURI,
-				Name:        cfg.Name + " UI",
-				MimeType:    core.AppMIMEType,
-			},
-			cfg.TemplateHandler,
-		)
-	} else {
-		if cfg.ResourceHandler == nil {
-			panic("RegisterAppTool: concrete URI " + cfg.ResourceURI + " requires ResourceHandler, got nil")
-		}
-		reg.RegisterResource(
-			core.ResourceDef{
-				URI:      cfg.ResourceURI,
-				Name:     cfg.Name + " UI",
-				MimeType: core.AppMIMEType,
-			},
-			cfg.ResourceHandler,
-		)
+		panic("RegisterAppTool: concrete URI " + cfg.ResourceURI + " requires ResourceHandler, got nil")
 	}
+	reg.RegisterResource(
+		core.ResourceDef{
+			URI:      cfg.ResourceURI,
+			Name:     cfg.Name + " UI",
+			MimeType: core.AppMIMEType,
+		},
+		cfg.ResourceHandler,
+	)
 }
 
 // RequestDisplayMode sends a display mode change notification to the client.
@@ -242,4 +306,45 @@ func matchesAnyTemplate(uri string, templates []string) bool {
 		}
 	}
 	return false
+}
+
+// concreteFallbackURI generates a synthetic concrete URI from a template URI
+// and tool name. The authority (host) portion of the template URI is preserved
+// so the concrete fallback lives in the same namespace.
+//
+// Example: "ui://slyds/decks/{deck}/preview", "preview_deck" → "ui://slyds/preview_deck/latest"
+func concreteFallbackURI(templateURI, toolName string) string {
+	u, err := url.Parse(templateURI)
+	if err != nil || u.Host == "" {
+		// Fallback: use the tool name alone.
+		return "ui://" + toolName + "/latest"
+	}
+	return "ui://" + u.Host + "/" + toolName + "/latest"
+}
+
+// extractTemplateParams extracts template variable values from tool arguments.
+// For each variable name in vars, if a matching key exists in the JSON
+// arguments object, its string value is included in the result map.
+func extractTemplateParams(vars []string, args json.RawMessage) map[string]string {
+	params := make(map[string]string, len(vars))
+	if len(args) == 0 {
+		return params
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(args, &m); err != nil {
+		return params
+	}
+	for _, v := range vars {
+		raw, ok := m[v]
+		if !ok {
+			continue
+		}
+		// Try to unquote a JSON string; fall back to raw literal.
+		var s string
+		if err := json.Unmarshal(raw, &s); err != nil {
+			s = string(raw)
+		}
+		params[v] = s
+	}
+	return params
 }
