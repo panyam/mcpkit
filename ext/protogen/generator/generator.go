@@ -10,6 +10,7 @@ import (
 
 	"google.golang.org/protobuf/compiler/protogen"
 
+	mcpv1 "github.com/panyam/mcpkit/ext/protogen/proto/mcp/v1"
 	"github.com/panyam/mcpkit/ext/protogen/schema"
 )
 
@@ -35,7 +36,11 @@ func Generate(gen *protogen.Plugin, file *protogen.File, cfg Config) {
 		file.GoImportPath+protogen.GoImportPath("/"+suffix),
 	)
 
-	data := collectFileData(file, gf)
+	data, err := collectFileData(file, gf)
+	if err != nil {
+		gen.Error(fmt.Errorf("annotation error in %s: %w", file.Desc.Path(), err))
+		return
+	}
 	if len(data.Services) == 0 {
 		return
 	}
@@ -72,7 +77,7 @@ type toolData struct {
 	InputSchema  string // JSON string of the input schema
 }
 
-func collectFileData(file *protogen.File, gf *protogen.GeneratedFile) fileData {
+func collectFileData(file *protogen.File, gf *protogen.GeneratedFile) (fileData, error) {
 	data := fileData{
 		SourcePath: file.Desc.Path(),
 		GoPackage:  string(file.GoPackageName),
@@ -80,21 +85,27 @@ func collectFileData(file *protogen.File, gf *protogen.GeneratedFile) fileData {
 	}
 
 	for _, svc := range file.Services {
-		sd := collectServiceData(svc, gf)
+		sd, err := collectServiceData(svc, gf)
+		if err != nil {
+			return fileData{}, err
+		}
 		if len(sd.Tools) > 0 {
 			data.Services = append(data.Services, sd)
 		}
 	}
 
-	return data
+	return data, nil
 }
 
-func collectServiceData(svc *protogen.Service, gf *protogen.GeneratedFile) serviceData {
+func collectServiceData(svc *protogen.Service, gf *protogen.GeneratedFile) (serviceData, error) {
 	sd := serviceData{
 		Name: svc.GoName,
 	}
 
-	// TODO: read mcp_service annotation for namespace once proto extensions are wired.
+	// Read mcp_service annotation for namespace.
+	if svcOpts := mcpv1.GetServiceOptions(svc.Desc.Options()); svcOpts != nil {
+		sd.Namespace = svcOpts.Namespace
+	}
 
 	seenNames := map[string]*protogen.Method{}
 
@@ -104,7 +115,13 @@ func collectServiceData(svc *protogen.Service, gf *protogen.GeneratedFile) servi
 			continue
 		}
 
-		toolName := resolveToolName(sd.Namespace, method)
+		// Read mcp_tool annotation.
+		toolOpts := mcpv1.GetToolOptions(method.Desc.Options())
+
+		toolName, err := resolveToolName(sd.Namespace, method, toolOpts)
+		if err != nil {
+			return sd, fmt.Errorf("method %s: %w", method.GoName, err)
+		}
 
 		// Check for duplicate tool names.
 		if existing, ok := seenNames[toolName]; ok {
@@ -115,7 +132,28 @@ func collectServiceData(svc *protogen.Service, gf *protogen.GeneratedFile) servi
 		}
 		seenNames[toolName] = method
 
+		// Description: annotation overrides comment.
 		desc := CleanComment(string(method.Comments.Leading))
+		if toolOpts != nil && toolOpts.Description != "" {
+			desc = toolOpts.Description
+		}
+
+		// Structured output.
+		structured := false
+		if toolOpts != nil {
+			structured = toolOpts.StructuredOutput
+		}
+
+		// Timeout: validate at generation time, emit as nanosecond literal.
+		var timeout string
+		if toolOpts != nil && toolOpts.Timeout != "" {
+			d, err := time.ParseDuration(toolOpts.Timeout)
+			if err != nil {
+				return sd, fmt.Errorf("method %s: invalid timeout %q: %w", method.GoName, toolOpts.Timeout, err)
+			}
+			timeout = fmt.Sprintf("time.Duration(%d) /* %s */", int64(d), d)
+		}
+
 		inputSchema := schema.FromMessage(method.Input.Desc)
 		schemaJSON, _ := json.Marshal(inputSchema)
 
@@ -127,19 +165,28 @@ func collectServiceData(svc *protogen.Service, gf *protogen.GeneratedFile) servi
 			MethodName:   method.GoName,
 			ToolName:     toolName,
 			Description:  desc,
+			Timeout:      timeout,
+			Structured:   structured,
 			RequestType:  reqType,
 			ResponseType: respType,
 			InputSchema:  string(schemaJSON),
 		})
 	}
 
-	return sd
+	return sd, nil
 }
 
-func resolveToolName(namespace string, method *protogen.Method) string {
-	// TODO: check mcp_tool annotation for custom name.
-	name := MethodToSnakeCase(method.GoName)
-	return PrefixWithNamespace(namespace, name)
+func resolveToolName(namespace string, method *protogen.Method, opts *mcpv1.MCPToolOptions) (string, error) {
+	var name string
+	if opts != nil && opts.Name != "" {
+		if err := ValidateToolName(opts.Name); err != nil {
+			return "", fmt.Errorf("invalid mcp_tool.name: %w", err)
+		}
+		name = opts.Name
+	} else {
+		name = MethodToSnakeCase(method.GoName)
+	}
+	return PrefixWithNamespace(namespace, name), nil
 }
 
 // escapeString escapes a string for use in a Go string literal.
