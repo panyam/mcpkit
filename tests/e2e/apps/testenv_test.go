@@ -7,7 +7,6 @@
 package apps_test
 
 import (
-	"context"
 	"net/http/httptest"
 	"testing"
 
@@ -47,7 +46,7 @@ func newConformanceServer() *server.Server {
 				},
 			},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("Dashboard displayed"), nil
 		},
 	)
@@ -67,7 +66,7 @@ func newConformanceServer() *server.Server {
 				},
 			},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			var args struct{ Page string `json:"page"` }
 			req.Bind(&args)
 			return core.TextResult("Navigated to " + args.Page), nil
@@ -87,7 +86,7 @@ func newConformanceServer() *server.Server {
 				},
 			},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult(`Dashboard data: {"widgets": 5}`), nil
 		},
 	)
@@ -105,7 +104,7 @@ func newConformanceServer() *server.Server {
 				},
 			},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			core.NotifyResourcesChanged(ctx)
 			return core.TextResult("Dashboard mutated"), nil
 		},
@@ -118,7 +117,7 @@ func newConformanceServer() *server.Server {
 			Description: "Tool without UI metadata",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("plain result"), nil
 		},
 	)
@@ -126,7 +125,7 @@ func newConformanceServer() *server.Server {
 	// ui://dashboard/view — HTML resource with per-content _meta
 	srv.RegisterResource(
 		core.ResourceDef{URI: "ui://dashboard/view", Name: "Dashboard View", MimeType: core.AppMIMEType},
-		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{Contents: []core.ResourceReadContent{{
 				URI:      req.URI,
 				MimeType: core.AppMIMEType,
@@ -144,7 +143,7 @@ func newConformanceServer() *server.Server {
 	// ui://apps/{id}/view — parameterized template resource
 	srv.RegisterResourceTemplate(
 		core.ResourceTemplate{URITemplate: "ui://apps/{id}/view", Name: "App View", MimeType: core.AppMIMEType},
-		func(ctx context.Context, uri string, params map[string]string) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, uri string, params map[string]string) (core.ResourceResult, error) {
 			return core.ResourceResult{Contents: []core.ResourceReadContent{{
 				URI:      uri,
 				MimeType: core.AppMIMEType,
@@ -156,7 +155,7 @@ func newConformanceServer() *server.Server {
 	// test://plain-resource — non-UI resource for comparison
 	srv.RegisterResource(
 		core.ResourceDef{URI: "test://plain-resource", Name: "Plain Resource", MimeType: "text/plain"},
-		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{Contents: []core.ResourceReadContent{{
 				URI: req.URI, MimeType: "text/plain", Text: "plain content",
 			}}}, nil

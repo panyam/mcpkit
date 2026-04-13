@@ -80,7 +80,7 @@ func ToolExec(cfg ExecConfig) Tool {
 			InputSchema: schema,
 			Timeout:     cfg.Timeout,
 		},
-		Handler: func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		Handler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			// Build the full argument list: static args + dynamic args.
 			args := make([]string, len(cfg.Args))
 			copy(args, cfg.Args)
@@ -94,13 +94,14 @@ func ToolExec(cfg ExecConfig) Tool {
 			}
 
 			// Apply per-invocation timeout if configured.
+			cmdCtx := ctx.Context
 			if cfg.Timeout > 0 {
 				var cancel context.CancelFunc
-				ctx, cancel = context.WithTimeout(ctx, cfg.Timeout)
+				cmdCtx, cancel = context.WithTimeout(ctx, cfg.Timeout)
 				defer cancel()
 			}
 
-			cmd := exec.CommandContext(ctx, cfg.Command, args...)
+			cmd := exec.CommandContext(cmdCtx, cfg.Command, args...)
 			if cfg.Dir != "" {
 				cmd.Dir = cfg.Dir
 			}

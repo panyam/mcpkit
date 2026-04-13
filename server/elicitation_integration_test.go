@@ -93,7 +93,7 @@ func newElicitationTestServer() *server.Server {
 			Description: "Calls elicitation/create and returns the user's response",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			result, err := core.Elicit(ctx, core.ElicitationRequest{
 				Message:         "Pick a color",
 				RequestedSchema: json.RawMessage(`{"type":"object","properties":{"color":{"type":"string","enum":["red","green","blue"]}}}`),

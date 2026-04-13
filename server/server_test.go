@@ -32,7 +32,7 @@ func TestServerDispatch(t *testing.T) {
 	srv := NewServer(core.ServerInfo{Name: "test", Version: "0.1.0"})
 	srv.RegisterTool(
 		core.ToolDef{Name: "greet", Description: "say hi"},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("hi"), nil
 		},
 	)
@@ -62,7 +62,7 @@ func TestServerToolTimeout(t *testing.T) {
 	)
 	srv.RegisterTool(
 		core.ToolDef{Name: "slow", Description: "blocks"},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			select {
 			case <-ctx.Done():
 				return core.ErrorResult("timeout: " + ctx.Err().Error()), nil

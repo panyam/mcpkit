@@ -241,7 +241,7 @@ func TestAnnotationsOnToolDef(t *testing.T) {
 	srv := NewServer(core.ServerInfo{Name: "test", Version: "0.1.0"})
 	srv.RegisterExperimentalTool(
 		core.ToolDef{Name: "beta-tool", Description: "experimental"},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("ok"), nil
 		},
 	)

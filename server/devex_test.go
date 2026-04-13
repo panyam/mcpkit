@@ -118,7 +118,7 @@ func TestStructuredContentInDispatch(t *testing.T) {
 			InputSchema:  map[string]any{"type": "object"},
 			OutputSchema: map[string]any{"type": "object", "properties": map[string]any{"count": map[string]any{"type": "integer"}}},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.StructuredResult("3 items", map[string]any{"count": 3}), nil
 		},
 	)
@@ -222,7 +222,7 @@ func TestStatelessMode_NoSession(t *testing.T) {
 	srv := server.NewServer(core.ServerInfo{Name: "stateless", Version: "1.0"})
 	srv.RegisterTool(
 		core.ToolDef{Name: "ping", Description: "ping", InputSchema: map[string]any{"type": "object"}},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("pong"), nil
 		},
 	)
@@ -252,7 +252,7 @@ func TestStatelessMode_IndependentRequests(t *testing.T) {
 	srv := server.NewServer(core.ServerInfo{Name: "stateless", Version: "1.0"})
 	srv.RegisterTool(
 		core.ToolDef{Name: "count", Description: "count", InputSchema: map[string]any{"type": "object"}},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			callCount++
 			return core.TextResult(fmt.Sprintf("call-%d", callCount)), nil
 		},

@@ -1,7 +1,6 @@
 package server_test
 
 import (
-	"context"
 	"net/http/httptest"
 	"testing"
 
@@ -35,7 +34,7 @@ func TestClient_Streamable_401Integration(t *testing.T) {
 		server.WithBearerToken("valid-token"))
 	srv.RegisterTool(
 		core.ToolDef{Name: "echo", Description: "echo", InputSchema: map[string]any{"type": "object", "properties": map[string]any{"message": map[string]any{"type": "string"}}}},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			var p struct{ Message string `json:"message"` }
 			req.Bind(&p)
 			return core.TextResult("echo: "+p.Message), nil
@@ -66,7 +65,7 @@ func TestClient_Streamable_AuthErrorType(t *testing.T) {
 		server.WithBearerToken("valid-token"))
 	srv.RegisterTool(
 		core.ToolDef{Name: "echo", Description: "echo"},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("ok"), nil
 		},
 	)

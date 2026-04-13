@@ -69,7 +69,7 @@ func TestAddToolAfterServing(t *testing.T) {
 	// Add a tool at runtime
 	d.Reg.AddTool(
 		core.ToolDef{Name: "dynamic", Description: "Added at runtime"},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("dynamic"), nil
 		},
 	)
@@ -88,7 +88,7 @@ func TestRemoveTool(t *testing.T) {
 
 	d.Reg.AddTool(
 		core.ToolDef{Name: "ephemeral", Description: "Will be removed"},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("here"), nil
 		},
 	)
@@ -140,7 +140,7 @@ func TestAddToolBroadcastsListChanged(t *testing.T) {
 
 	srv.Registry().AddTool(
 		core.ToolDef{Name: "notified", Description: "triggers broadcast"},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("ok"), nil
 		},
 	)
@@ -159,7 +159,7 @@ func TestRemoveToolBroadcastsListChanged(t *testing.T) {
 
 	srv.Registry().AddTool(
 		core.ToolDef{Name: "temp", Description: "temp"},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("ok"), nil
 		},
 	)
@@ -189,7 +189,7 @@ func TestAddResourceAfterServing(t *testing.T) {
 
 	d.Reg.AddResource(
 		core.ResourceDef{URI: "test://dynamic", Name: "Dynamic Resource"},
-		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{Contents: []core.ResourceReadContent{
 				{URI: req.URI, Text: "dynamic content"},
 			}}, nil
@@ -220,7 +220,7 @@ func TestRemoveResource(t *testing.T) {
 
 	d.Reg.AddResource(
 		core.ResourceDef{URI: "test://temp", Name: "Temp"},
-		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{Contents: []core.ResourceReadContent{
 				{URI: req.URI, Text: "temp"},
 			}}, nil
@@ -247,7 +247,7 @@ func TestAddResourceBroadcastsListChanged(t *testing.T) {
 
 	srv.Registry().AddResource(
 		core.ResourceDef{URI: "test://r", Name: "R"},
-		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{}, nil
 		},
 	)
@@ -265,7 +265,7 @@ func TestAddPromptAfterServing(t *testing.T) {
 
 	d.Reg.AddPrompt(
 		core.PromptDef{Name: "dynamic-prompt", Description: "Added at runtime"},
-		func(ctx context.Context, req core.PromptRequest) (core.PromptResult, error) {
+		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResult, error) {
 			return core.PromptResult{Messages: []core.PromptMessage{
 				{Role: "assistant", Content: core.Content{Type: "text", Text: "dynamic"}},
 			}}, nil
@@ -292,7 +292,7 @@ func TestRemovePrompt(t *testing.T) {
 
 	d.Reg.AddPrompt(
 		core.PromptDef{Name: "temp-prompt", Description: "Temp"},
-		func(ctx context.Context, req core.PromptRequest) (core.PromptResult, error) {
+		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResult, error) {
 			return core.PromptResult{}, nil
 		},
 	)
@@ -317,7 +317,7 @@ func TestAddPromptBroadcastsListChanged(t *testing.T) {
 
 	srv.Registry().AddPrompt(
 		core.PromptDef{Name: "p", Description: "P"},
-		func(ctx context.Context, req core.PromptRequest) (core.PromptResult, error) {
+		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResult, error) {
 			return core.PromptResult{}, nil
 		},
 	)
@@ -345,7 +345,7 @@ func TestConcurrentAddAndList(t *testing.T) {
 			defer wg.Done()
 			d.Reg.AddTool(
 				core.ToolDef{Name: json.Number(json.Number(string(rune('a'+i)))).String(), Description: "concurrent"},
-				func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+				func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 					return core.TextResult("ok"), nil
 				},
 			)

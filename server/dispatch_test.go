@@ -40,7 +40,7 @@ func testDispatcher() *Dispatcher {
 				"required": []string{"message"},
 			},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			var args struct {
 				Message string `json:"message"`
 			}
@@ -270,7 +270,7 @@ func TestDispatchToolsCallHandlerError(t *testing.T) {
 	// Register a tool that always returns a Go error
 	d.RegisterTool(
 		core.ToolDef{Name: "failing", Description: "always fails"},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.ToolResult{}, fmt.Errorf("something broke")
 		},
 	)
@@ -309,7 +309,7 @@ func TestDispatchToolsCallHandlerError(t *testing.T) {
 func TestDispatchToolOrder(t *testing.T) {
 	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
 	for _, name := range []string{"charlie", "alpha", "bravo"} {
-		d.RegisterTool(core.ToolDef{Name: name, Description: name}, func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		d.RegisterTool(core.ToolDef{Name: name, Description: name}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult(name), nil
 		})
 	}
@@ -456,7 +456,7 @@ func TestDispatchBeforeInitialized(t *testing.T) {
 	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
 	d.RegisterTool(
 		core.ToolDef{Name: "echo", Description: "echoes"},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("hi"), nil
 		},
 	)
@@ -491,7 +491,7 @@ func TestDispatchToolsCallBeforeAnyInit(t *testing.T) {
 	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
 	d.RegisterTool(
 		core.ToolDef{Name: "echo", Description: "echoes"},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("hi"), nil
 		},
 	)
@@ -663,7 +663,7 @@ func TestDispatchToolsCallWithProgressToken(t *testing.T) {
 	var gotToken any
 	d.RegisterTool(
 		core.ToolDef{Name: "progress_tool", Description: "captures progress token"},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			gotToken = req.ProgressToken
 			return core.TextResult("ok"), nil
 		},
@@ -689,7 +689,7 @@ func TestDispatchToolsCallWithoutProgressToken(t *testing.T) {
 	var gotToken any = "sentinel"
 	d.RegisterTool(
 		core.ToolDef{Name: "no_progress", Description: "no progress token"},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			gotToken = req.ProgressToken
 			return core.TextResult("ok"), nil
 		},
@@ -737,7 +737,7 @@ func TestDispatchToolsListExtraSchemaFields(t *testing.T) {
 				},
 			},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("ok"), nil
 		},
 	)
@@ -813,7 +813,7 @@ func TestToolsListMeta(t *testing.T) {
 				},
 			},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("ok"), nil
 		},
 	)
@@ -823,7 +823,7 @@ func TestToolsListMeta(t *testing.T) {
 			Description: "Tool without UI metadata",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("ok"), nil
 		},
 	)

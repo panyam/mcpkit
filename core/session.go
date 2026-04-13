@@ -109,6 +109,16 @@ func NotifyResourcesChanged(ctx context.Context) {
 	Notify(ctx, "notifications/resources/list_changed", nil)
 }
 
+// FromContext returns a BaseContext for the given context.Context. This is
+// the bridge for code using the free-function API — existing free functions
+// like EmitLog(ctx, ...) delegate to FromContext(ctx).EmitLog(...).
+//
+// Always returns a usable BaseContext (never nil). Methods become no-ops
+// when no session state is present.
+func FromContext(ctx context.Context) BaseContext {
+	return BaseContext{ctx, sessionFromContext(ctx)}
+}
+
 // MarshalNotification builds a JSON-RPC notification (no id field).
 // Exported for use by the server transport sub-package.
 func MarshalNotification(method string, params any) (json.RawMessage, error) {
