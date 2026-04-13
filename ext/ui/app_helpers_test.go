@@ -121,10 +121,11 @@ func TestValidateRefsNoMetaSkipped(t *testing.T) {
 	}
 }
 
-// mockRegistrar captures RegisterTool and RegisterResource calls for testing.
+// mockRegistrar captures RegisterTool, RegisterResource, and RegisterResourceTemplate calls for testing.
 type mockRegistrar struct {
 	tools     []core.ToolDef
 	resources []core.ResourceDef
+	templates []core.ResourceTemplate
 }
 
 func (m *mockRegistrar) RegisterTool(def core.ToolDef, _ core.ToolHandler) {
@@ -133,4 +134,107 @@ func (m *mockRegistrar) RegisterTool(def core.ToolDef, _ core.ToolHandler) {
 
 func (m *mockRegistrar) RegisterResource(def core.ResourceDef, _ core.ResourceHandler) {
 	m.resources = append(m.resources, def)
+}
+
+func (m *mockRegistrar) RegisterResourceTemplate(def core.ResourceTemplate, _ core.TemplateHandler) {
+	m.templates = append(m.templates, def)
+}
+
+// TestRegisterAppToolTemplate verifies that RegisterAppTool detects a template
+// URI (contains "{") and routes registration to RegisterResourceTemplate instead
+// of RegisterResource.
+func TestRegisterAppToolTemplate(t *testing.T) {
+	reg := &mockRegistrar{}
+
+	RegisterAppTool(reg, AppToolConfig{
+		Name:        "show_pizza",
+		Description: "Show a pizza",
+		InputSchema: map[string]any{"type": "object"},
+		ResourceURI: "ui://pizzas/{pizzaId}/details",
+		ToolHandler: func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			return core.TextResult("ok"), nil
+		},
+		TemplateHandler: func(ctx context.Context, uri string, params map[string]string) (core.ResourceResult, error) {
+			return core.ResourceResult{}, nil
+		},
+	})
+
+	if len(reg.templates) != 1 {
+		t.Fatalf("expected 1 template, got %d", len(reg.templates))
+	}
+	if len(reg.resources) != 0 {
+		t.Errorf("expected 0 resources, got %d", len(reg.resources))
+	}
+	tmpl := reg.templates[0]
+	if tmpl.URITemplate != "ui://pizzas/{pizzaId}/details" {
+		t.Errorf("URITemplate = %q, want %q", tmpl.URITemplate, "ui://pizzas/{pizzaId}/details")
+	}
+	if tmpl.MimeType != core.AppMIMEType {
+		t.Errorf("MimeType = %q, want %q", tmpl.MimeType, core.AppMIMEType)
+	}
+
+	// Tool should still have the correct _meta.ui.resourceUri
+	if len(reg.tools) != 1 {
+		t.Fatalf("expected 1 tool, got %d", len(reg.tools))
+	}
+	if reg.tools[0].Meta == nil || reg.tools[0].Meta.UI == nil {
+		t.Fatal("tool Meta.UI is nil")
+	}
+	if reg.tools[0].Meta.UI.ResourceUri != "ui://pizzas/{pizzaId}/details" {
+		t.Errorf("resourceUri = %q, want template URI", reg.tools[0].Meta.UI.ResourceUri)
+	}
+}
+
+// TestRegisterAppToolTemplateNilHandlerPanics verifies that RegisterAppTool
+// panics when a template URI is used without a TemplateHandler.
+func TestRegisterAppToolTemplateNilHandlerPanics(t *testing.T) {
+	reg := &mockRegistrar{}
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic for template URI without TemplateHandler")
+		}
+	}()
+
+	RegisterAppTool(reg, AppToolConfig{
+		Name:        "bad_template",
+		ResourceURI: "ui://items/{id}/view",
+		ToolHandler: func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			return core.TextResult("ok"), nil
+		},
+		// TemplateHandler intentionally nil
+	})
+}
+
+// TestRegisterAppToolSupportedDisplayModes verifies that SupportedDisplayModes
+// flows through from AppToolConfig to the tool's _meta.ui.
+func TestRegisterAppToolSupportedDisplayModes(t *testing.T) {
+	reg := &mockRegistrar{}
+
+	RegisterAppTool(reg, AppToolConfig{
+		Name:        "dashboard",
+		ResourceURI: "ui://dashboard/view",
+		ToolHandler: func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			return core.TextResult("ok"), nil
+		},
+		ResourceHandler: func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+			return core.ResourceResult{}, nil
+		},
+		SupportedDisplayModes: []core.DisplayMode{core.DisplayModeInline, core.DisplayModeFullscreen},
+	})
+
+	if len(reg.tools) != 1 {
+		t.Fatalf("expected 1 tool, got %d", len(reg.tools))
+	}
+	ui := reg.tools[0].Meta.UI
+	if len(ui.SupportedDisplayModes) != 2 {
+		t.Fatalf("SupportedDisplayModes length = %d, want 2", len(ui.SupportedDisplayModes))
+	}
+	if ui.SupportedDisplayModes[0] != core.DisplayModeInline {
+		t.Errorf("SupportedDisplayModes[0] = %q, want %q", ui.SupportedDisplayModes[0], core.DisplayModeInline)
+	}
+	if ui.SupportedDisplayModes[1] != core.DisplayModeFullscreen {
+		t.Errorf("SupportedDisplayModes[1] = %q, want %q", ui.SupportedDisplayModes[1], core.DisplayModeFullscreen)
+	}
 }

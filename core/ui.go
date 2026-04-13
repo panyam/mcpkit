@@ -40,6 +40,10 @@ type UIMetadata struct {
 	// Domain requests a dedicated sandbox origin for the app.
 	// Format is host-dependent (e.g., "myapp" → myapp.claudemcpcontent.com).
 	Domain string `json:"domain,omitempty"`
+
+	// SupportedDisplayModes declares which display modes this app can render in.
+	// Nil means the host decides. Hosts use this to offer mode switching UI.
+	SupportedDisplayModes []DisplayMode `json:"supportedDisplayModes,omitempty"`
 }
 
 // UICSPConfig declares external domains for Content-Security-Policy construction.
@@ -67,6 +71,20 @@ const (
 
 	// UIVisibilityApp means the tool is callable by apps from the same server.
 	UIVisibilityApp UIVisibility = "app"
+)
+
+// DisplayMode represents an iframe display mode for MCP Apps.
+type DisplayMode string
+
+const (
+	// DisplayModeInline renders the app inline within the host UI.
+	DisplayModeInline DisplayMode = "inline"
+
+	// DisplayModeFullscreen renders the app in a fullscreen overlay.
+	DisplayModeFullscreen DisplayMode = "fullscreen"
+
+	// DisplayModePIP renders the app in a picture-in-picture window.
+	DisplayModePIP DisplayMode = "pip"
 )
 
 // AppMIMEType is the MIME type for MCP App HTML resources.

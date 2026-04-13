@@ -46,7 +46,7 @@ mcpkit/
 │   ├── request.go             RequestFunc, ErrNoRequestFunc
 │   ├── protocol.go            ServerInfo, ClientInfo, ClientCapabilities, ServerCapabilities, ToolsCap, ResourcesCap, PromptsCap, InitializeResult, ExtensionCapability
 │   ├── interfaces.go          Transport, ServerRequestHandler, NotificationHandler
-│   ├── ui.go                  UIMetadata, UICSPConfig, UIVisibility, AppMIMEType, ToolMeta, ResourceContentMeta
+│   ├── ui.go                  UIMetadata, UICSPConfig, UIVisibility, DisplayMode, AppMIMEType, ToolMeta, ResourceContentMeta
 │   └── www_authenticate.go    ParseWWWAuthenticate
 │
 ├── server/                  ← Server + Dispatcher + transports
@@ -82,7 +82,7 @@ mcpkit/
 │         mergeScopes → core.UnionScopes. Type aliases preserved for compat.
 │
 ├── ext/ui/                 ← Separate Go module (ext/ui/go.mod)
-│   └── extension.go          UIExtension (ExtensionProvider + RefValidator), RegisterAppTool, AppToolConfig
+│   └── extension.go          UIExtension (ExtensionProvider + RefValidator), RegisterAppTool, AppToolConfig, RequestDisplayMode, ElicitWithApp, SampleWithApp
 │
 ├── testutil/                ← Test helpers (NewTestServer, ForAllTransports, TestClient)
 ├── cmd/testserver/          ← Conformance test server
@@ -276,9 +276,11 @@ mcpkit/
 - **Server-side detection**: `core.ClientSupportsUI(ctx)` in tool handlers checks if client declared UI extension support.
 - **Client-side detection**: `client.ServerSupportsUI()` checks if server advertised the extension.
 - **`NotifyResourcesChanged(ctx)`** — call from tool handlers after mutating state so clients know to re-fetch resources.
-- **`RegisterAppTool`** lives in `ext/ui/`, takes a `ToolResourceRegistrar` interface (not `*server.Server`) to avoid cross-module import.
+- **`RegisterAppTool`** lives in `ext/ui/`, takes a `ToolResourceRegistrar` interface (not `*server.Server`) to avoid cross-module import. Auto-detects template URIs (containing `{`) and routes to `RegisterResourceTemplate` instead of `RegisterResource`. Template URIs require `TemplateHandler` in `AppToolConfig` (panics if nil).
 - **`RefValidator`** interface on `ExtensionProvider` — `UIExtension` validates `_meta.ui.resourceUri` refs at `Handler()` startup. Warnings only, no errors.
 - **`PrefersBorder`** is `*bool` tri-state: nil (host decides), true (border), false (no border).
+- **Display mode negotiation (#185)**: `UIMetadata.SupportedDisplayModes []DisplayMode` declares which modes an app supports (`inline`, `fullscreen`, `pip`). `ui.RequestDisplayMode(ctx, mode)` sends `notifications/ui/displayMode` to request the host change display. Fire-and-forget; host may ignore.
+- **App metadata on elicitation/sampling (#191)**: `ElicitationRequest.Meta *ElicitationMeta` and `CreateMessageRequest.Meta *SamplingMeta` carry `_meta.ui` on the wire. `ui.ElicitWithApp(ctx, req, uiMeta)` and `ui.SampleWithApp(ctx, req, uiMeta)` are convenience wrappers.
 - **`ListToolsForModel()`** is client-side filtering — server always returns all tools including app-only. Visibility is a presentation hint, not access control.
 - **Playwright tests**: `make test-apps-playwright` runs the upstream ext-apps Playwright suite against our testserver. Not in `testall` — run manually when needed.
 - **Design doc**: see `docs/APPS_DESIGN.md` for full architecture, protocol flows, and conformance strategy.
