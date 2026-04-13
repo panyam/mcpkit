@@ -16,7 +16,7 @@ import (
 //
 // Usage in a tool handler:
 //
-//	func adminTool(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+//	func adminTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 //	    if err := auth.RequireScope(ctx, "admin:write"); err != nil {
 //	        return core.ErrorResult(err.Error()), nil
 //	    }

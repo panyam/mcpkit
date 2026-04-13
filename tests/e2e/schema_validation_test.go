@@ -7,7 +7,6 @@ package e2e_test
 // and inspects the -32602 error shape over the wire.
 
 import (
-	"context"
 	"net/http/httptest"
 	"testing"
 
@@ -38,7 +37,7 @@ func TestE2E_SchemaValidationErrorOverWire(t *testing.T) {
 				},
 			},
 		},
-	}, func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+	}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 		return core.TextResult("ok"), nil
 	})
 

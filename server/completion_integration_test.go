@@ -12,7 +12,7 @@ import (
 // This is the happy path for argument autocompletion.
 func TestCompletionComplete(t *testing.T) {
 	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
-	d.RegisterCompletion("ref/prompt", "my-prompt", func(ctx context.Context, ref core.CompletionRef, arg core.CompletionArgument) (core.CompletionResult, error) {
+	d.RegisterCompletion("ref/prompt", "my-prompt", func(ctx core.PromptContext, ref core.CompletionRef, arg core.CompletionArgument) (core.CompletionResult, error) {
 		return core.CompletionResult{
 			Values:  []string{"val1", "val2"},
 			Total:   2,
@@ -135,7 +135,7 @@ func TestCompletionCapability(t *testing.T) {
 // "ref/resource" references (URI-based) in addition to "ref/prompt" references.
 func TestCompletionCompleteResourceRef(t *testing.T) {
 	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
-	d.RegisterCompletion("ref/resource", "file:///{path}", func(ctx context.Context, ref core.CompletionRef, arg core.CompletionArgument) (core.CompletionResult, error) {
+	d.RegisterCompletion("ref/resource", "file:///{path}", func(ctx core.PromptContext, ref core.CompletionRef, arg core.CompletionArgument) (core.CompletionResult, error) {
 		return core.CompletionResult{Values: []string{"/etc", "/usr"}, HasMore: false}, nil
 	})
 	initDispatcher(d)

@@ -46,7 +46,7 @@ func NewTestServer() *server.Server {
 				"required": []string{"message"},
 			},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			var p struct {
 				Message string `json:"message"`
 			}
@@ -57,7 +57,7 @@ func NewTestServer() *server.Server {
 
 	srv.RegisterTool(
 		core.ToolDef{Name: "fail", Description: "Always fails with an error result"},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.ErrorResult("intentional failure"), nil
 		},
 	)
@@ -69,7 +69,7 @@ func NewTestServer() *server.Server {
 			Description: "Static test resource",
 			MimeType:    "text/plain",
 		},
-		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{
 				Contents: []core.ResourceReadContent{{
 					URI:      "test://info",
@@ -87,7 +87,7 @@ func NewTestServer() *server.Server {
 			Description: "Parameterized test resource",
 			MimeType:    "text/plain",
 		},
-		func(ctx context.Context, uri string, params map[string]string) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, uri string, params map[string]string) (core.ResourceResult, error) {
 			return core.ResourceResult{
 				Contents: []core.ResourceReadContent{{
 					URI:      uri,

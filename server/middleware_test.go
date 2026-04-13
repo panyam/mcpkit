@@ -32,7 +32,7 @@ func TestMiddleware_SeesAllRequests(t *testing.T) {
 		WithMiddleware(mw))
 	srv.RegisterTool(
 		core.ToolDef{Name: "echo", Description: "echo"},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("ok"), nil
 		},
 	)
@@ -102,7 +102,7 @@ func TestMiddleware_ShortCircuit(t *testing.T) {
 		WithMiddleware(blockingMW))
 	srv.RegisterTool(
 		core.ToolDef{Name: "echo", Description: "echo"},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			dispatched.Store(true)
 			return core.TextResult("should not reach"), nil
 		},
@@ -165,7 +165,7 @@ func TestMiddleware_ToolTimeoutPreserved(t *testing.T) {
 		WithMiddleware(mw))
 	srv.RegisterTool(
 		core.ToolDef{Name: "slow", Description: "slow"},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			select {
 			case <-time.After(200 * time.Millisecond):
 				return core.TextResult("too slow"), nil

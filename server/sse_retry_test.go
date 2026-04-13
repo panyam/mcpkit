@@ -65,7 +65,7 @@ func TestSSE_EmitRetryHintReachesClient(t *testing.T) {
 			Description: "Emits a retry hint, then returns",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			if err := core.EmitSSERetry(ctx, 30*time.Second); err != nil {
 				return core.ErrorResult("emit: " + err.Error()), nil
 			}
@@ -131,7 +131,7 @@ func TestSSE_EmitRetryHintNoOpOnNonSSEPath(t *testing.T) {
 	var called bool
 	d.RegisterTool(
 		core.ToolDef{Name: "t", InputSchema: map[string]any{"type": "object"}},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			called = true
 			if err := core.EmitSSERetry(ctx, 5*time.Second); err != nil {
 				t.Errorf("EmitSSERetry on no-sse-hint ctx: %v", err)

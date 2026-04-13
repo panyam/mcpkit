@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"encoding/json"
 	"time"
 )
@@ -192,4 +191,6 @@ func (r *ToolRequest) Bind(v any) error {
 }
 
 // ToolHandler is the function signature for tool implementations.
-type ToolHandler func(ctx context.Context, req ToolRequest) (ToolResult, error)
+// The ToolContext provides typed access to session capabilities (EmitLog,
+// EmitProgress, EmitContent, Sample, Elicit, etc.) with IDE discoverability.
+type ToolHandler func(ctx ToolContext, req ToolRequest) (ToolResult, error)

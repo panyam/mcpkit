@@ -10,7 +10,6 @@ package keycloak_test
 // Tests skip gracefully when Keycloak is not reachable — run "make upkcl" to start.
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -139,7 +138,7 @@ func NewMCPTestEnv(t *testing.T) *MCPTestEnv {
 			Description: "Echoes input and reports claims. No scope required.",
 			InputSchema: json.RawMessage(`{"type":"object","properties":{"msg":{"type":"string"}}}`),
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			claims := core.AuthClaims(ctx)
 			var args map[string]any
 			json.Unmarshal(req.Arguments, &args)
@@ -160,7 +159,7 @@ func NewMCPTestEnv(t *testing.T) *MCPTestEnv {
 			Description: "Requires tools-call scope.",
 			InputSchema: json.RawMessage(`{"type":"object"}`),
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			if err := auth.RequireScope(ctx, scopeToolsCall); err != nil {
 				return core.TextResult("error: " + err.Error()), nil
 			}

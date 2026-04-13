@@ -39,7 +39,7 @@ func TestRoots_CustomFetchTimeout(t *testing.T) {
 	)
 	srv.RegisterTool(
 		core.ToolDef{Name: "noop", InputSchema: map[string]any{"type": "object"}},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("ok"), nil
 		},
 	)

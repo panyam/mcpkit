@@ -446,7 +446,7 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, pa
 		req.ProgressToken = envelope.Meta.ProgressToken
 	}
 
-	result, err := entry.handler(ctx, req)
+	result, err := entry.handler(core.NewToolContext(ctx), req)
 	if err != nil {
 		result = core.ErrorResult(fmt.Sprintf("tool %q: %v", envelope.Name, err))
 	}
@@ -489,7 +489,7 @@ func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage
 			defer cancel()
 			ctx = tctx
 		}
-		result, err := entry.handler(ctx, core.ResourceRequest{URI: envelope.URI})
+		result, err := entry.handler(core.NewResourceContext(ctx), core.ResourceRequest{URI: envelope.URI})
 		if err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeResourceError, fmt.Sprintf("resource %q: %v", envelope.URI, err))
 		}
@@ -520,7 +520,7 @@ func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage
 			defer cancel()
 			ctx = tctx
 		}
-		result, err := matchedHandler(ctx, matchedURI, matchedParams)
+		result, err := matchedHandler(core.NewResourceContext(ctx), matchedURI, matchedParams)
 		if err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeResourceError, fmt.Sprintf("resource template %q: %v", matchedTmplURI, err))
 		}
@@ -649,7 +649,7 @@ func (d *Dispatcher) handlePromptsGet(ctx context.Context, id json.RawMessage, p
 		Arguments: envelope.Arguments,
 	}
 
-	result, err := entry.handler(ctx, req)
+	result, err := entry.handler(core.NewPromptContext(ctx), req)
 	if err != nil {
 		return core.NewErrorResponse(id, core.ErrCodePromptError, fmt.Sprintf("prompt %q: %v", envelope.Name, err))
 	}
@@ -690,7 +690,7 @@ func (d *Dispatcher) handleCompletionComplete(ctx context.Context, id json.RawMe
 		})
 	}
 
-	result, err := handler(ctx, p.Ref, p.Argument)
+	result, err := handler(core.NewPromptContext(ctx), p.Ref, p.Argument)
 	if err != nil {
 		return core.NewErrorResponse(id, core.ErrCodeCompletionError, fmt.Sprintf("completion %q: %v", key, err))
 	}
