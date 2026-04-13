@@ -22,7 +22,7 @@ import (
 func TestAddTool_OverwriteDoesNotDuplicateOrder(t *testing.T) {
 	d := testDynamicDispatcher()
 
-	handler := func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+	handler := func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 		return core.TextResult("v1"), nil
 	}
 	d.Reg.AddTool(core.ToolDef{Name: "dup", Description: "first"}, handler)
@@ -39,7 +39,7 @@ func TestAddTool_OverwriteDoesNotDuplicateOrder(t *testing.T) {
 func TestAddResource_OverwriteDoesNotDuplicateOrder(t *testing.T) {
 	d := testDynamicDispatcher()
 
-	handler := func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+	handler := func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 		return core.ResourceResult{Contents: []core.ResourceReadContent{{URI: req.URI, Text: "v1"}}}, nil
 	}
 	d.Reg.AddResource(core.ResourceDef{URI: "test://dup", Name: "dup"}, handler)
@@ -68,7 +68,7 @@ func TestAddResource_OverwriteDoesNotDuplicateOrder(t *testing.T) {
 func TestAddResourceTemplate_OverwriteDoesNotDuplicateOrder(t *testing.T) {
 	d := testDynamicDispatcher()
 
-	handler := func(ctx context.Context, uri string, params map[string]string) (core.ResourceResult, error) {
+	handler := func(ctx core.ResourceContext, uri string, params map[string]string) (core.ResourceResult, error) {
 		return core.ResourceResult{Contents: []core.ResourceReadContent{{URI: uri, Text: "v1"}}}, nil
 	}
 	d.Reg.AddResourceTemplate(core.ResourceTemplate{URITemplate: "test://items/{id}", Name: "first"}, handler)
@@ -95,7 +95,7 @@ func TestAddResourceTemplate_OverwriteDoesNotDuplicateOrder(t *testing.T) {
 func TestAddPrompt_OverwriteDoesNotDuplicateOrder(t *testing.T) {
 	d := testDynamicDispatcher()
 
-	handler := func(ctx context.Context, req core.PromptRequest) (core.PromptResult, error) {
+	handler := func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResult, error) {
 		return core.PromptResult{}, nil
 	}
 	d.Reg.AddPrompt(core.PromptDef{Name: "dup", Description: "first"}, handler)
@@ -126,14 +126,14 @@ func TestAddResourceTemplate_OverwriteUpdatesHandler(t *testing.T) {
 
 	d.Reg.AddResourceTemplate(
 		core.ResourceTemplate{URITemplate: "test://items/{id}", Name: "items"},
-		func(ctx context.Context, uri string, params map[string]string) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, uri string, params map[string]string) (core.ResourceResult, error) {
 			return core.ResourceResult{Contents: []core.ResourceReadContent{{URI: uri, Text: "v1"}}}, nil
 		},
 	)
 	// Overwrite with new handler
 	d.Reg.AddResourceTemplate(
 		core.ResourceTemplate{URITemplate: "test://items/{id}", Name: "items"},
-		func(ctx context.Context, uri string, params map[string]string) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, uri string, params map[string]string) (core.ResourceResult, error) {
 			return core.ResourceResult{Contents: []core.ResourceReadContent{{URI: uri, Text: "v2"}}}, nil
 		},
 	)

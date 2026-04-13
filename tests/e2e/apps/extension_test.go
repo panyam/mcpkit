@@ -1,7 +1,6 @@
 package apps_test
 
 import (
-	"context"
 	"encoding/json"
 	"net/http/httptest"
 	"sync"
@@ -34,7 +33,7 @@ func TestUIExtensionNegotiationE2E(t *testing.T) {
 			Description: "Reports whether client supports UI",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			mu.Lock()
 			uiSupported = core.ClientSupportsUI(ctx)
 			mu.Unlock()

@@ -5,7 +5,6 @@ package main
 // See: https://github.com/modelcontextprotocol/conformance
 
 import (
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -24,7 +23,7 @@ func registerConformanceTools(srv *server.Server) {
 			Description: "Returns a simple text response for conformance testing",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("This is a simple text response for testing."), nil
 		},
 	)
@@ -36,7 +35,7 @@ func registerConformanceTools(srv *server.Server) {
 			Description: "Returns an error result for conformance testing",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.ToolResult{}, fmt.Errorf("Test error from tool")
 		},
 	)
@@ -48,7 +47,7 @@ func registerConformanceTools(srv *server.Server) {
 			Description: "Returns image content for conformance testing",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			// Minimal 1x1 red PNG
 			pngBytes := minimalPNG()
 			return core.ToolResult{
@@ -68,7 +67,7 @@ func registerConformanceTools(srv *server.Server) {
 			Description: "Returns audio content for conformance testing",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			// Minimal WAV header (44 bytes, no samples)
 			wavBytes := minimalWAV()
 			return core.ToolResult{
@@ -88,7 +87,7 @@ func registerConformanceTools(srv *server.Server) {
 			Description: "Returns mixed text, image, and resource content for conformance testing",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			pngBytes := minimalPNG()
 			return core.ToolResult{
 				Content: []core.Content{
@@ -114,7 +113,7 @@ func registerConformanceTools(srv *server.Server) {
 			Description: "Emits log notifications during execution for conformance testing",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			core.EmitLog(ctx, core.LogInfo, "test", "Tool execution started")
 			time.Sleep(50 * time.Millisecond)
 			core.EmitLog(ctx, core.LogInfo, "test", "Tool processing data")
@@ -134,7 +133,7 @@ func registerConformanceTools(srv *server.Server) {
 			Description: "Emits progress notifications during execution for conformance testing",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			core.EmitProgress(ctx, req.ProgressToken, 0, 100, "Starting")
 			time.Sleep(50 * time.Millisecond)
 			core.EmitProgress(ctx, req.ProgressToken, 50, 100, "Processing")
@@ -151,7 +150,7 @@ func registerConformanceTools(srv *server.Server) {
 			Description: "Returns embedded resource content for conformance testing",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.ToolResult{
 				Content: []core.Content{{
 					Type: "resource",
@@ -174,7 +173,7 @@ func registerConformanceTools(srv *server.Server) {
 			Description: "Calls sampling/createMessage and returns the LLM response for conformance testing",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			result, err := core.Sample(ctx, core.CreateMessageRequest{
 				Messages: []core.SamplingMessage{{
 					Role:    "user",
@@ -198,7 +197,7 @@ func registerConformanceTools(srv *server.Server) {
 			Description: "Calls elicitation/create and returns user input for conformance testing",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			result, err := core.Elicit(ctx, core.ElicitationRequest{
 				Message:         "Please provide your name",
 				RequestedSchema: json.RawMessage(`{"type":"object","properties":{"name":{"type":"string","description":"Your name"}}}`),
@@ -224,7 +223,7 @@ func registerConformanceTools(srv *server.Server) {
 			Description: "Calls elicitation/create with default values for all primitive types (SEP-1034)",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			schema := json.RawMessage(`{
 				"type": "object",
 				"properties": {
@@ -257,7 +256,7 @@ func registerConformanceTools(srv *server.Server) {
 			Description: "Calls elicitation/create with all 5 enum variants (SEP-1330)",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			schema := json.RawMessage(`{
 				"type": "object",
 				"properties": {

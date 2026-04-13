@@ -64,7 +64,7 @@ func main() {
 				"required": []string{"message"},
 			},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			var args struct {
 				Message string `json:"message"`
 			}
@@ -89,7 +89,7 @@ func main() {
 				"required": []string{"a", "b"},
 			},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			var args struct {
 				A json.Number `json:"a"`
 				B json.Number `json:"b"`
@@ -112,7 +112,7 @@ func main() {
 				"type": "object",
 			},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.ToolResult{}, fmt.Errorf("intentional failure for testing")
 		},
 	)

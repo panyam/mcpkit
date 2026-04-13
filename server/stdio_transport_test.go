@@ -286,7 +286,7 @@ func TestStdioNotificationDelivery(t *testing.T) {
 	// Register a tool that emits a log notification.
 	srv.RegisterTool(
 		core.ToolDef{Name: "log-test", Description: "emits a log", InputSchema: json.RawMessage(`{"type":"object"}`)},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			core.EmitLog(ctx, core.LogInfo, "test-logger", "hello from stdio")
 			return core.ToolResult{Content: []core.Content{{Type: "text", Text: "ok"}}}, nil
 		},
@@ -388,7 +388,7 @@ func newTestServer() *Server {
 			Description: "echoes input",
 			InputSchema: json.RawMessage(`{"type":"object","properties":{"message":{"type":"string"}}}`),
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			var args struct{ Message string }
 			json.Unmarshal(req.Arguments, &args)
 			return core.ToolResult{

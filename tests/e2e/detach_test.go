@@ -1,7 +1,6 @@
 package e2e_test
 
 import (
-	"context"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -40,14 +39,14 @@ func TestE2E_DetachFromClient_SurvivesPerToolTimeout(t *testing.T) {
 			}},
 			Timeout: 100 * time.Millisecond, // short timeout
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			var args struct {
 				Tag string `json:"tag"`
 			}
 			req.Bind(&args)
 
 			// Detach — strips the 100ms per-tool timeout.
-			ctx = core.DetachFromClient(ctx)
+			ctx = ctx.DetachFromClient()
 
 			// Simulate long work (300ms — 3x the timeout).
 			for i := 0; i < 6; i++ {
@@ -95,7 +94,7 @@ func TestE2E_DetachFromClient_NonDetachedToolCancelledByTimeout(t *testing.T) {
 			InputSchema: map[string]any{"type": "object"},
 			Timeout:     100 * time.Millisecond,
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			// NO DetachFromClient — tool uses the request context.
 			for i := 0; i < 6; i++ {
 				select {
@@ -143,12 +142,12 @@ func TestE2E_DetachFromClient_WithRetryHint(t *testing.T) {
 			InputSchema: map[string]any{"type": "object"},
 			Timeout:     50 * time.Millisecond,
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			// Emit retry hint while still attached.
 			_ = core.EmitSSERetry(ctx, 30*time.Second)
 
 			// Detach to survive the 50ms timeout.
-			ctx = core.DetachFromClient(ctx)
+			ctx = ctx.DetachFromClient()
 
 			time.Sleep(150 * time.Millisecond) // outlives timeout
 			return core.TextResult("combo-done"), nil

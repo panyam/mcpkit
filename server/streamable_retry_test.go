@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -36,7 +35,7 @@ func TestStreamableHTTP_EmitRetryHintReachesGetSSEStream(t *testing.T) {
 			Description: "Emits a retry hint, then returns",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			if err := core.EmitSSERetry(ctx, 30*time.Second); err != nil {
 				return core.ErrorResult("emit: " + err.Error()), nil
 			}
@@ -139,7 +138,7 @@ func TestStreamableHTTP_EmitRetryHintNoOpWithoutGetStream(t *testing.T) {
 			Description: "Emits a retry hint with no GET stream",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			handlerCalled = true
 			if err := core.EmitSSERetry(ctx, 5*time.Second); err != nil {
 				t.Errorf("EmitSSERetry error: %v (expected nil for no-op)", err)

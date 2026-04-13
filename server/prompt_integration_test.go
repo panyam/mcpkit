@@ -18,7 +18,7 @@ func testPromptDispatcher() *Dispatcher {
 				{Name: "name", Description: "Name to greet", Required: true},
 			},
 		},
-		func(ctx context.Context, req core.PromptRequest) (core.PromptResult, error) {
+		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResult, error) {
 			name, _ := req.Arguments["name"].(string)
 			return core.PromptResult{
 				Description: "Greeting",
@@ -31,7 +31,7 @@ func testPromptDispatcher() *Dispatcher {
 	)
 	d.RegisterPrompt(
 		core.PromptDef{Name: "simple", Description: "No-args prompt"},
-		func(ctx context.Context, req core.PromptRequest) (core.PromptResult, error) {
+		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResult, error) {
 			return core.PromptResult{
 				Messages: []core.PromptMessage{{
 					Role:    "user",

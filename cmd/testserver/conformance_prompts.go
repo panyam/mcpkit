@@ -4,7 +4,6 @@ package main
 // MCP conformance test suite (@modelcontextprotocol/conformance).
 
 import (
-	"context"
 	"encoding/base64"
 	"fmt"
 	"strings"
@@ -21,7 +20,7 @@ func registerConformancePrompts(srv *server.Server) {
 			Name:        "test_simple_prompt",
 			Description: "A simple prompt for conformance testing",
 		},
-		func(ctx context.Context, req core.PromptRequest) (core.PromptResult, error) {
+		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResult, error) {
 			return core.PromptResult{
 				Description: "A simple test prompt",
 				Messages: []core.PromptMessage{{
@@ -42,7 +41,7 @@ func registerConformancePrompts(srv *server.Server) {
 				{Name: "arg2", Description: "Second test argument", Required: true},
 			},
 		},
-		func(ctx context.Context, req core.PromptRequest) (core.PromptResult, error) {
+		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResult, error) {
 			arg1 := req.Arguments["arg1"]
 			arg2 := req.Arguments["arg2"]
 			return core.PromptResult{
@@ -64,7 +63,7 @@ func registerConformancePrompts(srv *server.Server) {
 				{Name: "resourceUri", Description: "URI of the resource to embed", Required: true},
 			},
 		},
-		func(ctx context.Context, req core.PromptRequest) (core.PromptResult, error) {
+		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResult, error) {
 			uri, _ := req.Arguments["resourceUri"].(string)
 			return core.PromptResult{
 				Description: "A prompt with an embedded resource",
@@ -89,7 +88,7 @@ func registerConformancePrompts(srv *server.Server) {
 			Name:        "test_prompt_with_image",
 			Description: "A prompt that includes an image",
 		},
-		func(ctx context.Context, req core.PromptRequest) (core.PromptResult, error) {
+		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResult, error) {
 			pngBytes := minimalPNG() // reuse from conformance_tools.go
 			return core.PromptResult{
 				Description: "A prompt with image content",
@@ -109,7 +108,7 @@ func registerConformancePrompts(srv *server.Server) {
 	// The conformance suite sends completion/complete with ref/prompt for this prompt
 	// and expects a valid response with completion suggestions.
 	srv.RegisterCompletion("ref/prompt", "test_prompt_with_arguments",
-		func(ctx context.Context, ref core.CompletionRef, arg core.CompletionArgument) (core.CompletionResult, error) {
+		func(ctx core.PromptContext, ref core.CompletionRef, arg core.CompletionArgument) (core.CompletionResult, error) {
 			// Provide sample completions filtered by partial input
 			allValues := []string{"value1", "value2", "value3"}
 			var filtered []string

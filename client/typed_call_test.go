@@ -1,7 +1,6 @@
 package client_test
 
 import (
-	"context"
 	"net/http/httptest"
 	"testing"
 
@@ -29,7 +28,7 @@ func TestToolCallTyped(t *testing.T) {
 			InputSchema:  map[string]any{"type": "object"},
 			OutputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.StructuredResult("found 2 items", SearchResult{
 				Items: []string{"a", "b"},
 				Total: 2,
@@ -62,7 +61,7 @@ func TestToolCallTypedNoStructuredContent(t *testing.T) {
 			Description: "Returns text only",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("just text"), nil
 		},
 	)
@@ -91,7 +90,7 @@ func TestToolCallTypedToolError(t *testing.T) {
 			Description: "Always fails",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.ErrorResult("something went wrong"), nil
 		},
 	)

@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -35,9 +34,9 @@ func TestDetach_ToolSurvivesPerToolTimeout(t *testing.T) {
 			InputSchema: map[string]any{"type": "object"},
 			Timeout:     50 * time.Millisecond, // short timeout
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			// Detach — strips the per-tool timeout.
-			ctx = core.DetachFromClient(ctx)
+			ctx = ctx.DetachFromClient()
 
 			// Work for longer than the timeout.
 			time.Sleep(150 * time.Millisecond)
@@ -102,7 +101,7 @@ func TestDetach_NonDetachedToolCancelledByTimeout(t *testing.T) {
 			InputSchema: map[string]any{"type": "object"},
 			Timeout:     50 * time.Millisecond,
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			// NO DetachFromClient.
 			for i := 0; i < 10; i++ {
 				select {
@@ -166,9 +165,9 @@ func TestStreamableHTTP_DetachedToolPreservesRetryHint(t *testing.T) {
 			Description: "Emits retry then detaches",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			_ = core.EmitSSERetry(ctx, 10*time.Second)
-			ctx = core.DetachFromClient(ctx)
+			ctx = ctx.DetachFromClient()
 			time.Sleep(50 * time.Millisecond)
 			mu.Lock()
 			completed = true

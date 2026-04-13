@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"context"
 	"testing"
 
 	"github.com/panyam/mcpkit/core"
@@ -18,10 +17,10 @@ func TestRegisterAppTool(t *testing.T) {
 		Description: "Build a slide deck",
 		InputSchema: map[string]any{"type": "object"},
 		ResourceURI: "ui://decks/view",
-		ToolHandler: func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("ok"), nil
 		},
-		ResourceHandler: func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{}, nil
 		},
 		Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
@@ -151,10 +150,10 @@ func TestRegisterAppToolTemplate(t *testing.T) {
 		Description: "Show a pizza",
 		InputSchema: map[string]any{"type": "object"},
 		ResourceURI: "ui://pizzas/{pizzaId}/details",
-		ToolHandler: func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("ok"), nil
 		},
-		TemplateHandler: func(ctx context.Context, uri string, params map[string]string) (core.ResourceResult, error) {
+		TemplateHandler: func(ctx core.ResourceContext, uri string, params map[string]string) (core.ResourceResult, error) {
 			return core.ResourceResult{}, nil
 		},
 	})
@@ -200,7 +199,7 @@ func TestRegisterAppToolTemplateNilHandlerPanics(t *testing.T) {
 	RegisterAppTool(reg, AppToolConfig{
 		Name:        "bad_template",
 		ResourceURI: "ui://items/{id}/view",
-		ToolHandler: func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("ok"), nil
 		},
 		// TemplateHandler intentionally nil
@@ -222,7 +221,7 @@ func TestRegisterAppToolConcreteNilHandlerPanics(t *testing.T) {
 	RegisterAppTool(reg, AppToolConfig{
 		Name:        "bad_concrete",
 		ResourceURI: "ui://items/view",
-		ToolHandler: func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("ok"), nil
 		},
 		// ResourceHandler intentionally nil
@@ -237,10 +236,10 @@ func TestRegisterAppToolSupportedDisplayModes(t *testing.T) {
 	RegisterAppTool(reg, AppToolConfig{
 		Name:        "dashboard",
 		ResourceURI: "ui://dashboard/view",
-		ToolHandler: func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("ok"), nil
 		},
-		ResourceHandler: func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{}, nil
 		},
 		SupportedDisplayModes: []core.DisplayMode{core.DisplayModeInline, core.DisplayModeFullscreen},

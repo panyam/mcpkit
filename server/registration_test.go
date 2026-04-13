@@ -22,7 +22,7 @@ func TestRegisterToolSingleStruct(t *testing.T) {
 			Description: "Greets the user",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		Handler: func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		Handler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("hello"), nil
 		},
 	})
@@ -44,7 +44,7 @@ func TestRegisterResourceSingleStruct(t *testing.T) {
 			Name:     "Test Data",
 			MimeType: "text/plain",
 		},
-		Handler: func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+		Handler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{
 				Contents: []core.ResourceReadContent{{
 					URI: req.URI, MimeType: "text/plain", Text: "data content",
@@ -69,7 +69,7 @@ func TestRegisterPromptSingleStruct(t *testing.T) {
 			Name:        "greeting",
 			Description: "A greeting prompt",
 		},
-		Handler: func(ctx context.Context, req core.PromptRequest) (core.PromptResult, error) {
+		Handler: func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResult, error) {
 			return core.PromptResult{
 				Messages: []core.PromptMessage{{
 					Role:    "assistant",
@@ -93,19 +93,19 @@ func TestRegisterMixed(t *testing.T) {
 	srv.Register(
 		server.Tool{
 			ToolDef: core.ToolDef{Name: "t1", Description: "tool", InputSchema: map[string]any{"type": "object"}},
-			Handler: func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+			Handler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 				return core.TextResult("t1"), nil
 			},
 		},
 		server.Resource{
 			ResourceDef: core.ResourceDef{URI: "test://r1", Name: "resource"},
-			Handler: func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+			Handler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 				return core.ResourceResult{Contents: []core.ResourceReadContent{{URI: req.URI, Text: "r1"}}}, nil
 			},
 		},
 		server.Prompt{
 			PromptDef: core.PromptDef{Name: "p1", Description: "prompt"},
-			Handler: func(ctx context.Context, req core.PromptRequest) (core.PromptResult, error) {
+			Handler: func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResult, error) {
 				return core.PromptResult{}, nil
 			},
 		},
@@ -132,14 +132,14 @@ func TestExistingTwoArgAPIStillWorks(t *testing.T) {
 	// Old API
 	srv.RegisterTool(
 		core.ToolDef{Name: "old-style", Description: "two-arg", InputSchema: map[string]any{"type": "object"}},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("old"), nil
 		},
 	)
 	// New API
 	srv.Register(server.Tool{
 		ToolDef: core.ToolDef{Name: "new-style", Description: "single-struct", InputSchema: map[string]any{"type": "object"}},
-		Handler: func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		Handler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("new"), nil
 		},
 	})

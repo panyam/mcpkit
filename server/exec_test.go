@@ -19,7 +19,7 @@ func TestToolExec_Echo(t *testing.T) {
 		Args:    []string{"hello"},
 	})
 
-	result, err := tool.Handler(context.Background(), core.ToolRequest{
+	result, err := tool.Handler(core.NewToolContext(context.Background()), core.ToolRequest{
 		Name: "echo-test",
 	})
 	if err != nil {
@@ -52,7 +52,7 @@ func TestToolExec_BuildArgs(t *testing.T) {
 		},
 	})
 
-	result, err := tool.Handler(context.Background(), core.ToolRequest{
+	result, err := tool.Handler(core.NewToolContext(context.Background()), core.ToolRequest{
 		Name:      "echo-dynamic",
 		Arguments: json.RawMessage(`{"message":"world"}`),
 	})
@@ -77,7 +77,7 @@ func TestToolExec_NonZeroExit(t *testing.T) {
 		Args:    []string{"-c", "echo fail >&2; exit 1"},
 	})
 
-	result, err := tool.Handler(context.Background(), core.ToolRequest{
+	result, err := tool.Handler(core.NewToolContext(context.Background()), core.ToolRequest{
 		Name: "fail-test",
 	})
 	if err != nil {
@@ -107,7 +107,7 @@ func TestToolExec_Timeout(t *testing.T) {
 	})
 
 	start := time.Now()
-	result, err := tool.Handler(context.Background(), core.ToolRequest{
+	result, err := tool.Handler(core.NewToolContext(context.Background()), core.ToolRequest{
 		Name: "timeout-test",
 	})
 	elapsed := time.Since(start)

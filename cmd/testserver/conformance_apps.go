@@ -5,7 +5,6 @@ package main
 // resource serving, and resource change notifications.
 
 import (
-	"context"
 	"fmt"
 
 	core "github.com/panyam/mcpkit/core"
@@ -51,7 +50,7 @@ func registerConformanceApps(srv *server.Server) {
 				},
 			},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("Dashboard displayed"), nil
 		},
 	)
@@ -73,7 +72,7 @@ func registerConformanceApps(srv *server.Server) {
 				},
 			},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			var args struct {
 				Page string `json:"page"`
 			}
@@ -95,7 +94,7 @@ func registerConformanceApps(srv *server.Server) {
 				},
 			},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("Dashboard data: {\"widgets\": 5}"), nil
 		},
 	)
@@ -113,7 +112,7 @@ func registerConformanceApps(srv *server.Server) {
 				},
 			},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			core.NotifyResourcesChanged(ctx)
 			return core.TextResult("Dashboard mutated"), nil
 		},
@@ -133,7 +132,7 @@ func registerConformanceApps(srv *server.Server) {
 				},
 			},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			// Uses raw core.Notify instead of ui.RequestDisplayMode to avoid
 			// importing ext/ui from the root module (see testUIExtension above).
 			core.Notify(ctx, "notifications/ui/displayMode", map[string]any{
@@ -156,7 +155,7 @@ func registerConformanceApps(srv *server.Server) {
 				},
 			},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			result, err := core.Elicit(ctx, core.ElicitationRequest{
 				Message: "Choose a dashboard widget",
 				Meta: &core.ElicitationMeta{
@@ -179,7 +178,7 @@ func registerConformanceApps(srv *server.Server) {
 			Name:     "Dashboard View",
 			MimeType: core.AppMIMEType,
 		},
-		func(ctx context.Context, req core.ResourceRequest) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{Contents: []core.ResourceReadContent{{
 				URI:      req.URI,
 				MimeType: core.AppMIMEType,
@@ -201,7 +200,7 @@ func registerConformanceApps(srv *server.Server) {
 			Name:        "App View",
 			MimeType:    core.AppMIMEType,
 		},
-		func(ctx context.Context, uri string, params map[string]string) (core.ResourceResult, error) {
+		func(ctx core.ResourceContext, uri string, params map[string]string) (core.ResourceResult, error) {
 			return core.ResourceResult{Contents: []core.ResourceReadContent{{
 				URI:      uri,
 				MimeType: core.AppMIMEType,

@@ -2,7 +2,6 @@ package server
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -52,7 +51,7 @@ func testMCPServer(opts ...TransportOption) (*httptest.Server, *Server) {
 				},
 			},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			var args struct {
 				Message string `json:"message"`
 			}
@@ -304,7 +303,7 @@ func TestSSEAuthRequired(t *testing.T) {
 	)
 	srv.RegisterTool(
 		core.ToolDef{Name: "echo", Description: "echo"},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			return core.TextResult("ok"), nil
 		},
 	)
@@ -496,7 +495,7 @@ func TestSSELoggingNotification(t *testing.T) {
 			Description: "Emits a log notification then returns a result",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			core.EmitLog(ctx, core.LogInfo, "test-logger", "hello from tool")
 			return core.TextResult("done"), nil
 		},
@@ -638,7 +637,7 @@ func TestSSELoggingFilteredByLevel(t *testing.T) {
 			Description: "Emits a debug log",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			core.EmitLog(ctx, core.LogDebug, "test", "debug msg")
 			return core.TextResult("ok"), nil
 		},
@@ -713,7 +712,7 @@ func TestSSEProgressNotification(t *testing.T) {
 			Description: "Emits progress notifications then returns a result",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			core.EmitProgress(ctx, req.ProgressToken, 0, 100, "start")
 			core.EmitProgress(ctx, req.ProgressToken, 50, 100, "mid")
 			core.EmitProgress(ctx, req.ProgressToken, 100, 100, "done")
