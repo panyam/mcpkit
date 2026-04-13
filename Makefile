@@ -267,7 +267,7 @@ tidy: ## Run go mod tidy on root module only
 
 # All sub-modules (including tests/*) that have their own go.mod and require
 # the root module. Used by tidy-all and bump-root targets.
-SUB_MODS_ALL := ext/auth ext/ui cmd/testclient tests/e2e tests/keycloak
+SUB_MODS_ALL := ext/auth ext/ui ext/protogen cmd/testclient tests/e2e tests/keycloak
 
 tidy-all: ## Run go mod tidy across root + every sub-module
 	@echo "==> tidy root"

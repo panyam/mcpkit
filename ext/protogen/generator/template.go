@@ -58,7 +58,7 @@ func Register{{ .Name }}MCP(srv *server.Server, impl {{ .Name }}MCPServer) {
 	srv.Register(
 {{- range .Tools }}
 		{{ template "toolDef" . }}{
-			Handler: func(ctx context.Context, req mcpcore.ToolRequest) (mcpcore.ToolResult, error) {
+			Handler: func(ctx mcpcore.ToolContext, req mcpcore.ToolRequest) (mcpcore.ToolResult, error) {
 				var in {{ .RequestType }}
 				if err := runtime.BindProto(req, &in); err != nil {
 					return mcpcore.ErrorResult(err.Error()), nil
@@ -94,7 +94,7 @@ func Forward{{ .Name }}ToGRPC(srv *server.Server, client {{ .Name }}GRPCClient) 
 	srv.Register(
 {{- range .Tools }}
 		{{ template "toolDef" . }}{
-			Handler: func(ctx context.Context, req mcpcore.ToolRequest) (mcpcore.ToolResult, error) {
+			Handler: func(ctx mcpcore.ToolContext, req mcpcore.ToolRequest) (mcpcore.ToolResult, error) {
 				var in {{ .RequestType }}
 				if err := runtime.BindProto(req, &in); err != nil {
 					return mcpcore.ErrorResult(err.Error()), nil
@@ -130,7 +130,7 @@ func Forward{{ .Name }}ToConnect(srv *server.Server, client Connect{{ .Name }}Cl
 	srv.Register(
 {{- range .Tools }}
 		{{ template "toolDef" . }}{
-			Handler: func(ctx context.Context, req mcpcore.ToolRequest) (mcpcore.ToolResult, error) {
+			Handler: func(ctx mcpcore.ToolContext, req mcpcore.ToolRequest) (mcpcore.ToolResult, error) {
 				var in {{ .RequestType }}
 				if err := runtime.BindProto(req, &in); err != nil {
 					return mcpcore.ErrorResult(err.Error()), nil

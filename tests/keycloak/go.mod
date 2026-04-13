@@ -3,7 +3,7 @@ module github.com/panyam/mcpkit/tests/keycloak
 go 1.26.1
 
 require (
-	github.com/panyam/mcpkit v0.2.0
+	github.com/panyam/mcpkit v0.2.3
 	github.com/panyam/mcpkit/ext/auth v0.0.0
 	github.com/panyam/oneauth v0.0.71
 	github.com/stretchr/testify v1.11.1
@@ -17,7 +17,7 @@ require (
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/panyam/gocurrent v0.1.0 // indirect
 	github.com/panyam/goutils v0.1.8 // indirect
-	github.com/panyam/servicekit v0.0.24 // indirect
+	github.com/panyam/servicekit v0.0.25 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
