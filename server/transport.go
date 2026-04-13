@@ -319,42 +319,19 @@ func (c *mcpSSEConn) OnStart(w http.ResponseWriter, r *http.Request) error {
 		c.transport.sessions.Store(sessionID, entry)
 	}
 
-	// Wire up (or re-wire) server-to-client notifications via the SSE stream.
-	// The closure captures the current hub connection, so it must be refreshed
-	// on reconnect to point to the new connection.
-	dispatcher.SetNotifyFunc(func(method string, params any) {
-		raw, err := core.MarshalNotification(method, params)
-		if err != nil {
-			return
-		}
-		emitSSEEvent(dispatcher.eventIDs, store, sessionID, raw, func(id string, data json.RawMessage) {
-			hub.SendEventWithID(sessionID, "message", id, SSEJSON(data))
-		})
-	})
-
-	// Persistent push function for server-initiated JSON-RPC requests
-	// (roots/list, keepalive ping, any future out-of-band request). Re-wired
-	// on reconnect so the closure points to the current hub connection.
-	pushFunc := func(raw json.RawMessage) {
-		emitSSEEvent(dispatcher.eventIDs, cfg.eventStore, sessionID, raw, func(id string, data json.RawMessage) {
-			hub.SendEventWithID(sessionID, "message", id, SSEJSON(data))
-		})
-	}
-	dispatcher.SetPushRequest(pushFunc)
-
-	// Start keepalive pings if configured.
-	if cfg.keepaliveInterval > 0 {
-		maxFails := cfg.keepaliveMaxFails
-		if maxFails <= 0 {
-			maxFails = 3
-		}
-		c.keepalive = &sessionKeepalive{
-			interval:    cfg.keepaliveInterval,
-			maxFailures: maxFails,
-			requestFunc: dispatcher.makeRequestFunc(pushFunc),
-			onDeath:     func() { c.transport.closeSession(sessionID) },
-			onPingFail:  func(failures int) { c.transport.server.notifyKeepaliveFailure(sessionID, failures) },
-		}
+	// Wire notifyFunc, pushRequest, and keepalive via the shared SSE
+	// transport wiring helper (#199). The closures capture the current hub
+	// connection and are refreshed on reconnect (grace period).
+	_, c.keepalive = (&sseWiring{
+		dispatcher: dispatcher,
+		hub:        hub,
+		sessionID:  sessionID,
+		store:      store,
+		cfg:        cfg,
+		onDeath:    func() { c.transport.closeSession(sessionID) },
+		onPingFail: func(failures int) { c.transport.server.notifyKeepaliveFailure(sessionID, failures) },
+	}).wire()
+	if c.keepalive != nil {
 		c.keepalive.start()
 	}
 
