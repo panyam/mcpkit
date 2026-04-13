@@ -9,11 +9,21 @@ import (
 // Sentinel errors for elicitation.
 var ErrElicitationNotSupported = errors.New("client does not support elicitation")
 
+// ElicitationMeta holds protocol-level metadata for an elicitation request.
+// Serialized as "_meta" in the elicitation/create params.
+type ElicitationMeta struct {
+	// UI contains MCP Apps presentation metadata.
+	// When set, the host can render a UI resource during input collection
+	// instead of falling back to the default schema-driven form.
+	UI *UIMetadata `json:"ui,omitempty"`
+}
+
 // ElicitationRequest is the params for an elicitation/create server-to-client request.
 // The server sends this to ask the client to collect structured user input.
 type ElicitationRequest struct {
-	Message         string          `json:"message"`
-	RequestedSchema json.RawMessage `json:"requestedSchema,omitempty"`
+	Message         string           `json:"message"`
+	RequestedSchema json.RawMessage  `json:"requestedSchema,omitempty"`
+	Meta            *ElicitationMeta `json:"_meta,omitempty"`
 }
 
 // ElicitationResult is the client's response to an elicitation/create request.
