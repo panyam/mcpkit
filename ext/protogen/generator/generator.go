@@ -28,16 +28,18 @@ func Generate(gen *protogen.Plugin, file *protogen.File, cfg Config) {
 	}
 
 	suffix := cfg.PackageSuffix
-	if suffix == "" {
-		suffix = "mcp"
+
+	importPath := file.GoImportPath
+	if suffix != "" {
+		importPath += protogen.GoImportPath("/" + suffix)
 	}
 
 	gf := gen.NewGeneratedFile(
 		file.GeneratedFilenamePrefix+".pb.mcp.go",
-		file.GoImportPath+protogen.GoImportPath("/"+suffix),
+		importPath,
 	)
 
-	data, err := collectFileData(file, gf)
+	data, err := collectFileData(file, gf, suffix)
 	if err != nil {
 		gen.Error(fmt.Errorf("annotation error in %s: %w", file.Desc.Path(), err))
 		return
@@ -53,10 +55,11 @@ func Generate(gen *protogen.Plugin, file *protogen.File, cfg Config) {
 
 // fileData holds all data needed to render the template for one file.
 type fileData struct {
-	SourcePath string
-	GoPackage  string
-	Services   []serviceData
-	Timestamp  string
+	SourcePath    string
+	GoPackage     string
+	PackageSuffix string
+	Services      []serviceData
+	Timestamp     string
 }
 
 // serviceData holds data for one proto service.
@@ -116,11 +119,12 @@ type toolData struct {
 	InputSchema   string // JSON string of the input schema
 }
 
-func collectFileData(file *protogen.File, gf *protogen.GeneratedFile) (fileData, error) {
+func collectFileData(file *protogen.File, gf *protogen.GeneratedFile, suffix string) (fileData, error) {
 	data := fileData{
-		SourcePath: file.Desc.Path(),
-		GoPackage:  string(file.GoPackageName),
-		Timestamp:  time.Now().UTC().Format(time.RFC3339),
+		SourcePath:    file.Desc.Path(),
+		GoPackage:     string(file.GoPackageName),
+		PackageSuffix: suffix,
+		Timestamp:     time.Now().UTC().Format(time.RFC3339),
 	}
 
 	for _, svc := range file.Services {
