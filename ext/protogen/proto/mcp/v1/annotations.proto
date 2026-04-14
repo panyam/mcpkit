@@ -46,6 +46,12 @@ message MCPToolOptions {
   // When true, the response message is emitted as OutputSchema
   // and the result uses StructuredResult instead of TextResult.
   bool structured_output = 4;
+
+  // Go template for a human-readable result summary.
+  // Interpolates response message field values: "Slide {position} updated (v{version})"
+  // When set, the text content uses this rendered summary instead of raw JSON.
+  // Only used when structured_output is true (structured content carries the data).
+  string result_summary = 5;
 }
 
 // MCPResourceOptions exposes a gRPC method as an MCP resource or resource template.

@@ -45,6 +45,14 @@ var (
 {{ template "resourceConnectClientInterface" . }}
 {{ template "forwardResourceToConnect" . }}
 {{- end }}
+{{- if .Prompts }}
+{{ template "promptServerInterface" . }}
+{{ template "registerPromptInProcess" . }}
+{{ template "promptGRPCClientInterface" . }}
+{{ template "forwardPromptToGRPC" . }}
+{{ template "promptConnectClientInterface" . }}
+{{ template "forwardPromptToConnect" . }}
+{{- end }}
 {{ end }}
 
 {{- define "serverInterface" -}}
@@ -71,7 +79,9 @@ func Register{{ .Name }}MCP(srv *server.Server, impl {{ .Name }}MCPServer) {
 				if err != nil {
 					return runtime.RPCError(err)
 				}
-				{{ if .Structured -}}
+				{{ if .ResultSummary -}}
+				return runtime.ProtoSummaryStructuredResult(resp, "{{ .ResultSummary }}")
+				{{- else if .Structured -}}
 				return runtime.ProtoStructuredResult(resp)
 				{{- else -}}
 				return runtime.ProtoTextResult(resp)
@@ -107,7 +117,9 @@ func Forward{{ .Name }}ToGRPC(srv *server.Server, client {{ .Name }}GRPCClient) 
 				if err != nil {
 					return runtime.RPCError(err)
 				}
-				{{ if .Structured -}}
+				{{ if .ResultSummary -}}
+				return runtime.ProtoSummaryStructuredResult(resp, "{{ .ResultSummary }}")
+				{{- else if .Structured -}}
 				return runtime.ProtoStructuredResult(resp)
 				{{- else -}}
 				return runtime.ProtoTextResult(resp)
@@ -143,7 +155,9 @@ func Forward{{ .Name }}ToConnect(srv *server.Server, client Connect{{ .Name }}Cl
 				if err != nil {
 					return runtime.RPCError(err)
 				}
-				{{ if .Structured -}}
+				{{ if .ResultSummary -}}
+				return runtime.ProtoSummaryStructuredResult(resp.Msg, "{{ .ResultSummary }}")
+				{{- else if .Structured -}}
 				return runtime.ProtoStructuredResult(resp.Msg)
 				{{- else -}}
 				return runtime.ProtoTextResult(resp.Msg)
@@ -330,6 +344,129 @@ func Forward{{ .Name }}ResourcesToConnect(srv *server.Server, client Connect{{ .
 			},
 		},
 	{{- end }}
+{{- end }}
+	)
+}
+{{ end }}
+
+{{- define "promptServerInterface" -}}
+// {{ .Name }}MCPPromptServer is the interface for in-process prompt implementations.
+type {{ .Name }}MCPPromptServer interface {
+{{- range .Prompts }}
+	{{ .MethodName }}(ctx context.Context, req *{{ .RequestType }}) (*{{ .ResponseType }}, error)
+{{- end }}
+}
+{{ end }}
+
+{{- define "registerPromptInProcess" -}}
+// Register{{ .Name }}MCPPrompts registers MCP prompts from {{ .Name }} with an in-process implementation.
+func Register{{ .Name }}MCPPrompts(srv *server.Server, impl {{ .Name }}MCPPromptServer) {
+	srv.Register(
+{{- range .Prompts }}
+		server.Prompt{
+			PromptDef: mcpcore.PromptDef{
+				Name:        "{{ .PromptName }}",
+				Description: "{{ .Description }}",
+				Arguments:   []mcpcore.PromptArgument{
+				{{- range .Arguments }}
+					{Name: "{{ .Name }}", Description: "{{ .Description }}", Required: {{ .Required }}},
+				{{- end }}
+				},
+			},
+			Handler: func(ctx mcpcore.PromptContext, req mcpcore.PromptRequest) (mcpcore.PromptResult, error) {
+				var in {{ .RequestType }}
+				if err := runtime.BindPromptArgs(req.Arguments, &in); err != nil {
+					return mcpcore.PromptResult{}, err
+				}
+				resp, err := impl.{{ .MethodName }}(ctx, &in)
+				if err != nil {
+					return mcpcore.PromptResult{}, err
+				}
+				return runtime.ProtoPromptResult(resp)
+			},
+		},
+{{- end }}
+	)
+}
+{{ end }}
+
+{{- define "promptGRPCClientInterface" -}}
+// {{ .Name }}PromptGRPCClient is the gRPC client interface for prompt forwarding.
+type {{ .Name }}PromptGRPCClient interface {
+{{- range .Prompts }}
+	{{ .MethodName }}(ctx context.Context, req *{{ .RequestType }}, opts ...grpc.CallOption) (*{{ .ResponseType }}, error)
+{{- end }}
+}
+{{ end }}
+
+{{- define "forwardPromptToGRPC" -}}
+// Forward{{ .Name }}PromptsToGRPC registers MCP prompts that forward to a gRPC {{ .Name }} client.
+func Forward{{ .Name }}PromptsToGRPC(srv *server.Server, client {{ .Name }}PromptGRPCClient) {
+	srv.Register(
+{{- range .Prompts }}
+		server.Prompt{
+			PromptDef: mcpcore.PromptDef{
+				Name:        "{{ .PromptName }}",
+				Description: "{{ .Description }}",
+				Arguments:   []mcpcore.PromptArgument{
+				{{- range .Arguments }}
+					{Name: "{{ .Name }}", Description: "{{ .Description }}", Required: {{ .Required }}},
+				{{- end }}
+				},
+			},
+			Handler: func(ctx mcpcore.PromptContext, req mcpcore.PromptRequest) (mcpcore.PromptResult, error) {
+				var in {{ .RequestType }}
+				if err := runtime.BindPromptArgs(req.Arguments, &in); err != nil {
+					return mcpcore.PromptResult{}, err
+				}
+				resp, err := client.{{ .MethodName }}(ctx, &in)
+				if err != nil {
+					return mcpcore.PromptResult{}, err
+				}
+				return runtime.ProtoPromptResult(resp)
+			},
+		},
+{{- end }}
+	)
+}
+{{ end }}
+
+{{- define "promptConnectClientInterface" -}}
+// Connect{{ .Name }}PromptClient is the ConnectRPC client interface for prompt forwarding.
+type Connect{{ .Name }}PromptClient interface {
+{{- range .Prompts }}
+	{{ .MethodName }}(ctx context.Context, req *connect.Request[{{ .RequestType }}]) (*connect.Response[{{ .ResponseType }}], error)
+{{- end }}
+}
+{{ end }}
+
+{{- define "forwardPromptToConnect" -}}
+// Forward{{ .Name }}PromptsToConnect registers MCP prompts that forward to a ConnectRPC {{ .Name }} client.
+func Forward{{ .Name }}PromptsToConnect(srv *server.Server, client Connect{{ .Name }}PromptClient) {
+	srv.Register(
+{{- range .Prompts }}
+		server.Prompt{
+			PromptDef: mcpcore.PromptDef{
+				Name:        "{{ .PromptName }}",
+				Description: "{{ .Description }}",
+				Arguments:   []mcpcore.PromptArgument{
+				{{- range .Arguments }}
+					{Name: "{{ .Name }}", Description: "{{ .Description }}", Required: {{ .Required }}},
+				{{- end }}
+				},
+			},
+			Handler: func(ctx mcpcore.PromptContext, req mcpcore.PromptRequest) (mcpcore.PromptResult, error) {
+				var in {{ .RequestType }}
+				if err := runtime.BindPromptArgs(req.Arguments, &in); err != nil {
+					return mcpcore.PromptResult{}, err
+				}
+				resp, err := client.{{ .MethodName }}(ctx, connect.NewRequest(&in))
+				if err != nil {
+					return mcpcore.PromptResult{}, err
+				}
+				return runtime.ProtoPromptResult(resp.Msg)
+			},
+		},
 {{- end }}
 	)
 }
