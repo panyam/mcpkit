@@ -65,11 +65,12 @@ type serviceData struct {
 	Namespace string // from mcp_service annotation
 	Tools     []toolData
 	Resources []resourceData
+	Prompts   []promptData
 }
 
-// HasContent reports whether the service has any tools or resources to generate.
+// HasContent reports whether the service has any tools, resources, or prompts to generate.
 func (sd serviceData) HasContent() bool {
-	return len(sd.Tools) > 0 || len(sd.Resources) > 0
+	return len(sd.Tools) > 0 || len(sd.Resources) > 0 || len(sd.Prompts) > 0
 }
 
 // resourceData holds data for one MCP resource generated from a unary RPC.
@@ -85,16 +86,34 @@ type resourceData struct {
 	ResponseType string   // qualified Go ident
 }
 
+// promptData holds data for one MCP prompt generated from a unary RPC.
+type promptData struct {
+	MethodName   string       // Go method name
+	PromptName   string       // MCP prompt name (snake_case)
+	Description  string
+	Arguments    []promptArg  // derived from request message fields
+	RequestType  string       // qualified Go ident
+	ResponseType string       // qualified Go ident
+}
+
+// promptArg describes a single prompt argument derived from a proto field.
+type promptArg struct {
+	Name        string // proto field name (JSON name)
+	Description string // from field comment or empty
+	Required    bool   // true for non-optional scalar fields
+}
+
 // toolData holds data for one MCP tool generated from a unary RPC.
 type toolData struct {
-	MethodName   string // Go method name (e.g. "GetUser")
-	ToolName     string // MCP tool name (e.g. "get_user")
-	Description  string
-	Timeout      string // Go duration literal, empty if not set
-	Structured   bool   // use StructuredResult instead of TextResult
-	RequestType  string // qualified Go ident for the generated file
-	ResponseType string // qualified Go ident
-	InputSchema  string // JSON string of the input schema
+	MethodName    string // Go method name (e.g. "GetUser")
+	ToolName      string // MCP tool name (e.g. "get_user")
+	Description   string
+	Timeout       string // Go duration literal, empty if not set
+	Structured    bool   // use StructuredResult instead of TextResult
+	ResultSummary string // template for human-readable summary, empty if not set
+	RequestType   string // qualified Go ident for the generated file
+	ResponseType  string // qualified Go ident
+	InputSchema   string // JSON string of the input schema
 }
 
 func collectFileData(file *protogen.File, gf *protogen.GeneratedFile) (fileData, error) {
@@ -135,12 +154,23 @@ func collectServiceData(svc *protogen.Service, gf *protogen.GeneratedFile) (serv
 			continue
 		}
 
-		// Read annotations — a method is either a tool or a resource, not both.
+		// Read annotations — a method has at most one of mcp_tool, mcp_resource, mcp_prompt.
 		toolOpts := mcpv1.GetToolOptions(method.Desc.Options())
 		resOpts := mcpv1.GetResourceOptions(method.Desc.Options())
+		promptOpts := mcpv1.GetPromptOptions(method.Desc.Options())
 
-		if toolOpts != nil && resOpts != nil {
-			return sd, fmt.Errorf("method %s: cannot have both mcp_tool and mcp_resource annotations", method.GoName)
+		annotCount := 0
+		if toolOpts != nil {
+			annotCount++
+		}
+		if resOpts != nil {
+			annotCount++
+		}
+		if promptOpts != nil {
+			annotCount++
+		}
+		if annotCount > 1 {
+			return sd, fmt.Errorf("method %s: cannot have multiple MCP annotations (tool/resource/prompt)", method.GoName)
 		}
 
 		// Use qualified Go idents so the template gets proper imports.
@@ -153,6 +183,12 @@ func collectServiceData(svc *protogen.Service, gf *protogen.GeneratedFile) (serv
 				return sd, err
 			}
 			sd.Resources = append(sd.Resources, rd)
+			continue
+		}
+
+		if promptOpts != nil {
+			pd := collectPrompt(method, promptOpts, sd.Namespace, reqType, respType)
+			sd.Prompts = append(sd.Prompts, pd)
 			continue
 		}
 
@@ -194,19 +230,61 @@ func collectServiceData(svc *protogen.Service, gf *protogen.GeneratedFile) (serv
 		inputSchema := schema.FromMessage(method.Input.Desc)
 		schemaJSON, _ := json.Marshal(inputSchema)
 
+		// Result summary template (only meaningful with structured output).
+		var resultSummary string
+		if toolOpts != nil && toolOpts.ResultSummary != "" {
+			resultSummary = toolOpts.ResultSummary
+		}
+
 		sd.Tools = append(sd.Tools, toolData{
-			MethodName:   method.GoName,
-			ToolName:     toolName,
-			Description:  desc,
-			Timeout:      timeout,
-			Structured:   structured,
-			RequestType:  reqType,
-			ResponseType: respType,
-			InputSchema:  string(schemaJSON),
+			MethodName:    method.GoName,
+			ToolName:      toolName,
+			Description:   desc,
+			Timeout:       timeout,
+			Structured:    structured,
+			ResultSummary: resultSummary,
+			RequestType:   reqType,
+			ResponseType:  respType,
+			InputSchema:   string(schemaJSON),
 		})
 	}
 
 	return sd, nil
+}
+
+func collectPrompt(method *protogen.Method, opts *mcpv1.MCPPromptOptions, namespace, reqType, respType string) promptData {
+	name := MethodToSnakeCase(method.GoName)
+	if opts.Name != "" {
+		name = opts.Name
+	}
+	name = PrefixWithNamespace(namespace, name)
+
+	desc := CleanComment(string(method.Comments.Leading))
+	if opts.Description != "" {
+		desc = opts.Description
+	}
+
+	// Derive prompt arguments from request message fields.
+	var args []promptArg
+	fields := method.Input.Desc.Fields()
+	for i := 0; i < fields.Len(); i++ {
+		fd := fields.Get(i)
+		required := !fd.HasOptionalKeyword() && fd.IsList() == false && fd.IsMap() == false
+		args = append(args, promptArg{
+			Name:        string(fd.Name()),
+			Description: CleanComment(string(method.Input.Fields[i].Comments.Leading)),
+			Required:    required,
+		})
+	}
+
+	return promptData{
+		MethodName:   method.GoName,
+		PromptName:   name,
+		Description:  desc,
+		Arguments:    args,
+		RequestType:  reqType,
+		ResponseType: respType,
+	}
 }
 
 func collectResource(method *protogen.Method, opts *mcpv1.MCPResourceOptions, reqType, respType string) (resourceData, error) {
