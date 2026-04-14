@@ -12,6 +12,7 @@ package {{ .GoPackage }}mcp
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	mcpcore "github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/ext/protogen/runtime"
@@ -30,6 +31,7 @@ var (
 	_ protojson.MarshalOptions
 	_ grpc.ClientConnInterface
 	_ connect.Request[struct{}]
+	_ time.Duration
 )
 
 {{ range .Services }}
@@ -157,6 +159,9 @@ server.Tool{
 				Name:        "{{ .ToolName }}",
 				Description: "{{ .Description }}",
 				InputSchema: json.RawMessage(` + "`" + `{{ .InputSchema }}` + "`" + `),
+				{{- if .Timeout }}
+				Timeout:     {{ .Timeout }},
+				{{- end }}
 			},
 {{- end }}
 `
