@@ -95,16 +95,52 @@ type fileData struct {
 
 // serviceData holds data for one proto service.
 type serviceData struct {
-	Name      string // Go name (e.g. "UserService")
-	Namespace string // from mcp_service annotation
-	Tools     []toolData
-	Resources []resourceData
-	Prompts   []promptData
+	Name        string // Go name (e.g. "UserService")
+	Namespace   string // from mcp_service annotation
+	Tools       []toolData
+	Resources   []resourceData
+	Prompts     []promptData
+	Completions []completionData
 }
 
 // HasContent reports whether the service has any tools, resources, or prompts to generate.
 func (sd serviceData) HasContent() bool {
 	return len(sd.Tools) > 0 || len(sd.Resources) > 0 || len(sd.Prompts) > 0
+}
+
+// CompleterMethods returns the deduplicated set of methods for the Completer
+// interface, derived from all completion registrations.
+func (sd serviceData) CompleterMethods() []completerMethod {
+	seen := map[string]bool{}
+	var methods []completerMethod
+	for _, c := range sd.Completions {
+		for _, f := range c.Fields {
+			if !seen[f.GoMethod] {
+				seen[f.GoMethod] = true
+				methods = append(methods, completerMethod{GoMethod: f.GoMethod, Field: f.Name})
+			}
+		}
+	}
+	return methods
+}
+
+// completionData groups completable fields for one (refType, refName) pair.
+type completionData struct {
+	RefType string           // "ref/prompt" or "ref/resource"
+	RefName string           // prompt name or resource URI template
+	Fields  []completionField // fields that support completion
+}
+
+// completionField is a single completable field within a completion registration.
+type completionField struct {
+	Name     string // argument/param name (e.g. "book_id")
+	GoMethod string // Go method name on the Completer interface (e.g. "CompleteBookId")
+}
+
+// completerMethod describes a unique method on the Completer interface.
+type completerMethod struct {
+	GoMethod string // e.g. "CompleteBookId"
+	Field    string // e.g. "book_id"
 }
 
 // resourceData holds data for one MCP resource generated from a unary RPC.
@@ -220,12 +256,34 @@ func collectServiceData(svc *protogen.Service, gf *protogen.GeneratedFile) (serv
 				return sd, err
 			}
 			sd.Resources = append(sd.Resources, rd)
+			// Collect completions for resource template params.
+			if len(resOpts.CompletableFields) > 0 {
+				cd := completionData{RefType: "ref/resource", RefName: rd.URI}
+				for _, field := range resOpts.CompletableFields {
+					cd.Fields = append(cd.Fields, completionField{
+						Name:     field,
+						GoMethod: completeMethodName(field),
+					})
+				}
+				sd.Completions = append(sd.Completions, cd)
+			}
 			continue
 		}
 
 		if promptOpts != nil {
 			pd := collectPrompt(method, promptOpts, sd.Namespace, reqType, respType)
 			sd.Prompts = append(sd.Prompts, pd)
+			// Collect completions for prompt arguments.
+			if len(promptOpts.CompletableFields) > 0 {
+				cd := completionData{RefType: "ref/prompt", RefName: pd.PromptName}
+				for _, field := range promptOpts.CompletableFields {
+					cd.Fields = append(cd.Fields, completionField{
+						Name:     field,
+						GoMethod: completeMethodName(field),
+					})
+				}
+				sd.Completions = append(sd.Completions, cd)
+			}
 			continue
 		}
 
@@ -365,6 +423,20 @@ func resolveToolName(namespace string, method *protogen.Method, opts *mcpv1.MCPT
 		name = MethodToSnakeCase(method.GoName)
 	}
 	return PrefixWithNamespace(namespace, name), nil
+}
+
+// completeMethodName converts a proto field name to a Go Completer method name.
+// "book_id" → "CompleteBookId"
+func completeMethodName(field string) string {
+	parts := strings.Split(field, "_")
+	var b strings.Builder
+	b.WriteString("Complete")
+	for _, p := range parts {
+		if len(p) > 0 {
+			b.WriteString(strings.ToUpper(p[:1]) + p[1:])
+		}
+	}
+	return b.String()
 }
 
 // escapeString escapes a string for use in a Go string literal.

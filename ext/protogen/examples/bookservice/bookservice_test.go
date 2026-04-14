@@ -20,6 +20,7 @@ func newTestServer() *server.Server {
 	booksv1.RegisterBookServiceMCP(srv, impl)
 	booksv1.RegisterBookServiceMCPResources(srv, impl)
 	booksv1.RegisterBookServiceMCPPrompts(srv, impl)
+	booksv1.RegisterBookServiceMCPCompletions(srv, impl)
 	return srv
 }
 
@@ -148,4 +149,34 @@ func TestListResources(t *testing.T) {
 	}
 	assert.Contains(t, templateURIs, "book://{book_id}")
 	assert.Contains(t, templateURIs, "author://{author_id}/books")
+}
+
+// TestCompletion verifies that completion/complete works end-to-end for
+// the book_id field on the resource template.
+func TestCompletion(t *testing.T) {
+	srv := newTestServer()
+	handler := srv.Handler(server.WithStreamableHTTP(true))
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
+	require.NoError(t, c.Connect())
+	defer c.Close()
+
+	// Complete book_id on the resource template.
+	result, err := c.Call("completion/complete", map[string]any{
+		"ref": map[string]any{
+			"type": "ref/resource",
+			"uri":  "book://{book_id}",
+		},
+		"argument": map[string]any{
+			"name":  "book_id",
+			"value": "1",
+		},
+	})
+	require.NoError(t, err)
+
+	var completeResult core.CompletionCompleteResult
+	require.NoError(t, result.Unmarshal(&completeResult))
+	assert.Contains(t, completeResult.Completion.Values, "1")
 }

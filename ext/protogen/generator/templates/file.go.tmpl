@@ -73,6 +73,10 @@ var (
 {{ template "forwardPromptToConnect" . }}
 {{- end }}
 {{- end }}
+{{- if .Completions }}
+{{ template "completerInterface" . }}
+{{ template "registerCompletions" . }}
+{{- end }}
 {{ end }}
 
 {{- define "serverInterface" -}}
@@ -489,5 +493,33 @@ func Forward{{ .Name }}PromptsToConnect(srv *server.Server, client Connect{{ .Na
 		},
 {{- end }}
 	)
+}
+{{ end }}
+
+{{- define "completerInterface" -}}
+// {{ .Name }}MCPCompleter provides auto-completion for resource template params
+// and prompt arguments. Each method handles one completable field.
+type {{ .Name }}MCPCompleter interface {
+{{- range .CompleterMethods }}
+	{{ .GoMethod }}(ctx mcpcore.PromptContext, ref mcpcore.CompletionRef, arg mcpcore.CompletionArgument) (mcpcore.CompletionResult, error)
+{{- end }}
+}
+{{ end }}
+
+{{- define "registerCompletions" -}}
+// Register{{ .Name }}MCPCompletions registers auto-completion handlers from {{ .Name }}.
+func Register{{ .Name }}MCPCompletions(srv *server.Server, completer {{ .Name }}MCPCompleter) {
+{{- range .Completions }}
+	srv.RegisterCompletion("{{ .RefType }}", "{{ .RefName }}", func(ctx mcpcore.PromptContext, ref mcpcore.CompletionRef, arg mcpcore.CompletionArgument) (mcpcore.CompletionResult, error) {
+		switch arg.Name {
+		{{- range .Fields }}
+		case "{{ .Name }}":
+			return completer.{{ .GoMethod }}(ctx, ref, arg)
+		{{- end }}
+		default:
+			return mcpcore.CompletionResult{}, nil
+		}
+	})
+{{- end }}
 }
 {{ end }}
