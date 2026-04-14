@@ -14,6 +14,7 @@ type MCPToolOptions struct {
 	Description      string `json:"description,omitempty"`
 	Timeout          string `json:"timeout,omitempty"`
 	StructuredOutput bool   `json:"structured_output,omitempty"`
+	ResultSummary    string `json:"result_summary,omitempty"`
 }
 
 // MCPResourceOptions exposes a gRPC method as an MCP resource or resource template.
@@ -159,6 +160,7 @@ func GetToolOptions(opts proto.Message) *MCPToolOptions {
 		Description:      decodeString(raw, 2),
 		Timeout:          decodeString(raw, 3),
 		StructuredOutput: decodeBool(raw, 4),
+		ResultSummary:    decodeString(raw, 5),
 	}
 }
 
