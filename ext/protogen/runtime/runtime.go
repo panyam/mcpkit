@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/protokit/fields"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -69,6 +70,13 @@ func ProtoResourceResult(msg proto.Message, uri, mimeType string) (core.Resource
 			Text:     string(data),
 		}},
 	}, nil
+}
+
+// BindParams populates a proto message from URI template parameters.
+// Each key is a field path (dot-separated for nested fields, e.g. "pos.q")
+// and each string value is coerced to the target field type.
+func BindParams(params map[string]string, msg proto.Message) error {
+	return fields.PopulateFromMap(msg, params)
 }
 
 // RPCError wraps an RPC error as an MCP error result.
