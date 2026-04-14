@@ -233,13 +233,12 @@ plugins:
     out: gen
     opt:
       - paths=source_relative
-      - package_suffix=          # empty = same package as pb.go
       - variants=inprocess       # only in-process, no grpc/connect deps
 ```
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `package_suffix` | `mcp` | Appended to the Go package name. Empty string generates into the same package as `pb.go`. |
+| `package_suffix` | `` (empty) | Appended to the Go package name. Default empty generates into the same package as `pb.go`. Set to `mcp` for a separate sub-package. |
 | `variants` | `inprocess,grpc` | Comma-separated list of registration variants. Valid: `inprocess`, `grpc`, `connect`. |
 
 ## gRPC Error Mapping
