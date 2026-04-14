@@ -1,5 +1,9 @@
 package core
 
+// MaxCompletionValues is the MCP spec limit on the number of values in a
+// completion response (schema maxItems: 100).
+const MaxCompletionValues = 100
+
 // CompletionRef identifies what is being completed — a prompt argument or resource URI.
 type CompletionRef struct {
 	// Type is "ref/prompt" for prompt argument completion or "ref/resource" for resource URI completion.
