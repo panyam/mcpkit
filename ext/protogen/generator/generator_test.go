@@ -276,3 +276,186 @@ func TestAnnotationInvalidTimeout(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid timeout")
 }
+
+// --- Resource annotation tests ---
+
+// methodOptionsWithResource creates MethodOptions with an mcp_resource extension.
+func methodOptionsWithResource(fields map[protowire.Number]any) *descriptorpb.MethodOptions {
+	opts := &descriptorpb.MethodOptions{}
+	raw := buildExtensionBytes(mcpv1.FieldMCPResource, fields)
+	opts.ProtoReflect().SetUnknown(raw)
+	return opts
+}
+
+// collectResources is a test helper that runs collectServiceData and returns
+// the resulting resources, failing the test on error.
+func collectResources(t *testing.T, svc ptestutil.Service) []resourceData {
+	t.Helper()
+	plugin := makePlugin(t, svc)
+	protoSvc := ptestutil.FindService(t, plugin, svc.Name)
+	gf := plugin.NewGeneratedFile("_test.go", "")
+	sd, err := collectServiceData(protoSvc, gf)
+	require.NoError(t, err)
+	return sd.Resources
+}
+
+// TestResourceStaticRegistration verifies that a method with mcp_resource
+// and no template variables produces a static resource (IsTemplate=false).
+func TestResourceStaticRegistration(t *testing.T) {
+	resources := collectResources(t, ptestutil.Service{
+		Name: "ConfigService",
+		Methods: []ptestutil.Method{{
+			Name:       "GetSettings",
+			InputType:  "test.v1.GetUserRequest",
+			OutputType: "test.v1.GetUserResponse",
+			Options: methodOptionsWithResource(map[protowire.Number]any{
+				1: "config://app/settings", // uri_template (no params)
+				2: "App Settings",          // name
+				3: "application/json",      // mime_type
+				4: "Application settings",  // description
+			}),
+		}},
+	})
+
+	require.Len(t, resources, 1)
+	r := resources[0]
+	assert.Equal(t, "GetSettings", r.MethodName)
+	assert.Equal(t, "config://app/settings", r.URI)
+	assert.Equal(t, "App Settings", r.Name)
+	assert.Equal(t, "application/json", r.MimeType)
+	assert.Equal(t, "Application settings", r.Description)
+	assert.False(t, r.IsTemplate)
+	assert.Empty(t, r.Params)
+}
+
+// TestResourceTemplateRegistration verifies that a method with mcp_resource
+// containing {param} placeholders produces a template resource with extracted params.
+func TestResourceTemplateRegistration(t *testing.T) {
+	resources := collectResources(t, ptestutil.Service{
+		Name: "UserService",
+		Methods: []ptestutil.Method{{
+			Name:       "GetUserProfile",
+			InputType:  "test.v1.GetUserRequest",
+			OutputType: "test.v1.GetUserResponse",
+			Options: methodOptionsWithResource(map[protowire.Number]any{
+				1: "user://{user_id}/profile", // uri_template with param
+				2: "User Profile",
+			}),
+		}},
+	})
+
+	require.Len(t, resources, 1)
+	r := resources[0]
+	assert.True(t, r.IsTemplate)
+	assert.Equal(t, []string{"user_id"}, r.Params)
+	assert.Equal(t, "user://{user_id}/profile", r.URI)
+}
+
+// TestResourceMimeTypeDefault verifies that omitting mime_type defaults
+// to "application/json".
+func TestResourceMimeTypeDefault(t *testing.T) {
+	resources := collectResources(t, ptestutil.Service{
+		Name: "ConfigService",
+		Methods: []ptestutil.Method{{
+			Name:       "GetSettings",
+			InputType:  "test.v1.GetUserRequest",
+			OutputType: "test.v1.GetUserResponse",
+			Options: methodOptionsWithResource(map[protowire.Number]any{
+				1: "config://app/settings",
+				// mime_type omitted
+			}),
+		}},
+	})
+
+	require.Len(t, resources, 1)
+	assert.Equal(t, "application/json", resources[0].MimeType)
+}
+
+// TestResourceNoURITemplate verifies that mcp_resource with empty uri_template
+// produces an error.
+func TestResourceNoURITemplate(t *testing.T) {
+	plugin := makePlugin(t, ptestutil.Service{
+		Name: "BadService",
+		Methods: []ptestutil.Method{{
+			Name:       "GetStuff",
+			InputType:  "test.v1.GetUserRequest",
+			OutputType: "test.v1.GetUserResponse",
+			Options: methodOptionsWithResource(map[protowire.Number]any{
+				2: "Missing URI", // name but no uri_template
+			}),
+		}},
+	})
+
+	protoSvc := ptestutil.FindService(t, plugin, "BadService")
+	gf := plugin.NewGeneratedFile("_test.go", "")
+	_, err := collectServiceData(protoSvc, gf)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "uri_template is required")
+}
+
+// TestResourceMutualExclusion verifies that a method with both mcp_tool and
+// mcp_resource annotations produces an error.
+func TestResourceMutualExclusion(t *testing.T) {
+	// Build options with both extensions.
+	opts := &descriptorpb.MethodOptions{}
+	toolRaw := buildExtensionBytes(mcpv1.FieldMCPTool, map[protowire.Number]any{
+		1: "my_tool",
+	})
+	resRaw := buildExtensionBytes(mcpv1.FieldMCPResource, map[protowire.Number]any{
+		1: "res://thing",
+	})
+	opts.ProtoReflect().SetUnknown(append(toolRaw, resRaw...))
+
+	plugin := makePlugin(t, ptestutil.Service{
+		Name: "BadService",
+		Methods: []ptestutil.Method{{
+			Name:       "Ambiguous",
+			InputType:  "test.v1.GetUserRequest",
+			OutputType: "test.v1.GetUserResponse",
+			Options:    opts,
+		}},
+	})
+
+	protoSvc := ptestutil.FindService(t, plugin, "BadService")
+	gf := plugin.NewGeneratedFile("_test.go", "")
+	_, err := collectServiceData(protoSvc, gf)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot have both mcp_tool and mcp_resource")
+}
+
+// TestMixedToolAndResource verifies that a service with both tool methods
+// and resource methods collects both correctly.
+func TestMixedToolAndResource(t *testing.T) {
+	plugin := makePlugin(t, ptestutil.Service{
+		Name: "MixedService",
+		Methods: []ptestutil.Method{
+			{
+				Name:       "GetUser",
+				InputType:  "test.v1.GetUserRequest",
+				OutputType: "test.v1.GetUserResponse",
+				// No annotation → default tool
+			},
+			{
+				Name:       "GetUserProfile",
+				InputType:  "test.v1.GetUserRequest",
+				OutputType: "test.v1.GetUserResponse",
+				Options: methodOptionsWithResource(map[protowire.Number]any{
+					1: "user://{user_id}/profile",
+					2: "User Profile",
+				}),
+			},
+		},
+	})
+
+	protoSvc := ptestutil.FindService(t, plugin, "MixedService")
+	gf := plugin.NewGeneratedFile("_test.go", "")
+	sd, err := collectServiceData(protoSvc, gf)
+	require.NoError(t, err)
+
+	assert.Len(t, sd.Tools, 1, "should have 1 tool")
+	assert.Equal(t, "get_user", sd.Tools[0].ToolName)
+
+	assert.Len(t, sd.Resources, 1, "should have 1 resource")
+	assert.Equal(t, "user://{user_id}/profile", sd.Resources[0].URI)
+	assert.True(t, sd.Resources[0].IsTemplate)
+}

@@ -10,6 +10,7 @@ import (
 
 	"google.golang.org/protobuf/compiler/protogen"
 
+	"github.com/panyam/mcpkit/core"
 	mcpv1 "github.com/panyam/mcpkit/ext/protogen/proto/mcp/v1"
 	"github.com/panyam/mcpkit/ext/protogen/schema"
 )
@@ -63,6 +64,25 @@ type serviceData struct {
 	Name      string // Go name (e.g. "UserService")
 	Namespace string // from mcp_service annotation
 	Tools     []toolData
+	Resources []resourceData
+}
+
+// HasContent reports whether the service has any tools or resources to generate.
+func (sd serviceData) HasContent() bool {
+	return len(sd.Tools) > 0 || len(sd.Resources) > 0
+}
+
+// resourceData holds data for one MCP resource generated from a unary RPC.
+type resourceData struct {
+	MethodName   string   // Go method name (e.g. "GetUserProfile")
+	URI          string   // URI or URI template from mcp_resource.uri_template
+	Name         string   // display name
+	MimeType     string   // content MIME type (default: "application/json")
+	Description  string
+	IsTemplate   bool     // true if URI contains template variables
+	Params       []string // extracted template variable names
+	RequestType  string   // qualified Go ident
+	ResponseType string   // qualified Go ident
 }
 
 // toolData holds data for one MCP tool generated from a unary RPC.
@@ -89,7 +109,7 @@ func collectFileData(file *protogen.File, gf *protogen.GeneratedFile) (fileData,
 		if err != nil {
 			return fileData{}, err
 		}
-		if len(sd.Tools) > 0 {
+		if sd.HasContent() {
 			data.Services = append(data.Services, sd)
 		}
 	}
@@ -115,8 +135,26 @@ func collectServiceData(svc *protogen.Service, gf *protogen.GeneratedFile) (serv
 			continue
 		}
 
-		// Read mcp_tool annotation.
+		// Read annotations — a method is either a tool or a resource, not both.
 		toolOpts := mcpv1.GetToolOptions(method.Desc.Options())
+		resOpts := mcpv1.GetResourceOptions(method.Desc.Options())
+
+		if toolOpts != nil && resOpts != nil {
+			return sd, fmt.Errorf("method %s: cannot have both mcp_tool and mcp_resource annotations", method.GoName)
+		}
+
+		// Use qualified Go idents so the template gets proper imports.
+		reqType := gf.QualifiedGoIdent(method.Input.GoIdent)
+		respType := gf.QualifiedGoIdent(method.Output.GoIdent)
+
+		if resOpts != nil {
+			rd, err := collectResource(method, resOpts, reqType, respType)
+			if err != nil {
+				return sd, err
+			}
+			sd.Resources = append(sd.Resources, rd)
+			continue
+		}
 
 		toolName, err := resolveToolName(sd.Namespace, method, toolOpts)
 		if err != nil {
@@ -125,7 +163,6 @@ func collectServiceData(svc *protogen.Service, gf *protogen.GeneratedFile) (serv
 
 		// Check for duplicate tool names.
 		if existing, ok := seenNames[toolName]; ok {
-			// Log warning but continue — don't fail the whole generation.
 			fmt.Fprintf(gf, "// WARNING: duplicate tool name %q from methods %s and %s\n",
 				toolName, existing.GoName, method.GoName)
 			continue
@@ -157,10 +194,6 @@ func collectServiceData(svc *protogen.Service, gf *protogen.GeneratedFile) (serv
 		inputSchema := schema.FromMessage(method.Input.Desc)
 		schemaJSON, _ := json.Marshal(inputSchema)
 
-		// Use qualified Go idents so the template gets proper imports.
-		reqType := gf.QualifiedGoIdent(method.Input.GoIdent)
-		respType := gf.QualifiedGoIdent(method.Output.GoIdent)
-
 		sd.Tools = append(sd.Tools, toolData{
 			MethodName:   method.GoName,
 			ToolName:     toolName,
@@ -174,6 +207,36 @@ func collectServiceData(svc *protogen.Service, gf *protogen.GeneratedFile) (serv
 	}
 
 	return sd, nil
+}
+
+func collectResource(method *protogen.Method, opts *mcpv1.MCPResourceOptions, reqType, respType string) (resourceData, error) {
+	if opts.URITemplate == "" {
+		return resourceData{}, fmt.Errorf("method %s: mcp_resource.uri_template is required", method.GoName)
+	}
+
+	desc := CleanComment(string(method.Comments.Leading))
+	if opts.Description != "" {
+		desc = opts.Description
+	}
+
+	mimeType := opts.MimeType
+	if mimeType == "" {
+		mimeType = "application/json"
+	}
+
+	params := core.URITemplateVars(opts.URITemplate)
+
+	return resourceData{
+		MethodName:   method.GoName,
+		URI:          opts.URITemplate,
+		Name:         opts.Name,
+		MimeType:     mimeType,
+		Description:  desc,
+		IsTemplate:   len(params) > 0,
+		Params:       params,
+		RequestType:  reqType,
+		ResponseType: respType,
+	}, nil
 }
 
 func resolveToolName(namespace string, method *protogen.Method, opts *mcpv1.MCPToolOptions) (string, error) {
