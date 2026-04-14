@@ -10,14 +10,27 @@ Go library for building production-grade MCP servers and clients. Three packages
 make test             # Core tests (core/server/client/testutil)
 make test-auth        # ext/auth sub-module
 make test-ui          # ext/ui sub-module
+make test-protogen    # ext/protogen sub-module
 make test-e2e         # E2E tests (auth + apps)
 make testconf         # MCP conformance suite (needs Node.js)
 make testconfauth     # Auth conformance (client OAuth)
-make testall          # Everything + Keycloak + HTML report
+make testall          # Everything (9 stages) + Keycloak + HTML report
 make audit            # govulncheck + gosec + gitleaks + race
 make smoke            # Curl-based transport tests
 make testkcl          # Keycloak interop (needs Docker)
 make upkcl / downkcl  # Keycloak container lifecycle
+make tag-push V=vX.Y.Z  # Tag root + all sub-modules and push
+make bump-root V=vX.Y.Z # Update mcpkit version in all sub-module go.mods
+```
+
+### ext/protogen commands
+```bash
+cd ext/protogen
+make build            # Build protoc-gen-go-mcp plugin
+make install          # Install plugin to $GOPATH/bin
+make lint             # buf lint proto files
+make generate         # buf generate Go code from protos
+make push             # Push proto module to buf.build/mcpkit/protogen
 ```
 
 ## Package Layout
@@ -27,7 +40,7 @@ make upkcl / downkcl  # Keycloak container lifecycle
 - **`client/`** — Client, HTTP/Stdio/Command transports, reconnection, auth retry
 - **`ext/auth/`** — Separate Go module: JWT validation, PRM, OAuth token sources. See `ext/auth/docs/DESIGN.md`
 - **`ext/ui/`** — Separate Go module: MCP Apps extension. See `docs/APPS_DESIGN.md`
-- **`ext/protogen/`** — Separate Go module: proto annotation-driven MCP code generation. See `ext/protogen/docs/DESIGN.md`
+- **`ext/protogen/`** — Separate Go module: proto annotation-driven MCP code generation. Annotations: `mcp_tool`, `mcp_resource`, `mcp_prompt`, `mcp_service`. Published to `buf.build/mcpkit/protogen`. See `ext/protogen/docs/DESIGN.md`
 - **`testutil/`** — `NewTestServer`, `ForAllTransports`, `TestClient`
 - **`cmd/testserver/`** — Conformance test server
 - **`tests/e2e/`, `tests/keycloak/`** — Separate Go modules with `replace` directives
@@ -51,10 +64,11 @@ func myTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error)
 
 ### Sub-Modules
 - `ext/auth/`, `ext/ui/`, and `ext/protogen/` have separate `go.mod` — `make test` does NOT cover them
-- Release order: tag root → `make bump-root V=vX.Y.Z` → tag sub-modules (`ext/auth/vX.Y.Z`, `ext/ui/vX.Y.Z`, `ext/protogen/vX.Y.Z`). Don't retag published versions.
+- Release order: tag root → `make bump-root V=vX.Y.Z` → tag sub-modules. Use `make tag-push V=vX.Y.Z` to do it in one step. Don't retag published versions.
 - `scripts/verify-submodule-deps.sh` catches `v0.0.0` placeholder bugs (wired into pre-push hook)
-- `SUB_MODS_ALL` in Makefile lists all sub-modules for `tidy-all` and `bump-root`
-- **New core deps propagate**: adding imports to `core/` (e.g., `uritemplate`) requires `go mod tidy` in every sub-module to update their `go.sum`
+- `SUB_MODS_ALL` (tidy-all, bump-root) and `SUB_MODS_TO_TAG` (tag, tag-push) in Makefile — both must include ext/protogen
+- Pre-push hook runs root + ext/auth + ext/ui + ext/protogen tests
+- **New core deps propagate**: adding imports to `core/` (e.g., `uritemplate`) requires `make tidy-all` to update all sub-module `go.sum` files
 
 ## Gotchas
 
@@ -66,6 +80,7 @@ func myTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error)
 - **`GH_TOKEN="$GH_PERSONAL_TOKEN"`**: Use personal token for GitHub operations (EMU account can't access personal repos).
 - **Template URI detection**: Use `core.IsTemplateURI()` (RFC 6570 parsing), not `strings.Contains("{")`.
 - **Sub-module go.sum drift**: Adding a new import in `core/` breaks sub-module builds until `make tidy-all` runs. Always run `make testall` after touching core imports.
+- **Protogen templates**: Use embedded `.tmpl` files (`go:embed templates/*.tmpl`), not Go string constants. Enables syntax highlighting and avoids backtick escaping.
 
 ## Deeper Documentation
 
@@ -84,3 +99,4 @@ func myTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error)
 - Server: 30/30 scenarios passing
 - Auth: 14/14 scenarios (210/210 checks)
 - Apps: 21 conformance tests passing
+- testall: 9/9 stages (unit+coverage, race, auth, ui, protogen, e2e, conformance, auth-conformance, keycloak)
