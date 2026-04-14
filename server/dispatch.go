@@ -695,6 +695,15 @@ func (d *Dispatcher) handleCompletionComplete(ctx context.Context, id json.RawMe
 		return core.NewErrorResponse(id, core.ErrCodeCompletionError, fmt.Sprintf("completion %q: %v", key, err))
 	}
 
+	// MCP spec: completion.values has maxItems=100.
+	if len(result.Values) > core.MaxCompletionValues {
+		if result.Total == 0 {
+			result.Total = len(result.Values)
+		}
+		result.Values = result.Values[:core.MaxCompletionValues]
+		result.HasMore = true
+	}
+
 	return core.NewResponse(id, core.CompletionCompleteResult{Completion: result})
 }
 

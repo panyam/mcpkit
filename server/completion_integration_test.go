@@ -180,3 +180,89 @@ func TestCompletionCompleteBadParams(t *testing.T) {
 		t.Errorf("error code = %d, want %d", resp.Error.Code, core.ErrCodeInvalidParams)
 	}
 }
+
+// TestCompletionMaxItems verifies that completion responses are clamped to
+// MaxCompletionValues (100) per the MCP spec schema constraint (maxItems: 100).
+// Handlers returning more than 100 values get truncated with hasMore=true.
+func TestCompletionMaxItems(t *testing.T) {
+	// Generate 150 values.
+	allValues := make([]string, 150)
+	for i := range allValues {
+		allValues[i] = "item"
+	}
+
+	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
+	d.RegisterCompletion("ref/prompt", "big-prompt", func(ctx core.PromptContext, ref core.CompletionRef, arg core.CompletionArgument) (core.CompletionResult, error) {
+		return core.CompletionResult{
+			Values:  allValues,
+			HasMore: false,
+		}, nil
+	})
+	initDispatcher(d)
+
+	resp := d.Dispatch(context.Background(), &core.Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "completion/complete",
+		Params:  json.RawMessage(`{"ref":{"type":"ref/prompt","name":"big-prompt"},"argument":{"name":"x","value":""}}`),
+	})
+
+	if resp.Error != nil {
+		t.Fatalf("unexpected error: %v", resp.Error.Message)
+	}
+
+	var result core.CompletionCompleteResult
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if len(result.Completion.Values) != core.MaxCompletionValues {
+		t.Errorf("values length = %d, want %d", len(result.Completion.Values), core.MaxCompletionValues)
+	}
+	if !result.Completion.HasMore {
+		t.Error("hasMore should be true when truncated")
+	}
+	if result.Completion.Total != 150 {
+		t.Errorf("total = %d, want 150", result.Completion.Total)
+	}
+}
+
+// TestCompletionUnderLimit verifies that responses under the limit are
+// returned unchanged (no truncation, original hasMore preserved).
+func TestCompletionUnderLimit(t *testing.T) {
+	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
+	d.RegisterCompletion("ref/prompt", "small-prompt", func(ctx core.PromptContext, ref core.CompletionRef, arg core.CompletionArgument) (core.CompletionResult, error) {
+		return core.CompletionResult{
+			Values:  []string{"a", "b", "c"},
+			Total:   3,
+			HasMore: false,
+		}, nil
+	})
+	initDispatcher(d)
+
+	resp := d.Dispatch(context.Background(), &core.Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "completion/complete",
+		Params:  json.RawMessage(`{"ref":{"type":"ref/prompt","name":"small-prompt"},"argument":{"name":"x","value":""}}`),
+	})
+
+	if resp.Error != nil {
+		t.Fatalf("unexpected error: %v", resp.Error.Message)
+	}
+
+	var result core.CompletionCompleteResult
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if len(result.Completion.Values) != 3 {
+		t.Errorf("values length = %d, want 3", len(result.Completion.Values))
+	}
+	if result.Completion.HasMore {
+		t.Error("hasMore should be false when under limit")
+	}
+	if result.Completion.Total != 3 {
+		t.Errorf("total = %d, want 3", result.Completion.Total)
+	}
+}
