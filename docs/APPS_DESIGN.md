@@ -352,6 +352,75 @@ sequenceDiagram
     Note over Host,App: Host allows app to call -<br/>build_deck, edit_slide,<br/>navigate_slide, get_theme_css
 ```
 
+## Observed Host Behavior (MCPJam, April 2026)
+
+Testing slyds against MCPJam revealed important details about how hosts
+actually implement the `_meta.ui.resourceUri` lifecycle. These behaviors
+are not specified in the ext-apps spec and vary by host.
+
+### Pre-fetch timing
+
+MCPJam pre-fetches `resources/read` for `_meta.ui.resourceUri` **immediately
+before** `tools/call` — not at connection time or `tools/list` time. The
+pre-fetch and tool call happen in parallel (resource read ~300ms before tool
+result arrives). The iframe boots from the pre-fetched HTML while the tool
+executes.
+
+### Template URI concrete fallbacks
+
+Hosts (MCPJam, Claude Desktop, VS Code) do not substitute template variables
+in `_meta.ui.resourceUri`. They fetch the URI literally. mcpkit's
+`RegisterAppTool` generates a concrete fallback URI (e.g.,
+`ui://slyds/preview_deck/latest`) and a wrapped handler that replays the
+most recent tool-call params into the `TemplateHandler`.
+
+**Implication:** The concrete fallback handler receives `resources/read`
+before any `tools/call` has set params. It must return a valid HTML document
+(not an error), or the host will fail to boot the iframe entirely. mcpkit
+returns a placeholder HTML in this case.
+
+### Tool results flow through postMessage, not resource re-fetch
+
+After `tools/call` completes, the host does **not** re-fetch `resources/read`.
+Instead, it forwards the tool result to the already-loaded iframe via
+`postMessage` (`ui/notifications/tool-result`). The iframe app is responsible
+for updating its DOM based on the tool result.
+
+This means:
+- The initial `resources/read` HTML is the **app shell** — it boots the
+  iframe and sets up the postMessage listener
+- Tool results are delivered as structured data, not as new HTML
+- `notifications/resources/updated` does not trigger a resource re-fetch
+  in MCPJam (as of April 2026)
+
+### `structuredContent` must be a JSON object
+
+The MCP draft spec (schema) defines `structuredContent` in `CallToolResult`
+as `"type": "object"`. MCPJam validates this and rejects arrays with:
+`"expected record, received array"`. Tools returning lists must wrap them
+in an object (e.g., `{"decks": [...]}`).
+
+### Spec gaps identified
+
+1. **No guidance on pre-fetch behavior.** The spec does not define when
+   hosts should fetch `_meta.ui.resourceUri` relative to `tools/call`. In
+   practice, hosts pre-fetch in parallel with the tool call. Servers with
+   template URIs must handle `resources/read` before any tool has been
+   called (empty params).
+
+2. **No guidance on template URI substitution.** The spec does not say
+   whether hosts should substitute template variables in
+   `_meta.ui.resourceUri` before fetching. Current hosts do not. This
+   forces the concrete-fallback pattern with param capture.
+
+3. **Unclear role of `notifications/resources/updated`.** The spec defines
+   this notification for resource subscriptions, but its interaction with
+   MCP Apps iframes is unspecified. MCPJam ignores it for app resources —
+   tool results flow through `postMessage` instead.
+
+These observations have been filed as feedback to the ext-apps spec:
+<!-- TODO: add link to spec issue once filed -->
+
 ## Edge Cases and Challenges
 
 ### 1. HTML Size Limits
