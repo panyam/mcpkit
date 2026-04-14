@@ -43,6 +43,14 @@ var (
 {{ template "forwardToGRPC" . }}
 {{ template "connectClientInterface" . }}
 {{ template "forwardToConnect" . }}
+{{- if .Resources }}
+{{ template "resourceServerInterface" . }}
+{{ template "registerResourceInProcess" . }}
+{{ template "resourceGRPCClientInterface" . }}
+{{ template "forwardResourceToGRPC" . }}
+{{ template "resourceConnectClientInterface" . }}
+{{ template "forwardResourceToConnect" . }}
+{{- end }}
 {{ end }}
 
 {{- define "serverInterface" -}}
@@ -164,4 +172,172 @@ server.Tool{
 				{{- end }}
 			},
 {{- end }}
+
+{{- define "resourceServerInterface" -}}
+// {{ .Name }}MCPResourceServer is the interface for in-process resource implementations.
+type {{ .Name }}MCPResourceServer interface {
+{{- range .Resources }}
+	{{ .MethodName }}(ctx context.Context, req *{{ .RequestType }}) (*{{ .ResponseType }}, error)
+{{- end }}
+}
+{{ end }}
+
+{{- define "registerResourceInProcess" -}}
+// Register{{ .Name }}MCPResources registers MCP resources from {{ .Name }} with an in-process implementation.
+func Register{{ .Name }}MCPResources(srv *server.Server, impl {{ .Name }}MCPResourceServer) {
+	srv.Register(
+{{- range .Resources }}
+	{{- if .IsTemplate }}
+		server.ResourceTemplate{
+			ResourceTemplate: mcpcore.ResourceTemplate{
+				URITemplate: "{{ .URI }}",
+				Name:        "{{ .Name }}",
+				MimeType:    "{{ .MimeType }}",
+			},
+			Handler: func(ctx mcpcore.ResourceContext, uri string, params map[string]string) (mcpcore.ResourceResult, error) {
+				var in {{ .RequestType }}
+				if err := runtime.BindParams(params, &in); err != nil {
+					return mcpcore.ResourceResult{}, err
+				}
+				resp, err := impl.{{ .MethodName }}(ctx, &in)
+				if err != nil {
+					return mcpcore.ResourceResult{}, err
+				}
+				return runtime.ProtoResourceResult(resp, uri, "{{ .MimeType }}")
+			},
+		},
+	{{- else }}
+		server.Resource{
+			ResourceDef: mcpcore.ResourceDef{
+				URI:         "{{ .URI }}",
+				Name:        "{{ .Name }}",
+				MimeType:    "{{ .MimeType }}",
+				Description: "{{ .Description }}",
+			},
+			Handler: func(ctx mcpcore.ResourceContext, req mcpcore.ResourceRequest) (mcpcore.ResourceResult, error) {
+				var in {{ .RequestType }}
+				resp, err := impl.{{ .MethodName }}(ctx, &in)
+				if err != nil {
+					return mcpcore.ResourceResult{}, err
+				}
+				return runtime.ProtoResourceResult(resp, req.URI, "{{ .MimeType }}")
+			},
+		},
+	{{- end }}
+{{- end }}
+	)
+}
+{{ end }}
+
+{{- define "resourceGRPCClientInterface" -}}
+// {{ .Name }}ResourceGRPCClient is the gRPC client interface for resource forwarding.
+type {{ .Name }}ResourceGRPCClient interface {
+{{- range .Resources }}
+	{{ .MethodName }}(ctx context.Context, req *{{ .RequestType }}, opts ...grpc.CallOption) (*{{ .ResponseType }}, error)
+{{- end }}
+}
+{{ end }}
+
+{{- define "forwardResourceToGRPC" -}}
+// Forward{{ .Name }}ResourcesToGRPC registers MCP resources that forward to a gRPC {{ .Name }} client.
+func Forward{{ .Name }}ResourcesToGRPC(srv *server.Server, client {{ .Name }}ResourceGRPCClient) {
+	srv.Register(
+{{- range .Resources }}
+	{{- if .IsTemplate }}
+		server.ResourceTemplate{
+			ResourceTemplate: mcpcore.ResourceTemplate{
+				URITemplate: "{{ .URI }}",
+				Name:        "{{ .Name }}",
+				MimeType:    "{{ .MimeType }}",
+			},
+			Handler: func(ctx mcpcore.ResourceContext, uri string, params map[string]string) (mcpcore.ResourceResult, error) {
+				var in {{ .RequestType }}
+				if err := runtime.BindParams(params, &in); err != nil {
+					return mcpcore.ResourceResult{}, err
+				}
+				resp, err := client.{{ .MethodName }}(ctx, &in)
+				if err != nil {
+					return mcpcore.ResourceResult{}, err
+				}
+				return runtime.ProtoResourceResult(resp, uri, "{{ .MimeType }}")
+			},
+		},
+	{{- else }}
+		server.Resource{
+			ResourceDef: mcpcore.ResourceDef{
+				URI:         "{{ .URI }}",
+				Name:        "{{ .Name }}",
+				MimeType:    "{{ .MimeType }}",
+				Description: "{{ .Description }}",
+			},
+			Handler: func(ctx mcpcore.ResourceContext, req mcpcore.ResourceRequest) (mcpcore.ResourceResult, error) {
+				var in {{ .RequestType }}
+				resp, err := client.{{ .MethodName }}(ctx, &in)
+				if err != nil {
+					return mcpcore.ResourceResult{}, err
+				}
+				return runtime.ProtoResourceResult(resp, req.URI, "{{ .MimeType }}")
+			},
+		},
+	{{- end }}
+{{- end }}
+	)
+}
+{{ end }}
+
+{{- define "resourceConnectClientInterface" -}}
+// Connect{{ .Name }}ResourceClient is the ConnectRPC client interface for resource forwarding.
+type Connect{{ .Name }}ResourceClient interface {
+{{- range .Resources }}
+	{{ .MethodName }}(ctx context.Context, req *connect.Request[{{ .RequestType }}]) (*connect.Response[{{ .ResponseType }}], error)
+{{- end }}
+}
+{{ end }}
+
+{{- define "forwardResourceToConnect" -}}
+// Forward{{ .Name }}ResourcesToConnect registers MCP resources that forward to a ConnectRPC {{ .Name }} client.
+func Forward{{ .Name }}ResourcesToConnect(srv *server.Server, client Connect{{ .Name }}ResourceClient) {
+	srv.Register(
+{{- range .Resources }}
+	{{- if .IsTemplate }}
+		server.ResourceTemplate{
+			ResourceTemplate: mcpcore.ResourceTemplate{
+				URITemplate: "{{ .URI }}",
+				Name:        "{{ .Name }}",
+				MimeType:    "{{ .MimeType }}",
+			},
+			Handler: func(ctx mcpcore.ResourceContext, uri string, params map[string]string) (mcpcore.ResourceResult, error) {
+				var in {{ .RequestType }}
+				if err := runtime.BindParams(params, &in); err != nil {
+					return mcpcore.ResourceResult{}, err
+				}
+				resp, err := client.{{ .MethodName }}(ctx, connect.NewRequest(&in))
+				if err != nil {
+					return mcpcore.ResourceResult{}, err
+				}
+				return runtime.ProtoResourceResult(resp.Msg, uri, "{{ .MimeType }}")
+			},
+		},
+	{{- else }}
+		server.Resource{
+			ResourceDef: mcpcore.ResourceDef{
+				URI:         "{{ .URI }}",
+				Name:        "{{ .Name }}",
+				MimeType:    "{{ .MimeType }}",
+				Description: "{{ .Description }}",
+			},
+			Handler: func(ctx mcpcore.ResourceContext, req mcpcore.ResourceRequest) (mcpcore.ResourceResult, error) {
+				var in {{ .RequestType }}
+				resp, err := client.{{ .MethodName }}(ctx, connect.NewRequest(&in))
+				if err != nil {
+					return mcpcore.ResourceResult{}, err
+				}
+				return runtime.ProtoResourceResult(resp.Msg, req.URI, "{{ .MimeType }}")
+			},
+		},
+	{{- end }}
+{{- end }}
+	)
+}
+{{ end }}
 `
