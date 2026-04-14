@@ -19,16 +19,18 @@ type MCPToolOptions struct {
 
 // MCPResourceOptions exposes a gRPC method as an MCP resource or resource template.
 type MCPResourceOptions struct {
-	URITemplate string `json:"uri_template,omitempty"`
-	Name        string `json:"name,omitempty"`
-	MimeType    string `json:"mime_type,omitempty"`
-	Description string `json:"description,omitempty"`
+	URITemplate      string   `json:"uri_template,omitempty"`
+	Name             string   `json:"name,omitempty"`
+	MimeType         string   `json:"mime_type,omitempty"`
+	Description      string   `json:"description,omitempty"`
+	CompletableFields []string `json:"completable_fields,omitempty"`
 }
 
 // MCPPromptOptions exposes a gRPC method as an MCP prompt.
 type MCPPromptOptions struct {
-	Name        string `json:"name,omitempty"`
-	Description string `json:"description,omitempty"`
+	Name              string   `json:"name,omitempty"`
+	Description       string   `json:"description,omitempty"`
+	CompletableFields []string `json:"completable_fields,omitempty"`
 }
 
 // MCPServiceOptions configures service-level MCP settings.
@@ -148,6 +150,39 @@ func decodeBool(raw []byte, fieldNum protowire.Number) bool {
 	return false
 }
 
+// decodeRepeatedString collects all string values for a repeated field.
+func decodeRepeatedString(raw []byte, fieldNum protowire.Number) []string {
+	var result []string
+	for len(raw) > 0 {
+		num, wtype, n := protowire.ConsumeTag(raw)
+		if n < 0 {
+			return result
+		}
+		raw = raw[n:]
+		switch wtype {
+		case protowire.VarintType:
+			_, n = protowire.ConsumeVarint(raw)
+		case protowire.Fixed32Type:
+			_, n = protowire.ConsumeFixed32(raw)
+		case protowire.Fixed64Type:
+			_, n = protowire.ConsumeFixed64(raw)
+		case protowire.BytesType:
+			var val []byte
+			val, n = protowire.ConsumeBytes(raw)
+			if n >= 0 && num == fieldNum {
+				result = append(result, string(val))
+			}
+		default:
+			return result
+		}
+		if n < 0 {
+			return result
+		}
+		raw = raw[n:]
+	}
+	return result
+}
+
 // GetToolOptions extracts MCPToolOptions from method options.
 // Returns nil if the mcp_tool annotation is not present.
 func GetToolOptions(opts proto.Message) *MCPToolOptions {
@@ -172,10 +207,11 @@ func GetResourceOptions(opts proto.Message) *MCPResourceOptions {
 		return nil
 	}
 	return &MCPResourceOptions{
-		URITemplate: decodeString(raw, 1),
-		Name:        decodeString(raw, 2),
-		MimeType:    decodeString(raw, 3),
-		Description: decodeString(raw, 4),
+		URITemplate:       decodeString(raw, 1),
+		Name:              decodeString(raw, 2),
+		MimeType:          decodeString(raw, 3),
+		Description:       decodeString(raw, 4),
+		CompletableFields: decodeRepeatedString(raw, 5),
 	}
 }
 
@@ -187,8 +223,9 @@ func GetPromptOptions(opts proto.Message) *MCPPromptOptions {
 		return nil
 	}
 	return &MCPPromptOptions{
-		Name:        decodeString(raw, 1),
-		Description: decodeString(raw, 2),
+		Name:              decodeString(raw, 1),
+		Description:       decodeString(raw, 2),
+		CompletableFields: decodeRepeatedString(raw, 3),
 	}
 }
 
