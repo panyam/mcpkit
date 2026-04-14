@@ -1,12 +1,17 @@
 # ext/protogen Makefile
 
-.PHONY: build test lint generate push install help
+.PHONY: build test test-e2e lint generate push install help
 
 build: ## Build the protoc plugin
 	go build -o bin/protoc-gen-go-mcp ./cmd/protoc-gen-go-mcp
 
-test: ## Run all tests
+test: ## Run unit tests
 	go test ./... -count=1 -timeout 30s
+
+test-e2e: install ## Regenerate examples, compile, and run e2e tests
+	@echo "==> e2e: bookservice example"
+	cd examples/bookservice && rm -rf gen && buf generate && go test -count=1 -timeout 30s .
+	@echo "==> e2e: passed"
 
 install: ## Install the protoc plugin to $GOPATH/bin
 	go install ./cmd/protoc-gen-go-mcp
