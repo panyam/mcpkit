@@ -99,5 +99,7 @@ func main() {
 	booksv1.RegisterBookServiceMCPPrompts(srv, impl)
 
 	log.Println("Book service MCP server starting on :8787")
-	srv.Run(":8787")
+	if err := srv.Run(":8787"); err != nil {
+		log.Fatalf("server error: %v", err)
+	}
 }
