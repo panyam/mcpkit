@@ -13,7 +13,7 @@ test-e2e: install ## Regenerate examples, compile, and run e2e tests
 	cd examples/bookservice && rm -rf gen && buf generate && go test -count=1 -timeout 30s .
 	@echo "==> e2e: passed"
 
-install: ## Install the protoc plugin to $GOPATH/bin
+install: build ## Install the protoc plugin to $GOPATH/bin
 	go install ./cmd/protoc-gen-go-mcp
 
 # --- Proto / Buf targets ---
