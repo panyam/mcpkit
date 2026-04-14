@@ -5,9 +5,11 @@ package runtime
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/protokit/fields"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -72,6 +74,67 @@ func ProtoResourceResult(msg proto.Message, uri, mimeType string) (core.Resource
 	}, nil
 }
 
+// ProtoPromptResult marshals a proto message to JSON and returns it as a
+// PromptResult with a single assistant text message.
+func ProtoPromptResult(msg proto.Message) (core.PromptResult, error) {
+	data, err := marshalOpts.Marshal(msg)
+	if err != nil {
+		return core.PromptResult{}, fmt.Errorf("failed to marshal prompt response: %w", err)
+	}
+	return core.PromptResult{
+		Messages: []core.PromptMessage{{
+			Role:    "assistant",
+			Content: core.Content{Type: "text", Text: string(data)},
+		}},
+	}, nil
+}
+
+// BindPromptArgs populates a proto message from prompt argument values.
+// Prompt arguments arrive as map[string]any (JSON-decoded). Each value is
+// re-marshaled to JSON and the full map is unmarshaled via protojson.
+func BindPromptArgs(args map[string]any, msg proto.Message) error {
+	if len(args) == 0 {
+		return nil
+	}
+	data, err := json.Marshal(args)
+	if err != nil {
+		return fmt.Errorf("marshal prompt args: %w", err)
+	}
+	return unmarshalOpts.Unmarshal(data, msg)
+}
+
+// ProtoSummaryStructuredResult marshals a proto message and returns it as a
+// StructuredResult where the text content is a rendered summary template.
+// The template uses {field_name} placeholders interpolated from the response
+// message's JSON representation.
+func ProtoSummaryStructuredResult(msg proto.Message, summaryTemplate string) (core.ToolResult, error) {
+	data, err := marshalOpts.Marshal(msg)
+	if err != nil {
+		return core.ErrorResult(fmt.Sprintf("failed to marshal response: %v", err)), nil
+	}
+
+	// Parse into map for both structured content and summary interpolation.
+	var fields map[string]any
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return core.ErrorResult(fmt.Sprintf("failed to parse response: %v", err)), nil
+	}
+
+	// Render summary by replacing {field} placeholders.
+	summary := renderSummary(summaryTemplate, fields)
+
+	return core.StructuredResult(summary, fields), nil
+}
+
+// renderSummary replaces {field_name} placeholders in a template with values
+// from a map. Unknown fields are left as-is.
+func renderSummary(tmpl string, fields map[string]any) string {
+	result := tmpl
+	for key, val := range fields {
+		result = strings.ReplaceAll(result, "{"+key+"}", fmt.Sprintf("%v", val))
+	}
+	return result
+}
+
 // BindParams populates a proto message from URI template parameters.
 // Each key is a field path (dot-separated for nested fields, e.g. "pos.q")
 // and each string value is coerced to the target field type.
@@ -80,7 +143,41 @@ func BindParams(params map[string]string, msg proto.Message) error {
 }
 
 // RPCError wraps an RPC error as an MCP error result.
-// The isError flag is set so the LLM knows the call failed.
+// If the error is a gRPC status error, the status code and any attached
+// details (proto Any messages) are extracted and returned as structured
+// error content so agents can parse and recover programmatically.
+// For non-gRPC errors, falls back to a plain text error result.
 func RPCError(err error) (core.ToolResult, error) {
-	return core.ErrorResult(err.Error()), nil
+	st, ok := status.FromError(err)
+	if !ok {
+		return core.ErrorResult(err.Error()), nil
+	}
+
+	// Build structured error with code + message + details.
+	errData := map[string]any{
+		"code":    st.Code().String(),
+		"message": st.Message(),
+	}
+
+	// Extract status details as JSON objects.
+	if details := st.Details(); len(details) > 0 {
+		detailList := make([]any, 0, len(details))
+		for _, d := range details {
+			if pm, ok := d.(proto.Message); ok {
+				data, err := marshalOpts.Marshal(pm)
+				if err == nil {
+					var parsed any
+					if json.Unmarshal(data, &parsed) == nil {
+						detailList = append(detailList, parsed)
+						continue
+					}
+				}
+			}
+			// Fallback for non-proto or unmarshal failure.
+			detailList = append(detailList, fmt.Sprintf("%v", d))
+		}
+		errData["details"] = detailList
+	}
+
+	return core.StructuredError(st.Message(), errData), nil
 }
