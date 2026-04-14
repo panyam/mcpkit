@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Dice Roller</title>
+  <style>
+    * { box-sizing: border-box }
+    body { margin: 0; font-family: system-ui; text-align: center; padding: 2em }
+    #result { font-size: 4em; margin: 0 }
+    #label { color: #666 }
+    button {
+      font-size: 1.2em;
+      padding: 0.5em 2em;
+      cursor: pointer;
+      margin-top: 1em;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      background: #f5f5f5;
+    }
+    button:hover { background: #e8e8e8 }
+  </style>
+</head>
+<body>
+  <h1 id="result">🎲</h1>
+  <p id="label">Waiting for roll...</p>
+  <button id="roll">Roll Again</button>
+
+  <script>
+    // Update display when a tool result arrives from the host.
+    MCPApp.on('toolresult', function(data) {
+      var text = '';
+      if (data.result && data.result.content) {
+        for (var i = 0; i < data.result.content.length; i++) {
+          if (data.result.content[i].text) text = data.result.content[i].text;
+        }
+      }
+      var match = text.match(/: (\d+)/);
+      document.getElementById('result').textContent = match ? match[1] : '?';
+      document.getElementById('label').textContent = text || 'Rolled!';
+    });
+
+    // "Roll Again" calls the tool back through the bridge.
+    document.getElementById('roll').addEventListener('click', function() {
+      document.getElementById('result').textContent = '🎲';
+      document.getElementById('label').textContent = 'Rolling...';
+      MCPApp.callTool('roll_dice', { sides: 6 });
+    });
+
+    // Show connection status.
+    MCPApp.on('connected', function() {
+      document.getElementById('label').textContent = 'Connected! Ask the LLM to roll a die.';
+    });
+  </script>
+</body>
+</html>
