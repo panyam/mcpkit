@@ -1405,16 +1405,142 @@ sequenceDiagram
 | 2.4  | slyds `go.mod`               | Bump mcpkit dependency                                                  |
 | 2.5  | Manual test                  | Connect slyds to Claude via cloudflared tunnel, verify inline rendering |
 
-### Phase 3: Slyds Interactive Bridge
+### Phase 3: MCPKit — Embeddable App Runtime Snippet
 
-**Goal:** Users interact with slides directly; edits flow back through MCP tools.
+**Goal:** Go servers that generate their own HTML can participate in the
+MCP Apps postMessage lifecycle without depending on Node/npm or the
+ext-apps TypeScript SDK. mcpkit ships a small, framework-agnostic JS
+snippet (`ext/ui/assets/mcp-app-runtime.js`) that handles:
+- `ui/initialize` handshake
+- `ui/notifications/tool-input` and `ui/notifications/tool-result` listeners
+- `callServerTool()` for iframe→host tool calls
+- `ui/notifications/size-changed` via ResizeObserver
+- Theme/display-mode detection from `hostContext`
+
+The snippet is embeddable via Go `embed` — applications inject it with a
+`<script>` tag. No bundler required.
+
+**Graceful degradation:** The runtime snippet detects whether it's running
+inside an MCP Apps host (postMessage bridge available) or standalone/non-Apps
+host. If no host is detected, it's a silent no-op — the static HTML renders
+exactly as before. This ensures server-generated previews work on ALL hosts,
+with interactive features activating only when the host supports ext-apps.
+
+#### Lifecycle: Without ext-apps (host has no Apps support)
+
+```
+User: "preview my deck"
+  │
+  ▼
+Host/LLM ──tools/call preview_deck──▶ MCP Server
+  │                                       │
+  │◀──── result: "Built deck (5 slides)"──┘
+  │
+  ▼
+Host sees _meta.ui.resourceUri on tool def
+  │
+  ├── Host supports Apps?  NO
+  │     └── Host shows text result only:
+  │         "Built deck (5 slides). Preview available."
+  │         (no iframe, no resource fetch — works fine)
+  │
+  └── Host supports Apps?  YES (but no interactive bridge)
+        ├── resources/read ui://slyds/preview_deck/latest
+        │     └── Server returns self-contained HTML
+        ├── Host renders HTML in sandboxed iframe
+        │     └── Static slide deck displays correctly
+        └── User says "edit slide 3"
+              ├── tools/call edit_slide → Server edits slide
+              ├── Result: "Slide 3 updated"
+              └── Preview is STALE — user must say
+                  "preview deck again" to see changes
+```
+
+#### Lifecycle: With ext-apps runtime (host supports Apps)
+
+```
+User: "preview my deck"
+  │
+  ▼
+Host/LLM ──tools/call preview_deck──▶ MCP Server
+  │                                       │
+  │◀──── result: "Built deck (5 slides)"──┘
+  │
+  ▼
+Host sees _meta.ui.resourceUri
+  ├── resources/read → Server returns HTML + embedded runtime JS
+  ├── Host renders iframe
+  │     ├── Runtime JS detects MCP Apps host
+  │     ├── iframe→host: ui/initialize
+  │     ├── host→iframe: initialize result (theme, dimensions)
+  │     ├── iframe→host: ui/notifications/initialized
+  │     ├── host→iframe: ui/notifications/tool-input {deck: "..."}
+  │     └── host→iframe: ui/notifications/tool-result
+  │           └── JS renders slides using structured data
+  │
+  ▼
+User says "edit slide 3"
+  ├── tools/call edit_slide → Server edits
+  ├── host→iframe: ui/notifications/tool-result {slide: 3, ...}
+  │     └── Runtime JS updates slide 3 DOM in place ← NO RE-FETCH
+  │
+  ▼
+User clicks "Next" in iframe
+  ├── iframe→host: tools/call navigate_slide (app-only tool)
+  │     └── host proxies to server → result
+  ├── host→iframe: tool-result {position: 4, ...}
+  │     └── JS navigates to slide 4
+  │
+  ▼
+User clicks link in iframe
+  └── iframe→host: ui/open-link {url: "https://..."}
+        └── Host opens in browser (not inside iframe)
+```
+
+The same server code, same `RegisterAppTool`, same HTML. The runtime
+snippet adds interactivity when the host supports it, stays silent
+when it doesn't.
+
+**Design principle:** mcpkit is frontend-agnostic. Teams using React/Vue
+should use the upstream `@modelcontextprotocol/ext-apps` SDK for their
+iframe code and only use mcpkit for the Go server side. The embedded
+snippet is for server-generated HTML where adding a JS build pipeline
+is unwanted overhead.
+
+| Step | File(s)                           | Change                                                                                      |
+|------|-----------------------------------|---------------------------------------------------------------------------------------------|
+| 3.1  | `ext/ui/assets/mcp-app-runtime.js`| Minimal postMessage protocol: init handshake, tool-input/tool-result listeners, callServerTool |
+| 3.2  | `ext/ui/embed.go`                 | `go:embed` the JS; export `AppRuntimeScript` string constant                                |
+| 3.3  | `ext/ui/app_helpers.go`           | `InjectAppRuntime(html string) string` — inserts `<script>` before `</body>`                |
+| 3.4  | Unit tests                        | Verify injection, verify JS syntax (basic parse check)                                      |
+| 3.5  | Documentation                     | Usage guide: server-generated HTML vs JS framework frontend patterns                        |
+
+### Phase 3b: Slyds Interactive Preview
+
+**Goal:** Slyds preview becomes interactive — edits update the live preview,
+users can navigate slides within the iframe.
 
 | Step | File(s)                      | Change                                                                   |
 |------|------------------------------|--------------------------------------------------------------------------|
-| 3.1  | slyds `assets/slyds.js`      | Add MCP App bridge (postMessage JSON-RPC, callServerTool)                |
-| 3.2  | slyds `cmd/mcp_tools.go`     | Add app-only tools: `navigate_slide`, `get_theme_css`, `refresh_preview` |
-| 3.3  | slyds `cmd/mcp_resources.go` | `NotifyResourcesChanged` after mutations                                 |
-| 3.4  | Integration test             | E2E: create → build → verify HTML → call app-only tool                   |
+| 3b.1 | slyds `cmd/mcp_apps.go`     | Inject `AppRuntimeScript` into preview HTML via `InjectAppRuntime`        |
+| 3b.2 | slyds `assets/slyds-app.js` | App-specific handlers: on tool-result update slide DOM, keyboard nav      |
+| 3b.3 | slyds `cmd/mcp_tools.go`    | Add app-only tools: `navigate_slide`, `get_theme_css`, `refresh_preview` |
+| 3b.4 | slyds `cmd/mcp_apps.go`     | On `edit_slide` result, forward content hint to iframe via tool-result    |
+| 3b.5 | Integration test             | E2E: create → build → verify HTML → call app-only tool                   |
+
+### Phase 3c: HTMX Demo App
+
+**Goal:** Demonstrate the server-generated HTML pattern with HTMX — no JS
+framework, no bundler, pure Go + HTML. Validates that the embedded runtime
+snippet works with partial-swap patterns and showcases mcpkit's
+frontend-agnostic positioning versus the ext-apps TypeScript SDK.
+
+| Step | File(s)                        | Change                                                                |
+|------|--------------------------------|-----------------------------------------------------------------------|
+| 3c.1 | `examples/htmx-app/`          | Simple MCP App: Go server, Go templates, HTMX for interactions       |
+| 3c.2 | `examples/htmx-app/main.go`   | `RegisterAppTool` with inline Go template rendering                  |
+| 3c.3 | `examples/htmx-app/templates/`| HTML with `hx-*` attrs; tool-result triggers `hx-swap` via runtime   |
+| 3c.4 | Documentation                 | "Server-generated HTML" guide contrasting with ext-apps SDK approach  |
 
 ### Phase 4: Conformance
 
@@ -1444,7 +1570,9 @@ Unlike the auth extension (which heavily wraps oneauth), MCP Apps is almost enti
 | `ui://` resource serving                          | mcpkit core            | Standard `resources/read` — no special handling           |
 | Tool visibility filtering                         | mcpkit client          | Client-side convenience                                   |
 | HTML content (building, inlining, templating)     | Application (slyds)    | App-specific, not library concern                         |
-| postMessage bridge JS                             | Application (slyds)    | Runs in iframe, browser-only                              |
+| Embeddable App runtime JS (postMessage protocol)  | mcpkit/ui (embedded)   | Framework-agnostic snippet for server-generated HTML      |
+| Full iframe SDK (React hooks, App class)           | ext-apps SDK (npm)     | For JS framework frontends; mcpkit does not duplicate     |
+| postMessage bridge (app-specific handlers)         | Application (slyds)    | App-specific DOM updates, navigation, event handling      |
 | CSP enforcement                                   | Host (Claude, ChatGPT) | Host controls the iframe sandbox                          |
 
 ### Nothing goes to oneauth
