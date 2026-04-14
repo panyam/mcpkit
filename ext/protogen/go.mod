@@ -4,7 +4,7 @@ go 1.26.1
 
 require (
 	github.com/panyam/mcpkit v0.2.3
-	github.com/panyam/protokit v0.0.3
+	github.com/panyam/protokit v0.0.4
 	github.com/stretchr/testify v1.10.0
 	google.golang.org/protobuf v1.36.11
 )
