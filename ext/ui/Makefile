@@ -1,7 +1,8 @@
 # ext/ui Makefile
 
-test: ## Run Go unit tests
+test: ## Run Go + JS bridge unit tests
 	go test ./... -count=1 -timeout 30s
+	cd assets && pnpm install --frozen-lockfile --silent && pnpm test
 
 test-bridge: ## Run JS bridge unit tests (requires pnpm + Node.js)
 	cd assets && pnpm install --frozen-lockfile && pnpm test
