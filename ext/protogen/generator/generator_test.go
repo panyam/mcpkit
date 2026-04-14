@@ -420,7 +420,7 @@ func TestResourceMutualExclusion(t *testing.T) {
 	gf := plugin.NewGeneratedFile("_test.go", "")
 	_, err := collectServiceData(protoSvc, gf)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "cannot have both mcp_tool and mcp_resource")
+	assert.Contains(t, err.Error(), "cannot have multiple MCP annotations")
 }
 
 // TestMixedToolAndResource verifies that a service with both tool methods
@@ -458,4 +458,136 @@ func TestMixedToolAndResource(t *testing.T) {
 	assert.Len(t, sd.Resources, 1, "should have 1 resource")
 	assert.Equal(t, "user://{user_id}/profile", sd.Resources[0].URI)
 	assert.True(t, sd.Resources[0].IsTemplate)
+}
+
+// --- Prompt annotation tests ---
+
+// methodOptionsWithPrompt creates MethodOptions with an mcp_prompt extension.
+func methodOptionsWithPrompt(fields map[protowire.Number]any) *descriptorpb.MethodOptions {
+	opts := &descriptorpb.MethodOptions{}
+	raw := buildExtensionBytes(mcpv1.FieldMCPPrompt, fields)
+	opts.ProtoReflect().SetUnknown(raw)
+	return opts
+}
+
+// TestPromptRegistration verifies that a method with mcp_prompt produces
+// a promptData with arguments derived from the request message fields.
+func TestPromptRegistration(t *testing.T) {
+	plugin := ptestutil.CreatePlugin(t, &ptestutil.ProtoSet{
+		Files: []ptestutil.File{{
+			Name: "test.proto",
+			Pkg:  "test.v1",
+			Messages: []ptestutil.Message{
+				{Name: "SummarizeRequest", Fields: []ptestutil.Field{
+					{Name: "document_id", Number: 1, TypeName: "string"},
+					{Name: "max_length", Number: 2, TypeName: "int32", Optional: true},
+				}},
+				{Name: "SummarizeResponse", Fields: []ptestutil.Field{
+					{Name: "summary", Number: 1, TypeName: "string"},
+				}},
+			},
+			Services: []ptestutil.Service{{
+				Name: "DocService",
+				Methods: []ptestutil.Method{{
+					Name:       "Summarize",
+					InputType:  "test.v1.SummarizeRequest",
+					OutputType: "test.v1.SummarizeResponse",
+					Options: methodOptionsWithPrompt(map[protowire.Number]any{
+						1: "summarize_doc",       // name
+						2: "Summarize a document", // description
+					}),
+				}},
+			}},
+		}},
+	})
+
+	protoSvc := ptestutil.FindService(t, plugin, "DocService")
+	gf := plugin.NewGeneratedFile("_test.go", "")
+	sd, err := collectServiceData(protoSvc, gf)
+	require.NoError(t, err)
+
+	require.Len(t, sd.Prompts, 1)
+	p := sd.Prompts[0]
+	assert.Equal(t, "summarize_doc", p.PromptName)
+	assert.Equal(t, "Summarize a document", p.Description)
+	assert.Equal(t, "Summarize", p.MethodName)
+
+	// Arguments derived from request message fields.
+	require.Len(t, p.Arguments, 2)
+	assert.Equal(t, "document_id", p.Arguments[0].Name)
+	assert.True(t, p.Arguments[0].Required, "non-optional scalar should be required")
+	assert.Equal(t, "max_length", p.Arguments[1].Name)
+	assert.False(t, p.Arguments[1].Required, "optional field should not be required")
+}
+
+// TestPromptDefaultName verifies that prompt name defaults to snake_case
+// of the method name when not specified in the annotation.
+func TestPromptDefaultName(t *testing.T) {
+	plugin := makePlugin(t, ptestutil.Service{
+		Name: "DocService",
+		Methods: []ptestutil.Method{{
+			Name:       "SummarizeDocument",
+			InputType:  "test.v1.GetUserRequest",
+			OutputType: "test.v1.GetUserResponse",
+			Options: methodOptionsWithPrompt(map[protowire.Number]any{
+				2: "Summarize", // description only, no custom name
+			}),
+		}},
+	})
+
+	protoSvc := ptestutil.FindService(t, plugin, "DocService")
+	gf := plugin.NewGeneratedFile("_test.go", "")
+	sd, err := collectServiceData(protoSvc, gf)
+	require.NoError(t, err)
+
+	require.Len(t, sd.Prompts, 1)
+	assert.Equal(t, "summarize_document", sd.Prompts[0].PromptName)
+}
+
+// TestPromptWithNamespace verifies that mcp_service.namespace prefixes
+// prompt names.
+func TestPromptWithNamespace(t *testing.T) {
+	plugin := makePlugin(t, ptestutil.Service{
+		Name:    "DocService",
+		Options: serviceOptionsWithNamespace("docs"),
+		Methods: []ptestutil.Method{{
+			Name:       "Summarize",
+			InputType:  "test.v1.GetUserRequest",
+			OutputType: "test.v1.GetUserResponse",
+			Options: methodOptionsWithPrompt(map[protowire.Number]any{
+				1: "summarize",
+			}),
+		}},
+	})
+
+	protoSvc := ptestutil.FindService(t, plugin, "DocService")
+	gf := plugin.NewGeneratedFile("_test.go", "")
+	sd, err := collectServiceData(protoSvc, gf)
+	require.NoError(t, err)
+
+	require.Len(t, sd.Prompts, 1)
+	assert.Equal(t, "docs_summarize", sd.Prompts[0].PromptName)
+}
+
+// --- Result summary tests ---
+
+// TestResultSummaryAnnotation verifies that mcp_tool.result_summary is
+// captured in toolData.
+func TestResultSummaryAnnotation(t *testing.T) {
+	tools := collectTools(t, ptestutil.Service{
+		Name: "UserService",
+		Methods: []ptestutil.Method{{
+			Name:       "GetUser",
+			InputType:  "test.v1.GetUserRequest",
+			OutputType: "test.v1.GetUserResponse",
+			Options: methodOptionsWithTool(map[protowire.Number]any{
+				4: true,                                  // structured_output
+				5: "User {name} retrieved (id: {user_id})", // result_summary
+			}),
+		}},
+	})
+
+	require.Len(t, tools, 1)
+	assert.True(t, tools[0].Structured)
+	assert.Equal(t, "User {name} retrieved (id: {user_id})", tools[0].ResultSummary)
 }
