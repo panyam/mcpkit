@@ -149,9 +149,13 @@ type MCPResourceOptions struct {
 	// MIME type of the resource content.
 	MimeType string `protobuf:"bytes,3,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
 	// Human-readable description.
-	Description   string `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Description string `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
+	// Fields from the URI template that support auto-completion.
+	// Each name must match a {param} in uri_template.
+	// Generates a Completer interface method per field.
+	CompletableFields []string `protobuf:"bytes,5,rep,name=completable_fields,json=completableFields,proto3" json:"completable_fields,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *MCPResourceOptions) Reset() {
@@ -212,15 +216,25 @@ func (x *MCPResourceOptions) GetDescription() string {
 	return ""
 }
 
+func (x *MCPResourceOptions) GetCompletableFields() []string {
+	if x != nil {
+		return x.CompletableFields
+	}
+	return nil
+}
+
 // MCPPromptOptions exposes a gRPC method as an MCP prompt.
 type MCPPromptOptions struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Custom prompt name. Defaults to snake_case of the method name.
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// Human-readable description.
-	Description   string `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Description string `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	// Request message fields that support auto-completion.
+	// Generates a Completer interface method per field.
+	CompletableFields []string `protobuf:"bytes,3,rep,name=completable_fields,json=completableFields,proto3" json:"completable_fields,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *MCPPromptOptions) Reset() {
@@ -265,6 +279,13 @@ func (x *MCPPromptOptions) GetDescription() string {
 		return x.Description
 	}
 	return ""
+}
+
+func (x *MCPPromptOptions) GetCompletableFields() []string {
+	if x != nil {
+		return x.CompletableFields
+	}
+	return nil
 }
 
 // MCPServiceOptions configures service-level MCP settings.
@@ -375,15 +396,17 @@ const file_mcp_v1_annotations_proto_rawDesc = "" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x18\n" +
 	"\atimeout\x18\x03 \x01(\tR\atimeout\x12+\n" +
 	"\x11structured_output\x18\x04 \x01(\bR\x10structuredOutput\x12%\n" +
-	"\x0eresult_summary\x18\x05 \x01(\tR\rresultSummary\"\x8a\x01\n" +
+	"\x0eresult_summary\x18\x05 \x01(\tR\rresultSummary\"\xb9\x01\n" +
 	"\x12MCPResourceOptions\x12!\n" +
 	"\furi_template\x18\x01 \x01(\tR\vuriTemplate\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1b\n" +
 	"\tmime_type\x18\x03 \x01(\tR\bmimeType\x12 \n" +
-	"\vdescription\x18\x04 \x01(\tR\vdescription\"H\n" +
+	"\vdescription\x18\x04 \x01(\tR\vdescription\x12-\n" +
+	"\x12completable_fields\x18\x05 \x03(\tR\x11completableFields\"w\n" +
 	"\x10MCPPromptOptions\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
-	"\vdescription\x18\x02 \x01(\tR\vdescription\"1\n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12-\n" +
+	"\x12completable_fields\x18\x03 \x03(\tR\x11completableFields\"1\n" +
 	"\x11MCPServiceOptions\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace:S\n" +
 	"\bmcp_tool\x12\x1e.google.protobuf.MethodOptions\x18\xb9\x8e\x03 \x01(\v2\x16.mcp.v1.MCPToolOptionsR\amcpTool:_\n" +

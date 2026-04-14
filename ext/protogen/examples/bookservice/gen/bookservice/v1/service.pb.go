@@ -652,16 +652,16 @@ const file_bookservice_v1_service_proto_rawDesc = "" +
 	"\x05genre\x18\x04 \x01(\tR\x05genre\x12\x12\n" +
 	"\x04year\x18\x05 \x01(\x05R\x04year\x12\x1a\n" +
 	"\bsynopsis\x18\x06 \x01(\tR\bsynopsis\x12\x16\n" +
-	"\x06rating\x18\a \x01(\x02R\x06rating2\x82\x06\n" +
+	"\x06rating\x18\a \x01(\x02R\x06rating2\x95\x06\n" +
 	"\vBookService\x12\xa3\x01\n" +
 	"\vSearchBooks\x12\".bookservice.v1.SearchBooksRequest\x1a#.bookservice.v1.SearchBooksResponse\"K\xca\xf3\x18G\n" +
-	"\x06search\x12\x17Search the book catalog \x01*\"Found {total} books matching query\x12\x7f\n" +
-	"\aGetBook\x12\x1e.bookservice.v1.GetBookRequest\x1a\x1f.bookservice.v1.GetBookResponse\"3\xd2\xf3\x18/\n" +
-	"\x10book://{book_id}\x12\x04Book\"\x15A book in the catalog\x12\xa1\x01\n" +
+	"\x06search\x12\x17Search the book catalog \x01*\"Found {total} books matching query\x12\x88\x01\n" +
+	"\aGetBook\x12\x1e.bookservice.v1.GetBookRequest\x1a\x1f.bookservice.v1.GetBookResponse\"<\xd2\xf3\x188\n" +
+	"\x10book://{book_id}\x12\x04Book\"\x15A book in the catalog*\abook_id\x12\xa1\x01\n" +
 	"\x0eGetAuthorBooks\x12%.bookservice.v1.GetAuthorBooksRequest\x1a&.bookservice.v1.GetAuthorBooksResponse\"@\xd2\xf3\x18<\n" +
-	"\x1aauthor://{author_id}/books\x12\fAuthor Books\x1a\x10application/json\x12\x8b\x01\n" +
-	"\rSummarizeBook\x12$.bookservice.v1.SummarizeBookRequest\x1a%.bookservice.v1.SummarizeBookResponse\"-\xda\xf3\x18)\n" +
-	"\tsummarize\x12\x1cGenerate a summary of a book\x12\x8c\x01\n" +
+	"\x1aauthor://{author_id}/books\x12\fAuthor Books\x1a\x10application/json\x12\x94\x01\n" +
+	"\rSummarizeBook\x12$.bookservice.v1.SummarizeBookRequest\x1a%.bookservice.v1.SummarizeBookResponse\"6\xda\xf3\x182\n" +
+	"\tsummarize\x12\x1cGenerate a summary of a book\x1a\abook_id\x12\x8c\x01\n" +
 	"\x0eRecommendBooks\x12%.bookservice.v1.RecommendBooksRequest\x1a&.bookservice.v1.RecommendBooksResponse\"+\xda\xf3\x18'\x12%Get personalized book recommendations\x1a\v\x92\xf4\x18\a\n" +
 	"\x05booksBWZUgithub.com/panyam/mcpkit/ext/protogen/examples/bookservice/gen/bookservice/v1;booksv1b\x06proto3"
 

@@ -157,3 +157,29 @@ func RegisterBookServiceMCPPrompts(srv *server.Server, impl BookServiceMCPPrompt
 		},
 	)
 }
+
+// BookServiceMCPCompleter provides auto-completion for resource template params
+// and prompt arguments. Each method handles one completable field.
+type BookServiceMCPCompleter interface {
+	CompleteBookId(ctx mcpcore.PromptContext, ref mcpcore.CompletionRef, arg mcpcore.CompletionArgument) (mcpcore.CompletionResult, error)
+}
+
+// RegisterBookServiceMCPCompletions registers auto-completion handlers from BookService.
+func RegisterBookServiceMCPCompletions(srv *server.Server, completer BookServiceMCPCompleter) {
+	srv.RegisterCompletion("ref/resource", "book://{book_id}", func(ctx mcpcore.PromptContext, ref mcpcore.CompletionRef, arg mcpcore.CompletionArgument) (mcpcore.CompletionResult, error) {
+		switch arg.Name {
+		case "book_id":
+			return completer.CompleteBookId(ctx, ref, arg)
+		default:
+			return mcpcore.CompletionResult{}, nil
+		}
+	})
+	srv.RegisterCompletion("ref/prompt", "books_summarize", func(ctx mcpcore.PromptContext, ref mcpcore.CompletionRef, arg mcpcore.CompletionArgument) (mcpcore.CompletionResult, error) {
+		switch arg.Name {
+		case "book_id":
+			return completer.CompleteBookId(ctx, ref, arg)
+		default:
+			return mcpcore.CompletionResult{}, nil
+		}
+	})
+}

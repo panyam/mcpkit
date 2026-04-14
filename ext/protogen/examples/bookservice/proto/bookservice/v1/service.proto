@@ -26,6 +26,7 @@ service BookService {
       uri_template: "book://{book_id}"
       name: "Book"
       description: "A book in the catalog"
+      completable_fields: "book_id"
     };
   }
 
@@ -43,6 +44,7 @@ service BookService {
     option (mcp.v1.mcp_prompt) = {
       name: "summarize"
       description: "Generate a summary of a book"
+      completable_fields: "book_id"
     };
   }
 

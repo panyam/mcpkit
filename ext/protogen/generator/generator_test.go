@@ -31,6 +31,11 @@ func buildExtensionBytes(extField protowire.Number, fields map[protowire.Number]
 			} else {
 				inner = protowire.AppendVarint(inner, 0)
 			}
+		case []string:
+			for _, s := range v {
+				inner = protowire.AppendTag(inner, num, protowire.BytesType)
+				inner = protowire.AppendString(inner, s)
+			}
 		}
 	}
 	// Wrap as an extension field in the parent options message.
@@ -590,4 +595,144 @@ func TestResultSummaryAnnotation(t *testing.T) {
 	require.Len(t, tools, 1)
 	assert.True(t, tools[0].Structured)
 	assert.Equal(t, "User {name} retrieved (id: {user_id})", tools[0].ResultSummary)
+}
+
+// --- Completion annotation tests ---
+
+// TestCompletionFromPrompt verifies that completable_fields on a prompt
+// annotation generates completion data with the correct ref type and fields.
+func TestCompletionFromPrompt(t *testing.T) {
+	plugin := ptestutil.CreatePlugin(t, &ptestutil.ProtoSet{
+		Files: []ptestutil.File{{
+			Name: "test.proto",
+			Pkg:  "test.v1",
+			Messages: []ptestutil.Message{
+				{Name: "SummarizeRequest", Fields: []ptestutil.Field{
+					{Name: "book_id", Number: 1, TypeName: "string"},
+					{Name: "style", Number: 2, TypeName: "string"},
+				}},
+				{Name: "SummarizeResponse", Fields: []ptestutil.Field{
+					{Name: "summary", Number: 1, TypeName: "string"},
+				}},
+			},
+			Services: []ptestutil.Service{{
+				Name: "BookService",
+				Options: serviceOptionsWithNamespace("books"),
+				Methods: []ptestutil.Method{{
+					Name:       "SummarizeBook",
+					InputType:  "test.v1.SummarizeRequest",
+					OutputType: "test.v1.SummarizeResponse",
+					Options: methodOptionsWithPrompt(map[protowire.Number]any{
+						1: "summarize",                       // name
+						3: []string{"book_id", "style"},      // completable_fields
+					}),
+				}},
+			}},
+		}},
+	})
+
+	protoSvc := ptestutil.FindService(t, plugin, "BookService")
+	gf := plugin.NewGeneratedFile("_test.go", "")
+	sd, err := collectServiceData(protoSvc, gf)
+	require.NoError(t, err)
+
+	require.Len(t, sd.Completions, 1)
+	c := sd.Completions[0]
+	assert.Equal(t, "ref/prompt", c.RefType)
+	assert.Equal(t, "books_summarize", c.RefName)
+	require.Len(t, c.Fields, 2)
+	assert.Equal(t, "book_id", c.Fields[0].Name)
+	assert.Equal(t, "CompleteBookId", c.Fields[0].GoMethod)
+	assert.Equal(t, "style", c.Fields[1].Name)
+	assert.Equal(t, "CompleteStyle", c.Fields[1].GoMethod)
+}
+
+// TestCompletionFromResource verifies that completable_fields on a resource
+// annotation generates completion data with ref/resource type.
+func TestCompletionFromResource(t *testing.T) {
+	plugin := makePlugin(t, ptestutil.Service{
+		Name: "BookService",
+		Methods: []ptestutil.Method{{
+			Name:       "GetBook",
+			InputType:  "test.v1.GetUserRequest",
+			OutputType: "test.v1.GetUserResponse",
+			Options: methodOptionsWithResource(map[protowire.Number]any{
+				1: "book://{book_id}",           // uri_template
+				5: []string{"book_id"},           // completable_fields
+			}),
+		}},
+	})
+
+	protoSvc := ptestutil.FindService(t, plugin, "BookService")
+	gf := plugin.NewGeneratedFile("_test.go", "")
+	sd, err := collectServiceData(protoSvc, gf)
+	require.NoError(t, err)
+
+	require.Len(t, sd.Completions, 1)
+	c := sd.Completions[0]
+	assert.Equal(t, "ref/resource", c.RefType)
+	assert.Equal(t, "book://{book_id}", c.RefName)
+	require.Len(t, c.Fields, 1)
+	assert.Equal(t, "book_id", c.Fields[0].Name)
+	assert.Equal(t, "CompleteBookId", c.Fields[0].GoMethod)
+}
+
+// TestCompleterMethodsDeduplication verifies that CompleterMethods deduplicates
+// methods when the same field appears in both a prompt and resource.
+func TestCompleterMethodsDeduplication(t *testing.T) {
+	sd := serviceData{
+		Completions: []completionData{
+			{
+				RefType: "ref/prompt",
+				RefName: "summarize",
+				Fields:  []completionField{{Name: "book_id", GoMethod: "CompleteBookId"}},
+			},
+			{
+				RefType: "ref/resource",
+				RefName: "book://{book_id}",
+				Fields:  []completionField{{Name: "book_id", GoMethod: "CompleteBookId"}},
+			},
+		},
+	}
+
+	methods := sd.CompleterMethods()
+	require.Len(t, methods, 1, "should deduplicate across ref types")
+	assert.Equal(t, "CompleteBookId", methods[0].GoMethod)
+}
+
+// TestNoCompletions verifies that services without completable_fields
+// produce no completion data.
+func TestNoCompletions(t *testing.T) {
+	plugin := makePlugin(t, ptestutil.Service{
+		Name: "SimpleService",
+		Methods: []ptestutil.Method{{
+			Name:       "GetUser",
+			InputType:  "test.v1.GetUserRequest",
+			OutputType: "test.v1.GetUserResponse",
+			Options: methodOptionsWithPrompt(map[protowire.Number]any{
+				1: "get_user",
+				// no completable_fields
+			}),
+		}},
+	})
+
+	protoSvc := ptestutil.FindService(t, plugin, "SimpleService")
+	gf := plugin.NewGeneratedFile("_test.go", "")
+	sd, err := collectServiceData(protoSvc, gf)
+	require.NoError(t, err)
+
+	assert.Empty(t, sd.Completions)
+}
+
+// TestCompleteMethodName verifies the field-to-method name conversion.
+func TestCompleteMethodName(t *testing.T) {
+	tests := []struct{ field, want string }{
+		{"book_id", "CompleteBookId"},
+		{"genre", "CompleteGenre"},
+		{"user_name", "CompleteUserName"},
+		{"id", "CompleteId"},
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.want, completeMethodName(tt.field), "field=%q", tt.field)
+	}
 }
