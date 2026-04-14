@@ -177,13 +177,17 @@ func RegisterAppTool(reg ToolResourceRegistrar, cfg AppToolConfig) {
 		var lastParams atomic.Pointer[map[string]string]
 
 		// Wrap the tool handler to capture template variable values
-		// from tool arguments after each successful call.
+		// from tool arguments after each successful call, then notify
+		// the host that the concrete fallback resource has new content.
 		origHandler := cfg.ToolHandler
 		wrappedHandler := func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			result, err := origHandler(ctx, req)
 			if err == nil {
 				params := extractTemplateParams(templateVars, req.Arguments)
 				lastParams.Store(&params)
+				// Tell the host to re-fetch — the concrete fallback now
+				// has real content instead of the placeholder.
+				core.NotifyResourceUpdated(ctx, concreteURI)
 			}
 			return result, err
 		}

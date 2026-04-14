@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"encoding/json"
+	"sync/atomic"
 	"testing"
 
 	"github.com/panyam/mcpkit/core"
@@ -328,6 +330,62 @@ func TestConcreteFallbackURI(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("concreteFallbackURI(%q, %q) = %q, want %q", tt.templateURI, tt.toolName, got, tt.want)
 		}
+	}
+}
+
+// TestTemplateToolNotifiesResourceUpdated verifies that the wrapped tool
+// handler emits a notifications/resources/updated for the concrete fallback
+// URI after a successful tool call. Without this, hosts that pre-fetched
+// the placeholder HTML would never know to re-fetch the real content.
+func TestTemplateToolNotifiesResourceUpdated(t *testing.T) {
+	reg := &mockRegistrar{}
+
+	RegisterAppTool(reg, AppToolConfig{
+		Name:        "preview_widget",
+		Description: "Preview a widget",
+		InputSchema: map[string]any{"type": "object", "properties": map[string]any{
+			"widget_id": map[string]any{"type": "string"},
+		}},
+		ResourceURI: "ui://widgets/{widget_id}/preview",
+		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			return core.TextResult("previewed"), nil
+		},
+		TemplateHandler: func(ctx core.ResourceContext, uri string, params map[string]string) (core.ResourceResult, error) {
+			return core.ResourceResult{
+				Contents: []core.ResourceReadContent{{
+					URI:      uri,
+					MimeType: core.AppMIMEType,
+					Text:     "<html><body>Widget " + params["widget_id"] + "</body></html>",
+				}},
+			}, nil
+		},
+	})
+
+	if len(reg.toolHandlers) != 1 {
+		t.Fatalf("expected 1 tool handler, got %d", len(reg.toolHandlers))
+	}
+
+	// Build a context with a session so NotifyResourceUpdated works.
+	var logLevel atomic.Pointer[core.LogLevel]
+	ctx := core.ContextWithSession(t.Context(), nil, nil, &logLevel, nil, nil)
+	var notifiedURI string
+	ctx = core.SetNotifyResourceUpdated(ctx, func(uri string) {
+		notifiedURI = uri
+	})
+	toolCtx := core.NewToolContext(ctx)
+
+	args, _ := json.Marshal(map[string]string{"widget_id": "w42"})
+	result, err := reg.toolHandlers[0](toolCtx, core.ToolRequest{Arguments: args})
+	if err != nil {
+		t.Fatalf("tool handler error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("tool returned error: %s", result.Content[0].Text)
+	}
+
+	wantURI := "ui://widgets/preview_widget/latest"
+	if notifiedURI != wantURI {
+		t.Errorf("NotifyResourceUpdated URI = %q, want %q", notifiedURI, wantURI)
 	}
 }
 
