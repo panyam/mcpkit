@@ -1,9 +1,31 @@
-// protoc-gen-go-mcp is a protoc plugin that generates mcpkit server and client
+// protoc-gen-go-mcp is a protoc plugin that generates mcpkit MCP server
 // bindings from annotated proto service definitions.
 //
-// Usage:
+// It reads mcp_tool, mcp_resource, and mcp_prompt annotations from proto
+// methods and generates typed registration functions (in-process, gRPC
+// forwarding, ConnectRPC forwarding) that wire proto services into an
+// mcpkit MCP server.
+//
+// Usage with protoc:
 //
 //	protoc --go-mcp_out=. --go-mcp_opt=package_suffix=mcp myservice.proto
+//
+// Usage with buf (recommended):
+//
+//	# buf.gen.yaml
+//	plugins:
+//	  - local: protoc-gen-go-mcp
+//	    out: gen
+//	    opt:
+//	      - paths=source_relative
+//	      - package_suffix=          # empty = same package as pb.go
+//	      - variants=inprocess       # omit grpc/connect deps
+//
+// Options:
+//   - package_suffix: Go package name suffix (default "mcp"). Empty generates
+//     into the same package as protoc-gen-go output.
+//   - variants: Comma-separated list of registration variants to emit.
+//     Valid: inprocess, grpc, connect. Default: inprocess,grpc.
 package main
 
 import (

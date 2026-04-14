@@ -28,10 +28,16 @@ make bump-root V=vX.Y.Z # Update mcpkit version in all sub-module go.mods
 cd ext/protogen
 make build            # Build protoc-gen-go-mcp plugin
 make install          # Install plugin to $GOPATH/bin
+make test             # Unit tests
+make test-e2e         # Regenerate bookservice example + run e2e tests
 make lint             # buf lint proto files
 make generate         # buf generate Go code from protos
 make push             # Push proto module to buf.build/mcpkit/protogen
 ```
+
+### protoc-gen-go-mcp options
+- `package_suffix=mcp` — Go package suffix (empty = same package as pb.go)
+- `variants=inprocess,grpc` — registration variants to emit (default). Add `connect` for ConnectRPC. Use `inprocess` alone for zero external deps.
 
 ## Package Layout
 
