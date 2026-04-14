@@ -30,17 +30,21 @@ Proto annotations declare *what* to expose (tool name, description, schema) — 
 
 **Rationale:** Schema drift is the #1 source of bugs in hand-written MCP integrations. If the proto changes, the MCP schema changes automatically.
 
-### 3. Three forwarding variants, one annotation
+### 3. Configurable forwarding variants
 
-A single `mcp_tool` annotation generates three registration functions:
+A single annotation generates registration functions for selected variants, controlled by the `variants` CLI flag:
 
-| Variant | Use case | Call pattern |
-|---------|----------|-------------|
-| **In-process** | Service impl in same binary | `impl.Method(ctx, &req)` |
-| **gRPC client** | Forward to remote gRPC server | `client.Method(ctx, &req, opts...)` |
-| **ConnectRPC client** | Forward to Connect server | `client.Method(ctx, connect.NewRequest(&req))` |
+| Variant | Use case | Call pattern | Import |
+|---------|----------|-------------|--------|
+| **inprocess** | Service impl in same binary | `impl.Method(ctx, &req)` | none |
+| **grpc** | Forward to remote gRPC server | `client.Method(ctx, &req, opts...)` | `google.golang.org/grpc` |
+| **connect** | Forward to Connect server | `client.Method(ctx, connect.NewRequest(&req))` | `connectrpc.com/connect` |
 
-**Rationale:** The annotation describes the API contract. How you reach the backend is a wiring decision made at server construction time, not at proto authoring time.
+Default: `inprocess,grpc`. Connect is opt-in via `--go-mcp_opt=variants=inprocess,grpc,connect`.
+
+Use `variants=inprocess` for the lightest output — zero gRPC/Connect dependencies.
+
+**Rationale:** The annotation describes the API contract. How you reach the backend is a wiring decision made at server construction time, not at proto authoring time. Unused variants add transitive dependencies that bloat go.sum.
 
 ### 4. Streaming RPCs map to progressive tool output
 
@@ -83,6 +87,7 @@ rpc GetUser(GetUserRequest) returns (User) {
     description: "Retrieve a user by ID"
     timeout: "30s"
     structured_output: true
+    result_summary: "User {name} retrieved (id: {id})"
   };
 }
 ```
@@ -91,8 +96,9 @@ rpc GetUser(GetUserRequest) returns (User) {
 |-------|------|---------|-------------|
 | `name` | string | snake_case of method name | MCP tool name. Must match `[a-z][a-z0-9_]*`, max 64 chars. |
 | `description` | string | Method's leading comment | Human-readable description for LLM consumption. |
-| `timeout` | string | Server default | Per-tool execution timeout (Go duration format). |
+| `timeout` | string | Server default | Per-tool execution timeout (Go duration format). Validated at generation time. |
 | `structured_output` | bool | false | Emit response as `OutputSchema` + `StructuredResult`. |
+| `result_summary` | string | — | Template for human-readable text content. Interpolates `{field}` from response JSON. Implies structured output. |
 
 ### Method-level: `mcp_resource`
 
@@ -129,6 +135,12 @@ rpc SummarizeDocument(SummarizeRequest) returns (SummarizeResponse) {
 |-------|------|---------|-------------|
 | `name` | string | snake_case of method name | MCP prompt name. |
 | `description` | string | Method's leading comment | Human-readable description. |
+
+**Prompt arguments** are auto-derived from the request message fields:
+- Each field becomes a `PromptArgument` with `Name` = proto field name
+- Non-optional scalar fields are `Required: true`
+- Optional, repeated, map, and message fields are `Required: false`
+- Field comments become the argument `Description`
 
 ## Schema Mapping
 
@@ -175,25 +187,74 @@ Proto3 scalar fields are required by default. Fields are optional when:
 
 ## Generated Code Shape
 
-For a service `UserService` with `mcp_tool` annotations:
+For a service `UserService` with tool, resource, and prompt annotations:
 
 ```go
 // user_service.pb.mcp.go — GENERATED, DO NOT EDIT
 
-// RegisterUserServiceMCP registers MCP tools/resources/prompts from
-// UserService with an in-process implementation.
-func RegisterUserServiceMCP(srv *server.Server, impl UserServiceServer)
+// --- Tools (always generated) ---
+type UserServiceMCPServer interface { ... }
+func RegisterUserServiceMCP(srv *server.Server, impl UserServiceMCPServer)
 
-// ForwardUserServiceToGRPC registers MCP tools/resources/prompts that
-// forward to a remote gRPC UserService.
-func ForwardUserServiceToGRPC(srv *server.Server, conn grpc.ClientConnInterface)
+// --- Resources (only if mcp_resource methods exist) ---
+type UserServiceMCPResourceServer interface { ... }
+func RegisterUserServiceMCPResources(srv *server.Server, impl UserServiceMCPResourceServer)
 
-// ForwardUserServiceToConnect registers MCP tools/resources/prompts that
-// forward to a ConnectRPC UserService.
-func ForwardUserServiceToConnect(srv *server.Server, client userv1connect.UserServiceClient)
+// --- Prompts (only if mcp_prompt methods exist) ---
+type UserServiceMCPPromptServer interface { ... }
+func RegisterUserServiceMCPPrompts(srv *server.Server, impl UserServiceMCPPromptServer)
+
+// --- gRPC forwarding (only with variants=grpc) ---
+type UserServiceGRPCClient interface { ... }
+func ForwardUserServiceToGRPC(srv *server.Server, client UserServiceGRPCClient)
+type UserServiceResourceGRPCClient interface { ... }
+func ForwardUserServiceResourcesToGRPC(srv *server.Server, client UserServiceResourceGRPCClient)
+type UserServicePromptGRPCClient interface { ... }
+func ForwardUserServicePromptsToGRPC(srv *server.Server, client UserServicePromptGRPCClient)
+
+// --- ConnectRPC forwarding (only with variants=connect) ---
+// Same pattern with Connect request/response wrappers.
 ```
 
 Each function calls `srv.Register(...)` with `server.Tool`, `server.Resource`, or `server.Prompt` structs — standard mcpkit registration.
+
+## CLI Options
+
+```
+protoc --go-mcp_out=. --go-mcp_opt=<options> service.proto
+```
+
+Or with buf:
+
+```yaml
+# buf.gen.yaml
+plugins:
+  - local: protoc-gen-go-mcp
+    out: gen
+    opt:
+      - paths=source_relative
+      - package_suffix=          # empty = same package as pb.go
+      - variants=inprocess       # only in-process, no grpc/connect deps
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `package_suffix` | `mcp` | Appended to the Go package name. Empty string generates into the same package as `pb.go`. |
+| `variants` | `inprocess,grpc` | Comma-separated list of registration variants. Valid: `inprocess`, `grpc`, `connect`. |
+
+## gRPC Error Mapping
+
+When a forwarded RPC returns a gRPC status error, `runtime.RPCError` extracts the status code, message, and any attached details (proto Any messages) and returns them as a `StructuredError`:
+
+```json
+{
+  "code": "NotFound",
+  "message": "user not found",
+  "details": [...]
+}
+```
+
+This lets LLM agents parse error details programmatically (e.g., version conflict recovery from an `ABORTED` status with conflict details).
 
 ## Future Work
 

@@ -1,5 +1,18 @@
 // Package generator implements the protoc-gen-go-mcp code generation logic.
-// It transforms proto service definitions into mcpkit server/client registration code.
+// It reads proto service definitions with mcp_tool, mcp_resource, and
+// mcp_prompt annotations, and emits Go registration functions that wire
+// them into an mcpkit MCP server.
+//
+// The generator supports three forwarding variants (in-process, gRPC,
+// ConnectRPC), configurable via [Config.Variants]. Templates are loaded
+// from embedded .tmpl files via go:embed.
+//
+// Tool annotations support custom names, descriptions, timeouts,
+// structured output with result summary templates, and namespace prefixing.
+// Resource annotations support both static URIs and RFC 6570 URI templates.
+// Prompt arguments are auto-derived from request message fields.
+//
+// See ext/protogen/docs/DESIGN.md for the full design document.
 package generator
 
 import (
