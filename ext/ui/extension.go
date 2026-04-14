@@ -200,8 +200,17 @@ func RegisterAppTool(reg ToolResourceRegistrar, cfg AppToolConfig) {
 			func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 				params := lastParams.Load()
 				if params == nil {
-					empty := map[string]string{}
-					params = &empty
+					// No tool call yet — host is pre-fetching the resource
+					// before tools/call. Return a placeholder so the iframe
+					// loads without error; the host will re-fetch after the
+					// tool runs and lastParams is populated.
+					return core.ResourceResult{
+						Contents: []core.ResourceReadContent{{
+							URI:      req.URI,
+							MimeType: core.AppMIMEType,
+							Text:     concreteFallbackPlaceholderHTML,
+						}},
+					}, nil
 				}
 				return tmplHandler(ctx, req.URI, *params)
 			},
@@ -313,6 +322,15 @@ func matchesAnyTemplate(uri string, templates []string) bool {
 // so the concrete fallback lives in the same namespace.
 //
 // Example: "ui://slyds/decks/{deck}/preview", "preview_deck" → "ui://slyds/preview_deck/latest"
+// concreteFallbackPlaceholderHTML is returned when a host pre-fetches a
+// concrete fallback resource before any tools/call has populated the
+// template parameters. Without this, the TemplateHandler receives empty
+// params and typically errors (e.g., "deck not found: """).
+const concreteFallbackPlaceholderHTML = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Loading…</title>
+<style>body{display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:system-ui;color:#666}</style>
+</head><body><p>Waiting for tool call…</p></body></html>`
+
 func concreteFallbackURI(templateURI, toolName string) string {
 	u, err := url.Parse(templateURI)
 	if err != nil || u.Host == "" {
