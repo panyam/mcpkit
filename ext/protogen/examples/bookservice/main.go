@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/server"
@@ -85,6 +86,21 @@ func (s *bookService) RecommendBooks(_ context.Context, req *booksv1.RecommendBo
 	}, nil
 }
 
+// CompleteBookId returns book ID suggestions matching the partial input.
+func (s *bookService) CompleteBookId(_ core.PromptContext, _ core.CompletionRef, arg core.CompletionArgument) (core.CompletionResult, error) {
+	var values []string
+	for _, b := range catalog {
+		if strings.HasPrefix(b.Id, arg.Value) || strings.Contains(strings.ToLower(b.Title), strings.ToLower(arg.Value)) {
+			values = append(values, b.Id)
+		}
+	}
+	return core.CompletionResult{
+		Values:  values,
+		Total:   len(values),
+		HasMore: false,
+	}, nil
+}
+
 func main() {
 	impl := &bookService{}
 
@@ -93,10 +109,11 @@ func main() {
 		Version: "0.1.0",
 	})
 
-	// Register all three MCP primitives from the generated code.
+	// Register all MCP primitives from the generated code.
 	booksv1.RegisterBookServiceMCP(srv, impl)
 	booksv1.RegisterBookServiceMCPResources(srv, impl)
 	booksv1.RegisterBookServiceMCPPrompts(srv, impl)
+	booksv1.RegisterBookServiceMCPCompletions(srv, impl)
 
 	log.Println("Book service MCP server starting on :8787")
 	if err := srv.Run(":8787"); err != nil {

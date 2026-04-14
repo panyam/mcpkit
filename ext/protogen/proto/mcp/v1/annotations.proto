@@ -70,6 +70,11 @@ message MCPResourceOptions {
 
   // Human-readable description.
   string description = 4;
+
+  // Fields from the URI template that support auto-completion.
+  // Each name must match a {param} in uri_template.
+  // Generates a Completer interface method per field.
+  repeated string completable_fields = 5;
 }
 
 // MCPPromptOptions exposes a gRPC method as an MCP prompt.
@@ -79,6 +84,10 @@ message MCPPromptOptions {
 
   // Human-readable description.
   string description = 2;
+
+  // Request message fields that support auto-completion.
+  // Generates a Completer interface method per field.
+  repeated string completable_fields = 3;
 }
 
 // MCPServiceOptions configures service-level MCP settings.
