@@ -1,7 +1,7 @@
 # MCPKit
 
 ## Version
-0.2.3
+0.2.9
 
 ## Provides
 - mcp-protocol-negotiation: Version negotiation supporting MCP 2025-11-25 and 2024-11-05
@@ -67,7 +67,15 @@
 - mcp-uri-template-helpers: core.URITemplateVars/core.IsTemplateURI — RFC 6570 template detection using yosida95/uritemplate (replaces string-based `{` checks)
 - mcp-apps-elicitation-meta: ElicitationRequest._meta.ui and CreateMessageRequest._meta.ui — app metadata on server-to-client requests. ElicitWithApp/SampleWithApp helpers in ext/ui. (#191)
 - mcp-apps-conformance: 21 MCP Apps conformance tests (tool metadata, resources, visibility, fallback, negotiation)
-- mcp-protogen: ext/protogen — protoc plugin (protoc-gen-go-mcp) generates MCP tool registrations from proto service definitions. In-process, gRPC forwarding, and ConnectRPC forwarding variants. Proto annotations (mcp_tool, mcp_resource, mcp_prompt) for semantic mapping. JSON Schema derived from proto messages. Uses typed handler contexts (core.ToolContext). (#211)
+- mcp-protogen: ext/protogen — protoc plugin (protoc-gen-go-mcp) generates MCP registrations from proto service definitions. Proto annotations (mcp_tool, mcp_resource, mcp_prompt, mcp_service) with full field support. In-process, gRPC forwarding, and ConnectRPC forwarding variants for all three primitives. JSON Schema derived from proto messages. Uses typed handler contexts. Published to buf.build/mcpkit/protogen. (#211, #216, #217, #218)
+- mcp-protogen-tool-annotations: mcp_tool annotation fields: name, description, timeout, structured_output, result_summary. Validated at generation time (invalid names/timeouts are fatal errors). Namespace prefix via mcp_service.namespace. (#216)
+- mcp-protogen-resources: mcp_resource annotation → server.Resource (static) or server.ResourceTemplate (parameterized). URI template detection via core.IsTemplateURI. runtime.BindParams delegates to protokit PopulateFromMap for type-coerced field binding. (#217)
+- mcp-protogen-prompts: mcp_prompt annotation → server.Prompt with auto-derived PromptArguments from request message fields. runtime.BindPromptArgs and ProtoPromptResult helpers. (#218)
+- mcp-protogen-grpc-errors: RPCError extracts gRPC status code, message, and details (proto Any) as StructuredError with {code, message, details} JSON. Agents can parse and recover programmatically. (#224)
+- mcp-protogen-result-summary: mcp_tool.result_summary template: "Slide {position} updated (v{version})". runtime.ProtoSummaryStructuredResult renders from response fields. (#224)
+- mcp-protogen-embedded-templates: Codegen templates use go:embed (templates/file.go.tmpl) instead of Go string constants
+- mcp-protogen-buf: Proto module published to buf.build/mcpkit/protogen. ext/protogen/Makefile with build, lint, generate, push targets
+- mcp-client-toolcall-full: Client.ToolCallFull returns *core.ToolResult directly — preserves IsError, all Content blocks, and StructuredContent. Tool-level errors returned in result, not as Go errors. (#215)
 - mcp-dynamic-registration: Registry.AddTool/RemoveTool/AddResource/RemoveResource/AddPrompt/RemovePrompt — thread-safe runtime registration with automatic notifications/*/list_changed broadcast via OnChange callback
 - mcp-session-timeout: WithSessionTimeout — idle session cleanup for Streamable HTTP (timer + ref counting to avoid closing mid-execution)
 - mcp-sse-resumption: WithSSEGracePeriod — SSE sessions survive brief disconnects with grace timer. Client reconnects via ?sessionId= query param; server replays missed events via Last-Event-ID header. Principal-bound for security.
@@ -95,13 +103,13 @@ newstack/mcpkit/main
 - oneauth (github.com/panyam/oneauth) v0.0.71 — JWT/OIDC validation, testutil.TestAuthServer; separate go.mod
 
 ### Sub-module: ext/protogen (github.com/panyam/mcpkit/ext/protogen)
-- protokit (github.com/panyam/protokit) v0.0.2 — proto descriptor test utilities
+- protokit (github.com/panyam/protokit) v0.0.4 — proto descriptor test utilities, PopulateFieldFromPath (dot-path field binding with type coercion)
 
 ## Integration
 
 ### Go Module
 ```go
-require github.com/panyam/mcpkit v0.1.0
+require github.com/panyam/mcpkit v0.2.9
 ```
 
 ### Basic Server (Streamable HTTP)
