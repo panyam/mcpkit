@@ -86,6 +86,31 @@ func TestProtoResourceResult(t *testing.T) {
 	assert.Contains(t, result.Contents[0].Text, "data")
 }
 
+// TestProtoResourceResult_NonJSON verifies that non-JSON MIME types extract
+// raw content from a single-string-field message instead of JSON-wrapping.
+func TestProtoResourceResult_NonJSON(t *testing.T) {
+	msg := wrapperspb.String("<div>hello</div>")
+	result, err := ProtoResourceResult(msg, "test://slide", "text/html")
+	require.NoError(t, err)
+	require.Len(t, result.Contents, 1)
+	assert.Equal(t, "text/html", result.Contents[0].MimeType)
+	// Should be raw HTML, not {"value":"<div>hello</div>"}
+	assert.Equal(t, "<div>hello</div>", result.Contents[0].Text)
+}
+
+// TestProtoResourceResult_NonJSON_MultiField verifies that non-JSON resources
+// with multiple fields fall back to JSON serialization.
+func TestProtoResourceResult_NonJSON_MultiField(t *testing.T) {
+	// wrapperspb.StringValue has one field; use a different message with >1 field.
+	// Use a Duration (seconds + nanos) as a multi-field message.
+	msg := wrapperspb.Int32(42)
+	result, err := ProtoResourceResult(msg, "test://num", "text/plain")
+	require.NoError(t, err)
+	require.Len(t, result.Contents, 1)
+	// Int32Value has one field but it's not a string — should JSON-serialize.
+	assert.Contains(t, result.Contents[0].Text, "42")
+}
+
 // TestRPCErrorPlain verifies that non-gRPC errors produce a plain error result.
 func TestRPCErrorPlain(t *testing.T) {
 	result, err := RPCError(errors.New("permission denied"))
