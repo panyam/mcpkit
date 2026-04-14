@@ -12,8 +12,6 @@ import (
 	"github.com/panyam/mcpkit/ext/protogen/runtime"
 	"github.com/panyam/mcpkit/server"
 	"google.golang.org/protobuf/encoding/protojson"
-	grpc "google.golang.org/grpc"
-	"connectrpc.com/connect"
 )
 
 // Ensure imports are used.
@@ -23,8 +21,6 @@ var (
 	_ mcpcore.ToolDef
 	_ = runtime.BindProto // unused import guard for runtime
 	_ protojson.MarshalOptions
-	_ grpc.ClientConnInterface
-	_ connect.Request[struct{}]
 	_ time.Duration
 )
 
@@ -54,64 +50,6 @@ func RegisterBookServiceMCP(srv *server.Server, impl BookServiceMCPServer) {
 					return runtime.RPCError(err)
 				}
 				return runtime.ProtoSummaryStructuredResult(resp, "Found {total} books matching query")
-			},
-		},
-	)
-}
-
-// BookServiceGRPCClient is the gRPC client interface for forwarding.
-type BookServiceGRPCClient interface {
-	SearchBooks(ctx context.Context, req *SearchBooksRequest, opts ...grpc.CallOption) (*SearchBooksResponse, error)
-}
-
-// ForwardBookServiceToGRPC registers MCP tools that forward to a gRPC BookService client.
-func ForwardBookServiceToGRPC(srv *server.Server, client BookServiceGRPCClient) {
-	srv.Register(
-		server.Tool{
-			ToolDef: mcpcore.ToolDef{
-				Name:        "books_search",
-				Description: "Search the book catalog",
-				InputSchema: json.RawMessage(`{"properties":{"genre":{"type":"string"},"max_results":{"type":"integer"},"query":{"type":"string"}},"required":["query","max_results","genre"],"type":"object"}`),
-			},
-			Handler: func(ctx mcpcore.ToolContext, req mcpcore.ToolRequest) (mcpcore.ToolResult, error) {
-				var in SearchBooksRequest
-				if err := runtime.BindProto(req, &in); err != nil {
-					return mcpcore.ErrorResult(err.Error()), nil
-				}
-				resp, err := client.SearchBooks(ctx, &in)
-				if err != nil {
-					return runtime.RPCError(err)
-				}
-				return runtime.ProtoSummaryStructuredResult(resp, "Found {total} books matching query")
-			},
-		},
-	)
-}
-
-// ConnectBookServiceClient is the ConnectRPC client interface for forwarding.
-type ConnectBookServiceClient interface {
-	SearchBooks(ctx context.Context, req *connect.Request[SearchBooksRequest]) (*connect.Response[SearchBooksResponse], error)
-}
-
-// ForwardBookServiceToConnect registers MCP tools that forward to a ConnectRPC BookService client.
-func ForwardBookServiceToConnect(srv *server.Server, client ConnectBookServiceClient) {
-	srv.Register(
-		server.Tool{
-			ToolDef: mcpcore.ToolDef{
-				Name:        "books_search",
-				Description: "Search the book catalog",
-				InputSchema: json.RawMessage(`{"properties":{"genre":{"type":"string"},"max_results":{"type":"integer"},"query":{"type":"string"}},"required":["query","max_results","genre"],"type":"object"}`),
-			},
-			Handler: func(ctx mcpcore.ToolContext, req mcpcore.ToolRequest) (mcpcore.ToolResult, error) {
-				var in SearchBooksRequest
-				if err := runtime.BindProto(req, &in); err != nil {
-					return mcpcore.ErrorResult(err.Error()), nil
-				}
-				resp, err := client.SearchBooks(ctx, connect.NewRequest(&in))
-				if err != nil {
-					return runtime.RPCError(err)
-				}
-				return runtime.ProtoSummaryStructuredResult(resp.Msg, "Found {total} books matching query")
 			},
 		},
 	)
@@ -160,102 +98,6 @@ func RegisterBookServiceMCPResources(srv *server.Server, impl BookServiceMCPReso
 					return mcpcore.ResourceResult{}, err
 				}
 				return runtime.ProtoResourceResult(resp, uri, "application/json")
-			},
-		},
-	)
-}
-
-// BookServiceResourceGRPCClient is the gRPC client interface for resource forwarding.
-type BookServiceResourceGRPCClient interface {
-	GetBook(ctx context.Context, req *GetBookRequest, opts ...grpc.CallOption) (*GetBookResponse, error)
-	GetAuthorBooks(ctx context.Context, req *GetAuthorBooksRequest, opts ...grpc.CallOption) (*GetAuthorBooksResponse, error)
-}
-
-// ForwardBookServiceResourcesToGRPC registers MCP resources that forward to a gRPC BookService client.
-func ForwardBookServiceResourcesToGRPC(srv *server.Server, client BookServiceResourceGRPCClient) {
-	srv.Register(
-		server.ResourceTemplate{
-			ResourceTemplate: mcpcore.ResourceTemplate{
-				URITemplate: "book://{book_id}",
-				Name:        "Book",
-				MimeType:    "application/json",
-			},
-			Handler: func(ctx mcpcore.ResourceContext, uri string, params map[string]string) (mcpcore.ResourceResult, error) {
-				var in GetBookRequest
-				if err := runtime.BindParams(params, &in); err != nil {
-					return mcpcore.ResourceResult{}, err
-				}
-				resp, err := client.GetBook(ctx, &in)
-				if err != nil {
-					return mcpcore.ResourceResult{}, err
-				}
-				return runtime.ProtoResourceResult(resp, uri, "application/json")
-			},
-		},
-		server.ResourceTemplate{
-			ResourceTemplate: mcpcore.ResourceTemplate{
-				URITemplate: "author://{author_id}/books",
-				Name:        "Author Books",
-				MimeType:    "application/json",
-			},
-			Handler: func(ctx mcpcore.ResourceContext, uri string, params map[string]string) (mcpcore.ResourceResult, error) {
-				var in GetAuthorBooksRequest
-				if err := runtime.BindParams(params, &in); err != nil {
-					return mcpcore.ResourceResult{}, err
-				}
-				resp, err := client.GetAuthorBooks(ctx, &in)
-				if err != nil {
-					return mcpcore.ResourceResult{}, err
-				}
-				return runtime.ProtoResourceResult(resp, uri, "application/json")
-			},
-		},
-	)
-}
-
-// ConnectBookServiceResourceClient is the ConnectRPC client interface for resource forwarding.
-type ConnectBookServiceResourceClient interface {
-	GetBook(ctx context.Context, req *connect.Request[GetBookRequest]) (*connect.Response[GetBookResponse], error)
-	GetAuthorBooks(ctx context.Context, req *connect.Request[GetAuthorBooksRequest]) (*connect.Response[GetAuthorBooksResponse], error)
-}
-
-// ForwardBookServiceResourcesToConnect registers MCP resources that forward to a ConnectRPC BookService client.
-func ForwardBookServiceResourcesToConnect(srv *server.Server, client ConnectBookServiceResourceClient) {
-	srv.Register(
-		server.ResourceTemplate{
-			ResourceTemplate: mcpcore.ResourceTemplate{
-				URITemplate: "book://{book_id}",
-				Name:        "Book",
-				MimeType:    "application/json",
-			},
-			Handler: func(ctx mcpcore.ResourceContext, uri string, params map[string]string) (mcpcore.ResourceResult, error) {
-				var in GetBookRequest
-				if err := runtime.BindParams(params, &in); err != nil {
-					return mcpcore.ResourceResult{}, err
-				}
-				resp, err := client.GetBook(ctx, connect.NewRequest(&in))
-				if err != nil {
-					return mcpcore.ResourceResult{}, err
-				}
-				return runtime.ProtoResourceResult(resp.Msg, uri, "application/json")
-			},
-		},
-		server.ResourceTemplate{
-			ResourceTemplate: mcpcore.ResourceTemplate{
-				URITemplate: "author://{author_id}/books",
-				Name:        "Author Books",
-				MimeType:    "application/json",
-			},
-			Handler: func(ctx mcpcore.ResourceContext, uri string, params map[string]string) (mcpcore.ResourceResult, error) {
-				var in GetAuthorBooksRequest
-				if err := runtime.BindParams(params, &in); err != nil {
-					return mcpcore.ResourceResult{}, err
-				}
-				resp, err := client.GetAuthorBooks(ctx, connect.NewRequest(&in))
-				if err != nil {
-					return mcpcore.ResourceResult{}, err
-				}
-				return runtime.ProtoResourceResult(resp.Msg, uri, "application/json")
 			},
 		},
 	)
@@ -311,116 +153,6 @@ func RegisterBookServiceMCPPrompts(srv *server.Server, impl BookServiceMCPPrompt
 					return mcpcore.PromptResult{}, err
 				}
 				return runtime.ProtoPromptResult(resp)
-			},
-		},
-	)
-}
-
-// BookServicePromptGRPCClient is the gRPC client interface for prompt forwarding.
-type BookServicePromptGRPCClient interface {
-	SummarizeBook(ctx context.Context, req *SummarizeBookRequest, opts ...grpc.CallOption) (*SummarizeBookResponse, error)
-	RecommendBooks(ctx context.Context, req *RecommendBooksRequest, opts ...grpc.CallOption) (*RecommendBooksResponse, error)
-}
-
-// ForwardBookServicePromptsToGRPC registers MCP prompts that forward to a gRPC BookService client.
-func ForwardBookServicePromptsToGRPC(srv *server.Server, client BookServicePromptGRPCClient) {
-	srv.Register(
-		server.Prompt{
-			PromptDef: mcpcore.PromptDef{
-				Name:        "books_summarize",
-				Description: "Generate a summary of a book",
-				Arguments: []mcpcore.PromptArgument{
-					{Name: "book_id", Description: "", Required: true},
-					{Name: "style", Description: "", Required: false},
-				},
-			},
-			Handler: func(ctx mcpcore.PromptContext, req mcpcore.PromptRequest) (mcpcore.PromptResult, error) {
-				var in SummarizeBookRequest
-				if err := runtime.BindPromptArgs(req.Arguments, &in); err != nil {
-					return mcpcore.PromptResult{}, err
-				}
-				resp, err := client.SummarizeBook(ctx, &in)
-				if err != nil {
-					return mcpcore.PromptResult{}, err
-				}
-				return runtime.ProtoPromptResult(resp)
-			},
-		},
-		server.Prompt{
-			PromptDef: mcpcore.PromptDef{
-				Name:        "books_recommend_books",
-				Description: "Get personalized book recommendations",
-				Arguments: []mcpcore.PromptArgument{
-					{Name: "genre", Description: "", Required: true},
-					{Name: "mood", Description: "", Required: true},
-					{Name: "count", Description: "", Required: true},
-				},
-			},
-			Handler: func(ctx mcpcore.PromptContext, req mcpcore.PromptRequest) (mcpcore.PromptResult, error) {
-				var in RecommendBooksRequest
-				if err := runtime.BindPromptArgs(req.Arguments, &in); err != nil {
-					return mcpcore.PromptResult{}, err
-				}
-				resp, err := client.RecommendBooks(ctx, &in)
-				if err != nil {
-					return mcpcore.PromptResult{}, err
-				}
-				return runtime.ProtoPromptResult(resp)
-			},
-		},
-	)
-}
-
-// ConnectBookServicePromptClient is the ConnectRPC client interface for prompt forwarding.
-type ConnectBookServicePromptClient interface {
-	SummarizeBook(ctx context.Context, req *connect.Request[SummarizeBookRequest]) (*connect.Response[SummarizeBookResponse], error)
-	RecommendBooks(ctx context.Context, req *connect.Request[RecommendBooksRequest]) (*connect.Response[RecommendBooksResponse], error)
-}
-
-// ForwardBookServicePromptsToConnect registers MCP prompts that forward to a ConnectRPC BookService client.
-func ForwardBookServicePromptsToConnect(srv *server.Server, client ConnectBookServicePromptClient) {
-	srv.Register(
-		server.Prompt{
-			PromptDef: mcpcore.PromptDef{
-				Name:        "books_summarize",
-				Description: "Generate a summary of a book",
-				Arguments: []mcpcore.PromptArgument{
-					{Name: "book_id", Description: "", Required: true},
-					{Name: "style", Description: "", Required: false},
-				},
-			},
-			Handler: func(ctx mcpcore.PromptContext, req mcpcore.PromptRequest) (mcpcore.PromptResult, error) {
-				var in SummarizeBookRequest
-				if err := runtime.BindPromptArgs(req.Arguments, &in); err != nil {
-					return mcpcore.PromptResult{}, err
-				}
-				resp, err := client.SummarizeBook(ctx, connect.NewRequest(&in))
-				if err != nil {
-					return mcpcore.PromptResult{}, err
-				}
-				return runtime.ProtoPromptResult(resp.Msg)
-			},
-		},
-		server.Prompt{
-			PromptDef: mcpcore.PromptDef{
-				Name:        "books_recommend_books",
-				Description: "Get personalized book recommendations",
-				Arguments: []mcpcore.PromptArgument{
-					{Name: "genre", Description: "", Required: true},
-					{Name: "mood", Description: "", Required: true},
-					{Name: "count", Description: "", Required: true},
-				},
-			},
-			Handler: func(ctx mcpcore.PromptContext, req mcpcore.PromptRequest) (mcpcore.PromptResult, error) {
-				var in RecommendBooksRequest
-				if err := runtime.BindPromptArgs(req.Arguments, &in); err != nil {
-					return mcpcore.PromptResult{}, err
-				}
-				resp, err := client.RecommendBooks(ctx, connect.NewRequest(&in))
-				if err != nil {
-					return mcpcore.PromptResult{}, err
-				}
-				return runtime.ProtoPromptResult(resp.Msg)
 			},
 		},
 	)

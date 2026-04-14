@@ -19,6 +19,22 @@ import (
 type Config struct {
 	// PackageSuffix is appended to the Go package name. Default: "mcp".
 	PackageSuffix string
+
+	// Variants controls which registration flavors to generate.
+	// Valid values: "inprocess", "grpc", "connect".
+	// Default (nil or empty): all three.
+	Variants map[string]bool
+}
+
+// DefaultVariants are emitted when no explicit variants are configured.
+var DefaultVariants = map[string]bool{"inprocess": true, "grpc": true}
+
+// HasVariant reports whether a variant should be generated.
+func (c Config) HasVariant(name string) bool {
+	if len(c.Variants) == 0 {
+		return DefaultVariants[name]
+	}
+	return c.Variants[name]
 }
 
 // Generate processes a proto file and emits mcpkit registration code.
@@ -39,7 +55,7 @@ func Generate(gen *protogen.Plugin, file *protogen.File, cfg Config) {
 		importPath,
 	)
 
-	data, err := collectFileData(file, gf, suffix)
+	data, err := collectFileData(file, gf, cfg)
 	if err != nil {
 		gen.Error(fmt.Errorf("annotation error in %s: %w", file.Desc.Path(), err))
 		return
@@ -58,6 +74,8 @@ type fileData struct {
 	SourcePath    string
 	GoPackage     string
 	PackageSuffix string
+	GRPC          bool // emit gRPC forwarding variants
+	Connect       bool // emit ConnectRPC forwarding variants
 	Services      []serviceData
 	Timestamp     string
 }
@@ -119,11 +137,13 @@ type toolData struct {
 	InputSchema   string // JSON string of the input schema
 }
 
-func collectFileData(file *protogen.File, gf *protogen.GeneratedFile, suffix string) (fileData, error) {
+func collectFileData(file *protogen.File, gf *protogen.GeneratedFile, cfg Config) (fileData, error) {
 	data := fileData{
 		SourcePath:    file.Desc.Path(),
 		GoPackage:     string(file.GoPackageName),
-		PackageSuffix: suffix,
+		PackageSuffix: cfg.PackageSuffix,
+		GRPC:          cfg.HasVariant("grpc"),
+		Connect:       cfg.HasVariant("connect"),
 		Timestamp:     time.Now().UTC().Format(time.RFC3339),
 	}
 

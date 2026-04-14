@@ -8,3 +8,4 @@ plugins:
     opt:
       - paths=source_relative
       - package_suffix=
+      - variants=inprocess

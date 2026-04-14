@@ -12,8 +12,12 @@ import (
 	"github.com/panyam/mcpkit/ext/protogen/runtime"
 	"github.com/panyam/mcpkit/server"
 	"google.golang.org/protobuf/encoding/protojson"
+{{- if .GRPC }}
 	grpc "google.golang.org/grpc"
+{{- end }}
+{{- if .Connect }}
 	"connectrpc.com/connect"
+{{- end }}
 )
 
 // Ensure imports are used.
@@ -23,8 +27,12 @@ var (
 	_ mcpcore.ToolDef
 	_ = runtime.BindProto  // unused import guard for runtime
 	_ protojson.MarshalOptions
+{{- if .GRPC }}
 	_ grpc.ClientConnInterface
+{{- end }}
+{{- if .Connect }}
 	_ connect.Request[struct{}]
+{{- end }}
 	_ time.Duration
 )
 
@@ -33,25 +41,37 @@ var (
 
 {{ template "serverInterface" . }}
 {{ template "registerInProcess" . }}
+{{- if $.GRPC }}
 {{ template "grpcClientInterface" . }}
 {{ template "forwardToGRPC" . }}
+{{- end }}
+{{- if $.Connect }}
 {{ template "connectClientInterface" . }}
 {{ template "forwardToConnect" . }}
+{{- end }}
 {{- if .Resources }}
 {{ template "resourceServerInterface" . }}
 {{ template "registerResourceInProcess" . }}
+{{- if $.GRPC }}
 {{ template "resourceGRPCClientInterface" . }}
 {{ template "forwardResourceToGRPC" . }}
+{{- end }}
+{{- if $.Connect }}
 {{ template "resourceConnectClientInterface" . }}
 {{ template "forwardResourceToConnect" . }}
+{{- end }}
 {{- end }}
 {{- if .Prompts }}
 {{ template "promptServerInterface" . }}
 {{ template "registerPromptInProcess" . }}
+{{- if $.GRPC }}
 {{ template "promptGRPCClientInterface" . }}
 {{ template "forwardPromptToGRPC" . }}
+{{- end }}
+{{- if $.Connect }}
 {{ template "promptConnectClientInterface" . }}
 {{ template "forwardPromptToConnect" . }}
+{{- end }}
 {{- end }}
 {{ end }}
 
