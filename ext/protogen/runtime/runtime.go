@@ -27,6 +27,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 // Default protojson options used by generated code.
@@ -73,20 +74,65 @@ func ProtoStructuredResult(msg proto.Message) (core.ToolResult, error) {
 	return core.StructuredResult(string(data), structured), nil
 }
 
-// ProtoResourceResult marshals a proto message to JSON and returns it as a ResourceResult
+// ProtoResourceResult marshals a proto message and returns it as a ResourceResult
 // with the given URI and MIME type.
+//
+// For JSON resources (application/json), the message is serialized via protojson.
+// For non-JSON resources (text/html, text/yaml, text/markdown, etc.), the function
+// extracts a raw string from a single "content" field if present. This ensures
+// the MCP resource text contains the actual content, not a JSON wrapper — matching
+// what a hand-written resource handler would return.
 func ProtoResourceResult(msg proto.Message, uri, mimeType string) (core.ResourceResult, error) {
-	data, err := marshalOpts.Marshal(msg)
-	if err != nil {
-		return core.ResourceResult{}, fmt.Errorf("failed to marshal resource: %w", err)
+	var text string
+	if mimeType != "application/json" {
+		// Try to extract raw content for non-JSON resources.
+		if raw, ok := extractSingleStringField(msg); ok {
+			text = raw
+		}
+	}
+	if text == "" {
+		// Fall back to JSON serialization (for JSON resources or messages
+		// without a single string field).
+		data, err := marshalOpts.Marshal(msg)
+		if err != nil {
+			return core.ResourceResult{}, fmt.Errorf("failed to marshal resource: %w", err)
+		}
+		text = string(data)
 	}
 	return core.ResourceResult{
 		Contents: []core.ResourceReadContent{{
 			URI:      uri,
 			MimeType: mimeType,
-			Text:     string(data),
+			Text:     text,
 		}},
 	}, nil
+}
+
+// extractSingleStringField checks if a proto message has exactly one populated
+// field and that field is a string. Returns the string value if so.
+// Used by ProtoResourceResult to extract raw content for non-JSON MIME types
+// (e.g., a SlideContentResource with a single "content" field should return
+// the HTML, not {"content":"..."}).
+//
+// Returns false if the message has zero fields, multiple fields, or a single
+// non-string field — all of which fall through to JSON serialization.
+func extractSingleStringField(msg proto.Message) (string, bool) {
+	ref := msg.ProtoReflect()
+	var result string
+	var totalFields int
+	var isString bool
+	ref.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
+		totalFields++
+		if fd.Kind() == protoreflect.StringKind {
+			result = v.String()
+			isString = true
+		}
+		return true
+	})
+	if totalFields == 1 && isString && result != "" {
+		return result, true
+	}
+	return "", false
 }
 
 // ProtoPromptResult marshals a proto message to JSON and returns it as a
