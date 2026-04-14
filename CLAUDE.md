@@ -36,7 +36,7 @@ make push             # Push proto module to buf.build/mcpkit/protogen
 ```
 
 ### protoc-gen-go-mcp options
-- `package_suffix=mcp` — Go package suffix (empty = same package as pb.go)
+- `package_suffix` — Go package suffix (default empty = same package as pb.go). Set to `mcp` for a separate sub-package.
 - `variants=inprocess,grpc` — registration variants to emit (default). Add `connect` for ConnectRPC. Use `inprocess` alone for zero external deps.
 
 ## Package Layout

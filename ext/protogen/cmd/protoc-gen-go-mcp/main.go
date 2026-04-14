@@ -18,12 +18,12 @@
 //	    out: gen
 //	    opt:
 //	      - paths=source_relative
-//	      - package_suffix=          # empty = same package as pb.go
 //	      - variants=inprocess       # omit grpc/connect deps
 //
 // Options:
-//   - package_suffix: Go package name suffix (default "mcp"). Empty generates
-//     into the same package as protoc-gen-go output.
+//   - package_suffix: Go package name suffix (default empty). Generates
+//     into the same package as protoc-gen-go output. Set to "mcp" for a
+//     separate sub-package.
 //   - variants: Comma-separated list of registration variants to emit.
 //     Valid: inprocess, grpc, connect. Default: inprocess,grpc.
 package main
@@ -39,8 +39,8 @@ import (
 
 func main() {
 	var flags flag.FlagSet
-	packageSuffix := flags.String("package_suffix", "mcp",
-		"Suffix for the generated Go package name. Empty string generates into the same package.")
+	packageSuffix := flags.String("package_suffix", "",
+		"Suffix for the generated Go package name. Default empty generates into the same package as pb.go.")
 	variants := flags.String("variants", "",
 		"Comma-separated list of registration variants to generate: inprocess,grpc,connect. Default: inprocess,grpc.")
 
