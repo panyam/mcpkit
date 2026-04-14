@@ -91,3 +91,21 @@ func TestRPCError(t *testing.T) {
 	require.Len(t, result.Content, 1)
 	assert.Equal(t, "permission denied", result.Content[0].Text)
 }
+
+// TestBindParams verifies that BindParams populates proto fields from a
+// string map via protokit's PopulateFromMap.
+func TestBindParams(t *testing.T) {
+	t.Run("populates string field", func(t *testing.T) {
+		msg := wrapperspb.String("")
+		err := BindParams(map[string]string{"value": "hello"}, msg)
+		require.NoError(t, err)
+		assert.Equal(t, "hello", msg.GetValue())
+	})
+
+	t.Run("empty map is no-op", func(t *testing.T) {
+		msg := wrapperspb.String("original")
+		err := BindParams(map[string]string{}, msg)
+		require.NoError(t, err)
+		assert.Equal(t, "original", msg.GetValue())
+	})
+}
