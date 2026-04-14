@@ -1,19 +1,19 @@
 # bookservice example Makefile
 
-.PHONY: generate build run clean help
+.PHONY: generate run test clean help
 
 generate: ## Generate Go code from proto files
 	rm -rf gen
 	buf generate
 
-build: ## Build the example server
-	go build -o bin/bookservice .
+run: ## Run the example MCP server
+	go run .
 
-run: build ## Run the example MCP server
-	./bin/bookservice
+test: ## Run e2e tests
+	go test -count=1 -timeout 30s -v .
 
-clean: ## Remove generated and build artifacts
-	rm -rf gen bin
+clean: ## Remove generated artifacts
+	rm -rf gen
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'

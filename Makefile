@@ -64,8 +64,8 @@ test-auth: ## Run auth sub-module tests
 test-ui: ## Run UI extension sub-module tests
 	cd ext/ui && go test ./... -count=1 -timeout 30s
 
-test-protogen: ## Run protogen sub-module tests
-	cd ext/protogen && go test ./... -count=1 -timeout 30s
+test-protogen: ## Run protogen sub-module tests + e2e example
+	cd ext/protogen && go test ./... -count=1 -timeout 30s && $(MAKE) test-e2e
 
 test-e2e: ## Run all E2E tests (auth, apps — no Docker)
 	cd tests/e2e && go test ./... -count=1 -timeout 60s
