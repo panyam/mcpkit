@@ -19,16 +19,16 @@
     }
     button:hover { background: #e8e8e8 }
   </style>
-
-  <!-- MCP App Bridge — included like any other dependency -->
-  {{ template "mcpkit-bridge" .Bridge }}
-</head>
-<body>
-  <h1 id="result">🎲</h1>
-  <p id="label">Waiting for roll...</p>
-  <button id="roll">Roll Again</button>
-
+  <!-- Everything in ONE script block: config + bridge + app logic -->
   <script type="module">
+    window.MCPAppConfig = {
+      name: "{{ .Bridge.AppName }}",
+      version: "{{ .Bridge.AppVersion }}",
+      protocolVersion: "{{ .Bridge.ProtocolVersion }}"
+    };
+    {{ .Bridge.BridgeJS }}
+
+    // --- App logic below ---
     function extractText(result) {
       if (result && result.content) {
         for (var i = 0; i < result.content.length; i++) {
@@ -37,17 +37,14 @@
       }
       return '';
     }
-
     function showResult(text) {
       var match = text.match(/: (\d+)/);
       document.getElementById('result').textContent = match ? match[1] : '?';
       document.getElementById('label').textContent = text || 'Rolled!';
     }
-
     MCPApp.on('toolresult', function(data) {
       showResult(extractText(data.result));
     });
-
     document.getElementById('roll').addEventListener('click', function() {
       document.getElementById('result').textContent = '🎲';
       document.getElementById('label').textContent = 'Rolling...';
@@ -57,16 +54,19 @@
         document.getElementById('label').textContent = 'Error: ' + err.message;
       });
     });
-
     MCPApp.on('connected', function() {
       document.getElementById('label').textContent = 'Connected! Ask the LLM to roll a die.';
     });
-
     setTimeout(function() {
       if (!MCPApp.connected) {
         document.getElementById('label').textContent = 'Bridge not connected to host';
       }
     }, 3000);
   </script>
+</head>
+<body>
+  <h1 id="result">🎲</h1>
+  <p id="label">Waiting for roll...</p>
+  <button id="roll">Roll Again</button>
 </body>
 </html>
