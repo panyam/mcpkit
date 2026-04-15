@@ -23,6 +23,15 @@ make tag-push V=vX.Y.Z  # Tag root + all sub-modules and push
 make bump-root V=vX.Y.Z # Update mcpkit version in all sub-module go.mods
 ```
 
+### ext/ui commands
+```bash
+cd ext/ui
+make test             # Go tests + vitest bridge JS tests
+make test-bridge      # Bridge JS unit tests only (vitest + jsdom)
+make test-bridge-e2e  # Playwright fake-host integration tests
+make build-bridge     # Compile mcp-app-bridge.ts → .js (requires pnpm)
+```
+
 ### ext/protogen commands
 ```bash
 cd ext/protogen
@@ -45,7 +54,9 @@ make push             # Push proto module to buf.build/mcpkit/protogen
 - **`server/`** — Server, Dispatcher, transports (SSE, Streamable HTTP, Stdio, InProcess), middleware, registry
 - **`client/`** — Client, HTTP/Stdio/Command transports, reconnection, auth retry
 - **`ext/auth/`** — Separate Go module: JWT validation, PRM, OAuth token sources. See `ext/auth/docs/DESIGN.md`
-- **`ext/ui/`** — Separate Go module: MCP Apps extension. See `docs/APPS_DESIGN.md`
+- **`ext/ui/`** — Separate Go module: MCP Apps extension + App Bridge (JS). See `docs/APPS_DESIGN.md`
+  - `ext/ui/assets/` — TypeScript bridge source, compiled JS, `.d.ts`, vitest tests
+  - `ext/ui/tests/playwright/` — Fake-host integration tests
 - **`ext/protogen/`** — Separate Go module: proto annotation-driven MCP code generation. Annotations: `mcp_tool`, `mcp_resource`, `mcp_prompt`, `mcp_service`. Published to `buf.build/mcpkit/protogen`. See `ext/protogen/docs/DESIGN.md`
 - **`testutil/`** — `NewTestServer`, `ForAllTransports`, `TestClient`
 - **`cmd/testserver/`** — Conformance test server
@@ -87,6 +98,10 @@ func myTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error)
 - **Template URI detection**: Use `core.IsTemplateURI()` (RFC 6570 parsing), not `strings.Contains("{")`.
 - **Sub-module go.sum drift**: Adding a new import in `core/` breaks sub-module builds until `make tidy-all` runs. Always run `make testall` after touching core imports.
 - **Protogen templates**: Use embedded `.tmpl` files (`go:embed templates/*.tmpl`), not Go string constants. Enables syntax highlighting and avoids backtick escaping.
+- **No `</script>` in embeddable JS**: HTML parser closes `<script>` tags even inside JS comments. Never include literal `</script>` in JS that gets inlined via `go:embed` or templates. Use `<\/script>` if needed in strings.
+- **JSON HTML escaping**: `core.MarshalJSON()` uses `SetEscapeHTML(false)` — JSON-RPC responses must NOT escape `<`/`>` to `\u003c`/`\u003e`. Go is the only language that does this by default; other SDKs (Node/Python) don't, and some hosts don't unescape before parsing HTML.
+- **MCP App Bridge templates**: Use `html/template` with `template.JS` type for the bridge script (prevents escaping). Use `text/template` only if you control all inputs. See `ext/ui/bridge.go` for the `BridgeData` type.
+- **Single `<script type="module">` for MCP Apps**: MCPJam and some hosts extract inline scripts and re-serve them. Use `type="module"` (not plain `<script>`) and prefer a single script block matching the upstream Vite-bundled pattern.
 
 ## Deeper Documentation
 
@@ -95,6 +110,7 @@ func myTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error)
 | Architecture | `docs/ARCHITECTURE.md` |
 | Auth design & spec compliance | `ext/auth/docs/DESIGN.md` |
 | MCP Apps design | `docs/APPS_DESIGN.md` |
+| MCP App Bridge | `ext/ui/bridge.go`, `ext/ui/assets/mcp-app-bridge.ts` |
 | Protogen design | `ext/protogen/docs/DESIGN.md` |
 | Capabilities list | `CAPABILITIES.md` |
 | Constraints | `core/CONSTRAINTS.md`, `server/CONSTRAINTS.md`, `client/CONSTRAINTS.md` |
