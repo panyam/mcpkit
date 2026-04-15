@@ -146,7 +146,7 @@ func TestToolExec_RegisterAndDispatch(t *testing.T) {
 	if resp.Error != nil {
 		t.Fatalf("tools/call failed: %s", resp.Error.Message)
 	}
-	raw, _ := json.Marshal(resp.Result)
+	raw, _ := core.MarshalJSON(resp.Result)
 	var result core.ToolResult
 	json.Unmarshal(raw, &result)
 	if result.IsError {

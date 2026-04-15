@@ -38,7 +38,7 @@ func TestCompletionComplete(t *testing.T) {
 	var result struct {
 		Completion core.CompletionResult `json:"completion"`
 	}
-	if err := json.Unmarshal(resp.Result, &result); err != nil {
+	if err := resp.ResultAs(&result); err != nil {
 		t.Fatal(err)
 	}
 	if len(result.Completion.Values) != 2 {
@@ -73,7 +73,7 @@ func TestCompletionCompleteNoHandler(t *testing.T) {
 	var result struct {
 		Completion core.CompletionResult `json:"completion"`
 	}
-	if err := json.Unmarshal(resp.Result, &result); err != nil {
+	if err := resp.ResultAs(&result); err != nil {
 		t.Fatal(err)
 	}
 	if len(result.Completion.Values) != 0 {
@@ -122,7 +122,7 @@ func TestCompletionCapability(t *testing.T) {
 	})
 
 	var result map[string]any
-	if err := json.Unmarshal(resp.Result, &result); err != nil {
+	if err := resp.ResultAs(&result); err != nil {
 		t.Fatal(err)
 	}
 	caps := result["capabilities"].(map[string]any)
@@ -154,7 +154,7 @@ func TestCompletionCompleteResourceRef(t *testing.T) {
 	var result struct {
 		Completion core.CompletionResult `json:"completion"`
 	}
-	json.Unmarshal(resp.Result, &result)
+	resp.ResultAs(&result)
 	if len(result.Completion.Values) != 2 {
 		t.Errorf("got %d values, want 2", len(result.Completion.Values))
 	}
@@ -212,7 +212,7 @@ func TestCompletionMaxItems(t *testing.T) {
 	}
 
 	var result core.CompletionCompleteResult
-	if err := json.Unmarshal(resp.Result, &result); err != nil {
+	if err := resp.ResultAs(&result); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 
@@ -252,7 +252,7 @@ func TestCompletionUnderLimit(t *testing.T) {
 	}
 
 	var result core.CompletionCompleteResult
-	if err := json.Unmarshal(resp.Result, &result); err != nil {
+	if err := resp.ResultAs(&result); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 

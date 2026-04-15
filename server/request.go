@@ -30,7 +30,7 @@ type pendingServerRequest struct {
 
 // serverResponse carries the result of a server-to-client request.
 type serverResponse struct {
-	Result json.RawMessage
+	Result any
 	Error  *core.Error
 }
 
@@ -82,7 +82,15 @@ func sendServerRequest(
 		if resp.Error != nil {
 			return nil, fmt.Errorf("client error: [%d] %s", resp.Error.Code, resp.Error.Message)
 		}
-		return resp.Result, nil
+		// Result may be typed (from NewResponse) or json.RawMessage (from client).
+		if raw, ok := resp.Result.(json.RawMessage); ok {
+			return raw, nil
+		}
+		raw, err := core.MarshalJSON(resp.Result)
+		if err != nil {
+			return nil, fmt.Errorf("marshal server response result: %w", err)
+		}
+		return raw, nil
 	}
 }
 

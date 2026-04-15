@@ -140,7 +140,7 @@ func TestStructuredContentInDispatch(t *testing.T) {
 
 	// Check that structuredContent is in the response
 	var result map[string]any
-	require.NoError(t, json.Unmarshal(resp.Result, &result))
+	require.NoError(t, resp.ResultAs(&result))
 	assert.NotNil(t, result["structuredContent"], "response should contain structuredContent")
 }
 

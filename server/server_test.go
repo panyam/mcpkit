@@ -49,7 +49,7 @@ func TestServerDispatch(t *testing.T) {
 		t.Fatalf("unexpected error: %v", resp.Error)
 	}
 	var result core.ToolResult
-	json.Unmarshal(resp.Result, &result)
+	resp.ResultAs(&result)
 	if result.Content[0].Text != "hi" {
 		t.Errorf("got %q, want hi", result.Content[0].Text)
 	}
@@ -84,7 +84,7 @@ func TestServerToolTimeout(t *testing.T) {
 		t.Fatalf("unexpected JSON-RPC error: %v", resp.Error)
 	}
 	var result core.ToolResult
-	json.Unmarshal(resp.Result, &result)
+	resp.ResultAs(&result)
 	if !result.IsError {
 		t.Error("expected tool result to be marked as error")
 	}

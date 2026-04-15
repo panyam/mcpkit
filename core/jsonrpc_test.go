@@ -20,7 +20,7 @@ func TestNewResponse(t *testing.T) {
 	}
 
 	var result map[string]string
-	if err := json.Unmarshal(resp.Result, &result); err != nil {
+	if err := resp.ResultAs(&result); err != nil {
 		t.Fatal(err)
 	}
 	if result["key"] != "value" {
@@ -82,6 +82,39 @@ func TestNewErrorResponseWithData(t *testing.T) {
 	}
 	if len(parsed.Data.Supported) != 2 {
 		t.Errorf("got %d supported versions, want 2", len(parsed.Data.Supported))
+	}
+}
+
+// BenchmarkNewResponseAndMarshal measures the full create+serialize path
+// that every JSON-RPC response goes through.
+func BenchmarkNewResponseAndMarshal(b *testing.B) {
+	id := json.RawMessage(`1`)
+	result := ToolsListResult{
+		Tools: []ToolDef{
+			{Name: "tool1", Description: "A test tool", InputSchema: map[string]any{"type": "object"}},
+			{Name: "tool2", Description: "Another tool", InputSchema: map[string]any{"type": "object"}},
+		},
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		resp := NewResponse(id, result)
+		MarshalJSON(resp)
+	}
+}
+
+// BenchmarkNewResponseHTML measures with HTML content (the MCP Apps case).
+func BenchmarkNewResponseHTML(b *testing.B) {
+	id := json.RawMessage(`1`)
+	html := "<html><head><script type=\"module\">console.log('hello')</script></head><body><p>Content</p></body></html>"
+	result := ResourceResult{
+		Contents: []ResourceReadContent{{
+			URI: "ui://test/view", MimeType: "text/html;profile=mcp-app", Text: html,
+		}},
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		resp := NewResponse(id, result)
+		MarshalJSON(resp)
 	}
 }
 

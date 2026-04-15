@@ -268,7 +268,7 @@ func TestStdioRequestResponse(t *testing.T) {
 	var result struct {
 		ServerInfo core.ServerInfo `json:"serverInfo"`
 	}
-	json.Unmarshal(resp.Result, &result)
+	resp.ResultAs(&result)
 	if result.ServerInfo.Name != "test-server" {
 		t.Errorf("server name = %q, want test-server", result.ServerInfo.Name)
 	}

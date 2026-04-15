@@ -43,7 +43,7 @@ func TestPromptsListAdvertisesSchema(t *testing.T) {
 	var result struct {
 		Prompts []core.PromptDef `json:"prompts"`
 	}
-	if err := json.Unmarshal(resp.Result, &result); err != nil {
+	if err := resp.ResultAs(&result); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if len(result.Prompts) != 1 || len(result.Prompts[0].Arguments) != 1 {

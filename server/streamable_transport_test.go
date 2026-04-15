@@ -133,7 +133,7 @@ func TestStreamableInitAndToolCall(t *testing.T) {
 	}
 
 	var result core.ToolResult
-	json.Unmarshal(rpcResp.Result, &result)
+	rpcResp.ResultAs( &result)
 	if len(result.Content) == 0 || result.Content[0].Text != "echo: hello" {
 		t.Errorf("tool result = %+v, want echo: hello", result)
 	}
@@ -171,7 +171,7 @@ func TestStreamableInitReturnsSessionID(t *testing.T) {
 		t.Fatalf("init error: %s", rpcResp.Error.Message)
 	}
 	var result map[string]any
-	json.Unmarshal(rpcResp.Result, &result)
+	rpcResp.ResultAs( &result)
 	if result["protocolVersion"] != "2024-11-05" {
 		t.Errorf("protocolVersion = %v, want 2024-11-05", result["protocolVersion"])
 	}
