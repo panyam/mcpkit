@@ -10,7 +10,7 @@ test: ## Run unit tests
 
 test-e2e: install ## Regenerate examples, compile, and run e2e tests
 	@echo "==> e2e: bookservice example"
-	cd examples/bookservice && rm -rf gen && buf generate && go test -count=1 -timeout 30s .
+	cd ../../examples/protogen/bookservice && rm -rf gen && buf generate && go test -count=1 -timeout 30s .
 	@echo "==> e2e: passed"
 
 install: build ## Install the protoc plugin to $GOPATH/bin
