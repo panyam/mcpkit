@@ -26,30 +26,50 @@
   <button id="roll">Roll Again</button>
 
   <script>
-    // Update display when a tool result arrives from the host.
-    MCPApp.on('toolresult', function(data) {
-      var text = '';
-      if (data.result && data.result.content) {
-        for (var i = 0; i < data.result.content.length; i++) {
-          if (data.result.content[i].text) text = data.result.content[i].text;
+    // Helper: extract text from a tool result's content array.
+    function extractText(result) {
+      if (result && result.content) {
+        for (var i = 0; i < result.content.length; i++) {
+          if (result.content[i].text) return result.content[i].text;
         }
       }
+      return '';
+    }
+
+    // Helper: display a roll result.
+    function showResult(text) {
       var match = text.match(/: (\d+)/);
       document.getElementById('result').textContent = match ? match[1] : '?';
       document.getElementById('label').textContent = text || 'Rolled!';
+    }
+
+    // Update display when the host pushes a tool result (e.g. LLM-initiated call).
+    MCPApp.on('toolresult', function(data) {
+      showResult(extractText(data.result));
     });
 
-    // "Roll Again" calls the tool back through the bridge.
+    // "Roll Again" calls the tool back through the bridge and uses the response.
     document.getElementById('roll').addEventListener('click', function() {
       document.getElementById('result').textContent = '🎲';
       document.getElementById('label').textContent = 'Rolling...';
-      MCPApp.callTool('roll_dice', { sides: 6 });
+      MCPApp.callTool('roll_dice', { sides: 6 }).then(function(res) {
+        showResult(extractText(res));
+      }).catch(function(err) {
+        document.getElementById('label').textContent = 'Error: ' + err.message;
+      });
     });
 
     // Show connection status.
     MCPApp.on('connected', function() {
       document.getElementById('label').textContent = 'Connected! Ask the LLM to roll a die.';
     });
+
+    // Debug: show connection state so we can diagnose.
+    setTimeout(function() {
+      if (!MCPApp.connected) {
+        document.getElementById('label').textContent = 'Bridge not connected to host';
+      }
+    }, 3000);
   </script>
 </body>
 </html>
