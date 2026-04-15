@@ -1,0 +1,16 @@
+{
+  "name": "@mcpkit/app-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Framework-agnostic postMessage bridge for MCP Apps (iframe side)",
+  "scripts": {
+    "build": "tsc",
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.0",
+    "jsdom": "^26.1.0"
+  }
+}

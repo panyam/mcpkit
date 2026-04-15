@@ -166,7 +166,7 @@ func (s *Server) RunStdio(ctx context.Context, opts ...StdioOption) error {
 					core.ErrCodeParse,
 					fmt.Sprintf("parse error: %v", result.err),
 				)
-				raw, _ := json.Marshal(errResp)
+				raw, _ := marshalJSON(errResp)
 				if writeErr := writeFrameLocked(raw); writeErr != nil {
 					return fmt.Errorf("stdio: write error response: %w", writeErr)
 				}
@@ -190,7 +190,7 @@ func (s *Server) RunStdio(ctx context.Context, opts ...StdioOption) error {
 					core.ErrCodeParse,
 					fmt.Sprintf("invalid JSON: %v", err),
 				)
-				raw, _ := json.Marshal(errResp)
+				raw, _ := marshalJSON(errResp)
 				_ = writeFrameLocked(raw)
 				continue
 			}
@@ -206,7 +206,7 @@ func (s *Server) RunStdio(ctx context.Context, opts ...StdioOption) error {
 				continue
 			}
 
-			raw, err := json.Marshal(resp)
+			raw, err := marshalJSON(resp)
 			if err != nil {
 				if cfg.logger != nil {
 					cfg.logger.Printf("stdio: marshal response: %v", err)
