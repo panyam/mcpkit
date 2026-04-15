@@ -26,15 +26,21 @@ func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	flag.Parse()
 
-	// Read the Vite-built HTML.
-	distPath := filepath.Join("dist", "index.html")
-	if _, err := os.Stat(distPath); err != nil {
-		// Try relative to binary location.
-		distPath = filepath.Join(filepath.Dir(os.Args[0]), "..", "dist", "index.html")
+	// Read the Vite-built HTML. Try multiple paths since `go run .`
+	// can be invoked from the server/ dir or the react/ dir.
+	candidates := []string{
+		filepath.Join("..", "dist", "index.html"),  // from server/
+		filepath.Join("dist", "index.html"),         // from react/
 	}
-	htmlBytes, err := os.ReadFile(distPath)
-	if err != nil {
-		log.Fatalf("Run 'pnpm build' in the parent directory first: %v", err)
+	var htmlBytes []byte
+	for _, p := range candidates {
+		if b, err := os.ReadFile(p); err == nil {
+			htmlBytes = b
+			break
+		}
+	}
+	if htmlBytes == nil {
+		log.Fatal("Run 'pnpm build' in the react/ directory first: dist/index.html not found")
 	}
 
 	// Inject the bridge into the Vite-built HTML.
