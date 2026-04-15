@@ -352,14 +352,18 @@ describe("outbound requests", () => {
     await expect(promise).rejects.toThrow("tool failed");
   });
 
-  it("openLink sends notification (no response expected)", async () => {
-    (window as any).MCPApp.openLink("https://example.com");
+  it("openLink sends request and resolves on response", async () => {
+    const promise = (window as any).MCPApp.openLink("https://example.com");
 
     await new Promise((r) => setTimeout(r, 10));
     const msg = sentMessages.find((m) => m.method === "ui/open-link");
     expect(msg).toBeDefined();
     expect(msg.params.url).toBe("https://example.com");
-    expect(msg.id).toBeUndefined();
+    expect(msg.id).toBeDefined(); // request, not notification
+
+    hostSends({ jsonrpc: "2.0", id: msg.id, result: { isError: false } });
+    const result = await promise;
+    expect((result as any).isError).toBe(false);
   });
 
   it("log sends notification", async () => {

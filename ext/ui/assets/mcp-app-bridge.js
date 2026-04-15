@@ -381,11 +381,11 @@
         updateModelContext(context, options) {
             return request("ui/update-model-context", { context }, options);
         },
-        openLink(url) {
-            notify("ui/open-link", { url });
+        openLink(url, options) {
+            return request("ui/open-link", { url }, options);
         },
-        downloadFile(url, filename) {
-            notify("ui/download-file", { url, filename });
+        downloadFile(url, filename, options) {
+            return request("ui/download-file", { url, filename }, options);
         },
         requestDisplayMode(mode, options) {
             return request("ui/request-display-mode", { mode }, options);
