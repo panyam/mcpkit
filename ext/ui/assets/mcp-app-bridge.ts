@@ -40,8 +40,37 @@ interface HostContext {
   theme?: string;
   locale?: string;
   dimensions?: { width: number; height: number };
+  styles?: {
+    variables?: Record<string, string>;
+    css?: { fonts?: string };
+  };
+  safeAreaInsets?: {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+  };
   [key: string]: unknown;
 }
+
+/** Options for request methods (callTool, readResource, etc.). */
+interface RequestOptions {
+  /** AbortSignal for cancellation. */
+  signal?: AbortSignal;
+  /** Timeout in milliseconds (shorthand for AbortSignal.timeout). */
+  timeout?: number;
+}
+
+/** Handler for incoming tool calls from the host. */
+type CallToolHandler = (params: {
+  name: string;
+  arguments: Record<string, unknown>;
+}) => unknown | Promise<unknown>;
+
+/** Handler for incoming list-tools requests from the host. */
+type ListToolsHandler = () =>
+  | Array<{ name: string; description?: string; inputSchema?: unknown }>
+  | Promise<Array<{ name: string; description?: string; inputSchema?: unknown }>>;
 
 interface ToolCallResult {
   content?: Array<{ type: string; text?: string; [k: string]: unknown }>;
@@ -109,6 +138,10 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
   let _hostContext: HostContext | null = null;
   let _hostCapabilities: Record<string, unknown> | null = null;
 
+  // Bidirectional handlers (host → app requests).
+  let _oncalltool: CallToolHandler | null = null;
+  let _onlisttools: ListToolsHandler | null = null;
+
   // --- Event emitter -------------------------------------------------------
 
   function on<E extends MCPAppEvent>(
@@ -171,21 +204,50 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
     }
   }
 
-  function request(method: string, params?: unknown): Promise<unknown> {
+  function request(
+    method: string,
+    params?: unknown,
+    options?: RequestOptions
+  ): Promise<unknown> {
     if (!_connected && method !== "ui/initialize") {
       return Promise.reject(new Error("Not connected to MCP host"));
     }
+
+    // Resolve signal: explicit signal > timeout shorthand > default 30s.
+    let signal = options?.signal;
+    if (!signal && options?.timeout) {
+      signal = AbortSignal.timeout(options.timeout);
+    }
+
     return new Promise((resolve, reject) => {
       const id = nextId++;
+      const cleanup = () => { pending.delete(id); };
+
       pending.set(id, { resolve, reject });
       send({ jsonrpc: "2.0", id, method, params: params || {} });
-      // Timeout after 30 seconds.
-      setTimeout(() => {
-        if (pending.has(id)) {
-          pending.delete(id);
-          reject(new Error("Request timeout: " + method));
+
+      // AbortSignal-based cancellation.
+      if (signal) {
+        if (signal.aborted) {
+          cleanup();
+          reject(new Error(signal.reason?.message || "Aborted"));
+          return;
         }
-      }, 30000);
+        signal.addEventListener("abort", () => {
+          if (pending.has(id)) {
+            cleanup();
+            reject(new Error(signal!.reason?.message || "Aborted: " + method));
+          }
+        }, { once: true });
+      } else {
+        // Default 30s timeout when no signal provided.
+        setTimeout(() => {
+          if (pending.has(id)) {
+            cleanup();
+            reject(new Error("Request timeout: " + method));
+          }
+        }, 30000);
+      }
     });
   }
 
@@ -222,8 +284,14 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
       return;
     }
 
-    // Notification or request from host.
+    // Request from host (has both id and method) — bidirectional call.
     const req = msg as JsonRpcRequest;
+    if (req.id != null && req.method) {
+      handleHostRequest(req);
+      return;
+    }
+
+    // Notification from host (no id, only method).
     switch (req.method) {
       case "ui/notifications/tool-input": {
         const p = (req.params || {}) as any;
@@ -251,6 +319,7 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
       case "ui/notifications/host-context-changed": {
         const p = (req.params || {}) as any;
         _hostContext = p.hostContext || p;
+        applyHostStyles(_hostContext!);
         emit("hostcontextchanged", { hostContext: _hostContext! });
         break;
       }
@@ -292,6 +361,98 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
     }
   }
 
+  // --- Style utilities -----------------------------------------------------
+
+  function applyTheme(theme: string): void {
+    const root = document.documentElement;
+    root.setAttribute("data-theme", theme);
+    root.style.colorScheme = theme;
+  }
+
+  function applyStyleVariables(
+    variables: Record<string, string>,
+    root: HTMLElement = document.documentElement
+  ): void {
+    for (const [key, value] of Object.entries(variables)) {
+      if (value !== undefined) {
+        root.style.setProperty(key, value);
+      }
+    }
+  }
+
+  const FONTS_STYLE_ID = "__mcp-host-fonts";
+
+  function applyFonts(fontCss: string): void {
+    if (document.getElementById(FONTS_STYLE_ID)) return;
+    const style = document.createElement("style");
+    style.id = FONTS_STYLE_ID;
+    style.textContent = fontCss;
+    document.head.appendChild(style);
+  }
+
+  /** Apply all available styles from the host context. */
+  function applyHostStyles(ctx: HostContext): void {
+    if (ctx.theme) applyTheme(ctx.theme);
+    if (ctx.styles?.variables) applyStyleVariables(ctx.styles.variables);
+    if (ctx.styles?.css?.fonts) applyFonts(ctx.styles.css.fonts);
+  }
+
+  // --- Bidirectional handlers (host → app requests) -----------------------
+
+  /** Respond to a JSON-RPC request from the host. */
+  function respond(id: number, result: unknown, error?: unknown): void {
+    if (error) {
+      send({
+        jsonrpc: "2.0",
+        id,
+        error: {
+          code: -32000,
+          message: String(error),
+        },
+      } as any);
+    } else {
+      send({ jsonrpc: "2.0", id, result } as any);
+    }
+  }
+
+  async function handleHostRequest(req: JsonRpcRequest): Promise<void> {
+    if (req.id == null) return; // Not a request, just a notification.
+
+    const id = req.id;
+    const params = (req.params || {}) as any;
+
+    try {
+      switch (req.method) {
+        case "tools/call": {
+          if (_oncalltool) {
+            const result = await _oncalltool({
+              name: params.name || "",
+              arguments: params.arguments || {},
+            });
+            respond(id, result);
+          } else {
+            respond(id, null, "No oncalltool handler registered");
+          }
+          break;
+        }
+        case "tools/list": {
+          if (_onlisttools) {
+            const tools = await _onlisttools();
+            respond(id, { tools });
+          } else {
+            respond(id, { tools: [] });
+          }
+          break;
+        }
+        default:
+          respond(id, null, "Method not found: " + req.method);
+          break;
+      }
+    } catch (e) {
+      respond(id, null, e instanceof Error ? e.message : String(e));
+    }
+  }
+
   // --- Initialize handshake ------------------------------------------------
 
   function initialize(): void {
@@ -313,6 +474,8 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
         _connected = true;
         _hostContext = result?.hostContext || result || {};
         _hostCapabilities = result?.capabilities || {};
+        // Auto-apply host styles on connect.
+        applyHostStyles(_hostContext!);
         emit("connected", {
           hostContext: _hostContext!,
           capabilities: _hostCapabilities!,
@@ -346,27 +509,28 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
     off,
     once,
 
-    // Host-bound methods.
+    // Host-bound methods (all support optional RequestOptions).
     callTool(
       name: string,
-      args?: Record<string, unknown>
+      args?: Record<string, unknown>,
+      options?: RequestOptions
     ): Promise<ToolCallResult> {
       return request("tools/call", {
         name,
         arguments: args || {},
-      }) as Promise<ToolCallResult>;
+      }, options) as Promise<ToolCallResult>;
     },
 
-    readResource(uri: string): Promise<ResourceReadResult> {
-      return request("resources/read", { uri }) as Promise<ResourceReadResult>;
+    readResource(uri: string, options?: RequestOptions): Promise<ResourceReadResult> {
+      return request("resources/read", { uri }, options) as Promise<ResourceReadResult>;
     },
 
-    sendMessage(message: unknown): Promise<unknown> {
-      return request("ui/message", { message });
+    sendMessage(message: unknown, options?: RequestOptions): Promise<unknown> {
+      return request("ui/message", { message }, options);
     },
 
-    updateModelContext(context: unknown): Promise<unknown> {
-      return request("ui/update-model-context", { context });
+    updateModelContext(context: unknown, options?: RequestOptions): Promise<unknown> {
+      return request("ui/update-model-context", { context }, options);
     },
 
     openLink(url: string): void {
@@ -377,8 +541,8 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
       notify("ui/download-file", { url, filename });
     },
 
-    requestDisplayMode(mode: string): Promise<unknown> {
-      return request("ui/request-display-mode", { mode });
+    requestDisplayMode(mode: string, options?: RequestOptions): Promise<unknown> {
+      return request("ui/request-display-mode", { mode }, options);
     },
 
     requestTeardown(): void {
@@ -388,6 +552,18 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
     log(level: string, message: string, data?: unknown): void {
       notify("ui/log", { level, message, data });
     },
+
+    // Style utilities.
+    applyTheme,
+    applyStyleVariables,
+    applyFonts,
+    applyHostStyles,
+
+    // Bidirectional handlers (set these before connecting).
+    set oncalltool(handler: CallToolHandler | null) { _oncalltool = handler; },
+    get oncalltool(): CallToolHandler | null { return _oncalltool; },
+    set onlisttools(handler: ListToolsHandler | null) { _onlisttools = handler; },
+    get onlisttools(): ListToolsHandler | null { return _onlisttools; },
 
     // Utility.
     isHosted(): boolean {

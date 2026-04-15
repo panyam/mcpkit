@@ -109,23 +109,71 @@ test.describe("MCP App Bridge — fake host integration", () => {
     expect(logs.length).toBeGreaterThan(0);
   });
 
-  test("host-context-changed updates iframe", async ({ page }) => {
+  test("host-context-changed applies theme and style variables", async ({
+    page,
+  }) => {
     const frame = page.frameLocator("#app-frame");
 
-    // Verify initial theme.
+    // Verify initial theme from connect.
     await expect(frame.locator("#theme")).toHaveText("dark");
 
-    // The app.html doesn't have a hostcontextchanged handler that updates
-    // the UI, but we can verify the bridge processes it without error.
+    // Send context change with theme + style variables.
     await page.evaluate(() => {
       (window as any).__sendToApp({
         jsonrpc: "2.0",
         method: "ui/notifications/host-context-changed",
-        params: { hostContext: { theme: "light" } },
+        params: {
+          hostContext: {
+            theme: "light",
+            styles: { variables: { "--accent": "blue" } },
+          },
+        },
       });
     });
 
-    // No crash — bridge handled it gracefully.
-    await expect(frame.locator("#status")).toHaveText("connected");
+    await expect(frame.locator("#theme")).toHaveText("light");
+    await expect(frame.locator("#style-var")).toHaveText("blue");
+  });
+
+  test("bidirectional: host calls tool on app", async ({ page }) => {
+    // Host sends a tools/call request to the app iframe.
+    await page.evaluate(() => {
+      (window as any).__sendToApp({
+        jsonrpc: "2.0",
+        id: 9001,
+        method: "tools/call",
+        params: { name: "app-action", arguments: { key: "val" } },
+      });
+    });
+
+    await page.waitForTimeout(100);
+
+    // Verify the app responded.
+    const resp = await page.evaluate(() => {
+      return (window as any).__hostLog.find(
+        (m: any) => m.direction === "in" && m.id === 9001
+      );
+    });
+    expect(resp).toBeDefined();
+  });
+
+  test("bidirectional: host lists app tools", async ({ page }) => {
+    await page.evaluate(() => {
+      (window as any).__sendToApp({
+        jsonrpc: "2.0",
+        id: 9002,
+        method: "tools/list",
+        params: {},
+      });
+    });
+
+    await page.waitForTimeout(100);
+
+    const resp = await page.evaluate(() => {
+      return (window as any).__hostLog.find(
+        (m: any) => m.direction === "in" && m.id === 9002
+      );
+    });
+    expect(resp).toBeDefined();
   });
 });
