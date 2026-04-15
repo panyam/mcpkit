@@ -1,7 +1,7 @@
 # MCPKit
 
 ## Version
-0.2.19
+0.2.20
 
 ## Provides
 - mcp-protocol-negotiation: Version negotiation supporting MCP 2025-11-25 and 2024-11-05
