@@ -533,12 +533,12 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
       return request("ui/update-model-context", { context }, options);
     },
 
-    openLink(url: string): void {
-      notify("ui/open-link", { url });
+    openLink(url: string, options?: RequestOptions): Promise<unknown> {
+      return request("ui/open-link", { url }, options);
     },
 
-    downloadFile(url: string, filename?: string): void {
-      notify("ui/download-file", { url, filename });
+    downloadFile(url: string, filename?: string, options?: RequestOptions): Promise<unknown> {
+      return request("ui/download-file", { url, filename }, options);
     },
 
     requestDisplayMode(mode: string, options?: RequestOptions): Promise<unknown> {

@@ -134,10 +134,10 @@ interface MCPAppBridge {
   updateModelContext(context: unknown, options?: RequestOptions): Promise<unknown>;
 
   /** Open a URL in the host browser (not inside the iframe). */
-  openLink(url: string): void;
+  openLink(url: string, options?: RequestOptions): Promise<unknown>;
 
   /** Initiate a file download through the host. */
-  downloadFile(url: string, filename?: string): void;
+  downloadFile(url: string, filename?: string, options?: RequestOptions): Promise<unknown>;
 
   /** Request a display mode change (inline, fullscreen, pip). */
   requestDisplayMode(mode: string, options?: RequestOptions): Promise<unknown>;
