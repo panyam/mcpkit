@@ -1,7 +1,7 @@
 # MCPKit
 
 ## Version
-0.2.9
+0.2.19
 
 ## Provides
 - mcp-protocol-negotiation: Version negotiation supporting MCP 2025-11-25 and 2024-11-05
@@ -67,6 +67,11 @@
 - mcp-uri-template-helpers: core.URITemplateVars/core.IsTemplateURI — RFC 6570 template detection using yosida95/uritemplate (replaces string-based `{` checks)
 - mcp-apps-elicitation-meta: ElicitationRequest._meta.ui and CreateMessageRequest._meta.ui — app metadata on server-to-client requests. ElicitWithApp/SampleWithApp helpers in ext/ui. (#191)
 - mcp-apps-conformance: 21 MCP Apps conformance tests (tool metadata, resources, visibility, fallback, negotiation)
+- mcp-apps-bridge: MCP App Bridge — framework-agnostic JS for iframe postMessage protocol. TypeScript source → compiled JS + .d.ts. Global MCPApp singleton: on/off/once events, callTool, readResource, sendMessage, updateModelContext, openLink, downloadFile, requestDisplayMode. Auto ResizeObserver + CustomEvent dispatch for HTMX. Graceful no-op when not hosted. (v0.2.18)
+- mcp-apps-bridge-template: BridgeData + BridgeTemplateDef() — Go html/template integration for explicit bridge inclusion. template.JS for safe unescaped JS. Single `<script type="module">` pattern. (v0.2.19)
+- mcp-apps-bridge-serve: ServeBridge() HTTP handler at /_mcpkit/mcp-app-bridge.js — serves bridge JS for external `<script src>` loading
+- mcp-apps-bridge-inject: InjectAppBridge(html) + AppShellHTML(title, body) — convenience helpers for inline bridge injection
+- mcp-json-no-html-escape: core.MarshalJSON with SetEscapeHTML(false) — JSON-RPC responses preserve literal <, >, & matching Node.js/Python behavior. Fixes HTML content in resource responses for MCP Apps hosts. (v0.2.19)
 - mcp-protogen: ext/protogen — protoc plugin (protoc-gen-go-mcp) generates MCP registrations from proto service definitions. Proto annotations (mcp_tool, mcp_resource, mcp_prompt, mcp_service) with full field support. In-process, gRPC forwarding, and ConnectRPC forwarding variants for all three primitives. JSON Schema derived from proto messages. Uses typed handler contexts. Published to buf.build/mcpkit/protogen. (#211, #216, #217, #218)
 - mcp-protogen-tool-annotations: mcp_tool annotation fields: name, description, timeout, structured_output, result_summary. Validated at generation time (invalid names/timeouts are fatal errors). Namespace prefix via mcp_service.namespace. (#216)
 - mcp-protogen-resources: mcp_resource annotation → server.Resource (static) or server.ResourceTemplate (parameterized). URI template detection via core.IsTemplateURI. runtime.BindParams delegates to protokit PopulateFromMap for type-coerced field binding. (#217)
