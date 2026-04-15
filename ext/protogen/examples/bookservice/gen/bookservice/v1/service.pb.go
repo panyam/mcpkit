@@ -519,6 +519,156 @@ func (x *RecommendBooksResponse) GetReasoning() string {
 	return ""
 }
 
+type ReviewBookRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BookId        string                 `protobuf:"bytes,1,opt,name=book_id,json=bookId,proto3" json:"book_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReviewBookRequest) Reset() {
+	*x = ReviewBookRequest{}
+	mi := &file_bookservice_v1_service_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReviewBookRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReviewBookRequest) ProtoMessage() {}
+
+func (x *ReviewBookRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_bookservice_v1_service_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReviewBookRequest.ProtoReflect.Descriptor instead.
+func (*ReviewBookRequest) Descriptor() ([]byte, []int) {
+	return file_bookservice_v1_service_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ReviewBookRequest) GetBookId() string {
+	if x != nil {
+		return x.BookId
+	}
+	return ""
+}
+
+type ReviewBookResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Review        string                 `protobuf:"bytes,1,opt,name=review,proto3" json:"review,omitempty"`
+	Approved      bool                   `protobuf:"varint,2,opt,name=approved,proto3" json:"approved,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReviewBookResponse) Reset() {
+	*x = ReviewBookResponse{}
+	mi := &file_bookservice_v1_service_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReviewBookResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReviewBookResponse) ProtoMessage() {}
+
+func (x *ReviewBookResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_bookservice_v1_service_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReviewBookResponse.ProtoReflect.Descriptor instead.
+func (*ReviewBookResponse) Descriptor() ([]byte, []int) {
+	return file_bookservice_v1_service_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ReviewBookResponse) GetReview() string {
+	if x != nil {
+		return x.Review
+	}
+	return ""
+}
+
+func (x *ReviewBookResponse) GetApproved() bool {
+	if x != nil {
+		return x.Approved
+	}
+	return false
+}
+
+// ReviewApproval is the elicitation schema for the ReviewBook tool.
+// Users confirm or reject the AI-generated review.
+type ReviewApproval struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Approved      bool                   `protobuf:"varint,1,opt,name=approved,proto3" json:"approved,omitempty"`
+	Notes         *string                `protobuf:"bytes,2,opt,name=notes,proto3,oneof" json:"notes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReviewApproval) Reset() {
+	*x = ReviewApproval{}
+	mi := &file_bookservice_v1_service_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReviewApproval) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReviewApproval) ProtoMessage() {}
+
+func (x *ReviewApproval) ProtoReflect() protoreflect.Message {
+	mi := &file_bookservice_v1_service_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReviewApproval.ProtoReflect.Descriptor instead.
+func (*ReviewApproval) Descriptor() ([]byte, []int) {
+	return file_bookservice_v1_service_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ReviewApproval) GetApproved() bool {
+	if x != nil {
+		return x.Approved
+	}
+	return false
+}
+
+func (x *ReviewApproval) GetNotes() string {
+	if x != nil && x.Notes != nil {
+		return *x.Notes
+	}
+	return ""
+}
+
 type Book struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -534,7 +684,7 @@ type Book struct {
 
 func (x *Book) Reset() {
 	*x = Book{}
-	mi := &file_bookservice_v1_service_proto_msgTypes[10]
+	mi := &file_bookservice_v1_service_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -546,7 +696,7 @@ func (x *Book) String() string {
 func (*Book) ProtoMessage() {}
 
 func (x *Book) ProtoReflect() protoreflect.Message {
-	mi := &file_bookservice_v1_service_proto_msgTypes[10]
+	mi := &file_bookservice_v1_service_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -559,7 +709,7 @@ func (x *Book) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Book.ProtoReflect.Descriptor instead.
 func (*Book) Descriptor() ([]byte, []int) {
-	return file_bookservice_v1_service_proto_rawDescGZIP(), []int{10}
+	return file_bookservice_v1_service_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *Book) GetId() string {
@@ -644,7 +794,16 @@ const file_bookservice_v1_service_proto_rawDesc = "" +
 	"\x05count\x18\x03 \x01(\x05R\x05count\"v\n" +
 	"\x16RecommendBooksResponse\x12>\n" +
 	"\x0frecommendations\x18\x01 \x03(\v2\x14.bookservice.v1.BookR\x0frecommendations\x12\x1c\n" +
-	"\treasoning\x18\x02 \x01(\tR\treasoning\"\xa2\x01\n" +
+	"\treasoning\x18\x02 \x01(\tR\treasoning\",\n" +
+	"\x11ReviewBookRequest\x12\x17\n" +
+	"\abook_id\x18\x01 \x01(\tR\x06bookId\"H\n" +
+	"\x12ReviewBookResponse\x12\x16\n" +
+	"\x06review\x18\x01 \x01(\tR\x06review\x12\x1a\n" +
+	"\bapproved\x18\x02 \x01(\bR\bapproved\"Q\n" +
+	"\x0eReviewApproval\x12\x1a\n" +
+	"\bapproved\x18\x01 \x01(\bR\bapproved\x12\x19\n" +
+	"\x05notes\x18\x02 \x01(\tH\x00R\x05notes\x88\x01\x01B\b\n" +
+	"\x06_notes\"\xa2\x01\n" +
 	"\x04Book\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x16\n" +
@@ -652,7 +811,7 @@ const file_bookservice_v1_service_proto_rawDesc = "" +
 	"\x05genre\x18\x04 \x01(\tR\x05genre\x12\x12\n" +
 	"\x04year\x18\x05 \x01(\x05R\x04year\x12\x1a\n" +
 	"\bsynopsis\x18\x06 \x01(\tR\bsynopsis\x12\x16\n" +
-	"\x06rating\x18\a \x01(\x02R\x06rating2\x95\x06\n" +
+	"\x06rating\x18\a \x01(\x02R\x06rating2\xcb\b\n" +
 	"\vBookService\x12\xa3\x01\n" +
 	"\vSearchBooks\x12\".bookservice.v1.SearchBooksRequest\x1a#.bookservice.v1.SearchBooksResponse\"K\xca\xf3\x18G\n" +
 	"\x06search\x12\x17Search the book catalog \x01*\"Found {total} books matching query\x12\x88\x01\n" +
@@ -662,7 +821,13 @@ const file_bookservice_v1_service_proto_rawDesc = "" +
 	"\x1aauthor://{author_id}/books\x12\fAuthor Books\x1a\x10application/json\x12\x94\x01\n" +
 	"\rSummarizeBook\x12$.bookservice.v1.SummarizeBookRequest\x1a%.bookservice.v1.SummarizeBookResponse\"6\xda\xf3\x182\n" +
 	"\tsummarize\x12\x1cGenerate a summary of a book\x1a\abook_id\x12\x8c\x01\n" +
-	"\x0eRecommendBooks\x12%.bookservice.v1.RecommendBooksRequest\x1a&.bookservice.v1.RecommendBooksResponse\"+\xda\xf3\x18'\x12%Get personalized book recommendations\x1a\v\x92\xf4\x18\a\n" +
+	"\x0eRecommendBooks\x12%.bookservice.v1.RecommendBooksRequest\x1a&.bookservice.v1.RecommendBooksResponse\"+\xda\xf3\x18'\x12%Get personalized book recommendations\x12\xb3\x02\n" +
+	"\n" +
+	"ReviewBook\x12!.bookservice.v1.ReviewBookRequest\x1a\".bookservice.v1.ReviewBookResponse\"\xdd\x01\xca\xf3\x18=\n" +
+	"\x06review\x123Generate an AI review of a book, with user approval\xe2\xf3\x18<\n" +
+	"*Please review and approve this book review\x12\x0eReviewApproval\xea\xf3\x18X\n" +
+	"BYou are a literary critic. Write concise, insightful book reviews.\x10\xac\x02\x1a\n" +
+	"thisServer%fff?\x1a\v\x92\xf4\x18\a\n" +
 	"\x05booksBWZUgithub.com/panyam/mcpkit/ext/protogen/examples/bookservice/gen/bookservice/v1;booksv1b\x06proto3"
 
 var (
@@ -677,7 +842,7 @@ func file_bookservice_v1_service_proto_rawDescGZIP() []byte {
 	return file_bookservice_v1_service_proto_rawDescData
 }
 
-var file_bookservice_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_bookservice_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_bookservice_v1_service_proto_goTypes = []any{
 	(*SearchBooksRequest)(nil),     // 0: bookservice.v1.SearchBooksRequest
 	(*SearchBooksResponse)(nil),    // 1: bookservice.v1.SearchBooksResponse
@@ -689,25 +854,30 @@ var file_bookservice_v1_service_proto_goTypes = []any{
 	(*SummarizeBookResponse)(nil),  // 7: bookservice.v1.SummarizeBookResponse
 	(*RecommendBooksRequest)(nil),  // 8: bookservice.v1.RecommendBooksRequest
 	(*RecommendBooksResponse)(nil), // 9: bookservice.v1.RecommendBooksResponse
-	(*Book)(nil),                   // 10: bookservice.v1.Book
+	(*ReviewBookRequest)(nil),      // 10: bookservice.v1.ReviewBookRequest
+	(*ReviewBookResponse)(nil),     // 11: bookservice.v1.ReviewBookResponse
+	(*ReviewApproval)(nil),         // 12: bookservice.v1.ReviewApproval
+	(*Book)(nil),                   // 13: bookservice.v1.Book
 }
 var file_bookservice_v1_service_proto_depIdxs = []int32{
-	10, // 0: bookservice.v1.SearchBooksResponse.results:type_name -> bookservice.v1.Book
-	10, // 1: bookservice.v1.GetBookResponse.book:type_name -> bookservice.v1.Book
-	10, // 2: bookservice.v1.GetAuthorBooksResponse.books:type_name -> bookservice.v1.Book
-	10, // 3: bookservice.v1.RecommendBooksResponse.recommendations:type_name -> bookservice.v1.Book
+	13, // 0: bookservice.v1.SearchBooksResponse.results:type_name -> bookservice.v1.Book
+	13, // 1: bookservice.v1.GetBookResponse.book:type_name -> bookservice.v1.Book
+	13, // 2: bookservice.v1.GetAuthorBooksResponse.books:type_name -> bookservice.v1.Book
+	13, // 3: bookservice.v1.RecommendBooksResponse.recommendations:type_name -> bookservice.v1.Book
 	0,  // 4: bookservice.v1.BookService.SearchBooks:input_type -> bookservice.v1.SearchBooksRequest
 	2,  // 5: bookservice.v1.BookService.GetBook:input_type -> bookservice.v1.GetBookRequest
 	4,  // 6: bookservice.v1.BookService.GetAuthorBooks:input_type -> bookservice.v1.GetAuthorBooksRequest
 	6,  // 7: bookservice.v1.BookService.SummarizeBook:input_type -> bookservice.v1.SummarizeBookRequest
 	8,  // 8: bookservice.v1.BookService.RecommendBooks:input_type -> bookservice.v1.RecommendBooksRequest
-	1,  // 9: bookservice.v1.BookService.SearchBooks:output_type -> bookservice.v1.SearchBooksResponse
-	3,  // 10: bookservice.v1.BookService.GetBook:output_type -> bookservice.v1.GetBookResponse
-	5,  // 11: bookservice.v1.BookService.GetAuthorBooks:output_type -> bookservice.v1.GetAuthorBooksResponse
-	7,  // 12: bookservice.v1.BookService.SummarizeBook:output_type -> bookservice.v1.SummarizeBookResponse
-	9,  // 13: bookservice.v1.BookService.RecommendBooks:output_type -> bookservice.v1.RecommendBooksResponse
-	9,  // [9:14] is the sub-list for method output_type
-	4,  // [4:9] is the sub-list for method input_type
+	10, // 9: bookservice.v1.BookService.ReviewBook:input_type -> bookservice.v1.ReviewBookRequest
+	1,  // 10: bookservice.v1.BookService.SearchBooks:output_type -> bookservice.v1.SearchBooksResponse
+	3,  // 11: bookservice.v1.BookService.GetBook:output_type -> bookservice.v1.GetBookResponse
+	5,  // 12: bookservice.v1.BookService.GetAuthorBooks:output_type -> bookservice.v1.GetAuthorBooksResponse
+	7,  // 13: bookservice.v1.BookService.SummarizeBook:output_type -> bookservice.v1.SummarizeBookResponse
+	9,  // 14: bookservice.v1.BookService.RecommendBooks:output_type -> bookservice.v1.RecommendBooksResponse
+	11, // 15: bookservice.v1.BookService.ReviewBook:output_type -> bookservice.v1.ReviewBookResponse
+	10, // [10:16] is the sub-list for method output_type
+	4,  // [4:10] is the sub-list for method input_type
 	4,  // [4:4] is the sub-list for extension type_name
 	4,  // [4:4] is the sub-list for extension extendee
 	0,  // [0:4] is the sub-list for field type_name
@@ -719,13 +889,14 @@ func file_bookservice_v1_service_proto_init() {
 		return
 	}
 	file_bookservice_v1_service_proto_msgTypes[6].OneofWrappers = []any{}
+	file_bookservice_v1_service_proto_msgTypes[12].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_bookservice_v1_service_proto_rawDesc), len(file_bookservice_v1_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

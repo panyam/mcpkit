@@ -95,12 +95,14 @@ type fileData struct {
 
 // serviceData holds data for one proto service.
 type serviceData struct {
-	Name        string // Go name (e.g. "UserService")
-	Namespace   string // from mcp_service annotation
-	Tools       []toolData
-	Resources   []resourceData
-	Prompts     []promptData
-	Completions []completionData
+	Name          string // Go name (e.g. "UserService")
+	Namespace     string // from mcp_service annotation
+	Tools         []toolData
+	Resources     []resourceData
+	Prompts       []promptData
+	Completions   []completionData
+	Elicitations  []elicitData
+	Samplings     []samplingData
 }
 
 // HasContent reports whether the service has any tools, resources, or prompts to generate.
@@ -173,6 +175,27 @@ type promptArg struct {
 	Required    bool   // true for non-optional scalar fields
 }
 
+// elicitData holds data for one generated elicitation helper.
+type elicitData struct {
+	ToolMethodName string // parent tool's Go method name (e.g. "ReviewBook")
+	Message        string // default prompt message shown to user
+	SchemaType     string // qualified Go ident for the schema message (e.g. "ReviewApproval")
+	SchemaJSON     string // JSON Schema string derived from the proto message
+	GoHelper       string // exported helper name (e.g. "ElicitReviewApproval")
+}
+
+// samplingData holds data for one generated sampling helper.
+type samplingData struct {
+	ToolMethodName       string  // parent tool's Go method name
+	GoHelper             string  // exported helper name (e.g. "SampleForReviewBook")
+	SystemPrompt         string
+	MaxTokens            int32
+	IncludeContext       string
+	IntelligencePriority float32
+	SpeedPriority        float32
+	CostPriority         float32
+}
+
 // toolData holds data for one MCP tool generated from a unary RPC.
 type toolData struct {
 	MethodName    string // Go method name (e.g. "GetUser")
@@ -197,7 +220,7 @@ func collectFileData(file *protogen.File, gf *protogen.GeneratedFile, cfg Config
 	}
 
 	for _, svc := range file.Services {
-		sd, err := collectServiceData(svc, gf)
+		sd, err := collectServiceData(svc, file, gf)
 		if err != nil {
 			return fileData{}, err
 		}
@@ -209,14 +232,18 @@ func collectFileData(file *protogen.File, gf *protogen.GeneratedFile, cfg Config
 	return data, nil
 }
 
-func collectServiceData(svc *protogen.Service, gf *protogen.GeneratedFile) (serviceData, error) {
+func collectServiceData(svc *protogen.Service, file *protogen.File, gf *protogen.GeneratedFile) (serviceData, error) {
 	sd := serviceData{
 		Name: svc.GoName,
 	}
 
-	// Read mcp_service annotation for namespace.
+	// Read mcp_service annotation for namespace and defaults.
+	var defaultSampling *mcpv1.MCPSamplingOptions
+	var defaultElicit *mcpv1.MCPElicitOptions
 	if svcOpts := mcpv1.GetServiceOptions(svc.Desc.Options()); svcOpts != nil {
 		sd.Namespace = svcOpts.Namespace
+		defaultSampling = svcOpts.DefaultSampling
+		defaultElicit = svcOpts.DefaultElicit
 	}
 
 	seenNames := map[string]*protogen.Method{}
@@ -244,6 +271,13 @@ func collectServiceData(svc *protogen.Service, gf *protogen.GeneratedFile) (serv
 		}
 		if annotCount > 1 {
 			return sd, fmt.Errorf("method %s: cannot have multiple MCP annotations (tool/resource/prompt)", method.GoName)
+		}
+
+		// Read elicit/sampling annotations (only valid on tool methods).
+		elicitOpts := mcpv1.GetElicitOptions(method.Desc.Options())
+		samplingOpts := mcpv1.GetSamplingOptions(method.Desc.Options())
+		if (elicitOpts != nil || samplingOpts != nil) && toolOpts == nil {
+			return sd, fmt.Errorf("method %s: mcp_elicit/mcp_sampling can only be used on mcp_tool methods", method.GoName)
 		}
 
 		// Use qualified Go idents so the template gets proper imports.
@@ -342,9 +376,78 @@ func collectServiceData(svc *protogen.Service, gf *protogen.GeneratedFile) (serv
 			ResponseType:  respType,
 			InputSchema:   string(schemaJSON),
 		})
+
+		// Collect elicitation helper (method-level overrides service-level).
+		effectiveElicit := elicitOpts
+		if effectiveElicit == nil {
+			effectiveElicit = defaultElicit
+		}
+		if effectiveElicit != nil && effectiveElicit.SchemaMessage != "" {
+			ed, err := collectElicit(method, effectiveElicit, file, gf)
+			if err != nil {
+				return sd, err
+			}
+			sd.Elicitations = append(sd.Elicitations, ed)
+		}
+
+		// Collect sampling helper (method-level overrides service-level).
+		effectiveSampling := samplingOpts
+		if effectiveSampling == nil {
+			effectiveSampling = defaultSampling
+		}
+		if effectiveSampling != nil && (effectiveSampling.SystemPrompt != "" || effectiveSampling.MaxTokens > 0) {
+			sd.Samplings = append(sd.Samplings, collectSampling(method, effectiveSampling))
+		}
 	}
 
 	return sd, nil
+}
+
+// collectElicit builds an elicitData from a method's elicit annotation.
+// It resolves schema_message to a proto message in the same file and derives
+// JSON Schema from its fields.
+func collectElicit(method *protogen.Method, opts *mcpv1.MCPElicitOptions, file *protogen.File, gf *protogen.GeneratedFile) (elicitData, error) {
+	// Find the schema message in the same proto file.
+	var schemaMsg *protogen.Message
+	for _, msg := range file.Messages {
+		if string(msg.Desc.Name()) == opts.SchemaMessage {
+			schemaMsg = msg
+			break
+		}
+	}
+	if schemaMsg == nil {
+		return elicitData{}, fmt.Errorf("method %s: mcp_elicit.schema_message %q not found in %s",
+			method.GoName, opts.SchemaMessage, file.Desc.Path())
+	}
+
+	// Derive JSON Schema from the schema message.
+	schemaMap := schema.FromMessage(schemaMsg.Desc)
+	schemaJSON, _ := json.Marshal(schemaMap)
+
+	// Helper name: "Elicit" + schema message Go name (e.g. "ElicitReviewApproval").
+	helperName := "Elicit" + schemaMsg.GoIdent.GoName
+
+	return elicitData{
+		ToolMethodName: method.GoName,
+		Message:        escapeString(opts.Message),
+		SchemaType:     gf.QualifiedGoIdent(schemaMsg.GoIdent),
+		SchemaJSON:     string(schemaJSON),
+		GoHelper:       helperName,
+	}, nil
+}
+
+// collectSampling builds a samplingData from a method's sampling annotation.
+func collectSampling(method *protogen.Method, opts *mcpv1.MCPSamplingOptions) samplingData {
+	return samplingData{
+		ToolMethodName:       method.GoName,
+		GoHelper:             "SampleFor" + method.GoName,
+		SystemPrompt:         escapeString(opts.SystemPrompt),
+		MaxTokens:            opts.MaxTokens,
+		IncludeContext:       opts.IncludeContext,
+		IntelligencePriority: opts.IntelligencePriority,
+		SpeedPriority:        opts.SpeedPriority,
+		CostPriority:         opts.CostPriority,
+	}
 }
 
 func collectPrompt(method *protogen.Method, opts *mcpv1.MCPPromptOptions, namespace, reqType, respType string) promptData {
@@ -383,7 +486,7 @@ func collectPrompt(method *protogen.Method, opts *mcpv1.MCPPromptOptions, namesp
 }
 
 func collectResource(method *protogen.Method, opts *mcpv1.MCPResourceOptions, reqType, respType string) (resourceData, error) {
-	if opts.URITemplate == "" {
+	if opts.UriTemplate == "" {
 		return resourceData{}, fmt.Errorf("method %s: mcp_resource.uri_template is required", method.GoName)
 	}
 
@@ -397,11 +500,11 @@ func collectResource(method *protogen.Method, opts *mcpv1.MCPResourceOptions, re
 		mimeType = "application/json"
 	}
 
-	params := core.URITemplateVars(opts.URITemplate)
+	params := core.URITemplateVars(opts.UriTemplate)
 
 	return resourceData{
 		MethodName:   method.GoName,
-		URI:          opts.URITemplate,
+		URI:          opts.UriTemplate,
 		Name:         opts.Name,
 		MimeType:     mimeType,
 		Description:  desc,

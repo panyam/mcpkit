@@ -3,6 +3,7 @@ package mcpv1
 import (
 	"testing"
 
+	"github.com/panyam/protokit/wire"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/encoding/protowire"
 )
@@ -70,7 +71,7 @@ func TestDecodeString(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			raw := buildEmbeddedMessage(tt.fields)
-			got := decodeString(raw, tt.fieldNum)
+			got := wire.DecodeString(raw, tt.fieldNum)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -105,7 +106,7 @@ func TestDecodeBool(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			raw := buildEmbeddedMessage(tt.fields)
-			got := decodeBool(raw, tt.fieldNum)
+			got := wire.DecodeBool(raw, tt.fieldNum)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -113,26 +114,20 @@ func TestDecodeBool(t *testing.T) {
 
 func TestExtractExtension(t *testing.T) {
 	inner := buildEmbeddedMessage(map[protowire.Number]any{1: "test_tool"})
-	raw := buildOptionsBytes(FieldMCPTool, inner)
 
 	t.Run("found", func(t *testing.T) {
-		// Wrap raw bytes in a minimal proto message for extractExtension.
-		// Since extractExtension calls proto.Marshal on its input, we test
-		// the lower-level decode helpers directly here instead.
-		got := decodeString(inner, 1)
+		got := wire.DecodeString(inner, 1)
 		assert.Equal(t, "test_tool", got)
 	})
 
 	t.Run("not found", func(t *testing.T) {
-		// Scan for a field that isn't there.
-		got := decodeString(raw, 99999)
+		raw := buildOptionsBytes(FieldMCPTool, inner)
+		got := wire.DecodeString(raw, 99999)
 		assert.Equal(t, "", got)
 	})
 }
 
 func TestGetToolOptions_fromRawBytes(t *testing.T) {
-	// Test the decoding logic directly since we can't easily construct
-	// a real descriptorpb.MethodOptions with custom extensions in unit tests.
 	inner := buildEmbeddedMessage(map[protowire.Number]any{
 		1: "my_tool",
 		2: "Does something useful",
@@ -141,10 +136,10 @@ func TestGetToolOptions_fromRawBytes(t *testing.T) {
 	})
 
 	opts := &MCPToolOptions{
-		Name:             decodeString(inner, 1),
-		Description:      decodeString(inner, 2),
-		Timeout:          decodeString(inner, 3),
-		StructuredOutput: decodeBool(inner, 4),
+		Name:             wire.DecodeString(inner, 1),
+		Description:      wire.DecodeString(inner, 2),
+		Timeout:          wire.DecodeString(inner, 3),
+		StructuredOutput: wire.DecodeBool(inner, 4),
 	}
 
 	assert.Equal(t, "my_tool", opts.Name)
@@ -162,13 +157,13 @@ func TestGetResourceOptions_fromRawBytes(t *testing.T) {
 	})
 
 	opts := &MCPResourceOptions{
-		URITemplate: decodeString(inner, 1),
-		Name:        decodeString(inner, 2),
-		MimeType:    decodeString(inner, 3),
-		Description: decodeString(inner, 4),
+		UriTemplate: wire.DecodeString(inner, 1),
+		Name:        wire.DecodeString(inner, 2),
+		MimeType:    wire.DecodeString(inner, 3),
+		Description: wire.DecodeString(inner, 4),
 	}
 
-	assert.Equal(t, "user://{user_id}/profile", opts.URITemplate)
+	assert.Equal(t, "user://{user_id}/profile", opts.UriTemplate)
 	assert.Equal(t, "User Profile", opts.Name)
 	assert.Equal(t, "application/json", opts.MimeType)
 	assert.Equal(t, "A user's profile data", opts.Description)
@@ -181,8 +176,8 @@ func TestGetPromptOptions_fromRawBytes(t *testing.T) {
 	})
 
 	opts := &MCPPromptOptions{
-		Name:        decodeString(inner, 1),
-		Description: decodeString(inner, 2),
+		Name:        wire.DecodeString(inner, 1),
+		Description: wire.DecodeString(inner, 2),
 	}
 
 	assert.Equal(t, "summarize", opts.Name)
@@ -195,7 +190,7 @@ func TestGetServiceOptions_fromRawBytes(t *testing.T) {
 	})
 
 	opts := &MCPServiceOptions{
-		Namespace: decodeString(inner, 1),
+		Namespace: wire.DecodeString(inner, 1),
 	}
 
 	assert.Equal(t, "users", opts.Namespace)
@@ -205,5 +200,7 @@ func TestNilInputs(t *testing.T) {
 	assert.Nil(t, GetToolOptions(nil))
 	assert.Nil(t, GetResourceOptions(nil))
 	assert.Nil(t, GetPromptOptions(nil))
+	assert.Nil(t, GetElicitOptions(nil))
+	assert.Nil(t, GetSamplingOptions(nil))
 	assert.Nil(t, GetServiceOptions(nil))
 }
