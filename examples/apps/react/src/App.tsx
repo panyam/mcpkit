@@ -5,8 +5,11 @@ function App() {
   const { connected, hostContext, callTool } = useMCPApp();
   const [serverTime, setServerTime] = useState("Loading...");
   const [messageText, setMessageText] = useState("This is message text.");
+  const [messageStatus, setMessageStatus] = useState("");
   const [logText, setLogText] = useState("This is log text.");
+  const [logStatus, setLogStatus] = useState("");
   const [linkUrl, setLinkUrl] = useState("https://modelcontextprotocol.io/");
+  const [linkStatus, setLinkStatus] = useState("");
 
   // Listen for tool results pushed by the host (LLM-initiated calls).
   useMCPEvent("toolresult", useCallback((data: MCPAppEventMap["toolresult"]) => {
@@ -27,22 +30,29 @@ function App() {
   };
 
   const handleSendMessage = async () => {
+    setMessageStatus("Sending...");
     try {
       await MCPApp.sendMessage({
         role: "user",
         content: [{ type: "text", text: messageText }],
       }, { timeout: 5000 });
+      setMessageStatus("Sent!");
     } catch (e) {
+      setMessageStatus("Error: " + (e instanceof Error ? e.message : String(e)));
       console.error("Message send error:", e);
     }
   };
 
   const handleSendLog = () => {
     MCPApp.log("info", logText);
+    setLogStatus("Log sent (check host log panel)");
+    setTimeout(() => setLogStatus(""), 2000);
   };
 
   const handleOpenLink = () => {
     MCPApp.openLink(linkUrl);
+    setLinkStatus("Link sent to host");
+    setTimeout(() => setLinkStatus(""), 2000);
   };
 
   const theme = hostContext?.theme || "unknown";
@@ -72,6 +82,7 @@ function App() {
         <button onClick={handleSendMessage} disabled={!connected}>
           Send Message
         </button>
+        {messageStatus && <Status text={messageStatus} />}
       </Section>
 
       <Section title="Send Log">
@@ -84,6 +95,7 @@ function App() {
         <button onClick={handleSendLog} disabled={!connected}>
           Send Log
         </button>
+        {logStatus && <Status text={logStatus} />}
       </Section>
 
       <Section title="Open Link">
@@ -96,6 +108,7 @@ function App() {
         <button onClick={handleOpenLink} disabled={!connected}>
           Open Link
         </button>
+        {linkStatus && <Status text={linkStatus} />}
       </Section>
     </main>
   );
@@ -113,6 +126,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       {children}
     </div>
   );
+}
+
+function Status({ text }: { text: string }) {
+  return <p style={{ fontSize: "0.85em", color: "#888", margin: "0.5em 0 0" }}>{text}</p>;
 }
 
 export default App;

@@ -526,7 +526,7 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
     },
 
     sendMessage(message: unknown, options?: RequestOptions): Promise<unknown> {
-      return request("ui/message", { message }, options);
+      return request("ui/message", message, options);
     },
 
     updateModelContext(context: unknown, options?: RequestOptions): Promise<unknown> {
