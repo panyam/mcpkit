@@ -31,7 +31,10 @@ func main() {
 	flag.Parse()
 
 	// Inject the bridge into our HTML at startup.
-	dicePageHTML := ui.InjectAppBridge(diceHTML)
+	dicePageHTML := ui.InjectAppBridge(diceHTML, &ui.BridgeConfig{
+		Name:    "dice-app",
+		Version: "0.1.0",
+	})
 
 	srv := server.NewServer(
 		core.ServerInfo{Name: "dice-app", Version: "0.1.0"},

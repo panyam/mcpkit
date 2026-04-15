@@ -90,6 +90,20 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
   // Guard against double-inclusion.
   if ((window as any).MCPApp) return;
 
+  // Configuration: set window.MCPAppConfig before loading this script
+  // to customize app identity and protocol version.
+  //
+  //   <script>
+  //     window.MCPAppConfig = { name: "my-app", version: "1.0.0" };
+  //   </script>
+  //   <script src="mcp-app-bridge.js"></script>
+  //
+  // Go helpers (InjectAppBridge, AppShellHTML) inject this automatically.
+  const config = (window as any).MCPAppConfig || {};
+  const APP_NAME: string = config.name || "mcp-app";
+  const APP_VERSION: string = config.version || "0.0.0";
+  const PROTOCOL_VERSION: string = config.protocolVersion || "2026-01-26";
+
   let nextId = 1;
   const pending = new Map<
     number,
@@ -295,7 +309,11 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
       _connected = false;
     }, 2000);
 
-    request("ui/initialize", {})
+    request("ui/initialize", {
+      protocolVersion: PROTOCOL_VERSION,
+      appInfo: { name: APP_NAME, version: APP_VERSION },
+      appCapabilities: {},
+    })
       .then((result: any) => {
         clearTimeout(timeout);
         _connected = true;
