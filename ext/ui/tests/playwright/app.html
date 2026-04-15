@@ -12,6 +12,7 @@
   <div id="status">not connected</div>
   <div id="result">no result</div>
   <div id="theme">no theme</div>
+  <div id="style-var">no style var</div>
   <button id="call-tool">Call Tool</button>
   <button id="open-link">Open Link</button>
 
@@ -22,6 +23,7 @@
     var statusEl = document.getElementById('status');
     var resultEl = document.getElementById('result');
     var themeEl = document.getElementById('theme');
+    var styleVarEl = document.getElementById('style-var');
 
     MCPApp.on('connected', function(data) {
       statusEl.textContent = 'connected';
@@ -37,6 +39,21 @@
       }
       resultEl.textContent = text || JSON.stringify(data.result);
     });
+
+    MCPApp.on('hostcontextchanged', function(data) {
+      themeEl.textContent = data.hostContext.theme || themeEl.textContent;
+      var accent = getComputedStyle(document.documentElement).getPropertyValue('--accent');
+      if (accent) styleVarEl.textContent = accent.trim();
+    });
+
+    // Register app-side tool for bidirectional tests.
+    MCPApp.oncalltool = function(params) {
+      return { content: [{ type: 'text', text: 'app-handled:' + params.name }] };
+    };
+
+    MCPApp.onlisttools = function() {
+      return [{ name: 'app-tool', description: 'A tool provided by the app' }];
+    };
 
     document.getElementById('call-tool').addEventListener('click', function() {
       MCPApp.callTool('test_tool', { value: 42 }).then(function(res) {
