@@ -197,7 +197,7 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 		// Parse error → JSON-RPC error in response body
 		w.Header().Set("Content-Type", "application/json")
 		errResp := core.NewErrorResponse(json.RawMessage("null"), core.ErrCodeParse, "parse error: "+err.Error())
-		raw, _ := json.Marshal(errResp)
+		raw, _ := marshalJSON(errResp)
 		w.Write(raw)
 		return
 	}
@@ -215,7 +215,7 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		raw, _ := json.Marshal(resp)
+		raw, _ := marshalJSON(resp)
 		w.Write(raw)
 		return
 	}
@@ -275,7 +275,7 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	raw, err := json.Marshal(resp)
+	raw, err := marshalJSON(resp)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
@@ -298,7 +298,7 @@ func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		raw, _ := json.Marshal(resp)
+		raw, _ := marshalJSON(resp)
 		w.Write(raw)
 		return
 	}
@@ -354,7 +354,7 @@ func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Reque
 
 	// Write the JSON-RPC response as the final SSE event
 	if resp != nil {
-		raw, _ := json.Marshal(resp)
+		raw, _ := marshalJSON(resp)
 		writeSSE(raw)
 	}
 }
@@ -380,7 +380,7 @@ func (t *streamableTransport) handleInitialize(w http.ResponseWriter, r *http.Re
 	// If initialize failed (JSON-RPC error), return it without creating a session
 	if resp.Error != nil {
 		w.Header().Set("Content-Type", "application/json")
-		raw, _ := json.Marshal(resp)
+		raw, _ := marshalJSON(resp)
 		w.Write(raw)
 		return
 	}
@@ -398,7 +398,7 @@ func (t *streamableTransport) handleInitialize(w http.ResponseWriter, r *http.Re
 
 	w.Header().Set(mcpSessionIDHeader, sessionID)
 	w.Header().Set("Content-Type", "application/json")
-	raw, _ := json.Marshal(resp)
+	raw, _ := marshalJSON(resp)
 	w.Write(raw)
 }
 
@@ -604,7 +604,7 @@ func (t *streamableTransport) handleBatchPost(w http.ResponseWriter, r *http.Req
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		errResp := core.NewErrorResponse(json.RawMessage("null"), core.ErrCodeParse, "invalid batch: "+err.Error())
-		raw, _ := json.Marshal(errResp)
+		raw, _ := marshalJSON(errResp)
 		w.Write(raw)
 		return
 	}
@@ -612,7 +612,7 @@ func (t *streamableTransport) handleBatchPost(w http.ResponseWriter, r *http.Req
 	if len(parts) == 0 {
 		w.Header().Set("Content-Type", "application/json")
 		errResp := core.NewErrorResponse(json.RawMessage("null"), core.ErrCodeInvalidRequest, "empty batch")
-		raw, _ := json.Marshal(errResp)
+		raw, _ := marshalJSON(errResp)
 		w.Write(raw)
 		return
 	}
@@ -636,7 +636,7 @@ func (t *streamableTransport) handleBatchPost(w http.ResponseWriter, r *http.Req
 		var req core.Request
 		if err := json.Unmarshal(part, &req); err != nil {
 			errResp := core.NewErrorResponse(json.RawMessage("null"), core.ErrCodeParse, "parse error in batch element: "+err.Error())
-			raw, _ := json.Marshal(errResp)
+			raw, _ := marshalJSON(errResp)
 			responses = append(responses, raw)
 			continue
 		}
@@ -645,7 +645,7 @@ func (t *streamableTransport) handleBatchPost(w http.ResponseWriter, r *http.Req
 		if resp == nil {
 			continue // notification — no response entry
 		}
-		raw, _ := json.Marshal(resp)
+		raw, _ := marshalJSON(resp)
 		responses = append(responses, raw)
 	}
 
