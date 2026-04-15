@@ -1,0 +1,152 @@
+syntax = "proto3";
+package bookservice.v1;
+
+option go_package = "github.com/panyam/mcpkit/examples/protogen/bookservice/gen/bookservice/v1;booksv1";
+
+import "google/protobuf/descriptor.proto";
+import "mcp/v1/annotations.proto";
+
+// BookService demonstrates all three MCP primitives generated from proto annotations.
+service BookService {
+  option (mcp.v1.mcp_service) = { namespace: "books" };
+
+  // SearchBooks finds books matching a query.
+  rpc SearchBooks(SearchBooksRequest) returns (SearchBooksResponse) {
+    option (mcp.v1.mcp_tool) = {
+      name: "search"
+      description: "Search the book catalog"
+      structured_output: true
+      result_summary: "Found {total} books matching query"
+    };
+  }
+
+  // GetBook retrieves a book by its unique identifier.
+  rpc GetBook(GetBookRequest) returns (GetBookResponse) {
+    option (mcp.v1.mcp_resource) = {
+      uri_template: "book://{book_id}"
+      name: "Book"
+      description: "A book in the catalog"
+      completable_fields: "book_id"
+    };
+  }
+
+  // GetAuthorBooks lists all books by an author.
+  rpc GetAuthorBooks(GetAuthorBooksRequest) returns (GetAuthorBooksResponse) {
+    option (mcp.v1.mcp_resource) = {
+      uri_template: "author://{author_id}/books"
+      name: "Author Books"
+      mime_type: "application/json"
+    };
+  }
+
+  // SummarizeBook generates a summary prompt for a book.
+  rpc SummarizeBook(SummarizeBookRequest) returns (SummarizeBookResponse) {
+    option (mcp.v1.mcp_prompt) = {
+      name: "summarize"
+      description: "Generate a summary of a book"
+      completable_fields: "book_id"
+    };
+  }
+
+  // RecommendBooks generates reading recommendations based on preferences.
+  rpc RecommendBooks(RecommendBooksRequest) returns (RecommendBooksResponse) {
+    option (mcp.v1.mcp_prompt) = {
+      description: "Get personalized book recommendations"
+    };
+  }
+
+  // ReviewBook generates an AI review of a book, then asks the user to approve it.
+  rpc ReviewBook(ReviewBookRequest) returns (ReviewBookResponse) {
+    option (mcp.v1.mcp_tool) = {
+      name: "review"
+      description: "Generate an AI review of a book, with user approval"
+    };
+    option (mcp.v1.mcp_sampling) = {
+      system_prompt: "You are a literary critic. Write concise, insightful book reviews."
+      max_tokens: 300
+      include_context: "thisServer"
+      intelligence_priority: 0.9
+    };
+    option (mcp.v1.mcp_elicit) = {
+      message: "Please review and approve this book review"
+      schema_message: "ReviewApproval"
+    };
+  }
+}
+
+// --- Request/Response messages ---
+
+message SearchBooksRequest {
+  string query = 1;
+  int32 max_results = 2;
+  string genre = 3;
+}
+
+message SearchBooksResponse {
+  repeated Book results = 1;
+  int32 total = 2;
+}
+
+message GetBookRequest {
+  string book_id = 1;
+}
+
+message GetBookResponse {
+  Book book = 1;
+}
+
+message GetAuthorBooksRequest {
+  string author_id = 1;
+}
+
+message GetAuthorBooksResponse {
+  repeated Book books = 1;
+}
+
+message SummarizeBookRequest {
+  string book_id = 1;
+  optional string style = 2;  // "brief", "detailed", "academic"
+}
+
+message SummarizeBookResponse {
+  string summary = 1;
+}
+
+message RecommendBooksRequest {
+  string genre = 1;
+  string mood = 2;
+  int32 count = 3;
+}
+
+message RecommendBooksResponse {
+  repeated Book recommendations = 1;
+  string reasoning = 2;
+}
+
+message ReviewBookRequest {
+  string book_id = 1;
+}
+
+message ReviewBookResponse {
+  string review = 1;
+  bool approved = 2;
+}
+
+// ReviewApproval is the elicitation schema for the ReviewBook tool.
+// Users confirm or reject the AI-generated review.
+message ReviewApproval {
+  bool approved = 1;
+  optional string notes = 2;
+}
+
+// --- Domain model ---
+
+message Book {
+  string id = 1;
+  string title = 2;
+  string author = 3;
+  string genre = 4;
+  int32 year = 5;
+  string synopsis = 6;
+  float rating = 7;
+}

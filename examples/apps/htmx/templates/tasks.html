@@ -1,0 +1,8 @@
+{{ range .Tasks }}
+<li class="task-item{{ if .Done }} task-done{{ end }}">
+  <span>{{ .Title }}</span>
+  <span class="badge">{{ .Priority }}</span>
+</li>
+{{ else }}
+<li class="task-item">No tasks yet.</li>
+{{ end }}
