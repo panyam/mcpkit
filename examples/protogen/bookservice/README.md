@@ -24,6 +24,14 @@ make run        # Start MCP server on :8787
 go test -v .    # Run e2e tests (tool calls, resource reads, prompt listing)
 ```
 
+## Prompts to try
+
+- "Search for books about Go programming" — calls `books_search` tool
+- "Tell me about book 1" — reads `book://{book_id}` resource
+- "What books has author 1 written?" — reads `author://{author_id}/books` resource
+- "Summarize the book collection" — uses `books_summarize` prompt
+- "Recommend books for someone learning distributed systems" — uses `books_recommend_books` prompt
+
 ## Add to Claude Desktop
 
 Add this to your `claude_desktop_config.json` (or VS Code MCP settings):
@@ -34,7 +42,7 @@ Add this to your `claude_desktop_config.json` (or VS Code MCP settings):
     "bookservice": {
       "command": "go",
       "args": ["run", "."],
-      "cwd": "/path/to/mcpkit/ext/protogen/examples/bookservice",
+      "cwd": "/path/to/mcpkit/examples/protogen/bookservice",
       "transport": "streamable-http",
       "url": "http://localhost:8787/mcp"
     }
@@ -48,7 +56,7 @@ Or if you've built the binary:
 {
   "mcpServers": {
     "bookservice": {
-      "command": "/path/to/mcpkit/ext/protogen/examples/bookservice/bin/bookservice",
+      "command": "/path/to/mcpkit/examples/protogen/bookservice/bin/bookservice",
       "transport": "streamable-http",
       "url": "http://localhost:8787/mcp"
     }
