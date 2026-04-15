@@ -103,6 +103,7 @@ func myTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error)
 - **JSON HTML escaping**: `core.MarshalJSON()` uses `SetEscapeHTML(false)` — JSON-RPC responses must NOT escape `<`/`>` to `\u003c`/`\u003e`. Go is the only language that does this by default; other SDKs (Node/Python) don't, and some hosts don't unescape before parsing HTML.
 - **MCP App Bridge templates**: Use `html/template` with `template.JS` type for the bridge script (prevents escaping). Use `text/template` only if you control all inputs. See `ext/ui/bridge.go` for the `BridgeData` type.
 - **Single `<script type="module">` for MCP Apps**: MCPJam and some hosts extract inline scripts and re-serve them. Use `type="module"` (not plain `<script>`) and prefer a single script block matching the upstream Vite-bundled pattern.
+- **Request vs notification in bridge**: `openLink`, `downloadFile`, `sendMessage`, `callTool`, `readResource`, `updateModelContext`, `requestDisplayMode` are **requests** (host responds). Only `log`, `requestTeardown`, `size-changed`, `initialized` are **notifications** (fire-and-forget). Getting this wrong means the host silently ignores the call.
 
 ## Deeper Documentation
 
