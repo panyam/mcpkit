@@ -255,6 +255,73 @@ When a forwarded RPC returns a gRPC status error, `runtime.RPCError` extracts th
 
 This lets LLM agents parse error details programmatically (e.g., version conflict recovery from an `ABORTED` status with conflict details).
 
+### Method-level: `mcp_sampling`
+
+```proto
+rpc ReviewBook(ReviewBookRequest) returns (ReviewBookResponse) {
+  option (mcp.v1.mcp_tool) = { name: "review" };
+  option (mcp.v1.mcp_sampling) = {
+    system_prompt: "You are a literary critic."
+    max_tokens: 300
+    include_context: "thisServer"
+    intelligence_priority: 0.9
+  };
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `system_prompt` | string | System prompt for the LLM. |
+| `max_tokens` | int32 | Maximum tokens for the response. |
+| `include_context` | string | Context inclusion: "none", "thisServer", "allServers". |
+| `intelligence_priority` | float | Model preference hint (0.0–1.0). |
+| `speed_priority` | float | Model preference hint (0.0–1.0). |
+| `cost_priority` | float | Model preference hint (0.0–1.0). |
+
+Generates: `SampleForReviewBook(ctx, messages)` — pre-configured `CreateMessageRequest` helper.
+
+Only valid on methods that also have `mcp_tool`. Service-level default via `mcp_service.default_sampling`; method-level fully overrides.
+
+### Method-level: `mcp_elicit`
+
+```proto
+message ReviewApproval {
+  bool approved = 1;
+  optional string notes = 2;
+}
+
+rpc ReviewBook(ReviewBookRequest) returns (ReviewBookResponse) {
+  option (mcp.v1.mcp_tool) = { name: "review" };
+  option (mcp.v1.mcp_elicit) = {
+    message: "Please review and approve this book review"
+    schema_message: "ReviewApproval"
+  };
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `message` | string | Prompt message shown to the user. |
+| `schema_message` | string | Name of a proto message in the same file. JSON Schema auto-derived via `schema.FromMessage()`. |
+
+Generates: `ElicitReviewApproval(ctx, message)` → `(*ReviewApproval, action, error)` — typed helper with auto-derived JSON Schema and `runtime.BindElicitResult[T]` for type-safe unmarshaling.
+
+Only valid on methods that also have `mcp_tool`. Service-level default via `mcp_service.default_elicit`; method-level fully overrides.
+
+### Service-level defaults
+
+```proto
+service BookService {
+  option (mcp.v1.mcp_service) = {
+    namespace: "books"
+    default_sampling: { system_prompt: "You are helpful." max_tokens: 200 }
+    default_elicit: { schema_message: "DefaultApproval" }
+  };
+}
+```
+
+Method-level `mcp_sampling`/`mcp_elicit` fully overrides service-level when both are set.
+
 ## Future Work
 
 - **OpenAPI ingestion** — `openapi-gen-mcp` reads OpenAPI 3.x specs with `x-mcp-tool` extensions

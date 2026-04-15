@@ -80,6 +80,10 @@
 - mcp-protogen-result-summary: mcp_tool.result_summary template: "Slide {position} updated (v{version})". runtime.ProtoSummaryStructuredResult renders from response fields. (#224)
 - mcp-protogen-embedded-templates: Codegen templates use go:embed (templates/file.go.tmpl) instead of Go string constants
 - mcp-protogen-buf: Proto module published to buf.build/mcpkit/protogen. ext/protogen/Makefile with build, lint, generate, push targets
+- mcp-protogen-typed-contexts: Generated in-process server interfaces use typed handler contexts (ToolContext, ResourceContext, PromptContext) instead of context.Context. Gives impls direct access to ctx.Sample(), ctx.Elicit(), ctx.EmitProgress() etc. gRPC/Connect client interfaces unchanged.
+- mcp-protogen-sampling: mcp_sampling annotation on tool methods — generates pre-configured SampleForXxx() helper with system_prompt, max_tokens, include_context, model preferences. Service-level default_sampling in mcp_service; method-level overrides.
+- mcp-protogen-elicitation: mcp_elicit annotation on tool methods — schema_message references a proto message, JSON Schema auto-derived via schema.FromMessage(). Generates typed ElicitXxx() helper returning (*SchemaMsg, action, error). Uses generic runtime.BindElicitResult[T] for type-safe unmarshaling.
+- mcp-protogen-completions: completable_fields on mcp_resource and mcp_prompt annotations. Generates deduplicated Completer interface + RegisterXxxMCPCompletions dispatcher.
 - mcp-client-toolcall-full: Client.ToolCallFull returns *core.ToolResult directly — preserves IsError, all Content blocks, and StructuredContent. Tool-level errors returned in result, not as Go errors. (#215)
 - mcp-dynamic-registration: Registry.AddTool/RemoveTool/AddResource/RemoveResource/AddPrompt/RemovePrompt — thread-safe runtime registration with automatic notifications/*/list_changed broadcast via OnChange callback
 - mcp-session-timeout: WithSessionTimeout — idle session cleanup for Streamable HTTP (timer + ref counting to avoid closing mid-execution)
@@ -108,7 +112,7 @@ newstack/mcpkit/main
 - oneauth (github.com/panyam/oneauth) v0.0.71 — JWT/OIDC validation, testutil.TestAuthServer; separate go.mod
 
 ### Sub-module: ext/protogen (github.com/panyam/mcpkit/ext/protogen)
-- protokit (github.com/panyam/protokit) v0.0.4 — proto descriptor test utilities, PopulateFieldFromPath (dot-path field binding with type coercion)
+- protokit (github.com/panyam/protokit) v0.0.5 — proto descriptor test utilities, PopulateFieldFromPath (dot-path field binding with type coercion), wire package (proto wire-format decoding helpers for extension extraction)
 
 ## Integration
 

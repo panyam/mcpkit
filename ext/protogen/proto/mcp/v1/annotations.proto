@@ -90,11 +90,51 @@ message MCPPromptOptions {
   repeated string completable_fields = 3;
 }
 
+// MCPElicitOptions configures elicitation (user input) for a tool.
+// Can be set at method level (per-tool) or service level (default for all tools).
+// Method-level fully overrides service-level when both are set.
+message MCPElicitOptions {
+  // Prompt message shown to the user.
+  string message = 1;
+
+  // Name of a proto message in the same file whose fields define the
+  // elicitation schema. The generator derives JSON Schema via schema.FromMessage()
+  // and emits a typed helper function: Elicit<MessageName>(ctx, message).
+  string schema_message = 2;
+}
+
+// MCPSamplingOptions configures LLM sampling for a tool.
+// Can be set at method level (per-tool) or service level (default for all tools).
+// Method-level fully overrides service-level when both are set.
+message MCPSamplingOptions {
+  // System prompt for the LLM.
+  string system_prompt = 1;
+
+  // Maximum tokens for the response.
+  int32 max_tokens = 2;
+
+  // Context inclusion: "none", "thisServer", "allServers".
+  string include_context = 3;
+
+  // Model preference hints (0.0–1.0).
+  float intelligence_priority = 4;
+  float speed_priority = 5;
+  float cost_priority = 6;
+}
+
 // MCPServiceOptions configures service-level MCP settings.
 message MCPServiceOptions {
   // Namespace prefix for all tools in this service.
   // e.g. namespace="users" → tool "get" becomes "users_get".
   string namespace = 1;
+
+  // Default sampling config for all tools in this service.
+  // Overridden by method-level mcp_sampling when set.
+  MCPSamplingOptions default_sampling = 2;
+
+  // Default elicitation config for all tools in this service.
+  // Overridden by method-level mcp_elicit when set.
+  MCPElicitOptions default_elicit = 3;
 }
 
 // Method-level annotations.
@@ -102,6 +142,8 @@ extend google.protobuf.MethodOptions {
   MCPToolOptions mcp_tool = 51001;
   MCPResourceOptions mcp_resource = 51002;
   MCPPromptOptions mcp_prompt = 51003;
+  MCPElicitOptions mcp_elicit = 51004;
+  MCPSamplingOptions mcp_sampling = 51005;
 }
 
 // Service-level annotations.

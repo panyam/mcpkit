@@ -24,11 +24,16 @@ var (
 	_ time.Duration
 )
 
+func floatPtr(v float64) *float64 { return &v }
+
 // --- BookService ---
 
 // BookServiceMCPServer is the interface that in-process implementations must satisfy.
+// Methods receive mcpcore.ToolContext which provides access to Sample(), Elicit(),
+// EmitProgress(), and other MCP session capabilities.
 type BookServiceMCPServer interface {
-	SearchBooks(ctx context.Context, req *SearchBooksRequest) (*SearchBooksResponse, error)
+	SearchBooks(ctx mcpcore.ToolContext, req *SearchBooksRequest) (*SearchBooksResponse, error)
+	ReviewBook(ctx mcpcore.ToolContext, req *ReviewBookRequest) (*ReviewBookResponse, error)
 }
 
 // RegisterBookServiceMCP registers MCP tools from BookService with an in-process implementation.
@@ -52,13 +57,31 @@ func RegisterBookServiceMCP(srv *server.Server, impl BookServiceMCPServer) {
 				return runtime.ProtoSummaryStructuredResult(resp, "Found {total} books matching query")
 			},
 		},
+		server.Tool{
+			ToolDef: mcpcore.ToolDef{
+				Name:        "books_review",
+				Description: "Generate an AI review of a book, with user approval",
+				InputSchema: json.RawMessage(`{"properties":{"book_id":{"type":"string"}},"required":["book_id"],"type":"object"}`),
+			},
+			Handler: func(ctx mcpcore.ToolContext, req mcpcore.ToolRequest) (mcpcore.ToolResult, error) {
+				var in ReviewBookRequest
+				if err := runtime.BindProto(req, &in); err != nil {
+					return mcpcore.ErrorResult(err.Error()), nil
+				}
+				resp, err := impl.ReviewBook(ctx, &in)
+				if err != nil {
+					return runtime.RPCError(err)
+				}
+				return runtime.ProtoTextResult(resp)
+			},
+		},
 	)
 }
 
 // BookServiceMCPResourceServer is the interface for in-process resource implementations.
 type BookServiceMCPResourceServer interface {
-	GetBook(ctx context.Context, req *GetBookRequest) (*GetBookResponse, error)
-	GetAuthorBooks(ctx context.Context, req *GetAuthorBooksRequest) (*GetAuthorBooksResponse, error)
+	GetBook(ctx mcpcore.ResourceContext, req *GetBookRequest) (*GetBookResponse, error)
+	GetAuthorBooks(ctx mcpcore.ResourceContext, req *GetAuthorBooksRequest) (*GetAuthorBooksResponse, error)
 }
 
 // RegisterBookServiceMCPResources registers MCP resources from BookService with an in-process implementation.
@@ -105,8 +128,8 @@ func RegisterBookServiceMCPResources(srv *server.Server, impl BookServiceMCPReso
 
 // BookServiceMCPPromptServer is the interface for in-process prompt implementations.
 type BookServiceMCPPromptServer interface {
-	SummarizeBook(ctx context.Context, req *SummarizeBookRequest) (*SummarizeBookResponse, error)
-	RecommendBooks(ctx context.Context, req *RecommendBooksRequest) (*RecommendBooksResponse, error)
+	SummarizeBook(ctx mcpcore.PromptContext, req *SummarizeBookRequest) (*SummarizeBookResponse, error)
+	RecommendBooks(ctx mcpcore.PromptContext, req *RecommendBooksRequest) (*RecommendBooksResponse, error)
 }
 
 // RegisterBookServiceMCPPrompts registers MCP prompts from BookService with an in-process implementation.
@@ -181,5 +204,42 @@ func RegisterBookServiceMCPCompletions(srv *server.Server, completer BookService
 		default:
 			return mcpcore.CompletionResult{}, nil
 		}
+	})
+}
+
+// ElicitReviewApproval sends a typed elicitation request using the schema derived
+// from ReviewApproval. Returns the populated proto message, the user's action
+// ("accept"/"decline"/"cancel"), and any error.
+// If the user does not accept, the returned message pointer is nil.
+func ElicitReviewApproval(ctx mcpcore.ToolContext, message string) (*ReviewApproval, string, error) {
+	result, err := ctx.Elicit(mcpcore.ElicitationRequest{
+		Message:         message,
+		RequestedSchema: json.RawMessage(`{"properties":{"approved":{"type":"boolean"},"notes":{"type":"string"}},"required":["approved"],"type":"object"}`),
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	if result.Action != "accept" {
+		return nil, result.Action, nil
+	}
+	out, err := runtime.BindElicitResult[ReviewApproval](result.Content)
+	if err != nil {
+		return nil, "", err
+	}
+	return out, result.Action, nil
+}
+
+// SampleForReviewBook sends a pre-configured sampling request for ReviewBook.
+// Caller provides the user messages; system prompt and model preferences come
+// from the mcp_sampling annotation.
+func SampleForReviewBook(ctx mcpcore.ToolContext, messages []mcpcore.SamplingMessage) (mcpcore.CreateMessageResult, error) {
+	return ctx.Sample(mcpcore.CreateMessageRequest{
+		Messages:       messages,
+		SystemPrompt:   "You are a literary critic. Write concise, insightful book reviews.",
+		MaxTokens:      300,
+		IncludeContext: "thisServer",
+		ModelPreferences: &mcpcore.ModelPreferences{
+			IntelligencePriority: floatPtr(0.9),
+		},
 	})
 }
