@@ -376,7 +376,7 @@
             return request("resources/read", { uri }, options);
         },
         sendMessage(message, options) {
-            return request("ui/message", { message }, options);
+            return request("ui/message", message, options);
         },
         updateModelContext(context, options) {
             return request("ui/update-model-context", { context }, options);
