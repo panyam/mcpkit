@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Fake MCP Apps Host</title>
+</head>
+<body>
+  <h1>Fake Host</h1>
+  <div id="status">waiting</div>
+  <div id="log"></div>
+  <iframe id="app-frame" sandbox="allow-scripts allow-same-origin" style="width:400px;height:300px;border:1px solid #ccc"></iframe>
+
+  <script>
+    // Minimal fake host that implements the host side of the MCP Apps
+    // postMessage protocol. Used by Playwright tests to validate the
+    // bridge in a real browser environment.
+
+    const frame = document.getElementById('app-frame');
+    const statusEl = document.getElementById('status');
+    const logEl = document.getElementById('log');
+    let initialized = false;
+
+    // Track all messages received from the iframe.
+    window.__hostLog = [];
+
+    function log(msg) {
+      window.__hostLog.push(msg);
+      const div = document.createElement('div');
+      div.textContent = JSON.stringify(msg).slice(0, 120);
+      logEl.appendChild(div);
+    }
+
+    // Listen for messages from the iframe.
+    window.addEventListener('message', function(event) {
+      const msg = event.data;
+      if (!msg || msg.jsonrpc !== '2.0') return;
+      log({ direction: 'in', method: msg.method || '(response)', id: msg.id });
+
+      // Handle ui/initialize request.
+      if (msg.method === 'ui/initialize' && msg.id != null) {
+        frame.contentWindow.postMessage({
+          jsonrpc: '2.0',
+          id: msg.id,
+          result: {
+            hostContext: { theme: 'dark', locale: 'en-US', dimensions: { width: 400, height: 300 } },
+            capabilities: { tools: true, resources: true }
+          }
+        }, '*');
+        log({ direction: 'out', method: 'ui/initialize-response', id: msg.id });
+        return;
+      }
+
+      // Handle ui/notifications/initialized.
+      if (msg.method === 'ui/notifications/initialized') {
+        initialized = true;
+        statusEl.textContent = 'connected';
+        window.__hostInitialized = true;
+        return;
+      }
+
+      // Handle tools/call from iframe.
+      if (msg.method === 'tools/call' && msg.id != null) {
+        window.__lastToolCall = msg.params;
+        // Auto-respond with a result.
+        frame.contentWindow.postMessage({
+          jsonrpc: '2.0',
+          id: msg.id,
+          result: {
+            content: [{ type: 'text', text: 'Result for ' + msg.params.name }]
+          }
+        }, '*');
+        log({ direction: 'out', method: 'tools/call-response', id: msg.id });
+        return;
+      }
+
+      // Handle ui/open-link notification.
+      if (msg.method === 'ui/open-link') {
+        window.__lastOpenLink = msg.params;
+        return;
+      }
+
+      // Handle ui/notifications/size-changed.
+      if (msg.method === 'ui/notifications/size-changed') {
+        window.__lastSizeChanged = msg.params;
+        return;
+      }
+    });
+
+    // Expose helper to send notifications to the iframe from Playwright.
+    window.__sendToApp = function(data) {
+      frame.contentWindow.postMessage(data, '*');
+      log({ direction: 'out', method: data.method, id: data.id });
+    };
+
+    // Load the app HTML into the iframe via src attribute.
+    // Playwright will set this up by navigating to fake-host.html?app=app.html
+    const params = new URLSearchParams(window.location.search);
+    const appUrl = params.get('app') || 'app.html';
+    frame.src = appUrl;
+  </script>
+</body>
+</html>
