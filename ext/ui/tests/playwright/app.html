@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Test MCP App</title>
+  <style>
+    * { box-sizing: border-box }
+    body { margin: 0; padding: 1em; font-family: system-ui }
+  </style>
+</head>
+<body>
+  <div id="status">not connected</div>
+  <div id="result">no result</div>
+  <div id="theme">no theme</div>
+  <button id="call-tool">Call Tool</button>
+  <button id="open-link">Open Link</button>
+
+  <!-- Bridge is loaded from the compiled JS file served by the static server. -->
+  <script src="/mcp-app-bridge.js"></script>
+
+  <script>
+    var statusEl = document.getElementById('status');
+    var resultEl = document.getElementById('result');
+    var themeEl = document.getElementById('theme');
+
+    MCPApp.on('connected', function(data) {
+      statusEl.textContent = 'connected';
+      themeEl.textContent = data.hostContext.theme || 'unknown';
+    });
+
+    MCPApp.on('toolresult', function(data) {
+      var text = '';
+      if (data.result && data.result.content) {
+        for (var i = 0; i < data.result.content.length; i++) {
+          if (data.result.content[i].text) text = data.result.content[i].text;
+        }
+      }
+      resultEl.textContent = text || JSON.stringify(data.result);
+    });
+
+    document.getElementById('call-tool').addEventListener('click', function() {
+      MCPApp.callTool('test_tool', { value: 42 }).then(function(res) {
+        resultEl.textContent = 'call-response: ' + (res.content ? res.content[0].text : JSON.stringify(res));
+      });
+    });
+
+    document.getElementById('open-link').addEventListener('click', function() {
+      MCPApp.openLink('https://example.com/test');
+    });
+  </script>
+</body>
+</html>
