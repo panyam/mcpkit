@@ -91,14 +91,8 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
   if ((window as any).MCPApp) return;
 
   // Configuration: set window.MCPAppConfig before loading this script
-  // to customize app identity and protocol version.
-  //
-  //   <script>
-  //     window.MCPAppConfig = { name: "my-app", version: "1.0.0" };
-  //   </script>
-  //   <script src="mcp-app-bridge.js"></script>
-  //
-  // Go helpers (InjectAppBridge, AppShellHTML) inject this automatically.
+  // to customize app identity and protocol version. See BridgeTemplateDef()
+  // in ext/ui for the Go template that renders config + bridge together.
   const config = (window as any).MCPAppConfig || {};
   const APP_NAME: string = config.name || "mcp-app";
   const APP_VERSION: string = config.version || "0.0.0";

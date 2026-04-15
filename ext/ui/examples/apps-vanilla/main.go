@@ -15,6 +15,7 @@ import (
 	"html/template"
 	"log"
 	"math/rand"
+	"strings"
 
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/ext/ui"
@@ -77,9 +78,20 @@ func main() {
 			return core.TextResult(fmt.Sprintf("Rolled a d%d: %d", args.Sides, result)), nil
 		},
 		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
-			return core.ResourceResult{Contents: []core.ResourceReadContent{{
+			result := core.ResourceResult{Contents: []core.ResourceReadContent{{
 				URI: req.URI, MimeType: core.AppMIMEType, Text: diceHTML,
-			}}}, nil
+			}}}
+			// Debug: check if <script> tags survive serialization
+			raw, _ := core.MarshalJSON(result)
+			s := string(raw)
+			if idx := strings.Index(s, "script"); idx > 0 {
+				start := idx - 10
+				if start < 0 { start = 0 }
+				end := idx + 50
+				if end > len(s) { end = len(s) }
+				log.Printf("DEBUG script context: ...%s...", s[start:end])
+			}
+			return result, nil
 		},
 	})
 
