@@ -72,7 +72,7 @@ func InjectAppBridge(html string, cfg ...*BridgeConfig) string {
 	}
 
 	tag := "\n" + configScript(c) + "\n" +
-		"<script>" + bridgeSentinel + "\n" + AppBridgeScript + "\n</script>\n"
+		`<script type="module">` + bridgeSentinel + "\n" + AppBridgeScript + "\n</script>\n"
 
 	// Case-insensitive search for </body>.
 	lower := strings.ToLower(html)

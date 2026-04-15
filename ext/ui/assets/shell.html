@@ -13,14 +13,14 @@
 {{ .BodyHTML }}
 
 <!-- MCP App Bridge config + runtime -->
-<script>
+<script type="module">
   window.MCPAppConfig = {
     name: "{{ .ConfigName }}",
     version: "{{ .ConfigVersion }}",
     protocolVersion: "{{ .ConfigProtocol }}"
   };
 </script>
-<script>/* mcpkit:app-bridge */
+<script type="module">/* mcpkit:app-bridge */
 {{ .BridgeScript }}
 </script>
 
