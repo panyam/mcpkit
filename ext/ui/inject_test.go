@@ -63,7 +63,8 @@ func TestAppShellHTML_Structure(t *testing.T) {
 		`<div id="app">hello</div>`,
 		bridgeSentinel,
 		"MCPApp",
-		"</body></html>",
+		"</body>",
+		"</html>",
 	}
 	for _, want := range checks {
 		if !strings.Contains(got, want) {
