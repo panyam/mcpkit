@@ -1,6 +1,9 @@
 package core
 
-import "encoding/json"
+import (
+	"bytes"
+	"encoding/json"
+)
 
 // JSON-RPC 2.0 types for MCP protocol communication.
 
@@ -68,8 +71,26 @@ const (
 
 // NewResponse creates a success response for the given request ID.
 func NewResponse(id json.RawMessage, result any) *Response {
-	raw, _ := json.Marshal(result)
+	raw, _ := MarshalJSON(result)
 	return &Response{JSONRPC: "2.0", ID: id, Result: raw}
+}
+
+// MarshalJSON encodes v as JSON without HTML-escaping <, >, &.
+// Go's json.Marshal escapes these to \u003c/\u003e/\u0026 for HTML safety,
+// but JSON-RPC payloads are not HTML contexts. This matches how Node.js
+// and Python serialize JSON.
+func MarshalJSON(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	b := buf.Bytes()
+	if len(b) > 0 && b[len(b)-1] == '\n' {
+		b = b[:len(b)-1]
+	}
+	return b, nil
 }
 
 // NewErrorResponse creates an error response for the given request ID.
