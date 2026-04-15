@@ -13,50 +13,6 @@ import (
 	booksv1 "github.com/panyam/mcpkit/examples/protogen/bookservice/gen/bookservice/v1"
 )
 
-// catalog is a simple in-memory book database.
-var catalog = []*booksv1.Book{
-	{Id: "1", Title: "The Go Programming Language", Author: "donovan-kernighan", Genre: "programming", Year: 2015, Rating: 4.5,
-		Synopsis: "A comprehensive guide to Go covering the language specification, standard library, and best practices. Covers concurrency with goroutines and channels, interfaces, testing, and low-level programming."},
-	{Id: "2", Title: "Designing Data-Intensive Applications", Author: "kleppmann", Genre: "systems", Year: 2017, Rating: 4.8,
-		Synopsis: "A deep dive into the internals of databases, stream processing, batch processing, and distributed systems. Covers replication, partitioning, transactions, consensus, and the trade-offs behind modern data architectures."},
-	{Id: "3", Title: "The Pragmatic Programmer", Author: "hunt-thomas", Genre: "programming", Year: 1999, Rating: 4.6,
-		Synopsis: "Classic software engineering wisdom covering DRY, orthogonality, tracer bullets, domain languages, estimation, and pragmatic approaches to testing, debugging, and team collaboration."},
-	{Id: "4", Title: "Structure and Interpretation of Computer Programs", Author: "abelson-sussman", Genre: "cs-theory", Year: 1996, Rating: 4.7,
-		Synopsis: "Foundational CS text using Scheme to explore abstraction, recursion, higher-order functions, metalinguistic abstraction, and the design of interpreters and compilers."},
-	{Id: "5", Title: "Clean Code", Author: "martin", Genre: "programming", Year: 2008, Rating: 4.3,
-		Synopsis: "Principles and patterns for writing readable, maintainable code. Covers naming, functions, comments, formatting, error handling, unit testing, and refactoring with Java examples."},
-	{Id: "6", Title: "Site Reliability Engineering", Author: "beyer-jones-petoff-murphy", Genre: "systems", Year: 2016, Rating: 4.4,
-		Synopsis: "Google's approach to running production systems at scale. Covers SLOs, error budgets, toil reduction, monitoring, incident response, capacity planning, and release engineering."},
-	{Id: "7", Title: "Distributed Systems", Author: "van-steen-tanenbaum", Genre: "systems", Year: 2017, Rating: 4.2,
-		Synopsis: "Comprehensive textbook on distributed systems covering architectures, processes, communication, naming, coordination, consistency, replication, and fault tolerance."},
-	{Id: "8", Title: "Introduction to Algorithms", Author: "cormen-leiserson-rivest-stein", Genre: "cs-theory", Year: 2009, Rating: 4.4,
-		Synopsis: "The definitive algorithms textbook covering sorting, graph algorithms, dynamic programming, greedy algorithms, NP-completeness, and advanced data structures."},
-	{Id: "9", Title: "Refactoring", Author: "fowler", Genre: "programming", Year: 2018, Rating: 4.5,
-		Synopsis: "A catalog of refactoring techniques for improving the design of existing code. Covers code smells, composing methods, simplifying conditional expressions, and dealing with generalization."},
-	{Id: "10", Title: "Database Internals", Author: "petrov", Genre: "systems", Year: 2019, Rating: 4.6,
-		Synopsis: "Explores the internal workings of database storage engines and distributed database systems. Covers B-trees, LSM-trees, page structures, buffer management, leader election, and gossip protocols."},
-	{Id: "11", Title: "Gödel, Escher, Bach", Author: "hofstadter", Genre: "cs-theory", Year: 1979, Rating: 4.7,
-		Synopsis: "An exploration of consciousness, self-reference, and formal systems through an interplay of mathematics, art, and music. Connects Gödel's incompleteness theorems, Escher's drawings, and Bach's fugues."},
-	{Id: "12", Title: "The Mythical Man-Month", Author: "brooks", Genre: "programming", Year: 1975, Rating: 4.3,
-		Synopsis: "Classic essays on software engineering management. Introduces Brooks's Law ('adding manpower to a late project makes it later'), the surgical team model, and the second-system effect."},
-}
-
-// authors maps author IDs to display names for resource lookups.
-var authors = map[string]string{
-	"donovan-kernighan":          "Alan Donovan & Brian Kernighan",
-	"kleppmann":                  "Martin Kleppmann",
-	"hunt-thomas":                "Andrew Hunt & David Thomas",
-	"abelson-sussman":            "Harold Abelson & Gerald Sussman",
-	"martin":                     "Robert C. Martin",
-	"beyer-jones-petoff-murphy":  "Betsy Beyer, Chris Jones, Jennifer Petoff & Niall Murphy",
-	"van-steen-tanenbaum":        "Maarten van Steen & Andrew Tanenbaum",
-	"cormen-leiserson-rivest-stein": "Thomas Cormen, Charles Leiserson, Ronald Rivest & Clifford Stein",
-	"fowler":                     "Martin Fowler",
-	"petrov":                     "Alex Petrov",
-	"hofstadter":                 "Douglas Hofstadter",
-	"brooks":                     "Frederick Brooks",
-}
-
 // bookService implements the generated BookServiceMCPServer, BookServiceMCPResourceServer,
 // and BookServiceMCPPromptServer interfaces.
 type bookService struct{}
