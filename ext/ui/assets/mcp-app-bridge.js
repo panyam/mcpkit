@@ -20,14 +20,8 @@
     if (window.MCPApp)
         return;
     // Configuration: set window.MCPAppConfig before loading this script
-    // to customize app identity and protocol version.
-    //
-    //   <script>
-    //     window.MCPAppConfig = { name: "my-app", version: "1.0.0" };
-    //   </script>
-    //   <script src="mcp-app-bridge.js"></script>
-    //
-    // Go helpers (InjectAppBridge, AppShellHTML) inject this automatically.
+    // to customize app identity and protocol version. See BridgeTemplateDef()
+    // in ext/ui for the Go template that renders config + bridge together.
     const config = window.MCPAppConfig || {};
     const APP_NAME = config.name || "mcp-app";
     const APP_VERSION = config.version || "0.0.0";
