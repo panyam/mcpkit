@@ -244,11 +244,19 @@ func (a *coreTransportAdapter) call(data []byte) (*rpcResponse, error) {
 	if resp == nil {
 		return nil, nil
 	}
-	// core.Response and rpcResponse have identical field types now
+	// Convert core.Response (Result any) to rpcResponse (Result json.RawMessage).
+	var rawResult json.RawMessage
+	if resp.Result != nil {
+		if raw, ok := resp.Result.(json.RawMessage); ok {
+			rawResult = raw
+		} else {
+			rawResult, _ = core.MarshalJSON(resp.Result)
+		}
+	}
 	return &rpcResponse{
 		JSONRPC: resp.JSONRPC,
 		ID:      resp.ID,
-		Result:  resp.Result,
+		Result:  rawResult,
 		Error:   resp.Error,
 	}, nil
 }

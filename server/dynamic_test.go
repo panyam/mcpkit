@@ -200,7 +200,7 @@ func TestAddResourceAfterServing(t *testing.T) {
 	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/list",
 	})
-	raw, _ := json.Marshal(resp.Result)
+	raw, _ := core.MarshalJSON(resp.Result)
 	if !json.Valid(raw) {
 		t.Fatal("invalid result JSON")
 	}
@@ -275,7 +275,7 @@ func TestAddPromptAfterServing(t *testing.T) {
 	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "prompts/list",
 	})
-	raw, _ := json.Marshal(resp.Result)
+	raw, _ := core.MarshalJSON(resp.Result)
 	var result struct {
 		Prompts []core.PromptDef `json:"prompts"`
 	}
@@ -382,7 +382,7 @@ func TestListChangedCapabilityAdvertised(t *testing.T) {
 		Params: json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
 	})
 
-	raw, _ := json.Marshal(resp.Result)
+	raw, _ := core.MarshalJSON(resp.Result)
 	var result struct {
 		Capabilities struct {
 			Tools     struct{ ListChanged bool `json:"listChanged"` } `json:"tools"`
@@ -411,7 +411,7 @@ func assertToolCount(t *testing.T, resp *core.Response, n int) {
 	if resp.Error != nil {
 		t.Fatalf("tools/list failed: %s", resp.Error.Message)
 	}
-	raw, _ := json.Marshal(resp.Result)
+	raw, _ := core.MarshalJSON(resp.Result)
 	var result struct {
 		Tools []core.ToolDef `json:"tools"`
 	}

@@ -51,7 +51,7 @@ func TestAddResource_OverwriteDoesNotDuplicateOrder(t *testing.T) {
 	if resp.Error != nil {
 		t.Fatalf("resources/list failed: %s", resp.Error.Message)
 	}
-	raw, _ := json.Marshal(resp.Result)
+	raw, _ := core.MarshalJSON(resp.Result)
 	var result struct {
 		Resources []core.ResourceDef `json:"resources"`
 	}
@@ -80,7 +80,7 @@ func TestAddResourceTemplate_OverwriteDoesNotDuplicateOrder(t *testing.T) {
 	if resp.Error != nil {
 		t.Fatalf("resources/templates/list failed: %s", resp.Error.Message)
 	}
-	raw, _ := json.Marshal(resp.Result)
+	raw, _ := core.MarshalJSON(resp.Result)
 	var result struct {
 		ResourceTemplates []core.ResourceTemplate `json:"resourceTemplates"`
 	}
@@ -107,7 +107,7 @@ func TestAddPrompt_OverwriteDoesNotDuplicateOrder(t *testing.T) {
 	if resp.Error != nil {
 		t.Fatalf("prompts/list failed: %s", resp.Error.Message)
 	}
-	raw, _ := json.Marshal(resp.Result)
+	raw, _ := core.MarshalJSON(resp.Result)
 	var result struct {
 		Prompts []core.PromptDef `json:"prompts"`
 	}
@@ -145,7 +145,7 @@ func TestAddResourceTemplate_OverwriteUpdatesHandler(t *testing.T) {
 	if resp.Error != nil {
 		t.Fatalf("resources/read failed: %s", resp.Error.Message)
 	}
-	raw, _ := json.Marshal(resp.Result)
+	raw, _ := core.MarshalJSON(resp.Result)
 	var result struct {
 		Contents []core.ResourceReadContent `json:"contents"`
 	}

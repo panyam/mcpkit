@@ -3,7 +3,6 @@ package server
 import (
 	core "github.com/panyam/mcpkit/core"
 	"context"
-	"encoding/json"
 	"net/http"
 	"sync/atomic"
 	"testing"
@@ -207,7 +206,7 @@ func TestExtensionRegistration(t *testing.T) {
 
 	// Unmarshal the result to inspect extensions
 	var result map[string]any
-	if err := json.Unmarshal(resp.Result, &result); err != nil {
+	if err := resp.ResultAs(&result); err != nil {
 		t.Fatalf("unmarshal result: %v", err)
 	}
 	caps, ok := result["capabilities"].(map[string]any)
