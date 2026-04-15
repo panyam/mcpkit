@@ -1,0 +1,10 @@
+{{ define "mcpkit-bridge" }}
+<script type="module">
+window.MCPAppConfig = {
+  name: "{{ .AppName }}",
+  version: "{{ .AppVersion }}",
+  protocolVersion: "{{ .ProtocolVersion }}"
+};
+{{ .BridgeJS }}
+</script>
+{{ end }}
