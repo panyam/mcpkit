@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{{ .Title }}</title>
+  <style>
+    * { box-sizing: border-box }
+    body { margin: 0; font-family: system-ui }
+  </style>
+</head>
+<body>
+
+{{ .BodyHTML }}
+
+<!-- MCP App Bridge config + runtime -->
+<script>
+  window.MCPAppConfig = {
+    name: "{{ .ConfigName }}",
+    version: "{{ .ConfigVersion }}",
+    protocolVersion: "{{ .ConfigProtocol }}"
+  };
+</script>
+<script>/* mcpkit:app-bridge */
+{{ .BridgeScript }}
+</script>
+
+</body>
+</html>

@@ -7,3 +7,8 @@ import _ "embed"
 //
 //go:embed assets/mcp-app-bridge.js
 var AppBridgeScript string
+
+// shellTemplateHTML is the HTML template used by AppShellHTML.
+//
+//go:embed assets/shell.html
+var shellTemplateHTML string

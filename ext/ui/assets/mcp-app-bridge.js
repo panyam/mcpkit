@@ -19,6 +19,19 @@
     // Guard against double-inclusion.
     if (window.MCPApp)
         return;
+    // Configuration: set window.MCPAppConfig before loading this script
+    // to customize app identity and protocol version.
+    //
+    //   <script>
+    //     window.MCPAppConfig = { name: "my-app", version: "1.0.0" };
+    //   </script>
+    //   <script src="mcp-app-bridge.js"></script>
+    //
+    // Go helpers (InjectAppBridge, AppShellHTML) inject this automatically.
+    const config = window.MCPAppConfig || {};
+    const APP_NAME = config.name || "mcp-app";
+    const APP_VERSION = config.version || "0.0.0";
+    const PROTOCOL_VERSION = config.protocolVersion || "2026-01-26";
     let nextId = 1;
     const pending = new Map();
     const listeners = new Map();
@@ -196,7 +209,11 @@
             // No response — not inside an MCP Apps host.
             _connected = false;
         }, 2000);
-        request("ui/initialize", {})
+        request("ui/initialize", {
+            protocolVersion: PROTOCOL_VERSION,
+            appInfo: { name: APP_NAME, version: APP_VERSION },
+            appCapabilities: {},
+        })
             .then((result) => {
             clearTimeout(timeout);
             _connected = true;
