@@ -828,7 +828,7 @@ const file_bookservice_v1_service_proto_rawDesc = "" +
 	"*Please review and approve this book review\x12\x0eReviewApproval\xea\xf3\x18X\n" +
 	"BYou are a literary critic. Write concise, insightful book reviews.\x10\xac\x02\x1a\n" +
 	"thisServer%fff?\x1a\v\x92\xf4\x18\a\n" +
-	"\x05booksBWZUgithub.com/panyam/mcpkit/ext/protogen/examples/bookservice/gen/bookservice/v1;booksv1b\x06proto3"
+	"\x05booksBSZQgithub.com/panyam/mcpkit/examples/protogen/bookservice/gen/bookservice/v1;booksv1b\x06proto3"
 
 var (
 	file_bookservice_v1_service_proto_rawDescOnce sync.Once

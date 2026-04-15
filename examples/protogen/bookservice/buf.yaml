@@ -3,3 +3,4 @@ modules:
   - path: proto
 deps:
   - buf.build/protocolbuffers/wellknowntypes
+  - buf.build/mcpkit/protogen
