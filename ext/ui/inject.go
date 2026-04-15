@@ -74,8 +74,12 @@ func InjectAppBridge(html string, cfg ...*BridgeConfig) string {
 	tag := "\n" + configScript(c) + "\n" +
 		`<script type="module">` + bridgeSentinel + "\n" + AppBridgeScript + "\n</script>\n"
 
-	// Case-insensitive search for </body>.
+	// Insert in <head> so the bridge loads before any app scripts in <body>.
 	lower := strings.ToLower(html)
+	if i := strings.Index(lower, "</head>"); i >= 0 {
+		return html[:i] + tag + html[i:]
+	}
+	// Fallback: before </body>.
 	if i := strings.LastIndex(lower, "</body>"); i >= 0 {
 		return html[:i] + tag + html[i:]
 	}

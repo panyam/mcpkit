@@ -1,20 +1,18 @@
 // Example: Vanilla JS MCP App with mcpkit bridge.
 //
-// A minimal MCP server with one tool ("roll_dice") that returns a random
-// number, and an MCP App that displays it. The iframe has a "Roll Again"
-// button that calls the tool back through the bridge.
+// dice.html uses {{ template "mcpkit-bridge" .Bridge }} to include the
+// bridge explicitly — like any other dependency. No injection, no magic.
 //
-// Run:
-//
-//	go run . -addr :8080
-//
-// Then connect with Claude Desktop, MCPJam, or any MCP Apps-capable host.
+// Run:  go run . -addr :8080
+// Connect MCPJam to http://localhost:8080/mcp, ask "roll a die".
 package main
 
 import (
+	"bytes"
 	_ "embed"
 	"flag"
 	"fmt"
+	"html/template"
 	"log"
 	"math/rand"
 
@@ -24,17 +22,29 @@ import (
 )
 
 //go:embed dice.html
-var diceHTML string
+var diceTemplateRaw string
+
+// pageData is the template data for dice.html.
+type pageData struct {
+	Bridge ui.BridgeData
+}
 
 func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	flag.Parse()
 
-	// Inject the bridge into our HTML at startup.
-	dicePageHTML := ui.InjectAppBridge(diceHTML, &ui.BridgeConfig{
-		Name:    "dice-app",
-		Version: "0.1.0",
-	})
+	// Parse dice.html + the bridge template definition.
+	tmpl := template.Must(template.New("dice").Parse(diceTemplateRaw))
+	template.Must(tmpl.Parse(ui.BridgeTemplateDef()))
+
+	// Pre-render the page with bridge baked in.
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, pageData{
+		Bridge: ui.NewBridgeData("dice-app", "0.1.0"),
+	}); err != nil {
+		log.Fatal(err)
+	}
+	diceHTML := buf.String()
 
 	srv := server.NewServer(
 		core.ServerInfo{Name: "dice-app", Version: "0.1.0"},
@@ -56,13 +66,6 @@ func main() {
 		},
 		ResourceURI: "ui://dice/view",
 		Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
-		// Workaround: MCPJam re-serves inline scripts from its own proxy but
-		// omits 'self' from script-src (spec requires it). Adding the MCPJam
-		// dev origin here unblocks local testing until the host is fixed.
-		// See: https://github.com/MCPJam/inspector/issues/XXX
-		CSP: &core.UICSPConfig{
-			ResourceDomains: []string{"http://localhost:6274"},
-		},
 		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			var args struct {
 				Sides int `json:"sides"`
@@ -75,12 +78,12 @@ func main() {
 		},
 		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{Contents: []core.ResourceReadContent{{
-				URI: req.URI, MimeType: core.AppMIMEType, Text: dicePageHTML,
+				URI: req.URI, MimeType: core.AppMIMEType, Text: diceHTML,
 			}}}, nil
 		},
 	})
 
-	log.Printf("dice-app listening on %s", *addr)
+	log.Printf("dice-app listening on %s (MCP at /mcp)", *addr)
 	if err := srv.Run(*addr); err != nil {
 		log.Fatal(err)
 	}
