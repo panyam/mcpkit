@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,24 +14,9 @@ import (
 	gohttp "github.com/panyam/servicekit/http"
 )
 
-// marshalJSON encodes v as JSON without HTML-escaping <, >, &.
-// Go's json.Marshal escapes these to \u003c/\u003e/\u0026 for HTML safety,
-// but JSON-RPC payloads are not HTML contexts. Disabling this matches
-// how Node.js and Python serialize JSON, ensuring HTML content in
-// resource responses is preserved verbatim for hosts to parse.
+// marshalJSON delegates to core.MarshalJSON — JSON without HTML escaping.
 func marshalJSON(v any) ([]byte, error) {
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(v); err != nil {
-		return nil, err
-	}
-	// Encode appends a newline; trim it for consistency with json.Marshal.
-	b := buf.Bytes()
-	if len(b) > 0 && b[len(b)-1] == '\n' {
-		b = b[:len(b)-1]
-	}
-	return b, nil
+	return core.MarshalJSON(v)
 }
 
 // sseSessionEntry wraps a Dispatcher with session metadata and an optional
