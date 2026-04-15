@@ -1,4 +1,4 @@
-module github.com/panyam/mcpkit/examples/apps-react/server
+module github.com/panyam/mcpkit/examples/apps/vanilla
 
 go 1.26.1
 
@@ -8,7 +8,7 @@ replace (
 )
 
 require (
-	github.com/panyam/mcpkit v0.2.22
+	github.com/panyam/mcpkit v0.2.3
 	github.com/panyam/mcpkit/ext/ui v0.0.0
 )
 
