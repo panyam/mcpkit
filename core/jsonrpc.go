@@ -19,7 +19,7 @@ type Request struct {
 type Response struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      json.RawMessage `json:"id"`
-	Result  json.RawMessage `json:"result,omitempty"`
+	Result  any             `json:"result,omitempty"`
 	Error   *Error          `json:"error,omitempty"`
 }
 
@@ -70,9 +70,29 @@ const (
 )
 
 // NewResponse creates a success response for the given request ID.
+// Result is stored as-is and serialized once when the transport sends it.
 func NewResponse(id json.RawMessage, result any) *Response {
-	raw, _ := MarshalJSON(result)
-	return &Response{JSONRPC: "2.0", ID: id, Result: raw}
+	return &Response{JSONRPC: "2.0", ID: id, Result: result}
+}
+
+// ResultAs unmarshals the response result into v. Use this when you
+// need to inspect the result after it has been through JSON round-trip
+// (e.g., in tests or client code). Handles both typed results (any)
+// and pre-serialized json.RawMessage.
+func (r *Response) ResultAs(v any) error {
+	if r.Result == nil {
+		return nil
+	}
+	// If already json.RawMessage, unmarshal directly.
+	if raw, ok := r.Result.(json.RawMessage); ok {
+		return json.Unmarshal(raw, v)
+	}
+	// Otherwise marshal then unmarshal (typed result).
+	raw, err := MarshalJSON(r.Result)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(raw, v)
 }
 
 // MarshalJSON encodes v as JSON without HTML-escaping <, >, &.

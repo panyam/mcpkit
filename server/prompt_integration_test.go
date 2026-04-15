@@ -57,7 +57,7 @@ func TestPromptsList(t *testing.T) {
 	var result struct {
 		Prompts []core.PromptDef `json:"prompts"`
 	}
-	json.Unmarshal(resp.Result, &result)
+	resp.ResultAs(&result)
 	if len(result.Prompts) != 2 {
 		t.Fatalf("got %d prompts, want 2", len(result.Prompts))
 	}
@@ -80,7 +80,7 @@ func TestPromptsListEmpty(t *testing.T) {
 	var result struct {
 		Prompts []core.PromptDef `json:"prompts"`
 	}
-	json.Unmarshal(resp.Result, &result)
+	resp.ResultAs(&result)
 	if len(result.Prompts) != 0 {
 		t.Errorf("got %d prompts, want 0", len(result.Prompts))
 	}
@@ -98,7 +98,7 @@ func TestPromptsGetSimple(t *testing.T) {
 		t.Fatalf("error: %s", resp.Error.Message)
 	}
 	var result core.PromptResult
-	json.Unmarshal(resp.Result, &result)
+	resp.ResultAs(&result)
 	if len(result.Messages) != 1 {
 		t.Fatalf("got %d messages, want 1", len(result.Messages))
 	}
@@ -119,7 +119,7 @@ func TestPromptsGetWithArgs(t *testing.T) {
 		t.Fatalf("error: %s", resp.Error.Message)
 	}
 	var result core.PromptResult
-	json.Unmarshal(resp.Result, &result)
+	resp.ResultAs(&result)
 	if result.Messages[0].Content.Text != "Hello, World!" {
 		t.Errorf("text = %q, want Hello, World!", result.Messages[0].Content.Text)
 	}
@@ -150,7 +150,7 @@ func TestPromptsCapabilities(t *testing.T) {
 		Params: json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
 	})
 	var result map[string]any
-	json.Unmarshal(resp.Result, &result)
+	resp.ResultAs(&result)
 	caps := result["capabilities"].(map[string]any)
 	if _, ok := caps["prompts"]; !ok {
 		t.Error("capabilities missing 'prompts'")

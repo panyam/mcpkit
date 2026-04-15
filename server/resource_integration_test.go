@@ -53,7 +53,7 @@ func TestResourcesList(t *testing.T) {
 	var result struct {
 		Resources []core.ResourceDef `json:"resources"`
 	}
-	json.Unmarshal(resp.Result, &result)
+	resp.ResultAs(&result)
 	if len(result.Resources) != 2 {
 		t.Fatalf("got %d resources, want 2", len(result.Resources))
 	}
@@ -76,7 +76,7 @@ func TestResourcesListEmpty(t *testing.T) {
 	var result struct {
 		Resources []core.ResourceDef `json:"resources"`
 	}
-	json.Unmarshal(resp.Result, &result)
+	resp.ResultAs(&result)
 	if len(result.Resources) != 0 {
 		t.Errorf("got %d resources, want 0", len(result.Resources))
 	}
@@ -93,7 +93,7 @@ func TestResourcesRead(t *testing.T) {
 		t.Fatalf("error: %s", resp.Error.Message)
 	}
 	var result core.ResourceResult
-	json.Unmarshal(resp.Result, &result)
+	resp.ResultAs(&result)
 	if len(result.Contents) != 1 {
 		t.Fatalf("got %d contents, want 1", len(result.Contents))
 	}
@@ -113,7 +113,7 @@ func TestResourcesReadBinary(t *testing.T) {
 		t.Fatalf("error: %s", resp.Error.Message)
 	}
 	var result core.ResourceResult
-	json.Unmarshal(resp.Result, &result)
+	resp.ResultAs(&result)
 	if result.Contents[0].Blob != "AQID" {
 		t.Errorf("blob = %q, want AQID", result.Contents[0].Blob)
 	}
@@ -148,7 +148,7 @@ func TestResourcesTemplatesList(t *testing.T) {
 	var result struct {
 		ResourceTemplates []core.ResourceTemplate `json:"resourceTemplates"`
 	}
-	json.Unmarshal(resp.Result, &result)
+	resp.ResultAs(&result)
 	if len(result.ResourceTemplates) != 1 {
 		t.Fatalf("got %d templates, want 1", len(result.ResourceTemplates))
 	}
@@ -169,7 +169,7 @@ func TestResourcesTemplateRead(t *testing.T) {
 		t.Fatalf("error: %s", resp.Error.Message)
 	}
 	var result core.ResourceResult
-	json.Unmarshal(resp.Result, &result)
+	resp.ResultAs(&result)
 	if result.Contents[0].Text != "item 42" {
 		t.Errorf("text = %q, want item 42", result.Contents[0].Text)
 	}
@@ -185,7 +185,7 @@ func TestResourcesCapabilities(t *testing.T) {
 		Params: json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
 	})
 	var result map[string]any
-	json.Unmarshal(resp.Result, &result)
+	resp.ResultAs(&result)
 	caps := result["capabilities"].(map[string]any)
 	if _, ok := caps["resources"]; !ok {
 		t.Error("capabilities missing 'resources'")
@@ -227,7 +227,7 @@ func TestResourcesSubscribe(t *testing.T) {
 	}
 	// Result should be an empty object {}
 	var result map[string]any
-	if err := json.Unmarshal(resp.Result, &result); err != nil {
+	if err := resp.ResultAs(&result); err != nil {
 		t.Fatalf("unmarshal result: %v", err)
 	}
 }
@@ -250,7 +250,7 @@ func TestResourcesUnsubscribe(t *testing.T) {
 		t.Fatalf("resources/unsubscribe error: %s", resp.Error.Message)
 	}
 	var result map[string]any
-	if err := json.Unmarshal(resp.Result, &result); err != nil {
+	if err := resp.ResultAs(&result); err != nil {
 		t.Fatalf("unmarshal result: %v", err)
 	}
 }
@@ -288,7 +288,7 @@ func TestResourcesSubscribeCapabilities(t *testing.T) {
 		Params: json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
 	})
 	var result map[string]any
-	json.Unmarshal(resp.Result, &result)
+	resp.ResultAs(&result)
 	caps := result["capabilities"].(map[string]any)
 	resCap, ok := caps["resources"].(map[string]any)
 	if !ok {
@@ -312,7 +312,7 @@ func TestResourcesSubscribeCapabilitiesDisabled(t *testing.T) {
 		Params: json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
 	})
 	var result map[string]any
-	json.Unmarshal(resp.Result, &result)
+	resp.ResultAs(&result)
 	caps := result["capabilities"].(map[string]any)
 	resCap, ok := caps["resources"].(map[string]any)
 	if !ok {
@@ -520,7 +520,7 @@ func TestResourcesReadMeta(t *testing.T) {
 	var raw struct {
 		Contents []json.RawMessage `json:"contents"`
 	}
-	if err := json.Unmarshal(resp.Result, &raw); err != nil {
+	if err := resp.ResultAs(&raw); err != nil {
 		t.Fatal(err)
 	}
 	if len(raw.Contents) != 1 {
@@ -561,7 +561,7 @@ func TestResourcesReadMeta(t *testing.T) {
 	var raw2 struct {
 		Contents []json.RawMessage `json:"contents"`
 	}
-	json.Unmarshal(resp2.Result, &raw2)
+	resp2.ResultAs(&raw2)
 	var content2 map[string]json.RawMessage
 	json.Unmarshal(raw2.Contents[0], &content2)
 	if _, ok := content2["_meta"]; ok {

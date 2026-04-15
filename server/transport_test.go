@@ -227,7 +227,7 @@ func TestSSEInitAndToolCall(t *testing.T) {
 		t.Fatalf("tool error: %s", toolResp.Error.Message)
 	}
 	var result core.ToolResult
-	if err := json.Unmarshal(toolResp.Result, &result); err != nil {
+	if err := toolResp.ResultAs(&result); err != nil {
 		t.Fatal(err)
 	}
 	if len(result.Content) == 0 || result.Content[0].Text != "echo: hello" {

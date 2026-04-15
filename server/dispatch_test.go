@@ -71,7 +71,7 @@ func TestDispatchInitialize(t *testing.T) {
 	}
 
 	var result map[string]any
-	if err := json.Unmarshal(resp.Result, &result); err != nil {
+	if err := resp.ResultAs(&result); err != nil {
 		t.Fatal(err)
 	}
 	if result["protocolVersion"] != "2024-11-05" {
@@ -145,7 +145,7 @@ func TestDispatchToolsList(t *testing.T) {
 	var result struct {
 		Tools []core.ToolDef `json:"tools"`
 	}
-	if err := json.Unmarshal(resp.Result, &result); err != nil {
+	if err := resp.ResultAs(&result); err != nil {
 		t.Fatal(err)
 	}
 	if len(result.Tools) != 1 {
@@ -173,7 +173,7 @@ func TestDispatchToolsCall(t *testing.T) {
 	}
 
 	var result core.ToolResult
-	if err := json.Unmarshal(resp.Result, &result); err != nil {
+	if err := resp.ResultAs(&result); err != nil {
 		t.Fatal(err)
 	}
 	if result.IsError {
@@ -292,7 +292,7 @@ func TestDispatchToolsCallHandlerError(t *testing.T) {
 	}
 
 	var result core.ToolResult
-	if err := json.Unmarshal(resp.Result, &result); err != nil {
+	if err := resp.ResultAs(&result); err != nil {
 		t.Fatalf("failed to unmarshal result: %v", err)
 	}
 	if !result.IsError {
@@ -324,7 +324,7 @@ func TestDispatchToolOrder(t *testing.T) {
 	var result struct {
 		Tools []core.ToolDef `json:"tools"`
 	}
-	if err := json.Unmarshal(resp.Result, &result); err != nil {
+	if err := resp.ResultAs(&result); err != nil {
 		t.Fatal(err)
 	}
 	if len(result.Tools) != 3 {
@@ -359,7 +359,7 @@ func TestDispatchInitializeVersion2025(t *testing.T) {
 	}
 
 	var result map[string]any
-	if err := json.Unmarshal(resp.Result, &result); err != nil {
+	if err := resp.ResultAs(&result); err != nil {
 		t.Fatal(err)
 	}
 	if result["protocolVersion"] != "2025-11-25" {
@@ -643,7 +643,7 @@ func TestDispatchLoggingCapability(t *testing.T) {
 	}
 
 	var result map[string]any
-	if err := json.Unmarshal(resp.Result, &result); err != nil {
+	if err := resp.ResultAs(&result); err != nil {
 		t.Fatal(err)
 	}
 	caps, ok := result["capabilities"].(map[string]any)
@@ -758,7 +758,7 @@ func TestDispatchToolsListExtraSchemaFields(t *testing.T) {
 			InputSchema map[string]any `json:"inputSchema"`
 		} `json:"tools"`
 	}
-	if err := json.Unmarshal(resp.Result, &result); err != nil {
+	if err := resp.ResultAs(&result); err != nil {
 		t.Fatal(err)
 	}
 	if len(result.Tools) != 1 {
@@ -840,7 +840,7 @@ func TestToolsListMeta(t *testing.T) {
 	var raw struct {
 		Tools []json.RawMessage `json:"tools"`
 	}
-	if err := json.Unmarshal(resp.Result, &raw); err != nil {
+	if err := resp.ResultAs(&raw); err != nil {
 		t.Fatal(err)
 	}
 	if len(raw.Tools) != 2 {
@@ -923,7 +923,7 @@ func TestInitializeWithClientExtensions(t *testing.T) {
 
 	// Verify server response includes its extensions
 	var result map[string]json.RawMessage
-	json.Unmarshal(resp.Result, &result)
+	resp.ResultAs(&result)
 
 	var caps map[string]json.RawMessage
 	json.Unmarshal(result["capabilities"], &caps)
