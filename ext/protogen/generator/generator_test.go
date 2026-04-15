@@ -88,9 +88,9 @@ func makePlugin(t *testing.T, svc ptestutil.Service) *protogen.Plugin {
 func collectTools(t *testing.T, svc ptestutil.Service) []toolData {
 	t.Helper()
 	plugin := makePlugin(t, svc)
-	protoSvc := ptestutil.FindService(t, plugin, svc.Name)
+	protoSvc, protoFile := ptestutil.FindServiceFile(t, plugin,svc.Name)
 	gf := plugin.NewGeneratedFile("_test.go", "")
-	sd, err := collectServiceData(protoSvc, gf)
+	sd, err := collectServiceData(protoSvc, protoFile, gf)
 	require.NoError(t, err)
 	return sd.Tools
 }
@@ -203,9 +203,9 @@ func TestAnnotationNamespace(t *testing.T) {
 		}},
 	})
 
-	protoSvc := ptestutil.FindService(t, plugin, "UserService")
+	protoSvc, protoFile := ptestutil.FindServiceFile(t, plugin,"UserService")
 	gf := plugin.NewGeneratedFile("_test.go", "")
-	sd, err := collectServiceData(protoSvc, gf)
+	sd, err := collectServiceData(protoSvc, protoFile, gf)
 	require.NoError(t, err)
 
 	require.Len(t, sd.Tools, 1)
@@ -229,9 +229,9 @@ func TestAnnotationNamespaceWithToolName(t *testing.T) {
 		}},
 	})
 
-	protoSvc := ptestutil.FindService(t, plugin, "UserService")
+	protoSvc, protoFile := ptestutil.FindServiceFile(t, plugin,"UserService")
 	gf := plugin.NewGeneratedFile("_test.go", "")
-	sd, err := collectServiceData(protoSvc, gf)
+	sd, err := collectServiceData(protoSvc, protoFile, gf)
 	require.NoError(t, err)
 
 	require.Len(t, sd.Tools, 1)
@@ -253,9 +253,9 @@ func TestAnnotationInvalidToolName(t *testing.T) {
 		}},
 	})
 
-	protoSvc := ptestutil.FindService(t, plugin, "UserService")
+	protoSvc, protoFile := ptestutil.FindServiceFile(t, plugin,"UserService")
 	gf := plugin.NewGeneratedFile("_test.go", "")
-	_, err := collectServiceData(protoSvc, gf)
+	_, err := collectServiceData(protoSvc, protoFile, gf)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid mcp_tool.name")
 }
@@ -275,9 +275,9 @@ func TestAnnotationInvalidTimeout(t *testing.T) {
 		}},
 	})
 
-	protoSvc := ptestutil.FindService(t, plugin, "UserService")
+	protoSvc, protoFile := ptestutil.FindServiceFile(t, plugin,"UserService")
 	gf := plugin.NewGeneratedFile("_test.go", "")
-	_, err := collectServiceData(protoSvc, gf)
+	_, err := collectServiceData(protoSvc, protoFile, gf)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid timeout")
 }
@@ -297,9 +297,9 @@ func methodOptionsWithResource(fields map[protowire.Number]any) *descriptorpb.Me
 func collectResources(t *testing.T, svc ptestutil.Service) []resourceData {
 	t.Helper()
 	plugin := makePlugin(t, svc)
-	protoSvc := ptestutil.FindService(t, plugin, svc.Name)
+	protoSvc, protoFile := ptestutil.FindServiceFile(t, plugin,svc.Name)
 	gf := plugin.NewGeneratedFile("_test.go", "")
-	sd, err := collectServiceData(protoSvc, gf)
+	sd, err := collectServiceData(protoSvc, protoFile, gf)
 	require.NoError(t, err)
 	return sd.Resources
 }
@@ -391,9 +391,9 @@ func TestResourceNoURITemplate(t *testing.T) {
 		}},
 	})
 
-	protoSvc := ptestutil.FindService(t, plugin, "BadService")
+	protoSvc, protoFile := ptestutil.FindServiceFile(t, plugin,"BadService")
 	gf := plugin.NewGeneratedFile("_test.go", "")
-	_, err := collectServiceData(protoSvc, gf)
+	_, err := collectServiceData(protoSvc, protoFile, gf)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "uri_template is required")
 }
@@ -421,9 +421,9 @@ func TestResourceMutualExclusion(t *testing.T) {
 		}},
 	})
 
-	protoSvc := ptestutil.FindService(t, plugin, "BadService")
+	protoSvc, protoFile := ptestutil.FindServiceFile(t, plugin,"BadService")
 	gf := plugin.NewGeneratedFile("_test.go", "")
-	_, err := collectServiceData(protoSvc, gf)
+	_, err := collectServiceData(protoSvc, protoFile, gf)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "cannot have multiple MCP annotations")
 }
@@ -452,9 +452,9 @@ func TestMixedToolAndResource(t *testing.T) {
 		},
 	})
 
-	protoSvc := ptestutil.FindService(t, plugin, "MixedService")
+	protoSvc, protoFile := ptestutil.FindServiceFile(t, plugin,"MixedService")
 	gf := plugin.NewGeneratedFile("_test.go", "")
-	sd, err := collectServiceData(protoSvc, gf)
+	sd, err := collectServiceData(protoSvc, protoFile, gf)
 	require.NoError(t, err)
 
 	assert.Len(t, sd.Tools, 1, "should have 1 tool")
@@ -506,9 +506,9 @@ func TestPromptRegistration(t *testing.T) {
 		}},
 	})
 
-	protoSvc := ptestutil.FindService(t, plugin, "DocService")
+	protoSvc, protoFile := ptestutil.FindServiceFile(t, plugin,"DocService")
 	gf := plugin.NewGeneratedFile("_test.go", "")
-	sd, err := collectServiceData(protoSvc, gf)
+	sd, err := collectServiceData(protoSvc, protoFile, gf)
 	require.NoError(t, err)
 
 	require.Len(t, sd.Prompts, 1)
@@ -540,9 +540,9 @@ func TestPromptDefaultName(t *testing.T) {
 		}},
 	})
 
-	protoSvc := ptestutil.FindService(t, plugin, "DocService")
+	protoSvc, protoFile := ptestutil.FindServiceFile(t, plugin,"DocService")
 	gf := plugin.NewGeneratedFile("_test.go", "")
-	sd, err := collectServiceData(protoSvc, gf)
+	sd, err := collectServiceData(protoSvc, protoFile, gf)
 	require.NoError(t, err)
 
 	require.Len(t, sd.Prompts, 1)
@@ -565,9 +565,9 @@ func TestPromptWithNamespace(t *testing.T) {
 		}},
 	})
 
-	protoSvc := ptestutil.FindService(t, plugin, "DocService")
+	protoSvc, protoFile := ptestutil.FindServiceFile(t, plugin,"DocService")
 	gf := plugin.NewGeneratedFile("_test.go", "")
-	sd, err := collectServiceData(protoSvc, gf)
+	sd, err := collectServiceData(protoSvc, protoFile, gf)
 	require.NoError(t, err)
 
 	require.Len(t, sd.Prompts, 1)
@@ -631,9 +631,9 @@ func TestCompletionFromPrompt(t *testing.T) {
 		}},
 	})
 
-	protoSvc := ptestutil.FindService(t, plugin, "BookService")
+	protoSvc, protoFile := ptestutil.FindServiceFile(t, plugin,"BookService")
 	gf := plugin.NewGeneratedFile("_test.go", "")
-	sd, err := collectServiceData(protoSvc, gf)
+	sd, err := collectServiceData(protoSvc, protoFile, gf)
 	require.NoError(t, err)
 
 	require.Len(t, sd.Completions, 1)
@@ -663,9 +663,9 @@ func TestCompletionFromResource(t *testing.T) {
 		}},
 	})
 
-	protoSvc := ptestutil.FindService(t, plugin, "BookService")
+	protoSvc, protoFile := ptestutil.FindServiceFile(t, plugin,"BookService")
 	gf := plugin.NewGeneratedFile("_test.go", "")
-	sd, err := collectServiceData(protoSvc, gf)
+	sd, err := collectServiceData(protoSvc, protoFile, gf)
 	require.NoError(t, err)
 
 	require.Len(t, sd.Completions, 1)
@@ -716,9 +716,9 @@ func TestNoCompletions(t *testing.T) {
 		}},
 	})
 
-	protoSvc := ptestutil.FindService(t, plugin, "SimpleService")
+	protoSvc, protoFile := ptestutil.FindServiceFile(t, plugin,"SimpleService")
 	gf := plugin.NewGeneratedFile("_test.go", "")
-	sd, err := collectServiceData(protoSvc, gf)
+	sd, err := collectServiceData(protoSvc, protoFile, gf)
 	require.NoError(t, err)
 
 	assert.Empty(t, sd.Completions)

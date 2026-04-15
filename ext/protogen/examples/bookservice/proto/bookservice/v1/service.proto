@@ -54,6 +54,24 @@ service BookService {
       description: "Get personalized book recommendations"
     };
   }
+
+  // ReviewBook generates an AI review of a book, then asks the user to approve it.
+  rpc ReviewBook(ReviewBookRequest) returns (ReviewBookResponse) {
+    option (mcp.v1.mcp_tool) = {
+      name: "review"
+      description: "Generate an AI review of a book, with user approval"
+    };
+    option (mcp.v1.mcp_sampling) = {
+      system_prompt: "You are a literary critic. Write concise, insightful book reviews."
+      max_tokens: 300
+      include_context: "thisServer"
+      intelligence_priority: 0.9
+    };
+    option (mcp.v1.mcp_elicit) = {
+      message: "Please review and approve this book review"
+      schema_message: "ReviewApproval"
+    };
+  }
 }
 
 // --- Request/Response messages ---
@@ -103,6 +121,22 @@ message RecommendBooksRequest {
 message RecommendBooksResponse {
   repeated Book recommendations = 1;
   string reasoning = 2;
+}
+
+message ReviewBookRequest {
+  string book_id = 1;
+}
+
+message ReviewBookResponse {
+  string review = 1;
+  bool approved = 2;
+}
+
+// ReviewApproval is the elicitation schema for the ReviewBook tool.
+// Users confirm or reject the AI-generated review.
+message ReviewApproval {
+  bool approved = 1;
+  optional string notes = 2;
 }
 
 // --- Domain model ---

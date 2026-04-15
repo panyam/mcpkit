@@ -3,7 +3,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -25,7 +24,7 @@ var catalog = []*booksv1.Book{
 // and BookServiceMCPPromptServer interfaces.
 type bookService struct{}
 
-func (s *bookService) SearchBooks(_ context.Context, req *booksv1.SearchBooksRequest) (*booksv1.SearchBooksResponse, error) {
+func (s *bookService) SearchBooks(_ core.ToolContext, req *booksv1.SearchBooksRequest) (*booksv1.SearchBooksResponse, error) {
 	var results []*booksv1.Book
 	for _, b := range catalog {
 		if req.Genre != "" && b.Genre != req.Genre {
@@ -39,7 +38,7 @@ func (s *bookService) SearchBooks(_ context.Context, req *booksv1.SearchBooksReq
 	return &booksv1.SearchBooksResponse{Results: results, Total: int32(len(results))}, nil
 }
 
-func (s *bookService) GetBook(_ context.Context, req *booksv1.GetBookRequest) (*booksv1.GetBookResponse, error) {
+func (s *bookService) GetBook(_ core.ResourceContext, req *booksv1.GetBookRequest) (*booksv1.GetBookResponse, error) {
 	for _, b := range catalog {
 		if b.Id == req.BookId {
 			return &booksv1.GetBookResponse{Book: b}, nil
@@ -48,7 +47,7 @@ func (s *bookService) GetBook(_ context.Context, req *booksv1.GetBookRequest) (*
 	return nil, fmt.Errorf("book %q not found", req.BookId)
 }
 
-func (s *bookService) GetAuthorBooks(_ context.Context, req *booksv1.GetAuthorBooksRequest) (*booksv1.GetAuthorBooksResponse, error) {
+func (s *bookService) GetAuthorBooks(_ core.ResourceContext, req *booksv1.GetAuthorBooksRequest) (*booksv1.GetAuthorBooksResponse, error) {
 	var books []*booksv1.Book
 	for _, b := range catalog {
 		if b.Author == req.AuthorId {
@@ -58,7 +57,7 @@ func (s *bookService) GetAuthorBooks(_ context.Context, req *booksv1.GetAuthorBo
 	return &booksv1.GetAuthorBooksResponse{Books: books}, nil
 }
 
-func (s *bookService) SummarizeBook(_ context.Context, req *booksv1.SummarizeBookRequest) (*booksv1.SummarizeBookResponse, error) {
+func (s *bookService) SummarizeBook(_ core.PromptContext, req *booksv1.SummarizeBookRequest) (*booksv1.SummarizeBookResponse, error) {
 	for _, b := range catalog {
 		if b.Id == req.BookId {
 			return &booksv1.SummarizeBookResponse{
@@ -69,7 +68,7 @@ func (s *bookService) SummarizeBook(_ context.Context, req *booksv1.SummarizeBoo
 	return nil, fmt.Errorf("book %q not found", req.BookId)
 }
 
-func (s *bookService) RecommendBooks(_ context.Context, req *booksv1.RecommendBooksRequest) (*booksv1.RecommendBooksResponse, error) {
+func (s *bookService) RecommendBooks(_ core.PromptContext, req *booksv1.RecommendBooksRequest) (*booksv1.RecommendBooksResponse, error) {
 	var recs []*booksv1.Book
 	for _, b := range catalog {
 		if req.Genre != "" && b.Genre != req.Genre {
@@ -84,6 +83,21 @@ func (s *bookService) RecommendBooks(_ context.Context, req *booksv1.RecommendBo
 		Recommendations: recs,
 		Reasoning:       fmt.Sprintf("Selected %d books matching genre=%q mood=%q", len(recs), req.Genre, req.Mood),
 	}, nil
+}
+
+// ReviewBook demonstrates sampling + elicitation in a tool handler.
+// In a real implementation, this would call SampleForReviewBook() and ElicitReviewApproval().
+// For testing, we return a canned review.
+func (s *bookService) ReviewBook(_ core.ToolContext, req *booksv1.ReviewBookRequest) (*booksv1.ReviewBookResponse, error) {
+	for _, b := range catalog {
+		if b.Id == req.BookId {
+			return &booksv1.ReviewBookResponse{
+				Review:   fmt.Sprintf("An excellent read: %s by %s", b.Title, b.Author),
+				Approved: true,
+			}, nil
+		}
+	}
+	return nil, fmt.Errorf("book %q not found", req.BookId)
 }
 
 // CompleteBookId returns book ID suggestions matching the partial input.

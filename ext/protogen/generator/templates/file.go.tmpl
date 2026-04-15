@@ -36,6 +36,8 @@ var (
 	_ time.Duration
 )
 
+func floatPtr(v float64) *float64 { return &v }
+
 {{ range .Services }}
 // --- {{ .Name }} ---
 
@@ -77,13 +79,21 @@ var (
 {{ template "completerInterface" . }}
 {{ template "registerCompletions" . }}
 {{- end }}
+{{- if .Elicitations }}
+{{ template "elicitHelpers" . }}
+{{- end }}
+{{- if .Samplings }}
+{{ template "samplingHelpers" . }}
+{{- end }}
 {{ end }}
 
 {{- define "serverInterface" -}}
 // {{ .Name }}MCPServer is the interface that in-process implementations must satisfy.
+// Methods receive mcpcore.ToolContext which provides access to Sample(), Elicit(),
+// EmitProgress(), and other MCP session capabilities.
 type {{ .Name }}MCPServer interface {
 {{- range .Tools }}
-	{{ .MethodName }}(ctx context.Context, req *{{ .RequestType }}) (*{{ .ResponseType }}, error)
+	{{ .MethodName }}(ctx mcpcore.ToolContext, req *{{ .RequestType }}) (*{{ .ResponseType }}, error)
 {{- end }}
 }
 {{ end }}
@@ -209,7 +219,7 @@ server.Tool{
 // {{ .Name }}MCPResourceServer is the interface for in-process resource implementations.
 type {{ .Name }}MCPResourceServer interface {
 {{- range .Resources }}
-	{{ .MethodName }}(ctx context.Context, req *{{ .RequestType }}) (*{{ .ResponseType }}, error)
+	{{ .MethodName }}(ctx mcpcore.ResourceContext, req *{{ .RequestType }}) (*{{ .ResponseType }}, error)
 {{- end }}
 }
 {{ end }}
@@ -377,7 +387,7 @@ func Forward{{ .Name }}ResourcesToConnect(srv *server.Server, client Connect{{ .
 // {{ .Name }}MCPPromptServer is the interface for in-process prompt implementations.
 type {{ .Name }}MCPPromptServer interface {
 {{- range .Prompts }}
-	{{ .MethodName }}(ctx context.Context, req *{{ .RequestType }}) (*{{ .ResponseType }}, error)
+	{{ .MethodName }}(ctx mcpcore.PromptContext, req *{{ .RequestType }}) (*{{ .ResponseType }}, error)
 {{- end }}
 }
 {{ end }}
@@ -522,4 +532,65 @@ func Register{{ .Name }}MCPCompletions(srv *server.Server, completer {{ .Name }}
 	})
 {{- end }}
 }
+{{ end }}
+
+{{- define "elicitHelpers" -}}
+{{- range .Elicitations }}
+// {{ .GoHelper }} sends a typed elicitation request using the schema derived
+// from {{ .SchemaType }}. Returns the populated proto message, the user's action
+// ("accept"/"decline"/"cancel"), and any error.
+// If the user does not accept, the returned message pointer is nil.
+func {{ .GoHelper }}(ctx mcpcore.ToolContext, message string) (*{{ .SchemaType }}, string, error) {
+	result, err := ctx.Elicit(mcpcore.ElicitationRequest{
+		Message:         message,
+		RequestedSchema: json.RawMessage(`{{ .SchemaJSON }}`),
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	if result.Action != "accept" {
+		return nil, result.Action, nil
+	}
+	out, err := runtime.BindElicitResult[{{ .SchemaType }}](result.Content)
+	if err != nil {
+		return nil, "", err
+	}
+	return out, result.Action, nil
+}
+{{- end }}
+{{ end }}
+
+{{- define "samplingHelpers" -}}
+{{- range .Samplings }}
+// {{ .GoHelper }} sends a pre-configured sampling request for {{ .ToolMethodName }}.
+// Caller provides the user messages; system prompt and model preferences come
+// from the mcp_sampling annotation.
+func {{ .GoHelper }}(ctx mcpcore.ToolContext, messages []mcpcore.SamplingMessage) (mcpcore.CreateMessageResult, error) {
+	return ctx.Sample(mcpcore.CreateMessageRequest{
+		Messages:       messages,
+		{{- if .SystemPrompt }}
+		SystemPrompt:   "{{ .SystemPrompt }}",
+		{{- end }}
+		{{- if .MaxTokens }}
+		MaxTokens:      {{ .MaxTokens }},
+		{{- end }}
+		{{- if .IncludeContext }}
+		IncludeContext:  "{{ .IncludeContext }}",
+		{{- end }}
+		{{- if or .IntelligencePriority .SpeedPriority .CostPriority }}
+		ModelPreferences: &mcpcore.ModelPreferences{
+			{{- if .IntelligencePriority }}
+			IntelligencePriority: floatPtr({{ .IntelligencePriority }}),
+			{{- end }}
+			{{- if .SpeedPriority }}
+			SpeedPriority: floatPtr({{ .SpeedPriority }}),
+			{{- end }}
+			{{- if .CostPriority }}
+			CostPriority: floatPtr({{ .CostPriority }}),
+			{{- end }}
+		},
+		{{- end }}
+	})
+}
+{{- end }}
 {{ end }}

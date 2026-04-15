@@ -203,6 +203,31 @@ func BindParams(params map[string]string, msg proto.Message) error {
 	return fields.PopulateFromMap(msg, params)
 }
 
+// BindElicitResult unmarshals an elicitation result content map into a typed
+// proto message. Returns a pointer to the populated message.
+//
+// Usage in generated code:
+//
+//	approval, err := runtime.BindElicitResult[SummaryApproval](result.Content)
+//	// approval is *SummaryApproval
+func BindElicitResult[T any, PT interface {
+	*T
+	proto.Message
+}](content map[string]any) (PT, error) {
+	msg := PT(new(T))
+	if len(content) == 0 {
+		return msg, nil
+	}
+	data, err := json.Marshal(content)
+	if err != nil {
+		return nil, fmt.Errorf("marshal elicit content: %w", err)
+	}
+	if err := unmarshalOpts.Unmarshal(data, msg); err != nil {
+		return nil, err
+	}
+	return msg, nil
+}
+
 // RPCError wraps an RPC error as an MCP error result.
 // If the error is a gRPC status error, the status code and any attached
 // details (proto Any messages) are extracted and returned as structured

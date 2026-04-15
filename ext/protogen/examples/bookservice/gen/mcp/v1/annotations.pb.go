@@ -288,19 +288,175 @@ func (x *MCPPromptOptions) GetCompletableFields() []string {
 	return nil
 }
 
+// MCPElicitOptions configures elicitation (user input) for a tool.
+// Can be set at method level (per-tool) or service level (default for all tools).
+// Method-level fully overrides service-level when both are set.
+type MCPElicitOptions struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Prompt message shown to the user.
+	Message string `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	// Name of a proto message in the same file whose fields define the
+	// elicitation schema. The generator derives JSON Schema via schema.FromMessage()
+	// and emits a typed helper function: Elicit<MessageName>(ctx, message).
+	SchemaMessage string `protobuf:"bytes,2,opt,name=schema_message,json=schemaMessage,proto3" json:"schema_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MCPElicitOptions) Reset() {
+	*x = MCPElicitOptions{}
+	mi := &file_mcp_v1_annotations_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MCPElicitOptions) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MCPElicitOptions) ProtoMessage() {}
+
+func (x *MCPElicitOptions) ProtoReflect() protoreflect.Message {
+	mi := &file_mcp_v1_annotations_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MCPElicitOptions.ProtoReflect.Descriptor instead.
+func (*MCPElicitOptions) Descriptor() ([]byte, []int) {
+	return file_mcp_v1_annotations_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *MCPElicitOptions) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *MCPElicitOptions) GetSchemaMessage() string {
+	if x != nil {
+		return x.SchemaMessage
+	}
+	return ""
+}
+
+// MCPSamplingOptions configures LLM sampling for a tool.
+// Can be set at method level (per-tool) or service level (default for all tools).
+// Method-level fully overrides service-level when both are set.
+type MCPSamplingOptions struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// System prompt for the LLM.
+	SystemPrompt string `protobuf:"bytes,1,opt,name=system_prompt,json=systemPrompt,proto3" json:"system_prompt,omitempty"`
+	// Maximum tokens for the response.
+	MaxTokens int32 `protobuf:"varint,2,opt,name=max_tokens,json=maxTokens,proto3" json:"max_tokens,omitempty"`
+	// Context inclusion: "none", "thisServer", "allServers".
+	IncludeContext string `protobuf:"bytes,3,opt,name=include_context,json=includeContext,proto3" json:"include_context,omitempty"`
+	// Model preference hints (0.0–1.0).
+	IntelligencePriority float32 `protobuf:"fixed32,4,opt,name=intelligence_priority,json=intelligencePriority,proto3" json:"intelligence_priority,omitempty"`
+	SpeedPriority        float32 `protobuf:"fixed32,5,opt,name=speed_priority,json=speedPriority,proto3" json:"speed_priority,omitempty"`
+	CostPriority         float32 `protobuf:"fixed32,6,opt,name=cost_priority,json=costPriority,proto3" json:"cost_priority,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *MCPSamplingOptions) Reset() {
+	*x = MCPSamplingOptions{}
+	mi := &file_mcp_v1_annotations_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MCPSamplingOptions) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MCPSamplingOptions) ProtoMessage() {}
+
+func (x *MCPSamplingOptions) ProtoReflect() protoreflect.Message {
+	mi := &file_mcp_v1_annotations_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MCPSamplingOptions.ProtoReflect.Descriptor instead.
+func (*MCPSamplingOptions) Descriptor() ([]byte, []int) {
+	return file_mcp_v1_annotations_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *MCPSamplingOptions) GetSystemPrompt() string {
+	if x != nil {
+		return x.SystemPrompt
+	}
+	return ""
+}
+
+func (x *MCPSamplingOptions) GetMaxTokens() int32 {
+	if x != nil {
+		return x.MaxTokens
+	}
+	return 0
+}
+
+func (x *MCPSamplingOptions) GetIncludeContext() string {
+	if x != nil {
+		return x.IncludeContext
+	}
+	return ""
+}
+
+func (x *MCPSamplingOptions) GetIntelligencePriority() float32 {
+	if x != nil {
+		return x.IntelligencePriority
+	}
+	return 0
+}
+
+func (x *MCPSamplingOptions) GetSpeedPriority() float32 {
+	if x != nil {
+		return x.SpeedPriority
+	}
+	return 0
+}
+
+func (x *MCPSamplingOptions) GetCostPriority() float32 {
+	if x != nil {
+		return x.CostPriority
+	}
+	return 0
+}
+
 // MCPServiceOptions configures service-level MCP settings.
 type MCPServiceOptions struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Namespace prefix for all tools in this service.
 	// e.g. namespace="users" → tool "get" becomes "users_get".
-	Namespace     string `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Namespace string `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	// Default sampling config for all tools in this service.
+	// Overridden by method-level mcp_sampling when set.
+	DefaultSampling *MCPSamplingOptions `protobuf:"bytes,2,opt,name=default_sampling,json=defaultSampling,proto3" json:"default_sampling,omitempty"`
+	// Default elicitation config for all tools in this service.
+	// Overridden by method-level mcp_elicit when set.
+	DefaultElicit *MCPElicitOptions `protobuf:"bytes,3,opt,name=default_elicit,json=defaultElicit,proto3" json:"default_elicit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MCPServiceOptions) Reset() {
 	*x = MCPServiceOptions{}
-	mi := &file_mcp_v1_annotations_proto_msgTypes[3]
+	mi := &file_mcp_v1_annotations_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -312,7 +468,7 @@ func (x *MCPServiceOptions) String() string {
 func (*MCPServiceOptions) ProtoMessage() {}
 
 func (x *MCPServiceOptions) ProtoReflect() protoreflect.Message {
-	mi := &file_mcp_v1_annotations_proto_msgTypes[3]
+	mi := &file_mcp_v1_annotations_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -325,7 +481,7 @@ func (x *MCPServiceOptions) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MCPServiceOptions.ProtoReflect.Descriptor instead.
 func (*MCPServiceOptions) Descriptor() ([]byte, []int) {
-	return file_mcp_v1_annotations_proto_rawDescGZIP(), []int{3}
+	return file_mcp_v1_annotations_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *MCPServiceOptions) GetNamespace() string {
@@ -333,6 +489,20 @@ func (x *MCPServiceOptions) GetNamespace() string {
 		return x.Namespace
 	}
 	return ""
+}
+
+func (x *MCPServiceOptions) GetDefaultSampling() *MCPSamplingOptions {
+	if x != nil {
+		return x.DefaultSampling
+	}
+	return nil
+}
+
+func (x *MCPServiceOptions) GetDefaultElicit() *MCPElicitOptions {
+	if x != nil {
+		return x.DefaultElicit
+	}
+	return nil
 }
 
 var file_mcp_v1_annotations_proto_extTypes = []protoimpl.ExtensionInfo{
@@ -361,6 +531,22 @@ var file_mcp_v1_annotations_proto_extTypes = []protoimpl.ExtensionInfo{
 		Filename:      "mcp/v1/annotations.proto",
 	},
 	{
+		ExtendedType:  (*descriptorpb.MethodOptions)(nil),
+		ExtensionType: (*MCPElicitOptions)(nil),
+		Field:         51004,
+		Name:          "mcp.v1.mcp_elicit",
+		Tag:           "bytes,51004,opt,name=mcp_elicit",
+		Filename:      "mcp/v1/annotations.proto",
+	},
+	{
+		ExtendedType:  (*descriptorpb.MethodOptions)(nil),
+		ExtensionType: (*MCPSamplingOptions)(nil),
+		Field:         51005,
+		Name:          "mcp.v1.mcp_sampling",
+		Tag:           "bytes,51005,opt,name=mcp_sampling",
+		Filename:      "mcp/v1/annotations.proto",
+	},
+	{
 		ExtendedType:  (*descriptorpb.ServiceOptions)(nil),
 		ExtensionType: (*MCPServiceOptions)(nil),
 		Field:         51010,
@@ -378,12 +564,16 @@ var (
 	E_McpResource = &file_mcp_v1_annotations_proto_extTypes[1]
 	// optional mcp.v1.MCPPromptOptions mcp_prompt = 51003;
 	E_McpPrompt = &file_mcp_v1_annotations_proto_extTypes[2]
+	// optional mcp.v1.MCPElicitOptions mcp_elicit = 51004;
+	E_McpElicit = &file_mcp_v1_annotations_proto_extTypes[3]
+	// optional mcp.v1.MCPSamplingOptions mcp_sampling = 51005;
+	E_McpSampling = &file_mcp_v1_annotations_proto_extTypes[4]
 )
 
 // Extension fields to descriptorpb.ServiceOptions.
 var (
 	// optional mcp.v1.MCPServiceOptions mcp_service = 51010;
-	E_McpService = &file_mcp_v1_annotations_proto_extTypes[3]
+	E_McpService = &file_mcp_v1_annotations_proto_extTypes[5]
 )
 
 var File_mcp_v1_annotations_proto protoreflect.FileDescriptor
@@ -406,13 +596,29 @@ const file_mcp_v1_annotations_proto_rawDesc = "" +
 	"\x10MCPPromptOptions\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12-\n" +
-	"\x12completable_fields\x18\x03 \x03(\tR\x11completableFields\"1\n" +
+	"\x12completable_fields\x18\x03 \x03(\tR\x11completableFields\"S\n" +
+	"\x10MCPElicitOptions\x12\x18\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage\x12%\n" +
+	"\x0eschema_message\x18\x02 \x01(\tR\rschemaMessage\"\x82\x02\n" +
+	"\x12MCPSamplingOptions\x12#\n" +
+	"\rsystem_prompt\x18\x01 \x01(\tR\fsystemPrompt\x12\x1d\n" +
+	"\n" +
+	"max_tokens\x18\x02 \x01(\x05R\tmaxTokens\x12'\n" +
+	"\x0finclude_context\x18\x03 \x01(\tR\x0eincludeContext\x123\n" +
+	"\x15intelligence_priority\x18\x04 \x01(\x02R\x14intelligencePriority\x12%\n" +
+	"\x0espeed_priority\x18\x05 \x01(\x02R\rspeedPriority\x12#\n" +
+	"\rcost_priority\x18\x06 \x01(\x02R\fcostPriority\"\xb9\x01\n" +
 	"\x11MCPServiceOptions\x12\x1c\n" +
-	"\tnamespace\x18\x01 \x01(\tR\tnamespace:S\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12E\n" +
+	"\x10default_sampling\x18\x02 \x01(\v2\x1a.mcp.v1.MCPSamplingOptionsR\x0fdefaultSampling\x12?\n" +
+	"\x0edefault_elicit\x18\x03 \x01(\v2\x18.mcp.v1.MCPElicitOptionsR\rdefaultElicit:S\n" +
 	"\bmcp_tool\x12\x1e.google.protobuf.MethodOptions\x18\xb9\x8e\x03 \x01(\v2\x16.mcp.v1.MCPToolOptionsR\amcpTool:_\n" +
 	"\fmcp_resource\x12\x1e.google.protobuf.MethodOptions\x18\xba\x8e\x03 \x01(\v2\x1a.mcp.v1.MCPResourceOptionsR\vmcpResource:Y\n" +
 	"\n" +
-	"mcp_prompt\x12\x1e.google.protobuf.MethodOptions\x18\xbb\x8e\x03 \x01(\v2\x18.mcp.v1.MCPPromptOptionsR\tmcpPrompt:]\n" +
+	"mcp_prompt\x12\x1e.google.protobuf.MethodOptions\x18\xbb\x8e\x03 \x01(\v2\x18.mcp.v1.MCPPromptOptionsR\tmcpPrompt:Y\n" +
+	"\n" +
+	"mcp_elicit\x12\x1e.google.protobuf.MethodOptions\x18\xbc\x8e\x03 \x01(\v2\x18.mcp.v1.MCPElicitOptionsR\tmcpElicit:_\n" +
+	"\fmcp_sampling\x12\x1e.google.protobuf.MethodOptions\x18\xbd\x8e\x03 \x01(\v2\x1a.mcp.v1.MCPSamplingOptionsR\vmcpSampling:]\n" +
 	"\vmcp_service\x12\x1f.google.protobuf.ServiceOptions\x18\u008e\x03 \x01(\v2\x19.mcp.v1.MCPServiceOptionsR\n" +
 	"mcpServiceB:Z8github.com/panyam/mcpkit/ext/protogen/proto/mcp/v1;mcpv1b\x06proto3"
 
@@ -428,29 +634,37 @@ func file_mcp_v1_annotations_proto_rawDescGZIP() []byte {
 	return file_mcp_v1_annotations_proto_rawDescData
 }
 
-var file_mcp_v1_annotations_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_mcp_v1_annotations_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_mcp_v1_annotations_proto_goTypes = []any{
 	(*MCPToolOptions)(nil),              // 0: mcp.v1.MCPToolOptions
 	(*MCPResourceOptions)(nil),          // 1: mcp.v1.MCPResourceOptions
 	(*MCPPromptOptions)(nil),            // 2: mcp.v1.MCPPromptOptions
-	(*MCPServiceOptions)(nil),           // 3: mcp.v1.MCPServiceOptions
-	(*descriptorpb.MethodOptions)(nil),  // 4: google.protobuf.MethodOptions
-	(*descriptorpb.ServiceOptions)(nil), // 5: google.protobuf.ServiceOptions
+	(*MCPElicitOptions)(nil),            // 3: mcp.v1.MCPElicitOptions
+	(*MCPSamplingOptions)(nil),          // 4: mcp.v1.MCPSamplingOptions
+	(*MCPServiceOptions)(nil),           // 5: mcp.v1.MCPServiceOptions
+	(*descriptorpb.MethodOptions)(nil),  // 6: google.protobuf.MethodOptions
+	(*descriptorpb.ServiceOptions)(nil), // 7: google.protobuf.ServiceOptions
 }
 var file_mcp_v1_annotations_proto_depIdxs = []int32{
-	4, // 0: mcp.v1.mcp_tool:extendee -> google.protobuf.MethodOptions
-	4, // 1: mcp.v1.mcp_resource:extendee -> google.protobuf.MethodOptions
-	4, // 2: mcp.v1.mcp_prompt:extendee -> google.protobuf.MethodOptions
-	5, // 3: mcp.v1.mcp_service:extendee -> google.protobuf.ServiceOptions
-	0, // 4: mcp.v1.mcp_tool:type_name -> mcp.v1.MCPToolOptions
-	1, // 5: mcp.v1.mcp_resource:type_name -> mcp.v1.MCPResourceOptions
-	2, // 6: mcp.v1.mcp_prompt:type_name -> mcp.v1.MCPPromptOptions
-	3, // 7: mcp.v1.mcp_service:type_name -> mcp.v1.MCPServiceOptions
-	8, // [8:8] is the sub-list for method output_type
-	8, // [8:8] is the sub-list for method input_type
-	4, // [4:8] is the sub-list for extension type_name
-	0, // [0:4] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	4,  // 0: mcp.v1.MCPServiceOptions.default_sampling:type_name -> mcp.v1.MCPSamplingOptions
+	3,  // 1: mcp.v1.MCPServiceOptions.default_elicit:type_name -> mcp.v1.MCPElicitOptions
+	6,  // 2: mcp.v1.mcp_tool:extendee -> google.protobuf.MethodOptions
+	6,  // 3: mcp.v1.mcp_resource:extendee -> google.protobuf.MethodOptions
+	6,  // 4: mcp.v1.mcp_prompt:extendee -> google.protobuf.MethodOptions
+	6,  // 5: mcp.v1.mcp_elicit:extendee -> google.protobuf.MethodOptions
+	6,  // 6: mcp.v1.mcp_sampling:extendee -> google.protobuf.MethodOptions
+	7,  // 7: mcp.v1.mcp_service:extendee -> google.protobuf.ServiceOptions
+	0,  // 8: mcp.v1.mcp_tool:type_name -> mcp.v1.MCPToolOptions
+	1,  // 9: mcp.v1.mcp_resource:type_name -> mcp.v1.MCPResourceOptions
+	2,  // 10: mcp.v1.mcp_prompt:type_name -> mcp.v1.MCPPromptOptions
+	3,  // 11: mcp.v1.mcp_elicit:type_name -> mcp.v1.MCPElicitOptions
+	4,  // 12: mcp.v1.mcp_sampling:type_name -> mcp.v1.MCPSamplingOptions
+	5,  // 13: mcp.v1.mcp_service:type_name -> mcp.v1.MCPServiceOptions
+	14, // [14:14] is the sub-list for method output_type
+	14, // [14:14] is the sub-list for method input_type
+	8,  // [8:14] is the sub-list for extension type_name
+	2,  // [2:8] is the sub-list for extension extendee
+	0,  // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_mcp_v1_annotations_proto_init() }
@@ -464,8 +678,8 @@ func file_mcp_v1_annotations_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_mcp_v1_annotations_proto_rawDesc), len(file_mcp_v1_annotations_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
-			NumExtensions: 4,
+			NumMessages:   6,
+			NumExtensions: 6,
 			NumServices:   0,
 		},
 		GoTypes:           file_mcp_v1_annotations_proto_goTypes,

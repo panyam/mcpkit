@@ -52,3 +52,18 @@ func FindService(t *testing.T, plugin *protogen.Plugin, name string) *protogen.S
 	t.Fatalf("service %q not found", name)
 	return nil
 }
+
+// FindServiceFile finds a service by short name and returns both the service
+// and the file it belongs to.
+func FindServiceFile(t *testing.T, plugin *protogen.Plugin, name string) (*protogen.Service, *protogen.File) {
+	t.Helper()
+	for _, f := range plugin.Files {
+		for _, svc := range f.Services {
+			if string(svc.Desc.Name()) == name {
+				return svc, f
+			}
+		}
+	}
+	t.Fatalf("service %q not found", name)
+	return nil, nil
+}
