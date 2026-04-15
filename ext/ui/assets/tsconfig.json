@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "module": "none",
+    "lib": ["ES2017", "DOM"],
+    "strict": true,
+    "declaration": false,
+    "removeComments": false,
+    "sourceMap": false,
+    "outDir": "."
+  },
+  "include": ["mcp-app-bridge.ts"],
+  "exclude": ["mcp-app-bridge.js", "mcp-app-bridge.d.ts"]
+}

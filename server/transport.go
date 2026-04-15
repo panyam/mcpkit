@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +14,26 @@ import (
 	core "github.com/panyam/mcpkit/core"
 	gohttp "github.com/panyam/servicekit/http"
 )
+
+// marshalJSON encodes v as JSON without HTML-escaping <, >, &.
+// Go's json.Marshal escapes these to \u003c/\u003e/\u0026 for HTML safety,
+// but JSON-RPC payloads are not HTML contexts. Disabling this matches
+// how Node.js and Python serialize JSON, ensuring HTML content in
+// resource responses is preserved verbatim for hosts to parse.
+func marshalJSON(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	// Encode appends a newline; trim it for consistency with json.Marshal.
+	b := buf.Bytes()
+	if len(b) > 0 && b[len(b)-1] == '\n' {
+		b = b[:len(b)-1]
+	}
+	return b, nil
+}
 
 // sseSessionEntry wraps a Dispatcher with session metadata and an optional
 // grace period timer. When a grace period is configured, the session survives
@@ -179,7 +200,7 @@ func (t *sseTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 		parts, splitErr := gohttp.SplitBatch(body)
 		if splitErr != nil {
 			errResp := core.NewErrorResponse(json.RawMessage("null"), core.ErrCodeParse, "invalid batch: "+splitErr.Error())
-			raw, _ := json.Marshal(errResp)
+			raw, _ := marshalJSON(errResp)
 			emitSSEEvent(dispatcher.eventIDs, t.config.eventStore, sessionID, raw, func(id string, data json.RawMessage) {
 				t.hub.SendEventWithID(sessionID, "message", id, SSEJSON(data))
 			})
@@ -188,7 +209,7 @@ func (t *sseTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 				var batchReq core.Request
 				if err := json.Unmarshal(part, &batchReq); err != nil {
 					errResp := core.NewErrorResponse(json.RawMessage("null"), core.ErrCodeParse, "parse error in batch element: "+err.Error())
-					raw, _ := json.Marshal(errResp)
+					raw, _ := marshalJSON(errResp)
 					emitSSEEvent(dispatcher.eventIDs, t.config.eventStore, sessionID, raw, func(id string, data json.RawMessage) {
 						t.hub.SendEventWithID(sessionID, "message", id, SSEJSON(data))
 					})
@@ -198,7 +219,7 @@ func (t *sseTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 				if resp == nil {
 					continue // notification — no response
 				}
-				raw, _ := json.Marshal(resp)
+				raw, _ := marshalJSON(resp)
 				emitSSEEvent(dispatcher.eventIDs, t.config.eventStore, sessionID, raw, func(id string, data json.RawMessage) {
 					t.hub.SendEventWithID(sessionID, "message", id, SSEJSON(data))
 				})
@@ -212,7 +233,7 @@ func (t *sseTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 	if err := json.Unmarshal(body, &req); err != nil {
 		// JSON parse error — push error response on SSE stream
 		errResp := core.NewErrorResponse(json.RawMessage("null"), core.ErrCodeParse, "parse error: "+err.Error())
-		raw, _ := json.Marshal(errResp)
+		raw, _ := marshalJSON(errResp)
 		emitSSEEvent(dispatcher.eventIDs, t.config.eventStore, sessionID, raw, func(id string, data json.RawMessage) {
 			t.hub.SendEventWithID(sessionID, "message", id, SSEJSON(data))
 		})
@@ -242,7 +263,7 @@ func (t *sseTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	raw, err := json.Marshal(resp)
+	raw, err := marshalJSON(resp)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
