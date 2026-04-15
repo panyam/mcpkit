@@ -56,6 +56,12 @@ func main() {
 		},
 		ResourceURI: "ui://dice/view",
 		Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
+		CSP: &core.UICSPConfig{
+			// Allow the host to serve extracted scripts from its own proxy.
+			// MCPJam extracts inline <script> blocks and re-serves them
+			// through localhost — this must be in script-src.
+			ResourceDomains: []string{"'self'"},
+		},
 		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			var args struct {
 				Sides int `json:"sides"`
