@@ -32,6 +32,9 @@
     let _connected = false;
     let _hostContext = null;
     let _hostCapabilities = null;
+    // Bidirectional handlers (host → app requests).
+    let _oncalltool = null;
+    let _onlisttools = null;
     // --- Event emitter -------------------------------------------------------
     function on(event, handler) {
         let set = listeners.get(event);
@@ -79,21 +82,45 @@
             window.parent.postMessage(msg, "*");
         }
     }
-    function request(method, params) {
+    function request(method, params, options) {
         if (!_connected && method !== "ui/initialize") {
             return Promise.reject(new Error("Not connected to MCP host"));
         }
+        // Resolve signal: explicit signal > timeout shorthand > default 30s.
+        let signal = options === null || options === void 0 ? void 0 : options.signal;
+        if (!signal && (options === null || options === void 0 ? void 0 : options.timeout)) {
+            signal = AbortSignal.timeout(options.timeout);
+        }
         return new Promise((resolve, reject) => {
+            var _a;
             const id = nextId++;
+            const cleanup = () => { pending.delete(id); };
             pending.set(id, { resolve, reject });
             send({ jsonrpc: "2.0", id, method, params: params || {} });
-            // Timeout after 30 seconds.
-            setTimeout(() => {
-                if (pending.has(id)) {
-                    pending.delete(id);
-                    reject(new Error("Request timeout: " + method));
+            // AbortSignal-based cancellation.
+            if (signal) {
+                if (signal.aborted) {
+                    cleanup();
+                    reject(new Error(((_a = signal.reason) === null || _a === void 0 ? void 0 : _a.message) || "Aborted"));
+                    return;
                 }
-            }, 30000);
+                signal.addEventListener("abort", () => {
+                    var _a;
+                    if (pending.has(id)) {
+                        cleanup();
+                        reject(new Error(((_a = signal.reason) === null || _a === void 0 ? void 0 : _a.message) || "Aborted: " + method));
+                    }
+                }, { once: true });
+            }
+            else {
+                // Default 30s timeout when no signal provided.
+                setTimeout(() => {
+                    if (pending.has(id)) {
+                        cleanup();
+                        reject(new Error("Request timeout: " + method));
+                    }
+                }, 30000);
+            }
         });
     }
     function notify(method, params) {
@@ -124,8 +151,13 @@
             }
             return;
         }
-        // Notification or request from host.
+        // Request from host (has both id and method) — bidirectional call.
         const req = msg;
+        if (req.id != null && req.method) {
+            handleHostRequest(req);
+            return;
+        }
+        // Notification from host (no id, only method).
         switch (req.method) {
             case "ui/notifications/tool-input": {
                 const p = (req.params || {});
@@ -153,6 +185,7 @@
             case "ui/notifications/host-context-changed": {
                 const p = (req.params || {});
                 _hostContext = p.hostContext || p;
+                applyHostStyles(_hostContext);
                 emit("hostcontextchanged", { hostContext: _hostContext });
                 break;
             }
@@ -194,6 +227,94 @@
             });
         }
     }
+    // --- Style utilities -----------------------------------------------------
+    function applyTheme(theme) {
+        const root = document.documentElement;
+        root.setAttribute("data-theme", theme);
+        root.style.colorScheme = theme;
+    }
+    function applyStyleVariables(variables, root = document.documentElement) {
+        for (const [key, value] of Object.entries(variables)) {
+            if (value !== undefined) {
+                root.style.setProperty(key, value);
+            }
+        }
+    }
+    const FONTS_STYLE_ID = "__mcp-host-fonts";
+    function applyFonts(fontCss) {
+        if (document.getElementById(FONTS_STYLE_ID))
+            return;
+        const style = document.createElement("style");
+        style.id = FONTS_STYLE_ID;
+        style.textContent = fontCss;
+        document.head.appendChild(style);
+    }
+    /** Apply all available styles from the host context. */
+    function applyHostStyles(ctx) {
+        var _a, _b, _c;
+        if (ctx.theme)
+            applyTheme(ctx.theme);
+        if ((_a = ctx.styles) === null || _a === void 0 ? void 0 : _a.variables)
+            applyStyleVariables(ctx.styles.variables);
+        if ((_c = (_b = ctx.styles) === null || _b === void 0 ? void 0 : _b.css) === null || _c === void 0 ? void 0 : _c.fonts)
+            applyFonts(ctx.styles.css.fonts);
+    }
+    // --- Bidirectional handlers (host → app requests) -----------------------
+    /** Respond to a JSON-RPC request from the host. */
+    function respond(id, result, error) {
+        if (error) {
+            send({
+                jsonrpc: "2.0",
+                id,
+                error: {
+                    code: -32000,
+                    message: String(error),
+                },
+            });
+        }
+        else {
+            send({ jsonrpc: "2.0", id, result });
+        }
+    }
+    async function handleHostRequest(req) {
+        if (req.id == null)
+            return; // Not a request, just a notification.
+        const id = req.id;
+        const params = (req.params || {});
+        try {
+            switch (req.method) {
+                case "tools/call": {
+                    if (_oncalltool) {
+                        const result = await _oncalltool({
+                            name: params.name || "",
+                            arguments: params.arguments || {},
+                        });
+                        respond(id, result);
+                    }
+                    else {
+                        respond(id, null, "No oncalltool handler registered");
+                    }
+                    break;
+                }
+                case "tools/list": {
+                    if (_onlisttools) {
+                        const tools = await _onlisttools();
+                        respond(id, { tools });
+                    }
+                    else {
+                        respond(id, { tools: [] });
+                    }
+                    break;
+                }
+                default:
+                    respond(id, null, "Method not found: " + req.method);
+                    break;
+            }
+        }
+        catch (e) {
+            respond(id, null, e instanceof Error ? e.message : String(e));
+        }
+    }
     // --- Initialize handshake ------------------------------------------------
     function initialize() {
         // Only attempt if we're inside an iframe.
@@ -213,6 +334,8 @@
             _connected = true;
             _hostContext = (result === null || result === void 0 ? void 0 : result.hostContext) || result || {};
             _hostCapabilities = (result === null || result === void 0 ? void 0 : result.capabilities) || {};
+            // Auto-apply host styles on connect.
+            applyHostStyles(_hostContext);
             emit("connected", {
                 hostContext: _hostContext,
                 capabilities: _hostCapabilities,
@@ -242,21 +365,21 @@
         on,
         off,
         once,
-        // Host-bound methods.
-        callTool(name, args) {
+        // Host-bound methods (all support optional RequestOptions).
+        callTool(name, args, options) {
             return request("tools/call", {
                 name,
                 arguments: args || {},
-            });
+            }, options);
         },
-        readResource(uri) {
-            return request("resources/read", { uri });
+        readResource(uri, options) {
+            return request("resources/read", { uri }, options);
         },
-        sendMessage(message) {
-            return request("ui/message", { message });
+        sendMessage(message, options) {
+            return request("ui/message", { message }, options);
         },
-        updateModelContext(context) {
-            return request("ui/update-model-context", { context });
+        updateModelContext(context, options) {
+            return request("ui/update-model-context", { context }, options);
         },
         openLink(url) {
             notify("ui/open-link", { url });
@@ -264,8 +387,8 @@
         downloadFile(url, filename) {
             notify("ui/download-file", { url, filename });
         },
-        requestDisplayMode(mode) {
-            return request("ui/request-display-mode", { mode });
+        requestDisplayMode(mode, options) {
+            return request("ui/request-display-mode", { mode }, options);
         },
         requestTeardown() {
             notify("ui/teardown", {});
@@ -273,6 +396,16 @@
         log(level, message, data) {
             notify("ui/log", { level, message, data });
         },
+        // Style utilities.
+        applyTheme,
+        applyStyleVariables,
+        applyFonts,
+        applyHostStyles,
+        // Bidirectional handlers (set these before connecting).
+        set oncalltool(handler) { _oncalltool = handler; },
+        get oncalltool() { return _oncalltool; },
+        set onlisttools(handler) { _onlisttools = handler; },
+        get onlisttools() { return _onlisttools; },
         // Utility.
         isHosted() {
             return _connected;
