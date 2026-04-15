@@ -25,6 +25,11 @@ interface HostContext {
   theme?: string;
   locale?: string;
   dimensions?: { width: number; height: number };
+  styles?: {
+    variables?: Record<string, string>;
+    css?: { fonts?: string };
+  };
+  safeAreaInsets?: { top: number; right: number; bottom: number; left: number };
   [key: string]: unknown;
 }
 
@@ -37,6 +42,14 @@ interface MCPAppEventMap {
   toolcancelled: { tool: string };
   hostcontextchanged: { hostContext: HostContext };
   teardown: Record<string, never>;
+}
+
+/** Options for request methods. */
+interface RequestOptions {
+  /** AbortSignal for cancellation. */
+  signal?: AbortSignal;
+  /** Timeout in milliseconds (shorthand for AbortSignal.timeout). */
+  timeout?: number;
 }
 
 /** Result from callTool(). */
@@ -58,16 +71,31 @@ interface ResourceReadResult {
   [key: string]: unknown;
 }
 
+/** Handler for incoming tool calls from the host. */
+type CallToolHandler = (params: {
+  name: string;
+  arguments: Record<string, unknown>;
+}) => unknown | Promise<unknown>;
+
+/** Handler for incoming list-tools requests from the host. */
+type ListToolsHandler = () =>
+  | Array<{ name: string; description?: string; inputSchema?: unknown }>
+  | Promise<
+      Array<{ name: string; description?: string; inputSchema?: unknown }>
+    >;
+
 /** The global MCPApp bridge singleton. */
 interface MCPAppBridge {
   /** True after the ui/initialize handshake completes with the host. */
   readonly connected: boolean;
 
-  /** Host context (theme, locale, dimensions) from initialization. */
+  /** Host context (theme, locale, dimensions, styles) from initialization. */
   readonly hostContext: HostContext | null;
 
   /** Host capabilities from initialization. */
   readonly hostCapabilities: Record<string, unknown> | null;
+
+  // --- Events ---
 
   /** Subscribe to an event. Returns an unsubscribe function. */
   on<E extends MCPAppEvent>(
@@ -87,20 +115,23 @@ interface MCPAppBridge {
     handler: (data: MCPAppEventMap[E]) => void
   ): () => void;
 
+  // --- Host-bound methods ---
+
   /** Call a tool on the MCP server (proxied through the host). */
   callTool(
     name: string,
-    args?: Record<string, unknown>
+    args?: Record<string, unknown>,
+    options?: RequestOptions
   ): Promise<ToolCallResult>;
 
   /** Read a resource from the MCP server. */
-  readResource(uri: string): Promise<ResourceReadResult>;
+  readResource(uri: string, options?: RequestOptions): Promise<ResourceReadResult>;
 
   /** Send a message to the conversation. */
-  sendMessage(message: unknown): Promise<unknown>;
+  sendMessage(message: unknown, options?: RequestOptions): Promise<unknown>;
 
   /** Update the model context visible to the LLM. */
-  updateModelContext(context: unknown): Promise<unknown>;
+  updateModelContext(context: unknown, options?: RequestOptions): Promise<unknown>;
 
   /** Open a URL in the host browser (not inside the iframe). */
   openLink(url: string): void;
@@ -109,13 +140,40 @@ interface MCPAppBridge {
   downloadFile(url: string, filename?: string): void;
 
   /** Request a display mode change (inline, fullscreen, pip). */
-  requestDisplayMode(mode: string): Promise<unknown>;
+  requestDisplayMode(mode: string, options?: RequestOptions): Promise<unknown>;
 
   /** Request app teardown. */
   requestTeardown(): void;
 
   /** Send a log message to the host. */
   log(level: string, message: string, data?: unknown): void;
+
+  // --- Style utilities ---
+
+  /** Apply theme to document root (sets data-theme + color-scheme). */
+  applyTheme(theme: string): void;
+
+  /** Apply CSS custom properties from host styles. */
+  applyStyleVariables(
+    variables: Record<string, string>,
+    root?: HTMLElement
+  ): void;
+
+  /** Inject host font CSS (idempotent — only injects once). */
+  applyFonts(fontCss: string): void;
+
+  /** Apply all available styles from a host context (theme + variables + fonts). */
+  applyHostStyles(ctx: HostContext): void;
+
+  // --- Bidirectional handlers (host → app) ---
+
+  /** Handler for tools/call requests from the host. */
+  oncalltool: CallToolHandler | null;
+
+  /** Handler for tools/list requests from the host. */
+  onlisttools: ListToolsHandler | null;
+
+  // --- Utility ---
 
   /** Returns true if running inside an MCP Apps host. */
   isHosted(): boolean;
