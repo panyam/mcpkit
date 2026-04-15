@@ -10,7 +10,7 @@ import (
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/server"
 
-	booksv1 "github.com/panyam/mcpkit/ext/protogen/examples/bookservice/gen/bookservice/v1"
+	booksv1 "github.com/panyam/mcpkit/examples/protogen/bookservice/gen/bookservice/v1"
 )
 
 // catalog is a simple in-memory book database.

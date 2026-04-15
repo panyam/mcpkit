@@ -1,7 +1,7 @@
 syntax = "proto3";
 package bookservice.v1;
 
-option go_package = "github.com/panyam/mcpkit/ext/protogen/examples/bookservice/gen/bookservice/v1;booksv1";
+option go_package = "github.com/panyam/mcpkit/examples/protogen/bookservice/gen/bookservice/v1;booksv1";
 
 import "google/protobuf/descriptor.proto";
 import "mcp/v1/annotations.proto";

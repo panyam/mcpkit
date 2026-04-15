@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	booksv1 "github.com/panyam/mcpkit/ext/protogen/examples/bookservice/gen/bookservice/v1"
+	booksv1 "github.com/panyam/mcpkit/examples/protogen/bookservice/gen/bookservice/v1"
 )
 
 // newTestServer creates a BookService MCP server for testing.

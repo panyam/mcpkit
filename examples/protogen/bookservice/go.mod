@@ -1,4 +1,4 @@
-module github.com/panyam/mcpkit/ext/protogen/examples/bookservice
+module github.com/panyam/mcpkit/examples/protogen/bookservice
 
 go 1.26.2
 
@@ -27,6 +27,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/panyam/mcpkit => ../../../..
+replace github.com/panyam/mcpkit => ../../..
 
-replace github.com/panyam/mcpkit/ext/protogen => ../../
+replace github.com/panyam/mcpkit/ext/protogen => ../../../ext/protogen
