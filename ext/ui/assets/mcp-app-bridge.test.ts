@@ -373,6 +373,176 @@ describe("outbound requests", () => {
   });
 });
 
+describe("style utilities", () => {
+  beforeEach(async () => {
+    autoRespondToInitialize();
+    await waitForConnect();
+  });
+
+  it("auto-applies theme on connect", async () => {
+    // The auto-respond sends theme: "dark"
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+    expect(document.documentElement.style.colorScheme).toBe("dark");
+  });
+
+  it("applyTheme sets data-theme and color-scheme", () => {
+    (window as any).MCPApp.applyTheme("light");
+    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+    expect(document.documentElement.style.colorScheme).toBe("light");
+  });
+
+  it("applyStyleVariables sets CSS custom properties", () => {
+    (window as any).MCPApp.applyStyleVariables({
+      "--color-bg": "#fff",
+      "--color-text": "#000",
+    });
+    expect(
+      document.documentElement.style.getPropertyValue("--color-bg")
+    ).toBe("#fff");
+    expect(
+      document.documentElement.style.getPropertyValue("--color-text")
+    ).toBe("#000");
+  });
+
+  it("applyFonts injects style tag once", () => {
+    (window as any).MCPApp.applyFonts("@font-face { font-family: Test; }");
+    const style = document.getElementById("__mcp-host-fonts");
+    expect(style).toBeDefined();
+    expect(style?.textContent).toContain("@font-face");
+
+    // Second call is a no-op.
+    (window as any).MCPApp.applyFonts("@font-face { font-family: Other; }");
+    expect(document.querySelectorAll("#__mcp-host-fonts").length).toBe(1);
+  });
+
+  it("auto-applies styles on host-context-changed", () => {
+    hostSends({
+      jsonrpc: "2.0",
+      method: "ui/notifications/host-context-changed",
+      params: {
+        hostContext: {
+          theme: "light",
+          styles: { variables: { "--accent": "blue" } },
+        },
+      },
+    });
+    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+    expect(
+      document.documentElement.style.getPropertyValue("--accent")
+    ).toBe("blue");
+  });
+});
+
+describe("AbortSignal support", () => {
+  beforeEach(async () => {
+    autoRespondToInitialize();
+    await waitForConnect();
+  });
+
+  it("callTool with timeout rejects on timeout", async () => {
+    const promise = (window as any).MCPApp.callTool("slow", {}, { timeout: 50 });
+    // Don't respond — let it timeout.
+    await expect(promise).rejects.toThrow(/abort|timed out/i);
+  });
+
+  it("callTool with signal rejects on abort", async () => {
+    const controller = new AbortController();
+    const promise = (window as any).MCPApp.callTool("test", {}, {
+      signal: controller.signal,
+    });
+    controller.abort(new Error("user cancelled"));
+    await expect(promise).rejects.toThrow("user cancelled");
+  });
+
+  it("callTool with pre-aborted signal rejects immediately", async () => {
+    const signal = AbortSignal.abort(new Error("already aborted"));
+    await expect(
+      (window as any).MCPApp.callTool("test", {}, { signal })
+    ).rejects.toThrow("already aborted");
+  });
+});
+
+describe("bidirectional tool calls", () => {
+  beforeEach(async () => {
+    autoRespondToInitialize();
+    await waitForConnect();
+  });
+
+  it("oncalltool handles incoming tools/call request", async () => {
+    (window as any).MCPApp.oncalltool = (params: any) => {
+      return { content: [{ type: "text", text: "result:" + params.name }] };
+    };
+
+    hostSends({
+      jsonrpc: "2.0",
+      id: 999,
+      method: "tools/call",
+      params: { name: "app-tool", arguments: { x: 1 } },
+    });
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    const resp = sentMessages.find(
+      (m) => m.id === 999 && m.result
+    );
+    expect(resp).toBeDefined();
+    expect(resp.result.content[0].text).toBe("result:app-tool");
+  });
+
+  it("onlisttools handles incoming tools/list request", async () => {
+    (window as any).MCPApp.onlisttools = () => {
+      return [{ name: "app-tool", description: "An app tool" }];
+    };
+
+    hostSends({
+      jsonrpc: "2.0",
+      id: 888,
+      method: "tools/list",
+      params: {},
+    });
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    const resp = sentMessages.find((m) => m.id === 888 && m.result);
+    expect(resp).toBeDefined();
+    expect(resp.result.tools[0].name).toBe("app-tool");
+  });
+
+  it("returns error when no oncalltool handler set", async () => {
+    (window as any).MCPApp.oncalltool = null;
+
+    hostSends({
+      jsonrpc: "2.0",
+      id: 777,
+      method: "tools/call",
+      params: { name: "missing" },
+    });
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    const resp = sentMessages.find((m) => m.id === 777 && m.error);
+    expect(resp).toBeDefined();
+    expect(resp.error.message).toContain("No oncalltool handler");
+  });
+
+  it("returns empty tools when no onlisttools handler set", async () => {
+    (window as any).MCPApp.onlisttools = null;
+
+    hostSends({
+      jsonrpc: "2.0",
+      id: 666,
+      method: "tools/list",
+      params: {},
+    });
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    const resp = sentMessages.find((m) => m.id === 666 && m.result);
+    expect(resp).toBeDefined();
+    expect(resp.result.tools).toEqual([]);
+  });
+});
+
 describe("graceful degradation", () => {
   it("callTool rejects when not connected", async () => {
     expect((window as any).MCPApp.connected).toBe(false);
