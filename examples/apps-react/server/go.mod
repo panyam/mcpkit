@@ -1,10 +1,10 @@
-module github.com/panyam/mcpkit/ext/ui/examples/apps-react/server
+module github.com/panyam/mcpkit/examples/apps-react/server
 
 go 1.26.1
 
 replace (
-	github.com/panyam/mcpkit => ../../../../..
-	github.com/panyam/mcpkit/ext/ui => ../../..
+	github.com/panyam/mcpkit => ../../..
+	github.com/panyam/mcpkit/ext/ui => ../../../ext/ui
 )
 
 require (
