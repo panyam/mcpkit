@@ -2,6 +2,8 @@
 
 .PHONY: generate run test clean help
 
+all: generate test run 
+
 generate: ## Generate Go code from proto files
 	rm -rf gen
 	buf generate

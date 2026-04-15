@@ -15,7 +15,7 @@ End-to-end example demonstrating all three MCP primitives generated from proto a
 
 ```bash
 make generate   # Generate Go code from protos
-make run        # Start MCP server on :8787
+make run        # Start MCP server on :8080
 ```
 
 ## Testing
@@ -44,7 +44,7 @@ Add this to your `claude_desktop_config.json` (or VS Code MCP settings):
       "args": ["run", "."],
       "cwd": "/path/to/mcpkit/examples/protogen/bookservice",
       "transport": "streamable-http",
-      "url": "http://localhost:8787/mcp"
+      "url": "http://localhost:8080/mcp"
     }
   }
 }
@@ -58,7 +58,7 @@ Or if you've built the binary:
     "bookservice": {
       "command": "/path/to/mcpkit/examples/protogen/bookservice/bin/bookservice",
       "transport": "streamable-http",
-      "url": "http://localhost:8787/mcp"
+      "url": "http://localhost:8080/mcp"
     }
   }
 }
@@ -67,7 +67,7 @@ Or if you've built the binary:
 ## Add to Claude Code
 
 ```bash
-claude mcp add bookservice --transport streamable-http http://localhost:8787/mcp
+claude mcp add bookservice --transport streamable-http http://localhost:8080/mcp
 ```
 
 Or in `.claude/settings.json`:
@@ -77,7 +77,7 @@ Or in `.claude/settings.json`:
   "mcpServers": {
     "bookservice": {
       "type": "streamable-http",
-      "url": "http://localhost:8787/mcp"
+      "url": "http://localhost:8080/mcp"
     }
   }
 }
