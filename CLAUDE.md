@@ -115,7 +115,6 @@ func myTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error)
 | MCP Apps design | `docs/APPS_DESIGN.md` |
 | MCP App Bridge | `ext/ui/bridge.go`, `ext/ui/assets/mcp-app-bridge.ts` |
 | Protogen design | `ext/protogen/docs/DESIGN.md` |
-| Competitive analysis (vs go-sdk) | `docs/COMPETITIVE_ANALYSIS.md` |
 | Capabilities list | `CAPABILITIES.md` |
 | Constraints | `core/CONSTRAINTS.md`, `server/CONSTRAINTS.md`, `client/CONSTRAINTS.md` |
 | Conformance baseline | `conformance/baseline.yml` |
