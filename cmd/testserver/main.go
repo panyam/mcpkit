@@ -19,6 +19,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/server"
 )
@@ -88,6 +89,16 @@ func main() {
 	registerConformancePrompts(srv)
 	registerConformanceApps(srv)
 
+	// Self-test mode: creates an in-process client with LoggingTransport,
+	// lists tools via auto-pagination iterator, and calls each one.
+	// Demonstrates LoggingTransport (wire-level tracing) and iter.Seq2 iterators.
+	//
+	// Usage: SELFTEST=1 go run ./cmd/testserver
+	if os.Getenv("SELFTEST") == "1" {
+		selfTest(srv)
+		return
+	}
+
 	// Stdio mode: Content-Length framed JSON-RPC over stdin/stdout.
 	// No HTTP server — the process communicates directly via stdio.
 	if os.Getenv("STDIO") == "1" {
@@ -114,4 +125,51 @@ func main() {
 	if err := srv.ListenAndServe(transportOpts...); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// selfTest creates an in-process client with LoggingTransport enabled,
+// lists all tools via the auto-pagination iterator, and calls each one.
+// Demonstrates wire-level tracing and iter.Seq2 iterators.
+func selfTest(srv *server.Server) {
+	log.Println("=== Self-test mode: LoggingTransport + iterator demo ===")
+
+	// Wrap the in-process transport with LoggingTransport for wire-level tracing.
+	inner := server.NewInProcessTransport(srv)
+	logged := &core.LoggingTransport{
+		Inner:     inner,
+		Logger:    log.New(os.Stderr, "", log.Ltime),
+		LogBodies: os.Getenv("VERBOSE") == "1",
+	}
+
+	c := client.NewClient("selftest://", core.ClientInfo{Name: "selftest", Version: "1.0"},
+		client.WithTransport(logged),
+	)
+	if err := c.Connect(); err != nil {
+		log.Fatalf("self-test connect: %v", err)
+	}
+	defer c.Close()
+
+	// List tools using auto-pagination iterator.
+	log.Println("--- Listing tools via c.Tools(ctx) iterator ---")
+	ctx := context.Background()
+	count := 0
+	for tool, err := range c.Tools(ctx) {
+		if err != nil {
+			log.Fatalf("tools iterator: %v", err)
+		}
+		log.Printf("  [%d] %s — %s", count+1, tool.Name, tool.Description)
+		count++
+	}
+	log.Printf("--- %d tools found ---", count)
+
+	// Call the echo tool.
+	log.Println("--- Calling echo tool ---")
+	result, err := c.ToolCall("echo", map[string]any{"message": "hello from self-test"})
+	if err != nil {
+		log.Printf("echo: error: %v", err)
+	} else {
+		log.Printf("echo: %s", result)
+	}
+
+	log.Println("=== Self-test complete ===")
 }
