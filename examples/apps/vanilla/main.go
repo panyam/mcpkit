@@ -52,31 +52,21 @@ func main() {
 		server.WithExtension(&ui.UIExtension{}),
 	)
 
-	ui.RegisterAppTool(srv, ui.AppToolConfig{
+	type rollDiceInput struct {
+		Sides int `json:"sides,omitempty" jsonschema:"description=Number of sides on the die,default=6"`
+	}
+	ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[rollDiceInput, string]{
 		Name:        "roll_dice",
 		Description: "Roll a die and show the result in a rich UI",
-		InputSchema: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"sides": map[string]any{
-					"type":        "number",
-					"description": "Number of sides on the die",
-					"default":     6,
-				},
-			},
+		Handler: func(ctx core.ToolContext, input rollDiceInput) (string, error) {
+			if input.Sides <= 0 {
+				input.Sides = 6
+			}
+			result := rand.Intn(input.Sides) + 1
+			return fmt.Sprintf("Rolled a d%d: %d", input.Sides, result), nil
 		},
 		ResourceURI: "ui://dice/view",
 		Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
-		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			var args struct {
-				Sides int `json:"sides"`
-			}
-			if err := req.Bind(&args); err != nil || args.Sides <= 0 {
-				args.Sides = 6
-			}
-			result := rand.Intn(args.Sides) + 1
-			return core.TextResult(fmt.Sprintf("Rolled a d%d: %d", args.Sides, result)), nil
-		},
 		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			result := core.ResourceResult{Contents: []core.ResourceReadContent{{
 				URI: req.URI, MimeType: core.AppMIMEType, Text: diceHTML,
@@ -86,9 +76,13 @@ func main() {
 			s := string(raw)
 			if idx := strings.Index(s, "script"); idx > 0 {
 				start := idx - 10
-				if start < 0 { start = 0 }
+				if start < 0 {
+					start = 0
+				}
 				end := idx + 50
-				if end > len(s) { end = len(s) }
+				if end > len(s) {
+					end = len(s)
+				}
 				log.Printf("DEBUG script context: ...%s...", s[start:end])
 			}
 			return result, nil
