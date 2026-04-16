@@ -102,8 +102,7 @@ func (r *WebhookRegistry) pruneExpiredLocked() {
 
 // Deliver sends an event to all non-expired webhooks. Each POST includes an
 // HMAC-SHA256 signature in X-MCP-Signature and a timestamp in X-MCP-Timestamp.
-// Delivery failures are logged but do not remove the target.
-// TODO: spec says SHOULD retry with exponential backoff on failure.
+// Delivery failures are retried with exponential backoff per spec.
 func (r *WebhookRegistry) Deliver(event TelegramEvent) {
 	targets := r.Targets()
 	if len(targets) == 0 {
