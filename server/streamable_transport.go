@@ -167,18 +167,24 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Auth check
-	claims, err := t.server.CheckAuth(r)
-	if err != nil {
-		writeAuthError(w, err)
-		return
-	}
-
-	// Read and parse JSON body
+	// Read body first — needed for method peek and dispatch.
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "failed to read body", http.StatusBadRequest)
 		return
+	}
+
+	// Auth check — peek at method for public method bypass.
+	var claims *core.Claims
+	if method := extractMethodFromJSON(body); t.server.IsPublicMethod(method) {
+		// Public method — skip auth, dispatch without claims.
+		claims, _ = t.server.CheckAuth(r) // best-effort: populate claims if token present
+	} else {
+		claims, err = t.server.CheckAuth(r)
+		if err != nil {
+			writeAuthError(w, err)
+			return
+		}
 	}
 
 	// Detect if the incoming message is a JSON-RPC response (from the client

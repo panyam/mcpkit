@@ -132,11 +132,21 @@ func (t *sseTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Auth check
-	claims, err := t.server.CheckAuth(r)
+	// Auth check — peek at method for public method bypass.
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		writeAuthError(w, err)
+		http.Error(w, "failed to read body", http.StatusBadRequest)
 		return
+	}
+	var claims *core.Claims
+	if method := extractMethodFromJSON(body); t.server.IsPublicMethod(method) {
+		claims, _ = t.server.CheckAuth(r) // best-effort: populate claims if token present
+	} else {
+		claims, err = t.server.CheckAuth(r)
+		if err != nil {
+			writeAuthError(w, err)
+			return
+		}
 	}
 
 	sessionID := r.URL.Query().Get("sessionId")
@@ -161,11 +171,7 @@ func (t *sseTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "failed to read body", http.StatusBadRequest)
-		return
-	}
+	// body already read above for method peek.
 
 	// Detect if the incoming message is a JSON-RPC response (from the client
 	// answering a server-to-client request like sampling/createMessage).
