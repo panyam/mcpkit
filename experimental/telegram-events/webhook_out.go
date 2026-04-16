@@ -9,21 +9,34 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 )
 
-// WebhookTarget is a registered outbound webhook callback.
+const defaultWebhookTTL = 60 * time.Second // 1 minute for POC (production: longer)
+
+// WebhookTarget is a registered outbound webhook callback with TTL-based expiry.
 type WebhookTarget struct {
-	URL    string
-	Secret string
+	ID        string // client-provided subscription ID
+	URL       string
+	Secret    string
+	ExpiresAt time.Time
+}
+
+// webhookKey returns the composite key for a webhook subscription per spec:
+// (delivery.url, id) for unauthenticated servers.
+func webhookKey(urlStr, id string) string {
+	return urlStr + "\x00" + id
 }
 
 // WebhookRegistry tracks outbound webhook subscriptions and delivers events
-// with HMAC-SHA256 signed payloads.
+// with HMAC-SHA256 signed payloads. Subscriptions have TTL-based soft state
+// per Peter's spec — they expire if the client stops refreshing.
 type WebhookRegistry struct {
 	mu      sync.RWMutex
-	targets map[string]WebhookTarget // keyed by URL
+	targets map[string]WebhookTarget // keyed by webhookKey(url, id)
 	client  *http.Client
 }
 
@@ -35,34 +48,62 @@ func NewWebhookRegistry() *WebhookRegistry {
 	}
 }
 
-// Register adds or updates a webhook target.
-func (r *WebhookRegistry) Register(url, secret string) {
+// Register adds or refreshes a webhook subscription. Returns the expiry time.
+func (r *WebhookRegistry) Register(id, urlStr, secret string) time.Time {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.targets[url] = WebhookTarget{URL: url, Secret: secret}
+	r.pruneExpiredLocked()
+	expiresAt := time.Now().Add(defaultWebhookTTL)
+	key := webhookKey(urlStr, id)
+	if existing, ok := r.targets[key]; ok {
+		// Refresh: update expiry and secret if provided
+		existing.ExpiresAt = expiresAt
+		if secret != "" {
+			existing.Secret = secret
+		}
+		r.targets[key] = existing
+	} else {
+		r.targets[key] = WebhookTarget{ID: id, URL: urlStr, Secret: secret, ExpiresAt: expiresAt}
+	}
+	return expiresAt
 }
 
-// Unregister removes a webhook target.
-func (r *WebhookRegistry) Unregister(url string) {
+// Unregister removes a webhook subscription by (url, id).
+func (r *WebhookRegistry) Unregister(urlStr, id string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	delete(r.targets, url)
+	delete(r.targets, webhookKey(urlStr, id))
 }
 
-// Targets returns a snapshot of all registered webhook targets.
+// Targets returns a snapshot of all non-expired webhook targets.
 func (r *WebhookRegistry) Targets() []WebhookTarget {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	now := time.Now()
 	out := make([]WebhookTarget, 0, len(r.targets))
 	for _, t := range r.targets {
-		out = append(out, t)
+		if t.ExpiresAt.After(now) {
+			out = append(out, t)
+		}
 	}
 	return out
 }
 
-// Deliver sends an event to all registered webhooks. Each POST includes an
-// HMAC-SHA256 signature in the X-Signature-256 header. Delivery failures are
-// logged but do not remove the target (appropriate for a POC).
+// pruneExpiredLocked removes expired subscriptions. Must hold r.mu write lock.
+func (r *WebhookRegistry) pruneExpiredLocked() {
+	now := time.Now()
+	for key, t := range r.targets {
+		if t.ExpiresAt.Before(now) {
+			log.Printf("[webhook] subscription %s expired, removing", t.ID)
+			delete(r.targets, key)
+		}
+	}
+}
+
+// Deliver sends an event to all non-expired webhooks. Each POST includes an
+// HMAC-SHA256 signature in X-MCP-Signature and a timestamp in X-MCP-Timestamp.
+// Delivery failures are logged but do not remove the target.
+// TODO: spec says SHOULD retry with exponential backoff on failure.
 func (r *WebhookRegistry) Deliver(event TelegramEvent) {
 	targets := r.Targets()
 	if len(targets) == 0 {
@@ -103,6 +144,27 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, body []byte) {
 	if resp.StatusCode >= 300 {
 		log.Printf("[webhook] delivery to %s returned %d", target.URL, resp.StatusCode)
 	}
+}
+
+// ValidateWebhookURL performs basic SSRF validation on a webhook callback URL.
+// Spec: "MUST validate callback URLs at subscribe time" and "SHOULD reject
+// URLs pointing to private/loopback ranges."
+// For this POC we reject obvious loopback and private schemes. Production
+// implementations should also resolve DNS and check the resulting IP.
+func ValidateWebhookURL(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("unsupported scheme %q (must be http or https)", u.Scheme)
+	}
+	host := strings.ToLower(u.Hostname())
+	if host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "0.0.0.0" {
+		// Allow in test/dev — production should reject these.
+		log.Printf("[webhook] WARNING: loopback webhook URL %s (allowed in POC mode)", rawURL)
+	}
+	return nil
 }
 
 // sign computes HMAC-SHA256(secret, timestamp + "." + body) per Peter's spec

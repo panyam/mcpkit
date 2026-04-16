@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"context"
+	"time"
 
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/server"
@@ -96,7 +97,13 @@ func (d *MethodDelivery) Register(srv *server.Server, store *MessageStore, webho
 				cursor, _ = strconv.ParseInt(*sub.Cursor, 10, 64)
 			}
 
-			msgs, nextCursor := store.GetSince(cursor, req.MaxEvents)
+			// Fetch one extra to detect hasMore
+			msgs, nextCursor := store.GetSince(cursor, req.MaxEvents+1)
+			hasMore := len(msgs) > req.MaxEvents
+			if hasMore {
+				msgs = msgs[:req.MaxEvents]
+				nextCursor = msgs[len(msgs)-1].ID
+			}
 			events := make([]TelegramEvent, 0, len(msgs))
 			for _, m := range msgs {
 				events = append(events, messageToEvent(m))
@@ -106,7 +113,7 @@ func (d *MethodDelivery) Register(srv *server.Server, store *MessageStore, webho
 				ID:              sub.ID,
 				Events:          events,
 				Cursor:          strconv.FormatInt(nextCursor, 10),
-				HasMore:         false,
+				HasMore:         hasMore,
 				NextPollSeconds: 5,
 			})
 		}
@@ -140,13 +147,18 @@ func (d *MethodDelivery) Register(srv *server.Server, store *MessageStore, webho
 		if req.Delivery.URL == "" {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "delivery.url is required")
 		}
+		// Spec: MUST validate callback URLs at subscribe time.
+		if err := ValidateWebhookURL(req.Delivery.URL); err != nil {
+			return core.NewErrorResponse(id, -32005, err.Error())
+		}
 
 		secret := req.Delivery.Secret
 		if secret == "" {
-			secret = fmt.Sprintf("whsec_%d", store.Len()) // simple unique secret for POC
+			// TODO: use crypto/rand for production-grade entropy
+			secret = fmt.Sprintf("whsec_%d", store.Len())
 		}
 
-		webhooks.Register(req.Delivery.URL, secret)
+		expiresAt := webhooks.Register(req.ID, req.Delivery.URL, secret)
 
 		cursorStr := "0"
 		if req.Cursor != nil {
@@ -154,9 +166,10 @@ func (d *MethodDelivery) Register(srv *server.Server, store *MessageStore, webho
 		}
 
 		return core.NewResponse(id, map[string]any{
-			"id":     req.ID,
-			"secret": secret,
-			"cursor": cursorStr,
+			"id":            req.ID,
+			"secret":        secret,
+			"cursor":        cursorStr,
+			"refreshBefore": expiresAt.Format(time.RFC3339),
 		})
 	})
 
@@ -174,7 +187,7 @@ func (d *MethodDelivery) Register(srv *server.Server, store *MessageStore, webho
 		if req.Delivery == nil || req.Delivery.URL == "" {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "delivery.url required")
 		}
-		webhooks.Unregister(req.Delivery.URL)
+		webhooks.Unregister(req.Delivery.URL, req.ID)
 		return core.NewResponse(id, map[string]any{})
 	})
 }

@@ -51,9 +51,11 @@ func newConnectedClient(t *testing.T, store *MessageStore, webhooks *WebhookRegi
 
 // pollResult is the structure returned by events/poll for a single subscription.
 type pollResult struct {
-	ID     string          `json:"id"`
-	Events []TelegramEvent `json:"events"`
-	Cursor string          `json:"cursor"`
+	ID              string          `json:"id"`
+	Events          []TelegramEvent `json:"events"`
+	Cursor          string          `json:"cursor"`
+	HasMore         bool            `json:"hasMore"`
+	NextPollSeconds int             `json:"nextPollSeconds"`
 }
 
 // TestEventsPollCursorPagination verifies that the events/poll method returns
@@ -193,7 +195,7 @@ func TestWebhookHMACSignature(t *testing.T) {
 	defer srv.Close()
 
 	webhooks := NewWebhookRegistry()
-	webhooks.Register(srv.URL, secret)
+	webhooks.Register("hmac-test", srv.URL, secret)
 
 	event := TelegramEvent{
 		EventID:   "evt_1",
@@ -253,6 +255,113 @@ func TestMessageStoreRingBuffer(t *testing.T) {
 	assert.Len(t, recent, 3)
 	assert.Equal(t, "msg 3", recent[0].Text, "oldest surviving message should be msg 3")
 	assert.Equal(t, "msg 5", recent[2].Text)
+}
+
+// TestEventsPollHasMore verifies that events/poll sets hasMore=true when
+// maxEvents truncates results, per Peter's spec.
+func TestEventsPollHasMore(t *testing.T) {
+	store := newTestStore(5)
+	c, _ := newConnectedClient(t, store, NewWebhookRegistry())
+
+	// Poll with maxEvents=3 when 5 exist → hasMore=true
+	result, err := c.Call("events/poll", map[string]any{
+		"maxEvents": 3,
+		"subscriptions": []map[string]any{
+			{"id": "hm", "name": "telegram.message", "cursor": "0"},
+		},
+	})
+	require.NoError(t, err)
+
+	var resp struct{ Results []pollResult }
+	require.NoError(t, json.Unmarshal(result.Raw, &resp))
+	require.Len(t, resp.Results, 1)
+	assert.Len(t, resp.Results[0].Events, 3, "should return maxEvents events")
+	assert.True(t, resp.Results[0].HasMore, "hasMore should be true when truncated")
+
+	// Poll remaining with updated cursor → hasMore=false
+	result2, err := c.Call("events/poll", map[string]any{
+		"maxEvents": 3,
+		"subscriptions": []map[string]any{
+			{"id": "hm2", "name": "telegram.message", "cursor": resp.Results[0].Cursor},
+		},
+	})
+	require.NoError(t, err)
+
+	var resp2 struct{ Results []pollResult }
+	require.NoError(t, json.Unmarshal(result2.Raw, &resp2))
+	assert.Len(t, resp2.Results[0].Events, 2, "should return remaining 2 events")
+	assert.False(t, resp2.Results[0].HasMore, "hasMore should be false when all returned")
+}
+
+// TestSubscribeReturnsRefreshBefore verifies that events/subscribe returns
+// a refreshBefore timestamp per spec.
+func TestSubscribeReturnsRefreshBefore(t *testing.T) {
+	store := NewMessageStore(1000)
+	webhooks := NewWebhookRegistry()
+	c, _ := newConnectedClient(t, store, webhooks)
+
+	result, err := c.Call("events/subscribe", map[string]any{
+		"id":       "rb-test",
+		"name":     "telegram.message",
+		"delivery": map[string]any{"mode": "webhook", "url": "http://example.com/hook", "secret": "s"},
+	})
+	require.NoError(t, err)
+
+	var resp struct {
+		ID            string `json:"id"`
+		RefreshBefore string `json:"refreshBefore"`
+	}
+	require.NoError(t, json.Unmarshal(result.Raw, &resp))
+	assert.Equal(t, "rb-test", resp.ID)
+	assert.NotEmpty(t, resp.RefreshBefore, "refreshBefore must be present")
+
+	// Parse to verify it's a valid RFC3339 timestamp in the future
+	rb, err := time.Parse(time.RFC3339, resp.RefreshBefore)
+	require.NoError(t, err, "refreshBefore should be valid RFC3339")
+	assert.True(t, rb.After(time.Now()), "refreshBefore should be in the future")
+}
+
+// TestWebhookKeyedByURLAndID verifies that two subscriptions to the same URL
+// with different IDs don't collide (spec: key is (url, id) for unauthenticated servers).
+func TestWebhookKeyedByURLAndID(t *testing.T) {
+	webhooks := NewWebhookRegistry()
+	webhooks.Register("sub-1", "http://example.com/hook", "secret-1")
+	webhooks.Register("sub-2", "http://example.com/hook", "secret-2")
+
+	targets := webhooks.Targets()
+	assert.Len(t, targets, 2, "same URL with different IDs should create 2 targets")
+
+	// Unregister one — the other should remain
+	webhooks.Unregister("http://example.com/hook", "sub-1")
+	targets = webhooks.Targets()
+	assert.Len(t, targets, 1, "should have 1 target after unregistering one")
+	assert.Equal(t, "sub-2", targets[0].ID)
+}
+
+// TestWebhookTTLExpiry verifies that webhook subscriptions expire after their TTL.
+func TestWebhookTTLExpiry(t *testing.T) {
+	webhooks := NewWebhookRegistry()
+	// Register with default TTL
+	webhooks.Register("exp-test", "http://example.com/hook", "secret")
+	assert.Len(t, webhooks.Targets(), 1)
+
+	// Manually expire it by setting ExpiresAt to the past
+	webhooks.mu.Lock()
+	for k, v := range webhooks.targets {
+		v.ExpiresAt = time.Now().Add(-1 * time.Second)
+		webhooks.targets[k] = v
+	}
+	webhooks.mu.Unlock()
+
+	// Targets() filters expired entries
+	assert.Empty(t, webhooks.Targets(), "expired subscription should not appear in Targets()")
+
+	// Re-registering triggers pruning of expired entries
+	webhooks.Register("new", "http://example.com/other", "s")
+	webhooks.mu.RLock()
+	count := len(webhooks.targets)
+	webhooks.mu.RUnlock()
+	assert.Equal(t, 1, count, "expired entry should be pruned on next Register")
 }
 
 // TestVerifySignature verifies the HMAC verification helper.
