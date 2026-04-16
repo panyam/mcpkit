@@ -34,33 +34,20 @@ import (
 func NewTestServer() *server.Server {
 	srv := server.NewServer(core.ServerInfo{Name: "test-server", Version: "1.0.0"})
 
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "echo",
-			Description: "Echoes the input message back",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"message": map[string]any{"type": "string"},
-				},
-				"required": []string{"message"},
-			},
+	type echoInput struct {
+		Message string `json:"message"`
+	}
+	srv.Register(core.TextTool[echoInput]("echo", "Echoes the input message back",
+		func(ctx core.ToolContext, input echoInput) (string, error) {
+			return fmt.Sprintf("echo: %s", input.Message), nil
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			var p struct {
-				Message string `json:"message"`
-			}
-			req.Bind(&p)
-			return core.TextResult(fmt.Sprintf("echo: %s", p.Message)), nil
-		},
-	)
+	))
 
-	srv.RegisterTool(
-		core.ToolDef{Name: "fail", Description: "Always fails with an error result"},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			return core.ErrorResult("intentional failure"), nil
+	srv.Register(core.TextTool[struct{}]("fail", "Always fails with an error result",
+		func(ctx core.ToolContext, _ struct{}) (string, error) {
+			return "", fmt.Errorf("intentional failure")
 		},
-	)
+	))
 
 	srv.RegisterResource(
 		core.ResourceDef{
