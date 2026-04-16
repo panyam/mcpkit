@@ -107,7 +107,7 @@ func main() {
 	type completeTaskInput struct {
 		Title string `json:"title" jsonschema:"description=Task title to complete"`
 	}
-	srv.Register(server.TextTool[completeTaskInput]("complete_task", "Mark a task as done by title",
+	srv.Register(core.TextTool[completeTaskInput]("complete_task", "Mark a task as done by title",
 		func(ctx core.ToolContext, input completeTaskInput) (string, error) {
 			tasksMu.Lock()
 			found := false
@@ -125,7 +125,7 @@ func main() {
 		},
 	))
 
-	srv.Register(server.TypedTool[struct{}, core.ToolResult]("list_tasks", "List all tasks on the board",
+	srv.Register(core.TypedTool[struct{}, core.ToolResult]("list_tasks", "List all tasks on the board",
 		func(ctx core.ToolContext, _ struct{}) (core.ToolResult, error) {
 			tasksMu.Lock()
 			data, _ := json.Marshal(tasks)

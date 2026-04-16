@@ -62,21 +62,21 @@ func main() {
 	)
 
 	// echo: returns the input message as-is
-	srv.Register(server.TextTool[echoInput]("echo", "Echoes the input message",
+	srv.Register(core.TextTool[echoInput]("echo", "Echoes the input message",
 		func(ctx core.ToolContext, input echoInput) (string, error) {
 			return "echo: " + input.Message, nil
 		},
 	))
 
 	// add: adds two numbers
-	srv.Register(server.TextTool[addInput]("add", "Adds two numbers",
+	srv.Register(core.TextTool[addInput]("add", "Adds two numbers",
 		func(ctx core.ToolContext, input addInput) (string, error) {
 			return fmt.Sprintf("%g", input.A+input.B), nil
 		},
 	))
 
 	// fail: always returns an error (for testing isError semantics)
-	srv.Register(server.TextTool[struct{}]("fail", "Always fails with an error",
+	srv.Register(core.TextTool[struct{}]("fail", "Always fails with an error",
 		func(ctx core.ToolContext, _ struct{}) (string, error) {
 			return "", fmt.Errorf("intentional failure for testing")
 		},

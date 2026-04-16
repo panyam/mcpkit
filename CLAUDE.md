@@ -75,7 +75,7 @@ func myTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error)
 `BaseContext` → shared methods (EmitLog, Sample, Elicit, AuthClaims, Notify, etc.). `ToolContext` adds `EmitProgress`/`EmitContent`. Free functions (`core.EmitLog(ctx, ...)`) still work. Use `ctx.DetachFromClient()` not `core.DetachFromClient(ctx)` inside typed handlers.
 
 ### Registration
-- **Typed (recommended)**: `server.TypedTool[In, Out](name, desc, handler)` / `server.TextTool[In](name, desc, handler)` — auto-derives InputSchema (and optionally OutputSchema) from Go struct tags via `invopop/jsonschema`. Zero schema drift. `TextTool[In]` is sugar for `TypedTool[In, string]`.
+- **Typed (recommended)**: `core.TypedTool[In, Out](name, desc, handler)` / `core.TextTool[In](name, desc, handler)` — auto-derives InputSchema (and optionally OutputSchema) from Go struct tags via `invopop/jsonschema`. Zero schema drift. `TextTool[In]` is sugar for `TypedTool[In, string]`. Returns `core.TypedToolResult` accepted by `srv.Register()`.
 - **Explicit**: `srv.RegisterTool(def, handler)` / `srv.Register(server.Tool{Def, Handler})` — manual schema, full control. Used by protogen, dynamic tools, proxies.
 - `ext/ui.RegisterAppTool(reg, cfg)` — registers tool + resource in one call, auto-detects template URIs. With `TemplateHandler`: auto-generates concrete fallback for hosts that don't substitute template vars. Without: manual hybrid path.
 - Schema validation panics at registration for malformed schemas
