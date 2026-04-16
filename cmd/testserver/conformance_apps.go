@@ -29,134 +29,89 @@ func registerConformanceApps(srv *server.Server) {
 	border := false
 
 	// show-dashboard: tool with full UI metadata
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "show-dashboard",
-			Description: "Shows the dashboard UI",
-			InputSchema: map[string]any{
-				"type":       "object",
-				"properties": map[string]any{},
-			},
-			Meta: &core.ToolMeta{
-				UI: &core.UIMetadata{
-					ResourceUri: "ui://dashboard/view",
-					Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
-					CSP: &core.UICSPConfig{
-						ResourceDomains: []string{"cdn.example.com"},
-					},
-					Permissions:           []string{"clipboard-write"},
-					PrefersBorder:         &border,
-					SupportedDisplayModes: []core.DisplayMode{core.DisplayModeInline, core.DisplayModeFullscreen},
+	srv.Register(server.TextTool[struct{}]("show-dashboard", "Shows the dashboard UI",
+		func(ctx core.ToolContext, _ struct{}) (string, error) {
+			return "Dashboard displayed", nil
+		},
+		server.WithToolMeta(&core.ToolMeta{
+			UI: &core.UIMetadata{
+				ResourceUri: "ui://dashboard/view",
+				Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
+				CSP: &core.UICSPConfig{
+					ResourceDomains: []string{"cdn.example.com"},
 				},
+				Permissions:           []string{"clipboard-write"},
+				PrefersBorder:         &border,
+				SupportedDisplayModes: []core.DisplayMode{core.DisplayModeInline, core.DisplayModeFullscreen},
 			},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			return core.TextResult("Dashboard displayed"), nil
-		},
-	)
+		}),
+	))
 
 	// navigate-dashboard: app-only tool (not visible to model)
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "navigate-dashboard",
-			Description: "Navigates within the dashboard (app-only)",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"page": map[string]any{"type": "string"},
-				},
-			},
-			Meta: &core.ToolMeta{
-				UI: &core.UIMetadata{
-					Visibility: []core.UIVisibility{core.UIVisibilityApp},
-				},
-			},
+	type navigateInput struct {
+		Page string `json:"page,omitempty"`
+	}
+	srv.Register(server.TextTool[navigateInput]("navigate-dashboard", "Navigates within the dashboard (app-only)",
+		func(ctx core.ToolContext, input navigateInput) (string, error) {
+			return fmt.Sprintf("Navigated to %s", input.Page), nil
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			var args struct {
-				Page string `json:"page"`
-			}
-			req.Bind(&args)
-			return core.TextResult(fmt.Sprintf("Navigated to %s", args.Page)), nil
-		},
-	)
+		server.WithToolMeta(&core.ToolMeta{
+			UI: &core.UIMetadata{
+				Visibility: []core.UIVisibility{core.UIVisibilityApp},
+			},
+		}),
+	))
 
 	// dashboard-data: model+app tool sharing the same resourceUri as show-dashboard
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "dashboard-data",
-			Description: "Returns dashboard data",
-			InputSchema: map[string]any{"type": "object"},
-			Meta: &core.ToolMeta{
-				UI: &core.UIMetadata{
-					ResourceUri: "ui://dashboard/view",
-					Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
-				},
+	srv.Register(server.TextTool[struct{}]("dashboard-data", "Returns dashboard data",
+		func(ctx core.ToolContext, _ struct{}) (string, error) {
+			return "Dashboard data: {\"widgets\": 5}", nil
+		},
+		server.WithToolMeta(&core.ToolMeta{
+			UI: &core.UIMetadata{
+				ResourceUri: "ui://dashboard/view",
+				Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
 			},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			return core.TextResult("Dashboard data: {\"widgets\": 5}"), nil
-		},
-	)
+		}),
+	))
 
 	// mutate-dashboard: mutates state and sends resource change notification
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "mutate-dashboard",
-			Description: "Mutates dashboard state and notifies resource change",
-			InputSchema: map[string]any{"type": "object"},
-			Meta: &core.ToolMeta{
-				UI: &core.UIMetadata{
-					ResourceUri: "ui://dashboard/view",
-					Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
-				},
+	srv.Register(server.TextTool[struct{}]("mutate-dashboard", "Mutates dashboard state and notifies resource change",
+		func(ctx core.ToolContext, _ struct{}) (string, error) {
+			ctx.NotifyResourcesChanged()
+			return "Dashboard mutated", nil
+		},
+		server.WithToolMeta(&core.ToolMeta{
+			UI: &core.UIMetadata{
+				ResourceUri: "ui://dashboard/view",
+				Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
 			},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			core.NotifyResourcesChanged(ctx)
-			return core.TextResult("Dashboard mutated"), nil
-		},
-	)
+		}),
+	))
 
 	// request-fullscreen: requests display mode change via notification
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "request-fullscreen",
-			Description: "Requests fullscreen display mode",
-			InputSchema: map[string]any{"type": "object"},
-			Meta: &core.ToolMeta{
-				UI: &core.UIMetadata{
-					ResourceUri:           "ui://dashboard/view",
-					Visibility:            []core.UIVisibility{core.UIVisibilityApp},
-					SupportedDisplayModes: []core.DisplayMode{core.DisplayModeInline, core.DisplayModeFullscreen},
-				},
-			},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			// Uses raw core.Notify instead of ui.RequestDisplayMode to avoid
+	srv.Register(server.TextTool[struct{}]("request-fullscreen", "Requests fullscreen display mode",
+		func(ctx core.ToolContext, _ struct{}) (string, error) {
+			// Uses raw ctx.Notify instead of ui.RequestDisplayMode to avoid
 			// importing ext/ui from the root module (see testUIExtension above).
-			core.Notify(ctx, "notifications/ui/displayMode", map[string]any{
+			ctx.Notify("notifications/ui/displayMode", map[string]any{
 				"displayMode": core.DisplayModeFullscreen,
 			})
-			return core.TextResult("Fullscreen requested"), nil
+			return "Fullscreen requested", nil
 		},
-	)
+		server.WithToolMeta(&core.ToolMeta{
+			UI: &core.UIMetadata{
+				ResourceUri:           "ui://dashboard/view",
+				Visibility:            []core.UIVisibility{core.UIVisibilityApp},
+				SupportedDisplayModes: []core.DisplayMode{core.DisplayModeInline, core.DisplayModeFullscreen},
+			},
+		}),
+	))
 
 	// elicit-with-ui: demonstrates app-backed elicitation with _meta.ui
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "elicit-with-ui",
-			Description: "Elicits input using an MCP App UI",
-			InputSchema: map[string]any{"type": "object"},
-			Meta: &core.ToolMeta{
-				UI: &core.UIMetadata{
-					ResourceUri: "ui://dashboard/view",
-					Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
-				},
-			},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			result, err := core.Elicit(ctx, core.ElicitationRequest{
+	srv.Register(server.TypedTool[struct{}, core.ToolResult]("elicit-with-ui", "Elicits input using an MCP App UI",
+		func(ctx core.ToolContext, _ struct{}) (core.ToolResult, error) {
+			result, err := ctx.Elicit(core.ElicitationRequest{
 				Message: "Choose a dashboard widget",
 				Meta: &core.ElicitationMeta{
 					UI: &core.UIMetadata{
@@ -169,7 +124,13 @@ func registerConformanceApps(srv *server.Server) {
 			}
 			return core.TextResult(fmt.Sprintf("Action: %s", result.Action)), nil
 		},
-	)
+		server.WithToolMeta(&core.ToolMeta{
+			UI: &core.UIMetadata{
+				ResourceUri: "ui://dashboard/view",
+				Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
+			},
+		}),
+	))
 
 	// ui://dashboard/view — static HTML resource for the dashboard
 	srv.RegisterResource(
