@@ -104,52 +104,35 @@ func main() {
 		},
 	})
 
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "complete_task",
-			Description: "Mark a task as done by title",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"title": map[string]any{"type": "string", "description": "Task title to complete"},
-				},
-				"required": []string{"title"},
-			},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			var args struct {
-				Title string `json:"title"`
-			}
-			req.Bind(&args)
+	type completeTaskInput struct {
+		Title string `json:"title" jsonschema:"description=Task title to complete"`
+	}
+	srv.Register(server.TextTool[completeTaskInput]("complete_task", "Mark a task as done by title",
+		func(ctx core.ToolContext, input completeTaskInput) (string, error) {
 			tasksMu.Lock()
 			found := false
 			for i := range tasks {
-				if tasks[i].Title == args.Title {
+				if tasks[i].Title == input.Title {
 					tasks[i].Done = true
 					found = true
 				}
 			}
 			tasksMu.Unlock()
 			if !found {
-				return core.TextResult("Task not found: " + args.Title), nil
+				return "Task not found: " + input.Title, nil
 			}
-			return core.TextResult("Completed: " + args.Title), nil
+			return "Completed: " + input.Title, nil
 		},
-	)
+	))
 
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "list_tasks",
-			Description: "List all tasks on the board",
-			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+	srv.Register(server.TypedTool[struct{}, core.ToolResult]("list_tasks", "List all tasks on the board",
+		func(ctx core.ToolContext, _ struct{}) (core.ToolResult, error) {
 			tasksMu.Lock()
 			data, _ := json.Marshal(tasks)
 			tasksMu.Unlock()
 			return core.StructuredResult("Tasks: "+string(data), map[string]any{"tasks": tasks}), nil
 		},
-	)
+	))
 
 	// HTTP mux: MCP + HTMX partials.
 	mux := http.NewServeMux()

@@ -14,41 +14,28 @@ import (
 	"github.com/panyam/mcpkit/server"
 )
 
+// emptyInput is used for conformance tools that take no arguments.
+type emptyInput = struct{}
+
 // registerConformanceTools adds all tools required by the MCP conformance suite.
 func registerConformanceTools(srv *server.Server) {
 	// test_simple_text: returns a fixed text response (no arguments)
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "test_simple_text",
-			Description: "Returns a simple text response for conformance testing",
-			InputSchema: map[string]any{"type": "object"},
+	srv.Register(server.TextTool[emptyInput]("test_simple_text", "Returns a simple text response for conformance testing",
+		func(ctx core.ToolContext, _ emptyInput) (string, error) {
+			return "This is a simple text response for testing.", nil
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			return core.TextResult("This is a simple text response for testing."), nil
-		},
-	)
+	))
 
 	// test_error_handling: always returns isError: true
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "test_error_handling",
-			Description: "Returns an error result for conformance testing",
-			InputSchema: map[string]any{"type": "object"},
+	srv.Register(server.TextTool[emptyInput]("test_error_handling", "Returns an error result for conformance testing",
+		func(ctx core.ToolContext, _ emptyInput) (string, error) {
+			return "", fmt.Errorf("Test error from tool")
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			return core.ToolResult{}, fmt.Errorf("Test error from tool")
-		},
-	)
+	))
 
 	// test_image_content: returns base64 PNG image content
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "test_image_content",
-			Description: "Returns image content for conformance testing",
-			InputSchema: map[string]any{"type": "object"},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			// Minimal 1x1 red PNG
+	srv.Register(server.TypedTool[emptyInput, core.ToolResult]("test_image_content", "Returns image content for conformance testing",
+		func(ctx core.ToolContext, _ emptyInput) (core.ToolResult, error) {
 			pngBytes := minimalPNG()
 			return core.ToolResult{
 				Content: []core.Content{{
@@ -58,17 +45,11 @@ func registerConformanceTools(srv *server.Server) {
 				}},
 			}, nil
 		},
-	)
+	))
 
 	// test_audio_content: returns base64 audio content
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "test_audio_content",
-			Description: "Returns audio content for conformance testing",
-			InputSchema: map[string]any{"type": "object"},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			// Minimal WAV header (44 bytes, no samples)
+	srv.Register(server.TypedTool[emptyInput, core.ToolResult]("test_audio_content", "Returns audio content for conformance testing",
+		func(ctx core.ToolContext, _ emptyInput) (core.ToolResult, error) {
 			wavBytes := minimalWAV()
 			return core.ToolResult{
 				Content: []core.Content{{
@@ -78,16 +59,11 @@ func registerConformanceTools(srv *server.Server) {
 				}},
 			}, nil
 		},
-	)
+	))
 
 	// test_multiple_content_types: returns text + image + embedded resource content
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "test_multiple_content_types",
-			Description: "Returns mixed text, image, and resource content for conformance testing",
-			InputSchema: map[string]any{"type": "object"},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+	srv.Register(server.TypedTool[emptyInput, core.ToolResult]("test_multiple_content_types", "Returns mixed text, image, and resource content for conformance testing",
+		func(ctx core.ToolContext, _ emptyInput) (core.ToolResult, error) {
 			pngBytes := minimalPNG()
 			return core.ToolResult{
 				Content: []core.Content{
@@ -101,32 +77,31 @@ func registerConformanceTools(srv *server.Server) {
 				},
 			}, nil
 		},
-	)
+	))
 
 	// test_tool_with_logging: emits 3 log notifications during tool execution.
 	// The conformance suite calls this tool after setting the log level to verify
 	// that notifications/message events are sent on the transport during execution.
 	// Sends 3 info-level log notifications with 50ms delays to test streaming.
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "test_tool_with_logging",
-			Description: "Emits log notifications during execution for conformance testing",
-			InputSchema: map[string]any{"type": "object"},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			core.EmitLog(ctx, core.LogInfo, "test", "Tool execution started")
+	srv.Register(server.TextTool[emptyInput]("test_tool_with_logging", "Emits log notifications during execution for conformance testing",
+		func(ctx core.ToolContext, _ emptyInput) (string, error) {
+			ctx.EmitLog(core.LogInfo, "test", "Tool execution started")
 			time.Sleep(50 * time.Millisecond)
-			core.EmitLog(ctx, core.LogInfo, "test", "Tool processing data")
+			ctx.EmitLog(core.LogInfo, "test", "Tool processing data")
 			time.Sleep(50 * time.Millisecond)
-			core.EmitLog(ctx, core.LogInfo, "test", "Tool execution completed")
-			return core.TextResult("Execution complete"), nil
+			ctx.EmitLog(core.LogInfo, "test", "Tool execution completed")
+			return "Execution complete", nil
 		},
-	)
+	))
 
 	// test_tool_with_progress: emits 3 progress notifications during tool execution.
 	// The conformance suite calls this tool with _meta.progressToken and verifies
 	// that notifications/progress events arrive with monotonically increasing progress.
 	// Sends progress at 0/100, 50/100, 100/100 with 50ms delays between them.
+	//
+	// Stays on RegisterTool because TypedTool handlers don't receive ToolRequest,
+	// which is needed for req.ProgressToken. Also serves as a backward-compat
+	// example of the explicit registration pattern.
 	srv.RegisterTool(
 		core.ToolDef{
 			Name:        "test_tool_with_progress",
@@ -144,13 +119,8 @@ func registerConformanceTools(srv *server.Server) {
 	)
 
 	// test_embedded_resource: returns a resource content item
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "test_embedded_resource",
-			Description: "Returns embedded resource content for conformance testing",
-			InputSchema: map[string]any{"type": "object"},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+	srv.Register(server.TypedTool[emptyInput, core.ToolResult]("test_embedded_resource", "Returns embedded resource content for conformance testing",
+		func(ctx core.ToolContext, _ emptyInput) (core.ToolResult, error) {
 			return core.ToolResult{
 				Content: []core.Content{{
 					Type: "resource",
@@ -162,19 +132,14 @@ func registerConformanceTools(srv *server.Server) {
 				}},
 			}, nil
 		},
-	)
+	))
 
 	// test_sampling: calls sampling/createMessage during tool execution.
 	// The conformance suite's client must respond to the server-to-client request
 	// with an LLM inference result. The tool returns the model's response text.
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "test_sampling",
-			Description: "Calls sampling/createMessage and returns the LLM response for conformance testing",
-			InputSchema: map[string]any{"type": "object"},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			result, err := core.Sample(ctx, core.CreateMessageRequest{
+	srv.Register(server.TypedTool[emptyInput, core.ToolResult]("test_sampling", "Calls sampling/createMessage and returns the LLM response for conformance testing",
+		func(ctx core.ToolContext, _ emptyInput) (core.ToolResult, error) {
+			result, err := ctx.Sample(core.CreateMessageRequest{
 				Messages: []core.SamplingMessage{{
 					Role:    "user",
 					Content: core.Content{Type: "text", Text: "What is the capital of France?"},
@@ -186,19 +151,14 @@ func registerConformanceTools(srv *server.Server) {
 			}
 			return core.TextResult(fmt.Sprintf("model=%s role=%s text=%s", result.Model, result.Role, result.Content.Text)), nil
 		},
-	)
+	))
 
 	// test_elicitation: calls elicitation/create during tool execution.
 	// The conformance suite's client must respond to the server-to-client request
 	// with user input. The tool returns the user's action and content.
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "test_elicitation",
-			Description: "Calls elicitation/create and returns user input for conformance testing",
-			InputSchema: map[string]any{"type": "object"},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			result, err := core.Elicit(ctx, core.ElicitationRequest{
+	srv.Register(server.TypedTool[emptyInput, core.ToolResult]("test_elicitation", "Calls elicitation/create and returns user input for conformance testing",
+		func(ctx core.ToolContext, _ emptyInput) (core.ToolResult, error) {
+			result, err := ctx.Elicit(core.ElicitationRequest{
 				Message:         "Please provide your name",
 				RequestedSchema: json.RawMessage(`{"type":"object","properties":{"name":{"type":"string","description":"Your name"}}}`),
 			})
@@ -211,19 +171,14 @@ func registerConformanceTools(srv *server.Server) {
 			}
 			return core.TextResult(fmt.Sprintf("action=%s", result.Action)), nil
 		},
-	)
+	))
 
 	// test_elicitation_sep1034_defaults: calls elicitation/create with a schema
 	// containing default values for all primitive types (SEP-1034 conformance).
 	// Schema includes: string, integer, number, enum with default, and boolean,
 	// each with a default value set.
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "test_elicitation_sep1034_defaults",
-			Description: "Calls elicitation/create with default values for all primitive types (SEP-1034)",
-			InputSchema: map[string]any{"type": "object"},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+	srv.Register(server.TypedTool[emptyInput, core.ToolResult]("test_elicitation_sep1034_defaults", "Calls elicitation/create with default values for all primitive types (SEP-1034)",
+		func(ctx core.ToolContext, _ emptyInput) (core.ToolResult, error) {
 			schema := json.RawMessage(`{
 				"type": "object",
 				"properties": {
@@ -234,7 +189,7 @@ func registerConformanceTools(srv *server.Server) {
 					"verified": {"type": "boolean", "default": true}
 				}
 			}`)
-			result, err := core.Elicit(ctx, core.ElicitationRequest{
+			result, err := ctx.Elicit(core.ElicitationRequest{
 				Message:         "Please provide your information",
 				RequestedSchema: schema,
 			})
@@ -244,19 +199,14 @@ func registerConformanceTools(srv *server.Server) {
 			contentJSON, _ := json.Marshal(result.Content)
 			return core.TextResult(fmt.Sprintf("Elicitation completed: action=%s, content=%s", result.Action, string(contentJSON))), nil
 		},
-	)
+	))
 
 	// test_elicitation_sep1330_enums: calls elicitation/create with all 5 enum
 	// variants defined in SEP-1330 conformance: untitled single-select, titled
 	// single-select (oneOf), legacy titled (enumNames), untitled multi-select,
 	// and titled multi-select (anyOf).
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "test_elicitation_sep1330_enums",
-			Description: "Calls elicitation/create with all 5 enum variants (SEP-1330)",
-			InputSchema: map[string]any{"type": "object"},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+	srv.Register(server.TypedTool[emptyInput, core.ToolResult]("test_elicitation_sep1330_enums", "Calls elicitation/create with all 5 enum variants (SEP-1330)",
+		func(ctx core.ToolContext, _ emptyInput) (core.ToolResult, error) {
 			schema := json.RawMessage(`{
 				"type": "object",
 				"properties": {
@@ -296,7 +246,7 @@ func registerConformanceTools(srv *server.Server) {
 					}
 				}
 			}`)
-			result, err := core.Elicit(ctx, core.ElicitationRequest{
+			result, err := ctx.Elicit(core.ElicitationRequest{
 				Message:         "Please make your selections",
 				RequestedSchema: schema,
 			})
@@ -306,7 +256,7 @@ func registerConformanceTools(srv *server.Server) {
 			contentJSON, _ := json.Marshal(result.Content)
 			return core.TextResult(fmt.Sprintf("Elicitation completed: action=%s, content=%s", result.Action, string(contentJSON))), nil
 		},
-	)
+	))
 }
 
 // minimalPNG returns a valid 1x1 red PNG image (67 bytes).
