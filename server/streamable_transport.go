@@ -51,6 +51,11 @@ type sessionEntry struct {
 	idleTimer  *conc.IdleTimer // nil-safe: all methods are no-ops on nil
 	timeout    time.Duration   // retained for log messages on expiry
 
+	// subject is the authenticated principal (Claims.Subject) bound at session
+	// creation. Subsequent requests must match — prevents session hijacking
+	// when different users share the same server. Empty when no auth is configured.
+	subject string
+
 	// getConn points at the live streamableSSEConn for this session's GET
 	// SSE stream, if any. Set in OnStart, cleared in OnClose. Used by the
 	// retry-hint path (#202) to emit raw SSE "retry:" fields to the
@@ -130,6 +135,21 @@ func (t *streamableTransport) loadSession(id string) (*sessionEntry, bool) {
 	return t.sessions.Load(id)
 }
 
+// verifySessionPrincipal checks that the request's authenticated principal
+// matches the session's bound principal. Returns true if allowed, false if
+// rejected (403 already written). Sessions created without auth (empty subject)
+// allow any caller — backward compatible with unauthenticated servers.
+func (e *sessionEntry) verifyPrincipal(w http.ResponseWriter, claims *core.Claims) bool {
+	if e.subject == "" {
+		return true // no auth binding
+	}
+	if claims != nil && claims.Subject == e.subject {
+		return true // principal matches
+	}
+	http.Error(w, "forbidden: session principal mismatch", http.StatusForbidden)
+	return false
+}
+
 // handlePost handles POST requests: JSON-RPC dispatch with session management.
 func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request) {
 	// NOTE: Per MCP spec (2025-11-25, Streamable HTTP transport), clients MUST include
@@ -173,6 +193,9 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 		entry, ok := t.loadSession(sessionID)
 		if !ok {
 			http.Error(w, "session not found", http.StatusNotFound)
+			return
+		}
+		if !entry.verifyPrincipal(w, claims) {
 			return
 		}
 		entry.idleTimer.Acquire()
@@ -236,6 +259,9 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 	entry, ok := t.loadSession(sessionID)
 	if !ok {
 		http.Error(w, "session not found", http.StatusNotFound)
+		return
+	}
+	if !entry.verifyPrincipal(w, claims) {
 		return
 	}
 	entry.idleTimer.Acquire()
@@ -389,10 +415,16 @@ func (t *streamableTransport) handleInitialize(w http.ResponseWriter, r *http.Re
 	// Check if client suggested a session ID via _suggestedSessionId.
 	sessionID := t.resolveSessionID(req.Params)
 	dispatcher.sessionID = sessionID
+	// Bind authenticated principal to session — prevents hijacking.
+	subject := ""
+	if claims != nil && claims.Subject != "" {
+		subject = claims.Subject
+	}
 	entry := &sessionEntry{
 		dispatcher: dispatcher,
 		idleTimer:  conc.NewIdleTimer(t.config.sessionTimeout, func() { t.expireSession(sessionID) }),
 		timeout:    t.config.sessionTimeout,
+		subject:    subject,
 	}
 	t.sessions.Store(sessionID, entry)
 
@@ -439,7 +471,8 @@ type streamableSSEConn struct {
 
 func (h *streamableSSEHandler) Validate(w http.ResponseWriter, r *http.Request) (*streamableSSEConn, bool) {
 	// Auth check
-	if _, err := h.transport.server.CheckAuth(r); err != nil {
+	claims, err := h.transport.server.CheckAuth(r)
+	if err != nil {
 		writeAuthError(w, err)
 		return nil, false
 	}
@@ -452,6 +485,9 @@ func (h *streamableSSEHandler) Validate(w http.ResponseWriter, r *http.Request) 
 		entry, ok := h.transport.loadSession(sessionID)
 		if !ok {
 			http.Error(w, "session not found", http.StatusNotFound)
+			return nil, false
+		}
+		if !entry.verifyPrincipal(w, claims) {
 			return nil, false
 		}
 		entry.idleTimer.Acquire() // released in OnClose
@@ -546,7 +582,8 @@ func (c *streamableSSEConn) OnClose() {
 // handleDelete handles DELETE requests: terminates a session.
 func (t *streamableTransport) handleDelete(w http.ResponseWriter, r *http.Request) {
 	// Auth check — prevent unauthenticated session termination
-	if _, err := t.server.CheckAuth(r); err != nil {
+	claims, err := t.server.CheckAuth(r)
+	if err != nil {
 		writeAuthError(w, err)
 		return
 	}
@@ -557,11 +594,17 @@ func (t *streamableTransport) handleDelete(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	entry, ok := t.sessions.LoadAndDelete(sessionID)
+	// Look up session first (without deleting) to verify principal.
+	entry, ok := t.loadSession(sessionID)
 	if !ok {
 		http.Error(w, "session not found", http.StatusNotFound)
 		return
 	}
+	if !entry.verifyPrincipal(w, claims) {
+		return
+	}
+	// Principal verified — now delete.
+	t.sessions.Delete(sessionID)
 	entry.idleTimer.Stop()
 	entry.dispatcher.Close()
 	if t.config.eventStore != nil {
@@ -626,6 +669,9 @@ func (t *streamableTransport) handleBatchPost(w http.ResponseWriter, r *http.Req
 	entry, ok := t.loadSession(sessionID)
 	if !ok {
 		http.Error(w, "session not found", http.StatusNotFound)
+		return
+	}
+	if !entry.verifyPrincipal(w, claims) {
 		return
 	}
 	entry.idleTimer.Acquire()
