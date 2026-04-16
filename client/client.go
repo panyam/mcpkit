@@ -332,6 +332,9 @@ type Client struct {
 	// ModifyRequest hook for outgoing HTTP requests (set by WithModifyRequest).
 	modifyRequest func(*http.Request)
 
+	// Call-level middleware chain (set by WithClientMiddleware).
+	callMiddleware []ClientMiddleware
+
 	// Command transport fields (set by WithCommandTransport).
 	commandName string
 	commandArgs []string
@@ -719,6 +722,28 @@ func (c *Client) SetURL(url string) { c.url = url }
 
 // Call makes a JSON-RPC call and returns the parsed response.
 func (c *Client) Call(method string, params any) (*CallResult, error) {
+	// Apply client middleware chain if configured.
+	if len(c.callMiddleware) > 0 {
+		// Build the terminal handler.
+		terminal := ClientCallFunc(func(_ context.Context, method string, params any) (*CallResult, error) {
+			return c.callDirect(method, params)
+		})
+		// Wrap with middleware (reverse order: first registered = outermost).
+		handler := terminal
+		for i := len(c.callMiddleware) - 1; i >= 0; i-- {
+			next := handler
+			mw := c.callMiddleware[i]
+			handler = func(ctx context.Context, method string, params any) (*CallResult, error) {
+				return mw(ctx, method, params, next)
+			}
+		}
+		return handler(context.Background(), method, params)
+	}
+	return c.callDirect(method, params)
+}
+
+// callDirect is the non-middleware Call path.
+func (c *Client) callDirect(method string, params any) (*CallResult, error) {
 	resp, err := c.rawCall(method, params)
 	if err != nil {
 		return nil, err
