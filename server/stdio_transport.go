@@ -58,27 +58,29 @@ func WithStdioLogger(l *log.Logger) StdioOption {
 	return func(c *stdioConfig) { c.logger = l }
 }
 
-// RunStdio runs the MCP server over stdio using Content-Length framed JSON-RPC.
-// Blocks until ctx is cancelled or the input stream reaches EOF.
+// RunIO runs the MCP server over Content-Length framed JSON-RPC on arbitrary
+// io.Reader/io.Writer streams. Blocks until ctx is cancelled or the reader
+// reaches EOF.
 //
-// This is the primary entry point for editor-spawned MCP servers. The server
-// reads JSON-RPC messages from stdin (or the configured input), dispatches them
-// through the standard Server dispatch pipeline, and writes responses to stdout
-// (or the configured output).
+// This is the generic version of RunStdio — use it for Unix domain sockets,
+// named pipes, SSH tunnels, or any other stream-based transport. RunStdio
+// is equivalent to RunIO(ctx, os.Stdin, os.Stdout).
 //
-// Example:
+// Example (Unix socket):
 //
-//	srv := server.NewServer(core.ServerInfo{Name: "my-server", Version: "1.0"})
-//	srv.RegisterTool(def, handler)
-//	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
-//	defer cancel()
-//	if err := srv.RunStdio(ctx); err != nil {
-//	    log.Fatal(err)
-//	}
-func (s *Server) RunStdio(ctx context.Context, opts ...StdioOption) error {
+//	conn, _ := net.Dial("unix", "/tmp/mcp.sock")
+//	srv.RunIO(ctx, conn, conn)
+//
+// Example (pipe pair for testing):
+//
+//	sr, cw := io.Pipe()
+//	cr, sw := io.Pipe()
+//	go srv.RunIO(ctx, sr, sw)
+//	client := client.NewClient("", info, client.WithIOTransport(cr, cw))
+func (s *Server) RunIO(ctx context.Context, r io.Reader, w io.Writer, opts ...StdioOption) error {
 	cfg := stdioConfig{
-		input:  os.Stdin,
-		output: os.Stdout,
+		input:  r,
+		output: w,
 	}
 	for _, opt := range opts {
 		opt(&cfg)
@@ -86,8 +88,20 @@ func (s *Server) RunStdio(ctx context.Context, opts ...StdioOption) error {
 
 	// Validate extension refs at startup (same as Handler() for HTTP transports).
 	s.validateExtensionRefs()
+	return s.runIOInternal(ctx, cfg)
+}
 
-	// Single session — stdio is always 1:1 client-to-server.
+// RunStdio runs the MCP server over stdio using Content-Length framed JSON-RPC.
+// Blocks until ctx is cancelled or stdin reaches EOF.
+//
+// This is the primary entry point for editor-spawned MCP servers. Equivalent
+// to RunIO(ctx, os.Stdin, os.Stdout, opts...).
+func (s *Server) RunStdio(ctx context.Context, opts ...StdioOption) error {
+	return s.RunIO(ctx, os.Stdin, os.Stdout, opts...)
+}
+
+func (s *Server) runIOInternal(ctx context.Context, cfg stdioConfig) error {
+	// Single session — IO is always 1:1 client-to-server.
 	dispatcher := s.newSession()
 	dispatcher.sessionID = "stdio"
 	defer dispatcher.Close()
