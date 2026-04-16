@@ -96,6 +96,7 @@
 - mcp-tool-context-detach: core.DetachFromClient — tool handlers opt into surviving client disconnect and per-tool timeout. Uses context.WithoutCancel to strip cancellation while preserving session state. Combine with EmitSSERetry + GracePeriod + EventStore for long-running tools with result replay on reconnect. (#203)
 - mcp-auth-refresh-callback: OAuthTokenSource.OnToken — optional callback fired after successful refresh_token grant by the underlying oneauth AuthClient. Use for external persistence without implementing CredentialStore. (#137)
 - mcp-auth-refresh-flow: OAuthTokenSource.Token() attempts the refresh_token grant before falling back to LoginWithBrowser. Long-running clients (agents, CLI tools) no longer re-prompt for browser consent on every token expiry. Default in-memory cred store when CredStore is nil; TokenForScopes wipes stored credential to force full re-login on scope step-up; scope-coverage check skips refresh when stored credential doesn't cover requested scopes. (#196)
+- mcp-typed-tool-registration: server.TypedTool[In, Out] and server.TextTool[In] — generic typed handlers with auto-derived JSON Schema from Go struct tags (via invopop/jsonschema). Zero schema drift between InputSchema and handler parameters. Out type dispatch: string → TextResult (no OutputSchema), struct → StructuredResult (auto OutputSchema), core.ToolResult → passthrough. TextTool[In] is sugar for TypedTool[In, string]. Builds on existing Register(Tool{}) foundation layer. (#242)
 
 ## Module
 github.com/panyam/mcpkit
