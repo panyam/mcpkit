@@ -58,6 +58,8 @@ func (s *Server) Register(items ...any) {
 		switch v := item.(type) {
 		case Tool:
 			s.RegisterTool(v.ToolDef, v.Handler)
+		case core.TypedToolResult:
+			s.RegisterTool(v.ToolDef, v.Handler)
 		case Resource:
 			s.RegisterResource(v.ResourceDef, v.Handler)
 		case ResourceTemplate:

@@ -48,7 +48,7 @@ type userInfo struct {
 // from the Go struct type, including property types, required fields (from
 // omitempty), and descriptions (from jsonschema tags).
 func TestTypedTool_SchemaGeneration(t *testing.T) {
-	tool := server.TextTool[searchInput]("search", "Search things",
+	tool := core.TextTool[searchInput]("search", "Search things",
 		func(ctx core.ToolContext, input searchInput) (string, error) {
 			return "ok", nil
 		},
@@ -86,7 +86,7 @@ func TestTypedTool_SchemaGeneration(t *testing.T) {
 // TestTypedTool_NestedSchema verifies that nested struct types produce
 // correctly inlined JSON Schema objects (no $ref/$defs).
 func TestTypedTool_NestedSchema(t *testing.T) {
-	tool := server.TextTool[nestedInput]("nested", "Nested input",
+	tool := core.TextTool[nestedInput]("nested", "Nested input",
 		func(ctx core.ToolContext, input nestedInput) (string, error) {
 			return "ok", nil
 		},
@@ -111,7 +111,7 @@ func TestTypedTool_NestedSchema(t *testing.T) {
 // struct Out types, and absent for string and core.ToolResult Out types.
 func TestTypedTool_OutputSchemaGeneration(t *testing.T) {
 	// Struct Out → OutputSchema present
-	structTool := server.TypedTool[greetInput, searchOutput]("a", "desc",
+	structTool := core.TypedTool[greetInput, searchOutput]("a", "desc",
 		func(ctx core.ToolContext, input greetInput) (searchOutput, error) {
 			return searchOutput{}, nil
 		},
@@ -124,7 +124,7 @@ func TestTypedTool_OutputSchemaGeneration(t *testing.T) {
 	assert.Contains(t, outProps, "total")
 
 	// String Out → no OutputSchema
-	stringTool := server.TextTool[greetInput]("b", "desc",
+	stringTool := core.TextTool[greetInput]("b", "desc",
 		func(ctx core.ToolContext, input greetInput) (string, error) {
 			return "", nil
 		},
@@ -132,7 +132,7 @@ func TestTypedTool_OutputSchemaGeneration(t *testing.T) {
 	assert.Nil(t, stringTool.OutputSchema, "string Out should not generate OutputSchema")
 
 	// core.ToolResult Out → no OutputSchema
-	resultTool := server.TypedTool[greetInput, core.ToolResult]("c", "desc",
+	resultTool := core.TypedTool[greetInput, core.ToolResult]("c", "desc",
 		func(ctx core.ToolContext, input greetInput) (core.ToolResult, error) {
 			return core.TextResult("raw"), nil
 		},
@@ -143,12 +143,12 @@ func TestTypedTool_OutputSchemaGeneration(t *testing.T) {
 // TestTextTool_Sugar verifies that TextTool[In] produces identical schema to
 // TypedTool[In, string].
 func TestTextTool_Sugar(t *testing.T) {
-	text := server.TextTool[searchInput]("a", "desc",
+	text := core.TextTool[searchInput]("a", "desc",
 		func(ctx core.ToolContext, input searchInput) (string, error) {
 			return "", nil
 		},
 	)
-	typed := server.TypedTool[searchInput, string]("a", "desc",
+	typed := core.TypedTool[searchInput, string]("a", "desc",
 		func(ctx core.ToolContext, input searchInput) (string, error) {
 			return "", nil
 		},
@@ -169,7 +169,7 @@ func TestTypedTool_TypeSafeDeserialization(t *testing.T) {
 	var captured greetInput
 
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
-	srv.Register(server.TextTool[greetInput]("greet", "Greet someone",
+	srv.Register(core.TextTool[greetInput]("greet", "Greet someone",
 		func(ctx core.ToolContext, input greetInput) (string, error) {
 			captured = input
 			return "Hello, " + input.Name, nil
@@ -199,7 +199,7 @@ func TestTypedTool_TypeSafeDeserialization(t *testing.T) {
 // (isError=true), not a protocol error.
 func TestTypedTool_InvalidInput(t *testing.T) {
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
-	srv.Register(server.TextTool[greetInput]("greet", "Greet",
+	srv.Register(core.TextTool[greetInput]("greet", "Greet",
 		func(ctx core.ToolContext, input greetInput) (string, error) {
 			return "should not reach here", nil
 		},
@@ -231,7 +231,7 @@ func TestTypedTool_InvalidInput(t *testing.T) {
 // populates StructuredContent and returns a text fallback.
 func TestTypedTool_StructuredOutput(t *testing.T) {
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
-	srv.Register(server.TypedTool[greetInput, searchOutput]("search", "Search",
+	srv.Register(core.TypedTool[greetInput, searchOutput]("search", "Search",
 		func(ctx core.ToolContext, input greetInput) (searchOutput, error) {
 			return searchOutput{Results: []string{"book1", "book2"}, Total: 2}, nil
 		},
@@ -259,7 +259,7 @@ func TestTypedTool_StructuredOutput(t *testing.T) {
 // Out type passes the handler's result through without modification.
 func TestTypedTool_ToolResultPassthrough(t *testing.T) {
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
-	srv.Register(server.TypedTool[greetInput, core.ToolResult]("multi", "Multi-content",
+	srv.Register(core.TypedTool[greetInput, core.ToolResult]("multi", "Multi-content",
 		func(ctx core.ToolContext, input greetInput) (core.ToolResult, error) {
 			return core.ToolResult{
 				Content: []core.Content{
@@ -289,7 +289,7 @@ func TestTypedTool_TypedContext(t *testing.T) {
 	var gotContext bool
 
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
-	srv.Register(server.TextTool[greetInput]("ctx-test", "Context test",
+	srv.Register(core.TextTool[greetInput]("ctx-test", "Context test",
 		func(ctx core.ToolContext, input greetInput) (string, error) {
 			// These should not panic — ToolContext provides them.
 			ctx.EmitLog(core.LogInfo, "test", "hello")
@@ -311,13 +311,13 @@ func TestTypedTool_TypedContext(t *testing.T) {
 // TestTypedTool_Options verifies that TypedToolOption values (timeout, annotations,
 // meta) are correctly applied to the generated ToolDef.
 func TestTypedTool_Options(t *testing.T) {
-	tool := server.TextTool[greetInput]("opt-test", "Options test",
+	tool := core.TextTool[greetInput]("opt-test", "Options test",
 		func(ctx core.ToolContext, input greetInput) (string, error) {
 			return "ok", nil
 		},
-		server.WithToolAnnotations(map[string]any{"experimental": true}),
-		server.WithTypedToolTimeout(5*time.Second),
-		server.WithToolMeta(&core.ToolMeta{}),
+		core.WithToolAnnotations(map[string]any{"experimental": true}),
+		core.WithTypedToolTimeout(5*time.Second),
+		core.WithToolMeta(&core.ToolMeta{}),
 	)
 
 	assert.Equal(t, "opt-test", tool.Name)
@@ -333,7 +333,7 @@ func TestTypedTool_Options(t *testing.T) {
 // (Streamable HTTP, SSE, in-process, stdio) to verify end-to-end behavior.
 func TestTypedTool_ForAllTransports(t *testing.T) {
 	srv := server.NewServer(core.ServerInfo{Name: "typed-test", Version: "1.0"})
-	srv.Register(server.TextTool[greetInput]("greet", "Greet someone",
+	srv.Register(core.TextTool[greetInput]("greet", "Greet someone",
 		func(ctx core.ToolContext, input greetInput) (string, error) {
 			greeting := "Hello, " + input.Name
 			if input.Excited {

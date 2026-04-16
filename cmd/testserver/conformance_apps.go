@@ -29,11 +29,11 @@ func registerConformanceApps(srv *server.Server) {
 	border := false
 
 	// show-dashboard: tool with full UI metadata
-	srv.Register(server.TextTool[struct{}]("show-dashboard", "Shows the dashboard UI",
+	srv.Register(core.TextTool[struct{}]("show-dashboard", "Shows the dashboard UI",
 		func(ctx core.ToolContext, _ struct{}) (string, error) {
 			return "Dashboard displayed", nil
 		},
-		server.WithToolMeta(&core.ToolMeta{
+		core.WithToolMeta(&core.ToolMeta{
 			UI: &core.UIMetadata{
 				ResourceUri: "ui://dashboard/view",
 				Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
@@ -51,11 +51,11 @@ func registerConformanceApps(srv *server.Server) {
 	type navigateInput struct {
 		Page string `json:"page,omitempty"`
 	}
-	srv.Register(server.TextTool[navigateInput]("navigate-dashboard", "Navigates within the dashboard (app-only)",
+	srv.Register(core.TextTool[navigateInput]("navigate-dashboard", "Navigates within the dashboard (app-only)",
 		func(ctx core.ToolContext, input navigateInput) (string, error) {
 			return fmt.Sprintf("Navigated to %s", input.Page), nil
 		},
-		server.WithToolMeta(&core.ToolMeta{
+		core.WithToolMeta(&core.ToolMeta{
 			UI: &core.UIMetadata{
 				Visibility: []core.UIVisibility{core.UIVisibilityApp},
 			},
@@ -63,11 +63,11 @@ func registerConformanceApps(srv *server.Server) {
 	))
 
 	// dashboard-data: model+app tool sharing the same resourceUri as show-dashboard
-	srv.Register(server.TextTool[struct{}]("dashboard-data", "Returns dashboard data",
+	srv.Register(core.TextTool[struct{}]("dashboard-data", "Returns dashboard data",
 		func(ctx core.ToolContext, _ struct{}) (string, error) {
 			return "Dashboard data: {\"widgets\": 5}", nil
 		},
-		server.WithToolMeta(&core.ToolMeta{
+		core.WithToolMeta(&core.ToolMeta{
 			UI: &core.UIMetadata{
 				ResourceUri: "ui://dashboard/view",
 				Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
@@ -76,12 +76,12 @@ func registerConformanceApps(srv *server.Server) {
 	))
 
 	// mutate-dashboard: mutates state and sends resource change notification
-	srv.Register(server.TextTool[struct{}]("mutate-dashboard", "Mutates dashboard state and notifies resource change",
+	srv.Register(core.TextTool[struct{}]("mutate-dashboard", "Mutates dashboard state and notifies resource change",
 		func(ctx core.ToolContext, _ struct{}) (string, error) {
 			ctx.NotifyResourcesChanged()
 			return "Dashboard mutated", nil
 		},
-		server.WithToolMeta(&core.ToolMeta{
+		core.WithToolMeta(&core.ToolMeta{
 			UI: &core.UIMetadata{
 				ResourceUri: "ui://dashboard/view",
 				Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
@@ -90,7 +90,7 @@ func registerConformanceApps(srv *server.Server) {
 	))
 
 	// request-fullscreen: requests display mode change via notification
-	srv.Register(server.TextTool[struct{}]("request-fullscreen", "Requests fullscreen display mode",
+	srv.Register(core.TextTool[struct{}]("request-fullscreen", "Requests fullscreen display mode",
 		func(ctx core.ToolContext, _ struct{}) (string, error) {
 			// Uses raw ctx.Notify instead of ui.RequestDisplayMode to avoid
 			// importing ext/ui from the root module (see testUIExtension above).
@@ -99,7 +99,7 @@ func registerConformanceApps(srv *server.Server) {
 			})
 			return "Fullscreen requested", nil
 		},
-		server.WithToolMeta(&core.ToolMeta{
+		core.WithToolMeta(&core.ToolMeta{
 			UI: &core.UIMetadata{
 				ResourceUri:           "ui://dashboard/view",
 				Visibility:            []core.UIVisibility{core.UIVisibilityApp},
@@ -109,7 +109,7 @@ func registerConformanceApps(srv *server.Server) {
 	))
 
 	// elicit-with-ui: demonstrates app-backed elicitation with _meta.ui
-	srv.Register(server.TypedTool[struct{}, core.ToolResult]("elicit-with-ui", "Elicits input using an MCP App UI",
+	srv.Register(core.TypedTool[struct{}, core.ToolResult]("elicit-with-ui", "Elicits input using an MCP App UI",
 		func(ctx core.ToolContext, _ struct{}) (core.ToolResult, error) {
 			result, err := ctx.Elicit(core.ElicitationRequest{
 				Message: "Choose a dashboard widget",
@@ -124,7 +124,7 @@ func registerConformanceApps(srv *server.Server) {
 			}
 			return core.TextResult(fmt.Sprintf("Action: %s", result.Action)), nil
 		},
-		server.WithToolMeta(&core.ToolMeta{
+		core.WithToolMeta(&core.ToolMeta{
 			UI: &core.UIMetadata{
 				ResourceUri: "ui://dashboard/view",
 				Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
