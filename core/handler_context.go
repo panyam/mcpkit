@@ -22,6 +22,7 @@ type BaseContext struct {
 // BaseContext and adds tool-specific methods (EmitProgress, EmitContent).
 type ToolContext struct {
 	BaseContext
+	progressToken any // set by dispatch or TypedTool from _meta.progressToken
 }
 
 // ResourceContext is the context passed to ResourceHandler and
@@ -41,7 +42,17 @@ type PromptContext struct {
 // NewToolContext constructs a ToolContext from a standard context.Context.
 // Called by the dispatch layer before invoking tool handlers.
 func NewToolContext(ctx context.Context) ToolContext {
-	return ToolContext{BaseContext{ctx, sessionFromContext(ctx)}}
+	return ToolContext{BaseContext: BaseContext{ctx, sessionFromContext(ctx)}}
+}
+
+// NewToolContextWithProgress constructs a ToolContext with a stored progress
+// token. The dispatch layer passes the token from _meta.progressToken so that
+// handlers can call ctx.Progress() without threading the token manually.
+func NewToolContextWithProgress(ctx context.Context, progressToken any) ToolContext {
+	return ToolContext{
+		BaseContext:   BaseContext{ctx, sessionFromContext(ctx)},
+		progressToken: progressToken,
+	}
 }
 
 // NewResourceContext constructs a ResourceContext from a standard context.Context.
@@ -197,7 +208,7 @@ func (bc BaseContext) EmitSSERetry(retryAfter time.Duration) error {
 // DetachFromClient returns a ToolContext that preserves session state but is
 // NOT cancelled when the client disconnects.
 func (tc ToolContext) DetachFromClient() ToolContext {
-	return ToolContext{tc.BaseContext.DetachFromClient()}
+	return ToolContext{BaseContext: tc.BaseContext.DetachFromClient(), progressToken: tc.progressToken}
 }
 
 // DetachFromClient returns a ResourceContext that preserves session state but is
@@ -214,8 +225,22 @@ func (pc PromptContext) DetachFromClient() PromptContext {
 
 // --- ToolContext-only methods ---
 
+// Progress sends a notifications/progress using the stored progress token
+// from _meta.progressToken. No-op if the client didn't request progress.
+// This is the preferred method in TypedTool handlers where the token is
+// automatically captured from the request.
+func (tc ToolContext) Progress(progress, total float64, message string) {
+	tc.EmitProgress(tc.progressToken, progress, total, message)
+}
+
+// ProgressToken returns the stored progress token, or nil if not set.
+func (tc ToolContext) ProgressToken() any {
+	return tc.progressToken
+}
+
 // EmitProgress sends a notifications/progress to the connected client.
-// No-op if token is nil.
+// No-op if token is nil. Prefer ctx.Progress() when the token is stored
+// in the context (TypedTool handlers, or dispatch with NewToolContextWithProgress).
 func (tc ToolContext) EmitProgress(token any, progress, total float64, message string) {
 	if token == nil {
 		return
