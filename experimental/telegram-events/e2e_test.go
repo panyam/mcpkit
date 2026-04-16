@@ -135,8 +135,9 @@ func TestE2EWebhookDelivery(t *testing.T) {
 
 	callbackSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		sig := r.Header.Get("X-Signature-256")
-		assert.True(t, VerifySignature(body, "wh-secret", sig), "HMAC should be valid")
+		sig := r.Header.Get("X-MCP-Signature")
+		ts := r.Header.Get("X-MCP-Timestamp")
+		assert.True(t, VerifySignature(body, "wh-secret", ts, sig), "HMAC should be valid")
 
 		var event TelegramEvent
 		json.Unmarshal(body, &event)

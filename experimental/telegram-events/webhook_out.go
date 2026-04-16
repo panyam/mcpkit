@@ -81,7 +81,8 @@ func (r *WebhookRegistry) Deliver(event TelegramEvent) {
 }
 
 func (r *WebhookRegistry) deliver(target WebhookTarget, body []byte) {
-	sig := sign(body, target.Secret)
+	ts := fmt.Sprintf("%d", time.Now().Unix())
+	sig := sign(body, ts, target.Secret)
 
 	req, err := http.NewRequest("POST", target.URL, bytes.NewReader(body))
 	if err != nil {
@@ -89,7 +90,8 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, body []byte) {
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Signature-256", sig)
+	req.Header.Set("X-MCP-Signature", sig)
+	req.Header.Set("X-MCP-Timestamp", ts)
 
 	resp, err := r.client.Do(req)
 	if err != nil {
@@ -103,15 +105,19 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, body []byte) {
 	}
 }
 
-// sign computes HMAC-SHA256 of body using secret and returns "sha256=<hex>".
-func sign(body []byte, secret string) string {
+// sign computes HMAC-SHA256(secret, timestamp + "." + body) per Peter's spec
+// and returns "sha256=<hex>".
+func sign(body []byte, timestamp, secret string) string {
 	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(timestamp))
+	mac.Write([]byte("."))
 	mac.Write(body)
 	return fmt.Sprintf("sha256=%s", hex.EncodeToString(mac.Sum(nil)))
 }
 
-// VerifySignature checks that a webhook signature matches the expected HMAC.
-func VerifySignature(body []byte, secret, signature string) bool {
-	expected := sign(body, secret)
+// VerifySignature checks that a webhook signature matches the expected HMAC
+// using the timestamp + "." + body format.
+func VerifySignature(body []byte, secret, timestamp, signature string) bool {
+	expected := sign(body, timestamp, secret)
 	return hmac.Equal([]byte(expected), []byte(signature))
 }
