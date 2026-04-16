@@ -6,10 +6,12 @@ package server
 // or custom per-method authorization.
 
 import (
-	core "github.com/panyam/mcpkit/core"
 	"context"
+	"encoding/json"
 	"log"
 	"time"
+
+	core "github.com/panyam/mcpkit/core"
 )
 
 // Middleware intercepts a JSON-RPC request. Call next to continue the chain,
@@ -47,6 +49,49 @@ type MiddlewareFunc func(context.Context, *core.Request) *core.Response
 func WithMiddleware(mw ...Middleware) Option {
 	return func(o *serverOptions) {
 		o.middleware = append(o.middleware, mw...)
+	}
+}
+
+// --- Sending Middleware (outgoing server-to-client messages) ---
+
+// NotifyInterceptor wraps outgoing server-to-client notifications before they
+// reach the transport. Interceptors see the method and params of every
+// notification (logging, progress, resource updates, custom). Call next to
+// continue the chain, or return without calling next to suppress.
+//
+// Example — log all outgoing notifications:
+//
+//	server.WithNotifyInterceptor(func(method string, params any, next core.NotifyFunc) {
+//	    log.Printf("→ notify %s", method)
+//	    next(method, params)
+//	})
+type NotifyInterceptor func(method string, params any, next core.NotifyFunc)
+
+// RequestInterceptor wraps outgoing server-to-client requests (sampling,
+// elicitation) before they reach the transport. Call next to continue the
+// chain, or return an error to reject the request.
+//
+// Example — log sampling requests:
+//
+//	server.WithRequestInterceptor(func(ctx context.Context, method string, params any, next core.RequestFunc) (json.RawMessage, error) {
+//	    log.Printf("→ request %s", method)
+//	    return next(ctx, method, params)
+//	})
+type RequestInterceptor func(ctx context.Context, method string, params any, next core.RequestFunc) (json.RawMessage, error)
+
+// WithNotifyInterceptor registers interceptors for outgoing notifications.
+// Interceptors execute in registration order (first = outermost).
+func WithNotifyInterceptor(fn ...NotifyInterceptor) Option {
+	return func(o *serverOptions) {
+		o.notifyInterceptors = append(o.notifyInterceptors, fn...)
+	}
+}
+
+// WithRequestInterceptor registers interceptors for outgoing server-to-client
+// requests (sampling, elicitation). Interceptors execute in registration order.
+func WithRequestInterceptor(fn ...RequestInterceptor) Option {
+	return func(o *serverOptions) {
+		o.requestInterceptors = append(o.requestInterceptors, fn...)
 	}
 }
 
