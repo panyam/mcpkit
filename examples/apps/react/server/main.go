@@ -55,19 +55,15 @@ func main() {
 	)
 
 	// get-time tool — matches upstream basic-server-vanillajs.
-	ui.RegisterAppTool(srv, ui.AppToolConfig{
+	ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[struct{}, core.ToolResult]{
 		Name:        "get-time",
 		Description: "Returns the current server time as an ISO 8601 string.",
-		InputSchema: map[string]any{
-			"type":       "object",
-			"properties": map[string]any{},
-		},
-		ResourceURI: "ui://get-time/react-app",
-		Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
-		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		Handler: func(ctx core.ToolContext, _ struct{}) (core.ToolResult, error) {
 			t := time.Now().UTC().Format(time.RFC3339)
 			return core.StructuredResult(t, map[string]string{"time": t}), nil
 		},
+		ResourceURI: "ui://get-time/react-app",
+		Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
 		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{Contents: []core.ResourceReadContent{{
 				URI: req.URI, MimeType: core.AppMIMEType, Text: appHTML,

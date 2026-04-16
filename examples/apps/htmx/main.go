@@ -66,37 +66,28 @@ func main() {
 	)
 
 	// Register tools.
-	ui.RegisterAppTool(srv, ui.AppToolConfig{
+	type addTaskInput struct {
+		Title    string `json:"title"    jsonschema:"description=Task title,required"`
+		Priority string `json:"priority,omitempty" jsonschema:"enum=low,enum=medium,enum=high,default=medium"`
+	}
+	ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[addTaskInput, core.ToolResult]{
 		Name:        "add_task",
 		Description: "Add a task to the board",
-		InputSchema: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"title":    map[string]any{"type": "string", "description": "Task title"},
-				"priority": map[string]any{"type": "string", "enum": []string{"low", "medium", "high"}, "default": "medium"},
-			},
-			"required": []string{"title"},
-		},
-		ResourceURI: "ui://tasks/board",
-		Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
-		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			var args struct {
-				Title    string `json:"title"`
-				Priority string `json:"priority"`
-			}
-			req.Bind(&args)
-			if args.Priority == "" {
-				args.Priority = "medium"
+		Handler: func(ctx core.ToolContext, input addTaskInput) (core.ToolResult, error) {
+			if input.Priority == "" {
+				input.Priority = "medium"
 			}
 			tasksMu.Lock()
-			tasks = append(tasks, Task{Title: args.Title, Priority: args.Priority})
+			tasks = append(tasks, Task{Title: input.Title, Priority: input.Priority})
 			count := len(tasks)
 			tasksMu.Unlock()
 			return core.StructuredResult(
-				"Added task: "+args.Title,
-				map[string]any{"title": args.Title, "priority": args.Priority, "total": count},
+				"Added task: "+input.Title,
+				map[string]any{"title": input.Title, "priority": input.Priority, "total": count},
 			), nil
 		},
+		ResourceURI: "ui://tasks/board",
+		Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
 		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 			return core.ResourceResult{Contents: []core.ResourceReadContent{{
 				URI: req.URI, MimeType: core.AppMIMEType, Text: pageHTML,
