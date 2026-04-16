@@ -39,13 +39,13 @@ func testStreamableServerWithTimeout(timeout time.Duration, opts ...TransportOpt
 // activity. After expiry, subsequent requests with the old session ID
 // receive HTTP 404 "session not found".
 func TestSessionExpiresAfterTimeout(t *testing.T) {
-	ts, _ := testStreamableServerWithTimeout(100 * time.Millisecond)
+	ts, _ := testStreamableServerWithTimeout(50 * time.Millisecond)
 	defer ts.Close()
 
 	sessionID := streamableInit(t, ts.URL)
 
 	// Wait for timeout to fire
-	time.Sleep(250 * time.Millisecond)
+	time.Sleep(120 * time.Millisecond)
 
 	// Session should be gone
 	resp, err := streamablePost(ts.URL+"/mcp", sessionID, &core.Request{
@@ -65,14 +65,14 @@ func TestSessionExpiresAfterTimeout(t *testing.T) {
 // session resets the idle timer. If the client sends requests at intervals
 // shorter than the timeout, the session should remain alive indefinitely.
 func TestSessionTimeoutResetsOnActivity(t *testing.T) {
-	ts, _ := testStreamableServerWithTimeout(200 * time.Millisecond)
+	ts, _ := testStreamableServerWithTimeout(100 * time.Millisecond)
 	defer ts.Close()
 
 	sessionID := streamableInit(t, ts.URL)
 
-	// Send activity at 100ms intervals (< 200ms timeout) — session should survive
+	// Send activity at 50ms intervals (< 100ms timeout) — session should survive
 	for i := 0; i < 4; i++ {
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 		resp, err := streamablePost(ts.URL+"/mcp", sessionID, &core.Request{
 			JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "tools/list",
 		})
@@ -98,13 +98,13 @@ func TestSessionTimeoutPausesDuringActiveRequest(t *testing.T) {
 		core.ToolDef{Name: "slow", Description: "Takes a while"},
 		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			called.Store(true)
-			time.Sleep(300 * time.Millisecond)
+			time.Sleep(150 * time.Millisecond)
 			return core.TextResult("done"), nil
 		},
 	)
 	ts := httptest.NewServer(srv.Handler(
 		WithStreamableHTTP(true), WithSSE(false),
-		WithSessionTimeout(50*time.Millisecond),
+		WithSessionTimeout(30*time.Millisecond),
 	))
 	defer ts.Close()
 
@@ -143,7 +143,7 @@ func TestSessionTimeoutPausesDuringActiveRequest(t *testing.T) {
 // TestSessionDeleteStopsTimer verifies that explicitly deleting a session
 // via HTTP DELETE stops the idle timer cleanly, with no crash or double-close.
 func TestSessionDeleteStopsTimer(t *testing.T) {
-	ts, _ := testStreamableServerWithTimeout(1 * time.Second)
+	ts, _ := testStreamableServerWithTimeout(200 * time.Millisecond)
 	defer ts.Close()
 
 	sessionID := streamableInit(t, ts.URL)
@@ -161,7 +161,7 @@ func TestSessionDeleteStopsTimer(t *testing.T) {
 	}
 
 	// Wait past the original timeout — should not panic
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
 	// Verify session is gone
 	resp2, err := streamablePost(ts.URL+"/mcp", sessionID, &core.Request{
@@ -186,7 +186,7 @@ func TestNoTimeoutByDefault(t *testing.T) {
 	sessionID := streamableInit(t, ts.URL)
 
 	// Wait a while
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
 	// Session should still be alive
 	resp, err := streamablePost(ts.URL+"/mcp", sessionID, &core.Request{

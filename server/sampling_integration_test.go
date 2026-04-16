@@ -77,10 +77,10 @@ func TestSampleTimeout(t *testing.T) {
 	ts := httptest.NewServer(handler)
 	t.Cleanup(ts.Close)
 
-	// Client with a handler that takes too long
+	// Client with a handler that takes longer than the tool's 200ms timeout.
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test-client", Version: "1.0"},
 		client.WithSamplingHandler(func(ctx context.Context, req core.CreateMessageRequest) (core.CreateMessageResult, error) {
-			time.Sleep(5 * time.Second)
+			time.Sleep(500 * time.Millisecond)
 			return core.CreateMessageResult{Model: "slow", Role: "assistant", Content: core.Content{Type: "text", Text: "too late"}}, nil
 		}),
 	)

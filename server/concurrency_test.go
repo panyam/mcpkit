@@ -73,11 +73,11 @@ func TestDuplicateRequestIDRejected(t *testing.T) {
 	srv.RegisterTool(
 		core.ToolDef{
 			Name:        "slow",
-			Description: "Takes 500ms to complete",
+			Description: "Takes 100ms to complete",
 			InputSchema: map[string]any{"type": "object"},
 		},
 		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond)
 			return core.TextResult("done"), nil
 		},
 	)

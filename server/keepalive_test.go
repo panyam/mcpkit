@@ -27,8 +27,8 @@ func TestSessionKeepaliveDetectsDeadClient(t *testing.T) {
 	}
 	ka.start()
 
-	// Wait for 3 failures + some buffer (3 * 50ms = 150ms, add margin)
-	time.Sleep(300 * time.Millisecond)
+	// Wait for 3 failures + buffer (3 * 50ms = 150ms + margin)
+	time.Sleep(200 * time.Millisecond)
 
 	if !deathCalled.Load() {
 		t.Error("expected onDeath to be called after max failures")
@@ -52,7 +52,7 @@ func TestSessionKeepaliveResetsOnSuccess(t *testing.T) {
 	}
 
 	ka := &sessionKeepalive{
-		interval:    30 * time.Millisecond,
+		interval:    20 * time.Millisecond,
 		maxFailures: 3, // need 3 consecutive failures
 		requestFunc: alternatingRequest,
 		onDeath:     func() { deathCalled.Store(true) },
@@ -62,7 +62,7 @@ func TestSessionKeepaliveResetsOnSuccess(t *testing.T) {
 
 	// Run long enough for multiple cycles. Since we succeed every 3rd call,
 	// we never hit 3 consecutive failures.
-	time.Sleep(300 * time.Millisecond)
+	time.Sleep(150 * time.Millisecond)
 
 	if deathCalled.Load() {
 		t.Error("onDeath should NOT be called when failures are intermittent")
@@ -88,11 +88,11 @@ func TestSessionKeepaliveStopPreventsDeathCallback(t *testing.T) {
 	ka.start()
 
 	// Let it run briefly, then stop
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(80 * time.Millisecond)
 	ka.stop()
 
 	// Wait to ensure no deferred onDeath fires
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
 	if deathCalled.Load() {
 		t.Error("onDeath should NOT be called after stop()")

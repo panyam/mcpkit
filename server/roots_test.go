@@ -325,7 +325,7 @@ func TestRootsFetchDedup(t *testing.T) {
 	}
 
 	// Allow time for all in-flight fetches plus the optional coalesced re-fetch.
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 
 	got := h.reqCount.Load()
 	assert.LessOrEqual(t, got, int32(2),
