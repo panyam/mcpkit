@@ -182,16 +182,18 @@ func TestWebhookHMACSignature(t *testing.T) {
 	secret := "test-secret-key"
 	var receivedBody []byte
 	var receivedSig string
+	var receivedTS string
 
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		receivedSig = r.Header.Get("X-Signature-256")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedSig = r.Header.Get("X-MCP-Signature")
+		receivedTS = r.Header.Get("X-MCP-Timestamp")
 		receivedBody, _ = io.ReadAll(r.Body)
 		w.WriteHeader(http.StatusOK)
 	}))
-	defer ts.Close()
+	defer srv.Close()
 
 	webhooks := NewWebhookRegistry()
-	webhooks.Register(ts.URL, secret)
+	webhooks.Register(srv.URL, secret)
 
 	event := TelegramEvent{
 		EventID:   "evt_1",
@@ -205,9 +207,13 @@ func TestWebhookHMACSignature(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	require.NotEmpty(t, receivedBody, "webhook should have received a POST")
-	require.NotEmpty(t, receivedSig, "webhook should include X-Signature-256 header")
+	require.NotEmpty(t, receivedSig, "webhook should include X-MCP-Signature header")
+	require.NotEmpty(t, receivedTS, "webhook should include X-MCP-Timestamp header")
 
+	// Verify: HMAC-SHA256(secret, timestamp + "." + body)
 	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(receivedTS))
+	mac.Write([]byte("."))
 	mac.Write(receivedBody)
 	expectedSig := fmt.Sprintf("sha256=%s", hex.EncodeToString(mac.Sum(nil)))
 	assert.Equal(t, expectedSig, receivedSig, "HMAC signature should match")
@@ -252,13 +258,17 @@ func TestMessageStoreRingBuffer(t *testing.T) {
 // TestVerifySignature verifies the HMAC verification helper.
 func TestVerifySignature(t *testing.T) {
 	secret := "my-secret"
+	ts := "1700000000"
 	body := []byte(`{"test":"data"}`)
 
 	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(ts))
+	mac.Write([]byte("."))
 	mac.Write(body)
 	sig := fmt.Sprintf("sha256=%s", hex.EncodeToString(mac.Sum(nil)))
 
-	assert.True(t, VerifySignature(body, secret, sig), "valid signature should verify")
-	assert.False(t, VerifySignature(body, "wrong-secret", sig), "wrong secret should fail")
-	assert.False(t, VerifySignature([]byte("tampered"), secret, sig), "tampered body should fail")
+	assert.True(t, VerifySignature(body, secret, ts, sig), "valid signature should verify")
+	assert.False(t, VerifySignature(body, "wrong-secret", ts, sig), "wrong secret should fail")
+	assert.False(t, VerifySignature([]byte("tampered"), secret, ts, sig), "tampered body should fail")
+	assert.False(t, VerifySignature(body, secret, "wrong-ts", sig), "wrong timestamp should fail")
 }

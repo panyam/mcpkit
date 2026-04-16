@@ -73,6 +73,9 @@ test-protogen: ## Run protogen sub-module tests + e2e example
 test-e2e: ## Run all E2E tests (auth, apps — no Docker)
 	cd tests/e2e && go test ./... -count=1 -timeout 60s
 
+test-experimental: ## Run experimental POC tests (telegram-events)
+	cd experimental/telegram-events && go test ./... -count=1 -timeout 60s
+
 test-apps-playwright: ## Run ext-apps Playwright tests against testserver (needs Node.js + Playwright)
 	bash scripts/apps-playwright-test.sh
 
@@ -99,15 +102,16 @@ testall: ## Run ALL tests (starts Keycloak if needed) + generate HTML report
 	@echo "Started: $$(date)" | tee -a $(REPORT_DIR)/run.log
 	@PASS=0; FAIL=0; STAGES=""; \
 	echo "" | tee -a $(REPORT_DIR)/run.log; \
-	$(call run_stage,1,9,unit+coverage,cover-html) \
-	$(call run_stage,2,9,race,test-race) \
-	$(call run_stage,3,9,auth,test-auth) \
-	$(call run_stage,4,9,ui,test-ui) \
-	$(call run_stage,5,9,protogen,test-protogen) \
-	$(call run_stage,6,9,e2e,test-e2e) \
-	$(call run_stage,7,9,conformance,testconf) \
-	$(call run_stage,8,9,auth-conformance,testconfauth) \
-	$(call run_stage,9,9,keycloak,testkcl-auto) \
+	$(call run_stage,1,10,unit+coverage,cover-html) \
+	$(call run_stage,2,10,race,test-race) \
+	$(call run_stage,3,10,auth,test-auth) \
+	$(call run_stage,4,10,ui,test-ui) \
+	$(call run_stage,5,10,protogen,test-protogen) \
+	$(call run_stage,6,10,e2e,test-e2e) \
+	$(call run_stage,7,10,experimental,test-experimental) \
+	$(call run_stage,8,10,conformance,testconf) \
+	$(call run_stage,9,10,auth-conformance,testconfauth) \
+	$(call run_stage,10,10,keycloak,testkcl-auto) \
 	echo "" | tee -a $(REPORT_DIR)/run.log; \
 	echo "=== Results: $$PASS passed, $$FAIL failed ===" | tee -a $(REPORT_DIR)/run.log; \
 	echo "Finished: $$(date)" | tee -a $(REPORT_DIR)/run.log; \
@@ -345,5 +349,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-protogen test-e2e test-apps-playwright testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
+.PHONY: build test test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-protogen test-e2e test-experimental test-apps-playwright testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
 .DEFAULT_GOAL := help
