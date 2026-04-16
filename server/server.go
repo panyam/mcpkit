@@ -44,6 +44,13 @@ type serverOptions struct {
 	rootsFetchTimeout    time.Duration     // timeout for server-to-client roots/list requests (0 = default 30s)
 	skipSchemaValidation bool              // WithSchemaValidation(false) disables call-time validation
 	publicMethods        map[string]bool   // methods that bypass auth (pre-auth discovery)
+	customHandlers       map[string]MethodHandler // custom JSON-RPC method handlers
+	httpHandlers         []httpHandlerEntry       // custom HTTP endpoint handlers
+}
+
+type httpHandlerEntry struct {
+	pattern string
+	handler http.Handler
 }
 
 // ErrorHandler receives out-of-band errors that aren't returned to a
@@ -238,6 +245,7 @@ func NewServer(info core.ServerInfo, opts ...Option) *Server {
 	// Propagate schema validation opt-out to the dispatcher so per-session
 	// clones inherit it via newSession().
 	s.dispatcher.skipSchemaValidation = s.options.skipSchemaValidation
+	s.dispatcher.customHandlers = s.options.customHandlers
 	// Wire registry change notifications to Server.Broadcast so that
 	// dynamic adds/removes automatically notify all connected sessions.
 	s.dispatcher.Reg.OnChange = func(method string) {
@@ -258,6 +266,18 @@ func NewServer(info core.ServerInfo, opts ...Option) *Server {
 		s.dispatcher.subManager = s.subRegistry
 	}
 	return s
+}
+
+// HandleMethod registers a handler for a custom JSON-RPC method.
+// Panics if the method is a built-in MCP spec method.
+func (s *Server) HandleMethod(method string, h MethodHandler) {
+	if builtinMethods[method] {
+		panic("mcpkit: cannot override built-in MCP method: " + method)
+	}
+	if s.dispatcher.customHandlers == nil {
+		s.dispatcher.customHandlers = make(map[string]MethodHandler)
+	}
+	s.dispatcher.customHandlers[method] = h
 }
 
 // RegisterTool adds a tool to the server.
@@ -577,6 +597,16 @@ func (s *Server) Handler(opts ...TransportOption) http.Handler {
 			stT := newStreamableTransport(s, cfg)
 			s.registerTransportSessions(stT.closeSession, stT.closeAllSessions, stT.broadcast)
 			mux.HandleFunc(prefix, stT.handleRoot)
+		}
+		handler = mux
+	}
+
+	// Mount custom HTTP handlers if configured.
+	if len(s.options.httpHandlers) > 0 {
+		mux := http.NewServeMux()
+		mux.Handle("/", handler) // transport handler as default
+		for _, entry := range s.options.httpHandlers {
+			mux.Handle(entry.pattern, entry.handler)
 		}
 		handler = mux
 	}

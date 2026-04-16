@@ -80,6 +80,10 @@ type Dispatcher struct {
 	pending     pendingMap
 	requestIDs  gohttp.IDGen // generates unique IDs for server-to-client requests
 
+	// customHandlers holds user-registered handlers for custom JSON-RPC methods.
+	// Shared across sessions (read-only after startup).
+	customHandlers map[string]MethodHandler
+
 	// eventIDs generates unique SSE event IDs for this session's streams.
 	// Used by transports to assign id: fields to SSE events, enabling
 	// client reconnection via Last-Event-ID.
@@ -203,6 +207,7 @@ func (d *Dispatcher) newSession() *Dispatcher {
 		eventIDs:             newEventIDGen(),
 		requestIDs:           newEventIDGen(),
 		skipSchemaValidation: d.skipSchemaValidation,
+		customHandlers:       d.customHandlers,
 	}
 }
 
@@ -315,6 +320,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) *core.Resp
 		case "completion/complete":
 			return d.handleCompletionComplete(ctx, id, req.Params)
 		default:
+			if h, ok := d.customHandlers[req.Method]; ok {
+				return h(ctx, id, req.Params)
+			}
 			return core.NewErrorResponse(id, core.ErrCodeMethodNotFound, "method not found: "+req.Method)
 		}
 	}
