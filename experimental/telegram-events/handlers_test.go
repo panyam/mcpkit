@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -362,6 +363,77 @@ func TestWebhookTTLExpiry(t *testing.T) {
 	count := len(webhooks.targets)
 	webhooks.mu.RUnlock()
 	assert.Equal(t, 1, count, "expired entry should be pruned on next Register")
+}
+
+// TestWebhookRetryOnServerError verifies that webhook delivery retries on 5xx
+// errors with exponential backoff, and succeeds when the server recovers.
+func TestWebhookRetryOnServerError(t *testing.T) {
+	var mu sync.Mutex
+	var attempts int
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		attempts++
+		n := attempts
+		mu.Unlock()
+
+		if n <= 2 {
+			w.WriteHeader(http.StatusInternalServerError) // fail first 2
+			return
+		}
+		w.WriteHeader(http.StatusOK) // succeed on 3rd
+	}))
+	defer srv.Close()
+
+	webhooks := NewWebhookRegistry()
+	webhooks.Register("retry-test", srv.URL, "secret")
+
+	event := TelegramEvent{
+		EventID: "evt_retry", Name: "telegram.message",
+		Timestamp: "2024-01-01T00:00:00Z",
+		Data:      TelegramEventData{ChatID: "1", User: "test", Text: "retry me"},
+		Cursor:    "1",
+	}
+	webhooks.Deliver(event)
+
+	// Wait for retries (500ms + 1s + delivery time)
+	time.Sleep(3 * time.Second)
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, 3, attempts, "should have retried: 2 failures + 1 success")
+}
+
+// TestWebhookNoRetryOn4xx verifies that 4xx errors are not retried
+// (client errors are not transient).
+func TestWebhookNoRetryOn4xx(t *testing.T) {
+	var mu sync.Mutex
+	var attempts int
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		attempts++
+		mu.Unlock()
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer srv.Close()
+
+	webhooks := NewWebhookRegistry()
+	webhooks.Register("no-retry", srv.URL, "secret")
+
+	event := TelegramEvent{
+		EventID: "evt_4xx", Name: "telegram.message",
+		Timestamp: "2024-01-01T00:00:00Z",
+		Data:      TelegramEventData{ChatID: "1", User: "test", Text: "no retry"},
+		Cursor:    "1",
+	}
+	webhooks.Deliver(event)
+
+	time.Sleep(500 * time.Millisecond)
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, 1, attempts, "4xx should not be retried")
 }
 
 // TestVerifySignature verifies the HMAC verification helper.
