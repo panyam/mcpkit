@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	server "github.com/panyam/mcpkit/server"
 	"github.com/panyam/oneauth/testutil"
 )
 
@@ -56,6 +57,17 @@ func NewTestEnv(t *testing.T) *TestEnv {
 	// include the MCP server URL as the "aud" claim.
 	env.AS.APIAuth.JWTAudience = env.MCPServerURL
 
+	return env
+}
+
+// NewTestEnvWithPublicMethods creates a test environment like NewTestEnv but
+// with WithPublicMethods configured on the MCP server.
+func NewTestEnvWithPublicMethods(t *testing.T, methods ...string) *TestEnv {
+	t.Helper()
+	env := &TestEnv{}
+	env.AS = testutil.NewTestAuthServer(t, testutil.WithScopes(testScopes))
+	env.buildMCPServerWithOpts(t, server.WithPublicMethods(methods...))
+	env.AS.APIAuth.JWTAudience = env.MCPServerURL
 	return env
 }
 

@@ -24,6 +24,10 @@ import (
 // the MCP server URL is needed as the JWT audience, but isn't known until
 // httptest.NewServer starts.
 func (e *TestEnv) buildMCPServer(t *testing.T) {
+	e.buildMCPServerWithOpts(t)
+}
+
+func (e *TestEnv) buildMCPServerWithOpts(t *testing.T, extraOpts ...server.Option) {
 	t.Helper()
 
 	// Delegating handler — lets us wire the real mux after we know the server URL
@@ -50,10 +54,13 @@ func (e *TestEnv) buildMCPServer(t *testing.T) {
 	t.Cleanup(validator.Stop)
 
 	// MCP server with auth
-	srv := server.NewServer(
-		core.ServerInfo{Name: "mcp-e2e-test", Version: "0.1.0"},
+	opts := append([]server.Option{
 		server.WithAuth(validator),
 		server.WithExtension(auth.AuthExtension{}),
+	}, extraOpts...)
+	srv := server.NewServer(
+		core.ServerInfo{Name: "mcp-e2e-test", Version: "0.1.0"},
+		opts...,
 	)
 
 	// Public tool — no scope required, echoes the input and reports claims
