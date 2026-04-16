@@ -14,7 +14,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -23,6 +22,17 @@ import (
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/server"
 )
+
+// Input types for typed tool registration.
+
+type echoInput struct {
+	Message string `json:"message" jsonschema:"description=The message to echo"`
+}
+
+type addInput struct {
+	A float64 `json:"a" jsonschema:"description=First number"`
+	B float64 `json:"b" jsonschema:"description=Second number"`
+}
 
 func listenAddr() string {
 	if port := os.Getenv("PORT"); port != "" {
@@ -52,70 +62,25 @@ func main() {
 	)
 
 	// echo: returns the input message as-is
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "echo",
-			Description: "Echoes the input message",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"message": map[string]any{"type": "string", "description": "The message to echo"},
-				},
-				"required": []string{"message"},
-			},
+	srv.Register(server.TextTool[echoInput]("echo", "Echoes the input message",
+		func(ctx core.ToolContext, input echoInput) (string, error) {
+			return "echo: " + input.Message, nil
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			var args struct {
-				Message string `json:"message"`
-			}
-			if err := req.Bind(&args); err != nil {
-				return core.ErrorResult(err.Error()), nil
-			}
-			return core.TextResult("echo: " + args.Message), nil
-		},
-	)
+	))
 
 	// add: adds two numbers
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "add",
-			Description: "Adds two numbers",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"a": map[string]any{"type": "number", "description": "First number"},
-					"b": map[string]any{"type": "number", "description": "Second number"},
-				},
-				"required": []string{"a", "b"},
-			},
+	srv.Register(server.TextTool[addInput]("add", "Adds two numbers",
+		func(ctx core.ToolContext, input addInput) (string, error) {
+			return fmt.Sprintf("%g", input.A+input.B), nil
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			var args struct {
-				A json.Number `json:"a"`
-				B json.Number `json:"b"`
-			}
-			if err := req.Bind(&args); err != nil {
-				return core.ErrorResult(err.Error()), nil
-			}
-			a, _ := args.A.Float64()
-			b, _ := args.B.Float64()
-			return core.TextResult(fmt.Sprintf("%g", a+b)), nil
-		},
-	)
+	))
 
 	// fail: always returns an error (for testing isError semantics)
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "fail",
-			Description: "Always fails with an error",
-			InputSchema: map[string]any{
-				"type": "object",
-			},
+	srv.Register(server.TextTool[struct{}]("fail", "Always fails with an error",
+		func(ctx core.ToolContext, _ struct{}) (string, error) {
+			return "", fmt.Errorf("intentional failure for testing")
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			return core.ToolResult{}, fmt.Errorf("intentional failure for testing")
-		},
-	)
+	))
 
 	// Register conformance suite tools, resources, and prompts
 	registerConformanceTools(srv)
