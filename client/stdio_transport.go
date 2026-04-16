@@ -61,15 +61,30 @@ func NewStdioTransport(r io.Reader, w io.Writer) *StdioTransport {
 	return &StdioTransport{r: r, w: w}
 }
 
-// WithStdioTransport configures a Client to use stdio transport over the given
-// reader/writer pair. Unlike WithTransport(NewStdioTransport(...)), this option
-// wires the client's sampling/elicitation handlers and notification callback into
-// the stdio transport automatically.
-func WithStdioTransport(r io.Reader, w io.Writer) ClientOption {
+// WithIOTransport configures a Client to use Content-Length framed JSON-RPC
+// over arbitrary reader/writer streams. This is the generic IO transport —
+// use it for Unix sockets, named pipes, SSH tunnels, test pipe pairs, or
+// any other stream-based transport.
+//
+// Example (pipe pair for testing):
+//
+//	sr, cw := io.Pipe()
+//	cr, sw := io.Pipe()
+//	go srv.RunIO(ctx, sr, sw)
+//	c := client.NewClient("", info, client.WithIOTransport(cr, cw))
+func WithIOTransport(r io.Reader, w io.Writer) ClientOption {
 	return func(c *Client) {
 		c.stdioReader = r
 		c.stdioWriter = w
 	}
+}
+
+// WithStdioTransport configures a Client to use stdio transport. This is
+// equivalent to WithIOTransport with the given reader/writer pair — kept
+// for backward compatibility and naming clarity when used with subprocess
+// servers (where r is stdout and w is stdin of the child process).
+func WithStdioTransport(r io.Reader, w io.Writer) ClientOption {
+	return WithIOTransport(r, w)
 }
 
 // Connect starts the background read loop.
