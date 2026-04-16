@@ -121,29 +121,57 @@ func (r *WebhookRegistry) Deliver(event TelegramEvent) {
 	}
 }
 
+const (
+	maxRetries     = 3
+	initialBackoff = 500 * time.Millisecond
+	maxBackoff     = 5 * time.Second
+)
+
+// deliver attempts to POST the event with exponential backoff on failure.
+// Spec: SHOULD retry with exponential backoff.
 func (r *WebhookRegistry) deliver(target WebhookTarget, body []byte) {
-	ts := fmt.Sprintf("%d", time.Now().Unix())
-	sig := sign(body, ts, target.Secret)
+	backoff := initialBackoff
 
-	req, err := http.NewRequest("POST", target.URL, bytes.NewReader(body))
-	if err != nil {
-		log.Printf("[webhook] failed to create request for %s: %v", target.URL, err)
-		return
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-MCP-Signature", sig)
-	req.Header.Set("X-MCP-Timestamp", ts)
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			log.Printf("[webhook] retry %d/%d for %s (backoff %v)", attempt, maxRetries, target.URL, backoff)
+			time.Sleep(backoff)
+			backoff *= 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+		}
 
-	resp, err := r.client.Do(req)
-	if err != nil {
-		log.Printf("[webhook] delivery to %s failed: %v", target.URL, err)
-		return
-	}
-	resp.Body.Close()
+		ts := fmt.Sprintf("%d", time.Now().Unix())
+		sig := sign(body, ts, target.Secret)
 
-	if resp.StatusCode >= 300 {
+		req, err := http.NewRequest("POST", target.URL, bytes.NewReader(body))
+		if err != nil {
+			log.Printf("[webhook] failed to create request for %s: %v", target.URL, err)
+			return // not retryable
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-MCP-Signature", sig)
+		req.Header.Set("X-MCP-Timestamp", ts)
+
+		resp, err := r.client.Do(req)
+		if err != nil {
+			log.Printf("[webhook] delivery to %s failed: %v", target.URL, err)
+			continue // retry
+		}
+		resp.Body.Close()
+
+		if resp.StatusCode < 300 {
+			return // success
+		}
+
 		log.Printf("[webhook] delivery to %s returned %d", target.URL, resp.StatusCode)
+		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+			return // 4xx = client error, not retryable
+		}
+		// 5xx = server error, retry
 	}
+	log.Printf("[webhook] delivery to %s failed after %d retries, giving up", target.URL, maxRetries)
 }
 
 // ValidateWebhookURL performs basic SSRF validation on a webhook callback URL.
