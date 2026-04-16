@@ -442,11 +442,13 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, pa
 		Arguments: envelope.Arguments,
 		RequestID: id,
 	}
+	var progressToken any
 	if envelope.Meta != nil {
 		req.ProgressToken = envelope.Meta.ProgressToken
+		progressToken = envelope.Meta.ProgressToken
 	}
 
-	result, err := entry.handler(core.NewToolContext(ctx), req)
+	result, err := entry.handler(core.NewToolContextWithProgress(ctx, progressToken), req)
 	if err != nil {
 		result = core.ErrorResult(fmt.Sprintf("tool %q: %v", envelope.Name, err))
 	}

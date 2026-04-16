@@ -98,25 +98,17 @@ func registerConformanceTools(srv *server.Server) {
 	// The conformance suite calls this tool with _meta.progressToken and verifies
 	// that notifications/progress events arrive with monotonically increasing progress.
 	// Sends progress at 0/100, 50/100, 100/100 with 50ms delays between them.
-	//
-	// Stays on RegisterTool because TypedTool handlers don't receive ToolRequest,
-	// which is needed for req.ProgressToken. Also serves as a backward-compat
-	// example of the explicit registration pattern.
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "test_tool_with_progress",
-			Description: "Emits progress notifications during execution for conformance testing",
-			InputSchema: map[string]any{"type": "object"},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			core.EmitProgress(ctx, req.ProgressToken, 0, 100, "Starting")
+	// Uses ctx.Progress() which reads the stored token from the dispatch layer.
+	srv.Register(core.TextTool[emptyInput]("test_tool_with_progress", "Emits progress notifications during execution for conformance testing",
+		func(ctx core.ToolContext, _ emptyInput) (string, error) {
+			ctx.Progress(0, 100, "Starting")
 			time.Sleep(50 * time.Millisecond)
-			core.EmitProgress(ctx, req.ProgressToken, 50, 100, "Processing")
+			ctx.Progress(50, 100, "Processing")
 			time.Sleep(50 * time.Millisecond)
-			core.EmitProgress(ctx, req.ProgressToken, 100, 100, "Complete")
-			return core.TextResult("Progress complete"), nil
+			ctx.Progress(100, 100, "Complete")
+			return "Progress complete", nil
 		},
-	)
+	))
 
 	// test_embedded_resource: returns a resource content item
 	srv.Register(core.TypedTool[emptyInput, core.ToolResult]("test_embedded_resource", "Returns embedded resource content for conformance testing",
