@@ -43,6 +43,7 @@ type serverOptions struct {
 	onRootsChanged       func([]core.Root) // optional callback when client sends roots/list_changed
 	rootsFetchTimeout    time.Duration     // timeout for server-to-client roots/list requests (0 = default 30s)
 	skipSchemaValidation bool              // WithSchemaValidation(false) disables call-time validation
+	publicMethods        map[string]bool   // methods that bypass auth (pre-auth discovery)
 }
 
 // ErrorHandler receives out-of-band errors that aren't returned to a
@@ -100,6 +101,29 @@ func WithBearerToken(token string) Option {
 // WithAuth sets a custom auth validator (e.g. JWT via mcpkit/auth).
 func WithAuth(v core.AuthValidator) Option {
 	return func(o *serverOptions) { o.authValidator = v }
+}
+
+// WithPublicMethods declares JSON-RPC methods that bypass auth and are
+// accessible without a valid token. Use this for pre-auth capability
+// discovery — clients can call these methods to learn what the server
+// offers before deciding to authenticate.
+//
+// Default: none (all methods require auth when WithAuth is configured).
+//
+// Recommended set for discovery:
+//
+//	server.WithPublicMethods("initialize", "notifications/initialized",
+//	    "tools/list", "resources/list", "resources/templates/list",
+//	    "prompts/list", "ping")
+func WithPublicMethods(methods ...string) Option {
+	return func(o *serverOptions) {
+		if o.publicMethods == nil {
+			o.publicMethods = make(map[string]bool)
+		}
+		for _, m := range methods {
+			o.publicMethods[m] = true
+		}
+	}
 }
 
 // WithExtension registers a protocol extension that will be advertised
@@ -837,6 +861,23 @@ func (s *Server) CheckAuth(r *http.Request) (*core.Claims, error) {
 		return cp.Claims(r), nil
 	}
 	return nil, nil
+}
+
+// IsPublicMethod returns true if the given JSON-RPC method is in the server's
+// public method set (configured via WithPublicMethods). Public methods bypass
+// auth and are dispatched without claims.
+func (s *Server) IsPublicMethod(method string) bool {
+	return len(s.options.publicMethods) > 0 && s.options.publicMethods[method]
+}
+
+// extractMethodFromJSON extracts the "method" field from a JSON-RPC message
+// without full unmarshaling. Returns empty string if extraction fails.
+func extractMethodFromJSON(data []byte) string {
+	var envelope struct {
+		Method string `json:"method"`
+	}
+	json.Unmarshal(data, &envelope)
+	return envelope.Method
 }
 
 // writeAuthError writes an authentication/authorization error to the response.
