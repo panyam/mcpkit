@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"time"
 
@@ -62,9 +63,15 @@ func main() {
 		serverOpts...,
 	)
 
-	// echo: returns the input message as-is
+	// echo: returns the input message as-is, demonstrates slog → MCP logging
 	srv.Register(core.TextTool[echoInput]("echo", "Echoes the input message",
 		func(ctx core.ToolContext, input echoInput) (string, error) {
+			// slog.Logger backed by MCP notifications — structured logs
+			// are sent to the connected client via notifications/message.
+			logger := slog.New(core.NewMCPLogHandler(ctx, &core.MCPLogHandlerOptions{
+				Logger: "echo",
+			}))
+			logger.Info("processing", "message", input.Message)
 			return "echo: " + input.Message, nil
 		},
 	))
@@ -162,8 +169,13 @@ func selfTest(srv *server.Server) {
 	}
 	log.Printf("--- %d tools found ---", count)
 
-	// Call the echo tool.
-	log.Println("--- Calling echo tool ---")
+	// Enable server-side logging (required for slog→MCP notifications to flow).
+	log.Println("--- Enabling logging (setLevel=debug) ---")
+	c.SetLogLevel("debug")
+
+	// Call the echo tool — its handler uses slog.Logger backed by MCPLogHandler,
+	// so we should see a notifications/message from the slog.Info call.
+	log.Println("--- Calling echo tool (slog→MCP demo) ---")
 	result, err := c.ToolCall("echo", map[string]any{"message": "hello from self-test"})
 	if err != nil {
 		log.Printf("echo: error: %v", err)

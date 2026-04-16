@@ -941,6 +941,29 @@ func (c *Client) ListResourceTemplates() ([]core.ResourceTemplate, error) {
 	return resp.ResourceTemplates, nil
 }
 
+// SetLogLevel sets the server's minimum log level for this session via
+// logging/setLevel. The server will send notifications/message for log
+// entries at or above this level. Use "debug" to see all logs.
+func (c *Client) SetLogLevel(level string) error {
+	_, err := c.Call("logging/setLevel", map[string]string{"level": level})
+	return err
+}
+
+// ListPrompts returns all registered prompt definitions.
+func (c *Client) ListPrompts() ([]core.PromptDef, error) {
+	result, err := c.Call("prompts/list", nil)
+	if err != nil {
+		return nil, err
+	}
+	var resp struct {
+		Prompts []core.PromptDef `json:"prompts"`
+	}
+	if err := result.Unmarshal(&resp); err != nil {
+		return nil, err
+	}
+	return resp.Prompts, nil
+}
+
 // --- Internal ---
 
 // initializeParams is the params object sent in an initialize request.
