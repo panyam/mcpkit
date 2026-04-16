@@ -75,7 +75,8 @@ func myTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error)
 `BaseContext` → shared methods (EmitLog, Sample, Elicit, AuthClaims, Notify, etc.). `ToolContext` adds `EmitProgress`/`EmitContent`. Free functions (`core.EmitLog(ctx, ...)`) still work. Use `ctx.DetachFromClient()` not `core.DetachFromClient(ctx)` inside typed handlers.
 
 ### Registration
-- Two-arg: `srv.RegisterTool(def, handler)` / Single-struct: `srv.Register(server.Tool{Def, Handler})`
+- **Typed (recommended)**: `server.TypedTool[In, Out](name, desc, handler)` / `server.TextTool[In](name, desc, handler)` — auto-derives InputSchema (and optionally OutputSchema) from Go struct tags via `invopop/jsonschema`. Zero schema drift. `TextTool[In]` is sugar for `TypedTool[In, string]`.
+- **Explicit**: `srv.RegisterTool(def, handler)` / `srv.Register(server.Tool{Def, Handler})` — manual schema, full control. Used by protogen, dynamic tools, proxies.
 - `ext/ui.RegisterAppTool(reg, cfg)` — registers tool + resource in one call, auto-detects template URIs. With `TemplateHandler`: auto-generates concrete fallback for hosts that don't substitute template vars. Without: manual hybrid path.
 - Schema validation panics at registration for malformed schemas
 
@@ -114,6 +115,7 @@ func myTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error)
 | MCP Apps design | `docs/APPS_DESIGN.md` |
 | MCP App Bridge | `ext/ui/bridge.go`, `ext/ui/assets/mcp-app-bridge.ts` |
 | Protogen design | `ext/protogen/docs/DESIGN.md` |
+| Competitive analysis (vs go-sdk) | `docs/COMPETITIVE_ANALYSIS.md` |
 | Capabilities list | `CAPABILITIES.md` |
 | Constraints | `core/CONSTRAINTS.md`, `server/CONSTRAINTS.md`, `client/CONSTRAINTS.md` |
 | Conformance baseline | `conformance/baseline.yml` |
