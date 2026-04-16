@@ -1,9 +1,9 @@
 package server
 
 import (
-	core "github.com/panyam/mcpkit/core"
 	"context"
 	"crypto/subtle"
+	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	core "github.com/panyam/mcpkit/core"
 	gohttp "github.com/panyam/servicekit/http"
 )
 
@@ -33,7 +34,9 @@ type serverOptions struct {
 	authValidator        core.AuthValidator
 	extensions           []core.ExtensionProvider
 	middleware           []Middleware
-	requestLogger        *log.Logger // HTTP-level request/response logging
+	notifyInterceptors   []NotifyInterceptor  // outgoing notification interceptors
+	requestInterceptors  []RequestInterceptor // outgoing server-to-client request interceptors
+	requestLogger        *log.Logger          // HTTP-level request/response logging
 	subscriptionsEnabled bool        // enable resources/subscribe and resources/unsubscribe
 	errorHandler         ErrorHandler // optional out-of-band error callback
 	contentChunkMethod   string       // custom notification method for streaming content (empty = default)
@@ -359,6 +362,24 @@ func (s *Server) dispatchWithNotifyAndRequest(d *Dispatcher, ctx context.Context
 // core.EmitSSERetry can emit a "retry:" field on the current stream.
 // Non-SSE transports pass nil and EmitSSERetry becomes a silent no-op.
 func (s *Server) dispatchWithOpts(d *Dispatcher, ctx context.Context, claims *core.Claims, notify core.NotifyFunc, request core.RequestFunc, sseRetry func(ms int), req *core.Request) *core.Response {
+	// Wrap outgoing notifications with interceptors (first registered = outermost).
+	for i := len(s.options.notifyInterceptors) - 1; i >= 0; i-- {
+		next := notify
+		interceptor := s.options.notifyInterceptors[i]
+		notify = func(method string, params any) { interceptor(method, params, next) }
+	}
+
+	// Wrap outgoing server-to-client requests with interceptors.
+	if request != nil {
+		for i := len(s.options.requestInterceptors) - 1; i >= 0; i-- {
+			next := request
+			interceptor := s.options.requestInterceptors[i]
+			request = func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				return interceptor(ctx, method, params, next)
+			}
+		}
+	}
+
 	// Inject session context so tool handlers can send notifications, requests,
 	// and access authenticated claims and client capabilities.
 	ctx = core.ContextWithSession(ctx, notify, request, &d.logLevel, &d.clientCaps, claims)
