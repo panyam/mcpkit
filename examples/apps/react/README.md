@@ -1,6 +1,6 @@
 # React App — MCP App with mcpkit backend
 
-A React 19 MCP App that mirrors the upstream ext-apps `basic-server-vanillajs` feature set. Demonstrates that mcpkit works as a drop-in Go backend for React frontends.
+A React 19 MCP App that mirrors the upstream ext-apps `basic-server-vanillajs` feature set, extended with elicitation, sampling, and prompts to demonstrate the full MCP protocol surface.
 
 ## What it demonstrates
 
@@ -8,7 +8,17 @@ A React 19 MCP App that mirrors the upstream ext-apps `basic-server-vanillajs` f
 - Type-safe via `mcp-app-bridge.d.ts` — full autocomplete for `MCPApp.*`
 - Vite + `vite-plugin-singlefile` builds to one HTML file (same as upstream pattern)
 - Go server injects bridge via `ui.InjectAppBridge()` into Vite-built output
-- Tool calls, message sending, logging, link opening, theme adaptation
+- **Tools**: `get-time`, `get-time-with-tz`, `time-fact`
+- **Elicitation**: `get-time-with-tz` asks the user to pick a timezone
+- **Sampling**: `time-fact` asks the LLM for a fun fact about today
+- **Prompts**: `time_format` returns a time-related prompt message
+- **Middleware**: `LoggingMiddleware` logs every JSON-RPC request
+
+## Screenshots
+
+<!-- TODO: add screenshots -->
+![React App](screenshots/react-app.png)
+![Timezone Elicitation](screenshots/elicitation.png)
 
 ## Setup
 
@@ -32,9 +42,20 @@ In MCPJam (or Claude Desktop):
 ## Prompts to try
 
 - "What time is it?" — calls `get-time` tool, time appears in the React UI
+- **"What time is it in Tokyo?"** — triggers elicitation for timezone selection
+- **"Tell me a fun fact about today"** — LLM generates a fact via sampling
+- **Use the `time_format` prompt** — formatted time question for the LLM
 - Then click **Get Server Time** in the iframe — calls the tool back through the bridge
 - Type a message and click **Send Message** — sends text to the conversation
-- Click **Open Link** — opens the URL in the host browser (not the iframe)
+
+## MCP Features
+
+| Feature | Tool/Prompt | Description |
+|---------|------------|-------------|
+| Tool (basic) | `get-time` | Returns current UTC time |
+| Elicitation | `get-time-with-tz` | Asks user to pick timezone, returns local time |
+| Sampling | `time-fact` | LLM generates fun fact about today's date |
+| Prompt | `time_format` | Time question with optional timezone argument |
 
 ## Key files
 
@@ -43,5 +64,5 @@ In MCPJam (or Claude Desktop):
 | `src/App.tsx` | React component: time display, message/log/link controls |
 | `src/useMCPApp.ts` | React hooks: `useMCPApp()` + `useMCPEvent()` |
 | `src/mcp-app-bridge.d.ts` | TypeScript declarations for `MCPApp` global |
-| `server/main.go` | Go server: `get-time` tool, serves Vite-built HTML |
+| `server/main.go` | Go server: tools, elicitation, sampling, prompts |
 | `vite.config.ts` | Vite + singlefile plugin config |
