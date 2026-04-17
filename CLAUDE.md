@@ -69,9 +69,13 @@ Module-specific gotchas live in their READMEs (protogen templates, App Bridge es
 | Protogen design | `ext/protogen/docs/DESIGN.md` |
 | Events library | `experimental/ext/events/README.md` |
 | Telegram example | `experimental/telegram-events/README.md` |
+| Auth examples | `examples/auth/README.md` (5 servers: bearer, JWT, scopes, hijacking, discovery) |
+| App examples | `examples/apps/` (htmx, vanilla, react — tools, elicitation, sampling, prompts) |
 | Conformance baseline | `conformance/baseline.yml` |
 
 ## Conformance Status
 
-- Server: 30/30, Auth: 14/14 (210 checks), Apps: 21, Telegram Events: 21
+- Server: 30/30 (40 with baseline), Auth: 14/14 (210 checks), Apps: 21, Telegram Events: 21
+- Keycloak interop: 12/12 (valid token, tampered, scopes, PRM, WWW-Authenticate, password grant, session hijacking, public methods, token refresh)
 - testall: 10/10 stages
+- Auth examples: 5 persistent servers (bearer, JWT, scopes, session-binding, public-discovery)

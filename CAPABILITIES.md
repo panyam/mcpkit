@@ -1,7 +1,7 @@
 # MCPKit
 
 ## Version
-0.2.20
+0.2.40
 
 ## Provides
 - mcp-protocol-negotiation: Version negotiation supporting MCP 2025-11-25 and 2024-11-05
@@ -104,6 +104,15 @@
 - mcp-method-context: core.MethodContext — typed handler context for custom method handlers. Embeds BaseContext (EmitLog, Sample, Elicit, AuthClaims, Notify, DetachFromClient). Matches ToolContext/ResourceContext pattern.
 - mcp-events-library-experimental: experimental/ext/events — EXPERIMENTAL library for MCP Events spec (triggers-events-wg). EventSource interface, TypedSource[Data] with auto-derived payloadSchema, Register() for protocol methods, WebhookRegistry with HMAC-SHA256 signing (ts+"."+body), TTL, retry with backoff, SSRF validation. cursorGap detection for ring buffer wrap. (#264)
 - mcp-telegram-events-example: experimental/telegram-events — Reference server implementing MCP Events with Telegram. Three delivery modes: push (Broadcast+SSE), poll (events/poll), webhook (events/subscribe+HMAC POST). 21 tests. Companion to Clare Liguori's TypeScript impl. (#264)
+- mcp-slog-handler: core.MCPLogHandler — slog.Handler that routes structured log records through MCP notifications/message. SlogToMCPLevel/MCPToSlogLevel bidirectional mapping. Respects per-session logging/setLevel. (#248)
+- mcp-client-setloglevel: Client.SetLogLevel(level) — convenience method for logging/setLevel. Client.ListPrompts() for prompts/list.
+- mcp-sending-middleware: server.NotifyInterceptor + RequestInterceptor — wrap outgoing notifications and server-to-client requests. WithNotifyInterceptor/WithRequestInterceptor options. (#244)
+- mcp-client-middleware: client.ClientMiddleware — call-level middleware on Client.Call path. WithClientMiddleware option. Method+params visibility for tracing, logging, metrics. (#245)
+- mcp-session-hijack-protection: Streamable HTTP session hijacking prevention — binds Claims.Subject at session creation, verifies on POST/GET/DELETE. Mirrors SSE transport protection. (#249)
+- mcp-public-methods: server.WithPublicMethods — bypass auth for specified JSON-RPC methods. Pre-auth capability discovery (tools/list without token). (#76)
+- mcp-ctx-progress: ToolContext.Progress(progress, total, message) — token-free progress emission. Dispatch stashes progressToken from _meta.progressToken into ToolContext. ToolContext.ProgressToken() accessor.
+- mcp-typed-app-tool: ext/ui.RegisterTypedAppTool[In, Out] — typed variant of RegisterAppTool. Auto-derives InputSchema from In type. Delegates to RegisterAppTool for all app-specific wiring.
+- mcp-auth-examples: examples/auth/ — 5 persistent MCP servers demonstrating auth patterns: bearer (:8081), JWT/JWKS (:8082), scopes (:8083), session hijacking (:8084), pre-auth discovery (:8085). Shared common/ module. mcp.json for VS Code.
 
 ## Module
 github.com/panyam/mcpkit
