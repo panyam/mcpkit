@@ -1,122 +1,62 @@
 // Example: JWT/JWKS validation with claims propagation.
 //
 // Server validates RS256 JWTs via an in-process JWKS endpoint.
-// Tool handlers read authenticated claims (subject, scopes).
-// Demonstrates: JWTValidator, token minting, signature verification.
+// The echo tool reports the authenticated user's identity.
 //
-// Run: go run ./jwt
+// Run: go run ./jwt -addr :8082
+// The server prints a token on startup — use it to connect MCPJam.
 package main
 
 import (
-	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
-	"net/http/httptest"
-	"strings"
 
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/examples/auth/common"
 	"github.com/panyam/mcpkit/ext/auth"
 	"github.com/panyam/mcpkit/server"
-	"github.com/panyam/oneauth/testutil"
 )
 
 func main() {
-	fmt.Println("=== Auth Example: JWT/JWKS Validation ===")
-	fmt.Println()
+	addr := flag.String("addr", ":8082", "listen address")
+	flag.Parse()
 
-	// Step 1: Start in-process authorization server.
-	// This provides: JWKS endpoint, token endpoint, RS256 key pair.
-	as, err := testutil.NewAuthServer(
-		testutil.WithScopes([]string{"read", "write"}),
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer as.Close()
-	fmt.Printf("Authorization server at %s\n", as.URL())
-	fmt.Printf("  JWKS: %s\n", as.JWKSURL())
-	fmt.Printf("  Issuer: %s\n\n", as.Issuer())
+	env := common.NewEnv([]string{"read", "write"})
+	defer env.Close()
 
-	// Step 2: Create MCP server with JWT validation.
-	var handler http.Handler
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		handler.ServeHTTP(w, r)
-	}))
-	defer ts.Close()
-
-	// Set audience AFTER we know the URL.
-	as.APIAuth.JWTAudience = ts.URL
-
-	validator := auth.NewJWTValidator(auth.JWTConfig{
-		JWKSURL:  as.JWKSURL(),
-		Issuer:   as.Issuer(),
-		Audience: ts.URL,
-	})
-	validator.Start()
-	defer validator.Stop()
+	// Create validator — audience is the server's own URL.
+	listenURL := fmt.Sprintf("http://localhost%s", *addr)
+	validator := env.NewValidator(listenURL)
 
 	srv := server.NewServer(
-		core.ServerInfo{Name: "jwt-demo", Version: "1.0"},
+		core.ServerInfo{Name: "auth-jwt", Version: "1.0"},
 		server.WithAuth(validator),
+		server.WithMiddleware(server.LoggingMiddleware(log.Default())),
 	)
+	common.RegisterEchoTools(srv)
 
-	// Tool that reports the authenticated user's identity.
-	srv.Register(core.TextTool[struct{}]("whoami", "Reports the authenticated user's identity",
-		func(ctx core.ToolContext, _ struct{}) (string, error) {
-			claims := ctx.AuthClaims()
-			if claims == nil {
-				return "anonymous (no claims)", nil
-			}
-			data, _ := json.Marshal(map[string]any{
-				"sub":    claims.Subject,
-				"iss":    claims.Issuer,
-				"scopes": claims.Scopes,
-			})
-			return string(data), nil
-		},
-	))
-
-	handler = srv.Handler(server.WithStreamableHTTP(true))
-	fmt.Printf("MCP server at %s (auth: JWT via JWKS)\n\n", ts.URL)
-
-	// Step 3: Connect as "alice" with a valid token.
-	fmt.Println("Step 1: Connect as alice with valid JWT...")
-	token := mustMintToken(as, "alice", []string{"read", "write"})
-	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "demo", Version: "1.0"},
-		client.WithClientBearerToken(token),
-	)
-	if err := c.Connect(); err != nil {
-		fmt.Printf("  → Error: %v\n", err)
-		return
-	}
-	result, _ := c.ToolCall("whoami", nil)
-	fmt.Printf("  → whoami: %s ✓\n\n", result)
-	c.Close()
-
-	// Step 4: Try a tampered token → 401.
-	fmt.Println("Step 2: Connect with tampered token...")
-	tampered := token[:len(token)-5] + "XXXXX"
-	c2 := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "demo", Version: "1.0"},
-		client.WithClientBearerToken(tampered),
-	)
-	if err := c2.Connect(); err != nil {
-		fmt.Printf("  → Rejected (signature invalid): %v ✓\n", err)
-	}
-
-	fmt.Println("\n=== Done ===")
-}
-
-func mustMintToken(as *testutil.TestAuthServer, userID string, scopes []string) string {
-	tok, err := as.MintTokenWithClaims(jwt.MapClaims{
-		"sub":   userID,
-		"aud":   as.APIAuth.JWTAudience,
-		"scope": strings.Join(scopes, " "),
+	// Mount PRM endpoints for auth discovery.
+	mux := http.NewServeMux()
+	mcpHandler := srv.Handler(server.WithStreamableHTTP(true))
+	mux.Handle("/mcp", mcpHandler)
+	auth.MountAuth(mux, auth.AuthConfig{
+		ResourceURI:          listenURL,
+		AuthorizationServers: []string{env.AS.Issuer()},
+		ScopesSupported:      env.Scopes,
+		MCPPath:              "/mcp",
 	})
-	if err != nil {
+
+	// Print a token for the user to copy-paste.
+	token := env.MintToken("alice", []string{"read", "write"})
+	log.Printf("JWT auth example on %s", *addr)
+	log.Printf("AS: %s (JWKS: %s)", env.AS.URL(), env.AS.JWKSURL())
+	log.Printf("")
+	log.Printf("Connect MCPJam: http://localhost%s/mcp", *addr)
+	log.Printf("Authorization: Bearer %s", token)
+
+	if err := http.ListenAndServe(*addr, mux); err != nil {
 		log.Fatal(err)
 	}
-	return tok
 }

@@ -1,0 +1,27 @@
+{
+  "mcpServers": {
+    "auth-bearer": {
+      "url": "http://localhost:8081/mcp",
+      "description": "Static bearer token auth (token: my-secret-token)",
+      "headers": {
+        "Authorization": "Bearer my-secret-token"
+      }
+    },
+    "auth-jwt": {
+      "url": "http://localhost:8082/mcp",
+      "description": "JWT/JWKS auth — run 'go run ./jwt' first, copy the printed token"
+    },
+    "auth-scopes": {
+      "url": "http://localhost:8083/mcp",
+      "description": "Scope enforcement — run 'go run ./scopes' first, copy a token"
+    },
+    "auth-session-binding": {
+      "url": "http://localhost:8084/mcp",
+      "description": "Session hijacking prevention — run 'go run ./session-binding' first"
+    },
+    "auth-public-discovery": {
+      "url": "http://localhost:8085/mcp",
+      "description": "Pre-auth discovery — tools/list works without token, tools/call requires JWT"
+    }
+  }
+}
