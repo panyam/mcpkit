@@ -13,9 +13,11 @@ import (
 	_ "embed"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/panyam/mcpkit/core"
@@ -63,6 +65,7 @@ func main() {
 	srv := server.NewServer(
 		core.ServerInfo{Name: "task-board", Version: "0.1.0"},
 		server.WithExtension(&ui.UIExtension{}),
+		server.WithMiddleware(server.LoggingMiddleware(log.Default())),
 	)
 
 	// Register tools.
@@ -124,6 +127,125 @@ func main() {
 			return core.StructuredResult("Tasks: "+string(data), map[string]any{"tasks": tasks}), nil
 		},
 	))
+
+	// --- Elicitation demo: confirm priority before adding ---
+	type confirmTaskInput struct {
+		Title string `json:"title" jsonschema:"description=Task title,required"`
+	}
+	srv.Register(core.TextTool[confirmTaskInput]("add_task_confirmed",
+		"Add a task with priority confirmation — asks the user to pick a priority via elicitation before adding",
+		func(ctx core.ToolContext, input confirmTaskInput) (string, error) {
+			result, err := ctx.Elicit(core.ElicitationRequest{
+				Message: fmt.Sprintf("Choose priority for task: %q", input.Title),
+				RequestedSchema: json.RawMessage(`{
+					"type": "object",
+					"properties": {
+						"priority": {
+							"type": "string",
+							"enum": ["low", "medium", "high"],
+							"default": "medium",
+							"description": "Task priority"
+						}
+					}
+				}`),
+			})
+			if err != nil {
+				return fmt.Sprintf("Elicitation failed: %v", err), nil
+			}
+			if result.Action != "accept" {
+				return fmt.Sprintf("Task creation cancelled (action=%s)", result.Action), nil
+			}
+			priority, _ := result.Content["priority"].(string)
+			if priority == "" {
+				priority = "medium"
+			}
+			tasksMu.Lock()
+			tasks = append(tasks, Task{Title: input.Title, Priority: priority})
+			tasksMu.Unlock()
+			return fmt.Sprintf("Added task %q with priority %s (confirmed by user)", input.Title, priority), nil
+		},
+	))
+
+	// --- Sampling demo: auto-categorize task priority ---
+	type categorizeInput struct {
+		Title string `json:"title" jsonschema:"description=Task title to categorize,required"`
+	}
+	srv.Register(core.TextTool[categorizeInput]("categorize_task",
+		"Use the LLM to suggest a priority for a task based on its title",
+		func(ctx core.ToolContext, input categorizeInput) (string, error) {
+			result, err := ctx.Sample(core.CreateMessageRequest{
+				Messages: []core.SamplingMessage{{
+					Role: "user",
+					Content: core.Content{
+						Type: "text",
+						Text: fmt.Sprintf(
+							"Given this task title, suggest exactly one priority: low, medium, or high. "+
+								"Reply with ONLY the priority word, nothing else.\n\nTask: %q", input.Title),
+					},
+				}},
+				MaxTokens: 10,
+			})
+			if err != nil {
+				return fmt.Sprintf("Sampling failed: %v", err), nil
+			}
+			suggestion := strings.TrimSpace(strings.ToLower(result.Content.Text))
+			// Normalize to valid priority
+			switch suggestion {
+			case "low", "medium", "high":
+				// valid
+			default:
+				suggestion = "medium"
+			}
+			tasksMu.Lock()
+			tasks = append(tasks, Task{Title: input.Title, Priority: suggestion})
+			tasksMu.Unlock()
+			return fmt.Sprintf("Added task %q with LLM-suggested priority: %s (model: %s)",
+				input.Title, suggestion, result.Model), nil
+		},
+	))
+
+	// --- Prompt demo: task summary ---
+	srv.RegisterPrompt(
+		core.PromptDef{
+			Name:        "task_summary",
+			Description: "Returns a formatted summary of all tasks on the board",
+		},
+		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResult, error) {
+			tasksMu.Lock()
+			snapshot := make([]Task, len(tasks))
+			copy(snapshot, tasks)
+			tasksMu.Unlock()
+
+			if len(snapshot) == 0 {
+				return core.PromptResult{
+					Description: "Task board summary",
+					Messages: []core.PromptMessage{{
+						Role:    "user",
+						Content: core.Content{Type: "text", Text: "The task board is empty. No tasks have been added yet."},
+					}},
+				}, nil
+			}
+
+			var sb strings.Builder
+			sb.WriteString("Here are the current tasks on the board:\n\n")
+			for i, t := range snapshot {
+				status := "pending"
+				if t.Done {
+					status = "done"
+				}
+				sb.WriteString(fmt.Sprintf("%d. [%s] %s (priority: %s)\n", i+1, status, t.Title, t.Priority))
+			}
+			sb.WriteString(fmt.Sprintf("\nTotal: %d tasks", len(snapshot)))
+
+			return core.PromptResult{
+				Description: "Task board summary",
+				Messages: []core.PromptMessage{{
+					Role:    "user",
+					Content: core.Content{Type: "text", Text: sb.String()},
+				}},
+			}, nil
+		},
+	)
 
 	// HTTP mux: MCP + HTMX partials.
 	mux := http.NewServeMux()
