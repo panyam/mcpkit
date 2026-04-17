@@ -96,6 +96,21 @@
           "temporary": false
         }
       ]
+    },
+    {
+      "username": "mcp-testuser2",
+      "enabled": true,
+      "email": "mcp-testuser2@example.com",
+      "emailVerified": true,
+      "firstName": "MCP",
+      "lastName": "TestUser2",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "testpassword2",
+          "temporary": false
+        }
+      ]
     }
   ]
 }
