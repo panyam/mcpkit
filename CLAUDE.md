@@ -14,7 +14,8 @@ make test-protogen    # ext/protogen sub-module
 make test-e2e         # E2E tests (auth + apps)
 make testconf         # MCP conformance suite (needs Node.js)
 make testconfauth     # Auth conformance (client OAuth)
-make testall          # Everything (9 stages) + Keycloak + HTML report
+make test-experimental # Experimental POC tests (telegram-events)
+make testall          # Everything (10 stages) + Keycloak + HTML report
 make audit            # govulncheck + gosec + gitleaks + race
 make smoke            # Curl-based transport tests
 make testkcl          # Keycloak interop (needs Docker)
@@ -50,7 +51,7 @@ make push             # Push proto module to buf.build/mcpkit/protogen
 
 ## Package Layout
 
-- **`core/`** — Protocol types, handler types (`ToolHandler`, `ResourceHandler`, `PromptHandler`), typed handler contexts (`ToolContext`, `ResourceContext`, `PromptContext`), session APIs
+- **`core/`** — Protocol types, handler types (`ToolHandler`, `ResourceHandler`, `PromptHandler`), typed handler contexts (`ToolContext`, `ResourceContext`, `PromptContext`, `MethodContext`), session APIs
 - **`server/`** — Server, Dispatcher, transports (SSE, Streamable HTTP, Stdio, InProcess), middleware, registry
 - **`client/`** — Client, HTTP/Stdio/Command transports, reconnection, auth retry
 - **`ext/auth/`** — Separate Go module: JWT validation, PRM, OAuth token sources. See `ext/auth/docs/DESIGN.md`
@@ -58,6 +59,8 @@ make push             # Push proto module to buf.build/mcpkit/protogen
   - `ext/ui/assets/` — TypeScript bridge source, compiled JS, `.d.ts`, vitest tests
   - `ext/ui/tests/playwright/` — Fake-host integration tests
 - **`ext/protogen/`** — Separate Go module: proto annotation-driven MCP code generation. Annotations: `mcp_tool`, `mcp_resource`, `mcp_prompt`, `mcp_elicit`, `mcp_sampling`, `mcp_service`. Published to `buf.build/mcpkit/protogen`. See `ext/protogen/docs/DESIGN.md`
+- **`experimental/ext/events/`** — Separate Go module (EXPERIMENTAL): MCP Events protocol library (events/list, events/poll, events/subscribe). See `experimental/ext/events/README.md`
+- **`experimental/telegram-events/`** — Separate Go module: Telegram Events reference server using events library. See `experimental/telegram-events/README.md`
 - **`testutil/`** — `NewTestServer`, `ForAllTransports`, `TestClient`
 - **`cmd/testserver/`** — Conformance test server
 - **`tests/e2e/`, `tests/keycloak/`** — Separate Go modules with `replace` directives
@@ -72,7 +75,16 @@ func myTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error)
     ctx.EmitProgress(req.ProgressToken, 50, 100, "halfway")
 }
 ```
-`BaseContext` → shared methods (EmitLog, Sample, Elicit, AuthClaims, Notify, etc.). `ToolContext` adds `EmitProgress`/`EmitContent`. Free functions (`core.EmitLog(ctx, ...)`) still work. Use `ctx.DetachFromClient()` not `core.DetachFromClient(ctx)` inside typed handlers.
+`BaseContext` → shared methods (EmitLog, Sample, Elicit, AuthClaims, Notify, etc.). `ToolContext` adds `EmitProgress`/`EmitContent`. `MethodContext` for custom method handlers (#266). Free functions (`core.EmitLog(ctx, ...)`) still work. Use `ctx.DetachFromClient()` not `core.DetachFromClient(ctx)` inside typed handlers.
+
+### Custom Method Handlers (#266)
+Register custom JSON-RPC methods beyond the built-in MCP spec methods:
+```go
+srv.HandleMethod("events/poll", func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
+    return core.NewResponse(id, map[string]any{"events": []any{}})
+})
+```
+Also as server option: `server.WithMethodHandler("events/poll", handler)`. Built-in MCP methods cannot be overridden (panics). Custom methods participate in middleware and require initialization.
 
 ### Registration
 - **Typed (recommended)**: `core.TypedTool[In, Out](name, desc, handler)` / `core.TextTool[In](name, desc, handler)` — auto-derives InputSchema (and optionally OutputSchema) from Go struct tags via `invopop/jsonschema`. Zero schema drift. `TextTool[In]` is sugar for `TypedTool[In, string]`. Returns `core.TypedToolResult` accepted by `srv.Register()`.
@@ -105,6 +117,9 @@ func myTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error)
 - **MCP App Bridge templates**: Use `html/template` with `template.JS` type for the bridge script (prevents escaping). Use `text/template` only if you control all inputs. See `ext/ui/bridge.go` for the `BridgeData` type.
 - **Single `<script type="module">` for MCP Apps**: MCPJam and some hosts extract inline scripts and re-serve them. Use `type="module"` (not plain `<script>`) and prefer a single script block matching the upstream Vite-bundled pattern.
 - **Request vs notification in bridge**: `openLink`, `downloadFile`, `sendMessage`, `callTool`, `readResource`, `updateModelContext`, `requestDisplayMode` are **requests** (host responds). Only `log`, `requestTeardown`, `size-changed`, `initialized` are **notifications** (fire-and-forget). Getting this wrong means the host silently ignores the call.
+- **Streamable HTTP returns SSE**: POST responses come as `text/event-stream` with `data:` lines, not plain JSON. Curl diagnostics must extract `data:` lines: `curl -s -N ... | grep '^data:' | sed 's/^data: //'`.
+- **Server requires initialization**: Direct `srv.Dispatch()` calls in tests fail with "server not initialized" unless you send an `initialize` request first. Use httptest + client (which does the handshake) instead of raw dispatch.
+- **Telegram long-polling vs webhooks**: Mutually exclusive. If a webhook was set via `setWebhook`, long-polling via `GetUpdatesChan` silently receives nothing. Delete webhook first: `curl .../deleteWebhook`.
 
 ## Deeper Documentation
 
@@ -118,10 +133,13 @@ func myTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error)
 | Capabilities list | `CAPABILITIES.md` |
 | Constraints | `core/CONSTRAINTS.md`, `server/CONSTRAINTS.md`, `client/CONSTRAINTS.md` |
 | Conformance baseline | `conformance/baseline.yml` |
+| Events library (experimental) | `experimental/ext/events/README.md` |
+| Telegram events example | `experimental/telegram-events/README.md` |
 
 ## Conformance Status
 
 - Server: 30/30 scenarios passing
 - Auth: 14/14 scenarios (210/210 checks)
 - Apps: 21 conformance tests passing
-- testall: 9/9 stages (unit+coverage, race, auth, ui, protogen, e2e, conformance, auth-conformance, keycloak)
+- Telegram Events: 21 tests (poll, push, webhook, cursor, HMAC, TTL, retry)
+- testall: 10/10 stages (unit+coverage, race, auth, ui, protogen, e2e, experimental, conformance, auth-conformance, keycloak)
