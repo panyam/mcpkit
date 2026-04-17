@@ -31,9 +31,11 @@ const (
 	confidentialClientID     = "mcp-confidential"
 	confidentialClientSecret = "mcp-test-secret-for-confidential"
 
-	// Test user defined in realm.json
-	testUsername = "mcp-testuser"
-	testPassword = "testpassword"
+	// Test users defined in realm.json
+	testUsername  = "mcp-testuser"
+	testPassword  = "testpassword"
+	testUsername2 = "mcp-testuser2"
+	testPassword2 = "testpassword2"
 
 	// MCP scopes (defined as client scopes in realm.json)
 	scopeToolsRead  = "tools-read"
@@ -81,10 +83,16 @@ func getClientCredentialsToken(t *testing.T, tokenEndpoint string, scopes ...str
 	return testutil.GetClientCredentialsToken(t, tokenEndpoint, confidentialClientID, confidentialClientSecret, scopes...)
 }
 
-// getPasswordToken acquires a token via password grant for the test user.
+// getPasswordToken acquires a token via password grant for the default test user.
 func getPasswordToken(t *testing.T, tokenEndpoint string) testutil.TokenResponse {
 	t.Helper()
-	return testutil.GetPasswordToken(t, tokenEndpoint, confidentialClientID, confidentialClientSecret, testUsername, testPassword)
+	return getPasswordTokenForUser(t, tokenEndpoint, testUsername, testPassword)
+}
+
+// getPasswordTokenForUser acquires a token via password grant for a specific user.
+func getPasswordTokenForUser(t *testing.T, tokenEndpoint, username, password string) testutil.TokenResponse {
+	t.Helper()
+	return testutil.GetPasswordToken(t, tokenEndpoint, confidentialClientID, confidentialClientSecret, username, password)
 }
 
 // MCPTestEnv holds an in-process mcpkit MCP server with JWTValidator configured
@@ -99,7 +107,7 @@ type MCPTestEnv struct {
 // admin-tool) with varying scope requirements.
 //
 // Requires Keycloak to be running (caller should call skipIfKeycloakNotRunning first).
-func NewMCPTestEnv(t *testing.T) *MCPTestEnv {
+func NewMCPTestEnv(t *testing.T, extraOpts ...server.Option) *MCPTestEnv {
 	t.Helper()
 
 	cfg := discoverOIDC(t)
@@ -126,9 +134,10 @@ func NewMCPTestEnv(t *testing.T) *MCPTestEnv {
 	validator.Start()
 	t.Cleanup(validator.Stop)
 
+	opts := append([]server.Option{server.WithAuth(validator)}, extraOpts...)
 	srv := server.NewServer(
 		core.ServerInfo{Name: "mcp-keycloak-test", Version: "0.1.0"},
-		server.WithAuth(validator),
+		opts...,
 	)
 
 	// Echo tool — returns claims info, no scope required

@@ -89,11 +89,14 @@ REPORT_DIR := tests/reports
 # Shell vars PASS, FAIL, STAGES must be initialized by the caller.
 define run_stage
 	echo "--- [$(1)/$(2)] $(3) ---" | tee -a $(REPORT_DIR)/run.log; \
-	if $(MAKE) -s $(4) >> $(REPORT_DIR)/run.log 2>&1; then \
+	STAGE_LOG=$$(mktemp); \
+	if $(MAKE) $(4) > $$STAGE_LOG 2>&1; then \
 		echo "  PASS: $(3)" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); STAGES="$$STAGES $(3):PASS"; \
 	else \
 		echo "  FAIL: $(3)" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); STAGES="$$STAGES $(3):FAIL"; \
-	fi;
+		echo "  --- $(3) output ---"; tail -20 $$STAGE_LOG; echo "  ---"; \
+	fi; \
+	cat $$STAGE_LOG >> $(REPORT_DIR)/run.log; rm -f $$STAGE_LOG;
 endef
 
 testall: ## Run ALL tests (starts Keycloak if needed) + generate HTML report
