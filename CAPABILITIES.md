@@ -100,6 +100,10 @@
 - mcp-io-transport: Server.RunIO(ctx, r, w) — Content-Length framed JSON-RPC over arbitrary io.Reader/io.Writer streams. Generalizes stdio transport for Unix sockets, named pipes, SSH tunnels, test fixtures. Client: WithIOTransport(r, w). RunStdio/WithStdioTransport delegate to RunIO/WithIOTransport. (#253)
 - mcp-logging-transport: core.LoggingTransport — wire-level JSON-RPC message tracing decorator for any core.Transport. Logs method names, direction (→/←), latency. Optional LogBodies for full JSON output. Complements server middleware (method-level) with transport-level visibility. (#254)
 - mcp-auto-pagination: Client iterators c.Tools(ctx), c.Resources(ctx), c.ResourceTemplates(ctx), c.Prompts(ctx) — iter.Seq2 auto-pagination over cursor-based list responses. Generic paginate[T] helper handles cursor threading and context cancellation. (#252)
+- mcp-custom-method-handlers: server.HandleMethod / WithMethodHandler — register handlers for custom JSON-RPC methods (e.g., events/poll, events/stream). Dispatched after initialization, participates in middleware. Built-in MCP methods cannot be overridden (panics). Uses core.MethodContext typed context. (#266)
+- mcp-method-context: core.MethodContext — typed handler context for custom method handlers. Embeds BaseContext (EmitLog, Sample, Elicit, AuthClaims, Notify, DetachFromClient). Matches ToolContext/ResourceContext pattern.
+- mcp-events-library-experimental: experimental/ext/events — EXPERIMENTAL library for MCP Events spec (triggers-events-wg). EventSource interface, TypedSource[Data] with auto-derived payloadSchema, Register() for protocol methods, WebhookRegistry with HMAC-SHA256 signing (ts+"."+body), TTL, retry with backoff, SSRF validation. cursorGap detection for ring buffer wrap. (#264)
+- mcp-telegram-events-example: experimental/telegram-events — Reference server implementing MCP Events with Telegram. Three delivery modes: push (Broadcast+SSE), poll (events/poll), webhook (events/subscribe+HMAC POST). 21 tests. Companion to Clare Liguori's TypeScript impl. (#264)
 
 ## Module
 github.com/panyam/mcpkit
