@@ -1,6 +1,6 @@
 # experimental/ext/events
 
-> **EXPERIMENTAL** — this package will change as the triggers-events-wg iterates on the spec.
+> **EXPERIMENTAL** - this package will change as the triggers-events-wg iterates on the spec.
 
 Go library for adding [MCP Events](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/pull/1) to an mcpkit server. Implements the protocol methods (`events/list`, `events/poll`, `events/subscribe`, `events/unsubscribe`) and webhook delivery so you only write the event source.
 
@@ -31,7 +31,7 @@ source := events.TypedSource[AlertData](events.EventDef{
     Delivery:    []string{"push", "poll", "webhook"},
 }, func(cursor string, limit int) events.PollResult {
     // Your cursor-based retrieval logic here.
-    // Cursor is an opaque string — you define the format.
+    // Cursor is an opaque string - you define the format.
     return events.PollResult{
         Events: myEvents,
         Cursor: nextCursor,
@@ -88,9 +88,9 @@ type EventSource interface {
     Poll(cursor string, limit int) PollResult
 }
 
-// PollResult includes CursorGap — true when the client's cursor
+// PollResult includes CursorGap - true when the client's cursor
 // points to evicted events (ring buffer wrapped). Not in Peter's
-// spec — an mcpkit extension to signal silent event loss.
+// spec - an mcpkit extension to signal silent event loss.
 type PollResult struct {
     Events    []Event
     Cursor    string
@@ -113,8 +113,8 @@ Based on [Peter Alexander's design sketch](https://github.com/modelcontextprotoc
 
 | Topic | Our Approach |
 |-------|-------------|
-| **Cursors** | Opaque strings — source defines format |
-| **`cursorGap`** | mcpkit extension (not in spec) — signals events lost to buffer wrap |
+| **Cursors** | Opaque strings - source defines format |
+| **`cursorGap`** | mcpkit extension (not in spec) - signals events lost to buffer wrap |
 | **`nextPollSeconds`** | Per-subscription (follows spec schema); client SDK coalesces |
-| **`events/stream`** | Deferred — push uses `Server.Broadcast` for now |
+| **`events/stream`** | Deferred - push uses `Server.Broadcast` for now |
 | **Typed contexts** | Handlers receive `core.MethodContext` (EmitLog, AuthClaims, etc.) |

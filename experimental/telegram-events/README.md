@@ -7,7 +7,7 @@ Companion to [Clare Liguori's TypeScript implementation](https://github.com/mode
 ## Quick Start
 
 ```bash
-# Test mode (no Telegram — use make inject)
+# Test mode (no Telegram - use make inject)
 make run
 
 # With Telegram bot
