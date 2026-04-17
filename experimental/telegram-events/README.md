@@ -11,7 +11,7 @@ Companion to [Clare Liguori's TypeScript implementation](https://github.com/mode
 make run
 
 # With Telegram bot
-TELEGRAM_MCPKIT_BOTTOKEN=your-token make run
+TELEGRAM_BOT_TOKEN=your-token make run
 ```
 
 Get a bot token from [@BotFather](https://t.me/BotFather) (`/newbot`).
@@ -101,7 +101,7 @@ The Telegram-specific code is ~200 LoC. Protocol methods, webhook delivery, and 
 
 | Target | Description |
 |--------|-------------|
-| `make run` | Start server (with bot if `TELEGRAM_MCPKIT_BOTTOKEN` set) |
+| `make run` | Start server (with bot if `TELEGRAM_BOT_TOKEN` set) |
 | `make test` | 21 Go tests |
 | `make diag` | Full diagnostic sequence |
 | `make inject TEXT="..."` | Inject a message (optional: `SENDER=`, `CHAT_ID=`) |

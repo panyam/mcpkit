@@ -3,12 +3,12 @@ MCP  := $(ADDR)/mcp
 
 # ── Build & Run ──────────────────────────────────────────────────────
 # Usage: make run                                — test mode (no Telegram)
-#        TELEGRAM_MCPKIT_BOTTOKEN=... make run   — with Telegram bot
+#        TELEGRAM_BOT_TOKEN=... make run   — with Telegram bot
 
 run:
-	@if [ -n "$(TELEGRAM_MCPKIT_BOTTOKEN)" ]; then \
+	@if [ -n "$(TELEGRAM_BOT_TOKEN)" ]; then \
 	  echo "Starting with Telegram bot..."; \
-	  go run . -addr :8080 -token "$(TELEGRAM_MCPKIT_BOTTOKEN)"; \
+	  go run . -addr :8080 -token "$(TELEGRAM_BOT_TOKEN)"; \
 	else \
 	  echo "Starting in test mode (no Telegram token)..."; \
 	  go run . -addr :8080; \
