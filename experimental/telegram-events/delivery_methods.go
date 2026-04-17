@@ -73,6 +73,7 @@ func (d *MethodDelivery) Register(srv *server.Server, store *MessageStore, webho
 			Cursor          string          `json:"cursor"`
 			HasMore         bool            `json:"hasMore"`
 			NextPollSeconds int             `json:"nextPollSeconds,omitempty"`
+			CursorGap       bool            `json:"cursorGap,omitempty"` // true if events were lost due to buffer wrap
 			Error           *struct {
 				Code    int    `json:"code"`
 				Message string `json:"message"`
@@ -98,8 +99,10 @@ func (d *MethodDelivery) Register(srv *server.Server, store *MessageStore, webho
 			}
 
 			// Fetch one extra to detect hasMore
-			msgs, nextCursor := store.GetSince(cursor, req.MaxEvents+1)
-			hasMore := len(msgs) > req.MaxEvents
+			pr := store.GetSince(cursor, req.MaxEvents+1)
+			hasMore := len(pr.Messages) > req.MaxEvents
+			msgs := pr.Messages
+			nextCursor := pr.NextCursor
 			if hasMore {
 				msgs = msgs[:req.MaxEvents]
 				nextCursor = msgs[len(msgs)-1].ID
@@ -114,6 +117,7 @@ func (d *MethodDelivery) Register(srv *server.Server, store *MessageStore, webho
 				Events:          events,
 				Cursor:          strconv.FormatInt(nextCursor, 10),
 				HasMore:         hasMore,
+				CursorGap:       pr.CursorGap,
 				NextPollSeconds: 5,
 			})
 		}

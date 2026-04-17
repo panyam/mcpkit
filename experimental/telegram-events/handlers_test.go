@@ -230,18 +230,42 @@ func TestMessageStoreCursorSemantics(t *testing.T) {
 	store.Add(1, "bob", "second", time.Now())
 	store.Add(1, "carol", "third", time.Now())
 
-	msgs, next := store.GetSince(0, 100)
-	assert.Len(t, msgs, 3)
-	assert.Equal(t, int64(3), next)
+	pr := store.GetSince(0, 100)
+	assert.Len(t, pr.Messages, 3)
+	assert.Equal(t, int64(3), pr.NextCursor)
+	assert.False(t, pr.CursorGap, "no gap when starting from 0")
 
-	msgs, next = store.GetSince(1, 100)
-	assert.Len(t, msgs, 2)
-	assert.Equal(t, "second", msgs[0].Text)
-	assert.Equal(t, int64(3), next)
+	pr = store.GetSince(1, 100)
+	assert.Len(t, pr.Messages, 2)
+	assert.Equal(t, "second", pr.Messages[0].Text)
+	assert.Equal(t, int64(3), pr.NextCursor)
 
-	msgs, next = store.GetSince(3, 100)
-	assert.Empty(t, msgs)
-	assert.Equal(t, int64(3), next)
+	pr = store.GetSince(3, 100)
+	assert.Empty(t, pr.Messages)
+	assert.Equal(t, int64(3), pr.NextCursor)
+}
+
+// TestMessageStoreCursorGap verifies that polling with a stale cursor (pointing
+// to evicted messages) returns cursorGap=true so the client knows events were lost.
+func TestMessageStoreCursorGap(t *testing.T) {
+	store := NewMessageStore(3) // small buffer
+	for i := 1; i <= 3; i++ {
+		store.Add(1, "user", fmt.Sprintf("msg %d", i), time.Now())
+	}
+	// cursor=2 is valid, no gap
+	pr := store.GetSince(2, 100)
+	assert.Len(t, pr.Messages, 1)
+	assert.False(t, pr.CursorGap, "cursor within buffer should not signal gap")
+
+	// Add more to wrap the buffer
+	for i := 4; i <= 10; i++ {
+		store.Add(1, "user", fmt.Sprintf("msg %d", i), time.Now())
+	}
+	// Buffer now holds IDs 8,9,10. cursor=2 is stale.
+	pr = store.GetSince(2, 100)
+	assert.True(t, pr.CursorGap, "cursor pointing to evicted messages should signal gap")
+	assert.Len(t, pr.Messages, 3, "should still return available messages")
+	assert.Equal(t, "msg 8", pr.Messages[0].Text)
 }
 
 // TestMessageStoreRingBuffer verifies that the store evicts old messages
