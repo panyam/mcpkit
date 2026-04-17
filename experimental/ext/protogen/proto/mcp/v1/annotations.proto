@@ -25,7 +25,7 @@
 syntax = "proto3";
 package mcp.v1;
 
-option go_package = "github.com/panyam/mcpkit/ext/protogen/proto/mcp/v1;mcpv1";
+option go_package = "github.com/panyam/mcpkit/experimental/ext/protogen/proto/mcp/v1;mcpv1";
 
 import "google/protobuf/descriptor.proto";
 

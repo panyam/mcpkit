@@ -34,7 +34,7 @@ import (
 
 	"google.golang.org/protobuf/compiler/protogen"
 
-	"github.com/panyam/mcpkit/ext/protogen/generator"
+	"github.com/panyam/mcpkit/experimental/ext/protogen/generator"
 )
 
 func main() {

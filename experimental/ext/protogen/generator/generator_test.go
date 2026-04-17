@@ -9,8 +9,8 @@ import (
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/types/descriptorpb"
 
-	mcpv1 "github.com/panyam/mcpkit/ext/protogen/proto/mcp/v1"
-	ptestutil "github.com/panyam/mcpkit/ext/protogen/testutil"
+	mcpv1 "github.com/panyam/mcpkit/experimental/ext/protogen/proto/mcp/v1"
+	ptestutil "github.com/panyam/mcpkit/experimental/ext/protogen/testutil"
 )
 
 // buildExtensionBytes encodes annotation fields as raw proto bytes suitable

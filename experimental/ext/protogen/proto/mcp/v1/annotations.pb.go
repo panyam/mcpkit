@@ -620,7 +620,7 @@ const file_mcp_v1_annotations_proto_rawDesc = "" +
 	"mcp_elicit\x12\x1e.google.protobuf.MethodOptions\x18\xbc\x8e\x03 \x01(\v2\x18.mcp.v1.MCPElicitOptionsR\tmcpElicit:_\n" +
 	"\fmcp_sampling\x12\x1e.google.protobuf.MethodOptions\x18\xbd\x8e\x03 \x01(\v2\x1a.mcp.v1.MCPSamplingOptionsR\vmcpSampling:]\n" +
 	"\vmcp_service\x12\x1f.google.protobuf.ServiceOptions\x18\u008e\x03 \x01(\v2\x19.mcp.v1.MCPServiceOptionsR\n" +
-	"mcpServiceB:Z8github.com/panyam/mcpkit/ext/protogen/proto/mcp/v1;mcpv1b\x06proto3"
+	"mcpServiceBGZEgithub.com/panyam/mcpkit/experimental/ext/protogen/proto/mcp/v1;mcpv1b\x06proto3"
 
 var (
 	file_mcp_v1_annotations_proto_rawDescOnce sync.Once

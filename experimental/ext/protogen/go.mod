@@ -1,4 +1,4 @@
-module github.com/panyam/mcpkit/ext/protogen
+module github.com/panyam/mcpkit/experimental/ext/protogen
 
 go 1.26.1
 
@@ -25,4 +25,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/panyam/mcpkit => ../../
+replace github.com/panyam/mcpkit => ../../../

@@ -1,7 +1,7 @@
 # MCPKit Makefile
 
 # Sub-modules that get tagged alongside the root module
-SUB_MODS_TO_TAG := ext/auth ext/ui ext/protogen cmd/testclient tests/e2e tests/keycloak
+SUB_MODS_TO_TAG := ext/auth ext/ui experimental/ext/protogen cmd/testclient tests/e2e tests/keycloak
 
 # =============================================================================
 # Build & test
@@ -68,7 +68,7 @@ build-bridge: ## Compile mcp-app-bridge.ts → .js (delegates to ext/ui)
 	cd ext/ui && $(MAKE) build-bridge
 
 test-protogen: ## Run protogen sub-module tests + e2e example
-	cd ext/protogen && go test ./... -count=1 -timeout 30s && $(MAKE) test-e2e
+	cd experimental/ext/protogen && go test ./... -count=1 -timeout 30s && $(MAKE) test-e2e
 
 test-e2e: ## Run all E2E tests (auth, apps — no Docker)
 	cd tests/e2e && go test ./... -count=1 -timeout 60s
@@ -285,7 +285,7 @@ tidy: ## Run go mod tidy on root module only
 
 # All sub-modules (including tests/*) that have their own go.mod and require
 # the root module. Used by tidy-all and bump-root targets.
-SUB_MODS_ALL := ext/auth ext/ui ext/protogen cmd/testclient tests/e2e tests/keycloak
+SUB_MODS_ALL := ext/auth ext/ui experimental/ext/protogen cmd/testclient tests/e2e tests/keycloak
 
 tidy-all: ## Run go mod tidy across root + every sub-module
 	@echo "==> tidy root"

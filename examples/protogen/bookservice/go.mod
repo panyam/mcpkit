@@ -4,7 +4,7 @@ go 1.26.2
 
 require (
 	github.com/panyam/mcpkit v0.2.9
-	github.com/panyam/mcpkit/ext/protogen v0.2.9
+	github.com/panyam/mcpkit/experimental/ext/protogen v0.2.9
 	github.com/stretchr/testify v1.11.1
 	google.golang.org/protobuf v1.36.11
 )
@@ -34,4 +34,4 @@ require (
 
 replace github.com/panyam/mcpkit => ../../..
 
-replace github.com/panyam/mcpkit/ext/protogen => ../../../ext/protogen
+replace github.com/panyam/mcpkit/experimental/ext/protogen => ../../../ext/protogen

@@ -8,7 +8,7 @@ Go library for building production-grade MCP servers and clients.
 make test              # Core tests (core/server/client/testutil)
 make test-auth         # ext/auth sub-module
 make test-ui           # ext/ui sub-module
-make test-protogen     # ext/protogen sub-module
+make test-protogen     # experimental/ext/protogen sub-module
 make test-e2e          # E2E tests (auth + apps)
 make test-experimental # Experimental POC tests (telegram-events)
 make testconf          # MCP conformance suite (needs Node.js)
@@ -22,7 +22,7 @@ make tag-push V=vX.Y.Z  # Tag root + all sub-modules and push
 make bump-root V=vX.Y.Z # Update mcpkit version in all sub-module go.mods
 ```
 
-Sub-module commands: see `ext/ui/Makefile`, `ext/protogen/Makefile`, `experimental/telegram-events/Makefile`.
+Sub-module commands: see `ext/ui/Makefile`, `experimental/ext/protogen/Makefile`, `experimental/telegram-events/Makefile`.
 
 ## Package Layout
 
@@ -33,7 +33,7 @@ Sub-module commands: see `ext/ui/Makefile`, `ext/protogen/Makefile`, `experiment
 | `client/` | Client, transports, reconnection, auth retry | `client/README.md`, `client/CONSTRAINTS.md` |
 | `ext/auth/` | JWT, PRM, OAuth (separate go.mod) | `ext/auth/docs/DESIGN.md` |
 | `ext/ui/` | MCP Apps + App Bridge JS (separate go.mod) | `docs/APPS_DESIGN.md` |
-| `ext/protogen/` | Proto → MCP codegen (separate go.mod) | `ext/protogen/docs/DESIGN.md` |
+| `experimental/ext/protogen/` | Proto → MCP codegen (separate go.mod) | `experimental/ext/protogen/docs/DESIGN.md` |
 | `experimental/ext/events/` | MCP Events protocol library (EXPERIMENTAL, separate go.mod) | `experimental/ext/events/README.md` |
 | `experimental/telegram-events/` | Telegram Events reference server (separate go.mod) | `experimental/telegram-events/README.md` |
 | `testutil/` | `NewTestServer`, `ForAllTransports`, `TestClient` | |
@@ -41,10 +41,10 @@ Sub-module commands: see `ext/ui/Makefile`, `ext/protogen/Makefile`, `experiment
 
 ## Sub-Module Checklist
 
-- `ext/auth/`, `ext/ui/`, `ext/protogen/` have separate `go.mod` — `make test` does NOT cover them
+- `ext/auth/`, `ext/ui/`, `experimental/ext/protogen/` have separate `go.mod` — `make test` does NOT cover them
 - Release: `make tag-push V=vX.Y.Z` tags root + all sub-modules. Don't retag published versions.
 - New core deps propagate: `make tidy-all` after touching `core/` imports
-- Pre-push hook runs root + ext/auth + ext/ui + ext/protogen tests
+- Pre-push hook runs root + ext/auth + ext/ui + experimental/ext/protogen tests
 
 ## Gotchas
 
@@ -66,7 +66,7 @@ Module-specific gotchas live in their READMEs (protogen templates, App Bridge es
 | Constraints | `core/CONSTRAINTS.md`, `server/CONSTRAINTS.md`, `client/CONSTRAINTS.md` |
 | Auth design | `ext/auth/docs/DESIGN.md` |
 | MCP Apps design | `docs/APPS_DESIGN.md` |
-| Protogen design | `ext/protogen/docs/DESIGN.md` |
+| Protogen design | `experimental/ext/protogen/docs/DESIGN.md` |
 | Events library | `experimental/ext/events/README.md` |
 | Telegram example | `experimental/telegram-events/README.md` |
 | Auth examples | `examples/auth/README.md` (5 servers: bearer, JWT, scopes, hijacking, discovery) |
