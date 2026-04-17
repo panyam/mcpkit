@@ -3,7 +3,7 @@ package schema
 import (
 	"testing"
 
-	"github.com/panyam/mcpkit/ext/protogen/testutil"
+	"github.com/panyam/mcpkit/experimental/ext/protogen/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

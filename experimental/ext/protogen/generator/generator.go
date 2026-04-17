@@ -24,8 +24,8 @@ import (
 	"google.golang.org/protobuf/compiler/protogen"
 
 	"github.com/panyam/mcpkit/core"
-	mcpv1 "github.com/panyam/mcpkit/ext/protogen/proto/mcp/v1"
-	"github.com/panyam/mcpkit/ext/protogen/schema"
+	mcpv1 "github.com/panyam/mcpkit/experimental/ext/protogen/proto/mcp/v1"
+	"github.com/panyam/mcpkit/experimental/ext/protogen/schema"
 )
 
 // Config holds generation options.

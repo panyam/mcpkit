@@ -72,14 +72,14 @@
 - mcp-apps-bridge-serve: ServeBridge() HTTP handler at /_mcpkit/mcp-app-bridge.js — serves bridge JS for external `<script src>` loading
 - mcp-apps-bridge-inject: InjectAppBridge(html) + AppShellHTML(title, body) — convenience helpers for inline bridge injection
 - mcp-json-no-html-escape: core.MarshalJSON with SetEscapeHTML(false) — JSON-RPC responses preserve literal <, >, & matching Node.js/Python behavior. Fixes HTML content in resource responses for MCP Apps hosts. (v0.2.19)
-- mcp-protogen: ext/protogen — protoc plugin (protoc-gen-go-mcp) generates MCP registrations from proto service definitions. Proto annotations (mcp_tool, mcp_resource, mcp_prompt, mcp_service) with full field support. In-process, gRPC forwarding, and ConnectRPC forwarding variants for all three primitives. JSON Schema derived from proto messages. Uses typed handler contexts. Published to buf.build/mcpkit/protogen. (#211, #216, #217, #218)
+- mcp-protogen: experimental/ext/protogen — protoc plugin (protoc-gen-go-mcp) generates MCP registrations from proto service definitions. Proto annotations (mcp_tool, mcp_resource, mcp_prompt, mcp_service) with full field support. In-process, gRPC forwarding, and ConnectRPC forwarding variants for all three primitives. JSON Schema derived from proto messages. Uses typed handler contexts. Published to buf.build/mcpkit/protogen. (#211, #216, #217, #218)
 - mcp-protogen-tool-annotations: mcp_tool annotation fields: name, description, timeout, structured_output, result_summary. Validated at generation time (invalid names/timeouts are fatal errors). Namespace prefix via mcp_service.namespace. (#216)
 - mcp-protogen-resources: mcp_resource annotation → server.Resource (static) or server.ResourceTemplate (parameterized). URI template detection via core.IsTemplateURI. runtime.BindParams delegates to protokit PopulateFromMap for type-coerced field binding. (#217)
 - mcp-protogen-prompts: mcp_prompt annotation → server.Prompt with auto-derived PromptArguments from request message fields. runtime.BindPromptArgs and ProtoPromptResult helpers. (#218)
 - mcp-protogen-grpc-errors: RPCError extracts gRPC status code, message, and details (proto Any) as StructuredError with {code, message, details} JSON. Agents can parse and recover programmatically. (#224)
 - mcp-protogen-result-summary: mcp_tool.result_summary template: "Slide {position} updated (v{version})". runtime.ProtoSummaryStructuredResult renders from response fields. (#224)
 - mcp-protogen-embedded-templates: Codegen templates use go:embed (templates/file.go.tmpl) instead of Go string constants
-- mcp-protogen-buf: Proto module published to buf.build/mcpkit/protogen. ext/protogen/Makefile with build, lint, generate, push targets
+- mcp-protogen-buf: Proto module published to buf.build/mcpkit/protogen. experimental/ext/protogen/Makefile with build, lint, generate, push targets
 - mcp-protogen-typed-contexts: Generated in-process server interfaces use typed handler contexts (ToolContext, ResourceContext, PromptContext) instead of context.Context. Gives impls direct access to ctx.Sample(), ctx.Elicit(), ctx.EmitProgress() etc. gRPC/Connect client interfaces unchanged.
 - mcp-protogen-sampling: mcp_sampling annotation on tool methods — generates pre-configured SampleForXxx() helper with system_prompt, max_tokens, include_context, model preferences. Service-level default_sampling in mcp_service; method-level overrides.
 - mcp-protogen-elicitation: mcp_elicit annotation on tool methods — schema_message references a proto message, JSON Schema auto-derived via schema.FromMessage(). Generates typed ElicitXxx() helper returning (*SchemaMsg, action, error). Uses generic runtime.BindElicitResult[T] for type-safe unmarshaling.
@@ -128,7 +128,7 @@ newstack/mcpkit/main
 ### Sub-module: ext/auth (github.com/panyam/mcpkit/ext/auth)
 - oneauth (github.com/panyam/oneauth) v0.0.71 — JWT/OIDC validation, testutil.TestAuthServer; separate go.mod
 
-### Sub-module: ext/protogen (github.com/panyam/mcpkit/ext/protogen)
+### Sub-module: experimental/ext/protogen (github.com/panyam/mcpkit/experimental/ext/protogen)
 - protokit (github.com/panyam/protokit) v0.0.5 — proto descriptor test utilities, PopulateFieldFromPath (dot-path field binding with type coercion), wire package (proto wire-format decoding helpers for extension extraction)
 
 ## Integration
