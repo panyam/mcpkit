@@ -10,9 +10,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/ext/auth"
@@ -26,9 +29,12 @@ func main() {
 
 	// Step 1: Start in-process authorization server.
 	// This provides: JWKS endpoint, token endpoint, RS256 key pair.
-	as := testutil.NewTestAuthServerDirect(
+	as, err := testutil.NewAuthServer(
 		testutil.WithScopes([]string{"read", "write"}),
 	)
+	if err != nil {
+		log.Fatal(err)
+	}
 	defer as.Close()
 	fmt.Printf("Authorization server at %s\n", as.URL())
 	fmt.Printf("  JWKS: %s\n", as.JWKSURL())
@@ -78,7 +84,7 @@ func main() {
 
 	// Step 3: Connect as "alice" with a valid token.
 	fmt.Println("Step 1: Connect as alice with valid JWT...")
-	token := mintToken(as, "alice", []string{"read", "write"})
+	token := mustMintToken(as, "alice", []string{"read", "write"})
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "demo", Version: "1.0"},
 		client.WithClientBearerToken(token),
 	)
@@ -103,10 +109,14 @@ func main() {
 	fmt.Println("\n=== Done ===")
 }
 
-func mintToken(as *testutil.TestAuthServer, userID string, scopes []string) string {
-	tok, err := as.MintTokenForSubject(userID, scopes)
+func mustMintToken(as *testutil.TestAuthServer, userID string, scopes []string) string {
+	tok, err := as.MintTokenWithClaims(jwt.MapClaims{
+		"sub":   userID,
+		"aud":   as.APIAuth.JWTAudience,
+		"scope": strings.Join(scopes, " "),
+	})
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	return tok
 }

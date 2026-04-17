@@ -22,7 +22,7 @@ func main() {
 	// Step 1: Create server with bearer token auth.
 	srv := server.NewServer(
 		core.ServerInfo{Name: "bearer-demo", Version: "1.0"},
-		server.WithAuth(core.BearerTokenValidator("my-secret-token")),
+		server.WithBearerToken("my-secret-token"),
 	)
 	srv.Register(core.TextTool[struct{}]("ping", "Returns pong",
 		func(ctx core.ToolContext, _ struct{}) (string, error) {
