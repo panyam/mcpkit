@@ -503,3 +503,5 @@ make[2]: *** No rule to make target `downkcl'.  Stop.
 
 === Results: 10 passed, 0 failed ===
 Finished: Thu Apr 16 19:24:45 PDT 2026
+2026/04/16 20:25:42 Received signal terminated, shutting down...
+2026/04/16 20:25:42 Server shut down gracefully
