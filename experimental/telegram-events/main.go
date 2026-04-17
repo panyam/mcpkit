@@ -12,14 +12,13 @@ package main
 import (
 	"encoding/json"
 	"flag"
-	"fmt"
 	"log"
 	"net/http"
-	"strconv"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/experimental/ext/events"
 	"github.com/panyam/mcpkit/server"
 	gohttp "github.com/panyam/servicekit/http"
 )
@@ -30,7 +29,7 @@ func main() {
 	flag.Parse()
 
 	store := NewMessageStore(1000)
-	webhooks := NewWebhookRegistry()
+	webhooks := events.NewWebhookRegistry()
 
 	var bot *tgbotapi.BotAPI
 	if *token != "" {
@@ -54,33 +53,23 @@ func main() {
 	// Register MCP resources (telegram://messages/*)
 	registerResources(srv, store)
 
-	// Register both delivery modes:
-	// - ToolDelivery: get_messages, send_message, register_webhook as MCP tools
-	// - MethodDelivery: events/list, events/poll, events/subscribe as protocol methods (#266)
-	toolDelivery := &ToolDelivery{Bot: bot}
-	toolDelivery.Register(srv, store, webhooks)
-	methodDelivery := &MethodDelivery{}
-	methodDelivery.Register(srv, store, webhooks)
+	// Register send_message tool (Telegram action, not an event operation)
+	(&ToolDelivery{Bot: bot}).Register(srv, store)
+
+	// Register event protocol methods via the events library
+	events.Register(events.Config{
+		Sources:  []events.EventSource{newTelegramSource(store)},
+		Webhooks: webhooks,
+		Server:   srv,
+	})
 
 	// Wire fan-out: when a message arrives, push to SSE clients, notify
 	// resource subscribers, and deliver to outbound webhooks.
 	store.OnMessage = func(msg Message) {
-		event := TelegramEvent{
-			EventID:   fmt.Sprintf("evt_%d", msg.ID),
-			Name:      "telegram.message",
-			Timestamp: msg.Timestamp.Format(time.RFC3339),
-			Data: TelegramEventData{
-				ChatID:    strconv.FormatInt(msg.ChatID, 10),
-				MessageID: strconv.FormatInt(msg.ID, 10),
-				User:      msg.Sender,
-				Text:      msg.Text,
-				Timestamp: msg.Timestamp.Format(time.RFC3339),
-			},
-			Cursor: strconv.FormatInt(msg.ID, 10),
-		}
-		srv.Broadcast("notifications/events/event", event)
+		event := messageToEvent(msg)
+		events.Emit(srv, event)
 		srv.NotifyResourceUpdated("telegram://messages/recent")
-		webhooks.Deliver(event)
+		events.EmitToWebhooks(webhooks, event)
 	}
 
 	// Build HTTP mux: MCP server at /mcp, Telegram webhook at /webhook/telegram
@@ -95,9 +84,7 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	// Direct injection endpoint — POST /inject with JSON body:
-	//   {"chat_id": 123, "sender": "alice", "text": "hello"}
-	// Useful for testing without a Telegram bot.
+	// Direct injection endpoint
 	mux.HandleFunc("POST /inject", func(w http.ResponseWriter, r *http.Request) {
 		var msg struct {
 			ChatID int64  `json:"chat_id"`
@@ -126,8 +113,7 @@ func main() {
 	}
 }
 
-// startTelegramPolling uses long-polling to receive updates from Telegram
-// (alternative to webhook mode — useful for local dev without ngrok).
+// startTelegramPolling uses long-polling to receive updates from Telegram.
 func startTelegramPolling(bot *tgbotapi.BotAPI, store *MessageStore) {
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60

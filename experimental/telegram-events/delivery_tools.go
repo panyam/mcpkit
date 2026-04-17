@@ -9,8 +9,7 @@ import (
 )
 
 // ToolDelivery registers MCP tools for Telegram actions (send_message).
-// Event delivery (poll, push, webhook) is handled by MethodDelivery via
-// protocol-level methods per Peter Alexander's design sketch.
+// Event delivery (poll, push, webhook) is handled by the events library.
 type ToolDelivery struct {
 	Bot *tgbotapi.BotAPI // nil in test mode
 }
@@ -20,9 +19,8 @@ type sendMessageInput struct {
 	Text   string `json:"text" jsonschema:"description=Message text to send.,required"`
 }
 
-// Register hooks up MCP tools for Telegram actions.
-func (d *ToolDelivery) Register(srv *server.Server, store *MessageStore, webhooks *WebhookRegistry) {
-	// Send tool: send_message(chat_id, text) → confirmation
+// Register hooks up the send_message tool on the MCP server.
+func (d *ToolDelivery) Register(srv *server.Server, store *MessageStore) {
 	srv.Register(core.TextTool[sendMessageInput](
 		"send_message",
 		"Send a text message to a Telegram chat.",

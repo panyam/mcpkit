@@ -321,7 +321,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) *core.Resp
 			return d.handleCompletionComplete(ctx, id, req.Params)
 		default:
 			if h, ok := d.customHandlers[req.Method]; ok {
-				return h(ctx, id, req.Params)
+				return h(core.NewMethodContext(ctx), id, req.Params)
 			}
 			return core.NewErrorResponse(id, core.ErrCodeMethodNotFound, "method not found: "+req.Method)
 		}

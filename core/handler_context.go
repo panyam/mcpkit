@@ -39,6 +39,25 @@ type PromptContext struct {
 	BaseContext
 }
 
+// MethodContext is the context passed to custom JSON-RPC method handlers
+// registered via server.HandleMethod or server.WithMethodHandler. It embeds
+// BaseContext with no additional methods — custom methods get the same
+// session capabilities as other handlers (EmitLog, Sample, Elicit, etc.).
+type MethodContext struct {
+	BaseContext
+}
+
+// NewMethodContext constructs a MethodContext from a standard context.Context.
+func NewMethodContext(ctx context.Context) MethodContext {
+	return MethodContext{BaseContext{ctx, sessionFromContext(ctx)}}
+}
+
+// DetachFromClient returns a MethodContext that preserves session state but is
+// NOT cancelled when the client disconnects.
+func (mc MethodContext) DetachFromClient() MethodContext {
+	return MethodContext{mc.BaseContext.DetachFromClient()}
+}
+
 // NewToolContext constructs a ToolContext from a standard context.Context.
 // Called by the dispatch layer before invoking tool handlers.
 func NewToolContext(ctx context.Context) ToolContext {

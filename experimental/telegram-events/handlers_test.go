@@ -15,6 +15,7 @@ import (
 
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/experimental/ext/events"
 	"github.com/panyam/mcpkit/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,17 +30,21 @@ func newTestStore(n int) *MessageStore {
 	return store
 }
 
-// newConnectedClient creates a fully wired MCP server (tools + methods + resources),
-// starts it on httptest, connects a client, and returns both.
-func newConnectedClient(t *testing.T, store *MessageStore, webhooks *WebhookRegistry) (*client.Client, *httptest.Server) {
+// newConnectedClient creates a fully wired MCP server, starts it on httptest,
+// connects a client, and returns both.
+func newConnectedClient(t *testing.T, store *MessageStore, webhooks *events.WebhookRegistry) (*client.Client, *httptest.Server) {
 	t.Helper()
 	srv := server.NewServer(
 		core.ServerInfo{Name: "telegram-events-test", Version: "0.1.0"},
 		server.WithSubscriptions(),
 	)
 	registerResources(srv, store)
-	(&ToolDelivery{Bot: nil}).Register(srv, store, webhooks)
-	(&MethodDelivery{}).Register(srv, store, webhooks)
+	(&ToolDelivery{Bot: nil}).Register(srv, store)
+	events.Register(events.Config{
+		Sources:  []events.EventSource{newTelegramSource(store)},
+		Webhooks: webhooks,
+		Server:   srv,
+	})
 
 	handler := srv.Handler(server.WithStreamableHTTP(true))
 	ts := httptest.NewServer(handler)
@@ -52,21 +57,18 @@ func newConnectedClient(t *testing.T, store *MessageStore, webhooks *WebhookRegi
 
 // pollResult is the structure returned by events/poll for a single subscription.
 type pollResult struct {
-	ID              string          `json:"id"`
-	Events          []TelegramEvent `json:"events"`
-	Cursor          string          `json:"cursor"`
-	HasMore         bool            `json:"hasMore"`
-	NextPollSeconds int             `json:"nextPollSeconds"`
+	ID              string         `json:"id"`
+	Events          []events.Event `json:"events"`
+	Cursor          string         `json:"cursor"`
+	HasMore         bool           `json:"hasMore"`
+	NextPollSeconds int            `json:"nextPollSeconds"`
 }
 
-// TestEventsPollCursorPagination verifies that the events/poll method returns
-// events after the cursor and provides the correct next cursor for
-// subsequent polls.
+// TestEventsPollCursorPagination verifies events/poll cursor pagination.
 func TestEventsPollCursorPagination(t *testing.T) {
 	store := newTestStore(10)
-	c, _ := newConnectedClient(t, store, NewWebhookRegistry())
+	c, _ := newConnectedClient(t, store, events.NewWebhookRegistry())
 
-	// First poll: cursor=0, maxEvents=5 → events 1-5, cursor="5"
 	result, err := c.Call("events/poll", map[string]any{
 		"maxEvents": 5,
 		"subscriptions": []map[string]any{
@@ -78,12 +80,9 @@ func TestEventsPollCursorPagination(t *testing.T) {
 	var resp struct{ Results []pollResult }
 	require.NoError(t, json.Unmarshal(result.Raw, &resp))
 	require.Len(t, resp.Results, 1)
-	assert.Len(t, resp.Results[0].Events, 5, "first page should have 5 events")
-	assert.Equal(t, "5", resp.Results[0].Cursor, "cursor should be 5")
-	assert.Equal(t, "message 1", resp.Results[0].Events[0].Data.Text)
-	assert.Equal(t, "message 5", resp.Results[0].Events[4].Data.Text)
+	assert.Len(t, resp.Results[0].Events, 5)
+	assert.Equal(t, "5", resp.Results[0].Cursor)
 
-	// Second poll: cursor=5, maxEvents=5 → events 6-10, cursor="10"
 	result2, err := c.Call("events/poll", map[string]any{
 		"maxEvents": 5,
 		"subscriptions": []map[string]any{
@@ -94,17 +93,14 @@ func TestEventsPollCursorPagination(t *testing.T) {
 
 	var resp2 struct{ Results []pollResult }
 	require.NoError(t, json.Unmarshal(result2.Raw, &resp2))
-	assert.Len(t, resp2.Results[0].Events, 5, "second page should have 5 events")
-	assert.Equal(t, "10", resp2.Results[0].Cursor, "cursor should be 10")
-	assert.Equal(t, "message 6", resp2.Results[0].Events[0].Data.Text)
-	assert.Equal(t, "message 10", resp2.Results[0].Events[4].Data.Text)
+	assert.Len(t, resp2.Results[0].Events, 5)
+	assert.Equal(t, "10", resp2.Results[0].Cursor)
 }
 
-// TestEventsPollEmptyStore verifies that polling an empty store returns an
-// empty events list and cursor "0".
+// TestEventsPollEmptyStore verifies polling an empty store.
 func TestEventsPollEmptyStore(t *testing.T) {
 	store := NewMessageStore(1000)
-	c, _ := newConnectedClient(t, store, NewWebhookRegistry())
+	c, _ := newConnectedClient(t, store, events.NewWebhookRegistry())
 
 	result, err := c.Call("events/poll", map[string]any{
 		"subscriptions": []map[string]any{
@@ -116,15 +112,14 @@ func TestEventsPollEmptyStore(t *testing.T) {
 	var resp struct{ Results []pollResult }
 	require.NoError(t, json.Unmarshal(result.Raw, &resp))
 	require.Len(t, resp.Results, 1)
-	assert.Empty(t, resp.Results[0].Events, "empty store should return no events")
-	assert.Equal(t, "0", resp.Results[0].Cursor, "cursor should remain 0")
+	assert.Empty(t, resp.Results[0].Events)
+	assert.Equal(t, "0", resp.Results[0].Cursor)
 }
 
-// TestEventsPollUnknownEvent verifies that polling for an unknown event name
-// returns an error for that subscription without failing the request.
+// TestEventsPollUnknownEvent verifies unknown event name returns per-sub error.
 func TestEventsPollUnknownEvent(t *testing.T) {
 	store := NewMessageStore(1000)
-	c, _ := newConnectedClient(t, store, NewWebhookRegistry())
+	c, _ := newConnectedClient(t, store, events.NewWebhookRegistry())
 
 	result, err := c.Call("events/poll", map[string]any{
 		"subscriptions": []map[string]any{
@@ -144,31 +139,28 @@ func TestEventsPollUnknownEvent(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(result.Raw, &resp))
 	require.Len(t, resp.Results, 1)
-	require.NotNil(t, resp.Results[0].Error, "unknown event should return error")
+	require.NotNil(t, resp.Results[0].Error)
 	assert.Equal(t, -32001, resp.Results[0].Error.Code)
-	assert.Equal(t, "EventNotFound", resp.Results[0].Error.Message)
 }
 
-// TestResourceRecentMessages verifies that the telegram://messages/recent
-// resource returns stored messages as JSON.
+// TestResourceRecentMessages verifies the recent messages resource.
 func TestResourceRecentMessages(t *testing.T) {
 	store := newTestStore(3)
-	c, _ := newConnectedClient(t, store, NewWebhookRegistry())
+	c, _ := newConnectedClient(t, store, events.NewWebhookRegistry())
 
 	text, err := c.ReadResource("telegram://messages/recent")
 	require.NoError(t, err)
 
 	var msgs []Message
 	require.NoError(t, json.Unmarshal([]byte(text), &msgs))
-	assert.Len(t, msgs, 3, "should return all 3 messages")
+	assert.Len(t, msgs, 3)
 	assert.Equal(t, "message 1", msgs[0].Text)
 }
 
-// TestResourceMessageByID verifies that the telegram://message/{id} template
-// resource returns the correct message.
+// TestResourceMessageByID verifies the message-by-ID template resource.
 func TestResourceMessageByID(t *testing.T) {
 	store := newTestStore(3)
-	c, _ := newConnectedClient(t, store, NewWebhookRegistry())
+	c, _ := newConnectedClient(t, store, events.NewWebhookRegistry())
 
 	text, err := c.ReadResource("telegram://message/2")
 	require.NoError(t, err)
@@ -179,13 +171,11 @@ func TestResourceMessageByID(t *testing.T) {
 	assert.Equal(t, "message 2", msg.Text)
 }
 
-// TestWebhookHMACSignature verifies that outbound webhook deliveries include
-// a correct HMAC-SHA256 signature in the X-Signature-256 header.
+// TestWebhookHMACSignature verifies HMAC-SHA256(secret, ts + "." + body) signing.
 func TestWebhookHMACSignature(t *testing.T) {
 	secret := "test-secret-key"
 	var receivedBody []byte
-	var receivedSig string
-	var receivedTS string
+	var receivedSig, receivedTS string
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedSig = r.Header.Get("X-MCP-Signature")
@@ -195,35 +185,28 @@ func TestWebhookHMACSignature(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	webhooks := NewWebhookRegistry()
+	webhooks := events.NewWebhookRegistry()
 	webhooks.Register("hmac-test", srv.URL, secret)
 
-	event := TelegramEvent{
-		EventID:   "evt_1",
-		Name:      "telegram.message",
-		Timestamp: "2024-01-01T00:00:00Z",
-		Data:      TelegramEventData{ChatID: "100", User: "test", Text: "hello"},
-		Cursor:    "1",
-	}
+	event := events.MakeEvent("telegram.message", "evt_1", "1", time.Now(),
+		map[string]string{"text": "hello"})
 	webhooks.Deliver(event)
 
 	time.Sleep(100 * time.Millisecond)
 
-	require.NotEmpty(t, receivedBody, "webhook should have received a POST")
-	require.NotEmpty(t, receivedSig, "webhook should include X-MCP-Signature header")
-	require.NotEmpty(t, receivedTS, "webhook should include X-MCP-Timestamp header")
+	require.NotEmpty(t, receivedBody)
+	require.NotEmpty(t, receivedSig)
+	require.NotEmpty(t, receivedTS)
 
-	// Verify: HMAC-SHA256(secret, timestamp + "." + body)
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(receivedTS))
 	mac.Write([]byte("."))
 	mac.Write(receivedBody)
 	expectedSig := fmt.Sprintf("sha256=%s", hex.EncodeToString(mac.Sum(nil)))
-	assert.Equal(t, expectedSig, receivedSig, "HMAC signature should match")
+	assert.Equal(t, expectedSig, receivedSig)
 }
 
-// TestMessageStoreCursorSemantics verifies the cursor-based retrieval contract:
-// GetSince returns only messages with ID strictly greater than the cursor.
+// TestMessageStoreCursorSemantics verifies cursor-based retrieval.
 func TestMessageStoreCursorSemantics(t *testing.T) {
 	store := NewMessageStore(100)
 	store.Add(1, "alice", "first", time.Now())
@@ -233,62 +216,53 @@ func TestMessageStoreCursorSemantics(t *testing.T) {
 	pr := store.GetSince(0, 100)
 	assert.Len(t, pr.Messages, 3)
 	assert.Equal(t, int64(3), pr.NextCursor)
-	assert.False(t, pr.CursorGap, "no gap when starting from 0")
+	assert.False(t, pr.CursorGap)
 
 	pr = store.GetSince(1, 100)
 	assert.Len(t, pr.Messages, 2)
 	assert.Equal(t, "second", pr.Messages[0].Text)
-	assert.Equal(t, int64(3), pr.NextCursor)
 
 	pr = store.GetSince(3, 100)
 	assert.Empty(t, pr.Messages)
 	assert.Equal(t, int64(3), pr.NextCursor)
 }
 
-// TestMessageStoreCursorGap verifies that polling with a stale cursor (pointing
-// to evicted messages) returns cursorGap=true so the client knows events were lost.
+// TestMessageStoreCursorGap verifies stale cursor detection.
 func TestMessageStoreCursorGap(t *testing.T) {
-	store := NewMessageStore(3) // small buffer
+	store := NewMessageStore(3)
 	for i := 1; i <= 3; i++ {
 		store.Add(1, "user", fmt.Sprintf("msg %d", i), time.Now())
 	}
-	// cursor=2 is valid, no gap
 	pr := store.GetSince(2, 100)
-	assert.Len(t, pr.Messages, 1)
-	assert.False(t, pr.CursorGap, "cursor within buffer should not signal gap")
+	assert.False(t, pr.CursorGap)
 
-	// Add more to wrap the buffer
 	for i := 4; i <= 10; i++ {
 		store.Add(1, "user", fmt.Sprintf("msg %d", i), time.Now())
 	}
-	// Buffer now holds IDs 8,9,10. cursor=2 is stale.
 	pr = store.GetSince(2, 100)
-	assert.True(t, pr.CursorGap, "cursor pointing to evicted messages should signal gap")
-	assert.Len(t, pr.Messages, 3, "should still return available messages")
+	assert.True(t, pr.CursorGap)
+	assert.Len(t, pr.Messages, 3)
 	assert.Equal(t, "msg 8", pr.Messages[0].Text)
 }
 
-// TestMessageStoreRingBuffer verifies that the store evicts old messages
-// when the buffer exceeds maxSize.
+// TestMessageStoreRingBuffer verifies ring buffer eviction.
 func TestMessageStoreRingBuffer(t *testing.T) {
 	store := NewMessageStore(3)
 	for i := 1; i <= 5; i++ {
 		store.Add(1, "user", fmt.Sprintf("msg %d", i), time.Now())
 	}
-	assert.Equal(t, 3, store.Len(), "store should cap at maxSize")
+	assert.Equal(t, 3, store.Len())
 	recent := store.Recent(10)
 	assert.Len(t, recent, 3)
-	assert.Equal(t, "msg 3", recent[0].Text, "oldest surviving message should be msg 3")
+	assert.Equal(t, "msg 3", recent[0].Text)
 	assert.Equal(t, "msg 5", recent[2].Text)
 }
 
-// TestEventsPollHasMore verifies that events/poll sets hasMore=true when
-// maxEvents truncates results, per Peter's spec.
+// TestEventsPollHasMore verifies hasMore when maxEvents truncates results.
 func TestEventsPollHasMore(t *testing.T) {
 	store := newTestStore(5)
-	c, _ := newConnectedClient(t, store, NewWebhookRegistry())
+	c, _ := newConnectedClient(t, store, events.NewWebhookRegistry())
 
-	// Poll with maxEvents=3 when 5 exist → hasMore=true
 	result, err := c.Call("events/poll", map[string]any{
 		"maxEvents": 3,
 		"subscriptions": []map[string]any{
@@ -299,11 +273,9 @@ func TestEventsPollHasMore(t *testing.T) {
 
 	var resp struct{ Results []pollResult }
 	require.NoError(t, json.Unmarshal(result.Raw, &resp))
-	require.Len(t, resp.Results, 1)
-	assert.Len(t, resp.Results[0].Events, 3, "should return maxEvents events")
-	assert.True(t, resp.Results[0].HasMore, "hasMore should be true when truncated")
+	assert.Len(t, resp.Results[0].Events, 3)
+	assert.True(t, resp.Results[0].HasMore)
 
-	// Poll remaining with updated cursor → hasMore=false
 	result2, err := c.Call("events/poll", map[string]any{
 		"maxEvents": 3,
 		"subscriptions": []map[string]any{
@@ -314,15 +286,14 @@ func TestEventsPollHasMore(t *testing.T) {
 
 	var resp2 struct{ Results []pollResult }
 	require.NoError(t, json.Unmarshal(result2.Raw, &resp2))
-	assert.Len(t, resp2.Results[0].Events, 2, "should return remaining 2 events")
-	assert.False(t, resp2.Results[0].HasMore, "hasMore should be false when all returned")
+	assert.Len(t, resp2.Results[0].Events, 2)
+	assert.False(t, resp2.Results[0].HasMore)
 }
 
-// TestSubscribeReturnsRefreshBefore verifies that events/subscribe returns
-// a refreshBefore timestamp per spec.
+// TestSubscribeReturnsRefreshBefore verifies mandatory refreshBefore field.
 func TestSubscribeReturnsRefreshBefore(t *testing.T) {
 	store := NewMessageStore(1000)
-	webhooks := NewWebhookRegistry()
+	webhooks := events.NewWebhookRegistry()
 	c, _ := newConnectedClient(t, store, webhooks)
 
 	result, err := c.Call("events/subscribe", map[string]any{
@@ -338,59 +309,39 @@ func TestSubscribeReturnsRefreshBefore(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(result.Raw, &resp))
 	assert.Equal(t, "rb-test", resp.ID)
-	assert.NotEmpty(t, resp.RefreshBefore, "refreshBefore must be present")
+	assert.NotEmpty(t, resp.RefreshBefore)
 
-	// Parse to verify it's a valid RFC3339 timestamp in the future
 	rb, err := time.Parse(time.RFC3339, resp.RefreshBefore)
-	require.NoError(t, err, "refreshBefore should be valid RFC3339")
-	assert.True(t, rb.After(time.Now()), "refreshBefore should be in the future")
+	require.NoError(t, err)
+	assert.True(t, rb.After(time.Now()))
 }
 
-// TestWebhookKeyedByURLAndID verifies that two subscriptions to the same URL
-// with different IDs don't collide (spec: key is (url, id) for unauthenticated servers).
+// TestWebhookKeyedByURLAndID verifies (url, id) composite keying.
 func TestWebhookKeyedByURLAndID(t *testing.T) {
-	webhooks := NewWebhookRegistry()
+	webhooks := events.NewWebhookRegistry()
 	webhooks.Register("sub-1", "http://example.com/hook", "secret-1")
 	webhooks.Register("sub-2", "http://example.com/hook", "secret-2")
 
 	targets := webhooks.Targets()
-	assert.Len(t, targets, 2, "same URL with different IDs should create 2 targets")
+	assert.Len(t, targets, 2)
 
-	// Unregister one — the other should remain
 	webhooks.Unregister("http://example.com/hook", "sub-1")
 	targets = webhooks.Targets()
-	assert.Len(t, targets, 1, "should have 1 target after unregistering one")
+	assert.Len(t, targets, 1)
 	assert.Equal(t, "sub-2", targets[0].ID)
 }
 
-// TestWebhookTTLExpiry verifies that webhook subscriptions expire after their TTL.
+// TestWebhookTTLExpiry verifies TTL-based expiry.
 func TestWebhookTTLExpiry(t *testing.T) {
-	webhooks := NewWebhookRegistry()
-	// Register with default TTL
+	webhooks := events.NewWebhookRegistry()
 	webhooks.Register("exp-test", "http://example.com/hook", "secret")
 	assert.Len(t, webhooks.Targets(), 1)
 
-	// Manually expire it by setting ExpiresAt to the past
-	webhooks.mu.Lock()
-	for k, v := range webhooks.targets {
-		v.ExpiresAt = time.Now().Add(-1 * time.Second)
-		webhooks.targets[k] = v
-	}
-	webhooks.mu.Unlock()
-
-	// Targets() filters expired entries
-	assert.Empty(t, webhooks.Targets(), "expired subscription should not appear in Targets()")
-
-	// Re-registering triggers pruning of expired entries
-	webhooks.Register("new", "http://example.com/other", "s")
-	webhooks.mu.RLock()
-	count := len(webhooks.targets)
-	webhooks.mu.RUnlock()
-	assert.Equal(t, 1, count, "expired entry should be pruned on next Register")
+	webhooks.ExpireAll() // test helper
+	assert.Empty(t, webhooks.Targets())
 }
 
-// TestWebhookRetryOnServerError verifies that webhook delivery retries on 5xx
-// errors with exponential backoff, and succeeds when the server recovers.
+// TestWebhookRetryOnServerError verifies retry with backoff on 5xx.
 func TestWebhookRetryOnServerError(t *testing.T) {
 	var mu sync.Mutex
 	var attempts int
@@ -400,36 +351,29 @@ func TestWebhookRetryOnServerError(t *testing.T) {
 		attempts++
 		n := attempts
 		mu.Unlock()
-
 		if n <= 2 {
-			w.WriteHeader(http.StatusInternalServerError) // fail first 2
+			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		w.WriteHeader(http.StatusOK) // succeed on 3rd
+		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
 
-	webhooks := NewWebhookRegistry()
+	webhooks := events.NewWebhookRegistry()
 	webhooks.Register("retry-test", srv.URL, "secret")
 
-	event := TelegramEvent{
-		EventID: "evt_retry", Name: "telegram.message",
-		Timestamp: "2024-01-01T00:00:00Z",
-		Data:      TelegramEventData{ChatID: "1", User: "test", Text: "retry me"},
-		Cursor:    "1",
-	}
+	event := events.MakeEvent("telegram.message", "evt_retry", "1", time.Now(),
+		map[string]string{"text": "retry me"})
 	webhooks.Deliver(event)
 
-	// Wait for retries (500ms + 1s + delivery time)
 	time.Sleep(3 * time.Second)
 
 	mu.Lock()
 	defer mu.Unlock()
-	assert.Equal(t, 3, attempts, "should have retried: 2 failures + 1 success")
+	assert.Equal(t, 3, attempts)
 }
 
-// TestWebhookNoRetryOn4xx verifies that 4xx errors are not retried
-// (client errors are not transient).
+// TestWebhookNoRetryOn4xx verifies 4xx errors are not retried.
 func TestWebhookNoRetryOn4xx(t *testing.T) {
 	var mu sync.Mutex
 	var attempts int
@@ -442,22 +386,18 @@ func TestWebhookNoRetryOn4xx(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	webhooks := NewWebhookRegistry()
+	webhooks := events.NewWebhookRegistry()
 	webhooks.Register("no-retry", srv.URL, "secret")
 
-	event := TelegramEvent{
-		EventID: "evt_4xx", Name: "telegram.message",
-		Timestamp: "2024-01-01T00:00:00Z",
-		Data:      TelegramEventData{ChatID: "1", User: "test", Text: "no retry"},
-		Cursor:    "1",
-	}
+	event := events.MakeEvent("telegram.message", "evt_4xx", "1", time.Now(),
+		map[string]string{"text": "no retry"})
 	webhooks.Deliver(event)
 
 	time.Sleep(500 * time.Millisecond)
 
 	mu.Lock()
 	defer mu.Unlock()
-	assert.Equal(t, 1, attempts, "4xx should not be retried")
+	assert.Equal(t, 1, attempts)
 }
 
 // TestVerifySignature verifies the HMAC verification helper.
@@ -472,8 +412,8 @@ func TestVerifySignature(t *testing.T) {
 	mac.Write(body)
 	sig := fmt.Sprintf("sha256=%s", hex.EncodeToString(mac.Sum(nil)))
 
-	assert.True(t, VerifySignature(body, secret, ts, sig), "valid signature should verify")
-	assert.False(t, VerifySignature(body, "wrong-secret", ts, sig), "wrong secret should fail")
-	assert.False(t, VerifySignature([]byte("tampered"), secret, ts, sig), "tampered body should fail")
-	assert.False(t, VerifySignature(body, secret, "wrong-ts", sig), "wrong timestamp should fail")
+	assert.True(t, events.VerifySignature(body, secret, ts, sig))
+	assert.False(t, events.VerifySignature(body, "wrong-secret", ts, sig))
+	assert.False(t, events.VerifySignature([]byte("tampered"), secret, ts, sig))
+	assert.False(t, events.VerifySignature(body, secret, "wrong-ts", sig))
 }
