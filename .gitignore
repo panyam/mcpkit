@@ -30,3 +30,5 @@ Thumbs.db
 /testserver
 /testclient
 docs/COMPETITIVE_ANALYSIS.md
+examples/apps/htmx/htmx
+examples/apps/react/server/server
