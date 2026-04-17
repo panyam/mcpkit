@@ -1,4 +1,4 @@
-package main
+package events
 
 import (
 	"bytes"
@@ -100,10 +100,21 @@ func (r *WebhookRegistry) pruneExpiredLocked() {
 	}
 }
 
+// ExpireAll forcibly expires all subscriptions (test helper).
+func (r *WebhookRegistry) ExpireAll() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	past := time.Now().Add(-1 * time.Second)
+	for k, v := range r.targets {
+		v.ExpiresAt = past
+		r.targets[k] = v
+	}
+}
+
 // Deliver sends an event to all non-expired webhooks. Each POST includes an
 // HMAC-SHA256 signature in X-MCP-Signature and a timestamp in X-MCP-Timestamp.
 // Delivery failures are retried with exponential backoff per spec.
-func (r *WebhookRegistry) Deliver(event TelegramEvent) {
+func (r *WebhookRegistry) Deliver(event Event) {
 	targets := r.Targets()
 	if len(targets) == 0 {
 		return

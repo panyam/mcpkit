@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 
@@ -9,16 +8,16 @@ import (
 )
 
 // MethodHandler handles a custom JSON-RPC method registered via
-// WithMethodHandler or Server.HandleMethod. The handler receives the full
-// MCP session context (EmitLog, Sample, Elicit, AuthClaims, etc.), the
-// request ID, and raw JSON params.
+// WithMethodHandler or Server.HandleMethod. The handler receives a typed
+// MethodContext with full session capabilities (EmitLog, Sample, Elicit,
+// AuthClaims, Notify, etc.), the request ID, and raw JSON params.
 //
 // Return a *core.Response with the result or error. Use core.NewResponse
 // for success, core.NewErrorResponse for errors.
 //
 // Custom methods participate in middleware and require initialization
 // (they're dispatched after the "initialized" gate, same as tools/resources).
-type MethodHandler func(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response
+type MethodHandler func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response
 
 // builtinMethods lists all MCP spec methods that cannot be overridden by
 // custom handlers. Attempting to register a handler for these panics.
@@ -51,7 +50,7 @@ var builtinMethods = map[string]bool{
 // Example:
 //
 //	srv := server.NewServer(info,
-//	    server.WithMethodHandler("events/poll", func(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
+//	    server.WithMethodHandler("events/poll", func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 //	        return core.NewResponse(id, map[string]any{"events": []any{}})
 //	    }),
 //	)
