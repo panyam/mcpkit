@@ -67,14 +67,28 @@ func (s *MessageStore) Add(chatID int64, sender, text string, ts time.Time) int6
 	return msg.ID
 }
 
-// GetSince returns messages with ID > cursor, up to limit. Returns the messages
-// and the next cursor (ID of the last returned message, or cursor if none).
-func (s *MessageStore) GetSince(cursor int64, limit int) ([]Message, int64) {
+// PollResult holds the result of a cursor-based poll.
+type PollResult struct {
+	Messages   []Message
+	NextCursor int64
+	CursorGap  bool // true if events were lost due to ring buffer wrap
+}
+
+// GetSince returns messages with ID > cursor, up to limit. If the cursor
+// refers to an evicted message (ring buffer wrapped), CursorGap is true —
+// the client should treat this as a signal that events were silently lost.
+func (s *MessageStore) GetSince(cursor int64, limit int) PollResult {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	if limit <= 0 {
 		limit = 50
+	}
+
+	// Detect cursor gap: cursor is non-zero and older than the oldest buffered message.
+	var cursorGap bool
+	if cursor > 0 && len(s.messages) > 0 && cursor < s.messages[0].ID-1 {
+		cursorGap = true
 	}
 
 	var result []Message
@@ -91,7 +105,7 @@ func (s *MessageStore) GetSince(cursor int64, limit int) ([]Message, int64) {
 	if len(result) > 0 {
 		nextCursor = result[len(result)-1].ID
 	}
-	return result, nextCursor
+	return PollResult{Messages: result, NextCursor: nextCursor, CursorGap: cursorGap}
 }
 
 // GetByID returns the message with the given ID, or nil if not found.
