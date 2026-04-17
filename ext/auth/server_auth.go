@@ -63,12 +63,8 @@ func MountAuth(mux *http.ServeMux, cfg AuthConfig) {
 		ScopesSupported:      cfg.ScopesSupported,
 	}
 
-	handler := apiauth.NewProtectedResourceHandler(meta)
-
-	// Mount at path-based well-known URI (primary)
-	if cfg.MCPPath != "" {
-		mux.Handle("/.well-known/oauth-protected-resource"+cfg.MCPPath, handler)
-	}
-	// Also mount at root well-known URI (fallback)
-	mux.Handle("/.well-known/oauth-protected-resource", handler)
+	// Mount PRM + RFC 8414 AS metadata proxy. The proxy ensures clients
+	// that only try RFC 8414 (not OIDC fallback) can discover AS endpoints.
+	// See: https://github.com/panyam/oneauth/issues/86
+	apiauth.MountProtectedResource(mux, meta, true, cfg.MCPPath)
 }
