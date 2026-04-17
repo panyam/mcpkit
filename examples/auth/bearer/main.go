@@ -1,71 +1,34 @@
 // Example: Static bearer token authentication.
 //
-// The simplest auth pattern — server validates a constant token,
-// client sends it in the Authorization header. No external dependencies.
+// The simplest auth pattern — server validates a constant token.
+// Connect MCPJam with: Authorization: Bearer my-secret-token
 //
-// Run: go run ./bearer
+// Run: go run ./bearer -addr :8081
 package main
 
 import (
-	"fmt"
-	"net/http/httptest"
+	"flag"
+	"log"
 
-	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/examples/auth/common"
 	"github.com/panyam/mcpkit/server"
 )
 
 func main() {
-	fmt.Println("=== Auth Example: Static Bearer Token ===")
-	fmt.Println()
+	addr := flag.String("addr", ":8081", "listen address")
+	flag.Parse()
 
-	// Step 1: Create server with bearer token auth.
 	srv := server.NewServer(
-		core.ServerInfo{Name: "bearer-demo", Version: "1.0"},
+		core.ServerInfo{Name: "auth-bearer", Version: "1.0"},
 		server.WithBearerToken("my-secret-token"),
+		server.WithMiddleware(server.LoggingMiddleware(log.Default())),
 	)
-	srv.Register(core.TextTool[struct{}]("ping", "Returns pong",
-		func(ctx core.ToolContext, _ struct{}) (string, error) {
-			return "pong", nil
-		},
-	))
+	common.RegisterEchoTools(srv)
 
-	ts := httptest.NewServer(srv.Handler(server.WithStreamableHTTP(true)))
-	defer ts.Close()
-	fmt.Printf("Server running at %s (auth: bearer token)\n\n", ts.URL)
-
-	// Step 2: Try without token → 401.
-	fmt.Println("Step 1: Connect WITHOUT token...")
-	c1 := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "demo", Version: "1.0"})
-	if err := c1.Connect(); err != nil {
-		fmt.Printf("  → Rejected: %v ✓\n\n", err)
+	log.Printf("Bearer auth example on %s (token: my-secret-token)", *addr)
+	log.Printf("Connect MCPJam: http://localhost%s/mcp with header Authorization: Bearer my-secret-token", *addr)
+	if err := srv.Run(*addr); err != nil {
+		log.Fatal(err)
 	}
-
-	// Step 3: Try with wrong token → 401.
-	fmt.Println("Step 2: Connect with WRONG token...")
-	c2 := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "demo", Version: "1.0"},
-		client.WithClientBearerToken("wrong-token"),
-	)
-	if err := c2.Connect(); err != nil {
-		fmt.Printf("  → Rejected: %v ✓\n\n", err)
-	}
-
-	// Step 4: Try with correct token → 200.
-	fmt.Println("Step 3: Connect with CORRECT token...")
-	c3 := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "demo", Version: "1.0"},
-		client.WithClientBearerToken("my-secret-token"),
-	)
-	if err := c3.Connect(); err != nil {
-		fmt.Printf("  → Error: %v\n", err)
-		return
-	}
-	defer c3.Close()
-	result, err := c3.ToolCall("ping", nil)
-	if err != nil {
-		fmt.Printf("  → Tool call failed: %v\n", err)
-		return
-	}
-	fmt.Printf("  → Connected and called ping: %s ✓\n", result)
-
-	fmt.Println("\n=== Done ===")
 }
