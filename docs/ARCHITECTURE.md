@@ -298,3 +298,18 @@ MCPKit supports the [MCP Apps extension](https://modelcontextprotocol.io/extensi
 - `client/client.go` — `WithExtension`, `WithUIExtension`, `ServerSupportsUI`, `ListToolsForModel`
 
 See [docs/APPS_DESIGN.md](APPS_DESIGN.md) for the full design: protocol flows, edge cases, conformance strategy, and slyds reference integration.
+
+## MCP Tasks (Experimental)
+
+MCPKit supports the MCP Tasks protocol (spec 2025-11-25) as an experimental extension in `experimental/ext/tasks/`. Tasks enable "call-now, fetch-later" async tool execution.
+
+**Architecture:** Tasks are implemented as a middleware + custom method handlers layered on top of the core server, not baked into the dispatcher. `tasks.Register(Config)` hooks everything up:
+
+1. **Middleware** intercepts `tools/call` — when the client includes `_meta.task` and the tool doesn't forbid it, the middleware creates a task, runs the tool in a detached goroutine, and returns `CreateTaskResult` immediately.
+2. **Method handlers** for `tasks/get`, `tasks/result`, `tasks/list`, `tasks/cancel` are registered via `Server.HandleMethod()`.
+3. **TaskStore interface** abstracts state persistence. `InMemoryTaskStore` shipped as default; interface exists for multi-node scenarios (e.g., Redis-backed).
+4. **Capability advertisement** via `Server.SetTasksCap()` — the `tasks` field appears in the initialize response.
+
+**Per-tool control:** `ToolDef.Execution.TaskSupport` declares `required` (must use tasks), `optional` (client's choice), or `forbidden` (always sync). The middleware enforces these semantics.
+
+**Why middleware, not core:** Tasks are optional and experimental. The middleware pattern keeps the dispatcher simple and lets the feature evolve without touching core dispatch logic. The `InMemoryTaskStore` uses `sync.Cond` for `WaitForResult` blocking — this is task-lifecycle-specific and not a generic store pattern.

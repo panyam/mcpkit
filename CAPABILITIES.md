@@ -113,6 +113,9 @@
 - mcp-ctx-progress: ToolContext.Progress(progress, total, message) — token-free progress emission. Dispatch stashes progressToken from _meta.progressToken into ToolContext. ToolContext.ProgressToken() accessor.
 - mcp-typed-app-tool: ext/ui.RegisterTypedAppTool[In, Out] — typed variant of RegisterAppTool. Auto-derives InputSchema from In type. Delegates to RegisterAppTool for all app-specific wiring.
 - mcp-auth-examples: examples/auth/ — 5 persistent MCP servers demonstrating auth patterns: bearer (:8081), JWT/JWKS (:8082), scopes (:8083), session hijacking (:8084), pre-auth discovery (:8085). Shared common/ module. mcp.json for VS Code.
+- mcp-tasks-types: core.TaskStatus (working/input_required/completed/failed/cancelled), TaskInfo, ToolExecution, TasksCap, ClientTasksCap — wire types for MCP Tasks spec 2025-11-25. ToolDef.Execution declares per-tool task support (required/optional/forbidden).
+- mcp-tasks-server-plumbing: Server.SetTasksCap(), Server.UseMiddleware(), Registry.ToolDef() — server-side hooks for tasks capability advertisement and middleware injection post-construction.
+- mcp-tasks-library-experimental: experimental/ext/tasks — EXPERIMENTAL library implementing MCP Tasks protocol. tasks.Register(Config) installs middleware + method handlers on an existing server. Middleware intercepts tools/call with _meta.task hint, runs tool async, returns CreateTaskResult. Method handlers: tasks/get (poll), tasks/result (blocking wait), tasks/list (cursor pagination), tasks/cancel. InMemoryTaskStore with sync.Cond-based WaitForResult. Client helpers: GetTask, GetTaskResult, ListTasks, CancelTask, ToolCallAsTask. 30 tests (15 store + 15 integration).
 
 ## Module
 github.com/panyam/mcpkit

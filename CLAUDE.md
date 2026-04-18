@@ -34,6 +34,7 @@ Sub-module commands: see `ext/ui/Makefile`, `experimental/ext/protogen/Makefile`
 | `ext/auth/` | JWT, PRM, OAuth (separate go.mod) | `ext/auth/docs/DESIGN.md` |
 | `ext/ui/` | MCP Apps + App Bridge JS (separate go.mod) | `docs/APPS_DESIGN.md` |
 | `experimental/ext/protogen/` | Proto → MCP codegen (separate go.mod) | `experimental/ext/protogen/docs/DESIGN.md` |
+| `experimental/ext/tasks/` | MCP Tasks protocol (EXPERIMENTAL, separate go.mod) — middleware, store, client helpers | |
 | `experimental/ext/events/` | MCP Events protocol library (EXPERIMENTAL, separate go.mod) | `experimental/ext/events/README.md` |
 | `experimental/telegram-events/` | Telegram Events reference server (separate go.mod) | `experimental/telegram-events/README.md` |
 | `testutil/` | `NewTestServer`, `ForAllTransports`, `TestClient` | |
@@ -41,7 +42,7 @@ Sub-module commands: see `ext/ui/Makefile`, `experimental/ext/protogen/Makefile`
 
 ## Sub-Module Checklist
 
-- `ext/auth/`, `ext/ui/`, `experimental/ext/protogen/` have separate `go.mod` — `make test` does NOT cover them
+- `ext/auth/`, `ext/ui/`, `experimental/ext/protogen/`, `experimental/ext/tasks/` have separate `go.mod` — `make test` does NOT cover them
 - Release: `make tag-push V=vX.Y.Z` tags root + all sub-modules. Don't retag published versions.
 - New core deps propagate: `make tidy-all` after touching `core/` imports
 - Pre-push hook runs root + ext/auth + ext/ui + experimental/ext/protogen tests
