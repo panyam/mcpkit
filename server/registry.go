@@ -57,6 +57,20 @@ func (r *Registry) notify(method string) {
 	}
 }
 
+// ToolDef returns the definition for a registered tool, or false if not found.
+// Read-only accessor for use by middleware and extensions that need to inspect
+// tool metadata (e.g., Execution.TaskSupport) without access to the handler
+// or compiled schema.
+func (r *Registry) ToolDef(name string) (core.ToolDef, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	entry, ok := r.tools[name]
+	if !ok {
+		return core.ToolDef{}, false
+	}
+	return entry.def, true
+}
+
 // AddTool adds a tool to the registry. Thread-safe.
 // Broadcasts notifications/tools/list_changed if OnChange is set.
 //

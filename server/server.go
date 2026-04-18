@@ -280,6 +280,19 @@ func (s *Server) HandleMethod(method string, h MethodHandler) {
 	s.dispatcher.customHandlers[method] = h
 }
 
+// UseMiddleware appends server-side middleware post-construction. Must be
+// called before accepting connections (same constraint as HandleMethod).
+// For construction-time registration, prefer WithMiddleware().
+func (s *Server) UseMiddleware(mw ...Middleware) {
+	s.options.middleware = append(s.options.middleware, mw...)
+}
+
+// SetTasksCap configures the tasks capability advertised during initialize.
+// Must be called before accepting connections.
+func (s *Server) SetTasksCap(cap *core.TasksCap) {
+	s.dispatcher.tasksCap = cap
+}
+
 // RegisterTool adds a tool to the server.
 func (s *Server) RegisterTool(def core.ToolDef, handler core.ToolHandler) {
 	s.dispatcher.RegisterTool(def, handler)

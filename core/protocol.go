@@ -23,7 +23,8 @@ type ClientInfo struct {
 type ClientCapabilities struct {
 	Sampling    *struct{} `json:"sampling,omitempty"`
 	Roots       *RootsCap `json:"roots,omitempty"`
-	Elicitation *struct{} `json:"elicitation,omitempty"`
+	Elicitation *struct{}       `json:"elicitation,omitempty"`
+	Tasks       *ClientTasksCap `json:"tasks,omitempty"`
 
 	// Extensions maps extension IDs to the client's capability declaration
 	// for that extension. Sent during initialize to advertise extension support.
@@ -64,6 +65,7 @@ type ServerCapabilities struct {
 	Tools       *ToolsCap       `json:"tools,omitempty"`
 	Resources   *ResourcesCap   `json:"resources,omitempty"`
 	Prompts     *PromptsCap     `json:"prompts,omitempty"`
+	Tasks       *TasksCap       `json:"tasks,omitempty"`
 	Logging     *struct{}       `json:"logging,omitempty"`
 	Completions *struct{}       `json:"completions,omitempty"`
 	Extensions  map[string]ExtensionCapability `json:"extensions,omitempty"`

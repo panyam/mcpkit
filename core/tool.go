@@ -25,6 +25,10 @@ type ToolDef struct {
 	// Per MCP spec: enables clients to validate and process tool output programmatically.
 	OutputSchema any `json:"outputSchema,omitempty"`
 
+	// Execution holds task-related execution metadata.
+	// Per MCP spec: declares whether this tool supports async task execution.
+	Execution *ToolExecution `json:"execution,omitempty"`
+
 	// Annotations holds optional metadata for this tool.
 	// Convention: {"experimental": true} marks experimental tools.
 	Annotations map[string]any `json:"annotations,omitempty"`
