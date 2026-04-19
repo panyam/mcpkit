@@ -22,26 +22,53 @@ The server prints tokens for alice and bob. Connect to `http://localhost:8084/mc
 
 ## Exercises
 
-Connect with **alice's token**:
+Testing session binding requires manually crafting HTTP requests with mismatched tokens and session IDs — a normal MCP host manages the session header automatically, so you can't trigger a hijack through the UI.
 
-```
-Echo hello
-```
+### Step 1: Connect as alice
 
-- Returns: `echo: hello (user: alice, scopes: [read])`
-- Note the `Mcp-Session-Id` in the response headers
-
-Now send a request with **bob's token** using alice's session ID:
-
-- Returns **403 Forbidden** — session is bound to alice
-
-Connect bob on a **fresh session** (no session ID header):
-
-```
-Echo hello
+```bash
+curl -s -D- http://localhost:8084/mcp \
+  -H "Authorization: Bearer <alice-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
 ```
 
-- Returns: `echo: hello (user: bob, scopes: [read])` — works fine, gets his own session
+Note the `Mcp-Session-Id` header in the response (e.g. `Mcp-Session-Id: abc123`).
+
+### Step 2: Call echo as alice — works
+
+```bash
+curl -s http://localhost:8084/mcp \
+  -H "Authorization: Bearer <alice-token>" \
+  -H "Mcp-Session-Id: <session-id-from-step-1>" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{"message":"hello"}}}'
+```
+
+Returns: `echo: hello (user: alice, scopes: [read])`
+
+### Step 3: Try bob's token on alice's session — rejected
+
+```bash
+curl -s -D- http://localhost:8084/mcp \
+  -H "Authorization: Bearer <bob-token>" \
+  -H "Mcp-Session-Id: <session-id-from-step-1>" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"echo","arguments":{"message":"hijack"}}}'
+```
+
+Returns **403 Forbidden** — the session is bound to alice's `sub` claim.
+
+### Step 4: Bob on a fresh session — works
+
+```bash
+curl -s -D- http://localhost:8084/mcp \
+  -H "Authorization: Bearer <bob-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+```
+
+Bob gets his own session — no conflict with alice's.
 
 ## Screenshots
 

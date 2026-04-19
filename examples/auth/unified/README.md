@@ -78,9 +78,30 @@ Reconnect with the **all-scopes token** — everything works.
 
 ### 4. Session Binding
 
-Connect as alice (any token). Note the `Mcp-Session-Id` in the response headers.
+This requires curl — a normal MCP host manages sessions automatically.
 
-Now send a request with **bob's token** using the same session ID — **403 Forbidden**.
+Connect as alice (use any of her tokens):
+
+```bash
+curl -s -D- http://localhost:8080/mcp \
+  -H "Authorization: Bearer <alice-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+```
+
+Note the `Mcp-Session-Id` in the response headers.
+
+Now try **bob's token** on alice's session:
+
+```bash
+curl -s -D- http://localhost:8080/mcp \
+  -H "Authorization: Bearer <bob-token>" \
+  -H "Mcp-Session-Id: <session-id-from-above>" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{"message":"hijack"}}}'
+```
+
+Returns **403 Forbidden** — the session is bound to alice's `sub` claim.
 
 ## Screenshots
 
