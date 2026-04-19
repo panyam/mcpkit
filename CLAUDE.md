@@ -72,6 +72,8 @@ Module-specific gotchas live in their READMEs (protogen templates, App Bridge es
 | Telegram example | `experimental/telegram-events/README.md` |
 | Auth examples | `examples/auth/README.md` (5 servers: bearer, JWT, scopes, hijacking, discovery) |
 | App examples | `examples/apps/` (htmx, vanilla, react — tools, elicitation, sampling, prompts) |
+| Tasks library | `experimental/ext/tasks/README.md` |
+| Tasks example | `examples/tasks/README.md` (3 tools: sync, async-optional, async-required) |
 | Conformance baseline | `conformance/baseline.yml` |
 
 ## Conformance Status

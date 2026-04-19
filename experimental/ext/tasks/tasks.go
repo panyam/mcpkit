@@ -66,17 +66,24 @@ func Register(cfg Config) {
 	srv.HandleMethod("tasks/list", makeListHandler(store))
 	srv.HandleMethod("tasks/cancel", makeCancelHandler(store))
 
-	// Advertise tasks capability.
+	// Advertise tasks capability with nested structure per spec.
 	srv.SetTasksCap(&core.TasksCap{
-		Requests: map[string]struct{}{"tools/call": {}},
+		List:   &core.TasksCapMethod{},
+		Cancel: &core.TasksCapMethod{},
+		Requests: &core.TasksCapRequests{
+			Tools: &core.TasksCapToolsMethods{
+				Call: &core.TasksCapMethod{},
+			},
+		},
 	})
 }
 
 // --- Middleware ---
 
 // taskMiddleware intercepts tools/call requests. When the client sends a task
-// hint and the tool supports tasks, the middleware creates a task, runs the
-// tool asynchronously, and returns CreateTaskResult immediately.
+// hint at params.task (per MCP spec 2025-11-25) and the tool supports tasks,
+// the middleware creates a task, runs the tool asynchronously, and returns
+// CreateTaskResult immediately.
 func taskMiddleware(reg *server.Registry, store TaskStore, cfg Config) server.Middleware {
 	return func(ctx context.Context, req *core.Request, next server.MiddlewareFunc) *core.Response {
 		if req.Method != "tools/call" {
@@ -84,43 +91,51 @@ func taskMiddleware(reg *server.Registry, store TaskStore, cfg Config) server.Mi
 		}
 
 		// Parse the envelope to extract tool name and task hint.
+		// Per spec: task hint is at params.task, NOT params._meta.task.
 		var envelope struct {
-			Name string          `json:"name"`
-			Meta *taskCallMeta   `json:"_meta"`
+			Name string    `json:"name"`
+			Task *taskHint `json:"task"`
 		}
 		if err := json.Unmarshal(req.Params, &envelope); err != nil {
 			return next(ctx, req) // let dispatch handle the parse error
 		}
 
-		// Check for task hint from client.
-		if envelope.Meta == nil || envelope.Meta.Task == nil {
-			// No task hint — check if tool requires tasks.
-			def, ok := reg.ToolDef(envelope.Name)
-			if ok && def.Execution != nil && def.Execution.TaskSupport == core.TaskSupportRequired {
-				return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
-					fmt.Sprintf("tool %q requires task invocation (execution.taskSupport=required); include _meta.task in params", envelope.Name))
+		// Look up the tool to check its Execution.TaskSupport.
+		def, toolFound := reg.ToolDef(envelope.Name)
+
+		// Determine effective taskSupport. Per spec: absent Execution = forbidden.
+		effectiveSupport := core.TaskSupportForbidden
+		if toolFound && def.Execution != nil {
+			effectiveSupport = def.Execution.TaskSupport
+		}
+
+		if envelope.Task == nil {
+			// No task hint. Check if tool requires tasks.
+			if effectiveSupport == core.TaskSupportRequired {
+				return core.NewErrorResponse(req.ID, core.ErrCodeMethodNotFound,
+					fmt.Sprintf("tool %q requires task invocation (execution.taskSupport=required); include 'task' in params", envelope.Name))
 			}
 			return next(ctx, req)
 		}
 
-		// Task hint present — check if tool forbids tasks.
-		def, ok := reg.ToolDef(envelope.Name)
-		if !ok {
+		// Task hint present.
+		if !toolFound {
 			return next(ctx, req) // let dispatch handle unknown tool
 		}
-		if def.Execution != nil && def.Execution.TaskSupport == core.TaskSupportForbidden {
-			// Tool explicitly forbids tasks — ignore the hint, run sync.
-			return next(ctx, req)
+
+		// Forbidden or absent Execution with hint → error per spec.
+		if effectiveSupport == core.TaskSupportForbidden {
+			return core.NewErrorResponse(req.ID, core.ErrCodeMethodNotFound,
+				fmt.Sprintf("tool %q does not support task invocation", envelope.Name))
 		}
 
-		// Tool supports tasks (optional or required, or no Execution field
-		// with an explicit hint — treat as optional).
+		// Tool supports tasks (optional or required with hint present).
 		taskID := generateTaskID()
 		now := time.Now().UTC().Format(time.RFC3339)
 
 		ttlMs := cfg.DefaultTTLMs
-		if envelope.Meta.Task.TTL > 0 {
-			ttlMs = envelope.Meta.Task.TTL
+		if envelope.Task.TTL > 0 {
+			ttlMs = envelope.Task.TTL
 		}
 
 		info := core.TaskInfo{
@@ -128,7 +143,7 @@ func taskMiddleware(reg *server.Registry, store TaskStore, cfg Config) server.Mi
 			Status:        core.TaskWorking,
 			CreatedAt:     now,
 			LastUpdatedAt: now,
-			TTL:           ttlMs,
+			TTL:           core.IntPtr(ttlMs),
 			PollInterval:  cfg.DefaultPollMs,
 		}
 		if err := store.Create(info); err != nil {
@@ -143,36 +158,38 @@ func taskMiddleware(reg *server.Registry, store TaskStore, cfg Config) server.Mi
 
 			now := time.Now().UTC().Format(time.RFC3339)
 
+			// Store result BEFORE updating status to terminal. Update broadcasts
+			// to WaitForResult waiters, so the result must be available first.
 			if resp.Error != nil {
+				store.SetResult(taskID, core.ErrorResult(resp.Error.Message))
 				store.Update(taskID, func(t *core.TaskInfo) {
 					t.Status = core.TaskFailed
 					t.StatusMessage = resp.Error.Message
 					t.LastUpdatedAt = now
 				})
-				store.SetResult(taskID, core.ErrorResult(resp.Error.Message))
 				return
 			}
 
 			// resp.Result is any — marshal then unmarshal to get ToolResult.
 			raw, err := json.Marshal(resp.Result)
 			if err != nil {
+				store.SetResult(taskID, core.ErrorResult("failed to marshal tool result"))
 				store.Update(taskID, func(t *core.TaskInfo) {
 					t.Status = core.TaskFailed
 					t.StatusMessage = "failed to marshal tool result"
 					t.LastUpdatedAt = now
 				})
-				store.SetResult(taskID, core.ErrorResult("failed to marshal tool result"))
 				return
 			}
 
 			var toolResult core.ToolResult
 			if err := json.Unmarshal(raw, &toolResult); err != nil {
+				store.SetResult(taskID, core.ErrorResult("failed to unmarshal tool result"))
 				store.Update(taskID, func(t *core.TaskInfo) {
 					t.Status = core.TaskFailed
 					t.StatusMessage = "failed to unmarshal tool result"
 					t.LastUpdatedAt = now
 				})
-				store.SetResult(taskID, core.ErrorResult("failed to unmarshal tool result"))
 				return
 			}
 
@@ -180,23 +197,18 @@ func taskMiddleware(reg *server.Registry, store TaskStore, cfg Config) server.Mi
 			if toolResult.IsError {
 				status = core.TaskFailed
 			}
+			store.SetResult(taskID, toolResult)
 			store.Update(taskID, func(t *core.TaskInfo) {
 				t.Status = status
 				t.LastUpdatedAt = now
 			})
-			store.SetResult(taskID, toolResult)
 		}()
 
 		return core.NewResponse(req.ID, core.CreateTaskResult{Task: info})
 	}
 }
 
-// taskCallMeta is the _meta field in tools/call params when a task hint is present.
-type taskCallMeta struct {
-	Task *taskHint `json:"task"`
-}
-
-// taskHint is the client's task creation hint.
+// taskHint is the client's task creation hint from params.task.
 type taskHint struct {
 	TTL int `json:"ttl,omitempty"` // milliseconds
 }
@@ -215,7 +227,8 @@ func makeGetHandler(store TaskStore) server.MethodHandler {
 		if !ok {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "task not found: "+p.TaskID)
 		}
-		return core.NewResponse(id, core.GetTaskResult{Task: info})
+		// Per spec: tasks/get returns flat Result & Task (no wrapper).
+		return core.NewResponse(id, core.GetTaskResult{TaskInfo: info})
 	}
 }
 
@@ -241,10 +254,14 @@ func makeResultHandler(store TaskStore) server.MethodHandler {
 			return core.NewErrorResponse(id, -32800, "task was cancelled")
 		}
 
-		return core.NewResponse(id, core.GetTaskPayloadResult{
-			Task:   info,
-			Result: result,
-		})
+		// Per spec: tasks/result returns the original ToolResult shape with
+		// _meta["io.modelcontextprotocol/related-task"] injected.
+		if result.Meta == nil {
+			result.Meta = &core.ToolResultMeta{}
+		}
+		result.Meta.RelatedTask = &core.RelatedTaskMeta{TaskID: p.TaskID}
+
+		return core.NewResponse(id, result)
 	}
 }
 
@@ -279,7 +296,8 @@ func makeCancelHandler(store TaskStore) server.MethodHandler {
 		if err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 		}
-		return core.NewResponse(id, core.CancelTaskResult{Task: info})
+		// Per spec: tasks/cancel returns flat Result & Task (no wrapper).
+		return core.NewResponse(id, core.CancelTaskResult{TaskInfo: info})
 	}
 }
 

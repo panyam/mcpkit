@@ -15,7 +15,7 @@ func newTestInfo(id string, status core.TaskStatus) core.TaskInfo {
 		Status:        status,
 		CreatedAt:     now,
 		LastUpdatedAt: now,
-		TTL:           300_000,
+		TTL:           core.IntPtr(300_000),
 		PollInterval:  1000,
 	}
 }
@@ -133,11 +133,12 @@ func TestStoreWaitForResult(t *testing.T) {
 	// Give the goroutine time to block.
 	time.Sleep(50 * time.Millisecond)
 
-	// Complete the task.
+	// Store result first, then transition to terminal (Update broadcasts
+	// to waiters, so the result must be available before wake-up).
+	s.SetResult("t1", core.TextResult("waited"))
 	s.Update("t1", func(info *core.TaskInfo) {
 		info.Status = core.TaskCompleted
 	})
-	s.SetResult("t1", core.TextResult("waited"))
 
 	select {
 	case <-done:

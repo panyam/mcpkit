@@ -31,23 +31,21 @@ type cancelTaskParams struct {
 }
 
 // toolCallAsTaskParams is the wire-format params for tools/call with a task hint.
+// Per spec: task hint is at params.task (sibling of name/arguments), NOT _meta.task.
 type toolCallAsTaskParams struct {
-	Name      string  `json:"name"`
-	Arguments any     `json:"arguments"`
-	Meta      taskMeta `json:"_meta"`
+	Name      string    `json:"name"`
+	Arguments any       `json:"arguments"`
+	Task      taskParam `json:"task"`
 }
 
-type taskMeta struct {
-	Task taskHintParam `json:"task"`
-}
-
-type taskHintParam struct {
+type taskParam struct {
 	TTL int `json:"ttl,omitempty"` // milliseconds
 }
 
 // --- Client helpers ---
 
 // GetTask polls the status of a task by ID. Non-blocking.
+// Per spec: tasks/get returns flat Result & Task — fields at root level.
 func GetTask(c *client.Client, taskID string) (*core.GetTaskResult, error) {
 	result, err := c.Call("tasks/get", getTaskParams{TaskID: taskID})
 	if err != nil {
@@ -60,18 +58,24 @@ func GetTask(c *client.Client, taskID string) (*core.GetTaskResult, error) {
 	return &r, nil
 }
 
-// GetTaskResult fetches the result payload for a task. Blocks until the
-// task reaches a terminal state.
-func GetTaskResult(c *client.Client, taskID string) (*core.GetTaskPayloadResult, error) {
+// GetTaskPayload fetches the result payload for a task. Blocks until the
+// task reaches a terminal state. Per spec: returns the original ToolResult
+// with _meta["io.modelcontextprotocol/related-task"]. Returns the ToolResult,
+// the related taskId, and any error.
+func GetTaskPayload(c *client.Client, taskID string) (*core.ToolResult, string, error) {
 	result, err := c.Call("tasks/result", resultParams{TaskID: taskID})
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	var r core.GetTaskPayloadResult
+	var r core.ToolResult
 	if err := json.Unmarshal(result.Raw, &r); err != nil {
-		return nil, fmt.Errorf("unmarshal tasks/result: %w", err)
+		return nil, "", fmt.Errorf("unmarshal tasks/result: %w", err)
 	}
-	return &r, nil
+	var relatedID string
+	if r.Meta != nil && r.Meta.RelatedTask != nil {
+		relatedID = r.Meta.RelatedTask.TaskID
+	}
+	return &r, relatedID, nil
 }
 
 // ListTasks returns all tasks with cursor-based pagination. Pass an empty
@@ -90,6 +94,7 @@ func ListTasks(c *client.Client, cursor string) (*core.ListTasksResult, error) {
 
 // CancelTask cancels a running task. Returns an error if the task is
 // already in a terminal state.
+// Per spec: tasks/cancel returns flat Result & Task.
 func CancelTask(c *client.Client, taskID string) (*core.CancelTaskResult, error) {
 	result, err := c.Call("tasks/cancel", cancelTaskParams{TaskID: taskID})
 	if err != nil {
@@ -104,12 +109,12 @@ func CancelTask(c *client.Client, taskID string) (*core.CancelTaskResult, error)
 
 // ToolCallAsTask invokes a tool with a task hint, returning a CreateTaskResult
 // instead of the immediate tool result. The server creates a task and runs
-// the tool asynchronously.
+// the tool asynchronously. Per spec: task hint at params.task.
 func ToolCallAsTask(c *client.Client, name string, args any, ttlMs int) (*core.CreateTaskResult, error) {
 	params := toolCallAsTaskParams{
 		Name:      name,
 		Arguments: args,
-		Meta:      taskMeta{Task: taskHintParam{TTL: ttlMs}},
+		Task:      taskParam{TTL: ttlMs},
 	}
 	result, err := c.Call("tools/call", params)
 	if err != nil {
