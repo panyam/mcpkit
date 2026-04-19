@@ -29,89 +29,131 @@ MCPJam, VS Code, or any MCP client: `http://localhost:8080/mcp`
 | `slow_compute` | optional | Sleeps N seconds. Sync without hint, async with hint. |
 | `failing_job` | required | Always fails after 1s. Must be called as a task. |
 
-## Step-by-Step Manual Testing
+## Exercises
 
-### 1. Sync tool call (greet)
+### 1. Sync tool call
 
-Call `greet` with `{"name": "World"}`. Returns immediately: `Hello, World!`
-
-### 2. Forbidden tool with task hint
-
-Call `greet` with task hint:
-```json
-{"name": "greet", "arguments": {"name": "World"}, "task": {}}
 ```
+Greet World
+```
+
+Returns immediately: `Hello, World!`
+
+### 2. Async computation (optional task support)
+
+```
+Run a slow computation for 5 seconds labeled "pi"
+```
+
+If the host supports tasks, this returns a task ID immediately and the computation runs in the background. Poll for the result — after 5 seconds it completes with `Result: 42`.
+
+Without task support, the call blocks for 5 seconds and returns the result directly.
+
+### 3. Check on a running task
+
+```
+What's the status of my computation?
+```
+
+The host polls `tasks/get` — status transitions from `working` to `completed`.
+
+### 4. Failing job (required task support)
+
+```
+Run the failing job
+```
+
+This tool *requires* task invocation. The host must send a task hint. The job starts, then fails after 1 second — status transitions to `failed`.
+
+### 5. Cancel a running task
+
+```
+Run a slow computation for 30 seconds, then cancel it
+```
+
+Start a long computation, then cancel before it finishes. Status transitions to `cancelled`.
+
+### 6. List all tasks
+
+```
+List all tasks
+```
+
+Shows all tasks with their current status.
+
+## Wire-Level Reference
+
+For hosts that don't support tasks natively, or for manual testing with curl, here are the raw JSON-RPC payloads.
+
+<details>
+<summary>Sync tool call</summary>
+
+```json
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"greet","arguments":{"name":"World"}}}
+```
+</details>
+
+<details>
+<summary>Async tool call with task hint</summary>
+
+```json
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":5,"label":"pi"},"task":{}}}
+```
+
+Returns `CreateTaskResult` with a `taskId`.
+</details>
+
+<details>
+<summary>Poll task status</summary>
+
+```json
+{"jsonrpc":"2.0","id":3,"method":"tasks/get","params":{"taskId":"task-..."}}
+```
+</details>
+
+<details>
+<summary>Get task result (blocks until done)</summary>
+
+```json
+{"jsonrpc":"2.0","id":4,"method":"tasks/result","params":{"taskId":"task-..."}}
+```
+</details>
+
+<details>
+<summary>Cancel a running task</summary>
+
+```json
+{"jsonrpc":"2.0","id":5,"method":"tasks/cancel","params":{"taskId":"task-..."}}
+```
+</details>
+
+<details>
+<summary>List all tasks</summary>
+
+```json
+{"jsonrpc":"2.0","id":6,"method":"tasks/list","params":{}}
+```
+</details>
+
+<details>
+<summary>Forbidden: greet with task hint (error)</summary>
+
+```json
+{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"greet","arguments":{"name":"World"},"task":{}}}
+```
+
 Returns error: tool does not support task invocation.
+</details>
 
-### 3. Async tool call (slow_compute)
-
-Call `slow_compute` with task hint:
-```json
-{"name": "slow_compute", "arguments": {"seconds": 5, "label": "pi"}, "task": {}}
-```
-
-Returns immediately with `CreateTaskResult`:
-```json
-{"task": {"taskId": "task-...", "status": "working", "ttl": 300000, "pollInterval": 1000, ...}}
-```
-
-### 4. Poll task status
+<details>
+<summary>Required: failing_job without task hint (error)</summary>
 
 ```json
-{"method": "tasks/get", "params": {"taskId": "task-..."}}
+{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"failing_job","arguments":{}}}
 ```
 
-Returns flat task info: `{"taskId": "...", "status": "working", ...}`
-
-### 5. Get task result
-
-```json
-{"method": "tasks/result", "params": {"taskId": "task-..."}}
-```
-
-Blocks until completion, then returns the original `ToolResult` with `_meta`:
-```json
-{"content": [{"type": "text", "text": "Computation \"pi\" completed after 5 seconds. Result: 42."}], "_meta": {"io.modelcontextprotocol/related-task": {"taskId": "task-..."}}}
-```
-
-### 6. Required task tool without hint
-
-Call `failing_job` without task hint:
-```json
-{"name": "failing_job", "arguments": {}}
-```
 Returns error: tool requires task invocation.
-
-### 7. Required task tool with hint
-
-```json
-{"name": "failing_job", "arguments": {}, "task": {}}
-```
-
-Returns `CreateTaskResult`. Poll with `tasks/get` — status transitions to `failed`.
-
-### 8. Cancel a running task
-
-Start `slow_compute` with a long duration, then:
-```json
-{"method": "tasks/cancel", "params": {"taskId": "task-..."}}
-```
-
-Returns flat: `{"taskId": "...", "status": "cancelled", ...}`
-
-### 9. List all tasks
-
-```json
-{"method": "tasks/list", "params": {}}
-```
-
-Returns: `{"tasks": [...], "nextCursor": "..."}`
-
-## Prompts to Try
-
-- "Greet World" — sync call, returns immediately
-- "Run a slow computation for 5 seconds" — returns task, poll for result
-- "Run the failing job" — must include task hint, transitions to failed
+</details>
 
 ## Screenshots
 
