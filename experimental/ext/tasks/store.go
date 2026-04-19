@@ -10,6 +10,7 @@
 package tasks
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -31,8 +32,7 @@ type TaskStore interface {
 	// Returns an error if the task doesn't exist.
 	Update(taskID string, fn func(*core.TaskInfo)) error
 
-	// SetResult stores the tool result for a completed task and unblocks
-	// any waiters on WaitForResult.
+	// SetResult stores the tool result for a completed task.
 	SetResult(taskID string, result core.ToolResult) error
 
 	// GetResult returns the stored tool result, or false if not yet available.
@@ -40,7 +40,8 @@ type TaskStore interface {
 
 	// WaitForResult blocks until the task reaches a terminal state, then
 	// returns the result. Returns an error if the task doesn't exist.
-	WaitForResult(taskID string) (core.ToolResult, core.TaskInfo, error)
+	// Respects context cancellation.
+	WaitForResult(ctx context.Context, taskID string) (core.ToolResult, core.TaskInfo, error)
 
 	// List returns tasks with cursor-based pagination. An empty cursor
 	// starts from the beginning.
@@ -51,28 +52,37 @@ type TaskStore interface {
 	Cancel(taskID string) (core.TaskInfo, error)
 }
 
-// InMemoryTaskStore is a TaskStore backed by an in-memory map with insertion-ordered
-// keys for cursor pagination. Uses sync.Cond for WaitForResult blocking.
-type InMemoryTaskStore struct {
-	mu       sync.RWMutex
-	cond     *sync.Cond
-	tasks    map[string]*taskEntry
-	order    []string // insertion-ordered task IDs for cursor pagination
-	results  map[string]json.RawMessage
+// taskEntry holds all state for a single task in the in-memory store.
+type taskEntry struct {
+	info    core.TaskInfo
+	result  json.RawMessage  // stored tool result (nil until terminal)
+	waiters []chan struct{}   // channels to notify on status/result changes
 }
 
-type taskEntry struct {
-	info core.TaskInfo
+// notify wakes all waiters for this task entry.
+func (e *taskEntry) notify() {
+	for _, ch := range e.waiters {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	}
+	e.waiters = nil
+}
+
+// InMemoryTaskStore is a TaskStore backed by an in-memory map with insertion-ordered
+// keys for cursor pagination.
+type InMemoryTaskStore struct {
+	mu    sync.RWMutex
+	tasks map[string]*taskEntry
+	order []string // insertion-ordered task IDs for cursor pagination
 }
 
 // NewInMemoryStore creates a new in-memory task store.
 func NewInMemoryStore() *InMemoryTaskStore {
-	s := &InMemoryTaskStore{
-		tasks:   make(map[string]*taskEntry),
-		results: make(map[string]json.RawMessage),
+	return &InMemoryTaskStore{
+		tasks: make(map[string]*taskEntry),
 	}
-	s.cond = sync.NewCond(&s.mu)
-	return s
 }
 
 func (s *InMemoryTaskStore) Create(info core.TaskInfo) error {
@@ -104,7 +114,7 @@ func (s *InMemoryTaskStore) Update(taskID string, fn func(*core.TaskInfo)) error
 		return fmt.Errorf("task %q not found", taskID)
 	}
 	fn(&entry.info)
-	s.cond.Broadcast()
+	entry.notify()
 	return nil
 }
 
@@ -115,47 +125,62 @@ func (s *InMemoryTaskStore) SetResult(taskID string, result core.ToolResult) err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.tasks[taskID]; !ok {
+	entry, ok := s.tasks[taskID]
+	if !ok {
 		return fmt.Errorf("task %q not found", taskID)
 	}
-	s.results[taskID] = raw
-	s.cond.Broadcast()
+	entry.result = raw
+	entry.notify()
 	return nil
 }
 
 func (s *InMemoryTaskStore) GetResult(taskID string) (core.ToolResult, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	raw, ok := s.results[taskID]
-	if !ok {
+	entry, ok := s.tasks[taskID]
+	if !ok || entry.result == nil {
 		return core.ToolResult{}, false
 	}
 	var result core.ToolResult
-	json.Unmarshal(raw, &result)
+	json.Unmarshal(entry.result, &result)
 	return result, true
 }
 
 // WaitForResult blocks until the task reaches a terminal state and a result
-// is available. The caller must ensure the task exists before calling.
-func (s *InMemoryTaskStore) WaitForResult(taskID string) (core.ToolResult, core.TaskInfo, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+// is available, or the context is cancelled. Returns context.Canceled if
+// the context is done before the task completes.
+func (s *InMemoryTaskStore) WaitForResult(ctx context.Context, taskID string) (core.ToolResult, core.TaskInfo, error) {
 	for {
+		// Check current state under lock.
+		s.mu.Lock()
 		entry, ok := s.tasks[taskID]
 		if !ok {
+			s.mu.Unlock()
 			return core.ToolResult{}, core.TaskInfo{}, fmt.Errorf("task %q not found", taskID)
 		}
 		if entry.info.Status.IsTerminal() {
-			raw, hasResult := s.results[taskID]
-			if !hasResult {
-				// Cancelled or failed without a result.
-				return core.ToolResult{}, entry.info, nil
-			}
 			var result core.ToolResult
-			json.Unmarshal(raw, &result)
-			return result, entry.info, nil
+			if entry.result != nil {
+				json.Unmarshal(entry.result, &result)
+			}
+			info := entry.info
+			s.mu.Unlock()
+			return result, info, nil
 		}
-		s.cond.Wait()
+
+		// Not terminal — register a waiter channel and wait.
+		ch := make(chan struct{}, 1)
+		entry.waiters = append(entry.waiters, ch)
+		s.mu.Unlock()
+
+		// Wait for either an update or context cancellation.
+		select {
+		case <-ch:
+			// Task was updated — loop back to check state.
+			continue
+		case <-ctx.Done():
+			return core.ToolResult{}, core.TaskInfo{}, ctx.Err()
+		}
 	}
 }
 
@@ -207,14 +232,14 @@ func (s *InMemoryTaskStore) Cancel(taskID string) (core.TaskInfo, error) {
 	entry.info.Status = core.TaskCancelled
 	entry.info.StatusMessage = "task was cancelled"
 	// Store a cancellation result so tasks/result can return it.
-	if _, hasResult := s.results[taskID]; !hasResult {
+	if entry.result == nil {
 		cancelResult := core.ToolResult{
 			Content: []core.Content{{Type: "text", Text: "task was cancelled"}},
 			IsError: true,
 		}
 		raw, _ := json.Marshal(cancelResult)
-		s.results[taskID] = raw
+		entry.result = raw
 	}
-	s.cond.Broadcast()
+	entry.notify()
 	return entry.info, nil
 }

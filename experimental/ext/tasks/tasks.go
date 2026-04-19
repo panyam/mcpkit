@@ -264,8 +264,9 @@ func makeResultHandler(store TaskStore) server.MethodHandler {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 		}
 
-		// WaitForResult blocks until terminal.
-		result, _, err := store.WaitForResult(p.TaskID)
+		// WaitForResult blocks until terminal, respecting context cancellation
+		// (e.g., HTTP disconnect aborts the long-poll).
+		result, _, err := store.WaitForResult(ctx, p.TaskID)
 		if err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 		}

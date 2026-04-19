@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -126,7 +127,7 @@ func TestStoreWaitForResult(t *testing.T) {
 	var gotErr error
 
 	go func() {
-		gotResult, gotInfo, gotErr = s.WaitForResult("t1")
+		gotResult, gotInfo, gotErr = s.WaitForResult(context.Background(), "t1")
 		close(done)
 	}()
 
@@ -159,7 +160,7 @@ func TestStoreWaitForResult(t *testing.T) {
 
 func TestStoreWaitForResultNotFound(t *testing.T) {
 	s := NewInMemoryStore()
-	_, _, err := s.WaitForResult("nonexistent")
+	_, _, err := s.WaitForResult(context.Background(), "nonexistent")
 	if err == nil {
 		t.Error("expected error for nonexistent task")
 	}
@@ -200,7 +201,7 @@ func TestStoreCancelUnblocksWaiter(t *testing.T) {
 	var gotInfo core.TaskInfo
 
 	go func() {
-		_, gotInfo, _ = s.WaitForResult("t1")
+		_, gotInfo, _ = s.WaitForResult(context.Background(), "t1")
 		close(done)
 	}()
 
@@ -215,6 +216,31 @@ func TestStoreCancelUnblocksWaiter(t *testing.T) {
 
 	if gotInfo.Status != core.TaskCancelled {
 		t.Errorf("status = %q, want cancelled", gotInfo.Status)
+	}
+}
+
+func TestStoreWaitForResultContextCancelled(t *testing.T) {
+	s := NewInMemoryStore()
+	s.Create(newTestInfo("t1", core.TaskWorking))
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan error, 1)
+	go func() {
+		_, _, err := s.WaitForResult(ctx, "t1")
+		done <- err
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != context.Canceled {
+			t.Errorf("err = %v, want context.Canceled", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("WaitForResult did not return after context cancellation")
 	}
 }
 
