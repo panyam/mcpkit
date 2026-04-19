@@ -95,8 +95,12 @@
 
     // Update the task list from tool result structured data.
     MCPApp.on('toolresult', (data) => {
+      console.log('[todolist] toolresult event:', JSON.stringify(data, null, 2));
       const sc = data?.structuredContent || data?.result?.structuredContent;
-      if (!sc) return;
+      if (!sc) {
+        console.log('[todolist] no structuredContent found in event data');
+        return;
+      }
 
       // add_task / add_task_confirmed / categorize_task → adds a task
       if (sc.title) {
