@@ -30,6 +30,9 @@ func (s TaskStatus) IsTerminal() bool {
 	return s == TaskCompleted || s == TaskFailed || s == TaskCancelled
 }
 
+// IntPtr returns a pointer to the given int. Convenience for setting TaskInfo.TTL.
+func IntPtr(v int) *int { return &v }
+
 // TaskSupport declares how a tool interacts with the tasks capability.
 // Set on ToolDef.Execution.TaskSupport.
 type TaskSupport string
@@ -55,32 +58,33 @@ type ToolExecution struct {
 }
 
 // TaskInfo is the wire-format task object returned by tasks/* methods.
+// TTL is required but nullable per spec: *int with null = unlimited.
 type TaskInfo struct {
 	TaskID        string     `json:"taskId"`
 	Status        TaskStatus `json:"status"`
 	StatusMessage string     `json:"statusMessage,omitempty"`
 	CreatedAt     string     `json:"createdAt"`
 	LastUpdatedAt string     `json:"lastUpdatedAt"`
-	TTL           int        `json:"ttl,omitempty"`          // milliseconds
+	TTL           *int       `json:"ttl"`                    // milliseconds; null = unlimited
 	PollInterval  int        `json:"pollInterval,omitempty"` // milliseconds
 }
 
 // CreateTaskResult is returned by tools/call when a task is created
-// instead of the immediate tool result.
+// instead of the immediate tool result. Per spec: nested under "task" key.
 type CreateTaskResult struct {
 	Task TaskInfo `json:"task"`
 }
 
-// GetTaskResult is the response to tasks/get (non-blocking status poll).
+// GetTaskResult is the response to tasks/get. Per spec: flat Result & Task
+// intersection — task fields at the root level, no "task" wrapper.
 type GetTaskResult struct {
-	Task TaskInfo `json:"task"`
+	TaskInfo
 }
 
-// GetTaskPayloadResult is the response to tasks/result.
-// Blocks until the task reaches a terminal state.
-type GetTaskPayloadResult struct {
-	Task   TaskInfo   `json:"task"`
-	Result ToolResult `json:"result"`
+// CancelTaskResult is the response to tasks/cancel. Per spec: flat Result & Task
+// intersection — same as GetTaskResult.
+type CancelTaskResult struct {
+	TaskInfo
 }
 
 // ListTasksResult is the response to tasks/list with cursor pagination.
@@ -89,19 +93,45 @@ type ListTasksResult struct {
 	NextCursor string     `json:"nextCursor,omitempty"`
 }
 
-// CancelTaskResult is the response to tasks/cancel.
-type CancelTaskResult struct {
-	Task TaskInfo `json:"task"`
+// --- Capability types ---
+
+// TasksCapMethod is an empty struct used as a marker in capability negotiation.
+type TasksCapMethod struct{}
+
+// TasksCapToolsMethods declares which tool methods support task augmentation.
+type TasksCapToolsMethods struct {
+	Call *TasksCapMethod `json:"call,omitempty"`
+}
+
+// TasksCapSamplingMethods declares which sampling methods support task augmentation.
+type TasksCapSamplingMethods struct {
+	CreateMessage *TasksCapMethod `json:"createMessage,omitempty"`
+}
+
+// TasksCapElicitationMethods declares which elicitation methods support task augmentation.
+type TasksCapElicitationMethods struct {
+	Create *TasksCapMethod `json:"create,omitempty"`
+}
+
+// TasksCapRequests declares which request types support task-augmented responses.
+type TasksCapRequests struct {
+	Tools       *TasksCapToolsMethods       `json:"tools,omitempty"`
+	Sampling    *TasksCapSamplingMethods    `json:"sampling,omitempty"`
+	Elicitation *TasksCapElicitationMethods `json:"elicitation,omitempty"`
 }
 
 // TasksCap declares server support for the tasks capability in
-// ServerCapabilities. The Requests map keys are method names that support
-// task-augmented responses (e.g., "tools/call").
+// ServerCapabilities. Per spec: nested structure with list, cancel, requests.
 type TasksCap struct {
-	Requests map[string]struct{} `json:"requests,omitempty"`
+	List     *TasksCapMethod   `json:"list,omitempty"`
+	Cancel   *TasksCapMethod   `json:"cancel,omitempty"`
+	Requests *TasksCapRequests `json:"requests,omitempty"`
 }
 
 // ClientTasksCap declares client support for tasks in ClientCapabilities.
+// Mirrors TasksCap structure.
 type ClientTasksCap struct {
-	Requests map[string]struct{} `json:"requests,omitempty"`
+	List     *TasksCapMethod   `json:"list,omitempty"`
+	Cancel   *TasksCapMethod   `json:"cancel,omitempty"`
+	Requests *TasksCapRequests `json:"requests,omitempty"`
 }
