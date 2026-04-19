@@ -39,7 +39,8 @@ type toolCallAsTaskParams struct {
 }
 
 type taskParam struct {
-	TTL int `json:"ttl,omitempty"` // milliseconds
+	TTL          int `json:"ttl,omitempty"`          // milliseconds
+	PollInterval int `json:"pollInterval,omitempty"` // milliseconds
 }
 
 // --- Client helpers ---
