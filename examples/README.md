@@ -14,7 +14,7 @@ Runnable examples covering MCP Apps, authentication, async tasks, and proto-base
 | Example | What it shows | Port |
 |---------|--------------|:----:|
 | [apps/vanilla](apps/vanilla/) | Minimal MCP App — plain JS, no build step | 8080 |
-| [apps/htmx](apps/htmx/) | Server-rendered MCP App — HTMX, zero custom JS | 8080 |
+| [apps/todolist](apps/todolist/) | Server-rendered MCP App — bridge events, inline JS | 8080 |
 | [apps/react](apps/react/) | React 19 MCP App — hooks, Vite, TypeScript | 8080 |
 | [auth/unified](auth/) | **Start here** — all auth patterns in one server | 8080 |
 | [auth/bearer](auth/) | Static bearer token (simplest possible) | 8081 |
@@ -36,8 +36,8 @@ Each app example starts a Go server with an MCP endpoint at `/mcp`.
 cd examples/apps/vanilla
 go run . -addr :8080
 
-# HTMX — server-rendered with elicitation + sampling
-cd examples/apps/htmx
+# Todo List — server-rendered with elicitation + sampling
+cd examples/apps/todolist
 go run . -addr :8080
 
 # React — requires a frontend build first
