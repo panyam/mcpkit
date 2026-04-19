@@ -23,8 +23,12 @@ A server-rendered MCP App with inline JavaScript. The initial state is rendered 
 
 ## Screenshots
 
-<!-- TODO: add screenshots -->
+### Todo list with items added by the LLM
+
 ![Todo List](screenshots/todolist.png)
+
+### Elicitation flow — user picks priority before adding
+
 ![Elicitation](screenshots/elicitation.png)
 
 ## Setup

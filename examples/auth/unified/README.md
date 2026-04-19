@@ -56,9 +56,16 @@ Connect as alice. Then try bob's token on the same session — **403 Forbidden**
 
 ## Screenshots
 
-<!-- TODO: add screenshots -->
+### Connected with a valid JWT — echo reports identity
+
 ![Unified Auth](screenshots/unified-auth.png)
+
+### Calling write-tool with a read-only token — scope enforcement in action
+
 ![Scope Enforcement](screenshots/scope-enforcement.png)
+
+### Using bob's token on alice's session — 403 rejected
+
 ![Session Binding Rejection](screenshots/session-binding.png)
 
 ## Key Files

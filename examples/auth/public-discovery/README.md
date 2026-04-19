@@ -31,8 +31,12 @@ The server prints a token. Connect to `http://localhost:8085/mcp`.
 
 ## Screenshots
 
-<!-- TODO: add screenshots -->
+### tools/list works without a token — discover available tools
+
 ![Public Discovery](screenshots/public-discovery.png)
+
+### Calling echo without a token — 401 unauthorized
+
 ![Protected Call](screenshots/protected-call.png)
 
 ## Key Files

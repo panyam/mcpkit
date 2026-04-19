@@ -34,8 +34,12 @@ With **all-scopes** token:
 
 ## Screenshots
 
-<!-- TODO: add screenshots -->
+### Calling write-tool with a read-only token — denied
+
 ![Scope Denied](screenshots/scope-denied.png)
+
+### Reconnected with read+write token — granted
+
 ![Scope Granted](screenshots/scope-granted.png)
 
 ## Key Files

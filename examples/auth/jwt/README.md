@@ -26,7 +26,8 @@ The server prints a valid token on startup. Connect to `http://localhost:8082/mc
 
 ## Screenshots
 
-<!-- TODO: add screenshots -->
+### Echo reports authenticated identity from JWT claims
+
 ![JWT Auth](screenshots/jwt-auth.png)
 
 ## Key Files
