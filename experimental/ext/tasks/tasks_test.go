@@ -653,3 +653,214 @@ func TestTasksResultRelatedTask(t *testing.T) {
 		t.Errorf("related taskId = %v, want %s", relatedMap["taskId"], created.Task.TaskID)
 	}
 }
+
+// --- New tests for gap closure (panyam/mcpkit#279) ---
+
+// TestTaskPanicRecovery verifies that a panicking tool handler transitions
+// the task to failed instead of leaving it stuck in working.
+func TestTaskPanicRecovery(t *testing.T) {
+	srv := server.NewServer(core.ServerInfo{Name: "panic-test", Version: "0.0.1"})
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "panic-tool",
+			Description: "Always panics",
+			InputSchema: map[string]any{"type": "object"},
+			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			panic("test panic")
+		},
+	)
+	Register(Config{Server: srv})
+	c := connectClient(t, srv)
+
+	created, err := ToolCallAsTask(c, "panic-tool", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Poll until terminal.
+	var info core.TaskInfo
+	for i := 0; i < 20; i++ {
+		got, err := GetTask(c, created.Task.TaskID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		info = got.TaskInfo
+		if info.Status.IsTerminal() {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	if info.Status != core.TaskFailed {
+		t.Errorf("status = %q, want failed", info.Status)
+	}
+	if info.StatusMessage == "" {
+		t.Error("expected non-empty statusMessage with panic info")
+	}
+}
+
+// TestTaskResultForFailedTask verifies that tasks/result returns the stored
+// ToolResult (not a JSON-RPC error) for failed tasks.
+func TestTaskResultForFailedTask(t *testing.T) {
+	srv, _ := newTaskServer(t)
+	c := connectClient(t, srv)
+
+	created, err := ToolCallAsTask(c, "fail-async", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for task to fail.
+	for i := 0; i < 20; i++ {
+		got, _ := GetTask(c, created.Task.TaskID)
+		if got.Status.IsTerminal() {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	// tasks/result should return a ToolResult, not an error.
+	result, relatedID, err := GetTaskPayload(c, created.Task.TaskID)
+	if err != nil {
+		t.Fatalf("tasks/result should not return error for failed task, got: %v", err)
+	}
+	if !result.IsError {
+		t.Error("expected IsError=true on failed task result")
+	}
+	if relatedID != created.Task.TaskID {
+		t.Errorf("relatedTaskId = %q, want %q", relatedID, created.Task.TaskID)
+	}
+}
+
+// TestTaskResultForCancelledTask verifies that tasks/result returns a
+// cancellation ToolResult for cancelled tasks.
+func TestTaskResultForCancelledTask(t *testing.T) {
+	srv, _ := newTaskServer(t)
+	c := connectClient(t, srv)
+
+	created, err := ToolCallAsTask(c, "slow", map[string]any{"data": "cancel-me"}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Cancel immediately.
+	_, err = CancelTask(c, created.Task.TaskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// tasks/result should return a ToolResult, not an error.
+	result, relatedID, err := GetTaskPayload(c, created.Task.TaskID)
+	if err != nil {
+		t.Fatalf("tasks/result should not return error for cancelled task, got: %v", err)
+	}
+	if !result.IsError {
+		t.Error("expected IsError=true on cancelled task result")
+	}
+	if relatedID != created.Task.TaskID {
+		t.Errorf("relatedTaskId = %q, want %q", relatedID, created.Task.TaskID)
+	}
+}
+
+// TestTaskPollIntervalPassthrough verifies the client-specified pollInterval
+// is returned in CreateTaskResult.
+func TestTaskPollIntervalPassthrough(t *testing.T) {
+	srv, unblock := newTaskServer(t)
+	defer close(unblock)
+	c := connectClient(t, srv)
+
+	// Send tools/call with custom pollInterval.
+	result, err := c.Call("tools/call", map[string]any{
+		"name":      "slow",
+		"arguments": map[string]any{"data": "poll"},
+		"task":      map[string]any{"pollInterval": 2000},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var created core.CreateTaskResult
+	json.Unmarshal(result.Raw, &created)
+
+	if created.Task.PollInterval != 2000 {
+		t.Errorf("pollInterval = %d, want 2000", created.Task.PollInterval)
+	}
+}
+
+// TestGetTaskContextNilForSync verifies GetTaskContext returns nil for
+// synchronous (non-task) tool invocations.
+func TestGetTaskContextNilForSync(t *testing.T) {
+	srv := server.NewServer(core.ServerInfo{Name: "ctx-test", Version: "0.0.1"})
+
+	var gotTC bool
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "check-ctx",
+			Description: "Checks if TaskContext is available",
+			InputSchema: map[string]any{"type": "object"},
+			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			tc := GetTaskContext(ctx)
+			gotTC = tc != nil
+			return core.TextResult("ok"), nil
+		},
+	)
+	Register(Config{Server: srv})
+	c := connectClient(t, srv)
+
+	// Call without task hint — sync mode.
+	_, err := c.ToolCall("check-ctx", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotTC {
+		t.Error("GetTaskContext should return nil for sync tool calls")
+	}
+}
+
+// TestGetTaskContextAvailableForAsync verifies GetTaskContext returns a
+// non-nil TaskContext for async (task) tool invocations.
+func TestGetTaskContextAvailableForAsync(t *testing.T) {
+	srv := server.NewServer(core.ServerInfo{Name: "ctx-test", Version: "0.0.1"})
+
+	gotTaskID := make(chan string, 1)
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "check-ctx",
+			Description: "Checks if TaskContext is available",
+			InputSchema: map[string]any{"type": "object"},
+			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			tc := GetTaskContext(ctx)
+			if tc != nil {
+				gotTaskID <- tc.TaskID()
+			} else {
+				gotTaskID <- ""
+			}
+			return core.TextResult("ok"), nil
+		},
+	)
+	Register(Config{Server: srv})
+	c := connectClient(t, srv)
+
+	created, err := ToolCallAsTask(c, "check-ctx", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case tid := <-gotTaskID:
+		if tid == "" {
+			t.Error("GetTaskContext returned nil for async tool call")
+		}
+		if tid != created.Task.TaskID {
+			t.Errorf("TaskID = %q, want %q", tid, created.Task.TaskID)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for tool handler")
+	}
+}
