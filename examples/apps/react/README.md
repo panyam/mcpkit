@@ -25,8 +25,12 @@ A React 19 MCP App that mirrors the upstream ext-apps `basic-server-vanillajs` f
 
 ## Screenshots
 
-<!-- TODO: add screenshots -->
+### Current time displayed in the React UI
+
 ![React App](screenshots/react-app.png)
+
+### Timezone elicitation — user picks a timezone
+
 ![Timezone Elicitation](screenshots/elicitation.png)
 
 ## Setup

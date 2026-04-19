@@ -115,9 +115,16 @@ Returns: `{"tasks": [...], "nextCursor": "..."}`
 
 ## Screenshots
 
-<!-- TODO: add screenshots -->
+### Async tool returns a task ID immediately
+
 ![Task Created](screenshots/task-created.png)
+
+### Polling tasks/get — status transitions to completed
+
 ![Task Completed](screenshots/task-completed.png)
+
+### failing_job — task transitions to failed after 1 second
+
 ![Task Failed](screenshots/task-failed.png)
 
 ## Key Files

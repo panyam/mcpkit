@@ -28,8 +28,12 @@ The server prints tokens for alice and bob. Connect to `http://localhost:8084/mc
 
 ## Screenshots
 
-<!-- TODO: add screenshots -->
+### Alice connected — session bound to her identity
+
 ![Session Bound](screenshots/session-bound.png)
+
+### Bob's token on alice's session — 403 rejected
+
 ![Hijack Rejected](screenshots/hijack-rejected.png)
 
 ## Key Files

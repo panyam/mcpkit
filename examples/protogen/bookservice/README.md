@@ -75,8 +75,12 @@ Or if you've built the binary:
 
 ## Screenshots
 
-<!-- TODO: add screenshots -->
+### Tools, resources, and prompts generated from proto annotations
+
 ![BookService Tools](screenshots/bookservice-tools.png)
+
+### Search results for "Go programming"
+
 ![Search Results](screenshots/search-results.png)
 
 ## Add to Claude Code

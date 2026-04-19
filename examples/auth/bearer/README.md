@@ -24,7 +24,8 @@ Connect to `http://localhost:8081/mcp` with header `Authorization: Bearer my-sec
 
 ## Screenshots
 
-<!-- TODO: add screenshots -->
+### Connected with the static token — echo responds
+
 ![Bearer Auth](screenshots/bearer-auth.png)
 
 ## Key Files
