@@ -37,15 +37,6 @@ func main() {
 	)
 	common.RegisterEchoTools(srv)
 
-	mux := http.NewServeMux()
-	mux.Handle("/mcp", srv.Handler(server.WithStreamableHTTP(true)))
-	auth.MountAuth(mux, auth.AuthConfig{
-		ResourceURI:          listenURL,
-		AuthorizationServers: []string{env.AS.Issuer()},
-		ScopesSupported:      env.Scopes,
-		MCPPath:              "/mcp",
-	})
-
 	token := env.MintToken("alice", []string{"read"})
 
 	log.Printf("Pre-auth discovery example on %s", *addr)
@@ -59,7 +50,17 @@ func main() {
 	log.Printf("")
 	log.Printf("Token: %s", token)
 
-	if err := http.ListenAndServe(*addr, mux); err != nil {
+	if err := srv.Run(*addr,
+		server.WithStreamableHTTP(true),
+		server.WithMux(func(mux *http.ServeMux) {
+			auth.MountAuth(mux, auth.AuthConfig{
+				ResourceURI:          listenURL,
+				AuthorizationServers: []string{env.AS.Issuer()},
+				ScopesSupported:      env.Scopes,
+				MCPPath:              "/mcp",
+			})
+		}),
+	); err != nil {
 		log.Fatal(err)
 	}
 }

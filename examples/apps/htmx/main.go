@@ -247,23 +247,20 @@ func main() {
 		},
 	)
 
-	// HTTP mux: MCP + HTMX partials.
-	mux := http.NewServeMux()
-	handler := srv.Handler(server.WithStreamableHTTP(true))
-	mux.Handle("/mcp", handler)
-	mux.Handle("/mcp/", handler)
-
-	// HTMX partial endpoint — returns rendered task list HTML.
-	mux.HandleFunc("/partial/tasks", func(w http.ResponseWriter, r *http.Request) {
-		tasksMu.Lock()
-		data := struct{ Tasks []Task }{Tasks: tasks}
-		tasksMu.Unlock()
-		w.Header().Set("Content-Type", "text/html")
-		tasksTmpl.Execute(w, data)
-	})
-
 	log.Printf("task-board listening on %s (MCP at /mcp)", *addr)
-	if err := http.ListenAndServe(*addr, mux); err != nil {
+	if err := srv.Run(*addr,
+		server.WithStreamableHTTP(true),
+		server.WithMux(func(mux *http.ServeMux) {
+			// HTMX partial endpoint — returns rendered task list HTML.
+			mux.HandleFunc("/partial/tasks", func(w http.ResponseWriter, r *http.Request) {
+				tasksMu.Lock()
+				data := struct{ Tasks []Task }{Tasks: tasks}
+				tasksMu.Unlock()
+				w.Header().Set("Content-Type", "text/html")
+				tasksTmpl.Execute(w, data)
+			})
+		}),
+	); err != nil {
 		log.Fatal(err)
 	}
 }

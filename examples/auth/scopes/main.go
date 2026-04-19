@@ -36,15 +36,6 @@ func main() {
 	)
 	common.RegisterEchoTools(srv)
 
-	mux := http.NewServeMux()
-	mux.Handle("/mcp", srv.Handler(server.WithStreamableHTTP(true)))
-	auth.MountAuth(mux, auth.AuthConfig{
-		ResourceURI:          listenURL,
-		AuthorizationServers: []string{env.AS.Issuer()},
-		ScopesSupported:      env.Scopes,
-		MCPPath:              "/mcp",
-	})
-
 	tokRead := env.MintToken("alice", []string{"read"})
 	tokReadWrite := env.MintToken("alice", []string{"read", "write"})
 	tokAll := env.MintToken("alice", []string{"read", "write", "admin"})
@@ -59,7 +50,17 @@ func main() {
 	log.Printf("")
 	log.Printf("Try: echo (any token), write-tool (needs write), admin-tool (needs admin)")
 
-	if err := http.ListenAndServe(*addr, mux); err != nil {
+	if err := srv.Run(*addr,
+		server.WithStreamableHTTP(true),
+		server.WithMux(func(mux *http.ServeMux) {
+			auth.MountAuth(mux, auth.AuthConfig{
+				ResourceURI:          listenURL,
+				AuthorizationServers: []string{env.AS.Issuer()},
+				ScopesSupported:      env.Scopes,
+				MCPPath:              "/mcp",
+			})
+		}),
+	); err != nil {
 		log.Fatal(err)
 	}
 }

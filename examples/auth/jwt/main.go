@@ -37,17 +37,6 @@ func main() {
 	)
 	common.RegisterEchoTools(srv)
 
-	// Mount PRM endpoints for auth discovery.
-	mux := http.NewServeMux()
-	mcpHandler := srv.Handler(server.WithStreamableHTTP(true))
-	mux.Handle("/mcp", mcpHandler)
-	auth.MountAuth(mux, auth.AuthConfig{
-		ResourceURI:          listenURL,
-		AuthorizationServers: []string{env.AS.Issuer()},
-		ScopesSupported:      env.Scopes,
-		MCPPath:              "/mcp",
-	})
-
 	// Print a token for the user to copy-paste.
 	token := env.MintToken("alice", []string{"read", "write"})
 	log.Printf("JWT auth example on %s", *addr)
@@ -56,7 +45,17 @@ func main() {
 	log.Printf("Connect MCPJam: http://localhost%s/mcp", *addr)
 	log.Printf("Authorization: Bearer %s", token)
 
-	if err := http.ListenAndServe(*addr, mux); err != nil {
+	if err := srv.Run(*addr,
+		server.WithStreamableHTTP(true),
+		server.WithMux(func(mux *http.ServeMux) {
+			auth.MountAuth(mux, auth.AuthConfig{
+				ResourceURI:          listenURL,
+				AuthorizationServers: []string{env.AS.Issuer()},
+				ScopesSupported:      env.Scopes,
+				MCPPath:              "/mcp",
+			})
+		}),
+	); err != nil {
 		log.Fatal(err)
 	}
 }
