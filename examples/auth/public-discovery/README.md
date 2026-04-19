@@ -18,16 +18,27 @@ go run ./public-discovery
 
 The server prints a token. Connect to `http://localhost:8085/mcp`.
 
-## Prompts to Try
+## Exercises
 
-**Without a token:**
+Connect **without** a token:
+
 - `initialize` — works
 - `tools/list` — works, shows available tools
 - `ping` — works
-- Call `echo` — returns 401
 
-**With the printed token:**
-- Everything works
+```
+Echo hello
+```
+
+- Returns **401** — tool execution requires auth
+
+Now connect **with** the printed token:
+
+```
+Echo hello
+```
+
+- Returns: `echo: hello (user: alice, scopes: [read])` — everything works
 
 ## Screenshots
 

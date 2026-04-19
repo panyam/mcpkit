@@ -18,19 +18,43 @@ go run ./scopes
 
 The server prints three tokens with different scope sets. Connect to `http://localhost:8083/mcp`.
 
-## Prompts to Try
+## Exercises
 
-With **read-only** token:
-- "Echo hello" — works (echo has no scope requirement)
-- "Call write-tool" — fails: `insufficient scope: requires "write"`
-- "Call admin-tool" — fails: `insufficient scope: requires "admin"`
+Connect with the **read-only** token:
 
-With **read+write** token:
-- "Call write-tool" — works
-- "Call admin-tool" — still fails
+```
+Echo hello
+```
 
-With **all-scopes** token:
-- Everything works
+- Returns: `echo: hello (user: alice, scopes: [read])` — works, no scope required
+
+```
+Call the write tool
+```
+
+- Returns: `error: insufficient scope: requires "write"`
+
+```
+Call the admin tool
+```
+
+- Returns: `error: insufficient scope: requires "admin"`
+
+Reconnect with the **read+write** token:
+
+```
+Call the write tool
+```
+
+- Returns: `write ok`
+
+```
+Call the admin tool
+```
+
+- Still fails — missing `admin` scope
+
+Reconnect with the **all-scopes** token — everything works.
 
 ## Screenshots
 

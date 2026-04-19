@@ -17,10 +17,23 @@ go run ./bearer
 
 Connect to `http://localhost:8081/mcp` with header `Authorization: Bearer my-secret-token`.
 
-## Prompts to Try
+## Exercises
 
-- "Echo hello" — works with the correct token
-- Connect without a token or with a wrong token — all calls fail with 401
+Connect with `Authorization: Bearer my-secret-token`:
+
+```
+Echo hello
+```
+
+- Returns: `echo: hello (anonymous)` — bearer auth doesn't propagate identity
+
+Now connect **without** a token or with a wrong token:
+
+```
+Echo hello
+```
+
+- Returns **401** — all calls fail
 
 ## Screenshots
 
