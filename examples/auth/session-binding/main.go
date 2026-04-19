@@ -36,15 +36,6 @@ func main() {
 	)
 	common.RegisterEchoTools(srv)
 
-	mux := http.NewServeMux()
-	mux.Handle("/mcp", srv.Handler(server.WithStreamableHTTP(true)))
-	auth.MountAuth(mux, auth.AuthConfig{
-		ResourceURI:          listenURL,
-		AuthorizationServers: []string{env.AS.Issuer()},
-		ScopesSupported:      env.Scopes,
-		MCPPath:              "/mcp",
-	})
-
 	tokAlice := env.MintToken("alice", []string{"read"})
 	tokBob := env.MintToken("bob", []string{"read"})
 
@@ -58,7 +49,17 @@ func main() {
 	log.Printf("Try: connect with alice's token, note session ID.")
 	log.Printf("Then try sending a request with bob's token to alice's session → 403")
 
-	if err := http.ListenAndServe(*addr, mux); err != nil {
+	if err := srv.Run(*addr,
+		server.WithStreamableHTTP(true),
+		server.WithMux(func(mux *http.ServeMux) {
+			auth.MountAuth(mux, auth.AuthConfig{
+				ResourceURI:          listenURL,
+				AuthorizationServers: []string{env.AS.Issuer()},
+				ScopesSupported:      env.Scopes,
+				MCPPath:              "/mcp",
+			})
+		}),
+	); err != nil {
 		log.Fatal(err)
 	}
 }

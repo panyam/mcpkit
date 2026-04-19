@@ -722,13 +722,22 @@ func (s *Server) ListenAndServe(opts ...TransportOption) error {
 		addr = ":8080"
 	}
 
-	handler := s.Handler(opts...)
+	mcpHandler := s.Handler(opts...)
 	var shutdownFns []func()
 
 	// Collect shutdown callbacks from active transports
 	if cfg.sse {
 		// SSE hub cleanup is handled internally by the SSE transport
 		// through the handler's SSEHub.CloseAll
+	}
+
+	// If muxSetup is provided, wrap the MCP handler in a mux with additional routes.
+	var handler http.Handler = mcpHandler
+	if cfg.muxSetup != nil {
+		mux := http.NewServeMux()
+		mux.Handle(cfg.prefix, mcpHandler)
+		cfg.muxSetup(mux)
+		handler = mux
 	}
 
 	httpSrv := &http.Server{
@@ -761,6 +770,7 @@ type transportConfig struct {
 	keepaliveInterval time.Duration  // 0 = disabled; interval for JSON-RPC ping requests
 	keepaliveMaxFails int            // max consecutive ping failures before session cleanup (default 3)
 	sseGracePeriod    time.Duration  // 0 = immediate cleanup on SSE disconnect (backward compat)
+	muxSetup          func(*http.ServeMux) // optional: register additional routes on the server mux
 }
 
 func defaultTransportConfig() transportConfig {
@@ -857,6 +867,24 @@ func WithKeepalive(interval time.Duration, maxFailures int) TransportOption {
 		c.keepaliveInterval = interval
 		c.keepaliveMaxFails = maxFailures
 	}
+}
+
+// WithMux registers additional HTTP routes on the server's mux alongside
+// the MCP transport handler. Use this to mount auth discovery (PRM), health
+// checks, or other endpoints without dropping out of srv.Run()'s graceful
+// shutdown.
+//
+// Example:
+//
+//	srv.Run(":8080",
+//	    server.WithStreamableHTTP(true),
+//	    server.WithMux(func(mux *http.ServeMux) {
+//	        auth.MountAuth(mux, authCfg)
+//	        mux.HandleFunc("/healthz", healthHandler)
+//	    }),
+//	)
+func WithMux(setup func(*http.ServeMux)) TransportOption {
+	return func(c *transportConfig) { c.muxSetup = setup }
 }
 
 // WithStateless enables stateless mode for the Streamable HTTP transport.
