@@ -39,7 +39,6 @@ In MCPJam (or Claude Desktop):
 
 ## Screenshots
 
-<!-- TODO: add screenshots -->
 ![Dice Roller](screenshots/dice-roller.png)
 
 ## Key files
