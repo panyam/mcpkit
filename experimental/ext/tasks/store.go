@@ -205,6 +205,16 @@ func (s *InMemoryTaskStore) Cancel(taskID string) (core.TaskInfo, error) {
 		return entry.info, errTaskTerminal
 	}
 	entry.info.Status = core.TaskCancelled
+	entry.info.StatusMessage = "task was cancelled"
+	// Store a cancellation result so tasks/result can return it.
+	if _, hasResult := s.results[taskID]; !hasResult {
+		cancelResult := core.ToolResult{
+			Content: []core.Content{{Type: "text", Text: "task was cancelled"}},
+			IsError: true,
+		}
+		raw, _ := json.Marshal(cancelResult)
+		s.results[taskID] = raw
+	}
 	s.cond.Broadcast()
 	return entry.info, nil
 }

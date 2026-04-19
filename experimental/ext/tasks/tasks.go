@@ -137,6 +137,10 @@ func taskMiddleware(reg *server.Registry, store TaskStore, cfg Config) server.Mi
 		if envelope.Task.TTL > 0 {
 			ttlMs = envelope.Task.TTL
 		}
+		pollMs := cfg.DefaultPollMs
+		if envelope.Task.PollInterval > 0 {
+			pollMs = envelope.Task.PollInterval
+		}
 
 		info := core.TaskInfo{
 			TaskID:        taskID,
@@ -144,7 +148,7 @@ func taskMiddleware(reg *server.Registry, store TaskStore, cfg Config) server.Mi
 			CreatedAt:     now,
 			LastUpdatedAt: now,
 			TTL:           core.IntPtr(ttlMs),
-			PollInterval:  cfg.DefaultPollMs,
+			PollInterval:  pollMs,
 		}
 		if err := store.Create(info); err != nil {
 			return core.NewErrorResponse(req.ID, -32603, "failed to create task: "+err.Error())
@@ -153,6 +157,19 @@ func taskMiddleware(reg *server.Registry, store TaskStore, cfg Config) server.Mi
 		// Run the tool asynchronously. Detach from client context so
 		// the tool continues even if the client disconnects.
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					now := time.Now().UTC().Format(time.RFC3339)
+					msg := fmt.Sprintf("panic: %v", r)
+					store.SetResult(taskID, core.ErrorResult(msg))
+					store.Update(taskID, func(t *core.TaskInfo) {
+						t.Status = core.TaskFailed
+						t.StatusMessage = msg
+						t.LastUpdatedAt = now
+					})
+				}
+			}()
+
 			bgCtx := context.WithoutCancel(ctx)
 			resp := next(bgCtx, req)
 
@@ -210,7 +227,8 @@ func taskMiddleware(reg *server.Registry, store TaskStore, cfg Config) server.Mi
 
 // taskHint is the client's task creation hint from params.task.
 type taskHint struct {
-	TTL int `json:"ttl,omitempty"` // milliseconds
+	TTL          int `json:"ttl,omitempty"`          // milliseconds
+	PollInterval int `json:"pollInterval,omitempty"` // milliseconds
 }
 
 // --- Method Handlers ---
@@ -242,20 +260,15 @@ func makeResultHandler(store TaskStore) server.MethodHandler {
 		}
 
 		// WaitForResult blocks until terminal.
-		result, info, err := store.WaitForResult(p.TaskID)
+		result, _, err := store.WaitForResult(p.TaskID)
 		if err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 		}
 
-		if info.Status == core.TaskFailed {
-			return core.NewErrorResponse(id, core.ErrCodeToolExecutionError, info.StatusMessage)
-		}
-		if info.Status == core.TaskCancelled {
-			return core.NewErrorResponse(id, -32800, "task was cancelled")
-		}
-
-		// Per spec: tasks/result returns the original ToolResult shape with
-		// _meta["io.modelcontextprotocol/related-task"] injected.
+		// Per spec: tasks/result returns the stored ToolResult for ALL terminal
+		// states (completed, failed, cancelled). The client checks isError or
+		// polls tasks/get for the status. We do NOT return JSON-RPC errors for
+		// failed/cancelled tasks — the result IS the payload.
 		if result.Meta == nil {
 			result.Meta = &core.ToolResultMeta{}
 		}
