@@ -29,7 +29,18 @@ MCPJam, VS Code, or any MCP client: `http://localhost:8080/mcp`
 | `slow_compute` | optional | Sleeps N seconds. Sync without hint, async with hint. |
 | `failing_job` | required | Always fails after 1s. Must be called as a task. |
 
-## Exercises
+## Important: Host Support Required
+
+MCP Tasks is an experimental protocol extension (spec 2025-11-25). **Most MCP hosts don't support it yet** — they will call tools synchronously and ignore the task hints.
+
+- **Without task support**: `slow_compute` blocks for the full duration (may timeout). `failing_job` returns an error saying it requires task invocation.
+- **With task support**: The host sends a `"task": {}` hint, gets a task ID back immediately, and can poll/cancel/list tasks.
+
+Until your host supports tasks, use the [curl walkthrough](#curl-walkthrough) below to exercise the async path.
+
+## Exercises (task-capable hosts)
+
+These prompts work if your host supports the MCP tasks protocol.
 
 ### 1. Sync tool call
 
@@ -39,15 +50,13 @@ Greet World
 
 Returns immediately: `Hello, World!`
 
-### 2. Async computation (optional task support)
+### 2. Async computation
 
 ```
 Run a slow computation for 5 seconds labeled "pi"
 ```
 
-If the host supports tasks, this returns a task ID immediately and the computation runs in the background. Poll for the result — after 5 seconds it completes with `Result: 42`.
-
-Without task support, the call blocks for 5 seconds and returns the result directly.
+Returns a task ID immediately. The computation runs in the background.
 
 ### 3. Check on a running task
 
@@ -57,13 +66,13 @@ What's the status of my computation?
 
 The host polls `tasks/get` — status transitions from `working` to `completed`.
 
-### 4. Failing job (required task support)
+### 4. Failing job
 
 ```
 Run the failing job
 ```
 
-This tool *requires* task invocation. The host must send a task hint. The job starts, then fails after 1 second — status transitions to `failed`.
+This tool *requires* task invocation. The job starts, then fails after 1 second — status transitions to `failed`.
 
 ### 5. Cancel a running task
 
@@ -81,79 +90,72 @@ List all tasks
 
 Shows all tasks with their current status.
 
-## Wire-Level Reference
+## Curl Walkthrough
 
-For hosts that don't support tasks natively, or for manual testing with curl, here are the raw JSON-RPC payloads.
+For hosts that don't support tasks yet, you can exercise the full async lifecycle with curl.
 
-<details>
-<summary>Sync tool call</summary>
+### Initialize a session
 
-```json
-{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"greet","arguments":{"name":"World"}}}
-```
-</details>
-
-<details>
-<summary>Async tool call with task hint</summary>
-
-```json
-{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":5,"label":"pi"},"task":{}}}
+```bash
+curl -s -D- http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
 ```
 
-Returns `CreateTaskResult` with a `taskId`.
-</details>
+Note the `Mcp-Session-Id` header — use it in all subsequent requests.
 
-<details>
-<summary>Poll task status</summary>
+### Start an async computation
 
-```json
-{"jsonrpc":"2.0","id":3,"method":"tasks/get","params":{"taskId":"task-..."}}
-```
-</details>
-
-<details>
-<summary>Get task result (blocks until done)</summary>
-
-```json
-{"jsonrpc":"2.0","id":4,"method":"tasks/result","params":{"taskId":"task-..."}}
-```
-</details>
-
-<details>
-<summary>Cancel a running task</summary>
-
-```json
-{"jsonrpc":"2.0","id":5,"method":"tasks/cancel","params":{"taskId":"task-..."}}
-```
-</details>
-
-<details>
-<summary>List all tasks</summary>
-
-```json
-{"jsonrpc":"2.0","id":6,"method":"tasks/list","params":{}}
-```
-</details>
-
-<details>
-<summary>Forbidden: greet with task hint (error)</summary>
-
-```json
-{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"greet","arguments":{"name":"World"},"task":{}}}
+```bash
+curl -s http://localhost:8080/mcp \
+  -H "Mcp-Session-Id: <session-id>" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":10,"label":"pi"},"task":{}}}'
 ```
 
-Returns error: tool does not support task invocation.
-</details>
-
-<details>
-<summary>Required: failing_job without task hint (error)</summary>
+Returns immediately with a `taskId`:
 
 ```json
-{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"failing_job","arguments":{}}}
+{"result":{"task":{"taskId":"task-...","status":"working","ttl":300000,"pollInterval":1000}}}
 ```
 
-Returns error: tool requires task invocation.
-</details>
+### Poll task status
+
+```bash
+curl -s http://localhost:8080/mcp \
+  -H "Mcp-Session-Id: <session-id>" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tasks/get","params":{"taskId":"<task-id>"}}'
+```
+
+Returns `"status":"working"` while running, `"status":"completed"` when done.
+
+### Get the result (blocks until done)
+
+```bash
+curl -s http://localhost:8080/mcp \
+  -H "Mcp-Session-Id: <session-id>" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":4,"method":"tasks/result","params":{"taskId":"<task-id>"}}'
+```
+
+### Cancel a running task
+
+```bash
+curl -s http://localhost:8080/mcp \
+  -H "Mcp-Session-Id: <session-id>" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":5,"method":"tasks/cancel","params":{"taskId":"<task-id>"}}'
+```
+
+### List all tasks
+
+```bash
+curl -s http://localhost:8080/mcp \
+  -H "Mcp-Session-Id: <session-id>" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":6,"method":"tasks/list","params":{}}'
+```
 
 ## Screenshots
 
