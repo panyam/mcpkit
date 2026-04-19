@@ -1,5 +1,9 @@
 {
   "mcpServers": {
+    "auth-unified": {
+      "url": "http://localhost:8080/mcp",
+      "description": "All auth patterns in one server — run 'go run ./unified' first"
+    },
     "auth-bearer": {
       "url": "http://localhost:8081/mcp",
       "description": "Static bearer token auth (token: my-secret-token)",
