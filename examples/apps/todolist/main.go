@@ -1,8 +1,8 @@
-// Example: HTMX MCP App — zero custom JavaScript.
+// Example: Todo List MCP App — server-rendered + bridge events.
 //
-// A task board app where the LLM adds/completes tasks. The iframe uses
-// HTMX to swap partial HTML updates driven by the bridge's CustomEvent
-// dispatch (mcp:toolresult). No custom JS event wiring needed.
+// A todo list app where the LLM adds/completes items. The initial state
+// is server-rendered in the resource handler. Subsequent updates arrive
+// via the bridge's toolresult event and update the DOM with inline JS.
 //
 // Run:  go run . -addr :8080
 // Connect MCPJam to http://localhost:8080/mcp, ask "add a task to buy groceries".
@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"html/template"
 	"log"
-	"net/http"
 	"strings"
 	"sync"
 
@@ -27,9 +26,6 @@ import (
 
 //go:embed templates/page.html
 var pageTemplateRaw string
-
-//go:embed templates/tasks.html
-var tasksTemplateRaw string
 
 // Task is a simple task item.
 type Task struct {
@@ -51,16 +47,31 @@ func main() {
 	// Parse templates.
 	pageTmpl := template.Must(template.New("page").Parse(pageTemplateRaw))
 	template.Must(pageTmpl.Parse(ui.BridgeTemplateDef()))
-	tasksTmpl := template.Must(template.New("tasks").Parse(tasksTemplateRaw))
 
-	// Pre-render the page with bridge.
-	var pageBuf bytes.Buffer
-	if err := pageTmpl.Execute(&pageBuf, struct{ Bridge ui.BridgeData }{
-		Bridge: ui.NewBridgeData("task-board", "0.1.0"),
-	}); err != nil {
-		log.Fatal(err)
+	bridge := ui.NewBridgeData("task-board", "0.1.0")
+
+	// renderPage renders the full page HTML with the current task list.
+	// Called each time the resource is read so the iframe shows current state.
+	renderPage := func() string {
+		tasksMu.Lock()
+		snapshot := make([]Task, len(tasks))
+		copy(snapshot, tasks)
+		tasksMu.Unlock()
+
+		tasksJSON, _ := json.Marshal(snapshot)
+
+		var buf bytes.Buffer
+		pageTmpl.Execute(&buf, struct {
+			Bridge    ui.BridgeData
+			Tasks     []Task
+			TasksJSON template.JS
+		}{
+			Bridge:    bridge,
+			Tasks:     snapshot,
+			TasksJSON: template.JS(tasksJSON),
+		})
+		return buf.String()
 	}
-	pageHTML := pageBuf.String()
 
 	srv := server.NewServer(
 		core.ServerInfo{Name: "task-board", Version: "0.1.0"},
@@ -84,6 +95,9 @@ func main() {
 			tasks = append(tasks, Task{Title: input.Title, Priority: input.Priority})
 			count := len(tasks)
 			tasksMu.Unlock()
+			// Tell the host the resource changed so it re-reads the page
+			// with the updated task list (host pre-fetches before tools/call).
+			ctx.NotifyResourceUpdated("ui://tasks/board")
 			return core.StructuredResult(
 				"Added task: "+input.Title,
 				map[string]any{"title": input.Title, "priority": input.Priority, "total": count},
@@ -92,8 +106,12 @@ func main() {
 		ResourceURI: "ui://tasks/board",
 		Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
 		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
+			tasksMu.Lock()
+			count := len(tasks)
+			tasksMu.Unlock()
+			log.Printf("[resource] ui://tasks/board read — %d tasks in store", count)
 			return core.ResourceResult{Contents: []core.ResourceReadContent{{
-				URI: req.URI, MimeType: core.AppMIMEType, Text: pageHTML,
+				URI: req.URI, MimeType: core.AppMIMEType, Text: renderPage(),
 			}}}, nil
 		},
 	})
@@ -115,6 +133,7 @@ func main() {
 			if !found {
 				return "Task not found: " + input.Title, nil
 			}
+			ctx.NotifyResourceUpdated("ui://tasks/board")
 			return "Completed: " + input.Title, nil
 		},
 	))
@@ -162,6 +181,7 @@ func main() {
 			tasksMu.Lock()
 			tasks = append(tasks, Task{Title: input.Title, Priority: priority})
 			tasksMu.Unlock()
+			ctx.NotifyResourceUpdated("ui://tasks/board")
 			return fmt.Sprintf("Added task %q with priority %s (confirmed by user)", input.Title, priority), nil
 		},
 	))
@@ -199,6 +219,7 @@ func main() {
 			tasksMu.Lock()
 			tasks = append(tasks, Task{Title: input.Title, Priority: suggestion})
 			tasksMu.Unlock()
+			ctx.NotifyResourceUpdated("ui://tasks/board")
 			return fmt.Sprintf("Added task %q with LLM-suggested priority: %s (model: %s)",
 				input.Title, suggestion, result.Model), nil
 		},
@@ -248,19 +269,7 @@ func main() {
 	)
 
 	log.Printf("task-board listening on %s (MCP at /mcp)", *addr)
-	if err := srv.Run(*addr,
-		server.WithStreamableHTTP(true),
-		server.WithMux(func(mux *http.ServeMux) {
-			// HTMX partial endpoint — returns rendered task list HTML.
-			mux.HandleFunc("/partial/tasks", func(w http.ResponseWriter, r *http.Request) {
-				tasksMu.Lock()
-				data := struct{ Tasks []Task }{Tasks: tasks}
-				tasksMu.Unlock()
-				w.Header().Set("Content-Type", "text/html")
-				tasksTmpl.Execute(w, data)
-			})
-		}),
-	); err != nil {
+	if err := srv.Run(*addr, server.WithStreamableHTTP(true)); err != nil {
 		log.Fatal(err)
 	}
 }

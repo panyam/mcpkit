@@ -1,4 +1,4 @@
-module github.com/panyam/mcpkit/examples/apps/htmx
+module github.com/panyam/mcpkit/examples/apps/todolist
 
 go 1.26.1
 
