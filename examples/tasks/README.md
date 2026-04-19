@@ -2,6 +2,14 @@
 
 Demonstrates MCP Tasks (spec 2025-11-25) — async tool execution with lifecycle tracking.
 
+## MCPKit Features Used
+
+| Category | Feature |
+|----------|---------|
+| Core | `core.ToolDef.Execution`, `core.TaskSupportOptional`, `core.TaskSupportRequired` |
+| Experimental | `experimental/ext/tasks` — `tasks.Register`, `tasks.Config` |
+| MCP methods | `tasks/get`, `tasks/result`, `tasks/cancel`, `tasks/list` |
+
 ## Setup
 
 ```bash
@@ -98,6 +106,19 @@ Returns flat: `{"taskId": "...", "status": "cancelled", ...}`
 ```
 
 Returns: `{"tasks": [...], "nextCursor": "..."}`
+
+## Prompts to Try
+
+- "Greet World" — sync call, returns immediately
+- "Run a slow computation for 5 seconds" — returns task, poll for result
+- "Run the failing job" — must include task hint, transitions to failed
+
+## Screenshots
+
+<!-- TODO: add screenshots -->
+![Task Created](screenshots/task-created.png)
+![Task Completed](screenshots/task-completed.png)
+![Task Failed](screenshots/task-failed.png)
 
 ## Key Files
 
