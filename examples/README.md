@@ -1,6 +1,6 @@
 # MCPKit Examples
 
-Runnable examples covering MCP Apps, authentication, and proto-based code generation. Each example is self-contained with its own `go.mod`.
+Runnable examples covering MCP Apps, authentication, async tasks, and proto-based code generation. Each example is self-contained with its own `go.mod`.
 
 ## Prerequisites
 
@@ -23,6 +23,7 @@ Runnable examples covering MCP Apps, authentication, and proto-based code genera
 | [auth/session-binding](auth/) | Session hijacking prevention | 8084 |
 | [auth/public-discovery](auth/) | Pre-auth tool discovery | 8085 |
 | [protogen/bookservice](protogen/bookservice/) | Proto annotations to MCP tools, resources, prompts | 8080 |
+| [tasks](tasks/) | Async tool execution with lifecycle tracking (experimental) | 8080 |
 
 ## Running the Examples
 
@@ -87,6 +88,17 @@ go test -v .
 ```
 
 Connect to `http://localhost:8080/mcp` and try "Search for books about Go programming".
+
+### Tasks (Experimental)
+
+Async tool execution with task lifecycle (create, poll, cancel):
+
+```bash
+cd examples/tasks
+go run . -addr :8080
+```
+
+Three tools: `greet` (sync-only), `slow_compute` (optional async), `failing_job` (required async). See [tasks/README.md](tasks/README.md) for the step-by-step walkthrough.
 
 ## Connecting to an MCP Host
 

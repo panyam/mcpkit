@@ -723,13 +723,10 @@ func (s *Server) ListenAndServe(opts ...TransportOption) error {
 	}
 
 	mcpHandler := s.Handler(opts...)
-	var shutdownFns []func()
 
-	// Collect shutdown callbacks from active transports
-	if cfg.sse {
-		// SSE hub cleanup is handled internally by the SSE transport
-		// through the handler's SSEHub.CloseAll
-	}
+	// Close all sessions on shutdown so SSE/Streamable HTTP handlers unblock
+	// and srv.Shutdown() can drain immediately.
+	shutdownFns := []func(){s.CloseAllSessions}
 
 	// If muxSetup is provided, wrap the MCP handler in a mux with additional routes.
 	var handler http.Handler = mcpHandler

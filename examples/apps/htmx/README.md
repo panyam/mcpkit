@@ -2,6 +2,14 @@
 
 A server-rendered MCP App with zero custom JavaScript. HTMX handles all UI updates via the bridge's `CustomEvent` dispatch. Demonstrates the full MCP protocol surface: tools, elicitation, sampling, and prompts.
 
+## MCPKit Features Used
+
+| Category | Feature |
+|----------|---------|
+| Core | `core.TextTool`, `server.WithMux`, `server.WithMiddleware`, `LoggingMiddleware` |
+| Extension | `ext/ui` — `UIExtension`, `RegisterTypedAppTool`, `BridgeTemplateDef`, `NewBridgeData` |
+| MCP primitives | Tools, Resources (App), Elicitation, Sampling, Prompts |
+
 ## What it demonstrates
 
 - Zero custom JS — only the bridge + HTMX library
