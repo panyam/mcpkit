@@ -20,11 +20,28 @@ go run ./session-binding
 
 The server prints tokens for alice and bob. Connect to `http://localhost:8084/mcp`.
 
-## Prompts to Try
+## Exercises
 
-1. Connect with **alice's token** — call `echo`, note the session ID in the `Mcp-Session-Id` header
-2. Send a request with **bob's token** using alice's session ID — **403 Forbidden**
-3. Connect bob on a fresh session (no session ID header) — works fine, gets his own session
+Connect with **alice's token**:
+
+```
+Echo hello
+```
+
+- Returns: `echo: hello (user: alice, scopes: [read])`
+- Note the `Mcp-Session-Id` in the response headers
+
+Now send a request with **bob's token** using alice's session ID:
+
+- Returns **403 Forbidden** — session is bound to alice
+
+Connect bob on a **fresh session** (no session ID header):
+
+```
+Echo hello
+```
+
+- Returns: `echo: hello (user: bob, scopes: [read])` — works fine, gets his own session
 
 ## Screenshots
 

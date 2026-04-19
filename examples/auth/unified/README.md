@@ -25,34 +25,62 @@ The server prints tokens for each exercise. Connect your MCP host to `http://loc
 
 Connect **without** a token.
 
-- `tools/list` works — discover available tools
-- Call `echo` — returns 401
+Try these prompts:
+
+```
+Echo hello
+```
+
+- `tools/list` succeeds — you can see the available tools
+- But calling `echo` returns **401** — tool execution requires auth
 
 ### 2. JWT Authentication
 
 Connect with the **read-only token** printed at startup.
 
-- Call `echo` with `{"message": "hello"}` — see identity in response
+```
+Echo hello
+```
+
+- Returns: `echo: hello (user: alice, scopes: [read])`
 
 ### 3. Scope Enforcement
 
-With the read-only token:
+Still connected with the read-only token:
 
-- Call `write-tool` — fails (missing `write` scope)
-- Call `admin-tool` — fails (missing `admin` scope)
+```
+Call the write tool
+```
 
-Reconnect with the **read+write token** — `write-tool` works, `admin-tool` still fails.
+- Returns: `error: insufficient scope: requires "write"`
+
+```
+Call the admin tool
+```
+
+- Returns: `error: insufficient scope: requires "admin"`
+
+Reconnect with the **read+write token**:
+
+```
+Call the write tool
+```
+
+- Returns: `write ok`
+
+```
+Call the admin tool
+```
+
+- Still fails — missing `admin` scope
+
 Reconnect with the **all-scopes token** — everything works.
 
 ### 4. Session Binding
 
-Connect as alice. Then try bob's token on the same session — **403 Forbidden**.
+Connect as alice (any token). Note the `Mcp-Session-Id` in the response headers.
 
-## Prompts to Try
-
-- "Echo hello" — calls `echo`, shows authenticated identity
-- "Call the write tool" — fails with read-only token, works with write scope
-- "Call the admin tool" — only works with all-scopes token
+Now send a request with **bob's token** using the same session ID — **403 Forbidden**.
 
 ## Screenshots
 

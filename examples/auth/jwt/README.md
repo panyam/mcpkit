@@ -18,11 +18,25 @@ go run ./jwt
 
 The server prints a valid token on startup. Connect to `http://localhost:8082/mcp` with `Authorization: Bearer <token>`.
 
-## Prompts to Try
+## Exercises
 
-- "Echo hello" — returns identity: `echo: hello (user: alice, scopes: [read write])`
-- Connect without a token — 401
-- Connect with a tampered/expired token — 401
+Connect with the token printed at startup:
+
+```
+Echo hello
+```
+
+- Returns: `echo: hello (user: alice, scopes: [read write])`
+
+Now connect **without** a token:
+
+```
+Echo hello
+```
+
+- Returns **401**
+
+Try a tampered or expired token — also **401**.
 
 ## Screenshots
 
