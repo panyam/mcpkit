@@ -80,6 +80,13 @@ func (tc *TaskContext) TaskElicit(req core.ElicitationRequest) (core.Elicitation
 		return core.ElicitationResult{}, fmt.Errorf("task %s: failed to set input_required: %w", tc.taskID, err)
 	}
 
+	// Inject related-task metadata so the client can correlate this
+	// elicitation request with the originating task.
+	if req.Meta == nil {
+		req.Meta = &core.ElicitationMeta{}
+	}
+	req.Meta.RelatedTask = &core.RelatedTaskMeta{TaskID: tc.taskID}
+
 	result, err := tc.Elicit(req)
 
 	// Transition back to working regardless of success/failure.
@@ -103,6 +110,13 @@ func (tc *TaskContext) TaskSample(req core.CreateMessageRequest) (core.CreateMes
 	}); err != nil {
 		return core.CreateMessageResult{}, fmt.Errorf("task %s: failed to set input_required: %w", tc.taskID, err)
 	}
+
+	// Inject related-task metadata so the client can correlate this
+	// sampling request with the originating task.
+	if req.Meta == nil {
+		req.Meta = &core.SamplingMeta{}
+	}
+	req.Meta.RelatedTask = &core.RelatedTaskMeta{TaskID: tc.taskID}
 
 	result, err := tc.Sample(req)
 

@@ -457,6 +457,96 @@ func TestToolResultRelatedTaskMeta(t *testing.T) {
 	}
 }
 
+// TestParentTaskIDJSON verifies parentTaskId is included when set and
+// omitted when empty (backward compatible extension).
+func TestParentTaskIDJSON(t *testing.T) {
+	// With parentTaskId set.
+	info := TaskInfo{
+		TaskID:        "child-1",
+		ParentTaskID:  "parent-1",
+		Status:        TaskWorking,
+		CreatedAt:     "2025-01-01T00:00:00Z",
+		LastUpdatedAt: "2025-01-01T00:00:00Z",
+		TTL:           IntPtr(60000),
+	}
+	raw, _ := MarshalJSON(info)
+	var m map[string]any
+	json.Unmarshal(raw, &m)
+
+	if m["parentTaskId"] != "parent-1" {
+		t.Errorf("parentTaskId = %v, want parent-1", m["parentTaskId"])
+	}
+
+	// Without parentTaskId (root task) — field should be omitted.
+	root := TaskInfo{
+		TaskID:        "root-1",
+		Status:        TaskWorking,
+		CreatedAt:     "2025-01-01T00:00:00Z",
+		LastUpdatedAt: "2025-01-01T00:00:00Z",
+		TTL:           IntPtr(60000),
+	}
+	raw2, _ := MarshalJSON(root)
+	var m2 map[string]any
+	json.Unmarshal(raw2, &m2)
+
+	if _, ok := m2["parentTaskId"]; ok {
+		t.Error("parentTaskId should be omitted for root tasks")
+	}
+}
+
+// TestRelatedTaskOnElicitationMeta verifies the related-task metadata
+// field on ElicitationMeta serializes correctly.
+func TestRelatedTaskOnElicitationMeta(t *testing.T) {
+	req := ElicitationRequest{
+		Message: "confirm?",
+		Meta: &ElicitationMeta{
+			RelatedTask: &RelatedTaskMeta{TaskID: "task-abc"},
+		},
+	}
+	raw, _ := MarshalJSON(req)
+	var m map[string]any
+	json.Unmarshal(raw, &m)
+
+	meta, ok := m["_meta"].(map[string]any)
+	if !ok {
+		t.Fatal("missing _meta")
+	}
+	related, ok := meta["io.modelcontextprotocol/related-task"].(map[string]any)
+	if !ok {
+		t.Fatal("missing related-task in _meta")
+	}
+	if related["taskId"] != "task-abc" {
+		t.Errorf("taskId = %v, want task-abc", related["taskId"])
+	}
+}
+
+// TestRelatedTaskOnSamplingMeta verifies the related-task metadata
+// field on SamplingMeta serializes correctly.
+func TestRelatedTaskOnSamplingMeta(t *testing.T) {
+	req := CreateMessageRequest{
+		Messages:  []SamplingMessage{{Role: "user", Content: Content{Type: "text", Text: "hi"}}},
+		MaxTokens: 10,
+		Meta: &SamplingMeta{
+			RelatedTask: &RelatedTaskMeta{TaskID: "task-xyz"},
+		},
+	}
+	raw, _ := MarshalJSON(req)
+	var m map[string]any
+	json.Unmarshal(raw, &m)
+
+	meta, ok := m["_meta"].(map[string]any)
+	if !ok {
+		t.Fatal("missing _meta")
+	}
+	related, ok := meta["io.modelcontextprotocol/related-task"].(map[string]any)
+	if !ok {
+		t.Fatal("missing related-task in _meta")
+	}
+	if related["taskId"] != "task-xyz" {
+		t.Errorf("taskId = %v, want task-xyz", related["taskId"])
+	}
+}
+
 func keys(m map[string]any) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
