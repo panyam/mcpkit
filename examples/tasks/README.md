@@ -52,7 +52,18 @@ MCPJam, VS Code, or any MCP client: `http://localhost:$PORT/mcp`
 
 MCP Tasks is an experimental protocol extension (spec 2025-11-25). **Most MCP hosts don't support it yet** — they will call tools synchronously and ignore the task hints.
 
-Until your host supports tasks, use the curl commands in each exercise below (requires [curl prerequisites](#curl-prerequisites) first).
+Until your host supports tasks, use the curl commands in each exercise below, or run the automated walkthrough:
+
+```bash
+# Start a server (Go or TS)
+go run . -addr :8080 &
+# OR: node ts-reference-server.mjs &
+
+# Run all exercises automatically
+bash run-exercises.sh 8080
+```
+
+The script runs exercises 1–9, prints each command and its result with sorted JSON keys for easy comparison between Go and TS servers.
 
 ---
 
@@ -529,5 +540,8 @@ Create a task and send progress notifications from the tool handler.
 
 | File | What |
 |------|------|
-| `main.go` | Server setup, 5 tools (greet, slow_compute, failing_job, confirm_delete, write_haiku), tasks registration |
-| `test-side-by-side.sh` | Wire format comparison against TS SDK |
+| `main.go` | Go server: 5 tools, tasks registration |
+| `ts-reference-server.mjs` | TS SDK reference server: same 5 tools, for comparison |
+| `run-exercises.sh` | Runs all README exercises against a running server (Go or TS) |
+| `test-side-by-side.sh` | Starts both servers, compares wire format side-by-side |
+| `package.json` | TS SDK dependencies for the reference server |
