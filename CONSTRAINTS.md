@@ -34,3 +34,11 @@ tasks map[string]*taskEntry
 This makes it easier to add fields later without scattering state across multiple data structures, and ensures consistency (no orphaned keys in one map but not another).
 
 **Verify:** `grep -rn 'map\[string\]' --include='*.go' | grep -v '_test.go'` — check that structs with multiple same-keyed maps have been consolidated.
+
+## C3: No package-level global mutable state
+
+Don't use package-level `var` for mutable state that should be per-instance (e.g., `var activeTasks sync.Map`). Multiple servers in the same process would collide, and it's untestable.
+
+Scope mutable state to the struct/instance created during registration. E.g., the `Register()` function should create a struct that both middleware and handlers close over.
+
+**Verify:** `grep -rn 'var.*sync.Map\|var.*make(map' --include='*.go' | grep -v '_test.go' | grep -v 'func '` — package-level mutable maps should not exist.
