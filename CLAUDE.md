@@ -34,6 +34,7 @@ Sub-module commands: see `ext/ui/Makefile`, `experimental/ext/protogen/Makefile`
 | `ext/auth/` | JWT, PRM, OAuth (separate go.mod) | `ext/auth/docs/DESIGN.md` |
 | `ext/ui/` | MCP Apps + App Bridge JS (separate go.mod) | `docs/APPS_DESIGN.md` |
 | `experimental/ext/protogen/` | Proto → MCP codegen (separate go.mod) | `experimental/ext/protogen/docs/DESIGN.md` |
+| `experimental/ext/tasks/` | MCP Tasks protocol (EXPERIMENTAL, separate go.mod) — middleware, store, client helpers | |
 | `experimental/ext/events/` | MCP Events protocol library (EXPERIMENTAL, separate go.mod) | `experimental/ext/events/README.md` |
 | `experimental/telegram-events/` | Telegram Events reference server (separate go.mod) | `experimental/telegram-events/README.md` |
 | `testutil/` | `NewTestServer`, `ForAllTransports`, `TestClient` | |
@@ -41,7 +42,7 @@ Sub-module commands: see `ext/ui/Makefile`, `experimental/ext/protogen/Makefile`
 
 ## Sub-Module Checklist
 
-- `ext/auth/`, `ext/ui/`, `experimental/ext/protogen/` have separate `go.mod` — `make test` does NOT cover them
+- `ext/auth/`, `ext/ui/`, `experimental/ext/protogen/`, `experimental/ext/tasks/` have separate `go.mod` — `make test` does NOT cover them
 - Release: `make tag-push V=vX.Y.Z` tags root + all sub-modules. Don't retag published versions.
 - New core deps propagate: `make tidy-all` after touching `core/` imports
 - Pre-push hook runs root + ext/auth + ext/ui + experimental/ext/protogen tests
@@ -54,6 +55,9 @@ Sub-module commands: see `ext/ui/Makefile`, `experimental/ext/protogen/Makefile`
 - **Server requires initialization**: Direct `srv.Dispatch()` in tests fails — use httptest + client instead
 - **Sub-module go.sum drift**: New `core/` imports break sub-modules until `make tidy-all`
 - **Telegram long-polling vs webhooks**: Mutually exclusive — delete webhook before using `GetUpdatesChan`
+- **MCP App CSP**: Host iframes enforce strict CSP (`script-src 'unsafe-inline'`, no `connect-src`). No external CDN scripts, no `fetch()` to server. Use inline JS + bridge events only.
+- **Background goroutine requestFunc**: Task goroutines inherit a dead POST-scoped `requestFunc`. Use `core.DetachForBackground(ctx)` instead of `context.WithoutCancel(ctx)` — it replaces with the session-level persistent push.
+- **Tasks side-channel**: `TaskElicit`/`TaskSample` send via the `tasks/result` handler's live connection, not the background goroutine's dead one. The handler proxies requests from a channel.
 
 Module-specific gotchas live in their READMEs (protogen templates, App Bridge escaping, etc.).
 
@@ -63,14 +67,18 @@ Module-specific gotchas live in their READMEs (protogen templates, App Bridge es
 |-------|-------|
 | Architecture | `docs/ARCHITECTURE.md` |
 | Capabilities list | `CAPABILITIES.md` |
-| Constraints | `core/CONSTRAINTS.md`, `server/CONSTRAINTS.md`, `client/CONSTRAINTS.md` |
+| Constraints | `CONSTRAINTS.md` (project-wide), `core/CONSTRAINTS.md`, `server/CONSTRAINTS.md`, `client/CONSTRAINTS.md` |
 | Auth design | `ext/auth/docs/DESIGN.md` |
 | MCP Apps design | `docs/APPS_DESIGN.md` |
 | Protogen design | `experimental/ext/protogen/docs/DESIGN.md` |
 | Events library | `experimental/ext/events/README.md` |
 | Telegram example | `experimental/telegram-events/README.md` |
-| Auth examples | `examples/auth/README.md` (5 servers: bearer, JWT, scopes, hijacking, discovery) |
-| App examples | `examples/apps/` (htmx, vanilla, react — tools, elicitation, sampling, prompts) |
+| Auth examples | `examples/auth/README.md` (unified + 5 individual servers) |
+| App examples | `examples/apps/` (todolist, vanilla, react — tools, elicitation, sampling, prompts) |
+| Tasks library | `experimental/ext/tasks/` (TaskContext, TaskElicit, TaskSample, side-channel delivery) |
+| Tasks gap plan | `experimental/ext/tasks/TASKS_GAP_PLAN.md` (7-phase plan vs TS SDK) |
+| Tasks example | `examples/tasks/README.md` (5 tools: sync, async, failing, elicitation, sampling) |
+| Examples overview | `examples/README.md` |
 | Conformance baseline | `conformance/baseline.yml` |
 
 ## Conformance Status

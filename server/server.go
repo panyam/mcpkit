@@ -280,6 +280,19 @@ func (s *Server) HandleMethod(method string, h MethodHandler) {
 	s.dispatcher.customHandlers[method] = h
 }
 
+// UseMiddleware appends server-side middleware post-construction. Must be
+// called before accepting connections (same constraint as HandleMethod).
+// For construction-time registration, prefer WithMiddleware().
+func (s *Server) UseMiddleware(mw ...Middleware) {
+	s.options.middleware = append(s.options.middleware, mw...)
+}
+
+// SetTasksCap configures the tasks capability advertised during initialize.
+// Must be called before accepting connections.
+func (s *Server) SetTasksCap(cap *core.TasksCap) {
+	s.dispatcher.tasksCap = cap
+}
+
 // RegisterTool adds a tool to the server.
 func (s *Server) RegisterTool(def core.ToolDef, handler core.ToolHandler) {
 	s.dispatcher.RegisterTool(def, handler)
@@ -427,6 +440,21 @@ func (s *Server) dispatchWithOpts(d *Dispatcher, ctx context.Context, claims *co
 	// Inject session context so tool handlers can send notifications, requests,
 	// and access authenticated claims and client capabilities.
 	ctx = core.ContextWithSession(ctx, notify, request, &d.logLevel, &d.clientCaps, claims)
+
+	// Register a detach strategy for background goroutines (e.g., async tasks).
+	// The strategy replaces the POST-scoped requestFunc (which writes to the
+	// now-closed response stream) with one that uses the session's persistent
+	// push function (GET SSE stream). This allows background goroutines to
+	// send server-to-client requests (elicitation, sampling) after the
+	// original HTTP request has returned.
+	ctx = core.SetDetachStrategy(ctx, func(c context.Context) context.Context {
+		c = context.WithoutCancel(c)
+		if push := d.getPushRequest(); push != nil {
+			bgRequest := d.makeRequestFunc(push)
+			c = core.ReplaceSessionRequestFunc(c, bgRequest)
+		}
+		return c
+	})
 
 	// Wire the SSE retry-hint emitter if provided by the transport layer.
 	if sseRetry != nil {
@@ -709,13 +737,19 @@ func (s *Server) ListenAndServe(opts ...TransportOption) error {
 		addr = ":8080"
 	}
 
-	handler := s.Handler(opts...)
-	var shutdownFns []func()
+	mcpHandler := s.Handler(opts...)
 
-	// Collect shutdown callbacks from active transports
-	if cfg.sse {
-		// SSE hub cleanup is handled internally by the SSE transport
-		// through the handler's SSEHub.CloseAll
+	// Close all sessions on shutdown so SSE/Streamable HTTP handlers unblock
+	// and srv.Shutdown() can drain immediately.
+	shutdownFns := []func(){s.CloseAllSessions}
+
+	// If muxSetup is provided, wrap the MCP handler in a mux with additional routes.
+	var handler http.Handler = mcpHandler
+	if cfg.muxSetup != nil {
+		mux := http.NewServeMux()
+		mux.Handle(cfg.prefix, mcpHandler)
+		cfg.muxSetup(mux)
+		handler = mux
 	}
 
 	httpSrv := &http.Server{
@@ -748,6 +782,7 @@ type transportConfig struct {
 	keepaliveInterval time.Duration  // 0 = disabled; interval for JSON-RPC ping requests
 	keepaliveMaxFails int            // max consecutive ping failures before session cleanup (default 3)
 	sseGracePeriod    time.Duration  // 0 = immediate cleanup on SSE disconnect (backward compat)
+	muxSetup          func(*http.ServeMux) // optional: register additional routes on the server mux
 }
 
 func defaultTransportConfig() transportConfig {
@@ -844,6 +879,24 @@ func WithKeepalive(interval time.Duration, maxFailures int) TransportOption {
 		c.keepaliveInterval = interval
 		c.keepaliveMaxFails = maxFailures
 	}
+}
+
+// WithMux registers additional HTTP routes on the server's mux alongside
+// the MCP transport handler. Use this to mount auth discovery (PRM), health
+// checks, or other endpoints without dropping out of srv.Run()'s graceful
+// shutdown.
+//
+// Example:
+//
+//	srv.Run(":8080",
+//	    server.WithStreamableHTTP(true),
+//	    server.WithMux(func(mux *http.ServeMux) {
+//	        auth.MountAuth(mux, authCfg)
+//	        mux.HandleFunc("/healthz", healthHandler)
+//	    }),
+//	)
+func WithMux(setup func(*http.ServeMux)) TransportOption {
+	return func(c *transportConfig) { c.muxSetup = setup }
 }
 
 // WithStateless enables stateless mode for the Streamable HTTP transport.

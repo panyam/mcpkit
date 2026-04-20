@@ -2,6 +2,14 @@
 
 A minimal MCP App using the bridge with plain JavaScript. No framework, no build step.
 
+## MCPKit Features Used
+
+| Category | Feature |
+|----------|---------|
+| Core | `core.TextTool`, `server.Run` |
+| Extension | `ext/ui` — `UIExtension`, `RegisterTypedAppTool`, `BridgeTemplateDef`, `NewBridgeData` |
+| MCP primitives | Tools, Resources (App resource via `ui://` URI) |
+
 ## What it demonstrates
 
 - Bridge included via Go `html/template` (`{{ template "mcpkit-bridge" .Bridge }}`)
@@ -28,6 +36,10 @@ In MCPJam (or Claude Desktop):
 - "Roll a die" — calls `roll_dice`, result appears in the iframe
 - "Roll a d20" — calls with `sides: 20`
 - Then click **Roll Again** in the iframe — calls the tool back through the bridge
+
+## Screenshots
+
+![Dice Roller](screenshots/dice-roller.png)
 
 ## Key files
 

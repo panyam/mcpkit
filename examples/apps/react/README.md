@@ -2,6 +2,15 @@
 
 A React 19 MCP App that mirrors the upstream ext-apps `basic-server-vanillajs` feature set, extended with elicitation, sampling, and prompts to demonstrate the full MCP protocol surface.
 
+## MCPKit Features Used
+
+| Category | Feature |
+|----------|---------|
+| Core | `core.TextTool`, `core.ToolContext.Elicit`, `core.ToolContext.Sample`, `server.WithMiddleware`, `LoggingMiddleware` |
+| Extension | `ext/ui` — `UIExtension`, `RegisterTypedAppTool`, `InjectAppBridge` |
+| MCP primitives | Tools, Resources (App), Elicitation, Sampling, Prompts |
+| Frontend | React 19 hooks (`useMCPApp`, `useMCPEvent`), Vite + `vite-plugin-singlefile` |
+
 ## What it demonstrates
 
 - React hooks for the bridge: `useMCPApp()`, `useMCPEvent()` (~30 lines)
@@ -16,8 +25,12 @@ A React 19 MCP App that mirrors the upstream ext-apps `basic-server-vanillajs` f
 
 ## Screenshots
 
-<!-- TODO: add screenshots -->
+### Current time displayed in the React UI
+
 ![React App](screenshots/react-app.png)
+
+### Timezone elicitation — user picks a timezone
+
 ![Timezone Elicitation](screenshots/elicitation.png)
 
 ## Setup

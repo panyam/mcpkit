@@ -52,6 +52,11 @@ type SamplingMeta struct {
 	// UI contains MCP Apps presentation metadata.
 	// When set, the host can associate the sampling request with a UI resource.
 	UI *UIMetadata `json:"ui,omitempty"`
+
+	// RelatedTask identifies the task this request is associated with.
+	// Set automatically by TaskContext.TaskSample() so the client can
+	// correlate side-channel requests with the originating task.
+	RelatedTask *RelatedTaskMeta `json:"io.modelcontextprotocol/related-task,omitempty"`
 }
 
 // CreateMessageRequest is the params for a sampling/createMessage server-to-client request.

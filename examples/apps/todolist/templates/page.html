@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="color-scheme" content="light dark">
+  <title>Task Board</title>
+  <style>
+    * { box-sizing: border-box }
+    body {
+      margin: 0; padding: 1.5em;
+      font-family: system-ui;
+      background: var(--color-background-primary, #fff);
+      color: var(--color-text-primary, #222);
+    }
+    [data-theme="dark"] body {
+      background: var(--color-background-primary, #1a1a1a);
+      color: var(--color-text-primary, #eee);
+    }
+    h2 { margin: 0 0 1em }
+    .task-list { list-style: none; padding: 0; margin: 0 }
+    .task-item {
+      padding: 0.75em 1em;
+      border: 1px solid var(--color-border-primary, #ddd);
+      border-radius: 6px;
+      margin-bottom: 0.5em;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    [data-theme="dark"] .task-item {
+      border-color: var(--color-border-primary, #444);
+    }
+    .task-done { text-decoration: line-through; opacity: 0.6 }
+    .badge {
+      font-size: 0.75em;
+      padding: 0.2em 0.6em;
+      border-radius: 4px;
+      background: #e0e0e0;
+    }
+    [data-theme="dark"] .badge { background: #444 }
+    #status { font-size: 0.85em; color: #888; margin-bottom: 1em }
+  </style>
+
+  <!-- MCP App Bridge — single script block -->
+  {{ template "mcpkit-bridge" .Bridge }}
+</head>
+<body>
+  <div id="status">Connecting...</div>
+  <h2>Task Board</h2>
+
+  <ul class="task-list" id="tasks">
+    <!-- Server-rendered initial state -->
+    {{ range .Tasks }}
+    <li class="task-item{{ if .Done }} task-done{{ end }}">
+      <span>{{ .Title }}</span>
+      <span class="badge">{{ .Priority }}</span>
+    </li>
+    {{ else }}
+    <li class="task-item">No tasks yet — ask the LLM to add some.</li>
+    {{ end }}
+  </ul>
+
+  <script type="module">
+    // In-memory task list seeded from server-rendered state.
+    const tasks = {{ .TasksJSON }};
+
+    function renderTasks() {
+      const el = document.getElementById('tasks');
+      if (tasks.length === 0) {
+        el.textContent = '';
+        const li = document.createElement('li');
+        li.className = 'task-item';
+        li.textContent = 'No tasks yet — ask the LLM to add some.';
+        el.appendChild(li);
+        return;
+      }
+      el.textContent = '';
+      for (const t of tasks) {
+        const li = document.createElement('li');
+        li.className = 'task-item' + (t.done ? ' task-done' : '');
+        const title = document.createElement('span');
+        title.textContent = t.title;
+        const badge = document.createElement('span');
+        badge.className = 'badge';
+        badge.textContent = t.priority || 'medium';
+        li.appendChild(title);
+        li.appendChild(badge);
+        el.appendChild(li);
+      }
+    }
+
+    MCPApp.on('connected', () => {
+      document.getElementById('status').textContent = 'Connected to host';
+    });
+
+    // Update the task list from tool result structured data.
+    MCPApp.on('toolresult', (data) => {
+      console.log('[todolist] toolresult event:', JSON.stringify(data, null, 2));
+      const sc = data?.structuredContent || data?.result?.structuredContent;
+      if (!sc) {
+        console.log('[todolist] no structuredContent found in event data');
+        return;
+      }
+
+      // add_task / add_task_confirmed / categorize_task → adds a task
+      if (sc.title) {
+        tasks.push({ title: sc.title, priority: sc.priority || 'medium', done: false });
+        renderTasks();
+      }
+      // list_tasks → replaces the whole list
+      if (sc.tasks) {
+        tasks.length = 0;
+        for (const t of sc.tasks) tasks.push(t);
+        renderTasks();
+      }
+    });
+
+    setTimeout(() => {
+      if (!MCPApp.connected) {
+        document.getElementById('status').textContent = 'Not connected (standalone mode)';
+      }
+    }, 3000);
+  </script>
+</body>
+</html>

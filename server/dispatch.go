@@ -95,6 +95,10 @@ type Dispatcher struct {
 	// Set via WithSchemaValidation(false) for servers that prefer to handle
 	// validation themselves. Default: validation enabled.
 	skipSchemaValidation bool
+
+	// tasksCap is the tasks capability to advertise during initialize.
+	// nil means tasks are not enabled. Set via Server.SetTasksCap().
+	tasksCap *core.TasksCap
 }
 
 // SetNotifyFunc sets the notification delivery function for this dispatcher.
@@ -207,6 +211,7 @@ func (d *Dispatcher) newSession() *Dispatcher {
 		eventIDs:             newEventIDGen(),
 		requestIDs:           newEventIDGen(),
 		skipSchemaValidation: d.skipSchemaValidation,
+		tasksCap:             d.tasksCap,
 		customHandlers:       d.customHandlers,
 	}
 }
@@ -361,6 +366,9 @@ func (d *Dispatcher) handleInitialize(id json.RawMessage, params json.RawMessage
 		Prompts:     &core.PromptsCap{ListChanged: true},
 		Logging:     &struct{}{},
 		Completions: &struct{}{},
+	}
+	if d.tasksCap != nil {
+		caps.Tasks = d.tasksCap
 	}
 	if len(d.extensions) > 0 {
 		exts := make(map[string]core.ExtensionCapability, len(d.extensions))
