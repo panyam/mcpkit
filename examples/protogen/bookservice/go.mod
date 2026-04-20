@@ -34,4 +34,4 @@ require (
 
 replace github.com/panyam/mcpkit => ../../..
 
-replace github.com/panyam/mcpkit/experimental/ext/protogen => ../../../ext/protogen
+replace github.com/panyam/mcpkit/experimental/ext/protogen => ../../../experimental/ext/protogen
