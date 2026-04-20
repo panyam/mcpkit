@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/panyam/mcpkit/core"
@@ -53,6 +54,45 @@ func (c *Config) defaults() {
 	}
 }
 
+// taskRuntime holds the per-registration state shared between the middleware
+// and the tasks/* method handlers. Scoped to a single Register() call —
+// no package-level globals.
+type taskRuntime struct {
+	store   TaskStore
+	queue   TaskMessageQueue
+	mu      sync.Mutex
+	channels map[string]chan sideChannelRequest // taskID → side-channel request channel
+}
+
+func newTaskRuntime(store TaskStore, queue TaskMessageQueue) *taskRuntime {
+	return &taskRuntime{
+		store:    store,
+		queue:    queue,
+		channels: make(map[string]chan sideChannelRequest),
+	}
+}
+
+// registerChannel stores the side-channel request channel for a task.
+func (rt *taskRuntime) registerChannel(taskID string, ch chan sideChannelRequest) {
+	rt.mu.Lock()
+	rt.channels[taskID] = ch
+	rt.mu.Unlock()
+}
+
+// unregisterChannel removes the side-channel request channel for a task.
+func (rt *taskRuntime) unregisterChannel(taskID string) {
+	rt.mu.Lock()
+	delete(rt.channels, taskID)
+	rt.mu.Unlock()
+}
+
+// getChannel returns the side-channel request channel for a task, or nil.
+func (rt *taskRuntime) getChannel(taskID string) chan sideChannelRequest {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	return rt.channels[taskID]
+}
+
 // Register hooks up tasks support on the given server:
 //   - Installs middleware that intercepts tools/call for task-eligible requests
 //   - Registers tasks/get, tasks/result, tasks/list, tasks/cancel handlers
@@ -64,17 +104,16 @@ func Register(cfg Config) {
 	srv := cfg.Server
 	store := cfg.Store
 	reg := srv.Registry()
+	rt := newTaskRuntime(store, cfg.MessageQueue)
 
 	// Install middleware for tools/call interception.
-	srv.UseMiddleware(taskMiddleware(reg, store, cfg))
-
-	queue := cfg.MessageQueue
+	srv.UseMiddleware(taskMiddleware(reg, rt, cfg))
 
 	// Register tasks/* protocol methods.
 	srv.HandleMethod("tasks/get", makeGetHandler(store))
-	srv.HandleMethod("tasks/result", makeResultHandler(store, queue))
+	srv.HandleMethod("tasks/result", makeResultHandler(rt))
 	srv.HandleMethod("tasks/list", makeListHandler(store))
-	srv.HandleMethod("tasks/cancel", makeCancelHandler(store, queue))
+	srv.HandleMethod("tasks/cancel", makeCancelHandler(rt))
 
 	// Advertise tasks capability with nested structure per spec.
 	srv.SetTasksCap(&core.TasksCap{
@@ -94,7 +133,7 @@ func Register(cfg Config) {
 // hint at params.task (per MCP spec 2025-11-25) and the tool supports tasks,
 // the middleware creates a task, runs the tool asynchronously, and returns
 // CreateTaskResult immediately.
-func taskMiddleware(reg *server.Registry, store TaskStore, cfg Config) server.Middleware {
+func taskMiddleware(reg *server.Registry, rt *taskRuntime, cfg Config) server.Middleware {
 	return func(ctx context.Context, req *core.Request, next server.MiddlewareFunc) *core.Response {
 		if req.Method != "tools/call" {
 			return next(ctx, req)
@@ -160,6 +199,7 @@ func taskMiddleware(reg *server.Registry, store TaskStore, cfg Config) server.Mi
 			TTL:           core.IntPtr(ttlMs),
 			PollInterval:  pollMs,
 		}
+		store := rt.store
 		if err := store.Create(info); err != nil {
 			return core.NewErrorResponse(req.ID, -32603, "failed to create task: "+err.Error())
 		}
@@ -168,6 +208,7 @@ func taskMiddleware(reg *server.Registry, store TaskStore, cfg Config) server.Mi
 		// the tool continues even if the client disconnects.
 		go func() {
 			defer func() {
+				rt.unregisterChannel(taskID)
 				if r := recover(); r != nil {
 					now := time.Now().UTC().Format(time.RFC3339)
 					msg := fmt.Sprintf("panic: %v", r)
@@ -182,10 +223,12 @@ func taskMiddleware(reg *server.Registry, store TaskStore, cfg Config) server.Mi
 
 			bgCtx := core.DetachForBackground(ctx)
 			// Inject TaskContext so tool handlers can call TaskElicit/TaskSample.
-			// The ToolContext is constructed downstream by dispatch — we inject
-			// into the raw context here, and GetTaskContext(ctx) retrieves it.
-			tc := &TaskContext{taskID: taskID, store: store}
+			// The requests channel is read by the tasks/result handler to proxy
+			// elicitation/sampling through its live connection.
+			reqCh := make(chan sideChannelRequest, 1)
+			tc := &TaskContext{taskID: taskID, store: store, requests: reqCh}
 			bgCtx = WithTaskContext(bgCtx, tc)
+			rt.registerChannel(taskID, reqCh)
 			resp := next(bgCtx, req)
 
 			now := time.Now().UTC().Format(time.RFC3339)
@@ -265,7 +308,7 @@ func makeGetHandler(store TaskStore) server.MethodHandler {
 	}
 }
 
-func makeResultHandler(store TaskStore, queue TaskMessageQueue) server.MethodHandler {
+func makeResultHandler(rt *taskRuntime) server.MethodHandler {
 	return func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		var p struct {
 			TaskID string `json:"taskId"`
@@ -274,18 +317,26 @@ func makeResultHandler(store TaskStore, queue TaskMessageQueue) server.MethodHan
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 		}
 
+		store := rt.store
+
 		// Long-poll loop: wait for the task to reach a terminal state.
-		// Between iterations, drain any queued messages (future: deliver
-		// elicitation/sampling requests via the response stream).
+		// Between iterations, proxy any pending side-channel requests
+		// (elicitation/sampling) through this handler's live connection.
 		for {
-			// 1. Drain queued messages for this task.
-			//    Currently a no-op in "direct mode" (TaskElicit uses the GET SSE
-			//    stream). Prepares for future queue-based delivery.
-			for {
-				if _, ok := queue.Dequeue(p.TaskID); !ok {
-					break
+			// 1. Check for pending side-channel requests from the background
+			//    goroutine. If one is waiting, proxy it through our live context.
+			if reqCh := rt.getChannel(p.TaskID); reqCh != nil {
+				select {
+				case scReq := <-reqCh:
+					// Proxy the request through this handler's live context.
+					// ctx (MethodContext) has a working requestFunc because
+					// this handler is inside an active POST SSE response.
+					raw, err := proxySideChannel(ctx, scReq)
+					scReq.Result <- sideChannelResponse{Raw: raw, Err: err}
+					continue // loop back to check for more
+				default:
+					// No pending request — fall through to status check.
 				}
-				// TODO(Phase 1 future): deliver queued requests via response stream
 			}
 
 			// 2. Check if the task is terminal.
@@ -298,7 +349,7 @@ func makeResultHandler(store TaskStore, queue TaskMessageQueue) server.MethodHan
 				result, _ := store.GetResult(p.TaskID)
 
 				// Clean up any remaining queued messages.
-				queue.DequeueAll(p.TaskID)
+				rt.queue.DequeueAll(p.TaskID)
 
 				// Per spec: tasks/result returns the stored ToolResult for ALL
 				// terminal states with _meta["io.modelcontextprotocol/related-task"].
@@ -336,7 +387,7 @@ func makeListHandler(store TaskStore) server.MethodHandler {
 	}
 }
 
-func makeCancelHandler(store TaskStore, queue TaskMessageQueue) server.MethodHandler {
+func makeCancelHandler(rt *taskRuntime) server.MethodHandler {
 	return func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		var p struct {
 			TaskID string `json:"taskId"`
@@ -344,12 +395,12 @@ func makeCancelHandler(store TaskStore, queue TaskMessageQueue) server.MethodHan
 		if err := json.Unmarshal(params, &p); err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 		}
-		info, err := store.Cancel(p.TaskID)
+		info, err := rt.store.Cancel(p.TaskID)
 		if err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 		}
 		// Clean up any queued messages for the cancelled task.
-		queue.DequeueAll(p.TaskID)
+		rt.queue.DequeueAll(p.TaskID)
 		// Per spec: tasks/cancel returns flat Result & Task (no wrapper).
 		return core.NewResponse(id, core.CancelTaskResult{TaskInfo: info})
 	}
@@ -361,4 +412,36 @@ func generateTaskID() string {
 	b := make([]byte, 12)
 	rand.Read(b)
 	return "task-" + hex.EncodeToString(b)
+}
+
+// proxySideChannel proxies a side-channel request (elicitation/sampling)
+// through the tasks/result handler's live MethodContext. The handler calls
+// ctx.Elicit or ctx.Sample, which routes through the active POST SSE stream.
+func proxySideChannel(ctx core.MethodContext, req sideChannelRequest) (json.RawMessage, error) {
+	switch req.Method {
+	case "elicitation/create":
+		var elicitReq core.ElicitationRequest
+		if err := json.Unmarshal(req.Params, &elicitReq); err != nil {
+			return nil, fmt.Errorf("unmarshal elicitation params: %w", err)
+		}
+		result, err := ctx.Elicit(elicitReq)
+		if err != nil {
+			return nil, err
+		}
+		return core.MarshalJSON(result)
+
+	case "sampling/createMessage":
+		var sampleReq core.CreateMessageRequest
+		if err := json.Unmarshal(req.Params, &sampleReq); err != nil {
+			return nil, fmt.Errorf("unmarshal sampling params: %w", err)
+		}
+		result, err := ctx.Sample(sampleReq)
+		if err != nil {
+			return nil, err
+		}
+		return core.MarshalJSON(result)
+
+	default:
+		return nil, fmt.Errorf("unknown side-channel method: %s", req.Method)
+	}
 }
