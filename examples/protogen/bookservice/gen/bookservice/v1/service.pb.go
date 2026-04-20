@@ -7,7 +7,7 @@
 package booksv1
 
 import (
-	_ "github.com/panyam/mcpkit/experimental/ext/protogen/proto/mcp/v1"
+	_ "github.com/panyam/mcpkit/ext/protogen/proto/mcp/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	_ "google.golang.org/protobuf/types/descriptorpb"
