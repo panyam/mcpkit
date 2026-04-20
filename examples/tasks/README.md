@@ -36,14 +36,13 @@ MCPJam, VS Code, or any MCP client: `http://localhost:8080/mcp`
 
 MCP Tasks is an experimental protocol extension (spec 2025-11-25). **Most MCP hosts don't support it yet** — they will call tools synchronously and ignore the task hints.
 
-- **Without task support**: `slow_compute` blocks for the full duration (may timeout). `failing_job` returns an error saying it requires task invocation.
-- **With task support**: The host sends a `"task": {}` hint, gets a task ID back immediately, and can poll/cancel/list tasks.
-
 Until your host supports tasks, use the [curl walkthrough](#curl-walkthrough) below to exercise the async path.
 
-## Exercises (task-capable hosts)
+---
 
-These prompts work if your host supports the MCP tasks protocol.
+## Phase 1: Core Task Lifecycle ✅
+
+These exercises work today.
 
 ### 1. Sync tool call
 
@@ -109,6 +108,178 @@ List all tasks
 
 Shows all tasks with their current status.
 
+---
+
+## Phase 2: TTL Enforcement 🔲
+
+> **Status**: Not yet implemented. These exercises will fail today — tasks never expire.
+
+### 9. Task expires after TTL
+
+```bash
+# Create a task with short TTL (5 seconds)
+curl -s http://localhost:8080/mcp \
+  -H "Mcp-Session-Id: <session-id>" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":2,"label":"short"},"task":{"ttl":5000}}}'
+```
+
+Wait 7 seconds, then poll:
+
+```bash
+curl -s http://localhost:8080/mcp \
+  -H "Mcp-Session-Id: <session-id>" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":11,"method":"tasks/get","params":{"taskId":"<task-id>"}}'
+```
+
+**Expected (after Phase 2):** Task not found — it was cleaned up after TTL expired.
+**Today:** Task is still there. Tasks live forever in memory.
+
+---
+
+## Phase 3: Session Isolation 🔲
+
+> **Status**: Not yet implemented. These exercises will fail today — any session can access any task.
+
+### 10. Cross-session task access denied
+
+Create a task in session A:
+
+```bash
+curl -s -D- http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"session-a","version":"1.0"}}}'
+# Note session A's Mcp-Session-Id
+# Send notifications/initialized
+# Create a task in session A
+```
+
+Initialize a second session B, then try to access session A's task:
+
+```bash
+# Initialize session B (separate curl, gets different session ID)
+# Try tasks/get with session A's taskId from session B
+```
+
+**Expected (after Phase 3):** Task not found — session B can't see session A's tasks.
+**Today:** Session B can access session A's tasks.
+
+---
+
+## Phase 4: Store API Alignment 🔲
+
+> **Status**: Not yet implemented.
+
+### 11. Double-complete is rejected
+
+Complete a task, then try to store another result:
+
+```bash
+# Create and wait for task to complete
+# Try to store a second result via internal API
+```
+
+**Expected (after Phase 4):** Error — can't store result for terminal task.
+**Today:** No guard. Second result overwrites the first.
+
+---
+
+## Phase 5: Cancellation Propagation 🔲
+
+> **Status**: Not yet implemented. Cancel marks the status but doesn't stop the goroutine.
+
+### 12. Cancel actually stops the work
+
+```bash
+# Start a 60-second computation
+curl -s http://localhost:8080/mcp \
+  -H "Mcp-Session-Id: <session-id>" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":20,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":60,"label":"long"},"task":{}}}'
+
+# Cancel it
+curl -s http://localhost:8080/mcp \
+  -H "Mcp-Session-Id: <session-id>" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":21,"method":"tasks/cancel","params":{"taskId":"<task-id>"}}'
+```
+
+**Expected (after Phase 5):** The server log shows the goroutine exited. Server resource usage drops.
+**Today:** Status shows `cancelled` but the goroutine keeps sleeping for 60 seconds. Server log shows `[slow_compute] finished "long"` after 60s even though it was cancelled.
+
+---
+
+## Phase 6: Status Notifications 🔲
+
+> **Status**: Not yet implemented. Clients must poll — no push notifications.
+
+### 13. Receive status change notifications
+
+Open a GET SSE stream, create a task, and watch for notifications:
+
+```bash
+# Terminal 1: open GET SSE stream
+curl -N http://localhost:8080/mcp \
+  -H "Mcp-Session-Id: <session-id>" \
+  -H "Accept: text/event-stream"
+
+# Terminal 2: create a task
+# (same as exercise 2)
+```
+
+**Expected (after Phase 6):** The GET SSE stream receives `notifications/tasks/status` events as the task transitions: `working` → `completed`.
+**Today:** No notifications. The SSE stream is silent. Clients must poll `tasks/get`.
+
+---
+
+## Phase 7: Progress Token Tracking 🔲
+
+> **Status**: Not yet implemented.
+
+### 14. Progress notifications flow through tasks
+
+Create a task and send progress notifications from the tool handler:
+
+**Expected (after Phase 7):** Progress notifications from the tool handler are associated with the task and delivered to the client.
+**Today:** Progress token from the original `tools/call` is lost when the task is created.
+
+---
+
+## Phase 8: Sub-Task Threading 🔲
+
+> **Status**: Not yet implemented. Tracked in #281.
+
+### 15. Fan-out / join with sub-tasks
+
+A "deploy" tool that fans out to parallel sub-tasks:
+
+```
+Deploy the app (build + test in parallel, then push)
+```
+
+**Expected (after Phase 8):**
+- Parent task "deploy" created
+- Child tasks "build" and "test" created with `parentTaskId` pointing to deploy
+- Both children run in parallel
+- Parent waits for both to complete (join)
+- Parent continues with "push"
+- `tasks/list` shows the full tree
+
+**Today:** No sub-task support. The deploy tool would have to run everything sequentially in one goroutine.
+
+### 16. Cascade cancel
+
+```
+Deploy the app, then cancel the deployment
+```
+
+**Expected (after Phase 8):** Cancelling the parent task cascades to all children — build and test are also cancelled.
+**Today:** No cascade. Only the parent task is cancelled.
+
+---
+
 ## Curl Walkthrough
 
 For hosts that don't support tasks yet, you can exercise the async lifecycle with curl.
@@ -120,10 +291,21 @@ For hosts that don't support tasks yet, you can exercise the async lifecycle wit
 ```bash
 curl -s -D- http://localhost:8080/mcp \
   -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
 ```
 
 Note the `Mcp-Session-Id` header — use it in all subsequent requests.
+
+Send the initialized notification:
+
+```bash
+curl -s http://localhost:8080/mcp \
+  -H "Mcp-Session-Id: <session-id>" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}'
+```
 
 ### Start an async computation
 
@@ -131,6 +313,7 @@ Note the `Mcp-Session-Id` header — use it in all subsequent requests.
 curl -s http://localhost:8080/mcp \
   -H "Mcp-Session-Id: <session-id>" \
   -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":10,"label":"pi"},"task":{}}}'
 ```
 
@@ -146,6 +329,7 @@ Returns immediately with a `taskId`:
 curl -s http://localhost:8080/mcp \
   -H "Mcp-Session-Id: <session-id>" \
   -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":3,"method":"tasks/get","params":{"taskId":"<task-id>"}}'
 ```
 
@@ -157,6 +341,7 @@ Returns `"status":"working"` while running, `"status":"completed"` when done.
 curl -s http://localhost:8080/mcp \
   -H "Mcp-Session-Id: <session-id>" \
   -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":4,"method":"tasks/result","params":{"taskId":"<task-id>"}}'
 ```
 
@@ -166,6 +351,7 @@ curl -s http://localhost:8080/mcp \
 curl -s http://localhost:8080/mcp \
   -H "Mcp-Session-Id: <session-id>" \
   -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":5,"method":"tasks/cancel","params":{"taskId":"<task-id>"}}'
 ```
 
@@ -175,6 +361,7 @@ curl -s http://localhost:8080/mcp \
 curl -s http://localhost:8080/mcp \
   -H "Mcp-Session-Id: <session-id>" \
   -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":6,"method":"tasks/list","params":{}}'
 ```
 
@@ -197,3 +384,4 @@ curl -s http://localhost:8080/mcp \
 | File | What |
 |------|------|
 | `main.go` | Server setup, 5 tools (greet, slow_compute, failing_job, confirm_delete, write_haiku), tasks registration |
+| `test-side-by-side.sh` | Wire format comparison against TS SDK |
