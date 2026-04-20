@@ -104,6 +104,109 @@ func main() {
 		},
 	)
 
+	// confirm_delete: demonstrates elicitation from a background task.
+	// Requires task invocation. Uses TaskElicit to ask the user for confirmation
+	// before "deleting" a file.
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "confirm_delete",
+			Description: "Asks for confirmation before deleting a file. Demonstrates task-based elicitation.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"filename": map[string]any{
+						"type":        "string",
+						"description": "File to delete",
+						"default":     "important.txt",
+					},
+				},
+			},
+			Execution: &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			tc := tasks.GetTaskContext(ctx)
+			if tc == nil {
+				return core.ToolResult{}, fmt.Errorf("confirm_delete requires task context")
+			}
+
+			var args struct {
+				Filename string `json:"filename"`
+			}
+			json.Unmarshal(req.Arguments, &args)
+			if args.Filename == "" {
+				args.Filename = "important.txt"
+			}
+
+			log.Printf("[confirm_delete] asking about %q", args.Filename)
+			result, err := tc.TaskElicit(core.ElicitationRequest{
+				Message:         fmt.Sprintf("Are you sure you want to delete '%s'?", args.Filename),
+				RequestedSchema: json.RawMessage(`{"type":"object","properties":{"confirm":{"type":"boolean"}},"required":["confirm"]}`),
+			})
+			if err != nil {
+				return core.TextResult(fmt.Sprintf("Elicitation failed: %v", err)), nil
+			}
+
+			if result.Action == "accept" {
+				confirmed, _ := result.Content["confirm"].(bool)
+				if confirmed {
+					log.Printf("[confirm_delete] user confirmed deletion of %q", args.Filename)
+					return core.TextResult(fmt.Sprintf("Deleted '%s'", args.Filename)), nil
+				}
+			}
+			log.Printf("[confirm_delete] user declined deletion of %q", args.Filename)
+			return core.TextResult("Deletion cancelled"), nil
+		},
+	)
+
+	// write_haiku: demonstrates sampling from a background task.
+	// Requires task invocation. Uses TaskSample to ask the LLM to generate a haiku.
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "write_haiku",
+			Description: "Asks the LLM to write a haiku on a topic. Demonstrates task-based sampling.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"topic": map[string]any{
+						"type":        "string",
+						"description": "Topic for the haiku",
+						"default":     "nature",
+					},
+				},
+			},
+			Execution: &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			tc := tasks.GetTaskContext(ctx)
+			if tc == nil {
+				return core.ToolResult{}, fmt.Errorf("write_haiku requires task context")
+			}
+
+			var args struct {
+				Topic string `json:"topic"`
+			}
+			json.Unmarshal(req.Arguments, &args)
+			if args.Topic == "" {
+				args.Topic = "nature"
+			}
+
+			log.Printf("[write_haiku] requesting haiku about %q", args.Topic)
+			result, err := tc.TaskSample(core.CreateMessageRequest{
+				Messages: []core.SamplingMessage{{
+					Role:    "user",
+					Content: core.Content{Type: "text", Text: fmt.Sprintf("Write a haiku about %s", args.Topic)},
+				}},
+				MaxTokens: 50,
+			})
+			if err != nil {
+				return core.TextResult(fmt.Sprintf("Sampling failed: %v", err)), nil
+			}
+
+			log.Printf("[write_haiku] received haiku from %s", result.Model)
+			return core.TextResult(fmt.Sprintf("Haiku about %s:\n%s", args.Topic, result.Content.Text)), nil
+		},
+	)
+
 	// Register tasks capability on the server.
 	tasks.Register(tasks.Config{Server: srv})
 
@@ -114,6 +217,8 @@ func main() {
 	log.Printf("  greet          — sync-only (no task support)")
 	log.Printf("  slow_compute   — optional task support (try with/without 'task' hint)")
 	log.Printf("  failing_job    — required task support (must include 'task' hint)")
+	log.Printf("  confirm_delete — required task + elicitation (asks user before deleting)")
+	log.Printf("  write_haiku    — required task + sampling (asks LLM to write a haiku)")
 	if err := srv.Run(*addr); err != nil {
 		log.Fatal(err)
 	}

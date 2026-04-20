@@ -28,6 +28,8 @@ MCPJam, VS Code, or any MCP client: `http://localhost:8080/mcp`
 | `greet` | forbidden (absent) | Sync-only. Returns greeting immediately. |
 | `slow_compute` | optional | Sleeps N seconds. Sync without hint, async with hint. |
 | `failing_job` | required | Always fails after 1s. Must be called as a task. |
+| `confirm_delete` | required + elicitation | Asks user for confirmation before deleting. |
+| `write_haiku` | required + sampling | Asks the LLM to write a haiku on a topic. |
 
 ## Important: Host Support Required
 
@@ -74,7 +76,23 @@ Run the failing job
 
 This tool *requires* task invocation. The job starts, then fails after 1 second — status transitions to `failed`.
 
-### 5. Cancel a running task
+### 5. Elicitation from a task (confirm_delete)
+
+```
+Delete the file important.txt
+```
+
+The tool creates a task, then asks you for confirmation via elicitation. If you confirm, it "deletes" the file. If you decline, it cancels. Demonstrates `TaskElicit` — the task transitions to `input_required` while waiting for your response.
+
+### 6. Sampling from a task (write_haiku)
+
+```
+Write a haiku about the ocean
+```
+
+The tool creates a task, then asks the LLM to write a haiku via sampling. The task transitions to `input_required` while the LLM generates, then returns the result. Demonstrates `TaskSample`.
+
+### 7. Cancel a running task
 
 ```
 Run a slow computation for 30 seconds, then cancel it
@@ -82,7 +100,7 @@ Run a slow computation for 30 seconds, then cancel it
 
 Start a long computation, then cancel before it finishes. Status transitions to `cancelled`.
 
-### 6. List all tasks
+### 8. List all tasks
 
 ```
 List all tasks
