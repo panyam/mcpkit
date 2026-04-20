@@ -60,12 +60,17 @@ Until your host supports tasks, use the curl commands in each exercise below (re
 
 All curl commands below use `$SESSION_ID` and `$TASK_ID` env vars so you can copy-paste without manual replacement. Requires [`jq`](https://jqlang.github.io/jq/).
 
-The server returns SSE (`event: message\ndata: {...}`), not raw JSON. The helper function below extracts the JSON from the `data:` lines:
+The server may return SSE (`data: {...}`) or plain JSON depending on the method. The helper function below handles both formats:
 
 ```bash
-# Helper: extract JSON from SSE data lines, pretty-print, and save to /tmp/mcp-body.json
+# Helper: extract JSON from SSE or plain response, pretty-print, and save to /tmp/mcp-body.json
 mcp() {
-  curl -s "$@" | grep '^data: ' | sed 's/^data: //' | tee /tmp/mcp-body.json | jq .
+  local raw
+  raw=$(curl -s "$@")
+  local json
+  json=$(echo "$raw" | grep '^data: ' | tail -1 | sed 's/^data: //')
+  if [ -z "$json" ]; then json="$raw"; fi
+  echo "$json" | tee /tmp/mcp-body.json | jq .
 }
 ```
 
@@ -75,11 +80,14 @@ Initialize a session before running any curl exercises:
 
 ```bash
 # Step 1: Initialize — prints response and captures SESSION_ID
-curl -s -D /tmp/mcp-headers.txt http://localhost:$PORT/mcp \
+# Note: Go server returns plain JSON, TS server returns SSE. This handles both.
+RAW=$(curl -s -D /tmp/mcp-headers.txt http://localhost:$PORT/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}' \
-  | grep '^data: ' | sed 's/^data: //' | jq .
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}')
+JSON=$(echo "$RAW" | grep '^data: ' | tail -1 | sed 's/^data: //')
+if [ -z "$JSON" ]; then JSON="$RAW"; fi
+echo "$JSON" | jq .
 
 export SESSION_ID=$(grep -i mcp-session-id /tmp/mcp-headers.txt | awk '{print $2}' | tr -d '\r')
 echo "SESSION_ID=$SESSION_ID"
