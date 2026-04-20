@@ -42,9 +42,10 @@ type sideChannelResponse struct {
 //	}
 type TaskContext struct {
 	core.ToolContext
-	taskID   string
-	store    TaskStore
-	requests chan sideChannelRequest // read by tasks/result handler
+	taskID    string
+	sessionID string
+	store     TaskStore
+	requests  chan sideChannelRequest // read by tasks/result handler
 }
 
 type taskContextKey struct{}
@@ -77,7 +78,7 @@ func (tc *TaskContext) TaskID() string {
 // Status transitions: working → input_required → (wait for client) → working
 func (tc *TaskContext) TaskElicit(req core.ElicitationRequest) (core.ElicitationResult, error) {
 	// Transition to input_required.
-	if err := tc.store.Update(tc.taskID, func(t *core.TaskInfo) {
+	if err := tc.store.Update(tc.taskID, tc.sessionID, func(t *core.TaskInfo) {
 		t.Status = core.TaskInputRequired
 	}); err != nil {
 		return core.ElicitationResult{}, fmt.Errorf("task %s: failed to set input_required: %w", tc.taskID, err)
@@ -92,7 +93,7 @@ func (tc *TaskContext) TaskElicit(req core.ElicitationRequest) (core.Elicitation
 	// Serialize params.
 	params, err := core.MarshalJSON(req)
 	if err != nil {
-		tc.store.Update(tc.taskID, func(t *core.TaskInfo) { t.Status = core.TaskWorking })
+		tc.store.Update(tc.taskID, tc.sessionID, func(t *core.TaskInfo) { t.Status = core.TaskWorking })
 		return core.ElicitationResult{}, fmt.Errorf("marshal elicitation request: %w", err)
 	}
 
@@ -100,7 +101,7 @@ func (tc *TaskContext) TaskElicit(req core.ElicitationRequest) (core.Elicitation
 	resp, err := tc.sendSideChannel("elicitation/create", params)
 
 	// Transition back to working.
-	tc.store.Update(tc.taskID, func(t *core.TaskInfo) {
+	tc.store.Update(tc.taskID, tc.sessionID, func(t *core.TaskInfo) {
 		t.Status = core.TaskWorking
 	})
 
@@ -121,7 +122,7 @@ func (tc *TaskContext) TaskElicit(req core.ElicitationRequest) (core.Elicitation
 // Status transitions: working → input_required → (wait for client) → working
 func (tc *TaskContext) TaskSample(req core.CreateMessageRequest) (core.CreateMessageResult, error) {
 	// Transition to input_required.
-	if err := tc.store.Update(tc.taskID, func(t *core.TaskInfo) {
+	if err := tc.store.Update(tc.taskID, tc.sessionID, func(t *core.TaskInfo) {
 		t.Status = core.TaskInputRequired
 	}); err != nil {
 		return core.CreateMessageResult{}, fmt.Errorf("task %s: failed to set input_required: %w", tc.taskID, err)
@@ -136,7 +137,7 @@ func (tc *TaskContext) TaskSample(req core.CreateMessageRequest) (core.CreateMes
 	// Serialize params.
 	params, err := core.MarshalJSON(req)
 	if err != nil {
-		tc.store.Update(tc.taskID, func(t *core.TaskInfo) { t.Status = core.TaskWorking })
+		tc.store.Update(tc.taskID, tc.sessionID, func(t *core.TaskInfo) { t.Status = core.TaskWorking })
 		return core.CreateMessageResult{}, fmt.Errorf("marshal sampling request: %w", err)
 	}
 
@@ -144,7 +145,7 @@ func (tc *TaskContext) TaskSample(req core.CreateMessageRequest) (core.CreateMes
 	resp, err := tc.sendSideChannel("sampling/createMessage", params)
 
 	// Transition back to working.
-	tc.store.Update(tc.taskID, func(t *core.TaskInfo) {
+	tc.store.Update(tc.taskID, tc.sessionID, func(t *core.TaskInfo) {
 		t.Status = core.TaskWorking
 	})
 

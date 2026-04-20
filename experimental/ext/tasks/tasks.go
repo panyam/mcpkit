@@ -200,20 +200,23 @@ func taskMiddleware(reg *server.Registry, rt *taskRuntime, cfg Config) server.Mi
 			PollInterval:  pollMs,
 		}
 		store := rt.store
-		if err := store.Create(info); err != nil {
+		sessionID := core.GetSessionID(ctx)
+		if err := store.Create(info, sessionID); err != nil {
 			return core.NewErrorResponse(req.ID, -32603, "failed to create task: "+err.Error())
 		}
 
 		// Run the tool asynchronously. Detach from client context so
 		// the tool continues even if the client disconnects.
+		// The sessionID is captured here so the background goroutine
+		// uses the same session for all store operations.
 		go func() {
 			defer func() {
 				rt.unregisterChannel(taskID)
 				if r := recover(); r != nil {
 					now := time.Now().UTC().Format(time.RFC3339)
 					msg := fmt.Sprintf("panic: %v", r)
-					store.SetResult(taskID, core.ErrorResult(msg))
-					store.Update(taskID, func(t *core.TaskInfo) {
+					store.SetResult(taskID, sessionID, core.ErrorResult(msg))
+					store.Update(taskID, sessionID, func(t *core.TaskInfo) {
 						t.Status = core.TaskFailed
 						t.StatusMessage = msg
 						t.LastUpdatedAt = now
@@ -222,22 +225,17 @@ func taskMiddleware(reg *server.Registry, rt *taskRuntime, cfg Config) server.Mi
 			}()
 
 			bgCtx := core.DetachForBackground(ctx)
-			// Inject TaskContext so tool handlers can call TaskElicit/TaskSample.
-			// The requests channel is read by the tasks/result handler to proxy
-			// elicitation/sampling through its live connection.
 			reqCh := make(chan sideChannelRequest, 1)
-			tc := &TaskContext{taskID: taskID, store: store, requests: reqCh}
+			tc := &TaskContext{taskID: taskID, sessionID: sessionID, store: store, requests: reqCh}
 			bgCtx = WithTaskContext(bgCtx, tc)
 			rt.registerChannel(taskID, reqCh)
 			resp := next(bgCtx, req)
 
 			now := time.Now().UTC().Format(time.RFC3339)
 
-			// Store result BEFORE updating status to terminal. Update broadcasts
-			// to WaitForResult waiters, so the result must be available first.
 			if resp.Error != nil {
-				store.SetResult(taskID, core.ErrorResult(resp.Error.Message))
-				store.Update(taskID, func(t *core.TaskInfo) {
+				store.SetResult(taskID, sessionID, core.ErrorResult(resp.Error.Message))
+				store.Update(taskID, sessionID, func(t *core.TaskInfo) {
 					t.Status = core.TaskFailed
 					t.StatusMessage = resp.Error.Message
 					t.LastUpdatedAt = now
@@ -245,11 +243,10 @@ func taskMiddleware(reg *server.Registry, rt *taskRuntime, cfg Config) server.Mi
 				return
 			}
 
-			// resp.Result is any — marshal then unmarshal to get ToolResult.
 			raw, err := json.Marshal(resp.Result)
 			if err != nil {
-				store.SetResult(taskID, core.ErrorResult("failed to marshal tool result"))
-				store.Update(taskID, func(t *core.TaskInfo) {
+				store.SetResult(taskID, sessionID, core.ErrorResult("failed to marshal tool result"))
+				store.Update(taskID, sessionID, func(t *core.TaskInfo) {
 					t.Status = core.TaskFailed
 					t.StatusMessage = "failed to marshal tool result"
 					t.LastUpdatedAt = now
@@ -259,8 +256,8 @@ func taskMiddleware(reg *server.Registry, rt *taskRuntime, cfg Config) server.Mi
 
 			var toolResult core.ToolResult
 			if err := json.Unmarshal(raw, &toolResult); err != nil {
-				store.SetResult(taskID, core.ErrorResult("failed to unmarshal tool result"))
-				store.Update(taskID, func(t *core.TaskInfo) {
+				store.SetResult(taskID, sessionID, core.ErrorResult("failed to unmarshal tool result"))
+				store.Update(taskID, sessionID, func(t *core.TaskInfo) {
 					t.Status = core.TaskFailed
 					t.StatusMessage = "failed to unmarshal tool result"
 					t.LastUpdatedAt = now
@@ -272,8 +269,8 @@ func taskMiddleware(reg *server.Registry, rt *taskRuntime, cfg Config) server.Mi
 			if toolResult.IsError {
 				status = core.TaskFailed
 			}
-			store.SetResult(taskID, toolResult)
-			store.Update(taskID, func(t *core.TaskInfo) {
+			store.SetResult(taskID, sessionID, toolResult)
+			store.Update(taskID, sessionID, func(t *core.TaskInfo) {
 				t.Status = status
 				t.LastUpdatedAt = now
 			})
@@ -299,11 +296,10 @@ func makeGetHandler(store TaskStore) server.MethodHandler {
 		if err := json.Unmarshal(params, &p); err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 		}
-		info, ok := store.Get(p.TaskID)
+		info, ok := store.Get(p.TaskID, ctx.SessionID())
 		if !ok {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "task not found: "+p.TaskID)
 		}
-		// Per spec: tasks/get returns flat Result & Task (no wrapper).
 		return core.NewResponse(id, core.GetTaskResult{TaskInfo: info})
 	}
 }
@@ -340,19 +336,17 @@ func makeResultHandler(rt *taskRuntime) server.MethodHandler {
 			}
 
 			// 2. Check if the task is terminal.
-			info, found := store.Get(p.TaskID)
+			sid := ctx.SessionID()
+			info, found := store.Get(p.TaskID, sid)
 			if !found {
 				return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "task not found: "+p.TaskID)
 			}
 
 			if info.Status.IsTerminal() {
-				result, _ := store.GetResult(p.TaskID)
+				result, _ := store.GetResult(p.TaskID, sid)
 
-				// Clean up any remaining queued messages.
 				rt.queue.DequeueAll(p.TaskID)
 
-				// Per spec: tasks/result returns the stored ToolResult for ALL
-				// terminal states with _meta["io.modelcontextprotocol/related-task"].
 				if result.Meta == nil {
 					result.Meta = &core.ToolResultMeta{}
 				}
@@ -361,7 +355,7 @@ func makeResultHandler(rt *taskRuntime) server.MethodHandler {
 			}
 
 			// 3. Wait for a task update or context cancellation.
-			if err := store.WaitForUpdate(ctx, p.TaskID); err != nil {
+			if err := store.WaitForUpdate(ctx, p.TaskID, sid); err != nil {
 				return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 			}
 		}
@@ -376,7 +370,7 @@ func makeListHandler(store TaskStore) server.MethodHandler {
 		if params != nil {
 			json.Unmarshal(params, &p)
 		}
-		tasks, nextCursor := store.List(p.Cursor, 50)
+		tasks, nextCursor := store.List(p.Cursor, 50, ctx.SessionID())
 		if tasks == nil {
 			tasks = []core.TaskInfo{}
 		}
@@ -395,7 +389,7 @@ func makeCancelHandler(rt *taskRuntime) server.MethodHandler {
 		if err := json.Unmarshal(params, &p); err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 		}
-		info, err := rt.store.Cancel(p.TaskID)
+		info, err := rt.store.Cancel(p.TaskID, ctx.SessionID())
 		if err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 		}

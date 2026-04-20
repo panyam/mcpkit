@@ -102,6 +102,15 @@ func (bc BaseContext) EmitLog(level LogLevel, logger string, data any) {
 	})
 }
 
+// SessionID returns the transport-assigned session ID for this request.
+// Empty for stateless or stdio transports.
+func (bc BaseContext) SessionID() string {
+	if bc.sc == nil {
+		return ""
+	}
+	return bc.sc.sessionID
+}
+
 // Sample sends a sampling/createMessage request to the connected client.
 func (bc BaseContext) Sample(req CreateMessageRequest) (CreateMessageResult, error) {
 	if bc.sc == nil || bc.sc.request == nil {

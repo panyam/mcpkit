@@ -343,9 +343,9 @@ mcp http://localhost:$PORT/mcp \
 
 ---
 
-## Phase 3: Session Isolation 🔲
+## Phase 3: Session Isolation ✅
 
-> **Status**: Not yet implemented. These exercises will fail today — any session can access any task.
+> **Status**: Implemented. Tasks are scoped to the session that created them.
 
 ### 10. Cross-session task access denied
 
@@ -404,8 +404,8 @@ mcp http://localhost:$PORT/mcp \
   -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TASK_ID\"}}"
 ```
 
-**Expected (after Phase 3):** Task not found — session B can't see session A's tasks.
-**Today:** Session B can access session A's tasks.
+**Expected:** Task not found — session B can't see session A's tasks.
+**Behavior:** Empty sessionID (backward compat) allows access to all tasks.
 
 ---
 

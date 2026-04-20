@@ -891,7 +891,7 @@ func TestTaskInputRequiredTransition(t *testing.T) {
 				return core.TextResult("no task context"), nil
 			}
 			// Simulate what TaskElicit does: transition to input_required.
-			tc.store.Update(tc.taskID, func(info *core.TaskInfo) {
+			tc.store.Update(tc.taskID, "", func(info *core.TaskInfo) {
 				info.Status = core.TaskInputRequired
 			})
 			// Signal that we're in input_required.
@@ -899,7 +899,7 @@ func TestTaskInputRequiredTransition(t *testing.T) {
 			// Wait for the test to observe it.
 			<-observed
 			// Transition back to working (like TaskElicit does after response).
-			tc.store.Update(tc.taskID, func(info *core.TaskInfo) {
+			tc.store.Update(tc.taskID, "", func(info *core.TaskInfo) {
 				info.Status = core.TaskWorking
 			})
 			return core.TextResult("done"), nil
