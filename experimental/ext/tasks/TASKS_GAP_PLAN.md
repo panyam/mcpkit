@@ -15,7 +15,7 @@ Key TS files:
 **Goal**: Background tasks can do elicitation and sampling mid-execution.
 **This is the biggest change — everything else builds on it.**
 
-- [ ] **1a. Define `TaskMessageQueue` interface** in `experimental/ext/tasks/queue.go`
+- [x] **1a. Define `TaskMessageQueue` interface** ✅ in `experimental/ext/tasks/queue.go`
   - `Enqueue(taskID, msg QueuedMessage, sessionID string) error`
   - `Dequeue(taskID, sessionID string) (QueuedMessage, bool)`
   - `DequeueAll(taskID, sessionID string) []QueuedMessage`
@@ -23,13 +23,13 @@ Key TS files:
   - Each has `Type string`, `Timestamp int64`, `Message` (the JSON-RPC message)
   - Ref: `interfaces.ts:54-132`
 
-- [ ] **1b. Implement `InMemoryMessageQueue`**
+- [x] **1b. Implement `InMemoryMessageQueue`** ✅
   - Thread-safe with mutex
   - `WaitForMessage(taskID)` — blocks via channel until enqueue (for long-poll)
   - `NotifyWaiters(taskID)` — called by Enqueue to unblock WaitForMessage
   - Ref: `stores/inMemory.ts:245-313`
 
-- [ ] **1c. Add `TaskSession` helper** in `experimental/ext/tasks/session.go`
+- [x] **1c. Add `TaskContext` (was TaskSession)** ✅ in `experimental/ext/tasks/session.go`
   - Wraps server context for background task goroutines
   - `Elicit(message, schema)`:
     1. Transition status to `input_required`
@@ -41,7 +41,7 @@ Key TS files:
   - `Sample(messages, maxTokens)` — same pattern with `sampling/createMessage`
   - Ref: `simpleTaskInteractive.ts:332-440`
 
-- [ ] **1d. Rewrite `tasks/result` handler as long-poll loop**
+- [x] **1d. Rewrite `tasks/result` handler as long-poll loop** ✅
   - Loop:
     1. Dequeue all messages from queue
     2. For requests (elicitation/sampling): deliver via `server.elicitInput()` / `server.createMessage()`, route response back to TaskSession channel
@@ -51,7 +51,7 @@ Key TS files:
   - Need: `sendOnResponseStream` equivalent — write queued JSON-RPC messages onto the SSE response stream for the `tasks/result` request
   - Ref: `taskManager.ts:373-430`, `simpleTaskInteractive.ts:217-326`
 
-- [ ] **1e. Clean up queue on terminal state**
+- [x] **1e. Clean up queue on terminal state** ✅
   - When task reaches completed/failed/cancelled, call `DequeueAll`
   - Reject any pending request resolvers with "task cancelled/completed"
   - Ref: `taskManager.ts:816-832`
@@ -62,19 +62,39 @@ Key TS files:
   - Add `MaxQueueSize int` to Config (optional, 0 = unbounded)
   - Pass queue + store to TaskSession in task goroutine
 
+- [x] **1f. Wire into Config and middleware** ✅
+  - `MessageQueue` and `MaxQueueSize` in Config
+  - Queue wired into result and cancel handlers
+
 - [ ] **1g. `relatedTask` metadata propagation**
   - All outbound requests/notifications from a task context get `_meta["io.modelcontextprotocol/related-task"]` injected
   - Ref: `taskManager.ts:478-520, 556-584`
 
-- [ ] **1h. Update example** — add `confirm_delete` (elicitation) and `write_haiku` (sampling) tools
+- [ ] **1h. `SendOnResponseStream` transport support** (mcpkit server/)
+  - Add `MethodContext.SendOnResponseStream(msg)` so the tasks/result handler can write
+    intermediate SSE events (elicitation/sampling requests) on the POST response
+  - The SSE response writer already exists (used for notifications during tool calls)
+  - New: expose it to method handlers for streaming responses
+  - Response routing: client responses to task-related requests must be routed back
+    to the task's message queue instead of normal dispatch
+  - Files: `server/streamable_transport.go`, `server/dispatcher.go`
+
+- [ ] **1i. Queue-based delivery in tasks/result loop**
+  - Replace the TODO in the long-poll loop with actual delivery:
+    dequeue → SendOnResponseStream → route response back to resolver
+  - Wire TaskSession to enqueue requests instead of calling ctx.Elicit() directly
+    (or support both modes)
+
+- [ ] **1j. Update example** — add `confirm_delete` (elicitation) and `write_haiku` (sampling) tools
   - Mirror TS SDK's `simpleTaskInteractive.ts`
   - Ref: `simpleTaskInteractive.ts:530-607`
 
-- [ ] **1i. Tests**
-  - Message queue unit tests (enqueue/dequeue/wait/cleanup)
+- [ ] **1k. Tests**
+  - Message queue unit tests (enqueue/dequeue/wait/cleanup) ✅
   - TaskSession elicit/sample tests
   - Long-poll integration test (create task → elicit mid-task → complete → fetch result)
   - Queue cleanup on cancel test
+  - SendOnResponseStream transport test
 
 ### Phase 2: TTL Enforcement
 **Goal**: Tasks auto-expire after TTL.
