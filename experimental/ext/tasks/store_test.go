@@ -244,6 +244,84 @@ func TestStoreWaitForResultContextCancelled(t *testing.T) {
 	}
 }
 
+func TestStoreWaitForUpdateWakesOnUpdate(t *testing.T) {
+	s := NewInMemoryStore()
+	s.Create(newTestInfo("t1", core.TaskWorking))
+
+	done := make(chan error, 1)
+	go func() {
+		done <- s.WaitForUpdate(context.Background(), "t1")
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	// Any Update should wake the waiter — not just terminal.
+	s.Update("t1", func(info *core.TaskInfo) {
+		info.StatusMessage = "progress 50%"
+	})
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("WaitForUpdate returned error: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("WaitForUpdate did not wake on Update")
+	}
+}
+
+func TestStoreWaitForUpdateWakesOnSetResult(t *testing.T) {
+	s := NewInMemoryStore()
+	s.Create(newTestInfo("t1", core.TaskWorking))
+
+	done := make(chan error, 1)
+	go func() {
+		done <- s.WaitForUpdate(context.Background(), "t1")
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	s.SetResult("t1", core.TextResult("partial"))
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("WaitForUpdate returned error: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("WaitForUpdate did not wake on SetResult")
+	}
+}
+
+func TestStoreWaitForUpdateContextCancelled(t *testing.T) {
+	s := NewInMemoryStore()
+	s.Create(newTestInfo("t1", core.TaskWorking))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- s.WaitForUpdate(ctx, "t1")
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != context.Canceled {
+			t.Errorf("err = %v, want context.Canceled", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("WaitForUpdate did not return after context cancellation")
+	}
+}
+
+func TestStoreWaitForUpdateNotFound(t *testing.T) {
+	s := NewInMemoryStore()
+	err := s.WaitForUpdate(context.Background(), "nonexistent")
+	if err == nil {
+		t.Error("expected error for nonexistent task")
+	}
+}
+
 func TestStoreListPagination(t *testing.T) {
 	s := NewInMemoryStore()
 	for i := 0; i < 5; i++ {
