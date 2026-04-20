@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http/httptest"
@@ -96,13 +97,13 @@ func newTaskServer(t *testing.T) (*server.Server, chan struct{}) {
 	return srv, unblock
 }
 
-func connectClient(t *testing.T, srv *server.Server) *client.Client {
+func connectClient(t *testing.T, srv *server.Server, opts ...client.ClientOption) *client.Client {
 	t.Helper()
 	handler := srv.Handler(server.WithStreamableHTTP(true))
 	ts := httptest.NewServer(handler)
 	t.Cleanup(ts.Close)
 
-	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "0.0.1"})
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "0.0.1"}, opts...)
 	if err := c.Connect(); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
@@ -1036,5 +1037,169 @@ func TestQueueCleanupOnCancel(t *testing.T) {
 	msgs := queue.DequeueAll(created.Task.TaskID)
 	if len(msgs) != 0 {
 		t.Errorf("queue should be empty after cancel, got %d messages", len(msgs))
+	}
+}
+
+// --- E2E: TaskElicit via side-channel ---
+
+// TestTaskElicitE2E exercises the full side-channel elicitation flow:
+// 1. Tool runs as a task, calls TaskElicit
+// 2. tasks/result handler proxies elicitation to client
+// 3. Client's elicitation handler responds
+// 4. Tool receives the response and completes
+func TestTaskElicitE2E(t *testing.T) {
+	srv := server.NewServer(core.ServerInfo{Name: "elicit-e2e", Version: "0.0.1"})
+
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "confirm-action",
+			Description: "Asks user for confirmation via elicitation",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"action": map[string]any{"type": "string"},
+				},
+			},
+			Execution: &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			tc := GetTaskContext(ctx)
+			if tc == nil {
+				return core.ToolResult{}, fmt.Errorf("expected TaskContext")
+			}
+
+			var args struct {
+				Action string `json:"action"`
+			}
+			json.Unmarshal(req.Arguments, &args)
+
+			// This is the key call — sends elicitation via the side-channel.
+			result, err := tc.TaskElicit(core.ElicitationRequest{
+				Message:         fmt.Sprintf("Confirm: %s?", args.Action),
+				RequestedSchema: json.RawMessage(`{"type":"object","properties":{"ok":{"type":"boolean"}}}`),
+			})
+			if err != nil {
+				return core.TextResult("elicitation failed: " + err.Error()), nil
+			}
+
+			if result.Action == "accept" {
+				ok, _ := result.Content["ok"].(bool)
+				if ok {
+					return core.TextResult("confirmed: " + args.Action), nil
+				}
+				return core.TextResult("declined: " + args.Action), nil
+			}
+			return core.TextResult("cancelled"), nil
+		},
+	)
+
+	Register(Config{Server: srv})
+
+	// Client with an elicitation handler that auto-accepts.
+	c := connectClient(t, srv, client.WithElicitationHandler(
+		func(ctx context.Context, req core.ElicitationRequest) (core.ElicitationResult, error) {
+			return core.ElicitationResult{
+				Action:  "accept",
+				Content: map[string]any{"ok": true},
+			}, nil
+		},
+	))
+
+	// Create the task.
+	created, err := ToolCallAsTask(c, "confirm-action", map[string]any{"action": "deploy"}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// GetTaskPayload blocks on tasks/result. During the long-poll, the handler
+	// proxies the elicitation to the client, the client responds, the tool
+	// completes, and we get the result.
+	result, relatedID, err := GetTaskPayload(c, created.Task.TaskID)
+	if err != nil {
+		t.Fatalf("GetTaskPayload: %v", err)
+	}
+
+	if relatedID != created.Task.TaskID {
+		t.Errorf("relatedTaskId = %q, want %q", relatedID, created.Task.TaskID)
+	}
+
+	if len(result.Content) == 0 || result.Content[0].Text != "confirmed: deploy" {
+		t.Errorf("unexpected result: %+v", result)
+	}
+}
+
+// TestTaskSampleE2E exercises the full side-channel sampling flow.
+func TestTaskSampleE2E(t *testing.T) {
+	srv := server.NewServer(core.ServerInfo{Name: "sample-e2e", Version: "0.0.1"})
+
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "write-haiku",
+			Description: "Asks LLM to write a haiku via sampling",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"topic": map[string]any{"type": "string"},
+				},
+			},
+			Execution: &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			tc := GetTaskContext(ctx)
+			if tc == nil {
+				return core.ToolResult{}, fmt.Errorf("expected TaskContext")
+			}
+
+			var args struct {
+				Topic string `json:"topic"`
+			}
+			json.Unmarshal(req.Arguments, &args)
+
+			result, err := tc.TaskSample(core.CreateMessageRequest{
+				Messages: []core.SamplingMessage{{
+					Role:    "user",
+					Content: core.Content{Type: "text", Text: "Write a haiku about " + args.Topic},
+				}},
+				MaxTokens: 50,
+			})
+			if err != nil {
+				return core.TextResult("sampling failed: " + err.Error()), nil
+			}
+
+			return core.TextResult("Haiku: " + result.Content.Text), nil
+		},
+	)
+
+	Register(Config{Server: srv})
+
+	// Client with a sampling handler that returns a mock haiku.
+	c := connectClient(t, srv, client.WithSamplingHandler(
+		func(ctx context.Context, req core.CreateMessageRequest) (core.CreateMessageResult, error) {
+			return core.CreateMessageResult{
+				Model: "test-model",
+				Role:  "assistant",
+				Content: core.Content{
+					Type: "text",
+					Text: "autumn leaves fall\nsilent streams whisper softly\nnature finds its way",
+				},
+			}, nil
+		},
+	))
+
+	created, err := ToolCallAsTask(c, "write-haiku", map[string]any{"topic": "nature"}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, _, err := GetTaskPayload(c, created.Task.TaskID)
+	if err != nil {
+		t.Fatalf("GetTaskPayload: %v", err)
+	}
+
+	if len(result.Content) == 0 {
+		t.Fatal("expected content in result")
+	}
+	if result.Content[0].Text != "Haiku: autumn leaves fall\nsilent streams whisper softly\nnature finds its way" {
+		t.Errorf("unexpected result: %q", result.Content[0].Text)
 	}
 }
