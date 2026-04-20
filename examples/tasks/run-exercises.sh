@@ -28,7 +28,7 @@ mcp() {
   local json
   json=$(echo "$raw" | grep '^data: ' | tail -1 | sed 's/^data: //')
   if [ -z "$json" ]; then json="$raw"; fi
-  echo "$json" | tee /tmp/mcp-body.json | python3 -m json.tool 2>/dev/null || echo "$json"
+  echo "$json" | tee /tmp/mcp-body.json | jq -S . 2>/dev/null || echo "$json"
 }
 
 exercise() {
@@ -64,7 +64,7 @@ if [ -z "$SESSION_ID" ]; then
 fi
 
 echo "Session: $SESSION_ID"
-echo "$JSON" | python3 -m json.tool 2>/dev/null || echo "$JSON"
+echo "$JSON" | jq -S . 2>/dev/null || echo "$JSON"
 
 # Send initialized notification
 curl -s "$BASE" -H "$CT" -H "$ACCEPT" -H "Mcp-Session-Id: $SESSION_ID" \
