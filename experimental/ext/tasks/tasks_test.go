@@ -1203,3 +1203,54 @@ func TestTaskSampleE2E(t *testing.T) {
 		t.Errorf("unexpected result: %q", result.Content[0].Text)
 	}
 }
+
+// --- Phase 2: TTL enforcement ---
+
+// TestTaskTTLExpiryE2E exercises README exercise 9: create a task with a
+// short TTL, wait for it to expire, then verify tasks/get returns an error.
+// This is the end-to-end validation that TTL enforcement works through
+// the full HTTP stack.
+func TestTaskTTLExpiryE2E(t *testing.T) {
+	srv, unblock := newTaskServer(t)
+	defer close(unblock)
+	c := connectClient(t, srv)
+
+	// Create a task with a 200ms TTL via raw tools/call (ToolCallAsTask
+	// doesn't expose TTL granularity for this test).
+	result, err := c.Call("tools/call", map[string]any{
+		"name":      "slow",
+		"arguments": map[string]any{"data": "ttl-test"},
+		"task":      map[string]any{"ttl": 200},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var created core.CreateTaskResult
+	json.Unmarshal(result.Raw, &created)
+	taskID := created.Task.TaskID
+
+	// Unblock the tool so it completes.
+	unblock <- struct{}{}
+
+	// Wait for task to complete.
+	for i := 0; i < 20; i++ {
+		got, err := GetTask(c, taskID)
+		if err != nil {
+			break // task might have been cleaned up already
+		}
+		if got.Status.IsTerminal() {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	// Wait for TTL to expire (200ms from result storage).
+	time.Sleep(300 * time.Millisecond)
+
+	// Task should be gone.
+	_, err = GetTask(c, taskID)
+	if err == nil {
+		t.Error("expected error — task should have been cleaned up after TTL expired")
+	}
+}
