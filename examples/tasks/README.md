@@ -44,6 +44,15 @@ Until your host supports tasks, use the curl commands in each exercise below (re
 
 All curl commands below use `$SESSION_ID` and `$TASK_ID` env vars so you can copy-paste without manual replacement. Requires [`jq`](https://jqlang.github.io/jq/).
 
+The server returns SSE (`event: message\ndata: {...}`), not raw JSON. The helper function below extracts the JSON from the `data:` lines:
+
+```bash
+# Helper: extract JSON from SSE data lines, pretty-print, and save to /tmp/mcp-body.json
+mcp() {
+  curl -s "$@" | grep '^data: ' | sed 's/^data: //' | tee /tmp/mcp-body.json | jq .
+}
+```
+
 **Note:** `confirm_delete` and `write_haiku` cannot be fully tested with curl because they use the side-channel pattern — the server sends elicitation/sampling requests back to the client during `tasks/result`, which requires a client that can handle server-initiated requests. Use the Go test suite (`go test ./...`) for those.
 
 Initialize a session before running any curl exercises:
@@ -54,7 +63,7 @@ curl -s -D /tmp/mcp-headers.txt http://localhost:8080/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}' \
-  | tee /tmp/mcp-body.txt | jq .
+  | grep '^data: ' | sed 's/^data: //' | jq .
 
 export SESSION_ID=$(grep -i mcp-session-id /tmp/mcp-headers.txt | awk '{print $2}' | tr -d '\r')
 echo "SESSION_ID=$SESSION_ID"
@@ -80,11 +89,11 @@ These exercises work today. Each shows the **prompt** (for MCP hosts) and the **
 | `Greet World` | See below |
 
 ```bash
-curl -s http://localhost:8080/mcp \
+mcp http://localhost:8080/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"greet","arguments":{"name":"World"}}}' | jq .
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"greet","arguments":{"name":"World"}}}'
 ```
 
 Returns immediately: `Hello, World!`
@@ -96,14 +105,13 @@ Returns immediately: `Hello, World!`
 | `Run a slow computation for 5 seconds labeled "pi"` | See below |
 
 ```bash
-curl -s http://localhost:8080/mcp \
+mcp http://localhost:8080/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":5,"label":"pi"},"task":{}}}' \
-  | tee /tmp/mcp-body.txt | jq .
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":5,"label":"pi"},"task":{}}}'
 
-export TASK_ID=$(jq -r '.result.task.taskId' /tmp/mcp-body.txt)
+export TASK_ID=$(jq -r '.result.task.taskId' /tmp/mcp-body.json)
 echo "TASK_ID=$TASK_ID"
 ```
 
@@ -116,11 +124,11 @@ Returns a task ID immediately. The computation runs in the background.
 | `What's the status of my computation?` | See below |
 
 ```bash
-curl -s http://localhost:8080/mcp \
+mcp http://localhost:8080/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -d "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TASK_ID\"}}" | jq .
+  -d "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TASK_ID\"}}"
 ```
 
 The host polls `tasks/get` — status transitions from `working` to `completed`.
@@ -132,23 +140,22 @@ The host polls `tasks/get` — status transitions from `working` to `completed`.
 | `Run the failing job` | See below |
 
 ```bash
-curl -s http://localhost:8080/mcp \
+mcp http://localhost:8080/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"failing_job","arguments":{},"task":{}}}' \
-  | tee /tmp/mcp-body.txt | jq .
+  -d '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"failing_job","arguments":{},"task":{}}}'
 
-export TASK_ID=$(jq -r '.result.task.taskId' /tmp/mcp-body.txt)
+export TASK_ID=$(jq -r '.result.task.taskId' /tmp/mcp-body.json)
 echo "TASK_ID=$TASK_ID"
 
 # Wait 2s, then check status
 sleep 2
-curl -s http://localhost:8080/mcp \
+mcp http://localhost:8080/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -d "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TASK_ID\"}}" | jq .
+  -d "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TASK_ID\"}}"
 ```
 
 This tool *requires* task invocation. The job starts, then fails after 1 second — status transitions to `failed`.
@@ -177,22 +184,21 @@ The tool creates a task, then asks the LLM to write a haiku via sampling. The ta
 
 ```bash
 # Start a long computation
-curl -s http://localhost:8080/mcp \
+mcp http://localhost:8080/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":30,"label":"long"},"task":{}}}' \
-  | tee /tmp/mcp-body.txt | jq .
+  -d '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":30,"label":"long"},"task":{}}}'
 
-export TASK_ID=$(jq -r '.result.task.taskId' /tmp/mcp-body.txt)
+export TASK_ID=$(jq -r '.result.task.taskId' /tmp/mcp-body.json)
 echo "TASK_ID=$TASK_ID"
 
 # Cancel it
-curl -s http://localhost:8080/mcp \
+mcp http://localhost:8080/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -d "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"tasks/cancel\",\"params\":{\"taskId\":\"$TASK_ID\"}}" | jq .
+  -d "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"tasks/cancel\",\"params\":{\"taskId\":\"$TASK_ID\"}}"
 ```
 
 Start a long computation, then cancel before it finishes. Status transitions to `cancelled`.
@@ -204,11 +210,11 @@ Start a long computation, then cancel before it finishes. Status transitions to 
 | `List all tasks` | See below |
 
 ```bash
-curl -s http://localhost:8080/mcp \
+mcp http://localhost:8080/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","id":9,"method":"tasks/list","params":{}}' | jq .
+  -d '{"jsonrpc":"2.0","id":9,"method":"tasks/list","params":{}}'
 ```
 
 Shows all tasks with their current status.
@@ -227,25 +233,24 @@ Shows all tasks with their current status.
 
 ```bash
 # Create a task with short TTL (5 seconds)
-curl -s http://localhost:8080/mcp \
+mcp http://localhost:8080/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":2,"label":"short"},"task":{"ttl":5000}}}' \
-  | tee /tmp/mcp-body.txt | jq .
+  -d '{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":2,"label":"short"},"task":{"ttl":5000}}}'
 
-export TASK_ID=$(jq -r '.result.task.taskId' /tmp/mcp-body.txt)
+export TASK_ID=$(jq -r '.result.task.taskId' /tmp/mcp-body.json)
 echo "TASK_ID=$TASK_ID"
 
 # Wait for TTL to expire
 sleep 7
 
 # Poll — should be gone
-curl -s http://localhost:8080/mcp \
+mcp http://localhost:8080/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -d "{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TASK_ID\"}}" | jq .
+  -d "{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TASK_ID\"}}"
 ```
 
 **Expected:** Task not found — it was cleaned up after TTL expired.
@@ -268,7 +273,8 @@ curl -s http://localhost:8080/mcp \
 curl -s -D /tmp/mcp-headers-a.txt http://localhost:8080/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"session-a","version":"1.0"}}}' | jq .
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"session-a","version":"1.0"}}}' \
+  | grep '^data: ' | sed 's/^data: //' | jq .
 
 export SESSION_A=$(grep -i mcp-session-id /tmp/mcp-headers-a.txt | awk '{print $2}' | tr -d '\r')
 echo "SESSION_A=$SESSION_A"
@@ -280,21 +286,21 @@ curl -s http://localhost:8080/mcp \
   -d '{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}'
 
 # Create a task in session A
-curl -s http://localhost:8080/mcp \
+mcp http://localhost:8080/mcp \
   -H "Mcp-Session-Id: $SESSION_A" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":30,"label":"secret"},"task":{}}}' \
-  | tee /tmp/mcp-body.txt | jq .
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":30,"label":"secret"},"task":{}}}'
 
-export TASK_ID=$(jq -r '.result.task.taskId' /tmp/mcp-body.txt)
+export TASK_ID=$(jq -r '.result.task.taskId' /tmp/mcp-body.json)
 echo "TASK_ID=$TASK_ID"
 
 # Initialize session B
 curl -s -D /tmp/mcp-headers-b.txt http://localhost:8080/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"session-b","version":"1.0"}}}' | jq .
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"session-b","version":"1.0"}}}' \
+  | grep '^data: ' | sed 's/^data: //' | jq .
 
 export SESSION_B=$(grep -i mcp-session-id /tmp/mcp-headers-b.txt | awk '{print $2}' | tr -d '\r')
 echo "SESSION_B=$SESSION_B"
@@ -306,11 +312,11 @@ curl -s http://localhost:8080/mcp \
   -d '{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}'
 
 # Try to access session A's task from session B
-curl -s http://localhost:8080/mcp \
+mcp http://localhost:8080/mcp \
   -H "Mcp-Session-Id: $SESSION_B" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TASK_ID\"}}" | jq .
+  -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TASK_ID\"}}"
 ```
 
 **Expected (after Phase 3):** Task not found — session B can't see session A's tasks.
@@ -343,22 +349,21 @@ Complete a task, then try to store another result (internal API — no curl equi
 
 ```bash
 # Start a 60-second computation
-curl -s http://localhost:8080/mcp \
+mcp http://localhost:8080/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","id":20,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":60,"label":"long"},"task":{}}}' \
-  | tee /tmp/mcp-body.txt | jq .
+  -d '{"jsonrpc":"2.0","id":20,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":60,"label":"long"},"task":{}}}'
 
-export TASK_ID=$(jq -r '.result.task.taskId' /tmp/mcp-body.txt)
+export TASK_ID=$(jq -r '.result.task.taskId' /tmp/mcp-body.json)
 echo "TASK_ID=$TASK_ID"
 
 # Cancel it
-curl -s http://localhost:8080/mcp \
+mcp http://localhost:8080/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -d "{\"jsonrpc\":\"2.0\",\"id\":21,\"method\":\"tasks/cancel\",\"params\":{\"taskId\":\"$TASK_ID\"}}" | jq .
+  -d "{\"jsonrpc\":\"2.0\",\"id\":21,\"method\":\"tasks/cancel\",\"params\":{\"taskId\":\"$TASK_ID\"}}"
 ```
 
 **Expected (after Phase 5):** The server log shows the goroutine exited. Server resource usage drops.
