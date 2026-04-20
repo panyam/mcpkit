@@ -15,11 +15,12 @@ import (
 // Config holds the options for registering tasks support on an MCP server.
 type Config struct {
 	// Store is the task state backend. If nil, an InMemoryTaskStore is used.
-	// Tasks are session-scoped and ephemeral by default — the in-memory store
-	// is the only implementation shipped. The interface exists so production
-	// deployments can swap in durable storage for multi-node scenarios
-	// (e.g., load-balanced servers sharing task state via Redis).
 	Store TaskStore
+
+	// MessageQueue is the per-task FIFO queue for side-channel messages
+	// (elicitation/sampling requests delivered via tasks/result long-poll).
+	// If nil, an InMemoryMessageQueue is used.
+	MessageQueue TaskMessageQueue
 
 	// Server is the MCP server to register tasks on.
 	Server *server.Server
@@ -31,11 +32,18 @@ type Config struct {
 	// DefaultPollMs is the suggested poll interval in milliseconds,
 	// returned to clients in CreateTaskResult. Default: 1000 (1 second).
 	DefaultPollMs int
+
+	// MaxQueueSize is the maximum number of messages per task queue.
+	// 0 means unbounded.
+	MaxQueueSize int
 }
 
 func (c *Config) defaults() {
 	if c.Store == nil {
 		c.Store = NewInMemoryStore()
+	}
+	if c.MessageQueue == nil {
+		c.MessageQueue = NewInMemoryMessageQueue()
 	}
 	if c.DefaultTTLMs <= 0 {
 		c.DefaultTTLMs = 300_000
@@ -60,11 +68,13 @@ func Register(cfg Config) {
 	// Install middleware for tools/call interception.
 	srv.UseMiddleware(taskMiddleware(reg, store, cfg))
 
+	queue := cfg.MessageQueue
+
 	// Register tasks/* protocol methods.
 	srv.HandleMethod("tasks/get", makeGetHandler(store))
-	srv.HandleMethod("tasks/result", makeResultHandler(store))
+	srv.HandleMethod("tasks/result", makeResultHandler(store, queue))
 	srv.HandleMethod("tasks/list", makeListHandler(store))
-	srv.HandleMethod("tasks/cancel", makeCancelHandler(store))
+	srv.HandleMethod("tasks/cancel", makeCancelHandler(store, queue))
 
 	// Advertise tasks capability with nested structure per spec.
 	srv.SetTasksCap(&core.TasksCap{
@@ -255,7 +265,7 @@ func makeGetHandler(store TaskStore) server.MethodHandler {
 	}
 }
 
-func makeResultHandler(store TaskStore) server.MethodHandler {
+func makeResultHandler(store TaskStore, queue TaskMessageQueue) server.MethodHandler {
 	return func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		var p struct {
 			TaskID string `json:"taskId"`
@@ -264,23 +274,46 @@ func makeResultHandler(store TaskStore) server.MethodHandler {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 		}
 
-		// WaitForResult blocks until terminal, respecting context cancellation
-		// (e.g., HTTP disconnect aborts the long-poll).
-		result, _, err := store.WaitForResult(ctx, p.TaskID)
-		if err != nil {
-			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
-		}
+		// Long-poll loop: wait for the task to reach a terminal state.
+		// Between iterations, drain any queued messages (future: deliver
+		// elicitation/sampling requests via the response stream).
+		for {
+			// 1. Drain queued messages for this task.
+			//    Currently a no-op in "direct mode" (TaskElicit uses the GET SSE
+			//    stream). Prepares for future queue-based delivery.
+			for {
+				if _, ok := queue.Dequeue(p.TaskID); !ok {
+					break
+				}
+				// TODO(Phase 1 future): deliver queued requests via response stream
+			}
 
-		// Per spec: tasks/result returns the stored ToolResult for ALL terminal
-		// states (completed, failed, cancelled). The client checks isError or
-		// polls tasks/get for the status. We do NOT return JSON-RPC errors for
-		// failed/cancelled tasks — the result IS the payload.
-		if result.Meta == nil {
-			result.Meta = &core.ToolResultMeta{}
-		}
-		result.Meta.RelatedTask = &core.RelatedTaskMeta{TaskID: p.TaskID}
+			// 2. Check if the task is terminal.
+			info, found := store.Get(p.TaskID)
+			if !found {
+				return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "task not found: "+p.TaskID)
+			}
 
-		return core.NewResponse(id, result)
+			if info.Status.IsTerminal() {
+				result, _ := store.GetResult(p.TaskID)
+
+				// Clean up any remaining queued messages.
+				queue.DequeueAll(p.TaskID)
+
+				// Per spec: tasks/result returns the stored ToolResult for ALL
+				// terminal states with _meta["io.modelcontextprotocol/related-task"].
+				if result.Meta == nil {
+					result.Meta = &core.ToolResultMeta{}
+				}
+				result.Meta.RelatedTask = &core.RelatedTaskMeta{TaskID: p.TaskID}
+				return core.NewResponse(id, result)
+			}
+
+			// 3. Wait for a task update or context cancellation.
+			if err := store.WaitForUpdate(ctx, p.TaskID); err != nil {
+				return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
+			}
+		}
 	}
 }
 
@@ -303,7 +336,7 @@ func makeListHandler(store TaskStore) server.MethodHandler {
 	}
 }
 
-func makeCancelHandler(store TaskStore) server.MethodHandler {
+func makeCancelHandler(store TaskStore, queue TaskMessageQueue) server.MethodHandler {
 	return func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		var p struct {
 			TaskID string `json:"taskId"`
@@ -315,6 +348,8 @@ func makeCancelHandler(store TaskStore) server.MethodHandler {
 		if err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 		}
+		// Clean up any queued messages for the cancelled task.
+		queue.DequeueAll(p.TaskID)
 		// Per spec: tasks/cancel returns flat Result & Task (no wrapper).
 		return core.NewResponse(id, core.CancelTaskResult{TaskInfo: info})
 	}

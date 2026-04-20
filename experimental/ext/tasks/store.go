@@ -47,6 +47,10 @@ type TaskStore interface {
 	// starts from the beginning.
 	List(cursor string, limit int) ([]core.TaskInfo, string)
 
+	// WaitForUpdate blocks until the task's state changes (status or result),
+	// or the context is cancelled. Used by the tasks/result long-poll loop.
+	WaitForUpdate(ctx context.Context, taskID string) error
+
 	// Cancel transitions a non-terminal task to cancelled. Returns an error
 	// if the task is already terminal or doesn't exist.
 	Cancel(taskID string) (core.TaskInfo, error)
@@ -215,6 +219,29 @@ func (s *InMemoryTaskStore) List(cursor string, limit int) ([]core.TaskInfo, str
 	}
 
 	return tasks, nextCursor
+}
+
+// WaitForUpdate blocks until the task's state changes or the context is cancelled.
+// Returns nil on update, context error on cancellation, or an error if the task
+// doesn't exist.
+func (s *InMemoryTaskStore) WaitForUpdate(ctx context.Context, taskID string) error {
+	s.mu.Lock()
+	entry, ok := s.tasks[taskID]
+	if !ok {
+		s.mu.Unlock()
+		return fmt.Errorf("task %q not found", taskID)
+	}
+
+	ch := make(chan struct{}, 1)
+	entry.waiters = append(entry.waiters, ch)
+	s.mu.Unlock()
+
+	select {
+	case <-ch:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 var errTaskTerminal = errors.New("task is already in a terminal state")
