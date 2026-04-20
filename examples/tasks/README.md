@@ -17,24 +17,26 @@ Demonstrates MCP Tasks (spec 2025-11-25) — async tool execution with lifecycle
 
 ```bash
 cd examples/tasks
-go run . -addr :8080
+export PORT=8080
+go run . -addr :$PORT
 ```
 
 ### TS SDK reference server (for comparison)
 
-The [TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk) ships an equivalent `simpleTaskInteractive` example with the same `confirm_delete` and `write_haiku` tools. Run it to compare wire format side-by-side:
+A TypeScript reference server with the same 5 tools is included for side-by-side wire format comparison. It imports the official [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk) as a dependency:
 
 ```bash
-cd ~/projects/typescript-sdk   # or wherever you cloned it
-pnpm install && pnpm build:all # first time only
-PORT=8080 node examples/server/dist/simpleTaskInteractive.mjs
+cd examples/tasks
+npm install              # first time only
+node ts-reference-server.mjs   # default port 8080
+PORT=8090 node ts-reference-server.mjs   # custom port
 ```
 
 All curl exercises below produce identical responses from both servers (except task IDs and timestamps). Use `test-side-by-side.sh` for automated comparison.
 
 ## Connect a Host
 
-MCPJam, VS Code, or any MCP client: `http://localhost:8080/mcp`
+MCPJam, VS Code, or any MCP client: `http://localhost:$PORT/mcp`
 
 ## Tools
 
@@ -73,7 +75,7 @@ Initialize a session before running any curl exercises:
 
 ```bash
 # Step 1: Initialize — prints response and captures SESSION_ID
-curl -s -D /tmp/mcp-headers.txt http://localhost:8080/mcp \
+curl -s -D /tmp/mcp-headers.txt http://localhost:$PORT/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}' \
@@ -83,7 +85,7 @@ export SESSION_ID=$(grep -i mcp-session-id /tmp/mcp-headers.txt | awk '{print $2
 echo "SESSION_ID=$SESSION_ID"
 
 # Step 2: Send initialized notification
-curl -s http://localhost:8080/mcp \
+curl -s http://localhost:$PORT/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
@@ -103,7 +105,7 @@ These exercises work today. Each shows the **prompt** (for MCP hosts) and the **
 | `Greet World` | See below |
 
 ```bash
-mcp http://localhost:8080/mcp \
+mcp http://localhost:$PORT/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
@@ -119,7 +121,7 @@ Returns immediately: `Hello, World!`
 | `Run a slow computation for 5 seconds labeled "pi"` | See below |
 
 ```bash
-mcp http://localhost:8080/mcp \
+mcp http://localhost:$PORT/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
@@ -138,7 +140,7 @@ Returns a task ID immediately. The computation runs in the background.
 | `What's the status of my computation?` | See below |
 
 ```bash
-mcp http://localhost:8080/mcp \
+mcp http://localhost:$PORT/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
@@ -154,7 +156,7 @@ The host polls `tasks/get` — status transitions from `working` to `completed`.
 | `Run the failing job` | See below |
 
 ```bash
-mcp http://localhost:8080/mcp \
+mcp http://localhost:$PORT/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
@@ -165,7 +167,7 @@ echo "TASK_ID=$TASK_ID"
 
 # Wait 2s, then check status
 sleep 2
-mcp http://localhost:8080/mcp \
+mcp http://localhost:$PORT/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
@@ -182,7 +184,7 @@ This tool *requires* task invocation. The job starts, then fails after 1 second 
 
 ```bash
 # Create the task
-mcp http://localhost:8080/mcp \
+mcp http://localhost:$PORT/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
@@ -193,7 +195,7 @@ echo "TASK_ID=$TASK_ID"
 
 # Poll status — should show "input_required" (task is waiting for your confirmation)
 sleep 1
-mcp http://localhost:8080/mcp \
+mcp http://localhost:$PORT/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
@@ -215,7 +217,7 @@ cd experimental/ext/tasks && go test -run TestTaskElicitE2E -v
 
 ```bash
 # Create the task
-mcp http://localhost:8080/mcp \
+mcp http://localhost:$PORT/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
@@ -226,7 +228,7 @@ echo "TASK_ID=$TASK_ID"
 
 # Poll status — should show "input_required" (task is waiting for LLM response)
 sleep 1
-mcp http://localhost:8080/mcp \
+mcp http://localhost:$PORT/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
@@ -248,7 +250,7 @@ cd experimental/ext/tasks && go test -run TestTaskSampleE2E -v
 
 ```bash
 # Start a long computation
-mcp http://localhost:8080/mcp \
+mcp http://localhost:$PORT/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
@@ -258,7 +260,7 @@ export TASK_ID=$(jq -r '.result.task.taskId' /tmp/mcp-body.json)
 echo "TASK_ID=$TASK_ID"
 
 # Cancel it
-mcp http://localhost:8080/mcp \
+mcp http://localhost:$PORT/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
@@ -274,7 +276,7 @@ Start a long computation, then cancel before it finishes. Status transitions to 
 | `List all tasks` | See below |
 
 ```bash
-mcp http://localhost:8080/mcp \
+mcp http://localhost:$PORT/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
@@ -297,7 +299,7 @@ Shows all tasks with their current status.
 
 ```bash
 # Create a task with short TTL (5 seconds)
-mcp http://localhost:8080/mcp \
+mcp http://localhost:$PORT/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
@@ -310,7 +312,7 @@ echo "TASK_ID=$TASK_ID"
 sleep 7
 
 # Poll — should be gone
-mcp http://localhost:8080/mcp \
+mcp http://localhost:$PORT/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
@@ -334,7 +336,7 @@ mcp http://localhost:8080/mcp \
 
 ```bash
 # Initialize session A
-curl -s -D /tmp/mcp-headers-a.txt http://localhost:8080/mcp \
+curl -s -D /tmp/mcp-headers-a.txt http://localhost:$PORT/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"session-a","version":"1.0"}}}' \
@@ -343,14 +345,14 @@ curl -s -D /tmp/mcp-headers-a.txt http://localhost:8080/mcp \
 export SESSION_A=$(grep -i mcp-session-id /tmp/mcp-headers-a.txt | awk '{print $2}' | tr -d '\r')
 echo "SESSION_A=$SESSION_A"
 
-curl -s http://localhost:8080/mcp \
+curl -s http://localhost:$PORT/mcp \
   -H "Mcp-Session-Id: $SESSION_A" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}'
 
 # Create a task in session A
-mcp http://localhost:8080/mcp \
+mcp http://localhost:$PORT/mcp \
   -H "Mcp-Session-Id: $SESSION_A" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
@@ -360,7 +362,7 @@ export TASK_ID=$(jq -r '.result.task.taskId' /tmp/mcp-body.json)
 echo "TASK_ID=$TASK_ID"
 
 # Initialize session B
-curl -s -D /tmp/mcp-headers-b.txt http://localhost:8080/mcp \
+curl -s -D /tmp/mcp-headers-b.txt http://localhost:$PORT/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"session-b","version":"1.0"}}}' \
@@ -369,14 +371,14 @@ curl -s -D /tmp/mcp-headers-b.txt http://localhost:8080/mcp \
 export SESSION_B=$(grep -i mcp-session-id /tmp/mcp-headers-b.txt | awk '{print $2}' | tr -d '\r')
 echo "SESSION_B=$SESSION_B"
 
-curl -s http://localhost:8080/mcp \
+curl -s http://localhost:$PORT/mcp \
   -H "Mcp-Session-Id: $SESSION_B" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}'
 
 # Try to access session A's task from session B
-mcp http://localhost:8080/mcp \
+mcp http://localhost:$PORT/mcp \
   -H "Mcp-Session-Id: $SESSION_B" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
@@ -413,7 +415,7 @@ Complete a task, then try to store another result (internal API — no curl equi
 
 ```bash
 # Start a 60-second computation
-mcp http://localhost:8080/mcp \
+mcp http://localhost:$PORT/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
@@ -423,7 +425,7 @@ export TASK_ID=$(jq -r '.result.task.taskId' /tmp/mcp-body.json)
 echo "TASK_ID=$TASK_ID"
 
 # Cancel it
-mcp http://localhost:8080/mcp \
+mcp http://localhost:$PORT/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
@@ -447,7 +449,7 @@ mcp http://localhost:8080/mcp \
 
 ```bash
 # Terminal 1: open GET SSE stream
-curl -N http://localhost:8080/mcp \
+curl -N http://localhost:$PORT/mcp \
   -H "Mcp-Session-Id: $SESSION_ID" \
   -H "Accept: text/event-stream"
 
