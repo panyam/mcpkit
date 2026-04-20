@@ -16,6 +16,11 @@ type ElicitationMeta struct {
 	// When set, the host can render a UI resource during input collection
 	// instead of falling back to the default schema-driven form.
 	UI *UIMetadata `json:"ui,omitempty"`
+
+	// RelatedTask identifies the task this request is associated with.
+	// Set automatically by TaskContext.TaskElicit() so the client can
+	// correlate side-channel requests with the originating task.
+	RelatedTask *RelatedTaskMeta `json:"io.modelcontextprotocol/related-task,omitempty"`
 }
 
 // ElicitationRequest is the params for an elicitation/create server-to-client request.

@@ -61,6 +61,7 @@ type ToolExecution struct {
 // TTL is required but nullable per spec: *int with null = unlimited.
 type TaskInfo struct {
 	TaskID        string     `json:"taskId"`
+	ParentTaskID  string     `json:"parentTaskId,omitempty"` // set for sub-tasks spawned by TaskContext.SpawnTool
 	Status        TaskStatus `json:"status"`
 	StatusMessage string     `json:"statusMessage,omitempty"`
 	CreatedAt     string     `json:"createdAt"`
