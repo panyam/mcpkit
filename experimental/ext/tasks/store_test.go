@@ -25,11 +25,11 @@ func TestStoreCreateAndGet(t *testing.T) {
 	s := NewInMemoryStore()
 
 	info := newTestInfo("t1", core.TaskWorking)
-	if err := s.Create(info); err != nil {
+	if err := s.Create(info, ""); err != nil {
 		t.Fatal(err)
 	}
 
-	got, ok := s.Get("t1")
+	got, ok := s.Get("t1", "")
 	if !ok {
 		t.Fatal("expected to find task t1")
 	}
@@ -41,17 +41,17 @@ func TestStoreCreateAndGet(t *testing.T) {
 func TestStoreCreateDuplicate(t *testing.T) {
 	s := NewInMemoryStore()
 	info := newTestInfo("t1", core.TaskWorking)
-	if err := s.Create(info); err != nil {
+	if err := s.Create(info, ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Create(info); err == nil {
+	if err := s.Create(info, ""); err == nil {
 		t.Error("expected error on duplicate create")
 	}
 }
 
 func TestStoreGetNotFound(t *testing.T) {
 	s := NewInMemoryStore()
-	_, ok := s.Get("nonexistent")
+	_, ok := s.Get("nonexistent", "")
 	if ok {
 		t.Error("expected not found")
 	}
@@ -59,9 +59,9 @@ func TestStoreGetNotFound(t *testing.T) {
 
 func TestStoreUpdate(t *testing.T) {
 	s := NewInMemoryStore()
-	s.Create(newTestInfo("t1", core.TaskWorking))
+	s.Create(newTestInfo("t1", core.TaskWorking), "")
 
-	err := s.Update("t1", func(info *core.TaskInfo) {
+	err := s.Update("t1", "", func(info *core.TaskInfo) {
 		info.Status = core.TaskCompleted
 		info.StatusMessage = "done"
 	})
@@ -69,7 +69,7 @@ func TestStoreUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, _ := s.Get("t1")
+	got, _ := s.Get("t1", "")
 	if got.Status != core.TaskCompleted {
 		t.Errorf("status = %q, want completed", got.Status)
 	}
@@ -80,7 +80,7 @@ func TestStoreUpdate(t *testing.T) {
 
 func TestStoreUpdateNotFound(t *testing.T) {
 	s := NewInMemoryStore()
-	err := s.Update("nonexistent", func(*core.TaskInfo) {})
+	err := s.Update("nonexistent", "", func(*core.TaskInfo) {})
 	if err == nil {
 		t.Error("expected error on update of nonexistent task")
 	}
@@ -88,14 +88,14 @@ func TestStoreUpdateNotFound(t *testing.T) {
 
 func TestStoreSetAndGetResult(t *testing.T) {
 	s := NewInMemoryStore()
-	s.Create(newTestInfo("t1", core.TaskWorking))
+	s.Create(newTestInfo("t1", core.TaskWorking), "")
 
 	result := core.TextResult("hello world")
-	if err := s.SetResult("t1", result); err != nil {
+	if err := s.SetResult("t1", "", result); err != nil {
 		t.Fatal(err)
 	}
 
-	got, ok := s.GetResult("t1")
+	got, ok := s.GetResult("t1", "")
 	if !ok {
 		t.Fatal("expected result to be present")
 	}
@@ -109,9 +109,9 @@ func TestStoreSetAndGetResult(t *testing.T) {
 
 func TestStoreGetResultNotReady(t *testing.T) {
 	s := NewInMemoryStore()
-	s.Create(newTestInfo("t1", core.TaskWorking))
+	s.Create(newTestInfo("t1", core.TaskWorking), "")
 
-	_, ok := s.GetResult("t1")
+	_, ok := s.GetResult("t1", "")
 	if ok {
 		t.Error("expected no result yet")
 	}
@@ -119,7 +119,7 @@ func TestStoreGetResultNotReady(t *testing.T) {
 
 func TestStoreWaitForResult(t *testing.T) {
 	s := NewInMemoryStore()
-	s.Create(newTestInfo("t1", core.TaskWorking))
+	s.Create(newTestInfo("t1", core.TaskWorking), "")
 
 	done := make(chan struct{})
 	var gotResult core.ToolResult
@@ -127,7 +127,7 @@ func TestStoreWaitForResult(t *testing.T) {
 	var gotErr error
 
 	go func() {
-		gotResult, gotInfo, gotErr = s.WaitForResult(context.Background(), "t1")
+		gotResult, gotInfo, gotErr = s.WaitForResult(context.Background(), "t1", "")
 		close(done)
 	}()
 
@@ -136,8 +136,8 @@ func TestStoreWaitForResult(t *testing.T) {
 
 	// Store result first, then transition to terminal (Update broadcasts
 	// to waiters, so the result must be available before wake-up).
-	s.SetResult("t1", core.TextResult("waited"))
-	s.Update("t1", func(info *core.TaskInfo) {
+	s.SetResult("t1", "", core.TextResult("waited"))
+	s.Update("t1", "", func(info *core.TaskInfo) {
 		info.Status = core.TaskCompleted
 	})
 
@@ -160,7 +160,7 @@ func TestStoreWaitForResult(t *testing.T) {
 
 func TestStoreWaitForResultNotFound(t *testing.T) {
 	s := NewInMemoryStore()
-	_, _, err := s.WaitForResult(context.Background(), "nonexistent")
+	_, _, err := s.WaitForResult(context.Background(), "nonexistent", "")
 	if err == nil {
 		t.Error("expected error for nonexistent task")
 	}
@@ -168,9 +168,9 @@ func TestStoreWaitForResultNotFound(t *testing.T) {
 
 func TestStoreCancel(t *testing.T) {
 	s := NewInMemoryStore()
-	s.Create(newTestInfo("t1", core.TaskWorking))
+	s.Create(newTestInfo("t1", core.TaskWorking), "")
 
-	info, err := s.Cancel("t1")
+	info, err := s.Cancel("t1", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +179,7 @@ func TestStoreCancel(t *testing.T) {
 	}
 
 	// Re-cancel should fail (already terminal).
-	_, err = s.Cancel("t1")
+	_, err = s.Cancel("t1", "")
 	if err == nil {
 		t.Error("expected error when cancelling already-terminal task")
 	}
@@ -187,7 +187,7 @@ func TestStoreCancel(t *testing.T) {
 
 func TestStoreCancelNotFound(t *testing.T) {
 	s := NewInMemoryStore()
-	_, err := s.Cancel("nonexistent")
+	_, err := s.Cancel("nonexistent", "")
 	if err == nil {
 		t.Error("expected error for nonexistent task")
 	}
@@ -195,18 +195,18 @@ func TestStoreCancelNotFound(t *testing.T) {
 
 func TestStoreCancelUnblocksWaiter(t *testing.T) {
 	s := NewInMemoryStore()
-	s.Create(newTestInfo("t1", core.TaskWorking))
+	s.Create(newTestInfo("t1", core.TaskWorking), "")
 
 	done := make(chan struct{})
 	var gotInfo core.TaskInfo
 
 	go func() {
-		_, gotInfo, _ = s.WaitForResult(context.Background(), "t1")
+		_, gotInfo, _ = s.WaitForResult(context.Background(), "t1", "")
 		close(done)
 	}()
 
 	time.Sleep(50 * time.Millisecond)
-	s.Cancel("t1")
+	s.Cancel("t1", "")
 
 	select {
 	case <-done:
@@ -221,13 +221,13 @@ func TestStoreCancelUnblocksWaiter(t *testing.T) {
 
 func TestStoreWaitForResultContextCancelled(t *testing.T) {
 	s := NewInMemoryStore()
-	s.Create(newTestInfo("t1", core.TaskWorking))
+	s.Create(newTestInfo("t1", core.TaskWorking), "")
 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	done := make(chan error, 1)
 	go func() {
-		_, _, err := s.WaitForResult(ctx, "t1")
+		_, _, err := s.WaitForResult(ctx, "t1", "")
 		done <- err
 	}()
 
@@ -246,16 +246,16 @@ func TestStoreWaitForResultContextCancelled(t *testing.T) {
 
 func TestStoreWaitForUpdateWakesOnUpdate(t *testing.T) {
 	s := NewInMemoryStore()
-	s.Create(newTestInfo("t1", core.TaskWorking))
+	s.Create(newTestInfo("t1", core.TaskWorking), "")
 
 	done := make(chan error, 1)
 	go func() {
-		done <- s.WaitForUpdate(context.Background(), "t1")
+		done <- s.WaitForUpdate(context.Background(), "t1", "")
 	}()
 
 	time.Sleep(50 * time.Millisecond)
 	// Any Update should wake the waiter — not just terminal.
-	s.Update("t1", func(info *core.TaskInfo) {
+	s.Update("t1", "", func(info *core.TaskInfo) {
 		info.StatusMessage = "progress 50%"
 	})
 
@@ -271,15 +271,15 @@ func TestStoreWaitForUpdateWakesOnUpdate(t *testing.T) {
 
 func TestStoreWaitForUpdateWakesOnSetResult(t *testing.T) {
 	s := NewInMemoryStore()
-	s.Create(newTestInfo("t1", core.TaskWorking))
+	s.Create(newTestInfo("t1", core.TaskWorking), "")
 
 	done := make(chan error, 1)
 	go func() {
-		done <- s.WaitForUpdate(context.Background(), "t1")
+		done <- s.WaitForUpdate(context.Background(), "t1", "")
 	}()
 
 	time.Sleep(50 * time.Millisecond)
-	s.SetResult("t1", core.TextResult("partial"))
+	s.SetResult("t1", "", core.TextResult("partial"))
 
 	select {
 	case err := <-done:
@@ -293,12 +293,12 @@ func TestStoreWaitForUpdateWakesOnSetResult(t *testing.T) {
 
 func TestStoreWaitForUpdateContextCancelled(t *testing.T) {
 	s := NewInMemoryStore()
-	s.Create(newTestInfo("t1", core.TaskWorking))
+	s.Create(newTestInfo("t1", core.TaskWorking), "")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		done <- s.WaitForUpdate(ctx, "t1")
+		done <- s.WaitForUpdate(ctx, "t1", "")
 	}()
 
 	time.Sleep(50 * time.Millisecond)
@@ -316,7 +316,7 @@ func TestStoreWaitForUpdateContextCancelled(t *testing.T) {
 
 func TestStoreWaitForUpdateNotFound(t *testing.T) {
 	s := NewInMemoryStore()
-	err := s.WaitForUpdate(context.Background(), "nonexistent")
+	err := s.WaitForUpdate(context.Background(), "nonexistent", "")
 	if err == nil {
 		t.Error("expected error for nonexistent task")
 	}
@@ -325,11 +325,11 @@ func TestStoreWaitForUpdateNotFound(t *testing.T) {
 func TestStoreListPagination(t *testing.T) {
 	s := NewInMemoryStore()
 	for i := 0; i < 5; i++ {
-		s.Create(newTestInfo("t"+string(rune('0'+i)), core.TaskWorking))
+		s.Create(newTestInfo("t"+string(rune('0'+i)), core.TaskWorking), "")
 	}
 
 	// First page: limit 3.
-	tasks, cursor := s.List("", 3)
+	tasks, cursor := s.List("", 3, "")
 	if len(tasks) != 3 {
 		t.Fatalf("page 1: got %d tasks, want 3", len(tasks))
 	}
@@ -338,7 +338,7 @@ func TestStoreListPagination(t *testing.T) {
 	}
 
 	// Second page from cursor.
-	tasks2, cursor2 := s.List(cursor, 3)
+	tasks2, cursor2 := s.List(cursor, 3, "")
 	if len(tasks2) != 2 {
 		t.Fatalf("page 2: got %d tasks, want 2", len(tasks2))
 	}
@@ -349,7 +349,7 @@ func TestStoreListPagination(t *testing.T) {
 
 func TestStoreListEmpty(t *testing.T) {
 	s := NewInMemoryStore()
-	tasks, cursor := s.List("", 10)
+	tasks, cursor := s.List("", 10, "")
 	if len(tasks) != 0 {
 		t.Errorf("expected 0 tasks, got %d", len(tasks))
 	}
@@ -368,18 +368,18 @@ func TestStoreConcurrentAccess(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			id := "t" + time.Now().Format("150405.000000000") + "-" + string(rune('A'+i%26))
-			s.Create(newTestInfo(id, core.TaskWorking))
-			s.Get(id)
-			s.Update(id, func(info *core.TaskInfo) {
+			s.Create(newTestInfo(id, core.TaskWorking), "")
+			s.Get(id, "")
+			s.Update(id, "", func(info *core.TaskInfo) {
 				info.Status = core.TaskCompleted
 			})
-			s.SetResult(id, core.TextResult("done"))
-			s.GetResult(id)
+			s.SetResult(id, "", core.TextResult("done"))
+			s.GetResult(id, "")
 		}(i)
 	}
 	wg.Wait()
 
-	tasks, _ := s.List("", 100)
+	tasks, _ := s.List("", 100, "")
 	if len(tasks) != n {
 		t.Errorf("got %d tasks, want %d", len(tasks), n)
 	}
@@ -394,10 +394,10 @@ func TestStoreTTLExpiry(t *testing.T) {
 	s := NewInMemoryStore()
 	info := newTestInfo("t1", core.TaskWorking)
 	info.TTL = core.IntPtr(100) // 100ms TTL
-	s.Create(info)
+	s.Create(info, "")
 
 	// Task should be accessible immediately.
-	_, ok := s.Get("t1")
+	_, ok := s.Get("t1", "")
 	if !ok {
 		t.Fatal("task should exist immediately after creation")
 	}
@@ -406,7 +406,7 @@ func TestStoreTTLExpiry(t *testing.T) {
 	time.Sleep(150 * time.Millisecond)
 
 	// Task should be gone.
-	_, ok = s.Get("t1")
+	_, ok = s.Get("t1", "")
 	if ok {
 		t.Error("task should have been removed after TTL expired")
 	}
@@ -420,18 +420,18 @@ func TestStoreTTLResetOnResult(t *testing.T) {
 	s := NewInMemoryStore()
 	info := newTestInfo("t1", core.TaskWorking)
 	info.TTL = core.IntPtr(200) // 200ms TTL
-	s.Create(info)
+	s.Create(info, "")
 
 	// Wait 100ms (half the TTL), then store result.
 	time.Sleep(100 * time.Millisecond)
-	s.SetResult("t1", core.TextResult("done"))
-	s.Update("t1", func(i *core.TaskInfo) { i.Status = core.TaskCompleted })
+	s.SetResult("t1", "", core.TextResult("done"))
+	s.Update("t1", "", func(i *core.TaskInfo) { i.Status = core.TaskCompleted })
 
 	// Wait another 150ms — past the original TTL but within the reset window.
 	time.Sleep(150 * time.Millisecond)
 
 	// Task should still be accessible (timer was reset on SetResult).
-	_, ok := s.Get("t1")
+	_, ok := s.Get("t1", "")
 	if !ok {
 		t.Error("task should still exist — TTL should have reset when result was stored")
 	}
@@ -439,7 +439,7 @@ func TestStoreTTLResetOnResult(t *testing.T) {
 	// Wait for the full reset TTL to expire.
 	time.Sleep(100 * time.Millisecond)
 
-	_, ok = s.Get("t1")
+	_, ok = s.Get("t1", "")
 	if ok {
 		t.Error("task should have been removed after reset TTL expired")
 	}
@@ -451,16 +451,16 @@ func TestStoreTTLResetOnCancel(t *testing.T) {
 	s := NewInMemoryStore()
 	info := newTestInfo("t1", core.TaskWorking)
 	info.TTL = core.IntPtr(200) // 200ms TTL
-	s.Create(info)
+	s.Create(info, "")
 
 	// Wait 100ms, then cancel.
 	time.Sleep(100 * time.Millisecond)
-	s.Cancel("t1")
+	s.Cancel("t1", "")
 
 	// Wait 150ms — past original TTL but within reset window.
 	time.Sleep(150 * time.Millisecond)
 
-	_, ok := s.Get("t1")
+	_, ok := s.Get("t1", "")
 	if !ok {
 		t.Error("cancelled task should still exist within reset TTL window")
 	}
@@ -472,11 +472,11 @@ func TestStoreTTLNullNoExpiry(t *testing.T) {
 	s := NewInMemoryStore()
 	info := newTestInfo("t1", core.TaskWorking)
 	info.TTL = nil // null = unlimited
-	s.Create(info)
+	s.Create(info, "")
 
 	time.Sleep(100 * time.Millisecond)
 
-	_, ok := s.Get("t1")
+	_, ok := s.Get("t1", "")
 	if !ok {
 		t.Error("task with nil TTL should never expire")
 	}
@@ -489,19 +489,19 @@ func TestStoreCleanup(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		info := newTestInfo("t"+string(rune('0'+i)), core.TaskWorking)
 		info.TTL = core.IntPtr(60000) // long TTL — won't expire during test
-		s.Create(info)
+		s.Create(info, "")
 	}
 
 	s.Cleanup()
 
 	for i := 0; i < 5; i++ {
-		_, ok := s.Get("t" + string(rune('0'+i)))
+		_, ok := s.Get("t" + string(rune('0'+i)), "")
 		if ok {
 			t.Errorf("task t%d should have been removed by Cleanup", i)
 		}
 	}
 
-	tasks, _ := s.List("", 100)
+	tasks, _ := s.List("", 100, "")
 	if len(tasks) != 0 {
 		t.Errorf("List should return empty after Cleanup, got %d", len(tasks))
 	}
@@ -514,7 +514,7 @@ func TestStoreCleanupStopsTimers(t *testing.T) {
 	s := NewInMemoryStore()
 	info := newTestInfo("t1", core.TaskWorking)
 	info.TTL = core.IntPtr(50) // very short TTL
-	s.Create(info)
+	s.Create(info, "")
 
 	// Cleanup before the timer fires.
 	s.Cleanup()
@@ -523,8 +523,122 @@ func TestStoreCleanupStopsTimers(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// No panic, no corruption. The store is empty and stable.
-	tasks, _ := s.List("", 100)
+	tasks, _ := s.List("", 100, "")
 	if len(tasks) != 0 {
 		t.Errorf("store should be empty after Cleanup, got %d", len(tasks))
+	}
+}
+
+// --- Session isolation tests (Phase 3) ---
+
+// TestStoreSessionIsolationGet verifies that a task created by session A
+// is not visible to session B via Get.
+func TestStoreSessionIsolationGet(t *testing.T) {
+	s := NewInMemoryStore()
+	s.Create(newTestInfo("t1", core.TaskWorking), "session-a")
+
+	// Session A can see it.
+	_, ok := s.Get("t1", "session-a")
+	if !ok {
+		t.Error("session A should see its own task")
+	}
+
+	// Session B cannot.
+	_, ok = s.Get("t1", "session-b")
+	if ok {
+		t.Error("session B should NOT see session A's task")
+	}
+
+	// Empty session can see everything (backward compat).
+	_, ok = s.Get("t1", "")
+	if !ok {
+		t.Error("empty session should see all tasks")
+	}
+}
+
+// TestStoreSessionIsolationUpdate verifies that session B cannot update
+// session A's task.
+func TestStoreSessionIsolationUpdate(t *testing.T) {
+	s := NewInMemoryStore()
+	s.Create(newTestInfo("t1", core.TaskWorking), "session-a")
+
+	err := s.Update("t1", "session-b", func(info *core.TaskInfo) {
+		info.StatusMessage = "hijacked"
+	})
+	if err == nil {
+		t.Error("session B should NOT be able to update session A's task")
+	}
+
+	// Session A can update.
+	err = s.Update("t1", "session-a", func(info *core.TaskInfo) {
+		info.StatusMessage = "legit"
+	})
+	if err != nil {
+		t.Errorf("session A should be able to update its own task: %v", err)
+	}
+}
+
+// TestStoreSessionIsolationCancel verifies that session B cannot cancel
+// session A's task.
+func TestStoreSessionIsolationCancel(t *testing.T) {
+	s := NewInMemoryStore()
+	s.Create(newTestInfo("t1", core.TaskWorking), "session-a")
+
+	_, err := s.Cancel("t1", "session-b")
+	if err == nil {
+		t.Error("session B should NOT be able to cancel session A's task")
+	}
+
+	_, err = s.Cancel("t1", "session-a")
+	if err != nil {
+		t.Errorf("session A should be able to cancel its own task: %v", err)
+	}
+}
+
+// TestStoreSessionIsolationList verifies that List only returns tasks
+// belonging to the caller's session.
+func TestStoreSessionIsolationList(t *testing.T) {
+	s := NewInMemoryStore()
+	s.Create(newTestInfo("t1", core.TaskWorking), "session-a")
+	s.Create(newTestInfo("t2", core.TaskWorking), "session-b")
+	s.Create(newTestInfo("t3", core.TaskWorking), "session-a")
+
+	// Session A sees only t1 and t3.
+	tasks, _ := s.List("", 50, "session-a")
+	if len(tasks) != 2 {
+		t.Fatalf("session A: got %d tasks, want 2", len(tasks))
+	}
+
+	// Session B sees only t2.
+	tasks, _ = s.List("", 50, "session-b")
+	if len(tasks) != 1 {
+		t.Fatalf("session B: got %d tasks, want 1", len(tasks))
+	}
+
+	// Empty session sees all.
+	tasks, _ = s.List("", 50, "")
+	if len(tasks) != 3 {
+		t.Fatalf("empty session: got %d tasks, want 3", len(tasks))
+	}
+}
+
+// TestStoreSessionEmptyAllowsAccess verifies that tasks created without
+// a session are accessible by any session (backward compat).
+func TestStoreSessionEmptyAllowsAccess(t *testing.T) {
+	s := NewInMemoryStore()
+	s.Create(newTestInfo("t1", core.TaskWorking), "") // no session
+
+	// Any session can see it.
+	_, ok := s.Get("t1", "any-session")
+	if !ok {
+		t.Error("task with empty session should be accessible by any session")
+	}
+
+	// Can also update.
+	err := s.Update("t1", "any-session", func(info *core.TaskInfo) {
+		info.StatusMessage = "updated"
+	})
+	if err != nil {
+		t.Errorf("should be able to update session-less task: %v", err)
 	}
 }

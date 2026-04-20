@@ -441,6 +441,9 @@ func (s *Server) dispatchWithOpts(d *Dispatcher, ctx context.Context, claims *co
 	// and access authenticated claims and client capabilities.
 	ctx = core.ContextWithSession(ctx, notify, request, &d.logLevel, &d.clientCaps, claims)
 
+	// Set the session ID so middleware and handlers can access it via ctx.SessionID().
+	core.SetSessionID(ctx, d.sessionID)
+
 	// Register a detach strategy for background goroutines (e.g., async tasks).
 	// The strategy replaces the POST-scoped requestFunc (which writes to the
 	// now-closed response stream) with one that uses the session's persistent

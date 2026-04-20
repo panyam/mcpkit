@@ -22,51 +22,61 @@ import (
 
 // TaskStore is the interface for task state persistence. Implementations
 // must be safe for concurrent use.
+//
+// All methods accept a sessionID parameter for session isolation.
+// Empty sessionID means no session binding (backward compatible).
+// When both the task and the caller have a sessionID, they must match.
 type TaskStore interface {
-	// Create persists a new task. Returns an error if the taskId already exists.
-	Create(info core.TaskInfo) error
+	// Create persists a new task bound to the given session.
+	Create(info core.TaskInfo, sessionID string) error
 
-	// Get returns a task by ID, or false if not found.
-	Get(taskID string) (core.TaskInfo, bool)
+	// Get returns a task by ID, or false if not found or session mismatch.
+	Get(taskID, sessionID string) (core.TaskInfo, bool)
 
 	// Update atomically modifies a task via the provided function.
-	// Returns an error if the task doesn't exist.
-	Update(taskID string, fn func(*core.TaskInfo)) error
+	// Returns an error if the task doesn't exist or session mismatch.
+	Update(taskID, sessionID string, fn func(*core.TaskInfo)) error
 
 	// SetResult stores the tool result for a completed task.
-	SetResult(taskID string, result core.ToolResult) error
+	SetResult(taskID, sessionID string, result core.ToolResult) error
 
 	// GetResult returns the stored tool result, or false if not yet available.
-	GetResult(taskID string) (core.ToolResult, bool)
+	GetResult(taskID, sessionID string) (core.ToolResult, bool)
 
 	// WaitForResult blocks until the task reaches a terminal state, then
-	// returns the result. Returns an error if the task doesn't exist.
-	// Respects context cancellation.
-	WaitForResult(ctx context.Context, taskID string) (core.ToolResult, core.TaskInfo, error)
+	// returns the result. Respects context cancellation.
+	WaitForResult(ctx context.Context, taskID, sessionID string) (core.ToolResult, core.TaskInfo, error)
 
-	// List returns tasks with cursor-based pagination. An empty cursor
-	// starts from the beginning.
-	List(cursor string, limit int) ([]core.TaskInfo, string)
+	// List returns tasks for the given session with cursor-based pagination.
+	List(cursor string, limit int, sessionID string) ([]core.TaskInfo, string)
 
-	// WaitForUpdate blocks until the task's state changes (status or result),
-	// or the context is cancelled. Used by the tasks/result long-poll loop.
-	WaitForUpdate(ctx context.Context, taskID string) error
+	// WaitForUpdate blocks until the task's state changes, or the context
+	// is cancelled. Used by the tasks/result long-poll loop.
+	WaitForUpdate(ctx context.Context, taskID, sessionID string) error
 
-	// Cancel transitions a non-terminal task to cancelled. Returns an error
-	// if the task is already terminal or doesn't exist.
-	Cancel(taskID string) (core.TaskInfo, error)
+	// Cancel transitions a non-terminal task to cancelled.
+	Cancel(taskID, sessionID string) (core.TaskInfo, error)
 
 	// Cleanup removes all tasks and stops any background timers.
-	// Used for graceful shutdown and testing.
 	Cleanup()
 }
 
 // taskEntry holds all state for a single task in the in-memory store.
 type taskEntry struct {
-	info    core.TaskInfo
-	result  json.RawMessage // stored tool result (nil until terminal)
-	waiters []chan struct{}  // channels to notify on status/result changes
-	timer   *time.Timer     // TTL cleanup timer; nil if TTL is null/unlimited
+	info      core.TaskInfo
+	result    json.RawMessage // stored tool result (nil until terminal)
+	waiters   []chan struct{}  // channels to notify on status/result changes
+	timer     *time.Timer     // TTL cleanup timer; nil if TTL is null/unlimited
+	sessionID string          // session that created this task; empty = no binding
+}
+
+// sessionAllowed checks if the caller's session can access this task.
+// Access is allowed if either side has no sessionID (backward compat).
+func (e *taskEntry) sessionAllowed(callerSession string) bool {
+	if callerSession == "" || e.sessionID == "" {
+		return true
+	}
+	return callerSession == e.sessionID
 }
 
 // notify wakes all waiters for this task entry.
@@ -95,13 +105,13 @@ func NewInMemoryStore() *InMemoryTaskStore {
 	}
 }
 
-func (s *InMemoryTaskStore) Create(info core.TaskInfo) error {
+func (s *InMemoryTaskStore) Create(info core.TaskInfo, sessionID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, exists := s.tasks[info.TaskID]; exists {
 		return fmt.Errorf("task %q already exists", info.TaskID)
 	}
-	entry := &taskEntry{info: info}
+	entry := &taskEntry{info: info, sessionID: sessionID}
 	// Schedule TTL cleanup if TTL is set and positive.
 	if info.TTL != nil && *info.TTL > 0 {
 		taskID := info.TaskID
@@ -114,20 +124,30 @@ func (s *InMemoryTaskStore) Create(info core.TaskInfo) error {
 	return nil
 }
 
-func (s *InMemoryTaskStore) Get(taskID string) (core.TaskInfo, bool) {
+// getEntry returns the task entry if it exists and the caller's session
+// is allowed. Must be called with at least s.mu.RLock held.
+func (s *InMemoryTaskStore) getEntry(taskID, sessionID string) (*taskEntry, bool) {
+	entry, ok := s.tasks[taskID]
+	if !ok || !entry.sessionAllowed(sessionID) {
+		return nil, false
+	}
+	return entry, true
+}
+
+func (s *InMemoryTaskStore) Get(taskID, sessionID string) (core.TaskInfo, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	entry, ok := s.tasks[taskID]
+	entry, ok := s.getEntry(taskID, sessionID)
 	if !ok {
 		return core.TaskInfo{}, false
 	}
 	return entry.info, true
 }
 
-func (s *InMemoryTaskStore) Update(taskID string, fn func(*core.TaskInfo)) error {
+func (s *InMemoryTaskStore) Update(taskID, sessionID string, fn func(*core.TaskInfo)) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	entry, ok := s.tasks[taskID]
+	entry, ok := s.getEntry(taskID, sessionID)
 	if !ok {
 		return fmt.Errorf("task %q not found", taskID)
 	}
@@ -136,28 +156,27 @@ func (s *InMemoryTaskStore) Update(taskID string, fn func(*core.TaskInfo)) error
 	return nil
 }
 
-func (s *InMemoryTaskStore) SetResult(taskID string, result core.ToolResult) error {
+func (s *InMemoryTaskStore) SetResult(taskID, sessionID string, result core.ToolResult) error {
 	raw, err := json.Marshal(result)
 	if err != nil {
 		return fmt.Errorf("marshal result: %w", err)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	entry, ok := s.tasks[taskID]
+	entry, ok := s.getEntry(taskID, sessionID)
 	if !ok {
 		return fmt.Errorf("task %q not found", taskID)
 	}
 	entry.result = raw
-	// Reset TTL timer — task gets a fresh TTL window from now.
 	s.resetTimer(entry)
 	entry.notify()
 	return nil
 }
 
-func (s *InMemoryTaskStore) GetResult(taskID string) (core.ToolResult, bool) {
+func (s *InMemoryTaskStore) GetResult(taskID, sessionID string) (core.ToolResult, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	entry, ok := s.tasks[taskID]
+	entry, ok := s.getEntry(taskID, sessionID)
 	if !ok || entry.result == nil {
 		return core.ToolResult{}, false
 	}
@@ -166,14 +185,10 @@ func (s *InMemoryTaskStore) GetResult(taskID string) (core.ToolResult, bool) {
 	return result, true
 }
 
-// WaitForResult blocks until the task reaches a terminal state and a result
-// is available, or the context is cancelled. Returns context.Canceled if
-// the context is done before the task completes.
-func (s *InMemoryTaskStore) WaitForResult(ctx context.Context, taskID string) (core.ToolResult, core.TaskInfo, error) {
+func (s *InMemoryTaskStore) WaitForResult(ctx context.Context, taskID, sessionID string) (core.ToolResult, core.TaskInfo, error) {
 	for {
-		// Check current state under lock.
 		s.mu.Lock()
-		entry, ok := s.tasks[taskID]
+		entry, ok := s.getEntry(taskID, sessionID)
 		if !ok {
 			s.mu.Unlock()
 			return core.ToolResult{}, core.TaskInfo{}, fmt.Errorf("task %q not found", taskID)
@@ -188,15 +203,12 @@ func (s *InMemoryTaskStore) WaitForResult(ctx context.Context, taskID string) (c
 			return result, info, nil
 		}
 
-		// Not terminal — register a waiter channel and wait.
 		ch := make(chan struct{}, 1)
 		entry.waiters = append(entry.waiters, ch)
 		s.mu.Unlock()
 
-		// Wait for either an update or context cancellation.
 		select {
 		case <-ch:
-			// Task was updated — loop back to check state.
 			continue
 		case <-ctx.Done():
 			return core.ToolResult{}, core.TaskInfo{}, ctx.Err()
@@ -204,7 +216,7 @@ func (s *InMemoryTaskStore) WaitForResult(ctx context.Context, taskID string) (c
 	}
 }
 
-func (s *InMemoryTaskStore) List(cursor string, limit int) ([]core.TaskInfo, string) {
+func (s *InMemoryTaskStore) List(cursor string, limit int, sessionID string) ([]core.TaskInfo, string) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -212,7 +224,6 @@ func (s *InMemoryTaskStore) List(cursor string, limit int) ([]core.TaskInfo, str
 		limit = 50
 	}
 
-	// Find starting index from cursor (cursor is a task ID).
 	start := 0
 	if cursor != "" {
 		for i, id := range s.order {
@@ -227,7 +238,9 @@ func (s *InMemoryTaskStore) List(cursor string, limit int) ([]core.TaskInfo, str
 	var nextCursor string
 	for i := start; i < len(s.order) && len(tasks) < limit; i++ {
 		if entry, ok := s.tasks[s.order[i]]; ok {
-			tasks = append(tasks, entry.info)
+			if entry.sessionAllowed(sessionID) {
+				tasks = append(tasks, entry.info)
+			}
 		}
 	}
 	if start+limit < len(s.order) && len(tasks) == limit {
@@ -237,12 +250,9 @@ func (s *InMemoryTaskStore) List(cursor string, limit int) ([]core.TaskInfo, str
 	return tasks, nextCursor
 }
 
-// WaitForUpdate blocks until the task's state changes or the context is cancelled.
-// Returns nil on update, context error on cancellation, or an error if the task
-// doesn't exist.
-func (s *InMemoryTaskStore) WaitForUpdate(ctx context.Context, taskID string) error {
+func (s *InMemoryTaskStore) WaitForUpdate(ctx context.Context, taskID, sessionID string) error {
 	s.mu.Lock()
-	entry, ok := s.tasks[taskID]
+	entry, ok := s.getEntry(taskID, sessionID)
 	if !ok {
 		s.mu.Unlock()
 		return fmt.Errorf("task %q not found", taskID)
@@ -262,10 +272,10 @@ func (s *InMemoryTaskStore) WaitForUpdate(ctx context.Context, taskID string) er
 
 var errTaskTerminal = errors.New("task is already in a terminal state")
 
-func (s *InMemoryTaskStore) Cancel(taskID string) (core.TaskInfo, error) {
+func (s *InMemoryTaskStore) Cancel(taskID, sessionID string) (core.TaskInfo, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	entry, ok := s.tasks[taskID]
+	entry, ok := s.getEntry(taskID, sessionID)
 	if !ok {
 		return core.TaskInfo{}, fmt.Errorf("task %q not found", taskID)
 	}
@@ -274,7 +284,6 @@ func (s *InMemoryTaskStore) Cancel(taskID string) (core.TaskInfo, error) {
 	}
 	entry.info.Status = core.TaskCancelled
 	entry.info.StatusMessage = "task was cancelled"
-	// Store a cancellation result so tasks/result can return it.
 	if entry.result == nil {
 		cancelResult := core.ToolResult{
 			Content: []core.Content{{Type: "text", Text: "task was cancelled"}},
@@ -283,7 +292,6 @@ func (s *InMemoryTaskStore) Cancel(taskID string) (core.TaskInfo, error) {
 		raw, _ := json.Marshal(cancelResult)
 		entry.result = raw
 	}
-	// Reset TTL timer — cancelled task gets a fresh TTL window for cleanup.
 	s.resetTimer(entry)
 	entry.notify()
 	return entry.info, nil

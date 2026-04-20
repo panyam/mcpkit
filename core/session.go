@@ -21,6 +21,7 @@ type sessionCtx struct {
 	logLevel   *atomic.Pointer[LogLevel] // nil pointer in atomic = logging disabled
 	clientCaps *ClientCapabilities       // parsed from initialize; nil before handshake
 	claims     *Claims                   // nil when no auth or validator doesn't provide claims
+	sessionID  string                    // transport-assigned session ID; empty for stateless/stdio
 
 	// sseRetry emits a raw SSE "retry:" hint on the session's stream.
 	// Non-SSE transports (stdio, in-process, Streamable HTTP JSON path) leave
@@ -57,6 +58,25 @@ func ContextWithSession(ctx context.Context, notify NotifyFunc, request RequestF
 		clientCaps: clientCaps,
 		claims:     claims,
 	})
+}
+
+// SetSessionID sets the transport-assigned session ID on the session context.
+// Called by the server dispatch layer after session creation.
+// No-op if no session context is present.
+func SetSessionID(ctx context.Context, id string) {
+	if sc := sessionFromContext(ctx); sc != nil {
+		sc.sessionID = id
+	}
+}
+
+// GetSessionID returns the session ID from a raw context.Context.
+// For use in middleware that doesn't have a typed BaseContext.
+// Returns empty string if no session context is present.
+func GetSessionID(ctx context.Context) string {
+	if sc := sessionFromContext(ctx); sc != nil {
+		return sc.sessionID
+	}
+	return ""
 }
 
 // sessionFromContext retrieves the session context, or nil if absent.
