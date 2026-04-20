@@ -864,3 +864,177 @@ func TestGetTaskContextAvailableForAsync(t *testing.T) {
 		t.Fatal("timed out waiting for tool handler")
 	}
 }
+
+// TestTaskInputRequiredTransition verifies that a tool handler calling
+// TaskContext methods transitions the task through input_required and
+// back to working. We simulate this by having the tool handler manually
+// update the status via the TaskContext's store access.
+func TestTaskInputRequiredTransition(t *testing.T) {
+	srv := server.NewServer(core.ServerInfo{Name: "input-req-test", Version: "0.0.1"})
+
+	// Channel to coordinate: tool signals when it's in input_required,
+	// test signals when it's done observing.
+	inInputRequired := make(chan struct{})
+	observed := make(chan struct{})
+
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "needs-input",
+			Description: "Transitions through input_required",
+			InputSchema: map[string]any{"type": "object"},
+			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			tc := GetTaskContext(ctx)
+			if tc == nil {
+				return core.TextResult("no task context"), nil
+			}
+			// Simulate what TaskElicit does: transition to input_required.
+			tc.store.Update(tc.taskID, func(info *core.TaskInfo) {
+				info.Status = core.TaskInputRequired
+			})
+			// Signal that we're in input_required.
+			close(inInputRequired)
+			// Wait for the test to observe it.
+			<-observed
+			// Transition back to working (like TaskElicit does after response).
+			tc.store.Update(tc.taskID, func(info *core.TaskInfo) {
+				info.Status = core.TaskWorking
+			})
+			return core.TextResult("done"), nil
+		},
+	)
+	Register(Config{Server: srv})
+	c := connectClient(t, srv)
+
+	created, err := ToolCallAsTask(c, "needs-input", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for the tool to enter input_required.
+	select {
+	case <-inInputRequired:
+	case <-time.After(2 * time.Second):
+		t.Fatal("tool did not enter input_required")
+	}
+
+	// Poll tasks/get — should see input_required.
+	got, err := GetTask(c, created.Task.TaskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != core.TaskInputRequired {
+		t.Errorf("status = %q, want input_required", got.Status)
+	}
+
+	// Let the tool continue.
+	close(observed)
+
+	// Wait for completion.
+	for i := 0; i < 20; i++ {
+		got, _ = GetTask(c, created.Task.TaskID)
+		if got.Status.IsTerminal() {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if got.Status != core.TaskCompleted {
+		t.Errorf("final status = %q, want completed", got.Status)
+	}
+}
+
+// TestTaskResultConcurrentCancel verifies that tasks/result returns
+// correctly when the task is cancelled while the client is waiting.
+func TestTaskResultConcurrentCancel(t *testing.T) {
+	srv, _ := newTaskServer(t) // slow tool blocks on channel
+	c := connectClient(t, srv)
+
+	created, err := ToolCallAsTask(c, "slow", map[string]any{"data": "x"}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Start tasks/result in a goroutine — it will block.
+	type resultOut struct {
+		result *core.ToolResult
+		taskID string
+		err    error
+	}
+	ch := make(chan resultOut, 1)
+	go func() {
+		r, tid, err := GetTaskPayload(c, created.Task.TaskID)
+		ch <- resultOut{r, tid, err}
+	}()
+
+	// Give tasks/result time to start blocking.
+	time.Sleep(100 * time.Millisecond)
+
+	// Cancel the task — should unblock tasks/result.
+	_, err = CancelTask(c, created.Task.TaskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case out := <-ch:
+		if out.err != nil {
+			t.Fatalf("tasks/result should return result, not error: %v", out.err)
+		}
+		if !out.result.IsError {
+			t.Error("expected IsError=true for cancelled task result")
+		}
+		if out.taskID != created.Task.TaskID {
+			t.Errorf("relatedTaskId = %q, want %q", out.taskID, created.Task.TaskID)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("tasks/result did not return after cancel")
+	}
+}
+
+// TestQueueCleanupOnCancel verifies that cancelling a task via the handler
+// drains its message queue.
+func TestQueueCleanupOnCancel(t *testing.T) {
+	store := NewInMemoryStore()
+	queue := NewInMemoryMessageQueue()
+
+	srv := server.NewServer(core.ServerInfo{Name: "queue-cleanup-test", Version: "0.0.1"})
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "slow",
+			Description: "Blocks forever",
+			InputSchema: map[string]any{"type": "object"},
+			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			select {} // block forever
+		},
+	)
+	Register(Config{Server: srv, Store: store, MessageQueue: queue})
+	c := connectClient(t, srv)
+
+	created, err := ToolCallAsTask(c, "slow", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Manually enqueue some messages for this task.
+	queue.Enqueue(created.Task.TaskID, QueuedMessage{
+		Type: QueuedMessageRequest, Message: []byte(`{"id":1}`),
+	}, 0)
+	queue.Enqueue(created.Task.TaskID, QueuedMessage{
+		Type: QueuedMessageNotification, Message: []byte(`{"method":"test"}`),
+	}, 0)
+
+	// Cancel via client — handler should drain the queue.
+	_, err = CancelTask(c, created.Task.TaskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Queue should be empty.
+	msgs := queue.DequeueAll(created.Task.TaskID)
+	if len(msgs) != 0 {
+		t.Errorf("queue should be empty after cancel, got %d messages", len(msgs))
+	}
+}
