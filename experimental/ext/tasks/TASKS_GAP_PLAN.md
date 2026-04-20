@@ -70,20 +70,29 @@ Key TS files:
   - All outbound requests/notifications from a task context get `_meta["io.modelcontextprotocol/related-task"]` injected
   - Ref: `taskManager.ts:478-520, 556-584`
 
-- [ ] **1h. `SendOnResponseStream` transport support** (mcpkit server/)
-  - Add `MethodContext.SendOnResponseStream(msg)` so the tasks/result handler can write
-    intermediate SSE events (elicitation/sampling requests) on the POST response
-  - The SSE response writer already exists (used for notifications during tool calls)
-  - New: expose it to method handlers for streaming responses
-  - Response routing: client responses to task-related requests must be routed back
-    to the task's message queue instead of normal dispatch
-  - Files: `server/streamable_transport.go`, `server/dispatcher.go`
+- [ ] **1h. `core.DetachForBackground(ctx)` — background-safe context**
+  - **Problem found:** The background goroutine's context carries a `requestFunc` 
+    from the `tools/call` POST response, which is already closed by the time 
+    TaskElicit/TaskSample runs.
+  - **Solution:** `core.DetachForBackground(ctx)` — a single function that returns
+    a context suitable for background goroutines. The server registers a strategy
+    that replaces the dead POST requestFunc with the session-level persistent push.
+  - **Implementation:**
+    1. `core/background.go`: `DetachForBackground(ctx)`, `SetDetachStrategy(ctx, fn)`
+       Default: `context.WithoutCancel(ctx)`. With strategy: also replaces requestFunc.
+    2. `server/dispatch.go`: In `dispatchWithOpts`, set detach strategy that uses
+       `d.getPushRequest()` + `d.makeRequestFunc()` for the replacement requestFunc.
+    3. `experimental/ext/tasks/tasks.go`: Replace `context.WithoutCancel(ctx)` with
+       `core.DetachForBackground(ctx)`.
+  - **No transport changes needed.** No internal types leak.
+  - **Aligns with #281** (sub-tasks): `SpawnTool` will use the same function.
+  - Files: `core/background.go` (NEW), `server/dispatch.go`, `tasks/tasks.go`
 
-- [ ] **1i. Queue-based delivery in tasks/result loop**
-  - Replace the TODO in the long-poll loop with actual delivery:
-    dequeue → SendOnResponseStream → route response back to resolver
-  - Wire TaskSession to enqueue requests instead of calling ctx.Elicit() directly
-    (or support both modes)
+- [ ] **1i. Queue-based delivery in tasks/result loop** (future, after 1h works)
+  - Currently direct mode (TaskElicit → ctx.Elicit → GET SSE) works once 1h is fixed
+  - Queue-based delivery would route elicitation through the tasks/result POST SSE 
+    response instead — requires the tasks/result handler to write intermediate events
+  - This is a separate optimization, not required for basic functionality
 
 - [ ] **1j. Update example** — add `confirm_delete` (elicitation) and `write_haiku` (sampling) tools
   - Mirror TS SDK's `simpleTaskInteractive.ts`

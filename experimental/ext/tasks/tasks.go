@@ -180,7 +180,7 @@ func taskMiddleware(reg *server.Registry, store TaskStore, cfg Config) server.Mi
 				}
 			}()
 
-			bgCtx := context.WithoutCancel(ctx)
+			bgCtx := core.DetachForBackground(ctx)
 			// Inject TaskContext so tool handlers can call TaskElicit/TaskSample.
 			// The ToolContext is constructed downstream by dispatch — we inject
 			// into the raw context here, and GetTaskContext(ctx) retrieves it.
