@@ -1,0 +1,10 @@
+{
+  "name": "@mcpkit/example-tasks-ts-reference",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@modelcontextprotocol/server": "latest",
+    "@modelcontextprotocol/node": "latest",
+    "@cfworker/json-schema": "^4.1.1"
+  }
+}

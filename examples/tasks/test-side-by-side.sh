@@ -3,17 +3,14 @@
 # Compares wire format and behavior of both implementations.
 #
 # Usage:
-#   ./test-side-by-side.sh                              # default TS SDK path
-#   ./test-side-by-side.sh ~/my/typescript-sdk           # custom TS SDK path
+#   ./test-side-by-side.sh
 #
 # Prerequisites:
 #   - Go server: this directory (examples/tasks)
-#   - TS server: typescript-sdk/examples/server/dist/simpleTaskInteractive.mjs
-#     (run: cd typescript-sdk && pnpm install && pnpm build:all)
+#   - TS server: npm install in this directory (first time only)
 
 set -e
 
-TS_SDK_ROOT="${1:-$HOME/projects/typescript-sdk}"
 GO_PORT=8090
 TS_PORT=8091
 ACCEPT="Accept: application/json, text/event-stream"
@@ -29,10 +26,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if [ ! -f "$TS_SDK_ROOT/examples/server/dist/simpleTaskInteractive.mjs" ]; then
-  echo "ERROR: TS SDK not found at $TS_SDK_ROOT"
-  echo "Build it first: cd $TS_SDK_ROOT && pnpm install && pnpm build:all"
-  exit 1
+if [ ! -d "$SCRIPT_DIR/node_modules/@modelcontextprotocol" ]; then
+  echo "Installing TS SDK dependencies..."
+  cd "$SCRIPT_DIR" && npm install
 fi
 
 # Helper: extract JSON from SSE or plain response
@@ -56,7 +52,7 @@ cd "$SCRIPT_DIR"
 go run . -addr ":$GO_PORT" 2>&1 &
 CLEANUP_PIDS+=($!)
 
-PORT=$TS_PORT node "$TS_SDK_ROOT/examples/server/dist/simpleTaskInteractive.mjs" 2>&1 &
+PORT=$TS_PORT node "$SCRIPT_DIR/ts-reference-server.mjs" 2>&1 &
 CLEANUP_PIDS+=($!)
 
 sleep 2
@@ -104,22 +100,39 @@ parse_response "$TS_TL" | python3 -m json.tool 2>/dev/null || echo "$TS_TL"
 echo ""
 
 echo "=========================================="
-echo "  Stage 4: Create task (tools/call + task hint)"
+echo "  Stage 4: greet (sync, no task hint)"
 echo "=========================================="
 echo ""
 
-echo "--- Go: slow_compute ---"
+echo "--- Go ---"
+GO_G=$(curl -s "http://localhost:$GO_PORT/mcp" -H "$CT" -H "$ACCEPT" -H "Mcp-Session-Id: $GO_SID" \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"greet","arguments":{"name":"World"}}}')
+parse_response "$GO_G" | python3 -m json.tool 2>/dev/null || echo "$GO_G"
+echo ""
+
+echo "--- TS ---"
+TS_G=$(curl -s "http://localhost:$TS_PORT/mcp" -H "$CT" -H "$ACCEPT" -H "Mcp-Session-Id: $TS_SID" \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"greet","arguments":{"name":"World"}}}')
+parse_response "$TS_G" | python3 -m json.tool 2>/dev/null || echo "$TS_G"
+echo ""
+
+echo "=========================================="
+echo "  Stage 5: slow_compute (async, task hint)"
+echo "=========================================="
+echo ""
+
+echo "--- Go ---"
 GO_CT_RAW=$(curl -s "http://localhost:$GO_PORT/mcp" -H "$CT" -H "$ACCEPT" -H "Mcp-Session-Id: $GO_SID" \
-  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":3,"label":"pi"},"task":{}}}')
+  -d '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":3,"label":"pi"},"task":{}}}')
 GO_CT=$(parse_response "$GO_CT_RAW")
 echo "$GO_CT" | python3 -m json.tool 2>/dev/null || echo "$GO_CT"
 GO_TID=$(echo "$GO_CT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('result',{}).get('task',{}).get('taskId','MISSING'))" 2>/dev/null || echo "PARSE_FAILED")
 echo "taskId: $GO_TID"
 echo ""
 
-echo "--- TS: confirm_delete ---"
+echo "--- TS ---"
 TS_CT_RAW=$(curl -s "http://localhost:$TS_PORT/mcp" -H "$CT" -H "$ACCEPT" -H "Mcp-Session-Id: $TS_SID" \
-  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"confirm_delete","arguments":{"filename":"test.txt"},"task":{}}}')
+  -d '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":3,"label":"pi"},"task":{}}}')
 TS_CT=$(parse_response "$TS_CT_RAW")
 echo "$TS_CT" | python3 -m json.tool 2>/dev/null || echo "$TS_CT"
 TS_TID=$(echo "$TS_CT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('result',{}).get('task',{}).get('taskId','MISSING'))" 2>/dev/null || echo "PARSE_FAILED")
@@ -127,77 +140,97 @@ echo "taskId: $TS_TID"
 echo ""
 
 echo "=========================================="
-echo "  Stage 5: tasks/get (poll status)"
+echo "  Stage 6: tasks/get (poll status)"
 echo "=========================================="
 echo ""
 sleep 1
 
 echo "--- Go ---"
 GO_G_RAW=$(curl -s "http://localhost:$GO_PORT/mcp" -H "$CT" -H "$ACCEPT" -H "Mcp-Session-Id: $GO_SID" \
-  -d "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$GO_TID\"}}")
+  -d "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$GO_TID\"}}")
 parse_response "$GO_G_RAW" | python3 -m json.tool 2>/dev/null || echo "$GO_G_RAW"
 echo ""
 
 echo "--- TS ---"
 TS_G_RAW=$(curl -s "http://localhost:$TS_PORT/mcp" -H "$CT" -H "$ACCEPT" -H "Mcp-Session-Id: $TS_SID" \
-  -d "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TS_TID\"}}")
+  -d "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TS_TID\"}}")
 parse_response "$TS_G_RAW" | python3 -m json.tool 2>/dev/null || echo "$TS_G_RAW"
 echo ""
 
 echo "=========================================="
-echo "  Stage 6: tasks/list"
+echo "  Stage 7: tasks/list"
 echo "=========================================="
 echo ""
 
 echo "--- Go ---"
 GO_L_RAW=$(curl -s "http://localhost:$GO_PORT/mcp" -H "$CT" -H "$ACCEPT" -H "Mcp-Session-Id: $GO_SID" \
-  -d '{"jsonrpc":"2.0","id":5,"method":"tasks/list","params":{}}')
+  -d '{"jsonrpc":"2.0","id":6,"method":"tasks/list","params":{}}')
 parse_response "$GO_L_RAW" | python3 -m json.tool 2>/dev/null || echo "$GO_L_RAW"
 echo ""
 
 echo "--- TS ---"
 TS_L_RAW=$(curl -s "http://localhost:$TS_PORT/mcp" -H "$CT" -H "$ACCEPT" -H "Mcp-Session-Id: $TS_SID" \
-  -d '{"jsonrpc":"2.0","id":5,"method":"tasks/list","params":{}}')
+  -d '{"jsonrpc":"2.0","id":6,"method":"tasks/list","params":{}}')
 parse_response "$TS_L_RAW" | python3 -m json.tool 2>/dev/null || echo "$TS_L_RAW"
-echo "(TS simpleTaskInteractive does not register tasks/list — handled by TaskManager in production)"
 echo ""
 
 echo "=========================================="
-echo "  Stage 7: tasks/result (Go — waits for completion)"
+echo "  Stage 8: tasks/result (wait for completion)"
 echo "=========================================="
 echo ""
 sleep 3
 
 echo "--- Go ---"
 GO_R_RAW=$(curl -s "http://localhost:$GO_PORT/mcp" -H "$CT" -H "$ACCEPT" -H "Mcp-Session-Id: $GO_SID" \
-  -d "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tasks/result\",\"params\":{\"taskId\":\"$GO_TID\"}}")
+  -d "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tasks/result\",\"params\":{\"taskId\":\"$GO_TID\"}}")
 parse_response "$GO_R_RAW" | python3 -m json.tool 2>/dev/null || echo "$GO_R_RAW"
 echo ""
 
+echo "--- TS ---"
+TS_R_RAW=$(curl -s "http://localhost:$TS_PORT/mcp" -H "$CT" -H "$ACCEPT" -H "Mcp-Session-Id: $TS_SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tasks/result\",\"params\":{\"taskId\":\"$TS_TID\"}}")
+parse_response "$TS_R_RAW" | python3 -m json.tool 2>/dev/null || echo "$TS_R_RAW"
+echo ""
+
 echo "=========================================="
-echo "  Stage 8: tasks/cancel (TS)"
+echo "  Stage 9: tasks/cancel"
 echo "=========================================="
 echo ""
 
-echo "--- TS ---"
+# Create new tasks to cancel
+GO_CAN_RAW=$(curl -s "http://localhost:$GO_PORT/mcp" -H "$CT" -H "$ACCEPT" -H "Mcp-Session-Id: $GO_SID" \
+  -d '{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":30,"label":"cancel-me"},"task":{}}}')
+GO_CAN_TID=$(parse_response "$GO_CAN_RAW" | python3 -c "import sys,json; print(json.load(sys.stdin).get('result',{}).get('task',{}).get('taskId',''))" 2>/dev/null)
+
+TS_CAN_RAW=$(curl -s "http://localhost:$TS_PORT/mcp" -H "$CT" -H "$ACCEPT" -H "Mcp-Session-Id: $TS_SID" \
+  -d '{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":30,"label":"cancel-me"},"task":{}}}')
+TS_CAN_TID=$(parse_response "$TS_CAN_RAW" | python3 -c "import sys,json; print(json.load(sys.stdin).get('result',{}).get('task',{}).get('taskId',''))" 2>/dev/null)
+
+echo "--- Go cancel ---"
+GO_C_RAW=$(curl -s "http://localhost:$GO_PORT/mcp" -H "$CT" -H "$ACCEPT" -H "Mcp-Session-Id: $GO_SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tasks/cancel\",\"params\":{\"taskId\":\"$GO_CAN_TID\"}}")
+parse_response "$GO_C_RAW" | python3 -m json.tool 2>/dev/null || echo "$GO_C_RAW"
+echo ""
+
+echo "--- TS cancel ---"
 TS_C_RAW=$(curl -s "http://localhost:$TS_PORT/mcp" -H "$CT" -H "$ACCEPT" -H "Mcp-Session-Id: $TS_SID" \
-  -d "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tasks/cancel\",\"params\":{\"taskId\":\"$TS_TID\"}}")
+  -d "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tasks/cancel\",\"params\":{\"taskId\":\"$TS_CAN_TID\"}}")
 parse_response "$TS_C_RAW" | python3 -m json.tool 2>/dev/null || echo "$TS_C_RAW"
-echo "(TS simpleTaskInteractive does not register tasks/cancel — handled by TaskManager in production)"
 echo ""
 
 echo "=========================================="
 echo "  Wire Format Comparison Summary"
 echo "=========================================="
 echo ""
-echo "CreateTaskResult:  Both nest under 'task' key ✓"
-echo "tasks/get:         Both flat (no wrapper) ✓"
-echo "tasks/result:      Go includes _meta[related-task] ✓"
-echo "tasks/list:        Go supports, TS example doesn't register it"
-echo "tasks/cancel:      Go supports, TS example doesn't register it"
+echo "greet (sync):      Both return {content: [{type:'text', text:'Hello, World!'}]}"
+echo "CreateTaskResult:  Both nest under 'task' key"
+echo "tasks/get:         Both flat (no wrapper)"
+echo "tasks/list:        Both return {tasks: [...]}"
+echo "tasks/result:      Both return ToolResult with _meta[related-task]"
+echo "tasks/cancel:      Both return flat cancelled task"
 echo ""
-echo "Differences:"
-echo "  - TTL: Go defaults to 300000ms, TS defaults to null (unlimited)"
-echo "  - taskId format: Go='task-<hex>', TS='<uuid-no-dashes>'"
-echo "  - createdAt: Go='2006-01-02T15:04:05Z', TS includes ms"
+echo "Expected differences:"
+echo "  - TTL: Go=300000ms, TS=null (unlimited)"
+echo "  - taskId format: Go='task-<hex>', TS='<uuid>'"
+echo "  - Timestamps: Go=seconds, TS=milliseconds"
 echo ""
