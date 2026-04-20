@@ -2,6 +2,15 @@
 
 End-to-end example demonstrating all three MCP primitives generated from proto annotations.
 
+## MCPKit Features Used
+
+| Category | Feature |
+|----------|---------|
+| Core | `core.ToolContext`, `core.ResourceContext`, `core.PromptContext`, `core.CompletionRef` |
+| Experimental | `experimental/ext/protogen` — `protoc-gen-go-mcp` code generator |
+| MCP primitives | Tools, Resources (templates), Prompts, Completions, Sampling, Elicitation |
+| Proto annotations | `mcp_tool`, `mcp_resource`, `mcp_prompt`, `mcp_service`, `mcp_sample`, `mcp_elicit` |
+
 ## What it shows
 
 | Proto annotation | MCP primitive | Generated names |
@@ -63,6 +72,16 @@ Or if you've built the binary:
   }
 }
 ```
+
+## Screenshots
+
+### Tools, resources, and prompts generated from proto annotations
+
+![BookService Tools](screenshots/bookservice-tools.png)
+
+### Search results for "Go programming"
+
+![Search Results](screenshots/search-results.png)
 
 ## Add to Claude Code
 

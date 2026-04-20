@@ -25,6 +25,10 @@ type ToolDef struct {
 	// Per MCP spec: enables clients to validate and process tool output programmatically.
 	OutputSchema any `json:"outputSchema,omitempty"`
 
+	// Execution holds task-related execution metadata.
+	// Per MCP spec: declares whether this tool supports async task execution.
+	Execution *ToolExecution `json:"execution,omitempty"`
+
 	// Annotations holds optional metadata for this tool.
 	// Convention: {"experimental": true} marks experimental tools.
 	Annotations map[string]any `json:"annotations,omitempty"`
@@ -99,11 +103,21 @@ func (r *ToolResult) UnmarshalJSON(data []byte) error {
 	return decodeContentSlice(aux.Content, &r.Content)
 }
 
+// RelatedTaskMeta identifies a task associated with a result. Per MCP spec,
+// tasks/result responses MUST include this in _meta["io.modelcontextprotocol/related-task"].
+type RelatedTaskMeta struct {
+	TaskID string `json:"taskId"`
+}
+
 // ToolResultMeta carries optional metadata on a tool result.
 type ToolResultMeta struct {
 	// NextCursor is a pagination cursor for fetching the next page.
 	// Empty when there are no more pages.
 	NextCursor string `json:"nextCursor,omitempty"`
+
+	// RelatedTask identifies a task associated with this result.
+	// Per MCP spec: set by tasks/result responses.
+	RelatedTask *RelatedTaskMeta `json:"io.modelcontextprotocol/related-task,omitempty"`
 }
 
 // Content is a single content item in a tool result.

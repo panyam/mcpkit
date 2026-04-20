@@ -1,48 +1,59 @@
 # Auth Examples
 
-Persistent MCP servers demonstrating every auth pattern mcpkit supports. Each runs on its own port with real JWT infrastructure — connect MCPJam, VS Code, or any MCP host.
+MCP servers demonstrating mcpkit's auth capabilities. No external dependencies — no Docker, no Keycloak. Each example spins up an in-process authorization server.
 
 ## Quick Start
 
+Start with the [unified example](unified/) — one server, all four auth patterns layered together:
+
 ```bash
 cd examples/auth
-
-# Run all 5 on different ports:
-go run ./bearer           # :8081 — static bearer token
-go run ./jwt              # :8082 — JWT/JWKS validation
-go run ./scopes           # :8083 — scope enforcement
-go run ./session-binding  # :8084 — hijacking prevention
-go run ./public-discovery # :8085 — pre-auth discovery
+go run ./unified
 ```
 
-Each server prints the token(s) to use. Copy-paste into MCPJam's Authorization header.
+The server prints tokens and a step-by-step exercise walkthrough. Connect your MCP host to `http://localhost:8080/mcp` (Streamable HTTP).
 
 ## Examples
 
-| Port | Example | Auth Pattern | What to Try |
-|:---:|---------|-------------|------------|
-| 8081 | **bearer/** | Static token | Connect with `Bearer my-secret-token` |
-| 8082 | **jwt/** | RS256 JWT via JWKS | Server prints a valid token on startup |
-| 8083 | **scopes/** | Scope enforcement | Three tokens with different scopes — try each |
-| 8084 | **session-binding/** | Hijacking prevention | Connect as alice, then try bob's token on alice's session |
-| 8085 | **public-discovery/** | Pre-auth tools/list | Connect WITHOUT token — discover tools, then authenticate to call them |
+| Port | Example | Auth Pattern |
+|:----:|---------|-------------|
+| 8080 | [**unified/**](unified/) | **Start here** — JWT + public discovery + scopes + session binding |
+| 8081 | [bearer/](bearer/) | Static bearer token (simplest possible) |
+| 8082 | [jwt/](jwt/) | RS256 JWT validation via JWKS |
+| 8083 | [scopes/](scopes/) | Scope-based access control |
+| 8084 | [session-binding/](session-binding/) | Session hijacking prevention |
+| 8085 | [public-discovery/](public-discovery/) | Pre-auth tool discovery |
 
-## VS Code / MCP Host Configuration
+Each sub-directory has its own README with setup, exercises, and copy-pasteable prompts.
 
-See `mcp.json` for a ready-to-use configuration. Run all examples first, then point your MCP host at the URLs.
+## Shared Infrastructure
 
-## How It Works
+The `common/` package provides the auth building blocks all examples use:
 
-Each example (except bearer) spins up an in-process authorization server (oneauth `TestAuthServer`) that provides real JWKS, token endpoint, and RS256 signing. No external dependencies — no Docker, no Keycloak, no hosting.
+| Function | What it does |
+|----------|-------------|
+| `common.NewEnv(scopes)` | Spins up an in-process authorization server with JWKS + token endpoint |
+| `env.NewValidator(audience)` | Creates a `JWTValidator` pointed at the AS |
+| `env.MintToken(subject, scopes)` | Mints a valid RS256 JWT |
+| `common.RegisterEchoTools(srv)` | Registers `echo`, `write-tool`, `admin-tool` with scope checks |
 
-The `common/` package provides shared setup:
-- `common.NewEnv(scopes)` — creates the in-process AS
-- `env.NewValidator(audience)` — creates JWTValidator
-- `env.MintToken(subject, scopes)` — creates valid JWTs
-- `common.RegisterEchoTools(srv)` — registers echo, write-tool, admin-tool
+## MCP Host Configuration
+
+See `mcp.json` for a ready-to-use multi-server configuration, or for the unified example:
+
+```json
+{
+  "mcpServers": {
+    "auth-unified": {
+      "type": "streamable-http",
+      "url": "http://localhost:8080/mcp"
+    }
+  }
+}
+```
 
 ## Related
 
+- `ext/auth/docs/DESIGN.md` — Auth architecture
 - `tests/e2e/` — E2E auth integration tests
 - `tests/keycloak/` — Keycloak interop tests (real OIDC)
-- `ext/auth/docs/DESIGN.md` — Auth architecture
