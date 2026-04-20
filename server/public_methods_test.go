@@ -74,7 +74,8 @@ func TestPublicMethods_ToolsListWithoutAuth(t *testing.T) {
 	req2.Header.Set("Content-Type", "application/json")
 	req2.Header.Set("Accept", "application/json, text/event-stream")
 	req2.Header.Set("Mcp-Session-Id", sessionID)
-	listResp, _ := http.DefaultClient.Do(req2)
+	listResp, err := http.DefaultClient.Do(req2)
+	require.NoError(t, err)
 	defer listResp.Body.Close()
 	assert.Equal(t, http.StatusOK, listResp.StatusCode, "public tools/list should succeed without auth")
 
