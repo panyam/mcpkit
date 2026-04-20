@@ -110,9 +110,9 @@ Shows all tasks with their current status.
 
 ---
 
-## Phase 2: TTL Enforcement 🔲
+## Phase 2: TTL Enforcement ✅
 
-> **Status**: Not yet implemented. These exercises will fail today — tasks never expire.
+> **Status**: Implemented. Tasks are automatically cleaned up after TTL expires.
 
 ### 9. Task expires after TTL
 
@@ -133,8 +133,8 @@ curl -s http://localhost:8080/mcp \
   -d '{"jsonrpc":"2.0","id":11,"method":"tasks/get","params":{"taskId":"<task-id>"}}'
 ```
 
-**Expected (after Phase 2):** Task not found — it was cleaned up after TTL expired.
-**Today:** Task is still there. Tasks live forever in memory.
+**Expected:** Task not found — it was cleaned up after TTL expired.
+**Behavior:** Timer resets on result storage and cancellation, so the TTL window starts fresh from the last state change.
 
 ---
 

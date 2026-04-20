@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/panyam/mcpkit/core"
 )
@@ -54,13 +55,18 @@ type TaskStore interface {
 	// Cancel transitions a non-terminal task to cancelled. Returns an error
 	// if the task is already terminal or doesn't exist.
 	Cancel(taskID string) (core.TaskInfo, error)
+
+	// Cleanup removes all tasks and stops any background timers.
+	// Used for graceful shutdown and testing.
+	Cleanup()
 }
 
 // taskEntry holds all state for a single task in the in-memory store.
 type taskEntry struct {
 	info    core.TaskInfo
-	result  json.RawMessage  // stored tool result (nil until terminal)
-	waiters []chan struct{}   // channels to notify on status/result changes
+	result  json.RawMessage // stored tool result (nil until terminal)
+	waiters []chan struct{}  // channels to notify on status/result changes
+	timer   *time.Timer     // TTL cleanup timer; nil if TTL is null/unlimited
 }
 
 // notify wakes all waiters for this task entry.
@@ -95,7 +101,15 @@ func (s *InMemoryTaskStore) Create(info core.TaskInfo) error {
 	if _, exists := s.tasks[info.TaskID]; exists {
 		return fmt.Errorf("task %q already exists", info.TaskID)
 	}
-	s.tasks[info.TaskID] = &taskEntry{info: info}
+	entry := &taskEntry{info: info}
+	// Schedule TTL cleanup if TTL is set and positive.
+	if info.TTL != nil && *info.TTL > 0 {
+		taskID := info.TaskID
+		entry.timer = time.AfterFunc(time.Duration(*info.TTL)*time.Millisecond, func() {
+			s.deleteTask(taskID)
+		})
+	}
+	s.tasks[info.TaskID] = entry
 	s.order = append(s.order, info.TaskID)
 	return nil
 }
@@ -134,6 +148,8 @@ func (s *InMemoryTaskStore) SetResult(taskID string, result core.ToolResult) err
 		return fmt.Errorf("task %q not found", taskID)
 	}
 	entry.result = raw
+	// Reset TTL timer — task gets a fresh TTL window from now.
+	s.resetTimer(entry)
 	entry.notify()
 	return nil
 }
@@ -267,6 +283,54 @@ func (s *InMemoryTaskStore) Cancel(taskID string) (core.TaskInfo, error) {
 		raw, _ := json.Marshal(cancelResult)
 		entry.result = raw
 	}
+	// Reset TTL timer — cancelled task gets a fresh TTL window for cleanup.
+	s.resetTimer(entry)
 	entry.notify()
 	return entry.info, nil
+}
+
+// deleteTask removes a task from the store. Called by the TTL timer when
+// it fires. Thread-safe — acquires its own lock.
+func (s *InMemoryTaskStore) deleteTask(taskID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if entry, ok := s.tasks[taskID]; ok {
+		if entry.timer != nil {
+			entry.timer.Stop()
+		}
+		entry.notify() // wake any waiters so they see "not found"
+		delete(s.tasks, taskID)
+	}
+}
+
+// resetTimer stops the existing TTL timer (if any) and starts a new one
+// with the task's TTL. Called when the task's lifetime should restart
+// (e.g., result stored, status changed to terminal).
+// Must be called with s.mu held.
+func (s *InMemoryTaskStore) resetTimer(entry *taskEntry) {
+	if entry.info.TTL == nil || *entry.info.TTL <= 0 {
+		return
+	}
+	if entry.timer != nil {
+		entry.timer.Stop()
+	}
+	taskID := entry.info.TaskID
+	entry.timer = time.AfterFunc(time.Duration(*entry.info.TTL)*time.Millisecond, func() {
+		s.deleteTask(taskID)
+	})
+}
+
+// Cleanup removes all tasks and stops all TTL timers.
+// Used for graceful shutdown and testing.
+func (s *InMemoryTaskStore) Cleanup() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, entry := range s.tasks {
+		if entry.timer != nil {
+			entry.timer.Stop()
+		}
+		entry.notify()
+	}
+	s.tasks = make(map[string]*taskEntry)
+	s.order = nil
 }

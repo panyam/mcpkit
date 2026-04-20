@@ -384,3 +384,147 @@ func TestStoreConcurrentAccess(t *testing.T) {
 		t.Errorf("got %d tasks, want %d", len(tasks), n)
 	}
 }
+
+// --- TTL enforcement tests (Phase 2) ---
+
+// TestStoreTTLExpiry verifies that a task with a short TTL is automatically
+// removed from the store after the TTL elapses. This is the core TTL
+// enforcement behavior — exercise 9 in the tasks README.
+func TestStoreTTLExpiry(t *testing.T) {
+	s := NewInMemoryStore()
+	info := newTestInfo("t1", core.TaskWorking)
+	info.TTL = core.IntPtr(100) // 100ms TTL
+	s.Create(info)
+
+	// Task should be accessible immediately.
+	_, ok := s.Get("t1")
+	if !ok {
+		t.Fatal("task should exist immediately after creation")
+	}
+
+	// Wait for TTL to expire.
+	time.Sleep(150 * time.Millisecond)
+
+	// Task should be gone.
+	_, ok = s.Get("t1")
+	if ok {
+		t.Error("task should have been removed after TTL expired")
+	}
+}
+
+// TestStoreTTLResetOnResult verifies that storing a result resets the TTL
+// timer — the task gets a fresh TTL window from the time the result is
+// stored, not from creation. This matches the TS SDK behavior where
+// completed tasks remain queryable for a TTL period after completion.
+func TestStoreTTLResetOnResult(t *testing.T) {
+	s := NewInMemoryStore()
+	info := newTestInfo("t1", core.TaskWorking)
+	info.TTL = core.IntPtr(200) // 200ms TTL
+	s.Create(info)
+
+	// Wait 100ms (half the TTL), then store result.
+	time.Sleep(100 * time.Millisecond)
+	s.SetResult("t1", core.TextResult("done"))
+	s.Update("t1", func(i *core.TaskInfo) { i.Status = core.TaskCompleted })
+
+	// Wait another 150ms — past the original TTL but within the reset window.
+	time.Sleep(150 * time.Millisecond)
+
+	// Task should still be accessible (timer was reset on SetResult).
+	_, ok := s.Get("t1")
+	if !ok {
+		t.Error("task should still exist — TTL should have reset when result was stored")
+	}
+
+	// Wait for the full reset TTL to expire.
+	time.Sleep(100 * time.Millisecond)
+
+	_, ok = s.Get("t1")
+	if ok {
+		t.Error("task should have been removed after reset TTL expired")
+	}
+}
+
+// TestStoreTTLResetOnCancel verifies that cancelling a task resets the TTL
+// timer so the cancelled task remains queryable for the TTL period.
+func TestStoreTTLResetOnCancel(t *testing.T) {
+	s := NewInMemoryStore()
+	info := newTestInfo("t1", core.TaskWorking)
+	info.TTL = core.IntPtr(200) // 200ms TTL
+	s.Create(info)
+
+	// Wait 100ms, then cancel.
+	time.Sleep(100 * time.Millisecond)
+	s.Cancel("t1")
+
+	// Wait 150ms — past original TTL but within reset window.
+	time.Sleep(150 * time.Millisecond)
+
+	_, ok := s.Get("t1")
+	if !ok {
+		t.Error("cancelled task should still exist within reset TTL window")
+	}
+}
+
+// TestStoreTTLNullNoExpiry verifies that a task with TTL=nil (null per spec,
+// meaning unlimited lifetime) is never automatically removed.
+func TestStoreTTLNullNoExpiry(t *testing.T) {
+	s := NewInMemoryStore()
+	info := newTestInfo("t1", core.TaskWorking)
+	info.TTL = nil // null = unlimited
+	s.Create(info)
+
+	time.Sleep(100 * time.Millisecond)
+
+	_, ok := s.Get("t1")
+	if !ok {
+		t.Error("task with nil TTL should never expire")
+	}
+}
+
+// TestStoreCleanup verifies that Cleanup() removes all tasks and stops
+// all TTL timers. Used for graceful shutdown and testing.
+func TestStoreCleanup(t *testing.T) {
+	s := NewInMemoryStore()
+	for i := 0; i < 5; i++ {
+		info := newTestInfo("t"+string(rune('0'+i)), core.TaskWorking)
+		info.TTL = core.IntPtr(60000) // long TTL — won't expire during test
+		s.Create(info)
+	}
+
+	s.Cleanup()
+
+	for i := 0; i < 5; i++ {
+		_, ok := s.Get("t" + string(rune('0'+i)))
+		if ok {
+			t.Errorf("task t%d should have been removed by Cleanup", i)
+		}
+	}
+
+	tasks, _ := s.List("", 100)
+	if len(tasks) != 0 {
+		t.Errorf("List should return empty after Cleanup, got %d", len(tasks))
+	}
+}
+
+// TestStoreCleanupStopsTimers verifies that Cleanup() stops pending TTL
+// timers so they don't fire after cleanup (which would panic or corrupt
+// state on a reused store).
+func TestStoreCleanupStopsTimers(t *testing.T) {
+	s := NewInMemoryStore()
+	info := newTestInfo("t1", core.TaskWorking)
+	info.TTL = core.IntPtr(50) // very short TTL
+	s.Create(info)
+
+	// Cleanup before the timer fires.
+	s.Cleanup()
+
+	// Wait past the original TTL — timer should have been stopped.
+	time.Sleep(100 * time.Millisecond)
+
+	// No panic, no corruption. The store is empty and stable.
+	tasks, _ := s.List("", 100)
+	if len(tasks) != 0 {
+		t.Errorf("store should be empty after Cleanup, got %d", len(tasks))
+	}
+}
