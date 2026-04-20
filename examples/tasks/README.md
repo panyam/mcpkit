@@ -13,10 +13,24 @@ Demonstrates MCP Tasks (spec 2025-11-25) — async tool execution with lifecycle
 
 ## Setup
 
+### Go server (mcpkit)
+
 ```bash
 cd examples/tasks
 go run . -addr :8080
 ```
+
+### TS SDK reference server (for comparison)
+
+The [TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk) ships an equivalent `simpleTaskInteractive` example with the same `confirm_delete` and `write_haiku` tools. Run it to compare wire format side-by-side:
+
+```bash
+cd ~/projects/typescript-sdk   # or wherever you cloned it
+pnpm install && pnpm build:all # first time only
+PORT=8080 node examples/server/dist/simpleTaskInteractive.mjs
+```
+
+All curl exercises below produce identical responses from both servers (except task IDs and timestamps). Use `test-side-by-side.sh` for automated comparison.
 
 ## Connect a Host
 
@@ -164,17 +178,67 @@ This tool *requires* task invocation. The job starts, then fails after 1 second 
 
 | Prompt | Curl |
 |--------|------|
-| `Delete the file important.txt` | ⚠️ Requires side-channel — use `go test ./...` |
+| `Delete the file important.txt` | See below (partial — curl can't respond to elicitation) |
 
-The tool creates a task, then asks you for confirmation via elicitation. If you confirm, it "deletes" the file. If you decline, it cancels. Demonstrates `TaskElicit` — the task transitions to `input_required` while waiting for your response.
+```bash
+# Create the task
+mcp http://localhost:8080/mcp \
+  -H "Mcp-Session-Id: $SESSION_ID" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"confirm_delete","arguments":{"filename":"important.txt"},"task":{}}}'
+
+export TASK_ID=$(jq -r '.result.task.taskId' /tmp/mcp-body.json)
+echo "TASK_ID=$TASK_ID"
+
+# Poll status — should show "input_required" (task is waiting for your confirmation)
+sleep 1
+mcp http://localhost:8080/mcp \
+  -H "Mcp-Session-Id: $SESSION_ID" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TASK_ID\"}}"
+```
+
+The task transitions to `input_required` while waiting for the elicitation response. With curl, the task stays stuck here — the server sent an elicitation request via SSE but curl can't respond to it.
+
+**To complete the flow**, use the Go test suite which has a mock elicitation handler:
+```bash
+cd experimental/ext/tasks && go test -run TestTaskElicitE2E -v
+```
 
 ### 6. Sampling from a task (write_haiku)
 
 | Prompt | Curl |
 |--------|------|
-| `Write a haiku about the ocean` | ⚠️ Requires side-channel — use `go test ./...` |
+| `Write a haiku about the ocean` | See below (partial — curl can't respond to sampling) |
 
-The tool creates a task, then asks the LLM to write a haiku via sampling. The task transitions to `input_required` while the LLM generates, then returns the result. Demonstrates `TaskSample`.
+```bash
+# Create the task
+mcp http://localhost:8080/mcp \
+  -H "Mcp-Session-Id: $SESSION_ID" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"write_haiku","arguments":{"topic":"ocean"},"task":{}}}'
+
+export TASK_ID=$(jq -r '.result.task.taskId' /tmp/mcp-body.json)
+echo "TASK_ID=$TASK_ID"
+
+# Poll status — should show "input_required" (task is waiting for LLM response)
+sleep 1
+mcp http://localhost:8080/mcp \
+  -H "Mcp-Session-Id: $SESSION_ID" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":13,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TASK_ID\"}}"
+```
+
+Same as confirm_delete — the task transitions to `input_required` while the server waits for a sampling response. Curl can't provide one.
+
+**To complete the flow:**
+```bash
+cd experimental/ext/tasks && go test -run TestTaskSampleE2E -v
+```
 
 ### 7. Cancel a running task
 
