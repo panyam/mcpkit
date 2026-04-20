@@ -72,6 +72,7 @@ echo "--- Go ---"
 GO_INIT_RAW=$(curl -s -D /tmp/go_h.txt "http://localhost:$GO_PORT/mcp" -H "$CT" -H "$ACCEPT" -d "$INIT")
 GO_SID=$(grep -i 'mcp-session-id' /tmp/go_h.txt | head -1 | awk '{print $2}' | tr -d '\r\n')
 echo "Session: $GO_SID"
+parse_response "$GO_INIT_RAW" | python3 -m json.tool 2>/dev/null || echo "$GO_INIT_RAW"
 curl -s "http://localhost:$GO_PORT/mcp" -H "$CT" -H "$ACCEPT" -H "Mcp-Session-Id: $GO_SID" -d "$NOTIF" > /dev/null 2>&1
 echo ""
 
@@ -79,6 +80,7 @@ echo "--- TS ---"
 TS_INIT_RAW=$(curl -s -D /tmp/ts_h.txt "http://localhost:$TS_PORT/mcp" -H "$CT" -H "$ACCEPT" -d "$INIT")
 TS_SID=$(grep -i 'mcp-session-id' /tmp/ts_h.txt | head -1 | awk '{print $2}' | tr -d '\r\n')
 echo "Session: $TS_SID"
+parse_response "$TS_INIT_RAW" | python3 -m json.tool 2>/dev/null || echo "$TS_INIT_RAW"
 curl -s "http://localhost:$TS_PORT/mcp" -H "$CT" -H "$ACCEPT" -H "Mcp-Session-Id: $TS_SID" -d "$NOTIF" > /dev/null 2>&1
 echo ""
 
