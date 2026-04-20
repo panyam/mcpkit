@@ -6,8 +6,9 @@ Demonstrates MCP Tasks (spec 2025-11-25) — async tool execution with lifecycle
 
 | Category | Feature |
 |----------|---------|
-| Core | `core.ToolDef.Execution`, `core.TaskSupportOptional`, `core.TaskSupportRequired` |
-| Experimental | `experimental/ext/tasks` — `tasks.Register`, `tasks.Config` |
+| Core | `core.ToolDef.Execution`, `core.TaskSupportOptional`, `core.TaskSupportRequired`, `core.DetachForBackground` |
+| Experimental | `experimental/ext/tasks` — `tasks.Register`, `tasks.Config`, `tasks.TaskContext`, `tasks.GetTaskContext` |
+| Side-channel | `TaskContext.TaskElicit` (elicitation from background task), `TaskContext.TaskSample` (sampling from background task) |
 | MCP methods | `tasks/get`, `tasks/result`, `tasks/cancel`, `tasks/list` |
 
 ## Setup
@@ -110,7 +111,9 @@ Shows all tasks with their current status.
 
 ## Curl Walkthrough
 
-For hosts that don't support tasks yet, you can exercise the full async lifecycle with curl.
+For hosts that don't support tasks yet, you can exercise the async lifecycle with curl.
+
+**Note:** `confirm_delete` and `write_haiku` cannot be fully tested with curl because they use the side-channel pattern — the server sends elicitation/sampling requests back to the client during `tasks/result`, which requires a client that can handle server-initiated requests. Use the Go test suite (`go test ./...`) to exercise these paths end-to-end.
 
 ### Initialize a session
 
@@ -193,4 +196,4 @@ curl -s http://localhost:8080/mcp \
 
 | File | What |
 |------|------|
-| `main.go` | Server setup, 3 tools, tasks registration |
+| `main.go` | Server setup, 5 tools (greet, slow_compute, failing_job, confirm_delete, write_haiku), tasks registration |
