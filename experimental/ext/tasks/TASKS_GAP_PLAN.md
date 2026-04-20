@@ -38,21 +38,12 @@ Key TS files:
 
 **Wire format parity verified** via `test-side-by-side.sh` against TS SDK.
 
-## Phase 2: TTL Enforcement
+## Phase 2: TTL Enforcement ✅ COMPLETE
 **Goal**: Tasks auto-expire after TTL.
 
-- [ ] **2a. Add cleanup timer to InMemoryStore**
-  - On `Create()`: schedule cleanup with `time.AfterFunc(ttl, cleanup)`
-  - On `StoreResult()`: reset timer to start from now
-  - On terminal status: reset timer
-  - Store timer handle alongside task in taskEntry
-  - Ref: `stores/inMemory.ts:66-76, 118-131, 170-182`
-
-- [ ] **2b. Add `Cleanup()` method**
-  - Stop all timers, clear all tasks
-  - For graceful shutdown and testing
-
-- [ ] **2c. Tests** — TTL expiry, timer reset on result, cleanup on shutdown
+- [x] **2a.** Timer per task on `taskEntry` — `time.AfterFunc` on Create, reset on SetResult/Cancel
+- [x] **2b.** `Cleanup()` method — stops all timers, clears all tasks
+- [x] **2c.** Tests: 6 unit (expiry, reset on result, reset on cancel, null no-expiry, cleanup, cleanup stops timers) + 1 e2e (exercise 9)
 
 ## Phase 3: Session Isolation
 **Goal**: Tasks are scoped to the session that created them.
