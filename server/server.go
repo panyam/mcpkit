@@ -441,6 +441,21 @@ func (s *Server) dispatchWithOpts(d *Dispatcher, ctx context.Context, claims *co
 	// and access authenticated claims and client capabilities.
 	ctx = core.ContextWithSession(ctx, notify, request, &d.logLevel, &d.clientCaps, claims)
 
+	// Register a detach strategy for background goroutines (e.g., async tasks).
+	// The strategy replaces the POST-scoped requestFunc (which writes to the
+	// now-closed response stream) with one that uses the session's persistent
+	// push function (GET SSE stream). This allows background goroutines to
+	// send server-to-client requests (elicitation, sampling) after the
+	// original HTTP request has returned.
+	ctx = core.SetDetachStrategy(ctx, func(c context.Context) context.Context {
+		c = context.WithoutCancel(c)
+		if push := d.getPushRequest(); push != nil {
+			bgRequest := d.makeRequestFunc(push)
+			c = core.ReplaceSessionRequestFunc(c, bgRequest)
+		}
+		return c
+	})
+
 	// Wire the SSE retry-hint emitter if provided by the transport layer.
 	if sseRetry != nil {
 		ctx = core.SetSSERetryHint(ctx, sseRetry)
