@@ -1577,7 +1577,7 @@ func TestWaitForTaskCompletes(t *testing.T) {
 		unblock <- struct{}{}
 	}()
 
-	got, err := client.WaitForTask(c, created.Task.TaskID, 50*time.Millisecond)
+	got, err := client.WaitForTask(context.Background(), c, created.Task.TaskID, 50*time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1603,7 +1603,7 @@ func TestWaitForTaskCancelled(t *testing.T) {
 		client.CancelTask(c, created.Task.TaskID)
 	}()
 
-	got, err := client.WaitForTask(c, created.Task.TaskID, 50*time.Millisecond)
+	got, err := client.WaitForTask(context.Background(), c, created.Task.TaskID, 50*time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1666,5 +1666,30 @@ func TestToolCallAsTaskWithPollInterval(t *testing.T) {
 	}
 	if created.Task.PollInterval != 2000 {
 		t.Errorf("PollInterval = %d, want 2000", created.Task.PollInterval)
+	}
+}
+
+// TestWaitForTaskTimeout verifies that WaitForTask respects context
+// cancellation — a real-world requirement to prevent infinite blocking
+// when a task never completes.
+func TestWaitForTaskTimeout(t *testing.T) {
+	srv, _ := newTaskServer(t) // never unblock — task stays working forever
+	c := connectClient(t, srv)
+
+	created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "stuck"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// WaitForTask with a short timeout — should return deadline exceeded.
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	_, err = client.WaitForTask(ctx, c, created.Task.TaskID, 50*time.Millisecond)
+	if err == nil {
+		t.Fatal("expected timeout error")
+	}
+	if err != context.DeadlineExceeded {
+		t.Errorf("err = %v, want context.DeadlineExceeded", err)
 	}
 }
