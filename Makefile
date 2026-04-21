@@ -55,6 +55,9 @@ testconfall: testconf testconfauth
 testconf: ## Run MCP conformance test suite (requires Node.js/npx)
 	bash scripts/conformance-test.sh
 
+testconf-tasks: ## Run MCP Tasks conformance suite (requires Node.js, target server must be running)
+	cd conformance && npm install --silent && SERVER_URL=$${SERVER_URL:-http://localhost:8080/mcp} npx tsx --test tasks/scenarios.test.ts
+
 testconfauth: ## Run MCP Auth conformance suite (client-side, requires mcpkit/auth)
 	bash scripts/conformance-auth-test.sh
 
