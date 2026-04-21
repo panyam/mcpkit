@@ -1,4 +1,67 @@
 === Stage 9/10: auth-conformance (make testconfauth) ===
-Started: Tue Apr 21 06:59:39 PDT 2026
+Started: Tue Apr 21 07:27:38 PDT 2026
 bash scripts/conformance-auth-test.sh
-Finished: Tue Apr 21 06:59:39 PDT 2026
+Building testclient...
+=== Running MCP Auth conformance suite ===
+Command: npx -y @modelcontextprotocol/conformance client --suite auth --command "./bin/testclient" --expected-failures conformance/baseline.yml
+
+Running auth suite (14 scenarios) in parallel...
+
+Starting scenario: auth/metadata-default
+Starting scenario: auth/metadata-var1
+Starting scenario: auth/metadata-var2
+Starting scenario: auth/metadata-var3
+Starting scenario: auth/basic-cimd
+Starting scenario: auth/scope-from-www-authenticate
+Starting scenario: auth/scope-from-scopes-supported
+Starting scenario: auth/scope-omitted-when-undefined
+Starting scenario: auth/scope-step-up
+Starting scenario: auth/scope-retry-limit
+Starting scenario: auth/token-endpoint-auth-basic
+Starting scenario: auth/token-endpoint-auth-post
+Starting scenario: auth/token-endpoint-auth-none
+Starting scenario: auth/pre-registration
+Executing client: ./bin/testclient http://localhost:58387/mcp
+Executing client: ./bin/testclient http://localhost:58388/mcp
+Executing client: ./bin/testclient http://localhost:58389/mcp
+Executing client: ./bin/testclient http://localhost:58390/mcp
+Executing client: ./bin/testclient http://localhost:58391/mcp
+Executing client: ./bin/testclient http://localhost:58392/mcp
+Executing client: ./bin/testclient http://localhost:58393/mcp
+Executing client: ./bin/testclient http://localhost:58394/mcp
+Executing client: ./bin/testclient http://localhost:58395/mcp
+Executing client: ./bin/testclient http://localhost:58396/mcp
+Executing client: ./bin/testclient http://localhost:58397/mcp
+Executing client: ./bin/testclient http://localhost:58398/mcp
+Executing client: ./bin/testclient http://localhost:58399/mcp
+Executing client: ./bin/testclient http://localhost:58400/mcp
+With context: {"client_id":"pre-registered-client","client_secret":"pre-registered-secret"}
+(node:27544) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+=== SUITE SUMMARY ===
+
+✓ auth/metadata-default: 13 passed, 0 failed
+✓ auth/metadata-var1: 13 passed, 0 failed
+✓ auth/metadata-var2: 13 passed, 0 failed
+✓ auth/metadata-var3: 13 passed, 0 failed
+✗ auth/basic-cimd: 13 passed, 0 failed, 1 warnings
+✓ auth/scope-from-www-authenticate: 14 passed, 0 failed
+✓ auth/scope-from-scopes-supported: 14 passed, 0 failed
+✓ auth/scope-omitted-when-undefined: 14 passed, 0 failed
+✓ auth/scope-step-up: 20 passed, 0 failed
+✓ auth/scope-retry-limit: 16 passed, 0 failed
+✓ auth/token-endpoint-auth-basic: 18 passed, 0 failed
+✓ auth/token-endpoint-auth-post: 18 passed, 0 failed
+✓ auth/token-endpoint-auth-none: 18 passed, 0 failed
+✓ auth/pre-registration: 13 passed, 0 failed
+
+Total: 210 passed, 0 failed, 1 warnings
+
+[33mExpected failures (in baseline):[0m
+  ~ auth/basic-cimd
+
+[32mBaseline check passed: all failures are expected.[0m
+
+=== AUTH CONFORMANCE TESTS PASSED ===
+Finished: Tue Apr 21 07:27:39 PDT 2026
