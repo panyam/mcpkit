@@ -90,11 +90,13 @@ Key TS files:
 
 - [ ] **6c. Tests** — client receives notification after status change
 
-## Phase 7: Progress Token Tracking (P2)
+## Phase 7: Progress Notifications ✅ PARTIAL
 **Goal**: Progress notifications flow through task lifecycle.
 
-- [ ] **7a. Preserve progress token when CreateTaskResult is returned**
-- [ ] **7b. Clean up progress handler on terminal state**
+- [x] **7a.** `DetachForBackground` replaces notifyFunc with session-level one — progress from background goroutines reaches client via GET SSE
+- [x] **7b.** Go `slow_compute` emits per-second progress (matching TS reference server)
+- [ ] **7c.** Preserve original `_meta.progressToken` from `tools/call` through to task goroutine (currently uses taskId as token)
+- [ ] **7d.** Clean up progress handler on terminal state
 
 ## Phase 8: Sub-Task Threading (#281)
 **Goal**: Tasks can spawn sub-tasks with ParentTaskID linkage.

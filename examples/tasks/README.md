@@ -480,9 +480,9 @@ curl -N http://localhost:$PORT/mcp \
 
 ---
 
-## Phase 7: Progress Token Tracking 🔲
+## Phase 7: Progress Notifications ✅ PARTIAL
 
-> **Status**: Not yet implemented.
+> **Status**: Progress notifications work from async tasks. Original progressToken preservation is pending.
 
 ### 14. Progress notifications flow through tasks
 
