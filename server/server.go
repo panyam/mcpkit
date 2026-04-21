@@ -445,16 +445,23 @@ func (s *Server) dispatchWithOpts(d *Dispatcher, ctx context.Context, claims *co
 	core.SetSessionID(ctx, d.sessionID)
 
 	// Register a detach strategy for background goroutines (e.g., async tasks).
-	// The strategy replaces the POST-scoped requestFunc (which writes to the
-	// now-closed response stream) with one that uses the session's persistent
-	// push function (GET SSE stream). This allows background goroutines to
-	// send server-to-client requests (elicitation, sampling) after the
-	// original HTTP request has returned.
+	// The strategy replaces the POST-scoped requestFunc and notifyFunc (which
+	// write to the now-closed response stream) with session-level equivalents
+	// that use the persistent GET SSE stream. This allows background goroutines
+	// to send notifications (progress, logging) and server-to-client requests
+	// (elicitation, sampling) after the original HTTP request has returned.
 	ctx = core.SetDetachStrategy(ctx, func(c context.Context) context.Context {
 		c = context.WithoutCancel(c)
 		if push := d.getPushRequest(); push != nil {
 			bgRequest := d.makeRequestFunc(push)
 			c = core.ReplaceSessionRequestFunc(c, bgRequest)
+		}
+		// Also replace notifyFunc if the session has a persistent one
+		// (e.g., GET SSE stream). Don't replace if nil — keep the
+		// POST-scoped one as fallback (it may be the only option in
+		// test/stdio contexts without a GET SSE stream).
+		if bgNotify := d.getNotifyFunc(); bgNotify != nil {
+			c = core.ReplaceSessionNotifyFunc(c, bgNotify)
 		}
 		return c
 	})
