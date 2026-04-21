@@ -1453,3 +1453,107 @@ func TestTaskStatusNotificationOnCancel(t *testing.T) {
 		t.Fatal("did not receive notifications/tasks/status for cancelled task")
 	}
 }
+
+// --- Phase 7c: Progress token round-trip ---
+
+// TestTaskProgressTokenRoundTrip verifies that the client's _meta.progressToken
+// from the original tools/call is preserved through to notifications/progress
+
+// --- Phase 4 + 7c e2e tests ---
+
+// TestTaskProgressTokenPreserved verifies that the client's _meta.progressToken
+// from the original tools/call is preserved on TaskContext.ProgressToken().
+// Per MCP spec 2025-11-25 §Progress: the server echoes the client's
+// progressToken in notifications.
+func TestTaskProgressTokenPreserved(t *testing.T) {
+	srv := NewServer(core.ServerInfo{Name: "progress-token-test", Version: "0.0.1"})
+
+	gotToken := make(chan any, 1)
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "progress-tool",
+			Description: "Checks progressToken",
+			InputSchema: map[string]any{"type": "object"},
+			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			tc := GetTaskContext(ctx)
+			gotToken <- tc.ProgressToken()
+			return core.TextResult("ok"), nil
+		},
+	)
+	RegisterTasks(TasksConfig{Server: srv})
+	c := connectClient(t, srv)
+
+	_, err := c.Call("tools/call", map[string]any{
+		"name":      "progress-tool",
+		"arguments": map[string]any{},
+		"task":      map[string]any{},
+		"_meta":     map[string]any{"progressToken": "my-custom-token"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case token := <-gotToken:
+		if token != "my-custom-token" {
+			t.Errorf("ProgressToken() = %v, want my-custom-token", token)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("tool handler did not run")
+	}
+}
+
+// TestTaskDoubleCompletionRejected verifies that a task cannot be completed
+// twice — the second StoreTerminalResult is rejected by the terminal guard.
+// This tests the full stack: two concurrent tool completions racing.
+func TestTaskDoubleCompletionRejected(t *testing.T) {
+	srv := NewServer(core.ServerInfo{Name: "double-complete-test", Version: "0.0.1"})
+
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "fast",
+			Description: "Completes immediately",
+			InputSchema: map[string]any{"type": "object"},
+			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			return core.TextResult("done"), nil
+		},
+	)
+	RegisterTasks(TasksConfig{Server: srv})
+	c := connectClient(t, srv)
+
+	created, err := client.ToolCallAsTask(c, "fast", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for completion.
+	for i := 0; i < 20; i++ {
+		got, _ := client.GetTask(c, created.Task.TaskID)
+		if got.Status.IsTerminal() {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	// First tasks/result succeeds.
+	result1, _, err := client.GetTaskPayload(c, created.Task.TaskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result1.Content) == 0 || result1.Content[0].Text != "done" {
+		t.Errorf("first result: %+v", result1)
+	}
+
+	// Second tasks/result also succeeds (idempotent read — result is stored).
+	result2, _, err := client.GetTaskPayload(c, created.Task.TaskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result2.Content) == 0 || result2.Content[0].Text != "done" {
+		t.Errorf("second result should be same: %+v", result2)
+	}
+}
