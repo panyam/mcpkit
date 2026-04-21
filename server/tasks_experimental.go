@@ -53,35 +53,41 @@ func (c *TasksConfig) defaults() {
 	}
 }
 
+// activeTask holds per-task runtime state for a running async task (C2: consolidated struct).
+type activeTask struct {
+	requests chan sideChannelRequest // read by tasks/result handler for side-channel proxying
+	cancel   context.CancelFunc     // cancels the background goroutine's context (Phase 5)
+}
+
 // taskRuntime holds the per-registration state shared between the middleware
 // and the tasks/* method handlers. Scoped to a single Register() call —
 // no package-level globals.
 type taskRuntime struct {
-	store   TaskStore
-	queue   TaskMessageQueue
-	mu      sync.Mutex
-	channels map[string]chan sideChannelRequest // taskID → side-channel request channel
+	store  TaskStore
+	queue  TaskMessageQueue
+	mu     sync.Mutex
+	active map[string]*activeTask
 }
 
 func newTaskRuntime(store TaskStore, queue TaskMessageQueue) *taskRuntime {
 	return &taskRuntime{
-		store:    store,
-		queue:    queue,
-		channels: make(map[string]chan sideChannelRequest),
+		store:  store,
+		queue:  queue,
+		active: make(map[string]*activeTask),
 	}
 }
 
-// registerChannel stores the side-channel request channel for a task.
-func (rt *taskRuntime) registerChannel(taskID string, ch chan sideChannelRequest) {
+// register stores the active task entry.
+func (rt *taskRuntime) register(taskID string, at *activeTask) {
 	rt.mu.Lock()
-	rt.channels[taskID] = ch
+	rt.active[taskID] = at
 	rt.mu.Unlock()
 }
 
-// unregisterChannel removes the side-channel request channel for a task.
-func (rt *taskRuntime) unregisterChannel(taskID string) {
+// unregister removes the active task entry.
+func (rt *taskRuntime) unregister(taskID string) {
 	rt.mu.Lock()
-	delete(rt.channels, taskID)
+	delete(rt.active, taskID)
 	rt.mu.Unlock()
 }
 
@@ -89,7 +95,19 @@ func (rt *taskRuntime) unregisterChannel(taskID string) {
 func (rt *taskRuntime) getChannel(taskID string) chan sideChannelRequest {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
-	return rt.channels[taskID]
+	if at := rt.active[taskID]; at != nil {
+		return at.requests
+	}
+	return nil
+}
+
+// cancelTask cancels the background goroutine for a task (Phase 5).
+func (rt *taskRuntime) cancelTask(taskID string) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	if at := rt.active[taskID]; at != nil && at.cancel != nil {
+		at.cancel()
+	}
 }
 
 // Register hooks up tasks support on the given server:
@@ -206,11 +224,20 @@ func taskMiddleware(reg *Registry, rt *taskRuntime, cfg TasksConfig) Middleware 
 
 		// Run the tool asynchronously. Detach from client context so
 		// the tool continues even if the client disconnects.
-		// The sessionID is captured here so the background goroutine
-		// uses the same session for all store operations.
+		// context.WithCancel gives us a cancel func (Phase 5) so
+		// Cancel() can stop the goroutine.
 		go func() {
+			bgCtx := core.DetachForBackground(ctx)
+			bgCtx, cancelFunc := context.WithCancel(bgCtx)
+
+			reqCh := make(chan sideChannelRequest, 1)
+			tc := &TaskContext{taskID: taskID, sessionID: sessionID, store: store, requests: reqCh}
+			bgCtx = WithTaskContext(bgCtx, tc)
+			rt.register(taskID, &activeTask{requests: reqCh, cancel: cancelFunc})
+
 			defer func() {
-				rt.unregisterChannel(taskID)
+				cancelFunc() // ensure cancel is called on exit
+				rt.unregister(taskID)
 				if r := recover(); r != nil {
 					now := time.Now().UTC().Format(time.RFC3339)
 					msg := fmt.Sprintf("panic: %v", r)
@@ -220,47 +247,45 @@ func taskMiddleware(reg *Registry, rt *taskRuntime, cfg TasksConfig) Middleware 
 						t.StatusMessage = msg
 						t.LastUpdatedAt = now
 					})
+					notifyTaskStatus(bgCtx, store, taskID, sessionID)
 				}
 			}()
 
-			bgCtx := core.DetachForBackground(ctx)
-			reqCh := make(chan sideChannelRequest, 1)
-			tc := &TaskContext{taskID: taskID, sessionID: sessionID, store: store, requests: reqCh}
-			bgCtx = WithTaskContext(bgCtx, tc)
-			rt.registerChannel(taskID, reqCh)
 			resp := next(bgCtx, req)
+
+			// If the task was already cancelled (Phase 5), don't overwrite
+			// the terminal status. The cancel handler already set it.
+			if info, ok := store.Get(taskID, sessionID); ok && info.Status.IsTerminal() {
+				return
+			}
 
 			now := time.Now().UTC().Format(time.RFC3339)
 
-			if resp.Error != nil {
-				store.SetResult(taskID, sessionID, core.ErrorResult(resp.Error.Message))
+			// Helper: set terminal status + send notification (Phase 6).
+			setTerminal := func(status core.TaskStatus, result core.ToolResult, statusMsg string) {
+				store.SetResult(taskID, sessionID, result)
 				store.Update(taskID, sessionID, func(t *core.TaskInfo) {
-					t.Status = core.TaskFailed
-					t.StatusMessage = resp.Error.Message
+					t.Status = status
+					t.StatusMessage = statusMsg
 					t.LastUpdatedAt = now
 				})
+				notifyTaskStatus(bgCtx, store, taskID, sessionID)
+			}
+
+			if resp.Error != nil {
+				setTerminal(core.TaskFailed, core.ErrorResult(resp.Error.Message), resp.Error.Message)
 				return
 			}
 
 			raw, err := json.Marshal(resp.Result)
 			if err != nil {
-				store.SetResult(taskID, sessionID, core.ErrorResult("failed to marshal tool result"))
-				store.Update(taskID, sessionID, func(t *core.TaskInfo) {
-					t.Status = core.TaskFailed
-					t.StatusMessage = "failed to marshal tool result"
-					t.LastUpdatedAt = now
-				})
+				setTerminal(core.TaskFailed, core.ErrorResult("failed to marshal tool result"), "failed to marshal tool result")
 				return
 			}
 
 			var toolResult core.ToolResult
 			if err := json.Unmarshal(raw, &toolResult); err != nil {
-				store.SetResult(taskID, sessionID, core.ErrorResult("failed to unmarshal tool result"))
-				store.Update(taskID, sessionID, func(t *core.TaskInfo) {
-					t.Status = core.TaskFailed
-					t.StatusMessage = "failed to unmarshal tool result"
-					t.LastUpdatedAt = now
-				})
+				setTerminal(core.TaskFailed, core.ErrorResult("failed to unmarshal tool result"), "failed to unmarshal tool result")
 				return
 			}
 
@@ -268,11 +293,7 @@ func taskMiddleware(reg *Registry, rt *taskRuntime, cfg TasksConfig) Middleware 
 			if toolResult.IsError {
 				status = core.TaskFailed
 			}
-			store.SetResult(taskID, sessionID, toolResult)
-			store.Update(taskID, sessionID, func(t *core.TaskInfo) {
-				t.Status = status
-				t.LastUpdatedAt = now
-			})
+			setTerminal(status, toolResult, "")
 		}()
 
 		return core.NewResponse(req.ID, core.CreateTaskResult{Task: info})
@@ -346,6 +367,11 @@ func makeResultHandler(rt *taskRuntime) MethodHandler {
 
 				rt.queue.DequeueAll(p.TaskID)
 
+				// Send status notification from this live handler context (Phase 6).
+				// The background goroutine's context may have a dead notifyFunc,
+				// but this handler's MethodContext is always alive.
+				ctx.Notify("notifications/tasks/status", info)
+
 				if result.Meta == nil {
 					result.Meta = &core.ToolResultMeta{}
 				}
@@ -392,8 +418,12 @@ func makeCancelHandler(rt *taskRuntime) MethodHandler {
 		if err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 		}
+		// Stop the background goroutine (Phase 5).
+		rt.cancelTask(p.TaskID)
 		// Clean up any queued messages for the cancelled task.
 		rt.queue.DequeueAll(p.TaskID)
+		// Send status notification (Phase 6).
+		ctx.Notify("notifications/tasks/status", info)
 		// Per spec: tasks/cancel returns flat Result & Task (no wrapper).
 		return core.NewResponse(id, core.CancelTaskResult{TaskInfo: info})
 	}
@@ -405,6 +435,17 @@ func generateTaskID() string {
 	b := make([]byte, 12)
 	rand.Read(b)
 	return "task-" + hex.EncodeToString(b)
+}
+
+// notifyTaskStatus sends a notifications/tasks/status notification with the
+// current task state. Called after every status change (Phase 6).
+// Best-effort — silently drops if no notification channel is available.
+func notifyTaskStatus(ctx context.Context, store TaskStore, taskID, sessionID string) {
+	info, ok := store.Get(taskID, sessionID)
+	if !ok {
+		return
+	}
+	core.Notify(ctx, "notifications/tasks/status", info)
 }
 
 // proxySideChannel proxies a side-channel request (elicitation/sampling)

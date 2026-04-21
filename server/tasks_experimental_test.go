@@ -44,7 +44,12 @@ func newTaskServer(t *testing.T) (*Server, chan struct{}) {
 			Execution: &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
 		},
 		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			<-unblock
+			// Wait for unblock signal OR context cancellation (Phase 5).
+			select {
+			case <-unblock:
+			case <-ctx.Done():
+				return core.TextResult("cancelled"), nil
+			}
 			var args struct {
 				Data string `json:"data"`
 			}
@@ -1296,4 +1301,155 @@ func TestTaskProgressFromBackgroundNoPanic(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	t.Fatal("task did not complete in time")
+}
+
+// --- Phase 5+6 tests ---
+
+// TestTaskCancelStopsGoroutine verifies that cancelling a task actually
+// stops the background goroutine via context cancellation (Phase 5).
+// Before Phase 5, the goroutine would keep running after cancel.
+func TestTaskCancelStopsGoroutine(t *testing.T) {
+	srv := NewServer(core.ServerInfo{Name: "cancel-stop-test", Version: "0.0.1"})
+
+	goroutineStopped := make(chan struct{})
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "long-task",
+			Description: "Runs until cancelled",
+			InputSchema: map[string]any{"type": "object"},
+			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			// Wait for cancellation or timeout.
+			select {
+			case <-ctx.Done():
+				close(goroutineStopped)
+				return core.TextResult("cancelled"), nil
+			case <-time.After(30 * time.Second):
+				return core.TextResult("completed"), nil
+			}
+		},
+	)
+	RegisterTasks(TasksConfig{Server: srv})
+	c := connectClient(t, srv)
+
+	created, err := client.ToolCallAsTask(c, "long-task", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Cancel the task.
+	_, err = client.CancelTask(c, created.Task.TaskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The goroutine should have exited via ctx.Done().
+	select {
+	case <-goroutineStopped:
+		// success — goroutine received cancellation
+	case <-time.After(2 * time.Second):
+		t.Fatal("goroutine did not stop after cancel — context cancellation not propagated")
+	}
+}
+
+// TestTaskStatusNotificationOnComplete verifies that fetching a completed
+// task's result via tasks/result sends a notifications/tasks/status
+// notification to the client (Phase 6, Option 1).
+func TestTaskStatusNotificationOnComplete(t *testing.T) {
+	srv := NewServer(core.ServerInfo{Name: "notify-test", Version: "0.0.1"})
+
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "fast",
+			Description: "Completes immediately",
+			InputSchema: map[string]any{"type": "object"},
+			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			return core.TextResult("done"), nil
+		},
+	)
+	RegisterTasks(TasksConfig{Server: srv})
+
+	notifications := make(chan core.TaskInfo, 10)
+	c := connectClient(t, srv, client.WithNotificationCallback(func(method string, params any) {
+		if method == "notifications/tasks/status" {
+			raw, _ := json.Marshal(params)
+			var info core.TaskInfo
+			json.Unmarshal(raw, &info)
+			notifications <- info
+		}
+	}))
+
+	created, err := client.ToolCallAsTask(c, "fast", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Call tasks/result — this triggers the notification (Option 1).
+	client.GetTaskPayload(c, created.Task.TaskID)
+
+	// Wait for the completion notification.
+	select {
+	case info := <-notifications:
+		if info.TaskID != created.Task.TaskID {
+			t.Errorf("notification taskId = %q, want %q", info.TaskID, created.Task.TaskID)
+		}
+		if info.Status != core.TaskCompleted {
+			t.Errorf("notification status = %q, want completed", info.Status)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("did not receive notifications/tasks/status for completed task")
+	}
+}
+
+// TestTaskStatusNotificationOnCancel verifies that cancelling a task
+// sends a notifications/tasks/status notification (Phase 6).
+func TestTaskStatusNotificationOnCancel(t *testing.T) {
+	srv := NewServer(core.ServerInfo{Name: "notify-cancel-test", Version: "0.0.1"})
+
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "blocking",
+			Description: "Blocks until cancelled",
+			InputSchema: map[string]any{"type": "object"},
+			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			<-ctx.Done()
+			return core.TextResult("cancelled"), nil
+		},
+	)
+	RegisterTasks(TasksConfig{Server: srv})
+
+	notifications := make(chan core.TaskInfo, 10)
+	c := connectClient(t, srv, client.WithNotificationCallback(func(method string, params any) {
+		if method == "notifications/tasks/status" {
+			raw, _ := json.Marshal(params)
+			var info core.TaskInfo
+			json.Unmarshal(raw, &info)
+			notifications <- info
+		}
+	}))
+
+	created, err := client.ToolCallAsTask(c, "blocking", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = client.CancelTask(c, created.Task.TaskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Should receive cancelled notification.
+	select {
+	case info := <-notifications:
+		if info.Status != core.TaskCancelled {
+			t.Errorf("notification status = %q, want cancelled", info.Status)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("did not receive notifications/tasks/status for cancelled task")
+	}
 }
