@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -148,14 +149,15 @@ func ToolCallAsTask(c *Client, name string, args any, opts ...*TaskCallOptions) 
 	return &r, nil
 }
 
-// WaitForTask polls tasks/get until the task reaches a terminal state.
-// Returns the final task info. Use pollInterval of 0 for the server's
-// suggested interval (from CreateTaskResult.PollInterval), or provide
-// a custom interval.
+// WaitForTask polls tasks/get until the task reaches a terminal state or
+// the context is cancelled. Returns the final task info.
+//
+// Use pollInterval of 0 for a 1-second default. The context controls
+// the overall timeout — use context.WithTimeout for deadline-based waiting.
 //
 // This is a convenience wrapper around GetTask for the common pattern
 // of polling until completion.
-func WaitForTask(c *Client, taskID string, pollInterval time.Duration) (*core.GetTaskResult, error) {
+func WaitForTask(ctx context.Context, c *Client, taskID string, pollInterval time.Duration) (*core.GetTaskResult, error) {
 	if pollInterval <= 0 {
 		pollInterval = 1 * time.Second
 	}
@@ -167,6 +169,10 @@ func WaitForTask(c *Client, taskID string, pollInterval time.Duration) (*core.Ge
 		if got.Status.IsTerminal() {
 			return got, nil
 		}
-		time.Sleep(pollInterval)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(pollInterval):
+		}
 	}
 }
