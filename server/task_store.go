@@ -54,6 +54,15 @@ type TaskStore interface {
 	// is cancelled. Used by the tasks/result long-poll loop.
 	WaitForUpdate(ctx context.Context, taskID, sessionID string) error
 
+	// StoreTerminalResult atomically sets the task's result and transitions
+	// to a terminal status. Rejects if the task is already terminal.
+	// Replaces the separate SetResult + Update pattern.
+	//
+	// Per MCP spec 2025-11-25 §Tasks: "The result MUST be stored before
+	// the status transitions to a terminal state" — this method ensures
+	// atomicity so WaitForResult callers always see the result.
+	StoreTerminalResult(taskID, sessionID string, status core.TaskStatus, result core.ToolResult, statusMsg string) error
+
 	// Cancel transitions a non-terminal task to cancelled.
 	Cancel(taskID, sessionID string) (core.TaskInfo, error)
 
@@ -68,6 +77,8 @@ type taskEntry struct {
 	waiters   []chan struct{}  // channels to notify on status/result changes
 	timer     *time.Timer     // TTL cleanup timer; nil if TTL is null/unlimited
 	sessionID string          // session that created this task; empty = no binding
+	request   json.RawMessage // original tools/call params (for replay/debugging)
+	requestID json.RawMessage // original JSON-RPC request ID
 }
 
 // sessionAllowed checks if the caller's session can access this task.
@@ -168,6 +179,32 @@ func (s *InMemoryTaskStore) SetResult(taskID, sessionID string, result core.Tool
 		return fmt.Errorf("task %q not found", taskID)
 	}
 	entry.result = raw
+	s.resetTimer(entry)
+	entry.notify()
+	return nil
+}
+
+// StoreTerminalResult atomically stores the result and transitions to a
+// terminal status. Rejects if the task is already terminal (prevents
+// cancel→completed races and double-completion).
+func (s *InMemoryTaskStore) StoreTerminalResult(taskID, sessionID string, status core.TaskStatus, result core.ToolResult, statusMsg string) error {
+	raw, err := json.Marshal(result)
+	if err != nil {
+		return fmt.Errorf("marshal result: %w", err)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entry, ok := s.getEntry(taskID, sessionID)
+	if !ok {
+		return fmt.Errorf("task %q not found", taskID)
+	}
+	if entry.info.Status.IsTerminal() {
+		return errTaskTerminal
+	}
+	entry.result = raw
+	entry.info.Status = status
+	entry.info.StatusMessage = statusMsg
+	entry.info.LastUpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	s.resetTimer(entry)
 	entry.notify()
 	return nil

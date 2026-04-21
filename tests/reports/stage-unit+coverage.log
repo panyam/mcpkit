@@ -1,0 +1,7 @@
+=== Stage 1/10: unit+coverage (make cover-html) ===
+Started: Tue Apr 21 06:59:37 PDT 2026
+mkdir -p tests/reports
+go test -coverprofile=tests/reports/coverage.out ./... -count=1 -timeout 30s
+go tool cover -html=tests/reports/coverage.out -o tests/reports/coverage.html
+echo "Coverage report: tests/reports/coverage.html"
+Finished: Tue Apr 21 06:59:37 PDT 2026

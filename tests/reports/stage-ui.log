@@ -1,0 +1,6 @@
+=== Stage 4/10: ui (make test-ui) ===
+Started: Tue Apr 21 06:59:37 PDT 2026
+cd ext/ui && /Library/Developer/CommandLineTools/usr/bin/make test
+go test ./... -count=1 -timeout 30s
+cd assets && pnpm install --frozen-lockfile --silent && pnpm test
+Finished: Tue Apr 21 06:59:37 PDT 2026

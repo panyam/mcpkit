@@ -1,0 +1,4 @@
+=== Stage 2/10: race (make test-race) ===
+Started: Tue Apr 21 06:59:37 PDT 2026
+go test -race ./... -count=1 -timeout 60s
+Finished: Tue Apr 21 06:59:37 PDT 2026

@@ -532,3 +532,27 @@ make[2]: *** No rule to make target `downkcl'.  Stop.
 
 === Results: 10 passed, 0 failed ===
 Finished: Mon Apr 20 23:52:01 PDT 2026
+
+--- [1/10] unit+coverage ---
+  PASS: unit+coverage
+--- [2/10] race ---
+  PASS: race
+--- [3/10] auth ---
+  PASS: auth
+--- [4/10] ui ---
+  PASS: ui
+--- [5/10] protogen ---
+  PASS: protogen
+--- [6/10] e2e ---
+  PASS: e2e
+--- [7/10] experimental ---
+  PASS: experimental
+--- [8/10] conformance ---
+  PASS: conformance
+--- [9/10] auth-conformance ---
+  PASS: auth-conformance
+--- [10/10] keycloak ---
+  PASS: keycloak
+
+=== Results: 10 passed, 0 failed ===
+Finished: Tue Apr 21 07:01:43 PDT 2026

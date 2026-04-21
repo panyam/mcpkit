@@ -81,9 +81,13 @@ func main() {
 			// DetachForBackground replaces the notifyFunc with the session-level
 			// one so notifications reach the client via GET SSE.
 			// Use the task ID as the progress token if running as a task.
+			// Use the client's progressToken if available, fall back to taskID.
 			var progressToken any
 			if tc := server.GetTaskContext(ctx); tc != nil {
-				progressToken = tc.TaskID()
+				progressToken = tc.ProgressToken()
+				if progressToken == nil {
+					progressToken = tc.TaskID()
+				}
 			}
 			for i := 1; i <= args.Seconds; i++ {
 				select {
