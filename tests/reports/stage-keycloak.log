@@ -1,34 +1,11 @@
 === Stage 10/10: keycloak (make testkcl-auto) ===
-Started: Tue Apr 21 06:59:39 PDT 2026
-if ! curl -sf http://localhost:8180/realms/mcpkit-test > /dev/null 2>&1; then \
-		echo "Starting Keycloak for interop tests..."; \
-		/Library/Developer/CommandLineTools/usr/bin/make upkcl; \
-		echo "Waiting for Keycloak realm..."; \
-		for i in $(seq 1 60); do \
-			curl -sf http://localhost:8180/realms/mcpkit-test > /dev/null 2>&1 && break; \
-			sleep 2; \
-		done; \
-		KC_STARTED=1; \
-	fi; \
-	cd tests/keycloak && go test ./... -count=1 -timeout 120s -v; \
-	EXIT=$?; \
-	if [ "${KC_STARTED:-}" = "1" ]; then /Library/Developer/CommandLineTools/usr/bin/make downkcl; fi; \
-	exit $EXIT
+Started: Tue Apr 21 07:27:39 PDT 2026
 Starting Keycloak for interop tests...
-if curl -sf http://localhost:8180/realms/mcpkit-test > /dev/null 2>&1; then \
-		echo "Keycloak already running on port 8180 — skipping start"; \
-	else \
-		docker rm -f mcpkit-keycloak 2>/dev/null || true; \
-		docker run -d --name mcpkit-keycloak \
-			-p 8180:8080 \
-			-e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
-			-e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
-			-v /Users/dzshrh/newstack/mcpkit/main/tests/keycloak/realm.json:/opt/keycloak/data/import/realm.json \
-			quay.io/keycloak/keycloak:26.0 start-dev --import-realm \
-			--log-level=INFO,org.keycloak.events:DEBUG; \
-		echo "Keycloak starting on port 8180... (realm import takes ~30s)"; \
-		echo "Run 'make kcllogs' to watch startup, 'make testkcl' when ready"; \
-	fi
+docker: failed to connect to the docker API at unix:///Users/dzshrh/.docker/run/docker.sock; check if the path is correct and if the daemon is running: dial unix /Users/dzshrh/.docker/run/docker.sock: connect: no such file or directory
+
+Run 'docker run --help' for more information
+Keycloak starting on port 8180... (realm import takes ~30s)
+Run 'make kcllogs' to watch startup, 'make testkcl' when ready
 Waiting for Keycloak realm...
 === RUN   TestKeycloak_MCPServer_ValidToken
     interop_test.go:34: Keycloak not reachable at http://localhost:8180: Get "http://localhost:8180/realms/mcpkit-test": dial tcp [::1]:8180: connect: connection refused (run 'make upkcl' to start)
@@ -67,6 +44,6 @@ Waiting for Keycloak realm...
     token_refresh_test.go:22: Keycloak not reachable at http://localhost:8180: Get "http://localhost:8180/realms/mcpkit-test": dial tcp [::1]:8180: connect: connection refused (run 'make upkcl' to start)
 --- SKIP: TestKeycloak_TokenRefresh_PasswordGrant (0.00s)
 PASS
-ok  	github.com/panyam/mcpkit/tests/keycloak	0.686s
+ok  	github.com/panyam/mcpkit/tests/keycloak	0.574s
 make[2]: *** No rule to make target `downkcl'.  Stop.
-Finished: Tue Apr 21 07:01:43 PDT 2026
+Finished: Tue Apr 21 07:37:04 PDT 2026
