@@ -156,11 +156,13 @@ func taskMiddleware(reg *Registry, rt *taskRuntime, cfg TasksConfig) Middleware 
 			return next(ctx, req)
 		}
 
-		// Parse the envelope to extract tool name and task hint.
-		// Per spec: task hint is at params.task, NOT params._meta.task.
+		// Parse the envelope to extract tool name, task hint, and progressToken.
 		var envelope struct {
 			Name string    `json:"name"`
 			Task *taskHint `json:"task"`
+			Meta *struct {
+				ProgressToken any `json:"progressToken"`
+			} `json:"_meta"`
 		}
 		if err := json.Unmarshal(req.Params, &envelope); err != nil {
 			return next(ctx, req) // let dispatch handle the parse error
@@ -222,70 +224,61 @@ func taskMiddleware(reg *Registry, rt *taskRuntime, cfg TasksConfig) Middleware 
 			return core.NewErrorResponse(req.ID, -32603, "failed to create task: "+err.Error())
 		}
 
-		// Run the tool asynchronously. Detach from client context so
-		// the tool continues even if the client disconnects.
-		// context.WithCancel gives us a cancel func (Phase 5) so
+		// Extract progressToken from _meta for the background goroutine (Phase 7c).
+		var progressToken any
+		if envelope.Meta != nil {
+			progressToken = envelope.Meta.ProgressToken
+		}
+
+		// Run the tool asynchronously. context.WithCancel (Phase 5) so
 		// Cancel() can stop the goroutine.
 		go func() {
 			bgCtx := core.DetachForBackground(ctx)
 			bgCtx, cancelFunc := context.WithCancel(bgCtx)
 
 			reqCh := make(chan sideChannelRequest, 1)
-			tc := &TaskContext{taskID: taskID, sessionID: sessionID, store: store, requests: reqCh}
+			tc := &TaskContext{
+				taskID:        taskID,
+				sessionID:     sessionID,
+				store:         store,
+				requests:      reqCh,
+				progressToken: progressToken,
+			}
 			bgCtx = WithTaskContext(bgCtx, tc)
 			rt.register(taskID, &activeTask{requests: reqCh, cancel: cancelFunc})
 
 			defer func() {
-				cancelFunc() // ensure cancel is called on exit
+				cancelFunc()
 				rt.unregister(taskID)
 				if r := recover(); r != nil {
-					now := time.Now().UTC().Format(time.RFC3339)
 					msg := fmt.Sprintf("panic: %v", r)
-					store.SetResult(taskID, sessionID, core.ErrorResult(msg))
-					store.Update(taskID, sessionID, func(t *core.TaskInfo) {
-						t.Status = core.TaskFailed
-						t.StatusMessage = msg
-						t.LastUpdatedAt = now
-					})
+					// Use StoreTerminalResult (Phase 4) — atomic + terminal guard.
+					store.StoreTerminalResult(taskID, sessionID, core.TaskFailed, core.ErrorResult(msg), msg)
 					notifyTaskStatus(bgCtx, store, taskID, sessionID)
 				}
 			}()
 
 			resp := next(bgCtx, req)
 
-			// If the task was already cancelled (Phase 5), don't overwrite
-			// the terminal status. The cancel handler already set it.
-			if info, ok := store.Get(taskID, sessionID); ok && info.Status.IsTerminal() {
-				return
-			}
-
-			now := time.Now().UTC().Format(time.RFC3339)
-
-			// Helper: set terminal status + send notification (Phase 6).
-			setTerminal := func(status core.TaskStatus, result core.ToolResult, statusMsg string) {
-				store.SetResult(taskID, sessionID, result)
-				store.Update(taskID, sessionID, func(t *core.TaskInfo) {
-					t.Status = status
-					t.StatusMessage = statusMsg
-					t.LastUpdatedAt = now
-				})
-				notifyTaskStatus(bgCtx, store, taskID, sessionID)
-			}
-
+			// If the task was already cancelled (Phase 5), StoreTerminalResult
+			// will reject the transition (terminal guard).
 			if resp.Error != nil {
-				setTerminal(core.TaskFailed, core.ErrorResult(resp.Error.Message), resp.Error.Message)
+				store.StoreTerminalResult(taskID, sessionID, core.TaskFailed, core.ErrorResult(resp.Error.Message), resp.Error.Message)
+				notifyTaskStatus(bgCtx, store, taskID, sessionID)
 				return
 			}
 
 			raw, err := json.Marshal(resp.Result)
 			if err != nil {
-				setTerminal(core.TaskFailed, core.ErrorResult("failed to marshal tool result"), "failed to marshal tool result")
+				store.StoreTerminalResult(taskID, sessionID, core.TaskFailed, core.ErrorResult("failed to marshal tool result"), "failed to marshal tool result")
+				notifyTaskStatus(bgCtx, store, taskID, sessionID)
 				return
 			}
 
 			var toolResult core.ToolResult
 			if err := json.Unmarshal(raw, &toolResult); err != nil {
-				setTerminal(core.TaskFailed, core.ErrorResult("failed to unmarshal tool result"), "failed to unmarshal tool result")
+				store.StoreTerminalResult(taskID, sessionID, core.TaskFailed, core.ErrorResult("failed to unmarshal tool result"), "failed to unmarshal tool result")
+				notifyTaskStatus(bgCtx, store, taskID, sessionID)
 				return
 			}
 
@@ -293,7 +286,8 @@ func taskMiddleware(reg *Registry, rt *taskRuntime, cfg TasksConfig) Middleware 
 			if toolResult.IsError {
 				status = core.TaskFailed
 			}
-			setTerminal(status, toolResult, "")
+			store.StoreTerminalResult(taskID, sessionID, status, toolResult, "")
+			notifyTaskStatus(bgCtx, store, taskID, sessionID)
 		}()
 
 		return core.NewResponse(req.ID, core.CreateTaskResult{Task: info})

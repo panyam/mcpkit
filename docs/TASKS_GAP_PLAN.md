@@ -52,21 +52,13 @@ Key TS files:
 - [x] **3b.** `core.SetSessionID` / `core.GetSessionID` / `BaseContext.SessionID()` — server dispatch sets it
 - [x] **3c.** 5 unit tests (Get, Update, Cancel, List isolation + empty backward compat)
 
-## Phase 4: Store API Alignment
+## Phase 4: Store API Alignment ✅ COMPLETE
 **Goal**: Match TS SDK's atomic operations and guards.
 
-- [ ] **4a. Add `StoreResult(taskID, status, result)` atomic method**
-  - Replaces separate `SetResult()` + `Update()` calls
-  - Guards against storing results for terminal tasks
-  - Ref: `stores/inMemory.ts:101-132`
-
-- [ ] **4b. Add terminal state guard on `UpdateStatus()`**
-  - Reject transitions from completed/failed/cancelled
-  - Ref: `stores/inMemory.ts:149-160`
-
-- [ ] **4c. Store original request + requestID with task**
-
-- [ ] **4d. Migrate middleware to use new atomic API**
+- [x] **4a.** `StoreTerminalResult(taskID, sessionID, status, result, statusMsg)` — atomic result + status, terminal guard
+- [x] **4b.** Terminal guard rejects transitions from completed/failed/cancelled
+- [x] **4c.** `request` and `requestID` fields on taskEntry (stored during Create)
+- [x] **4d.** Middleware migrated to use StoreTerminalResult (no more SetResult + Update pairs)
 
 ## Phase 5: Cancellation Propagation ✅ COMPLETE
 **Goal**: Cancelled tasks stop their goroutines.
@@ -88,8 +80,8 @@ Key TS files:
 
 - [x] **7a.** `DetachForBackground` replaces notifyFunc with session-level one — progress from background goroutines reaches client via GET SSE
 - [x] **7b.** Go `slow_compute` emits per-second progress (matching TS reference server)
-- [ ] **7c.** Preserve original `_meta.progressToken` from `tools/call` through to task goroutine (currently uses taskId as token)
-- [ ] **7d.** Clean up progress handler on terminal state
+- [x] **7c.** `progressToken` extracted from `_meta` and stored on TaskContext, exposed via `ProgressToken()`
+- [x] **7d.** No-op — no explicit progress handler registration to clean up
 
 ## Phase 8: Sub-Task Threading (#281)
 **Goal**: Tasks can spawn sub-tasks with ParentTaskID linkage.
