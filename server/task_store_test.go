@@ -1,4 +1,4 @@
-package tasks
+package server
 
 import (
 	"context"
