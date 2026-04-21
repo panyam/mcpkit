@@ -78,6 +78,7 @@ Module-specific gotchas live in their READMEs (protogen templates, App Bridge es
 | App examples | `examples/apps/` (todolist, vanilla, react — tools, elicitation, sampling, prompts) |
 | Tasks library | `server/task_*.go`, `server/tasks_experimental.go` (TaskContext, TaskElicit, TaskSample, side-channel) |
 | Tasks client | `client/tasks.go` (GetTask, GetTaskPayload, ToolCallAsTask, etc.) |
+| Tasks gap plan | `docs/TASKS_GAP_PLAN.md` (7-phase plan vs TS SDK) |
 | Tasks example | `examples/tasks/README.md` (5 tools: sync, async, failing, elicitation, sampling) |
 | Examples overview | `examples/README.md` |
 | Conformance baseline | `conformance/baseline.yml` |
