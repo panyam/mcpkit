@@ -56,7 +56,7 @@ Sub-module commands: see `ext/ui/Makefile`, `experimental/ext/protogen/Makefile`
 - **Sub-module go.sum drift**: New `core/` imports break sub-modules until `make tidy-all`
 - **Telegram long-polling vs webhooks**: Mutually exclusive — delete webhook before using `GetUpdatesChan`
 - **MCP App CSP**: Host iframes enforce strict CSP (`script-src 'unsafe-inline'`, no `connect-src`). No external CDN scripts, no `fetch()` to server. Use inline JS + bridge events only.
-- **Background goroutine requestFunc**: Task goroutines inherit a dead POST-scoped `requestFunc`. Use `core.DetachForBackground(ctx)` instead of `context.WithoutCancel(ctx)` — it replaces with the session-level persistent push.
+- **Background goroutine requestFunc**: Task goroutines inherit a dead POST-scoped `requestFunc`. Use `core.DetachForBackground(ctx)` instead of `context.WithoutCancel(ctx)` — it replaces both `requestFunc` and `notifyFunc` with the session-level persistent push.
 - **Tasks side-channel**: `TaskElicit`/`TaskSample` send via the `tasks/result` handler's live connection, not the background goroutine's dead one. The handler proxies requests from a channel.
 
 Module-specific gotchas live in their READMEs (protogen templates, App Bridge escaping, etc.).
