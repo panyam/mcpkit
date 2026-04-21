@@ -7,7 +7,7 @@ Demonstrates MCP Tasks (spec 2025-11-25) — async tool execution with lifecycle
 | Category | Feature |
 |----------|---------|
 | Core | `core.ToolDef.Execution`, `core.TaskSupportOptional`, `core.TaskSupportRequired`, `core.DetachForBackground` |
-| Experimental | `experimental/ext/tasks` — `tasks.Register`, `tasks.Config`, `tasks.TaskContext`, `tasks.GetTaskContext` |
+| Server | `server.RegisterTasks`, `server.TasksConfig`, `server.TaskContext`, `server.GetTaskContext` |
 | Side-channel | `TaskContext.TaskElicit` (elicitation from background task), `TaskContext.TaskSample` (sampling from background task) |
 | MCP methods | `tasks/get`, `tasks/result`, `tasks/cancel`, `tasks/list` |
 
@@ -225,7 +225,7 @@ The task transitions to `input_required` while waiting for the elicitation respo
 
 **To complete the flow**, use the Go test suite which has a mock elicitation handler:
 ```bash
-cd experimental/ext/tasks && go test -run TestTaskElicitE2E -v
+cd server && go test -run TestTaskElicitE2E -v
 ```
 
 ### 6. Sampling from a task (write_haiku)
@@ -258,7 +258,7 @@ Same as confirm_delete — the task transitions to `input_required` while the se
 
 **To complete the flow:**
 ```bash
-cd experimental/ext/tasks && go test -run TestTaskSampleE2E -v
+cd server && go test -run TestTaskSampleE2E -v
 ```
 
 ### 7. Cancel a running task
