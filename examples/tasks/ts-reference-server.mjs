@@ -76,6 +76,35 @@ const TOOLS = [
 ];
 
 // ============================================================================
+// Status notification helper — sends notifications/tasks/status after
+// every status change (Phase 6 parity with RequestTaskStore pattern)
+// ============================================================================
+
+async function updateStatus(server, taskId, status, statusMessage, sessionId) {
+    await taskStore.updateTaskStatus(taskId, status, statusMessage, sessionId);
+    const task = await taskStore.getTask(taskId, sessionId);
+    if (task) {
+        try {
+            await server.notification({ method: 'notifications/tasks/status', params: task });
+        } catch (e) {
+            // Notification delivery is best-effort — don't fail the operation
+        }
+    }
+}
+
+async function storeResult(server, taskId, status, result, sessionId) {
+    await taskStore.storeTaskResult(taskId, status, result, sessionId);
+    const task = await taskStore.getTask(taskId, sessionId);
+    if (task) {
+        try {
+            await server.notification({ method: 'notifications/tasks/status', params: task });
+        } catch (e) {
+            // Best-effort
+        }
+    }
+}
+
+// ============================================================================
 // Tool handlers
 // ============================================================================
 
@@ -106,11 +135,20 @@ async function handleToolCall(server, request, ctx) {
         console.log(`[slow_compute] async: task ${task.taskId}, sleeping ${seconds}s...`);
 
         (async () => {
-            await new Promise(r => setTimeout(r, seconds * 1000));
+            // Emit progress notifications during computation (Phase 7)
+            for (let i = 1; i <= seconds; i++) {
+                await new Promise(r => setTimeout(r, 1000));
+                try {
+                    await server.notification({
+                        method: 'notifications/progress',
+                        params: { progressToken: task.taskId, progress: i, total: seconds }
+                    });
+                } catch (e) { /* best-effort */ }
+            }
             console.log(`[slow_compute] finished "${label}"`);
-            await taskStore.storeTaskResult(task.taskId, 'completed', {
+            await storeResult(server, task.taskId, 'completed', {
                 content: [{ type: 'text', text: `Computation "${label}" completed after ${seconds} seconds. Result: 42.` }]
-            });
+            }, ctx.sessionId);
         })();
 
         return { task };
@@ -124,9 +162,9 @@ async function handleToolCall(server, request, ctx) {
         );
         (async () => {
             await new Promise(r => setTimeout(r, 1000));
-            await taskStore.storeTaskResult(task.taskId, 'failed', {
+            await storeResult(server, task.taskId, 'failed', {
                 content: [{ type: 'text', text: 'simulated failure: job crashed' }], isError: true
-            });
+            }, ctx.sessionId);
         })();
         return { task };
     }
@@ -142,20 +180,20 @@ async function handleToolCall(server, request, ctx) {
 
         (async () => {
             try {
-                await taskStore.updateTaskStatus(task.taskId, 'input_required');
+                await updateStatus(server, task.taskId, 'input_required', undefined, ctx.sessionId);
                 const result = await server.elicitInput({
                     message: `Are you sure you want to delete '${filename}'?`,
                     requestedSchema: { type: 'object', properties: { confirm: { type: 'boolean' } }, required: ['confirm'] },
                     mode: 'form'
                 });
-                await taskStore.updateTaskStatus(task.taskId, 'working');
+                await updateStatus(server, task.taskId, 'working', undefined, ctx.sessionId);
                 const text = (result.action === 'accept' && result.content?.confirm)
                     ? `Deleted '${filename}'` : 'Deletion cancelled';
-                await taskStore.storeTaskResult(task.taskId, 'completed', { content: [{ type: 'text', text }] });
+                await storeResult(server, task.taskId, 'completed', { content: [{ type: 'text', text }] }, ctx.sessionId);
             } catch (e) {
-                await taskStore.storeTaskResult(task.taskId, 'failed', {
+                await storeResult(server, task.taskId, 'failed', {
                     content: [{ type: 'text', text: `Error: ${e}` }], isError: true
-                });
+                }, ctx.sessionId);
             }
         })();
 
@@ -173,20 +211,20 @@ async function handleToolCall(server, request, ctx) {
 
         (async () => {
             try {
-                await taskStore.updateTaskStatus(task.taskId, 'input_required');
+                await updateStatus(server, task.taskId, 'input_required', undefined, ctx.sessionId);
                 const result = await server.createMessage({
                     messages: [{ role: 'user', content: { type: 'text', text: `Write a haiku about ${topic}` } }],
                     maxTokens: 50
                 });
-                await taskStore.updateTaskStatus(task.taskId, 'working');
+                await updateStatus(server, task.taskId, 'working', undefined, ctx.sessionId);
                 const haiku = result.content?.text || 'No response';
-                await taskStore.storeTaskResult(task.taskId, 'completed', {
+                await storeResult(server, task.taskId, 'completed', {
                     content: [{ type: 'text', text: `Haiku about ${topic}:\n${haiku}` }]
-                });
+                }, ctx.sessionId);
             } catch (e) {
-                await taskStore.storeTaskResult(task.taskId, 'failed', {
+                await storeResult(server, task.taskId, 'failed', {
                     content: [{ type: 'text', text: `Error: ${e}` }], isError: true
-                });
+                }, ctx.sessionId);
             }
         })();
 
@@ -223,7 +261,7 @@ function createMCPServer() {
         const task = await taskStore.getTask(req.params.taskId, ctx.sessionId);
         if (!task) throw new Error(`Task ${req.params.taskId} not found`);
         if (isTerminal(task.status)) throw new Error(`Cannot cancel terminal task: ${task.status}`);
-        await taskStore.updateTaskStatus(req.params.taskId, 'cancelled', 'task was cancelled', ctx.sessionId);
+        await updateStatus(server, req.params.taskId, 'cancelled', 'task was cancelled', ctx.sessionId);
         return await taskStore.getTask(req.params.taskId, ctx.sessionId);
     });
 
