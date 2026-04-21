@@ -452,14 +452,11 @@ func (s *Server) dispatchWithOpts(d *Dispatcher, ctx context.Context, claims *co
 	// (elicitation, sampling) after the original HTTP request has returned.
 	ctx = core.SetDetachStrategy(ctx, func(c context.Context) context.Context {
 		c = context.WithoutCancel(c)
+		// Replace transport-scoped functions. Each Replace* returns a new
+		// context — chain them so both replacements take effect.
 		if push := d.getPushRequest(); push != nil {
-			bgRequest := d.makeRequestFunc(push)
-			c = core.ReplaceSessionRequestFunc(c, bgRequest)
+			c = core.ReplaceSessionRequestFunc(c, d.makeRequestFunc(push))
 		}
-		// Also replace notifyFunc if the session has a persistent one
-		// (e.g., GET SSE stream). Don't replace if nil — keep the
-		// POST-scoped one as fallback (it may be the only option in
-		// test/stdio contexts without a GET SSE stream).
 		if bgNotify := d.getNotifyFunc(); bgNotify != nil {
 			c = core.ReplaceSessionNotifyFunc(c, bgNotify)
 		}
