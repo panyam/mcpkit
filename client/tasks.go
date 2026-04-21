@@ -55,6 +55,25 @@ type TaskCallOptions struct {
 	ProgressToken any
 }
 
+// IsToolTask checks whether a tool supports task invocation based on its
+// Execution.TaskSupport field. Returns true for "required" or "optional".
+// Per MCP spec 2025-11-25: absent Execution = forbidden.
+//
+// Use with ListTools to decide whether to call ToolCallAsTask or ToolCall:
+//
+//	tools, _ := c.ListTools()
+//	for _, t := range tools {
+//	    if client.IsToolTask(t) {
+//	        client.ToolCallAsTask(c, t.Name, args)
+//	    } else {
+//	        c.ToolCall(t.Name, args)
+//	    }
+//	}
+func IsToolTask(tool core.ToolDef) bool {
+	return tool.Execution != nil &&
+		tool.Execution.TaskSupport != core.TaskSupportForbidden
+}
+
 // --- Client helpers ---
 
 // GetTask polls the status of a task by ID. Non-blocking.

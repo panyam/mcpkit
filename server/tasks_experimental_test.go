@@ -1693,3 +1693,26 @@ func TestWaitForTaskTimeout(t *testing.T) {
 		t.Errorf("err = %v, want context.DeadlineExceeded", err)
 	}
 }
+
+// TestIsToolTask verifies that IsToolTask correctly identifies tools that
+// support task invocation based on Execution.TaskSupport.
+func TestIsToolTask(t *testing.T) {
+	tests := []struct {
+		name     string
+		tool     core.ToolDef
+		expected bool
+	}{
+		{"no execution", core.ToolDef{Name: "a"}, false},
+		{"forbidden", core.ToolDef{Name: "b", Execution: &core.ToolExecution{TaskSupport: core.TaskSupportForbidden}}, false},
+		{"optional", core.ToolDef{Name: "c", Execution: &core.ToolExecution{TaskSupport: core.TaskSupportOptional}}, true},
+		{"required", core.ToolDef{Name: "d", Execution: &core.ToolExecution{TaskSupport: core.TaskSupportRequired}}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := client.IsToolTask(tt.tool)
+			if got != tt.expected {
+				t.Errorf("IsToolTask(%q) = %v, want %v", tt.tool.Name, got, tt.expected)
+			}
+		})
+	}
+}
