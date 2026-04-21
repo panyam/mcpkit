@@ -124,7 +124,7 @@ func TestTaskFullLifecycle(t *testing.T) {
 	c := connectClient(t, srv)
 
 	// 1. Create task via tools/call with task hint.
-	created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "hello"}, 0)
+	created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "hello"})
 	if err != nil {
 		t.Fatalf("ToolCallAsTask: %v", err)
 	}
@@ -179,7 +179,7 @@ func TestTaskCancel(t *testing.T) {
 	srv, _ := newTaskServer(t) // don't unblock — tool stays blocked
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "cancel-me"}, 0)
+	created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "cancel-me"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func TestTaskFailedTool(t *testing.T) {
 	srv, _ := newTaskServer(t)
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "fail-async", nil, 0)
+	created, err := client.ToolCallAsTask(c, "fail-async", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -303,7 +303,7 @@ func TestTaskMultipleConcurrent(t *testing.T) {
 	const n = 5
 	var taskIDs []string
 	for i := 0; i < n; i++ {
-		created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": fmt.Sprintf("t%d", i)}, 0)
+		created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": fmt.Sprintf("t%d", i)})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -332,7 +332,7 @@ func TestTaskCustomTTL(t *testing.T) {
 	defer close(unblock)
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "x"}, 60_000)
+	created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "x"}, &client.TaskCallOptions{TTL: 60000})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -358,7 +358,7 @@ func TestTaskCancelAlreadyTerminal(t *testing.T) {
 	srv, _ := newTaskServer(t)
 	c := connectClient(t, srv)
 
-	created, _ := client.ToolCallAsTask(c, "slow", map[string]any{"data": "x"}, 0)
+	created, _ := client.ToolCallAsTask(c, "slow", map[string]any{"data": "x"})
 	client.CancelTask(c, created.Task.TaskID)
 
 	_, err := client.CancelTask(c, created.Task.TaskID)
@@ -410,7 +410,7 @@ func TestTaskResultAfterCompletion(t *testing.T) {
 	srv, unblock := newTaskServer(t)
 	c := connectClient(t, srv)
 
-	created, _ := client.ToolCallAsTask(c, "slow", map[string]any{"data": "done"}, 0)
+	created, _ := client.ToolCallAsTask(c, "slow", map[string]any{"data": "done"})
 
 	unblock <- struct{}{}
 
@@ -448,7 +448,7 @@ func TestTaskProgressCounter(t *testing.T) {
 	done := make(chan struct{})
 	for i := 0; i < n; i++ {
 		go func() {
-			created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "x"}, 0)
+			created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "x"})
 			if err == nil {
 				if ids[created.Task.TaskID] {
 					collisions.Add(1)
@@ -567,7 +567,7 @@ func TestTasksGetFlatWireFormat(t *testing.T) {
 	defer close(unblock)
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "flat"}, 0)
+	created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "flat"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -595,7 +595,7 @@ func TestTasksCancelFlatWireFormat(t *testing.T) {
 	srv, _ := newTaskServer(t)
 	c := connectClient(t, srv)
 
-	created, _ := client.ToolCallAsTask(c, "slow", map[string]any{"data": "x"}, 0)
+	created, _ := client.ToolCallAsTask(c, "slow", map[string]any{"data": "x"})
 
 	result, err := c.Call("tasks/cancel", map[string]any{"taskId": created.Task.TaskID})
 	if err != nil {
@@ -619,7 +619,7 @@ func TestTasksResultRelatedTask(t *testing.T) {
 	srv, unblock := newTaskServer(t)
 	c := connectClient(t, srv)
 
-	created, _ := client.ToolCallAsTask(c, "slow", map[string]any{"data": "meta"}, 0)
+	created, _ := client.ToolCallAsTask(c, "slow", map[string]any{"data": "meta"})
 	unblock <- struct{}{}
 
 	// Wait for completion.
@@ -680,7 +680,7 @@ func TestTaskPanicRecovery(t *testing.T) {
 	RegisterTasks(TasksConfig{Server: srv})
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "panic-tool", nil, 0)
+	created, err := client.ToolCallAsTask(c, "panic-tool", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -713,7 +713,7 @@ func TestTaskResultForFailedTask(t *testing.T) {
 	srv, _ := newTaskServer(t)
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "fail-async", nil, 0)
+	created, err := client.ToolCallAsTask(c, "fail-async", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -746,7 +746,7 @@ func TestTaskResultForCancelledTask(t *testing.T) {
 	srv, _ := newTaskServer(t)
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "cancel-me"}, 0)
+	created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "cancel-me"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -853,7 +853,7 @@ func TestGetTaskContextAvailableForAsync(t *testing.T) {
 	RegisterTasks(TasksConfig{Server: srv})
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "check-ctx", nil, 0)
+	created, err := client.ToolCallAsTask(c, "check-ctx", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -909,7 +909,7 @@ func TestTaskInputRequiredTransition(t *testing.T) {
 	RegisterTasks(TasksConfig{Server: srv})
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "needs-input", nil, 0)
+	created, err := client.ToolCallAsTask(c, "needs-input", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -952,7 +952,7 @@ func TestTaskResultConcurrentCancel(t *testing.T) {
 	srv, _ := newTaskServer(t) // slow tool blocks on channel
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "x"}, 0)
+	created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "x"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1015,7 +1015,7 @@ func TestQueueCleanupOnCancel(t *testing.T) {
 	RegisterTasks(TasksConfig{Server: srv, Store: store, MessageQueue: queue})
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "slow", nil, 0)
+	created, err := client.ToolCallAsTask(c, "slow", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1107,7 +1107,7 @@ func TestTaskElicitE2E(t *testing.T) {
 	))
 
 	// Create the task.
-	created, err := client.ToolCallAsTask(c, "confirm-action", map[string]any{"action": "deploy"}, 0)
+	created, err := client.ToolCallAsTask(c, "confirm-action", map[string]any{"action": "deploy"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1187,7 +1187,7 @@ func TestTaskSampleE2E(t *testing.T) {
 		},
 	))
 
-	created, err := client.ToolCallAsTask(c, "write-haiku", map[string]any{"topic": "nature"}, 0)
+	created, err := client.ToolCallAsTask(c, "write-haiku", map[string]any{"topic": "nature"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1281,7 +1281,7 @@ func TestTaskProgressFromBackgroundNoPanic(t *testing.T) {
 	c := connectClient(t, srv)
 
 	// Create task (no GET SSE stream — just POST).
-	created, err := client.ToolCallAsTask(c, "progress-tool", nil, 0)
+	created, err := client.ToolCallAsTask(c, "progress-tool", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1333,7 +1333,7 @@ func TestTaskCancelStopsGoroutine(t *testing.T) {
 	RegisterTasks(TasksConfig{Server: srv})
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "long-task", nil, 0)
+	created, err := client.ToolCallAsTask(c, "long-task", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1382,7 +1382,7 @@ func TestTaskStatusNotificationOnComplete(t *testing.T) {
 		}
 	}))
 
-	created, err := client.ToolCallAsTask(c, "fast", nil, 0)
+	created, err := client.ToolCallAsTask(c, "fast", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1433,7 +1433,7 @@ func TestTaskStatusNotificationOnCancel(t *testing.T) {
 		}
 	}))
 
-	created, err := client.ToolCallAsTask(c, "blocking", nil, 0)
+	created, err := client.ToolCallAsTask(c, "blocking", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1525,7 +1525,7 @@ func TestTaskDoubleCompletionRejected(t *testing.T) {
 	RegisterTasks(TasksConfig{Server: srv})
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "fast", nil, 0)
+	created, err := client.ToolCallAsTask(c, "fast", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
