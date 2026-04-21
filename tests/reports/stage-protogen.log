@@ -1,0 +1,15 @@
+=== Stage 5/10: protogen (make test-protogen) ===
+Started: Tue Apr 21 06:59:37 PDT 2026
+cd experimental/ext/protogen && go test ./... -count=1 -timeout 30s && /Library/Developer/CommandLineTools/usr/bin/make test-e2e
+?   	github.com/panyam/mcpkit/experimental/ext/protogen/cmd/protoc-gen-go-mcp	[no test files]
+ok  	github.com/panyam/mcpkit/experimental/ext/protogen/generator	0.353s
+ok  	github.com/panyam/mcpkit/experimental/ext/protogen/proto/mcp/v1	0.934s
+ok  	github.com/panyam/mcpkit/experimental/ext/protogen/runtime	0.658s
+ok  	github.com/panyam/mcpkit/experimental/ext/protogen/schema	1.248s
+?   	github.com/panyam/mcpkit/experimental/ext/protogen/testutil	[no test files]
+go build -o bin/protoc-gen-go-mcp ./cmd/protoc-gen-go-mcp
+go install ./cmd/protoc-gen-go-mcp
+echo "==> e2e: bookservice example"
+cd ../../../examples/protogen/bookservice && rm -rf gen && buf generate && go test -count=1 -timeout 30s .
+echo "==> e2e: passed"
+Finished: Tue Apr 21 06:59:39 PDT 2026

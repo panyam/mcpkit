@@ -1,0 +1,4 @@
+=== Stage 8/10: conformance (make testconf) ===
+Started: Tue Apr 21 06:59:39 PDT 2026
+bash scripts/conformance-test.sh
+Finished: Tue Apr 21 06:59:39 PDT 2026

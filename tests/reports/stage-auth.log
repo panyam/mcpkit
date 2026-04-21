@@ -1,0 +1,4 @@
+=== Stage 3/10: auth (make test-auth) ===
+Started: Tue Apr 21 06:59:37 PDT 2026
+cd ext/auth && go test ./... -count=1 -timeout 30s
+Finished: Tue Apr 21 06:59:37 PDT 2026
