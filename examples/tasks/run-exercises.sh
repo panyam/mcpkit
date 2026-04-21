@@ -259,10 +259,10 @@ mcp "$BASE" -H "$SH" -H "$CT" -H "$ACCEPT" \
 sleep 2
 
 # Kill SSE listener and check for notifications
-kill $SSE_PID 2>/dev/null
+kill $SSE_PID 2>/dev/null || true
 sleep 0.5
-kill -9 $SSE_PID 2>/dev/null
-wait $SSE_PID 2>/dev/null 2>&1
+kill -9 $SSE_PID 2>/dev/null || true
+wait $SSE_PID 2>/dev/null || true
 
 if grep -q 'notifications/tasks/status' /tmp/sse-notifications.txt 2>/dev/null; then
   echo -e "${GREEN}✓ Received notifications/tasks/status on SSE stream${NC}"
