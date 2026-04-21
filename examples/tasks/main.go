@@ -78,7 +78,18 @@ func main() {
 			}
 
 			log.Printf("[slow_compute] starting %q: sleeping %ds...", args.Label, args.Seconds)
-			time.Sleep(time.Duration(args.Seconds) * time.Second)
+			// Emit progress notifications per second. For async tasks,
+			// DetachForBackground replaces the notifyFunc with the session-level
+			// one so notifications reach the client via GET SSE.
+			// Use the task ID as the progress token if running as a task.
+			var progressToken any
+			if tc := tasks.GetTaskContext(ctx); tc != nil {
+				progressToken = tc.TaskID()
+			}
+			for i := 1; i <= args.Seconds; i++ {
+				time.Sleep(1 * time.Second)
+				ctx.EmitProgress(progressToken, float64(i), float64(args.Seconds), fmt.Sprintf("%s: %d/%d", args.Label, i, args.Seconds))
+			}
 			log.Printf("[slow_compute] finished %q", args.Label)
 
 			return core.TextResult(fmt.Sprintf("Computation %q completed after %d seconds. Result: 42.", args.Label, args.Seconds)), nil
