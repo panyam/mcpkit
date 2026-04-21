@@ -1,15 +1,19 @@
 === Stage 5/10: protogen (make test-protogen) ===
-Started: Tue Apr 21 06:59:37 PDT 2026
+Started: Tue Apr 21 07:43:22 PDT 2026
 cd experimental/ext/protogen && go test ./... -count=1 -timeout 30s && /Library/Developer/CommandLineTools/usr/bin/make test-e2e
 ?   	github.com/panyam/mcpkit/experimental/ext/protogen/cmd/protoc-gen-go-mcp	[no test files]
-ok  	github.com/panyam/mcpkit/experimental/ext/protogen/generator	0.353s
-ok  	github.com/panyam/mcpkit/experimental/ext/protogen/proto/mcp/v1	0.934s
-ok  	github.com/panyam/mcpkit/experimental/ext/protogen/runtime	0.658s
-ok  	github.com/panyam/mcpkit/experimental/ext/protogen/schema	1.248s
+ok  	github.com/panyam/mcpkit/experimental/ext/protogen/generator	0.301s
+ok  	github.com/panyam/mcpkit/experimental/ext/protogen/proto/mcp/v1	0.494s
+ok  	github.com/panyam/mcpkit/experimental/ext/protogen/runtime	0.731s
+ok  	github.com/panyam/mcpkit/experimental/ext/protogen/schema	0.957s
 ?   	github.com/panyam/mcpkit/experimental/ext/protogen/testutil	[no test files]
 go build -o bin/protoc-gen-go-mcp ./cmd/protoc-gen-go-mcp
 go install ./cmd/protoc-gen-go-mcp
-echo "==> e2e: bookservice example"
+==> e2e: bookservice example
 cd ../../../examples/protogen/bookservice && rm -rf gen && buf generate && go test -count=1 -timeout 30s .
-echo "==> e2e: passed"
-Finished: Tue Apr 21 06:59:39 PDT 2026
+[33mWARN[0m	plugin "protoc-gen-go-mcp" does not support required features.
+  Feature "proto3 optional" is required by 1 file(s):
+    bookservice/v1/service.proto
+ok  	github.com/panyam/mcpkit/examples/protogen/bookservice	0.367s
+==> e2e: passed
+Finished: Tue Apr 21 07:43:26 PDT 2026
