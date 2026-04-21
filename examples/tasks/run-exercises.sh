@@ -116,7 +116,7 @@ mcp "$BASE" -H "$SH" -H "$CT" -H "$ACCEPT" \
 exercise 5 "Elicitation from task (confirm_delete) — partial"
 # ============================================================================
 cmd 'tools/call confirm_delete {filename: "important.txt"} + task hint'
-expect 'CreateTaskResult, then status → input_required (stuck — curl cannot respond)'
+expect 'CreateTaskResult (status: working or input_required depending on timing), then tasks/get → input_required'
 mcp "$BASE" -H "$SH" -H "$CT" -H "$ACCEPT" \
   -d '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"confirm_delete","arguments":{"filename":"important.txt"},"task":{}}}'
 ELICIT_ID=$(python3 -c "import json; print(json.load(open('/tmp/mcp-body.json')).get('result',{}).get('task',{}).get('taskId',''))" 2>/dev/null)
@@ -129,7 +129,7 @@ mcp "$BASE" -H "$SH" -H "$CT" -H "$ACCEPT" \
 exercise 6 "Sampling from task (write_haiku) — partial"
 # ============================================================================
 cmd 'tools/call write_haiku {topic: "ocean"} + task hint'
-expect 'CreateTaskResult, then status → input_required (stuck — curl cannot respond)'
+expect 'CreateTaskResult (status: working or input_required depending on timing), then tasks/get → input_required'
 mcp "$BASE" -H "$SH" -H "$CT" -H "$ACCEPT" \
   -d '{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"write_haiku","arguments":{"topic":"ocean"},"task":{}}}'
 SAMPLE_ID=$(python3 -c "import json; print(json.load(open('/tmp/mcp-body.json')).get('result',{}).get('task',{}).get('taskId',''))" 2>/dev/null)
@@ -187,8 +187,139 @@ mcp "$BASE" -H "$SH" -H "$CT" -H "$ACCEPT" \
   -d "{\"jsonrpc\":\"2.0\",\"id\":17,\"method\":\"tasks/result\",\"params\":{\"taskId\":\"$TASK_ID\"}}"
 
 # ============================================================================
+exercise 10 "Session isolation (Phase 3)"
+# ============================================================================
+cmd 'Initialize a second session, try to access first session task'
+
+# Initialize session B
+RAW_B=$(curl -s -D /tmp/mcp-headers-b.txt "$BASE" -H "$CT" -H "$ACCEPT" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"session-b","version":"1.0"}}}')
+SESSION_B=$(grep -i mcp-session-id /tmp/mcp-headers-b.txt | awk '{print $2}' | tr -d '\r\n')
+curl -s "$BASE" -H "$CT" -H "$ACCEPT" -H "Mcp-Session-Id: $SESSION_B" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}' > /dev/null 2>&1
+echo "Session B: $SESSION_B"
+
+# Create a task in session A (reuse $SESSION_ID)
+mcp "$BASE" -H "$SH" -H "$CT" -H "$ACCEPT" \
+  -d '{"jsonrpc":"2.0","id":20,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":10,"label":"session-test"},"task":{}}}'
+ISO_TASK_ID=$(jq -r '.result.task.taskId' /tmp/mcp-body.json 2>/dev/null)
+echo "Task created in session A: $ISO_TASK_ID"
+
+cmd "Session B tries tasks/get on session A's task"
+expect 'Error: task not found (cross-session access denied)'
+mcp "$BASE" -H "Mcp-Session-Id: $SESSION_B" -H "$CT" -H "$ACCEPT" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":21,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$ISO_TASK_ID\"}}"
+
+cmd "Session A can still access its own task"
+expect 'Task info with status: working'
+mcp "$BASE" -H "$SH" -H "$CT" -H "$ACCEPT" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":22,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$ISO_TASK_ID\"}}"
+
+cmd "Session B's tasks/list should NOT include session A's tasks"
+expect 'Empty or only session B tasks'
+mcp "$BASE" -H "Mcp-Session-Id: $SESSION_B" -H "$CT" -H "$ACCEPT" \
+  -d '{"jsonrpc":"2.0","id":23,"method":"tasks/list","params":{}}'
+
+# ============================================================================
+exercise 11 "Store API: double-complete rejected (Phase 4) 🔲"
+# ============================================================================
+cmd 'Create task, wait for completion, try tasks/result twice'
+expect 'Both calls return same result (no error on second call — but store should guard internally)'
+echo -e "${YELLOW}Note: Phase 4 is internal store safety — not directly observable via protocol.${NC}"
+echo -e "${YELLOW}The test suite (TestStoreAtomicResult) covers this.${NC}"
+
+# ============================================================================
+exercise 12 "Cancel propagation (Phase 5) 🔲"
+# ============================================================================
+cmd 'Start 60s computation, cancel, check if goroutine actually stops'
+mcp "$BASE" -H "$SH" -H "$CT" -H "$ACCEPT" \
+  -d '{"jsonrpc":"2.0","id":30,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":60,"label":"cancel-propagation"},"task":{}}}'
+PROP_ID=$(jq -r '.result.task.taskId' /tmp/mcp-body.json 2>/dev/null)
+mcp "$BASE" -H "$SH" -H "$CT" -H "$ACCEPT" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":31,\"method\":\"tasks/cancel\",\"params\":{\"taskId\":\"$PROP_ID\"}}"
+expect 'Status: cancelled (immediate). Server log should NOT show "finished cancel-propagation" after 60s.'
+echo -e "${YELLOW}Today: status shows cancelled, but goroutine keeps sleeping for 60s.${NC}"
+echo -e "${YELLOW}After Phase 5: goroutine receives context cancellation and exits immediately.${NC}"
+
+# ============================================================================
+exercise 13 "Status notifications (Phase 6) 🔲"
+# ============================================================================
+cmd 'Open GET SSE stream, create task, watch for notifications/tasks/status'
+expect 'SSE stream receives working → completed notifications'
+echo -e "${YELLOW}Testing SSE notifications requires a background listener...${NC}"
+
+# Start SSE listener in background
+curl -s -N "$BASE" -H "$ACCEPT" -H "Mcp-Session-Id: $SESSION_ID" > /tmp/sse-notifications.txt 2>&1 &
+SSE_PID=$!
+sleep 0.5
+
+# Create a fast task to trigger notifications
+mcp "$BASE" -H "$SH" -H "$CT" -H "$ACCEPT" \
+  -d '{"jsonrpc":"2.0","id":32,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":1,"label":"notify-test"},"task":{}}}'
+sleep 2
+
+# Kill SSE listener and check for notifications
+kill $SSE_PID 2>/dev/null || true
+sleep 0.5
+kill -9 $SSE_PID 2>/dev/null || true
+wait $SSE_PID 2>/dev/null || true
+
+if grep -q 'notifications/tasks/status' /tmp/sse-notifications.txt 2>/dev/null; then
+  echo -e "${GREEN}✓ Received notifications/tasks/status on SSE stream${NC}"
+  grep 'notifications/tasks/status' /tmp/sse-notifications.txt | head -2 | sed 's/^data: //' | jq -S . 2>/dev/null
+else
+  echo -e "${YELLOW}✗ No notifications/tasks/status received (Phase 6 not implemented)${NC}"
+fi
+
+# ============================================================================
+exercise 14 "Progress notifications (Phase 7) 🔲"
+# ============================================================================
+cmd 'Open SSE stream, run 3-second computation, check for notifications/progress'
+expect 'SSE stream receives progress notifications (1/3, 2/3, 3/3)'
+
+# Start SSE listener in background
+curl -s -N "$BASE" -H "$ACCEPT" -H "Mcp-Session-Id: $SESSION_ID" > /tmp/sse-progress.txt 2>&1 &
+PROG_PID=$!
+sleep 0.5
+
+# Create a 3-second computation task
+mcp "$BASE" -H "$SH" -H "$CT" -H "$ACCEPT" \
+  -d '{"jsonrpc":"2.0","id":40,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":3,"label":"progress-test"},"task":{}}}'
+sleep 4
+
+# Kill SSE listener and check
+kill $PROG_PID 2>/dev/null || true
+sleep 0.5
+kill -9 $PROG_PID 2>/dev/null || true
+wait $PROG_PID 2>/dev/null || true
+
+if grep -q 'notifications/progress' /tmp/sse-progress.txt 2>/dev/null; then
+  PROG_COUNT=$(grep -c 'notifications/progress' /tmp/sse-progress.txt)
+  echo -e "${GREEN}✓ Received $PROG_COUNT progress notifications${NC}"
+  grep 'notifications/progress' /tmp/sse-progress.txt | head -3 | sed 's/^data: //' | jq -S . 2>/dev/null
+else
+  echo -e "${YELLOW}✗ No progress notifications received (Phase 7 not implemented in this server)${NC}"
+fi
+
+# ============================================================================
+exercise 15 "Sub-task fan-out/join (Phase 8) 🔲"
+# ============================================================================
+echo -e "${YELLOW}Note: Phase 8 requires TaskContext.SpawnTool which is not yet implemented.${NC}"
+echo -e "${YELLOW}Will be tested with a deploy tool (build + test in parallel).${NC}"
+echo -e "${YELLOW}Tracked in panyam/mcpkit#281.${NC}"
+
+# ============================================================================
+exercise 16 "Cascade cancel (Phase 8) 🔲"
+# ============================================================================
+echo -e "${YELLOW}Note: Phase 8. Cancel parent → all children cancelled.${NC}"
+echo -e "${YELLOW}Requires sub-task support (#281).${NC}"
+
+# ============================================================================
 echo ""
 echo -e "${GREEN}═══════════════════════════════════════${NC}"
 echo -e "${GREEN}  All exercises complete!${NC}"
 echo -e "${GREEN}═══════════════════════════════════════${NC}"
+echo ""
+echo "Exercises 1-10: Phase 1-3 (implemented)"
+echo "Exercises 11-16: Phase 4-8 (future — see status markers)"
 echo ""

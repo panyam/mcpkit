@@ -45,20 +45,12 @@ Key TS files:
 - [x] **2b.** `Cleanup()` method — stops all timers, clears all tasks
 - [x] **2c.** Tests: 6 unit (expiry, reset on result, reset on cancel, null no-expiry, cleanup, cleanup stops timers) + 1 e2e (exercise 9)
 
-## Phase 3: Session Isolation
+## Phase 3: Session Isolation ✅ COMPLETE
 **Goal**: Tasks are scoped to the session that created them.
 
-- [ ] **3a. Add `sessionID` parameter to TaskStore interface methods**
-  - `Create(info, sessionID)` — store sessionID with task
-  - `Get(taskID, sessionID)` — return not-found if session mismatch
-  - `Update(taskID, fn, sessionID)`
-  - `Cancel(taskID, sessionID)`
-  - `List(cursor, limit, sessionID)` — filter by session
-  - Ref: `stores/inMemory.ts:82-93`
-
-- [ ] **3b. Pass session ID from middleware/handler context**
-
-- [ ] **3c. Tests** — cross-session access denied, same-session access allowed
+- [x] **3a.** `sessionID` on all TaskStore methods + `sessionAllowed()` check on taskEntry
+- [x] **3b.** `core.SetSessionID` / `core.GetSessionID` / `BaseContext.SessionID()` — server dispatch sets it
+- [x] **3c.** 5 unit tests (Get, Update, Cancel, List isolation + empty backward compat)
 
 ## Phase 4: Store API Alignment
 **Goal**: Match TS SDK's atomic operations and guards.
@@ -98,11 +90,13 @@ Key TS files:
 
 - [ ] **6c. Tests** — client receives notification after status change
 
-## Phase 7: Progress Token Tracking (P2)
+## Phase 7: Progress Notifications ✅ PARTIAL
 **Goal**: Progress notifications flow through task lifecycle.
 
-- [ ] **7a. Preserve progress token when CreateTaskResult is returned**
-- [ ] **7b. Clean up progress handler on terminal state**
+- [x] **7a.** `DetachForBackground` replaces notifyFunc with session-level one — progress from background goroutines reaches client via GET SSE
+- [x] **7b.** Go `slow_compute` emits per-second progress (matching TS reference server)
+- [ ] **7c.** Preserve original `_meta.progressToken` from `tools/call` through to task goroutine (currently uses taskId as token)
+- [ ] **7d.** Clean up progress handler on terminal state
 
 ## Phase 8: Sub-Task Threading (#281)
 **Goal**: Tasks can spawn sub-tasks with ParentTaskID linkage.
