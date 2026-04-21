@@ -1250,3 +1250,50 @@ func TestTaskTTLExpiryE2E(t *testing.T) {
 		t.Error("expected error — task should have been cleaned up after TTL expired")
 	}
 }
+
+// TestTaskProgressFromBackgroundNoPanic verifies that EmitProgress from a
+// background task goroutine does not panic when no GET SSE stream is open.
+// Before the fix, the POST-scoped notifyFunc would write to a closed
+// ResponseWriter and panic. Now it silently drops via the closed flag.
+func TestTaskProgressFromBackgroundNoPanic(t *testing.T) {
+	srv := NewServer(core.ServerInfo{Name: "progress-panic-test", Version: "0.0.1"})
+
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "progress-tool",
+			Description: "Emits progress from background goroutine",
+			InputSchema: map[string]any{"type": "object"},
+			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			// Emit progress — this should not panic even without GET SSE.
+			ctx.EmitProgress("token", 1, 2, "halfway")
+			ctx.EmitProgress("token", 2, 2, "done")
+			return core.TextResult("ok"), nil
+		},
+	)
+	RegisterTasks(TasksConfig{Server: srv})
+	c := connectClient(t, srv)
+
+	// Create task (no GET SSE stream — just POST).
+	created, err := client.ToolCallAsTask(c, "progress-tool", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for completion — should succeed, not fail with panic.
+	for i := 0; i < 20; i++ {
+		got, err := client.GetTask(c, created.Task.TaskID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Status == core.TaskCompleted {
+			return // success — no panic
+		}
+		if got.Status == core.TaskFailed {
+			t.Fatalf("task failed (likely panic): %s", got.StatusMessage)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatal("task did not complete in time")
+}
