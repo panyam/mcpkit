@@ -301,9 +301,9 @@ See [docs/APPS_DESIGN.md](APPS_DESIGN.md) for the full design: protocol flows, e
 
 ## MCP Tasks (Experimental)
 
-MCPKit supports the MCP Tasks protocol (spec 2025-11-25) as an experimental extension in `experimental/ext/tasks/`. Tasks enable "call-now, fetch-later" async tool execution.
+MCPKit supports the MCP Tasks protocol (spec 2025-11-25) in `server/task_*.go` and `server/tasks_experimental.go`. Client helpers are in `client/tasks.go`. Tasks enable "call-now, fetch-later" async tool execution.
 
-**Architecture:** Tasks are implemented as a middleware + custom method handlers layered on top of the core server, not baked into the dispatcher. `tasks.Register(Config)` hooks everything up:
+**Architecture:** Tasks are implemented as a middleware + custom method handlers in the server package. `server.RegisterTasks(TasksConfig)` hooks everything up:
 
 1. **Middleware** intercepts `tools/call` — when the client includes `_meta.task` and the tool doesn't forbid it, the middleware creates a task, runs the tool in a detached goroutine, and returns `CreateTaskResult` immediately.
 2. **Method handlers** for `tasks/get`, `tasks/result`, `tasks/list`, `tasks/cancel` are registered via `Server.HandleMethod()`.

@@ -34,7 +34,7 @@ Sub-module commands: see `ext/ui/Makefile`, `experimental/ext/protogen/Makefile`
 | `ext/auth/` | JWT, PRM, OAuth (separate go.mod) | `ext/auth/docs/DESIGN.md` |
 | `ext/ui/` | MCP Apps + App Bridge JS (separate go.mod) | `docs/APPS_DESIGN.md` |
 | `experimental/ext/protogen/` | Proto → MCP codegen (separate go.mod) | `experimental/ext/protogen/docs/DESIGN.md` |
-| `experimental/ext/tasks/` | MCP Tasks protocol (EXPERIMENTAL, separate go.mod) — middleware, store, client helpers | |
+| `server/task_*.go`, `server/tasks_experimental.go` | MCP Tasks protocol (EXPERIMENTAL) — middleware, store, handlers, TaskContext |
 | `experimental/ext/events/` | MCP Events protocol library (EXPERIMENTAL, separate go.mod) | `experimental/ext/events/README.md` |
 | `experimental/telegram-events/` | Telegram Events reference server (separate go.mod) | `experimental/telegram-events/README.md` |
 | `testutil/` | `NewTestServer`, `ForAllTransports`, `TestClient` | |
@@ -42,7 +42,8 @@ Sub-module commands: see `ext/ui/Makefile`, `experimental/ext/protogen/Makefile`
 
 ## Sub-Module Checklist
 
-- `ext/auth/`, `ext/ui/`, `experimental/ext/protogen/`, `experimental/ext/tasks/` have separate `go.mod` — `make test` does NOT cover them
+- `ext/auth/`, `ext/ui/`, `experimental/ext/protogen/` have separate `go.mod` — `make test` does NOT cover them
+- Tasks moved to `server/` (no separate go.mod) — covered by `make test`
 - Release: `make tag-push V=vX.Y.Z` tags root + all sub-modules. Don't retag published versions.
 - New core deps propagate: `make tidy-all` after touching `core/` imports
 - Pre-push hook runs root + ext/auth + ext/ui + experimental/ext/protogen tests
@@ -75,8 +76,8 @@ Module-specific gotchas live in their READMEs (protogen templates, App Bridge es
 | Telegram example | `experimental/telegram-events/README.md` |
 | Auth examples | `examples/auth/README.md` (unified + 5 individual servers) |
 | App examples | `examples/apps/` (todolist, vanilla, react — tools, elicitation, sampling, prompts) |
-| Tasks library | `experimental/ext/tasks/` (TaskContext, TaskElicit, TaskSample, side-channel delivery) |
-| Tasks gap plan | `experimental/ext/tasks/TASKS_GAP_PLAN.md` (7-phase plan vs TS SDK) |
+| Tasks library | `server/task_*.go`, `server/tasks_experimental.go` (TaskContext, TaskElicit, TaskSample, side-channel) |
+| Tasks client | `client/tasks.go` (GetTask, GetTaskPayload, ToolCallAsTask, etc.) |
 | Tasks example | `examples/tasks/README.md` (5 tools: sync, async, failing, elicitation, sampling) |
 | Examples overview | `examples/README.md` |
 | Conformance baseline | `conformance/baseline.yml` |
