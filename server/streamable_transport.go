@@ -342,9 +342,13 @@ func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("X-Accel-Buffering", "no")
 
 	var mu sync.Mutex
+	var closed bool // set after handler returns; silently drops writes from background goroutines
 	writeSSE := func(data []byte) {
 		mu.Lock()
 		defer mu.Unlock()
+		if closed {
+			return // POST response already sent — background goroutine writing to dead writer
+		}
 		emitSSEEvent(d.eventIDs, t.config.eventStore, d.sessionID, data, func(id string, data json.RawMessage) {
 			fmt.Fprintf(w, "id: %s\nevent: message\ndata: %s\n\n", id, data)
 			flusher.Flush()
@@ -389,6 +393,13 @@ func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Reque
 		raw, _ := marshalJSON(resp)
 		writeSSE(raw)
 	}
+
+	// Mark the POST-scoped writer as closed. Background goroutines that
+	// inherited this notifyFunc/requestFunc via the context will get
+	// silent no-ops instead of panicking on the dead ResponseWriter.
+	mu.Lock()
+	closed = true
+	mu.Unlock()
 }
 
 // handleInitialize handles POST initialize: creates session, dispatches, returns
