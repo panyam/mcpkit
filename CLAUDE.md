@@ -59,6 +59,9 @@ Sub-module commands: see `ext/ui/Makefile`, `experimental/ext/protogen/Makefile`
 - **MCP App CSP**: Host iframes enforce strict CSP (`script-src 'unsafe-inline'`, no `connect-src`). No external CDN scripts, no `fetch()` to server. Use inline JS + bridge events only.
 - **Background goroutine requestFunc**: Task goroutines inherit a dead POST-scoped `requestFunc`. Use `core.DetachForBackground(ctx)` instead of `context.WithoutCancel(ctx)` — it replaces both `requestFunc` and `notifyFunc` with the session-level persistent push.
 - **Tasks side-channel**: `TaskElicit`/`TaskSample` send via the `tasks/result` handler's live connection, not the background goroutine's dead one. The handler proxies requests from a channel.
+- **POST SSE writer closure**: After `handlePostSSE` returns, the SSE writer is marked `closed`. Background goroutines that try to notify via the dead writer get silent no-ops instead of panics.
+- **Task cancel race**: After cancel, the background goroutine checks if the task is already terminal before setting status. `StoreTerminalResult` also guards against terminal→terminal transitions.
+- **Initialize returns JSON, not SSE**: Go server returns initialize as plain JSON; TS SDK returns SSE. Both spec-compliant. Curl helpers must handle both formats (#284).
 
 Module-specific gotchas live in their READMEs (protogen templates, App Bridge escaping, etc.).
 
@@ -77,10 +80,11 @@ Module-specific gotchas live in their READMEs (protogen templates, App Bridge es
 | Auth examples | `examples/auth/README.md` (unified + 5 individual servers) |
 | App examples | `examples/apps/` (todolist, vanilla, react — tools, elicitation, sampling, prompts) |
 | Tasks library | `server/task_*.go`, `server/tasks_experimental.go` (TaskContext, TaskElicit, TaskSample, side-channel) |
-| Tasks client | `client/tasks.go` (GetTask, GetTaskPayload, ToolCallAsTask, etc.) |
+| Tasks client | `client/tasks.go` (ToolCallAsTask, WaitForTask, GetTask, GetTaskPayload, IsToolTask, etc.) |
 | Tasks gap plan | `docs/TASKS_GAP_PLAN.md` (7-phase plan vs TS SDK) |
 | Tasks example | `examples/tasks/README.md` (5 tools: sync, async, failing, elicitation, sampling) |
 | Examples overview | `examples/README.md` |
+| Tasks testing | `examples/tasks/run-exercises.sh` (16 exercises), `test-side-by-side.sh`, `ts-reference-server.mjs` |
 | Conformance baseline | `conformance/baseline.yml` |
 
 ## Conformance Status
