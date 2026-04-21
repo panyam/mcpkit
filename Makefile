@@ -84,23 +84,27 @@ testkcl: ## Run Keycloak auth interop tests (requires Docker, run upkcl first)
 
 REPORT_DIR := tests/reports
 
-# run_stage runs a make target as a testall stage with logging and pass/fail tracking.
+# run_stage runs a make target as a testall stage with per-stage log files.
+# Each stage writes to $(REPORT_DIR)/stage-<label>.log (not the shared run.log).
 # Usage: $(call run_stage,STEP_NUM,TOTAL,LABEL,MAKE_TARGET)
 # Shell vars PASS, FAIL, STAGES must be initialized by the caller.
 define run_stage
+	STAGE_LOG=$(REPORT_DIR)/stage-$(3).log; \
 	echo "--- [$(1)/$(2)] $(3) ---" | tee -a $(REPORT_DIR)/run.log; \
-	STAGE_LOG=$$(mktemp); \
-	if $(MAKE) $(4) > $$STAGE_LOG 2>&1; then \
-		echo "  PASS: $(3)" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); STAGES="$$STAGES $(3):PASS"; \
+	echo "=== Stage $(1)/$(2): $(3) (make $(4)) ===" > $$STAGE_LOG; \
+	echo "Started: $$(date)" >> $$STAGE_LOG; \
+	if $(MAKE) $(4) >> $$STAGE_LOG 2>&1; then \
+		echo "  PASS: $(3)" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); STAGES="$$STAGES $(3):PASS:$(4)"; \
 	else \
-		echo "  FAIL: $(3)" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); STAGES="$$STAGES $(3):FAIL"; \
-		echo "  --- $(3) output ---"; tail -20 $$STAGE_LOG; echo "  ---"; \
+		echo "  FAIL: $(3)" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); STAGES="$$STAGES $(3):FAIL:$(4)"; \
+		echo "  --- $(3) tail ---"; tail -20 $$STAGE_LOG; echo "  ---"; \
 	fi; \
-	cat $$STAGE_LOG >> $(REPORT_DIR)/run.log; rm -f $$STAGE_LOG;
+	echo "Finished: $$(date)" >> $$STAGE_LOG;
 endef
 
-testall: ## Run ALL tests (starts Keycloak if needed) + generate HTML report
+testall: ## Run ALL tests (starts Keycloak if needed) + per-stage HTML reports
 	@mkdir -p $(REPORT_DIR)
+	@rm -f $(REPORT_DIR)/stage-*.log
 	@echo "=== MCPKit Comprehensive Test Suite ===" | tee $(REPORT_DIR)/run.log
 	@echo "Started: $$(date)" | tee -a $(REPORT_DIR)/run.log
 	@PASS=0; FAIL=0; STAGES=""; \
@@ -118,7 +122,7 @@ testall: ## Run ALL tests (starts Keycloak if needed) + generate HTML report
 	echo "" | tee -a $(REPORT_DIR)/run.log; \
 	echo "=== Results: $$PASS passed, $$FAIL failed ===" | tee -a $(REPORT_DIR)/run.log; \
 	echo "Finished: $$(date)" | tee -a $(REPORT_DIR)/run.log; \
-	echo "Full log: $(REPORT_DIR)/run.log"; \
+	echo "Per-stage logs: $(REPORT_DIR)/stage-*.log"; \
 	$(MAKE) -s test-report STAGES="$$STAGES"; \
 	echo "HTML report: $(REPORT_DIR)/report.html"; \
 	[ $$FAIL -eq 0 ]
@@ -139,59 +143,74 @@ testkcl-auto: ## Start Keycloak if needed, run interop tests, stop after
 	if [ "$${KC_STARTED:-}" = "1" ]; then $(MAKE) downkcl; fi; \
 	exit $$EXIT
 
-test-report: ## Generate HTML report from last testall run
+test-report: ## Generate HTML report with per-stage collapsible logs
 	@mkdir -p $(REPORT_DIR)
 	@TIMESTAMP=$$(date '+%Y-%m-%d %H:%M:%S'); \
 	COMMIT=$$(git rev-parse --short HEAD 2>/dev/null || echo "unknown"); \
 	BRANCH=$$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown"); \
-	echo '<!DOCTYPE html>' > $(REPORT_DIR)/report.html; \
-	echo '<html><head><meta charset="utf-8"><title>MCPKit Test Report</title>' >> $(REPORT_DIR)/report.html; \
-	echo '<style>' >> $(REPORT_DIR)/report.html; \
-	echo 'body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; color: #333; }' >> $(REPORT_DIR)/report.html; \
-	echo 'h1 { border-bottom: 2px solid #333; padding-bottom: 10px; }' >> $(REPORT_DIR)/report.html; \
-	echo '.meta { color: #666; font-size: 14px; margin-bottom: 20px; }' >> $(REPORT_DIR)/report.html; \
-	echo 'table { border-collapse: collapse; width: 100%; margin: 20px 0; }' >> $(REPORT_DIR)/report.html; \
-	echo 'th, td { border: 1px solid #ddd; padding: 10px 14px; text-align: left; }' >> $(REPORT_DIR)/report.html; \
-	echo 'th { background: #f5f5f5; font-weight: 600; }' >> $(REPORT_DIR)/report.html; \
-	echo '.pass { color: #22863a; font-weight: 600; }' >> $(REPORT_DIR)/report.html; \
-	echo '.fail { color: #cb2431; font-weight: 600; }' >> $(REPORT_DIR)/report.html; \
-	echo '.skip { color: #6a737d; font-weight: 600; }' >> $(REPORT_DIR)/report.html; \
-	echo '.summary-pass { background: #dcffe4; padding: 12px 20px; border-radius: 6px; font-size: 18px; }' >> $(REPORT_DIR)/report.html; \
-	echo '.summary-fail { background: #ffdce0; padding: 12px 20px; border-radius: 6px; font-size: 18px; }' >> $(REPORT_DIR)/report.html; \
-	echo 'pre { background: #f6f8fa; padding: 16px; border-radius: 6px; overflow-x: auto; font-size: 13px; max-height: 400px; overflow-y: auto; }' >> $(REPORT_DIR)/report.html; \
-	echo '</style></head><body>' >> $(REPORT_DIR)/report.html; \
-	echo "<h1>MCPKit Test Report</h1>" >> $(REPORT_DIR)/report.html; \
-	echo "<div class='meta'>Branch: <strong>$$BRANCH</strong> | Commit: <code>$$COMMIT</code> | Date: $$TIMESTAMP</div>" >> $(REPORT_DIR)/report.html; \
+	R=$(REPORT_DIR)/report.html; \
+	echo '<!DOCTYPE html>' > $$R; \
+	echo '<html><head><meta charset="utf-8"><title>MCPKit Test Report</title>' >> $$R; \
+	echo '<style>' >> $$R; \
+	echo 'body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; color: #333; }' >> $$R; \
+	echo 'h1 { border-bottom: 2px solid #333; padding-bottom: 10px; }' >> $$R; \
+	echo '.meta { color: #666; font-size: 14px; margin-bottom: 20px; }' >> $$R; \
+	echo 'table { border-collapse: collapse; width: 100%; margin: 20px 0; }' >> $$R; \
+	echo 'th, td { border: 1px solid #ddd; padding: 10px 14px; text-align: left; }' >> $$R; \
+	echo 'th { background: #f5f5f5; font-weight: 600; }' >> $$R; \
+	echo '.pass { color: #22863a; font-weight: 600; }' >> $$R; \
+	echo '.fail { color: #cb2431; font-weight: 600; }' >> $$R; \
+	echo '.skip { color: #6a737d; font-weight: 600; }' >> $$R; \
+	echo '.summary-pass { background: #dcffe4; padding: 12px 20px; border-radius: 6px; font-size: 18px; }' >> $$R; \
+	echo '.summary-fail { background: #ffdce0; padding: 12px 20px; border-radius: 6px; font-size: 18px; }' >> $$R; \
+	echo 'details { margin: 8px 0; }' >> $$R; \
+	echo 'summary { cursor: pointer; font-weight: 600; padding: 6px 0; }' >> $$R; \
+	echo 'summary:hover { color: #0366d6; }' >> $$R; \
+	echo 'pre { background: #f6f8fa; padding: 16px; border-radius: 6px; overflow-x: auto; font-size: 13px; max-height: 500px; overflow-y: auto; }' >> $$R; \
+	echo 'code.cmd { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-size: 13px; }' >> $$R; \
+	echo '</style></head><body>' >> $$R; \
+	echo "<h1>MCPKit Test Report</h1>" >> $$R; \
+	echo "<div class='meta'>Branch: <strong>$$BRANCH</strong> | Commit: <code>$$COMMIT</code> | Date: $$TIMESTAMP</div>" >> $$R; \
 	\
 	PASS=0; FAIL=0; \
-	echo "<table><tr><th>Stage</th><th>Result</th></tr>" >> $(REPORT_DIR)/report.html; \
+	echo "<table><tr><th>Stage</th><th>Result</th><th>Re-run</th></tr>" >> $$R; \
 	for entry in $(STAGES); do \
 		STAGE=$$(echo $$entry | cut -d: -f1); \
 		RESULT=$$(echo $$entry | cut -d: -f2); \
+		TARGET=$$(echo $$entry | cut -d: -f3); \
 		if [ "$$RESULT" = "PASS" ]; then \
-			echo "<tr><td>$$STAGE</td><td class='pass'>PASS</td></tr>" >> $(REPORT_DIR)/report.html; \
+			echo "<tr><td><a href='#log-$$STAGE'>$$STAGE</a></td><td class='pass'>PASS</td><td><code class='cmd'>make $$TARGET</code></td></tr>" >> $$R; \
 			PASS=$$((PASS+1)); \
 		elif [ "$$RESULT" = "SKIP" ]; then \
-			echo "<tr><td>$$STAGE</td><td class='skip'>SKIP</td></tr>" >> $(REPORT_DIR)/report.html; \
+			echo "<tr><td>$$STAGE</td><td class='skip'>SKIP</td><td><code class='cmd'>make $$TARGET</code></td></tr>" >> $$R; \
 		else \
-			echo "<tr><td>$$STAGE</td><td class='fail'>FAIL</td></tr>" >> $(REPORT_DIR)/report.html; \
+			echo "<tr><td><a href='#log-$$STAGE'>$$STAGE</a></td><td class='fail'>FAIL</td><td><code class='cmd'>make $$TARGET</code></td></tr>" >> $$R; \
 			FAIL=$$((FAIL+1)); \
 		fi; \
 	done; \
-	echo "</table>" >> $(REPORT_DIR)/report.html; \
+	echo "</table>" >> $$R; \
 	\
 	if [ $$FAIL -eq 0 ]; then \
-		echo "<div class='summary-pass'>All $$PASS stages passed</div>" >> $(REPORT_DIR)/report.html; \
+		echo "<div class='summary-pass'>All $$PASS stages passed</div>" >> $$R; \
 	else \
-		echo "<div class='summary-fail'>$$PASS passed, $$FAIL failed</div>" >> $(REPORT_DIR)/report.html; \
+		echo "<div class='summary-fail'>$$PASS passed, $$FAIL failed</div>" >> $$R; \
 	fi; \
 	\
-	if [ -f $(REPORT_DIR)/run.log ]; then \
-		echo "<h2>Full Log</h2><pre>" >> $(REPORT_DIR)/report.html; \
-		sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' $(REPORT_DIR)/run.log >> $(REPORT_DIR)/report.html; \
-		echo "</pre>" >> $(REPORT_DIR)/report.html; \
-	fi; \
-	echo "</body></html>" >> $(REPORT_DIR)/report.html
+	echo "<h2>Stage Logs</h2>" >> $$R; \
+	for entry in $(STAGES); do \
+		STAGE=$$(echo $$entry | cut -d: -f1); \
+		RESULT=$$(echo $$entry | cut -d: -f2); \
+		LOGFILE=$(REPORT_DIR)/stage-$$STAGE.log; \
+		OPEN=""; if [ "$$RESULT" = "FAIL" ]; then OPEN=" open"; fi; \
+		echo "<details id='log-$$STAGE'$$OPEN><summary class='$$( [ "$$RESULT" = "PASS" ] && echo pass || echo fail )'>$$STAGE — $$RESULT</summary><pre>" >> $$R; \
+		if [ -f "$$LOGFILE" ]; then \
+			sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' "$$LOGFILE" >> $$R; \
+		else \
+			echo "(no log file found)" >> $$R; \
+		fi; \
+		echo "</pre></details>" >> $$R; \
+	done; \
+	echo "</body></html>" >> $$R
 
 # =============================================================================
 # Keycloak (for interop tests)
