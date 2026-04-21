@@ -1,49 +1,29 @@
 === Stage 10/10: keycloak (make testkcl-auto) ===
-Started: Tue Apr 21 07:43:45 PDT 2026
-Starting Keycloak for interop tests...
-docker: failed to connect to the docker API at unix:///Users/dzshrh/.docker/run/docker.sock; check if the path is correct and if the daemon is running: dial unix /Users/dzshrh/.docker/run/docker.sock: connect: no such file or directory
-
-Run 'docker run --help' for more information
-Keycloak starting on port 8180... (realm import takes ~30s)
-Run 'make kcllogs' to watch startup, 'make testkcl' when ready
-Waiting for Keycloak realm...
+Started: Tue Apr 21 12:54:19 PDT 2026
 === RUN   TestKeycloak_MCPServer_ValidToken
-    interop_test.go:34: Keycloak not reachable at http://localhost:8180: Get "http://localhost:8180/realms/mcpkit-test": dial tcp [::1]:8180: connect: connection refused (run 'make upkcl' to start)
---- SKIP: TestKeycloak_MCPServer_ValidToken (0.00s)
+--- PASS: TestKeycloak_MCPServer_ValidToken (0.03s)
 === RUN   TestKeycloak_MCPServer_TamperedToken
-    interop_test.go:56: Keycloak not reachable at http://localhost:8180: Get "http://localhost:8180/realms/mcpkit-test": dial tcp [::1]:8180: connect: connection refused (run 'make upkcl' to start)
---- SKIP: TestKeycloak_MCPServer_TamperedToken (0.00s)
+--- PASS: TestKeycloak_MCPServer_TamperedToken (0.01s)
 === RUN   TestKeycloak_MCPServer_ScopeAllowed
-    interop_test.go:79: Keycloak not reachable at http://localhost:8180: Get "http://localhost:8180/realms/mcpkit-test": dial tcp [::1]:8180: connect: connection refused (run 'make upkcl' to start)
---- SKIP: TestKeycloak_MCPServer_ScopeAllowed (0.00s)
+--- PASS: TestKeycloak_MCPServer_ScopeAllowed (0.01s)
 === RUN   TestKeycloak_MCPServer_ScopeDenied
-    interop_test.go:101: Keycloak not reachable at http://localhost:8180: Get "http://localhost:8180/realms/mcpkit-test": dial tcp [::1]:8180: connect: connection refused (run 'make upkcl' to start)
---- SKIP: TestKeycloak_MCPServer_ScopeDenied (0.00s)
+--- PASS: TestKeycloak_MCPServer_ScopeDenied (0.01s)
 === RUN   TestKeycloak_MCPServer_PRM
-    interop_test.go:123: Keycloak not reachable at http://localhost:8180: Get "http://localhost:8180/realms/mcpkit-test": dial tcp [::1]:8180: connect: connection refused (run 'make upkcl' to start)
---- SKIP: TestKeycloak_MCPServer_PRM (0.00s)
+--- PASS: TestKeycloak_MCPServer_PRM (0.01s)
 === RUN   TestKeycloak_MCPServer_WWWAuthenticate
-    interop_test.go:144: Keycloak not reachable at http://localhost:8180: Get "http://localhost:8180/realms/mcpkit-test": dial tcp [::1]:8180: connect: connection refused (run 'make upkcl' to start)
---- SKIP: TestKeycloak_MCPServer_WWWAuthenticate (0.00s)
+--- PASS: TestKeycloak_MCPServer_WWWAuthenticate (0.01s)
 === RUN   TestKeycloak_MCPServer_PasswordGrant
-    interop_test.go:167: Keycloak not reachable at http://localhost:8180: Get "http://localhost:8180/realms/mcpkit-test": dial tcp [::1]:8180: connect: connection refused (run 'make upkcl' to start)
---- SKIP: TestKeycloak_MCPServer_PasswordGrant (0.00s)
+--- PASS: TestKeycloak_MCPServer_PasswordGrant (0.03s)
 === RUN   TestKeycloak_PublicMethods_DiscoverWithoutAuth
-    public_methods_test.go:22: Keycloak not reachable at http://localhost:8180: Get "http://localhost:8180/realms/mcpkit-test": dial tcp [::1]:8180: connect: connection refused (run 'make upkcl' to start)
---- SKIP: TestKeycloak_PublicMethods_DiscoverWithoutAuth (0.00s)
+--- PASS: TestKeycloak_PublicMethods_DiscoverWithoutAuth (0.01s)
 === RUN   TestKeycloak_PublicMethods_ToolCallRequiresAuth
-    public_methods_test.go:65: Keycloak not reachable at http://localhost:8180: Get "http://localhost:8180/realms/mcpkit-test": dial tcp [::1]:8180: connect: connection refused (run 'make upkcl' to start)
---- SKIP: TestKeycloak_PublicMethods_ToolCallRequiresAuth (0.00s)
+--- PASS: TestKeycloak_PublicMethods_ToolCallRequiresAuth (0.01s)
 === RUN   TestKeycloak_SessionHijack_DifferentUserRejected
-    session_hijack_test.go:54: Keycloak not reachable at http://localhost:8180: Get "http://localhost:8180/realms/mcpkit-test": dial tcp [::1]:8180: connect: connection refused (run 'make upkcl' to start)
---- SKIP: TestKeycloak_SessionHijack_DifferentUserRejected (0.00s)
+--- PASS: TestKeycloak_SessionHijack_DifferentUserRejected (0.05s)
 === RUN   TestKeycloak_SessionHijack_SameUserAllowed
-    session_hijack_test.go:85: Keycloak not reachable at http://localhost:8180: Get "http://localhost:8180/realms/mcpkit-test": dial tcp [::1]:8180: connect: connection refused (run 'make upkcl' to start)
---- SKIP: TestKeycloak_SessionHijack_SameUserAllowed (0.00s)
+--- PASS: TestKeycloak_SessionHijack_SameUserAllowed (0.03s)
 === RUN   TestKeycloak_TokenRefresh_PasswordGrant
-    token_refresh_test.go:22: Keycloak not reachable at http://localhost:8180: Get "http://localhost:8180/realms/mcpkit-test": dial tcp [::1]:8180: connect: connection refused (run 'make upkcl' to start)
---- SKIP: TestKeycloak_TokenRefresh_PasswordGrant (0.00s)
+--- PASS: TestKeycloak_TokenRefresh_PasswordGrant (0.03s)
 PASS
-ok  	github.com/panyam/mcpkit/tests/keycloak	3.076s
-make[2]: *** No rule to make target `downkcl'.  Stop.
-Finished: Tue Apr 21 08:41:22 PDT 2026
+ok  	github.com/panyam/mcpkit/tests/keycloak	0.508s
+Finished: Tue Apr 21 12:54:20 PDT 2026

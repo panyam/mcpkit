@@ -1,5 +1,8 @@
 # MCP Conformance Test Baseline
 #
+# Last verified: 2026-04-21 against @modelcontextprotocol/conformance@0.1.16
+# Result: 30/30 scenarios, 40/40 checks passing
+#
 # Lists scenarios that are expected to fail. The conformance runner exits 0
 # if only these scenarios fail (known gaps), but exits 1 if:
 #   - A scenario NOT in this list fails (regression)

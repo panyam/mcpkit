@@ -1,0 +1,15 @@
+{
+  "name": "@mcpkit/conformance",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:tasks": "npx tsx --test tasks/scenarios.test.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "latest",
+    "@modelcontextprotocol/node": "latest",
+    "@modelcontextprotocol/server": "latest",
+    "@cfworker/json-schema": "^4.1.1",
+    "tsx": "^4.0.0"
+  }
+}
