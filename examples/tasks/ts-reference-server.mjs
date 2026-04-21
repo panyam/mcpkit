@@ -209,31 +209,31 @@ function createMCPServer() {
     server.setRequestHandler('tools/list', async () => ({ tools: TOOLS }));
     server.setRequestHandler('tools/call', (req, ctx) => handleToolCall(server, req, ctx));
 
-    server.setRequestHandler('tasks/get', async (req) => {
-        const task = await taskStore.getTask(req.params.taskId);
+    server.setRequestHandler('tasks/get', async (req, ctx) => {
+        const task = await taskStore.getTask(req.params.taskId, ctx.sessionId);
         if (!task) throw new Error(`Task ${req.params.taskId} not found`);
         return task;
     });
 
-    server.setRequestHandler('tasks/list', async (req) => {
-        return await taskStore.listTasks(req.params?.cursor);
+    server.setRequestHandler('tasks/list', async (req, ctx) => {
+        return await taskStore.listTasks(req.params?.cursor, ctx.sessionId);
     });
 
-    server.setRequestHandler('tasks/cancel', async (req) => {
-        const task = await taskStore.getTask(req.params.taskId);
+    server.setRequestHandler('tasks/cancel', async (req, ctx) => {
+        const task = await taskStore.getTask(req.params.taskId, ctx.sessionId);
         if (!task) throw new Error(`Task ${req.params.taskId} not found`);
         if (isTerminal(task.status)) throw new Error(`Cannot cancel terminal task: ${task.status}`);
-        await taskStore.updateTaskStatus(req.params.taskId, 'cancelled', 'task was cancelled');
-        return await taskStore.getTask(req.params.taskId);
+        await taskStore.updateTaskStatus(req.params.taskId, 'cancelled', 'task was cancelled', ctx.sessionId);
+        return await taskStore.getTask(req.params.taskId, ctx.sessionId);
     });
 
-    server.setRequestHandler('tasks/result', async (req) => {
+    server.setRequestHandler('tasks/result', async (req, ctx) => {
         const { taskId } = req.params;
         while (true) {
-            const task = await taskStore.getTask(taskId);
+            const task = await taskStore.getTask(taskId, ctx.sessionId);
             if (!task) throw new Error(`Task ${taskId} not found`);
             if (isTerminal(task.status)) {
-                const result = await taskStore.getTaskResult(taskId);
+                const result = await taskStore.getTaskResult(taskId, ctx.sessionId);
                 return { ...result, _meta: { ...result._meta, [RELATED_TASK_META_KEY]: { taskId } } };
             }
             await new Promise(r => setTimeout(r, 1000));
