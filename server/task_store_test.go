@@ -642,3 +642,77 @@ func TestStoreSessionEmptyAllowsAccess(t *testing.T) {
 		t.Errorf("should be able to update session-less task: %v", err)
 	}
 }
+
+// --- Phase 4: Store API alignment tests ---
+
+// TestStoreTerminalResultAtomic verifies that StoreTerminalResult sets both
+// the result and status in one call. Per MCP spec 2025-11-25: the result
+// MUST be available before the status transitions to terminal (for WaitForResult).
+func TestStoreTerminalResultAtomic(t *testing.T) {
+	s := NewInMemoryStore()
+	s.Create(newTestInfo("t1", core.TaskWorking), "")
+
+	err := s.StoreTerminalResult("t1", "", core.TaskCompleted, core.TextResult("done"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	info, ok := s.Get("t1", "")
+	if !ok {
+		t.Fatal("task not found")
+	}
+	if info.Status != core.TaskCompleted {
+		t.Errorf("status = %q, want completed", info.Status)
+	}
+
+	result, ok := s.GetResult("t1", "")
+	if !ok {
+		t.Fatal("result not found")
+	}
+	if len(result.Content) == 0 || result.Content[0].Text != "done" {
+		t.Errorf("unexpected result: %+v", result)
+	}
+}
+
+// TestStoreTerminalResultGuard verifies that StoreTerminalResult rejects
+// transitions from terminal states. Per MCP spec: terminal states are
+// final — completed/failed/cancelled tasks cannot be re-completed.
+func TestStoreTerminalResultGuard(t *testing.T) {
+	s := NewInMemoryStore()
+	s.Create(newTestInfo("t1", core.TaskWorking), "")
+
+	// First completion succeeds.
+	err := s.StoreTerminalResult("t1", "", core.TaskCompleted, core.TextResult("first"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Second completion is rejected (already terminal).
+	err = s.StoreTerminalResult("t1", "", core.TaskCompleted, core.TextResult("second"), "")
+	if err == nil {
+		t.Error("expected error — task is already terminal")
+	}
+}
+
+// TestStoreTerminalResultCancelRace verifies that if a task is cancelled
+// first, StoreTerminalResult with completed is rejected. This prevents
+// the cancel→completed race condition.
+func TestStoreTerminalResultCancelRace(t *testing.T) {
+	s := NewInMemoryStore()
+	s.Create(newTestInfo("t1", core.TaskWorking), "")
+
+	// Cancel first.
+	s.Cancel("t1", "")
+
+	// Attempted completion after cancel is rejected.
+	err := s.StoreTerminalResult("t1", "", core.TaskCompleted, core.TextResult("late"), "")
+	if err == nil {
+		t.Error("expected error — task was already cancelled")
+	}
+
+	// Status should still be cancelled.
+	info, _ := s.Get("t1", "")
+	if info.Status != core.TaskCancelled {
+		t.Errorf("status = %q, want cancelled", info.Status)
+	}
+}

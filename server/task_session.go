@@ -42,10 +42,11 @@ type sideChannelResponse struct {
 //	}
 type TaskContext struct {
 	core.ToolContext
-	taskID    string
-	sessionID string
-	store     TaskStore
-	requests  chan sideChannelRequest // read by tasks/result handler
+	taskID        string
+	sessionID     string
+	store         TaskStore
+	requests      chan sideChannelRequest // read by tasks/result handler
+	progressToken any                    // original _meta.progressToken from client (Phase 7c)
 }
 
 type taskContextKey struct{}
@@ -69,6 +70,14 @@ func GetTaskContext(ctx core.ToolContext) *TaskContext {
 // TaskID returns the task's unique identifier.
 func (tc *TaskContext) TaskID() string {
 	return tc.taskID
+}
+
+// ProgressToken returns the client's original _meta.progressToken from
+// the tools/call request. Use this instead of TaskID() for EmitProgress
+// so progress notifications correlate with what the client expects.
+// Returns nil if the client didn't send a progressToken.
+func (tc *TaskContext) ProgressToken() any {
+	return tc.progressToken
 }
 
 // SetStatus transitions the task to a new status and sends a
