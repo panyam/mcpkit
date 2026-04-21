@@ -7,7 +7,7 @@
 //
 // Stability: experimental. The Go API will change as the spec evolves and
 // conformance tests are published.
-package tasks
+package server
 
 import (
 	"context"

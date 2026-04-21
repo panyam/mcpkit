@@ -126,14 +126,14 @@ After each phase:
 | `core/elicitation.go` | RelatedTask on ElicitationMeta |
 | `core/sampling.go` | RelatedTask on SamplingMeta |
 | `server/server.go` | DetachStrategy registration, WithMux, CloseAllSessions on shutdown |
-| `experimental/ext/tasks/queue.go` | NEW — TaskMessageQueue + InMemoryMessageQueue |
-| `experimental/ext/tasks/queue_test.go` | NEW — 9 queue tests |
-| `experimental/ext/tasks/session.go` | NEW — TaskContext, side-channel request/response |
-| `experimental/ext/tasks/tasks.go` | taskRuntime, long-poll handler, side-channel proxy |
-| `experimental/ext/tasks/store.go` | Consolidated taskEntry, WaitForUpdate, context-aware WaitForResult |
-| `experimental/ext/tasks/store_test.go` | WaitForUpdate tests, context cancellation |
-| `experimental/ext/tasks/tasks_test.go` | 61 tests total |
-| `experimental/ext/tasks/client.go` | pollInterval in task hint |
+| `server/task_queue.go` | NEW — TaskMessageQueue + InMemoryMessageQueue |
+| `server/task_queue_test.go` | NEW — 9 queue tests |
+| `server/task_session.go` | NEW — TaskContext, side-channel request/response |
+| `server/tasks_experimental.go` | taskRuntime, long-poll handler, side-channel proxy |
+| `server/task_store.go` | Consolidated taskEntry, WaitForUpdate, context-aware WaitForResult |
+| `server/task_store_test.go` | WaitForUpdate tests, context cancellation |
+| `server/tasks_experimental_test.go` | 61 tests total |
+| `client/tasks.go` | pollInterval in task hint |
 | `examples/tasks/main.go` | confirm_delete + write_haiku tools |
 | `examples/tasks/README.md` | Updated features, exercises, curl note |
 | `examples/tasks/test-side-by-side.sh` | NEW — wire format comparison vs TS SDK |

@@ -1,4 +1,4 @@
-package tasks
+package server
 
 import (
 	"context"
@@ -10,11 +10,10 @@ import (
 	"time"
 
 	"github.com/panyam/mcpkit/core"
-	"github.com/panyam/mcpkit/server"
 )
 
 // Config holds the options for registering tasks support on an MCP server.
-type Config struct {
+type TasksConfig struct {
 	// Store is the task state backend. If nil, an InMemoryTaskStore is used.
 	Store TaskStore
 
@@ -24,7 +23,7 @@ type Config struct {
 	MessageQueue TaskMessageQueue
 
 	// Server is the MCP server to register tasks on.
-	Server *server.Server
+	Server *Server
 
 	// DefaultTTLMs is the default task TTL in milliseconds. Tasks are
 	// cleaned up after this duration. Default: 300000 (5 minutes).
@@ -39,7 +38,7 @@ type Config struct {
 	MaxQueueSize int
 }
 
-func (c *Config) defaults() {
+func (c *TasksConfig) defaults() {
 	if c.Store == nil {
 		c.Store = NewInMemoryStore()
 	}
@@ -99,7 +98,7 @@ func (rt *taskRuntime) getChannel(taskID string) chan sideChannelRequest {
 //   - Advertises the tasks capability in the initialize response
 //
 // Must be called before accepting connections.
-func Register(cfg Config) {
+func RegisterTasks(cfg TasksConfig) {
 	cfg.defaults()
 	srv := cfg.Server
 	store := cfg.Store
@@ -133,8 +132,8 @@ func Register(cfg Config) {
 // hint at params.task (per MCP spec 2025-11-25) and the tool supports tasks,
 // the middleware creates a task, runs the tool asynchronously, and returns
 // CreateTaskResult immediately.
-func taskMiddleware(reg *server.Registry, rt *taskRuntime, cfg Config) server.Middleware {
-	return func(ctx context.Context, req *core.Request, next server.MiddlewareFunc) *core.Response {
+func taskMiddleware(reg *Registry, rt *taskRuntime, cfg TasksConfig) Middleware {
+	return func(ctx context.Context, req *core.Request, next MiddlewareFunc) *core.Response {
 		if req.Method != "tools/call" {
 			return next(ctx, req)
 		}
@@ -288,7 +287,7 @@ type taskHint struct {
 
 // --- Method Handlers ---
 
-func makeGetHandler(store TaskStore) server.MethodHandler {
+func makeGetHandler(store TaskStore) MethodHandler {
 	return func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		var p struct {
 			TaskID string `json:"taskId"`
@@ -304,7 +303,7 @@ func makeGetHandler(store TaskStore) server.MethodHandler {
 	}
 }
 
-func makeResultHandler(rt *taskRuntime) server.MethodHandler {
+func makeResultHandler(rt *taskRuntime) MethodHandler {
 	return func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		var p struct {
 			TaskID string `json:"taskId"`
@@ -362,7 +361,7 @@ func makeResultHandler(rt *taskRuntime) server.MethodHandler {
 	}
 }
 
-func makeListHandler(store TaskStore) server.MethodHandler {
+func makeListHandler(store TaskStore) MethodHandler {
 	return func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		var p struct {
 			Cursor string `json:"cursor"`
@@ -381,7 +380,7 @@ func makeListHandler(store TaskStore) server.MethodHandler {
 	}
 }
 
-func makeCancelHandler(rt *taskRuntime) server.MethodHandler {
+func makeCancelHandler(rt *taskRuntime) MethodHandler {
 	return func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		var p struct {
 			TaskID string `json:"taskId"`
