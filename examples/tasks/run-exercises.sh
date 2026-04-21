@@ -272,10 +272,34 @@ else
 fi
 
 # ============================================================================
-exercise 14 "Progress tokens (Phase 7) 🔲"
+exercise 14 "Progress notifications (Phase 7) 🔲"
 # ============================================================================
-echo -e "${YELLOW}Note: Phase 7 requires tool handlers that emit progress. Not testable via${NC}"
-echo -e "${YELLOW}current example tools. Will be tested after progress-emitting tools are added.${NC}"
+cmd 'Open SSE stream, run 3-second computation, check for notifications/progress'
+expect 'SSE stream receives progress notifications (1/3, 2/3, 3/3)'
+
+# Start SSE listener in background
+curl -s -N "$BASE" -H "$ACCEPT" -H "Mcp-Session-Id: $SESSION_ID" > /tmp/sse-progress.txt 2>&1 &
+PROG_PID=$!
+sleep 0.5
+
+# Create a 3-second computation task
+mcp "$BASE" -H "$SH" -H "$CT" -H "$ACCEPT" \
+  -d '{"jsonrpc":"2.0","id":40,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":3,"label":"progress-test"},"task":{}}}'
+sleep 4
+
+# Kill SSE listener and check
+kill $PROG_PID 2>/dev/null || true
+sleep 0.5
+kill -9 $PROG_PID 2>/dev/null || true
+wait $PROG_PID 2>/dev/null || true
+
+if grep -q 'notifications/progress' /tmp/sse-progress.txt 2>/dev/null; then
+  PROG_COUNT=$(grep -c 'notifications/progress' /tmp/sse-progress.txt)
+  echo -e "${GREEN}✓ Received $PROG_COUNT progress notifications${NC}"
+  grep 'notifications/progress' /tmp/sse-progress.txt | head -3 | sed 's/^data: //' | jq -S . 2>/dev/null
+else
+  echo -e "${YELLOW}✗ No progress notifications received (Phase 7 not implemented in this server)${NC}"
+fi
 
 # ============================================================================
 exercise 15 "Sub-task fan-out/join (Phase 8) 🔲"
