@@ -68,27 +68,20 @@ Key TS files:
 
 - [ ] **4d. Migrate middleware to use new atomic API**
 
-## Phase 5: Cancellation Propagation
+## Phase 5: Cancellation Propagation ✅ COMPLETE
 **Goal**: Cancelled tasks stop their goroutines.
 
-- [ ] **5a. Use `context.WithCancel` inside `DetachForBackground`**
-  - Store cancel func in taskRuntime
-  - `Cancel()` calls cancel func after marking status
+- [x] **5a.** `context.WithCancel` on detached context, cancel func in `activeTask` struct (C2)
+- [x] **5b.** Cancel handler calls `rt.cancelTask()` → goroutine's `ctx.Done()` fires
+- [x] **5c.** `TestTaskCancelStopsGoroutine` + example `slow_compute` checks `ctx.Err()`
 
-- [ ] **5b. Tool handlers receive cancelled context**
-
-- [ ] **5c. Tests** — cancel while running, verify goroutine exits
-
-## Phase 6: Status Notifications
+## Phase 6: Status Notifications ✅ COMPLETE (Option 1)
 **Goal**: Clients receive push notifications on status changes.
 
-- [ ] **6a. Wrap store with `RequestTaskStore` pattern**
-  - Auto-send `notifications/tasks/status` on every status change
-  - Ref: `taskManager.ts:657-712`
-
-- [ ] **6b. Define `TaskStatusNotification` type** in `core/task.go`
-
-- [ ] **6c. Tests** — client receives notification after status change
+- [x] **6a.** `notifyTaskStatus()` sends `notifications/tasks/status` after status changes
+- [x] **6b.** Cancel handler + tasks/result handler + TaskContext.SetStatus all notify
+- [x] **6c.** `TestTaskStatusNotificationOnComplete` + `TestTaskStatusNotificationOnCancel`
+- [ ] **6d.** Queue-based notification storage for replay/reliability (#288)
 
 ## Phase 7: Progress Notifications ✅ PARTIAL
 **Goal**: Progress notifications flow through task lifecycle.

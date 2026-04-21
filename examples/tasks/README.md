@@ -422,9 +422,9 @@ Complete a task, then try to store another result (internal API — no curl equi
 
 ---
 
-## Phase 5: Cancellation Propagation 🔲
+## Phase 5: Cancellation Propagation ✅
 
-> **Status**: Not yet implemented. Cancel marks the status but doesn't stop the goroutine.
+> **Status**: Implemented. Cancel stops the background goroutine via context cancellation.
 
 ### 12. Cancel actually stops the work
 
@@ -451,14 +451,14 @@ mcp http://localhost:$PORT/mcp \
   -d "{\"jsonrpc\":\"2.0\",\"id\":21,\"method\":\"tasks/cancel\",\"params\":{\"taskId\":\"$TASK_ID\"}}"
 ```
 
-**Expected (after Phase 5):** The server log shows the goroutine exited. Server resource usage drops.
-**Today:** Status shows `cancelled` but the goroutine keeps sleeping for 60 seconds. Server log shows `[slow_compute] finished "long"` after 60s even though it was cancelled.
+**Expected:** Server log shows `[slow_compute] cancelled "long" at N/60`. Goroutine exits immediately.
+**Behavior:** `context.WithCancel` propagates to the tool handler's `ctx.Done()` channel.
 
 ---
 
-## Phase 6: Status Notifications 🔲
+## Phase 6: Status Notifications ✅
 
-> **Status**: Not yet implemented. Clients must poll — no push notifications.
+> **Status**: Implemented. Status notifications sent via cancel handler and tasks/result handler.
 
 ### 13. Receive status change notifications
 

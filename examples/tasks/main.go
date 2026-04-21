@@ -86,8 +86,14 @@ func main() {
 				progressToken = tc.TaskID()
 			}
 			for i := 1; i <= args.Seconds; i++ {
-				time.Sleep(1 * time.Second)
-				ctx.EmitProgress(progressToken, float64(i), float64(args.Seconds), fmt.Sprintf("%s: %d/%d", args.Label, i, args.Seconds))
+				select {
+				case <-ctx.Done():
+					// Task was cancelled (Phase 5) — exit early.
+					log.Printf("[slow_compute] cancelled %q at %d/%d", args.Label, i, args.Seconds)
+					return core.TextResult(fmt.Sprintf("Computation %q cancelled at %d/%d.", args.Label, i, args.Seconds)), nil
+				case <-time.After(1 * time.Second):
+					ctx.EmitProgress(progressToken, float64(i), float64(args.Seconds), fmt.Sprintf("%s: %d/%d", args.Label, i, args.Seconds))
+				}
 			}
 			log.Printf("[slow_compute] finished %q", args.Label)
 
