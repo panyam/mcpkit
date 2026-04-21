@@ -7,7 +7,7 @@
  *   cd examples/tasks && npm install   # first time only
  *
  * Usage:
- *   node ts-reference-server.mjs                # default port 8080
+ *   node ts-reference-server.mjs                # default port 8090
  *   PORT=8090 node ts-reference-server.mjs      # custom port
  */
 
@@ -17,7 +17,7 @@ import { createServer } from 'node:http';
 import { Server, InMemoryTaskStore, isTerminal, RELATED_TASK_META_KEY } from '@modelcontextprotocol/server';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 8080;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 8090;
 
 const taskStore = new InMemoryTaskStore();
 const transports = {};
