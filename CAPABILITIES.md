@@ -110,6 +110,12 @@
 - mcp-tasks-side-channel: TaskContext.TaskElicit/TaskSample — background tasks can elicit user input or request LLM sampling via the tasks/result side-channel. The tasks/result handler proxies requests through its live POST SSE connection. Status transitions: working → input_required → working.
 - mcp-tasks-detach-background: core.DetachForBackground(ctx) — returns a context suitable for background goroutines. Server registers a detach strategy that replaces the dead POST-scoped requestFunc with the session-level persistent push (GET SSE). Aligns with future sub-task spawning (#281).
 - mcp-tasks-parent-task: TaskInfo.ParentTaskID — backward-compatible extension field for sub-task trees. Foundation for SpawnTool/WaitForTask threading model (#281).
+- mcp-tasks-cancel-propagation: context.WithCancel on background goroutines — Cancel() fires ctx.Done() so tool handlers can exit early. activeTask struct consolidates channel + cancel func.
+- mcp-tasks-status-notifications: notifications/tasks/status sent on cancel, completion, and status changes (Option 1 — from live handler context). Queue-based delivery deferred (#288).
+- mcp-tasks-atomic-store: StoreTerminalResult — atomic result + status transition with terminal guard. Prevents cancel→completed race and double-completion.
+- mcp-tasks-progress-token: _meta.progressToken from tools/call preserved on TaskContext.ProgressToken(). Background goroutine uses client's token for EmitProgress.
+- mcp-tasks-client-helpers: client.ToolCallAsTask (variadic TaskCallOptions), client.WaitForTask(ctx), client.IsToolTask, client.GetTask/GetTaskPayload/ListTasks/CancelTask.
+- mcp-tasks-post-sse-closure: POST-scoped SSE writer signals closure via atomic flag. Background goroutines get silent no-ops instead of panics on dead ResponseWriter.
 - mcp-server-withmux: server.WithMux — TransportOption for registering additional HTTP routes (auth PRM, health checks) on the server's mux while staying on srv.Run()'s graceful shutdown path.
 - mcp-sending-middleware: server.NotifyInterceptor + RequestInterceptor — wrap outgoing notifications and server-to-client requests. WithNotifyInterceptor/WithRequestInterceptor options. (#244)
 - mcp-client-middleware: client.ClientMiddleware — call-level middleware on Client.Call path. WithClientMiddleware option. Method+params visibility for tracing, logging, metrics. (#245)
