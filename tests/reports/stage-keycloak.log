@@ -1,5 +1,5 @@
 === Stage 10/10: keycloak (make testkcl-auto) ===
-Started: Tue Apr 21 07:27:39 PDT 2026
+Started: Tue Apr 21 07:43:45 PDT 2026
 Starting Keycloak for interop tests...
 docker: failed to connect to the docker API at unix:///Users/dzshrh/.docker/run/docker.sock; check if the path is correct and if the daemon is running: dial unix /Users/dzshrh/.docker/run/docker.sock: connect: no such file or directory
 
@@ -44,6 +44,6 @@ Waiting for Keycloak realm...
     token_refresh_test.go:22: Keycloak not reachable at http://localhost:8180: Get "http://localhost:8180/realms/mcpkit-test": dial tcp [::1]:8180: connect: connection refused (run 'make upkcl' to start)
 --- SKIP: TestKeycloak_TokenRefresh_PasswordGrant (0.00s)
 PASS
-ok  	github.com/panyam/mcpkit/tests/keycloak	0.574s
+ok  	github.com/panyam/mcpkit/tests/keycloak	3.076s
 make[2]: *** No rule to make target `downkcl'.  Stop.
-Finished: Tue Apr 21 07:37:04 PDT 2026
+Finished: Tue Apr 21 08:41:22 PDT 2026
