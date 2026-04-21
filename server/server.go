@@ -441,17 +441,24 @@ func (s *Server) dispatchWithOpts(d *Dispatcher, ctx context.Context, claims *co
 	// and access authenticated claims and client capabilities.
 	ctx = core.ContextWithSession(ctx, notify, request, &d.logLevel, &d.clientCaps, claims)
 
+	// Set the session ID so middleware and handlers can access it via ctx.SessionID().
+	core.SetSessionID(ctx, d.sessionID)
+
 	// Register a detach strategy for background goroutines (e.g., async tasks).
-	// The strategy replaces the POST-scoped requestFunc (which writes to the
-	// now-closed response stream) with one that uses the session's persistent
-	// push function (GET SSE stream). This allows background goroutines to
-	// send server-to-client requests (elicitation, sampling) after the
-	// original HTTP request has returned.
+	// The strategy replaces the POST-scoped requestFunc and notifyFunc (which
+	// write to the now-closed response stream) with session-level equivalents
+	// that use the persistent GET SSE stream. This allows background goroutines
+	// to send notifications (progress, logging) and server-to-client requests
+	// (elicitation, sampling) after the original HTTP request has returned.
 	ctx = core.SetDetachStrategy(ctx, func(c context.Context) context.Context {
 		c = context.WithoutCancel(c)
+		// Replace transport-scoped functions. Each Replace* returns a new
+		// context — chain them so both replacements take effect.
 		if push := d.getPushRequest(); push != nil {
-			bgRequest := d.makeRequestFunc(push)
-			c = core.ReplaceSessionRequestFunc(c, bgRequest)
+			c = core.ReplaceSessionRequestFunc(c, d.makeRequestFunc(push))
+		}
+		if bgNotify := d.getNotifyFunc(); bgNotify != nil {
+			c = core.ReplaceSessionNotifyFunc(c, bgNotify)
 		}
 		return c
 	})

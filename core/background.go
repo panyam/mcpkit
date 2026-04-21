@@ -44,9 +44,22 @@ func ReplaceSessionRequestFunc(ctx context.Context, fn RequestFunc) context.Cont
 	if sc == nil {
 		return ctx
 	}
-	// Create a shallow copy of the session context with the new requestFunc.
-	// We can't mutate the original because other goroutines may still reference it.
 	newSC := *sc
 	newSC.request = fn
+	return context.WithValue(ctx, sessionCtxKey, &newSC)
+}
+
+// ReplaceSessionNotifyFunc returns a new context with the session's
+// notifyFunc replaced. Used by detach strategies to swap the dead
+// POST-scoped notifyFunc with a live session-level one.
+//
+// No-op if the context has no session.
+func ReplaceSessionNotifyFunc(ctx context.Context, fn NotifyFunc) context.Context {
+	sc := sessionFromContext(ctx)
+	if sc == nil {
+		return ctx
+	}
+	newSC := *sc
+	newSC.notify = fn
 	return context.WithValue(ctx, sessionCtxKey, &newSC)
 }
