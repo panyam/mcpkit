@@ -1557,3 +1557,114 @@ func TestTaskDoubleCompletionRejected(t *testing.T) {
 		t.Errorf("second result should be same: %+v", result2)
 	}
 }
+
+// --- Client helper tests (#291) ---
+
+// TestWaitForTaskCompletes verifies that WaitForTask polls until the task
+// reaches a terminal state and returns the final status.
+func TestWaitForTaskCompletes(t *testing.T) {
+	srv, unblock := newTaskServer(t)
+	c := connectClient(t, srv)
+
+	created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "wait"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Unblock after a short delay.
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		unblock <- struct{}{}
+	}()
+
+	got, err := client.WaitForTask(c, created.Task.TaskID, 50*time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != core.TaskCompleted {
+		t.Errorf("status = %q, want completed", got.Status)
+	}
+}
+
+// TestWaitForTaskCancelled verifies that WaitForTask returns when the task
+// is cancelled by another goroutine.
+func TestWaitForTaskCancelled(t *testing.T) {
+	srv, _ := newTaskServer(t)
+	c := connectClient(t, srv)
+
+	created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "wait-cancel"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Cancel after a short delay.
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		client.CancelTask(c, created.Task.TaskID)
+	}()
+
+	got, err := client.WaitForTask(c, created.Task.TaskID, 50*time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != core.TaskCancelled {
+		t.Errorf("status = %q, want cancelled", got.Status)
+	}
+}
+
+// TestToolCallAsTaskWithProgressToken verifies that ToolCallAsTask passes
+// the progressToken through via _meta.progressToken.
+func TestToolCallAsTaskWithProgressToken(t *testing.T) {
+	srv := NewServer(core.ServerInfo{Name: "opts-test", Version: "0.0.1"})
+
+	gotToken := make(chan any, 1)
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "token-check",
+			Description: "Reports progressToken",
+			InputSchema: map[string]any{"type": "object"},
+			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			tc := GetTaskContext(ctx)
+			gotToken <- tc.ProgressToken()
+			return core.TextResult("ok"), nil
+		},
+	)
+	RegisterTasks(TasksConfig{Server: srv})
+	c := connectClient(t, srv)
+
+	_, err := client.ToolCallAsTask(c, "token-check", nil, &client.TaskCallOptions{
+		ProgressToken: "client-token-123",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case token := <-gotToken:
+		if token != "client-token-123" {
+			t.Errorf("ProgressToken = %v, want client-token-123", token)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("tool handler did not run")
+	}
+}
+
+// TestToolCallAsTaskWithPollInterval verifies that ToolCallAsTask passes
+// pollInterval through to the CreateTaskResult.
+func TestToolCallAsTaskWithPollInterval(t *testing.T) {
+	srv, unblock := newTaskServer(t)
+	defer close(unblock)
+	c := connectClient(t, srv)
+
+	created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "x"}, &client.TaskCallOptions{
+		PollInterval: 2000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Task.PollInterval != 2000 {
+		t.Errorf("PollInterval = %d, want 2000", created.Task.PollInterval)
+	}
+}
