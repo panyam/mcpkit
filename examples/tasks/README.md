@@ -409,16 +409,16 @@ mcp http://localhost:$PORT/mcp \
 
 ---
 
-## Phase 4: Store API Alignment 🔲
+## Phase 4: Store API Alignment ✅
 
-> **Status**: Not yet implemented.
+> **Status**: Implemented. Atomic `StoreTerminalResult` with terminal guard.
 
 ### 11. Double-complete is rejected
 
 Complete a task, then try to store another result (internal API — no curl equivalent).
 
-**Expected (after Phase 4):** Error — can't store result for terminal task.
-**Today:** No guard. Second result overwrites the first.
+**Expected:** Error — can't store result for terminal task. Second `StoreTerminalResult` is rejected.
+**Behavior:** Terminal guard prevents cancel→completed race and double-completion.
 
 ---
 
@@ -480,9 +480,9 @@ curl -N http://localhost:$PORT/mcp \
 
 ---
 
-## Phase 7: Progress Notifications ✅ PARTIAL
+## Phase 7: Progress Notifications ✅
 
-> **Status**: Progress notifications work from async tasks. Original progressToken preservation is pending.
+> **Status**: Implemented. Progress from background tasks uses client's `_meta.progressToken`.
 
 ### 14. Progress notifications flow through tasks
 
