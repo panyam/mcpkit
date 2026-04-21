@@ -116,7 +116,7 @@ mcp "$BASE" -H "$SH" -H "$CT" -H "$ACCEPT" \
 exercise 5 "Elicitation from task (confirm_delete) — partial"
 # ============================================================================
 cmd 'tools/call confirm_delete {filename: "important.txt"} + task hint'
-expect 'CreateTaskResult, then status → input_required (stuck — curl cannot respond)'
+expect 'CreateTaskResult (status: working or input_required depending on timing), then tasks/get → input_required'
 mcp "$BASE" -H "$SH" -H "$CT" -H "$ACCEPT" \
   -d '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"confirm_delete","arguments":{"filename":"important.txt"},"task":{}}}'
 ELICIT_ID=$(python3 -c "import json; print(json.load(open('/tmp/mcp-body.json')).get('result',{}).get('task',{}).get('taskId',''))" 2>/dev/null)
@@ -129,7 +129,7 @@ mcp "$BASE" -H "$SH" -H "$CT" -H "$ACCEPT" \
 exercise 6 "Sampling from task (write_haiku) — partial"
 # ============================================================================
 cmd 'tools/call write_haiku {topic: "ocean"} + task hint'
-expect 'CreateTaskResult, then status → input_required (stuck — curl cannot respond)'
+expect 'CreateTaskResult (status: working or input_required depending on timing), then tasks/get → input_required'
 mcp "$BASE" -H "$SH" -H "$CT" -H "$ACCEPT" \
   -d '{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"write_haiku","arguments":{"topic":"ocean"},"task":{}}}'
 SAMPLE_ID=$(python3 -c "import json; print(json.load(open('/tmp/mcp-body.json')).get('result',{}).get('task',{}).get('taskId',''))" 2>/dev/null)
