@@ -71,6 +71,14 @@ func (tc *TaskContext) TaskID() string {
 	return tc.taskID
 }
 
+// SetStatus transitions the task to a new status. Exposed for testing
+// and advanced use cases where direct status control is needed.
+func (tc *TaskContext) SetStatus(status core.TaskStatus) error {
+	return tc.store.Update(tc.taskID, tc.sessionID, func(t *core.TaskInfo) {
+		t.Status = status
+	})
+}
+
 // TaskElicit sends an elicitation request to the client via the tasks/result
 // side-channel. The request is proxied by the tasks/result long-poll handler
 // through its live connection.

@@ -13,7 +13,7 @@ import (
 )
 
 // Config holds the options for registering tasks support on an MCP server.
-type Config struct {
+type TasksConfig struct {
 	// Store is the task state backend. If nil, an InMemoryTaskStore is used.
 	Store TaskStore
 
@@ -38,7 +38,7 @@ type Config struct {
 	MaxQueueSize int
 }
 
-func (c *Config) defaults() {
+func (c *TasksConfig) defaults() {
 	if c.Store == nil {
 		c.Store = NewInMemoryStore()
 	}
@@ -98,7 +98,7 @@ func (rt *taskRuntime) getChannel(taskID string) chan sideChannelRequest {
 //   - Advertises the tasks capability in the initialize response
 //
 // Must be called before accepting connections.
-func Register(cfg Config) {
+func RegisterTasks(cfg TasksConfig) {
 	cfg.defaults()
 	srv := cfg.Server
 	store := cfg.Store
@@ -132,7 +132,7 @@ func Register(cfg Config) {
 // hint at params.task (per MCP spec 2025-11-25) and the tool supports tasks,
 // the middleware creates a task, runs the tool asynchronously, and returns
 // CreateTaskResult immediately.
-func taskMiddleware(reg *Registry, rt *taskRuntime, cfg Config) Middleware {
+func taskMiddleware(reg *Registry, rt *taskRuntime, cfg TasksConfig) Middleware {
 	return func(ctx context.Context, req *core.Request, next MiddlewareFunc) *core.Response {
 		if req.Method != "tools/call" {
 			return next(ctx, req)
