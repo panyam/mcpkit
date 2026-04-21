@@ -221,7 +221,7 @@ mcp "$BASE" -H "Mcp-Session-Id: $SESSION_B" -H "$CT" -H "$ACCEPT" \
   -d '{"jsonrpc":"2.0","id":23,"method":"tasks/list","params":{}}'
 
 # ============================================================================
-exercise 11 "Store API: double-complete rejected (Phase 4) 🔲"
+exercise 11 "Store API: double-complete rejected (Phase 4) ✅"
 # ============================================================================
 cmd 'Create task, wait for completion, try tasks/result twice'
 expect 'Both calls return same result (no error on second call — but store should guard internally)'
@@ -229,7 +229,7 @@ echo -e "${YELLOW}Note: Phase 4 is internal store safety — not directly observ
 echo -e "${YELLOW}The test suite (TestStoreAtomicResult) covers this.${NC}"
 
 # ============================================================================
-exercise 12 "Cancel propagation (Phase 5) 🔲"
+exercise 12 "Cancel propagation (Phase 5) ✅"
 # ============================================================================
 cmd 'Start 60s computation, cancel, check if goroutine actually stops'
 mcp "$BASE" -H "$SH" -H "$CT" -H "$ACCEPT" \
@@ -242,7 +242,7 @@ echo -e "${YELLOW}Today: status shows cancelled, but goroutine keeps sleeping fo
 echo -e "${YELLOW}After Phase 5: goroutine receives context cancellation and exits immediately.${NC}"
 
 # ============================================================================
-exercise 13 "Status notifications (Phase 6) 🔲"
+exercise 13 "Status notifications (Phase 6) ✅"
 # ============================================================================
 cmd 'Open GET SSE stream, create task, watch for notifications/tasks/status'
 expect 'SSE stream receives working → completed notifications'
@@ -272,7 +272,7 @@ else
 fi
 
 # ============================================================================
-exercise 14 "Progress notifications (Phase 7) 🔲"
+exercise 14 "Progress notifications (Phase 7) ✅"
 # ============================================================================
 cmd 'Open SSE stream, run 3-second computation, check for notifications/progress'
 expect 'SSE stream receives progress notifications (1/3, 2/3, 3/3)'
@@ -320,6 +320,6 @@ echo -e "${GREEN}═════════════════════
 echo -e "${GREEN}  All exercises complete!${NC}"
 echo -e "${GREEN}═══════════════════════════════════════${NC}"
 echo ""
-echo "Exercises 1-10: Phase 1-3 (implemented)"
-echo "Exercises 11-16: Phase 4-8 (future — see status markers)"
+echo "Exercises 1-14: Phase 1-7 (implemented)"
+echo "Exercises 15-16: Phase 8 (future — sub-task threading)"
 echo ""

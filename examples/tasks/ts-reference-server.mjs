@@ -22,6 +22,9 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 8080;
 const taskStore = new InMemoryTaskStore();
 const transports = {};
 
+// Per-task AbortController for cancellation propagation (Phase 5 parity).
+const taskAbortControllers = new Map();
+
 // ============================================================================
 // Tool definitions — mirrors examples/tasks/main.go exactly
 // ============================================================================
@@ -134,21 +137,40 @@ async function handleToolCall(server, request, ctx) {
         );
         console.log(`[slow_compute] async: task ${task.taskId}, sleeping ${seconds}s...`);
 
+        // AbortController for cancellation propagation (Phase 5 parity).
+        const ac = new AbortController();
+        taskAbortControllers.set(task.taskId, ac);
+
         (async () => {
-            // Emit progress notifications during computation (Phase 7)
-            for (let i = 1; i <= seconds; i++) {
-                await new Promise(r => setTimeout(r, 1000));
-                try {
-                    await server.notification({
-                        method: 'notifications/progress',
-                        params: { progressToken: task.taskId, progress: i, total: seconds }
+            try {
+                for (let i = 1; i <= seconds; i++) {
+                    // Check cancellation before each sleep.
+                    if (ac.signal.aborted) {
+                        console.log(`[slow_compute] cancelled "${label}" at ${i}/${seconds}`);
+                        return;
+                    }
+                    await new Promise((resolve, reject) => {
+                        const timer = setTimeout(resolve, 1000);
+                        ac.signal.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
                     });
-                } catch (e) { /* best-effort */ }
+                    if (ac.signal.aborted) {
+                        console.log(`[slow_compute] cancelled "${label}" at ${i}/${seconds}`);
+                        return;
+                    }
+                    try {
+                        await server.notification({
+                            method: 'notifications/progress',
+                            params: { progressToken: task.taskId, progress: i, total: seconds }
+                        });
+                    } catch (e) { /* best-effort */ }
+                }
+                console.log(`[slow_compute] finished "${label}"`);
+                await storeResult(server, task.taskId, 'completed', {
+                    content: [{ type: 'text', text: `Computation "${label}" completed after ${seconds} seconds. Result: 42.` }]
+                }, ctx.sessionId);
+            } finally {
+                taskAbortControllers.delete(task.taskId);
             }
-            console.log(`[slow_compute] finished "${label}"`);
-            await storeResult(server, task.taskId, 'completed', {
-                content: [{ type: 'text', text: `Computation "${label}" completed after ${seconds} seconds. Result: 42.` }]
-            }, ctx.sessionId);
         })();
 
         return { task };
@@ -261,6 +283,9 @@ function createMCPServer() {
         const task = await taskStore.getTask(req.params.taskId, ctx.sessionId);
         if (!task) throw new Error(`Task ${req.params.taskId} not found`);
         if (isTerminal(task.status)) throw new Error(`Cannot cancel terminal task: ${task.status}`);
+        // Abort the background goroutine (Phase 5 parity).
+        const ac = taskAbortControllers.get(req.params.taskId);
+        if (ac) ac.abort();
         await updateStatus(server, req.params.taskId, 'cancelled', 'task was cancelled', ctx.sessionId);
         return await taskStore.getTask(req.params.taskId, ctx.sessionId);
     });
