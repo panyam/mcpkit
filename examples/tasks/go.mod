@@ -2,21 +2,16 @@ module github.com/panyam/mcpkit/examples/tasks
 
 go 1.26.1
 
-replace (
-	github.com/panyam/mcpkit => ../..
-	github.com/panyam/mcpkit/experimental/ext/tasks => ../../experimental/ext/tasks
-)
+replace github.com/panyam/mcpkit => ../..
 
-require (
-	github.com/panyam/mcpkit v0.2.40
-	github.com/panyam/mcpkit/experimental/ext/tasks v0.0.0
-)
+require github.com/panyam/mcpkit v0.2.40
 
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
+	github.com/kr/text v0.2.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/panyam/gocurrent v0.1.0 // indirect
 	github.com/panyam/goutils v0.1.8 // indirect

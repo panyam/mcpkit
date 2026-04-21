@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/panyam/mcpkit/core"
-	"github.com/panyam/mcpkit/experimental/ext/tasks"
 	"github.com/panyam/mcpkit/server"
 )
 
@@ -83,7 +82,7 @@ func main() {
 			// one so notifications reach the client via GET SSE.
 			// Use the task ID as the progress token if running as a task.
 			var progressToken any
-			if tc := tasks.GetTaskContext(ctx); tc != nil {
+			if tc := server.GetTaskContext(ctx); tc != nil {
 				progressToken = tc.TaskID()
 			}
 			for i := 1; i <= args.Seconds; i++ {
@@ -135,7 +134,7 @@ func main() {
 			Execution: &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
 		},
 		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			tc := tasks.GetTaskContext(ctx)
+			tc := server.GetTaskContext(ctx)
 			if tc == nil {
 				return core.ToolResult{}, fmt.Errorf("confirm_delete requires task context")
 			}
@@ -188,7 +187,7 @@ func main() {
 			Execution: &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
 		},
 		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			tc := tasks.GetTaskContext(ctx)
+			tc := server.GetTaskContext(ctx)
 			if tc == nil {
 				return core.ToolResult{}, fmt.Errorf("write_haiku requires task context")
 			}
@@ -219,7 +218,7 @@ func main() {
 	)
 
 	// Register tasks capability on the server.
-	tasks.Register(tasks.Config{Server: srv})
+	server.RegisterTasks(server.TasksConfig{Server: srv})
 
 	log.Printf("Tasks demo server on %s", *addr)
 	log.Printf("Connect MCPJam or VS Code: http://localhost%s/mcp", *addr)

@@ -1,10 +1,9 @@
-package tasks
+package client
 
 import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 )
 
@@ -47,7 +46,7 @@ type taskParam struct {
 
 // GetTask polls the status of a task by ID. Non-blocking.
 // Per spec: tasks/get returns flat Result & Task — fields at root level.
-func GetTask(c *client.Client, taskID string) (*core.GetTaskResult, error) {
+func GetTask(c *Client, taskID string) (*core.GetTaskResult, error) {
 	result, err := c.Call("tasks/get", getTaskParams{TaskID: taskID})
 	if err != nil {
 		return nil, err
@@ -63,7 +62,7 @@ func GetTask(c *client.Client, taskID string) (*core.GetTaskResult, error) {
 // task reaches a terminal state. Per spec: returns the original ToolResult
 // with _meta["io.modelcontextprotocol/related-task"]. Returns the ToolResult,
 // the related taskId, and any error.
-func GetTaskPayload(c *client.Client, taskID string) (*core.ToolResult, string, error) {
+func GetTaskPayload(c *Client, taskID string) (*core.ToolResult, string, error) {
 	result, err := c.Call("tasks/result", resultParams{TaskID: taskID})
 	if err != nil {
 		return nil, "", err
@@ -81,7 +80,7 @@ func GetTaskPayload(c *client.Client, taskID string) (*core.ToolResult, string, 
 
 // ListTasks returns all tasks with cursor-based pagination. Pass an empty
 // cursor to start from the beginning.
-func ListTasks(c *client.Client, cursor string) (*core.ListTasksResult, error) {
+func ListTasks(c *Client, cursor string) (*core.ListTasksResult, error) {
 	result, err := c.Call("tasks/list", listTasksParams{Cursor: cursor})
 	if err != nil {
 		return nil, err
@@ -96,7 +95,7 @@ func ListTasks(c *client.Client, cursor string) (*core.ListTasksResult, error) {
 // CancelTask cancels a running task. Returns an error if the task is
 // already in a terminal state.
 // Per spec: tasks/cancel returns flat Result & Task.
-func CancelTask(c *client.Client, taskID string) (*core.CancelTaskResult, error) {
+func CancelTask(c *Client, taskID string) (*core.CancelTaskResult, error) {
 	result, err := c.Call("tasks/cancel", cancelTaskParams{TaskID: taskID})
 	if err != nil {
 		return nil, err
@@ -111,7 +110,7 @@ func CancelTask(c *client.Client, taskID string) (*core.CancelTaskResult, error)
 // ToolCallAsTask invokes a tool with a task hint, returning a CreateTaskResult
 // instead of the immediate tool result. The server creates a task and runs
 // the tool asynchronously. Per spec: task hint at params.task.
-func ToolCallAsTask(c *client.Client, name string, args any, ttlMs int) (*core.CreateTaskResult, error) {
+func ToolCallAsTask(c *Client, name string, args any, ttlMs int) (*core.CreateTaskResult, error) {
 	params := toolCallAsTaskParams{
 		Name:      name,
 		Arguments: args,
