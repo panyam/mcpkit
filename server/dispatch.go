@@ -157,6 +157,9 @@ type toolEntry struct {
 	// arguments before the handler is invoked. nil if the tool declared
 	// no schema (bypass validation).
 	schema *compiledSchema
+	// taskCallbacks are optional per-tool overrides for tasks/get and
+	// tasks/result. Nil means use the TaskStore directly.
+	taskCallbacks *TaskCallbacks
 }
 
 type resourceEntry struct {

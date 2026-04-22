@@ -9,6 +9,7 @@ Demonstrates MCP Tasks (spec 2025-11-25) — async tool execution with lifecycle
 | Core | `core.ToolDef.Execution`, `core.TaskSupportOptional`, `core.TaskSupportRequired`, `core.DetachForBackground` |
 | Server | `server.RegisterTasks`, `server.TasksConfig`, `server.TaskContext`, `server.GetTaskContext` |
 | Side-channel | `TaskContext.TaskElicit` (elicitation from background task), `TaskContext.TaskSample` (sampling from background task) |
+| Callbacks | `server.TaskCallbacks` (per-tool `GetTask`/`GetResult` overrides for external proxy pattern) |
 | MCP methods | `tasks/get`, `tasks/result`, `tasks/cancel`, `tasks/list` |
 
 ## Setup
@@ -23,7 +24,7 @@ go run . -addr :$PORT
 
 ### TS SDK reference server (for comparison)
 
-A TypeScript reference server with the same 5 tools is included for side-by-side wire format comparison. It imports the official [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk) as a dependency:
+A TypeScript reference server with the same 6 tools is included for side-by-side wire format comparison. It imports the official [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk) as a dependency:
 
 ```bash
 cd examples/tasks
@@ -47,6 +48,7 @@ MCPJam, VS Code, or any MCP client: `http://localhost:$PORT/mcp`
 | `failing_job` | required | Always fails after 1s. Must be called as a task. |
 | `confirm_delete` | required + elicitation | Asks user for confirmation before deleting. |
 | `write_haiku` | required + sampling | Asks the LLM to write a haiku on a topic. |
+| `external_job` | required + TaskCallbacks | Simulates proxying an external job system. |
 
 ## Important: Host Support Required
 
@@ -540,12 +542,13 @@ Create a task and send progress notifications from the tool handler.
 
 | File | What |
 |------|------|
-| `main.go` | Go server: 5 tools, `server.RegisterTasks()` |
-| `ts-reference-server.mjs` | TS SDK reference server: same 5 tools, for comparison |
+| `main.go` | Go server: 6 tools, `server.RegisterTasks()` |
+| `ts-reference-server.mjs` | TS SDK reference server: same 6 tools, for comparison |
 | `run-exercises.sh` | Runs all README exercises against a running server (Go or TS) |
 | `test-side-by-side.sh` | Starts both servers, compares wire format side-by-side |
 | `package.json` | TS SDK dependencies for the reference server |
 | `../../server/tasks_experimental.go` | Tasks middleware, handlers, RegisterTasks |
+| `../../server/task_callbacks.go` | TaskCallbacks struct (per-tool GetTask/GetResult overrides) |
 | `../../server/task_store.go` | TaskStore interface + InMemoryTaskStore |
 | `../../server/task_session.go` | TaskContext, TaskElicit, TaskSample |
 | `../../client/tasks.go` | Client helpers: GetTask, ToolCallAsTask, etc. |

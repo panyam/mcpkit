@@ -63,32 +63,60 @@ type activeTask struct {
 // and the tasks/* method handlers. Scoped to a single Register() call —
 // no package-level globals.
 type taskRuntime struct {
-	store  TaskStore
-	queue  TaskMessageQueue
-	mu     sync.Mutex
-	active map[string]*activeTask
+	store    TaskStore
+	queue    TaskMessageQueue
+	registry *Registry // for looking up per-tool TaskCallbacks
+	mu       sync.Mutex
+	active   map[string]*activeTask
+	creatorToolForTask map[string]string // taskID → tool name (for callback dispatch)
 }
 
-func newTaskRuntime(store TaskStore, queue TaskMessageQueue) *taskRuntime {
+func newTaskRuntime(store TaskStore, queue TaskMessageQueue, reg *Registry) *taskRuntime {
 	return &taskRuntime{
-		store:  store,
-		queue:  queue,
-		active: make(map[string]*activeTask),
+		store:    store,
+		queue:    queue,
+		registry: reg,
+		active:   make(map[string]*activeTask),
+		creatorToolForTask: make(map[string]string),
 	}
 }
 
-// register stores the active task entry.
-func (rt *taskRuntime) register(taskID string, at *activeTask) {
+// register stores the active task entry and its tool name.
+func (rt *taskRuntime) register(taskID, tool string, at *activeTask) {
 	rt.mu.Lock()
 	rt.active[taskID] = at
+	rt.creatorToolForTask[taskID] = tool
 	rt.mu.Unlock()
 }
 
-// unregister removes the active task entry.
+// unregister removes the active task entry. The creatorToolForTask mapping
+// is kept so that tasks/get and tasks/result can still dispatch to per-tool
+// callbacks after the background goroutine finishes (matching TS SDK
+// behavior where getTaskResult cleans up only after the handler resolves).
 func (rt *taskRuntime) unregister(taskID string) {
 	rt.mu.Lock()
 	delete(rt.active, taskID)
 	rt.mu.Unlock()
+}
+
+// cleanupToolName removes the creatorToolForTask mapping. Called after
+// tasks/result handler resolves for a terminal task.
+func (rt *taskRuntime) cleanupToolName(taskID string) {
+	rt.mu.Lock()
+	delete(rt.creatorToolForTask, taskID)
+	rt.mu.Unlock()
+}
+
+// getToolCallbacks returns the TaskCallbacks for the tool that created
+// the given task, or nil if no callbacks are registered.
+func (rt *taskRuntime) getToolCallbacks(taskID string) *TaskCallbacks {
+	rt.mu.Lock()
+	name := rt.creatorToolForTask[taskID]
+	rt.mu.Unlock()
+	if name == "" || rt.registry == nil {
+		return nil
+	}
+	return rt.registry.ToolCallbacks(name)
 }
 
 // getChannel returns the side-channel request channel for a task, or nil.
@@ -121,13 +149,13 @@ func RegisterTasks(cfg TasksConfig) {
 	srv := cfg.Server
 	store := cfg.Store
 	reg := srv.Registry()
-	rt := newTaskRuntime(store, cfg.MessageQueue)
+	rt := newTaskRuntime(store, cfg.MessageQueue, reg)
 
 	// Install middleware for tools/call interception.
 	srv.UseMiddleware(taskMiddleware(reg, rt, cfg))
 
 	// Register tasks/* protocol methods.
-	srv.HandleMethod("tasks/get", makeGetHandler(store))
+	srv.HandleMethod("tasks/get", makeGetHandler(rt))
 	srv.HandleMethod("tasks/result", makeResultHandler(rt))
 	srv.HandleMethod("tasks/list", makeListHandler(store))
 	srv.HandleMethod("tasks/cancel", makeCancelHandler(rt))
@@ -245,7 +273,7 @@ func taskMiddleware(reg *Registry, rt *taskRuntime, cfg TasksConfig) Middleware 
 				progressToken: progressToken,
 			}
 			bgCtx = WithTaskContext(bgCtx, tc)
-			rt.register(taskID, &activeTask{requests: reqCh, cancel: cancelFunc})
+			rt.register(taskID, envelope.Name, &activeTask{requests: reqCh, cancel: cancelFunc})
 
 			defer func() {
 				cancelFunc()
@@ -302,7 +330,7 @@ type taskHint struct {
 
 // --- Method Handlers ---
 
-func makeGetHandler(store TaskStore) MethodHandler {
+func makeGetHandler(rt *taskRuntime) MethodHandler {
 	return func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		var p struct {
 			TaskID string `json:"taskId"`
@@ -310,7 +338,16 @@ func makeGetHandler(store TaskStore) MethodHandler {
 		if err := json.Unmarshal(params, &p); err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 		}
-		info, ok := store.Get(p.TaskID, ctx.SessionID())
+
+		// Check per-tool callbacks first (external proxy pattern).
+		if cb := rt.getToolCallbacks(p.TaskID); cb != nil && cb.GetTask != nil {
+			if result, ok := cb.GetTask(ctx, p.TaskID); ok {
+				return core.NewResponse(id, result)
+			}
+		}
+
+		// Fall through to TaskStore.
+		info, ok := rt.store.Get(p.TaskID, ctx.SessionID())
 		if !ok {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "task not found: "+p.TaskID)
 		}
@@ -357,9 +394,22 @@ func makeResultHandler(rt *taskRuntime) MethodHandler {
 			}
 
 			if info.Status.IsTerminal() {
-				result, _ := store.GetResult(p.TaskID, sid)
+				// Check per-tool GetResult callback first (external proxy pattern).
+				var result core.ToolResult
+				if cb := rt.getToolCallbacks(p.TaskID); cb != nil && cb.GetResult != nil {
+					if overrideResult, ok := cb.GetResult(ctx, p.TaskID); ok {
+						result = overrideResult
+					} else {
+						result, _ = store.GetResult(p.TaskID, sid)
+					}
+				} else {
+					result, _ = store.GetResult(p.TaskID, sid)
+				}
 
 				rt.queue.DequeueAll(p.TaskID)
+				// Clean up creatorToolForTask mapping after result is served (matches
+				// TS SDK: delete _taskToTool after handler resolves).
+				rt.cleanupToolName(p.TaskID)
 
 				// Send status notification from this live handler context (Phase 6).
 				// The background goroutine's context may have a dead notifyFunc,

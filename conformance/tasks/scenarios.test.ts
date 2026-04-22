@@ -192,4 +192,46 @@ describe('MCP Tasks Conformance', () => {
         }
     });
 
+    // ========================================================================
+    // Scenario 10: External proxy tool — full lifecycle via callbacks
+    // ========================================================================
+    test('scenario 10: external proxy tool completes via task callbacks', async () => {
+        // The external_job tool uses TaskCallbacks (server-side) to override
+        // tasks/get and tasks/result. From the client's perspective, the
+        // protocol is identical — this scenario verifies the tool works
+        // end-to-end through the callback dispatch path.
+        const task = await createTask('external_job', { job_id: 'conformance-10' });
+        assert.equal(task.status, 'working', 'initial status should be working');
+
+        // Poll tasks/get until terminal.
+        const terminal = await waitForTerminal(task.taskId);
+        assert.equal(terminal.status, 'completed', 'task should complete');
+
+        // Fetch result via tasks/result.
+        const result = await client.experimental.tasks.getTaskResult(task.taskId);
+        assert.ok(result, 'should return a result');
+        const meta = (result as any)._meta;
+        assert.ok(meta, 'result should have _meta');
+        const related = meta['io.modelcontextprotocol/related-task'];
+        assert.ok(related, 'should have related-task in _meta');
+        assert.equal(related.taskId, task.taskId, 'related taskId should match');
+    });
+
+    // ========================================================================
+    // Scenario 11: External proxy tool — tasks/get returns correct state
+    // ========================================================================
+    test('scenario 11: external proxy tool tasks/get returns task info', async () => {
+        const task = await createTask('external_job', { job_id: 'conformance-11' });
+
+        // Immediately poll — should get valid task info.
+        const info = await client.experimental.tasks.getTask(task.taskId);
+        assert.ok(info.taskId, 'should have taskId');
+        assert.ok(info.status, 'should have status');
+        // Status can be working or completed depending on timing.
+        assert.ok(
+            ['working', 'completed'].includes(info.status),
+            `status should be working or completed, got ${info.status}`
+        );
+    });
+
 });
