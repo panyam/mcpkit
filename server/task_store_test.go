@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -367,7 +368,7 @@ func TestStoreConcurrentAccess(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			id := "t" + time.Now().Format("150405.000000000") + "-" + string(rune('A'+i%26))
+			id := fmt.Sprintf("t-concurrent-%d", i)
 			s.Create(newTestInfo(id, core.TaskWorking), "")
 			s.Get(id, "")
 			s.Update(id, "", func(info *core.TaskInfo) {
