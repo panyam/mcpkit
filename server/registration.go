@@ -19,6 +19,10 @@ import core "github.com/panyam/mcpkit/core"
 type Tool struct {
 	core.ToolDef
 	Handler core.ToolHandler
+	// TaskCallbacks provides optional per-tool overrides for tasks/get and
+	// tasks/result handlers. When set, the task protocol consults these
+	// callbacks before falling through to the TaskStore. See [TaskCallbacks].
+	TaskCallbacks *TaskCallbacks
 }
 
 // Resource bundles a resource definition with its handler.
@@ -58,6 +62,9 @@ func (s *Server) Register(items ...any) {
 		switch v := item.(type) {
 		case Tool:
 			s.RegisterTool(v.ToolDef, v.Handler)
+			if v.TaskCallbacks != nil {
+				s.Registry().SetToolCallbacks(v.Name, v.TaskCallbacks)
+			}
 		case core.TypedToolResult:
 			s.RegisterTool(v.ToolDef, v.Handler)
 		case Resource:

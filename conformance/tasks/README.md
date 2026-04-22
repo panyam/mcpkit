@@ -11,6 +11,7 @@ The target server MUST register these tools:
 | `greet` | forbidden (absent) | Returns `Hello, {name}!` |
 | `slow_compute` | optional | Sleeps `seconds` seconds, returns result |
 | `failing_job` | required | Fails after 1 second |
+| `external_job` | required | Completes after 1s (uses TaskCallbacks for proxy pattern) |
 
 Both the Go example (`examples/tasks/main.go`) and TS reference server (`examples/tasks/ts-reference-server.mjs`) provide these tools.
 
@@ -46,6 +47,8 @@ SERVER_URL=http://localhost:8080/mcp npx tsx --test tasks/scenarios.test.ts
 | 07 | Task list | tasks/list returns array |
 | 08 | Required without hint | Error when required tool called without task hint |
 | 09 | Forbidden with hint | Error when forbidden tool called with task hint |
+| 10 | External proxy lifecycle | external_job completes via TaskCallbacks path |
+| 11 | External proxy tasks/get | external_job tasks/get returns valid state |
 
 ## Future scenarios
 
