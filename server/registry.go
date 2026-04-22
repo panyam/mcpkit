@@ -71,6 +71,30 @@ func (r *Registry) ToolDef(name string) (core.ToolDef, bool) {
 	return entry.def, true
 }
 
+// SetToolCallbacks associates per-tool task callbacks with a registered tool.
+// The tool must already be registered. Thread-safe.
+func (r *Registry) SetToolCallbacks(name string, cb *TaskCallbacks) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	entry, ok := r.tools[name]
+	if !ok {
+		return
+	}
+	entry.taskCallbacks = cb
+	r.tools[name] = entry
+}
+
+// ToolCallbacks returns the per-tool task callbacks for a tool, or nil.
+func (r *Registry) ToolCallbacks(name string) *TaskCallbacks {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	entry, ok := r.tools[name]
+	if !ok {
+		return nil
+	}
+	return entry.taskCallbacks
+}
+
 // AddTool adds a tool to the registry. Thread-safe.
 // Broadcasts notifications/tools/list_changed if OnChange is set.
 //

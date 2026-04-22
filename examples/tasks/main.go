@@ -1,9 +1,12 @@
 // Example: MCP Tasks — async tool execution with lifecycle tracking.
 //
-// Demonstrates three tools with different task support modes:
-//   - greet:        sync-only (no Execution field = forbidden per spec)
-//   - slow_compute: optional task support (client chooses sync or async)
-//   - failing_job:  required task support (must be invoked as task)
+// Demonstrates tools with different task support modes:
+//   - greet:          sync-only (no Execution field = forbidden per spec)
+//   - slow_compute:   optional task support (client chooses sync or async)
+//   - failing_job:    required task support (must be invoked as task)
+//   - confirm_delete: required task + elicitation (asks user before deleting)
+//   - write_haiku:    required task + sampling (asks LLM to write a haiku)
+//   - external_job:   required task + TaskCallbacks (external proxy pattern)
 //
 // Run:  go run . -addr :8080
 // Connect MCPJam or VS Code to http://localhost:8080/mcp
@@ -226,6 +229,53 @@ func main() {
 			return core.TextResult(fmt.Sprintf("Haiku about %s:\n%s", args.Topic, result.Content.Text)), nil
 		},
 	)
+
+	// external_job: demonstrates TaskCallbacks (per-tool getTask/getResult overrides).
+	// Simulates proxying an external job system where the tool provides custom
+	// task state lookup instead of relying on the default TaskStore.
+	srv.Register(server.Tool{
+		ToolDef: core.ToolDef{
+			Name:        "external_job",
+			Description: "Simulates an external job system with custom task state lookup. Demonstrates TaskCallbacks for the external proxy pattern.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"job_id": map[string]any{
+						"type":        "string",
+						"description": "External job ID to track",
+						"default":     "job-001",
+					},
+				},
+			},
+			Execution: &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
+		},
+		Handler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			var args struct {
+				JobID string `json:"job_id"`
+			}
+			json.Unmarshal(req.Arguments, &args)
+			if args.JobID == "" {
+				args.JobID = "job-001"
+			}
+			log.Printf("[external_job] started external job %s", args.JobID)
+			time.Sleep(1 * time.Second)
+			log.Printf("[external_job] external job %s completed", args.JobID)
+			return core.TextResult(fmt.Sprintf("External job %s completed", args.JobID)), nil
+		},
+		TaskCallbacks: &server.TaskCallbacks{
+			GetTask: func(ctx core.MethodContext, taskID string) (core.GetTaskResult, bool) {
+				// In a real system, this would query an external API (Step Functions, etc.)
+				// For demo purposes, we augment the status message.
+				log.Printf("[external_job] custom getTask for %s", taskID)
+				return core.GetTaskResult{}, false // fall through to store
+			},
+			GetResult: func(ctx core.MethodContext, taskID string) (core.ToolResult, bool) {
+				// In a real system, this would fetch the result from the external system.
+				log.Printf("[external_job] custom getResult for %s", taskID)
+				return core.ToolResult{}, false // fall through to store
+			},
+		},
+	})
 
 	// Register tasks capability on the server.
 	server.RegisterTasks(server.TasksConfig{Server: srv})
