@@ -36,19 +36,19 @@ SERVER_URL=http://localhost:8080/mcp npx tsx --test tasks/scenarios.test.ts
 
 ## Scenarios
 
-| # | Scenario | What it tests |
-|---|----------|---------------|
-| 01 | Sync tool call | greet returns immediately, no task |
-| 02 | Async task creation | tools/call + task hint → CreateTaskResult |
-| 03 | Poll task status | tasks/get returns flat TaskInfo |
-| 04 | Failing job | Tool error → task status: failed |
-| 05 | Task result | tasks/result returns ToolResult + related-task meta |
-| 06 | Task cancellation | tasks/cancel → status: cancelled |
-| 07 | Task list | tasks/list returns array |
-| 08 | Required without hint | Error when required tool called without task hint |
-| 09 | Forbidden with hint | Error when forbidden tool called with task hint |
-| 10 | External proxy lifecycle | external_job completes via TaskCallbacks path |
-| 11 | External proxy tasks/get | external_job tasks/get returns valid state |
+| # | Scenario | What it tests | Expected |
+|---|----------|---------------|----------|
+| 01 | Sync tool call | greet returns immediately, no task | `content[0].text` = `"Hello, World!"` |
+| 02 | Async task creation | tools/call + task hint → CreateTaskResult | `task.status` = `working`, `taskId` and `createdAt` present |
+| 03 | Poll task status | tasks/get returns flat TaskInfo | `taskId` and `status` at root level |
+| 04 | Failing job | Tool error → task status: failed | Terminal status = `failed` within 10s |
+| 05 | Task result | tasks/result returns ToolResult + related-task meta | `_meta["io.modelcontextprotocol/related-task"].taskId` matches |
+| 06 | Task cancellation | tasks/cancel → status: cancelled | Cancel returns `cancelled`; subsequent get confirms |
+| 07 | Task list | tasks/list returns array | `tasks` is a non-empty array |
+| 08 | Required without hint | Error when required tool called without task hint | JSON-RPC error (message or code present) |
+| 09 | Forbidden with hint | Error when forbidden tool called with task hint | JSON-RPC error (message or code present) |
+| 10 | External proxy lifecycle | external_job completes via TaskCallbacks path | Completes with `_meta.related-task.taskId` matching |
+| 11 | External proxy tasks/get | external_job tasks/get returns valid state | `status` is `working` or `completed` |
 
 ## Future scenarios
 
