@@ -1,11 +1,11 @@
 === Stage 1/10: unit+coverage (make cover-html) ===
-Started: Tue Apr 21 12:53:35 PDT 2026
+Started: Wed Apr 22 13:29:53 PDT 2026
 go test -coverprofile=tests/reports/coverage.out ./... -count=1 -timeout 30s
-ok  	github.com/panyam/mcpkit/client	7.254s	coverage: 63.8% of statements
+ok  	github.com/panyam/mcpkit/client	8.421s	coverage: 63.8% of statements
 	github.com/panyam/mcpkit/cmd/testserver		coverage: 0.0% of statements
-ok  	github.com/panyam/mcpkit/core	0.384s	coverage: 51.0% of statements
-ok  	github.com/panyam/mcpkit/server	9.907s	coverage: 80.7% of statements
-ok  	github.com/panyam/mcpkit/testutil	0.744s	coverage: 69.4% of statements
+ok  	github.com/panyam/mcpkit/core	0.537s	coverage: 51.0% of statements
+ok  	github.com/panyam/mcpkit/server	10.102s	coverage: 80.9% of statements
+ok  	github.com/panyam/mcpkit/testutil	1.065s	coverage: 69.4% of statements
 go tool cover -html=tests/reports/coverage.out -o tests/reports/coverage.html
 Coverage report: tests/reports/coverage.html
-Finished: Tue Apr 21 12:53:46 PDT 2026
+Finished: Wed Apr 22 13:30:05 PDT 2026

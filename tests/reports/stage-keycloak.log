@@ -1,29 +1,50 @@
 === Stage 10/10: keycloak (make testkcl-auto) ===
-Started: Tue Apr 21 12:54:19 PDT 2026
+Started: Wed Apr 22 13:30:54 PDT 2026
+Starting Keycloak for interop tests...
+cc0576832fdab4445e4c8af335471a5784bca2061cea36cd7cd01c202d71aa92
+docker: Error response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint mcpkit-keycloak (1e67c9447cfff9807670b598b71c3595f6d6034a8033ab57c88f5f27dc2ae92a): Bind for 0.0.0.0:8180 failed: port is already allocated
+
+Run 'docker run --help' for more information
+Keycloak starting on port 8180... (realm import takes ~30s)
+Run 'make kcllogs' to watch startup, 'make testkcl' when ready
+Waiting for Keycloak realm...
 === RUN   TestKeycloak_MCPServer_ValidToken
---- PASS: TestKeycloak_MCPServer_ValidToken (0.03s)
+    interop_test.go:34: Keycloak realm mcpkit-test not ready (status 404)
+--- SKIP: TestKeycloak_MCPServer_ValidToken (0.02s)
 === RUN   TestKeycloak_MCPServer_TamperedToken
---- PASS: TestKeycloak_MCPServer_TamperedToken (0.01s)
+    interop_test.go:56: Keycloak realm mcpkit-test not ready (status 404)
+--- SKIP: TestKeycloak_MCPServer_TamperedToken (0.00s)
 === RUN   TestKeycloak_MCPServer_ScopeAllowed
---- PASS: TestKeycloak_MCPServer_ScopeAllowed (0.01s)
+    interop_test.go:79: Keycloak realm mcpkit-test not ready (status 404)
+--- SKIP: TestKeycloak_MCPServer_ScopeAllowed (0.00s)
 === RUN   TestKeycloak_MCPServer_ScopeDenied
---- PASS: TestKeycloak_MCPServer_ScopeDenied (0.01s)
+    interop_test.go:101: Keycloak realm mcpkit-test not ready (status 404)
+--- SKIP: TestKeycloak_MCPServer_ScopeDenied (0.00s)
 === RUN   TestKeycloak_MCPServer_PRM
---- PASS: TestKeycloak_MCPServer_PRM (0.01s)
+    interop_test.go:123: Keycloak realm mcpkit-test not ready (status 404)
+--- SKIP: TestKeycloak_MCPServer_PRM (0.00s)
 === RUN   TestKeycloak_MCPServer_WWWAuthenticate
---- PASS: TestKeycloak_MCPServer_WWWAuthenticate (0.01s)
+    interop_test.go:144: Keycloak realm mcpkit-test not ready (status 404)
+--- SKIP: TestKeycloak_MCPServer_WWWAuthenticate (0.00s)
 === RUN   TestKeycloak_MCPServer_PasswordGrant
---- PASS: TestKeycloak_MCPServer_PasswordGrant (0.03s)
+    interop_test.go:167: Keycloak realm mcpkit-test not ready (status 404)
+--- SKIP: TestKeycloak_MCPServer_PasswordGrant (0.01s)
 === RUN   TestKeycloak_PublicMethods_DiscoverWithoutAuth
---- PASS: TestKeycloak_PublicMethods_DiscoverWithoutAuth (0.01s)
+    public_methods_test.go:22: Keycloak realm mcpkit-test not ready (status 404)
+--- SKIP: TestKeycloak_PublicMethods_DiscoverWithoutAuth (0.00s)
 === RUN   TestKeycloak_PublicMethods_ToolCallRequiresAuth
---- PASS: TestKeycloak_PublicMethods_ToolCallRequiresAuth (0.01s)
+    public_methods_test.go:65: Keycloak realm mcpkit-test not ready (status 404)
+--- SKIP: TestKeycloak_PublicMethods_ToolCallRequiresAuth (0.00s)
 === RUN   TestKeycloak_SessionHijack_DifferentUserRejected
---- PASS: TestKeycloak_SessionHijack_DifferentUserRejected (0.05s)
+    session_hijack_test.go:54: Keycloak realm mcpkit-test not ready (status 404)
+--- SKIP: TestKeycloak_SessionHijack_DifferentUserRejected (0.00s)
 === RUN   TestKeycloak_SessionHijack_SameUserAllowed
---- PASS: TestKeycloak_SessionHijack_SameUserAllowed (0.03s)
+    session_hijack_test.go:85: Keycloak realm mcpkit-test not ready (status 404)
+--- SKIP: TestKeycloak_SessionHijack_SameUserAllowed (0.00s)
 === RUN   TestKeycloak_TokenRefresh_PasswordGrant
---- PASS: TestKeycloak_TokenRefresh_PasswordGrant (0.03s)
+    token_refresh_test.go:22: Keycloak realm mcpkit-test not ready (status 404)
+--- SKIP: TestKeycloak_TokenRefresh_PasswordGrant (0.00s)
 PASS
-ok  	github.com/panyam/mcpkit/tests/keycloak	0.508s
-Finished: Tue Apr 21 12:54:20 PDT 2026
+ok  	github.com/panyam/mcpkit/tests/keycloak	0.634s
+make[2]: *** No rule to make target `downkcl'.  Stop.
+Finished: Wed Apr 22 13:33:00 PDT 2026
