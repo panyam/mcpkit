@@ -75,6 +75,15 @@ const TOOLS = [
             properties: { topic: { type: 'string', description: 'Topic for the haiku', default: 'nature' } }
         },
         execution: { taskSupport: 'required' }
+    },
+    {
+        name: 'external_job',
+        description: 'Simulates an external job system with custom task state lookup. Demonstrates the external proxy pattern.',
+        inputSchema: {
+            type: 'object',
+            properties: { job_id: { type: 'string', description: 'External job ID to track', default: 'job-001' } }
+        },
+        execution: { taskSupport: 'required' }
     }
 ];
 
@@ -253,6 +262,24 @@ async function handleToolCall(server, request, ctx) {
         return { task };
     }
 
+    if (name === 'external_job') {
+        if (!taskParams) throw new Error('Tool "external_job" requires task invocation');
+        const task = await taskStore.createTask(
+            { ttl: taskParams.ttl, pollInterval: taskParams.pollInterval ?? 1000 },
+            ctx.mcpReq.id, request, ctx.sessionId
+        );
+        const jobId = args?.job_id || 'job-001';
+        console.log(`[external_job] started external job ${jobId}, task ${task.taskId}`);
+        (async () => {
+            await new Promise(r => setTimeout(r, 1000));
+            console.log(`[external_job] external job ${jobId} completed`);
+            await storeResult(server, task.taskId, 'completed', {
+                content: [{ type: 'text', text: `External job ${jobId} completed` }]
+            }, ctx.sessionId);
+        })();
+        return { task };
+    }
+
     throw new Error(`Unknown tool: ${name}`);
 }
 
@@ -343,7 +370,7 @@ const httpServer = createServer(async (req, res) => {
 
 httpServer.listen(PORT, () => {
     console.log(`TS reference server on http://localhost:${PORT}/mcp`);
-    console.log('Tools: greet, slow_compute, failing_job, confirm_delete, write_haiku');
+    console.log('Tools: greet, slow_compute, failing_job, confirm_delete, write_haiku, external_job');
 });
 
 process.on('SIGINT', () => { process.exit(0); });
