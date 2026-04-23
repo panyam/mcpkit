@@ -139,8 +139,8 @@ The following aspects are **intentionally not covered** by this conformance suit
 ## Cross-Server Compatibility
 
 All 27 scenarios pass against both:
-- **Go server** (`examples/tasks/main.go`) — mcpkit
 - **TS reference server** (`examples/tasks/ts-reference-server.mjs`) — official MCP TypeScript SDK
+- **Go server** (`examples/tasks/main.go`) — mcpkit
 
 Known behavioral differences (both spec-compliant):
 - **Initial status for elicitation/sampling tools**: Go returns `working` (goroutine hasn't run yet); TS returns `input_required` (async fires before response flush). Scenarios 22-23 accept both.
