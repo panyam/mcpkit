@@ -1,9 +1,9 @@
 === Stage 10/10: keycloak (make testkcl-auto) ===
-Started: Wed Apr 22 14:51:19 PDT 2026
+Started: Wed Apr 22 20:34:49 PDT 2026
 Starting Keycloak for interop tests...
 mcpkit-keycloak
-d4634c85abd603a47bcf49bb94ff2b15e559184ada2ba1314012b807ad8c3a05
-docker: Error response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint mcpkit-keycloak (75f5db73defb5bfb11bd0d898df53b4e19215f0a1cf3b802c361f1e43c32e471): Bind for 0.0.0.0:8180 failed: port is already allocated
+e6e04e923b1bf88b8072ccc5031379c3961a60c33e29a938420093986acc9472
+docker: Error response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint mcpkit-keycloak (dff84c05d3de2e1a87ea32b8914c18341cb2799ab9d25ba1e528069a524f2f2b): Bind for 0.0.0.0:8180 failed: port is already allocated
 
 Run 'docker run --help' for more information
 Keycloak starting on port 8180... (realm import takes ~30s)
@@ -46,6 +46,6 @@ Waiting for Keycloak realm...
     token_refresh_test.go:22: Keycloak realm mcpkit-test not ready (status 404)
 --- SKIP: TestKeycloak_TokenRefresh_PasswordGrant (0.00s)
 PASS
-ok  	github.com/panyam/mcpkit/tests/keycloak	0.405s
+ok  	github.com/panyam/mcpkit/tests/keycloak	0.747s
 make[2]: *** No rule to make target `downkcl'.  Stop.
-Finished: Wed Apr 22 14:53:22 PDT 2026
+Finished: Wed Apr 22 20:36:54 PDT 2026
