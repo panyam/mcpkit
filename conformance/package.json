@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test:tasks": "npx tsx --test tasks/scenarios.test.ts"
+    "test:tasks": "npx tsx --test tasks/scenarios.test.ts",
+    "test:elicitation": "npx tsx --test elicitation/scenarios.test.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "latest",

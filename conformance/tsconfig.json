@@ -9,5 +9,5 @@
     "outDir": "dist",
     "rootDir": "."
   },
-  "include": ["tasks/**/*.ts", "common/**/*.ts"]
+  "include": ["tasks/**/*.ts", "elicitation/**/*.ts", "common/**/*.ts"]
 }

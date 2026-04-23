@@ -64,7 +64,15 @@ type SamplingHandler func(context.Context, core.CreateMessageRequest) (core.Crea
 
 // ElicitationHandler handles a server-to-client elicitation/create request.
 // The client prompts the user for input and returns the result.
+// For URL-mode requests (Mode == "url"), the handler should present the URL
+// to the user and return once acknowledged. The actual completion is signaled
+// separately via notifications/elicitation/complete.
 type ElicitationHandler func(context.Context, core.ElicitationRequest) (core.ElicitationResult, error)
+
+// ElicitationCompleteHandler handles a notifications/elicitation/complete notification.
+// Called when the server signals that an out-of-band URL-mode elicitation
+// flow has been completed. The client can use this to retry the original request.
+type ElicitationCompleteHandler func(context.Context, core.ElicitationCompleteParams)
 
 // RootsHandler handles a server-to-client roots/list request.
 // The client returns its current filesystem roots.
@@ -77,9 +85,23 @@ func WithSamplingHandler(h SamplingHandler) ClientOption {
 }
 
 // WithElicitationHandler registers a handler for server-to-client elicitation requests.
-// When set, the client advertises the "elicitation" capability during initialization.
+// When set, the client advertises form-mode elicitation capability during initialization.
+// To also support URL-mode elicitation, combine with WithElicitationURLSupport.
 func WithElicitationHandler(h ElicitationHandler) ClientOption {
 	return func(c *Client) { c.elicitationHandler = h }
+}
+
+// WithElicitationURLSupport enables URL-mode elicitation capability.
+// The same ElicitationHandler receives both form and URL mode requests;
+// it should branch on req.Mode. Must be combined with WithElicitationHandler.
+func WithElicitationURLSupport() ClientOption {
+	return func(c *Client) { c.elicitationURLSupport = true }
+}
+
+// WithElicitationCompleteHandler registers a handler for
+// notifications/elicitation/complete notifications (SEP-1036).
+func WithElicitationCompleteHandler(h ElicitationCompleteHandler) ClientOption {
+	return func(c *Client) { c.elicitationCompleteHandler = h }
 }
 
 // WithRootsHandler registers a handler for server-to-client roots/list requests.
@@ -293,9 +315,11 @@ type Client struct {
 	serverExtensions map[string]json.RawMessage         // parsed from server's initialize response
 
 	// Server-to-client request handlers
-	samplingHandler    SamplingHandler
-	elicitationHandler ElicitationHandler
-	rootsHandler       RootsHandler
+	samplingHandler              SamplingHandler
+	elicitationHandler           ElicitationHandler
+	elicitationURLSupport        bool
+	elicitationCompleteHandler   ElicitationCompleteHandler
+	rootsHandler                 RootsHandler
 
 	// Reconnection settings (zero values = disabled)
 	maxRetries int
@@ -421,13 +445,10 @@ func (c *Client) doConnect() error {
 			ct.serverReqHandler = func(_ context.Context, req *core.Request) *core.Response {
 				return c.HandleServerRequest(req)
 			}
-			if c.onNotify != nil {
+			if c.needsNotifyAdapter() {
+				adapter := c.makeNotifyAdapter()
 				ct.notifyHandler = func(method string, params []byte) {
-					var parsed any
-					if len(params) > 0 {
-						json.Unmarshal(params, &parsed)
-					}
-					c.onNotify(method, parsed)
+					adapter(method, json.RawMessage(params))
 				}
 			}
 			c.transport = &coreTransportAdapter{inner: ct}
@@ -436,13 +457,10 @@ func (c *Client) doConnect() error {
 			st.serverReqHandler = func(_ context.Context, req *core.Request) *core.Response {
 				return c.HandleServerRequest(req)
 			}
-			if c.onNotify != nil {
+			if c.needsNotifyAdapter() {
+				adapter := c.makeNotifyAdapter()
 				st.notifyHandler = func(method string, params []byte) {
-					var parsed any
-					if len(params) > 0 {
-						json.Unmarshal(params, &parsed)
-					}
-					c.onNotify(method, parsed)
+					adapter(method, json.RawMessage(params))
 				}
 			}
 			c.transport = &coreTransportAdapter{inner: st}
@@ -451,7 +469,7 @@ func (c *Client) doConnect() error {
 			st.client = c
 			st.serverReqHandler = c.HandleServerRequest
 			st.modifyReq = c.modifyRequest
-			if c.onNotify != nil || c.onContentChunk != nil {
+			if c.needsNotifyAdapter() {
 				st.notifyHandler = c.makeNotifyAdapter()
 			}
 			c.transport = st
@@ -461,7 +479,7 @@ func (c *Client) doConnect() error {
 			st.serverReqHandler = c.HandleServerRequest
 			st.enableGetSSE = c.enableGetSSE
 			st.modifyReq = c.modifyRequest
-			if c.onNotify != nil || c.onContentChunk != nil {
+			if c.needsNotifyAdapter() {
 				st.notifyHandler = c.makeNotifyAdapter()
 			}
 			c.transport = st
@@ -483,7 +501,11 @@ func (c *Client) doConnect() error {
 		caps.Sampling = &struct{}{}
 	}
 	if c.elicitationHandler != nil {
-		caps.Elicitation = &struct{}{}
+		cap := &core.ElicitationCap{Form: &core.ElicitationFormCap{}}
+		if c.elicitationURLSupport {
+			cap.URL = &core.ElicitationURLCap{}
+		}
+		caps.Elicitation = cap
 	}
 	if c.rootsHandler != nil {
 		caps.Roots = &core.RootsCap{ListChanged: true}
@@ -618,9 +640,14 @@ func (c *Client) unwrapStreamableTransport() *streamableClientTransport {
 	return nil
 }
 
+// needsNotifyAdapter returns true if any notification-intercepting handler is set.
+func (c *Client) needsNotifyAdapter() bool {
+	return c.onNotify != nil || c.onContentChunk != nil || c.elicitationCompleteHandler != nil
+}
+
 // makeNotifyAdapter creates a transport-level notification handler that
 // unmarshals JSON params and delegates to the client's onNotify callback.
-// Also intercepts content chunk notifications for the onContentChunk handler.
+// Also intercepts content chunk and elicitation complete notifications.
 func (c *Client) makeNotifyAdapter() func(string, json.RawMessage) {
 	return func(method string, params json.RawMessage) {
 		// Intercept content chunk notifications for the dedicated handler.
@@ -631,6 +658,14 @@ func (c *Client) makeNotifyAdapter() func(string, json.RawMessage) {
 				c.onContentChunk(chunk)
 				return // Don't also deliver to generic onNotify
 			}
+		}
+		// Intercept elicitation complete notifications (SEP-1036).
+		if c.elicitationCompleteHandler != nil && method == "notifications/elicitation/complete" {
+			var p core.ElicitationCompleteParams
+			if json.Unmarshal(params, &p) == nil {
+				c.elicitationCompleteHandler(context.Background(), p)
+			}
+			// Still deliver to generic onNotify below.
 		}
 		if c.onNotify != nil {
 			var parsed any
@@ -668,6 +703,10 @@ func (c *Client) HandleServerRequest(req *core.Request) *core.Response {
 		var params core.ElicitationRequest
 		if err := json.Unmarshal(req.Params, &params); err != nil {
 			return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams, "invalid elicitation params: "+err.Error())
+		}
+		// Reject URL mode if client didn't declare URL support.
+		if params.Mode == core.ElicitModeURL && !c.elicitationURLSupport {
+			return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams, "client does not support URL-mode elicitation")
 		}
 		result, err := c.elicitationHandler(context.Background(), params)
 		if err != nil {
