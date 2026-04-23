@@ -89,14 +89,25 @@ async function waitForStatus(taskId: string, status: string, timeoutMs = 10_000)
     throw new Error(`Task ${taskId} did not reach status ${status} within ${timeoutMs}ms`);
 }
 
+// TODO: Set to true once the spec mandates specific error codes for task
+// operations and TS SDK enforces them. When enabled, all error scenarios
+// will assert the exact code instead of just "any numeric code."
+const ENFORCE_ERROR_CODES = false;
+
 /**
  * Assert a JSON-RPC error on the caught error object.
- * The spec does not mandate specific error codes for most task operations,
- * so we verify the error has a numeric code (valid JSON-RPC error).
+ *
+ * Always verifies the error has a numeric code. When `enforce` is true,
+ * also asserts it matches `expectedCode`. Defaults to ENFORCE_ERROR_CODES
+ * but can be overridden per-test for cases where a specific code IS
+ * mandated by the spec.
  */
-function assertJsonRpcError(e: any, label: string) {
+function assertJsonRpcError(e: any, expectedCode: number, label: string, enforce = ENFORCE_ERROR_CODES) {
     const code = e.code ?? e.error?.code;
     assert.ok(typeof code === 'number', `${label}: error should have a numeric code, got ${typeof code}`);
+    if (enforce) {
+        assert.equal(code, expectedCode, `${label}: expected code ${expectedCode}, got ${code}`);
+    }
 }
 
 // ============================================================================
@@ -215,7 +226,7 @@ describe('MCP Tasks Conformance', () => {
             });
             assert.fail('should have thrown an error');
         } catch (e: any) {
-            assertJsonRpcError(e, 'required without hint');
+            assertJsonRpcError(e, -32601, 'required without hint');
         }
     });
 
@@ -232,7 +243,7 @@ describe('MCP Tasks Conformance', () => {
             await createTask('greet', { name: 'test' });
             assert.fail('should have thrown an error');
         } catch (e: any) {
-            assertJsonRpcError(e, 'forbidden with hint');
+            assertJsonRpcError(e, -32601, 'forbidden with hint');
         }
     });
 
@@ -301,7 +312,7 @@ describe('MCP Tasks Conformance', () => {
             await client.experimental.tasks.getTask('nonexistent-task-id-12345');
             assert.fail('should have thrown an error');
         } catch (e: any) {
-            assertJsonRpcError(e, 'get non-existent');
+            assertJsonRpcError(e, -32602, 'get non-existent');
         }
     });
 
@@ -315,7 +326,7 @@ describe('MCP Tasks Conformance', () => {
             await client.experimental.tasks.cancelTask('nonexistent-task-id-12345');
             assert.fail('should have thrown an error');
         } catch (e: any) {
-            assertJsonRpcError(e, 'cancel non-existent');
+            assertJsonRpcError(e, -32602, 'cancel non-existent');
         }
     });
 
@@ -332,7 +343,7 @@ describe('MCP Tasks Conformance', () => {
             await client.experimental.tasks.cancelTask(created.taskId);
             assert.fail('should have thrown an error');
         } catch (e: any) {
-            assertJsonRpcError(e, 'cancel completed');
+            assertJsonRpcError(e, -32602, 'cancel completed');
         }
     });
 
