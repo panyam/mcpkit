@@ -67,6 +67,17 @@ const (
 	ErrCodeResourceError      = -31001 // Resource handler returned an error
 	ErrCodePromptError        = -31002 // Prompt handler returned an error
 	ErrCodeCompletionError    = -31003 // Completion handler returned an error
+
+	// ErrCodeURLElicitationRequired indicates that the request cannot proceed
+	// until the user completes one or more URL-based elicitation flows (SEP-1036).
+	// The error data contains an elicitations array with URL-mode elicitation
+	// requests. Clients should present the URLs to the user and retry after
+	// receiving notifications/elicitation/complete.
+	//
+	// This error code is also the composition point for FineGrainedAuth (UC1):
+	// the authorization denial envelope is additive metadata in the same data
+	// object, alongside the elicitations array.
+	ErrCodeURLElicitationRequired = -32042
 )
 
 // NewResponse creates a success response for the given request ID.
@@ -130,6 +141,31 @@ func NewErrorResponseWithData(id json.RawMessage, code int, message string, data
 		ID:      id,
 		Error:   &Error{Code: code, Message: message, Data: data},
 	}
+}
+
+// URLElicitationRequiredErrorData is the structured data for a -32042 error.
+// The Elicitations field carries URL-mode elicitation requests. Extra holds
+// additional metadata (e.g., authorization denial context from FineGrainedAuth
+// UC1). Extra keys are flattened into the top-level JSON object.
+type URLElicitationRequiredErrorData struct {
+	Elicitations []ElicitationRequest `json:"elicitations"`
+	Extra        map[string]any       `json:"-"`
+}
+
+// MarshalJSON flattens Extra keys into the top-level alongside elicitations.
+func (d URLElicitationRequiredErrorData) MarshalJSON() ([]byte, error) {
+	m := make(map[string]any, 1+len(d.Extra))
+	m["elicitations"] = d.Elicitations
+	for k, v := range d.Extra {
+		m[k] = v
+	}
+	return json.Marshal(m)
+}
+
+// NewURLElicitationRequiredError creates a -32042 error response indicating
+// that URL-based elicitation flows must be completed before retrying.
+func NewURLElicitationRequiredError(id json.RawMessage, message string, data URLElicitationRequiredErrorData) *Response {
+	return NewErrorResponseWithData(id, ErrCodeURLElicitationRequired, message, data)
 }
 
 // isJSONRPCResponse detects whether raw JSON is a JSON-RPC response (not a request).

@@ -249,6 +249,71 @@ func registerConformanceTools(srv *server.Server) {
 			return core.TextResult(fmt.Sprintf("Elicitation completed: action=%s, content=%s", result.Action, string(contentJSON))), nil
 		},
 	))
+
+	// test_elicitation_url_mode: calls elicitation/create in URL mode (SEP-1036).
+	// The server sends a URL for out-of-band interaction and returns the client's response.
+	srv.Register(core.TypedTool[emptyInput, core.ToolResult]("test_elicitation_url_mode", "Calls elicitation/create in URL mode (SEP-1036)",
+		func(ctx core.ToolContext, _ emptyInput) (core.ToolResult, error) {
+			result, err := core.ElicitURL(ctx, core.ElicitationRequest{
+				Message:       "Please approve access by visiting this URL",
+				URL:           "https://example.com/approve?session=test123",
+				ElicitationID: "elicit-url-test-001",
+			})
+			if err != nil {
+				return core.ErrorResult(fmt.Sprintf("url elicitation failed: %v", err)), nil
+			}
+			return core.TextResult(fmt.Sprintf("URL elicitation completed: action=%s", result.Action)), nil
+		},
+	))
+
+	// test_elicitation_url_required_error: returns a -32042 URLElicitationRequiredError
+	// to test client handling of the error code and embedded elicitation list.
+	srv.Register(core.TypedTool[emptyInput, core.ToolResult]("test_elicitation_url_required_error", "Returns -32042 URLElicitationRequiredError for conformance testing",
+		func(ctx core.ToolContext, _ emptyInput) (core.ToolResult, error) {
+			// This tool always returns an error to test the -32042 code path.
+			// In practice, this would be returned by middleware or auth checks.
+			return core.ErrorResult("requires URL elicitation"), fmt.Errorf("url_elicitation_required")
+		},
+	))
+
+	// test_elicitation_complete_notification: triggers a URL elicitation, then
+	// sends notifications/elicitation/complete after a short delay.
+	srv.Register(core.TypedTool[emptyInput, core.ToolResult]("test_elicitation_complete_notification", "URL elicitation with completion notification (SEP-1036)",
+		func(ctx core.ToolContext, _ emptyInput) (core.ToolResult, error) {
+			elicitID := "elicit-complete-test-001"
+
+			// Send the URL elicitation.
+			result, err := core.ElicitURL(ctx, core.ElicitationRequest{
+				Message:       "Visit URL to complete approval",
+				URL:           "https://example.com/approve?id=" + elicitID,
+				ElicitationID: elicitID,
+			})
+			if err != nil {
+				return core.ErrorResult(fmt.Sprintf("url elicitation failed: %v", err)), nil
+			}
+
+			// Send completion notification.
+			core.NotifyElicitationComplete(ctx, elicitID)
+
+			return core.TextResult(fmt.Sprintf("URL elicitation + notification: action=%s", result.Action)), nil
+		},
+	))
+
+	// test_elicitation_mode_default_form: calls elicitation/create with no mode
+	// set (should default to form). Verifies backwards compatibility.
+	srv.Register(core.TypedTool[emptyInput, core.ToolResult]("test_elicitation_mode_default_form", "Calls elicitation/create with no mode (defaults to form, backwards compat)",
+		func(ctx core.ToolContext, _ emptyInput) (core.ToolResult, error) {
+			result, err := ctx.Elicit(core.ElicitationRequest{
+				Message:         "Pick a color (no mode set)",
+				RequestedSchema: json.RawMessage(`{"type":"object","properties":{"color":{"type":"string"}}}`),
+			})
+			if err != nil {
+				return core.ErrorResult(fmt.Sprintf("elicitation failed: %v", err)), nil
+			}
+			contentJSON, _ := json.Marshal(result.Content)
+			return core.TextResult(fmt.Sprintf("Default form mode: action=%s, content=%s", result.Action, string(contentJSON))), nil
+		},
+	))
 }
 
 // minimalPNG returns a valid 1x1 red PNG image (67 bytes).

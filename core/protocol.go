@@ -19,12 +19,28 @@ type ClientInfo struct {
 	Version string `json:"version"`
 }
 
+// ElicitationFormCap is a marker for form-mode elicitation support.
+// Currently empty; future specs may add fields (e.g., schema constraints).
+type ElicitationFormCap struct{}
+
+// ElicitationURLCap is a marker for URL-mode elicitation support (SEP-1036).
+// Currently empty; future specs may add fields (e.g., allowed domains).
+type ElicitationURLCap struct{}
+
+// ElicitationCap describes client support for elicitation modes.
+// Per SEP-1036: Form is the default mode (JSON schema → form).
+// URL mode enables out-of-band interactions where the user visits a URL.
+type ElicitationCap struct {
+	Form *ElicitationFormCap `json:"form,omitempty"`
+	URL  *ElicitationURLCap  `json:"url,omitempty"`
+}
+
 // ClientCapabilities describes features the client supports.
 type ClientCapabilities struct {
-	Sampling    *struct{} `json:"sampling,omitempty"`
-	Roots       *RootsCap `json:"roots,omitempty"`
-	Elicitation *struct{}       `json:"elicitation,omitempty"`
-	Tasks       *ClientTasksCap `json:"tasks,omitempty"`
+	Sampling    *struct{}        `json:"sampling,omitempty"`
+	Roots       *RootsCap        `json:"roots,omitempty"`
+	Elicitation *ElicitationCap  `json:"elicitation,omitempty"`
+	Tasks       *ClientTasksCap  `json:"tasks,omitempty"`
 
 	// Extensions maps extension IDs to the client's capability declaration
 	// for that extension. Sent during initialize to advertise extension support.
