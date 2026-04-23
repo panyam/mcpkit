@@ -30,5 +30,8 @@ Thumbs.db
 /testserver
 /testclient
 docs/COMPETITIVE_ANALYSIS.md
+
+# Example binaries (go build . produces binary matching dir name)
 examples/apps/htmx/htmx
 examples/apps/react/server/server
+examples/tasks/tasks
