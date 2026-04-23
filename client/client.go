@@ -589,7 +589,7 @@ func (c *Client) startKeepalive() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				_, err := c.rawCall("ping", nil)
+				resp, err := c.rawCall("ping", nil)
 				if err != nil {
 					failures++
 					if failures >= maxFails {
@@ -599,6 +599,10 @@ func (c *Client) startKeepalive() {
 						}
 						return
 					}
+				} else if resp != nil && resp.Error != nil && resp.Error.Code == core.ErrCodeMethodNotFound {
+					// Method-not-found proves the connection is alive — the server
+					// received the ping and responded. Per MCP spec, ping is optional.
+					failures = 0
 				} else {
 					failures = 0
 				}

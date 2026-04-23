@@ -13,6 +13,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	core "github.com/panyam/mcpkit/core"
@@ -32,6 +33,28 @@ type pendingServerRequest struct {
 type serverResponse struct {
 	Result any
 	Error  *core.Error
+}
+
+// ServerRequestError is a typed error returned by sendServerRequest when the
+// client responds with a JSON-RPC error. It wraps the error code and message
+// so callers can inspect the code (e.g., to distinguish method-not-found from
+// transport failures).
+type ServerRequestError struct {
+	Code    int
+	Message string
+}
+
+func (e *ServerRequestError) Error() string {
+	return fmt.Sprintf("client error: [%d] %s", e.Code, e.Message)
+}
+
+// IsMethodNotFound reports whether the error is a JSON-RPC method-not-found (-32601).
+func IsMethodNotFound(err error) bool {
+	var sre *ServerRequestError
+	if errors.As(err, &sre) {
+		return sre.Code == core.ErrCodeMethodNotFound
+	}
+	return false
 }
 
 // marshalRequest builds a JSON-RPC 2.0 request with a string ID.
@@ -80,7 +103,7 @@ func sendServerRequest(
 		return nil, ctx.Err()
 	case resp := <-pr.ch:
 		if resp.Error != nil {
-			return nil, fmt.Errorf("client error: [%d] %s", resp.Error.Code, resp.Error.Message)
+			return nil, &ServerRequestError{Code: resp.Error.Code, Message: resp.Error.Message}
 		}
 		// Result may be typed (from NewResponse) or json.RawMessage (from client).
 		if raw, ok := resp.Result.(json.RawMessage); ok {
