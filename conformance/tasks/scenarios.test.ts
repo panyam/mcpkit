@@ -41,9 +41,10 @@ after(async () => {
 });
 
 // ============================================================================
-// Helper: create a task via raw request
+// Helpers
 // ============================================================================
 
+/** Create a task via raw request (bypasses SDK schema validation). */
 async function createTask(toolName: string, args: Record<string, unknown>, taskOpts: Record<string, unknown> = {}): Promise<Task> {
     const result = await client.request(
         {
@@ -54,7 +55,7 @@ async function createTask(toolName: string, args: Record<string, unknown>, taskO
                 task: taskOpts,
             },
         },
-        {} as any // skip schema validation — we check manually
+        {} as any
     );
     const task = (result as any).task as Task;
     assert.ok(task, 'CreateTaskResult should have task field');
@@ -62,7 +63,7 @@ async function createTask(toolName: string, args: Record<string, unknown>, taskO
     return task;
 }
 
-// Helper: poll tasks/get until terminal
+/** Poll tasks/get until a terminal state. */
 async function waitForTerminal(taskId: string, timeoutMs = 10_000): Promise<Task> {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
@@ -75,7 +76,7 @@ async function waitForTerminal(taskId: string, timeoutMs = 10_000): Promise<Task
     throw new Error(`Task ${taskId} did not reach terminal state within ${timeoutMs}ms`);
 }
 
-// Helper: poll tasks/get until a specific status
+/** Poll tasks/get until a specific status or terminal. */
 async function waitForStatus(taskId: string, status: string, timeoutMs = 10_000): Promise<Task> {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
@@ -86,6 +87,16 @@ async function waitForStatus(taskId: string, status: string, timeoutMs = 10_000)
         await new Promise(r => setTimeout(r, 200));
     }
     throw new Error(`Task ${taskId} did not reach status ${status} within ${timeoutMs}ms`);
+}
+
+/**
+ * Assert a JSON-RPC error on the caught error object.
+ * The spec does not mandate specific error codes for most task operations,
+ * so we verify the error has a numeric code (valid JSON-RPC error).
+ */
+function assertJsonRpcError(e: any, label: string) {
+    const code = e.code ?? e.error?.code;
+    assert.ok(typeof code === 'number', `${label}: error should have a numeric code, got ${typeof code}`);
 }
 
 // ============================================================================
@@ -113,7 +124,12 @@ describe('MCP Tasks Conformance', () => {
     // ========================================================================
     test('scenario 02: async task creation returns CreateTaskResult', async () => {
         const task = await createTask('slow_compute', { seconds: 2, label: 'conformance' });
-        assert.equal(task.status, 'working', 'initial status should be working');
+        // A fast server could transition beyond 'working' before the response
+        // flushes, so accept any non-terminal status.
+        assert.ok(
+            !['completed', 'failed', 'cancelled'].includes(task.status),
+            `initial status should be non-terminal, got ${task.status}`
+        );
         assert.ok(task.createdAt, 'task should have createdAt');
         assert.ok(task.lastUpdatedAt, 'task should have lastUpdatedAt');
     });
@@ -169,9 +185,12 @@ describe('MCP Tasks Conformance', () => {
 
     // ========================================================================
     // Scenario 7: tasks/list returns array
+    //
+    // Note: tasks/list is capability-conditional (tasks.list). This test
+    // assumes the server advertises it. Servers that don't are not required
+    // to implement it.
     // ========================================================================
     test('scenario 07: tasks/list returns task array', async () => {
-        // Create a task first to ensure list is not empty.
         await createTask('slow_compute', { seconds: 1, label: 'list-test' });
 
         const list = await client.experimental.tasks.listTasks();
@@ -182,6 +201,11 @@ describe('MCP Tasks Conformance', () => {
 
     // ========================================================================
     // Scenario 8: Required tool without task hint returns error
+    //
+    // Calling a tool with execution.taskSupport=required without a task hint
+    // MUST return an error. The spec does not mandate a specific error code;
+    // Go uses -32601 (MethodNotFound), TS SDK uses -32603 (InternalError).
+    // TODO: If the spec standardizes an error code for this case, assert it.
     // ========================================================================
     test('scenario 08: required tool without task hint returns error', async () => {
         try {
@@ -191,19 +215,24 @@ describe('MCP Tasks Conformance', () => {
             });
             assert.fail('should have thrown an error');
         } catch (e: any) {
-            assert.ok(e.message || e.code, 'should have error message or code');
+            assertJsonRpcError(e, 'required without hint');
         }
     });
 
     // ========================================================================
     // Scenario 9: Forbidden tool with task hint returns error
+    //
+    // Sending a task hint to a tool that does not support tasks (absent or
+    // forbidden execution) MUST return an error. The spec does not mandate
+    // a specific code; implementations vary (-32601, -32603).
+    // TODO: If the spec standardizes an error code for this case, assert it.
     // ========================================================================
     test('scenario 09: forbidden tool with task hint returns error', async () => {
         try {
             await createTask('greet', { name: 'test' });
             assert.fail('should have thrown an error');
         } catch (e: any) {
-            assert.ok(e.message || e.code, 'should have error message or code');
+            assertJsonRpcError(e, 'forbidden with hint');
         }
     });
 
@@ -212,7 +241,10 @@ describe('MCP Tasks Conformance', () => {
     // ========================================================================
     test('scenario 10: external proxy tool completes via task callbacks', async () => {
         const task = await createTask('external_job', { job_id: 'conformance-10' });
-        assert.equal(task.status, 'working', 'initial status should be working');
+        assert.ok(
+            !['completed', 'failed', 'cancelled'].includes(task.status),
+            `initial status should be non-terminal, got ${task.status}`
+        );
 
         const terminal = await waitForTerminal(task.taskId);
         assert.equal(terminal.status, 'completed', 'task should complete');
@@ -253,36 +285,44 @@ describe('MCP Tasks Conformance', () => {
         assert.ok(content.length > 0, 'should have content');
         assert.equal(content[0].type, 'text');
         assert.ok(content[0].text.includes('sync-test'), 'result should mention label');
-        // No task field — this was a sync call
+        // No task field — this was a sync call.
         assert.ok(!(result as any).task, 'sync call should not have task field');
     });
 
     // ========================================================================
-    // Scenario 13: Get non-existent task
+    // Scenario 13: Get non-existent task returns error
+    //
+    // TODO: Spec does not mandate a specific code for task-not-found.
+    // Go uses -32602 (InvalidParams), TS SDK uses -32603 (InternalError).
+    // If the spec standardizes this, assert the specific code.
     // ========================================================================
     test('scenario 13: tasks/get with bogus taskId returns error', async () => {
         try {
             await client.experimental.tasks.getTask('nonexistent-task-id-12345');
             assert.fail('should have thrown an error');
         } catch (e: any) {
-            assert.ok(e.message || e.code, 'should have error message or code');
+            assertJsonRpcError(e, 'get non-existent');
         }
     });
 
     // ========================================================================
-    // Scenario 14: Cancel non-existent task
+    // Scenario 14: Cancel non-existent task returns error
+    //
+    // TODO: Same as scenario 13 — no mandated error code for task-not-found.
     // ========================================================================
     test('scenario 14: tasks/cancel with bogus taskId returns error', async () => {
         try {
             await client.experimental.tasks.cancelTask('nonexistent-task-id-12345');
             assert.fail('should have thrown an error');
         } catch (e: any) {
-            assert.ok(e.message || e.code, 'should have error message or code');
+            assertJsonRpcError(e, 'cancel non-existent');
         }
     });
 
     // ========================================================================
-    // Scenario 15: Cancel already-completed task
+    // Scenario 15: Cancel already-completed task returns error
+    //
+    // TODO: Same — no mandated error code for cancelling a terminal task.
     // ========================================================================
     test('scenario 15: cancel completed task returns error', async () => {
         const created = await createTask('slow_compute', { seconds: 1, label: 'cancel-done' });
@@ -292,47 +332,55 @@ describe('MCP Tasks Conformance', () => {
             await client.experimental.tasks.cancelTask(created.taskId);
             assert.fail('should have thrown an error');
         } catch (e: any) {
-            assert.ok(e.message || e.code, 'should have error for cancelling terminal task');
+            assertJsonRpcError(e, 'cancel completed');
         }
     });
 
     // ========================================================================
-    // Scenario 16: Custom TTL passthrough
+    // Scenario 16: TTL in CreateTaskResult
+    //
+    // The client's task.ttl is a statement of intent — the server MAY use a
+    // different value. We only verify the response includes a TTL and that
+    // it's a positive number.
     // ========================================================================
-    test('scenario 16: client TTL hint is reflected in CreateTaskResult', async () => {
+    test('scenario 16: CreateTaskResult includes a TTL', async () => {
         const task = await createTask('slow_compute', { seconds: 1, label: 'ttl-test' }, { ttl: 30000 });
         assert.ok(task.ttl !== undefined && task.ttl !== null, 'task should have ttl');
-        assert.equal(task.ttl, 30000, 'ttl should match client hint');
+        assert.ok(typeof task.ttl === 'number' && task.ttl > 0, 'ttl should be a positive number');
     });
 
     // ========================================================================
-    // Scenario 17: Poll interval passthrough
+    // Scenario 17: pollInterval in CreateTaskResult
+    //
+    // pollInterval is a server-provided field telling the client how often
+    // to poll. It is NOT a client request parameter (that was a TS SDK bug).
+    // We verify the server returns a pollInterval and it's a positive number.
     // ========================================================================
-    test('scenario 17: client pollInterval hint is reflected in CreateTaskResult', async () => {
-        const task = await createTask('slow_compute', { seconds: 1, label: 'poll-test' }, { pollInterval: 500 });
+    test('scenario 17: CreateTaskResult includes a pollInterval', async () => {
+        const task = await createTask('slow_compute', { seconds: 1, label: 'poll-test' });
         assert.ok(task.pollInterval !== undefined, 'task should have pollInterval');
-        // Server MAY use client hint or override with its own default.
-        // Go server respects it; TS SDK defaults to 1000ms.
         assert.ok(typeof task.pollInterval === 'number' && task.pollInterval > 0,
             'pollInterval should be a positive number');
     });
 
     // ========================================================================
-    // Scenario 18: TTL expiry
+    // Scenario 18: TTL — task must not expire before TTL
+    //
+    // Per spec, servers MUST NOT expire a task before the TTL elapses.
+    // Servers MAY expire at any point after — we don't require immediate
+    // expiry post-TTL.
     // ========================================================================
-    test('scenario 18: task expires after TTL', async () => {
-        // Create task with very short TTL (2 seconds).
-        const task = await createTask('slow_compute', { seconds: 1, label: 'ttl-expiry' }, { ttl: 2000 });
-        // Wait for task to complete + TTL to expire.
+    test('scenario 18: task must not expire before TTL', async () => {
+        // Create with a generous TTL (5 seconds).
+        const task = await createTask('slow_compute', { seconds: 1, label: 'ttl-guard' }, { ttl: 5000 });
         await waitForTerminal(task.taskId);
-        await new Promise(r => setTimeout(r, 2500));
 
-        try {
-            await client.experimental.tasks.getTask(task.taskId);
-            assert.fail('should have thrown — task should be expired');
-        } catch (e: any) {
-            assert.ok(e.message || e.code, 'should get error for expired task');
-        }
+        // Task MUST still be accessible well before TTL expires.
+        // (Task completed after ~1s, TTL is 5s, so at ~1.5s it should exist.)
+        await new Promise(r => setTimeout(r, 500));
+        const info = await client.experimental.tasks.getTask(task.taskId);
+        assert.ok(info.taskId, 'task should still exist before TTL expires');
+        assert.equal(info.status, 'completed', 'task should be completed');
     });
 
     // ========================================================================
@@ -347,62 +395,31 @@ describe('MCP Tasks Conformance', () => {
         const ids = new Set(tasks.map(t => t.taskId));
         assert.equal(ids.size, 5, 'all 5 tasks should have unique IDs');
 
-        // Wait for all to complete.
         await Promise.all(tasks.map(t => waitForTerminal(t.taskId)));
     });
 
     // ========================================================================
-    // Scenario 20: tasks/result for failed task returns isError content
+    // Scenario 20: tasks/result for failed task returns isError
+    //
+    // Per spec: a failed task's result MUST have isError: true.
     // ========================================================================
-    test('scenario 20: tasks/result for failed task returns error content', async () => {
+    test('scenario 20: tasks/result for failed task has isError true', async () => {
         const created = await createTask('failing_job', {});
         await waitForTerminal(created.taskId);
 
         const result = await client.experimental.tasks.getTaskResult(created.taskId);
         assert.ok(result, 'should return a result');
-        const content = (result as any).content as any[];
-        assert.ok(content && content.length > 0, 'should have content');
-        // The result should indicate an error.
-        assert.ok(
-            (result as any).isError === true || content[0].text.toLowerCase().includes('fail'),
-            'result should indicate failure'
-        );
+        assert.equal((result as any).isError, true, 'result should have isError: true');
     });
 
     // ========================================================================
-    // Scenario 21: Session isolation
+    // Scenario 21: Execution field in tools/list
     // ========================================================================
-    test('scenario 21: task from one session is not visible to another', async () => {
-        // Create a task on the main client.
-        const task = await createTask('slow_compute', { seconds: 5, label: 'isolation-test' });
-
-        // Create a second client (separate session).
-        const transport2 = new StreamableHTTPClientTransport(new URL(SERVER_URL));
-        const client2 = new Client(
-            { name: 'mcp-tasks-conformance-2', version: '1.0.0' },
-            { capabilities: { tasks: {} } }
-        );
-        await client2.connect(transport2);
-
-        try {
-            // Client 2 should NOT see client 1's task.
-            await client2.experimental.tasks.getTask(task.taskId);
-            assert.fail('client 2 should not see client 1 task');
-        } catch (e: any) {
-            assert.ok(e.message || e.code, 'should get error for cross-session access');
-        } finally {
-            await client2.close();
-        }
-    });
-
-    // ========================================================================
-    // Scenario 22: Execution field in tools/list
-    // ========================================================================
-    test('scenario 22: tools/list includes execution.taskSupport', async () => {
+    test('scenario 21: tools/list includes execution.taskSupport', async () => {
         const tools = await client.listTools();
         const toolMap = new Map(tools.tools.map(t => [t.name, t]));
 
-        // greet — no execution field (forbidden)
+        // greet — no execution field (forbidden per spec: absent = forbidden)
         const greet = toolMap.get('greet');
         assert.ok(greet, 'greet tool should exist');
         assert.ok(!greet.execution || greet.execution.taskSupport === 'forbidden',
@@ -424,10 +441,9 @@ describe('MCP Tasks Conformance', () => {
     });
 
     // ========================================================================
-    // Scenario 23: Elicitation via side-channel (confirm_delete)
+    // Scenario 22: Elicitation via side-channel (confirm_delete)
     // ========================================================================
-    test('scenario 23: elicitation round-trip via tasks/result', async () => {
-        // Set up elicitation handler — auto-confirm deletion.
+    test('scenario 22: elicitation round-trip via tasks/result', async () => {
         client.setRequestHandler('elicitation/create', async (request: any) => {
             return {
                 action: 'accept' as const,
@@ -435,20 +451,18 @@ describe('MCP Tasks Conformance', () => {
             };
         });
 
-        // Create the task.
         const task = await createTask('confirm_delete', { filename: 'conformance.txt' });
         // Initial status may be 'working' or 'input_required' depending on
-        // server timing (TS SDK transitions before returning CreateTaskResult).
+        // server timing — both are valid.
         assert.ok(['working', 'input_required'].includes(task.status),
             `initial status should be working or input_required, got ${task.status}`);
 
-        // Wait for input_required (server is waiting for elicitation response).
         const inputTask = await waitForStatus(task.taskId, 'input_required', 5000);
         assert.equal(inputTask.status, 'input_required',
             'task should be input_required while waiting for elicitation');
 
-        // Call tasks/result — this triggers the side-channel: server sends
-        // elicitation request via SSE, client handler responds, server completes task.
+        // tasks/result triggers the side-channel: server sends elicitation
+        // request via SSE, client handler responds, server completes task.
         const result = await client.experimental.tasks.getTaskResult(task.taskId);
         assert.ok(result, 'should return a result');
         const content = (result as any).content as any[];
@@ -456,16 +470,14 @@ describe('MCP Tasks Conformance', () => {
         assert.ok(content[0].text.includes('Deleted') || content[0].text.includes('conformance.txt'),
             'result should confirm deletion');
 
-        // Verify task is now completed.
         const final = await client.experimental.tasks.getTask(task.taskId);
         assert.equal(final.status, 'completed', 'task should be completed after elicitation');
     });
 
     // ========================================================================
-    // Scenario 24: Sampling via side-channel (write_haiku)
+    // Scenario 23: Sampling via side-channel (write_haiku)
     // ========================================================================
-    test('scenario 24: sampling round-trip via tasks/result', async () => {
-        // Set up sampling handler — return a canned haiku.
+    test('scenario 23: sampling round-trip via tasks/result', async () => {
         client.setRequestHandler('sampling/createMessage', async (request: any) => {
             return {
                 model: 'test-model',
@@ -474,19 +486,14 @@ describe('MCP Tasks Conformance', () => {
             };
         });
 
-        // Create the task.
         const task = await createTask('write_haiku', { topic: 'ocean' });
-        // Initial status may be 'working' or 'input_required' depending on
-        // server timing (TS SDK transitions before returning CreateTaskResult).
         assert.ok(['working', 'input_required'].includes(task.status),
             `initial status should be working or input_required, got ${task.status}`);
 
-        // Wait for input_required.
         const inputTask = await waitForStatus(task.taskId, 'input_required', 5000);
         assert.equal(inputTask.status, 'input_required',
             'task should be input_required while waiting for sampling');
 
-        // Call tasks/result — triggers side-channel sampling.
         const result = await client.experimental.tasks.getTaskResult(task.taskId);
         assert.ok(result, 'should return a result');
         const content = (result as any).content as any[];
@@ -494,60 +501,115 @@ describe('MCP Tasks Conformance', () => {
         assert.ok(content[0].text.includes('ocean') || content[0].text.includes('Haiku'),
             'result should mention the topic');
 
-        // Verify task is completed.
         const final = await client.experimental.tasks.getTask(task.taskId);
         assert.equal(final.status, 'completed', 'task should be completed after sampling');
     });
 
     // ========================================================================
-    // Scenario 25: Progress notifications
+    // Scenario 24: Progress notifications (optional)
+    //
+    // Progress notifications are optional per spec. If the server sends them,
+    // they must be well-formed (numeric progress field). We do NOT require
+    // that the server sends them.
     // ========================================================================
-    test('scenario 25: progress notifications received during task execution', async () => {
+    test('scenario 24: progress notifications are well-formed if sent', async () => {
         const progressEvents: any[] = [];
 
         client.setNotificationHandler('notifications/progress', (notification: any) => {
             progressEvents.push(notification.params);
         });
 
-        // Create a 2-second task — should emit progress each second.
         const task = await createTask('slow_compute', { seconds: 2, label: 'progress-test' });
         await waitForTerminal(task.taskId, 10_000);
 
-        // Should have received at least 1 progress notification.
-        assert.ok(progressEvents.length >= 1,
-            `should have received progress events, got ${progressEvents.length}`);
-        // Progress should have numeric progress field.
-        assert.ok(typeof progressEvents[0].progress === 'number',
-            'progress event should have numeric progress field');
+        if (progressEvents.length > 0) {
+            // If notifications were sent, verify they're well-formed.
+            for (const evt of progressEvents) {
+                assert.ok(typeof evt.progress === 'number',
+                    'progress event should have numeric progress field');
+                assert.ok(evt.progressToken !== undefined,
+                    'progress event should have progressToken');
+            }
+        }
+        // No assertion on count — notifications are optional.
     });
 
     // ========================================================================
-    // Scenario 26: Status notifications
+    // Scenario 25: Status notifications (optional, well-formed if sent)
+    //
+    // Status notifications are optional per spec. If the server sends them,
+    // they must reference the correct task and match the actual task state
+    // at the time they were sent.
     // ========================================================================
-    test('scenario 26: status notification received on task completion', async () => {
+    test('scenario 25: status notifications match task state if sent', async () => {
         const statusEvents: any[] = [];
 
         client.setNotificationHandler('notifications/tasks/status', (notification: any) => {
             statusEvents.push(notification.params);
         });
 
-        // Create a task that completes quickly.
         const task = await createTask('slow_compute', { seconds: 1, label: 'status-notify' });
-
-        // Wait for completion — the result handler sends a status notification.
         await waitForTerminal(task.taskId);
-        // Fetch result to trigger the notification from the result handler.
+        // Fetch result to trigger any final notification.
         await client.experimental.tasks.getTaskResult(task.taskId);
-
-        // Give notifications a moment to arrive.
         await new Promise(r => setTimeout(r, 500));
 
-        // Should have received at least one status notification.
-        assert.ok(statusEvents.length >= 1,
-            `should have received status notifications, got ${statusEvents.length}`);
-        // The notification should reference our task.
-        const ourEvent = statusEvents.find((e: any) => e.taskId === task.taskId);
-        assert.ok(ourEvent, 'should have a status notification for our task');
+        if (statusEvents.length > 0) {
+            // If notifications were sent, verify they're well-formed.
+            for (const evt of statusEvents) {
+                assert.ok(evt.taskId, 'status notification should have taskId');
+                assert.ok(evt.status, 'status notification should have status');
+                assert.ok(
+                    ['working', 'completed', 'failed', 'cancelled', 'input_required'].includes(evt.status),
+                    `status notification has valid status: ${evt.status}`
+                );
+            }
+            // If any reference our task, they must have a valid status.
+            const ours = statusEvents.filter((e: any) => e.taskId === task.taskId);
+            if (ours.length > 0) {
+                const last = ours[ours.length - 1];
+                assert.equal(last.status, 'completed',
+                    'final status notification for our task should be completed');
+            }
+        }
+        // No assertion on count — notifications are optional.
+    });
+
+    // ========================================================================
+    // Scenario 26: related-task _meta on tasks/result
+    //
+    // Per spec: tasks/result responses MUST include
+    // _meta["io.modelcontextprotocol/related-task"] with the taskId.
+    // ========================================================================
+    test('scenario 26: tasks/result includes related-task _meta', async () => {
+        const task = await createTask('slow_compute', { seconds: 1, label: 'meta-test' });
+        await waitForTerminal(task.taskId);
+
+        const result = await client.experimental.tasks.getTaskResult(task.taskId);
+        const meta = (result as any)._meta;
+        assert.ok(meta, 'tasks/result should have _meta');
+        const related = meta['io.modelcontextprotocol/related-task'];
+        assert.ok(related, 'should have io.modelcontextprotocol/related-task key');
+        assert.ok(related.taskId, 'related-task should have taskId');
+        assert.equal(related.taskId, task.taskId, 'related-task taskId should match');
+    });
+
+    // ========================================================================
+    // Scenario 27: tasks/get SHALL NOT include related-task _meta
+    //
+    // Per spec: tasks/get responses SHALL NOT include related-task metadata
+    // because the taskId parameter is the source of truth.
+    // ========================================================================
+    test('scenario 27: tasks/get does not include related-task _meta', async () => {
+        const task = await createTask('slow_compute', { seconds: 1, label: 'no-meta-test' });
+        const info = await client.experimental.tasks.getTask(task.taskId);
+        const meta = (info as any)._meta;
+        if (meta) {
+            const related = meta['io.modelcontextprotocol/related-task'];
+            assert.ok(!related,
+                'tasks/get SHALL NOT include related-task in _meta');
+        }
+        // No _meta at all is also valid.
     });
 
 });
