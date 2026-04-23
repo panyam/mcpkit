@@ -344,3 +344,5 @@ Total: 40 passed, 0 failed
 
 === CONFORMANCE TESTS PASSED ===
 Finished: Wed Apr 22 14:51:17 PDT 2026
+2026/04/22 20:28:18 Received signal terminated, shutting down...
+2026/04/22 20:28:18 Server shut down gracefully

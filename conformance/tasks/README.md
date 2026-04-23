@@ -29,7 +29,7 @@ npm install
 ```bash
 # Start your server
 cd examples/tasks && go run . -addr :8080 &
-# OR
+# OR 
 cd examples/tasks && node ts-reference-server.mjs &
 
 # Run conformance scenarios
