@@ -13,6 +13,7 @@ make test-e2e          # E2E tests (auth + apps)
 make test-experimental # Experimental POC tests (telegram-events)
 make testconf          # MCP conformance suite (needs Node.js)
 make testconfauth      # Auth conformance (client OAuth)
+make testconf-tasks    # Tasks conformance (27 scenarios, needs Go + Node.js)
 make testall           # Everything (10 stages) + Keycloak + HTML report
 make audit             # govulncheck + gosec + gitleaks + race
 make smoke             # Curl-based transport tests
@@ -34,7 +35,7 @@ Sub-module commands: see `ext/ui/Makefile`, `experimental/ext/protogen/Makefile`
 | `ext/auth/` | JWT, PRM, OAuth (separate go.mod) | `ext/auth/docs/DESIGN.md` |
 | `ext/ui/` | MCP Apps + App Bridge JS (separate go.mod) | `docs/APPS_DESIGN.md` |
 | `experimental/ext/protogen/` | Proto → MCP codegen (separate go.mod) | `experimental/ext/protogen/docs/DESIGN.md` |
-| `server/task_*.go`, `server/tasks_experimental.go` | MCP Tasks protocol (EXPERIMENTAL) — middleware, store, handlers, TaskContext |
+| `server/task_*.go`, `server/tasks_experimental.go` | MCP Tasks protocol (EXPERIMENTAL) — middleware, store, handlers, TaskContext, TaskCallbacks |
 | `experimental/ext/events/` | MCP Events protocol library (EXPERIMENTAL, separate go.mod) | `experimental/ext/events/README.md` |
 | `experimental/telegram-events/` | Telegram Events reference server (separate go.mod) | `experimental/telegram-events/README.md` |
 | `testutil/` | `NewTestServer`, `ForAllTransports`, `TestClient` | |
@@ -62,6 +63,8 @@ Sub-module commands: see `ext/ui/Makefile`, `experimental/ext/protogen/Makefile`
 - **POST SSE writer closure**: After `handlePostSSE` returns, the SSE writer is marked `closed`. Background goroutines that try to notify via the dead writer get silent no-ops instead of panics.
 - **Task cancel race**: After cancel, the background goroutine checks if the task is already terminal before setting status. `StoreTerminalResult` also guards against terminal→terminal transitions.
 - **Initialize returns JSON, not SSE**: Go server returns initialize as plain JSON; TS SDK returns SSE. Both spec-compliant. Curl helpers must handle both formats (#284).
+- **Conformance assertions — spec MUST vs MAY**: Don't assert specific error codes unless the spec mandates them. TTL is a client hint (server may ignore). `pollInterval` is server-only (not a client request param — TS SDK bug). Notifications are optional. Auth-context binding ≠ session isolation. Use `ENFORCE_ERROR_CODES` flag pattern for future-proofing.
+- **Flaky TestStoreConcurrentAccess**: Was caused by timestamp-based task IDs colliding when goroutines ran within the same nanosecond. Fixed with deterministic IDs (`fmt.Sprintf`).
 
 Module-specific gotchas live in their READMEs (protogen templates, App Bridge escaping, etc.).
 
@@ -79,17 +82,22 @@ Module-specific gotchas live in their READMEs (protogen templates, App Bridge es
 | Telegram example | `experimental/telegram-events/README.md` |
 | Auth examples | `examples/auth/README.md` (unified + 5 individual servers) |
 | App examples | `examples/apps/` (todolist, vanilla, react — tools, elicitation, sampling, prompts) |
-| Tasks library | `server/task_*.go`, `server/tasks_experimental.go` (TaskContext, TaskElicit, TaskSample, side-channel) |
+| Tasks library | `server/task_*.go`, `server/tasks_experimental.go` (TaskContext, TaskElicit, TaskSample, side-channel, TaskCallbacks) |
+| Tasks callbacks | `server/task_callbacks.go` — per-tool GetTask/GetResult overrides for external proxy pattern |
 | Tasks client | `client/tasks.go` (ToolCallAsTask, WaitForTask, GetTask, GetTaskPayload, IsToolTask, etc.) |
 | Tasks gap plan | `docs/TASKS_GAP_PLAN.md` (7-phase plan vs TS SDK) |
-| Tasks example | `examples/tasks/README.md` (5 tools: sync, async, failing, elicitation, sampling) |
+| Tasks v2 plan | `docs/TASKS_V2_PLAN.md` (SEP-2557 — 8-phase plan, 16 conformance scenarios) |
+| Tasks example | `examples/tasks/README.md` (6 tools: sync, async, failing, elicitation, sampling, external proxy) |
+| Tasks conformance | `conformance/tasks/` (27 scenarios, Go + TS parity) |
 | Examples overview | `examples/README.md` |
 | Tasks testing | `examples/tasks/run-exercises.sh` (16 exercises), `test-side-by-side.sh`, `ts-reference-server.mjs` |
 | Conformance baseline | `conformance/baseline.yml` |
+| Conformance tasks | `conformance/tasks/scenarios.test.ts` (27 scenarios) |
 
 ## Conformance Status
 
 - Server: 30/30 (40 with baseline), Auth: 14/14 (210 checks), Apps: 21, Telegram Events: 21
+- Tasks: 27/27 (lifecycle, errors, TTL, concurrency, elicitation, sampling, progress, status, related-task meta)
 - Keycloak interop: 12/12 (valid token, tampered, scopes, PRM, WWW-Authenticate, password grant, session hijacking, public methods, token refresh)
 - testall: 10/10 stages
 - Auth examples: 5 persistent servers (bearer, JWT, scopes, session-binding, public-discovery)

@@ -127,6 +127,8 @@
 - mcp-tasks-types: core.TaskStatus (working/input_required/completed/failed/cancelled), TaskInfo, ToolExecution, TasksCap, ClientTasksCap — wire types for MCP Tasks spec 2025-11-25. ToolDef.Execution declares per-tool task support (required/optional/forbidden).
 - mcp-tasks-server-plumbing: Server.SetTasksCap(), Server.UseMiddleware(), Registry.ToolDef() — server-side hooks for tasks capability advertisement and middleware injection post-construction.
 - mcp-tasks-library: server/task_*.go + server/tasks_experimental.go — MCP Tasks protocol (spec 2025-11-25, wire-format parity with TS SDK). server.RegisterTasks(TasksConfig) installs middleware + method handlers. Side-channel elicitation/sampling via TaskContext.TaskElicit/TaskSample. Client helpers in client/tasks.go (GetTask, GetTaskPayload, ToolCallAsTask, etc.).
+- mcp-tasks-callbacks: server.TaskCallbacks — per-tool GetTask/GetResult overrides for the external proxy pattern (Step Functions, CI pipelines). Registered via server.Tool{TaskCallbacks: &TaskCallbacks{...}}. creatorToolForTask map dispatches to callbacks; falls through to TaskStore when callback returns false.
+- mcp-tasks-conformance: conformance/tasks/ — 27 scenarios testing full Tasks v1 protocol surface. Uses official TS SDK client against both Go and TS reference servers. Covers lifecycle, errors, TTL, concurrency, session isolation, elicitation, sampling, progress, status notifications, related-task _meta.
 
 ## Module
 github.com/panyam/mcpkit
