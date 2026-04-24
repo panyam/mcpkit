@@ -7,80 +7,96 @@ Companion to [Clare Liguori's TypeScript implementation](https://github.com/mode
 ## Quick Start
 
 ```bash
-# Test mode (no Telegram - use make inject)
+# Terminal 1: start server in test mode (no Telegram needed)
 make run
 
-# With Telegram bot
+# Terminal 2: start SSE listener
+make listen
+
+# Terminal 3: inject a message
+make inject TEXT="hello world"
+# → event appears instantly in Terminal 2
+```
+
+With a real Telegram bot:
+```bash
 TELEGRAM_BOT_TOKEN=your-token make run
 ```
 
 Get a bot token from [@BotFather](https://t.me/BotFather) (`/newbot`).
 
-## Injecting Messages
+## Three Delivery Modes
 
-```bash
-make inject TEXT="hello world"
-make inject TEXT="test" SENDER="alice" CHAT_ID=123
+All three modes work simultaneously from the same server.
+
+### Push — `make listen`
+
+Client opens a long-lived SSE connection. Server broadcasts events in real time.
+
+```mermaid
+sequenceDiagram
+    participant C as Client (listen)
+    participant S as MCP Server
+    participant T as Telegram / inject
+
+    C->>S: POST initialize
+    S-->>C: 200 + Mcp-Session-Id
+    C->>S: POST notifications/initialized
+    C->>S: GET /mcp (SSE stream open)
+    Note over C,S: Connection held open
+
+    T->>S: Message arrives
+    S->>S: store.Add() → OnMessage callback
+    S-->>C: SSE: notifications/events/event
+    T->>S: Another message
+    S-->>C: SSE: notifications/events/event
 ```
 
-## Diagnostics
+### Poll — `make poll`
 
-```bash
-make diag    # init → tools/list → events/list → events/poll → resources
-make test    # 21 Go tests
+Client calls `events/poll` on an interval. Cursor-based — never misses events.
+
+```mermaid
+sequenceDiagram
+    participant C as Client (poll)
+    participant S as MCP Server
+
+    C->>S: POST initialize + initialized
+    C->>S: events/poll (cursor="0")
+    S-->>C: events=[], cursor="5"
+    Note over C: sleep(interval)
+
+    C->>S: events/poll (cursor="5")
+    S-->>C: events=[msg6, msg7], cursor="7"
+    Note over C: process events
+
+    C->>S: events/poll (cursor="7")
+    S-->>C: events=[], cursor="7"
+    Note over C: nothing new, sleep
 ```
 
-## Testing the Three Delivery Modes
+### Webhook — `make webhook`
 
-### Poll (`events/poll`)
+Client registers a callback URL. Server POSTs HMAC-signed events to it.
 
-Client calls `events/poll` with a cursor. Server returns events since that cursor.
+```mermaid
+sequenceDiagram
+    participant C as Client (webhook receiver)
+    participant S as MCP Server
+    participant T as Telegram / inject
 
-```bash
-make diag   # Look for the "events/poll" section
+    C->>C: Start HTTP server on :9999
+    C->>S: POST initialize + initialized
+    C->>S: events/subscribe (url=localhost:9999, secret=...)
+    S-->>C: 200 (id, refreshBefore)
+
+    T->>S: Message arrives
+    S->>S: store.Add() → OnMessage callback
+    S->>C: POST http://localhost:9999<br/>X-MCP-Signature: sha256=...<br/>X-MCP-Timestamp: 1714000000
+    C->>C: Verify HMAC, print event
+
+    Note over C,S: Client must refresh subscription<br/>before TTL expires (60s default)
 ```
-
-Cursor flow: poll with `"0"` → get events + cursor `"3"` → poll with `"3"` → nothing new → inject → poll again → get new event.
-
-### Push (SSE broadcast)
-
-Server broadcasts events to all connected SSE clients in real-time.
-
-```bash
-# Terminal 1: start SSE listener
-SID=$(curl -s -D- -X POST http://localhost:8080/mcp \
-  -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","clientInfo":{"name":"sse","version":"1.0"},"capabilities":{}}}' \
-  | grep -i Mcp-Session-Id | awk '{print $2}' | tr -d '\r')
-curl -s -X POST http://localhost:8080/mcp -H 'Content-Type: application/json' \
-  -H "Mcp-Session-Id: $SID" -d '{"jsonrpc":"2.0","method":"notifications/initialized"}'
-curl -N http://localhost:8080/mcp -H "Mcp-Session-Id: $SID" -H "Accept: text/event-stream"
-
-# Terminal 2: inject a message
-make inject TEXT="push me"
-```
-
-Event appears instantly in Terminal 1 as `notifications/events/event`.
-
-### Webhook (`events/subscribe`)
-
-Server POSTs HMAC-signed events to a registered callback URL.
-
-```bash
-# Terminal 1: simple receiver
-nc -l 9999
-
-# Terminal 2: subscribe (use SID from above)
-curl -s -N http://localhost:8080/mcp -H 'Content-Type: application/json' \
-  -H "Mcp-Session-Id: $SID" \
-  -d '{"jsonrpc":"2.0","id":3,"method":"events/subscribe","params":{"id":"wh-1","name":"telegram.message","delivery":{"mode":"webhook","url":"http://localhost:9999","secret":"my-secret"}}}' \
-  | grep '^data:' | sed 's/^data: //' | jq .
-
-# Terminal 3: inject
-make inject TEXT="webhook me"
-```
-
-POST arrives in Terminal 1 with `X-MCP-Signature` and `X-MCP-Timestamp` headers.
 
 ## Architecture
 
@@ -88,20 +104,28 @@ POST arrives in Terminal 1 with `X-MCP-Signature` and `X-MCP-Timestamp` headers.
 Telegram Bot (long-poll)  ──or──  POST /inject
                 │                       │
                 ▼                       ▼
-          MessageStore (in-memory ring buffer)
+          MessageStore (in-memory ring buffer, 1000 max)
                 │
-                ├──► events.Emit()              → Push (SSE)
+                │  OnMessage callback
+                │
+                ├──► events.Emit()              → Push (SSE broadcast)
                 ├──► srv.NotifyResourceUpdated() → Resource subscribers
                 └──► events.EmitToWebhooks()     → Webhook (HMAC POST)
+                                                   ▲
+                                              events/poll reads
+                                              from store on demand
 ```
-
-The Telegram-specific code is ~200 LoC. Protocol methods, webhook delivery, and HMAC signing come from the [`events` library](../ext/events/).
 
 ## Make Targets
 
 | Target | Description |
 |--------|-------------|
 | `make run` | Start server (with bot if `TELEGRAM_BOT_TOKEN` set) |
-| `make test` | 21 Go tests |
-| `make diag` | Full diagnostic sequence |
+| `make test` | Go tests (21 tests) |
 | `make inject TEXT="..."` | Inject a message (optional: `SENDER=`, `CHAT_ID=`) |
+| `make list` | Show server capabilities: tools, resources, events, sample poll |
+| `make listen` | SSE push listener — print events in real time |
+| `make webhook` | Webhook receiver — subscribe + receive HMAC-signed POSTs |
+| `make poll` | Polling loop (default 5s interval, override: `INTERVAL=10`) |
+
+All client commands use the shared [`events_client.py`](../ext/events/events_client.py).
