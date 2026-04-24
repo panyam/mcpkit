@@ -25,6 +25,8 @@
  *   - inputRequests/inputResponses inline in tasks/get (MRTR model)
  *   - tasks/cancel required (not optional)
  *   - No capability advertisement — tasks are core protocol
+ *   - resultType: "task" discriminator on CreateTaskResult
+ *   - "failed" status = JSON-RPC protocol error only; tool errors = "completed" + isError
  *
  * Usage:
  *   cd conformance && npm install
@@ -33,7 +35,8 @@
  * The server MUST register these tools:
  *   - greet — sync-only, returns "Hello, {name}!"
  *   - slow_compute — async, sleeps N seconds, returns result
- *   - failing_job — async, always fails after 1s
+ *   - failing_job — async, always fails after 1s (tool-level error, not protocol error)
+ *   - protocol_error_job — async, fails with a JSON-RPC protocol error
  *   - confirm_delete — async, elicitation via inputRequests model
  */
 
@@ -85,7 +88,7 @@ async function callTool(toolName: string, args: Record<string, unknown>): Promis
  * Call tasks/get with optional requestState and inputResponses.
  * This is the v2 consolidated polling endpoint.
  */
-async function getTask(taskId: string, opts: { requestState?: string; inputResponses?: any[] } = {}): Promise<any> {
+async function getTask(taskId: string, opts: { requestState?: string; inputResponses?: Record<string, any> } = {}): Promise<any> {
     const params: any = { taskId };
     if (opts.requestState !== undefined) {
         params.requestState = opts.requestState;
@@ -111,6 +114,28 @@ async function cancelTask(taskId: string, requestState?: string): Promise<any> {
         { method: 'tasks/cancel', params },
         {} as any
     );
+}
+
+/**
+ * Assert that a CreateTaskResult has the v2-required resultType discriminator
+ * and a valid task object.
+ */
+function assertCreateTaskResult(result: any, label: string) {
+    assert.equal(result.resultType, 'task',
+        `${label}: result.resultType must be "task"`);
+    assert.ok(result.task, `${label}: should have task field`);
+    assert.ok(result.task.taskId, `${label}: task should have taskId`);
+}
+
+/**
+ * Assert that a completed task has a well-formed inlined result.
+ */
+function assertCompletedResult(task: any, label: string) {
+    assert.equal(task.status, 'completed', `${label}: status should be completed`);
+    assert.ok(task.result, `${label}: completed task should have inlined result`);
+    assert.ok(task.result.content, `${label}: result should have content`);
+    assert.ok(Array.isArray(task.result.content), `${label}: content should be an array`);
+    assert.ok(task.result.content.length > 0, `${label}: content should not be empty`);
 }
 
 // ============================================================================
@@ -139,12 +164,11 @@ describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
     //
     // In v2, the client does NOT send a `task` param. The server decides
     // to create a task based on the tool's configuration. The response is
-    // a CreateTaskResult with a task object.
+    // a CreateTaskResult with resultType: "task" and a task object.
     // ========================================================================
     test('v2-02: server creates task without client task param', async () => {
         const result = await callTool('slow_compute', { seconds: 2, label: 'v2-create' });
-        assert.ok(result.task, 'task-capable tool should return task');
-        assert.ok(result.task.taskId, 'task should have taskId');
+        assertCreateTaskResult(result, 'v2-02');
         assert.ok(
             !['completed', 'failed', 'cancelled'].includes(result.task.status),
             `initial status should be non-terminal, got ${result.task.status}`
@@ -154,20 +178,22 @@ describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
     // ========================================================================
     // Scenario 03: tasks/get returns working status
     //
-    // Polling a non-terminal task returns its current status.
+    // Polling a non-terminal task returns its current status. If it has
+    // already completed, the result must be inlined.
     // ========================================================================
-    test('v2-03: tasks/get returns working status for active task', async () => {
+    test('v2-03: tasks/get returns status for active task', async () => {
         const result = await callTool('slow_compute', { seconds: 3, label: 'v2-poll' });
+        assertCreateTaskResult(result, 'v2-03 create');
         const taskId = result.task.taskId;
 
         const task = await getTask(taskId);
         assert.ok(task.taskId, 'should have taskId');
         assert.ok(task.status, 'should have status');
-        // May still be working or could have completed if fast.
-        assert.ok(
-            ['working', 'completed'].includes(task.status),
-            `status should be working or completed, got ${task.status}`
-        );
+
+        // If the task already completed, verify inlined result.
+        if (task.status === 'completed') {
+            assertCompletedResult(task, 'v2-03 early-complete');
+        }
     });
 
     // ========================================================================
@@ -178,46 +204,71 @@ describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
     // ========================================================================
     test('v2-04: tasks/get returns completed status with inlined result', async () => {
         const result = await callTool('slow_compute', { seconds: 1, label: 'v2-result' });
+        assertCreateTaskResult(result, 'v2-04 create');
         const taskId = result.task.taskId;
 
         const terminal = await waitForTerminal(client, taskId);
-        assert.equal(terminal.status, 'completed', 'should be completed');
-        // v2: result is inlined in the tasks/get response.
-        assert.ok(terminal.result, 'completed task should have inlined result');
-        assert.ok(terminal.result.content, 'result should have content');
-        assert.ok(Array.isArray(terminal.result.content), 'content should be an array');
-        assert.ok(terminal.result.content.length > 0, 'content should not be empty');
+        assertCompletedResult(terminal, 'v2-04');
     });
 
     // ========================================================================
-    // Scenario 05: tasks/get returns failed + inlined error
+    // Scenario 05: Tool execution error — completed with isError: true
     //
-    // SEP-2557 defines FailedTask with an `error` field. However, the exact
-    // shape is still being finalized. This test checks for the `error` field
-    // as the canonical form per SEP-2557's FailedTask type.
+    // In v2, tool execution errors (the tool ran but returned an error) are
+    // represented as status: "completed" with result.isError: true. This
+    // matches the v1 tool error handling semantics.
     //
-    // OPEN QUESTION @LucaButBoring: Is `error` the definitive field name for
-    // FailedTask, or could it also be `result` with `isError: true`
-    // (matching v1 semantics)? Current assertion checks `error` first.
+    // The "failed" status is reserved for JSON-RPC protocol-level errors
+    // (e.g., the server crashed, lost connection to the tool, etc.) and
+    // inlines an `error` field (not `result`).
     // ========================================================================
-    test('v2-05: tasks/get returns failed status with inlined error', async () => {
+    test('v2-05: tool execution error is completed with isError true', async () => {
         const result = await callTool('failing_job', {});
+        assertCreateTaskResult(result, 'v2-05 create');
         const taskId = result.task.taskId;
 
         const terminal = await waitForTerminal(client, taskId);
-        assert.equal(terminal.status, 'failed', 'should be failed');
-        // v2 FailedTask should have an `error` field per SEP-2557.
-        assert.ok(terminal.error,
-            'failed task should have inlined error field (FailedTask type)');
+        // Tool errors are "completed" with isError, NOT "failed".
+        assert.equal(terminal.status, 'completed',
+            'tool execution error should be completed (not failed)');
+        assert.ok(terminal.result, 'should have inlined result');
+        assert.equal(terminal.result.isError, true,
+            'result should have isError: true for tool execution errors');
     });
 
     // ========================================================================
-    // Scenario 06: tasks/cancel (cooperative, required)
+    // Scenario 06: Protocol-level error — failed with error field
+    //
+    // The "failed" status is used only for JSON-RPC protocol-level errors.
+    // The task inlines an `error` field (not `result`).
+    //
+    // NOTE: This requires a tool that triggers a protocol-level failure
+    // (e.g., server crash, internal error). The test server should provide
+    // a `protocol_error_job` tool for this purpose.
+    // ========================================================================
+    test('v2-06: protocol error is failed with error field', async () => {
+        const result = await callTool('protocol_error_job', {});
+        assertCreateTaskResult(result, 'v2-06 create');
+        const taskId = result.task.taskId;
+
+        const terminal = await waitForTerminal(client, taskId);
+        assert.equal(terminal.status, 'failed',
+            'protocol error should have status: failed');
+        assert.ok(terminal.error,
+            'failed task should have inlined error field');
+        // error should NOT have result
+        assert.ok(!terminal.result,
+            'failed task should not have result field');
+    });
+
+    // ========================================================================
+    // Scenario 07: tasks/cancel (cooperative, required)
     //
     // In v2, tasks/cancel is REQUIRED (not optional like v1).
     // ========================================================================
-    test('v2-06: tasks/cancel returns cancelled status', async () => {
+    test('v2-07: tasks/cancel returns cancelled status', async () => {
         const result = await callTool('slow_compute', { seconds: 60, label: 'v2-cancel' });
+        assertCreateTaskResult(result, 'v2-07 create');
         const taskId = result.task.taskId;
 
         const cancelled = await cancelTask(taskId);
@@ -229,12 +280,12 @@ describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
     });
 
     // ========================================================================
-    // Scenario 07: tasks/cancel on terminal task returns error
+    // Scenario 08: tasks/cancel on terminal task returns error
     //
     // Per spec: -32602 (InvalidParams). Enforced from the start since
     // v2 is a new spec.
     // ========================================================================
-    test('v2-07: cancel completed task returns error', async () => {
+    test('v2-08: cancel completed task returns error', async () => {
         const result = await callTool('slow_compute', { seconds: 1, label: 'v2-cancel-done' });
         const taskId = result.task.taskId;
         await waitForTerminal(client, taskId);
@@ -248,12 +299,16 @@ describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
     });
 
     // ========================================================================
-    // Scenario 08: tasks/result method does not exist
+    // Scenario 09: tasks/result method does not exist
     //
     // v2 removes tasks/result entirely. Servers MUST reject it.
     // -32601 (MethodNotFound) is mandated by JSON-RPC for unknown methods.
+    //
+    // NOTE: This negative test is useful for making the spec diff clear to
+    // SDK implementors, even though a server could technically still support
+    // it for backward compatibility (gated by protocol version).
     // ========================================================================
-    test('v2-08: tasks/result is rejected (method removed in v2)', async () => {
+    test('v2-09: tasks/result is rejected (method removed in v2)', async () => {
         const result = await callTool('slow_compute', { seconds: 1, label: 'v2-no-result' });
         const taskId = result.task.taskId;
         await waitForTerminal(client, taskId);
@@ -270,12 +325,11 @@ describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
     });
 
     // ========================================================================
-    // Scenario 09: tasks/list method does not exist
+    // Scenario 10: tasks/list method does not exist
     //
-    // v2 removes tasks/list entirely.
-    // -32601 (MethodNotFound) is mandated by JSON-RPC for unknown methods.
+    // v2 removes tasks/list entirely. Same rationale as scenario 09.
     // ========================================================================
-    test('v2-09: tasks/list is rejected (method removed in v2)', async () => {
+    test('v2-10: tasks/list is rejected (method removed in v2)', async () => {
         try {
             await client.request(
                 { method: 'tasks/list', params: {} },
@@ -288,69 +342,75 @@ describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
     });
 
     // ========================================================================
-    // Scenario 10: No tasks in initialize capabilities
+    // Scenario 11: No tasks in initialize capabilities
     //
     // In v2, tasks are core protocol — not negotiated via capabilities.
     // The server SHOULD NOT advertise tasks in initialize.capabilities.
+    //
+    // NOTE: Accessing server capabilities via private fields is fragile.
+    // The conformance repo may have a better mechanism for this check.
     // ========================================================================
-    test('v2-10: tasks not advertised in initialize capabilities', async () => {
-        // Re-read the server's capabilities from the initialization response.
-        // The client stores these after connect().
-        const caps = (client as any)._serverCapabilities ?? (client as any).serverCapabilities;
+    test('v2-11: tasks not advertised in initialize capabilities', async () => {
+        // Access server capabilities — the mechanism varies by SDK version.
+        const caps = (client as any)._serverCapabilities
+            ?? (client as any).serverCapabilities
+            ?? (client as any)._capabilities;
         if (caps) {
             assert.ok(!caps.tasks,
                 'v2 server should not advertise tasks in capabilities (tasks are core protocol)');
         }
-        // If we can't access capabilities, skip — this is a structural check.
+        // If we can't access capabilities, this check is a no-op.
+        // The conformance repo may have a better mechanism.
     });
 
     // ========================================================================
-    // Scenario 11: TTL in seconds (not milliseconds)
+    // Scenario 12: TTL field present and in seconds
     //
     // v2 aligns TTL with SEP-2549: seconds, not milliseconds.
-    // A TTL of 300 means 5 minutes, not 0.3 seconds.
     //
-    // OPEN QUESTION @LucaButBoring: Is there a programmatic way to distinguish
-    // seconds from milliseconds, or is this purely a documentation/convention
-    // change? The heuristic below (ttl < 10000) catches common defaults but
-    // a server with a very long TTL (e.g., 24 hours = 86400s) would pass
-    // either way.
+    // NOTE: TTL units are purely convention — the schema alone can't
+    // distinguish seconds from milliseconds. The field may be renamed to
+    // `ttlSeconds` (pending SEP-2549 resolution). This test checks the
+    // value is reasonable for seconds but can't programmatically enforce
+    // the unit. Servers with very long TTLs (e.g., 24h = 86400s) will
+    // pass regardless of unit.
     // ========================================================================
-    test('v2-11: TTL is in seconds', async () => {
+    test('v2-12: TTL is present and reasonable for seconds', async () => {
         const result = await callTool('slow_compute', { seconds: 1, label: 'v2-ttl' });
         const task = result.task;
         assert.ok(task.ttl !== undefined, 'task should have ttl');
         assert.ok(typeof task.ttl === 'number' && task.ttl > 0, 'ttl should be a positive number');
-        // Heuristic: typical server defaults are 60-600 seconds. If a server
-        // returns TTL > 10000, it's likely still using milliseconds.
-        // This is a best-effort check — not a spec requirement.
+        // Best-effort heuristic: typical server defaults are 60-600 seconds.
+        // If TTL > 10000, it's likely still using milliseconds (the most common
+        // migration bug). This is convention, not schema-enforceable.
         assert.ok(task.ttl < 10000,
             `ttl should be in seconds (got ${task.ttl} — if >10000, likely milliseconds)`);
     });
 
     // ========================================================================
-    // Scenario 12: Task not expired before TTL
+    // Scenario 13: Task not expired before TTL
     //
-    // Same as v1 — servers MUST NOT expire before TTL elapses.
+    // Servers MUST NOT expire before TTL elapses.
     // ========================================================================
-    test('v2-12: task must not expire before TTL', async () => {
+    test('v2-13: task must not expire before TTL', async () => {
         const result = await callTool('slow_compute', { seconds: 1, label: 'v2-ttl-guard' });
+        assertCreateTaskResult(result, 'v2-13 create');
         const taskId = result.task.taskId;
         await waitForTerminal(client, taskId);
 
-        // Task should still be accessible well before TTL (which is in seconds now).
+        // Task should still be accessible well before TTL (which is in seconds).
         await new Promise(r => setTimeout(r, 500));
         const task = await getTask(taskId);
         assert.ok(task.taskId, 'task should still exist before TTL expires');
     });
 
     // ========================================================================
-    // Scenario 13: requestState returned by server
+    // Scenario 14: requestState returned by server
     //
     // v2 adds requestState for stateless deployments. The server MAY return
     // a requestState in tasks/get responses.
     // ========================================================================
-    test('v2-13: tasks/get response may include requestState', async () => {
+    test('v2-14: tasks/get response may include requestState', async () => {
         const result = await callTool('slow_compute', { seconds: 1, label: 'v2-reqstate' });
         const taskId = result.task.taskId;
         await waitForTerminal(client, taskId);
@@ -363,108 +423,114 @@ describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
             assert.ok(task.requestState.length > 0,
                 'requestState should be non-empty if present');
         }
-        // No assertion on presence — it's optional.
     });
 
     // ========================================================================
-    // Scenario 14: requestState echoed by client
+    // Scenario 15: requestState echoed by client
     //
     // If the server returns requestState, the client MUST echo it back
     // in subsequent tasks/get and tasks/cancel requests.
     // ========================================================================
-    test('v2-14: client echoes requestState in subsequent requests', async () => {
+    test('v2-15: client echoes requestState in subsequent requests', async () => {
         const result = await callTool('slow_compute', { seconds: 2, label: 'v2-reqstate-echo' });
         const taskId = result.task.taskId;
 
-        // First poll — may get requestState.
         const first = await getTask(taskId);
         const state = first.requestState;
 
         if (state) {
-            // Echo requestState in next poll.
             const second = await getTask(taskId, { requestState: state });
             assert.ok(second.taskId, 'should still return task info');
-            // Server may return a new requestState.
             if (second.requestState !== undefined) {
                 assert.equal(typeof second.requestState, 'string',
                     'updated requestState should be a string');
             }
         }
-        // If no requestState on first poll, the server doesn't use it — skip.
+        // If no requestState, the server doesn't use it — skip.
     });
 
     // ========================================================================
-    // Scenario 15: inputRequests via tasks/get
+    // Scenario 16: inputRequests via tasks/get
     //
     // When a task needs input (elicitation/sampling), v2 returns
-    // status: input_required with an inputRequests array in tasks/get.
+    // status: input_required with an inputRequests map in tasks/get.
     // This replaces the v1 side-channel via tasks/result.
     //
-    // PROVISIONAL: The exact field names (inputRequests vs inputRequest)
-    // and delivery mechanism are under active discussion in SEP-2557.
-    // There is debate about whether inputResponses should live on tasks/get
-    // or a separate tasks/continue method. This test uses the current SEP
-    // text and WILL NEED UPDATING if the spec changes.
+    // inputRequests is a MAP (not an array) — keys identify each request
+    // so the client can match responses to requests.
     //
-    // OPEN QUESTION @LucaButBoring: Is tasks/get the right place for
-    // inputRequests/inputResponses, or will this move to tasks/continue?
+    // PROVISIONAL: inputRequests stays on tasks/get per Luca's confirmation.
+    // inputResponses will likely move to a separate method (TBD).
     // ========================================================================
-    test('v2-15: input_required task has inputRequests in tasks/get', async () => {
+    test('v2-16: input_required task has inputRequests map in tasks/get', async () => {
         const result = await callTool('confirm_delete', { filename: 'v2-input.txt' });
+        assertCreateTaskResult(result, 'v2-16 create');
         const taskId = result.task.taskId;
 
         // Wait for input_required.
         const task = await waitForStatus(client, taskId, 'input_required', 5000);
         assert.equal(task.status, 'input_required', 'should be input_required');
 
-        // v2: inputRequests should be inlined in the tasks/get response.
+        // v2: inputRequests is a MAP, keyed by request identifier.
         assert.ok(task.inputRequests, 'input_required task should have inputRequests');
-        assert.ok(Array.isArray(task.inputRequests), 'inputRequests should be an array');
-        assert.ok(task.inputRequests.length > 0, 'inputRequests should not be empty');
+        assert.equal(typeof task.inputRequests, 'object',
+            'inputRequests should be an object (map)');
+        assert.ok(!Array.isArray(task.inputRequests),
+            'inputRequests should be a map, not an array');
+
+        const keys = Object.keys(task.inputRequests);
+        assert.ok(keys.length > 0, 'inputRequests should have at least one entry');
 
         // Each request should have a method (e.g., elicitation/create).
-        const req = task.inputRequests[0];
+        const firstKey = keys[0];
+        const req = task.inputRequests[firstKey];
         assert.ok(req.method || req.type,
             'inputRequest should have a method or type field');
     });
 
     // ========================================================================
-    // Scenario 16: inputResponses via tasks/get
+    // Scenario 17: inputResponses resumes task
     //
-    // Client sends inputResponses in a subsequent tasks/get call to
-    // provide the requested input. The task should resume.
+    // Client sends inputResponses as a MAP in a subsequent request to
+    // provide the requested input. Keys must correspond to the inputRequests
+    // keys. The task should resume.
     //
-    // PROVISIONAL: Same caveat as scenario 15 — the delivery mechanism
-    // for inputResponses is under active debate. This test uses tasks/get
-    // per the current SEP text.
+    // PROVISIONAL: inputResponses will likely move to a separate method
+    // (name TBD). Currently using tasks/get per the SEP text, but this
+    // scenario WILL NEED UPDATING when the delivery method is finalized.
+    //
+    // NOTE: The task can also return input_required again (e.g., if the
+    // server sent multiple requests and the client only responded to one).
+    // This scenario responds to all requests so the task should complete.
     // ========================================================================
-    test('v2-16: inputResponses resumes task', async () => {
+    test('v2-17: inputResponses map resumes task', async () => {
         const result = await callTool('confirm_delete', { filename: 'v2-respond.txt' });
+        assertCreateTaskResult(result, 'v2-17 create');
         const taskId = result.task.taskId;
 
         // Wait for input_required.
         const inputTask = await waitForStatus(client, taskId, 'input_required', 5000);
         assert.equal(inputTask.status, 'input_required', 'should be input_required');
 
-        // Get requestState if available.
+        // Build inputResponses map — keys must match inputRequests keys.
+        const requestKeys = Object.keys(inputTask.inputRequests || {});
+        const responses: Record<string, any> = {};
+        for (const key of requestKeys) {
+            responses[key] = {
+                action: 'accept',
+                content: { confirm: true }
+            };
+        }
+
         const state = inputTask.requestState;
-
-        // Send inputResponses — confirm the deletion.
-        // The exact shape depends on the inputRequest type.
-        const responses = [{
-            // Elicitation response: accept with content.
-            action: 'accept',
-            content: { confirm: true }
-        }];
-
         const resumed = await getTask(taskId, {
             requestState: state,
             inputResponses: responses
         });
 
-        // Task should have resumed — either working or completed.
+        // Task should have resumed — working, completed, or input_required again.
         assert.ok(
-            ['working', 'completed'].includes(resumed.status),
+            ['working', 'completed', 'input_required'].includes(resumed.status),
             `task should have resumed, got ${resumed.status}`
         );
 
@@ -476,12 +542,14 @@ describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
     });
 
     // ========================================================================
-    // Scenario 17: Status notification with DetailedTask (optional)
+    // Scenario 18: Status notification with DetailedTask (optional)
     //
     // v2 status notifications include the full DetailedTask, so terminal
-    // notifications have inlined result/error. Notifications are optional.
+    // notifications have inlined result/error. Notifications are optional,
+    // but if sent, they MUST be delivered on the tasks/get SSE response
+    // stream (not testable from this client-side suite).
     // ========================================================================
-    test('v2-17: status notifications include DetailedTask if sent', async () => {
+    test('v2-18: status notifications include DetailedTask if sent', async () => {
         const statusEvents: any[] = [];
 
         client.setNotificationHandler('notifications/tasks/status', (notification: any) => {
@@ -494,7 +562,6 @@ describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
         await new Promise(r => setTimeout(r, 500));
 
         if (statusEvents.length > 0) {
-            // If notifications were sent, verify they're well-formed.
             for (const evt of statusEvents) {
                 assert.ok(evt.taskId, 'status notification should have taskId');
                 assert.ok(evt.status, 'status notification should have status');
@@ -502,83 +569,70 @@ describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
 
             // Terminal notifications should include inlined result (v2 DetailedTask).
             const terminal = statusEvents.filter(
-                (e: any) => e.taskId === taskId && ['completed', 'failed'].includes(e.status)
+                (e: any) => e.taskId === taskId && e.status === 'completed'
             );
             if (terminal.length > 0) {
                 const last = terminal[terminal.length - 1];
-                if (last.status === 'completed') {
-                    assert.ok(last.result,
-                        'v2 completed notification should include inlined result');
-                }
+                assert.ok(last.result,
+                    'v2 completed notification should include inlined result');
             }
         }
         // No assertion on count — notifications are optional.
     });
 
     // ========================================================================
-    // Scenario 18: No client `task` param needed
+    // Scenario 19: No client `task` param needed
     //
     // In v2, execution.taskSupport is removed. The server decides whether
     // to create a task. The client just calls tools/call normally.
-    // A tool that was "required" in v1 now simply always returns a task.
     // ========================================================================
-    test('v2-18: tools/call without task param creates task for async tools', async () => {
-        // In v1, failing_job required a `task` param. In v2, it doesn't.
+    test('v2-19: tools/call without task param creates task for async tools', async () => {
         const result = await callTool('failing_job', {});
-        // Server should still create a task for this tool.
-        assert.ok(result.task, 'async tool should return CreateTaskResult');
-        assert.ok(result.task.taskId, 'task should have taskId');
+        assertCreateTaskResult(result, 'v2-19');
     });
 
     // ========================================================================
-    // Scenario 19: Immediate result shortcut
+    // Scenario 20: Immediate result shortcut
     //
     // v2 allows servers to return an immediate result even for task-capable
     // tools when the operation completes fast enough. The server MAY return
     // a CallToolResult (no task) or a CreateTaskResult (with task).
     // Both are valid responses.
     // ========================================================================
-    test('v2-19: server may return immediate result for fast operations', async () => {
-        // A very fast operation — server may choose to return inline.
+    test('v2-20: server may return immediate result for fast operations', async () => {
         const result = await callTool('slow_compute', { seconds: 0, label: 'v2-instant' });
 
-        // Either a task was created (CreateTaskResult) or result was immediate (CallToolResult).
         if (result.task) {
-            // Task path — verify it has taskId.
-            assert.ok(result.task.taskId, 'task should have taskId');
+            // Task path — must have resultType discriminator.
+            assertCreateTaskResult(result, 'v2-20 task path');
         } else {
             // Immediate result path — verify content.
             assert.ok(result.content, 'immediate result should have content');
             assert.ok(Array.isArray(result.content), 'content should be an array');
         }
-        // Both paths are valid — this scenario just verifies the server handles it.
     });
 
     // ========================================================================
-    // Scenario 20: related-task _meta in v2 context
+    // Scenario 21: related-task _meta NOT on tasks/get inlined results
     //
-    // With tasks/result removed in v2, the related-task metadata question
-    // changes. When tasks/get returns an inlined result for a completed task,
-    // the taskId is already in the response — so related-task _meta may be
-    // redundant. This scenario documents the open question.
-    //
-    // OPEN QUESTION @LucaButBoring: Does the inlined result in tasks/get need
-    // io.modelcontextprotocol/related-task in _meta? The taskId is already
-    // at the root of the response. If not needed, this scenario can verify
-    // its absence instead.
+    // With tasks/result removed in v2, the related-task metadata is
+    // unnecessary — the taskId is already at the root of the tasks/get
+    // response. Verify its absence.
     // ========================================================================
-    test('v2-20: related-task _meta handling in tasks/get inlined results', async () => {
-        const result = await callTool('slow_compute', { seconds: 1, label: 'v2-meta' });
+    test('v2-21: tasks/get inlined result does not include related-task _meta', async () => {
+        const result = await callTool('slow_compute', { seconds: 1, label: 'v2-no-meta' });
+        assertCreateTaskResult(result, 'v2-21 create');
         const taskId = result.task.taskId;
 
         const terminal = await waitForTerminal(client, taskId);
-        assert.equal(terminal.status, 'completed', 'should be completed');
-        assert.ok(terminal.result, 'should have inlined result');
+        assertCompletedResult(terminal, 'v2-21');
 
-        // The taskId is already at the root level of the tasks/get response.
-        // related-task _meta may be unnecessary/redundant in v2.
-        // For now, just verify the result is well-formed.
-        assert.ok(terminal.result.content, 'inlined result should have content');
+        // related-task _meta should NOT be present — taskId is at root level.
+        const meta = terminal.result?._meta;
+        if (meta) {
+            assert.ok(!meta['io.modelcontextprotocol/related-task'],
+                'tasks/get inlined result should NOT include related-task _meta');
+        }
     });
 
 });
