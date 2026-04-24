@@ -547,12 +547,359 @@ describe("bidirectional tool calls", () => {
   });
 });
 
-describe("graceful degradation", () => {
+describe("registerTool API", () => {
+  beforeEach(async () => {
+    autoRespondToInitialize();
+    await waitForConnect();
+  });
+
+  it("registerTool registers a tool and auto-handles tools/list", async () => {
+    const app = (window as any).MCPApp;
+    app.registerTool(
+      "my-tool",
+      { description: "A test tool" },
+      () => ({ content: [{ type: "text", text: "ok" }] })
+    );
+
+    hostSends({
+      jsonrpc: "2.0",
+      id: 1001,
+      method: "tools/list",
+      params: {},
+    });
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    const resp = sentMessages.find((m) => m.id === 1001 && m.result);
+    expect(resp).toBeDefined();
+    expect(resp.result.tools).toEqual([
+      { name: "my-tool", description: "A test tool" },
+    ]);
+  });
+
+  it("registerTool auto-dispatches tools/call to the right handler", async () => {
+    const app = (window as any).MCPApp;
+    const handlerA = vi.fn(() => ({ content: [{ type: "text", text: "a" }] }));
+    const handlerB = vi.fn(() => ({ content: [{ type: "text", text: "b" }] }));
+
+    app.registerTool("tool-a", { description: "A" }, handlerA);
+    app.registerTool("tool-b", { description: "B" }, handlerB);
+
+    hostSends({
+      jsonrpc: "2.0",
+      id: 1002,
+      method: "tools/call",
+      params: { name: "tool-b", arguments: { x: 42 } },
+    });
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(handlerB).toHaveBeenCalledOnce();
+    expect(handlerB).toHaveBeenCalledWith({ x: 42 });
+    expect(handlerA).not.toHaveBeenCalled();
+
+    const resp = sentMessages.find((m) => m.id === 1002 && m.result);
+    expect(resp).toBeDefined();
+    expect(resp.result.content[0].text).toBe("b");
+  });
+
+  it("sendToolListChanged sends notification to host", async () => {
+    const app = (window as any).MCPApp;
+    // Clear sentMessages to isolate our notification.
+    sentMessages.length = 0;
+
+    app.sendToolListChanged();
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    const notif = sentMessages.find(
+      (m) => m.method === "notifications/tools/list_changed" && m.id == null
+    );
+    expect(notif).toBeDefined();
+  });
+
+  it("registerTool auto-sends toolListChanged on register", async () => {
+    const app = (window as any).MCPApp;
+    sentMessages.length = 0;
+
+    app.registerTool("auto-notify", {}, () => "ok");
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    const notif = sentMessages.find(
+      (m) => m.method === "notifications/tools/list_changed"
+    );
+    expect(notif).toBeDefined();
+  });
+
+  it("tool handle update() changes tool metadata", async () => {
+    const app = (window as any).MCPApp;
+    const handle = app.registerTool(
+      "updatable",
+      { description: "old" },
+      () => "ok"
+    );
+
+    handle.update({ description: "new" });
+
+    hostSends({
+      jsonrpc: "2.0",
+      id: 1003,
+      method: "tools/list",
+      params: {},
+    });
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    const resp = sentMessages.find((m) => m.id === 1003 && m.result);
+    expect(resp).toBeDefined();
+    expect(resp.result.tools[0].description).toBe("new");
+  });
+
+  it("tool handle disable()/enable() controls visibility", async () => {
+    const app = (window as any).MCPApp;
+    const handle = app.registerTool(
+      "toggleable",
+      { description: "toggle" },
+      () => "ok"
+    );
+
+    handle.disable();
+
+    // tools/list should omit disabled tool.
+    hostSends({ jsonrpc: "2.0", id: 1004, method: "tools/list", params: {} });
+    await new Promise((r) => setTimeout(r, 10));
+
+    let resp = sentMessages.find((m) => m.id === 1004 && m.result);
+    expect(resp).toBeDefined();
+    expect(resp.result.tools).toEqual([]);
+
+    handle.enable();
+
+    // tools/list should include it again.
+    hostSends({ jsonrpc: "2.0", id: 1005, method: "tools/list", params: {} });
+    await new Promise((r) => setTimeout(r, 10));
+
+    resp = sentMessages.find((m) => m.id === 1005 && m.result);
+    expect(resp).toBeDefined();
+    expect(resp.result.tools.length).toBe(1);
+    expect(resp.result.tools[0].name).toBe("toggleable");
+  });
+
+  it("tool handle remove() unregisters tool", async () => {
+    const app = (window as any).MCPApp;
+    const handle = app.registerTool(
+      "removable",
+      { description: "bye" },
+      () => "ok"
+    );
+
+    handle.remove();
+
+    // tools/list should return empty.
+    hostSends({ jsonrpc: "2.0", id: 1006, method: "tools/list", params: {} });
+    await new Promise((r) => setTimeout(r, 10));
+
+    const listResp = sentMessages.find((m) => m.id === 1006 && m.result);
+    expect(listResp).toBeDefined();
+    expect(listResp.result.tools).toEqual([]);
+
+    // tools/call should return error for removed tool.
+    hostSends({
+      jsonrpc: "2.0",
+      id: 1007,
+      method: "tools/call",
+      params: { name: "removable" },
+    });
+    await new Promise((r) => setTimeout(r, 10));
+
+    const callResp = sentMessages.find((m) => m.id === 1007 && m.error);
+    expect(callResp).toBeDefined();
+  });
+
+  it("tools/call returns error for unknown tool name", async () => {
+    const app = (window as any).MCPApp;
+    app.registerTool("known", {}, () => "ok");
+
+    hostSends({
+      jsonrpc: "2.0",
+      id: 1008,
+      method: "tools/call",
+      params: { name: "unknown-tool", arguments: {} },
+    });
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    const resp = sentMessages.find((m) => m.id === 1008 && m.error);
+    expect(resp).toBeDefined();
+    expect(resp.error.message).toContain("unknown-tool");
+  });
+
+  it("includes inputSchema and outputSchema in tools/list", async () => {
+    const app = (window as any).MCPApp;
+    app.registerTool(
+      "schema-tool",
+      {
+        description: "has schemas",
+        inputSchema: { type: "object", properties: { x: { type: "number" } } },
+        outputSchema: { type: "object", properties: { y: { type: "string" } } },
+      },
+      () => ({ y: "hello" })
+    );
+
+    hostSends({ jsonrpc: "2.0", id: 1009, method: "tools/list", params: {} });
+    await new Promise((r) => setTimeout(r, 10));
+
+    const resp = sentMessages.find((m) => m.id === 1009 && m.result);
+    expect(resp).toBeDefined();
+    const tool = resp.result.tools[0];
+    expect(tool.name).toBe("schema-tool");
+    expect(tool.inputSchema).toEqual({
+      type: "object",
+      properties: { x: { type: "number" } },
+    });
+    expect(tool.outputSchema).toEqual({
+      type: "object",
+      properties: { y: { type: "string" } },
+    });
+  });
+});
+
+describe("Standard Schema validation", () => {
+  beforeEach(async () => {
+    autoRespondToInitialize();
+    await waitForConnect();
+  });
+
+  it("validates input via ~standard.validate before calling handler", async () => {
+    const app = (window as any).MCPApp;
+    const handler = vi.fn(() => "ok");
+
+    // Mock Standard Schema v1 object with ~standard property.
+    const schema = {
+      type: "object",
+      "~standard": {
+        version: 1,
+        vendor: "test",
+        validate: (value: any) => {
+          if (typeof value.x !== "number") {
+            return { issues: [{ message: "x must be a number", path: [{ key: "x" }] }] };
+          }
+          return { value };
+        },
+      },
+    };
+
+    app.registerTool("validated", { inputSchema: schema }, handler);
+
+    // Valid input — handler should be called.
+    hostSends({
+      jsonrpc: "2.0",
+      id: 2001,
+      method: "tools/call",
+      params: { name: "validated", arguments: { x: 42 } },
+    });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(handler).toHaveBeenCalledOnce();
+
+    const okResp = sentMessages.find((m: any) => m.id === 2001 && m.result);
+    expect(okResp).toBeDefined();
+  });
+
+  it("returns error on validation failure", async () => {
+    const app = (window as any).MCPApp;
+    const handler = vi.fn(() => "ok");
+
+    const schema = {
+      "~standard": {
+        version: 1,
+        vendor: "test",
+        validate: (value: any) => {
+          if (!value.name) {
+            return { issues: [{ message: "name is required", path: [{ key: "name" }] }] };
+          }
+          return { value };
+        },
+      },
+    };
+
+    app.registerTool("strict-tool", { inputSchema: schema }, handler);
+
+    // Invalid input — handler should NOT be called.
+    hostSends({
+      jsonrpc: "2.0",
+      id: 2002,
+      method: "tools/call",
+      params: { name: "strict-tool", arguments: {} },
+    });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(handler).not.toHaveBeenCalled();
+
+    const errResp = sentMessages.find((m: any) => m.id === 2002 && m.error);
+    expect(errResp).toBeDefined();
+    expect(errResp.error.message).toContain("Validation failed");
+    expect(errResp.error.message).toContain("name is required");
+  });
+
+  it("skips validation when inputSchema has no ~standard property", async () => {
+    const app = (window as any).MCPApp;
+    const handler = vi.fn(() => "ok");
+
+    // Plain JSON Schema without ~standard — no validation.
+    app.registerTool(
+      "plain-schema",
+      { inputSchema: { type: "object", properties: { x: { type: "number" } } } },
+      handler
+    );
+
+    hostSends({
+      jsonrpc: "2.0",
+      id: 2003,
+      method: "tools/call",
+      params: { name: "plain-schema", arguments: { x: "not-a-number" } },
+    });
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Handler called regardless — no validation without ~standard.
+    expect(handler).toHaveBeenCalledOnce();
+  });
+});
+
+describe("pre-handshake guarding", () => {
   it("callTool rejects when not connected", async () => {
     expect((window as any).MCPApp.connected).toBe(false);
     await expect(
       (window as any).MCPApp.callTool("test", {})
     ).rejects.toThrow("Not connected");
+  });
+
+  it("readResource rejects when not connected", async () => {
+    await expect(
+      (window as any).MCPApp.readResource("ui://test")
+    ).rejects.toThrow("Not connected");
+  });
+
+  it("sendToolListChanged is silently dropped before handshake", () => {
+    const app = (window as any).MCPApp;
+    sentMessages.length = 0;
+
+    app.sendToolListChanged();
+
+    const notif = sentMessages.find(
+      (m: any) => m.method === "notifications/tools/list_changed"
+    );
+    expect(notif).toBeUndefined();
+  });
+
+  it("log is silently dropped before handshake", () => {
+    const app = (window as any).MCPApp;
+    sentMessages.length = 0;
+
+    app.log("info", "test");
+
+    const logMsg = sentMessages.find((m: any) => m.method === "ui/log");
+    expect(logMsg).toBeUndefined();
   });
 });
 
