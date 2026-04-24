@@ -1,5 +1,8 @@
 ADDR ?= http://localhost:8080
 MCP  := $(ADDR)/mcp
+EVENT := telegram.message
+RESOURCE_URI := telegram://messages/recent
+EVENTS_CLIENT := python3 ../ext/events/events_client.py --mcp $(MCP) --event $(EVENT) --resource-uri $(RESOURCE_URI)
 
 # ── Build & Run ──────────────────────────────────────────────────────
 # Usage: make run                                — test mode (no Telegram)
@@ -22,24 +25,23 @@ test:
 test-race:
 	go test ./... -race -count=1
 
-# ── All-in-one diagnostic (requires server running on ADDR) ──────────
-# Initializes a session, sends initialized notification, then exercises
-# all tools, resources, and custom event methods.
-#
-# Streamable HTTP returns SSE (text/event-stream) — we use -N for no-buffer
-# and extract the "data: " line to get the JSON payload.
-#
-# Usage: make diag
-#        ADDR=http://host:9090 make diag
-# Inject a test message directly (no Telegram needed)
-# Usage: make inject TEXT="hello world"
-#        make inject TEXT="test" SENDER="alice" CHAT_ID=123
+# ── Inject + Client Modes ────────────────────────────────────────────
+
 inject:
 	@curl -s -X POST $(ADDR)/inject \
 	  -H 'Content-Type: application/json' \
 	  -d '{"chat_id": $(or $(CHAT_ID),100), "sender": "$(or $(SENDER),test-user)", "text": "$(or $(TEXT),hello from make inject)"}' | jq .
 
-diag:
-	@./diag.sh $(MCP)
+list:
+	@$(EVENTS_CLIENT) list
 
-.PHONY: run test test-race inject diag
+listen:
+	@$(EVENTS_CLIENT) listen
+
+webhook:
+	@$(EVENTS_CLIENT) webhook --port $(or $(HOOK_PORT),9999)
+
+poll:
+	@$(EVENTS_CLIENT) poll --interval $(or $(INTERVAL),5)
+
+.PHONY: run test test-race inject list listen webhook poll
