@@ -33,7 +33,7 @@ Sub-module commands: see `ext/ui/Makefile`, `experimental/ext/protogen/Makefile`
 | `server/` | Server, Dispatcher, transports, middleware, registry, custom method handlers (#266) | `server/README.md`, `server/CONSTRAINTS.md` |
 | `client/` | Client, transports, reconnection, auth retry | `client/README.md`, `client/CONSTRAINTS.md` |
 | `ext/auth/` | JWT, PRM, OAuth (separate go.mod) | `ext/auth/docs/DESIGN.md` |
-| `ext/ui/` | MCP Apps + App Bridge JS + AppHost + AppBridge (separate go.mod) | `docs/APPS_DESIGN.md` |
+| `ext/ui/` | MCP Apps + App Bridge JS + AppHost + AppBridge + ServerRegistry (separate go.mod) | `docs/APPS_DESIGN.md` |
 | `experimental/ext/protogen/` | Proto → MCP codegen (separate go.mod) | `experimental/ext/protogen/docs/DESIGN.md` |
 | `server/task_*.go`, `server/tasks_experimental.go` | MCP Tasks protocol (EXPERIMENTAL) — middleware, store, handlers, TaskContext, TaskCallbacks |
 | `experimental/ext/events/` | MCP Events protocol library (EXPERIMENTAL, separate go.mod) | `experimental/ext/events/README.md` |
@@ -79,6 +79,7 @@ Module-specific gotchas live in their READMEs (protogen templates, App Bridge es
 | Auth design | `ext/auth/docs/DESIGN.md` |
 | MCP Apps design | `docs/APPS_DESIGN.md` |
 | AppHost (host-side app mgmt) | `ext/ui/app_host.go`, `ext/ui/app_bridge.go`, `ext/ui/in_process_bridge.go` |
+| ServerRegistry (multi-server) | `ext/ui/server_registry.go` — tool aggregation, routing, collision resolution |
 | Protogen design | `experimental/ext/protogen/docs/DESIGN.md` |
 | Events library | `experimental/ext/events/README.md` |
 | Telegram example | `experimental/telegram-events/README.md` |
