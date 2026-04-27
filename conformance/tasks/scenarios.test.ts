@@ -214,9 +214,10 @@ describe('MCP Tasks Conformance', () => {
     // Scenario 8: Required tool without task hint returns error
     //
     // Calling a tool with execution.taskSupport=required without a task hint
-    // MUST return an error. The spec does not mandate a specific error code;
-    // Go uses -32601 (MethodNotFound), TS SDK uses -32603 (InternalError).
-    // TODO: If the spec standardizes an error code for this case, assert it.
+    // MUST return -32601 (MethodNotFound) per spec. The TS SDK currently
+    // returns -32603 which is incorrect. ENFORCE_ERROR_CODES is off by
+    // default to avoid breaking existing servers, but the expected code
+    // is documented and will be enforced once the TS SDK is fixed.
     // ========================================================================
     test('scenario 08: required tool without task hint returns error', async () => {
         try {
@@ -234,9 +235,9 @@ describe('MCP Tasks Conformance', () => {
     // Scenario 9: Forbidden tool with task hint returns error
     //
     // Sending a task hint to a tool that does not support tasks (absent or
-    // forbidden execution) MUST return an error. The spec does not mandate
-    // a specific code; implementations vary (-32601, -32603).
-    // TODO: If the spec standardizes an error code for this case, assert it.
+    // forbidden execution) MUST return -32601 (MethodNotFound) per spec.
+    // TS SDK currently returns -32603 (incorrect). Same ENFORCE_ERROR_CODES
+    // gating as scenario 8.
     // ========================================================================
     test('scenario 09: forbidden tool with task hint returns error', async () => {
         try {
@@ -303,9 +304,9 @@ describe('MCP Tasks Conformance', () => {
     // ========================================================================
     // Scenario 13: Get non-existent task returns error
     //
-    // TODO: Spec does not mandate a specific code for task-not-found.
-    // Go uses -32602 (InvalidParams), TS SDK uses -32603 (InternalError).
-    // If the spec standardizes this, assert the specific code.
+    // Per spec, task-not-found MUST return -32602 (InvalidParams).
+    // TS SDK currently returns -32603 (incorrect). ENFORCE_ERROR_CODES
+    // is off by default to avoid breaking existing servers.
     // ========================================================================
     test('scenario 13: tasks/get with bogus taskId returns error', async () => {
         try {
@@ -319,7 +320,7 @@ describe('MCP Tasks Conformance', () => {
     // ========================================================================
     // Scenario 14: Cancel non-existent task returns error
     //
-    // TODO: Same as scenario 13 — no mandated error code for task-not-found.
+    // Per spec: -32602 (InvalidParams). Same as scenario 13.
     // ========================================================================
     test('scenario 14: tasks/cancel with bogus taskId returns error', async () => {
         try {
@@ -333,7 +334,7 @@ describe('MCP Tasks Conformance', () => {
     // ========================================================================
     // Scenario 15: Cancel already-completed task returns error
     //
-    // TODO: Same — no mandated error code for cancelling a terminal task.
+    // Per spec: -32602 (InvalidParams). Same as scenario 13.
     // ========================================================================
     test('scenario 15: cancel completed task returns error', async () => {
         const created = await createTask('slow_compute', { seconds: 1, label: 'cancel-done' });
@@ -363,15 +364,17 @@ describe('MCP Tasks Conformance', () => {
     // ========================================================================
     // Scenario 17: pollInterval in CreateTaskResult
     //
-    // pollInterval is a server-provided field telling the client how often
-    // to poll. It is NOT a client request parameter (that was a TS SDK bug).
-    // We verify the server returns a pollInterval and it's a positive number.
+    // pollInterval is an optional server-provided field telling the client
+    // how often to poll. It is NOT a client request parameter (that was a
+    // TS SDK bug). If present, it should be a positive number.
     // ========================================================================
-    test('scenario 17: CreateTaskResult includes a pollInterval', async () => {
+    test('scenario 17: CreateTaskResult pollInterval is valid if present', async () => {
         const task = await createTask('slow_compute', { seconds: 1, label: 'poll-test' });
-        assert.ok(task.pollInterval !== undefined, 'task should have pollInterval');
-        assert.ok(typeof task.pollInterval === 'number' && task.pollInterval > 0,
-            'pollInterval should be a positive number');
+        // pollInterval is optional per spec.
+        if (task.pollInterval !== undefined) {
+            assert.ok(typeof task.pollInterval === 'number' && task.pollInterval > 0,
+                'pollInterval should be a positive number if present');
+        }
     });
 
     // ========================================================================

@@ -52,6 +52,13 @@ func (k *sessionKeepalive) run(ctx context.Context) {
 			cancel()
 
 			if err != nil {
+				// A method-not-found response proves the connection is alive —
+				// the client received the ping and responded. Per MCP spec,
+				// ping is optional; not implementing it is not a failure.
+				if IsMethodNotFound(err) {
+					failures = 0
+					continue
+				}
 				failures++
 				log.Printf("mcpkit: keepalive ping failed (%d/%d): %v", failures, k.maxFailures, err)
 				if k.onPingFail != nil {

@@ -1,8 +1,8 @@
 === Stage 4/10: ui (make test-ui) ===
-Started: Wed Apr 22 20:34:21 PDT 2026
+Started: Wed Apr 22 22:26:36 PDT 2026
 cd ext/ui && /Library/Developer/CommandLineTools/usr/bin/make test
 go test ./... -count=1 -timeout 30s
-ok  	github.com/panyam/mcpkit/ext/ui	0.586s
+ok  	github.com/panyam/mcpkit/ext/ui	0.347s
 cd assets && pnpm install --frozen-lockfile --silent && pnpm test
 
 > @mcpkit/app-bridge@0.1.0 test /Users/dzshrh/newstack/mcpkit/pocs/ext/ui/assets
@@ -11,11 +11,11 @@ cd assets && pnpm install --frozen-lockfile --silent && pnpm test
 
  RUN  v3.2.4 /Users/dzshrh/newstack/mcpkit/pocs/ext/ui/assets
 
- ✓ mcp-app-bridge.test.ts (33 tests) 403ms
+ ✓ mcp-app-bridge.test.ts (33 tests) 383ms
 
  Test Files  1 passed (1)
       Tests  33 passed (33)
-   Start at  20:34:24
-   Duration  1.22s (transform 31ms, setup 0ms, collect 28ms, tests 403ms, environment 476ms, prepare 129ms)
+   Start at  22:26:38
+   Duration  1.11s (transform 31ms, setup 0ms, collect 28ms, tests 383ms, environment 384ms, prepare 134ms)
 
-Finished: Wed Apr 22 20:34:25 PDT 2026
+Finished: Wed Apr 22 22:26:39 PDT 2026

@@ -62,7 +62,7 @@ Sub-module commands: see `ext/ui/Makefile`, `experimental/ext/protogen/Makefile`
 - **Tasks side-channel**: `TaskElicit`/`TaskSample` send via the `tasks/result` handler's live connection, not the background goroutine's dead one. The handler proxies requests from a channel.
 - **POST SSE writer closure**: After `handlePostSSE` returns, the SSE writer is marked `closed`. Background goroutines that try to notify via the dead writer get silent no-ops instead of panics.
 - **Task cancel race**: After cancel, the background goroutine checks if the task is already terminal before setting status. `StoreTerminalResult` also guards against terminal→terminal transitions.
-- **Initialize returns JSON, not SSE**: Go server returns initialize as plain JSON; TS SDK returns SSE. Both spec-compliant. Curl helpers must handle both formats (#284).
+- **Initialize returns SSE or JSON**: Go server returns initialize as SSE when the client sends `Accept: text/event-stream` (matching TS SDK), or plain JSON otherwise. Curl helpers should send the appropriate Accept header.
 - **Conformance assertions — spec MUST vs MAY**: Don't assert specific error codes unless the spec mandates them. TTL is a client hint (server may ignore). `pollInterval` is server-only (not a client request param — TS SDK bug). Notifications are optional. Auth-context binding ≠ session isolation. Use `ENFORCE_ERROR_CODES` flag pattern for future-proofing.
 - **Flaky TestStoreConcurrentAccess**: Was caused by timestamp-based task IDs colliding when goroutines ran within the same nanosecond. Fixed with deterministic IDs (`fmt.Sprintf`).
 
