@@ -23,6 +23,92 @@ A React 19 MCP App that mirrors the upstream ext-apps `basic-server-vanillajs` f
 - **Prompts**: `time_format` returns a time-related prompt message
 - **Middleware**: `LoggingMiddleware` logs every JSON-RPC request
 
+## React Hooks for App-Provided Tools
+
+The `useMCPAppTool` hook provides declarative tool registration tied to React lifecycle:
+
+```tsx
+// Register tool on mount, remove on unmount, handler updates via ref
+useMCPAppTool("get_count", { description: "Get counter" }, () => ({
+  content: [{ type: "text", text: String(count) }]
+}));
+```
+
+The hook re-registers if the tool name changes, and the handler always sees the latest React state (via `useRef`).
+
+## Sequence Diagrams
+
+### LLM requests time (server tool → app update)
+
+```mermaid
+sequenceDiagram
+    participant LLM
+    participant Host
+    participant Server as Go Server
+    participant App as React App (iframe)
+
+    LLM->>Host: "What time is it?"
+    Host->>Server: tools/call {name: "get-time"}
+    Server-->>Host: ToolResult {text: "2026-04-27T10:30:00Z"}
+    Host->>App: ui/notifications/tool-result
+    App->>App: setState(time) — React re-renders
+    Host-->>LLM: "It's 10:30 UTC"
+```
+
+### Elicitation flow (timezone picker)
+
+```mermaid
+sequenceDiagram
+    participant LLM
+    participant Host
+    participant Server as Go Server
+    participant User
+
+    LLM->>Host: "What time is it in Tokyo?"
+    Host->>Server: tools/call {name: "get-time-with-tz"}
+    Server->>Host: elicitation/create {message: "Pick timezone"}
+    Host->>User: Shows timezone picker
+    User-->>Host: {action: "accept", content: {timezone: "Asia/Tokyo"}}
+    Host-->>Server: ElicitationResult
+    Server-->>Host: ToolResult {text: "19:30 JST"}
+    Host-->>LLM: "It's 19:30 in Tokyo"
+```
+
+### Sampling flow (fun fact)
+
+```mermaid
+sequenceDiagram
+    participant LLM
+    participant Host
+    participant Server as Go Server
+
+    LLM->>Host: "Tell me a fun fact about today"
+    Host->>Server: tools/call {name: "time-fact"}
+    Server->>Host: sampling/createMessage {prompt: "Fun fact about April 27"}
+    Host->>LLM: CreateMessageRequest
+    LLM-->>Host: CreateMessageResult {text: "On this day in 1981..."}
+    Host-->>Server: SamplingResult
+    Server-->>Host: ToolResult {text: "Fun fact: ..."}
+    Host-->>LLM: "On this day in 1981..."
+```
+
+### User clicks "Get Server Time" (app→host→server)
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant App as React App (iframe)
+    participant Host
+    participant Server as Go Server
+
+    User->>App: clicks "Get Server Time"
+    App->>Host: MCPApp.callTool("get-time")
+    Host->>Server: tools/call
+    Server-->>Host: ToolResult
+    Host-->>App: response
+    App->>App: setState — React re-renders with new time
+```
+
 ## Screenshots
 
 ### Current time displayed in the React UI

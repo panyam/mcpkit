@@ -35,6 +35,9 @@
     // Bidirectional handlers (host → app requests).
     let _oncalltool = null;
     let _onlisttools = null;
+    // Tool registry for registerTool() API.
+    const _registeredTools = new Map();
+    let _useRegistry = false;
     // --- Event emitter -------------------------------------------------------
     function on(event, handler) {
         let set = listeners.get(event);
@@ -124,6 +127,13 @@
         });
     }
     function notify(method, params) {
+        // Allow handshake notifications through before connected.
+        if (!_connected && method !== "ui/notifications/initialized") {
+            if (typeof console !== "undefined") {
+                console.warn("[MCPApp] notify blocked before handshake: " + method);
+            }
+            return;
+        }
         send({ jsonrpc: "2.0", method, params: params || {} });
     }
     // --- Incoming message handler --------------------------------------------
@@ -284,7 +294,28 @@
         try {
             switch (req.method) {
                 case "tools/call": {
-                    if (_oncalltool) {
+                    if (_useRegistry) {
+                        const name = params.name || "";
+                        const tool = _registeredTools.get(name);
+                        if (tool && tool.enabled) {
+                            const args = params.arguments || {};
+                            // Standard Schema validation (if inputSchema implements ~standard).
+                            if (tool.validate) {
+                                const vResult = tool.validate(args);
+                                if ("issues" in vResult) {
+                                    const msgs = vResult.issues.map((i) => { var _a; return (((_a = i.path) === null || _a === void 0 ? void 0 : _a.map((p) => p.key).join(".")) || "") + ": " + i.message; }).join("; ");
+                                    respond(id, null, "Validation failed: " + msgs);
+                                    break;
+                                }
+                            }
+                            const result = await tool.handler(args);
+                            respond(id, result);
+                        }
+                        else {
+                            respond(id, null, "Unknown tool: " + name);
+                        }
+                    }
+                    else if (_oncalltool) {
                         const result = await _oncalltool({
                             name: params.name || "",
                             arguments: params.arguments || {},
@@ -297,7 +328,23 @@
                     break;
                 }
                 case "tools/list": {
-                    if (_onlisttools) {
+                    if (_useRegistry) {
+                        const tools = [];
+                        _registeredTools.forEach((t) => {
+                            if (!t.enabled)
+                                return;
+                            const entry = { name: t.name };
+                            if (t.description !== undefined)
+                                entry.description = t.description;
+                            if (t.inputSchema !== undefined)
+                                entry.inputSchema = t.inputSchema;
+                            if (t.outputSchema !== undefined)
+                                entry.outputSchema = t.outputSchema;
+                            tools.push(entry);
+                        });
+                        respond(id, { tools });
+                    }
+                    else if (_onlisttools) {
                         const tools = await _onlisttools();
                         respond(id, { tools });
                     }
@@ -314,6 +361,83 @@
         catch (e) {
             respond(id, null, e instanceof Error ? e.message : String(e));
         }
+    }
+    // --- Tool registration API ------------------------------------------------
+    /** Send notifications/tools/list_changed to the host. */
+    function sendToolListChanged() {
+        notify("notifications/tools/list_changed", {});
+    }
+    /**
+     * Extract a Standard Schema v1 validate function from a schema object.
+     * Returns undefined if the schema doesn't implement the ~standard protocol.
+     * See https://standardschema.dev/ for the spec.
+     */
+    function extractStandardValidate(schema) {
+        if (schema == null || typeof schema !== "object")
+            return undefined;
+        // Standard Schema v1 uses the "~standard" property.
+        const std = schema["~standard"];
+        if (std && typeof std === "object" && typeof std.validate === "function") {
+            return (value) => std.validate(value);
+        }
+        return undefined;
+    }
+    /**
+     * Register an app-provided tool that the host/model can call.
+     * Installs auto-dispatch handlers for tools/call and tools/list,
+     * replacing any manually set oncalltool/onlisttools handlers.
+     *
+     * If inputSchema implements the Standard Schema protocol (~standard.validate),
+     * input arguments are validated before the handler is called.
+     */
+    function registerTool(name, config, handler) {
+        _registeredTools.set(name, {
+            name,
+            description: config.description,
+            inputSchema: config.inputSchema,
+            outputSchema: config.outputSchema,
+            enabled: true,
+            handler,
+            validate: extractStandardValidate(config.inputSchema),
+        });
+        _useRegistry = true;
+        sendToolListChanged();
+        return {
+            update(partial) {
+                const tool = _registeredTools.get(name);
+                if (!tool)
+                    return;
+                if (partial.description !== undefined)
+                    tool.description = partial.description;
+                if (partial.inputSchema !== undefined) {
+                    tool.inputSchema = partial.inputSchema;
+                    tool.validate = extractStandardValidate(partial.inputSchema);
+                }
+                if (partial.outputSchema !== undefined)
+                    tool.outputSchema = partial.outputSchema;
+                sendToolListChanged();
+            },
+            disable() {
+                const tool = _registeredTools.get(name);
+                if (tool) {
+                    tool.enabled = false;
+                    sendToolListChanged();
+                }
+            },
+            enable() {
+                const tool = _registeredTools.get(name);
+                if (tool) {
+                    tool.enabled = true;
+                    sendToolListChanged();
+                }
+            },
+            remove() {
+                _registeredTools.delete(name);
+                if (_registeredTools.size === 0)
+                    _useRegistry = false;
+                sendToolListChanged();
+            },
+        };
     }
     // --- Initialize handshake ------------------------------------------------
     function initialize() {
@@ -406,6 +530,9 @@
         get oncalltool() { return _oncalltool; },
         set onlisttools(handler) { _onlisttools = handler; },
         get onlisttools() { return _onlisttools; },
+        // Tool registration API (higher-level than oncalltool/onlisttools).
+        registerTool,
+        sendToolListChanged,
         // Utility.
         isHosted() {
             return _connected;

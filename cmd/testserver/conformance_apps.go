@@ -154,6 +154,65 @@ func registerConformanceApps(srv *server.Server) {
 		},
 	)
 
+	// test-app-tools: tool whose resource HTML registers app-provided tools.
+	// Exercises the registerTool() bridge API. A host that supports app-provided
+	// tools can call tools/list and tools/call on this app's iframe.
+	srv.Register(core.TextTool[struct{}]("test-app-tools", "Opens an app that registers its own tools",
+		func(ctx core.ToolContext, _ struct{}) (string, error) {
+			return "App with registered tools displayed", nil
+		},
+		core.WithToolMeta(&core.ToolMeta{
+			UI: &core.UIMetadata{
+				ResourceUri: "ui://app-tools/view",
+				Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
+			},
+		}),
+	))
+
+	// ui://app-tools/view — HTML that uses registerTool() to provide app tools.
+	// A conformant host can call tools/list on this iframe and get back the
+	// registered tools, then call tools/call to invoke them.
+	srv.RegisterResource(
+		core.ResourceDef{
+			URI:      "ui://app-tools/view",
+			Name:     "App Tools View",
+			MimeType: core.AppMIMEType,
+		},
+		func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
+			html := `<!DOCTYPE html>
+<html><head><title>App Tools Test</title></head>
+<body>
+<h1>App-Provided Tools</h1>
+<p id="status">Registering tools...</p>
+<script>
+// Register app-provided tools for conformance testing.
+if (typeof MCPApp !== 'undefined' && MCPApp.registerTool) {
+  var counter = 0;
+  MCPApp.registerTool('app-counter', {
+    description: 'Increment and return a counter value',
+    inputSchema: { type: 'object', properties: { amount: { type: 'number' } } }
+  }, function(args) {
+    counter += (args.amount || 1);
+    return { content: [{ type: 'text', text: 'counter=' + counter }] };
+  });
+  MCPApp.registerTool('app-echo', {
+    description: 'Echo back the input arguments',
+    inputSchema: { type: 'object', properties: { message: { type: 'string' } } }
+  }, function(args) {
+    return { content: [{ type: 'text', text: 'echo: ' + (args.message || '') }] };
+  });
+  document.getElementById('status').textContent = 'Tools registered: app-counter, app-echo';
+}
+</script>
+</body></html>`
+			return core.ResourceResult{Contents: []core.ResourceReadContent{{
+				URI:      req.URI,
+				MimeType: core.AppMIMEType,
+				Text:     html,
+			}}}, nil
+		},
+	)
+
 	// ui://apps/{id}/view — parameterized template resource
 	srv.RegisterResourceTemplate(
 		core.ResourceTemplate{
