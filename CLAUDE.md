@@ -33,7 +33,7 @@ Sub-module commands: see `ext/ui/Makefile`, `experimental/ext/protogen/Makefile`
 | `server/` | Server, Dispatcher, transports, middleware, registry, custom method handlers (#266) | `server/README.md`, `server/CONSTRAINTS.md` |
 | `client/` | Client, transports, reconnection, auth retry | `client/README.md`, `client/CONSTRAINTS.md` |
 | `ext/auth/` | JWT, PRM, OAuth (separate go.mod) | `ext/auth/docs/DESIGN.md` |
-| `ext/ui/` | MCP Apps + App Bridge JS (separate go.mod) | `docs/APPS_DESIGN.md` |
+| `ext/ui/` | MCP Apps + App Bridge JS + AppHost + AppBridge (separate go.mod) | `docs/APPS_DESIGN.md` |
 | `experimental/ext/protogen/` | Proto → MCP codegen (separate go.mod) | `experimental/ext/protogen/docs/DESIGN.md` |
 | `server/task_*.go`, `server/tasks_experimental.go` | MCP Tasks protocol (EXPERIMENTAL) — middleware, store, handlers, TaskContext, TaskCallbacks |
 | `experimental/ext/events/` | MCP Events protocol library (EXPERIMENTAL, separate go.mod) | `experimental/ext/events/README.md` |
@@ -58,6 +58,7 @@ Sub-module commands: see `ext/ui/Makefile`, `experimental/ext/protogen/Makefile`
 - **Sub-module go.sum drift**: New `core/` imports break sub-modules until `make tidy-all`
 - **Telegram long-polling vs webhooks**: Mutually exclusive — delete webhook before using `GetUpdatesChan`
 - **MCP App CSP**: Host iframes enforce strict CSP (`script-src 'unsafe-inline'`, no `connect-src`). No external CDN scripts, no `fetch()` to server. Use inline JS + bridge events only.
+- **AppHost lifecycle ordering**: `Client.Connect()` must complete before `AppHost.Start()` — the bridge may forward requests that require an active MCP session. `AppHost.Close()` only closes the bridge; the caller must close the Client separately.
 - **Background goroutine requestFunc**: Task goroutines inherit a dead POST-scoped `requestFunc`. Use `core.DetachForBackground(ctx)` instead of `context.WithoutCancel(ctx)` — it replaces both `requestFunc` and `notifyFunc` with the session-level persistent push.
 - **Tasks side-channel**: `TaskElicit`/`TaskSample` send via the `tasks/result` handler's live connection, not the background goroutine's dead one. The handler proxies requests from a channel.
 - **POST SSE writer closure**: After `handlePostSSE` returns, the SSE writer is marked `closed`. Background goroutines that try to notify via the dead writer get silent no-ops instead of panics.
@@ -77,6 +78,7 @@ Module-specific gotchas live in their READMEs (protogen templates, App Bridge es
 | Constraints | `CONSTRAINTS.md` (project-wide), `core/CONSTRAINTS.md`, `server/CONSTRAINTS.md`, `client/CONSTRAINTS.md` |
 | Auth design | `ext/auth/docs/DESIGN.md` |
 | MCP Apps design | `docs/APPS_DESIGN.md` |
+| AppHost (host-side app mgmt) | `ext/ui/app_host.go`, `ext/ui/app_bridge.go`, `ext/ui/in_process_bridge.go` |
 | Protogen design | `experimental/ext/protogen/docs/DESIGN.md` |
 | Events library | `experimental/ext/events/README.md` |
 | Telegram example | `experimental/telegram-events/README.md` |

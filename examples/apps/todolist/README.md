@@ -21,6 +21,102 @@ A server-rendered MCP App with inline JavaScript. The initial state is rendered 
 - **Prompts**: `task_summary` returns a formatted overview of all items
 - **Middleware**: `LoggingMiddleware` logs every JSON-RPC request
 
+## App-Provided Tools
+
+The todolist app registers tools that let the host/model query and mutate the app's live UI state directly:
+
+| Tool | Direction | Description |
+|------|-----------|-------------|
+| `get_todos` | host→app | Read the current todo list from the app's DOM |
+| `toggle_todo` | host→app | Toggle a todo done/undone by index |
+
+These complement the server-side tools — server tools manage canonical state, app tools give the model direct access to the UI's live state.
+
+## Sequence Diagrams
+
+### Add a task (server tool → app update)
+
+```mermaid
+sequenceDiagram
+    participant LLM
+    participant Host
+    participant Server as Go Server
+    participant App as Todo App (iframe)
+
+    LLM->>Host: "Add a task to buy groceries"
+    Host->>Server: tools/call {name: "add_task", args: {title: "buy groceries"}}
+    Server-->>Host: ToolResult {text: "Added: buy groceries"}
+    Host->>App: ui/notifications/tool-result
+    App->>App: renderTasks() — DOM updated
+    Host-->>LLM: "Added: buy groceries"
+```
+
+### Elicitation flow (user picks priority)
+
+```mermaid
+sequenceDiagram
+    participant LLM
+    participant Host
+    participant Server as Go Server
+    participant User
+
+    LLM->>Host: "Add a task, let me pick priority"
+    Host->>Server: tools/call {name: "add_task_confirmed"}
+    Server->>Host: elicitation/create {message: "Choose priority"}
+    Host->>User: Shows priority picker
+    User-->>Host: {action: "accept", content: {priority: "high"}}
+    Host-->>Server: ElicitationResult
+    Server-->>Host: ToolResult {text: "Added with priority: high"}
+    Host-->>LLM: "Added with priority: high"
+```
+
+### Sampling flow (LLM suggests priority)
+
+```mermaid
+sequenceDiagram
+    participant LLM
+    participant Host
+    participant Server as Go Server
+
+    LLM->>Host: "Categorize 'deploy to production'"
+    Host->>Server: tools/call {name: "categorize_task"}
+    Server->>Host: sampling/createMessage {prompt: "Suggest priority for..."}
+    Host->>LLM: CreateMessageRequest
+    LLM-->>Host: CreateMessageResult {text: "high"}
+    Host-->>Server: SamplingResult
+    Server-->>Host: ToolResult {text: "Suggested priority: high"}
+    Host-->>LLM: "Suggested priority: high"
+```
+
+### Host queries app state (app-provided tool)
+
+```mermaid
+sequenceDiagram
+    participant LLM
+    participant Host
+    participant App as Todo App (iframe)
+
+    LLM->>Host: "What todos are in the app?"
+    Host->>App: tools/call {name: "get_todos"}
+    App-->>Host: {text: '[{"title":"buy groceries","done":false}]'}
+    Host-->>LLM: Current todo list from app UI
+```
+
+### Host mutates app state (app-provided tool)
+
+```mermaid
+sequenceDiagram
+    participant LLM
+    participant Host
+    participant App as Todo App (iframe)
+
+    LLM->>Host: "Toggle the first todo"
+    Host->>App: tools/call {name: "toggle_todo", args: {index: 0}}
+    App->>App: tasks[0].done = true; renderTasks()
+    App-->>Host: {text: "Toggled: buy groceries → done"}
+    Host-->>LLM: "Toggled: buy groceries → done"
+```
+
 ## Screenshots
 
 ### Todo list with items added by the LLM
