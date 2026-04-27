@@ -1,11 +1,14 @@
 === Stage 1/10: unit+coverage (make cover-html) ===
-Started: Wed Apr 22 22:26:07 PDT 2026
+Started: Mon Apr 27 13:50:39 PDT 2026
 go test -coverprofile=tests/reports/coverage.out ./... -count=1 -timeout 30s
-ok  	github.com/panyam/mcpkit/client	8.073s	coverage: 62.9% of statements
+# github.com/panyam/mcpkit/server [github.com/panyam/mcpkit/server.test]
+server/keepalive_test.go:108:6: TestKeepaliveMethodNotFoundDoesNotKillSession redeclared in this block
+	server/keepalive_method_not_found_test.go:19:6: other declaration of TestKeepaliveMethodNotFoundDoesNotKillSession
+ok  	github.com/panyam/mcpkit/client	8.334s	coverage: 62.9% of statements
 	github.com/panyam/mcpkit/cmd/testserver		coverage: 0.0% of statements
-ok  	github.com/panyam/mcpkit/core	0.398s	coverage: 50.0% of statements
-ok  	github.com/panyam/mcpkit/server	10.537s	coverage: 81.1% of statements
-ok  	github.com/panyam/mcpkit/testutil	0.502s	coverage: 69.4% of statements
-go tool cover -html=tests/reports/coverage.out -o tests/reports/coverage.html
-Coverage report: tests/reports/coverage.html
-Finished: Wed Apr 22 22:26:20 PDT 2026
+ok  	github.com/panyam/mcpkit/core	0.647s	coverage: 50.0% of statements
+FAIL	github.com/panyam/mcpkit/server [build failed]
+ok  	github.com/panyam/mcpkit/testutil	0.931s	coverage: 69.4% of statements
+FAIL
+make[1]: *** [cover-html] Error 1
+Finished: Mon Apr 27 13:50:48 PDT 2026

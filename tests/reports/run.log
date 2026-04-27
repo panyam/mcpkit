@@ -1,10 +1,10 @@
 === MCPKit Comprehensive Test Suite ===
-Started: Wed Apr 22 22:26:07 PDT 2026
+Started: Mon Apr 27 13:50:39 PDT 2026
 
 --- [1/10] unit+coverage ---
-  PASS: unit+coverage
+  FAIL: unit+coverage
 --- [2/10] race ---
-  PASS: race
+  FAIL: race
 --- [3/10] auth ---
   PASS: auth
 --- [4/10] ui ---
@@ -18,9 +18,3 @@ Started: Wed Apr 22 22:26:07 PDT 2026
 --- [8/10] conformance ---
   PASS: conformance
 --- [9/10] auth-conformance ---
-  PASS: auth-conformance
---- [10/10] keycloak ---
-  PASS: keycloak
-
-=== Results: 10 passed, 0 failed ===
-Finished: Wed Apr 22 22:29:09 PDT 2026
