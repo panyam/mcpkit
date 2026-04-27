@@ -1,9 +1,14 @@
 === Stage 2/10: race (make test-race) ===
-Started: Wed Apr 22 22:26:20 PDT 2026
+Started: Mon Apr 27 13:50:49 PDT 2026
 go test -race ./... -count=1 -timeout 60s
-ok  	github.com/panyam/mcpkit/client	10.278s
+# github.com/panyam/mcpkit/server [github.com/panyam/mcpkit/server.test]
+server/keepalive_test.go:108:6: TestKeepaliveMethodNotFoundDoesNotKillSession redeclared in this block
+	server/keepalive_method_not_found_test.go:19:6: other declaration of TestKeepaliveMethodNotFoundDoesNotKillSession
+ok  	github.com/panyam/mcpkit/client	9.962s
 ?   	github.com/panyam/mcpkit/cmd/testserver	[no test files]
-ok  	github.com/panyam/mcpkit/core	1.373s
-ok  	github.com/panyam/mcpkit/server	11.474s
-ok  	github.com/panyam/mcpkit/testutil	1.859s
-Finished: Wed Apr 22 22:26:35 PDT 2026
+ok  	github.com/panyam/mcpkit/core	1.506s
+FAIL	github.com/panyam/mcpkit/server [build failed]
+ok  	github.com/panyam/mcpkit/testutil	2.073s
+FAIL
+make[1]: *** [test-race] Error 1
+Finished: Mon Apr 27 13:51:00 PDT 2026
