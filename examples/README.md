@@ -16,6 +16,10 @@ Runnable examples covering MCP Apps, authentication, async tasks, and proto-base
 | [apps/vanilla](apps/vanilla/) | Minimal MCP App — plain JS, no build step | 8080 |
 | [apps/todolist](apps/todolist/) | Server-rendered MCP App — bridge events, inline JS | 8080 |
 | [apps/react](apps/react/) | React 19 MCP App — hooks, Vite, TypeScript | 8080 |
+| [apps/interactive](apps/interactive/) | Tic-tac-toe — bidirectional app-provided tools | 8080 |
+| [apps/dashboard](apps/dashboard/) | Dashboard — tool lifecycle (enable/disable/remove) | 8080 |
+| [host/01-apphost](host/01-apphost/) | AppHost walkthrough (CLI, step-through) | — |
+| [host/02-multi-server](host/02-multi-server/) | ServerRegistry with 3 servers (CLI) | — |
 | [auth/unified](auth/) | **Start here** — all auth patterns in one server | 8080 |
 | [auth/bearer](auth/) | Static bearer token (simplest possible) | 8081 |
 | [auth/jwt](auth/) | RS256 JWT validation via JWKS | 8082 |
@@ -48,6 +52,26 @@ go run . -addr :8080
 ```
 
 Then connect your MCP host to `http://localhost:8080/mcp` (Streamable HTTP transport).
+
+### Host Examples (interactive CLI)
+
+Pure Go examples using `AppHost` and `ServerRegistry`. Run interactively to step through each operation, or non-interactively for full output. READMEs are auto-generated from code.
+
+```bash
+# AppHost basics — server + client + bridge + bidirectional tools
+cd examples/host/01-apphost
+make run           # interactive (pause between steps)
+make demo          # non-interactive (full output)
+
+# Multi-server registry — 3 servers, collision resolution, app bridge
+cd examples/host/02-multi-server
+make run
+make demo
+
+# Generate all READMEs from code
+cd examples/host
+make readme
+```
 
 ### Auth
 

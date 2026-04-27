@@ -28,7 +28,7 @@ make tag-push V=vX.Y.Z # Tag root + all sub-modules and push
 | `experimental/ext/events/` — MCP Events protocol | `experimental/ext/events/README.md` |
 | `testutil/` — Test helpers | |
 | `tests/e2e/`, `tests/keycloak/` — Integration tests | `tests/e2e/apps/README.md` |
-| `examples/` — Working examples (apps, auth, tasks) | `examples/README.md` |
+| `examples/` — Working examples (apps, auth, tasks, host) | `examples/README.md` |
 
 ## Sub-Modules
 
