@@ -34,6 +34,7 @@ import (
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/ext/auth"
 	"github.com/panyam/mcpkit/server"
+	oneauthcore "github.com/panyam/oneauth/core"
 )
 
 const (
@@ -152,33 +153,91 @@ func main() {
 		},
 	)
 
-	// initiate_payment: UC3 placeholder — waiting on oneauth RAR support.
+	// initiate_payment: UC3 — per-operation ephemeral credential with RAR.
 	//
-	// EXPERIMENTAL: This tool is a placeholder for the FineGrainedAuth UC3 pattern
-	// (per-operation ephemeral credentials). The full implementation requires:
-	//   - RFC 9396 authorization_details types (building in oneauth)
-	//   - credential_disposition: "additional" semantics
-	//   - Keycloak RAR feature flag (--features=rar)
+	// EXPERIMENTAL: Demonstrates the FineGrainedAuth UC3 pattern where a payment
+	// requires a separate ephemeral credential with RFC 9396 authorization_details
+	// bound to the specific transaction. The original read token is retained.
+	//
+	// The client must obtain an ephemeral token with a payment_initiation
+	// authorization_details type, then retry with that token. The original
+	// token continues to be used for other operations.
+	//
+	// Note: Full end-to-end flow requires Keycloak with --features=rar enabled.
+	// This example demonstrates the denial response shape and remediation hints.
 	srv.RegisterTool(
 		core.ToolDef{
 			Name:        "initiate_payment",
-			Description: "Initiate a payment (UC3 placeholder — not yet implemented, waiting on RAR support).",
+			Description: "Initiate a payment. Requires an ephemeral token with payment_initiation authorization_details (UC3 — per-operation credential).",
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {
-					"amount":   {"type": "string"},
-					"currency": {"type": "string"},
-					"payee":    {"type": "string"}
+					"amount":   {"type": "string", "description": "Payment amount"},
+					"currency": {"type": "string", "description": "Currency code (e.g., EUR, USD)"},
+					"payee":    {"type": "string", "description": "Payee name"}
 				},
 				"required": ["amount", "currency", "payee"]
 			}`),
 		},
 		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			return core.ErrorResult(
-				"Not yet implemented. UC3 (per-operation ephemeral credentials) " +
-					"requires RFC 9396 Rich Authorization Request support, which is " +
-					"being built in oneauth. See examples/fine-grained-auth/README.md " +
-					"for the planned flow."), nil
+			var args struct {
+				Amount   string `json:"amount"`
+				Currency string `json:"currency"`
+				Payee    string `json:"payee"`
+			}
+			json.Unmarshal(req.Arguments, &args)
+
+			// In a real implementation, we'd check the token's authorization_details
+			// for a matching payment_initiation entry. For this example, we always
+			// return the denial to demonstrate the wire format.
+			//
+			// TODO: When ext/auth integrates oneauth RAR middleware, replace this
+			// with auth.RequireAuthorizationDetails(ctx, "payment_initiation").
+
+			// Build the RFC 9396 authorization_details for the payment.
+			paymentDetail := oneauthcore.AuthorizationDetail{
+				Type:    "payment_initiation",
+				Actions: []string{"initiate", "status", "cancel"},
+				Extra: map[string]any{
+					"instructedAmount": map[string]any{
+						"currency": args.Currency,
+						"amount":   args.Amount,
+					},
+					"creditorName": args.Payee,
+				},
+			}
+
+			// Return authorization denial with:
+			//   - credential_disposition: "additional" (new token coexists with existing)
+			//   - remediationHints with oauth_authorization_details containing the
+			//     payment_initiation details the client needs to request
+			//
+			// EXPERIMENTAL: All field names and values are subject to breaking changes.
+			denial := core.AuthorizationDenial{
+				Reason:                "insufficient_authorization", // EXPERIMENTAL: value will be standardized
+				CredentialDisposition: "additional",                 // EXPERIMENTAL: new credential coexists with existing
+				RemediationHints: []core.RemediationHint{
+					{
+						Type: core.RemediationTypeOAuthRAR,
+						Data: map[string]any{
+							"authorization_details": []oneauthcore.AuthorizationDetail{paymentDetail},
+						},
+					},
+				},
+			}
+
+			denialJSON, _ := json.Marshal(map[string]any{
+				"error":         "insufficient_authorization",
+				"authorization": denial,
+				"message": fmt.Sprintf(
+					"Payment of %s %s to %s requires a transaction-specific credential. "+
+						"Obtain an ephemeral token with payment_initiation authorization_details.",
+					args.Amount, args.Currency, args.Payee),
+			})
+			return core.ToolResult{
+				Content: []core.Content{{Type: "text", Text: string(denialJSON)}},
+				IsError: true,
+			}, nil
 		},
 	)
 
@@ -207,7 +266,7 @@ func main() {
 	log.Printf("  1. Connect with read-only token, call read_document -> succeeds")
 	log.Printf("  2. Call update_document -> fails with authorization denial + remediationHints")
 	log.Printf("  3. Reconnect with read+call token, call update_document -> succeeds")
-	log.Printf("  4. Call initiate_payment -> placeholder (UC3, waiting on RAR)")
+	log.Printf("  4. Call initiate_payment -> authorization denial with payment_initiation RAR details (UC3)")
 
 	if err := http.ListenAndServe(*addr, mux); err != nil {
 		log.Fatal(err)

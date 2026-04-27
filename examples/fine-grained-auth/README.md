@@ -32,7 +32,7 @@ The server prints two tokens (read-only and read+call) for the walkthrough.
 |------|---------------|-------------|
 | `read_document` | `tools-read` | Returns document content |
 | `update_document` | `tools-call` | Updates document content (returns authorization denial if scope missing) |
-| `initiate_payment` | — | UC3 placeholder (waiting on oneauth RAR support) |
+| `initiate_payment` | — | UC3: returns authorization denial with RFC 9396 `payment_initiation` authorization_details + `credential_disposition: "additional"` |
 
 ## Flow: Scope Step-Up (UC2)
 
@@ -62,7 +62,7 @@ sequenceDiagram
     Server-->>Client: "Document doc-001 updated successfully."
 ```
 
-## Flow: UC3 Payment (Future)
+## Flow: Per-Operation Ephemeral Credential (UC3)
 
 ```mermaid
 sequenceDiagram
@@ -70,10 +70,8 @@ sequenceDiagram
     participant Server as MCP Server
     participant KC as Keycloak
 
-    Note over Client,KC: Planned — requires oneauth RAR support
-
     Client->>Server: tools/call: initiate_payment<br/>Authorization: Bearer {read-token}
-    Server-->>Client: Authorization denial<br/>+ remediationHints[oauth_authorization_details]<br/>+ credential_disposition: "additional"<br/>+ payment_initiation details
+    Server-->>Client: Authorization denial<br/>+ remediationHints[oauth_authorization_details]<br/>+ credential_disposition: "additional"<br/>+ payment_initiation details (amount, payee)
 
     Client->>KC: Authorization request<br/>+ authorization_details[payment_initiation]
     KC-->>Client: ephemeral payment token
@@ -83,6 +81,10 @@ sequenceDiagram
     Client->>Server: tools/call: initiate_payment<br/>Authorization: Bearer {ephemeral-token}
     Server-->>Client: "Payment initiated."
 ```
+
+> **Note**: The denial response shape is fully implemented. End-to-end token exchange
+> requires Keycloak with `--features=rar` enabled. The RFC 9396 `AuthorizationDetail`
+> types come from oneauth v0.0.76.
 
 ## Wire Format
 
@@ -105,7 +107,7 @@ The tool returns an error result with structured authorization denial:
 1. Connect with the **read-only** token, call `read_document` -> succeeds
 2. Call `update_document` -> fails with authorization denial + `remediationHints`
 3. Reconnect with the **read+call** token, call `update_document` -> succeeds
-4. Call `initiate_payment` -> placeholder message (UC3, waiting on RAR)
+4. Call `initiate_payment` -> authorization denial with `payment_initiation` RAR details + `credential_disposition: "additional"` (UC3)
 
 ## EXPERIMENTAL
 
@@ -113,9 +115,10 @@ The `authorization` denial envelope and `remediationHints` are from the FineGrai
 
 Specifically:
 - `reason` values will be standardized when the SEP assigns them
-- `remediationHints[].type` names are provisional
-- `credential_disposition` (UC3) semantics are not yet implemented
+- `remediationHints[].type` names (`oauth_scope_step_up`, `oauth_authorization_details`) are provisional
+- `credential_disposition: "additional"` semantics are demonstrated but not enforced end-to-end
 - The JSON-RPC error code for UC2/UC3 denials is TBD (currently uses tool error result, not a dedicated error code)
+- RFC 9396 `AuthorizationDetail` types from oneauth v0.0.76 are stable but the MCP remediation hint mapping is experimental
 
 ## Related
 
