@@ -23,7 +23,7 @@ Runnable examples covering MCP Apps, authentication, async tasks, and proto-base
 | [auth/session-binding](auth/) | Session hijacking prevention | 8084 |
 | [auth/public-discovery](auth/) | Pre-auth tool discovery | 8085 |
 | [elicitation](elicitation/) | URL-mode elicitation with consent approval (UC1) | 8086 |
-| [fine-grained-auth](fine-grained-auth/) | Authorization denial with scope step-up via Keycloak (UC2) | 8087 |
+| [fine-grained-auth](fine-grained-auth/) | Authorization denial: scope step-up (UC2) + RAR payments (UC3) via Keycloak | 8087 |
 | [protogen/bookservice](protogen/bookservice/) | Proto annotations to MCP tools, resources, prompts | 8080 |
 | [tasks](tasks/) | Async tool execution with lifecycle tracking (experimental) | 8080 |
 

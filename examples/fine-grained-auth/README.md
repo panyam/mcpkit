@@ -1,10 +1,23 @@
 # Fine-Grained Authorization Example
 
-Authorization denial with scope step-up — the FineGrainedAuth UC2 pattern.
+Authorization denial with scope step-up (UC2) and per-operation ephemeral credentials (UC3).
+
+## FineGrainedAuth Use Cases
+
+The FineGrainedAuth proposal defines three use cases for structured authorization denial at the MCP layer. This example covers UC2 and UC3. UC1 is in [`examples/elicitation/`](../elicitation/).
+
+| UC | Pattern | Example | Where |
+|----|---------|---------|-------|
+| **UC1** | URL consent approval (same credential) | User visits approval URL, retries with same token | [`examples/elicitation/`](../elicitation/) |
+| **UC2** | Scope step-up (new credential) | Client re-authorizes with broader scopes | **This example** — `update_document` |
+| **UC3** | Per-operation ephemeral credential | Client obtains additional token for specific operation | **This example** — `initiate_payment` |
 
 ## What It Shows
 
-A document management server where reading requires `tools-read` scope and writing requires `tools-call` scope. When a client with a read-only token attempts to write, the server returns a structured authorization denial with remediation hints telling the client exactly which scopes to request.
+A document management + payments server demonstrating two authorization denial patterns:
+
+- **UC2 (scope step-up)**: Reading requires `tools-read` scope, writing requires `tools-call`. When a read-only token attempts to write, the server returns an authorization denial with `remediationHints` telling the client which scopes to request.
+- **UC3 (ephemeral credential)**: Initiating a payment requires a transaction-specific ephemeral token with RFC 9396 `authorization_details`. The original token is retained for other operations.
 
 This demonstrates the layered approach: the transport's `WWW-Authenticate` challenge remains authoritative, and the JSON-RPC denial envelope provides complementary classification and remediation hints.
 
