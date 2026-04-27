@@ -83,12 +83,36 @@ In MCPJam (or Claude Desktop):
 1. Add server: `http://localhost:8080/mcp` (Streamable HTTP)
 2. Server name: "Tic-Tac-Toe"
 
-## Prompts to try
+## Try it — Step by Step
 
-- "Let's play tic-tac-toe" — model calls `new_game`, sees the board
-- "I'll go first, take the center" — user clicks center cell
-- "Your turn" — model calls `get_board` to see state, then `make_move` to play
-- "Start a new game" — resets board, `sendToolListChanged()` fires
+### 1. Verify server tools work
+
+Ask the model:
+- **"Let's play tic-tac-toe"** → model calls `new_game`, you should see the empty board in the iframe
+- **"What does the board look like?"** → model calls `get_game_state`, returns the board array + whose turn
+
+### 2. Test user interaction (app→host→server)
+
+- **Click a cell** in the iframe → the app calls `server_move` via `MCPApp.callTool()`, the cell fills with X
+- Click a few more cells — the board should update after each click
+
+### 3. Test app-provided tools (host→app via registerTool)
+
+These are the key new feature — tools registered by the HTML app, not the Go server:
+- **"Check the board using get_board"** → model calls the **app-provided** `get_board` tool → returns a visual grid
+- **"Place your piece at position 0"** → model calls the **app-provided** `make_move` tool → board updates in the iframe
+
+### 4. Test game lifecycle
+
+- **"Start a new game"** → model calls `new_game`, board resets, `sendToolListChanged()` fires
+- Play a full game to completion — verify win/draw detection works
+
+### What to verify
+
+- Server tools (`new_game`, `server_move`, `get_game_state`) and app tools (`make_move`, `get_board`) both work
+- Clicking cells in the iframe updates the board (app→host→server round-trip)
+- Model can play by calling app tools (host→app round-trip)
+- Board state stays consistent between server and app
 
 ## Tools
 

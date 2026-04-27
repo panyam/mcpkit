@@ -140,16 +140,34 @@ In MCPJam (or Claude Desktop):
 1. Add server: `http://localhost:8080/mcp` (Streamable HTTP)
 2. Server name: "Todo List"
 
-## Prompts to try
+## Try it — Step by Step
 
-- "Add a task to buy groceries" — adds an item, iframe updates via bridge event
-- "Add a high priority task to review the PR" — adds with priority badge
-- "Mark buy groceries as done" — strikes through the item
-- "What tasks do I have?" — lists all items
-- "Add three tasks: laundry, cooking, cleaning" — bulk add, iframe updates after each
-- **"Add a task to call mom, but let me pick the priority"** — triggers elicitation flow
-- **"Categorize the task 'deploy to production'"** — LLM suggests priority via sampling
-- **Use the `task_summary` prompt** — formatted overview of all items
+### 1. Test server tools (basic CRUD)
+
+- **"Add a task to buy groceries"** → model calls `add_task` → item appears in the iframe
+- **"Add a high priority task to review the PR"** → adds with priority badge
+- **"Mark buy groceries as done"** → model calls `complete_task` → item strikes through
+- **"What tasks do I have?"** → model calls `list_tasks` → returns structured list
+
+### 2. Test app-provided tools (host→app via registerTool)
+
+The todolist HTML registers two tools via `MCPApp.registerTool()`:
+- **"What todos does the app have?"** → model calls the **app-provided** `get_todos` → returns live DOM state as JSON
+- **"Toggle the first todo"** → model calls the **app-provided** `toggle_todo({index: 0})` → item toggles in the iframe
+
+These read/write the app's live UI state directly — independent of the server's state.
+
+### 3. Test elicitation (user input during tool call)
+
+- **"Add a task to call mom, but let me pick the priority"** → triggers elicitation flow → host shows priority picker → you choose → task added with your choice
+
+### 4. Test sampling (LLM-assisted categorization)
+
+- **"Categorize the task 'deploy to production'"** → server asks the LLM to suggest a priority → LLM responds → task gets the suggested priority
+
+### 5. Test prompts
+
+- **Use the `task_summary` prompt** → formatted overview of all items
 
 ## MCP Features
 
