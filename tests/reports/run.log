@@ -1,26 +1,30 @@
 === MCPKit Comprehensive Test Suite ===
-Started: Wed Apr 22 22:26:07 PDT 2026
+Started: Mon Apr 27 16:30:17 PDT 2026
 
---- [1/10] unit+coverage ---
+--- [1/12] unit+coverage ---
   PASS: unit+coverage
---- [2/10] race ---
+--- [2/12] race ---
   PASS: race
---- [3/10] auth ---
+--- [3/12] auth ---
   PASS: auth
---- [4/10] ui ---
+--- [4/12] ui ---
   PASS: ui
---- [5/10] protogen ---
+--- [5/12] protogen ---
   PASS: protogen
---- [6/10] e2e ---
+--- [6/12] e2e ---
   PASS: e2e
---- [7/10] experimental ---
+--- [7/12] experimental ---
   PASS: experimental
---- [8/10] conformance ---
+--- [8/12] conformance ---
   PASS: conformance
---- [9/10] auth-conformance ---
+--- [9/12] auth-conformance ---
   PASS: auth-conformance
---- [10/10] keycloak ---
+--- [10/12] tasks-conformance ---
+  PASS: tasks-conformance
+--- [11/12] tasks-v2-conformance ---
+  PASS: tasks-v2-conformance
+--- [12/12] keycloak ---
   PASS: keycloak
 
-=== Results: 10 passed, 0 failed ===
-Finished: Wed Apr 22 22:29:09 PDT 2026
+=== Results: 12 passed, 0 failed ===
+Finished: Mon Apr 27 16:31:46 PDT 2026
