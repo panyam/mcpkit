@@ -43,11 +43,13 @@
 import { describe, test, before, after } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
-import { assertJsonRpcError, waitForTerminal, waitForStatus } from '../common/helpers.js';
+import { assertJsonRpcError } from '../common/helpers.js';
 
 const SERVER_URL = process.env.SERVER_URL || 'http://localhost:8080/mcp';
 
 let client: Client;
+let sessionId: string;
+let nextId = 1;
 
 before(async () => {
     const transport = new StreamableHTTPClientTransport(new URL(SERVER_URL));
@@ -58,6 +60,28 @@ before(async () => {
         { capabilities: { elicitation: {}, sampling: {} } }
     );
     await client.connect(transport);
+
+    // Extract session ID for raw requests (the SDK stores it internally).
+    // We use raw fetch for tasks/get and tools/call because the SDK's
+    // built-in Zod schemas strip v2-only fields like `result` and `error`.
+    const initResp = await fetch(SERVER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({
+            jsonrpc: '2.0', id: 'init-raw', method: 'initialize',
+            params: { protocolVersion: '2025-11-25',
+                      clientInfo: { name: 'raw-init', version: '1.0' },
+                      capabilities: {} }
+        })
+    });
+    sessionId = initResp.headers.get('mcp-session-id') || '';
+    // Send initialized notification
+    await fetch(SERVER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json',
+                   'Mcp-Session-Id': sessionId },
+        body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })
+    });
 });
 
 after(async () => {
@@ -69,19 +93,61 @@ after(async () => {
 // ============================================================================
 
 /**
+ * Send a raw JSON-RPC request via fetch, bypassing SDK schema validation.
+ * Parses SSE `data:` lines if the response is text/event-stream, or
+ * plain JSON otherwise.
+ */
+async function rawRequest(method: string, params: any): Promise<any> {
+    const id = nextId++;
+    const resp = await fetch(SERVER_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream, application/json',
+            'Mcp-Session-Id': sessionId,
+        },
+        body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
+    });
+    const ct = resp.headers.get('content-type') || '';
+    let body: any;
+    if (ct.includes('text/event-stream')) {
+        // Parse SSE — find the first `data:` line with a JSON-RPC response.
+        const text = await resp.text();
+        for (const line of text.split('\n')) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith('data:')) {
+                const payload = trimmed.slice(5).trimStart();
+                if (payload.startsWith('{')) {
+                    const parsed = JSON.parse(payload);
+                    // Find the response matching our request ID.
+                    if (parsed.id === id) {
+                        body = parsed;
+                        break;
+                    }
+                }
+            }
+        }
+    } else {
+        body = await resp.json();
+    }
+    if (!body) throw new Error(`No JSON-RPC response for ${method}`);
+    if (body.error) {
+        const err: any = new Error(body.error.message);
+        err.code = body.error.code;
+        err.data = body.error.data;
+        throw err;
+    }
+    return body.result;
+}
+
+/**
  * Call a tool via raw request. In v2, there is no client `task` param —
  * the server decides whether to create a task based on the tool's
  * configuration. Returns the raw result (may be CallToolResult or
  * CreateTaskResult depending on the tool).
  */
 async function callTool(toolName: string, args: Record<string, unknown>): Promise<any> {
-    return await client.request(
-        {
-            method: 'tools/call',
-            params: { name: toolName, arguments: args },
-        },
-        {} as any
-    );
+    return rawRequest('tools/call', { name: toolName, arguments: args });
 }
 
 /**
@@ -96,10 +162,33 @@ async function getTask(taskId: string, opts: { requestState?: string; inputRespo
     if (opts.inputResponses !== undefined) {
         params.inputResponses = opts.inputResponses;
     }
-    return await client.request(
-        { method: 'tasks/get', params },
-        {} as any
-    );
+    return rawRequest('tasks/get', params);
+}
+
+/** Poll tasks/get until a terminal state via raw requests. */
+async function waitForTerminal(taskId: string, timeoutMs = 10_000): Promise<any> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+        const task = await getTask(taskId);
+        if (['completed', 'failed', 'cancelled'].includes(task.status)) {
+            return task;
+        }
+        await new Promise(r => setTimeout(r, 200));
+    }
+    throw new Error(`Task ${taskId} did not reach terminal state within ${timeoutMs}ms`);
+}
+
+/** Poll tasks/get until a specific status or terminal. */
+async function waitForStatus(taskId: string, status: string, timeoutMs = 10_000): Promise<any> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+        const task = await getTask(taskId);
+        if (task.status === status || ['completed', 'failed', 'cancelled'].includes(task.status)) {
+            return task;
+        }
+        await new Promise(r => setTimeout(r, 200));
+    }
+    throw new Error(`Task ${taskId} did not reach status ${status} within ${timeoutMs}ms`);
 }
 
 /**
@@ -110,10 +199,7 @@ async function cancelTask(taskId: string, requestState?: string): Promise<any> {
     if (requestState !== undefined) {
         params.requestState = requestState;
     }
-    return await client.request(
-        { method: 'tasks/cancel', params },
-        {} as any
-    );
+    return rawRequest('tasks/cancel', params);
 }
 
 /**
@@ -207,7 +293,7 @@ describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
         assertCreateTaskResult(result, 'v2-04 create');
         const taskId = result.task.taskId;
 
-        const terminal = await waitForTerminal(client, taskId);
+        const terminal = await waitForTerminal(taskId);
         assertCompletedResult(terminal, 'v2-04');
     });
 
@@ -227,7 +313,7 @@ describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
         assertCreateTaskResult(result, 'v2-05 create');
         const taskId = result.task.taskId;
 
-        const terminal = await waitForTerminal(client, taskId);
+        const terminal = await waitForTerminal(taskId);
         // Tool errors are "completed" with isError, NOT "failed".
         assert.equal(terminal.status, 'completed',
             'tool execution error should be completed (not failed)');
@@ -243,15 +329,17 @@ describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
     // The task inlines an `error` field (not `result`).
     //
     // NOTE: This requires a tool that triggers a protocol-level failure
-    // (e.g., server crash, internal error). The test server should provide
-    // a `protocol_error_job` tool for this purpose.
+    // (e.g., server crash, internal error). The test server provides a
+    // `protocol_error_job` tool that panics. Some SDKs (e.g., Python) make
+    // this hard because they catch all exceptions and convert them to tool
+    // errors — Go's panic recovery gives us clean control here.
     // ========================================================================
     test('v2-06: protocol error is failed with error field', async () => {
         const result = await callTool('protocol_error_job', {});
         assertCreateTaskResult(result, 'v2-06 create');
         const taskId = result.task.taskId;
 
-        const terminal = await waitForTerminal(client, taskId);
+        const terminal = await waitForTerminal(taskId);
         assert.equal(terminal.status, 'failed',
             'protocol error should have status: failed');
         assert.ok(terminal.error,
@@ -288,7 +376,7 @@ describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
     test('v2-08: cancel completed task returns error', async () => {
         const result = await callTool('slow_compute', { seconds: 1, label: 'v2-cancel-done' });
         const taskId = result.task.taskId;
-        await waitForTerminal(client, taskId);
+        await waitForTerminal(taskId);
 
         try {
             await cancelTask(taskId);
@@ -311,13 +399,10 @@ describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
     test('v2-09: tasks/result is rejected (method removed in v2)', async () => {
         const result = await callTool('slow_compute', { seconds: 1, label: 'v2-no-result' });
         const taskId = result.task.taskId;
-        await waitForTerminal(client, taskId);
+        await waitForTerminal(taskId);
 
         try {
-            await client.request(
-                { method: 'tasks/result', params: { taskId } },
-                {} as any
-            );
+            await rawRequest('tasks/result', { taskId });
             assert.fail('should have thrown — tasks/result removed in v2');
         } catch (e: any) {
             assertJsonRpcError(e, -32601, 'tasks/result removed', true);
@@ -331,10 +416,7 @@ describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
     // ========================================================================
     test('v2-10: tasks/list is rejected (method removed in v2)', async () => {
         try {
-            await client.request(
-                { method: 'tasks/list', params: {} },
-                {} as any
-            );
+            await rawRequest('tasks/list', {});
             assert.fail('should have thrown — tasks/list removed in v2');
         } catch (e: any) {
             assertJsonRpcError(e, -32601, 'tasks/list removed', true);
@@ -396,7 +478,7 @@ describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
         const result = await callTool('slow_compute', { seconds: 1, label: 'v2-ttl-guard' });
         assertCreateTaskResult(result, 'v2-13 create');
         const taskId = result.task.taskId;
-        await waitForTerminal(client, taskId);
+        await waitForTerminal(taskId);
 
         // Task should still be accessible well before TTL (which is in seconds).
         await new Promise(r => setTimeout(r, 500));
@@ -413,7 +495,7 @@ describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
     test('v2-14: tasks/get response may include requestState', async () => {
         const result = await callTool('slow_compute', { seconds: 1, label: 'v2-reqstate' });
         const taskId = result.task.taskId;
-        await waitForTerminal(client, taskId);
+        await waitForTerminal(taskId);
 
         const task = await getTask(taskId);
         // requestState is optional — if present, must be a string.
@@ -468,15 +550,13 @@ describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
         const taskId = result.task.taskId;
 
         // Wait for input_required.
-        const task = await waitForStatus(client, taskId, 'input_required', 5000);
+        const task = await waitForStatus(taskId, 'input_required', 5000);
         assert.equal(task.status, 'input_required', 'should be input_required');
 
         // v2: inputRequests is a MAP, keyed by request identifier.
         assert.ok(task.inputRequests, 'input_required task should have inputRequests');
-        assert.equal(typeof task.inputRequests, 'object',
-            'inputRequests should be an object (map)');
-        assert.ok(!Array.isArray(task.inputRequests),
-            'inputRequests should be a map, not an array');
+        assert.ok(typeof task.inputRequests === 'object' && task.inputRequests !== null,
+            'inputRequests should be a non-null object (map)');
 
         const keys = Object.keys(task.inputRequests);
         assert.ok(keys.length > 0, 'inputRequests should have at least one entry');
@@ -509,7 +589,7 @@ describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
         const taskId = result.task.taskId;
 
         // Wait for input_required.
-        const inputTask = await waitForStatus(client, taskId, 'input_required', 5000);
+        const inputTask = await waitForStatus(taskId, 'input_required', 5000);
         assert.equal(inputTask.status, 'input_required', 'should be input_required');
 
         // Build inputResponses map — keys must match inputRequests keys.
@@ -536,7 +616,7 @@ describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
 
         // If not yet completed, wait for completion.
         if (resumed.status !== 'completed') {
-            const terminal = await waitForTerminal(client, taskId);
+            const terminal = await waitForTerminal(taskId);
             assert.equal(terminal.status, 'completed', 'task should complete after input');
         }
     });
@@ -558,7 +638,7 @@ describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
 
         const result = await callTool('slow_compute', { seconds: 1, label: 'v2-notify' });
         const taskId = result.task.taskId;
-        await waitForTerminal(client, taskId);
+        await waitForTerminal(taskId);
         await new Promise(r => setTimeout(r, 500));
 
         if (statusEvents.length > 0) {
@@ -624,15 +704,15 @@ describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
         assertCreateTaskResult(result, 'v2-21 create');
         const taskId = result.task.taskId;
 
-        const terminal = await waitForTerminal(client, taskId);
+        const terminal = await waitForTerminal(taskId);
         assertCompletedResult(terminal, 'v2-21');
 
-        // related-task _meta should NOT be present — taskId is at root level.
+        // related-task _meta MUST be absent — taskId is at root level,
+        // so the metadata is redundant. Verify absence, not just "if present."
         const meta = terminal.result?._meta;
-        if (meta) {
-            assert.ok(!meta['io.modelcontextprotocol/related-task'],
-                'tasks/get inlined result should NOT include related-task _meta');
-        }
+        const related = meta?.['io.modelcontextprotocol/related-task'];
+        assert.ok(!related,
+            'tasks/get inlined result MUST NOT include related-task _meta');
     });
 
 });

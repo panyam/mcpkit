@@ -13,8 +13,9 @@ make test-e2e          # E2E tests (auth + apps)
 make test-experimental # Experimental POC tests (telegram-events)
 make testconf          # MCP conformance suite (needs Node.js)
 make testconfauth      # Auth conformance (client OAuth)
-make testconf-tasks    # Tasks conformance (27 scenarios, needs Go + Node.js)
-make testall           # Everything (10 stages) + Keycloak + HTML report
+make testconf-tasks    # Tasks v1 conformance (27 scenarios, self-contained)
+make testconf-tasks-v2 # Tasks v2 conformance (19 scenarios, self-contained, skips MRTR)
+make testall           # Everything (12 stages) + Keycloak + HTML report
 make audit             # govulncheck + gosec + gitleaks + race
 make smoke             # Curl-based transport tests
 make testkcl           # Keycloak interop (needs Docker)
@@ -97,7 +98,8 @@ Module-specific gotchas live in their READMEs (protogen templates, App Bridge es
 ## Conformance Status
 
 - Server: 30/30 (40 with baseline), Auth: 14/14 (210 checks), Apps: 21, Telegram Events: 21
-- Tasks: 27/27 (lifecycle, errors, TTL, concurrency, elicitation, sampling, progress, status, related-task meta)
+- Tasks v1: 27/27 (lifecycle, errors, TTL, concurrency, elicitation, sampling, progress, status, related-task meta)
+- Tasks v2: 19/21 (SEP-2557 — lifecycle, error semantics, TTL seconds, requestState, cancel, no capability; v2-16/v2-17 deferred pending MRTR)
 - Keycloak interop: 12/12 (valid token, tampered, scopes, PRM, WWW-Authenticate, password grant, session hijacking, public methods, token refresh)
-- testall: 10/10 stages
+- testall: 12/12 stages
 - Auth examples: 5 persistent servers (bearer, JWT, scopes, session-binding, public-discovery)

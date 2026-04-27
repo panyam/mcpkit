@@ -7,6 +7,10 @@
 
 import { strict as assert } from 'node:assert';
 import type { Client } from '@modelcontextprotocol/client';
+import { z } from 'zod';
+
+// Permissive schema that preserves all fields from server responses.
+const AnyResult = z.object({}).passthrough();
 
 // TODO: Set to true once the spec mandates specific error codes for task
 // operations and TS SDK enforces them. When enabled, all error scenarios
@@ -39,7 +43,7 @@ export async function waitForTerminal(client: Client, taskId: string, timeoutMs 
     while (Date.now() - start < timeoutMs) {
         const result = await client.request(
             { method: 'tasks/get', params: { taskId } },
-            {} as any
+            AnyResult
         );
         const task = result as any;
         if (['completed', 'failed', 'cancelled'].includes(task.status)) {
@@ -58,7 +62,7 @@ export async function waitForStatus(client: Client, taskId: string, status: stri
     while (Date.now() - start < timeoutMs) {
         const result = await client.request(
             { method: 'tasks/get', params: { taskId } },
-            {} as any
+            AnyResult
         );
         const task = result as any;
         if (task.status === status || ['completed', 'failed', 'cancelled'].includes(task.status)) {
