@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Tic-Tac-Toe</title>
+  <style>
+    * { box-sizing: border-box }
+    body { margin: 0; font-family: system-ui; text-align: center; padding: 1em; background: var(--bg, #fff); color: var(--fg, #333) }
+    h2 { margin: 0.5em 0 }
+    #status { color: #666; margin-bottom: 0.5em; min-height: 1.5em }
+    .board {
+      display: inline-grid;
+      grid-template-columns: repeat(3, 80px);
+      grid-template-rows: repeat(3, 80px);
+      gap: 4px;
+      margin: 0.5em 0;
+    }
+    .cell {
+      font-size: 2.5em;
+      font-weight: bold;
+      border: 2px solid #ccc;
+      border-radius: 8px;
+      background: #f9f9f9;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.1s;
+    }
+    .cell:hover { background: #eef }
+    .cell.x { color: #e44; }
+    .cell.o { color: #44e; }
+    .cell.taken { cursor: default; }
+    button {
+      font-size: 1em;
+      padding: 0.4em 1.5em;
+      cursor: pointer;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      background: #f5f5f5;
+      margin-top: 0.5em;
+    }
+    button:hover { background: #e8e8e8 }
+  </style>
+</head>
+<body>
+{{ template "mcpkit-bridge" .Bridge }}
+<h2>Tic-Tac-Toe</h2>
+<p id="status">Connecting...</p>
+<div class="board" id="board"></div>
+<br>
+<button onclick="newGame()">New Game</button>
+<script>
+  // Game state (mirrors server state, updated via tool results).
+  var board = ['','','','','','','','',''];
+  var currentTurn = 'X';
+  var gameOver = false;
+
+  function renderBoard() {
+    var el = document.getElementById('board');
+    // Clear board using safe DOM methods.
+    while (el.firstChild) el.removeChild(el.firstChild);
+
+    for (var i = 0; i < 9; i++) {
+      var cell = document.createElement('div');
+      cell.className = 'cell' + (board[i] ? ' taken ' + board[i].toLowerCase() : '');
+      cell.textContent = board[i];
+      cell.dataset.pos = i;
+      if (!board[i] && !gameOver) {
+        cell.onclick = function() { userMove(parseInt(this.dataset.pos)); };
+      }
+      el.appendChild(cell);
+    }
+  }
+
+  function updateStatus(msg) {
+    document.getElementById('status').textContent = msg;
+  }
+
+  // User clicks a cell — call the server_move tool to place their piece.
+  function userMove(pos) {
+    if (board[pos] || gameOver) return;
+    updateStatus('Placing...');
+    MCPApp.callTool('server_move', { position: pos }).then(function(result) {
+      syncFromServer();
+    }).catch(function(err) {
+      updateStatus('Error: ' + err.message);
+    });
+  }
+
+  // Sync game state from server.
+  function syncFromServer() {
+    MCPApp.callTool('get_game_state', {}).then(function(result) {
+      if (result && result.content && result.content[0]) {
+        try {
+          var state = JSON.parse(result.content[0].text);
+          board = state.board || board;
+          currentTurn = state.turn || currentTurn;
+          gameOver = state.gameOver || false;
+          renderBoard();
+          if (state.winner === 'draw') {
+            updateStatus("It's a draw!");
+          } else if (state.winner) {
+            updateStatus(state.winner + ' wins!');
+          } else {
+            updateStatus(currentTurn + "'s turn");
+          }
+        } catch(e) {
+          updateStatus(result.content[0].text || (currentTurn + "'s turn"));
+          renderBoard();
+        }
+      }
+    });
+  }
+
+  function newGame() {
+    MCPApp.callTool('new_game', {}).then(function() {
+      board = ['','','','','','','','',''];
+      currentTurn = 'X';
+      gameOver = false;
+      renderBoard();
+      updateStatus("X's turn — click a cell to play!");
+      MCPApp.sendToolListChanged();
+    });
+  }
+
+  // --- App-provided tools (host/model can call these) ---
+
+  MCPApp.registerTool('make_move', {
+    description: 'Place a piece on the tic-tac-toe board. The model plays as O.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        position: { type: 'number', description: 'Board position 0-8 (top-left=0, bottom-right=8)' }
+      },
+      required: ['position']
+    }
+  }, function(args) {
+    var pos = args.position;
+    if (typeof pos !== 'number' || pos < 0 || pos > 8) {
+      return { content: [{ type: 'text', text: 'Invalid position. Must be 0-8.' }], isError: true };
+    }
+    if (board[pos] !== '') {
+      return { content: [{ type: 'text', text: 'Position ' + pos + ' is already taken by ' + board[pos] + '.' }], isError: true };
+    }
+    if (gameOver) {
+      return { content: [{ type: 'text', text: 'Game is over. Call new_game to start a new one.' }], isError: true };
+    }
+
+    board[pos] = currentTurn;
+    var winner = checkWinner();
+    var prevTurn = currentTurn;
+    currentTurn = currentTurn === 'X' ? 'O' : 'X';
+    renderBoard();
+
+    if (winner === 'draw') {
+      gameOver = true;
+      updateStatus("It's a draw!");
+      return { content: [{ type: 'text', text: prevTurn + ' placed at ' + pos + ". It's a draw!" }] };
+    }
+    if (winner) {
+      gameOver = true;
+      updateStatus(winner + ' wins!');
+      return { content: [{ type: 'text', text: prevTurn + ' placed at ' + pos + '. ' + winner + ' wins!' }] };
+    }
+    updateStatus(currentTurn + "'s turn");
+    return { content: [{ type: 'text', text: prevTurn + ' placed at ' + pos + '. ' + currentTurn + "'s turn." }] };
+  });
+
+  MCPApp.registerTool('get_board', {
+    description: 'Get the current tic-tac-toe board state. Returns a 3x3 grid.',
+  }, function() {
+    var visual = '';
+    for (var r = 0; r < 3; r++) {
+      var row = [];
+      for (var c = 0; c < 3; c++) {
+        var v = board[r*3+c];
+        row.push(v || (r*3+c));
+      }
+      visual += row.join(' | ') + '\n';
+      if (r < 2) visual += '---------\n';
+    }
+    var state = {
+      board: board,
+      turn: currentTurn,
+      gameOver: gameOver,
+      visual: visual
+    };
+    return { content: [{ type: 'text', text: JSON.stringify(state, null, 2) }] };
+  });
+
+  function checkWinner() {
+    var lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+    for (var i = 0; i < lines.length; i++) {
+      var a = lines[i][0], b = lines[i][1], c = lines[i][2];
+      if (board[a] && board[a] === board[b] && board[b] === board[c]) return board[a];
+    }
+    var full = true;
+    for (var j = 0; j < 9; j++) { if (!board[j]) { full = false; break; } }
+    return full ? 'draw' : '';
+  }
+
+  MCPApp.on('connected', function() {
+    updateStatus("X's turn — click a cell to play!");
+    renderBoard();
+  });
+
+  MCPApp.on('toolresult', function(data) {
+    syncFromServer();
+  });
+
+  renderBoard();
+  updateStatus('Connecting...');
+</script>
+</body>
+</html>

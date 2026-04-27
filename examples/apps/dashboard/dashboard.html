@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Dashboard</title>
+  <style>
+    * { box-sizing: border-box }
+    body { margin: 0; font-family: system-ui; padding: 1em; background: var(--bg, #fff); color: var(--fg, #333) }
+    h2 { margin: 0.3em 0 }
+    #status { color: #666; font-size: 0.9em }
+    .tools-panel { margin: 1em 0; padding: 0.8em; background: #f5f5f5; border-radius: 8px }
+    .tools-panel h3 { margin: 0 0 0.5em }
+    .tool-row { display: flex; align-items: center; gap: 0.5em; margin: 0.3em 0; font-size: 0.9em }
+    .tool-name { font-weight: bold; min-width: 100px }
+    .badge { font-size: 0.75em; padding: 0.15em 0.5em; border-radius: 4px; color: #fff }
+    .badge.active { background: #4a4 }
+    .badge.disabled { background: #aaa }
+    .badge.removed { background: #c44 }
+    button { font-size: 0.85em; padding: 0.3em 0.8em; cursor: pointer; border-radius: 4px; border: 1px solid #ccc; background: #fff }
+    button:hover { background: #eee }
+    .data-panel { margin: 1em 0; padding: 0.8em; background: #f0f8ff; border-radius: 8px; font-size: 0.9em }
+    .data-panel pre { margin: 0.3em 0; white-space: pre-wrap }
+    .log { margin: 1em 0; font-size: 0.8em; color: #888; max-height: 120px; overflow-y: auto }
+    .log div { padding: 0.15em 0; border-bottom: 1px solid #f0f0f0 }
+  </style>
+</head>
+<body>
+{{ template "mcpkit-bridge" .Bridge }}
+<h2>Dashboard</h2>
+<p id="status">Connecting...</p>
+
+<div class="tools-panel">
+  <h3>App-Provided Tools</h3>
+  <div id="tool-list"></div>
+</div>
+
+<div class="data-panel">
+  <h3>Data</h3>
+  <pre id="data-display">No data loaded. Ask the model to query data.</pre>
+</div>
+
+<div>
+  <button onclick="loadData()">Load Data</button>
+  <button onclick="clearData()">Clear Data</button>
+  <button onclick="toggleExport()">Toggle Export Tool</button>
+</div>
+
+<div class="log" id="log"></div>
+
+<script>
+  // Dashboard state.
+  var data = null;
+  var filter = null;
+  var settings = { theme: 'light', refreshInterval: 30, pageSize: 50 };
+
+  // Tool handles for lifecycle management.
+  var handles = {};
+  var toolStates = {};
+
+  function addLog(msg) {
+    var el = document.getElementById('log');
+    var div = document.createElement('div');
+    div.textContent = new Date().toLocaleTimeString() + ' — ' + msg;
+    el.insertBefore(div, el.firstChild);
+  }
+
+  function renderToolList() {
+    var el = document.getElementById('tool-list');
+    while (el.firstChild) el.removeChild(el.firstChild);
+    var names = ['query_data', 'export_csv', 'refresh_data', 'set_filter', 'get_settings'];
+    names.forEach(function(name) {
+      var row = document.createElement('div');
+      row.className = 'tool-row';
+
+      var nameEl = document.createElement('span');
+      nameEl.className = 'tool-name';
+      nameEl.textContent = name;
+      row.appendChild(nameEl);
+
+      var badge = document.createElement('span');
+      var state = toolStates[name] || 'removed';
+      badge.className = 'badge ' + state;
+      badge.textContent = state;
+      row.appendChild(badge);
+
+      el.appendChild(row);
+    });
+  }
+
+  // --- Mock dataset ---
+  var MOCK_DATA = [
+    { id: 1, name: 'Widget A', category: 'hardware', price: 29.99, stock: 150 },
+    { id: 2, name: 'Widget B', category: 'hardware', price: 49.99, stock: 75 },
+    { id: 3, name: 'Service X', category: 'software', price: 99.00, stock: 999 },
+    { id: 4, name: 'Service Y', category: 'software', price: 149.00, stock: 999 },
+    { id: 5, name: 'Gadget Z', category: 'hardware', price: 199.99, stock: 12 },
+  ];
+
+  function getFilteredData() {
+    if (!data) return [];
+    if (!filter) return data;
+    return data.filter(function(item) {
+      return Object.keys(filter).every(function(key) {
+        return String(item[key]).toLowerCase().indexOf(String(filter[key]).toLowerCase()) >= 0;
+      });
+    });
+  }
+
+  function updateDataDisplay() {
+    var el = document.getElementById('data-display');
+    if (!data) {
+      el.textContent = 'No data loaded. Ask the model to query data.';
+      return;
+    }
+    var filtered = getFilteredData();
+    el.textContent = JSON.stringify(filtered, null, 2);
+  }
+
+  // --- Tool registration ---
+
+  function registerAllTools() {
+    // 1. query_data — always available
+    handles.query_data = MCPApp.registerTool('query_data', {
+      description: 'Query the dashboard dataset. Returns filtered results.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          category: { type: 'string', description: 'Filter by category (hardware, software)' },
+          limit: { type: 'number', description: 'Max results to return' }
+        }
+      }
+    }, function(args) {
+      if (!data) data = MOCK_DATA.slice();
+      var results = data;
+      if (args.category) {
+        results = results.filter(function(r) { return r.category === args.category; });
+      }
+      if (args.limit) {
+        results = results.slice(0, args.limit);
+      }
+      updateDataDisplay();
+      addLog('query_data: returned ' + results.length + ' results');
+      return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
+    });
+    toolStates.query_data = 'active';
+
+    // 2. export_csv — starts disabled, enabled when data is loaded
+    handles.export_csv = MCPApp.registerTool('export_csv', {
+      description: 'Export current data view as CSV text.',
+    }, function() {
+      var rows = getFilteredData();
+      if (rows.length === 0) return { content: [{ type: 'text', text: 'No data to export.' }], isError: true };
+      var headers = Object.keys(rows[0]);
+      var csv = headers.join(',') + '\n';
+      rows.forEach(function(r) {
+        csv += headers.map(function(h) { return r[h]; }).join(',') + '\n';
+      });
+      addLog('export_csv: exported ' + rows.length + ' rows');
+      return { content: [{ type: 'text', text: csv }] };
+    });
+    // Start disabled — no data yet.
+    handles.export_csv.disable();
+    toolStates.export_csv = 'disabled';
+
+    // 3. refresh_data — reloads mock data
+    handles.refresh_data = MCPApp.registerTool('refresh_data', {
+      description: 'Refresh the dashboard data from the source.',
+    }, function() {
+      data = MOCK_DATA.slice();
+      filter = null;
+      updateDataDisplay();
+      // Enable export now that we have data.
+      if (handles.export_csv) {
+        handles.export_csv.enable();
+        toolStates.export_csv = 'active';
+        renderToolList();
+      }
+      addLog('refresh_data: reloaded ' + data.length + ' items');
+      return { content: [{ type: 'text', text: 'Refreshed: ' + data.length + ' items loaded.' }] };
+    });
+    toolStates.refresh_data = 'active';
+
+    // 4. set_filter — disabled until data loaded
+    handles.set_filter = MCPApp.registerTool('set_filter', {
+      description: 'Apply a filter to the dashboard data.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          category: { type: 'string', description: 'Filter by category' },
+          name: { type: 'string', description: 'Filter by name substring' }
+        }
+      }
+    }, function(args) {
+      filter = args;
+      updateDataDisplay();
+      var count = getFilteredData().length;
+      addLog('set_filter: applied, ' + count + ' results match');
+      return { content: [{ type: 'text', text: 'Filter applied: ' + count + ' results match.' }] };
+    });
+    handles.set_filter.disable();
+    toolStates.set_filter = 'disabled';
+
+    // 5. get_settings — always available
+    handles.get_settings = MCPApp.registerTool('get_settings', {
+      description: 'Get current dashboard settings (theme, refresh interval, page size).',
+    }, function() {
+      addLog('get_settings: returned settings');
+      return { content: [{ type: 'text', text: JSON.stringify(settings, null, 2) }] };
+    });
+    toolStates.get_settings = 'active';
+
+    renderToolList();
+    addLog('Registered 5 tools (2 disabled until data loaded)');
+  }
+
+  // --- UI actions ---
+
+  function loadData() {
+    data = MOCK_DATA.slice();
+    updateDataDisplay();
+    // Enable data-dependent tools.
+    if (handles.export_csv) { handles.export_csv.enable(); toolStates.export_csv = 'active'; }
+    if (handles.set_filter) { handles.set_filter.enable(); toolStates.set_filter = 'active'; }
+    renderToolList();
+    addLog('Data loaded manually — export_csv and set_filter enabled');
+  }
+
+  function clearData() {
+    data = null;
+    filter = null;
+    updateDataDisplay();
+    // Disable data-dependent tools.
+    if (handles.export_csv) { handles.export_csv.disable(); toolStates.export_csv = 'disabled'; }
+    if (handles.set_filter) { handles.set_filter.disable(); toolStates.set_filter = 'disabled'; }
+    renderToolList();
+    addLog('Data cleared — export_csv and set_filter disabled');
+  }
+
+  function toggleExport() {
+    if (toolStates.export_csv === 'removed') {
+      // Re-register.
+      handles.export_csv = MCPApp.registerTool('export_csv', {
+        description: 'Export current data view as CSV text.',
+      }, function() {
+        var rows = getFilteredData();
+        if (rows.length === 0) return { content: [{ type: 'text', text: 'No data.' }], isError: true };
+        var headers = Object.keys(rows[0]);
+        var csv = headers.join(',') + '\n';
+        rows.forEach(function(r) { csv += headers.map(function(h) { return r[h]; }).join(',') + '\n'; });
+        return { content: [{ type: 'text', text: csv }] };
+      });
+      toolStates.export_csv = data ? 'active' : 'disabled';
+      if (!data) handles.export_csv.disable();
+      addLog('export_csv re-registered');
+    } else {
+      // Remove entirely.
+      handles.export_csv.remove();
+      toolStates.export_csv = 'removed';
+      handles.export_csv = null;
+      addLog('export_csv removed');
+    }
+    renderToolList();
+  }
+
+  // --- Bridge events ---
+  MCPApp.on('connected', function() {
+    document.getElementById('status').textContent = 'Connected to host';
+    registerAllTools();
+  });
+
+  renderToolList();
+</script>
+</body>
+</html>
