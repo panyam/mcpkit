@@ -1787,3 +1787,138 @@ result, _ := host.CallAppTool(ctx, "app_greet", map[string]any{"name": "world"})
 4. Use `ListAllTools`, `CallAppTool`, etc.
 5. `host.Close()` — closes bridge
 6. `client.Close()` — closes MCP session and auth token source
+
+## ServerRegistry — Multi-Server Aggregation
+
+### Overview
+
+`ServerRegistry` (`ext/ui/server_registry.go`) manages connections to multiple MCP servers simultaneously. It aggregates tool lists across servers, routes tool calls to the correct server, and provides pluggable collision resolution for ambiguous tool names.
+
+### Architecture
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                    ServerRegistry                        │
+│                                                          │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐     │
+│  │  "weather"   │  │  "calendar"  │  │   "game"    │     │
+│  │  Client      │  │  Client      │  │  Client     │     │
+│  │  (OAuth)     │  │  (Bearer)    │  │  (no auth)  │     │
+│  │             │  │             │  │  + AppHost  │     │
+│  │ get_forecast│  │ list_events │  │  new_game   │     │
+│  │ get_alerts  │  │ create_event│  │  get_board  │     │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘     │
+│         │                │                │             │
+│  ┌──────┴────────────────┴────────────────┴──────┐      │
+│  │              Tool Index                        │      │
+│  │  get_forecast → weather                        │      │
+│  │  get_alerts   → weather                        │      │
+│  │  list_events  → calendar                       │      │
+│  │  create_event → calendar                       │      │
+│  │  new_game     → game (server)                  │      │
+│  │  get_board    → game (app)                     │      │
+│  └───────────────────────────────────────────────┘      │
+│                                                          │
+│  AllTools() → [get_alerts, get_board, get_forecast, ...] │
+│  CallTool("get_forecast", args) → routes to weather      │
+│  CallToolOn("game", "get_board", args) → routes to app   │
+└──────────────────────────────────────────────────────────┘
+```
+
+### Request Flows
+
+#### Unambiguous tool call — direct routing
+
+```mermaid
+sequenceDiagram
+    participant Agent as LLM / Agent
+    participant Reg as ServerRegistry
+    participant Idx as Tool Index
+    participant Weather as Weather Server
+
+    Agent->>Reg: CallTool("get_forecast", {zip: "10001"})
+    Reg->>Idx: lookup "get_forecast"
+    Idx-->>Reg: 1 candidate: weather
+    Reg->>Weather: Client.Call(tools/call)
+    Weather-->>Reg: ToolResult
+    Reg-->>Agent: ToolResult {text: "Sunny, 72°F"}
+```
+
+#### Ambiguous tool call — resolver invoked
+
+```mermaid
+sequenceDiagram
+    participant Agent as LLM / Agent
+    participant Reg as ServerRegistry
+    participant Idx as Tool Index
+    participant Resolver as ToolResolver
+    participant Local as local-clock
+
+    Agent->>Reg: CallTool("get_time", {timezone: "local"})
+    Reg->>Idx: lookup "get_time"
+    Idx-->>Reg: 2 candidates: [utc-clock, local-clock]
+    Reg->>Resolver: resolve("get_time", candidates, args)
+    Resolver-->>Reg: "local-clock"
+    Reg->>Local: Client.Call(tools/call)
+    Local-->>Reg: ToolResult
+    Reg-->>Agent: ToolResult {text: "3:45 PM PDT"}
+```
+
+#### Collision detection on Add
+
+```mermaid
+sequenceDiagram
+    participant Host as Host Code
+    participant Reg as ServerRegistry
+    participant Handler as CollisionHandler
+
+    Host->>Reg: Add("utc-clock", client1)
+    Note over Reg: Index: get_time → [utc-clock]
+
+    Host->>Reg: Add("local-clock", client2)
+    Note over Reg: Index: get_time → [utc-clock, local-clock]
+    Reg->>Handler: collision("get_time", ["utc-clock", "local-clock"])
+    Note over Handler: Log, alert, or adjust resolver
+```
+
+### Usage
+
+```go
+// Create registry with collision handling
+reg := ui.NewServerRegistry(
+    ui.WithToolResolver(func(ctx context.Context, name string,
+        candidates []ui.RegisteredTool, args map[string]any) (string, error) {
+        // Pick based on args, LLM context, user input, etc.
+        return candidates[0].ServerID, nil
+    }),
+    ui.WithCollisionHandler(func(name string, ids []string) {
+        log.Printf("tool %q available from servers: %v", name, ids)
+    }),
+)
+
+// Add servers with independent auth
+weatherClient := client.NewClient(url1, info, client.WithTokenSource(oauthTS))
+weatherClient.Connect()
+reg.Add(ctx, "weather", weatherClient)
+
+calendarClient := client.NewClient(url2, info, client.WithClientBearerToken("sk-..."))
+calendarClient.Connect()
+reg.Add(ctx, "calendar", calendarClient)
+
+// Add server with app bridge
+bridge := ui.NewInProcessAppBridge()
+gameClient := client.NewClient(url3, info)
+gameClient.Connect()
+reg.AddWithBridge(ctx, "game", gameClient, bridge)
+
+// Use
+tools, _ := reg.AllTools(ctx)                              // all tools, clean names
+result, _ := reg.CallTool(ctx, "get_forecast", args)       // auto-routes
+result, _ = reg.CallToolOn(ctx, "game", "get_board", args) // explicit routing
+
+// Cleanup
+reg.Close()       // closes bridges
+weatherClient.Close()  // caller owns clients
+calendarClient.Close()
+gameClient.Close()
+```
