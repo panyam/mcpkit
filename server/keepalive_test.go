@@ -6,6 +6,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/panyam/mcpkit/core"
 )
 
 // TestSessionKeepaliveDetectsDeadClient verifies that the server-side
@@ -97,4 +99,60 @@ func TestSessionKeepaliveStopPreventsDeathCallback(t *testing.T) {
 	if deathCalled.Load() {
 		t.Error("onDeath should NOT be called after stop()")
 	}
+}
+
+// TestKeepaliveMethodNotFoundDoesNotKillSession verifies that a client
+// responding with method-not-found (-32601) to a ping request does NOT
+// count as a keepalive failure. Per MCP spec, ping is optional — a
+// method-not-found response proves the connection is alive.
+func TestKeepaliveMethodNotFoundDoesNotKillSession(t *testing.T) {
+	var deathCalled atomic.Bool
+
+	// requestFunc that always returns method-not-found (simulates client
+	// that doesn't implement ping).
+	methodNotFoundRequest := func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		return nil, &ServerRequestError{
+			Code:    core.ErrCodeMethodNotFound,
+			Message: "Method not found",
+		}
+	}
+
+	ka := &sessionKeepalive{
+		interval:    30 * time.Millisecond,
+		maxFailures: 2, // low threshold — would trigger quickly with real failures
+		requestFunc: methodNotFoundRequest,
+		onDeath:     func() { deathCalled.Store(true) },
+	}
+	ka.start()
+	defer ka.stop()
+
+	// Run long enough for many ping cycles. None should count as failures.
+	time.Sleep(150 * time.Millisecond)
+
+	if deathCalled.Load() {
+		t.Error("onDeath should NOT be called when client returns method-not-found")
+	}
+}
+
+// TestIsMethodNotFound verifies the IsMethodNotFound helper correctly
+// identifies ServerRequestError with code -32601.
+func TestIsMethodNotFound(t *testing.T) {
+	t.Run("method not found", func(t *testing.T) {
+		err := &ServerRequestError{Code: core.ErrCodeMethodNotFound, Message: "not found"}
+		if !IsMethodNotFound(err) {
+			t.Error("expected IsMethodNotFound to return true")
+		}
+	})
+	t.Run("other error code", func(t *testing.T) {
+		err := &ServerRequestError{Code: core.ErrCodeInternal, Message: "internal"}
+		if IsMethodNotFound(err) {
+			t.Error("expected IsMethodNotFound to return false for non-method-not-found")
+		}
+	})
+	t.Run("non-ServerRequestError", func(t *testing.T) {
+		err := context.DeadlineExceeded
+		if IsMethodNotFound(err) {
+			t.Error("expected IsMethodNotFound to return false for non-ServerRequestError")
+		}
+	})
 }

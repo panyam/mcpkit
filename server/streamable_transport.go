@@ -446,6 +446,25 @@ func (t *streamableTransport) handleInitialize(w http.ResponseWriter, r *http.Re
 	t.sessions.Store(sessionID, entry)
 
 	w.Header().Set(mcpSessionIDHeader, sessionID)
+
+	// Return SSE when the client accepts it (matching TS SDK behavior).
+	// Fall back to JSON when the client only accepts JSON.
+	_, acceptsSSE := gohttp.ParseAcceptTypes(r.Header.Get("Accept"))
+	if acceptsSSE {
+		if flusher, ok := w.(http.Flusher); ok {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("Cache-Control", "no-cache")
+			w.Header().Set("Connection", "keep-alive")
+			w.Header().Set("X-Accel-Buffering", "no")
+			raw, _ := marshalJSON(resp)
+			emitSSEEvent(dispatcher.eventIDs, t.config.eventStore, sessionID, raw, func(id string, data json.RawMessage) {
+				fmt.Fprintf(w, "id: %s\nevent: message\ndata: %s\n\n", id, data)
+				flusher.Flush()
+			})
+			return
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	raw, _ := marshalJSON(resp)
 	w.Write(raw)
@@ -814,12 +833,6 @@ func shouldStreamSSE(accept string, req *core.Request) bool {
 
 	_, acceptsSSE := gohttp.ParseAcceptTypes(accept)
 	if !acceptsSSE {
-		return false
-	}
-
-	// Never stream SSE for initialize — the handshake must return JSON
-	// so the client can parse the session ID and server capabilities.
-	if req.Method == "initialize" {
 		return false
 	}
 

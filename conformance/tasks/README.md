@@ -56,15 +56,16 @@ SERVER_URL=http://localhost:8080/mcp npx tsx --test tasks/scenarios.test.ts
 
 | # | Scenario | What it tests | Expected |
 |---|----------|---------------|----------|
-| 08 | Required without hint | Required tool called without task hint | JSON-RPC error (code varies by impl) |
-| 09 | Forbidden with hint | Forbidden tool called with task hint | JSON-RPC error (code varies by impl) |
-| 13 | Get non-existent task | `tasks/get` with bogus taskId | JSON-RPC error (code varies by impl) |
-| 14 | Cancel non-existent task | `tasks/cancel` with bogus taskId | JSON-RPC error (code varies by impl) |
-| 15 | Cancel completed task | Cancel after task finishes | JSON-RPC error (code varies by impl) |
+| 08 | Required without hint | Required tool called without task hint | `-32601` MethodNotFound (TS SDK currently returns -32603, incorrect) |
+| 09 | Forbidden with hint | Forbidden tool called with task hint | `-32601` MethodNotFound (same) |
+| 13 | Get non-existent task | `tasks/get` with bogus taskId | `-32602` InvalidParams (TS SDK currently returns -32603, incorrect) |
+| 14 | Cancel non-existent task | `tasks/cancel` with bogus taskId | `-32602` InvalidParams (same) |
+| 15 | Cancel completed task | Cancel after task finishes | `-32602` InvalidParams (same) |
 
-> **Note on error codes:** The spec does not mandate specific JSON-RPC error codes for
-> these cases. Go uses `-32601`/`-32602`; TS SDK uses `-32603`. The conformance suite
-> verifies an error with a numeric code is returned, not a specific code.
+> **Note on error codes:** The spec mandates `-32601` for hint mismatches and `-32602` for
+> invalid task operations. The TS SDK currently returns `-32603` for all of these, which is
+> incorrect. The conformance suite documents the correct codes but uses `ENFORCE_ERROR_CODES`
+> (default `false`) to avoid breaking existing servers. Set to `true` once the TS SDK is fixed.
 
 ### External Proxy (TaskCallbacks)
 
@@ -79,7 +80,7 @@ SERVER_URL=http://localhost:8080/mcp npx tsx --test tasks/scenarios.test.ts
 |---|----------|---------------|----------|
 | 12 | Optional tool sync | `slow_compute` without task hint runs synchronously | Inline result, no `task` field |
 | 16 | TTL in response | CreateTaskResult includes a TTL | `ttl` present and positive (server may differ from client hint) |
-| 17 | pollInterval in response | CreateTaskResult includes a pollInterval | `pollInterval` present and positive (server-provided, not client param) |
+| 17 | pollInterval in response | CreateTaskResult may include a pollInterval | Valid positive number if present (optional, server-provided) |
 | 18 | TTL — no early expiry | Task must not expire before TTL | Task accessible well before TTL elapses |
 | 21 | Execution in tools/list | `tools/list` includes `execution.taskSupport` | `optional`, `required`, absent per tool |
 

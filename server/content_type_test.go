@@ -1,6 +1,7 @@
 package server_test
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -91,4 +92,67 @@ func TestGETRequestsNotAffectedByContentTypeCheck(t *testing.T) {
 	resp.Body.Close()
 	// Should not be 415 — GET doesn't require Content-Type
 	assert.NotEqual(t, 415, resp.StatusCode)
+}
+
+// TestInitializeReturnsSSEWhenAccepted verifies that when the client sends
+// Accept: text/event-stream, the initialize response is returned as an SSE
+// event (Content-Type: text/event-stream) matching TS SDK behavior (#284).
+func TestInitializeReturnsSSEWhenAccepted(t *testing.T) {
+	srv := testutil.NewTestServer()
+	handler := srv.Handler(server.WithStreamableHTTP(true), server.WithSSE(false))
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	body := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}`
+	req, _ := http.NewRequest("POST", ts.URL+"/mcp", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "text/event-stream, application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, "text/event-stream", resp.Header.Get("Content-Type"))
+	assert.NotEmpty(t, resp.Header.Get("Mcp-Session-Id"), "should have session ID header")
+
+	// Read the body — should be SSE format: "id: ...\nevent: message\ndata: {...}\n\n"
+	data, _ := io.ReadAll(resp.Body)
+	bodyStr := string(data)
+	assert.Contains(t, bodyStr, "event: message")
+	assert.Contains(t, bodyStr, "data: ")
+	assert.Contains(t, bodyStr, `"protocolVersion"`)
+}
+
+// TestInitializeReturnsJSONWhenNotAccepted verifies that when the client
+// sends Accept: application/json (no SSE), the initialize response is
+// returned as plain JSON (backwards compatible behavior).
+func TestInitializeReturnsJSONWhenNotAccepted(t *testing.T) {
+	srv := testutil.NewTestServer()
+	handler := srv.Handler(server.WithStreamableHTTP(true), server.WithSSE(false))
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	body := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}`
+	req, _ := http.NewRequest("POST", ts.URL+"/mcp", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
+	assert.NotEmpty(t, resp.Header.Get("Mcp-Session-Id"))
+
+	// Body should be raw JSON, not SSE
+	data, _ := io.ReadAll(resp.Body)
+	bodyStr := string(data)
+	assert.NotContains(t, bodyStr, "event: message", "should not be SSE format")
+	assert.Contains(t, bodyStr, `"protocolVersion"`)
 }
