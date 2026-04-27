@@ -158,6 +158,38 @@ sequenceDiagram
     Note over Test: assert error returned
 ```
 
+### ServerRegistry Conformance (`server_registry_test.go`)
+
+Tests multi-server tool aggregation, routing, and collision resolution with 3 real servers over httptest.
+
+```mermaid
+sequenceDiagram
+    participant Test as Test Case
+    participant Reg as ServerRegistry
+    participant W as Weather Server
+    participant C as Calendar Server
+    participant K as Clock Server
+
+    Test->>Reg: Add("weather", weatherClient)
+    Test->>Reg: Add("calendar", calendarClient)
+    Test->>Reg: Add("clock", clockClient)
+    Note over Reg: Collision detected: "get_info" in [weather, calendar]
+
+    Test->>Reg: CallTool("get_forecast", nil)
+    Reg->>W: tools/call (unambiguous)
+    W-->>Reg: ToolResult
+    Reg-->>Test: ToolResult
+
+    Test->>Reg: CallTool("get_info", {source: "calendar"})
+    Note over Reg: Ambiguous → invoke resolver
+    Reg->>C: tools/call (resolver picked calendar)
+    C-->>Reg: ToolResult
+    Reg-->>Test: ToolResult
+
+    Test->>Reg: Remove("clock")
+    Note over Reg: get_time removed from index
+```
+
 ## Test Matrix
 
 | Test | Direction | What it verifies |
@@ -168,3 +200,4 @@ sequenceDiagram
 | `TestAppHost_ListAllTools` | both | Server + app tools aggregated |
 | `TestAppHost_DynamicToolRegistration` | host→app | `list_changed` triggers cache refresh |
 | `TestAppHost_ToolRemoval` | host→app | Removed tool disappears from cache |
+| `TestRegistry_MultiServer_FullStack` | multi-server | 3 servers, aggregation, routing, collisions, removal |
