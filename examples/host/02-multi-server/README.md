@@ -124,3 +124,13 @@ Pass `--non-interactive` to skip pauses:
 ```bash
 go run ./examples/host/02-multi-server/ --non-interactive
 ```
+
+## What to verify
+
+- **Step 3**: Collision handler prints `⚠ Collision detected: 'get_info' in servers [weather, calendar]`
+- **Step 4**: AllTools lists 7 tools with ServerID metadata (get_info appears twice)
+- **Step 5**: Unambiguous call result includes `[weather]` prefix
+- **Step 6**: Ambiguous call with `{source: "calendar"}` routes to calendar (resolver works)
+- **Step 7**: CallToolOn routes to weather regardless of resolver
+- **Step 8**: After removing clock, `get_time` returns "unknown tool" error
+- **Step 9**: After AddWithBridge, 8 tools listed including `app_stopwatch` (source=app)

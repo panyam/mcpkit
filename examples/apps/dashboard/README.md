@@ -100,13 +100,53 @@ In MCPJam (or Claude Desktop):
 1. Add server: `http://localhost:8080/mcp` (Streamable HTTP)
 2. Server name: "Dashboard"
 
-## Prompts to try
+## Try it — Step by Step
 
-- "Open the dashboard" — opens the dashboard UI
-- "Query hardware items" — calls `query_data` with category filter
-- "Export the data as CSV" — calls `export_csv` (fails if no data loaded)
-- "Load the data first, then export" — loads data, enables export, then exports
-- "What are the dashboard settings?" — calls `get_settings`
+### 1. Open and check initial tool states
+
+- **"Open the dashboard"** → model calls `open_dashboard`, iframe appears
+- Look at the tool status panel in the iframe — you should see:
+  - `query_data` — **active** (green)
+  - `refresh_data` — **active** (green)
+  - `get_settings` — **active** (green)
+  - `export_csv` — **disabled** (grey)
+  - `set_filter` — **disabled** (grey)
+
+### 2. Try a disabled tool (should fail)
+
+- **"Export the data as CSV"** → model calls `export_csv` → **should fail** because no data is loaded yet
+
+### 3. Load data and watch tools enable
+
+- Click **"Load Data"** in the iframe → `export_csv` and `set_filter` badges turn **active**
+- The app sends `notifications/tools/list_changed` — the host re-fetches the tool list
+- **"Now export the data as CSV"** → **should succeed** — returns CSV text
+
+### 4. Use the data tools
+
+- **"Query hardware items"** → model calls `query_data({category: "hardware"})` → returns 3 items
+- **"Filter by name 'Widget'"** → model calls `set_filter({name: "Widget"})` → narrows results
+- **"What are the dashboard settings?"** → model calls `get_settings` → returns theme, refreshInterval, pageSize
+
+### 5. Test tool removal and re-registration
+
+- Click **"Toggle Export Tool"** in the iframe → `export_csv` badge turns **removed** (red)
+- **"Export data"** → **should fail** — tool no longer exists
+- Click **"Toggle Export Tool"** again → `export_csv` is **re-registered** and active
+- **"Export data"** → **should succeed** again
+
+### 6. Test data clearing
+
+- Click **"Clear Data"** → `export_csv` and `set_filter` go back to **disabled**
+- **"Export data"** → **should fail** again
+
+### What to verify
+
+- Tools start in the correct states (3 active, 2 disabled)
+- Loading data enables the disabled tools
+- `notifications/tools/list_changed` fires on every state change (host sees updated tool list)
+- Removing a tool makes it uncallable; re-registering brings it back
+- Clearing data disables data-dependent tools
 
 ## Key files
 

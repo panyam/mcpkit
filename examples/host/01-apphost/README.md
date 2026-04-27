@@ -125,3 +125,10 @@ Pass `--non-interactive` to skip pauses:
 ```bash
 go run ./examples/host/01-apphost/ --non-interactive
 ```
+
+## What to verify
+
+- **Step 5**: ListAllTools shows 4 tools (2 server + 2 app)
+- **Step 6**: CallAppTool returns "Hello, World!" and counter increments to 2
+- **Step 7**: App calls server_echo, result includes "echo: from the app"
+- **Step 8**: After dynamic registration, 3 app tools listed (app_greet, app_counter, app_dice)

@@ -92,11 +92,22 @@ In MCPJam (or Claude Desktop):
 1. Add server: `http://localhost:8080/mcp` (Streamable HTTP)
 2. Server name: "Dice App"
 
-## Prompts to try
+## Try it — Step by Step
 
-- "Roll a die" — calls `roll_dice`, result appears in the iframe
-- "Roll a d20" — calls with `sides: 20`
-- Then click **Roll Again** in the iframe — calls the tool back through the bridge
+### 1. Test server tool (LLM→server)
+
+- **"Roll a die"** → model calls server-side `roll_dice` → result appears in the iframe
+- **"Roll a d20"** → calls with `sides: 20` → larger die result
+
+### 2. Test app→host→server (iframe button)
+
+- Click **"Roll Again"** in the iframe → calls `MCPApp.callTool("roll_dice")` → new result appears
+
+### 3. Test app-provided tools (host→app via registerTool)
+
+The dice app registers two tools via `MCPApp.registerTool()`:
+- **"Roll a die from the app"** → model calls the **app-provided** `roll_dice` tool (not the server one)
+- **"What was the last roll?"** → model calls the **app-provided** `get_last_roll` tool → returns the last result
 
 ## Screenshots
 
