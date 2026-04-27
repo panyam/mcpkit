@@ -55,8 +55,21 @@ testconfall: testconf testconfauth
 testconf: ## Run MCP conformance test suite (requires Node.js/npx)
 	bash scripts/conformance-test.sh
 
-testconf-tasks: ## Run MCP Tasks conformance suite (requires Node.js, target server must be running)
-	cd conformance && npm install --silent && SERVER_URL=$${SERVER_URL:-http://localhost:8080/mcp} npx tsx --test tasks/scenarios.test.ts
+testconf-tasks: ## Run MCP Tasks v1 conformance (builds + starts server, runs tests, tears down)
+	@(cd examples/tasks && go build -o tasks .) && \
+	examples/tasks/tasks -addr :18091 & PID=$$!; \
+	sleep 1; \
+	(cd conformance && npm install --silent && \
+	SERVER_URL=http://localhost:18091/mcp npx tsx --test tasks/scenarios.test.ts); \
+	RC=$$?; kill $$PID 2>/dev/null; wait $$PID 2>/dev/null; exit $$RC
+
+testconf-tasks-v2: ## Run MCP Tasks v2 conformance (builds + starts server, runs tests, tears down)
+	@(cd examples/tasks-v2 && go build -o tasks-v2 .) && \
+	examples/tasks-v2/tasks-v2 -addr :18092 & PID=$$!; \
+	sleep 1; \
+	(cd conformance && npm install --silent && \
+	SERVER_URL=http://localhost:18092/mcp npx tsx --test --test-name-pattern 'v2-(?!1[67])' tasks-v2/scenarios.test.ts); \
+	RC=$$?; kill $$PID 2>/dev/null; wait $$PID 2>/dev/null; exit $$RC
 
 testconf-elicitation: ## Run elicitation conformance suite (SEP-1036 URL mode + form, requires Node.js, target server must be running)
 	cd conformance && npm install --silent && SERVER_URL=$${SERVER_URL:-http://localhost:8080/mcp} npx tsx --test elicitation/scenarios.test.ts
@@ -115,16 +128,18 @@ testall: ## Run ALL tests (starts Keycloak if needed) + per-stage HTML reports
 	@echo "Started: $$(date)" | tee -a $(REPORT_DIR)/run.log
 	@PASS=0; FAIL=0; STAGES=""; \
 	echo "" | tee -a $(REPORT_DIR)/run.log; \
-	$(call run_stage,1,10,unit+coverage,cover-html) \
-	$(call run_stage,2,10,race,test-race) \
-	$(call run_stage,3,10,auth,test-auth) \
-	$(call run_stage,4,10,ui,test-ui) \
-	$(call run_stage,5,10,protogen,test-protogen) \
-	$(call run_stage,6,10,e2e,test-e2e) \
-	$(call run_stage,7,10,experimental,test-experimental) \
-	$(call run_stage,8,10,conformance,testconf) \
-	$(call run_stage,9,10,auth-conformance,testconfauth) \
-	$(call run_stage,10,10,keycloak,testkcl-auto) \
+	$(call run_stage,1,12,unit+coverage,cover-html) \
+	$(call run_stage,2,12,race,test-race) \
+	$(call run_stage,3,12,auth,test-auth) \
+	$(call run_stage,4,12,ui,test-ui) \
+	$(call run_stage,5,12,protogen,test-protogen) \
+	$(call run_stage,6,12,e2e,test-e2e) \
+	$(call run_stage,7,12,experimental,test-experimental) \
+	$(call run_stage,8,12,conformance,testconf) \
+	$(call run_stage,9,12,auth-conformance,testconfauth) \
+	$(call run_stage,10,12,tasks-conformance,testconf-tasks) \
+	$(call run_stage,11,12,tasks-v2-conformance,testconf-tasks-v2) \
+	$(call run_stage,12,12,keycloak,testkcl-auto) \
 	echo "" | tee -a $(REPORT_DIR)/run.log; \
 	echo "=== Results: $$PASS passed, $$FAIL failed ===" | tee -a $(REPORT_DIR)/run.log; \
 	echo "Finished: $$(date)" | tee -a $(REPORT_DIR)/run.log; \
@@ -377,5 +392,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-protogen test-e2e test-experimental test-apps-playwright testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
+.PHONY: build test test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-protogen test-e2e test-experimental test-apps-playwright testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth testconf-tasks testconf-tasks-v2 vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
 .DEFAULT_GOAL := help
