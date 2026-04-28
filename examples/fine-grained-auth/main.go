@@ -31,8 +31,8 @@ import (
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/ext/auth"
 	"github.com/panyam/mcpkit/server"
-	"github.com/panyam/servicekit/middleware"
 	oneauthcore "github.com/panyam/oneauth/core"
+	"github.com/panyam/servicekit/middleware"
 )
 
 const (
@@ -63,11 +63,24 @@ func main() {
 			demokit.Actor("KC", "Keycloak"),
 		)
 
+	demo.Section("Prerequisites",
+		"This example requires Keycloak running on localhost:8180 with the mcpkit-test realm.",
+		"Start it from the **repo root** (not this directory):",
+		"",
+		"```bash",
+		"cd /path/to/mcpkit   # repo root",
+		"make upkcl           # starts Keycloak on :8180, imports realm (~30s)",
+		"```",
+		"",
+		"The realm config lives in `tests/keycloak/realm.json` and includes the",
+		"`mcp-confidential` client with `tools-read` and `tools-call` scopes.",
+	)
+
 	var (
-		baseURL      string
-		sessionID    string
-		tokRead      string // read-only token
-		tokReadCall  string // read + call token
+		baseURL     string
+		sessionID   string
+		tokRead     string // read-only token
+		tokReadCall string // read + call token
 	)
 
 	// --- Step 1: Start server ---
@@ -605,7 +618,7 @@ func registerTools(srv *server.Server) {
 			}
 
 			denial := core.AuthorizationDenial{
-				Reason:               "insufficient_authorization",
+				Reason:                "insufficient_authorization",
 				CredentialDisposition: "additional",
 				RemediationHints: []core.RemediationHint{
 					{

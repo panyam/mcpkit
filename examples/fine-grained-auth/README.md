@@ -56,6 +56,19 @@ sequenceDiagram
 
 ## Steps
 
+### Prerequisites
+
+This example requires Keycloak running on localhost:8180 with the mcpkit-test realm.
+Start it from the **repo root** (not this directory):
+
+```bash
+cd /path/to/mcpkit   # repo root
+make upkcl           # starts Keycloak on :8180, imports realm (~30s)
+```
+
+The realm config lives in `tests/keycloak/realm.json` and includes the
+`mcp-confidential` client with `tools-read` and `tools-call` scopes.
+
 ### Step 1: Start the MCP server with JWT auth + scope enforcement
 
 The server validates JWTs from Keycloak and enforces per-tool scope requirements. read_document needs tools-read; update_document needs tools-call.
