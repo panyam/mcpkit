@@ -25,7 +25,7 @@ func TestRootsNotificationHandled(t *testing.T) {
 	testutil.InitHandshake(srv)
 
 	// Send the notification — should not error or panic
-	resp := srv.Dispatch(context.Background(), &core.Request{
+	resp, _ := srv.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		Method:  "notifications/roots/list_changed",
 	})
@@ -40,7 +40,7 @@ func TestRootsNotificationBeforeInit(t *testing.T) {
 	srv := testutil.NewTestServer()
 
 	// Send notification before init — should not panic
-	resp := srv.Dispatch(context.Background(), &core.Request{
+	resp, _ := srv.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		Method:  "notifications/roots/list_changed",
 	})

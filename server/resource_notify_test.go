@@ -81,10 +81,13 @@ func TestNotifyResourceUpdatedFromHandler(t *testing.T) {
 
 	// Call the tool via d1's dispatch context. The tool handler calls
 	// core.NotifyResourceUpdated(ctx, "test://res").
-	resp := srv.dispatchWith(d1, context.Background(), nil, &core.Request{
+	resp, dErr := srv.dispatchWith(d1, context.Background(), nil, &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`2`), Method: "tools/call",
 		Params: json.RawMessage(`{"name":"mutate","arguments":{}}`),
 	})
+	if dErr != nil {
+		t.Fatalf("dispatch transport error: %v", dErr)
+	}
 	if resp.Error != nil {
 		t.Fatalf("tool error: %s", resp.Error.Message)
 	}

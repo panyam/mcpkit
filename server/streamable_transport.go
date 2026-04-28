@@ -238,7 +238,11 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 		dispatcher := t.server.newSession()
 		// Auto-initialize the dispatcher so it accepts any method
 		dispatcher.initialized = true
-		resp := t.server.dispatchWith(dispatcher, r.Context(), claims, &req)
+		resp, dErr := t.server.dispatchWith(dispatcher, r.Context(), claims, &req)
+		if dErr != nil {
+			writeAuthError(w, dErr)
+			return
+		}
 		if resp == nil {
 			w.WriteHeader(http.StatusAccepted)
 			return
@@ -299,7 +303,11 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Synchronous JSON path (no mid-request notifications)
-	resp := t.server.dispatchWith(dispatcher, r.Context(), claims, &req)
+	resp, dErr := t.server.dispatchWith(dispatcher, r.Context(), claims, &req)
+	if dErr != nil {
+		writeAuthError(w, dErr)
+		return
+	}
 
 	if resp == nil {
 		w.WriteHeader(http.StatusAccepted)
@@ -324,7 +332,11 @@ func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Reque
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		// Fall back to synchronous JSON if flushing not supported
-		resp := t.server.dispatchWith(d, r.Context(), claims, req)
+		resp, dErr := t.server.dispatchWith(d, r.Context(), claims, req)
+		if dErr != nil {
+			writeAuthError(w, dErr)
+			return
+		}
 		if resp == nil {
 			w.WriteHeader(http.StatusAccepted)
 			return
@@ -386,10 +398,18 @@ func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Dispatch with request-scoped notify, request, and retry funcs.
-	resp := t.server.dispatchWithOpts(d, r.Context(), claims, requestNotify, requestFunc, sseRetry, req)
+	resp, dErr := t.server.dispatchWithOpts(d, r.Context(), claims, requestNotify, requestFunc, sseRetry, req)
 
-	// Write the JSON-RPC response as the final SSE event
-	if resp != nil {
+	// If middleware returned a transport-level error, surface it as a JSON-RPC
+	// error response on the SSE stream. We can't change HTTP status from here
+	// (SSE response may already have been sent on first notification), so the
+	// best we can do is emit a JSON-RPC error event before closing the stream.
+	if dErr != nil {
+		errResp := core.NewErrorResponse(req.ID, core.ErrCodeServerError, dErr.Error())
+		raw, _ := marshalJSON(errResp)
+		writeSSE(raw)
+	} else if resp != nil {
+		// Write the JSON-RPC response as the final SSE event
 		raw, _ := marshalJSON(resp)
 		writeSSE(raw)
 	}
@@ -413,7 +433,11 @@ func (t *streamableTransport) handleInitialize(w http.ResponseWriter, r *http.Re
 
 	// Create session dispatcher and dispatch initialize
 	dispatcher := t.server.newSession()
-	resp := t.server.dispatchWith(dispatcher, r.Context(), claims, req)
+	resp, dErr := t.server.dispatchWith(dispatcher, r.Context(), claims, req)
+	if dErr != nil {
+		writeAuthError(w, dErr)
+		return
+	}
 
 	if resp == nil {
 		w.WriteHeader(http.StatusAccepted)
@@ -723,7 +747,14 @@ func (t *streamableTransport) handleBatchPost(w http.ResponseWriter, r *http.Req
 			continue
 		}
 
-		resp := t.server.dispatchWith(entry.dispatcher, r.Context(), claims, &req)
+		resp, dErr := t.server.dispatchWith(entry.dispatcher, r.Context(), claims, &req)
+		if dErr != nil {
+			// Surface transport-level error as a JSON-RPC error in this batch slot.
+			errResp := core.NewErrorResponse(req.ID, core.ErrCodeServerError, dErr.Error())
+			raw, _ := marshalJSON(errResp)
+			responses = append(responses, raw)
+			continue
+		}
 		if resp == nil {
 			continue // notification — no response entry
 		}

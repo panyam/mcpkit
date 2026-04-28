@@ -32,7 +32,7 @@ func newSchemaTestServer(t *testing.T, opts ...server.Option) *server.Server {
 		Method:  "initialize",
 		Params:  json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
 	}
-	resp := srv.Dispatch(context.Background(), initReq)
+	resp, _ := srv.Dispatch(context.Background(), initReq)
 	require.Nil(t, resp.Error, "initialize should succeed")
 	notif := &core.Request{
 		JSONRPC: "2.0",
@@ -58,7 +58,8 @@ func callTool(t *testing.T, srv *server.Server, name string, args any) *core.Res
 		Method:  "tools/call",
 		Params:  params,
 	}
-	return srv.Dispatch(context.Background(), req)
+	resp, _ := srv.Dispatch(context.Background(), req)
+	return resp
 }
 
 // getPrompt issues a prompts/get request via Dispatch and returns the response.
@@ -75,7 +76,8 @@ func getPrompt(t *testing.T, srv *server.Server, name string, args map[string]an
 		Method:  "prompts/get",
 		Params:  params,
 	}
-	return srv.Dispatch(context.Background(), req)
+	resp, _ := srv.Dispatch(context.Background(), req)
+	return resp
 }
 
 // okHandler is a trivial tool handler that returns "ok". Used whenever the
@@ -225,7 +227,7 @@ func TestToolValidateNullArguments(t *testing.T) {
 		Method:  "tools/call",
 		Params:  json.RawMessage(`{"name":"noargs","arguments":null}`),
 	}
-	resp := srv.Dispatch(context.Background(), req)
+	resp, _ := srv.Dispatch(context.Background(), req)
 	require.Nil(t, resp.Error, "null arguments should validate against object schema")
 }
 

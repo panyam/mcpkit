@@ -38,12 +38,15 @@ func TestServerDispatch(t *testing.T) {
 	)
 	initServer(srv)
 
-	resp := srv.Dispatch(context.Background(), &core.Request{
+	resp, dErr := srv.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "tools/call",
 		Params:  json.RawMessage(`{"name":"greet","arguments":{}}`),
 	})
+	if dErr != nil {
+		t.Fatalf("dispatch transport error: %v", dErr)
+	}
 
 	if resp.Error != nil {
 		t.Fatalf("unexpected error: %v", resp.Error)
@@ -73,12 +76,15 @@ func TestServerToolTimeout(t *testing.T) {
 	)
 	initServer(srv)
 
-	resp := srv.Dispatch(context.Background(), &core.Request{
+	resp, dErr := srv.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "tools/call",
 		Params:  json.RawMessage(`{"name":"slow","arguments":{}}`),
 	})
+	if dErr != nil {
+		t.Fatalf("dispatch transport error: %v", dErr)
+	}
 
 	if resp.Error != nil {
 		t.Fatalf("unexpected JSON-RPC error: %v", resp.Error)

@@ -14,8 +14,31 @@ import (
 	core "github.com/panyam/mcpkit/core"
 )
 
-// Middleware intercepts a JSON-RPC request. Call next to continue the chain,
-// or return a *core.Response directly to short-circuit (e.g., reject a request).
+// Middleware intercepts a JSON-RPC request. The middleware can:
+//   - Call next to continue the chain and return its response
+//   - Return a *core.Response to short-circuit with a JSON-RPC error
+//   - Return a non-nil error to short-circuit at the transport layer
+//     (e.g., a *core.AuthError with WWW-Authenticate triggers an HTTP 403/401)
+//
+// # Convention: when to use which return path
+//
+// There is no programmatic distinction between transport-level and
+// protocol-level errors — it is purely a contract between the middleware
+// author and the transport layer:
+//
+//   - Response.Error: JSON-RPC protocol errors (parse error, invalid params,
+//     method not found). Client receives a normal JSON-RPC error reply.
+//
+//   - Response.Result with IsError: tool-level errors (the tool ran and
+//     produced an error result). Client receives tools/call with isError: true.
+//
+//   - error return: transport-level short-circuit (auth challenges, scope
+//     step-up, rate limits requiring Retry-After). Transport layer maps to
+//     an HTTP response (writeAuthError handles *core.AuthError → 401/403).
+//
+// Receiving middleware should not differentiate — just propagate (resp, err)
+// from next() as-is, with whatever inspection logic it needs around it.
+// Only the transport layer consumes the error.
 //
 // Middleware sees the full request (method, params, ID) and the context
 // (which includes auth claims via core.AuthClaims(ctx) and session notification
@@ -28,17 +51,17 @@ import (
 // Example — per-method rate limiting:
 //
 //	func RateLimitMiddleware(limiter *rate.Limiter) mcpkit.Middleware {
-//	    return func(ctx context.Context, req *mcpkit.Request, next mcpkit.MiddlewareFunc) *mcpkit.Response {
+//	    return func(ctx context.Context, req *mcpkit.Request, next mcpkit.MiddlewareFunc) (*mcpkit.Response, error) {
 //	        if !limiter.Allow() {
-//	            return mcpkit.NewErrorResponse(req.ID, -32000, "rate limit exceeded")
+//	            return mcpkit.NewErrorResponse(req.ID, -32000, "rate limit exceeded"), nil
 //	        }
 //	        return next(ctx, req)
 //	    }
 //	}
-type Middleware func(ctx context.Context, req *core.Request, next MiddlewareFunc) *core.Response
+type Middleware func(ctx context.Context, req *core.Request, next MiddlewareFunc) (*core.Response, error)
 
 // MiddlewareFunc is the signature for the next handler in the middleware chain.
-type MiddlewareFunc func(context.Context, *core.Request) *core.Response
+type MiddlewareFunc func(context.Context, *core.Request) (*core.Response, error)
 
 // WithMiddleware registers server-side middleware that intercepts all JSON-RPC
 // requests. Middleware executes in registration order: the first registered
@@ -104,18 +127,21 @@ func WithRequestInterceptor(fn ...RequestInterceptor) Option {
 //	MCP tools/call ok [45.3ms]
 //	MCP tools/call error=-32602 (invalid params) [0.1ms]
 func LoggingMiddleware(logger *log.Logger) Middleware {
-	return func(ctx context.Context, req *core.Request, next MiddlewareFunc) *core.Response {
+	return func(ctx context.Context, req *core.Request, next MiddlewareFunc) (*core.Response, error) {
 		start := time.Now()
-		resp := next(ctx, req)
+		resp, err := next(ctx, req)
 		elapsed := time.Since(start)
 
-		if resp != nil && resp.Error != nil {
+		switch {
+		case err != nil:
+			logger.Printf("MCP %s transportError=%v [%s]", req.Method, err, elapsed)
+		case resp != nil && resp.Error != nil:
 			logger.Printf("MCP %s error=%d (%s) [%s]",
 				req.Method, resp.Error.Code, resp.Error.Message, elapsed)
-		} else {
+		default:
 			logger.Printf("MCP %s ok [%s]", req.Method, elapsed)
 		}
-		return resp
+		return resp, err
 	}
 }
 
@@ -133,7 +159,7 @@ func LoggingMiddleware(logger *log.Logger) Middleware {
 //	tool=update_document isError=true text="{\"error\":\"insufficient_scope\",..."
 //	tool=initiate_payment isError=true text="..."
 func ToolCallLogger(logger *log.Logger) Middleware {
-	return func(ctx context.Context, req *core.Request, next MiddlewareFunc) *core.Response {
+	return func(ctx context.Context, req *core.Request, next MiddlewareFunc) (*core.Response, error) {
 		if req.Method != "tools/call" {
 			return next(ctx, req)
 		}
@@ -143,15 +169,19 @@ func ToolCallLogger(logger *log.Logger) Middleware {
 		}
 		_ = json.Unmarshal(req.Params, &params)
 
-		resp := next(ctx, req)
+		resp, err := next(ctx, req)
 
+		if err != nil {
+			logger.Printf("tool=%s transportError=%v", params.Name, err)
+			return resp, err
+		}
 		if resp == nil {
-			return resp
+			return resp, nil
 		}
 		if resp.Error != nil {
 			logger.Printf("tool=%s rpcError=%d msg=%q",
 				params.Name, resp.Error.Code, resp.Error.Message)
-			return resp
+			return resp, nil
 		}
 
 		// Result is `any` — marshal to bytes, then parse as ToolResult.
@@ -171,6 +201,6 @@ func ToolCallLogger(logger *log.Logger) Middleware {
 		} else {
 			logger.Printf("tool=%s ok", params.Name)
 		}
-		return resp
+		return resp, nil
 	}
 }

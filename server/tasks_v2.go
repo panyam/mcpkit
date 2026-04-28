@@ -143,7 +143,7 @@ func RegisterTasksV2(cfg TasksV2Config) {
 //   - optional: create a task (server-directed)
 //   - forbidden/absent: pass through (sync execution)
 func taskV2Middleware(reg *Registry, rt *v2TaskRuntime, cfg TasksV2Config) Middleware {
-	return func(ctx context.Context, req *core.Request, next MiddlewareFunc) *core.Response {
+	return func(ctx context.Context, req *core.Request, next MiddlewareFunc) (*core.Response, error) {
 		if req.Method != "tools/call" {
 			return next(ctx, req)
 		}
@@ -194,7 +194,7 @@ func taskV2Middleware(reg *Registry, rt *v2TaskRuntime, cfg TasksV2Config) Middl
 		store := rt.store
 		sessionID := core.GetSessionID(ctx)
 		if err := store.Create(info, sessionID); err != nil {
-			return core.NewErrorResponse(req.ID, -32603, "failed to create task: "+err.Error())
+			return core.NewErrorResponse(req.ID, -32603, "failed to create task: "+err.Error()), nil
 		}
 
 		var progressToken any
@@ -231,7 +231,16 @@ func taskV2Middleware(reg *Registry, rt *v2TaskRuntime, cfg TasksV2Config) Middl
 				}
 			}()
 
-			resp := next(bgCtx, req)
+			resp, mwErr := next(bgCtx, req)
+
+			// If middleware returned a transport-level error, treat it as a task failure.
+			if mwErr != nil {
+				te := &core.TaskError{Code: -32603, Message: mwErr.Error()}
+				rt.setTaskError(taskID, te)
+				store.StoreTerminalResult(taskID, sessionID, core.TaskFailed, core.ErrorResult(mwErr.Error()), mwErr.Error())
+				notifyV2TaskStatus(bgCtx, rt, store, taskID, sessionID)
+				return
+			}
 
 			// Check if already cancelled — StoreTerminalResult rejects terminal→terminal.
 			if resp.Error != nil {
@@ -276,7 +285,7 @@ func taskV2Middleware(reg *Registry, rt *v2TaskRuntime, cfg TasksV2Config) Middl
 		return core.NewResponse(req.ID, core.CreateTaskResultV2{
 			ResultType: core.ResultTypeTask,
 			Task:       wireInfo,
-		})
+		}), nil
 	}
 }
 
