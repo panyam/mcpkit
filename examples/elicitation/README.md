@@ -1,6 +1,6 @@
 # URL Elicitation — Consent Approval Flow (UC1)
 
-A scripted MCP host walking through the UC1 consent approval flow.
+**EXPERIMENTAL** — Tracks SEP-2643 (Structured Authorization Denials), currently a draft. A scripted MCP host walking through the UC1 consent approval flow. Wire format may change as the SEP evolves.
 
 ## What you'll learn
 

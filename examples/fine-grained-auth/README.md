@@ -1,6 +1,6 @@
 # Fine-Grained Authorization — Scope Step-Up (UC2) + Ephemeral Credentials (UC3)
 
-A scripted MCP host walking through UC2/UC3 authorization denial flows.
+**EXPERIMENTAL** — Tracks SEP-2643 (Structured Authorization Denials), currently a draft. A scripted MCP host walking through UC2/UC3 authorization denial flows. Wire format may change as the SEP evolves; spec divergences tracked in mcpkit issue #317.
 
 ## What you'll learn
 
