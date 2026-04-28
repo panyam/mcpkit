@@ -19,8 +19,6 @@ sequenceDiagram
     participant Browser as User Browser
 
     Note over Client,Browser: Step 1: Start the MCP server with consent middleware
-    Server->>Server: RegisterTool(access_protected_resource)
-    Server->>Server: UseMiddleware(consentMiddleware)
 
     Note over Client,Browser: Step 2: Initialize MCP session
     Client->>Server: POST /mcp — initialize
