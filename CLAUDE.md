@@ -31,7 +31,7 @@ make tag-push V=vX.Y.Z # Tag root + all sub-modules and push
 | `experimental/ext/events/` — MCP Events protocol | `experimental/ext/events/README.md` |
 | `testutil/` — Test helpers | |
 | `tests/e2e/`, `tests/keycloak/` — Integration tests | `tests/e2e/apps/README.md` |
-| `examples/` — Working examples (apps, auth, tasks, tasks-v2, host) | `examples/README.md` |
+| `examples/` — Working examples (apps, auth, tasks, tasks-v2, host, elicitation, fine-grained-auth) | `examples/README.md` |
 
 ## Sub-Modules
 
@@ -47,6 +47,9 @@ Project-wide: `CONSTRAINTS.md`. Per-package: `core/CONSTRAINTS.md`, `server/CONS
 - **Sub-module go.sum drift**: New `core/` imports break sub-modules until `make tidy-all`
 - **Server requires initialization**: Direct `srv.Dispatch()` in tests fails — use httptest + client
 - **AppHost lifecycle**: `Client.Connect()` before `AppHost.Start()`. `AppHost.Close()` only closes bridge.
+- **Background goroutines**: Use `core.DetachForBackground(ctx)` (not `context.WithoutCancel`) — replaces dead POST-scoped requestFunc/notifyFunc with the session-level persistent push.
+- **CORS for browser clients**: MCP servers need `Mcp-Session-Id` in both Allow-Headers and Expose-Headers, plus `DELETE` in allowed methods. Use `servicekit/middleware.CORS()` with options.
+- **Demokit non-interactive + browser steps**: Steps that open a browser and expect user action will fail in `--non-interactive` mode. Interactive mode is the primary path.
 
 Module-specific gotchas live in their READMEs.
 
