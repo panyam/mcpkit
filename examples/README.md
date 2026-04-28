@@ -26,6 +26,8 @@ Runnable examples covering MCP Apps, authentication, async tasks, and proto-base
 | [auth/scopes](auth/) | Scope-based access control | 8083 |
 | [auth/session-binding](auth/) | Session hijacking prevention | 8084 |
 | [auth/public-discovery](auth/) | Pre-auth tool discovery | 8085 |
+| [elicitation](elicitation/) ⚠ experimental | URL-mode elicitation with consent approval (UC1) — tracks draft [SEP-2643](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2643) | dynamic |
+| [fine-grained-auth](fine-grained-auth/) ⚠ experimental | Authorization denial: scope step-up (UC2) + RAR payments (UC3) — tracks draft [SEP-2643](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2643) | 8080 |
 | [protogen/bookservice](protogen/bookservice/) | Proto annotations to MCP tools, resources, prompts | 8080 |
 | [tasks](tasks/) | Async tool execution with lifecycle tracking (experimental) | 8080 |
 
