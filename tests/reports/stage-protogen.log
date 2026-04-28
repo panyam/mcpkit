@@ -1,11 +1,11 @@
 === Stage 5/12: protogen (make test-protogen) ===
-Started: Mon Apr 27 16:30:46 PDT 2026
+Started: Tue Apr 28 16:15:43 PDT 2026
 cd experimental/ext/protogen && go test ./... -count=1 -timeout 30s && /Library/Developer/CommandLineTools/usr/bin/make test-e2e
 ?   	github.com/panyam/mcpkit/experimental/ext/protogen/cmd/protoc-gen-go-mcp	[no test files]
-ok  	github.com/panyam/mcpkit/experimental/ext/protogen/generator	0.648s
-ok  	github.com/panyam/mcpkit/experimental/ext/protogen/proto/mcp/v1	0.344s
-ok  	github.com/panyam/mcpkit/experimental/ext/protogen/runtime	0.947s
-ok  	github.com/panyam/mcpkit/experimental/ext/protogen/schema	1.255s
+ok  	github.com/panyam/mcpkit/experimental/ext/protogen/generator	0.789s
+ok  	github.com/panyam/mcpkit/experimental/ext/protogen/proto/mcp/v1	1.483s
+ok  	github.com/panyam/mcpkit/experimental/ext/protogen/runtime	1.269s
+ok  	github.com/panyam/mcpkit/experimental/ext/protogen/schema	1.041s
 ?   	github.com/panyam/mcpkit/experimental/ext/protogen/testutil	[no test files]
 go build -o bin/protoc-gen-go-mcp ./cmd/protoc-gen-go-mcp
 go install ./cmd/protoc-gen-go-mcp
@@ -14,6 +14,6 @@ cd ../../../examples/protogen/bookservice && rm -rf gen && buf generate && go te
 [33mWARN[0m	plugin "protoc-gen-go-mcp" does not support required features.
   Feature "proto3 optional" is required by 1 file(s):
     bookservice/v1/service.proto
-ok  	github.com/panyam/mcpkit/examples/protogen/bookservice	0.436s
+ok  	github.com/panyam/mcpkit/examples/protogen/bookservice	0.372s
 ==> e2e: passed
-Finished: Mon Apr 27 16:30:50 PDT 2026
+Finished: Tue Apr 28 16:15:47 PDT 2026

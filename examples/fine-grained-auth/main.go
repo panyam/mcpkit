@@ -1,22 +1,28 @@
-// Example: Fine-Grained Authorization Denial — scope step-up (UC2) + per-operation
-// ephemeral credentials (UC3).
+// Example: Fine-Grained Authorization (SEP-2643).
+//
+// Demonstrates UC2 (scope step-up) and UC3 (per-operation ephemeral
+// credential / RFC 9396 RAR) end-to-end against an in-process oneauth AS.
 //
 // Two-process architecture:
 //
-//	Terminal 1:  make serve         # starts the MCP server on :8080
+//	Terminal 1:  make serve         # starts the MCP server + in-process AS
 //	Terminal 2:  make run           # runs the demokit client (scripted MCP host)
 //
-// The server is a real MCP server that any host can connect to.
-// The demokit client acts as a scripted host walking through UC2/UC3 flows.
+// The MCP server runs an in-process oneauth AS (HTTPtest server in a goroutine)
+// because Keycloak does not support RFC 9396 RAR. Tokens are RS256-signed; the
+// MCP server validates them via the AS's JWKS endpoint.
 package main
 
 import (
+	"bytes"
+	"context"
+	"crypto/rsa"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
+	"net/http/httptest"
 	"os"
 	"strings"
 
@@ -26,18 +32,22 @@ import (
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/ext/auth"
 	"github.com/panyam/mcpkit/server"
+	"github.com/panyam/oneauth/admin"
+	"github.com/panyam/oneauth/apiauth"
+	oacore "github.com/panyam/oneauth/core"
+	"github.com/panyam/oneauth/keys"
+	"github.com/panyam/oneauth/utils"
 	"github.com/panyam/servicekit/middleware"
-	oneauthcore "github.com/panyam/oneauth/core"
 )
 
 const (
-	keycloakURL  = "http://localhost:8180"
-	realmName    = "mcpkit-test"
-	clientID     = "mcp-confidential"
-	clientSecret = "mcp-test-secret-for-confidential"
-
 	scopeRead = "tools-read"
 	scopeCall = "tools-call"
+
+	// asKeyID is the keystore client_id under which we register the AS's
+	// own keypair. It's not a real client — just a way to get the AS's key
+	// published via the JWKSHandler.
+	asKeyID = "_as_signer"
 )
 
 func main() {
@@ -63,72 +73,97 @@ func runDemo() {
 
 	demo := demokit.New("Fine-Grained Authorization — Scope Step-Up (UC2) + Ephemeral Credentials (UC3)").
 		Dir("fine-grained-auth").
-		Description("**EXPERIMENTAL** — Tracks SEP-2643 (Structured Authorization Denials), currently a draft. A scripted MCP host walking through UC2/UC3 authorization denial flows. Wire format may change as the SEP evolves; spec divergences tracked in mcpkit issue #317.").
+		Description("**EXPERIMENTAL** — Tracks SEP-2643 (Structured Authorization Denials), currently a draft. UC2 + UC3 demonstrated end-to-end against an in-process oneauth AS.").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this client)"),
 			demokit.Actor("Server", "MCP Server (make serve)"),
-			demokit.Actor("KC", "Keycloak"),
+			demokit.Actor("AS", "Auth Server (in-process oneauth)"),
 		)
 
 	demo.Section("Setup",
-		"Keycloak (KC) is an open-source OAuth 2.0 / OIDC authorization server.",
-		"In this demo it plays the role of the Authorization Server (AS) that issues",
-		"access tokens with specific scopes. The MCP server validates incoming tokens",
-		"against KC's JWKS endpoint and enforces per-tool scope requirements.",
+		"This example uses an in-process oneauth Authorization Server because",
+		"Keycloak does not support RFC 9396 Rich Authorization Requests (RAR).",
+		"The MCP server starts the AS in a goroutine, registers a confidential",
+		"client for the demo, and exposes the client_id+secret + AS URL for the",
+		"host to discover.",
 		"",
-		"Before running this demo, start KC and the MCP server in separate terminals:",
+		"Start the MCP server in a separate terminal first:",
 		"",
 		"```",
-		"Terminal 1:  make kcl          # start Keycloak on :8180 (if not running)",
-		"Terminal 2:  make serve        # start the MCP server on :8080",
-		"Terminal 3:  make run          # run this demo",
+		"Terminal 1:  make serve        # MCP server + in-process AS on :8080",
+		"Terminal 2:  make run          # this demo",
 		"```",
 	)
 
 	demo.Section("UC1 vs UC2/UC3 — When does the host react?",
-		"UC1 (elicitation): The denial points to an out-of-band action (user clicks Approve in browser).",
-		"The host can't proceed until it receives notifications/elicitation/complete from the server.",
+		"UC1 (elicitation): the denial points to an out-of-band action (user clicks Approve).",
+		"The host can't proceed until it receives `notifications/elicitation/complete`.",
 		"",
-		"UC2/UC3 (this demo): The denial is delivered *synchronously* as a tool error result.",
-		"The host parses remediationHints from the denial and reacts immediately — no notification,",
-		"no waiting. A smart host extracts the required scopes (UC2) or authorization_details (UC3)",
-		"from the hint and re-authorizes on its own.",
+		"UC2/UC3: the denial is a transport-level signal — UC2 is HTTP 403 + WWW-Authenticate,",
+		"UC3 is a JSON-RPC error with an RFC 9396 remediationHint. The host parses it and reacts",
+		"immediately by re-authorizing — no user interaction in this demo (a real banking host",
+		"would prompt the user to confirm the payment first).",
 	)
 
 	var (
-		readClient *client.Client // client with read-only token
-		callClient *client.Client // client with broader token (after step-up)
-		tokRead    string
+		readClient  *client.Client // client with read-only token
+		callClient  *client.Client // client with broader token (after step-up)
+		payClient   *client.Client // client with RAR-bound payment token (UC3)
+		bootstrap   bootstrapInfo
+		tokRead     string
 		tokReadCall string
-
-		// Captured from the UC2 denial — drives the auto-step-up in the next step.
+		tokPayment  string
+		// captured from the UC2 denial — drives auto-step-up
 		requiredScopes []string
+		// captured from the UC3 denial — drives RAR token request
+		paymentAuthzDetails []map[string]any
 	)
 
-	// --- Step 1: Get read-only token ---
-	demo.Step("Get a read-only token from Keycloak (scope: tools-read)").
-		Arrow("Host", "KC", "POST /token — grant_type=client_credentials + client_id + client_secret + scope=tools-read").
-		DashedArrow("KC", "Host", "access_token (tools-read only)").
-		Note("The host authenticates to KC using client_credentials grant — a confidential client_id+secret pair. KC validates the credentials, ensures the requested scope is allowed for this client, and issues a signed JWT. In production the secret would be in a vault/secret manager (or replaced by mTLS / private_key_jwt for stronger client auth). For interactive user flows, you'd use authorization_code + PKCE instead.").
+	// --- Step 1: Discover AS bootstrap from server ---
+	demo.Step("Discover the in-process AS bootstrap from the MCP server").
+		Arrow("Host", "Server", "GET /demo/bootstrap").
+		DashedArrow("Server", "Host", "{as_url, client_id, client_secret}").
+		Note("The MCP server exposes a non-standard bootstrap endpoint that hands the host the in-process AS URL and a pre-registered client credential. In production, the host would do OAuth Dynamic Client Registration; this shortcut keeps the demo focused on SEP-2643.").
 		Run(func() {
-			realmURL := keycloakURL + "/realms/" + realmName
-			oidc, err := discoverOIDC(realmURL)
+			resp, err := http.Get(serverURL + "/demo/bootstrap")
 			if err != nil {
-				fmt.Printf("    ERROR: Keycloak not reachable: %v\n", err)
-				fmt.Printf("    Start it with: make kcl\n")
+				fmt.Printf("    ERROR: server not reachable at %s: %v\n", serverURL, err)
+				fmt.Printf("    Start it with: make serve\n")
 				return
 			}
-			tokRead = getToken(oidc.TokenEndpoint, scopeRead)
-			fmt.Printf("    Token endpoint: %s\n", oidc.TokenEndpoint)
+			defer resp.Body.Close()
+			if err := json.NewDecoder(resp.Body).Decode(&bootstrap); err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				return
+			}
+			fmt.Printf("    AS URL:        %s\n", bootstrap.ASURL)
+			fmt.Printf("    Token endpt:   %s\n", bootstrap.TokenEndpoint)
+			fmt.Printf("    JWKS endpt:    %s\n", bootstrap.JWKSURL)
+			fmt.Printf("    client_id:     %s\n", bootstrap.ClientID)
+			fmt.Printf("    client_secret: %s\n", bootstrap.ClientSecret)
+		})
+
+	// --- Step 2: Get read-only token ---
+	demo.Step("Get a read-only token (scope: tools-read)").
+		Arrow("Host", "AS", "POST /token — grant_type=client_credentials, scope=tools-read").
+		DashedArrow("AS", "Host", "access_token (tools-read only)").
+		Note("Standard OAuth 2.0 client_credentials grant. The token is RS256-signed by the AS and can be validated against the AS's JWKS endpoint.").
+		Run(func() {
+			tok, err := requestToken(bootstrap, []string{scopeRead}, nil)
+			if err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				return
+			}
+			tokRead = tok
 			fmt.Printf("    Scopes requested: %s\n", scopeRead)
 			fmt.Printf("    Token: %s...%s\n", tokRead[:min(20, len(tokRead))], tokRead[max(0, len(tokRead)-10):])
 		})
 
-	// --- Step 2: Connect with read-only token ---
+	// --- Step 3: Connect with read-only token ---
 	demo.Step("Connect to MCP server with read-only token").
 		Arrow("Host", "Server", "POST /mcp — initialize + Authorization: Bearer <read-token>").
 		DashedArrow("Server", "Host", "serverInfo + Mcp-Session-Id").
-		Note("The host connects with the read-only token. JWT validation passes — the token is valid, just limited in scope.").
+		Note("JWT validation against the AS's JWKS endpoint succeeds — token is valid, just limited in scope.").
 		Run(func() {
 			fmt.Printf("    Connecting to %s ...\n", serverURL)
 			readClient = client.NewClient(serverURL+"/mcp",
@@ -137,7 +172,6 @@ func runDemo() {
 			)
 			if err := readClient.Connect(); err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
-				fmt.Printf("    Start the server with: make serve\n")
 				return
 			}
 			fmt.Printf("    Connected to %s %s\n\n", readClient.ServerInfo.Name, readClient.ServerInfo.Version)
@@ -149,7 +183,7 @@ func runDemo() {
 			}
 		})
 
-	// --- Step 3: read_document succeeds ---
+	// --- Step 4: read_document succeeds ---
 	demo.Step("Call read_document — succeeds (tools-read is sufficient)").
 		Arrow("Host", "Server", "tools/call: read_document {docId: \"doc-123\"}").
 		DashedArrow("Server", "Host", "Document content").
@@ -163,7 +197,7 @@ func runDemo() {
 			fmt.Printf("    Result: %s\n", text)
 		})
 
-	// --- Step 4: update_document → HTTP 403 + WWW-Authenticate (UC2 spec-correct) ---
+	// --- Step 5: update_document → HTTP 403 + WWW-Authenticate (UC2 spec-correct) ---
 	demo.Step("Call update_document — DENIED (UC2: HTTP 403 + WWW-Authenticate)").
 		Arrow("Host", "Server", "tools/call: update_document {docId: \"doc-123\"}").
 		DashedArrow("Server", "Host", "HTTP 403 + WWW-Authenticate: Bearer error=\"insufficient_scope\", scope=\"tools-call\"").
@@ -190,34 +224,34 @@ func runDemo() {
 			requiredScopes = authErr.RequiredScopes
 		})
 
-	// --- Step 5: Auto-step-up using scopes from WWW-Authenticate ---
+	// --- Step 6: Auto-step-up using scopes from WWW-Authenticate ---
 	demo.Step("Auto-step-up: re-authorize with scopes from WWW-Authenticate").
-		Arrow("Host", "KC", "POST /token — client_credentials, scope=<from WWW-Authenticate>").
-		DashedArrow("KC", "Host", "access_token with broader scopes").
-		Note("Spec-driven smart-host behavior: the server's WWW-Authenticate header named the required scopes; the host complies by requesting exactly those scopes from Keycloak — no hardcoded values. We also re-include tools-read so the broader token works for both reads and writes.").
+		Arrow("Host", "AS", "POST /token — scope=<from WWW-Authenticate>").
+		DashedArrow("AS", "Host", "access_token with broader scopes").
+		Note("Spec-driven smart-host behavior: the WWW-Authenticate header named the required scopes; the host complies. We also re-include tools-read so the broader token works for both reads and writes (typical OAuth step-up: ask for the union, not a replacement).").
 		Run(func() {
 			if len(requiredScopes) == 0 {
-				fmt.Printf("    ERROR: no requiredScopes from previous step (WWW-Authenticate parse failed)\n")
+				fmt.Printf("    ERROR: no requiredScopes from previous step\n")
 				return
 			}
-			// Combine the originally-held scope with the newly-required ones so
-			// the broader token works for both reads and writes (typical OAuth
-			// step-up: ask for the union, not a replacement).
 			scopes := append([]string{scopeRead}, requiredScopes...)
-			realmURL := keycloakURL + "/realms/" + realmName
-			oidc, _ := discoverOIDC(realmURL)
-			tokReadCall = getToken(oidc.TokenEndpoint, scopes...)
+			tok, err := requestToken(bootstrap, scopes, nil)
+			if err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				return
+			}
+			tokReadCall = tok
 			fmt.Printf("    Scopes requested: %v\n", scopes)
 			fmt.Printf("    New token: %s...%s\n", tokReadCall[:min(20, len(tokReadCall))], tokReadCall[max(0, len(tokReadCall)-10):])
 		})
 
-	// --- Step 6: Retry with broader token ---
+	// --- Step 7: Retry with broader token ---
 	demo.Step("Retry update_document with broader token — SUCCEEDS").
 		Arrow("Host", "Server", "POST /mcp — initialize + Bearer (broader token)").
 		DashedArrow("Server", "Host", "new session").
 		Arrow("Host", "Server", "tools/call: update_document").
 		DashedArrow("Server", "Host", "Document updated successfully").
-		Note("The host starts a new session with the broader token. Now update_document succeeds because the token includes tools-call.").
+		Note("New session with the broader token. update_document succeeds because the token includes tools-call.").
 		Run(func() {
 			callClient = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "demo-host", Version: "1.0"},
@@ -242,33 +276,40 @@ func runDemo() {
 	demo.Section("UC3: Per-Operation Ephemeral Credential",
 		"UC3 is a different pattern: the host needs an *additional* token for a",
 		"specific operation (payment), while keeping the original token for other",
-		"operations. The server returns credential_disposition: \"additional\" and",
-		"RFC 9396 authorization_details in the remediation hint.",
+		"operations. The denial carries credentialDisposition: \"additional\" and",
+		"RFC 9396 authorization_details bound to the specific transaction.",
 	)
 
-	// --- Step 7: initiate_payment (UC3) ---
+	// --- Step 8: initiate_payment → DENIED with RAR remediation ---
 	demo.Step("Call initiate_payment — DENIED with RAR authorization_details (UC3)").
-		Arrow("Host", "Server", "tools/call: initiate_payment {amount: 150, currency: EUR, payee: ACME}").
-		DashedArrow("Server", "Host", "isError: true + credential_disposition: additional + payment_initiation RAR").
-		Note("Same denial-driven pattern as UC2, but the remediationHint carries RFC 9396 authorization_details bound to this specific transaction. The host should request an *additional* token (credential_disposition: additional) and use it just for the payment — the original token continues to be used for other operations.").
+		Arrow("Host", "Server", "tools/call: initiate_payment {amount: 150 EUR, payee: ACME}").
+		DashedArrow("Server", "Host", "JSON-RPC error + credentialDisposition: additional + payment_initiation RAR").
+		Note("The payment tool requires a transaction-specific ephemeral credential. Our broader token has tools-call but no authorization_details bound to this payment, so the server returns the SEP-2643 envelope with an oauth_authorization_details remediationHint describing the exact authorization the host must request.").
 		Run(func() {
-			result, err := readClient.ToolCallFull("initiate_payment", map[string]any{
+			_, err := callClient.ToolCall("initiate_payment", map[string]any{
 				"amount":   "150.00",
 				"currency": "EUR",
 				"payee":    "ACME Corp",
 			})
-			if err != nil {
-				fmt.Printf("    ERROR: %v\n", err)
+			if err == nil {
+				fmt.Printf("    UNEXPECTED: tool succeeded (expected denial)\n")
 				return
 			}
 
-			var denial any
-			json.Unmarshal([]byte(result.Content[0].Text), &denial)
-			denialJSON, _ := json.MarshalIndent(denial, "    ", "  ")
-			fmt.Printf("    Authorization denial:\n    %s\n\n", denialJSON)
+			var rpcErr *client.RPCError
+			if !errors.As(err, &rpcErr) {
+				fmt.Printf("    UNEXPECTED error type: %T %v\n", err, err)
+				return
+			}
 
-			// Parse the authorization_details from the remediationHint — what a smart host would do.
-			// Per SEP-2643, hint members are at the top level of the hint object.
+			fmt.Printf("    JSON-RPC error %d: %s\n", rpcErr.Code, rpcErr.Message)
+
+			// Pretty-print the full denial.
+			data, _ := json.MarshalIndent(rpcErr.Data, "    ", "  ")
+			fmt.Printf("    error.data:\n    %s\n\n", data)
+
+			// Parse the SEP-2643 envelope.
+			raw, _ := json.Marshal(rpcErr.Data)
 			var parsed struct {
 				Authorization struct {
 					CredentialDisposition string `json:"credentialDisposition"`
@@ -278,22 +319,67 @@ func runDemo() {
 					} `json:"remediationHints"`
 				} `json:"authorization"`
 			}
-			json.Unmarshal([]byte(result.Content[0].Text), &parsed)
+			json.Unmarshal(raw, &parsed)
 
-			fmt.Printf("    → Parsed credentialDisposition: %q (additional = keep original token)\n",
+			fmt.Printf("    → credentialDisposition: %q (additional = keep original token)\n",
 				parsed.Authorization.CredentialDisposition)
 			for _, h := range parsed.Authorization.RemediationHints {
 				if h.Type == "oauth_authorization_details" {
+					paymentAuthzDetails = h.AuthorizationDetails
 					adJSON, _ := json.MarshalIndent(h.AuthorizationDetails, "    ", "  ")
-					fmt.Printf("    → Parsed authorization_details (RFC 9396):\n    %s\n", adJSON)
+					fmt.Printf("    → authorization_details (RFC 9396):\n    %s\n", adJSON)
 				}
 			}
-			fmt.Printf("\n    Next step (not implemented in this demo):\n")
-			fmt.Printf("      The host would POST these authorization_details to an RAR-capable AS\n")
-			fmt.Printf("      to obtain an ephemeral payment-bound credential, then retry initiate_payment.\n")
-			fmt.Printf("      Blocked on:\n")
-			fmt.Printf("        - issue #311 (upgrade oneauth dep — Keycloak doesn't support RFC 9396 RAR)\n")
-			fmt.Printf("        - issue #317 (use SEP-2643 JSON-RPC error code once spec assigns one)\n")
+		})
+
+	// --- Step 9: Request RAR-bound token ---
+	demo.Step("Request an RAR-bound payment token from the AS").
+		Arrow("Host", "AS", "POST /token — authorization_details=[payment_initiation, ...]").
+		DashedArrow("AS", "Host", "access_token with authorization_details claim").
+		Note("The host uses the authorization_details from the remediationHint *verbatim* in the OAuth token request (RFC 9396). The AS validates and embeds the authorization_details into the JWT as a claim. The host now holds two tokens: the original tools-read+tools-call token (for everything else) and this short-lived payment-bound token.").
+		Run(func() {
+			if len(paymentAuthzDetails) == 0 {
+				fmt.Printf("    ERROR: no authorization_details from previous step\n")
+				return
+			}
+			tok, err := requestToken(bootstrap, nil, paymentAuthzDetails)
+			if err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				return
+			}
+			tokPayment = tok
+			fmt.Printf("    New token: %s...%s\n", tokPayment[:min(20, len(tokPayment))], tokPayment[max(0, len(tokPayment)-10):])
+		})
+
+	// --- Step 10: Retry with RAR-bound token — succeeds ---
+	demo.Step("Retry initiate_payment with RAR-bound token — SUCCEEDS").
+		Arrow("Host", "Server", "POST /mcp — initialize + Bearer (RAR token)").
+		DashedArrow("Server", "Host", "new session").
+		Arrow("Host", "Server", "tools/call: initiate_payment {amount: 150 EUR, payee: ACME}").
+		DashedArrow("Server", "Host", "Payment initiated").
+		Note("The server's initiate_payment handler reads authorization_details from the JWT claims and validates that a payment_initiation entry matches the request (amount, currency, payee). It does — the host minted exactly the token the server asked for in the previous denial.").
+		Run(func() {
+			payClient = client.NewClient(serverURL+"/mcp",
+				core.ClientInfo{Name: "demo-host", Version: "1.0"},
+				client.WithClientBearerToken(tokPayment),
+			)
+			if err := payClient.Connect(); err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				return
+			}
+			fmt.Printf("    New session with RAR token connected\n\n")
+
+			text, err := payClient.ToolCall("initiate_payment", map[string]any{
+				"amount":   "150.00",
+				"currency": "EUR",
+				"payee":    "ACME Corp",
+			})
+			if err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				return
+			}
+			fmt.Printf("    Result: %s\n", text)
+			fmt.Printf("\n    Note: the original tokReadCall is unchanged and still valid for non-payment ops.\n")
 		})
 
 	// Use TUI renderer if --tui flag is passed.
@@ -312,9 +398,58 @@ func runDemo() {
 	if callClient != nil {
 		callClient.Close()
 	}
+	if payClient != nil {
+		payClient.Close()
+	}
 }
 
-// --- Serve mode: standalone MCP server ---
+// --- Bootstrap protocol (non-standard demo helper) ---
+
+type bootstrapInfo struct {
+	ASURL         string `json:"as_url"`
+	TokenEndpoint string `json:"token_endpoint"`
+	JWKSURL       string `json:"jwks_url"`
+	ClientID      string `json:"client_id"`
+	ClientSecret  string `json:"client_secret"`
+}
+
+// requestToken performs a client_credentials grant against the in-process AS.
+// Pass scopes for UC2 (broader scope) or authorizationDetails for UC3 (RAR).
+func requestToken(b bootstrapInfo, scopes []string, authzDetails []map[string]any) (string, error) {
+	body := map[string]any{
+		"grant_type":    "client_credentials",
+		"client_id":     b.ClientID,
+		"client_secret": b.ClientSecret,
+	}
+	if len(scopes) > 0 {
+		body["scope"] = strings.Join(scopes, " ")
+	}
+	if len(authzDetails) > 0 {
+		body["authorization_details"] = authzDetails
+	}
+	raw, _ := json.Marshal(body)
+	resp, err := http.Post(b.TokenEndpoint, "application/json", bytes.NewReader(raw))
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("token endpoint returned %d: %s", resp.StatusCode, respBody)
+	}
+	var tokResp struct {
+		AccessToken string `json:"access_token"`
+	}
+	if err := json.Unmarshal(respBody, &tokResp); err != nil {
+		return "", err
+	}
+	if tokResp.AccessToken == "" {
+		return "", fmt.Errorf("no access_token in response: %s", respBody)
+	}
+	return tokResp.AccessToken, nil
+}
+
+// --- Serve mode: standalone MCP server with in-process AS ---
 
 func serve() {
 	addr := ":8080"
@@ -323,24 +458,6 @@ func serve() {
 			addr = os.Args[i+2]
 		}
 	}
-	listenURL := fmt.Sprintf("http://localhost%s", addr)
-
-	realmURL := keycloakURL + "/realms/" + realmName
-	oidc, err := discoverOIDC(realmURL)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: Keycloak not reachable at %s — run 'make kcl' first: %v\n", keycloakURL, err)
-		os.Exit(1)
-	}
-
-	validator := auth.NewJWTValidator(auth.JWTConfig{
-		JWKSURL:             oidc.JWKSURI,
-		Issuer:              oidc.Issuer,
-		Audience:            "",
-		ResourceMetadataURL: listenURL + "/.well-known/oauth-protected-resource/mcp",
-		AllScopes:           []string{scopeRead, scopeCall},
-	})
-	validator.Start()
-	defer validator.Stop()
 
 	logger := demokit.NewColorLogger("[mcp] ", []demokit.ColorRule{
 		{Contains: "isError=true", DarkColor: demokit.ANSIBrightYellow, LightColor: demokit.ANSIYellow},
@@ -351,6 +468,28 @@ func serve() {
 		{Contains: "[http] ←", DarkColor: demokit.ANSICyan, LightColor: demokit.ANSIBlue},
 		{Contains: "MCP ", DarkColor: demokit.ANSIBrightGreen, LightColor: demokit.ANSIGreen},
 	})
+
+	// 1. Spin up the in-process oneauth AS.
+	asInfo, err := startInProcessAS()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: failed to start in-process AS: %v\n", err)
+		os.Exit(1)
+	}
+	defer asInfo.cleanup()
+
+	// 2. mcpkit JWT validator pointed at the AS's JWKS endpoint.
+	listenURL := fmt.Sprintf("http://localhost%s", addr)
+	validator := auth.NewJWTValidator(auth.JWTConfig{
+		JWKSURL:             asInfo.JWKSURL,
+		Issuer:              asInfo.ASURL,
+		Audience:            "",
+		ResourceMetadataURL: listenURL + "/.well-known/oauth-protected-resource/mcp",
+		AllScopes:           []string{scopeRead, scopeCall},
+	})
+	validator.Start()
+	defer validator.Stop()
+
+	// 3. MCP server with auth + scope-enforcement middleware.
 	srv := server.NewServer(
 		core.ServerInfo{Name: "fine-grained-auth-example", Version: "1.0.0"},
 		server.WithAuth(validator),
@@ -358,15 +497,11 @@ func serve() {
 		server.WithMiddleware(server.LoggingMiddleware(logger)),
 		server.WithMiddleware(server.ToolCallLogger(logger)),
 	)
-
 	registerTools(srv)
-
-	// Per-tool scope enforcement (SEP-2643 UC2). Returns HTTP 403 +
-	// WWW-Authenticate: Bearer error="insufficient_scope" before the tool
-	// handler runs. Must be added AFTER registerTools so the registry knows
-	// each tool's RequiredScopes.
 	srv.UseMiddleware(auth.NewToolScopeMiddleware(srv.Registry()))
+	srv.UseMiddleware(paymentAuthorizationMiddleware())
 
+	// 4. HTTP mux with MCP endpoint, PRM, and demo bootstrap endpoint.
 	mux := http.NewServeMux()
 	cors := middleware.CORS(nil,
 		middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
@@ -376,24 +511,32 @@ func serve() {
 	mux.Handle("/mcp", cors(srv.Handler(server.WithStreamableHTTP(true))))
 	auth.MountAuth(mux, auth.AuthConfig{
 		ResourceURI:          listenURL,
-		AuthorizationServers: []string{oidc.Issuer},
+		AuthorizationServers: []string{asInfo.ASURL},
 		ScopesSupported:      []string{scopeRead, scopeCall},
 		MCPPath:              "/mcp",
 	})
-
-	// Mint tokens for manual testing.
-	tokRead := getToken(oidc.TokenEndpoint, scopeRead)
-	tokReadCall := getToken(oidc.TokenEndpoint, scopeRead, scopeCall)
+	mux.HandleFunc("GET /demo/bootstrap", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(bootstrapInfo{
+			ASURL:         asInfo.ASURL,
+			TokenEndpoint: asInfo.TokenEndpoint,
+			JWKSURL:       asInfo.JWKSURL,
+			ClientID:      asInfo.ClientID,
+			ClientSecret:  asInfo.ClientSecret,
+		})
+	})
 
 	fmt.Printf("Fine-Grained Auth server on %s\n", addr)
-	fmt.Printf("MCP endpoint: %s/mcp\n\n", listenURL)
-	fmt.Printf("Tokens (paste into Authorization: Bearer <token>):\n")
-	fmt.Printf("  read only:   %s\n", tokRead)
-	fmt.Printf("  read+call:   %s\n\n", tokReadCall)
-	fmt.Printf("Tools:\n")
-	fmt.Printf("  read_document      — needs tools-read\n")
-	fmt.Printf("  update_document    — needs tools-call (returns denial if missing)\n")
-	fmt.Printf("  initiate_payment   — always returns UC3 denial with RAR details\n")
+	fmt.Printf("MCP endpoint:   %s/mcp\n", listenURL)
+	fmt.Printf("AS URL:         %s\n", asInfo.ASURL)
+	fmt.Printf("AS JWKS:        %s\n", asInfo.JWKSURL)
+	fmt.Printf("AS token endpt: %s\n", asInfo.TokenEndpoint)
+	fmt.Printf("Demo client_id: %s\n", asInfo.ClientID)
+	fmt.Printf("Demo secret:    %s\n", asInfo.ClientSecret)
+	fmt.Printf("\nTools:\n")
+	fmt.Printf("  read_document      — needs tools-read scope\n")
+	fmt.Printf("  update_document    — needs tools-call scope (returns 403 if missing)\n")
+	fmt.Printf("  initiate_payment   — needs payment_initiation authorization_details\n")
 
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
@@ -401,7 +544,115 @@ func serve() {
 	}
 }
 
-// --- Shared tool registration ---
+// --- In-process oneauth AS ---
+
+type inProcessAS struct {
+	ASURL         string
+	TokenEndpoint string
+	JWKSURL       string
+	ClientID      string
+	ClientSecret  string
+	cleanup       func()
+}
+
+// startInProcessAS spins up an in-process oneauth Authorization Server with
+// RS256 signing, RAR support, and a pre-registered confidential client.
+func startInProcessAS() (*inProcessAS, error) {
+	// Generate AS RSA keypair.
+	privPEM, pubPEM, err := utils.GenerateRSAKeyPair(2048)
+	if err != nil {
+		return nil, fmt.Errorf("generate keypair: %w", err)
+	}
+	parsed, err := utils.ParsePrivateKeyPEM(privPEM)
+	if err != nil {
+		return nil, fmt.Errorf("parse private key: %w", err)
+	}
+	privKey := parsed.(*rsa.PrivateKey)
+
+	// Keystore: register the AS's *public* key (PEM bytes) under a sentinel
+	// client_id so the JWKSHandler publishes it. APIAuth signs with the
+	// matching private key (passed via JWTSigningKey, below).
+	ks := keys.NewInMemoryKeyStore()
+	if err := ks.RegisterKey(asKeyID, pubPEM, "RS256"); err != nil {
+		return nil, fmt.Errorf("register AS key: %w", err)
+	}
+
+	// AS components.
+	registrar := admin.NewAppRegistrar(ks, admin.NewNoAuth())
+	apiAuth := &apiauth.APIAuth{
+		JWTSigningAlg:  "RS256",
+		JWTSigningKey:  privKey,
+		JWTVerifyKey:   &privKey.PublicKey,
+		ClientKeyStore: ks,
+	}
+	jwksHandler := &keys.JWKSHandler{KeyStore: ks}
+
+	// metadataMu guards lazy initialization of asMetadataHandler with the AS
+	// URL, which we don't know until httptest.NewServer is created.
+	var asMetadataHandler http.Handler
+
+	mux := http.NewServeMux()
+	mux.Handle("/apps/", registrar.Handler())
+	mux.HandleFunc("POST /token", apiAuth.ServeHTTP)
+	mux.Handle("GET /.well-known/jwks.json", jwksHandler)
+	mux.HandleFunc("GET /.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
+		if asMetadataHandler == nil {
+			http.Error(w, "AS not yet initialized", http.StatusServiceUnavailable)
+			return
+		}
+		asMetadataHandler.ServeHTTP(w, r)
+	})
+
+	ts := httptest.NewServer(mux)
+	apiAuth.JWTIssuer = ts.URL
+
+	asMetadataHandler = apiauth.NewASMetadataHandler(&apiauth.ASServerMetadata{
+		Issuer:                             ts.URL,
+		TokenEndpoint:                      ts.URL + "/token",
+		JWKSURI:                            ts.URL + "/.well-known/jwks.json",
+		GrantTypesSupported:                []string{"client_credentials"},
+		TokenEndpointAuthMethods:           []string{"client_secret_post"},
+		AuthorizationDetailsTypesSupported: []string{"payment_initiation"},
+	})
+
+	// Register a confidential client for the demo.
+	body, _ := json.Marshal(map[string]any{
+		"client_name":                "fine-grained-auth-demo",
+		"grant_types":                []string{"client_credentials"},
+		"token_endpoint_auth_method": "client_secret_post",
+		"scope":                      strings.Join([]string{scopeRead, scopeCall}, " "),
+	})
+	resp, err := http.Post(ts.URL+"/apps/dcr", "application/json", bytes.NewReader(body))
+	if err != nil {
+		ts.Close()
+		return nil, fmt.Errorf("DCR: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		ts.Close()
+		return nil, fmt.Errorf("DCR returned %d: %s", resp.StatusCode, respBody)
+	}
+	var reg struct {
+		ClientID     string `json:"client_id"`
+		ClientSecret string `json:"client_secret"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&reg); err != nil {
+		ts.Close()
+		return nil, fmt.Errorf("DCR decode: %w", err)
+	}
+
+	return &inProcessAS{
+		ASURL:         ts.URL,
+		TokenEndpoint: ts.URL + "/token",
+		JWKSURL:       ts.URL + "/.well-known/jwks.json",
+		ClientID:      reg.ClientID,
+		ClientSecret:  reg.ClientSecret,
+		cleanup:       ts.Close,
+	}, nil
+}
+
+// --- Tool registration ---
 
 func registerTools(srv *server.Server) {
 	srv.RegisterTool(
@@ -417,8 +668,6 @@ func registerTools(srv *server.Server) {
 			}`),
 		},
 		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			// Scope enforcement is declarative (RequiredScopes above) +
-			// auth.NewToolScopeMiddleware. Handler only runs if scope check passed.
 			var args struct {
 				DocID string `json:"docId"`
 			}
@@ -446,10 +695,6 @@ func registerTools(srv *server.Server) {
 			}`),
 		},
 		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			// Scope enforcement is declarative — handler only runs if tools-call is present.
-			// Per SEP-2643: scope step-up is described entirely by the WWW-Authenticate
-			// header set by auth.NewToolScopeMiddleware on 403, so this handler doesn't
-			// emit a custom denial envelope.
 			var args struct {
 				DocID   string `json:"docId"`
 				Content string `json:"content"`
@@ -463,7 +708,9 @@ func registerTools(srv *server.Server) {
 	srv.RegisterTool(
 		core.ToolDef{
 			Name:        "initiate_payment",
-			Description: "Initiate a payment. Requires an ephemeral token with payment_initiation authorization_details (UC3).",
+			Description: "Initiate a payment. Requires an RAR-bound token with payment_initiation authorization_details (UC3).",
+			// Authorization is checked by paymentAuthorizationMiddleware (registered
+			// alongside scope middleware in serve()). Handler runs only on success.
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {
@@ -481,87 +728,123 @@ func registerTools(srv *server.Server) {
 				Payee    string `json:"payee"`
 			}
 			json.Unmarshal(req.Arguments, &args)
-
-			paymentDetail := oneauthcore.AuthorizationDetail{
-				Type:    "payment_initiation",
-				Actions: []string{"initiate", "status", "cancel"},
-				Extra: map[string]any{
-					"instructedAmount": map[string]any{
-						"currency": args.Currency,
-						"amount":   args.Amount,
-					},
-					"creditorName": args.Payee,
-				},
-			}
-
-			denial := core.AuthorizationDenial{
-				Reason:                "insufficient_authorization",
-				CredentialDisposition: "additional",
-				RemediationHints: []core.RemediationHint{
-					core.OAuthAuthorizationDetailsHint([]oneauthcore.AuthorizationDetail{paymentDetail}),
-				},
-			}
-
-			denialJSON, _ := json.Marshal(map[string]any{
-				"error":         "insufficient_authorization",
-				"authorization": denial,
-				"message": fmt.Sprintf(
-					"Payment of %s %s to %s requires a transaction-specific credential. "+
-						"Obtain an ephemeral token with payment_initiation authorization_details.",
-					args.Amount, args.Currency, args.Payee),
-			})
-			return core.ToolResult{
-				Content: []core.Content{{Type: "text", Text: string(denialJSON)}},
-				IsError: true,
-			}, nil
+			return core.TextResult(fmt.Sprintf(
+				"Payment of %s %s to %s initiated successfully.",
+				args.Amount, args.Currency, args.Payee)), nil
 		},
 	)
 }
 
-// --- OIDC discovery and token helpers ---
+// paymentAuthorizationMiddleware short-circuits tools/call for initiate_payment
+// when the bearer token's authorization_details claim doesn't include a
+// matching payment_initiation entry. Returns a JSON-RPC error response with
+// the SEP-2643 denial envelope (credentialDisposition: additional + RAR hint).
+//
+// Note: SEP-2643 specifies a JSON-RPC error code (Open Question §1, currently
+// TBD). This example uses ErrCodeServerError as a placeholder; tracked in #317.
+func paymentAuthorizationMiddleware() server.Middleware {
+	return func(ctx context.Context, req *core.Request, next server.MiddlewareFunc) (*core.Response, error) {
+		if req.Method != "tools/call" {
+			return next(ctx, req)
+		}
+		var envelope struct {
+			Name      string `json:"name"`
+			Arguments struct {
+				Amount   string `json:"amount"`
+				Currency string `json:"currency"`
+				Payee    string `json:"payee"`
+			} `json:"arguments"`
+		}
+		if err := json.Unmarshal(req.Params, &envelope); err != nil {
+			return next(ctx, req)
+		}
+		if envelope.Name != "initiate_payment" {
+			return next(ctx, req)
+		}
 
-type oidcConfig struct {
-	Issuer        string `json:"issuer"`
-	TokenEndpoint string `json:"token_endpoint"`
-	JWKSURI       string `json:"jwks_uri"`
+		args := envelope.Arguments
+		if claimsAuthorizePayment(ctx, args.Amount, args.Currency, args.Payee) {
+			return next(ctx, req)
+		}
+
+		// Build the SEP-2643 denial envelope.
+		requested := paymentDetail(args.Amount, args.Currency, args.Payee)
+		denial := core.AuthorizationDenial{
+			Reason:                "insufficient_authorization",
+			CredentialDisposition: "additional",
+			RemediationHints: []core.RemediationHint{
+				core.OAuthAuthorizationDetailsHint([]oacore.AuthorizationDetail{requested}),
+			},
+		}
+		return core.NewErrorResponseWithData(req.ID,
+			core.ErrCodeServerError,
+			fmt.Sprintf("Payment of %s %s to %s requires a transaction-specific credential.",
+				args.Amount, args.Currency, args.Payee),
+			map[string]any{
+				"authorization": denial,
+			},
+		), nil
+	}
 }
 
-func discoverOIDC(realmURL string) (*oidcConfig, error) {
-	resp, err := http.Get(realmURL + "/.well-known/openid-configuration")
-	if err != nil {
-		return nil, err
+// paymentDetail constructs the RFC 9396 authorization_details entry for a
+// payment_initiation operation.
+func paymentDetail(amount, currency, payee string) oacore.AuthorizationDetail {
+	return oacore.AuthorizationDetail{
+		Type:    "payment_initiation",
+		Actions: []string{"initiate"},
+		Extra: map[string]any{
+			"instructedAmount": map[string]any{
+				"currency": currency,
+				"amount":   amount,
+			},
+			"creditorName": payee,
+		},
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("OIDC discovery returned %d", resp.StatusCode)
-	}
-	var cfg oidcConfig
-	if err := json.NewDecoder(resp.Body).Decode(&cfg); err != nil {
-		return nil, err
-	}
-	return &cfg, nil
 }
 
-func getToken(tokenEndpoint string, scopes ...string) string {
-	data := url.Values{
-		"grant_type":    {"client_credentials"},
-		"client_id":     {clientID},
-		"client_secret": {clientSecret},
-		"scope":         {strings.Join(scopes, " ")},
+// claimsAuthorizePayment checks whether the request context's auth claims
+// carry an authorization_details entry of type payment_initiation that matches
+// the requested amount/currency/payee.
+func claimsAuthorizePayment(ctx context.Context, amount, currency, payee string) bool {
+	claims := core.AuthClaims(ctx)
+	if claims == nil || claims.Extra == nil {
+		return false
 	}
-	resp, err := http.PostForm(tokenEndpoint, data)
-	if err != nil {
-		return "<token-unavailable>"
+	raw, ok := claims.Extra["authorization_details"]
+	if !ok {
+		return false
 	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	var tok struct {
-		AccessToken string `json:"access_token"`
+	// Re-marshal then unmarshal into a typed slice.
+	rawJSON, _ := json.Marshal(raw)
+	var details []oacore.AuthorizationDetail
+	if err := json.Unmarshal(rawJSON, &details); err != nil {
+		return false
 	}
-	json.Unmarshal(body, &tok)
-	if tok.AccessToken == "" {
-		return "<token-unavailable>"
+	for _, d := range details {
+		if d.Type != "payment_initiation" {
+			continue
+		}
+		amt, _ := nestedString(d.Extra, "instructedAmount", "amount")
+		cur, _ := nestedString(d.Extra, "instructedAmount", "currency")
+		creditor, _ := d.Extra["creditorName"].(string)
+		if amt == amount && cur == currency && creditor == payee {
+			return true
+		}
 	}
-	return tok.AccessToken
+	return false
+}
+
+func nestedString(m map[string]any, path ...string) (string, bool) {
+	cur := any(m)
+	for _, p := range path {
+		mm, ok := cur.(map[string]any)
+		if !ok {
+			return "", false
+		}
+		cur = mm[p]
+	}
+	s, ok := cur.(string)
+	return s, ok
 }
 

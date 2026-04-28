@@ -1,36 +1,29 @@
 === Stage 12/12: keycloak (make testkcl-auto) ===
-Started: Mon Apr 27 16:31:33 PDT 2026
-Starting Keycloak for interop tests...
-mcpkit-keycloak
-3283f02b36afc77469cd1ba04d46078bcb5460e81c42ff3a2827667051963b9d
-Keycloak starting on port 8180... (realm import takes ~30s)
-Run 'make kcllogs' to watch startup, 'make testkcl' when ready
-Waiting for Keycloak realm...
+Started: Tue Apr 28 16:16:28 PDT 2026
 === RUN   TestKeycloak_MCPServer_ValidToken
---- PASS: TestKeycloak_MCPServer_ValidToken (0.23s)
+--- PASS: TestKeycloak_MCPServer_ValidToken (0.02s)
 === RUN   TestKeycloak_MCPServer_TamperedToken
---- PASS: TestKeycloak_MCPServer_TamperedToken (0.02s)
+--- PASS: TestKeycloak_MCPServer_TamperedToken (0.01s)
 === RUN   TestKeycloak_MCPServer_ScopeAllowed
 --- PASS: TestKeycloak_MCPServer_ScopeAllowed (0.02s)
 === RUN   TestKeycloak_MCPServer_ScopeDenied
---- PASS: TestKeycloak_MCPServer_ScopeDenied (0.02s)
+--- PASS: TestKeycloak_MCPServer_ScopeDenied (0.01s)
 === RUN   TestKeycloak_MCPServer_PRM
 --- PASS: TestKeycloak_MCPServer_PRM (0.01s)
 === RUN   TestKeycloak_MCPServer_WWWAuthenticate
 --- PASS: TestKeycloak_MCPServer_WWWAuthenticate (0.01s)
 === RUN   TestKeycloak_MCPServer_PasswordGrant
---- PASS: TestKeycloak_MCPServer_PasswordGrant (0.11s)
+--- PASS: TestKeycloak_MCPServer_PasswordGrant (0.04s)
 === RUN   TestKeycloak_PublicMethods_DiscoverWithoutAuth
 --- PASS: TestKeycloak_PublicMethods_DiscoverWithoutAuth (0.01s)
 === RUN   TestKeycloak_PublicMethods_ToolCallRequiresAuth
 --- PASS: TestKeycloak_PublicMethods_ToolCallRequiresAuth (0.01s)
 === RUN   TestKeycloak_SessionHijack_DifferentUserRejected
---- PASS: TestKeycloak_SessionHijack_DifferentUserRejected (0.08s)
+--- PASS: TestKeycloak_SessionHijack_DifferentUserRejected (0.05s)
 === RUN   TestKeycloak_SessionHijack_SameUserAllowed
---- PASS: TestKeycloak_SessionHijack_SameUserAllowed (0.04s)
+--- PASS: TestKeycloak_SessionHijack_SameUserAllowed (0.03s)
 === RUN   TestKeycloak_TokenRefresh_PasswordGrant
---- PASS: TestKeycloak_TokenRefresh_PasswordGrant (0.05s)
+--- PASS: TestKeycloak_TokenRefresh_PasswordGrant (0.03s)
 PASS
-ok  	github.com/panyam/mcpkit/tests/keycloak	1.302s
-make[2]: *** No rule to make target `downkcl'.  Stop.
-Finished: Mon Apr 27 16:31:46 PDT 2026
+ok  	github.com/panyam/mcpkit/tests/keycloak	0.586s
+Finished: Tue Apr 28 16:16:30 PDT 2026
