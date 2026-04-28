@@ -65,6 +65,8 @@ Sub-module commands: see `ext/ui/Makefile`, `experimental/ext/protogen/Makefile`
 - **Initialize returns SSE or JSON**: Go server returns initialize as SSE when the client sends `Accept: text/event-stream` (matching TS SDK), or plain JSON otherwise. Curl helpers should send the appropriate Accept header.
 - **Conformance assertions — spec MUST vs MAY**: Don't assert specific error codes unless the spec mandates them. TTL is a client hint (server may ignore). `pollInterval` is server-only (not a client request param — TS SDK bug). Notifications are optional. Auth-context binding ≠ session isolation. Use `ENFORCE_ERROR_CODES` flag pattern for future-proofing.
 - **Flaky TestStoreConcurrentAccess**: Was caused by timestamp-based task IDs colliding when goroutines ran within the same nanosecond. Fixed with deterministic IDs (`fmt.Sprintf`).
+- **Demokit browser steps in non-interactive mode**: Steps that open a browser (`openBrowser()`) and expect user action will fail in `--non-interactive` mode since no one approves. Expected — interactive mode is the primary path.
+- **CORS for browser-based MCP clients**: MCP servers need `Mcp-Session-Id` in both `Access-Control-Allow-Headers` and `Access-Control-Expose-Headers`, plus `DELETE` in allowed methods. Use `servicekit/middleware.CORS()` with options.
 
 Module-specific gotchas live in their READMEs (protogen templates, App Bridge escaping, etc.).
 
@@ -81,6 +83,8 @@ Module-specific gotchas live in their READMEs (protogen templates, App Bridge es
 | Events library | `experimental/ext/events/README.md` |
 | Telegram example | `experimental/telegram-events/README.md` |
 | Auth examples | `examples/auth/README.md` (unified + 5 individual servers) |
+| Elicitation example | `examples/elicitation/` (demokit interactive CLI — UC1 consent flow) |
+| Fine-grained auth | `examples/fine-grained-auth/` (UC2 scope step-up + UC3 RAR via Keycloak) |
 | App examples | `examples/apps/` (todolist, vanilla, react — tools, elicitation, sampling, prompts) |
 | Tasks library | `server/task_*.go`, `server/tasks_experimental.go` (TaskContext, TaskElicit, TaskSample, side-channel, TaskCallbacks) |
 | Tasks callbacks | `server/task_callbacks.go` — per-tool GetTask/GetResult overrides for external proxy pattern |

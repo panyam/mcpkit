@@ -141,7 +141,7 @@ newstack/mcpkit/main
 ## Stack Dependencies
 
 ### Core module (github.com/panyam/mcpkit)
-- servicekit (github.com/panyam/servicekit) v0.0.25 — SSEConn/SSEHub, ListenAndServeGraceful, StreamableServe, HTTPStatusError (with Header), MaxErrorBodySize
+- servicekit (github.com/panyam/servicekit) v0.0.26 — SSEConn/SSEHub, ListenAndServeGraceful, StreamableServe, HTTPStatusError (with Header), MaxErrorBodySize, CORS middleware with functional options (CORSAllowMethods, CORSAllowHeaders, CORSExposeHeaders)
 
 ### Sub-module: ext/auth (github.com/panyam/mcpkit/ext/auth)
 - oneauth (github.com/panyam/oneauth) v0.0.71 — JWT/OIDC validation, testutil.TestAuthServer; separate go.mod
