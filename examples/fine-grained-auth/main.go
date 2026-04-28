@@ -70,10 +70,15 @@ func runDemo() {
 		)
 
 	demo.Section("Setup",
-		"Before running this demo, start the MCP server and Keycloak in separate terminals:",
+		"Keycloak (KC) is an open-source OAuth 2.0 / OIDC authorization server.",
+		"In this demo it plays the role of the Authorization Server (AS) that issues",
+		"access tokens with specific scopes. The MCP server validates incoming tokens",
+		"against KC's JWKS endpoint and enforces per-tool scope requirements.",
+		"",
+		"Before running this demo, start KC and the MCP server in separate terminals:",
 		"",
 		"```",
-		"Terminal 1:  make kcl          # start Keycloak (if not running)",
+		"Terminal 1:  make kcl          # start Keycloak on :8180 (if not running)",
 		"Terminal 2:  make serve        # start the MCP server on :8080",
 		"Terminal 3:  make run          # run this demo",
 		"```",
@@ -101,9 +106,9 @@ func runDemo() {
 
 	// --- Step 1: Get read-only token ---
 	demo.Step("Get a read-only token from Keycloak (scope: tools-read)").
-		Arrow("Host", "KC", "POST /token — client_credentials, scope=tools-read").
+		Arrow("Host", "KC", "POST /token — grant_type=client_credentials + client_id + client_secret + scope=tools-read").
 		DashedArrow("KC", "Host", "access_token (tools-read only)").
-		Note("The host obtains a token with only the tools-read scope. This is sufficient for reading but not for writing or payments.").
+		Note("The host authenticates to KC using client_credentials grant — a confidential client_id+secret pair. KC validates the credentials, ensures the requested scope is allowed for this client, and issues a signed JWT. In production the secret would be in a vault/secret manager (or replaced by mTLS / private_key_jwt for stronger client auth). For interactive user flows, you'd use authorization_code + PKCE instead.").
 		Run(func() {
 			realmURL := keycloakURL + "/realms/" + realmName
 			oidc, err := discoverOIDC(realmURL)
@@ -351,8 +356,10 @@ func serve() {
 	defer validator.Stop()
 
 	logger := demokit.NewColorLogger("[mcp] ", []demokit.ColorRule{
+		{Contains: "isError=true", DarkColor: demokit.ANSIBrightYellow, LightColor: demokit.ANSIYellow},
 		{Contains: "error=", DarkColor: demokit.ANSIRed},
 		{Contains: "ERROR", DarkColor: demokit.ANSIRed},
+		{Contains: "tool=", DarkColor: demokit.ANSIBrightCyan, LightColor: demokit.ANSIBlue},
 		{Contains: "[http] →", DarkColor: demokit.ANSIGray, LightColor: demokit.ANSIDimBlue},
 		{Contains: "[http] ←", DarkColor: demokit.ANSICyan, LightColor: demokit.ANSIBlue},
 		{Contains: "MCP ", DarkColor: demokit.ANSIBrightGreen, LightColor: demokit.ANSIGreen},
@@ -362,6 +369,7 @@ func serve() {
 		server.WithAuth(validator),
 		server.WithRequestLogging(logger),
 		server.WithMiddleware(server.LoggingMiddleware(logger)),
+		server.WithMiddleware(server.ToolCallLogger(logger)),
 	)
 
 	registerTools(srv)

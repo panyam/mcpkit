@@ -4,7 +4,7 @@ A scripted MCP host walking through UC2/UC3 authorization denial flows.
 
 ## What you'll learn
 
-- **Get a read-only token from Keycloak (scope: tools-read)** — The host obtains a token with only the tools-read scope. This is sufficient for reading but not for writing or payments.
+- **Get a read-only token from Keycloak (scope: tools-read)** — The host authenticates to KC using client_credentials grant — a confidential client_id+secret pair. KC validates the credentials, ensures the requested scope is allowed for this client, and issues a signed JWT. In production the secret would be in a vault/secret manager (or replaced by mTLS / private_key_jwt for stronger client auth). For interactive user flows, you'd use authorization_code + PKCE instead.
 - **Connect to MCP server with read-only token** — The host connects with the read-only token. JWT validation passes — the token is valid, just limited in scope.
 - **Call read_document — succeeds (tools-read is sufficient)** — The read_document tool only requires tools-read scope. Our token has it, so the call succeeds.
 - **Call update_document — DENIED (UC2: needs tools-call scope)** — The update_document tool requires tools-call scope. Our read-only token lacks it. The server returns a structured authorization denial telling the host exactly which scopes to request via remediationHints.
@@ -21,7 +21,7 @@ sequenceDiagram
     participant KC as Keycloak
 
     Note over Host,KC: Step 1: Get a read-only token from Keycloak (scope: tools-read)
-    Host->>KC: POST /token — client_credentials, scope=tools-read
+    Host->>KC: POST /token — grant_type=client_credentials + client_id + client_secret + scope=tools-read
     KC-->>Host: access_token (tools-read only)
 
     Note over Host,KC: Step 2: Connect to MCP server with read-only token
@@ -55,10 +55,15 @@ sequenceDiagram
 
 ### Setup
 
-Before running this demo, start the MCP server and Keycloak in separate terminals:
+Keycloak (KC) is an open-source OAuth 2.0 / OIDC authorization server.
+In this demo it plays the role of the Authorization Server (AS) that issues
+access tokens with specific scopes. The MCP server validates incoming tokens
+against KC's JWKS endpoint and enforces per-tool scope requirements.
+
+Before running this demo, start KC and the MCP server in separate terminals:
 
 ```
-Terminal 1:  make kcl          # start Keycloak (if not running)
+Terminal 1:  make kcl          # start Keycloak on :8180 (if not running)
 Terminal 2:  make serve        # start the MCP server on :8080
 Terminal 3:  make run          # run this demo
 ```
@@ -75,7 +80,7 @@ from the hint and re-authorizes on its own.
 
 ### Step 1: Get a read-only token from Keycloak (scope: tools-read)
 
-The host obtains a token with only the tools-read scope. This is sufficient for reading but not for writing or payments.
+The host authenticates to KC using client_credentials grant — a confidential client_id+secret pair. KC validates the credentials, ensures the requested scope is allowed for this client, and issues a signed JWT. In production the secret would be in a vault/secret manager (or replaced by mTLS / private_key_jwt for stronger client auth). For interactive user flows, you'd use authorization_code + PKCE instead.
 
 ### Step 2: Connect to MCP server with read-only token
 
