@@ -221,10 +221,20 @@ func serve() {
 	listenURL := fmt.Sprintf("http://localhost%s", addr)
 	consent := newConsentStore()
 
+	logger := demokit.NewColorLogger("[mcp] ", []demokit.ColorRule{
+		{Contains: "error=", DarkColor: demokit.ANSIRed},
+		{Contains: "ERROR", DarkColor: demokit.ANSIRed},
+		{Contains: "[http] →", DarkColor: demokit.ANSIDimCyan, LightColor: demokit.ANSIDimBlue},
+		{Contains: "[http] ←", DarkColor: demokit.ANSICyan, LightColor: demokit.ANSIBlue},
+		{Contains: "MCP ", DarkColor: demokit.ANSIGreen},
+	})
 	srv := server.NewServer(core.ServerInfo{
 		Name:    "elicitation-example",
 		Version: "1.0.0",
-	})
+	},
+		server.WithRequestLogging(logger),
+		server.WithMiddleware(server.LoggingMiddleware(logger)),
+	)
 
 	srv.RegisterTool(
 		core.ToolDef{

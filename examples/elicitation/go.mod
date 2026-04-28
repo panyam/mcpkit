@@ -2,7 +2,10 @@ module github.com/panyam/mcpkit/examples/elicitation
 
 go 1.26.2
 
-replace github.com/panyam/mcpkit => ../..
+replace (
+	github.com/panyam/demokit => ../../../../demokit
+	github.com/panyam/mcpkit => ../..
+)
 
 require (
 	github.com/panyam/demokit v0.0.2
