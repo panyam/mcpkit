@@ -35,3 +35,5 @@ docs/COMPETITIVE_ANALYSIS.md
 examples/apps/htmx/htmx
 examples/apps/react/server/server
 examples/tasks/tasks
+examples/elicitation/elicitation
+examples/fine-grained-auth/fine-grained-auth
