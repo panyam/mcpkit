@@ -6,7 +6,7 @@
  * not a reason to pull in the full upstream ext-apps SDK.
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 /** Hook that tracks bridge connection state and host context. */
 export function useMCPApp() {
@@ -41,4 +41,32 @@ export function useMCPEvent<E extends MCPAppEvent>(
   useEffect(() => {
     return MCPApp.on(event, handler);
   }, [event, handler]);
+}
+
+/**
+ * Hook for declarative app-provided tool registration.
+ * Registers the tool on mount and removes it on unmount.
+ * Handler updates automatically when it changes (via ref).
+ *
+ * Usage:
+ *   useMCPAppTool("get_count", { description: "Get counter" }, () => ({
+ *     content: [{ type: "text", text: String(count) }]
+ *   }));
+ */
+export function useMCPAppTool(
+  name: string,
+  config: { description?: string; inputSchema?: unknown; outputSchema?: unknown },
+  handler: (args: Record<string, unknown>) => unknown | Promise<unknown>
+) {
+  const handlerRef = useRef(handler);
+  handlerRef.current = handler;
+
+  useEffect(() => {
+    const handle = MCPApp.registerTool(name, config, (args) =>
+      handlerRef.current(args)
+    );
+    return () => handle.remove();
+    // Re-register if name or config identity changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name]);
 }
