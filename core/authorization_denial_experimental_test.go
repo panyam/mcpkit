@@ -39,13 +39,40 @@ func TestAuthorizationDenialSerialization(t *testing.T) {
 	if hint.Type != RemediationTypeOAuthScopeStepUp {
 		t.Errorf("hint.Type = %q, want %q", hint.Type, RemediationTypeOAuthScopeStepUp)
 	}
-	scopes, ok := hint.Data["requiredScopes"]
+	scopes, ok := hint.Extra["requiredScopes"]
 	if !ok {
-		t.Fatal("missing requiredScopes in hint data")
+		t.Fatal("missing requiredScopes in hint")
 	}
 	scopeList, ok := scopes.([]any)
 	if !ok || len(scopeList) != 2 {
 		t.Errorf("requiredScopes = %v, want [read write]", scopes)
+	}
+}
+
+// TestRemediationHintFlatWireFormat verifies that hint members appear at the
+// top level of the JSON object (per SEP-2643), not nested under a `data` field.
+func TestRemediationHintFlatWireFormat(t *testing.T) {
+	hint := OAuthAuthorizationDetailsHint([]any{
+		map[string]any{"type": "payment_initiation"},
+	})
+
+	data, err := json.Marshal(hint)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := raw["data"]; ok {
+		t.Error("hint must not nest members under 'data' (SEP-2643 wire format)")
+	}
+	if _, ok := raw["authorization_details"]; !ok {
+		t.Error("authorization_details must appear at top level")
+	}
+	if _, ok := raw["type"]; !ok {
+		t.Error("type must be present")
 	}
 }
 
@@ -70,8 +97,8 @@ func TestAuthorizationDenialOmitsEmptyFields(t *testing.T) {
 	if _, ok := raw["authorizationContextId"]; ok {
 		t.Error("authorizationContextId should be omitted when empty")
 	}
-	if _, ok := raw["credential_disposition"]; ok {
-		t.Error("credential_disposition should be omitted when empty")
+	if _, ok := raw["credentialDisposition"]; ok {
+		t.Error("credentialDisposition should be omitted when empty")
 	}
 	if _, ok := raw["remediationHints"]; ok {
 		t.Error("remediationHints should be omitted when empty")
@@ -125,7 +152,7 @@ func TestScopeStepUpHint(t *testing.T) {
 	if hint.Type != RemediationTypeOAuthScopeStepUp {
 		t.Errorf("Type = %q, want %q", hint.Type, RemediationTypeOAuthScopeStepUp)
 	}
-	scopes, ok := hint.Data["requiredScopes"].([]string)
+	scopes, ok := hint.Extra["requiredScopes"].([]string)
 	if !ok {
 		t.Fatal("requiredScopes not []string")
 	}

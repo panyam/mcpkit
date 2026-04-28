@@ -55,7 +55,7 @@ func runDemo() {
 
 	demo := demokit.New("URL Elicitation — Consent Approval Flow (UC1)").
 		Dir("elicitation").
-		Description("A scripted MCP host walking through the UC1 consent approval flow.").
+		Description("**EXPERIMENTAL** — Tracks SEP-2643 (Structured Authorization Denials), currently a draft. A scripted MCP host walking through the UC1 consent approval flow. Wire format may change as the SEP evolves.").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this client)"),
 			demokit.Actor("Server", "MCP Server (make serve)"),
@@ -190,7 +190,7 @@ func runDemo() {
 				"name":      "access_protected_resource",
 				"arguments": map[string]any{"resourceId": "my-doc"},
 				"_meta": map[string]any{
-					"modelcontextprotocol.io/authorizationContextId": contextID,
+					core.MetaKeyAuthorizationContextID: contextID,
 				},
 			})
 			if err != nil {
@@ -313,7 +313,7 @@ func consentMiddleware(store *consentStore, baseURL string) server.Middleware {
 		var envelope struct {
 			Name string `json:"name"`
 			Meta *struct {
-				AuthzContextID string `json:"modelcontextprotocol.io/authorizationContextId"`
+				AuthzContextID string `json:"io.modelcontextprotocol/authorization-context-id"`
 			} `json:"_meta"`
 		}
 		if err := json.Unmarshal(req.Params, &envelope); err != nil {
@@ -355,6 +355,7 @@ func consentMiddleware(store *consentStore, baseURL string) server.Middleware {
 				"authorization": core.AuthorizationDenial{
 					Reason:                 "insufficient_authorization",
 					AuthorizationContextID: contextID,
+					RemediationHints:       []core.RemediationHint{core.URLHint()},
 				},
 				"elicitations": []core.ElicitationRequest{
 					{

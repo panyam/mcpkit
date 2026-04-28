@@ -62,7 +62,7 @@ func runDemo() {
 
 	demo := demokit.New("Fine-Grained Authorization — Scope Step-Up (UC2) + Ephemeral Credentials (UC3)").
 		Dir("fine-grained-auth").
-		Description("A scripted MCP host walking through UC2/UC3 authorization denial flows.").
+		Description("**EXPERIMENTAL** — Tracks SEP-2643 (Structured Authorization Denials), currently a draft. A scripted MCP host walking through UC2/UC3 authorization denial flows. Wire format may change as the SEP evolves; spec divergences tracked in mcpkit issue #317.").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this client)"),
 			demokit.Actor("Server", "MCP Server (make serve)"),
@@ -188,20 +188,19 @@ func runDemo() {
 			fmt.Printf("    Authorization denial:\n    %s\n\n", denialJSON)
 
 			// Parse the remediationHints to extract required scopes — what a smart host would do.
+			// Per SEP-2643, hint members appear at the top level of the hint object (not nested).
 			var parsed struct {
 				Authorization struct {
 					RemediationHints []struct {
-						Type string `json:"type"`
-						Data struct {
-							RequiredScopes []string `json:"requiredScopes"`
-						} `json:"data"`
+						Type           string   `json:"type"`
+						RequiredScopes []string `json:"requiredScopes"`
 					} `json:"remediationHints"`
 				} `json:"authorization"`
 			}
 			json.Unmarshal([]byte(result.Content[0].Text), &parsed)
 			for _, h := range parsed.Authorization.RemediationHints {
 				if h.Type == "oauth_scope_step_up" {
-					requiredScopes = h.Data.RequiredScopes
+					requiredScopes = h.RequiredScopes
 					break
 				}
 			}
@@ -283,14 +282,13 @@ func runDemo() {
 			fmt.Printf("    Authorization denial:\n    %s\n\n", denialJSON)
 
 			// Parse the authorization_details from the remediationHint — what a smart host would do.
+			// Per SEP-2643, hint members are at the top level of the hint object.
 			var parsed struct {
 				Authorization struct {
 					CredentialDisposition string `json:"credentialDisposition"`
 					RemediationHints      []struct {
-						Type string `json:"type"`
-						Data struct {
-							AuthorizationDetails []map[string]any `json:"authorization_details"`
-						} `json:"data"`
+						Type                 string           `json:"type"`
+						AuthorizationDetails []map[string]any `json:"authorization_details"`
 					} `json:"remediationHints"`
 				} `json:"authorization"`
 			}
@@ -300,15 +298,16 @@ func runDemo() {
 				parsed.Authorization.CredentialDisposition)
 			for _, h := range parsed.Authorization.RemediationHints {
 				if h.Type == "oauth_authorization_details" {
-					adJSON, _ := json.MarshalIndent(h.Data.AuthorizationDetails, "    ", "  ")
+					adJSON, _ := json.MarshalIndent(h.AuthorizationDetails, "    ", "  ")
 					fmt.Printf("    → Parsed authorization_details (RFC 9396):\n    %s\n", adJSON)
 				}
 			}
 			fmt.Printf("\n    Next step (not implemented in this demo):\n")
 			fmt.Printf("      The host would POST these authorization_details to an RAR-capable AS\n")
 			fmt.Printf("      to obtain an ephemeral payment-bound credential, then retry initiate_payment.\n")
-			fmt.Printf("      Keycloak does not support RFC 9396 RAR; oneauth v0.0.78+ does. Wiring this up\n")
-			fmt.Printf("      requires upgrading mcpkit's oneauth dep — see issue #311.\n")
+			fmt.Printf("      Blocked on:\n")
+			fmt.Printf("        - issue #311 (upgrade oneauth dep — Keycloak doesn't support RFC 9396 RAR)\n")
+			fmt.Printf("        - issue #317 (use SEP-2643 JSON-RPC error code once spec assigns one)\n")
 		})
 
 	// Use TUI renderer if --tui flag is passed.
@@ -517,15 +516,10 @@ func registerTools(srv *server.Server) {
 			}
 
 			denial := core.AuthorizationDenial{
-				Reason:               "insufficient_authorization",
+				Reason:                "insufficient_authorization",
 				CredentialDisposition: "additional",
 				RemediationHints: []core.RemediationHint{
-					{
-						Type: core.RemediationTypeOAuthRAR,
-						Data: map[string]any{
-							"authorization_details": []oneauthcore.AuthorizationDetail{paymentDetail},
-						},
-					},
+					core.OAuthAuthorizationDetailsHint([]oneauthcore.AuthorizationDetail{paymentDetail}),
 				},
 			}
 
