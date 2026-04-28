@@ -24,18 +24,28 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
 	"sync"
 
 	"github.com/panyam/demokit"
+	"github.com/panyam/demokit/tui"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/server"
 	"github.com/panyam/servicekit/middleware"
 )
 
 func main() {
+	// --serve mode: start the MCP server standalone for use with MCPJam or other clients.
+	for _, arg := range os.Args[1:] {
+		if strings.TrimSpace(arg) == "--serve" {
+			serve()
+			return
+		}
+	}
+
 	demo := demokit.New("URL Elicitation — Consent Approval Flow (UC1)").
 		Dir("elicitation").
 		Description("Demonstrates the FineGrainedAuth UC1 pattern: a tool requires out-of-band user approval via a URL before granting access.").
@@ -53,8 +63,6 @@ func main() {
 
 	// --- Step 1: Start server ---
 	demo.Step("Start the MCP server with consent middleware").
-		Arrow("Server", "Server", "RegisterTool(access_protected_resource)").
-		Arrow("Server", "Server", "UseMiddleware(consentMiddleware)").
 		Note("The server has one tool protected by consent middleware. First calls get rejected with -32042 until the user approves via a URL.").
 		Run(func() {
 			addr, err := startServer()
@@ -207,7 +215,76 @@ func main() {
 			fmt.Printf("    Result: %s\n", result.Content[0].Text)
 		})
 
+	// Use TUI renderer if --tui flag is passed.
+	for _, arg := range os.Args[1:] {
+		if strings.TrimSpace(arg) == "--tui" {
+			demo.WithRenderer(tui.New())
+			break
+		}
+	}
+
 	demo.Execute()
+}
+
+// serve starts the MCP server standalone (no demokit, no demo steps).
+// Connect an MCP host to http://localhost:<port>/mcp.
+func serve() {
+	addr := ":8080"
+	for i, arg := range os.Args[1:] {
+		if arg == "--addr" && i+2 < len(os.Args) {
+			addr = os.Args[i+2]
+		}
+	}
+	listenURL := fmt.Sprintf("http://localhost%s", addr)
+	consent := newConsentStore()
+
+	srv := server.NewServer(core.ServerInfo{
+		Name:    "elicitation-example",
+		Version: "1.0.0",
+	})
+
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "access_protected_resource",
+			Description: "Access a protected resource. Requires user approval via URL consent flow on first call.",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"resourceId": {"type": "string", "description": "Resource to access"}
+				}
+			}`),
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			var args struct {
+				ResourceID string `json:"resourceId"`
+			}
+			json.Unmarshal(req.Arguments, &args)
+			if args.ResourceID == "" {
+				args.ResourceID = "default-resource"
+			}
+			return core.TextResult(fmt.Sprintf(
+				"Access granted to resource %q (approved via consent)", args.ResourceID)), nil
+		},
+	)
+
+	srv.UseMiddleware(consentMiddleware(consent, listenURL))
+
+	mux := http.NewServeMux()
+	cors := middleware.CORS(nil,
+		middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
+		middleware.CORSAllowHeaders("Content-Type", "Authorization", "Mcp-Session-Id"),
+		middleware.CORSExposeHeaders("Mcp-Session-Id"),
+	)
+	mux.Handle("/mcp", cors(srv.Handler(server.WithStreamableHTTP(true))))
+	mux.HandleFunc("/approve", consent.handleApprove)
+
+	fmt.Printf("Elicitation example server on %s\n", addr)
+	fmt.Printf("MCP endpoint: %s/mcp\n", listenURL)
+	fmt.Printf("Tools: access_protected_resource\n")
+	if err := http.ListenAndServe(addr, mux); err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 // --- MCP HTTP helpers ---
@@ -384,17 +461,25 @@ func consentMiddleware(store *consentStore, baseURL string) server.Middleware {
 			return next(ctx, req)
 		}
 
+		// Check if retrying with an approved context ID (FineGrainedAuth-aware clients).
 		if envelope.Meta != nil && envelope.Meta.AuthzContextID != "" {
 			if store.isApproved(envelope.Meta.AuthzContextID) {
 				return next(ctx, req)
 			}
 		}
 
+		// Fallback: check if this session+tool was already approved.
+		// Supports clients (VS Code, Claude Desktop) that retry without the context ID.
+		sessionKey := core.GetSessionID(ctx) + ":" + envelope.Name
+		if store.isSessionApproved(sessionKey) {
+			return next(ctx, req)
+		}
+
 		contextID := generateID("authzctx")
 		elicitID := generateID("el")
 
 		bgCtx := core.DetachForBackground(ctx)
-		store.addPending(contextID, elicitID, func(method string, params any) {
+		store.addPending(contextID, elicitID, sessionKey, func(method string, params any) {
 			core.Notify(bgCtx, method, params)
 		})
 
@@ -425,6 +510,13 @@ type consentStore struct {
 	mu       sync.Mutex
 	pending  map[string]*consentEntry
 	approved map[string]bool
+
+	// sessionApproved tracks approvals by session ID, so clients that
+	// don't send authorizationContextId on retry (e.g., VS Code) still work.
+	// Key: "sessionID:toolName"
+	sessionApproved map[string]bool
+	// pendingSession maps contextID → "sessionID:toolName" for session-level approval on POST /approve.
+	pendingSession map[string]string
 }
 
 type consentEntry struct {
@@ -434,21 +526,32 @@ type consentEntry struct {
 
 func newConsentStore() *consentStore {
 	return &consentStore{
-		pending:  make(map[string]*consentEntry),
-		approved: make(map[string]bool),
+		pending:         make(map[string]*consentEntry),
+		approved:        make(map[string]bool),
+		sessionApproved: make(map[string]bool),
+		pendingSession:  make(map[string]string),
 	}
 }
 
-func (s *consentStore) addPending(contextID, elicitID string, nf core.NotifyFunc) {
+func (s *consentStore) addPending(contextID, elicitID string, sessionKey string, nf core.NotifyFunc) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.pending[contextID] = &consentEntry{elicitationID: elicitID, notifyFunc: nf}
+	if sessionKey != "" {
+		s.pendingSession[contextID] = sessionKey
+	}
 }
 
 func (s *consentStore) isApproved(contextID string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.approved[contextID]
+}
+
+func (s *consentStore) isSessionApproved(sessionKey string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.sessionApproved[sessionKey]
 }
 
 func (s *consentStore) approve(contextID string) (*consentEntry, bool) {
@@ -460,6 +563,11 @@ func (s *consentStore) approve(contextID string) (*consentEntry, bool) {
 	}
 	delete(s.pending, contextID)
 	s.approved[contextID] = true
+	// Also approve by session so clients that don't send the context ID on retry still work.
+	if sessionKey, ok := s.pendingSession[contextID]; ok {
+		s.sessionApproved[sessionKey] = true
+		delete(s.pendingSession, contextID)
+	}
 	return entry, true
 }
 
