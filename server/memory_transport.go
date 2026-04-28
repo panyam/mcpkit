@@ -120,17 +120,17 @@ func (t *InProcessTransport) Call(ctx context.Context, req *core.Request) (*core
 		requestFunc = t.dispatcher.makeRequestFunc(push)
 	}
 
-	resp := t.server.dispatchWithNotifyAndRequest(
+	resp, err := t.server.dispatchWithNotifyAndRequest(
 		t.dispatcher, ctx, nil,
 		t.dispatcher.getNotifyFunc(), requestFunc, req,
 	)
-	return resp, nil
+	return resp, err
 }
 
 // Notify dispatches a JSON-RPC notification (no response expected).
 func (t *InProcessTransport) Notify(ctx context.Context, req *core.Request) error {
-	t.server.dispatchWith(t.dispatcher, ctx, nil, req)
-	return nil
+	_, err := t.server.dispatchWith(t.dispatcher, ctx, nil, req)
+	return err
 }
 
 // Close tears down the session.

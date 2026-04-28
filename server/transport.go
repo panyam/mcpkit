@@ -205,7 +205,18 @@ func (t *sseTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 					})
 					continue
 				}
-				resp := t.server.dispatchWith(dispatcher, r.Context(), claims, &batchReq)
+				resp, dErr := t.server.dispatchWith(dispatcher, r.Context(), claims, &batchReq)
+				if dErr != nil {
+					// Transport-level short-circuit (e.g., scope step-up).
+					// Emit the auth error as an SSE message: per SSE transport,
+					// we cannot return HTTP status from inside the batch loop.
+					errResp := core.NewErrorResponse(batchReq.ID, core.ErrCodeServerError, dErr.Error())
+					raw, _ := marshalJSON(errResp)
+					emitSSEEvent(dispatcher.eventIDs, t.config.eventStore, sessionID, raw, func(id string, data json.RawMessage) {
+						t.hub.SendEventWithID(sessionID, "message", id, SSEJSON(data))
+					})
+					continue
+				}
 				if resp == nil {
 					continue // notification — no response
 				}
@@ -245,7 +256,12 @@ func (t *sseTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 			cur.conn.SendRetry(ms)
 		}
 	}
-	resp := t.server.dispatchWithOpts(dispatcher, r.Context(), claims, dispatcher.getNotifyFunc(), requestFunc, sseRetry, &req)
+	resp, dErr := t.server.dispatchWithOpts(dispatcher, r.Context(), claims, dispatcher.getNotifyFunc(), requestFunc, sseRetry, &req)
+	if dErr != nil {
+		// Transport-level short-circuit (e.g., scope step-up).
+		writeAuthError(w, dErr)
+		return
+	}
 
 	// Notifications have no response
 	if resp == nil {

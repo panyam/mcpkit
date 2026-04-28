@@ -388,14 +388,19 @@ func (s *Server) Registry() *Registry {
 }
 
 // Dispatch routes a JSON-RPC request through the server's dispatch layer.
-func (s *Server) Dispatch(ctx context.Context, req *core.Request) *core.Response {
+//
+// Returns the JSON-RPC response and an optional transport-level error.
+// A non-nil error (typically *core.AuthError) indicates middleware short-circuited
+// at the transport layer (e.g., scope step-up); callers should map it to an
+// HTTP-level response via writeAuthError.
+func (s *Server) Dispatch(ctx context.Context, req *core.Request) (*core.Response, error) {
 	return s.dispatchWith(s.dispatcher, ctx, nil, req)
 }
 
 // dispatchWith routes a request through a specific dispatcher with server-level
 // middleware (e.g. tool timeout). Used by transports to dispatch on per-session
 // dispatchers. The claims parameter carries the authenticated identity from CheckAuth.
-func (s *Server) dispatchWith(d *Dispatcher, ctx context.Context, claims *core.Claims, req *core.Request) *core.Response {
+func (s *Server) dispatchWith(d *Dispatcher, ctx context.Context, claims *core.Claims, req *core.Request) (*core.Response, error) {
 	return s.dispatchWithNotify(d, ctx, claims, d.getNotifyFunc(), req)
 }
 
@@ -403,13 +408,13 @@ func (s *Server) dispatchWith(d *Dispatcher, ctx context.Context, claims *core.C
 // Used by handlePostSSE to pass a request-scoped notify function that writes
 // to the current SSE stream, avoiding races on d.notifyFunc when concurrent
 // SSE-streaming POSTs share the same session dispatcher.
-func (s *Server) dispatchWithNotify(d *Dispatcher, ctx context.Context, claims *core.Claims, notify core.NotifyFunc, req *core.Request) *core.Response {
+func (s *Server) dispatchWithNotify(d *Dispatcher, ctx context.Context, claims *core.Claims, notify core.NotifyFunc, req *core.Request) (*core.Response, error) {
 	return s.dispatchWithNotifyAndRequest(d, ctx, claims, notify, nil, req)
 }
 
 // dispatchWithNotifyAndRequest is the full dispatch entry point that accepts both
 // a core.NotifyFunc and core.RequestFunc. Used by transports that support server-to-client requests.
-func (s *Server) dispatchWithNotifyAndRequest(d *Dispatcher, ctx context.Context, claims *core.Claims, notify core.NotifyFunc, request core.RequestFunc, req *core.Request) *core.Response {
+func (s *Server) dispatchWithNotifyAndRequest(d *Dispatcher, ctx context.Context, claims *core.Claims, notify core.NotifyFunc, request core.RequestFunc, req *core.Request) (*core.Response, error) {
 	return s.dispatchWithOpts(d, ctx, claims, notify, request, nil, req)
 }
 
@@ -418,7 +423,7 @@ func (s *Server) dispatchWithNotifyAndRequest(d *Dispatcher, ctx context.Context
 // streamable HTTP SSE POST path) pass a non-nil sseRetry so handlers calling
 // core.EmitSSERetry can emit a "retry:" field on the current stream.
 // Non-SSE transports pass nil and EmitSSERetry becomes a silent no-op.
-func (s *Server) dispatchWithOpts(d *Dispatcher, ctx context.Context, claims *core.Claims, notify core.NotifyFunc, request core.RequestFunc, sseRetry func(ms int), req *core.Request) *core.Response {
+func (s *Server) dispatchWithOpts(d *Dispatcher, ctx context.Context, claims *core.Claims, notify core.NotifyFunc, request core.RequestFunc, sseRetry func(ms int), req *core.Request) (*core.Response, error) {
 	// Wrap outgoing notifications with interceptors (first registered = outermost).
 	for i := len(s.options.notifyInterceptors) - 1; i >= 0; i-- {
 		next := notify
@@ -492,20 +497,20 @@ func (s *Server) dispatchWithOpts(d *Dispatcher, ctx context.Context, claims *co
 	}
 
 	// Build the terminal handler: dispatch with optional tool timeout.
-	handler := MiddlewareFunc(func(ctx context.Context, req *core.Request) *core.Response {
+	handler := MiddlewareFunc(func(ctx context.Context, req *core.Request) (*core.Response, error) {
 		if s.options.toolTimeout > 0 && req.Method == "tools/call" {
 			tctx, cancel := context.WithTimeout(ctx, s.options.toolTimeout)
 			defer cancel()
-			return d.Dispatch(tctx, req)
+			return d.Dispatch(tctx, req), nil
 		}
-		return d.Dispatch(ctx, req)
+		return d.Dispatch(ctx, req), nil
 	})
 
 	// Wrap with user middleware (reverse order: first registered = outermost).
 	for i := len(s.options.middleware) - 1; i >= 0; i-- {
 		next := handler
 		mw := s.options.middleware[i]
-		handler = func(ctx context.Context, req *core.Request) *core.Response {
+		handler = func(ctx context.Context, req *core.Request) (*core.Response, error) {
 			return mw(ctx, req, next)
 		}
 	}
