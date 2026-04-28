@@ -89,6 +89,26 @@
       }
     }
 
+    // --- App-provided tools (host/model can query and mutate the app's task state) ---
+    MCPApp.registerTool('get_todos', {
+      description: 'Get the current list of todos from the app UI',
+    }, () => {
+      return { content: [{ type: 'text', text: JSON.stringify(tasks) }] };
+    });
+
+    MCPApp.registerTool('toggle_todo', {
+      description: 'Toggle a todo item done/undone by index',
+      inputSchema: { type: 'object', properties: { index: { type: 'number' } }, required: ['index'] },
+    }, (args) => {
+      const i = args.index;
+      if (typeof i !== 'number' || i < 0 || i >= tasks.length) {
+        return { content: [{ type: 'text', text: 'Invalid index: ' + i }], isError: true };
+      }
+      tasks[i].done = !tasks[i].done;
+      renderTasks();
+      return { content: [{ type: 'text', text: 'Toggled: ' + tasks[i].title + ' → ' + (tasks[i].done ? 'done' : 'undone') }] };
+    });
+
     MCPApp.on('connected', () => {
       document.getElementById('status').textContent = 'Connected to host';
     });

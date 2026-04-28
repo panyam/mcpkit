@@ -54,6 +54,25 @@
         document.getElementById('label').textContent = 'Error: ' + err.message;
       });
     });
+    // --- App-provided tools (host/model can call these) ---
+    var lastRoll = null;
+    MCPApp.registerTool('roll_dice', {
+      description: 'Roll a die from the app UI',
+      inputSchema: { type: 'object', properties: { sides: { type: 'number' } } }
+    }, function(args) {
+      var sides = args.sides || 6;
+      var value = Math.floor(Math.random() * sides) + 1;
+      lastRoll = { sides: sides, value: value };
+      showResult('Rolled d' + sides + ': ' + value);
+      return { content: [{ type: 'text', text: 'Rolled d' + sides + ': ' + value }] };
+    });
+    MCPApp.registerTool('get_last_roll', {
+      description: 'Get the last dice roll result'
+    }, function() {
+      if (!lastRoll) return { content: [{ type: 'text', text: 'No rolls yet' }] };
+      return { content: [{ type: 'text', text: 'Last roll: d' + lastRoll.sides + ' = ' + lastRoll.value }] };
+    });
+
     MCPApp.on('connected', function() {
       document.getElementById('label').textContent = 'Connected! Ask the LLM to roll a die.';
     });

@@ -173,10 +173,38 @@ interface MCPAppBridge {
   /** Handler for tools/list requests from the host. */
   onlisttools: ListToolsHandler | null;
 
+  // --- Tool registration API ---
+
+  /**
+   * Register an app-provided tool that the host/model can call.
+   * Installs auto-dispatch handlers, replacing any manually set
+   * oncalltool/onlisttools handlers. Sends toolListChanged notification.
+   */
+  registerTool(
+    name: string,
+    config: { description?: string; inputSchema?: unknown; outputSchema?: unknown },
+    handler: (args: Record<string, unknown>) => unknown | Promise<unknown>
+  ): ToolHandle;
+
+  /** Notify the host that the app's tool list has changed. */
+  sendToolListChanged(): void;
+
   // --- Utility ---
 
   /** Returns true if running inside an MCP Apps host. */
   isHosted(): boolean;
+}
+
+/** Handle for managing a registered app-provided tool. */
+interface ToolHandle {
+  /** Update tool metadata (description, schemas). Sends toolListChanged. */
+  update(config: Partial<{ description?: string; inputSchema?: unknown; outputSchema?: unknown }>): void;
+  /** Disable the tool (hidden from tools/list, rejected on tools/call). */
+  disable(): void;
+  /** Re-enable a disabled tool. */
+  enable(): void;
+  /** Remove the tool entirely. */
+  remove(): void;
 }
 
 declare var MCPApp: MCPAppBridge;
