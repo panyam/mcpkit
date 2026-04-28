@@ -29,7 +29,7 @@ func TestRegisterToolSingleStruct(t *testing.T) {
 
 	testutil.InitHandshake(srv)
 
-	resp := srv.Dispatch(context.Background(), testutil.ToolCallRequest("greet", nil))
+	resp, _ := srv.Dispatch(context.Background(), testutil.ToolCallRequest("greet", nil))
 	require.NotNil(t, resp)
 	require.Nil(t, resp.Error)
 }
@@ -55,7 +55,7 @@ func TestRegisterResourceSingleStruct(t *testing.T) {
 
 	testutil.InitHandshake(srv)
 
-	resp := srv.Dispatch(context.Background(), testutil.ResourceReadRequest("test://data"))
+	resp, _ := srv.Dispatch(context.Background(), testutil.ResourceReadRequest("test://data"))
 	require.NotNil(t, resp)
 	require.Nil(t, resp.Error)
 }
@@ -81,7 +81,7 @@ func TestRegisterPromptSingleStruct(t *testing.T) {
 
 	testutil.InitHandshake(srv)
 
-	resp := srv.Dispatch(context.Background(), testutil.PromptGetRequest("greeting", nil))
+	resp, _ := srv.Dispatch(context.Background(), testutil.PromptGetRequest("greeting", nil))
 	require.NotNil(t, resp)
 	require.Nil(t, resp.Error)
 }
@@ -114,13 +114,13 @@ func TestRegisterMixed(t *testing.T) {
 	testutil.InitHandshake(srv)
 
 	// All three should be dispatched successfully
-	resp := srv.Dispatch(context.Background(), testutil.ToolCallRequest("t1", nil))
+	resp, _ := srv.Dispatch(context.Background(), testutil.ToolCallRequest("t1", nil))
 	require.Nil(t, resp.Error, "tool should work")
 
-	resp = srv.Dispatch(context.Background(), testutil.ResourceReadRequest("test://r1"))
+	resp, _ = srv.Dispatch(context.Background(), testutil.ResourceReadRequest("test://r1"))
 	require.Nil(t, resp.Error, "resource should work")
 
-	resp = srv.Dispatch(context.Background(), testutil.PromptGetRequest("p1", nil))
+	resp, _ = srv.Dispatch(context.Background(), testutil.PromptGetRequest("p1", nil))
 	require.Nil(t, resp.Error, "prompt should work")
 }
 
@@ -146,8 +146,8 @@ func TestExistingTwoArgAPIStillWorks(t *testing.T) {
 
 	testutil.InitHandshake(srv)
 
-	resp1 := srv.Dispatch(context.Background(), testutil.ToolCallRequest("old-style", nil))
-	resp2 := srv.Dispatch(context.Background(), testutil.ToolCallRequest("new-style", nil))
+	resp1, _ := srv.Dispatch(context.Background(), testutil.ToolCallRequest("old-style", nil))
+	resp2, _ := srv.Dispatch(context.Background(), testutil.ToolCallRequest("new-style", nil))
 	assert.Nil(t, resp1.Error, "old-style should work")
 	assert.Nil(t, resp2.Error, "new-style should work")
 }

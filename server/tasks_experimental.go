@@ -179,7 +179,7 @@ func RegisterTasks(cfg TasksConfig) {
 // the middleware creates a task, runs the tool asynchronously, and returns
 // CreateTaskResult immediately.
 func taskMiddleware(reg *Registry, rt *taskRuntime, cfg TasksConfig) Middleware {
-	return func(ctx context.Context, req *core.Request, next MiddlewareFunc) *core.Response {
+	return func(ctx context.Context, req *core.Request, next MiddlewareFunc) (*core.Response, error) {
 		if req.Method != "tools/call" {
 			return next(ctx, req)
 		}
@@ -209,7 +209,7 @@ func taskMiddleware(reg *Registry, rt *taskRuntime, cfg TasksConfig) Middleware 
 			// No task hint. Check if tool requires tasks.
 			if effectiveSupport == core.TaskSupportRequired {
 				return core.NewErrorResponse(req.ID, core.ErrCodeMethodNotFound,
-					fmt.Sprintf("tool %q requires task invocation (execution.taskSupport=required); include 'task' in params", envelope.Name))
+					fmt.Sprintf("tool %q requires task invocation (execution.taskSupport=required); include 'task' in params", envelope.Name)), nil
 			}
 			return next(ctx, req)
 		}
@@ -222,7 +222,7 @@ func taskMiddleware(reg *Registry, rt *taskRuntime, cfg TasksConfig) Middleware 
 		// Forbidden or absent Execution with hint → error per spec.
 		if effectiveSupport == core.TaskSupportForbidden {
 			return core.NewErrorResponse(req.ID, core.ErrCodeMethodNotFound,
-				fmt.Sprintf("tool %q does not support task invocation", envelope.Name))
+				fmt.Sprintf("tool %q does not support task invocation", envelope.Name)), nil
 		}
 
 		// Tool supports tasks (optional or required with hint present).
@@ -249,7 +249,7 @@ func taskMiddleware(reg *Registry, rt *taskRuntime, cfg TasksConfig) Middleware 
 		store := rt.store
 		sessionID := core.GetSessionID(ctx)
 		if err := store.Create(info, sessionID); err != nil {
-			return core.NewErrorResponse(req.ID, -32603, "failed to create task: "+err.Error())
+			return core.NewErrorResponse(req.ID, -32603, "failed to create task: "+err.Error()), nil
 		}
 
 		// Extract progressToken from _meta for the background goroutine (Phase 7c).
@@ -286,7 +286,14 @@ func taskMiddleware(reg *Registry, rt *taskRuntime, cfg TasksConfig) Middleware 
 				}
 			}()
 
-			resp := next(bgCtx, req)
+			resp, mwErr := next(bgCtx, req)
+
+			// If middleware returned a transport-level error, treat it as task failure.
+			if mwErr != nil {
+				store.StoreTerminalResult(taskID, sessionID, core.TaskFailed, core.ErrorResult(mwErr.Error()), mwErr.Error())
+				notifyTaskStatus(bgCtx, store, taskID, sessionID)
+				return
+			}
 
 			// If the task was already cancelled (Phase 5), StoreTerminalResult
 			// will reject the transition (terminal guard).
@@ -318,7 +325,7 @@ func taskMiddleware(reg *Registry, rt *taskRuntime, cfg TasksConfig) Middleware 
 			notifyTaskStatus(bgCtx, store, taskID, sessionID)
 		}()
 
-		return core.NewResponse(req.ID, core.CreateTaskResult{Task: info})
+		return core.NewResponse(req.ID, core.CreateTaskResult{Task: info}), nil
 	}
 }
 

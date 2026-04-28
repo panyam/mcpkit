@@ -25,7 +25,7 @@ func TestCustomMethod_Dispatch(t *testing.T) {
 	)
 
 	testutil.InitHandshake(srv)
-	resp := srv.Dispatch(context.Background(), &core.Request{
+	resp, _ := srv.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`99`), Method: "custom/echo",
 		Params: json.RawMessage(`{"msg":"hello"}`),
 	})
@@ -46,7 +46,7 @@ func TestCustomMethod_UnknownStillReturnsMethodNotFound(t *testing.T) {
 	)
 
 	testutil.InitHandshake(srv)
-	resp := srv.Dispatch(context.Background(), &core.Request{
+	resp, _ := srv.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`99`), Method: "custom/unknown",
 	})
 	require.NotNil(t, resp)
@@ -76,7 +76,7 @@ func TestCustomMethod_RequiresInitialized(t *testing.T) {
 	)
 
 	// Don't initialize — just dispatch directly.
-	resp := srv.Dispatch(context.Background(), &core.Request{
+	resp, _ := srv.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`99`), Method: "custom/test",
 	})
 	require.NotNil(t, resp)
@@ -93,7 +93,7 @@ func TestCustomMethod_HandleMethod(t *testing.T) {
 	})
 
 	testutil.InitHandshake(srv)
-	resp := srv.Dispatch(context.Background(), &core.Request{
+	resp, _ := srv.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`99`), Method: "custom/dynamic",
 	})
 	require.NotNil(t, resp)

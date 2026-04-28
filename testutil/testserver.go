@@ -103,7 +103,7 @@ func NewTestServer() *server.Server {
 //	testutil.InitHandshake(srv)
 //	resp := srv.Dispatch(ctx, toolCallRequest)
 func InitHandshake(d interface {
-	Dispatch(context.Context, *core.Request) *core.Response
+	Dispatch(context.Context, *core.Request) (*core.Response, error)
 }) {
 	d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",

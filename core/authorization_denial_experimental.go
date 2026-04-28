@@ -32,14 +32,6 @@ const (
 	// RFC 9396 Rich Authorization Request authorization_details. The hint
 	// carries an "authorization_details" field at the top level.
 	RemediationTypeOAuthRAR = "oauth_authorization_details"
-
-	// RemediationTypeOAuthScopeStepUp is a NON-SPEC extension used to carry
-	// requiredScopes from server to client at the JSON-RPC layer. SEP-2643
-	// says scope step-up is fully described by the WWW-Authenticate challenge
-	// and the envelope should carry only classification metadata. Tracked in
-	// issue #317 — to be removed once ext/auth supports declarative per-tool
-	// scopes + 403/WWW-Authenticate scope-enforcement middleware.
-	RemediationTypeOAuthScopeStepUp = "oauth_scope_step_up"
 )
 
 // Retry meta key per SEP-2643. The client MUST echo the server-issued
@@ -142,20 +134,6 @@ func OAuthAuthorizationDetailsHint(authorizationDetails any) RemediationHint {
 		Type: RemediationTypeOAuthRAR,
 		Extra: map[string]any{
 			"authorization_details": authorizationDetails,
-		},
-	}
-}
-
-// ScopeStepUpHint creates a NON-SPEC remediation hint carrying requiredScopes.
-// SEP-2643 doesn't define this hint type — the spec position is that scope
-// step-up is fully described by the WWW-Authenticate challenge. We keep this
-// helper for the fine-grained-auth example until our auth middleware is
-// updated to emit proper 403 + WWW-Authenticate responses.
-func ScopeStepUpHint(requiredScopes []string) RemediationHint {
-	return RemediationHint{
-		Type: RemediationTypeOAuthScopeStepUp,
-		Extra: map[string]any{
-			"requiredScopes": requiredScopes,
 		},
 	}
 }

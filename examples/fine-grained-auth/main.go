@@ -12,6 +12,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -162,66 +163,51 @@ func runDemo() {
 			fmt.Printf("    Result: %s\n", text)
 		})
 
-	// --- Step 4: update_document fails (UC2) ---
-	demo.Step("Call update_document — DENIED (UC2: needs tools-call scope)").
+	// --- Step 4: update_document → HTTP 403 + WWW-Authenticate (UC2 spec-correct) ---
+	demo.Step("Call update_document — DENIED (UC2: HTTP 403 + WWW-Authenticate)").
 		Arrow("Host", "Server", "tools/call: update_document {docId: \"doc-123\"}").
-		DashedArrow("Server", "Host", "isError: true + authorization denial + remediationHints").
-		Note("The update_document tool requires tools-call scope. Our read-only token lacks it. The server returns a structured authorization denial telling the host exactly which scopes to request via remediationHints.").
+		DashedArrow("Server", "Host", "HTTP 403 + WWW-Authenticate: Bearer error=\"insufficient_scope\", scope=\"tools-call\"").
+		Note("Per SEP-2643 (FineGrainedAuth UC2): the server's auth.NewToolScopeMiddleware returns HTTP 403 with WWW-Authenticate before the handler runs. The mcpkit client surfaces this as *client.ClientAuthError with the required scopes already parsed from the header (RFC 6750).").
 		Run(func() {
-			result, err := readClient.ToolCallFull("update_document", map[string]any{
+			_, err := readClient.ToolCallFull("update_document", map[string]any{
 				"docId": "doc-123", "content": "Updated content",
 			})
-			if err != nil {
-				fmt.Printf("    ERROR: %v\n", err)
-				return
-			}
-			if !result.IsError {
-				fmt.Printf("    UNEXPECTED: tool succeeded (expected denial)\n")
+			if err == nil {
+				fmt.Printf("    UNEXPECTED: tool succeeded (expected 403)\n")
 				return
 			}
 
-			// Show the full denial.
-			var denial any
-			json.Unmarshal([]byte(result.Content[0].Text), &denial)
-			denialJSON, _ := json.MarshalIndent(denial, "    ", "  ")
-			fmt.Printf("    Tool returned isError: true\n")
-			fmt.Printf("    Authorization denial:\n    %s\n\n", denialJSON)
+			var authErr *client.ClientAuthError
+			if !errors.As(err, &authErr) {
+				fmt.Printf("    UNEXPECTED error type: %T %v\n", err, err)
+				return
+			}
 
-			// Parse the remediationHints to extract required scopes — what a smart host would do.
-			// Per SEP-2643, hint members appear at the top level of the hint object (not nested).
-			var parsed struct {
-				Authorization struct {
-					RemediationHints []struct {
-						Type           string   `json:"type"`
-						RequiredScopes []string `json:"requiredScopes"`
-					} `json:"remediationHints"`
-				} `json:"authorization"`
-			}
-			json.Unmarshal([]byte(result.Content[0].Text), &parsed)
-			for _, h := range parsed.Authorization.RemediationHints {
-				if h.Type == "oauth_scope_step_up" {
-					requiredScopes = h.RequiredScopes
-					break
-				}
-			}
-			fmt.Printf("    → Parsed remediationHints[oauth_scope_step_up]:\n")
-			fmt.Printf("    → requiredScopes = %v\n", requiredScopes)
+			fmt.Printf("    HTTP %d response\n", authErr.StatusCode)
+			fmt.Printf("    WWW-Authenticate: %s\n", authErr.WWWAuthenticate)
+			fmt.Printf("    → RequiredScopes (parsed from header per RFC 6750): %v\n",
+				authErr.RequiredScopes)
+			requiredScopes = authErr.RequiredScopes
 		})
 
-	// --- Step 5: Auto-step-up using parsed scopes ---
-	demo.Step("Auto-step-up: re-authorize with scopes from remediationHints").
-		Arrow("Host", "KC", "POST /token — client_credentials, scope=<from remediationHints>").
+	// --- Step 5: Auto-step-up using scopes from WWW-Authenticate ---
+	demo.Step("Auto-step-up: re-authorize with scopes from WWW-Authenticate").
+		Arrow("Host", "KC", "POST /token — client_credentials, scope=<from WWW-Authenticate>").
 		DashedArrow("KC", "Host", "access_token with broader scopes").
-		Note("The host uses the requiredScopes captured from the previous step's denial — not hardcoded values. This is the spec-driven smart-host behavior: the server tells the host what to ask for, and the host complies.").
+		Note("Spec-driven smart-host behavior: the server's WWW-Authenticate header named the required scopes; the host complies by requesting exactly those scopes from Keycloak — no hardcoded values. We also re-include tools-read so the broader token works for both reads and writes.").
 		Run(func() {
 			if len(requiredScopes) == 0 {
-				fmt.Printf("    ERROR: no requiredScopes from previous step (denial parse failed)\n")
+				fmt.Printf("    ERROR: no requiredScopes from previous step (WWW-Authenticate parse failed)\n")
 				return
 			}
+			// Combine the originally-held scope with the newly-required ones so
+			// the broader token works for both reads and writes (typical OAuth
+			// step-up: ask for the union, not a replacement).
+			scopes := append([]string{scopeRead}, requiredScopes...)
 			realmURL := keycloakURL + "/realms/" + realmName
 			oidc, _ := discoverOIDC(realmURL)
-			tokReadCall = getToken(oidc.TokenEndpoint, requiredScopes...)
-			fmt.Printf("    Scopes requested (from hint): %v\n", requiredScopes)
+			tokReadCall = getToken(oidc.TokenEndpoint, scopes...)
+			fmt.Printf("    Scopes requested: %v\n", scopes)
 			fmt.Printf("    New token: %s...%s\n", tokReadCall[:min(20, len(tokReadCall))], tokReadCall[max(0, len(tokReadCall)-10):])
 		})
 
@@ -375,6 +361,12 @@ func serve() {
 
 	registerTools(srv)
 
+	// Per-tool scope enforcement (SEP-2643 UC2). Returns HTTP 403 +
+	// WWW-Authenticate: Bearer error="insufficient_scope" before the tool
+	// handler runs. Must be added AFTER registerTools so the registry knows
+	// each tool's RequiredScopes.
+	srv.UseMiddleware(auth.NewToolScopeMiddleware(srv.Registry()))
+
 	mux := http.NewServeMux()
 	cors := middleware.CORS(nil,
 		middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
@@ -414,8 +406,9 @@ func serve() {
 func registerTools(srv *server.Server) {
 	srv.RegisterTool(
 		core.ToolDef{
-			Name:        "read_document",
-			Description: "Read a document. Requires tools-read scope.",
+			Name:           "read_document",
+			Description:    "Read a document. Requires tools-read scope.",
+			RequiredScopes: []string{scopeRead},
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {
@@ -424,9 +417,8 @@ func registerTools(srv *server.Server) {
 			}`),
 		},
 		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			if err := auth.RequireScope(ctx, scopeRead); err != nil {
-				return core.ErrorResult(err.Error()), nil
-			}
+			// Scope enforcement is declarative (RequiredScopes above) +
+			// auth.NewToolScopeMiddleware. Handler only runs if scope check passed.
 			var args struct {
 				DocID string `json:"docId"`
 			}
@@ -441,8 +433,9 @@ func registerTools(srv *server.Server) {
 
 	srv.RegisterTool(
 		core.ToolDef{
-			Name:        "update_document",
-			Description: "Update a document. Requires tools-call scope (returns authorization denial if missing).",
+			Name:           "update_document",
+			Description:    "Update a document. Requires tools-call scope.",
+			RequiredScopes: []string{scopeCall},
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {
@@ -453,24 +446,10 @@ func registerTools(srv *server.Server) {
 			}`),
 		},
 		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			if err := auth.RequireScope(ctx, scopeCall); err != nil {
-				denial := core.AuthorizationDenial{
-					Reason: "insufficient_authorization",
-					RemediationHints: []core.RemediationHint{
-						core.ScopeStepUpHint([]string{scopeRead, scopeCall}),
-					},
-				}
-				denialJSON, _ := json.Marshal(map[string]any{
-					"error":         "insufficient_scope",
-					"authorization": denial,
-					"message":       fmt.Sprintf("Token lacks required scope %q. Re-authorize with scopes: %s %s", scopeCall, scopeRead, scopeCall),
-				})
-				return core.ToolResult{
-					Content: []core.Content{{Type: "text", Text: string(denialJSON)}},
-					IsError: true,
-				}, nil
-			}
-
+			// Scope enforcement is declarative — handler only runs if tools-call is present.
+			// Per SEP-2643: scope step-up is described entirely by the WWW-Authenticate
+			// header set by auth.NewToolScopeMiddleware on 403, so this handler doesn't
+			// emit a custom denial envelope.
 			var args struct {
 				DocID   string `json:"docId"`
 				Content string `json:"content"`

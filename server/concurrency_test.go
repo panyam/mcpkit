@@ -46,7 +46,7 @@ func TestConcurrentRequestsGetCorrectResponses(t *testing.T) {
 			defer wg.Done()
 			tag := fmt.Sprintf("req-%d", idx)
 			params, _ := json.Marshal(map[string]any{"name": "identify", "arguments": map[string]any{"tag": tag}})
-			resp := srv.Dispatch(context.Background(), &core.Request{
+			resp, _ := srv.Dispatch(context.Background(), &core.Request{
 				JSONRPC: "2.0",
 				ID:      json.RawMessage(fmt.Sprintf(`%d`, idx+100)),
 				Method:  "tools/call",
@@ -89,7 +89,7 @@ func TestDuplicateRequestIDRejected(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		firstResp = srv.Dispatch(context.Background(), &core.Request{
+		firstResp, _ = srv.Dispatch(context.Background(), &core.Request{
 			JSONRPC: "2.0",
 			ID:      json.RawMessage(`"dup-id"`),
 			Method:  "tools/call",
@@ -101,7 +101,7 @@ func TestDuplicateRequestIDRejected(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Send second request with same ID — should be rejected immediately
-	secondResp := srv.Dispatch(context.Background(), &core.Request{
+	secondResp, _ := srv.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`"dup-id"`),
 		Method:  "tools/call",

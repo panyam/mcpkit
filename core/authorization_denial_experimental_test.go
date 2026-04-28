@@ -12,7 +12,7 @@ func TestAuthorizationDenialSerialization(t *testing.T) {
 		Reason:                 "insufficient_authorization",
 		AuthorizationContextID: "authzctx_abc123",
 		RemediationHints: []RemediationHint{
-			ScopeStepUpHint([]string{"read", "write"}),
+			URLHint(),
 		},
 	}
 
@@ -36,16 +36,8 @@ func TestAuthorizationDenialSerialization(t *testing.T) {
 		t.Fatalf("RemediationHints len = %d, want 1", len(got.RemediationHints))
 	}
 	hint := got.RemediationHints[0]
-	if hint.Type != RemediationTypeOAuthScopeStepUp {
-		t.Errorf("hint.Type = %q, want %q", hint.Type, RemediationTypeOAuthScopeStepUp)
-	}
-	scopes, ok := hint.Extra["requiredScopes"]
-	if !ok {
-		t.Fatal("missing requiredScopes in hint")
-	}
-	scopeList, ok := scopes.([]any)
-	if !ok || len(scopeList) != 2 {
-		t.Errorf("requiredScopes = %v, want [read write]", scopes)
+	if hint.Type != RemediationTypeURL {
+		t.Errorf("hint.Type = %q, want %q", hint.Type, RemediationTypeURL)
 	}
 }
 
@@ -113,7 +105,7 @@ func TestNewAuthorizationDenialError(t *testing.T) {
 		Reason:                 "insufficient_authorization",
 		AuthorizationContextID: "authzctx_test",
 		RemediationHints: []RemediationHint{
-			ScopeStepUpHint([]string{"write"}),
+			URLHint(),
 		},
 	}
 
@@ -145,18 +137,35 @@ func TestNewAuthorizationDenialError(t *testing.T) {
 	}
 }
 
-// TestScopeStepUpHint verifies the convenience constructor produces the
-// expected hint structure with requiredScopes in data.
-func TestScopeStepUpHint(t *testing.T) {
-	hint := ScopeStepUpHint([]string{"read", "write", "admin"})
-	if hint.Type != RemediationTypeOAuthScopeStepUp {
-		t.Errorf("Type = %q, want %q", hint.Type, RemediationTypeOAuthScopeStepUp)
+// TestURLHint verifies the URLHint constructor produces a hint with type "url"
+// and no other top-level fields.
+func TestURLHint(t *testing.T) {
+	hint := URLHint()
+	if hint.Type != RemediationTypeURL {
+		t.Errorf("Type = %q, want %q", hint.Type, RemediationTypeURL)
 	}
-	scopes, ok := hint.Extra["requiredScopes"].([]string)
-	if !ok {
-		t.Fatal("requiredScopes not []string")
+	if len(hint.Extra) != 0 {
+		t.Errorf("Extra = %v, want empty", hint.Extra)
 	}
-	if len(scopes) != 3 {
-		t.Errorf("requiredScopes len = %d, want 3", len(scopes))
+}
+
+// TestOAuthAuthorizationDetailsHint verifies the constructor produces a hint
+// with type "oauth_authorization_details" and authorization_details at the
+// top level (not nested under data).
+func TestOAuthAuthorizationDetailsHint(t *testing.T) {
+	details := []map[string]any{{"type": "payment_initiation"}}
+	hint := OAuthAuthorizationDetailsHint(details)
+	if hint.Type != RemediationTypeOAuthRAR {
+		t.Errorf("Type = %q, want %q", hint.Type, RemediationTypeOAuthRAR)
+	}
+
+	data, err := json.Marshal(hint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]json.RawMessage
+	json.Unmarshal(data, &raw)
+	if _, ok := raw["authorization_details"]; !ok {
+		t.Error("authorization_details must appear at top level")
 	}
 }
