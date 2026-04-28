@@ -1,53 +1,19 @@
-# Fine-Grained Authorization Example
+# Fine-Grained Authorization — Scope Step-Up (UC2) + Ephemeral Credentials (UC3)
 
-Authorization denial with scope step-up (UC2) and per-operation ephemeral credentials (UC3).
+Demonstrates structured authorization denial with remediation hints. Requires Keycloak.
 
-## FineGrainedAuth Use Cases
+## What you'll learn
 
-The FineGrainedAuth proposal defines three use cases for structured authorization denial at the MCP layer. This example covers UC2 and UC3. UC1 is in [`examples/elicitation/`](../elicitation/).
+- **Start the MCP server with JWT auth + scope enforcement** — The server validates JWTs from Keycloak and enforces per-tool scope requirements. read_document needs tools-read; update_document needs tools-call.
+- **Get a read-only token from Keycloak** — The client obtains a token with only the tools-read scope. This is sufficient for reading but not for writing.
+- **Initialize MCP session with read-only token** — The client connects with the read-only token. JWT validation passes — the token is valid, just limited in scope.
+- **Call read_document — succeeds with tools-read scope** — The read_document tool only requires tools-read, which our token has. The call succeeds.
+- **Call update_document — denied with remediationHints (UC2: scope step-up)** — The update_document tool requires tools-call scope, which our read-only token lacks. The server returns a structured authorization denial with remediation hints telling the client which scopes to request.
+- **Get a broader token with tools-read + tools-call scopes** — Following the remediation hint, the client re-authorizes with the required scopes.
+- **Retry update_document with broader token — succeeds** — The client starts a new session with the broader token. Now update_document succeeds because the token includes tools-call.
+- **Call initiate_payment — denied with RAR authorization_details (UC3)** — The payment tool requires a transaction-specific ephemeral credential with RFC 9396 authorization_details. The denial tells the client exactly what to request from the authorization server.
 
-| UC | Pattern | Example | Where |
-|----|---------|---------|-------|
-| **UC1** | URL consent approval (same credential) | User visits approval URL, retries with same token | [`examples/elicitation/`](../elicitation/) |
-| **UC2** | Scope step-up (new credential) | Client re-authorizes with broader scopes | **This example** — `update_document` |
-| **UC3** | Per-operation ephemeral credential | Client obtains additional token for specific operation | **This example** — `initiate_payment` |
-
-## What It Shows
-
-A document management + payments server demonstrating two authorization denial patterns:
-
-- **UC2 (scope step-up)**: Reading requires `tools-read` scope, writing requires `tools-call`. When a read-only token attempts to write, the server returns an authorization denial with `remediationHints` telling the client which scopes to request.
-- **UC3 (ephemeral credential)**: Initiating a payment requires a transaction-specific ephemeral token with RFC 9396 `authorization_details`. The original token is retained for other operations.
-
-This demonstrates the layered approach: the transport's `WWW-Authenticate` challenge remains authoritative, and the JSON-RPC denial envelope provides complementary classification and remediation hints.
-
-## Prerequisites
-
-- **Keycloak** — run `make upkcl` from the repo root (uses Docker)
-- The example uses the `mcpkit-test` realm with pre-configured `tools-read` and `tools-call` scopes
-
-## Running
-
-```bash
-# Start Keycloak (from repo root)
-make upkcl
-
-# Start the example server
-cd examples/fine-grained-auth
-make run    # or: go run . -addr :8087
-```
-
-The server prints two tokens (read-only and read+call) for the walkthrough.
-
-## Tools
-
-| Tool | Required Scope | What it does |
-|------|---------------|-------------|
-| `read_document` | `tools-read` | Returns document content |
-| `update_document` | `tools-call` | Updates document content (returns authorization denial if scope missing) |
-| `initiate_payment` | — | UC3: returns authorization denial with RFC 9396 `payment_initiation` authorization_details + `credential_disposition: "additional"` |
-
-## Flow: Scope Step-Up (UC2)
+## Flow
 
 ```mermaid
 sequenceDiagram
@@ -55,88 +21,88 @@ sequenceDiagram
     participant Server as MCP Server
     participant KC as Keycloak
 
-    Note over Client,KC: Phase 1: Read-only token
+    Note over Client,KC: Step 1: Start the MCP server with JWT auth + scope enforcement
 
-    Client->>KC: client_credentials grant<br/>scope=tools-read
+    Note over Client,KC: Step 2: Get a read-only token from Keycloak
+    Client->>KC: POST /token — client_credentials, scope=tools-read
     KC-->>Client: access_token (tools-read only)
 
-    Client->>Server: tools/call: read_document<br/>Authorization: Bearer {read-token}
-    Server-->>Client: "Document doc-001: Lorem ipsum..."
+    Note over Client,KC: Step 3: Initialize MCP session with read-only token
+    Client->>Server: POST /mcp — initialize + Bearer token
+    Server-->>Client: serverInfo + Mcp-Session-Id
 
-    Client->>Server: tools/call: update_document<br/>Authorization: Bearer {read-token}
-    Server-->>Client: Tool error with authorization denial<br/>+ remediationHints[oauth_scope_step_up]<br/>requiredScopes: [tools-read, tools-call]
+    Note over Client,KC: Step 4: Call read_document — succeeds with tools-read scope
+    Client->>Server: tools/call: read_document
+    Server-->>Client: Document content
 
-    Note over Client,KC: Phase 2: Broader token
+    Note over Client,KC: Step 5: Call update_document — denied with remediationHints (UC2: scope step-up)
+    Client->>Server: tools/call: update_document
+    Server-->>Client: Tool error + authorization denial + remediationHints
 
-    Client->>KC: client_credentials grant<br/>scope=tools-read tools-call
+    Note over Client,KC: Step 6: Get a broader token with tools-read + tools-call scopes
+    Client->>KC: POST /token — client_credentials, scope=tools-read tools-call
     KC-->>Client: access_token (tools-read + tools-call)
 
-    Client->>Server: tools/call: update_document<br/>Authorization: Bearer {broader-token}
-    Server-->>Client: "Document doc-001 updated successfully."
+    Note over Client,KC: Step 7: Retry update_document with broader token — succeeds
+    Client->>Server: POST /mcp — initialize + Bearer (broader token)
+    Server-->>Client: new session
+    Client->>Server: tools/call: update_document
+    Server-->>Client: Document updated successfully
+
+    Note over Client,KC: Step 8: Call initiate_payment — denied with RAR authorization_details (UC3)
+    Client->>Server: tools/call: initiate_payment
+    Server-->>Client: Authorization denial + payment_initiation RAR + credential_disposition: additional
 ```
 
-## Flow: Per-Operation Ephemeral Credential (UC3)
+## Steps
 
-```mermaid
-sequenceDiagram
-    participant Client as MCP Client
-    participant Server as MCP Server
-    participant KC as Keycloak
+### Step 1: Start the MCP server with JWT auth + scope enforcement
 
-    Client->>Server: tools/call: initiate_payment<br/>Authorization: Bearer {read-token}
-    Server-->>Client: Authorization denial<br/>+ remediationHints[oauth_authorization_details]<br/>+ credential_disposition: "additional"<br/>+ payment_initiation details (amount, payee)
+The server validates JWTs from Keycloak and enforces per-tool scope requirements. read_document needs tools-read; update_document needs tools-call.
 
-    Client->>KC: Authorization request<br/>+ authorization_details[payment_initiation]
-    KC-->>Client: ephemeral payment token
+### Step 2: Get a read-only token from Keycloak
 
-    Note over Client: Client retains original token<br/>+ uses ephemeral token for payment
+The client obtains a token with only the tools-read scope. This is sufficient for reading but not for writing.
 
-    Client->>Server: tools/call: initiate_payment<br/>Authorization: Bearer {ephemeral-token}
-    Server-->>Client: "Payment initiated."
+### Step 3: Initialize MCP session with read-only token
+
+The client connects with the read-only token. JWT validation passes — the token is valid, just limited in scope.
+
+### Step 4: Call read_document — succeeds with tools-read scope
+
+The read_document tool only requires tools-read, which our token has. The call succeeds.
+
+### Step 5: Call update_document — denied with remediationHints (UC2: scope step-up)
+
+The update_document tool requires tools-call scope, which our read-only token lacks. The server returns a structured authorization denial with remediation hints telling the client which scopes to request.
+
+### Step 6: Get a broader token with tools-read + tools-call scopes
+
+Following the remediation hint, the client re-authorizes with the required scopes.
+
+### Step 7: Retry update_document with broader token — succeeds
+
+The client starts a new session with the broader token. Now update_document succeeds because the token includes tools-call.
+
+### UC3: Per-Operation Ephemeral Credential
+
+UC3 demonstrates a different pattern: the client needs an *additional* token
+for a specific operation (payment), while retaining the original token for
+other operations. The server returns `credential_disposition: "additional"`
+and RFC 9396 `authorization_details` in the remediation hint.
+
+### Step 8: Call initiate_payment — denied with RAR authorization_details (UC3)
+
+The payment tool requires a transaction-specific ephemeral credential with RFC 9396 authorization_details. The denial tells the client exactly what to request from the authorization server.
+
+## Run it
+
+```bash
+go run ./examples/fine-grained-auth/
 ```
 
-> **Note**: The denial response shape is fully implemented. End-to-end token exchange
-> requires Keycloak with `--features=rar` enabled. The RFC 9396 `AuthorizationDetail`
-> types come from oneauth v0.0.76.
+Pass `--non-interactive` to skip pauses:
 
-## Wire Format
-
-### Authorization denial (update_document with read-only token)
-
-The tool returns an error result with structured authorization denial:
-
-```json
-{
-  "content": [{
-    "type": "text",
-    "text": "{\"error\":\"insufficient_scope\",\"authorization\":{\"reason\":\"insufficient_authorization\",\"remediationHints\":[{\"type\":\"oauth_scope_step_up\",\"data\":{\"requiredScopes\":[\"tools-read\",\"tools-call\"]}}]},\"message\":\"Token lacks required scope...\"}"
-  }],
-  "isError": true
-}
+```bash
+go run ./examples/fine-grained-auth/ --non-interactive
 ```
-
-## Exercises
-
-1. Connect with the **read-only** token, call `read_document` -> succeeds
-2. Call `update_document` -> fails with authorization denial + `remediationHints`
-3. Reconnect with the **read+call** token, call `update_document` -> succeeds
-4. Call `initiate_payment` -> authorization denial with `payment_initiation` RAR details + `credential_disposition: "additional"` (UC3)
-
-## EXPERIMENTAL
-
-The `authorization` denial envelope and `remediationHints` are from the FineGrainedAuth proposal (draft SEP). Type names (`oauth_scope_step_up`), field names (`reason`, `credential_disposition`), and wire format are subject to breaking changes.
-
-Specifically:
-- `reason` values will be standardized when the SEP assigns them
-- `remediationHints[].type` names (`oauth_scope_step_up`, `oauth_authorization_details`) are provisional
-- `credential_disposition: "additional"` semantics are demonstrated but not enforced end-to-end
-- The JSON-RPC error code for UC2/UC3 denials is TBD (currently uses tool error result, not a dedicated error code)
-- RFC 9396 `AuthorizationDetail` types from oneauth v0.0.76 are stable but the MCP remediation hint mapping is experimental
-
-## Related
-
-- `core/authorization_denial_experimental.go` — Experimental denial types
-- `examples/elicitation/` — UC1 example (URL consent approval)
-- `examples/auth/scopes/` — Basic scope enforcement (no denial envelope)
-- `tests/keycloak/` — Keycloak interop tests
-- `FineGrainedAuth.docx` — Full design document
