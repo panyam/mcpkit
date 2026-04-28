@@ -792,9 +792,32 @@ func (c *Client) callDirect(method string, params any) (*CallResult, error) {
 		return nil, err
 	}
 	if resp.Error != nil {
-		return nil, fmt.Errorf("RPC error %d: %s", resp.Error.Code, resp.Error.Message)
+		return nil, &RPCError{
+			Code:    resp.Error.Code,
+			Message: resp.Error.Message,
+			Data:    resp.Error.Data,
+		}
 	}
 	return &CallResult{Raw: resp.Result}, nil
+}
+
+// RPCError is a JSON-RPC error returned by the server. It preserves the
+// error code, message, and optional data field for structured error handling.
+//
+// Use errors.As to extract it from a Call/ToolCall error:
+//
+//	var rpcErr *client.RPCError
+//	if errors.As(err, &rpcErr) {
+//	    fmt.Println(rpcErr.Code, rpcErr.Data)
+//	}
+type RPCError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    any    `json:"data,omitempty"`
+}
+
+func (e *RPCError) Error() string {
+	return fmt.Sprintf("RPC error %d: %s", e.Code, e.Message)
 }
 
 // CallResult holds the raw JSON result from a JSON-RPC call.

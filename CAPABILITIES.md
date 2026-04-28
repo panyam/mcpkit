@@ -37,6 +37,7 @@
 - mcp-sampling: Server-to-client sampling/createMessage via Sample() — server asks client LLM for inference
 - mcp-elicitation: Server-to-client elicitation/create via Elicit() — server asks client for user input
 - mcp-elicitation-url-mode: URL-mode elicitation (SEP-1036) — ElicitURL() sends mode="url" with URL + elicitationId for out-of-band user interaction. ElicitationCap{Form, URL} structured capability. notifications/elicitation/complete for completion signaling. ErrCodeURLElicitationRequired (-32042) with composable error data (FineGrainedAuth-ready). Client mode validation + WithElicitationURLSupport(). 5/5 conformance scenarios.
+- mcp-authorization-denial-experimental: EXPERIMENTAL AuthorizationDenial envelope + RemediationHint types for FineGrainedAuth (draft SEP). ScopeStepUpHint helper for UC2 scope escalation. NewAuthorizationDenialError composer. Examples: elicitation/ (UC1 consent), fine-grained-auth/ (UC2 Keycloak scope step-up). UC3 (RAR/PSD2) stubbed pending oneauth RAR.
 - mcp-conformance: Official MCP conformance test suite integration (30/30 server passing, 14/14 auth passing)
 - mcp-client: Go MCP client for Streamable HTTP — Connect, ToolCall, ReadResource, ListTools, ListResources
 - mcp-testutil: TestClient wrapper for e2e testing MCP servers (httptest + testing.T integration)
@@ -140,7 +141,7 @@ newstack/mcpkit/main
 ## Stack Dependencies
 
 ### Core module (github.com/panyam/mcpkit)
-- servicekit (github.com/panyam/servicekit) v0.0.25 — SSEConn/SSEHub, ListenAndServeGraceful, StreamableServe, HTTPStatusError (with Header), MaxErrorBodySize
+- servicekit (github.com/panyam/servicekit) v0.0.26 — SSEConn/SSEHub, ListenAndServeGraceful, StreamableServe, HTTPStatusError (with Header), MaxErrorBodySize, CORS middleware with functional options (CORSAllowMethods, CORSAllowHeaders, CORSExposeHeaders)
 
 ### Sub-module: ext/auth (github.com/panyam/mcpkit/ext/auth)
 - oneauth (github.com/panyam/oneauth) v0.0.71 — JWT/OIDC validation, testutil.TestAuthServer; separate go.mod

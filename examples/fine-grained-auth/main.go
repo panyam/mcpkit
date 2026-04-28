@@ -1,0 +1,588 @@
+// Example: Fine-Grained Authorization Denial — scope step-up (UC2) + per-operation
+// ephemeral credentials (UC3).
+//
+// Two-process architecture:
+//
+//	Terminal 1:  make serve         # starts the MCP server on :8080
+//	Terminal 2:  make run           # runs the demokit client (scripted MCP host)
+//
+// The server is a real MCP server that any host can connect to.
+// The demokit client acts as a scripted host walking through UC2/UC3 flows.
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"os"
+	"strings"
+
+	"github.com/panyam/demokit"
+	"github.com/panyam/demokit/tui"
+	"github.com/panyam/mcpkit/client"
+	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/ext/auth"
+	"github.com/panyam/mcpkit/server"
+	"github.com/panyam/servicekit/middleware"
+	oneauthcore "github.com/panyam/oneauth/core"
+)
+
+const (
+	keycloakURL  = "http://localhost:8180"
+	realmName    = "mcpkit-test"
+	clientID     = "mcp-confidential"
+	clientSecret = "mcp-test-secret-for-confidential"
+
+	scopeRead = "tools-read"
+	scopeCall = "tools-call"
+)
+
+func main() {
+	for _, arg := range os.Args[1:] {
+		if strings.TrimSpace(arg) == "--serve" {
+			serve()
+			return
+		}
+	}
+
+	runDemo()
+}
+
+// --- Demo client (scripted MCP host) ---
+
+func runDemo() {
+	serverURL := "http://localhost:8080"
+	for i, arg := range os.Args[1:] {
+		if arg == "--url" && i+2 < len(os.Args) {
+			serverURL = os.Args[i+2]
+		}
+	}
+
+	demo := demokit.New("Fine-Grained Authorization — Scope Step-Up (UC2) + Ephemeral Credentials (UC3)").
+		Dir("fine-grained-auth").
+		Description("**EXPERIMENTAL** — Tracks SEP-2643 (Structured Authorization Denials), currently a draft. A scripted MCP host walking through UC2/UC3 authorization denial flows. Wire format may change as the SEP evolves; spec divergences tracked in mcpkit issue #317.").
+		Actors(
+			demokit.Actor("Host", "MCP Host (this client)"),
+			demokit.Actor("Server", "MCP Server (make serve)"),
+			demokit.Actor("KC", "Keycloak"),
+		)
+
+	demo.Section("Setup",
+		"Keycloak (KC) is an open-source OAuth 2.0 / OIDC authorization server.",
+		"In this demo it plays the role of the Authorization Server (AS) that issues",
+		"access tokens with specific scopes. The MCP server validates incoming tokens",
+		"against KC's JWKS endpoint and enforces per-tool scope requirements.",
+		"",
+		"Before running this demo, start KC and the MCP server in separate terminals:",
+		"",
+		"```",
+		"Terminal 1:  make kcl          # start Keycloak on :8180 (if not running)",
+		"Terminal 2:  make serve        # start the MCP server on :8080",
+		"Terminal 3:  make run          # run this demo",
+		"```",
+	)
+
+	demo.Section("UC1 vs UC2/UC3 — When does the host react?",
+		"UC1 (elicitation): The denial points to an out-of-band action (user clicks Approve in browser).",
+		"The host can't proceed until it receives notifications/elicitation/complete from the server.",
+		"",
+		"UC2/UC3 (this demo): The denial is delivered *synchronously* as a tool error result.",
+		"The host parses remediationHints from the denial and reacts immediately — no notification,",
+		"no waiting. A smart host extracts the required scopes (UC2) or authorization_details (UC3)",
+		"from the hint and re-authorizes on its own.",
+	)
+
+	var (
+		readClient *client.Client // client with read-only token
+		callClient *client.Client // client with broader token (after step-up)
+		tokRead    string
+		tokReadCall string
+
+		// Captured from the UC2 denial — drives the auto-step-up in the next step.
+		requiredScopes []string
+	)
+
+	// --- Step 1: Get read-only token ---
+	demo.Step("Get a read-only token from Keycloak (scope: tools-read)").
+		Arrow("Host", "KC", "POST /token — grant_type=client_credentials + client_id + client_secret + scope=tools-read").
+		DashedArrow("KC", "Host", "access_token (tools-read only)").
+		Note("The host authenticates to KC using client_credentials grant — a confidential client_id+secret pair. KC validates the credentials, ensures the requested scope is allowed for this client, and issues a signed JWT. In production the secret would be in a vault/secret manager (or replaced by mTLS / private_key_jwt for stronger client auth). For interactive user flows, you'd use authorization_code + PKCE instead.").
+		Run(func() {
+			realmURL := keycloakURL + "/realms/" + realmName
+			oidc, err := discoverOIDC(realmURL)
+			if err != nil {
+				fmt.Printf("    ERROR: Keycloak not reachable: %v\n", err)
+				fmt.Printf("    Start it with: make kcl\n")
+				return
+			}
+			tokRead = getToken(oidc.TokenEndpoint, scopeRead)
+			fmt.Printf("    Token endpoint: %s\n", oidc.TokenEndpoint)
+			fmt.Printf("    Scopes requested: %s\n", scopeRead)
+			fmt.Printf("    Token: %s...%s\n", tokRead[:min(20, len(tokRead))], tokRead[max(0, len(tokRead)-10):])
+		})
+
+	// --- Step 2: Connect with read-only token ---
+	demo.Step("Connect to MCP server with read-only token").
+		Arrow("Host", "Server", "POST /mcp — initialize + Authorization: Bearer <read-token>").
+		DashedArrow("Server", "Host", "serverInfo + Mcp-Session-Id").
+		Note("The host connects with the read-only token. JWT validation passes — the token is valid, just limited in scope.").
+		Run(func() {
+			fmt.Printf("    Connecting to %s ...\n", serverURL)
+			readClient = client.NewClient(serverURL+"/mcp",
+				core.ClientInfo{Name: "demo-host", Version: "1.0"},
+				client.WithClientBearerToken(tokRead),
+			)
+			if err := readClient.Connect(); err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				fmt.Printf("    Start the server with: make serve\n")
+				return
+			}
+			fmt.Printf("    Connected to %s %s\n\n", readClient.ServerInfo.Name, readClient.ServerInfo.Version)
+
+			tools, _ := readClient.ListTools()
+			fmt.Printf("    Tools:\n")
+			for _, t := range tools {
+				fmt.Printf("      - %s: %s\n", t.Name, t.Description)
+			}
+		})
+
+	// --- Step 3: read_document succeeds ---
+	demo.Step("Call read_document — succeeds (tools-read is sufficient)").
+		Arrow("Host", "Server", "tools/call: read_document {docId: \"doc-123\"}").
+		DashedArrow("Server", "Host", "Document content").
+		Note("The read_document tool only requires tools-read scope. Our token has it, so the call succeeds.").
+		Run(func() {
+			text, err := readClient.ToolCall("read_document", map[string]any{"docId": "doc-123"})
+			if err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				return
+			}
+			fmt.Printf("    Result: %s\n", text)
+		})
+
+	// --- Step 4: update_document fails (UC2) ---
+	demo.Step("Call update_document — DENIED (UC2: needs tools-call scope)").
+		Arrow("Host", "Server", "tools/call: update_document {docId: \"doc-123\"}").
+		DashedArrow("Server", "Host", "isError: true + authorization denial + remediationHints").
+		Note("The update_document tool requires tools-call scope. Our read-only token lacks it. The server returns a structured authorization denial telling the host exactly which scopes to request via remediationHints.").
+		Run(func() {
+			result, err := readClient.ToolCallFull("update_document", map[string]any{
+				"docId": "doc-123", "content": "Updated content",
+			})
+			if err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				return
+			}
+			if !result.IsError {
+				fmt.Printf("    UNEXPECTED: tool succeeded (expected denial)\n")
+				return
+			}
+
+			// Show the full denial.
+			var denial any
+			json.Unmarshal([]byte(result.Content[0].Text), &denial)
+			denialJSON, _ := json.MarshalIndent(denial, "    ", "  ")
+			fmt.Printf("    Tool returned isError: true\n")
+			fmt.Printf("    Authorization denial:\n    %s\n\n", denialJSON)
+
+			// Parse the remediationHints to extract required scopes — what a smart host would do.
+			// Per SEP-2643, hint members appear at the top level of the hint object (not nested).
+			var parsed struct {
+				Authorization struct {
+					RemediationHints []struct {
+						Type           string   `json:"type"`
+						RequiredScopes []string `json:"requiredScopes"`
+					} `json:"remediationHints"`
+				} `json:"authorization"`
+			}
+			json.Unmarshal([]byte(result.Content[0].Text), &parsed)
+			for _, h := range parsed.Authorization.RemediationHints {
+				if h.Type == "oauth_scope_step_up" {
+					requiredScopes = h.RequiredScopes
+					break
+				}
+			}
+			fmt.Printf("    → Parsed remediationHints[oauth_scope_step_up]:\n")
+			fmt.Printf("    → requiredScopes = %v\n", requiredScopes)
+		})
+
+	// --- Step 5: Auto-step-up using parsed scopes ---
+	demo.Step("Auto-step-up: re-authorize with scopes from remediationHints").
+		Arrow("Host", "KC", "POST /token — client_credentials, scope=<from remediationHints>").
+		DashedArrow("KC", "Host", "access_token with broader scopes").
+		Note("The host uses the requiredScopes captured from the previous step's denial — not hardcoded values. This is the spec-driven smart-host behavior: the server tells the host what to ask for, and the host complies.").
+		Run(func() {
+			if len(requiredScopes) == 0 {
+				fmt.Printf("    ERROR: no requiredScopes from previous step (denial parse failed)\n")
+				return
+			}
+			realmURL := keycloakURL + "/realms/" + realmName
+			oidc, _ := discoverOIDC(realmURL)
+			tokReadCall = getToken(oidc.TokenEndpoint, requiredScopes...)
+			fmt.Printf("    Scopes requested (from hint): %v\n", requiredScopes)
+			fmt.Printf("    New token: %s...%s\n", tokReadCall[:min(20, len(tokReadCall))], tokReadCall[max(0, len(tokReadCall)-10):])
+		})
+
+	// --- Step 6: Retry with broader token ---
+	demo.Step("Retry update_document with broader token — SUCCEEDS").
+		Arrow("Host", "Server", "POST /mcp — initialize + Bearer (broader token)").
+		DashedArrow("Server", "Host", "new session").
+		Arrow("Host", "Server", "tools/call: update_document").
+		DashedArrow("Server", "Host", "Document updated successfully").
+		Note("The host starts a new session with the broader token. Now update_document succeeds because the token includes tools-call.").
+		Run(func() {
+			callClient = client.NewClient(serverURL+"/mcp",
+				core.ClientInfo{Name: "demo-host", Version: "1.0"},
+				client.WithClientBearerToken(tokReadCall),
+			)
+			if err := callClient.Connect(); err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				return
+			}
+			fmt.Printf("    New session connected\n\n")
+
+			text, err := callClient.ToolCall("update_document", map[string]any{
+				"docId": "doc-123", "content": "Updated content",
+			})
+			if err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				return
+			}
+			fmt.Printf("    Result: %s\n", text)
+		})
+
+	demo.Section("UC3: Per-Operation Ephemeral Credential",
+		"UC3 is a different pattern: the host needs an *additional* token for a",
+		"specific operation (payment), while keeping the original token for other",
+		"operations. The server returns credential_disposition: \"additional\" and",
+		"RFC 9396 authorization_details in the remediation hint.",
+	)
+
+	// --- Step 7: initiate_payment (UC3) ---
+	demo.Step("Call initiate_payment — DENIED with RAR authorization_details (UC3)").
+		Arrow("Host", "Server", "tools/call: initiate_payment {amount: 150, currency: EUR, payee: ACME}").
+		DashedArrow("Server", "Host", "isError: true + credential_disposition: additional + payment_initiation RAR").
+		Note("Same denial-driven pattern as UC2, but the remediationHint carries RFC 9396 authorization_details bound to this specific transaction. The host should request an *additional* token (credential_disposition: additional) and use it just for the payment — the original token continues to be used for other operations.").
+		Run(func() {
+			result, err := readClient.ToolCallFull("initiate_payment", map[string]any{
+				"amount":   "150.00",
+				"currency": "EUR",
+				"payee":    "ACME Corp",
+			})
+			if err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				return
+			}
+
+			var denial any
+			json.Unmarshal([]byte(result.Content[0].Text), &denial)
+			denialJSON, _ := json.MarshalIndent(denial, "    ", "  ")
+			fmt.Printf("    Authorization denial:\n    %s\n\n", denialJSON)
+
+			// Parse the authorization_details from the remediationHint — what a smart host would do.
+			// Per SEP-2643, hint members are at the top level of the hint object.
+			var parsed struct {
+				Authorization struct {
+					CredentialDisposition string `json:"credentialDisposition"`
+					RemediationHints      []struct {
+						Type                 string           `json:"type"`
+						AuthorizationDetails []map[string]any `json:"authorization_details"`
+					} `json:"remediationHints"`
+				} `json:"authorization"`
+			}
+			json.Unmarshal([]byte(result.Content[0].Text), &parsed)
+
+			fmt.Printf("    → Parsed credentialDisposition: %q (additional = keep original token)\n",
+				parsed.Authorization.CredentialDisposition)
+			for _, h := range parsed.Authorization.RemediationHints {
+				if h.Type == "oauth_authorization_details" {
+					adJSON, _ := json.MarshalIndent(h.AuthorizationDetails, "    ", "  ")
+					fmt.Printf("    → Parsed authorization_details (RFC 9396):\n    %s\n", adJSON)
+				}
+			}
+			fmt.Printf("\n    Next step (not implemented in this demo):\n")
+			fmt.Printf("      The host would POST these authorization_details to an RAR-capable AS\n")
+			fmt.Printf("      to obtain an ephemeral payment-bound credential, then retry initiate_payment.\n")
+			fmt.Printf("      Blocked on:\n")
+			fmt.Printf("        - issue #311 (upgrade oneauth dep — Keycloak doesn't support RFC 9396 RAR)\n")
+			fmt.Printf("        - issue #317 (use SEP-2643 JSON-RPC error code once spec assigns one)\n")
+		})
+
+	// Use TUI renderer if --tui flag is passed.
+	for _, arg := range os.Args[1:] {
+		if strings.TrimSpace(arg) == "--tui" {
+			demo.WithRenderer(tui.New())
+			break
+		}
+	}
+
+	demo.Execute()
+
+	if readClient != nil {
+		readClient.Close()
+	}
+	if callClient != nil {
+		callClient.Close()
+	}
+}
+
+// --- Serve mode: standalone MCP server ---
+
+func serve() {
+	addr := ":8080"
+	for i, arg := range os.Args[1:] {
+		if arg == "--addr" && i+2 < len(os.Args) {
+			addr = os.Args[i+2]
+		}
+	}
+	listenURL := fmt.Sprintf("http://localhost%s", addr)
+
+	realmURL := keycloakURL + "/realms/" + realmName
+	oidc, err := discoverOIDC(realmURL)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: Keycloak not reachable at %s — run 'make kcl' first: %v\n", keycloakURL, err)
+		os.Exit(1)
+	}
+
+	validator := auth.NewJWTValidator(auth.JWTConfig{
+		JWKSURL:             oidc.JWKSURI,
+		Issuer:              oidc.Issuer,
+		Audience:            "",
+		ResourceMetadataURL: listenURL + "/.well-known/oauth-protected-resource/mcp",
+		AllScopes:           []string{scopeRead, scopeCall},
+	})
+	validator.Start()
+	defer validator.Stop()
+
+	logger := demokit.NewColorLogger("[mcp] ", []demokit.ColorRule{
+		{Contains: "isError=true", DarkColor: demokit.ANSIBrightYellow, LightColor: demokit.ANSIYellow},
+		{Contains: "error=", DarkColor: demokit.ANSIRed},
+		{Contains: "ERROR", DarkColor: demokit.ANSIRed},
+		{Contains: "tool=", DarkColor: demokit.ANSIBrightCyan, LightColor: demokit.ANSIBlue},
+		{Contains: "[http] →", DarkColor: demokit.ANSIGray, LightColor: demokit.ANSIDimBlue},
+		{Contains: "[http] ←", DarkColor: demokit.ANSICyan, LightColor: demokit.ANSIBlue},
+		{Contains: "MCP ", DarkColor: demokit.ANSIBrightGreen, LightColor: demokit.ANSIGreen},
+	})
+	srv := server.NewServer(
+		core.ServerInfo{Name: "fine-grained-auth-example", Version: "1.0.0"},
+		server.WithAuth(validator),
+		server.WithRequestLogging(logger),
+		server.WithMiddleware(server.LoggingMiddleware(logger)),
+		server.WithMiddleware(server.ToolCallLogger(logger)),
+	)
+
+	registerTools(srv)
+
+	mux := http.NewServeMux()
+	cors := middleware.CORS(nil,
+		middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
+		middleware.CORSAllowHeaders("Content-Type", "Authorization", "Mcp-Session-Id"),
+		middleware.CORSExposeHeaders("Mcp-Session-Id"),
+	)
+	mux.Handle("/mcp", cors(srv.Handler(server.WithStreamableHTTP(true))))
+	auth.MountAuth(mux, auth.AuthConfig{
+		ResourceURI:          listenURL,
+		AuthorizationServers: []string{oidc.Issuer},
+		ScopesSupported:      []string{scopeRead, scopeCall},
+		MCPPath:              "/mcp",
+	})
+
+	// Mint tokens for manual testing.
+	tokRead := getToken(oidc.TokenEndpoint, scopeRead)
+	tokReadCall := getToken(oidc.TokenEndpoint, scopeRead, scopeCall)
+
+	fmt.Printf("Fine-Grained Auth server on %s\n", addr)
+	fmt.Printf("MCP endpoint: %s/mcp\n\n", listenURL)
+	fmt.Printf("Tokens (paste into Authorization: Bearer <token>):\n")
+	fmt.Printf("  read only:   %s\n", tokRead)
+	fmt.Printf("  read+call:   %s\n\n", tokReadCall)
+	fmt.Printf("Tools:\n")
+	fmt.Printf("  read_document      — needs tools-read\n")
+	fmt.Printf("  update_document    — needs tools-call (returns denial if missing)\n")
+	fmt.Printf("  initiate_payment   — always returns UC3 denial with RAR details\n")
+
+	if err := http.ListenAndServe(addr, mux); err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// --- Shared tool registration ---
+
+func registerTools(srv *server.Server) {
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "read_document",
+			Description: "Read a document. Requires tools-read scope.",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"docId": {"type": "string", "description": "Document ID"}
+				}
+			}`),
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			if err := auth.RequireScope(ctx, scopeRead); err != nil {
+				return core.ErrorResult(err.Error()), nil
+			}
+			var args struct {
+				DocID string `json:"docId"`
+			}
+			json.Unmarshal(req.Arguments, &args)
+			if args.DocID == "" {
+				args.DocID = "doc-001"
+			}
+			return core.TextResult(fmt.Sprintf(
+				"Document %q: Lorem ipsum dolor sit amet, consectetur adipiscing elit.", args.DocID)), nil
+		},
+	)
+
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "update_document",
+			Description: "Update a document. Requires tools-call scope (returns authorization denial if missing).",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"docId":   {"type": "string", "description": "Document ID"},
+					"content": {"type": "string", "description": "New content"}
+				},
+				"required": ["docId", "content"]
+			}`),
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			if err := auth.RequireScope(ctx, scopeCall); err != nil {
+				denial := core.AuthorizationDenial{
+					Reason: "insufficient_authorization",
+					RemediationHints: []core.RemediationHint{
+						core.ScopeStepUpHint([]string{scopeRead, scopeCall}),
+					},
+				}
+				denialJSON, _ := json.Marshal(map[string]any{
+					"error":         "insufficient_scope",
+					"authorization": denial,
+					"message":       fmt.Sprintf("Token lacks required scope %q. Re-authorize with scopes: %s %s", scopeCall, scopeRead, scopeCall),
+				})
+				return core.ToolResult{
+					Content: []core.Content{{Type: "text", Text: string(denialJSON)}},
+					IsError: true,
+				}, nil
+			}
+
+			var args struct {
+				DocID   string `json:"docId"`
+				Content string `json:"content"`
+			}
+			json.Unmarshal(req.Arguments, &args)
+			return core.TextResult(fmt.Sprintf(
+				"Document %q updated successfully.", args.DocID)), nil
+		},
+	)
+
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "initiate_payment",
+			Description: "Initiate a payment. Requires an ephemeral token with payment_initiation authorization_details (UC3).",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"amount":   {"type": "string", "description": "Payment amount"},
+					"currency": {"type": "string", "description": "Currency code (e.g., EUR, USD)"},
+					"payee":    {"type": "string", "description": "Payee name"}
+				},
+				"required": ["amount", "currency", "payee"]
+			}`),
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			var args struct {
+				Amount   string `json:"amount"`
+				Currency string `json:"currency"`
+				Payee    string `json:"payee"`
+			}
+			json.Unmarshal(req.Arguments, &args)
+
+			paymentDetail := oneauthcore.AuthorizationDetail{
+				Type:    "payment_initiation",
+				Actions: []string{"initiate", "status", "cancel"},
+				Extra: map[string]any{
+					"instructedAmount": map[string]any{
+						"currency": args.Currency,
+						"amount":   args.Amount,
+					},
+					"creditorName": args.Payee,
+				},
+			}
+
+			denial := core.AuthorizationDenial{
+				Reason:                "insufficient_authorization",
+				CredentialDisposition: "additional",
+				RemediationHints: []core.RemediationHint{
+					core.OAuthAuthorizationDetailsHint([]oneauthcore.AuthorizationDetail{paymentDetail}),
+				},
+			}
+
+			denialJSON, _ := json.Marshal(map[string]any{
+				"error":         "insufficient_authorization",
+				"authorization": denial,
+				"message": fmt.Sprintf(
+					"Payment of %s %s to %s requires a transaction-specific credential. "+
+						"Obtain an ephemeral token with payment_initiation authorization_details.",
+					args.Amount, args.Currency, args.Payee),
+			})
+			return core.ToolResult{
+				Content: []core.Content{{Type: "text", Text: string(denialJSON)}},
+				IsError: true,
+			}, nil
+		},
+	)
+}
+
+// --- OIDC discovery and token helpers ---
+
+type oidcConfig struct {
+	Issuer        string `json:"issuer"`
+	TokenEndpoint string `json:"token_endpoint"`
+	JWKSURI       string `json:"jwks_uri"`
+}
+
+func discoverOIDC(realmURL string) (*oidcConfig, error) {
+	resp, err := http.Get(realmURL + "/.well-known/openid-configuration")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("OIDC discovery returned %d", resp.StatusCode)
+	}
+	var cfg oidcConfig
+	if err := json.NewDecoder(resp.Body).Decode(&cfg); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+func getToken(tokenEndpoint string, scopes ...string) string {
+	data := url.Values{
+		"grant_type":    {"client_credentials"},
+		"client_id":     {clientID},
+		"client_secret": {clientSecret},
+		"scope":         {strings.Join(scopes, " ")},
+	}
+	resp, err := http.PostForm(tokenEndpoint, data)
+	if err != nil {
+		return "<token-unavailable>"
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	var tok struct {
+		AccessToken string `json:"access_token"`
+	}
+	json.Unmarshal(body, &tok)
+	if tok.AccessToken == "" {
+		return "<token-unavailable>"
+	}
+	return tok.AccessToken
+}
+

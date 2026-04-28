@@ -118,3 +118,59 @@ func LoggingMiddleware(logger *log.Logger) Middleware {
 		return resp
 	}
 }
+
+// ToolCallLogger logs tools/call requests with the tool name and isError status.
+// Complements LoggingMiddleware: that one only sees JSON-RPC errors, while this
+// one also surfaces "in-stream" tool errors — tool results with isError: true
+// (returned at the JSON-RPC layer as success). Useful for visibility into
+// authorization denials, scope failures, and other tool-level error signals.
+//
+// Non-tools/call requests pass through without logging.
+//
+// Example output:
+//
+//	tool=read_document ok
+//	tool=update_document isError=true text="{\"error\":\"insufficient_scope\",..."
+//	tool=initiate_payment isError=true text="..."
+func ToolCallLogger(logger *log.Logger) Middleware {
+	return func(ctx context.Context, req *core.Request, next MiddlewareFunc) *core.Response {
+		if req.Method != "tools/call" {
+			return next(ctx, req)
+		}
+
+		var params struct {
+			Name string `json:"name"`
+		}
+		_ = json.Unmarshal(req.Params, &params)
+
+		resp := next(ctx, req)
+
+		if resp == nil {
+			return resp
+		}
+		if resp.Error != nil {
+			logger.Printf("tool=%s rpcError=%d msg=%q",
+				params.Name, resp.Error.Code, resp.Error.Message)
+			return resp
+		}
+
+		// Result is `any` — marshal to bytes, then parse as ToolResult.
+		raw, _ := json.Marshal(resp.Result)
+		var result core.ToolResult
+		_ = json.Unmarshal(raw, &result)
+
+		if result.IsError {
+			snippet := ""
+			if len(result.Content) > 0 {
+				snippet = result.Content[0].Text
+				if len(snippet) > 80 {
+					snippet = snippet[:80] + "..."
+				}
+			}
+			logger.Printf("tool=%s isError=true text=%q", params.Name, snippet)
+		} else {
+			logger.Printf("tool=%s ok", params.Name)
+		}
+		return resp
+	}
+}

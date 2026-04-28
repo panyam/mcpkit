@@ -36,3 +36,5 @@ examples/apps/htmx/htmx
 examples/apps/react/server/server
 examples/tasks/tasks
 examples/tasks-v2/tasks-v2
+examples/elicitation/elicitation
+examples/fine-grained-auth/fine-grained-auth
