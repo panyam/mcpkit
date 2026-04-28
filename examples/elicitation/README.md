@@ -1,27 +1,14 @@
-# Elicitation Example
+# URL Elicitation — Consent Approval Flow (UC1)
 
-URL-mode elicitation with consent approval — the FineGrainedAuth UC1 pattern.
+Demonstrates the FineGrainedAuth UC1 pattern: a tool requires out-of-band user approval via a URL before granting access.
 
-## What It Shows
+## What you'll learn
 
-A tool requires user approval before granting access to a protected resource. The approval happens out-of-band: the user visits a URL in their browser, clicks "Approve", and the MCP client retries automatically.
-
-The client's bearer token remains unchanged throughout — this is not an OAuth re-authorization flow. It's a server-side state change triggered by direct user interaction.
-
-## Running
-
-```bash
-cd examples/elicitation
-go run . -addr :8086
-```
-
-Connect your MCP host to `http://localhost:8086/mcp` (Streamable HTTP).
-
-## Tools
-
-| Tool | What it does |
-|------|-------------|
-| `access_protected_resource` | Returns resource content after user approves access via URL consent flow |
+- **Start the MCP server with consent middleware** — The server has one tool protected by consent middleware. First calls get rejected with -32042 until the user approves via a URL.
+- **Initialize MCP session** — The client sends an initialize request and receives a session ID for subsequent calls.
+- **Call access_protected_resource — denied with consent URL** — The consent middleware intercepts the call and returns -32042 (URLElicitationRequired) with a URL the user must visit to approve access.
+- **Open consent URL in browser — user clicks Approve** — The consent URL opens in the user's default browser. Click 'Approve' to grant access, then return here and press Enter to continue.
+- **Retry with authorizationContextId — access granted** — The client retries the same tool call, this time including the authorizationContextId in _meta. The middleware recognizes the approved context and lets the call through.
 
 ## Flow
 
@@ -31,87 +18,60 @@ sequenceDiagram
     participant Server as MCP Server
     participant Browser as User Browser
 
+    Note over Client,Browser: Step 1: Start the MCP server with consent middleware
+    Server->>Server: RegisterTool(access_protected_resource)
+    Server->>Server: UseMiddleware(consentMiddleware)
+
+    Note over Client,Browser: Step 2: Initialize MCP session
+    Client->>Server: POST /mcp — initialize
+    Server-->>Client: serverInfo + Mcp-Session-Id
+
+    Note over Client,Browser: Step 3: Call access_protected_resource — denied with consent URL
     Client->>Server: tools/call: access_protected_resource
-    Server-->>Client: error -32042 (URLElicitationRequired)<br/>+ consent URL + elicitationId + authzContextId
+    Server-->>Client: error -32042 + consent URL + authzContextId
 
-    Note over Client: Client presents URL to user
+    Note over Client,Browser: Step 4: Open consent URL in browser — user clicks Approve
+    Client->>Browser: open consent URL
+    Browser->>Server: GET /approve?ctx=...
+    Server-->>Browser: approval form
+    Browser->>Server: POST /approve?ctx=...
+    Server-->>Browser: Access Approved
 
-    Browser->>Server: GET /approve?ctx=authzctx_...
-    Server-->>Browser: Approval form
-
-    Browser->>Server: POST /approve?ctx=authzctx_...
-    Server-->>Browser: "Access Approved"
-    Server-->>Client: notifications/elicitation/complete<br/>{elicitationId: "el_..."}
-
-    Note over Client: Client retries with authzContextId in _meta
-
-    Client->>Server: tools/call: access_protected_resource<br/>+ _meta.authorizationContextId
-    Server-->>Client: "Access granted to resource..."
+    Note over Client,Browser: Step 5: Retry with authorizationContextId — access granted
+    Client->>Server: tools/call + _meta.authorizationContextId
+    Server-->>Client: Access granted to resource
 ```
 
-### Steps
+## Steps
 
-1. Call `access_protected_resource` with `{"resourceId": "my-doc"}`
-2. Server returns `-32042` (URLElicitationRequired) with:
-   - A consent URL (`http://localhost:8086/approve?ctx=...`)
-   - An `elicitationId` for correlation
-   - An `authorizationContextId` for retry correlation
-3. Open the consent URL in your browser
-4. Click **Approve**
-5. Server sends `notifications/elicitation/complete` to the client
-6. Client retries with `authorizationContextId` in `_meta`
-7. Tool succeeds: "Access granted to resource..."
+### Step 1: Start the MCP server with consent middleware
 
-## Wire Format
+The server has one tool protected by consent middleware. First calls get rejected with -32042 until the user approves via a URL.
 
-### Initial denial (-32042)
+### Step 2: Initialize MCP session
 
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "error": {
-    "code": -32042,
-    "message": "You need to approve access to this resource.",
-    "data": {
-      "authorization": {
-        "reason": "insufficient_authorization",
-        "authorizationContextId": "authzctx_..."
-      },
-      "elicitations": [{
-        "mode": "url",
-        "message": "Open this page to approve access to the requested resource.",
-        "url": "http://localhost:8086/approve?ctx=authzctx_...",
-        "elicitationId": "el_..."
-      }]
-    }
-  }
-}
+The client sends an initialize request and receives a session ID for subsequent calls.
+
+### Step 3: Call access_protected_resource — denied with consent URL
+
+The consent middleware intercepts the call and returns -32042 (URLElicitationRequired) with a URL the user must visit to approve access.
+
+### Step 4: Open consent URL in browser — user clicks Approve
+
+The consent URL opens in the user's default browser. Click 'Approve' to grant access, then return here and press Enter to continue.
+
+### Step 5: Retry with authorizationContextId — access granted
+
+The client retries the same tool call, this time including the authorizationContextId in _meta. The middleware recognizes the approved context and lets the call through.
+
+## Run it
+
+```bash
+go run ./examples/elicitation/
 ```
 
-### Retry with context ID
+Pass `--non-interactive` to skip pauses:
 
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 2,
-  "method": "tools/call",
-  "params": {
-    "name": "access_protected_resource",
-    "arguments": {"resourceId": "my-doc"},
-    "_meta": {
-      "modelcontextprotocol.io/authorizationContextId": "authzctx_..."
-    }
-  }
-}
+```bash
+go run ./examples/elicitation/ --non-interactive
 ```
-
-## EXPERIMENTAL
-
-The `authorization` field in the error data is from the FineGrainedAuth proposal (draft SEP). Field names, values, and wire format are subject to breaking changes. The `-32042` error code and `elicitations` array are stable (SEP-1036, finalized).
-
-## Related
-
-- `core/authorization_denial_experimental.go` — Experimental denial types
-- `conformance/elicitation/` — Conformance test suite (5 scenarios)
-- `FineGrainedAuth.docx` — Full design document
