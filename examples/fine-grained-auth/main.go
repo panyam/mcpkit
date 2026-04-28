@@ -304,9 +304,11 @@ func runDemo() {
 					fmt.Printf("    → Parsed authorization_details (RFC 9396):\n    %s\n", adJSON)
 				}
 			}
-			fmt.Printf("\n    Next step (not implemented — requires Keycloak --features=rar):\n")
-			fmt.Printf("      The host would POST these authorization_details to Keycloak's /token endpoint\n")
+			fmt.Printf("\n    Next step (not implemented in this demo):\n")
+			fmt.Printf("      The host would POST these authorization_details to an RAR-capable AS\n")
 			fmt.Printf("      to obtain an ephemeral payment-bound credential, then retry initiate_payment.\n")
+			fmt.Printf("      Keycloak does not support RFC 9396 RAR; oneauth v0.0.78+ does. Wiring this up\n")
+			fmt.Printf("      requires upgrading mcpkit's oneauth dep — see issue #311.\n")
 		})
 
 	// Use TUI renderer if --tui flag is passed.
