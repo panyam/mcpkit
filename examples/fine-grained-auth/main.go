@@ -295,9 +295,9 @@ func serve() {
 	logger := demokit.NewColorLogger("[mcp] ", []demokit.ColorRule{
 		{Contains: "error=", DarkColor: demokit.ANSIRed},
 		{Contains: "ERROR", DarkColor: demokit.ANSIRed},
-		{Contains: "[http] →", DarkColor: demokit.ANSIDimCyan, LightColor: demokit.ANSIDimBlue},
+		{Contains: "[http] →", DarkColor: demokit.ANSIGray, LightColor: demokit.ANSIDimBlue},
 		{Contains: "[http] ←", DarkColor: demokit.ANSICyan, LightColor: demokit.ANSIBlue},
-		{Contains: "MCP ", DarkColor: demokit.ANSIGreen},
+		{Contains: "MCP ", DarkColor: demokit.ANSIBrightGreen, LightColor: demokit.ANSIGreen},
 	})
 	srv := server.NewServer(
 		core.ServerInfo{Name: "fine-grained-auth-example", Version: "1.0.0"},
