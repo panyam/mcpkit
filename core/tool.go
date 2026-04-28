@@ -40,6 +40,16 @@ type ToolDef struct {
 	// Timeout is a per-tool execution timeout. If set, overrides the
 	// server-wide WithToolTimeout for this tool. Not serialized to clients.
 	Timeout time.Duration `json:"-"`
+
+	// RequiredScopes are OAuth scopes the caller's access token must include
+	// to invoke this tool. Enforced by ext/auth's scope middleware
+	// (auth.NewToolScopeMiddleware), which returns HTTP 403 + WWW-Authenticate
+	// when scopes are missing — per SEP-2643 (FineGrainedAuth UC2).
+	//
+	// Not serialized to clients (it's enforcement metadata, not API contract).
+	// Empty/nil means no per-tool scope check; the tool is callable by any
+	// authenticated client (subject to global server.WithRequiredScopes).
+	RequiredScopes []string `json:"-"`
 }
 
 // ToolsListResult is the typed result for tools/list responses.
