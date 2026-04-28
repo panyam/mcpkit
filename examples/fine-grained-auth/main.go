@@ -79,11 +79,24 @@ func runDemo() {
 		"```",
 	)
 
+	demo.Section("UC1 vs UC2/UC3 — When does the host react?",
+		"UC1 (elicitation): The denial points to an out-of-band action (user clicks Approve in browser).",
+		"The host can't proceed until it receives notifications/elicitation/complete from the server.",
+		"",
+		"UC2/UC3 (this demo): The denial is delivered *synchronously* as a tool error result.",
+		"The host parses remediationHints from the denial and reacts immediately — no notification,",
+		"no waiting. A smart host extracts the required scopes (UC2) or authorization_details (UC3)",
+		"from the hint and re-authorizes on its own.",
+	)
+
 	var (
 		readClient *client.Client // client with read-only token
-		callClient *client.Client // client with read+call token
+		callClient *client.Client // client with broader token (after step-up)
 		tokRead    string
 		tokReadCall string
+
+		// Captured from the UC2 denial — drives the auto-step-up in the next step.
+		requiredScopes []string
 	)
 
 	// --- Step 1: Get read-only token ---
@@ -148,7 +161,7 @@ func runDemo() {
 	demo.Step("Call update_document — DENIED (UC2: needs tools-call scope)").
 		Arrow("Host", "Server", "tools/call: update_document {docId: \"doc-123\"}").
 		DashedArrow("Server", "Host", "isError: true + authorization denial + remediationHints").
-		Note("The update_document tool requires tools-call scope. Our read-only token lacks it. The server returns a structured authorization denial telling the host exactly which scopes to request.").
+		Note("The update_document tool requires tools-call scope. Our read-only token lacks it. The server returns a structured authorization denial telling the host exactly which scopes to request via remediationHints.").
 		Run(func() {
 			result, err := readClient.ToolCallFull("update_document", map[string]any{
 				"docId": "doc-123", "content": "Updated content",
@@ -162,26 +175,49 @@ func runDemo() {
 				return
 			}
 
-			// The denial is JSON inside the text content.
+			// Show the full denial.
 			var denial any
 			json.Unmarshal([]byte(result.Content[0].Text), &denial)
 			denialJSON, _ := json.MarshalIndent(denial, "    ", "  ")
 			fmt.Printf("    Tool returned isError: true\n")
 			fmt.Printf("    Authorization denial:\n    %s\n\n", denialJSON)
-			fmt.Printf("    The remediationHints tell the host to re-authorize with scopes:\n")
-			fmt.Printf("      tools-read + tools-call\n")
+
+			// Parse the remediationHints to extract required scopes — what a smart host would do.
+			var parsed struct {
+				Authorization struct {
+					RemediationHints []struct {
+						Type string `json:"type"`
+						Data struct {
+							RequiredScopes []string `json:"requiredScopes"`
+						} `json:"data"`
+					} `json:"remediationHints"`
+				} `json:"authorization"`
+			}
+			json.Unmarshal([]byte(result.Content[0].Text), &parsed)
+			for _, h := range parsed.Authorization.RemediationHints {
+				if h.Type == "oauth_scope_step_up" {
+					requiredScopes = h.Data.RequiredScopes
+					break
+				}
+			}
+			fmt.Printf("    → Parsed remediationHints[oauth_scope_step_up]:\n")
+			fmt.Printf("    → requiredScopes = %v\n", requiredScopes)
 		})
 
-	// --- Step 5: Get broader token ---
-	demo.Step("Re-authorize: get a broader token (tools-read + tools-call)").
-		Arrow("Host", "KC", "POST /token — client_credentials, scope=tools-read tools-call").
-		DashedArrow("KC", "Host", "access_token (tools-read + tools-call)").
-		Note("A smart host reads the remediationHints and automatically requests the required scopes. Here we simulate that by getting a new token.").
+	// --- Step 5: Auto-step-up using parsed scopes ---
+	demo.Step("Auto-step-up: re-authorize with scopes from remediationHints").
+		Arrow("Host", "KC", "POST /token — client_credentials, scope=<from remediationHints>").
+		DashedArrow("KC", "Host", "access_token with broader scopes").
+		Note("The host uses the requiredScopes captured from the previous step's denial — not hardcoded values. This is the spec-driven smart-host behavior: the server tells the host what to ask for, and the host complies.").
 		Run(func() {
+			if len(requiredScopes) == 0 {
+				fmt.Printf("    ERROR: no requiredScopes from previous step (denial parse failed)\n")
+				return
+			}
 			realmURL := keycloakURL + "/realms/" + realmName
 			oidc, _ := discoverOIDC(realmURL)
-			tokReadCall = getToken(oidc.TokenEndpoint, scopeRead, scopeCall)
-			fmt.Printf("    Scopes requested: %s %s\n", scopeRead, scopeCall)
+			tokReadCall = getToken(oidc.TokenEndpoint, requiredScopes...)
+			fmt.Printf("    Scopes requested (from hint): %v\n", requiredScopes)
 			fmt.Printf("    New token: %s...%s\n", tokReadCall[:min(20, len(tokReadCall))], tokReadCall[max(0, len(tokReadCall)-10):])
 		})
 
@@ -224,7 +260,7 @@ func runDemo() {
 	demo.Step("Call initiate_payment — DENIED with RAR authorization_details (UC3)").
 		Arrow("Host", "Server", "tools/call: initiate_payment {amount: 150, currency: EUR, payee: ACME}").
 		DashedArrow("Server", "Host", "isError: true + credential_disposition: additional + payment_initiation RAR").
-		Note("The payment tool requires a transaction-specific ephemeral credential. The denial includes RFC 9396 authorization_details the host should use to request an additional token — the original token is kept for other operations.").
+		Note("Same denial-driven pattern as UC2, but the remediationHint carries RFC 9396 authorization_details bound to this specific transaction. The host should request an *additional* token (credential_disposition: additional) and use it just for the payment — the original token continues to be used for other operations.").
 		Run(func() {
 			result, err := readClient.ToolCallFull("initiate_payment", map[string]any{
 				"amount":   "150.00",
@@ -239,11 +275,33 @@ func runDemo() {
 			var denial any
 			json.Unmarshal([]byte(result.Content[0].Text), &denial)
 			denialJSON, _ := json.MarshalIndent(denial, "    ", "  ")
-			fmt.Printf("    Authorization denial (UC3 — ephemeral credential):\n    %s\n\n", denialJSON)
-			fmt.Printf("    Key differences from UC2:\n")
-			fmt.Printf("      - credential_disposition: \"additional\" (don't replace the original token)\n")
-			fmt.Printf("      - remediationHints type: oauth_authorization_details (RFC 9396 RAR)\n")
-			fmt.Printf("      - The authorization_details are bound to this specific transaction\n")
+			fmt.Printf("    Authorization denial:\n    %s\n\n", denialJSON)
+
+			// Parse the authorization_details from the remediationHint — what a smart host would do.
+			var parsed struct {
+				Authorization struct {
+					CredentialDisposition string `json:"credentialDisposition"`
+					RemediationHints      []struct {
+						Type string `json:"type"`
+						Data struct {
+							AuthorizationDetails []map[string]any `json:"authorization_details"`
+						} `json:"data"`
+					} `json:"remediationHints"`
+				} `json:"authorization"`
+			}
+			json.Unmarshal([]byte(result.Content[0].Text), &parsed)
+
+			fmt.Printf("    → Parsed credentialDisposition: %q (additional = keep original token)\n",
+				parsed.Authorization.CredentialDisposition)
+			for _, h := range parsed.Authorization.RemediationHints {
+				if h.Type == "oauth_authorization_details" {
+					adJSON, _ := json.MarshalIndent(h.Data.AuthorizationDetails, "    ", "  ")
+					fmt.Printf("    → Parsed authorization_details (RFC 9396):\n    %s\n", adJSON)
+				}
+			}
+			fmt.Printf("\n    Next step (not implemented — requires Keycloak --features=rar):\n")
+			fmt.Printf("      The host would POST these authorization_details to Keycloak's /token endpoint\n")
+			fmt.Printf("      to obtain an ephemeral payment-bound credential, then retry initiate_payment.\n")
 		})
 
 	// Use TUI renderer if --tui flag is passed.

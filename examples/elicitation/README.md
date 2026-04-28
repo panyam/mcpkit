@@ -4,10 +4,9 @@ A scripted MCP host walking through the UC1 consent approval flow.
 
 ## What you'll learn
 
-- **Connect to the MCP server and initialize session** — Connect to the server using the mcpkit client. The server has one tool (access_protected_resource) protected by consent middleware.
+- **Connect to the MCP server and initialize session** — Connect with a notification callback listening for notifications/elicitation/complete. The GET SSE stream receives server-pushed notifications.
 - **Call access_protected_resource — denied with consent URL** — The consent middleware intercepts the call and returns -32042 (URLElicitationRequired) with a URL the user must visit to approve access.
-- **Open consent URL in browser — user clicks Approve** — The consent URL opens in the user's default browser. Click 'Approve' to grant access, then return here and press Enter to continue.
-- **Retry with authorizationContextId — access granted** — The host retries the same tool call, this time including the authorizationContextId in _meta. The middleware recognizes the approved context and lets the call through.
+- **Open consent URL → wait for approval notification → auto-retry** — The host opens the consent URL and waits for the server to send a notifications/elicitation/complete notification via the SSE stream. When it arrives, the host automatically retries with the authorizationContextId.
 
 ## Flow
 
@@ -20,20 +19,17 @@ sequenceDiagram
     Note over Host,Browser: Step 1: Connect to the MCP server and initialize session
     Host->>Server: POST /mcp — initialize
     Server-->>Host: serverInfo + Mcp-Session-Id
+    Host->>Server: GET /mcp — open SSE stream for notifications
 
     Note over Host,Browser: Step 2: Call access_protected_resource — denied with consent URL
     Host->>Server: tools/call: access_protected_resource
     Server-->>Host: error -32042 + consent URL + authzContextId
 
-    Note over Host,Browser: Step 3: Open consent URL in browser — user clicks Approve
+    Note over Host,Browser: Step 3: Open consent URL → wait for approval notification → auto-retry
     Host->>Browser: open consent URL
-    Browser->>Server: GET /approve?ctx=...
-    Server-->>Browser: approval form
     Browser->>Server: POST /approve?ctx=...
-    Server-->>Browser: Access Approved
-
-    Note over Host,Browser: Step 4: Retry with authorizationContextId — access granted
-    Host->>Server: tools/call + _meta.authorizationContextId
+    Server-->>Host: notifications/elicitation/complete (via SSE)
+    Host->>Server: tools/call + _meta.authorizationContextId (auto-retry)
     Server-->>Host: Access granted to resource
 ```
 
@@ -50,19 +46,15 @@ Terminal 2:  make run          # run this demo
 
 ### Step 1: Connect to the MCP server and initialize session
 
-Connect to the server using the mcpkit client. The server has one tool (access_protected_resource) protected by consent middleware.
+Connect with a notification callback listening for notifications/elicitation/complete. The GET SSE stream receives server-pushed notifications.
 
 ### Step 2: Call access_protected_resource — denied with consent URL
 
 The consent middleware intercepts the call and returns -32042 (URLElicitationRequired) with a URL the user must visit to approve access.
 
-### Step 3: Open consent URL in browser — user clicks Approve
+### Step 3: Open consent URL → wait for approval notification → auto-retry
 
-The consent URL opens in the user's default browser. Click 'Approve' to grant access, then return here and press Enter to continue.
-
-### Step 4: Retry with authorizationContextId — access granted
-
-The host retries the same tool call, this time including the authorizationContextId in _meta. The middleware recognizes the approved context and lets the call through.
+The host opens the consent URL and waits for the server to send a notifications/elicitation/complete notification via the SSE stream. When it arrives, the host automatically retries with the authorizationContextId.
 
 ## Run it
 

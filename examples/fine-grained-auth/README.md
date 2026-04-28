@@ -1,112 +1,112 @@
 # Fine-Grained Authorization — Scope Step-Up (UC2) + Ephemeral Credentials (UC3)
 
-Demonstrates structured authorization denial with remediation hints. Requires Keycloak.
+A scripted MCP host walking through UC2/UC3 authorization denial flows.
 
 ## What you'll learn
 
-- **Start the MCP server with JWT auth + scope enforcement** — The server validates JWTs from Keycloak and enforces per-tool scope requirements. read_document needs tools-read; update_document needs tools-call.
-- **Get a read-only token from Keycloak** — The client obtains a token with only the tools-read scope. This is sufficient for reading but not for writing.
-- **Initialize MCP session with read-only token** — The client connects with the read-only token. JWT validation passes — the token is valid, just limited in scope.
-- **Call read_document — succeeds with tools-read scope** — The read_document tool only requires tools-read, which our token has. The call succeeds.
-- **Call update_document — denied with remediationHints (UC2: scope step-up)** — The update_document tool requires tools-call scope, which our read-only token lacks. The server returns a structured authorization denial with remediation hints telling the client which scopes to request.
-- **Get a broader token with tools-read + tools-call scopes** — Following the remediation hint, the client re-authorizes with the required scopes.
-- **Retry update_document with broader token — succeeds** — The client starts a new session with the broader token. Now update_document succeeds because the token includes tools-call.
-- **Call initiate_payment — denied with RAR authorization_details (UC3)** — The payment tool requires a transaction-specific ephemeral credential with RFC 9396 authorization_details. The denial tells the client exactly what to request from the authorization server.
+- **Get a read-only token from Keycloak (scope: tools-read)** — The host obtains a token with only the tools-read scope. This is sufficient for reading but not for writing or payments.
+- **Connect to MCP server with read-only token** — The host connects with the read-only token. JWT validation passes — the token is valid, just limited in scope.
+- **Call read_document — succeeds (tools-read is sufficient)** — The read_document tool only requires tools-read scope. Our token has it, so the call succeeds.
+- **Call update_document — DENIED (UC2: needs tools-call scope)** — The update_document tool requires tools-call scope. Our read-only token lacks it. The server returns a structured authorization denial telling the host exactly which scopes to request via remediationHints.
+- **Auto-step-up: re-authorize with scopes from remediationHints** — The host uses the requiredScopes captured from the previous step's denial — not hardcoded values. This is the spec-driven smart-host behavior: the server tells the host what to ask for, and the host complies.
+- **Retry update_document with broader token — SUCCEEDS** — The host starts a new session with the broader token. Now update_document succeeds because the token includes tools-call.
+- **Call initiate_payment — DENIED with RAR authorization_details (UC3)** — Same denial-driven pattern as UC2, but the remediationHint carries RFC 9396 authorization_details bound to this specific transaction. The host should request an *additional* token (credential_disposition: additional) and use it just for the payment — the original token continues to be used for other operations.
 
 ## Flow
 
 ```mermaid
 sequenceDiagram
-    participant Client as MCP Client
-    participant Server as MCP Server
+    participant Host as MCP Host (this client)
+    participant Server as MCP Server (make serve)
     participant KC as Keycloak
 
-    Note over Client,KC: Step 1: Start the MCP server with JWT auth + scope enforcement
+    Note over Host,KC: Step 1: Get a read-only token from Keycloak (scope: tools-read)
+    Host->>KC: POST /token — client_credentials, scope=tools-read
+    KC-->>Host: access_token (tools-read only)
 
-    Note over Client,KC: Step 2: Get a read-only token from Keycloak
-    Client->>KC: POST /token — client_credentials, scope=tools-read
-    KC-->>Client: access_token (tools-read only)
+    Note over Host,KC: Step 2: Connect to MCP server with read-only token
+    Host->>Server: POST /mcp — initialize + Authorization: Bearer <read-token>
+    Server-->>Host: serverInfo + Mcp-Session-Id
 
-    Note over Client,KC: Step 3: Initialize MCP session with read-only token
-    Client->>Server: POST /mcp — initialize + Bearer token
-    Server-->>Client: serverInfo + Mcp-Session-Id
+    Note over Host,KC: Step 3: Call read_document — succeeds (tools-read is sufficient)
+    Host->>Server: tools/call: read_document {docId: "doc-123"}
+    Server-->>Host: Document content
 
-    Note over Client,KC: Step 4: Call read_document — succeeds with tools-read scope
-    Client->>Server: tools/call: read_document
-    Server-->>Client: Document content
+    Note over Host,KC: Step 4: Call update_document — DENIED (UC2: needs tools-call scope)
+    Host->>Server: tools/call: update_document {docId: "doc-123"}
+    Server-->>Host: isError: true + authorization denial + remediationHints
 
-    Note over Client,KC: Step 5: Call update_document — denied with remediationHints (UC2: scope step-up)
-    Client->>Server: tools/call: update_document
-    Server-->>Client: Tool error + authorization denial + remediationHints
+    Note over Host,KC: Step 5: Auto-step-up: re-authorize with scopes from remediationHints
+    Host->>KC: POST /token — client_credentials, scope=<from remediationHints>
+    KC-->>Host: access_token with broader scopes
 
-    Note over Client,KC: Step 6: Get a broader token with tools-read + tools-call scopes
-    Client->>KC: POST /token — client_credentials, scope=tools-read tools-call
-    KC-->>Client: access_token (tools-read + tools-call)
+    Note over Host,KC: Step 6: Retry update_document with broader token — SUCCEEDS
+    Host->>Server: POST /mcp — initialize + Bearer (broader token)
+    Server-->>Host: new session
+    Host->>Server: tools/call: update_document
+    Server-->>Host: Document updated successfully
 
-    Note over Client,KC: Step 7: Retry update_document with broader token — succeeds
-    Client->>Server: POST /mcp — initialize + Bearer (broader token)
-    Server-->>Client: new session
-    Client->>Server: tools/call: update_document
-    Server-->>Client: Document updated successfully
-
-    Note over Client,KC: Step 8: Call initiate_payment — denied with RAR authorization_details (UC3)
-    Client->>Server: tools/call: initiate_payment
-    Server-->>Client: Authorization denial + payment_initiation RAR + credential_disposition: additional
+    Note over Host,KC: Step 7: Call initiate_payment — DENIED with RAR authorization_details (UC3)
+    Host->>Server: tools/call: initiate_payment {amount: 150, currency: EUR, payee: ACME}
+    Server-->>Host: isError: true + credential_disposition: additional + payment_initiation RAR
 ```
 
 ## Steps
 
-### Prerequisites
+### Setup
 
-This example requires Keycloak running on localhost:8180 with the mcpkit-test realm.
-Start it from the **repo root** (not this directory):
+Before running this demo, start the MCP server and Keycloak in separate terminals:
 
-```bash
-cd /path/to/mcpkit   # repo root
-make upkcl           # starts Keycloak on :8180, imports realm (~30s)
+```
+Terminal 1:  make kcl          # start Keycloak (if not running)
+Terminal 2:  make serve        # start the MCP server on :8080
+Terminal 3:  make run          # run this demo
 ```
 
-The realm config lives in `tests/keycloak/realm.json` and includes the
-`mcp-confidential` client with `tools-read` and `tools-call` scopes.
+### UC1 vs UC2/UC3 — When does the host react?
 
-### Step 1: Start the MCP server with JWT auth + scope enforcement
+UC1 (elicitation): The denial points to an out-of-band action (user clicks Approve in browser).
+The host can't proceed until it receives notifications/elicitation/complete from the server.
 
-The server validates JWTs from Keycloak and enforces per-tool scope requirements. read_document needs tools-read; update_document needs tools-call.
+UC2/UC3 (this demo): The denial is delivered *synchronously* as a tool error result.
+The host parses remediationHints from the denial and reacts immediately — no notification,
+no waiting. A smart host extracts the required scopes (UC2) or authorization_details (UC3)
+from the hint and re-authorizes on its own.
 
-### Step 2: Get a read-only token from Keycloak
+### Step 1: Get a read-only token from Keycloak (scope: tools-read)
 
-The client obtains a token with only the tools-read scope. This is sufficient for reading but not for writing.
+The host obtains a token with only the tools-read scope. This is sufficient for reading but not for writing or payments.
 
-### Step 3: Initialize MCP session with read-only token
+### Step 2: Connect to MCP server with read-only token
 
-The client connects with the read-only token. JWT validation passes — the token is valid, just limited in scope.
+The host connects with the read-only token. JWT validation passes — the token is valid, just limited in scope.
 
-### Step 4: Call read_document — succeeds with tools-read scope
+### Step 3: Call read_document — succeeds (tools-read is sufficient)
 
-The read_document tool only requires tools-read, which our token has. The call succeeds.
+The read_document tool only requires tools-read scope. Our token has it, so the call succeeds.
 
-### Step 5: Call update_document — denied with remediationHints (UC2: scope step-up)
+### Step 4: Call update_document — DENIED (UC2: needs tools-call scope)
 
-The update_document tool requires tools-call scope, which our read-only token lacks. The server returns a structured authorization denial with remediation hints telling the client which scopes to request.
+The update_document tool requires tools-call scope. Our read-only token lacks it. The server returns a structured authorization denial telling the host exactly which scopes to request via remediationHints.
 
-### Step 6: Get a broader token with tools-read + tools-call scopes
+### Step 5: Auto-step-up: re-authorize with scopes from remediationHints
 
-Following the remediation hint, the client re-authorizes with the required scopes.
+The host uses the requiredScopes captured from the previous step's denial — not hardcoded values. This is the spec-driven smart-host behavior: the server tells the host what to ask for, and the host complies.
 
-### Step 7: Retry update_document with broader token — succeeds
+### Step 6: Retry update_document with broader token — SUCCEEDS
 
-The client starts a new session with the broader token. Now update_document succeeds because the token includes tools-call.
+The host starts a new session with the broader token. Now update_document succeeds because the token includes tools-call.
 
 ### UC3: Per-Operation Ephemeral Credential
 
-UC3 demonstrates a different pattern: the client needs an *additional* token
-for a specific operation (payment), while retaining the original token for
-other operations. The server returns `credential_disposition: "additional"`
-and RFC 9396 `authorization_details` in the remediation hint.
+UC3 is a different pattern: the host needs an *additional* token for a
+specific operation (payment), while keeping the original token for other
+operations. The server returns credential_disposition: "additional" and
+RFC 9396 authorization_details in the remediation hint.
 
-### Step 8: Call initiate_payment — denied with RAR authorization_details (UC3)
+### Step 7: Call initiate_payment — DENIED with RAR authorization_details (UC3)
 
-The payment tool requires a transaction-specific ephemeral credential with RFC 9396 authorization_details. The denial tells the client exactly what to request from the authorization server.
+Same denial-driven pattern as UC2, but the remediationHint carries RFC 9396 authorization_details bound to this specific transaction. The host should request an *additional* token (credential_disposition: additional) and use it just for the payment — the original token continues to be used for other operations.
 
 ## Run it
 
