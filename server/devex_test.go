@@ -129,7 +129,7 @@ func TestStructuredContentInDispatch(t *testing.T) {
 	srv.Dispatch(context.Background(), &core.Request{Method: "notifications/initialized"})
 
 	// Call tool
-	resp := srv.Dispatch(context.Background(), &core.Request{
+	resp, _ := srv.Dispatch(context.Background(), &core.Request{
 		ID:     json.RawMessage(`2`),
 		Method: "tools/call",
 		Params: json.RawMessage(`{"name":"structured"}`),

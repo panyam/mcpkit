@@ -10,7 +10,10 @@ make test-auth         # ext/auth sub-module
 make test-ui           # ext/ui sub-module
 make test-e2e          # E2E tests (auth + apps)
 make testconf          # MCP conformance suite (needs Node.js)
-make testall           # Everything (10 stages) + Keycloak + HTML report
+make testconfauth      # Auth conformance (client OAuth)
+make testconf-tasks    # Tasks v1 conformance (27 scenarios, self-contained)
+make testconf-tasks-v2 # Tasks v2 conformance (19 scenarios, self-contained, skips MRTR)
+make testall           # Everything (12 stages) + Keycloak + HTML report
 make audit             # govulncheck + gosec + gitleaks + race
 make tag-push V=vX.Y.Z # Tag root + all sub-modules and push
 ```
@@ -28,7 +31,7 @@ make tag-push V=vX.Y.Z # Tag root + all sub-modules and push
 | `experimental/ext/events/` — MCP Events protocol | `experimental/ext/events/README.md` |
 | `testutil/` — Test helpers | |
 | `tests/e2e/`, `tests/keycloak/` — Integration tests | `tests/e2e/apps/README.md` |
-| `examples/` — Working examples (apps, auth, tasks, host, elicitation, fine-grained-auth) | `examples/README.md` |
+| `examples/` — Working examples (apps, auth, tasks, tasks-v2, host, elicitation, fine-grained-auth) | `examples/README.md` |
 
 ## Sub-Modules
 
@@ -52,4 +55,4 @@ Module-specific gotchas live in their READMEs.
 
 ## Conformance
 
-Server: 30/30, Auth: 14/14, Apps: 21, Tasks: 27/27, Keycloak: 12/12, testall: 10/10 stages.
+Server: 30/30, Auth: 14/14, Apps: 21, Tasks v1: 27/27, Tasks v2: 19/21 (v2-16/v2-17 MRTR-deferred), Keycloak: 12/12, testall: 12/12 stages.

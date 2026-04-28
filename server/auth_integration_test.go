@@ -193,12 +193,15 @@ func TestExtensionRegistration(t *testing.T) {
 	}
 
 	// Verify initialize response includes extensions
-	resp := srv.Dispatch(context.Background(), &core.Request{
+	resp, dErr := srv.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      []byte(`1`),
 		Method:  "initialize",
 		Params:  []byte(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1"}}`),
 	})
+	if dErr != nil {
+		t.Fatalf("dispatch transport error: %v", dErr)
+	}
 
 	if resp.Error != nil {
 		t.Fatalf("initialize error: %s", resp.Error.Message)

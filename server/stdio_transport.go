@@ -210,10 +210,16 @@ func (s *Server) runIOInternal(ctx context.Context, cfg stdioConfig) error {
 			}
 
 			// Dispatch through the standard server pipeline.
-			resp := s.dispatchWithNotifyAndRequest(
+			resp, dErr := s.dispatchWithNotifyAndRequest(
 				dispatcher, ctx, nil,
 				dispatcher.getNotifyFunc(), requestFunc, &req,
 			)
+
+			// stdio has no transport-level error path (no HTTP status codes), so
+			// we surface a transport-level short-circuit as a JSON-RPC error.
+			if dErr != nil {
+				resp = core.NewErrorResponse(req.ID, core.ErrCodeServerError, dErr.Error())
+			}
 
 			// Notifications produce no response.
 			if resp == nil {

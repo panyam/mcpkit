@@ -23,7 +23,7 @@ import (
 // dispatched request, including initialize and tools/call.
 func TestMiddleware_SeesAllRequests(t *testing.T) {
 	var methods []string
-	mw := func(ctx context.Context, req *core.Request, next MiddlewareFunc) *core.Response {
+	mw := func(ctx context.Context, req *core.Request, next MiddlewareFunc) (*core.Response, error) {
 		methods = append(methods, req.Method)
 		return next(ctx, req)
 	}
@@ -59,17 +59,17 @@ func TestMiddleware_SeesAllRequests(t *testing.T) {
 func TestMiddleware_ChainOrder(t *testing.T) {
 	var order []string
 
-	mw1 := func(ctx context.Context, req *core.Request, next MiddlewareFunc) *core.Response {
+	mw1 := func(ctx context.Context, req *core.Request, next MiddlewareFunc) (*core.Response, error) {
 		order = append(order, "mw1-before")
-		resp := next(ctx, req)
+		resp, err := next(ctx, req)
 		order = append(order, "mw1-after")
-		return resp
+		return resp, err
 	}
-	mw2 := func(ctx context.Context, req *core.Request, next MiddlewareFunc) *core.Response {
+	mw2 := func(ctx context.Context, req *core.Request, next MiddlewareFunc) (*core.Response, error) {
 		order = append(order, "mw2-before")
-		resp := next(ctx, req)
+		resp, err := next(ctx, req)
 		order = append(order, "mw2-after")
-		return resp
+		return resp, err
 	}
 
 	srv := NewServer(core.ServerInfo{Name: "mw-test", Version: "1.0"},
@@ -91,9 +91,9 @@ func TestMiddleware_ChainOrder(t *testing.T) {
 func TestMiddleware_ShortCircuit(t *testing.T) {
 	var dispatched atomic.Bool
 
-	blockingMW := func(ctx context.Context, req *core.Request, next MiddlewareFunc) *core.Response {
+	blockingMW := func(ctx context.Context, req *core.Request, next MiddlewareFunc) (*core.Response, error) {
 		if req.Method == "tools/call" {
-			return core.NewErrorResponse(req.ID, -32000, "blocked by middleware")
+			return core.NewErrorResponse(req.ID, -32000, "blocked by middleware"), nil
 		}
 		return next(ctx, req)
 	}
@@ -115,7 +115,8 @@ func TestMiddleware_ShortCircuit(t *testing.T) {
 
 	// Tool call should be blocked
 	toolReq := &core.Request{ID: json.RawMessage(`2`), Method: "tools/call", Params: json.RawMessage(`{"name":"echo"}`)}
-	resp := srv.Dispatch(context.Background(), toolReq)
+	resp, err := srv.Dispatch(context.Background(), toolReq)
+	require.NoError(t, err)
 
 	assert.False(t, dispatched.Load(), "handler should not have been called")
 	require.NotNil(t, resp)
@@ -130,7 +131,7 @@ func TestMiddleware_ShortCircuit(t *testing.T) {
 func TestMiddleware_AccessContext(t *testing.T) {
 	var sawClaims bool
 
-	mw := func(ctx context.Context, req *core.Request, next MiddlewareFunc) *core.Response {
+	mw := func(ctx context.Context, req *core.Request, next MiddlewareFunc) (*core.Response, error) {
 		claims := core.AuthClaims(ctx)
 		if claims != nil && claims.Subject == "test-user" {
 			sawClaims = true
@@ -155,7 +156,7 @@ func TestMiddleware_AccessContext(t *testing.T) {
 // innermost handler inside the middleware chain.
 func TestMiddleware_ToolTimeoutPreserved(t *testing.T) {
 	var mwRan bool
-	mw := func(ctx context.Context, req *core.Request, next MiddlewareFunc) *core.Response {
+	mw := func(ctx context.Context, req *core.Request, next MiddlewareFunc) (*core.Response, error) {
 		mwRan = true
 		return next(ctx, req)
 	}
@@ -182,7 +183,8 @@ func TestMiddleware_ToolTimeoutPreserved(t *testing.T) {
 
 	// Tool call should timeout
 	toolReq := &core.Request{ID: json.RawMessage(`2`), Method: "tools/call", Params: json.RawMessage(`{"name":"slow"}`)}
-	resp := srv.Dispatch(context.Background(), toolReq)
+	resp, err := srv.Dispatch(context.Background(), toolReq)
+	require.NoError(t, err)
 
 	assert.True(t, mwRan, "middleware should have run")
 	require.NotNil(t, resp)

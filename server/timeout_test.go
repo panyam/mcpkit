@@ -53,14 +53,14 @@ func TestPerToolTimeout(t *testing.T) {
 
 	// Slow tool should be cancelled by per-handler timeout
 	start := time.Now()
-	result := srv.Dispatch(context.Background(), testutil.ToolCallRequest("slow", nil))
+	result, _ := srv.Dispatch(context.Background(), testutil.ToolCallRequest("slow", nil))
 	elapsed := time.Since(start)
 	require.NotNil(t, result)
 	// Should complete quickly (timeout fires), not after 5 seconds
 	assert.Less(t, elapsed, 1*time.Second, "slow tool should be cancelled by per-handler timeout")
 
 	// Fast tool should work normally
-	result = srv.Dispatch(context.Background(), testutil.ToolCallRequest("fast", nil))
+	result, _ = srv.Dispatch(context.Background(), testutil.ToolCallRequest("fast", nil))
 	require.NotNil(t, result)
 	require.Nil(t, result.Error)
 }
@@ -92,7 +92,7 @@ func TestPerResourceTimeout(t *testing.T) {
 	testutil.InitHandshake(srv)
 
 	start := time.Now()
-	result := srv.Dispatch(context.Background(), testutil.ResourceReadRequest("test://slow"))
+	result, _ := srv.Dispatch(context.Background(), testutil.ResourceReadRequest("test://slow"))
 	elapsed := time.Since(start)
 	require.NotNil(t, result)
 	// Should be an error (timeout) not a successful result after 5s
@@ -124,7 +124,7 @@ func TestPerPromptTimeout(t *testing.T) {
 	testutil.InitHandshake(srv)
 
 	start := time.Now()
-	result := srv.Dispatch(context.Background(), testutil.PromptGetRequest("slow-prompt", nil))
+	result, _ := srv.Dispatch(context.Background(), testutil.PromptGetRequest("slow-prompt", nil))
 	elapsed := time.Since(start)
 	require.NotNil(t, result)
 	assert.Less(t, elapsed, 1*time.Second, "slow prompt should be cancelled by per-handler timeout")

@@ -177,7 +177,7 @@ func TestTypedTool_TypeSafeDeserialization(t *testing.T) {
 	))
 	testutil.InitHandshake(srv)
 
-	resp := srv.Dispatch(context.Background(),
+	resp, _ := srv.Dispatch(context.Background(),
 		testutil.ToolCallRequest("greet", map[string]any{
 			"name":    "Alice",
 			"excited": true,
@@ -207,7 +207,7 @@ func TestTypedTool_InvalidInput(t *testing.T) {
 	testutil.InitHandshake(srv)
 
 	// Send excited as string instead of bool → deserialization error
-	resp := srv.Dispatch(context.Background(),
+	resp, _ := srv.Dispatch(context.Background(),
 		testutil.ToolCallRequest("greet", map[string]any{
 			"name":    "Alice",
 			"excited": "not-a-bool",
@@ -238,7 +238,7 @@ func TestTypedTool_StructuredOutput(t *testing.T) {
 	))
 	testutil.InitHandshake(srv)
 
-	resp := srv.Dispatch(context.Background(),
+	resp, _ := srv.Dispatch(context.Background(),
 		testutil.ToolCallRequest("search", map[string]any{"name": "test"}))
 	require.NotNil(t, resp)
 	require.Nil(t, resp.Error)
@@ -271,7 +271,7 @@ func TestTypedTool_ToolResultPassthrough(t *testing.T) {
 	))
 	testutil.InitHandshake(srv)
 
-	resp := srv.Dispatch(context.Background(),
+	resp, _ := srv.Dispatch(context.Background(),
 		testutil.ToolCallRequest("multi", map[string]any{"name": "test"}))
 	require.NotNil(t, resp)
 	require.Nil(t, resp.Error)
@@ -299,7 +299,7 @@ func TestTypedTool_TypedContext(t *testing.T) {
 	))
 	testutil.InitHandshake(srv)
 
-	resp := srv.Dispatch(context.Background(),
+	resp, _ := srv.Dispatch(context.Background(),
 		testutil.ToolCallRequest("ctx-test", map[string]any{"name": "test"}))
 	require.NotNil(t, resp)
 	require.Nil(t, resp.Error)

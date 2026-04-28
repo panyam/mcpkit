@@ -225,7 +225,7 @@ server.RegisterTasksV2(server.TasksV2Config{Server: srv})
 ### Phase V2-7: Conformance Suite
 **Goal**: TS conformance tests against both Go and TS servers.
 
-- [ ] **V2-7a.** `conformance/tasks-v2/scenarios.test.ts` — full scenario suite
+- [x] **V2-7a.** `conformance/tasks-v2/scenarios.test.ts` — 18 scenarios (red-before-green)
 - [ ] **V2-7b.** Example server with `--tasks-version=v2` flag
 - [ ] **V2-7c.** TS reference server v2 mode
 - [ ] **V2-7d.** `make testconf-tasks-v2` target
