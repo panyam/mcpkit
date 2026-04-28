@@ -22,6 +22,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/panyam/demokit"
 	"github.com/panyam/demokit/tui"
@@ -73,25 +74,43 @@ func runDemo() {
 	var (
 		c         *client.Client
 		contextID string // authorizationContextId from the -32042 response
+
+		// Channel signaled when notifications/elicitation/complete arrives.
+		approved = make(chan string, 1)
 	)
 
 	// --- Step 1: Connect to server ---
 	demo.Step("Connect to the MCP server and initialize session").
 		Arrow("Host", "Server", "POST /mcp — initialize").
 		DashedArrow("Server", "Host", "serverInfo + Mcp-Session-Id").
-		Note("Connect to the server using the mcpkit client. The server has one tool (access_protected_resource) protected by consent middleware.").
+		Arrow("Host", "Server", "GET /mcp — open SSE stream for notifications").
+		Note("Connect with a notification callback listening for notifications/elicitation/complete. The GET SSE stream receives server-pushed notifications.").
 		Run(func() {
 			fmt.Printf("    Connecting to %s ...\n", serverURL)
 
 			c = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "demo-host", Version: "1.0"},
+				client.WithNotificationCallback(func(method string, params any) {
+					if method == "notifications/elicitation/complete" {
+						fmt.Fprintf(os.Stderr, "    ✓ Received notification: %s\n", method)
+						// Extract elicitationId from params.
+						raw, _ := json.Marshal(params)
+						var p struct {
+							ElicitationID string `json:"elicitationId"`
+						}
+						json.Unmarshal(raw, &p)
+						approved <- p.ElicitationID
+					}
+				}),
+				client.WithGetSSEStream(),
 			)
 			if err := c.Connect(); err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				fmt.Printf("    Start the server with: make serve\n")
 				return
 			}
-			fmt.Printf("    Connected to %s %s\n\n", c.ServerInfo.Name, c.ServerInfo.Version)
+			fmt.Printf("    Connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)
+			fmt.Printf("    SSE notification stream active\n\n")
 
 			tools, _ := c.ListTools()
 			fmt.Printf("    Tools:\n")
@@ -142,28 +161,31 @@ func runDemo() {
 			}
 		})
 
-	// --- Step 3: Open browser for approval ---
-	demo.Step("Open consent URL in browser — user clicks Approve").
+	// --- Step 3: Open browser, wait for notification, auto-retry ---
+	demo.Step("Open consent URL → wait for approval notification → auto-retry").
 		Arrow("Host", "Browser", "open consent URL").
-		Arrow("Browser", "Server", "GET /approve?ctx=...").
-		DashedArrow("Server", "Browser", "approval form").
 		Arrow("Browser", "Server", "POST /approve?ctx=...").
-		DashedArrow("Server", "Browser", "Access Approved").
-		Note("The consent URL opens in the user's default browser. Click 'Approve' to grant access, then return here and press Enter to continue.").
+		DashedArrow("Server", "Host", "notifications/elicitation/complete (via SSE)").
+		Arrow("Host", "Server", "tools/call + _meta.authorizationContextId (auto-retry)").
+		DashedArrow("Server", "Host", "Access granted to resource").
+		Note("The host opens the consent URL and waits for the server to send a notifications/elicitation/complete notification via the SSE stream. When it arrives, the host automatically retries with the authorizationContextId.").
 		Run(func() {
 			approveURL := fmt.Sprintf("%s/approve?ctx=%s", serverURL, contextID)
 			fmt.Printf("    Opening browser: %s\n", approveURL)
 			openBrowser(approveURL)
-			fmt.Printf("    → Click 'Approve' in the browser, then press Enter here to continue.\n")
-		})
+			fmt.Printf("    Waiting for notifications/elicitation/complete ...\n\n")
 
-	// --- Step 4: Retry — access granted ---
-	demo.Step("Retry with authorizationContextId — access granted").
-		Arrow("Host", "Server", "tools/call + _meta.authorizationContextId").
-		DashedArrow("Server", "Host", "Access granted to resource").
-		Note("The host retries the same tool call, this time including the authorizationContextId in _meta. The middleware recognizes the approved context and lets the call through.").
-		Run(func() {
-			// Use Call() directly to pass _meta.
+			// Wait for the approval notification (with timeout).
+			select {
+			case elicitID := <-approved:
+				fmt.Printf("    ✓ Approval notification received (elicitationId: %s)\n", elicitID)
+				fmt.Printf("    Auto-retrying with authorizationContextId ...\n\n")
+			case <-time.After(2 * time.Minute):
+				fmt.Printf("    ✗ Timed out waiting for approval (2 min). Did you click Approve?\n")
+				return
+			}
+
+			// Retry with the context ID.
 			result, err := c.Call("tools/call", map[string]any{
 				"name":      "access_protected_resource",
 				"arguments": map[string]any{"resourceId": "my-doc"},
@@ -224,9 +246,9 @@ func serve() {
 	logger := demokit.NewColorLogger("[mcp] ", []demokit.ColorRule{
 		{Contains: "error=", DarkColor: demokit.ANSIRed},
 		{Contains: "ERROR", DarkColor: demokit.ANSIRed},
-		{Contains: "[http] →", DarkColor: demokit.ANSIDimCyan, LightColor: demokit.ANSIDimBlue},
+		{Contains: "[http] →", DarkColor: demokit.ANSIGray, LightColor: demokit.ANSIDimBlue},
 		{Contains: "[http] ←", DarkColor: demokit.ANSICyan, LightColor: demokit.ANSIBlue},
-		{Contains: "MCP ", DarkColor: demokit.ANSIGreen},
+		{Contains: "MCP ", DarkColor: demokit.ANSIBrightGreen, LightColor: demokit.ANSIGreen},
 	})
 	srv := server.NewServer(core.ServerInfo{
 		Name:    "elicitation-example",
