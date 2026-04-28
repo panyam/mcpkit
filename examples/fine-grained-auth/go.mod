@@ -3,7 +3,7 @@ module github.com/panyam/mcpkit/examples/fine-grained-auth
 go 1.26.2
 
 require (
-	github.com/panyam/demokit v0.0.2
+	github.com/panyam/demokit v0.0.4
 	github.com/panyam/mcpkit v0.2.40
 	github.com/panyam/mcpkit/ext/auth v0.2.36
 	github.com/panyam/oneauth v0.0.79
@@ -50,7 +50,6 @@ require (
 )
 
 replace (
-	github.com/panyam/demokit => ../../../../demokit
 	github.com/panyam/mcpkit => ../..
 	github.com/panyam/mcpkit/ext/auth => ../../ext/auth
 )
