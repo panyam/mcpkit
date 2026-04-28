@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/examples/elicitation
 
-go 1.26.1
+go 1.26.2
 
 replace github.com/panyam/mcpkit => ../..
 
@@ -13,9 +13,10 @@ require (
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
+	github.com/panyam/demokit v0.0.1 // indirect
 	github.com/panyam/gocurrent v0.1.0 // indirect
 	github.com/panyam/goutils v0.1.8 // indirect
-	github.com/panyam/servicekit v0.0.25 // indirect
+	github.com/panyam/servicekit v0.0.26 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
