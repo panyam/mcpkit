@@ -305,7 +305,7 @@ func serve() {
 // --- Consent middleware + store ---
 
 func consentMiddleware(store *consentStore, baseURL string) server.Middleware {
-	return func(ctx context.Context, req *core.Request, next server.MiddlewareFunc) *core.Response {
+	return func(ctx context.Context, req *core.Request, next server.MiddlewareFunc) (*core.Response, error) {
 		if req.Method != "tools/call" {
 			return next(ctx, req)
 		}
@@ -366,7 +366,7 @@ func consentMiddleware(store *consentStore, baseURL string) server.Middleware {
 					},
 				},
 			},
-		)
+		), nil
 	}
 }
 

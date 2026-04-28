@@ -347,19 +347,25 @@ func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Set SSE headers
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
-
+	// SSE headers are set lazily on first write so we can still surface
+	// transport-level auth errors via writeAuthError (HTTP 403/401 +
+	// WWW-Authenticate) when middleware short-circuits before any
+	// notification has been emitted.
 	var mu sync.Mutex
-	var closed bool // set after handler returns; silently drops writes from background goroutines
+	var closed bool   // set after handler returns; silently drops writes from background goroutines
+	var sseStarted bool // set on first writeSSE call; once true, headers are committed
 	writeSSE := func(data []byte) {
 		mu.Lock()
 		defer mu.Unlock()
 		if closed {
 			return // POST response already sent — background goroutine writing to dead writer
+		}
+		if !sseStarted {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("Cache-Control", "no-cache")
+			w.Header().Set("Connection", "keep-alive")
+			w.Header().Set("X-Accel-Buffering", "no")
+			sseStarted = true
 		}
 		emitSSEEvent(d.eventIDs, t.config.eventStore, d.sessionID, data, func(id string, data json.RawMessage) {
 			fmt.Fprintf(w, "id: %s\nevent: message\ndata: %s\n\n", id, data)
@@ -400,14 +406,22 @@ func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Reque
 	// Dispatch with request-scoped notify, request, and retry funcs.
 	resp, dErr := t.server.dispatchWithOpts(d, r.Context(), claims, requestNotify, requestFunc, sseRetry, req)
 
-	// If middleware returned a transport-level error, surface it as a JSON-RPC
-	// error response on the SSE stream. We can't change HTTP status from here
-	// (SSE response may already have been sent on first notification), so the
-	// best we can do is emit a JSON-RPC error event before closing the stream.
+	// Transport-level error from middleware (e.g., scope step-up): if the SSE
+	// stream hasn't started yet, we can still send an HTTP-level auth response
+	// (writeAuthError → 401/403 + WWW-Authenticate). If the stream has already
+	// flushed (a notification fired before the middleware error — unusual but
+	// possible), we fall back to emitting a JSON-RPC error on the SSE stream.
 	if dErr != nil {
-		errResp := core.NewErrorResponse(req.ID, core.ErrCodeServerError, dErr.Error())
-		raw, _ := marshalJSON(errResp)
-		writeSSE(raw)
+		mu.Lock()
+		started := sseStarted
+		mu.Unlock()
+		if !started {
+			writeAuthError(w, dErr)
+		} else {
+			errResp := core.NewErrorResponse(req.ID, core.ErrCodeServerError, dErr.Error())
+			raw, _ := marshalJSON(errResp)
+			writeSSE(raw)
+		}
 	} else if resp != nil {
 		// Write the JSON-RPC response as the final SSE event
 		raw, _ := marshalJSON(resp)
