@@ -1,36 +1,36 @@
 === Stage 11/12: tasks-v2-conformance (make testconf-tasks-v2) ===
-Started: Mon Apr 27 16:31:21 PDT 2026
-2026/04/27 16:31:23 Tasks v2 demo server on :18092
-2026/04/27 16:31:23 Connect: http://localhost:18092/mcp
-2026/04/27 16:31:23 
-2026/04/27 16:31:23 Tools:
-2026/04/27 16:31:23   greet              — sync-only
-2026/04/27 16:31:23   slow_compute       — optional task (server-directed)
-2026/04/27 16:31:23   failing_job        — required task (tool error → completed + isError)
-2026/04/27 16:31:23   protocol_error_job — required task (protocol error → failed + error)
-2026/04/27 16:31:23   external_job       �� required task (TaskCallbacks proxy)
-2026/04/27 16:31:23 listen tcp :18092: bind: address already in use
+Started: Tue Apr 28 16:16:17 PDT 2026
+2026/04/28 16:16:18 Tasks v2 demo server on :18092
+2026/04/28 16:16:18 Connect: http://localhost:18092/mcp
+2026/04/28 16:16:18 
+2026/04/28 16:16:18 Tools:
+2026/04/28 16:16:18   greet              — sync-only
+2026/04/28 16:16:18   slow_compute       — optional task (server-directed)
+2026/04/28 16:16:18   failing_job        — required task (tool error → completed + isError)
+2026/04/28 16:16:18   protocol_error_job — required task (protocol error → failed + error)
+2026/04/28 16:16:18   external_job       �� required task (TaskCallbacks proxy)
+2026/04/28 16:16:18 listen tcp :18092: bind: address already in use
 ▶ MCP Tasks v2 Conformance (SEP-2557)
-  ✔ v2-01: sync tool call returns immediately, no task (2.005167ms)
-  ✔ v2-02: server creates task without client task param (0.975167ms)
-  ✔ v2-03: tasks/get returns status for active task (2.038958ms)
-  ✔ v2-04: tasks/get returns completed status with inlined result (1016.779583ms)
-  ✔ v2-05: tool execution error is completed with isError true (1020.507625ms)
-  ✔ v2-06: protocol error is failed with error field (611.260542ms)
-  ✔ v2-07: tasks/cancel returns cancelled status (2.584083ms)
-  ✔ v2-08: cancel completed task returns error (1013.701375ms)
-  ✔ v2-09: tasks/result is rejected (method removed in v2) (1013.678541ms)
-  ✔ v2-10: tasks/list is rejected (method removed in v2) (0.776791ms)
-  ✔ v2-11: tasks not advertised in initialize capabilities (0.083ms)
-  ✔ v2-12: TTL is present and reasonable for seconds (0.884167ms)
-  ✔ v2-13: task must not expire before TTL (1514.095625ms)
-  ✔ v2-14: tasks/get response may include requestState (1012.4675ms)
-  ✔ v2-15: client echoes requestState in subsequent requests (2.049583ms)
-  ✔ v2-18: status notifications include DetailedTask if sent (1512.612375ms)
-  ✔ v2-19: tools/call without task param creates task for async tools (3.400125ms)
-  ✔ v2-20: server may return immediate result for fast operations (1.569958ms)
-  ✔ v2-21: tasks/get inlined result does not include related-task _meta (1014.524125ms)
-✔ MCP Tasks v2 Conformance (SEP-2557) (9764.278292ms)
+  ✔ v2-01: sync tool call returns immediately, no task (1.555792ms)
+  ✔ v2-02: server creates task without client task param (0.844667ms)
+  ✔ v2-03: tasks/get returns status for active task (1.275375ms)
+  ✔ v2-04: tasks/get returns completed status with inlined result (1013.859917ms)
+  ✔ v2-05: tool execution error is completed with isError true (1016.024792ms)
+  ✔ v2-06: protocol error is failed with error field (608.014333ms)
+  ✔ v2-07: tasks/cancel returns cancelled status (2.719875ms)
+  ✔ v2-08: cancel completed task returns error (1013.625833ms)
+  ✔ v2-09: tasks/result is rejected (method removed in v2) (1017.491917ms)
+  ✔ v2-10: tasks/list is rejected (method removed in v2) (1.018125ms)
+  ✔ v2-11: tasks not advertised in initialize capabilities (0.113958ms)
+  ✔ v2-12: TTL is present and reasonable for seconds (0.85475ms)
+  ✔ v2-13: task must not expire before TTL (1517.591167ms)
+  ✔ v2-14: tasks/get response may include requestState (1014.610459ms)
+  ✔ v2-15: client echoes requestState in subsequent requests (2.529916ms)
+  ✔ v2-18: status notifications include DetailedTask if sent (1513.366916ms)
+  ✔ v2-19: tools/call without task param creates task for async tools (1.796125ms)
+  ✔ v2-20: server may return immediate result for fast operations (1.131667ms)
+  ✔ v2-21: tasks/get inlined result does not include related-task _meta (1014.961708ms)
+✔ MCP Tasks v2 Conformance (SEP-2557) (9757.110958ms)
 ℹ tests 19
 ℹ suites 1
 ℹ pass 19
@@ -38,5 +38,5 @@ Started: Mon Apr 27 16:31:21 PDT 2026
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 10029.592042
-Finished: Mon Apr 27 16:31:33 PDT 2026
+ℹ duration_ms 9955.704125
+Finished: Tue Apr 28 16:16:28 PDT 2026
