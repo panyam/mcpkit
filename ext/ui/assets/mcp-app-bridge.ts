@@ -72,6 +72,42 @@ type ListToolsHandler = () =>
   | Array<{ name: string; description?: string; inputSchema?: unknown }>
   | Promise<Array<{ name: string; description?: string; inputSchema?: unknown }>>;
 
+/** Configuration for a registered app-provided tool. */
+interface ToolConfig {
+  description?: string;
+  inputSchema?: unknown;
+  outputSchema?: unknown;
+}
+
+/** Handle returned by registerTool() for managing a registered tool. */
+interface ToolHandle {
+  /** Update tool metadata (description, schemas). Sends toolListChanged. */
+  update(config: Partial<ToolConfig>): void;
+  /** Disable the tool (hidden from tools/list, rejected on tools/call). Sends toolListChanged. */
+  disable(): void;
+  /** Re-enable a disabled tool. Sends toolListChanged. */
+  enable(): void;
+  /** Remove the tool entirely. Sends toolListChanged. */
+  remove(): void;
+}
+
+/** Standard Schema v1 validate function signature. */
+type StandardValidate = (
+  value: unknown
+) => { value: unknown } | { issues: Array<{ message: string; path?: Array<{ key: string | number }> }> };
+
+/** Internal state for a registered tool. */
+interface RegisteredTool {
+  name: string;
+  description?: string;
+  inputSchema?: unknown;
+  outputSchema?: unknown;
+  enabled: boolean;
+  handler: (args: Record<string, unknown>) => unknown | Promise<unknown>;
+  /** Extracted Standard Schema validator, if inputSchema implements ~standard. */
+  validate?: StandardValidate;
+}
+
 interface ToolCallResult {
   content?: Array<{ type: string; text?: string; [k: string]: unknown }>;
   isError?: boolean;
@@ -141,6 +177,10 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
   // Bidirectional handlers (host → app requests).
   let _oncalltool: CallToolHandler | null = null;
   let _onlisttools: ListToolsHandler | null = null;
+
+  // Tool registry for registerTool() API.
+  const _registeredTools = new Map<string, RegisteredTool>();
+  let _useRegistry = false;
 
   // --- Event emitter -------------------------------------------------------
 
@@ -252,6 +292,13 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
   }
 
   function notify(method: string, params?: unknown): void {
+    // Allow handshake notifications through before connected.
+    if (!_connected && method !== "ui/notifications/initialized") {
+      if (typeof console !== "undefined") {
+        console.warn("[MCPApp] notify blocked before handshake: " + method);
+      }
+      return;
+    }
     send({ jsonrpc: "2.0", method, params: params || {} });
   }
 
@@ -424,7 +471,28 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
     try {
       switch (req.method) {
         case "tools/call": {
-          if (_oncalltool) {
+          if (_useRegistry) {
+            const name = params.name || "";
+            const tool = _registeredTools.get(name);
+            if (tool && tool.enabled) {
+              const args = params.arguments || {};
+              // Standard Schema validation (if inputSchema implements ~standard).
+              if (tool.validate) {
+                const vResult = tool.validate(args);
+                if ("issues" in vResult) {
+                  const msgs = vResult.issues.map(
+                    (i: any) => (i.path?.map((p: any) => p.key).join(".") || "") + ": " + i.message
+                  ).join("; ");
+                  respond(id, null, "Validation failed: " + msgs);
+                  break;
+                }
+              }
+              const result = await tool.handler(args);
+              respond(id, result);
+            } else {
+              respond(id, null, "Unknown tool: " + name);
+            }
+          } else if (_oncalltool) {
             const result = await _oncalltool({
               name: params.name || "",
               arguments: params.arguments || {},
@@ -436,7 +504,18 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
           break;
         }
         case "tools/list": {
-          if (_onlisttools) {
+          if (_useRegistry) {
+            const tools: Array<{ name: string; description?: string; inputSchema?: unknown; outputSchema?: unknown }> = [];
+            _registeredTools.forEach((t) => {
+              if (!t.enabled) return;
+              const entry: any = { name: t.name };
+              if (t.description !== undefined) entry.description = t.description;
+              if (t.inputSchema !== undefined) entry.inputSchema = t.inputSchema;
+              if (t.outputSchema !== undefined) entry.outputSchema = t.outputSchema;
+              tools.push(entry);
+            });
+            respond(id, { tools });
+          } else if (_onlisttools) {
             const tools = await _onlisttools();
             respond(id, { tools });
           } else {
@@ -451,6 +530,88 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
     } catch (e) {
       respond(id, null, e instanceof Error ? e.message : String(e));
     }
+  }
+
+  // --- Tool registration API ------------------------------------------------
+
+  /** Send notifications/tools/list_changed to the host. */
+  function sendToolListChanged(): void {
+    notify("notifications/tools/list_changed", {});
+  }
+
+  /**
+   * Extract a Standard Schema v1 validate function from a schema object.
+   * Returns undefined if the schema doesn't implement the ~standard protocol.
+   * See https://standardschema.dev/ for the spec.
+   */
+  function extractStandardValidate(schema: unknown): StandardValidate | undefined {
+    if (schema == null || typeof schema !== "object") return undefined;
+    // Standard Schema v1 uses the "~standard" property.
+    const std = (schema as any)["~standard"];
+    if (std && typeof std === "object" && typeof std.validate === "function") {
+      return (value: unknown) => std.validate(value);
+    }
+    return undefined;
+  }
+
+  /**
+   * Register an app-provided tool that the host/model can call.
+   * Installs auto-dispatch handlers for tools/call and tools/list,
+   * replacing any manually set oncalltool/onlisttools handlers.
+   *
+   * If inputSchema implements the Standard Schema protocol (~standard.validate),
+   * input arguments are validated before the handler is called.
+   */
+  function registerTool(
+    name: string,
+    config: ToolConfig,
+    handler: (args: Record<string, unknown>) => unknown | Promise<unknown>
+  ): ToolHandle {
+    _registeredTools.set(name, {
+      name,
+      description: config.description,
+      inputSchema: config.inputSchema,
+      outputSchema: config.outputSchema,
+      enabled: true,
+      handler,
+      validate: extractStandardValidate(config.inputSchema),
+    });
+    _useRegistry = true;
+
+    sendToolListChanged();
+
+    return {
+      update(partial: Partial<ToolConfig>): void {
+        const tool = _registeredTools.get(name);
+        if (!tool) return;
+        if (partial.description !== undefined) tool.description = partial.description;
+        if (partial.inputSchema !== undefined) {
+          tool.inputSchema = partial.inputSchema;
+          tool.validate = extractStandardValidate(partial.inputSchema);
+        }
+        if (partial.outputSchema !== undefined) tool.outputSchema = partial.outputSchema;
+        sendToolListChanged();
+      },
+      disable(): void {
+        const tool = _registeredTools.get(name);
+        if (tool) {
+          tool.enabled = false;
+          sendToolListChanged();
+        }
+      },
+      enable(): void {
+        const tool = _registeredTools.get(name);
+        if (tool) {
+          tool.enabled = true;
+          sendToolListChanged();
+        }
+      },
+      remove(): void {
+        _registeredTools.delete(name);
+        if (_registeredTools.size === 0) _useRegistry = false;
+        sendToolListChanged();
+      },
+    };
   }
 
   // --- Initialize handshake ------------------------------------------------
@@ -564,6 +725,10 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
     get oncalltool(): CallToolHandler | null { return _oncalltool; },
     set onlisttools(handler: ListToolsHandler | null) { _onlisttools = handler; },
     get onlisttools(): ListToolsHandler | null { return _onlisttools; },
+
+    // Tool registration API (higher-level than oncalltool/onlisttools).
+    registerTool,
+    sendToolListChanged,
 
     // Utility.
     isHosted(): boolean {

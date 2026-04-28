@@ -1,15 +1,22 @@
-module github.com/panyam/mcpkit/ext/ui
+module github.com/panyam/mcpkit/examples/apps/dashboard
 
 go 1.26.1
 
-require github.com/panyam/mcpkit v0.2.3
+replace (
+	github.com/panyam/mcpkit => ../../..
+	github.com/panyam/mcpkit/ext/ui => ../../../ext/ui
+)
+
+require (
+	github.com/panyam/mcpkit v0.2.3
+	github.com/panyam/mcpkit/ext/ui v0.0.0
+)
 
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
-	github.com/kr/text v0.2.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/panyam/gocurrent v0.1.0 // indirect
 	github.com/panyam/goutils v0.1.8 // indirect
@@ -25,5 +32,3 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/panyam/mcpkit => ../../

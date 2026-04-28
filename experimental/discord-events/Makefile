@@ -1,5 +1,8 @@
 ADDR ?= http://localhost:8080
 MCP  := $(ADDR)/mcp
+EVENT := discord.message
+RESOURCE_URI := discord://messages/recent
+EVENTS_CLIENT := python3 ../ext/events/events_client.py --mcp $(MCP) --event $(EVENT) --resource-uri $(RESOURCE_URI)
 
 # ── Build & Run ──────────────────────────────────────────────────────
 # Usage: make run                              — test mode (no Discord)
@@ -22,14 +25,23 @@ test:
 test-race:
 	go test ./... -race -count=1
 
-# ── Inject + Diagnostics ─────────────────────────────────────────────
+# ── Inject + Client Modes ────────────────────────────────────────────
 
 inject:
 	@curl -s -X POST $(ADDR)/inject \
 	  -H 'Content-Type: application/json' \
 	  -d '{"guild_id": "$(or $(GUILD),test-guild)", "channel_id": "$(or $(CHANNEL),test-channel)", "sender": "$(or $(SENDER),test-user)", "text": "$(or $(TEXT),hello from make inject)"}' | jq .
 
-diag:
-	@./diag.sh $(MCP)
+list:
+	@$(EVENTS_CLIENT) list
 
-.PHONY: run test test-race inject diag
+listen:
+	@$(EVENTS_CLIENT) listen
+
+webhook:
+	@$(EVENTS_CLIENT) webhook --port $(or $(HOOK_PORT),9999)
+
+poll:
+	@$(EVENTS_CLIENT) poll --interval $(or $(INTERVAL),5)
+
+.PHONY: run test test-race inject list listen webhook poll
