@@ -1,12 +1,12 @@
 module github.com/panyam/mcpkit/examples/auth
 
-go 1.26.1
+go 1.26.2
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/panyam/mcpkit v0.2.36
 	github.com/panyam/mcpkit/ext/auth v0.2.36
-	github.com/panyam/oneauth v0.0.75
+	github.com/panyam/oneauth v0.0.79
 )
 
 require (

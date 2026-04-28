@@ -29,8 +29,8 @@ github.com/panyam/gocurrent v0.1.0 h1:AW8ctsSQHtoj8QXN55e9n+TYxtq+noF/ikPsRLiihi
 github.com/panyam/gocurrent v0.1.0/go.mod h1:jIIhcNfNnnIe2JXH8aY2+ba+/5G1fzwCWoZXdcMNw6o=
 github.com/panyam/goutils v0.1.8 h1:5UscYTP892k54+Nyb01tKGGwZxczZ5k7BC+c0nXmcoc=
 github.com/panyam/goutils v0.1.8/go.mod h1:ntucs8GJOHQ0LmlRGRjeup3aDC2t7xPMudrRwUHrJNM=
-github.com/panyam/oneauth v0.0.75 h1:Yw5FI3hahw7x1Idb0F3HGURoG+lvh9+9qKeKSHA5NLE=
-github.com/panyam/oneauth v0.0.75/go.mod h1:Gz0xF9sRHlBAMhrX9gwDkCVXDbJjowcVKAp8xO+wJP8=
+github.com/panyam/oneauth v0.0.79 h1:oDFdjsNqzv6OZSh4F1qm8REhRSGZLsCpTQRj1GznQVA=
+github.com/panyam/oneauth v0.0.79/go.mod h1:07eoijxxnj1mCxIIDo71FNGVyl4ru1Aw+G9x7qoSnnk=
 github.com/panyam/servicekit v0.0.25 h1:JeTRyz5ZZY3beENg0N3tLW+O39/foTuHMPAf+rpwYhM=
 github.com/panyam/servicekit v0.0.25/go.mod h1:9TkF2LRqiPC9bgu0bYVdky7rnHEuBvzGzrsoL++Ra5c=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
