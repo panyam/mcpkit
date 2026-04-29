@@ -1,4 +1,4 @@
-run: ## Run the demokit walkthrough (interactive, TUI)
+demo: ## Run the demokit walkthrough (interactive, TUI)
 	go run . --tui
 
 serve: ## Start the unified MCP server standalone (for MCPJam, VS Code, Claude Desktop)
@@ -18,5 +18,5 @@ serve-session-binding:  ; go run ./session-binding
 serve-public-discovery: ; go run ./public-discovery
 serve-unified:          ; go run ./unified
 
-.PHONY: run serve readme build serve-bearer serve-jwt serve-scopes serve-session-binding serve-public-discovery serve-unified
-.DEFAULT_GOAL := run
+.PHONY: demo serve readme build serve-bearer serve-jwt serve-scopes serve-session-binding serve-public-discovery serve-unified
+.DEFAULT_GOAL := demo

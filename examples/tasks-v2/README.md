@@ -2,6 +2,8 @@
 
 Server-side implementation of the v2 Tasks protocol. v2 inverts v1's client-driven model: the *server* decides when to create a task, and clients call `tools/call` normally with no task hint.
 
+> **🚀 [Skip to the guided walkthrough →](WALKTHROUGH.md)** — 7-step demokit walkthrough with sequence diagram contrasting v1 vs v2 semantics: server-decided tasks, `resultType` discriminator, inlined results, and tool-vs-protocol error semantics. Run it with `make serve` + `make demo`.
+
 ## Key Differences from v1
 
 | Aspect | v1 (SEP-1036) | v2 (SEP-2557) |
@@ -19,10 +21,10 @@ Server-side implementation of the v2 Tasks protocol. v2 inverts v1's client-driv
 
 ```bash
 make serve   # terminal 1: v2 tasks server on :8080
-make run     # terminal 2: demokit walkthrough (7 steps)
+make demo     # terminal 2: demokit walkthrough (7 steps)
 ```
 
-The walkthrough is auto-generated from the source — see [WALKTHROUGH.md](WALKTHROUGH.md) for the full step-by-step description and sequence diagram.
+See [WALKTHROUGH.md](WALKTHROUGH.md) for the full step-by-step description and sequence diagram.
 
 ## Tools
 

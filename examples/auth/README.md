@@ -2,6 +2,8 @@
 
 MCP servers demonstrating mcpkit's auth capabilities. No external dependencies — no Docker, no Keycloak. Each example spins up an in-process authorization server.
 
+> **🚀 [Skip to the guided walkthrough →](WALKTHROUGH.md)** — 8-step demokit walkthrough with sequence diagram covering public discovery, JWT/JWKS, scope step-up (403 + WWW-Authenticate), and session binding. Run it with `make serve` + `make demo`.
+
 ## Quick Start
 
 Start with the [unified example](unified/) — one server, all four auth patterns layered together:
@@ -64,7 +66,7 @@ For a guided wire-format tour of the unified server (8 steps covering public dis
 
 ```bash
 make serve   # terminal 1: starts the unified server
-make run     # terminal 2: scripted MCP host walks through 8 exercises
+make demo     # terminal 2: scripted MCP host walks through 8 exercises
 ```
 
-See [WALKTHROUGH.md](WALKTHROUGH.md) for the full step-by-step description and sequence diagram (auto-generated from the demo source).
+See [WALKTHROUGH.md](WALKTHROUGH.md) for the full step-by-step description and sequence diagram.
