@@ -60,13 +60,3 @@ See `mcp.json` for a ready-to-use multi-server configuration, or for the unified
 - `tests/e2e/` — E2E auth integration tests
 - `tests/keycloak/` — Keycloak interop tests (real OIDC)
 
-## Demokit Walkthrough
-
-For a guided wire-format tour of the unified server (8 steps covering public discovery → JWT → scope step-up → session binding), run the demokit walkthrough in a second terminal:
-
-```bash
-make serve   # terminal 1: starts the unified server
-make demo     # terminal 2: scripted MCP host walks through 8 exercises
-```
-
-See [WALKTHROUGH.md](WALKTHROUGH.md) for the full step-by-step description and sequence diagram.

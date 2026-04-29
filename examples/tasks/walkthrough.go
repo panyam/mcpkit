@@ -146,7 +146,7 @@ func runDemo() {
 		})
 
 	// --- Step 4: Poll + receive progress notifications ---
-	demo.Step("Poll tasks/get until terminal; receive notifications/progress").
+	demo.Step("Poll tasks/get until terminal — receive notifications/progress").
 		Arrow("Host", "Server", "tasks/get {taskId}  (polled every pollInterval)").
 		DashedArrow("Server", "Host", "notifications/progress (1/3, 2/3, 3/3) via SSE").
 		DashedArrow("Server", "Host", "{status: completed} on terminal poll").

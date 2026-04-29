@@ -39,7 +39,6 @@ Echo hello
 
 ### Connected with the static token — echo responds
 
-![Bearer Auth](screenshots/bearer-auth.png)
 
 ## Key Files
 
