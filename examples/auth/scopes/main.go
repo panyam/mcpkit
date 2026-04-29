@@ -35,6 +35,7 @@ func main() {
 		server.WithMiddleware(server.LoggingMiddleware(log.Default())),
 	)
 	common.RegisterEchoTools(srv)
+	srv.UseMiddleware(auth.NewToolScopeMiddleware(srv.Registry()))
 
 	tokRead := env.MintToken("alice", []string{"read"})
 	tokReadWrite := env.MintToken("alice", []string{"read", "write"})
