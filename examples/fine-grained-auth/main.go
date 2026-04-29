@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/panyam/demokit"
@@ -477,7 +478,14 @@ func serve() {
 	}
 	defer asInfo.cleanup()
 
-	// 2. mcpkit JWT validator pointed at the AS's JWKS endpoint.
+	// 2. Seed the document store in a per-instance temp dir.
+	if err := seedDocs(); err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+		os.Exit(1)
+	}
+	defer os.RemoveAll(docDir)
+
+	// 3. mcpkit JWT validator pointed at the AS's JWKS endpoint.
 	listenURL := fmt.Sprintf("http://localhost%s", addr)
 	validator := auth.NewJWTValidator(auth.JWTConfig{
 		JWKSURL:             asInfo.JWKSURL,
@@ -533,10 +541,13 @@ func serve() {
 	fmt.Printf("AS token endpt: %s\n", asInfo.TokenEndpoint)
 	fmt.Printf("Demo client_id: %s\n", asInfo.ClientID)
 	fmt.Printf("Demo secret:    %s\n", asInfo.ClientSecret)
+	fmt.Printf("Doc store:      %s (cleaned up on graceful shutdown)\n", docDir)
 	fmt.Printf("\nTools:\n")
-	fmt.Printf("  read_document      — needs tools-read scope\n")
-	fmt.Printf("  update_document    — needs tools-call scope (returns 403 if missing)\n")
+	fmt.Printf("  read_document      — reads from doc store; needs tools-read scope\n")
+	fmt.Printf("  update_document    — writes to doc store; needs tools-call scope\n")
 	fmt.Printf("  initiate_payment   — needs payment_initiation authorization_details\n")
+	fmt.Printf("\nSeed docs: doc-001, doc-123, doc-456\n")
+	fmt.Printf("Inspect:   ls %s/ ; cat %s/doc-123.txt\n", docDir, docDir)
 
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
@@ -652,18 +663,53 @@ func startInProcessAS() (*inProcessAS, error) {
 	}, nil
 }
 
+// --- Document store ---
+
+// docDir is where read_document and update_document persist content. It's
+// allocated per-server-instance via os.MkdirTemp() so concurrent demos don't
+// clobber each other. Path is logged on startup so users can inspect with
+// `cat $docDir/doc-123.txt`. Cleaned up on graceful shutdown.
+var docDir string
+
+// seedDocs creates a fresh temp dir for the document store and writes a few
+// sample documents the demo can read.
+func seedDocs() error {
+	dir, err := os.MkdirTemp("", "fine-grained-auth-*")
+	if err != nil {
+		return fmt.Errorf("create temp dir: %w", err)
+	}
+	docDir = dir
+	samples := map[string]string{
+		"doc-001": "Project kickoff notes — kickoff is on Monday at 10am. Bring the roadmap doc.",
+		"doc-123": "Q2 strategy memo — focus on three pillars: reliability, observability, and developer experience.",
+		"doc-456": "Architecture review — the new auth middleware was approved. Rollout planned for week 14.",
+	}
+	for id, content := range samples {
+		if err := os.WriteFile(docPath(id), []byte(content), 0o644); err != nil {
+			return fmt.Errorf("seed %s: %w", id, err)
+		}
+	}
+	return nil
+}
+
+// docPath returns the on-disk path for a given docID. Sanitizes to prevent
+// path traversal — only the basename is used.
+func docPath(docID string) string {
+	return filepath.Join(docDir, filepath.Base(docID)+".txt")
+}
+
 // --- Tool registration ---
 
 func registerTools(srv *server.Server) {
 	srv.RegisterTool(
 		core.ToolDef{
 			Name:           "read_document",
-			Description:    "Read a document. Requires tools-read scope.",
+			Description:    "Read a document from the document store. Requires tools-read scope.",
 			RequiredScopes: []string{scopeRead},
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {
-					"docId": {"type": "string", "description": "Document ID"}
+					"docId": {"type": "string", "description": "Document ID (seeds: doc-001, doc-123, doc-456)"}
 				}
 			}`),
 		},
@@ -675,20 +721,27 @@ func registerTools(srv *server.Server) {
 			if args.DocID == "" {
 				args.DocID = "doc-001"
 			}
-			return core.TextResult(fmt.Sprintf(
-				"Document %q: Lorem ipsum dolor sit amet, consectetur adipiscing elit.", args.DocID)), nil
+			body, err := os.ReadFile(docPath(args.DocID))
+			if err != nil {
+				if os.IsNotExist(err) {
+					return core.ErrorResult(fmt.Sprintf(
+						"document %q not found in %s", args.DocID, docDir)), nil
+				}
+				return core.ErrorResult(fmt.Sprintf("read %q: %v", args.DocID, err)), nil
+			}
+			return core.TextResult(fmt.Sprintf("[%s] %s", args.DocID, body)), nil
 		},
 	)
 
 	srv.RegisterTool(
 		core.ToolDef{
 			Name:           "update_document",
-			Description:    "Update a document. Requires tools-call scope.",
+			Description:    "Write content to a document in the store. Requires tools-call scope.",
 			RequiredScopes: []string{scopeCall},
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {
-					"docId":   {"type": "string", "description": "Document ID"},
+					"docId":   {"type": "string", "description": "Document ID (will be created if it doesn't exist)"},
 					"content": {"type": "string", "description": "New content"}
 				},
 				"required": ["docId", "content"]
@@ -700,8 +753,13 @@ func registerTools(srv *server.Server) {
 				Content string `json:"content"`
 			}
 			json.Unmarshal(req.Arguments, &args)
+			path := docPath(args.DocID)
+			if err := os.WriteFile(path, []byte(args.Content), 0o644); err != nil {
+				return core.ErrorResult(fmt.Sprintf("write %q: %v", args.DocID, err)), nil
+			}
 			return core.TextResult(fmt.Sprintf(
-				"Document %q updated successfully.", args.DocID)), nil
+				"Document %q updated (%d bytes written to %s).",
+				args.DocID, len(args.Content), path)), nil
 		},
 	)
 
