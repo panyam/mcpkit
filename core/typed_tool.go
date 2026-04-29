@@ -60,13 +60,14 @@ func TypedTool[In, Out any](name, desc string,
 	}
 
 	def := ToolDef{
-		Name:         name,
-		Description:  desc,
-		InputSchema:  inputSchema,
-		OutputSchema: outputSchema,
-		Annotations:  cfg.annotations,
-		Meta:         cfg.meta,
-		Timeout:      cfg.timeout,
+		Name:           name,
+		Description:    desc,
+		InputSchema:    inputSchema,
+		OutputSchema:   outputSchema,
+		Annotations:    cfg.annotations,
+		Meta:           cfg.meta,
+		Timeout:        cfg.timeout,
+		RequiredScopes: cfg.requiredScopes,
 	}
 
 	wrappedHandler := func(ctx ToolContext, req ToolRequest) (ToolResult, error) {
@@ -105,9 +106,10 @@ func TextTool[In any](name, desc string,
 type TypedToolOption func(*typedToolConfig)
 
 type typedToolConfig struct {
-	annotations map[string]any
-	meta        *ToolMeta
-	timeout     time.Duration
+	annotations    map[string]any
+	meta           *ToolMeta
+	timeout        time.Duration
+	requiredScopes []string
 }
 
 // WithToolAnnotations sets the Annotations field on the generated ToolDef.
@@ -123,6 +125,14 @@ func WithToolMeta(m *ToolMeta) TypedToolOption {
 // WithTypedToolTimeout sets a per-tool execution timeout on the generated ToolDef.
 func WithTypedToolTimeout(d time.Duration) TypedToolOption {
 	return func(c *typedToolConfig) { c.timeout = d }
+}
+
+// WithToolRequiredScopes sets the RequiredScopes field on the generated ToolDef.
+// When auth.NewToolScopeMiddleware is registered on the server, calls to this
+// tool from clients without all of the named scopes are rejected at the
+// transport layer with HTTP 403 + WWW-Authenticate per RFC 6750.
+func WithToolRequiredScopes(scopes ...string) TypedToolOption {
+	return func(c *typedToolConfig) { c.requiredScopes = scopes }
 }
 
 // wrapOutput converts a typed handler output into a ToolResult.
