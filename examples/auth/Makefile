@@ -5,7 +5,7 @@ serve: ## Start the unified MCP server standalone (for MCPJam, VS Code, Claude D
 	go run . --serve
 
 readme: ## Regenerate README.md from demo definitions
-	go run . --readme > README.md
+	go run . --readme > WALKTHROUGH.md
 
 build: ## Build the binary
 	go build -o auth-demo .
