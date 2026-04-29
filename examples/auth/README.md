@@ -1,126 +1,70 @@
-# MCP Auth — Public Discovery + JWT + Scopes + Session Binding
+# Auth Examples
 
-Walks through auth patterns layered on a single mcpkit server: public method allowlist, JWT/JWKS validation, per-tool scope enforcement, and session hijacking prevention.
+MCP servers demonstrating mcpkit's auth capabilities. No external dependencies — no Docker, no Keycloak. Each example spins up an in-process authorization server.
 
-## What you'll learn
+## Quick Start
 
-- **Discover server URL + minted tokens** — The server pre-mints four tokens for the demo and exposes them via a non-standard /demo/bootstrap endpoint. In production a host would do OAuth (or accept tokens via mcp.json config); this shortcut keeps the demo focused on auth behavior.
-- **Public discovery: tools/list without a token** — The server is configured with WithPublicMethods("initialize", "notifications/initialized", "tools/list", "prompts/list", "ping"). These bypass the auth check so an unauthenticated client can discover what's available before requesting a token.
-- **Protected method without a token → 401** — tools/call is NOT in the public allowlist. The mcpkit client surfaces this as *client.ClientAuthError. A real MCP host would use this to trigger an OAuth flow.
-- **Call echo with alice's read-only token (JWT validated via JWKS)** — The mcpkit JWTValidator fetches the AS's JWKS, verifies the RS256 signature using kid lookup, and exposes the claims to handlers via core.AuthClaims(ctx). echo is a no-scope tool that reflects the authenticated identity back, so we can see the validated claims.
-- **Call write-tool with read-only token → 403 + insufficient_scope** — write-tool declares RequiredScopes: ["write"] on its ToolDef. The auth.NewToolScopeMiddleware short-circuits the request with HTTP 403 + WWW-Authenticate before the handler runs (per SEP-2643 UC2 + RFC 6750). Scope info is in the header — the client's RFC 6750 parser auto-populates RequiredScopes.
-- **Reconnect with read+write token → write-tool succeeds** — New session with the broader token. write-tool runs because the token includes write. Scope step-up in real systems is driven by the WWW-Authenticate response from the previous step — see examples/fine-grained-auth/ for the full SEP-2643 UC2 flow.
-- **admin-tool with read+write token → 403 (needs admin)** — admin-tool requires "admin" scope. The same scope-enforcement middleware returns 403 + WWW-Authenticate with the missing scope.
-- **Session binding: bob's token on alice's session → rejected** — mcpkit binds the principal (Claims.Subject) to the session at creation time. Subsequent requests on the same session must come from the same subject. Even though bob's token is independently valid (correct signature, fresh, has all scopes), it doesn't match alice's bound session — so the request is rejected. This prevents an attacker who steals a session ID from using their own valid token to take over.
-
-## Flow
-
-```mermaid
-sequenceDiagram
-    participant Host as MCP Host (this client)
-    participant Server as MCP Server (make serve)
-    participant AS as Auth Server (in-process)
-
-    Note over Host,AS: Step 1: Discover server URL + minted tokens
-    Host->>Server: GET /demo/bootstrap
-    Server-->>Host: {mcp_url, tok_read, tok_read_write, tok_all, tok_bob}
-
-    Note over Host,AS: Step 2: Public discovery: tools/list without a token
-    Host->>Server: POST /mcp — initialize + tools/list (no Authorization header)
-    Server-->>Host: tool list (3 tools, even without auth)
-
-    Note over Host,AS: Step 3: Protected method without a token → 401
-    Host->>Server: tools/call: echo  (no Authorization header)
-    Server-->>Host: HTTP 401 + WWW-Authenticate
-
-    Note over Host,AS: Step 4: Call echo with alice's read-only token (JWT validated via JWKS)
-    Host->>Server: tools/call: echo + Bearer alice/[read]
-    Server-->>Host: echo + claims (subject=alice, scopes=[read])
-
-    Note over Host,AS: Step 5: Call write-tool with read-only token → 403 + insufficient_scope
-    Host->>Server: tools/call: write-tool + Bearer alice/[read]
-    Server-->>Host: HTTP 403 + WWW-Authenticate: Bearer error="insufficient_scope", scope="write"
-
-    Note over Host,AS: Step 6: Reconnect with read+write token → write-tool succeeds
-    Host->>Server: POST /mcp — initialize + Bearer alice/[read write]
-    Server-->>Host: new session
-    Host->>Server: tools/call: write-tool
-    Server-->>Host: ok
-
-    Note over Host,AS: Step 7: admin-tool with read+write token → 403 (needs admin)
-    Host->>Server: tools/call: admin-tool + Bearer alice/[read write]
-    Server-->>Host: HTTP 403 + WWW-Authenticate: scope="admin"
-
-    Note over Host,AS: Step 8: Session binding: bob's token on alice's session → rejected
-    Host->>Server: tools/call: echo + Mcp-Session-Id=<alice's> + Bearer bob/[all]
-    Server-->>Host: HTTP 403 (subject mismatch)
-```
-
-## Steps
-
-### Setup
-
-Start the MCP server in a separate terminal first:
-
-```
-Terminal 1:  make serve        # MCP server + in-process AS on :8080
-Terminal 2:  make run          # this demo
-```
-
-### Auth patterns covered
-
-1. **Public discovery** — `tools/list` works *without* a token (per spec, capability discovery should be permitted pre-auth).
-2. **JWT authentication** — protected methods require `Authorization: Bearer <RS256 JWT>`. The MCP server fetches the AS's JWKS and validates signatures.
-3. **Scope enforcement** — `write-tool` requires `write` scope; `admin-tool` requires `admin`. Missing scopes → HTTP 403 + `WWW-Authenticate: Bearer error="insufficient_scope"`.
-4. **Session binding** — once a session is established with one user's token, requests on that session must come from the same subject. Swapping tokens mid-session is rejected to prevent session hijacking.
-
-### Step 1: Discover server URL + minted tokens
-
-The server pre-mints four tokens for the demo and exposes them via a non-standard /demo/bootstrap endpoint. In production a host would do OAuth (or accept tokens via mcp.json config); this shortcut keeps the demo focused on auth behavior.
-
-### Step 2: Public discovery: tools/list without a token
-
-The server is configured with WithPublicMethods("initialize", "notifications/initialized", "tools/list", "prompts/list", "ping"). These bypass the auth check so an unauthenticated client can discover what's available before requesting a token.
-
-### Step 3: Protected method without a token → 401
-
-tools/call is NOT in the public allowlist. The mcpkit client surfaces this as *client.ClientAuthError. A real MCP host would use this to trigger an OAuth flow.
-
-### Step 4: Call echo with alice's read-only token (JWT validated via JWKS)
-
-The mcpkit JWTValidator fetches the AS's JWKS, verifies the RS256 signature using kid lookup, and exposes the claims to handlers via core.AuthClaims(ctx). echo is a no-scope tool that reflects the authenticated identity back, so we can see the validated claims.
-
-### Step 5: Call write-tool with read-only token → 403 + insufficient_scope
-
-write-tool declares RequiredScopes: ["write"] on its ToolDef. The auth.NewToolScopeMiddleware short-circuits the request with HTTP 403 + WWW-Authenticate before the handler runs (per SEP-2643 UC2 + RFC 6750). Scope info is in the header — the client's RFC 6750 parser auto-populates RequiredScopes.
-
-### Step 6: Reconnect with read+write token → write-tool succeeds
-
-New session with the broader token. write-tool runs because the token includes write. Scope step-up in real systems is driven by the WWW-Authenticate response from the previous step — see examples/fine-grained-auth/ for the full SEP-2643 UC2 flow.
-
-### Step 7: admin-tool with read+write token → 403 (needs admin)
-
-admin-tool requires "admin" scope. The same scope-enforcement middleware returns 403 + WWW-Authenticate with the missing scope.
-
-### Step 8: Session binding: bob's token on alice's session → rejected
-
-mcpkit binds the principal (Claims.Subject) to the session at creation time. Subsequent requests on the same session must come from the same subject. Even though bob's token is independently valid (correct signature, fresh, has all scopes), it doesn't match alice's bound session — so the request is rejected. This prevents an attacker who steals a session ID from using their own valid token to take over.
-
-### Where each pattern lives in the code
-
-- Public methods: `server.WithPublicMethods(...)`
-- JWT/JWKS validation: `auth.NewJWTValidator(JWTConfig{JWKSURL: ...})` — `ext/auth/jwt_validator.go`
-- Per-tool scopes: `core.ToolDef.RequiredScopes` + `auth.NewToolScopeMiddleware(reg)` — `ext/auth/scope_middleware.go`
-- Session binding: enforced in `server/streamable_transport.go` (verifyPrincipal); subject is captured at session creation
-
-## Run it
+Start with the [unified example](unified/) — one server, all four auth patterns layered together:
 
 ```bash
-go run ./examples/auth/
+cd examples/auth
+go run ./unified
 ```
 
-Pass `--non-interactive` to skip pauses:
+The server prints tokens and a step-by-step exercise walkthrough. Connect your MCP host to `http://localhost:8080/mcp` (Streamable HTTP).
+
+## Examples
+
+| Port | Example | Auth Pattern |
+|:----:|---------|-------------|
+| 8080 | [**unified/**](unified/) | **Start here** — JWT + public discovery + scopes + session binding |
+| 8081 | [bearer/](bearer/) | Static bearer token (simplest possible) |
+| 8082 | [jwt/](jwt/) | RS256 JWT validation via JWKS |
+| 8083 | [scopes/](scopes/) | Scope-based access control |
+| 8084 | [session-binding/](session-binding/) | Session hijacking prevention |
+| 8085 | [public-discovery/](public-discovery/) | Pre-auth tool discovery |
+
+Each sub-directory has its own README with setup, exercises, and copy-pasteable prompts.
+
+## Shared Infrastructure
+
+The `common/` package provides the auth building blocks all examples use:
+
+| Function | What it does |
+|----------|-------------|
+| `common.NewEnv(scopes)` | Spins up an in-process authorization server with JWKS + token endpoint |
+| `env.NewValidator(audience)` | Creates a `JWTValidator` pointed at the AS |
+| `env.MintToken(subject, scopes)` | Mints a valid RS256 JWT |
+| `common.RegisterEchoTools(srv)` | Registers `echo`, `write-tool`, `admin-tool` with scope checks |
+
+## MCP Host Configuration
+
+See `mcp.json` for a ready-to-use multi-server configuration, or for the unified example:
+
+```json
+{
+  "mcpServers": {
+    "auth-unified": {
+      "type": "streamable-http",
+      "url": "http://localhost:8080/mcp"
+    }
+  }
+}
+```
+
+## Related
+
+- `ext/auth/docs/DESIGN.md` — Auth architecture
+- `tests/e2e/` — E2E auth integration tests
+- `tests/keycloak/` — Keycloak interop tests (real OIDC)
+
+## Demokit Walkthrough
+
+For a guided wire-format tour of the unified server (8 steps covering public discovery → JWT → scope step-up → session binding), run the demokit walkthrough in a second terminal:
 
 ```bash
-go run ./examples/auth/ --non-interactive
+make serve   # terminal 1: starts the unified server
+make run     # terminal 2: scripted MCP host walks through 8 exercises
 ```
+
+See [WALKTHROUGH.md](WALKTHROUGH.md) for the full step-by-step description and sequence diagram (auto-generated from the demo source).
