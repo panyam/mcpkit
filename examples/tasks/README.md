@@ -2,6 +2,8 @@
 
 Demonstrates MCP Tasks (spec 2025-11-25) — async tool execution with lifecycle tracking.
 
+> **🚀 [Skip to the guided walkthrough →](WALKTHROUGH.md)** — 8-step demokit walkthrough with sequence diagram covering sync calls, optional async tasks, polling, progress notifications via SSE, required-task tools, and cancellation. Run it with `make serve` + `make demo`.
+
 ## MCPKit Features Used
 
 | Category | Feature |
@@ -560,7 +562,7 @@ For a guided wire-format tour of the task lifecycle (8 steps covering sync calls
 
 ```bash
 make serve   # terminal 1: starts the tasks server
-make run     # terminal 2: scripted MCP host walks through 8 exercises
+make demo     # terminal 2: scripted MCP host walks through 8 exercises
 ```
 
-See [WALKTHROUGH.md](WALKTHROUGH.md) for the full step-by-step description and sequence diagram (auto-generated from the demo source).
+See [WALKTHROUGH.md](WALKTHROUGH.md) for the full step-by-step description and sequence diagram.

@@ -1,4 +1,4 @@
-run: ## Run the demokit walkthrough (interactive, TUI)
+demo: ## Run the demokit walkthrough (interactive, TUI)
 	go run . --tui
 
 serve: ## Start the tasks MCP server standalone (for MCPJam, VS Code, Claude Desktop)
@@ -13,5 +13,5 @@ runts: ## Run the TS reference server (parity check)
 build: ## Build the binary
 	go build -o tasks-demo .
 
-.PHONY: run serve readme runts build
-.DEFAULT_GOAL := run
+.PHONY: demo serve readme runts build
+.DEFAULT_GOAL := demo
