@@ -74,11 +74,9 @@ Bob gets his own session — no conflict with alice's.
 
 ### Alice connected — session bound to her identity
 
-![Session Bound](screenshots/session-bound.png)
 
 ### Bob's token on alice's session — 403 rejected
 
-![Hijack Rejected](screenshots/hijack-rejected.png)
 
 ## Key Files
 

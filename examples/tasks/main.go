@@ -1,15 +1,17 @@
 // Example: MCP Tasks — async tool execution with lifecycle tracking.
 //
-// Demonstrates tools with different task support modes:
+// Two-process architecture:
+//
+//	Terminal 1:  make serve         # MCP Tasks server on :8080
+//	Terminal 2:  make run           # demokit walkthrough
+//
+// Tools:
 //   - greet:          sync-only (no Execution field = forbidden per spec)
 //   - slow_compute:   optional task support (client chooses sync or async)
 //   - failing_job:    required task support (must be invoked as task)
 //   - confirm_delete: required task + elicitation (asks user before deleting)
 //   - write_haiku:    required task + sampling (asks LLM to write a haiku)
 //   - external_job:   required task + TaskCallbacks (external proxy pattern)
-//
-// Run:  go run . -addr :8080
-// Connect MCPJam or VS Code to http://localhost:8080/mcp
 package main
 
 import (
@@ -17,6 +19,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/panyam/mcpkit/core"
@@ -24,8 +28,18 @@ import (
 )
 
 func main() {
+	for _, arg := range os.Args[1:] {
+		if strings.TrimSpace(arg) == "--serve" {
+			serve()
+			return
+		}
+	}
+	runDemo()
+}
+
+func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
-	flag.Parse()
+	flag.CommandLine.Parse(filterFlags(os.Args[1:]))
 
 	srv := server.NewServer(
 		core.ServerInfo{Name: "tasks-demo", Version: "0.1.0"},

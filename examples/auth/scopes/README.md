@@ -60,11 +60,9 @@ Reconnect with the **all-scopes** token — everything works.
 
 ### Calling write-tool with a read-only token — denied
 
-![Scope Denied](screenshots/scope-denied.png)
 
 ### Reconnected with read+write token — granted
 
-![Scope Granted](screenshots/scope-granted.png)
 
 ## Key Files
 

@@ -1,7 +1,9 @@
 // Example: MCP Tasks v2 (SEP-2557) — server-directed async tool execution.
 //
-// Demonstrates the v2 tasks protocol where the server decides whether to
-// create a task — clients do not send a task hint.
+// Two-process architecture:
+//
+//	Terminal 1:  make serve         # tasks-v2 server on :8080
+//	Terminal 2:  make run           # demokit walkthrough
 //
 // Tools:
 //   - greet:              sync-only (no Execution field = forbidden)
@@ -9,9 +11,6 @@
 //   - failing_job:        required task support (tool error → completed + isError)
 //   - protocol_error_job: required task support (protocol error → failed + error)
 //   - external_job:       required task support (TaskCallbacks proxy pattern)
-//
-// Run:  go run . -addr :8080
-// Test: SERVER_URL=http://localhost:8080/mcp npx tsx --test tasks-v2/scenarios.test.ts
 package main
 
 import (
@@ -19,6 +18,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/panyam/mcpkit/core"
@@ -26,8 +27,18 @@ import (
 )
 
 func main() {
+	for _, arg := range os.Args[1:] {
+		if strings.TrimSpace(arg) == "--serve" {
+			serve()
+			return
+		}
+	}
+	runDemo()
+}
+
+func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
-	flag.Parse()
+	flag.CommandLine.Parse(filterFlags(os.Args[1:]))
 
 	srv := server.NewServer(
 		core.ServerInfo{Name: "tasks-v2-demo", Version: "0.1.0"},

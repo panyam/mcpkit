@@ -1,132 +1,53 @@
 # MCPKit Examples
 
-Runnable examples covering MCP Apps, authentication, async tasks, and proto-based code generation. Each example is self-contained with its own `go.mod`.
+Runnable examples covering authentication, async tasks, MCP Apps, and proto-based code generation. Each example is self-contained with its own `go.mod`.
+
+> **Most examples ship a guided walkthrough.** Each walkthrough is a scripted MCP host that drives the server through every wire-format detail of the feature. Two terminals: `make serve` (real MCP server, also works with VS Code/MCPJam/Claude Desktop) + `make demo` (the walkthrough). External MCP hosts are only needed when there is no `make demo`.
+
+## Walkthrough-driven examples
+
+The primary path. Run the demo from the CLI and read the on-disk `WALKTHROUGH.md` for the sequence diagram and step-by-step explanation.
+
+| Example | Walkthrough covers |
+|---------|--------------|
+| [auth/](auth/) | Public discovery, JWT/JWKS validation, scope step-up (HTTP 403 + WWW-Authenticate per SEP-2643), session hijacking prevention |
+| [tasks/](tasks/) | Async tool lifecycle (SEP-1036): sync calls, optional async, polling, progress notifications, required-task tools, cancellation |
+| [tasks-v2/](tasks-v2/) | Server-directed async (SEP-2557): no client task hint, `resultType` discriminator, inlined results, tool-vs-protocol error semantics |
+| [elicitation/](elicitation/) ⚠ experimental | URL-mode elicitation with consent approval (FineGrainedAuth UC1 — tracks draft [SEP-2643](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2643)) |
+| [fine-grained-auth/](fine-grained-auth/) ⚠ experimental | Authorization denial with scope step-up (UC2) + RAR per-payment ephemeral credentials (UC3) — tracks draft [SEP-2643](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2643) |
+| [host/01-apphost/](host/01-apphost/) | `AppHost` mediator — host-side app management, bidirectional tool calls |
+| [host/02-multi-server/](host/02-multi-server/) | `ServerRegistry` with 3 servers, name-collision resolution |
+
+```bash
+cd examples/<name>
+make serve   # terminal 1 — real MCP server
+make demo    # terminal 2 — scripted walkthrough
+```
+
+## Examples that need an MCP host
+
+These don't have a CLI demo — point an MCP host at the running server.
+
+| Example | What it shows | Host needed |
+|---------|--------------|-------------|
+| [apps/](apps/) | MCP Apps — server-defined HTML/JS UIs in an iframe (vanilla, todolist, react, interactive, dashboard) | [MCPJam](https://mcpjam.com) (browser-based, supports the Apps extension) |
+| [protogen/bookservice/](protogen/bookservice/) | Proto annotations to MCP tools, resources, prompts | Any MCP host (Claude Code, VS Code, MCPJam, Claude Desktop) |
+
+```bash
+cd examples/apps/todolist
+go run . -addr :8080
+# then connect MCPJam / your host to http://localhost:8080/mcp
+```
 
 ## Prerequisites
 
 - **Go 1.26+**
-- **Node.js + pnpm** (React app only)
-- **buf** CLI (protogen only, for regenerating from `.proto`)
-- An MCP host to connect to the servers: [MCPJam](https://mcpjam.com), Claude Desktop, VS Code, or Claude Code
+- **Node.js + pnpm** — only needed for the React MCP App and the tasks TS reference server
+- **buf** CLI — only needed if regenerating protogen output from `.proto`
 
-## Examples at a Glance
+## Connecting an external MCP host
 
-| Example | What it shows | Port |
-|---------|--------------|:----:|
-| [apps/vanilla](apps/vanilla/) | Minimal MCP App — plain JS, no build step | 8080 |
-| [apps/todolist](apps/todolist/) | Server-rendered MCP App — bridge events, inline JS | 8080 |
-| [apps/react](apps/react/) | React 19 MCP App — hooks, Vite, TypeScript | 8080 |
-| [apps/interactive](apps/interactive/) | Tic-tac-toe — bidirectional app-provided tools | 8080 |
-| [apps/dashboard](apps/dashboard/) | Dashboard — tool lifecycle (enable/disable/remove) | 8080 |
-| [host/01-apphost](host/01-apphost/) | AppHost walkthrough (CLI, step-through) | — |
-| [host/02-multi-server](host/02-multi-server/) | ServerRegistry with 3 servers (CLI) | — |
-| [auth/unified](auth/) | **Start here** — all auth patterns in one server | 8080 |
-| [auth/bearer](auth/) | Static bearer token (simplest possible) | 8081 |
-| [auth/jwt](auth/) | RS256 JWT validation via JWKS | 8082 |
-| [auth/scopes](auth/) | Scope-based access control | 8083 |
-| [auth/session-binding](auth/) | Session hijacking prevention | 8084 |
-| [auth/public-discovery](auth/) | Pre-auth tool discovery | 8085 |
-| [elicitation](elicitation/) ⚠ experimental | URL-mode elicitation with consent approval (UC1) — tracks draft [SEP-2643](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2643) | dynamic |
-| [fine-grained-auth](fine-grained-auth/) ⚠ experimental | Authorization denial: scope step-up (UC2) + RAR payments (UC3) — tracks draft [SEP-2643](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2643) | 8080 |
-| [protogen/bookservice](protogen/bookservice/) | Proto annotations to MCP tools, resources, prompts | 8080 |
-| [tasks](tasks/) | Async tool execution with lifecycle tracking (experimental) | 8080 |
-
-## Running the Examples
-
-### MCP Apps
-
-Each app example starts a Go server with an MCP endpoint at `/mcp`.
-
-```bash
-# Vanilla JS — simplest possible app
-cd examples/apps/vanilla
-go run . -addr :8080
-
-# Todo List — server-rendered with elicitation + sampling
-cd examples/apps/todolist
-go run . -addr :8080
-
-# React — requires a frontend build first
-cd examples/apps/react
-pnpm install && pnpm build
-cd server
-go run . -addr :8080
-```
-
-Then connect your MCP host to `http://localhost:8080/mcp` (Streamable HTTP transport).
-
-### Host Examples (interactive CLI)
-
-Pure Go examples using `AppHost` and `ServerRegistry`. Run interactively to step through each operation, or non-interactively for full output. READMEs are auto-generated from code.
-
-```bash
-# AppHost basics — server + client + bridge + bidirectional tools
-cd examples/host/01-apphost
-make run           # interactive (pause between steps)
-make demo          # non-interactive (full output)
-
-# Multi-server registry — 3 servers, collision resolution, app bridge
-cd examples/host/02-multi-server
-make run
-make demo
-
-# Generate all READMEs from code
-cd examples/host
-make readme
-```
-
-### Auth
-
-Start with the unified example — one server, all auth patterns layered:
-
-```bash
-cd examples/auth
-go run ./unified          # :8080 — JWT + scopes + session binding + public discovery
-```
-
-The server prints tokens and a walkthrough of 4 exercises. See [auth/README.md](auth/README.md) for the full guide.
-
-Individual pattern examples are also available on separate ports:
-
-```bash
-go run ./bearer           # :8081 — static bearer token
-go run ./jwt              # :8082 — JWT/JWKS
-go run ./scopes           # :8083 — scope enforcement
-go run ./session-binding  # :8084 — hijacking prevention
-go run ./public-discovery # :8085 — pre-auth discovery
-```
-
-### Protogen (BookService)
-
-Generates MCP tools, resources, and prompts from proto annotations:
-
-```bash
-cd examples/protogen/bookservice
-
-# If you want to regenerate from .proto (requires buf CLI):
-make generate
-
-# Run the server:
-make run          # or: go run .
-
-# Run tests:
-go test -v .
-```
-
-Connect to `http://localhost:8080/mcp` and try "Search for books about Go programming".
-
-### Tasks (Experimental)
-
-Async tool execution with task lifecycle (create, poll, cancel):
-
-```bash
-cd examples/tasks
-go run . -addr :8080
-```
-
-Three tools: `greet` (sync-only), `slow_compute` (optional async), `failing_job` (required async). See [tasks/README.md](tasks/README.md) for the step-by-step walkthrough.
-
-## Connecting to an MCP Host
+If you're using `make serve` and want to point an external host at it (instead of `make demo`):
 
 ### Claude Code
 
@@ -151,12 +72,13 @@ Add to your MCP settings JSON:
 
 ### MCPJam
 
-1. Add server URL: `http://localhost:8080/mcp`
+1. Server URL: `http://localhost:8080/mcp`
 2. Transport: Streamable HTTP
 3. For auth examples, paste the printed token into the Authorization header
+4. **Required for `apps/`** — MCPJam is currently the only host with iframe support for MCP Apps
 
 ## Troubleshooting
 
-- **Port already in use** — another example is still running. Kill it or use a different `-addr` flag.
+- **Port already in use** — another example is still running. Kill it or use a different `-addr`.
 - **`go run` fails with replace directive errors** — make sure you're running from the example's own directory (where its `go.mod` lives), not from the repo root.
-- **React app shows blank page** — run `pnpm build` in `examples/apps/react` before starting the Go server.
+- **MCP App shows nothing in the host** — your host needs Apps support. Try MCPJam.

@@ -38,6 +38,7 @@ func main() {
 		server.WithMiddleware(server.LoggingMiddleware(log.Default())),
 	)
 	common.RegisterEchoTools(srv)
+	srv.UseMiddleware(auth.NewToolScopeMiddleware(srv.Registry()))
 
 	// Mint tokens for each exercise scenario.
 	tokReadOnly := env.MintToken("alice", []string{"read"})
