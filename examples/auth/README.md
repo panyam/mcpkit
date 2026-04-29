@@ -2,6 +2,8 @@
 
 MCP servers demonstrating mcpkit's auth capabilities. No external dependencies — no Docker, no Keycloak. Each example spins up an in-process authorization server.
 
+> **🚀 [Skip to the guided walkthrough →](WALKTHROUGH.md)** — 8-step demokit walkthrough with sequence diagram covering public discovery, JWT/JWKS, scope step-up (403 + WWW-Authenticate), and session binding. Run it with `make serve` + `make demo`.
+
 ## Quick Start
 
 Start with the [unified example](unified/) — one server, all four auth patterns layered together:
@@ -57,3 +59,4 @@ See `mcp.json` for a ready-to-use multi-server configuration, or for the unified
 - `ext/auth/docs/DESIGN.md` — Auth architecture
 - `tests/e2e/` — E2E auth integration tests
 - `tests/keycloak/` — Keycloak interop tests (real OIDC)
+

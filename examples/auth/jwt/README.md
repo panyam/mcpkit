@@ -42,7 +42,6 @@ Try a tampered or expired token — also **401**.
 
 ### Echo reports authenticated identity from JWT claims
 
-![JWT Auth](screenshots/jwt-auth.png)
 
 ## Key Files
 

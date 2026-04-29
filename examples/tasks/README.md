@@ -2,6 +2,8 @@
 
 Demonstrates MCP Tasks (spec 2025-11-25) — async tool execution with lifecycle tracking.
 
+> **🚀 [Skip to the guided walkthrough →](WALKTHROUGH.md)** — 8-step demokit walkthrough with sequence diagram covering sync calls, optional async tasks, polling, progress notifications via SSE, required-task tools, and cancellation. Run it with `make serve` + `make demo`.
+
 ## MCPKit Features Used
 
 | Category | Feature |
@@ -528,15 +530,12 @@ Create a task and send progress notifications from the tool handler.
 
 ### Async tool returns a task ID immediately
 
-![Task Created](screenshots/task-created.png)
 
 ### Polling tasks/get — status transitions to completed
 
-![Task Completed](screenshots/task-completed.png)
 
 ### failing_job — task transitions to failed after 1 second
 
-![Task Failed](screenshots/task-failed.png)
 
 ## Key Files
 
@@ -553,3 +552,4 @@ Create a task and send progress notifications from the tool handler.
 | `../../server/task_session.go` | TaskContext, TaskElicit, TaskSample |
 | `../../client/tasks.go` | Client helpers: GetTask, ToolCallAsTask, etc. |
 | `../../docs/TASKS_GAP_PLAN.md` | Gap closure plan vs TS SDK (Phases 1-8) |
+
