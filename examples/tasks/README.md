@@ -530,15 +530,12 @@ Create a task and send progress notifications from the tool handler.
 
 ### Async tool returns a task ID immediately
 
-![Task Created](screenshots/task-created.png)
 
 ### Polling tasks/get — status transitions to completed
 
-![Task Completed](screenshots/task-completed.png)
 
 ### failing_job — task transitions to failed after 1 second
 
-![Task Failed](screenshots/task-failed.png)
 
 ## Key Files
 
@@ -556,13 +553,3 @@ Create a task and send progress notifications from the tool handler.
 | `../../client/tasks.go` | Client helpers: GetTask, ToolCallAsTask, etc. |
 | `../../docs/TASKS_GAP_PLAN.md` | Gap closure plan vs TS SDK (Phases 1-8) |
 
-## Demokit Walkthrough
-
-For a guided wire-format tour of the task lifecycle (8 steps covering sync calls, optional async, polling, progress notifications, required-task tools, and cancellation), run the demokit walkthrough:
-
-```bash
-make serve   # terminal 1: starts the tasks server
-make demo     # terminal 2: scripted MCP host walks through 8 exercises
-```
-
-See [WALKTHROUGH.md](WALKTHROUGH.md) for the full step-by-step description and sequence diagram.

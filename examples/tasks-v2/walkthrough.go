@@ -149,7 +149,7 @@ func runDemo() {
 		})
 
 	// --- Step 4: tasks/get with inlined result on completion ---
-	demo.Step("Poll tasks/get; final response inlines the result").
+	demo.Step("Poll tasks/get — final response inlines the result").
 		Arrow("Host", "Server", "tasks/get {taskId}  (polled)").
 		DashedArrow("Server", "Host", "notifications/progress (1/3, 2/3, 3/3) via SSE").
 		DashedArrow("Server", "Host", "{status: completed, result: {...}, ttl: ...}  (no separate tasks/result needed)").

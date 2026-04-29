@@ -7,7 +7,7 @@ Walks through the v2 Tasks protocol where the *server* decides whether to create
 - **Connect to the v2 tasks server** — The mcpkit client opens a GET SSE stream so progress notifications reach us during polling. Initialize advertises the v2 tasks capability.
 - **Sync call: greet — no task created** — greet is taskSupport=forbidden. The server runs it inline and returns the standard ToolResult shape. No task created. The host can detect sync vs task by checking for the `resultType: "task"` discriminator on the response.
 - **slow_compute (no task hint!) — server creates a task** — Critical v2 semantics: client doesn't include a `task` param — calls slow_compute like any sync tool. Because slow_compute has Execution.TaskSupport=optional, the server elects to create a task. The discriminator `resultType: "task"` tells the host to switch to polling mode.
-- **Poll tasks/get; final response inlines the result** — v2's flat shape: GetTaskResultV2 has TaskInfo fields at the top level, and inlines the actual ToolResult under `result` once status is terminal. No second roundtrip to tasks/result.
+- **Poll tasks/get — final response inlines the result** — v2's flat shape: GetTaskResultV2 has TaskInfo fields at the top level, and inlines the actual ToolResult under `result` once status is terminal. No second roundtrip to tasks/result.
 - **failing_job → status: completed, result.isError: true (TOOL error semantics)** — In v2, a tool that returns an error result lands in status `completed` with `result.isError: true`. The task itself ran to completion — the *operation* failed but the *infrastructure* didn't. This is distinct from protocol failures (next step).
 - **protocol_error_job → status: failed, error: {...} (PROTOCOL error semantics)** — Protocol errors (panics, framework bugs, things that aren't the tool's fault) land in status `failed` with the error inlined as `error: {code, message, data}` mirroring JSON-RPC error shape. The host should treat this as 'something is broken', not 'the tool said no'.
 - **Cancel a long-running task → status: cancelled** — Same cooperative cancellation as v1. Server cancels the goroutine context; tools that select on ctx.Done() exit cleanly. v2 cancel response also includes the flat TaskInfo so the host doesn't need an extra round-trip.
@@ -31,7 +31,7 @@ sequenceDiagram
     Host->>Server: tools/call: slow_compute {seconds: 3}
     Server-->>Host: {resultType: "task", task: {taskId, status: working, ttl}}
 
-    Note over Host,Server: Step 4: Poll tasks/get; final response inlines the result
+    Note over Host,Server: Step 4: Poll tasks/get — final response inlines the result
     Host->>Server: tasks/get {taskId}  (polled)
     Server-->>Host: notifications/progress (1/3, 2/3, 3/3) via SSE
     Server-->>Host: {status: completed, result: {...}, ttl: ...}  (no separate tasks/result needed)
@@ -89,7 +89,7 @@ greet is taskSupport=forbidden. The server runs it inline and returns the standa
 
 Critical v2 semantics: client doesn't include a `task` param — calls slow_compute like any sync tool. Because slow_compute has Execution.TaskSupport=optional, the server elects to create a task. The discriminator `resultType: "task"` tells the host to switch to polling mode.
 
-### Step 4: Poll tasks/get; final response inlines the result
+### Step 4: Poll tasks/get — final response inlines the result
 
 v2's flat shape: GetTaskResultV2 has TaskInfo fields at the top level, and inlines the actual ToolResult under `result` once status is terminal. No second roundtrip to tasks/result.
 
