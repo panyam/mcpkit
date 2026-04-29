@@ -90,22 +90,22 @@ func RegisterEchoTools(srv *server.Server) {
 		},
 	))
 
+	// Scope enforcement is declarative — auth.NewToolScopeMiddleware will
+	// short-circuit unauthorized requests with HTTP 403 + WWW-Authenticate
+	// before the handler runs. Servers that don't register the scope
+	// middleware get RequiredScopes as inert metadata.
 	srv.Register(core.TextTool[struct{}]("write-tool", "Requires 'write' scope",
 		func(ctx core.ToolContext, _ struct{}) (string, error) {
-			if err := auth.RequireScope(ctx, "write"); err != nil {
-				return "error: " + err.Error(), nil
-			}
 			return "write ok", nil
 		},
+		core.WithToolRequiredScopes("write"),
 	))
 
 	srv.Register(core.TextTool[struct{}]("admin-tool", "Requires 'admin' scope",
 		func(ctx core.ToolContext, _ struct{}) (string, error) {
-			if err := auth.RequireScope(ctx, "admin"); err != nil {
-				return "error: " + err.Error(), nil
-			}
 			return "admin ok", nil
 		},
+		core.WithToolRequiredScopes("admin"),
 	))
 }
 
