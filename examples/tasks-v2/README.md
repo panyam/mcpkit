@@ -1,21 +1,29 @@
-# MCP Tasks v2 (SEP-2557) — Server-Directed Async
+# MCP Tasks v2 (SEP-2663) — Server-Directed Async + MRTR
 
-Server-side implementation of the v2 Tasks protocol. v2 inverts v1's client-driven model: the *server* decides when to create a task, and clients call `tools/call` normally with no task hint.
+Server-side implementation of the v2 Tasks extension. v2 inverts v1's client-driven model: the *server* decides when to create a task, and clients call `tools/call` normally with no task hint.
 
-> **🚀 [Skip to the guided walkthrough →](WALKTHROUGH.md)** — 7-step demokit walkthrough with sequence diagram contrasting v1 vs v2 semantics: server-decided tasks, `resultType` discriminator, inlined results, and tool-vs-protocol error semantics. Run it with `make serve` + `make demo`.
+> **🚀 [Skip to the guided walkthrough →](WALKTHROUGH.md)** — 8-step demokit walkthrough covering the full v2 surface: extension negotiation, polymorphic `tools/call`, inlined results, the new `tasks/update` MRTR loop, ack-only cancel, and tool-vs-protocol error semantics. Run it with `make serve` + `make demo`.
+>
+> **🔁 Migrating from v1?** See the [v1 → v2 migration guide](../../docs/TASKS_V2_MIGRATION.md) for the wire-shape diff, server entry points (`RegisterTasks` / `RegisterTasksV1` / `RegisterTasksHybrid`), and the rolling-upgrade recipe.
 
 ## Key Differences from v1
 
-| Aspect | v1 (SEP-1036) | v2 (SEP-2557) |
+| Aspect | v1 (SEP-1036) | v2 (SEP-2663) |
 |--------|---------------|---------------|
+| Capability slot | `capabilities.tasks` | `capabilities.extensions["io.modelcontextprotocol/tasks"]` |
+| Client opt-in | (none) | `client.WithTasksExtension()` required |
 | Client task hint | `task: {ttl, pollInterval}` in params | **none — server decides** |
 | Discriminator on `tools/call` | absent (use `taskId` presence) | `resultType: "task"` |
 | Read endpoints | `tasks/get` + `tasks/result` (two RTTs) | `tasks/get` only (result inlined) |
 | Result on terminal `tasks/get` | only status — fetch separately | inlined `result` / `error` / `inputRequests` |
-| TTL units | milliseconds | **seconds** |
+| MRTR resume path | side-channel via `tasks/result` long-poll | `tasks/update` (new method) |
+| `tasks/cancel` response | rich task envelope | empty `{}` ack |
+| TTL field | `ttl` (ms by convention) | `ttlSeconds` |
+| Poll-interval field | `pollInterval` | `pollIntervalMilliseconds` |
 | Tool errors | `status: failed` | `status: completed, result.isError: true` |
 | Protocol errors | `status: failed, error: ...` | `status: failed, error: {code, message, data}` |
 | `tasks/list` | exists | **removed** |
+| Mcp-Name HTTP header | not set | set on task-creating responses (SEP-2243) |
 
 ## Quick Start
 
