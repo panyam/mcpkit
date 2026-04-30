@@ -1,57 +1,81 @@
 # experimental/ext/events
 
-> **EXPERIMENTAL** - this package will change as the triggers-events-wg iterates on the spec.
+> **EXPERIMENTAL** — this package will change as the triggers-events-wg iterates on the spec.
 
-Go library for adding [MCP Events](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/pull/1) to an mcpkit server. Implements the protocol methods (`events/list`, `events/poll`, `events/subscribe`, `events/unsubscribe`) and webhook delivery so you only write the event source.
+Go library for adding [MCP Events](https://github.com/modelcontextprotocol/experimental-ext-triggers-events) to an mcpkit server. Implements the protocol methods (`events/list`, `events/poll`, `events/subscribe`, `events/unsubscribe`) and webhook delivery so you only write the event source.
 
-## Usage
+Two source styles, pick whichever matches who owns storage:
+
+| Style | When to use | Who owns the buffer | Fanout to push + webhook |
+|-------|-------------|---------------------|--------------------------|
+| **`YieldingSource`** (recommended) | The source pushes events at you (bot callback, HTTP handler, channel reader) | Library — bounded ring, typed `Recent(n)` / `ByCursor(c)` accessors | Library wires it (`SetEmitHook` via `Register`) |
+| **`TypedSource`** | The source already owns its storage (DB, event log, external queue) | You — implement `Poll(cursor, limit)` | You — call `events.Emit` and `events.EmitToWebhooks` yourself |
+
+## Quickstart — `YieldingSource`
 
 ```go
 import "github.com/panyam/mcpkit/experimental/ext/events"
-```
 
-### 1. Define your event data type
-
-```go
+// 1. Define your event payload type
 type AlertData struct {
     Severity string `json:"severity" jsonschema:"enum=P1,enum=P2,enum=P3"`
     Service  string `json:"service"`
     Message  string `json:"message"`
 }
+
+// 2. Construct the source. PayloadSchema is auto-derived from the type param.
+source, yield := events.NewYieldingSource[AlertData](events.EventDef{
+    Name:        "incident.created",
+    Description: "Fires when a new incident is created",
+    Delivery:    []string{"push", "poll", "webhook"},
+})
+
+// 3. Register on the server. The library installs the push + webhook
+//    fanout hook so yield(...) automatically broadcasts via SSE and POSTs
+//    to webhook subscribers — you don't write any fanout code.
+webhooks := events.NewWebhookRegistry()
+events.Register(events.Config{
+    Sources:  []events.EventSource{source},
+    Webhooks: webhooks,
+    Server:   srv,
+})
+
+// 4. Yield from wherever you produce events.
+go alertWatcher(func(a AlertData) { _ = yield(a) })
+
+// 5. Optional: read typed payloads back without re-unmarshaling. Used by
+//    MCP resource handlers in the demos.
+recent := source.Recent(50)              // []AlertData, oldest-first
+one, ok := source.ByCursor("42")         // (AlertData, bool)
 ```
 
-### 2. Create a typed event source
+That's it. No `OnMessage` callback, no `MakeEvent`, no per-event fanout calls.
 
-`payloadSchema` is auto-derived from your struct (same as `core.TypedTool`):
+## Quickstart — `TypedSource`
+
+Use when you already have a store you can serve cursor-based reads from:
 
 ```go
 source := events.TypedSource[AlertData](events.EventDef{
     Name:        "incident.created",
-    Description: "Fires when a new incident is created",
+    Description: "...",
     Delivery:    []string{"push", "poll", "webhook"},
 }, func(cursor string, limit int) events.PollResult {
-    // Your cursor-based retrieval logic here.
-    // Cursor is an opaque string - you define the format.
-    return events.PollResult{
-        Events: myEvents,
-        Cursor: nextCursor,
-    }
+    rows := myDB.GetSince(cursor, limit)
+    return events.PollResult{Events: toEvents(rows), Cursor: ..., CursorGap: ...}
 })
+
+events.Register(events.Config{Sources: []events.EventSource{source}, Webhooks: wh, Server: srv})
+
+// You wire fanout yourself:
+myDB.OnInsert = func(row Row) {
+    e := events.MakeEvent[AlertData]("incident.created", row.ID, row.Cursor, row.TS, toData(row))
+    events.Emit(srv, e)
+    events.EmitToWebhooks(wh, e)
+}
 ```
 
-### 3. Register on the server
-
-```go
-webhooks := events.NewWebhookRegistry()
-
-events.Register(events.Config{
-    Sources:  []events.EventSource{source},
-    Webhooks: webhooks, // nil to disable webhook delivery
-    Server:   srv,
-})
-```
-
-This registers four protocol methods:
+## Protocol methods registered
 
 | Method | Description |
 |--------|-------------|
@@ -60,17 +84,7 @@ This registers four protocol methods:
 | `events/subscribe` | Webhook registration with HMAC secret + TTL + `refreshBefore` |
 | `events/unsubscribe` | Webhook removal by `(url, id)` |
 
-### 4. Wire push + webhook fan-out
-
-```go
-store.OnNewEvent = func(data AlertData, id, cursor string, ts time.Time) {
-    event := events.MakeEvent[AlertData]("incident.created", id, cursor, ts, data)
-    events.Emit(srv, event)                   // push to SSE clients
-    events.EmitToWebhooks(webhooks, event)    // POST to webhook subscribers
-}
-```
-
-## Key Types
+## Key types
 
 ```go
 // Event is the wire-format envelope.
@@ -82,15 +96,15 @@ type Event struct {
     Cursor    string          `json:"cursor"`
 }
 
-// EventSource is what you implement.
+// EventSource — what TypedSource implements; YieldingSource also satisfies it.
 type EventSource interface {
     Def() EventDef
     Poll(cursor string, limit int) PollResult
 }
 
-// PollResult includes CursorGap - true when the client's cursor
-// points to evicted events (ring buffer wrapped). Not in Peter's
-// spec - an mcpkit extension to signal silent event loss.
+// PollResult includes CursorGap — true when the requested cursor predates
+// evicted events. NOT in Peter's spec — mcpkit extension to signal silent
+// loss. Clients decide policy: re-sync, warn, or ignore.
 type PollResult struct {
     Events    []Event
     Cursor    string
@@ -98,23 +112,58 @@ type PollResult struct {
 }
 ```
 
-## Webhook Delivery
+## Webhook delivery
 
 - HMAC-SHA256 signing: `HMAC(secret, timestamp + "." + body)`
 - Headers: `X-MCP-Signature`, `X-MCP-Timestamp`
-- TTL-based soft state with automatic expiry
+- TTL-based soft state with automatic expiry (default 60s, override via `WithWebhookTTL`)
 - Keyed by `(url, id)` per spec (unauthenticated servers)
 - Retry with exponential backoff on 5xx (no retry on 4xx)
 - Basic SSRF validation on callback URLs
 
-## Spec Alignment
+```go
+webhooks := events.NewWebhookRegistry(events.WithWebhookTTL(5 * time.Second))
+```
 
-Based on [Peter Alexander's design sketch](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/pull/1). Notable choices:
+## Python client SDK — auto-refresh
 
-| Topic | Our Approach |
+`events_client.py` ships a `WebhookSubscription` helper that refreshes the subscription at `0.5 × TTL` (configurable) and transparently re-subscribes if a refresh hits the "subscription not found" race near the TTL boundary. Use it via the helper class or the bundled `webhook` subcommand:
+
+```bash
+python3 events_client.py webhook --event discord.message --port 9999 --refresh-factor 0.5
+```
+
+```python
+from events_client import MCPSession, WebhookSubscription
+
+session = MCPSession("http://localhost:8080/mcp")
+session.initialize()
+
+sub = WebhookSubscription(
+    session,
+    event_name="discord.message",
+    callback_url="http://localhost:9999",
+    secret="my-secret",
+    refresh_factor=0.5,
+    on_refresh=lambda: print("refreshed"),
+    on_recover=lambda: print("recovered after subscription expired"),
+)
+sub.start()
+# ... receive webhooks on :9999 ...
+sub.stop()
+```
+
+Smoke-tested by `make test-ttl` in the discord-events demo.
+
+## Spec alignment
+
+Based on Peter Alexander's design sketch (triggers-events-wg PR #1). Notable choices:
+
+| Topic | Our approach |
 |-------|-------------|
-| **Cursors** | Opaque strings - source defines format |
-| **`cursorGap`** | mcpkit extension (not in spec) - signals events lost to buffer wrap |
+| **Cursors** | Opaque strings — store defines format. `YieldingSource` defaults to monotonic int64 |
+| **`cursorGap`** | mcpkit extension (not in spec) — signals events lost to buffer wrap |
 | **`nextPollSeconds`** | Per-subscription (follows spec schema); client SDK coalesces |
-| **`events/stream`** | Deferred - push uses `Server.Broadcast` for now |
+| **`events/stream`** | Deferred — push uses `Server.Broadcast` for now |
 | **Typed contexts** | Handlers receive `core.MethodContext` (EmitLog, AuthClaims, etc.) |
+| **Yield-style SDK** | `YieldingSource` (Casey + Peter, WG PR #1 line 609) — non-normative SDK ergonomic |

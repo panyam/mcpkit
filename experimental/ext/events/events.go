@@ -120,6 +120,12 @@ type Config struct {
 
 // Register hooks up events/list, events/poll, events/subscribe, and
 // events/unsubscribe as custom JSON-RPC methods on the server.
+//
+// For sources that implement emitterAware (notably YieldingSource), Register
+// installs a fanout hook so each yielded event is automatically broadcast
+// via push and POSTed to webhook subscribers — the source author writes
+// no fanout code. Sources that don't implement emitterAware (TypedSource)
+// remain responsible for calling Emit / EmitToWebhooks themselves.
 func Register(cfg Config) {
 	srv := cfg.Server
 	sources := cfg.Sources
@@ -128,6 +134,14 @@ func Register(cfg Config) {
 	sourceMap := make(map[string]EventSource, len(sources))
 	for _, s := range sources {
 		sourceMap[s.Def().Name] = s
+		if ea, ok := s.(emitterAware); ok {
+			ea.SetEmitHook(func(event Event) {
+				Emit(srv, event)
+				if webhooks != nil {
+					EmitToWebhooks(webhooks, event)
+				}
+			})
+		}
 	}
 
 	registerList(srv, sources)
