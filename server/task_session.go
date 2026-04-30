@@ -45,8 +45,9 @@ type TaskContext struct {
 	taskID        string
 	sessionID     string
 	store         TaskStore
-	requests      chan sideChannelRequest // read by tasks/result handler
-	progressToken any                    // original _meta.progressToken from client (Phase 7c)
+	requests      chan sideChannelRequest // v1 only: read by tasks/result handler
+	inputState    *v2InputState           // v2 only: SEP-2663 input request flow
+	progressToken any                     // original _meta.progressToken from client
 }
 
 type taskContextKey struct{}
@@ -92,44 +93,36 @@ func (tc *TaskContext) SetStatus(status core.TaskStatus) error {
 	return err
 }
 
-// TaskElicit sends an elicitation request to the client via the tasks/result
-// side-channel. The request is proxied by the tasks/result long-poll handler
-// through its live connection.
+// TaskElicit asks the client for elicitation input from inside a running task.
 //
-// Status transitions: working → input_required → (wait for client) → working
+// Behavior depends on which task runtime owns this TaskContext:
+//
+//   - v2 (SEP-2663): the request is stashed on the task's inputState under a
+//     monotonic key, the task transitions to input_required, and the goroutine
+//     blocks on a per-key waiter channel. The client observes the pending
+//     request via tasks/get's DetailedTask.InputRequests and resumes the task
+//     by sending the matching response via tasks/update. ctx cancellation
+//     unblocks the wait with the corresponding context error.
+//   - v1 (legacy): the request is enqueued on a side-channel proxied by the
+//     tasks/result long-poll handler.
+//
+// Status transitions for both paths: working → input_required → working.
 func (tc *TaskContext) TaskElicit(req core.ElicitationRequest) (core.ElicitationResult, error) {
-	// Transition to input_required.
-	if err := tc.store.Update(tc.taskID, tc.sessionID, func(t *core.TaskInfo) {
-		t.Status = core.TaskInputRequired
-	}); err != nil {
-		return core.ElicitationResult{}, fmt.Errorf("task %s: failed to set input_required: %w", tc.taskID, err)
-	}
-
-	// Inject related-task metadata.
+	// Inject related-task metadata so out-of-band consumers can correlate.
 	if req.Meta == nil {
 		req.Meta = &core.ElicitationMeta{}
 	}
 	req.Meta.RelatedTask = &core.RelatedTaskMeta{TaskID: tc.taskID}
 
-	// Serialize params.
 	params, err := core.MarshalJSON(req)
 	if err != nil {
-		tc.store.Update(tc.taskID, tc.sessionID, func(t *core.TaskInfo) { t.Status = core.TaskWorking })
 		return core.ElicitationResult{}, fmt.Errorf("marshal elicitation request: %w", err)
 	}
 
-	// Send to the tasks/result handler and wait for response.
-	resp, err := tc.sendSideChannel("elicitation/create", params)
-
-	// Transition back to working.
-	tc.store.Update(tc.taskID, tc.sessionID, func(t *core.TaskInfo) {
-		t.Status = core.TaskWorking
-	})
-
+	resp, err := tc.requestInput("elicit", "elicitation/create", params)
 	if err != nil {
 		return core.ElicitationResult{}, err
 	}
-
 	var result core.ElicitationResult
 	if err := json.Unmarshal(resp, &result); err != nil {
 		return core.ElicitationResult{}, fmt.Errorf("unmarshal elicitation result: %w", err)
@@ -137,43 +130,25 @@ func (tc *TaskContext) TaskElicit(req core.ElicitationRequest) (core.Elicitation
 	return result, nil
 }
 
-// TaskSample sends a sampling request to the client via the tasks/result
-// side-channel.
+// TaskSample asks the client for a sampling/createMessage response from
+// inside a running task. See TaskElicit for the v1 vs v2 routing.
 //
-// Status transitions: working → input_required → (wait for client) → working
+// Status transitions: working → input_required → working.
 func (tc *TaskContext) TaskSample(req core.CreateMessageRequest) (core.CreateMessageResult, error) {
-	// Transition to input_required.
-	if err := tc.store.Update(tc.taskID, tc.sessionID, func(t *core.TaskInfo) {
-		t.Status = core.TaskInputRequired
-	}); err != nil {
-		return core.CreateMessageResult{}, fmt.Errorf("task %s: failed to set input_required: %w", tc.taskID, err)
-	}
-
-	// Inject related-task metadata.
 	if req.Meta == nil {
 		req.Meta = &core.SamplingMeta{}
 	}
 	req.Meta.RelatedTask = &core.RelatedTaskMeta{TaskID: tc.taskID}
 
-	// Serialize params.
 	params, err := core.MarshalJSON(req)
 	if err != nil {
-		tc.store.Update(tc.taskID, tc.sessionID, func(t *core.TaskInfo) { t.Status = core.TaskWorking })
 		return core.CreateMessageResult{}, fmt.Errorf("marshal sampling request: %w", err)
 	}
 
-	// Send to the tasks/result handler and wait for response.
-	resp, err := tc.sendSideChannel("sampling/createMessage", params)
-
-	// Transition back to working.
-	tc.store.Update(tc.taskID, tc.sessionID, func(t *core.TaskInfo) {
-		t.Status = core.TaskWorking
-	})
-
+	resp, err := tc.requestInput("sample", "sampling/createMessage", params)
 	if err != nil {
 		return core.CreateMessageResult{}, err
 	}
-
 	var result core.CreateMessageResult
 	if err := json.Unmarshal(resp, &result); err != nil {
 		return core.CreateMessageResult{}, fmt.Errorf("unmarshal sampling result: %w", err)
@@ -181,8 +156,75 @@ func (tc *TaskContext) TaskSample(req core.CreateMessageRequest) (core.CreateMes
 	return result, nil
 }
 
-// sendSideChannel enqueues a request for the tasks/result handler to proxy,
-// then blocks until the response arrives.
+// requestInput is the routing layer behind TaskElicit / TaskSample. It picks
+// the v2 SEP-2663 path when an inputState is attached and falls back to the
+// v1 side-channel otherwise. methodPrefix is a short readable tag used to
+// mint stable keys ("elicit-1", "sample-2") on the v2 path; jsonRpcMethod
+// is the actual JSON-RPC method name routed to the client.
+func (tc *TaskContext) requestInput(methodPrefix, jsonRpcMethod string, params json.RawMessage) (json.RawMessage, error) {
+	if tc.inputState != nil {
+		return tc.requestInputV2(methodPrefix, jsonRpcMethod, params)
+	}
+	return tc.requestInputV1(jsonRpcMethod, params)
+}
+
+// requestInputV2 implements the SEP-2663 input-request flow.
+func (tc *TaskContext) requestInputV2(methodPrefix, jsonRpcMethod string, params json.RawMessage) (json.RawMessage, error) {
+	_, waiter := tc.inputState.enqueue(methodPrefix, core.InputRequest{
+		Method: jsonRpcMethod,
+		Params: params,
+	})
+
+	// Transition to input_required and notify status so polling clients
+	// pick up the new pending request on the next tasks/get.
+	if err := tc.store.Update(tc.taskID, tc.sessionID, func(t *core.TaskInfo) {
+		t.Status = core.TaskInputRequired
+	}); err != nil {
+		return nil, fmt.Errorf("task %s: set input_required: %w", tc.taskID, err)
+	}
+	notifyTaskStatus(tc.Context, tc.store, tc.taskID, tc.sessionID)
+
+	// Wait for either tasks/update delivery or context cancellation.
+	var payload json.RawMessage
+	select {
+	case payload = <-waiter:
+		// Closed-channel receive yields nil payload + ok=false; treat as cancel.
+		if payload == nil {
+			return nil, fmt.Errorf("task %s: input wait cancelled", tc.taskID)
+		}
+	case <-tc.Context.Done():
+		return nil, tc.Context.Err()
+	}
+
+	// Transition back to working before returning. Best-effort: if the task
+	// has already gone terminal, the store's terminal guard rejects this.
+	tc.store.Update(tc.taskID, tc.sessionID, func(t *core.TaskInfo) {
+		t.Status = core.TaskWorking
+	})
+	notifyTaskStatus(tc.Context, tc.store, tc.taskID, tc.sessionID)
+
+	return payload, nil
+}
+
+// requestInputV1 implements the legacy v1 side-channel flow (tasks/result
+// long-poll proxies the request through its live connection).
+func (tc *TaskContext) requestInputV1(jsonRpcMethod string, params json.RawMessage) (json.RawMessage, error) {
+	if err := tc.store.Update(tc.taskID, tc.sessionID, func(t *core.TaskInfo) {
+		t.Status = core.TaskInputRequired
+	}); err != nil {
+		return nil, fmt.Errorf("task %s: set input_required: %w", tc.taskID, err)
+	}
+
+	resp, err := tc.sendSideChannel(jsonRpcMethod, params)
+
+	tc.store.Update(tc.taskID, tc.sessionID, func(t *core.TaskInfo) {
+		t.Status = core.TaskWorking
+	})
+	return resp, err
+}
+
+// sendSideChannel enqueues a request for the v1 tasks/result handler to
+// proxy, then blocks until the response arrives.
 func (tc *TaskContext) sendSideChannel(method string, params json.RawMessage) (json.RawMessage, error) {
 	respCh := make(chan sideChannelResponse, 1)
 	tc.requests <- sideChannelRequest{
