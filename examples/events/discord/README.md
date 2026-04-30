@@ -8,6 +8,9 @@ Companion to the [Telegram example](../telegram/) — shows the events library h
 
 The canonical demo for the events extension. Two terminals:
 
+> **Going to production?** See [`experimental/ext/events/DEPLOYMENT.md`](../../../experimental/ext/events/DEPLOYMENT.md) for private-cloud / WAF guidance.
+
+
 ```bash
 make serve    # terminal 1 — real MCP server
 make demo     # terminal 2 — scripted demokit walkthrough (TUI)
