@@ -195,8 +195,9 @@ func serve() {
 		},
 	})
 
-	// Register v2 tasks on the server.
-	server.RegisterTasksV2(server.TasksV2Config{Server: srv})
+	// Register v2 tasks on the server (canonical RegisterTasks since SEP-2663
+	// — v2 takes the canonical name; v1 lives at RegisterTasksV1).
+	server.RegisterTasks(server.TasksConfig{Server: srv})
 
 	log.Printf("Tasks v2 demo server on %s", *addr)
 	log.Printf("Connect: http://localhost%s/mcp", *addr)
