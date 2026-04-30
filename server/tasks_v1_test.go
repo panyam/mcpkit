@@ -124,7 +124,7 @@ func TestTaskFullLifecycle(t *testing.T) {
 	c := connectClient(t, srv)
 
 	// 1. Create task via tools/call with task hint.
-	created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "hello"})
+	created, err := client.ToolCallAsTaskV1(c, "slow", map[string]any{"data": "hello"})
 	if err != nil {
 		t.Fatalf("ToolCallAsTask: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestTaskFullLifecycle(t *testing.T) {
 	}
 
 	// 2. Poll — should still be working.
-	got, err := client.GetTask(c, created.Task.TaskID)
+	got, err := client.GetTaskV1(c, created.Task.TaskID)
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestTaskFullLifecycle(t *testing.T) {
 	}
 
 	// 3. List — should include our task.
-	list, err := client.ListTasks(c, "")
+	list, err := client.ListTasksV1(c, "")
 	if err != nil {
 		t.Fatalf("ListTasks: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestTaskFullLifecycle(t *testing.T) {
 	// 4. Unblock the tool and fetch the result.
 	unblock <- struct{}{}
 
-	result, taskID, err := client.GetTaskPayload(c, created.Task.TaskID)
+	result, taskID, err := client.GetTaskPayloadV1(c, created.Task.TaskID)
 	if err != nil {
 		t.Fatalf("GetTaskPayload: %v", err)
 	}
@@ -179,12 +179,12 @@ func TestTaskCancel(t *testing.T) {
 	srv, _ := newTaskServer(t) // don't unblock — tool stays blocked
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "cancel-me"})
+	created, err := client.ToolCallAsTaskV1(c, "slow", map[string]any{"data": "cancel-me"})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	cancelled, err := client.CancelTask(c, created.Task.TaskID)
+	cancelled, err := client.CancelTaskV1(c, created.Task.TaskID)
 	if err != nil {
 		t.Fatalf("CancelTask: %v", err)
 	}
@@ -193,7 +193,7 @@ func TestTaskCancel(t *testing.T) {
 	}
 
 	// Poll after cancel — should still be cancelled.
-	got, err := client.GetTask(c, created.Task.TaskID)
+	got, err := client.GetTaskV1(c, created.Task.TaskID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func TestTaskFailedTool(t *testing.T) {
 	srv, _ := newTaskServer(t)
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "fail-async", nil)
+	created, err := client.ToolCallAsTaskV1(c, "fail-async", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +215,7 @@ func TestTaskFailedTool(t *testing.T) {
 	// The tool fails immediately, so poll until terminal.
 	var info core.TaskInfo
 	for i := 0; i < 20; i++ {
-		got, err := client.GetTask(c, created.Task.TaskID)
+		got, err := client.GetTaskV1(c, created.Task.TaskID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -303,14 +303,14 @@ func TestTaskMultipleConcurrent(t *testing.T) {
 	const n = 5
 	var taskIDs []string
 	for i := 0; i < n; i++ {
-		created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": fmt.Sprintf("t%d", i)})
+		created, err := client.ToolCallAsTaskV1(c, "slow", map[string]any{"data": fmt.Sprintf("t%d", i)})
 		if err != nil {
 			t.Fatal(err)
 		}
 		taskIDs = append(taskIDs, created.Task.TaskID)
 	}
 
-	list, err := client.ListTasks(c, "")
+	list, err := client.ListTasksV1(c, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -319,7 +319,7 @@ func TestTaskMultipleConcurrent(t *testing.T) {
 	}
 
 	for _, id := range taskIDs {
-		_, err := client.CancelTask(c, id)
+		_, err := client.CancelTaskV1(c, id)
 		if err != nil {
 			t.Errorf("cancel %s: %v", id, err)
 		}
@@ -332,7 +332,7 @@ func TestTaskCustomTTL(t *testing.T) {
 	defer close(unblock)
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "x"}, &client.TaskCallOptions{TTL: 60000})
+	created, err := client.ToolCallAsTaskV1(c, "slow", map[string]any{"data": "x"}, &client.TaskCallOptionsV1{TTL: 60000})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -347,7 +347,7 @@ func TestTaskGetNotFound(t *testing.T) {
 	defer close(unblock)
 	c := connectClient(t, srv)
 
-	_, err := client.GetTask(c, "nonexistent-id")
+	_, err := client.GetTaskV1(c, "nonexistent-id")
 	if err == nil {
 		t.Fatal("expected error for nonexistent task")
 	}
@@ -358,10 +358,10 @@ func TestTaskCancelAlreadyTerminal(t *testing.T) {
 	srv, _ := newTaskServer(t)
 	c := connectClient(t, srv)
 
-	created, _ := client.ToolCallAsTask(c, "slow", map[string]any{"data": "x"})
-	client.CancelTask(c, created.Task.TaskID)
+	created, _ := client.ToolCallAsTaskV1(c, "slow", map[string]any{"data": "x"})
+	client.CancelTaskV1(c, created.Task.TaskID)
 
-	_, err := client.CancelTask(c, created.Task.TaskID)
+	_, err := client.CancelTaskV1(c, created.Task.TaskID)
 	if err == nil {
 		t.Fatal("expected error cancelling already-terminal task")
 	}
@@ -410,13 +410,13 @@ func TestTaskResultAfterCompletion(t *testing.T) {
 	srv, unblock := newTaskServer(t)
 	c := connectClient(t, srv)
 
-	created, _ := client.ToolCallAsTask(c, "slow", map[string]any{"data": "done"})
+	created, _ := client.ToolCallAsTaskV1(c, "slow", map[string]any{"data": "done"})
 
 	unblock <- struct{}{}
 
 	var completed bool
 	for i := 0; i < 20; i++ {
-		got, _ := client.GetTask(c, created.Task.TaskID)
+		got, _ := client.GetTaskV1(c, created.Task.TaskID)
 		if got.Status == core.TaskCompleted {
 			completed = true
 			break
@@ -427,7 +427,7 @@ func TestTaskResultAfterCompletion(t *testing.T) {
 		t.Fatal("task did not complete in time")
 	}
 
-	result, _, err := client.GetTaskPayload(c, created.Task.TaskID)
+	result, _, err := client.GetTaskPayloadV1(c, created.Task.TaskID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -448,7 +448,7 @@ func TestTaskProgressCounter(t *testing.T) {
 	done := make(chan struct{})
 	for i := 0; i < n; i++ {
 		go func() {
-			created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "x"})
+			created, err := client.ToolCallAsTaskV1(c, "slow", map[string]any{"data": "x"})
 			if err == nil {
 				if ids[created.Task.TaskID] {
 					collisions.Add(1)
@@ -567,7 +567,7 @@ func TestTasksGetFlatWireFormat(t *testing.T) {
 	defer close(unblock)
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "flat"})
+	created, err := client.ToolCallAsTaskV1(c, "slow", map[string]any{"data": "flat"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -595,7 +595,7 @@ func TestTasksCancelFlatWireFormat(t *testing.T) {
 	srv, _ := newTaskServer(t)
 	c := connectClient(t, srv)
 
-	created, _ := client.ToolCallAsTask(c, "slow", map[string]any{"data": "x"})
+	created, _ := client.ToolCallAsTaskV1(c, "slow", map[string]any{"data": "x"})
 
 	result, err := c.Call("tasks/cancel", map[string]any{"taskId": created.Task.TaskID})
 	if err != nil {
@@ -619,12 +619,12 @@ func TestTasksResultRelatedTask(t *testing.T) {
 	srv, unblock := newTaskServer(t)
 	c := connectClient(t, srv)
 
-	created, _ := client.ToolCallAsTask(c, "slow", map[string]any{"data": "meta"})
+	created, _ := client.ToolCallAsTaskV1(c, "slow", map[string]any{"data": "meta"})
 	unblock <- struct{}{}
 
 	// Wait for completion.
 	for i := 0; i < 20; i++ {
-		got, _ := client.GetTask(c, created.Task.TaskID)
+		got, _ := client.GetTaskV1(c, created.Task.TaskID)
 		if got.Status.IsTerminal() {
 			break
 		}
@@ -680,7 +680,7 @@ func TestTaskPanicRecovery(t *testing.T) {
 	RegisterTasksV1(TasksConfigV1{Server: srv})
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "panic-tool", nil)
+	created, err := client.ToolCallAsTaskV1(c, "panic-tool", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -688,7 +688,7 @@ func TestTaskPanicRecovery(t *testing.T) {
 	// Poll until terminal.
 	var info core.TaskInfo
 	for i := 0; i < 20; i++ {
-		got, err := client.GetTask(c, created.Task.TaskID)
+		got, err := client.GetTaskV1(c, created.Task.TaskID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -713,14 +713,14 @@ func TestTaskResultForFailedTask(t *testing.T) {
 	srv, _ := newTaskServer(t)
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "fail-async", nil)
+	created, err := client.ToolCallAsTaskV1(c, "fail-async", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Wait for task to fail.
 	for i := 0; i < 20; i++ {
-		got, _ := client.GetTask(c, created.Task.TaskID)
+		got, _ := client.GetTaskV1(c, created.Task.TaskID)
 		if got.Status.IsTerminal() {
 			break
 		}
@@ -728,7 +728,7 @@ func TestTaskResultForFailedTask(t *testing.T) {
 	}
 
 	// tasks/result should return a ToolResult, not an error.
-	result, relatedID, err := client.GetTaskPayload(c, created.Task.TaskID)
+	result, relatedID, err := client.GetTaskPayloadV1(c, created.Task.TaskID)
 	if err != nil {
 		t.Fatalf("tasks/result should not return error for failed task, got: %v", err)
 	}
@@ -746,19 +746,19 @@ func TestTaskResultForCancelledTask(t *testing.T) {
 	srv, _ := newTaskServer(t)
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "cancel-me"})
+	created, err := client.ToolCallAsTaskV1(c, "slow", map[string]any{"data": "cancel-me"})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Cancel immediately.
-	_, err = client.CancelTask(c, created.Task.TaskID)
+	_, err = client.CancelTaskV1(c, created.Task.TaskID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// tasks/result should return a ToolResult, not an error.
-	result, relatedID, err := client.GetTaskPayload(c, created.Task.TaskID)
+	result, relatedID, err := client.GetTaskPayloadV1(c, created.Task.TaskID)
 	if err != nil {
 		t.Fatalf("tasks/result should not return error for cancelled task, got: %v", err)
 	}
@@ -853,7 +853,7 @@ func TestGetTaskContextAvailableForAsync(t *testing.T) {
 	RegisterTasksV1(TasksConfigV1{Server: srv})
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "check-ctx", nil)
+	created, err := client.ToolCallAsTaskV1(c, "check-ctx", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -909,7 +909,7 @@ func TestTaskInputRequiredTransition(t *testing.T) {
 	RegisterTasksV1(TasksConfigV1{Server: srv})
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "needs-input", nil)
+	created, err := client.ToolCallAsTaskV1(c, "needs-input", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -922,7 +922,7 @@ func TestTaskInputRequiredTransition(t *testing.T) {
 	}
 
 	// Poll tasks/get — should see input_required.
-	got, err := client.GetTask(c, created.Task.TaskID)
+	got, err := client.GetTaskV1(c, created.Task.TaskID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -935,7 +935,7 @@ func TestTaskInputRequiredTransition(t *testing.T) {
 
 	// Wait for completion.
 	for i := 0; i < 20; i++ {
-		got, _ = client.GetTask(c, created.Task.TaskID)
+		got, _ = client.GetTaskV1(c, created.Task.TaskID)
 		if got.Status.IsTerminal() {
 			break
 		}
@@ -952,7 +952,7 @@ func TestTaskResultConcurrentCancel(t *testing.T) {
 	srv, _ := newTaskServer(t) // slow tool blocks on channel
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "x"})
+	created, err := client.ToolCallAsTaskV1(c, "slow", map[string]any{"data": "x"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -965,7 +965,7 @@ func TestTaskResultConcurrentCancel(t *testing.T) {
 	}
 	ch := make(chan resultOut, 1)
 	go func() {
-		r, tid, err := client.GetTaskPayload(c, created.Task.TaskID)
+		r, tid, err := client.GetTaskPayloadV1(c, created.Task.TaskID)
 		ch <- resultOut{r, tid, err}
 	}()
 
@@ -973,7 +973,7 @@ func TestTaskResultConcurrentCancel(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Cancel the task — should unblock tasks/result.
-	_, err = client.CancelTask(c, created.Task.TaskID)
+	_, err = client.CancelTaskV1(c, created.Task.TaskID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1015,7 +1015,7 @@ func TestQueueCleanupOnCancel(t *testing.T) {
 	RegisterTasksV1(TasksConfigV1{Server: srv, Store: store, MessageQueue: queue})
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "slow", nil)
+	created, err := client.ToolCallAsTaskV1(c, "slow", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1029,7 +1029,7 @@ func TestQueueCleanupOnCancel(t *testing.T) {
 	}, 0)
 
 	// Cancel via client — handler should drain the queue.
-	_, err = client.CancelTask(c, created.Task.TaskID)
+	_, err = client.CancelTaskV1(c, created.Task.TaskID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1107,7 +1107,7 @@ func TestTaskElicitE2E(t *testing.T) {
 	))
 
 	// Create the task.
-	created, err := client.ToolCallAsTask(c, "confirm-action", map[string]any{"action": "deploy"})
+	created, err := client.ToolCallAsTaskV1(c, "confirm-action", map[string]any{"action": "deploy"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1115,7 +1115,7 @@ func TestTaskElicitE2E(t *testing.T) {
 	// GetTaskPayload blocks on tasks/result. During the long-poll, the handler
 	// proxies the elicitation to the client, the client responds, the tool
 	// completes, and we get the result.
-	result, relatedID, err := client.GetTaskPayload(c, created.Task.TaskID)
+	result, relatedID, err := client.GetTaskPayloadV1(c, created.Task.TaskID)
 	if err != nil {
 		t.Fatalf("GetTaskPayload: %v", err)
 	}
@@ -1187,12 +1187,12 @@ func TestTaskSampleE2E(t *testing.T) {
 		},
 	))
 
-	created, err := client.ToolCallAsTask(c, "write-haiku", map[string]any{"topic": "nature"})
+	created, err := client.ToolCallAsTaskV1(c, "write-haiku", map[string]any{"topic": "nature"})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	result, _, err := client.GetTaskPayload(c, created.Task.TaskID)
+	result, _, err := client.GetTaskPayloadV1(c, created.Task.TaskID)
 	if err != nil {
 		t.Fatalf("GetTaskPayload: %v", err)
 	}
@@ -1236,7 +1236,7 @@ func TestTaskTTLExpiryE2E(t *testing.T) {
 
 	// Wait for task to complete.
 	for i := 0; i < 20; i++ {
-		got, err := client.GetTask(c, taskID)
+		got, err := client.GetTaskV1(c, taskID)
 		if err != nil {
 			break // task might have been cleaned up already
 		}
@@ -1250,7 +1250,7 @@ func TestTaskTTLExpiryE2E(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 
 	// Task should be gone.
-	_, err = client.GetTask(c, taskID)
+	_, err = client.GetTaskV1(c, taskID)
 	if err == nil {
 		t.Error("expected error — task should have been cleaned up after TTL expired")
 	}
@@ -1281,14 +1281,14 @@ func TestTaskProgressFromBackgroundNoPanic(t *testing.T) {
 	c := connectClient(t, srv)
 
 	// Create task (no GET SSE stream — just POST).
-	created, err := client.ToolCallAsTask(c, "progress-tool", nil)
+	created, err := client.ToolCallAsTaskV1(c, "progress-tool", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Wait for completion — should succeed, not fail with panic.
 	for i := 0; i < 20; i++ {
-		got, err := client.GetTask(c, created.Task.TaskID)
+		got, err := client.GetTaskV1(c, created.Task.TaskID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1333,13 +1333,13 @@ func TestTaskCancelStopsGoroutine(t *testing.T) {
 	RegisterTasksV1(TasksConfigV1{Server: srv})
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "long-task", nil)
+	created, err := client.ToolCallAsTaskV1(c, "long-task", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Cancel the task.
-	_, err = client.CancelTask(c, created.Task.TaskID)
+	_, err = client.CancelTaskV1(c, created.Task.TaskID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1382,13 +1382,13 @@ func TestTaskStatusNotificationOnComplete(t *testing.T) {
 		}
 	}))
 
-	created, err := client.ToolCallAsTask(c, "fast", nil)
+	created, err := client.ToolCallAsTaskV1(c, "fast", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Call tasks/result — this triggers the notification (Option 1).
-	client.GetTaskPayload(c, created.Task.TaskID)
+	client.GetTaskPayloadV1(c, created.Task.TaskID)
 
 	// Wait for the completion notification.
 	select {
@@ -1433,12 +1433,12 @@ func TestTaskStatusNotificationOnCancel(t *testing.T) {
 		}
 	}))
 
-	created, err := client.ToolCallAsTask(c, "blocking", nil)
+	created, err := client.ToolCallAsTaskV1(c, "blocking", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = client.CancelTask(c, created.Task.TaskID)
+	_, err = client.CancelTaskV1(c, created.Task.TaskID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1525,14 +1525,14 @@ func TestTaskDoubleCompletionRejected(t *testing.T) {
 	RegisterTasksV1(TasksConfigV1{Server: srv})
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "fast", nil)
+	created, err := client.ToolCallAsTaskV1(c, "fast", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Wait for completion.
 	for i := 0; i < 20; i++ {
-		got, _ := client.GetTask(c, created.Task.TaskID)
+		got, _ := client.GetTaskV1(c, created.Task.TaskID)
 		if got.Status.IsTerminal() {
 			break
 		}
@@ -1540,7 +1540,7 @@ func TestTaskDoubleCompletionRejected(t *testing.T) {
 	}
 
 	// First tasks/result succeeds.
-	result1, _, err := client.GetTaskPayload(c, created.Task.TaskID)
+	result1, _, err := client.GetTaskPayloadV1(c, created.Task.TaskID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1549,7 +1549,7 @@ func TestTaskDoubleCompletionRejected(t *testing.T) {
 	}
 
 	// Second tasks/result also succeeds (idempotent read — result is stored).
-	result2, _, err := client.GetTaskPayload(c, created.Task.TaskID)
+	result2, _, err := client.GetTaskPayloadV1(c, created.Task.TaskID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1566,7 +1566,7 @@ func TestWaitForTaskCompletes(t *testing.T) {
 	srv, unblock := newTaskServer(t)
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "wait"})
+	created, err := client.ToolCallAsTaskV1(c, "slow", map[string]any{"data": "wait"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1577,7 +1577,7 @@ func TestWaitForTaskCompletes(t *testing.T) {
 		unblock <- struct{}{}
 	}()
 
-	got, err := client.WaitForTask(context.Background(), c, created.Task.TaskID, 50*time.Millisecond)
+	got, err := client.WaitForTaskV1(context.Background(), c, created.Task.TaskID, 50*time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1592,7 +1592,7 @@ func TestWaitForTaskCancelled(t *testing.T) {
 	srv, _ := newTaskServer(t)
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "wait-cancel"})
+	created, err := client.ToolCallAsTaskV1(c, "slow", map[string]any{"data": "wait-cancel"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1600,10 +1600,10 @@ func TestWaitForTaskCancelled(t *testing.T) {
 	// Cancel after a short delay.
 	go func() {
 		time.Sleep(100 * time.Millisecond)
-		client.CancelTask(c, created.Task.TaskID)
+		client.CancelTaskV1(c, created.Task.TaskID)
 	}()
 
-	got, err := client.WaitForTask(context.Background(), c, created.Task.TaskID, 50*time.Millisecond)
+	got, err := client.WaitForTaskV1(context.Background(), c, created.Task.TaskID, 50*time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1634,7 +1634,7 @@ func TestToolCallAsTaskWithProgressToken(t *testing.T) {
 	RegisterTasksV1(TasksConfigV1{Server: srv})
 	c := connectClient(t, srv)
 
-	_, err := client.ToolCallAsTask(c, "token-check", nil, &client.TaskCallOptions{
+	_, err := client.ToolCallAsTaskV1(c, "token-check", nil, &client.TaskCallOptionsV1{
 		ProgressToken: "client-token-123",
 	})
 	if err != nil {
@@ -1658,7 +1658,7 @@ func TestToolCallAsTaskWithPollInterval(t *testing.T) {
 	defer close(unblock)
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "x"}, &client.TaskCallOptions{
+	created, err := client.ToolCallAsTaskV1(c, "slow", map[string]any{"data": "x"}, &client.TaskCallOptionsV1{
 		PollInterval: 2000,
 	})
 	if err != nil {
@@ -1676,7 +1676,7 @@ func TestWaitForTaskTimeout(t *testing.T) {
 	srv, _ := newTaskServer(t) // never unblock — task stays working forever
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "stuck"})
+	created, err := client.ToolCallAsTaskV1(c, "slow", map[string]any{"data": "stuck"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1685,7 +1685,7 @@ func TestWaitForTaskTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
-	_, err = client.WaitForTask(ctx, c, created.Task.TaskID, 50*time.Millisecond)
+	_, err = client.WaitForTaskV1(ctx, c, created.Task.TaskID, 50*time.Millisecond)
 	if err == nil {
 		t.Fatal("expected timeout error")
 	}
@@ -1709,7 +1709,7 @@ func TestIsToolTask(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := client.IsToolTask(tt.tool)
+			got := client.IsToolTaskV1(tt.tool)
 			if got != tt.expected {
 				t.Errorf("IsToolTask(%q) = %v, want %v", tt.tool.Name, got, tt.expected)
 			}

@@ -53,13 +53,13 @@ func TestTaskCallbacksGetTask(t *testing.T) {
 	c := connectClient(t, srv)
 
 	// Create a task.
-	created, err := client.ToolCallAsTask(c, "proxy-job", map[string]any{})
+	created, err := client.ToolCallAsTaskV1(c, "proxy-job", map[string]any{})
 	if err != nil {
 		t.Fatalf("ToolCallAsTask: %v", err)
 	}
 
 	// Poll via tasks/get — should hit the custom callback.
-	got, err := client.GetTask(c, created.Task.TaskID)
+	got, err := client.GetTaskV1(c, created.Task.TaskID)
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestTaskCallbacksGetResult(t *testing.T) {
 	c := connectClient(t, srv)
 
 	// Create task — tool returns immediately, task completes fast.
-	created, err := client.ToolCallAsTask(c, "proxy-result", map[string]any{})
+	created, err := client.ToolCallAsTaskV1(c, "proxy-result", map[string]any{})
 	if err != nil {
 		t.Fatalf("ToolCallAsTask: %v", err)
 	}
@@ -115,13 +115,13 @@ func TestTaskCallbacksGetResult(t *testing.T) {
 	// Wait for terminal state via tasks/get polling.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_, err = client.WaitForTask(ctx, c, created.Task.TaskID, 50*time.Millisecond)
+	_, err = client.WaitForTaskV1(ctx, c, created.Task.TaskID, 50*time.Millisecond)
 	if err != nil {
 		t.Fatalf("WaitForTask: %v", err)
 	}
 
 	// Now call tasks/result — should hit the custom GetResult callback.
-	result, _, err := client.GetTaskPayload(c, created.Task.TaskID)
+	result, _, err := client.GetTaskPayloadV1(c, created.Task.TaskID)
 	if err != nil {
 		t.Fatalf("GetTaskPayload: %v", err)
 	}
@@ -169,7 +169,7 @@ func TestTaskCallbacksFallthrough(t *testing.T) {
 
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "fallthrough-job", map[string]any{})
+	created, err := client.ToolCallAsTaskV1(c, "fallthrough-job", map[string]any{})
 	if err != nil {
 		t.Fatalf("ToolCallAsTask: %v", err)
 	}
@@ -177,10 +177,10 @@ func TestTaskCallbacksFallthrough(t *testing.T) {
 	// Wait for completion so the store has the task.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	client.WaitForTask(ctx, c, created.Task.TaskID, 50*time.Millisecond)
+	client.WaitForTaskV1(ctx, c, created.Task.TaskID, 50*time.Millisecond)
 
 	// Poll via tasks/get — callback returns false, so store handles it.
-	got, err := client.GetTask(c, created.Task.TaskID)
+	got, err := client.GetTaskV1(c, created.Task.TaskID)
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
@@ -200,13 +200,13 @@ func TestTaskCallbacksNoCallbacks(t *testing.T) {
 	srv, unblock := newTaskServer(t) // uses default tools, no callbacks
 	c := connectClient(t, srv)
 
-	created, err := client.ToolCallAsTask(c, "slow", map[string]any{"data": "x"})
+	created, err := client.ToolCallAsTaskV1(c, "slow", map[string]any{"data": "x"})
 	if err != nil {
 		t.Fatalf("ToolCallAsTask: %v", err)
 	}
 
 	// Should still work via TaskStore.
-	got, err := client.GetTask(c, created.Task.TaskID)
+	got, err := client.GetTaskV1(c, created.Task.TaskID)
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
