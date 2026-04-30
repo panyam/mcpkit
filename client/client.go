@@ -229,6 +229,14 @@ func WithUIExtension() ClientOption {
 	})
 }
 
+// WithTasksExtension advertises SEP-2663 Tasks support
+// (io.modelcontextprotocol/tasks). v2 servers gate task creation and the
+// tasks/* methods on this declaration — clients that omit it see synchronous
+// tools/call responses and -32601 for tasks/get / tasks/cancel / tasks/update.
+func WithTasksExtension() ClientOption {
+	return WithExtension(core.TasksExtensionID, core.ClientExtensionCap{})
+}
+
 // WithTransport sets a core.Transport for the client, bypassing the default
 // HTTP transport creation. Use with server.NewInProcessTransport for testing
 // or embedded scenarios.

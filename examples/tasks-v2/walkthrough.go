@@ -79,13 +79,14 @@ func runDemo() {
 
 	// --- Step 1: Connect ---
 	demo.Step("Connect to the v2 tasks server").
-		Arrow("Host", "Server", "POST /mcp — initialize").
-		DashedArrow("Server", "Host", "serverInfo + tasks v2 capability").
-		Note("The mcpkit client opens a GET SSE stream so progress notifications reach us during polling. Initialize advertises the v2 tasks capability.").
+		Arrow("Host", "Server", "POST /mcp — initialize (declares io.modelcontextprotocol/tasks)").
+		DashedArrow("Server", "Host", "serverInfo + tasks extension advertised").
+		Note("The mcpkit client opens a GET SSE stream so progress notifications reach us during polling. Initialize declares support for the SEP-2663 tasks extension; without that declaration the v2 server falls through to synchronous tools/call and rejects tasks/* with -32601.").
 		Run(func() (result *demokit.StepResult) {
 			c = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "tasks-v2-host", Version: "1.0"},
 				client.WithGetSSEStream(),
+				client.WithTasksExtension(),
 				client.WithNotificationCallback(func(method string, params any) {
 					if method == "notifications/progress" {
 						fmt.Fprintf(os.Stderr, "    [notif] progress: %v\n", params)
@@ -129,7 +130,7 @@ func runDemo() {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
 			}
-			var ctr core.CreateTaskResultV2
+			var ctr core.CreateTaskResult
 			if err := json.Unmarshal(res.Raw, &ctr); err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
@@ -142,8 +143,8 @@ func runDemo() {
 			fmt.Printf("    resultType:    %s\n", ctr.ResultType)
 			fmt.Printf("    taskId:        %s\n", slowTaskID)
 			fmt.Printf("    status:        %s\n", ctr.Task.Status)
-			if ctr.Task.TTL != nil {
-				fmt.Printf("    ttl:           %ds (v2 uses seconds)\n", *ctr.Task.TTL)
+			if ctr.Task.TTLSeconds != nil {
+				fmt.Printf("    ttlSeconds:    %d (SEP-2663 wire field)\n", *ctr.Task.TTLSeconds)
 			}
 			return
 		})
@@ -153,7 +154,7 @@ func runDemo() {
 		Arrow("Host", "Server", "tasks/get {taskId}  (polled)").
 		DashedArrow("Server", "Host", "notifications/progress (1/3, 2/3, 3/3) via SSE").
 		DashedArrow("Server", "Host", "{status: completed, result: {...}, ttl: ...}  (no separate tasks/result needed)").
-		Note("v2's flat shape: GetTaskResultV2 has TaskInfo fields at the top level, and inlines the actual ToolResult under `result` once status is terminal. No second roundtrip to tasks/result.").
+		Note("v2's flat shape: DetailedTask has the v2 task fields (taskId, status, ttlSeconds, ...) at the top level, and inlines the actual ToolResult under `result` once status is terminal. No second roundtrip to tasks/result.").
 		Run(func() (result *demokit.StepResult) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
@@ -185,7 +186,7 @@ func runDemo() {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
 			}
-			var ctr core.CreateTaskResultV2
+			var ctr core.CreateTaskResult
 			json.Unmarshal(res.Raw, &ctr)
 			failTaskID = ctr.Task.TaskID
 
@@ -221,7 +222,7 @@ func runDemo() {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
 			}
-			var ctr core.CreateTaskResultV2
+			var ctr core.CreateTaskResult
 			json.Unmarshal(res.Raw, &ctr)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -256,7 +257,7 @@ func runDemo() {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
 			}
-			var ctr core.CreateTaskResultV2
+			var ctr core.CreateTaskResult
 			json.Unmarshal(res.Raw, &ctr)
 			cancelID := ctr.Task.TaskID
 			fmt.Printf("    Started taskId: %s\n", cancelID)
@@ -281,7 +282,7 @@ func runDemo() {
 
 	demo.Section("Where each piece lives in mcpkit",
 		"- v2 server library: `server/tasks_v2.go`",
-		"- v2 wire types (`CreateTaskResultV2`, `GetTaskResultV2`, `ResultTypeTask`): `core/task_v2.go`",
+		"- v2 wire types (`CreateTaskResult`, `DetailedTask`, `TaskInfoV2`, `ResultTypeTask`): `core/task_v2.go` (SEP-2663)",
 		"- Conformance tests: `conformance/tasks-v2/scenarios.test.ts` (21 scenarios)",
 		"- Implementation plan: `docs/TASKS_V2_PLAN.md`",
 	)
@@ -303,13 +304,13 @@ func runDemo() {
 // pollV2 polls tasks/get until the task reaches a terminal status or the
 // context expires. There's no v2 client helper in mcpkit yet (v1 has
 // client.WaitForTask), so this is inline.
-func pollV2(ctx context.Context, c *client.Client, taskID string, interval time.Duration) (*core.GetTaskResultV2, error) {
+func pollV2(ctx context.Context, c *client.Client, taskID string, interval time.Duration) (*core.DetailedTask, error) {
 	for {
 		res, err := c.Call("tasks/get", map[string]any{"taskId": taskID})
 		if err != nil {
 			return nil, err
 		}
-		var got core.GetTaskResultV2
+		var got core.DetailedTask
 		if err := json.Unmarshal(res.Raw, &got); err != nil {
 			return nil, err
 		}
