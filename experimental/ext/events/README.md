@@ -164,8 +164,8 @@ Two on-the-wire signature formats. Default is `MCPHeaders`. Only the headers and
 
 | Mode | Headers | HMAC base |
 |---|---|---|
-| `MCPHeaders` (default) | `X-MCP-Signature: sha256=<hex>` + `X-MCP-Timestamp: <unix>` | `HMAC(secret, ts + "." + body)` |
-| `StandardWebhooks` | `webhook-id`, `webhook-timestamp`, `webhook-signature: v1,<base64>` per [standardwebhooks.com](https://www.standardwebhooks.com/) | `HMAC(secret, msg_id + "." + ts + "." + body)` |
+| `StandardWebhooks` (default) | `webhook-id`, `webhook-timestamp`, `webhook-signature: v1,<base64>` per [standardwebhooks.com](https://www.standardwebhooks.com/) | `HMAC(secret, msg_id + "." + ts + "." + body)` |
+| `MCPHeaders` (opt-in) | `X-MCP-Signature: sha256=<hex>` + `X-MCP-Timestamp: <unix>` | `HMAC(secret, ts + "." + body)` |
 
 Verification helpers ship for both:
 

@@ -147,11 +147,10 @@ func TestE2EPushDelivery(t *testing.T) {
 	assert.Contains(t, received, "notifications/events/event")
 }
 
-// TestE2EWebhookDelivery verifies webhook fanout via the default secret mode
-// (Server). Demonstrates the post-PR-C contract: the server generates the
-// secret regardless of what the client supplied, returns it in the subscribe
-// response, and signs deliveries with the generated secret. The receiver
-// uses the returned secret to verify.
+// TestE2EWebhookDelivery verifies webhook fanout via the default modes:
+// Server-generated secret + StandardWebhooks header naming. The latter is
+// the post-r3167245184 default (upstream WG PR#1 line 434, author aligned
+// on Standard Webhooks).
 func TestE2EWebhookDelivery(t *testing.T) {
 	srv, _, yield, webhooks := buildTestStack()
 
@@ -161,12 +160,14 @@ func TestE2EWebhookDelivery(t *testing.T) {
 
 	callbackSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		sig := r.Header.Get("X-MCP-Signature")
-		ts := r.Header.Get("X-MCP-Timestamp")
+		msgID := r.Header.Get("webhook-id")
+		ts := r.Header.Get("webhook-timestamp")
+		sig := r.Header.Get("webhook-signature")
 		mu.Lock()
 		secret := assignedSecret
 		mu.Unlock()
-		assert.True(t, events.VerifyMCPSignature(body, secret, ts, sig), "signature should verify against the server-assigned secret")
+		assert.True(t, events.VerifyStandardWebhooksSignature(body, secret, msgID, ts, sig), "signature should verify against the server-assigned secret")
+		assert.Empty(t, r.Header.Get("X-MCP-Signature"), "default header mode must NOT emit X-MCP-* headers")
 
 		var event events.Event
 		json.Unmarshal(body, &event)
@@ -280,12 +281,13 @@ func TestE2EWebhookDelivery_IdentityMode(t *testing.T) {
 
 	callbackSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		sig := r.Header.Get("X-MCP-Signature")
-		ts := r.Header.Get("X-MCP-Timestamp")
+		msgID := r.Header.Get("webhook-id")
+		ts := r.Header.Get("webhook-timestamp")
+		sig := r.Header.Get("webhook-signature")
 		mu.Lock()
 		secret := assignedSecret
 		mu.Unlock()
-		assert.True(t, events.VerifyMCPSignature(body, secret, ts, sig), "delivery should sign with the derived secret")
+		assert.True(t, events.VerifyStandardWebhooksSignature(body, secret, msgID, ts, sig), "delivery should sign with the derived secret (Standard Webhooks default)")
 
 		var event events.Event
 		json.Unmarshal(body, &event)
@@ -336,10 +338,10 @@ func TestE2EWebhookDelivery_IdentityMode(t *testing.T) {
 	require.Len(t, deliveries, 1, "delivery must reach the receiver under the derived secret")
 }
 
-// TestE2EWebhookDelivery_StandardHeaders verifies that switching the header
-// mode to StandardWebhooks emits webhook-id / webhook-timestamp /
-// webhook-signature on the wire and that the signature verifies via the
-// Standard Webhooks verifier (not the X-MCP-* one).
+// TestE2EWebhookDelivery_StandardHeaders pins the StandardWebhooks header
+// path explicitly. Today this is also the default (covered by
+// TestE2EWebhookDelivery), but the explicit opt-in test stays so the wire
+// format remains pinned regardless of any future default flip.
 func TestE2EWebhookDelivery_StandardHeaders(t *testing.T) {
 	srv, _, yield, _ := buildTestStack(
 		events.WithWebhookHeaderMode(events.StandardWebhooks),
@@ -387,6 +389,63 @@ func TestE2EWebhookDelivery_StandardHeaders(t *testing.T) {
 	mu.Unlock()
 
 	require.NoError(t, yield(newDiscordEvent("g", "c", "alice", "standard-headers test", time.Now())))
+	time.Sleep(500 * time.Millisecond)
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, 1, deliveries)
+}
+
+// TestE2EWebhookDelivery_MCPHeadersOptIn pins the MCPHeaders header path
+// explicitly. Symmetric to TestE2EWebhookDelivery_StandardHeaders — the
+// non-default mode is opted into via WithWebhookHeaderMode and verified
+// for byte-format on the wire.
+func TestE2EWebhookDelivery_MCPHeadersOptIn(t *testing.T) {
+	srv, _, yield, _ := buildTestStack(
+		events.WithWebhookHeaderMode(events.MCPHeaders),
+	)
+
+	var mu sync.Mutex
+	var deliveries int
+	var assignedSecret string
+
+	callbackSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		sig := r.Header.Get("X-MCP-Signature")
+		ts := r.Header.Get("X-MCP-Timestamp")
+		assert.NotEmpty(t, sig, "must emit X-MCP-Signature")
+		assert.NotEmpty(t, ts, "must emit X-MCP-Timestamp")
+		assert.True(t, len(sig) > 7 && sig[:7] == "sha256=", "signature must be sha256=<hex>")
+		assert.Empty(t, r.Header.Get("webhook-signature"), "must NOT emit webhook-* headers in MCP mode")
+
+		mu.Lock()
+		secret := assignedSecret
+		mu.Unlock()
+		assert.True(t, events.VerifyMCPSignature(body, secret, ts, sig))
+
+		mu.Lock()
+		deliveries++
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer callbackSrv.Close()
+
+	c, _ := connectClient(t, srv)
+	raw, err := c.Call("events/subscribe", map[string]any{
+		"id":       "wh-mcp",
+		"name":     "discord.message",
+		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL},
+	})
+	require.NoError(t, err)
+	var resp struct {
+		Secret string `json:"secret"`
+	}
+	require.NoError(t, json.Unmarshal(raw.Raw, &resp))
+	mu.Lock()
+	assignedSecret = resp.Secret
+	mu.Unlock()
+
+	require.NoError(t, yield(newDiscordEvent("g", "c", "alice", "mcp-headers test", time.Now())))
 	time.Sleep(500 * time.Millisecond)
 
 	mu.Lock()

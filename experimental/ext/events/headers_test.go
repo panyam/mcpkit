@@ -15,18 +15,19 @@ import (
 
 // TestParseHeaderMode_Aliases verifies the flag parser accepts the friendly
 // alias forms ("mcp", "standard", "standardwebhooks", "standard-webhooks")
-// case-insensitively, and that empty string falls back to the default. The
-// CLI flag plumbing depends on this — keeping it loose lets users not memorize
-// the exact spelling.
+// case-insensitively, and that empty string falls back to the default
+// (StandardWebhooks per upstream WG PR#1 line 434, comment r3167245184).
+// The CLI flag plumbing depends on this — keeping it loose lets users not
+// memorize the exact spelling.
 func TestParseHeaderMode_Aliases(t *testing.T) {
 	cases := map[string]WebhookHeaderMode{
-		"":                  MCPHeaders,
-		"mcp":               MCPHeaders,
-		"MCP":               MCPHeaders,
+		"":                  StandardWebhooks,
 		"standard":          StandardWebhooks,
 		"Standard":          StandardWebhooks,
 		"standardwebhooks":  StandardWebhooks,
 		"standard-webhooks": StandardWebhooks,
+		"mcp":               MCPHeaders,
+		"MCP":               MCPHeaders,
 	}
 	for in, want := range cases {
 		got, err := ParseHeaderMode(in)

@@ -31,8 +31,9 @@ func WithWebhookTTL(ttl time.Duration) WebhookOption {
 }
 
 // WithWebhookHeaderMode selects the header / signature wire format used for
-// outbound deliveries. Defaults to MCPHeaders. See WebhookHeaderMode for the
-// available modes (MCPHeaders, StandardWebhooks).
+// outbound deliveries. Defaults to StandardWebhooks (per upstream WG PR#1
+// line 434, comment r3167245184). See WebhookHeaderMode for the available
+// modes (StandardWebhooks, MCPHeaders).
 func WithWebhookHeaderMode(mode WebhookHeaderMode) WebhookOption {
 	return func(r *WebhookRegistry) {
 		r.headerMode = mode
@@ -86,8 +87,9 @@ type WebhookRegistry struct {
 }
 
 // NewWebhookRegistry creates an empty registry with the documented defaults:
-// 5-second HTTP timeout, 60-second TTL, MCPHeaders signing, WebhookSecretServer
-// (server always generates secrets). Override via the With* options.
+// 5-second HTTP timeout, 60-second TTL, StandardWebhooks signing,
+// WebhookSecretServer (server always generates secrets). Override via the
+// With* options.
 //
 // Identity mode requires WithWebhookRoot. If the caller selects identity
 // mode without providing a root, NewWebhookRegistry panics — surfacing the
@@ -97,7 +99,7 @@ func NewWebhookRegistry(opts ...WebhookOption) *WebhookRegistry {
 		targets:    make(map[string]WebhookTarget),
 		client:     &http.Client{Timeout: 5 * time.Second},
 		ttl:        defaultWebhookTTL,
-		headerMode: MCPHeaders,
+		headerMode: StandardWebhooks,
 		secretMode: WebhookSecretServer,
 	}
 	for _, o := range opts {
