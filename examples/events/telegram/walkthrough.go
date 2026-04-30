@@ -80,6 +80,20 @@ func (b *notifBroker) dispatch(method string, params any) {
 	}
 }
 
+// liveInteractionTimeout is how long the live-interaction step waits for
+// real Telegram events. Drops to 0 in --non-interactive mode so CI runs
+// don't pay the wait when no human is there to send.
+const liveInteractionTimeout = 30 * time.Second
+
+func nonInteractive() bool {
+	for _, a := range os.Args[1:] {
+		if strings.TrimSpace(a) == "--non-interactive" {
+			return true
+		}
+	}
+	return false
+}
+
 // runDemo drives a lighter walkthrough than the discord version — the
 // protocol is the same, so this one focuses on the telegram-specific
 // payload shape (chat_id, user, text) and the typed Go SDK at clients/go.
@@ -267,6 +281,44 @@ func runDemo() {
 				return
 			}
 			return
+		})
+
+	// --- Step 5: Live Telegram interaction ---
+	demo.Step("Live Telegram interaction (real message from a Telegram chat)").
+		Arrow("Telegram", "Server", "MessageCreate event (when you send a message to the bot)").
+		DashedArrow("Server", "Host", "notifications/events/event { name: telegram.message, cursor: <new> }").
+		Note("Requires the server to be running with -token + you having a chat open with the bot. No typing parallel here — Telegram's Bot API doesn't expose user typing events to bots (only the bot can send typing chat actions, not the other way around). Discord does have user-typing events; see ../discord/WALKTHROUGH.md for the live-typing demo. In --non-interactive mode this step skips the wait so CI runs aren't slowed.").
+		Run(func() (result *demokit.StepResult) {
+			if nonInteractive() {
+				fmt.Printf("    Skipped in --non-interactive mode. Run without --non-interactive (and with the server in -token mode) to see live events.\n")
+				return
+			}
+
+			fmt.Printf("    Open a chat with your bot in Telegram and send a message.\n")
+			fmt.Printf("    Listening for %s...\n\n", liveInteractionTimeout)
+
+			gotMsg := broker.Subscribe("telegram.message", 8)
+			deadline := time.After(liveInteractionTimeout)
+
+			var msgSeen int
+			for {
+				select {
+				case p := <-gotMsg:
+					msgSeen++
+					if d, ok := p["data"].(map[string]any); ok {
+						fmt.Printf("    [message] %v in chat %v: %q\n", d["user"], d["chat_id"], d["text"])
+					}
+					if msgSeen >= 1 {
+						fmt.Printf("\n    Captured %d message(s).\n", msgSeen)
+						return
+					}
+				case <-deadline:
+					if msgSeen == 0 {
+						fmt.Printf("    No live events received within %s. Make sure the server is started with -token and you have a chat open with the bot.\n", liveInteractionTimeout)
+					}
+					return
+				}
+			}
 		})
 
 	demo.Section("More",

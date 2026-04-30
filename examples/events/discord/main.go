@@ -102,7 +102,27 @@ func serve() {
 			// because the events library doesn't know about MCP resources.
 		})
 
-		dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsMessageContent
+		// TypingStart fires once when a user starts typing in a channel the
+		// bot can see, then refires every ~8s if they keep typing. Powers the
+		// live cursorless flow in the demokit walkthrough.
+		dg.AddHandler(func(s *discordgo.Session, ts *discordgo.TypingStart) {
+			if ts.UserID == s.State.User.ID {
+				return // ignore the bot's own typing actions
+			}
+			username := "unknown"
+			if member, err := s.State.Member(ts.GuildID, ts.UserID); err == nil && member != nil {
+				if member.Nick != "" {
+					username = member.Nick
+				} else if member.User != nil {
+					username = member.User.Username
+				}
+			}
+			_ = yieldTyping(newDiscordTypingEvent(ts.GuildID, ts.ChannelID, username, time.Unix(int64(ts.Timestamp), 0)))
+		})
+
+		dg.Identify.Intents = discordgo.IntentsGuildMessages |
+			discordgo.IntentsMessageContent |
+			discordgo.IntentsGuildMessageTyping
 
 		if err := dg.Open(); err != nil {
 			log.Fatalf("failed to open Discord connection: %v", err)

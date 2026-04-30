@@ -8,6 +8,7 @@ A condensed walkthrough showing the same MCP Events extension wired against a Te
 - **Push: inject a telegram message, observe SSE notification** — Telegram's payload is flat — chat_id, user, text — vs discord's nested author + content. Same library, same wire envelope, different Data shape (auto-derived from TelegramEventData).
 - **Cursorless: telegram.typing emits cursor:null** — Telegram's typing chat-action is ephemeral — no replay value, no buffer. Same WithoutCursors() story as discord.typing; the wire payload differs only in shape.
 - **Webhook: subscribe via the typed Go SDK, receive a TelegramEventData** — The typed Receiver[TelegramEventData] decodes the wire envelope's Data field directly into TelegramEventData, so the consumer reads `ev.Data.Text` rather than re-parsing JSON. Same `Subscription` + `Receiver[Data]` pair as the discord webhook step — the only differences are the type parameter and the payload field names.
+- **Live Telegram interaction (real message from a Telegram chat)** — Requires the server to be running with -token + you having a chat open with the bot. No typing parallel here — Telegram's Bot API doesn't expose user typing events to bots (only the bot can send typing chat actions, not the other way around). Discord does have user-typing events; see ../discord/WALKTHROUGH.md for the live-typing demo. In --non-interactive mode this step skips the wait so CI runs aren't slowed.
 
 ## Flow
 
@@ -35,6 +36,10 @@ sequenceDiagram
     Server-->>Host: { id, secret: <server-assigned>, refreshBefore }
     Receiver->>Server: POST /inject (simulated message)
     Server-->>Receiver: POST <url> + HMAC signature headers (default: webhook-* per Standard Webhooks; opt-in: X-MCP-* via -webhook-header-mode mcp)
+
+    Note over Host,Receiver: Step 5: Live Telegram interaction (real message from a Telegram chat)
+    Telegram->>Server: MessageCreate event (when you send a message to the bot)
+    Server-->>Host: notifications/events/event { name: telegram.message, cursor: <new> }
 ```
 
 ## Steps
@@ -69,6 +74,10 @@ Telegram's typing chat-action is ephemeral — no replay value, no buffer. Same 
 ### Step 4: Webhook: subscribe via the typed Go SDK, receive a TelegramEventData
 
 The typed Receiver[TelegramEventData] decodes the wire envelope's Data field directly into TelegramEventData, so the consumer reads `ev.Data.Text` rather than re-parsing JSON. Same `Subscription` + `Receiver[Data]` pair as the discord webhook step — the only differences are the type parameter and the payload field names.
+
+### Step 5: Live Telegram interaction (real message from a Telegram chat)
+
+Requires the server to be running with -token + you having a chat open with the bot. No typing parallel here — Telegram's Bot API doesn't expose user typing events to bots (only the bot can send typing chat actions, not the other way around). Discord does have user-typing events; see ../discord/WALKTHROUGH.md for the live-typing demo. In --non-interactive mode this step skips the wait so CI runs aren't slowed.
 
 ### More
 
