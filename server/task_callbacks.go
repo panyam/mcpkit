@@ -10,8 +10,11 @@ import "github.com/panyam/mcpkit/core"
 // job system (e.g., AWS Step Functions, CI/CD pipelines) and the external
 // system is the source of truth for task state — not the in-memory store.
 //
-// Designed for extensibility: v2 (SEP-2557) will add OnCancel and
+// Designed for extensibility: v2 (SEP-2557/SEP-2663) will add OnCancel and
 // OnInputResponse fields without structural changes.
+//
+// Currently scoped to v1 — the GetTask callback returns the v1 wire shape
+// (GetTaskResultV1). The v2 task runtime does not yet consult these callbacks.
 //
 // Example:
 //
@@ -22,24 +25,24 @@ import "github.com/panyam/mcpkit/core"
 //	    },
 //	    Handler: deployHandler,
 //	    TaskCallbacks: &server.TaskCallbacks{
-//	        GetTask: func(ctx core.MethodContext, taskID string) (core.GetTaskResult, bool) {
+//	        GetTask: func(ctx core.MethodContext, taskID string) (core.GetTaskResultV1, bool) {
 //	            // Query external system for task state
 //	            state, err := stepFunctions.DescribeExecution(taskID)
 //	            if err != nil {
-//	                return core.GetTaskResult{}, false // fall through to store
+//	                return core.GetTaskResultV1{}, false // fall through to store
 //	            }
-//	            return core.GetTaskResult{TaskInfo: toTaskInfo(state)}, true
+//	            return core.GetTaskResultV1{TaskInfo: toTaskInfo(state)}, true
 //	        },
 //	    },
 //	})
 type TaskCallbacks struct {
-	// GetTask overrides the default TaskStore lookup for tasks/get.
-	// Return (result, true) to use the override response.
+	// GetTask overrides the default TaskStore lookup for the v1 tasks/get
+	// handler. Return (result, true) to use the override response.
 	// Return (_, false) to fall through to the TaskStore.
-	GetTask func(ctx core.MethodContext, taskID string) (core.GetTaskResult, bool)
+	GetTask func(ctx core.MethodContext, taskID string) (core.GetTaskResultV1, bool)
 
-	// GetResult overrides the default TaskStore lookup for tasks/result.
-	// Return (result, true) to use the override response.
+	// GetResult overrides the default TaskStore lookup for the v1 tasks/result
+	// handler. Return (result, true) to use the override response.
 	// Return (_, false) to fall through to the TaskStore.
 	GetResult func(ctx core.MethodContext, taskID string) (core.ToolResult, bool)
 }

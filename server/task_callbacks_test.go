@@ -35,9 +35,9 @@ func TestTaskCallbacksGetTask(t *testing.T) {
 			return core.TextResult("done"), nil
 		},
 		TaskCallbacks: &TaskCallbacks{
-			GetTask: func(ctx core.MethodContext, taskID string) (core.GetTaskResult, bool) {
+			GetTask: func(ctx core.MethodContext, taskID string) (core.GetTaskResultV1, bool) {
 				getTaskCalled.Add(1)
-				return core.GetTaskResult{
+				return core.GetTaskResultV1{
 					TaskInfo: core.TaskInfo{
 						TaskID:        taskID,
 						Status:        core.TaskWorking,
@@ -158,9 +158,9 @@ func TestTaskCallbacksFallthrough(t *testing.T) {
 			return core.TextResult("real-result"), nil
 		},
 		TaskCallbacks: &TaskCallbacks{
-			GetTask: func(ctx core.MethodContext, taskID string) (core.GetTaskResult, bool) {
+			GetTask: func(ctx core.MethodContext, taskID string) (core.GetTaskResultV1, bool) {
 				getTaskCalled.Add(1)
-				return core.GetTaskResult{}, false // fall through to store
+				return core.GetTaskResultV1{}, false // fall through to store
 			},
 		},
 	})
