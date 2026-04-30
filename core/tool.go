@@ -73,6 +73,24 @@ type ToolRequest struct {
 	// Nil if the client did not request progress reporting. Pass this to
 	// EmitProgress to send notifications/progress notifications.
 	ProgressToken any
+
+	// InputResponses is the SEP-2322 ephemeral MRTR retry payload — the
+	// client echoes the inputResponses map back into the SAME tools/call
+	// request that previously returned an IncompleteResult. Keys MUST match
+	// those the server returned in the matching InputRequests; values are
+	// opaque per-method response payloads (ElicitResult, CreateMessageResult,
+	// ListRootsResult, ...). Nil on the first call.
+	//
+	// Handlers usually access this through ToolContext.InputResponses() /
+	// ToolContext.InputResponse(key); the raw field is here so middleware
+	// and conformance tests can inspect the wire payload directly.
+	InputResponses InputResponses
+
+	// RequestState is the opaque session-continuation token the client
+	// echoed back from a previous IncompleteResult. The dispatch layer
+	// verifies it (HMAC when a key is configured) before invoking the
+	// handler. Empty on the first call.
+	RequestState string
 }
 
 // ToolResult is the response from a tool handler.
@@ -80,9 +98,9 @@ type ToolResult struct {
 	// ResultType is the SEP-2322 polymorphic-dispatch discriminator. For
 	// sync tools/call responses the wire value is "complete" (defaulted by
 	// MarshalJSON when this field is empty). Task-creating responses use
-	// ResultTypeTask on CreateTaskResult instead. Multi-round tool results
-	// will use ResultTypeIncomplete once that flow is wired.
-	ResultType ResultType `json:"resultType"`
+	// ResultTypeTask on CreateTaskResult; multi-round results use
+	// ResultTypeIncomplete on IncompleteResult instead.
+	ResultType ResultType `json:"result_type"`
 
 	// Content is the list of content items to return.
 	Content []Content `json:"content"`
@@ -98,6 +116,19 @@ type ToolResult struct {
 
 	// Meta holds optional result metadata (e.g., pagination cursor).
 	Meta *ToolResultMeta `json:"_meta,omitempty"`
+
+	// IsIncomplete is the in-process sentinel signalling that the handler
+	// is returning an MRTR IncompleteResult rather than a final tool result.
+	// Set by ctx.RequestInput; the dispatch layer detects it, mints / refreshes
+	// the requestState, and reshapes the wire payload as IncompleteResult.
+	// Never serialized — this field is in-process plumbing only.
+	IsIncomplete bool `json:"-"`
+
+	// InputRequests is the SEP-2322 inputRequests map staged by ctx.RequestInput
+	// when IsIncomplete is true. Dispatch reads it to build the IncompleteResult
+	// envelope. Nil for normal complete results. Never serialized through
+	// ToolResult — dispatch reshapes the response into IncompleteResult.
+	InputRequests InputRequests `json:"-"`
 }
 
 // MarshalJSON ensures every ToolResult on the wire carries a ResultType.
@@ -118,7 +149,7 @@ func (r ToolResult) MarshalJSON() ([]byte, error) {
 // objects are wrapped into a 1-element slice. See #81.
 func (r *ToolResult) UnmarshalJSON(data []byte) error {
 	var aux struct {
-		ResultType        ResultType      `json:"resultType,omitempty"`
+		ResultType        ResultType      `json:"result_type,omitempty"`
 		Content           json.RawMessage `json:"content"`
 		IsError           bool            `json:"isError,omitempty"`
 		StructuredContent any             `json:"structuredContent,omitempty"`

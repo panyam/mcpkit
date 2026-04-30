@@ -99,6 +99,12 @@ type Dispatcher struct {
 	// tasksCap is the tasks capability to advertise during initialize.
 	// nil means tasks are not enabled. Set via Server.SetTasksCap().
 	tasksCap *core.TasksCap
+
+	// mrtr is the SEP-2322 ephemeral MRTR runtime — signing key + TTL for
+	// requestState tokens. Always non-nil (built with zero-value defaults
+	// when the server didn't pass WithMRTRSigning); nil signingKey means
+	// plaintext mode.
+	mrtr *mrtrRuntime
 }
 
 // SetNotifyFunc sets the notification delivery function for this dispatcher.
@@ -194,6 +200,7 @@ func NewDispatcher(info core.ServerInfo) *Dispatcher {
 		Reg:        NewRegistry(),
 		extensions: make(map[string]core.Extension),
 		serverInfo: info,
+		mrtr:       &mrtrRuntime{},
 	}
 }
 
@@ -216,6 +223,7 @@ func (d *Dispatcher) newSession() *Dispatcher {
 		skipSchemaValidation: d.skipSchemaValidation,
 		tasksCap:             d.tasksCap,
 		customHandlers:       d.customHandlers,
+		mrtr:                 d.mrtr,
 	}
 }
 
@@ -420,13 +428,7 @@ func parsePaginationParams(params json.RawMessage) (cursor string, pageSize int)
 }
 
 func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
-	var envelope struct {
-		Name      string          `json:"name"`
-		Arguments json.RawMessage `json:"arguments"`
-		Meta      *struct {
-			ProgressToken any `json:"progressToken"`
-		} `json:"_meta"`
-	}
+	var envelope toolsCallEnvelope
 	if err := json.Unmarshal(params, &envelope); err != nil {
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 	}
@@ -449,6 +451,22 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, pa
 		}
 	}
 
+	// SEP-2322: validate any echoed requestState and pull out the
+	// accumulated inputResponses from previous rounds. A tampered or
+	// expired token gets rejected here so the handler never sees a
+	// forged round.
+	prevState, err := d.mrtr.verifyRequestState(envelope.RequestState, envelope.Name)
+	if err != nil {
+		return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
+			"invalid requestState: "+err.Error())
+	}
+
+	// Multi-round merge: accumulated answers from previous rounds + the
+	// current round's inputResponses. Current round wins on key collision
+	// so a client correcting an earlier answer can re-send under the same
+	// key. Handler always sees the unified map regardless of round count.
+	mergedResponses := mergeInputResponses(prevState.Answered, envelope.InputResponses)
+
 	// Apply per-tool timeout if set (overrides server-wide WithToolTimeout)
 	if entry.def.Timeout > 0 {
 		tctx, cancel := context.WithTimeout(ctx, entry.def.Timeout)
@@ -457,9 +475,11 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, pa
 	}
 
 	req := core.ToolRequest{
-		Name:      envelope.Name,
-		Arguments: envelope.Arguments,
-		RequestID: id,
+		Name:           envelope.Name,
+		Arguments:      envelope.Arguments,
+		RequestID:      id,
+		InputResponses: mergedResponses,
+		RequestState:   envelope.RequestState,
 	}
 	var progressToken any
 	if envelope.Meta != nil {
@@ -467,9 +487,21 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, pa
 		progressToken = envelope.Meta.ProgressToken
 	}
 
-	result, err := entry.handler(core.NewToolContextWithProgress(ctx, progressToken), req)
-	if err != nil {
-		result = core.ErrorResult(fmt.Sprintf("tool %q: %v", envelope.Name, err))
+	tc := core.NewToolContextWithMRTR(ctx, progressToken, mergedResponses, envelope.RequestState)
+	result, hErr := entry.handler(tc, req)
+	if hErr != nil {
+		result = core.ErrorResult(fmt.Sprintf("tool %q: %v", envelope.Name, hErr))
+	}
+
+	// SEP-2322: handler signalled "I need more input" — reshape the
+	// response on the wire as IncompleteResult and mint a fresh
+	// requestState carrying the merged accumulated answers so the next
+	// round sees them too.
+	if result.IsIncomplete {
+		return core.NewResponse(id, core.IncompleteResult{
+			InputRequests: result.InputRequests,
+			RequestState:  d.mrtr.mintRequestState(envelope.Name, mergedResponses),
+		})
 	}
 
 	return core.NewResponse(id, result)
