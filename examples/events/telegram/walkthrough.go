@@ -217,7 +217,7 @@ func runDemo() {
 		Arrow("Host", "Server", "events/subscribe { mode: webhook, url, name: telegram.message }").
 		DashedArrow("Server", "Host", "{ id, secret: <server-assigned>, refreshBefore }").
 		Arrow("Receiver", "Server", "POST /inject (simulated message)").
-		DashedArrow("Server", "Receiver", "POST <url> + X-MCP-Signature, X-MCP-Timestamp").
+		DashedArrow("Server", "Receiver", "POST <url> + HMAC signature headers (default: webhook-* per Standard Webhooks; opt-in: X-MCP-* via -webhook-header-mode mcp)").
 		Note("The typed Receiver[TelegramEventData] decodes the wire envelope's Data field directly into TelegramEventData, so the consumer reads `ev.Data.Text` rather than re-parsing JSON. Same `Subscription` + `Receiver[Data]` pair as the discord webhook step — the only differences are the type parameter and the payload field names.").
 		Run(func() (result *demokit.StepResult) {
 			recv := eventsclient.NewReceiver[TelegramEventData]("")

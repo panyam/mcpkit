@@ -34,7 +34,7 @@ sequenceDiagram
     Host->>Server: events/subscribe { mode: webhook, url, name: telegram.message }
     Server-->>Host: { id, secret: <server-assigned>, refreshBefore }
     Receiver->>Server: POST /inject (simulated message)
-    Server-->>Receiver: POST <url> + X-MCP-Signature, X-MCP-Timestamp
+    Server-->>Receiver: POST <url> + HMAC signature headers (default: webhook-* per Standard Webhooks; opt-in: X-MCP-* via -webhook-header-mode mcp)
 ```
 
 ## Steps
