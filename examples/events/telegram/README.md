@@ -11,103 +11,21 @@ make serve    # terminal 1 — real MCP server
 make demo     # terminal 2 — scripted demokit walkthrough (TUI)
 ```
 
+A condensed walkthrough focused on the telegram-specific payload shape and the typed Go SDK at [`experimental/ext/events/clients/go/`](../../../experimental/ext/events/clients/go/). Generated artifact in [`WALKTHROUGH.md`](WALKTHROUGH.md) — regenerate via `make readme`.
+
+For the full protocol exposition (events/list, poll, secret modes, header modes, the spec's design rationale) see [`../discord/WALKTHROUGH.md`](../discord/WALKTHROUGH.md). This README intentionally skips repeating what's already in the walkthroughs.
+
 > **Going to production?** See [`experimental/ext/events/DEPLOYMENT.md`](../../../experimental/ext/events/DEPLOYMENT.md) for private-cloud / WAF guidance.
 
-A condensed walkthrough focused on the telegram-specific payload shape and the typed Go SDK at [`experimental/ext/events/clients/go/`](../../../experimental/ext/events/clients/go/). For the full protocol exposition (events/list, poll, secret modes, header modes) see [`../discord/WALKTHROUGH.md`](../discord/WALKTHROUGH.md). See [`WALKTHROUGH.md`](WALKTHROUGH.md) for this demo's specific sequence.
+## Setup — connecting to Telegram
 
-## Quick Start
+The walkthrough runs in test mode by default (no Telegram needed). To wire up a real bot:
 
 ```bash
-# Terminal 1: start server in test mode (no Telegram needed)
-make serve
-
-# Terminal 2: start SSE listener
-make listen
-
-# Terminal 3: inject a message
-make inject TEXT="hello world"
-# → event appears instantly in Terminal 2
-```
-
-With a real Telegram bot:
-```bash
-TELEGRAM_BOT_TOKEN=your-token make run
+TELEGRAM_BOT_TOKEN=your-token make serve
 ```
 
 Get a bot token from [@BotFather](https://t.me/BotFather) (`/newbot`).
-
-## Three Delivery Modes
-
-All three modes work simultaneously from the same server.
-
-### Push — `make listen`
-
-Client opens a long-lived SSE connection. Server broadcasts events in real time.
-
-```mermaid
-sequenceDiagram
-    participant C as Client (listen)
-    participant S as MCP Server
-    participant T as Telegram / inject
-
-    C->>S: POST initialize
-    S-->>C: 200 + Mcp-Session-Id
-    C->>S: POST notifications/initialized
-    C->>S: GET /mcp (SSE stream open)
-    Note over C,S: Connection held open
-
-    T->>S: Message arrives
-    S->>S: yield() → store + library fanout hook
-    S-->>C: SSE: notifications/events/event
-    T->>S: Another message
-    S-->>C: SSE: notifications/events/event
-```
-
-### Poll — `make poll`
-
-Client calls `events/poll` on an interval. Cursor-based — never misses events.
-
-```mermaid
-sequenceDiagram
-    participant C as Client (poll)
-    participant S as MCP Server
-
-    C->>S: POST initialize + initialized
-    C->>S: events/poll (cursor="0")
-    S-->>C: events=[], cursor="5"
-    Note over C: sleep(interval)
-
-    C->>S: events/poll (cursor="5")
-    S-->>C: events=[msg6, msg7], cursor="7"
-    Note over C: process events
-
-    C->>S: events/poll (cursor="7")
-    S-->>C: events=[], cursor="7"
-    Note over C: nothing new, sleep
-```
-
-### Webhook — `make webhook`
-
-Client registers a callback URL. Server POSTs HMAC-signed events to it.
-
-```mermaid
-sequenceDiagram
-    participant C as Client (webhook receiver)
-    participant S as MCP Server
-    participant T as Telegram / inject
-
-    C->>C: Start HTTP server on :9999
-    C->>S: POST initialize + initialized
-    C->>S: events/subscribe (url=localhost:9999, secret=...)
-    S-->>C: 200 (id, refreshBefore)
-
-    T->>S: Message arrives
-    S->>S: yield() → store + library fanout hook
-    S->>C: POST http://localhost:9999<br/>X-MCP-Signature: sha256=...<br/>X-MCP-Timestamp: 1714000000
-    C->>C: Verify HMAC, print event
-
-    Note over C,S: WebhookSubscription helper auto-refreshes at<br/>0.5×TTL (60s default) and re-subscribes if<br/>the boundary race produces a "not found"
-```
 
 ## Architecture
 
@@ -133,34 +51,34 @@ Telegram Bot (long-poll)  ──or──  POST /inject
     source.ByCursor("42")     → (TelegramEventData, true)
 ```
 
-## Make Targets
+## Server flag examples (outside the walkthrough)
+
+The walkthrough runs against the default server config. To exercise the other modes, pass flags to `make serve`:
+
+```bash
+# Identity mode — secret = HMAC(root, tuple); subscribe is idempotent
+go run . --serve -webhook-secret-mode identity -webhook-root deadbeefcafef00d
+
+# Opt out of the Standard Webhooks default back to X-MCP-* headers
+go run . --serve -webhook-header-mode mcp
+```
+
+Full mode matrix in [`experimental/ext/events/README.md`](../../../experimental/ext/events/README.md).
+
+## Make targets
 
 | Target | Description |
 |--------|-------------|
-| `make run` | Start server (with bot if `TELEGRAM_BOT_TOKEN` set) |
+| `make serve` | Start the server (with bot if `TELEGRAM_BOT_TOKEN` set; test mode otherwise) |
+| `make demo` | Run the demokit walkthrough — `--tui` mode |
+| `make readme` | Regenerate `WALKTHROUGH.md` from the demo step definitions |
+| `make build` | Build the binary |
 | `make test` | Go tests |
 | `make inject TEXT="..."` | Inject a message event (optional: `SENDER=`, `CHAT_ID=`) |
 | `make inject-typing` | Inject a cursorless typing event (optional: `USER_NAME=`, `CHAT_ID=`) |
-| `make list` | Show server capabilities: tools, resources, events, sample poll |
-| `make listen` | SSE push listener — print events in real time |
-| `make webhook` | Webhook receiver — subscribe + auto-refresh, receive HMAC-signed POSTs |
-| `make poll` | Polling loop (default 5s interval, override: `INTERVAL=10`) |
+| `make list` | Show server capabilities via Python client |
+| `make listen` | Python SSE push listener |
+| `make webhook` | Python webhook receiver — subscribe + auto-refresh, receive HMAC-signed POSTs |
+| `make poll` | Python polling loop (default 5s interval, override: `INTERVAL=10`) |
 
-All client commands use the shared [`events_client.py`](../../../experimental/ext/events/clients/python/events_client.py).
-
-## Webhook secret + header modes
-
-The server takes the same `-webhook-secret-mode` / `-webhook-header-mode` /
-`-webhook-root` flags as discord-events. See
-[`experimental/ext/events/README.md`](../../../experimental/ext/events/) for the full matrix.
-
-```bash
-# Default
-go run . -addr :8080
-
-# Identity mode (idempotent subscribe, derived secrets)
-go run . -addr :8080 -webhook-secret-mode identity -webhook-root deadbeefcafef00d
-
-# Standard Webhooks header naming
-go run . -addr :8080 -webhook-header-mode standard
-```
+All Python clients share the [`events_client.py`](../../../experimental/ext/events/clients/python/events_client.py) helper.

@@ -306,7 +306,7 @@ func runDemo() {
 		Arrow("Host", "Server", "events/subscribe { mode: webhook, url, secret: ignored }").
 		DashedArrow("Server", "Host", "{ id, secret: <server-assigned>, refreshBefore }").
 		Arrow("Receiver", "Server", "POST /inject (simulated message)").
-		DashedArrow("Server", "Receiver", "POST <url> + X-MCP-Signature, X-MCP-Timestamp").
+		DashedArrow("Server", "Receiver", "POST <url> + HMAC signature headers (default: webhook-* per Standard Webhooks; opt-in: X-MCP-* via -webhook-header-mode mcp)").
 		DashedArrow("Host", "Host", "background loop: re-subscribe at 0.5 × TTL").
 		Note("clients/go provides Subscription (subscribe + auto-refresh) plus Receiver[Data] (typed inbound channel). Subscribe blocks until the initial subscribe lands, so the caller has the server-assigned secret synchronously. Receiver[DiscordEventData] verifies signatures and decodes the wire envelope into the typed Data shape, so the consumer reads `ev.Data.Content` rather than re-parsing JSON.").
 		Run(func() (result *demokit.StepResult) {
