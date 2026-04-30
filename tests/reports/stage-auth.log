@@ -1,5 +1,5 @@
 === Stage 3/12: auth (make test-auth) ===
-Started: Tue Apr 28 16:15:39 PDT 2026
+Started: Thu Apr 30 03:03:53 PDT 2026
 cd ext/auth && go test ./... -count=1 -timeout 30s
-ok  	github.com/panyam/mcpkit/ext/auth	0.347s
-Finished: Tue Apr 28 16:15:40 PDT 2026
+ok  	github.com/panyam/mcpkit/ext/auth	0.784s
+Finished: Thu Apr 30 03:03:54 PDT 2026
