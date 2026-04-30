@@ -14,7 +14,6 @@ package events
 
 import (
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/panyam/mcpkit/core"
@@ -254,12 +253,13 @@ func registerPoll(srv *server.Server, sourceMap map[string]EventSource) {
 func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, webhooks *WebhookRegistry) {
 	srv.HandleMethod("events/subscribe", func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		var req struct {
-			ID       string  `json:"id"`
-			Name     string  `json:"name"`
+			ID       string `json:"id"`
+			Name     string `json:"name"`
 			Delivery struct {
-				Mode   string `json:"mode"`
-				URL    string `json:"url"`
-				Secret string `json:"secret,omitempty"`
+				Mode   string            `json:"mode"`
+				URL    string            `json:"url"`
+				Secret string            `json:"secret,omitempty"`
+				Params map[string]string `json:"params,omitempty"` // identity-mode tuple input
 			} `json:"delivery"`
 			Cursor *string `json:"cursor"`
 		}
@@ -279,12 +279,13 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 			return core.NewErrorResponse(id, -32005, err.Error())
 		}
 
-		secret := req.Delivery.Secret
-		if secret == "" {
-			secret = fmt.Sprintf("whsec_%d", time.Now().UnixNano())
-		}
+		// Per-mode behavior is documented on WebhookSecretMode.
+		resolvedID, secret := webhooks.resolveSecret(
+			req.ID, req.Delivery.Secret,
+			req.Name, req.Delivery.URL, req.Delivery.Params,
+		)
 
-		expiresAt := webhooks.Register(req.ID, req.Delivery.URL, secret)
+		expiresAt := webhooks.Register(resolvedID, req.Delivery.URL, secret)
 
 		cursorStr := "0"
 		if req.Cursor != nil {
@@ -292,7 +293,7 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 		}
 
 		return core.NewResponse(id, map[string]any{
-			"id":            req.ID,
+			"id":            resolvedID,
 			"secret":        secret,
 			"cursor":        cursorStr,
 			"refreshBefore": expiresAt.Format(time.RFC3339),
@@ -305,7 +306,8 @@ func registerUnsubscribe(srv *server.Server, webhooks *WebhookRegistry) {
 		var req struct {
 			ID       string `json:"id"`
 			Delivery *struct {
-				URL string `json:"url"`
+				URL    string `json:"url"`
+				Secret string `json:"secret,omitempty"` // proof-of-possession path (any mode)
 			} `json:"delivery,omitempty"`
 		}
 		if err := json.Unmarshal(params, &req); err != nil {
@@ -314,7 +316,18 @@ func registerUnsubscribe(srv *server.Server, webhooks *WebhookRegistry) {
 		if req.Delivery == nil || req.Delivery.URL == "" {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "delivery.url required")
 		}
-		webhooks.Unregister(req.Delivery.URL, req.ID)
+		if req.ID == "" && req.Delivery.Secret == "" {
+			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "either id or delivery.secret is required")
+		}
+		// Either form is accepted in any mode. Identity mode docs steer
+		// clients toward the secret form (proof-of-possession); other modes
+		// typically use the id form. Internally the registry resolves both
+		// to the same subscription.
+		if req.ID != "" {
+			webhooks.Unregister(req.Delivery.URL, req.ID)
+		} else {
+			webhooks.UnregisterBySecret(req.Delivery.URL, req.Delivery.Secret)
+		}
 		return core.NewResponse(id, map[string]any{})
 	})
 }

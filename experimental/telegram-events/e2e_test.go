@@ -20,8 +20,10 @@ import (
 
 // buildTestStack returns a fully wired test server plus the source/yield
 // pair so tests can publish events directly without a Telegram session.
-func buildTestStack() (*server.Server, *events.YieldingSource[TelegramEventData], func(TelegramEventData) error, *events.WebhookRegistry) {
-	webhooks := events.NewWebhookRegistry()
+// Optional WebhookOptions configure the registry; defaults match the
+// production demo (Server + MCPHeaders).
+func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.YieldingSource[TelegramEventData], func(TelegramEventData) error, *events.WebhookRegistry) {
+	webhooks := events.NewWebhookRegistry(whOpts...)
 	source, yield := newTelegramSource()
 
 	srv := server.NewServer(
@@ -125,19 +127,25 @@ func TestE2EPushDelivery(t *testing.T) {
 	assert.Contains(t, received, "notifications/events/event")
 }
 
-// TestE2EWebhookDelivery verifies webhook fanout — same library hook also
-// routes events to registered webhook subscribers with HMAC signing.
+// TestE2EWebhookDelivery verifies webhook fanout via the default secret
+// mode (Server). Per the post-PR-C contract: server generates the secret
+// regardless of what the client supplies, returns it on subscribe, and
+// signs deliveries with the generated secret.
 func TestE2EWebhookDelivery(t *testing.T) {
 	srv, _, yield, webhooks := buildTestStack()
 
 	var mu sync.Mutex
 	var deliveries []events.Event
+	var assignedSecret string
 
 	callbackSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		sig := r.Header.Get("X-MCP-Signature")
 		ts := r.Header.Get("X-MCP-Timestamp")
-		assert.True(t, events.VerifySignature(body, "wh-secret", ts, sig))
+		mu.Lock()
+		secret := assignedSecret
+		mu.Unlock()
+		assert.True(t, events.VerifyMCPSignature(body, secret, ts, sig), "signature should verify against the server-assigned secret")
 
 		var event events.Event
 		json.Unmarshal(body, &event)
@@ -158,15 +166,21 @@ func TestE2EWebhookDelivery(t *testing.T) {
 	subResult, err := c.Call("events/subscribe", map[string]any{
 		"id":       "wh-e2e",
 		"name":     "telegram.message",
-		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": "wh-secret"},
+		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": "ignored-in-server-mode"},
 	})
 	require.NoError(t, err)
 
 	var subResp struct {
-		ID string `json:"id"`
+		ID     string `json:"id"`
+		Secret string `json:"secret"`
 	}
 	require.NoError(t, json.Unmarshal(subResult.Raw, &subResp))
 	assert.Equal(t, "wh-e2e", subResp.ID)
+	require.NotEmpty(t, subResp.Secret)
+	require.NotEqual(t, "ignored-in-server-mode", subResp.Secret, "server mode must NOT echo the client-supplied secret")
+	mu.Lock()
+	assignedSecret = subResp.Secret
+	mu.Unlock()
 	require.Len(t, webhooks.Targets(), 1)
 
 	require.NoError(t, yieldText(yield, 200, "bob", "webhook test"))
@@ -176,6 +190,138 @@ func TestE2EWebhookDelivery(t *testing.T) {
 	defer mu.Unlock()
 	require.Len(t, deliveries, 1)
 	assert.Equal(t, "telegram.message", deliveries[0].Name)
+}
+
+// TestE2EWebhookDelivery_IdentityMode verifies the identity-mode contract
+// end-to-end on telegram-events: subscribe is idempotent on the
+// (name, url, params) tuple, server returns derived id and secret, and
+// webhook delivery signs with the derived secret.
+func TestE2EWebhookDelivery_IdentityMode(t *testing.T) {
+	srv, _, yield, webhooks := buildTestStack(
+		events.WithWebhookSecretMode(events.WebhookSecretIdentity),
+		events.WithWebhookRoot([]byte("test-root-master")),
+	)
+
+	var mu sync.Mutex
+	var deliveries int
+	var assignedSecret string
+
+	callbackSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		sig := r.Header.Get("X-MCP-Signature")
+		ts := r.Header.Get("X-MCP-Timestamp")
+		mu.Lock()
+		secret := assignedSecret
+		mu.Unlock()
+		assert.True(t, events.VerifyMCPSignature(body, secret, ts, sig))
+		mu.Lock()
+		deliveries++
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer callbackSrv.Close()
+
+	handler := srv.Handler(server.WithStreamableHTTP(true))
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "identity-test", Version: "1.0"})
+	require.NoError(t, c.Connect())
+
+	subscribe := func(clientID string) (string, string) {
+		t.Helper()
+		raw, err := c.Call("events/subscribe", map[string]any{
+			"id":   clientID,
+			"name": "telegram.message",
+			"delivery": map[string]any{
+				"mode":   "webhook",
+				"url":    callbackSrv.URL,
+				"params": map[string]string{"chat": "100"},
+			},
+		})
+		require.NoError(t, err)
+		var resp struct {
+			ID     string `json:"id"`
+			Secret string `json:"secret"`
+		}
+		require.NoError(t, json.Unmarshal(raw.Raw, &resp))
+		return resp.ID, resp.Secret
+	}
+	id1, sec1 := subscribe("client-A")
+	id2, sec2 := subscribe("client-B")
+	assert.Equal(t, id1, id2, "identity mode derives same id regardless of client-supplied id")
+	assert.Equal(t, sec1, sec2, "identity mode derives same secret for same tuple")
+	assert.Len(t, webhooks.Targets(), 1, "two subscribes against same tuple collapse to one entry")
+
+	mu.Lock()
+	assignedSecret = sec1
+	mu.Unlock()
+	require.NoError(t, yieldText(yield, 100, "alice", "identity-mode test"))
+	time.Sleep(500 * time.Millisecond)
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, 1, deliveries)
+}
+
+// TestE2EWebhookDelivery_StandardHeaders verifies StandardWebhooks header
+// emission on telegram-events.
+func TestE2EWebhookDelivery_StandardHeaders(t *testing.T) {
+	srv, _, yield, _ := buildTestStack(
+		events.WithWebhookHeaderMode(events.StandardWebhooks),
+	)
+
+	var mu sync.Mutex
+	var deliveries int
+	var assignedSecret string
+
+	callbackSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		msgID := r.Header.Get("webhook-id")
+		ts := r.Header.Get("webhook-timestamp")
+		sig := r.Header.Get("webhook-signature")
+		assert.NotEmpty(t, msgID)
+		assert.NotEmpty(t, ts)
+		assert.True(t, len(sig) > 3 && sig[:3] == "v1,")
+		assert.Empty(t, r.Header.Get("X-MCP-Signature"))
+
+		mu.Lock()
+		secret := assignedSecret
+		mu.Unlock()
+		assert.True(t, events.VerifyStandardWebhooksSignature(body, secret, msgID, ts, sig))
+
+		mu.Lock()
+		deliveries++
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer callbackSrv.Close()
+
+	handler := srv.Handler(server.WithStreamableHTTP(true))
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "stdhdr-test", Version: "1.0"})
+	require.NoError(t, c.Connect())
+
+	raw, err := c.Call("events/subscribe", map[string]any{
+		"id":       "wh-std",
+		"name":     "telegram.message",
+		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL},
+	})
+	require.NoError(t, err)
+	var resp struct {
+		Secret string `json:"secret"`
+	}
+	require.NoError(t, json.Unmarshal(raw.Raw, &resp))
+	mu.Lock()
+	assignedSecret = resp.Secret
+	mu.Unlock()
+
+	require.NoError(t, yieldText(yield, 100, "alice", "standard-headers test"))
+	time.Sleep(500 * time.Millisecond)
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, 1, deliveries)
 }
 
 // TestE2EEventsList verifies events/list returns the telegram.message

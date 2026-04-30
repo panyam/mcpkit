@@ -114,16 +114,61 @@ type PollResult struct {
 
 ## Webhook delivery
 
-- HMAC-SHA256 signing: `HMAC(secret, timestamp + "." + body)`
-- Headers: `X-MCP-Signature`, `X-MCP-Timestamp`
 - TTL-based soft state with automatic expiry (default 60s, override via `WithWebhookTTL`)
-- Keyed by `(url, id)` per spec (unauthenticated servers)
 - Retry with exponential backoff on 5xx (no retry on 4xx)
 - Basic SSRF validation on callback URLs
+- Pluggable signature format and secret model (see below)
 
 ```go
-webhooks := events.NewWebhookRegistry(events.WithWebhookTTL(5 * time.Second))
+webhooks := events.NewWebhookRegistry(
+    events.WithWebhookTTL(5 * time.Second),
+    events.WithWebhookSecretMode(events.WebhookSecretIdentity),
+    events.WithWebhookRoot([]byte("master")),
+    events.WithWebhookHeaderMode(events.StandardWebhooks),
+)
 ```
+
+### Secret mode (`WebhookSecretMode`)
+
+Three options for who decides on the per-subscription HMAC secret. Default is `WebhookSecretServer`.
+
+| Mode | Behavior | When to use |
+|---|---|---|
+| `WebhookSecretServer` (default) | Server always generates a fresh high-entropy secret; client-supplied `delivery.secret` is ignored. Returned in subscribe response. | Most cases. Avoids trusting client entropy. |
+| `WebhookSecretClient` | Client supplies `delivery.secret`; if empty, server generates one. | Pre-provisioned secrets (IaC, gateways with the secret in config). |
+| `WebhookSecretIdentity` | Secret is `HMAC(root, canonical(name, url, params))`. Subscribe is **idempotent** on the tuple — same inputs return the same `id` and `secret`, no duplicate registry entry. Requires `WithWebhookRoot`. | When subscriptions are agent-generated and you want deterministic, deduplicating identity. |
+
+### Header mode (`WebhookHeaderMode`)
+
+Two on-the-wire signature formats. Default is `MCPHeaders`. Only the headers and signature scheme are configurable; the body shape (the `events.Event` envelope) is unchanged.
+
+| Mode | Headers | HMAC base |
+|---|---|---|
+| `MCPHeaders` (default) | `X-MCP-Signature: sha256=<hex>` + `X-MCP-Timestamp: <unix>` | `HMAC(secret, ts + "." + body)` |
+| `StandardWebhooks` | `webhook-id`, `webhook-timestamp`, `webhook-signature: v1,<base64>` per [standardwebhooks.com](https://www.standardwebhooks.com/) | `HMAC(secret, msg_id + "." + ts + "." + body)` |
+
+Verification helpers ship for both:
+
+```go
+events.VerifyMCPSignature(body, secret, ts, sig)
+events.VerifyStandardWebhooksSignature(body, secret, msgID, ts, sig)
+```
+
+The Python `events_client.py` receiver auto-detects which header set is on the inbound request and verifies accordingly — no client-side mode flag needed.
+
+### Unsubscribe
+
+Two equivalent forms — pick whichever is convenient. In Identity mode the secret form is preferred because the `id` is server-derived.
+
+```jsonc
+// By id (any mode):
+{"delivery": {"url": "https://...", "id": "sub-1"}}
+
+// By proof-of-possession of the secret (any mode):
+{"delivery": {"url": "https://...", "secret": "whsec_..."}}
+```
+
+The registry method is `WebhookRegistry.Unregister(url, id)` or `WebhookRegistry.UnregisterBySecret(url, secret)`. The unsubscribe handler accepts either form.
 
 ## Python client SDK — auto-refresh
 

@@ -10,6 +10,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"log"
@@ -32,13 +33,40 @@ func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	token := flag.String("token", "", "Discord bot token (omit for test mode)")
 	whTTL := flag.Duration("webhook-ttl", 0, "override webhook subscription TTL (default 60s; useful for driving the SDK refresh path in tests)")
+	whSecretMode := flag.String("webhook-secret-mode", "server", "webhook secret mode: server | client | identity")
+	whHeaderMode := flag.String("webhook-header-mode", "mcp", "webhook header style: mcp | standard")
+	whRootHex := flag.String("webhook-root", "", "hex-encoded master secret for identity mode (required when -webhook-secret-mode=identity)")
 	flag.Parse()
 
-	var whOpts []events.WebhookOption
+	secretMode, err := events.ParseSecretMode(*whSecretMode)
+	if err != nil {
+		log.Fatalf("invalid -webhook-secret-mode: %v", err)
+	}
+	headerMode, err := events.ParseHeaderMode(*whHeaderMode)
+	if err != nil {
+		log.Fatalf("invalid -webhook-header-mode: %v", err)
+	}
+
+	whOpts := []events.WebhookOption{
+		events.WithWebhookSecretMode(secretMode),
+		events.WithWebhookHeaderMode(headerMode),
+	}
 	if *whTTL > 0 {
 		whOpts = append(whOpts, events.WithWebhookTTL(*whTTL))
 		log.Printf("[server] webhook TTL overridden to %s", *whTTL)
 	}
+	if secretMode == events.WebhookSecretIdentity {
+		if *whRootHex == "" {
+			log.Fatalf("-webhook-root is required when -webhook-secret-mode=identity")
+		}
+		root, err := hex.DecodeString(*whRootHex)
+		if err != nil {
+			log.Fatalf("invalid -webhook-root: %v", err)
+		}
+		whOpts = append(whOpts, events.WithWebhookRoot(root))
+	}
+	log.Printf("[server] webhook modes: secret=%s headers=%s", secretMode, headerMode)
+
 	webhooks := events.NewWebhookRegistry(whOpts...)
 	source, yield := newDiscordSource()
 
