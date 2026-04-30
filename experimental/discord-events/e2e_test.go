@@ -22,9 +22,13 @@ import (
 // events without spinning up a Discord session. Optional WebhookOptions
 // configure the registry — defaults match the production demo (Server +
 // MCPHeaders).
+//
+// The cursorless typing source is registered alongside discord.message so
+// cursor-shape tests can exercise both modes against the same server.
 func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.YieldingSource[DiscordEventData], func(DiscordEventData) error, *events.WebhookRegistry) {
 	webhooks := events.NewWebhookRegistry(whOpts...)
 	source, yield := newDiscordSource()
+	typingSource, _ := newDiscordTypingSource()
 
 	srv := server.NewServer(
 		core.ServerInfo{Name: "discord-events-test", Version: "0.1.0"},
@@ -33,12 +37,33 @@ func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.Yie
 	registerResources(srv, source)
 	registerTools(srv, nil) // nil session = test mode
 	events.Register(events.Config{
-		Sources:  []events.EventSource{source},
+		Sources:  []events.EventSource{source, typingSource},
 		Webhooks: webhooks,
 		Server:   srv,
 	})
 
 	return srv, source, yield, webhooks
+}
+
+// buildTestStackWithTyping returns the same wired server but exposes the
+// cursorless typing yield function too. Used by the cursorless e2e tests.
+func buildTestStackWithTyping(whOpts ...events.WebhookOption) (*server.Server, func(DiscordEventData) error, func(DiscordTypingData) error, *events.WebhookRegistry) {
+	webhooks := events.NewWebhookRegistry(whOpts...)
+	source, yield := newDiscordSource()
+	typingSource, yieldTyping := newDiscordTypingSource()
+
+	srv := server.NewServer(
+		core.ServerInfo{Name: "discord-events-test", Version: "0.1.0"},
+		server.WithSubscriptions(),
+	)
+	registerResources(srv, source)
+	registerTools(srv, nil)
+	events.Register(events.Config{
+		Sources:  []events.EventSource{source, typingSource},
+		Webhooks: webhooks,
+		Server:   srv,
+	})
+	return srv, yield, yieldTyping, webhooks
 }
 
 func connectClient(t *testing.T, srv *server.Server) (*client.Client, *httptest.Server) {
@@ -197,13 +222,25 @@ func TestE2EEventsList(t *testing.T) {
 			Name          string   `json:"name"`
 			Delivery      []string `json:"delivery"`
 			PayloadSchema any      `json:"payloadSchema"`
+			Cursorless    bool     `json:"cursorless"`
 		} `json:"events"`
 	}
 	require.NoError(t, json.Unmarshal(result.Raw, &resp))
-	require.Len(t, resp.Events, 1)
-	assert.Equal(t, "discord.message", resp.Events[0].Name)
-	assert.ElementsMatch(t, []string{"push", "poll", "webhook"}, resp.Events[0].Delivery)
-	assert.NotNil(t, resp.Events[0].PayloadSchema, "payloadSchema should be auto-derived")
+	byName := map[string]int{}
+	for i, e := range resp.Events {
+		byName[e.Name] = i
+	}
+	require.Contains(t, byName, "discord.message")
+	require.Contains(t, byName, "discord.typing")
+
+	msg := resp.Events[byName["discord.message"]]
+	assert.ElementsMatch(t, []string{"push", "poll", "webhook"}, msg.Delivery)
+	assert.NotNil(t, msg.PayloadSchema, "payloadSchema should be auto-derived")
+	assert.False(t, msg.Cursorless, "discord.message is cursored")
+
+	typing := resp.Events[byName["discord.typing"]]
+	assert.ElementsMatch(t, []string{"push", "webhook"}, typing.Delivery)
+	assert.True(t, typing.Cursorless, "discord.typing is cursorless")
 }
 
 // TestE2EResourceRead verifies the recent-messages resource reads from the
@@ -384,6 +421,177 @@ func TestE2EUnsubscribeBySecret(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Len(t, webhooks.Targets(), 0, "unsubscribe by secret must remove the matching subscription")
+}
+
+// TestE2ECursorlessPushDelivery verifies the cursorless typing source: yield
+// triggers a push notification whose Event.cursor is JSON null on the wire.
+// Confirms the `*string` cursor field round-trips correctly through the
+// notification fanout path.
+func TestE2ECursorlessPushDelivery(t *testing.T) {
+	srv, _, yieldTyping, _ := buildTestStackWithTyping()
+
+	var mu sync.Mutex
+	var receivedRaw []map[string]any
+
+	handler := srv.Handler(server.WithStreamableHTTP(true))
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "cursorless-push", Version: "1.0"},
+		client.WithGetSSEStream(),
+		client.WithNotificationCallback(func(method string, params any) {
+			if method != "notifications/events/event" {
+				return
+			}
+			b, _ := json.Marshal(params)
+			var p map[string]any
+			_ = json.Unmarshal(b, &p)
+			mu.Lock()
+			receivedRaw = append(receivedRaw, p)
+			mu.Unlock()
+		}),
+	)
+	require.NoError(t, c.Connect())
+	defer c.Close()
+
+	time.Sleep(200 * time.Millisecond)
+	require.NoError(t, yieldTyping(newDiscordTypingEvent("g", "c", "alice", time.Now())))
+	time.Sleep(500 * time.Millisecond)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Len(t, receivedRaw, 1, "push must deliver the typing event")
+	cursorVal, present := receivedRaw[0]["cursor"]
+	require.True(t, present, "cursor field must be present on the wire (not omitted)")
+	assert.Nil(t, cursorVal, "cursorless event must wire as cursor:null")
+}
+
+// TestE2ECursorlessWebhookDelivery verifies the cursorless typing source's
+// webhook delivery: the POSTed Event JSON has cursor:null. Mirrors the push
+// test but through the webhook fanout path.
+func TestE2ECursorlessWebhookDelivery(t *testing.T) {
+	srv, _, yieldTyping, _ := buildTestStackWithTyping()
+
+	var mu sync.Mutex
+	var deliveryBody map[string]any
+	var assignedSecret string
+
+	callbackSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		_ = json.Unmarshal(body, &deliveryBody)
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer callbackSrv.Close()
+
+	handler := srv.Handler(server.WithStreamableHTTP(true))
+	tsrv := httptest.NewServer(handler)
+	defer tsrv.Close()
+	c := client.NewClient(tsrv.URL+"/mcp", core.ClientInfo{Name: "cursorless-wh", Version: "1.0"})
+	require.NoError(t, c.Connect())
+
+	raw, err := c.Call("events/subscribe", map[string]any{
+		"id":       "wh-typing",
+		"name":     "discord.typing",
+		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL},
+	})
+	require.NoError(t, err)
+	var resp struct {
+		Cursor *string `json:"cursor"`
+		Secret string  `json:"secret"`
+	}
+	require.NoError(t, json.Unmarshal(raw.Raw, &resp))
+	assert.Nil(t, resp.Cursor, "subscribe response cursor must be null for cursorless source")
+	mu.Lock()
+	assignedSecret = resp.Secret
+	mu.Unlock()
+	_ = assignedSecret
+
+	require.NoError(t, yieldTyping(newDiscordTypingEvent("g", "c", "alice", time.Now())))
+	time.Sleep(500 * time.Millisecond)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.NotNil(t, deliveryBody, "webhook must deliver the typing event")
+	cursorVal, present := deliveryBody["cursor"]
+	require.True(t, present, "cursor field must be present on the wire")
+	assert.Nil(t, cursorVal, "cursorless event must wire as cursor:null")
+}
+
+// TestE2ECursorlessPollAlwaysEmpty verifies events/poll on a cursorless
+// source returns no events and a null cursor regardless of how the client
+// addressed it. Subscribers can't replay missed indicators by design.
+func TestE2ECursorlessPollAlwaysEmpty(t *testing.T) {
+	srv, _, yieldTyping, _ := buildTestStackWithTyping()
+	c, _ := connectClient(t, srv)
+
+	for i := 0; i < 3; i++ {
+		require.NoError(t, yieldTyping(newDiscordTypingEvent("g", "c", "alice", time.Now())))
+	}
+
+	result, err := c.Call("events/poll", map[string]any{
+		"subscriptions": []map[string]any{
+			{"id": "p", "name": "discord.typing", "cursor": "0"},
+		},
+	})
+	require.NoError(t, err)
+
+	var resp struct {
+		Results []struct {
+			Events []events.Event `json:"events"`
+			Cursor *string        `json:"cursor"`
+		} `json:"results"`
+	}
+	require.NoError(t, json.Unmarshal(result.Raw, &resp))
+	require.Len(t, resp.Results, 1)
+	assert.Empty(t, resp.Results[0].Events)
+	assert.Nil(t, resp.Results[0].Cursor, "poll on cursorless source must return cursor:null")
+}
+
+// TestE2ESubscribeCursorNullOnCursoredSourceReturnsLatest verifies the
+// "from now" subscribe semantic on a cursored source: passing cursor:null
+// makes the server stamp the response with the source's current head, so
+// the client polls forward without replaying historical events.
+func TestE2ESubscribeCursorNullOnCursoredSourceReturnsLatest(t *testing.T) {
+	srv, source, yield, _ := buildTestStack()
+	c, _ := connectClient(t, srv)
+
+	require.NoError(t, yield(newDiscordEvent("g", "c", "a", "first", time.Now())))
+	require.NoError(t, yield(newDiscordEvent("g", "c", "b", "second", time.Now())))
+	expected := source.Latest()
+	require.NotEmpty(t, expected, "precondition: source has a head cursor")
+
+	raw, err := c.Call("events/subscribe", map[string]any{
+		"id":       "wh-fromnow",
+		"name":     "discord.message",
+		"delivery": map[string]any{"mode": "webhook", "url": "http://localhost:1/sink"},
+		// cursor field intentionally omitted → JSON null on parse
+	})
+	require.NoError(t, err)
+	var resp struct {
+		Cursor *string `json:"cursor"`
+	}
+	require.NoError(t, json.Unmarshal(raw.Raw, &resp))
+	require.NotNil(t, resp.Cursor, "cursored source must return a real cursor for cursor:null subscribe")
+	assert.Equal(t, expected, *resp.Cursor, "subscribe response cursor must equal source.Latest()")
+}
+
+// TestE2EPollMultiSubRejected verifies the wire-level guarantee that
+// events/poll no longer accepts multiple subscriptions in one request.
+// Single-sub callers still work; multi-sub callers get a clear error.
+func TestE2EPollMultiSubRejected(t *testing.T) {
+	srv, _, _, _ := buildTestStack()
+	c, _ := connectClient(t, srv)
+
+	_, err := c.Call("events/poll", map[string]any{
+		"subscriptions": []map[string]any{
+			{"id": "a", "name": "discord.message", "cursor": "0"},
+			{"id": "b", "name": "discord.typing", "cursor": "0"},
+		},
+	})
+	require.Error(t, err, "multi-subscription events/poll must be rejected")
+	assert.Contains(t, err.Error(), "exactly one subscription", "error message must point at the spec change")
 }
 
 // TestE2EResourceByCursor verifies the per-message resource template resolves

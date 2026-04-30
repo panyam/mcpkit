@@ -13,6 +13,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -69,6 +70,7 @@ func main() {
 
 	webhooks := events.NewWebhookRegistry(whOpts...)
 	source, yield := newDiscordSource()
+	typingSource, yieldTyping := newDiscordTypingSource()
 
 	var dg *discordgo.Session
 	if *token != "" {
@@ -110,7 +112,7 @@ func main() {
 	registerTools(srv, dg)
 
 	events.Register(events.Config{
-		Sources:  []events.EventSource{source},
+		Sources:  []events.EventSource{source, typingSource},
 		Webhooks: webhooks,
 		Server:   srv,
 	})
@@ -122,24 +124,55 @@ func main() {
 		server.WithEventStore(gohttp.NewMemoryEventStore(eventStoreCap)),
 	))
 
+	// One endpoint, dispatch on ?event=<name>. Default is discord.message
+	// for backwards compatibility with the older inject script. Body shape
+	// varies per event — see the per-event branches below.
 	mux.HandleFunc("POST /inject", func(w http.ResponseWriter, r *http.Request) {
-		var msg struct {
-			GuildID   string `json:"guild_id"`
-			ChannelID string `json:"channel_id"`
-			Sender    string `json:"sender"`
-			Text      string `json:"text"`
+		eventName := r.URL.Query().Get("event")
+		if eventName == "" {
+			eventName = "discord.message"
 		}
-		if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+
+		switch eventName {
+		case "discord.message":
+			var msg struct {
+				GuildID   string `json:"guild_id"`
+				ChannelID string `json:"channel_id"`
+				Sender    string `json:"sender"`
+				Text      string `json:"text"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			if msg.Sender == "" {
+				msg.Sender = "injected"
+			}
+			_ = yield(newDiscordEvent(msg.GuildID, msg.ChannelID, msg.Sender, msg.Text, time.Now()))
+			srv.NotifyResourceUpdated("discord://messages/recent")
+
+		case "discord.typing":
+			var msg struct {
+				GuildID   string `json:"guild_id"`
+				ChannelID string `json:"channel_id"`
+				User      string `json:"user"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			if msg.User == "" {
+				msg.User = "injected-typing"
+			}
+			_ = yieldTyping(newDiscordTypingEvent(msg.GuildID, msg.ChannelID, msg.User, time.Now()))
+
+		default:
+			http.Error(w, fmt.Sprintf("unknown event %q (want discord.message or discord.typing)", eventName), http.StatusBadRequest)
 			return
 		}
-		if msg.Sender == "" {
-			msg.Sender = "injected"
-		}
-		_ = yield(newDiscordEvent(msg.GuildID, msg.ChannelID, msg.Sender, msg.Text, time.Now()))
-		srv.NotifyResourceUpdated("discord://messages/recent")
+
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"status": "ok"})
+		json.NewEncoder(w).Encode(map[string]any{"status": "ok", "event": eventName})
 	})
 
 	log.Printf("[server] discord-events listening on %s (MCP at /mcp)", *addr)

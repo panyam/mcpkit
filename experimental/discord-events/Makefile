@@ -73,6 +73,11 @@ inject:
 	  -H 'Content-Type: application/json' \
 	  -d '{"guild_id": "$(or $(GUILD),test-guild)", "channel_id": "$(or $(CHANNEL),test-channel)", "sender": "$(or $(SENDER),test-user)", "text": "$(or $(TEXT),hello from make inject)"}' | jq .
 
+inject-typing:
+	@curl -s -X POST '$(ADDR)/inject?event=discord.typing' \
+	  -H 'Content-Type: application/json' \
+	  -d '{"guild_id": "$(or $(GUILD),test-guild)", "channel_id": "$(or $(CHANNEL),test-channel)", "user": "$(or $(USER_NAME),test-user)"}' | jq .
+
 list:
 	@$(EVENTS_CLIENT) list
 
@@ -85,4 +90,4 @@ webhook:
 poll:
 	@$(EVENTS_CLIENT) poll --interval $(or $(INTERVAL),5)
 
-.PHONY: run test test-race test-ttl inject list listen webhook poll
+.PHONY: run test test-race test-ttl inject inject-typing list listen webhook poll
