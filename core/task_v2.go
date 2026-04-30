@@ -25,11 +25,11 @@ func ClientSupportsTasks(ctx context.Context) bool {
 	return ClientSupportsExtension(ctx, TasksExtensionID)
 }
 
-// Tasks v2 types — SEP-2663 (Tasks Extension), SEP-2557 (resultType
+// Tasks v2 types — SEP-2663 (Tasks Extension), SEP-2557 (result_type
 // discriminator), and MRTR base types from SEP-2322.
 //
 // Wire-format differences from v1:
-//   - tools/call carries a resultType discriminator: "task" (this file),
+//   - tools/call carries a result_type discriminator: "task" (this file),
 //     "complete" / "incomplete" (MRTR — see ResultType constants).
 //   - tasks/get returns DetailedTask: a discriminated union by status that
 //     inlines result / error / inputRequests / requestState in one trip.
@@ -90,11 +90,11 @@ type TaskInfoV2 struct {
 }
 
 // CreateTaskResult is returned by tools/call when the server elects to handle
-// the call as an async task (resultType: "task"). Per SEP-2663, this envelope
+// the call as an async task (result_type: "task"). Per SEP-2663, this envelope
 // MUST NOT carry result, error, inputRequests, or requestState — those belong
 // on tasks/get's DetailedTask response.
 type CreateTaskResult struct {
-	ResultType ResultType `json:"resultType"`
+	ResultType ResultType `json:"result_type"`
 	Task       TaskInfoV2 `json:"task"`
 }
 
@@ -117,7 +117,7 @@ type DetailedTask struct {
 	// is still running. (The task lifecycle is on the Status field.)
 	// MarshalJSON defaults this to ResultTypeComplete when empty so
 	// existing struct literals don't have to set it.
-	ResultType ResultType `json:"resultType"`
+	ResultType ResultType `json:"result_type"`
 
 	TaskInfoV2
 
@@ -182,12 +182,12 @@ type UpdateTaskRequest struct {
 // UpdateTaskResult is the (essentially empty) ack returned by tasks/update.
 // Servers resume task execution asynchronously; clients learn the outcome
 // via the next tasks/get. The wire payload carries only the SEP-2322
-// resultType discriminator so polymorphic dispatch on tools/call vs
+// result_type discriminator so polymorphic dispatch on tools/call vs
 // tasks/update vs tasks/get is uniform across the protocol. // SEP-2663
 type UpdateTaskResult struct {
 	// ResultType is the SEP-2322 polymorphic-dispatch discriminator. Always
 	// "complete" for the tasks/update ack (defaulted by MarshalJSON when empty).
-	ResultType ResultType `json:"resultType"`
+	ResultType ResultType `json:"result_type"`
 }
 
 // MarshalJSON defaults ResultType to ResultTypeComplete so callers using
@@ -205,11 +205,11 @@ func (u UpdateTaskResult) MarshalJSON() ([]byte, error) {
 // Per SEP-2663, cancellation does not return task state — the client should
 // issue tasks/get if it wants to observe the resulting "cancelled" status.
 // Like UpdateTaskResult, the wire payload carries only the SEP-2322
-// resultType discriminator.
+// result_type discriminator.
 type CancelTaskResult struct {
 	// ResultType is the SEP-2322 polymorphic-dispatch discriminator. Always
 	// "complete" for the tasks/cancel ack (defaulted by MarshalJSON when empty).
-	ResultType ResultType `json:"resultType"`
+	ResultType ResultType `json:"result_type"`
 }
 
 // MarshalJSON defaults ResultType to ResultTypeComplete so the zero value
@@ -220,6 +220,41 @@ func (c CancelTaskResult) MarshalJSON() ([]byte, error) {
 		c.ResultType = ResultTypeComplete
 	}
 	return json.Marshal(alias(c))
+}
+
+// IncompleteResult is the SEP-2322 wire envelope returned by tools/call (and
+// other request methods, in principle) when the server needs additional input
+// from the client before it can produce a final result. Clients retry the
+// same request with `inputResponses` (and the echoed `requestState`) until
+// the server returns a complete result, a CreateTaskResult, or an error.
+//
+// Wire-format note: the `result_type` discriminator is snake_case per the
+// SEP-2322 conformance contract; the rest of the payload (`inputRequests`,
+// `requestState`) follows the existing camelCase MCP convention.
+type IncompleteResult struct {
+	// ResultType is always "incomplete". Defaulted by MarshalJSON when empty
+	// so server handlers can build the struct without thinking about it.
+	ResultType ResultType `json:"result_type"`
+
+	// InputRequests is the map of server-chosen request keys → InputRequest
+	// describing what the server needs from the client. Keys are echoed back
+	// verbatim by the client in the matching InputResponses entry.
+	InputRequests InputRequests `json:"inputRequests,omitempty"`
+
+	// RequestState is the opaque session-continuation token. SEP-2322 says
+	// servers MUST treat any echoed value as attacker-controlled; the helper
+	// API in dispatch HMAC-signs it when a key is configured.
+	RequestState string `json:"requestState,omitempty"`
+}
+
+// MarshalJSON defaults ResultType to ResultTypeIncomplete so handlers that
+// build an IncompleteResult{} literal don't have to set the discriminator.
+func (r IncompleteResult) MarshalJSON() ([]byte, error) {
+	type alias IncompleteResult
+	if r.ResultType == "" {
+		r.ResultType = ResultTypeIncomplete
+	}
+	return json.Marshal(alias(r))
 }
 
 // --- SEP-2322 requestState signing ---
@@ -276,6 +311,120 @@ func SignRequestState(key []byte, taskID string, ttl time.Duration) string {
 	sig := mac.Sum(nil)
 	return base64.RawURLEncoding.EncodeToString(sig) + "." +
 		base64.RawURLEncoding.EncodeToString(payloadBytes)
+}
+
+// MRTRRoundState is the payload encoded inside an SEP-2322 ephemeral
+// requestState token across multi-round flows. The dispatcher uses it to
+// carry accumulated InputResponses from previous rounds back to the
+// handler — the wire protocol only ships the current round's responses,
+// so without this carry-over a stateless handler couldn't see history.
+//
+// Tool is the tool name the token was issued for; replays against a
+// different tool fail with ErrRequestStateInvalidSignature. Answered is
+// the merged inputResponses map (raw, opaque per-key payloads). Exp is
+// the unix-seconds expiry, mirroring the requestStatePayload semantics.
+type MRTRRoundState struct {
+	Tool     string                     `json:"tool"`
+	Answered map[string]json.RawMessage `json:"answered,omitempty"`
+	Exp      int64                      `json:"exp"`
+}
+
+// SignMRTRState produces an HMAC-SHA256-signed requestState token wrapping
+// state. ttl bounds the token's validity. Same wire format as
+// SignRequestState ("<base64url-sig>.<base64url-payload>") so the same
+// helpers in transports/middleware that already strip / re-add the prefix
+// work uniformly. Panics if key is empty — callers should fall back to
+// the plaintext encoder when no signing key is configured.
+func SignMRTRState(key []byte, state MRTRRoundState, ttl time.Duration) (string, error) {
+	if len(key) == 0 {
+		return "", errors.New("core.SignMRTRState: empty key")
+	}
+	if state.Exp == 0 {
+		state.Exp = time.Now().Add(ttl).Unix()
+	}
+	payloadBytes, err := json.Marshal(state)
+	if err != nil {
+		return "", fmt.Errorf("marshal MRTR state: %w", err)
+	}
+	mac := hmac.New(sha256.New, key)
+	mac.Write(payloadBytes)
+	sig := mac.Sum(nil)
+	return base64.RawURLEncoding.EncodeToString(sig) + "." +
+		base64.RawURLEncoding.EncodeToString(payloadBytes), nil
+}
+
+// VerifyMRTRState validates an incoming MRTR requestState token against the
+// signing key + current time and returns the embedded round state. Errors:
+//   - ErrRequestStateMalformed: structural parse failures (split, base64, JSON)
+//   - ErrRequestStateInvalidSignature: signature mismatch (tampered or wrong key)
+//   - ErrRequestStateExpired: payload exp is in the past
+//
+// Uses hmac.Equal for constant-time signature comparison.
+func VerifyMRTRState(key []byte, token string) (MRTRRoundState, error) {
+	if len(key) == 0 {
+		return MRTRRoundState{}, ErrRequestStateMalformed
+	}
+	dot := strings.IndexByte(token, '.')
+	if dot < 0 {
+		return MRTRRoundState{}, ErrRequestStateMalformed
+	}
+	sig, err := base64.RawURLEncoding.DecodeString(token[:dot])
+	if err != nil {
+		return MRTRRoundState{}, ErrRequestStateMalformed
+	}
+	payloadBytes, err := base64.RawURLEncoding.DecodeString(token[dot+1:])
+	if err != nil {
+		return MRTRRoundState{}, ErrRequestStateMalformed
+	}
+	mac := hmac.New(sha256.New, key)
+	mac.Write(payloadBytes)
+	expected := mac.Sum(nil)
+	if !hmac.Equal(sig, expected) {
+		return MRTRRoundState{}, ErrRequestStateInvalidSignature
+	}
+	var state MRTRRoundState
+	if err := json.Unmarshal(payloadBytes, &state); err != nil {
+		return MRTRRoundState{}, ErrRequestStateMalformed
+	}
+	if state.Exp > 0 && time.Now().Unix() > state.Exp {
+		return MRTRRoundState{}, ErrRequestStateExpired
+	}
+	return state, nil
+}
+
+// EncodeMRTRStatePlaintext returns a base64url-encoded JSON of state with no
+// integrity guarantee — used by the dispatcher in plaintext mode when no
+// signing key is configured. The encoded form is parseable but trivially
+// forgeable; SEP-2322 servers without a signing key must treat it as
+// untrusted regardless.
+func EncodeMRTRStatePlaintext(state MRTRRoundState) (string, error) {
+	if state.Exp == 0 {
+		state.Exp = time.Now().Add(24 * time.Hour).Unix()
+	}
+	payloadBytes, err := json.Marshal(state)
+	if err != nil {
+		return "", fmt.Errorf("marshal MRTR state: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(payloadBytes), nil
+}
+
+// DecodeMRTRStatePlaintext parses a token produced by EncodeMRTRStatePlaintext.
+// Returns ErrRequestStateMalformed for unparseable tokens and
+// ErrRequestStateExpired when the embedded exp is in the past. No signature
+// check (plaintext mode has none).
+func DecodeMRTRStatePlaintext(token string) (MRTRRoundState, error) {
+	payloadBytes, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		return MRTRRoundState{}, ErrRequestStateMalformed
+	}
+	var state MRTRRoundState
+	if err := json.Unmarshal(payloadBytes, &state); err != nil {
+		return MRTRRoundState{}, ErrRequestStateMalformed
+	}
+	if state.Exp > 0 && time.Now().Unix() > state.Exp {
+		return MRTRRoundState{}, ErrRequestStateExpired
+	}
+	return state, nil
 }
 
 // VerifyRequestState checks an incoming requestState token against the

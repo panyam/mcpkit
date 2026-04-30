@@ -71,6 +71,14 @@ testconf-tasks-v2: ## Run MCP Tasks v2 conformance (builds + starts server, runs
 	SERVER_URL=http://localhost:18092/mcp npx tsx --test tasks-v2/scenarios.test.ts); \
 	RC=$$?; kill $$PID 2>/dev/null; wait $$PID 2>/dev/null; exit $$RC
 
+testconf-mrtr: ## Run MCP MRTR (SEP-2322) conformance (builds + starts server, runs tests, tears down)
+	@(cd examples/mrtr && go build -o mrtr-demo .) && \
+	examples/mrtr/mrtr-demo --serve -addr :18093 & PID=$$!; \
+	sleep 1; \
+	(cd conformance && npm install --silent && \
+	SERVER_URL=http://localhost:18093/mcp npx tsx --test mrtr/scenarios.test.ts); \
+	RC=$$?; kill $$PID 2>/dev/null; wait $$PID 2>/dev/null; exit $$RC
+
 testconf-elicitation: ## Run elicitation conformance suite (SEP-1036 URL mode + form, requires Node.js, target server must be running)
 	cd conformance && npm install --silent && SERVER_URL=$${SERVER_URL:-http://localhost:8080/mcp} npx tsx --test elicitation/scenarios.test.ts
 

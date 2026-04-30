@@ -689,10 +689,29 @@ func (c *Client) makeNotifyAdapter() func(string, json.RawMessage) {
 	}
 }
 
-// handleServerRequest dispatches an incoming server-to-client JSON-RPC request
-// to the appropriate registered handler (sampling or elicitation).
-// Returns a JSON-RPC response to send back to the server.
+// HandleServerRequest dispatches an incoming server-to-client JSON-RPC
+// request to the appropriate registered handler (sampling, elicitation,
+// or roots). Returns a JSON-RPC response to send back to the server.
+//
+// Uses context.Background(); transports that wish to thread their own
+// cancellation context (or callers needing to invoke the dispatch
+// synthetically — e.g. SEP-2322 MRTR's CallToolWithInputs feeding
+// inputRequests through the same routing logic) should call
+// HandleServerRequestWithContext instead.
 func (c *Client) HandleServerRequest(req *core.Request) *core.Response {
+	return c.HandleServerRequestWithContext(context.Background(), req)
+}
+
+// HandleServerRequestWithContext is the context-aware form of
+// HandleServerRequest. Callers that have a real context (caller-driven
+// cancellation, MRTR loops, future client middleware) thread it through
+// here so handlers receive it instead of context.Background.
+//
+// This is the single source of truth for "given an MCP method name and
+// a registered handler, what's the response?" Both the transport's
+// incoming-request path AND the SEP-2322 MRTR client-side input
+// resolution route through this function.
+func (c *Client) HandleServerRequestWithContext(ctx context.Context, req *core.Request) *core.Response {
 	switch req.Method {
 	case "sampling/createMessage":
 		if c.samplingHandler == nil {
@@ -702,7 +721,7 @@ func (c *Client) HandleServerRequest(req *core.Request) *core.Response {
 		if err := json.Unmarshal(req.Params, &params); err != nil {
 			return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams, "invalid sampling params: "+err.Error())
 		}
-		result, err := c.samplingHandler(context.Background(), params)
+		result, err := c.samplingHandler(ctx, params)
 		if err != nil {
 			return core.NewErrorResponse(req.ID, core.ErrCodeInternal, err.Error())
 		}
@@ -720,7 +739,7 @@ func (c *Client) HandleServerRequest(req *core.Request) *core.Response {
 		if params.Mode == core.ElicitModeURL && !c.elicitationURLSupport {
 			return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams, "client does not support URL-mode elicitation")
 		}
-		result, err := c.elicitationHandler(context.Background(), params)
+		result, err := c.elicitationHandler(ctx, params)
 		if err != nil {
 			return core.NewErrorResponse(req.ID, core.ErrCodeInternal, err.Error())
 		}
@@ -730,7 +749,7 @@ func (c *Client) HandleServerRequest(req *core.Request) *core.Response {
 		if c.rootsHandler == nil {
 			return core.NewErrorResponse(req.ID, core.ErrCodeMethodNotFound, "roots not supported")
 		}
-		roots, err := c.rootsHandler(context.Background())
+		roots, err := c.rootsHandler(ctx)
 		if err != nil {
 			return core.NewErrorResponse(req.ID, core.ErrCodeInternal, err.Error())
 		}

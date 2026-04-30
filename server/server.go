@@ -46,6 +46,8 @@ type serverOptions struct {
 	publicMethods        map[string]bool   // methods that bypass auth (pre-auth discovery)
 	customHandlers       map[string]MethodHandler // custom JSON-RPC method handlers
 	httpHandlers         []httpHandlerEntry       // custom HTTP endpoint handlers
+	requestStateKey      []byte                   // SEP-2322 requestState HMAC key — shared by MRTR + Tasks (nil = plaintext / unsigned)
+	requestStateTTL      time.Duration            // SEP-2322 requestState validity (0 = 24h default)
 }
 
 type httpHandlerEntry struct {
@@ -257,6 +259,13 @@ func NewServer(info core.ServerInfo, opts ...Option) *Server {
 	}
 	s.dispatcher.rootsFetchTimeout = s.options.rootsFetchTimeout
 	s.dispatcher.allowedRoots = s.options.allowedRoots
+	// SEP-2322 requestState signing — shared by ephemeral MRTR (this Dispatcher's
+	// mrtr runtime) and SEP-2663 Tasks (consumed by RegisterTasks via the
+	// server's options when TasksConfig.RequestStateKey is unset).
+	if len(s.options.requestStateKey) > 0 {
+		s.dispatcher.mrtr.signingKey = s.options.requestStateKey
+	}
+	s.dispatcher.mrtr.ttl = s.options.requestStateTTL
 	// Initialize subscription support if enabled
 	if s.options.subscriptionsEnabled {
 		s.subRegistry = &subscriptionRegistry{

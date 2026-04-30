@@ -285,9 +285,10 @@ func TestTaskInfoV2TTLSecondsNullable(t *testing.T) {
 }
 
 // TestCreateTaskResultWireShape verifies the SEP-2663 wire shape:
-// {"resultType": "task", "task": {...}} with no extra fields (no result,
+// {"result_type": "task", "task": {...}} with no extra fields (no result,
 // no error, no inputRequests, no requestState — all forbidden on
-// CreateTaskResult per SEP-2663).
+// CreateTaskResult per SEP-2663). The discriminator is snake_case per
+// the SEP-2322 conformance contract.
 func TestCreateTaskResultWireShape(t *testing.T) {
 	res := CreateTaskResult{
 		ResultType: ResultTypeTask,
@@ -306,8 +307,8 @@ func TestCreateTaskResultWireShape(t *testing.T) {
 	var m map[string]any
 	json.Unmarshal(data, &m)
 
-	if m["resultType"] != "task" {
-		t.Errorf("resultType = %v, want task", m["resultType"])
+	if m["result_type"] != "task" {
+		t.Errorf("result_type = %v, want task", m["result_type"])
 	}
 	if _, ok := m["task"]; !ok {
 		t.Fatalf("task missing; got %s", data)
@@ -446,10 +447,73 @@ func TestUpdateTaskRequestOmitEmpty(t *testing.T) {
 	}
 }
 
+// TestIncompleteResultWireShape verifies the SEP-2322 ephemeral wire shape:
+// {"result_type": "incomplete", "inputRequests": {...}, "requestState": "..."}.
+// The discriminator is snake_case per the upstream conformance contract;
+// inputRequests / requestState stay camelCase (the rest of MCP wire is
+// camelCase, only the discriminator is snake_case).
+func TestIncompleteResultWireShape(t *testing.T) {
+	res := IncompleteResult{
+		InputRequests: InputRequests{
+			"user_name": InputRequest{
+				Method: "elicitation/create",
+				Params: json.RawMessage(`{"message":"What is your name?"}`),
+			},
+		},
+		RequestState: "opaque-state",
+	}
+	data, err := json.Marshal(res)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatal(err)
+	}
+
+	if m["result_type"] != "incomplete" {
+		t.Errorf("result_type = %v, want \"incomplete\"; got %s", m["result_type"], data)
+	}
+	if _, ok := m["resultType"]; ok {
+		t.Errorf("camelCase resultType must NOT appear (snake_case is the wire field); got %s", data)
+	}
+	if m["requestState"] != "opaque-state" {
+		t.Errorf("requestState = %v, want opaque-state", m["requestState"])
+	}
+	reqs, ok := m["inputRequests"].(map[string]any)
+	if !ok {
+		t.Fatalf("inputRequests missing or wrong shape; got %s", data)
+	}
+	entry, ok := reqs["user_name"].(map[string]any)
+	if !ok {
+		t.Fatalf("inputRequests[user_name] missing; got %s", data)
+	}
+	if entry["method"] != "elicitation/create" {
+		t.Errorf("inputRequests[user_name].method = %v, want elicitation/create", entry["method"])
+	}
+}
+
+// TestIncompleteResultDefaultsResultType verifies that a zero-value
+// IncompleteResult marshals with result_type = "incomplete" so handlers
+// can build IncompleteResult{InputRequests: ...} without setting the
+// discriminator manually.
+func TestIncompleteResultDefaultsResultType(t *testing.T) {
+	data, err := json.Marshal(IncompleteResult{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	json.Unmarshal(data, &m)
+	if m["result_type"] != "incomplete" {
+		t.Errorf("zero-value IncompleteResult.result_type = %v, want \"incomplete\"; got %s",
+			m["result_type"], data)
+	}
+}
+
 // TestAckShapes verifies that UpdateTaskResult and CancelTaskResult serialize
-// to the SEP-2322 minimum: a single resultType:"complete" discriminator and
+// to the SEP-2322 minimum: a single result_type:"complete" discriminator and
 // no other fields. SEP-2663 says the acks carry no task state — but SEP-2322
-// requires the resultType discriminator on every non-task response so
+// requires the result_type discriminator on every non-task response so
 // clients can dispatch sync/task/multi-round uniformly.
 func TestAckShapes(t *testing.T) {
 	for _, tc := range []struct {
@@ -467,11 +531,11 @@ func TestAckShapes(t *testing.T) {
 		if err := json.Unmarshal(data, &m); err != nil {
 			t.Fatalf("%s: unmarshal: %v", tc.name, err)
 		}
-		if got := m["resultType"]; got != "complete" {
-			t.Errorf("%s.resultType = %v, want \"complete\"", tc.name, got)
+		if got := m["result_type"]; got != "complete" {
+			t.Errorf("%s.result_type = %v, want \"complete\"", tc.name, got)
 		}
 		if len(m) != 1 {
-			t.Errorf("%s should carry only resultType (got %d keys: %v)", tc.name, len(m), m)
+			t.Errorf("%s should carry only result_type (got %d keys: %v)", tc.name, len(m), m)
 		}
 	}
 }
