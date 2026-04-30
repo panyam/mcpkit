@@ -14,42 +14,47 @@ import (
 )
 
 // WebhookHeaderMode selects the header / signature wire format for outbound
-// webhook deliveries. Defaults to MCPHeaders.
+// webhook deliveries. Defaults to StandardWebhooks per upstream WG PR#1
+// line 434 (comment r3167245184) — author signaled alignment on Standard
+// Webhooks naming. MCPHeaders is retained as an opt-in mode for clients
+// that already standardized on the X-MCP-* shape.
 type WebhookHeaderMode int
 
 const (
-	// MCPHeaders emits X-MCP-Signature and X-MCP-Timestamp with the
-	// signature computed as HMAC(secret, ts + "." + body).
-	MCPHeaders WebhookHeaderMode = iota
-
-	// StandardWebhooks emits webhook-id, webhook-timestamp, and
+	// StandardWebhooks (default) emits webhook-id, webhook-timestamp, and
 	// webhook-signature ("v1,<base64>") per https://standardwebhooks.com/.
 	// HMAC base is webhook_id + "." + webhook_timestamp + "." + body.
 	// Note: only the headers/signature scheme is adopted — the Standard
 	// Webhooks payload envelope is intentionally out of scope here.
-	StandardWebhooks
+	StandardWebhooks WebhookHeaderMode = iota
+
+	// MCPHeaders emits X-MCP-Signature and X-MCP-Timestamp with the
+	// signature computed as HMAC(secret, ts + "." + body). Was the
+	// pre-r3167245184 default; kept as an opt-in for callers that
+	// already wired against this shape.
+	MCPHeaders
 )
 
 // String renders the mode as a config-flag-friendly token.
 func (m WebhookHeaderMode) String() string {
 	switch m {
-	case StandardWebhooks:
-		return "standard"
-	default:
+	case MCPHeaders:
 		return "mcp"
+	default:
+		return "standard"
 	}
 }
 
 // ParseHeaderMode converts a flag-style token ("mcp" or "standard") to a
-// WebhookHeaderMode. Empty string returns the default (MCPHeaders).
+// WebhookHeaderMode. Empty string returns the default (StandardWebhooks).
 func ParseHeaderMode(s string) (WebhookHeaderMode, error) {
 	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "", "mcp":
-		return MCPHeaders, nil
-	case "standard", "standardwebhooks", "standard-webhooks":
+	case "", "standard", "standardwebhooks", "standard-webhooks":
 		return StandardWebhooks, nil
+	case "mcp":
+		return MCPHeaders, nil
 	default:
-		return MCPHeaders, fmt.Errorf("unknown header mode %q (want mcp|standard)", s)
+		return StandardWebhooks, fmt.Errorf("unknown header mode %q (want standard|mcp)", s)
 	}
 }
 
@@ -113,10 +118,10 @@ func signStandardWebhooks(body []byte, secret string, now time.Time) signedDeliv
 // signFor selects the right signer for the registry's mode.
 func signFor(mode WebhookHeaderMode, body []byte, secret string, now time.Time) signedDelivery {
 	switch mode {
-	case StandardWebhooks:
-		return signStandardWebhooks(body, secret, now)
-	default:
+	case MCPHeaders:
 		return signMCP(body, secret, now)
+	default:
+		return signStandardWebhooks(body, secret, now)
 	}
 }
 

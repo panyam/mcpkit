@@ -183,9 +183,11 @@ func TestResourceMessageByCursor(t *testing.T) {
 	assert.Equal(t, "message 2", payload.Text)
 }
 
-// TestWebhookHMACSignature verifies HMAC-SHA256(secret, ts + "." + body)
-// signing matches what receivers expect — protocol-level webhook contract.
-func TestWebhookHMACSignature(t *testing.T) {
+// TestWebhookHMACSignature_MCPHeaders pins the X-MCP-* wire shape under the
+// MCPHeaders opt-in. After the default flip to Standard Webhooks
+// (r3167245184), the registry must be explicitly configured with
+// WithWebhookHeaderMode(MCPHeaders) for this byte-format check to apply.
+func TestWebhookHMACSignature_MCPHeaders(t *testing.T) {
 	secret := "test-secret-key"
 	var receivedBody []byte
 	var receivedSig, receivedTS string
@@ -198,7 +200,7 @@ func TestWebhookHMACSignature(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	webhooks := events.NewWebhookRegistry()
+	webhooks := events.NewWebhookRegistry(events.WithWebhookHeaderMode(events.MCPHeaders))
 	webhooks.Register("hmac-test", srv.URL, secret)
 
 	event := events.MakeEvent("telegram.message", "evt_1", "1", time.Now(),

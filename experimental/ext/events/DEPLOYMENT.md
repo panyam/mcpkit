@@ -50,8 +50,8 @@ For deployments where the receiver sits behind a WAF, the rules need to allow we
 | **Path** | Whatever the subscriber registered (`callback_url`) | The MCP server POSTs to exactly this URL |
 | **Source IP** | The MCP server's egress IPs | Restrict to known issuers |
 | **Headers required** | `Content-Type: application/json` + the signature pair (see below) | Reject unsigned requests at the edge |
-| **Headers (MCPHeaders mode, default)** | `X-MCP-Signature` (`sha256=<hex>`) + `X-MCP-Timestamp` (unix seconds) | The two-field signature pair |
-| **Headers (StandardWebhooks mode)** | `webhook-id` + `webhook-timestamp` + `webhook-signature` (`v1,<base64>`) | Per [standardwebhooks.com](https://www.standardwebhooks.com/) |
+| **Headers (StandardWebhooks mode, default)** | `webhook-id` + `webhook-timestamp` + `webhook-signature` (`v1,<base64>`) | Per [standardwebhooks.com](https://www.standardwebhooks.com/) |
+| **Headers (MCPHeaders mode, opt-in)** | `X-MCP-Signature` (`sha256=<hex>`) + `X-MCP-Timestamp` (unix seconds) | The pre-r3167245184 default; opt-in for callers that already wired against this shape |
 | **Body size** | Reasonable cap (1 MB is plenty for almost any event payload) | Limit DoS surface |
 | **Rate limit** | Per source IP, generous (≥ 100 r/s) | Bursts happen during reconnects + identity-mode rebroadcasts |
 
