@@ -37,6 +37,15 @@ from urllib.request import Request, urlopen
 # MCP session helpers
 # ═══════════════════════════════════════════════════════════════════
 
+def _fmt_cursor(c) -> str:
+    """Render a cursor for human-readable logging. Cursored sources emit a
+    string; cursorless sources emit JSON null which deserializes to Python
+    None — render that as a visible token rather than the literal "None"."""
+    if c is None:
+        return "(none)"
+    return c
+
+
 class MCPSession:
     """Thin wrapper around an MCP Streamable HTTP session."""
 
@@ -170,7 +179,7 @@ def cmd_list(session: MCPSession, args):
         if results:
             r = results[0]
             n = len(r.get("events", []))
-            print(f"  {n} event(s), cursor={r.get('cursor')}, hasMore={r.get('hasMore')}")
+            print(f"  {n} event(s), cursor={_fmt_cursor(r.get('cursor'))}, hasMore={r.get('hasMore')}")
             for ev in r.get("events", [])[:3]:
                 print(f"    {ev.get('eventId')}: {json.dumps(ev.get('data', {}), separators=(',', ':'))[:120]}")
         print()
@@ -215,7 +224,7 @@ def cmd_listen(session: MCPSession, args):
             print(f"  id:      {p.get('eventId', '')}")
             print(f"  name:    {p.get('name', '')}")
             print(f"  time:    {p.get('timestamp', '')}")
-            print(f"  cursor:  {p.get('cursor', '')}")
+            print(f"  cursor:  {_fmt_cursor(p.get('cursor'))}")
             data = p.get("data")
             if data:
                 print(json.dumps(data, indent=2))
@@ -409,7 +418,7 @@ def _make_webhook_handler(secret_holder):
                 print(f"  id:      {event.get('eventId', '')}")
                 print(f"  name:    {event.get('name', '')}")
                 print(f"  time:    {event.get('timestamp', '')}")
-                print(f"  cursor:  {event.get('cursor', '')}")
+                print(f"  cursor:  {_fmt_cursor(event.get('cursor'))}")
                 data = event.get("data")
                 if data:
                     print(json.dumps(data, indent=2))
@@ -520,7 +529,7 @@ def cmd_poll(session: MCPSession, args):
                         print(f"  id:      {ev.get('eventId', '')}")
                         print(f"  name:    {ev.get('name', '')}")
                         print(f"  time:    {ev.get('timestamp', '')}")
-                        print(f"  cursor:  {ev.get('cursor', '')}")
+                        print(f"  cursor:  {_fmt_cursor(ev.get('cursor'))}")
                         data = ev.get("data")
                         if data:
                             print(json.dumps(data, indent=2))

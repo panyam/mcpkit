@@ -128,7 +128,8 @@ Telegram Bot (long-poll)  ──or──  POST /inject
 |--------|-------------|
 | `make run` | Start server (with bot if `TELEGRAM_BOT_TOKEN` set) |
 | `make test` | Go tests |
-| `make inject TEXT="..."` | Inject a message (optional: `SENDER=`, `CHAT_ID=`) |
+| `make inject TEXT="..."` | Inject a message event (optional: `SENDER=`, `CHAT_ID=`) |
+| `make inject-typing` | Inject a cursorless typing event (optional: `USER_NAME=`, `CHAT_ID=`) |
 | `make list` | Show server capabilities: tools, resources, events, sample poll |
 | `make listen` | SSE push listener — print events in real time |
 | `make webhook` | Webhook receiver — subscribe + auto-refresh, receive HMAC-signed POSTs |

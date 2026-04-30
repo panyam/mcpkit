@@ -22,9 +22,13 @@ import (
 // pair so tests can publish events directly without a Telegram session.
 // Optional WebhookOptions configure the registry; defaults match the
 // production demo (Server + MCPHeaders).
+//
+// The cursorless typing source is registered alongside telegram.message so
+// cursor-shape tests can exercise both modes against the same server.
 func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.YieldingSource[TelegramEventData], func(TelegramEventData) error, *events.WebhookRegistry) {
 	webhooks := events.NewWebhookRegistry(whOpts...)
 	source, yield := newTelegramSource()
+	typingSource, _ := newTelegramTypingSource()
 
 	srv := server.NewServer(
 		core.ServerInfo{Name: "telegram-events-e2e", Version: "0.1.0"},
@@ -33,12 +37,35 @@ func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.Yie
 	registerResources(srv, source)
 	(&ToolDelivery{Bot: nil}).Register(srv)
 	events.Register(events.Config{
-		Sources:  []events.EventSource{source},
+		Sources:  []events.EventSource{source, typingSource},
 		Webhooks: webhooks,
 		Server:   srv,
 	})
 
 	return srv, source, yield, webhooks
+}
+
+// buildTestStackWithTyping is a parallel constructor that returns the typing
+// yield closure alongside the message yield. Used by the cursorless e2e
+// tests so they can publish typing events without spinning up a Telegram
+// session.
+func buildTestStackWithTyping() (*server.Server, func(TelegramEventData) error, func(TelegramTypingData) error) {
+	webhooks := events.NewWebhookRegistry()
+	source, yield := newTelegramSource()
+	typingSource, yieldTyping := newTelegramTypingSource()
+
+	srv := server.NewServer(
+		core.ServerInfo{Name: "telegram-events-e2e", Version: "0.1.0"},
+		server.WithSubscriptions(),
+	)
+	registerResources(srv, source)
+	(&ToolDelivery{Bot: nil}).Register(srv)
+	events.Register(events.Config{
+		Sources:  []events.EventSource{source, typingSource},
+		Webhooks: webhooks,
+		Server:   srv,
+	})
+	return srv, yield, yieldTyping
 }
 
 // yieldText is a small helper for tests that just need to publish a message.
@@ -344,13 +371,135 @@ func TestE2EEventsList(t *testing.T) {
 			Name          string   `json:"name"`
 			Delivery      []string `json:"delivery"`
 			PayloadSchema any      `json:"payloadSchema"`
+			Cursorless    bool     `json:"cursorless"`
 		} `json:"events"`
 	}
 	require.NoError(t, json.Unmarshal(result.Raw, &resp))
-	require.Len(t, resp.Events, 1)
-	assert.Equal(t, "telegram.message", resp.Events[0].Name)
-	assert.ElementsMatch(t, []string{"push", "poll", "webhook"}, resp.Events[0].Delivery)
-	assert.NotNil(t, resp.Events[0].PayloadSchema, "payloadSchema should be auto-derived")
+	byName := map[string]int{}
+	for i, e := range resp.Events {
+		byName[e.Name] = i
+	}
+	require.Contains(t, byName, "telegram.message")
+	require.Contains(t, byName, "telegram.typing")
+
+	msg := resp.Events[byName["telegram.message"]]
+	assert.ElementsMatch(t, []string{"push", "poll", "webhook"}, msg.Delivery)
+	assert.NotNil(t, msg.PayloadSchema, "payloadSchema should be auto-derived")
+	assert.False(t, msg.Cursorless, "telegram.message is cursored")
+
+	typing := resp.Events[byName["telegram.typing"]]
+	assert.ElementsMatch(t, []string{"push", "webhook"}, typing.Delivery)
+	assert.True(t, typing.Cursorless, "telegram.typing is cursorless")
+}
+
+// TestE2ECursorlessPushDelivery verifies the cursorless typing source on
+// telegram-events: yield triggers a push notification whose Event.cursor
+// is JSON null on the wire.
+func TestE2ECursorlessPushDelivery(t *testing.T) {
+	srv, _, yieldTyping := buildTestStackWithTyping()
+
+	var mu sync.Mutex
+	var receivedRaw []map[string]any
+
+	handler := srv.Handler(server.WithStreamableHTTP(true))
+	tsrv := httptest.NewServer(handler)
+	defer tsrv.Close()
+
+	c := client.NewClient(tsrv.URL+"/mcp", core.ClientInfo{Name: "cursorless-push", Version: "1.0"},
+		client.WithGetSSEStream(),
+		client.WithNotificationCallback(func(method string, params any) {
+			if method != "notifications/events/event" {
+				return
+			}
+			b, _ := json.Marshal(params)
+			var p map[string]any
+			_ = json.Unmarshal(b, &p)
+			mu.Lock()
+			receivedRaw = append(receivedRaw, p)
+			mu.Unlock()
+		}),
+	)
+	require.NoError(t, c.Connect())
+	defer c.Close()
+
+	time.Sleep(200 * time.Millisecond)
+	require.NoError(t, yieldTyping(newTelegramTypingEvent(100, "alice", time.Now())))
+	time.Sleep(500 * time.Millisecond)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Len(t, receivedRaw, 1, "push must deliver the typing event")
+	cursorVal, present := receivedRaw[0]["cursor"]
+	require.True(t, present, "cursor field must be present on the wire")
+	assert.Nil(t, cursorVal, "cursorless event must wire as cursor:null")
+}
+
+// TestE2ECursorlessWebhookDelivery verifies the cursorless typing source's
+// webhook delivery on telegram-events: the POSTed Event JSON has cursor:null.
+func TestE2ECursorlessWebhookDelivery(t *testing.T) {
+	srv, _, yieldTyping := buildTestStackWithTyping()
+
+	var mu sync.Mutex
+	var deliveryBody map[string]any
+
+	callbackSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		_ = json.Unmarshal(body, &deliveryBody)
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer callbackSrv.Close()
+
+	handler := srv.Handler(server.WithStreamableHTTP(true))
+	tsrv := httptest.NewServer(handler)
+	defer tsrv.Close()
+	c := client.NewClient(tsrv.URL+"/mcp", core.ClientInfo{Name: "cursorless-wh", Version: "1.0"})
+	require.NoError(t, c.Connect())
+
+	raw, err := c.Call("events/subscribe", map[string]any{
+		"id":       "wh-typing",
+		"name":     "telegram.typing",
+		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL},
+	})
+	require.NoError(t, err)
+	var resp struct {
+		Cursor *string `json:"cursor"`
+	}
+	require.NoError(t, json.Unmarshal(raw.Raw, &resp))
+	assert.Nil(t, resp.Cursor, "subscribe response cursor must be null for cursorless source")
+
+	require.NoError(t, yieldTyping(newTelegramTypingEvent(100, "alice", time.Now())))
+	time.Sleep(500 * time.Millisecond)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.NotNil(t, deliveryBody)
+	cursorVal, present := deliveryBody["cursor"]
+	require.True(t, present)
+	assert.Nil(t, cursorVal, "cursorless event must wire as cursor:null")
+}
+
+// TestE2EPollMultiSubRejected verifies the wire-level guarantee that
+// events/poll no longer accepts multiple subscriptions in one request.
+// Mirrors the discord-events test for telegram parity.
+func TestE2EPollMultiSubRejected(t *testing.T) {
+	srv, _, _, _ := buildTestStack()
+
+	handler := srv.Handler(server.WithStreamableHTTP(true))
+	tsrv := httptest.NewServer(handler)
+	defer tsrv.Close()
+	c := client.NewClient(tsrv.URL+"/mcp", core.ClientInfo{Name: "multi-sub", Version: "1.0"})
+	require.NoError(t, c.Connect())
+
+	_, err := c.Call("events/poll", map[string]any{
+		"subscriptions": []map[string]any{
+			{"id": "a", "name": "telegram.message", "cursor": "0"},
+			{"id": "b", "name": "telegram.typing", "cursor": "0"},
+		},
+	})
+	require.Error(t, err, "multi-subscription events/poll must be rejected")
+	assert.Contains(t, err.Error(), "exactly one subscription")
 }
 
 // TestE2EResourceReadViaClient verifies the recent-messages resource reads

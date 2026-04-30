@@ -15,3 +15,16 @@ func newDiscordSource() (*events.YieldingSource[DiscordEventData], func(DiscordE
 		Delivery:    []string{"push", "poll", "webhook"},
 	}, events.WithMaxSize(1000))
 }
+
+// newDiscordTypingSource constructs the cursorless YieldingSource for
+// discord.typing events. Typing indicators are ephemeral — the source skips
+// buffering and events emit with `cursor: null` on the wire. Push and webhook
+// delivery still work; poll always returns empty (subscribers can't replay
+// missed indicators, which matches the semantics of the underlying state).
+func newDiscordTypingSource() (*events.YieldingSource[DiscordTypingData], func(DiscordTypingData) error) {
+	return events.NewYieldingSource[DiscordTypingData](events.EventDef{
+		Name:        "discord.typing",
+		Description: "Fires when a user starts typing in a Discord channel",
+		Delivery:    []string{"push", "webhook"},
+	}, events.WithoutCursors())
+}

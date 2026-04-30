@@ -32,6 +32,11 @@ inject:
 	  -H 'Content-Type: application/json' \
 	  -d '{"chat_id": $(or $(CHAT_ID),100), "sender": "$(or $(SENDER),test-user)", "text": "$(or $(TEXT),hello from make inject)"}' | jq .
 
+inject-typing:
+	@curl -s -X POST '$(ADDR)/inject?event=telegram.typing' \
+	  -H 'Content-Type: application/json' \
+	  -d '{"chat_id": $(or $(CHAT_ID),100), "user": "$(or $(USER_NAME),test-user)"}' | jq .
+
 list:
 	@$(EVENTS_CLIENT) list
 
@@ -44,4 +49,4 @@ webhook:
 poll:
 	@$(EVENTS_CLIENT) poll --interval $(or $(INTERVAL),5)
 
-.PHONY: run test test-race inject list listen webhook poll
+.PHONY: run test test-race inject inject-typing list listen webhook poll

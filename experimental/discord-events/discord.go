@@ -58,3 +58,24 @@ func newDiscordEvent(guildID, channelID, sender, content string, ts time.Time) D
 		Timestamp: ts.Format(time.RFC3339),
 	}
 }
+
+// DiscordTypingData is the typed payload for the cursorless discord.typing
+// event. Typing indicators are ephemeral state — there is no replay value,
+// so the source declares itself cursorless and the wire emits cursor:null.
+type DiscordTypingData struct {
+	GuildID   string `json:"guild_id" jsonschema:"description=Discord server (guild) ID"`
+	ChannelID string `json:"channel_id" jsonschema:"description=Channel where typing started"`
+	User      string `json:"user" jsonschema:"description=Username that started typing"`
+	StartedAt string `json:"started_at" jsonschema:"description=ISO 8601 timestamp,format=date-time"`
+}
+
+// newDiscordTypingEvent builds a DiscordTypingData payload.
+func newDiscordTypingEvent(guildID, channelID, user string, ts time.Time) DiscordTypingData {
+	log.Printf("[discord-typing] guild=%s channel=%s user=%s", guildID, channelID, user)
+	return DiscordTypingData{
+		GuildID:   guildID,
+		ChannelID: channelID,
+		User:      user,
+		StartedAt: ts.Format(time.RFC3339),
+	}
+}
