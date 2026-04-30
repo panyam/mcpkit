@@ -77,6 +77,13 @@ type ToolRequest struct {
 
 // ToolResult is the response from a tool handler.
 type ToolResult struct {
+	// ResultType is the SEP-2322 polymorphic-dispatch discriminator. For
+	// sync tools/call responses the wire value is "complete" (defaulted by
+	// MarshalJSON when this field is empty). Task-creating responses use
+	// ResultTypeTask on CreateTaskResult instead. Multi-round tool results
+	// will use ResultTypeIncomplete once that flow is wired.
+	ResultType ResultType `json:"resultType"`
+
 	// Content is the list of content items to return.
 	Content []Content `json:"content"`
 
@@ -93,11 +100,25 @@ type ToolResult struct {
 	Meta *ToolResultMeta `json:"_meta,omitempty"`
 }
 
+// MarshalJSON ensures every ToolResult on the wire carries a ResultType.
+// Empty defaults to ResultTypeComplete so existing callers and struct
+// literals don't have to set the field explicitly. SEP-2322 requires this
+// discriminator on every non-task tools/call response so clients can
+// dispatch sync vs task vs multi-round without inspecting payload shape.
+func (r ToolResult) MarshalJSON() ([]byte, error) {
+	type alias ToolResult
+	if r.ResultType == "" {
+		r.ResultType = ResultTypeComplete
+	}
+	return json.Marshal(alias(r))
+}
+
 // UnmarshalJSON decodes a ToolResult, tolerating a single-object `content`
 // form from peers that haven't caught up to the array-form spec. Single
 // objects are wrapped into a 1-element slice. See #81.
 func (r *ToolResult) UnmarshalJSON(data []byte) error {
 	var aux struct {
+		ResultType        ResultType      `json:"resultType,omitempty"`
 		Content           json.RawMessage `json:"content"`
 		IsError           bool            `json:"isError,omitempty"`
 		StructuredContent any             `json:"structuredContent,omitempty"`
@@ -106,6 +127,7 @@ func (r *ToolResult) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
+	r.ResultType = aux.ResultType
 	r.IsError = aux.IsError
 	r.StructuredContent = aux.StructuredContent
 	r.Meta = aux.Meta
