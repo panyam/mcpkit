@@ -47,7 +47,8 @@ See [WALKTHROUGH.md](WALKTHROUGH.md) for the full step-by-step description and s
 ## Conformance
 
 - 21 scenarios in `conformance/tasks-v2/scenarios.test.ts` (Node + tsx)
-- Implementation plan: [`docs/TASKS_V2_PLAN.md`](../../docs/TASKS_V2_PLAN.md)
+- Implementation plan: [`PLAN.md`](../../PLAN.md) (SEP-2663, marked COMPLETE)
+- Migration guide: [`docs/TASKS_V2_MIGRATION.md`](../../docs/TASKS_V2_MIGRATION.md)
 - Spec: [SEP-2557](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2557)
 
 ## Related

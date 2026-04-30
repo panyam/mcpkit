@@ -546,10 +546,10 @@ Create a task and send progress notifications from the tool handler.
 | `run-exercises.sh` | Runs all README exercises against a running server (Go or TS) |
 | `test-side-by-side.sh` | Starts both servers, compares wire format side-by-side |
 | `package.json` | TS SDK dependencies for the reference server |
-| `../../server/tasks_experimental.go` | Tasks middleware, handlers, RegisterTasks |
+| `../../server/tasks_v1.go` | v1 tasks middleware, handlers, RegisterTasksV1 |
 | `../../server/task_callbacks.go` | TaskCallbacks struct (per-tool GetTask/GetResult overrides) |
 | `../../server/task_store.go` | TaskStore interface + InMemoryTaskStore |
 | `../../server/task_session.go` | TaskContext, TaskElicit, TaskSample |
-| `../../client/tasks.go` | Client helpers: GetTask, ToolCallAsTask, etc. |
-| `../../docs/TASKS_GAP_PLAN.md` | Gap closure plan vs TS SDK (Phases 1-8) |
+| `../../client/tasks_v1.go` | v1 client helpers: GetTaskV1, ToolCallAsTaskV1, etc. |
+| `../../docs/TASKS_V2_MIGRATION.md` | v1 → v2 migration guide (current canonical doc) |
 
