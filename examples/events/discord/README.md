@@ -6,24 +6,41 @@ Companion to the [Telegram example](../telegram/) — shows the events library h
 
 ## Walkthrough
 
-The canonical demo for the events extension. Runs end-to-end, hits every protocol feature.
+The canonical demo for the events extension. Two ways to run it.
+
+### Option A — Test mode (no Discord token needed)
+
+All walkthrough steps run; the final live-interaction step skips with a "no token" message. Great for a quick read-through of the protocol features.
 
 ```bash
-make serve    # terminal 1 — real MCP server
-make demo     # terminal 2 — scripted demokit walkthrough (TUI)
+make serve    # terminal 1 — server in test mode
+make demo     # terminal 2 — walkthrough
 ```
 
-See [`WALKTHROUGH.md`](WALKTHROUGH.md) for the full sequence diagram and step-by-step explanation. Don't repeat it here — the walkthrough is generated from the demo step definitions in `walkthrough.go`, run `make readme` to regenerate.
+To simulate Discord activity (so you can see push/poll/webhook fanout in real time), inject events from a third terminal:
+
+```bash
+make inject TEXT="hello world"   # message event (cursored)
+make inject-typing               # typing indicator (cursorless)
+```
+
+### Option B — Real bot mode (requires `DISCORD_BOT_TOKEN`)
+
+Same walkthrough plus the final live step captures real typing + message events from the Discord channel where you invited the bot.
+
+```bash
+DISCORD_BOT_TOKEN=your-token make serve   # terminal 1 — server in bot mode
+make demo                                  # terminal 2 — walkthrough
+# When the live step starts, go type in your Discord channel.
+```
+
+See [`WALKTHROUGH.md`](WALKTHROUGH.md) for the full sequence diagram and step-by-step explanation. The walkthrough is generated from the demo step definitions in `walkthrough.go` — run `make readme` to regenerate.
 
 > **Going to production?** See [`experimental/ext/events/DEPLOYMENT.md`](../../../experimental/ext/events/DEPLOYMENT.md) for private-cloud / WAF guidance.
 
-## Setup — connecting to Discord
+## Setup — getting a Discord bot token (Option B only)
 
-The walkthrough runs in test mode by default (no Discord needed). To wire up a real bot:
-
-```bash
-DISCORD_BOT_TOKEN=your-token make serve
-```
+Skip this section if you're running in test mode (Option A above).
 
 ### Getting a Discord Bot Token
 
