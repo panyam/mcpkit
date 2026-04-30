@@ -360,20 +360,48 @@ class WebhookSubscription:
 # Subcommand: webhook
 # ═══════════════════════════════════════════════════════════════════
 
-def _make_webhook_handler(secret: str):
+def _verify_signature(headers, body: bytes, secret: str) -> bool:
+    """Verify either X-MCP-* or webhook-* signature on an inbound delivery.
+    Detects which header set is present rather than requiring the caller to
+    know the server's mode — handy for ad-hoc receivers and tests.
+    """
+    mcp_sig = headers.get("X-MCP-Signature", "")
+    if mcp_sig:
+        ts = headers.get("X-MCP-Timestamp", "")
+        expected = "sha256=" + hmac.new(
+            secret.encode(), (ts + ".").encode() + body, hashlib.sha256
+        ).hexdigest()
+        return hmac.compare_digest(mcp_sig, expected)
+
+    std_sig = headers.get("webhook-signature", "")
+    if std_sig:
+        msg_id = headers.get("webhook-id", "")
+        ts = headers.get("webhook-timestamp", "")
+        import base64
+        expected = "v1," + base64.b64encode(
+            hmac.new(secret.encode(), (msg_id + "." + ts + ".").encode() + body, hashlib.sha256).digest()
+        ).decode()
+        # Standard Webhooks allows multiple space-separated v1 sigs; any match wins.
+        for cand in std_sig.split():
+            if hmac.compare_digest(cand, expected):
+                return True
+        return False
+    return False
+
+
+def _make_webhook_handler(secret_holder):
+    """secret_holder is a list with one element — `secret_holder[0]` — so the
+    handler reads the live secret on every request. cmd_webhook updates the
+    holder after subscribe returns the server-assigned secret (which may
+    differ from anything the client supplied, depending on secret mode)."""
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length)
-            sig = self.headers.get("X-MCP-Signature", "")
-            ts = self.headers.get("X-MCP-Timestamp", "")
+            sig_ok = _verify_signature(self.headers, body, secret_holder[0])
+            mode = "standard" if self.headers.get("webhook-signature") else "mcp"
 
-            expected = "sha256=" + hmac.new(
-                secret.encode(), (ts + ".").encode() + body, hashlib.sha256
-            ).hexdigest()
-            sig_ok = hmac.compare_digest(sig, expected)
-
-            label = "sig OK" if sig_ok else "sig FAIL"
+            label = f"{mode} sig OK" if sig_ok else f"{mode} sig FAIL"
             print()
             print(f"── WEBHOOK EVENT ({label}) " + "─" * 30)
             try:
@@ -402,14 +430,17 @@ def cmd_webhook(session: MCPSession, args):
     if not args.event:
         sys.exit("ERROR: --event is required for webhook mode")
 
-    secret = args.secret
     hook_url = f"http://localhost:{args.port}"
 
     print("=== MCP Events — Webhook Receiver ===\n")
 
-    # Start local receiver first
+    # Start local receiver first. The verification secret lives in a
+    # one-element list so we can swap in the server-assigned secret after
+    # subscribe returns (Server / Identity modes generate or derive the
+    # secret server-side; Client mode echoes the supplied one).
+    secret_holder = [args.secret]
     print(f"Starting webhook receiver on port {args.port}...")
-    server = HTTPServer(("", args.port), _make_webhook_handler(secret))
+    server = HTTPServer(("", args.port), _make_webhook_handler(secret_holder))
     threading.Thread(target=server.serve_forever, daemon=True).start()
 
     # Initialize MCP, then subscribe with auto-refresh.
@@ -426,12 +457,18 @@ def cmd_webhook(session: MCPSession, args):
         session,
         event_name=args.event,
         callback_url=hook_url,
-        secret=secret,
+        secret=args.secret,
         sub_id="wh-demo",
         refresh_factor=args.refresh_factor,
         on_refresh=on_refresh,
     )
     result = sub.start()
+    # Adopt whatever secret the server returned — handles Server / Identity
+    # modes where the client-supplied secret is ignored.
+    if result.get("secret"):
+        secret_holder[0] = result["secret"]
+        if result["secret"] != args.secret:
+            print(f"  using server-assigned secret (mode is not 'client'): {result['secret'][:16]}...")
     if result.get("id"):
         print(f"  subscription: {result['id']}")
     if result.get("refreshBefore"):

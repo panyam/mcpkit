@@ -135,3 +135,20 @@ Telegram Bot (long-poll)  ──or──  POST /inject
 | `make poll` | Polling loop (default 5s interval, override: `INTERVAL=10`) |
 
 All client commands use the shared [`events_client.py`](../ext/events/events_client.py).
+
+## Webhook secret + header modes
+
+The server takes the same `-webhook-secret-mode` / `-webhook-header-mode` /
+`-webhook-root` flags as discord-events. See
+[`experimental/ext/events/README.md`](../ext/events/) for the full matrix.
+
+```bash
+# Default
+go run . -addr :8080
+
+# Identity mode (idempotent subscribe, derived secrets)
+go run . -addr :8080 -webhook-secret-mode identity -webhook-root deadbeefcafef00d
+
+# Standard Webhooks header naming
+go run . -addr :8080 -webhook-header-mode standard
+```

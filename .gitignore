@@ -1,4 +1,5 @@
 # Binaries
+__pycache__
 bin
 *.exe
 *.exe~

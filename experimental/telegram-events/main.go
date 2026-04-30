@@ -10,6 +10,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"log"
@@ -29,9 +30,37 @@ const eventStoreCap = 1000
 func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	token := flag.String("token", "", "Telegram bot token (omit for test mode)")
+	whSecretMode := flag.String("webhook-secret-mode", "server", "webhook secret mode: server | client | identity")
+	whHeaderMode := flag.String("webhook-header-mode", "mcp", "webhook header style: mcp | standard")
+	whRootHex := flag.String("webhook-root", "", "hex-encoded master secret for identity mode (required when -webhook-secret-mode=identity)")
 	flag.Parse()
 
-	webhooks := events.NewWebhookRegistry()
+	secretMode, err := events.ParseSecretMode(*whSecretMode)
+	if err != nil {
+		log.Fatalf("invalid -webhook-secret-mode: %v", err)
+	}
+	headerMode, err := events.ParseHeaderMode(*whHeaderMode)
+	if err != nil {
+		log.Fatalf("invalid -webhook-header-mode: %v", err)
+	}
+
+	whOpts := []events.WebhookOption{
+		events.WithWebhookSecretMode(secretMode),
+		events.WithWebhookHeaderMode(headerMode),
+	}
+	if secretMode == events.WebhookSecretIdentity {
+		if *whRootHex == "" {
+			log.Fatalf("-webhook-root is required when -webhook-secret-mode=identity")
+		}
+		root, err := hex.DecodeString(*whRootHex)
+		if err != nil {
+			log.Fatalf("invalid -webhook-root: %v", err)
+		}
+		whOpts = append(whOpts, events.WithWebhookRoot(root))
+	}
+	log.Printf("[server] webhook modes: secret=%s headers=%s", secretMode, headerMode)
+
+	webhooks := events.NewWebhookRegistry(whOpts...)
 	source, yield := newTelegramSource()
 
 	var bot *tgbotapi.BotAPI
