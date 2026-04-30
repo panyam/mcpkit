@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -238,7 +239,8 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 		dispatcher := t.server.newSession()
 		// Auto-initialize the dispatcher so it accepts any method
 		dispatcher.initialized = true
-		resp, dErr := t.server.dispatchWith(dispatcher, r.Context(), claims, &req)
+		ctx := core.WithResponseHeaderCollector(r.Context())
+		resp, dErr := t.server.dispatchWith(dispatcher, ctx, claims, &req)
 		if dErr != nil {
 			writeAuthError(w, dErr)
 			return
@@ -247,6 +249,7 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 			w.WriteHeader(http.StatusAccepted)
 			return
 		}
+		applyStagedResponseHeaders(w, ctx)
 		w.Header().Set("Content-Type", "application/json")
 		raw, _ := marshalJSON(resp)
 		w.Write(raw)
@@ -303,7 +306,8 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Synchronous JSON path (no mid-request notifications)
-	resp, dErr := t.server.dispatchWith(dispatcher, r.Context(), claims, &req)
+	ctx := core.WithResponseHeaderCollector(r.Context())
+	resp, dErr := t.server.dispatchWith(dispatcher, ctx, claims, &req)
 	if dErr != nil {
 		writeAuthError(w, dErr)
 		return
@@ -314,6 +318,7 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	applyStagedResponseHeaders(w, ctx)
 	w.Header().Set("Content-Type", "application/json")
 	raw, err := marshalJSON(resp)
 	if err != nil {
@@ -321,6 +326,16 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	w.Write(raw)
+}
+
+// applyStagedResponseHeaders writes any HTTP response headers staged by
+// middleware/handlers during dispatch (via core.SetResponseHeader) onto w
+// before the response body is written. Caller must invoke before any Write
+// or WriteHeader, otherwise the headers are dropped by net/http.
+func applyStagedResponseHeaders(w http.ResponseWriter, ctx context.Context) {
+	for k, v := range core.CollectResponseHeaders(ctx) {
+		w.Header().Set(k, v)
+	}
 }
 
 // handlePostSSE handles a POST request using SSE streaming, allowing the server
@@ -332,7 +347,8 @@ func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Reque
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		// Fall back to synchronous JSON if flushing not supported
-		resp, dErr := t.server.dispatchWith(d, r.Context(), claims, req)
+		ctx := core.WithResponseHeaderCollector(r.Context())
+		resp, dErr := t.server.dispatchWith(d, ctx, claims, req)
 		if dErr != nil {
 			writeAuthError(w, dErr)
 			return
@@ -341,11 +357,17 @@ func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Reque
 			w.WriteHeader(http.StatusAccepted)
 			return
 		}
+		applyStagedResponseHeaders(w, ctx)
 		w.Header().Set("Content-Type", "application/json")
 		raw, _ := marshalJSON(resp)
 		w.Write(raw)
 		return
 	}
+
+	// Attach a response-header collector so middleware/handlers can stage
+	// HTTP response headers (e.g., Mcp-Name from the v2 task middleware per
+	// SEP-2243) that we apply on the first SSE flush below.
+	dispatchCtx := core.WithResponseHeaderCollector(r.Context())
 
 	// SSE headers are set lazily on first write so we can still surface
 	// transport-level auth errors via writeAuthError (HTTP 403/401 +
@@ -361,6 +383,9 @@ func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Reque
 			return // POST response already sent — background goroutine writing to dead writer
 		}
 		if !sseStarted {
+			// Apply any headers staged by middleware/handlers (e.g., Mcp-Name)
+			// before we commit response headers via Content-Type.
+			applyStagedResponseHeaders(w, dispatchCtx)
 			w.Header().Set("Content-Type", "text/event-stream")
 			w.Header().Set("Cache-Control", "no-cache")
 			w.Header().Set("Connection", "keep-alive")
@@ -404,7 +429,7 @@ func (t *streamableTransport) handlePostSSE(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Dispatch with request-scoped notify, request, and retry funcs.
-	resp, dErr := t.server.dispatchWithOpts(d, r.Context(), claims, requestNotify, requestFunc, sseRetry, req)
+	resp, dErr := t.server.dispatchWithOpts(d, dispatchCtx, claims, requestNotify, requestFunc, sseRetry, req)
 
 	// Transport-level error from middleware (e.g., scope step-up): if the SSE
 	// stream hasn't started yet, we can still send an HTTP-level auth response
