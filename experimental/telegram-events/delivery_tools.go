@@ -20,7 +20,7 @@ type sendMessageInput struct {
 }
 
 // Register hooks up the send_message tool on the MCP server.
-func (d *ToolDelivery) Register(srv *server.Server, store *MessageStore) {
+func (d *ToolDelivery) Register(srv *server.Server) {
 	srv.Register(core.TextTool[sendMessageInput](
 		"send_message",
 		"Send a text message to a Telegram chat.",

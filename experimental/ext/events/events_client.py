@@ -27,7 +27,9 @@ import sys
 import textwrap
 import threading
 import time
+from datetime import datetime, timezone
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 
@@ -230,6 +232,131 @@ def cmd_listen(session: MCPSession, args):
 
 
 # ═══════════════════════════════════════════════════════════════════
+# WebhookSubscription — TTL refresh + recovery helper
+# ═══════════════════════════════════════════════════════════════════
+
+class WebhookSubscription:
+    """Wraps an events/subscribe lifecycle with automatic TTL refresh.
+
+    Per the spec, webhook subscriptions are soft state: the server holds them
+    in memory and they expire if the client stops refreshing. Per Peter's
+    response on the WG PR (line 623), it's allowed to deliver near the TTL
+    boundary and the client should expect a "subscription not found" error
+    when refreshing — at which point the right move is to re-subscribe.
+
+    This helper does both:
+      - Schedules a refresh at refresh_factor * TTL (default 0.5).
+      - On any refresh that fails (subscription expired, server restarted),
+        immediately re-subscribes with the same parameters.
+
+    Use start() / stop() to manage the background refresh thread.
+    """
+
+    def __init__(
+        self,
+        session,
+        event_name: str,
+        callback_url: str,
+        secret: str,
+        sub_id: str = "wh-sub",
+        refresh_factor: float = 0.5,
+        on_event: callable = None,
+        on_refresh: callable = None,
+        on_recover: callable = None,
+    ):
+        """
+        on_refresh: called after each successful refresh (including the initial
+                    subscribe and any post-recovery re-subscribe). Receives no args.
+        on_recover: called when a refresh fails (subscription expired) and a
+                    fresh subscribe succeeds. Receives no args. Both may fire
+                    in the same cycle if the recovery succeeds.
+        """
+        self.session = session
+        self.event_name = event_name
+        self.callback_url = callback_url
+        self.secret = secret
+        self.sub_id = sub_id
+        self.refresh_factor = refresh_factor
+        self.on_event = on_event
+        self.on_refresh = on_refresh
+        self.on_recover = on_recover
+
+        self._stop = threading.Event()
+        self._thread = None
+        self._refresh_before = None  # parsed from server response
+
+    def _subscribe(self):
+        """Send events/subscribe and capture refreshBefore."""
+        resp = self.session.rpc("events/subscribe", {
+            "id": self.sub_id,
+            "name": self.event_name,
+            "delivery": {
+                "mode": "webhook",
+                "url": self.callback_url,
+                "secret": self.secret,
+            },
+        })
+        result = resp.get("result", {})
+        rb_str = result.get("refreshBefore")
+        if rb_str:
+            # RFC3339 — strip trailing Z and parse as UTC
+            self._refresh_before = datetime.fromisoformat(rb_str.replace("Z", "+00:00"))
+        return result
+
+    def _seconds_until_refresh(self) -> float:
+        """How long to wait before the next refresh."""
+        if self._refresh_before is None:
+            return 30.0  # conservative fallback
+        ttl_remaining = (self._refresh_before - datetime.now(timezone.utc)).total_seconds()
+        # refresh_factor * TTL_remaining; clamp to [1.0, ttl_remaining]
+        wait = max(1.0, ttl_remaining * self.refresh_factor)
+        # Don't sleep past the boundary either
+        return min(wait, max(1.0, ttl_remaining - 1.0))
+
+    def _refresh_loop(self):
+        """Background loop: sleep, refresh, repeat. On any refresh failure,
+        treat as expired and re-subscribe immediately."""
+        while not self._stop.is_set():
+            wait = self._seconds_until_refresh()
+            # Use Event.wait so stop() interrupts the sleep
+            if self._stop.wait(timeout=wait):
+                return
+            try:
+                self._subscribe()
+                if self.on_refresh:
+                    self.on_refresh()
+            except (HTTPError, OSError, ValueError) as exc:
+                # Subscription was likely expired (race near TTL boundary,
+                # per Peter's WG comment). Re-subscribe and notify.
+                print(f"  [refresh] {exc.__class__.__name__}: {exc} — re-subscribing", flush=True)
+                try:
+                    self._subscribe()
+                    if self.on_refresh:
+                        self.on_refresh()
+                    if self.on_recover:
+                        self.on_recover()
+                except Exception as exc2:
+                    print(f"  [refresh] re-subscribe failed: {exc2}", flush=True)
+
+    def start(self):
+        """Subscribe and start the background refresh thread. on_refresh fires
+        once for the initial subscribe so callers that count refresh calls see
+        a consistent total."""
+        result = self._subscribe()
+        if self.on_refresh:
+            self.on_refresh()
+        self._thread = threading.Thread(target=self._refresh_loop, daemon=True)
+        self._thread.start()
+        return result
+
+    def stop(self):
+        """Stop the refresh thread. Does not unsubscribe."""
+        self._stop.set()
+        if self._thread:
+            self._thread.join(timeout=2.0)
+
+
+# ═══════════════════════════════════════════════════════════════════
 # Subcommand: webhook
 # ═══════════════════════════════════════════════════════════════════
 
@@ -285,17 +412,26 @@ def cmd_webhook(session: MCPSession, args):
     server = HTTPServer(("", args.port), _make_webhook_handler(secret))
     threading.Thread(target=server.serve_forever, daemon=True).start()
 
-    # Initialize MCP + subscribe
+    # Initialize MCP, then subscribe with auto-refresh.
     sid = session.initialize()
     print(f"Session: {sid}")
-    print(f"Subscribing to {args.event}...")
+    print(f"Subscribing to {args.event} (auto-refresh at {args.refresh_factor:g}*TTL)...")
 
-    resp = session.rpc("events/subscribe", {
-        "id": "wh-demo",
-        "name": args.event,
-        "delivery": {"mode": "webhook", "url": hook_url, "secret": secret},
-    })
-    result = resp.get("result", {})
+    refresh_count = [0]
+    def on_refresh():
+        refresh_count[0] += 1
+        print(f"  [auto-refresh] subscription refreshed (count={refresh_count[0]})", flush=True)
+
+    sub = WebhookSubscription(
+        session,
+        event_name=args.event,
+        callback_url=hook_url,
+        secret=secret,
+        sub_id="wh-demo",
+        refresh_factor=args.refresh_factor,
+        on_refresh=on_refresh,
+    )
+    result = sub.start()
     if result.get("id"):
         print(f"  subscription: {result['id']}")
     if result.get("refreshBefore"):
@@ -309,6 +445,8 @@ def cmd_webhook(session: MCPSession, args):
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nStopped.")
+    finally:
+        sub.stop()
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -378,9 +516,11 @@ def main():
 
     sub.add_parser("listen", help="SSE push listener")
 
-    wp = sub.add_parser("webhook", help="Webhook receiver")
+    wp = sub.add_parser("webhook", help="Webhook receiver (auto-refreshes subscription)")
     wp.add_argument("--port", type=int, default=9999, help="Local receiver port")
     wp.add_argument("--secret", default="demo-webhook-secret", help="HMAC shared secret")
+    wp.add_argument("--refresh-factor", type=float, default=0.5,
+                    help="Refresh subscription at this fraction of TTL (default 0.5)")
 
     pp = sub.add_parser("poll", help="Polling loop")
     pp.add_argument("--interval", type=int, default=5, help="Seconds between polls")

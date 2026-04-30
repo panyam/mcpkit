@@ -46,7 +46,7 @@ sequenceDiagram
     Note over C,S: Connection held open
 
     T->>S: Message arrives
-    S->>S: store.Add() → OnMessage callback
+    S->>S: yield() → store + library fanout hook
     S-->>C: SSE: notifications/events/event
     T->>S: Another message
     S-->>C: SSE: notifications/events/event
@@ -91,11 +91,11 @@ sequenceDiagram
     S-->>C: 200 (id, refreshBefore)
 
     T->>S: Message arrives
-    S->>S: store.Add() → OnMessage callback
+    S->>S: yield() → store + library fanout hook
     S->>C: POST http://localhost:9999<br/>X-MCP-Signature: sha256=...<br/>X-MCP-Timestamp: 1714000000
     C->>C: Verify HMAC, print event
 
-    Note over C,S: Client must refresh subscription<br/>before TTL expires (60s default)
+    Note over C,S: WebhookSubscription helper auto-refreshes at<br/>0.5×TTL (60s default) and re-subscribes if<br/>the boundary race produces a "not found"
 ```
 
 ## Architecture
@@ -104,16 +104,22 @@ sequenceDiagram
 Telegram Bot (long-poll)  ──or──  POST /inject
                 │                       │
                 ▼                       ▼
-          MessageStore (in-memory ring buffer, 1000 max)
+                yield(TelegramEventData{...})    ← user code: one call
                 │
-                │  OnMessage callback
-                │
+                │  YieldingSource (library):
+                │    - assigns cursor + event ID
+                │    - stores in bounded ring (1000 max)
+                │    - calls library-installed fanout hook
+                ▼
                 ├──► events.Emit()              → Push (SSE broadcast)
-                ├──► srv.NotifyResourceUpdated() → Resource subscribers
                 └──► events.EmitToWebhooks()     → Webhook (HMAC POST)
                                                    ▲
-                                              events/poll reads
-                                              from store on demand
+                                              events/poll reads from
+                                              the same source's buffer
+
+  Resource handlers read typed payloads via:
+    source.Recent(50)         → []TelegramEventData
+    source.ByCursor("42")     → (TelegramEventData, true)
 ```
 
 ## Make Targets
@@ -121,11 +127,11 @@ Telegram Bot (long-poll)  ──or──  POST /inject
 | Target | Description |
 |--------|-------------|
 | `make run` | Start server (with bot if `TELEGRAM_BOT_TOKEN` set) |
-| `make test` | Go tests (21 tests) |
+| `make test` | Go tests |
 | `make inject TEXT="..."` | Inject a message (optional: `SENDER=`, `CHAT_ID=`) |
 | `make list` | Show server capabilities: tools, resources, events, sample poll |
 | `make listen` | SSE push listener — print events in real time |
-| `make webhook` | Webhook receiver — subscribe + receive HMAC-signed POSTs |
+| `make webhook` | Webhook receiver — subscribe + auto-refresh, receive HMAC-signed POSTs |
 | `make poll` | Polling loop (default 5s interval, override: `INTERVAL=10`) |
 
 All client commands use the shared [`events_client.py`](../ext/events/events_client.py).

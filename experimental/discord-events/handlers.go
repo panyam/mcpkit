@@ -3,25 +3,28 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/experimental/ext/events"
 	"github.com/panyam/mcpkit/server"
 )
 
-// registerResources registers MCP resources for reading Discord messages.
-func registerResources(srv *server.Server, store *MessageStore) {
+const recentLimit = 50
+
+// registerResources registers MCP resources that read typed payloads
+// directly from the YieldingSource — no separate buffer, no unmarshal cycle.
+func registerResources(srv *server.Server, source *events.YieldingSource[DiscordEventData]) {
 	srv.RegisterResource(
 		core.ResourceDef{
 			URI:         "discord://messages/recent",
 			Name:        "Recent Discord Messages",
-			Description: "The most recent 50 Discord messages received by the bot.",
+			Description: "The most recent Discord message payloads received by the bot.",
 			MimeType:    "application/json",
 		},
 		func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
-			msgs := store.Recent(50)
-			data, _ := json.Marshal(msgs)
+			payloads := source.Recent(recentLimit)
+			data, _ := json.Marshal(payloads)
 			return core.ResourceResult{
 				Contents: []core.ResourceReadContent{{
 					URI: req.URI, MimeType: "application/json", Text: string(data),
@@ -32,21 +35,18 @@ func registerResources(srv *server.Server, store *MessageStore) {
 
 	srv.RegisterResourceTemplate(
 		core.ResourceTemplate{
-			URITemplate: "discord://message/{id}",
+			URITemplate: "discord://message/{cursor}",
 			Name:        "Discord Message",
-			Description: "A single Discord message by its ID.",
+			Description: "A single Discord message identified by its event cursor.",
 			MimeType:    "application/json",
 		},
 		func(ctx core.ResourceContext, uri string, params map[string]string) (core.ResourceResult, error) {
-			id, err := strconv.ParseInt(params["id"], 10, 64)
-			if err != nil {
-				return core.ResourceResult{}, fmt.Errorf("invalid message ID %q: %w", params["id"], err)
+			cursor := params["cursor"]
+			payload, ok := source.ByCursor(cursor)
+			if !ok {
+				return core.ResourceResult{}, fmt.Errorf("message with cursor %q not found", cursor)
 			}
-			msg := store.GetByID(id)
-			if msg == nil {
-				return core.ResourceResult{}, fmt.Errorf("message %d not found", id)
-			}
-			data, _ := json.Marshal(msg)
+			data, _ := json.Marshal(payload)
 			return core.ResourceResult{
 				Contents: []core.ResourceReadContent{{
 					URI: uri, MimeType: "application/json", Text: string(data),
@@ -61,7 +61,6 @@ type sendMessageInput struct {
 	Text      string `json:"text" jsonschema:"description=Message text to send.,required"`
 }
 
-// registerTools registers the send_message tool.
 func registerTools(srv *server.Server, session *discordgo.Session) {
 	srv.Register(core.TextTool[sendMessageInput](
 		"send_message",

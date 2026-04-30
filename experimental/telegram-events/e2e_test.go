@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -17,37 +18,42 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// buildTestStack creates a fully wired test server with tools, event methods,
-// resources, and fan-out callback.
-func buildTestStack() (*server.Server, *MessageStore, *events.WebhookRegistry) {
-	store := NewMessageStore(1000)
+// buildTestStack returns a fully wired test server plus the source/yield
+// pair so tests can publish events directly without a Telegram session.
+func buildTestStack() (*server.Server, *events.YieldingSource[TelegramEventData], func(TelegramEventData) error, *events.WebhookRegistry) {
 	webhooks := events.NewWebhookRegistry()
+	source, yield := newTelegramSource()
 
 	srv := server.NewServer(
 		core.ServerInfo{Name: "telegram-events-e2e", Version: "0.1.0"},
 		server.WithSubscriptions(),
 	)
-	registerResources(srv, store)
-	(&ToolDelivery{Bot: nil}).Register(srv, store)
+	registerResources(srv, source)
+	(&ToolDelivery{Bot: nil}).Register(srv)
 	events.Register(events.Config{
-		Sources:  []events.EventSource{newTelegramSource(store)},
+		Sources:  []events.EventSource{source},
 		Webhooks: webhooks,
 		Server:   srv,
 	})
 
-	store.OnMessage = func(msg Message) {
-		event := messageToEvent(msg)
-		events.Emit(srv, event)
-		srv.NotifyResourceUpdated("telegram://messages/recent")
-		events.EmitToWebhooks(webhooks, event)
-	}
-
-	return srv, store, webhooks
+	return srv, source, yield, webhooks
 }
 
-// TestE2EPollDelivery verifies poll via events/poll protocol method.
+// yieldText is a small helper for tests that just need to publish a message.
+func yieldText(yield func(TelegramEventData) error, chatID int64, sender, text string) error {
+	return yield(TelegramEventData{
+		ChatID:    strconv.FormatInt(chatID, 10),
+		User:      sender,
+		Text:      text,
+		Timestamp: time.Now().Format(time.RFC3339),
+	})
+}
+
+// TestE2EPollDelivery verifies events/poll returns events that were yielded
+// via the YieldingSource path. Confirms the library's internal Poll handler
+// reads through the user-provided source correctly with cursor pagination.
 func TestE2EPollDelivery(t *testing.T) {
-	srv, store, _ := buildTestStack()
+	srv, _, yield, _ := buildTestStack()
 
 	handler := srv.Handler(server.WithStreamableHTTP(true))
 	ts := httptest.NewServer(handler)
@@ -56,9 +62,9 @@ func TestE2EPollDelivery(t *testing.T) {
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "poll-test", Version: "1.0"})
 	require.NoError(t, c.Connect())
 
-	store.Add(100, "alice", "hello", time.Now())
-	store.Add(100, "bob", "world", time.Now())
-	store.Add(100, "carol", "!", time.Now())
+	require.NoError(t, yieldText(yield, 100, "alice", "hello"))
+	require.NoError(t, yieldText(yield, 100, "bob", "world"))
+	require.NoError(t, yieldText(yield, 100, "carol", "!"))
 
 	result, err := c.Call("events/poll", map[string]any{
 		"maxEvents": 2,
@@ -86,9 +92,11 @@ func TestE2EPollDelivery(t *testing.T) {
 	assert.Len(t, resp2.Results[0].Events, 1)
 }
 
-// TestE2EPushDelivery verifies push via SSE broadcast.
+// TestE2EPushDelivery verifies the library's automatic push fanout — yield()
+// triggers events.Emit via the SetEmitHook wired by Register, and the SSE
+// notification reaches the client. Source author writes no fanout code.
 func TestE2EPushDelivery(t *testing.T) {
-	srv, store, _ := buildTestStack()
+	srv, _, yield, _ := buildTestStack()
 
 	var mu sync.Mutex
 	var received []string
@@ -109,7 +117,7 @@ func TestE2EPushDelivery(t *testing.T) {
 	defer c.Close()
 
 	time.Sleep(200 * time.Millisecond)
-	store.Add(100, "alice", "push test", time.Now())
+	require.NoError(t, yieldText(yield, 100, "alice", "push test"))
 	time.Sleep(500 * time.Millisecond)
 
 	mu.Lock()
@@ -117,9 +125,10 @@ func TestE2EPushDelivery(t *testing.T) {
 	assert.Contains(t, received, "notifications/events/event")
 }
 
-// TestE2EWebhookDelivery verifies webhook via events/subscribe protocol method.
+// TestE2EWebhookDelivery verifies webhook fanout — same library hook also
+// routes events to registered webhook subscribers with HMAC signing.
 func TestE2EWebhookDelivery(t *testing.T) {
-	srv, store, webhooks := buildTestStack()
+	srv, _, yield, webhooks := buildTestStack()
 
 	var mu sync.Mutex
 	var deliveries []events.Event
@@ -153,12 +162,14 @@ func TestE2EWebhookDelivery(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	var subResp struct{ ID string `json:"id"` }
+	var subResp struct {
+		ID string `json:"id"`
+	}
 	require.NoError(t, json.Unmarshal(subResult.Raw, &subResp))
 	assert.Equal(t, "wh-e2e", subResp.ID)
 	require.Len(t, webhooks.Targets(), 1)
 
-	store.Add(200, "bob", "webhook test", time.Now())
+	require.NoError(t, yieldText(yield, 200, "bob", "webhook test"))
 	time.Sleep(500 * time.Millisecond)
 
 	mu.Lock()
@@ -167,9 +178,10 @@ func TestE2EWebhookDelivery(t *testing.T) {
 	assert.Equal(t, "telegram.message", deliveries[0].Name)
 }
 
-// TestE2EEventsList verifies events/list returns the telegram.message definition.
+// TestE2EEventsList verifies events/list returns the telegram.message
+// definition with payloadSchema auto-derived from TelegramEventData.
 func TestE2EEventsList(t *testing.T) {
-	srv, _, _ := buildTestStack()
+	srv, _, _, _ := buildTestStack()
 
 	handler := srv.Handler(server.WithStreamableHTTP(true))
 	ts := httptest.NewServer(handler)
@@ -183,19 +195,22 @@ func TestE2EEventsList(t *testing.T) {
 
 	var resp struct {
 		Events []struct {
-			Name     string   `json:"name"`
-			Delivery []string `json:"delivery"`
+			Name          string   `json:"name"`
+			Delivery      []string `json:"delivery"`
+			PayloadSchema any      `json:"payloadSchema"`
 		} `json:"events"`
 	}
 	require.NoError(t, json.Unmarshal(result.Raw, &resp))
 	require.Len(t, resp.Events, 1)
 	assert.Equal(t, "telegram.message", resp.Events[0].Name)
 	assert.ElementsMatch(t, []string{"push", "poll", "webhook"}, resp.Events[0].Delivery)
+	assert.NotNil(t, resp.Events[0].PayloadSchema, "payloadSchema should be auto-derived")
 }
 
-// TestE2EResourceReadViaClient verifies MCP resources work through the client.
+// TestE2EResourceReadViaClient verifies the recent-messages resource reads
+// from the same source that events/poll uses — single source of truth.
 func TestE2EResourceReadViaClient(t *testing.T) {
-	srv, store, _ := buildTestStack()
+	srv, _, yield, _ := buildTestStack()
 
 	handler := srv.Handler(server.WithStreamableHTTP(true))
 	ts := httptest.NewServer(handler)
@@ -204,9 +219,14 @@ func TestE2EResourceReadViaClient(t *testing.T) {
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "resource-test", Version: "1.0"})
 	require.NoError(t, c.Connect())
 
-	store.Add(100, "alice", "resource test", time.Now())
+	require.NoError(t, yieldText(yield, 100, "alice", "resource test"))
 
 	text, err := c.ReadResource("telegram://messages/recent")
 	require.NoError(t, err)
 	assert.Contains(t, text, "resource test")
+
+	var payloads []TelegramEventData
+	require.NoError(t, json.Unmarshal([]byte(text), &payloads))
+	require.Len(t, payloads, 1)
+	assert.Equal(t, "alice", payloads[0].User)
 }

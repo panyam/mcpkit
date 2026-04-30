@@ -92,8 +92,10 @@ test-protogen: ## Run protogen sub-module tests + e2e example
 test-e2e: ## Run all E2E tests (auth, apps — no Docker)
 	cd tests/e2e && go test ./... -count=1 -timeout 60s
 
-test-experimental: ## Run experimental POC tests (telegram-events)
+test-experimental: ## Run experimental POC tests (ext/events library + telegram-events + discord-events)
+	cd experimental/ext/events && go test ./... -count=1 -timeout 60s
 	cd experimental/telegram-events && go test ./... -count=1 -timeout 60s
+	cd experimental/discord-events && go test ./... -count=1 -timeout 60s
 
 test-apps-playwright: ## Run ext-apps Playwright tests against testserver (needs Node.js + Playwright)
 	bash scripts/apps-playwright-test.sh
