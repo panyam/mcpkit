@@ -1,130 +1,60 @@
 // Package main implements a Discord MCP Events reference server demonstrating
 // push, poll, and webhook delivery modes using mcpkit.
+//
+// All event production goes through events.YieldingSource — the library owns
+// storage, cursor assignment, and fan-out to push + webhook subscribers. The
+// demo wires Discord (or the /inject endpoint) to a single yield() call.
 package main
 
 import (
 	"log"
-	"sync"
 	"time"
 )
 
-// Message represents a Discord message stored in the in-memory buffer.
-type Message struct {
-	ID        int64     `json:"id"`
-	GuildID   string    `json:"guild_id"`
-	ChannelID string    `json:"channel_id"`
-	Sender    string    `json:"sender"`
-	Text      string    `json:"text"`
-	Timestamp time.Time `json:"timestamp"`
+// DiscordEventData is the wire-format payload emitted to subscribers. It's
+// also used directly as the typed parameter to the Discord callback — the
+// store and the wire shape are the same.
+type DiscordEventData struct {
+	GuildID   string         `json:"guild_id" jsonschema:"description=Discord server (guild) ID"`
+	ChannelID string         `json:"channel_id" jsonschema:"description=Channel ID where the message was sent"`
+	MessageID string         `json:"message_id" jsonschema:"description=Discord message snowflake ID"`
+	Author    DiscordAuthor  `json:"author" jsonschema:"description=Message author"`
+	Content   string         `json:"content" jsonschema:"description=Text content of the message"`
+	Type      string         `json:"type" jsonschema:"description=Message type: default reply thread_starter,enum=default,enum=reply,enum=thread_starter"`
+	Thread    *DiscordThread `json:"thread,omitempty" jsonschema:"description=Thread context if this message is part of a thread"`
+	Embeds    []DiscordEmbed `json:"embeds,omitempty" jsonschema:"description=Rich embeds attached to the message"`
+	Mentions  []string       `json:"mentions,omitempty" jsonschema:"description=Usernames mentioned in the message"`
+	Timestamp string         `json:"ts" jsonschema:"description=ISO 8601 timestamp,format=date-time"`
 }
 
-// MessageStore is a thread-safe in-memory message buffer with cursor-based retrieval.
-type MessageStore struct {
-	mu       sync.RWMutex
-	messages []Message
-	nextID   int64
-	maxSize  int
-
-	// OnMessage is called after a message is added — used to trigger fan-out.
-	OnMessage func(Message)
+type DiscordAuthor struct {
+	ID       string `json:"id" jsonschema:"description=User snowflake ID"`
+	Username string `json:"username"`
+	Bot      bool   `json:"bot,omitempty" jsonschema:"description=True if the author is a bot"`
 }
 
-func NewMessageStore(maxSize int) *MessageStore {
-	return &MessageStore{maxSize: maxSize}
+type DiscordThread struct {
+	ID       string `json:"id" jsonschema:"description=Thread channel ID"`
+	Name     string `json:"name" jsonschema:"description=Thread name"`
+	ParentID string `json:"parent_id" jsonschema:"description=Parent channel ID"`
 }
 
-// Add inserts a message, assigns a monotonic ID, and calls OnMessage if set.
-func (s *MessageStore) Add(guildID, channelID, sender, text string, ts time.Time) int64 {
-	s.mu.Lock()
-	s.nextID++
-	msg := Message{
-		ID:        s.nextID,
+type DiscordEmbed struct {
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+	URL         string `json:"url,omitempty"`
+}
+
+// newDiscordEvent builds a DiscordEventData payload from the minimal fields
+// the bot callback and the /inject endpoint provide.
+func newDiscordEvent(guildID, channelID, sender, content string, ts time.Time) DiscordEventData {
+	log.Printf("[discord] guild=%s channel=%s sender=%s text=%q", guildID, channelID, sender, content)
+	return DiscordEventData{
 		GuildID:   guildID,
 		ChannelID: channelID,
-		Sender:    sender,
-		Text:      text,
-		Timestamp: ts,
+		Author:    DiscordAuthor{Username: sender},
+		Content:   content,
+		Type:      "default",
+		Timestamp: ts.Format(time.RFC3339),
 	}
-	s.messages = append(s.messages, msg)
-	if len(s.messages) > s.maxSize {
-		s.messages = s.messages[len(s.messages)-s.maxSize:]
-	}
-	cb := s.OnMessage
-	s.mu.Unlock()
-
-	if cb != nil {
-		cb(msg)
-	}
-	log.Printf("[discord] id=%d guild=%s channel=%s sender=%s text=%q", msg.ID, guildID, channelID, sender, text)
-	return msg.ID
-}
-
-// PollResult holds the result of a cursor-based poll.
-type PollResult struct {
-	Messages   []Message
-	NextCursor int64
-	CursorGap  bool
-}
-
-// GetSince returns messages with ID > cursor, up to limit.
-func (s *MessageStore) GetSince(cursor int64, limit int) PollResult {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	if limit <= 0 {
-		limit = 50
-	}
-
-	var cursorGap bool
-	if cursor > 0 && len(s.messages) > 0 && cursor < s.messages[0].ID-1 {
-		cursorGap = true
-	}
-
-	var result []Message
-	for _, m := range s.messages {
-		if m.ID > cursor {
-			result = append(result, m)
-			if len(result) >= limit {
-				break
-			}
-		}
-	}
-
-	nextCursor := cursor
-	if len(result) > 0 {
-		nextCursor = result[len(result)-1].ID
-	}
-	return PollResult{Messages: result, NextCursor: nextCursor, CursorGap: cursorGap}
-}
-
-// GetByID returns the message with the given ID, or nil if not found.
-func (s *MessageStore) GetByID(id int64) *Message {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	for i := range s.messages {
-		if s.messages[i].ID == id {
-			msg := s.messages[i]
-			return &msg
-		}
-	}
-	return nil
-}
-
-// Recent returns the last n messages.
-func (s *MessageStore) Recent(n int) []Message {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if n <= 0 || n > len(s.messages) {
-		n = len(s.messages)
-	}
-	start := len(s.messages) - n
-	result := make([]Message, n)
-	copy(result, s.messages[start:])
-	return result
-}
-
-func (s *MessageStore) Len() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return len(s.messages)
 }

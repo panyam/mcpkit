@@ -26,13 +26,21 @@ import (
 	gohttp "github.com/panyam/servicekit/http"
 )
 
+const eventStoreCap = 1000
+
 func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	token := flag.String("token", "", "Discord bot token (omit for test mode)")
+	whTTL := flag.Duration("webhook-ttl", 0, "override webhook subscription TTL (default 60s; useful for driving the SDK refresh path in tests)")
 	flag.Parse()
 
-	store := NewMessageStore(1000)
-	webhooks := events.NewWebhookRegistry()
+	var whOpts []events.WebhookOption
+	if *whTTL > 0 {
+		whOpts = append(whOpts, events.WithWebhookTTL(*whTTL))
+		log.Printf("[server] webhook TTL overridden to %s", *whTTL)
+	}
+	webhooks := events.NewWebhookRegistry(whOpts...)
+	source, yield := newDiscordSource()
 
 	var dg *discordgo.Session
 	if *token != "" {
@@ -42,12 +50,14 @@ func main() {
 			log.Fatalf("failed to create Discord session: %v", err)
 		}
 
-		// Register handler for incoming messages
 		dg.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
 			if m.Author.ID == s.State.User.ID {
 				return // ignore own messages
 			}
-			store.Add(m.GuildID, m.ChannelID, m.Author.Username, m.Content, time.Now())
+			_ = yield(newDiscordEvent(m.GuildID, m.ChannelID, m.Author.Username, m.Content, time.Now()))
+			// The yield above already broadcasts push + webhook via the
+			// library's fanout hook. The resource notification stays explicit
+			// because the events library doesn't know about MCP resources.
 		})
 
 		dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsMessageContent
@@ -68,30 +78,22 @@ func main() {
 		server.WithRequestLogging(log.Default()),
 	)
 
-	registerResources(srv, store)
+	registerResources(srv, source)
 	registerTools(srv, dg)
 
 	events.Register(events.Config{
-		Sources:  []events.EventSource{newDiscordSource(store)},
+		Sources:  []events.EventSource{source},
 		Webhooks: webhooks,
 		Server:   srv,
 	})
-
-	store.OnMessage = func(msg Message) {
-		event := messageToEvent(msg)
-		events.Emit(srv, event)
-		srv.NotifyResourceUpdated("discord://messages/recent")
-		events.EmitToWebhooks(webhooks, event)
-	}
 
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", srv.Handler(
 		server.WithStreamableHTTP(true),
 		server.WithSSE(true),
-		server.WithEventStore(gohttp.NewMemoryEventStore(1000)),
+		server.WithEventStore(gohttp.NewMemoryEventStore(eventStoreCap)),
 	))
 
-	// Direct injection endpoint
 	mux.HandleFunc("POST /inject", func(w http.ResponseWriter, r *http.Request) {
 		var msg struct {
 			GuildID   string `json:"guild_id"`
@@ -106,10 +108,10 @@ func main() {
 		if msg.Sender == "" {
 			msg.Sender = "injected"
 		}
-		id := store.Add(msg.GuildID, msg.ChannelID, msg.Sender, msg.Text, time.Now())
-		log.Printf("[inject] id=%d sender=%s text=%q", id, msg.Sender, msg.Text)
+		_ = yield(newDiscordEvent(msg.GuildID, msg.ChannelID, msg.Sender, msg.Text, time.Now()))
+		srv.NotifyResourceUpdated("discord://messages/recent")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"id": id, "status": "ok"})
+		json.NewEncoder(w).Encode(map[string]any{"status": "ok"})
 	})
 
 	log.Printf("[server] discord-events listening on %s (MCP at /mcp)", *addr)
@@ -120,7 +122,6 @@ func main() {
 		}
 	}()
 
-	// Wait for interrupt
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop

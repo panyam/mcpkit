@@ -17,6 +17,21 @@ import (
 
 const defaultWebhookTTL = 60 * time.Second // 1 minute for POC (production: longer)
 
+// WebhookOption configures a WebhookRegistry at construction time.
+type WebhookOption func(*WebhookRegistry)
+
+// WithWebhookTTL overrides the registry's subscription TTL. Useful for tests
+// (drive the SDK's TTL refresh behavior in seconds rather than minutes) and
+// for deployments that want longer-lived subscriptions. Pass <=0 to keep
+// the default of 60s.
+func WithWebhookTTL(ttl time.Duration) WebhookOption {
+	return func(r *WebhookRegistry) {
+		if ttl > 0 {
+			r.ttl = ttl
+		}
+	}
+}
+
 // WebhookTarget is a registered outbound webhook callback with TTL-based expiry.
 type WebhookTarget struct {
 	ID        string // client-provided subscription ID
@@ -38,14 +53,21 @@ type WebhookRegistry struct {
 	mu      sync.RWMutex
 	targets map[string]WebhookTarget // keyed by webhookKey(url, id)
 	client  *http.Client
+	ttl     time.Duration
 }
 
-// NewWebhookRegistry creates an empty registry with a 5-second HTTP timeout.
-func NewWebhookRegistry() *WebhookRegistry {
-	return &WebhookRegistry{
+// NewWebhookRegistry creates an empty registry with a 5-second HTTP timeout
+// and the default 60-second subscription TTL (override via WithWebhookTTL).
+func NewWebhookRegistry(opts ...WebhookOption) *WebhookRegistry {
+	r := &WebhookRegistry{
 		targets: make(map[string]WebhookTarget),
 		client:  &http.Client{Timeout: 5 * time.Second},
+		ttl:     defaultWebhookTTL,
 	}
+	for _, o := range opts {
+		o(r)
+	}
+	return r
 }
 
 // Register adds or refreshes a webhook subscription. Returns the expiry time.
@@ -53,7 +75,7 @@ func (r *WebhookRegistry) Register(id, urlStr, secret string) time.Time {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.pruneExpiredLocked()
-	expiresAt := time.Now().Add(defaultWebhookTTL)
+	expiresAt := time.Now().Add(r.ttl)
 	key := webhookKey(urlStr, id)
 	if existing, ok := r.targets[key]; ok {
 		// Refresh: update expiry and secret if provided

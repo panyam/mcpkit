@@ -14,6 +14,7 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -23,13 +24,15 @@ import (
 	gohttp "github.com/panyam/servicekit/http"
 )
 
+const eventStoreCap = 1000
+
 func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	token := flag.String("token", "", "Telegram bot token (omit for test mode)")
 	flag.Parse()
 
-	store := NewMessageStore(1000)
 	webhooks := events.NewWebhookRegistry()
+	source, yield := newTelegramSource()
 
 	var bot *tgbotapi.BotAPI
 	if *token != "" {
@@ -50,41 +53,28 @@ func main() {
 		server.WithRequestLogging(log.Default()),
 	)
 
-	// Register MCP resources (telegram://messages/*)
-	registerResources(srv, store)
+	registerResources(srv, source)
+	(&ToolDelivery{Bot: bot}).Register(srv)
 
-	// Register send_message tool (Telegram action, not an event operation)
-	(&ToolDelivery{Bot: bot}).Register(srv, store)
-
-	// Register event protocol methods via the events library
 	events.Register(events.Config{
-		Sources:  []events.EventSource{newTelegramSource(store)},
+		Sources:  []events.EventSource{source},
 		Webhooks: webhooks,
 		Server:   srv,
 	})
 
-	// Wire fan-out: when a message arrives, push to SSE clients, notify
-	// resource subscribers, and deliver to outbound webhooks.
-	store.OnMessage = func(msg Message) {
-		event := messageToEvent(msg)
-		events.Emit(srv, event)
-		srv.NotifyResourceUpdated("telegram://messages/recent")
-		events.EmitToWebhooks(webhooks, event)
-	}
-
-	// Build HTTP mux: MCP server at /mcp, Telegram webhook at /webhook/telegram
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", srv.Handler(
 		server.WithStreamableHTTP(true),
 		server.WithSSE(true),
-		server.WithEventStore(gohttp.NewMemoryEventStore(1000)),
+		server.WithEventStore(gohttp.NewMemoryEventStore(eventStoreCap)),
 	))
 	mux.HandleFunc("POST /webhook/telegram", func(w http.ResponseWriter, r *http.Request) {
-		handleTelegramWebhook(store, r)
+		if handleTelegramWebhook(yield, r) {
+			srv.NotifyResourceUpdated("telegram://messages/recent")
+		}
 		w.WriteHeader(http.StatusOK)
 	})
 
-	// Direct injection endpoint
 	mux.HandleFunc("POST /inject", func(w http.ResponseWriter, r *http.Request) {
 		var msg struct {
 			ChatID int64  `json:"chat_id"`
@@ -98,23 +88,31 @@ func main() {
 		if msg.Sender == "" {
 			msg.Sender = "injected"
 		}
-		id := store.Add(msg.ChatID, msg.Sender, msg.Text, time.Now())
-		log.Printf("[inject] id=%d sender=%s text=%q", id, msg.Sender, msg.Text)
+		now := time.Now()
+		_ = yield(TelegramEventData{
+			ChatID:    strconv.FormatInt(msg.ChatID, 10),
+			User:      msg.Sender,
+			Text:      msg.Text,
+			Timestamp: now.Format(time.RFC3339),
+		})
+		srv.NotifyResourceUpdated("telegram://messages/recent")
+		log.Printf("[inject] sender=%s text=%q", msg.Sender, msg.Text)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"id": id, "status": "ok"})
+		json.NewEncoder(w).Encode(map[string]any{"status": "ok"})
 	})
 
 	log.Printf("[server] telegram-events listening on %s (MCP at /mcp)", *addr)
 	if bot != nil {
-		go startTelegramPolling(bot, store)
+		go startTelegramPolling(bot, yield)
 	}
 	if err := http.ListenAndServe(*addr, mux); err != nil {
 		log.Fatal(err)
 	}
 }
 
-// startTelegramPolling uses long-polling to receive updates from Telegram.
-func startTelegramPolling(bot *tgbotapi.BotAPI, store *MessageStore) {
+// startTelegramPolling uses long-polling to receive updates from Telegram and
+// yields each text message as a TelegramEventData event.
+func startTelegramPolling(bot *tgbotapi.BotAPI, yield func(TelegramEventData) error) {
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 
@@ -125,17 +123,12 @@ func startTelegramPolling(bot *tgbotapi.BotAPI, store *MessageStore) {
 		if update.Message == nil || update.Message.Text == "" {
 			continue
 		}
-		msg := update.Message
-		sender := "unknown"
-		if msg.From != nil {
-			if msg.From.UserName != "" {
-				sender = msg.From.UserName
-			} else {
-				sender = msg.From.FirstName
-			}
+		ev := makeTelegramEvent(update.Message)
+		if err := yield(ev); err != nil {
+			log.Printf("[telegram] yield failed: %v", err)
+			continue
 		}
-		id := store.Add(msg.Chat.ID, sender, msg.Text, time.Unix(int64(msg.Date), 0))
-		log.Printf("[telegram] id=%d chat=%d sender=%s text=%q", id, msg.Chat.ID, sender, msg.Text)
+		log.Printf("[telegram] chat=%s sender=%s text=%q", ev.ChatID, ev.User, ev.Text)
 	}
 	log.Println("[telegram] poll loop ended")
 }

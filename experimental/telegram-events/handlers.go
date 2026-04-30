@@ -3,66 +3,58 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/experimental/ext/events"
 	"github.com/panyam/mcpkit/server"
 )
 
-// registerResources registers MCP resources for reading Telegram messages.
-// Delivery-mode tools/methods are registered separately via EventDelivery.
-func registerResources(srv *server.Server, store *MessageStore) {
-	// Static resource: recent messages
+const recentLimit = 50
+
+// registerResources registers MCP resources that read typed payloads
+// directly from the YieldingSource — no separate buffer, no unmarshal cycle.
+func registerResources(srv *server.Server, source *events.YieldingSource[TelegramEventData]) {
 	srv.RegisterResource(
 		core.ResourceDef{
 			URI:         "telegram://messages/recent",
 			Name:        "Recent Telegram Messages",
-			Description: "The most recent 50 Telegram messages received by the bot.",
+			Description: "The most recent Telegram message payloads received by the bot.",
 			MimeType:    "application/json",
 		},
 		func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
-			msgs := store.Recent(50)
-			data, err := json.Marshal(msgs)
+			payloads := source.Recent(recentLimit)
+			data, err := json.Marshal(payloads)
 			if err != nil {
 				return core.ResourceResult{}, fmt.Errorf("marshal messages: %w", err)
 			}
 			return core.ResourceResult{
 				Contents: []core.ResourceReadContent{{
-					URI:      req.URI,
-					MimeType: "application/json",
-					Text:     string(data),
+					URI: req.URI, MimeType: "application/json", Text: string(data),
 				}},
 			}, nil
 		},
 	)
 
-	// Template resource: single message by ID
 	srv.RegisterResourceTemplate(
 		core.ResourceTemplate{
-			URITemplate: "telegram://message/{id}",
+			URITemplate: "telegram://message/{cursor}",
 			Name:        "Telegram Message",
-			Description: "A single Telegram message by its ID.",
+			Description: "A single Telegram message identified by its event cursor.",
 			MimeType:    "application/json",
 		},
 		func(ctx core.ResourceContext, uri string, params map[string]string) (core.ResourceResult, error) {
-			idStr := params["id"]
-			id, err := strconv.ParseInt(idStr, 10, 64)
-			if err != nil {
-				return core.ResourceResult{}, fmt.Errorf("invalid message ID %q: %w", idStr, err)
+			cursor := params["cursor"]
+			payload, ok := source.ByCursor(cursor)
+			if !ok {
+				return core.ResourceResult{}, fmt.Errorf("message with cursor %q not found", cursor)
 			}
-			msg := store.GetByID(id)
-			if msg == nil {
-				return core.ResourceResult{}, fmt.Errorf("message %d not found", id)
-			}
-			data, err := json.Marshal(msg)
+			data, err := json.Marshal(payload)
 			if err != nil {
 				return core.ResourceResult{}, fmt.Errorf("marshal message: %w", err)
 			}
 			return core.ResourceResult{
 				Contents: []core.ResourceReadContent{{
-					URI:      uri,
-					MimeType: "application/json",
-					Text:     string(data),
+					URI: uri, MimeType: "application/json", Text: string(data),
 				}},
 			}, nil
 		},
