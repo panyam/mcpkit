@@ -1,5 +1,11 @@
 === Stage 7/12: experimental (make test-experimental) ===
-Started: Tue Apr 28 16:15:51 PDT 2026
-cd experimental/telegram-events && go test ./... -count=1 -timeout 60s
-ok  	github.com/panyam/mcpkit/experimental/telegram-events	5.169s
-Finished: Tue Apr 28 16:15:56 PDT 2026
+Started: Thu Apr 30 03:04:11 PDT 2026
+cd experimental/ext/events && go test ./... -count=1 -timeout 60s
+ok  	github.com/panyam/mcpkit/experimental/ext/events	0.690s
+cd experimental/ext/events/clients/go && go test ./... -count=1 -timeout 60s
+ok  	github.com/panyam/mcpkit/experimental/ext/events/clients/go	6.797s
+cd examples/events/discord && go test ./... -count=1 -timeout 60s
+ok  	github.com/panyam/mcpkit/examples/events/discord	4.192s
+cd examples/events/telegram && go test ./... -count=1 -timeout 60s
+ok  	github.com/panyam/mcpkit/examples/events/telegram	8.998s
+Finished: Thu Apr 30 03:04:35 PDT 2026

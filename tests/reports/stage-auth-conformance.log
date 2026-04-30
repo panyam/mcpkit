@@ -1,5 +1,5 @@
 === Stage 9/12: auth-conformance (make testconfauth) ===
-Started: Tue Apr 28 16:16:00 PDT 2026
+Started: Thu Apr 30 03:04:40 PDT 2026
 bash scripts/conformance-auth-test.sh
 Building testclient...
 === Running MCP Auth conformance suite ===
@@ -21,22 +21,22 @@ Starting scenario: auth/token-endpoint-auth-basic
 Starting scenario: auth/token-endpoint-auth-post
 Starting scenario: auth/token-endpoint-auth-none
 Starting scenario: auth/pre-registration
-Executing client: ./bin/testclient http://localhost:64738/mcp
-Executing client: ./bin/testclient http://localhost:64739/mcp
-Executing client: ./bin/testclient http://localhost:64740/mcp
-Executing client: ./bin/testclient http://localhost:64741/mcp
-Executing client: ./bin/testclient http://localhost:64742/mcp
-Executing client: ./bin/testclient http://localhost:64743/mcp
-Executing client: ./bin/testclient http://localhost:64744/mcp
-Executing client: ./bin/testclient http://localhost:64745/mcp
-Executing client: ./bin/testclient http://localhost:64746/mcp
-Executing client: ./bin/testclient http://localhost:64747/mcp
-Executing client: ./bin/testclient http://localhost:64748/mcp
-Executing client: ./bin/testclient http://localhost:64749/mcp
-Executing client: ./bin/testclient http://localhost:64750/mcp
-Executing client: ./bin/testclient http://localhost:64751/mcp
+Executing client: ./bin/testclient http://localhost:54934/mcp
+Executing client: ./bin/testclient http://localhost:54935/mcp
+Executing client: ./bin/testclient http://localhost:54936/mcp
+Executing client: ./bin/testclient http://localhost:54937/mcp
+Executing client: ./bin/testclient http://localhost:54938/mcp
+Executing client: ./bin/testclient http://localhost:54939/mcp
+Executing client: ./bin/testclient http://localhost:54940/mcp
+Executing client: ./bin/testclient http://localhost:54941/mcp
+Executing client: ./bin/testclient http://localhost:54942/mcp
+Executing client: ./bin/testclient http://localhost:54943/mcp
+Executing client: ./bin/testclient http://localhost:54944/mcp
+Executing client: ./bin/testclient http://localhost:54945/mcp
+Executing client: ./bin/testclient http://localhost:54946/mcp
+Executing client: ./bin/testclient http://localhost:54947/mcp
 With context: {"client_id":"pre-registered-client","client_secret":"pre-registered-secret"}
-(node:52894) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(node:99796) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
 (Use `node --trace-deprecation ...` to show where the warning was created)
 
 === SUITE SUMMARY ===
@@ -64,4 +64,4 @@ Total: 210 passed, 0 failed, 1 warnings
 [32mBaseline check passed: all failures are expected.[0m
 
 === AUTH CONFORMANCE TESTS PASSED ===
-Finished: Tue Apr 28 16:16:01 PDT 2026
+Finished: Thu Apr 30 03:04:43 PDT 2026
