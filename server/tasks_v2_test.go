@@ -578,3 +578,262 @@ func TestV2_McpNameHeaderAbsentWithoutExtension(t *testing.T) {
 		t.Errorf("tools/call without extension should not emit Mcp-Name; got %q", got)
 	}
 }
+
+// --- Phase 5: SEP-2663 inputRequests / inputResponses flow ---
+
+// newTaskV2ServerWithElicit registers a "confirm-delete" tool that calls
+// TaskElicit and returns a result derived from the user's response. The
+// Phase 5 integration test drives the full SEP-2663 elicit → update →
+// complete cycle against this fixture.
+func newTaskV2ServerWithElicit(t *testing.T) *Server {
+	t.Helper()
+	srv := newTaskV2Server(t)
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "confirm-delete",
+			Description: "Asks the client to confirm before deleting",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"filename": map[string]any{"type": "string"},
+				},
+			},
+			Execution: &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			tc := GetTaskContext(ctx)
+			if tc == nil {
+				return core.ToolResult{}, errorString("confirm-delete requires task context")
+			}
+
+			var args struct {
+				Filename string `json:"filename"`
+			}
+			json.Unmarshal(req.Arguments, &args)
+			if args.Filename == "" {
+				args.Filename = "untitled"
+			}
+
+			res, err := tc.TaskElicit(core.ElicitationRequest{
+				Message:         "Delete " + args.Filename + "?",
+				RequestedSchema: json.RawMessage(`{"type":"object","properties":{"confirm":{"type":"boolean"}}}`),
+			})
+			if err != nil {
+				return core.ToolResult{}, err
+			}
+			if res.Action == "accept" {
+				if confirmed, _ := res.Content["confirm"].(bool); confirmed {
+					return core.TextResult("deleted " + args.Filename), nil
+				}
+			}
+			return core.TextResult("kept " + args.Filename), nil
+		},
+	)
+	return srv
+}
+
+// errorString is a tiny adapter so the inline tool handler doesn't have to
+// import "errors" / "fmt" just for one literal.
+type errorString string
+
+func (e errorString) Error() string { return string(e) }
+
+// pollV2Detailed polls tasks/get every interval until pred returns true or
+// the context expires. Returns the last DetailedTask seen.
+func pollV2Detailed(t *testing.T, ctx context.Context, c *client.Client, taskID string, interval time.Duration, pred func(core.DetailedTask) bool) core.DetailedTask {
+	t.Helper()
+	var last core.DetailedTask
+	for {
+		gres, err := c.Call("tasks/get", map[string]any{"taskId": taskID})
+		if err != nil {
+			t.Fatalf("tasks/get: %v", err)
+		}
+		if err := json.Unmarshal(gres.Raw, &last); err != nil {
+			t.Fatalf("unmarshal DetailedTask: %v", err)
+		}
+		if pred(last) {
+			return last
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("tasks/get poll timed out; last status %q, raw %s", last.Status, gres.Raw)
+		case <-time.After(interval):
+		}
+	}
+}
+
+// TestV2_ElicitUpdateCompleteFlow drives the full SEP-2663 input-request
+// loop end-to-end:
+//
+//	tools/call confirm-delete  →  CreateTaskResult
+//	poll tasks/get             →  status: input_required, inputRequests populated
+//	tasks/update               →  empty ack, server-side goroutine unblocks
+//	poll tasks/get             →  status: completed, result inlined
+func TestV2_ElicitUpdateCompleteFlow(t *testing.T) {
+	srv := newTaskV2ServerWithElicit(t)
+	c := connectV2Client(t, srv, client.WithTasksExtension())
+
+	res, err := c.Call("tools/call", map[string]any{
+		"name":      "confirm-delete",
+		"arguments": map[string]any{"filename": "important.txt"},
+	})
+	if err != nil {
+		t.Fatalf("tools/call: %v", err)
+	}
+	var ctr core.CreateTaskResult
+	if err := json.Unmarshal(res.Raw, &ctr); err != nil {
+		t.Fatalf("unmarshal CreateTaskResult: %v", err)
+	}
+	taskID := ctr.Task.TaskID
+
+	// 1. Wait for input_required + a populated inputRequests map.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	pending := pollV2Detailed(t, ctx, c, taskID, 20*time.Millisecond, func(d core.DetailedTask) bool {
+		return d.Status == core.TaskInputRequired && len(d.InputRequests) > 0
+	})
+	if got := len(pending.InputRequests); got != 1 {
+		t.Fatalf("expected 1 pending input request, got %d (raw: %+v)", got, pending.InputRequests)
+	}
+
+	// Pick whatever key the server minted — clients MUST treat it as opaque.
+	var key string
+	var inputReq core.InputRequest
+	for k, v := range pending.InputRequests {
+		key = k
+		inputReq = v
+		break
+	}
+	if inputReq.Method != "elicitation/create" {
+		t.Errorf("inputRequests[%q].method = %q, want elicitation/create", key, inputReq.Method)
+	}
+
+	// 2. Reply via tasks/update — empty ack confirms the server accepted it.
+	ackRes, err := c.Call("tasks/update", core.UpdateTaskRequest{
+		TaskID: taskID,
+		InputResponses: core.InputResponses{
+			key: json.RawMessage(`{"action":"accept","content":{"confirm":true}}`),
+		},
+	})
+	if err != nil {
+		t.Fatalf("tasks/update: %v", err)
+	}
+	var ackMap map[string]any
+	json.Unmarshal(ackRes.Raw, &ackMap)
+	if len(ackMap) != 0 {
+		t.Errorf("tasks/update ack should be empty {}, got %v", ackMap)
+	}
+
+	// 3. Poll until the goroutine resumes and the task completes.
+	final := pollV2Detailed(t, ctx, c, taskID, 20*time.Millisecond, func(d core.DetailedTask) bool {
+		return d.Status.IsTerminal()
+	})
+	if final.Status != core.TaskCompleted {
+		t.Fatalf("status = %q, want completed", final.Status)
+	}
+	if final.Result == nil || len(final.Result.Content) == 0 {
+		t.Fatalf("expected inlined result with content, got %+v", final.Result)
+	}
+	if got := final.Result.Content[0].Text; got != "deleted important.txt" {
+		t.Errorf("result text = %q, want %q", got, "deleted important.txt")
+	}
+}
+
+// TestV2_ElicitCancelUnblocks verifies that a tasks/cancel issued while a
+// task is parked in input_required cancels the background goroutine — the
+// pending TaskElicit returns via ctx.Done() instead of waiting forever for
+// a tasks/update that will never come. The task transitions to cancelled.
+func TestV2_ElicitCancelUnblocks(t *testing.T) {
+	srv := newTaskV2ServerWithElicit(t)
+	c := connectV2Client(t, srv, client.WithTasksExtension())
+
+	res, err := c.Call("tools/call", map[string]any{
+		"name":      "confirm-delete",
+		"arguments": map[string]any{"filename": "doc.txt"},
+	})
+	if err != nil {
+		t.Fatalf("tools/call: %v", err)
+	}
+	var ctr core.CreateTaskResult
+	json.Unmarshal(res.Raw, &ctr)
+	taskID := ctr.Task.TaskID
+
+	// Wait for input_required, then cancel.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	pollV2Detailed(t, ctx, c, taskID, 20*time.Millisecond, func(d core.DetailedTask) bool {
+		return d.Status == core.TaskInputRequired
+	})
+
+	if _, err := c.Call("tasks/cancel", map[string]any{"taskId": taskID}); err != nil {
+		t.Fatalf("tasks/cancel: %v", err)
+	}
+
+	final := pollV2Detailed(t, ctx, c, taskID, 20*time.Millisecond, func(d core.DetailedTask) bool {
+		return d.Status.IsTerminal()
+	})
+	if final.Status != core.TaskCancelled {
+		t.Errorf("status = %q, want cancelled", final.Status)
+	}
+}
+
+// TestV2_UpdateUnknownKeyIgnored verifies that delivering a tasks/update
+// payload for a key that doesn't match any pending request is silently
+// dropped — the still-blocked TaskElicit keeps waiting. Important because
+// the wait-then-deliver dance can race; an in-flight tasks/update with a
+// stale or made-up key MUST NOT crash the server.
+func TestV2_UpdateUnknownKeyIgnored(t *testing.T) {
+	srv := newTaskV2ServerWithElicit(t)
+	c := connectV2Client(t, srv, client.WithTasksExtension())
+
+	res, err := c.Call("tools/call", map[string]any{
+		"name":      "confirm-delete",
+		"arguments": map[string]any{"filename": "x.txt"},
+	})
+	if err != nil {
+		t.Fatalf("tools/call: %v", err)
+	}
+	var ctr core.CreateTaskResult
+	json.Unmarshal(res.Raw, &ctr)
+	taskID := ctr.Task.TaskID
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	pending := pollV2Detailed(t, ctx, c, taskID, 20*time.Millisecond, func(d core.DetailedTask) bool {
+		return d.Status == core.TaskInputRequired && len(d.InputRequests) > 0
+	})
+
+	// Send an update for a bogus key — should ack but NOT unblock.
+	if _, err := c.Call("tasks/update", core.UpdateTaskRequest{
+		TaskID: taskID,
+		InputResponses: core.InputResponses{
+			"bogus-key": json.RawMessage(`{"action":"reject"}`),
+		},
+	}); err != nil {
+		t.Fatalf("tasks/update with unknown key: %v", err)
+	}
+
+	// Confirm the task is still parked — the real key is still pending.
+	gres, _ := c.Call("tasks/get", map[string]any{"taskId": taskID})
+	var still core.DetailedTask
+	json.Unmarshal(gres.Raw, &still)
+	if still.Status != core.TaskInputRequired {
+		t.Errorf("status = %q, want still input_required", still.Status)
+	}
+
+	// Now satisfy the real key so the test cleanly completes the goroutine.
+	var realKey string
+	for k := range pending.InputRequests {
+		realKey = k
+		break
+	}
+	c.Call("tasks/update", core.UpdateTaskRequest{
+		TaskID: taskID,
+		InputResponses: core.InputResponses{
+			realKey: json.RawMessage(`{"action":"accept","content":{"confirm":false}}`),
+		},
+	})
+	pollV2Detailed(t, ctx, c, taskID, 20*time.Millisecond, func(d core.DetailedTask) bool {
+		return d.Status.IsTerminal()
+	})
+}
