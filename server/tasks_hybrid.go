@@ -68,7 +68,7 @@ func RegisterTasksHybrid(cfg TasksHybridConfig) {
 
 	reg := srv.Registry()
 	v1RT := newTaskRuntime(cfg.V1.Store, cfg.V1.MessageQueue, reg)
-	v2RT := newV2TaskRuntime(cfg.V2.Store, reg)
+	v2RT := newV2TaskRuntime(cfg.V2)
 
 	// Advertise BOTH so clients can pick. v1 SetTasksCap goes first so the
 	// v1 cap shows up under the canonical capabilities.tasks slot; the v2

@@ -426,9 +426,10 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
         const taskId = result.task.taskId;
 
         const cancelAck = await cancelTask(taskId);
-        // SEP-2663: cancel response is the empty {} ack (no task state).
-        assert.deepEqual(cancelAck, {},
-            `tasks/cancel should return empty {} ack; got ${JSON.stringify(cancelAck)}`);
+        // SEP-2663: cancel response carries no task state — only the SEP-2322
+        // resultType:"complete" discriminator (added under v2-26).
+        assert.deepEqual(cancelAck, { resultType: 'complete' },
+            `tasks/cancel should return {resultType:"complete"} ack; got ${JSON.stringify(cancelAck)}`);
 
         // Status settles to cancelled — observe via tasks/get.
         const task = await getTask(taskId);
@@ -669,8 +670,10 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
         }
 
         const ack = await updateTask(taskId, responses, inputTask.requestState);
-        assert.deepEqual(ack, {},
-            `tasks/update should return empty {} ack; got ${JSON.stringify(ack)}`);
+        // SEP-2663: ack carries no task state — only the SEP-2322
+        // resultType:"complete" discriminator (covered by v2-26).
+        assert.deepEqual(ack, { resultType: 'complete' },
+            `tasks/update should return {resultType:"complete"} ack; got ${JSON.stringify(ack)}`);
 
         // Server-side goroutine resumes — status will settle to terminal
         // (or back to input_required if the tool emits another round).
@@ -805,16 +808,19 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
     //
     // SEP-2663: a client that did not negotiate the extension still gets to
     // call task-eligible tools — the server falls through to synchronous
-    // execution and returns a plain ToolResult (no resultType discriminator).
-    // It MUST NOT return CreateTaskResult.
+    // execution and returns a plain ToolResult. SEP-2322: that ToolResult
+    // carries resultType:"complete" so polymorphic dispatch on the wire is
+    // uniform. The server MUST NOT return CreateTaskResult (resultType:"task")
+    // here.
     // ========================================================================
-    test('v2-23: tools/call without extension returns sync ToolResult (no CreateTaskResult)', async () => {
+    test('v2-23: tools/call without extension returns sync ToolResult (resultType:"complete", no task)', async () => {
         const result = await rawRequest('tools/call',
             { name: 'slow_compute', arguments: { seconds: 0, label: 'v2-23' } },
             { sessionId: unsupportedSessionId },
         );
-        assert.ok(!result.resultType,
-            `tools/call without extension MUST NOT carry resultType; got ${result.resultType}`);
+        // SEP-2322: sync ToolResult carries resultType:"complete" (not "task").
+        assert.equal(result.resultType, 'complete',
+            `sync ToolResult.resultType = ${result.resultType}, want "complete"`);
         assert.ok(!result.task,
             `tools/call without extension MUST NOT carry task envelope; got ${JSON.stringify(result.task)}`);
         // Sync ToolResult shape: should have content[].
@@ -874,6 +880,53 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
             },
         );
         assertCreateTaskResult(result, 'v2-25 per-request opt-in');
+    });
+
+    // ========================================================================
+    // Scenario 26: SEP-2322 resultType discriminator on non-task responses
+    //
+    // SEP-2322 requires every non-task JSON-RPC response on the tools+tasks
+    // surface to carry a resultType discriminator so clients can dispatch
+    // sync vs task vs multi-round uniformly without inspecting the payload.
+    // Task-creation responses use resultType:"task" (covered by v2-02 +
+    // assertCreateTaskResult); every other response — sync tools/call,
+    // tasks/get, tasks/update, tasks/cancel — MUST carry resultType:"complete".
+    //
+    // This scenario batches the four non-task assertions in one place so a
+    // server that misses one fails loudly rather than passing the unrelated
+    // scenario it slipped through.
+    // ========================================================================
+    test('v2-26: non-task responses carry resultType:"complete" (SEP-2322)', async () => {
+        // Sync tools/call — extension declared but the tool isn't async.
+        const sync = await callTool('greet', { name: 'v2-26' });
+        assert.equal(sync.resultType, 'complete',
+            `sync tools/call resultType = ${sync.resultType}, want "complete"`);
+
+        // tasks/get — drive a fast task to completion and read the response.
+        const created = await callTool('slow_compute', { seconds: 0, label: 'v2-26' });
+        assertCreateTaskResult(created, 'v2-26 setup');
+        const taskId = created.task.taskId;
+        await waitForTerminal(taskId);
+        const got = await getTask(taskId);
+        assert.equal(got.resultType, 'complete',
+            `tasks/get resultType = ${got.resultType}, want "complete"`);
+
+        // tasks/cancel — empty ack on a (already-terminal) task should still
+        // reject with -32602; pick a fresh long-running task to cancel cleanly.
+        const longLived = await callTool('slow_compute', { seconds: 60, label: 'v2-26-cancel' });
+        const cancelAck = await cancelTask(longLived.task.taskId);
+        assert.equal(cancelAck.resultType, 'complete',
+            `tasks/cancel ack.resultType = ${cancelAck.resultType}, want "complete"`);
+
+        // tasks/update — bogus key on a non-terminal task gets a clean ack.
+        const elicit = await callTool('confirm_delete', { filename: 'v2-26.txt' });
+        const elicitTaskId = elicit.task.taskId;
+        await waitForStatus(elicitTaskId, 'input_required', 5000);
+        const updateAck = await updateTask(elicitTaskId, { 'unknown-key': { ignored: true } });
+        assert.equal(updateAck.resultType, 'complete',
+            `tasks/update ack.resultType = ${updateAck.resultType}, want "complete"`);
+        // Clean up the parked elicit task.
+        await cancelTask(elicitTaskId);
     });
 
 });

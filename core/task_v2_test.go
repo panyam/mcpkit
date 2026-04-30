@@ -1,8 +1,13 @@
 package core
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
+	"strings"
 	"testing"
+	"time"
 )
 
 // TestResultTypeConstants verifies the wire values of the ResultType
@@ -441,9 +446,12 @@ func TestUpdateTaskRequestOmitEmpty(t *testing.T) {
 	}
 }
 
-// TestEmptyAckShapes verifies that UpdateTaskResult and CancelTaskResult
-// serialize as empty JSON objects (no task state, per SEP-2663).
-func TestEmptyAckShapes(t *testing.T) {
+// TestAckShapes verifies that UpdateTaskResult and CancelTaskResult serialize
+// to the SEP-2322 minimum: a single resultType:"complete" discriminator and
+// no other fields. SEP-2663 says the acks carry no task state — but SEP-2322
+// requires the resultType discriminator on every non-task response so
+// clients can dispatch sync/task/multi-round uniformly.
+func TestAckShapes(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		v    any
@@ -455,8 +463,142 @@ func TestEmptyAckShapes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", tc.name, err)
 		}
-		if string(data) != "{}" {
-			t.Errorf("%s = %s, want {}", tc.name, data)
+		var m map[string]any
+		if err := json.Unmarshal(data, &m); err != nil {
+			t.Fatalf("%s: unmarshal: %v", tc.name, err)
+		}
+		if got := m["resultType"]; got != "complete" {
+			t.Errorf("%s.resultType = %v, want \"complete\"", tc.name, got)
+		}
+		if len(m) != 1 {
+			t.Errorf("%s should carry only resultType (got %d keys: %v)", tc.name, len(m), m)
 		}
 	}
+}
+
+// --- SEP-2322 requestState signing (gap-3) ---
+
+// TestRequestState_RoundTrip verifies a freshly signed token verifies cleanly
+// and exposes the original taskID. The base case for the HMAC flow.
+func TestRequestState_RoundTrip(t *testing.T) {
+	key := []byte("test-key-32-bytes-min-for-hmac-shake")
+	state := SignRequestState(key, "task-abc", time.Hour)
+	if state == "" {
+		t.Fatal("SignRequestState returned empty string")
+	}
+	got, err := VerifyRequestState(key, state)
+	if err != nil {
+		t.Fatalf("VerifyRequestState: %v", err)
+	}
+	if got != "task-abc" {
+		t.Errorf("decoded taskID = %q, want %q", got, "task-abc")
+	}
+}
+
+// TestRequestState_TamperedPayload verifies that any modification to the
+// payload bytes (even a single character flip) invalidates the signature.
+// This is the core attacker scenario the HMAC defends against.
+func TestRequestState_TamperedPayload(t *testing.T) {
+	key := []byte("test-key-32-bytes-min-for-hmac-shake")
+	state := SignRequestState(key, "task-abc", time.Hour)
+	dot := strings.IndexByte(state, '.')
+	if dot < 0 {
+		t.Fatalf("expected '.' separator in signed state %q", state)
+	}
+	// Re-encode a different payload (taskId swap) but keep the original sig.
+	tampered := state[:dot+1] + base64.RawURLEncoding.EncodeToString([]byte(`{"taskId":"task-evil","exp":9999999999}`))
+	if _, err := VerifyRequestState(key, tampered); err != ErrRequestStateInvalidSignature {
+		t.Errorf("tampered payload: err = %v, want ErrRequestStateInvalidSignature", err)
+	}
+}
+
+// TestRequestState_TamperedSignature verifies that a flipped signature byte
+// (with the original payload intact) is also rejected. Symmetric with the
+// payload-tamper case.
+func TestRequestState_TamperedSignature(t *testing.T) {
+	key := []byte("test-key-32-bytes-min-for-hmac-shake")
+	state := SignRequestState(key, "task-abc", time.Hour)
+	dot := strings.IndexByte(state, '.')
+	if dot < 0 {
+		t.Fatalf("expected '.' separator")
+	}
+	// Flip a byte inside the signature (replace first char with one that
+	// decodes to different bytes).
+	sigChar := byte('A')
+	if state[0] == 'A' {
+		sigChar = 'B'
+	}
+	tampered := string(sigChar) + state[1:]
+	if _, err := VerifyRequestState(key, tampered); err != ErrRequestStateInvalidSignature {
+		t.Errorf("tampered signature: err = %v, want ErrRequestStateInvalidSignature", err)
+	}
+}
+
+// TestRequestState_Expired verifies that a token whose exp is in the past
+// is rejected even when the signature is valid.
+func TestRequestState_Expired(t *testing.T) {
+	key := []byte("test-key-32-bytes-min-for-hmac-shake")
+	// Negative TTL = exp in the past.
+	state := SignRequestState(key, "task-abc", -time.Second)
+	if _, err := VerifyRequestState(key, state); err != ErrRequestStateExpired {
+		t.Errorf("expired state: err = %v, want ErrRequestStateExpired", err)
+	}
+}
+
+// TestRequestState_Malformed batches the structural-failure cases so a
+// single test guards every parse path that should map to ErrRequestStateMalformed.
+func TestRequestState_Malformed(t *testing.T) {
+	key := []byte("test-key-32-bytes-min-for-hmac-shake")
+	cases := []struct {
+		name  string
+		state string
+	}{
+		{"missing separator", "no-dot-here-just-text"},
+		{"bad signature base64", "!!!!.eyJ0YXNrSWQiOiJ0YXNrLWFiYyIsImV4cCI6MX0"},
+		{"bad payload base64", "abc.!!!!"},
+		{"empty", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := VerifyRequestState(key, tc.state); err != ErrRequestStateMalformed {
+				t.Errorf("err = %v, want ErrRequestStateMalformed", err)
+			}
+		})
+	}
+}
+
+// TestRequestState_WrongKey verifies that a token signed with one key can't
+// be verified with a different key — covers the multi-tenant case where
+// each tenant has its own signing key.
+func TestRequestState_WrongKey(t *testing.T) {
+	keyA := []byte("tenant-a-key-32-bytes-padding-here")
+	keyB := []byte("tenant-b-key-32-bytes-padding-here")
+	state := SignRequestState(keyA, "task-abc", time.Hour)
+	if _, err := VerifyRequestState(keyB, state); err != ErrRequestStateInvalidSignature {
+		t.Errorf("wrong key: err = %v, want ErrRequestStateInvalidSignature", err)
+	}
+}
+
+// TestRequestState_BadJSONPayload verifies that a payload that survives
+// base64 + HMAC but doesn't parse as the expected JSON shape is reported
+// as malformed (not invalid-signature).
+func TestRequestState_BadJSONPayload(t *testing.T) {
+	key := []byte("test-key-32-bytes-min-for-hmac-shake")
+	rawPayload := []byte("not-json-at-all")
+	mac := hmacFromKey(t, key, rawPayload)
+	state := base64.RawURLEncoding.EncodeToString(mac) + "." +
+		base64.RawURLEncoding.EncodeToString(rawPayload)
+	if _, err := VerifyRequestState(key, state); err != ErrRequestStateMalformed {
+		t.Errorf("bad JSON payload: err = %v, want ErrRequestStateMalformed", err)
+	}
+}
+
+// hmacFromKey is a tiny test helper to compute an HMAC-SHA256 sig over an
+// arbitrary payload — used by TestRequestState_BadJSONPayload to forge a
+// signature-valid-but-payload-broken token.
+func hmacFromKey(t *testing.T, key, payload []byte) []byte {
+	t.Helper()
+	h := hmac.New(sha256.New, key)
+	h.Write(payload)
+	return h.Sum(nil)
 }

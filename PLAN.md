@@ -1,8 +1,8 @@
 # Plan: SEP-2322 (MRTR) + SEP-2663 (Tasks Extension)
 
-**Status:** ✅ COMPLETE — all 8 phases shipped (PRs #324, #328, #329, #331, #334; Phase 8 in flight on `feat/sep-2663-phase-8`). 26/26 v2 conformance scenarios passing. v1 frozen alongside via `RegisterTasksV1`; hybrid via `RegisterTasksHybrid`. User-facing summary in [`docs/TASKS_V2_MIGRATION.md`](docs/TASKS_V2_MIGRATION.md).
+**Status:** ✅ COMPLETE — all 8 phases shipped (PRs 324, 328, 329, 331, 334, 335) + audit gap fixes (in flight on `feat/sep-2663-audit-fixes`). 27/27 v2 conformance scenarios passing. v1 frozen alongside via `RegisterTasksV1`; hybrid via `RegisterTasksHybrid`. User-facing summary in [`docs/TASKS_V2_MIGRATION.md`](docs/TASKS_V2_MIGRATION.md).
 
-**Issues:** mcpkit#320 (SEP-2663), mcpkit#321 (SEP-2322)
+**Issues:** issue 320 (SEP-2663), issue 321 (SEP-2322)
 **Branch:** `feat/tasks-extension` (from main)
 **Approach:** Evolve v2 in place (Option B). No parallel files.
 
@@ -124,7 +124,7 @@ Example server tools:
 - `failing_job` — async, transitions to `failed` (protocol error)
 - `confirm_delete` — async, transitions to `input_required`, resumes via `tasks/update`
 
-Conformance evolution (from mcpkit#320 comment):
+Conformance evolution (from issue 320 comment):
 - Keep passing scenarios, adjust shapes (ack-only cancel, etc.)
 - Rework v2-11 → extension negotiation
 - Rework v2-16/v2-17 → `tasks/update` flow (currently unimplemented)
@@ -172,14 +172,18 @@ Phase 6 (client) → Phase 7 (example + conformance) → Phase 8 (bridge)
 
 ## Open spec questions (watch before finalizing)
 
-1. `requestState` rejection: synchronous `-32602` or silent? (Luca TBD)
-2. SEP-2575 per-request capabilities shape — may change
-3. `tasks/update` / `tasks/cancel` ack for unknown taskId — may add optional validation errors
+Tracked in the living register issue titled "Tracking: SEP-2322 / SEP-2663 / SEP-2575 open spec questions" (issue 339) — code pins, test pins, and triggers for revisiting. Three entries today:
+
+1. `requestState` rejection: synchronous `-32602` or silent? — picked `-32602`.
+2. SEP-2575 per-request capabilities shape — using opaque `json.RawMessage` envelope so shape can change without consumer churn.
+3. `tasks/update` / `tasks/cancel` ack for unknown taskId — picked `-32602`.
+
+The pattern (loud failure + inline `// Open spec question` comment + named conformance scenario as the change-detector) is documented in the issue.
 
 ## Reference
 
 - SEP-2663 PR: https://github.com/modelcontextprotocol/specification/pull/2663
 - SEP-2322 PR: https://github.com/modelcontextprotocol/specification/pull/2322
-- SEP-2663 analysis: mcpkit#320
-- Existing v2 PR: mcpkit#301 (19/21 conformance)
-- Conformance test evolution: mcpkit#320 comment
+- SEP-2663 analysis: issue 320
+- Existing v2 PR: PR 301 (19/21 conformance)
+- Conformance test evolution: issue 320 comment
