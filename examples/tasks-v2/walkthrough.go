@@ -65,7 +65,7 @@ func runDemo() {
 		"",
 		"- **Tasks is an extension** (`io.modelcontextprotocol/tasks`). Clients declare support during `initialize`; servers gate every task-creating `tools/call` and every `tasks/*` method on the negotiation.",
 		"- **No client task hint.** Just call `tools/call` normally — the *server* decides whether to run sync or create a task. The client `client.ToolCall` helper returns a polymorphic `ToolCallResult` with either `Sync` or `Task` populated.",
-		"- **`resultType` discriminator** on `tools/call` response: `\"task\"` means a task was created; absent means sync.",
+		"- **`result_type` discriminator** on `tools/call` response: `\"task\"` means a task was created; absent means sync.",
 		"- **`tasks/get` returns `DetailedTask`** with inlined `result` / `error` / `inputRequests` / `requestState` per status. No separate `tasks/result` round-trip.",
 		"- **`tasks/cancel` returns an empty ack**. Observe the resulting `cancelled` status with the next `tasks/get`.",
 		"- **`tasks/update` is the SEP-2663 resume path** for MRTR input rounds — the client delivers `inputResponses` keyed to whatever `inputRequests` the server emitted.",

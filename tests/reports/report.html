@@ -19,7 +19,7 @@ pre { background: #f6f8fa; padding: 16px; border-radius: 6px; overflow-x: auto; 
 code.cmd { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-size: 13px; }
 </style></head><body>
 <h1>MCPKit Test Report</h1>
-<div class='meta'>Branch: <strong>feat/sep-2663-phase-8</strong> | Commit: <code>061312c</code> | Date: 2026-04-30 03:05:25</div>
+<div class='meta'>Branch: <strong>feat/sep-2322-mrtr-incomplete</strong> | Commit: <code>a2f2b13</code> | Date: 2026-04-30 14:36:00</div>
 <table><tr><th>Stage</th><th>Result</th><th>Re-run</th></tr>
 <tr><td><a href='#log-unit+coverage'>unit+coverage</a></td><td class='pass'>PASS</td><td><code class='cmd'>make cover-html</code></td></tr>
 <tr><td><a href='#log-race'>race</a></td><td class='pass'>PASS</td><td><code class='cmd'>make test-race</code></td></tr>
@@ -38,48 +38,48 @@ code.cmd { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-size:
 <h2>Stage Logs</h2>
 <details id='log-unit+coverage'><summary class='pass'>unit+coverage — PASS</summary><pre>
 === Stage 1/12: unit+coverage (make cover-html) ===
-Started: Thu Apr 30 03:03:23 PDT 2026
+Started: Thu Apr 30 14:34:19 PDT 2026
 go test -coverprofile=tests/reports/coverage.out ./... -count=1 -timeout 30s
-ok  	github.com/panyam/mcpkit/client	9.106s	coverage: 63.7% of statements
+ok  	github.com/panyam/mcpkit/client	8.162s	coverage: 65.4% of statements
 	github.com/panyam/mcpkit/cmd/testserver		coverage: 0.0% of statements
-ok  	github.com/panyam/mcpkit/core	0.882s	coverage: 47.6% of statements
-ok  	github.com/panyam/mcpkit/server	10.642s	coverage: 78.7% of statements
-ok  	github.com/panyam/mcpkit/testutil	0.729s	coverage: 69.4% of statements
+ok  	github.com/panyam/mcpkit/core	0.337s	coverage: 47.3% of statements
+ok  	github.com/panyam/mcpkit/server	12.475s	coverage: 78.9% of statements
+ok  	github.com/panyam/mcpkit/testutil	1.320s	coverage: 69.4% of statements
 go tool cover -html=tests/reports/coverage.out -o tests/reports/coverage.html
 Coverage report: tests/reports/coverage.html
-Finished: Thu Apr 30 03:03:37 PDT 2026
+Finished: Thu Apr 30 14:34:33 PDT 2026
 </pre></details>
 <details id='log-race'><summary class='pass'>race — PASS</summary><pre>
 === Stage 2/12: race (make test-race) ===
-Started: Thu Apr 30 03:03:37 PDT 2026
+Started: Thu Apr 30 14:34:33 PDT 2026
 go test -race ./... -count=1 -timeout 60s
-ok  	github.com/panyam/mcpkit/client	9.790s
+ok  	github.com/panyam/mcpkit/client	9.250s
 ?   	github.com/panyam/mcpkit/cmd/testserver	[no test files]
-ok  	github.com/panyam/mcpkit/core	1.577s
-ok  	github.com/panyam/mcpkit/server	11.853s
-ok  	github.com/panyam/mcpkit/testutil	1.860s
-Finished: Thu Apr 30 03:03:53 PDT 2026
+ok  	github.com/panyam/mcpkit/core	1.374s
+ok  	github.com/panyam/mcpkit/server	13.970s
+ok  	github.com/panyam/mcpkit/testutil	2.500s
+Finished: Thu Apr 30 14:34:48 PDT 2026
 </pre></details>
 <details id='log-auth'><summary class='pass'>auth — PASS</summary><pre>
 === Stage 3/12: auth (make test-auth) ===
-Started: Thu Apr 30 03:03:53 PDT 2026
+Started: Thu Apr 30 14:34:48 PDT 2026
 cd ext/auth &amp;&amp; go test ./... -count=1 -timeout 30s
-ok  	github.com/panyam/mcpkit/ext/auth	0.784s
-Finished: Thu Apr 30 03:03:54 PDT 2026
+ok  	github.com/panyam/mcpkit/ext/auth	0.401s
+Finished: Thu Apr 30 14:34:49 PDT 2026
 </pre></details>
 <details id='log-ui'><summary class='pass'>ui — PASS</summary><pre>
 === Stage 4/12: ui (make test-ui) ===
-Started: Thu Apr 30 03:03:54 PDT 2026
+Started: Thu Apr 30 14:34:49 PDT 2026
 cd ext/ui &amp;&amp; /Library/Developer/CommandLineTools/usr/bin/make test
 go test ./... -count=1 -timeout 30s
-ok  	github.com/panyam/mcpkit/ext/ui	0.724s
+ok  	github.com/panyam/mcpkit/ext/ui	0.417s
 cd assets &amp;&amp; pnpm install --frozen-lockfile --silent &amp;&amp; pnpm test
 
-&gt; @mcpkit/app-bridge@0.1.0 test /Users/dzshrh/newstack/mcpkit/tasks/ext/ui/assets
+&gt; @mcpkit/app-bridge@0.1.0 test /Users/dzshrh/newstack/mcpkit/mrtr/ext/ui/assets
 &gt; vitest run
 
 
- RUN  v3.2.4 /Users/dzshrh/newstack/mcpkit/tasks/ext/ui/assets
+ RUN  v3.2.4 /Users/dzshrh/newstack/mcpkit/mrtr/ext/ui/assets
 
 stderr | mcp-app-bridge.test.ts &gt; pre-handshake guarding &gt; sendToolListChanged is silently dropped before handshake
 [MCPApp] notify blocked before handshake: notifications/tools/list_changed
@@ -87,24 +87,24 @@ stderr | mcp-app-bridge.test.ts &gt; pre-handshake guarding &gt; sendToolListCha
 stderr | mcp-app-bridge.test.ts &gt; pre-handshake guarding &gt; log is silently dropped before handshake
 [MCPApp] notify blocked before handshake: ui/log
 
- ✓ mcp-app-bridge.test.ts (48 tests) 696ms
+ ✓ mcp-app-bridge.test.ts (48 tests) 683ms
 
  Test Files  1 passed (1)
       Tests  48 passed (48)
-   Start at  03:03:58
-   Duration  1.39s (transform 33ms, setup 0ms, collect 34ms, tests 696ms, environment 373ms, prepare 104ms)
+   Start at  14:34:51
+   Duration  1.43s (transform 38ms, setup 0ms, collect 35ms, tests 683ms, environment 387ms, prepare 125ms)
 
-Finished: Thu Apr 30 03:04:00 PDT 2026
+Finished: Thu Apr 30 14:34:53 PDT 2026
 </pre></details>
 <details id='log-protogen'><summary class='pass'>protogen — PASS</summary><pre>
 === Stage 5/12: protogen (make test-protogen) ===
-Started: Thu Apr 30 03:04:00 PDT 2026
+Started: Thu Apr 30 14:34:53 PDT 2026
 cd experimental/ext/protogen &amp;&amp; go test ./... -count=1 -timeout 30s &amp;&amp; /Library/Developer/CommandLineTools/usr/bin/make test-e2e
 ?   	github.com/panyam/mcpkit/experimental/ext/protogen/cmd/protoc-gen-go-mcp	[no test files]
-ok  	github.com/panyam/mcpkit/experimental/ext/protogen/generator	0.607s
-ok  	github.com/panyam/mcpkit/experimental/ext/protogen/proto/mcp/v1	1.429s
-ok  	github.com/panyam/mcpkit/experimental/ext/protogen/runtime	0.873s
-ok  	github.com/panyam/mcpkit/experimental/ext/protogen/schema	1.164s
+ok  	github.com/panyam/mcpkit/experimental/ext/protogen/generator	0.351s
+ok  	github.com/panyam/mcpkit/experimental/ext/protogen/proto/mcp/v1	0.635s
+ok  	github.com/panyam/mcpkit/experimental/ext/protogen/runtime	0.933s
+ok  	github.com/panyam/mcpkit/experimental/ext/protogen/schema	1.225s
 ?   	github.com/panyam/mcpkit/experimental/ext/protogen/testutil	[no test files]
 go build -o bin/protoc-gen-go-mcp ./cmd/protoc-gen-go-mcp
 go install ./cmd/protoc-gen-go-mcp
@@ -113,38 +113,38 @@ cd ../../../examples/protogen/bookservice &amp;&amp; rm -rf gen &amp;&amp; buf g
 [33mWARN[0m	plugin "protoc-gen-go-mcp" does not support required features.
   Feature "proto3 optional" is required by 1 file(s):
     bookservice/v1/service.proto
-ok  	github.com/panyam/mcpkit/examples/protogen/bookservice	0.697s
+ok  	github.com/panyam/mcpkit/examples/protogen/bookservice	0.422s
 ==&gt; e2e: passed
-Finished: Thu Apr 30 03:04:06 PDT 2026
+Finished: Thu Apr 30 14:34:57 PDT 2026
 </pre></details>
 <details id='log-e2e'><summary class='pass'>e2e — PASS</summary><pre>
 === Stage 6/12: e2e (make test-e2e) ===
-Started: Thu Apr 30 03:04:06 PDT 2026
+Started: Thu Apr 30 14:34:57 PDT 2026
 cd tests/e2e &amp;&amp; go test ./... -count=1 -timeout 60s
-ok  	github.com/panyam/mcpkit/tests/e2e	3.941s
-ok  	github.com/panyam/mcpkit/tests/e2e/apps	0.997s
-Finished: Thu Apr 30 03:04:11 PDT 2026
+ok  	github.com/panyam/mcpkit/tests/e2e	4.446s
+ok  	github.com/panyam/mcpkit/tests/e2e/apps	0.450s
+Finished: Thu Apr 30 14:35:02 PDT 2026
 </pre></details>
 <details id='log-experimental'><summary class='pass'>experimental — PASS</summary><pre>
 === Stage 7/12: experimental (make test-experimental) ===
-Started: Thu Apr 30 03:04:11 PDT 2026
+Started: Thu Apr 30 14:35:02 PDT 2026
 cd experimental/ext/events &amp;&amp; go test ./... -count=1 -timeout 60s
-ok  	github.com/panyam/mcpkit/experimental/ext/events	0.690s
+ok  	github.com/panyam/mcpkit/experimental/ext/events	0.386s
 cd experimental/ext/events/clients/go &amp;&amp; go test ./... -count=1 -timeout 60s
-ok  	github.com/panyam/mcpkit/experimental/ext/events/clients/go	6.797s
+ok  	github.com/panyam/mcpkit/experimental/ext/events/clients/go	6.411s
 cd examples/events/discord &amp;&amp; go test ./... -count=1 -timeout 60s
-ok  	github.com/panyam/mcpkit/examples/events/discord	4.192s
+ok  	github.com/panyam/mcpkit/examples/events/discord	4.462s
 cd examples/events/telegram &amp;&amp; go test ./... -count=1 -timeout 60s
-ok  	github.com/panyam/mcpkit/examples/events/telegram	8.998s
-Finished: Thu Apr 30 03:04:35 PDT 2026
+ok  	github.com/panyam/mcpkit/examples/events/telegram	7.964s
+Finished: Thu Apr 30 14:35:24 PDT 2026
 </pre></details>
 <details id='log-conformance'><summary class='pass'>conformance — PASS</summary><pre>
 === Stage 8/12: conformance (make testconf) ===
-Started: Thu Apr 30 03:04:35 PDT 2026
+Started: Thu Apr 30 14:35:24 PDT 2026
 bash scripts/conformance-test.sh
 Killing stale process on port 18799...
 === Starting test server on :18799 (Streamable HTTP) ===
-Waiting for server.....2026/04/30 03:04:37 MCP test server listening on :18799 (Streamable HTTP at /mcp)
+Waiting for server....2026/04/30 14:35:26 MCP test server listening on :18799 (Streamable HTTP at /mcp)
  ready
 
 === Running MCP conformance suite ===
@@ -155,295 +155,295 @@ Running active suite (30 scenarios) against http://localhost:18799/mcp
 
 === Running scenario: server-initialize ===
 Running client scenario 'server-initialize' against server: http://localhost:18799/mcp
-2026/04/30 03:04:39 Starting MCP-GET-SSE SSE connection: 6426c5f18b42d0d34a7d5212a7cfeeaf
-2026/04/30 03:04:39 SSEHub: registered connection 6426c5f18b42d0d34a7d5212a7cfeeaf (total: 1)
-2026/04/30 03:04:39 SSEHub: unregistered connection 6426c5f18b42d0d34a7d5212a7cfeeaf (total: 0)
-2026/04/30 03:04:39 Received kill signal.  Quitting Writer. stop 0x66e2eb4ba150
-2026/04/30 03:04:39 Cleaning up writer...
-2026/04/30 03:04:39 Finished cleaning up writer:  0x66e2eb4ba150
-2026/04/30 03:04:39 Closed MCP-GET-SSE SSE connection: 6426c5f18b42d0d34a7d5212a7cfeeaf
+2026/04/30 14:35:27 Starting MCP-GET-SSE SSE connection: 25aba30c70f1abbfb40eb89699a94d81
+2026/04/30 14:35:27 SSEHub: registered connection 25aba30c70f1abbfb40eb89699a94d81 (total: 1)
 
 === Running scenario: logging-set-level ===
+2026/04/30 14:35:27 SSEHub: unregistered connection 25aba30c70f1abbfb40eb89699a94d81 (total: 0)
 Running client scenario 'logging-set-level' against server: http://localhost:18799/mcp
-2026/04/30 03:04:39 Starting MCP-GET-SSE SSE connection: ce78a7e4180922d6da3c202139370db6
-2026/04/30 03:04:39 SSEHub: registered connection ce78a7e4180922d6da3c202139370db6 (total: 1)
-2026/04/30 03:04:39 SSEHub: unregistered connection ce78a7e4180922d6da3c202139370db6 (total: 0)
-2026/04/30 03:04:39 Received kill signal.  Quitting Writer. stop 0x66e2eb18c230
-2026/04/30 03:04:39 Cleaning up writer...
-2026/04/30 03:04:39 Finished cleaning up writer:  0x66e2eb18c230
-2026/04/30 03:04:39 Closed MCP-GET-SSE SSE connection: ce78a7e4180922d6da3c202139370db6
+2026/04/30 14:35:27 Received kill signal.  Quitting Writer. stop 0x72c089261c0
+2026/04/30 14:35:27 Cleaning up writer...
+2026/04/30 14:35:27 Finished cleaning up writer:  0x72c089261c0
+2026/04/30 14:35:27 Closed MCP-GET-SSE SSE connection: 25aba30c70f1abbfb40eb89699a94d81
+2026/04/30 14:35:27 Starting MCP-GET-SSE SSE connection: 118de176ce8f3233ef7284338b563a86
+2026/04/30 14:35:27 SSEHub: registered connection 118de176ce8f3233ef7284338b563a86 (total: 1)
+2026/04/30 14:35:27 SSEHub: unregistered connection 118de176ce8f3233ef7284338b563a86 (total: 0)
+2026/04/30 14:35:27 Received kill signal.  Quitting Writer. stop 0x72c08926460
+2026/04/30 14:35:27 Cleaning up writer...
+2026/04/30 14:35:27 Finished cleaning up writer:  0x72c08926460
+2026/04/30 14:35:27 Closed MCP-GET-SSE SSE connection: 118de176ce8f3233ef7284338b563a86
 
 === Running scenario: ping ===
 Running client scenario 'ping' against server: http://localhost:18799/mcp
-2026/04/30 03:04:39 Starting MCP-GET-SSE SSE connection: 8741aaedd5fcca618536f8ffd6a5b943
-2026/04/30 03:04:39 SSEHub: registered connection 8741aaedd5fcca618536f8ffd6a5b943 (total: 1)
-2026/04/30 03:04:39 SSEHub: unregistered connection 8741aaedd5fcca618536f8ffd6a5b943 (total: 0)
+2026/04/30 14:35:28 Starting MCP-GET-SSE SSE connection: e5436ef452a1e0410533ab60bf4d182f
+2026/04/30 14:35:28 SSEHub: registered connection e5436ef452a1e0410533ab60bf4d182f (total: 1)
+2026/04/30 14:35:28 SSEHub: unregistered connection e5436ef452a1e0410533ab60bf4d182f (total: 0)
+2026/04/30 14:35:28 Received kill signal.  Quitting Writer. stop 0x72c084c2380
+2026/04/30 14:35:28 Cleaning up writer...
+2026/04/30 14:35:28 Finished cleaning up writer:  0x72c084c2380
 
 === Running scenario: completion-complete ===
-2026/04/30 03:04:39 Received kill signal.  Quitting Writer. stop 0x66e2eb1482a0
-2026/04/30 03:04:39 Cleaning up writer...
+2026/04/30 14:35:28 Closed MCP-GET-SSE SSE connection: e5436ef452a1e0410533ab60bf4d182f
 Running client scenario 'completion-complete' against server: http://localhost:18799/mcp
-2026/04/30 03:04:39 Finished cleaning up writer:  0x66e2eb1482a0
-2026/04/30 03:04:39 Closed MCP-GET-SSE SSE connection: 8741aaedd5fcca618536f8ffd6a5b943
-2026/04/30 03:04:39 Starting MCP-GET-SSE SSE connection: f26f4a5531da9ea8f9a17cb0931a7b17
-2026/04/30 03:04:39 SSEHub: registered connection f26f4a5531da9ea8f9a17cb0931a7b17 (total: 1)
-2026/04/30 03:04:39 SSEHub: unregistered connection f26f4a5531da9ea8f9a17cb0931a7b17 (total: 0)
-2026/04/30 03:04:39 Received kill signal.  Quitting Writer. stop 0x66e2eb148540
-2026/04/30 03:04:39 Cleaning up writer...
-2026/04/30 03:04:39 Finished cleaning up writer:  0x66e2eb148540
-2026/04/30 03:04:39 Closed MCP-GET-SSE SSE connection: f26f4a5531da9ea8f9a17cb0931a7b17
+2026/04/30 14:35:28 Starting MCP-GET-SSE SSE connection: 7086b9466dbae7fa1e6cef09f2032f48
+2026/04/30 14:35:28 SSEHub: registered connection 7086b9466dbae7fa1e6cef09f2032f48 (total: 1)
+2026/04/30 14:35:28 SSEHub: unregistered connection 7086b9466dbae7fa1e6cef09f2032f48 (total: 0)
+2026/04/30 14:35:28 Received kill signal.  Quitting Writer. stop 0x72c08618af0
+2026/04/30 14:35:28 Cleaning up writer...
+2026/04/30 14:35:28 Finished cleaning up writer:  0x72c08618af0
+2026/04/30 14:35:28 Closed MCP-GET-SSE SSE connection: 7086b9466dbae7fa1e6cef09f2032f48
 
 === Running scenario: tools-list ===
 Running client scenario 'tools-list' against server: http://localhost:18799/mcp
-2026/04/30 03:04:39 Starting MCP-GET-SSE SSE connection: bd21b56a728bc1a3c262c1ec87dad69a
-2026/04/30 03:04:39 SSEHub: registered connection bd21b56a728bc1a3c262c1ec87dad69a (total: 1)
-2026/04/30 03:04:39 SSEHub: unregistered connection bd21b56a728bc1a3c262c1ec87dad69a (total: 0)
+2026/04/30 14:35:28 Starting MCP-GET-SSE SSE connection: 14c3a93257d7ecd74b2803ce4df4f115
+2026/04/30 14:35:28 SSEHub: registered connection 14c3a93257d7ecd74b2803ce4df4f115 (total: 1)
+2026/04/30 14:35:28 SSEHub: unregistered connection 14c3a93257d7ecd74b2803ce4df4f115 (total: 0)
+2026/04/30 14:35:28 Received kill signal.  Quitting Writer. stop 0x72c08926700
+2026/04/30 14:35:28 Cleaning up writer...
 
 === Running scenario: tools-call-simple-text ===
-2026/04/30 03:04:39 Received kill signal.  Quitting Writer. stop 0x66e2eb1487e0
-2026/04/30 03:04:39 Cleaning up writer...
-2026/04/30 03:04:39 Finished cleaning up writer:  0x66e2eb1487e0
-2026/04/30 03:04:39 Closed MCP-GET-SSE SSE connection: bd21b56a728bc1a3c262c1ec87dad69a
+2026/04/30 14:35:28 Finished cleaning up writer:  0x72c08926700
 Running client scenario 'tools-call-simple-text' against server: http://localhost:18799/mcp
-2026/04/30 03:04:39 Starting MCP-GET-SSE SSE connection: 543687e3b010bfd75991b0a040d0fb51
-2026/04/30 03:04:39 SSEHub: registered connection 543687e3b010bfd75991b0a040d0fb51 (total: 1)
-2026/04/30 03:04:39 SSEHub: unregistered connection 543687e3b010bfd75991b0a040d0fb51 (total: 0)
-2026/04/30 03:04:39 Received kill signal.  Quitting Writer. stop 0x66e2eb18cc40
-2026/04/30 03:04:39 Cleaning up writer...
+2026/04/30 14:35:28 Closed MCP-GET-SSE SSE connection: 14c3a93257d7ecd74b2803ce4df4f115
+2026/04/30 14:35:28 Starting MCP-GET-SSE SSE connection: 5c2b6d9c9b62a2dcfce9c0706439c105
+2026/04/30 14:35:28 SSEHub: registered connection 5c2b6d9c9b62a2dcfce9c0706439c105 (total: 1)
+2026/04/30 14:35:28 SSEHub: unregistered connection 5c2b6d9c9b62a2dcfce9c0706439c105 (total: 0)
 
 === Running scenario: tools-call-image ===
-2026/04/30 03:04:39 Finished cleaning up writer:  0x66e2eb18cc40
-2026/04/30 03:04:39 Closed MCP-GET-SSE SSE connection: 543687e3b010bfd75991b0a040d0fb51
+2026/04/30 14:35:28 Received kill signal.  Quitting Writer. stop 0x72c084c2700
+2026/04/30 14:35:28 Cleaning up writer...
+2026/04/30 14:35:28 Finished cleaning up writer:  0x72c084c2700
+2026/04/30 14:35:28 Closed MCP-GET-SSE SSE connection: 5c2b6d9c9b62a2dcfce9c0706439c105
 Running client scenario 'tools-call-image' against server: http://localhost:18799/mcp
-2026/04/30 03:04:39 Starting MCP-GET-SSE SSE connection: d8bf9665116ba83f9011f9013639a8f7
-2026/04/30 03:04:39 SSEHub: registered connection d8bf9665116ba83f9011f9013639a8f7 (total: 1)
+2026/04/30 14:35:28 Starting MCP-GET-SSE SSE connection: 574131bc2959dc64f9cb7285bda602b7
+2026/04/30 14:35:28 SSEHub: registered connection 574131bc2959dc64f9cb7285bda602b7 (total: 1)
+2026/04/30 14:35:28 SSEHub: unregistered connection 574131bc2959dc64f9cb7285bda602b7 (total: 0)
 
 === Running scenario: tools-call-audio ===
+2026/04/30 14:35:28 Received kill signal.  Quitting Writer. stop 0x72c084c2930
+2026/04/30 14:35:28 Cleaning up writer...
+2026/04/30 14:35:28 Finished cleaning up writer:  0x72c084c2930
+2026/04/30 14:35:28 Closed MCP-GET-SSE SSE connection: 574131bc2959dc64f9cb7285bda602b7
 Running client scenario 'tools-call-audio' against server: http://localhost:18799/mcp
-2026/04/30 03:04:39 SSEHub: unregistered connection d8bf9665116ba83f9011f9013639a8f7 (total: 0)
-2026/04/30 03:04:39 Received kill signal.  Quitting Writer. stop 0x66e2eb18cf50
-2026/04/30 03:04:39 Cleaning up writer...
-2026/04/30 03:04:39 Finished cleaning up writer:  0x66e2eb18cf50
-2026/04/30 03:04:39 Closed MCP-GET-SSE SSE connection: d8bf9665116ba83f9011f9013639a8f7
-2026/04/30 03:04:39 Starting MCP-GET-SSE SSE connection: 3acc1285f366cdfe8a294aa177ada52e
-2026/04/30 03:04:39 SSEHub: registered connection 3acc1285f366cdfe8a294aa177ada52e (total: 1)
+2026/04/30 14:35:28 Starting MCP-GET-SSE SSE connection: a4a4c8170fe7ce41078b1007c29a811f
+2026/04/30 14:35:28 SSEHub: registered connection a4a4c8170fe7ce41078b1007c29a811f (total: 1)
+2026/04/30 14:35:28 SSEHub: unregistered connection a4a4c8170fe7ce41078b1007c29a811f (total: 0)
 
 === Running scenario: tools-call-embedded-resource ===
-2026/04/30 03:04:39 SSEHub: unregistered connection 3acc1285f366cdfe8a294aa177ada52e (total: 0)
+2026/04/30 14:35:28 Received kill signal.  Quitting Writer. stop 0x72c089269a0
+2026/04/30 14:35:28 Cleaning up writer...
+2026/04/30 14:35:28 Finished cleaning up writer:  0x72c089269a0
+2026/04/30 14:35:28 Closed MCP-GET-SSE SSE connection: a4a4c8170fe7ce41078b1007c29a811f
 Running client scenario 'tools-call-embedded-resource' against server: http://localhost:18799/mcp
-2026/04/30 03:04:39 Received kill signal.  Quitting Writer. stop 0x66e2eb18d180
-2026/04/30 03:04:39 Cleaning up writer...
-2026/04/30 03:04:39 Finished cleaning up writer:  0x66e2eb18d180
-2026/04/30 03:04:39 Closed MCP-GET-SSE SSE connection: 3acc1285f366cdfe8a294aa177ada52e
-2026/04/30 03:04:39 Starting MCP-GET-SSE SSE connection: 47e5d1af5eddfe544b02a6902629769e
-2026/04/30 03:04:39 SSEHub: registered connection 47e5d1af5eddfe544b02a6902629769e (total: 1)
-2026/04/30 03:04:39 SSEHub: unregistered connection 47e5d1af5eddfe544b02a6902629769e (total: 0)
-2026/04/30 03:04:39 Received kill signal.  Quitting Writer. stop 0x66e2eb02a540
-2026/04/30 03:04:39 Cleaning up writer...
-2026/04/30 03:04:39 Finished cleaning up writer:  0x66e2eb02a540
-2026/04/30 03:04:39 Closed MCP-GET-SSE SSE connection: 47e5d1af5eddfe544b02a6902629769e
+2026/04/30 14:35:28 Starting MCP-GET-SSE SSE connection: 8b907438911e2c76b9f70dfe9600f216
+2026/04/30 14:35:28 SSEHub: registered connection 8b907438911e2c76b9f70dfe9600f216 (total: 1)
+2026/04/30 14:35:28 SSEHub: unregistered connection 8b907438911e2c76b9f70dfe9600f216 (total: 0)
+2026/04/30 14:35:28 Received kill signal.  Quitting Writer. stop 0x72c08926cb0
+2026/04/30 14:35:28 Cleaning up writer...
+2026/04/30 14:35:28 Finished cleaning up writer:  0x72c08926cb0
+2026/04/30 14:35:28 Closed MCP-GET-SSE SSE connection: 8b907438911e2c76b9f70dfe9600f216
 
 === Running scenario: tools-call-mixed-content ===
 Running client scenario 'tools-call-mixed-content' against server: http://localhost:18799/mcp
-2026/04/30 03:04:39 Starting MCP-GET-SSE SSE connection: 6a0820c57af0e37728c04831dc7fc99c
-2026/04/30 03:04:39 SSEHub: registered connection 6a0820c57af0e37728c04831dc7fc99c (total: 1)
-2026/04/30 03:04:39 SSEHub: unregistered connection 6a0820c57af0e37728c04831dc7fc99c (total: 0)
-2026/04/30 03:04:39 Received kill signal.  Quitting Writer. stop 0x66e2eb18d500
-2026/04/30 03:04:39 Cleaning up writer...
+2026/04/30 14:35:28 Starting MCP-GET-SSE SSE connection: eb2212329eefcd6eee4c8f4efefcfd03
+2026/04/30 14:35:28 SSEHub: registered connection eb2212329eefcd6eee4c8f4efefcfd03 (total: 1)
+2026/04/30 14:35:28 SSEHub: unregistered connection eb2212329eefcd6eee4c8f4efefcfd03 (total: 0)
+2026/04/30 14:35:28 Received kill signal.  Quitting Writer. stop 0x72c084c2b60
+2026/04/30 14:35:28 Cleaning up writer...
+2026/04/30 14:35:28 Finished cleaning up writer:  0x72c084c2b60
+2026/04/30 14:35:28 Closed MCP-GET-SSE SSE connection: eb2212329eefcd6eee4c8f4efefcfd03
 
 === Running scenario: tools-call-with-logging ===
-2026/04/30 03:04:39 Finished cleaning up writer:  0x66e2eb18d500
 Running client scenario 'tools-call-with-logging' against server: http://localhost:18799/mcp
-2026/04/30 03:04:39 Closed MCP-GET-SSE SSE connection: 6a0820c57af0e37728c04831dc7fc99c
-2026/04/30 03:04:39 Starting MCP-GET-SSE SSE connection: 666c542b3f7ba87edfb0ed29d66bddd3
-2026/04/30 03:04:39 SSEHub: registered connection 666c542b3f7ba87edfb0ed29d66bddd3 (total: 1)
-2026/04/30 03:04:40 SSEHub: unregistered connection 666c542b3f7ba87edfb0ed29d66bddd3 (total: 0)
-2026/04/30 03:04:40 Received kill signal.  Quitting Writer. stop 0x66e2eb18d810
-2026/04/30 03:04:40 Cleaning up writer...
-2026/04/30 03:04:40 Finished cleaning up writer:  0x66e2eb18d810
-2026/04/30 03:04:40 Closed MCP-GET-SSE SSE connection: 666c542b3f7ba87edfb0ed29d66bddd3
+2026/04/30 14:35:28 Starting MCP-GET-SSE SSE connection: 47dc3002f088eabe4a4b49423780b4f9
+2026/04/30 14:35:28 SSEHub: registered connection 47dc3002f088eabe4a4b49423780b4f9 (total: 1)
 
 === Running scenario: tools-call-error ===
+2026/04/30 14:35:28 SSEHub: unregistered connection 47dc3002f088eabe4a4b49423780b4f9 (total: 0)
 Running client scenario 'tools-call-error' against server: http://localhost:18799/mcp
-2026/04/30 03:04:40 Starting MCP-GET-SSE SSE connection: 6a912cd7a341325a7aed54813d7a62ea
-2026/04/30 03:04:40 SSEHub: registered connection 6a912cd7a341325a7aed54813d7a62ea (total: 1)
-2026/04/30 03:04:40 SSEHub: unregistered connection 6a912cd7a341325a7aed54813d7a62ea (total: 0)
-2026/04/30 03:04:40 Received kill signal.  Quitting Writer. stop 0x66e2eb02a7e0
-2026/04/30 03:04:40 Cleaning up writer...
-2026/04/30 03:04:40 Finished cleaning up writer:  0x66e2eb02a7e0
-2026/04/30 03:04:40 Closed MCP-GET-SSE SSE connection: 6a912cd7a341325a7aed54813d7a62ea
+2026/04/30 14:35:28 Received kill signal.  Quitting Writer. stop 0x72c086191f0
+2026/04/30 14:35:28 Cleaning up writer...
+2026/04/30 14:35:28 Finished cleaning up writer:  0x72c086191f0
+2026/04/30 14:35:28 Closed MCP-GET-SSE SSE connection: 47dc3002f088eabe4a4b49423780b4f9
+2026/04/30 14:35:28 Starting MCP-GET-SSE SSE connection: 1e1a3d746df0b27a34949c6d6961868c
+2026/04/30 14:35:28 SSEHub: registered connection 1e1a3d746df0b27a34949c6d6961868c (total: 1)
+2026/04/30 14:35:28 SSEHub: unregistered connection 1e1a3d746df0b27a34949c6d6961868c (total: 0)
 
 === Running scenario: tools-call-with-progress ===
+2026/04/30 14:35:28 Received kill signal.  Quitting Writer. stop 0x72c084c2ee0
 Running client scenario 'tools-call-with-progress' against server: http://localhost:18799/mcp
-2026/04/30 03:04:40 Starting MCP-GET-SSE SSE connection: 9794a03678c306bbbfb54e472475ce46
-2026/04/30 03:04:40 SSEHub: registered connection 9794a03678c306bbbfb54e472475ce46 (total: 1)
-2026/04/30 03:04:40 SSEHub: unregistered connection 9794a03678c306bbbfb54e472475ce46 (total: 0)
-2026/04/30 03:04:40 Received kill signal.  Quitting Writer. stop 0x66e2eb148e70
-2026/04/30 03:04:40 Cleaning up writer...
-2026/04/30 03:04:40 Finished cleaning up writer:  0x66e2eb148e70
-2026/04/30 03:04:40 Closed MCP-GET-SSE SSE connection: 9794a03678c306bbbfb54e472475ce46
+2026/04/30 14:35:28 Cleaning up writer...
+2026/04/30 14:35:28 Finished cleaning up writer:  0x72c084c2ee0
+2026/04/30 14:35:28 Closed MCP-GET-SSE SSE connection: 1e1a3d746df0b27a34949c6d6961868c
+2026/04/30 14:35:28 Starting MCP-GET-SSE SSE connection: ff995e31cad0554e12487d4d28bdc698
+2026/04/30 14:35:28 SSEHub: registered connection ff995e31cad0554e12487d4d28bdc698 (total: 1)
+2026/04/30 14:35:28 SSEHub: unregistered connection ff995e31cad0554e12487d4d28bdc698 (total: 0)
+2026/04/30 14:35:28 Received kill signal.  Quitting Writer. stop 0x72c08927030
+2026/04/30 14:35:28 Cleaning up writer...
+2026/04/30 14:35:28 Finished cleaning up writer:  0x72c08927030
+2026/04/30 14:35:28 Closed MCP-GET-SSE SSE connection: ff995e31cad0554e12487d4d28bdc698
 
 === Running scenario: tools-call-sampling ===
 Running client scenario 'tools-call-sampling' against server: http://localhost:18799/mcp
-2026/04/30 03:04:40 Starting MCP-GET-SSE SSE connection: 2f17f96d791657bd7900f000242b16ea
-2026/04/30 03:04:40 SSEHub: registered connection 2f17f96d791657bd7900f000242b16ea (total: 1)
-2026/04/30 03:04:40 SSEHub: unregistered connection 2f17f96d791657bd7900f000242b16ea (total: 0)
-2026/04/30 03:04:40 Received kill signal.  Quitting Writer. stop 0x66e2eb1490a0
-2026/04/30 03:04:40 Cleaning up writer...
-2026/04/30 03:04:40 Finished cleaning up writer:  0x66e2eb1490a0
-2026/04/30 03:04:40 Closed MCP-GET-SSE SSE connection: 2f17f96d791657bd7900f000242b16ea
+2026/04/30 14:35:28 Starting MCP-GET-SSE SSE connection: eb0eadea11d9aae14080a23027ee5d85
+2026/04/30 14:35:28 SSEHub: registered connection eb0eadea11d9aae14080a23027ee5d85 (total: 1)
+2026/04/30 14:35:28 SSEHub: unregistered connection eb0eadea11d9aae14080a23027ee5d85 (total: 0)
+2026/04/30 14:35:28 Received kill signal.  Quitting Writer. stop 0x72c084c31f0
+2026/04/30 14:35:28 Cleaning up writer...
+2026/04/30 14:35:28 Finished cleaning up writer:  0x72c084c31f0
+2026/04/30 14:35:28 Closed MCP-GET-SSE SSE connection: eb0eadea11d9aae14080a23027ee5d85
 
 === Running scenario: tools-call-elicitation ===
 Running client scenario 'tools-call-elicitation' against server: http://localhost:18799/mcp
-2026/04/30 03:04:40 Starting MCP-GET-SSE SSE connection: 3c1a0313f340c2673ade4307f6cb1b92
-2026/04/30 03:04:40 SSEHub: registered connection 3c1a0313f340c2673ade4307f6cb1b92 (total: 1)
-2026/04/30 03:04:40 SSEHub: unregistered connection 3c1a0313f340c2673ade4307f6cb1b92 (total: 0)
-2026/04/30 03:04:40 Received kill signal.  Quitting Writer. stop 0x66e2eb02aaf0
-2026/04/30 03:04:40 Cleaning up writer...
+2026/04/30 14:35:28 Starting MCP-GET-SSE SSE connection: 5714e73ce9ea4dc2d65f9405a106866f
+2026/04/30 14:35:28 SSEHub: registered connection 5714e73ce9ea4dc2d65f9405a106866f (total: 1)
+2026/04/30 14:35:28 SSEHub: unregistered connection 5714e73ce9ea4dc2d65f9405a106866f (total: 0)
+2026/04/30 14:35:28 Received kill signal.  Quitting Writer. stop 0x72c084c3420
+2026/04/30 14:35:28 Cleaning up writer...
+2026/04/30 14:35:28 Finished cleaning up writer:  0x72c084c3420
 
 === Running scenario: elicitation-sep1034-defaults ===
-2026/04/30 03:04:40 Finished cleaning up writer:  0x66e2eb02aaf0
+2026/04/30 14:35:28 Closed MCP-GET-SSE SSE connection: 5714e73ce9ea4dc2d65f9405a106866f
 Running client scenario 'elicitation-sep1034-defaults' against server: http://localhost:18799/mcp
-2026/04/30 03:04:40 Closed MCP-GET-SSE SSE connection: 3c1a0313f340c2673ade4307f6cb1b92
-2026/04/30 03:04:40 Starting MCP-GET-SSE SSE connection: ce882a265e6bf6916c59c4d732e3b023
-2026/04/30 03:04:40 SSEHub: registered connection ce882a265e6bf6916c59c4d732e3b023 (total: 1)
-2026/04/30 03:04:40 SSEHub: unregistered connection ce882a265e6bf6916c59c4d732e3b023 (total: 0)
+2026/04/30 14:35:28 Starting MCP-GET-SSE SSE connection: 6f2224cebd75ec90d1fa069e927c8145
+2026/04/30 14:35:28 SSEHub: registered connection 6f2224cebd75ec90d1fa069e927c8145 (total: 1)
+2026/04/30 14:35:28 SSEHub: unregistered connection 6f2224cebd75ec90d1fa069e927c8145 (total: 0)
+2026/04/30 14:35:28 Received kill signal.  Quitting Writer. stop 0x72c084c3650
+2026/04/30 14:35:28 Cleaning up writer...
+2026/04/30 14:35:28 Finished cleaning up writer:  0x72c084c3650
+2026/04/30 14:35:28 Closed MCP-GET-SSE SSE connection: 6f2224cebd75ec90d1fa069e927c8145
 
 === Running scenario: server-sse-multiple-streams ===
-2026/04/30 03:04:40 Received kill signal.  Quitting Writer. stop 0x66e2eb02af50
-2026/04/30 03:04:40 Cleaning up writer...
-2026/04/30 03:04:40 Finished cleaning up writer:  0x66e2eb02af50
-2026/04/30 03:04:40 Closed MCP-GET-SSE SSE connection: ce882a265e6bf6916c59c4d732e3b023
 Running client scenario 'server-sse-multiple-streams' against server: http://localhost:18799/mcp
-2026/04/30 03:04:40 Starting MCP-GET-SSE SSE connection: d6a1a80924c59521cb11888ef8001d22
-2026/04/30 03:04:40 SSEHub: registered connection d6a1a80924c59521cb11888ef8001d22 (total: 1)
+2026/04/30 14:35:28 Starting MCP-GET-SSE SSE connection: f0418ff88b08a86b0920724f281e6a0c
+2026/04/30 14:35:28 SSEHub: registered connection f0418ff88b08a86b0920724f281e6a0c (total: 1)
+2026/04/30 14:35:28 SSEHub: unregistered connection f0418ff88b08a86b0920724f281e6a0c (total: 0)
 
 === Running scenario: elicitation-sep1330-enums ===
+2026/04/30 14:35:28 Received kill signal.  Quitting Writer. stop 0x72c08619730
+2026/04/30 14:35:28 Cleaning up writer...
 Running client scenario 'elicitation-sep1330-enums' against server: http://localhost:18799/mcp
-2026/04/30 03:04:40 SSEHub: unregistered connection d6a1a80924c59521cb11888ef8001d22 (total: 0)
-2026/04/30 03:04:40 Received kill signal.  Quitting Writer. stop 0x66e2eb1492d0
-2026/04/30 03:04:40 Cleaning up writer...
-2026/04/30 03:04:40 Finished cleaning up writer:  0x66e2eb1492d0
-2026/04/30 03:04:40 Closed MCP-GET-SSE SSE connection: d6a1a80924c59521cb11888ef8001d22
-2026/04/30 03:04:40 Starting MCP-GET-SSE SSE connection: b2de16abbc1e3125274ccb85b955a6dd
-2026/04/30 03:04:40 SSEHub: registered connection b2de16abbc1e3125274ccb85b955a6dd (total: 1)
-2026/04/30 03:04:40 SSEHub: unregistered connection b2de16abbc1e3125274ccb85b955a6dd (total: 0)
-2026/04/30 03:04:40 Received kill signal.  Quitting Writer. stop 0x66e2eb4ba460
-2026/04/30 03:04:40 Cleaning up writer...
+2026/04/30 14:35:28 Finished cleaning up writer:  0x72c08619730
+2026/04/30 14:35:28 Closed MCP-GET-SSE SSE connection: f0418ff88b08a86b0920724f281e6a0c
+2026/04/30 14:35:28 Starting MCP-GET-SSE SSE connection: 1660a1e91835636b667f1dbcc91255f4
+2026/04/30 14:35:28 SSEHub: registered connection 1660a1e91835636b667f1dbcc91255f4 (total: 1)
+2026/04/30 14:35:28 SSEHub: unregistered connection 1660a1e91835636b667f1dbcc91255f4 (total: 0)
+2026/04/30 14:35:28 Received kill signal.  Quitting Writer. stop 0x72c084c3960
+2026/04/30 14:35:28 Cleaning up writer...
+2026/04/30 14:35:28 Finished cleaning up writer:  0x72c084c3960
+2026/04/30 14:35:28 Closed MCP-GET-SSE SSE connection: 1660a1e91835636b667f1dbcc91255f4
 
 === Running scenario: resources-list ===
-2026/04/30 03:04:40 Finished cleaning up writer:  0x66e2eb4ba460
-2026/04/30 03:04:40 Closed MCP-GET-SSE SSE connection: b2de16abbc1e3125274ccb85b955a6dd
 Running client scenario 'resources-list' against server: http://localhost:18799/mcp
-2026/04/30 03:04:40 Starting MCP-GET-SSE SSE connection: 462495113e753fb81870b0e7ed69ed83
-2026/04/30 03:04:40 SSEHub: registered connection 462495113e753fb81870b0e7ed69ed83 (total: 1)
-2026/04/30 03:04:40 SSEHub: unregistered connection 462495113e753fb81870b0e7ed69ed83 (total: 0)
-2026/04/30 03:04:40 Received kill signal.  Quitting Writer. stop 0x66e2eb4ba690
-2026/04/30 03:04:40 Cleaning up writer...
-2026/04/30 03:04:40 Finished cleaning up writer:  0x66e2eb4ba690
+2026/04/30 14:35:28 Starting MCP-GET-SSE SSE connection: 78b42bd43dde02c3533da7df84a025d3
+2026/04/30 14:35:28 SSEHub: registered connection 78b42bd43dde02c3533da7df84a025d3 (total: 1)
+2026/04/30 14:35:28 SSEHub: unregistered connection 78b42bd43dde02c3533da7df84a025d3 (total: 0)
+2026/04/30 14:35:28 Received kill signal.  Quitting Writer. stop 0x72c08619a40
+2026/04/30 14:35:28 Cleaning up writer...
+2026/04/30 14:35:28 Finished cleaning up writer:  0x72c08619a40
+2026/04/30 14:35:28 Closed MCP-GET-SSE SSE connection: 78b42bd43dde02c3533da7df84a025d3
 
 === Running scenario: resources-read-text ===
-2026/04/30 03:04:40 Closed MCP-GET-SSE SSE connection: 462495113e753fb81870b0e7ed69ed83
 Running client scenario 'resources-read-text' against server: http://localhost:18799/mcp
-2026/04/30 03:04:40 Starting MCP-GET-SSE SSE connection: 8260765669b919292296191533e748f0
-2026/04/30 03:04:40 SSEHub: registered connection 8260765669b919292296191533e748f0 (total: 1)
-2026/04/30 03:04:40 SSEHub: unregistered connection 8260765669b919292296191533e748f0 (total: 0)
+2026/04/30 14:35:28 Starting MCP-GET-SSE SSE connection: 117ce28a7a80270537ebc7653d59559d
+2026/04/30 14:35:28 SSEHub: registered connection 117ce28a7a80270537ebc7653d59559d (total: 1)
+2026/04/30 14:35:28 SSEHub: unregistered connection 117ce28a7a80270537ebc7653d59559d (total: 0)
+2026/04/30 14:35:28 Received kill signal.  Quitting Writer. stop 0x72c089275e0
+2026/04/30 14:35:28 Cleaning up writer...
 
 === Running scenario: resources-read-binary ===
-2026/04/30 03:04:40 Received kill signal.  Quitting Writer. stop 0x66e2eb02b490
+2026/04/30 14:35:28 Finished cleaning up writer:  0x72c089275e0
+2026/04/30 14:35:28 Closed MCP-GET-SSE SSE connection: 117ce28a7a80270537ebc7653d59559d
 Running client scenario 'resources-read-binary' against server: http://localhost:18799/mcp
-2026/04/30 03:04:40 Cleaning up writer...
-2026/04/30 03:04:40 Finished cleaning up writer:  0x66e2eb02b490
-2026/04/30 03:04:40 Closed MCP-GET-SSE SSE connection: 8260765669b919292296191533e748f0
-2026/04/30 03:04:40 Starting MCP-GET-SSE SSE connection: 2460f9aa7b293fb33fc8957623fd3f72
-2026/04/30 03:04:40 SSEHub: registered connection 2460f9aa7b293fb33fc8957623fd3f72 (total: 1)
+2026/04/30 14:35:28 Starting MCP-GET-SSE SSE connection: d86ca0b70ea141ecbbbeacdc9b7b42c8
+2026/04/30 14:35:28 SSEHub: registered connection d86ca0b70ea141ecbbbeacdc9b7b42c8 (total: 1)
+2026/04/30 14:35:28 SSEHub: unregistered connection d86ca0b70ea141ecbbbeacdc9b7b42c8 (total: 0)
 
 === Running scenario: resources-templates-read ===
-2026/04/30 03:04:40 SSEHub: unregistered connection 2460f9aa7b293fb33fc8957623fd3f72 (total: 0)
+2026/04/30 14:35:28 Received kill signal.  Quitting Writer. stop 0x72c08619ce0
+2026/04/30 14:35:28 Cleaning up writer...
 Running client scenario 'resources-templates-read' against server: http://localhost:18799/mcp
-2026/04/30 03:04:40 Received kill signal.  Quitting Writer. stop 0x66e2eb4ba9a0
-2026/04/30 03:04:40 Cleaning up writer...
-2026/04/30 03:04:40 Finished cleaning up writer:  0x66e2eb4ba9a0
-2026/04/30 03:04:40 Closed MCP-GET-SSE SSE connection: 2460f9aa7b293fb33fc8957623fd3f72
-2026/04/30 03:04:40 Starting MCP-GET-SSE SSE connection: ca6b381d81cd71d918e96e15d908adb6
-2026/04/30 03:04:40 SSEHub: registered connection ca6b381d81cd71d918e96e15d908adb6 (total: 1)
-2026/04/30 03:04:40 SSEHub: unregistered connection ca6b381d81cd71d918e96e15d908adb6 (total: 0)
-2026/04/30 03:04:40 Received kill signal.  Quitting Writer. stop 0x66e2eb1497a0
-2026/04/30 03:04:40 Cleaning up writer...
+2026/04/30 14:35:28 Finished cleaning up writer:  0x72c08619ce0
+2026/04/30 14:35:28 Closed MCP-GET-SSE SSE connection: d86ca0b70ea141ecbbbeacdc9b7b42c8
+2026/04/30 14:35:28 Starting MCP-GET-SSE SSE connection: 7c99f2dc4e91ddef29d78b099be9b36d
+2026/04/30 14:35:28 SSEHub: registered connection 7c99f2dc4e91ddef29d78b099be9b36d (total: 1)
+2026/04/30 14:35:28 SSEHub: unregistered connection 7c99f2dc4e91ddef29d78b099be9b36d (total: 0)
+2026/04/30 14:35:28 Received kill signal.  Quitting Writer. stop 0x72c0874e000
+2026/04/30 14:35:28 Cleaning up writer...
 
 === Running scenario: resources-subscribe ===
-2026/04/30 03:04:40 Finished cleaning up writer:  0x66e2eb1497a0
+2026/04/30 14:35:28 Finished cleaning up writer:  0x72c0874e000
+2026/04/30 14:35:28 Closed MCP-GET-SSE SSE connection: 7c99f2dc4e91ddef29d78b099be9b36d
 Running client scenario 'resources-subscribe' against server: http://localhost:18799/mcp
-2026/04/30 03:04:40 Closed MCP-GET-SSE SSE connection: ca6b381d81cd71d918e96e15d908adb6
-2026/04/30 03:04:40 Starting MCP-GET-SSE SSE connection: 29285411131f0fad957fd8f839bc91b5
-2026/04/30 03:04:40 SSEHub: registered connection 29285411131f0fad957fd8f839bc91b5 (total: 1)
-2026/04/30 03:04:40 SSEHub: unregistered connection 29285411131f0fad957fd8f839bc91b5 (total: 0)
-2026/04/30 03:04:40 Received kill signal.  Quitting Writer. stop 0x66e2eb4bacb0
-2026/04/30 03:04:40 Cleaning up writer...
-2026/04/30 03:04:40 Finished cleaning up writer:  0x66e2eb4bacb0
-2026/04/30 03:04:40 Closed MCP-GET-SSE SSE connection: 29285411131f0fad957fd8f839bc91b5
+2026/04/30 14:35:28 Starting MCP-GET-SSE SSE connection: 5d0fda3b9de90f5e07f86a68f9e8f0c5
+2026/04/30 14:35:28 SSEHub: registered connection 5d0fda3b9de90f5e07f86a68f9e8f0c5 (total: 1)
+2026/04/30 14:35:28 SSEHub: unregistered connection 5d0fda3b9de90f5e07f86a68f9e8f0c5 (total: 0)
 
 === Running scenario: resources-unsubscribe ===
+2026/04/30 14:35:28 Received kill signal.  Quitting Writer. stop 0x72c08927960
+2026/04/30 14:35:28 Cleaning up writer...
 Running client scenario 'resources-unsubscribe' against server: http://localhost:18799/mcp
-2026/04/30 03:04:40 Starting MCP-GET-SSE SSE connection: 61898cb63dd4be4e9cacef095260ee7c
-2026/04/30 03:04:40 SSEHub: registered connection 61898cb63dd4be4e9cacef095260ee7c (total: 1)
-2026/04/30 03:04:40 SSEHub: unregistered connection 61898cb63dd4be4e9cacef095260ee7c (total: 0)
-2026/04/30 03:04:40 Received kill signal.  Quitting Writer. stop 0x66e2eb4baf50
-2026/04/30 03:04:40 Cleaning up writer...
-2026/04/30 03:04:40 Finished cleaning up writer:  0x66e2eb4baf50
-2026/04/30 03:04:40 Closed MCP-GET-SSE SSE connection: 61898cb63dd4be4e9cacef095260ee7c
+2026/04/30 14:35:28 Finished cleaning up writer:  0x72c08927960
+2026/04/30 14:35:28 Closed MCP-GET-SSE SSE connection: 5d0fda3b9de90f5e07f86a68f9e8f0c5
+2026/04/30 14:35:28 Starting MCP-GET-SSE SSE connection: 975d2e36f73bbe7ccb4089e6ac456c28
+2026/04/30 14:35:28 SSEHub: registered connection 975d2e36f73bbe7ccb4089e6ac456c28 (total: 1)
+2026/04/30 14:35:28 SSEHub: unregistered connection 975d2e36f73bbe7ccb4089e6ac456c28 (total: 0)
 
 === Running scenario: prompts-list ===
+2026/04/30 14:35:28 Received kill signal.  Quitting Writer. stop 0x72c084c3c00
 Running client scenario 'prompts-list' against server: http://localhost:18799/mcp
-2026/04/30 03:04:40 Starting MCP-GET-SSE SSE connection: 4f557220dae23654060c69e71dc8367b
-2026/04/30 03:04:40 SSEHub: registered connection 4f557220dae23654060c69e71dc8367b (total: 1)
-2026/04/30 03:04:40 SSEHub: unregistered connection 4f557220dae23654060c69e71dc8367b (total: 0)
+2026/04/30 14:35:28 Cleaning up writer...
+2026/04/30 14:35:28 Finished cleaning up writer:  0x72c084c3c00
+2026/04/30 14:35:28 Closed MCP-GET-SSE SSE connection: 975d2e36f73bbe7ccb4089e6ac456c28
+2026/04/30 14:35:28 Starting MCP-GET-SSE SSE connection: bd7509f69a8a9987ed3a23d8aafe6745
+2026/04/30 14:35:28 SSEHub: registered connection bd7509f69a8a9987ed3a23d8aafe6745 (total: 1)
+2026/04/30 14:35:28 SSEHub: unregistered connection bd7509f69a8a9987ed3a23d8aafe6745 (total: 0)
+2026/04/30 14:35:28 Received kill signal.  Quitting Writer. stop 0x72c08927ce0
+2026/04/30 14:35:28 Cleaning up writer...
+2026/04/30 14:35:28 Finished cleaning up writer:  0x72c08927ce0
+2026/04/30 14:35:28 Closed MCP-GET-SSE SSE connection: bd7509f69a8a9987ed3a23d8aafe6745
 
 === Running scenario: prompts-get-simple ===
-2026/04/30 03:04:40 Received kill signal.  Quitting Writer. stop 0x66e2eb18df10
-2026/04/30 03:04:40 Cleaning up writer...
 Running client scenario 'prompts-get-simple' against server: http://localhost:18799/mcp
-2026/04/30 03:04:40 Finished cleaning up writer:  0x66e2eb18df10
-2026/04/30 03:04:40 Closed MCP-GET-SSE SSE connection: 4f557220dae23654060c69e71dc8367b
-2026/04/30 03:04:40 Starting MCP-GET-SSE SSE connection: 1b345946dc42826059ab20dfc4813b4e
-2026/04/30 03:04:40 SSEHub: registered connection 1b345946dc42826059ab20dfc4813b4e (total: 1)
-2026/04/30 03:04:40 SSEHub: unregistered connection 1b345946dc42826059ab20dfc4813b4e (total: 0)
+2026/04/30 14:35:28 Starting MCP-GET-SSE SSE connection: 08ace7b0e437136059392061ed4f8735
+2026/04/30 14:35:28 SSEHub: registered connection 08ace7b0e437136059392061ed4f8735 (total: 1)
+2026/04/30 14:35:28 SSEHub: unregistered connection 08ace7b0e437136059392061ed4f8735 (total: 0)
+2026/04/30 14:35:28 Received kill signal.  Quitting Writer. stop 0x72c085b0770
+2026/04/30 14:35:28 Cleaning up writer...
+2026/04/30 14:35:28 Finished cleaning up writer:  0x72c085b0770
+2026/04/30 14:35:28 Closed MCP-GET-SSE SSE connection: 08ace7b0e437136059392061ed4f8735
 
 === Running scenario: prompts-get-with-args ===
-2026/04/30 03:04:40 Received kill signal.  Quitting Writer. stop 0x66e2eb02b880
-2026/04/30 03:04:40 Cleaning up writer...
 Running client scenario 'prompts-get-with-args' against server: http://localhost:18799/mcp
-2026/04/30 03:04:40 Finished cleaning up writer:  0x66e2eb02b880
-2026/04/30 03:04:40 Closed MCP-GET-SSE SSE connection: 1b345946dc42826059ab20dfc4813b4e
-2026/04/30 03:04:40 Starting MCP-GET-SSE SSE connection: b9924194e1ae5a3b498f77f63e748faf
-2026/04/30 03:04:40 SSEHub: registered connection b9924194e1ae5a3b498f77f63e748faf (total: 1)
+2026/04/30 14:35:28 Starting MCP-GET-SSE SSE connection: 8a292461496cacfe6adb37afcce0ee29
+2026/04/30 14:35:28 SSEHub: registered connection 8a292461496cacfe6adb37afcce0ee29 (total: 1)
+2026/04/30 14:35:28 SSEHub: unregistered connection 8a292461496cacfe6adb37afcce0ee29 (total: 0)
+2026/04/30 14:35:28 Received kill signal.  Quitting Writer. stop 0x72c085b09a0
+2026/04/30 14:35:28 Cleaning up writer...
+2026/04/30 14:35:28 Finished cleaning up writer:  0x72c085b09a0
 
 === Running scenario: prompts-get-embedded-resource ===
-2026/04/30 03:04:40 SSEHub: unregistered connection b9924194e1ae5a3b498f77f63e748faf (total: 0)
+2026/04/30 14:35:28 Closed MCP-GET-SSE SSE connection: 8a292461496cacfe6adb37afcce0ee29
 Running client scenario 'prompts-get-embedded-resource' against server: http://localhost:18799/mcp
-2026/04/30 03:04:40 Received kill signal.  Quitting Writer. stop 0x66e2eb408230
-2026/04/30 03:04:40 Cleaning up writer...
-2026/04/30 03:04:40 Finished cleaning up writer:  0x66e2eb408230
-2026/04/30 03:04:40 Closed MCP-GET-SSE SSE connection: b9924194e1ae5a3b498f77f63e748faf
-2026/04/30 03:04:40 Starting MCP-GET-SSE SSE connection: 42f22398d7a6ebee6309bf565d6ffdc0
-2026/04/30 03:04:40 SSEHub: registered connection 42f22398d7a6ebee6309bf565d6ffdc0 (total: 1)
-2026/04/30 03:04:40 SSEHub: unregistered connection 42f22398d7a6ebee6309bf565d6ffdc0 (total: 0)
-2026/04/30 03:04:40 Received kill signal.  Quitting Writer. stop 0x66e2eb4084d0
-2026/04/30 03:04:40 Cleaning up writer...
-2026/04/30 03:04:40 Finished cleaning up writer:  0x66e2eb4084d0
-2026/04/30 03:04:40 Closed MCP-GET-SSE SSE connection: 42f22398d7a6ebee6309bf565d6ffdc0
+2026/04/30 14:35:28 Starting MCP-GET-SSE SSE connection: dd7990109675701c39006b4bd5190c0c
+2026/04/30 14:35:28 SSEHub: registered connection dd7990109675701c39006b4bd5190c0c (total: 1)
+2026/04/30 14:35:28 SSEHub: unregistered connection dd7990109675701c39006b4bd5190c0c (total: 0)
+2026/04/30 14:35:28 Received kill signal.  Quitting Writer. stop 0x72c0874e310
+2026/04/30 14:35:28 Cleaning up writer...
+2026/04/30 14:35:28 Finished cleaning up writer:  0x72c0874e310
+2026/04/30 14:35:28 Closed MCP-GET-SSE SSE connection: dd7990109675701c39006b4bd5190c0c
 
 === Running scenario: prompts-get-with-image ===
 Running client scenario 'prompts-get-with-image' against server: http://localhost:18799/mcp
-2026/04/30 03:04:40 Starting MCP-GET-SSE SSE connection: c843d9839974eb344bf04cee756226bd
-2026/04/30 03:04:40 SSEHub: registered connection c843d9839974eb344bf04cee756226bd (total: 1)
-2026/04/30 03:04:40 SSEHub: unregistered connection c843d9839974eb344bf04cee756226bd (total: 0)
-2026/04/30 03:04:40 Received kill signal.  Quitting Writer. stop 0x66e2eb4bb260
-2026/04/30 03:04:40 Cleaning up writer...
-2026/04/30 03:04:40 Finished cleaning up writer:  0x66e2eb4bb260
-2026/04/30 03:04:40 Closed MCP-GET-SSE SSE connection: c843d9839974eb344bf04cee756226bd
+2026/04/30 14:35:28 Starting MCP-GET-SSE SSE connection: 76f6e6391f3628a9ebcb0ce419ce3cf8
+2026/04/30 14:35:28 SSEHub: registered connection 76f6e6391f3628a9ebcb0ce419ce3cf8 (total: 1)
+2026/04/30 14:35:28 SSEHub: unregistered connection 76f6e6391f3628a9ebcb0ce419ce3cf8 (total: 0)
+2026/04/30 14:35:28 Received kill signal.  Quitting Writer. stop 0x72c08b581c0
+2026/04/30 14:35:28 Cleaning up writer...
+2026/04/30 14:35:28 Finished cleaning up writer:  0x72c08b581c0
 
 === Running scenario: dns-rebinding-protection ===
+2026/04/30 14:35:28 Closed MCP-GET-SSE SSE connection: 76f6e6391f3628a9ebcb0ce419ce3cf8
 Running client scenario 'dns-rebinding-protection' against server: http://localhost:18799/mcp
 
 
@@ -484,11 +484,11 @@ Total: 40 passed, 0 failed
 [32mBaseline check passed: all failures are expected.[0m
 
 === CONFORMANCE TESTS PASSED ===
-Finished: Thu Apr 30 03:04:40 PDT 2026
+Finished: Thu Apr 30 14:35:28 PDT 2026
 </pre></details>
 <details id='log-auth-conformance'><summary class='pass'>auth-conformance — PASS</summary><pre>
 === Stage 9/12: auth-conformance (make testconfauth) ===
-Started: Thu Apr 30 03:04:40 PDT 2026
+Started: Thu Apr 30 14:35:28 PDT 2026
 bash scripts/conformance-auth-test.sh
 Building testclient...
 === Running MCP Auth conformance suite ===
@@ -510,22 +510,22 @@ Starting scenario: auth/token-endpoint-auth-basic
 Starting scenario: auth/token-endpoint-auth-post
 Starting scenario: auth/token-endpoint-auth-none
 Starting scenario: auth/pre-registration
-Executing client: ./bin/testclient http://localhost:54934/mcp
-Executing client: ./bin/testclient http://localhost:54935/mcp
-Executing client: ./bin/testclient http://localhost:54936/mcp
-Executing client: ./bin/testclient http://localhost:54937/mcp
-Executing client: ./bin/testclient http://localhost:54938/mcp
-Executing client: ./bin/testclient http://localhost:54939/mcp
-Executing client: ./bin/testclient http://localhost:54940/mcp
-Executing client: ./bin/testclient http://localhost:54941/mcp
-Executing client: ./bin/testclient http://localhost:54942/mcp
-Executing client: ./bin/testclient http://localhost:54943/mcp
-Executing client: ./bin/testclient http://localhost:54944/mcp
-Executing client: ./bin/testclient http://localhost:54945/mcp
-Executing client: ./bin/testclient http://localhost:54946/mcp
-Executing client: ./bin/testclient http://localhost:54947/mcp
+Executing client: ./bin/testclient http://localhost:65307/mcp
+Executing client: ./bin/testclient http://localhost:65308/mcp
+Executing client: ./bin/testclient http://localhost:65309/mcp
+Executing client: ./bin/testclient http://localhost:65310/mcp
+Executing client: ./bin/testclient http://localhost:65311/mcp
+Executing client: ./bin/testclient http://localhost:65312/mcp
+Executing client: ./bin/testclient http://localhost:65313/mcp
+Executing client: ./bin/testclient http://localhost:65314/mcp
+Executing client: ./bin/testclient http://localhost:65315/mcp
+Executing client: ./bin/testclient http://localhost:65316/mcp
+Executing client: ./bin/testclient http://localhost:65317/mcp
+Executing client: ./bin/testclient http://localhost:65318/mcp
+Executing client: ./bin/testclient http://localhost:65319/mcp
+Executing client: ./bin/testclient http://localhost:65320/mcp
 With context: {"client_id":"pre-registered-client","client_secret":"pre-registered-secret"}
-(node:99796) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(node:22698) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
 (Use `node --trace-deprecation ...` to show where the warning was created)
 
 === SUITE SUMMARY ===
@@ -553,11 +553,11 @@ Total: 210 passed, 0 failed, 1 warnings
 [32mBaseline check passed: all failures are expected.[0m
 
 === AUTH CONFORMANCE TESTS PASSED ===
-Finished: Thu Apr 30 03:04:43 PDT 2026
+Finished: Thu Apr 30 14:35:30 PDT 2026
 </pre></details>
 <details id='log-tasks-conformance'><summary class='pass'>tasks-conformance — PASS</summary><pre>
 === Stage 10/12: tasks-conformance (make testconf-tasks) ===
-Started: Thu Apr 30 03:04:43 PDT 2026
+Started: Thu Apr 30 14:35:30 PDT 2026
 ========================================================================
   MCP Tasks — Async Tool Execution Lifecycle
   Walks through the MCP Tasks (SEP-1036) lifecycle: optional/required task support, polling, progress notifications, and cancellation.
@@ -600,9 +600,10 @@ Started: Thu Apr 30 03:04:43 PDT 2026
     (progress, status changes) reach us during polling.
 
     Press Enter to run this step...
-ERROR: initialize failed: Post "http://localhost:8080/mcp": dial tcp
-[::1]:8080: connect: connection refused
-Start the server with: make serve
+Connected to telegram-events 0.1.0
+
+Tools (with task support metadata):
+- send_message taskSupport=forbidden
 
 
   Step 2/8: Sync call: greet (taskSupport=forbidden)
@@ -615,8 +616,7 @@ Start the server with: make serve
     use today; tasks are opt-in per tool.
 
     Press Enter to run this step...
-ERROR: Post "http://localhost:8080/mcp": dial tcp [::1]:8080: connect:
-connection refused
+ERROR: RPC error -32602: unknown tool: greet
 
 
   Step 3/8: Optional task: slow_compute as task → CreateTaskResult
@@ -629,8 +629,7 @@ connection refused
     immediately while the work runs in a background goroutine.
 
     Press Enter to run this step...
-ERROR: Post "http://localhost:8080/mcp": dial tcp [::1]:8080: connect:
-connection refused
+ERROR: RPC error -32602: unknown tool: slow_compute
 
 
   Step 4/8: Poll tasks/get until terminal — receive notifications/progress
@@ -645,8 +644,7 @@ connection refused
     stops.
 
     Press Enter to run this step...
-ERROR: Post "http://localhost:8080/mcp": dial tcp [::1]:8080: connect:
-connection refused
+ERROR: RPC error -32601: method not found: tasks/get
 
 
   Step 5/8: Fetch the result payload via tasks/result
@@ -659,8 +657,7 @@ connection refused
     tasks/result with the same taskId.
 
     Press Enter to run this step...
-ERROR: Post "http://localhost:8080/mcp": dial tcp [::1]:8080: connect:
-connection refused
+ERROR: RPC error -32601: method not found: tasks/result
 
 
   Step 6/8: Required task: failing_job — sync call returns an error
@@ -673,8 +670,7 @@ connection refused
     guards expensive/long tools from blocking the request thread.
 
     Press Enter to run this step...
-Server returned: Post "http://localhost:8080/mcp": dial tcp [::1]:8080:
-connect: connection refused
+Server returned: RPC error -32602: unknown tool: failing_job
 
 
   Step 7/8: Invoke failing_job as task → terminal status: failed
@@ -690,8 +686,7 @@ connect: connection refused
     polling call.
 
     Press Enter to run this step...
-ERROR: Post "http://localhost:8080/mcp": dial tcp [::1]:8080: connect:
-connection refused
+ERROR: RPC error -32602: unknown tool: failing_job
 
 
   Step 8/8: Cancel a long-running task mid-flight
@@ -710,8 +705,7 @@ connection refused
     cancel doesn't overwrite the cancelled status.
 
     Press Enter to run this step...
-ERROR: Post "http://localhost:8080/mcp": dial tcp [::1]:8080: connect:
-connection refused
+ERROR: RPC error -32602: unknown tool: slow_compute
 
 
   --- Where each piece lives in mcpkit ---
@@ -731,34 +725,34 @@ connection refused
 
 === Done ===
 ▶ MCP Tasks Conformance
-  ✔ scenario 01: sync tool call returns immediately (4.131709ms)
-  ✔ scenario 02: async task creation returns CreateTaskResult (1.42275ms)
-  ✔ scenario 03: tasks/get returns flat task info (2.428ms)
-  ✔ scenario 04: failing tool transitions to failed (1029.251292ms)
-  ✔ scenario 05: tasks/result returns ToolResult with related-task meta (1036.2235ms)
-  ✔ scenario 06: cancel returns cancelled status (6.421584ms)
-  ✔ scenario 07: tasks/list returns task array (2.734917ms)
-  ✔ scenario 08: required tool without task hint returns error (1.391875ms)
-  ✔ scenario 09: forbidden tool with task hint returns error (0.979417ms)
-  ✔ scenario 10: external proxy tool completes via task callbacks (1029.993167ms)
-  ✔ scenario 11: external proxy tool tasks/get returns task info (3.103833ms)
-  ✔ scenario 12: optional tool without hint runs synchronously (1003.285375ms)
-  ✔ scenario 13: tasks/get with bogus taskId returns error (3.928917ms)
-  ✔ scenario 14: tasks/cancel with bogus taskId returns error (2.973042ms)
-  ✔ scenario 15: cancel completed task returns error (1034.665042ms)
-  ✔ scenario 16: CreateTaskResult includes a TTL (2.436375ms)
-  ✔ scenario 17: CreateTaskResult pollInterval is valid if present (2.232625ms)
-  ✔ scenario 18: task must not expire before TTL (1534.31775ms)
-  ✔ scenario 19: concurrent task creation produces unique taskIds (1054.956959ms)
-  ✔ scenario 20: tasks/result for failed task has isError true (1033.937042ms)
-  ✔ scenario 21: tools/list includes execution.taskSupport (3.622541ms)
-  ✔ scenario 22: elicitation round-trip via tasks/result (8.713458ms)
-  ✔ scenario 23: sampling round-trip via tasks/result (9.532333ms)
-  ✔ scenario 24: progress notifications are well-formed if sent (2052.824875ms)
-  ✔ scenario 25: status notifications match task state if sent (1533.229916ms)
-  ✔ scenario 26: tasks/result includes related-task _meta (1033.954833ms)
-  ✔ scenario 27: tasks/get does not include related-task _meta (3.975084ms)
-✔ MCP Tasks Conformance (13453.989458ms)
+  ✔ scenario 01: sync tool call returns immediately (5.534709ms)
+  ✔ scenario 02: async task creation returns CreateTaskResult (1.580584ms)
+  ✔ scenario 03: tasks/get returns flat task info (3.258792ms)
+  ✔ scenario 04: failing tool transitions to failed (1016.332292ms)
+  ✔ scenario 05: tasks/result returns ToolResult with related-task meta (1021.86425ms)
+  ✔ scenario 06: cancel returns cancelled status (3.45825ms)
+  ✔ scenario 07: tasks/list returns task array (2.1835ms)
+  ✔ scenario 08: required tool without task hint returns error (1.361125ms)
+  ✔ scenario 09: forbidden tool with task hint returns error (1.286084ms)
+  ✔ scenario 10: external proxy tool completes via task callbacks (1014.599542ms)
+  ✔ scenario 11: external proxy tool tasks/get returns task info (1.876291ms)
+  ✔ scenario 12: optional tool without hint runs synchronously (1001.395334ms)
+  ✔ scenario 13: tasks/get with bogus taskId returns error (1.267291ms)
+  ✔ scenario 14: tasks/cancel with bogus taskId returns error (0.9955ms)
+  ✔ scenario 15: cancel completed task returns error (1013.752042ms)
+  ✔ scenario 16: CreateTaskResult includes a TTL (0.958916ms)
+  ✔ scenario 17: CreateTaskResult pollInterval is valid if present (0.804834ms)
+  ✔ scenario 18: task must not expire before TTL (1516.309625ms)
+  ✔ scenario 19: concurrent task creation produces unique taskIds (1023.268042ms)
+  ✔ scenario 20: tasks/result for failed task has isError true (1014.767917ms)
+  ✔ scenario 21: tools/list includes execution.taskSupport (2.323875ms)
+  ✔ scenario 22: elicitation round-trip via tasks/result (6.73425ms)
+  ✔ scenario 23: sampling round-trip via tasks/result (7.68575ms)
+  ✔ scenario 24: progress notifications are well-formed if sent (2025.576083ms)
+  ✔ scenario 25: status notifications match task state if sent (1515.890875ms)
+  ✔ scenario 26: tasks/result includes related-task _meta (1017.0525ms)
+  ✔ scenario 27: tasks/get does not include related-task _meta (2.356ms)
+✔ MCP Tasks Conformance (13241.662084ms)
 ℹ tests 27
 ℹ suites 1
 ℹ pass 27
@@ -766,234 +760,242 @@ connection refused
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 13802.270417
-Finished: Thu Apr 30 03:04:59 PDT 2026
+ℹ duration_ms 13580.469375
+Finished: Thu Apr 30 14:35:46 PDT 2026
 </pre></details>
 <details id='log-tasks-v2-conformance'><summary class='pass'>tasks-v2-conformance — PASS</summary><pre>
 === Stage 11/12: tasks-v2-conformance (make testconf-tasks-v2) ===
-Started: Thu Apr 30 03:04:59 PDT 2026
-2026/04/30 03:05:00 Tasks v2 demo server on :18092
-2026/04/30 03:05:00 Connect: http://localhost:18092/mcp
-2026/04/30 03:05:00 
-2026/04/30 03:05:00 Tools:
-2026/04/30 03:05:00   greet              — sync-only
-2026/04/30 03:05:00   slow_compute       — optional task (server-directed)
-2026/04/30 03:05:00   failing_job        — required task (tool error → completed + isError)
-2026/04/30 03:05:00   confirm_delete     — required task (input_required → tasks/update → completed)
-2026/04/30 03:05:00   protocol_error_job — required task (protocol error → failed + error)
-2026/04/30 03:05:00   external_job       — required task (TaskCallbacks proxy)
-2026/04/30 03:05:01 MCP initialize ok [349.334µs]
-2026/04/30 03:05:01 MCP notifications/initialized ok [375ns]
-2026/04/30 03:05:01 Starting MCP-GET-SSE SSE connection: 28786f99dc852cba3140faf226194624
-2026/04/30 03:05:01 SSEHub: registered connection 28786f99dc852cba3140faf226194624 (total: 1)
-2026/04/30 03:05:01 MCP initialize ok [34.584µs]
-2026/04/30 03:05:01 MCP notifications/initialized ok [208ns]
-2026/04/30 03:05:01 MCP initialize ok [2.959µs]
-2026/04/30 03:05:01 MCP notifications/initialized ok [125ns]
-2026/04/30 03:05:01 MCP tools/call ok [66.833µs]
-2026/04/30 03:05:01 MCP tools/call ok [26.542µs]
-2026/04/30 03:05:01 [slow_compute] starting "v2-create": sleeping 2s...
+Started: Thu Apr 30 14:35:46 PDT 2026
+2026/04/30 14:35:46 Tasks v2 demo server on :18092
+2026/04/30 14:35:46 Connect: http://localhost:18092/mcp
+2026/04/30 14:35:46 
+2026/04/30 14:35:46 Tools:
+2026/04/30 14:35:46   greet              — sync-only
+2026/04/30 14:35:46   slow_compute       — optional task (server-directed)
+2026/04/30 14:35:46   failing_job        — required task (tool error → completed + isError)
+2026/04/30 14:35:46   confirm_delete     — required task (input_required → tasks/update → completed)
+2026/04/30 14:35:46   protocol_error_job — required task (protocol error → failed + error)
+2026/04/30 14:35:46   external_job       — required task (TaskCallbacks proxy)
+2026/04/30 14:35:48 MCP initialize ok [320.958µs]
+2026/04/30 14:35:48 MCP notifications/initialized ok [541ns]
+2026/04/30 14:35:48 Starting MCP-GET-SSE SSE connection: baf859e600d3e9ee12c62f65f62f6cbf
+2026/04/30 14:35:48 SSEHub: registered connection baf859e600d3e9ee12c62f65f62f6cbf (total: 1)
+2026/04/30 14:35:48 MCP initialize ok [40.625µs]
+2026/04/30 14:35:48 MCP notifications/initialized ok [292ns]
+2026/04/30 14:35:48 MCP initialize ok [3.209µs]
+2026/04/30 14:35:48 MCP notifications/initialized ok [291ns]
+2026/04/30 14:35:48 MCP tools/call ok [56.334µs]
+2026/04/30 14:35:48 MCP tools/call ok [20.958µs]
 ▶ MCP Tasks v2 Conformance (SEP-2663)
-  ✔ v2-01: sync tool call returns immediately, no task (2.201833ms)
-2026/04/30 03:05:01 MCP tools/call ok [5.959µs]
-2026/04/30 03:05:01 [slow_compute] starting "v2-poll": sleeping 3s...
-  ✔ v2-02: server creates task without client task param (1.131167ms)
-2026/04/30 03:05:01 MCP tasks/get ok [8.875µs]
-  ✔ v2-03: tasks/get returns status for active task (1.867625ms)
-2026/04/30 03:05:01 MCP tools/call ok [14.75µs]
-2026/04/30 03:05:01 [slow_compute] starting "v2-result": sleeping 1s...
-2026/04/30 03:05:01 MCP tasks/get ok [13.083µs]
-2026/04/30 03:05:01 MCP tasks/get ok [25.208µs]
-2026/04/30 03:05:01 MCP tasks/get ok [20.875µs]
-2026/04/30 03:05:02 MCP tasks/get ok [24.25µs]
-2026/04/30 03:05:02 MCP tasks/get ok [26.042µs]
-2026/04/30 03:05:02 [slow_compute] finished "v2-result"
-2026/04/30 03:05:02 MCP tasks/get ok [38.125µs]
-2026/04/30 03:05:02 MCP tools/call ok [39.209µs]
-2026/04/30 03:05:02 [failing_job] starting (will fail in 1s)...
-  ✔ v2-04: tasks/get returns completed status with inlined result (1028.060541ms)
-2026/04/30 03:05:02 MCP tasks/get ok [12.667µs]
-2026/04/30 03:05:02 MCP tasks/get ok [28.375µs]
-2026/04/30 03:05:02 MCP tasks/get ok [27.5µs]
-2026/04/30 03:05:03 MCP tasks/get ok [26.292µs]
-2026/04/30 03:05:03 MCP tasks/get ok [25.083µs]
-2026/04/30 03:05:03 [slow_compute] finished "v2-create"
-2026/04/30 03:05:03 MCP tasks/get ok [76.458µs]
-2026/04/30 03:05:03 MCP tools/call ok [40.208µs]
-2026/04/30 03:05:03 [protocol_error_job] starting (will panic in 500ms)...
-  ✔ v2-05: tool execution error is completed with isError true (1031.379208ms)
-2026/04/30 03:05:03 MCP tasks/get ok [14.375µs]
-2026/04/30 03:05:03 MCP tasks/get ok [24µs]
-2026/04/30 03:05:03 MCP tasks/get ok [33.959µs]
-2026/04/30 03:05:04 MCP tasks/get ok [22.833µs]
-2026/04/30 03:05:04 MCP tools/call ok [37.209µs]
-2026/04/30 03:05:04 [slow_compute] starting "v2-cancel": sleeping 60s...
-  ✔ v2-06: protocol error is failed with error field (619.069625ms)
-2026/04/30 03:05:04 MCP tasks/cancel ok [95.167µs]
-2026/04/30 03:05:04 [slow_compute] cancelled "v2-cancel" at 1/60
-2026/04/30 03:05:04 MCP tasks/get ok [8.292µs]
-2026/04/30 03:05:04 MCP tools/call ok [16.208µs]
-2026/04/30 03:05:04 [slow_compute] starting "v2-cancel-done": sleeping 1s...
-  ✔ v2-07: tasks/cancel returns empty ack; status settles to cancelled (6.750708ms)
-2026/04/30 03:05:04 MCP tasks/get ok [5.417µs]
-2026/04/30 03:05:04 MCP tasks/get ok [30.125µs]
-2026/04/30 03:05:04 [slow_compute] finished "v2-poll"
-2026/04/30 03:05:04 MCP tasks/get ok [25.542µs]
-2026/04/30 03:05:04 MCP tasks/get ok [26.833µs]
-2026/04/30 03:05:05 MCP tasks/get ok [26.75µs]
-2026/04/30 03:05:05 [slow_compute] finished "v2-cancel-done"
-2026/04/30 03:05:05 MCP tasks/get ok [47.917µs]
-2026/04/30 03:05:05 MCP tasks/cancel error=-32602 (task is already in a terminal state) [12.625µs]
-2026/04/30 03:05:05 MCP tools/call ok [48.709µs]
-2026/04/30 03:05:05 [slow_compute] starting "v2-no-result": sleeping 1s...
-  ✔ v2-08: cancel completed task returns error (1036.94025ms)
-2026/04/30 03:05:05 MCP tasks/get ok [16.167µs]
-2026/04/30 03:05:05 MCP tasks/get ok [24.541µs]
-2026/04/30 03:05:05 MCP tasks/get ok [24µs]
-2026/04/30 03:05:05 MCP tasks/get ok [28µs]
-2026/04/30 03:05:06 MCP tasks/get ok [24.875µs]
-2026/04/30 03:05:06 [slow_compute] finished "v2-no-result"
-2026/04/30 03:05:06 MCP tasks/get ok [52.708µs]
-2026/04/30 03:05:06 MCP tasks/result error=-32601 (method not found: tasks/result) [9.625µs]
-2026/04/30 03:05:06 MCP tasks/list error=-32601 (method not found: tasks/list) [7.625µs]
-  ✔ v2-09: tasks/result is rejected (method removed in v2) (1030.950583ms)
-2026/04/30 03:05:06 MCP tools/call ok [70µs]
-  ✔ v2-10: tasks/list is rejected (method removed in v2) (2.075666ms)
-2026/04/30 03:05:06 [slow_compute] starting "v2-ttl": sleeping 1s...
-  ✔ v2-11: tasks advertised under capabilities.extensions, not capabilities.tasks (0.201709ms)
-2026/04/30 03:05:06 MCP tools/call ok [11.792µs]
-2026/04/30 03:05:06 [slow_compute] starting "v2-ttl-guard": sleeping 1s...
-  ✔ v2-12: ttlSeconds present (and v1 ttl key absent) (1.492375ms)
-2026/04/30 03:05:06 MCP tasks/get ok [6.416µs]
-2026/04/30 03:05:06 MCP tasks/get ok [24.917µs]
-2026/04/30 03:05:06 MCP tasks/get ok [28.167µs]
-2026/04/30 03:05:06 MCP tasks/get ok [26.75µs]
-2026/04/30 03:05:07 MCP tasks/get ok [26.833µs]
-2026/04/30 03:05:07 [slow_compute] finished "v2-ttl"
-2026/04/30 03:05:07 [slow_compute] finished "v2-ttl-guard"
-2026/04/30 03:05:07 MCP tasks/get ok [49.666µs]
-2026/04/30 03:05:07 MCP tasks/get ok [70.166µs]
-2026/04/30 03:05:07 MCP tools/call ok [43.375µs]
-2026/04/30 03:05:07 [slow_compute] starting "v2-reqstate": sleeping 1s...
-  ✔ v2-13: task must not expire before TTL (1528.68275ms)
-2026/04/30 03:05:07 MCP tasks/get ok [9.416µs]
-2026/04/30 03:05:08 MCP tasks/get ok [28.75µs]
-2026/04/30 03:05:08 MCP tasks/get ok [29.125µs]
-2026/04/30 03:05:08 MCP tasks/get ok [25.375µs]
-2026/04/30 03:05:08 MCP tasks/get ok [31.708µs]
-2026/04/30 03:05:08 [slow_compute] finished "v2-reqstate"
-2026/04/30 03:05:08 MCP tasks/get ok [38.084µs]
-2026/04/30 03:05:08 MCP tasks/get ok [26.167µs]
-2026/04/30 03:05:08 MCP tools/call ok [47.375µs]
-2026/04/30 03:05:08 [slow_compute] starting "v2-reqstate-echo": sleeping 2s...
-  ✔ v2-14: tasks/get response may include requestState (1028.853792ms)
-2026/04/30 03:05:08 MCP tasks/get ok [12.416µs]
-2026/04/30 03:05:08 MCP tasks/get ok [9.5µs]
-2026/04/30 03:05:08 MCP tools/call ok [18.375µs]
-2026/04/30 03:05:08 [confirm_delete] asking about "v2-input.txt" (parking task in input_required)...
-  ✔ v2-15: client echoes requestState in subsequent requests (5.004833ms)
-2026/04/30 03:05:08 MCP tasks/get ok [7.125µs]
-2026/04/30 03:05:08 MCP tools/call ok [10.333µs]
-2026/04/30 03:05:08 [confirm_delete] asking about "v2-respond.txt" (parking task in input_required)...
-  ✔ v2-16: input_required task has inputRequests map in tasks/get (2.81225ms)
-2026/04/30 03:05:08 MCP tasks/get ok [10.5µs]
-2026/04/30 03:05:08 MCP tasks/update ok [22.125µs]
-2026/04/30 03:05:08 [confirm_delete] user confirmed; deleting "v2-respond.txt"
-2026/04/30 03:05:08 MCP tasks/get ok [15.75µs]
-2026/04/30 03:05:08 MCP tools/call ok [9.792µs]
-2026/04/30 03:05:08 [slow_compute] starting "v2-notify": sleeping 1s...
-  ✔ v2-17: tasks/update inputResponses resume task (3.798708ms)
-2026/04/30 03:05:08 MCP tasks/get ok [4.458µs]
-2026/04/30 03:05:09 MCP tasks/get ok [37.167µs]
-2026/04/30 03:05:09 MCP tasks/get ok [49.833µs]
-2026/04/30 03:05:09 MCP tasks/get ok [28.875µs]
-2026/04/30 03:05:09 MCP tasks/get ok [28.084µs]
-2026/04/30 03:05:09 [slow_compute] finished "v2-notify"
-2026/04/30 03:05:09 MCP tasks/get ok [42.792µs]
-2026/04/30 03:05:10 MCP tools/call ok [41.875µs]
-2026/04/30 03:05:10 [failing_job] starting (will fail in 1s)...
-  ✔ v2-18: status notifications include DetailedTask if sent (1526.918041ms)
-2026/04/30 03:05:10 MCP tools/call ok [51.667µs]
-  ✔ v2-19: tools/call without task param creates task for async tools (4.680333ms)
-2026/04/30 03:05:10 MCP tools/call ok [19.833µs]
-2026/04/30 03:05:10 [slow_compute] starting "v2-no-meta": sleeping 1s...
-  ✔ v2-20: server may return immediate result for fast operations (2.433458ms)
-2026/04/30 03:05:10 MCP tasks/get ok [8.541µs]
-2026/04/30 03:05:10 MCP tasks/get ok [26.125µs]
-2026/04/30 03:05:10 MCP tasks/get ok [34.416µs]
-2026/04/30 03:05:10 [slow_compute] finished "v2-reqstate-echo"
-2026/04/30 03:05:10 MCP tasks/get ok [28.917µs]
-2026/04/30 03:05:11 MCP tasks/get ok [28.334µs]
-2026/04/30 03:05:11 [slow_compute] finished "v2-no-meta"
-2026/04/30 03:05:11 MCP tasks/get ok [70.834µs]
-2026/04/30 03:05:11 MCP tasks/get error=-32601 (method requires extension io.modelcontextprotocol/tasks) [8.083µs]
-  ✔ v2-21: tasks/get inlined result does not include related-task _meta (1028.132875ms)
-2026/04/30 03:05:11 MCP tasks/update error=-32601 (method requires extension io.modelcontextprotocol/tasks) [6.042µs]
-2026/04/30 03:05:11 MCP tasks/cancel error=-32601 (method requires extension io.modelcontextprotocol/tasks) [4µs]
-2026/04/30 03:05:11 MCP tools/call ok [41µs]
-  ✔ v2-22: tasks/* return -32601 when extension not negotiated (4.98175ms)
-2026/04/30 03:05:11 MCP tools/call ok [48.333µs]
-2026/04/30 03:05:11 [slow_compute] starting "v2-24": sleeping 1s...
-  ✔ v2-23: tools/call without extension returns sync ToolResult (no CreateTaskResult) (1.204375ms)
-2026/04/30 03:05:11 MCP tools/call ok [13.208µs]
-  ✔ v2-24: Mcp-Name response header on task-creating tools/call (1.061208ms)
-2026/04/30 03:05:11 MCP tools/call ok [16.458µs]
-2026/04/30 03:05:11 [slow_compute] starting "v2-25": sleeping 1s...
-  ✔ v2-24b: Mcp-Name absent on sync tools/call response (1.083042ms)
-2026/04/30 03:05:11 SSEHub: unregistered connection 28786f99dc852cba3140faf226194624 (total: 0)
-2026/04/30 03:05:11 Received kill signal.  Quitting Writer. stop 0x1c674ec0cd20
-2026/04/30 03:05:11 Cleaning up writer...
-2026/04/30 03:05:11 Finished cleaning up writer:  0x1c674ec0cd20
-2026/04/30 03:05:11 Closed MCP-GET-SSE SSE connection: 28786f99dc852cba3140faf226194624
-  ✔ v2-25: per-request _meta opt-in produces CreateTaskResult (0.898125ms)
-✔ MCP Tasks v2 Conformance (SEP-2663) (9923.923791ms)
-ℹ tests 26
+  ✔ v2-01: sync tool call returns immediately, no task (2.163375ms)
+2026/04/30 14:35:48 [slow_compute] starting "v2-create": sleeping 2s...
+2026/04/30 14:35:48 MCP tools/call ok [5.166µs]
+2026/04/30 14:35:48 [slow_compute] starting "v2-poll": sleeping 3s...
+  ✔ v2-02: server creates task without client task param (1.855792ms)
+2026/04/30 14:35:48 MCP tasks/get ok [8.416µs]
+2026/04/30 14:35:48 MCP tools/call ok [8.708µs]
+2026/04/30 14:35:48 [slow_compute] starting "v2-result": sleeping 1s...
+  ✔ v2-03: tasks/get returns status for active task (1.862542ms)
+2026/04/30 14:35:48 MCP tasks/get ok [3.708µs]
+2026/04/30 14:35:48 MCP tasks/get ok [8.083µs]
+2026/04/30 14:35:48 MCP tasks/get ok [10.5µs]
+2026/04/30 14:35:48 MCP tasks/get ok [23µs]
+2026/04/30 14:35:49 MCP tasks/get ok [6.958µs]
+2026/04/30 14:35:49 [slow_compute] finished "v2-result"
+2026/04/30 14:35:49 MCP tasks/get ok [17.208µs]
+2026/04/30 14:35:49 MCP tools/call ok [9.459µs]
+2026/04/30 14:35:49 [failing_job] starting (will fail in 1s)...
+2026/04/30 14:35:49 MCP tasks/get ok [3.958µs]
+  ✔ v2-04: tasks/get returns completed status with inlined result (1015.339667ms)
+2026/04/30 14:35:49 MCP tasks/get ok [9.541µs]
+2026/04/30 14:35:49 MCP tasks/get ok [26.166µs]
+2026/04/30 14:35:49 MCP tasks/get ok [11.209µs]
+2026/04/30 14:35:50 MCP tasks/get ok [6.208µs]
+2026/04/30 14:35:50 [slow_compute] finished "v2-create"
+2026/04/30 14:35:50 MCP tasks/get ok [13.792µs]
+2026/04/30 14:35:50 MCP tools/call ok [10.583µs]
+2026/04/30 14:35:50 [protocol_error_job] starting (will panic in 500ms)...
+  ✔ v2-05: tool execution error is completed with isError true (1016.758541ms)
+2026/04/30 14:35:50 MCP tasks/get ok [3.542µs]
+2026/04/30 14:35:50 MCP tasks/get ok [8.5µs]
+2026/04/30 14:35:50 MCP tasks/get ok [8.833µs]
+2026/04/30 14:35:50 MCP tasks/get ok [6.708µs]
+2026/04/30 14:35:50 MCP tools/call ok [19.375µs]
+2026/04/30 14:35:50 [slow_compute] starting "v2-cancel": sleeping 60s...
+  ✔ v2-06: protocol error is failed with error field (608.549125ms)
+2026/04/30 14:35:50 [slow_compute] cancelled "v2-cancel" at 1/60
+2026/04/30 14:35:50 MCP tasks/cancel ok [53.708µs]
+2026/04/30 14:35:50 MCP tasks/get ok [23.959µs]
+2026/04/30 14:35:50 MCP tools/call ok [9.25µs]
+2026/04/30 14:35:50 [slow_compute] starting "v2-cancel-done": sleeping 1s...
+  ✔ v2-07: tasks/cancel returns empty ack; status settles to cancelled (3.365334ms)
+2026/04/30 14:35:50 MCP tasks/get ok [3.917µs]
+2026/04/30 14:35:51 MCP tasks/get ok [6.75µs]
+2026/04/30 14:35:51 [slow_compute] finished "v2-poll"
+2026/04/30 14:35:51 MCP tasks/get ok [7.541µs]
+2026/04/30 14:35:51 MCP tasks/get ok [19.584µs]
+2026/04/30 14:35:51 MCP tasks/get ok [40.875µs]
+2026/04/30 14:35:51 [slow_compute] finished "v2-cancel-done"
+2026/04/30 14:35:51 MCP tasks/get ok [15.25µs]
+2026/04/30 14:35:51 MCP tasks/cancel error=-32602 (task is already in a terminal state) [4.75µs]
+2026/04/30 14:35:51 MCP tools/call ok [23.167µs]
+2026/04/30 14:35:51 [slow_compute] starting "v2-no-result": sleeping 1s...
+  ✔ v2-08: cancel completed task returns error (1015.996084ms)
+2026/04/30 14:35:51 MCP tasks/get ok [4.834µs]
+2026/04/30 14:35:52 MCP tasks/get ok [6.125µs]
+2026/04/30 14:35:52 MCP tasks/get ok [30.667µs]
+2026/04/30 14:35:52 MCP tasks/get ok [21.25µs]
+2026/04/30 14:35:52 MCP tasks/get ok [6.875µs]
+2026/04/30 14:35:52 [slow_compute] finished "v2-no-result"
+2026/04/30 14:35:52 MCP tasks/get ok [14.666µs]
+2026/04/30 14:35:52 MCP tasks/result error=-32601 (method not found: tasks/result) [2.459µs]
+2026/04/30 14:35:52 MCP tasks/list error=-32601 (method not found: tasks/list) [2.708µs]
+  ✔ v2-09: tasks/result is rejected (method removed in v2) (1017.306875ms)
+2026/04/30 14:35:52 MCP tools/call ok [18.292µs]
+2026/04/30 14:35:52 [slow_compute] starting "v2-ttl": sleeping 1s...
+  ✔ v2-10: tasks/list is rejected (method removed in v2) (0.824ms)
+  ✔ v2-11: tasks advertised under capabilities.extensions, not capabilities.tasks (0.108583ms)
+2026/04/30 14:35:52 MCP tools/call ok [7µs]
+2026/04/30 14:35:52 [slow_compute] starting "v2-ttl-guard": sleeping 1s...
+  ✔ v2-12: ttlSeconds present (and v1 ttl key absent) (0.839291ms)
+2026/04/30 14:35:52 MCP tasks/get ok [4.541µs]
+2026/04/30 14:35:53 MCP tasks/get ok [7.5µs]
+2026/04/30 14:35:53 MCP tasks/get ok [6.75µs]
+2026/04/30 14:35:53 MCP tasks/get ok [9.75µs]
+2026/04/30 14:35:53 MCP tasks/get ok [7.667µs]
+2026/04/30 14:35:53 [slow_compute] finished "v2-ttl"
+2026/04/30 14:35:53 [slow_compute] finished "v2-ttl-guard"
+2026/04/30 14:35:53 MCP tasks/get ok [60.125µs]
+2026/04/30 14:35:54 MCP tasks/get ok [27.209µs]
+2026/04/30 14:35:54 MCP tools/call ok [16.625µs]
+2026/04/30 14:35:54 [slow_compute] starting "v2-reqstate": sleeping 1s...
+  ✔ v2-13: task must not expire before TTL (1519.705667ms)
+2026/04/30 14:35:54 MCP tasks/get ok [6.625µs]
+2026/04/30 14:35:54 MCP tasks/get ok [23µs]
+2026/04/30 14:35:54 MCP tasks/get ok [10.166µs]
+2026/04/30 14:35:55 MCP tasks/get ok [6.209µs]
+2026/04/30 14:35:55 MCP tasks/get ok [8.666µs]
+2026/04/30 14:35:55 [slow_compute] finished "v2-reqstate"
+2026/04/30 14:35:55 MCP tasks/get ok [22.5µs]
+2026/04/30 14:35:55 MCP tasks/get ok [42.709µs]
+2026/04/30 14:35:55 MCP tools/call ok [22.042µs]
+2026/04/30 14:35:55 [slow_compute] starting "v2-reqstate-echo": sleeping 2s...
+  ✔ v2-14: tasks/get response may include requestState (1018.0765ms)
+2026/04/30 14:35:55 MCP tasks/get ok [4.333µs]
+2026/04/30 14:35:55 MCP tasks/get ok [4.042µs]
+2026/04/30 14:35:55 MCP tools/call ok [12.167µs]
+  ✔ v2-15: client echoes requestState in subsequent requests (2.778ms)
+2026/04/30 14:35:55 [confirm_delete] asking about "v2-input.txt" (parking task in input_required)...
+2026/04/30 14:35:55 MCP tasks/get ok [9.458µs]
+2026/04/30 14:35:55 MCP tools/call ok [8.167µs]
+2026/04/30 14:35:55 [confirm_delete] asking about "v2-respond.txt" (parking task in input_required)...
+  ✔ v2-16: input_required task has inputRequests map in tasks/get (1.691542ms)
+2026/04/30 14:35:55 MCP tasks/get ok [4.375µs]
+2026/04/30 14:35:55 MCP tasks/update ok [31.917µs]
+2026/04/30 14:35:55 [confirm_delete] user confirmed; deleting "v2-respond.txt"
+2026/04/30 14:35:55 MCP tasks/get ok [9.084µs]
+2026/04/30 14:35:55 MCP tools/call ok [29.792µs]
+2026/04/30 14:35:55 [slow_compute] starting "v2-notify": sleeping 1s...
+  ✔ v2-17: tasks/update inputResponses resume task (3.331ms)
+2026/04/30 14:35:55 MCP tasks/get ok [9.125µs]
+2026/04/30 14:35:55 MCP tasks/get ok [22.208µs]
+2026/04/30 14:35:55 MCP tasks/get ok [1.511708ms]
+2026/04/30 14:35:56 MCP tasks/get ok [23.25µs]
+2026/04/30 14:35:56 MCP tasks/get ok [21.833µs]
+2026/04/30 14:35:56 [slow_compute] finished "v2-notify"
+2026/04/30 14:35:56 MCP tasks/get ok [19.25µs]
+2026/04/30 14:35:57 MCP tools/call ok [26µs]
+2026/04/30 14:35:57 [failing_job] starting (will fail in 1s)...
+  ✔ v2-18: status notifications include DetailedTask if sent (1524.302125ms)
+2026/04/30 14:35:57 MCP tools/call ok [52.75µs]
+  ✔ v2-19: tools/call without task param creates task for async tools (3.091291ms)
+2026/04/30 14:35:57 MCP tools/call ok [7.833µs]
+  ✔ v2-20: server may return immediate result for fast operations (2.764042ms)
+2026/04/30 14:35:57 [slow_compute] starting "v2-no-meta": sleeping 1s...
+2026/04/30 14:35:57 MCP tasks/get ok [6.916µs]
+2026/04/30 14:35:57 MCP tasks/get ok [11.25µs]
+2026/04/30 14:35:57 MCP tasks/get ok [11.166µs]
+2026/04/30 14:35:57 [slow_compute] finished "v2-reqstate-echo"
+2026/04/30 14:35:57 MCP tasks/get ok [12.791µs]
+2026/04/30 14:35:57 MCP tasks/get ok [28.542µs]
+2026/04/30 14:35:58 [slow_compute] finished "v2-no-meta"
+2026/04/30 14:35:58 MCP tasks/get ok [33.875µs]
+2026/04/30 14:35:58 MCP tasks/get error=-32601 (method requires extension io.modelcontextprotocol/tasks) [5.083µs]
+  ✔ v2-21: tasks/get inlined result does not include related-task _meta (1019.612166ms)
+2026/04/30 14:35:58 MCP tasks/update error=-32601 (method requires extension io.modelcontextprotocol/tasks) [2.542µs]
+2026/04/30 14:35:58 MCP tasks/cancel error=-32601 (method requires extension io.modelcontextprotocol/tasks) [4.125µs]
+2026/04/30 14:35:58 MCP tools/call ok [48.583µs]
+  ✔ v2-22: tasks/* return -32601 when extension not negotiated (3.283208ms)
+2026/04/30 14:35:58 MCP tools/call ok [28.625µs]
+2026/04/30 14:35:58 [slow_compute] starting "v2-24": sleeping 1s...
+  ✔ v2-23: tools/call without extension returns sync ToolResult (result_type:"complete", no task) (1.274375ms)
+2026/04/30 14:35:58 MCP tools/call ok [17.167µs]
+  ✔ v2-24: Mcp-Name response header on task-creating tools/call (1.20125ms)
+2026/04/30 14:35:58 MCP tools/call ok [19.041µs]
+2026/04/30 14:35:58 [slow_compute] starting "v2-25": sleeping 1s...
+  ✔ v2-24b: Mcp-Name absent on sync tools/call response (1.015542ms)
+2026/04/30 14:35:58 MCP tools/call ok [17.042µs]
+  ✔ v2-25: per-request _meta opt-in produces CreateTaskResult (1.133959ms)
+2026/04/30 14:35:58 MCP tools/call ok [11.333µs]
+2026/04/30 14:35:58 MCP tasks/get ok [15.959µs]
+2026/04/30 14:35:58 MCP tasks/get ok [13.542µs]
+2026/04/30 14:35:58 MCP tools/call ok [10.125µs]
+2026/04/30 14:35:58 [slow_compute] starting "v2-26-cancel": sleeping 60s...
+2026/04/30 14:35:58 [slow_compute] cancelled "v2-26-cancel" at 1/60
+2026/04/30 14:35:58 MCP tasks/cancel ok [41.458µs]
+2026/04/30 14:35:58 MCP tools/call ok [5.917µs]
+2026/04/30 14:35:58 [confirm_delete] asking about "v2-26.txt" (parking task in input_required)...
+2026/04/30 14:35:58 MCP tasks/get ok [4.209µs]
+2026/04/30 14:35:58 MCP tasks/update ok [7µs]
+2026/04/30 14:35:58 MCP tasks/cancel ok [29.959µs]
+2026/04/30 14:35:58 SSEHub: unregistered connection baf859e600d3e9ee12c62f65f62f6cbf (total: 0)
+2026/04/30 14:35:58 Received kill signal.  Quitting Writer. stop 0x50acee58e3f0
+2026/04/30 14:35:58 Cleaning up writer...
+2026/04/30 14:35:58 Finished cleaning up writer:  0x50acee58e3f0
+2026/04/30 14:35:58 Closed MCP-GET-SSE SSE connection: baf859e600d3e9ee12c62f65f62f6cbf
+  ✔ v2-26: non-task responses carry result_type:"complete" (SEP-2322) (9.057875ms)
+✔ MCP Tasks v2 Conformance (SEP-2663) (9821.378541ms)
+ℹ tests 27
 ℹ suites 1
-ℹ pass 26
+ℹ pass 27
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 10210.160125
-Finished: Thu Apr 30 03:05:11 PDT 2026
-2026/04/30 03:05:12 [slow_compute] finished "v2-24"
-2026/04/30 03:05:12 [slow_compute] finished "v2-25"
+ℹ duration_ms 10122.0405
+Finished: Thu Apr 30 14:35:58 PDT 2026
+2026/04/30 14:35:59 [slow_compute] finished "v2-24"
+2026/04/30 14:35:59 [slow_compute] finished "v2-25"
 </pre></details>
 <details id='log-keycloak'><summary class='pass'>keycloak — PASS</summary><pre>
 === Stage 12/12: keycloak (make testkcl-auto) ===
-Started: Thu Apr 30 03:05:11 PDT 2026
-Starting Keycloak for interop tests...
-76199adae0515bbaf4767c463aba8cadd34d5f6ace07281e48cdc29b31a60796
-Keycloak starting on port 8180... (realm import takes ~30s)
-Run 'make kcllogs' to watch startup, 'make testkcl' when ready
-Waiting for Keycloak realm...
+Started: Thu Apr 30 14:35:58 PDT 2026
 === RUN   TestKeycloak_MCPServer_ValidToken
---- PASS: TestKeycloak_MCPServer_ValidToken (0.23s)
+--- PASS: TestKeycloak_MCPServer_ValidToken (0.03s)
 === RUN   TestKeycloak_MCPServer_TamperedToken
 --- PASS: TestKeycloak_MCPServer_TamperedToken (0.02s)
 === RUN   TestKeycloak_MCPServer_ScopeAllowed
---- PASS: TestKeycloak_MCPServer_ScopeAllowed (0.02s)
+--- PASS: TestKeycloak_MCPServer_ScopeAllowed (0.01s)
 === RUN   TestKeycloak_MCPServer_ScopeDenied
---- PASS: TestKeycloak_MCPServer_ScopeDenied (0.02s)
+--- PASS: TestKeycloak_MCPServer_ScopeDenied (0.01s)
 === RUN   TestKeycloak_MCPServer_PRM
 --- PASS: TestKeycloak_MCPServer_PRM (0.01s)
 === RUN   TestKeycloak_MCPServer_WWWAuthenticate
 --- PASS: TestKeycloak_MCPServer_WWWAuthenticate (0.01s)
 === RUN   TestKeycloak_MCPServer_PasswordGrant
---- PASS: TestKeycloak_MCPServer_PasswordGrant (0.11s)
+--- PASS: TestKeycloak_MCPServer_PasswordGrant (0.04s)
 === RUN   TestKeycloak_PublicMethods_DiscoverWithoutAuth
 --- PASS: TestKeycloak_PublicMethods_DiscoverWithoutAuth (0.01s)
 === RUN   TestKeycloak_PublicMethods_ToolCallRequiresAuth
 --- PASS: TestKeycloak_PublicMethods_ToolCallRequiresAuth (0.01s)
 === RUN   TestKeycloak_SessionHijack_DifferentUserRejected
---- PASS: TestKeycloak_SessionHijack_DifferentUserRejected (0.08s)
+--- PASS: TestKeycloak_SessionHijack_DifferentUserRejected (0.07s)
 === RUN   TestKeycloak_SessionHijack_SameUserAllowed
---- PASS: TestKeycloak_SessionHijack_SameUserAllowed (0.04s)
+--- PASS: TestKeycloak_SessionHijack_SameUserAllowed (0.06s)
 === RUN   TestKeycloak_TokenRefresh_PasswordGrant
---- PASS: TestKeycloak_TokenRefresh_PasswordGrant (0.06s)
+--- PASS: TestKeycloak_TokenRefresh_PasswordGrant (0.09s)
 PASS
-ok  	github.com/panyam/mcpkit/tests/keycloak	1.575s
-make[2]: *** No rule to make target `downkcl'.  Stop.
-Finished: Thu Apr 30 03:05:25 PDT 2026
+ok  	github.com/panyam/mcpkit/tests/keycloak	0.870s
+Finished: Thu Apr 30 14:36:00 PDT 2026
 </pre></details>
 </body></html>
