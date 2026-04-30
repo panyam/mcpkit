@@ -23,23 +23,54 @@ import (
 // Event is the wire-format event envelope delivered via all three modes.
 // The Data field is typed per-source via generics at construction time
 // (see MakeEvent), but serialized as json.RawMessage on the wire.
+//
+// Cursor is a pointer so cursorless sources can emit `cursor: null` per
+// upstream WG PR#1 line 392. Use HasCursor / CursorStr to access it without
+// dealing with the pointer directly.
 type Event struct {
 	EventID   string          `json:"eventId"`
 	Name      string          `json:"name"`
 	Timestamp string          `json:"timestamp"`
 	Data      json.RawMessage `json:"data"`
-	Cursor    string          `json:"cursor"`
+	Cursor    *string         `json:"cursor"`
+}
+
+// HasCursor reports whether the event carries a cursor (cursored source) or
+// is cursor-less (best-effort source). Wire shape is `cursor: <string>` vs
+// `cursor: null`.
+func (e Event) HasCursor() bool { return e.Cursor != nil }
+
+// CursorStr returns the cursor string for cursored events, or "" when the
+// event is cursorless. Convenience wrapper to avoid `*event.Cursor` at call
+// sites that don't care about the cursored / cursorless distinction.
+func (e Event) CursorStr() string {
+	if e.Cursor == nil {
+		return ""
+	}
+	return *e.Cursor
 }
 
 // EventDef describes an event type advertised via events/list.
+//
+// Cursorless declares a source that does not support cursor-based replay.
+// The library still serves events/poll for it (always returning empty +
+// `cursor: null`), and push/webhook delivery still works — events arrive
+// with `cursor: null`. Use this for ephemeral-state sources (typing
+// indicators, presence, current-readings) where replay carries no value.
 type EventDef struct {
 	Name          string   `json:"name"`
 	Description   string   `json:"description"`
 	Delivery      []string `json:"delivery"`
 	PayloadSchema any      `json:"payloadSchema,omitempty"`
+	Cursorless    bool     `json:"cursorless,omitempty"`
 }
 
 // PollResult holds the result of a cursor-based poll from an event source.
+//
+// Cursor is the string a client should pass on its next poll. For cursored
+// sources this is typically the cursor of the last delivered event (or
+// Latest() when nothing was delivered). For cursorless sources Cursor is
+// always "" and the wire layer translates it to `cursor: null`.
 type PollResult struct {
 	Events []Event
 	Cursor string
@@ -59,8 +90,9 @@ type PollResult struct {
 // calls these methods to serve events/list and events/poll requests.
 //
 // Cursors are opaque strings per the spec — the source defines their format.
-// The spec says null cursor means "start from now" — the source should return
-// no events and a fresh cursor for subsequent polls.
+// Latest() supports the `cursor: null` subscribe / poll semantic ("from now"):
+// the library asks the source for its current head and returns it as the
+// resume cursor. Cursorless sources should return "".
 type EventSource interface {
 	// Def returns the event definition for events/list.
 	Def() EventDef
@@ -68,10 +100,17 @@ type EventSource interface {
 	// Poll returns events since the given cursor, up to limit.
 	// An empty cursor means "start from now" (return empty + fresh cursor).
 	Poll(cursor string, limit int) PollResult
+
+	// Latest returns the cursor of the most recent event the source knows
+	// about. Used to resolve `cursor: null` subscribe requests to a concrete
+	// resume point. Cursorless sources should return "".
+	Latest() string
 }
 
 // TypedSource creates an EventSource with auto-derived payloadSchema from the
-// Data type parameter, matching the TypedTool ergonomic pattern.
+// Data type parameter, matching the TypedTool ergonomic pattern. Pass `latest`
+// returning the head cursor of your store; return "" if your source does not
+// support cursor-based replay.
 //
 // Example:
 //
@@ -79,35 +118,46 @@ type EventSource interface {
 //	    Name:        "telegram.message",
 //	    Description: "Fires when a message is received",
 //	    Delivery:    []string{"push", "poll", "webhook"},
-//	}, func(cursor string, limit int) events.PollResult {
-//	    // ... cursor-based retrieval from your store
-//	})
-func TypedSource[Data any](def EventDef, poll func(cursor string, limit int) PollResult) EventSource {
+//	},
+//	    func(cursor string, limit int) events.PollResult { /* read store */ },
+//	    func() string { return store.HeadCursor() },
+//	)
+func TypedSource[Data any](def EventDef, poll func(cursor string, limit int) PollResult, latest func() string) EventSource {
 	if def.PayloadSchema == nil {
 		def.PayloadSchema = core.GenerateSchema[Data]()
 	}
-	return &typedSource{def: def, poll: poll}
+	if latest == nil {
+		latest = func() string { return "" }
+	}
+	return &typedSource{def: def, poll: poll, latest: latest}
 }
 
 type typedSource struct {
-	def  EventDef
-	poll func(cursor string, limit int) PollResult
+	def    EventDef
+	poll   func(cursor string, limit int) PollResult
+	latest func() string
 }
 
 func (s *typedSource) Def() EventDef                            { return s.def }
 func (s *typedSource) Poll(cursor string, limit int) PollResult { return s.poll(cursor, limit) }
+func (s *typedSource) Latest() string                           { return s.latest() }
 
 // MakeEvent creates an Event envelope with typed data. The data is serialized
-// to JSON for the wire format.
+// to JSON for the wire format. An empty cursor maps to nil (wire `cursor: null`)
+// — convenient for cursorless sources without forcing every caller to deal
+// with `*string`.
 func MakeEvent[Data any](name string, eventID string, cursor string, ts time.Time, data Data) Event {
 	raw, _ := json.Marshal(data)
-	return Event{
+	e := Event{
 		EventID:   eventID,
 		Name:      name,
 		Timestamp: ts.Format(time.RFC3339),
 		Data:      raw,
-		Cursor:    cursor,
 	}
+	if cursor != "" {
+		e.Cursor = &cursor
+	}
+	return e
 }
 
 // Config holds the options for registering event sources on an MCP server.
@@ -168,10 +218,14 @@ func EmitToWebhooks(webhooks *WebhookRegistry, event Event) {
 // nextPollSeconds is per-subscription per Peter's spec — the server can
 // recommend different poll intervals for different event types. Client SDKs
 // should coalesce by taking the minimum across subscriptions.
+//
+// Cursor is a pointer so cursorless sources serialize as `cursor: null`.
+// Note: there is intentionally no `omitempty` — cursored sources with empty
+// cursor still emit `cursor: ""`, only nil maps to JSON null.
 type pollResultWire struct {
 	ID              string  `json:"id"`
 	Events          []Event `json:"events,omitempty"`
-	Cursor          string  `json:"cursor"`
+	Cursor          *string `json:"cursor"`
 	HasMore         bool    `json:"hasMore"`
 	CursorGap       bool    `json:"cursorGap,omitempty"`
 	NextPollSeconds int     `json:"nextPollSeconds,omitempty"`
@@ -204,49 +258,71 @@ func registerPoll(srv *server.Server, sourceMap map[string]EventSource) {
 		if err := json.Unmarshal(params, &req); err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 		}
+		// events/poll is single-subscription per upstream WG PR#1 line 185
+		// (comment r3140480214). Reject batched requests with a clear
+		// pointer to the spec change.
+		if len(req.Subscriptions) > 1 {
+			return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
+				"events/poll: pass exactly one subscription per call (multi-sub support has been removed)")
+		}
+		if len(req.Subscriptions) == 0 {
+			return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
+				"events/poll: subscriptions[] must contain exactly one entry")
+		}
 		if req.MaxEvents <= 0 {
 			req.MaxEvents = 50
 		}
 
-		results := make([]pollResultWire, 0, len(req.Subscriptions))
-		for _, sub := range req.Subscriptions {
-			source, ok := sourceMap[sub.Name]
-			if !ok {
-				results = append(results, pollResultWire{
-					ID: sub.ID,
-					Error: &struct {
-						Code    int    `json:"code"`
-						Message string `json:"message"`
-					}{Code: -32001, Message: "EventNotFound"},
-				})
-				continue
-			}
-
-			cursor := ""
-			if sub.Cursor != nil {
-				cursor = *sub.Cursor
-			}
-
-			pr := source.Poll(cursor, req.MaxEvents+1)
-			hasMore := len(pr.Events) > req.MaxEvents
-			events := pr.Events
-			resultCursor := pr.Cursor
-			if hasMore {
-				events = events[:req.MaxEvents]
-				resultCursor = events[len(events)-1].Cursor
-			}
-
-			results = append(results, pollResultWire{
-				ID:              sub.ID,
-				Events:          events,
-				Cursor:          resultCursor,
-				HasMore:         hasMore,
-				CursorGap:       pr.CursorGap,
-				NextPollSeconds: 5,
-			})
+		sub := req.Subscriptions[0]
+		source, ok := sourceMap[sub.Name]
+		if !ok {
+			return core.NewResponse(id, map[string]any{"results": []pollResultWire{{
+				ID: sub.ID,
+				Error: &struct {
+					Code    int    `json:"code"`
+					Message string `json:"message"`
+				}{Code: -32001, Message: "EventNotFound"},
+			}}})
 		}
 
-		return core.NewResponse(id, map[string]any{"results": results})
+		cursorless := source.Def().Cursorless
+
+		// Resolve `cursor: null` to the source's current head ("from now").
+		// Cursored sources return Latest(); cursorless sources return "" and
+		// the wire layer below translates that to JSON null.
+		cursor := ""
+		if sub.Cursor != nil {
+			cursor = *sub.Cursor
+		} else if !cursorless {
+			cursor = source.Latest()
+		}
+
+		pr := source.Poll(cursor, req.MaxEvents+1)
+		hasMore := len(pr.Events) > req.MaxEvents
+		events := pr.Events
+		resultCursor := pr.Cursor
+		if hasMore {
+			events = events[:req.MaxEvents]
+			resultCursor = events[len(events)-1].CursorStr()
+		}
+
+		// For cursorless sources, the wire `cursor` is null regardless of
+		// what the source returned. For cursored sources, marshal the
+		// resolved string into a *string so it serializes as a JSON string.
+		var wireCursor *string
+		if !cursorless {
+			c := resultCursor
+			wireCursor = &c
+		}
+
+		return core.NewResponse(id, map[string]any{"results": []pollResultWire{{
+			ID:              sub.ID,
+			Events:          events,
+			Cursor:          wireCursor,
+			HasMore:         hasMore,
+			CursorGap:       pr.CursorGap,
+			NextPollSeconds: 5,
+		}}})
 	})
 }
 
@@ -287,15 +363,26 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 
 		expiresAt := webhooks.Register(resolvedID, req.Delivery.URL, secret)
 
-		cursorStr := "0"
-		if req.Cursor != nil {
-			cursorStr = *req.Cursor
+		// Resolve `cursor: null` to the source's current head ("from now")
+		// for cursored sources. Cursorless sources always serialize as null.
+		// An explicit non-null client cursor passes through unchanged.
+		source := sourceMap[req.Name] // already validated above
+		cursorless := source.Def().Cursorless
+		var wireCursor *string
+		if cursorless {
+			wireCursor = nil
+		} else if req.Cursor != nil {
+			c := *req.Cursor
+			wireCursor = &c
+		} else {
+			c := source.Latest()
+			wireCursor = &c
 		}
 
 		return core.NewResponse(id, map[string]any{
 			"id":            resolvedID,
 			"secret":        secret,
-			"cursor":        cursorStr,
+			"cursor":        wireCursor,
 			"refreshBefore": expiresAt.Format(time.RFC3339),
 		})
 	})

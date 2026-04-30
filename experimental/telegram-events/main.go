@@ -13,6 +13,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -62,6 +63,7 @@ func main() {
 
 	webhooks := events.NewWebhookRegistry(whOpts...)
 	source, yield := newTelegramSource()
+	typingSource, yieldTyping := newTelegramTypingSource()
 
 	var bot *tgbotapi.BotAPI
 	if *token != "" {
@@ -86,7 +88,7 @@ func main() {
 	(&ToolDelivery{Bot: bot}).Register(srv)
 
 	events.Register(events.Config{
-		Sources:  []events.EventSource{source},
+		Sources:  []events.EventSource{source, typingSource},
 		Webhooks: webhooks,
 		Server:   srv,
 	})
@@ -104,30 +106,60 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 
+	// One endpoint, dispatch on ?event=<name>. Default is telegram.message
+	// for backwards compatibility with the older inject script. Body shape
+	// varies per event — see the per-event branches below.
 	mux.HandleFunc("POST /inject", func(w http.ResponseWriter, r *http.Request) {
-		var msg struct {
-			ChatID int64  `json:"chat_id"`
-			Sender string `json:"sender"`
-			Text   string `json:"text"`
+		eventName := r.URL.Query().Get("event")
+		if eventName == "" {
+			eventName = "telegram.message"
 		}
-		if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+
+		switch eventName {
+		case "telegram.message":
+			var msg struct {
+				ChatID int64  `json:"chat_id"`
+				Sender string `json:"sender"`
+				Text   string `json:"text"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			if msg.Sender == "" {
+				msg.Sender = "injected"
+			}
+			now := time.Now()
+			_ = yield(TelegramEventData{
+				ChatID:    strconv.FormatInt(msg.ChatID, 10),
+				User:      msg.Sender,
+				Text:      msg.Text,
+				Timestamp: now.Format(time.RFC3339),
+			})
+			srv.NotifyResourceUpdated("telegram://messages/recent")
+			log.Printf("[inject] sender=%s text=%q", msg.Sender, msg.Text)
+
+		case "telegram.typing":
+			var msg struct {
+				ChatID int64  `json:"chat_id"`
+				User   string `json:"user"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			if msg.User == "" {
+				msg.User = "injected-typing"
+			}
+			_ = yieldTyping(newTelegramTypingEvent(msg.ChatID, msg.User, time.Now()))
+
+		default:
+			http.Error(w, fmt.Sprintf("unknown event %q (want telegram.message or telegram.typing)", eventName), http.StatusBadRequest)
 			return
 		}
-		if msg.Sender == "" {
-			msg.Sender = "injected"
-		}
-		now := time.Now()
-		_ = yield(TelegramEventData{
-			ChatID:    strconv.FormatInt(msg.ChatID, 10),
-			User:      msg.Sender,
-			Text:      msg.Text,
-			Timestamp: now.Format(time.RFC3339),
-		})
-		srv.NotifyResourceUpdated("telegram://messages/recent")
-		log.Printf("[inject] sender=%s text=%q", msg.Sender, msg.Text)
+
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"status": "ok"})
+		json.NewEncoder(w).Encode(map[string]any{"status": "ok", "event": eventName})
 	})
 
 	log.Printf("[server] telegram-events listening on %s (MCP at /mcp)", *addr)

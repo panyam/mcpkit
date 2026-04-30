@@ -57,7 +57,7 @@ func TestYieldingSource_YieldAppearsOnPoll(t *testing.T) {
 func TestYieldingSource_PollHonorsCursor(t *testing.T) {
 	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"})
 	require.NoError(t, yield(fakePayload{Msg: "a"}))
-	c1 := src.Poll("", 10).Events[0].Cursor
+	c1 := src.Poll("", 10).Events[0].CursorStr()
 
 	require.NoError(t, yield(fakePayload{Msg: "b"}))
 	require.NoError(t, yield(fakePayload{Msg: "c"}))
@@ -85,7 +85,7 @@ func TestYieldingSource_PollRespectsLimit(t *testing.T) {
 func TestYieldingSource_EvictionAndCursorGap(t *testing.T) {
 	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"}, WithMaxSize(3))
 	require.NoError(t, yield(fakePayload{Msg: "1"}))
-	c1 := src.Poll("", 10).Events[0].Cursor
+	c1 := src.Poll("", 10).Events[0].CursorStr()
 	require.NoError(t, yield(fakePayload{Msg: "2"}))
 	require.NoError(t, yield(fakePayload{Msg: "3"}))
 	require.NoError(t, yield(fakePayload{Msg: "4"})) // evicts c1
@@ -197,7 +197,7 @@ func TestYieldingSource_ByCursorFindsTypedPayload(t *testing.T) {
 	require.NoError(t, yield(fakePayload{Msg: "second"}))
 
 	first := src.Poll("", 10).Events[0]
-	got, ok := src.ByCursor(first.Cursor)
+	got, ok := src.ByCursor(first.CursorStr())
 	assert.True(t, ok)
 	assert.Equal(t, "first", got.Msg)
 }

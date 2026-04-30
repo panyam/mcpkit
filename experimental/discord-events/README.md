@@ -164,7 +164,8 @@ typed accessors (for resource reads).
 | `make run` | Start server (with bot if `DISCORD_BOT_TOKEN` set) |
 | `make test` | Go tests |
 | `make test-ttl` | Drive the Python `WebhookSubscription` auto-refresh helper end-to-end (POSIX-only — see Makefile for Windows steps) |
-| `make inject TEXT="..."` | Inject a message (optional: `SENDER=`, `CHANNEL=`, `GUILD=`) |
+| `make inject TEXT="..."` | Inject a message event (optional: `SENDER=`, `CHANNEL=`, `GUILD=`) |
+| `make inject-typing` | Inject a cursorless typing event (optional: `USER_NAME=`, `CHANNEL=`, `GUILD=`) |
 | `make list` | Show server capabilities: tools, resources, events, sample poll |
 | `make listen` | SSE push listener — print events in real time |
 | `make webhook` | Webhook receiver — subscribe + auto-refresh, receive HMAC-signed POSTs |
