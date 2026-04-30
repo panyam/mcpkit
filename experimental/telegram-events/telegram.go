@@ -48,6 +48,25 @@ func makeTelegramEvent(msg *tgbotapi.Message) TelegramEventData {
 	}
 }
 
+// TelegramTypingData is the typed payload for the cursorless telegram.typing
+// event. Telegram's bot API exposes typing as a chat-action update; the
+// indicator is ephemeral so the source declares itself cursorless and the
+// wire emits cursor:null.
+type TelegramTypingData struct {
+	ChatID    string `json:"chat_id"`
+	User      string `json:"user" jsonschema:"description=Username that started typing"`
+	StartedAt string `json:"started_at" jsonschema:"description=ISO 8601 timestamp,format=date-time"`
+}
+
+// newTelegramTypingEvent builds a TelegramTypingData payload.
+func newTelegramTypingEvent(chatID int64, user string, ts time.Time) TelegramTypingData {
+	return TelegramTypingData{
+		ChatID:    strconv.FormatInt(chatID, 10),
+		User:      user,
+		StartedAt: ts.Format(time.RFC3339),
+	}
+}
+
 // handleTelegramWebhook processes a Telegram Bot API webhook POST and yields
 // the resulting event. Returns true if an event was published.
 func handleTelegramWebhook(yield func(TelegramEventData) error, r *http.Request) bool {

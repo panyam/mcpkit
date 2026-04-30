@@ -17,17 +17,33 @@ const defaultYieldingMaxSize = 1000
 type YieldingOption func(*yieldingConfig)
 
 type yieldingConfig struct {
-	maxSize int
+	maxSize    int
+	cursorless bool
 }
 
 // WithMaxSize caps the YieldingSource's internal ring buffer. Older events
 // are evicted FIFO once the cap is reached. Default is 1000. Pass <=0 to
-// keep the default.
+// keep the default. Has no effect when WithoutCursors is set (cursorless
+// sources do not buffer events).
 func WithMaxSize(n int) YieldingOption {
 	return func(c *yieldingConfig) {
 		if n > 0 {
 			c.maxSize = n
 		}
+	}
+}
+
+// WithoutCursors marks the source as cursorless: events are emitted with
+// `cursor: null` on the wire, the source does not buffer events, and
+// events/poll always returns empty. Use for ephemeral-state sources where
+// replay carries no value (typing indicators, presence, current readings).
+//
+// Push and webhook fanout still work exactly the same — the difference is
+// that subscribers can't replay missed events. The EventDef advertised by
+// events/list carries `cursorless: true` so clients can plan accordingly.
+func WithoutCursors() YieldingOption {
+	return func(c *yieldingConfig) {
+		c.cursorless = true
 	}
 }
 
@@ -68,8 +84,12 @@ func NewYieldingSource[Data any](def EventDef, opts ...YieldingOption) (*Yieldin
 	if def.PayloadSchema == nil {
 		def.PayloadSchema = core.GenerateSchema[Data]()
 	}
+	// Reflect cursorlessness onto the EventDef so events/list advertises it.
+	if cfg.cursorless {
+		def.Cursorless = true
+	}
 
-	s := &YieldingSource[Data]{def: def, maxSize: cfg.maxSize}
+	s := &YieldingSource[Data]{def: def, maxSize: cfg.maxSize, cursorless: cfg.cursorless}
 	yield := func(data Data) error {
 		return s.yield(data)
 	}
@@ -95,10 +115,15 @@ type yieldedEntry[Data any] struct {
 // YieldingSource is a push-style EventSource. It owns an in-memory ring
 // buffer of typed payloads + wire Events; events/poll reads through the same
 // buffer. Construct via NewYieldingSource.
+//
+// When constructed with WithoutCursors, the source skips buffering entirely.
+// Push and webhook fanout still fire (events emitted with `cursor: null`),
+// but Poll always returns empty and Recent / ByCursor return zero results.
 type YieldingSource[Data any] struct {
-	def     EventDef
-	maxSize int
-	seq     atomic.Int64
+	def        EventDef
+	maxSize    int
+	cursorless bool
+	seq        atomic.Int64
 
 	mu       sync.RWMutex
 	entries  []yieldedEntry[Data]
@@ -111,7 +136,14 @@ func (s *YieldingSource[Data]) Def() EventDef { return s.def }
 // than the requested cursor, up to limit. The Cursor field of PollResult is
 // the cursor of the last delivered event (or the head if none) so the
 // client's cursor advances even on empty polls.
+//
+// Cursorless sources always return empty events + empty cursor; the wire
+// layer translates the empty cursor to JSON null.
 func (s *YieldingSource[Data]) Poll(cursor string, limit int) PollResult {
+	if s.cursorless {
+		return PollResult{}
+	}
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -119,7 +151,7 @@ func (s *YieldingSource[Data]) Poll(cursor string, limit int) PollResult {
 
 	gap := false
 	if c > 0 && len(s.entries) > 0 {
-		oldest, _ := strconv.ParseInt(s.entries[0].event.Cursor, 10, 64)
+		oldest, _ := strconv.ParseInt(s.entries[0].event.CursorStr(), 10, 64)
 		if c < oldest {
 			gap = true
 		}
@@ -127,7 +159,7 @@ func (s *YieldingSource[Data]) Poll(cursor string, limit int) PollResult {
 
 	out := make([]Event, 0, limit)
 	for _, e := range s.entries {
-		ec, _ := strconv.ParseInt(e.event.Cursor, 10, 64)
+		ec, _ := strconv.ParseInt(e.event.CursorStr(), 10, 64)
 		if ec > c {
 			out = append(out, e.event)
 			if len(out) >= limit {
@@ -138,11 +170,25 @@ func (s *YieldingSource[Data]) Poll(cursor string, limit int) PollResult {
 
 	next := cursor
 	if len(out) > 0 {
-		next = out[len(out)-1].Cursor
+		next = out[len(out)-1].CursorStr()
 	} else if len(s.entries) > 0 {
-		next = s.entries[len(s.entries)-1].event.Cursor
+		next = s.entries[len(s.entries)-1].event.CursorStr()
 	}
 	return PollResult{Events: out, Cursor: next, CursorGap: gap}
+}
+
+// Latest implements EventSource. Returns the cursor of the most recently
+// yielded event, or "" when the source is empty or cursorless.
+func (s *YieldingSource[Data]) Latest() string {
+	if s.cursorless {
+		return ""
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if len(s.entries) == 0 {
+		return ""
+	}
+	return s.entries[len(s.entries)-1].event.CursorStr()
 }
 
 // Recent returns up to n most-recently-yielded payloads, oldest-first within
@@ -166,12 +212,12 @@ func (s *YieldingSource[Data]) Recent(n int) []Data {
 
 // ByCursor returns the typed payload for the event with the given cursor.
 // Returns (zero, false) if the cursor is not present in the buffer (either
-// never existed or was evicted).
+// never existed, was evicted, or the source is cursorless).
 func (s *YieldingSource[Data]) ByCursor(cursor string) (Data, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, e := range s.entries {
-		if e.event.Cursor == cursor {
+		if e.event.CursorStr() == cursor {
 			return e.data, true
 		}
 	}
@@ -202,19 +248,25 @@ func (s *YieldingSource[Data]) yield(data Data) error {
 	}
 
 	seq := s.seq.Add(1)
-	cursor := strconv.FormatInt(seq, 10)
 	event := Event{
 		EventID:   fmt.Sprintf("evt_%d", seq),
 		Name:      s.def.Name,
 		Timestamp: now.Format(time.RFC3339),
 		Data:      raw,
-		Cursor:    cursor,
+	}
+	if !s.cursorless {
+		cursor := strconv.FormatInt(seq, 10)
+		event.Cursor = &cursor
 	}
 
 	s.mu.Lock()
-	s.entries = append(s.entries, yieldedEntry[Data]{data: data, event: event})
-	if len(s.entries) > s.maxSize {
-		s.entries = s.entries[len(s.entries)-s.maxSize:]
+	if !s.cursorless {
+		// Only buffer when cursored — cursorless sources don't support
+		// poll-side replay, so retaining events would just waste memory.
+		s.entries = append(s.entries, yieldedEntry[Data]{data: data, event: event})
+		if len(s.entries) > s.maxSize {
+			s.entries = s.entries[len(s.entries)-s.maxSize:]
+		}
 	}
 	hook := s.emitHook
 	s.mu.Unlock()

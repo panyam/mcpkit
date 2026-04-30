@@ -11,6 +11,21 @@ Two source styles, pick whichever matches who owns storage:
 | **`YieldingSource`** (recommended) | The source pushes events at you (bot callback, HTTP handler, channel reader) | Library — bounded ring, typed `Recent(n)` / `ByCursor(c)` accessors | Library wires it (`SetEmitHook` via `Register`) |
 | **`TypedSource`** | The source already owns its storage (DB, event log, external queue) | You — implement `Poll(cursor, limit)` | You — call `events.Emit` and `events.EmitToWebhooks` yourself |
 
+## Cursored vs cursorless sources
+
+Sources come in two flavors:
+
+| | Cursored (default) | Cursorless |
+|---|---|---|
+| Construction | `events.NewYieldingSource[Data](def)` | `events.NewYieldingSource[Data](def, events.WithoutCursors())` |
+| `Event.cursor` on the wire | string | `null` |
+| Internal buffer | yes (events retained for replay) | no (events emitted and forgotten) |
+| `events/poll` | returns events since the supplied cursor | always returns empty + `cursor: null` |
+| `events/subscribe` with `cursor: null` | resolves to source's current head ("from now") | stays null |
+| `EventDef.cursorless` advertised in `events/list` | `false` | `true` |
+
+Use cursorless for ephemeral state where replay carries no value (typing indicators, presence, current readings). Use cursored for messages, alerts, audit logs, etc.
+
 ## Quickstart — `YieldingSource`
 
 ```go
@@ -79,22 +94,27 @@ myDB.OnInsert = func(row Row) {
 
 | Method | Description |
 |--------|-------------|
-| `events/list` | Returns event definitions with auto-derived `payloadSchema` |
-| `events/poll` | Cursor-based polling, `hasMore` + `cursorGap` signals |
-| `events/subscribe` | Webhook registration with HMAC secret + TTL + `refreshBefore` |
-| `events/unsubscribe` | Webhook removal by `(url, id)` |
+| `events/list` | Returns event definitions with auto-derived `payloadSchema` and `cursorless` flag |
+| `events/poll` | Single-subscription polling (multi-subscription is rejected per upstream WG PR#1 line 185, comment `r3140480214`); `hasMore` + `cursorGap` signals |
+| `events/subscribe` | Webhook registration with HMAC secret + TTL + `refreshBefore`. `cursor: null` means "from now" — server resolves to source's current head |
+| `events/unsubscribe` | Webhook removal by `(url, id)` or `(url, secret)` |
 
 ## Key types
 
 ```go
-// Event is the wire-format envelope.
+// Event is the wire-format envelope. Cursor is a pointer so cursorless
+// sources serialize as `cursor: null`; HasCursor / CursorStr hide the
+// pointer at call sites that don't care.
 type Event struct {
     EventID   string          `json:"eventId"`
     Name      string          `json:"name"`
     Timestamp string          `json:"timestamp"`
     Data      json.RawMessage `json:"data"`
-    Cursor    string          `json:"cursor"`
+    Cursor    *string         `json:"cursor"`
 }
+
+func (e Event) HasCursor() bool   // true for cursored events
+func (e Event) CursorStr() string // "" for cursorless
 
 // EventSource — what TypedSource implements; YieldingSource also satisfies it.
 type EventSource interface {
