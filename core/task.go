@@ -1,5 +1,7 @@
 package core
 
+import "context"
+
 // Task protocol types for MCP spec 2025-11-25.
 // Tasks enable "call-now, fetch-later" async execution: a tool call returns
 // a task reference immediately; the client polls for status and results.
@@ -139,4 +141,19 @@ type ClientTasksCap struct {
 	List     *TasksCapMethod   `json:"list,omitempty"`
 	Cancel   *TasksCapMethod   `json:"cancel,omitempty"`
 	Requests *TasksCapRequests `json:"requests,omitempty"`
+}
+
+// ClientSupportsTasksV1 reports whether the connected client declared the
+// v1 ServerCapabilities.Tasks slot during the initialize handshake. Used by
+// hybrid v1+v2 servers to dispatch tasks/* methods to the v1 path when the
+// client opted into v1 (and not the io.modelcontextprotocol/tasks extension).
+//
+// V2-only servers and clients can ignore this — see ClientSupportsTasks /
+// ClientSupportsExtension(TasksExtensionID) instead.
+func ClientSupportsTasksV1(ctx context.Context) bool {
+	sc := sessionFromContext(ctx)
+	if sc == nil || sc.clientCaps == nil {
+		return false
+	}
+	return sc.clientCaps.Tasks != nil
 }
