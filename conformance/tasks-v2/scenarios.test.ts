@@ -1,32 +1,36 @@
 /**
- * MCP Tasks v2 Conformance Scenarios (SEP-2557)
+ * MCP Tasks v2 Conformance Scenarios (SEP-2663 / SEP-2322 / SEP-2575 / SEP-2243)
  *
- * Tests any MCP server that implements the Tasks v2 protocol as proposed
- * in SEP-2557 (https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2557).
- *
- * SEP STATUS: Draft, targeted for 2026-06-30-RC milestone.
- * These tests are written ahead of the spec being finalized. They will
- * evolve as the SEP is refined. All scenarios should FAIL today — no
- * v2 server implementation exists yet (red-before-green).
+ * Tests any MCP server that implements the Tasks v2 surface, evolving from
+ * the original SEP-2557 draft to the current shape:
+ *   - SEP-2663 — Tasks Extension (https://github.com/modelcontextprotocol/specification/pull/2663)
+ *   - SEP-2322 — MRTR base types (inputRequests/inputResponses, requestState)
+ *   - SEP-2575 — per-request capabilities via _meta.io.modelcontextprotocol/clientCapabilities
+ *   - SEP-2243 — Mcp-Name HTTP response header
  *
  * UPSTREAM PORTING NOTE: When porting to the conformance repo, these
  * individual test() calls should be consolidated into ~4 scenarios with
  * multiple ConformanceCheck entries each, per AGENTS.md: "one scenario
  * with many checks beats 10 scenarios with one check each." The current
  * structure is for readability during spec review. Each check will need
- * specReferences pointing to the relevant SEP-2557 sections.
+ * specReferences pointing to the relevant SEP-2663 sections.
  *
- * Key differences from v1 (spec 2025-11-25):
- *   - tasks/result REMOVED — result inlined into tasks/get
- *   - tasks/list REMOVED — sessions going away
- *   - No client `task` param — server decides unilaterally
- *   - TTL in seconds (not milliseconds)
- *   - requestState for stateless deployments
- *   - inputRequests/inputResponses inline in tasks/get (MRTR model)
- *   - tasks/cancel required (not optional)
- *   - No capability advertisement — tasks are core protocol
- *   - resultType: "task" discriminator on CreateTaskResult
- *   - "failed" status = JSON-RPC protocol error only; tool errors = "completed" + isError
+ * Key wire-format differences from v1 (MCP spec 2025-11-25):
+ *   - Tasks is an EXTENSION (io.modelcontextprotocol/tasks) advertised under
+ *     capabilities.extensions — clients MUST declare support during initialize
+ *     (or per-request via SEP-2575 _meta) for the server to accept the surface.
+ *   - tasks/result REMOVED — result inlined into tasks/get's DetailedTask.
+ *   - tasks/list REMOVED.
+ *   - tasks/update is the new MRTR resume path (delivers inputResponses).
+ *   - tasks/cancel returns an EMPTY {} ack (no task state).
+ *   - No client `task` param — server decides unilaterally.
+ *   - Wire fields renamed: ttlSeconds, pollIntervalMilliseconds. parentTaskId removed.
+ *   - inputRequests is a MAP keyed by server-minted opaque ids; inputResponses
+ *     mirrors the same keys via tasks/update.
+ *   - resultType: "task" discriminator on CreateTaskResult; absence => sync ToolResult.
+ *   - "failed" status = JSON-RPC protocol error only; tool errors = "completed" + isError.
+ *   - Mcp-Name HTTP response header carries the new taskId on task-creating
+ *     responses (SEP-2243).
  *
  * Usage:
  *   cd conformance && npm install
@@ -37,7 +41,7 @@
  *   - slow_compute — async, sleeps N seconds, returns result
  *   - failing_job — async, always fails after 1s (tool-level error, not protocol error)
  *   - protocol_error_job — async, fails with a JSON-RPC protocol error
- *   - confirm_delete — async, elicitation via inputRequests model
+ *   - confirm_delete — async, elicitation via the SEP-2663 inputRequests / tasks/update flow
  */
 
 import { describe, test, before, after } from 'node:test';
@@ -46,42 +50,72 @@ import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/cli
 import { assertJsonRpcError } from '../common/helpers.js';
 
 const SERVER_URL = process.env.SERVER_URL || 'http://localhost:8080/mcp';
+const TASKS_EXTENSION_ID = 'io.modelcontextprotocol/tasks';
 
 let client: Client;
-let sessionId: string;
+let sessionId: string;          // raw session that DECLARES the tasks extension
+let unsupportedSessionId: string; // raw session that does NOT declare the extension (for gating tests)
 let nextId = 1;
 
-before(async () => {
-    const transport = new StreamableHTTPClientTransport(new URL(SERVER_URL));
-    // v2: No tasks capability negotiation — tasks are core protocol.
-    // Client still declares elicitation/sampling for inputRequests handling.
-    client = new Client(
-        { name: 'mcp-tasks-v2-conformance', version: '1.0.0' },
-        { capabilities: { elicitation: {}, sampling: {} } }
-    );
-    await client.connect(transport);
-
-    // Extract session ID for raw requests (the SDK stores it internally).
-    // We use raw fetch for tasks/get and tools/call because the SDK's
-    // built-in Zod schemas strip v2-only fields like `result` and `error`.
+// initRawSession runs the raw initialize handshake against SERVER_URL with the
+// supplied capabilities and returns the session id from Mcp-Session-Id, after
+// firing the notifications/initialized to make the session usable. We bypass
+// the SDK because its built-in Zod schemas strip v2-only fields (result,
+// error, inputRequests, etc.) from responses.
+async function initRawSession(capabilities: Record<string, unknown>): Promise<string> {
     const initResp = await fetch(SERVER_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify({
             jsonrpc: '2.0', id: 'init-raw', method: 'initialize',
-            params: { protocolVersion: '2025-11-25',
-                      clientInfo: { name: 'raw-init', version: '1.0' },
-                      capabilities: {} }
-        })
+            params: {
+                protocolVersion: '2025-11-25',
+                clientInfo: { name: 'raw-init', version: '1.0' },
+                capabilities,
+            },
+        }),
     });
-    sessionId = initResp.headers.get('mcp-session-id') || '';
-    // Send initialized notification
+    const sid = initResp.headers.get('mcp-session-id') || '';
+    if (!sid) throw new Error('initialize response missing Mcp-Session-Id');
+
     await fetch(SERVER_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json',
-                   'Mcp-Session-Id': sessionId },
-        body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Mcp-Session-Id': sid,
+        },
+        body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }),
     });
+    return sid;
+}
+
+before(async () => {
+    const transport = new StreamableHTTPClientTransport(new URL(SERVER_URL));
+    // v2: declare the io.modelcontextprotocol/tasks extension so the server
+    // gates the task surface ON for this client. Also declare elicitation /
+    // sampling so v1-style notifications round-trip.
+    client = new Client(
+        { name: 'mcp-tasks-v2-conformance', version: '1.0.0' },
+        {
+            capabilities: {
+                elicitation: {},
+                sampling: {},
+                extensions: { [TASKS_EXTENSION_ID]: {} },
+            },
+        },
+    );
+    await client.connect(transport);
+
+    // Two raw sessions: one that declares the tasks extension (used by every
+    // happy-path scenario) and one that doesn't (used by the negative-gate
+    // scenarios v2-23 / v2-25-no-meta).
+    sessionId = await initRawSession({
+        elicitation: {},
+        sampling: {},
+        extensions: { [TASKS_EXTENSION_ID]: {} },
+    });
+    unsupportedSessionId = await initRawSession({});
 });
 
 after(async () => {
@@ -97,16 +131,33 @@ after(async () => {
  * Parses SSE `data:` lines if the response is text/event-stream, or
  * plain JSON otherwise.
  */
-async function rawRequest(method: string, params: any): Promise<any> {
+async function rawRequest(method: string, params: any, opts: { sessionId?: string; meta?: any } = {}): Promise<any> {
+    const result = await rawRequestFull(method, params, opts);
+    return result.result;
+}
+
+/**
+ * Like rawRequest, but also returns the raw fetch Response so callers can
+ * inspect transport-level headers (e.g., SEP-2243 Mcp-Name). Most scenarios
+ * only need the JSON-RPC body; the Mcp-Name scenario is the outlier that
+ * needs the headers.
+ */
+async function rawRequestFull(
+    method: string,
+    params: any,
+    opts: { sessionId?: string; meta?: any } = {},
+): Promise<{ result: any; response: Response }> {
     const id = nextId++;
+    const sid = opts.sessionId ?? sessionId;
+    const requestParams = opts.meta ? { ...params, _meta: opts.meta } : params;
     const resp = await fetch(SERVER_URL, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'Accept': 'text/event-stream, application/json',
-            'Mcp-Session-Id': sessionId,
+            'Mcp-Session-Id': sid,
         },
-        body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
+        body: JSON.stringify({ jsonrpc: '2.0', id, method, params: requestParams }),
     });
     const ct = resp.headers.get('content-type') || '';
     let body: any;
@@ -119,7 +170,6 @@ async function rawRequest(method: string, params: any): Promise<any> {
                 const payload = trimmed.slice(5).trimStart();
                 if (payload.startsWith('{')) {
                     const parsed = JSON.parse(payload);
-                    // Find the response matching our request ID.
                     if (parsed.id === id) {
                         body = parsed;
                         break;
@@ -137,7 +187,7 @@ async function rawRequest(method: string, params: any): Promise<any> {
         err.data = body.error.data;
         throw err;
     }
-    return body.result;
+    return { result: body.result, response: resp };
 }
 
 /**
@@ -151,18 +201,30 @@ async function callTool(toolName: string, args: Record<string, unknown>): Promis
 }
 
 /**
- * Call tasks/get with optional requestState and inputResponses.
- * This is the v2 consolidated polling endpoint.
+ * Call tasks/get. Idempotent read of the v2 task surface — returns DetailedTask
+ * with inlined result / error / inputRequests / requestState per status.
+ * SEP-2663 moved input-response delivery off this method onto tasks/update;
+ * see updateTask below.
  */
-async function getTask(taskId: string, opts: { requestState?: string; inputResponses?: Record<string, any> } = {}): Promise<any> {
+async function getTask(taskId: string, opts: { requestState?: string } = {}): Promise<any> {
     const params: any = { taskId };
     if (opts.requestState !== undefined) {
         params.requestState = opts.requestState;
     }
-    if (opts.inputResponses !== undefined) {
-        params.inputResponses = opts.inputResponses;
-    }
     return rawRequest('tasks/get', params);
+}
+
+/**
+ * Call tasks/update — SEP-2663 MRTR resume path. Delivers inputResponses
+ * keyed to whatever inputRequests the server emitted. Returns the empty
+ * {} ack.
+ */
+async function updateTask(taskId: string, inputResponses: Record<string, any>, requestState?: string): Promise<any> {
+    const params: any = { taskId, inputResponses };
+    if (requestState !== undefined) {
+        params.requestState = requestState;
+    }
+    return rawRequest('tasks/update', params);
 }
 
 /** Poll tasks/get until a terminal state via raw requests. */
@@ -228,7 +290,7 @@ function assertCompletedResult(task: any, label: string) {
 // Scenarios
 // ============================================================================
 
-describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
+describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
 
     // ========================================================================
     // Scenario 01: Sync tool call — no task created
@@ -350,19 +412,25 @@ describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
     });
 
     // ========================================================================
-    // Scenario 07: tasks/cancel (cooperative, required)
+    // Scenario 07: tasks/cancel returns empty ack; status settles to cancelled
     //
-    // In v2, tasks/cancel is REQUIRED (not optional like v1).
+    // SEP-2663 changed the cancel response from a rich task envelope to an
+    // empty {} ack — the client observes the resulting "cancelled" status
+    // via the next tasks/get. This is more honest about the cooperative
+    // nature of cancellation: the response only acknowledges the request,
+    // not that the goroutine has stopped yet.
     // ========================================================================
-    test('v2-07: tasks/cancel returns cancelled status', async () => {
+    test('v2-07: tasks/cancel returns empty ack; status settles to cancelled', async () => {
         const result = await callTool('slow_compute', { seconds: 60, label: 'v2-cancel' });
         assertCreateTaskResult(result, 'v2-07 create');
         const taskId = result.task.taskId;
 
-        const cancelled = await cancelTask(taskId);
-        assert.equal(cancelled.status, 'cancelled', 'should be cancelled');
+        const cancelAck = await cancelTask(taskId);
+        // SEP-2663: cancel response is the empty {} ack (no task state).
+        assert.deepEqual(cancelAck, {},
+            `tasks/cancel should return empty {} ack; got ${JSON.stringify(cancelAck)}`);
 
-        // Confirm via tasks/get.
+        // Status settles to cancelled — observe via tasks/get.
         const task = await getTask(taskId);
         assert.equal(task.status, 'cancelled', 'poll after cancel should show cancelled');
     });
@@ -424,49 +492,51 @@ describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
     });
 
     // ========================================================================
-    // Scenario 11: No tasks in initialize capabilities
+    // Scenario 11: tasks live under capabilities.extensions, not the v1
+    // capabilities.tasks slot
     //
-    // In v2, tasks are core protocol — not negotiated via capabilities.
-    // The server SHOULD NOT advertise tasks in initialize.capabilities.
+    // SEP-2663: tasks is an extension, NOT a top-level capability. The server
+    // MUST advertise it under capabilities.extensions[io.modelcontextprotocol/tasks]
+    // and MUST NOT use the v1 capabilities.tasks slot.
     //
-    // NOTE: Accessing server capabilities via private fields is fragile.
-    // The conformance repo may have a better mechanism for this check.
+    // NOTE: Accessing server capabilities via private fields is fragile —
+    // the mechanism varies by SDK version.
     // ========================================================================
-    test('v2-11: tasks not advertised in initialize capabilities', async () => {
-        // Access server capabilities — the mechanism varies by SDK version.
+    test('v2-11: tasks advertised under capabilities.extensions, not capabilities.tasks', async () => {
         const caps = (client as any)._serverCapabilities
             ?? (client as any).serverCapabilities
             ?? (client as any)._capabilities;
-        if (caps) {
-            assert.ok(!caps.tasks,
-                'v2 server should not advertise tasks in capabilities (tasks are core protocol)');
+        if (!caps) {
+            // SDK didn't expose capabilities — the conformance repo may have a
+            // better mechanism. Skip rather than failing on missing access.
+            return;
         }
-        // If we can't access capabilities, this check is a no-op.
-        // The conformance repo may have a better mechanism.
+        assert.ok(!caps.tasks,
+            'v2 server must NOT use the v1 capabilities.tasks slot (use capabilities.extensions instead)');
+        assert.ok(caps.extensions,
+            'v2 server must advertise capabilities.extensions');
+        assert.ok(caps.extensions[TASKS_EXTENSION_ID],
+            `v2 server must advertise the ${TASKS_EXTENSION_ID} extension under capabilities.extensions`);
     });
 
     // ========================================================================
-    // Scenario 12: TTL field present and in seconds
+    // Scenario 12: ttlSeconds field present and in seconds
     //
-    // v2 aligns TTL with SEP-2549: seconds, not milliseconds.
-    //
-    // NOTE: TTL units are purely convention — the schema alone can't
-    // distinguish seconds from milliseconds. The field may be renamed to
-    // `ttlSeconds` (pending SEP-2549 resolution). This test checks the
-    // value is reasonable for seconds but can't programmatically enforce
-    // the unit. Servers with very long TTLs (e.g., 24h = 86400s) will
-    // pass regardless of unit.
+    // SEP-2663 renamed the wire field from `ttl` to `ttlSeconds` (units are
+    // now part of the field name, no convention required). The legacy `ttl`
+    // key MUST NOT appear on the v2 wire — clients that key off it on a v2
+    // server would silently see an unbounded TTL.
     // ========================================================================
-    test('v2-12: TTL is present and reasonable for seconds', async () => {
+    test('v2-12: ttlSeconds present (and v1 ttl key absent)', async () => {
         const result = await callTool('slow_compute', { seconds: 1, label: 'v2-ttl' });
         const task = result.task;
-        assert.ok(task.ttl !== undefined, 'task should have ttl');
-        assert.ok(typeof task.ttl === 'number' && task.ttl > 0, 'ttl should be a positive number');
-        // Best-effort heuristic: typical server defaults are 60-600 seconds.
-        // If TTL > 10000, it's likely still using milliseconds (the most common
-        // migration bug). This is convention, not schema-enforceable.
-        assert.ok(task.ttl < 10000,
-            `ttl should be in seconds (got ${task.ttl} — if >10000, likely milliseconds)`);
+        assert.ok(task.ttlSeconds !== undefined,
+            'task should have ttlSeconds (SEP-2663 wire-field rename)');
+        assert.ok(typeof task.ttlSeconds === 'number' && task.ttlSeconds > 0,
+            'ttlSeconds should be a positive number');
+        // The v1 `ttl` (milliseconds) key MUST NOT appear in v2 responses.
+        assert.ok(!('ttl' in task),
+            'v2 task object MUST NOT carry the v1 `ttl` key (use ttlSeconds)');
     });
 
     // ========================================================================
@@ -569,56 +639,44 @@ describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
     });
 
     // ========================================================================
-    // Scenario 17: inputResponses resumes task
+    // Scenario 17: tasks/update delivers inputResponses; task resumes
     //
-    // Client sends inputResponses as a MAP in a subsequent request to
-    // provide the requested input. Keys must correspond to the inputRequests
-    // keys. The task should resume.
-    //
-    // PROVISIONAL: inputResponses will likely move to a separate method
-    // (name TBD). Currently using tasks/get per the SEP text, but this
-    // scenario WILL NEED UPDATING when the delivery method is finalized.
-    //
-    // NOTE: The task can also return input_required again (e.g., if the
-    // server sent multiple requests and the client only responded to one).
-    // This scenario responds to all requests so the task should complete.
+    // SEP-2663 finalized the MRTR resume path: the client sends inputResponses
+    // via the new tasks/update method (NOT on tasks/get). The server matches
+    // keys to the previously-emitted inputRequests, hands the payloads to the
+    // waiting goroutine, and the task transitions back to working (or
+    // directly to terminal if the tool finishes immediately after).
+    // tasks/update returns an empty {} ack — observe the resulting status
+    // via the next tasks/get.
     // ========================================================================
-    test('v2-17: inputResponses map resumes task', async () => {
+    test('v2-17: tasks/update inputResponses resume task', async () => {
         const result = await callTool('confirm_delete', { filename: 'v2-respond.txt' });
         assertCreateTaskResult(result, 'v2-17 create');
         const taskId = result.task.taskId;
 
-        // Wait for input_required.
+        // Wait for input_required + populated inputRequests.
         const inputTask = await waitForStatus(taskId, 'input_required', 5000);
         assert.equal(inputTask.status, 'input_required', 'should be input_required');
+        assert.ok(inputTask.inputRequests && Object.keys(inputTask.inputRequests).length > 0,
+            'input_required task must surface inputRequests via tasks/get');
 
-        // Build inputResponses map — keys must match inputRequests keys.
-        const requestKeys = Object.keys(inputTask.inputRequests || {});
+        // Build inputResponses keyed by the server-minted opaque ids. Echo
+        // the requestState the server returned so stateless deployments
+        // can pick the request back up.
         const responses: Record<string, any> = {};
-        for (const key of requestKeys) {
-            responses[key] = {
-                action: 'accept',
-                content: { confirm: true }
-            };
+        for (const key of Object.keys(inputTask.inputRequests)) {
+            responses[key] = { action: 'accept', content: { confirm: true } };
         }
 
-        const state = inputTask.requestState;
-        const resumed = await getTask(taskId, {
-            requestState: state,
-            inputResponses: responses
-        });
+        const ack = await updateTask(taskId, responses, inputTask.requestState);
+        assert.deepEqual(ack, {},
+            `tasks/update should return empty {} ack; got ${JSON.stringify(ack)}`);
 
-        // Task should have resumed — working, completed, or input_required again.
-        assert.ok(
-            ['working', 'completed', 'input_required'].includes(resumed.status),
-            `task should have resumed, got ${resumed.status}`
-        );
-
-        // If not yet completed, wait for completion.
-        if (resumed.status !== 'completed') {
-            const terminal = await waitForTerminal(taskId);
-            assert.equal(terminal.status, 'completed', 'task should complete after input');
-        }
+        // Server-side goroutine resumes — status will settle to terminal
+        // (or back to input_required if the tool emits another round).
+        const terminal = await waitForTerminal(taskId);
+        assert.equal(terminal.status, 'completed',
+            `task should complete after tasks/update; got ${terminal.status}`);
     });
 
     // ========================================================================
@@ -713,6 +771,109 @@ describe('MCP Tasks v2 Conformance (SEP-2557)', () => {
         const related = meta?.['io.modelcontextprotocol/related-task'];
         assert.ok(!related,
             'tasks/get inlined result MUST NOT include related-task _meta');
+    });
+
+    // ========================================================================
+    // Scenario 22: tasks/* rejected when extension not negotiated
+    //
+    // SEP-2663: tasks/get / tasks/update / tasks/cancel MUST NOT exist for
+    // a session that did not declare the io.modelcontextprotocol/tasks
+    // extension during initialize. Servers return -32601 (MethodNotFound)
+    // so unsupported clients don't see a tasks surface they didn't ask for.
+    //
+    // This scenario uses a SECOND session (unsupportedSessionId, set up in
+    // before()) that omitted the extension declaration.
+    // ========================================================================
+    test('v2-22: tasks/* return -32601 when extension not negotiated', async () => {
+        const cases: Array<{ method: string; params: any }> = [
+            { method: 'tasks/get', params: { taskId: 'any-id' } },
+            { method: 'tasks/update', params: { taskId: 'any-id', inputResponses: {} } },
+            { method: 'tasks/cancel', params: { taskId: 'any-id' } },
+        ];
+        for (const tc of cases) {
+            try {
+                await rawRequest(tc.method, tc.params, { sessionId: unsupportedSessionId });
+                assert.fail(`${tc.method} should fail without extension negotiation`);
+            } catch (e: any) {
+                assertJsonRpcError(e, -32601, `${tc.method} without ext`, true);
+            }
+        }
+    });
+
+    // ========================================================================
+    // Scenario 23: tools/call without extension does NOT create a task
+    //
+    // SEP-2663: a client that did not negotiate the extension still gets to
+    // call task-eligible tools — the server falls through to synchronous
+    // execution and returns a plain ToolResult (no resultType discriminator).
+    // It MUST NOT return CreateTaskResult.
+    // ========================================================================
+    test('v2-23: tools/call without extension returns sync ToolResult (no CreateTaskResult)', async () => {
+        const result = await rawRequest('tools/call',
+            { name: 'slow_compute', arguments: { seconds: 0, label: 'v2-23' } },
+            { sessionId: unsupportedSessionId },
+        );
+        assert.ok(!result.resultType,
+            `tools/call without extension MUST NOT carry resultType; got ${result.resultType}`);
+        assert.ok(!result.task,
+            `tools/call without extension MUST NOT carry task envelope; got ${JSON.stringify(result.task)}`);
+        // Sync ToolResult shape: should have content[].
+        assert.ok(result.content,
+            `expected sync ToolResult with content[]; got ${JSON.stringify(result)}`);
+    });
+
+    // ========================================================================
+    // Scenario 24: SEP-2243 Mcp-Name HTTP response header on task creation
+    //
+    // The streamable-HTTP transport MUST set Mcp-Name: <taskId> on the
+    // response to a task-creating tools/call so HTTP-level routing /
+    // observability can key off the task id without parsing the JSON body.
+    // The header MUST NOT appear when the call did not create a task (sync
+    // tool, or extension not negotiated).
+    // ========================================================================
+    test('v2-24: Mcp-Name response header on task-creating tools/call', async () => {
+        const { result, response } = await rawRequestFull('tools/call', {
+            name: 'slow_compute', arguments: { seconds: 1, label: 'v2-24' },
+        });
+        assertCreateTaskResult(result, 'v2-24');
+        const mcpName = response.headers.get('mcp-name');
+        assert.ok(mcpName,
+            'Mcp-Name header MUST be set on task-creating tools/call response');
+        assert.equal(mcpName, result.task.taskId,
+            'Mcp-Name header value MUST equal the taskId in the response body');
+    });
+
+    test('v2-24b: Mcp-Name absent on sync tools/call response', async () => {
+        const { response } = await rawRequestFull('tools/call', {
+            name: 'greet', arguments: { name: 'world' },
+        });
+        const mcpName = response.headers.get('mcp-name');
+        assert.ok(!mcpName,
+            `sync tools/call MUST NOT emit Mcp-Name; got ${mcpName}`);
+    });
+
+    // ========================================================================
+    // Scenario 25: SEP-2575 per-request capability override
+    //
+    // A client that did NOT declare the extension at session level can opt
+    // into task creation for a single tools/call by including the extension
+    // under _meta.io.modelcontextprotocol/clientCapabilities.extensions.
+    // Per-request opt-in is additive — it cannot revoke a session-level
+    // declaration and only applies to the current request.
+    // ========================================================================
+    test('v2-25: per-request _meta opt-in produces CreateTaskResult', async () => {
+        const result = await rawRequest('tools/call',
+            { name: 'slow_compute', arguments: { seconds: 1, label: 'v2-25' } },
+            {
+                sessionId: unsupportedSessionId, // session-level: no extension
+                meta: {
+                    'io.modelcontextprotocol/clientCapabilities': {
+                        extensions: { [TASKS_EXTENSION_ID]: {} },
+                    },
+                },
+            },
+        );
+        assertCreateTaskResult(result, 'v2-25 per-request opt-in');
     });
 
 });
