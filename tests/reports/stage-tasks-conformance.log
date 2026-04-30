@@ -1,44 +1,206 @@
 === Stage 10/12: tasks-conformance (make testconf-tasks) ===
-Started: Tue Apr 28 16:16:01 PDT 2026
-2026/04/28 16:16:03 Tasks demo server on :18091
-2026/04/28 16:16:03 Connect MCPJam or VS Code: http://localhost:18091/mcp
-2026/04/28 16:16:03 
-2026/04/28 16:16:03 Tools:
-2026/04/28 16:16:03   greet          — sync-only (no task support)
-2026/04/28 16:16:03   slow_compute   — optional task support (try with/without 'task' hint)
-2026/04/28 16:16:03   failing_job    — required task support (must include 'task' hint)
-2026/04/28 16:16:03   confirm_delete — required task + elicitation (asks user before deleting)
-2026/04/28 16:16:03   write_haiku    — required task + sampling (asks LLM to write a haiku)
-2026/04/28 16:16:03 listen tcp :18091: bind: address already in use
+Started: Thu Apr 30 03:04:43 PDT 2026
+========================================================================
+  MCP Tasks — Async Tool Execution Lifecycle
+  Walks through the MCP Tasks (SEP-1036) lifecycle: optional/required task support, polling, progress notifications, and cancellation.
+  8 steps
+========================================================================
+
+  --- Setup ---
+    Start the MCP server in a separate terminal first:
+    
+    ```
+    Terminal 1: make serve # tasks server on :8080
+    Terminal 2: make run # this demo
+    ```
+
+  --- How tasks work ---
+    Each tool's `Execution.TaskSupport` declares whether it can run as a
+    task:
+    
+    - **forbidden** (or absent): sync-only. Calling with a `task` hint
+    returns an error.
+    - **optional**: client chooses. `tools/call` blocks for the result;
+    `tools/call` with `task` hint returns a `CreateTaskResult`
+    immediately.
+    - **required**: must be invoked as a task. Direct sync calls return
+    an error.
+    
+    For task invocations, the server responds with `{taskId, ttl,
+    pollInterval}`. The host polls `tasks/get` until the status is
+    terminal (`completed`, `failed`, or `cancelled`), then fetches the
+    result via `tasks/result`. Progress notifications stream over the
+    session's GET SSE channel.
+
+  Step 1/8: Connect to the MCP server
+  ----------------------------------------------------------------------
+    Host ->> Server: POST /mcp — initialize
+    Server -->> Host: serverInfo + Mcp-Session-Id + tasks capability
+
+    The server advertises tasks capability in initialize. The mcpkit
+    client opens a GET SSE stream so server-pushed notifications
+    (progress, status changes) reach us during polling.
+
+    Press Enter to run this step...
+ERROR: initialize failed: Post "http://localhost:8080/mcp": dial tcp
+[::1]:8080: connect: connection refused
+Start the server with: make serve
+
+
+  Step 2/8: Sync call: greet (taskSupport=forbidden)
+  ----------------------------------------------------------------------
+    Host ->> Server: tools/call: greet {name: "world"}  (no task hint)
+    Server -->> Host: ToolResult immediately
+
+    greet is sync-only. The result returns directly in the tools/call
+    response — no task created. This is the path most existing tools
+    use today; tasks are opt-in per tool.
+
+    Press Enter to run this step...
+ERROR: Post "http://localhost:8080/mcp": dial tcp [::1]:8080: connect:
+connection refused
+
+
+  Step 3/8: Optional task: slow_compute as task → CreateTaskResult
+  ----------------------------------------------------------------------
+    Host ->> Server: tools/call: slow_compute {seconds:3} + task: {ttl: 60s}
+    Server -->> Host: {taskId, status: working, ttl, pollInterval}
+
+    slow_compute has taskSupport=optional. Sending the `task` hint tells
+    the server to run it asynchronously. We get a taskId back
+    immediately while the work runs in a background goroutine.
+
+    Press Enter to run this step...
+ERROR: Post "http://localhost:8080/mcp": dial tcp [::1]:8080: connect:
+connection refused
+
+
+  Step 4/8: Poll tasks/get until terminal — receive notifications/progress
+  ----------------------------------------------------------------------
+    Host ->> Server: tasks/get {taskId}  (polled every pollInterval)
+    Server -->> Host: notifications/progress (1/3, 2/3, 3/3) via SSE
+    Server -->> Host: {status: completed} on terminal poll
+
+    The server streams progress notifications over the GET SSE channel
+    while the task runs. Our notification callback (set up in Step 1)
+    prints them inline. Once status reaches `completed`, the polling
+    stops.
+
+    Press Enter to run this step...
+ERROR: Post "http://localhost:8080/mcp": dial tcp [::1]:8080: connect:
+connection refused
+
+
+  Step 5/8: Fetch the result payload via tasks/result
+  ----------------------------------------------------------------------
+    Host ->> Server: tasks/result {taskId}
+    Server -->> Host: ToolResult
+
+    tasks/get returns task status only. To get the actual tool result
+    (content blocks, isError flag, structured content), the host calls
+    tasks/result with the same taskId.
+
+    Press Enter to run this step...
+ERROR: Post "http://localhost:8080/mcp": dial tcp [::1]:8080: connect:
+connection refused
+
+
+  Step 6/8: Required task: failing_job — sync call returns an error
+  ----------------------------------------------------------------------
+    Host ->> Server: tools/call: failing_job  (no task hint)
+    Server -->> Host: JSON-RPC error (taskSupport=required)
+
+    failing_job declares Execution.TaskSupport=required. Sync invocation
+    returns an error telling the host to retry with a task hint. This
+    guards expensive/long tools from blocking the request thread.
+
+    Press Enter to run this step...
+Server returned: Post "http://localhost:8080/mcp": dial tcp [::1]:8080:
+connect: connection refused
+
+
+  Step 7/8: Invoke failing_job as task → terminal status: failed
+  ----------------------------------------------------------------------
+    Host ->> Server: tools/call: failing_job + task hint
+    Server -->> Host: {taskId, status: working}
+    Host ->> Server: tasks/get (polled)
+    Server -->> Host: {status: failed, error: "simulated failure"}
+
+    Errors from required-task tools surface as a terminal status of
+    `failed`. The host gets the taskId immediately, polls, and learns
+    the task failed via the status field — no exception thrown on the
+    polling call.
+
+    Press Enter to run this step...
+ERROR: Post "http://localhost:8080/mcp": dial tcp [::1]:8080: connect:
+connection refused
+
+
+  Step 8/8: Cancel a long-running task mid-flight
+  ----------------------------------------------------------------------
+    Host ->> Server: tools/call: slow_compute {seconds: 10} + task hint
+    Server -->> Host: {taskId, status: working}
+    Host ->> Server: tasks/cancel {taskId}
+    Server -->> Host: ack
+    Host ->> Server: tasks/get (final)
+    Server -->> Host: {status: cancelled}
+
+    Tasks support cooperative cancellation. The server cancels the
+    goroutine's context; tools that select on ctx.Done() exit cleanly.
+    Status transitions to `cancelled`. mcpkit guards against
+    terminal-to-terminal transitions so a tool finishing normally after
+    cancel doesn't overwrite the cancelled status.
+
+    Press Enter to run this step...
+ERROR: Post "http://localhost:8080/mcp": dial tcp [::1]:8080: connect:
+connection refused
+
+
+  --- Where each piece lives in mcpkit ---
+    - Tasks server library: `server/task_*.go`,
+    `server/tasks_experimental.go`
+    - TaskContext (used by required-task tools): `core.TaskContext` —
+    `core/task.go`
+    - Client helpers: `client/tasks.go` — `ToolCallAsTask`,
+    `WaitForTask`, `GetTask`, `GetTaskPayload`, `CancelTask`
+    - Tool declares task support via
+    `core.ToolDef.Execution.TaskSupport` (`forbidden` | `optional` |
+    `required`)
+    
+    For elicitation/sampling from inside a task (the `confirm_delete`
+    and `write_haiku` tools also registered on this server), see
+    `examples/tasks/run-exercises.sh`.
+
+=== Done ===
 ▶ MCP Tasks Conformance
-  ✔ scenario 01: sync tool call returns immediately (3.484833ms)
-  ✔ scenario 02: async task creation returns CreateTaskResult (1.263375ms)
-  ✔ scenario 03: tasks/get returns flat task info (2.325958ms)
-  ✔ scenario 04: failing tool transitions to failed (1020.182125ms)
-  ✔ scenario 05: tasks/result returns ToolResult with related-task meta (1018.192458ms)
-  ✔ scenario 06: cancel returns cancelled status (3.071333ms)
-  ✔ scenario 07: tasks/list returns task array (1.779ms)
-  ✔ scenario 08: required tool without task hint returns error (1.210125ms)
-  ✔ scenario 09: forbidden tool with task hint returns error (0.841ms)
-  ✔ scenario 10: external proxy tool completes via task callbacks (1016.1255ms)
-  ✔ scenario 11: external proxy tool tasks/get returns task info (2.058583ms)
-  ✔ scenario 12: optional tool without hint runs synchronously (1001.680542ms)
-  ✔ scenario 13: tasks/get with bogus taskId returns error (1.718042ms)
-  ✔ scenario 14: tasks/cancel with bogus taskId returns error (1.807375ms)
-  ✔ scenario 15: cancel completed task returns error (1016.244084ms)
-  ✔ scenario 16: CreateTaskResult includes a TTL (1.133709ms)
-  ✔ scenario 17: CreateTaskResult pollInterval is valid if present (0.851875ms)
-  ✔ scenario 18: task must not expire before TTL (1519.009958ms)
-  ✔ scenario 19: concurrent task creation produces unique taskIds (1024.813791ms)
-  ✔ scenario 20: tasks/result for failed task has isError true (1014.977041ms)
-  ✔ scenario 21: tools/list includes execution.taskSupport (3.044083ms)
-  ✔ scenario 22: elicitation round-trip via tasks/result (8.04225ms)
-  ✔ scenario 23: sampling round-trip via tasks/result (5.122792ms)
-  ✔ scenario 24: progress notifications are well-formed if sent (2032.481125ms)
-  ✔ scenario 25: status notifications match task state if sent (1517.051667ms)
-  ✔ scenario 26: tasks/result includes related-task _meta (1015.149792ms)
-  ✔ scenario 27: tasks/get does not include related-task _meta (1.644ms)
-✔ MCP Tasks Conformance (13247.849334ms)
+  ✔ scenario 01: sync tool call returns immediately (4.131709ms)
+  ✔ scenario 02: async task creation returns CreateTaskResult (1.42275ms)
+  ✔ scenario 03: tasks/get returns flat task info (2.428ms)
+  ✔ scenario 04: failing tool transitions to failed (1029.251292ms)
+  ✔ scenario 05: tasks/result returns ToolResult with related-task meta (1036.2235ms)
+  ✔ scenario 06: cancel returns cancelled status (6.421584ms)
+  ✔ scenario 07: tasks/list returns task array (2.734917ms)
+  ✔ scenario 08: required tool without task hint returns error (1.391875ms)
+  ✔ scenario 09: forbidden tool with task hint returns error (0.979417ms)
+  ✔ scenario 10: external proxy tool completes via task callbacks (1029.993167ms)
+  ✔ scenario 11: external proxy tool tasks/get returns task info (3.103833ms)
+  ✔ scenario 12: optional tool without hint runs synchronously (1003.285375ms)
+  ✔ scenario 13: tasks/get with bogus taskId returns error (3.928917ms)
+  ✔ scenario 14: tasks/cancel with bogus taskId returns error (2.973042ms)
+  ✔ scenario 15: cancel completed task returns error (1034.665042ms)
+  ✔ scenario 16: CreateTaskResult includes a TTL (2.436375ms)
+  ✔ scenario 17: CreateTaskResult pollInterval is valid if present (2.232625ms)
+  ✔ scenario 18: task must not expire before TTL (1534.31775ms)
+  ✔ scenario 19: concurrent task creation produces unique taskIds (1054.956959ms)
+  ✔ scenario 20: tasks/result for failed task has isError true (1033.937042ms)
+  ✔ scenario 21: tools/list includes execution.taskSupport (3.622541ms)
+  ✔ scenario 22: elicitation round-trip via tasks/result (8.713458ms)
+  ✔ scenario 23: sampling round-trip via tasks/result (9.532333ms)
+  ✔ scenario 24: progress notifications are well-formed if sent (2052.824875ms)
+  ✔ scenario 25: status notifications match task state if sent (1533.229916ms)
+  ✔ scenario 26: tasks/result includes related-task _meta (1033.954833ms)
+  ✔ scenario 27: tasks/get does not include related-task _meta (3.975084ms)
+✔ MCP Tasks Conformance (13453.989458ms)
 ℹ tests 27
 ℹ suites 1
 ℹ pass 27
@@ -46,5 +208,5 @@ Started: Tue Apr 28 16:16:01 PDT 2026
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 13447.6785
-Finished: Tue Apr 28 16:16:17 PDT 2026
+ℹ duration_ms 13802.270417
+Finished: Thu Apr 30 03:04:59 PDT 2026
