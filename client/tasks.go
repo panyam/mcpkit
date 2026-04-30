@@ -1,5 +1,18 @@
 package client
 
+// V2 task client helpers — SEP-2663 (Tasks Extension), SEP-2557 (resultType
+// discriminator), SEP-2322 (MRTR).
+//
+// Differences from the v1 helpers in tasks_v1.go:
+//   - No client-side task hint: the server decides whether tools/call returns
+//     a sync ToolResult or a CreateTaskResult. ToolCall returns a polymorphic
+//     ToolCallResult so callers can branch on which shape arrived.
+//   - tasks/get returns DetailedTask with inlined result/error/inputRequests.
+//   - tasks/update is the new resume path for MRTR input rounds.
+//   - tasks/cancel returns an empty ack.
+//   - WaitForTask polls tasks/get and honors the server's
+//     PollIntervalMilliseconds hint, automatically echoing requestState.
+
 import (
 	"context"
 	"encoding/json"
@@ -9,191 +22,228 @@ import (
 	"github.com/panyam/mcpkit/core"
 )
 
-// --- Typed request params ---
+// --- Public option types ---
 
-type getTaskParams struct {
-	TaskID string `json:"taskId"`
+// TaskOptions configures a single tasks/get or tasks/cancel call.
+// The zero value sends no requestState; pass an explicit value to echo a
+// requestState the server returned on a previous response (SEP-2322 stateless
+// deployments). Polling helpers (WaitForTask) thread requestState
+// automatically and don't require callers to pass it manually.
+type TaskOptions struct {
+	// RequestState is the opaque session-continuation token the server
+	// returned on the most recent DetailedTask. Echoed verbatim — clients
+	// MUST treat it as opaque.
+	RequestState string
 }
 
-type resultParams struct {
-	TaskID string `json:"taskId"`
+// WaitOptions configures WaitForTask.
+type WaitOptions struct {
+	// PollInterval overrides the server's PollIntervalMilliseconds hint.
+	// 0 (the default) means: respect whatever the server returned, with a
+	// 1-second floor and a 30-second cap if the server didn't say.
+	PollInterval time.Duration
+
+	// RequestState seeds the echo loop. When the server returns an updated
+	// requestState in a poll response, WaitForTask switches to using it on
+	// the next call.
+	RequestState string
 }
 
-type listTasksParams struct {
-	Cursor string `json:"cursor,omitempty"`
+// ToolCallResult is the discriminated union returned by ToolCall when the
+// server may have elected to handle a tools/call as an async task. Exactly
+// one of Sync or Task is non-nil — branch on which is set.
+type ToolCallResult struct {
+	// Sync is populated when the server ran the tool to completion in the
+	// same request and returned a ToolResult directly (sync tool, or the
+	// SEP-2663 immediate-result shortcut).
+	Sync *core.ToolResult
+
+	// Task is populated when the server elected to create a task (the
+	// resultType: "task" discriminator was present on the response).
+	Task *core.CreateTaskResult
 }
 
-type cancelTaskParams struct {
-	TaskID string `json:"taskId"`
+// IsTask reports whether the result is the task-creation variant.
+func (r *ToolCallResult) IsTask() bool { return r != nil && r.Task != nil }
+
+// --- Wire-format params ---
+
+type tasksGetParams struct {
+	TaskID       string `json:"taskId"`
+	RequestState string `json:"requestState,omitempty"`
 }
 
-// toolCallAsTaskParams is the wire-format params for tools/call with a task hint.
-// Per MCP spec 2025-11-25: task hint is at params.task (sibling of name/arguments).
-type toolCallAsTaskParams struct {
-	Name      string         `json:"name"`
-	Arguments any            `json:"arguments"`
-	Task      taskParam      `json:"task"`
-	Meta      map[string]any `json:"_meta,omitempty"`
+type tasksCancelParams struct {
+	TaskID       string `json:"taskId"`
+	RequestState string `json:"requestState,omitempty"`
 }
 
-type taskParam struct {
-	TTL          int `json:"ttl,omitempty"`          // milliseconds
-	PollInterval int `json:"pollInterval,omitempty"` // milliseconds
-}
+// --- Polymorphic tools/call ---
 
-// TaskCallOptions configures a ToolCallAsTask invocation.
-// Nil means use server defaults for everything.
-type TaskCallOptions struct {
-	// TTL in milliseconds. 0 = server default.
-	TTL int
-
-	// PollInterval in milliseconds. 0 = server default.
-	PollInterval int
-
-	// ProgressToken is passed as _meta.progressToken so the server
-	// echoes it in notifications/progress. Nil = no token.
-	ProgressToken any
-}
-
-// IsToolTask checks whether a tool supports task invocation based on its
-// Execution.TaskSupport field. Returns true for "required" or "optional".
-// Per MCP spec 2025-11-25: absent Execution = forbidden.
+// ToolCall invokes a tool, transparently handling both the sync ToolResult
+// and the SEP-2663 CreateTaskResult shapes. Branch on result.IsTask() (or
+// the Sync / Task fields directly) to know which arrived.
 //
-// Use with ListTools to decide whether to call ToolCallAsTask or ToolCall:
-//
-//	tools, _ := c.ListTools()
-//	for _, t := range tools {
-//	    if client.IsToolTask(t) {
-//	        client.ToolCallAsTask(c, t.Name, args)
-//	    } else {
-//	        c.ToolCall(t.Name, args)
-//	    }
-//	}
-func IsToolTask(tool core.ToolDef) bool {
-	return tool.Execution != nil &&
-		tool.Execution.TaskSupport != core.TaskSupportForbidden
-}
-
-// --- Client helpers ---
-
-// GetTask polls the status of a v1 task by ID. Non-blocking.
-// Per MCP spec 2025-11-25 §tasks/get: returns flat Result & Task.
-func GetTask(c *Client, taskID string) (*core.GetTaskResultV1, error) {
-	result, err := c.Call("tasks/get", getTaskParams{TaskID: taskID})
+// Servers gate task creation on the io.modelcontextprotocol/tasks extension,
+// so this only ever returns a Task result if the client declared the
+// extension during initialize (or per-request via SEP-2575 _meta).
+func ToolCall(c *Client, name string, args any) (*ToolCallResult, error) {
+	resp, err := c.Call("tools/call", map[string]any{
+		"name":      name,
+		"arguments": args,
+	})
 	if err != nil {
 		return nil, err
 	}
-	var r core.GetTaskResultV1
-	if err := json.Unmarshal(result.Raw, &r); err != nil {
-		return nil, fmt.Errorf("unmarshal tasks/get: %w", err)
-	}
-	return &r, nil
+	return parseToolCallResult(resp.Raw)
 }
 
-// GetTaskPayload fetches the result payload for a task. Blocks until the
-// task reaches a terminal state via the tasks/result long-poll.
-// Per MCP spec 2025-11-25 §tasks/result: returns the original ToolResult
-// with _meta["io.modelcontextprotocol/related-task"].
-func GetTaskPayload(c *Client, taskID string) (*core.ToolResult, string, error) {
-	result, err := c.Call("tasks/result", resultParams{TaskID: taskID})
-	if err != nil {
-		return nil, "", err
+// parseToolCallResult inspects the resultType discriminator on a tools/call
+// response and decodes into the matching typed shape. Exposed as a top-level
+// helper so other callers (e.g. typed wrappers) can reuse the dispatch.
+func parseToolCallResult(raw json.RawMessage) (*ToolCallResult, error) {
+	var probe struct {
+		ResultType core.ResultType `json:"resultType"`
 	}
-	var r core.ToolResult
-	if err := json.Unmarshal(result.Raw, &r); err != nil {
-		return nil, "", fmt.Errorf("unmarshal tasks/result: %w", err)
-	}
-	var relatedID string
-	if r.Meta != nil && r.Meta.RelatedTask != nil {
-		relatedID = r.Meta.RelatedTask.TaskID
-	}
-	return &r, relatedID, nil
-}
+	// Probe failure is harmless — fall through to the sync shape, which
+	// will surface its own decode error if the response is genuinely malformed.
+	_ = json.Unmarshal(raw, &probe)
 
-// ListTasks returns all v1 tasks with cursor-based pagination.
-// Pass an empty cursor to start from the beginning.
-// (Removed in v2 — tasks/list is no longer part of the protocol.)
-func ListTasks(c *Client, cursor string) (*core.ListTasksResultV1, error) {
-	result, err := c.Call("tasks/list", listTasksParams{Cursor: cursor})
-	if err != nil {
-		return nil, err
-	}
-	var r core.ListTasksResultV1
-	if err := json.Unmarshal(result.Raw, &r); err != nil {
-		return nil, fmt.Errorf("unmarshal tasks/list: %w", err)
-	}
-	return &r, nil
-}
-
-// CancelTask cancels a running v1 task. Returns an error if the task is
-// already in a terminal state.
-// Per MCP spec 2025-11-25 §tasks/cancel: returns flat Result & Task.
-func CancelTask(c *Client, taskID string) (*core.CancelTaskResultV1, error) {
-	result, err := c.Call("tasks/cancel", cancelTaskParams{TaskID: taskID})
-	if err != nil {
-		return nil, err
-	}
-	var r core.CancelTaskResultV1
-	if err := json.Unmarshal(result.Raw, &r); err != nil {
-		return nil, fmt.Errorf("unmarshal tasks/cancel: %w", err)
-	}
-	return &r, nil
-}
-
-// ToolCallAsTask invokes a v1 tool with a task hint, returning a
-// CreateTaskResultV1 instead of the immediate tool result. The server
-// creates a task and runs the tool asynchronously.
-//
-// Pass nil for opts to use server defaults. Per MCP spec 2025-11-25:
-// task hint at params.task, progressToken at params._meta.progressToken.
-// (V2 removes the client task hint — the server decides unilaterally.)
-func ToolCallAsTask(c *Client, name string, args any, opts ...*TaskCallOptions) (*core.CreateTaskResultV1, error) {
-	params := toolCallAsTaskParams{
-		Name:      name,
-		Arguments: args,
-	}
-	if len(opts) > 0 && opts[0] != nil {
-		o := opts[0]
-		params.Task = taskParam{TTL: o.TTL, PollInterval: o.PollInterval}
-		if o.ProgressToken != nil {
-			params.Meta = map[string]any{"progressToken": o.ProgressToken}
+	if probe.ResultType == core.ResultTypeTask {
+		var r core.CreateTaskResult
+		if err := json.Unmarshal(raw, &r); err != nil {
+			return nil, fmt.Errorf("unmarshal CreateTaskResult: %w", err)
 		}
+		return &ToolCallResult{Task: &r}, nil
 	}
-	result, err := c.Call("tools/call", params)
+
+	var r core.ToolResult
+	if err := json.Unmarshal(raw, &r); err != nil {
+		return nil, fmt.Errorf("unmarshal ToolResult: %w", err)
+	}
+	return &ToolCallResult{Sync: &r}, nil
+}
+
+// --- tasks/get / tasks/update / tasks/cancel ---
+
+// GetTask fetches the current state of a v2 task as a DetailedTask, with
+// inlined result / error / inputRequests / requestState depending on status.
+// Idempotent — safe to call as often as needed; servers gate this method on
+// the io.modelcontextprotocol/tasks extension being negotiated.
+func GetTask(c *Client, taskID string, opts ...TaskOptions) (*core.DetailedTask, error) {
+	params := tasksGetParams{TaskID: taskID}
+	if len(opts) > 0 {
+		params.RequestState = opts[0].RequestState
+	}
+	resp, err := c.Call("tasks/get", params)
 	if err != nil {
 		return nil, err
 	}
-	var r core.CreateTaskResultV1
-	if err := json.Unmarshal(result.Raw, &r); err != nil {
-		return nil, fmt.Errorf("unmarshal task creation: %w", err)
+	var dt core.DetailedTask
+	if err := json.Unmarshal(resp.Raw, &dt); err != nil {
+		return nil, fmt.Errorf("unmarshal DetailedTask: %w", err)
 	}
-	return &r, nil
+	return &dt, nil
 }
+
+// UpdateTask resumes a task parked in input_required by delivering the
+// inputResponses the server's pending inputRequests are waiting on. The
+// server matches keys, hands the payloads to the waiting goroutine, and
+// the task transitions back to working (or directly to a terminal state
+// if the tool finishes immediately after).
+//
+// Returns nil on success — the server response is an empty ack per
+// SEP-2663. Observe the resulting state via the next GetTask poll.
+func UpdateTask(c *Client, req core.UpdateTaskRequest) error {
+	if req.TaskID == "" {
+		return fmt.Errorf("UpdateTask: missing TaskID")
+	}
+	if _, err := c.Call("tasks/update", req); err != nil {
+		return err
+	}
+	return nil
+}
+
+// CancelTask cancels a running task. Returns nil on success — the server
+// response is an empty ack per SEP-2663 (no task state). Issue GetTask if
+// you need to observe the resulting "cancelled" status.
+func CancelTask(c *Client, taskID string, opts ...TaskOptions) error {
+	params := tasksCancelParams{TaskID: taskID}
+	if len(opts) > 0 {
+		params.RequestState = opts[0].RequestState
+	}
+	if _, err := c.Call("tasks/cancel", params); err != nil {
+		return err
+	}
+	return nil
+}
+
+// --- Polling helpers ---
+
+const (
+	// defaultPollInterval is the floor used when neither the caller nor the
+	// server suggests one. Tuned for "feels responsive in tests, doesn't
+	// hammer in production."
+	defaultPollInterval = 1 * time.Second
+	// maxPollInterval caps server-suggested intervals so a misconfigured
+	// server can't park a poll loop indefinitely.
+	maxPollInterval = 30 * time.Second
+)
 
 // WaitForTask polls tasks/get until the task reaches a terminal state or
-// the context is cancelled. Returns the final task info.
+// ctx fires. Each iteration honors:
 //
-// Use pollInterval of 0 for a 1-second default. The context controls
-// the overall timeout — use context.WithTimeout for deadline-based waiting.
+//   - opts[0].PollInterval if non-zero (caller override),
+//   - else the server's PollIntervalMilliseconds on the most recent response,
+//   - else the 1-second default.
 //
-// This is a convenience wrapper around GetTask for the common pattern
-// of polling until completion.
-func WaitForTask(ctx context.Context, c *Client, taskID string, pollInterval time.Duration) (*core.GetTaskResultV1, error) {
-	if pollInterval <= 0 {
-		pollInterval = 1 * time.Second
+// requestState is threaded automatically: each poll echoes the requestState
+// the server returned on the previous response. Returns the final
+// DetailedTask snapshot (which inlines the result / error / inputRequests
+// per SEP-2663). Note that input_required is NOT terminal — callers wanting
+// to handle the MRTR resume should poll until terminal or use a tighter
+// loop that checks for input_required and calls UpdateTask in between.
+func WaitForTask(ctx context.Context, c *Client, taskID string, opts ...WaitOptions) (*core.DetailedTask, error) {
+	var override time.Duration
+	state := ""
+	if len(opts) > 0 {
+		override = opts[0].PollInterval
+		state = opts[0].RequestState
 	}
+
 	for {
-		got, err := GetTask(c, taskID)
+		dt, err := GetTask(c, taskID, TaskOptions{RequestState: state})
 		if err != nil {
 			return nil, err
 		}
-		if got.Status.IsTerminal() {
-			return got, nil
+		if dt.Status.IsTerminal() {
+			return dt, nil
 		}
+		if dt.RequestState != "" {
+			state = dt.RequestState
+		}
+
+		wait := nextPollWait(override, dt.PollIntervalMilliseconds)
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-time.After(pollInterval):
+		case <-time.After(wait):
 		}
 	}
+}
+
+// nextPollWait picks the next poll interval, applying the caller override,
+// the server hint, and the floor/ceiling.
+func nextPollWait(override time.Duration, serverHintMs *int) time.Duration {
+	if override > 0 {
+		return override
+	}
+	if serverHintMs != nil && *serverHintMs > 0 {
+		hint := time.Duration(*serverHintMs) * time.Millisecond
+		if hint > maxPollInterval {
+			return maxPollInterval
+		}
+		return hint
+	}
+	return defaultPollInterval
 }
