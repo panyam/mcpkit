@@ -26,6 +26,22 @@ type TasksConfig struct {
 	// returned to clients in CreateTaskResult. Default: 1000 (1 second).
 	DefaultPollMs int
 
+	// RequestStateKey is the HMAC-SHA256 key the server uses to sign and
+	// verify SEP-2322 requestState tokens. When non-nil, requestState is
+	// returned as `<base64url-hmac>.<base64url-payload>` where the payload
+	// is JSON {"taskId":"...", "exp":<unix-seconds>} — clients echo it
+	// verbatim and the server rejects tampered or expired tokens with
+	// -32602 on tasks/get / tasks/update / tasks/cancel.
+	//
+	// SEP-2663 says servers MUST treat requestState as attacker-controlled.
+	// Production deployments SHOULD set this. nil = legacy plaintext mode
+	// (requestState == taskID), kept for backward compat with existing
+	// tests and minimal-config setups.
+	RequestStateKey []byte
+
+	// RequestStateTTL is how long a signed requestState stays valid. When
+	// 0, defaults to 24h. Has no effect when RequestStateKey is nil.
+	RequestStateTTL time.Duration
 }
 
 func (c *TasksConfig) defaults() {
@@ -38,6 +54,9 @@ func (c *TasksConfig) defaults() {
 	if c.DefaultPollMs <= 0 {
 		c.DefaultPollMs = 1000
 	}
+	if c.RequestStateTTL <= 0 {
+		c.RequestStateTTL = 24 * time.Hour
+	}
 }
 
 // v2TaskRuntime holds per-registration state for v2 tasks, shared between
@@ -45,7 +64,13 @@ func (c *TasksConfig) defaults() {
 type v2TaskRuntime struct {
 	store    TaskStore
 	registry *Registry
-	mu       sync.Mutex
+
+	// requestStateKey + requestStateTTL configure SEP-2322 requestState
+	// signing. nil key = legacy plaintext mode (requestState == taskID).
+	requestStateKey []byte
+	requestStateTTL time.Duration
+
+	mu sync.Mutex
 	active   map[string]*activeTask
 	// taskErrors stores protocol-level errors (TaskError) for failed tasks.
 	// Separate from the store's result, which holds ToolResult for completed tasks.
@@ -54,10 +79,12 @@ type v2TaskRuntime struct {
 	creatorToolForTask map[string]string
 }
 
-func newV2TaskRuntime(store TaskStore, reg *Registry) *v2TaskRuntime {
+func newV2TaskRuntime(cfg TasksConfig) *v2TaskRuntime {
 	return &v2TaskRuntime{
-		store:              store,
-		registry:           reg,
+		store:              cfg.Store,
+		registry:           cfg.Server.Registry(),
+		requestStateKey:    cfg.RequestStateKey,
+		requestStateTTL:    cfg.RequestStateTTL,
 		active:             make(map[string]*activeTask),
 		taskErrors:         make(map[string]*core.TaskError),
 		creatorToolForTask: make(map[string]string),
@@ -105,6 +132,52 @@ func (rt *v2TaskRuntime) getToolCallbacks(taskID string) *TaskCallbacks {
 		return nil
 	}
 	return rt.registry.ToolCallbacks(name)
+}
+
+// makeRequestState mints the SEP-2322 requestState string the server hands
+// to clients on tasks/get responses and notifications/tasks/status events.
+// When a signing key is configured (TasksConfig.RequestStateKey), the token
+// is HMAC-SHA256 signed with an embedded expiry; otherwise it falls back to
+// the bare taskID for backward compat with minimal-config setups and tests.
+func (rt *v2TaskRuntime) makeRequestState(taskID string) string {
+	if len(rt.requestStateKey) == 0 {
+		return taskID
+	}
+	return core.SignRequestState(rt.requestStateKey, taskID, rt.requestStateTTL)
+}
+
+// verifyRequestState validates an incoming requestState against the signing
+// key. When the key is unset we run in legacy plaintext mode: any incoming
+// requestState that matches the taskID round-trips, anything else is
+// rejected (matches the old "RequestState: p.TaskID" semantics). When the
+// key is set, the token MUST decode + HMAC-verify + not be expired; mismatch
+// returns -32602 at the handler boundary.
+//
+// expectedTaskID is the taskID the caller already pulled from the request
+// body — we cross-check the token's embedded taskID against it so a token
+// issued for task A can't be replayed against task B.
+//
+// Empty incoming requestState is allowed (legacy clients, or first call
+// before the server has minted one). Callers that want stricter behavior
+// can refuse on requestState=="" themselves.
+func (rt *v2TaskRuntime) verifyRequestState(state, expectedTaskID string) error {
+	if state == "" {
+		return nil
+	}
+	if len(rt.requestStateKey) == 0 {
+		if state != expectedTaskID {
+			return core.ErrRequestStateInvalidSignature
+		}
+		return nil
+	}
+	gotTaskID, err := core.VerifyRequestState(rt.requestStateKey, state)
+	if err != nil {
+		return err
+	}
+	if gotTaskID != expectedTaskID {
+		return core.ErrRequestStateInvalidSignature
+	}
+	return nil
 }
 
 // deliverInputResponses routes a tasks/update payload back to whichever
@@ -272,15 +345,13 @@ func (tasksExtensionProvider) Extension() core.Extension {
 func RegisterTasks(cfg TasksConfig) {
 	cfg.defaults()
 	srv := cfg.Server
-	store := cfg.Store
-	reg := srv.Registry()
-	rt := newV2TaskRuntime(store, reg)
+	rt := newV2TaskRuntime(cfg)
 
 	// Advertise the SEP-2663 Tasks extension.
 	srv.RegisterExtension(tasksExtensionProvider{})
 
 	// Install v2 middleware for tools/call interception (gated on extension).
-	srv.UseMiddleware(taskV2Middleware(reg, rt, cfg))
+	srv.UseMiddleware(taskV2Middleware(srv.Registry(), rt, cfg))
 
 	// Register tasks/* protocol methods (SEP-2663: get + update + cancel),
 	// gated on session-level extension support.
@@ -513,10 +584,20 @@ func makeV2GetHandler(rt *v2TaskRuntime) MethodHandler {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "task not found: "+p.TaskID)
 		}
 
+		// SEP-2322: validate any echoed requestState — tampered, expired,
+		// or cross-task tokens are rejected with -32602 so attackers can't
+		// drive the loop with forged state. Empty is allowed (first call).
+		if err := rt.verifyRequestState(p.RequestState, p.TaskID); err != nil {
+			return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
+				"invalid requestState: "+err.Error())
+		}
+
 		result := core.DetailedTask{
 			TaskInfoV2: toTaskInfoV2(info),
-			// Generate requestState (opaque token for stateless deployments).
-			RequestState: p.TaskID,
+			// SEP-2322 requestState — opaque session-continuation token. The
+			// same helper feeds notifyV2TaskStatus so polling and SSE stay
+			// in sync (HMAC-signed when RequestStateKey is configured).
+			RequestState: rt.makeRequestState(p.TaskID),
 		}
 
 		// SEP-2663: when the task is awaiting MRTR input, surface the
@@ -592,6 +673,13 @@ func makeV2UpdateHandler(rt *v2TaskRuntime) MethodHandler {
 			// settles that way.
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "task not found: "+p.TaskID)
 		}
+		// SEP-2322: validate echoed requestState before doing any work —
+		// the resume side of the MRTR loop is the most attractive target
+		// for forged state since it directly drives goroutine wake-ups.
+		if err := rt.verifyRequestState(p.RequestState, p.TaskID); err != nil {
+			return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
+				"invalid requestState: "+err.Error())
+		}
 		if info.Status.IsTerminal() {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
 				"task "+p.TaskID+" is in terminal state "+string(info.Status))
@@ -613,6 +701,12 @@ func makeV2CancelHandler(rt *v2TaskRuntime) MethodHandler {
 		}
 		if err := json.Unmarshal(params, &p); err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
+		}
+
+		// SEP-2322: validate echoed requestState before mutating task state.
+		if err := rt.verifyRequestState(p.RequestState, p.TaskID); err != nil {
+			return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
+				"invalid requestState: "+err.Error())
 		}
 
 		info, err := rt.store.Cancel(p.TaskID, ctx.SessionID())
@@ -662,13 +756,21 @@ func toTaskInfoV2(info core.TaskInfo) core.TaskInfoV2 {
 
 // notifyV2TaskStatus sends a v2-style status notification with the full
 // DetailedTask (inlined result/error) read fresh from the store. Best-effort.
+//
+// SEP-2322: the notification carries the same requestState the next
+// tasks/get would have minted. Clients update their tracked requestState
+// from notifications so a stateless deployment can pick the conversation
+// back up without an extra tasks/get round-trip.
 func notifyV2TaskStatus(ctx context.Context, rt *v2TaskRuntime, store TaskStore, taskID, sessionID string) {
 	info, ok := store.Get(taskID, sessionID)
 	if !ok {
 		return
 	}
 
-	payload := core.DetailedTask{TaskInfoV2: toTaskInfoV2(info)}
+	payload := core.DetailedTask{
+		TaskInfoV2:   toTaskInfoV2(info),
+		RequestState: rt.makeRequestState(taskID),
+	}
 
 	if info.Status == core.TaskCompleted {
 		toolResult, found := store.GetResult(taskID, sessionID)
@@ -696,8 +798,14 @@ func notifyV2TaskStatus(ctx context.Context, rt *v2TaskRuntime, store TaskStore,
 // MethodContext for callers that already have fresh TaskInfo (e.g., the
 // cancel handler, which gets info back from store.Cancel and doesn't need
 // to re-read it).
+//
+// SEP-2322: carries requestState matching what the next tasks/get would
+// return — same rationale as notifyV2TaskStatus.
 func notifyV2TaskStatusFromInfo(ctx core.MethodContext, rt *v2TaskRuntime, info core.TaskInfo) {
-	payload := core.DetailedTask{TaskInfoV2: toTaskInfoV2(info)}
+	payload := core.DetailedTask{
+		TaskInfoV2:   toTaskInfoV2(info),
+		RequestState: rt.makeRequestState(info.TaskID),
+	}
 	if info.Status == core.TaskFailed {
 		if te := rt.getTaskError(info.TaskID); te != nil {
 			payload.Error = te
