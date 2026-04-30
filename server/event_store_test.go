@@ -1,7 +1,7 @@
 package server_test
 
 import (
-	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -96,10 +96,12 @@ func TestStreamableHTTPEventStoreIntegration(t *testing.T) {
 	require.NoError(t, err)
 	defer resp2.Body.Close()
 
-	// Read the SSE response to ensure it completes
-	var body []byte
-	body, err = json.RawMessage(make([]byte, 4096)), nil
-	_ = body
+	// Drain the SSE response so the server-side handler — and its trailing
+	// store.Store call inside emitSSEEvent — has fully completed before we
+	// query the event store. http.DefaultClient.Do returns when response
+	// headers arrive, which on the SSE path happens BEFORE store.Store
+	// finishes. Without this drain the test races (CI failure on PR #335).
+	_, _ = io.Copy(io.Discard, resp2.Body)
 
 	// Verify events were stored for this session
 	events, err := store.Replay(sessionID, "unknown")
