@@ -45,7 +45,7 @@ func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
 	token := flag.String("token", "", "Telegram bot token (omit for test mode)")
 	whSecretMode := flag.String("webhook-secret-mode", "server", "webhook secret mode: server | client | identity")
-	whHeaderMode := flag.String("webhook-header-mode", "mcp", "webhook header style: mcp | standard")
+	whHeaderMode := flag.String("webhook-header-mode", "standard", "webhook header style: standard | mcp")
 	whRootHex := flag.String("webhook-root", "", "hex-encoded master secret for identity mode (required when -webhook-secret-mode=identity)")
 	flag.CommandLine.Parse(filterFlags(os.Args[1:]))
 
