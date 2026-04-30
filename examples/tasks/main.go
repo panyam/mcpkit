@@ -291,8 +291,8 @@ func serve() {
 		},
 	})
 
-	// Register tasks capability on the server.
-	server.RegisterTasks(server.TasksConfig{Server: srv})
+	// Register v1 tasks capability on the server.
+	server.RegisterTasksV1(server.TasksConfigV1{Server: srv})
 
 	log.Printf("Tasks demo server on %s", *addr)
 	log.Printf("Connect MCPJam or VS Code: http://localhost%s/mcp", *addr)

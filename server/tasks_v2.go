@@ -10,8 +10,8 @@ import (
 	"github.com/panyam/mcpkit/core"
 )
 
-// TasksV2Config holds the options for registering v2 tasks support on an MCP server.
-type TasksV2Config struct {
+// TasksConfig holds the options for registering v2 tasks support on an MCP server.
+type TasksConfig struct {
 	// Store is the task state backend. If nil, an InMemoryTaskStore is used.
 	Store TaskStore
 
@@ -28,7 +28,7 @@ type TasksV2Config struct {
 
 }
 
-func (c *TasksV2Config) defaults() {
+func (c *TasksConfig) defaults() {
 	if c.Store == nil {
 		c.Store = NewInMemoryStore()
 	}
@@ -41,7 +41,7 @@ func (c *TasksV2Config) defaults() {
 }
 
 // v2TaskRuntime holds per-registration state for v2 tasks, shared between
-// middleware and handlers. Scoped to a single RegisterTasksV2 call (C3).
+// middleware and handlers. Scoped to a single RegisterTasks call (C3).
 type v2TaskRuntime struct {
 	store    TaskStore
 	registry *Registry
@@ -107,14 +107,35 @@ func (rt *v2TaskRuntime) getToolCallbacks(taskID string) *TaskCallbacks {
 	return rt.registry.ToolCallbacks(name)
 }
 
+// deliverInputResponses routes a tasks/update payload back to whatever was
+// waiting on the corresponding input requests. Phase 4 ships an intentional
+// no-op so the handler can ack without blocking; Phase 5 wires the two real
+// delivery paths:
+//
+//   - In-process tools (the goroutine path used by RegisterTasks today):
+//     match each response key to a per-key channel on the taskEntry and send
+//     so TaskContext.TaskElicit / TaskSample can return.
+//   - External-backed tools (Temporal, Step Functions, SQS, ...): dispatch
+//     through TaskCallbacks.OnInputResponse so the proxy hands the payload
+//     to the orchestrator. This callback field doesn't exist yet — it lands
+//     when a real external-backed example drives the contract.
+//
+// Until Phase 5 lands, the handler still returns ack so clients that drive
+// the Phase 5 protocol shape early get plausible behavior at the wire level.
+func (rt *v2TaskRuntime) deliverInputResponses(taskID string, responses core.InputResponses) {
+	_ = taskID
+	_ = responses
+	// TODO(phase 5): in-process channel dispatch + TaskCallbacks.OnInputResponse.
+}
+
 // tasksExtensionProvider implements core.ExtensionProvider for the SEP-2663
-// Tasks extension. RegisterTasksV2 hands an instance to Server.RegisterExtension
+// Tasks extension. RegisterTasks hands an instance to Server.RegisterExtension
 // so the extension is advertised in capabilities.extensions during initialize.
 type tasksExtensionProvider struct{}
 
 // Extension declares the SEP-2663 Tasks extension.
 //
-//nolint:unused // referenced by RegisterTasksV2 only when the v2 path is wired
+//nolint:unused // referenced by RegisterTasks only when the v2 path is wired
 func (tasksExtensionProvider) Extension() core.Extension {
 	return core.Extension{
 		ID:          core.TasksExtensionID,
@@ -123,7 +144,7 @@ func (tasksExtensionProvider) Extension() core.Extension {
 	}
 }
 
-// RegisterTasksV2 hooks up v2 tasks support on the given server:
+// RegisterTasks hooks up v2 tasks support on the given server:
 //   - Advertises the io.modelcontextprotocol/tasks extension in initialize
 //     (replacing the v1 ServerCapabilities.Tasks declaration).
 //   - Installs middleware that intercepts tools/call for task-eligible tools
@@ -139,7 +160,7 @@ func (tasksExtensionProvider) Extension() core.Extension {
 //     not the v1 ServerCapabilities.Tasks slot.
 //
 // Must be called before accepting connections.
-func RegisterTasksV2(cfg TasksV2Config) {
+func RegisterTasks(cfg TasksConfig) {
 	cfg.defaults()
 	srv := cfg.Server
 	store := cfg.Store
@@ -152,9 +173,10 @@ func RegisterTasksV2(cfg TasksV2Config) {
 	// Install v2 middleware for tools/call interception (gated on extension).
 	srv.UseMiddleware(taskV2Middleware(reg, rt, cfg))
 
-	// Register tasks/* protocol methods (v2: only get + cancel),
+	// Register tasks/* protocol methods (SEP-2663: get + update + cancel),
 	// gated on session-level extension support.
 	srv.HandleMethod("tasks/get", gateOnTasksExtension(makeV2GetHandler(rt)))
+	srv.HandleMethod("tasks/update", gateOnTasksExtension(makeV2UpdateHandler(rt)))
 	srv.HandleMethod("tasks/cancel", gateOnTasksExtension(makeV2CancelHandler(rt)))
 }
 
@@ -182,7 +204,7 @@ func gateOnTasksExtension(inner MethodHandler) MethodHandler {
 //   - required: always create a task (no client hint needed)
 //   - optional: create a task (server-directed)
 //   - forbidden/absent: pass through (sync execution)
-func taskV2Middleware(reg *Registry, rt *v2TaskRuntime, cfg TasksV2Config) Middleware {
+func taskV2Middleware(reg *Registry, rt *v2TaskRuntime, cfg TasksConfig) Middleware {
 	return func(ctx context.Context, req *core.Request, next MiddlewareFunc) (*core.Response, error) {
 		if req.Method != "tools/call" {
 			return next(ctx, req)
@@ -337,6 +359,11 @@ func taskV2Middleware(reg *Registry, rt *v2TaskRuntime, cfg TasksV2Config) Middl
 			notifyV2TaskStatus(bgCtx, rt, store, taskID, sessionID)
 		}()
 
+		// SEP-2243: stage Mcp-Name on the HTTP response so transports / proxies
+		// / observability can route or log against the task id without parsing
+		// the JSON body. No-op for non-HTTP transports (stdio, in-process).
+		core.SetResponseHeader(ctx, mcpNameHeader, taskID)
+
 		// Build the v2 wire envelope. CreateTaskResult MUST NOT carry result/
 		// error/inputRequests/requestState (SEP-2663 — those belong on
 		// DetailedTask returned by tasks/get).
@@ -348,6 +375,12 @@ func taskV2Middleware(reg *Registry, rt *v2TaskRuntime, cfg TasksV2Config) Middl
 		}), nil
 	}
 }
+
+// mcpNameHeader is the SEP-2243 HTTP response header carrying the taskId
+// when a task-creating tools/call response is returned. Transports surface
+// it so downstream HTTP infrastructure (proxies, observability) can route
+// or log against the task identifier without parsing the JSON body.
+const mcpNameHeader = "Mcp-Name"
 
 // --- Method Handlers ---
 
@@ -401,6 +434,52 @@ func makeV2GetHandler(rt *v2TaskRuntime) MethodHandler {
 		}
 
 		return core.NewResponse(id, result)
+	}
+}
+
+// makeV2UpdateHandler implements SEP-2663 tasks/update — the resume path for
+// MRTR input rounds. The client supplies inputResponses keyed to the
+// inputRequests previously surfaced via tasks/get's DetailedTask, optionally
+// echoing requestState (SEP-2322) for stateless deployments.
+//
+// This Phase 4 implementation is a validating shell: it parses the request,
+// confirms the task exists and is non-terminal, hands the responses to the
+// runtime's deliveryInputResponses helper, and returns an empty ack
+// (UpdateTaskResult{}) per SEP-2663. Phase 5 wires the actual delivery — for
+// in-process tasks, that means matching keys to per-key channels on the
+// taskEntry and unblocking the waiting goroutine; for external-backed tools
+// (Temporal, Step Functions, SQS, ...), Phase 5 routes through a planned
+// TaskCallbacks.OnInputResponse extension point so the proxy can forward the
+// payload to the orchestrator. Either way, the handler shape stays the same.
+func makeV2UpdateHandler(rt *v2TaskRuntime) MethodHandler {
+	return func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
+		var p core.UpdateTaskRequest
+		if err := json.Unmarshal(params, &p); err != nil {
+			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
+		}
+		if p.TaskID == "" {
+			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "missing taskId")
+		}
+
+		sid := ctx.SessionID()
+		info, ok := rt.store.Get(p.TaskID, sid)
+		if !ok {
+			// Open spec question (PLAN.md): tasks/update for unknown taskId
+			// may end up as a silent ack. For now treat it as -32602 so
+			// callers find out immediately; flip to silent if the spec
+			// settles that way.
+			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "task not found: "+p.TaskID)
+		}
+		if info.Status.IsTerminal() {
+			return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
+				"task "+p.TaskID+" is in terminal state "+string(info.Status))
+		}
+
+		// Hand off to the runtime. Phase 4 only logs/queues; Phase 5 wires
+		// the actual per-key delivery and goroutine unblock.
+		rt.deliverInputResponses(p.TaskID, p.InputResponses)
+
+		return core.NewResponse(id, core.UpdateTaskResult{})
 	}
 }
 

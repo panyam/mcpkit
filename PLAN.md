@@ -157,6 +157,17 @@ Phase 6 (client) → Phase 7 (example + conformance) → Phase 8 (bridge)
   - the store record needs to diverge from the v1 wire shape (then introduce
     a dedicated `taskRecord` type and free up `TaskInfo` for the v2 wire).
 
+- **Internal v2 symbols keep `V2`/`v2` infix** (deferred during Phase 4).
+  After promoting `RegisterTasksV2` → `RegisterTasks` and `TasksV2Config` →
+  `TasksConfig`, the canonical-named v2 file still has internal symbols like
+  `taskV2Middleware`, `v2TaskRuntime`, `newV2TaskRuntime`, `makeV2GetHandler`,
+  `notifyV2TaskStatus`, `notifyV2TaskStatusFromInfo`, `toTaskInfoV2`. They
+  collide with v1 internals in the same package (`taskMiddleware`,
+  `taskRuntime`, `makeGetHandler`, `notifyTaskStatus`), so dropping the V2
+  prefix requires renaming v1 internals to `*V1` first. Pure stylistic
+  cleanup with no user-visible impact — sweep when v1 is removed or when a
+  refactor already touches these files.
+
 ## Open spec questions (watch before finalizing)
 
 1. `requestState` rejection: synchronous `-32602` or silent? (Luca TBD)

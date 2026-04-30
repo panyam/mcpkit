@@ -48,7 +48,7 @@ func TestTaskCallbacksGetTask(t *testing.T) {
 		},
 	})
 
-	RegisterTasks(TasksConfig{Server: srv})
+	RegisterTasksV1(TasksConfigV1{Server: srv})
 
 	c := connectClient(t, srv)
 
@@ -102,7 +102,7 @@ func TestTaskCallbacksGetResult(t *testing.T) {
 		},
 	})
 
-	RegisterTasks(TasksConfig{Server: srv})
+	RegisterTasksV1(TasksConfigV1{Server: srv})
 
 	c := connectClient(t, srv)
 
@@ -165,7 +165,7 @@ func TestTaskCallbacksFallthrough(t *testing.T) {
 		},
 	})
 
-	RegisterTasks(TasksConfig{Server: srv})
+	RegisterTasksV1(TasksConfigV1{Server: srv})
 
 	c := connectClient(t, srv)
 

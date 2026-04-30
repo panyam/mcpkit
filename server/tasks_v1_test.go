@@ -97,7 +97,7 @@ func newTaskServer(t *testing.T) (*Server, chan struct{}) {
 		},
 	)
 
-	RegisterTasks(TasksConfig{Server: srv})
+	RegisterTasksV1(TasksConfigV1{Server: srv})
 
 	return srv, unblock
 }
@@ -677,7 +677,7 @@ func TestTaskPanicRecovery(t *testing.T) {
 			panic("test panic")
 		},
 	)
-	RegisterTasks(TasksConfig{Server: srv})
+	RegisterTasksV1(TasksConfigV1{Server: srv})
 	c := connectClient(t, srv)
 
 	created, err := client.ToolCallAsTask(c, "panic-tool", nil)
@@ -814,7 +814,7 @@ func TestGetTaskContextNilForSync(t *testing.T) {
 			return core.TextResult("ok"), nil
 		},
 	)
-	RegisterTasks(TasksConfig{Server: srv})
+	RegisterTasksV1(TasksConfigV1{Server: srv})
 	c := connectClient(t, srv)
 
 	// Call without task hint — sync mode.
@@ -850,7 +850,7 @@ func TestGetTaskContextAvailableForAsync(t *testing.T) {
 			return core.TextResult("ok"), nil
 		},
 	)
-	RegisterTasks(TasksConfig{Server: srv})
+	RegisterTasksV1(TasksConfigV1{Server: srv})
 	c := connectClient(t, srv)
 
 	created, err := client.ToolCallAsTask(c, "check-ctx", nil)
@@ -906,7 +906,7 @@ func TestTaskInputRequiredTransition(t *testing.T) {
 			return core.TextResult("done"), nil
 		},
 	)
-	RegisterTasks(TasksConfig{Server: srv})
+	RegisterTasksV1(TasksConfigV1{Server: srv})
 	c := connectClient(t, srv)
 
 	created, err := client.ToolCallAsTask(c, "needs-input", nil)
@@ -1012,7 +1012,7 @@ func TestQueueCleanupOnCancel(t *testing.T) {
 			select {} // block forever
 		},
 	)
-	RegisterTasks(TasksConfig{Server: srv, Store: store, MessageQueue: queue})
+	RegisterTasksV1(TasksConfigV1{Server: srv, Store: store, MessageQueue: queue})
 	c := connectClient(t, srv)
 
 	created, err := client.ToolCallAsTask(c, "slow", nil)
@@ -1094,7 +1094,7 @@ func TestTaskElicitE2E(t *testing.T) {
 		},
 	)
 
-	RegisterTasks(TasksConfig{Server: srv})
+	RegisterTasksV1(TasksConfigV1{Server: srv})
 
 	// Client with an elicitation handler that auto-accepts.
 	c := connectClient(t, srv, client.WithElicitationHandler(
@@ -1171,7 +1171,7 @@ func TestTaskSampleE2E(t *testing.T) {
 		},
 	)
 
-	RegisterTasks(TasksConfig{Server: srv})
+	RegisterTasksV1(TasksConfigV1{Server: srv})
 
 	// Client with a sampling handler that returns a mock haiku.
 	c := connectClient(t, srv, client.WithSamplingHandler(
@@ -1277,7 +1277,7 @@ func TestTaskProgressFromBackgroundNoPanic(t *testing.T) {
 			return core.TextResult("ok"), nil
 		},
 	)
-	RegisterTasks(TasksConfig{Server: srv})
+	RegisterTasksV1(TasksConfigV1{Server: srv})
 	c := connectClient(t, srv)
 
 	// Create task (no GET SSE stream — just POST).
@@ -1330,7 +1330,7 @@ func TestTaskCancelStopsGoroutine(t *testing.T) {
 			}
 		},
 	)
-	RegisterTasks(TasksConfig{Server: srv})
+	RegisterTasksV1(TasksConfigV1{Server: srv})
 	c := connectClient(t, srv)
 
 	created, err := client.ToolCallAsTask(c, "long-task", nil)
@@ -1370,7 +1370,7 @@ func TestTaskStatusNotificationOnComplete(t *testing.T) {
 			return core.TextResult("done"), nil
 		},
 	)
-	RegisterTasks(TasksConfig{Server: srv})
+	RegisterTasksV1(TasksConfigV1{Server: srv})
 
 	notifications := make(chan core.TaskInfo, 10)
 	c := connectClient(t, srv, client.WithNotificationCallback(func(method string, params any) {
@@ -1421,7 +1421,7 @@ func TestTaskStatusNotificationOnCancel(t *testing.T) {
 			return core.TextResult("cancelled"), nil
 		},
 	)
-	RegisterTasks(TasksConfig{Server: srv})
+	RegisterTasksV1(TasksConfigV1{Server: srv})
 
 	notifications := make(chan core.TaskInfo, 10)
 	c := connectClient(t, srv, client.WithNotificationCallback(func(method string, params any) {
@@ -1482,7 +1482,7 @@ func TestTaskProgressTokenPreserved(t *testing.T) {
 			return core.TextResult("ok"), nil
 		},
 	)
-	RegisterTasks(TasksConfig{Server: srv})
+	RegisterTasksV1(TasksConfigV1{Server: srv})
 	c := connectClient(t, srv)
 
 	_, err := c.Call("tools/call", map[string]any{
@@ -1522,7 +1522,7 @@ func TestTaskDoubleCompletionRejected(t *testing.T) {
 			return core.TextResult("done"), nil
 		},
 	)
-	RegisterTasks(TasksConfig{Server: srv})
+	RegisterTasksV1(TasksConfigV1{Server: srv})
 	c := connectClient(t, srv)
 
 	created, err := client.ToolCallAsTask(c, "fast", nil)
@@ -1631,7 +1631,7 @@ func TestToolCallAsTaskWithProgressToken(t *testing.T) {
 			return core.TextResult("ok"), nil
 		},
 	)
-	RegisterTasks(TasksConfig{Server: srv})
+	RegisterTasksV1(TasksConfigV1{Server: srv})
 	c := connectClient(t, srv)
 
 	_, err := client.ToolCallAsTask(c, "token-check", nil, &client.TaskCallOptions{
