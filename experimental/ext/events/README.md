@@ -190,12 +190,21 @@ Two equivalent forms — pick whichever is convenient. In Identity mode the secr
 
 The registry method is `WebhookRegistry.Unregister(url, id)` or `WebhookRegistry.UnregisterBySecret(url, secret)`. The unsubscribe handler accepts either form.
 
-## Python client SDK — auto-refresh
+## Client SDKs
+
+Two officially-shipped clients live under `clients/`. Both implement the same TTL refresh + signature verification contract.
+
+| Language | Path | Style |
+|---|---|---|
+| Go | [`clients/go/`](clients/go/) | Typed `Subscription` + `Receiver[Data]` (channel-based delivery) |
+| Python | [`clients/python/events_client.py`](clients/python/events_client.py) | Class-based `WebhookSubscription` + CLI subcommands (`list`, `listen`, `webhook`, `poll`) |
+
+### Python — auto-refresh
 
 `events_client.py` ships a `WebhookSubscription` helper that refreshes the subscription at `0.5 × TTL` (configurable) and transparently re-subscribes if a refresh hits the "subscription not found" race near the TTL boundary. Use it via the helper class or the bundled `webhook` subcommand:
 
 ```bash
-python3 events_client.py webhook --event discord.message --port 9999 --refresh-factor 0.5
+python3 clients/python/events_client.py webhook --event discord.message --port 9999 --refresh-factor 0.5
 ```
 
 ```python
@@ -218,7 +227,34 @@ sub.start()
 sub.stop()
 ```
 
-Smoke-tested by `make test-ttl` in the discord-events demo.
+Smoke-tested by `make test-ttl` in [`examples/events/discord/`](../../../examples/events/discord/).
+
+### Go — typed delivery
+
+`clients/go/` provides `Subscription` (subscribe + auto-refresh) plus `Receiver[Data]` (typed webhook receiver implementing `http.Handler`). Same lifecycle and recovery semantics as the Python helper, with decoded payloads on a channel.
+
+```go
+import (
+    eventsclient "github.com/panyam/mcpkit/experimental/ext/events/clients/go"
+)
+
+recv := eventsclient.NewReceiver[AlertData]("")
+hookSrv := httptest.NewServer(recv)
+defer hookSrv.Close()
+defer recv.Close()
+
+sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
+    EventName:   "alert.fired",
+    CallbackURL: hookSrv.URL,
+})
+if err != nil { ... }
+defer sub.Stop()
+recv.SetSecret(sub.Secret())
+
+for ev := range recv.Events() {
+    fmt.Printf("alert: %+v\n", ev.Data)
+}
+```
 
 ## Spec alignment
 

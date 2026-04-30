@@ -17,6 +17,8 @@ The primary path. Run the demo from the CLI and read the on-disk `WALKTHROUGH.md
 | [fine-grained-auth/](fine-grained-auth/) ⚠ experimental | Authorization denial with scope step-up (UC2) + RAR per-payment ephemeral credentials (UC3) — tracks draft [SEP-2643](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2643) |
 | [host/01-apphost/](host/01-apphost/) | `AppHost` mediator — host-side app management, bidirectional tool calls |
 | [host/02-multi-server/](host/02-multi-server/) | `ServerRegistry` with 3 servers, name-collision resolution |
+| [events/discord/](events/discord/) ⚠ experimental | MCP Events extension — events/list, push (SSE), poll (cursor), cursorless typing source (cursor:null), webhook with TTL auto-refresh via the typed Go SDK at `experimental/ext/events/clients/go/` |
+| [events/telegram/](events/telegram/) ⚠ experimental | Same protocol as discord, lighter walkthrough — focuses on the telegram-specific payload shape and the typed `Receiver[TelegramEventData]` |
 
 ```bash
 cd examples/<name>
