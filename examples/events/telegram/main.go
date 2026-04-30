@@ -1,12 +1,13 @@
-// Telegram Events Reference Server — demonstrates all three MCP event delivery
-// modes (push, poll, webhook) using mcpkit with Telegram as the event source.
+// Telegram Events Reference Server + demokit walkthrough.
 //
-// Run:
+// Two-process architecture:
 //
-//	go run . -addr :8080 -token YOUR_BOT_TOKEN
+//	Terminal 1:  make serve         # telegram-events server on :8080
+//	Terminal 2:  make demo          # demokit walkthrough (--tui for the TUI)
 //
-// Without -token, the server runs in test mode (no Telegram connection).
-// Connect an MCP client to http://localhost:8080/mcp.
+// Without --serve, the binary runs the walkthrough against a server it
+// expects at --url (default http://localhost:8080). Use --readme to
+// regenerate WALKTHROUGH.md.
 package main
 
 import (
@@ -16,7 +17,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -29,12 +32,22 @@ import (
 const eventStoreCap = 1000
 
 func main() {
+	for _, arg := range os.Args[1:] {
+		if strings.TrimSpace(arg) == "--serve" {
+			serve()
+			return
+		}
+	}
+	runDemo()
+}
+
+func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
 	token := flag.String("token", "", "Telegram bot token (omit for test mode)")
 	whSecretMode := flag.String("webhook-secret-mode", "server", "webhook secret mode: server | client | identity")
 	whHeaderMode := flag.String("webhook-header-mode", "mcp", "webhook header style: mcp | standard")
 	whRootHex := flag.String("webhook-root", "", "hex-encoded master secret for identity mode (required when -webhook-secret-mode=identity)")
-	flag.Parse()
+	flag.CommandLine.Parse(filterFlags(os.Args[1:]))
 
 	secretMode, err := events.ParseSecretMode(*whSecretMode)
 	if err != nil {

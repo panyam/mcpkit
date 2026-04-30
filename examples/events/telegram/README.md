@@ -1,14 +1,23 @@
 # Telegram Events Example
 
-Reference server demonstrating the [MCP Events spec](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/pull/1) with Telegram as the event source. Built on the [`experimental/ext/events`](../ext/events/) library.
+Reference server demonstrating the [MCP Events spec](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/pull/1) with Telegram as the event source. Built on the [`experimental/ext/events`](../../../experimental/ext/events/) library.
 
-Companion to [Clare Liguori's TypeScript implementation](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/tree/main/telegram-reference-server).
+Companion to [Clare Liguori's TypeScript implementation](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/tree/main/telegram-reference-server). Also a lighter mirror of the [discord-events demo](../discord/) — same protocol, different bot SDK.
+
+## Walkthrough
+
+```bash
+make serve    # terminal 1 — real MCP server
+make demo     # terminal 2 — scripted demokit walkthrough (TUI)
+```
+
+A condensed walkthrough focused on the telegram-specific payload shape and the typed Go SDK at [`experimental/ext/events/clients/go/`](../../../experimental/ext/events/clients/go/). For the full protocol exposition (events/list, poll, secret modes, header modes) see [`../discord/WALKTHROUGH.md`](../discord/WALKTHROUGH.md). See [`WALKTHROUGH.md`](WALKTHROUGH.md) for this demo's specific sequence.
 
 ## Quick Start
 
 ```bash
 # Terminal 1: start server in test mode (no Telegram needed)
-make run
+make serve
 
 # Terminal 2: start SSE listener
 make listen
@@ -135,13 +144,13 @@ Telegram Bot (long-poll)  ──or──  POST /inject
 | `make webhook` | Webhook receiver — subscribe + auto-refresh, receive HMAC-signed POSTs |
 | `make poll` | Polling loop (default 5s interval, override: `INTERVAL=10`) |
 
-All client commands use the shared [`events_client.py`](../ext/events/events_client.py).
+All client commands use the shared [`events_client.py`](../../../experimental/ext/events/clients/python/events_client.py).
 
 ## Webhook secret + header modes
 
 The server takes the same `-webhook-secret-mode` / `-webhook-header-mode` /
 `-webhook-root` flags as discord-events. See
-[`experimental/ext/events/README.md`](../ext/events/) for the full matrix.
+[`experimental/ext/events/README.md`](../../../experimental/ext/events/) for the full matrix.
 
 ```bash
 # Default

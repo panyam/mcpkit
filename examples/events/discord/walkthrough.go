@@ -1,0 +1,411 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/panyam/demokit"
+	"github.com/panyam/demokit/tui"
+	"github.com/panyam/mcpkit/client"
+	"github.com/panyam/mcpkit/core"
+	eventsclient "github.com/panyam/mcpkit/experimental/ext/events/clients/go"
+)
+
+// notifBroker is a tiny multiplexer for `notifications/events/event`. The
+// MCP client only accepts a single notification callback at construction
+// time, so the walkthrough sets one dispatcher that fans events out by
+// name to per-step channels.
+type notifBroker struct {
+	mu      sync.Mutex
+	byName  map[string]chan map[string]any
+}
+
+func newNotifBroker() *notifBroker { return &notifBroker{byName: map[string]chan map[string]any{}} }
+
+// Subscribe returns a buffered channel for notifications/events/event with
+// matching name. Caller is responsible for reading; the broker drops if
+// the channel is full so it can never block the dispatcher.
+func (b *notifBroker) Subscribe(name string, buf int) <-chan map[string]any {
+	ch := make(chan map[string]any, buf)
+	b.mu.Lock()
+	b.byName[name] = ch
+	b.mu.Unlock()
+	return ch
+}
+
+func (b *notifBroker) dispatch(method string, params any) {
+	if method != "notifications/events/event" {
+		return
+	}
+	raw, _ := json.Marshal(params)
+	var p map[string]any
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return
+	}
+	name, _ := p["name"].(string)
+	b.mu.Lock()
+	ch, ok := b.byName[name]
+	b.mu.Unlock()
+	if !ok {
+		return
+	}
+	select {
+	case ch <- p:
+	default:
+	}
+}
+
+// filterFlags strips the dispatcher flags so the inner flag.Parse on -addr
+// (or the demo's flag.Parse) doesn't choke on them.
+func filterFlags(args []string) []string {
+	out := make([]string, 0, len(args))
+	skip := false
+	for _, a := range args {
+		if skip {
+			skip = false
+			continue
+		}
+		switch a {
+		case "--serve", "--tui", "--readme", "--non-interactive":
+			continue
+		case "--url":
+			skip = true
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
+// runDemo drives the demokit walkthrough against a server that the user
+// started separately via `make serve`. Steps walk through every events-spec
+// feature mcpkit currently supports: list, push, poll, cursorless, webhook
+// + auto-refresh, all driven through the typed Go SDK at clients/go.
+func runDemo() {
+	serverURL := "http://localhost:8080"
+	for i, arg := range os.Args[1:] {
+		if arg == "--url" && i+2 < len(os.Args) {
+			serverURL = os.Args[i+2]
+		}
+	}
+	mcpURL := serverURL + "/mcp"
+	injectURL := serverURL + "/inject"
+
+	demo := demokit.New("MCP Events Extension — Discord reference walkthrough").
+		Dir("events/discord").
+		Description("Walks through the four delivery modes of the experimental MCP Events extension (events/list, push via SSE, poll, webhook with TTL refresh) plus the cursored vs cursorless source distinction. Webhook subscriber uses the typed Go SDK at experimental/ext/events/clients/go.").
+		Actors(
+			demokit.Actor("Host", "MCP Host (this client)"),
+			demokit.Actor("Server", "MCP Server (make serve)"),
+			demokit.Actor("Receiver", "Local webhook receiver (this process)"),
+		)
+
+	demo.Section("Setup",
+		"Start the events server in a separate terminal first:",
+		"",
+		"```",
+		"Terminal 1:  make serve         # discord-events server on :8080",
+		"Terminal 2:  make demo          # this walkthrough",
+		"```",
+	)
+
+	demo.Section("What this demo covers",
+		"- **events/list** — the source catalog, including the new `cursorless` flag.",
+		"- **Push** — long-lived SSE stream; `notifications/events/event` arrives in real time.",
+		"- **Poll** — single-subscription `events/poll` (multi-sub batching is not supported).",
+		"- **Cursorless source** — typing indicators that wire as `cursor: null`. Subscribers can't replay, only see live events.",
+		"- **Webhook + auto-refresh** — `events/subscribe` with the typed `Subscription` + `Receiver[Data]` from `clients/go`.",
+		"",
+		"Identity-mode subscribe and Standard Webhooks header naming are exercised by the unit tests in `experimental/ext/events/` and by `discord-events`'s e2e tests; they require the server to be started with mode flags so they're documented in the README rather than driven from this walkthrough.",
+	)
+
+	var (
+		c             *client.Client
+		messageCursor *string
+		broker        = newNotifBroker()
+	)
+
+	// --- Step 1: Connect ---
+	demo.Step("Connect to the events server").
+		Arrow("Host", "Server", "POST /mcp — initialize").
+		DashedArrow("Server", "Host", "serverInfo + capabilities").
+		Note("The mcpkit client opens a GET SSE stream so push notifications reach us during later steps. We're not declaring any extension capability — events/* are server-side custom methods registered via experimental/ext/events. A small in-process broker fans out `notifications/events/event` by name so each step can subscribe just to what it cares about.").
+		Run(func() (result *demokit.StepResult) {
+			c = client.NewClient(mcpURL,
+				core.ClientInfo{Name: "discord-events-host", Version: "1.0"},
+				client.WithGetSSEStream(),
+				client.WithNotificationCallback(broker.dispatch),
+			)
+			if err := c.Connect(); err != nil {
+				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
+				return
+			}
+			fmt.Printf("    Connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)
+			return
+		})
+
+	// --- Step 2: events/list ---
+	demo.Step("events/list — see the source catalog").
+		Arrow("Host", "Server", "events/list").
+		DashedArrow("Server", "Host", "[discord.message (cursored), discord.typing (cursorless)]").
+		Note("The new `cursorless` flag (added in PR B) tells subscribers whether the source supports cursor-based replay. discord.message buffers events and accepts cursors; discord.typing emits ephemerally and always wires cursor:null.").
+		Run(func() (result *demokit.StepResult) {
+			res, err := c.Call("events/list", map[string]any{})
+			if err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				return
+			}
+			var resp struct {
+				Events []struct {
+					Name        string   `json:"name"`
+					Description string   `json:"description"`
+					Delivery    []string `json:"delivery"`
+					Cursorless  bool     `json:"cursorless"`
+				} `json:"events"`
+			}
+			if err := json.Unmarshal(res.Raw, &resp); err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				return
+			}
+			for _, e := range resp.Events {
+				flag := "cursored"
+				if e.Cursorless {
+					flag = "CURSORLESS"
+				}
+				fmt.Printf("    %-20s %-12s delivery=%v\n", e.Name, "["+flag+"]", e.Delivery)
+			}
+			return
+		})
+
+	// --- Step 3: Push delivery ---
+	demo.Step("Push: inject a message, observe SSE notification").
+		Arrow("Receiver", "Server", "POST /inject (simulated Discord message)").
+		DashedArrow("Server", "Host", "notifications/events/event (via SSE)").
+		Note("The /inject endpoint is the demo's stand-in for a real Discord WebSocket handler; in production the bot's MessageCreate handler calls yield(). Either way, the YieldingSource fans out: the library installs an emit hook that broadcasts the event to all SSE subscribers.").
+		Run(func() (result *demokit.StepResult) {
+			gotEvent := broker.Subscribe("discord.message", 4)
+
+			body := map[string]any{
+				"guild_id":   "demo-guild",
+				"channel_id": "demo-channel",
+				"sender":     "alice",
+				"text":       "hello from the walkthrough",
+			}
+			if err := postInject(injectURL, "discord.message", body); err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				return
+			}
+
+			select {
+			case p := <-gotEvent:
+				if cur, ok := p["cursor"].(string); ok {
+					cc := cur
+					messageCursor = &cc
+				}
+				fmt.Printf("    name:    %v\n", p["name"])
+				fmt.Printf("    eventId: %v\n", p["eventId"])
+				fmt.Printf("    cursor:  %v\n", p["cursor"])
+				if d, ok := p["data"].(map[string]any); ok {
+					fmt.Printf("    text:    %v (from %v)\n", d["content"], d["author"])
+				}
+			case <-time.After(3 * time.Second):
+				fmt.Printf("    ERROR: no push notification within 3s\n")
+			}
+			return
+		})
+
+	// --- Step 4: Poll delivery ---
+	demo.Step("Poll: events/poll with the cursor we just saw").
+		Arrow("Host", "Server", "events/poll {subscriptions: [{name: discord.message, cursor: <head>}]}").
+		DashedArrow("Server", "Host", "{events: [], cursor: <head>, hasMore: false}").
+		Note("Single-subscription per call (PR B removed batching). Polling at the head returns no new events but advances the cursor — the same response shape that would carry events if any had arrived since the last poll.").
+		Run(func() (result *demokit.StepResult) {
+			cursor := "0"
+			if messageCursor != nil {
+				cursor = *messageCursor
+			}
+			res, err := c.Call("events/poll", map[string]any{
+				"subscriptions": []map[string]any{
+					{"id": "demo-poll", "name": "discord.message", "cursor": cursor},
+				},
+			})
+			if err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				return
+			}
+			var resp struct {
+				Results []struct {
+					ID      string  `json:"id"`
+					Cursor  *string `json:"cursor"`
+					HasMore bool    `json:"hasMore"`
+					Events  []any   `json:"events"`
+				} `json:"results"`
+			}
+			_ = json.Unmarshal(res.Raw, &resp)
+			if len(resp.Results) == 0 {
+				fmt.Printf("    ERROR: no result\n")
+				return
+			}
+			r := resp.Results[0]
+			c := "(none)"
+			if r.Cursor != nil {
+				c = *r.Cursor
+			}
+			fmt.Printf("    events:  %d  cursor: %s  hasMore: %v\n", len(r.Events), c, r.HasMore)
+			return
+		})
+
+	// --- Step 5: Cursorless source ---
+	demo.Step("Cursorless: inject a typing event, observe cursor:null on the wire").
+		Arrow("Receiver", "Server", "POST /inject?event=discord.typing").
+		DashedArrow("Server", "Host", "notifications/events/event { cursor: null }").
+		Note("WithoutCursors() sources don't buffer and emit cursor:null. Push and webhook fanout still work — there's just nothing to replay. Useful for ephemeral state (typing indicators, presence, current readings).").
+		Run(func() (result *demokit.StepResult) {
+			gotEvent := broker.Subscribe("discord.typing", 4)
+
+			body := map[string]any{
+				"guild_id":   "demo-guild",
+				"channel_id": "demo-channel",
+				"user":       "alice",
+			}
+			if err := postInject(injectURL, "discord.typing", body); err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				return
+			}
+
+			select {
+			case p := <-gotEvent:
+				cursorVal, present := p["cursor"]
+				fmt.Printf("    name:        %v\n", p["name"])
+				fmt.Printf("    cursor:      %v (present=%v)\n", cursorVal, present)
+				if cursorVal != nil {
+					fmt.Printf("    UNEXPECTED: cursorless events should wire as cursor:null\n")
+				}
+				if d, ok := p["data"].(map[string]any); ok {
+					fmt.Printf("    user:        %v\n", d["user"])
+					fmt.Printf("    started_at:  %v\n", d["started_at"])
+				}
+			case <-time.After(3 * time.Second):
+				fmt.Printf("    ERROR: no typing event within 3s\n")
+			}
+			return
+		})
+
+	// --- Step 6: Webhook + auto-refresh via Go SDK ---
+	demo.Step("Webhook: subscribe via the typed Go SDK, observe HMAC delivery + auto-refresh").
+		Arrow("Receiver", "Receiver", "spin up local httptest receiver on :random").
+		Arrow("Host", "Server", "events/subscribe { mode: webhook, url, secret: ignored }").
+		DashedArrow("Server", "Host", "{ id, secret: <server-assigned>, refreshBefore }").
+		Arrow("Receiver", "Server", "POST /inject (simulated message)").
+		DashedArrow("Server", "Receiver", "POST <url> + X-MCP-Signature, X-MCP-Timestamp").
+		DashedArrow("Host", "Host", "background loop: re-subscribe at 0.5 × TTL").
+		Note("clients/go provides Subscription (subscribe + auto-refresh) plus Receiver[Data] (typed inbound channel). Subscribe blocks until the initial subscribe lands, so the caller has the server-assigned secret synchronously. Receiver[DiscordEventData] verifies signatures and decodes the wire envelope into the typed Data shape, so the consumer reads `ev.Data.Content` rather than re-parsing JSON.").
+		Run(func() (result *demokit.StepResult) {
+			recv := eventsclient.NewReceiver[DiscordEventData]("")
+			defer recv.Close()
+
+			hookSrv := httptest.NewServer(recv)
+			defer hookSrv.Close()
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			var refreshes int32
+			sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
+				EventName:     "discord.message",
+				CallbackURL:   hookSrv.URL,
+				SubID:         "demo-webhook",
+				RefreshFactor: 0.5,
+				OnRefresh:     func() { atomic.AddInt32(&refreshes, 1) },
+			})
+			if err != nil {
+				fmt.Printf("    ERROR: subscribe failed: %v\n", err)
+				return
+			}
+			defer sub.Stop()
+			recv.SetSecret(sub.Secret())
+			fmt.Printf("    server-assigned secret:  %s...\n", truncate(sub.Secret(), 16))
+			fmt.Printf("    refreshBefore:           %s\n", sub.RefreshBefore().Format(time.RFC3339))
+
+			body := map[string]any{
+				"guild_id":   "demo-guild",
+				"channel_id": "demo-channel",
+				"sender":     "bob",
+				"text":       "hello via webhook",
+			}
+			if err := postInject(injectURL, "discord.message", body); err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				return
+			}
+
+			select {
+			case ev := <-recv.Events():
+				fmt.Printf("    Receiver got typed event:\n")
+				fmt.Printf("      name:    %s\n", ev.Name)
+				fmt.Printf("      eventId: %s\n", ev.EventID)
+				fmt.Printf("      cursor:  %s\n", ev.CursorStr())
+				fmt.Printf("      content: %q (from %s)\n", ev.Data.Content, ev.Data.Author.Username)
+			case <-time.After(3 * time.Second):
+				fmt.Printf("    ERROR: no webhook delivery within 3s\n")
+				return
+			}
+
+			fmt.Printf("    on_refresh callbacks fired so far: %d (initial subscribe + any auto-refreshes)\n",
+				atomic.LoadInt32(&refreshes))
+			return
+		})
+
+	demo.Section("Where each piece lives in mcpkit",
+		"- Events library: `experimental/ext/events/`",
+		"- Go client SDK (`Subscription`, `Receiver[Data]`): `experimental/ext/events/clients/go/`",
+		"- Python client SDK (`WebhookSubscription` class + `webhook` CLI): `experimental/ext/events/clients/python/events_client.py`",
+		"- Demo source: `examples/events/discord/`",
+		"- Companion demo: `examples/events/telegram/` (lighter walkthrough — same protocol, different bot SDK)",
+	)
+
+	for _, arg := range os.Args[1:] {
+		if strings.TrimSpace(arg) == "--tui" {
+			demo.WithRenderer(tui.New())
+			break
+		}
+	}
+
+	demo.Execute()
+
+	if c != nil {
+		c.Close()
+	}
+}
+
+// postInject is a tiny helper to POST a JSON body to /inject?event=<name>.
+// Used by the steps that simulate an external event source.
+func postInject(injectURL, eventName string, body map[string]any) error {
+	raw, _ := json.Marshal(body)
+	url := injectURL + "?event=" + eventName
+	resp, err := http.Post(url, "application/json", bytes.NewReader(raw))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("inject returned %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// truncate returns a short prefix for display.
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
+}

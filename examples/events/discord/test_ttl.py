@@ -34,7 +34,10 @@ import time
 from pathlib import Path
 
 # Reuse the production helpers — we are testing them, after all.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ext" / "events"))
+# Demos live at examples/events/<name>/, the events client lives at
+# experimental/ext/events/. Walk three parents up from this file to reach
+# the repo root, then descend into experimental/ext/events.
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "experimental" / "ext" / "events" / "clients" / "python"))
 from events_client import MCPSession, WebhookSubscription, _make_webhook_handler  # noqa: E402
 
 
