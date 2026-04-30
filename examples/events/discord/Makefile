@@ -2,20 +2,31 @@ ADDR ?= http://localhost:8080
 MCP  := $(ADDR)/mcp
 EVENT := discord.message
 RESOURCE_URI := discord://messages/recent
-EVENTS_CLIENT := python3 ../ext/events/events_client.py --mcp $(MCP) --event $(EVENT) --resource-uri $(RESOURCE_URI)
+EVENTS_CLIENT := python3 ../../../experimental/ext/events/clients/python/events_client.py --mcp $(MCP) --event $(EVENT) --resource-uri $(RESOURCE_URI)
 
 # ── Build & Run ──────────────────────────────────────────────────────
 # Usage: make run                              — test mode (no Discord)
 #        DISCORD_BOT_TOKEN=... make run  — with Discord bot
 
-run:
+run: serve  ## Alias for serve
+
+serve: ## Start the discord-events server standalone (also works with MCPJam, VS Code, Claude Desktop)
 	@if [ -n "$(DISCORD_BOT_TOKEN)" ]; then \
 	  echo "Starting with Discord bot..."; \
-	  go run . -addr :8080 -token "$(DISCORD_BOT_TOKEN)"; \
+	  go run . --serve -addr :8080 -token "$(DISCORD_BOT_TOKEN)"; \
 	else \
 	  echo "Starting in test mode (no Discord token)..."; \
-	  go run . -addr :8080; \
+	  go run . --serve -addr :8080; \
 	fi
+
+demo: ## Run the demokit walkthrough (interactive, TUI). Server must be up via `make serve` in another terminal.
+	go run . --tui
+
+readme: ## Regenerate WALKTHROUGH.md from demo definitions
+	go run . --readme > WALKTHROUGH.md
+
+build: ## Build the binary
+	go build -o discord-events-demo .
 
 # ── Tests ────────────────────────────────────────────────────────────
 
@@ -48,7 +59,7 @@ test-ttl:
 	@bash -c '\
 	  set -e; \
 	  go build -o /tmp/discord-events-ttl-bin . ; \
-	  /tmp/discord-events-ttl-bin -addr :$(TTL_PORT) -webhook-ttl $(TTL_SECONDS)s > /tmp/discord-events-ttl.log 2>&1 & \
+	  /tmp/discord-events-ttl-bin --serve -addr :$(TTL_PORT) -webhook-ttl $(TTL_SECONDS)s > /tmp/discord-events-ttl.log 2>&1 & \
 	  SERVER_PID=$$!; \
 	  trap "kill -9 $$SERVER_PID 2>/dev/null || true; lsof -ti :$(TTL_PORT) 2>/dev/null | xargs -r kill -9 2>/dev/null || true; rm -f /tmp/discord-events-ttl-bin" EXIT; \
 	  for i in 1 2 3 4 5 6 7 8 9 10; do \
@@ -90,4 +101,4 @@ webhook:
 poll:
 	@$(EVENTS_CLIENT) poll --interval $(or $(INTERVAL),5)
 
-.PHONY: run test test-race test-ttl inject inject-typing list listen webhook poll
+.PHONY: run serve demo readme build test test-race test-ttl inject inject-typing list listen webhook poll

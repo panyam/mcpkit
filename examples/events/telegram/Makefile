@@ -2,20 +2,31 @@ ADDR ?= http://localhost:8080
 MCP  := $(ADDR)/mcp
 EVENT := telegram.message
 RESOURCE_URI := telegram://messages/recent
-EVENTS_CLIENT := python3 ../ext/events/events_client.py --mcp $(MCP) --event $(EVENT) --resource-uri $(RESOURCE_URI)
+EVENTS_CLIENT := python3 ../../../experimental/ext/events/clients/python/events_client.py --mcp $(MCP) --event $(EVENT) --resource-uri $(RESOURCE_URI)
 
 # ── Build & Run ──────────────────────────────────────────────────────
 # Usage: make run                                — test mode (no Telegram)
 #        TELEGRAM_BOT_TOKEN=... make run   — with Telegram bot
 
-run:
+run: serve  ## Alias for serve
+
+serve: ## Start the telegram-events server standalone (also works with MCPJam, VS Code, Claude Desktop)
 	@if [ -n "$(TELEGRAM_BOT_TOKEN)" ]; then \
 	  echo "Starting with Telegram bot..."; \
-	  go run . -addr :8080 -token "$(TELEGRAM_BOT_TOKEN)"; \
+	  go run . --serve -addr :8080 -token "$(TELEGRAM_BOT_TOKEN)"; \
 	else \
 	  echo "Starting in test mode (no Telegram token)..."; \
-	  go run . -addr :8080; \
+	  go run . --serve -addr :8080; \
 	fi
+
+demo: ## Run the demokit walkthrough (interactive, TUI). Server must be up via `make serve` in another terminal.
+	go run . --tui
+
+readme: ## Regenerate WALKTHROUGH.md from demo definitions
+	go run . --readme > WALKTHROUGH.md
+
+build: ## Build the binary
+	go build -o telegram-events-demo .
 
 # ── Tests ────────────────────────────────────────────────────────────
 
@@ -49,4 +60,4 @@ webhook:
 poll:
 	@$(EVENTS_CLIENT) poll --interval $(or $(INTERVAL),5)
 
-.PHONY: run test test-race inject inject-typing list listen webhook poll
+.PHONY: run serve demo readme build test test-race inject inject-typing list listen webhook poll

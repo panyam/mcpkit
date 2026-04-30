@@ -1,14 +1,25 @@
 # Discord Events Example
 
-Reference server demonstrating the [MCP Events spec](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/pull/1) with Discord as the event source. Built on the [`experimental/ext/events`](../ext/events/) library.
+Reference server demonstrating the [MCP Events spec](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/pull/1) with Discord as the event source. Built on the [`experimental/ext/events`](../../../experimental/ext/events/) library.
 
-Companion to the [Telegram example](../telegram-events/) — shows the events library handles structurally different payloads (Discord has nested author objects, embeds, threads, mentions vs Telegram's flat text model).
+Companion to the [Telegram example](../telegram/) — shows the events library handles structurally different payloads (Discord has nested author objects, embeds, threads, mentions vs Telegram's flat text model).
+
+## Walkthrough
+
+The canonical demo for the events extension. Two terminals:
+
+```bash
+make serve    # terminal 1 — real MCP server
+make demo     # terminal 2 — scripted demokit walkthrough (TUI)
+```
+
+The walkthrough drives every protocol feature end-to-end: `events/list`, push (SSE), poll (cursor), the cursorless typing source (`cursor: null`), and webhook subscribe with TTL auto-refresh via the typed Go SDK at [`experimental/ext/events/clients/go/`](../../../experimental/ext/events/clients/go/). See [`WALKTHROUGH.md`](WALKTHROUGH.md) for the full sequence diagram and step-by-step explanation.
 
 ## Quick Start
 
 ```bash
 # Terminal 1: start server in test mode (no Discord needed)
-make run
+make serve
 
 # Terminal 2: start SSE listener
 make listen
@@ -171,12 +182,12 @@ typed accessors (for resource reads).
 | `make webhook` | Webhook receiver — subscribe + auto-refresh, receive HMAC-signed POSTs |
 | `make poll` | Polling loop (default 5s interval, override: `INTERVAL=10`) |
 
-All client commands use the shared [`events_client.py`](../ext/events/events_client.py).
+All client commands use the shared [`events_client.py`](../../../experimental/ext/events/clients/python/events_client.py).
 
 ## Webhook secret + header modes
 
 The server flags select per-registry secret and header modes (see
-[`experimental/ext/events/README.md`](../ext/events/) for the full matrix).
+[`experimental/ext/events/README.md`](../../../experimental/ext/events/) for the full matrix).
 
 ```bash
 # Default: server-generated secrets, X-MCP-* headers
