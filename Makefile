@@ -65,10 +65,10 @@ testconf-tasks: ## Run MCP Tasks v1 conformance (builds + starts server, runs te
 
 testconf-tasks-v2: ## Run MCP Tasks v2 conformance (builds + starts server, runs tests, tears down)
 	@(cd examples/tasks-v2 && go build -o tasks-v2 .) && \
-	examples/tasks-v2/tasks-v2 -addr :18092 & PID=$$!; \
+	examples/tasks-v2/tasks-v2 --serve -addr :18092 & PID=$$!; \
 	sleep 1; \
 	(cd conformance && npm install --silent && \
-	SERVER_URL=http://localhost:18092/mcp npx tsx --test --test-name-pattern 'v2-(?!1[67])' tasks-v2/scenarios.test.ts); \
+	SERVER_URL=http://localhost:18092/mcp npx tsx --test tasks-v2/scenarios.test.ts); \
 	RC=$$?; kill $$PID 2>/dev/null; wait $$PID 2>/dev/null; exit $$RC
 
 testconf-elicitation: ## Run elicitation conformance suite (SEP-1036 URL mode + form, requires Node.js, target server must be running)

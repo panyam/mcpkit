@@ -134,6 +134,59 @@ func serve() {
 		},
 	)
 
+	// confirm_delete: required task support, demonstrates the SEP-2663 MRTR
+	// elicit → tasks/update → complete loop. The tool calls TaskElicit, parks
+	// the task in input_required (which surfaces inputRequests on tasks/get),
+	// and resumes when the client sends the matching response via tasks/update.
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "confirm_delete",
+			Description: "Asks the client to confirm before deleting (demonstrates SEP-2663 inputRequests/inputResponses).",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"filename": map[string]any{
+						"type":        "string",
+						"description": "File the user is being asked to confirm deletion of",
+						"default":     "important.txt",
+					},
+				},
+			},
+			Execution: &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			tc := server.GetTaskContext(ctx)
+			if tc == nil {
+				return core.ToolResult{}, fmt.Errorf("confirm_delete requires task context")
+			}
+
+			var args struct {
+				Filename string `json:"filename"`
+			}
+			json.Unmarshal(req.Arguments, &args)
+			if args.Filename == "" {
+				args.Filename = "important.txt"
+			}
+
+			log.Printf("[confirm_delete] asking about %q (parking task in input_required)...", args.Filename)
+			result, err := tc.TaskElicit(core.ElicitationRequest{
+				Message:         fmt.Sprintf("Delete '%s'?", args.Filename),
+				RequestedSchema: json.RawMessage(`{"type":"object","properties":{"confirm":{"type":"boolean"}},"required":["confirm"]}`),
+			})
+			if err != nil {
+				return core.TextResult(fmt.Sprintf("elicitation failed: %v", err)), nil
+			}
+			if result.Action == "accept" {
+				if confirmed, _ := result.Content["confirm"].(bool); confirmed {
+					log.Printf("[confirm_delete] user confirmed; deleting %q", args.Filename)
+					return core.TextResult(fmt.Sprintf("deleted '%s'", args.Filename)), nil
+				}
+			}
+			log.Printf("[confirm_delete] user declined; keeping %q", args.Filename)
+			return core.TextResult(fmt.Sprintf("kept '%s'", args.Filename)), nil
+		},
+	)
+
 	// protocol_error_job: required task support. Triggers a protocol-level failure
 	// by panicking. In v2, protocol errors → failed + error field.
 	srv.RegisterTool(
@@ -206,8 +259,9 @@ func serve() {
 	log.Printf("  greet              — sync-only")
 	log.Printf("  slow_compute       — optional task (server-directed)")
 	log.Printf("  failing_job        — required task (tool error → completed + isError)")
+	log.Printf("  confirm_delete     — required task (input_required → tasks/update → completed)")
 	log.Printf("  protocol_error_job — required task (protocol error → failed + error)")
-	log.Printf("  external_job       �� required task (TaskCallbacks proxy)")
+	log.Printf("  external_job       — required task (TaskCallbacks proxy)")
 	if err := srv.Run(*addr); err != nil {
 		log.Fatal(err)
 	}
