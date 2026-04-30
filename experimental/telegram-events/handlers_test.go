@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -21,27 +22,34 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// newTestStore creates a MessageStore pre-loaded with n messages.
-func newTestStore(n int) *MessageStore {
-	store := NewMessageStore(1000)
+// preloadedSource constructs a YieldingSource pre-populated with n test
+// messages — the test fixture replacement for the old newTestStore helper.
+func preloadedSource(n int) (*events.YieldingSource[TelegramEventData], func(TelegramEventData) error) {
+	source, yield := newTelegramSource()
 	for i := 1; i <= n; i++ {
-		store.Add(100, "testuser", fmt.Sprintf("message %d", i), time.Unix(int64(1000+i), 0))
+		_ = yield(TelegramEventData{
+			ChatID:    "100",
+			MessageID: strconv.Itoa(i),
+			User:      "testuser",
+			Text:      fmt.Sprintf("message %d", i),
+			Timestamp: time.Unix(int64(1000+i), 0).Format(time.RFC3339),
+		})
 	}
-	return store
+	return source, yield
 }
 
 // newConnectedClient creates a fully wired MCP server, starts it on httptest,
-// connects a client, and returns both.
-func newConnectedClient(t *testing.T, store *MessageStore, webhooks *events.WebhookRegistry) (*client.Client, *httptest.Server) {
+// connects a client, and returns both. Used by the handler-level tests below.
+func newConnectedClient(t *testing.T, source *events.YieldingSource[TelegramEventData], webhooks *events.WebhookRegistry) (*client.Client, *httptest.Server) {
 	t.Helper()
 	srv := server.NewServer(
 		core.ServerInfo{Name: "telegram-events-test", Version: "0.1.0"},
 		server.WithSubscriptions(),
 	)
-	registerResources(srv, store)
-	(&ToolDelivery{Bot: nil}).Register(srv, store)
+	registerResources(srv, source)
+	(&ToolDelivery{Bot: nil}).Register(srv)
 	events.Register(events.Config{
-		Sources:  []events.EventSource{newTelegramSource(store)},
+		Sources:  []events.EventSource{source},
 		Webhooks: webhooks,
 		Server:   srv,
 	})
@@ -64,10 +72,11 @@ type pollResult struct {
 	NextPollSeconds int            `json:"nextPollSeconds"`
 }
 
-// TestEventsPollCursorPagination verifies events/poll cursor pagination.
+// TestEventsPollCursorPagination verifies events/poll cursor pagination works
+// end-to-end against the YieldingSource path. Two pages of 5 cover all 10.
 func TestEventsPollCursorPagination(t *testing.T) {
-	store := newTestStore(10)
-	c, _ := newConnectedClient(t, store, events.NewWebhookRegistry())
+	source, _ := preloadedSource(10)
+	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry())
 
 	result, err := c.Call("events/poll", map[string]any{
 		"maxEvents": 5,
@@ -97,10 +106,11 @@ func TestEventsPollCursorPagination(t *testing.T) {
 	assert.Equal(t, "10", resp2.Results[0].Cursor)
 }
 
-// TestEventsPollEmptyStore verifies polling an empty store.
+// TestEventsPollEmptyStore verifies polling an empty source returns no events
+// and a stable cursor — sanity check for the no-data case.
 func TestEventsPollEmptyStore(t *testing.T) {
-	store := NewMessageStore(1000)
-	c, _ := newConnectedClient(t, store, events.NewWebhookRegistry())
+	source, _ := newTelegramSource()
+	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry())
 
 	result, err := c.Call("events/poll", map[string]any{
 		"subscriptions": []map[string]any{
@@ -116,10 +126,11 @@ func TestEventsPollEmptyStore(t *testing.T) {
 	assert.Equal(t, "0", resp.Results[0].Cursor)
 }
 
-// TestEventsPollUnknownEvent verifies unknown event name returns per-sub error.
+// TestEventsPollUnknownEvent verifies unknown event names return a per-sub
+// error rather than failing the whole batch — preserves spec semantics.
 func TestEventsPollUnknownEvent(t *testing.T) {
-	store := NewMessageStore(1000)
-	c, _ := newConnectedClient(t, store, events.NewWebhookRegistry())
+	source, _ := newTelegramSource()
+	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry())
 
 	result, err := c.Call("events/poll", map[string]any{
 		"subscriptions": []map[string]any{
@@ -143,35 +154,37 @@ func TestEventsPollUnknownEvent(t *testing.T) {
 	assert.Equal(t, -32001, resp.Results[0].Error.Code)
 }
 
-// TestResourceRecentMessages verifies the recent messages resource.
+// TestResourceRecentMessages verifies the recent messages resource returns
+// typed payloads from the YieldingSource — no separate buffer involved.
 func TestResourceRecentMessages(t *testing.T) {
-	store := newTestStore(3)
-	c, _ := newConnectedClient(t, store, events.NewWebhookRegistry())
+	source, _ := preloadedSource(3)
+	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry())
 
 	text, err := c.ReadResource("telegram://messages/recent")
 	require.NoError(t, err)
 
-	var msgs []Message
-	require.NoError(t, json.Unmarshal([]byte(text), &msgs))
-	assert.Len(t, msgs, 3)
-	assert.Equal(t, "message 1", msgs[0].Text)
+	var payloads []TelegramEventData
+	require.NoError(t, json.Unmarshal([]byte(text), &payloads))
+	assert.Len(t, payloads, 3)
+	assert.Equal(t, "message 1", payloads[0].Text)
 }
 
-// TestResourceMessageByID verifies the message-by-ID template resource.
-func TestResourceMessageByID(t *testing.T) {
-	store := newTestStore(3)
-	c, _ := newConnectedClient(t, store, events.NewWebhookRegistry())
+// TestResourceMessageByCursor verifies the per-message template resolves
+// {cursor} to the matching event payload. Cursor is the addressing scheme.
+func TestResourceMessageByCursor(t *testing.T) {
+	source, _ := preloadedSource(3)
+	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry())
 
 	text, err := c.ReadResource("telegram://message/2")
 	require.NoError(t, err)
 
-	var msg Message
-	require.NoError(t, json.Unmarshal([]byte(text), &msg))
-	assert.Equal(t, int64(2), msg.ID)
-	assert.Equal(t, "message 2", msg.Text)
+	var payload TelegramEventData
+	require.NoError(t, json.Unmarshal([]byte(text), &payload))
+	assert.Equal(t, "message 2", payload.Text)
 }
 
-// TestWebhookHMACSignature verifies HMAC-SHA256(secret, ts + "." + body) signing.
+// TestWebhookHMACSignature verifies HMAC-SHA256(secret, ts + "." + body)
+// signing matches what receivers expect — protocol-level webhook contract.
 func TestWebhookHMACSignature(t *testing.T) {
 	secret := "test-secret-key"
 	var receivedBody []byte
@@ -206,62 +219,11 @@ func TestWebhookHMACSignature(t *testing.T) {
 	assert.Equal(t, expectedSig, receivedSig)
 }
 
-// TestMessageStoreCursorSemantics verifies cursor-based retrieval.
-func TestMessageStoreCursorSemantics(t *testing.T) {
-	store := NewMessageStore(100)
-	store.Add(1, "alice", "first", time.Now())
-	store.Add(1, "bob", "second", time.Now())
-	store.Add(1, "carol", "third", time.Now())
-
-	pr := store.GetSince(0, 100)
-	assert.Len(t, pr.Messages, 3)
-	assert.Equal(t, int64(3), pr.NextCursor)
-	assert.False(t, pr.CursorGap)
-
-	pr = store.GetSince(1, 100)
-	assert.Len(t, pr.Messages, 2)
-	assert.Equal(t, "second", pr.Messages[0].Text)
-
-	pr = store.GetSince(3, 100)
-	assert.Empty(t, pr.Messages)
-	assert.Equal(t, int64(3), pr.NextCursor)
-}
-
-// TestMessageStoreCursorGap verifies stale cursor detection.
-func TestMessageStoreCursorGap(t *testing.T) {
-	store := NewMessageStore(3)
-	for i := 1; i <= 3; i++ {
-		store.Add(1, "user", fmt.Sprintf("msg %d", i), time.Now())
-	}
-	pr := store.GetSince(2, 100)
-	assert.False(t, pr.CursorGap)
-
-	for i := 4; i <= 10; i++ {
-		store.Add(1, "user", fmt.Sprintf("msg %d", i), time.Now())
-	}
-	pr = store.GetSince(2, 100)
-	assert.True(t, pr.CursorGap)
-	assert.Len(t, pr.Messages, 3)
-	assert.Equal(t, "msg 8", pr.Messages[0].Text)
-}
-
-// TestMessageStoreRingBuffer verifies ring buffer eviction.
-func TestMessageStoreRingBuffer(t *testing.T) {
-	store := NewMessageStore(3)
-	for i := 1; i <= 5; i++ {
-		store.Add(1, "user", fmt.Sprintf("msg %d", i), time.Now())
-	}
-	assert.Equal(t, 3, store.Len())
-	recent := store.Recent(10)
-	assert.Len(t, recent, 3)
-	assert.Equal(t, "msg 3", recent[0].Text)
-	assert.Equal(t, "msg 5", recent[2].Text)
-}
-
-// TestEventsPollHasMore verifies hasMore when maxEvents truncates results.
+// TestEventsPollHasMore verifies hasMore is set when maxEvents truncates the
+// result. Critical for clients deciding whether to poll again immediately.
 func TestEventsPollHasMore(t *testing.T) {
-	store := newTestStore(5)
-	c, _ := newConnectedClient(t, store, events.NewWebhookRegistry())
+	source, _ := preloadedSource(5)
+	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry())
 
 	result, err := c.Call("events/poll", map[string]any{
 		"maxEvents": 3,
@@ -290,11 +252,13 @@ func TestEventsPollHasMore(t *testing.T) {
 	assert.False(t, resp2.Results[0].HasMore)
 }
 
-// TestSubscribeReturnsRefreshBefore verifies mandatory refreshBefore field.
+// TestSubscribeReturnsRefreshBefore verifies the mandatory refreshBefore
+// field is populated and in the future — clients use this to schedule TTL
+// refresh.
 func TestSubscribeReturnsRefreshBefore(t *testing.T) {
-	store := NewMessageStore(1000)
+	source, _ := newTelegramSource()
 	webhooks := events.NewWebhookRegistry()
-	c, _ := newConnectedClient(t, store, webhooks)
+	c, _ := newConnectedClient(t, source, webhooks)
 
 	result, err := c.Call("events/subscribe", map[string]any{
 		"id":       "rb-test",
@@ -316,7 +280,8 @@ func TestSubscribeReturnsRefreshBefore(t *testing.T) {
 	assert.True(t, rb.After(time.Now()))
 }
 
-// TestWebhookKeyedByURLAndID verifies (url, id) composite keying.
+// TestWebhookKeyedByURLAndID verifies (url, id) composite keying — two
+// distinct subscriptions to the same URL coexist.
 func TestWebhookKeyedByURLAndID(t *testing.T) {
 	webhooks := events.NewWebhookRegistry()
 	webhooks.Register("sub-1", "http://example.com/hook", "secret-1")
@@ -331,17 +296,19 @@ func TestWebhookKeyedByURLAndID(t *testing.T) {
 	assert.Equal(t, "sub-2", targets[0].ID)
 }
 
-// TestWebhookTTLExpiry verifies TTL-based expiry.
+// TestWebhookTTLExpiry verifies the test-helper ExpireAll path does what
+// it claims — used by other tests that exercise post-TTL behavior.
 func TestWebhookTTLExpiry(t *testing.T) {
 	webhooks := events.NewWebhookRegistry()
 	webhooks.Register("exp-test", "http://example.com/hook", "secret")
 	assert.Len(t, webhooks.Targets(), 1)
 
-	webhooks.ExpireAll() // test helper
+	webhooks.ExpireAll()
 	assert.Empty(t, webhooks.Targets())
 }
 
-// TestWebhookRetryOnServerError verifies retry with backoff on 5xx.
+// TestWebhookRetryOnServerError verifies retry-with-backoff on 5xx responses
+// per spec. Three attempts: first two return 500, third returns 200.
 func TestWebhookRetryOnServerError(t *testing.T) {
 	var mu sync.Mutex
 	var attempts int
@@ -373,7 +340,8 @@ func TestWebhookRetryOnServerError(t *testing.T) {
 	assert.Equal(t, 3, attempts)
 }
 
-// TestWebhookNoRetryOn4xx verifies 4xx errors are not retried.
+// TestWebhookNoRetryOn4xx verifies 4xx responses are NOT retried — receivers
+// signaling a permanent client error should stop, per spec.
 func TestWebhookNoRetryOn4xx(t *testing.T) {
 	var mu sync.Mutex
 	var attempts int
@@ -400,7 +368,8 @@ func TestWebhookNoRetryOn4xx(t *testing.T) {
 	assert.Equal(t, 1, attempts)
 }
 
-// TestVerifySignature verifies the HMAC verification helper.
+// TestVerifySignature verifies the HMAC verification helper used by clients
+// to validate incoming webhooks.
 func TestVerifySignature(t *testing.T) {
 	secret := "my-secret"
 	ts := "1700000000"

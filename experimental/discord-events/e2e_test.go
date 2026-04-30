@@ -17,30 +17,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func buildTestStack() (*server.Server, *MessageStore, *events.WebhookRegistry) {
-	store := NewMessageStore(1000)
+// buildTestStack constructs a server + source + yield closure used by all
+// e2e tests. The source and yield are returned so tests can directly publish
+// events without spinning up a Discord session.
+func buildTestStack() (*server.Server, *events.YieldingSource[DiscordEventData], func(DiscordEventData) error, *events.WebhookRegistry) {
 	webhooks := events.NewWebhookRegistry()
+	source, yield := newDiscordSource()
 
 	srv := server.NewServer(
 		core.ServerInfo{Name: "discord-events-test", Version: "0.1.0"},
 		server.WithSubscriptions(),
 	)
-	registerResources(srv, store)
+	registerResources(srv, source)
 	registerTools(srv, nil) // nil session = test mode
 	events.Register(events.Config{
-		Sources:  []events.EventSource{newDiscordSource(store)},
+		Sources:  []events.EventSource{source},
 		Webhooks: webhooks,
 		Server:   srv,
 	})
 
-	store.OnMessage = func(msg Message) {
-		event := messageToEvent(msg)
-		events.Emit(srv, event)
-		srv.NotifyResourceUpdated("discord://messages/recent")
-		events.EmitToWebhooks(webhooks, event)
-	}
-
-	return srv, store, webhooks
+	return srv, source, yield, webhooks
 }
 
 func connectClient(t *testing.T, srv *server.Server) (*client.Client, *httptest.Server) {
@@ -61,13 +57,15 @@ type pollResult struct {
 	HasMore bool           `json:"hasMore"`
 }
 
-// TestE2EPollDelivery verifies events/poll with Discord messages.
+// TestE2EPollDelivery verifies events/poll returns events that were yielded
+// via the YieldingSource path. Confirms the library's internal Poll handler
+// reads through the user-provided EventStore correctly.
 func TestE2EPollDelivery(t *testing.T) {
-	srv, store, _ := buildTestStack()
+	srv, _, yield, _ := buildTestStack()
 	c, _ := connectClient(t, srv)
 
-	store.Add("guild-1", "channel-1", "alice", "hello", time.Now())
-	store.Add("guild-1", "channel-1", "bob", "world", time.Now())
+	require.NoError(t, yield(newDiscordEvent("guild-1", "channel-1", "alice", "hello", time.Now())))
+	require.NoError(t, yield(newDiscordEvent("guild-1", "channel-1", "bob", "world", time.Now())))
 
 	result, err := c.Call("events/poll", map[string]any{
 		"subscriptions": []map[string]any{
@@ -81,7 +79,6 @@ func TestE2EPollDelivery(t *testing.T) {
 	require.Len(t, resp.Results, 1)
 	assert.Len(t, resp.Results[0].Events, 2)
 
-	// Verify Discord event shape — nested author, not flat sender
 	var data DiscordEventData
 	require.NoError(t, json.Unmarshal(resp.Results[0].Events[0].Data, &data))
 	assert.Equal(t, "alice", data.Author.Username)
@@ -90,9 +87,11 @@ func TestE2EPollDelivery(t *testing.T) {
 	assert.Equal(t, "channel-1", data.ChannelID)
 }
 
-// TestE2EPushDelivery verifies push via SSE broadcast.
+// TestE2EPushDelivery verifies the library's automatic push fanout — yield()
+// triggers events.Emit via the SetEmitHook wired by Register, and the SSE
+// notification reaches the client. Source author writes no fanout code.
 func TestE2EPushDelivery(t *testing.T) {
-	srv, store, _ := buildTestStack()
+	srv, _, yield, _ := buildTestStack()
 
 	var mu sync.Mutex
 	var received []string
@@ -113,7 +112,7 @@ func TestE2EPushDelivery(t *testing.T) {
 	defer c.Close()
 
 	time.Sleep(200 * time.Millisecond)
-	store.Add("g", "c", "alice", "push test", time.Now())
+	require.NoError(t, yield(newDiscordEvent("g", "c", "alice", "push test", time.Now())))
 	time.Sleep(500 * time.Millisecond)
 
 	mu.Lock()
@@ -121,9 +120,11 @@ func TestE2EPushDelivery(t *testing.T) {
 	assert.Contains(t, received, "notifications/events/event")
 }
 
-// TestE2EWebhookDelivery verifies webhook delivery with HMAC verification.
+// TestE2EWebhookDelivery verifies webhook fanout — same library hook also
+// routes events to registered webhook subscribers with HMAC signing. Tests
+// the full subscribe → yield → POST → verify-signature path.
 func TestE2EWebhookDelivery(t *testing.T) {
-	srv, store, webhooks := buildTestStack()
+	srv, _, yield, webhooks := buildTestStack()
 
 	var mu sync.Mutex
 	var deliveries []events.Event
@@ -153,7 +154,7 @@ func TestE2EWebhookDelivery(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, webhooks.Targets(), 1)
 
-	store.Add("g", "c", "bob", "webhook test", time.Now())
+	require.NoError(t, yield(newDiscordEvent("g", "c", "bob", "webhook test", time.Now())))
 	time.Sleep(500 * time.Millisecond)
 
 	mu.Lock()
@@ -162,10 +163,12 @@ func TestE2EWebhookDelivery(t *testing.T) {
 	assert.Equal(t, "discord.message", deliveries[0].Name)
 }
 
-// TestE2EEventsList verifies events/list returns the discord.message definition
-// with a rich payloadSchema (nested objects, optional fields, enums).
+// TestE2EEventsList verifies events/list returns the discord.message
+// definition with payloadSchema auto-derived from DiscordEventData (nested
+// objects, optional fields, enums). Confirms YieldingSource preserves the
+// schema-derivation ergonomic from TypedSource.
 func TestE2EEventsList(t *testing.T) {
-	srv, _, _ := buildTestStack()
+	srv, _, _, _ := buildTestStack()
 	c, _ := connectClient(t, srv)
 
 	result, err := c.Call("events/list", map[string]any{})
@@ -182,18 +185,43 @@ func TestE2EEventsList(t *testing.T) {
 	require.Len(t, resp.Events, 1)
 	assert.Equal(t, "discord.message", resp.Events[0].Name)
 	assert.ElementsMatch(t, []string{"push", "poll", "webhook"}, resp.Events[0].Delivery)
-	// PayloadSchema should be present (auto-derived from DiscordEventData)
 	assert.NotNil(t, resp.Events[0].PayloadSchema, "payloadSchema should be auto-derived")
 }
 
-// TestE2EResourceRead verifies the recent messages resource.
+// TestE2EResourceRead verifies the recent-messages resource reads from the
+// same store the events/poll path uses — single source of truth, no separate
+// message buffer. Round-trips a yielded event through the resource read path.
 func TestE2EResourceRead(t *testing.T) {
-	srv, store, _ := buildTestStack()
+	srv, _, yield, _ := buildTestStack()
 	c, _ := connectClient(t, srv)
 
-	store.Add("g", "c", "alice", "resource test", time.Now())
+	require.NoError(t, yield(newDiscordEvent("g", "c", "alice", "resource test", time.Now())))
 
 	text, err := c.ReadResource("discord://messages/recent")
 	require.NoError(t, err)
 	assert.Contains(t, text, "resource test")
+
+	var payloads []DiscordEventData
+	require.NoError(t, json.Unmarshal([]byte(text), &payloads))
+	require.Len(t, payloads, 1)
+	assert.Equal(t, "alice", payloads[0].Author.Username)
+	assert.Equal(t, "resource test", payloads[0].Content)
+}
+
+// TestE2EResourceByCursor verifies the per-message resource template resolves
+// {cursor} to the matching event's payload. Cursor is the addressing scheme
+// now (replacing the previous opaque message ID) — documented in the URI.
+func TestE2EResourceByCursor(t *testing.T) {
+	srv, _, yield, _ := buildTestStack()
+	c, _ := connectClient(t, srv)
+
+	require.NoError(t, yield(newDiscordEvent("g", "c", "alice", "first", time.Now())))
+	require.NoError(t, yield(newDiscordEvent("g", "c", "bob", "second", time.Now())))
+
+	// Cursors are assigned monotonically by NewMemoryStore — first event = "1".
+	text, err := c.ReadResource("discord://message/1")
+	require.NoError(t, err)
+	var payload DiscordEventData
+	require.NoError(t, json.Unmarshal([]byte(text), &payload))
+	assert.Equal(t, "first", payload.Content)
 }

@@ -55,7 +55,7 @@ sequenceDiagram
     Note over C,S: Connection held open
 
     D->>S: Message arrives
-    S->>S: store.Add() → OnMessage callback
+    S->>S: yield() → store + library fanout hook
     S-->>C: SSE: notifications/events/event
     D->>S: Another message
     S-->>C: SSE: notifications/events/event
@@ -100,11 +100,11 @@ sequenceDiagram
     S-->>C: 200 (id, refreshBefore)
 
     D->>S: Message arrives
-    S->>S: store.Add() → OnMessage callback
+    S->>S: yield() → store + library fanout hook
     S->>C: POST http://localhost:9999<br/>X-MCP-Signature: sha256=...<br/>X-MCP-Timestamp: 1714000000
     C->>C: Verify HMAC, print event
 
-    Note over C,S: Client must refresh subscription<br/>before TTL expires (60s default)
+    Note over C,S: WebhookSubscription helper auto-refreshes at<br/>0.5×TTL (60s default) and re-subscribes if<br/>the boundary race produces a "not found"
 ```
 
 ## Event Payload Shape
@@ -132,17 +132,30 @@ Discord events have a richer structure than Telegram — nested author, optional
 Discord Bot (WebSocket)  ──or──  POST /inject
                 │                       │
                 ▼                       ▼
-          MessageStore (in-memory ring buffer, 1000 max)
+                yield(DiscordEventData{...})    ← user code: one call
                 │
-                │  OnMessage callback
-                │
+                │  YieldingSource (library):
+                │    - assigns cursor + event ID
+                │    - stores in bounded ring (1000 max)
+                │    - calls library-installed fanout hook
+                ▼
                 ├──► events.Emit()              → Push (SSE broadcast)
-                ├──► srv.NotifyResourceUpdated() → Resource subscribers
                 └──► events.EmitToWebhooks()     → Webhook (HMAC POST)
                                                    ▲
-                                              events/poll reads
-                                              from store on demand
+                                              events/poll reads from
+                                              the same source's buffer
+
+  Resource handlers read typed payloads via:
+    source.Recent(50)         → []DiscordEventData
+    source.ByCursor("42")     → (DiscordEventData, true)
 ```
+
+The discord callback writes one line — `yield(...)` — and the library
+handles cursor assignment, retention, push fanout, webhook fanout, and
+typed read access. There is no separate `MessageStore` and no `OnMessage`
+callback; the YieldingSource's internal buffer is the single source of
+truth, exposed as both an `EventSource` (for `events/poll`) and as typed
+typed accessors (for resource reads).
 
 ## Make Targets
 
@@ -150,10 +163,11 @@ Discord Bot (WebSocket)  ──or──  POST /inject
 |--------|-------------|
 | `make run` | Start server (with bot if `DISCORD_BOT_TOKEN` set) |
 | `make test` | Go tests |
+| `make test-ttl` | Drive the Python `WebhookSubscription` auto-refresh helper end-to-end (POSIX-only — see Makefile for Windows steps) |
 | `make inject TEXT="..."` | Inject a message (optional: `SENDER=`, `CHANNEL=`, `GUILD=`) |
 | `make list` | Show server capabilities: tools, resources, events, sample poll |
 | `make listen` | SSE push listener — print events in real time |
-| `make webhook` | Webhook receiver — subscribe + receive HMAC-signed POSTs |
+| `make webhook` | Webhook receiver — subscribe + auto-refresh, receive HMAC-signed POSTs |
 | `make poll` | Polling loop (default 5s interval, override: `INTERVAL=10`) |
 
 All client commands use the shared [`events_client.py`](../ext/events/events_client.py).
