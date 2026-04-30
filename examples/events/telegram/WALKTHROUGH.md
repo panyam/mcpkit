@@ -44,13 +44,25 @@ sequenceDiagram
 
 ## Steps
 
-### Setup
+### Setup — two modes
 
-Start the events server in a separate terminal first:
+This walkthrough runs against either a test-mode server or a real Telegram bot.
+
+**Option A — Test mode** (no bot token needed). All steps run; the final live-interaction step skips with a 'no token' message. Drive synthetic events from a third terminal via `make inject` / `make inject-typing`.
 
 ```
-Terminal 1:  make serve         # telegram-events server on :8080
-Terminal 2:  make demo          # this walkthrough
+Terminal 1:  make serve                                # server in test mode
+Terminal 2:  make demo                                 # this walkthrough
+Terminal 3:  make inject TEXT='hello'                  # message event
+             make inject-typing                        # typing event (cursorless, demo-only)
+```
+
+**Option B — Real bot mode** (requires `TELEGRAM_BOT_TOKEN`). Same walkthrough plus the live step captures real message events from a chat with the bot. Telegram's Bot API doesn't expose user typing events to bots, so the live step is message-only — see the live step's note for details.
+
+```
+Terminal 1:  TELEGRAM_BOT_TOKEN=... make serve         # server in bot mode
+Terminal 2:  make demo                                 # this walkthrough
+             # In Telegram: send a message to the bot. Live step captures it.
 ```
 
 ### Why a separate telegram demo?
