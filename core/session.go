@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"sync/atomic"
 )
 
@@ -42,6 +43,40 @@ type sessionCtx struct {
 	notifyResourceUpdated func(uri string)
 }
 
+// responseHeaderCollector buffers per-request HTTP response headers set by
+// middleware or handlers. Mutex-guarded because background-goroutine middleware
+// can race with the transport's read after dispatch returns.
+type responseHeaderCollector struct {
+	mu      sync.Mutex
+	headers map[string]string
+}
+
+func (c *responseHeaderCollector) set(k, v string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.headers == nil {
+		c.headers = make(map[string]string)
+	}
+	c.headers[k] = v
+}
+
+func (c *responseHeaderCollector) snapshot() map[string]string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.headers) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(c.headers))
+	for k, v := range c.headers {
+		out[k] = v
+	}
+	return out
+}
+
+type responseHeadersCtxKey int
+
+const responseHeadersKey responseHeadersCtxKey = 0
+
 type ctxKey int
 
 const sessionCtxKey ctxKey = iota
@@ -58,6 +93,41 @@ func ContextWithSession(ctx context.Context, notify NotifyFunc, request RequestF
 		clientCaps: clientCaps,
 		claims:     claims,
 	})
+}
+
+// WithResponseHeaderCollector attaches a fresh per-request HTTP response
+// header collector to ctx. Transports call this on the inbound request
+// context BEFORE dispatching so middleware/handlers can stage headers via
+// SetResponseHeader, and the transport reads them via CollectResponseHeaders
+// before writing the response. Non-HTTP transports skip this and the
+// staging functions become silent no-ops.
+func WithResponseHeaderCollector(ctx context.Context) context.Context {
+	return context.WithValue(ctx, responseHeadersKey, &responseHeaderCollector{})
+}
+
+// SetResponseHeader stages an HTTP response header that the transport applies
+// before writing the response body. Used by middleware and handlers that need
+// to surface protocol metadata at the HTTP layer (e.g., the v2 task middleware
+// emits Mcp-Name: <taskId> per SEP-2243). Silent no-op when the request was
+// not wrapped with WithResponseHeaderCollector (e.g., non-HTTP transports).
+func SetResponseHeader(ctx context.Context, key, value string) {
+	c, _ := ctx.Value(responseHeadersKey).(*responseHeaderCollector)
+	if c == nil {
+		return
+	}
+	c.set(key, value)
+}
+
+// CollectResponseHeaders returns a snapshot of the response headers staged on
+// the current request via SetResponseHeader. HTTP transports call this after
+// dispatch returns, before writing response headers. Returns nil when no
+// collector was attached or no headers were staged.
+func CollectResponseHeaders(ctx context.Context) map[string]string {
+	c, _ := ctx.Value(responseHeadersKey).(*responseHeaderCollector)
+	if c == nil {
+		return nil
+	}
+	return c.snapshot()
 }
 
 // SetSessionID sets the transport-assigned session ID on the session context.
