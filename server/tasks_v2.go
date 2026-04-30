@@ -107,25 +107,134 @@ func (rt *v2TaskRuntime) getToolCallbacks(taskID string) *TaskCallbacks {
 	return rt.registry.ToolCallbacks(name)
 }
 
-// deliverInputResponses routes a tasks/update payload back to whatever was
-// waiting on the corresponding input requests. Phase 4 ships an intentional
-// no-op so the handler can ack without blocking; Phase 5 wires the two real
-// delivery paths:
+// deliverInputResponses routes a tasks/update payload back to whichever
+// goroutine is waiting on the corresponding SEP-2663 input request. For
+// each response key that matches a pending request on the task's
+// inputState, the payload is sent on the per-key waiter channel so
+// TaskContext.TaskElicit / TaskSample can return. Unknown keys are
+// silently dropped — clients may legitimately race tasks/update against
+// status changes.
 //
-//   - In-process tools (the goroutine path used by RegisterTasks today):
-//     match each response key to a per-key channel on the taskEntry and send
-//     so TaskContext.TaskElicit / TaskSample can return.
-//   - External-backed tools (Temporal, Step Functions, SQS, ...): dispatch
-//     through TaskCallbacks.OnInputResponse so the proxy hands the payload
-//     to the orchestrator. This callback field doesn't exist yet — it lands
-//     when a real external-backed example drives the contract.
-//
-// Until Phase 5 lands, the handler still returns ack so clients that drive
-// the Phase 5 protocol shape early get plausible behavior at the wire level.
+// External-backed tools (Temporal, Step Functions, SQS, ...) will also
+// route through here once a planned TaskCallbacks.OnInputResponse field
+// exists; until that lands, they won't have an inputState attached and
+// this method is a no-op for them.
 func (rt *v2TaskRuntime) deliverInputResponses(taskID string, responses core.InputResponses) {
-	_ = taskID
-	_ = responses
-	// TODO(phase 5): in-process channel dispatch + TaskCallbacks.OnInputResponse.
+	state := rt.inputStateFor(taskID)
+	if state == nil {
+		return
+	}
+	for key, payload := range responses {
+		state.deliver(key, payload)
+	}
+}
+
+// inputStateFor returns the per-task SEP-2663 input-state, or nil if the
+// task has no active entry (already terminal, never created, or the
+// underlying tool is external-backed without an inputState attached).
+func (rt *v2TaskRuntime) inputStateFor(taskID string) *v2InputState {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	if at := rt.active[taskID]; at != nil {
+		return at.inputState
+	}
+	return nil
+}
+
+// v2InputState tracks SEP-2663 input requests in flight for one v2 task.
+// Each enqueue mints a stable monotonic key ("elicit-1", "sample-2", ...)
+// and returns a waiter channel; the matching tasks/update key delivers the
+// raw response payload through that channel. Concurrency-safe.
+type v2InputState struct {
+	mu      sync.Mutex
+	counter uint64
+	pending map[string]*v2InputWait
+}
+
+func newV2InputState() *v2InputState {
+	return &v2InputState{pending: make(map[string]*v2InputWait)}
+}
+
+// v2InputWait pairs a pending input request with the channel its caller
+// (TaskContext.TaskElicit / TaskSample) is blocked on.
+type v2InputWait struct {
+	request core.InputRequest
+	waiter  chan json.RawMessage
+}
+
+// enqueue mints a new monotonic key, stashes the request on pending, and
+// returns the key plus the waiter channel the caller should block on.
+// methodPrefix is a short tag ("elicit", "sample") used to make the keys
+// readable when surfaced in tasks/get responses; uniqueness comes from
+// the global counter, not the prefix.
+//
+// IMPORTANT: the key format ("<prefix>-<n>") is a server-internal readability
+// choice, not a wire contract. Per SEP-2322 / SEP-2663 the InputRequests /
+// InputResponses map keys are server-chosen and opaque to the client —
+// clients MUST treat them as round-trip echo strings and MUST NOT parse them.
+// We are free to change the generator (e.g., to UUIDs) without breaking any
+// conformant client.
+func (s *v2InputState) enqueue(methodPrefix string, req core.InputRequest) (key string, waiter chan json.RawMessage) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.counter++
+	key = fmt.Sprintf("%s-%d", methodPrefix, s.counter)
+	waiter = make(chan json.RawMessage, 1)
+	s.pending[key] = &v2InputWait{request: req, waiter: waiter}
+	return key, waiter
+}
+
+// deliver routes a tasks/update payload to the waiter for key, returning
+// true if a waiter was found. The pending entry is removed regardless of
+// whether the send succeeds (the caller's select on ctx.Done() may have
+// already drained the slot). Buffered waiter chans guarantee deliver
+// never blocks.
+func (s *v2InputState) deliver(key string, payload json.RawMessage) bool {
+	s.mu.Lock()
+	wait, ok := s.pending[key]
+	if ok {
+		delete(s.pending, key)
+	}
+	s.mu.Unlock()
+	if !ok {
+		return false
+	}
+	select {
+	case wait.waiter <- payload:
+	default:
+		// Waiter already abandoned the slot (cancelled / context done).
+	}
+	return true
+}
+
+// snapshot copies the current pending requests into the SEP-2663 wire
+// shape for tasks/get DetailedTask responses. Returns nil when nothing
+// is pending so the handler omits the field entirely.
+func (s *v2InputState) snapshot() core.InputRequests {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.pending) == 0 {
+		return nil
+	}
+	out := make(core.InputRequests, len(s.pending))
+	for k, w := range s.pending {
+		out[k] = w.request
+	}
+	return out
+}
+
+// cancelAll drops every pending request and closes the waiter channels so
+// blocked goroutines unblock with a zero-value payload (callers detect
+// this via the closed-channel receive). Called when a task transitions to
+// a terminal state without delivering responses (cancel, panic, etc.).
+func (s *v2InputState) cancelAll() {
+	s.mu.Lock()
+	pending := s.pending
+	s.pending = make(map[string]*v2InputWait)
+	s.mu.Unlock()
+	for _, w := range pending {
+		close(w.waiter)
+	}
 }
 
 // tasksExtensionProvider implements core.ExtensionProvider for the SEP-2663
@@ -287,16 +396,20 @@ func taskV2Middleware(reg *Registry, rt *v2TaskRuntime, cfg TasksConfig) Middlew
 			bgCtx := core.DetachForBackground(ctx)
 			bgCtx, cancelFunc := context.WithCancel(bgCtx)
 
-			reqCh := make(chan sideChannelRequest, 1)
+			// SEP-2663 input-request flow: each v2 task gets its own
+			// inputState. TaskContext.TaskElicit / TaskSample stash pending
+			// requests here; tasks/update delivers responses; tasks/get
+			// snapshots them for the DetailedTask wire shape.
+			inputState := newV2InputState()
 			tc := &TaskContext{
 				taskID:        taskID,
 				sessionID:     sessionID,
 				store:         store,
-				requests:      reqCh,
+				inputState:    inputState,
 				progressToken: progressToken,
 			}
 			bgCtx = WithTaskContext(bgCtx, tc)
-			rt.register(taskID, envelope.Name, &activeTask{requests: reqCh, cancel: cancelFunc})
+			rt.register(taskID, envelope.Name, &activeTask{cancel: cancelFunc, inputState: inputState})
 
 			defer func() {
 				cancelFunc()
@@ -404,6 +517,15 @@ func makeV2GetHandler(rt *v2TaskRuntime) MethodHandler {
 			TaskInfoV2: toTaskInfoV2(info),
 			// Generate requestState (opaque token for stateless deployments).
 			RequestState: p.TaskID,
+		}
+
+		// SEP-2663: when the task is awaiting MRTR input, surface the
+		// pending requests on DetailedTask.InputRequests so the client
+		// knows which keys to satisfy via tasks/update.
+		if info.Status == core.TaskInputRequired {
+			if state := rt.inputStateFor(p.TaskID); state != nil {
+				result.InputRequests = state.snapshot()
+			}
 		}
 
 		// Inline result or error depending on terminal status.

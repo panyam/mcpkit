@@ -53,10 +53,18 @@ func (c *TasksConfigV1) defaults() {
 	}
 }
 
-// activeTask holds per-task runtime state for a running async task (C2: consolidated struct).
+// activeTask holds per-task runtime state for a running async task (C2:
+// consolidated struct). Used by both the v1 and v2 task runtimes; some fields
+// are path-specific and stay nil when not used.
 type activeTask struct {
-	requests chan sideChannelRequest // read by tasks/result handler for side-channel proxying
-	cancel   context.CancelFunc     // cancels the background goroutine's context (Phase 5)
+	requests chan sideChannelRequest // v1 only: read by tasks/result handler for side-channel proxying
+	cancel   context.CancelFunc      // both: cancels the background goroutine's context
+
+	// inputState tracks pending SEP-2663 input requests for v2 tasks. nil for
+	// v1-driven tasks (which use the legacy `requests` side-channel above).
+	// Populated by v2 middleware at task creation; consulted by tasks/get
+	// (snapshot of pending) and tasks/update (delivery to waiters).
+	inputState *v2InputState
 }
 
 // taskRuntime holds the per-registration state shared between the middleware
