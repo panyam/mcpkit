@@ -289,7 +289,7 @@ func TestTaskCapabilityAdvertised(t *testing.T) {
 	if err != nil {
 		t.Fatalf("tasks/list should succeed if capability is advertised: %v", err)
 	}
-	var list core.ListTasksResult
+	var list core.ListTasksResultV1
 	if err := json.Unmarshal(result.Raw, &list); err != nil {
 		t.Fatalf("unmarshal list: %v", err)
 	}
@@ -484,7 +484,7 @@ func TestTaskHintAtParamsRoot(t *testing.T) {
 		t.Fatalf("expected task creation, got error: %v", err)
 	}
 
-	var created core.CreateTaskResult
+	var created core.CreateTaskResultV1
 	if err := json.Unmarshal(result.Raw, &created); err != nil {
 		t.Fatal(err)
 	}
@@ -787,7 +787,7 @@ func TestTaskPollIntervalPassthrough(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var created core.CreateTaskResult
+	var created core.CreateTaskResultV1
 	json.Unmarshal(result.Raw, &created)
 
 	if created.Task.PollInterval != 2000 {
@@ -1227,7 +1227,7 @@ func TestTaskTTLExpiryE2E(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var created core.CreateTaskResult
+	var created core.CreateTaskResultV1
 	json.Unmarshal(result.Raw, &created)
 	taskID := created.Task.TaskID
 

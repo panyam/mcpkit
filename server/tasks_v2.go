@@ -107,12 +107,36 @@ func (rt *v2TaskRuntime) getToolCallbacks(taskID string) *TaskCallbacks {
 	return rt.registry.ToolCallbacks(name)
 }
 
+// tasksExtensionProvider implements core.ExtensionProvider for the SEP-2663
+// Tasks extension. RegisterTasksV2 hands an instance to Server.RegisterExtension
+// so the extension is advertised in capabilities.extensions during initialize.
+type tasksExtensionProvider struct{}
+
+// Extension declares the SEP-2663 Tasks extension.
+//
+//nolint:unused // referenced by RegisterTasksV2 only when the v2 path is wired
+func (tasksExtensionProvider) Extension() core.Extension {
+	return core.Extension{
+		ID:          core.TasksExtensionID,
+		SpecVersion: "draft", // SEP-2663 is in draft
+		Stability:   core.Experimental,
+	}
+}
+
 // RegisterTasksV2 hooks up v2 tasks support on the given server:
+//   - Advertises the io.modelcontextprotocol/tasks extension in initialize
+//     (replacing the v1 ServerCapabilities.Tasks declaration).
 //   - Installs middleware that intercepts tools/call for task-eligible tools
-//     (server-directed, no client task param needed)
-//   - Registers tasks/get and tasks/cancel handlers
-//   - Does NOT register tasks/result or tasks/list (removed in v2)
-//   - Does NOT advertise tasks capability (tasks are core protocol in v2)
+//     (server-directed, no client task param needed). Task creation is
+//     gated on the client supporting the extension — either at session
+//     level (initialize handshake) or per-request (SEP-2575 _meta).
+//   - Registers tasks/get and tasks/cancel handlers, gated on session-level
+//     extension support; otherwise the handlers return -32601 (method not
+//     found) so unsupported clients don't see a tasks surface they didn't
+//     ask for.
+//   - Does NOT register tasks/result or tasks/list (removed in v2).
+//   - Does NOT call SetTasksCap — v2 tasks live under capabilities.extensions,
+//     not the v1 ServerCapabilities.Tasks slot.
 //
 // Must be called before accepting connections.
 func RegisterTasksV2(cfg TasksV2Config) {
@@ -122,14 +146,30 @@ func RegisterTasksV2(cfg TasksV2Config) {
 	reg := srv.Registry()
 	rt := newV2TaskRuntime(store, reg)
 
-	// Install v2 middleware for tools/call interception.
+	// Advertise the SEP-2663 Tasks extension.
+	srv.RegisterExtension(tasksExtensionProvider{})
+
+	// Install v2 middleware for tools/call interception (gated on extension).
 	srv.UseMiddleware(taskV2Middleware(reg, rt, cfg))
 
-	// Register tasks/* protocol methods (v2: only get + cancel).
-	srv.HandleMethod("tasks/get", makeV2GetHandler(rt))
-	srv.HandleMethod("tasks/cancel", makeV2CancelHandler(rt))
+	// Register tasks/* protocol methods (v2: only get + cancel),
+	// gated on session-level extension support.
+	srv.HandleMethod("tasks/get", gateOnTasksExtension(makeV2GetHandler(rt)))
+	srv.HandleMethod("tasks/cancel", gateOnTasksExtension(makeV2CancelHandler(rt)))
+}
 
-	// v2: Do NOT call SetTasksCap — tasks are core protocol, not negotiated.
+// gateOnTasksExtension wraps a tasks/* handler so unsupported clients get
+// -32601 (method not found) instead of the real handler's response. This is
+// the SEP-2663 contract: tasks/* methods MUST NOT exist for clients that did
+// not negotiate the extension during initialize.
+func gateOnTasksExtension(inner MethodHandler) MethodHandler {
+	return func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
+		if !ctx.ClientSupportsExtension(core.TasksExtensionID) {
+			return core.NewErrorResponse(id, core.ErrCodeMethodNotFound,
+				"method requires extension "+core.TasksExtensionID)
+		}
+		return inner(ctx, id, params)
+	}
 }
 
 // --- Middleware ---
@@ -148,11 +188,16 @@ func taskV2Middleware(reg *Registry, rt *v2TaskRuntime, cfg TasksV2Config) Middl
 			return next(ctx, req)
 		}
 
+		// Parse the envelope. _meta carries two known keys for our purposes:
+		// progressToken (forwarded to the background goroutine) and the
+		// SEP-2575 per-request clientCapabilities override (kept as raw JSON
+		// because the typed ClientCapabilities lives in core).
 		var envelope struct {
 			Name string `json:"name"`
 			Meta *struct {
-				ProgressToken any `json:"progressToken"`
-			} `json:"_meta"`
+				ProgressToken         any             `json:"progressToken,omitempty"`
+				ClientCapabilitiesRaw json.RawMessage `json:"io.modelcontextprotocol/clientCapabilities,omitempty"`
+			} `json:"_meta,omitempty"`
 		}
 		if err := json.Unmarshal(req.Params, &envelope); err != nil {
 			return next(ctx, req)
@@ -163,7 +208,20 @@ func taskV2Middleware(reg *Registry, rt *v2TaskRuntime, cfg TasksV2Config) Middl
 			return next(ctx, req)
 		}
 
+		// SEP-2663: server MUST NOT return CreateTaskResult unless the client
+		// negotiated the io.modelcontextprotocol/tasks extension, either at
+		// session level (initialize handshake) or per-request (SEP-2575).
+		var perRequestCapsRaw json.RawMessage
+		if envelope.Meta != nil {
+			perRequestCapsRaw = envelope.Meta.ClientCapabilitiesRaw
+		}
+		if !core.ClientSupportsExtensionForRequest(ctx, core.TasksExtensionID, perRequestCapsRaw) {
+			return next(ctx, req)
+		}
+
 		// Determine effective taskSupport. Absent Execution = forbidden.
+		// In v2 this is a server-internal hint about which tools should be
+		// async — clients no longer opt in via a `task` param.
 		effectiveSupport := core.TaskSupportForbidden
 		if def.Execution != nil {
 			effectiveSupport = def.Execution.TaskSupport
@@ -279,12 +337,14 @@ func taskV2Middleware(reg *Registry, rt *v2TaskRuntime, cfg TasksV2Config) Middl
 			notifyV2TaskStatus(bgCtx, rt, store, taskID, sessionID)
 		}()
 
-		// Return TTL in seconds on the wire (v2 spec).
-		wireInfo := info
-		wireInfo.TTL = core.IntPtr(ttlSec)
-		return core.NewResponse(req.ID, core.CreateTaskResultV2{
+		// Build the v2 wire envelope. CreateTaskResult MUST NOT carry result/
+		// error/inputRequests/requestState (SEP-2663 — those belong on
+		// DetailedTask returned by tasks/get).
+		wireTask := toTaskInfoV2(info)
+		wireTask.TTLSeconds = core.IntPtr(ttlSec)
+		return core.NewResponse(req.ID, core.CreateTaskResult{
 			ResultType: core.ResultTypeTask,
-			Task:       wireInfo,
+			Task:       wireTask,
 		}), nil
 	}
 }
@@ -307,15 +367,11 @@ func makeV2GetHandler(rt *v2TaskRuntime) MethodHandler {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "task not found: "+p.TaskID)
 		}
 
-		// Convert TTL from internal ms to seconds for v2 wire format.
-		ttlToSeconds(&info)
-
-		result := core.GetTaskResultV2{
-			TaskInfo: info,
+		result := core.DetailedTask{
+			TaskInfoV2: toTaskInfoV2(info),
+			// Generate requestState (opaque token for stateless deployments).
+			RequestState: p.TaskID,
 		}
-
-		// Generate requestState (opaque token for stateless deployments).
-		result.RequestState = p.TaskID
 
 		// Inline result or error depending on terminal status.
 		if info.Status == core.TaskCompleted {
@@ -336,7 +392,7 @@ func makeV2GetHandler(rt *v2TaskRuntime) MethodHandler {
 			if te != nil {
 				result.Error = te
 			} else {
-				// Fallback: construct from store's result.
+				// Fallback: construct from store's status message.
 				result.Error = &core.TaskError{
 					Code:    -32603,
 					Message: info.StatusMessage,
@@ -366,45 +422,52 @@ func makeV2CancelHandler(rt *v2TaskRuntime) MethodHandler {
 		// Stop the background goroutine.
 		rt.cancelTask(p.TaskID)
 
-		// Convert TTL from internal ms to seconds for v2 wire format.
-		ttlToSeconds(&info)
+		// Send status notification with the v2 wire-format task. Clients learn
+		// the new state via tasks/get; the cancel response itself is an empty
+		// ack per SEP-2663.
+		notifyV2TaskStatusFromInfo(ctx, rt, info)
 
-		// Send status notification.
-		ctx.Notify("notifications/tasks/status", info)
-
-		return core.NewResponse(id, core.CancelTaskResultV2{
-			TaskInfo:     info,
-			RequestState: p.TaskID,
-		})
+		return core.NewResponse(id, core.CancelTaskResult{})
 	}
 }
 
 // --- Helpers ---
 
-// ttlToSeconds converts a TaskInfo's TTL from internal ms to seconds (v2 wire format).
-func ttlToSeconds(info *core.TaskInfo) {
+// toTaskInfoV2 converts the internal TaskInfo (TTL stored as milliseconds) to
+// the v2 wire shape (ttlSeconds, pollIntervalMilliseconds; no parentTaskId).
+// nil TTL stays nil ("unlimited"); positive ms round down to whole seconds
+// with a 1-second floor so sub-second TTLs don't collapse to "expired".
+func toTaskInfoV2(info core.TaskInfo) core.TaskInfoV2 {
+	out := core.TaskInfoV2{
+		TaskID:        info.TaskID,
+		Status:        info.Status,
+		StatusMessage: info.StatusMessage,
+		CreatedAt:     info.CreatedAt,
+		LastUpdatedAt: info.LastUpdatedAt,
+	}
 	if info.TTL != nil && *info.TTL > 0 {
 		sec := *info.TTL / 1000
 		if sec <= 0 {
 			sec = 1
 		}
-		info.TTL = &sec
+		out.TTLSeconds = &sec
 	}
+	if info.PollInterval > 0 {
+		pi := info.PollInterval
+		out.PollIntervalMilliseconds = &pi
+	}
+	return out
 }
 
 // notifyV2TaskStatus sends a v2-style status notification with the full
-// DetailedTask (inlined result/error). Best-effort.
+// DetailedTask (inlined result/error) read fresh from the store. Best-effort.
 func notifyV2TaskStatus(ctx context.Context, rt *v2TaskRuntime, store TaskStore, taskID, sessionID string) {
 	info, ok := store.Get(taskID, sessionID)
 	if !ok {
 		return
 	}
-	ttlToSeconds(&info)
 
-	// Build a DetailedTask notification payload.
-	payload := core.GetTaskResultV2{
-		TaskInfo: info,
-	}
+	payload := core.DetailedTask{TaskInfoV2: toTaskInfoV2(info)}
 
 	if info.Status == core.TaskCompleted {
 		toolResult, found := store.GetResult(taskID, sessionID)
@@ -426,4 +489,18 @@ func notifyV2TaskStatus(ctx context.Context, rt *v2TaskRuntime, store TaskStore,
 	}
 
 	core.Notify(ctx, "notifications/tasks/status", payload)
+}
+
+// notifyV2TaskStatusFromInfo sends a status notification through the live
+// MethodContext for callers that already have fresh TaskInfo (e.g., the
+// cancel handler, which gets info back from store.Cancel and doesn't need
+// to re-read it).
+func notifyV2TaskStatusFromInfo(ctx core.MethodContext, rt *v2TaskRuntime, info core.TaskInfo) {
+	payload := core.DetailedTask{TaskInfoV2: toTaskInfoV2(info)}
+	if info.Status == core.TaskFailed {
+		if te := rt.getTaskError(info.TaskID); te != nil {
+			payload.Error = te
+		}
+	}
+	ctx.Notify("notifications/tasks/status", payload)
 }
