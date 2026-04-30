@@ -70,26 +70,30 @@ type TaskInfo struct {
 	PollInterval  int        `json:"pollInterval,omitempty"` // milliseconds
 }
 
-// CreateTaskResult is returned by tools/call when a task is created
-// instead of the immediate tool result. Per spec: nested under "task" key.
-type CreateTaskResult struct {
+// CreateTaskResultV1 is returned by tools/call when a v1 task is created
+// instead of the immediate tool result. Per spec 2025-11-25: nested under
+// "task" key. (V1 wire format; v2 uses CreateTaskResult with resultType.)
+type CreateTaskResultV1 struct {
 	Task TaskInfo `json:"task"`
 }
 
-// GetTaskResult is the response to tasks/get. Per spec: flat Result & Task
-// intersection — task fields at the root level, no "task" wrapper.
-type GetTaskResult struct {
+// GetTaskResultV1 is the v1 response to tasks/get. Per spec 2025-11-25:
+// flat Result & Task intersection — task fields at the root level, no "task"
+// wrapper. (V2 returns DetailedTask with inlined result/error/inputRequests.)
+type GetTaskResultV1 struct {
 	TaskInfo
 }
 
-// CancelTaskResult is the response to tasks/cancel. Per spec: flat Result & Task
-// intersection — same as GetTaskResult.
-type CancelTaskResult struct {
+// CancelTaskResultV1 is the v1 response to tasks/cancel. Per spec 2025-11-25:
+// flat Result & Task intersection — same shape as GetTaskResultV1.
+// (V2 returns an empty ack per SEP-2663.)
+type CancelTaskResultV1 struct {
 	TaskInfo
 }
 
-// ListTasksResult is the response to tasks/list with cursor pagination.
-type ListTasksResult struct {
+// ListTasksResultV1 is the v1 response to tasks/list with cursor pagination.
+// (Removed in v2 — tasks/list is no longer part of the protocol.)
+type ListTasksResultV1 struct {
 	Tasks      []TaskInfo `json:"tasks"`
 	NextCursor string     `json:"nextCursor,omitempty"`
 }

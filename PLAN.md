@@ -144,6 +144,19 @@ Phase 4 (server handlers) → Phase 5 (inputRequests flow) →
 Phase 6 (client) → Phase 7 (example + conformance) → Phase 8 (bridge)
 ```
 
+## Deferred cleanup
+
+- **`TaskInfoV2` → `TaskInfo` rename** (deliberately deferred during Phase 2).
+  Rationale: the existing `TaskInfo` (in `core/task.go`) is *not* strictly a
+  v1 wire type — it's the internal `TaskStore` record (`server/task_store.go`,
+  `server/task_session.go`) that happens to also serialize as the v1 wire
+  shape. Renaming it to `TaskInfoV1` would conflate "internal storage" with
+  "v1 protocol shape" and stop being true the moment the store record needs
+  fields the wire doesn't expose. Revisit when:
+  - the v1 path is removed (then `TaskInfoV2` can simply become `TaskInfo`), or
+  - the store record needs to diverge from the v1 wire shape (then introduce
+    a dedicated `taskRecord` type and free up `TaskInfo` for the v2 wire).
+
 ## Open spec questions (watch before finalizing)
 
 1. `requestState` rejection: synchronous `-32602` or silent? (Luca TBD)

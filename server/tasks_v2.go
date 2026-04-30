@@ -279,12 +279,14 @@ func taskV2Middleware(reg *Registry, rt *v2TaskRuntime, cfg TasksV2Config) Middl
 			notifyV2TaskStatus(bgCtx, rt, store, taskID, sessionID)
 		}()
 
-		// Return TTL in seconds on the wire (v2 spec).
-		wireInfo := info
-		wireInfo.TTL = core.IntPtr(ttlSec)
-		return core.NewResponse(req.ID, core.CreateTaskResultV2{
+		// Build the v2 wire envelope. CreateTaskResult MUST NOT carry result/
+		// error/inputRequests/requestState (SEP-2663 — those belong on
+		// DetailedTask returned by tasks/get).
+		wireTask := toTaskInfoV2(info)
+		wireTask.TTLSeconds = core.IntPtr(ttlSec)
+		return core.NewResponse(req.ID, core.CreateTaskResult{
 			ResultType: core.ResultTypeTask,
-			Task:       wireInfo,
+			Task:       wireTask,
 		}), nil
 	}
 }
@@ -307,15 +309,11 @@ func makeV2GetHandler(rt *v2TaskRuntime) MethodHandler {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "task not found: "+p.TaskID)
 		}
 
-		// Convert TTL from internal ms to seconds for v2 wire format.
-		ttlToSeconds(&info)
-
-		result := core.GetTaskResultV2{
-			TaskInfo: info,
+		result := core.DetailedTask{
+			TaskInfoV2: toTaskInfoV2(info),
+			// Generate requestState (opaque token for stateless deployments).
+			RequestState: p.TaskID,
 		}
-
-		// Generate requestState (opaque token for stateless deployments).
-		result.RequestState = p.TaskID
 
 		// Inline result or error depending on terminal status.
 		if info.Status == core.TaskCompleted {
@@ -336,7 +334,7 @@ func makeV2GetHandler(rt *v2TaskRuntime) MethodHandler {
 			if te != nil {
 				result.Error = te
 			} else {
-				// Fallback: construct from store's result.
+				// Fallback: construct from store's status message.
 				result.Error = &core.TaskError{
 					Code:    -32603,
 					Message: info.StatusMessage,
@@ -366,45 +364,52 @@ func makeV2CancelHandler(rt *v2TaskRuntime) MethodHandler {
 		// Stop the background goroutine.
 		rt.cancelTask(p.TaskID)
 
-		// Convert TTL from internal ms to seconds for v2 wire format.
-		ttlToSeconds(&info)
+		// Send status notification with the v2 wire-format task. Clients learn
+		// the new state via tasks/get; the cancel response itself is an empty
+		// ack per SEP-2663.
+		notifyV2TaskStatusFromInfo(ctx, rt, info)
 
-		// Send status notification.
-		ctx.Notify("notifications/tasks/status", info)
-
-		return core.NewResponse(id, core.CancelTaskResultV2{
-			TaskInfo:     info,
-			RequestState: p.TaskID,
-		})
+		return core.NewResponse(id, core.CancelTaskResult{})
 	}
 }
 
 // --- Helpers ---
 
-// ttlToSeconds converts a TaskInfo's TTL from internal ms to seconds (v2 wire format).
-func ttlToSeconds(info *core.TaskInfo) {
+// toTaskInfoV2 converts the internal TaskInfo (TTL stored as milliseconds) to
+// the v2 wire shape (ttlSeconds, pollIntervalMilliseconds; no parentTaskId).
+// nil TTL stays nil ("unlimited"); positive ms round down to whole seconds
+// with a 1-second floor so sub-second TTLs don't collapse to "expired".
+func toTaskInfoV2(info core.TaskInfo) core.TaskInfoV2 {
+	out := core.TaskInfoV2{
+		TaskID:        info.TaskID,
+		Status:        info.Status,
+		StatusMessage: info.StatusMessage,
+		CreatedAt:     info.CreatedAt,
+		LastUpdatedAt: info.LastUpdatedAt,
+	}
 	if info.TTL != nil && *info.TTL > 0 {
 		sec := *info.TTL / 1000
 		if sec <= 0 {
 			sec = 1
 		}
-		info.TTL = &sec
+		out.TTLSeconds = &sec
 	}
+	if info.PollInterval > 0 {
+		pi := info.PollInterval
+		out.PollIntervalMilliseconds = &pi
+	}
+	return out
 }
 
 // notifyV2TaskStatus sends a v2-style status notification with the full
-// DetailedTask (inlined result/error). Best-effort.
+// DetailedTask (inlined result/error) read fresh from the store. Best-effort.
 func notifyV2TaskStatus(ctx context.Context, rt *v2TaskRuntime, store TaskStore, taskID, sessionID string) {
 	info, ok := store.Get(taskID, sessionID)
 	if !ok {
 		return
 	}
-	ttlToSeconds(&info)
 
-	// Build a DetailedTask notification payload.
-	payload := core.GetTaskResultV2{
-		TaskInfo: info,
-	}
+	payload := core.DetailedTask{TaskInfoV2: toTaskInfoV2(info)}
 
 	if info.Status == core.TaskCompleted {
 		toolResult, found := store.GetResult(taskID, sessionID)
@@ -426,4 +431,18 @@ func notifyV2TaskStatus(ctx context.Context, rt *v2TaskRuntime, store TaskStore,
 	}
 
 	core.Notify(ctx, "notifications/tasks/status", payload)
+}
+
+// notifyV2TaskStatusFromInfo sends a status notification through the live
+// MethodContext for callers that already have fresh TaskInfo (e.g., the
+// cancel handler, which gets info back from store.Cancel and doesn't need
+// to re-read it).
+func notifyV2TaskStatusFromInfo(ctx core.MethodContext, rt *v2TaskRuntime, info core.TaskInfo) {
+	payload := core.DetailedTask{TaskInfoV2: toTaskInfoV2(info)}
+	if info.Status == core.TaskFailed {
+		if te := rt.getTaskError(info.TaskID); te != nil {
+			payload.Error = te
+		}
+	}
+	ctx.Notify("notifications/tasks/status", payload)
 }

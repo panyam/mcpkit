@@ -98,10 +98,10 @@ func TestTaskInfoOmitEmpty(t *testing.T) {
 	}
 }
 
-// TestCreateTaskResultJSON verifies the CreateTaskResult envelope matches
-// the spec wire format: {"task": {...}}.
+// TestCreateTaskResultJSON verifies the v1 CreateTaskResultV1 envelope
+// matches the spec wire format: {"task": {...}}.
 func TestCreateTaskResultJSON(t *testing.T) {
-	result := CreateTaskResult{
+	result := CreateTaskResultV1{
 		Task: TaskInfo{
 			TaskID:        "task-abc",
 			Status:        TaskWorking,
@@ -240,9 +240,9 @@ func TestClientCapabilitiesWithTasks(t *testing.T) {
 	}
 }
 
-// TestListTasksResultJSON verifies pagination envelope.
+// TestListTasksResultJSON verifies the v1 pagination envelope.
 func TestListTasksResultJSON(t *testing.T) {
-	result := ListTasksResult{
+	result := ListTasksResultV1{
 		Tasks: []TaskInfo{
 			{TaskID: "t1", Status: TaskWorking, CreatedAt: "2025-01-15T10:00:00Z", LastUpdatedAt: "2025-01-15T10:00:00Z", TTL: IntPtr(30000)},
 		},
@@ -252,7 +252,7 @@ func TestListTasksResultJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var decoded ListTasksResult
+	var decoded ListTasksResultV1
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatal(err)
 	}
@@ -266,11 +266,11 @@ func TestListTasksResultJSON(t *testing.T) {
 
 // --- Spec wire-format compliance tests (red-first) ---
 
-// TestGetTaskResultFlatJSON verifies that GetTaskResult serializes task fields
-// at the root level (not nested under a "task" key). Per MCP spec: tasks/get
-// returns Result & Task intersection.
+// TestGetTaskResultFlatJSON verifies that the v1 GetTaskResultV1 serializes
+// task fields at the root level (not nested under a "task" key). Per MCP
+// spec 2025-11-25: tasks/get returns Result & Task intersection.
 func TestGetTaskResultFlatJSON(t *testing.T) {
-	result := GetTaskResult{
+	result := GetTaskResultV1{
 		TaskInfo: TaskInfo{
 			TaskID:        "task-flat",
 			Status:        TaskWorking,
@@ -289,7 +289,7 @@ func TestGetTaskResultFlatJSON(t *testing.T) {
 
 	// Must NOT have a "task" wrapper key.
 	if _, ok := m["task"]; ok {
-		t.Error("GetTaskResult should serialize flat, not under a 'task' key")
+		t.Error("GetTaskResultV1 should serialize flat, not under a 'task' key")
 	}
 	// Must have taskId at root.
 	if m["taskId"] != "task-flat" {
@@ -300,10 +300,11 @@ func TestGetTaskResultFlatJSON(t *testing.T) {
 	}
 }
 
-// TestCancelTaskResultFlatJSON verifies that CancelTaskResult serializes task
-// fields at the root level. Per MCP spec: tasks/cancel returns Result & Task.
+// TestCancelTaskResultFlatJSON verifies that the v1 CancelTaskResultV1
+// serializes task fields at the root level. Per MCP spec 2025-11-25:
+// tasks/cancel returns Result & Task.
 func TestCancelTaskResultFlatJSON(t *testing.T) {
-	result := CancelTaskResult{
+	result := CancelTaskResultV1{
 		TaskInfo: TaskInfo{
 			TaskID:        "task-cancel",
 			Status:        TaskCancelled,
@@ -320,7 +321,7 @@ func TestCancelTaskResultFlatJSON(t *testing.T) {
 	json.Unmarshal(data, &m)
 
 	if _, ok := m["task"]; ok {
-		t.Error("CancelTaskResult should serialize flat, not under a 'task' key")
+		t.Error("CancelTaskResultV1 should serialize flat, not under a 'task' key")
 	}
 	if m["taskId"] != "task-cancel" {
 		t.Errorf("taskId = %v, want task-cancel", m["taskId"])

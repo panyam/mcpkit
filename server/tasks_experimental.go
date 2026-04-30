@@ -325,7 +325,7 @@ func taskMiddleware(reg *Registry, rt *taskRuntime, cfg TasksConfig) Middleware 
 			notifyTaskStatus(bgCtx, store, taskID, sessionID)
 		}()
 
-		return core.NewResponse(req.ID, core.CreateTaskResult{Task: info}), nil
+		return core.NewResponse(req.ID, core.CreateTaskResultV1{Task: info}), nil
 	}
 }
 
@@ -358,7 +358,7 @@ func makeGetHandler(rt *taskRuntime) MethodHandler {
 		if !ok {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "task not found: "+p.TaskID)
 		}
-		return core.NewResponse(id, core.GetTaskResult{TaskInfo: info})
+		return core.NewResponse(id, core.GetTaskResultV1{TaskInfo: info})
 	}
 }
 
@@ -450,7 +450,7 @@ func makeListHandler(store TaskStore) MethodHandler {
 		if tasks == nil {
 			tasks = []core.TaskInfo{}
 		}
-		return core.NewResponse(id, core.ListTasksResult{
+		return core.NewResponse(id, core.ListTasksResultV1{
 			Tasks:      tasks,
 			NextCursor: nextCursor,
 		})
@@ -476,7 +476,7 @@ func makeCancelHandler(rt *taskRuntime) MethodHandler {
 		// Send status notification (Phase 6).
 		ctx.Notify("notifications/tasks/status", info)
 		// Per spec: tasks/cancel returns flat Result & Task (no wrapper).
-		return core.NewResponse(id, core.CancelTaskResult{TaskInfo: info})
+		return core.NewResponse(id, core.CancelTaskResultV1{TaskInfo: info})
 	}
 }
 

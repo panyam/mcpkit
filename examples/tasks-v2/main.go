@@ -184,9 +184,9 @@ func serve() {
 			return core.TextResult(fmt.Sprintf("External job %s completed", args.JobID)), nil
 		},
 		TaskCallbacks: &server.TaskCallbacks{
-			GetTask: func(ctx core.MethodContext, taskID string) (core.GetTaskResult, bool) {
+			GetTask: func(ctx core.MethodContext, taskID string) (core.GetTaskResultV1, bool) {
 				log.Printf("[external_job] custom getTask for %s", taskID)
-				return core.GetTaskResult{}, false
+				return core.GetTaskResultV1{}, false
 			},
 			GetResult: func(ctx core.MethodContext, taskID string) (core.ToolResult, bool) {
 				log.Printf("[external_job] custom getResult for %s", taskID)

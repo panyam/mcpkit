@@ -277,11 +277,11 @@ func serve() {
 			return core.TextResult(fmt.Sprintf("External job %s completed", args.JobID)), nil
 		},
 		TaskCallbacks: &server.TaskCallbacks{
-			GetTask: func(ctx core.MethodContext, taskID string) (core.GetTaskResult, bool) {
+			GetTask: func(ctx core.MethodContext, taskID string) (core.GetTaskResultV1, bool) {
 				// In a real system, this would query an external API (Step Functions, etc.)
 				// For demo purposes, we augment the status message.
 				log.Printf("[external_job] custom getTask for %s", taskID)
-				return core.GetTaskResult{}, false // fall through to store
+				return core.GetTaskResultV1{}, false // fall through to store
 			},
 			GetResult: func(ctx core.MethodContext, taskID string) (core.ToolResult, bool) {
 				// In a real system, this would fetch the result from the external system.
