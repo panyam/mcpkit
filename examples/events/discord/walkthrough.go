@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -86,14 +87,28 @@ func filterFlags(args []string) []string {
 	return out
 }
 
-// liveInteractionTimeout is how long the live-interaction step waits for
-// real Discord events. Drops to 0 in --non-interactive mode so CI runs
-// don't pay the wait when no human is there to type.
-const liveInteractionTimeout = 30 * time.Second
+// liveInteractionMaxWait is the safety-net timeout on the live-interaction
+// step — caps how long it'll hang if the user walks away without pressing
+// enter. The step's primary exit signal is press-enter (read from stdin).
+// Skipped entirely in --non-interactive mode.
+const liveInteractionMaxWait = 5 * time.Minute
 
 func nonInteractive() bool {
 	for _, a := range os.Args[1:] {
 		if strings.TrimSpace(a) == "--non-interactive" {
+			return true
+		}
+	}
+	return false
+}
+
+// tuiMode reports whether the walkthrough is running in TUI mode (Bubble
+// Tea). In TUI the press-enter exit mechanism doesn't work — Bubble Tea
+// owns stdin — so the live step falls back to "use Ctrl+C, otherwise
+// wait out the safety timeout."
+func tuiMode() bool {
+	for _, a := range os.Args[1:] {
+		if strings.TrimSpace(a) == "--tui" {
 			return true
 		}
 	}
@@ -123,12 +138,24 @@ func runDemo() {
 			demokit.Actor("Receiver", "Local webhook receiver (this process)"),
 		)
 
-	demo.Section("Setup",
-		"Start the events server in a separate terminal first:",
+	demo.Section("Setup — two modes",
+		"This walkthrough runs against either a test-mode server or a real Discord bot.",
+		"",
+		"**Option A — Test mode** (no bot token needed). All steps run; the final live-interaction step skips with a 'no token' message. Drive synthetic events from a third terminal via `make inject` / `make inject-typing`.",
 		"",
 		"```",
-		"Terminal 1:  make serve         # discord-events server on :8080",
-		"Terminal 2:  make demo          # this walkthrough",
+		"Terminal 1:  make serve                                # server in test mode",
+		"Terminal 2:  make demo                                 # this walkthrough",
+		"Terminal 3:  make inject TEXT='hello'                  # message event",
+		"             make inject-typing                        # typing event (cursorless)",
+		"```",
+		"",
+		"**Option B — Real bot mode** (requires `DISCORD_BOT_TOKEN`). Same walkthrough plus the live step captures real typing + message events from your Discord channel. Token setup in the demo's README.",
+		"",
+		"```",
+		"Terminal 1:  DISCORD_BOT_TOKEN=... make serve          # server in bot mode",
+		"Terminal 2:  make demo                                 # this walkthrough",
+		"             # In Discord: type, then send. Live step captures both.",
 		"```",
 	)
 
@@ -392,12 +419,23 @@ func runDemo() {
 			}
 
 			fmt.Printf("    Go to your Discord channel and start typing — typing indicators will show up here.\n")
-			fmt.Printf("    Press enter in Discord to send the message.\n")
-			fmt.Printf("    Listening for %s...\n\n", liveInteractionTimeout)
+			if tuiMode() {
+				fmt.Printf("    Press Ctrl+C to exit when done. Will stop automatically after %s.\n\n", liveInteractionMaxWait)
+			} else {
+				fmt.Printf("    Press enter (here, in this terminal) when you're done capturing events.\n")
+				fmt.Printf("    Will stop automatically after %s if you walk away.\n\n", liveInteractionMaxWait)
+			}
 
-			gotMsg := broker.Subscribe("discord.message", 8)
-			gotTyping := broker.Subscribe("discord.typing", 8)
-			deadline := time.After(liveInteractionTimeout)
+			gotMsg := broker.Subscribe("discord.message", 16)
+			gotTyping := broker.Subscribe("discord.typing", 16)
+			// In TUI mode Bubble Tea owns stdin, so awaitEnter would
+			// conflict — leave done as a nil channel (blocks forever in
+			// select) and rely on the deadline / Ctrl+C.
+			var done <-chan struct{}
+			if !tuiMode() {
+				done = awaitEnter()
+			}
+			deadline := time.After(liveInteractionMaxWait)
 
 			var typingSeen, msgSeen int
 			for {
@@ -412,16 +450,14 @@ func runDemo() {
 					if d, ok := p["data"].(map[string]any); ok {
 						fmt.Printf("    [message] %v: %q\n", d["author"], d["content"])
 					}
-					if msgSeen >= 1 {
-						// One message is enough to demo; finish without waiting out the timeout.
-						fmt.Printf("\n    Captured %d typing event(s) + %d message(s).\n", typingSeen, msgSeen)
-						return
-					}
+				case <-done:
+					fmt.Printf("\n    Captured %d typing event(s) + %d message(s).\n", typingSeen, msgSeen)
+					return
 				case <-deadline:
 					if typingSeen+msgSeen == 0 {
-						fmt.Printf("    No live events received within %s. Make sure the server is started with -token and the bot is invited to a channel you can post in.\n", liveInteractionTimeout)
+						fmt.Printf("    No live events received within %s. Make sure the server is started with -token and the bot is invited to a channel you can post in.\n", liveInteractionMaxWait)
 					} else {
-						fmt.Printf("\n    Captured %d typing event(s) + %d message(s).\n", typingSeen, msgSeen)
+						fmt.Printf("\n    Hit the safety timeout (%s). Captured %d typing event(s) + %d message(s).\n", liveInteractionMaxWait, typingSeen, msgSeen)
 					}
 					return
 				}
@@ -472,4 +508,17 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n]
+}
+
+// awaitEnter spawns a goroutine that reads a single line from stdin and
+// signals on the returned channel. Used by the live-interaction step to
+// let the user end the capture by pressing enter without imposing a
+// short hard timeout.
+func awaitEnter() <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		bufio.NewReader(os.Stdin).ReadString('\n')
+		close(done)
+	}()
+	return done
 }

@@ -6,26 +6,45 @@ Companion to [Clare Liguori's TypeScript implementation](https://github.com/mode
 
 ## Walkthrough
 
+A condensed walkthrough focused on the telegram-specific payload shape and the typed Go SDK at [`experimental/ext/events/clients/go/`](../../../experimental/ext/events/clients/go/). Two ways to run it.
+
+### Option A — Test mode (no Telegram token needed)
+
+All walkthrough steps run; the final live-interaction step skips with a "no token" message.
+
 ```bash
-make serve    # terminal 1 — real MCP server
-make demo     # terminal 2 — scripted demokit walkthrough (TUI)
+make serve    # terminal 1 — server in test mode
+make demo     # terminal 2 — walkthrough
 ```
 
-A condensed walkthrough focused on the telegram-specific payload shape and the typed Go SDK at [`experimental/ext/events/clients/go/`](../../../experimental/ext/events/clients/go/). Generated artifact in [`WALKTHROUGH.md`](WALKTHROUGH.md) — regenerate via `make readme`.
+To simulate Telegram activity from a third terminal:
 
-For the full protocol exposition (events/list, poll, secret modes, header modes, the spec's design rationale) see [`../discord/WALKTHROUGH.md`](../discord/WALKTHROUGH.md). This README intentionally skips repeating what's already in the walkthroughs.
+```bash
+make inject TEXT="hello world"   # message event (cursored)
+make inject-typing               # typing indicator (cursorless, demo-only — see below)
+```
+
+### Option B — Real bot mode (requires `TELEGRAM_BOT_TOKEN`)
+
+Same walkthrough plus the final live step captures real message events from a chat with the bot.
+
+```bash
+TELEGRAM_BOT_TOKEN=your-token make serve   # terminal 1 — server in bot mode
+make demo                                   # terminal 2 — walkthrough
+# When the live step starts, send a message to your bot in Telegram.
+```
+
+**Note on typing events**: Telegram's Bot API doesn't expose user typing events to bots — only the bot can send typing chat actions, not the other way around. So `make inject-typing` works as a demo of the cursorless wire shape, but Option B can't capture real typing events. Discord can; see [`../discord/WALKTHROUGH.md`](../discord/WALKTHROUGH.md) for the live-typing demo.
+
+Generated walkthrough in [`WALKTHROUGH.md`](WALKTHROUGH.md) — regenerate via `make readme`. For the full protocol exposition (events/list, poll, secret modes, header modes, the spec's design rationale) see [`../discord/WALKTHROUGH.md`](../discord/WALKTHROUGH.md). This README intentionally skips repeating what's already in the walkthroughs.
 
 > **Going to production?** See [`experimental/ext/events/DEPLOYMENT.md`](../../../experimental/ext/events/DEPLOYMENT.md) for private-cloud / WAF guidance.
 
-## Setup — connecting to Telegram
+## Setup — getting a Telegram bot token (Option B only)
 
-The walkthrough runs in test mode by default (no Telegram needed). To wire up a real bot:
+Skip this section if you're running in test mode (Option A above).
 
-```bash
-TELEGRAM_BOT_TOKEN=your-token make serve
-```
-
-Get a bot token from [@BotFather](https://t.me/BotFather) (`/newbot`).
+Get a bot token from [@BotFather](https://t.me/BotFather) (`/newbot`). That's it — no privileged-intent toggles like Discord has.
 
 ## Architecture
 
