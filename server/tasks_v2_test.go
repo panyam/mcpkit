@@ -93,10 +93,10 @@ func TestV2_ExtensionAdvertised(t *testing.T) {
 }
 
 // TestV2_NoTaskCreationWithoutExtension verifies that an async-eligible tool
-// call returns a synchronous ToolResult — resultType:"complete" per
+// call returns a synchronous ToolResult — result_type:"complete" per
 // SEP-2322, no task envelope — when the client has not negotiated the
 // tasks extension. SEP-2663: server MUST NOT return CreateTaskResult
-// (resultType:"task") without negotiation.
+// (result_type:"task") without negotiation.
 func TestV2_NoTaskCreationWithoutExtension(t *testing.T) {
 	srv := newTaskV2Server(t)
 	c := connectV2Client(t, srv) // no WithTasksExtension
@@ -113,9 +113,9 @@ func TestV2_NoTaskCreationWithoutExtension(t *testing.T) {
 	if err := json.Unmarshal(res.Raw, &m); err != nil {
 		t.Fatalf("unmarshal result: %v", err)
 	}
-	// SEP-2322: sync ToolResult carries resultType:"complete" (not "task").
-	if rt := m["resultType"]; rt != "complete" {
-		t.Errorf("sync ToolResult.resultType = %v, want \"complete\"", rt)
+	// SEP-2322: sync ToolResult carries result_type:"complete" (not "task").
+	if rt := m["result_type"]; rt != "complete" {
+		t.Errorf("sync ToolResult.result_type = %v, want \"complete\"", rt)
 	}
 	if _, ok := m["task"]; ok {
 		t.Errorf("response must NOT carry task envelope when extension not negotiated; got %s", res.Raw)
@@ -145,7 +145,7 @@ func TestV2_TaskCreationWithExtension(t *testing.T) {
 		t.Fatalf("unmarshal CreateTaskResult: %v", err)
 	}
 	if ctr.ResultType != core.ResultTypeTask {
-		t.Errorf("resultType = %q, want %q", ctr.ResultType, core.ResultTypeTask)
+		t.Errorf("result_type = %q, want %q", ctr.ResultType, core.ResultTypeTask)
 	}
 	if ctr.Task.TaskID == "" {
 		t.Error("CreateTaskResult.task.taskId should not be empty")
@@ -218,7 +218,7 @@ func TestV2_PerRequestExtensionOptIn(t *testing.T) {
 		t.Fatalf("unmarshal CreateTaskResult: %v", err)
 	}
 	if ctr.ResultType != core.ResultTypeTask {
-		t.Errorf("per-request opt-in should produce CreateTaskResult; got resultType=%q, raw=%s", ctr.ResultType, res.Raw)
+		t.Errorf("per-request opt-in should produce CreateTaskResult; got result_type=%q, raw=%s", ctr.ResultType, res.Raw)
 	}
 }
 
@@ -338,18 +338,18 @@ func TestV2_UpdateAck(t *testing.T) {
 		t.Fatalf("tasks/update: %v", err)
 	}
 
-	// SEP-2663 ack: no task state. SEP-2322: must carry the resultType
-	// discriminator. So the wire payload is {"resultType":"complete"} —
+	// SEP-2663 ack: no task state. SEP-2322: must carry the result_type
+	// discriminator. So the wire payload is {"result_type":"complete"} —
 	// nothing else.
 	var m map[string]any
 	if err := json.Unmarshal(res.Raw, &m); err != nil {
 		t.Fatalf("unmarshal ack: %v", err)
 	}
-	if rt := m["resultType"]; rt != "complete" {
-		t.Errorf("UpdateTaskResult.resultType = %v, want \"complete\"", rt)
+	if rt := m["result_type"]; rt != "complete" {
+		t.Errorf("UpdateTaskResult.result_type = %v, want \"complete\"", rt)
 	}
 	if len(m) != 1 {
-		t.Errorf("UpdateTaskResult should carry only resultType (got %d keys: %v)", len(m), m)
+		t.Errorf("UpdateTaskResult should carry only result_type (got %d keys: %v)", len(m), m)
 	}
 }
 
@@ -729,12 +729,12 @@ func TestV2_ElicitUpdateCompleteFlow(t *testing.T) {
 	}
 	var ackMap map[string]any
 	json.Unmarshal(ackRes.Raw, &ackMap)
-	// SEP-2322: ack carries only the resultType discriminator.
-	if rt := ackMap["resultType"]; rt != "complete" {
-		t.Errorf("tasks/update ack.resultType = %v, want \"complete\"", rt)
+	// SEP-2322: ack carries only the result_type discriminator.
+	if rt := ackMap["result_type"]; rt != "complete" {
+		t.Errorf("tasks/update ack.result_type = %v, want \"complete\"", rt)
 	}
 	if len(ackMap) != 1 {
-		t.Errorf("tasks/update ack should carry only resultType (got %d keys: %v)", len(ackMap), ackMap)
+		t.Errorf("tasks/update ack should carry only result_type (got %d keys: %v)", len(ackMap), ackMap)
 	}
 
 	// 3. Poll until the goroutine resumes and the task completes.

@@ -23,6 +23,13 @@ type BaseContext struct {
 type ToolContext struct {
 	BaseContext
 	progressToken any // set by dispatch or TypedTool from _meta.progressToken
+
+	// inputResponses + requestState carry the SEP-2322 ephemeral MRTR
+	// continuation payload — the client echoes them back into the SAME
+	// tools/call request when retrying after a previous IncompleteResult.
+	// Set by dispatch from the request envelope; nil/empty on the first call.
+	inputResponses InputResponses
+	requestState   string
 }
 
 // ResourceContext is the context passed to ResourceHandler and
@@ -71,6 +78,20 @@ func NewToolContextWithProgress(ctx context.Context, progressToken any) ToolCont
 	return ToolContext{
 		BaseContext:   BaseContext{ctx, sessionFromContext(ctx)},
 		progressToken: progressToken,
+	}
+}
+
+// NewToolContextWithMRTR constructs a ToolContext for an SEP-2322 MRTR retry:
+// progress token plus the inputResponses/requestState the client echoed back.
+// Called by the tools/call dispatch layer after parsing the request envelope;
+// handlers read the values via ctx.InputResponse / ctx.InputResponses /
+// ctx.RequestState.
+func NewToolContextWithMRTR(ctx context.Context, progressToken any, inputResponses InputResponses, requestState string) ToolContext {
+	return ToolContext{
+		BaseContext:    BaseContext{ctx, sessionFromContext(ctx)},
+		progressToken:  progressToken,
+		inputResponses: inputResponses,
+		requestState:   requestState,
 	}
 }
 
@@ -236,7 +257,12 @@ func (bc BaseContext) EmitSSERetry(retryAfter time.Duration) error {
 // DetachFromClient returns a ToolContext that preserves session state but is
 // NOT cancelled when the client disconnects.
 func (tc ToolContext) DetachFromClient() ToolContext {
-	return ToolContext{BaseContext: tc.BaseContext.DetachFromClient(), progressToken: tc.progressToken}
+	return ToolContext{
+		BaseContext:    tc.BaseContext.DetachFromClient(),
+		progressToken:  tc.progressToken,
+		inputResponses: tc.inputResponses,
+		requestState:   tc.requestState,
+	}
 }
 
 // DetachFromClient returns a ResourceContext that preserves session state but is
@@ -292,4 +318,73 @@ func (tc ToolContext) EmitContent(requestID json.RawMessage, content Content) {
 		RequestID: requestID,
 		Content:   content,
 	})
+}
+
+// --- SEP-2322 MRTR (Multi Round-Trip Requests) accessors ---
+
+// InputResponses returns the SEP-2322 inputResponses map the client echoed
+// back into this tools/call. Nil on the first call (no prior IncompleteResult)
+// or when the client did not include the field.
+//
+// Handlers branch on this to detect retries: nil = first call, ask for input;
+// non-nil = client has answered, build the final result.
+func (tc ToolContext) InputResponses() InputResponses {
+	return tc.inputResponses
+}
+
+// InputResponse returns the raw response payload for a specific request key
+// from the inputResponses map, or nil if the key is missing. The payload
+// shape matches the method declared in the original InputRequest
+// (ElicitResult, CreateMessageResult, ListRootsResult, ...) — callers
+// json.Unmarshal it into the matching typed struct.
+func (tc ToolContext) InputResponse(key string) json.RawMessage {
+	if tc.inputResponses == nil {
+		return nil
+	}
+	return tc.inputResponses[key]
+}
+
+// HasInputResponses reports whether the client echoed any inputResponses
+// back. Equivalent to len(ctx.InputResponses()) > 0; provided for readable
+// branching in handlers ("if ctx.HasInputResponses() { ... }").
+func (tc ToolContext) HasInputResponses() bool {
+	return len(tc.inputResponses) > 0
+}
+
+// RequestState returns the SEP-2322 requestState token the client echoed
+// back. Empty on the first call. The token has already been verified by
+// the dispatch layer (HMAC-checked when a signing key is configured),
+// so handlers can trust its presence as proof the round-trip is intact —
+// the embedded payload itself is opaque to handlers.
+func (tc ToolContext) RequestState() string {
+	return tc.requestState
+}
+
+// RequestInput is the SEP-2322 ephemeral retry primitive. Handlers return
+// the value as their ToolResult to signal "I need more input from the
+// client before I can produce a final result"; the dispatch layer
+// reshapes the response on the wire as an IncompleteResult and mints a
+// fresh requestState for the next round.
+//
+// Usage in a tool handler:
+//
+//	func myTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+//	    if !ctx.HasInputResponses() {
+//	        return ctx.RequestInput(core.InputRequests{
+//	            "user_name": {
+//	                Method: "elicitation/create",
+//	                Params: rawElicitationParams,
+//	            },
+//	        })
+//	    }
+//	    // Decode ctx.InputResponse("user_name") and build the final result.
+//	}
+//
+// The error return is always nil — the helper exists so the call site
+// reads as a single return statement matching the ToolHandler signature.
+func (tc ToolContext) RequestInput(reqs InputRequests) (ToolResult, error) {
+	return ToolResult{
+		IsIncomplete:  true,
+		InputRequests: reqs,
+	}, nil
 }

@@ -11,7 +11,7 @@ The suite drives wire-shape and behavioral assertions against any conformant ser
 | SEP | What it adds | Where it shows up |
 |-----|--------------|-------------------|
 | SEP-2663 | Tasks Extension — `io.modelcontextprotocol/tasks` capability, `DetailedTask`, `tasks/update`, ack-only `tasks/cancel`, wire-field renames (`ttlSeconds`, `pollIntervalMilliseconds`) | v2-02, v2-04, v2-07, v2-09, v2-10, v2-11, v2-12, v2-17, v2-22, v2-23 |
-| SEP-2322 | MRTR base types — `inputRequests`/`inputResponses` maps, `requestState`, `resultType` discriminator (`task`/`complete`/`incomplete`) | v2-14, v2-15, v2-16, v2-17, v2-26 |
+| SEP-2322 | MRTR base types — `inputRequests`/`inputResponses` maps, `requestState`, `result_type` discriminator (`task`/`complete`/`incomplete`) | v2-14, v2-15, v2-16, v2-17, v2-26 |
 | SEP-2575 | Per-request capability override via `_meta.io.modelcontextprotocol/clientCapabilities` | v2-25 |
 | SEP-2243 | `Mcp-Name` HTTP response header on task-creating responses | v2-24, v2-24b |
 
@@ -24,10 +24,10 @@ These are deliberately kept in **one file** rather than split per-SEP. The test 
 | Capability slot | `capabilities.tasks` | `capabilities.extensions["io.modelcontextprotocol/tasks"]` |
 | Client opt-in | (none — anyone can send `task` hint) | MUST declare extension at session OR per-request (SEP-2575) |
 | Task creation | Client sends `task` hint param | Server decides unilaterally |
-| `resultType` discriminator | absent | `"task"` (CreateTaskResult) / `"complete"` (everything else) |
+| `result_type` discriminator | absent | `"task"` (CreateTaskResult) / `"complete"` (everything else) |
 | `tasks/get` response | flat `TaskInfo` only | `DetailedTask` with inlined `result`/`error`/`inputRequests`/`requestState` |
-| `tasks/update` | n/a | new — MRTR resume path, returns `{resultType:"complete"}` ack |
-| `tasks/cancel` response | rich task envelope | `{resultType:"complete"}` ack (no task state) |
+| `tasks/update` | n/a | new — MRTR resume path, returns `{result_type:"complete"}` ack |
+| `tasks/cancel` response | rich task envelope | `{result_type:"complete"}` ack (no task state) |
 | `tasks/result` | separate blocking method | **removed** (result inlined on `tasks/get`) |
 | `tasks/list` | session-scoped list | **removed** |
 | TTL field | `ttl` (ms by convention) | `ttlSeconds` (units in name) |
@@ -84,7 +84,7 @@ SERVER_URL=http://localhost:8080/mcp npx tsx --test tasks-v2/scenarios.test.ts
 | 04 | tasks/get completed + inlined result | Poll completed task — `result` inlined | 2663 |
 | 05 | Tool error → completed + isError | Tool execution errors carry `isError:true` | 2663 |
 | 06 | Protocol error → failed + error | Server-side protocol errors carry `error:{code,message}` | 2663 |
-| 07 | tasks/cancel (empty ack) | Cancel response is `{resultType:"complete"}`; status settles to cancelled | 2663 |
+| 07 | tasks/cancel (empty ack) | Cancel response is `{result_type:"complete"}`; status settles to cancelled | 2663 |
 | 08 | Cancel terminal task | Cancel completed task → `-32602` | 2663 |
 
 ### Removed v1 methods
@@ -100,7 +100,7 @@ SERVER_URL=http://localhost:8080/mcp npx tsx --test tasks-v2/scenarios.test.ts
 |---|----------|---------------|------|
 | 11 | Tasks under `capabilities.extensions` | Extension advertised; v1 `capabilities.tasks` slot stays absent | 2663 |
 | 22 | `tasks/*` rejected without extension | `-32601` for clients that didn't negotiate | 2663 |
-| 23 | `tools/call` without extension | Returns sync `ToolResult` (`resultType:"complete"`, no task) | 2663 + 2322 |
+| 23 | `tools/call` without extension | Returns sync `ToolResult` (`result_type:"complete"`, no task) | 2663 + 2322 |
 | 25 | Per-request `_meta` opt-in | Produces `CreateTaskResult` even without session-level extension | 2575 |
 
 ### TTL + wire fields
@@ -122,7 +122,7 @@ SERVER_URL=http://localhost:8080/mcp npx tsx --test tasks-v2/scenarios.test.ts
 | # | Scenario | What it tests | SEPs |
 |---|----------|---------------|------|
 | 16 | `inputRequests` map on `tasks/get` | `input_required` status surfaces pending requests | 2322 |
-| 17 | `tasks/update` resumes task | Client delivers responses via tasks/update; ack is `{resultType:"complete"}` | 2322 + 2663 |
+| 17 | `tasks/update` resumes task | Client delivers responses via tasks/update; ack is `{result_type:"complete"}` | 2322 + 2663 |
 
 ### Notifications
 
@@ -145,11 +145,11 @@ SERVER_URL=http://localhost:8080/mcp npx tsx --test tasks-v2/scenarios.test.ts
 | 24 | Mcp-Name on task creation | Task-creating tools/call response carries `Mcp-Name: <taskId>` | 2243 |
 | 24b | Mcp-Name absent on sync | Sync tools/call response does NOT carry the header | 2243 |
 
-### SEP-2322: resultType discriminator across non-task responses
+### SEP-2322: result_type discriminator across non-task responses
 
 | # | Scenario | What it tests | SEPs |
 |---|----------|---------------|------|
-| 26 | `resultType:"complete"` on non-task responses | Sync tools/call, tasks/get, tasks/update ack, tasks/cancel ack all carry the discriminator | 2322 |
+| 26 | `result_type:"complete"` on non-task responses | Sync tools/call, tasks/get, tasks/update ack, tasks/cancel ack all carry the discriminator | 2322 |
 
 ## Open spec questions
 

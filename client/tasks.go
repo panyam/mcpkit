@@ -1,6 +1,6 @@
 package client
 
-// V2 task client helpers — SEP-2663 (Tasks Extension), SEP-2557 (resultType
+// V2 task client helpers — SEP-2663 (Tasks Extension), SEP-2557 (result_type
 // discriminator), SEP-2322 (MRTR).
 //
 // Differences from the v1 helpers in tasks_v1.go:
@@ -49,22 +49,35 @@ type WaitOptions struct {
 	RequestState string
 }
 
-// ToolCallResult is the discriminated union returned by ToolCall when the
-// server may have elected to handle a tools/call as an async task. Exactly
-// one of Sync or Task is non-nil — branch on which is set.
+// ToolCallResult is the discriminated union returned by ToolCall. Exactly
+// one of Sync, Task, or Incomplete is non-nil — branch on which is set
+// (or use the IsTask / IsIncomplete helpers).
 type ToolCallResult struct {
 	// Sync is populated when the server ran the tool to completion in the
-	// same request and returned a ToolResult directly (sync tool, or the
-	// SEP-2663 immediate-result shortcut).
+	// same request and returned a ToolResult directly (result_type:
+	// "complete" or absent).
 	Sync *core.ToolResult
 
 	// Task is populated when the server elected to create a task (the
-	// resultType: "task" discriminator was present on the response).
+	// result_type: "task" discriminator was present on the response).
 	Task *core.CreateTaskResult
+
+	// Incomplete is populated when the server returned an SEP-2322
+	// IncompleteResult — it needs more input before it can produce a
+	// final result. Callers using the bare ToolCall must handle this
+	// themselves (resolve inputRequests, retry tools/call with
+	// inputResponses + requestState); CallToolWithInputs handles the
+	// loop automatically.
+	Incomplete *core.IncompleteResult
 }
 
 // IsTask reports whether the result is the task-creation variant.
 func (r *ToolCallResult) IsTask() bool { return r != nil && r.Task != nil }
+
+// IsIncomplete reports whether the server returned an IncompleteResult
+// (SEP-2322 ephemeral MRTR). Callers needing the auto-retry loop should
+// use CallToolWithInputs instead of inspecting this directly.
+func (r *ToolCallResult) IsIncomplete() bool { return r != nil && r.Incomplete != nil }
 
 // --- Wire-format params ---
 
@@ -98,23 +111,30 @@ func ToolCall(c *Client, name string, args any) (*ToolCallResult, error) {
 	return parseToolCallResult(resp.Raw)
 }
 
-// parseToolCallResult inspects the resultType discriminator on a tools/call
+// parseToolCallResult inspects the result_type discriminator on a tools/call
 // response and decodes into the matching typed shape. Exposed as a top-level
 // helper so other callers (e.g. typed wrappers) can reuse the dispatch.
 func parseToolCallResult(raw json.RawMessage) (*ToolCallResult, error) {
 	var probe struct {
-		ResultType core.ResultType `json:"resultType"`
+		ResultType core.ResultType `json:"result_type"`
 	}
 	// Probe failure is harmless — fall through to the sync shape, which
 	// will surface its own decode error if the response is genuinely malformed.
 	_ = json.Unmarshal(raw, &probe)
 
-	if probe.ResultType == core.ResultTypeTask {
+	switch probe.ResultType {
+	case core.ResultTypeTask:
 		var r core.CreateTaskResult
 		if err := json.Unmarshal(raw, &r); err != nil {
 			return nil, fmt.Errorf("unmarshal CreateTaskResult: %w", err)
 		}
 		return &ToolCallResult{Task: &r}, nil
+	case core.ResultTypeIncomplete:
+		var r core.IncompleteResult
+		if err := json.Unmarshal(raw, &r); err != nil {
+			return nil, fmt.Errorf("unmarshal IncompleteResult: %w", err)
+		}
+		return &ToolCallResult{Incomplete: &r}, nil
 	}
 
 	var r core.ToolResult

@@ -1,189 +1,140 @@
-# Plan: SEP-2322 (MRTR) + SEP-2663 (Tasks Extension)
+# Plan: SEP-2322 MRTR IncompleteResult
 
-**Status:** ✅ COMPLETE — all 8 phases shipped (PRs 324, 328, 329, 331, 334, 335) + audit gap fixes (in flight on `feat/sep-2663-audit-fixes`). 27/27 v2 conformance scenarios passing. v1 frozen alongside via `RegisterTasksV1`; hybrid via `RegisterTasksHybrid`. User-facing summary in [`docs/TASKS_V2_MIGRATION.md`](docs/TASKS_V2_MIGRATION.md).
+**Issue:** mcpkit 341 | **Design review:** mcpkit 342
+**Branch:** `feat/sep-2322-mrtr-incomplete` (from main)
+**Depends on:** SEP-2663 work (merged) — resultType constants, InputRequest/InputResponses types, HMAC requestState
 
-**Issues:** issue 320 (SEP-2663), issue 321 (SEP-2322)
-**Branch:** `feat/tasks-extension` (from main)
-**Approach:** Evolve v2 in place (Option B). No parallel files.
+## Summary
+
+Implement the ephemeral multi-round-trip flow from SEP-2322: server returns `IncompleteResult` with `inputRequests` instead of blocking, client retries with `inputResponses`. This is the lightweight alternative to Tasks for gathering input.
 
 ## Key decisions
 
-- **MRTR types in core/** — SEP-2322 is accepted (10/10 vote). Track with `// SEP-2322` / `// SEP-2663` comment annotations for grep-able audit when specs finalize.
-- **No `_Ext` suffix** — v2 types become THE types: `CreateTaskResult`, `DetailedTask`, `UpdateTaskRequest`, etc.
-- **Types stay in core/, handlers in server/** — tasks is too deeply woven into dispatch/middleware for ext/tasks. Wire protocol says extension; implementation is core.
-- **v1 stays frozen** — rename `tasks_experimental.go` → `tasks_v1.go`, keep `RegisterTasksV1()`. 27/27 conformance preserved.
-- **v2 evolves** — `tasks_v2.go` and `core/task_v2.go` get updated in place to match SEP-2663.
-- **Client evolves** — `client/tasks.go` updated to new shapes. No v1 client preserved (conformance tests are the safety net).
+- **Handler model: stateless restart (Option 1)** — handler is re-invoked on each retry, checks for `inputResponses`, returns `IncompleteResult` if input is missing. See mcpkit 342 for conditions under which to revisit.
+- **Wire field: `result_type`** (snake_case) per conformance tests, NOT `resultType` (camelCase). Need to fix existing code too.
+- **Scope: `tools/call` only** — conformance only tests tools/call. Other methods are future.
+- **MRTR → Tasks composition** — MRTR loop can gather input, then final retry returns `CreateTaskResult`. Conformance tests validate this.
 
-## Constraints
+## Constraints check
 
 | Constraint | Status |
 |------------|--------|
-| C1 (typed contexts) | OK — `TaskContext` already typed |
-| C2 (consolidated entry structs) | OK — `taskEntry` consolidated |
-| C3 (no global mutable state) | OK — scoped to `v2TaskRuntime` |
-| server/C4 (no spec extensions without WG) | OK — implementing Agents WG spec |
+| C1 (typed contexts) | OK — ToolContext already carries inputResponses |
+| C2 (consolidated structs) | OK |
+| C3 (no globals) | OK |
+| server/C4 (no spec extensions without WG) | OK — implementing accepted SEP |
 
-## Phase 1: MRTR base types
+## Phase 1: Wire field rename + IncompleteResult type
 
-**Files:** `core/task_v2.go` (modify)
+**Files:** `core/task_v2.go`, `core/tool.go`
 
-- [ ] Add `ResultType` constants: `ResultTypeComplete = "complete"`, `ResultTypeIncomplete = "incomplete"` (keep `ResultTypeTask = "task"`)
-- [ ] Add `InputRequest` struct: `Method string`, `Params json.RawMessage` // SEP-2322
-- [ ] Add type aliases: `InputRequests = map[string]InputRequest`, `InputResponses = map[string]json.RawMessage`
-- [ ] Ensure `RequestState` field exists on result types // SEP-2322
+- [ ] Rename JSON tag `resultType` → `result_type` across all result types (breaking wire change — update all tests)
+- [ ] Add `IncompleteResult` struct: `ResultType` ("incomplete"), `InputRequests map[string]InputRequest`, `RequestState string`
+- [ ] Verify `InputRequest` struct already has `Method string` + `Params json.RawMessage` (done in SEP-2663)
+- [ ] Add `InputResponses` field to `ToolRequest` params (client sends these on retry)
 
-**Test:** JSON marshal/unmarshal round-trip for all `ResultType` values, `InputRequest` shapes.
+**Test:** Wire-format round-trip for IncompleteResult. Verify snake_case in JSON output.
 
-## Phase 2: SEP-2663 task types
+## Phase 2: Server dispatch — detect inputResponses on retry
 
-**Files:** `core/task_v2.go` (evolve)
+**Files:** `server/dispatch.go` or `server/mrtr.go` (new)
 
-- [ ] `CreateTaskResult` — remove `Result`, `Error`, `InputRequests` fields (MUST NOT carry these per SEP-2663)
-- [ ] `DetailedTask` discriminated union types: `WorkingTask`, `InputRequiredTask`, `CompletedTask`, `FailedTask`, `CancelledTask`
-- [ ] `GetTaskResult` — returns `DetailedTask`
-- [ ] `UpdateTaskRequest` (new): `TaskID`, `InputResponses`, `RequestState` // SEP-2663
-- [ ] `UpdateTaskResult` — empty ack
-- [ ] `CancelTaskResult` — empty ack (no task state)
-- [ ] Wire fields: `TTLSeconds *int`, `PollIntervalMilliseconds *int` (renamed per pja-ant feedback)
-- [ ] Remove `ParentTaskID` (not in SEP-2663)
-- [ ] Keep internal TTL storage as ms, convert at wire boundary
+- [ ] In tools/call dispatch: if `params.inputResponses` is present, inject into `ToolContext`
+- [ ] If `params.requestState` is present, verify HMAC (reuse existing infra), inject into context
+- [ ] Tool handler can access `ctx.InputResponses()` to check what the client sent
+- [ ] Tool handler can access `ctx.RequestState()` for any server-side state
 
-**Test:** JSON shapes match SEP-2663 examples exactly (wire-format comparison against spec examples).
+**Test:** Handler receives inputResponses correctly on retry.
 
-## Phase 3: Extension capability negotiation
+## Phase 3: Server handler API — returning IncompleteResult
 
-**Files:** `core/session.go`, `server/dispatch.go`
+**Files:** `core/tool.go`, `server/dispatch.go`
 
-- [ ] Register `io.modelcontextprotocol/tasks` as extension via `caps.Extensions`
-- [ ] Remove `TasksCap`/`ServerCapabilities.Tasks` for extension path (v1 keeps its own)
-- [ ] Gate task creation on `ClientSupportsExtension(ctx, "io.modelcontextprotocol/tasks")`
-- [ ] Remove per-tool `ToolExecution.TaskSupport` gating — server decides unilaterally
-- [ ] Support per-request capabilities via `_meta.io.modelcontextprotocol/clientCapabilities` (SEP-2575 pattern)
+- [ ] Tool handler returns `IncompleteResult` as a special value (not error):
+  ```go
+  func myTool(ctx ToolContext, req ToolRequest) (ToolResult, error) {
+      name := ctx.InputResponse("user_name")
+      if name == nil {
+          return ctx.RequestInput(map[string]InputRequest{
+              "user_name": {Method: "elicitation/create", Params: ...},
+          })
+      }
+      return TextResult("Hello, " + name), nil
+  }
+  ```
+- [ ] `ctx.RequestInput(reqs)` returns a sentinel `ToolResult` with `IsIncomplete: true` + `InputRequests`
+- [ ] Dispatch layer detects `IsIncomplete`, wraps as `IncompleteResult` with HMAC `requestState`
+- [ ] `requestState` encodes: tool name, accumulated inputResponses keys answered, expiry
 
-**Test:** Server returns `-32601` for `tasks/*` when extension not negotiated. Server MUST NOT return `CreateTaskResult` without extension.
+**Test:** Tool returns incomplete → client gets IncompleteResult on wire.
 
-## Phase 4: Server handlers
+## Phase 4: Multi-round + composition
 
-**Files:** `server/tasks_v2.go` (evolve)
+**Files:** `server/mrtr.go`
 
-- [ ] Rename `RegisterTasksV2` → `RegisterTasks` (THE registration)
-- [ ] `tasks/get` → pure idempotent read, returns `DetailedTask`
-- [ ] `tasks/update` (new handler) → accepts `InputResponses`, returns empty ack
-- [ ] `tasks/cancel` → returns empty ack (not task state)
-- [ ] Server-directed task creation: middleware creates task for ANY tool when server decides
-- [ ] `resultType: "task"` discriminator on `CreateTaskResult`
-- [ ] Set `Mcp-Name` header to `taskId` in HTTP transport for routing // SEP-2243
+- [ ] Multi-round: handler can return IncompleteResult multiple times (round 1: ask name, round 2: ask confirmation)
+- [ ] `requestState` carries which keys have been answered across rounds
+- [ ] On each retry, dispatch merges new `inputResponses` with previously-answered keys from `requestState`
+- [ ] MRTR → Tasks: if handler returns `CreateTaskResult` instead of `ToolResult`, dispatch emits task result
 
-**Also:**
-- [ ] Rename `tasks_experimental.go` → `tasks_v1.go`
-- [ ] Rename `RegisterTasks` (old v1) → `RegisterTasksV1`
+**Test:** Multi-round scenario + MRTR→task transition.
 
-**Test:** Unit tests for each handler, error cases, ack-only responses.
+## Phase 5: Client
 
-## Phase 5: inputRequests/inputResponses flow
+**Files:** `client/tools.go` or `client/mrtr.go` (new)
 
-**Files:** `server/task_session.go` (modify), `server/tasks_v2.go`
+- [ ] `CallTool()` checks `result_type` on response:
+  - `"complete"` or absent → return ToolResult (current behavior)
+  - `"task"` → return CreateTaskResult (current behavior from SEP-2663)
+  - `"incomplete"` → enter retry loop
+- [ ] Retry loop:
+  1. Parse `inputRequests` from IncompleteResult
+  2. Call user-provided `InputHandler` callback to gather responses
+  3. Re-send same `tools/call` with `inputResponses` + `requestState`
+  4. Repeat until complete/task/error
+- [ ] `InputHandler` interface: `func(reqs map[string]InputRequest) (map[string]json.RawMessage, error)`
+- [ ] Default InputHandler for common cases (auto-elicit via client's Elicit, auto-sample via client's Sample)
 
-Replace v1 side-channel pattern with poll-based input:
+**Test:** Mock server returning incomplete → client retries → gets complete.
 
-- [ ] `TaskContext.TaskElicit()`:
-  1. Generate stable key (monotonic counter per task, e.g. `"elicit-1"`)
-  2. Store `ElicitationRequest` in `taskEntry.pendingInputRequests`
-  3. Transition task to `input_required`
-  4. Block on response channel keyed by request key
-- [ ] `TaskContext.TaskSample()`: same pattern for `sampling/createMessage`
-- [ ] `tasks/get` handler: read `pendingInputRequests` → populate `inputRequests` in response
-- [ ] `tasks/update` handler: match `inputResponses` keys → deliver to waiting goroutine
-- [ ] Key uniqueness: monotonic counter, never reused over task lifetime
+## Phase 6: Example + conformance
 
-**Test:** Integration test: `confirm_delete` tool → poll → `input_required` with `inputRequests` → `tasks/update` → poll → `completed`.
+**Files:** `examples/mrtr/`, `conformance/mrtr/`
 
-## Phase 6: Client
+Example server tools (matching conformance contract):
+- `test_tool_with_elicitation` — asks for name, returns greeting
+- `test_tool_with_sampling` — asks model to generate, returns result
+- `test_tool_with_list_roots` — asks for roots, returns root list
+- `test_tool_multi_input` — asks for multiple inputs in one round
+- `test_tool_multi_round` — asks name (round 1), then confirmation (round 2)
+- `test_tool_with_task` — MRTR gathers input, then returns CreateTaskResult
 
-**Files:** `client/tasks.go` (evolve)
-
-- [ ] Remove `ToolCallAsTask()` (no client opt-in)
-- [ ] `GetTask()` → returns `DetailedTask` with inlined result/error/inputRequests + `requestState`
-- [ ] `UpdateTask(taskId, inputResponses, requestState)` (new)
-- [ ] `CancelTask()` → returns empty (no task state)
-- [ ] Remove `GetTaskPayload()` (`tasks/result` gone)
-- [ ] Remove `ListTasks()` (`tasks/list` gone)
-- [ ] `WaitForTask()` → poll loop, respects `PollIntervalMilliseconds`, echoes `requestState`
-- [ ] Handle polymorphic `tools/call` result: check `resultType` field
-
-**Test:** Mock server returning each result shape, polymorphic dispatch.
-
-## Phase 7: Example server + conformance
-
-**Files:** `examples/tasks-v2/` (evolve), `conformance/tasks-v2/` (evolve)
-
-Example server tools:
-- `greet` — sync, always returns `CallToolResult`
-- `slow_compute` — async, returns `CreateTaskResult`, completes after delay
-- `failing_job` — async, transitions to `failed` (protocol error)
-- `confirm_delete` — async, transitions to `input_required`, resumes via `tasks/update`
-
-Conformance evolution (from issue 320 comment):
-- Keep passing scenarios, adjust shapes (ack-only cancel, etc.)
-- Rework v2-11 → extension negotiation
-- Rework v2-16/v2-17 → `tasks/update` flow (currently unimplemented)
-- Add new: ext negotiation gate, polymorphic result, Mcp-Name header
-- Keep v1 suite frozen alongside
-
-## Phase 8: Backward compat bridge
-
-- [ ] `RegisterTasksV1()` stays for `2025-11-25` clients
-- [ ] `RegisterTasks()` (new) for extension-based clients
-- [ ] Both can coexist — dispatch based on negotiated capability
-- [ ] Document migration path in README
+Conformance scenarios (matching upstream PR 188):
+- [ ] Basic elicitation round-trip
+- [ ] Basic sampling round-trip
+- [ ] Basic list roots round-trip
+- [ ] requestState echo across rounds
+- [ ] Multiple inputRequests in one round
+- [ ] Multi-round (incomplete → incomplete → complete)
+- [ ] MRTR → task transition
+- [ ] Missing inputResponse handling
 
 ## Implementation order
 
 ```
-Phase 1 (MRTR types) → Phase 2 (task types) → Phase 3 (capability) →
-Phase 4 (server handlers) → Phase 5 (inputRequests flow) →
-Phase 6 (client) → Phase 7 (example + conformance) → Phase 8 (bridge)
+Phase 1 (types + rename) → Phase 2 (server detect) → Phase 3 (handler API) →
+Phase 4 (multi-round) → Phase 5 (client) → Phase 6 (example + conformance)
 ```
 
-## Deferred cleanup
+## Open questions
 
-- **`TaskInfoV2` → `TaskInfo` rename** (deliberately deferred during Phase 2).
-  Rationale: the existing `TaskInfo` (in `core/task.go`) is *not* strictly a
-  v1 wire type — it's the internal `TaskStore` record (`server/task_store.go`,
-  `server/task_session.go`) that happens to also serialize as the v1 wire
-  shape. Renaming it to `TaskInfoV1` would conflate "internal storage" with
-  "v1 protocol shape" and stop being true the moment the store record needs
-  fields the wire doesn't expose. Revisit when:
-  - the v1 path is removed (then `TaskInfoV2` can simply become `TaskInfo`), or
-  - the store record needs to diverge from the v1 wire shape (then introduce
-    a dedicated `taskRecord` type and free up `TaskInfo` for the v2 wire).
-
-- **Internal v2 symbols keep `V2`/`v2` infix** (deferred during Phase 4).
-  After promoting `RegisterTasksV2` → `RegisterTasks` and `TasksV2Config` →
-  `TasksConfig`, the canonical-named v2 file still has internal symbols like
-  `taskV2Middleware`, `v2TaskRuntime`, `newV2TaskRuntime`, `makeV2GetHandler`,
-  `notifyV2TaskStatus`, `notifyV2TaskStatusFromInfo`, `toTaskInfoV2`. They
-  collide with v1 internals in the same package (`taskMiddleware`,
-  `taskRuntime`, `makeGetHandler`, `notifyTaskStatus`), so dropping the V2
-  prefix requires renaming v1 internals to `*V1` first. Pure stylistic
-  cleanup with no user-visible impact — sweep when v1 is removed or when a
-  refactor already touches these files.
-
-## Open spec questions (watch before finalizing)
-
-Tracked in the living register issue titled "Tracking: SEP-2322 / SEP-2663 / SEP-2575 open spec questions" (issue 339) — code pins, test pins, and triggers for revisiting. Three entries today:
-
-1. `requestState` rejection: synchronous `-32602` or silent? — picked `-32602`.
-2. SEP-2575 per-request capabilities shape — using opaque `json.RawMessage` envelope so shape can change without consumer churn.
-3. `tasks/update` / `tasks/cancel` ack for unknown taskId — picked `-32602`.
-
-The pattern (loud failure + inline `// Open spec question` comment + named conformance scenario as the change-detector) is documented in the issue.
+1. **`result_type` rename** — breaking wire change for existing SEP-2663 consumers. Just rename since no external consumers yet.
+2. **InputHandler callback shape** — sync callback is simplest for Option 1.
+3. **requestState payload size** — if we serialize all answered inputResponses into requestState, large responses could bloat it. May need to store answers server-side and just carry a reference.
 
 ## Reference
 
-- SEP-2663 PR: https://github.com/modelcontextprotocol/specification/pull/2663
-- SEP-2322 PR: https://github.com/modelcontextprotocol/specification/pull/2322
-- SEP-2663 analysis: issue 320
-- Existing v2 PR: PR 301 (19/21 conformance)
-- Conformance test evolution: issue 320 comment
+- SEP-2322 spec: modelcontextprotocol/specification PR 2322
+- Conformance tests: modelcontextprotocol/conformance PR 188
+- Design review ticket: mcpkit 342
+- Depends on: SEP-2663 (merged, issue mcpkit 320)
