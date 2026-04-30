@@ -8,6 +8,9 @@ EVENTS_CLIENT := python3 ../../../experimental/ext/events/clients/python/events_
 # Usage: make run                                — test mode (no Telegram)
 #        TELEGRAM_BOT_TOKEN=... make run   — with Telegram bot
 
+demo: ## Run the demokit walkthrough (interactive, TUI). Server must be up via `make serve` in another terminal.
+	go run . --tui
+
 run: serve  ## Alias for serve
 
 serve: ## Start the telegram-events server standalone (also works with MCPJam, VS Code, Claude Desktop)
@@ -18,9 +21,6 @@ serve: ## Start the telegram-events server standalone (also works with MCPJam, V
 	  echo "Starting in test mode (no Telegram token)..."; \
 	  go run . --serve -addr :8080; \
 	fi
-
-demo: ## Run the demokit walkthrough (interactive, TUI). Server must be up via `make serve` in another terminal.
-	go run . --tui
 
 readme: ## Regenerate WALKTHROUGH.md from demo definitions
 	go run . --readme > WALKTHROUGH.md
