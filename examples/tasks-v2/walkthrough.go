@@ -79,13 +79,14 @@ func runDemo() {
 
 	// --- Step 1: Connect ---
 	demo.Step("Connect to the v2 tasks server").
-		Arrow("Host", "Server", "POST /mcp — initialize").
-		DashedArrow("Server", "Host", "serverInfo + tasks v2 capability").
-		Note("The mcpkit client opens a GET SSE stream so progress notifications reach us during polling. Initialize advertises the v2 tasks capability.").
+		Arrow("Host", "Server", "POST /mcp — initialize (declares io.modelcontextprotocol/tasks)").
+		DashedArrow("Server", "Host", "serverInfo + tasks extension advertised").
+		Note("The mcpkit client opens a GET SSE stream so progress notifications reach us during polling. Initialize declares support for the SEP-2663 tasks extension; without that declaration the v2 server falls through to synchronous tools/call and rejects tasks/* with -32601.").
 		Run(func() (result *demokit.StepResult) {
 			c = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "tasks-v2-host", Version: "1.0"},
 				client.WithGetSSEStream(),
+				client.WithTasksExtension(),
 				client.WithNotificationCallback(func(method string, params any) {
 					if method == "notifications/progress" {
 						fmt.Fprintf(os.Stderr, "    [notif] progress: %v\n", params)

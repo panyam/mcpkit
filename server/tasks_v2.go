@@ -107,12 +107,36 @@ func (rt *v2TaskRuntime) getToolCallbacks(taskID string) *TaskCallbacks {
 	return rt.registry.ToolCallbacks(name)
 }
 
+// tasksExtensionProvider implements core.ExtensionProvider for the SEP-2663
+// Tasks extension. RegisterTasksV2 hands an instance to Server.RegisterExtension
+// so the extension is advertised in capabilities.extensions during initialize.
+type tasksExtensionProvider struct{}
+
+// Extension declares the SEP-2663 Tasks extension.
+//
+//nolint:unused // referenced by RegisterTasksV2 only when the v2 path is wired
+func (tasksExtensionProvider) Extension() core.Extension {
+	return core.Extension{
+		ID:          core.TasksExtensionID,
+		SpecVersion: "draft", // SEP-2663 is in draft
+		Stability:   core.Experimental,
+	}
+}
+
 // RegisterTasksV2 hooks up v2 tasks support on the given server:
+//   - Advertises the io.modelcontextprotocol/tasks extension in initialize
+//     (replacing the v1 ServerCapabilities.Tasks declaration).
 //   - Installs middleware that intercepts tools/call for task-eligible tools
-//     (server-directed, no client task param needed)
-//   - Registers tasks/get and tasks/cancel handlers
-//   - Does NOT register tasks/result or tasks/list (removed in v2)
-//   - Does NOT advertise tasks capability (tasks are core protocol in v2)
+//     (server-directed, no client task param needed). Task creation is
+//     gated on the client supporting the extension — either at session
+//     level (initialize handshake) or per-request (SEP-2575 _meta).
+//   - Registers tasks/get and tasks/cancel handlers, gated on session-level
+//     extension support; otherwise the handlers return -32601 (method not
+//     found) so unsupported clients don't see a tasks surface they didn't
+//     ask for.
+//   - Does NOT register tasks/result or tasks/list (removed in v2).
+//   - Does NOT call SetTasksCap — v2 tasks live under capabilities.extensions,
+//     not the v1 ServerCapabilities.Tasks slot.
 //
 // Must be called before accepting connections.
 func RegisterTasksV2(cfg TasksV2Config) {
@@ -122,14 +146,30 @@ func RegisterTasksV2(cfg TasksV2Config) {
 	reg := srv.Registry()
 	rt := newV2TaskRuntime(store, reg)
 
-	// Install v2 middleware for tools/call interception.
+	// Advertise the SEP-2663 Tasks extension.
+	srv.RegisterExtension(tasksExtensionProvider{})
+
+	// Install v2 middleware for tools/call interception (gated on extension).
 	srv.UseMiddleware(taskV2Middleware(reg, rt, cfg))
 
-	// Register tasks/* protocol methods (v2: only get + cancel).
-	srv.HandleMethod("tasks/get", makeV2GetHandler(rt))
-	srv.HandleMethod("tasks/cancel", makeV2CancelHandler(rt))
+	// Register tasks/* protocol methods (v2: only get + cancel),
+	// gated on session-level extension support.
+	srv.HandleMethod("tasks/get", gateOnTasksExtension(makeV2GetHandler(rt)))
+	srv.HandleMethod("tasks/cancel", gateOnTasksExtension(makeV2CancelHandler(rt)))
+}
 
-	// v2: Do NOT call SetTasksCap — tasks are core protocol, not negotiated.
+// gateOnTasksExtension wraps a tasks/* handler so unsupported clients get
+// -32601 (method not found) instead of the real handler's response. This is
+// the SEP-2663 contract: tasks/* methods MUST NOT exist for clients that did
+// not negotiate the extension during initialize.
+func gateOnTasksExtension(inner MethodHandler) MethodHandler {
+	return func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
+		if !ctx.ClientSupportsExtension(core.TasksExtensionID) {
+			return core.NewErrorResponse(id, core.ErrCodeMethodNotFound,
+				"method requires extension "+core.TasksExtensionID)
+		}
+		return inner(ctx, id, params)
+	}
 }
 
 // --- Middleware ---
@@ -148,11 +188,16 @@ func taskV2Middleware(reg *Registry, rt *v2TaskRuntime, cfg TasksV2Config) Middl
 			return next(ctx, req)
 		}
 
+		// Parse the envelope. _meta carries two known keys for our purposes:
+		// progressToken (forwarded to the background goroutine) and the
+		// SEP-2575 per-request clientCapabilities override (kept as raw JSON
+		// because the typed ClientCapabilities lives in core).
 		var envelope struct {
 			Name string `json:"name"`
 			Meta *struct {
-				ProgressToken any `json:"progressToken"`
-			} `json:"_meta"`
+				ProgressToken         any             `json:"progressToken,omitempty"`
+				ClientCapabilitiesRaw json.RawMessage `json:"io.modelcontextprotocol/clientCapabilities,omitempty"`
+			} `json:"_meta,omitempty"`
 		}
 		if err := json.Unmarshal(req.Params, &envelope); err != nil {
 			return next(ctx, req)
@@ -163,7 +208,20 @@ func taskV2Middleware(reg *Registry, rt *v2TaskRuntime, cfg TasksV2Config) Middl
 			return next(ctx, req)
 		}
 
+		// SEP-2663: server MUST NOT return CreateTaskResult unless the client
+		// negotiated the io.modelcontextprotocol/tasks extension, either at
+		// session level (initialize handshake) or per-request (SEP-2575).
+		var perRequestCapsRaw json.RawMessage
+		if envelope.Meta != nil {
+			perRequestCapsRaw = envelope.Meta.ClientCapabilitiesRaw
+		}
+		if !core.ClientSupportsExtensionForRequest(ctx, core.TasksExtensionID, perRequestCapsRaw) {
+			return next(ctx, req)
+		}
+
 		// Determine effective taskSupport. Absent Execution = forbidden.
+		// In v2 this is a server-internal hint about which tools should be
+		// async — clients no longer opt in via a `task` param.
 		effectiveSupport := core.TaskSupportForbidden
 		if def.Execution != nil {
 			effectiveSupport = def.Execution.TaskSupport
