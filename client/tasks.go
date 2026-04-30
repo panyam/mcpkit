@@ -76,14 +76,14 @@ func IsToolTask(tool core.ToolDef) bool {
 
 // --- Client helpers ---
 
-// GetTask polls the status of a task by ID. Non-blocking.
+// GetTask polls the status of a v1 task by ID. Non-blocking.
 // Per MCP spec 2025-11-25 §tasks/get: returns flat Result & Task.
-func GetTask(c *Client, taskID string) (*core.GetTaskResult, error) {
+func GetTask(c *Client, taskID string) (*core.GetTaskResultV1, error) {
 	result, err := c.Call("tasks/get", getTaskParams{TaskID: taskID})
 	if err != nil {
 		return nil, err
 	}
-	var r core.GetTaskResult
+	var r core.GetTaskResultV1
 	if err := json.Unmarshal(result.Raw, &r); err != nil {
 		return nil, fmt.Errorf("unmarshal tasks/get: %w", err)
 	}
@@ -110,42 +110,44 @@ func GetTaskPayload(c *Client, taskID string) (*core.ToolResult, string, error) 
 	return &r, relatedID, nil
 }
 
-// ListTasks returns all tasks with cursor-based pagination.
+// ListTasks returns all v1 tasks with cursor-based pagination.
 // Pass an empty cursor to start from the beginning.
-func ListTasks(c *Client, cursor string) (*core.ListTasksResult, error) {
+// (Removed in v2 — tasks/list is no longer part of the protocol.)
+func ListTasks(c *Client, cursor string) (*core.ListTasksResultV1, error) {
 	result, err := c.Call("tasks/list", listTasksParams{Cursor: cursor})
 	if err != nil {
 		return nil, err
 	}
-	var r core.ListTasksResult
+	var r core.ListTasksResultV1
 	if err := json.Unmarshal(result.Raw, &r); err != nil {
 		return nil, fmt.Errorf("unmarshal tasks/list: %w", err)
 	}
 	return &r, nil
 }
 
-// CancelTask cancels a running task. Returns an error if the task is
+// CancelTask cancels a running v1 task. Returns an error if the task is
 // already in a terminal state.
 // Per MCP spec 2025-11-25 §tasks/cancel: returns flat Result & Task.
-func CancelTask(c *Client, taskID string) (*core.CancelTaskResult, error) {
+func CancelTask(c *Client, taskID string) (*core.CancelTaskResultV1, error) {
 	result, err := c.Call("tasks/cancel", cancelTaskParams{TaskID: taskID})
 	if err != nil {
 		return nil, err
 	}
-	var r core.CancelTaskResult
+	var r core.CancelTaskResultV1
 	if err := json.Unmarshal(result.Raw, &r); err != nil {
 		return nil, fmt.Errorf("unmarshal tasks/cancel: %w", err)
 	}
 	return &r, nil
 }
 
-// ToolCallAsTask invokes a tool with a task hint, returning a CreateTaskResult
-// instead of the immediate tool result. The server creates a task and runs
-// the tool asynchronously.
+// ToolCallAsTask invokes a v1 tool with a task hint, returning a
+// CreateTaskResultV1 instead of the immediate tool result. The server
+// creates a task and runs the tool asynchronously.
 //
 // Pass nil for opts to use server defaults. Per MCP spec 2025-11-25:
 // task hint at params.task, progressToken at params._meta.progressToken.
-func ToolCallAsTask(c *Client, name string, args any, opts ...*TaskCallOptions) (*core.CreateTaskResult, error) {
+// (V2 removes the client task hint — the server decides unilaterally.)
+func ToolCallAsTask(c *Client, name string, args any, opts ...*TaskCallOptions) (*core.CreateTaskResultV1, error) {
 	params := toolCallAsTaskParams{
 		Name:      name,
 		Arguments: args,
@@ -161,7 +163,7 @@ func ToolCallAsTask(c *Client, name string, args any, opts ...*TaskCallOptions) 
 	if err != nil {
 		return nil, err
 	}
-	var r core.CreateTaskResult
+	var r core.CreateTaskResultV1
 	if err := json.Unmarshal(result.Raw, &r); err != nil {
 		return nil, fmt.Errorf("unmarshal task creation: %w", err)
 	}
@@ -176,7 +178,7 @@ func ToolCallAsTask(c *Client, name string, args any, opts ...*TaskCallOptions) 
 //
 // This is a convenience wrapper around GetTask for the common pattern
 // of polling until completion.
-func WaitForTask(ctx context.Context, c *Client, taskID string, pollInterval time.Duration) (*core.GetTaskResult, error) {
+func WaitForTask(ctx context.Context, c *Client, taskID string, pollInterval time.Duration) (*core.GetTaskResultV1, error) {
 	if pollInterval <= 0 {
 		pollInterval = 1 * time.Second
 	}
