@@ -1,5 +1,7 @@
 # Plan: SEP-2322 (MRTR) + SEP-2663 (Tasks Extension)
 
+**Status:** ✅ COMPLETE — all 8 phases shipped (PRs #324, #328, #329, #331, #334; Phase 8 in flight on `feat/sep-2663-phase-8`). 26/26 v2 conformance scenarios passing. v1 frozen alongside via `RegisterTasksV1`; hybrid via `RegisterTasksHybrid`. User-facing summary in [`docs/TASKS_V2_MIGRATION.md`](docs/TASKS_V2_MIGRATION.md).
+
 **Issues:** mcpkit#320 (SEP-2663), mcpkit#321 (SEP-2322)
 **Branch:** `feat/tasks-extension` (from main)
 **Approach:** Evolve v2 in place (Option B). No parallel files.

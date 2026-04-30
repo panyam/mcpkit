@@ -12,7 +12,7 @@ make test-e2e          # E2E tests (auth + apps)
 make testconf          # MCP conformance suite (needs Node.js)
 make testconfauth      # Auth conformance (client OAuth)
 make testconf-tasks    # Tasks v1 conformance (27 scenarios, self-contained)
-make testconf-tasks-v2 # Tasks v2 conformance (19 scenarios, self-contained, skips MRTR)
+make testconf-tasks-v2 # Tasks v2 conformance (26 scenarios, self-contained, SEP-2663)
 make testall           # Everything (12 stages) + Keycloak + HTML report
 make audit             # govulncheck + gosec + gitleaks + race
 make tag-push V=vX.Y.Z # Tag root + all sub-modules and push
@@ -55,4 +55,8 @@ Module-specific gotchas live in their READMEs.
 
 ## Conformance
 
-Server: 30/30, Auth: 14/14, Apps: 21, Tasks v1: 27/27, Tasks v2: 19/21 (v2-16/v2-17 MRTR-deferred), Keycloak: 12/12, testall: 12/12 stages.
+Server: 30/30, Auth: 14/14, Apps: 21, Tasks v1: 27/27, Tasks v2: 26/26 (SEP-2663, MRTR closed), Keycloak: 12/12, testall: 12/12 stages.
+
+## Tasks v1 vs v2
+
+Two surfaces, three entry points: `RegisterTasksV1` (frozen), `RegisterTasks` (v2/SEP-2663, canonical), `RegisterTasksHybrid` (both, dispatch by negotiated cap). See [`docs/TASKS_V2_MIGRATION.md`](docs/TASKS_V2_MIGRATION.md).
