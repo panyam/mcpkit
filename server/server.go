@@ -288,9 +288,23 @@ func (s *Server) UseMiddleware(mw ...Middleware) {
 }
 
 // SetTasksCap configures the tasks capability advertised during initialize.
-// Must be called before accepting connections.
+// Must be called before accepting connections. (V1-only: v2 advertises tasks
+// via the io.modelcontextprotocol/tasks extension instead — see RegisterTasks.)
 func (s *Server) SetTasksCap(cap *core.TasksCap) {
 	s.dispatcher.tasksCap = cap
+}
+
+// RegisterExtension declares a protocol extension at runtime, the way
+// WithExtension does at construction time. Used by RegisterTasks (and other
+// post-construction hookups like ext/auth) so the extension is advertised in
+// the initialize response without forcing callers to thread an Option through.
+// Must be called before accepting connections.
+func (s *Server) RegisterExtension(ext core.ExtensionProvider) {
+	if s.dispatcher.extensions == nil {
+		s.dispatcher.extensions = make(map[string]core.Extension)
+	}
+	e := ext.Extension()
+	s.dispatcher.extensions[e.ID] = e
 }
 
 // RegisterTool adds a tool to the server.

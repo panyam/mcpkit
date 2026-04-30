@@ -103,6 +103,48 @@ func ClientSupportsExtension(ctx context.Context, extensionID string) bool {
 	return ok
 }
 
+// PerRequestClientCapsKey is the SEP-2575 _meta key under which a client may
+// declare a per-request capability override. The value is shaped like
+// ClientCapabilities and is merged additively on top of the session-level
+// capabilities for the duration of one request.
+const PerRequestClientCapsKey = "io.modelcontextprotocol/clientCapabilities"
+
+// PerRequestClientCaps decodes the SEP-2575 per-request client-capabilities
+// override from raw JSON bytes (typically the value of _meta[PerRequestClientCapsKey]
+// in the calling middleware's typed envelope). Returns nil if the bytes are
+// empty or malformed — the caller falls back to session-level caps.
+func PerRequestClientCaps(raw json.RawMessage) *ClientCapabilities {
+	if len(raw) == 0 {
+		return nil
+	}
+	var caps ClientCapabilities
+	if err := json.Unmarshal(raw, &caps); err != nil {
+		return nil
+	}
+	return &caps
+}
+
+// ClientSupportsExtensionForRequest reports whether the client supports the
+// given extension at session level (initialize handshake) OR per-request
+// level (SEP-2575 _meta override). Per-request opt-in is additive — it
+// cannot revoke a session-level declaration.
+//
+// requestCapsRaw is the raw JSON bytes from the SEP-2575 _meta override; the
+// caller extracts it from a typed envelope (e.g., a json.RawMessage field
+// tagged "io.modelcontextprotocol/clientCapabilities" inside _meta). Pass
+// an empty slice if the request had no override.
+func ClientSupportsExtensionForRequest(ctx context.Context, extensionID string, requestCapsRaw json.RawMessage) bool {
+	if ClientSupportsExtension(ctx, extensionID) {
+		return true
+	}
+	caps := PerRequestClientCaps(requestCapsRaw)
+	if caps == nil {
+		return false
+	}
+	_, ok := caps.Extensions[extensionID]
+	return ok
+}
+
 // Notify sends an arbitrary server-to-client JSON-RPC notification.
 // Returns false if no notification sender is available in the context.
 // This is the low-level API; prefer EmitLog for logging notifications.

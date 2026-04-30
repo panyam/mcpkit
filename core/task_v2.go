@@ -1,6 +1,22 @@
 package core
 
-import "encoding/json"
+import (
+	"context"
+	"encoding/json"
+)
+
+// TasksExtensionID is the protocol extension identifier for SEP-2663 Tasks.
+// Servers advertise it under capabilities.extensions in the initialize
+// response; clients declare support under capabilities.extensions in the
+// initialize request (or per-request via SEP-2575 _meta).
+const TasksExtensionID = "io.modelcontextprotocol/tasks"
+
+// ClientSupportsTasks checks whether the connected client declared support
+// for the SEP-2663 Tasks extension during the initialize handshake.
+// Equivalent to ClientSupportsExtension(ctx, TasksExtensionID).
+func ClientSupportsTasks(ctx context.Context) bool {
+	return ClientSupportsExtension(ctx, TasksExtensionID)
+}
 
 // Tasks v2 types — SEP-2663 (Tasks Extension), SEP-2557 (resultType
 // discriminator), and MRTR base types from SEP-2322.
