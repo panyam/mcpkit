@@ -171,3 +171,24 @@ typed accessors (for resource reads).
 | `make poll` | Polling loop (default 5s interval, override: `INTERVAL=10`) |
 
 All client commands use the shared [`events_client.py`](../ext/events/events_client.py).
+
+## Webhook secret + header modes
+
+The server flags select per-registry secret and header modes (see
+[`experimental/ext/events/README.md`](../ext/events/) for the full matrix).
+
+```bash
+# Default: server-generated secrets, X-MCP-* headers
+go run . -addr :8080
+
+# Client-supplied secrets (echoed back if non-empty)
+go run . -addr :8080 -webhook-secret-mode client
+
+# Identity mode: secret = HMAC(root, tuple); subscribe is idempotent on tuple
+go run . -addr :8080 -webhook-secret-mode identity -webhook-root deadbeefcafef00d
+
+# Standard Webhooks header naming (webhook-id / webhook-timestamp / webhook-signature)
+go run . -addr :8080 -webhook-header-mode standard
+```
+
+The Python `make webhook` receiver auto-detects the header set on the wire and verifies accordingly — no extra client-side flag.
