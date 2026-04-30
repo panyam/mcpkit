@@ -256,6 +256,10 @@ for ev := range recv.Events() {
 }
 ```
 
+## Deployment
+
+For private-cloud / WAF-fronted deployments, see [`DEPLOYMENT.md`](DEPLOYMENT.md) — covers egress patterns, WAF allowlist guidance, SSRF guards, retry/backoff timing for proxy tuning, TTL refresh as keepalive, and master-root handling for Identity mode.
+
 ## Spec alignment
 
 Based on Peter Alexander's design sketch (triggers-events-wg PR #1). Notable choices:

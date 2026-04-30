@@ -11,6 +11,8 @@ make serve    # terminal 1 — real MCP server
 make demo     # terminal 2 — scripted demokit walkthrough (TUI)
 ```
 
+> **Going to production?** See [`experimental/ext/events/DEPLOYMENT.md`](../../../experimental/ext/events/DEPLOYMENT.md) for private-cloud / WAF guidance.
+
 A condensed walkthrough focused on the telegram-specific payload shape and the typed Go SDK at [`experimental/ext/events/clients/go/`](../../../experimental/ext/events/clients/go/). For the full protocol exposition (events/list, poll, secret modes, header modes) see [`../discord/WALKTHROUGH.md`](../discord/WALKTHROUGH.md). See [`WALKTHROUGH.md`](WALKTHROUGH.md) for this demo's specific sequence.
 
 ## Quick Start
