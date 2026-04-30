@@ -86,6 +86,20 @@ func filterFlags(args []string) []string {
 	return out
 }
 
+// liveInteractionTimeout is how long the live-interaction step waits for
+// real Discord events. Drops to 0 in --non-interactive mode so CI runs
+// don't pay the wait when no human is there to type.
+const liveInteractionTimeout = 30 * time.Second
+
+func nonInteractive() bool {
+	for _, a := range os.Args[1:] {
+		if strings.TrimSpace(a) == "--non-interactive" {
+			return true
+		}
+	}
+	return false
+}
+
 // runDemo drives the demokit walkthrough against a server that the user
 // started separately via `make serve`. Steps walk through every events-spec
 // feature mcpkit currently supports: list, push, poll, cursorless, webhook
@@ -362,6 +376,56 @@ func runDemo() {
 			fmt.Printf("    on_refresh callbacks fired so far: %d (initial subscribe + any auto-refreshes)\n",
 				atomic.LoadInt32(&refreshes))
 			return
+		})
+
+	// --- Step 7: Live Discord interaction ---
+	demo.Step("Live Discord interaction (typing + message from a real Discord channel)").
+		Arrow("Discord", "Server", "TypingStart event (when you start typing in the channel)").
+		DashedArrow("Server", "Host", "notifications/events/event { name: discord.typing, cursor: null }").
+		Arrow("Discord", "Server", "MessageCreate event (when you press enter)").
+		DashedArrow("Server", "Host", "notifications/events/event { name: discord.message, cursor: <new> }").
+		Note("Requires the server to be running with -token + the bot invited to a channel you can post in. The TypingStart handler in main.go yields a cursorless discord.typing event; MessageCreate yields the cursored discord.message. Discord's typing indicator fires once when you start (then refires every ~8s if you keep typing), not per keystroke. In --non-interactive mode this step skips the wait so CI runs aren't slowed.").
+		Run(func() (result *demokit.StepResult) {
+			if nonInteractive() {
+				fmt.Printf("    Skipped in --non-interactive mode. Run without --non-interactive (and with the server in -token mode) to see live events.\n")
+				return
+			}
+
+			fmt.Printf("    Go to your Discord channel and start typing — typing indicators will show up here.\n")
+			fmt.Printf("    Press enter in Discord to send the message.\n")
+			fmt.Printf("    Listening for %s...\n\n", liveInteractionTimeout)
+
+			gotMsg := broker.Subscribe("discord.message", 8)
+			gotTyping := broker.Subscribe("discord.typing", 8)
+			deadline := time.After(liveInteractionTimeout)
+
+			var typingSeen, msgSeen int
+			for {
+				select {
+				case p := <-gotTyping:
+					typingSeen++
+					if d, ok := p["data"].(map[string]any); ok {
+						fmt.Printf("    [typing]  %v in channel %v\n", d["user"], d["channel_id"])
+					}
+				case p := <-gotMsg:
+					msgSeen++
+					if d, ok := p["data"].(map[string]any); ok {
+						fmt.Printf("    [message] %v: %q\n", d["author"], d["content"])
+					}
+					if msgSeen >= 1 {
+						// One message is enough to demo; finish without waiting out the timeout.
+						fmt.Printf("\n    Captured %d typing event(s) + %d message(s).\n", typingSeen, msgSeen)
+						return
+					}
+				case <-deadline:
+					if typingSeen+msgSeen == 0 {
+						fmt.Printf("    No live events received within %s. Make sure the server is started with -token and the bot is invited to a channel you can post in.\n", liveInteractionTimeout)
+					} else {
+						fmt.Printf("\n    Captured %d typing event(s) + %d message(s).\n", typingSeen, msgSeen)
+					}
+					return
+				}
+			}
 		})
 
 	demo.Section("Where each piece lives in mcpkit",

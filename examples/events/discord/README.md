@@ -36,6 +36,8 @@ DISCORD_BOT_TOKEN=your-token make serve
    - Bot Permissions: `Send Messages`, `Read Message History`
 6. Copy the generated URL and open it to invite the bot to your server
 
+The typing-indicator step in the walkthrough additionally needs the `IntentsGuildMessageTyping` intent — the server requests it automatically when started with `-token`, no extra dev-portal toggle required (typing isn't classified as a privileged intent).
+
 ## Architecture
 
 ```
