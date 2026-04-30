@@ -1,16 +1,16 @@
-# MCP Tasks v2 (SEP-2557) — Server-Directed Async
+# MCP Tasks v2 (SEP-2663) — Server-Directed Async + MRTR
 
-Walks through the v2 Tasks protocol where the *server* decides whether to create a task — clients no longer send a task hint. Inlined results, flat shape, and tool-error vs protocol-error semantics.
+Walks through the v2 Tasks extension where the *server* decides whether to create a task — clients no longer send a task hint. Polymorphic tools/call, inlined results, ack-only cancel, and the new tasks/update flow that closes the elicit/sample (MRTR) loop.
 
 ## What you'll learn
 
-- **Connect to the v2 tasks server** — The mcpkit client opens a GET SSE stream so progress notifications reach us during polling. Initialize advertises the v2 tasks capability.
-- **Sync call: greet — no task created** — greet is taskSupport=forbidden. The server runs it inline and returns the standard ToolResult shape. No task created. The host can detect sync vs task by checking for the `resultType: "task"` discriminator on the response.
-- **slow_compute (no task hint!) — server creates a task** — Critical v2 semantics: client doesn't include a `task` param — calls slow_compute like any sync tool. Because slow_compute has Execution.TaskSupport=optional, the server elects to create a task. The discriminator `resultType: "task"` tells the host to switch to polling mode.
-- **Poll tasks/get — final response inlines the result** — v2's flat shape: GetTaskResultV2 has TaskInfo fields at the top level, and inlines the actual ToolResult under `result` once status is terminal. No second roundtrip to tasks/result.
-- **failing_job → status: completed, result.isError: true (TOOL error semantics)** — In v2, a tool that returns an error result lands in status `completed` with `result.isError: true`. The task itself ran to completion — the *operation* failed but the *infrastructure* didn't. This is distinct from protocol failures (next step).
-- **protocol_error_job → status: failed, error: {...} (PROTOCOL error semantics)** — Protocol errors (panics, framework bugs, things that aren't the tool's fault) land in status `failed` with the error inlined as `error: {code, message, data}` mirroring JSON-RPC error shape. The host should treat this as 'something is broken', not 'the tool said no'.
-- **Cancel a long-running task → status: cancelled** — Same cooperative cancellation as v1. Server cancels the goroutine context; tools that select on ctx.Done() exit cleanly. v2 cancel response also includes the flat TaskInfo so the host doesn't need an extra round-trip.
+- **Connect to the v2 tasks server (declare extension)** — `client.WithTasksExtension()` adds `io.modelcontextprotocol/tasks` to ClientCapabilities.Extensions during initialize. Without that declaration, the v2 server falls through to synchronous tools/call and rejects tasks/* with -32601.
+- **Sync call: greet — ToolCall returns Sync variant** — `client.ToolCall(c, name, args)` returns a polymorphic `*ToolCallResult`. For sync tools (no Execution / TaskSupport=forbidden) the server returns a plain `ToolResult` and the helper sets `Sync` (not `Task`). Callers branch on `result.IsTask()`.
+- **slow_compute (no task hint!) — server creates a task → ToolCall returns Task variant** — Critical v2 semantics: no `task` param in the request — the server elects to create a task because slow_compute has TaskSupport=optional. The discriminator `resultType: "task"` lights up `result.IsTask()` on the helper. The Mcp-Name HTTP header carries the same taskId so HTTP routing/observability can key off it without parsing the body.
+- **failing_job → status: completed, result.isError: true (TOOL error semantics)** — In v2, a tool that returns an error result lands in status `completed` with `result.isError: true`. The task itself ran to completion — the *operation* failed but the *infrastructure* didn't. Distinct from protocol failures (next step).
+- **protocol_error_job → status: failed, error: {...} (PROTOCOL error semantics)** — Protocol errors (panics, framework bugs, things that aren't the tool's fault) land in status `failed` with the error inlined as `error: {code, message, data}` mirroring the JSON-RPC error shape. The host should treat this as 'something is broken', not 'the tool said no'.
+- **confirm_delete → input_required → tasks/update → completed (SEP-2663 MRTR)** — This is the new SEP-2663 MRTR loop: the tool blocks on `TaskElicit`, the task parks in `input_required`, `tasks/get` surfaces the pending request under `inputRequests` (server-minted opaque keys), and `client.UpdateTask` delivers the matching response so the goroutine resumes. Cancellation during input_required propagates via ctx.Done() — see `TestV2_ElicitCancelUnblocks` in server tests.
+- **Cancel a long-running task → empty ack, status settles to cancelled** — Same cooperative cancellation as v1 (server cancels the goroutine context; tools that select on ctx.Done() exit cleanly), but the response shape changed: SEP-2663 cancel returns an empty `{}` ack. Observe the `cancelled` status via the next `tasks/get` (or `WaitForTask` which does it for you).
 
 ## Flow
 
@@ -19,39 +19,45 @@ sequenceDiagram
     participant Host as MCP Host (this client)
     participant Server as MCP Server (make serve)
 
-    Note over Host,Server: Step 1: Connect to the v2 tasks server
-    Host->>Server: POST /mcp — initialize
-    Server-->>Host: serverInfo + tasks v2 capability
+    Note over Host,Server: Step 1: Connect to the v2 tasks server (declare extension)
+    Host->>Server: POST /mcp — initialize (declares io.modelcontextprotocol/tasks)
+    Server-->>Host: serverInfo + tasks extension advertised under capabilities.extensions
 
-    Note over Host,Server: Step 2: Sync call: greet — no task created
+    Note over Host,Server: Step 2: Sync call: greet — ToolCall returns Sync variant
     Host->>Server: tools/call: greet {name: "world"}
-    Server-->>Host: ToolResult (no resultType discriminator → sync)
+    Server-->>Host: ToolResult (no resultType discriminator → ToolCallResult.Sync)
 
-    Note over Host,Server: Step 3: slow_compute (no task hint!) — server creates a task
+    Note over Host,Server: Step 3: slow_compute (no task hint!) — server creates a task → ToolCall returns Task variant
     Host->>Server: tools/call: slow_compute {seconds: 3}
-    Server-->>Host: {resultType: "task", task: {taskId, status: working, ttl}}
+    Server-->>Host: {resultType: "task", task: {taskId, status: working, ttlSeconds, ...}}
++ Mcp-Name: <taskId> response header (SEP-2243)
 
-    Note over Host,Server: Step 4: Poll tasks/get — final response inlines the result
-    Host->>Server: tasks/get {taskId}  (polled)
-    Server-->>Host: notifications/progress (1/3, 2/3, 3/3) via SSE
-    Server-->>Host: {status: completed, result: {...}, ttl: ...}  (no separate tasks/result needed)
-
-    Note over Host,Server: Step 5: failing_job → status: completed, result.isError: true (TOOL error semantics)
-    Host->>Server: tools/call: failing_job
-    Server-->>Host: {resultType: task, task: ...}
-    Host->>Server: tasks/get (polled)
+    Note over Host,Server: Step 4: failing_job → status: completed, result.isError: true (TOOL error semantics)
+    Host->>Server: tools/call: failing_job → CreateTaskResult
+    Host->>Server: WaitForTask polls tasks/get until terminal
     Server-->>Host: {status: completed, result: {isError: true, content: [...]}}
 
-    Note over Host,Server: Step 6: protocol_error_job → status: failed, error: {...} (PROTOCOL error semantics)
-    Host->>Server: tools/call: protocol_error_job
-    Host->>Server: tasks/get (polled)
+    Note over Host,Server: Step 5: protocol_error_job → status: failed, error: {...} (PROTOCOL error semantics)
+    Host->>Server: tools/call: protocol_error_job → CreateTaskResult
+    Host->>Server: WaitForTask polls tasks/get until terminal
     Server-->>Host: {status: failed, error: {code, message}}
 
-    Note over Host,Server: Step 7: Cancel a long-running task → status: cancelled
+    Note over Host,Server: Step 6: confirm_delete → input_required → tasks/update → completed (SEP-2663 MRTR)
+    Host->>Server: tools/call: confirm_delete {filename: "important.txt"}
+    Server-->>Host: {resultType: task, task: {status: working, ...}}
+    Host->>Server: GetTask (polled until status = input_required)
+    Server-->>Host: DetailedTask {status: input_required, inputRequests: { "elicit-N": {method, params} }}
+    Host->>Server: tasks/update {taskId, inputResponses: { "elicit-N": {action: accept, content: {confirm: true}} }}
+    Server-->>Host: {} (empty ack)
+    Host->>Server: WaitForTask until terminal
+    Server-->>Host: {status: completed, result: {content: ["deleted 'important.txt'"]}}
+
+    Note over Host,Server: Step 7: Cancel a long-running task → empty ack, status settles to cancelled
     Host->>Server: tools/call: slow_compute {seconds: 10}
     Server-->>Host: {resultType: task, task: ...}
-    Host->>Server: tasks/cancel {taskId}
-    Host->>Server: tasks/get (final)
+    Host->>Server: client.CancelTask
+    Server-->>Host: {} (empty ack — SEP-2663 cancel returns no task state)
+    Host->>Server: WaitForTask polls tasks/get
     Server-->>Host: {status: cancelled}
 ```
 
@@ -63,54 +69,59 @@ Start the MCP server in a separate terminal first:
 
 ```
 Terminal 1:  make serve        # tasks-v2 server on :8080
-Terminal 2:  make run          # this demo
+Terminal 2:  make demo         # this demo
 ```
 
 ### v1 vs v2 — what changed
 
-In v1 (SEP-1036) the *client* hints at task vs sync via a `task` param. v2 (SEP-2557) flips this:
+v1 (SEP-1036, MCP spec 2025-11-25) had the *client* hint at task vs sync via a `task` param. v2 (SEP-2663, in-flight) flips the contract:
 
-- **No client task hint.** Just call `tools/call` normally — the *server* decides.
-- **`resultType` discriminator** on `tools/call` response: `"task"` means a task was created (poll); absent means sync result.
-- **Inlined `result` / `error` / `inputRequests`** on `tasks/get` — no separate `tasks/result` call.
-- **TTL in seconds** (was milliseconds in v1).
-- **Error semantics**: tool errors (logic failures) → `status: completed, isError: true`. Protocol errors (framework crashes) → `status: failed` + `error` object.
+- **Tasks is an extension** (`io.modelcontextprotocol/tasks`). Clients declare support during `initialize`; servers gate every task-creating `tools/call` and every `tasks/*` method on the negotiation.
+- **No client task hint.** Just call `tools/call` normally — the *server* decides whether to run sync or create a task. The client `client.ToolCall` helper returns a polymorphic `ToolCallResult` with either `Sync` or `Task` populated.
+- **`resultType` discriminator** on `tools/call` response: `"task"` means a task was created; absent means sync.
+- **`tasks/get` returns `DetailedTask`** with inlined `result` / `error` / `inputRequests` / `requestState` per status. No separate `tasks/result` round-trip.
+- **`tasks/cancel` returns an empty ack**. Observe the resulting `cancelled` status with the next `tasks/get`.
+- **`tasks/update` is the SEP-2663 resume path** for MRTR input rounds — the client delivers `inputResponses` keyed to whatever `inputRequests` the server emitted.
+- **Wire fields renamed**: `ttlSeconds`, `pollIntervalMilliseconds`. `parentTaskId` removed.
+- **Mcp-Name HTTP header** (SEP-2243) carries the new taskId on task-creating responses.
+- **Error semantics**: tool errors → `status: completed, isError: true`. Protocol errors → `status: failed` + `error` object.
 - **`tasks/result` and `tasks/list` removed** — `tasks/get` is the single read endpoint.
 
-### Step 1: Connect to the v2 tasks server
+### Step 1: Connect to the v2 tasks server (declare extension)
 
-The mcpkit client opens a GET SSE stream so progress notifications reach us during polling. Initialize advertises the v2 tasks capability.
+`client.WithTasksExtension()` adds `io.modelcontextprotocol/tasks` to ClientCapabilities.Extensions during initialize. Without that declaration, the v2 server falls through to synchronous tools/call and rejects tasks/* with -32601.
 
-### Step 2: Sync call: greet — no task created
+### Step 2: Sync call: greet — ToolCall returns Sync variant
 
-greet is taskSupport=forbidden. The server runs it inline and returns the standard ToolResult shape. No task created. The host can detect sync vs task by checking for the `resultType: "task"` discriminator on the response.
+`client.ToolCall(c, name, args)` returns a polymorphic `*ToolCallResult`. For sync tools (no Execution / TaskSupport=forbidden) the server returns a plain `ToolResult` and the helper sets `Sync` (not `Task`). Callers branch on `result.IsTask()`.
 
-### Step 3: slow_compute (no task hint!) — server creates a task
+### Step 3: slow_compute (no task hint!) — server creates a task → ToolCall returns Task variant
 
-Critical v2 semantics: client doesn't include a `task` param — calls slow_compute like any sync tool. Because slow_compute has Execution.TaskSupport=optional, the server elects to create a task. The discriminator `resultType: "task"` tells the host to switch to polling mode.
+Critical v2 semantics: no `task` param in the request — the server elects to create a task because slow_compute has TaskSupport=optional. The discriminator `resultType: "task"` lights up `result.IsTask()` on the helper. The Mcp-Name HTTP header carries the same taskId so HTTP routing/observability can key off it without parsing the body.
 
-### Step 4: Poll tasks/get — final response inlines the result
+### Step 4: failing_job → status: completed, result.isError: true (TOOL error semantics)
 
-v2's flat shape: GetTaskResultV2 has TaskInfo fields at the top level, and inlines the actual ToolResult under `result` once status is terminal. No second roundtrip to tasks/result.
+In v2, a tool that returns an error result lands in status `completed` with `result.isError: true`. The task itself ran to completion — the *operation* failed but the *infrastructure* didn't. Distinct from protocol failures (next step).
 
-### Step 5: failing_job → status: completed, result.isError: true (TOOL error semantics)
+### Step 5: protocol_error_job → status: failed, error: {...} (PROTOCOL error semantics)
 
-In v2, a tool that returns an error result lands in status `completed` with `result.isError: true`. The task itself ran to completion — the *operation* failed but the *infrastructure* didn't. This is distinct from protocol failures (next step).
+Protocol errors (panics, framework bugs, things that aren't the tool's fault) land in status `failed` with the error inlined as `error: {code, message, data}` mirroring the JSON-RPC error shape. The host should treat this as 'something is broken', not 'the tool said no'.
 
-### Step 6: protocol_error_job → status: failed, error: {...} (PROTOCOL error semantics)
+### Step 6: confirm_delete → input_required → tasks/update → completed (SEP-2663 MRTR)
 
-Protocol errors (panics, framework bugs, things that aren't the tool's fault) land in status `failed` with the error inlined as `error: {code, message, data}` mirroring JSON-RPC error shape. The host should treat this as 'something is broken', not 'the tool said no'.
+This is the new SEP-2663 MRTR loop: the tool blocks on `TaskElicit`, the task parks in `input_required`, `tasks/get` surfaces the pending request under `inputRequests` (server-minted opaque keys), and `client.UpdateTask` delivers the matching response so the goroutine resumes. Cancellation during input_required propagates via ctx.Done() — see `TestV2_ElicitCancelUnblocks` in server tests.
 
-### Step 7: Cancel a long-running task → status: cancelled
+### Step 7: Cancel a long-running task → empty ack, status settles to cancelled
 
-Same cooperative cancellation as v1. Server cancels the goroutine context; tools that select on ctx.Done() exit cleanly. v2 cancel response also includes the flat TaskInfo so the host doesn't need an extra round-trip.
+Same cooperative cancellation as v1 (server cancels the goroutine context; tools that select on ctx.Done() exit cleanly), but the response shape changed: SEP-2663 cancel returns an empty `{}` ack. Observe the `cancelled` status via the next `tasks/get` (or `WaitForTask` which does it for you).
 
 ### Where each piece lives in mcpkit
 
-- v2 server library: `server/tasks_v2.go`
-- v2 wire types (`CreateTaskResultV2`, `GetTaskResultV2`, `ResultTypeTask`): `core/task_v2.go`
-- Conformance tests: `conformance/tasks-v2/scenarios.test.ts` (21 scenarios)
-- Implementation plan: `docs/TASKS_V2_PLAN.md`
+- v2 server library: `server/tasks_v2.go` (RegisterTasks, gating, MRTR runtime)
+- v2 wire types (`CreateTaskResult`, `DetailedTask`, `TaskInfoV2`, `UpdateTaskRequest`, `ResultTypeTask`): `core/task_v2.go` (SEP-2663)
+- v2 client helpers (`ToolCall`, `GetTask`, `UpdateTask`, `WaitForTask`, `CancelTask`): `client/tasks.go`
+- Conformance tests: `conformance/tasks-v2/scenarios.test.ts`
+- Implementation plan + open questions: `PLAN.md`
 
 ## Run it
 
