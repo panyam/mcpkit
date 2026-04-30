@@ -343,8 +343,18 @@ func (tasksExtensionProvider) Extension() core.Extension {
 //
 // Must be called before accepting connections.
 func RegisterTasks(cfg TasksConfig) {
-	cfg.defaults()
 	srv := cfg.Server
+	// Inherit server-wide WithRequestStateSigning unless this RegisterTasks
+	// call overrides explicitly. Sharing the key means production deployments
+	// configure HMAC once and both MRTR (Dispatcher.mrtr) + Tasks (this
+	// runtime) sign with the same secret.
+	if len(cfg.RequestStateKey) == 0 && srv != nil && len(srv.options.requestStateKey) > 0 {
+		cfg.RequestStateKey = srv.options.requestStateKey
+	}
+	if cfg.RequestStateTTL == 0 && srv != nil && srv.options.requestStateTTL > 0 {
+		cfg.RequestStateTTL = srv.options.requestStateTTL
+	}
+	cfg.defaults()
 	rt := newV2TaskRuntime(cfg)
 
 	// Advertise the SEP-2663 Tasks extension.
