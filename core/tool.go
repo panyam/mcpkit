@@ -115,7 +115,7 @@ type ToolResult struct {
 	// MarshalJSON when this field is empty). Task-creating responses use
 	// ResultTypeTask on CreateTaskResult; multi-round results use
 	// ResultTypeIncomplete on IncompleteResult instead.
-	ResultType ResultType `json:"result_type"`
+	ResultType ResultType `json:"resultType"`
 
 	// Content is the list of content items to return.
 	Content []Content `json:"content"`
@@ -164,7 +164,7 @@ func (r ToolResult) MarshalJSON() ([]byte, error) {
 // objects are wrapped into a 1-element slice. See #81.
 func (r *ToolResult) UnmarshalJSON(data []byte) error {
 	var aux struct {
-		ResultType        ResultType      `json:"result_type,omitempty"`
+		ResultType        ResultType      `json:"resultType,omitempty"`
 		Content           json.RawMessage `json:"content"`
 		IsError           bool            `json:"isError,omitempty"`
 		StructuredContent any             `json:"structuredContent,omitempty"`

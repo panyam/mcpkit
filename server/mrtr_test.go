@@ -62,8 +62,8 @@ func TestMRTR_BasicElicitationRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(r1.Raw, &m1); err != nil {
 		t.Fatalf("unmarshal r1: %v", err)
 	}
-	if m1["result_type"] != "incomplete" {
-		t.Fatalf("round 1 result_type = %v, want \"incomplete\"; raw=%s", m1["result_type"], r1.Raw)
+	if m1["resultType"] != "incomplete" {
+		t.Fatalf("round 1 resultType = %v, want \"incomplete\"; raw=%s", m1["resultType"], r1.Raw)
 	}
 	reqs, ok := m1["inputRequests"].(map[string]any)
 	if !ok {
@@ -100,8 +100,8 @@ func TestMRTR_BasicElicitationRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(r2.Raw, &m2); err != nil {
 		t.Fatalf("unmarshal r2: %v", err)
 	}
-	if rt := m2["result_type"]; rt != "complete" && rt != nil {
-		t.Errorf("round 2 result_type = %v, want \"complete\" (or absent)", rt)
+	if rt := m2["resultType"]; rt != "complete" && rt != nil {
+		t.Errorf("round 2 resultType = %v, want \"complete\" (or absent)", rt)
 	}
 	content, ok := m2["content"].([]any)
 	if !ok || len(content) == 0 {
@@ -296,7 +296,7 @@ func TestMRTR_MultiRoundAccumulatesAnswers(t *testing.T) {
 	}
 	var m1 map[string]any
 	json.Unmarshal(r1.Raw, &m1)
-	if m1["result_type"] != "incomplete" {
+	if m1["resultType"] != "incomplete" {
 		t.Fatalf("round 1 not incomplete; raw=%s", r1.Raw)
 	}
 	state1 := m1["requestState"].(string)
@@ -318,7 +318,7 @@ func TestMRTR_MultiRoundAccumulatesAnswers(t *testing.T) {
 	}
 	var m2 map[string]any
 	json.Unmarshal(r2.Raw, &m2)
-	if m2["result_type"] != "incomplete" {
+	if m2["resultType"] != "incomplete" {
 		t.Fatalf("round 2 not incomplete; raw=%s", r2.Raw)
 	}
 	state2 := m2["requestState"].(string)
@@ -343,8 +343,8 @@ func TestMRTR_MultiRoundAccumulatesAnswers(t *testing.T) {
 	}
 	var m3 map[string]any
 	json.Unmarshal(r3.Raw, &m3)
-	if rt := m3["result_type"]; rt != "complete" && rt != nil {
-		t.Errorf("round 3 result_type = %v, want \"complete\" (or absent); raw=%s", rt, r3.Raw)
+	if rt := m3["resultType"]; rt != "complete" && rt != nil {
+		t.Errorf("round 3 resultType = %v, want \"complete\" (or absent); raw=%s", rt, r3.Raw)
 	}
 	content, ok := m3["content"].([]any)
 	if !ok || len(content) == 0 {
@@ -406,7 +406,7 @@ func TestMRTR_TaskComposition_Skipped(t *testing.T) {
 	}
 	var m1 map[string]any
 	json.Unmarshal(r1.Raw, &m1)
-	if m1["result_type"] != "incomplete" {
+	if m1["resultType"] != "incomplete" {
 		t.Fatalf("round 1 should be incomplete; raw=%s", r1.Raw)
 	}
 
@@ -423,8 +423,8 @@ func TestMRTR_TaskComposition_Skipped(t *testing.T) {
 	}
 	var m2 map[string]any
 	json.Unmarshal(r2.Raw, &m2)
-	if m2["result_type"] != "task" {
-		t.Errorf("round 2 result_type = %v, want \"task\"; raw=%s", m2["result_type"], r2.Raw)
+	if m2["resultType"] != "task" {
+		t.Errorf("round 2 resultType = %v, want \"task\"; raw=%s", m2["resultType"], r2.Raw)
 	}
 	if _, ok := m2["task"].(map[string]any); !ok {
 		t.Errorf("round 2 missing task envelope; raw=%s", r2.Raw)

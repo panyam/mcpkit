@@ -5,7 +5,7 @@ Walks through the SEP-2322 ephemeral Multi Round-Trip Requests flow. The server 
 ## What you'll learn
 
 - **Connect to the MRTR server with capability handlers** — `client.WithElicitationHandler` / `WithSamplingHandler` / `WithRootsHandler` register the client-side callbacks. The walkthrough returns canned answers so the loop runs end-to-end without user interaction; in production these would prompt the user, hit an LLM, or read filesystem roots.
-- **Round 1 (raw): tools/call → IncompleteResult** — Bypass the auto-loop helper to see the raw IncompleteResult shape. The discriminator is `result_type` (snake_case — the only MCP wire field that isn't camelCase). `inputRequests` is keyed by server-chosen opaque ids the client must echo verbatim.
+- **Round 1 (raw): tools/call → IncompleteResult** — Bypass the auto-loop helper to see the raw IncompleteResult shape. The discriminator is `resultType` — camelCase like every other MCP wire field. `inputRequests` is keyed by server-chosen opaque ids the client must echo verbatim.
 - **Auto-loop: CallToolWithInputs runs the round-trip** — `client.CallToolWithInputs(ctx, c, name, args, handler)` collapses the whole loop. `DefaultInputHandler` synthesizes a server-to-client request for each `inputRequest` and routes it through `client.HandleServerRequestWithContext` — single source of truth for how the client responds to MCP method requests, whether they arrived over the back-channel or inlined inside an IncompleteResult.
 - **Multi-round: server accumulates answers across rounds via requestState** — The wire only ships the LATEST round's `inputResponses`. Dispatch decodes prior answers from `requestState` (a signed `MRTRRoundState` containing the accumulated answers map), merges with the current round, and surfaces a unified map to the handler. Handlers stay stateless across rounds. The canned elicitation handler returns the same `name: Alice` for both prompts in this demo, hence the funny output — a real handler would branch on the elicitation message.
 
@@ -22,7 +22,7 @@ sequenceDiagram
 
     Note over Host,Server: Step 2: Round 1 (raw): tools/call → IncompleteResult
     Host->>Server: tools/call: test_tool_with_elicitation {}
-    Server-->>Host: { result_type: "incomplete", inputRequests: {user_name: {method: "elicitation/create", ...}}, requestState: "<token>" }
+    Server-->>Host: { resultType: "incomplete", inputRequests: {user_name: {method: "elicitation/create", ...}}, requestState: "<token>" }
 
     Note over Host,Server: Step 3: Auto-loop: CallToolWithInputs runs the round-trip
     Host->>Server: tools/call: test_tool_with_elicitation
@@ -55,9 +55,9 @@ Terminal 2:  make demo          # this walkthrough (--tui for the interactive TU
 
 v1 `tools/call` had two terminal shapes — a sync `ToolResult` or (with SEP-2663 Tasks) a `CreateTaskResult`. SEP-2322 adds a third **transient** shape:
 
-- **`result_type: "complete"`** (or absent) — sync ToolResult, the call is done.
-- **`result_type: "task"`** — server elected to spin off a task; client polls via `tasks/get` (SEP-2663).
-- **`result_type: "incomplete"`** — server needs more input. The response carries `inputRequests` (a map of opaque keys → `{method, params}`) and an opaque `requestState`. The client resolves each input request locally, then RETRIES the same `tools/call` with the original arguments PLUS `inputResponses` (keyed by the same opaque ids) AND the echoed `requestState`.
+- **`resultType: "complete"`** (or absent) — sync ToolResult, the call is done.
+- **`resultType: "task"`** — server elected to spin off a task; client polls via `tasks/get` (SEP-2663).
+- **`resultType: "incomplete"`** — server needs more input. The response carries `inputRequests` (a map of opaque keys → `{method, params}`) and an opaque `requestState`. The client resolves each input request locally, then RETRIES the same `tools/call` with the original arguments PLUS `inputResponses` (keyed by the same opaque ids) AND the echoed `requestState`.
 
 The `inputRequests` methods are real MCP method names (`elicitation/create`, `sampling/createMessage`, `roots/list`). The client routes each through the same dispatcher it uses for real server-initiated requests — `client.HandleServerRequestWithContext` — so your existing `WithElicitationHandler` / `WithSamplingHandler` / `WithRootsHandler` callbacks just work.
 
@@ -69,7 +69,7 @@ The `inputRequests` methods are real MCP method names (`elicitation/create`, `sa
 
 ### Step 2: Round 1 (raw): tools/call → IncompleteResult
 
-Bypass the auto-loop helper to see the raw IncompleteResult shape. The discriminator is `result_type` (snake_case — the only MCP wire field that isn't camelCase). `inputRequests` is keyed by server-chosen opaque ids the client must echo verbatim.
+Bypass the auto-loop helper to see the raw IncompleteResult shape. The discriminator is `resultType` — camelCase like every other MCP wire field. `inputRequests` is keyed by server-chosen opaque ids the client must echo verbatim.
 
 ### Step 3: Auto-loop: CallToolWithInputs runs the round-trip
 
