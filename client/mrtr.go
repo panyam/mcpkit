@@ -2,7 +2,7 @@ package client
 
 // SEP-2322 MRTR (Multi Round-Trip Requests) — client side.
 //
-// On a tools/call response with result_type: "incomplete", the client must
+// On a tools/call response with resultType: "incomplete", the client must
 // resolve each entry in the returned inputRequests map into a response
 // payload and retry the call with inputResponses + the echoed requestState.
 // CallToolWithInputs runs that loop automatically; DefaultInputHandler

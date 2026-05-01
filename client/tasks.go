@@ -1,6 +1,6 @@
 package client
 
-// V2 task client helpers — SEP-2663 (Tasks Extension), SEP-2557 (result_type
+// V2 task client helpers — SEP-2663 (Tasks Extension), SEP-2557 (resultType
 // discriminator), SEP-2322 (MRTR).
 //
 // Differences from the v1 helpers in tasks_v1.go:
@@ -54,12 +54,12 @@ type WaitOptions struct {
 // (or use the IsTask / IsIncomplete helpers).
 type ToolCallResult struct {
 	// Sync is populated when the server ran the tool to completion in the
-	// same request and returned a ToolResult directly (result_type:
+	// same request and returned a ToolResult directly (resultType:
 	// "complete" or absent).
 	Sync *core.ToolResult
 
 	// Task is populated when the server elected to create a task (the
-	// result_type: "task" discriminator was present on the response).
+	// resultType: "task" discriminator was present on the response).
 	Task *core.CreateTaskResult
 
 	// Incomplete is populated when the server returned an SEP-2322
@@ -111,12 +111,12 @@ func ToolCall(c *Client, name string, args any) (*ToolCallResult, error) {
 	return parseToolCallResult(resp.Raw)
 }
 
-// parseToolCallResult inspects the result_type discriminator on a tools/call
+// parseToolCallResult inspects the resultType discriminator on a tools/call
 // response and decodes into the matching typed shape. Exposed as a top-level
 // helper so other callers (e.g. typed wrappers) can reuse the dispatch.
 func parseToolCallResult(raw json.RawMessage) (*ToolCallResult, error) {
 	var probe struct {
-		ResultType core.ResultType `json:"result_type"`
+		ResultType core.ResultType `json:"resultType"`
 	}
 	// Probe failure is harmless — fall through to the sync shape, which
 	// will surface its own decode error if the response is genuinely malformed.

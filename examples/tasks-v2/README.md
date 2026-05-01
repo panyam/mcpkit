@@ -13,7 +13,7 @@ Server-side implementation of the v2 Tasks extension. v2 inverts v1's client-dri
 | Capability slot | `capabilities.tasks` | `capabilities.extensions["io.modelcontextprotocol/tasks"]` |
 | Client opt-in | (none) | `client.WithTasksExtension()` required |
 | Client task hint | `task: {ttl, pollInterval}` in params | **none — server decides** |
-| Discriminator on `tools/call` | absent (use `taskId` presence) | `result_type: "task"` |
+| Discriminator on `tools/call` | absent (use `taskId` presence) | `resultType: "task"` |
 | Read endpoints | `tasks/get` + `tasks/result` (two RTTs) | `tasks/get` only (result inlined) |
 | Result on terminal `tasks/get` | only status — fetch separately | inlined `result` / `error` / `inputRequests` |
 | MRTR resume path | side-channel via `tasks/result` long-poll | `tasks/update` (new method) |
@@ -38,8 +38,8 @@ See [WALKTHROUGH.md](WALKTHROUGH.md) for the full step-by-step description and s
 
 | Tool | TaskSupport | What it demonstrates |
 |------|-------------|---------------------|
-| `greet` | forbidden | Sync-only — server returns ToolResult directly, no `result_type` |
-| `slow_compute` | optional | Server creates a task; client gets `result_type: "task"` discriminator |
+| `greet` | forbidden | Sync-only — server returns ToolResult directly, no `resultType` |
+| `slow_compute` | optional | Server creates a task; client gets `resultType: "task"` discriminator |
 | `failing_job` | required | Tool error path → terminal `completed` + `isError: true` |
 | `protocol_error_job` | required | Protocol error path → terminal `failed` + `error: {...}` |
 | `external_job` | required | TaskCallbacks proxy pattern (external task store) |
