@@ -473,7 +473,7 @@ func TestRequestStateSigning_SharedByMRTRAndTasks(t *testing.T) {
 	if err := json.Unmarshal(res.Raw, &ctr); err != nil {
 		t.Fatalf("unmarshal CreateTaskResult: %v", err)
 	}
-	getRes, err := c.Call("tasks/get", map[string]any{"taskId": ctr.Task.TaskID})
+	getRes, err := c.Call("tasks/get", map[string]any{"taskId": ctr.TaskID})
 	if err != nil {
 		t.Fatalf("tasks/get: %v", err)
 	}

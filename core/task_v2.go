@@ -90,12 +90,24 @@ type TaskInfoV2 struct {
 }
 
 // CreateTaskResult is returned by tools/call when the server elects to handle
-// the call as an async task (result_type: "task"). Per SEP-2663, this envelope
-// MUST NOT carry result, error, inputRequests, or requestState — those belong
-// on tasks/get's DetailedTask response.
+// the call as an async task. Per SEP-2663 it is `Result & Task` — a flat
+// intersection where the discriminator and the task fields share one object
+// (taskId / status / ttlSeconds / ... at the top level alongside result_type).
+//
+// Per SEP-2663, this envelope MUST NOT carry result, error, inputRequests,
+// or requestState — those belong on tasks/get's DetailedTask response.
+//
+// Wire shape (flat — no `task` wrapper):
+//
+//	{"result_type": "task", "taskId": "...", "status": "working",
+//	 "createdAt": "...", "lastUpdatedAt": "...", "ttlSeconds": 60,
+//	 "pollIntervalMilliseconds": 1000}
+//
+// TaskInfoV2 is embedded so encoding/json promotes its fields to the parent
+// (same trick DetailedTask uses); no custom MarshalJSON is needed.
 type CreateTaskResult struct {
 	ResultType ResultType `json:"result_type"`
-	Task       TaskInfoV2 `json:"task"`
+	TaskInfoV2
 }
 
 // DetailedTask is the SEP-2663 discriminated union returned by tasks/get.
