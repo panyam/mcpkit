@@ -771,6 +771,25 @@ func toTaskInfoV2(info core.TaskInfo) core.TaskInfoV2 {
 // tasks/get would have minted. Clients update their tracked requestState
 // from notifications so a stateless deployment can pick the conversation
 // back up without an extra tasks/get round-trip.
+//
+// Wire fields: payload embeds TaskInfoV2, so the JSON keys are `ttlSeconds`
+// and `pollIntervalMilliseconds` (renamed with units per pja-ant's accepted
+// feedback). The spec's notification example in commit ed4c83e still shows
+// the older `ttl`/`pollInterval` keys — that example is stale; the
+// normative TaskInfo schema uses the renamed fields and our output matches.
+//
+// Stream routing (Streamable HTTP): the bgCtx passed in here was produced
+// by core.DetachForBackground in taskV2Middleware, which swaps the dead
+// POST-scoped notifyFunc for the session-level one wired by sseWiring on
+// the persistent GET SSE stream. So notifications fan out on the client's
+// long-lived GET SSE connection, NOT on any per-request POST SSE stream.
+//
+// The post-Apr-30 spec language ("MUST send it on an SSE stream associated
+// with a tasks/get request") strictly read would require holding open the
+// SSE response from a tasks/get POST and pushing here, which is a much
+// larger transport change (per-task SSE-stream registry, tasks/get
+// hold-open semantics). Tracked as mcpkit issue 346; current behavior
+// matches what the v2-18 conformance test allows.
 func notifyV2TaskStatus(ctx context.Context, rt *v2TaskRuntime, store TaskStore, taskID, sessionID string) {
 	info, ok := store.Get(taskID, sessionID)
 	if !ok {

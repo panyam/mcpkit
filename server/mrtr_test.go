@@ -358,15 +358,17 @@ func TestMRTR_MultiRoundAccumulatesAnswers(t *testing.T) {
 
 // TestMRTR_TaskComposition_Skipped is a tracking placeholder for MRTR↔Tasks
 // composition (gather input via MRTR rounds, then return CreateTaskResult on
-// the final round). The current v2 task middleware (server/tasks_v2.go)
-// creates a task BEFORE the handler runs, so it never sees the handler's
-// IsIncomplete signal. True composition needs an opt-in flag on
-// ToolExecution (e.g. SupportsMRTR) plus a handler-driven task-creation
-// sentinel — deferred to a follow-up PR. Re-enable by deleting the t.Skip
-// once that lands. A matching scenario lives skipped in the conformance
-// suite (conformance/mrtr/scenarios.test.ts).
+// the final round). SEP-2663 commit 451f5e1 (Apr 30) made this flow normative,
+// but our taskV2Middleware (server/tasks_v2.go) creates the task BEFORE the
+// handler runs, so the handler never gets to return IncompleteResult on
+// round 1 — the middleware has already sent CreateTaskResult to the client.
+//
+// Resolving this is a real design choice (always-sync handler vs. handler-
+// signalled async) tracked as mcpkit issue 347. Re-enable by deleting the
+// t.Skip once that lands. A matching scenario lives skipped in the
+// conformance suite (conformance/mrtr/scenarios.test.ts:mrtr-08).
 func TestMRTR_TaskComposition_Skipped(t *testing.T) {
-	t.Skip("MRTR→Tasks composition deferred — see PLAN.md Phase 4 + matching skipped conformance scenario")
+	t.Skip("MRTR→Tasks composition deferred — tracking: mcpkit issue 347")
 
 	srv := NewServer(
 		core.ServerInfo{Name: "mrtr-task-compose", Version: "0.0.1"},

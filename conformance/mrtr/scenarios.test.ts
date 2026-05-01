@@ -330,8 +330,9 @@ describe('SEP-2322 MRTR ephemeral IncompleteResult flow', () => {
     // -------- B1 (skipped): MRTR → Tasks composition --------
     test.skip('mrtr-08: MRTR loop gathers input then final round returns CreateTaskResult (deferred)', async () => {
         // Tracking placeholder — matches server/mrtr_test.go:TestMRTR_TaskComposition_Skipped.
+        // SEP-2663 commit 451f5e1 made this flow normative; gap is on our side.
         // Re-enable once the v2 task middleware learns to inspect the handler's
-        // IsIncomplete signal before creating a task. See PLAN.md Phase 4.
+        // IsIncomplete signal before creating a task. Tracking: mcpkit issue 347.
         const r1 = await rawRequest('tools/call', {
             name: 'test_tool_with_task',
             arguments: {},

@@ -60,10 +60,11 @@ SERVER_URL=http://localhost:18093/mcp npx tsx --test mrtr/scenarios.test.ts
 
 ## About the skipped scenario
 
-`mrtr-08` (MRTR → Tasks composition) is intentionally skipped — the
-existing v2 task middleware creates a task BEFORE the handler runs, so it
-never sees the handler's `IsIncomplete` signal. True composition needs an
-opt-in flag on `ToolExecution` plus a handler-driven task-creation
-sentinel — deferred to a follow-up. The matching Go test
+`mrtr-08` (MRTR → Tasks composition) is intentionally skipped. SEP-2663
+commit 451f5e1 (Apr 30) made this flow normative, but the existing v2
+task middleware creates a task BEFORE the handler runs, so it never sees
+the handler's `IsIncomplete` signal. Resolving this is a design choice
+(always-sync handler vs. handler-signalled async); see mcpkit issue 347
+for the tradeoff and proposed implementation paths. The matching Go test
 (`server/TestMRTR_TaskComposition_Skipped`) is also skipped; both
 re-enable the moment the underlying work lands.
