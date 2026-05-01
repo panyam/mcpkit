@@ -12,8 +12,9 @@ make test-e2e          # E2E tests (auth + apps)
 make testconf          # MCP conformance suite (needs Node.js)
 make testconfauth      # Auth conformance (client OAuth)
 make testconf-tasks    # Tasks v1 conformance (27 scenarios, self-contained)
-make testconf-tasks-v2 # Tasks v2 conformance (26 scenarios, self-contained, SEP-2663)
+make testconf-tasks-v2 # Tasks v2 conformance (27 scenarios, self-contained, SEP-2663)
 make testconf-mrtr     # MRTR conformance (7 scenarios + 1 deferred skip, SEP-2322)
+make testconf-list-ttl # List-TTL conformance (5 scenarios, SEP-2549)
 make testall           # Everything (12 stages) + Keycloak + HTML report
 make audit             # govulncheck + gosec + gitleaks + race
 make tag-push V=vX.Y.Z # Tag root + all sub-modules and push
@@ -32,7 +33,7 @@ make tag-push V=vX.Y.Z # Tag root + all sub-modules and push
 | `experimental/ext/events/` — MCP Events protocol | `experimental/ext/events/README.md` |
 | `testutil/` — Test helpers | |
 | `tests/e2e/`, `tests/keycloak/` — Integration tests | `tests/e2e/apps/README.md` |
-| `examples/` — Working examples (apps, auth, tasks, tasks-v2, mrtr, host, elicitation, fine-grained-auth) | `examples/README.md` |
+| `examples/` — Working examples (apps, auth, tasks, tasks-v2, mrtr, list-ttl, host, elicitation, fine-grained-auth) | `examples/README.md` |
 
 ## Sub-Modules
 
@@ -51,12 +52,14 @@ Project-wide: `CONSTRAINTS.md`. Per-package: `core/CONSTRAINTS.md`, `server/CONS
 - **Background goroutines**: Use `core.DetachForBackground(ctx)` (not `context.WithoutCancel`) — replaces dead POST-scoped requestFunc/notifyFunc with the session-level persistent push.
 - **CORS for browser clients**: MCP servers need `Mcp-Session-Id` in both Allow-Headers and Expose-Headers, plus `DELETE` in allowed methods. Use `servicekit/middleware.CORS()` with options.
 - **Demokit non-interactive + browser steps**: Steps that open a browser and expect user action will fail in `--non-interactive` mode. Interactive mode is the primary path.
+- **`result_type` is snake_case**: The SEP-2322 polymorphic-dispatch discriminator on tools/call responses (`"task"` / `"complete"` / `"incomplete"`) is the only MCP wire field that is snake_case. Everything else (`taskId`, `inputRequests`, `requestState`, `ttlSeconds`, ...) stays camelCase. Test assertions and TS conformance code MUST use snake_case for this one field.
+- **Three-state TTL needs `*int` + omitempty**: SEP-2549 distinguishes `nil` (no guidance), `&0` (do not cache), `&N>0` (fresh for N seconds). Plain `int` with omitempty would conflate `nil` with `&0`. Same pattern fits any spec field with explicit-zero semantics.
 
 Module-specific gotchas live in their READMEs.
 
 ## Conformance
 
-Server: 30/30, Auth: 14/14, Apps: 21, Tasks v1: 27/27, Tasks v2: 26/26 (SEP-2663), MRTR: 7/7 (SEP-2322, ephemeral; 1 task-composition scenario skipped pending follow-up), Keycloak: 12/12, testall: 12/12 stages.
+Server: 30/30, Auth: 14/14, Apps: 21, Tasks v1: 27/27, Tasks v2: 27/27 (SEP-2663), MRTR: 7/7 (SEP-2322, ephemeral; 1 task-composition scenario skipped pending follow-up), List-TTL: 5/5 (SEP-2549), Keycloak: 12/12, testall: 12/12 stages.
 
 ## Tasks v1 vs v2
 
