@@ -60,12 +60,22 @@ type ResourceTemplate struct {
 type ResourcesListResult struct {
 	Resources  []ResourceDef `json:"resources"`
 	NextCursor string        `json:"nextCursor,omitempty"`
+
+	// TTL is the SEP-2549 cache freshness hint in seconds. See
+	// ToolsListResult.TTL for full semantics — same three-state pointer
+	// shape (nil = no guidance, &0 = do not cache, &N>0 = N seconds fresh).
+	TTL *int `json:"ttl,omitempty"`
 }
 
 // ResourceTemplatesListResult is the typed result for resources/templates/list responses.
 type ResourceTemplatesListResult struct {
 	ResourceTemplates []ResourceTemplate `json:"resourceTemplates"`
 	NextCursor        string             `json:"nextCursor,omitempty"`
+
+	// TTL is the SEP-2549 cache freshness hint in seconds. See
+	// ToolsListResult.TTL for full semantics — same three-state pointer
+	// shape (nil = no guidance, &0 = do not cache, &N>0 = N seconds fresh).
+	TTL *int `json:"ttl,omitempty"`
 }
 
 // ResourceReadContent is a single content item returned by resources/read.
