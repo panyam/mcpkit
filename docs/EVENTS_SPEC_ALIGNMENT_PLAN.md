@@ -367,9 +367,9 @@ For this plan: α deletes the old field names cleanly (no deprecation — just r
 
 ## Tracking
 
-- Public umbrella: mcpkit issue `<TBD — to be filed when α starts>` (mirrors the shape of #323)
+- Public umbrella: #349 (mirrors the shape of #323)
 - Per-PR detail: each PR's description + a focused root `PLAN.md` for ε if needed
-- Phase 1 reference: mcpkit#323 (closed, all PRs merged)
+- Phase 1 reference: #323 (closed, all PRs merged)
 - This plan: `docs/EVENTS_SPEC_ALIGNMENT_PLAN.md` (this file) — updated as PRs land
 
 ## How to use this plan
