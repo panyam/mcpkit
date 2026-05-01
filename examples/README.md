@@ -34,6 +34,7 @@ These don't have a CLI demo — point an MCP host at the running server.
 |---------|--------------|-------------|
 | [apps/](apps/) | MCP Apps — server-defined HTML/JS UIs in an iframe (vanilla, todolist, react, interactive, dashboard) | [MCPJam](https://mcpjam.com) (browser-based, supports the Apps extension) |
 | [mrtr/](mrtr/) | SEP-2322 ephemeral MRTR — `IncompleteResult` round-trips for `elicitation/create`, `sampling/createMessage`, `roots/list`; multi-round accumulation via `requestState`; tool fixtures for `make testconf-mrtr` | Any MCP host (or run `make testconf-mrtr` for the conformance harness) |
+| [list-ttl/](list-ttl/) | SEP-2549 list TTL — server emits `"ttl": <seconds>` cache-freshness hint on tools/list, prompts/list, resources/list, resources/templates/list. Configurable via `--ttl`; fixture for `make testconf-list-ttl` | Any MCP host (or run `make testconf-list-ttl` for the conformance harness) |
 | [protogen/bookservice/](protogen/bookservice/) | Proto annotations to MCP tools, resources, prompts | Any MCP host (Claude Code, VS Code, MCPJam, Claude Desktop) |
 
 ```bash
