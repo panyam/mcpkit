@@ -175,13 +175,12 @@ def cmd_list(session: MCPSession, args):
         resp = session.rpc("events/poll", {
             "subscriptions": [{"id": "list", "name": args.event, "cursor": "0"}],
         })
-        results = resp.get("result", {}).get("results", [])
-        if results:
-            r = results[0]
-            n = len(r.get("events", []))
-            print(f"  {n} event(s), cursor={_fmt_cursor(r.get('cursor'))}, hasMore={r.get('hasMore')}")
-            for ev in r.get("events", [])[:3]:
-                print(f"    {ev.get('eventId')}: {json.dumps(ev.get('data', {}), separators=(',', ':'))[:120]}")
+        result = resp.get("result", {})
+        events = result.get("events", [])
+        n = len(events)
+        print(f"  {n} event(s), cursor={_fmt_cursor(result.get('cursor'))}, hasMore={result.get('hasMore')}")
+        for ev in events[:3]:
+            print(f"    {ev.get('eventId')}: {json.dumps(ev.get('data', {}), separators=(',', ':'))[:120]}")
         print()
 
     # resource read
@@ -516,28 +515,26 @@ def cmd_poll(session: MCPSession, args):
             resp = session.rpc("events/poll", {
                 "subscriptions": [{"id": "poll-loop", "name": args.event, "cursor": cursor}],
             })
-            results = resp.get("result", {}).get("results", [])
-            if results:
-                r = results[0]
-                events = r.get("events", [])
-                if r.get("truncated"):
-                    print("  [!] truncated — server reset to a later position; some events were missed")
-                if events:
-                    cursor = r.get("cursor", cursor)
-                    for ev in events:
-                        print("── EVENT " + "─" * 45)
-                        print(f"  id:      {ev.get('eventId', '')}")
-                        print(f"  name:    {ev.get('name', '')}")
-                        print(f"  time:    {ev.get('timestamp', '')}")
-                        print(f"  cursor:  {_fmt_cursor(ev.get('cursor'))}")
-                        data = ev.get("data")
-                        if data:
-                            print(json.dumps(data, indent=2))
-                        print()
-                    sys.stdout.flush()
-                elif cursor == "0":
-                    # First poll with cursor=0 — grab the cursor for next time
-                    cursor = r.get("cursor", cursor)
+            result = resp.get("result", {})
+            events = result.get("events", [])
+            if result.get("truncated"):
+                print("  [!] truncated — server reset to a later position; some events were missed")
+            if events:
+                cursor = result.get("cursor", cursor)
+                for ev in events:
+                    print("── EVENT " + "─" * 45)
+                    print(f"  id:      {ev.get('eventId', '')}")
+                    print(f"  name:    {ev.get('name', '')}")
+                    print(f"  time:    {ev.get('timestamp', '')}")
+                    print(f"  cursor:  {_fmt_cursor(ev.get('cursor'))}")
+                    data = ev.get("data")
+                    if data:
+                        print(json.dumps(data, indent=2))
+                    print()
+                sys.stdout.flush()
+            elif cursor == "0":
+                # First poll with cursor=0 — grab the cursor for next time
+                cursor = result.get("cursor", cursor)
             time.sleep(args.interval)
     except KeyboardInterrupt:
         print("\nStopped.")
