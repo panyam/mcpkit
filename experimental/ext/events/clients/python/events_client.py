@@ -520,8 +520,8 @@ def cmd_poll(session: MCPSession, args):
             if results:
                 r = results[0]
                 events = r.get("events", [])
-                if r.get("cursorGap"):
-                    print("  [!] cursor gap — some events were missed")
+                if r.get("truncated"):
+                    print("  [!] truncated — server reset to a later position; some events were missed")
                 if events:
                     cursor = r.get("cursor", cursor)
                     for ev in events:

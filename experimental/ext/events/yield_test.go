@@ -78,11 +78,11 @@ func TestYieldingSource_PollRespectsLimit(t *testing.T) {
 	assert.Len(t, pr.Events, 2)
 }
 
-// TestYieldingSource_EvictionAndCursorGap verifies the bounded ring evicts
-// oldest events past WithMaxSize, and Poll reports CursorGap=true when the
-// requested cursor predates the oldest surviving event. The gap signal is
-// mcpkit-specific (not in Peter's spec) — lets clients detect silent loss.
-func TestYieldingSource_EvictionAndCursorGap(t *testing.T) {
+// TestYieldingSource_EvictionAndTruncated verifies the bounded ring evicts
+// oldest events past WithMaxSize, and Poll reports Truncated=true when the
+// requested cursor predates the oldest surviving event. Matches the spec's
+// truncated signal — clients SHOULD treat it as a possible gap.
+func TestYieldingSource_EvictionAndTruncated(t *testing.T) {
 	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"}, WithMaxSize(3))
 	require.NoError(t, yield(fakePayload{Msg: "1"}))
 	c1 := src.Poll("", 10).Events[0].CursorStr()
@@ -94,7 +94,7 @@ func TestYieldingSource_EvictionAndCursorGap(t *testing.T) {
 	assert.Equal(t, 3, src.Len(), "buffer stays bounded at WithMaxSize")
 
 	pr := src.Poll(c1, 100)
-	assert.True(t, pr.CursorGap, "gap should be true when requested cursor was evicted")
+	assert.True(t, pr.Truncated, "truncated should be true when requested cursor was evicted")
 	assert.Len(t, pr.Events, 3, "remaining events still returned")
 }
 

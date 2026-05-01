@@ -75,15 +75,18 @@ type PollResult struct {
 	Events []Event
 	Cursor string
 
-	// CursorGap is true when the client's cursor points to events that have
-	// been evicted (e.g., ring buffer wrapped). This is NOT in Peter's spec —
-	// it's an mcpkit extension to signal that events were silently lost.
-	// The client decides the policy: re-sync, warn, or ignore.
+	// Truncated is true when the server started delivery from a position later
+	// than the cursor the client supplied — i.e., events were skipped. Causes
+	// are not distinguished on the wire: the supplied cursor may have fallen
+	// outside the upstream's retention window, the maxAge floor may have
+	// advanced past it, or the server may have applied its own replay ceiling.
+	// In all cases the server resets to a position it can serve from and
+	// continues delivering.
 	//
-	// Rationale: an error is too strong (the subscription is still valid),
-	// but silent loss is too weak for clients that need reliable delivery.
-	// A boolean signal is the minimal-cost indicator.
-	CursorGap bool
+	// Clients SHOULD treat truncated as a possible gap (e.g., re-fetch
+	// authoritative state via tools if it matters) and persist the fresh
+	// cursor returned alongside it. The subscription stays valid.
+	Truncated bool
 }
 
 // EventSource is the interface that event producers implement. The library
@@ -227,7 +230,7 @@ type pollResultWire struct {
 	Events          []Event `json:"events,omitempty"`
 	Cursor          *string `json:"cursor"`
 	HasMore         bool    `json:"hasMore"`
-	CursorGap       bool    `json:"cursorGap,omitempty"`
+	Truncated       bool    `json:"truncated,omitempty"`
 	NextPollSeconds int     `json:"nextPollSeconds,omitempty"`
 	Error           *struct {
 		Code    int    `json:"code"`
@@ -320,7 +323,7 @@ func registerPoll(srv *server.Server, sourceMap map[string]EventSource) {
 			Events:          events,
 			Cursor:          wireCursor,
 			HasMore:         hasMore,
-			CursorGap:       pr.CursorGap,
+			Truncated:       pr.Truncated,
 			NextPollSeconds: 5,
 		}}})
 	})
