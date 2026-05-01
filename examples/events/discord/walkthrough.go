@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -87,11 +86,11 @@ func filterFlags(args []string) []string {
 	return out
 }
 
-// liveInteractionMaxWait is the safety-net timeout on the live-interaction
-// step — caps how long it'll hang if the user walks away without pressing
-// enter. The step's primary exit signal is press-enter (read from stdin).
+// liveInteractionMaxWait is the upper-bound on the live-interaction step.
+// User can press enter at any point to end the capture early (in
+// interactive non-TUI mode); otherwise the step ends after this duration.
 // Skipped entirely in --non-interactive mode.
-const liveInteractionMaxWait = 5 * time.Minute
+const liveInteractionMaxWait = 30 * time.Second
 
 func nonInteractive() bool {
 	for _, a := range os.Args[1:] {
@@ -103,9 +102,9 @@ func nonInteractive() bool {
 }
 
 // tuiMode reports whether the walkthrough is running in TUI mode (Bubble
-// Tea). In TUI the press-enter exit mechanism doesn't work — Bubble Tea
-// owns stdin — so the live step falls back to "use Ctrl+C, otherwise
-// wait out the safety timeout."
+// Tea). In TUI Bubble Tea owns stdin, so demokit's Cancellable
+// (press-enter cancel) would conflict — we keep Timeout but skip
+// Cancellable in that mode.
 func tuiMode() bool {
 	for _, a := range os.Args[1:] {
 		if strings.TrimSpace(a) == "--tui" {
@@ -180,7 +179,7 @@ func runDemo() {
 		Arrow("Host", "Server", "POST /mcp — initialize").
 		DashedArrow("Server", "Host", "serverInfo + capabilities").
 		Note("The mcpkit client opens a GET SSE stream so push notifications reach us during later steps. We're not declaring any extension capability — events/* are server-side custom methods registered via experimental/ext/events. A small in-process broker fans out `notifications/events/event` by name so each step can subscribe just to what it cares about.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			c = client.NewClient(mcpURL,
 				core.ClientInfo{Name: "discord-events-host", Version: "1.0"},
 				client.WithGetSSEStream(),
@@ -199,7 +198,7 @@ func runDemo() {
 		Arrow("Host", "Server", "events/list").
 		DashedArrow("Server", "Host", "[discord.message (cursored), discord.typing (cursorless)]").
 		Note("The new `cursorless` flag (added in PR B) tells subscribers whether the source supports cursor-based replay. discord.message buffers events and accepts cursors; discord.typing emits ephemerally and always wires cursor:null.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			res, err := c.Call("events/list", map[string]any{})
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
@@ -232,7 +231,7 @@ func runDemo() {
 		Arrow("Receiver", "Server", "POST /inject (simulated Discord message)").
 		DashedArrow("Server", "Host", "notifications/events/event (via SSE)").
 		Note("The /inject endpoint is the demo's stand-in for a real Discord WebSocket handler; in production the bot's MessageCreate handler calls yield(). Either way, the YieldingSource fans out: the library installs an emit hook that broadcasts the event to all SSE subscribers.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			gotEvent := broker.Subscribe("discord.message", 4)
 
 			body := map[string]any{
@@ -269,7 +268,7 @@ func runDemo() {
 		Arrow("Host", "Server", "events/poll {subscriptions: [{name: discord.message, cursor: <head>}]}").
 		DashedArrow("Server", "Host", "{events: [], cursor: <head>, hasMore: false}").
 		Note("Single-subscription per call (PR B removed batching). Polling at the head returns no new events but advances the cursor — the same response shape that would carry events if any had arrived since the last poll.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			cursor := "0"
 			if messageCursor != nil {
 				cursor = *messageCursor
@@ -310,7 +309,7 @@ func runDemo() {
 		Arrow("Receiver", "Server", "POST /inject?event=discord.typing").
 		DashedArrow("Server", "Host", "notifications/events/event { cursor: null }").
 		Note("WithoutCursors() sources don't buffer and emit cursor:null. Push and webhook fanout still work — there's just nothing to replay. Useful for ephemeral state (typing indicators, presence, current readings).").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			gotEvent := broker.Subscribe("discord.typing", 4)
 
 			body := map[string]any{
@@ -350,7 +349,7 @@ func runDemo() {
 		DashedArrow("Server", "Receiver", "POST <url> + HMAC signature headers (default: webhook-* per Standard Webhooks; opt-in: X-MCP-* via -webhook-header-mode mcp)").
 		DashedArrow("Host", "Host", "background loop: re-subscribe at 0.5 × TTL").
 		Note("clients/go provides Subscription (subscribe + auto-refresh) plus Receiver[Data] (typed inbound channel). Subscribe blocks until the initial subscribe lands, so the caller has the server-assigned secret synchronously. Receiver[DiscordEventData] verifies signatures and decodes the wire envelope into the typed Data shape, so the consumer reads `ev.Data.Content` rather than re-parsing JSON.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			recv := eventsclient.NewReceiver[DiscordEventData]("")
 			defer recv.Close()
 
@@ -372,7 +371,18 @@ func runDemo() {
 				fmt.Printf("    ERROR: subscribe failed: %v\n", err)
 				return
 			}
-			defer sub.Stop()
+			// sub.Stop() ends the refresh loop but does NOT unsubscribe
+			// server-side — the registry retains the subscription for its
+			// TTL (~5 min) and keeps retrying delivery to the now-closed
+			// httptest port. Eager unsubscribe avoids the noisy "connection
+			// refused" retry log on the server side after the demo ends.
+			defer func() {
+				sub.Stop()
+				_, _ = c.Call("events/unsubscribe", map[string]any{
+					"id":       sub.ID(),
+					"delivery": map[string]any{"url": hookSrv.URL},
+				})
+			}()
 			recv.SetSecret(sub.Secret())
 			fmt.Printf("    server-assigned secret:  %s...\n", truncate(sub.Secret(), 16))
 			fmt.Printf("    refreshBefore:           %s\n", sub.RefreshBefore().Format(time.RFC3339))
@@ -406,13 +416,20 @@ func runDemo() {
 		})
 
 	// --- Step 7: Live Discord interaction ---
+	// Uses demokit's Timeout (safety upper bound) + Cancellable (press-enter
+	// to end early in interactive non-TUI mode). Output streams live as
+	// events arrive — demokit v0.0.8+ tees step stdout to the renderer in
+	// real time rather than buffering until Run returns. Cancellable is
+	// disabled in TUI mode because Bubble Tea owns stdin.
 	demo.Step("Live Discord interaction (typing + message from a real Discord channel)").
 		Arrow("Discord", "Server", "TypingStart event (when you start typing in the channel)").
 		DashedArrow("Server", "Host", "notifications/events/event { name: discord.typing, cursor: null }").
 		Arrow("Discord", "Server", "MessageCreate event (when you press enter)").
 		DashedArrow("Server", "Host", "notifications/events/event { name: discord.message, cursor: <new> }").
 		Note("Requires the server to be running with -token + the bot invited to a channel you can post in. The TypingStart handler in main.go yields a cursorless discord.typing event; MessageCreate yields the cursored discord.message. Discord's typing indicator fires once when you start (then refires every ~8s if you keep typing), not per keystroke. In --non-interactive mode this step skips the wait so CI runs aren't slowed.").
-		Run(func() (result *demokit.StepResult) {
+		Timeout(liveInteractionMaxWait).
+		Cancellable(!tuiMode()).
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			if nonInteractive() {
 				fmt.Printf("    Skipped in --non-interactive mode. Run without --non-interactive (and with the server in -token mode) to see live events.\n")
 				return
@@ -428,14 +445,6 @@ func runDemo() {
 
 			gotMsg := broker.Subscribe("discord.message", 16)
 			gotTyping := broker.Subscribe("discord.typing", 16)
-			// In TUI mode Bubble Tea owns stdin, so awaitEnter would
-			// conflict — leave done as a nil channel (blocks forever in
-			// select) and rely on the deadline / Ctrl+C.
-			var done <-chan struct{}
-			if !tuiMode() {
-				done = awaitEnter()
-			}
-			deadline := time.After(liveInteractionMaxWait)
 
 			var typingSeen, msgSeen int
 			for {
@@ -450,14 +459,11 @@ func runDemo() {
 					if d, ok := p["data"].(map[string]any); ok {
 						fmt.Printf("    [message] %v: %q\n", d["author"], d["content"])
 					}
-				case <-done:
-					fmt.Printf("\n    Captured %d typing event(s) + %d message(s).\n", typingSeen, msgSeen)
-					return
-				case <-deadline:
+				case <-ctx.Ctx.Done():
 					if typingSeen+msgSeen == 0 {
-						fmt.Printf("    No live events received within %s. Make sure the server is started with -token and the bot is invited to a channel you can post in.\n", liveInteractionMaxWait)
+						fmt.Printf("    No live events received. Make sure the server is started with -token and the bot is invited to a channel you can post in.\n")
 					} else {
-						fmt.Printf("\n    Hit the safety timeout (%s). Captured %d typing event(s) + %d message(s).\n", liveInteractionMaxWait, typingSeen, msgSeen)
+						fmt.Printf("\n    Captured %d typing event(s) + %d message(s).\n", typingSeen, msgSeen)
 					}
 					return
 				}
@@ -510,15 +516,3 @@ func truncate(s string, n int) string {
 	return s[:n]
 }
 
-// awaitEnter spawns a goroutine that reads a single line from stdin and
-// signals on the returned channel. Used by the live-interaction step to
-// let the user end the capture by pressing enter without imposing a
-// short hard timeout.
-func awaitEnter() <-chan struct{} {
-	done := make(chan struct{})
-	go func() {
-		bufio.NewReader(os.Stdin).ReadString('\n')
-		close(done)
-	}()
-	return done
-}

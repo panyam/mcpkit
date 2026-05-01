@@ -23,7 +23,7 @@ demo: ## Run the demokit walkthrough (interactive, TUI). Server must be up via `
 	go run . --tui
 
 readme: ## Regenerate WALKTHROUGH.md from demo definitions
-	go run . --readme > WALKTHROUGH.md
+	go run . --doc=md > WALKTHROUGH.md
 
 build: ## Build the binary
 	go build -o discord-events-demo .

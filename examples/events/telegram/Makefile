@@ -23,7 +23,7 @@ serve: ## Start the telegram-events server standalone (also works with MCPJam, V
 	fi
 
 readme: ## Regenerate WALKTHROUGH.md from demo definitions
-	go run . --readme > WALKTHROUGH.md
+	go run . --doc=md > WALKTHROUGH.md
 
 build: ## Build the binary
 	go build -o telegram-events-demo .
