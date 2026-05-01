@@ -1,4 +1,4 @@
-module github.com/panyam/mcpkit/examples/mrtr
+module github.com/panyam/mcpkit/examples/list-ttl
 
 go 1.26.2
 
@@ -6,7 +6,7 @@ replace github.com/panyam/mcpkit => ../..
 
 require (
 	github.com/panyam/demokit v0.0.5
-	github.com/panyam/mcpkit v0.2.40
+	github.com/panyam/mcpkit v0.2.41
 )
 
 require (

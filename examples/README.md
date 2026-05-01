@@ -13,6 +13,8 @@ The primary path. Run the demo from the CLI and read the on-disk `WALKTHROUGH.md
 | [auth/](auth/) | Public discovery, JWT/JWKS validation, scope step-up (HTTP 403 + WWW-Authenticate per SEP-2643), session hijacking prevention |
 | [tasks/](tasks/) | Async tool lifecycle (SEP-1036): sync calls, optional async, polling, progress notifications, required-task tools, cancellation |
 | [tasks-v2/](tasks-v2/) | Server-directed async (SEP-2557): no client task hint, `result_type` discriminator, inlined results, tool-vs-protocol error semantics |
+| [mrtr/](mrtr/) | SEP-2322 ephemeral MRTR — `IncompleteResult` round-trips for `elicitation/create`, `sampling/createMessage`, `roots/list`; multi-round accumulation via signed `requestState`; `client.CallToolWithInputs` auto-loop |
+| [list-ttl/](list-ttl/) | SEP-2549 list TTL — server emits `"ttl": <seconds>` cache-freshness hint on every list endpoint; three-state pointer encoding (`nil` / `&0` / `&N`); `client.ListXPage` typed helpers |
 | [elicitation/](elicitation/) ⚠ experimental | URL-mode elicitation with consent approval (FineGrainedAuth UC1 — tracks draft [SEP-2643](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2643)) |
 | [fine-grained-auth/](fine-grained-auth/) ⚠ experimental | Authorization denial with scope step-up (UC2) + RAR per-payment ephemeral credentials (UC3) — tracks draft [SEP-2643](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2643) |
 | [host/01-apphost/](host/01-apphost/) | `AppHost` mediator — host-side app management, bidirectional tool calls |
@@ -33,7 +35,6 @@ These don't have a CLI demo — point an MCP host at the running server.
 | Example | What it shows | Host needed |
 |---------|--------------|-------------|
 | [apps/](apps/) | MCP Apps — server-defined HTML/JS UIs in an iframe (vanilla, todolist, react, interactive, dashboard) | [MCPJam](https://mcpjam.com) (browser-based, supports the Apps extension) |
-| [mrtr/](mrtr/) | SEP-2322 ephemeral MRTR — `IncompleteResult` round-trips for `elicitation/create`, `sampling/createMessage`, `roots/list`; multi-round accumulation via `requestState`; tool fixtures for `make testconf-mrtr` | Any MCP host (or run `make testconf-mrtr` for the conformance harness) |
 | [protogen/bookservice/](protogen/bookservice/) | Proto annotations to MCP tools, resources, prompts | Any MCP host (Claude Code, VS Code, MCPJam, Claude Desktop) |
 
 ```bash

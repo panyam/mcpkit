@@ -105,6 +105,13 @@ type Dispatcher struct {
 	// when the server didn't pass WithMRTRSigning); nil signingKey means
 	// plaintext mode.
 	mrtr *mrtrRuntime
+
+	// listTTL is the SEP-2549 cache freshness hint (seconds) attached to
+	// every tools/list, prompts/list, resources/list, and
+	// resources/templates/list response. nil = no hint emitted (clients
+	// fall back to list_changed); &0 = explicit "do not cache"; &N>0 =
+	// fresh for N seconds. Set via WithListTTL.
+	listTTL *int
 }
 
 // SetNotifyFunc sets the notification delivery function for this dispatcher.
@@ -224,6 +231,7 @@ func (d *Dispatcher) newSession() *Dispatcher {
 		tasksCap:             d.tasksCap,
 		customHandlers:       d.customHandlers,
 		mrtr:                 d.mrtr,
+		listTTL:              d.listTTL,
 	}
 }
 
@@ -412,7 +420,7 @@ func (d *Dispatcher) handleToolsList(id json.RawMessage, params json.RawMessage)
 	d.Reg.mu.RUnlock()
 
 	page, nextCursor, _ := paginate(tools, cursor, defaultPageSize)
-	return core.NewResponse(id, core.ToolsListResult{Tools: page, NextCursor: nextCursor})
+	return core.NewResponse(id, core.ToolsListResult{Tools: page, NextCursor: nextCursor, TTL: d.listTTL})
 }
 
 // parsePaginationParams extracts cursor from request params.
@@ -522,7 +530,7 @@ func (d *Dispatcher) handleResourcesList(id json.RawMessage, params json.RawMess
 	d.Reg.mu.RUnlock()
 
 	page, nextCursor, _ := paginate(resources, cursor, defaultPageSize)
-	return core.NewResponse(id, core.ResourcesListResult{Resources: page, NextCursor: nextCursor})
+	return core.NewResponse(id, core.ResourcesListResult{Resources: page, NextCursor: nextCursor, TTL: d.listTTL})
 }
 
 func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
@@ -596,7 +604,7 @@ func (d *Dispatcher) handleResourcesTemplatesList(id json.RawMessage, params jso
 	d.Reg.mu.RUnlock()
 
 	page, nextCursor, _ := paginate(templates, cursor, defaultPageSize)
-	return core.NewResponse(id, core.ResourceTemplatesListResult{ResourceTemplates: page, NextCursor: nextCursor})
+	return core.NewResponse(id, core.ResourceTemplatesListResult{ResourceTemplates: page, NextCursor: nextCursor, TTL: d.listTTL})
 }
 
 // --- Resource Subscriptions ---
@@ -647,7 +655,7 @@ func (d *Dispatcher) handlePromptsList(id json.RawMessage, params json.RawMessag
 	d.Reg.mu.RUnlock()
 
 	page, nextCursor, _ := paginate(prompts, cursor, defaultPageSize)
-	return core.NewResponse(id, core.PromptsListResult{Prompts: page, NextCursor: nextCursor})
+	return core.NewResponse(id, core.PromptsListResult{Prompts: page, NextCursor: nextCursor, TTL: d.listTTL})
 }
 
 func (d *Dispatcher) handlePromptsGet(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
