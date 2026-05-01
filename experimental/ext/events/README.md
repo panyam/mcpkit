@@ -77,7 +77,7 @@ source := events.TypedSource[AlertData](events.EventDef{
     Delivery:    []string{"push", "poll", "webhook"},
 }, func(cursor string, limit int) events.PollResult {
     rows := myDB.GetSince(cursor, limit)
-    return events.PollResult{Events: toEvents(rows), Cursor: ..., CursorGap: ...}
+    return events.PollResult{Events: toEvents(rows), Cursor: ..., Truncated: ...}
 })
 
 events.Register(events.Config{Sources: []events.EventSource{source}, Webhooks: wh, Server: srv})
@@ -95,7 +95,7 @@ myDB.OnInsert = func(row Row) {
 | Method | Description |
 |--------|-------------|
 | `events/list` | Returns event definitions with auto-derived `payloadSchema` and `cursorless` flag |
-| `events/poll` | Single-subscription polling (multi-subscription is rejected per upstream WG PR#1 line 185, comment `r3140480214`); `hasMore` + `cursorGap` signals |
+| `events/poll` | Single-subscription polling, flat top-level response shape (`{events, cursor, hasMore, truncated, nextPollSeconds}`); error responses use spec error codes `-32011 EventNotFound` / `-32015 InvalidCallbackUrl` |
 | `events/subscribe` | Webhook registration with HMAC secret + TTL + `refreshBefore`. `cursor: null` means "from now" — server resolves to source's current head |
 | `events/unsubscribe` | Webhook removal by `(url, id)` or `(url, secret)` |
 
@@ -122,13 +122,15 @@ type EventSource interface {
     Poll(cursor string, limit int) PollResult
 }
 
-// PollResult includes CursorGap — true when the requested cursor predates
-// evicted events. NOT in Peter's spec — mcpkit extension to signal silent
-// loss. Clients decide policy: re-sync, warn, or ignore.
+// PollResult includes Truncated — true when the server started delivery
+// from a position later than the cursor the client supplied (events were
+// skipped: cursor outside retention, maxAge floor advanced, or server
+// replay ceiling). Clients SHOULD treat as a possible gap, persist the
+// fresh cursor, and re-fetch authoritative state via tools if it matters.
 type PollResult struct {
     Events    []Event
     Cursor    string
-    CursorGap bool
+    Truncated bool
 }
 ```
 
@@ -267,7 +269,7 @@ Based on Peter Alexander's design sketch (triggers-events-wg PR #1). Notable cho
 | Topic | Our approach |
 |-------|-------------|
 | **Cursors** | Opaque strings — store defines format. `YieldingSource` defaults to monotonic int64 |
-| **`cursorGap`** | mcpkit extension (not in spec) — signals events lost to buffer wrap |
+| **`truncated`** | Spec field — server signal that delivery started later than the supplied cursor (events skipped: retention, maxAge floor, or replay ceiling) |
 | **`nextPollSeconds`** | Per-subscription (follows spec schema); client SDK coalesces |
 | **`events/stream`** | Deferred — push uses `Server.Broadcast` for now |
 | **Typed contexts** | Handlers receive `core.MethodContext` (EmitLog, AuthClaims, etc.) |
