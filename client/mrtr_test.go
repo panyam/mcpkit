@@ -106,7 +106,7 @@ func TestCallToolWithInputs_HandlerError(t *testing.T) {
 }
 
 // TestParseToolCallResult_Incomplete verifies the wire-shape probe
-// recognises the SEP-2322 result_type:"incomplete" discriminator and
+// recognises the SEP-2322 resultType:"incomplete" discriminator and
 // surfaces the IncompleteResult payload to callers using the bare
 // ToolCall API.
 func TestParseToolCallResult_Incomplete(t *testing.T) {

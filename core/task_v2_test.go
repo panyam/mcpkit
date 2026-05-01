@@ -285,11 +285,10 @@ func TestTaskInfoV2TTLSecondsNullable(t *testing.T) {
 }
 
 // TestCreateTaskResultWireShape verifies the SEP-2663 wire shape:
-// {"result_type": "task", "taskId": "...", "status": "...", ...} — a flat
+// {"resultType": "task", "taskId": "...", "status": "...", ...} — a flat
 // intersection of Result and Task. No nested "task" wrapper key (the v0/v1
 // shape that SEP-2663 dropped). No result / error / inputRequests /
-// requestState — those belong on tasks/get's DetailedTask. The discriminator
-// is snake_case per the SEP-2322 conformance contract.
+// requestState — those belong on tasks/get's DetailedTask.
 func TestCreateTaskResultWireShape(t *testing.T) {
 	res := CreateTaskResult{
 		ResultType: ResultTypeTask,
@@ -309,10 +308,10 @@ func TestCreateTaskResultWireShape(t *testing.T) {
 	var m map[string]any
 	json.Unmarshal(data, &m)
 
-	if m["result_type"] != "task" {
-		t.Errorf("result_type = %v, want task", m["result_type"])
+	if m["resultType"] != "task" {
+		t.Errorf("resultType = %v, want task", m["resultType"])
 	}
-	// SEP-2663: the task fields are at the top level alongside result_type;
+	// SEP-2663: the task fields are at the top level alongside resultType;
 	// no "task" wrapper key.
 	if _, ok := m["task"]; ok {
 		t.Errorf("SEP-2663 CreateTaskResult must not nest under a \"task\" wrapper; got %s", data)
@@ -478,10 +477,9 @@ func TestUpdateTaskRequestOmitEmpty(t *testing.T) {
 }
 
 // TestIncompleteResultWireShape verifies the SEP-2322 ephemeral wire shape:
-// {"result_type": "incomplete", "inputRequests": {...}, "requestState": "..."}.
-// The discriminator is snake_case per the upstream conformance contract;
-// inputRequests / requestState stay camelCase (the rest of MCP wire is
-// camelCase, only the discriminator is snake_case).
+// {"resultType": "incomplete", "inputRequests": {...}, "requestState": "..."}.
+// resultType is camelCase like every other MCP wire field — Luca confirmed
+// camelCase is the SEP-2322 spec standard.
 func TestIncompleteResultWireShape(t *testing.T) {
 	res := IncompleteResult{
 		InputRequests: InputRequests{
@@ -501,11 +499,11 @@ func TestIncompleteResultWireShape(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if m["result_type"] != "incomplete" {
-		t.Errorf("result_type = %v, want \"incomplete\"; got %s", m["result_type"], data)
+	if m["resultType"] != "incomplete" {
+		t.Errorf("resultType = %v, want \"incomplete\"; got %s", m["resultType"], data)
 	}
-	if _, ok := m["resultType"]; ok {
-		t.Errorf("camelCase resultType must NOT appear (snake_case is the wire field); got %s", data)
+	if _, ok := m["result_type"]; ok {
+		t.Errorf("snake_case result_type must NOT appear (camelCase is the wire field); got %s", data)
 	}
 	if m["requestState"] != "opaque-state" {
 		t.Errorf("requestState = %v, want opaque-state", m["requestState"])
@@ -524,7 +522,7 @@ func TestIncompleteResultWireShape(t *testing.T) {
 }
 
 // TestIncompleteResultDefaultsResultType verifies that a zero-value
-// IncompleteResult marshals with result_type = "incomplete" so handlers
+// IncompleteResult marshals with resultType = "incomplete" so handlers
 // can build IncompleteResult{InputRequests: ...} without setting the
 // discriminator manually.
 func TestIncompleteResultDefaultsResultType(t *testing.T) {
@@ -534,16 +532,16 @@ func TestIncompleteResultDefaultsResultType(t *testing.T) {
 	}
 	var m map[string]any
 	json.Unmarshal(data, &m)
-	if m["result_type"] != "incomplete" {
-		t.Errorf("zero-value IncompleteResult.result_type = %v, want \"incomplete\"; got %s",
-			m["result_type"], data)
+	if m["resultType"] != "incomplete" {
+		t.Errorf("zero-value IncompleteResult.resultType = %v, want \"incomplete\"; got %s",
+			m["resultType"], data)
 	}
 }
 
 // TestAckShapes verifies that UpdateTaskResult and CancelTaskResult serialize
-// to the SEP-2322 minimum: a single result_type:"complete" discriminator and
+// to the SEP-2322 minimum: a single resultType:"complete" discriminator and
 // no other fields. SEP-2663 says the acks carry no task state — but SEP-2322
-// requires the result_type discriminator on every non-task response so
+// requires the resultType discriminator on every non-task response so
 // clients can dispatch sync/task/multi-round uniformly.
 func TestAckShapes(t *testing.T) {
 	for _, tc := range []struct {
@@ -561,11 +559,11 @@ func TestAckShapes(t *testing.T) {
 		if err := json.Unmarshal(data, &m); err != nil {
 			t.Fatalf("%s: unmarshal: %v", tc.name, err)
 		}
-		if got := m["result_type"]; got != "complete" {
-			t.Errorf("%s.result_type = %v, want \"complete\"", tc.name, got)
+		if got := m["resultType"]; got != "complete" {
+			t.Errorf("%s.resultType = %v, want \"complete\"", tc.name, got)
 		}
 		if len(m) != 1 {
-			t.Errorf("%s should carry only result_type (got %d keys: %v)", tc.name, len(m), m)
+			t.Errorf("%s should carry only resultType (got %d keys: %v)", tc.name, len(m), m)
 		}
 	}
 }
