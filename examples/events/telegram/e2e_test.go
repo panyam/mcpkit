@@ -103,22 +103,22 @@ func TestE2EPollDelivery(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	var resp struct{ Results []pollResult }
+	var resp pollResult
 	require.NoError(t, json.Unmarshal(result.Raw, &resp))
-	require.Len(t, resp.Results, 1)
-	assert.Len(t, resp.Results[0].Events, 2)
-	assert.Equal(t, "2", resp.Results[0].Cursor)
+	assert.Len(t, resp.Events, 2)
+	require.NotNil(t, resp.Cursor)
+	assert.Equal(t, "2", *resp.Cursor)
 
 	result2, err := c.Call("events/poll", map[string]any{
 		"subscriptions": []map[string]any{
-			{"id": "poll-2", "name": "telegram.message", "cursor": resp.Results[0].Cursor},
+			{"id": "poll-2", "name": "telegram.message", "cursor": *resp.Cursor},
 		},
 	})
 	require.NoError(t, err)
 
-	var resp2 struct{ Results []pollResult }
+	var resp2 pollResult
 	require.NoError(t, json.Unmarshal(result2.Raw, &resp2))
-	assert.Len(t, resp2.Results[0].Events, 1)
+	assert.Len(t, resp2.Events, 1)
 }
 
 // TestE2EPushDelivery verifies the library's automatic push fanout — yield()

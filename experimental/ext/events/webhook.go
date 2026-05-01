@@ -244,7 +244,7 @@ func (r *WebhookRegistry) Deliver(event Event) {
 	}
 
 	for _, t := range targets {
-		go r.deliver(t, body)
+		go r.deliver(t, event.EventID, body)
 	}
 }
 
@@ -255,8 +255,10 @@ const (
 )
 
 // deliver attempts to POST the event with exponential backoff on failure.
-// Spec: SHOULD retry with exponential backoff.
-func (r *WebhookRegistry) deliver(target WebhookTarget, body []byte) {
+// eventID is the event's identifier; used as webhook-id (stable across
+// retries so the receiver's dedup works). Spec: SHOULD retry with
+// exponential backoff.
+func (r *WebhookRegistry) deliver(target WebhookTarget, eventID string, body []byte) {
 	backoff := initialBackoff
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
@@ -269,7 +271,11 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, body []byte) {
 			}
 		}
 
-		signed := signFor(r.headerMode, body, target.Secret, time.Now())
+		// webhook-id == eventId for event deliveries: stable across retries
+		// (so receiver dedup works) and consistent across delivery paths
+		// (webhook emit + poll backfill of the same upstream event collapse
+		// under the receiver's eventId-keyed dedup).
+		signed := signFor(r.headerMode, eventID, body, target.Secret, time.Now())
 
 		req, err := http.NewRequest("POST", target.URL, bytes.NewReader(signed.body))
 		if err != nil {

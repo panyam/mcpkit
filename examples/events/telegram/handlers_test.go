@@ -63,12 +63,14 @@ func newConnectedClient(t *testing.T, source *events.YieldingSource[TelegramEven
 	return c, ts
 }
 
-// pollResult is the structure returned by events/poll for a single subscription.
+// pollResult mirrors the events/poll response (flat top-level shape per
+// the spec; no results[] wrapper, no per-result id). Cursor is *string so
+// it decodes both `"cursor": "..."` and `"cursor": null`.
 type pollResult struct {
-	ID              string         `json:"id"`
 	Events          []events.Event `json:"events"`
-	Cursor          string         `json:"cursor"`
+	Cursor          *string        `json:"cursor"`
 	HasMore         bool           `json:"hasMore"`
+	Truncated       bool           `json:"truncated,omitempty"`
 	NextPollSeconds int            `json:"nextPollSeconds"`
 }
 
@@ -86,24 +88,25 @@ func TestEventsPollCursorPagination(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	var resp struct{ Results []pollResult }
+	var resp pollResult
 	require.NoError(t, json.Unmarshal(result.Raw, &resp))
-	require.Len(t, resp.Results, 1)
-	assert.Len(t, resp.Results[0].Events, 5)
-	assert.Equal(t, "5", resp.Results[0].Cursor)
+	assert.Len(t, resp.Events, 5)
+	require.NotNil(t, resp.Cursor)
+	assert.Equal(t, "5", *resp.Cursor)
 
 	result2, err := c.Call("events/poll", map[string]any{
 		"maxEvents": 5,
 		"subscriptions": []map[string]any{
-			{"id": "page2", "name": "telegram.message", "cursor": resp.Results[0].Cursor},
+			{"id": "page2", "name": "telegram.message", "cursor": *resp.Cursor},
 		},
 	})
 	require.NoError(t, err)
 
-	var resp2 struct{ Results []pollResult }
+	var resp2 pollResult
 	require.NoError(t, json.Unmarshal(result2.Raw, &resp2))
-	assert.Len(t, resp2.Results[0].Events, 5)
-	assert.Equal(t, "10", resp2.Results[0].Cursor)
+	assert.Len(t, resp2.Events, 5)
+	require.NotNil(t, resp2.Cursor)
+	assert.Equal(t, "10", *resp2.Cursor)
 }
 
 // TestEventsPollEmptyStore verifies polling an empty source returns no events
@@ -119,39 +122,30 @@ func TestEventsPollEmptyStore(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	var resp struct{ Results []pollResult }
+	var resp pollResult
 	require.NoError(t, json.Unmarshal(result.Raw, &resp))
-	require.Len(t, resp.Results, 1)
-	assert.Empty(t, resp.Results[0].Events)
-	assert.Equal(t, "0", resp.Results[0].Cursor)
+	assert.Empty(t, resp.Events)
+	require.NotNil(t, resp.Cursor)
+	assert.Equal(t, "0", *resp.Cursor)
 }
 
-// TestEventsPollUnknownEvent verifies unknown event names return a per-sub
-// error rather than failing the whole batch — preserves spec semantics.
+// TestEventsPollUnknownEvent verifies unknown event names surface as a
+// top-level JSON-RPC error (-32011 EventNotFound per spec), not as an
+// embedded per-result error from the legacy partial-success model.
+// Single-sub call, single-sub response, single-sub error path.
 func TestEventsPollUnknownEvent(t *testing.T) {
 	source, _ := newTelegramSource()
 	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry())
 
-	result, err := c.Call("events/poll", map[string]any{
+	_, err := c.Call("events/poll", map[string]any{
 		"subscriptions": []map[string]any{
 			{"id": "bogus", "name": "nonexistent.event", "cursor": "0"},
 		},
 	})
-	require.NoError(t, err)
-
-	var resp struct {
-		Results []struct {
-			ID    string `json:"id"`
-			Error *struct {
-				Code    int    `json:"code"`
-				Message string `json:"message"`
-			} `json:"error"`
-		} `json:"results"`
-	}
-	require.NoError(t, json.Unmarshal(result.Raw, &resp))
-	require.Len(t, resp.Results, 1)
-	require.NotNil(t, resp.Results[0].Error)
-	assert.Equal(t, -32001, resp.Results[0].Error.Code)
+	require.Error(t, err, "unknown event must return a JSON-RPC error")
+	rpcErr, ok := err.(*client.RPCError)
+	require.True(t, ok, "error should be RPCError, got %T", err)
+	assert.Equal(t, events.ErrCodeEventNotFound, rpcErr.Code, "spec code -32011 EventNotFound")
 }
 
 // TestResourceRecentMessages verifies the recent messages resource returns
@@ -235,23 +229,23 @@ func TestEventsPollHasMore(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	var resp struct{ Results []pollResult }
+	var resp pollResult
 	require.NoError(t, json.Unmarshal(result.Raw, &resp))
-	assert.Len(t, resp.Results[0].Events, 3)
-	assert.True(t, resp.Results[0].HasMore)
+	assert.Len(t, resp.Events, 3)
+	assert.True(t, resp.HasMore)
 
 	result2, err := c.Call("events/poll", map[string]any{
 		"maxEvents": 3,
 		"subscriptions": []map[string]any{
-			{"id": "hm2", "name": "telegram.message", "cursor": resp.Results[0].Cursor},
+			{"id": "hm2", "name": "telegram.message", "cursor": *resp.Cursor},
 		},
 	})
 	require.NoError(t, err)
 
-	var resp2 struct{ Results []pollResult }
+	var resp2 pollResult
 	require.NoError(t, json.Unmarshal(result2.Raw, &resp2))
-	assert.Len(t, resp2.Results[0].Events, 2)
-	assert.False(t, resp2.Results[0].HasMore)
+	assert.Len(t, resp2.Events, 2)
+	assert.False(t, resp2.HasMore)
 }
 
 // TestSubscribeReturnsRefreshBefore verifies the mandatory refreshBefore

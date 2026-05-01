@@ -72,10 +72,15 @@ func (d signedDelivery) applyHeaders(req *http.Request) {
 	}
 }
 
-// signMCP produces the today's-default signed delivery.
+// signMCP produces the legacy MCP-headers signed delivery.
 //   X-MCP-Signature:  sha256=<hex(HMAC(secret, ts + "." + body))>
 //   X-MCP-Timestamp:  <unix>
-func signMCP(body []byte, secret string, now time.Time) signedDelivery {
+//
+// msgID is unused by this signer (the legacy MCP-headers wire format
+// has no equivalent of webhook-id), but the parameter is kept for
+// signature-parity with signStandardWebhooks so the caller doesn't
+// branch on mode.
+func signMCP(_ string, body []byte, secret string, now time.Time) signedDelivery {
 	ts := strconv.FormatInt(now.Unix(), 10)
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(ts))
@@ -92,11 +97,19 @@ func signMCP(body []byte, secret string, now time.Time) signedDelivery {
 }
 
 // signStandardWebhooks produces a Standard Webhooks v1 signed delivery.
-//   webhook-id:        <random message id>
+//   webhook-id:        <msgID — caller-supplied; spec mandates eventId for event deliveries>
 //   webhook-timestamp: <unix>
 //   webhook-signature: v1,<base64(HMAC(secret, msgId + "." + ts + "." + body))>
-func signStandardWebhooks(body []byte, secret string, now time.Time) signedDelivery {
-	msgID := newMessageID()
+//
+// The msgID parameter is the message identifier the receiver dedups on.
+// For event deliveries it MUST be the event's eventId so the same upstream
+// event surfaced via multiple paths (webhook emit + poll backfill) collapses
+// under client-side dedup. Crucially, the msgID is also stable across retries
+// of the same event — if it weren't, a Standard-Webhooks-conformant receiver
+// would treat each retry as a distinct delivery and dedup would silently
+// break. Control envelopes (added in PR group ζ) supply their own msgID of
+// the form msg_<type>_<random>; see newMessageID.
+func signStandardWebhooks(msgID string, body []byte, secret string, now time.Time) signedDelivery {
 	ts := strconv.FormatInt(now.Unix(), 10)
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(msgID))
@@ -115,19 +128,22 @@ func signStandardWebhooks(body []byte, secret string, now time.Time) signedDeliv
 	}
 }
 
-// signFor selects the right signer for the registry's mode.
-func signFor(mode WebhookHeaderMode, body []byte, secret string, now time.Time) signedDelivery {
+// signFor selects the right signer for the registry's mode. msgID is the
+// stable identifier for this delivery; see signStandardWebhooks docs.
+func signFor(mode WebhookHeaderMode, msgID string, body []byte, secret string, now time.Time) signedDelivery {
 	switch mode {
 	case MCPHeaders:
-		return signMCP(body, secret, now)
+		return signMCP(msgID, body, secret, now)
 	default:
-		return signStandardWebhooks(body, secret, now)
+		return signStandardWebhooks(msgID, body, secret, now)
 	}
 }
 
 // newMessageID returns a Standard-Webhooks-shaped message ID. Uses the
 // "msg_" prefix Stripe / Standard Webhooks examples use, with 16 random
-// bytes as URL-safe base64. Independent of the event's own EventID.
+// bytes as URL-safe base64. Reserved for non-event POSTs (control
+// envelopes) — event deliveries use the event's own eventId so that
+// retries dedup correctly at the receiver. See ζ for control envelopes.
 func newMessageID() string {
 	var buf [16]byte
 	if _, err := rand.Read(buf[:]); err != nil {
@@ -141,7 +157,7 @@ func newMessageID() string {
 // VerifyMCPSignature checks an X-MCP-Signature header against body+timestamp.
 // Equivalent to (and kept as) the existing VerifySignature helper.
 func VerifyMCPSignature(body []byte, secret, timestamp, signature string) bool {
-	expected := signMCP(body, secret, time.Unix(parseUnix(timestamp), 0)).headers["X-MCP-Signature"]
+	expected := signMCP("", body, secret, time.Unix(parseUnix(timestamp), 0)).headers["X-MCP-Signature"]
 	return hmac.Equal([]byte(expected), []byte(signature))
 }
 

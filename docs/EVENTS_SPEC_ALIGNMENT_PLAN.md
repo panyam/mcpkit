@@ -186,7 +186,11 @@ The others (resource-template subsumption, MCP task event subsumption, event-nam
 **Spec deltas addressed:**
 - `events/poll` request: drop `subscriptions[]` array (already single-entry-enforced after phase 1). Lift `name`, `params`, `cursor` to top level. Add optional `maxAge` (integer seconds), `maxEvents` (integer).
 - All three modes (poll, stream, subscribe) accept optional `maxAge`. Server begins replay from `max(cursor, now - maxAge)`.
-- `EventOccurrence` field set: `eventId` (string, required), `name` (string, required), `timestamp` (ISO 8601, required), `data` (object, required), `cursor` (string | null, optional). Confirm we emit all five with the right names; fix any drift.
+- `EventOccurrence` field set: `eventId` (string, required), `name` (string, required), `timestamp` (ISO 8601, required), `data` (object, required), `cursor` (string | null, optional), `_meta` (object, optional). Confirm we emit the required five with the right names; fix any drift.
+- `events/list` response: add optional `nextCursor` for pagination consistency with base MCP list endpoints (`tools/list`, `resources/list`). Today the events list is small enough that we'd always omit it; thread the field through and emit only when set.
+- `EventDescriptor` (per event-type definition in `events/list`): add optional `_meta` field, matching the metadata pattern on `Tool` / `Resource` / `Prompt`. Authors can attach arbitrary metadata; the SDK threads it through.
+
+The `nextCursor` and the two `_meta` fields are spec follow-ons added on 2026-05-01 (after the in-tree plan's first draft). Folded into δ rather than spinning a micro-PR because δ is already the "wire-shape audit" PR — these three are the same kind of work.
 
 **Files touched:**
 - `experimental/ext/events/events.go` — `events/poll` handler: parse the flat shape, single subscription

@@ -174,7 +174,7 @@ func (s *YieldingSource[Data]) Poll(cursor string, limit int) PollResult {
 	} else if len(s.entries) > 0 {
 		next = s.entries[len(s.entries)-1].event.CursorStr()
 	}
-	return PollResult{Events: out, Cursor: next, CursorGap: gap}
+	return PollResult{Events: out, Cursor: next, Truncated: gap}
 }
 
 // Latest implements EventSource. Returns the cursor of the most recently

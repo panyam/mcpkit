@@ -75,15 +75,18 @@ type PollResult struct {
 	Events []Event
 	Cursor string
 
-	// CursorGap is true when the client's cursor points to events that have
-	// been evicted (e.g., ring buffer wrapped). This is NOT in Peter's spec —
-	// it's an mcpkit extension to signal that events were silently lost.
-	// The client decides the policy: re-sync, warn, or ignore.
+	// Truncated is true when the server started delivery from a position later
+	// than the cursor the client supplied — i.e., events were skipped. Causes
+	// are not distinguished on the wire: the supplied cursor may have fallen
+	// outside the upstream's retention window, the maxAge floor may have
+	// advanced past it, or the server may have applied its own replay ceiling.
+	// In all cases the server resets to a position it can serve from and
+	// continues delivering.
 	//
-	// Rationale: an error is too strong (the subscription is still valid),
-	// but silent loss is too weak for clients that need reliable delivery.
-	// A boolean signal is the minimal-cost indicator.
-	CursorGap bool
+	// Clients SHOULD treat truncated as a possible gap (e.g., re-fetch
+	// authoritative state via tools if it matters) and persist the fresh
+	// cursor returned alongside it. The subscription stays valid.
+	Truncated bool
 }
 
 // EventSource is the interface that event producers implement. The library
@@ -214,25 +217,25 @@ func EmitToWebhooks(webhooks *WebhookRegistry, event Event) {
 
 // --- Protocol method implementations ---
 
-// pollResultWire is the per-subscription result in an events/poll response.
-// nextPollSeconds is per-subscription per Peter's spec — the server can
-// recommend different poll intervals for different event types. Client SDKs
-// should coalesce by taking the minimum across subscriptions.
+// pollResultWire is the events/poll response shape per the spec — flat
+// top-level fields, no `results[]` wrapper. The wrapper was leftover
+// from the batching era; with single-subscription enforcement the
+// wrapper carried exactly one entry, so we hoist its contents.
 //
 // Cursor is a pointer so cursorless sources serialize as `cursor: null`.
 // Note: there is intentionally no `omitempty` — cursored sources with empty
 // cursor still emit `cursor: ""`, only nil maps to JSON null.
+//
+// Per-result errors used to live inside this struct (legacy partial-
+// success model). They now surface as top-level JSON-RPC errors per
+// the spec — single-sub call, single-sub response, single-sub error
+// path. See the EventNotFound branch in registerPoll.
 type pollResultWire struct {
-	ID              string  `json:"id"`
 	Events          []Event `json:"events,omitempty"`
 	Cursor          *string `json:"cursor"`
 	HasMore         bool    `json:"hasMore"`
-	CursorGap       bool    `json:"cursorGap,omitempty"`
+	Truncated       bool    `json:"truncated,omitempty"`
 	NextPollSeconds int     `json:"nextPollSeconds,omitempty"`
-	Error           *struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-	} `json:"error,omitempty"`
 }
 
 func registerList(srv *server.Server, sources []EventSource) {
@@ -276,13 +279,7 @@ func registerPoll(srv *server.Server, sourceMap map[string]EventSource) {
 		sub := req.Subscriptions[0]
 		source, ok := sourceMap[sub.Name]
 		if !ok {
-			return core.NewResponse(id, map[string]any{"results": []pollResultWire{{
-				ID: sub.ID,
-				Error: &struct {
-					Code    int    `json:"code"`
-					Message string `json:"message"`
-				}{Code: -32001, Message: "EventNotFound"},
-			}}})
+			return core.NewErrorResponse(id, ErrCodeEventNotFound, "EventNotFound")
 		}
 
 		cursorless := source.Def().Cursorless
@@ -315,14 +312,13 @@ func registerPoll(srv *server.Server, sourceMap map[string]EventSource) {
 			wireCursor = &c
 		}
 
-		return core.NewResponse(id, map[string]any{"results": []pollResultWire{{
-			ID:              sub.ID,
+		return core.NewResponse(id, pollResultWire{
 			Events:          events,
 			Cursor:          wireCursor,
 			HasMore:         hasMore,
-			CursorGap:       pr.CursorGap,
+			Truncated:       pr.Truncated,
 			NextPollSeconds: 5,
-		}}})
+		})
 	})
 }
 
@@ -343,7 +339,7 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 		}
 		if _, ok := sourceMap[req.Name]; !ok {
-			return core.NewErrorResponse(id, -32001, "EventNotFound")
+			return core.NewErrorResponse(id, ErrCodeEventNotFound, "EventNotFound")
 		}
 		if req.Delivery.Mode != "webhook" {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "only webhook delivery mode is supported")
@@ -352,7 +348,7 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "delivery.url is required")
 		}
 		if err := ValidateWebhookURL(req.Delivery.URL); err != nil {
-			return core.NewErrorResponse(id, -32005, err.Error())
+			return core.NewErrorResponse(id, ErrCodeInvalidCallbackUrl, err.Error())
 		}
 
 		// Per-mode behavior is documented on WebhookSecretMode.
