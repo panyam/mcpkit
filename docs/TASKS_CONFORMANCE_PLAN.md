@@ -7,6 +7,26 @@ two places, and several spec requirements lack test coverage.
 
 ## Must fix (structural — wire format breaks against spec-compliant client)
 
+### Fix 0: Revert result_type → resultType (camelCase)
+
+Luca confirmed camelCase is the spec standard. We had renamed to snake_case
+based on upstream conformance PR 188, but that PR is also wrong — Luca will
+fix it on their side.
+
+Files to change:
+
+- [ ] `core/task_v2.go` — All `json:"result_type"` tags → `json:"resultType"`
+- [ ] `core/tool.go` — `ToolResult.ResultType` tag → `json:"resultType"`
+- [ ] `core/task_v2_test.go` — All `result_type` string literals → `resultType`
+- [ ] `server/tasks_v2_test.go` — All `result_type` assertions → `resultType`
+- [ ] `conformance/tasks-v2/scenarios.test.ts` — All `result_type` → `resultType`
+- [ ] `conformance/mrtr/scenarios.test.ts` — All `result_type` → `resultType`
+- [ ] `client/tasks.go` — `parseToolCallResult` field name → `resultType`
+- [ ] `client/tasks_test.go` — mock responses → `resultType`
+
+**Test:** grep -r "result_type" across core/ server/ client/ conformance/ — should
+return zero hits after this fix (except comments explaining the history).
+
 ### Fix 1: Flatten CreateTaskResult
 
 SEP-2663 defines `CreateTaskResult = Result & Task` — a flat intersection where
@@ -26,23 +46,36 @@ Upstream conformance PR 188 reads `result.taskId` (flat), not `result.task.taskI
 
 Files to change:
 
-- [ ] `core/task_v2.go` — `CreateTaskResult` struct: embed `TaskInfoV2` fields flat
-  instead of nesting under `Task TaskInfoV2`. Use custom `MarshalJSON` that merges
-  `ResultType` + `TaskInfoV2` fields into one flat object. Add `UnmarshalJSON` for
-  round-trip.
-- [ ] `core/task_v2_test.go` — Update `TestCreateTaskResultWireShape` to assert flat
-  shape. Verify `taskId` at top level, no `task` wrapper key.
-- [ ] `server/tasks_v2.go` — Update task creation code that builds `CreateTaskResult`.
-  Fields move from `Task: info` to inline: `TaskID: info.TaskID, Status: info.Status, ...`
-- [ ] `client/tasks.go` — Update `parseToolCallResult` to read flat shape
-  (`result.taskId` not `result.task.taskId`).
-- [ ] `client/tasks_test.go` — Update mock responses to flat shape.
-- [ ] `conformance/tasks-v2/scenarios.test.ts` — Change ALL `result.task.X` reads to
-  `result.X`. Affected: `assertCreateTaskResult`, v2-02, v2-03, v2-04, v2-05, v2-06,
-  v2-07, v2-12, v2-13, v2-14, v2-15, v2-16, v2-17, v2-18, v2-19, v2-20, v2-21.
+- [x] `core/task_v2.go` — `CreateTaskResult` now embeds `TaskInfoV2` directly,
+  so `encoding/json` promotes the task fields to the parent (same trick
+  `DetailedTask` already used). No custom `MarshalJSON`/`UnmarshalJSON` needed —
+  marshal and unmarshal both round-trip the flat shape automatically.
+- [x] `core/task_v2_test.go` — `TestCreateTaskResultWireShape` rewritten:
+  asserts `taskId` / `status` / `ttlSeconds` / `pollIntervalMilliseconds` at
+  the top level, asserts no `"task"` wrapper key, plus a marshal→unmarshal
+  round-trip that recovers the embedded `TaskInfoV2`.
+- [x] `server/tasks_v2.go` — task-creating middleware builds
+  `CreateTaskResult{ResultType: ResultTypeTask, TaskInfoV2: wireTask}`.
+- [x] `client/tasks.go` — `parseToolCallResult` already just `json.Unmarshal`s
+  the raw payload into the typed struct; no change needed once the struct is
+  flat. (Field access on `*ToolCallResult.Task` is now `res.Task.TaskID` etc.)
+- [x] `client/tasks_test.go` — `res.Task.Task.X` → `res.Task.X` everywhere
+  (the `*core.CreateTaskResult` is now flat).
+- [x] `conformance/tasks-v2/scenarios.test.ts` — All `result.task.X` reads
+  changed to `result.X`. `assertCreateTaskResult` rewritten to assert the flat
+  shape (no `task` wrapper, `taskId`+`status` at top level). Sync-tool checks
+  switched to `result.taskId` / `result.result_type !== 'task'` rather than
+  inspecting a wrapper that no longer exists. v2-12 reads `result.ttlSeconds`
+  directly. v2-20 dispatches on `result.result_type === 'task'`.
+- [x] Other callers updated: `server/tasks_v2_test.go`, `server/mrtr_test.go`,
+  `server/tasks_hybrid_test.go`, `examples/tasks-v2/walkthrough.go` (+ its
+  generated `WALKTHROUGH.md` mermaid arrows), `conformance/mrtr/scenarios.test.ts`
+  (deferred mrtr-08 assertion), `conformance/tasks-v2/README.md`,
+  `docs/TASKS_V2_MIGRATION.md`, `CAPABILITIES.md`.
 
-**Test:** Wire-format round-trip: marshal → JSON has no `"task"` key, `taskId` is top-level.
-Build `CreateTaskResult`, marshal, unmarshal back, verify fields survive.
+**Test:** `TestCreateTaskResultWireShape` covers the round-trip; full
+`make test` and `make testconf-tasks-v2` (27/27) + `make testconf-mrtr`
+(7/7 + 1 skip) pass against the flat shape.
 
 ### Fix 2: Protocol version
 
@@ -98,9 +131,8 @@ SEP-2243 requires both `Mcp-Name` AND `Mcp-Method` headers. v2-24 covers Mcp-Nam
 
 ### Fix 7: Cleanup stale comments and v2-16
 
-- [ ] `conformance/tasks-v2/scenarios.test.ts` v2-16 — Remove PROVISIONAL comment
-  ("inputResponses will likely move to a separate method (TBD)"). It landed as tasks/update.
-  Update v2-16 to reflect current tasks/update semantics.
+- [x] `conformance/tasks-v2/scenarios.test.ts` v2-16 — PROVISIONAL comment
+  removed; replaced with a pointer to v2-17 (which exercises tasks/update).
 - [ ] `conformance/tasks-v2/README.md` — Note that wire shapes match the implementation,
   not necessarily the published SEP TS declarations (which may lag behind).
 

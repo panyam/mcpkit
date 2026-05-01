@@ -347,6 +347,6 @@ describe('SEP-2322 MRTR ephemeral IncompleteResult flow', () => {
         });
         assert.equal(r2.result_type, 'task',
             'final round should promote sync result to CreateTaskResult');
-        assert.ok(r2.task?.taskId, 'CreateTaskResult must include task.taskId');
+        assert.ok(r2.taskId, 'CreateTaskResult must include taskId (SEP-2663 flat shape)');
     });
 });

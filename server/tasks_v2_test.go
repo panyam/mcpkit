@@ -147,8 +147,8 @@ func TestV2_TaskCreationWithExtension(t *testing.T) {
 	if ctr.ResultType != core.ResultTypeTask {
 		t.Errorf("result_type = %q, want %q", ctr.ResultType, core.ResultTypeTask)
 	}
-	if ctr.Task.TaskID == "" {
-		t.Error("CreateTaskResult.task.taskId should not be empty")
+	if ctr.TaskID == "" {
+		t.Error("CreateTaskResult.taskId should not be empty (SEP-2663 flat shape)")
 	}
 }
 
@@ -244,7 +244,7 @@ func TestV2_TasksGetWorksWithExtension(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	for {
-		gres, err := c.Call("tasks/get", map[string]any{"taskId": ctr.Task.TaskID})
+		gres, err := c.Call("tasks/get", map[string]any{"taskId": ctr.TaskID})
 		if err != nil {
 			t.Fatalf("tasks/get: %v", err)
 		}
@@ -310,10 +310,10 @@ func createTaskForUpdateTest(t *testing.T, c *client.Client, tool string) string
 	if err := json.Unmarshal(res.Raw, &ctr); err != nil {
 		t.Fatalf("unmarshal CreateTaskResult: %v", err)
 	}
-	if ctr.Task.TaskID == "" {
+	if ctr.TaskID == "" {
 		t.Fatal("missing taskId in CreateTaskResult")
 	}
-	return ctr.Task.TaskID
+	return ctr.TaskID
 }
 
 // TestV2_UpdateAck verifies tasks/update returns an empty {} ack when the
@@ -543,8 +543,8 @@ func TestV2_McpNameHeaderOnTaskCreation(t *testing.T) {
 	if err := json.Unmarshal(body, &rpcResp); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
 	}
-	if mcpName != rpcResp.Result.Task.TaskID {
-		t.Errorf("Mcp-Name = %q, want match for taskId %q", mcpName, rpcResp.Result.Task.TaskID)
+	if mcpName != rpcResp.Result.TaskID {
+		t.Errorf("Mcp-Name = %q, want match for taskId %q", mcpName, rpcResp.Result.TaskID)
 	}
 }
 
@@ -693,7 +693,7 @@ func TestV2_ElicitUpdateCompleteFlow(t *testing.T) {
 	if err := json.Unmarshal(res.Raw, &ctr); err != nil {
 		t.Fatalf("unmarshal CreateTaskResult: %v", err)
 	}
-	taskID := ctr.Task.TaskID
+	taskID := ctr.TaskID
 
 	// 1. Wait for input_required + a populated inputRequests map.
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -769,7 +769,7 @@ func TestV2_ElicitCancelUnblocks(t *testing.T) {
 	}
 	var ctr core.CreateTaskResult
 	json.Unmarshal(res.Raw, &ctr)
-	taskID := ctr.Task.TaskID
+	taskID := ctr.TaskID
 
 	// Wait for input_required, then cancel.
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -808,7 +808,7 @@ func TestV2_UpdateUnknownKeyIgnored(t *testing.T) {
 	}
 	var ctr core.CreateTaskResult
 	json.Unmarshal(res.Raw, &ctr)
-	taskID := ctr.Task.TaskID
+	taskID := ctr.TaskID
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -909,7 +909,7 @@ func TestV2_StatusNotificationCarriesRequestState(t *testing.T) {
 	if err := json.Unmarshal(res.Raw, &ctr); err != nil {
 		t.Fatalf("unmarshal CreateTaskResult: %v", err)
 	}
-	taskID := ctr.Task.TaskID
+	taskID := ctr.TaskID
 
 	// Wait up to 2s for a notification carrying requestState. Loop because
 	// the server may emit multiple status notifications before terminal.
@@ -984,7 +984,7 @@ func TestV2_RequestState_SignedRoundTrip(t *testing.T) {
 	if err != nil || !res.IsTask() {
 		t.Fatalf("ToolCall: %v / IsTask=%v", err, res != nil && res.IsTask())
 	}
-	taskID := res.Task.Task.TaskID
+	taskID := res.Task.TaskID
 
 	first, err := client.GetTask(c, taskID)
 	if err != nil {
@@ -1018,7 +1018,7 @@ func TestV2_RequestState_TamperedRejected(t *testing.T) {
 	c := connectV2Client(t, srv, client.WithTasksExtension())
 
 	res, _ := client.ToolCall(c, "fast-task", map[string]any{})
-	taskID := res.Task.Task.TaskID
+	taskID := res.Task.TaskID
 	first, _ := client.GetTask(c, taskID)
 
 	// Tamper the payload segment by re-encoding a different taskId.
@@ -1060,7 +1060,7 @@ func TestV2_RequestState_ExpiredRejected(t *testing.T) {
 	c := connectV2Client(t, srv, client.WithTasksExtension())
 
 	res, _ := client.ToolCall(c, "fast-task", map[string]any{})
-	taskID := res.Task.Task.TaskID
+	taskID := res.Task.TaskID
 	first, _ := client.GetTask(c, taskID)
 
 	// Wait past the TTL (≥ 1s past the embedded exp, regardless of jitter).
@@ -1087,7 +1087,7 @@ func TestV2_RequestState_LegacyPlaintext(t *testing.T) {
 	c := connectV2Client(t, srv, client.WithTasksExtension())
 
 	res, _ := client.ToolCall(c, "fast-task", map[string]any{})
-	taskID := res.Task.Task.TaskID
+	taskID := res.Task.TaskID
 	first, err := client.GetTask(c, taskID)
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)

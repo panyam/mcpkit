@@ -29,7 +29,7 @@ sequenceDiagram
 
     Note over Host,Server: Step 3: slow_compute (no task hint!) — server creates a task → ToolCall returns Task variant
     Host->>Server: tools/call: slow_compute {seconds: 3}
-    Server-->>Host: {result_type: "task", task: {taskId, status: working, ttlSeconds, ...}}
+    Server-->>Host: {result_type: "task", taskId, status: working, ttlSeconds, ...}
 + Mcp-Name: <taskId> response header (SEP-2243)
 
     Note over Host,Server: Step 4: failing_job → status: completed, result.isError: true (TOOL error semantics)
@@ -44,7 +44,7 @@ sequenceDiagram
 
     Note over Host,Server: Step 6: confirm_delete → input_required → tasks/update → completed (SEP-2663 MRTR)
     Host->>Server: tools/call: confirm_delete {filename: "important.txt"}
-    Server-->>Host: {result_type: task, task: {status: working, ...}}
+    Server-->>Host: {result_type: task, taskId, status: working, ...}
     Host->>Server: GetTask (polled until status = input_required)
     Server-->>Host: DetailedTask {status: input_required, inputRequests: { "elicit-N": {method, params} }}
     Host->>Server: tasks/update {taskId, inputResponses: { "elicit-N": {action: accept, content: {confirm: true}} }}
@@ -54,7 +54,7 @@ sequenceDiagram
 
     Note over Host,Server: Step 7: Cancel a long-running task → empty ack, status settles to cancelled
     Host->>Server: tools/call: slow_compute {seconds: 10}
-    Server-->>Host: {result_type: task, task: ...}
+    Server-->>Host: {result_type: task, taskId, ...}
     Host->>Server: client.CancelTask
     Server-->>Host: {} (empty ack — SEP-2663 cancel returns no task state)
     Host->>Server: WaitForTask polls tasks/get

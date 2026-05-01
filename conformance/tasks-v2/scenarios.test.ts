@@ -266,13 +266,17 @@ async function cancelTask(taskId: string, requestState?: string): Promise<any> {
 
 /**
  * Assert that a CreateTaskResult has the v2-required result_type discriminator
- * and a valid task object.
+ * and the SEP-2663 flat task shape — taskId/status/ttlSeconds/... are at the
+ * top level alongside result_type, NOT nested under a "task" wrapper.
+ * (`Result & Task` per SEP-2663.)
  */
 function assertCreateTaskResult(result: any, label: string) {
     assert.equal(result.result_type, 'task',
         `${label}: result.result_type must be "task"`);
-    assert.ok(result.task, `${label}: should have task field`);
-    assert.ok(result.task.taskId, `${label}: task should have taskId`);
+    assert.ok(!result.task,
+        `${label}: SEP-2663 CreateTaskResult is a flat intersection; there must be no "task" wrapper key`);
+    assert.ok(result.taskId, `${label}: should have top-level taskId`);
+    assert.ok(result.status, `${label}: should have top-level status`);
 }
 
 /**
@@ -303,8 +307,13 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
         assert.ok(content.length > 0, 'should have content');
         assert.equal(content[0].type, 'text');
         assert.equal(content[0].text, 'Hello, World!');
-        // No task field — sync tools don't create tasks.
-        assert.ok(!result.task, 'sync tool should not have task field');
+        // Sync tools don't create tasks. With the SEP-2663 flat CreateTaskResult
+        // shape, the discriminator is `result_type` and the task fields would
+        // be at the top level, so check both: no result_type:"task" and no
+        // taskId at the root.
+        assert.notEqual(result.result_type, 'task',
+            'sync tool result_type must not be "task"');
+        assert.ok(!result.taskId, 'sync tool should not have taskId at top level');
     });
 
     // ========================================================================
@@ -318,8 +327,8 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
         const result = await callTool('slow_compute', { seconds: 2, label: 'v2-create' });
         assertCreateTaskResult(result, 'v2-02');
         assert.ok(
-            !['completed', 'failed', 'cancelled'].includes(result.task.status),
-            `initial status should be non-terminal, got ${result.task.status}`
+            !['completed', 'failed', 'cancelled'].includes(result.status),
+            `initial status should be non-terminal, got ${result.status}`
         );
     });
 
@@ -332,7 +341,7 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
     test('v2-03: tasks/get returns status for active task', async () => {
         const result = await callTool('slow_compute', { seconds: 3, label: 'v2-poll' });
         assertCreateTaskResult(result, 'v2-03 create');
-        const taskId = result.task.taskId;
+        const taskId = result.taskId;
 
         const task = await getTask(taskId);
         assert.ok(task.taskId, 'should have taskId');
@@ -353,7 +362,7 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
     test('v2-04: tasks/get returns completed status with inlined result', async () => {
         const result = await callTool('slow_compute', { seconds: 1, label: 'v2-result' });
         assertCreateTaskResult(result, 'v2-04 create');
-        const taskId = result.task.taskId;
+        const taskId = result.taskId;
 
         const terminal = await waitForTerminal(taskId);
         assertCompletedResult(terminal, 'v2-04');
@@ -373,7 +382,7 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
     test('v2-05: tool execution error is completed with isError true', async () => {
         const result = await callTool('failing_job', {});
         assertCreateTaskResult(result, 'v2-05 create');
-        const taskId = result.task.taskId;
+        const taskId = result.taskId;
 
         const terminal = await waitForTerminal(taskId);
         // Tool errors are "completed" with isError, NOT "failed".
@@ -399,7 +408,7 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
     test('v2-06: protocol error is failed with error field', async () => {
         const result = await callTool('protocol_error_job', {});
         assertCreateTaskResult(result, 'v2-06 create');
-        const taskId = result.task.taskId;
+        const taskId = result.taskId;
 
         const terminal = await waitForTerminal(taskId);
         assert.equal(terminal.status, 'failed',
@@ -423,7 +432,7 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
     test('v2-07: tasks/cancel returns empty ack; status settles to cancelled', async () => {
         const result = await callTool('slow_compute', { seconds: 60, label: 'v2-cancel' });
         assertCreateTaskResult(result, 'v2-07 create');
-        const taskId = result.task.taskId;
+        const taskId = result.taskId;
 
         const cancelAck = await cancelTask(taskId);
         // SEP-2663: cancel response carries no task state — only the SEP-2322
@@ -444,7 +453,7 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
     // ========================================================================
     test('v2-08: cancel completed task returns error', async () => {
         const result = await callTool('slow_compute', { seconds: 1, label: 'v2-cancel-done' });
-        const taskId = result.task.taskId;
+        const taskId = result.taskId;
         await waitForTerminal(taskId);
 
         try {
@@ -467,7 +476,7 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
     // ========================================================================
     test('v2-09: tasks/result is rejected (method removed in v2)', async () => {
         const result = await callTool('slow_compute', { seconds: 1, label: 'v2-no-result' });
-        const taskId = result.task.taskId;
+        const taskId = result.taskId;
         await waitForTerminal(taskId);
 
         try {
@@ -530,14 +539,15 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
     // ========================================================================
     test('v2-12: ttlSeconds present (and v1 ttl key absent)', async () => {
         const result = await callTool('slow_compute', { seconds: 1, label: 'v2-ttl' });
-        const task = result.task;
-        assert.ok(task.ttlSeconds !== undefined,
-            'task should have ttlSeconds (SEP-2663 wire-field rename)');
-        assert.ok(typeof task.ttlSeconds === 'number' && task.ttlSeconds > 0,
+        // SEP-2663 flat CreateTaskResult: ttlSeconds is at the top level
+        // alongside result_type, not nested under a "task" wrapper.
+        assert.ok(result.ttlSeconds !== undefined,
+            'CreateTaskResult should have ttlSeconds (SEP-2663 wire-field rename)');
+        assert.ok(typeof result.ttlSeconds === 'number' && result.ttlSeconds > 0,
             'ttlSeconds should be a positive number');
         // The v1 `ttl` (milliseconds) key MUST NOT appear in v2 responses.
-        assert.ok(!('ttl' in task),
-            'v2 task object MUST NOT carry the v1 `ttl` key (use ttlSeconds)');
+        assert.ok(!('ttl' in result),
+            'v2 CreateTaskResult MUST NOT carry the v1 `ttl` key (use ttlSeconds)');
     });
 
     // ========================================================================
@@ -548,7 +558,7 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
     test('v2-13: task must not expire before TTL', async () => {
         const result = await callTool('slow_compute', { seconds: 1, label: 'v2-ttl-guard' });
         assertCreateTaskResult(result, 'v2-13 create');
-        const taskId = result.task.taskId;
+        const taskId = result.taskId;
         await waitForTerminal(taskId);
 
         // Task should still be accessible well before TTL (which is in seconds).
@@ -565,7 +575,7 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
     // ========================================================================
     test('v2-14: tasks/get response may include requestState', async () => {
         const result = await callTool('slow_compute', { seconds: 1, label: 'v2-reqstate' });
-        const taskId = result.task.taskId;
+        const taskId = result.taskId;
         await waitForTerminal(taskId);
 
         const task = await getTask(taskId);
@@ -586,7 +596,7 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
     // ========================================================================
     test('v2-15: client echoes requestState in subsequent requests', async () => {
         const result = await callTool('slow_compute', { seconds: 2, label: 'v2-reqstate-echo' });
-        const taskId = result.task.taskId;
+        const taskId = result.taskId;
 
         const first = await getTask(taskId);
         const state = first.requestState;
@@ -610,15 +620,14 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
     // This replaces the v1 side-channel via tasks/result.
     //
     // inputRequests is a MAP (not an array) — keys identify each request
-    // so the client can match responses to requests.
-    //
-    // PROVISIONAL: inputRequests stays on tasks/get per Luca's confirmation.
-    // inputResponses will likely move to a separate method (TBD).
+    // so the client can match responses to requests. The companion
+    // inputResponses path landed as the dedicated tasks/update method —
+    // exercised by v2-17 below.
     // ========================================================================
     test('v2-16: input_required task has inputRequests map in tasks/get', async () => {
         const result = await callTool('confirm_delete', { filename: 'v2-input.txt' });
         assertCreateTaskResult(result, 'v2-16 create');
-        const taskId = result.task.taskId;
+        const taskId = result.taskId;
 
         // Wait for input_required.
         const task = await waitForStatus(taskId, 'input_required', 5000);
@@ -653,7 +662,7 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
     test('v2-17: tasks/update inputResponses resume task', async () => {
         const result = await callTool('confirm_delete', { filename: 'v2-respond.txt' });
         assertCreateTaskResult(result, 'v2-17 create');
-        const taskId = result.task.taskId;
+        const taskId = result.taskId;
 
         // Wait for input_required + populated inputRequests.
         const inputTask = await waitForStatus(taskId, 'input_required', 5000);
@@ -698,7 +707,7 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
         });
 
         const result = await callTool('slow_compute', { seconds: 1, label: 'v2-notify' });
-        const taskId = result.task.taskId;
+        const taskId = result.taskId;
         await waitForTerminal(taskId);
         await new Promise(r => setTimeout(r, 500));
 
@@ -743,8 +752,8 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
     test('v2-20: server may return immediate result for fast operations', async () => {
         const result = await callTool('slow_compute', { seconds: 0, label: 'v2-instant' });
 
-        if (result.task) {
-            // Task path — must have result_type discriminator.
+        if (result.result_type === 'task') {
+            // Task path — must have the SEP-2663 flat shape.
             assertCreateTaskResult(result, 'v2-20 task path');
         } else {
             // Immediate result path — verify content.
@@ -763,7 +772,7 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
     test('v2-21: tasks/get inlined result does not include related-task _meta', async () => {
         const result = await callTool('slow_compute', { seconds: 1, label: 'v2-no-meta' });
         assertCreateTaskResult(result, 'v2-21 create');
-        const taskId = result.task.taskId;
+        const taskId = result.taskId;
 
         const terminal = await waitForTerminal(taskId);
         assertCompletedResult(terminal, 'v2-21');
@@ -821,8 +830,13 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
         // SEP-2322: sync ToolResult carries result_type:"complete" (not "task").
         assert.equal(result.result_type, 'complete',
             `sync ToolResult.result_type = ${result.result_type}, want "complete"`);
+        // SEP-2663 flat shape: a CreateTaskResult would have taskId at the top
+        // level; a sync ToolResult does not. Belt-and-braces: also reject any
+        // legacy "task" wrapper key that some servers might still emit.
+        assert.ok(!result.taskId,
+            `tools/call without extension MUST NOT carry CreateTaskResult shape; got taskId=${result.taskId}`);
         assert.ok(!result.task,
-            `tools/call without extension MUST NOT carry task envelope; got ${JSON.stringify(result.task)}`);
+            `tools/call without extension MUST NOT carry the legacy nested task envelope; got ${JSON.stringify(result.task)}`);
         // Sync ToolResult shape: should have content[].
         assert.ok(result.content,
             `expected sync ToolResult with content[]; got ${JSON.stringify(result)}`);
@@ -845,7 +859,7 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
         const mcpName = response.headers.get('mcp-name');
         assert.ok(mcpName,
             'Mcp-Name header MUST be set on task-creating tools/call response');
-        assert.equal(mcpName, result.task.taskId,
+        assert.equal(mcpName, result.taskId,
             'Mcp-Name header value MUST equal the taskId in the response body');
     });
 
@@ -905,7 +919,7 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
         // tasks/get — drive a fast task to completion and read the response.
         const created = await callTool('slow_compute', { seconds: 0, label: 'v2-26' });
         assertCreateTaskResult(created, 'v2-26 setup');
-        const taskId = created.task.taskId;
+        const taskId = created.taskId;
         await waitForTerminal(taskId);
         const got = await getTask(taskId);
         assert.equal(got.result_type, 'complete',
@@ -914,13 +928,13 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
         // tasks/cancel — empty ack on a (already-terminal) task should still
         // reject with -32602; pick a fresh long-running task to cancel cleanly.
         const longLived = await callTool('slow_compute', { seconds: 60, label: 'v2-26-cancel' });
-        const cancelAck = await cancelTask(longLived.task.taskId);
+        const cancelAck = await cancelTask(longLived.taskId);
         assert.equal(cancelAck.result_type, 'complete',
             `tasks/cancel ack.result_type = ${cancelAck.result_type}, want "complete"`);
 
         // tasks/update — bogus key on a non-terminal task gets a clean ack.
         const elicit = await callTool('confirm_delete', { filename: 'v2-26.txt' });
-        const elicitTaskId = elicit.task.taskId;
+        const elicitTaskId = elicit.taskId;
         await waitForStatus(elicitTaskId, 'input_required', 5000);
         const updateAck = await updateTask(elicitTaskId, { 'unknown-key': { ignored: true } });
         assert.equal(updateAck.result_type, 'complete',

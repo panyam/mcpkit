@@ -114,7 +114,7 @@ func runDemo() {
 				return
 			}
 			if res.IsTask() {
-				fmt.Printf("    UNEXPECTED: greet returned a task (%s)\n", res.Task.Task.TaskID)
+				fmt.Printf("    UNEXPECTED: greet returned a task (%s)\n", res.Task.TaskID)
 				return
 			}
 			if len(res.Sync.Content) > 0 {
@@ -126,7 +126,7 @@ func runDemo() {
 	// --- Step 3: Polymorphic tools/call — task branch ---
 	demo.Step("slow_compute (no task hint!) — server creates a task → ToolCall returns Task variant").
 		Arrow("Host", "Server", "tools/call: slow_compute {seconds: 3}").
-		DashedArrow("Server", "Host", "{result_type: \"task\", task: {taskId, status: working, ttlSeconds, ...}}\n+ Mcp-Name: <taskId> response header (SEP-2243)").
+		DashedArrow("Server", "Host", "{result_type: \"task\", taskId, status: working, ttlSeconds, ...}\n+ Mcp-Name: <taskId> response header (SEP-2243)").
 		Note("Critical v2 semantics: no `task` param in the request — the server elects to create a task because slow_compute has TaskSupport=optional. The discriminator `result_type: \"task\"` lights up `result.IsTask()` on the helper. The Mcp-Name HTTP header carries the same taskId so HTTP routing/observability can key off it without parsing the body.").
 		Run(func() (result *demokit.StepResult) {
 			var slowTaskID string
@@ -139,15 +139,15 @@ func runDemo() {
 				fmt.Printf("    UNEXPECTED: slow_compute returned sync\n")
 				return
 			}
-			slowTaskID = res.Task.Task.TaskID
+			slowTaskID = res.Task.TaskID
 			fmt.Printf("    result_type:   %s\n", res.Task.ResultType)
 			fmt.Printf("    taskId:        %s\n", slowTaskID)
-			fmt.Printf("    status:        %s\n", res.Task.Task.Status)
-			if res.Task.Task.TTLSeconds != nil {
-				fmt.Printf("    ttlSeconds:    %d\n", *res.Task.Task.TTLSeconds)
+			fmt.Printf("    status:        %s\n", res.Task.Status)
+			if res.Task.TTLSeconds != nil {
+				fmt.Printf("    ttlSeconds:    %d\n", *res.Task.TTLSeconds)
 			}
-			if res.Task.Task.PollIntervalMilliseconds != nil {
-				fmt.Printf("    pollIntervalMilliseconds: %d\n", *res.Task.Task.PollIntervalMilliseconds)
+			if res.Task.PollIntervalMilliseconds != nil {
+				fmt.Printf("    pollIntervalMilliseconds: %d\n", *res.Task.PollIntervalMilliseconds)
 			}
 
 			// --- Step 4 (chained): WaitForTask honors PollIntervalMilliseconds ---
@@ -180,7 +180,7 @@ func runDemo() {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			final, err := client.WaitForTask(ctx, c, res.Task.Task.TaskID)
+			final, err := client.WaitForTask(ctx, c, res.Task.TaskID)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
@@ -209,7 +209,7 @@ func runDemo() {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			final, err := client.WaitForTask(ctx, c, res.Task.Task.TaskID)
+			final, err := client.WaitForTask(ctx, c, res.Task.TaskID)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
@@ -225,7 +225,7 @@ func runDemo() {
 	// --- Step 7: MRTR — confirm_delete drives the elicit/update loop ---
 	demo.Step("confirm_delete → input_required → tasks/update → completed (SEP-2663 MRTR)").
 		Arrow("Host", "Server", "tools/call: confirm_delete {filename: \"important.txt\"}").
-		DashedArrow("Server", "Host", "{result_type: task, task: {status: working, ...}}").
+		DashedArrow("Server", "Host", "{result_type: task, taskId, status: working, ...}").
 		Arrow("Host", "Server", "GetTask (polled until status = input_required)").
 		DashedArrow("Server", "Host", "DetailedTask {status: input_required, inputRequests: { \"elicit-N\": {method, params} }}").
 		Arrow("Host", "Server", "tasks/update {taskId, inputResponses: { \"elicit-N\": {action: accept, content: {confirm: true}} }}").
@@ -239,7 +239,7 @@ func runDemo() {
 				fmt.Printf("    ERROR: %v / IsTask=%v\n", err, res != nil && res.IsTask())
 				return
 			}
-			taskID := res.Task.Task.TaskID
+			taskID := res.Task.TaskID
 			fmt.Printf("    taskId: %s\n", taskID)
 
 			// Poll until the task parks in input_required with a populated InputRequests map.
@@ -303,7 +303,7 @@ func runDemo() {
 	// --- Step 8: Cancellation — ack-only ---
 	demo.Step("Cancel a long-running task → empty ack, status settles to cancelled").
 		Arrow("Host", "Server", "tools/call: slow_compute {seconds: 10}").
-		DashedArrow("Server", "Host", "{result_type: task, task: ...}").
+		DashedArrow("Server", "Host", "{result_type: task, taskId, ...}").
 		Arrow("Host", "Server", "client.CancelTask").
 		DashedArrow("Server", "Host", "{} (empty ack — SEP-2663 cancel returns no task state)").
 		Arrow("Host", "Server", "WaitForTask polls tasks/get").
@@ -315,7 +315,7 @@ func runDemo() {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
 			}
-			cancelID := res.Task.Task.TaskID
+			cancelID := res.Task.TaskID
 			fmt.Printf("    Started taskId: %s\n", cancelID)
 
 			time.Sleep(500 * time.Millisecond)
