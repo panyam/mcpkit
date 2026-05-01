@@ -10,7 +10,7 @@ replace (
 
 require (
 	github.com/bwmarrin/discordgo v0.28.1
-	github.com/panyam/demokit v0.0.5
+	github.com/panyam/demokit v0.0.8
 	github.com/panyam/mcpkit v0.2.40
 	github.com/panyam/mcpkit/experimental/ext/events v0.0.0
 	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.0.0-00010101000000-000000000000
@@ -45,6 +45,7 @@ require (
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
+	github.com/yuin/goldmark v1.8.2 // indirect
 	golang.org/x/crypto v0.22.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect

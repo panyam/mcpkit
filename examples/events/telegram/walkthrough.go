@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -81,10 +80,11 @@ func (b *notifBroker) dispatch(method string, params any) {
 	}
 }
 
-// liveInteractionMaxWait is the safety-net timeout on the live-interaction
-// step — caps how long it'll hang if the user walks away without pressing
-// enter. Skipped entirely in --non-interactive mode.
-const liveInteractionMaxWait = 5 * time.Minute
+// liveInteractionMaxWait is the upper-bound on the live-interaction step.
+// User can press enter at any point to end the capture early (in
+// interactive non-TUI mode); otherwise the step ends after this duration.
+// Skipped entirely in --non-interactive mode.
+const liveInteractionMaxWait = 30 * time.Second
 
 func nonInteractive() bool {
 	for _, a := range os.Args[1:] {
@@ -96,9 +96,9 @@ func nonInteractive() bool {
 }
 
 // tuiMode reports whether the walkthrough is running in TUI mode (Bubble
-// Tea). In TUI the press-enter exit mechanism doesn't work — Bubble Tea
-// owns stdin — so the live step falls back to "use Ctrl+C, otherwise
-// wait out the safety timeout."
+// Tea). In TUI Bubble Tea owns stdin, so demokit's Cancellable
+// (press-enter cancel) would conflict — we keep Timeout but skip
+// Cancellable in that mode.
 func tuiMode() bool {
 	for _, a := range os.Args[1:] {
 		if strings.TrimSpace(a) == "--tui" {
@@ -168,7 +168,7 @@ func runDemo() {
 		Arrow("Host", "Server", "POST /mcp — initialize").
 		DashedArrow("Server", "Host", "serverInfo + capabilities").
 		Note("Same connection setup as discord. The notification broker fans `notifications/events/event` out by source name so each step subscribes to just what it cares about.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			c = client.NewClient(mcpURL,
 				core.ClientInfo{Name: "telegram-events-host", Version: "1.0"},
 				client.WithGetSSEStream(),
@@ -187,7 +187,7 @@ func runDemo() {
 		Arrow("Receiver", "Server", "POST /inject (simulated telegram message)").
 		DashedArrow("Server", "Host", "notifications/events/event { data: {chat_id, user, text, ...} }").
 		Note("Telegram's payload is flat — chat_id, user, text — vs discord's nested author + content. Same library, same wire envelope, different Data shape (auto-derived from TelegramEventData).").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			gotEvent := broker.Subscribe("telegram.message", 4)
 
 			body := map[string]any{
@@ -220,7 +220,7 @@ func runDemo() {
 		Arrow("Receiver", "Server", "POST /inject?event=telegram.typing").
 		DashedArrow("Server", "Host", "notifications/events/event { cursor: null }").
 		Note("Telegram's typing chat-action is ephemeral — no replay value, no buffer. Same WithoutCursors() story as discord.typing; the wire payload differs only in shape.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			gotEvent := broker.Subscribe("telegram.typing", 4)
 
 			body := map[string]any{
@@ -259,7 +259,7 @@ func runDemo() {
 		Arrow("Receiver", "Server", "POST /inject (simulated message)").
 		DashedArrow("Server", "Receiver", "POST <url> + HMAC signature headers (default: webhook-* per Standard Webhooks; opt-in: X-MCP-* via -webhook-header-mode mcp)").
 		Note("The typed Receiver[TelegramEventData] decodes the wire envelope's Data field directly into TelegramEventData, so the consumer reads `ev.Data.Text` rather than re-parsing JSON. Same `Subscription` + `Receiver[Data]` pair as the discord webhook step — the only differences are the type parameter and the payload field names.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			recv := eventsclient.NewReceiver[TelegramEventData]("")
 			defer recv.Close()
 
@@ -278,7 +278,18 @@ func runDemo() {
 				fmt.Printf("    ERROR: subscribe failed: %v\n", err)
 				return
 			}
-			defer sub.Stop()
+			// sub.Stop() ends the refresh loop but does NOT unsubscribe
+			// server-side — the registry retains the subscription for its
+			// TTL (~5 min) and keeps retrying delivery to the now-closed
+			// httptest port. Eager unsubscribe avoids the noisy "connection
+			// refused" retry log on the server side after the demo ends.
+			defer func() {
+				sub.Stop()
+				_, _ = c.Call("events/unsubscribe", map[string]any{
+					"id":       sub.ID(),
+					"delivery": map[string]any{"url": hookSrv.URL},
+				})
+			}()
 			recv.SetSecret(sub.Secret())
 			fmt.Printf("    server-assigned secret:  %s...\n", truncate(sub.Secret(), 16))
 			fmt.Printf("    refreshBefore:           %s\n", sub.RefreshBefore().Format(time.RFC3339))
@@ -310,11 +321,18 @@ func runDemo() {
 		})
 
 	// --- Step 5: Live Telegram interaction ---
+	// Uses demokit's Timeout (safety upper bound) + Cancellable (press-enter
+	// to end early in interactive non-TUI mode). Output streams live as
+	// events arrive — demokit v0.0.8+ tees step stdout to the renderer in
+	// real time rather than buffering until Run returns. Cancellable is
+	// disabled in TUI mode because Bubble Tea owns stdin.
 	demo.Step("Live Telegram interaction (real message from a Telegram chat)").
 		Arrow("Telegram", "Server", "MessageCreate event (when you send a message to the bot)").
 		DashedArrow("Server", "Host", "notifications/events/event { name: telegram.message, cursor: <new> }").
 		Note("Requires the server to be running with -token + you having a chat open with the bot. No typing parallel here — Telegram's Bot API doesn't expose user typing events to bots (only the bot can send typing chat actions, not the other way around). Discord does have user-typing events; see ../discord/WALKTHROUGH.md for the live-typing demo. In --non-interactive mode this step skips the wait so CI runs aren't slowed.").
-		Run(func() (result *demokit.StepResult) {
+		Timeout(liveInteractionMaxWait).
+		Cancellable(!tuiMode()).
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			if nonInteractive() {
 				fmt.Printf("    Skipped in --non-interactive mode. Run without --non-interactive (and with the server in -token mode) to see live events.\n")
 				return
@@ -329,14 +347,6 @@ func runDemo() {
 			}
 
 			gotMsg := broker.Subscribe("telegram.message", 16)
-			// In TUI mode Bubble Tea owns stdin, so awaitEnter would
-			// conflict — leave done as a nil channel (blocks forever in
-			// select) and rely on the deadline / Ctrl+C.
-			var done <-chan struct{}
-			if !tuiMode() {
-				done = awaitEnter()
-			}
-			deadline := time.After(liveInteractionMaxWait)
 
 			var msgSeen int
 			for {
@@ -346,14 +356,11 @@ func runDemo() {
 					if d, ok := p["data"].(map[string]any); ok {
 						fmt.Printf("    [message] %v in chat %v: %q\n", d["user"], d["chat_id"], d["text"])
 					}
-				case <-done:
-					fmt.Printf("\n    Captured %d message(s).\n", msgSeen)
-					return
-				case <-deadline:
+				case <-ctx.Ctx.Done():
 					if msgSeen == 0 {
-						fmt.Printf("    No live events received within %s. Make sure the server is started with -token and you have a chat open with the bot.\n", liveInteractionMaxWait)
+						fmt.Printf("    No live events received. Make sure the server is started with -token and you have a chat open with the bot.\n")
 					} else {
-						fmt.Printf("\n    Hit the safety timeout (%s). Captured %d message(s).\n", liveInteractionMaxWait, msgSeen)
+						fmt.Printf("\n    Captured %d message(s).\n", msgSeen)
 					}
 					return
 				}
@@ -403,14 +410,3 @@ func truncate(s string, n int) string {
 	return s[:n]
 }
 
-// awaitEnter spawns a goroutine that reads a single line from stdin and
-// signals on the returned channel. Used by the live-interaction step to
-// let the user end the capture by pressing enter.
-func awaitEnter() <-chan struct{} {
-	done := make(chan struct{})
-	go func() {
-		bufio.NewReader(os.Stdin).ReadString('\n')
-		close(done)
-	}()
-	return done
-}
