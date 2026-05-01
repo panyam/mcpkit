@@ -136,7 +136,7 @@ func TestHybrid_V2ClientSeesV2Shapes(t *testing.T) {
 		t.Fatalf("v2 task creation should return Task variant; got Sync=%+v", res.Sync)
 	}
 	if res.Task.ResultType != core.ResultTypeTask {
-		t.Errorf("result_type = %q, want %q", res.Task.ResultType, core.ResultTypeTask)
+		t.Errorf("resultType = %q, want %q", res.Task.ResultType, core.ResultTypeTask)
 	}
 	// v2 wire: TaskInfoV2 fields embedded directly on CreateTaskResult, with
 	// `ttlSeconds` (no v1 `ttl` ms field).
@@ -207,7 +207,7 @@ func TestHybrid_V2ExtensionTakesPriority(t *testing.T) {
 		t.Fatalf("unmarshal CreateTaskResult: %v", err)
 	}
 	if ctr.ResultType != core.ResultTypeTask {
-		t.Errorf("result_type = %q, want %q (v2 should win when extension declared)", ctr.ResultType, core.ResultTypeTask)
+		t.Errorf("resultType = %q, want %q (v2 should win when extension declared)", ctr.ResultType, core.ResultTypeTask)
 	}
 	if ctr.TTLSeconds == nil {
 		t.Errorf("expected v2 wire shape (TTLSeconds present); got %+v", ctr)

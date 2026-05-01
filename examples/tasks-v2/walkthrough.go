@@ -65,7 +65,7 @@ func runDemo() {
 		"",
 		"- **Tasks is an extension** (`io.modelcontextprotocol/tasks`). Clients declare support during `initialize`; servers gate every task-creating `tools/call` and every `tasks/*` method on the negotiation.",
 		"- **No client task hint.** Just call `tools/call` normally — the *server* decides whether to run sync or create a task. The client `client.ToolCall` helper returns a polymorphic `ToolCallResult` with either `Sync` or `Task` populated.",
-		"- **`result_type` discriminator** on `tools/call` response: `\"task\"` means a task was created; absent means sync.",
+		"- **`resultType` discriminator** on `tools/call` response: `\"task\"` means a task was created; absent means sync.",
 		"- **`tasks/get` returns `DetailedTask`** with inlined `result` / `error` / `inputRequests` / `requestState` per status. No separate `tasks/result` round-trip.",
 		"- **`tasks/cancel` returns an empty ack**. Observe the resulting `cancelled` status with the next `tasks/get`.",
 		"- **`tasks/update` is the SEP-2663 resume path** for MRTR input rounds — the client delivers `inputResponses` keyed to whatever `inputRequests` the server emitted.",
@@ -105,7 +105,7 @@ func runDemo() {
 	// --- Step 2: Polymorphic tools/call — sync branch ---
 	demo.Step("Sync call: greet — ToolCall returns Sync variant").
 		Arrow("Host", "Server", "tools/call: greet {name: \"world\"}").
-		DashedArrow("Server", "Host", "ToolResult (no result_type discriminator → ToolCallResult.Sync)").
+		DashedArrow("Server", "Host", "ToolResult (no resultType discriminator → ToolCallResult.Sync)").
 		Note("`client.ToolCall(c, name, args)` returns a polymorphic `*ToolCallResult`. For sync tools (no Execution / TaskSupport=forbidden) the server returns a plain `ToolResult` and the helper sets `Sync` (not `Task`). Callers branch on `result.IsTask()`.").
 		Run(func() (result *demokit.StepResult) {
 			res, err := client.ToolCall(c, "greet", map[string]any{"name": "world"})
@@ -126,8 +126,8 @@ func runDemo() {
 	// --- Step 3: Polymorphic tools/call — task branch ---
 	demo.Step("slow_compute (no task hint!) — server creates a task → ToolCall returns Task variant").
 		Arrow("Host", "Server", "tools/call: slow_compute {seconds: 3}").
-		DashedArrow("Server", "Host", "{result_type: \"task\", taskId, status: working, ttlSeconds, ...}\n+ Mcp-Name: <taskId> response header (SEP-2243)").
-		Note("Critical v2 semantics: no `task` param in the request — the server elects to create a task because slow_compute has TaskSupport=optional. The discriminator `result_type: \"task\"` lights up `result.IsTask()` on the helper. The Mcp-Name HTTP header carries the same taskId so HTTP routing/observability can key off it without parsing the body.").
+		DashedArrow("Server", "Host", "{resultType: \"task\", taskId, status: working, ttlSeconds, ...}\n+ Mcp-Name: <taskId> response header (SEP-2243)").
+		Note("Critical v2 semantics: no `task` param in the request — the server elects to create a task because slow_compute has TaskSupport=optional. The discriminator `resultType: \"task\"` lights up `result.IsTask()` on the helper. The Mcp-Name HTTP header carries the same taskId so HTTP routing/observability can key off it without parsing the body.").
 		Run(func() (result *demokit.StepResult) {
 			var slowTaskID string
 			res, err := client.ToolCall(c, "slow_compute", map[string]any{"seconds": 3, "label": "demo"})
@@ -140,7 +140,7 @@ func runDemo() {
 				return
 			}
 			slowTaskID = res.Task.TaskID
-			fmt.Printf("    result_type:   %s\n", res.Task.ResultType)
+			fmt.Printf("    resultType:   %s\n", res.Task.ResultType)
 			fmt.Printf("    taskId:        %s\n", slowTaskID)
 			fmt.Printf("    status:        %s\n", res.Task.Status)
 			if res.Task.TTLSeconds != nil {
@@ -225,7 +225,7 @@ func runDemo() {
 	// --- Step 7: MRTR — confirm_delete drives the elicit/update loop ---
 	demo.Step("confirm_delete → input_required → tasks/update → completed (SEP-2663 MRTR)").
 		Arrow("Host", "Server", "tools/call: confirm_delete {filename: \"important.txt\"}").
-		DashedArrow("Server", "Host", "{result_type: task, taskId, status: working, ...}").
+		DashedArrow("Server", "Host", "{resultType: task, taskId, status: working, ...}").
 		Arrow("Host", "Server", "GetTask (polled until status = input_required)").
 		DashedArrow("Server", "Host", "DetailedTask {status: input_required, inputRequests: { \"elicit-N\": {method, params} }}").
 		Arrow("Host", "Server", "tasks/update {taskId, inputResponses: { \"elicit-N\": {action: accept, content: {confirm: true}} }}").
@@ -303,7 +303,7 @@ func runDemo() {
 	// --- Step 8: Cancellation — ack-only ---
 	demo.Step("Cancel a long-running task → empty ack, status settles to cancelled").
 		Arrow("Host", "Server", "tools/call: slow_compute {seconds: 10}").
-		DashedArrow("Server", "Host", "{result_type: task, taskId, ...}").
+		DashedArrow("Server", "Host", "{resultType: task, taskId, ...}").
 		Arrow("Host", "Server", "client.CancelTask").
 		DashedArrow("Server", "Host", "{} (empty ack — SEP-2663 cancel returns no task state)").
 		Arrow("Host", "Server", "WaitForTask polls tasks/get").

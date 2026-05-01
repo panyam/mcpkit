@@ -52,7 +52,6 @@ Project-wide: `CONSTRAINTS.md`. Per-package: `core/CONSTRAINTS.md`, `server/CONS
 - **Background goroutines**: Use `core.DetachForBackground(ctx)` (not `context.WithoutCancel`) — replaces dead POST-scoped requestFunc/notifyFunc with the session-level persistent push.
 - **CORS for browser clients**: MCP servers need `Mcp-Session-Id` in both Allow-Headers and Expose-Headers, plus `DELETE` in allowed methods. Use `servicekit/middleware.CORS()` with options.
 - **Demokit non-interactive + browser steps**: Steps that open a browser and expect user action will fail in `--non-interactive` mode. Interactive mode is the primary path.
-- **`result_type` is snake_case**: The SEP-2322 polymorphic-dispatch discriminator on tools/call responses (`"task"` / `"complete"` / `"incomplete"`) is the only MCP wire field that is snake_case. Everything else (`taskId`, `inputRequests`, `requestState`, `ttlSeconds`, ...) stays camelCase. Test assertions and TS conformance code MUST use snake_case for this one field.
 - **Three-state TTL needs `*int` + omitempty**: SEP-2549 distinguishes `nil` (no guidance), `&0` (do not cache), `&N>0` (fresh for N seconds). Plain `int` with omitempty would conflate `nil` with `&0`. Same pattern fits any spec field with explicit-zero semantics.
 
 Module-specific gotchas live in their READMEs.

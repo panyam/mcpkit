@@ -151,7 +151,7 @@ func TestToolCall_TaskResult(t *testing.T) {
 		t.Fatalf("expected Task variant; got Sync=%+v", res.Sync)
 	}
 	if res.Task.ResultType != core.ResultTypeTask {
-		t.Errorf("result_type = %q, want %q", res.Task.ResultType, core.ResultTypeTask)
+		t.Errorf("resultType = %q, want %q", res.Task.ResultType, core.ResultTypeTask)
 	}
 	if res.Task.TaskID == "" {
 		t.Error("missing taskId in CreateTaskResult")
