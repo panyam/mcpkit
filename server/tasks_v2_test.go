@@ -536,6 +536,13 @@ func TestV2_McpNameHeaderOnTaskCreation(t *testing.T) {
 		t.Fatalf("missing Mcp-Name header on task-creating tools/call; got body: %s", body)
 	}
 
+	// SEP-2243 also requires Mcp-Method — the JSON-RPC method that produced
+	// this response. Pairs with Mcp-Name so HTTP infrastructure can route /
+	// log against (method, taskId) without parsing the JSON body.
+	if got := resp.Header.Get("Mcp-Method"); got != "tools/call" {
+		t.Errorf("Mcp-Method = %q, want \"tools/call\"", got)
+	}
+
 	// Sanity: the header value should match the taskId in the response body.
 	var rpcResp struct {
 		Result core.CreateTaskResult `json:"result"`
@@ -545,6 +552,62 @@ func TestV2_McpNameHeaderOnTaskCreation(t *testing.T) {
 	}
 	if mcpName != rpcResp.Result.TaskID {
 		t.Errorf("Mcp-Name = %q, want match for taskId %q", mcpName, rpcResp.Result.TaskID)
+	}
+}
+
+// TestV2_McpMethodHeaderOnTasksMethods verifies the SEP-2243 Mcp-Method
+// header carries the JSON-RPC method name on every tasks/* response, not
+// just task-creating tools/call. Mcp-Name is task-creation-specific and
+// stays empty for these reads.
+func TestV2_McpMethodHeaderOnTasksMethods(t *testing.T) {
+	srv := newTaskV2Server(t)
+	handler := srv.Handler(WithStreamableHTTP(true))
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	sid := initializeSession(t, ts.URL, true /* declare tasks ext */)
+
+	// Create a task so we have an id to query.
+	createResp := rawHTTPCall(t, ts.URL, sid, true /* jsonOnly */, "tools/call", "fast-task")
+	createBody, _ := io.ReadAll(createResp.Body)
+	createResp.Body.Close()
+	var createWrap struct {
+		Result core.CreateTaskResult `json:"result"`
+	}
+	if err := json.Unmarshal(createBody, &createWrap); err != nil {
+		t.Fatalf("unmarshal create response: %v", err)
+	}
+	taskID := createWrap.Result.TaskID
+	if taskID == "" {
+		t.Fatal("missing taskId in CreateTaskResult")
+	}
+
+	cases := []struct {
+		method string
+		body   string
+	}{
+		{"tasks/get", `{"jsonrpc":"2.0","id":1,"method":"tasks/get","params":{"taskId":"` + taskID + `"}}`},
+		{"tasks/update", `{"jsonrpc":"2.0","id":2,"method":"tasks/update","params":{"taskId":"` + taskID + `"}}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.method, func(t *testing.T) {
+			req, _ := http.NewRequest("POST", ts.URL+"/mcp", strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Accept", "application/json")
+			req.Header.Set("Mcp-Session-Id", sid)
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("%s: %v", tc.method, err)
+			}
+			io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if got := resp.Header.Get("Mcp-Method"); got != tc.method {
+				t.Errorf("%s: Mcp-Method = %q, want %q", tc.method, got, tc.method)
+			}
+			if got := resp.Header.Get("Mcp-Name"); got != "" {
+				t.Errorf("%s: Mcp-Name should be empty for non-task-creating responses; got %q", tc.method, got)
+			}
+		})
 	}
 }
 
@@ -1076,6 +1139,108 @@ func TestV2_RequestState_ExpiredRejected(t *testing.T) {
 	}
 	if !strings.Contains(rpcErr.Message, "expired") {
 		t.Errorf("expired requestState: message=%q; want it to mention \"expired\"", rpcErr.Message)
+	}
+}
+
+// TestV2_StrongConsistency_ImmediateGet verifies SEP-2663's durable-create
+// guarantee: "A server MUST NOT return CreateTaskResult until the task is
+// durably created — that is, until a tasks/get for the returned taskId would
+// resolve."
+//
+// Our middleware calls store.Create synchronously before building the
+// response, so the task is queryable the instant the client sees the
+// CreateTaskResult. This test codifies that ordering — if a future refactor
+// pushed store.Create into the background goroutine, this would catch it.
+func TestV2_StrongConsistency_ImmediateGet(t *testing.T) {
+	srv, _ := newTaskV2ServerWithSlow(t)
+	c := connectV2Client(t, srv, client.WithTasksExtension())
+
+	res, err := c.Call("tools/call", map[string]any{
+		"name":      "slow-task",
+		"arguments": map[string]any{},
+	})
+	if err != nil {
+		t.Fatalf("tools/call: %v", err)
+	}
+	var ctr core.CreateTaskResult
+	if err := json.Unmarshal(res.Raw, &ctr); err != nil {
+		t.Fatalf("unmarshal CreateTaskResult: %v", err)
+	}
+	if ctr.TaskID == "" {
+		t.Fatal("missing taskId in CreateTaskResult")
+	}
+
+	// Immediately query — no sleep, no poll, no goroutine yield. SEP-2663
+	// says this MUST resolve, even if the tool's background goroutine hasn't
+	// been scheduled yet.
+	got, err := c.Call("tasks/get", map[string]any{"taskId": ctr.TaskID})
+	if err != nil {
+		t.Fatalf("immediate tasks/get after CreateTaskResult must resolve (SEP-2663): %v", err)
+	}
+	var dt core.DetailedTask
+	if err := json.Unmarshal(got.Raw, &dt); err != nil {
+		t.Fatalf("unmarshal DetailedTask: %v", err)
+	}
+	if dt.TaskID != ctr.TaskID {
+		t.Errorf("tasks/get returned wrong taskId: got %q, want %q", dt.TaskID, ctr.TaskID)
+	}
+	// Status should be non-terminal (slow-task blocks until unblocked); the
+	// exact value doesn't matter — what matters is that the task exists.
+	if dt.Status.IsTerminal() {
+		t.Errorf("expected non-terminal status (task is blocked), got %q", dt.Status)
+	}
+}
+
+// TestV2_RequestState_StaleTolerance verifies SEP-2663's "Servers MUST tolerate
+// receiving a stale or outdated value gracefully" requirement. Each tasks/get
+// mints a fresh signed requestState (different `exp`), so an earlier token
+// becomes "stale" the moment the next one is minted — but stale-but-not-expired
+// tokens MUST still verify and the request MUST succeed (not -32602).
+//
+// Our HMAC verifier only checks signature validity + expiry, never "latest
+// version," so this test codifies the existing behavior. Servers that decide
+// to track a "latest only" notion would fail here, which is the point.
+func TestV2_RequestState_StaleTolerance(t *testing.T) {
+	srv, _ := newSignedTaskV2Server(t, time.Hour)
+	c := connectV2Client(t, srv, client.WithTasksExtension())
+
+	res, err := client.ToolCall(c, "fast-task", map[string]any{})
+	if err != nil || !res.IsTask() {
+		t.Fatalf("ToolCall: %v / IsTask=%v", err, res != nil && res.IsTask())
+	}
+	taskID := res.Task.TaskID
+
+	// Mint tokenA via the first tasks/get.
+	first, err := client.GetTask(c, taskID)
+	if err != nil {
+		t.Fatalf("first GetTask: %v", err)
+	}
+	tokenA := first.RequestState
+	if tokenA == "" {
+		t.Fatal("expected non-empty requestState from signed-mode server")
+	}
+
+	// Sleep ≥1s so the next mint embeds a different `exp` (unix seconds
+	// granularity) — that's what makes tokenA "stale."
+	time.Sleep(1100 * time.Millisecond)
+
+	second, err := client.GetTask(c, taskID, client.TaskOptions{RequestState: tokenA})
+	if err != nil {
+		t.Fatalf("second GetTask (echoing tokenA): %v", err)
+	}
+	tokenB := second.RequestState
+	if tokenB == "" || tokenB == tokenA {
+		t.Fatalf("expected fresh token on second tasks/get; got %q (vs A=%q)", tokenB, tokenA)
+	}
+
+	// Now echo the older tokenA — it's stale (a newer token has been minted)
+	// but still within its TTL, so the server MUST accept it.
+	stale, err := client.GetTask(c, taskID, client.TaskOptions{RequestState: tokenA})
+	if err != nil {
+		t.Fatalf("stale-token GetTask: %v — server must tolerate stale-but-valid tokens (SEP-2663)", err)
+	}
+	if stale.TaskID != taskID {
+		t.Errorf("stale-token GetTask returned wrong taskId: got %q, want %q", stale.TaskID, taskID)
 	}
 }
 
