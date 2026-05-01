@@ -1,17 +1,18 @@
 // Example: SEP-2549 TTL for List Results.
 //
-// Server fixture for the conformance/list-ttl/ suite. Registers one tool,
-// one resource, one resource template, and one prompt — just enough surface
-// for all four list endpoints to return a non-empty page — and configures
-// WithListTTL(60) so every list response carries `"ttl": 60`.
+// Two-process architecture:
 //
-// Usage:
+//	Terminal 1:  make serve         # MCP server on :8080 with WithListTTL(60)
+//	Terminal 2:  make demo          # demokit walkthrough (or `make demo --tui`)
 //
-//	go run . --serve [--addr :8080] [--ttl 60]
+// The server is a real MCP server — any host can connect to it (Claude
+// Desktop, MCPJam, VS Code) and observe the SEP-2549 `ttl` field on every
+// list response. The walkthrough acts as a scripted MCP host that calls
+// each list endpoint via the new client helpers and prints the TTL.
 //
-// Pass `--ttl 0` to test the explicit "do not cache" wire shape, or omit
-// `--ttl` (or pass a negative value) to test the "absent" shape. The
-// conformance suite drives all three modes via separate processes.
+// The same binary doubles as the conformance fixture: pass `--serve`
+// to run the server. The conformance/list-ttl/ suite spawns three
+// processes (positive / zero / unset) via the `--ttl` flag.
 package main
 
 import (
@@ -27,13 +28,13 @@ import (
 
 func main() {
 	for _, arg := range os.Args[1:] {
-		if strings.TrimSpace(arg) == "--serve" {
+		switch strings.TrimSpace(arg) {
+		case "--serve":
 			serve()
 			return
 		}
 	}
-	fmt.Println("Run with --serve to start the SEP-2549 list-ttl demo server.")
-	fmt.Println("  go run . --serve --addr :8080 --ttl 60")
+	runDemo()
 }
 
 func serve() {
@@ -109,15 +110,4 @@ func serve() {
 	if err := srv.ListenAndServe(server.WithStreamableHTTP(true)); err != nil {
 		log.Fatalf("ListenAndServe: %v", err)
 	}
-}
-
-func filterFlags(args []string) []string {
-	out := make([]string, 0, len(args))
-	for _, a := range args {
-		if a == "--serve" {
-			continue
-		}
-		out = append(out, a)
-	}
-	return out
 }

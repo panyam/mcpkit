@@ -1,12 +1,22 @@
 // Example: SEP-2322 MRTR (Multi Round-Trip Requests) — ephemeral
 // IncompleteResult flow.
 //
-// Usage:
+// Two-process architecture:
 //
-//	go run . --serve [--addr :8080]
+//	Terminal 1:  make serve         # MCP server on :8080
+//	Terminal 2:  make demo          # demokit walkthrough (or `make demo --tui`)
 //
-// Tools (named to match the upstream conformance contract — modelcontextprotocol
-// /conformance PR 188):
+// The server is a real MCP server — any host can connect to it. The
+// walkthrough acts as a scripted MCP host that drives `tools/call`
+// through one full IncompleteResult round-trip and prints the wire
+// fields at each step.
+//
+// The same binary doubles as the conformance fixture: pass `--serve`
+// to run the server. The conformance/mrtr/ suite spawns one process and
+// drives the seven scenarios against it.
+//
+// Tools (named to match the upstream conformance contract —
+// modelcontextprotocol/conformance PR 188):
 //
 //   - test_tool_with_elicitation             (A1) basic elicitation round-trip
 //   - test_incomplete_result_sampling        (A2) basic sampling round-trip
@@ -44,8 +54,7 @@ func main() {
 			return
 		}
 	}
-	fmt.Println("Run with --serve to start the MRTR demo server.")
-	fmt.Println("  go run . --serve --addr :8080")
+	runDemo()
 }
 
 func serve() {
@@ -69,17 +78,6 @@ func serve() {
 	if err := srv.ListenAndServe(server.WithStreamableHTTP(true)); err != nil {
 		log.Fatalf("ListenAndServe: %v", err)
 	}
-}
-
-func filterFlags(args []string) []string {
-	out := make([]string, 0, len(args))
-	for _, a := range args {
-		if a == "--serve" {
-			continue
-		}
-		out = append(out, a)
-	}
-	return out
 }
 
 // --- Tool registrations ---
