@@ -2,7 +2,6 @@ package events
 
 import (
 	"bytes"
-	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -40,25 +39,6 @@ func WithWebhookHeaderMode(mode WebhookHeaderMode) WebhookOption {
 	}
 }
 
-// WithWebhookSecretMode selects how the registry decides on the
-// per-subscription HMAC secret. See WebhookSecretMode (Server / Client /
-// Identity). Defaults to WebhookSecretServer.
-func WithWebhookSecretMode(mode WebhookSecretMode) WebhookOption {
-	return func(r *WebhookRegistry) {
-		r.secretMode = mode
-	}
-}
-
-// WithWebhookRoot supplies the master secret used by Identity mode to derive
-// per-subscription secrets via HMAC(root, canonicalTuple). Required when
-// using WebhookSecretIdentity; ignored otherwise (kept for forward use).
-// The bytes are not copied — pass a slice the caller doesn't mutate.
-func WithWebhookRoot(root []byte) WebhookOption {
-	return func(r *WebhookRegistry) {
-		r.root = root
-	}
-}
-
 // WebhookTarget is a registered outbound webhook callback with TTL-based expiry.
 type WebhookTarget struct {
 	ID        string // client-provided subscription ID
@@ -75,75 +55,34 @@ func webhookKey(urlStr, id string) string {
 
 // WebhookRegistry tracks outbound webhook subscriptions and delivers events
 // with HMAC-SHA256 signed payloads. Subscriptions have TTL-based soft state
-// per Peter's spec — they expire if the client stops refreshing.
+// per the spec — they expire if the client stops refreshing.
+//
+// The HMAC signing secret is always client-supplied per the spec; the
+// registry stores it as-is on Register and uses it directly when signing
+// outbound deliveries.
 type WebhookRegistry struct {
 	mu         sync.RWMutex
 	targets    map[string]WebhookTarget // keyed by webhookKey(url, id)
 	client     *http.Client
 	ttl        time.Duration
 	headerMode WebhookHeaderMode
-	secretMode WebhookSecretMode
-	root       []byte
 }
 
 // NewWebhookRegistry creates an empty registry with the documented defaults:
-// 5-second HTTP timeout, 60-second TTL, StandardWebhooks signing,
-// WebhookSecretServer (server always generates secrets). Override via the
-// With* options.
-//
-// Identity mode requires WithWebhookRoot. If the caller selects identity
-// mode without providing a root, NewWebhookRegistry panics — surfacing the
-// config bug at process start rather than at first subscribe.
+// 5-second HTTP timeout, 60-second TTL, StandardWebhooks signing. Override
+// via the With* options.
 func NewWebhookRegistry(opts ...WebhookOption) *WebhookRegistry {
 	r := &WebhookRegistry{
 		targets:    make(map[string]WebhookTarget),
 		client:     &http.Client{Timeout: 5 * time.Second},
 		ttl:        defaultWebhookTTL,
 		headerMode: StandardWebhooks,
-		secretMode: WebhookSecretServer,
 	}
 	for _, o := range opts {
 		o(r)
 	}
-	if r.secretMode == WebhookSecretIdentity && len(r.root) == 0 {
-		panic("events: WebhookSecretIdentity requires WithWebhookRoot to be set")
-	}
 	return r
 }
-
-// resolveSecret applies the registry's secret mode to a subscribe request.
-// Returns the secret to store and use for signing, plus the id to record
-// against the subscription (which may differ from the client-supplied id
-// when identity mode derives its own).
-//
-// Inputs:
-//   clientID, clientSecret — what the client supplied (may be empty)
-//   name, url, params      — the canonical tuple inputs for identity mode
-//
-// Behaviour by mode:
-//   Server   — always generate a fresh secret; ignore clientSecret. id is
-//              passed through (clientID).
-//   Client   — honour clientSecret; if empty, fall back to generating one.
-//              id is clientID.
-//   Identity — derive both secret and id from (name, url, params) via the
-//              configured root. Ignore clientSecret AND clientID.
-func (r *WebhookRegistry) resolveSecret(clientID, clientSecret, name, url string, params map[string]string) (id, secret string) {
-	switch r.secretMode {
-	case WebhookSecretIdentity:
-		return deriveIdentityID(name, url, params), deriveIdentitySecret(r.root, name, url, params)
-	case WebhookSecretClient:
-		if clientSecret == "" {
-			return clientID, generateSecret()
-		}
-		return clientID, clientSecret
-	default: // WebhookSecretServer
-		return clientID, generateSecret()
-	}
-}
-
-// SecretMode returns the registry's configured secret mode (read-only).
-// Subscribe handlers consult this when shaping their response.
-func (r *WebhookRegistry) SecretMode() WebhookSecretMode { return r.secretMode }
 
 // Register adds or refreshes a webhook subscription. Returns the expiry time.
 func (r *WebhookRegistry) Register(id, urlStr, secret string) time.Time {
@@ -170,26 +109,6 @@ func (r *WebhookRegistry) Unregister(urlStr, id string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.targets, webhookKey(urlStr, id))
-}
-
-// UnregisterBySecret removes a webhook subscription identified by
-// (url, secret). Used as the proof-of-possession unsubscribe path —
-// clients that hold the secret can drop the subscription without knowing
-// or remembering the server-assigned id. No-op if no match found.
-//
-// Constant-time secret comparison guards against timing-leak side channels.
-func (r *WebhookRegistry) UnregisterBySecret(urlStr, secret string) {
-	if secret == "" {
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	want := []byte(secret)
-	for key, t := range r.targets {
-		if t.URL == urlStr && subtle.ConstantTimeCompare([]byte(t.Secret), want) == 1 {
-			delete(r.targets, key)
-		}
-	}
 }
 
 // Targets returns a snapshot of all non-expired webhook targets.

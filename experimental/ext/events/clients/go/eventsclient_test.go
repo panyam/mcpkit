@@ -56,58 +56,6 @@ func stack(t *testing.T, whOpts ...events.WebhookOption) (*client.Client, func(f
 	return c, yield, webhooks
 }
 
-// TestSubscribe_PopulatesServerAssignedSecret verifies that Subscribe blocks
-// until the initial subscribe has succeeded and exposes the server-assigned
-// secret synchronously after. The default Server-mode registry generates a
-// fresh secret regardless of what the client supplied.
-func TestSubscribe_PopulatesServerAssignedSecret(t *testing.T) {
-	c, _, _ := stack(t)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
-		EventName:   "fake.event",
-		CallbackURL: "http://localhost:1/sink",
-		Secret:      "ignored-in-server-mode",
-		SubID:       "test-sub",
-	})
-	require.NoError(t, err)
-	defer sub.Stop()
-
-	assert.NotEmpty(t, sub.Secret(), "server must return its generated secret")
-	assert.NotEqual(t, "ignored-in-server-mode", sub.Secret(),
-		"Server mode must NOT echo the client-supplied secret")
-	assert.Equal(t, "test-sub", sub.ID())
-	assert.True(t, sub.RefreshBefore().After(time.Now()),
-		"refreshBefore must be in the future")
-}
-
-// TestSubscribe_IdentityModeReturnsDerivedID exercises the Identity mode
-// path through the SDK: the server-derived id replaces the client-supplied
-// SubID, demonstrating that the SDK round-trips the spec contract correctly.
-func TestSubscribe_IdentityModeReturnsDerivedID(t *testing.T) {
-	c, _, _ := stack(t,
-		events.WithWebhookSecretMode(events.WebhookSecretIdentity),
-		events.WithWebhookRoot([]byte("test-root")),
-	)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
-		EventName:   "fake.event",
-		CallbackURL: "http://localhost:1/sink",
-		SubID:       "ignored-in-identity-mode",
-		Params:      map[string]string{"region": "us"},
-	})
-	require.NoError(t, err)
-	defer sub.Stop()
-
-	assert.NotEqual(t, "ignored-in-identity-mode", sub.ID(),
-		"Identity mode must derive its own id")
-}
-
 // TestSubscribe_AutoRefreshFiresWithinShortTTL verifies the background
 // refresh loop calls OnRefresh at least twice (initial + at least one
 // scheduled refresh) within a short test window. Validates the SDK actually
