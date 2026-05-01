@@ -530,24 +530,40 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
     });
 
     // ========================================================================
-    // Scenario 12: ttlSeconds field present and in seconds
+    // Scenario 12: ttlSeconds + pollIntervalMilliseconds wire-field renames
     //
-    // SEP-2663 renamed the wire field from `ttl` to `ttlSeconds` (units are
-    // now part of the field name, no convention required). The legacy `ttl`
-    // key MUST NOT appear on the v2 wire — clients that key off it on a v2
-    // server would silently see an unbounded TTL.
+    // SEP-2663 renamed two wire fields with units in the name (no convention
+    // required):
+    //   - `ttl` (milliseconds, by convention) → `ttlSeconds`
+    //   - `pollInterval` (milliseconds, by convention) → `pollIntervalMilliseconds`
+    //
+    // The legacy keys MUST NOT appear on the v2 wire — clients that key off
+    // them on a v2 server would silently see an unbounded TTL or a missing
+    // poll hint.
     // ========================================================================
-    test('v2-12: ttlSeconds present (and v1 ttl key absent)', async () => {
+    test('v2-12: ttlSeconds + pollIntervalMilliseconds present (legacy v1 keys absent)', async () => {
         const result = await callTool('slow_compute', { seconds: 1, label: 'v2-ttl' });
-        // SEP-2663 flat CreateTaskResult: ttlSeconds is at the top level
-        // alongside resultType, not nested under a "task" wrapper.
+        // SEP-2663 flat CreateTaskResult: the renamed wire fields are at the
+        // top level alongside resultType, not nested under a "task" wrapper.
+
+        // ttlSeconds — required, positive, no legacy `ttl` key.
         assert.ok(result.ttlSeconds !== undefined,
             'CreateTaskResult should have ttlSeconds (SEP-2663 wire-field rename)');
         assert.ok(typeof result.ttlSeconds === 'number' && result.ttlSeconds > 0,
             'ttlSeconds should be a positive number');
-        // The v1 `ttl` (milliseconds) key MUST NOT appear in v2 responses.
         assert.ok(!('ttl' in result),
             'v2 CreateTaskResult MUST NOT carry the v1 `ttl` key (use ttlSeconds)');
+
+        // pollIntervalMilliseconds — optional, but the in-tree fixture sets
+        // DefaultPollMs so we expect it to be populated. When present it must
+        // be a positive number and the legacy `pollInterval` key must NOT
+        // appear on the v2 wire.
+        if (result.pollIntervalMilliseconds !== undefined) {
+            assert.ok(typeof result.pollIntervalMilliseconds === 'number' && result.pollIntervalMilliseconds > 0,
+                'pollIntervalMilliseconds should be a positive number when present');
+        }
+        assert.ok(!('pollInterval' in result),
+            'v2 CreateTaskResult MUST NOT carry the v1 `pollInterval` key (use pollIntervalMilliseconds)');
     });
 
     // ========================================================================
@@ -843,15 +859,21 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
     });
 
     // ========================================================================
-    // Scenario 24: SEP-2243 Mcp-Name HTTP response header on task creation
+    // Scenario 24: SEP-2243 Mcp-Name + Mcp-Method HTTP response headers
     //
-    // The streamable-HTTP transport MUST set Mcp-Name: <taskId> on the
-    // response to a task-creating tools/call so HTTP-level routing /
-    // observability can key off the task id without parsing the JSON body.
-    // The header MUST NOT appear when the call did not create a task (sync
-    // tool, or extension not negotiated).
+    // The streamable-HTTP transport MUST set both:
+    //   - Mcp-Name: <taskId> — only on task-creating responses; carries the
+    //     new task id so HTTP-level routing / observability can key off it
+    //     without parsing the JSON body.
+    //   - Mcp-Method: <jsonrpc-method> — on every JSON-RPC response; carries
+    //     the originating method (tools/call, tasks/get, …) so the same
+    //     infrastructure can shape requests by route.
+    //
+    // Mcp-Name MUST NOT appear when the call did not create a task (sync
+    // tool, or extension not negotiated). Mcp-Method MUST appear on every
+    // RPC response regardless of method.
     // ========================================================================
-    test('v2-24: Mcp-Name response header on task-creating tools/call', async () => {
+    test('v2-24: Mcp-Name + Mcp-Method response headers on task-creating tools/call', async () => {
         const { result, response } = await rawRequestFull('tools/call', {
             name: 'slow_compute', arguments: { seconds: 1, label: 'v2-24' },
         });
@@ -861,15 +883,38 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
             'Mcp-Name header MUST be set on task-creating tools/call response');
         assert.equal(mcpName, result.taskId,
             'Mcp-Name header value MUST equal the taskId in the response body');
+        // SEP-2243 Mcp-Method: the JSON-RPC method that produced this response.
+        const mcpMethod = response.headers.get('mcp-method');
+        assert.equal(mcpMethod, 'tools/call',
+            `Mcp-Method header MUST equal the originating JSON-RPC method; got ${mcpMethod}`);
     });
 
-    test('v2-24b: Mcp-Name absent on sync tools/call response', async () => {
+    test('v2-24b: Mcp-Name absent on sync tools/call response (Mcp-Method still present)', async () => {
         const { response } = await rawRequestFull('tools/call', {
             name: 'greet', arguments: { name: 'world' },
         });
         const mcpName = response.headers.get('mcp-name');
         assert.ok(!mcpName,
             `sync tools/call MUST NOT emit Mcp-Name; got ${mcpName}`);
+        // Mcp-Method is method-keyed, not task-keyed — it MUST appear on
+        // every RPC response, including this sync one.
+        assert.equal(response.headers.get('mcp-method'), 'tools/call',
+            'Mcp-Method MUST be set on every tools/call response (sync or task)');
+    });
+
+    test('v2-24c: Mcp-Method on tasks/get and tasks/cancel responses', async () => {
+        // Drive a task we can then read + cancel.
+        const created = await callTool('slow_compute', { seconds: 60, label: 'v2-24c' });
+        assertCreateTaskResult(created, 'v2-24c setup');
+        const taskId = created.taskId;
+
+        const getResp = await rawRequestFull('tasks/get', { taskId });
+        assert.equal(getResp.response.headers.get('mcp-method'), 'tasks/get',
+            'Mcp-Method MUST equal "tasks/get" on the tasks/get response');
+
+        const cancelResp = await rawRequestFull('tasks/cancel', { taskId });
+        assert.equal(cancelResp.response.headers.get('mcp-method'), 'tasks/cancel',
+            'Mcp-Method MUST equal "tasks/cancel" on the tasks/cancel response');
     });
 
     // ========================================================================
@@ -941,6 +986,72 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
             `tasks/update ack.resultType = ${updateAck.resultType}, want "complete"`);
         // Clean up the parked elicit task.
         await cancelTask(elicitTaskId);
+    });
+
+    // ========================================================================
+    // Scenario 27: SEP-2663 strong-consistency / durable-create
+    //
+    // "A server MUST NOT return CreateTaskResult until the task is durably
+    // created — that is, until a tasks/get for the returned taskId would
+    // resolve."
+    //
+    // Issue tools/call → take the returned taskId → immediately issue
+    // tasks/get with no sleep / poll. The server MUST resolve, not -32602.
+    // A naive implementation that creates the task in the background goroutine
+    // (after returning CreateTaskResult to the client) would fail this test.
+    // ========================================================================
+    test('v2-27: tasks/get immediately after CreateTaskResult must resolve', async () => {
+        const created = await callTool('slow_compute', { seconds: 60, label: 'v2-27' });
+        assertCreateTaskResult(created, 'v2-27 create');
+
+        // No await/sleep between the create and the get — codifies the
+        // strong-consistency ordering.
+        const got = await getTask(created.taskId);
+        assert.equal(got.taskId, created.taskId,
+            'immediate tasks/get after CreateTaskResult must resolve (SEP-2663 durable-create)');
+
+        // Cleanup so we don't leak a 60-second task.
+        await cancelTask(created.taskId);
+    });
+
+    // ========================================================================
+    // Scenario 28: SEP-2663 stale requestState tolerance
+    //
+    // "Servers MUST tolerate receiving a stale or outdated value gracefully."
+    //
+    // Each tasks/get mints a fresh requestState (different exp). After two
+    // tasks/get calls, the first token is "stale" (a newer one exists) but
+    // still within its TTL — echoing it MUST succeed, not -32602.
+    //
+    // No-op for servers running in legacy plaintext mode (requestState ==
+    // taskID, every echo is identical) — the assertion still holds because
+    // the same plaintext token round-trips both times.
+    // ========================================================================
+    test('v2-28: stale-but-valid requestState is tolerated', async () => {
+        const created = await callTool('slow_compute', { seconds: 60, label: 'v2-28' });
+        assertCreateTaskResult(created, 'v2-28 create');
+        const taskId = created.taskId;
+
+        const first = await getTask(taskId);
+        const tokenA = first.requestState;
+        if (!tokenA) {
+            // Server didn't issue requestState at all — nothing to test.
+            // (Conformance allows requestState to be absent per SEP-2322.)
+            await cancelTask(taskId);
+            return;
+        }
+
+        // Second call mints a fresh token (potentially with a newer exp),
+        // making tokenA stale on a server that signs with embedded expiry.
+        const second = await getTask(taskId, { requestState: tokenA });
+        assert.ok(second.taskId, 'second tasks/get should succeed when echoing tokenA');
+
+        // Now echo the older tokenA again — server MUST accept stale-but-valid.
+        const stale = await getTask(taskId, { requestState: tokenA });
+        assert.equal(stale.taskId, taskId,
+            'stale-but-valid requestState MUST be tolerated (SEP-2663)');
+
+        await cancelTask(taskId);
     });
 
 });

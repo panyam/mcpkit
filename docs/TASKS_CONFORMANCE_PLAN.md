@@ -94,10 +94,11 @@ Files to change:
 
 ### Fix 2: Protocol version
 
-- [ ] `conformance/tasks-v2/scenarios.test.ts` — Change `protocolVersion: '2025-11-25'`
-  to `'2026-06-30'` in the `before()` block / `initRawSession` calls.
-
-**Test:** Suite still passes with new version string.
+- [ ] **Deferred — pending the actual `2026-06-30` spec release.** The
+  conformance harness currently negotiates `'2025-11-25'`. Bumping requires
+  a paired change to `server/dispatch.go:supportedProtocolVersions`, which
+  would amount to declaring "mcpkit supports the not-yet-released
+  2026-06-30 spec." Revisit when that version actually lands upstream.
 
 ## Should fix (coverage gaps — spec requirements without test assertions)
 
@@ -107,49 +108,66 @@ Parallel to the existing `ttlSeconds` test in v2-12. Assert:
 - `pollIntervalMilliseconds` key present on CreateTaskResult when server sets it
 - Legacy `pollInterval` key absent
 
-- [ ] `conformance/tasks-v2/scenarios.test.ts` — Add assertion to v2-12 or new v2-XX
-- [ ] `core/task_v2_test.go` — Add wire-format test for `pollIntervalMilliseconds`
+- [x] `conformance/tasks-v2/scenarios.test.ts` v2-12 extended to also assert
+  `pollIntervalMilliseconds` (when present, must be a positive number) and
+  the absence of the legacy `pollInterval` key. Title updated accordingly.
+- [x] `core/task_v2_test.go` — already covered by `TestTaskInfoV2WireFields`
+  (asserts both renamed keys are present and both legacy keys are absent)
+  and by the rewritten `TestCreateTaskResultWireShape` (which now exercises
+  `PollIntervalMilliseconds` round-trip on the flat envelope too). No new
+  test needed.
 
 ### Fix 4: requestState stale-value tolerance
 
 SEP-2663: "Servers MUST tolerate receiving a stale or outdated value gracefully."
 
-- [ ] `server/tasks_v2_test.go` — New test: create task, get requestState A, get again
-  (requestState B), send tasks/get with stale requestState A → should succeed (not -32602).
-- [ ] `conformance/tasks-v2/scenarios.test.ts` — New scenario v2-XX: echo a previously-valid
-  but no-longer-latest requestState → server must accept.
+- [x] `server/tasks_v2_test.go` — `TestV2_RequestState_StaleTolerance`: create
+  task, mint tokenA, sleep ≥1s (unix-seconds expiry granularity), tasks/get
+  with tokenA mints tokenB, then echo the older tokenA — server MUST accept.
+- [x] `conformance/tasks-v2/scenarios.test.ts` — `v2-28` mirrors the same
+  flow against any conformant server.
 
-Note: Our HMAC implementation currently verifies the signature is valid, not that it's the
-latest value. So stale-but-valid tokens should already work. This test confirms it.
+Confirmed: our HMAC verifier checks signature + expiry only, never "latest
+version" — stale-but-valid tokens already work. The new tests lock in that
+behavior so a "track latest only" refactor would fail loudly.
 
 ### Fix 5: Strong consistency (immediate tasks/get after create)
 
 SEP-2663: "A server MUST NOT return CreateTaskResult until the task is durably created —
 that is, until a tasks/get for the returned taskId would resolve."
 
-- [ ] `server/tasks_v2_test.go` — New test: call tools/call → get CreateTaskResult →
-  immediately call tasks/get with returned taskId → must succeed (not -32602).
-- [ ] `conformance/tasks-v2/scenarios.test.ts` — New scenario v2-XX: immediate tasks/get
-  after CreateTaskResult must resolve.
+- [x] `server/tasks_v2_test.go` — `TestV2_StrongConsistency_ImmediateGet`:
+  tools/call → CreateTaskResult → immediate tasks/get (no sleep, no goroutine
+  yield) — must resolve, not -32602.
+- [x] `conformance/tasks-v2/scenarios.test.ts` — `v2-27` mirrors the same flow.
 
-Note: Our implementation already does this (store.Create is synchronous before response).
-This test codifies it.
+Confirmed: middleware calls `store.Create` synchronously before building
+the response, so the task is queryable the instant the client sees the
+CreateTaskResult. The new tests codify that ordering.
 
 ### Fix 6: Mcp-Method header assertion
 
 SEP-2243 requires both `Mcp-Name` AND `Mcp-Method` headers. v2-24 covers Mcp-Name only.
 
-- [ ] `server/tasks_v2_test.go` — Extend Mcp-Name test to also verify `Mcp-Method` header
-  is set to the JSON-RPC method name (e.g., `tasks/get`, `tasks/cancel`, `tasks/update`).
-- [ ] `conformance/tasks-v2/scenarios.test.ts` — Extend v2-24 or new scenario to assert
-  `Mcp-Method` header.
+- [x] `server/server.go:dispatchWithOpts` now stages `Mcp-Method: <req.Method>`
+  for every JSON-RPC response via the existing `core.WithResponseHeaderCollector`
+  plumbing. Pairs with the v2 task middleware's existing `Mcp-Name: <taskId>`.
+- [x] `server/tasks_v2_test.go` — `TestV2_McpNameHeaderOnTaskCreation` extended
+  to also assert `Mcp-Method == "tools/call"`. New `TestV2_McpMethodHeaderOnTasksMethods`
+  verifies tasks/get and tasks/update responses carry the right method.
+- [x] `conformance/tasks-v2/scenarios.test.ts` — v2-24 extended (Mcp-Method on
+  task-creating tools/call), v2-24b extended (Mcp-Method present on sync
+  tools/call too), v2-24c new (Mcp-Method on tasks/get and tasks/cancel).
 
 ### Fix 7: Cleanup stale comments and v2-16
 
 - [x] `conformance/tasks-v2/scenarios.test.ts` v2-16 — PROVISIONAL comment
   removed; replaced with a pointer to v2-17 (which exercises tasks/update).
-- [ ] `conformance/tasks-v2/README.md` — Note that wire shapes match the implementation,
-  not necessarily the published SEP TS declarations (which may lag behind).
+- [x] `conformance/tasks-v2/README.md` — Added a paragraph at the top noting
+  this suite tracks spec text + mcpkit's end-to-end behavior, not the
+  published SEP TypeScript declarations (which may lag — most recent
+  example: the upstream conformance PR briefly used snake_case
+  `result_type`, but Luca confirmed camelCase is the standard).
 
 ## Implementation order
 
