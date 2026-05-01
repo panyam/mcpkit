@@ -56,6 +56,21 @@ type ToolDef struct {
 type ToolsListResult struct {
 	Tools      []ToolDef `json:"tools"`
 	NextCursor string    `json:"nextCursor,omitempty"`
+
+	// TTL is the SEP-2549 cache freshness hint in SECONDS that the client
+	// MAY use to cache the tools list before re-fetching. Semantics mirror
+	// HTTP Cache-Control: max-age:
+	//
+	//   - nil (omitted on the wire) — no server guidance; client falls back
+	//     to notifications/list_changed or its own heuristics.
+	//   - &0 ("ttl": 0 on the wire) — explicit "do not cache"; client SHOULD
+	//     re-fetch every time the list is needed.
+	//   - >0 — the list is fresh for this many seconds; the client SHOULD NOT
+	//     re-fetch before the TTL expires unless it receives list_changed.
+	//
+	// Pointer semantics matter: omitempty omits nil but keeps a pointer to 0,
+	// so the spec's three states (absent / 0 / positive) round-trip correctly.
+	TTL *int `json:"ttl,omitempty"`
 }
 
 // ToolRequest is the validated input passed to a ToolHandler.

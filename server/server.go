@@ -48,6 +48,7 @@ type serverOptions struct {
 	httpHandlers         []httpHandlerEntry       // custom HTTP endpoint handlers
 	requestStateKey      []byte                   // SEP-2322 requestState HMAC key — shared by MRTR + Tasks (nil = plaintext / unsigned)
 	requestStateTTL      time.Duration            // SEP-2322 requestState validity (0 = 24h default)
+	listTTL              *int                     // SEP-2549 cache freshness hint (seconds) attached to every list response (nil = omit)
 }
 
 type httpHandlerEntry struct {
@@ -199,6 +200,37 @@ func WithToolTimeout(d time.Duration) Option {
 	return func(o *serverOptions) { o.toolTimeout = d }
 }
 
+// WithListTTL configures the SEP-2549 cache-freshness hint (in seconds)
+// attached to every tools/list, prompts/list, resources/list, and
+// resources/templates/list response. The TTL tells clients how long they
+// MAY serve a cached copy of the list before re-fetching:
+//
+//   - Negative values are treated as "no hint" (the wire field is omitted),
+//     so clients fall back to notifications/list_changed or their own
+//     heuristics. This is also the default when the option is not set.
+//   - 0 sends an explicit `"ttl": 0` meaning "do not cache" — clients
+//     SHOULD re-fetch every time the list is needed.
+//   - Positive values send `"ttl": N` meaning "fresh for N seconds";
+//     clients SHOULD NOT re-fetch before TTL expires unless they receive
+//     a list_changed notification.
+//
+// The hint applies uniformly to all four list endpoints. Per-endpoint
+// granularity (e.g. shorter TTL for tools that change often, longer for
+// prompts) is a future option if the simple uniform default proves too
+// coarse.
+func WithListTTL(seconds int) Option {
+	return func(o *serverOptions) {
+		if seconds < 0 {
+			o.listTTL = nil
+			return
+		}
+		// Allocate a new int so multiple servers with different TTLs
+		// don't share storage.
+		v := seconds
+		o.listTTL = &v
+	}
+}
+
 // WithSchemaValidation toggles call-time JSON Schema validation of tool
 // arguments and prompt arguments against their declared schemas. When
 // enabled (the default), the dispatcher validates incoming arguments
@@ -266,6 +298,8 @@ func NewServer(info core.ServerInfo, opts ...Option) *Server {
 		s.dispatcher.mrtr.signingKey = s.options.requestStateKey
 	}
 	s.dispatcher.mrtr.ttl = s.options.requestStateTTL
+	// SEP-2549 list TTL — propagated unchanged (nil = no hint emitted).
+	s.dispatcher.listTTL = s.options.listTTL
 	// Initialize subscription support if enabled
 	if s.options.subscriptionsEnabled {
 		s.subRegistry = &subscriptionRegistry{

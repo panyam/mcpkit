@@ -79,6 +79,22 @@ testconf-mrtr: ## Run MCP MRTR (SEP-2322) conformance (builds + starts server, r
 	SERVER_URL=http://localhost:18093/mcp npx tsx --test mrtr/scenarios.test.ts); \
 	RC=$$?; kill $$PID 2>/dev/null; wait $$PID 2>/dev/null; exit $$RC
 
+testconf-list-ttl: ## Run MCP SEP-2549 list-TTL conformance (builds + starts 3 servers, runs tests, tears down)
+	@(cd examples/list-ttl && go build -o list-ttl-demo .) && \
+	examples/list-ttl/list-ttl-demo --serve --addr=:18094 --ttl=60 & PID1=$$!; \
+	examples/list-ttl/list-ttl-demo --serve --addr=:18095 --ttl=0  & PID2=$$!; \
+	examples/list-ttl/list-ttl-demo --serve --addr=:18096           & PID3=$$!; \
+	sleep 1; \
+	(cd conformance && npm install --silent && \
+	SERVER_URL_POSITIVE=http://localhost:18094/mcp \
+	SERVER_URL_ZERO=http://localhost:18095/mcp \
+	SERVER_URL_UNSET=http://localhost:18096/mcp \
+	npx tsx --test list-ttl/scenarios.test.ts); \
+	RC=$$?; \
+	kill $$PID1 $$PID2 $$PID3 2>/dev/null; \
+	wait $$PID1 $$PID2 $$PID3 2>/dev/null; \
+	exit $$RC
+
 testconf-elicitation: ## Run elicitation conformance suite (SEP-1036 URL mode + form, requires Node.js, target server must be running)
 	cd conformance && npm install --silent && SERVER_URL=$${SERVER_URL:-http://localhost:8080/mcp} npx tsx --test elicitation/scenarios.test.ts
 
