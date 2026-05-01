@@ -62,9 +62,9 @@ func runDemo() {
 	demo.Section("What MRTR adds to tools/call",
 		"v1 `tools/call` had two terminal shapes — a sync `ToolResult` or (with SEP-2663 Tasks) a `CreateTaskResult`. SEP-2322 adds a third **transient** shape:",
 		"",
-		"- **`result_type: \"complete\"`** (or absent) — sync ToolResult, the call is done.",
-		"- **`result_type: \"task\"`** — server elected to spin off a task; client polls via `tasks/get` (SEP-2663).",
-		"- **`result_type: \"incomplete\"`** — server needs more input. The response carries `inputRequests` (a map of opaque keys → `{method, params}`) and an opaque `requestState`. The client resolves each input request locally, then RETRIES the same `tools/call` with the original arguments PLUS `inputResponses` (keyed by the same opaque ids) AND the echoed `requestState`.",
+		"- **`resultType: \"complete\"`** (or absent) — sync ToolResult, the call is done.",
+		"- **`resultType: \"task\"`** — server elected to spin off a task; client polls via `tasks/get` (SEP-2663).",
+		"- **`resultType: \"incomplete\"`** — server needs more input. The response carries `inputRequests` (a map of opaque keys → `{method, params}`) and an opaque `requestState`. The client resolves each input request locally, then RETRIES the same `tools/call` with the original arguments PLUS `inputResponses` (keyed by the same opaque ids) AND the echoed `requestState`.",
 		"",
 		"The `inputRequests` methods are real MCP method names (`elicitation/create`, `sampling/createMessage`, `roots/list`). The client routes each through the same dispatcher it uses for real server-initiated requests — `client.HandleServerRequestWithContext` — so your existing `WithElicitationHandler` / `WithSamplingHandler` / `WithRootsHandler` callbacks just work.",
 		"",
@@ -109,8 +109,8 @@ func runDemo() {
 
 	demo.Step("Round 1 (raw): tools/call → IncompleteResult").
 		Arrow("Host", "Server", "tools/call: test_tool_with_elicitation {}").
-		DashedArrow("Server", "Host", "{ result_type: \"incomplete\", inputRequests: {user_name: {method: \"elicitation/create\", ...}}, requestState: \"<token>\" }").
-		Note("Bypass the auto-loop helper to see the raw IncompleteResult shape. The discriminator is `result_type` (snake_case — the only MCP wire field that isn't camelCase). `inputRequests` is keyed by server-chosen opaque ids the client must echo verbatim.").
+		DashedArrow("Server", "Host", "{ resultType: \"incomplete\", inputRequests: {user_name: {method: \"elicitation/create\", ...}}, requestState: \"<token>\" }").
+		Note("Bypass the auto-loop helper to see the raw IncompleteResult shape. The discriminator is `resultType` — camelCase like every other MCP wire field. `inputRequests` is keyed by server-chosen opaque ids the client must echo verbatim.").
 		Run(func() (result *demokit.StepResult) {
 			res, err := client.ToolCall(c, "test_tool_with_elicitation", map[string]any{})
 			if err != nil {

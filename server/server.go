@@ -506,6 +506,17 @@ func (s *Server) dispatchWithOpts(d *Dispatcher, ctx context.Context, claims *co
 	// Set the session ID so middleware and handlers can access it via ctx.SessionID().
 	core.SetSessionID(ctx, d.sessionID)
 
+	// SEP-2243: stage the Mcp-Method response header carrying the JSON-RPC
+	// method name (e.g. "tools/call", "tasks/get"). Pairs with Mcp-Name
+	// (taskId, set by the v2 task middleware on task-creating tools/call) so
+	// HTTP infrastructure can route / log against the request shape without
+	// parsing the JSON body. Notifications go nowhere (dispatch returns nil),
+	// so the header is harmlessly dropped for those — only RPC responses
+	// carry it through to the wire.
+	if req.Method != "" {
+		core.SetResponseHeader(ctx, "Mcp-Method", req.Method)
+	}
+
 	// Register a detach strategy for background goroutines (e.g., async tasks).
 	// The strategy replaces the POST-scoped requestFunc and notifyFunc (which
 	// write to the now-closed response stream) with session-level equivalents

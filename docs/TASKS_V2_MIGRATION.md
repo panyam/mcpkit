@@ -27,9 +27,9 @@ SEP-2663 evolves the v1 task surface in five ways. Each one has a wire-format di
 | Per-request opt-in | n/a | SEP-2575 `_meta.io.modelcontextprotocol/clientCapabilities` |
 | Server gating | none | `tasks/*` returns `-32601` if extension not negotiated; `tools/call` falls through to sync |
 
-### 2. tools/call response is polymorphic (`result_type` discriminator)
+### 2. tools/call response is polymorphic (`resultType` discriminator)
 
-v1 server decides based on whether the client sent a `task` hint. v2 server decides unilaterally — and the client doesn't send a hint. The response carries a `result_type` discriminator so the client knows which shape arrived.
+v1 server decides based on whether the client sent a `task` hint. v2 server decides unilaterally — and the client doesn't send a hint. The response carries a `resultType` discriminator so the client knows which shape arrived.
 
 ```jsonc
 // v1 — sync
@@ -39,8 +39,8 @@ v1 server decides based on whether the client sent a `task` hint. v2 server deci
 
 // v2 — sync
 { "content": [...], "isError": false }
-// v2 — task (server elected)
-{ "result_type": "task", "task": { "taskId": "...", "ttlSeconds": 60, "pollIntervalMilliseconds": 1000 } }
+// v2 — task (server elected; SEP-2663 flat shape: Result & Task)
+{ "resultType": "task", "taskId": "...", "status": "working", "ttlSeconds": 60, "pollIntervalMilliseconds": 1000 }
 ```
 
 Client-side, use `client.ToolCall` (returns a polymorphic `*ToolCallResult`):
@@ -49,7 +49,7 @@ Client-side, use `client.ToolCall` (returns a polymorphic `*ToolCallResult`):
 res, err := client.ToolCall(c, "slow_compute", args)
 if err != nil { ... }
 if res.IsTask() {
-    // poll res.Task.Task.TaskID via client.WaitForTask / GetTask
+    // poll res.Task.TaskID via client.WaitForTask / GetTask
 } else {
     // res.Sync is a regular *core.ToolResult
 }
@@ -175,7 +175,7 @@ c.Connect()
 // Polymorphic tools/call
 res, _ := client.ToolCall(c, "tool", args)
 if res.IsTask() {
-    final, _ := client.WaitForTask(ctx, c, res.Task.Task.TaskID)
+    final, _ := client.WaitForTask(ctx, c, res.Task.TaskID)
     // final.Result has the inlined ToolResult (or final.Error / final.InputRequests)
 } else {
     // res.Sync is the regular *core.ToolResult

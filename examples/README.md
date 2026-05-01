@@ -12,7 +12,7 @@ The primary path. Run the demo from the CLI and read the on-disk `WALKTHROUGH.md
 |---------|--------------|
 | [auth/](auth/) | Public discovery, JWT/JWKS validation, scope step-up (HTTP 403 + WWW-Authenticate per SEP-2643), session hijacking prevention |
 | [tasks/](tasks/) | Async tool lifecycle (SEP-1036): sync calls, optional async, polling, progress notifications, required-task tools, cancellation |
-| [tasks-v2/](tasks-v2/) | Server-directed async (SEP-2557): no client task hint, `result_type` discriminator, inlined results, tool-vs-protocol error semantics |
+| [tasks-v2/](tasks-v2/) | Server-directed async (SEP-2557): no client task hint, `resultType` discriminator, inlined results, tool-vs-protocol error semantics |
 | [mrtr/](mrtr/) | SEP-2322 ephemeral MRTR — `IncompleteResult` round-trips for `elicitation/create`, `sampling/createMessage`, `roots/list`; multi-round accumulation via signed `requestState`; `client.CallToolWithInputs` auto-loop |
 | [list-ttl/](list-ttl/) | SEP-2549 list TTL — server emits `"ttl": <seconds>` cache-freshness hint on every list endpoint; three-state pointer encoding (`nil` / `&0` / `&N`); `client.ListXPage` typed helpers |
 | [elicitation/](elicitation/) ⚠ experimental | URL-mode elicitation with consent approval (FineGrainedAuth UC1 — tracks draft [SEP-2643](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2643)) |

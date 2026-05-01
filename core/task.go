@@ -74,7 +74,7 @@ type TaskInfo struct {
 
 // CreateTaskResultV1 is returned by tools/call when a v1 task is created
 // instead of the immediate tool result. Per spec 2025-11-25: nested under
-// "task" key. (V1 wire format; v2 uses CreateTaskResult with result_type.)
+// "task" key. (V1 wire format; v2 uses CreateTaskResult with resultType.)
 type CreateTaskResultV1 struct {
 	Task TaskInfo `json:"task"`
 }

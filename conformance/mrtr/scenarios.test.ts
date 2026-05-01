@@ -6,9 +6,10 @@
  * modelcontextprotocol/conformance PR 188 (incomplete-result.ts), adapted
  * to the mcpkit raw-fetch test pattern used by tasks-v2/scenarios.test.ts.
  *
- * Key wire-format note: the SEP-2322 discriminator is `result_type`
- * (snake_case). Everything else (`inputRequests`, `inputResponses`,
- * `requestState`) stays camelCase per the rest of MCP wire.
+ * Key wire-format note: the SEP-2322 discriminator is `resultType`
+ * — camelCase like every other MCP wire field. Luca confirmed camelCase
+ * is the spec standard; the upstream conformance suite briefly used
+ * snake_case but that's being corrected on their side.
  *
  * Server requirements: see examples/mrtr/main.go for the matching tool
  * fixture set. Each scenario tool is named per the upstream contract.
@@ -36,7 +37,7 @@ let nextId = 1;
 /**
  * Run a fresh initialize handshake and return the resulting session id.
  * We bypass the SDK because its built-in Zod schemas would strip the
- * non-standard fields this suite exercises (result_type, inputRequests,
+ * non-standard fields this suite exercises (resultType, inputRequests,
  * requestState).
  */
 async function initRawSession(capabilities: Record<string, unknown>): Promise<string> {
@@ -127,14 +128,14 @@ async function rawRequest(method: string, params: any): Promise<any> {
 
 function isIncompleteResult(result: any): boolean {
     if (!result) return false;
-    if (result.result_type === 'incomplete') return true;
+    if (result.resultType === 'incomplete') return true;
     return 'inputRequests' in result || 'requestState' in result;
 }
 
 function isCompleteResult(result: any): boolean {
     if (!result) return false;
-    if (result.result_type === 'complete') return true;
-    if (!('result_type' in result)) return true;
+    if (result.resultType === 'complete') return true;
+    if (!('resultType' in result)) return true;
     return !isIncompleteResult(result);
 }
 
@@ -171,7 +172,7 @@ describe('SEP-2322 MRTR ephemeral IncompleteResult flow', () => {
             arguments: {},
         });
         assert.ok(isIncompleteResult(r1), `round 1 must be IncompleteResult; got ${JSON.stringify(r1)}`);
-        assert.equal(r1.result_type, 'incomplete', 'result_type discriminator must be snake_case "incomplete"');
+        assert.equal(r1.resultType, 'incomplete', 'resultType discriminator must be camelCase "incomplete"');
         assert.ok(r1.inputRequests, 'IncompleteResult must carry inputRequests');
         assert.ok(r1.inputRequests.user_name, 'inputRequests must include "user_name" key');
         assert.equal(r1.inputRequests.user_name.method, 'elicitation/create');
@@ -345,8 +346,8 @@ describe('SEP-2322 MRTR ephemeral IncompleteResult flow', () => {
             inputResponses: { [key]: mockElicitResponse({ value: 'x' }) },
             requestState: r1.requestState,
         });
-        assert.equal(r2.result_type, 'task',
+        assert.equal(r2.resultType, 'task',
             'final round should promote sync result to CreateTaskResult');
-        assert.ok(r2.task?.taskId, 'CreateTaskResult must include task.taskId');
+        assert.ok(r2.taskId, 'CreateTaskResult must include taskId (SEP-2663 flat shape)');
     });
 });

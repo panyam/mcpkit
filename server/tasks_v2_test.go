@@ -93,10 +93,10 @@ func TestV2_ExtensionAdvertised(t *testing.T) {
 }
 
 // TestV2_NoTaskCreationWithoutExtension verifies that an async-eligible tool
-// call returns a synchronous ToolResult — result_type:"complete" per
+// call returns a synchronous ToolResult — resultType:"complete" per
 // SEP-2322, no task envelope — when the client has not negotiated the
 // tasks extension. SEP-2663: server MUST NOT return CreateTaskResult
-// (result_type:"task") without negotiation.
+// (resultType:"task") without negotiation.
 func TestV2_NoTaskCreationWithoutExtension(t *testing.T) {
 	srv := newTaskV2Server(t)
 	c := connectV2Client(t, srv) // no WithTasksExtension
@@ -113,9 +113,9 @@ func TestV2_NoTaskCreationWithoutExtension(t *testing.T) {
 	if err := json.Unmarshal(res.Raw, &m); err != nil {
 		t.Fatalf("unmarshal result: %v", err)
 	}
-	// SEP-2322: sync ToolResult carries result_type:"complete" (not "task").
-	if rt := m["result_type"]; rt != "complete" {
-		t.Errorf("sync ToolResult.result_type = %v, want \"complete\"", rt)
+	// SEP-2322: sync ToolResult carries resultType:"complete" (not "task").
+	if rt := m["resultType"]; rt != "complete" {
+		t.Errorf("sync ToolResult.resultType = %v, want \"complete\"", rt)
 	}
 	if _, ok := m["task"]; ok {
 		t.Errorf("response must NOT carry task envelope when extension not negotiated; got %s", res.Raw)
@@ -145,10 +145,10 @@ func TestV2_TaskCreationWithExtension(t *testing.T) {
 		t.Fatalf("unmarshal CreateTaskResult: %v", err)
 	}
 	if ctr.ResultType != core.ResultTypeTask {
-		t.Errorf("result_type = %q, want %q", ctr.ResultType, core.ResultTypeTask)
+		t.Errorf("resultType = %q, want %q", ctr.ResultType, core.ResultTypeTask)
 	}
-	if ctr.Task.TaskID == "" {
-		t.Error("CreateTaskResult.task.taskId should not be empty")
+	if ctr.TaskID == "" {
+		t.Error("CreateTaskResult.taskId should not be empty (SEP-2663 flat shape)")
 	}
 }
 
@@ -218,7 +218,7 @@ func TestV2_PerRequestExtensionOptIn(t *testing.T) {
 		t.Fatalf("unmarshal CreateTaskResult: %v", err)
 	}
 	if ctr.ResultType != core.ResultTypeTask {
-		t.Errorf("per-request opt-in should produce CreateTaskResult; got result_type=%q, raw=%s", ctr.ResultType, res.Raw)
+		t.Errorf("per-request opt-in should produce CreateTaskResult; got resultType=%q, raw=%s", ctr.ResultType, res.Raw)
 	}
 }
 
@@ -244,7 +244,7 @@ func TestV2_TasksGetWorksWithExtension(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	for {
-		gres, err := c.Call("tasks/get", map[string]any{"taskId": ctr.Task.TaskID})
+		gres, err := c.Call("tasks/get", map[string]any{"taskId": ctr.TaskID})
 		if err != nil {
 			t.Fatalf("tasks/get: %v", err)
 		}
@@ -310,10 +310,10 @@ func createTaskForUpdateTest(t *testing.T, c *client.Client, tool string) string
 	if err := json.Unmarshal(res.Raw, &ctr); err != nil {
 		t.Fatalf("unmarshal CreateTaskResult: %v", err)
 	}
-	if ctr.Task.TaskID == "" {
+	if ctr.TaskID == "" {
 		t.Fatal("missing taskId in CreateTaskResult")
 	}
-	return ctr.Task.TaskID
+	return ctr.TaskID
 }
 
 // TestV2_UpdateAck verifies tasks/update returns an empty {} ack when the
@@ -338,18 +338,18 @@ func TestV2_UpdateAck(t *testing.T) {
 		t.Fatalf("tasks/update: %v", err)
 	}
 
-	// SEP-2663 ack: no task state. SEP-2322: must carry the result_type
-	// discriminator. So the wire payload is {"result_type":"complete"} —
+	// SEP-2663 ack: no task state. SEP-2322: must carry the resultType
+	// discriminator. So the wire payload is {"resultType":"complete"} —
 	// nothing else.
 	var m map[string]any
 	if err := json.Unmarshal(res.Raw, &m); err != nil {
 		t.Fatalf("unmarshal ack: %v", err)
 	}
-	if rt := m["result_type"]; rt != "complete" {
-		t.Errorf("UpdateTaskResult.result_type = %v, want \"complete\"", rt)
+	if rt := m["resultType"]; rt != "complete" {
+		t.Errorf("UpdateTaskResult.resultType = %v, want \"complete\"", rt)
 	}
 	if len(m) != 1 {
-		t.Errorf("UpdateTaskResult should carry only result_type (got %d keys: %v)", len(m), m)
+		t.Errorf("UpdateTaskResult should carry only resultType (got %d keys: %v)", len(m), m)
 	}
 }
 
@@ -536,6 +536,13 @@ func TestV2_McpNameHeaderOnTaskCreation(t *testing.T) {
 		t.Fatalf("missing Mcp-Name header on task-creating tools/call; got body: %s", body)
 	}
 
+	// SEP-2243 also requires Mcp-Method — the JSON-RPC method that produced
+	// this response. Pairs with Mcp-Name so HTTP infrastructure can route /
+	// log against (method, taskId) without parsing the JSON body.
+	if got := resp.Header.Get("Mcp-Method"); got != "tools/call" {
+		t.Errorf("Mcp-Method = %q, want \"tools/call\"", got)
+	}
+
 	// Sanity: the header value should match the taskId in the response body.
 	var rpcResp struct {
 		Result core.CreateTaskResult `json:"result"`
@@ -543,8 +550,64 @@ func TestV2_McpNameHeaderOnTaskCreation(t *testing.T) {
 	if err := json.Unmarshal(body, &rpcResp); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
 	}
-	if mcpName != rpcResp.Result.Task.TaskID {
-		t.Errorf("Mcp-Name = %q, want match for taskId %q", mcpName, rpcResp.Result.Task.TaskID)
+	if mcpName != rpcResp.Result.TaskID {
+		t.Errorf("Mcp-Name = %q, want match for taskId %q", mcpName, rpcResp.Result.TaskID)
+	}
+}
+
+// TestV2_McpMethodHeaderOnTasksMethods verifies the SEP-2243 Mcp-Method
+// header carries the JSON-RPC method name on every tasks/* response, not
+// just task-creating tools/call. Mcp-Name is task-creation-specific and
+// stays empty for these reads.
+func TestV2_McpMethodHeaderOnTasksMethods(t *testing.T) {
+	srv := newTaskV2Server(t)
+	handler := srv.Handler(WithStreamableHTTP(true))
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	sid := initializeSession(t, ts.URL, true /* declare tasks ext */)
+
+	// Create a task so we have an id to query.
+	createResp := rawHTTPCall(t, ts.URL, sid, true /* jsonOnly */, "tools/call", "fast-task")
+	createBody, _ := io.ReadAll(createResp.Body)
+	createResp.Body.Close()
+	var createWrap struct {
+		Result core.CreateTaskResult `json:"result"`
+	}
+	if err := json.Unmarshal(createBody, &createWrap); err != nil {
+		t.Fatalf("unmarshal create response: %v", err)
+	}
+	taskID := createWrap.Result.TaskID
+	if taskID == "" {
+		t.Fatal("missing taskId in CreateTaskResult")
+	}
+
+	cases := []struct {
+		method string
+		body   string
+	}{
+		{"tasks/get", `{"jsonrpc":"2.0","id":1,"method":"tasks/get","params":{"taskId":"` + taskID + `"}}`},
+		{"tasks/update", `{"jsonrpc":"2.0","id":2,"method":"tasks/update","params":{"taskId":"` + taskID + `"}}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.method, func(t *testing.T) {
+			req, _ := http.NewRequest("POST", ts.URL+"/mcp", strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Accept", "application/json")
+			req.Header.Set("Mcp-Session-Id", sid)
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("%s: %v", tc.method, err)
+			}
+			io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if got := resp.Header.Get("Mcp-Method"); got != tc.method {
+				t.Errorf("%s: Mcp-Method = %q, want %q", tc.method, got, tc.method)
+			}
+			if got := resp.Header.Get("Mcp-Name"); got != "" {
+				t.Errorf("%s: Mcp-Name should be empty for non-task-creating responses; got %q", tc.method, got)
+			}
+		})
 	}
 }
 
@@ -693,7 +756,7 @@ func TestV2_ElicitUpdateCompleteFlow(t *testing.T) {
 	if err := json.Unmarshal(res.Raw, &ctr); err != nil {
 		t.Fatalf("unmarshal CreateTaskResult: %v", err)
 	}
-	taskID := ctr.Task.TaskID
+	taskID := ctr.TaskID
 
 	// 1. Wait for input_required + a populated inputRequests map.
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -729,12 +792,12 @@ func TestV2_ElicitUpdateCompleteFlow(t *testing.T) {
 	}
 	var ackMap map[string]any
 	json.Unmarshal(ackRes.Raw, &ackMap)
-	// SEP-2322: ack carries only the result_type discriminator.
-	if rt := ackMap["result_type"]; rt != "complete" {
-		t.Errorf("tasks/update ack.result_type = %v, want \"complete\"", rt)
+	// SEP-2322: ack carries only the resultType discriminator.
+	if rt := ackMap["resultType"]; rt != "complete" {
+		t.Errorf("tasks/update ack.resultType = %v, want \"complete\"", rt)
 	}
 	if len(ackMap) != 1 {
-		t.Errorf("tasks/update ack should carry only result_type (got %d keys: %v)", len(ackMap), ackMap)
+		t.Errorf("tasks/update ack should carry only resultType (got %d keys: %v)", len(ackMap), ackMap)
 	}
 
 	// 3. Poll until the goroutine resumes and the task completes.
@@ -769,7 +832,7 @@ func TestV2_ElicitCancelUnblocks(t *testing.T) {
 	}
 	var ctr core.CreateTaskResult
 	json.Unmarshal(res.Raw, &ctr)
-	taskID := ctr.Task.TaskID
+	taskID := ctr.TaskID
 
 	// Wait for input_required, then cancel.
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -808,7 +871,7 @@ func TestV2_UpdateUnknownKeyIgnored(t *testing.T) {
 	}
 	var ctr core.CreateTaskResult
 	json.Unmarshal(res.Raw, &ctr)
-	taskID := ctr.Task.TaskID
+	taskID := ctr.TaskID
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -909,7 +972,7 @@ func TestV2_StatusNotificationCarriesRequestState(t *testing.T) {
 	if err := json.Unmarshal(res.Raw, &ctr); err != nil {
 		t.Fatalf("unmarshal CreateTaskResult: %v", err)
 	}
-	taskID := ctr.Task.TaskID
+	taskID := ctr.TaskID
 
 	// Wait up to 2s for a notification carrying requestState. Loop because
 	// the server may emit multiple status notifications before terminal.
@@ -984,7 +1047,7 @@ func TestV2_RequestState_SignedRoundTrip(t *testing.T) {
 	if err != nil || !res.IsTask() {
 		t.Fatalf("ToolCall: %v / IsTask=%v", err, res != nil && res.IsTask())
 	}
-	taskID := res.Task.Task.TaskID
+	taskID := res.Task.TaskID
 
 	first, err := client.GetTask(c, taskID)
 	if err != nil {
@@ -1018,7 +1081,7 @@ func TestV2_RequestState_TamperedRejected(t *testing.T) {
 	c := connectV2Client(t, srv, client.WithTasksExtension())
 
 	res, _ := client.ToolCall(c, "fast-task", map[string]any{})
-	taskID := res.Task.Task.TaskID
+	taskID := res.Task.TaskID
 	first, _ := client.GetTask(c, taskID)
 
 	// Tamper the payload segment by re-encoding a different taskId.
@@ -1060,7 +1123,7 @@ func TestV2_RequestState_ExpiredRejected(t *testing.T) {
 	c := connectV2Client(t, srv, client.WithTasksExtension())
 
 	res, _ := client.ToolCall(c, "fast-task", map[string]any{})
-	taskID := res.Task.Task.TaskID
+	taskID := res.Task.TaskID
 	first, _ := client.GetTask(c, taskID)
 
 	// Wait past the TTL (≥ 1s past the embedded exp, regardless of jitter).
@@ -1079,6 +1142,108 @@ func TestV2_RequestState_ExpiredRejected(t *testing.T) {
 	}
 }
 
+// TestV2_StrongConsistency_ImmediateGet verifies SEP-2663's durable-create
+// guarantee: "A server MUST NOT return CreateTaskResult until the task is
+// durably created — that is, until a tasks/get for the returned taskId would
+// resolve."
+//
+// Our middleware calls store.Create synchronously before building the
+// response, so the task is queryable the instant the client sees the
+// CreateTaskResult. This test codifies that ordering — if a future refactor
+// pushed store.Create into the background goroutine, this would catch it.
+func TestV2_StrongConsistency_ImmediateGet(t *testing.T) {
+	srv, _ := newTaskV2ServerWithSlow(t)
+	c := connectV2Client(t, srv, client.WithTasksExtension())
+
+	res, err := c.Call("tools/call", map[string]any{
+		"name":      "slow-task",
+		"arguments": map[string]any{},
+	})
+	if err != nil {
+		t.Fatalf("tools/call: %v", err)
+	}
+	var ctr core.CreateTaskResult
+	if err := json.Unmarshal(res.Raw, &ctr); err != nil {
+		t.Fatalf("unmarshal CreateTaskResult: %v", err)
+	}
+	if ctr.TaskID == "" {
+		t.Fatal("missing taskId in CreateTaskResult")
+	}
+
+	// Immediately query — no sleep, no poll, no goroutine yield. SEP-2663
+	// says this MUST resolve, even if the tool's background goroutine hasn't
+	// been scheduled yet.
+	got, err := c.Call("tasks/get", map[string]any{"taskId": ctr.TaskID})
+	if err != nil {
+		t.Fatalf("immediate tasks/get after CreateTaskResult must resolve (SEP-2663): %v", err)
+	}
+	var dt core.DetailedTask
+	if err := json.Unmarshal(got.Raw, &dt); err != nil {
+		t.Fatalf("unmarshal DetailedTask: %v", err)
+	}
+	if dt.TaskID != ctr.TaskID {
+		t.Errorf("tasks/get returned wrong taskId: got %q, want %q", dt.TaskID, ctr.TaskID)
+	}
+	// Status should be non-terminal (slow-task blocks until unblocked); the
+	// exact value doesn't matter — what matters is that the task exists.
+	if dt.Status.IsTerminal() {
+		t.Errorf("expected non-terminal status (task is blocked), got %q", dt.Status)
+	}
+}
+
+// TestV2_RequestState_StaleTolerance verifies SEP-2663's "Servers MUST tolerate
+// receiving a stale or outdated value gracefully" requirement. Each tasks/get
+// mints a fresh signed requestState (different `exp`), so an earlier token
+// becomes "stale" the moment the next one is minted — but stale-but-not-expired
+// tokens MUST still verify and the request MUST succeed (not -32602).
+//
+// Our HMAC verifier only checks signature validity + expiry, never "latest
+// version," so this test codifies the existing behavior. Servers that decide
+// to track a "latest only" notion would fail here, which is the point.
+func TestV2_RequestState_StaleTolerance(t *testing.T) {
+	srv, _ := newSignedTaskV2Server(t, time.Hour)
+	c := connectV2Client(t, srv, client.WithTasksExtension())
+
+	res, err := client.ToolCall(c, "fast-task", map[string]any{})
+	if err != nil || !res.IsTask() {
+		t.Fatalf("ToolCall: %v / IsTask=%v", err, res != nil && res.IsTask())
+	}
+	taskID := res.Task.TaskID
+
+	// Mint tokenA via the first tasks/get.
+	first, err := client.GetTask(c, taskID)
+	if err != nil {
+		t.Fatalf("first GetTask: %v", err)
+	}
+	tokenA := first.RequestState
+	if tokenA == "" {
+		t.Fatal("expected non-empty requestState from signed-mode server")
+	}
+
+	// Sleep ≥1s so the next mint embeds a different `exp` (unix seconds
+	// granularity) — that's what makes tokenA "stale."
+	time.Sleep(1100 * time.Millisecond)
+
+	second, err := client.GetTask(c, taskID, client.TaskOptions{RequestState: tokenA})
+	if err != nil {
+		t.Fatalf("second GetTask (echoing tokenA): %v", err)
+	}
+	tokenB := second.RequestState
+	if tokenB == "" || tokenB == tokenA {
+		t.Fatalf("expected fresh token on second tasks/get; got %q (vs A=%q)", tokenB, tokenA)
+	}
+
+	// Now echo the older tokenA — it's stale (a newer token has been minted)
+	// but still within its TTL, so the server MUST accept it.
+	stale, err := client.GetTask(c, taskID, client.TaskOptions{RequestState: tokenA})
+	if err != nil {
+		t.Fatalf("stale-token GetTask: %v — server must tolerate stale-but-valid tokens (SEP-2663)", err)
+	}
+	if stale.TaskID != taskID {
+		t.Errorf("stale-token GetTask returned wrong taskId: got %q, want %q", stale.TaskID, taskID)
+	}
+}
+
 // TestV2_RequestState_LegacyPlaintext verifies that with no key configured
 // (the default), the server falls back to plaintext requestState (== taskID).
 // Existing tests / clients that don't echo requestState keep working.
@@ -1087,7 +1252,7 @@ func TestV2_RequestState_LegacyPlaintext(t *testing.T) {
 	c := connectV2Client(t, srv, client.WithTasksExtension())
 
 	res, _ := client.ToolCall(c, "fast-task", map[string]any{})
-	taskID := res.Task.Task.TaskID
+	taskID := res.Task.TaskID
 	first, err := client.GetTask(c, taskID)
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)

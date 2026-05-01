@@ -10,10 +10,11 @@ server returns a complete result.
 
 ## Wire format note
 
-Per the upstream conformance contract, the `result_type` discriminator is
-**snake_case** (`result_type: "incomplete"`); everything else
-(`inputRequests`, `inputResponses`, `requestState`) stays camelCase. The
-mcpkit dispatch and types follow the same convention.
+The SEP-2322 `resultType` discriminator is camelCase like every other
+MCP wire field — Luca confirmed camelCase is the spec standard (the
+upstream conformance suite briefly used snake_case but that's being
+corrected on their side). mcpkit dispatch and types follow the same
+convention.
 
 ## Server fixture
 
@@ -38,7 +39,7 @@ external server at the same names to run this suite against it.
 
 | ID | Coverage | SEP |
 |----|----------|-----|
-| mrtr-01 | Basic elicitation round-trip — `result_type:"incomplete"` discriminator, `inputRequests.user_name` keyed map, complete on retry | 2322 |
+| mrtr-01 | Basic elicitation round-trip — `resultType:"incomplete"` discriminator, `inputRequests.user_name` keyed map, complete on retry | 2322 |
 | mrtr-02 | Sampling round-trip via `sampling/createMessage` | 2322 |
 | mrtr-03 | Roots round-trip via `roots/list` | 2322 |
 | mrtr-04 | `requestState` echo validates on round 2 (`state-ok`) | 2322 |

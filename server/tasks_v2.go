@@ -558,14 +558,16 @@ func taskV2Middleware(reg *Registry, rt *v2TaskRuntime, cfg TasksConfig) Middlew
 		// the JSON body. No-op for non-HTTP transports (stdio, in-process).
 		core.SetResponseHeader(ctx, mcpNameHeader, taskID)
 
-		// Build the v2 wire envelope. CreateTaskResult MUST NOT carry result/
-		// error/inputRequests/requestState (SEP-2663 — those belong on
-		// DetailedTask returned by tasks/get).
+		// Build the v2 wire envelope. SEP-2663 defines CreateTaskResult as
+		// `Result & Task` — a flat intersection — so the task fields are
+		// inlined alongside resultType, NOT nested under a "task" key.
+		// MUST NOT carry result/error/inputRequests/requestState (SEP-2663 —
+		// those belong on DetailedTask returned by tasks/get).
 		wireTask := toTaskInfoV2(info)
 		wireTask.TTLSeconds = core.IntPtr(ttlSec)
 		return core.NewResponse(req.ID, core.CreateTaskResult{
 			ResultType: core.ResultTypeTask,
-			Task:       wireTask,
+			TaskInfoV2: wireTask,
 		}), nil
 	}
 }
