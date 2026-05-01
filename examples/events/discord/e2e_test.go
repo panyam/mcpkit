@@ -76,12 +76,15 @@ func connectClient(t *testing.T, srv *server.Server) (*client.Client, *httptest.
 	return c, ts
 }
 
-// pollResult mirrors the events/poll per-subscription result.
+// pollResult mirrors the events/poll response (flat top-level shape per
+// the spec; no results[] wrapper, no per-result id). Cursor is *string so
+// it decodes both `"cursor": "..."` for cursored sources and
+// `"cursor": null` for cursorless ones.
 type pollResult struct {
-	ID      string         `json:"id"`
-	Events  []events.Event `json:"events"`
-	Cursor  string         `json:"cursor"`
-	HasMore bool           `json:"hasMore"`
+	Events    []events.Event `json:"events"`
+	Cursor    *string        `json:"cursor"`
+	HasMore   bool           `json:"hasMore"`
+	Truncated bool           `json:"truncated,omitempty"`
 }
 
 // TestE2EPollDelivery verifies events/poll returns events that were yielded
@@ -101,13 +104,12 @@ func TestE2EPollDelivery(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	var resp struct{ Results []pollResult }
+	var resp pollResult
 	require.NoError(t, json.Unmarshal(result.Raw, &resp))
-	require.Len(t, resp.Results, 1)
-	assert.Len(t, resp.Results[0].Events, 2)
+	assert.Len(t, resp.Events, 2)
 
 	var data DiscordEventData
-	require.NoError(t, json.Unmarshal(resp.Results[0].Events[0].Data, &data))
+	require.NoError(t, json.Unmarshal(resp.Events[0].Data, &data))
 	assert.Equal(t, "alice", data.Author.Username)
 	assert.Equal(t, "hello", data.Content)
 	assert.Equal(t, "guild-1", data.GuildID)
@@ -596,16 +598,10 @@ func TestE2ECursorlessPollAlwaysEmpty(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	var resp struct {
-		Results []struct {
-			Events []events.Event `json:"events"`
-			Cursor *string        `json:"cursor"`
-		} `json:"results"`
-	}
+	var resp pollResult
 	require.NoError(t, json.Unmarshal(result.Raw, &resp))
-	require.Len(t, resp.Results, 1)
-	assert.Empty(t, resp.Results[0].Events)
-	assert.Nil(t, resp.Results[0].Cursor, "poll on cursorless source must return cursor:null")
+	assert.Empty(t, resp.Events)
+	assert.Nil(t, resp.Cursor, "poll on cursorless source must return cursor:null")
 }
 
 // TestE2ESubscribeCursorNullOnCursoredSourceReturnsLatest verifies the
