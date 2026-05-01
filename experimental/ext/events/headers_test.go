@@ -46,12 +46,17 @@ func TestParseHeaderMode_Unknown(t *testing.T) {
 // TestSignMCP_ByteFormat pins the exact wire format of the MCP header path:
 // X-MCP-Signature is "sha256=<hex>" computed over (ts + "." + body).
 // Receivers (including non-Go ones) depend on this exact shape.
+//
+// signMCP takes a msgID parameter for signature parity with the Standard
+// Webhooks signer, but the legacy MCP-headers wire format has no
+// webhook-id equivalent — the parameter is ignored. The empty-string
+// argument here is intentional.
 func TestSignMCP_ByteFormat(t *testing.T) {
 	body := []byte(`{"hello":"world"}`)
 	secret := "topsecret"
 	now := time.Unix(1700000000, 0)
 
-	d := signMCP(body, secret, now)
+	d := signMCP("", body, secret, now)
 
 	assert.Equal(t, "1700000000", d.headers["X-MCP-Timestamp"])
 	assert.True(t, strings.HasPrefix(d.headers["X-MCP-Signature"], "sha256="), "sig must start with sha256=")
@@ -67,25 +72,25 @@ func TestSignMCP_ByteFormat(t *testing.T) {
 }
 
 // TestSignStandardWebhooks_ByteFormat pins the Standard Webhooks v1 wire
-// format: signature is "v1,<base64>" computed over (msgId + "." + ts + "." + body)
-// and a webhook-id is generated per delivery. Pinning the byte format protects
-// against accidental drift when refactoring.
+// format: signature is "v1,<base64>" computed over (msgId + "." + ts + "." + body),
+// and webhook-id is the caller-supplied message identifier (the eventId
+// for event deliveries — see TestStandardWebhooks_WebhookIDIsStableAcrossRetries).
+// Pinning the byte format protects against accidental drift when refactoring.
 func TestSignStandardWebhooks_ByteFormat(t *testing.T) {
 	body := []byte(`{"hello":"world"}`)
 	secret := "topsecret"
+	msgID := "evt_demo_42"
 	now := time.Unix(1700000000, 0)
 
-	d := signStandardWebhooks(body, secret, now)
+	d := signStandardWebhooks(msgID, body, secret, now)
 
 	assert.Equal(t, "1700000000", d.headers["webhook-timestamp"])
-	require.NotEmpty(t, d.headers["webhook-id"], "webhook-id must be populated")
-	require.True(t, strings.HasPrefix(d.headers["webhook-id"], "msg_"))
+	assert.Equal(t, msgID, d.headers["webhook-id"], "webhook-id is the caller-supplied msgID")
 
 	sig := d.headers["webhook-signature"]
 	require.True(t, strings.HasPrefix(sig, "v1,"), "sig must start with v1,: got %q", sig)
 
-	// Recompute using the generated webhook-id and compare.
-	msgID := d.headers["webhook-id"]
+	// Recompute by hand and compare.
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(msgID))
 	mac.Write([]byte("."))
@@ -95,6 +100,35 @@ func TestSignStandardWebhooks_ByteFormat(t *testing.T) {
 	want := "v1," + base64.StdEncoding.EncodeToString(mac.Sum(nil))
 	assert.Equal(t, want, sig)
 	assert.Equal(t, body, d.body, "body passes through unmodified")
+}
+
+// TestStandardWebhooks_WebhookIDIsStableAcrossRetries verifies the spec
+// contract: the webhook-id header is stable across retries of the same
+// event. Standard Webhooks receivers dedup on webhook-id; if the sender
+// regenerates it per retry, the receiver treats each retry as a distinct
+// delivery and dedup silently breaks.
+//
+// This test pins the contract by signing the same event twice with the
+// same caller-supplied msgID (simulating two retry attempts) and
+// asserting the webhook-id matches across both, while the timestamp +
+// signature regenerate (which the spec also requires, so retries aren't
+// rejected by the receiver's freshness window).
+func TestStandardWebhooks_WebhookIDIsStableAcrossRetries(t *testing.T) {
+	body := []byte(`{"eventId":"evt_demo_42","data":{}}`)
+	secret := "topsecret"
+	eventID := "evt_demo_42"
+
+	first := signStandardWebhooks(eventID, body, secret, time.Unix(1700000000, 0))
+	second := signStandardWebhooks(eventID, body, secret, time.Unix(1700000005, 0))
+
+	assert.Equal(t, first.headers["webhook-id"], second.headers["webhook-id"],
+		"webhook-id must be stable across retries; receiver dedup depends on it")
+	assert.Equal(t, eventID, first.headers["webhook-id"],
+		"webhook-id should be the eventId for event deliveries")
+	assert.NotEqual(t, first.headers["webhook-timestamp"], second.headers["webhook-timestamp"],
+		"timestamp regenerates per retry (spec — so receiver freshness window doesn't reject)")
+	assert.NotEqual(t, first.headers["webhook-signature"], second.headers["webhook-signature"],
+		"signature regenerates per retry because timestamp is part of the signed input")
 }
 
 // TestNewMessageID_Uniqueness verifies the helper produces distinct ids
@@ -118,7 +152,7 @@ func TestVerifyMCPSignature_RoundTrip(t *testing.T) {
 	secret := "k"
 	now := time.Unix(1700000000, 0)
 
-	d := signMCP(body, secret, now)
+	d := signMCP("", body, secret, now)
 	ts := d.headers["X-MCP-Timestamp"]
 	sig := d.headers["X-MCP-Signature"]
 
@@ -137,8 +171,8 @@ func TestVerifyStandardWebhooksSignature_RoundTrip(t *testing.T) {
 	secret := "k"
 	now := time.Unix(1700000000, 0)
 
-	d := signStandardWebhooks(body, secret, now)
-	msgID := d.headers["webhook-id"]
+	msgID := "evt_test_round_trip"
+	d := signStandardWebhooks(msgID, body, secret, now)
 	ts := d.headers["webhook-timestamp"]
 	sig := d.headers["webhook-signature"]
 
@@ -169,11 +203,12 @@ func TestSignFor_DispatchesByMode(t *testing.T) {
 	body := []byte(`{}`)
 	now := time.Unix(1700000000, 0)
 
-	mcp := signFor(MCPHeaders, body, "k", now)
+	mcp := signFor(MCPHeaders, "evt_1", body, "k", now)
 	assert.Contains(t, mcp.headers, "X-MCP-Signature")
 	assert.NotContains(t, mcp.headers, "webhook-signature")
 
-	std := signFor(StandardWebhooks, body, "k", now)
+	std := signFor(StandardWebhooks, "evt_1", body, "k", now)
 	assert.Contains(t, std.headers, "webhook-signature")
 	assert.NotContains(t, std.headers, "X-MCP-Signature")
+	assert.Equal(t, "evt_1", std.headers["webhook-id"], "webhook-id is the supplied msgID")
 }
