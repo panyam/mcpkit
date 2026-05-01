@@ -25,6 +25,7 @@ These are deliberately kept in **one file** rather than split per-SEP. The test 
 | Client opt-in | (none — anyone can send `task` hint) | MUST declare extension at session OR per-request (SEP-2575) |
 | Task creation | Client sends `task` hint param | Server decides unilaterally |
 | `result_type` discriminator | absent | `"task"` (CreateTaskResult) / `"complete"` (everything else) |
+| `CreateTaskResult` shape | `{task: {…}}` (nested) | `Result & Task` — flat: `{result_type, taskId, status, ttlSeconds, …}` (no nested `task` wrapper) |
 | `tasks/get` response | flat `TaskInfo` only | `DetailedTask` with inlined `result`/`error`/`inputRequests`/`requestState` |
 | `tasks/update` | n/a | new — MRTR resume path, returns `{result_type:"complete"}` ack |
 | `tasks/cancel` response | rich task envelope | `{result_type:"complete"}` ack (no task state) |

@@ -153,7 +153,7 @@ func TestToolCall_TaskResult(t *testing.T) {
 	if res.Task.ResultType != core.ResultTypeTask {
 		t.Errorf("result_type = %q, want %q", res.Task.ResultType, core.ResultTypeTask)
 	}
-	if res.Task.Task.TaskID == "" {
+	if res.Task.TaskID == "" {
 		t.Error("missing taskId in CreateTaskResult")
 	}
 }
@@ -171,7 +171,7 @@ func TestGetTask(t *testing.T) {
 	if err != nil || !res.IsTask() {
 		t.Fatalf("setup: ToolCall(fast-task) = %v, %+v", err, res)
 	}
-	taskID := res.Task.Task.TaskID
+	taskID := res.Task.TaskID
 
 	dt, err := client.GetTask(c, taskID)
 	if err != nil {
@@ -194,7 +194,7 @@ func TestWaitForTask(t *testing.T) {
 	c := connectV2TaskClient(t, url)
 
 	res, _ := client.ToolCall(c, "fast-task", map[string]any{})
-	taskID := res.Task.Task.TaskID
+	taskID := res.Task.TaskID
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -220,7 +220,7 @@ func TestWaitForTask_HonorsServerPollHint(t *testing.T) {
 	c := connectV2TaskClient(t, url)
 
 	res, _ := client.ToolCall(c, "slow-task", map[string]any{})
-	taskID := res.Task.Task.TaskID
+	taskID := res.Task.TaskID
 
 	// Release after 150ms so the wait spans at least 2-3 server-hinted polls.
 	go func() {
@@ -258,7 +258,7 @@ func TestWaitForTask_RespectsCallerOverride(t *testing.T) {
 	c := connectV2TaskClient(t, url)
 
 	res, _ := client.ToolCall(c, "slow-task", map[string]any{})
-	taskID := res.Task.Task.TaskID
+	taskID := res.Task.TaskID
 
 	// Release right away so the test doesn't depend on timing precision.
 	close := make(chan struct{})
@@ -297,7 +297,7 @@ func TestUpdateTask_FullElicitLoop(t *testing.T) {
 	if err != nil || !res.IsTask() {
 		t.Fatalf("ToolCall(confirm-delete): err=%v res=%+v", err, res)
 	}
-	taskID := res.Task.Task.TaskID
+	taskID := res.Task.TaskID
 
 	// Poll until input_required surfaces a pending request.
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -369,7 +369,7 @@ func TestCancelTask(t *testing.T) {
 	_ = unblock // intentional: leave slow-task blocked so cancel has work to do
 
 	res, _ := client.ToolCall(c, "slow-task", map[string]any{})
-	taskID := res.Task.Task.TaskID
+	taskID := res.Task.TaskID
 
 	if err := client.CancelTask(c, taskID); err != nil {
 		t.Fatalf("CancelTask: %v", err)
