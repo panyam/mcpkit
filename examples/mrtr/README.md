@@ -10,16 +10,14 @@ Spec: [SEP-2322](https://github.com/modelcontextprotocol/specification/pull/2322
 
 ## Three terminal shapes for `tools/call`
 
-| `result_type` | What it means | Client action |
-|---------------|---------------|---------------|
+| `resultType` | What it means | Client action |
+|--------------|---------------|---------------|
 | `"complete"` (or absent) | Sync `ToolResult` | done |
 | `"task"` | `CreateTaskResult` (SEP-2663) | poll `tasks/get` |
 | `"incomplete"` | `IncompleteResult{inputRequests, requestState}` | resolve inputs, retry the same call |
 
-The discriminator is `result_type` — **snake_case**. The only MCP wire
-field that breaks the camelCase convention; everything else
-(`inputRequests`, `inputResponses`, `requestState`, `taskId`, …) stays
-camelCase.
+The discriminator is `resultType` — camelCase like every other MCP wire
+field (`inputRequests`, `inputResponses`, `requestState`, `taskId`, …).
 
 ## Quick Start
 

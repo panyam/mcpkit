@@ -560,7 +560,7 @@ func taskV2Middleware(reg *Registry, rt *v2TaskRuntime, cfg TasksConfig) Middlew
 
 		// Build the v2 wire envelope. SEP-2663 defines CreateTaskResult as
 		// `Result & Task` — a flat intersection — so the task fields are
-		// inlined alongside result_type, NOT nested under a "task" key.
+		// inlined alongside resultType, NOT nested under a "task" key.
 		// MUST NOT carry result/error/inputRequests/requestState (SEP-2663 —
 		// those belong on DetailedTask returned by tasks/get).
 		wireTask := toTaskInfoV2(info)

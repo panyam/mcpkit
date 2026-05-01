@@ -25,11 +25,11 @@ func ClientSupportsTasks(ctx context.Context) bool {
 	return ClientSupportsExtension(ctx, TasksExtensionID)
 }
 
-// Tasks v2 types — SEP-2663 (Tasks Extension), SEP-2557 (result_type
+// Tasks v2 types — SEP-2663 (Tasks Extension), SEP-2557 (resultType
 // discriminator), and MRTR base types from SEP-2322.
 //
 // Wire-format differences from v1:
-//   - tools/call carries a result_type discriminator: "task" (this file),
+//   - tools/call carries a resultType discriminator: "task" (this file),
 //     "complete" / "incomplete" (MRTR — see ResultType constants).
 //   - tasks/get returns DetailedTask: a discriminated union by status that
 //     inlines result / error / inputRequests / requestState in one trip.
@@ -92,21 +92,21 @@ type TaskInfoV2 struct {
 // CreateTaskResult is returned by tools/call when the server elects to handle
 // the call as an async task. Per SEP-2663 it is `Result & Task` — a flat
 // intersection where the discriminator and the task fields share one object
-// (taskId / status / ttlSeconds / ... at the top level alongside result_type).
+// (taskId / status / ttlSeconds / ... at the top level alongside resultType).
 //
 // Per SEP-2663, this envelope MUST NOT carry result, error, inputRequests,
 // or requestState — those belong on tasks/get's DetailedTask response.
 //
 // Wire shape (flat — no `task` wrapper):
 //
-//	{"result_type": "task", "taskId": "...", "status": "working",
+//	{"resultType": "task", "taskId": "...", "status": "working",
 //	 "createdAt": "...", "lastUpdatedAt": "...", "ttlSeconds": 60,
 //	 "pollIntervalMilliseconds": 1000}
 //
 // TaskInfoV2 is embedded so encoding/json promotes its fields to the parent
 // (same trick DetailedTask uses); no custom MarshalJSON is needed.
 type CreateTaskResult struct {
-	ResultType ResultType `json:"result_type"`
+	ResultType ResultType `json:"resultType"`
 	TaskInfoV2
 }
 
@@ -129,7 +129,7 @@ type DetailedTask struct {
 	// is still running. (The task lifecycle is on the Status field.)
 	// MarshalJSON defaults this to ResultTypeComplete when empty so
 	// existing struct literals don't have to set it.
-	ResultType ResultType `json:"result_type"`
+	ResultType ResultType `json:"resultType"`
 
 	TaskInfoV2
 
@@ -194,12 +194,12 @@ type UpdateTaskRequest struct {
 // UpdateTaskResult is the (essentially empty) ack returned by tasks/update.
 // Servers resume task execution asynchronously; clients learn the outcome
 // via the next tasks/get. The wire payload carries only the SEP-2322
-// result_type discriminator so polymorphic dispatch on tools/call vs
+// resultType discriminator so polymorphic dispatch on tools/call vs
 // tasks/update vs tasks/get is uniform across the protocol. // SEP-2663
 type UpdateTaskResult struct {
 	// ResultType is the SEP-2322 polymorphic-dispatch discriminator. Always
 	// "complete" for the tasks/update ack (defaulted by MarshalJSON when empty).
-	ResultType ResultType `json:"result_type"`
+	ResultType ResultType `json:"resultType"`
 }
 
 // MarshalJSON defaults ResultType to ResultTypeComplete so callers using
@@ -217,11 +217,11 @@ func (u UpdateTaskResult) MarshalJSON() ([]byte, error) {
 // Per SEP-2663, cancellation does not return task state — the client should
 // issue tasks/get if it wants to observe the resulting "cancelled" status.
 // Like UpdateTaskResult, the wire payload carries only the SEP-2322
-// result_type discriminator.
+// resultType discriminator.
 type CancelTaskResult struct {
 	// ResultType is the SEP-2322 polymorphic-dispatch discriminator. Always
 	// "complete" for the tasks/cancel ack (defaulted by MarshalJSON when empty).
-	ResultType ResultType `json:"result_type"`
+	ResultType ResultType `json:"resultType"`
 }
 
 // MarshalJSON defaults ResultType to ResultTypeComplete so the zero value
@@ -240,13 +240,14 @@ func (c CancelTaskResult) MarshalJSON() ([]byte, error) {
 // same request with `inputResponses` (and the echoed `requestState`) until
 // the server returns a complete result, a CreateTaskResult, or an error.
 //
-// Wire-format note: the `result_type` discriminator is snake_case per the
-// SEP-2322 conformance contract; the rest of the payload (`inputRequests`,
-// `requestState`) follows the existing camelCase MCP convention.
+// Wire-format note: the `resultType` discriminator is camelCase like every
+// other MCP wire field — Luca confirmed camelCase is the SEP-2322 spec
+// standard. (The upstream conformance suite briefly used snake_case but
+// that's being corrected on their side.)
 type IncompleteResult struct {
 	// ResultType is always "incomplete". Defaulted by MarshalJSON when empty
 	// so server handlers can build the struct without thinking about it.
-	ResultType ResultType `json:"result_type"`
+	ResultType ResultType `json:"resultType"`
 
 	// InputRequests is the map of server-chosen request keys → InputRequest
 	// describing what the server needs from the client. Keys are echoed back

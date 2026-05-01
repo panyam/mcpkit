@@ -13,19 +13,34 @@ Luca confirmed camelCase is the spec standard. We had renamed to snake_case
 based on upstream conformance PR 188, but that PR is also wrong — Luca will
 fix it on their side.
 
-Files to change:
+Files changed:
 
-- [ ] `core/task_v2.go` — All `json:"result_type"` tags → `json:"resultType"`
-- [ ] `core/tool.go` — `ToolResult.ResultType` tag → `json:"resultType"`
-- [ ] `core/task_v2_test.go` — All `result_type` string literals → `resultType`
-- [ ] `server/tasks_v2_test.go` — All `result_type` assertions → `resultType`
-- [ ] `conformance/tasks-v2/scenarios.test.ts` — All `result_type` → `resultType`
-- [ ] `conformance/mrtr/scenarios.test.ts` — All `result_type` → `resultType`
-- [ ] `client/tasks.go` — `parseToolCallResult` field name → `resultType`
-- [ ] `client/tasks_test.go` — mock responses → `resultType`
+- [x] `core/task_v2.go` — every `json:"result_type"` tag → `json:"resultType"`.
+- [x] `core/tool.go` — `ToolResult.ResultType` MarshalJSON tag + UnmarshalJSON
+  alias tag.
+- [x] `core/task_v2_test.go` — all `m["result_type"]` map reads + the
+  IncompleteResult negative assertion now checks `m["result_type"]` is absent
+  (since camelCase IS the wire field, snake_case must NOT leak).
+- [x] `server/tasks_v2_test.go`, `server/mrtr_test.go`, `server/tasks_hybrid_test.go`,
+  `server/tasks_v2.go` — all assertions and comments.
+- [x] `conformance/tasks-v2/scenarios.test.ts`, `conformance/mrtr/scenarios.test.ts`
+  — all `result.result_type` reads + literal `{ result_type: 'complete' }` ack
+  comparisons + helper functions.
+- [x] `client/tasks.go` — `parseToolCallResult` probe field tag.
+- [x] `client/tasks_test.go`, `client/mrtr_test.go`, `client/mrtr.go` — comments.
+- [x] Examples (`examples/tasks-v2/walkthrough.go` + WALKTHROUGH.md + README.md;
+  `examples/mrtr/walkthrough.go` + WALKTHROUGH.md + README.md;
+  `examples/README.md`) — narration.
+- [x] Docs and stack artifacts (`docs/TASKS_V2_MIGRATION.md`, `CAPABILITIES.md`,
+  `conformance/tasks-v2/README.md`, `conformance/mrtr/README.md`).
+- [x] `CLAUDE.md` — gotcha bullet about `result_type` snake_case removed (no
+  longer true).
 
-**Test:** grep -r "result_type" across core/ server/ client/ conformance/ — should
-return zero hits after this fix (except comments explaining the history).
+**Test:** `grep -rn 'result_type' --include='*.go' --include='*.ts' --include='*.md'`
+across the project returns zero matches except in `tests/reports/` (stale logs)
+and intentional history comments (`core/task_v2.go`, `core/task_v2_test.go`
+negative assertion, `conformance/mrtr/scenarios.test.ts`,
+`conformance/mrtr/README.md`, this plan).
 
 ### Fix 1: Flatten CreateTaskResult
 
