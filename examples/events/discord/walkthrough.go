@@ -343,12 +343,12 @@ func runDemo() {
 	// --- Step 6: Webhook + auto-refresh via Go SDK ---
 	demo.Step("Webhook: subscribe via the typed Go SDK, observe HMAC delivery + auto-refresh").
 		Arrow("Receiver", "Receiver", "spin up local httptest receiver on :random").
-		Arrow("Host", "Server", "events/subscribe { mode: webhook, url, secret: ignored }").
-		DashedArrow("Server", "Host", "{ id, secret: <server-assigned>, refreshBefore }").
+		Arrow("Host", "Server", "events/subscribe { mode: webhook, url, secret: whsec_<client-supplied> }").
+		DashedArrow("Server", "Host", "{ id, refreshBefore }   (response does NOT echo secret per spec)").
 		Arrow("Receiver", "Server", "POST /inject (simulated message)").
 		DashedArrow("Server", "Receiver", "POST <url> + HMAC signature headers (default: webhook-* per Standard Webhooks; opt-in: X-MCP-* via -webhook-header-mode mcp)").
 		DashedArrow("Host", "Host", "background loop: re-subscribe at 0.5 × TTL").
-		Note("clients/go provides Subscription (subscribe + auto-refresh) plus Receiver[Data] (typed inbound channel). Subscribe blocks until the initial subscribe lands, so the caller has the server-assigned secret synchronously. Receiver[DiscordEventData] verifies signatures and decodes the wire envelope into the typed Data shape, so the consumer reads `ev.Data.Content` rather than re-parsing JSON.").
+		Note("clients/go provides Subscription (subscribe + auto-refresh) plus Receiver[Data] (typed inbound channel). Per spec, the HMAC signing secret is client-supplied — the SDK auto-generates a whsec_ value via events.GenerateSecret() when SubscribeOptions.Secret is empty, and exposes it via Subscription.Secret() so the receiver can verify with the same value. Receiver[DiscordEventData] verifies signatures and decodes the wire envelope into the typed Data shape, so the consumer reads `ev.Data.Content` rather than re-parsing JSON.").
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			recv := eventsclient.NewReceiver[DiscordEventData]("")
 			defer recv.Close()
@@ -384,7 +384,7 @@ func runDemo() {
 				})
 			}()
 			recv.SetSecret(sub.Secret())
-			fmt.Printf("    server-assigned secret:  %s...\n", truncate(sub.Secret(), 16))
+			fmt.Printf("    SDK-generated secret:    %s...\n", truncate(sub.Secret(), 16))
 			fmt.Printf("    refreshBefore:           %s\n", sub.RefreshBefore().Format(time.RFC3339))
 
 			body := map[string]any{
