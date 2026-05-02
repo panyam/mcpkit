@@ -182,7 +182,7 @@ func TestE2EWebhookDelivery(t *testing.T) {
 
 	c, _ := connectClient(t, srv)
 
-	clientSecret := "whsec_test_secret_for_e2e_assertion"
+	clientSecret := events.GenerateSecret()
 	subResult, err := c.Call("events/subscribe", map[string]any{
 		"id":       "wh",
 		"name":     "discord.message",
@@ -306,18 +306,15 @@ func TestE2EWebhookDelivery_StandardHeaders(t *testing.T) {
 	defer callbackSrv.Close()
 
 	c, _ := connectClient(t, srv)
-	raw, err := c.Call("events/subscribe", map[string]any{
+	clientSecret := events.GenerateSecret()
+	_, err := c.Call("events/subscribe", map[string]any{
 		"id":       "wh-std",
 		"name":     "discord.message",
-		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL},
+		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": clientSecret},
 	})
 	require.NoError(t, err)
-	var resp struct {
-		Secret string `json:"secret"`
-	}
-	require.NoError(t, json.Unmarshal(raw.Raw, &resp))
 	mu.Lock()
-	assignedSecret = resp.Secret
+	assignedSecret = clientSecret
 	mu.Unlock()
 
 	require.NoError(t, yield(newDiscordEvent("g", "c", "alice", "standard-headers test", time.Now())))
@@ -363,18 +360,15 @@ func TestE2EWebhookDelivery_MCPHeadersOptIn(t *testing.T) {
 	defer callbackSrv.Close()
 
 	c, _ := connectClient(t, srv)
-	raw, err := c.Call("events/subscribe", map[string]any{
+	clientSecret := events.GenerateSecret()
+	_, err := c.Call("events/subscribe", map[string]any{
 		"id":       "wh-mcp",
 		"name":     "discord.message",
-		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL},
+		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": clientSecret},
 	})
 	require.NoError(t, err)
-	var resp struct {
-		Secret string `json:"secret"`
-	}
-	require.NoError(t, json.Unmarshal(raw.Raw, &resp))
 	mu.Lock()
-	assignedSecret = resp.Secret
+	assignedSecret = clientSecret
 	mu.Unlock()
 
 	require.NoError(t, yield(newDiscordEvent("g", "c", "alice", "mcp-headers test", time.Now())))
@@ -453,20 +447,20 @@ func TestE2ECursorlessWebhookDelivery(t *testing.T) {
 	c := client.NewClient(tsrv.URL+"/mcp", core.ClientInfo{Name: "cursorless-wh", Version: "1.0"})
 	require.NoError(t, c.Connect())
 
+	clientSecret := events.GenerateSecret()
 	raw, err := c.Call("events/subscribe", map[string]any{
 		"id":       "wh-typing",
 		"name":     "discord.typing",
-		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL},
+		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": clientSecret},
 	})
 	require.NoError(t, err)
 	var resp struct {
 		Cursor *string `json:"cursor"`
-		Secret string  `json:"secret"`
 	}
 	require.NoError(t, json.Unmarshal(raw.Raw, &resp))
 	assert.Nil(t, resp.Cursor, "subscribe response cursor must be null for cursorless source")
 	mu.Lock()
-	assignedSecret = resp.Secret
+	assignedSecret = clientSecret
 	mu.Unlock()
 	_ = assignedSecret
 
@@ -521,7 +515,7 @@ func TestE2ESubscribeCursorNullOnCursoredSourceReturnsLatest(t *testing.T) {
 	raw, err := c.Call("events/subscribe", map[string]any{
 		"id":       "wh-fromnow",
 		"name":     "discord.message",
-		"delivery": map[string]any{"mode": "webhook", "url": "http://localhost:1/sink"},
+		"delivery": map[string]any{"mode": "webhook", "url": "http://localhost:1/sink", "secret": events.GenerateSecret()},
 		// cursor field intentionally omitted → JSON null on parse
 	})
 	require.NoError(t, err)

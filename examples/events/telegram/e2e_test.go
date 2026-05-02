@@ -192,7 +192,7 @@ func TestE2EWebhookDelivery(t *testing.T) {
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "webhook-test", Version: "1.0"})
 	require.NoError(t, c.Connect())
 
-	clientSecret := "whsec_test_secret_for_telegram_e2e"
+	clientSecret := events.GenerateSecret()
 	subResult, err := c.Call("events/subscribe", map[string]any{
 		"id":       "wh-e2e",
 		"name":     "telegram.message",
@@ -262,18 +262,15 @@ func TestE2EWebhookDelivery_StandardHeaders(t *testing.T) {
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "stdhdr-test", Version: "1.0"})
 	require.NoError(t, c.Connect())
 
-	raw, err := c.Call("events/subscribe", map[string]any{
+	clientSecret := events.GenerateSecret()
+	_, err := c.Call("events/subscribe", map[string]any{
 		"id":       "wh-std",
 		"name":     "telegram.message",
-		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL},
+		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": clientSecret},
 	})
 	require.NoError(t, err)
-	var resp struct {
-		Secret string `json:"secret"`
-	}
-	require.NoError(t, json.Unmarshal(raw.Raw, &resp))
 	mu.Lock()
-	assignedSecret = resp.Secret
+	assignedSecret = clientSecret
 	mu.Unlock()
 
 	require.NoError(t, yieldText(yield, 100, "alice", "standard-headers test"))
@@ -324,18 +321,15 @@ func TestE2EWebhookDelivery_MCPHeadersOptIn(t *testing.T) {
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "mcphdr-test", Version: "1.0"})
 	require.NoError(t, c.Connect())
 
-	raw, err := c.Call("events/subscribe", map[string]any{
+	clientSecret := events.GenerateSecret()
+	_, err := c.Call("events/subscribe", map[string]any{
 		"id":       "wh-mcp",
 		"name":     "telegram.message",
-		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL},
+		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": clientSecret},
 	})
 	require.NoError(t, err)
-	var resp struct {
-		Secret string `json:"secret"`
-	}
-	require.NoError(t, json.Unmarshal(raw.Raw, &resp))
 	mu.Lock()
-	assignedSecret = resp.Secret
+	assignedSecret = clientSecret
 	mu.Unlock()
 
 	require.NoError(t, yieldText(yield, 100, "alice", "mcp-headers test"))
@@ -455,7 +449,7 @@ func TestE2ECursorlessWebhookDelivery(t *testing.T) {
 	raw, err := c.Call("events/subscribe", map[string]any{
 		"id":       "wh-typing",
 		"name":     "telegram.typing",
-		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL},
+		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": events.GenerateSecret()},
 	})
 	require.NoError(t, err)
 	var resp struct {
