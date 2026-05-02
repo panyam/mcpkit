@@ -10,6 +10,9 @@ Walks through the four delivery modes of the experimental MCP Events extension (
 - **Poll: events/poll with the cursor we just saw** — Single-subscription per call (PR B removed batching). Polling at the head returns no new events but advances the cursor — the same response shape that would carry events if any had arrived since the last poll.
 - **Cursorless: inject a typing event, observe cursor:null on the wire** — WithoutCursors() sources don't buffer and emit cursor:null. Push and webhook fanout still work — there's just nothing to replay. Useful for ephemeral state (typing indicators, presence, current readings).
 - **Webhook: subscribe via the typed Go SDK, observe HMAC delivery + auto-refresh** — clients/go provides Subscription (subscribe + auto-refresh) plus Receiver[Data] (typed inbound channel). Per spec, the HMAC signing secret is client-supplied — the SDK auto-generates a whsec_ value via events.GenerateSecret() when SubscribeOptions.Secret is empty, and exposes it via Subscription.Secret() so the receiver can verify with the same value. Receiver[DiscordEventData] verifies signatures and decodes the wire envelope into the typed Data shape, so the consumer reads `ev.Data.Content` rather than re-parsing JSON.
+- **Spec validation: empty delivery.secret is rejected** — Per spec, delivery.secret is REQUIRED on every events/subscribe — there is no server-side fallback. The server rejects at subscribe time so a subscription never exists that produces unverifiable deliveries. The Go SDK auto-generates a conforming whsec_ value via events.GenerateSecret() when SubscribeOptions.Secret is empty; this step makes a raw client.Call to bypass that and demonstrate the validator.
+- **Spec validation: malformed delivery.secret is rejected** — The validator enforces the full Standard Webhooks format: whsec_ followed by base64 of 24-64 random bytes. A non-prefixed value, a too-short value, or non-base64 garbage all fail with -32602 InvalidParams. This is what catches IaC-pinned secrets that don't match the spec format before they create a broken subscription.
+- **Spec validation: valid whsec_ accepted; response does NOT echo secret** — Counter-test for the validator: a freshly-generated whsec_ value is accepted. Note the response carries id + cursor + refreshBefore but no secret — the spec dropped it because the client supplied it (server doesn't need to echo) and echoing risks leaks via proxies, logs, or IDE network panes. The receiver verifies signatures with the value the client already knows.
 - **Live Discord interaction (typing + message from a real Discord channel)** — Requires the server to be running with -token + the bot invited to a channel you can post in. The TypingStart handler in main.go yields a cursorless discord.typing event; MessageCreate yields the cursored discord.message. Discord's typing indicator fires once when you start (then refires every ~8s if you keep typing), not per keystroke. In --non-interactive mode this step skips the wait so CI runs aren't slowed.
 
 ## Flow
@@ -48,7 +51,20 @@ sequenceDiagram
     Server-->>Receiver: POST <url> + HMAC signature headers (default: webhook-* per Standard Webhooks; opt-in: X-MCP-* via -webhook-header-mode mcp)
     Host-->>Host: background loop: re-subscribe at 0.5 × TTL
 
-    Note over Host,Receiver: Step 7: Live Discord interaction (typing + message from a real Discord channel)
+    Note over Host,Receiver: Step 7: Spec validation: empty delivery.secret is rejected
+    Host->>Server: events/subscribe { delivery: { ... } }   (no secret)
+    Server-->>Host: -32602 InvalidParams: delivery.secret is required
+
+    Note over Host,Receiver: Step 8: Spec validation: malformed delivery.secret is rejected
+    Host->>Server: events/subscribe { delivery: { secret: 'wrong' } }
+    Server-->>Host: -32602 InvalidParams: delivery.secret invalid: must start with the whsec_ prefix
+
+    Note over Host,Receiver: Step 9: Spec validation: valid whsec_ accepted; response does NOT echo secret
+    Host->>Host: events.GenerateSecret() → whsec_<base64 of 32 bytes>
+    Host->>Server: events/subscribe { delivery: { secret: whsec_<valid> } }
+    Server-->>Host: { id, cursor, refreshBefore }   (NO secret field per spec)
+
+    Note over Host,Receiver: Step 10: Live Discord interaction (typing + message from a real Discord channel)
     Discord->>Server: TypingStart event (when you start typing in the channel)
     Server-->>Host: notifications/events/event { name: discord.typing, cursor: null }
     Discord->>Server: MessageCreate event (when you press enter)
@@ -112,7 +128,19 @@ WithoutCursors() sources don't buffer and emit cursor:null. Push and webhook fan
 
 clients/go provides Subscription (subscribe + auto-refresh) plus Receiver[Data] (typed inbound channel). Per spec, the HMAC signing secret is client-supplied — the SDK auto-generates a whsec_ value via events.GenerateSecret() when SubscribeOptions.Secret is empty, and exposes it via Subscription.Secret() so the receiver can verify with the same value. Receiver[DiscordEventData] verifies signatures and decodes the wire envelope into the typed Data shape, so the consumer reads `ev.Data.Content` rather than re-parsing JSON.
 
-### Step 7: Live Discord interaction (typing + message from a real Discord channel)
+### Step 7: Spec validation: empty delivery.secret is rejected
+
+Per spec, delivery.secret is REQUIRED on every events/subscribe — there is no server-side fallback. The server rejects at subscribe time so a subscription never exists that produces unverifiable deliveries. The Go SDK auto-generates a conforming whsec_ value via events.GenerateSecret() when SubscribeOptions.Secret is empty; this step makes a raw client.Call to bypass that and demonstrate the validator.
+
+### Step 8: Spec validation: malformed delivery.secret is rejected
+
+The validator enforces the full Standard Webhooks format: whsec_ followed by base64 of 24-64 random bytes. A non-prefixed value, a too-short value, or non-base64 garbage all fail with -32602 InvalidParams. This is what catches IaC-pinned secrets that don't match the spec format before they create a broken subscription.
+
+### Step 9: Spec validation: valid whsec_ accepted; response does NOT echo secret
+
+Counter-test for the validator: a freshly-generated whsec_ value is accepted. Note the response carries id + cursor + refreshBefore but no secret — the spec dropped it because the client supplied it (server doesn't need to echo) and echoing risks leaks via proxies, logs, or IDE network panes. The receiver verifies signatures with the value the client already knows.
+
+### Step 10: Live Discord interaction (typing + message from a real Discord channel)
 
 Requires the server to be running with -token + the bot invited to a channel you can post in. The TypingStart handler in main.go yields a cursorless discord.typing event; MessageCreate yields the cursored discord.message. Discord's typing indicator fires once when you start (then refires every ~8s if you keep typing), not per keystroke. In --non-interactive mode this step skips the wait so CI runs aren't slowed.
 
