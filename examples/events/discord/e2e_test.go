@@ -182,22 +182,28 @@ func TestE2EWebhookDelivery(t *testing.T) {
 
 	c, _ := connectClient(t, srv)
 
+	clientSecret := events.GenerateSecret()
 	subResult, err := c.Call("events/subscribe", map[string]any{
 		"id":       "wh",
 		"name":     "discord.message",
-		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": "ignored-in-server-mode"},
+		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": clientSecret},
 	})
 	require.NoError(t, err)
 	require.Len(t, webhooks.Targets(), 1)
 
+	// Spec: subscribe response does NOT echo the secret. The client
+	// already knows the value it supplied; echoing risks leaks via
+	// proxies / logs / IDE network panes during development. The
+	// receiver verifies signatures using the value the client sent.
 	var subResp struct {
 		Secret string `json:"secret"`
 	}
 	require.NoError(t, json.Unmarshal(subResult.Raw, &subResp))
-	require.NotEmpty(t, subResp.Secret, "server mode must return its generated secret")
-	require.NotEqual(t, "ignored-in-server-mode", subResp.Secret, "server mode must NOT echo the client-supplied secret")
+	require.Empty(t, subResp.Secret, "subscribe response must NOT carry a secret field per spec")
+	require.NotEmpty(t, subResult.Raw, "response should still have other fields")
+	_ = subResult
 	mu.Lock()
-	assignedSecret = subResp.Secret
+	assignedSecret = clientSecret
 	mu.Unlock()
 
 	require.NoError(t, yield(newDiscordEvent("g", "c", "bob", "webhook test", time.Now())))
@@ -266,80 +272,6 @@ func TestE2EResourceRead(t *testing.T) {
 	assert.Equal(t, "resource test", payloads[0].Content)
 }
 
-// TestE2EWebhookDelivery_IdentityMode verifies the identity-mode contract
-// end-to-end: subscribe is idempotent on the (name, url, params) tuple, the
-// server returns derived id and secret, and webhook delivery signs with
-// the derived secret. Two subscribes with the same tuple must collapse to
-// one registry entry.
-func TestE2EWebhookDelivery_IdentityMode(t *testing.T) {
-	srv, _, yield, webhooks := buildTestStack(
-		events.WithWebhookSecretMode(events.WebhookSecretIdentity),
-		events.WithWebhookRoot([]byte("test-root-master")),
-	)
-
-	var mu sync.Mutex
-	var deliveries []events.Event
-	var assignedSecret string
-
-	callbackSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		msgID := r.Header.Get("webhook-id")
-		ts := r.Header.Get("webhook-timestamp")
-		sig := r.Header.Get("webhook-signature")
-		mu.Lock()
-		secret := assignedSecret
-		mu.Unlock()
-		assert.True(t, events.VerifyStandardWebhooksSignature(body, secret, msgID, ts, sig), "delivery should sign with the derived secret (Standard Webhooks default)")
-
-		var event events.Event
-		json.Unmarshal(body, &event)
-		mu.Lock()
-		deliveries = append(deliveries, event)
-		mu.Unlock()
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer callbackSrv.Close()
-
-	c, _ := connectClient(t, srv)
-
-	subscribe := func(clientID string) (string, string) {
-		t.Helper()
-		raw, err := c.Call("events/subscribe", map[string]any{
-			"id":   clientID,
-			"name": "discord.message",
-			"delivery": map[string]any{
-				"mode":   "webhook",
-				"url":    callbackSrv.URL,
-				"params": map[string]string{"region": "us"},
-			},
-		})
-		require.NoError(t, err)
-		var resp struct {
-			ID     string `json:"id"`
-			Secret string `json:"secret"`
-		}
-		require.NoError(t, json.Unmarshal(raw.Raw, &resp))
-		return resp.ID, resp.Secret
-	}
-
-	id1, sec1 := subscribe("client-id-A")
-	id2, sec2 := subscribe("client-id-B") // different client id, same tuple
-	assert.Equal(t, id1, id2, "identity mode must derive the same id regardless of client-supplied id")
-	assert.Equal(t, sec1, sec2, "identity mode must derive the same secret for the same tuple")
-	assert.Len(t, webhooks.Targets(), 1, "two subscribes against the same tuple must collapse to one entry")
-
-	mu.Lock()
-	assignedSecret = sec1
-	mu.Unlock()
-
-	require.NoError(t, yield(newDiscordEvent("g", "c", "alice", "identity-mode test", time.Now())))
-	time.Sleep(500 * time.Millisecond)
-
-	mu.Lock()
-	defer mu.Unlock()
-	require.Len(t, deliveries, 1, "delivery must reach the receiver under the derived secret")
-}
-
 // TestE2EWebhookDelivery_StandardHeaders pins the StandardWebhooks header
 // path explicitly. Today this is also the default (covered by
 // TestE2EWebhookDelivery), but the explicit opt-in test stays so the wire
@@ -376,18 +308,15 @@ func TestE2EWebhookDelivery_StandardHeaders(t *testing.T) {
 	defer callbackSrv.Close()
 
 	c, _ := connectClient(t, srv)
-	raw, err := c.Call("events/subscribe", map[string]any{
+	clientSecret := events.GenerateSecret()
+	_, err := c.Call("events/subscribe", map[string]any{
 		"id":       "wh-std",
 		"name":     "discord.message",
-		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL},
+		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": clientSecret},
 	})
 	require.NoError(t, err)
-	var resp struct {
-		Secret string `json:"secret"`
-	}
-	require.NoError(t, json.Unmarshal(raw.Raw, &resp))
 	mu.Lock()
-	assignedSecret = resp.Secret
+	assignedSecret = clientSecret
 	mu.Unlock()
 
 	require.NoError(t, yield(newDiscordEvent("g", "c", "alice", "standard-headers test", time.Now())))
@@ -433,18 +362,15 @@ func TestE2EWebhookDelivery_MCPHeadersOptIn(t *testing.T) {
 	defer callbackSrv.Close()
 
 	c, _ := connectClient(t, srv)
-	raw, err := c.Call("events/subscribe", map[string]any{
+	clientSecret := events.GenerateSecret()
+	_, err := c.Call("events/subscribe", map[string]any{
 		"id":       "wh-mcp",
 		"name":     "discord.message",
-		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL},
+		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": clientSecret},
 	})
 	require.NoError(t, err)
-	var resp struct {
-		Secret string `json:"secret"`
-	}
-	require.NoError(t, json.Unmarshal(raw.Raw, &resp))
 	mu.Lock()
-	assignedSecret = resp.Secret
+	assignedSecret = clientSecret
 	mu.Unlock()
 
 	require.NoError(t, yield(newDiscordEvent("g", "c", "alice", "mcp-headers test", time.Now())))
@@ -453,35 +379,6 @@ func TestE2EWebhookDelivery_MCPHeadersOptIn(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	assert.Equal(t, 1, deliveries)
-}
-
-// TestE2EUnsubscribeBySecret verifies the proof-of-possession unsubscribe
-// path works through the JSON-RPC handler — clients can unsubscribe by
-// presenting the secret without remembering the server-assigned id.
-func TestE2EUnsubscribeBySecret(t *testing.T) {
-	srv, _, _, webhooks := buildTestStack()
-	c, _ := connectClient(t, srv)
-
-	raw, err := c.Call("events/subscribe", map[string]any{
-		"id":       "wh-unsub",
-		"name":     "discord.message",
-		"delivery": map[string]any{"mode": "webhook", "url": "http://localhost:1/sink"},
-	})
-	require.NoError(t, err)
-	var resp struct {
-		Secret string `json:"secret"`
-	}
-	require.NoError(t, json.Unmarshal(raw.Raw, &resp))
-	require.Len(t, webhooks.Targets(), 1)
-
-	_, err = c.Call("events/unsubscribe", map[string]any{
-		"delivery": map[string]any{
-			"url":    "http://localhost:1/sink",
-			"secret": resp.Secret,
-		},
-	})
-	require.NoError(t, err)
-	assert.Len(t, webhooks.Targets(), 0, "unsubscribe by secret must remove the matching subscription")
 }
 
 // TestE2ECursorlessPushDelivery verifies the cursorless typing source: yield
@@ -552,20 +449,20 @@ func TestE2ECursorlessWebhookDelivery(t *testing.T) {
 	c := client.NewClient(tsrv.URL+"/mcp", core.ClientInfo{Name: "cursorless-wh", Version: "1.0"})
 	require.NoError(t, c.Connect())
 
+	clientSecret := events.GenerateSecret()
 	raw, err := c.Call("events/subscribe", map[string]any{
 		"id":       "wh-typing",
 		"name":     "discord.typing",
-		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL},
+		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": clientSecret},
 	})
 	require.NoError(t, err)
 	var resp struct {
 		Cursor *string `json:"cursor"`
-		Secret string  `json:"secret"`
 	}
 	require.NoError(t, json.Unmarshal(raw.Raw, &resp))
 	assert.Nil(t, resp.Cursor, "subscribe response cursor must be null for cursorless source")
 	mu.Lock()
-	assignedSecret = resp.Secret
+	assignedSecret = clientSecret
 	mu.Unlock()
 	_ = assignedSecret
 
@@ -620,7 +517,7 @@ func TestE2ESubscribeCursorNullOnCursoredSourceReturnsLatest(t *testing.T) {
 	raw, err := c.Call("events/subscribe", map[string]any{
 		"id":       "wh-fromnow",
 		"name":     "discord.message",
-		"delivery": map[string]any{"mode": "webhook", "url": "http://localhost:1/sink"},
+		"delivery": map[string]any{"mode": "webhook", "url": "http://localhost:1/sink", "secret": events.GenerateSecret()},
 		// cursor field intentionally omitted → JSON null on parse
 	})
 	require.NoError(t, err)

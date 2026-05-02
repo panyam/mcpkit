@@ -2,13 +2,13 @@ package eventsclient
 
 import (
 	"context"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/panyam/mcpkit/client"
+	"github.com/panyam/mcpkit/experimental/ext/events"
 )
 
 // SubscribeOptions configures a Subscription at startup.
@@ -19,18 +19,18 @@ type SubscribeOptions struct {
 	// CallbackURL is the publicly-reachable URL the server will POST to.
 	CallbackURL string
 
-	// Secret is the client-supplied shared secret. Honored in Client mode;
-	// ignored in Server / Identity modes (server returns its own).
+	// Secret is the client-supplied HMAC signing secret. Per spec, must
+	// be whsec_ + base64 of 24-64 random bytes. If empty, the SDK
+	// auto-generates a spec-conformant value via events.GenerateSecret().
+	// Subscription.Secret() returns the value the SDK ended up using
+	// (supplied or generated) — the receiver verifies signatures
+	// against this same value.
 	Secret string
 
-	// SubID is the client-side subscription id. Optional; ignored in
-	// Identity mode (server derives an id from the tuple).
+	// SubID is the client-side subscription id (for now; γ replaces
+	// id-keyed subscription identity with the (principal, name, params,
+	// url) tuple per spec).
 	SubID string
-
-	// Params is the identity-mode tuple input. Ignored in Server / Client
-	// modes. Same map for two subscribe calls produces the same id+secret
-	// in Identity mode (idempotent subscribe).
-	Params map[string]string
 
 	// Cursor controls the resume point. nil = "from now" (server returns
 	// its current head). Non-nil = explicit resume cursor.
@@ -76,6 +76,13 @@ func Subscribe(parent context.Context, sess *client.Client, opts SubscribeOption
 	if opts.RefreshFactor >= 1 {
 		return nil, fmt.Errorf("eventsclient: RefreshFactor must be < 1 (got %g) — refreshing at TTL or later races the boundary", opts.RefreshFactor)
 	}
+	// Spec mandates client-supplied delivery.secret (whsec_ + base64 of
+	// 24-64 random bytes). Auto-generate on the application's behalf
+	// when the caller didn't supply one — Standard Webhooks profile
+	// recommends generating from a CSPRNG by default.
+	if opts.Secret == "" {
+		opts.Secret = events.GenerateSecret()
+	}
 
 	s := &Subscription{
 		sess:    sess,
@@ -95,17 +102,19 @@ func Subscribe(parent context.Context, sess *client.Client, opts SubscribeOption
 	return s, nil
 }
 
-// ID returns the server-assigned subscription id (which may be derived in
-// Identity mode and differ from any SubID the caller supplied).
+// ID returns the subscription id the SDK supplied (echoed by the
+// server). γ replaces id-keyed subscription identity with the
+// (principal, name, params, url) tuple per spec.
 func (s *Subscription) ID() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.id
 }
 
-// Secret returns the secret the server is using to sign deliveries (which
-// may be server-generated or derived in Identity mode regardless of what
-// the caller supplied).
+// Secret returns the secret the SDK is using to sign deliveries —
+// either the value the caller passed in SubscribeOptions.Secret, or
+// the auto-generated whsec_ value the SDK produced when Secret was
+// empty. The receiver verifies signatures with this same value.
 func (s *Subscription) Secret() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -156,7 +165,6 @@ func (s *Subscription) subscribe() error {
 			"mode":   "webhook",
 			"url":    s.opts.CallbackURL,
 			"secret": s.opts.Secret,
-			"params": s.opts.Params,
 		},
 	}
 	if s.opts.Cursor != nil {
@@ -171,9 +179,10 @@ func (s *Subscription) subscribe() error {
 		return err
 	}
 
+	// Per spec the response no longer carries `secret` — the SDK
+	// already knows the value it supplied (s.opts.Secret).
 	var result struct {
 		ID            string  `json:"id"`
-		Secret        string  `json:"secret"`
 		Cursor        *string `json:"cursor"`
 		RefreshBefore string  `json:"refreshBefore"`
 	}
@@ -188,7 +197,7 @@ func (s *Subscription) subscribe() error {
 
 	s.mu.Lock()
 	s.id = result.ID
-	s.secret = result.Secret
+	s.secret = s.opts.Secret
 	s.cursor = result.Cursor
 	s.refreshBefore = rb
 	s.mu.Unlock()
@@ -257,10 +266,3 @@ func (s *Subscription) nextRefreshDelay() time.Duration {
 	return wait
 }
 
-// EncodeRoot is a tiny helper for callers who want to pass a hex-encoded
-// master secret to a server in Identity mode (matching the demos'
-// -webhook-root flag). Returns the bytes in the shape NewWebhookRegistry
-// expects.
-func EncodeRoot(hexBytes string) ([]byte, error) {
-	return hex.DecodeString(hexBytes)
-}

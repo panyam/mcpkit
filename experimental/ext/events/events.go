@@ -328,10 +328,9 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 			ID       string `json:"id"`
 			Name     string `json:"name"`
 			Delivery struct {
-				Mode   string            `json:"mode"`
-				URL    string            `json:"url"`
-				Secret string            `json:"secret,omitempty"`
-				Params map[string]string `json:"params,omitempty"` // identity-mode tuple input
+				Mode   string `json:"mode"`
+				URL    string `json:"url"`
+				Secret string `json:"secret,omitempty"`
 			} `json:"delivery"`
 			Cursor *string `json:"cursor"`
 		}
@@ -351,13 +350,20 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 			return core.NewErrorResponse(id, ErrCodeInvalidCallbackUrl, err.Error())
 		}
 
-		// Per-mode behavior is documented on WebhookSecretMode.
-		resolvedID, secret := webhooks.resolveSecret(
-			req.ID, req.Delivery.Secret,
-			req.Name, req.Delivery.URL, req.Delivery.Params,
-		)
+		// Spec: delivery.secret is REQUIRED, client-supplied, and MUST
+		// match whsec_ + base64 of 24-64 random bytes. Reject malformed
+		// values at subscribe time rather than creating a subscription
+		// that produces unverifiable deliveries.
+		if req.Delivery.Secret == "" {
+			return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
+				"delivery.secret is required (must be whsec_<base64 of 24-64 random bytes>)")
+		}
+		if err := validateClientSecret(req.Delivery.Secret); err != nil {
+			return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
+				"delivery.secret invalid: "+err.Error())
+		}
 
-		expiresAt := webhooks.Register(resolvedID, req.Delivery.URL, secret)
+		expiresAt := webhooks.Register(req.ID, req.Delivery.URL, req.Delivery.Secret)
 
 		// Resolve `cursor: null` to the source's current head ("from now")
 		// for cursored sources. Cursorless sources always serialize as null.
@@ -375,9 +381,13 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 			wireCursor = &c
 		}
 
+		// Per spec, the response does NOT echo back the secret. The
+		// client supplied it, so the client already knows it. Echoing
+		// would also risk leaking the secret to anyone who can observe
+		// the response (proxies, logs, IDE network panes during
+		// development).
 		return core.NewResponse(id, map[string]any{
-			"id":            resolvedID,
-			"secret":        secret,
+			"id":            req.ID,
 			"cursor":        wireCursor,
 			"refreshBefore": expiresAt.Format(time.RFC3339),
 		})
@@ -389,8 +399,7 @@ func registerUnsubscribe(srv *server.Server, webhooks *WebhookRegistry) {
 		var req struct {
 			ID       string `json:"id"`
 			Delivery *struct {
-				URL    string `json:"url"`
-				Secret string `json:"secret,omitempty"` // proof-of-possession path (any mode)
+				URL string `json:"url"`
 			} `json:"delivery,omitempty"`
 		}
 		if err := json.Unmarshal(params, &req); err != nil {
@@ -399,18 +408,11 @@ func registerUnsubscribe(srv *server.Server, webhooks *WebhookRegistry) {
 		if req.Delivery == nil || req.Delivery.URL == "" {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "delivery.url required")
 		}
-		if req.ID == "" && req.Delivery.Secret == "" {
-			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "either id or delivery.secret is required")
+		if req.ID == "" {
+			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "id is required")
 		}
-		// Either form is accepted in any mode. Identity mode docs steer
-		// clients toward the secret form (proof-of-possession); other modes
-		// typically use the id form. Internally the registry resolves both
-		// to the same subscription.
-		if req.ID != "" {
-			webhooks.Unregister(req.Delivery.URL, req.ID)
-		} else {
-			webhooks.UnregisterBySecret(req.Delivery.URL, req.Delivery.Secret)
-		}
+		// γ will replace id with the (principal, name, params, url) tuple per spec.
+		webhooks.Unregister(req.Delivery.URL, req.ID)
 		return core.NewResponse(id, map[string]any{})
 	})
 }
