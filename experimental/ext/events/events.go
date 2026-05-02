@@ -381,9 +381,13 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 			wireCursor = &c
 		}
 
+		// Per spec, the response does NOT echo back the secret. The
+		// client supplied it, so the client already knows it. Echoing
+		// would also risk leaking the secret to anyone who can observe
+		// the response (proxies, logs, IDE network panes during
+		// development).
 		return core.NewResponse(id, map[string]any{
 			"id":            req.ID,
-			"secret":        req.Delivery.Secret,
 			"cursor":        wireCursor,
 			"refreshBefore": expiresAt.Format(time.RFC3339),
 		})

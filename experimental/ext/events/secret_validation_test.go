@@ -163,6 +163,33 @@ func TestSubscribe_AcceptsValidWhsecSecret(t *testing.T) {
 	require.NotNil(t, resp.Result)
 }
 
+// TestSubscribe_ResponseDoesNotEchoSecret pins the spec contract that
+// the events/subscribe response MUST NOT carry the secret. The client
+// supplied it; echoing risks leaking via logs / proxies / IDE network
+// panes during development. Failing this test means we are leaking the
+// signing secret unnecessarily on the response leg.
+func TestSubscribe_ResponseDoesNotEchoSecret(t *testing.T) {
+	supplied := generateSecret()
+	resp := callSubscribeHandler(t, map[string]any{
+		"id":   "test",
+		"name": "fake.event",
+		"delivery": map[string]any{
+			"mode":   "webhook",
+			"url":    "https://example.com/hook",
+			"secret": supplied,
+		},
+	})
+	require.Nil(t, resp.Error)
+
+	// Marshal the response and assert the raw bytes contain neither
+	// "secret" nor the supplied whsec_ value.
+	raw, err := json.Marshal(resp.Result)
+	require.NoError(t, err)
+	body := string(raw)
+	assert.NotContains(t, body, `"secret"`, "subscribe response must not include a secret field")
+	assert.NotContains(t, body, supplied, "subscribe response must not echo the client-supplied secret value")
+}
+
 // TestUnsubscribe_RejectsSecretForm verifies the handler no longer
 // accepts the legacy "unsubscribe by presenting the secret" path that
 // existed before β. Spec keys unsubscribe on the (principal, name,
