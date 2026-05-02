@@ -28,8 +28,8 @@ type Receiver[Data any] struct {
 
 // NewReceiver constructs a typed receiver with the given verification
 // secret. Pass an empty string if you intend to call SetSecret later
-// (typical for Server / Identity modes where the server returns the
-// secret on subscribe).
+// (e.g., when the receiver is constructed before the application has
+// decided what value to subscribe with).
 //
 // Buffered to 64 events; callers should drain Events() promptly. A full
 // channel causes the receiver to drop new deliveries silently rather

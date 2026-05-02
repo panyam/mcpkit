@@ -139,26 +139,31 @@ type PollResult struct {
 - TTL-based soft state with automatic expiry (default 60s, override via `WithWebhookTTL`)
 - Retry with exponential backoff on 5xx (no retry on 4xx)
 - Basic SSRF validation on callback URLs
-- Pluggable signature format and secret model (see below)
+- Pluggable signature format (see below)
 
 ```go
 webhooks := events.NewWebhookRegistry(
     events.WithWebhookTTL(5 * time.Second),
-    events.WithWebhookSecretMode(events.WebhookSecretIdentity),
-    events.WithWebhookRoot([]byte("master")),
     events.WithWebhookHeaderMode(events.StandardWebhooks),
 )
 ```
 
-### Secret mode (`WebhookSecretMode`)
+### Webhook secret
 
-Three options for who decides on the per-subscription HMAC secret. Default is `WebhookSecretServer`.
+Per spec, `delivery.secret` is **client-supplied and REQUIRED** on every `events/subscribe` call. The format is `whsec_` + base64 of 24-64 random bytes (Standard Webhooks profile). The server validates the format at subscribe time and rejects malformed values with `-32602 InvalidParams`. The server stores the value as-is and signs every delivery with it; the receiver verifies with the same value.
 
-| Mode | Behavior | When to use |
-|---|---|---|
-| `WebhookSecretServer` (default) | Server always generates a fresh high-entropy secret; client-supplied `delivery.secret` is ignored. Returned in subscribe response. | Most cases. Avoids trusting client entropy. |
-| `WebhookSecretClient` | Client supplies `delivery.secret`; if empty, server generates one. | Pre-provisioned secrets (IaC, gateways with the secret in config). |
-| `WebhookSecretIdentity` | Secret is `HMAC(root, canonical(name, url, params))`. Subscribe is **idempotent** on the tuple — same inputs return the same `id` and `secret`, no duplicate registry entry. Requires `WithWebhookRoot`. | When subscriptions are agent-generated and you want deterministic, deduplicating identity. |
+The server does NOT generate or echo the secret — the client owns it from end to end. This closes a third-party-target abuse where, with server-generated secrets, anyone could subscribe with `url=<victim>` and the server would happily POST signed events to the victim. With client-supplied, HMAC proves "the endpoint owner asked for this delivery" rather than just "this came from the MCP server".
+
+Both client SDKs auto-generate a spec-conformant `whsec_` value when the application doesn't supply one:
+
+```go
+// Go: events.GenerateSecret() — also called automatically by Subscribe when opts.Secret == ""
+secret := events.GenerateSecret()
+
+# Python: generate_webhook_secret() — also called automatically by WebhookSubscription when secret == ""
+from events_client import generate_webhook_secret
+secret = generate_webhook_secret()
+```
 
 ### Header mode (`WebhookHeaderMode`)
 
@@ -180,17 +185,13 @@ The Python `events_client.py` receiver auto-detects which header set is on the i
 
 ### Unsubscribe
 
-Two equivalent forms — pick whichever is convenient. In Identity mode the secret form is preferred because the `id` is server-derived.
+Today: keyed on `(url, id)`. γ replaces this with the spec's `(principal, name, params, url)` tuple per the latest sketch.
 
 ```jsonc
-// By id (any mode):
-{"delivery": {"url": "https://...", "id": "sub-1"}}
-
-// By proof-of-possession of the secret (any mode):
-{"delivery": {"url": "https://...", "secret": "whsec_..."}}
+{"id": "sub-1", "delivery": {"url": "https://..."}}
 ```
 
-The registry method is `WebhookRegistry.Unregister(url, id)` or `WebhookRegistry.UnregisterBySecret(url, secret)`. The unsubscribe handler accepts either form.
+Registry method: `WebhookRegistry.Unregister(url, id)`.
 
 ## Client SDKs
 
@@ -260,7 +261,7 @@ for ev := range recv.Events() {
 
 ## Deployment
 
-For private-cloud / WAF-fronted deployments, see [`DEPLOYMENT.md`](DEPLOYMENT.md) — covers egress patterns, WAF allowlist guidance, SSRF guards, retry/backoff timing for proxy tuning, TTL refresh as keepalive, and master-root handling for Identity mode.
+For private-cloud / WAF-fronted deployments, see [`DEPLOYMENT.md`](DEPLOYMENT.md) — covers egress patterns, WAF allowlist guidance, SSRF guards, retry/backoff timing for proxy tuning, and TTL refresh as keepalive.
 
 ## Spec alignment
 

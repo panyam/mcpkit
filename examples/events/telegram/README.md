@@ -72,17 +72,14 @@ Telegram Bot (long-poll)  ──or──  POST /inject
 
 ## Server flag examples (outside the walkthrough)
 
-The walkthrough runs against the default server config. To exercise the other modes, pass flags to `make serve`:
+The walkthrough runs against the default server config. To exercise the legacy header mode, pass flags to `make serve`:
 
 ```bash
-# Identity mode — secret = HMAC(root, tuple); subscribe is idempotent
-go run . --serve -webhook-secret-mode identity -webhook-root deadbeefcafef00d
-
-# Opt out of the Standard Webhooks default back to X-MCP-* headers
+# Opt out of the Standard Webhooks default back to legacy X-MCP-* headers
 go run . --serve -webhook-header-mode mcp
 ```
 
-Full mode matrix in [`experimental/ext/events/README.md`](../../../experimental/ext/events/README.md).
+Per spec, the webhook signing secret is **client-supplied only** (`whsec_` + base64 of 24-64 random bytes). See [`experimental/ext/events/README.md`](../../../experimental/ext/events/README.md) for the full configuration reference.
 
 ## Make targets
 

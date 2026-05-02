@@ -111,13 +111,15 @@ Both helpers handle the boundary race: if a refresh hits the registry just after
 - If the network between the subscriber and the MCP server flaps, the refresh won't land and the registry will GC the subscription. A new `events/subscribe` once connectivity returns is the recovery path; expect a small gap in deliveries.
 - Sizing: 60 s default TTL × 0.5 refresh factor = one refresh call per subscription per 30 s. With 10K active subscriptions this is ~333 r/s of subscribe traffic — small but not zero.
 
-## Identity-mode considerations
+## Webhook secret considerations
 
-When running the registry with `WithWebhookSecretMode(events.WebhookSecretIdentity)`, the secret each subscription gets is derived from a server-side master root (`WithWebhookRoot`). Treat the root like a master credential:
+Per spec, the webhook signing secret is **client-supplied only** (`whsec_` + base64 of 24-64 random bytes per the Standard Webhooks profile). The server validates the format at `events/subscribe` time and stores the value as-is. The server does NOT generate or rotate secrets.
 
-- Provision via secrets manager (Vault, AWS Secrets Manager, GCP Secret Manager, K8s secret with appropriate restrictions) — **not** an env var checked into config.
-- **Rotate by deploying a new root.** All derived secrets rotate atomically. Plan for a brief overlap window where receivers may need to accept either old or new — the spec doesn't define a graceful rotation and this is operator territory.
-- The root file should be readable only by the MCP server process. Compromise of the root means compromise of every derived subscription secret.
+Operational notes:
+
+- **Receiver and subscriber must agree on the secret.** If they're the same process (e.g., a forward proxy that subscribes on its own behalf), this is automatic. If they're different — e.g., proxy receives, app subscribes — the subscriber must communicate the secret to the proxy out-of-band. SDKs auto-generate by default; surface the value via your secrets-manager / proxy-config path.
+- **Rotation is client-initiated.** Supply a new `whsec_` value on a refresh `events/subscribe` call. The server replaces the stored value; in-flight deliveries signed with the old secret will fail verification at the receiver. Spec describes a Standard-Webhooks dual-sign grace window for this case (not yet implemented in mcpkit; tracked under PR group ζ).
+- **Treat each `whsec_` value as a credential.** Provision via secrets manager (Vault, AWS Secrets Manager, GCP Secret Manager, K8s secret with appropriate restrictions) when subscribing programmatically. Compromise of one secret only compromises that subscription's deliveries — there's no master root.
 
 ## Connecting an MCP host
 
@@ -150,6 +152,6 @@ Before going live with a webhook-enabled events server in a private-cloud deploy
 - [ ] WAF / proxy idle timeouts > 25 s to survive the worst-case retry chain.
 - [ ] Receiver is idempotent on `event.eventId`.
 - [ ] Receiver returns 2xx for accept, 4xx for reject-permanently, 5xx for retry.
-- [ ] If using Identity mode, master root is in a secrets manager and rotation plan documented.
+- [ ] Webhook secrets (each subscription's `whsec_` value) reach the receiver via your secrets-management path; rotation procedure documented.
 - [ ] If using Standard Webhooks header mode, WAF allowlist has the `webhook-*` headers (not `X-MCP-*`).
 - [ ] Subscribers run an SDK that auto-refreshes (or have explicit refresh logic that fires before `refreshBefore`).

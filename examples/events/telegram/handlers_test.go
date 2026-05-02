@@ -259,7 +259,7 @@ func TestSubscribeReturnsRefreshBefore(t *testing.T) {
 	result, err := c.Call("events/subscribe", map[string]any{
 		"id":       "rb-test",
 		"name":     "telegram.message",
-		"delivery": map[string]any{"mode": "webhook", "url": "http://example.com/hook", "secret": "s"},
+		"delivery": map[string]any{"mode": "webhook", "url": "http://example.com/hook", "secret": events.GenerateSecret()},
 	})
 	require.NoError(t, err)
 
