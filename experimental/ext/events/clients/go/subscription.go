@@ -2,7 +2,6 @@ package eventsclient
 
 import (
 	"context"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"sync"
@@ -103,17 +102,19 @@ func Subscribe(parent context.Context, sess *client.Client, opts SubscribeOption
 	return s, nil
 }
 
-// ID returns the server-assigned subscription id (which may be derived in
-// Identity mode and differ from any SubID the caller supplied).
+// ID returns the subscription id the SDK supplied (echoed by the
+// server). γ replaces id-keyed subscription identity with the
+// (principal, name, params, url) tuple per spec.
 func (s *Subscription) ID() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.id
 }
 
-// Secret returns the secret the server is using to sign deliveries (which
-// may be server-generated or derived in Identity mode regardless of what
-// the caller supplied).
+// Secret returns the secret the SDK is using to sign deliveries —
+// either the value the caller passed in SubscribeOptions.Secret, or
+// the auto-generated whsec_ value the SDK produced when Secret was
+// empty. The receiver verifies signatures with this same value.
 func (s *Subscription) Secret() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -265,10 +266,3 @@ func (s *Subscription) nextRefreshDelay() time.Duration {
 	return wait
 }
 
-// EncodeRoot is a tiny helper for callers who want to pass a hex-encoded
-// master secret to a server in Identity mode (matching the demos'
-// -webhook-root flag). Returns the bytes in the shape NewWebhookRegistry
-// expects.
-func EncodeRoot(hexBytes string) ([]byte, error) {
-	return hex.DecodeString(hexBytes)
-}

@@ -105,17 +105,14 @@ Discord events have a richer structure than Telegram — nested author, optional
 The walkthrough runs against the default server config. To exercise the other modes, pass flags to `make serve`:
 
 ```bash
-# Identity mode — secret = HMAC(root, tuple); subscribe is idempotent
-go run . --serve -webhook-secret-mode identity -webhook-root deadbeefcafef00d
-
-# Client-supplied secrets (echoed back if non-empty, server-generated if empty)
-go run . --serve -webhook-secret-mode client
-
-# Opt out of the Standard Webhooks default back to X-MCP-* headers
+# Opt out of the Standard Webhooks default back to legacy X-MCP-* headers
 go run . --serve -webhook-header-mode mcp
+
+# Drive a short TTL to watch the SDK's auto-refresh behavior in real time
+go run . --serve -webhook-ttl 5s
 ```
 
-Full mode matrix in [`experimental/ext/events/README.md`](../../../experimental/ext/events/README.md).
+Per spec, the webhook signing secret is **client-supplied only** (`whsec_` + base64 of 24-64 random bytes). The python `make webhook` and the Go SDK both auto-generate when the application doesn't supply one. See [`experimental/ext/events/README.md`](../../../experimental/ext/events/README.md) for the full configuration reference.
 
 ## Make targets
 
