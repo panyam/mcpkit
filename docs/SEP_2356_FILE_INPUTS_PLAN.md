@@ -36,46 +36,32 @@ Two phases: core protocol support (Phase 1), then MCP Apps bridge integration
 
 ## Phase 1: Core protocol support
 
-### 1.1: Types
+### 1.1: Types ✅ shipped
 
-**Files:** `core/file_input.go` (new)
+**Files:** `core/file_input.go`, `core/protocol.go`
 
-- [ ] `FileInputDescriptor` struct:
-  ```go
-  type FileInputDescriptor struct {
-      Accept  []string `json:"accept,omitempty"`  // "image/*", ".pdf", "image/png"
-      MaxSize *int     `json:"maxSize,omitempty"` // max decoded bytes
-  }
-  ```
-- [ ] Add `FileInputs *struct{}` to `ClientCapabilities` in `core/protocol.go`
-- [ ] Helper: `HasFileInputs(ctx) bool` — checks client capability from context
+- [x] `FileInputDescriptor` struct with `Accept []string` + `MaxSize *int` (`omitempty` JSON tags).
+- [x] `FileInputs *struct{}` added to `ClientCapabilities`.
+- [x] `core.HasFileInputs(ctx) bool` helper.
+- [x] `core.FileInputSchemaKey = "x-mcp-file"` constant.
 
-### 1.2: Data URI helpers
+### 1.2: Data URI helpers ✅ shipped
 
-**Files:** `core/datauri.go` (new)
+**Files:** `core/datauri.go`, `core/datauri_test.go`
 
-- [ ] `EncodeDataURI(data []byte, mediaType, filename string) string`
-  — produces `data:<mediatype>;name=<pct-encoded-filename>;base64,<data>`
-- [ ] `DecodeDataURI(uri string) (data []byte, mediaType, filename string, err error)`
-  — parses RFC 2397 data URI, extracts media type, decoded filename, raw bytes
-- [ ] `IsDataURI(s string) bool` — quick prefix check
-- [ ] Validate: reject non-base64 data URIs (only base64 encoding supported per spec)
+- [x] `EncodeDataURI(data, mediaType, filename) string` (percent-encodes `name=` via `url.PathEscape`).
+- [x] `DecodeDataURI(uri) (data, mediaType, filename, err)` — defaults mediaType to `text/plain;charset=US-ASCII` per RFC 2397, preserves unknown media-type parameters, falls back to `RawStdEncoding` for tolerance.
+- [x] `IsDataURI(s) bool`.
+- [x] Sentinel errors: `ErrNotDataURI`, `ErrMalformedDataURI`, `ErrNonBase64DataURI`, `ErrInvalidDataURIName`.
+- [x] Tests cover round-trip, percent-encoded filenames, default media type, rejected non-base64 / non-data scheme / bad base64, capability JSON round-trip.
 
-**Test:** `core/datauri_test.go` — round-trip encode/decode, percent-encoded filenames
-with special chars, media type extraction, error cases (malformed, non-base64).
+### 1.3: Schema helpers for x-mcp-file ✅ shipped (alongside 1.1)
 
-### 1.3: Schema helpers for x-mcp-file
+**Files:** `core/file_input.go`, `core/file_input_test.go`
 
-**Files:** `core/file_input.go`
-
-Helpers for building tool inputSchemas with file input properties:
-
-- [ ] `FileInputProperty(desc FileInputDescriptor) map[string]any`
-  — returns `{"type": "string", "format": "uri", "x-mcp-file": desc}`
-- [ ] `FileInputArrayProperty(desc FileInputDescriptor) map[string]any`
-  — returns `{"type": "array", "items": {"type": "string", "format": "uri", "x-mcp-file": desc}}`
-- [ ] `ExtractFileInputDescriptor(schemaProp map[string]any) *FileInputDescriptor`
-  — extracts `x-mcp-file` from a schema property, returns nil if absent
+- [x] `FileInputProperty(desc) map[string]any` — `{"type":"string","format":"uri","x-mcp-file":desc}`.
+- [x] `FileInputArrayProperty(desc) map[string]any` — array of file-input items.
+- [x] `ExtractFileInputDescriptor(prop) *FileInputDescriptor` — handles both typed-value (`FileInputDescriptor` struct) and JSON-unmarshalled (`map[string]any`) shapes; the JSON path is needed when round-tripping schemas through `tools/list`.
 
 ### 1.4: Server-side validation
 
@@ -121,9 +107,16 @@ wrong MIME rejected, wildcard matching, extension matching.
 **Test:** `client/file_input_test.go` — extract descriptors from schema,
 encode file as data URI argument.
 
-### 1.7: Example + tests
+### 1.7: Example + tests 🟡 starter shipped (conformance pending)
 
-**Files:** `examples/file-inputs/` (new)
+**Files:** `examples/file-inputs/` (shipped: `main.go`, `walkthrough.go`, `Makefile`, `README.md`, `WALKTHROUGH.md`, `testdata/{pixel.png,contract.pdf,appendix.pdf,README.txt}`)
+
+- [x] Demokit walkthrough running against a real `make serve` MCP server.
+- [x] Three demo tools: `upload_image` (image/* + 5 MB cap), `analyze_documents` (array of PDFs), `process_any_file` (no filter).
+- [x] Embedded fixtures via `//go:embed testdata/...` so `make demo` is hermetic; readers can inspect / replace real files on disk.
+- [x] Optional `--file <path>` step exercises the on-disk → data URI path.
+- [x] VS Code MCP config in `examples/file-inputs/README.md`.
+- [ ] Conformance scenarios pending Phase 1.4–1.6 (oversized → `file_too_large`, wrong MIME → `file_type_not_accepted`, capability gating, multi-file arrays, percent-encoded filename round-trip).
 
 Example server with tools:
 - `upload_image` — accepts a single image file (`accept: ["image/*"]`, `maxSize: 5MB`)
