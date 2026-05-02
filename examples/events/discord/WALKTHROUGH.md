@@ -9,7 +9,7 @@ Walks through the four delivery modes of the experimental MCP Events extension (
 - **Push: inject a message, observe SSE notification** — The /inject endpoint is the demo's stand-in for a real Discord WebSocket handler; in production the bot's MessageCreate handler calls yield(). Either way, the YieldingSource fans out: the library installs an emit hook that broadcasts the event to all SSE subscribers.
 - **Poll: events/poll with the cursor we just saw** — Single-subscription per call (PR B removed batching). Polling at the head returns no new events but advances the cursor — the same response shape that would carry events if any had arrived since the last poll.
 - **Cursorless: inject a typing event, observe cursor:null on the wire** — WithoutCursors() sources don't buffer and emit cursor:null. Push and webhook fanout still work — there's just nothing to replay. Useful for ephemeral state (typing indicators, presence, current readings).
-- **Webhook: subscribe via the typed Go SDK, observe HMAC delivery + auto-refresh** — clients/go provides Subscription (subscribe + auto-refresh) plus Receiver[Data] (typed inbound channel). Subscribe blocks until the initial subscribe lands, so the caller has the server-assigned secret synchronously. Receiver[DiscordEventData] verifies signatures and decodes the wire envelope into the typed Data shape, so the consumer reads `ev.Data.Content` rather than re-parsing JSON.
+- **Webhook: subscribe via the typed Go SDK, observe HMAC delivery + auto-refresh** — clients/go provides Subscription (subscribe + auto-refresh) plus Receiver[Data] (typed inbound channel). Per spec, the HMAC signing secret is client-supplied — the SDK auto-generates a whsec_ value via events.GenerateSecret() when SubscribeOptions.Secret is empty, and exposes it via Subscription.Secret() so the receiver can verify with the same value. Receiver[DiscordEventData] verifies signatures and decodes the wire envelope into the typed Data shape, so the consumer reads `ev.Data.Content` rather than re-parsing JSON.
 - **Live Discord interaction (typing + message from a real Discord channel)** — Requires the server to be running with -token + the bot invited to a channel you can post in. The TypingStart handler in main.go yields a cursorless discord.typing event; MessageCreate yields the cursored discord.message. Discord's typing indicator fires once when you start (then refires every ~8s if you keep typing), not per keystroke. In --non-interactive mode this step skips the wait so CI runs aren't slowed.
 
 ## Flow
@@ -42,8 +42,8 @@ sequenceDiagram
 
     Note over Host,Receiver: Step 6: Webhook: subscribe via the typed Go SDK, observe HMAC delivery + auto-refresh
     Receiver->>Receiver: spin up local httptest receiver on :random
-    Host->>Server: events/subscribe { mode: webhook, url, secret: ignored }
-    Server-->>Host: { id, secret: <server-assigned>, refreshBefore }
+    Host->>Server: events/subscribe { mode: webhook, url, secret: whsec_<client-supplied> }
+    Server-->>Host: { id, refreshBefore }   (response does NOT echo secret per spec)
     Receiver->>Server: POST /inject (simulated message)
     Server-->>Receiver: POST <url> + HMAC signature headers (default: webhook-* per Standard Webhooks; opt-in: X-MCP-* via -webhook-header-mode mcp)
     Host-->>Host: background loop: re-subscribe at 0.5 × TTL
@@ -110,7 +110,7 @@ WithoutCursors() sources don't buffer and emit cursor:null. Push and webhook fan
 
 ### Step 6: Webhook: subscribe via the typed Go SDK, observe HMAC delivery + auto-refresh
 
-clients/go provides Subscription (subscribe + auto-refresh) plus Receiver[Data] (typed inbound channel). Subscribe blocks until the initial subscribe lands, so the caller has the server-assigned secret synchronously. Receiver[DiscordEventData] verifies signatures and decodes the wire envelope into the typed Data shape, so the consumer reads `ev.Data.Content` rather than re-parsing JSON.
+clients/go provides Subscription (subscribe + auto-refresh) plus Receiver[Data] (typed inbound channel). Per spec, the HMAC signing secret is client-supplied — the SDK auto-generates a whsec_ value via events.GenerateSecret() when SubscribeOptions.Secret is empty, and exposes it via Subscription.Secret() so the receiver can verify with the same value. Receiver[DiscordEventData] verifies signatures and decodes the wire envelope into the typed Data shape, so the consumer reads `ev.Data.Content` rather than re-parsing JSON.
 
 ### Step 7: Live Discord interaction (typing + message from a real Discord channel)
 

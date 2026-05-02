@@ -155,7 +155,7 @@ func runDemo() {
 	demo.Section("Why a separate telegram demo?",
 		"The two demos share the same `experimental/ext/events` library and the same wire protocol. The differences are only in the payload shape (telegram has flat `chat_id` / `text`; discord has nested `author` and richer fields) and the bot SDK used to source events (telegram's `tgbotapi` long-poll vs discord's `discordgo` WebSocket).",
 		"",
-		"For the full protocol exposition (events/list, poll, secret modes, header modes, the spec's design rationale) see [`examples/events/discord/WALKTHROUGH.md`](../discord/WALKTHROUGH.md).",
+		"For the full protocol exposition (events/list, poll, header modes, the spec's design rationale) see [`examples/events/discord/WALKTHROUGH.md`](../discord/WALKTHROUGH.md).",
 	)
 
 	var (
@@ -254,11 +254,11 @@ func runDemo() {
 	// --- Step 4: Webhook + auto-refresh via Go SDK ---
 	demo.Step("Webhook: subscribe via the typed Go SDK, receive a TelegramEventData").
 		Arrow("Receiver", "Receiver", "spin up local httptest receiver on :random").
-		Arrow("Host", "Server", "events/subscribe { mode: webhook, url, name: telegram.message }").
-		DashedArrow("Server", "Host", "{ id, secret: <server-assigned>, refreshBefore }").
+		Arrow("Host", "Server", "events/subscribe { mode: webhook, url, secret: whsec_<client-supplied>, name: telegram.message }").
+		DashedArrow("Server", "Host", "{ id, refreshBefore }   (response does NOT echo secret per spec)").
 		Arrow("Receiver", "Server", "POST /inject (simulated message)").
 		DashedArrow("Server", "Receiver", "POST <url> + HMAC signature headers (default: webhook-* per Standard Webhooks; opt-in: X-MCP-* via -webhook-header-mode mcp)").
-		Note("The typed Receiver[TelegramEventData] decodes the wire envelope's Data field directly into TelegramEventData, so the consumer reads `ev.Data.Text` rather than re-parsing JSON. Same `Subscription` + `Receiver[Data]` pair as the discord webhook step — the only differences are the type parameter and the payload field names.").
+		Note("The typed Receiver[TelegramEventData] decodes the wire envelope's Data field directly into TelegramEventData, so the consumer reads `ev.Data.Text` rather than re-parsing JSON. Same `Subscription` + `Receiver[Data]` pair as the discord webhook step — the only differences are the type parameter and the payload field names. Per spec, the SDK auto-generates a whsec_ secret when SubscribeOptions.Secret is empty (events.GenerateSecret).").
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			recv := eventsclient.NewReceiver[TelegramEventData]("")
 			defer recv.Close()
@@ -291,7 +291,7 @@ func runDemo() {
 				})
 			}()
 			recv.SetSecret(sub.Secret())
-			fmt.Printf("    server-assigned secret:  %s...\n", truncate(sub.Secret(), 16))
+			fmt.Printf("    SDK-generated secret:    %s...\n", truncate(sub.Secret(), 16))
 			fmt.Printf("    refreshBefore:           %s\n", sub.RefreshBefore().Format(time.RFC3339))
 
 			body := map[string]any{
@@ -368,7 +368,7 @@ func runDemo() {
 		})
 
 	demo.Section("More",
-		"For the full protocol walkthrough (events/list, poll, secret modes, header modes, the spec's design rationale) see [`examples/events/discord/WALKTHROUGH.md`](../discord/WALKTHROUGH.md).",
+		"For the full protocol walkthrough (events/list, poll, header modes, the spec's design rationale) see [`examples/events/discord/WALKTHROUGH.md`](../discord/WALKTHROUGH.md).",
 		"",
 		"Both demos share `experimental/ext/events` (library), `clients/go/` (Go SDK), and `clients/python/events_client.py` (Python SDK).",
 	)
