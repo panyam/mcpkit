@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/panyam/mcpkit/client"
+	"github.com/panyam/mcpkit/experimental/ext/events"
 )
 
 // SubscribeOptions configures a Subscription at startup.
@@ -75,6 +76,13 @@ func Subscribe(parent context.Context, sess *client.Client, opts SubscribeOption
 	}
 	if opts.RefreshFactor >= 1 {
 		return nil, fmt.Errorf("eventsclient: RefreshFactor must be < 1 (got %g) — refreshing at TTL or later races the boundary", opts.RefreshFactor)
+	}
+	// Spec mandates client-supplied delivery.secret (whsec_ + base64 of
+	// 24-64 random bytes). Auto-generate on the application's behalf
+	// when the caller didn't supply one — Standard Webhooks profile
+	// recommends generating from a CSPRNG by default.
+	if opts.Secret == "" {
+		opts.Secret = events.GenerateSecret()
 	}
 
 	s := &Subscription{

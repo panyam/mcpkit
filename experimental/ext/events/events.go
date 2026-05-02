@@ -350,10 +350,19 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 			return core.NewErrorResponse(id, ErrCodeInvalidCallbackUrl, err.Error())
 		}
 
-		// Spec: delivery.secret is client-supplied. The registry stores it
-		// as-is. Format validation (whsec_ + base64 of 24-64 random bytes
-		// per spec) lands in the next commit; for now we accept any
-		// non-empty value to keep the build green.
+		// Spec: delivery.secret is REQUIRED, client-supplied, and MUST
+		// match whsec_ + base64 of 24-64 random bytes. Reject malformed
+		// values at subscribe time rather than creating a subscription
+		// that produces unverifiable deliveries.
+		if req.Delivery.Secret == "" {
+			return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
+				"delivery.secret is required (must be whsec_<base64 of 24-64 random bytes>)")
+		}
+		if err := validateClientSecret(req.Delivery.Secret); err != nil {
+			return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
+				"delivery.secret invalid: "+err.Error())
+		}
+
 		expiresAt := webhooks.Register(req.ID, req.Delivery.URL, req.Delivery.Secret)
 
 		// Resolve `cursor: null` to the source's current head ("from now")
