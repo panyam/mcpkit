@@ -200,15 +200,15 @@ func TestE2EWebhookDelivery(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Spec: server stores client-supplied secret as-is. The response
-	// echoes it back today (commit 3 will drop the field per spec).
+	// Spec: subscribe response carries id but does NOT echo the secret.
+	// The client already supplied it; receiver verifies with that value.
 	var subResp struct {
 		ID     string `json:"id"`
 		Secret string `json:"secret"`
 	}
 	require.NoError(t, json.Unmarshal(subResult.Raw, &subResp))
 	assert.Equal(t, "wh-e2e", subResp.ID)
-	require.Equal(t, clientSecret, subResp.Secret, "server stores and (currently) echoes the client-supplied secret")
+	require.Empty(t, subResp.Secret, "subscribe response must NOT carry a secret field per spec")
 	mu.Lock()
 	assignedSecret = clientSecret
 	mu.Unlock()

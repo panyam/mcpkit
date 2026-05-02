@@ -56,6 +56,57 @@ func stack(t *testing.T, whOpts ...events.WebhookOption) (*client.Client, func(f
 	return c, yield, webhooks
 }
 
+// TestSubscribe_AutoGeneratesSecretWhenEmpty verifies the spec contract
+// the SDK upholds for application convenience: when SubscribeOptions.Secret
+// is empty, the SDK CSPRNG-generates a spec-conformant whsec_ secret and
+// both supplies it to the server AND uses it locally so the receiver can
+// verify with the same value via Subscription.Secret(). Without this, an
+// SDK user who forgets to set Secret would get a -32602 InvalidParams
+// from the server (since the secret is REQUIRED per spec).
+func TestSubscribe_AutoGeneratesSecretWhenEmpty(t *testing.T) {
+	c, _, _ := stack(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
+		EventName:   "fake.event",
+		CallbackURL: "http://localhost:1/sink",
+		SubID:       "auto-gen-test",
+		// Secret intentionally omitted → SDK auto-generates
+	})
+	require.NoError(t, err)
+	defer sub.Stop()
+
+	got := sub.Secret()
+	require.True(t, len(got) > 30 && got[:6] == "whsec_",
+		"SDK must auto-generate a whsec_ value when Secret is empty; got %q", got)
+}
+
+// TestSubscribe_PreservesCallerSuppliedSecret verifies that when the
+// application DOES supply a secret, the SDK uses it as-is rather than
+// auto-generating a different one. Subscription.Secret() returns the
+// caller's value so the receiver and the signer agree.
+func TestSubscribe_PreservesCallerSuppliedSecret(t *testing.T) {
+	c, _, _ := stack(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	supplied := events.GenerateSecret()
+	sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
+		EventName:   "fake.event",
+		CallbackURL: "http://localhost:1/sink",
+		SubID:       "preserve-test",
+		Secret:      supplied,
+	})
+	require.NoError(t, err)
+	defer sub.Stop()
+
+	assert.Equal(t, supplied, sub.Secret(),
+		"SDK must preserve caller-supplied secret, not generate a new one")
+}
+
 // TestSubscribe_AutoRefreshFiresWithinShortTTL verifies the background
 // refresh loop calls OnRefresh at least twice (initial + at least one
 // scheduled refresh) within a short test window. Validates the SDK actually

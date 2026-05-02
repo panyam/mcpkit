@@ -191,15 +191,17 @@ func TestE2EWebhookDelivery(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, webhooks.Targets(), 1)
 
-	// Spec: server stores the client-supplied secret as-is. The response
-	// echoes it back today (commit 3 will drop the field per spec —
-	// client already knows the value it supplied, no need for the server
-	// to return it).
+	// Spec: subscribe response does NOT echo the secret. The client
+	// already knows the value it supplied; echoing risks leaks via
+	// proxies / logs / IDE network panes during development. The
+	// receiver verifies signatures using the value the client sent.
 	var subResp struct {
 		Secret string `json:"secret"`
 	}
 	require.NoError(t, json.Unmarshal(subResult.Raw, &subResp))
-	require.Equal(t, clientSecret, subResp.Secret, "server stores and (currently) echoes the client-supplied secret")
+	require.Empty(t, subResp.Secret, "subscribe response must NOT carry a secret field per spec")
+	require.NotEmpty(t, subResult.Raw, "response should still have other fields")
+	_ = subResult
 	mu.Lock()
 	assignedSecret = clientSecret
 	mu.Unlock()

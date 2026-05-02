@@ -20,9 +20,11 @@ Common flags:
 """
 
 import argparse
+import base64
 import hashlib
 import hmac
 import json
+import os
 import sys
 import textwrap
 import threading
@@ -31,6 +33,14 @@ from datetime import datetime, timezone
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
+
+
+def generate_webhook_secret() -> str:
+    """Returns a Standard-Webhooks-shaped client-supplied secret:
+    `whsec_` + base64 of 32 random bytes (256 bits, well inside the
+    spec-mandated 24-64 byte range). Mirrors events.GenerateSecret() in
+    the Go SDK so both SDKs produce the same shape."""
+    return "whsec_" + base64.urlsafe_b64encode(os.urandom(32)).rstrip(b"=").decode("ascii")
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -265,7 +275,7 @@ class WebhookSubscription:
         session,
         event_name: str,
         callback_url: str,
-        secret: str,
+        secret: str = "",
         sub_id: str = "wh-sub",
         refresh_factor: float = 0.5,
         on_event: callable = None,
@@ -273,6 +283,10 @@ class WebhookSubscription:
         on_recover: callable = None,
     ):
         """
+        secret: client-supplied HMAC signing secret. Per spec, must be
+                whsec_ + base64 of 24-64 random bytes. If empty, the SDK
+                auto-generates a spec-conformant value via
+                generate_webhook_secret().
         on_refresh: called after each successful refresh (including the initial
                     subscribe and any post-recovery re-subscribe). Receives no args.
         on_recover: called when a refresh fails (subscription expired) and a
@@ -282,7 +296,7 @@ class WebhookSubscription:
         self.session = session
         self.event_name = event_name
         self.callback_url = callback_url
-        self.secret = secret
+        self.secret = secret if secret else generate_webhook_secret()
         self.sub_id = sub_id
         self.refresh_factor = refresh_factor
         self.on_event = on_event
@@ -398,10 +412,11 @@ def _verify_signature(headers, body: bytes, secret: str) -> bool:
 
 
 def _make_webhook_handler(secret_holder):
-    """secret_holder is a list with one element — `secret_holder[0]` — so the
-    handler reads the live secret on every request. cmd_webhook updates the
-    holder after subscribe returns the server-assigned secret (which may
-    differ from anything the client supplied, depending on secret mode)."""
+    """secret_holder is a list with one element — `secret_holder[0]` —
+    even though the secret no longer changes mid-flight under the spec
+    (client-supplied only, no server-side rotation). The list-of-one
+    indirection is kept so the handler closure doesn't need a mutex on
+    the rare case of a future secret rotation feature."""
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
             length = int(self.headers.get("Content-Length", 0))
@@ -442,11 +457,20 @@ def cmd_webhook(session: MCPSession, args):
 
     print("=== MCP Events — Webhook Receiver ===\n")
 
-    # Start local receiver first. The verification secret lives in a
-    # one-element list so we can swap in the server-assigned secret after
-    # subscribe returns (Server / Identity modes generate or derive the
-    # secret server-side; Client mode echoes the supplied one).
-    secret_holder = [args.secret]
+    # Subscription owns the secret (auto-generated if --secret omitted,
+    # else uses the supplied value). Pass it to the receiver via a
+    # single-element list so the closure reads the live value (allows
+    # for future rotation features without mutex juggling).
+    sub = WebhookSubscription(
+        session,
+        event_name=args.event,
+        callback_url=hook_url,
+        secret=args.secret,  # empty → SDK auto-generates a whsec_ value
+        sub_id="wh-demo",
+        refresh_factor=args.refresh_factor,
+    )
+    secret_holder = [sub.secret]
+
     print(f"Starting webhook receiver on port {args.port}...")
     server = HTTPServer(("", args.port), _make_webhook_handler(secret_holder))
     threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -460,23 +484,11 @@ def cmd_webhook(session: MCPSession, args):
     def on_refresh():
         refresh_count[0] += 1
         print(f"  [auto-refresh] subscription refreshed (count={refresh_count[0]})", flush=True)
+    sub.on_refresh = on_refresh
 
-    sub = WebhookSubscription(
-        session,
-        event_name=args.event,
-        callback_url=hook_url,
-        secret=args.secret,
-        sub_id="wh-demo",
-        refresh_factor=args.refresh_factor,
-        on_refresh=on_refresh,
-    )
     result = sub.start()
-    # Adopt whatever secret the server returned — handles Server / Identity
-    # modes where the client-supplied secret is ignored.
-    if result.get("secret"):
-        secret_holder[0] = result["secret"]
-        if result["secret"] != args.secret:
-            print(f"  using server-assigned secret (mode is not 'client'): {result['secret'][:16]}...")
+    if not args.secret:
+        print(f"  using SDK-generated secret: {sub.secret[:16]}...")
     if result.get("id"):
         print(f"  subscription: {result['id']}")
     if result.get("refreshBefore"):
@@ -561,7 +573,7 @@ def main():
 
     wp = sub.add_parser("webhook", help="Webhook receiver (auto-refreshes subscription)")
     wp.add_argument("--port", type=int, default=9999, help="Local receiver port")
-    wp.add_argument("--secret", default="demo-webhook-secret", help="HMAC shared secret")
+    wp.add_argument("--secret", default="", help="HMAC signing secret (whsec_ + base64 of 24-64 bytes per spec). Empty → SDK auto-generates.")
     wp.add_argument("--refresh-factor", type=float, default=0.5,
                     help="Refresh subscription at this fraction of TTL (default 0.5)")
 

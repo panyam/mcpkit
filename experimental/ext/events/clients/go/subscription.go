@@ -20,18 +20,18 @@ type SubscribeOptions struct {
 	// CallbackURL is the publicly-reachable URL the server will POST to.
 	CallbackURL string
 
-	// Secret is the client-supplied shared secret. Honored in Client mode;
-	// ignored in Server / Identity modes (server returns its own).
+	// Secret is the client-supplied HMAC signing secret. Per spec, must
+	// be whsec_ + base64 of 24-64 random bytes. If empty, the SDK
+	// auto-generates a spec-conformant value via events.GenerateSecret().
+	// Subscription.Secret() returns the value the SDK ended up using
+	// (supplied or generated) — the receiver verifies signatures
+	// against this same value.
 	Secret string
 
-	// SubID is the client-side subscription id. Optional; ignored in
-	// Identity mode (server derives an id from the tuple).
+	// SubID is the client-side subscription id (for now; γ replaces
+	// id-keyed subscription identity with the (principal, name, params,
+	// url) tuple per spec).
 	SubID string
-
-	// Params is the identity-mode tuple input. Ignored in Server / Client
-	// modes. Same map for two subscribe calls produces the same id+secret
-	// in Identity mode (idempotent subscribe).
-	Params map[string]string
 
 	// Cursor controls the resume point. nil = "from now" (server returns
 	// its current head). Non-nil = explicit resume cursor.
@@ -164,7 +164,6 @@ func (s *Subscription) subscribe() error {
 			"mode":   "webhook",
 			"url":    s.opts.CallbackURL,
 			"secret": s.opts.Secret,
-			"params": s.opts.Params,
 		},
 	}
 	if s.opts.Cursor != nil {
@@ -179,9 +178,10 @@ func (s *Subscription) subscribe() error {
 		return err
 	}
 
+	// Per spec the response no longer carries `secret` — the SDK
+	// already knows the value it supplied (s.opts.Secret).
 	var result struct {
 		ID            string  `json:"id"`
-		Secret        string  `json:"secret"`
 		Cursor        *string `json:"cursor"`
 		RefreshBefore string  `json:"refreshBefore"`
 	}
@@ -196,7 +196,7 @@ func (s *Subscription) subscribe() error {
 
 	s.mu.Lock()
 	s.id = result.ID
-	s.secret = result.Secret
+	s.secret = s.opts.Secret
 	s.cursor = result.Cursor
 	s.refreshBefore = rb
 	s.mu.Unlock()
