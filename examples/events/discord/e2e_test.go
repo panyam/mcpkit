@@ -37,9 +37,10 @@ func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.Yie
 	registerResources(srv, source)
 	registerTools(srv, nil) // nil session = test mode
 	events.Register(events.Config{
-		Sources:  []events.EventSource{source, typingSource},
-		Webhooks: webhooks,
-		Server:   srv,
+		Sources:                  []events.EventSource{source, typingSource},
+		Webhooks:                 webhooks,
+		Server:                   srv,
+		UnsafeAnonymousPrincipal: "test-principal", // tests don't wire auth; γ-2 spec gate would reject otherwise
 	})
 
 	return srv, source, yield, webhooks
@@ -59,9 +60,10 @@ func buildTestStackWithTyping(whOpts ...events.WebhookOption) (*server.Server, f
 	registerResources(srv, source)
 	registerTools(srv, nil)
 	events.Register(events.Config{
-		Sources:  []events.EventSource{source, typingSource},
-		Webhooks: webhooks,
-		Server:   srv,
+		Sources:                  []events.EventSource{source, typingSource},
+		Webhooks:                 webhooks,
+		Server:                   srv,
+		UnsafeAnonymousPrincipal: "test-principal",
 	})
 	return srv, yield, yieldTyping, webhooks
 }

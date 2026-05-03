@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -49,9 +50,10 @@ func newConnectedClient(t *testing.T, source *events.YieldingSource[TelegramEven
 	registerResources(srv, source)
 	(&ToolDelivery{Bot: nil}).Register(srv)
 	events.Register(events.Config{
-		Sources:  []events.EventSource{source},
-		Webhooks: webhooks,
-		Server:   srv,
+		Sources:                  []events.EventSource{source},
+		Webhooks:                 webhooks,
+		Server:                   srv,
+		UnsafeAnonymousPrincipal: "test-principal",
 	})
 
 	handler := srv.Handler(server.WithStreamableHTTP(true))
@@ -195,7 +197,10 @@ func TestWebhookHMACSignature_MCPHeaders(t *testing.T) {
 	defer srv.Close()
 
 	webhooks := events.NewWebhookRegistry(events.WithWebhookHeaderMode(events.MCPHeaders))
-	webhooks.Register("hmac-test", srv.URL, secret)
+	// Direct registry poke (skip the JSON-RPC subscribe handler) — γ-2
+	// rekeyed Register on canonical-tuple bytes. Use a stub key for the
+	// HMAC delivery test; the canonical-key contents don't matter here.
+	webhooks.Register([]byte("hmac-test"), "sub_hmac_test", srv.URL, secret)
 
 	event := events.MakeEvent("telegram.message", "evt_1", "1", time.Now(),
 		map[string]string{"text": "hello"})
@@ -268,7 +273,9 @@ func TestSubscribeReturnsRefreshBefore(t *testing.T) {
 		RefreshBefore string `json:"refreshBefore"`
 	}
 	require.NoError(t, json.Unmarshal(result.Raw, &resp))
-	assert.Equal(t, "rb-test", resp.ID)
+	// γ-2: server-derived id replaces client-supplied id per spec
+	// §"Subscription Identity" → "Derived id" L367.
+	assert.True(t, strings.HasPrefix(resp.ID, "sub_"), "id must be server-derived sub_<base64>; got %q", resp.ID)
 	assert.NotEmpty(t, resp.RefreshBefore)
 
 	rb, err := time.Parse(time.RFC3339, resp.RefreshBefore)
@@ -276,27 +283,33 @@ func TestSubscribeReturnsRefreshBefore(t *testing.T) {
 	assert.True(t, rb.After(time.Now()))
 }
 
-// TestWebhookKeyedByURLAndID verifies (url, id) composite keying — two
-// distinct subscriptions to the same URL coexist.
-func TestWebhookKeyedByURLAndID(t *testing.T) {
+// TestWebhookKeyedByCanonicalTuple verifies γ-2 registry keying: two
+// distinct canonical keys (different principals subscribing to the same
+// URL) coexist as distinct entries; Unregister by canonical key removes
+// only the matching entry. This is the spec's cross-tenant isolation
+// property (§"Subscription Identity" → "Cross-tenant isolation" L378)
+// at the registry level.
+func TestWebhookKeyedByCanonicalTuple(t *testing.T) {
 	webhooks := events.NewWebhookRegistry()
-	webhooks.Register("sub-1", "http://example.com/hook", "secret-1")
-	webhooks.Register("sub-2", "http://example.com/hook", "secret-2")
+	keyA := []byte("alice\x1fhttp://example.com/hook\x1ftelegram.message\x1f{}")
+	keyB := []byte("bob\x1fhttp://example.com/hook\x1ftelegram.message\x1f{}")
+	webhooks.Register(keyA, "sub_alice", "http://example.com/hook", "whsec_secret-1")
+	webhooks.Register(keyB, "sub_bob", "http://example.com/hook", "whsec_secret-2")
 
 	targets := webhooks.Targets()
 	assert.Len(t, targets, 2)
 
-	webhooks.Unregister("http://example.com/hook", "sub-1")
+	webhooks.Unregister(keyA)
 	targets = webhooks.Targets()
 	assert.Len(t, targets, 1)
-	assert.Equal(t, "sub-2", targets[0].ID)
+	assert.Equal(t, "sub_bob", targets[0].ID, "unregister(keyA) must leave keyB intact")
 }
 
 // TestWebhookTTLExpiry verifies the test-helper ExpireAll path does what
 // it claims — used by other tests that exercise post-TTL behavior.
 func TestWebhookTTLExpiry(t *testing.T) {
 	webhooks := events.NewWebhookRegistry()
-	webhooks.Register("exp-test", "http://example.com/hook", "secret")
+	webhooks.Register([]byte("exp-test"), "sub_exp", "http://example.com/hook", "whsec_secret")
 	assert.Len(t, webhooks.Targets(), 1)
 
 	webhooks.ExpireAll()
@@ -323,7 +336,7 @@ func TestWebhookRetryOnServerError(t *testing.T) {
 	defer srv.Close()
 
 	webhooks := events.NewWebhookRegistry()
-	webhooks.Register("retry-test", srv.URL, "secret")
+	webhooks.Register([]byte("retry-test"), "sub_retry", srv.URL, "whsec_secret")
 
 	event := events.MakeEvent("telegram.message", "evt_retry", "1", time.Now(),
 		map[string]string{"text": "retry me"})
@@ -351,7 +364,7 @@ func TestWebhookNoRetryOn4xx(t *testing.T) {
 	defer srv.Close()
 
 	webhooks := events.NewWebhookRegistry()
-	webhooks.Register("no-retry", srv.URL, "secret")
+	webhooks.Register([]byte("no-retry"), "sub_no_retry", srv.URL, "whsec_secret")
 
 	event := events.MakeEvent("telegram.message", "evt_4xx", "1", time.Now(),
 		map[string]string{"text": "no retry"})
