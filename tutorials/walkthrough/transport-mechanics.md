@@ -104,16 +104,38 @@ How they nest:
 
 ### Worked example: a tool call with progress, plus an unrelated push
 
-Concrete scenario to anchor every layer at once. You're in an active chat. Session `abc123` is live; the standing GET is open and idle. The model decides to call `jira_search`.
+Concrete scenario to anchor every layer at once.
 
-**1. Client → Server** — one HTTP request (POST), one JSON-RPC message in the body:
+**Setup — what brought the session to this moment.** Earlier in the chat (could have been seconds or hours ago):
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant S as Server
+    Note over C,S: HTTP request #1 — initialize handshake
+    C->>S: POST · {id:1, method:"initialize", params:{caps,...}}
+    S-->>C: 200 OK · Mcp-Session-Id: abc123<br/>{id:1, result:{caps, serverInfo,...}}
+    Note over C,S: HTTP request #2 — barrier
+    C->>S: POST · {method:"notifications/initialized"}
+    S-->>C: 202 Accepted (no body)
+    Note over C,S: HTTP request #3 — discovery
+    C->>S: POST · {id:2, method:"tools/list"}
+    S-->>C: 200 OK · {id:2, result:{tools:[..., jira_search, ...]}}
+    Note over C,S: HTTP request #4 — open standing back-channel
+    C->>S: GET · Accept: text/event-stream
+    S-->>C: 200 OK · Content-Type: text/event-stream<br/>(stream stays open)
+```
+
+Three POSTs and one GET so far. The session is live, the tools catalog is cached on the host, and the standing GET (HTTP request #4) is open and mostly idle — listening, with occasional pushes as things change on the server. Time passes. The user types something; the model decides to call `jira_search`.
+
+**The live moment — HTTP request #5 starts.** Client → Server, one HTTP request (POST), one JSON-RPC message in the body:
 
 ```http
-POST /mcp HTTP/1.1                                ← HTTP request #1 (POST)
+POST /mcp HTTP/1.1                                ← HTTP request #5 (POST tools/call)
 Mcp-Session-Id: abc123                            ← session layer
 Accept: application/json, text/event-stream
 
-{                                                  ← JSON-RPC message #1 (request, client's id space)
+{                                                  ← JSON-RPC message (request, client's id space)
   "jsonrpc": "2.0",
   "id": 7,
   "method": "tools/call",
@@ -121,10 +143,10 @@ Accept: application/json, text/event-stream
 }
 ```
 
-**2. Server → Client, on the same HTTP request** — response upgrades to SSE; the handler emits two progress notifications, then the final response:
+**Server → Client, on the same HTTP request** — response upgrades to SSE; the handler emits two progress notifications, then the final response:
 
 ```http
-HTTP/1.1 200 OK                                   ← still HTTP request #1, response side
+HTTP/1.1 200 OK                                   ← still HTTP request #5, response side
 Content-Type: text/event-stream
 Mcp-Session-Id: abc123
 
@@ -138,13 +160,13 @@ id: 3                                              ← SSE event #3
 data: {"jsonrpc":"2.0","id":7,"result":{...}}     ← JSON-RPC response, id 7 matches request
 ```
 
-Stream closes after event 3. HTTP request #1 is now complete.
+Stream closes after event 3. HTTP request #5 is now complete.
 
-**3. Meanwhile, on the standing GET** — a *different* HTTP request opened earlier, after `initialize`. The server pushes an unrelated notification because some resource changed on its end:
+**Meanwhile, on the standing GET (HTTP request #4, still open from bring-up).** The server pushes an unrelated notification because some resource changed on its end:
 
 ```http
-                                                   ← HTTP request #2 (the GET, already open)
-id: 42                                             ← SSE event id, this stream's own counter
+                                                   ← HTTP request #4 (the GET, still open)
+id: 42                                             ← SSE event id on this stream's own counter
 data: {"jsonrpc":"2.0","method":"notifications/resources/list_changed","params":{}}
 ```
 
@@ -152,20 +174,20 @@ The GET keeps running; the next push will be event 43.
 
 **Reading the layers off this scenario:**
 
-| Layer | Count | Identifiers in this scenario |
-|-------|-------|------------------------------|
-| MCP session | 1 | `abc123` (on every HTTP request header) |
-| HTTP request | 2 | POST (#1), standing GET (#2) — both client-opened |
-| SSE event | 4 | POST stream: 1, 2, 3 · GET stream: 42 — local counters per stream |
-| JSON-RPC message | 5 | tool-call req `id=7`, 2 progress notifs, tool-call resp `id=7`, list_changed notif |
+| Layer | Count (session so far) | Identifiers |
+|-------|------------------------|-------------|
+| MCP session | 1 | `abc123` (on every HTTP request header from #2 onward; #1 is the request that *issues* it) |
+| HTTP request | 5 total · 2 active in the live moment | #1 initialize POST (closed) · #2 initialized POST (closed) · #3 tools/list POST (closed) · #4 standing GET (open) · #5 tool-call POST (open until SSE closes) |
+| SSE event | 4 in the live moment | POST #5 stream: 1, 2, 3 · GET #4 stream: 42 — independent counters per stream |
+| JSON-RPC message | 10 since session start, 5 in the live moment | Setup: initialize req+resp `id=1`, initialized notif, tools/list req+resp `id=2`. Live: tool-call req `id=7`, 2 progress notifs, tool-call resp `id=7`, list_changed notif. |
 
 Things to notice:
 
-- **`Mcp-Session-Id: abc123`** appears on each HTTP request header exactly once. Never inside a JSON-RPC message body.
-- **JSON-RPC `id=7`** appears on the request and the response — that's the correlation. The two progress notifications and the list_changed notification have no JSON-RPC id at all.
-- **SSE `id:` lines** are independent counters per stream. The POST stream's "1, 2, 3" and the GET stream's "42" don't relate. They exist solely for `Last-Event-ID` replay if the stream drops.
-- **One HTTP request can carry many JSON-RPC messages.** The upgraded POST stream carried four (the request that opened it, plus three from the server). Still one HTTP request.
-- **Two HTTP requests, one session.** The POST and the GET are separate HTTP transactions on the same session id.
+- **`Mcp-Session-Id: abc123`** appears on each HTTP request header exactly once, on #2 onward — #1 is the request that *issues* it. Never inside a JSON-RPC message body.
+- **JSON-RPC ids restart per direction, not per HTTP request.** The client used `id=1`, `id=2` during setup, then jumped to `id=7` for the tool call (other client-originated work in the gap, or just non-monotonic allocation — the client picks; gaps are fine). Notifications carry no `id`.
+- **SSE `id:` lines** are independent counters per stream. The POST #5 stream's "1, 2, 3" and the GET #4 stream's "42" don't relate. They exist solely for `Last-Event-ID` replay if the stream drops.
+- **One HTTP request can carry many JSON-RPC messages.** The upgraded POST #5 carried four (the tool-call request that opened it, plus three from the server). Still one HTTP request.
+- **Five HTTP requests on the same session, and counting.** A real chat might run for hours and accumulate dozens or hundreds — every tool call is its own POST, the standing GET runs through all of it, eventually a DELETE closes the session (or the host just walks away).
 
 ### POST: client→server (with optional streaming response)
 
