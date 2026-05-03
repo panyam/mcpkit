@@ -16,7 +16,8 @@ Use this to:
 
 | Page | Kind | Preconditions | End-state (summary) | Leads to |
 |------|------|---------------|---------------------|----------|
-| [README](./README.md) | meta | — | conventions known; reader can navigate | — |
+| [README](./README.md) | meta | — | reader knows where to start and where to find conventions / graph | — |
+| [STRUCTURE](./STRUCTURE.md) | meta | — | author/reader knows the DAG model, root contract, note-block roles, branch-point convention, target-shape tracking | — |
 | [bring-up](./bringup.md) | root | none (foundational) | session live; transport chosen; auth resolved; protocol version + capabilities locked; `initialized` sent | transport-mechanics; (forthcoming) per-request anatomy; (forthcoming) re-init / resumption |
 | [transport-mechanics](./transport-mechanics.md) | root | none (foundational) | wire format known per transport; SSE upgrade vs. standing GET understood; JSON-RPC correlation + per-direction ID spaces understood; reverse-call origination constraint understood (handler-scoped, not on-wire) | (forthcoming) per-request anatomy; (forthcoming) reverse-call; (forthcoming) tasks; SSE resumption (leaf) |
 
