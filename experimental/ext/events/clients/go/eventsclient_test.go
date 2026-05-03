@@ -73,7 +73,6 @@ func TestSubscribe_AutoGeneratesSecretWhenEmpty(t *testing.T) {
 	sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
 		EventName:   "fake.event",
 		CallbackURL: "http://localhost:1/sink",
-		SubID:       "auto-gen-test",
 		// Secret intentionally omitted → SDK auto-generates
 	})
 	require.NoError(t, err)
@@ -98,7 +97,6 @@ func TestSubscribe_PreservesCallerSuppliedSecret(t *testing.T) {
 	sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
 		EventName:   "fake.event",
 		CallbackURL: "http://localhost:1/sink",
-		SubID:       "preserve-test",
 		Secret:      supplied,
 	})
 	require.NoError(t, err)
@@ -122,7 +120,6 @@ func TestSubscribe_AutoRefreshFiresWithinShortTTL(t *testing.T) {
 	sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
 		EventName:     "fake.event",
 		CallbackURL:   "http://localhost:1/sink",
-		SubID:         "refresh-test",
 		RefreshFactor: 0.4,
 		OnRefresh:     func() { atomic.AddInt32(&refreshes, 1) },
 	})
@@ -166,7 +163,6 @@ func TestReceiver_DeliversTypedEvents(t *testing.T) {
 	sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
 		EventName:   "fake.event",
 		CallbackURL: hookSrv.URL,
-		SubID:       "recv-test",
 	})
 	require.NoError(t, err)
 	defer sub.Stop()
@@ -203,7 +199,6 @@ func TestReceiver_RejectsBadSignature(t *testing.T) {
 	sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
 		EventName:   "fake.event",
 		CallbackURL: hookSrv.URL,
-		SubID:       "badsig-test",
 	})
 	require.NoError(t, err)
 	defer sub.Stop()
@@ -237,7 +232,6 @@ func TestReceiver_AcceptsStandardWebhooksHeaders(t *testing.T) {
 	sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
 		EventName:   "fake.event",
 		CallbackURL: hookSrv.URL,
-		SubID:       "stdwh-test",
 	})
 	require.NoError(t, err)
 	defer sub.Stop()
@@ -290,7 +284,6 @@ func TestReceiver_DropsOnFullChannel(t *testing.T) {
 	sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
 		EventName:   "fake.event",
 		CallbackURL: hookSrv.URL,
-		SubID:       "drop-test",
 	})
 	require.NoError(t, err)
 	defer sub.Stop()
@@ -318,7 +311,6 @@ func TestSubscribe_StopsOnContextCancel(t *testing.T) {
 	sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
 		EventName:     "fake.event",
 		CallbackURL:   "http://localhost:1/sink",
-		SubID:         "ctx-cancel-test",
 		RefreshFactor: 0.4,
 		OnRefresh:     func() { atomic.AddInt32(&refreshes, 1) },
 	})
@@ -342,7 +334,6 @@ func TestSubscribe_StopIsIdempotent(t *testing.T) {
 	sub, err := eventsclient.Subscribe(context.Background(), c, eventsclient.SubscribeOptions{
 		EventName:   "fake.event",
 		CallbackURL: "http://localhost:1/sink",
-		SubID:       "stop-twice-test",
 	})
 	require.NoError(t, err)
 	sub.Stop()

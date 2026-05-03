@@ -375,6 +375,13 @@ func resolvePrincipal(ctx core.MethodContext, unsafeAnon string) (string, bool) 
 func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, webhooks *WebhookRegistry, unsafeAnon string) {
 	srv.HandleMethod("events/subscribe", func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		var req struct {
+			// ID is parsed only to surface a helpful error if a client
+			// sends the legacy field. Per spec §"Subscription Identity"
+			// → "Key composition" L363: "There is no client-generated id
+			// — a subscription is fully determined by what it listens
+			// for, where it delivers, and who asked." γ-3 rejects
+			// client-supplied id at the wire level so old SDKs fail
+			// loudly instead of silently mis-keying.
 			ID       string         `json:"id"`
 			Name     string         `json:"name"`
 			Params   map[string]any `json:"params,omitempty"`
@@ -387,6 +394,10 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 		}
 		if err := json.Unmarshal(params, &req); err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
+		}
+		if req.ID != "" {
+			return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
+				"client-supplied id is not accepted; server derives id over (principal, name, params, url) per spec — drop the id field from your subscribe request")
 		}
 		if _, ok := sourceMap[req.Name]; !ok {
 			return core.NewErrorResponse(id, ErrCodeEventNotFound, "EventNotFound")

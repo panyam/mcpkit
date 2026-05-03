@@ -150,6 +150,25 @@ func TestSubscribe_TupleIsolationCrossPrincipal(t *testing.T) {
 	assert.Equal(t, idBob, targets[0].ID, "unregister(alice's tuple) must not affect bob's subscription")
 }
 
+// TestSubscribe_RejectsClientSuppliedID verifies γ-3's wire-strict
+// rejection of legacy id-bearing subscribe requests. Per spec
+// §"Subscription Identity" → "Key composition" L363: "There is no
+// client-generated id — a subscription is fully determined by what it
+// listens for, where it delivers, and who asked." Old SDKs sending an
+// id field get a loud -32602 instead of a silent mis-keying that
+// would route deliveries under the wrong subscription.
+func TestSubscribe_RejectsClientSuppliedID(t *testing.T) {
+	srv, _ := buildAuthGateStack(t, "test-principal")
+	params := validSubscribeParams()
+	params["id"] = "client-picked-id" // pre-γ wire shape
+
+	resp := dispatchSubscribe(t, srv, params)
+	require.NotNil(t, resp.Error, "client-supplied id must be rejected")
+	assert.Equal(t, core.ErrCodeInvalidParams, resp.Error.Code, "expected -32602 InvalidParams")
+	assert.Contains(t, resp.Error.Message, "id is not accepted",
+		"error message should explain why; got %q", resp.Error.Message)
+}
+
 // TestUnsubscribe_ByTuple verifies the spec's unsubscribe-by-tuple
 // behavior (§"Unsubscribing: events/unsubscribe" L509): client supplies
 // (name, params, delivery.url); server resolves via canonical key,
