@@ -197,7 +197,6 @@ func TestE2EWebhookDelivery(t *testing.T) {
 
 	clientSecret := events.GenerateSecret()
 	subResult, err := c.Call("events/subscribe", map[string]any{
-		"id":       "wh-e2e",
 		"name":     "telegram.message",
 		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": clientSecret},
 	})
@@ -270,7 +269,6 @@ func TestE2EWebhookDelivery_StandardHeaders(t *testing.T) {
 
 	clientSecret := events.GenerateSecret()
 	_, err := c.Call("events/subscribe", map[string]any{
-		"id":       "wh-std",
 		"name":     "telegram.message",
 		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": clientSecret},
 	})
@@ -329,7 +327,6 @@ func TestE2EWebhookDelivery_MCPHeadersOptIn(t *testing.T) {
 
 	clientSecret := events.GenerateSecret()
 	_, err := c.Call("events/subscribe", map[string]any{
-		"id":       "wh-mcp",
 		"name":     "telegram.message",
 		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": clientSecret},
 	})
@@ -453,7 +450,6 @@ func TestE2ECursorlessWebhookDelivery(t *testing.T) {
 	require.NoError(t, c.Connect())
 
 	raw, err := c.Call("events/subscribe", map[string]any{
-		"id":       "wh-typing",
 		"name":     "telegram.typing",
 		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": events.GenerateSecret()},
 	})

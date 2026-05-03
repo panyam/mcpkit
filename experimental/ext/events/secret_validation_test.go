@@ -107,7 +107,6 @@ func TestValidateClientSecret_AcceptsBothBase64Variants(t *testing.T) {
 // is REQUIRED — there is no server-side fallback.
 func TestSubscribe_RejectsMissingSecret(t *testing.T) {
 	resp := callSubscribeHandler(t, map[string]any{
-		"id":   "test",
 		"name": "fake.event",
 		"delivery": map[string]any{
 			"mode": "webhook",
@@ -132,7 +131,6 @@ func TestSubscribe_RejectsMalformedSecret(t *testing.T) {
 	for _, s := range bad {
 		t.Run(s, func(t *testing.T) {
 			resp := callSubscribeHandler(t, map[string]any{
-				"id":   "test",
 				"name": "fake.event",
 				"delivery": map[string]any{
 					"mode":   "webhook",
@@ -151,7 +149,6 @@ func TestSubscribe_RejectsMalformedSecret(t *testing.T) {
 // reject conformant inputs.
 func TestSubscribe_AcceptsValidWhsecSecret(t *testing.T) {
 	resp := callSubscribeHandler(t, map[string]any{
-		"id":   "test",
 		"name": "fake.event",
 		"delivery": map[string]any{
 			"mode":   "webhook",
@@ -171,7 +168,6 @@ func TestSubscribe_AcceptsValidWhsecSecret(t *testing.T) {
 func TestSubscribe_ResponseDoesNotEchoSecret(t *testing.T) {
 	supplied := generateSecret()
 	resp := callSubscribeHandler(t, map[string]any{
-		"id":   "test",
 		"name": "fake.event",
 		"delivery": map[string]any{
 			"mode":   "webhook",
