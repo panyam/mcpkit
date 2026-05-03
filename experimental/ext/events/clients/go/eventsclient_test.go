@@ -42,9 +42,10 @@ func stack(t *testing.T, whOpts ...events.WebhookOption) (*client.Client, func(f
 		server.WithSubscriptions(),
 	)
 	events.Register(events.Config{
-		Sources:  []events.EventSource{src},
-		Webhooks: webhooks,
-		Server:   srv,
+		Sources:                  []events.EventSource{src},
+		Webhooks:                 webhooks,
+		Server:                   srv,
+		UnsafeAnonymousPrincipal: "test-principal", // SDK tests don't wire auth; γ-2 spec gate would reject otherwise
 	})
 
 	handler := srv.Handler(server.WithStreamableHTTP(true))

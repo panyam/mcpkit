@@ -129,6 +129,14 @@ func serve() {
 		Sources:  []events.EventSource{source, typingSource},
 		Webhooks: webhooks,
 		Server:   srv,
+		// γ-2 spec gate (§"Subscription Identity" L361) requires an
+		// authenticated principal for webhook subscribe. Demo runs
+		// anonymously by default — use the escape hatch with a fixed
+		// principal so make demo continues to work end-to-end.
+		// γ-5 will replace this with auto-detection: if OAUTH_ISSUER
+		// is set, wire real auth via server.WithAuth(...) and drop
+		// the UnsafeAnonymousPrincipal fallback.
+		UnsafeAnonymousPrincipal: "demo-user",
 	})
 
 	mux := http.NewServeMux()

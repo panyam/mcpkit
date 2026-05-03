@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -37,9 +38,10 @@ func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.Yie
 	registerResources(srv, source)
 	(&ToolDelivery{Bot: nil}).Register(srv)
 	events.Register(events.Config{
-		Sources:  []events.EventSource{source, typingSource},
-		Webhooks: webhooks,
-		Server:   srv,
+		Sources:                  []events.EventSource{source, typingSource},
+		Webhooks:                 webhooks,
+		Server:                   srv,
+		UnsafeAnonymousPrincipal: "test-principal",
 	})
 
 	return srv, source, yield, webhooks
@@ -61,9 +63,10 @@ func buildTestStackWithTyping() (*server.Server, func(TelegramEventData) error, 
 	registerResources(srv, source)
 	(&ToolDelivery{Bot: nil}).Register(srv)
 	events.Register(events.Config{
-		Sources:  []events.EventSource{source, typingSource},
-		Webhooks: webhooks,
-		Server:   srv,
+		Sources:                  []events.EventSource{source, typingSource},
+		Webhooks:                 webhooks,
+		Server:                   srv,
+		UnsafeAnonymousPrincipal: "test-principal",
 	})
 	return srv, yield, yieldTyping
 }
@@ -200,14 +203,17 @@ func TestE2EWebhookDelivery(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Spec: subscribe response carries id but does NOT echo the secret.
-	// The client already supplied it; receiver verifies with that value.
+	// Spec: subscribe response carries id (server-derived per
+	// §"Subscription Identity" → "Derived id" L367) but does NOT echo
+	// the secret. The client already supplied the secret; receiver
+	// verifies with that value. The id is the X-MCP-Subscription-Id
+	// routing handle (γ-4 wires the header).
 	var subResp struct {
 		ID     string `json:"id"`
 		Secret string `json:"secret"`
 	}
 	require.NoError(t, json.Unmarshal(subResult.Raw, &subResp))
-	assert.Equal(t, "wh-e2e", subResp.ID)
+	assert.True(t, strings.HasPrefix(subResp.ID, "sub_"), "id must be the server-derived sub_<base64> per spec; got %q", subResp.ID)
 	require.Empty(t, subResp.Secret, "subscribe response must NOT carry a secret field per spec")
 	mu.Lock()
 	assignedSecret = clientSecret
