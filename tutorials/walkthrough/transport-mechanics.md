@@ -70,9 +70,37 @@ graph LR
 
 A single endpoint URL, three HTTP methods used together to simulate full-duplex:
 
-- **POST** — client→server messages (and, optionally, the response stream tied to that POST)
-- **GET** — long-lived server→client back-channel for unsolicited server-initiated traffic
-- **DELETE** — explicit session termination (optional)
+| Method | Direction | Lifetime | Carries |
+|--------|-----------|----------|---------|
+| **POST** | client → server | short — one operation, then closes (or stays open as SSE for that operation's response stream) | client-initiated messages: tool calls, prompts, etc. Plus the response (and any messages tied to that operation) on the way back. |
+| **GET** | server → client (one-way) | long — opened once after `initialize`, stays up for the session | unsolicited server→client messages: notifications, server-initiated requests not tied to a pending POST. |
+| **DELETE** | client → server | one-shot | explicit session termination (optional — connection close also works). |
+
+The two information directions HTTP-MCP cares about therefore have *different* mechanisms:
+
+- **Client → server**: always a fresh POST, one per operation.
+- **Server → client**: arrives **either** on the SSE stream of an in-flight POST (response, plus messages tied to that operation), **or** on the standing GET (unsolicited / out-of-band).
+
+### Vocabulary: what counts as one of what
+
+Streamable HTTP layers four concepts that are easy to conflate. Worth getting distinct before reading the rest of this section:
+
+| Concept | Identifier | Multiplicity |
+|---------|------------|--------------|
+| **MCP session** | `Mcp-Session-Id` (HTTP header) | exactly 1 between this client and this server, lasts hours |
+| **HTTP request** | the HTTP transaction itself (one POST / GET / DELETE) | many per session |
+| **SSE event** | SSE `id:` line in the event-stream body | many per stream (used for `Last-Event-ID` replay) |
+| **JSON-RPC message** | JSON-RPC `id` field (on requests and responses; notifications have none) | many per session |
+
+How they nest:
+
+- One **session** spans many **HTTP requests** over its lifetime — POSTs for client→server traffic, GETs for the back-channel, an optional terminating DELETE.
+- One **HTTP request** carries either a single JSON body (one message, or a batch — an array of messages) **or** a long-lived **SSE event stream** of many events (when a POST response upgrades to SSE, or for the standing GET).
+- One **SSE event** carries exactly one **JSON-RPC message** in MCP's framing.
+- One **JSON-RPC message** is one request, response, or notification — the unit JSON-RPC actually defines.
+
+> [!IMPORTANT]
+> When the rest of this page says "the server sends a message," that's a **JSON-RPC message** (a request, response, or notification) — *not* an HTTP request. The server doesn't initiate HTTP requests; it sends JSON-RPC messages over channels the client opened. The `Mcp-Session-Id` lives at the **HTTP-request layer** (one per HTTP request, identifying the session); it does **not** appear inside individual messages. If a server emits N messages over a single SSE stream, they all share the one session id on the HTTP request that opened that stream.
 
 ### POST: client→server (with optional streaming response)
 
@@ -89,6 +117,8 @@ Authorization: Bearer eyJ...              (if auth required)
 
 > [!IMPORTANT]
 > `Accept: application/json, text/event-stream` is required — **both** types must be listed. This is the client telling the server "I can take either type of response." Servers may reject POSTs that omit one.
+
+**One POST per client-initiated operation.** A tool call is one POST containing one JSON-RPC request. Same for `prompts/get`, `resources/read`, etc. — one logical operation, one POST, one request body. JSON-RPC batches (an array of messages in one body) are allowed by the spec but uncommon in practice; a typical mcpkit client/server doesn't use them. The session is reused across many such POSTs over its lifetime, but each POST is its own HTTP transaction.
 
 Server response options:
 
@@ -110,7 +140,7 @@ Then the stream closes.
 
 ### GET: long-lived server→client back-channel
 
-For server-initiated messages **not** tied to a specific client request, the client opens a long-lived GET against the same endpoint, **after `initialize` has succeeded** (so the client has the session id, if any):
+The client opens a long-lived GET against the same endpoint **after `initialize` has succeeded** (so the client has the session id, if any). It's opened **proactively** — the client doesn't wait for the server to "have a message ready"; the GET is just the standing channel for any unsolicited server→client traffic that may arrive at any time. **The stream may sit completely idle** (zero events) for long stretches if the server has nothing to push, and that's fine — keep-alive frames or HTTP-level pings keep the TCP alive. It only gets used when the server has something to send that isn't tied to an in-flight POST.
 
 ```
 GET /mcp HTTP/1.1
@@ -149,6 +179,13 @@ Server returns `Content-Type: text/event-stream` and keeps it open. Each SSE eve
 4. The standing GET (opened by the client after step 2) also carries it.
 
 Servers MAY operate stateless (no session id at all) — many won't. Where there's no session id, there's no standing GET back-channel either; server-initiated traffic can only flow during a per-call SSE upgrade.
+
+> [!IMPORTANT]
+> **The session id is a routing key on the server, not a filter applied by the client.** The server holds per-session state — capabilities, pending-id tables, the open SSE streams for that session — and routes each outbound message to the right stream by session id. The server cannot "push to an arbitrary session id"; it pushes only to sessions it has established and currently has push channels open for. If a session has no open push stream (no in-flight POST in SSE mode and no standing GET), the server has nowhere to send unsolicited messages and must wait until the client opens one.
+>
+> **Multiple GETs on the same session?** The spec allows it but requires the server to deliver each message on **exactly one** stream — no fan-out, no duplication. Most implementations (mcpkit included) expect a single standing GET per session and treat extras as redundant.
+>
+> **GETs on different session ids?** Those are different sessions entirely. Each has its own push channel; messages for session X go only to session X's GET. There's no cross-session pushing — sessions are isolated conversations even on the same server process.
 
 > [!CAUTION]
 > **Target-incompatible (replacement):** the [Dec-2025 transport WG post](https://blog.modelcontextprotocol.io/posts/2025-12-19-mcp-transport-future/) moves toward a stateless transport with sessions elevated to the data layer. Transport-level `Mcp-Session-Id` is on the chopping block. Code that pins behavior to the header will need to migrate.
@@ -265,8 +302,9 @@ After reading this root, downstream pages can assume:
 - You distinguish **host process / MCP session / transport transaction** as three different lifetimes. A session is per-server-per-host, may live for hours, and is reused across many tool calls.
 - You can read a JSON-RPC message off the wire for either transport and tell whether it's a request, response, or notification.
 - You understand the **layering**: MCP semantics > JSON-RPC message model > transport framing > transport bytes. Payload format is transport-agnostic.
-- You know how server→client messages reach the client on each transport: always-open pipe (stdio), per-call SSE upgrade (HTTP POST), standing GET SSE (HTTP back-channel — independent of any POST, opened after `initialize`).
-- You know `Mcp-Session-Id` is server-issued, returned on the response to `initialize`, mandatory on all subsequent client requests if issued.
+- You distinguish **MCP session vs. HTTP request vs. SSE event vs. JSON-RPC message** and know how they nest. "Message" means JSON-RPC message; HTTP requests are the transport units that carry them.
+- You know how server→client messages reach the client on each transport: always-open pipe (stdio), per-call SSE upgrade (HTTP POST), or standing GET SSE (HTTP back-channel — independent of any POST, opened proactively after `initialize`, may sit idle).
+- You know `Mcp-Session-Id` is server-issued (returned on the response to `initialize`), mandatory on all subsequent client requests if issued, and acts as a **routing key on the server** — not a filter on the client. Sessions are isolated; servers can't push to sessions they don't have state for.
 - You know IDs are per-direction and that the pending-request table is what makes correlation work — flat, no parent links.
 - You know reverse-call origination is gated by **handler context** (not the pending-id table, not anything on the wire). The handler context records the forward→reverse association for cancellation propagation.
 
