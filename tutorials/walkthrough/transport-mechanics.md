@@ -102,6 +102,71 @@ How they nest:
 > [!IMPORTANT]
 > When the rest of this page says "the server sends a message," that's a **JSON-RPC message** (a request, response, or notification) — *not* an HTTP request. The server doesn't initiate HTTP requests; it sends JSON-RPC messages over channels the client opened. The `Mcp-Session-Id` lives at the **HTTP-request layer** (one per HTTP request, identifying the session); it does **not** appear inside individual messages. If a server emits N messages over a single SSE stream, they all share the one session id on the HTTP request that opened that stream.
 
+### Worked example: a tool call with progress, plus an unrelated push
+
+Concrete scenario to anchor every layer at once. You're in an active chat. Session `abc123` is live; the standing GET is open and idle. The model decides to call `jira_search`.
+
+**1. Client → Server** — one HTTP request (POST), one JSON-RPC message in the body:
+
+```http
+POST /mcp HTTP/1.1                                ← HTTP request #1 (POST)
+Mcp-Session-Id: abc123                            ← session layer
+Accept: application/json, text/event-stream
+
+{                                                  ← JSON-RPC message #1 (request, client's id space)
+  "jsonrpc": "2.0",
+  "id": 7,
+  "method": "tools/call",
+  "params": {"name": "jira_search", "arguments": {...}}
+}
+```
+
+**2. Server → Client, on the same HTTP request** — response upgrades to SSE; the handler emits two progress notifications, then the final response:
+
+```http
+HTTP/1.1 200 OK                                   ← still HTTP request #1, response side
+Content-Type: text/event-stream
+Mcp-Session-Id: abc123
+
+id: 1                                              ← SSE event #1 (this stream's counter)
+data: {"jsonrpc":"2.0","method":"notifications/progress","params":{...}}
+
+id: 2                                              ← SSE event #2
+data: {"jsonrpc":"2.0","method":"notifications/progress","params":{...}}
+
+id: 3                                              ← SSE event #3
+data: {"jsonrpc":"2.0","id":7,"result":{...}}     ← JSON-RPC response, id 7 matches request
+```
+
+Stream closes after event 3. HTTP request #1 is now complete.
+
+**3. Meanwhile, on the standing GET** — a *different* HTTP request opened earlier, after `initialize`. The server pushes an unrelated notification because some resource changed on its end:
+
+```http
+                                                   ← HTTP request #2 (the GET, already open)
+id: 42                                             ← SSE event id, this stream's own counter
+data: {"jsonrpc":"2.0","method":"notifications/resources/list_changed","params":{}}
+```
+
+The GET keeps running; the next push will be event 43.
+
+**Reading the layers off this scenario:**
+
+| Layer | Count | Identifiers in this scenario |
+|-------|-------|------------------------------|
+| MCP session | 1 | `abc123` (on every HTTP request header) |
+| HTTP request | 2 | POST (#1), standing GET (#2) — both client-opened |
+| SSE event | 4 | POST stream: 1, 2, 3 · GET stream: 42 — local counters per stream |
+| JSON-RPC message | 5 | tool-call req `id=7`, 2 progress notifs, tool-call resp `id=7`, list_changed notif |
+
+Things to notice:
+
+- **`Mcp-Session-Id: abc123`** appears on each HTTP request header exactly once. Never inside a JSON-RPC message body.
+- **JSON-RPC `id=7`** appears on the request and the response — that's the correlation. The two progress notifications and the list_changed notification have no JSON-RPC id at all.
+- **SSE `id:` lines** are independent counters per stream. The POST stream's "1, 2, 3" and the GET stream's "42" don't relate. They exist solely for `Last-Event-ID` replay if the stream drops.
+- **One HTTP request can carry many JSON-RPC messages.** The upgraded POST stream carried four (the request that opened it, plus three from the server). Still one HTTP request.
+- **Two HTTP requests, one session.** The POST and the GET are separate HTTP transactions on the same session id.
+
 ### POST: client→server (with optional streaming response)
 
 ```
