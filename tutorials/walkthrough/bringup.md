@@ -6,6 +6,10 @@ What happens between *"the host has a config entry mentioning this server"* and 
 > **Reachable from:** [README](./README.md) · **Branches into:** [transport mechanics](./transport-mechanics.md), (forthcoming) per-request anatomy
 > **Spec:** [Lifecycle](https://modelcontextprotocol.io/specification/2025-06-18) · **Code:** `core/protocol.go`, `core/auth.go`, `core/www_authenticate.go`, `server/stdio_transport.go`, `server/streamable_transport.go`, `client/command_transport.go`, `ext/auth/`
 
+## Preconditions
+
+**None — this is a foundational root.** A reader needs only general familiarity with client/server concepts, JSON, and HTTP. No other roots required.
+
 ## The four phases
 
 Before any "useful" request can flow, four phases happen in order. Some are host-territory (the protocol says nothing about them); others are protocol-territory (the spec is normative).
@@ -106,6 +110,14 @@ What is **not** yet established (and lives in downstream pages):
 - The per-request flow itself — dispatch, middleware, handler context, typed binding (forthcoming: per-request anatomy).
 - The wire format and correlation model — covered by [transport mechanics](./transport-mechanics.md), itself a peer root.
 - Reverse calls, notifications, tasks, resumption — all build on those two roots.
+
+## Leads to
+
+Roots that build on this end-state:
+
+- **[Transport mechanics](./transport-mechanics.md)** — drills into the wire format chosen during bring-up phase 2.
+- **(forthcoming) Per-request anatomy** — the per-call flow that runs *inside* an established session. Assumes this root + transport mechanics.
+- **(forthcoming) Re-initialization / session resumption** — what happens if the underlying transport drops. Assumes this root.
 
 ## Findings (about the DAG itself)
 

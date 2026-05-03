@@ -53,13 +53,21 @@ Each page links to:
 
 External spec links happen at the *node* level. Inside a flow, links stay on-page so reading doesn't break. Click into a node only when you need normative detail.
 
-### Roots and assumed state
+### The root contract
 
-A **root** is a page whose end-state — the invariants that hold after reading it — downstream pages can assume. Every page is either a root itself or declares the roots it depends on.
+A **root** is a self-contained walkthrough that establishes a set of invariants downstream pages can assume. Every root follows the same four-part contract:
 
-This is dependency tracking for documentation. Instead of every page restating preliminaries, a page just says *"assumes you've read root X"* and moves on. As more roots get written, derived pages get shorter, not longer.
+1. **Preconditions** — what must be true going in. Stated explicitly at the top, with a *"if not, read [X]"* guard pointing at the root that establishes each missing precondition. A foundational root says "none — foundational."
+2. **Body** — the walkthrough itself.
+3. **End-state** — what is true after reading. Listed as bullets in a section near the end. Downstream roots may assume any of these without re-deriving.
+4. **Leads to** — which other roots build on this end-state. Pointers, not exhaustive.
 
-A root page **must end with an "End-state" section** listing what's now true. Example: bring-up's end-state is *"a session is live, capabilities are negotiated, the transport is chosen, auth is resolved."* Tasks (when written) can open with *"assumes [bring-up] · [transport mechanics] · [per-request anatomy]"* and skip the rest.
+This is dependency tracking for documentation. Instead of every page restating preliminaries, a page declares its preconditions and moves on. As more roots get written, derived pages get *shorter*, not longer.
+
+> [!NOTE]
+> A root is a *self-contained chunk*. A reader who has the preconditions can read just this root and walk away with the end-state. They never need to read sibling roots they don't care about.
+
+Branch and leaf pages don't need the full contract — they elaborate on a part of a root and live within its precondition envelope.
 
 ### Per-page header
 
@@ -71,9 +79,30 @@ Every page declares its position in the graph:
 > **Spec:** <spec link> · **Code:** <file paths>
 ```
 
-- **root** — establishes invariants. Must include an End-state section.
-- **branch** — drills into a part of a root or connects two roots. May or may not have an end-state.
+- **root** — establishes invariants. Must include explicit **Preconditions** (top) and **End-state** + **Leads to** (end) sections.
+- **branch** — drills into a part of a root or connects two roots. Lives within its parent root's precondition envelope.
 - **leaf** — reference detail. Read on demand.
+
+### Branch points within a journey
+
+Preconditions and End-state are the trivial branch points (start and end of a root). Mid-journey branch points — *moments* in the walkthrough where the reader could profitably fork into a side-trip — are marked inline with a callout:
+
+```markdown
+> [!NOTE]
+> **Branch →** [link to side-trip page]. Brief reason to follow the branch.
+```
+
+This keeps the main journey continuous while flagging where divergences live. The index file ([INDEX.md](./INDEX.md)) aggregates branch points across all pages so you can see the full graph without opening every file.
+
+### The index file
+
+[INDEX.md](./INDEX.md) is a single-page projection of the entire graph: every page, its kind, preconditions, end-state summary, leads-to, and branch points — in one table. Useful for:
+
+- Drawing the full graph without parsing every page header
+- Spotting orphans, broken links, or roots whose end-state nothing depends on
+- Checking the precondition closure when adding a new root
+
+Per-page headers are the source of truth; the index is an aggregated view. When you add or change a page, also update the index entry.
 
 ### Target-shape tracking
 

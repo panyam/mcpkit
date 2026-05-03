@@ -7,6 +7,10 @@ What the wire actually looks like, how server→client traffic flows on each tra
 > **Branches into:** (forthcoming) reverse-call, SSE resumption, batching
 > **Spec:** [Base protocol](https://modelcontextprotocol.io/specification/2025-06-18) · [Transports](https://modelcontextprotocol.io/specification/2025-06-18) · **Code:** `core/jsonrpc.go`, `server/stdio_transport.go`, `server/streamable_transport.go`, `client/mrtr.go`, `server/event_ids.go`
 
+## Preconditions
+
+**None — this is a foundational root.** A reader needs general familiarity with HTTP, SSE, and JSON-RPC at a vocabulary level. No other roots required.
+
 ## What both transports share
 
 JSON-RPC 2.0. Three message shapes — request, response, notification — covered in the [Correlation](#correlation-json-rpc-20-transport-agnostic) section below. Transports differ only on **framing** and on **how server→client traffic gets back to the client**. The message model is identical.
@@ -86,6 +90,9 @@ Last-Event-ID: 42                         (for resumption after reconnect)
 Server returns `Content-Type: text/event-stream` and keeps it open. Each SSE event has an `id:` line so the client can resume with `Last-Event-ID` after a network blip. mcpkit: `server/event_ids.go`.
 
 > [!NOTE]
+> **Branch →** *(forthcoming)* SSE resumption. The `Last-Event-ID` mechanic, what the server has to remember to make replay possible, and how mcpkit's event store handles in-flight responses across reconnects. Skip on a first read; the main correlation story doesn't depend on it.
+
+> [!NOTE]
 > So there are really **two SSE patterns** on streamable HTTP:
 > 1. **Per-call SSE** — a POST's response upgrades to SSE for that one request's lifetime.
 > 2. **Standing GET SSE** — long-lived back-channel for unsolicited server-initiated traffic.
@@ -136,7 +143,8 @@ When a server originates a request to a client (e.g., `sampling/createMessage`),
 >
 > mcpkit enforces this via `core/handler_context.go`, which carries the forward-call's identity into the handler's runtime context. A reverse-call attempt outside that scope is a programming error (and a spec violation if it ever escapes onto the wire).
 
-The forthcoming reverse-call page will make this concrete with a `tools/call → elicitation/create` walkthrough.
+> [!NOTE]
+> **Branch →** *(forthcoming)* Reverse-call mechanics. A `tools/call → elicitation/create` walkthrough that makes the parent-handler-context constraint concrete, with mcpkit code references to `core/handler_context.go` and the mrtr origination path.
 
 ### Order of arrival ≠ order of sending
 
@@ -151,4 +159,11 @@ After reading this root, downstream pages can assume:
 - You know IDs are per-direction and that the pending-request table is what makes correlation work.
 - You know reverse-call origination is gated by handler context — *not* by anything on the wire.
 
-Pages that build on this end-state: (forthcoming) per-request anatomy, reverse-call mechanics, SSE resumption, tasks subsystem.
+## Leads to
+
+Roots that build on this end-state:
+
+- **(forthcoming) Per-request anatomy** — uses the wire model and correlation tables from this root to walk the dispatch journey.
+- **(forthcoming) Reverse-call mechanics** — concretizes the parent-handler-context constraint with a real `tools/call → elicitation/create` example.
+- **(forthcoming) Tasks subsystem (v1/v2/hybrid)** — long-running operations layered on top of correlation + notifications.
+- **(forthcoming) SSE resumption** — `Last-Event-ID` replay, the server's event store, in-flight response recovery. (Leaf, not a root.)
