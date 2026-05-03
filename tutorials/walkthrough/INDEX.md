@@ -64,11 +64,11 @@ graph LR
     L0 --> bringup
     L0 --> wire
 
-    bringup -. drills into .-> wire
-    bringup -. unlocks .-> anat
-    wire -. unlocks .-> anat
-    wire -. unlocks .-> rev
-    wire -. unlocks .-> tasks
+    bringup -.->|drills into| wire
+    bringup -.->|unlocks| anat
+    wire -.->|unlocks| anat
+    wire -.->|unlocks| rev
+    wire -.->|unlocks| tasks
 
     anat --> rev
     anat --> notif

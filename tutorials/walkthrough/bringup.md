@@ -20,8 +20,9 @@ graph LR
     sel --> tx[transport selection<br/>config-driven, not negotiated]
     tx --> bringup[transport bring-up]
     bringup --> auth{auth required?}
-    auth -- stdio --> init
-    auth -- "HTTP, 401" --> oauth[auth flow<br/>WWW-Authenticate / OAuth] --> init
+    auth -->|stdio| init
+    auth -->|"HTTP, 401"| oauth[auth flow<br/>WWW-Authenticate / OAuth]
+    oauth --> init
     init[initialize request] --> ver[version negotiation]
     ver --> caps[capability exchange]
     caps --> ready[notifications/initialized]

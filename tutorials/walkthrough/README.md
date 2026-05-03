@@ -124,9 +124,9 @@ graph LR
     L0 --> wire["transport mechanics<br/>(root)"]
     L0 --> call["per-request anatomy<br/>(forthcoming root)"]
     bringup --> session[(session live)]
-    session -. unlocks .-> call
-    wire -. foundational for .-> call
-    bringup -. drills into .-> wire
+    session -.->|unlocks| call
+    wire -.->|foundational for| call
+    bringup -.->|drills into| wire
 
     click bringup "./bringup.md"
     click wire "./transport-mechanics.md"
