@@ -19,7 +19,7 @@ Use this to:
 | [README](./README.md) | meta | — | reader knows where to start and where to find conventions / graph | — |
 | [STRUCTURE](./STRUCTURE.md) | meta | — | author/reader knows the DAG model, root contract, note-block roles, branch-point convention, target-shape tracking | — |
 | [bring-up](./bringup.md) | root | none (foundational) | session live; transport chosen; auth resolved; protocol version + capabilities locked; `initialized` sent | transport-mechanics; (forthcoming) per-request anatomy; (forthcoming) re-init / resumption |
-| [transport-mechanics](./transport-mechanics.md) | root | none (foundational) | wire format known per transport; SSE upgrade vs. standing GET understood; JSON-RPC correlation + per-direction ID spaces understood; reverse-call origination constraint understood (handler-scoped, not on-wire) | (forthcoming) per-request anatomy; (forthcoming) reverse-call; (forthcoming) tasks; SSE resumption (leaf) |
+| [transport-mechanics](./transport-mechanics.md) | root | none (foundational) | host/session/transaction lifetimes distinct; wire format known per transport; layering (MCP/JSON-RPC/framing/bytes) understood; SSE upgrade vs. standing GET (independent of POST); `Mcp-Session-Id` server-issued on first response; JSON-RPC correlation + per-direction ID spaces understood; reverse-call origination gated by handler context, recorded for cancellation propagation | (forthcoming) per-request anatomy; (forthcoming) reverse-call; (forthcoming) tasks; SSE resumption (leaf); experimental events ext (branch) |
 
 ## Mid-journey branch points
 
@@ -28,6 +28,7 @@ Inline `> [!NOTE] **Branch →**` callouts within journeys, aggregated:
 | In page | At step | Branches to |
 |---------|---------|-------------|
 | transport-mechanics | "GET: long-lived server→client back-channel" / `Last-Event-ID` | (forthcoming) SSE resumption |
+| transport-mechanics | "GET: long-lived server→client back-channel" / events as first-class | [`experimental/ext/events/`](../../experimental/ext/events/README.md) |
 | transport-mechanics | "Reverse-call origination" | (forthcoming) reverse-call mechanics |
 
 ## Forthcoming nodes (referenced but not yet written)
