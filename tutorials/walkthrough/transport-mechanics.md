@@ -95,7 +95,7 @@ Streamable HTTP layers four concepts that are easy to conflate. Worth getting di
 How they nest:
 
 - One **session** spans many **HTTP requests** over its lifetime — POSTs for client→server traffic, GETs for the back-channel, an optional terminating DELETE.
-- One **HTTP request** carries either a single JSON body (one message, or a batch — an array of messages) **or** a long-lived **SSE event stream** of many events (when a POST response upgrades to SSE, or for the standing GET).
+- One **HTTP request** carries either a single JSON body (one message, or a batch — an array of messages) **or** a long-lived **SSE event stream** of many events arriving over time (when a POST response upgrades to SSE, or for the standing GET). The stream stays open inside the same one HTTP request; the server emits events as needed; no "new HTTP request" opens for each event.
 - One **SSE event** carries exactly one **JSON-RPC message** in MCP's framing.
 - One **JSON-RPC message** is one request, response, or notification — the unit JSON-RPC actually defines.
 
@@ -162,7 +162,12 @@ data: {"jsonrpc":"2.0","id":7,"result":{...}}     ← JSON-RPC response, id 7 ma
 
 Stream closes after event 3. HTTP request #5 is now complete.
 
-**Meanwhile, on the standing GET (HTTP request #4, still open from bring-up).** The server pushes an unrelated notification because some resource changed on its end:
+> [!IMPORTANT]
+> **No new HTTP request opens in the next step.** The standing GET (HTTP request #4) was opened back during bring-up and is still running — its response is a long-lived SSE stream that's been open the whole time, mostly idle. What "happens" next is just another SSE event arriving on that already-open stream.
+>
+> One HTTP request, one long-lived response stream, many messages over time. The POST #5 SSE upgrade above worked the same way: three events on one HTTP request, not three HTTP requests.
+
+**Meanwhile, on the standing GET (HTTP request #4 — the same GET opened in bring-up).** Its response stream emits another SSE event — a JSON-RPC `notifications/resources/list_changed` because some resource changed on the server's end:
 
 ```http
                                                    ← HTTP request #4 (the GET, still open)
