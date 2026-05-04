@@ -40,17 +40,19 @@ func WithWebhookHeaderMode(mode WebhookHeaderMode) WebhookOption {
 }
 
 // WebhookTarget is a registered outbound webhook callback with TTL-based expiry.
+//
+// The CanonicalKey is the spec's identity tuple bytes
+// (§"Subscription Identity" → "Key composition" L363) and serves as the
+// registry's primary key. The ID is the spec's derived routing handle
+// (§"Subscription Identity" → "Derived id" L367), surfaced on the wire
+// as the X-MCP-Subscription-Id header on every delivery POST per
+// §"Webhook Event Delivery" L390.
 type WebhookTarget struct {
-	ID        string // client-provided subscription ID
-	URL       string
-	Secret    string
-	ExpiresAt time.Time
-}
-
-// webhookKey returns the composite key for a webhook subscription per spec:
-// (delivery.url, id) for unauthenticated servers.
-func webhookKey(urlStr, id string) string {
-	return urlStr + "\x00" + id
+	CanonicalKey []byte    // canonical bytes of (principal, url, name, params)
+	ID           string    // server-derived routing handle (sub_<base64-of-16-bytes>)
+	URL          string    // delivery callback URL
+	Secret       string    // client-supplied HMAC signing secret (whsec_...)
+	ExpiresAt    time.Time // soft-state TTL expiry
 }
 
 // WebhookRegistry tracks outbound webhook subscriptions and delivers events
@@ -60,9 +62,15 @@ func webhookKey(urlStr, id string) string {
 // The HMAC signing secret is always client-supplied per the spec; the
 // registry stores it as-is on Register and uses it directly when signing
 // outbound deliveries.
+//
+// The registry is keyed on the spec's canonical-tuple bytes
+// (§"Subscription Identity" L363) — two subscribes with the same
+// canonical key (same principal, url, name, params) refer to the same
+// subscription. Cross-tenant isolation is by construction since
+// principal is part of the key.
 type WebhookRegistry struct {
 	mu         sync.RWMutex
-	targets    map[string]WebhookTarget // keyed by webhookKey(url, id)
+	targets    map[string]WebhookTarget // keyed by string(canonicalKey)
 	client     *http.Client
 	ttl        time.Duration
 	headerMode WebhookHeaderMode
@@ -84,31 +92,50 @@ func NewWebhookRegistry(opts ...WebhookOption) *WebhookRegistry {
 	return r
 }
 
-// Register adds or refreshes a webhook subscription. Returns the expiry time.
-func (r *WebhookRegistry) Register(id, urlStr, secret string) time.Time {
+// Register adds or refreshes a webhook subscription keyed on the spec's
+// canonical tuple (§"Subscription Identity" → "Key composition" L363).
+// Two calls with the same canonicalKey refer to the same subscription
+// — second call refreshes TTL + replaces secret. Returns the expiry time.
+//
+// The derivedID is the X-MCP-Subscription-Id value the registry emits
+// on every delivery POST; it MUST be deriveSubscriptionID(canonicalKey)
+// from identity.go. Passed in (rather than computed here) so the
+// caller can derive once and reuse for both Register and the
+// subscribe-response body.
+func (r *WebhookRegistry) Register(canonicalKey []byte, derivedID, urlStr, secret string) time.Time {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.pruneExpiredLocked()
 	expiresAt := time.Now().Add(r.ttl)
-	key := webhookKey(urlStr, id)
+	key := string(canonicalKey)
 	if existing, ok := r.targets[key]; ok {
-		// Refresh: update expiry and secret if provided
+		// Refresh: update expiry and secret if provided. Secret rotation
+		// per spec is allowed by supplying a new value on refresh.
 		existing.ExpiresAt = expiresAt
 		if secret != "" {
 			existing.Secret = secret
 		}
 		r.targets[key] = existing
 	} else {
-		r.targets[key] = WebhookTarget{ID: id, URL: urlStr, Secret: secret, ExpiresAt: expiresAt}
+		r.targets[key] = WebhookTarget{
+			CanonicalKey: canonicalKey,
+			ID:           derivedID,
+			URL:          urlStr,
+			Secret:       secret,
+			ExpiresAt:    expiresAt,
+		}
 	}
 	return expiresAt
 }
 
-// Unregister removes a webhook subscription by (url, id).
-func (r *WebhookRegistry) Unregister(urlStr, id string) {
+// Unregister removes a webhook subscription by canonical-tuple key.
+// No-op if no entry matches. Per spec §"Unsubscribing: events/unsubscribe"
+// L509, the derived id is not accepted as input — callers resolve via
+// the same canonical tuple they would for a subscribe.
+func (r *WebhookRegistry) Unregister(canonicalKey []byte) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	delete(r.targets, webhookKey(urlStr, id))
+	delete(r.targets, string(canonicalKey))
 }
 
 // Targets returns a snapshot of all non-expired webhook targets.
@@ -194,7 +221,14 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, eventID string, body []b
 		// (so receiver dedup works) and consistent across delivery paths
 		// (webhook emit + poll backfill of the same upstream event collapse
 		// under the receiver's eventId-keyed dedup).
-		signed := signFor(r.headerMode, eventID, body, target.Secret, time.Now())
+		//
+		// X-MCP-Subscription-Id carries target.ID (γ-2's derived id over
+		// the canonical tuple) so the receiver can select the correct
+		// secret without parsing the body. Per spec §"Webhook Event
+		// Delivery" L390 + §"Webhook Security" L472: this is the only
+		// MCP-specific header on a Standard Webhooks delivery.
+		signed := signFor(r.headerMode, eventID, body, target.Secret, time.Now()).
+			withSubscriptionID(target.ID)
 
 		req, err := http.NewRequest("POST", target.URL, bytes.NewReader(signed.body))
 		if err != nil {

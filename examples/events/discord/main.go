@@ -25,6 +25,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/experimental/ext/events"
+	"github.com/panyam/mcpkit/ext/auth"
 	"github.com/panyam/mcpkit/server"
 	gohttp "github.com/panyam/servicekit/http"
 )
@@ -115,21 +116,45 @@ func serve() {
 		log.Println("[discord] no token provided — running in test mode")
 	}
 
-	srv := server.NewServer(
-		core.ServerInfo{Name: "discord-events", Version: "0.1.0"},
+	// γ-5: auto-detect auth posture.
+	//
+	// If OAUTH_ISSUER is set, wire real OIDC auth via server.WithAuth(...)
+	// and follow the spec strictly — anonymous webhook subscribes are
+	// rejected with -32012 per §"Subscription Identity" → "Authentication
+	// required" L361. Otherwise fall back to the demo escape hatch so
+	// `make demo` works end-to-end without an auth provider.
+	srvOpts := []server.Option{
 		server.WithSubscriptions(),
 		server.WithMiddleware(server.LoggingMiddleware(log.Default())),
 		server.WithRequestLogging(log.Default()),
+	}
+	authPosture := "demo (anonymous → UnsafeAnonymousPrincipal)"
+	if validator := tryEnableAuth(); validator != nil {
+		srvOpts = append(srvOpts, server.WithAuth(validator))
+		authPosture = "real OIDC (" + os.Getenv("OAUTH_ISSUER") + ") — anonymous webhook subscribes rejected per spec"
+	}
+
+	srv := server.NewServer(
+		core.ServerInfo{Name: "discord-events", Version: "0.1.0"},
+		srvOpts...,
 	)
+	log.Printf("[server] auth: %s", authPosture)
 
 	registerResources(srv, source)
 	registerTools(srv, dg)
 
-	events.Register(events.Config{
+	cfg := events.Config{
 		Sources:  []events.EventSource{source, typingSource},
 		Webhooks: webhooks,
 		Server:   srv,
-	})
+	}
+	// Demo escape hatch — only when no real auth is wired. Production
+	// deployments leave UnsafeAnonymousPrincipal empty AND configure
+	// real auth via server.WithAuth(...).
+	if !hasOAuthEnv() {
+		cfg.UnsafeAnonymousPrincipal = "demo-user"
+	}
+	events.Register(cfg)
 
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", srv.Handler(
@@ -201,4 +226,45 @@ func serve() {
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
 	log.Println("[server] shutting down")
+}
+
+// hasOAuthEnv reports whether OAUTH_ISSUER is set (real-auth posture).
+// Used by the events.Config wiring to decide whether to set the
+// UnsafeAnonymousPrincipal demo escape.
+func hasOAuthEnv() bool {
+	return os.Getenv("OAUTH_ISSUER") != ""
+}
+
+// tryEnableAuth builds a JWTValidator from environment variables and
+// returns it (so the caller can pass server.WithAuth(validator)).
+// Returns nil if OAUTH_ISSUER is not set — caller falls back to the
+// UnsafeAnonymousPrincipal demo escape.
+//
+// Recognized env vars:
+//   OAUTH_ISSUER    REQUIRED. The OIDC issuer URL.
+//                   For Keycloak: http://localhost:8081/realms/<realm>
+//   OAUTH_JWKS_URL  Optional. Defaults to <issuer>/protocol/openid-connect/certs
+//                   (Keycloak convention). Override for non-Keycloak providers.
+//   OAUTH_AUDIENCE  Optional. Defaults to "mcp-events". Tokens MUST have
+//                   this audience claim to be accepted.
+func tryEnableAuth() *auth.JWTValidator {
+	issuer := os.Getenv("OAUTH_ISSUER")
+	if issuer == "" {
+		return nil
+	}
+	jwksURL := os.Getenv("OAUTH_JWKS_URL")
+	if jwksURL == "" {
+		jwksURL = issuer + "/protocol/openid-connect/certs"
+	}
+	audience := os.Getenv("OAUTH_AUDIENCE")
+	if audience == "" {
+		audience = "mcp-events"
+	}
+	v := auth.NewJWTValidator(auth.JWTConfig{
+		JWKSURL:  jwksURL,
+		Issuer:   issuer,
+		Audience: audience,
+	})
+	v.Start()
+	return v
 }

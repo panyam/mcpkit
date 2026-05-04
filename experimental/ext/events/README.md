@@ -165,6 +165,46 @@ from events_client import generate_webhook_secret
 secret = generate_webhook_secret()
 ```
 
+### Subscription identity + auth gate (γ)
+
+Per spec §"Subscription Identity" L361-378, webhook subscribe and unsubscribe MUST require an authenticated principal; the registry keys subscriptions on the canonical tuple `(principal, delivery.url, name, params)` and derives a routing handle (`X-MCP-Subscription-Id`) over the same canonical bytes. Two distinct tenants subscribing to the same `(name, params, url)` get distinct subscriptions — cross-tenant isolation by construction.
+
+The handler reads the principal via mcpkit's core auth abstraction (`core.MethodContext.AuthClaims().Subject`), so **any** auth provider that populates `core.Claims` works — JWT/OIDC via mcpkit's `ext/auth`, mTLS-derived principals, session cookies, custom validators, etc. Events depends on the `core.Claims` interface, **not** on `ext/auth` or any specific implementation. See "Auth + extension composition" below.
+
+For demos and unauthenticated mcpkit servers that want to exercise webhook delivery without standing up an auth provider, `events.Config.UnsafeAnonymousPrincipal` is a deliberate spec-deviating escape hatch:
+
+```go
+events.Register(events.Config{
+    Sources:                  sources,
+    Webhooks:                 webhooks,
+    Server:                   srv,
+    UnsafeAnonymousPrincipal: "demo-user", // ONLY for demos — see DEPLOYMENT.md
+})
+```
+
+When set, anonymous webhook subscribes are accepted under the configured principal. The server logs a startup warning so deployments using it know they're off-spec. **Production deployments leave this empty AND wire `server.WithAuth(validator)` so unauthenticated subscribe attempts hit the spec-mandated `-32012 Unauthorized` rejection.**
+
+### Auth + extension composition
+
+Events depends only on the `core.Claims` interface, not on any specific auth implementation. The wiring layer (a server's `main.go`) chooses the auth provider:
+
+```
+ext/events  ──→  core.Claims (the abstract contract)
+                       ↑
+ext/auth    ──→  populates Claims via JWT/OIDC validation
+                       ↑
+your code   ──→  server.WithAuth(your favorite validator)
+```
+
+The Events implementation has zero compile-time dependency on `ext/auth`. You can:
+
+- Use mcpkit's `ext/auth` for JWT/OIDC (what the demos do)
+- Use mTLS — populate Claims from the cert subject
+- Use session cookies — populate Claims from your session store
+- Use no auth at all — set `UnsafeAnonymousPrincipal` for demos
+
+This is the right composition shape for MCP extensions — extensions depend on stable core abstractions, not on each other.
+
 ### Header mode (`WebhookHeaderMode`)
 
 Two on-the-wire signature formats. Default is `MCPHeaders`. Only the headers and signature scheme are configurable; the body shape (the `events.Event` envelope) is unchanged.

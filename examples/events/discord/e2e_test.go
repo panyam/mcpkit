@@ -37,9 +37,10 @@ func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.Yie
 	registerResources(srv, source)
 	registerTools(srv, nil) // nil session = test mode
 	events.Register(events.Config{
-		Sources:  []events.EventSource{source, typingSource},
-		Webhooks: webhooks,
-		Server:   srv,
+		Sources:                  []events.EventSource{source, typingSource},
+		Webhooks:                 webhooks,
+		Server:                   srv,
+		UnsafeAnonymousPrincipal: "test-principal", // tests don't wire auth; γ-2 spec gate would reject otherwise
 	})
 
 	return srv, source, yield, webhooks
@@ -59,9 +60,10 @@ func buildTestStackWithTyping(whOpts ...events.WebhookOption) (*server.Server, f
 	registerResources(srv, source)
 	registerTools(srv, nil)
 	events.Register(events.Config{
-		Sources:  []events.EventSource{source, typingSource},
-		Webhooks: webhooks,
-		Server:   srv,
+		Sources:                  []events.EventSource{source, typingSource},
+		Webhooks:                 webhooks,
+		Server:                   srv,
+		UnsafeAnonymousPrincipal: "test-principal",
 	})
 	return srv, yield, yieldTyping, webhooks
 }
@@ -184,7 +186,6 @@ func TestE2EWebhookDelivery(t *testing.T) {
 
 	clientSecret := events.GenerateSecret()
 	subResult, err := c.Call("events/subscribe", map[string]any{
-		"id":       "wh",
 		"name":     "discord.message",
 		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": clientSecret},
 	})
@@ -310,7 +311,6 @@ func TestE2EWebhookDelivery_StandardHeaders(t *testing.T) {
 	c, _ := connectClient(t, srv)
 	clientSecret := events.GenerateSecret()
 	_, err := c.Call("events/subscribe", map[string]any{
-		"id":       "wh-std",
 		"name":     "discord.message",
 		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": clientSecret},
 	})
@@ -364,7 +364,6 @@ func TestE2EWebhookDelivery_MCPHeadersOptIn(t *testing.T) {
 	c, _ := connectClient(t, srv)
 	clientSecret := events.GenerateSecret()
 	_, err := c.Call("events/subscribe", map[string]any{
-		"id":       "wh-mcp",
 		"name":     "discord.message",
 		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": clientSecret},
 	})
@@ -451,7 +450,6 @@ func TestE2ECursorlessWebhookDelivery(t *testing.T) {
 
 	clientSecret := events.GenerateSecret()
 	raw, err := c.Call("events/subscribe", map[string]any{
-		"id":       "wh-typing",
 		"name":     "discord.typing",
 		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": clientSecret},
 	})
@@ -515,7 +513,6 @@ func TestE2ESubscribeCursorNullOnCursoredSourceReturnsLatest(t *testing.T) {
 	require.NotEmpty(t, expected, "precondition: source has a head cursor")
 
 	raw, err := c.Call("events/subscribe", map[string]any{
-		"id":       "wh-fromnow",
 		"name":     "discord.message",
 		"delivery": map[string]any{"mode": "webhook", "url": "http://localhost:1/sink", "secret": events.GenerateSecret()},
 		// cursor field intentionally omitted → JSON null on parse

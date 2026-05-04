@@ -107,7 +107,6 @@ func TestValidateClientSecret_AcceptsBothBase64Variants(t *testing.T) {
 // is REQUIRED — there is no server-side fallback.
 func TestSubscribe_RejectsMissingSecret(t *testing.T) {
 	resp := callSubscribeHandler(t, map[string]any{
-		"id":   "test",
 		"name": "fake.event",
 		"delivery": map[string]any{
 			"mode": "webhook",
@@ -132,7 +131,6 @@ func TestSubscribe_RejectsMalformedSecret(t *testing.T) {
 	for _, s := range bad {
 		t.Run(s, func(t *testing.T) {
 			resp := callSubscribeHandler(t, map[string]any{
-				"id":   "test",
 				"name": "fake.event",
 				"delivery": map[string]any{
 					"mode":   "webhook",
@@ -151,7 +149,6 @@ func TestSubscribe_RejectsMalformedSecret(t *testing.T) {
 // reject conformant inputs.
 func TestSubscribe_AcceptsValidWhsecSecret(t *testing.T) {
 	resp := callSubscribeHandler(t, map[string]any{
-		"id":   "test",
 		"name": "fake.event",
 		"delivery": map[string]any{
 			"mode":   "webhook",
@@ -171,7 +168,6 @@ func TestSubscribe_AcceptsValidWhsecSecret(t *testing.T) {
 func TestSubscribe_ResponseDoesNotEchoSecret(t *testing.T) {
 	supplied := generateSecret()
 	resp := callSubscribeHandler(t, map[string]any{
-		"id":   "test",
 		"name": "fake.event",
 		"delivery": map[string]any{
 			"mode":   "webhook",
@@ -190,19 +186,22 @@ func TestSubscribe_ResponseDoesNotEchoSecret(t *testing.T) {
 	assert.NotContains(t, body, supplied, "subscribe response must not echo the client-supplied secret value")
 }
 
-// TestUnsubscribe_RejectsSecretForm verifies the handler no longer
-// accepts the legacy "unsubscribe by presenting the secret" path that
-// existed before β. Spec keys unsubscribe on the (principal, name,
-// params, url) tuple (γ implements full tuple); β narrows to id-only.
-func TestUnsubscribe_RejectsSecretForm(t *testing.T) {
+// TestUnsubscribe_RequiresTupleNotSecret verifies the handler ignores
+// the legacy proof-of-possession secret-form unsubscribe — γ keys
+// unsubscribe on the (principal, name, params, delivery.url) tuple
+// per spec §"Unsubscribing: events/unsubscribe" L509. A request that
+// supplies only delivery.url + delivery.secret (no name) is rejected
+// with name-required because the secret field is no longer part of the
+// unsubscribe surface.
+func TestUnsubscribe_RequiresTupleNotSecret(t *testing.T) {
 	resp := callUnsubscribeHandler(t, map[string]any{
-		// id intentionally omitted
+		// name intentionally omitted; secret would have worked pre-β
 		"delivery": map[string]any{
 			"url":    "https://example.com/hook",
 			"secret": "whsec_should-not-be-accepted-here",
 		},
 	})
-	requireRPCError(t, resp, core.ErrCodeInvalidParams, "id")
+	requireRPCError(t, resp, core.ErrCodeInvalidParams, "name")
 }
 
 // --- handler-invocation helpers (private to test file) ---
@@ -219,15 +218,21 @@ func (fakeSecretValidationSource) Poll(_ string, _ int) PollResult { return Poll
 func (fakeSecretValidationSource) Latest() string                  { return "" }
 
 // buildSecretValidationStack returns a server with the events handlers
-// registered AND an initialize handshake completed so subsequent
+// registered (with UnsafeAnonymousPrincipal: "test-principal" so the
+// handlers don't reject every test request with -32012 Unauthorized —
+// γ adds spec-mandated auth gating, but the secret-validation tests
+// here are concerned with the validator and unsubscribe shape, not
+// the auth gate. Auth-specific tests live in identity_handler_test.go
+// (γ-2 follow-on).) The initialize handshake is completed so subsequent
 // Dispatch calls accept arbitrary methods.
 func buildSecretValidationStack(t *testing.T) *server.Server {
 	t.Helper()
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
 	Register(Config{
-		Sources:  []EventSource{fakeSecretValidationSource{}},
-		Webhooks: NewWebhookRegistry(),
-		Server:   srv,
+		Sources:                  []EventSource{fakeSecretValidationSource{}},
+		Webhooks:                 NewWebhookRegistry(),
+		Server:                   srv,
+		UnsafeAnonymousPrincipal: "test-principal",
 	})
 	// Two-step init handshake — the dispatcher rejects non-init methods
 	// until BOTH (a) the initialize request returns and (b) the client

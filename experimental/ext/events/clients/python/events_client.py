@@ -276,7 +276,6 @@ class WebhookSubscription:
         event_name: str,
         callback_url: str,
         secret: str = "",
-        sub_id: str = "wh-sub",
         refresh_factor: float = 0.5,
         on_event: callable = None,
         on_refresh: callable = None,
@@ -287,6 +286,13 @@ class WebhookSubscription:
                 whsec_ + base64 of 24-64 random bytes. If empty, the SDK
                 auto-generates a spec-conformant value via
                 generate_webhook_secret().
+
+        Note: there is no sub_id parameter. Per spec §"Subscription
+        Identity" → "Key composition" L363, the server derives the
+        subscription id from (principal, name, params, url); clients
+        do not supply one. The derived id is read back from the
+        subscribe response (self.id after start()).
+
         on_refresh: called after each successful refresh (including the initial
                     subscribe and any post-recovery re-subscribe). Receives no args.
         on_recover: called when a refresh fails (subscription expired) and a
@@ -297,7 +303,6 @@ class WebhookSubscription:
         self.event_name = event_name
         self.callback_url = callback_url
         self.secret = secret if secret else generate_webhook_secret()
-        self.sub_id = sub_id
         self.refresh_factor = refresh_factor
         self.on_event = on_event
         self.on_refresh = on_refresh
@@ -308,9 +313,10 @@ class WebhookSubscription:
         self._refresh_before = None  # parsed from server response
 
     def _subscribe(self):
-        """Send events/subscribe and capture refreshBefore."""
+        """Send events/subscribe and capture refreshBefore. Per spec the
+        request does NOT carry id; server derives it over the canonical
+        tuple (§"Subscription Identity" → "Key composition" L363)."""
         resp = self.session.rpc("events/subscribe", {
-            "id": self.sub_id,
             "name": self.event_name,
             "delivery": {
                 "mode": "webhook",
@@ -466,7 +472,6 @@ def cmd_webhook(session: MCPSession, args):
         event_name=args.event,
         callback_url=hook_url,
         secret=args.secret,  # empty → SDK auto-generates a whsec_ value
-        sub_id="wh-demo",
         refresh_factor=args.refresh_factor,
     )
     secret_holder = [sub.secret]

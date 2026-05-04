@@ -121,6 +121,44 @@ Operational notes:
 - **Rotation is client-initiated.** Supply a new `whsec_` value on a refresh `events/subscribe` call. The server replaces the stored value; in-flight deliveries signed with the old secret will fail verification at the receiver. Spec describes a Standard-Webhooks dual-sign grace window for this case (not yet implemented in mcpkit; tracked under PR group ζ).
 - **Treat each `whsec_` value as a credential.** Provision via secrets manager (Vault, AWS Secrets Manager, GCP Secret Manager, K8s secret with appropriate restrictions) when subscribing programmatically. Compromise of one secret only compromises that subscription's deliveries — there's no master root.
 
+## Auth + tuple subscription identity (γ)
+
+Per spec §"Subscription Identity" → "Authentication required" L361, webhook `events/subscribe` and `events/unsubscribe` MUST require an authenticated principal — servers reject unauthenticated calls with `-32012 Unauthorized`. The registry keys subscriptions on the canonical tuple `(principal, delivery.url, name, params)`; cross-tenant isolation is by construction since the principal is part of the key.
+
+Production wiring (the spec-strict path):
+
+```go
+validator := auth.NewJWTValidator(auth.JWTConfig{
+    JWKSURL:  "<your-OIDC-issuer>/.well-known/jwks.json",
+    Issuer:   "<your-OIDC-issuer>",
+    Audience: "mcp-events",
+})
+validator.Start()
+
+srv := server.NewServer(
+    core.ServerInfo{...},
+    server.WithSubscriptions(),
+    server.WithAuth(validator),  // ← anonymous webhook subscribes → -32012
+)
+events.Register(events.Config{
+    Sources:  ...,
+    Webhooks: webhooks,
+    Server:   srv,
+    // UnsafeAnonymousPrincipal intentionally NOT set — production
+    // deployments rely on the spec-strict auth gate.
+})
+```
+
+The `events` package only depends on `core.Claims` (the abstract auth contract), not on `ext/auth` or any specific auth implementation. You can swap in mTLS-derived principals, session-cookie validators, or custom JWKS — Events keeps working as long as `ctx.AuthClaims().Subject` returns the principal.
+
+### `UnsafeAnonymousPrincipal` is for demos only
+
+The `events.Config.UnsafeAnonymousPrincipal` field deliberately deviates from the spec — when set, anonymous calls are accepted under the configured principal. **Production deployments MUST leave this field empty.** The startup log line emitted by `events.Register` explicitly warns when it's non-empty so misconfiguration is loud rather than silent.
+
+If a production deployment sets it: the spec's `-32012` rejection is bypassed; webhook subscribe accepts anonymous calls under a single shared principal; cross-tenant isolation breaks (everyone is "the demo user"); the audit trail loses its principal field. None of these are acceptable production properties.
+
+The demos use it as an escape hatch so `make demo` works without standing up an auth provider. Each demo also auto-detects `OAUTH_ISSUER` and switches to real auth when present — see `examples/events/discord/README.md` for the env-var contract.
+
 ## Connecting an MCP host
 
 Once the server is running, point any MCP host at it:
@@ -153,5 +191,7 @@ Before going live with a webhook-enabled events server in a private-cloud deploy
 - [ ] Receiver is idempotent on `event.eventId`.
 - [ ] Receiver returns 2xx for accept, 4xx for reject-permanently, 5xx for retry.
 - [ ] Webhook secrets (each subscription's `whsec_` value) reach the receiver via your secrets-management path; rotation procedure documented.
+- [ ] **`events.Config.UnsafeAnonymousPrincipal` is EMPTY** in production code paths. Auth is wired via `server.WithAuth(...)`. Anonymous webhook subscribes return `-32012 Unauthorized`.
+- [ ] Server startup log shows `[events] WARNING: UnsafeAnonymousPrincipal=...` is **NOT** present. (Its presence indicates the demo escape hatch is on.)
 - [ ] If using Standard Webhooks header mode, WAF allowlist has the `webhook-*` headers (not `X-MCP-*`).
 - [ ] Subscribers run an SDK that auto-refreshes (or have explicit refresh logic that fires before `refreshBefore`).
