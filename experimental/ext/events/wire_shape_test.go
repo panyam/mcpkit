@@ -288,6 +288,46 @@ func buildPollFilterStack(t *testing.T) (*server.Server, *YieldingSource[fakeFil
 	return srv, src
 }
 
+// TestSubscribe_AcceptsMaxAge verifies the spec's maxAge floor on
+// events/subscribe per §"Cursor Lifecycle" → "Bounding replay with
+// maxAge" L529. Client supplies a per-subscription replay floor that
+// the server records on the WebhookTarget for use on (future) reconnect
+// — δ-3 plumbs the field, ζ wires the actual replay-with-floor logic.
+//
+// Without storing maxAge on the target, a long-offline subscriber's
+// reconnect would replay everything the cursor still covers; with it,
+// the server can bound replay to the requested floor.
+func TestSubscribe_AcceptsMaxAge(t *testing.T) {
+	srv, webhooks := buildAuthGateStack(t, "test-principal")
+	params := validSubscribeParams()
+	params["maxAge"] = 300
+	resp := dispatchSubscribe(t, srv, params)
+	require.Nil(t, resp.Error, "subscribe with maxAge must succeed; got %+v", resp.Error)
+
+	targets := webhooks.Targets()
+	require.Len(t, targets, 1)
+	assert.Equal(t, 300, targets[0].MaxAgeSeconds,
+		"maxAge from subscribe request must be stored on WebhookTarget for reconnect-replay bounding")
+}
+
+// TestSubscribe_DefaultsMaxAgeToZero is the counter-test: when maxAge is
+// omitted, the target stores 0 — no floor, replay is unbounded by maxAge
+// (still bounded by cursor + source retention). Catches over-eager
+// defaulting that would silently shrink replay for callers who didn't
+// opt in.
+func TestSubscribe_DefaultsMaxAgeToZero(t *testing.T) {
+	srv, webhooks := buildAuthGateStack(t, "test-principal")
+	params := validSubscribeParams()
+	// maxAge intentionally omitted
+	resp := dispatchSubscribe(t, srv, params)
+	require.Nil(t, resp.Error)
+
+	targets := webhooks.Targets()
+	require.Len(t, targets, 1)
+	assert.Equal(t, 0, targets[0].MaxAgeSeconds,
+		"omitted maxAge must default to 0 (no floor)")
+}
+
 // TestInvalidCallbackUrl_UsesSpecCode verifies the InvalidCallbackUrl error
 // uses spec code -32015, not the legacy -32005.
 func TestInvalidCallbackUrl_UsesSpecCode(t *testing.T) {

@@ -426,6 +426,7 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 				Secret string `json:"secret,omitempty"`
 			} `json:"delivery"`
 			Cursor *string `json:"cursor"`
+			MaxAge int     `json:"maxAge,omitempty"` // δ-3: spec §"Cursor Lifecycle" L529; seconds, 0 = no floor
 		}
 		if err := json.Unmarshal(params, &req); err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
@@ -479,7 +480,7 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 		canonical := canonicalKey(principal, req.Delivery.URL, req.Name, req.Params)
 		derivedID := deriveSubscriptionID(canonical)
 
-		expiresAt := webhooks.Register(canonical, derivedID, req.Delivery.URL, req.Delivery.Secret)
+		expiresAt := webhooks.Register(canonical, derivedID, req.Delivery.URL, req.Delivery.Secret, req.MaxAge)
 
 		// Resolve `cursor: null` to the source's current head ("from now")
 		// for cursored sources. Cursorless sources always serialize as null.
