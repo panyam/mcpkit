@@ -359,6 +359,10 @@ func runDemo() {
 				CallbackURL:   hookSrv.URL,
 				RefreshFactor: 0.5,
 				OnRefresh:     func() { atomic.AddInt32(&refreshes, 1) },
+				// δ-3: bound worst-case replay on reconnect to 5 minutes
+				// (§"Cursor Lifecycle" L529). Stored on WebhookTarget
+				// for ζ's reconnect-with-replay logic.
+				MaxAge: 5 * time.Minute,
 			})
 			if err != nil {
 				fmt.Printf("    ERROR: subscribe failed: %v\n", err)
@@ -401,6 +405,10 @@ func runDemo() {
 				fmt.Printf("      eventId: %s\n", ev.EventID)
 				fmt.Printf("      cursor:  %s\n", ev.CursorStr())
 				fmt.Printf("      content: %q (from %s)\n", ev.Data.Content, ev.Data.Author.Username)
+				// δ-4: per-event _meta from the source's metaFunc.
+				if ev.Meta != nil {
+					fmt.Printf("      _meta:   %v\n", ev.Meta)
+				}
 			case <-time.After(3 * time.Second):
 				fmt.Printf("    ERROR: no webhook delivery within 3s\n")
 				return
