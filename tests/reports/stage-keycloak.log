@@ -1,35 +1,29 @@
 === Stage 12/12: keycloak (make testkcl-auto) ===
-Started: Mon May  4 00:44:12 PDT 2026
-Starting Keycloak for interop tests...
-936a897256ba51b212a49ab4c60b4dacd45c70c638f990246826c56609707cd7
-Keycloak starting on port 8180... (realm import takes ~30s)
-Run 'make kcllogs' to watch startup, 'make testkcl' when ready
-Waiting for Keycloak realm...
+Started: Mon May  4 13:53:03 PDT 2026
 === RUN   TestKeycloak_MCPServer_ValidToken
---- PASS: TestKeycloak_MCPServer_ValidToken (0.23s)
+--- PASS: TestKeycloak_MCPServer_ValidToken (0.03s)
 === RUN   TestKeycloak_MCPServer_TamperedToken
 --- PASS: TestKeycloak_MCPServer_TamperedToken (0.02s)
 === RUN   TestKeycloak_MCPServer_ScopeAllowed
 --- PASS: TestKeycloak_MCPServer_ScopeAllowed (0.02s)
 === RUN   TestKeycloak_MCPServer_ScopeDenied
---- PASS: TestKeycloak_MCPServer_ScopeDenied (0.02s)
+--- PASS: TestKeycloak_MCPServer_ScopeDenied (0.01s)
 === RUN   TestKeycloak_MCPServer_PRM
 --- PASS: TestKeycloak_MCPServer_PRM (0.01s)
 === RUN   TestKeycloak_MCPServer_WWWAuthenticate
 --- PASS: TestKeycloak_MCPServer_WWWAuthenticate (0.01s)
 === RUN   TestKeycloak_MCPServer_PasswordGrant
---- PASS: TestKeycloak_MCPServer_PasswordGrant (0.11s)
+--- PASS: TestKeycloak_MCPServer_PasswordGrant (0.04s)
 === RUN   TestKeycloak_PublicMethods_DiscoverWithoutAuth
 --- PASS: TestKeycloak_PublicMethods_DiscoverWithoutAuth (0.01s)
 === RUN   TestKeycloak_PublicMethods_ToolCallRequiresAuth
 --- PASS: TestKeycloak_PublicMethods_ToolCallRequiresAuth (0.01s)
 === RUN   TestKeycloak_SessionHijack_DifferentUserRejected
---- PASS: TestKeycloak_SessionHijack_DifferentUserRejected (0.08s)
+--- PASS: TestKeycloak_SessionHijack_DifferentUserRejected (0.06s)
 === RUN   TestKeycloak_SessionHijack_SameUserAllowed
 --- PASS: TestKeycloak_SessionHijack_SameUserAllowed (0.04s)
 === RUN   TestKeycloak_TokenRefresh_PasswordGrant
---- PASS: TestKeycloak_TokenRefresh_PasswordGrant (0.06s)
+--- PASS: TestKeycloak_TokenRefresh_PasswordGrant (0.04s)
 PASS
-ok  	github.com/panyam/mcpkit/tests/keycloak	1.321s
-make[2]: *** No rule to make target `downkcl'.  Stop.
-Finished: Mon May  4 00:44:25 PDT 2026
+ok  	github.com/panyam/mcpkit/tests/keycloak	1.155s
+Finished: Mon May  4 13:53:04 PDT 2026

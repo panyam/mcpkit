@@ -9,7 +9,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -20,50 +19,6 @@ import (
 	"github.com/panyam/mcpkit/experimental/ext/events"
 	eventsclient "github.com/panyam/mcpkit/experimental/ext/events/clients/go"
 )
-
-// notifBroker is a tiny multiplexer for `notifications/events/event`. The
-// MCP client only accepts a single notification callback at construction
-// time, so the walkthrough sets one dispatcher that fans events out by
-// name to per-step channels.
-type notifBroker struct {
-	mu      sync.Mutex
-	byName  map[string]chan map[string]any
-}
-
-func newNotifBroker() *notifBroker { return &notifBroker{byName: map[string]chan map[string]any{}} }
-
-// Subscribe returns a buffered channel for notifications/events/event with
-// matching name. Caller is responsible for reading; the broker drops if
-// the channel is full so it can never block the dispatcher.
-func (b *notifBroker) Subscribe(name string, buf int) <-chan map[string]any {
-	ch := make(chan map[string]any, buf)
-	b.mu.Lock()
-	b.byName[name] = ch
-	b.mu.Unlock()
-	return ch
-}
-
-func (b *notifBroker) dispatch(method string, params any) {
-	if method != "notifications/events/event" {
-		return
-	}
-	raw, _ := json.Marshal(params)
-	var p map[string]any
-	if err := json.Unmarshal(raw, &p); err != nil {
-		return
-	}
-	name, _ := p["name"].(string)
-	b.mu.Lock()
-	ch, ok := b.byName[name]
-	b.mu.Unlock()
-	if !ok {
-		return
-	}
-	select {
-	case ch <- p:
-	default:
-	}
-}
 
 // filterFlags strips the dispatcher flags so the inner flag.Parse on -addr
 // (or the demo's flag.Parse) doesn't choke on them.
@@ -172,19 +127,16 @@ func runDemo() {
 	var (
 		c             *client.Client
 		messageCursor *string
-		broker        = newNotifBroker()
 	)
 
 	// --- Step 1: Connect ---
 	demo.Step("Connect to the events server").
 		Arrow("Host", "Server", "POST /mcp — initialize").
 		DashedArrow("Server", "Host", "serverInfo + capabilities").
-		Note("The mcpkit client opens a GET SSE stream so push notifications reach us during later steps. We're not declaring any extension capability — events/* are server-side custom methods registered via experimental/ext/events. A small in-process broker fans out `notifications/events/event` by name so each step can subscribe just to what it cares about.").
+		Note("Plain MCP initialize over Streamable HTTP. We're not declaring any extension capability — events/* are server-side custom methods registered via experimental/ext/events. Push delivery uses events/stream (a long-lived per-subscription POST that returns SSE), not the session GET stream — no transport-level wiring needed in the client.").
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			c = client.NewClient(mcpURL,
 				core.ClientInfo{Name: "discord-events-host", Version: "1.0"},
-				client.WithGetSSEStream(),
-				client.WithNotificationCallback(broker.dispatch),
 			)
 			if err := c.Connect(); err != nil {
 				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
@@ -227,13 +179,28 @@ func runDemo() {
 			return
 		})
 
-	// --- Step 3: Push delivery ---
-	demo.Step("Push: inject a message, observe SSE notification").
+	// --- Step 3: Push delivery via events/stream ---
+	demo.Step("Push: open events/stream, inject a message, observe per-call notifications").
+		Arrow("Host", "Server", "events/stream { name: discord.message }").
+		DashedArrow("Server", "Host", "notifications/events/active { requestId, cursor }").
 		Arrow("Receiver", "Server", "POST /inject (simulated Discord message)").
-		DashedArrow("Server", "Host", "notifications/events/event (via SSE)").
-		Note("The /inject endpoint is the demo's stand-in for a real Discord WebSocket handler; in production the bot's MessageCreate handler calls yield(). Either way, the YieldingSource fans out: the library installs an emit hook that broadcasts the event to all SSE subscribers.").
+		DashedArrow("Server", "Host", "notifications/events/event { requestId, eventId, ... }").
+		DashedArrow("Host", "Server", "(close request) → StreamEventsResult final frame").
+		Note("events/stream is a long-lived JSON-RPC request — one per subscription. The server confirms with notifications/events/active, then delivers events as notifications/events/event on the call's own SSE response stream. Heartbeats fire every ≥30s carrying the source's current cursor so the client's persisted cursor advances during quiet periods. Per spec §\"Push-Based Delivery\" L223-296. Replaces the broadcast-to-all-listeners model from Phase 1; per-stream isolation comes for free since each stream is its own POST. The typed Go SDK Stream() helper at experimental/ext/events/clients/go threads the per-call notification hook (client.CallContext.WithNotifyHook) so callbacks fire only for THIS stream's notifications.").
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
-			gotEvent := broker.Subscribe("discord.message", 4)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			gotEvent := make(chan events.Event, 4)
+			stream, err := eventsclient.Stream(ctx, c, eventsclient.StreamOptions{
+				EventName: "discord.message",
+				OnEvent:   func(ev events.Event) { gotEvent <- ev },
+			})
+			if err != nil {
+				fmt.Printf("    ERROR: Stream open failed: %v\n", err)
+				return
+			}
+			defer stream.Stop()
 
 			body := map[string]any{
 				"guild_id":   "demo-guild",
@@ -247,16 +214,19 @@ func runDemo() {
 			}
 
 			select {
-			case p := <-gotEvent:
-				if cur, ok := p["cursor"].(string); ok {
-					cc := cur
+			case ev := <-gotEvent:
+				if ev.Cursor != nil {
+					cc := *ev.Cursor
 					messageCursor = &cc
 				}
-				fmt.Printf("    name:    %v\n", p["name"])
-				fmt.Printf("    eventId: %v\n", p["eventId"])
-				fmt.Printf("    cursor:  %v\n", p["cursor"])
-				if d, ok := p["data"].(map[string]any); ok {
-					fmt.Printf("    text:    %v (from %v)\n", d["content"], d["author"])
+				fmt.Printf("    name:    %s\n", ev.Name)
+				fmt.Printf("    eventId: %s\n", ev.EventID)
+				fmt.Printf("    cursor:  %s\n", ev.CursorStr())
+				var d map[string]any
+				_ = json.Unmarshal(ev.Data, &d)
+				fmt.Printf("    text:    %v (from %v)\n", d["content"], d["author"])
+				if len(ev.Meta) > 0 {
+					fmt.Printf("    _meta:   %v\n", ev.Meta)
 				}
 			case <-time.After(3 * time.Second):
 				fmt.Printf("    ERROR: no push notification within 3s\n")
@@ -299,12 +269,26 @@ func runDemo() {
 		})
 
 	// --- Step 5: Cursorless source ---
-	demo.Step("Cursorless: inject a typing event, observe cursor:null on the wire").
+	demo.Step("Cursorless: open events/stream for typing, observe cursor:null on the wire").
+		Arrow("Host", "Server", "events/stream { name: discord.typing }").
+		DashedArrow("Server", "Host", "notifications/events/active { cursor: null }").
 		Arrow("Receiver", "Server", "POST /inject?event=discord.typing").
 		DashedArrow("Server", "Host", "notifications/events/event { cursor: null }").
-		Note("WithoutCursors() sources don't buffer and emit cursor:null. Push and webhook fanout still work — there's just nothing to replay. Useful for ephemeral state (typing indicators, presence, current readings).").
+		Note("WithoutCursors() sources don't buffer and emit cursor:null. Push delivery via events/stream still works — there's just nothing to replay. Heartbeats also carry cursor:null (per spec L294: \"null for event types that do not support replay\"). Useful for ephemeral state (typing indicators, presence, current readings).").
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
-			gotEvent := broker.Subscribe("discord.typing", 4)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			gotEvent := make(chan events.Event, 4)
+			stream, err := eventsclient.Stream(ctx, c, eventsclient.StreamOptions{
+				EventName: "discord.typing",
+				OnEvent:   func(ev events.Event) { gotEvent <- ev },
+			})
+			if err != nil {
+				fmt.Printf("    ERROR: Stream open failed: %v\n", err)
+				return
+			}
+			defer stream.Stop()
 
 			body := map[string]any{
 				"guild_id":   "demo-guild",
@@ -317,17 +301,16 @@ func runDemo() {
 			}
 
 			select {
-			case p := <-gotEvent:
-				cursorVal, present := p["cursor"]
-				fmt.Printf("    name:        %v\n", p["name"])
-				fmt.Printf("    cursor:      %v (present=%v)\n", cursorVal, present)
-				if cursorVal != nil {
+			case ev := <-gotEvent:
+				fmt.Printf("    name:        %s\n", ev.Name)
+				fmt.Printf("    cursor:      %v (HasCursor=%v)\n", ev.Cursor, ev.HasCursor())
+				if ev.Cursor != nil {
 					fmt.Printf("    UNEXPECTED: cursorless events should wire as cursor:null\n")
 				}
-				if d, ok := p["data"].(map[string]any); ok {
-					fmt.Printf("    user:        %v\n", d["user"])
-					fmt.Printf("    started_at:  %v\n", d["started_at"])
-				}
+				var d map[string]any
+				_ = json.Unmarshal(ev.Data, &d)
+				fmt.Printf("    user:        %v\n", d["user"])
+				fmt.Printf("    started_at:  %v\n", d["started_at"])
 			case <-time.After(3 * time.Second):
 				fmt.Printf("    ERROR: no typing event within 3s\n")
 			}
@@ -567,22 +550,53 @@ func runDemo() {
 				fmt.Printf("    Will stop automatically after %s if you walk away.\n\n", liveInteractionMaxWait)
 			}
 
-			gotMsg := broker.Subscribe("discord.message", 16)
-			gotTyping := broker.Subscribe("discord.typing", 16)
+			// Two concurrent events/stream calls against the same MCP
+			// session — each is a separate POST holding its own SSE
+			// response. requestId is the demux key on stdio; on
+			// Streamable HTTP each stream's notifications already
+			// arrive on its own response so per-call hooks naturally
+			// isolate. Per spec L271: "A client MAY hold multiple
+			// concurrent events/stream requests open, one per
+			// subscription."
+			liveCtx, liveCancel := context.WithCancel(ctx.Ctx)
+			defer liveCancel()
+
+			gotMsg := make(chan events.Event, 16)
+			gotTyping := make(chan events.Event, 16)
+
+			msgStream, err := eventsclient.Stream(liveCtx, c, eventsclient.StreamOptions{
+				EventName: "discord.message",
+				OnEvent:   func(ev events.Event) { gotMsg <- ev },
+			})
+			if err != nil {
+				fmt.Printf("    ERROR: open discord.message stream: %v\n", err)
+				return
+			}
+			defer msgStream.Stop()
+
+			typingStream, err := eventsclient.Stream(liveCtx, c, eventsclient.StreamOptions{
+				EventName: "discord.typing",
+				OnEvent:   func(ev events.Event) { gotTyping <- ev },
+			})
+			if err != nil {
+				fmt.Printf("    ERROR: open discord.typing stream: %v\n", err)
+				return
+			}
+			defer typingStream.Stop()
 
 			var typingSeen, msgSeen int
 			for {
 				select {
-				case p := <-gotTyping:
+				case ev := <-gotTyping:
 					typingSeen++
-					if d, ok := p["data"].(map[string]any); ok {
-						fmt.Printf("    [typing]  %v in channel %v\n", d["user"], d["channel_id"])
-					}
-				case p := <-gotMsg:
+					var d map[string]any
+					_ = json.Unmarshal(ev.Data, &d)
+					fmt.Printf("    [typing]  %v in channel %v\n", d["user"], d["channel_id"])
+				case ev := <-gotMsg:
 					msgSeen++
-					if d, ok := p["data"].(map[string]any); ok {
-						fmt.Printf("    [message] %v: %q\n", d["author"], d["content"])
-					}
+					var d map[string]any
+					_ = json.Unmarshal(ev.Data, &d)
+					fmt.Printf("    [message] %v: %q\n", d["author"], d["content"])
 				case <-ctx.Ctx.Done():
 					if typingSeen+msgSeen == 0 {
 						fmt.Printf("    No live events received. Make sure the server is started with -token and the bot is invited to a channel you can post in.\n")

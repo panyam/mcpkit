@@ -1,6 +1,7 @@
 package events
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -11,14 +12,55 @@ import (
 	"github.com/panyam/mcpkit/core"
 )
 
-const defaultYieldingMaxSize = 1000
+const (
+	defaultYieldingMaxSize         = 1000
+	defaultSubscriberBufferSize    = 64
+)
 
 // YieldingOption configures a YieldingSource at construction time.
 type YieldingOption func(*yieldingConfig)
 
 type yieldingConfig struct {
-	maxSize    int
-	cursorless bool
+	maxSize         int
+	cursorless      bool
+	subscriberBuf   int
+}
+
+// SubscriberEvent flows on the channel returned by YieldingSource.Subscribe.
+// Event is always populated for live deliveries. Truncated=true signals
+// "one or more events were dropped before this one" — consumers SHOULD
+// treat this as a possible state gap and re-fetch authoritative state if
+// it matters. Per spec §"Push-Based Delivery" → "Event Delivery" L285,
+// ε-2's stream handler maps Truncated=true onto a fresh
+// notifications/events/active{truncated:true} that precedes the event.
+//
+// Riding the flag on the next successful event (rather than a separate
+// marker frame) keeps the channel order trivially correct under any
+// buffer size and avoids the marker-starves-the-slot pathology when
+// consumers stay behind.
+type SubscriberEvent struct {
+	Event     Event
+	Truncated bool
+}
+
+// subscriberSlot is one registered Subscribe channel. pendingTruncated is
+// set when a yield is dropped because the chan is full; the next successful
+// send delivers a Truncated marker before the event itself.
+type subscriberSlot struct {
+	ch               chan SubscriberEvent
+	pendingTruncated atomic.Bool
+}
+
+// WithSubscriberBuffer overrides the per-Subscribe channel buffer size
+// (default 64). Larger buffers tolerate slower consumers without dropping;
+// smaller buffers fail fast and surface gaps via Truncated markers earlier.
+// Has no effect on existing subscribers.
+func WithSubscriberBuffer(n int) YieldingOption {
+	return func(c *yieldingConfig) {
+		if n > 0 {
+			c.subscriberBuf = n
+		}
+	}
 }
 
 // WithMaxSize caps the YieldingSource's internal ring buffer. Older events
@@ -77,7 +119,7 @@ func WithoutCursors() YieldingOption {
 //
 //	go alertWatcher(func(a AlertData) { _ = yield(a) })
 func NewYieldingSource[Data any](def EventDef, opts ...YieldingOption) (*YieldingSource[Data], func(Data) error) {
-	cfg := &yieldingConfig{maxSize: defaultYieldingMaxSize}
+	cfg := &yieldingConfig{maxSize: defaultYieldingMaxSize, subscriberBuf: defaultSubscriberBufferSize}
 	for _, o := range opts {
 		o(cfg)
 	}
@@ -89,7 +131,12 @@ func NewYieldingSource[Data any](def EventDef, opts ...YieldingOption) (*Yieldin
 		def.Cursorless = true
 	}
 
-	s := &YieldingSource[Data]{def: def, maxSize: cfg.maxSize, cursorless: cfg.cursorless}
+	s := &YieldingSource[Data]{
+		def:           def,
+		maxSize:       cfg.maxSize,
+		cursorless:    cfg.cursorless,
+		subscriberBuf: cfg.subscriberBuf,
+	}
 	yield := func(data Data) error {
 		return s.yield(data)
 	}
@@ -120,15 +167,17 @@ type yieldedEntry[Data any] struct {
 // Push and webhook fanout still fire (events emitted with `cursor: null`),
 // but Poll always returns empty and Recent / ByCursor return zero results.
 type YieldingSource[Data any] struct {
-	def        EventDef
-	maxSize    int
-	cursorless bool
-	seq        atomic.Int64
+	def           EventDef
+	maxSize       int
+	cursorless    bool
+	subscriberBuf int
+	seq           atomic.Int64
 
-	mu       sync.RWMutex
-	entries  []yieldedEntry[Data]
-	emitHook func(Event)
-	metaFunc func(Data) map[string]any
+	mu          sync.RWMutex
+	entries     []yieldedEntry[Data]
+	emitHook    func(Event)
+	metaFunc    func(Data) map[string]any
+	subscribers []*subscriberSlot
 }
 
 func (s *YieldingSource[Data]) Def() EventDef { return s.def }
@@ -146,6 +195,53 @@ func (s *YieldingSource[Data]) SetMetaFunc(f func(Data) map[string]any) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.metaFunc = f
+}
+
+// Subscribe registers a per-call live-event channel for push delivery
+// (ε-1 — foundation for events/stream). The returned channel receives a
+// SubscriberEvent for every yield() until ctx is Done; on cancellation
+// the slot is removed from the source and the channel is closed (range
+// loops exit cleanly, select-on-closed returns the zero value).
+//
+// On a slow consumer (channel full), yield does NOT block — the event
+// is dropped for that subscriber and a Truncated marker is sent on the
+// next successful send. Stream handlers map Truncated=true onto a fresh
+// notifications/events/active{truncated:true, cursor:source.Latest()}
+// per spec §"Push-Based Delivery" → "Event Delivery" L285.
+//
+// Cursorless sources still buffer-and-fanout to subscribers (push delivery
+// works fine without replay); only Poll returns empty on cursorless.
+func (s *YieldingSource[Data]) Subscribe(ctx context.Context) <-chan SubscriberEvent {
+	slot := &subscriberSlot{ch: make(chan SubscriberEvent, s.subscriberBuf)}
+	s.mu.Lock()
+	s.subscribers = append(s.subscribers, slot)
+	s.mu.Unlock()
+
+	go func() {
+		<-ctx.Done()
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		for i, x := range s.subscribers {
+			if x == slot {
+				s.subscribers = append(s.subscribers[:i], s.subscribers[i+1:]...)
+				break
+			}
+		}
+		// Close inside the same lock that the fanout in yield() takes —
+		// guarantees no concurrent send attempts a write to the closed chan.
+		close(slot.ch)
+	}()
+
+	return slot.ch
+}
+
+// SubscriberCount returns the number of live Subscribe channels. Test/
+// telemetry helper; the count is a snapshot, callers MUST NOT race on it
+// for correctness.
+func (s *YieldingSource[Data]) SubscriberCount() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.subscribers)
 }
 
 // Poll implements EventSource. Returns events with cursor strictly greater
@@ -287,6 +383,22 @@ func (s *YieldingSource[Data]) yield(data Data) error {
 		s.entries = append(s.entries, yieldedEntry[Data]{data: data, event: event})
 		if len(s.entries) > s.maxSize {
 			s.entries = s.entries[len(s.entries)-s.maxSize:]
+		}
+	}
+	// Fanout to live Subscribe channels under the same lock that gates
+	// close() in the cleanup goroutine — guarantees we never send to a
+	// closed channel. Sends are non-blocking; on a full subscriber buffer
+	// the event is dropped for that subscriber and pendingTruncated flips
+	// so the next successful send carries Truncated=true.
+	for _, sub := range s.subscribers {
+		truncated := sub.pendingTruncated.Load()
+		select {
+		case sub.ch <- SubscriberEvent{Event: event, Truncated: truncated}:
+			if truncated {
+				sub.pendingTruncated.Store(false)
+			}
+		default:
+			sub.pendingTruncated.Store(true)
 		}
 	}
 	hook := s.emitHook

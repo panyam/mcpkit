@@ -1,10 +1,12 @@
 package events
 
 import (
+	"context"
 	"encoding/json"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -283,4 +285,134 @@ func TestYieldingSource_MetaFuncReturningNilOmits(t *testing.T) {
 	raw, err := json.Marshal(pr.Events[0])
 	require.NoError(t, err)
 	assert.NotContains(t, string(raw), `"_meta"`, "omitempty must keep _meta off the wire when nil")
+}
+
+// TestYieldingSource_SubscribeReceivesYieldedEvents verifies the ε-1
+// per-call subscription channel: Subscribe(ctx) returns a chan that
+// receives a SubscriberEvent for every subsequent yield. The push
+// delivery model (events/stream, ε-2) sits on top of this primitive —
+// each open stream handler holds one subscription chan.
+//
+// Failing this test means events/stream cannot deliver anything: the
+// stream handler would have no source-level channel to select on.
+func TestYieldingSource_SubscribeReceivesYieldedEvents(t *testing.T) {
+	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ch := src.Subscribe(ctx)
+	require.NotNil(t, ch, "Subscribe must return a non-nil channel")
+
+	require.NoError(t, yield(fakePayload{Msg: "alpha"}))
+	require.NoError(t, yield(fakePayload{Msg: "beta"}))
+
+	first := readSubscriberEvent(t, ch, time.Second)
+	assert.False(t, first.Truncated)
+	assert.Equal(t, "fake", first.Event.Name)
+	var d fakePayload
+	require.NoError(t, json.Unmarshal(first.Event.Data, &d))
+	assert.Equal(t, "alpha", d.Msg)
+
+	second := readSubscriberEvent(t, ch, time.Second)
+	assert.False(t, second.Truncated)
+	require.NoError(t, json.Unmarshal(second.Event.Data, &d))
+	assert.Equal(t, "beta", d.Msg)
+}
+
+// TestYieldingSource_MultipleSubscribersAllReceive verifies fanout:
+// N concurrent subscribers each get every yielded event independently.
+// Without this, two open events/stream connections would compete for
+// the same delivery channel and miss events. Per-spec §"Push-Based
+// Delivery" L271, every stream is independent.
+func TestYieldingSource_MultipleSubscribersAllReceive(t *testing.T) {
+	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	subA := src.Subscribe(ctx)
+	subB := src.Subscribe(ctx)
+	subC := src.Subscribe(ctx)
+
+	require.NoError(t, yield(fakePayload{Msg: "x"}))
+
+	for name, ch := range map[string]<-chan SubscriberEvent{"A": subA, "B": subB, "C": subC} {
+		ev := readSubscriberEvent(t, ch, time.Second)
+		assert.False(t, ev.Truncated, "subscriber %s saw spurious truncated marker", name)
+		assert.Equal(t, "fake", ev.Event.Name, "subscriber %s missing event", name)
+	}
+}
+
+// TestYieldingSource_SubscribeCleanupOnContextCancel verifies the
+// subscriber slot is released when ctx is cancelled — without this,
+// every events/stream that closes would leak its subscriber slot and
+// the source would grow unbounded under churn.
+func TestYieldingSource_SubscribeCleanupOnContextCancel(t *testing.T) {
+	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	_ = src.Subscribe(ctx)
+	assert.Equal(t, 1, src.SubscriberCount(), "subscribe should register one slot")
+
+	cancel()
+	// Cleanup is async; poll briefly.
+	require.Eventually(t, func() bool {
+		return src.SubscriberCount() == 0
+	}, time.Second, 10*time.Millisecond, "ctx cancel must release the subscriber slot")
+
+	// Yield after cancel must not panic on the closed chan.
+	require.NoError(t, yield(fakePayload{Msg: "post-cancel"}))
+}
+
+// TestYieldingSource_SubscribeDropsOnSlowConsumer verifies the bounded
+// fanout: a slow subscriber whose chan is full does NOT block the
+// producer. The dropped events surface as Truncated=true on the next
+// successful send (the flag rides on the next event rather than a
+// separate marker frame — see SubscriberEvent docs).
+//
+// Without drop-on-full, one stalled stream would back-pressure the
+// yield path and starve every other consumer (poll, webhook, other
+// streams).
+func TestYieldingSource_SubscribeDropsOnSlowConsumer(t *testing.T) {
+	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"}, WithSubscriberBuffer(1))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ch := src.Subscribe(ctx)
+
+	// Fill the buffer (cap=1) and then keep yielding without draining.
+	require.NoError(t, yield(fakePayload{Msg: "a"}))
+	require.NoError(t, yield(fakePayload{Msg: "b"})) // dropped — buffer full
+	require.NoError(t, yield(fakePayload{Msg: "c"})) // dropped
+
+	// Drain the queued event — was buffered before any drop.
+	first := readSubscriberEvent(t, ch, time.Second)
+	assert.False(t, first.Truncated, "first event was buffered before any drop")
+	var d fakePayload
+	require.NoError(t, json.Unmarshal(first.Event.Data, &d))
+	assert.Equal(t, "a", d.Msg)
+
+	// Recovery yield: the dropped events surface as Truncated=true on
+	// this next event.
+	require.NoError(t, yield(fakePayload{Msg: "d"}))
+	recovered := readSubscriberEvent(t, ch, time.Second)
+	assert.True(t, recovered.Truncated, "next event after a drop must carry Truncated=true")
+	require.NoError(t, json.Unmarshal(recovered.Event.Data, &d))
+	assert.Equal(t, "d", d.Msg, "the carrying event is the recovery yield, not a re-emission")
+
+	// And the flag clears after one successful flagged delivery.
+	require.NoError(t, yield(fakePayload{Msg: "e"}))
+	clear := readSubscriberEvent(t, ch, time.Second)
+	assert.False(t, clear.Truncated, "Truncated flag must clear after one delivery")
+}
+
+// readSubscriberEvent receives one SubscriberEvent or fails the test.
+func readSubscriberEvent(t *testing.T, ch <-chan SubscriberEvent, d time.Duration) SubscriberEvent {
+	t.Helper()
+	select {
+	case ev := <-ch:
+		return ev
+	case <-time.After(d):
+		t.Fatalf("timed out waiting for SubscriberEvent after %s", d)
+		return SubscriberEvent{}
+	}
 }

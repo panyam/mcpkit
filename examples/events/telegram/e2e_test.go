@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/experimental/ext/events"
+	eventsclient "github.com/panyam/mcpkit/experimental/ext/events/clients/go"
 	"github.com/panyam/mcpkit/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -121,6 +123,91 @@ func TestE2EPollDelivery(t *testing.T) {
 	var resp2 pollResult
 	require.NoError(t, json.Unmarshal(result2.Raw, &resp2))
 	assert.Len(t, resp2.Events, 1)
+}
+
+// TestE2EStreamDelivery exercises events/stream end-to-end via the typed
+// Go SDK helper (eventsclient.Stream), mirroring walkthrough Step 2 — open
+// a stream, yield, observe OnEvent, Stop cleanly.
+//
+// Verifies the new push delivery model works against the telegram demo
+// stack — same wire shape as discord (which has its own e2e test) but
+// against the telegram payload.
+func TestE2EStreamDelivery(t *testing.T) {
+	srv, _, yield, _ := buildTestStack()
+	handler := srv.Handler(server.WithStreamableHTTP(true))
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "stream-test", Version: "1.0"})
+	require.NoError(t, c.Connect())
+	defer c.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	got := make(chan events.Event, 4)
+	stream, err := eventsclient.Stream(ctx, c, eventsclient.StreamOptions{
+		EventName: "telegram.message",
+		OnEvent:   func(ev events.Event) { got <- ev },
+	})
+	require.NoError(t, err)
+	defer stream.Stop()
+
+	require.NoError(t, yieldText(yield, 100, "alice", "stream-test"))
+
+	select {
+	case ev := <-got:
+		assert.Equal(t, "telegram.message", ev.Name)
+		assert.NotEmpty(t, ev.EventID)
+		assert.NotNil(t, ev.Cursor, "telegram.message is cursored — wire MUST carry a non-null cursor")
+	case <-time.After(2 * time.Second):
+		t.Fatal("OnEvent never fired within 2s of yield")
+	}
+
+	stream.Stop()
+	select {
+	case <-stream.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stream goroutine did not exit within 2s of Stop()")
+	}
+}
+
+// TestE2EStreamCursorless verifies events/stream against the cursorless
+// telegram.typing source delivers events with cursor:null on the wire.
+// Mirrors walkthrough Step 3.
+func TestE2EStreamCursorless(t *testing.T) {
+	srv, _, yieldTyping := buildTestStackWithTyping()
+	handler := srv.Handler(server.WithStreamableHTTP(true))
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "cursorless-test", Version: "1.0"})
+	require.NoError(t, c.Connect())
+	defer c.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	got := make(chan events.Event, 4)
+	stream, err := eventsclient.Stream(ctx, c, eventsclient.StreamOptions{
+		EventName: "telegram.typing",
+		OnEvent:   func(ev events.Event) { got <- ev },
+	})
+	require.NoError(t, err)
+	defer stream.Stop()
+
+	require.NoError(t, yieldTyping(TelegramTypingData{
+		ChatID: "100", User: "alice",
+		StartedAt: time.Now().Format(time.RFC3339),
+	}))
+
+	select {
+	case ev := <-got:
+		assert.Equal(t, "telegram.typing", ev.Name)
+		assert.Nil(t, ev.Cursor, "cursorless source MUST emit cursor:null on the wire (spec L294)")
+	case <-time.After(2 * time.Second):
+		t.Fatal("OnEvent never fired within 2s of yieldTyping")
+	}
 }
 
 // TestE2EPushDelivery verifies the library's automatic push fanout — yield()
