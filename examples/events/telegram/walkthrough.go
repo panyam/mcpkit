@@ -172,13 +172,8 @@ func runDemo() {
 
 			select {
 			case ev := <-gotEvent:
-				fmt.Printf("    name:    %s\n", ev.Name)
-				fmt.Printf("    cursor:  %s\n", ev.CursorStr())
-				var d map[string]any
-				_ = json.Unmarshal(ev.Data, &d)
-				fmt.Printf("    chat_id: %v\n", d["chat_id"])
-				fmt.Printf("    user:    %v\n", d["user"])
-				fmt.Printf("    text:    %q\n", d["text"])
+				pretty, _ := json.MarshalIndent(ev, "    ", "  ")
+				fmt.Printf("    notifications/events/event params:\n%s\n", string(pretty))
 			case <-time.After(3 * time.Second):
 				fmt.Printf("    ERROR: no push notification within 3s\n")
 			}
@@ -216,16 +211,11 @@ func runDemo() {
 
 			select {
 			case ev := <-gotEvent:
-				fmt.Printf("    name:        %s\n", ev.Name)
-				fmt.Printf("    cursor:      %v (HasCursor=%v)\n", ev.Cursor, ev.HasCursor())
+				pretty, _ := json.MarshalIndent(ev, "    ", "  ")
+				fmt.Printf("    notifications/events/event params:\n%s\n", string(pretty))
 				if ev.Cursor != nil {
 					fmt.Printf("    UNEXPECTED: cursorless events should wire as cursor:null\n")
 				}
-				var d map[string]any
-				_ = json.Unmarshal(ev.Data, &d)
-				fmt.Printf("    chat_id:    %v\n", d["chat_id"])
-				fmt.Printf("    user:       %v\n", d["user"])
-				fmt.Printf("    started_at: %v\n", d["started_at"])
 			case <-time.After(3 * time.Second):
 				fmt.Printf("    ERROR: no typing event within 3s\n")
 			}
@@ -291,13 +281,8 @@ func runDemo() {
 
 			select {
 			case ev := <-recv.Events():
-				fmt.Printf("    Receiver got typed event:\n")
-				fmt.Printf("      name:    %s\n", ev.Name)
-				fmt.Printf("      eventId: %s\n", ev.EventID)
-				fmt.Printf("      cursor:  %s\n", ev.CursorStr())
-				fmt.Printf("      chat_id: %s\n", ev.Data.ChatID)
-				fmt.Printf("      user:    %s\n", ev.Data.User)
-				fmt.Printf("      text:    %q\n", ev.Data.Text)
+				pretty, _ := json.MarshalIndent(ev, "    ", "  ")
+				fmt.Printf("    webhook delivery (typed Event[TelegramEventData]):\n%s\n", string(pretty))
 			case <-time.After(3 * time.Second):
 				fmt.Printf("    ERROR: no webhook delivery within 3s\n")
 				return
