@@ -41,7 +41,8 @@
  *   - slow_compute — async, sleeps N seconds, returns result
  *   - failing_job — async, always fails after 1s (tool-level error, not protocol error)
  *   - protocol_error_job — async, fails with a JSON-RPC protocol error
- *   - confirm_delete — async, elicitation via the SEP-2663 inputRequests / tasks/update flow
+ *   - confirm_delete — async, single-input elicitation via the SEP-2663 inputRequests / tasks/update flow
+ *   - multi_input — async, fan-out tool that surfaces TWO simultaneous inputRequests (used by v2-29)
  */
 
 import { describe, test, before, after } from 'node:test';
@@ -131,21 +132,26 @@ after(async () => {
  * Parses SSE `data:` lines if the response is text/event-stream, or
  * plain JSON otherwise.
  */
-async function rawRequest(method: string, params: any, opts: { sessionId?: string; meta?: any } = {}): Promise<any> {
+async function rawRequest(
+    method: string,
+    params: any,
+    opts: { sessionId?: string; meta?: any; headers?: Record<string, string> } = {},
+): Promise<any> {
     const result = await rawRequestFull(method, params, opts);
     return result.result;
 }
 
 /**
  * Like rawRequest, but also returns the raw fetch Response so callers can
- * inspect transport-level headers (e.g., SEP-2243 Mcp-Name). Most scenarios
- * only need the JSON-RPC body; the Mcp-Name scenario is the outlier that
- * needs the headers.
+ * inspect transport-level headers. The opts.headers field is merged into
+ * the outgoing fetch headers (after the harness defaults), letting tests
+ * exercise SEP-2243 request-side routing headers (Mcp-Name / Mcp-Method)
+ * or any other transport-level concern.
  */
 async function rawRequestFull(
     method: string,
     params: any,
-    opts: { sessionId?: string; meta?: any } = {},
+    opts: { sessionId?: string; meta?: any; headers?: Record<string, string> } = {},
 ): Promise<{ result: any; response: Response }> {
     const id = nextId++;
     const sid = opts.sessionId ?? sessionId;
@@ -156,6 +162,7 @@ async function rawRequestFull(
             'Content-Type': 'application/json',
             'Accept': 'text/event-stream, application/json',
             'Mcp-Session-Id': sid,
+            ...(opts.headers ?? {}),
         },
         body: JSON.stringify({ jsonrpc: '2.0', id, method, params: requestParams }),
     });
@@ -269,6 +276,11 @@ async function cancelTask(taskId: string, requestState?: string): Promise<any> {
  * and the SEP-2663 flat task shape — taskId/status/ttlSeconds/... are at the
  * top level alongside resultType, NOT nested under a "task" wrapper.
  * (`Result & Task` per SEP-2663.)
+ *
+ * Also enforces the SEP-2663 forbidden-field rule: CreateTaskResult MUST NOT
+ * carry `result`, `error`, or `inputRequests` — those belong on the
+ * DetailedTask returned by tasks/get. And asserts createdAt / lastUpdatedAt
+ * are ISO-8601 strings.
  */
 function assertCreateTaskResult(result: any, label: string) {
     assert.equal(result.resultType, 'task',
@@ -277,6 +289,27 @@ function assertCreateTaskResult(result: any, label: string) {
         `${label}: SEP-2663 CreateTaskResult is a flat intersection; there must be no "task" wrapper key`);
     assert.ok(result.taskId, `${label}: should have top-level taskId`);
     assert.ok(result.status, `${label}: should have top-level status`);
+
+    // SEP-2663: CreateTaskResult MUST NOT carry these — they live on
+    // DetailedTask returned by tasks/get.
+    assert.ok(!('result' in result),
+        `${label}: CreateTaskResult MUST NOT carry result`);
+    assert.ok(!('error' in result),
+        `${label}: CreateTaskResult MUST NOT carry error`);
+    assert.ok(!('inputRequests' in result),
+        `${label}: CreateTaskResult MUST NOT carry inputRequests`);
+
+    // SEP-2663 timestamps — both keys present and ISO-8601 formatted.
+    // Regex is the pragmatic choice: Date.parse is too permissive (accepts
+    // RFC-2822, "May 4 2026", etc.); new Date(s).toISOString() === s is too
+    // strict (rejects valid +00:00 offsets and sub-second variations);
+    // Temporal.Instant.from is Node 24+ experimental. If a stdlib ISO-8601
+    // validator becomes broadly available, swap this regex for it.
+    const iso8601 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
+    assert.match(result.createdAt, iso8601,
+        `${label}: createdAt must be ISO-8601 (got ${result.createdAt})`);
+    assert.match(result.lastUpdatedAt, iso8601,
+        `${label}: lastUpdatedAt must be ISO-8601 (got ${result.lastUpdatedAt})`);
 }
 
 /**
@@ -448,8 +481,9 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
     // ========================================================================
     // Scenario 08: tasks/cancel on terminal task returns error
     //
-    // Per spec: -32602 (InvalidParams). Enforced from the start since
-    // v2 is a new spec.
+    // Per spec: SHOULD return -32602 (InvalidParams) when tasks/cancel is
+    // called for an unknown / terminal taskId. Clarified upstream in
+    // modelcontextprotocol/specification commit d963ad0.
     // ========================================================================
     test('v2-08: cancel completed task returns error', async () => {
         const result = await callTool('slow_compute', { seconds: 1, label: 'v2-cancel-done' });
@@ -554,10 +588,9 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
         assert.ok(!('ttl' in result),
             'v2 CreateTaskResult MUST NOT carry the v1 `ttl` key (use ttlSeconds)');
 
-        // pollIntervalMilliseconds — optional, but the in-tree fixture sets
-        // DefaultPollMs so we expect it to be populated. When present it must
-        // be a positive number and the legacy `pollInterval` key must NOT
-        // appear on the v2 wire.
+        // pollIntervalMilliseconds — optional. When present it must be a
+        // positive number and the legacy `pollInterval` key must NOT appear
+        // on the v2 wire.
         if (result.pollIntervalMilliseconds !== undefined) {
             assert.ok(typeof result.pollIntervalMilliseconds === 'number' && result.pollIntervalMilliseconds > 0,
                 'pollIntervalMilliseconds should be a positive number when present');
@@ -859,62 +892,80 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
     });
 
     // ========================================================================
-    // Scenario 24: SEP-2243 Mcp-Name + Mcp-Method HTTP response headers
+    // Scenario 24: SEP-2243 — server tolerates Mcp-Method / Mcp-Name request
+    // headers
     //
-    // The streamable-HTTP transport MUST set both:
-    //   - Mcp-Name: <taskId> — only on task-creating responses; carries the
-    //     new task id so HTTP-level routing / observability can key off it
-    //     without parsing the JSON body.
-    //   - Mcp-Method: <jsonrpc-method> — on every JSON-RPC response; carries
-    //     the originating method (tools/call, tasks/get, …) so the same
-    //     infrastructure can shape requests by route.
+    // SEP-2243 defines Mcp-Method and Mcp-Name as REQUEST headers (client →
+    // server) used by HTTP infrastructure (proxies, gateways, observability)
+    // to route or shape JSON-RPC traffic without parsing the body:
     //
-    // Mcp-Name MUST NOT appear when the call did not create a task (sync
-    // tool, or extension not negotiated). Mcp-Method MUST appear on every
-    // RPC response regardless of method.
+    //   - Mcp-Method: <jsonrpc-method> — set on every JSON-RPC request so
+    //     edge routers can dispatch by method.
+    //   - Mcp-Name: <task-id> — set on resume operations (tasks/get,
+    //     tasks/update, tasks/cancel) so routers can stick the request to
+    //     the node owning the task.
+    //
+    // The headers are informational. The JSON-RPC body is authoritative —
+    // the server MUST tolerate them, MUST NOT require them, and MUST NOT
+    // change behavior based on them. These scenarios assert that tolerance.
+    //
+    // (Whether the server *also* echoes the headers on responses for
+    // downstream observability is implementation-defined and out of scope
+    // for SEP-2243 conformance — see server-side regression tests for that
+    // behavior.)
     // ========================================================================
-    test('v2-24: Mcp-Name + Mcp-Method response headers on task-creating tools/call', async () => {
-        const { result, response } = await rawRequestFull('tools/call', {
-            name: 'slow_compute', arguments: { seconds: 1, label: 'v2-24' },
-        });
-        assertCreateTaskResult(result, 'v2-24');
-        const mcpName = response.headers.get('mcp-name');
-        assert.ok(mcpName,
-            'Mcp-Name header MUST be set on task-creating tools/call response');
-        assert.equal(mcpName, result.taskId,
-            'Mcp-Name header value MUST equal the taskId in the response body');
-        // SEP-2243 Mcp-Method: the JSON-RPC method that produced this response.
-        const mcpMethod = response.headers.get('mcp-method');
-        assert.equal(mcpMethod, 'tools/call',
-            `Mcp-Method header MUST equal the originating JSON-RPC method; got ${mcpMethod}`);
+    test('v2-24: server tolerates Mcp-Method request header on tools/call', async () => {
+        const result = await rawRequest('tools/call',
+            { name: 'greet', arguments: { name: 'sep-2243' } },
+            { headers: { 'Mcp-Method': 'tools/call' } },
+        );
+        // Body is authoritative; header is informational. Response should
+        // be a normal sync ToolResult with the expected content.
+        assert.equal(result.resultType, 'complete',
+            'sync ToolResult resultType must be "complete" regardless of Mcp-Method header');
+        assert.ok(Array.isArray(result.content) && result.content.length > 0,
+            'sync ToolResult should still return content[]');
+        assert.equal(result.content[0].text, 'Hello, sep-2243!',
+            'tool result should be unaffected by the Mcp-Method header');
     });
 
-    test('v2-24b: Mcp-Name absent on sync tools/call response (Mcp-Method still present)', async () => {
-        const { response } = await rawRequestFull('tools/call', {
-            name: 'greet', arguments: { name: 'world' },
-        });
-        const mcpName = response.headers.get('mcp-name');
-        assert.ok(!mcpName,
-            `sync tools/call MUST NOT emit Mcp-Name; got ${mcpName}`);
-        // Mcp-Method is method-keyed, not task-keyed — it MUST appear on
-        // every RPC response, including this sync one.
-        assert.equal(response.headers.get('mcp-method'), 'tools/call',
-            'Mcp-Method MUST be set on every tools/call response (sync or task)');
-    });
-
-    test('v2-24c: Mcp-Method on tasks/get and tasks/cancel responses', async () => {
-        // Drive a task we can then read + cancel.
-        const created = await callTool('slow_compute', { seconds: 60, label: 'v2-24c' });
-        assertCreateTaskResult(created, 'v2-24c setup');
+    test('v2-24b: server tolerates Mcp-Method + Mcp-Name request headers on tasks/get', async () => {
+        // Drive a task so we have a real taskId to route on.
+        const created = await callTool('slow_compute', { seconds: 60, label: 'v2-24b' });
+        assertCreateTaskResult(created, 'v2-24b setup');
         const taskId = created.taskId;
 
-        const getResp = await rawRequestFull('tasks/get', { taskId });
-        assert.equal(getResp.response.headers.get('mcp-method'), 'tasks/get',
-            'Mcp-Method MUST equal "tasks/get" on the tasks/get response');
+        // tasks/get with both routing headers set — server MUST treat the
+        // body as authoritative and respond normally.
+        const got = await rawRequest('tasks/get', { taskId }, {
+            headers: {
+                'Mcp-Method': 'tasks/get',
+                'Mcp-Name': taskId,
+            },
+        });
+        assert.equal(got.taskId, taskId,
+            'tasks/get response MUST resolve the body taskId regardless of routing headers');
+        assert.ok(got.status,
+            'tasks/get must still return a status when Mcp-Method/Mcp-Name request headers are set');
 
-        const cancelResp = await rawRequestFull('tasks/cancel', { taskId });
-        assert.equal(cancelResp.response.headers.get('mcp-method'), 'tasks/cancel',
-            'Mcp-Method MUST equal "tasks/cancel" on the tasks/cancel response');
+        await cancelTask(taskId);
+    });
+
+    test('v2-24c: server ignores Mcp-Method header that disagrees with body method', async () => {
+        // A misconfigured proxy might forward a stale Mcp-Method header that
+        // disagrees with the body. SEP-2243 says the body is authoritative,
+        // so the server MUST execute the body's method (tools/call here)
+        // and not attempt to honor the header's claim (tasks/get).
+        const result = await rawRequest('tools/call',
+            { name: 'greet', arguments: { name: 'header-mismatch' } },
+            { headers: { 'Mcp-Method': 'tasks/get' } },
+        );
+        assert.equal(result.resultType, 'complete',
+            'server MUST dispatch on the body method, not the Mcp-Method header');
+        assert.ok(Array.isArray(result.content),
+            'server MUST return the body method\'s response shape (sync ToolResult)');
+        assert.equal(result.content[0].text, 'Hello, header-mismatch!',
+            'tool result must reflect the body method, not the header');
     });
 
     // ========================================================================
@@ -1052,6 +1103,128 @@ describe('MCP Tasks v2 Conformance (SEP-2663)', () => {
             'stale-but-valid requestState MUST be tolerated (SEP-2663)');
 
         await cancelTask(taskId);
+    });
+
+    // ========================================================================
+    // Scenario 29: SEP-2663 partial inputResponses fulfillment
+    //
+    // A tool that emits multiple simultaneous input requests parks the task
+    // in input_required with multiple keys in inputRequests. The client MAY
+    // satisfy them one at a time. SEP-2663:
+    //   - tasks/update with a subset of keys MUST be accepted as a clean
+    //     {resultType:"complete"} ack;
+    //   - the task MUST stay in input_required until every pending request
+    //     has been answered;
+    //   - tasks/get after a partial update MUST surface only the still-
+    //     pending keys in inputRequests (the answered key is gone).
+    //
+    // Requires the multi_input fixture, which fires two parallel TaskElicit
+    // calls so two keys are pending at once.
+    // ========================================================================
+    test('v2-29: tasks/update with a subset of keys leaves the rest pending', async () => {
+        const created = await callTool('multi_input', {});
+        assertCreateTaskResult(created, 'v2-29 create');
+        const taskId = created.taskId;
+
+        // Wait for input_required with both keys pending. The fan-out tool
+        // races two TaskElicits, so we may briefly see one key before the
+        // second arrives — poll until we see two.
+        let inputTask: any;
+        const start = Date.now();
+        while (Date.now() - start < 5000) {
+            inputTask = await getTask(taskId);
+            if (inputTask.status === 'input_required'
+                && inputTask.inputRequests
+                && Object.keys(inputTask.inputRequests).length >= 2) {
+                break;
+            }
+            await new Promise(r => setTimeout(r, 100));
+        }
+        assert.equal(inputTask.status, 'input_required',
+            'task with two parallel elicits should be input_required');
+        const keys = Object.keys(inputTask.inputRequests);
+        assert.ok(keys.length >= 2,
+            `multi_input must surface 2 inputRequests; got ${keys.length}: ${JSON.stringify(keys)}`);
+
+        const [firstKey, secondKey] = keys;
+
+        // Answer only the first key. ack is the SEP-2322 empty-complete shape.
+        const firstAck = await updateTask(taskId, {
+            [firstKey]: { action: 'accept', content: { name: 'partial-1', confirm: true } },
+        });
+        assert.equal(firstAck.resultType, 'complete',
+            'partial tasks/update ack must carry resultType:"complete"');
+
+        // Status must still be input_required, with only the second key
+        // remaining in inputRequests.
+        const afterFirst = await getTask(taskId);
+        assert.equal(afterFirst.status, 'input_required',
+            'task must stay input_required while the second input is still pending');
+        assert.ok(afterFirst.inputRequests,
+            'tasks/get after partial update must still surface inputRequests');
+        const remaining = Object.keys(afterFirst.inputRequests);
+        assert.ok(remaining.includes(secondKey),
+            `the unanswered key must remain in inputRequests; got ${JSON.stringify(remaining)}`);
+        assert.ok(!remaining.includes(firstKey),
+            `the answered key must be removed from inputRequests; still saw ${firstKey}`);
+
+        // Answer the second key — task resumes and runs to completion.
+        const secondAck = await updateTask(taskId, {
+            [secondKey]: { action: 'accept', content: { name: 'partial-2', confirm: true } },
+        });
+        assert.equal(secondAck.resultType, 'complete',
+            'final tasks/update ack must carry resultType:"complete"');
+
+        const terminal = await waitForTerminal(taskId);
+        assert.equal(terminal.status, 'completed',
+            `task must complete after both inputs are satisfied; got ${terminal.status}`);
+    });
+
+    // ========================================================================
+    // Scenario 30: tasks/get with unknown taskId returns -32602
+    //
+    // Symmetry with v2-08 (tasks/cancel on unknown / terminal taskId returns
+    // -32602). SEP-2663's invalid-taskId rule applies to every method on
+    // the tasks surface, not just cancel — a tasks/get against an id the
+    // server doesn't know about MUST surface as an InvalidParams error so
+    // the client doesn't silently get an empty/well-formed envelope it can
+    // mistake for a legitimate state.
+    // ========================================================================
+    test('v2-30: tasks/get with unknown taskId returns -32602', async () => {
+        try {
+            await rawRequest('tasks/get', { taskId: 'nonexistent-12345' });
+            assert.fail('tasks/get with invalid taskId must return error');
+        } catch (e: any) {
+            assertJsonRpcError(e, -32602, 'tasks/get unknown id', true);
+        }
+    });
+
+    // ========================================================================
+    // Scenario 31: legacy v1 `task` param on tools/call is ignored
+    //
+    // SEP-2663 removed the client-supplied `task` hint param — the server
+    // decides whether to create a task. A v1 client that still sends
+    // `task: { ttl, pollInterval }` MUST get a clean response: the server
+    // either ignores the param entirely (sync tool → sync ToolResult) or
+    // makes its own task-creation decision (server-async tool → CreateTaskResult).
+    // The server MUST NOT error out, AND it MUST NOT promote a sync tool to
+    // a task just because the client sent the legacy hint.
+    // ========================================================================
+    test('v2-31: legacy `task` param is ignored on sync tool', async () => {
+        const result = await rawRequest('tools/call', {
+            name: 'greet',
+            arguments: { name: 'legacy-hint' },
+            // Legacy v1 hint that the server should silently ignore.
+            task: { ttl: 60000, pollInterval: 100 },
+        });
+        // Server must not have errored (rawRequest would have thrown).
+        assert.notEqual(result.resultType, 'task',
+            'legacy `task` param MUST NOT promote a sync tool to a task');
+        assert.ok(!result.taskId,
+            'sync tool with legacy `task` param MUST NOT carry a taskId');
+        // Sanity: the sync result still arrives.
+        assert.ok(Array.isArray(result.content) && result.content.length > 0,
+            'sync tool should still return content[]');
     });
 
 });

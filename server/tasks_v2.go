@@ -296,6 +296,15 @@ func (s *v2InputState) snapshot() core.InputRequests {
 	return out
 }
 
+// hasPending reports whether any input requests are still awaiting a
+// tasks/update response. Used by requestInputV2 to keep the task in
+// input_required while a fan-out tool has only been partially answered.
+func (s *v2InputState) hasPending() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.pending) > 0
+}
+
 // cancelAll drops every pending request and closes the waiter channels so
 // blocked goroutines unblock with a zero-value payload (callers detect
 // this via the closed-channel receive). Called when a task transitions to
