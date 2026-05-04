@@ -221,7 +221,14 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, eventID string, body []b
 		// (so receiver dedup works) and consistent across delivery paths
 		// (webhook emit + poll backfill of the same upstream event collapse
 		// under the receiver's eventId-keyed dedup).
-		signed := signFor(r.headerMode, eventID, body, target.Secret, time.Now())
+		//
+		// X-MCP-Subscription-Id carries target.ID (γ-2's derived id over
+		// the canonical tuple) so the receiver can select the correct
+		// secret without parsing the body. Per spec §"Webhook Event
+		// Delivery" L390 + §"Webhook Security" L472: this is the only
+		// MCP-specific header on a Standard Webhooks delivery.
+		signed := signFor(r.headerMode, eventID, body, target.Secret, time.Now()).
+			withSubscriptionID(target.ID)
 
 		req, err := http.NewRequest("POST", target.URL, bytes.NewReader(signed.body))
 		if err != nil {

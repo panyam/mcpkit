@@ -131,6 +131,61 @@ func TestStandardWebhooks_WebhookIDIsStableAcrossRetries(t *testing.T) {
 		"signature regenerates per retry because timestamp is part of the signed input")
 }
 
+// TestStandardWebhooks_EmitsSubscriptionIDHeader verifies γ-4's spec
+// contract (§"Webhook Event Delivery" L390 + §"Webhook Security" →
+// "Signature scheme" L472): every delivery MUST include
+// X-MCP-Subscription-Id carrying the spec's derived subscription id
+// so the receiver can select the correct secret without parsing the
+// body.
+//
+// Without this header, a receiver hosting multiple subscriptions on a
+// single endpoint would have no way to pick the correct verification
+// secret — the body has eventId + name but not the subscription id.
+func TestStandardWebhooks_EmitsSubscriptionIDHeader(t *testing.T) {
+	body := []byte(`{"eventId":"evt_1","data":{}}`)
+	signed := signStandardWebhooks("evt_1", body, "whsec_test", time.Unix(1700000000, 0)).
+		withSubscriptionID("sub_abc123")
+
+	got, ok := signed.headers["X-MCP-Subscription-Id"]
+	require.True(t, ok, "X-MCP-Subscription-Id header MUST be present on every delivery")
+	assert.Equal(t, "sub_abc123", got)
+}
+
+// TestStandardWebhooks_SubscriptionIDStableAcrossRetries pairs with
+// TestStandardWebhooks_WebhookIDIsStableAcrossRetries (which verifies
+// webhook-id stability for receiver dedup). The X-MCP-Subscription-Id
+// must ALSO be stable across retries — same subscription, same routing
+// handle. If it changed per retry, a receiver tracking deliveries by
+// subscription would log spurious churn or worse, mis-route to a
+// non-existent subscription.
+func TestStandardWebhooks_SubscriptionIDStableAcrossRetries(t *testing.T) {
+	body := []byte(`{"eventId":"evt_42","data":{}}`)
+	subID := "sub_stable_test"
+
+	first := signStandardWebhooks("evt_42", body, "whsec_test", time.Unix(1700000000, 0)).
+		withSubscriptionID(subID)
+	second := signStandardWebhooks("evt_42", body, "whsec_test", time.Unix(1700000005, 0)).
+		withSubscriptionID(subID)
+
+	assert.Equal(t, first.headers["X-MCP-Subscription-Id"], second.headers["X-MCP-Subscription-Id"],
+		"X-MCP-Subscription-Id must be stable across retries of the same event")
+	assert.Equal(t, subID, first.headers["X-MCP-Subscription-Id"])
+}
+
+// TestStandardWebhooks_WithEmptySubscriptionIDIsNoOp verifies that
+// withSubscriptionID("") leaves the headers untouched. Defensive — the
+// registry's deliver path always passes target.ID (always set post-γ-2),
+// but the empty-string case shouldn't crash or add a misleading
+// "X-MCP-Subscription-Id: " header.
+func TestStandardWebhooks_WithEmptySubscriptionIDIsNoOp(t *testing.T) {
+	body := []byte(`{}`)
+	signed := signStandardWebhooks("evt_1", body, "whsec_test", time.Unix(1700000000, 0)).
+		withSubscriptionID("")
+
+	_, present := signed.headers["X-MCP-Subscription-Id"]
+	assert.False(t, present, "empty subscription id must not add the header at all")
+}
+
 // TestNewMessageID_Uniqueness verifies the helper produces distinct ids
 // across calls. Without this, replay-detection logic on receivers that
 // dedupe by webhook-id would silently break.
