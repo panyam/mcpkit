@@ -29,10 +29,20 @@ go run . --tui
 ```
 
 The walkthrough reads four embedded fixtures from
-[`testdata/`](testdata/) — `pixel.png`, `contract.pdf`, `appendix.pdf`,
-`README.txt` — encodes each via `core.EncodeDataURI`, and invokes every
-tool. See [WALKTHROUGH.md](WALKTHROUGH.md) for the full sequence diagram
+[`testdata/`](testdata/) — `pixel.png` (a 24×24 gradient), `contract.pdf`,
+`appendix.pdf`, `README.txt` — encodes each via `core.EncodeDataURI`, and
+invokes every tool. Before each upload, the demo shows a small preview of
+what's being sent: the [iTerm2 inline-image
+protocol](https://iterm2.com/documentation-images.html) for images
+(rendered inline in iTerm2 / WezTerm / Mintty / Kitty; silently consumed
+elsewhere), the first lines of text, and a hex preview for everything
+else. See [WALKTHROUGH.md](WALKTHROUGH.md) for the full sequence diagram
 and step-by-step description.
+
+Run `make serve` in a second terminal to watch the server side too — it
+streams colored `[mcp]` traces (`MCP tools/call ok [276µs]`, `[http] →
+POST /mcp`) for every request the walkthrough fires, matching the
+elicitation / mrtr examples.
 
 To upload a file from disk instead, pass `--file <path>` to the demo:
 

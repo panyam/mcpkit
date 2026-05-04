@@ -19,6 +19,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/server"
 )
@@ -38,9 +39,24 @@ func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
 	flag.CommandLine.Parse(filterFlags(os.Args[1:]))
 
+	// Same logger shape as examples/elicitation/main.go — tints request
+	// flow so a side-by-side `make serve` + `make demo` shows what the
+	// server saw for every tools/list and tools/call. WithRequestLogging
+	// covers transport-level traffic; the LoggingMiddleware covers the
+	// MCP dispatch path (method + duration + outcome).
+	logger := demokit.NewColorLogger("[mcp] ", []demokit.ColorRule{
+		{Contains: "error=", DarkColor: demokit.ANSIRed},
+		{Contains: "ERROR", DarkColor: demokit.ANSIRed},
+		{Contains: "[http] →", DarkColor: demokit.ANSIGray, LightColor: demokit.ANSIDimBlue},
+		{Contains: "[http] ←", DarkColor: demokit.ANSICyan, LightColor: demokit.ANSIBlue},
+		{Contains: "MCP ", DarkColor: demokit.ANSIBrightGreen, LightColor: demokit.ANSIGreen},
+	})
+
 	srv := server.NewServer(
 		core.ServerInfo{Name: "file-inputs-demo", Version: "0.1.0"},
 		server.WithListen(*addr),
+		server.WithRequestLogging(logger),
+		server.WithMiddleware(server.LoggingMiddleware(logger)),
 	)
 
 	registerTools(srv)
