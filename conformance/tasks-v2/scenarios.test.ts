@@ -300,6 +300,11 @@ function assertCreateTaskResult(result: any, label: string) {
         `${label}: CreateTaskResult MUST NOT carry inputRequests`);
 
     // SEP-2663 timestamps — both keys present and ISO-8601 formatted.
+    // Regex is the pragmatic choice: Date.parse is too permissive (accepts
+    // RFC-2822, "May 4 2026", etc.); new Date(s).toISOString() === s is too
+    // strict (rejects valid +00:00 offsets and sub-second variations);
+    // Temporal.Instant.from is Node 24+ experimental. If a stdlib ISO-8601
+    // validator becomes broadly available, swap this regex for it.
     const iso8601 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
     assert.match(result.createdAt, iso8601,
         `${label}: createdAt must be ISO-8601 (got ${result.createdAt})`);
