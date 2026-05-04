@@ -81,7 +81,7 @@ sequenceDiagram
     S-->>C: result { protocolVersion, capabilities, serverInfo, instructions? }
     C->>C: verify negotiated version is acceptable<br/>else close transport
     C->>S: notifications/initialized
-    Note over C,S: session live; capability flags now gate all subsequent calls
+    Note over C,S: session live — capability flags now gate all subsequent calls
 ```
 
 Three things to internalize:
