@@ -34,6 +34,11 @@ type Event struct {
 	Timestamp string          `json:"timestamp"`
 	Data      json.RawMessage `json:"data"`
 	Cursor    *string         `json:"cursor"`
+	// Meta is opaque per-occurrence metadata (spec follow-on commit
+	// d4faef9 2026-05-01). Mirrors the `_meta` field on Tool / Resource
+	// / Prompt in base MCP. Library threads it through; semantics are
+	// app-defined (trace ids, source-system tags, etc.).
+	Meta map[string]any `json:"_meta,omitempty"`
 }
 
 // HasCursor reports whether the event carries a cursor (cursored source) or
@@ -64,6 +69,11 @@ type EventDef struct {
 	Delivery      []string `json:"delivery"`
 	PayloadSchema any      `json:"payloadSchema,omitempty"`
 	Cursorless    bool     `json:"cursorless,omitempty"`
+	// Meta is opaque per-event-type metadata (spec follow-on commit
+	// d4faef9 2026-05-01). Same `_meta` convention as Event /
+	// Tool / Resource / Prompt. Sources set it once at construction
+	// and the library surfaces it on events/list.
+	Meta map[string]any `json:"_meta,omitempty"`
 }
 
 // PollResult holds the result of a cursor-based poll from an event source.
@@ -264,46 +274,64 @@ type pollResultWire struct {
 	NextPollSeconds int     `json:"nextPollSeconds,omitempty"`
 }
 
+// listResultWire is the events/list response shape (spec follow-on
+// commit d4faef9 2026-05-01). Optional `nextCursor` matches the
+// tools/list / resources/list pagination convention. The library does
+// not paginate today (event-type lists are small in practice); the
+// field is plumbed for forward compatibility — servers that DO have a
+// large advertised set can wrap or replace this handler and emit
+// nextCursor without changing the wire shape.
+type listResultWire struct {
+	Events     []EventDef `json:"events"`
+	NextCursor string     `json:"nextCursor,omitempty"`
+}
+
 func registerList(srv *server.Server, sources []EventSource) {
 	srv.HandleMethod("events/list", func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		defs := make([]EventDef, 0, len(sources))
 		for _, s := range sources {
 			defs = append(defs, s.Def())
 		}
-		return core.NewResponse(id, map[string]any{"events": defs})
+		return core.NewResponse(id, listResultWire{Events: defs})
 	})
 }
 
 func registerPoll(srv *server.Server, sourceMap map[string]EventSource) {
 	srv.HandleMethod("events/poll", func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
+		// Spec §"Poll-Based Delivery" → "Request: events/poll" L139-149:
+		// flat top-level shape — no subscriptions[] wrapper. Phase 1 dropped
+		// batching at the protocol level; δ-1 drops the now-vestigial
+		// wrapper at the wire level. δ-2 added MaxAge.
 		var req struct {
-			MaxEvents     int `json:"maxEvents,omitempty"`
-			Subscriptions []struct {
-				ID     string  `json:"id"`
-				Name   string  `json:"name"`
-				Cursor *string `json:"cursor"`
-			} `json:"subscriptions"`
+			Name      string         `json:"name"`
+			Params    map[string]any `json:"params,omitempty"`
+			Cursor    *string        `json:"cursor"`
+			MaxEvents int            `json:"maxEvents,omitempty"`
+			MaxAge    int            `json:"maxAge,omitempty"` // seconds; 0 = no floor
 		}
 		if err := json.Unmarshal(params, &req); err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 		}
-		// events/poll is single-subscription per upstream WG PR#1 line 185
-		// (comment r3140480214). Reject batched requests with a clear
-		// pointer to the spec change.
-		if len(req.Subscriptions) > 1 {
+		// Helpful diagnostic for clients still sending the legacy wrapper.
+		// A flat-shape request with name omitted is indistinguishable from
+		// a wrapper-shape request at the struct level (both leave req.Name
+		// empty); probe for the wrapper specifically.
+		if req.Name == "" {
+			var legacyProbe struct {
+				Subscriptions []json.RawMessage `json:"subscriptions"`
+			}
+			if err := json.Unmarshal(params, &legacyProbe); err == nil && legacyProbe.Subscriptions != nil {
+				return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
+					`events/poll: legacy {subscriptions: [...]} wrapper rejected — send top-level {name, cursor, maxEvents} per spec §"Poll-Based Delivery" L139-149`)
+			}
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
-				"events/poll: pass exactly one subscription per call (multi-sub support has been removed)")
-		}
-		if len(req.Subscriptions) == 0 {
-			return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
-				"events/poll: subscriptions[] must contain exactly one entry")
+				"events/poll: name is required")
 		}
 		if req.MaxEvents <= 0 {
 			req.MaxEvents = 50
 		}
 
-		sub := req.Subscriptions[0]
-		source, ok := sourceMap[sub.Name]
+		source, ok := sourceMap[req.Name]
 		if !ok {
 			return core.NewErrorResponse(id, ErrCodeEventNotFound, "EventNotFound")
 		}
@@ -314,8 +342,8 @@ func registerPoll(srv *server.Server, sourceMap map[string]EventSource) {
 		// Cursored sources return Latest(); cursorless sources return "" and
 		// the wire layer below translates that to JSON null.
 		cursor := ""
-		if sub.Cursor != nil {
-			cursor = *sub.Cursor
+		if req.Cursor != nil {
+			cursor = *req.Cursor
 		} else if !cursorless {
 			cursor = source.Latest()
 		}
@@ -327,6 +355,35 @@ func registerPoll(srv *server.Server, sourceMap map[string]EventSource) {
 		if hasMore {
 			events = events[:req.MaxEvents]
 			resultCursor = events[len(events)-1].CursorStr()
+		}
+
+		// δ-2: maxAge replay floor per spec §"Cursor Lifecycle" →
+		// "Bounding replay with maxAge" L529. Drop events whose
+		// timestamp predates now - maxAge. If filtering removes any,
+		// set Truncated=true (signals the gap to the client).
+		// When req.MaxAge is 0 (default), no filtering — preserves
+		// pre-δ-2 behavior for callers that don't pass the field.
+		if req.MaxAge > 0 && len(events) > 0 {
+			floor := time.Now().Add(-time.Duration(req.MaxAge) * time.Second)
+			kept := make([]Event, 0, len(events))
+			for _, e := range events {
+				ts, err := time.Parse(time.RFC3339, e.Timestamp)
+				if err != nil || !ts.Before(floor) {
+					kept = append(kept, e)
+				}
+			}
+			if len(kept) < len(events) {
+				pr.Truncated = true
+				// Per spec L529: when filtering removes everything,
+				// reset cursor to source head ("now") so the client
+				// doesn't re-poll for the dropped events. When some
+				// events survived, the resultCursor (last delivered)
+				// is already past the floor.
+				if len(kept) == 0 && !cursorless {
+					resultCursor = source.Latest()
+				}
+			}
+			events = kept
 		}
 
 		// For cursorless sources, the wire `cursor` is null regardless of
@@ -391,6 +448,7 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 				Secret string `json:"secret,omitempty"`
 			} `json:"delivery"`
 			Cursor *string `json:"cursor"`
+			MaxAge int     `json:"maxAge,omitempty"` // δ-3: spec §"Cursor Lifecycle" L529; seconds, 0 = no floor
 		}
 		if err := json.Unmarshal(params, &req); err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
@@ -444,7 +502,7 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 		canonical := canonicalKey(principal, req.Delivery.URL, req.Name, req.Params)
 		derivedID := deriveSubscriptionID(canonical)
 
-		expiresAt := webhooks.Register(canonical, derivedID, req.Delivery.URL, req.Delivery.Secret)
+		expiresAt := webhooks.Register(canonical, derivedID, req.Delivery.URL, req.Delivery.Secret, req.MaxAge)
 
 		// Resolve `cursor: null` to the source's current head ("from now")
 		// for cursored sources. Cursorless sources always serialize as null.
