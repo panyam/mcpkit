@@ -182,13 +182,26 @@ func TestResourceMessageByCursor(t *testing.T) {
 // WithWebhookHeaderMode(MCPHeaders) for this byte-format check to apply.
 func TestWebhookHMACSignature_MCPHeaders(t *testing.T) {
 	secret := "test-secret-key"
+
+	// Captured-state mutex matches the pattern used by
+	// TestWebhookRetryOnServerError + TestWebhookNoRetryOn4xx in this
+	// file. Without it, the handler-goroutine writes race the test-
+	// goroutine reads after the time.Sleep barrier (which the race
+	// detector correctly flags — sleeps don't establish happens-before).
+	// Issue 360.
+	var mu sync.Mutex
 	var receivedBody []byte
 	var receivedSig, receivedTS string
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		receivedSig = r.Header.Get("X-MCP-Signature")
-		receivedTS = r.Header.Get("X-MCP-Timestamp")
-		receivedBody, _ = io.ReadAll(r.Body)
+		body, _ := io.ReadAll(r.Body)
+		sig := r.Header.Get("X-MCP-Signature")
+		ts := r.Header.Get("X-MCP-Timestamp")
+		mu.Lock()
+		receivedBody = body
+		receivedSig = sig
+		receivedTS = ts
+		mu.Unlock()
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
@@ -205,6 +218,8 @@ func TestWebhookHMACSignature_MCPHeaders(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
+	mu.Lock()
+	defer mu.Unlock()
 	require.NotEmpty(t, receivedBody)
 	require.NotEmpty(t, receivedSig)
 	require.NotEmpty(t, receivedTS)
