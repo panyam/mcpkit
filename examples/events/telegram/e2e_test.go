@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -37,9 +38,10 @@ func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.Yie
 	registerResources(srv, source)
 	(&ToolDelivery{Bot: nil}).Register(srv)
 	events.Register(events.Config{
-		Sources:  []events.EventSource{source, typingSource},
-		Webhooks: webhooks,
-		Server:   srv,
+		Sources:                  []events.EventSource{source, typingSource},
+		Webhooks:                 webhooks,
+		Server:                   srv,
+		UnsafeAnonymousPrincipal: "test-principal",
 	})
 
 	return srv, source, yield, webhooks
@@ -61,9 +63,10 @@ func buildTestStackWithTyping() (*server.Server, func(TelegramEventData) error, 
 	registerResources(srv, source)
 	(&ToolDelivery{Bot: nil}).Register(srv)
 	events.Register(events.Config{
-		Sources:  []events.EventSource{source, typingSource},
-		Webhooks: webhooks,
-		Server:   srv,
+		Sources:                  []events.EventSource{source, typingSource},
+		Webhooks:                 webhooks,
+		Server:                   srv,
+		UnsafeAnonymousPrincipal: "test-principal",
 	})
 	return srv, yield, yieldTyping
 }
@@ -95,11 +98,11 @@ func TestE2EPollDelivery(t *testing.T) {
 	require.NoError(t, yieldText(yield, 100, "bob", "world"))
 	require.NoError(t, yieldText(yield, 100, "carol", "!"))
 
+	// δ-1: flat events/poll request shape per spec L139-149.
 	result, err := c.Call("events/poll", map[string]any{
+		"name":      "telegram.message",
+		"cursor":    "0",
 		"maxEvents": 2,
-		"subscriptions": []map[string]any{
-			{"id": "poll-1", "name": "telegram.message", "cursor": "0"},
-		},
 	})
 	require.NoError(t, err)
 
@@ -110,9 +113,8 @@ func TestE2EPollDelivery(t *testing.T) {
 	assert.Equal(t, "2", *resp.Cursor)
 
 	result2, err := c.Call("events/poll", map[string]any{
-		"subscriptions": []map[string]any{
-			{"id": "poll-2", "name": "telegram.message", "cursor": *resp.Cursor},
-		},
+		"name":   "telegram.message",
+		"cursor": *resp.Cursor,
 	})
 	require.NoError(t, err)
 
@@ -192,23 +194,27 @@ func TestE2EWebhookDelivery(t *testing.T) {
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "webhook-test", Version: "1.0"})
 	require.NoError(t, c.Connect())
 
+	clientSecret := events.GenerateSecret()
 	subResult, err := c.Call("events/subscribe", map[string]any{
-		"id":       "wh-e2e",
 		"name":     "telegram.message",
-		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": "ignored-in-server-mode"},
+		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": clientSecret},
 	})
 	require.NoError(t, err)
 
+	// Spec: subscribe response carries id (server-derived per
+	// §"Subscription Identity" → "Derived id" L367) but does NOT echo
+	// the secret. The client already supplied the secret; receiver
+	// verifies with that value. The id is the X-MCP-Subscription-Id
+	// routing handle (γ-4 wires the header).
 	var subResp struct {
 		ID     string `json:"id"`
 		Secret string `json:"secret"`
 	}
 	require.NoError(t, json.Unmarshal(subResult.Raw, &subResp))
-	assert.Equal(t, "wh-e2e", subResp.ID)
-	require.NotEmpty(t, subResp.Secret)
-	require.NotEqual(t, "ignored-in-server-mode", subResp.Secret, "server mode must NOT echo the client-supplied secret")
+	assert.True(t, strings.HasPrefix(subResp.ID, "sub_"), "id must be the server-derived sub_<base64> per spec; got %q", subResp.ID)
+	require.Empty(t, subResp.Secret, "subscribe response must NOT carry a secret field per spec")
 	mu.Lock()
-	assignedSecret = subResp.Secret
+	assignedSecret = clientSecret
 	mu.Unlock()
 	require.Len(t, webhooks.Targets(), 1)
 
@@ -219,78 +225,6 @@ func TestE2EWebhookDelivery(t *testing.T) {
 	defer mu.Unlock()
 	require.Len(t, deliveries, 1)
 	assert.Equal(t, "telegram.message", deliveries[0].Name)
-}
-
-// TestE2EWebhookDelivery_IdentityMode verifies the identity-mode contract
-// end-to-end on telegram-events: subscribe is idempotent on the
-// (name, url, params) tuple, server returns derived id and secret, and
-// webhook delivery signs with the derived secret.
-func TestE2EWebhookDelivery_IdentityMode(t *testing.T) {
-	srv, _, yield, webhooks := buildTestStack(
-		events.WithWebhookSecretMode(events.WebhookSecretIdentity),
-		events.WithWebhookRoot([]byte("test-root-master")),
-	)
-
-	var mu sync.Mutex
-	var deliveries int
-	var assignedSecret string
-
-	callbackSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		msgID := r.Header.Get("webhook-id")
-		ts := r.Header.Get("webhook-timestamp")
-		sig := r.Header.Get("webhook-signature")
-		mu.Lock()
-		secret := assignedSecret
-		mu.Unlock()
-		assert.True(t, events.VerifyStandardWebhooksSignature(body, secret, msgID, ts, sig))
-		mu.Lock()
-		deliveries++
-		mu.Unlock()
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer callbackSrv.Close()
-
-	handler := srv.Handler(server.WithStreamableHTTP(true))
-	ts := httptest.NewServer(handler)
-	defer ts.Close()
-	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "identity-test", Version: "1.0"})
-	require.NoError(t, c.Connect())
-
-	subscribe := func(clientID string) (string, string) {
-		t.Helper()
-		raw, err := c.Call("events/subscribe", map[string]any{
-			"id":   clientID,
-			"name": "telegram.message",
-			"delivery": map[string]any{
-				"mode":   "webhook",
-				"url":    callbackSrv.URL,
-				"params": map[string]string{"chat": "100"},
-			},
-		})
-		require.NoError(t, err)
-		var resp struct {
-			ID     string `json:"id"`
-			Secret string `json:"secret"`
-		}
-		require.NoError(t, json.Unmarshal(raw.Raw, &resp))
-		return resp.ID, resp.Secret
-	}
-	id1, sec1 := subscribe("client-A")
-	id2, sec2 := subscribe("client-B")
-	assert.Equal(t, id1, id2, "identity mode derives same id regardless of client-supplied id")
-	assert.Equal(t, sec1, sec2, "identity mode derives same secret for same tuple")
-	assert.Len(t, webhooks.Targets(), 1, "two subscribes against same tuple collapse to one entry")
-
-	mu.Lock()
-	assignedSecret = sec1
-	mu.Unlock()
-	require.NoError(t, yieldText(yield, 100, "alice", "identity-mode test"))
-	time.Sleep(500 * time.Millisecond)
-
-	mu.Lock()
-	defer mu.Unlock()
-	assert.Equal(t, 1, deliveries)
 }
 
 // TestE2EWebhookDelivery_StandardHeaders verifies StandardWebhooks header
@@ -332,18 +266,14 @@ func TestE2EWebhookDelivery_StandardHeaders(t *testing.T) {
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "stdhdr-test", Version: "1.0"})
 	require.NoError(t, c.Connect())
 
-	raw, err := c.Call("events/subscribe", map[string]any{
-		"id":       "wh-std",
+	clientSecret := events.GenerateSecret()
+	_, err := c.Call("events/subscribe", map[string]any{
 		"name":     "telegram.message",
-		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL},
+		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": clientSecret},
 	})
 	require.NoError(t, err)
-	var resp struct {
-		Secret string `json:"secret"`
-	}
-	require.NoError(t, json.Unmarshal(raw.Raw, &resp))
 	mu.Lock()
-	assignedSecret = resp.Secret
+	assignedSecret = clientSecret
 	mu.Unlock()
 
 	require.NoError(t, yieldText(yield, 100, "alice", "standard-headers test"))
@@ -394,18 +324,14 @@ func TestE2EWebhookDelivery_MCPHeadersOptIn(t *testing.T) {
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "mcphdr-test", Version: "1.0"})
 	require.NoError(t, c.Connect())
 
-	raw, err := c.Call("events/subscribe", map[string]any{
-		"id":       "wh-mcp",
+	clientSecret := events.GenerateSecret()
+	_, err := c.Call("events/subscribe", map[string]any{
 		"name":     "telegram.message",
-		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL},
+		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": clientSecret},
 	})
 	require.NoError(t, err)
-	var resp struct {
-		Secret string `json:"secret"`
-	}
-	require.NoError(t, json.Unmarshal(raw.Raw, &resp))
 	mu.Lock()
-	assignedSecret = resp.Secret
+	assignedSecret = clientSecret
 	mu.Unlock()
 
 	require.NoError(t, yieldText(yield, 100, "alice", "mcp-headers test"))
@@ -523,9 +449,8 @@ func TestE2ECursorlessWebhookDelivery(t *testing.T) {
 	require.NoError(t, c.Connect())
 
 	raw, err := c.Call("events/subscribe", map[string]any{
-		"id":       "wh-typing",
 		"name":     "telegram.typing",
-		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL},
+		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": events.GenerateSecret()},
 	})
 	require.NoError(t, err)
 	var resp struct {
@@ -557,14 +482,15 @@ func TestE2EPollMultiSubRejected(t *testing.T) {
 	c := client.NewClient(tsrv.URL+"/mcp", core.ClientInfo{Name: "multi-sub", Version: "1.0"})
 	require.NoError(t, c.Connect())
 
+	// δ-1: the {subscriptions: [...]} wrapper is rejected with a helpful
+	// error pointing at the spec change (L139-149).
 	_, err := c.Call("events/poll", map[string]any{
 		"subscriptions": []map[string]any{
-			{"id": "a", "name": "telegram.message", "cursor": "0"},
-			{"id": "b", "name": "telegram.typing", "cursor": "0"},
+			{"name": "telegram.message", "cursor": "0"},
 		},
 	})
-	require.Error(t, err, "multi-subscription events/poll must be rejected")
-	assert.Contains(t, err.Error(), "exactly one subscription")
+	require.Error(t, err, "legacy {subscriptions: [...]} wrapper must be rejected")
+	assert.Contains(t, err.Error(), "legacy")
 }
 
 // TestE2EResourceReadViaClient verifies the recent-messages resource reads

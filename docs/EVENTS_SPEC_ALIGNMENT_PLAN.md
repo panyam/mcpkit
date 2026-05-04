@@ -1,8 +1,10 @@
 # Events Spec Alignment — Phase 2 Plan
 
-**Status:** Drafted 2026-05-01. Not yet started. Replaces the spec-tracking work that landed in mcpkit#323 (phase 1).
+**Status:** Drafted 2026-05-01. α + β shipped as of 2026-05-02. Replaces the spec-tracking work that landed in mcpkit#323 (phase 1).
 **Scope:** `experimental/ext/events/` library, `experimental/ext/events/clients/go/` SDK, the discord + telegram demos under `examples/events/`.
-**Spec target:** the in-progress MCP Events extension spec sketch as of 2026-04-30. Substantial revisions landed in the spec in late April that broke from the direction phase 1 implemented; this plan re-aligns.
+**Spec target:** the MCP Events extension spec sketch cached at [`proposals/triggers-events-wg/spec-snapshots/design-sketch-2026-04-30.md`](https://github.com/panyam/mcpcontribs/blob/main/proposals/triggers-events-wg/spec-snapshots/design-sketch-2026-04-30.md) (in mcpcontribs, not this repo). Substantial revisions landed in the upstream sketch in late April that broke from the direction phase 1 implemented; this plan re-aligns.
+
+**Citation convention:** every delta in the per-PR sections below carries a citation in the form `(§"Section name" L<line>)` referencing the cached snapshot. Line numbers are stable against that snapshot file; if a future spec revision lands, we add a new dated snapshot rather than rewriting old citations. PR descriptions and commit messages following this plan should carry the same form so reviewers can correlate code → spec text directly.
 
 ## TL;DR
 
@@ -62,6 +64,8 @@ The others (resource-template subsumption, MCP task event subsumption, event-nam
 
 ### α — Wire renames + error code remap
 
+**Status:** merged via PR #353.
+
 **Goal:** make our wire bytes use the spec's vocabulary without changing semantics.
 
 **Spec deltas addressed:**
@@ -96,6 +100,8 @@ The others (resource-template subsumption, MCP task event subsumption, event-nam
 ---
 
 ### β — Collapse webhook secret modes to client-supplied only
+
+**Status:** merged via PR #355.
 
 **Goal:** match the spec's client-supplied-only secret model. The server no longer generates secrets; the client always provides the signing key on subscribe. Net-deletion PR.
 
@@ -136,14 +142,17 @@ The others (resource-template subsumption, MCP task event subsumption, event-nam
 
 ### γ — Auth + tuple subscription identity
 
+**Status:** merged via PR #356.
+
 **Goal:** key webhook subscriptions on `(principal, delivery.url, name, params)` per the spec; reject unauthenticated webhook subscribe / unsubscribe.
 
 **Spec deltas addressed:**
-- `events/subscribe` and `events/unsubscribe` MUST require an authenticated principal (`-32012 Unauthorized` if missing)
-- Subscription key is `(principal, delivery.url, name, params)`. `params` compared by canonical-JSON equality. All four components are immutable for the subscription lifetime.
-- No client-generated `id`. Server derives a deterministic SHA-256 over the canonical key serialization.
-- The derived `id` is a routing handle, not a capability. Appears in `X-MCP-Subscription-Id` on every webhook delivery POST (header was added in ζ — see note).
-- `events/unsubscribe` accepts only `(name, params, delivery.url)` from the client; `principal` is taken from the auth context. Rejects an `id`-keyed unsubscribe.
+- `events/subscribe` and `events/unsubscribe` MUST require an authenticated principal (`-32012 Unauthorized` if missing) (§"Subscription Identity" → "Authentication required" L361, error code table L110)
+- Subscription key is `(principal, delivery.url, name, params)`. `params` compared by canonical-JSON equality. All four components are immutable for the subscription lifetime. (§"Subscription Identity" → "Key composition" L363)
+- No client-generated `id`. Server derives a deterministic SHA-256 over the canonical key serialization. (§"Subscription Identity" → "Derived `id`" L367)
+- The derived `id` is a routing handle, not a capability. Appears in `X-MCP-Subscription-Id` on every webhook delivery POST (header lives in §"Webhook Event Delivery" L390 — γ produces the value, ζ wires the header).
+- `events/unsubscribe` accepts only `(name, params, delivery.url)` from the client; `principal` is taken from the auth context. Rejects an `id`-keyed unsubscribe. (§"Unsubscribing: events/unsubscribe" L509)
+- Cross-tenant isolation property: two distinct tenants subscribing to the same `(name, params)` get distinct subscriptions; learning another tenant's derived `id` gains nothing. (§"Subscription Identity" → "Cross-tenant isolation" L378)
 
 **Cross-PR note:** `X-MCP-Subscription-Id` header emission technically belongs in ζ (it's a delivery-time concern), but γ produces the `id` value. ζ wires the header onto the outbound POST.
 
@@ -156,9 +165,11 @@ The others (resource-template subsumption, MCP task event subsumption, event-nam
 - New file: `experimental/ext/events/identity.go` — pure-functional helpers `canonicalKey`, `deriveSubscriptionID`. Easy to unit-test.
 
 **Auth integration:**
-- mcpkit has an `ext/auth` package with `AuthContext` extraction. The events handler gets the principal via `auth.PrincipalFrom(ctx)` (or equivalent — verify exact API at impl time).
+- The events handler reads the principal via `core.MethodContext.AuthClaims()` returning `*core.Claims` (mcpkit core, not `ext/auth`). `claims.Subject` is the principal in the canonical tuple.
 - For unauthenticated mcpkit servers: webhook subscribe MUST return `-32012`. Poll and push are unaffected (they don't require auth per the spec).
-- For the discord + telegram demos: today they're anonymous. After γ, the webhook step in their walkthrough will fail unless we either (a) add a minimal auth shim to the demo server or (b) skip the webhook step in anonymous mode with an explanatory note. **Decision deferred to PR start time** — likely (b) for the demo, with a note pointing at how to enable auth.
+- For the discord + telegram demos: hybrid auto-detect via `OAUTH_ISSUER` env var. When set, wire `server.WithAuth(JWTValidator)` and follow spec strictly. When not set, fall back to `events.Config.UnsafeAnonymousPrincipal: "demo-user"` so `make demo` runs end-to-end without an OIDC provider. Server logs which posture is active at startup.
+
+**Composition note (WG-relevant):** `ext/events` has zero compile-time dependency on `ext/auth`. It depends on `core.Claims` (the abstract auth contract). Any auth provider that populates `core.Claims` works — JWT/OIDC via `ext/auth`, mTLS-derived principals, session cookies, custom validators. Auth and Events are independent extensions composed at the wiring layer (`server.WithAuth(...)` in `main.go`), not at the protocol-implementation layer. This is the right shape for MCP extensions: extensions depend on stable core abstractions, not on each other.
 
 **Acceptance:**
 - `make test-experimental` green
@@ -181,25 +192,29 @@ The others (resource-template subsumption, MCP task event subsumption, event-nam
 
 ### δ — Request shape alignment (flat poll, maxAge, EventOccurrence audit)
 
+**Status:** in flight on `feat/events-delta-wire-shapes`; 5 commits landed on the branch, PR pending.
+
 **Goal:** make `events/poll` and `events/subscribe` request bodies match the spec's flat shape; add `maxAge` floor; audit EventOccurrence fields.
 
 **Spec deltas addressed:**
-- `events/poll` request: drop `subscriptions[]` array (already single-entry-enforced after phase 1). Lift `name`, `params`, `cursor` to top level. Add optional `maxAge` (integer seconds), `maxEvents` (integer).
-- All three modes (poll, stream, subscribe) accept optional `maxAge`. Server begins replay from `max(cursor, now - maxAge)`.
-- `EventOccurrence` field set: `eventId` (string, required), `name` (string, required), `timestamp` (ISO 8601, required), `data` (object, required), `cursor` (string | null, optional), `_meta` (object, optional). Confirm we emit the required five with the right names; fix any drift.
-- `events/list` response: add optional `nextCursor` for pagination consistency with base MCP list endpoints (`tools/list`, `resources/list`). Today the events list is small enough that we'd always omit it; thread the field through and emit only when set.
-- `EventDescriptor` (per event-type definition in `events/list`): add optional `_meta` field, matching the metadata pattern on `Tool` / `Resource` / `Prompt`. Authors can attach arbitrary metadata; the SDK threads it through.
+- `events/poll` request: drop `subscriptions[]` array (already single-entry-enforced after phase 1). Lift `name`, `params`, `cursor` to top level. Add optional `maxAge` (integer seconds), `maxEvents` (integer). (§"Poll-Based Delivery" → "Request: events/poll" L139-149)
+- All three modes (poll, stream, subscribe) accept optional `maxAge`. Server begins replay from `max(cursor, now - maxAge)`. (§"Cursor Lifecycle" → "Bounding replay with maxAge" L529)
+- `EventOccurrence` field set: `eventId` (string, required), `name` (string, required), `timestamp` (ISO 8601, required), `data` (object, required), `cursor` (string | null, optional), `_meta` (object, optional). Confirm we emit the required five with the right names; fix any drift. (§"EventOccurrence schema" L180-186; `_meta` added in spec follow-on commit `d4faef9` 2026-05-01)
+- `events/list` response: add optional `nextCursor` for pagination consistency with base MCP list endpoints (`tools/list`, `resources/list`). Today the events list is small enough that we'd always omit it; thread the field through and emit only when set. (Spec follow-on commit `d4faef9` 2026-05-01 — pre-cached snapshot doesn't show this section yet; future snapshot will.)
+- `EventDescriptor` (per event-type definition in `events/list`): add optional `_meta` field, matching the metadata pattern on `Tool` / `Resource` / `Prompt`. Authors can attach arbitrary metadata; the SDK threads it through. (Spec follow-on commit `d4faef9` 2026-05-01)
 
 The `nextCursor` and the two `_meta` fields are spec follow-ons added on 2026-05-01 (after the in-tree plan's first draft). Folded into δ rather than spinning a micro-PR because δ is already the "wire-shape audit" PR — these three are the same kind of work.
 
-**Files touched:**
-- `experimental/ext/events/events.go` — `events/poll` handler: parse the flat shape, single subscription
-- `experimental/ext/events/yield.go` — `Poll(cursor, limit)` becomes `Poll(cursor string, maxAge time.Duration, limit int)`. Apply `maxAge` floor: drop events with `timestamp < now - maxAge` from the returned slice
-- `experimental/ext/events/clients/go/subscription.go` — Subscribe options grow `MaxAge time.Duration`; sent on every refresh
-- Python SDK — same
-- Discord + telegram demos — update their `events/poll` calls to the flat shape; offer a `--max-age` flag in the python helper
+**Files touched (as built):**
+- `experimental/ext/events/events.go` — `registerPoll` flattens the request struct; `registerSubscribe` adds `MaxAge int`; new `listResultWire` typed struct gives `events/list` a `nextCursor` field with `omitempty`. `Event` and `EventDef` gain `Meta map[string]any` with JSON tag `_meta,omitempty`.
+- `experimental/ext/events/webhook.go` — `WebhookTarget` gains `MaxAgeSeconds int`; `Register` signature grows a `maxAgeSeconds` parameter (refresh treats `0` as "don't change", non-zero replaces stored floor).
+- `experimental/ext/events/clients/go/subscription.go` — `SubscribeOptions.MaxAge time.Duration`, sent on every subscribe + refresh.
+- `experimental/ext/events/clients/go/event.go` + `receiver.go` — `Event[Data].Meta map[string]any`, threaded through the receiver decoder.
+- `experimental/ext/events/clients/python/events_client.py` — `WebhookSubscription(max_age=0)` kwarg; `--max-age` flag on `webhook` and `poll` subcommands; receiver + cmd_poll printout surface `_meta`; `cmd_list` loops on `nextCursor`.
+- `experimental/ext/events/yield.go` — `YieldingSource.SetMetaFunc(func(Data) map[string]any)`. Typed setter (not a YieldingOption — option-functions don't compose with the generic `Data` type) so authors can derive per-event `_meta` without touching the yield closure signature.
+- Discord + telegram demos — every `events/poll` call site flattened. Both walkthroughs pass `MaxAge: 5*time.Minute` on subscribe (δ-3 plumbing). Discord additionally uses `SetMetaFunc` to derive `channel_type` + `mention_count` per event and `EventDef.Meta = {"category": "messaging"}` for type-level metadata.
 
-**Decision:** for emit-only sources (our YieldingSource ring), if `cursor` is older than `now - maxAge` AND the cursor has been evicted from the ring, the safer response is to set `truncated: true` + reset to current head — the spec explicitly permits this fallback when honouring `maxAge` literally would mean an expensive backfill scan. Implement that for `WithMaxSize` ring sources.
+**Decision:** kept `EventSource.Poll(cursor, limit)` interface unchanged. `maxAge` filtering happens at the handler layer in `registerPoll`, after `source.Poll()` returns: drop events with `timestamp < now - maxAge`, set `truncated: true` if any were dropped, advance `cursor` to source head when filtering removed everything (so the client doesn't re-poll for the dropped events). Avoids forcing every `EventSource` implementor to learn about replay floors. Sources with non-RFC3339 timestamps are conservatively kept.
 
 **Acceptance:**
 - `make test-experimental` green
@@ -207,9 +222,13 @@ The `nextCursor` and the two `_meta` fields are spec follow-ons added on 2026-05
 - `maxAge` floor test: subscribe with `maxAge: 1` after sleeping 2s past a known event, verify the event is dropped from replay
 - `EventOccurrence` field audit: every wire-format event has the five required fields with the right names
 
-**Tests:**
-- New `events_poll_shape_test.go` for the flat-request shape
-- Extend `yield_test.go` with `maxAge` filtering cases
+**Tests (as built):** added to `experimental/ext/events/wire_shape_test.go` —
+- `TestPoll_FlatRequestShape`, `TestPoll_RejectsLegacyWrapper` (δ-1)
+- `TestPoll_MaxAgeFiltersOldEvents`, `TestPoll_MaxAgeZeroMeansNoFilter` (δ-2)
+- `TestSubscribe_AcceptsMaxAge`, `TestSubscribe_DefaultsMaxAgeToZero` (δ-3)
+- `TestEvent_MetaSerializesWithUnderscorePrefix` + omits-when-absent counter; same pair for `EventDef` (δ-4)
+- `TestYieldingSource_MetaFunc` + nil-omits counter in `yield_test.go` (SetMetaFunc helper)
+- `TestList_NextCursorOmitsWhenEmpty`, `TestList_NextCursorPresentWhenSet` (δ-5)
 
 **Risk:** Low. Wire-breaking but the change is mechanical and the spec is firm.
 
@@ -222,16 +241,16 @@ The `nextCursor` and the two `_meta` fields are spec follow-ons added on 2026-05
 **Goal:** real per-subscription push delivery, replacing today's broadcast-to-all-SSE-listeners model.
 
 **Spec deltas addressed:**
-- `events/stream` is a long-lived JSON-RPC request (one per subscription). Streamable HTTP: POST returns SSE response. stdio: notifications on stdout demuxed via `requestId`.
-- Server emits five new notifications, all carrying `requestId` (the JSON-RPC `id` of the parent stream):
-  - `notifications/events/active {requestId, cursor, truncated}` — confirmation, sent on subscribe and again on mid-stream gap recovery
-  - `notifications/events/event {requestId, eventId, name, timestamp, data, cursor}` — payload
-  - `notifications/events/heartbeat {requestId, cursor}` — keepalive ≥30s; carries cursor so client's persisted cursor advances during quiet periods. SSE `data:` frame, NOT comment form
-  - `notifications/events/error {requestId, error}` — transient per-event upstream failure; stream stays open
-  - `notifications/events/terminated {requestId, error}` — subscription has ended (auth revoked, etc.); SDK removes the subscription
-- `StreamEventsResult {_meta: {}}` — empty typed final frame, sent only when server initiates the close
-- Client cancellation: HTTP abort or `notifications/cancelled` (stdio)
-- `events/stream` requests are exempt from any general request-concurrency cap
+- `events/stream` is a long-lived JSON-RPC request (one per subscription). Streamable HTTP: POST returns SSE response. stdio: notifications on stdout demuxed via `requestId`. (§"Push-Based Delivery" L199-206 + "Request: events/stream" L225-241)
+- Server emits five new notifications, all carrying `requestId` (the JSON-RPC `id` of the parent stream): (§"Push-Based Delivery" → "Event Delivery" L243-271)
+  - `notifications/events/active {requestId, cursor, truncated}` — confirmation, sent on subscribe and again on mid-stream gap recovery (L249)
+  - `notifications/events/event {requestId, eventId, name, timestamp, data, cursor}` — payload (L252)
+  - `notifications/events/heartbeat {requestId, cursor}` — keepalive ≥30s; carries cursor so client's persisted cursor advances during quiet periods. SSE `data:` frame, NOT comment form. (§"Push-Based Delivery" → "Lifecycle" → "Heartbeat" L270)
+  - `notifications/events/error {requestId, error}` — transient per-event upstream failure; stream stays open (L255 + L261)
+  - `notifications/events/terminated {requestId, error}` — subscription has ended (auth revoked, etc.); SDK removes the subscription (§"Authorization" L783-795)
+- `StreamEventsResult {_meta: {}}` — empty typed final frame, sent only when server initiates the close (§"Push-Based Delivery" → "Lifecycle" → "Stream termination" L269)
+- Client cancellation: HTTP abort or `notifications/cancelled` (stdio) (§"Push-Based Delivery" → "Lifecycle" → "Cancellation" L271)
+- `events/stream` requests are exempt from any general request-concurrency cap (§"Push-Based Delivery" → "Lifecycle" → "Concurrent streams" L272)
 
 **This is the largest single PR. Worth a focused design doc commit before code.** Suggested approach: open a feature branch, write `PLAN.md` at root with the wire-level design (notification routing, heartbeat goroutine lifecycle, demux on stdio), then implement.
 
@@ -274,13 +293,13 @@ The TS reference's heartbeat doesn't carry a cursor today; the spec now requires
 **Goal:** close the spec-mandated security and reliability gaps in our webhook delivery path.
 
 **Spec deltas addressed:**
-- **SSRF revalidation at delivery time** (sketch line 464): hostname-based subscribe-time check is insufficient under DNS rebinding. Resolve hostname, check resolved IP against the blocklist, connect directly to that IP (sending the original hostname in `Host` header / TLS SNI).
-- **No HTTP redirects on webhook deliveries** — explicitly disable via `http.Client.CheckRedirect: ErrUseLastResponse`. Redirects can target an internal address that bypasses the blocklist.
-- **Body size cap**: SHOULD ≤ 256 KiB; servers MUST treat 413 from the receiver as non-retryable.
-- **Control envelopes** (sketch line 419-423): server POSTs signed `{type:gap, cursor:<fresh>}` when a gap is detected between refreshes; signed `{type:terminated, error:{...}}` when the subscription ends. Both use Standard Webhooks headers + `X-MCP-Subscription-Id`. `webhook-id` is `msg_<type>_<random>` (vs `eventId` for event deliveries — set up in α).
-- **`X-MCP-Subscription-Id` header** on every webhook delivery POST (the routing handle from γ; surfaced in the body-less header so receivers pick the right secret without parsing).
-- **`deliveryStatus`** on `events/subscribe` refresh response: `{active, lastDeliveryAt, lastError, failedSince?}`. `lastError` is a categorical string from a fixed set: `connection_refused | timeout | tls_error | http_4xx | http_5xx | challenge_failed`. **Never** raw response bodies / headers / status lines (avoids becoming a response oracle for attacker-chosen URLs).
-- **Suspend / reactivate state machine**: after repeated failures the server SHOULD set `active: false`; a successful refresh reactivates it (`active: true`) and resumes retrying pending events.
+- **SSRF revalidation at delivery time**: hostname-based subscribe-time check is insufficient under DNS rebinding. Resolve hostname, check resolved IP against the blocklist, connect directly to that IP (sending the original hostname in `Host` header / TLS SNI). (§"Webhook Security" → "SSRF prevention" L464)
+- **No HTTP redirects on webhook deliveries** — explicitly disable via `http.Client.CheckRedirect: ErrUseLastResponse`. Redirects can target an internal address that bypasses the blocklist. (§"Webhook Security" → "SSRF prevention" L464 — same paragraph)
+- **Body size cap**: SHOULD ≤ 256 KiB; servers MUST treat 413 from the receiver as non-retryable. (§"Webhook Security" → "Delivery profile (for WAF / private-cloud deployments)" L487)
+- **Control envelopes**: server POSTs signed `{type:gap, cursor:<fresh>}` when a gap is detected between refreshes; signed `{type:terminated, error:{...}}` when the subscription ends. Both use Standard Webhooks headers + `X-MCP-Subscription-Id`. `webhook-id` is `msg_<type>_<random>` (vs `eventId` for event deliveries — set up in α). (§"Non-event webhook bodies" L415-423)
+- **`X-MCP-Subscription-Id` header** on every webhook delivery POST (the routing handle from γ; surfaced in the body-less header so receivers pick the right secret without parsing). (§"Webhook Event Delivery" L390 + §"Webhook Security" → "Signature scheme" L472)
+- **`deliveryStatus`** on `events/subscribe` refresh response: `{active, lastDeliveryAt, lastError, failedSince?}`. `lastError` is a categorical string from a fixed set: `connection_refused | timeout | tls_error | http_4xx | http_5xx | challenge_failed`. **Never** raw response bodies / headers / status lines (avoids becoming a response oracle for attacker-chosen URLs). (§"Webhook Delivery Status" L425-460)
+- **Suspend / reactivate state machine**: after repeated failures the server SHOULD set `active: false`; a successful refresh reactivates it (`active: true`) and resumes retrying pending events. (§"Webhook Event Delivery" L413 + §"Webhook Delivery Status" L460)
 
 **Files touched:**
 - `experimental/ext/events/webhook.go` — new `deliveryStatus` field on `WebhookTarget`. State machine transitions documented inline. Outbound `http.Client` configured with `CheckRedirect`. SSRF check moves to a `dialContext` hook so it runs on every connect, not just at subscribe.
@@ -314,7 +333,7 @@ The TS reference's heartbeat doesn't carry a cursor today; the spec now requires
 
 **Goal:** add the per-subscription `match`/`transform` async hooks, `on_subscribe`/`on_unsubscribe` lifecycle hooks, and poll-lease tracking.
 
-**Why deferred:** the design needs more thought than the others. The spec's hook surface (sketch lines 599-635, 667-691) is described in Python-flavored prose; mapping it to Go's type system + concurrency model is its own design exercise. Worth doing *after* ε proves out the per-subscription event flow, since these hooks gate per-subscription delivery decisions.
+**Why deferred:** the design needs more thought than the others. The spec's hook surface — `match`/`transform` per-subscription (§"Server SDK Guidance" L599-635) and `on_subscribe`/`on_unsubscribe` lifecycle (§"Server SDK Guidance" → "Subscription lifecycle hooks" L667-691) — is described in Python-flavored prose; mapping it to Go's type system + concurrency model is its own design exercise. Worth doing *after* ε proves out the per-subscription event flow, since these hooks gate per-subscription delivery decisions.
 
 **When to revisit:** after ε merges and the discord/telegram demos run on real `events/stream`. By that point we'll have load-bearing per-subscription state to hang the hooks off, instead of bolting them onto the broadcast path.
 

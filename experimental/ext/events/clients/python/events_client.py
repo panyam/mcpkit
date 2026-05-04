@@ -20,9 +20,11 @@ Common flags:
 """
 
 import argparse
+import base64
 import hashlib
 import hmac
 import json
+import os
 import sys
 import textwrap
 import threading
@@ -31,6 +33,14 @@ from datetime import datetime, timezone
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
+
+
+def generate_webhook_secret() -> str:
+    """Returns a Standard-Webhooks-shaped client-supplied secret:
+    `whsec_` + base64 of 32 random bytes (256 bits, well inside the
+    spec-mandated 24-64 byte range). Mirrors events.GenerateSecret() in
+    the Go SDK so both SDKs produce the same shape."""
+    return "whsec_" + base64.urlsafe_b64encode(os.urandom(32)).rstrip(b"=").decode("ascii")
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -163,17 +173,30 @@ def cmd_list(session: MCPSession, args):
     print()
 
     # events/list
+    # δ-5: pagination via nextCursor (spec follow-on 2026-05-01).
+    # Today the library returns all sources in one response, but a server
+    # author with many event types may paginate; the loop is forward-
+    # compatible with that.
     print("--- events/list ---")
-    resp = session.rpc("events/list", {})
-    for ev in resp.get("result", {}).get("events", []):
-        print(json.dumps(ev, indent=2))
+    cursor = None
+    while True:
+        params = {"cursor": cursor} if cursor else {}
+        resp = session.rpc("events/list", params)
+        result = resp.get("result", {})
+        for ev in result.get("events", []):
+            print(json.dumps(ev, indent=2))
+        cursor = result.get("nextCursor")
+        if not cursor:
+            break
     print()
 
     # events/poll
     if args.event:
         print(f"--- events/poll (cursor=0, event={args.event}) ---")
+        # δ-1: flat events/poll request shape per spec L139-149.
         resp = session.rpc("events/poll", {
-            "subscriptions": [{"id": "list", "name": args.event, "cursor": "0"}],
+            "name": args.event,
+            "cursor": "0",
         })
         result = resp.get("result", {})
         events = result.get("events", [])
@@ -265,45 +288,64 @@ class WebhookSubscription:
         session,
         event_name: str,
         callback_url: str,
-        secret: str,
-        sub_id: str = "wh-sub",
+        secret: str = "",
         refresh_factor: float = 0.5,
         on_event: callable = None,
         on_refresh: callable = None,
         on_recover: callable = None,
+        max_age: int = 0,
     ):
         """
+        secret: client-supplied HMAC signing secret. Per spec, must be
+                whsec_ + base64 of 24-64 random bytes. If empty, the SDK
+                auto-generates a spec-conformant value via
+                generate_webhook_secret().
+
+        Note: there is no sub_id parameter. Per spec §"Subscription
+        Identity" → "Key composition" L363, the server derives the
+        subscription id from (principal, name, params, url); clients
+        do not supply one. The derived id is read back from the
+        subscribe response (self.id after start()).
+
         on_refresh: called after each successful refresh (including the initial
                     subscribe and any post-recovery re-subscribe). Receives no args.
         on_recover: called when a refresh fails (subscription expired) and a
                     fresh subscribe succeeds. Receives no args. Both may fire
                     in the same cycle if the recovery succeeds.
+        max_age: per-subscription replay floor in seconds, sent on every
+                 subscribe per spec §"Cursor Lifecycle" → "Bounding replay
+                 with maxAge" L529. 0 means no floor. Bounds the worst-case
+                 replay on reconnect.
         """
         self.session = session
         self.event_name = event_name
         self.callback_url = callback_url
-        self.secret = secret
-        self.sub_id = sub_id
+        self.secret = secret if secret else generate_webhook_secret()
         self.refresh_factor = refresh_factor
         self.on_event = on_event
         self.on_refresh = on_refresh
         self.on_recover = on_recover
+        self.max_age = max_age
 
         self._stop = threading.Event()
         self._thread = None
         self._refresh_before = None  # parsed from server response
 
     def _subscribe(self):
-        """Send events/subscribe and capture refreshBefore."""
-        resp = self.session.rpc("events/subscribe", {
-            "id": self.sub_id,
+        """Send events/subscribe and capture refreshBefore. Per spec the
+        request does NOT carry id; server derives it over the canonical
+        tuple (§"Subscription Identity" → "Key composition" L363)."""
+        params = {
             "name": self.event_name,
             "delivery": {
                 "mode": "webhook",
                 "url": self.callback_url,
                 "secret": self.secret,
             },
-        })
+        }
+        if self.max_age > 0:
+            params["maxAge"] = self.max_age
+        resp = self.session.rpc("events/subscribe", params)
         result = resp.get("result", {})
         rb_str = result.get("refreshBefore")
         if rb_str:
@@ -398,10 +440,11 @@ def _verify_signature(headers, body: bytes, secret: str) -> bool:
 
 
 def _make_webhook_handler(secret_holder):
-    """secret_holder is a list with one element — `secret_holder[0]` — so the
-    handler reads the live secret on every request. cmd_webhook updates the
-    holder after subscribe returns the server-assigned secret (which may
-    differ from anything the client supplied, depending on secret mode)."""
+    """secret_holder is a list with one element — `secret_holder[0]` —
+    even though the secret no longer changes mid-flight under the spec
+    (client-supplied only, no server-side rotation). The list-of-one
+    indirection is kept so the handler closure doesn't need a mutex on
+    the rare case of a future secret rotation feature."""
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
             length = int(self.headers.get("Content-Length", 0))
@@ -418,6 +461,9 @@ def _make_webhook_handler(secret_holder):
                 print(f"  name:    {event.get('name', '')}")
                 print(f"  time:    {event.get('timestamp', '')}")
                 print(f"  cursor:  {_fmt_cursor(event.get('cursor'))}")
+                meta = event.get("_meta")
+                if meta:
+                    print(f"  _meta:   {json.dumps(meta, separators=(',', ':'))}")
                 data = event.get("data")
                 if data:
                     print(json.dumps(data, indent=2))
@@ -442,11 +488,20 @@ def cmd_webhook(session: MCPSession, args):
 
     print("=== MCP Events — Webhook Receiver ===\n")
 
-    # Start local receiver first. The verification secret lives in a
-    # one-element list so we can swap in the server-assigned secret after
-    # subscribe returns (Server / Identity modes generate or derive the
-    # secret server-side; Client mode echoes the supplied one).
-    secret_holder = [args.secret]
+    # Subscription owns the secret (auto-generated if --secret omitted,
+    # else uses the supplied value). Pass it to the receiver via a
+    # single-element list so the closure reads the live value (allows
+    # for future rotation features without mutex juggling).
+    sub = WebhookSubscription(
+        session,
+        event_name=args.event,
+        callback_url=hook_url,
+        secret=args.secret,  # empty → SDK auto-generates a whsec_ value
+        refresh_factor=args.refresh_factor,
+        max_age=args.max_age,
+    )
+    secret_holder = [sub.secret]
+
     print(f"Starting webhook receiver on port {args.port}...")
     server = HTTPServer(("", args.port), _make_webhook_handler(secret_holder))
     threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -460,23 +515,11 @@ def cmd_webhook(session: MCPSession, args):
     def on_refresh():
         refresh_count[0] += 1
         print(f"  [auto-refresh] subscription refreshed (count={refresh_count[0]})", flush=True)
+    sub.on_refresh = on_refresh
 
-    sub = WebhookSubscription(
-        session,
-        event_name=args.event,
-        callback_url=hook_url,
-        secret=args.secret,
-        sub_id="wh-demo",
-        refresh_factor=args.refresh_factor,
-        on_refresh=on_refresh,
-    )
     result = sub.start()
-    # Adopt whatever secret the server returned — handles Server / Identity
-    # modes where the client-supplied secret is ignored.
-    if result.get("secret"):
-        secret_holder[0] = result["secret"]
-        if result["secret"] != args.secret:
-            print(f"  using server-assigned secret (mode is not 'client'): {result['secret'][:16]}...")
+    if not args.secret:
+        print(f"  using SDK-generated secret: {sub.secret[:16]}...")
     if result.get("id"):
         print(f"  subscription: {result['id']}")
     if result.get("refreshBefore"):
@@ -512,9 +555,13 @@ def cmd_poll(session: MCPSession, args):
     cursor = "0"
     try:
         while True:
-            resp = session.rpc("events/poll", {
-                "subscriptions": [{"id": "poll-loop", "name": args.event, "cursor": cursor}],
-            })
+            poll_params = {
+                "name": args.event,
+                "cursor": cursor,
+            }
+            if args.max_age > 0:
+                poll_params["maxAge"] = args.max_age
+            resp = session.rpc("events/poll", poll_params)
             result = resp.get("result", {})
             events = result.get("events", [])
             if result.get("truncated"):
@@ -527,6 +574,9 @@ def cmd_poll(session: MCPSession, args):
                     print(f"  name:    {ev.get('name', '')}")
                     print(f"  time:    {ev.get('timestamp', '')}")
                     print(f"  cursor:  {_fmt_cursor(ev.get('cursor'))}")
+                    meta = ev.get("_meta")
+                    if meta:
+                        print(f"  _meta:   {json.dumps(meta, separators=(',', ':'))}")
                     data = ev.get("data")
                     if data:
                         print(json.dumps(data, indent=2))
@@ -561,12 +611,16 @@ def main():
 
     wp = sub.add_parser("webhook", help="Webhook receiver (auto-refreshes subscription)")
     wp.add_argument("--port", type=int, default=9999, help="Local receiver port")
-    wp.add_argument("--secret", default="demo-webhook-secret", help="HMAC shared secret")
+    wp.add_argument("--secret", default="", help="HMAC signing secret (whsec_ + base64 of 24-64 bytes per spec). Empty → SDK auto-generates.")
     wp.add_argument("--refresh-factor", type=float, default=0.5,
                     help="Refresh subscription at this fraction of TTL (default 0.5)")
+    wp.add_argument("--max-age", type=int, default=0,
+                    help="Per-subscription replay floor in seconds (spec §'Cursor Lifecycle' L529). 0 = no floor.")
 
     pp = sub.add_parser("poll", help="Polling loop")
     pp.add_argument("--interval", type=int, default=5, help="Seconds between polls")
+    pp.add_argument("--max-age", type=int, default=0,
+                    help="Per-poll replay floor in seconds (spec §'Cursor Lifecycle' L529). 0 = no floor.")
 
     args = parser.parse_args()
     session = MCPSession(args.mcp)

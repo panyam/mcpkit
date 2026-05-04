@@ -28,8 +28,8 @@ type Receiver[Data any] struct {
 
 // NewReceiver constructs a typed receiver with the given verification
 // secret. Pass an empty string if you intend to call SetSecret later
-// (typical for Server / Identity modes where the server returns the
-// secret on subscribe).
+// (e.g., when the receiver is constructed before the application has
+// decided what value to subscribe with).
 //
 // Buffered to 64 events; callers should drain Events() promptly. A full
 // channel causes the receiver to drop new deliveries silently rather
@@ -108,6 +108,7 @@ func (r *Receiver[Data]) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		Timestamp: wire.Timestamp,
 		Cursor:    wire.Cursor,
 		Data:      data,
+		Meta:      wire.Meta,
 	}
 
 	// Non-blocking send. A full channel signals a slow consumer; we'd

@@ -85,7 +85,6 @@ def main() -> int:
         event_name="discord.message",
         callback_url=f"http://localhost:{args.port}",
         secret=args.secret,
-        sub_id="ttl-test",
         refresh_factor=0.5,  # refresh at 0.5*TTL (half a TTL window)
         on_refresh=on_refresh,
     )

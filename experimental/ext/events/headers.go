@@ -60,9 +60,37 @@ func ParseHeaderMode(s string) (WebhookHeaderMode, error) {
 
 // signedDelivery holds the headers and the request body for one webhook POST.
 // applyHeaders writes them onto an outbound *http.Request.
+//
+// Per spec §"Webhook Event Delivery" L390 + §"Webhook Security" →
+// "Signature scheme" L472: every delivery MUST include
+// X-MCP-Subscription-Id (the subscription's derived id from
+// γ-2's tuple identity) so the receiver can select the correct
+// secret without parsing the body. This is the only MCP-specific
+// header on a Standard Webhooks delivery; everything else conforms
+// to the Standard Webhooks profile.
+//
+// withSubscriptionID returns a copy with the X-MCP-Subscription-Id
+// header layered on. Kept as a separate method so the signing
+// functions stay focused on signature math; the registry's deliver
+// path layers the routing header after signing.
 type signedDelivery struct {
 	headers map[string]string
 	body    []byte
+}
+
+// withSubscriptionID adds the X-MCP-Subscription-Id header carrying
+// the spec's derived subscription id (sub_<base64>). Receivers use
+// the header to pick the correct secret without parsing the body.
+func (d signedDelivery) withSubscriptionID(subID string) signedDelivery {
+	if subID == "" {
+		return d
+	}
+	hdrs := make(map[string]string, len(d.headers)+1)
+	for k, v := range d.headers {
+		hdrs[k] = v
+	}
+	hdrs["X-MCP-Subscription-Id"] = subID
+	return signedDelivery{headers: hdrs, body: d.body}
 }
 
 func (d signedDelivery) applyHeaders(req *http.Request) {
