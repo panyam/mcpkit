@@ -117,8 +117,10 @@ What is **not** yet established (and lives in downstream pages):
 Roots that build on this end-state:
 
 - **[Transport mechanics](./transport-mechanics.md)** — drills into the wire format chosen during bring-up phase 2.
-- **(forthcoming) Per-request anatomy** — the per-call flow that runs *inside* an established session. Assumes this root + transport mechanics.
-- **(forthcoming) Re-initialization / session resumption** — what happens if the underlying transport drops. Assumes this root.
+- **(forthcoming) Notifications** — the session's state-change channel. Capability-gated by what was negotiated here. Assumes this root + transport mechanics.
+- **(forthcoming) Per-request anatomy** — the per-call flow that runs *inside* an established session: dispatch, middleware, handler context, typed binding. Assumes this root + transport mechanics + notifications.
+- **(forthcoming) Auth deep-dive** *(off-mainline root)* — full OAuth dance, PRM, JWT validation, fine-grained-auth per tool. Assumes this root.
+- **(forthcoming) Re-init / session resumption** *(leaf)* — what happens if the underlying transport drops mid-session.
 
 ## Findings (about the DAG itself)
 
