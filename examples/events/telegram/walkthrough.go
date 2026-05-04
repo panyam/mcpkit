@@ -229,7 +229,13 @@ func runDemo() {
 		DashedArrow("Server", "Host", "{ id, refreshBefore }   (response does NOT echo secret per spec)").
 		Arrow("Receiver", "Server", "POST /inject (simulated message)").
 		DashedArrow("Server", "Receiver", "POST <url> + HMAC signature headers (default: webhook-* per Standard Webhooks; opt-in: X-MCP-* via -webhook-header-mode mcp)").
-		Note("The typed Receiver[TelegramEventData] decodes the wire envelope's Data field directly into TelegramEventData, so the consumer reads `ev.Data.Text` rather than re-parsing JSON. Same `Subscription` + `Receiver[Data]` pair as the discord webhook step — the only differences are the type parameter and the payload field names. Per spec, the SDK auto-generates a whsec_ secret when SubscribeOptions.Secret is empty (events.GenerateSecret).").
+		Note(
+			"Same `Subscription` + `Receiver[Data]` pair as the discord webhook step.",
+			"",
+			"- Receiver[TelegramEventData] decodes the wire envelope's Data field directly into TelegramEventData — consumer reads `ev.Data.Text`, no re-parsing JSON.",
+			"- The only differences from discord: the type parameter and the payload field names.",
+			"- SDK auto-generates a whsec_ secret when SubscribeOptions.Secret is empty (events.GenerateSecret).",
+		).
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			recv := eventsclient.NewReceiver[TelegramEventData]("")
 			defer recv.Close()
@@ -299,7 +305,19 @@ func runDemo() {
 	demo.Step("Live Telegram interaction (real message from a Telegram chat)").
 		Arrow("Telegram", "Server", "MessageCreate event (when you send a message to the bot)").
 		DashedArrow("Server", "Host", "notifications/events/event { name: telegram.message, cursor: <new> }").
-		Note("Requires the server to be running with -token + you having a chat open with the bot. No typing parallel here — Telegram's Bot API doesn't expose user typing events to bots (only the bot can send typing chat actions, not the other way around). Discord does have user-typing events; see ../discord/WALKTHROUGH.md for the live-typing demo. In --non-interactive mode this step skips the wait so CI runs aren't slowed.").
+		Note(
+			"Setup: start the server with a Telegram bot token and open a chat with the bot in the Telegram app.",
+			"",
+			"```",
+			"TELEGRAM_BOT_TOKEN=<your-token> make serve",
+			"```",
+			"",
+			"Bot setup (BotFather token, chat link) is documented in this demo's README.md.",
+			"",
+			"- No typing parallel here — Telegram's Bot API doesn't expose user typing events to bots (only the bot can send typing chat actions, not the other way).",
+			"- Discord does have user-typing events; see ../discord/WALKTHROUGH.md for the live-typing demo.",
+			"- --non-interactive mode skips the wait so CI runs aren't slowed.",
+		).
 		Timeout(liveInteractionMaxWait).
 		Cancellable(!tuiMode()).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
