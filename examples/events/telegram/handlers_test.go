@@ -82,11 +82,11 @@ func TestEventsPollCursorPagination(t *testing.T) {
 	source, _ := preloadedSource(10)
 	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry())
 
+	// δ-1: flat events/poll request shape per spec L139-149.
 	result, err := c.Call("events/poll", map[string]any{
+		"name":      "telegram.message",
+		"cursor":    "0",
 		"maxEvents": 5,
-		"subscriptions": []map[string]any{
-			{"id": "page1", "name": "telegram.message", "cursor": "0"},
-		},
 	})
 	require.NoError(t, err)
 
@@ -97,10 +97,9 @@ func TestEventsPollCursorPagination(t *testing.T) {
 	assert.Equal(t, "5", *resp.Cursor)
 
 	result2, err := c.Call("events/poll", map[string]any{
+		"name":      "telegram.message",
+		"cursor":    *resp.Cursor,
 		"maxEvents": 5,
-		"subscriptions": []map[string]any{
-			{"id": "page2", "name": "telegram.message", "cursor": *resp.Cursor},
-		},
 	})
 	require.NoError(t, err)
 
@@ -118,9 +117,8 @@ func TestEventsPollEmptyStore(t *testing.T) {
 	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry())
 
 	result, err := c.Call("events/poll", map[string]any{
-		"subscriptions": []map[string]any{
-			{"id": "empty", "name": "telegram.message", "cursor": "0"},
-		},
+		"name":   "telegram.message",
+		"cursor": "0",
 	})
 	require.NoError(t, err)
 
@@ -140,9 +138,8 @@ func TestEventsPollUnknownEvent(t *testing.T) {
 	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry())
 
 	_, err := c.Call("events/poll", map[string]any{
-		"subscriptions": []map[string]any{
-			{"id": "bogus", "name": "nonexistent.event", "cursor": "0"},
-		},
+		"name":   "nonexistent.event",
+		"cursor": "0",
 	})
 	require.Error(t, err, "unknown event must return a JSON-RPC error")
 	rpcErr, ok := err.(*client.RPCError)
@@ -227,10 +224,9 @@ func TestEventsPollHasMore(t *testing.T) {
 	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry())
 
 	result, err := c.Call("events/poll", map[string]any{
+		"name":      "telegram.message",
+		"cursor":    "0",
 		"maxEvents": 3,
-		"subscriptions": []map[string]any{
-			{"id": "hm", "name": "telegram.message", "cursor": "0"},
-		},
 	})
 	require.NoError(t, err)
 
@@ -240,10 +236,9 @@ func TestEventsPollHasMore(t *testing.T) {
 	assert.True(t, resp.HasMore)
 
 	result2, err := c.Call("events/poll", map[string]any{
+		"name":      "telegram.message",
+		"cursor":    *resp.Cursor,
 		"maxEvents": 3,
-		"subscriptions": []map[string]any{
-			{"id": "hm2", "name": "telegram.message", "cursor": *resp.Cursor},
-		},
 	})
 	require.NoError(t, err)
 

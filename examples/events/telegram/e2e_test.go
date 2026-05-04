@@ -98,11 +98,11 @@ func TestE2EPollDelivery(t *testing.T) {
 	require.NoError(t, yieldText(yield, 100, "bob", "world"))
 	require.NoError(t, yieldText(yield, 100, "carol", "!"))
 
+	// δ-1: flat events/poll request shape per spec L139-149.
 	result, err := c.Call("events/poll", map[string]any{
+		"name":      "telegram.message",
+		"cursor":    "0",
 		"maxEvents": 2,
-		"subscriptions": []map[string]any{
-			{"id": "poll-1", "name": "telegram.message", "cursor": "0"},
-		},
 	})
 	require.NoError(t, err)
 
@@ -113,9 +113,8 @@ func TestE2EPollDelivery(t *testing.T) {
 	assert.Equal(t, "2", *resp.Cursor)
 
 	result2, err := c.Call("events/poll", map[string]any{
-		"subscriptions": []map[string]any{
-			{"id": "poll-2", "name": "telegram.message", "cursor": *resp.Cursor},
-		},
+		"name":   "telegram.message",
+		"cursor": *resp.Cursor,
 	})
 	require.NoError(t, err)
 
@@ -483,14 +482,15 @@ func TestE2EPollMultiSubRejected(t *testing.T) {
 	c := client.NewClient(tsrv.URL+"/mcp", core.ClientInfo{Name: "multi-sub", Version: "1.0"})
 	require.NoError(t, c.Connect())
 
+	// δ-1: the {subscriptions: [...]} wrapper is rejected with a helpful
+	// error pointing at the spec change (L139-149).
 	_, err := c.Call("events/poll", map[string]any{
 		"subscriptions": []map[string]any{
-			{"id": "a", "name": "telegram.message", "cursor": "0"},
-			{"id": "b", "name": "telegram.typing", "cursor": "0"},
+			{"name": "telegram.message", "cursor": "0"},
 		},
 	})
-	require.Error(t, err, "multi-subscription events/poll must be rejected")
-	assert.Contains(t, err.Error(), "exactly one subscription")
+	require.Error(t, err, "legacy {subscriptions: [...]} wrapper must be rejected")
+	assert.Contains(t, err.Error(), "legacy")
 }
 
 // TestE2EResourceReadViaClient verifies the recent-messages resource reads

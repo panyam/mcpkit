@@ -1,6 +1,7 @@
 package events
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -87,6 +88,50 @@ func TestEventNotFound_UsesSpecCode(t *testing.T) {
 	assert.Contains(t, body, `"message":"EventNotFound"`)
 	assert.False(t, strings.Contains(body, `"code":-32001`),
 		"legacy -32001 code must not appear (collides with base MCP ResourceNotFound)")
+}
+
+// TestPoll_FlatRequestShape pins the spec contract for events/poll
+// REQUEST shape per §"Poll-Based Delivery" → "Request: events/poll"
+// L139-149: top-level {name, cursor?, maxEvents?, params?} — no
+// subscriptions[] wrapper. δ-1 dropped the wrapper after phase 1
+// removed batching at the protocol level. Failing this test means
+// a spec-conformant client's request would not parse.
+func TestPoll_FlatRequestShape(t *testing.T) {
+	srv := buildSecretValidationStack(t)
+	rawReq, err := json.Marshal(map[string]any{
+		"name":   "fake.event",
+		"cursor": "0",
+	})
+	require.NoError(t, err)
+	resp, err := srv.Dispatch(context.Background(), &core.Request{
+		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "events/poll", Params: rawReq,
+	})
+	require.NoError(t, err)
+	require.Nil(t, resp.Error, "flat top-level shape must be accepted; got %+v", resp.Error)
+}
+
+// TestPoll_RejectsLegacyWrapper verifies that a request still using the
+// pre-δ {subscriptions: [...]} wrapper gets a -32602 with a message
+// pointing at the spec change. Without this helpful diagnostic, an old
+// SDK sending the legacy shape would just see "name is required" and
+// have no clue why.
+func TestPoll_RejectsLegacyWrapper(t *testing.T) {
+	srv := buildSecretValidationStack(t)
+	rawReq, err := json.Marshal(map[string]any{
+		"subscriptions": []map[string]any{
+			{"name": "fake.event", "cursor": "0"},
+		},
+	})
+	require.NoError(t, err)
+	resp, err := srv.Dispatch(context.Background(), &core.Request{
+		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "events/poll", Params: rawReq,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp.Error, "legacy wrapper must be rejected, not silently parsed as empty")
+	assert.Equal(t, core.ErrCodeInvalidParams, resp.Error.Code)
+	assert.Contains(t, resp.Error.Message, "legacy",
+		"error message should explain the wrapper is rejected; got %q", resp.Error.Message)
+	assert.Contains(t, resp.Error.Message, "L139", "error should cite the spec section")
 }
 
 // TestInvalidCallbackUrl_UsesSpecCode verifies the InvalidCallbackUrl error
