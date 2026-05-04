@@ -182,8 +182,10 @@ def cmd_list(session: MCPSession, args):
     # events/poll
     if args.event:
         print(f"--- events/poll (cursor=0, event={args.event}) ---")
+        # δ-1: flat events/poll request shape per spec L139-149.
         resp = session.rpc("events/poll", {
-            "subscriptions": [{"id": "list", "name": args.event, "cursor": "0"}],
+            "name": args.event,
+            "cursor": "0",
         })
         result = resp.get("result", {})
         events = result.get("events", [])
@@ -530,7 +532,8 @@ def cmd_poll(session: MCPSession, args):
     try:
         while True:
             resp = session.rpc("events/poll", {
-                "subscriptions": [{"id": "poll-loop", "name": args.event, "cursor": cursor}],
+                "name": args.event,
+                "cursor": cursor,
             })
             result = resp.get("result", {})
             events = result.get("events", [])

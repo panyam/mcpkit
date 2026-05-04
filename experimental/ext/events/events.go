@@ -276,34 +276,39 @@ func registerList(srv *server.Server, sources []EventSource) {
 
 func registerPoll(srv *server.Server, sourceMap map[string]EventSource) {
 	srv.HandleMethod("events/poll", func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
+		// Spec §"Poll-Based Delivery" → "Request: events/poll" L139-149:
+		// flat top-level shape — no subscriptions[] wrapper. Phase 1 dropped
+		// batching at the protocol level; δ-1 drops the now-vestigial
+		// wrapper at the wire level.
 		var req struct {
-			MaxEvents     int `json:"maxEvents,omitempty"`
-			Subscriptions []struct {
-				ID     string  `json:"id"`
-				Name   string  `json:"name"`
-				Cursor *string `json:"cursor"`
-			} `json:"subscriptions"`
+			Name      string         `json:"name"`
+			Params    map[string]any `json:"params,omitempty"`
+			Cursor    *string        `json:"cursor"`
+			MaxEvents int            `json:"maxEvents,omitempty"`
 		}
 		if err := json.Unmarshal(params, &req); err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 		}
-		// events/poll is single-subscription per upstream WG PR#1 line 185
-		// (comment r3140480214). Reject batched requests with a clear
-		// pointer to the spec change.
-		if len(req.Subscriptions) > 1 {
+		// Helpful diagnostic for clients still sending the legacy wrapper.
+		// A flat-shape request with name omitted is indistinguishable from
+		// a wrapper-shape request at the struct level (both leave req.Name
+		// empty); probe for the wrapper specifically.
+		if req.Name == "" {
+			var legacyProbe struct {
+				Subscriptions []json.RawMessage `json:"subscriptions"`
+			}
+			if err := json.Unmarshal(params, &legacyProbe); err == nil && legacyProbe.Subscriptions != nil {
+				return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
+					`events/poll: legacy {subscriptions: [...]} wrapper rejected — send top-level {name, cursor, maxEvents} per spec §"Poll-Based Delivery" L139-149`)
+			}
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
-				"events/poll: pass exactly one subscription per call (multi-sub support has been removed)")
-		}
-		if len(req.Subscriptions) == 0 {
-			return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
-				"events/poll: subscriptions[] must contain exactly one entry")
+				"events/poll: name is required")
 		}
 		if req.MaxEvents <= 0 {
 			req.MaxEvents = 50
 		}
 
-		sub := req.Subscriptions[0]
-		source, ok := sourceMap[sub.Name]
+		source, ok := sourceMap[req.Name]
 		if !ok {
 			return core.NewErrorResponse(id, ErrCodeEventNotFound, "EventNotFound")
 		}
@@ -314,8 +319,8 @@ func registerPoll(srv *server.Server, sourceMap map[string]EventSource) {
 		// Cursored sources return Latest(); cursorless sources return "" and
 		// the wire layer below translates that to JSON null.
 		cursor := ""
-		if sub.Cursor != nil {
-			cursor = *sub.Cursor
+		if req.Cursor != nil {
+			cursor = *req.Cursor
 		} else if !cursorless {
 			cursor = source.Latest()
 		}

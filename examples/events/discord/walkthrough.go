@@ -274,34 +274,27 @@ func runDemo() {
 			if messageCursor != nil {
 				cursor = *messageCursor
 			}
+			// δ-1: flat top-level shape per spec §"Poll-Based Delivery"
+			// → "Request: events/poll" L139-149.
 			res, err := c.Call("events/poll", map[string]any{
-				"subscriptions": []map[string]any{
-					{"id": "demo-poll", "name": "discord.message", "cursor": cursor},
-				},
+				"name":   "discord.message",
+				"cursor": cursor,
 			})
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
 			}
 			var resp struct {
-				Results []struct {
-					ID      string  `json:"id"`
-					Cursor  *string `json:"cursor"`
-					HasMore bool    `json:"hasMore"`
-					Events  []any   `json:"events"`
-				} `json:"results"`
+				Cursor  *string `json:"cursor"`
+				HasMore bool    `json:"hasMore"`
+				Events  []any   `json:"events"`
 			}
 			_ = json.Unmarshal(res.Raw, &resp)
-			if len(resp.Results) == 0 {
-				fmt.Printf("    ERROR: no result\n")
-				return
+			cur := "(none)"
+			if resp.Cursor != nil {
+				cur = *resp.Cursor
 			}
-			r := resp.Results[0]
-			c := "(none)"
-			if r.Cursor != nil {
-				c = *r.Cursor
-			}
-			fmt.Printf("    events:  %d  cursor: %s  hasMore: %v\n", len(r.Events), c, r.HasMore)
+			fmt.Printf("    events:  %d  cursor: %s  hasMore: %v\n", len(resp.Events), cur, resp.HasMore)
 			return
 		})
 
