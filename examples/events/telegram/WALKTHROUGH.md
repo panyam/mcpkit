@@ -4,9 +4,9 @@ A condensed walkthrough showing the same MCP Events extension wired against a Te
 
 ## What you'll learn
 
-- **Connect to the events server** — Same connection setup as discord. The notification broker fans `notifications/events/event` out by source name so each step subscribes to just what it cares about.
-- **Push: inject a telegram message, observe SSE notification** — Telegram's payload is flat — chat_id, user, text — vs discord's nested author + content. Same library, same wire envelope, different Data shape (auto-derived from TelegramEventData).
-- **Cursorless: telegram.typing emits cursor:null** — Telegram's typing chat-action is ephemeral — no replay value, no buffer. Same WithoutCursors() story as discord.typing; the wire payload differs only in shape.
+- **Connect to the events server** — Plain MCP initialize over Streamable HTTP. Push delivery uses events/stream (a long-lived per-subscription POST that returns SSE), not the session GET stream — no transport-level wiring needed in the client.
+- **Push: open events/stream, inject a telegram message, observe per-call notifications** — events/stream is a long-lived per-subscription POST returning SSE — see the discord walkthrough for the full protocol exposition. Telegram's flat payload (chat_id, user, text) wires through the same Stream() helper as discord's nested one; only the Data shape changes.
+- **Cursorless: open events/stream for telegram.typing, observe cursor:null** — Telegram's typing chat-action is ephemeral — no replay value, no buffer. Same WithoutCursors() story as discord.typing. Wire-shape contract per spec L294: cursorless emits cursor:null, never an empty string or absent key.
 - **Webhook: subscribe via the typed Go SDK, receive a TelegramEventData** — The typed Receiver[TelegramEventData] decodes the wire envelope's Data field directly into TelegramEventData, so the consumer reads `ev.Data.Text` rather than re-parsing JSON. Same `Subscription` + `Receiver[Data]` pair as the discord webhook step — the only differences are the type parameter and the payload field names. Per spec, the SDK auto-generates a whsec_ secret when SubscribeOptions.Secret is empty (events.GenerateSecret).
 - **Live Telegram interaction (real message from a Telegram chat)** — Requires the server to be running with -token + you having a chat open with the bot. No typing parallel here — Telegram's Bot API doesn't expose user typing events to bots (only the bot can send typing chat actions, not the other way around). Discord does have user-typing events; see ../discord/WALKTHROUGH.md for the live-typing demo. In --non-interactive mode this step skips the wait so CI runs aren't slowed.
 
@@ -22,12 +22,14 @@ sequenceDiagram
     Host->>Server: POST /mcp — initialize
     Server-->>Host: serverInfo + capabilities
 
-    Note over Host,Receiver: Step 2: Push: inject a telegram message, observe SSE notification
+    Note over Host,Receiver: Step 2: Push: open events/stream, inject a telegram message, observe per-call notifications
+    Host->>Server: events/stream { name: telegram.message }
+    Server-->>Host: notifications/events/active { requestId, cursor }
     Receiver->>Server: POST /inject (simulated telegram message)
-    Server-->>Host: notifications/events/event { data: {chat_id, user, text, ...} }
+    Server-->>Host: notifications/events/event { requestId, data: {chat_id, user, text, ...} }
 
-    Note over Host,Receiver: Step 3: Cursorless: telegram.typing emits cursor:null
-    Receiver->>Server: POST /inject?event=telegram.typing
+    Note over Host,Receiver: Step 3: Cursorless: open events/stream for telegram.typing, observe cursor:null
+    Host->>Server: events/stream { name: telegram.typing }
     Server-->>Host: notifications/events/event { cursor: null }
 
     Note over Host,Receiver: Step 4: Webhook: subscribe via the typed Go SDK, receive a TelegramEventData
@@ -73,15 +75,15 @@ For the full protocol exposition (events/list, poll, header modes, the spec's de
 
 ### Step 1: Connect to the events server
 
-Same connection setup as discord. The notification broker fans `notifications/events/event` out by source name so each step subscribes to just what it cares about.
+Plain MCP initialize over Streamable HTTP. Push delivery uses events/stream (a long-lived per-subscription POST that returns SSE), not the session GET stream — no transport-level wiring needed in the client.
 
-### Step 2: Push: inject a telegram message, observe SSE notification
+### Step 2: Push: open events/stream, inject a telegram message, observe per-call notifications
 
-Telegram's payload is flat — chat_id, user, text — vs discord's nested author + content. Same library, same wire envelope, different Data shape (auto-derived from TelegramEventData).
+events/stream is a long-lived per-subscription POST returning SSE — see the discord walkthrough for the full protocol exposition. Telegram's flat payload (chat_id, user, text) wires through the same Stream() helper as discord's nested one; only the Data shape changes.
 
-### Step 3: Cursorless: telegram.typing emits cursor:null
+### Step 3: Cursorless: open events/stream for telegram.typing, observe cursor:null
 
-Telegram's typing chat-action is ephemeral — no replay value, no buffer. Same WithoutCursors() story as discord.typing; the wire payload differs only in shape.
+Telegram's typing chat-action is ephemeral — no replay value, no buffer. Same WithoutCursors() story as discord.typing. Wire-shape contract per spec L294: cursorless emits cursor:null, never an empty string or absent key.
 
 ### Step 4: Webhook: subscribe via the typed Go SDK, receive a TelegramEventData
 

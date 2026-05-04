@@ -157,25 +157,10 @@ func runDemo() {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
 			}
-			var resp struct {
-				Events []struct {
-					Name        string   `json:"name"`
-					Description string   `json:"description"`
-					Delivery    []string `json:"delivery"`
-					Cursorless  bool     `json:"cursorless"`
-				} `json:"events"`
-			}
-			if err := json.Unmarshal(res.Raw, &resp); err != nil {
-				fmt.Printf("    ERROR: %v\n", err)
-				return
-			}
-			for _, e := range resp.Events {
-				flag := "cursored"
-				if e.Cursorless {
-					flag = "CURSORLESS"
-				}
-				fmt.Printf("    %-20s %-12s delivery=%v\n", e.Name, "["+flag+"]", e.Delivery)
-			}
+			var v any
+			_ = json.Unmarshal(res.Raw, &v)
+			pretty, _ := json.MarshalIndent(v, "    ", "  ")
+			fmt.Printf("    events/list response:\n%s\n", string(pretty))
 			return
 		})
 
@@ -219,15 +204,8 @@ func runDemo() {
 					cc := *ev.Cursor
 					messageCursor = &cc
 				}
-				fmt.Printf("    name:    %s\n", ev.Name)
-				fmt.Printf("    eventId: %s\n", ev.EventID)
-				fmt.Printf("    cursor:  %s\n", ev.CursorStr())
-				var d map[string]any
-				_ = json.Unmarshal(ev.Data, &d)
-				fmt.Printf("    text:    %v (from %v)\n", d["content"], d["author"])
-				if len(ev.Meta) > 0 {
-					fmt.Printf("    _meta:   %v\n", ev.Meta)
-				}
+				pretty, _ := json.MarshalIndent(ev, "    ", "  ")
+				fmt.Printf("    notifications/events/event params:\n%s\n", string(pretty))
 			case <-time.After(3 * time.Second):
 				fmt.Printf("    ERROR: no push notification within 3s\n")
 			}
@@ -254,17 +232,13 @@ func runDemo() {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
 			}
-			var resp struct {
-				Cursor  *string `json:"cursor"`
-				HasMore bool    `json:"hasMore"`
-				Events  []any   `json:"events"`
-			}
-			_ = json.Unmarshal(res.Raw, &resp)
-			cur := "(none)"
-			if resp.Cursor != nil {
-				cur = *resp.Cursor
-			}
-			fmt.Printf("    events:  %d  cursor: %s  hasMore: %v\n", len(resp.Events), cur, resp.HasMore)
+			// Re-indent the raw response so the demo output shows the actual
+			// wire shape — events/poll response per spec L139-149: flat
+			// {events, cursor, hasMore, [truncated], [nextPollSeconds]}.
+			var v any
+			_ = json.Unmarshal(res.Raw, &v)
+			pretty, _ := json.MarshalIndent(v, "    ", "  ")
+			fmt.Printf("    events/poll response:\n%s\n", string(pretty))
 			return
 		})
 
@@ -302,15 +276,11 @@ func runDemo() {
 
 			select {
 			case ev := <-gotEvent:
-				fmt.Printf("    name:        %s\n", ev.Name)
-				fmt.Printf("    cursor:      %v (HasCursor=%v)\n", ev.Cursor, ev.HasCursor())
+				pretty, _ := json.MarshalIndent(ev, "    ", "  ")
+				fmt.Printf("    notifications/events/event params:\n%s\n", string(pretty))
 				if ev.Cursor != nil {
 					fmt.Printf("    UNEXPECTED: cursorless events should wire as cursor:null\n")
 				}
-				var d map[string]any
-				_ = json.Unmarshal(ev.Data, &d)
-				fmt.Printf("    user:        %v\n", d["user"])
-				fmt.Printf("    started_at:  %v\n", d["started_at"])
 			case <-time.After(3 * time.Second):
 				fmt.Printf("    ERROR: no typing event within 3s\n")
 			}
@@ -383,15 +353,8 @@ func runDemo() {
 
 			select {
 			case ev := <-recv.Events():
-				fmt.Printf("    Receiver got typed event:\n")
-				fmt.Printf("      name:    %s\n", ev.Name)
-				fmt.Printf("      eventId: %s\n", ev.EventID)
-				fmt.Printf("      cursor:  %s\n", ev.CursorStr())
-				fmt.Printf("      content: %q (from %s)\n", ev.Data.Content, ev.Data.Author.Username)
-				// δ-4: per-event _meta from the source's metaFunc.
-				if ev.Meta != nil {
-					fmt.Printf("      _meta:   %v\n", ev.Meta)
-				}
+				pretty, _ := json.MarshalIndent(ev, "    ", "  ")
+				fmt.Printf("    webhook delivery (typed Event[DiscordEventData]):\n%s\n", string(pretty))
 			case <-time.After(3 * time.Second):
 				fmt.Printf("    ERROR: no webhook delivery within 3s\n")
 				return
@@ -502,15 +465,10 @@ func runDemo() {
 				fmt.Printf("    UNEXPECTED: want success, got %v\n", err)
 				return
 			}
-			var resp struct {
-				ID            string `json:"id"`
-				Secret        string `json:"secret"`
-				RefreshBefore string `json:"refreshBefore"`
-			}
-			_ = json.Unmarshal(res.Raw, &resp)
-			fmt.Printf("    response.id:            %q  (server-derived sub_<base64>)\n", resp.ID)
-			fmt.Printf("    response.refreshBefore: %q\n", resp.RefreshBefore)
-			fmt.Printf("    response.secret:        %q  (empty per spec)\n", resp.Secret)
+			var v any
+			_ = json.Unmarshal(res.Raw, &v)
+			pretty, _ := json.MarshalIndent(v, "    ", "  ")
+			fmt.Printf("    events/subscribe response (server-derived id, no secret echo per spec):\n%s\n", string(pretty))
 
 			// Eagerly unsubscribe (γ-2: tuple form, no id) so the
 			// subscription doesn't tie up a delivery target for a TTL

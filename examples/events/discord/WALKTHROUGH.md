@@ -4,11 +4,11 @@ Walks through the four delivery modes of the experimental MCP Events extension (
 
 ## What you'll learn
 
-- **Connect to the events server** — The mcpkit client opens a GET SSE stream so push notifications reach us during later steps. We're not declaring any extension capability — events/* are server-side custom methods registered via experimental/ext/events. A small in-process broker fans out `notifications/events/event` by name so each step can subscribe just to what it cares about.
+- **Connect to the events server** — Plain MCP initialize over Streamable HTTP. We're not declaring any extension capability — events/* are server-side custom methods registered via experimental/ext/events. Push delivery uses events/stream (a long-lived per-subscription POST that returns SSE), not the session GET stream — no transport-level wiring needed in the client.
 - **events/list — see the source catalog** — The new `cursorless` flag (added in PR B) tells subscribers whether the source supports cursor-based replay. discord.message buffers events and accepts cursors; discord.typing emits ephemerally and always wires cursor:null.
-- **Push: inject a message, observe SSE notification** — The /inject endpoint is the demo's stand-in for a real Discord WebSocket handler; in production the bot's MessageCreate handler calls yield(). Either way, the YieldingSource fans out: the library installs an emit hook that broadcasts the event to all SSE subscribers.
+- **Push: open events/stream, inject a message, observe per-call notifications** — events/stream is a long-lived JSON-RPC request — one per subscription. The server confirms with notifications/events/active, then delivers events as notifications/events/event on the call's own SSE response stream. Heartbeats fire every ≥30s carrying the source's current cursor so the client's persisted cursor advances during quiet periods. Per spec §"Push-Based Delivery" L223-296. Replaces the broadcast-to-all-listeners model from Phase 1; per-stream isolation comes for free since each stream is its own POST. The typed Go SDK Stream() helper at experimental/ext/events/clients/go threads the per-call notification hook (client.CallContext.WithNotifyHook) so callbacks fire only for THIS stream's notifications.
 - **Poll: events/poll with the cursor we just saw** — Single-subscription per call (PR B removed batching). Polling at the head returns no new events but advances the cursor — the same response shape that would carry events if any had arrived since the last poll.
-- **Cursorless: inject a typing event, observe cursor:null on the wire** — WithoutCursors() sources don't buffer and emit cursor:null. Push and webhook fanout still work — there's just nothing to replay. Useful for ephemeral state (typing indicators, presence, current readings).
+- **Cursorless: open events/stream for typing, observe cursor:null on the wire** — WithoutCursors() sources don't buffer and emit cursor:null. Push delivery via events/stream still works — there's just nothing to replay. Heartbeats also carry cursor:null (per spec L294: "null for event types that do not support replay"). Useful for ephemeral state (typing indicators, presence, current readings).
 - **Webhook: subscribe via the typed Go SDK, observe HMAC delivery + auto-refresh** — clients/go provides Subscription (subscribe + auto-refresh) plus Receiver[Data] (typed inbound channel). Per spec, the HMAC signing secret is client-supplied — the SDK auto-generates a whsec_ value via events.GenerateSecret() when SubscribeOptions.Secret is empty, and exposes it via Subscription.Secret() so the receiver can verify with the same value. Receiver[DiscordEventData] verifies signatures and decodes the wire envelope into the typed Data shape, so the consumer reads `ev.Data.Content` rather than re-parsing JSON.
 - **Spec validation: empty delivery.secret is rejected** — Per spec, delivery.secret is REQUIRED on every events/subscribe — there is no server-side fallback. The server rejects at subscribe time so a subscription never exists that produces unverifiable deliveries. The Go SDK auto-generates a conforming whsec_ value via events.GenerateSecret() when SubscribeOptions.Secret is empty; this step makes a raw client.Call to bypass that and demonstrate the validator.
 - **Spec validation: malformed delivery.secret is rejected** — The validator enforces the full Standard Webhooks format: whsec_ followed by base64 of 24-64 random bytes. A non-prefixed value, a too-short value, or non-base64 garbage all fail with -32602 InvalidParams. This is what catches IaC-pinned secrets that don't match the spec format before they create a broken subscription.
@@ -32,15 +32,20 @@ sequenceDiagram
     Host->>Server: events/list
     Server-->>Host: [discord.message (cursored), discord.typing (cursorless)]
 
-    Note over Host,Receiver: Step 3: Push: inject a message, observe SSE notification
+    Note over Host,Receiver: Step 3: Push: open events/stream, inject a message, observe per-call notifications
+    Host->>Server: events/stream { name: discord.message }
+    Server-->>Host: notifications/events/active { requestId, cursor }
     Receiver->>Server: POST /inject (simulated Discord message)
-    Server-->>Host: notifications/events/event (via SSE)
+    Server-->>Host: notifications/events/event { requestId, eventId, ... }
+    Host-->>Server: (close request) → StreamEventsResult final frame
 
     Note over Host,Receiver: Step 4: Poll: events/poll with the cursor we just saw
     Host->>Server: events/poll {subscriptions: [{name: discord.message, cursor: <head>}]}
     Server-->>Host: {events: [], cursor: <head>, hasMore: false}
 
-    Note over Host,Receiver: Step 5: Cursorless: inject a typing event, observe cursor:null on the wire
+    Note over Host,Receiver: Step 5: Cursorless: open events/stream for typing, observe cursor:null on the wire
+    Host->>Server: events/stream { name: discord.typing }
+    Server-->>Host: notifications/events/active { cursor: null }
     Receiver->>Server: POST /inject?event=discord.typing
     Server-->>Host: notifications/events/event { cursor: null }
 
@@ -111,23 +116,23 @@ Identity-mode subscribe and Standard Webhooks header naming are exercised by the
 
 ### Step 1: Connect to the events server
 
-The mcpkit client opens a GET SSE stream so push notifications reach us during later steps. We're not declaring any extension capability — events/* are server-side custom methods registered via experimental/ext/events. A small in-process broker fans out `notifications/events/event` by name so each step can subscribe just to what it cares about.
+Plain MCP initialize over Streamable HTTP. We're not declaring any extension capability — events/* are server-side custom methods registered via experimental/ext/events. Push delivery uses events/stream (a long-lived per-subscription POST that returns SSE), not the session GET stream — no transport-level wiring needed in the client.
 
 ### Step 2: events/list — see the source catalog
 
 The new `cursorless` flag (added in PR B) tells subscribers whether the source supports cursor-based replay. discord.message buffers events and accepts cursors; discord.typing emits ephemerally and always wires cursor:null.
 
-### Step 3: Push: inject a message, observe SSE notification
+### Step 3: Push: open events/stream, inject a message, observe per-call notifications
 
-The /inject endpoint is the demo's stand-in for a real Discord WebSocket handler; in production the bot's MessageCreate handler calls yield(). Either way, the YieldingSource fans out: the library installs an emit hook that broadcasts the event to all SSE subscribers.
+events/stream is a long-lived JSON-RPC request — one per subscription. The server confirms with notifications/events/active, then delivers events as notifications/events/event on the call's own SSE response stream. Heartbeats fire every ≥30s carrying the source's current cursor so the client's persisted cursor advances during quiet periods. Per spec §"Push-Based Delivery" L223-296. Replaces the broadcast-to-all-listeners model from Phase 1; per-stream isolation comes for free since each stream is its own POST. The typed Go SDK Stream() helper at experimental/ext/events/clients/go threads the per-call notification hook (client.CallContext.WithNotifyHook) so callbacks fire only for THIS stream's notifications.
 
 ### Step 4: Poll: events/poll with the cursor we just saw
 
 Single-subscription per call (PR B removed batching). Polling at the head returns no new events but advances the cursor — the same response shape that would carry events if any had arrived since the last poll.
 
-### Step 5: Cursorless: inject a typing event, observe cursor:null on the wire
+### Step 5: Cursorless: open events/stream for typing, observe cursor:null on the wire
 
-WithoutCursors() sources don't buffer and emit cursor:null. Push and webhook fanout still work — there's just nothing to replay. Useful for ephemeral state (typing indicators, presence, current readings).
+WithoutCursors() sources don't buffer and emit cursor:null. Push delivery via events/stream still works — there's just nothing to replay. Heartbeats also carry cursor:null (per spec L294: "null for event types that do not support replay"). Useful for ephemeral state (typing indicators, presence, current readings).
 
 ### Step 6: Webhook: subscribe via the typed Go SDK, observe HMAC delivery + auto-refresh
 
