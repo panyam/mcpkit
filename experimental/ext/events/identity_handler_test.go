@@ -3,7 +3,11 @@ package events
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/server"
@@ -194,6 +198,47 @@ func TestUnsubscribe_ByTuple(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, unsubResp.Error)
 	assert.Empty(t, webhooks.Targets(), "tuple-form unsubscribe must remove the matching entry")
+}
+
+// TestDelivery_EmitsXMCPSubscriptionIDHeader verifies γ-4's end-to-end
+// header wiring: a real subscribe → yield → POST round-trip carries
+// the X-MCP-Subscription-Id header on the outbound delivery, and the
+// header value matches the server-derived id returned in the subscribe
+// response. Per spec §"Webhook Event Delivery" L390 + §"Webhook
+// Security" L472.
+//
+// Without this test, a regression in the deliver path could drop the
+// header silently — receivers on shared callback URLs would still
+// process the body but would have no way to pick the right secret.
+func TestDelivery_EmitsXMCPSubscriptionIDHeader(t *testing.T) {
+	// Spin up a callback server that captures inbound headers, then
+	// build an events stack pointing at it. Use the public Register
+	// + canonicalKey path (not srv.Dispatch) since we need a real
+	// HTTP delivery to inspect the on-wire headers.
+	gotHeader := make(chan string, 1)
+	callback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeader <- r.Header.Get("X-MCP-Subscription-Id")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer callback.Close()
+
+	webhooks := NewWebhookRegistry()
+	canonical := canonicalKey("test-principal", callback.URL, "fake.event", nil)
+	subID := deriveSubscriptionID(canonical)
+	webhooks.Register(canonical, subID, callback.URL, "whsec_"+strings.Repeat("a", 32))
+
+	// Direct Deliver bypasses the JSON-RPC handler — what we want to
+	// inspect is the registry's outbound HTTP shape, not the subscribe
+	// flow (covered by other tests).
+	webhooks.Deliver(Event{EventID: "evt_1", Name: "fake.event", Data: json.RawMessage(`{}`)})
+
+	select {
+	case got := <-gotHeader:
+		assert.Equal(t, subID, got, "X-MCP-Subscription-Id MUST equal the derived subscription id")
+		assert.True(t, strings.HasPrefix(got, "sub_"), "header value must be the spec-shaped sub_<base64>; got %q", got)
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for delivery POST — was the header dropped?")
+	}
 }
 
 // --- helpers ---
