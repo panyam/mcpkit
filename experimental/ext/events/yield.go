@@ -128,9 +128,25 @@ type YieldingSource[Data any] struct {
 	mu       sync.RWMutex
 	entries  []yieldedEntry[Data]
 	emitHook func(Event)
+	metaFunc func(Data) map[string]any
 }
 
 func (s *YieldingSource[Data]) Def() EventDef { return s.def }
+
+// SetMetaFunc installs a per-event metadata mapper. When non-nil, the
+// source calls it during yield and assigns the result to Event.Meta
+// (spec follow-on commit d4faef9 2026-05-01: optional `_meta` on
+// EventOccurrence). Returning nil from f produces no `_meta` key on
+// the wire (omitempty). Pass nil to clear.
+//
+// Set on a separate method (not via NewYieldingSource opts) because
+// the mapper is type-parameterized over Data, which doesn't compose
+// cleanly with the option-function pattern.
+func (s *YieldingSource[Data]) SetMetaFunc(f func(Data) map[string]any) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.metaFunc = f
+}
 
 // Poll implements EventSource. Returns events with cursor strictly greater
 // than the requested cursor, up to limit. The Cursor field of PollResult is
@@ -260,6 +276,11 @@ func (s *YieldingSource[Data]) yield(data Data) error {
 	}
 
 	s.mu.Lock()
+	if s.metaFunc != nil {
+		if m := s.metaFunc(data); len(m) > 0 {
+			event.Meta = m
+		}
+	}
 	if !s.cursorless {
 		// Only buffer when cursored — cursorless sources don't support
 		// poll-side replay, so retaining events would just waste memory.
