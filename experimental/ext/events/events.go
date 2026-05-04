@@ -198,6 +198,13 @@ type Config struct {
 	// empty; ctx.AuthClaims().Subject becomes the principal in the
 	// canonical tuple. See γ PLAN.md for the design rationale.
 	UnsafeAnonymousPrincipal string
+
+	// StreamHeartbeatInterval is how often events/stream emits
+	// notifications/events/heartbeat (per spec §"Push-Based Delivery"
+	// → "Lifecycle" → "Heartbeat" L294). Zero or negative defaults to
+	// the spec-recommended 30s. Override to a smaller value in tests
+	// that need to observe heartbeats quickly.
+	StreamHeartbeatInterval time.Duration
 }
 
 // Register hooks up events/list, events/poll, events/subscribe, and
@@ -228,6 +235,7 @@ func Register(cfg Config) {
 
 	registerList(srv, sources)
 	registerPoll(srv, sourceMap)
+	registerStream(srv, sourceMap, cfg.UnsafeAnonymousPrincipal, cfg.StreamHeartbeatInterval)
 	if webhooks != nil {
 		registerSubscribe(srv, sourceMap, webhooks, cfg.UnsafeAnonymousPrincipal)
 		registerUnsubscribe(srv, webhooks, cfg.UnsafeAnonymousPrincipal)

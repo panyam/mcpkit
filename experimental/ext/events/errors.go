@@ -24,7 +24,8 @@ package events
 // introduces the behavior using them — keeps each new code visible
 // alongside its first use.
 const (
-	ErrCodeEventNotFound      = -32011 // Unknown event name
-	ErrCodeUnauthorized       = -32012 // Caller lacks permission for this event/params
-	ErrCodeInvalidCallbackUrl = -32015 // Webhook URL unreachable / rejected
+	ErrCodeEventNotFound           = -32011 // Unknown event name
+	ErrCodeUnauthorized            = -32012 // Caller lacks permission for this event/params
+	ErrCodeInvalidCallbackUrl      = -32015 // Webhook URL unreachable / rejected
+	ErrCodeDeliveryModeUnsupported = -32017 // Event type doesn't support requested mode
 )
