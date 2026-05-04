@@ -44,6 +44,14 @@ streams colored `[mcp]` traces (`MCP tools/call ok [276µs]`, `[http] →
 POST /mcp`) for every request the walkthrough fires, matching the
 elicitation / mrtr examples.
 
+The server also writes every received file to a fresh
+`/tmp/file-inputs-demo-XXXX/` directory (announced at startup) so you can
+`ls` the directory and `open pixel.png` to verify byte-for-byte that the
+right payload arrived. The directory is **not** auto-cleaned — `rm -rf
+/tmp/file-inputs-demo-*` when you're done. The full path is also surfaced
+in each tool's response so the demo client prints it inline (`saved as:
+/tmp/file-inputs-demo-…/pixel.png`).
+
 To upload a file from disk instead, pass `--file <path>` to the demo:
 
 ```bash

@@ -16,7 +16,10 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"mime"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/panyam/demokit"
@@ -52,6 +55,15 @@ func serve() {
 		{Contains: "MCP ", DarkColor: demokit.ANSIBrightGreen, LightColor: demokit.ANSIGreen},
 	})
 
+	// One temp dir per server run, NOT auto-cleaned — the whole point is
+	// that you can `ls` the directory and `open` the files after the
+	// walkthrough finishes. A real handler would never persist user
+	// uploads under a predictable path; this is purely for inspection.
+	uploadDir, err := os.MkdirTemp("/tmp", "file-inputs-demo-")
+	if err != nil {
+		log.Fatalf("mktemp: %v", err)
+	}
+
 	srv := server.NewServer(
 		core.ServerInfo{Name: "file-inputs-demo", Version: "0.1.0"},
 		server.WithListen(*addr),
@@ -59,18 +71,20 @@ func serve() {
 		server.WithMiddleware(server.LoggingMiddleware(logger)),
 	)
 
-	registerTools(srv)
+	registerTools(srv, uploadDir)
 
 	log.Printf("[file-inputs-demo] listening on %s — POST /mcp", *addr)
 	log.Printf("[file-inputs-demo] tools: upload_image, analyze_documents, process_any_file")
+	log.Printf("[file-inputs-demo] uploads will be written to %s (not auto-cleaned)", uploadDir)
 	if err := srv.ListenAndServe(server.WithStreamableHTTP(true)); err != nil {
 		log.Fatalf("ListenAndServe: %v", err)
 	}
 }
 
 // registerTools installs the three SEP-2356 demo tools on the server.
-// Extracted so tests / future fixtures can reuse the same registration.
-func registerTools(srv *server.Server) {
+// uploadDir is the demo-only inspection directory each handler writes
+// received payloads into.
+func registerTools(srv *server.Server, uploadDir string) {
 	const fiveMB = 5 * 1024 * 1024
 
 	imageMax := fiveMB
@@ -94,7 +108,9 @@ func registerTools(srv *server.Server) {
 				"required": []string{"image"},
 			},
 		},
-		uploadImageHandler,
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			return uploadImageHandler(ctx, req, uploadDir)
+		},
 	)
 
 	pdfDesc := core.FileInputDescriptor{
@@ -112,7 +128,9 @@ func registerTools(srv *server.Server) {
 				"required": []string{"documents"},
 			},
 		},
-		analyzeDocumentsHandler,
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			return analyzeDocumentsHandler(ctx, req, uploadDir)
+		},
 	)
 
 	srv.RegisterTool(
@@ -127,11 +145,13 @@ func registerTools(srv *server.Server) {
 				"required": []string{"file"},
 			},
 		},
-		processAnyFileHandler,
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			return processAnyFileHandler(ctx, req, uploadDir)
+		},
 	)
 }
 
-func uploadImageHandler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+func uploadImageHandler(ctx core.ToolContext, req core.ToolRequest, uploadDir string) (core.ToolResult, error) {
 	args, err := parseArgs(req.Arguments)
 	if err != nil {
 		return core.ErrorResult("invalid arguments: " + err.Error()), nil
@@ -146,6 +166,11 @@ func uploadImageHandler(ctx core.ToolContext, req core.ToolRequest) (core.ToolRe
 	if err != nil {
 		return core.ErrorResult("could not decode image data URI: " + err.Error()), nil
 	}
+	// Demo-only: echo the received payload to the server's stdout so a
+	// side-by-side `make serve` + `make demo` shows the image on both
+	// ends of the wire. A production handler would not do this.
+	previewFile(displayName(filename), mediaType, data)
+	saved, saveErr := saveUpload(uploadDir, filename, mediaType, data)
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "received image\n")
@@ -155,10 +180,15 @@ func uploadImageHandler(ctx core.ToolContext, req core.ToolRequest) (core.ToolRe
 	if caption != "" {
 		fmt.Fprintf(&b, "  caption:     %s\n", caption)
 	}
+	if saveErr != nil {
+		fmt.Fprintf(&b, "  save error:  %s\n", saveErr)
+	} else {
+		fmt.Fprintf(&b, "  saved as:    %s\n", saved)
+	}
 	return core.TextResult(b.String()), nil
 }
 
-func analyzeDocumentsHandler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+func analyzeDocumentsHandler(ctx core.ToolContext, req core.ToolRequest, uploadDir string) (core.ToolResult, error) {
 	args, err := parseArgs(req.Arguments)
 	if err != nil {
 		return core.ErrorResult("invalid arguments: " + err.Error()), nil
@@ -181,12 +211,22 @@ func analyzeDocumentsHandler(ctx core.ToolContext, req core.ToolRequest) (core.T
 			fmt.Fprintf(&b, "  [%d] decode error: %v\n", i, err)
 			continue
 		}
-		fmt.Fprintf(&b, "  [%d] %s — %s, %d bytes\n", i, displayName(filename), mediaType, len(data))
+		// Demo-only: echo each received doc on the server side. See the
+		// note in uploadImageHandler.
+		previewFile(displayName(filename), mediaType, data)
+		saved, saveErr := saveUpload(uploadDir, filename, mediaType, data)
+		if saveErr != nil {
+			fmt.Fprintf(&b, "  [%d] %s — %s, %d bytes (save error: %v)\n",
+				i, displayName(filename), mediaType, len(data), saveErr)
+		} else {
+			fmt.Fprintf(&b, "  [%d] %s — %s, %d bytes → %s\n",
+				i, displayName(filename), mediaType, len(data), saved)
+		}
 	}
 	return core.TextResult(b.String()), nil
 }
 
-func processAnyFileHandler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+func processAnyFileHandler(ctx core.ToolContext, req core.ToolRequest, uploadDir string) (core.ToolResult, error) {
 	args, err := parseArgs(req.Arguments)
 	if err != nil {
 		return core.ErrorResult("invalid arguments: " + err.Error()), nil
@@ -199,8 +239,57 @@ func processAnyFileHandler(ctx core.ToolContext, req core.ToolRequest) (core.Too
 	if err != nil {
 		return core.ErrorResult("could not decode file data URI: " + err.Error()), nil
 	}
+	// Demo-only: echo received payload on the server side.
+	previewFile(displayName(filename), mediaType, data)
+	saved, saveErr := saveUpload(uploadDir, filename, mediaType, data)
+	suffix := ""
+	if saveErr != nil {
+		suffix = fmt.Sprintf(" (save error: %v)", saveErr)
+	} else {
+		suffix = " → " + saved
+	}
 	return core.TextResult(fmt.Sprintf(
-		"received %s (%s, %d bytes)",
-		displayName(filename), mediaType, len(data),
+		"received %s (%s, %d bytes)%s",
+		displayName(filename), mediaType, len(data), suffix,
 	)), nil
+}
+
+// saveUpload writes the decoded payload to dir under a sanitized name so a
+// human can `ls` and inspect it after the demo finishes. If the suggested
+// name is empty or unsafe, an `upload-<n>.<ext>` fallback is used; if the
+// chosen path collides with an earlier upload, a numeric suffix is appended
+// (`name-1.ext`, `name-2.ext`, …) so each call yields a distinct file.
+//
+// This is a demo-only convenience — a production handler would never write
+// untrusted client data under a predictable path on the server.
+func saveUpload(dir, suggested, mediaType string, data []byte) (string, error) {
+	name := sanitizeUploadName(suggested, mediaType)
+	path := filepath.Join(dir, name)
+	for i := 1; ; i++ {
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			break
+		}
+		ext := filepath.Ext(name)
+		base := strings.TrimSuffix(name, ext)
+		path = filepath.Join(dir, base+"-"+strconv.Itoa(i)+ext)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return "", err
+	}
+	log.Printf("[upload] %s -> %s (%s, %d bytes)", suggested, path, mediaType, len(data))
+	return path, nil
+}
+
+func sanitizeUploadName(suggested, mediaType string) string {
+	clean := filepath.Base(suggested)
+	clean = strings.TrimSpace(clean)
+	if clean == "" || clean == "." || clean == "/" || clean == ".." {
+		exts, _ := mime.ExtensionsByType(mediaType)
+		ext := ".bin"
+		if len(exts) > 0 {
+			ext = exts[0]
+		}
+		return "upload" + ext
+	}
+	return clean
 }
