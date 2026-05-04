@@ -211,7 +211,8 @@ The `nextCursor` and the two `_meta` fields are spec follow-ons added on 2026-05
 - `experimental/ext/events/clients/go/subscription.go` — `SubscribeOptions.MaxAge time.Duration`, sent on every subscribe + refresh.
 - `experimental/ext/events/clients/go/event.go` + `receiver.go` — `Event[Data].Meta map[string]any`, threaded through the receiver decoder.
 - `experimental/ext/events/clients/python/events_client.py` — `WebhookSubscription(max_age=0)` kwarg; `--max-age` flag on `webhook` and `poll` subcommands; receiver + cmd_poll printout surface `_meta`; `cmd_list` loops on `nextCursor`.
-- Discord + telegram demos — every `events/poll` call site flattened.
+- `experimental/ext/events/yield.go` — `YieldingSource.SetMetaFunc(func(Data) map[string]any)`. Typed setter (not a YieldingOption — option-functions don't compose with the generic `Data` type) so authors can derive per-event `_meta` without touching the yield closure signature.
+- Discord + telegram demos — every `events/poll` call site flattened. Both walkthroughs pass `MaxAge: 5*time.Minute` on subscribe (δ-3 plumbing). Discord additionally uses `SetMetaFunc` to derive `channel_type` + `mention_count` per event and `EventDef.Meta = {"category": "messaging"}` for type-level metadata.
 
 **Decision:** kept `EventSource.Poll(cursor, limit)` interface unchanged. `maxAge` filtering happens at the handler layer in `registerPoll`, after `source.Poll()` returns: drop events with `timestamp < now - maxAge`, set `truncated: true` if any were dropped, advance `cursor` to source head when filtering removed everything (so the client doesn't re-poll for the dropped events). Avoids forcing every `EventSource` implementor to learn about replay floors. Sources with non-RFC3339 timestamps are conservatively kept.
 
@@ -226,6 +227,7 @@ The `nextCursor` and the two `_meta` fields are spec follow-ons added on 2026-05
 - `TestPoll_MaxAgeFiltersOldEvents`, `TestPoll_MaxAgeZeroMeansNoFilter` (δ-2)
 - `TestSubscribe_AcceptsMaxAge`, `TestSubscribe_DefaultsMaxAgeToZero` (δ-3)
 - `TestEvent_MetaSerializesWithUnderscorePrefix` + omits-when-absent counter; same pair for `EventDef` (δ-4)
+- `TestYieldingSource_MetaFunc` + nil-omits counter in `yield_test.go` (SetMetaFunc helper)
 - `TestList_NextCursorOmitsWhenEmpty`, `TestList_NextCursorPresentWhenSet` (δ-5)
 
 **Risk:** Low. Wire-breaking but the change is mechanical and the spec is firm.
