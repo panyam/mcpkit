@@ -4,17 +4,17 @@ Walks through the four delivery modes of the experimental MCP Events extension (
 
 ## What you'll learn
 
-- **Connect to the events server** — The mcpkit client opens a GET SSE stream so push notifications reach us during later steps. We're not declaring any extension capability — events/* are server-side custom methods registered via experimental/ext/events. A small in-process broker fans out `notifications/events/event` by name so each step can subscribe just to what it cares about.
+- **Connect to the events server** — Plain MCP initialize over Streamable HTTP. We're not declaring any extension capability — events/* are server-side custom methods registered via experimental/ext/events. Push delivery uses events/stream (a long-lived per-subscription POST that returns SSE), not the session GET stream — no transport-level wiring needed in the client.
 - **events/list — see the source catalog** — The new `cursorless` flag (added in PR B) tells subscribers whether the source supports cursor-based replay. discord.message buffers events and accepts cursors; discord.typing emits ephemerally and always wires cursor:null.
-- **Push: inject a message, observe SSE notification** — The /inject endpoint is the demo's stand-in for a real Discord WebSocket handler; in production the bot's MessageCreate handler calls yield(). Either way, the YieldingSource fans out: the library installs an emit hook that broadcasts the event to all SSE subscribers.
+- **Push: open events/stream, inject a message, observe per-call notifications** — events/stream is a long-lived JSON-RPC request — one per subscription. Spec §"Push-Based Delivery" L223-296.
 - **Poll: events/poll with the cursor we just saw** — Single-subscription per call (PR B removed batching). Polling at the head returns no new events but advances the cursor — the same response shape that would carry events if any had arrived since the last poll.
-- **Cursorless: inject a typing event, observe cursor:null on the wire** — WithoutCursors() sources don't buffer and emit cursor:null. Push and webhook fanout still work — there's just nothing to replay. Useful for ephemeral state (typing indicators, presence, current readings).
-- **Webhook: subscribe via the typed Go SDK, observe HMAC delivery + auto-refresh** — clients/go provides Subscription (subscribe + auto-refresh) plus Receiver[Data] (typed inbound channel). Per spec, the HMAC signing secret is client-supplied — the SDK auto-generates a whsec_ value via events.GenerateSecret() when SubscribeOptions.Secret is empty, and exposes it via Subscription.Secret() so the receiver can verify with the same value. Receiver[DiscordEventData] verifies signatures and decodes the wire envelope into the typed Data shape, so the consumer reads `ev.Data.Content` rather than re-parsing JSON.
-- **Spec validation: empty delivery.secret is rejected** — Per spec, delivery.secret is REQUIRED on every events/subscribe — there is no server-side fallback. The server rejects at subscribe time so a subscription never exists that produces unverifiable deliveries. The Go SDK auto-generates a conforming whsec_ value via events.GenerateSecret() when SubscribeOptions.Secret is empty; this step makes a raw client.Call to bypass that and demonstrate the validator.
-- **Spec validation: malformed delivery.secret is rejected** — The validator enforces the full Standard Webhooks format: whsec_ followed by base64 of 24-64 random bytes. A non-prefixed value, a too-short value, or non-base64 garbage all fail with -32602 InvalidParams. This is what catches IaC-pinned secrets that don't match the spec format before they create a broken subscription.
-- **Spec validation: client-supplied id is rejected** — Per spec §"Subscription Identity" → "Key composition" L363: "There is no client-generated id — a subscription is fully determined by what it listens for, where it delivers, and who asked." The server derives the id from (principal, name, params, url) and returns it; old SDKs sending an id field get a loud -32602 instead of a silent mis-keying.
-- **Spec validation: valid whsec_ accepted; response carries server-derived id, no secret** — Counter-test: a freshly-generated whsec_ value is accepted. The response carries the server-derived id (sub_<base64>) per spec §"Subscription Identity" → "Derived id" L367 — non-load-bearing for security, surfaced as X-MCP-Subscription-Id on delivery POSTs (γ-4 wires the header). The response does NOT echo the secret because the client already supplied it; echoing would risk leaks via proxies / logs / IDE network panes.
-- **Live Discord interaction (typing + message from a real Discord channel)** — Requires the server to be running with -token + the bot invited to a channel you can post in. The TypingStart handler in main.go yields a cursorless discord.typing event; MessageCreate yields the cursored discord.message. Discord's typing indicator fires once when you start (then refires every ~8s if you keep typing), not per keystroke. In --non-interactive mode this step skips the wait so CI runs aren't slowed.
+- **Cursorless: open events/stream for typing, observe cursor:null on the wire** — WithoutCursors() sources don't buffer; the wire emits cursor:null.
+- **Webhook: subscribe via the typed Go SDK, observe HMAC delivery + auto-refresh** — clients/go provides Subscription (subscribe + auto-refresh) plus Receiver[Data] (typed inbound channel).
+- **Spec validation: empty delivery.secret is rejected** — delivery.secret is REQUIRED on every events/subscribe — no server-side fallback per spec.
+- **Spec validation: malformed delivery.secret is rejected** — The validator enforces the full Standard Webhooks format: `whsec_` followed by base64 of 24-64 random bytes.
+- **Spec validation: client-supplied id is rejected** — Spec §"Subscription Identity" → "Key composition" L363: "There is no client-generated id — a subscription is fully determined by what it listens for, where it delivers, and who asked."
+- **Spec validation: valid whsec_ accepted; response carries server-derived id, no secret** — Counter-test: a freshly-generated whsec_ value is accepted.
+- **Live Discord interaction (typing + message from a real Discord channel)** — Setup: start the server with a Discord bot token and invite the bot to a channel you can post in.
 
 ## Flow
 
@@ -32,15 +32,20 @@ sequenceDiagram
     Host->>Server: events/list
     Server-->>Host: [discord.message (cursored), discord.typing (cursorless)]
 
-    Note over Host,Receiver: Step 3: Push: inject a message, observe SSE notification
+    Note over Host,Receiver: Step 3: Push: open events/stream, inject a message, observe per-call notifications
+    Host->>Server: events/stream { name: discord.message }
+    Server-->>Host: notifications/events/active { requestId, cursor }
     Receiver->>Server: POST /inject (simulated Discord message)
-    Server-->>Host: notifications/events/event (via SSE)
+    Server-->>Host: notifications/events/event { requestId, eventId, ... }
+    Host-->>Server: (close request) → StreamEventsResult final frame
 
     Note over Host,Receiver: Step 4: Poll: events/poll with the cursor we just saw
     Host->>Server: events/poll {subscriptions: [{name: discord.message, cursor: <head>}]}
     Server-->>Host: {events: [], cursor: <head>, hasMore: false}
 
-    Note over Host,Receiver: Step 5: Cursorless: inject a typing event, observe cursor:null on the wire
+    Note over Host,Receiver: Step 5: Cursorless: open events/stream for typing, observe cursor:null on the wire
+    Host->>Server: events/stream { name: discord.typing }
+    Server-->>Host: notifications/events/active { cursor: null }
     Receiver->>Server: POST /inject?event=discord.typing
     Server-->>Host: notifications/events/event { cursor: null }
 
@@ -111,47 +116,84 @@ Identity-mode subscribe and Standard Webhooks header naming are exercised by the
 
 ### Step 1: Connect to the events server
 
-The mcpkit client opens a GET SSE stream so push notifications reach us during later steps. We're not declaring any extension capability — events/* are server-side custom methods registered via experimental/ext/events. A small in-process broker fans out `notifications/events/event` by name so each step can subscribe just to what it cares about.
+Plain MCP initialize over Streamable HTTP. We're not declaring any extension capability — events/* are server-side custom methods registered via experimental/ext/events. Push delivery uses events/stream (a long-lived per-subscription POST that returns SSE), not the session GET stream — no transport-level wiring needed in the client.
 
 ### Step 2: events/list — see the source catalog
 
 The new `cursorless` flag (added in PR B) tells subscribers whether the source supports cursor-based replay. discord.message buffers events and accepts cursors; discord.typing emits ephemerally and always wires cursor:null.
 
-### Step 3: Push: inject a message, observe SSE notification
+### Step 3: Push: open events/stream, inject a message, observe per-call notifications
 
-The /inject endpoint is the demo's stand-in for a real Discord WebSocket handler; in production the bot's MessageCreate handler calls yield(). Either way, the YieldingSource fans out: the library installs an emit hook that broadcasts the event to all SSE subscribers.
+events/stream is a long-lived JSON-RPC request — one per subscription. Spec §"Push-Based Delivery" L223-296.
+
+- Server confirms with notifications/events/active, then delivers events as notifications/events/event on the call's own SSE response stream.
+- Heartbeats fire every ≥30s carrying the source's current cursor so the client's persisted cursor advances during quiet periods.
+- Replaces the broadcast-to-all-listeners model from Phase 1; per-stream isolation comes for free since each stream is its own POST.
+- Typed Go SDK Stream() helper (experimental/ext/events/clients/go) threads the per-call notification hook (client.CallContext.WithNotifyHook) so callbacks fire only for THIS stream's notifications.
 
 ### Step 4: Poll: events/poll with the cursor we just saw
 
 Single-subscription per call (PR B removed batching). Polling at the head returns no new events but advances the cursor — the same response shape that would carry events if any had arrived since the last poll.
 
-### Step 5: Cursorless: inject a typing event, observe cursor:null on the wire
+### Step 5: Cursorless: open events/stream for typing, observe cursor:null on the wire
 
-WithoutCursors() sources don't buffer and emit cursor:null. Push and webhook fanout still work — there's just nothing to replay. Useful for ephemeral state (typing indicators, presence, current readings).
+WithoutCursors() sources don't buffer; the wire emits cursor:null.
+
+- Push delivery via events/stream still works — there's just nothing to replay.
+- Heartbeats also carry cursor:null (spec L294: "null for event types that do not support replay").
+- Useful for ephemeral state (typing indicators, presence, current readings).
 
 ### Step 6: Webhook: subscribe via the typed Go SDK, observe HMAC delivery + auto-refresh
 
-clients/go provides Subscription (subscribe + auto-refresh) plus Receiver[Data] (typed inbound channel). Per spec, the HMAC signing secret is client-supplied — the SDK auto-generates a whsec_ value via events.GenerateSecret() when SubscribeOptions.Secret is empty, and exposes it via Subscription.Secret() so the receiver can verify with the same value. Receiver[DiscordEventData] verifies signatures and decodes the wire envelope into the typed Data shape, so the consumer reads `ev.Data.Content` rather than re-parsing JSON.
+clients/go provides Subscription (subscribe + auto-refresh) plus Receiver[Data] (typed inbound channel).
+
+- HMAC signing secret is client-supplied per spec; SDK auto-generates a whsec_ value via events.GenerateSecret() when SubscribeOptions.Secret is empty.
+- Subscription.Secret() returns the value the SDK ended up using, so the receiver can verify with the same secret.
+- Receiver[DiscordEventData] verifies signatures and decodes the wire envelope into the typed Data shape — consumer reads `ev.Data.Content` directly, no re-parsing JSON.
 
 ### Step 7: Spec validation: empty delivery.secret is rejected
 
-Per spec, delivery.secret is REQUIRED on every events/subscribe — there is no server-side fallback. The server rejects at subscribe time so a subscription never exists that produces unverifiable deliveries. The Go SDK auto-generates a conforming whsec_ value via events.GenerateSecret() when SubscribeOptions.Secret is empty; this step makes a raw client.Call to bypass that and demonstrate the validator.
+delivery.secret is REQUIRED on every events/subscribe — no server-side fallback per spec.
+
+- Server rejects at subscribe time so a subscription never exists that produces unverifiable deliveries.
+- The Go SDK auto-generates a conforming whsec_ value via events.GenerateSecret() when SubscribeOptions.Secret is empty.
+- This step makes a raw client.Call to bypass the SDK and demonstrate the server-side validator directly.
 
 ### Step 8: Spec validation: malformed delivery.secret is rejected
 
-The validator enforces the full Standard Webhooks format: whsec_ followed by base64 of 24-64 random bytes. A non-prefixed value, a too-short value, or non-base64 garbage all fail with -32602 InvalidParams. This is what catches IaC-pinned secrets that don't match the spec format before they create a broken subscription.
+The validator enforces the full Standard Webhooks format: `whsec_` followed by base64 of 24-64 random bytes.
+
+- A non-prefixed value, a too-short value, or non-base64 garbage all fail with -32602 InvalidParams.
+- Catches IaC-pinned secrets that don't match the spec format before they create a broken subscription.
 
 ### Step 9: Spec validation: client-supplied id is rejected
 
-Per spec §"Subscription Identity" → "Key composition" L363: "There is no client-generated id — a subscription is fully determined by what it listens for, where it delivers, and who asked." The server derives the id from (principal, name, params, url) and returns it; old SDKs sending an id field get a loud -32602 instead of a silent mis-keying.
+Spec §"Subscription Identity" → "Key composition" L363: "There is no client-generated id — a subscription is fully determined by what it listens for, where it delivers, and who asked."
+
+- Server derives the id from (principal, name, params, url) and returns it.
+- Old SDKs sending an id field get a loud -32602 instead of a silent mis-keying.
 
 ### Step 10: Spec validation: valid whsec_ accepted; response carries server-derived id, no secret
 
-Counter-test: a freshly-generated whsec_ value is accepted. The response carries the server-derived id (sub_<base64>) per spec §"Subscription Identity" → "Derived id" L367 — non-load-bearing for security, surfaced as X-MCP-Subscription-Id on delivery POSTs (γ-4 wires the header). The response does NOT echo the secret because the client already supplied it; echoing would risk leaks via proxies / logs / IDE network panes.
+Counter-test: a freshly-generated whsec_ value is accepted.
+
+- Response carries the server-derived id (sub_<base64>) per spec §"Subscription Identity" → "Derived id" L367.
+- The id is non-load-bearing for security; surfaced as X-MCP-Subscription-Id on delivery POSTs (γ-4 wires the header).
+- Response does NOT echo the secret — the client supplied it. Echoing would risk leaks via proxies / logs / IDE network panes.
 
 ### Step 11: Live Discord interaction (typing + message from a real Discord channel)
 
-Requires the server to be running with -token + the bot invited to a channel you can post in. The TypingStart handler in main.go yields a cursorless discord.typing event; MessageCreate yields the cursored discord.message. Discord's typing indicator fires once when you start (then refires every ~8s if you keep typing), not per keystroke. In --non-interactive mode this step skips the wait so CI runs aren't slowed.
+Setup: start the server with a Discord bot token and invite the bot to a channel you can post in.
+
+```
+DISCORD_BOT_TOKEN=<your-token> make serve
+```
+
+Bot setup (token + invite URL) is documented in this demo's README.md.
+
+- TypingStart handler in main.go yields a cursorless discord.typing event; MessageCreate yields the cursored discord.message.
+- Discord's typing indicator fires once when you start (then refires every ~8s if you keep typing), not per keystroke.
+- --non-interactive mode skips the wait so CI runs aren't slowed.
 
 ### Where each piece lives in mcpkit
 

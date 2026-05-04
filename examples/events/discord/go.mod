@@ -11,12 +11,12 @@ replace (
 
 require (
 	github.com/bwmarrin/discordgo v0.28.1
-	github.com/panyam/demokit v0.0.8
+	github.com/panyam/demokit v0.0.14
 	github.com/panyam/mcpkit v0.2.40
 	github.com/panyam/mcpkit/experimental/ext/events v0.0.0
 	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.0.0-00010101000000-000000000000
 	github.com/panyam/mcpkit/ext/auth v0.2.42
-	github.com/panyam/servicekit v0.0.25
+	github.com/panyam/servicekit v0.0.26
 	github.com/stretchr/testify v1.11.1
 )
 
@@ -42,7 +42,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.23 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/panyam/gocurrent v0.1.0 // indirect
-	github.com/panyam/goutils v0.1.8 // indirect
+	github.com/panyam/goutils v0.1.13 // indirect
 	github.com/panyam/oneauth v0.0.79 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect

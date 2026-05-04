@@ -172,13 +172,8 @@ func runDemo() {
 
 			select {
 			case ev := <-gotEvent:
-				fmt.Printf("    name:    %s\n", ev.Name)
-				fmt.Printf("    cursor:  %s\n", ev.CursorStr())
-				var d map[string]any
-				_ = json.Unmarshal(ev.Data, &d)
-				fmt.Printf("    chat_id: %v\n", d["chat_id"])
-				fmt.Printf("    user:    %v\n", d["user"])
-				fmt.Printf("    text:    %q\n", d["text"])
+				pretty, _ := json.MarshalIndent(ev, "    ", "  ")
+				fmt.Printf("    notifications/events/event params:\n%s\n", string(pretty))
 			case <-time.After(3 * time.Second):
 				fmt.Printf("    ERROR: no push notification within 3s\n")
 			}
@@ -216,16 +211,11 @@ func runDemo() {
 
 			select {
 			case ev := <-gotEvent:
-				fmt.Printf("    name:        %s\n", ev.Name)
-				fmt.Printf("    cursor:      %v (HasCursor=%v)\n", ev.Cursor, ev.HasCursor())
+				pretty, _ := json.MarshalIndent(ev, "    ", "  ")
+				fmt.Printf("    notifications/events/event params:\n%s\n", string(pretty))
 				if ev.Cursor != nil {
 					fmt.Printf("    UNEXPECTED: cursorless events should wire as cursor:null\n")
 				}
-				var d map[string]any
-				_ = json.Unmarshal(ev.Data, &d)
-				fmt.Printf("    chat_id:    %v\n", d["chat_id"])
-				fmt.Printf("    user:       %v\n", d["user"])
-				fmt.Printf("    started_at: %v\n", d["started_at"])
 			case <-time.After(3 * time.Second):
 				fmt.Printf("    ERROR: no typing event within 3s\n")
 			}
@@ -239,7 +229,13 @@ func runDemo() {
 		DashedArrow("Server", "Host", "{ id, refreshBefore }   (response does NOT echo secret per spec)").
 		Arrow("Receiver", "Server", "POST /inject (simulated message)").
 		DashedArrow("Server", "Receiver", "POST <url> + HMAC signature headers (default: webhook-* per Standard Webhooks; opt-in: X-MCP-* via -webhook-header-mode mcp)").
-		Note("The typed Receiver[TelegramEventData] decodes the wire envelope's Data field directly into TelegramEventData, so the consumer reads `ev.Data.Text` rather than re-parsing JSON. Same `Subscription` + `Receiver[Data]` pair as the discord webhook step — the only differences are the type parameter and the payload field names. Per spec, the SDK auto-generates a whsec_ secret when SubscribeOptions.Secret is empty (events.GenerateSecret).").
+		Note(
+			"Same `Subscription` + `Receiver[Data]` pair as the discord webhook step.",
+			"",
+			"- Receiver[TelegramEventData] decodes the wire envelope's Data field directly into TelegramEventData — consumer reads `ev.Data.Text`, no re-parsing JSON.",
+			"- The only differences from discord: the type parameter and the payload field names.",
+			"- SDK auto-generates a whsec_ secret when SubscribeOptions.Secret is empty (events.GenerateSecret).",
+		).
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			recv := eventsclient.NewReceiver[TelegramEventData]("")
 			defer recv.Close()
@@ -291,13 +287,8 @@ func runDemo() {
 
 			select {
 			case ev := <-recv.Events():
-				fmt.Printf("    Receiver got typed event:\n")
-				fmt.Printf("      name:    %s\n", ev.Name)
-				fmt.Printf("      eventId: %s\n", ev.EventID)
-				fmt.Printf("      cursor:  %s\n", ev.CursorStr())
-				fmt.Printf("      chat_id: %s\n", ev.Data.ChatID)
-				fmt.Printf("      user:    %s\n", ev.Data.User)
-				fmt.Printf("      text:    %q\n", ev.Data.Text)
+				pretty, _ := json.MarshalIndent(ev, "    ", "  ")
+				fmt.Printf("    webhook delivery (typed Event[TelegramEventData]):\n%s\n", string(pretty))
 			case <-time.After(3 * time.Second):
 				fmt.Printf("    ERROR: no webhook delivery within 3s\n")
 				return
@@ -314,7 +305,19 @@ func runDemo() {
 	demo.Step("Live Telegram interaction (real message from a Telegram chat)").
 		Arrow("Telegram", "Server", "MessageCreate event (when you send a message to the bot)").
 		DashedArrow("Server", "Host", "notifications/events/event { name: telegram.message, cursor: <new> }").
-		Note("Requires the server to be running with -token + you having a chat open with the bot. No typing parallel here — Telegram's Bot API doesn't expose user typing events to bots (only the bot can send typing chat actions, not the other way around). Discord does have user-typing events; see ../discord/WALKTHROUGH.md for the live-typing demo. In --non-interactive mode this step skips the wait so CI runs aren't slowed.").
+		Note(
+			"Setup: start the server with a Telegram bot token and open a chat with the bot in the Telegram app.",
+			"",
+			"```",
+			"TELEGRAM_BOT_TOKEN=<your-token> make serve",
+			"```",
+			"",
+			"Bot setup (BotFather token, chat link) is documented in this demo's README.md.",
+			"",
+			"- No typing parallel here — Telegram's Bot API doesn't expose user typing events to bots (only the bot can send typing chat actions, not the other way).",
+			"- Discord does have user-typing events; see ../discord/WALKTHROUGH.md for the live-typing demo.",
+			"- --non-interactive mode skips the wait so CI runs aren't slowed.",
+		).
 		Timeout(liveInteractionMaxWait).
 		Cancellable(!tuiMode()).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
