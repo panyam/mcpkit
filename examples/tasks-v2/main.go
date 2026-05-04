@@ -20,6 +20,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/panyam/mcpkit/core"
@@ -187,6 +188,64 @@ func serve() {
 		},
 	)
 
+	// multi_input: required task support. Fans out two TaskElicit calls in
+	// parallel so the task surfaces TWO simultaneous inputRequests, exercising
+	// the SEP-2663 partial-fulfillment path: a client may answer one key on
+	// tasks/update, observe the task is still input_required with the other
+	// key remaining, and answer the second on a follow-up tasks/update.
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "multi_input",
+			Description: "Asks for two simultaneous inputs (name + confirm) so partial inputResponses can be exercised.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{},
+			},
+			Execution: &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			tc := server.GetTaskContext(ctx)
+			if tc == nil {
+				return core.ToolResult{}, fmt.Errorf("multi_input requires task context")
+			}
+
+			var (
+				wg          sync.WaitGroup
+				nameRes     core.ElicitationResult
+				confirmRes  core.ElicitationResult
+				nameErr     error
+				confirmErr  error
+			)
+			wg.Add(2)
+			go func() {
+				defer wg.Done()
+				nameRes, nameErr = tc.TaskElicit(core.ElicitationRequest{
+					Message:         "Enter your name:",
+					RequestedSchema: json.RawMessage(`{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}`),
+				})
+			}()
+			go func() {
+				defer wg.Done()
+				confirmRes, confirmErr = tc.TaskElicit(core.ElicitationRequest{
+					Message:         "Confirm action?",
+					RequestedSchema: json.RawMessage(`{"type":"object","properties":{"confirm":{"type":"boolean"}},"required":["confirm"]}`),
+				})
+			}()
+			wg.Wait()
+
+			if nameErr != nil {
+				return core.ToolResult{}, fmt.Errorf("name elicit failed: %w", nameErr)
+			}
+			if confirmErr != nil {
+				return core.ToolResult{}, fmt.Errorf("confirm elicit failed: %w", confirmErr)
+			}
+
+			name, _ := nameRes.Content["name"].(string)
+			confirmed, _ := confirmRes.Content["confirm"].(bool)
+			return core.TextResult(fmt.Sprintf("name=%q confirmed=%t", name, confirmed)), nil
+		},
+	)
+
 	// protocol_error_job: required task support. Triggers a protocol-level failure
 	// by panicking. In v2, protocol errors → failed + error field.
 	srv.RegisterTool(
@@ -260,6 +319,7 @@ func serve() {
 	log.Printf("  slow_compute       — optional task (server-directed)")
 	log.Printf("  failing_job        — required task (tool error → completed + isError)")
 	log.Printf("  confirm_delete     — required task (input_required → tasks/update → completed)")
+	log.Printf("  multi_input        — required task (two simultaneous inputRequests for partial fulfillment)")
 	log.Printf("  protocol_error_job — required task (protocol error → failed + error)")
 	log.Printf("  external_job       — required task (TaskCallbacks proxy)")
 	if err := srv.Run(*addr); err != nil {

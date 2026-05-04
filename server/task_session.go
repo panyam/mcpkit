@@ -196,12 +196,20 @@ func (tc *TaskContext) requestInputV2(methodPrefix, jsonRpcMethod string, params
 		return nil, tc.Context.Err()
 	}
 
-	// Transition back to working before returning. Best-effort: if the task
-	// has already gone terminal, the store's terminal guard rejects this.
-	tc.store.Update(tc.taskID, tc.sessionID, func(t *core.TaskInfo) {
-		t.Status = core.TaskWorking
-	})
-	notifyTaskStatus(tc.Context, tc.store, tc.taskID, tc.sessionID)
+	// Transition back to working before returning — but only if no other
+	// inputs are still pending. A fan-out tool that has multiple TaskElicit /
+	// TaskSample calls in flight must stay in input_required until every
+	// one has been answered, otherwise tasks/get would briefly report
+	// "working" while some inputs are still un-fulfilled (and a polling
+	// client could miss the partial-fulfillment window). Best-effort: if
+	// the task has already gone terminal, the store's terminal guard
+	// rejects this.
+	if !tc.inputState.hasPending() {
+		tc.store.Update(tc.taskID, tc.sessionID, func(t *core.TaskInfo) {
+			t.Status = core.TaskWorking
+		})
+		notifyTaskStatus(tc.Context, tc.store, tc.taskID, tc.sessionID)
+	}
 
 	return payload, nil
 }
