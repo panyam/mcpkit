@@ -1,214 +1,48 @@
 === Stage 11/12: tasks-v2-conformance (make testconf-tasks-v2) ===
-Started: Mon May  4 00:43:59 PDT 2026
-2026/05/04 00:44:01 Tasks v2 demo server on :18092
-2026/05/04 00:44:01 Connect: http://localhost:18092/mcp
-2026/05/04 00:44:01 
-2026/05/04 00:44:01 Tools:
-2026/05/04 00:44:01   greet              — sync-only
-2026/05/04 00:44:01   slow_compute       — optional task (server-directed)
-2026/05/04 00:44:01   failing_job        — required task (tool error → completed + isError)
-2026/05/04 00:44:01   confirm_delete     — required task (input_required → tasks/update → completed)
-2026/05/04 00:44:01   protocol_error_job — required task (protocol error → failed + error)
-2026/05/04 00:44:01   external_job       — required task (TaskCallbacks proxy)
-2026/05/04 00:44:02 MCP initialize ok [293.833µs]
-2026/05/04 00:44:02 MCP notifications/initialized ok [458ns]
-2026/05/04 00:44:02 Starting MCP-GET-SSE SSE connection: 437afce20a9ed8cd84e12e8f5d13f216
-2026/05/04 00:44:02 SSEHub: registered connection 437afce20a9ed8cd84e12e8f5d13f216 (total: 1)
-2026/05/04 00:44:02 MCP initialize ok [34.375µs]
-2026/05/04 00:44:02 MCP notifications/initialized ok [208ns]
-2026/05/04 00:44:02 MCP initialize ok [6.458µs]
-2026/05/04 00:44:02 MCP notifications/initialized ok [333ns]
-2026/05/04 00:44:02 MCP tools/call ok [72.834µs]
-2026/05/04 00:44:02 MCP tools/call ok [11.583µs]
-2026/05/04 00:44:02 [slow_compute] starting "v2-create": sleeping 2s...
+Started: Mon May  4 13:52:51 PDT 2026
+2026/05/04 13:52:52 Tasks v2 demo server on :18092
+2026/05/04 13:52:52 Connect: http://localhost:18092/mcp
+2026/05/04 13:52:52 
+2026/05/04 13:52:52 Tools:
+2026/05/04 13:52:52   greet              — sync-only
+2026/05/04 13:52:52   slow_compute       — optional task (server-directed)
+2026/05/04 13:52:52   failing_job        — required task (tool error → completed + isError)
+2026/05/04 13:52:52   confirm_delete     — required task (input_required → tasks/update → completed)
+2026/05/04 13:52:52   protocol_error_job — required task (protocol error → failed + error)
+2026/05/04 13:52:52   external_job       — required task (TaskCallbacks proxy)
+2026/05/04 13:52:52 listen tcp :18092: bind: address already in use
 ▶ MCP Tasks v2 Conformance (SEP-2663)
-  ✔ v2-01: sync tool call returns immediately, no task (2.582666ms)
-2026/05/04 00:44:02 MCP tools/call ok [6.625µs]
-2026/05/04 00:44:02 [slow_compute] starting "v2-poll": sleeping 3s...
-  ✔ v2-02: server creates task without client task param (1.315041ms)
-2026/05/04 00:44:02 MCP tasks/get ok [14.708µs]
-2026/05/04 00:44:02 MCP tools/call ok [6.084µs]
-2026/05/04 00:44:02 [slow_compute] starting "v2-result": sleeping 1s...
-  ✔ v2-03: tasks/get returns status for active task (2.628ms)
-2026/05/04 00:44:02 MCP tasks/get ok [4.708µs]
-2026/05/04 00:44:02 MCP tasks/get ok [22.042µs]
-2026/05/04 00:44:02 MCP tasks/get ok [18.459µs]
-2026/05/04 00:44:02 MCP tasks/get ok [15.875µs]
-2026/05/04 00:44:03 MCP tasks/get ok [25.083µs]
-2026/05/04 00:44:03 [slow_compute] finished "v2-result"
-2026/05/04 00:44:03 MCP tasks/get ok [53.75µs]
-2026/05/04 00:44:03 MCP tools/call ok [49.125µs]
-2026/05/04 00:44:03 [failing_job] starting (will fail in 1s)...
-  ✔ v2-04: tasks/get returns completed status with inlined result (1026.892541ms)
-2026/05/04 00:44:03 MCP tasks/get ok [20.75µs]
-2026/05/04 00:44:03 MCP tasks/get ok [6.667µs]
-2026/05/04 00:44:03 MCP tasks/get ok [28µs]
-2026/05/04 00:44:03 MCP tasks/get ok [37.458µs]
-2026/05/04 00:44:04 MCP tasks/get ok [29.791µs]
-2026/05/04 00:44:04 [slow_compute] finished "v2-create"
-2026/05/04 00:44:04 MCP tasks/get ok [56.209µs]
-2026/05/04 00:44:04 MCP tools/call ok [32.833µs]
-2026/05/04 00:44:04 [protocol_error_job] starting (will panic in 500ms)...
-  ✔ v2-05: tool execution error is completed with isError true (1028.27675ms)
-2026/05/04 00:44:04 MCP tasks/get ok [18.708µs]
-2026/05/04 00:44:04 MCP tasks/get ok [31.167µs]
-2026/05/04 00:44:04 MCP tasks/get ok [17.459µs]
-2026/05/04 00:44:04 MCP tasks/get ok [23.833µs]
-2026/05/04 00:44:04 MCP tools/call ok [83.042µs]
-2026/05/04 00:44:04 [slow_compute] starting "v2-cancel": sleeping 60s...
-  ✔ v2-06: protocol error is failed with error field (619.631708ms)
-2026/05/04 00:44:04 MCP tasks/cancel ok [885.5µs]
-2026/05/04 00:44:04 [slow_compute] cancelled "v2-cancel" at 1/60
-2026/05/04 00:44:04 MCP tasks/get ok [64.25µs]
-2026/05/04 00:44:04 MCP tools/call ok [44.041µs]
-2026/05/04 00:44:04 [slow_compute] starting "v2-cancel-done": sleeping 1s...
-  ✔ v2-07: tasks/cancel returns empty ack; status settles to cancelled (9.350375ms)
-2026/05/04 00:44:04 MCP tasks/get ok [10.625µs]
-2026/05/04 00:44:05 MCP tasks/get ok [13.333µs]
-2026/05/04 00:44:05 [slow_compute] finished "v2-poll"
-2026/05/04 00:44:05 MCP tasks/get ok [11.375µs]
-2026/05/04 00:44:05 MCP tasks/get ok [26.708µs]
-2026/05/04 00:44:05 MCP tasks/get ok [14.083µs]
-2026/05/04 00:44:05 [slow_compute] finished "v2-cancel-done"
-2026/05/04 00:44:05 MCP tasks/get ok [28.292µs]
-2026/05/04 00:44:05 MCP tasks/cancel error=-32602 (task is already in a terminal state) [10.291µs]
-2026/05/04 00:44:05 MCP tools/call ok [24.625µs]
-2026/05/04 00:44:05 [slow_compute] starting "v2-no-result": sleeping 1s...
-  ✔ v2-08: cancel completed task returns error (1022.157791ms)
-2026/05/04 00:44:05 MCP tasks/get ok [6.583µs]
-2026/05/04 00:44:06 MCP tasks/get ok [21.25µs]
-2026/05/04 00:44:06 MCP tasks/get ok [17.625µs]
-2026/05/04 00:44:06 MCP tasks/get ok [25.125µs]
-2026/05/04 00:44:06 MCP tasks/get ok [22.333µs]
-2026/05/04 00:44:06 [slow_compute] finished "v2-no-result"
-2026/05/04 00:44:07 MCP tasks/get ok [39.292µs]
-2026/05/04 00:44:07 MCP tasks/result error=-32601 (method not found: tasks/result) [7.916µs]
-2026/05/04 00:44:07 MCP tasks/list error=-32601 (method not found: tasks/list) [6.583µs]
-  ✔ v2-09: tasks/result is rejected (method removed in v2) (1026.445083ms)
-2026/05/04 00:44:07 MCP tools/call ok [67.917µs]
-2026/05/04 00:44:07 [slow_compute] starting "v2-ttl": sleeping 1s...
-  ✔ v2-10: tasks/list is rejected (method removed in v2) (2.697958ms)
-  ✔ v2-11: tasks advertised under capabilities.extensions, not capabilities.tasks (0.381791ms)
-2026/05/04 00:44:07 MCP tools/call ok [25.417µs]
-2026/05/04 00:44:07 [slow_compute] starting "v2-ttl-guard": sleeping 1s...
-  ✔ v2-12: ttlSeconds + pollIntervalMilliseconds present (legacy v1 keys absent) (2.750584ms)
-2026/05/04 00:44:07 MCP tasks/get ok [8.583µs]
-2026/05/04 00:44:07 MCP tasks/get ok [26.041µs]
-2026/05/04 00:44:07 MCP tasks/get ok [22.959µs]
-2026/05/04 00:44:07 MCP tasks/get ok [23.916µs]
-2026/05/04 00:44:07 MCP tasks/get ok [25.417µs]
-2026/05/04 00:44:08 [slow_compute] finished "v2-ttl"
-2026/05/04 00:44:08 [slow_compute] finished "v2-ttl-guard"
-2026/05/04 00:44:08 MCP tasks/get ok [61.25µs]
-2026/05/04 00:44:08 MCP tasks/get ok [90.041µs]
-2026/05/04 00:44:08 MCP tools/call ok [45.459µs]
-2026/05/04 00:44:08 [slow_compute] starting "v2-reqstate": sleeping 1s...
-  ✔ v2-13: task must not expire before TTL (1531.758417ms)
-2026/05/04 00:44:08 MCP tasks/get ok [18.083µs]
-2026/05/04 00:44:08 MCP tasks/get ok [23.542µs]
-2026/05/04 00:44:08 MCP tasks/get ok [25.833µs]
-2026/05/04 00:44:09 MCP tasks/get ok [25.833µs]
-2026/05/04 00:44:09 MCP tasks/get ok [26.416µs]
-2026/05/04 00:44:09 [slow_compute] finished "v2-reqstate"
-2026/05/04 00:44:09 MCP tasks/get ok [56.292µs]
-2026/05/04 00:44:09 MCP tasks/get ok [50.167µs]
-2026/05/04 00:44:09 MCP tools/call ok [62.334µs]
-2026/05/04 00:44:09 [slow_compute] starting "v2-reqstate-echo": sleeping 2s...
-  ✔ v2-14: tasks/get response may include requestState (1033.088666ms)
-2026/05/04 00:44:09 MCP tasks/get ok [14.333µs]
-2026/05/04 00:44:09 MCP tasks/get ok [14.958µs]
-2026/05/04 00:44:09 MCP tools/call ok [35.166µs]
-2026/05/04 00:44:09 [confirm_delete] asking about "v2-input.txt" (parking task in input_required)...
-  ✔ v2-15: client echoes requestState in subsequent requests (6.728834ms)
-2026/05/04 00:44:09 MCP tasks/get ok [13.167µs]
-2026/05/04 00:44:09 MCP tools/call ok [21.875µs]
-2026/05/04 00:44:09 [confirm_delete] asking about "v2-respond.txt" (parking task in input_required)...
-  ✔ v2-16: input_required task has inputRequests map in tasks/get (3.993833ms)
-2026/05/04 00:44:09 MCP tasks/get ok [13.416µs]
-2026/05/04 00:44:09 MCP tasks/update ok [39µs]
-2026/05/04 00:44:09 [confirm_delete] user confirmed; deleting "v2-respond.txt"
-2026/05/04 00:44:09 MCP tasks/get ok [25.625µs]
-2026/05/04 00:44:09 MCP tools/call ok [32.25µs]
-2026/05/04 00:44:09 [slow_compute] starting "v2-notify": sleeping 1s...
-  ✔ v2-17: tasks/update inputResponses resume task (6.354084ms)
-2026/05/04 00:44:09 MCP tasks/get ok [8.041µs]
-2026/05/04 00:44:09 MCP tasks/get ok [24.959µs]
-2026/05/04 00:44:10 MCP tasks/get ok [29.958µs]
-2026/05/04 00:44:10 MCP tasks/get ok [14.792µs]
-2026/05/04 00:44:10 MCP tasks/get ok [28.916µs]
-2026/05/04 00:44:10 [slow_compute] finished "v2-notify"
-2026/05/04 00:44:10 MCP tasks/get ok [51.5µs]
-2026/05/04 00:44:11 MCP tools/call ok [35.833µs]
-2026/05/04 00:44:11 [failing_job] starting (will fail in 1s)...
-  ✔ v2-18: status notifications include DetailedTask if sent (1529.370584ms)
-2026/05/04 00:44:11 MCP tools/call ok [30.25µs]
-  ✔ v2-19: tools/call without task param creates task for async tools (3.671625ms)
-2026/05/04 00:44:11 MCP tools/call ok [42.5µs]
-2026/05/04 00:44:11 [slow_compute] starting "v2-no-meta": sleeping 1s...
-  ✔ v2-20: server may return immediate result for fast operations (2.729625ms)
-2026/05/04 00:44:11 MCP tasks/get ok [15.583µs]
-2026/05/04 00:44:11 MCP tasks/get ok [28.292µs]
-2026/05/04 00:44:11 MCP tasks/get ok [29.625µs]
-2026/05/04 00:44:11 [slow_compute] finished "v2-reqstate-echo"
-2026/05/04 00:44:11 MCP tasks/get ok [21.25µs]
-2026/05/04 00:44:11 MCP tasks/get ok [26.959µs]
-2026/05/04 00:44:12 [slow_compute] finished "v2-no-meta"
-2026/05/04 00:44:12 MCP tasks/get ok [59.5µs]
-2026/05/04 00:44:12 MCP tasks/get error=-32601 (method requires extension io.modelcontextprotocol/tasks) [13.208µs]
-  ✔ v2-21: tasks/get inlined result does not include related-task _meta (1028.228375ms)
-2026/05/04 00:44:12 MCP tasks/update error=-32601 (method requires extension io.modelcontextprotocol/tasks) [9.416µs]
-2026/05/04 00:44:12 MCP tasks/cancel error=-32601 (method requires extension io.modelcontextprotocol/tasks) [9.167µs]
-2026/05/04 00:44:12 MCP tools/call ok [84.042µs]
-  ✔ v2-22: tasks/* return -32601 when extension not negotiated (8.154542ms)
-2026/05/04 00:44:12 MCP tools/call ok [51.5µs]
-2026/05/04 00:44:12 [slow_compute] starting "v2-24": sleeping 1s...
-  ✔ v2-23: tools/call without extension returns sync ToolResult (resultType:"complete", no task) (2.141625ms)
-2026/05/04 00:44:12 MCP tools/call ok [36.584µs]
-  ✔ v2-24: Mcp-Name + Mcp-Method response headers on task-creating tools/call (2.054959ms)
-2026/05/04 00:44:12 MCP tools/call ok [120.75µs]
-2026/05/04 00:44:12 [slow_compute] starting "v2-24c": sleeping 60s...
-  ✔ v2-24b: Mcp-Name absent on sync tools/call response (Mcp-Method still present) (1.81325ms)
-2026/05/04 00:44:12 MCP tasks/get ok [33.375µs]
-2026/05/04 00:44:12 [slow_compute] cancelled "v2-24c" at 1/60
-2026/05/04 00:44:12 MCP tasks/cancel ok [120.208µs]
-2026/05/04 00:44:12 MCP tools/call ok [35.958µs]
-2026/05/04 00:44:12 [slow_compute] starting "v2-25": sleeping 1s...
-  ✔ v2-24c: Mcp-Method on tasks/get and tasks/cancel responses (6.171291ms)
-2026/05/04 00:44:12 MCP tools/call ok [25.958µs]
-  ✔ v2-25: per-request _meta opt-in produces CreateTaskResult (1.899625ms)
-2026/05/04 00:44:12 MCP tools/call ok [15.041µs]
-2026/05/04 00:44:12 MCP tasks/get ok [20.75µs]
-2026/05/04 00:44:12 MCP tasks/get ok [11.542µs]
-2026/05/04 00:44:12 MCP tools/call ok [8.209µs]
-2026/05/04 00:44:12 [slow_compute] starting "v2-26-cancel": sleeping 60s...
-2026/05/04 00:44:12 [slow_compute] cancelled "v2-26-cancel" at 1/60
-2026/05/04 00:44:12 MCP tasks/cancel ok [65.708µs]
-2026/05/04 00:44:12 MCP tools/call ok [9.042µs]
-2026/05/04 00:44:12 [confirm_delete] asking about "v2-26.txt" (parking task in input_required)...
-2026/05/04 00:44:12 MCP tasks/get ok [11.625µs]
-2026/05/04 00:44:12 MCP tasks/update ok [9.625µs]
-2026/05/04 00:44:12 MCP tasks/cancel ok [49.75µs]
-2026/05/04 00:44:12 MCP tools/call ok [10.667µs]
-2026/05/04 00:44:12 [slow_compute] starting "v2-27": sleeping 60s...
-  ✔ v2-26: non-task responses carry resultType:"complete" (SEP-2322) (11.063333ms)
-2026/05/04 00:44:12 MCP tasks/get ok [4.542µs]
-2026/05/04 00:44:12 [slow_compute] cancelled "v2-27" at 1/60
-2026/05/04 00:44:12 MCP tasks/cancel ok [44.792µs]
-2026/05/04 00:44:12 MCP tools/call ok [7.667µs]
-2026/05/04 00:44:12 [slow_compute] starting "v2-28": sleeping 60s...
-  ✔ v2-27: tasks/get immediately after CreateTaskResult must resolve (2.447375ms)
-2026/05/04 00:44:12 MCP tasks/get ok [3.583µs]
-2026/05/04 00:44:12 MCP tasks/get ok [5.5µs]
-2026/05/04 00:44:12 MCP tasks/get ok [3.5µs]
-2026/05/04 00:44:12 [slow_compute] cancelled "v2-28" at 1/60
-2026/05/04 00:44:12 MCP tasks/cancel ok [38.917µs]
-2026/05/04 00:44:12 SSEHub: unregistered connection 437afce20a9ed8cd84e12e8f5d13f216 (total: 0)
-2026/05/04 00:44:12 Received kill signal.  Quitting Writer. stop 0x6c9cb1f42f50
-2026/05/04 00:44:12 Cleaning up writer...
-2026/05/04 00:44:12 Finished cleaning up writer:  0x6c9cb1f42f50
-2026/05/04 00:44:12 Closed MCP-GET-SSE SSE connection: 437afce20a9ed8cd84e12e8f5d13f216
-  ✔ v2-28: stale-but-valid requestState is tolerated (3.408541ms)
-✔ MCP Tasks v2 Conformance (SEP-2663) (9952.914125ms)
+  ✔ v2-01: sync tool call returns immediately, no task (2.314667ms)
+  ✔ v2-02: server creates task without client task param (1.151208ms)
+  ✔ v2-03: tasks/get returns status for active task (1.672583ms)
+  ✔ v2-04: tasks/get returns completed status with inlined result (1013.5285ms)
+  ✔ v2-05: tool execution error is completed with isError true (1015.642041ms)
+  ✔ v2-06: protocol error is failed with error field (610.150125ms)
+  ✔ v2-07: tasks/cancel returns empty ack; status settles to cancelled (6.73375ms)
+  ✔ v2-08: cancel completed task returns error (1014.242459ms)
+  ✔ v2-09: tasks/result is rejected (method removed in v2) (1013.791917ms)
+  ✔ v2-10: tasks/list is rejected (method removed in v2) (0.904458ms)
+  ✔ v2-11: tasks advertised under capabilities.extensions, not capabilities.tasks (0.101166ms)
+  ✔ v2-12: ttlSeconds + pollIntervalMilliseconds present (legacy v1 keys absent) (0.818416ms)
+  ✔ v2-13: task must not expire before TTL (1516.069417ms)
+  ✔ v2-14: tasks/get response may include requestState (1015.358459ms)
+  ✔ v2-15: client echoes requestState in subsequent requests (1.486625ms)
+  ✔ v2-16: input_required task has inputRequests map in tasks/get (1.192667ms)
+  ✔ v2-17: tasks/update inputResponses resume task (2.400834ms)
+  ✔ v2-18: status notifications include DetailedTask if sent (1511.878792ms)
+  ✔ v2-19: tools/call without task param creates task for async tools (1.172875ms)
+  ✔ v2-20: server may return immediate result for fast operations (0.754042ms)
+  ✔ v2-21: tasks/get inlined result does not include related-task _meta (1013.793709ms)
+  ✔ v2-22: tasks/* return -32601 when extension not negotiated (2.756666ms)
+  ✔ v2-23: tools/call without extension returns sync ToolResult (resultType:"complete", no task) (1.063375ms)
+  ✔ v2-24: Mcp-Name + Mcp-Method response headers on task-creating tools/call (0.852584ms)
+  ✔ v2-24b: Mcp-Name absent on sync tools/call response (Mcp-Method still present) (0.811ms)
+  ✔ v2-24c: Mcp-Method on tasks/get and tasks/cancel responses (2.70375ms)
+  ✔ v2-25: per-request _meta opt-in produces CreateTaskResult (1.049292ms)
+  ✔ v2-26: non-task responses carry resultType:"complete" (SEP-2322) (6.499791ms)
+  ✔ v2-27: tasks/get immediately after CreateTaskResult must resolve (1.868666ms)
+  ✔ v2-28: stale-but-valid requestState is tolerated (3.318542ms)
+✔ MCP Tasks v2 Conformance (SEP-2663) (9784.60025ms)
 ℹ tests 30
 ℹ suites 1
 ℹ pass 30
@@ -216,7 +50,5 @@ Started: Mon May  4 00:43:59 PDT 2026
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 10267.112042
-Finished: Mon May  4 00:44:12 PDT 2026
-2026/05/04 00:44:13 [slow_compute] finished "v2-24"
-2026/05/04 00:44:13 [slow_compute] finished "v2-25"
+ℹ duration_ms 10007.109208
+Finished: Mon May  4 13:53:03 PDT 2026
