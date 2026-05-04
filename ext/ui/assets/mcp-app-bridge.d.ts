@@ -44,6 +44,22 @@ interface MCPAppEventMap {
   teardown: Record<string, never>;
 }
 
+/**
+ * SEP-2356 Phase 2.1 — file picker descriptor. Mirrors the server-side
+ * `core.FileInputDescriptor`. The bridge enforces the same `accept` /
+ * `maxSize` constraints client-side so the data URI a server receives
+ * has already passed validation.
+ */
+interface FileInputDescriptor {
+  /**
+   * MIME patterns or file extensions: `"image/*"`, `"image/png"`, `".pdf"`.
+   * Empty / omitted means any file is accepted.
+   */
+  accept?: string[];
+  /** Max decoded payload size in bytes. */
+  maxSize?: number;
+}
+
 /** Options for request methods. */
 interface RequestOptions {
   /** AbortSignal for cancellation. */
@@ -138,6 +154,19 @@ interface MCPAppBridge {
 
   /** Initiate a file download through the host. */
   downloadFile(url: string, filename?: string, options?: RequestOptions): Promise<unknown>;
+
+  /**
+   * SEP-2356 Phase 2.1 — open a native file picker in the iframe and
+   * resolve with the chosen file as an RFC 2397 base64 data URI.
+   * MUST be invoked from a user-gesture handler.
+   */
+  selectFile(descriptor?: FileInputDescriptor): Promise<string>;
+
+  /**
+   * SEP-2356 Phase 2.1 — multi-select variant. Resolves with an
+   * array of data URIs in the order the user selected them.
+   */
+  selectFiles(descriptor?: FileInputDescriptor): Promise<string[]>;
 
   /** Request a display mode change (inline, fullscreen, pip). */
   requestDisplayMode(mode: string, options?: RequestOptions): Promise<unknown>;
