@@ -248,3 +248,39 @@ func TestYieldingSource_ConcurrentYields(t *testing.T) {
 	pr := src.Poll("", 1000)
 	assert.Len(t, pr.Events, n)
 }
+
+// TestYieldingSource_MetaFunc verifies the per-event metadata mapper:
+// when SetMetaFunc is installed, yielded events carry Event.Meta set
+// from the mapper output. Pins the spec follow-on `_meta` plumbing
+// at the source-construction layer (vs the wire layer covered by
+// wire_shape_test.go).
+func TestYieldingSource_MetaFunc(t *testing.T) {
+	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"})
+	src.SetMetaFunc(func(d fakePayload) map[string]any {
+		return map[string]any{"length": len(d.Msg)}
+	})
+	require.NoError(t, yield(fakePayload{Msg: "hello"}))
+
+	pr := src.Poll("", 10)
+	require.Len(t, pr.Events, 1)
+	require.NotNil(t, pr.Events[0].Meta, "metaFunc returning a non-empty map must populate Event.Meta")
+	assert.Equal(t, 5, pr.Events[0].Meta["length"])
+}
+
+// TestYieldingSource_MetaFuncReturningNilOmits verifies an empty/nil
+// map from the mapper produces no `_meta` on the wire (omitempty).
+// Catches over-eager population that would emit `_meta: {}` for every
+// event, defeating the bytes-on-wire-free common case.
+func TestYieldingSource_MetaFuncReturningNilOmits(t *testing.T) {
+	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"})
+	src.SetMetaFunc(func(d fakePayload) map[string]any { return nil })
+	require.NoError(t, yield(fakePayload{Msg: "x"}))
+
+	pr := src.Poll("", 10)
+	require.Len(t, pr.Events, 1)
+	assert.Nil(t, pr.Events[0].Meta, "nil/empty mapper output must leave Event.Meta unset")
+
+	raw, err := json.Marshal(pr.Events[0])
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), `"_meta"`, "omitempty must keep _meta off the wire when nil")
+}

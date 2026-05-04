@@ -42,9 +42,10 @@ func stack(t *testing.T, whOpts ...events.WebhookOption) (*client.Client, func(f
 		server.WithSubscriptions(),
 	)
 	events.Register(events.Config{
-		Sources:  []events.EventSource{src},
-		Webhooks: webhooks,
-		Server:   srv,
+		Sources:                  []events.EventSource{src},
+		Webhooks:                 webhooks,
+		Server:                   srv,
+		UnsafeAnonymousPrincipal: "test-principal", // SDK tests don't wire auth; γ-2 spec gate would reject otherwise
 	})
 
 	handler := srv.Handler(server.WithStreamableHTTP(true))
@@ -56,11 +57,14 @@ func stack(t *testing.T, whOpts ...events.WebhookOption) (*client.Client, func(f
 	return c, yield, webhooks
 }
 
-// TestSubscribe_PopulatesServerAssignedSecret verifies that Subscribe blocks
-// until the initial subscribe has succeeded and exposes the server-assigned
-// secret synchronously after. The default Server-mode registry generates a
-// fresh secret regardless of what the client supplied.
-func TestSubscribe_PopulatesServerAssignedSecret(t *testing.T) {
+// TestSubscribe_AutoGeneratesSecretWhenEmpty verifies the spec contract
+// the SDK upholds for application convenience: when SubscribeOptions.Secret
+// is empty, the SDK CSPRNG-generates a spec-conformant whsec_ secret and
+// both supplies it to the server AND uses it locally so the receiver can
+// verify with the same value via Subscription.Secret(). Without this, an
+// SDK user who forgets to set Secret would get a -32602 InvalidParams
+// from the server (since the secret is REQUIRED per spec).
+func TestSubscribe_AutoGeneratesSecretWhenEmpty(t *testing.T) {
 	c, _, _ := stack(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -69,43 +73,37 @@ func TestSubscribe_PopulatesServerAssignedSecret(t *testing.T) {
 	sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
 		EventName:   "fake.event",
 		CallbackURL: "http://localhost:1/sink",
-		Secret:      "ignored-in-server-mode",
-		SubID:       "test-sub",
+		// Secret intentionally omitted → SDK auto-generates
 	})
 	require.NoError(t, err)
 	defer sub.Stop()
 
-	assert.NotEmpty(t, sub.Secret(), "server must return its generated secret")
-	assert.NotEqual(t, "ignored-in-server-mode", sub.Secret(),
-		"Server mode must NOT echo the client-supplied secret")
-	assert.Equal(t, "test-sub", sub.ID())
-	assert.True(t, sub.RefreshBefore().After(time.Now()),
-		"refreshBefore must be in the future")
+	got := sub.Secret()
+	require.True(t, len(got) > 30 && got[:6] == "whsec_",
+		"SDK must auto-generate a whsec_ value when Secret is empty; got %q", got)
 }
 
-// TestSubscribe_IdentityModeReturnsDerivedID exercises the Identity mode
-// path through the SDK: the server-derived id replaces the client-supplied
-// SubID, demonstrating that the SDK round-trips the spec contract correctly.
-func TestSubscribe_IdentityModeReturnsDerivedID(t *testing.T) {
-	c, _, _ := stack(t,
-		events.WithWebhookSecretMode(events.WebhookSecretIdentity),
-		events.WithWebhookRoot([]byte("test-root")),
-	)
+// TestSubscribe_PreservesCallerSuppliedSecret verifies that when the
+// application DOES supply a secret, the SDK uses it as-is rather than
+// auto-generating a different one. Subscription.Secret() returns the
+// caller's value so the receiver and the signer agree.
+func TestSubscribe_PreservesCallerSuppliedSecret(t *testing.T) {
+	c, _, _ := stack(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	supplied := events.GenerateSecret()
 	sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
 		EventName:   "fake.event",
 		CallbackURL: "http://localhost:1/sink",
-		SubID:       "ignored-in-identity-mode",
-		Params:      map[string]string{"region": "us"},
+		Secret:      supplied,
 	})
 	require.NoError(t, err)
 	defer sub.Stop()
 
-	assert.NotEqual(t, "ignored-in-identity-mode", sub.ID(),
-		"Identity mode must derive its own id")
+	assert.Equal(t, supplied, sub.Secret(),
+		"SDK must preserve caller-supplied secret, not generate a new one")
 }
 
 // TestSubscribe_AutoRefreshFiresWithinShortTTL verifies the background
@@ -122,7 +120,6 @@ func TestSubscribe_AutoRefreshFiresWithinShortTTL(t *testing.T) {
 	sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
 		EventName:     "fake.event",
 		CallbackURL:   "http://localhost:1/sink",
-		SubID:         "refresh-test",
 		RefreshFactor: 0.4,
 		OnRefresh:     func() { atomic.AddInt32(&refreshes, 1) },
 	})
@@ -166,7 +163,6 @@ func TestReceiver_DeliversTypedEvents(t *testing.T) {
 	sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
 		EventName:   "fake.event",
 		CallbackURL: hookSrv.URL,
-		SubID:       "recv-test",
 	})
 	require.NoError(t, err)
 	defer sub.Stop()
@@ -203,7 +199,6 @@ func TestReceiver_RejectsBadSignature(t *testing.T) {
 	sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
 		EventName:   "fake.event",
 		CallbackURL: hookSrv.URL,
-		SubID:       "badsig-test",
 	})
 	require.NoError(t, err)
 	defer sub.Stop()
@@ -237,7 +232,6 @@ func TestReceiver_AcceptsStandardWebhooksHeaders(t *testing.T) {
 	sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
 		EventName:   "fake.event",
 		CallbackURL: hookSrv.URL,
-		SubID:       "stdwh-test",
 	})
 	require.NoError(t, err)
 	defer sub.Stop()
@@ -290,7 +284,6 @@ func TestReceiver_DropsOnFullChannel(t *testing.T) {
 	sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
 		EventName:   "fake.event",
 		CallbackURL: hookSrv.URL,
-		SubID:       "drop-test",
 	})
 	require.NoError(t, err)
 	defer sub.Stop()
@@ -318,7 +311,6 @@ func TestSubscribe_StopsOnContextCancel(t *testing.T) {
 	sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
 		EventName:     "fake.event",
 		CallbackURL:   "http://localhost:1/sink",
-		SubID:         "ctx-cancel-test",
 		RefreshFactor: 0.4,
 		OnRefresh:     func() { atomic.AddInt32(&refreshes, 1) },
 	})
@@ -342,7 +334,6 @@ func TestSubscribe_StopIsIdempotent(t *testing.T) {
 	sub, err := eventsclient.Subscribe(context.Background(), c, eventsclient.SubscribeOptions{
 		EventName:   "fake.event",
 		CallbackURL: "http://localhost:1/sink",
-		SubID:       "stop-twice-test",
 	})
 	require.NoError(t, err)
 	sub.Stop()

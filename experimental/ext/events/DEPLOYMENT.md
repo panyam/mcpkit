@@ -111,13 +111,53 @@ Both helpers handle the boundary race: if a refresh hits the registry just after
 - If the network between the subscriber and the MCP server flaps, the refresh won't land and the registry will GC the subscription. A new `events/subscribe` once connectivity returns is the recovery path; expect a small gap in deliveries.
 - Sizing: 60 s default TTL × 0.5 refresh factor = one refresh call per subscription per 30 s. With 10K active subscriptions this is ~333 r/s of subscribe traffic — small but not zero.
 
-## Identity-mode considerations
+## Webhook secret considerations
 
-When running the registry with `WithWebhookSecretMode(events.WebhookSecretIdentity)`, the secret each subscription gets is derived from a server-side master root (`WithWebhookRoot`). Treat the root like a master credential:
+Per spec, the webhook signing secret is **client-supplied only** (`whsec_` + base64 of 24-64 random bytes per the Standard Webhooks profile). The server validates the format at `events/subscribe` time and stores the value as-is. The server does NOT generate or rotate secrets.
 
-- Provision via secrets manager (Vault, AWS Secrets Manager, GCP Secret Manager, K8s secret with appropriate restrictions) — **not** an env var checked into config.
-- **Rotate by deploying a new root.** All derived secrets rotate atomically. Plan for a brief overlap window where receivers may need to accept either old or new — the spec doesn't define a graceful rotation and this is operator territory.
-- The root file should be readable only by the MCP server process. Compromise of the root means compromise of every derived subscription secret.
+Operational notes:
+
+- **Receiver and subscriber must agree on the secret.** If they're the same process (e.g., a forward proxy that subscribes on its own behalf), this is automatic. If they're different — e.g., proxy receives, app subscribes — the subscriber must communicate the secret to the proxy out-of-band. SDKs auto-generate by default; surface the value via your secrets-manager / proxy-config path.
+- **Rotation is client-initiated.** Supply a new `whsec_` value on a refresh `events/subscribe` call. The server replaces the stored value; in-flight deliveries signed with the old secret will fail verification at the receiver. Spec describes a Standard-Webhooks dual-sign grace window for this case (not yet implemented in mcpkit; tracked under PR group ζ).
+- **Treat each `whsec_` value as a credential.** Provision via secrets manager (Vault, AWS Secrets Manager, GCP Secret Manager, K8s secret with appropriate restrictions) when subscribing programmatically. Compromise of one secret only compromises that subscription's deliveries — there's no master root.
+
+## Auth + tuple subscription identity (γ)
+
+Per spec §"Subscription Identity" → "Authentication required" L361, webhook `events/subscribe` and `events/unsubscribe` MUST require an authenticated principal — servers reject unauthenticated calls with `-32012 Unauthorized`. The registry keys subscriptions on the canonical tuple `(principal, delivery.url, name, params)`; cross-tenant isolation is by construction since the principal is part of the key.
+
+Production wiring (the spec-strict path):
+
+```go
+validator := auth.NewJWTValidator(auth.JWTConfig{
+    JWKSURL:  "<your-OIDC-issuer>/.well-known/jwks.json",
+    Issuer:   "<your-OIDC-issuer>",
+    Audience: "mcp-events",
+})
+validator.Start()
+
+srv := server.NewServer(
+    core.ServerInfo{...},
+    server.WithSubscriptions(),
+    server.WithAuth(validator),  // ← anonymous webhook subscribes → -32012
+)
+events.Register(events.Config{
+    Sources:  ...,
+    Webhooks: webhooks,
+    Server:   srv,
+    // UnsafeAnonymousPrincipal intentionally NOT set — production
+    // deployments rely on the spec-strict auth gate.
+})
+```
+
+The `events` package only depends on `core.Claims` (the abstract auth contract), not on `ext/auth` or any specific auth implementation. You can swap in mTLS-derived principals, session-cookie validators, or custom JWKS — Events keeps working as long as `ctx.AuthClaims().Subject` returns the principal.
+
+### `UnsafeAnonymousPrincipal` is for demos only
+
+The `events.Config.UnsafeAnonymousPrincipal` field deliberately deviates from the spec — when set, anonymous calls are accepted under the configured principal. **Production deployments MUST leave this field empty.** The startup log line emitted by `events.Register` explicitly warns when it's non-empty so misconfiguration is loud rather than silent.
+
+If a production deployment sets it: the spec's `-32012` rejection is bypassed; webhook subscribe accepts anonymous calls under a single shared principal; cross-tenant isolation breaks (everyone is "the demo user"); the audit trail loses its principal field. None of these are acceptable production properties.
+
+The demos use it as an escape hatch so `make demo` works without standing up an auth provider. Each demo also auto-detects `OAUTH_ISSUER` and switches to real auth when present — see `examples/events/discord/README.md` for the env-var contract.
 
 ## Connecting an MCP host
 
@@ -150,6 +190,8 @@ Before going live with a webhook-enabled events server in a private-cloud deploy
 - [ ] WAF / proxy idle timeouts > 25 s to survive the worst-case retry chain.
 - [ ] Receiver is idempotent on `event.eventId`.
 - [ ] Receiver returns 2xx for accept, 4xx for reject-permanently, 5xx for retry.
-- [ ] If using Identity mode, master root is in a secrets manager and rotation plan documented.
+- [ ] Webhook secrets (each subscription's `whsec_` value) reach the receiver via your secrets-management path; rotation procedure documented.
+- [ ] **`events.Config.UnsafeAnonymousPrincipal` is EMPTY** in production code paths. Auth is wired via `server.WithAuth(...)`. Anonymous webhook subscribes return `-32012 Unauthorized`.
+- [ ] Server startup log shows `[events] WARNING: UnsafeAnonymousPrincipal=...` is **NOT** present. (Its presence indicates the demo escape hatch is on.)
 - [ ] If using Standard Webhooks header mode, WAF allowlist has the `webhook-*` headers (not `X-MCP-*`).
 - [ ] Subscribers run an SDK that auto-refreshes (or have explicit refresh logic that fires before `refreshBefore`).

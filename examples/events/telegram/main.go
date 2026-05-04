@@ -11,7 +11,6 @@
 package main
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -25,6 +24,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/experimental/ext/events"
+	"github.com/panyam/mcpkit/ext/auth"
 	"github.com/panyam/mcpkit/server"
 	gohttp "github.com/panyam/servicekit/http"
 )
@@ -44,35 +44,18 @@ func main() {
 func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
 	token := flag.String("token", "", "Telegram bot token (omit for test mode)")
-	whSecretMode := flag.String("webhook-secret-mode", "server", "webhook secret mode: server | client | identity")
 	whHeaderMode := flag.String("webhook-header-mode", "standard", "webhook header style: standard | mcp")
-	whRootHex := flag.String("webhook-root", "", "hex-encoded master secret for identity mode (required when -webhook-secret-mode=identity)")
 	flag.CommandLine.Parse(filterFlags(os.Args[1:]))
 
-	secretMode, err := events.ParseSecretMode(*whSecretMode)
-	if err != nil {
-		log.Fatalf("invalid -webhook-secret-mode: %v", err)
-	}
 	headerMode, err := events.ParseHeaderMode(*whHeaderMode)
 	if err != nil {
 		log.Fatalf("invalid -webhook-header-mode: %v", err)
 	}
 
 	whOpts := []events.WebhookOption{
-		events.WithWebhookSecretMode(secretMode),
 		events.WithWebhookHeaderMode(headerMode),
 	}
-	if secretMode == events.WebhookSecretIdentity {
-		if *whRootHex == "" {
-			log.Fatalf("-webhook-root is required when -webhook-secret-mode=identity")
-		}
-		root, err := hex.DecodeString(*whRootHex)
-		if err != nil {
-			log.Fatalf("invalid -webhook-root: %v", err)
-		}
-		whOpts = append(whOpts, events.WithWebhookRoot(root))
-	}
-	log.Printf("[server] webhook modes: secret=%s headers=%s", secretMode, headerMode)
+	log.Printf("[server] webhook headers=%s; client-supplied secrets only", headerMode)
 
 	webhooks := events.NewWebhookRegistry(whOpts...)
 	source, yield := newTelegramSource()
@@ -90,21 +73,40 @@ func serve() {
 		log.Println("[telegram] no token provided — running in test mode")
 	}
 
-	srv := server.NewServer(
-		core.ServerInfo{Name: "telegram-events", Version: "0.1.0"},
+	// γ-5: auto-detect auth posture. Identical pattern to discord's main.go
+	// — if OAUTH_ISSUER is set, wire real OIDC auth and follow the spec
+	// strictly (anonymous webhook subscribes rejected with -32012 per
+	// §"Subscription Identity" L361). Otherwise fall back to the demo
+	// escape hatch so `make demo` works without an auth provider.
+	srvOpts := []server.Option{
 		server.WithSubscriptions(),
 		server.WithMiddleware(server.LoggingMiddleware(log.Default())),
 		server.WithRequestLogging(log.Default()),
+	}
+	authPosture := "demo (anonymous → UnsafeAnonymousPrincipal)"
+	if validator := tryEnableAuth(); validator != nil {
+		srvOpts = append(srvOpts, server.WithAuth(validator))
+		authPosture = "real OIDC (" + os.Getenv("OAUTH_ISSUER") + ") — anonymous webhook subscribes rejected per spec"
+	}
+
+	srv := server.NewServer(
+		core.ServerInfo{Name: "telegram-events", Version: "0.1.0"},
+		srvOpts...,
 	)
+	log.Printf("[server] auth: %s", authPosture)
 
 	registerResources(srv, source)
 	(&ToolDelivery{Bot: bot}).Register(srv)
 
-	events.Register(events.Config{
+	cfg := events.Config{
 		Sources:  []events.EventSource{source, typingSource},
 		Webhooks: webhooks,
 		Server:   srv,
-	})
+	}
+	if !hasOAuthEnv() {
+		cfg.UnsafeAnonymousPrincipal = "demo-user"
+	}
+	events.Register(cfg)
 
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", srv.Handler(
@@ -205,4 +207,45 @@ func startTelegramPolling(bot *tgbotapi.BotAPI, yield func(TelegramEventData) er
 		log.Printf("[telegram] chat=%s sender=%s text=%q", ev.ChatID, ev.User, ev.Text)
 	}
 	log.Println("[telegram] poll loop ended")
+}
+
+// hasOAuthEnv reports whether OAUTH_ISSUER is set (real-auth posture).
+// Used by the events.Config wiring to decide whether to set the
+// UnsafeAnonymousPrincipal demo escape.
+func hasOAuthEnv() bool {
+	return os.Getenv("OAUTH_ISSUER") != ""
+}
+
+// tryEnableAuth builds a JWTValidator from environment variables and
+// returns it (so the caller can pass server.WithAuth(validator)).
+// Returns nil if OAUTH_ISSUER is not set — caller falls back to the
+// UnsafeAnonymousPrincipal demo escape.
+//
+// Recognized env vars:
+//   OAUTH_ISSUER    REQUIRED. The OIDC issuer URL.
+//                   For Keycloak: http://localhost:8081/realms/<realm>
+//   OAUTH_JWKS_URL  Optional. Defaults to <issuer>/protocol/openid-connect/certs
+//                   (Keycloak convention). Override for non-Keycloak providers.
+//   OAUTH_AUDIENCE  Optional. Defaults to "mcp-events". Tokens MUST have
+//                   this audience claim to be accepted.
+func tryEnableAuth() *auth.JWTValidator {
+	issuer := os.Getenv("OAUTH_ISSUER")
+	if issuer == "" {
+		return nil
+	}
+	jwksURL := os.Getenv("OAUTH_JWKS_URL")
+	if jwksURL == "" {
+		jwksURL = issuer + "/protocol/openid-connect/certs"
+	}
+	audience := os.Getenv("OAUTH_AUDIENCE")
+	if audience == "" {
+		audience = "mcp-events"
+	}
+	v := auth.NewJWTValidator(auth.JWTConfig{
+		JWKSURL:  jwksURL,
+		Issuer:   issuer,
+		Audience: audience,
+	})
+	v.Start()
+	return v
 }

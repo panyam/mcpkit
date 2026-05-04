@@ -1,5 +1,5 @@
 === Stage 10/12: tasks-conformance (make testconf-tasks) ===
-Started: Thu Apr 30 14:35:30 PDT 2026
+Started: Mon May  4 00:43:42 PDT 2026
 ========================================================================
   MCP Tasks — Async Tool Execution Lifecycle
   Walks through the MCP Tasks (SEP-1036) lifecycle: optional/required task support, polling, progress notifications, and cancellation.
@@ -42,10 +42,9 @@ Started: Thu Apr 30 14:35:30 PDT 2026
     (progress, status changes) reach us during polling.
 
     Press Enter to run this step...
-Connected to telegram-events 0.1.0
-
-Tools (with task support metadata):
-- send_message taskSupport=forbidden
+ERROR: initialize failed: Post "http://localhost:8080/mcp": dial tcp
+[::1]:8080: connect: connection refused
+Start the server with: make serve
 
 
   Step 2/8: Sync call: greet (taskSupport=forbidden)
@@ -58,7 +57,8 @@ Tools (with task support metadata):
     use today; tasks are opt-in per tool.
 
     Press Enter to run this step...
-ERROR: RPC error -32602: unknown tool: greet
+ERROR: Post "http://localhost:8080/mcp": dial tcp [::1]:8080: connect:
+connection refused
 
 
   Step 3/8: Optional task: slow_compute as task → CreateTaskResult
@@ -71,7 +71,8 @@ ERROR: RPC error -32602: unknown tool: greet
     immediately while the work runs in a background goroutine.
 
     Press Enter to run this step...
-ERROR: RPC error -32602: unknown tool: slow_compute
+ERROR: Post "http://localhost:8080/mcp": dial tcp [::1]:8080: connect:
+connection refused
 
 
   Step 4/8: Poll tasks/get until terminal — receive notifications/progress
@@ -86,7 +87,8 @@ ERROR: RPC error -32602: unknown tool: slow_compute
     stops.
 
     Press Enter to run this step...
-ERROR: RPC error -32601: method not found: tasks/get
+ERROR: Post "http://localhost:8080/mcp": dial tcp [::1]:8080: connect:
+connection refused
 
 
   Step 5/8: Fetch the result payload via tasks/result
@@ -99,7 +101,8 @@ ERROR: RPC error -32601: method not found: tasks/get
     tasks/result with the same taskId.
 
     Press Enter to run this step...
-ERROR: RPC error -32601: method not found: tasks/result
+ERROR: Post "http://localhost:8080/mcp": dial tcp [::1]:8080: connect:
+connection refused
 
 
   Step 6/8: Required task: failing_job — sync call returns an error
@@ -112,7 +115,8 @@ ERROR: RPC error -32601: method not found: tasks/result
     guards expensive/long tools from blocking the request thread.
 
     Press Enter to run this step...
-Server returned: RPC error -32602: unknown tool: failing_job
+Server returned: Post "http://localhost:8080/mcp": dial tcp [::1]:8080:
+connect: connection refused
 
 
   Step 7/8: Invoke failing_job as task → terminal status: failed
@@ -128,7 +132,8 @@ Server returned: RPC error -32602: unknown tool: failing_job
     polling call.
 
     Press Enter to run this step...
-ERROR: RPC error -32602: unknown tool: failing_job
+ERROR: Post "http://localhost:8080/mcp": dial tcp [::1]:8080: connect:
+connection refused
 
 
   Step 8/8: Cancel a long-running task mid-flight
@@ -147,7 +152,8 @@ ERROR: RPC error -32602: unknown tool: failing_job
     cancel doesn't overwrite the cancelled status.
 
     Press Enter to run this step...
-ERROR: RPC error -32602: unknown tool: slow_compute
+ERROR: Post "http://localhost:8080/mcp": dial tcp [::1]:8080: connect:
+connection refused
 
 
   --- Where each piece lives in mcpkit ---
@@ -167,34 +173,34 @@ ERROR: RPC error -32602: unknown tool: slow_compute
 
 === Done ===
 ▶ MCP Tasks Conformance
-  ✔ scenario 01: sync tool call returns immediately (5.534709ms)
-  ✔ scenario 02: async task creation returns CreateTaskResult (1.580584ms)
-  ✔ scenario 03: tasks/get returns flat task info (3.258792ms)
-  ✔ scenario 04: failing tool transitions to failed (1016.332292ms)
-  ✔ scenario 05: tasks/result returns ToolResult with related-task meta (1021.86425ms)
-  ✔ scenario 06: cancel returns cancelled status (3.45825ms)
-  ✔ scenario 07: tasks/list returns task array (2.1835ms)
-  ✔ scenario 08: required tool without task hint returns error (1.361125ms)
-  ✔ scenario 09: forbidden tool with task hint returns error (1.286084ms)
-  ✔ scenario 10: external proxy tool completes via task callbacks (1014.599542ms)
-  ✔ scenario 11: external proxy tool tasks/get returns task info (1.876291ms)
-  ✔ scenario 12: optional tool without hint runs synchronously (1001.395334ms)
-  ✔ scenario 13: tasks/get with bogus taskId returns error (1.267291ms)
-  ✔ scenario 14: tasks/cancel with bogus taskId returns error (0.9955ms)
-  ✔ scenario 15: cancel completed task returns error (1013.752042ms)
-  ✔ scenario 16: CreateTaskResult includes a TTL (0.958916ms)
-  ✔ scenario 17: CreateTaskResult pollInterval is valid if present (0.804834ms)
-  ✔ scenario 18: task must not expire before TTL (1516.309625ms)
-  ✔ scenario 19: concurrent task creation produces unique taskIds (1023.268042ms)
-  ✔ scenario 20: tasks/result for failed task has isError true (1014.767917ms)
-  ✔ scenario 21: tools/list includes execution.taskSupport (2.323875ms)
-  ✔ scenario 22: elicitation round-trip via tasks/result (6.73425ms)
-  ✔ scenario 23: sampling round-trip via tasks/result (7.68575ms)
-  ✔ scenario 24: progress notifications are well-formed if sent (2025.576083ms)
-  ✔ scenario 25: status notifications match task state if sent (1515.890875ms)
-  ✔ scenario 26: tasks/result includes related-task _meta (1017.0525ms)
-  ✔ scenario 27: tasks/get does not include related-task _meta (2.356ms)
-✔ MCP Tasks Conformance (13241.662084ms)
+  ✔ scenario 01: sync tool call returns immediately (4.211792ms)
+  ✔ scenario 02: async task creation returns CreateTaskResult (1.355416ms)
+  ✔ scenario 03: tasks/get returns flat task info (2.342125ms)
+  ✔ scenario 04: failing tool transitions to failed (1028.671542ms)
+  ✔ scenario 05: tasks/result returns ToolResult with related-task meta (1037.055416ms)
+  ✔ scenario 06: cancel returns cancelled status (6.420041ms)
+  ✔ scenario 07: tasks/list returns task array (2.840583ms)
+  ✔ scenario 08: required tool without task hint returns error (1.586125ms)
+  ✔ scenario 09: forbidden tool with task hint returns error (1.272041ms)
+  ✔ scenario 10: external proxy tool completes via task callbacks (1034.218417ms)
+  ✔ scenario 11: external proxy tool tasks/get returns task info (5.017209ms)
+  ✔ scenario 12: optional tool without hint runs synchronously (1003.907916ms)
+  ✔ scenario 13: tasks/get with bogus taskId returns error (4.685583ms)
+  ✔ scenario 14: tasks/cancel with bogus taskId returns error (2.225333ms)
+  ✔ scenario 15: cancel completed task returns error (1036.887916ms)
+  ✔ scenario 16: CreateTaskResult includes a TTL (2.512667ms)
+  ✔ scenario 17: CreateTaskResult pollInterval is valid if present (1.514417ms)
+  ✔ scenario 18: task must not expire before TTL (1536.077958ms)
+  ✔ scenario 19: concurrent task creation produces unique taskIds (1050.300708ms)
+  ✔ scenario 20: tasks/result for failed task has isError true (1029.944541ms)
+  ✔ scenario 21: tools/list includes execution.taskSupport (5.149125ms)
+  ✔ scenario 22: elicitation round-trip via tasks/result (14.495417ms)
+  ✔ scenario 23: sampling round-trip via tasks/result (4.780458ms)
+  ✔ scenario 24: progress notifications are well-formed if sent (2054.152708ms)
+  ✔ scenario 25: status notifications match task state if sent (1537.212292ms)
+  ✔ scenario 26: tasks/result includes related-task _meta (1039.856875ms)
+  ✔ scenario 27: tasks/get does not include related-task _meta (3.946834ms)
+✔ MCP Tasks Conformance (13470.952917ms)
 ℹ tests 27
 ℹ suites 1
 ℹ pass 27
@@ -202,5 +208,5 @@ ERROR: RPC error -32602: unknown tool: slow_compute
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 13580.469375
-Finished: Thu Apr 30 14:35:46 PDT 2026
+ℹ duration_ms 13828.108166
+Finished: Mon May  4 00:43:59 PDT 2026
