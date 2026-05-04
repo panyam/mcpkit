@@ -401,6 +401,48 @@ func TestEventDef_MetaOmitsWhenAbsent(t *testing.T) {
 		"absent Meta must omit the key entirely; got %s", string(raw))
 }
 
+// TestList_NextCursorOmitsWhenEmpty pins the events/list response shape
+// (spec follow-on commit d4faef9 2026-05-01): optional `nextCursor`
+// matches the tools/list / resources/list pagination convention.
+// Today our implementation always returns all sources in one response,
+// so nextCursor is empty — the test enforces that "empty" means the
+// key is OMITTED on the wire (omitempty), not present-as-empty-string.
+//
+// Future paginating servers can populate the field; the test catches a
+// regression where a typo or missing tag causes the field to leak as
+// `"nextCursor": ""` (which a client paginating-loop would treat as
+// "no more pages" but is still an unwanted byte tax + spec drift).
+func TestList_NextCursorOmitsWhenEmpty(t *testing.T) {
+	wire := listResultWire{
+		Events:     []EventDef{{Name: "demo", Description: "x", Delivery: []string{"poll"}}},
+		NextCursor: "",
+	}
+	raw, err := json.Marshal(wire)
+	require.NoError(t, err)
+	body := string(raw)
+
+	assert.Contains(t, body, `"events":`, "events array must be present")
+	assert.False(t, strings.Contains(body, `"nextCursor"`),
+		"empty NextCursor must omit the key entirely; got %s", body)
+}
+
+// TestList_NextCursorPresentWhenSet — counter-test: when set, the
+// response carries `nextCursor` with the populated value. Pins both
+// the field name (camelCase, matching tools/list) and the omitempty
+// behavior (only the populated field appears).
+func TestList_NextCursorPresentWhenSet(t *testing.T) {
+	wire := listResultWire{
+		Events:     []EventDef{{Name: "demo", Description: "x", Delivery: []string{"poll"}}},
+		NextCursor: "page2",
+	}
+	raw, err := json.Marshal(wire)
+	require.NoError(t, err)
+	body := string(raw)
+
+	assert.Contains(t, body, `"nextCursor":"page2"`,
+		"populated NextCursor must serialize under the camelCase key; got %s", body)
+}
+
 // TestInvalidCallbackUrl_UsesSpecCode verifies the InvalidCallbackUrl error
 // uses spec code -32015, not the legacy -32005.
 func TestInvalidCallbackUrl_UsesSpecCode(t *testing.T) {
