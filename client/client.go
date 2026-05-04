@@ -25,6 +25,12 @@ type clientTransport interface {
 	connect() error
 	// call sends a JSON-RPC request and returns the response.
 	call(data []byte) (*rpcResponse, error)
+	// callWithContext is like call but accepts a typed CallContext carrying
+	// per-call cancellation and an optional notification hook. Transports
+	// that can't honor cc (no per-call notification scoping) MUST still
+	// issue the call — the hook is a best-effort enhancement, not a
+	// requirement. Pass nil cc to behave identically to call().
+	callWithContext(data []byte, cc *CallContext) (*rpcResponse, error)
 	// notify sends a JSON-RPC notification (no response expected).
 	notify(data []byte) error
 	// close shuts down the transport.
@@ -263,6 +269,13 @@ func (a *coreTransportAdapter) connect() error {
 }
 
 func (a *coreTransportAdapter) call(data []byte) (*rpcResponse, error) {
+	return a.callWithContext(data, nil)
+}
+
+// callWithContext on the core.Transport adapter ignores cc — core.Transport
+// has no notion of per-call notification scoping. Notifications still flow
+// through whatever notify path the underlying transport provides.
+func (a *coreTransportAdapter) callWithContext(data []byte, _ *CallContext) (*rpcResponse, error) {
 	var req core.Request
 	if err := json.Unmarshal(data, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
@@ -790,6 +803,66 @@ func (c *Client) URL() string { return c.url }
 // to simulate DNS/load balancer changes.
 func (c *Client) SetURL(url string) { c.url = url }
 
+// CallContext is a typed context for a single Client.CallContext invocation
+// — the client-side analogue of the typed handler contexts in core/ (per
+// constraint C1). Embeds context.Context for cancellation; carries a
+// per-call notification hook for long-lived calls that need their own
+// notification channel (events/stream and likely future tasks/progress
+// streaming RPCs).
+//
+// Construct via NewCallContext, configure via the chainable With*
+// methods, then pass to Client.CallContext.
+//
+// Goroutine model: the notify hook may be called concurrently with the
+// session-global callback (set via WithNotificationCallback). Both fire
+// on the same notification — the hook is additive, not a replacement.
+type CallContext struct {
+	context.Context
+	notifyHook func(method string, params json.RawMessage)
+}
+
+// NewCallContext wraps a context.Context as a CallContext for use with
+// Client.CallContext. The wrapped context controls cancellation: on
+// Streamable HTTP, the underlying http.Request is built with it so
+// cancelling cancels the in-flight POST. Required for long-lived calls
+// (events/stream) so Stop() actually closes the connection.
+func NewCallContext(ctx context.Context) *CallContext {
+	return &CallContext{Context: ctx}
+}
+
+// WithNotifyHook installs a per-call notification hook. The hook fires
+// for every notification arriving on this call's response stream — for
+// Streamable HTTP, that's the POST SSE response stream the call holds
+// open. ADDITIVE to WithNotificationCallback (both fire on the same
+// notification).
+//
+// Transport coverage: wired on the Streamable HTTP transport (the path
+// used by events/stream). On stdio / SSE / in-memory transports the
+// hook is a no-op for now — notifications still flow only via the
+// global callback.
+func (cc *CallContext) WithNotifyHook(hook func(method string, params json.RawMessage)) *CallContext {
+	cc.notifyHook = hook
+	return cc
+}
+
+// CallContext issues a JSON-RPC call with per-call configuration carried
+// on the typed CallContext. Identical to Call when cc has no hooks set
+// beyond a plain context.
+func (c *Client) CallContext(cc *CallContext, method string, params any) (*CallResult, error) {
+	resp, err := c.rawCallWithContext(method, params, cc)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Error != nil {
+		return nil, &RPCError{
+			Code:    resp.Error.Code,
+			Message: resp.Error.Message,
+			Data:    resp.Error.Data,
+		}
+	}
+	return &CallResult{Raw: resp.Result}, nil
+}
+
 // Call makes a JSON-RPC call and returns the parsed response.
 func (c *Client) Call(method string, params any) (*CallResult, error) {
 	// Apply client middleware chain if configured.
@@ -1107,6 +1180,12 @@ func (c *Client) nextRequestID() int {
 }
 
 func (c *Client) rawCall(method string, params any) (*rpcResponse, error) {
+	return c.rawCallWithContext(method, params, nil)
+}
+
+// rawCallWithContext is the underlying call path used by both Call and
+// CallContext. cc may be nil for a no-context call (legacy Call path).
+func (c *Client) rawCallWithContext(method string, params any, cc *CallContext) (*rpcResponse, error) {
 	req := core.Request{
 		JSONRPC: "2.0",
 		ID:      marshalID(c.nextRequestID()),
@@ -1117,13 +1196,13 @@ func (c *Client) rawCall(method string, params any) (*rpcResponse, error) {
 	}
 	data, _ := json.Marshal(req)
 
-	resp, err := c.transport.call(data)
+	resp, err := c.transport.callWithContext(data, cc)
 	if err != nil && c.maxRetries > 0 && IsTransientError(err) {
 		return c.retryWithReconnect(func() (*rpcResponse, error) {
 			// Re-build with new ID (old may have been consumed)
 			req.ID = marshalID(c.nextRequestID())
 			data, _ = json.Marshal(req)
-			return c.transport.call(data)
+			return c.transport.callWithContext(data, cc)
 		})
 	}
 	return resp, err
@@ -1269,6 +1348,15 @@ func (t *streamableClientTransport) backgroundGetReader(body io.Reader) {
 // Shared by both readSSEResponse (POST SSE) and backgroundGetReader (GET SSE)
 // to avoid duplicating the probe-and-dispatch logic.
 func (t *streamableClientTransport) dispatchSSEEvent(data string) *rpcResponse {
+	return t.dispatchSSEEventWithHook(data, nil)
+}
+
+// dispatchSSEEventWithHook is the implementation. The optional per-call
+// hook fires for every notification frame in addition to the session-global
+// notifyHandler — used by events/stream's Stream() helper to receive
+// notifications/events/* on a per-call channel without polluting the
+// global callback.
+func (t *streamableClientTransport) dispatchSSEEventWithHook(data string, hook func(method string, params json.RawMessage)) *rpcResponse {
 	var probe struct {
 		ID     any    `json:"id"`
 		Method string `json:"method"`
@@ -1289,14 +1377,19 @@ func (t *streamableClientTransport) dispatchSSEEvent(data string) *rpcResponse {
 		return nil
 	}
 
-	// Notification (method set, no id) — deliver to handler
+	// Notification (method set, no id) — deliver to global handler AND
+	// the per-call hook (if any). Both fire on the same payload — the
+	// hook is additive, not a replacement.
 	if probe.Method != "" && probe.ID == nil {
+		var notif struct {
+			Params json.RawMessage `json:"params"`
+		}
+		json.Unmarshal([]byte(data), &notif)
 		if t.notifyHandler != nil {
-			var notif struct {
-				Params json.RawMessage `json:"params"`
-			}
-			json.Unmarshal([]byte(data), &notif)
 			t.notifyHandler(probe.Method, notif.Params)
+		}
+		if hook != nil {
+			hook(probe.Method, notif.Params)
 		}
 		return nil
 	}
@@ -1310,8 +1403,25 @@ func (t *streamableClientTransport) dispatchSSEEvent(data string) *rpcResponse {
 }
 
 func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
+	return t.callWithContext(data, nil)
+}
+
+// callWithContext issues the POST and, if the response is SSE, threads the
+// caller's per-call notify hook (cc.notifyHook) into the SSE-frame loop so
+// notifications arriving on this call's response stream reach the hook in
+// addition to the session-global callback. Used by events/stream's Stream()
+// helper for per-stream demuxing without polluting the global callback.
+//
+// When cc carries a context, the underlying http.Request is built with it
+// so cancelling cancels the in-flight POST — required for events/stream's
+// Stop() to actually close the connection.
+func (t *streamableClientTransport) callWithContext(data []byte, cc *CallContext) (*rpcResponse, error) {
+	reqCtx := context.Background()
+	if cc != nil && cc.Context != nil {
+		reqCtx = cc.Context
+	}
 	buildReq := func() (*http.Request, error) {
-		req, err := http.NewRequest("POST", t.url, bytes.NewReader(data))
+		req, err := http.NewRequestWithContext(reqCtx, "POST", t.url, bytes.NewReader(data))
 		if err != nil {
 			return nil, err
 		}
@@ -1344,7 +1454,11 @@ func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
 
 	ct := resp.Header.Get("Content-Type")
 	if strings.Contains(ct, "text/event-stream") {
-		return t.readSSEResponse(resp.Body)
+		var hook func(method string, params json.RawMessage)
+		if cc != nil {
+			hook = cc.notifyHook
+		}
+		return t.readSSEResponseWithHook(resp.Body, hook)
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -1368,6 +1482,14 @@ func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
 // When a server-to-client request arrives (e.g., sampling/createMessage during
 // a tool call), the handler is called and the response is POSTed back to the server.
 func (t *streamableClientTransport) readSSEResponse(body io.Reader) (*rpcResponse, error) {
+	return t.readSSEResponseWithHook(body, nil)
+}
+
+// readSSEResponseWithHook is the implementation; the per-call notify hook
+// fires (in addition to the session-global notifyHandler) for every
+// notification frame on this response stream. Pass nil hook to behave
+// identically to readSSEResponse.
+func (t *streamableClientTransport) readSSEResponseWithHook(body io.Reader, hook func(method string, params json.RawMessage)) (*rpcResponse, error) {
 	reader := ssehttp.NewSSEEventReader(body)
 	var lastResponse *rpcResponse
 
@@ -1376,7 +1498,7 @@ func (t *streamableClientTransport) readSSEResponse(body io.Reader) (*rpcRespons
 		if err != nil {
 			// EOF (or EOF-mid-event) — process any final data, then break.
 			if ev.Data != "" {
-				if resp := t.dispatchSSEEvent(ev.Data); resp != nil {
+				if resp := t.dispatchSSEEventWithHook(ev.Data, hook); resp != nil {
 					lastResponse = resp
 				}
 			}
@@ -1391,7 +1513,7 @@ func (t *streamableClientTransport) readSSEResponse(body io.Reader) (*rpcRespons
 		if ev.Data == "" {
 			continue
 		}
-		if resp := t.dispatchSSEEvent(ev.Data); resp != nil {
+		if resp := t.dispatchSSEEventWithHook(ev.Data, hook); resp != nil {
 			lastResponse = resp
 		}
 	}
@@ -1682,6 +1804,14 @@ func (t *sseClientTransport) close() error {
 }
 
 func (t *sseClientTransport) getSessionID() string { return t.sessionID }
+
+// callWithContext on the legacy SSE transport ignores cc — notifications
+// arrive on the GET stream (background reader), not on a per-call response,
+// so per-call scoping is not meaningful here. Notifications still reach
+// the session-global callback via the existing path.
+func (t *sseClientTransport) callWithContext(data []byte, _ *CallContext) (*rpcResponse, error) {
+	return t.call(data)
+}
 
 func (t *sseClientTransport) call(data []byte) (*rpcResponse, error) {
 	// Check if the background reader is already dead before doing any work.

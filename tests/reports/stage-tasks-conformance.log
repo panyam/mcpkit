@@ -1,5 +1,5 @@
 === Stage 10/12: tasks-conformance (make testconf-tasks) ===
-Started: Mon May  4 00:43:42 PDT 2026
+Started: Mon May  4 13:52:35 PDT 2026
 ========================================================================
   MCP Tasks — Async Tool Execution Lifecycle
   Walks through the MCP Tasks (SEP-1036) lifecycle: optional/required task support, polling, progress notifications, and cancellation.
@@ -173,34 +173,34 @@ connection refused
 
 === Done ===
 ▶ MCP Tasks Conformance
-  ✔ scenario 01: sync tool call returns immediately (4.211792ms)
-  ✔ scenario 02: async task creation returns CreateTaskResult (1.355416ms)
-  ✔ scenario 03: tasks/get returns flat task info (2.342125ms)
-  ✔ scenario 04: failing tool transitions to failed (1028.671542ms)
-  ✔ scenario 05: tasks/result returns ToolResult with related-task meta (1037.055416ms)
-  ✔ scenario 06: cancel returns cancelled status (6.420041ms)
-  ✔ scenario 07: tasks/list returns task array (2.840583ms)
-  ✔ scenario 08: required tool without task hint returns error (1.586125ms)
-  ✔ scenario 09: forbidden tool with task hint returns error (1.272041ms)
-  ✔ scenario 10: external proxy tool completes via task callbacks (1034.218417ms)
-  ✔ scenario 11: external proxy tool tasks/get returns task info (5.017209ms)
-  ✔ scenario 12: optional tool without hint runs synchronously (1003.907916ms)
-  ✔ scenario 13: tasks/get with bogus taskId returns error (4.685583ms)
-  ✔ scenario 14: tasks/cancel with bogus taskId returns error (2.225333ms)
-  ✔ scenario 15: cancel completed task returns error (1036.887916ms)
-  ✔ scenario 16: CreateTaskResult includes a TTL (2.512667ms)
-  ✔ scenario 17: CreateTaskResult pollInterval is valid if present (1.514417ms)
-  ✔ scenario 18: task must not expire before TTL (1536.077958ms)
-  ✔ scenario 19: concurrent task creation produces unique taskIds (1050.300708ms)
-  ✔ scenario 20: tasks/result for failed task has isError true (1029.944541ms)
-  ✔ scenario 21: tools/list includes execution.taskSupport (5.149125ms)
-  ✔ scenario 22: elicitation round-trip via tasks/result (14.495417ms)
-  ✔ scenario 23: sampling round-trip via tasks/result (4.780458ms)
-  ✔ scenario 24: progress notifications are well-formed if sent (2054.152708ms)
-  ✔ scenario 25: status notifications match task state if sent (1537.212292ms)
-  ✔ scenario 26: tasks/result includes related-task _meta (1039.856875ms)
-  ✔ scenario 27: tasks/get does not include related-task _meta (3.946834ms)
-✔ MCP Tasks Conformance (13470.952917ms)
+  ✔ scenario 01: sync tool call returns immediately (3.715042ms)
+  ✔ scenario 02: async task creation returns CreateTaskResult (1.119542ms)
+  ✔ scenario 03: tasks/get returns flat task info (2.371541ms)
+  ✔ scenario 04: failing tool transitions to failed (1016.521292ms)
+  ✔ scenario 05: tasks/result returns ToolResult with related-task meta (1018.426125ms)
+  ✔ scenario 06: cancel returns cancelled status (3.248542ms)
+  ✔ scenario 07: tasks/list returns task array (1.700875ms)
+  ✔ scenario 08: required tool without task hint returns error (1.334167ms)
+  ✔ scenario 09: forbidden tool with task hint returns error (1.092375ms)
+  ✔ scenario 10: external proxy tool completes via task callbacks (1016.869167ms)
+  ✔ scenario 11: external proxy tool tasks/get returns task info (1.857166ms)
+  ✔ scenario 12: optional tool without hint runs synchronously (1001.373ms)
+  ✔ scenario 13: tasks/get with bogus taskId returns error (1.350166ms)
+  ✔ scenario 14: tasks/cancel with bogus taskId returns error (1.0515ms)
+  ✔ scenario 15: cancel completed task returns error (1015.9635ms)
+  ✔ scenario 16: CreateTaskResult includes a TTL (1.141042ms)
+  ✔ scenario 17: CreateTaskResult pollInterval is valid if present (1.069916ms)
+  ✔ scenario 18: task must not expire before TTL (1517.208709ms)
+  ✔ scenario 19: concurrent task creation produces unique taskIds (1029.876125ms)
+  ✔ scenario 20: tasks/result for failed task has isError true (1015.651167ms)
+  ✔ scenario 21: tools/list includes execution.taskSupport (2.259833ms)
+  ✔ scenario 22: elicitation round-trip via tasks/result (6.471208ms)
+  ✔ scenario 23: sampling round-trip via tasks/result (8.64ms)
+  ✔ scenario 24: progress notifications are well-formed if sent (2023.509083ms)
+  ✔ scenario 25: status notifications match task state if sent (1514.771667ms)
+  ✔ scenario 26: tasks/result includes related-task _meta (1015.97625ms)
+  ✔ scenario 27: tasks/get does not include related-task _meta (1.479375ms)
+✔ MCP Tasks Conformance (13239.405958ms)
 ℹ tests 27
 ℹ suites 1
 ℹ pass 27
@@ -208,5 +208,5 @@ connection refused
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 13828.108166
-Finished: Mon May  4 00:43:59 PDT 2026
+ℹ duration_ms 13490.6795
+Finished: Mon May  4 13:52:51 PDT 2026

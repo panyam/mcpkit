@@ -147,6 +147,54 @@ class MCPSession:
                     except json.JSONDecodeError:
                         pass
 
+    def open_call_stream(self, method: str, params: dict, callback):
+        """POST a long-lived JSON-RPC call (e.g., events/stream) that returns
+        an SSE response stream. Calls callback(parsed_json) for each data:
+        line — including notifications and the final result frame.
+
+        Blocks until the response stream closes (server-side termination),
+        the caller's callback raises StopIteration, or KeyboardInterrupt
+        bubbles up. Returns the call's response dict (the StreamEventsResult
+        for events/stream) when present, otherwise None.
+        """
+        import urllib.request
+        msg = {"jsonrpc": "2.0", "id": self._id(), "method": method, "params": params}
+        req = urllib.request.Request(self.url, data=json.dumps(msg).encode(), headers={
+            "Content-Type": "application/json",
+            "Mcp-Session-Id": self.sid,
+            "Accept": "text/event-stream",
+        })
+        resp = urllib.request.urlopen(req)
+        buf = b""
+        last_response = None
+        try:
+            while True:
+                chunk = resp.read(1)
+                if not chunk:
+                    break
+                buf += chunk
+                if buf.endswith(b"\n"):
+                    line = buf.decode().rstrip("\r\n")
+                    buf = b""
+                    if not line.startswith("data: "):
+                        continue
+                    try:
+                        frame = json.loads(line[6:])
+                    except json.JSONDecodeError:
+                        continue
+                    # JSON-RPC response (has id, no method) = stream's
+                    # final StreamEventsResult frame; capture and exit.
+                    if frame.get("method") is None and frame.get("id") is not None:
+                        last_response = frame
+                        continue
+                    callback(frame)
+        finally:
+            try:
+                resp.close()
+            except Exception:
+                pass
+        return last_response
+
 
 # ═══════════════════════════════════════════════════════════════════
 # Subcommand: list
@@ -260,6 +308,85 @@ def cmd_listen(session: MCPSession, args):
         session.open_sse_stream(on_message)
     except KeyboardInterrupt:
         print("\nStopped.")
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Subcommand: stream (events/stream — long-lived per-subscription POST)
+# ═══════════════════════════════════════════════════════════════════
+
+def cmd_stream(session: MCPSession, args):
+    """Open events/stream for one event type and print every notification
+    arriving on the call's response stream until Ctrl-C.
+
+    Per spec §"Push-Based Delivery" L223-296: events/stream is a
+    long-lived JSON-RPC request — POST returns SSE, the server delivers
+    notifications/events/* on that response. Per-call notification
+    routing comes from the spec's requestId (echoed in every
+    notification) — but on Streamable HTTP each stream IS its own POST
+    response, so we don't even need to demux: every notification on
+    THIS response stream belongs to THIS call.
+    """
+    if not args.event:
+        sys.exit("ERROR: --event is required for stream mode")
+
+    print("=== MCP Events — events/stream Listener ===\n")
+
+    sid = session.initialize()
+    print(f"Session: {sid}")
+    print(f"Opening events/stream for {args.event} (Ctrl-C to stop)...")
+    if args.max_age > 0:
+        print(f"  maxAge: {args.max_age}s replay floor")
+    print('  Inject in another terminal: make inject TEXT="hello"\n')
+
+    params = {"name": args.event}
+    if args.max_age > 0:
+        params["maxAge"] = args.max_age
+
+    def on_frame(frame):
+        method = frame.get("method", "")
+        p = frame.get("params", {})
+        if method == "notifications/events/active":
+            trunc = p.get("truncated")
+            tag = "ACTIVE (gap recovery)" if trunc else "ACTIVE"
+            print(f"── {tag} " + "─" * 45)
+            print(f"  requestId: {p.get('requestId')}")
+            print(f"  cursor:    {_fmt_cursor(p.get('cursor'))}")
+            if trunc:
+                print(f"  truncated: true (re-fetch authoritative state if relevant)")
+            print()
+        elif method == "notifications/events/event":
+            print("── EVENT " + "─" * 50)
+            print(f"  requestId: {p.get('requestId')}")
+            print(f"  id:        {p.get('eventId', '')}")
+            print(f"  name:      {p.get('name', '')}")
+            print(f"  time:      {p.get('timestamp', '')}")
+            print(f"  cursor:    {_fmt_cursor(p.get('cursor'))}")
+            meta = p.get("_meta")
+            if meta:
+                print(f"  _meta:     {json.dumps(meta, separators=(',', ':'))}")
+            data = p.get("data")
+            if data:
+                print(json.dumps(data, indent=2))
+            print()
+        elif method == "notifications/events/heartbeat":
+            print(f"[heartbeat] requestId={p.get('requestId')} cursor={_fmt_cursor(p.get('cursor'))}")
+        elif method == "notifications/events/error":
+            err = p.get("error", {})
+            print(f"[error] requestId={p.get('requestId')} code={err.get('code')} message={err.get('message')!r}")
+        elif method == "notifications/events/terminated":
+            err = p.get("error") or {}
+            print(f"[TERMINATED] requestId={p.get('requestId')} reason={err.get('message', '(none)')}")
+        elif method:
+            print(f"[notification] {method}")
+        sys.stdout.flush()
+
+    try:
+        result = session.open_call_stream("events/stream", params, on_frame)
+        if result is not None:
+            print("\n── StreamEventsResult (server-initiated close) ──")
+            print(json.dumps(result.get("result", {}), indent=2))
+    except KeyboardInterrupt:
+        print("\nStopped (client-initiated).")
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -596,7 +723,7 @@ def cmd_poll(session: MCPSession, args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="MCP Events client — list, listen, webhook, poll",
+        description="MCP Events client — list, listen, stream, webhook, poll",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--mcp", default="http://localhost:8080/mcp", help="MCP endpoint URL")
@@ -607,7 +734,11 @@ def main():
 
     sub.add_parser("list", help="Show server capabilities: tools, resources, events")
 
-    sub.add_parser("listen", help="SSE push listener")
+    sub.add_parser("listen", help="SSE push listener (legacy GET-stream broadcast model — pre-ε)")
+
+    sp = sub.add_parser("stream", help="events/stream — long-lived per-subscription POST (spec §'Push-Based Delivery' L223)")
+    sp.add_argument("--max-age", type=int, default=0,
+                    help="Per-stream replay floor in seconds (spec §'Cursor Lifecycle' L529). 0 = no floor.")
 
     wp = sub.add_parser("webhook", help="Webhook receiver (auto-refreshes subscription)")
     wp.add_argument("--port", type=int, default=9999, help="Local receiver port")
@@ -625,7 +756,13 @@ def main():
     args = parser.parse_args()
     session = MCPSession(args.mcp)
 
-    cmds = {"list": cmd_list, "listen": cmd_listen, "webhook": cmd_webhook, "poll": cmd_poll}
+    cmds = {
+        "list": cmd_list,
+        "listen": cmd_listen,
+        "stream": cmd_stream,
+        "webhook": cmd_webhook,
+        "poll": cmd_poll,
+    }
     cmds[args.command](session, args)
 
 

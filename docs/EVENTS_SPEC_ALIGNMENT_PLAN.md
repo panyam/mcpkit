@@ -238,6 +238,8 @@ The `nextCursor` and the two `_meta` fields are spec follow-ons added on 2026-05
 
 ### ε — Push delivery (`events/stream` + notifications surface)
 
+**Status:** in flight on `feat/events-epsilon-stream`; 8 commits landed (ε-1 through ε-6 + the ε-4a CallContext refactor), PR pending. Three of the five spec notifications (active, event, heartbeat) plus StreamEventsResult are wired end-to-end. `notifications/events/error` and `/terminated` are SDK-side ready but not emitted server-side — they need source-side signals (transient/terminal failure state) that don't exist until ζ adds the deliveryStatus state machine.
+
 **Goal:** real per-subscription push delivery, replacing today's broadcast-to-all-SSE-listeners model.
 
 **Spec deltas addressed:**
@@ -252,16 +254,15 @@ The `nextCursor` and the two `_meta` fields are spec follow-ons added on 2026-05
 - Client cancellation: HTTP abort or `notifications/cancelled` (stdio) (§"Push-Based Delivery" → "Lifecycle" → "Cancellation" L271)
 - `events/stream` requests are exempt from any general request-concurrency cap (§"Push-Based Delivery" → "Lifecycle" → "Concurrent streams" L272)
 
-**This is the largest single PR. Worth a focused design doc commit before code.** Suggested approach: open a feature branch, write `PLAN.md` at root with the wire-level design (notification routing, heartbeat goroutine lifecycle, demux on stdio), then implement.
-
-**Files touched:**
-- `experimental/ext/events/events.go` — register `events/stream` handler. Validate subscription, send `notifications/events/active`, kick off the per-stream goroutines.
-- New file: `experimental/ext/events/stream.go` — per-stream lifecycle: heartbeat ticker (≥30s), event fanout subscription, `requestId`-tagged notification emission, error notification path, terminated path
-- `experimental/ext/events/yield.go` — sources need a `Subscribe()` channel API (today only `Poll` and `Latest`); the per-stream goroutine selects on it
-- `server/server.go` (mcpkit core) — verify `Server.Broadcast` is replaceable per-subscription; may need a `Server.SendNotification(connID, notif)` if not present
-- Go SDK `experimental/ext/events/clients/go/stream.go` (NEW) — opens an `events/stream`, listens for `notifications/events/*`, routes by `requestId`. Reconnects on dead-stream detection (no notification for 2× heartbeat interval)
-- Python SDK — same shape
-- Discord + telegram demos — replace the manual notifBroker pattern with the new stream client; the demo's step 7 becomes "open events/stream against discord.message + discord.typing"
+**Files touched (as built):**
+- `experimental/ext/events/yield.go` — `YieldingSource.Subscribe(ctx) <-chan SubscriberEvent` channel API + `WithSubscriberBuffer(n)` option (default 64). Drop-on-full policy: a slow subscriber doesn't back-pressure yield; dropped events surface as `Truncated=true` on the next successful send. (ε-1)
+- New file `experimental/ext/events/stream.go` — `registerStream` + per-stream goroutine. `select(event, heartbeat, ctx.Done)` loop emits `notifications/events/{active, event, heartbeat}` and returns `StreamEventsResult{_meta:{}}` on cancel. Maps `SubscriberEvent.Truncated` onto a fresh `active{truncated:true}` per spec L285. (ε-2/ε-3)
+- `experimental/ext/events/events.go` — `Config.StreamHeartbeatInterval` (default 30s); `Register()` wires `registerStream`. New `ErrCodeDeliveryModeUnsupported = -32017` for TypedSource (which lacks Subscribe). (ε-2)
+- mcpkit core `client/client.go` — typed `CallContext` (per constraint C1): embeds `context.Context`, carries a per-call notification hook for long-lived calls. Streamable HTTP transport threads the hook into its SSE-frame loop; other transports stub. **Replaces** the briefly-introduced `CallWithOptions` functional-options API from ε-4a. (ε-4a)
+- Go SDK `experimental/ext/events/clients/go/stream.go` (NEW) — `Stream(parent, sess, opts) (*StreamCall, error)` with typed callbacks `OnEvent`, `OnHeartbeat`, `OnTruncated`, `OnError`, `OnTerminated`. Returns once the initial `active` arrives; `Stop()` cancels the underlying call cleanly. (ε-4b)
+- Python SDK `events_client.py` — `MCPSession.open_call_stream(method, params, callback)` + `cmd_stream` subcommand. Honors `--max-age`. Pretty-prints active / event / heartbeat / error / terminated frames. (ε-5)
+- Discord + telegram demos — `notifBroker` removed entirely; push steps use `eventsclient.Stream`. Discord live step opens TWO concurrent streams (message + typing) demonstrating per-stream isolation. (ε-6)
+- Discord + telegram `e2e_test.go` — new `TestE2EStreamDelivery` + `TestE2EStreamCursorless` alongside the preserved `TestE2EPushDelivery` (broadcast model kept until η deletes `events.Emit`).
 
 **Borrowable from TS reference SDK (`modelcontextprotocol/typescript-sdk` branch `events-bufferemits-and-examples`):**
 - Schema definitions for the five notifications: `EventActiveNotificationSchema`, `EventNotificationSchema`, `EventErrorNotificationSchema`, `EventTerminatedNotificationSchema`, `EventHeartbeatNotificationSchema` in `packages/core/src/types/schemas.ts`
@@ -270,17 +271,17 @@ The `nextCursor` and the two `_meta` fields are spec follow-ons added on 2026-05
 
 The TS reference's heartbeat doesn't carry a cursor today; the spec now requires it. We get to ship this correctly the first time.
 
-**Acceptance:**
-- `make test-experimental` green
-- Integration test: open `events/stream`, verify `notifications/events/active` arrives, inject events, verify `notifications/events/event` with matching `requestId`, close, verify `StreamEventsResult` (HTTP path)
-- Integration test: heartbeat fires within 30s of stream open; payload contains valid cursor
-- Integration test: open two concurrent streams with different `requestId`s, inject events for one subscription, verify the other stream sees nothing (per-stream isolation)
-- Discord demo step 7 uses real `events/stream` (visible in the wire trace)
+**Tests (as built):**
+- `experimental/ext/events/yield_test.go` — `TestYieldingSource_Subscribe*` (4 tests: receive, multi-subscriber fanout, ctx-cancel cleanup, drop-on-slow-consumer with Truncated semantics) (ε-1)
+- `experimental/ext/events/stream_test.go` — 7 tests via InProcessTransport with notification capture: validation rejection, active-first ordering, event with requestId, StreamEventsResult final frame, heartbeat timing + cursorless heartbeat (ε-2)
+- `experimental/ext/events/stream_routing_test.go` — concurrent-stream isolation (different sources + same source) + gap-recovery active emission (ε-3)
+- `client/client_per_call_notify_test.go` — `TestCallContext_*` (per-call hook fires AND global callback STILL fires — additive contract) (ε-4a)
+- `experimental/ext/events/clients/go/stream_test.go` — `TestStream_DeliversEventsViaCallback`, `TestStream_HeartbeatCallback`, `TestStream_StopEndsTheCall`, `TestStream_RejectsInitialError` (ε-4b)
+- `examples/events/{discord,telegram}/e2e_test.go` — `TestE2EStreamDelivery`, `TestE2EStreamCursorless` per demo (ε-6)
 
-**Tests:**
-- `stream_test.go` for lifecycle (active → events → heartbeat → cancel)
-- `stream_routing_test.go` for the multi-stream case
-- Update demo end-to-end tests
+**Race-detector:** clean across all event modules. One pre-existing race in `examples/events/telegram/handlers_test.go:TestWebhookHMACSignature_MCPHeaders` is tracked as a separate issue (filed during the ε branch — captured-headers race in the httptest handler, predates this work).
+
+**Reference comparison (TS SDK):** notification field names verified against `modelcontextprotocol/typescript-sdk` `EventActiveNotificationSchema` etc. Heartbeat carrying cursor (which the TS SDK doesn't yet do) shipped correctly per the updated spec.
 
 **Risk:** Medium. New transport surface. Mitigations: keep the old `Server.Broadcast` path until all callers migrate; write the design doc commit first.
 

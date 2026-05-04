@@ -1,8 +1,8 @@
 === Stage 4/12: ui (make test-ui) ===
-Started: Mon May  4 00:42:58 PDT 2026
+Started: Mon May  4 13:51:54 PDT 2026
 cd ext/ui && /Library/Developer/CommandLineTools/usr/bin/make test
 go test ./... -count=1 -timeout 30s
-ok  	github.com/panyam/mcpkit/ext/ui	0.715s
+ok  	github.com/panyam/mcpkit/ext/ui	0.780s
 cd assets && pnpm install --frozen-lockfile --silent && pnpm test
 
 > @mcpkit/app-bridge@0.1.0 test /Users/dzshrh/newstack/mcpkit/main/ext/ui/assets
@@ -17,11 +17,11 @@ stderr | mcp-app-bridge.test.ts > pre-handshake guarding > sendToolListChanged i
 stderr | mcp-app-bridge.test.ts > pre-handshake guarding > log is silently dropped before handshake
 [MCPApp] notify blocked before handshake: ui/log
 
- ✓ mcp-app-bridge.test.ts (48 tests) 691ms
+ ✓ mcp-app-bridge.test.ts (48 tests) 675ms
 
  Test Files  1 passed (1)
       Tests  48 passed (48)
-   Start at  00:43:01
-   Duration  1.36s (transform 31ms, setup 0ms, collect 30ms, tests 691ms, environment 339ms, prepare 68ms)
+   Start at  13:51:57
+   Duration  1.31s (transform 31ms, setup 0ms, collect 27ms, tests 675ms, environment 346ms, prepare 100ms)
 
-Finished: Mon May  4 00:43:03 PDT 2026
+Finished: Mon May  4 13:51:58 PDT 2026
