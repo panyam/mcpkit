@@ -190,5 +190,33 @@ done in parallel after Fix 1 lands.
 - Partial inputResponses fulfillment test (P2 — nice to have)
 - TTL expiry post-path test (P2 — hard to test conformantly)
 - Polling rate-limit test (P2 — hard to test conformantly)
-- v2-08 cancel-on-terminal semantics (waiting on Luca's decision on silent-ack vs -32602)
 - `result_type` vs `resultType` spec text update (flag to Luca, not our code change)
+
+## Resolved (post-review)
+
+- v2-08 cancel-on-terminal semantics — spec settled on SHOULD -32602 in
+  modelcontextprotocol/specification commit d963ad0. Our -32602 is
+  spec-aligned; the v2-08 test comment now points to that commit.
+- assertCreateTaskResult forbidden-field validation (no result / error /
+  inputRequests on the envelope) — added to the helper.
+- ISO-8601 timestamp validation on createdAt + lastUpdatedAt — added to
+  the helper alongside the forbidden-field rule.
+- v2-30 (tasks/get with unknown taskId returns -32602) — new scenario
+  mirrors v2-08 for the read path.
+- v2-31 (legacy v1 `task` param ignored) — new scenario asserts servers
+  tolerate a legacy hint without erroring or promoting sync tools.
+- v2-29 (partial inputResponses fulfillment) — new scenario backed by a
+  `multi_input` fixture that fans two parallel TaskElicits. Required a
+  small server fix in `requestInputV2`: the task now stays in
+  input_required when other inputs are still pending, so partial updates
+  don't briefly flip status to "working" and back.
+- v2-24 / v2-24b / v2-24c repurposed from response-header assertions
+  (mcpkit-specific echo behavior, already covered by Go tests
+  `TestV2_McpName*` / `TestV2_McpMethod*`) to request-header tolerance —
+  a real SEP-2243 conformance check (server tolerates `Mcp-Method` /
+  `Mcp-Name` request headers; body is authoritative). Required adding
+  `opts.headers` to the raw fetch helpers so tests can attach arbitrary
+  request headers.
+- Conformance suite scrubbed of mcpkit-specific framing (in-repo / in-tree
+  references, "mcpkit picks…" phrasing in open-spec-questions). The suite
+  now reads as a brand-neutral SEP-2663 / 2322 / 2575 / 2243 server check.

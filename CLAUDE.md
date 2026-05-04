@@ -12,7 +12,7 @@ make test-e2e          # E2E tests (auth + apps)
 make testconf          # MCP conformance suite (needs Node.js)
 make testconfauth      # Auth conformance (client OAuth)
 make testconf-tasks    # Tasks v1 conformance (27 scenarios, self-contained)
-make testconf-tasks-v2 # Tasks v2 conformance (27 scenarios, self-contained, SEP-2663)
+make testconf-tasks-v2 # Tasks v2 conformance (33 scenarios, self-contained, SEP-2663)
 make testconf-mrtr     # MRTR conformance (7 scenarios + 1 deferred skip, SEP-2322)
 make testconf-list-ttl # List-TTL conformance (5 scenarios, SEP-2549)
 make testall           # Everything (12 stages) + Keycloak + HTML report
@@ -53,12 +53,13 @@ Project-wide: `CONSTRAINTS.md`. Per-package: `core/CONSTRAINTS.md`, `server/CONS
 - **CORS for browser clients**: MCP servers need `Mcp-Session-Id` in both Allow-Headers and Expose-Headers, plus `DELETE` in allowed methods. Use `servicekit/middleware.CORS()` with options.
 - **Demokit non-interactive + browser steps**: Steps that open a browser and expect user action will fail in `--non-interactive` mode. Interactive mode is the primary path.
 - **Three-state TTL needs `*int` + omitempty**: SEP-2549 distinguishes `nil` (no guidance), `&0` (do not cache), `&N>0` (fresh for N seconds). Plain `int` with omitempty would conflate `nil` with `&0`. Same pattern fits any spec field with explicit-zero semantics.
+- **Conformance suites are brand-neutral**: `conformance/*/` assert what the spec says, not what mcpkit does. mcpkit-specific behavior (e.g., echoing SEP-2243 routing headers on responses) belongs in `server/*_test.go`, not in conformance scenarios. The conformance suites are the marketing — keep them framed as "what any server must do."
 
 Module-specific gotchas live in their READMEs.
 
 ## Conformance
 
-Server: 30/30, Auth: 14/14, Apps: 21, Tasks v1: 27/27, Tasks v2: 27/27 (SEP-2663), MRTR: 7/7 (SEP-2322, ephemeral; 1 task-composition scenario skipped pending follow-up), List-TTL: 5/5 (SEP-2549), Keycloak: 12/12, testall: 12/12 stages.
+Server: 30/30, Auth: 14/14, Apps: 21, Tasks v1: 27/27, Tasks v2: 33/33 (SEP-2663), MRTR: 7/7 (SEP-2322, ephemeral; 1 task-composition scenario skipped pending follow-up), List-TTL: 5/5 (SEP-2549), Keycloak: 12/12, testall: 12/12 stages.
 
 ## Tasks v1 vs v2
 
