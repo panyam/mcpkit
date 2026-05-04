@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/experimental/ext/events"
+	eventsclient "github.com/panyam/mcpkit/experimental/ext/events/clients/go"
 	"github.com/panyam/mcpkit/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -116,6 +118,88 @@ func TestE2EPollDelivery(t *testing.T) {
 	assert.Equal(t, "hello", data.Content)
 	assert.Equal(t, "guild-1", data.GuildID)
 	assert.Equal(t, "channel-1", data.ChannelID)
+}
+
+// TestE2EStreamDelivery exercises the events/stream push path end-to-end
+// via the typed Go SDK helper (eventsclient.Stream). Mirrors what
+// walkthrough.go Step 3 does at the demo layer:
+//
+//   - Open events/stream against discord.message
+//   - yield() server-side
+//   - Verify OnEvent callback fires with the spec EventOccurrence shape
+//   - Stop() the stream and confirm clean shutdown via Done()
+//
+// This is the E2E coverage for the new push delivery model. The legacy
+// broadcast path is still exercised by TestE2EPushDelivery below; both
+// stay until ε-6's deprecation lands in η.
+func TestE2EStreamDelivery(t *testing.T) {
+	srv, _, yield, _ := buildTestStack()
+	c, _ := connectClient(t, srv)
+	defer c.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	got := make(chan events.Event, 4)
+	stream, err := eventsclient.Stream(ctx, c, eventsclient.StreamOptions{
+		EventName: "discord.message",
+		OnEvent:   func(ev events.Event) { got <- ev },
+	})
+	require.NoError(t, err, "Stream open should succeed against the discord demo stack")
+	defer stream.Stop()
+
+	require.NoError(t, yield(newDiscordEvent("g1", "c1", "alice", "stream-test", time.Now())))
+
+	select {
+	case ev := <-got:
+		assert.Equal(t, "discord.message", ev.Name)
+		assert.NotEmpty(t, ev.EventID)
+		assert.NotNil(t, ev.Cursor, "discord.message is cursored — wire MUST carry a non-null cursor")
+	case <-time.After(2 * time.Second):
+		t.Fatal("OnEvent never fired within 2s of yield")
+	}
+
+	// Verify Stop() closes the goroutine cleanly.
+	stream.Stop()
+	select {
+	case <-stream.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stream goroutine did not exit within 2s of Stop()")
+	}
+}
+
+// TestE2EStreamCursorless verifies events/stream against a cursorless
+// source delivers events with `cursor: null` on the wire. Mirrors
+// walkthrough.go Step 5. Catches a regression where the typed Stream
+// callback might silently drop the cursor field or coerce nil to "".
+func TestE2EStreamCursorless(t *testing.T) {
+	srv, _, yieldTyping, _ := buildTestStackWithTyping()
+	c, _ := connectClient(t, srv)
+	defer c.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	got := make(chan events.Event, 4)
+	stream, err := eventsclient.Stream(ctx, c, eventsclient.StreamOptions{
+		EventName: "discord.typing",
+		OnEvent:   func(ev events.Event) { got <- ev },
+	})
+	require.NoError(t, err)
+	defer stream.Stop()
+
+	require.NoError(t, yieldTyping(DiscordTypingData{
+		GuildID: "g", ChannelID: "c", User: "alice",
+		StartedAt: time.Now().Format(time.RFC3339),
+	}))
+
+	select {
+	case ev := <-got:
+		assert.Equal(t, "discord.typing", ev.Name)
+		assert.Nil(t, ev.Cursor, "cursorless source MUST emit cursor:null on the wire (spec L294)")
+	case <-time.After(2 * time.Second):
+		t.Fatal("OnEvent never fired within 2s of yieldTyping")
+	}
 }
 
 // TestE2EPushDelivery verifies the library's automatic push fanout — yield()
