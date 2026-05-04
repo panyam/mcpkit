@@ -279,12 +279,13 @@ func registerPoll(srv *server.Server, sourceMap map[string]EventSource) {
 		// Spec §"Poll-Based Delivery" → "Request: events/poll" L139-149:
 		// flat top-level shape — no subscriptions[] wrapper. Phase 1 dropped
 		// batching at the protocol level; δ-1 drops the now-vestigial
-		// wrapper at the wire level.
+		// wrapper at the wire level. δ-2 added MaxAge.
 		var req struct {
 			Name      string         `json:"name"`
 			Params    map[string]any `json:"params,omitempty"`
 			Cursor    *string        `json:"cursor"`
 			MaxEvents int            `json:"maxEvents,omitempty"`
+			MaxAge    int            `json:"maxAge,omitempty"` // seconds; 0 = no floor
 		}
 		if err := json.Unmarshal(params, &req); err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
@@ -332,6 +333,35 @@ func registerPoll(srv *server.Server, sourceMap map[string]EventSource) {
 		if hasMore {
 			events = events[:req.MaxEvents]
 			resultCursor = events[len(events)-1].CursorStr()
+		}
+
+		// δ-2: maxAge replay floor per spec §"Cursor Lifecycle" →
+		// "Bounding replay with maxAge" L529. Drop events whose
+		// timestamp predates now - maxAge. If filtering removes any,
+		// set Truncated=true (signals the gap to the client).
+		// When req.MaxAge is 0 (default), no filtering — preserves
+		// pre-δ-2 behavior for callers that don't pass the field.
+		if req.MaxAge > 0 && len(events) > 0 {
+			floor := time.Now().Add(-time.Duration(req.MaxAge) * time.Second)
+			kept := make([]Event, 0, len(events))
+			for _, e := range events {
+				ts, err := time.Parse(time.RFC3339, e.Timestamp)
+				if err != nil || !ts.Before(floor) {
+					kept = append(kept, e)
+				}
+			}
+			if len(kept) < len(events) {
+				pr.Truncated = true
+				// Per spec L529: when filtering removes everything,
+				// reset cursor to source head ("now") so the client
+				// doesn't re-poll for the dropped events. When some
+				// events survived, the resultCursor (last delivered)
+				// is already past the floor.
+				if len(kept) == 0 && !cursorless {
+					resultCursor = source.Latest()
+				}
+			}
+			events = kept
 		}
 
 		// For cursorless sources, the wire `cursor` is null regardless of

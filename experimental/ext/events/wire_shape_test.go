@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -132,6 +134,158 @@ func TestPoll_RejectsLegacyWrapper(t *testing.T) {
 	assert.Contains(t, resp.Error.Message, "legacy",
 		"error message should explain the wrapper is rejected; got %q", resp.Error.Message)
 	assert.Contains(t, resp.Error.Message, "L139", "error should cite the spec section")
+}
+
+// TestPoll_MaxAgeFiltersOldEvents verifies the spec's maxAge replay
+// floor per §"Cursor Lifecycle" → "Bounding replay with maxAge" L529.
+// Server discards events whose timestamp predates `now - maxAge` and
+// signals the gap via Truncated=true. Without filtering, a long-offline
+// client reconnects with a stale cursor and triggers an unbounded
+// backfill — maxAge bounds the worst case.
+//
+// This test uses a real YieldingSource registered on a stack so the
+// timestamps come from the actual yield path (Now-based per yield call).
+func TestPoll_MaxAgeFiltersOldEvents(t *testing.T) {
+	srv, src := buildPollFilterStack(t)
+
+	// Yield 2 events that are "old" (manipulate their timestamp via
+	// the underlying source) and 2 fresh ones. Easier to backdate
+	// the events post-yield by walking the source's ring directly —
+	// but for δ-2's purposes we just yield them at different real
+	// times and use a small maxAge to filter.
+
+	// Yield "old" events with a backdated timestamp 10s in the past.
+	src.entries = append(src.entries,
+		yieldedEntry[fakeFilterPayload]{
+			data: fakeFilterPayload{Msg: "old1"},
+			event: Event{
+				EventID:   "evt_old_1",
+				Name:      "fake.event",
+				Timestamp: time.Now().Add(-10 * time.Second).Format(time.RFC3339),
+				Data:      json.RawMessage(`{"msg":"old1"}`),
+				Cursor:    cursorPtr("1"),
+			},
+		},
+		yieldedEntry[fakeFilterPayload]{
+			data: fakeFilterPayload{Msg: "old2"},
+			event: Event{
+				EventID:   "evt_old_2",
+				Name:      "fake.event",
+				Timestamp: time.Now().Add(-8 * time.Second).Format(time.RFC3339),
+				Data:      json.RawMessage(`{"msg":"old2"}`),
+				Cursor:    cursorPtr("2"),
+			},
+		},
+	)
+	// Fresh events.
+	src.entries = append(src.entries,
+		yieldedEntry[fakeFilterPayload]{
+			data: fakeFilterPayload{Msg: "fresh1"},
+			event: Event{
+				EventID:   "evt_fresh_1",
+				Name:      "fake.event",
+				Timestamp: time.Now().Format(time.RFC3339),
+				Data:      json.RawMessage(`{"msg":"fresh1"}`),
+				Cursor:    cursorPtr("3"),
+			},
+		},
+	)
+
+	// Poll with maxAge=5s — should drop both old events, keep the fresh one.
+	rawReq, _ := json.Marshal(map[string]any{
+		"name":   "fake.event",
+		"cursor": "0",
+		"maxAge": 5,
+	})
+	resp, err := srv.Dispatch(context.Background(), &core.Request{
+		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "events/poll", Params: rawReq,
+	})
+	require.NoError(t, err)
+	require.Nil(t, resp.Error)
+
+	body, err := json.Marshal(resp.Result)
+	require.NoError(t, err)
+	var bodyMap map[string]any
+	require.NoError(t, json.Unmarshal(body, &bodyMap))
+
+	events, _ := bodyMap["events"].([]any)
+	assert.Len(t, events, 1, "maxAge=5s must drop the 2 old events; got %d kept", len(events))
+	assert.Equal(t, true, bodyMap["truncated"], "filtering must set truncated=true to signal the gap")
+}
+
+// TestPoll_MaxAgeZeroMeansNoFilter is the counter-test: maxAge omitted
+// or set to 0 must NOT filter anything. Catches over-eager filtering
+// that would silently drop events when the client expects everything.
+func TestPoll_MaxAgeZeroMeansNoFilter(t *testing.T) {
+	srv, src := buildPollFilterStack(t)
+	// Yield one ancient event.
+	src.entries = append(src.entries,
+		yieldedEntry[fakeFilterPayload]{
+			data: fakeFilterPayload{Msg: "ancient"},
+			event: Event{
+				EventID:   "evt_ancient",
+				Name:      "fake.event",
+				Timestamp: time.Now().Add(-1 * time.Hour).Format(time.RFC3339),
+				Data:      json.RawMessage(`{"msg":"ancient"}`),
+				Cursor:    cursorPtr("1"),
+			},
+		},
+	)
+
+	rawReq, _ := json.Marshal(map[string]any{
+		"name":   "fake.event",
+		"cursor": "0",
+		// maxAge intentionally omitted
+	})
+	resp, err := srv.Dispatch(context.Background(), &core.Request{
+		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "events/poll", Params: rawReq,
+	})
+	require.NoError(t, err)
+	require.Nil(t, resp.Error)
+
+	body, _ := json.Marshal(resp.Result)
+	var bodyMap map[string]any
+	_ = json.Unmarshal(body, &bodyMap)
+	events, _ := bodyMap["events"].([]any)
+	assert.Len(t, events, 1, "no maxAge means no filter — ancient events must still be returned")
+	// Truncated may or may not be present depending on omitempty
+	if v, ok := bodyMap["truncated"]; ok {
+		assert.Equal(t, false, v, "no filtering happened — truncated must be false (or omitted)")
+	}
+}
+
+// --- shared helpers for δ-2 tests ---
+
+type fakeFilterPayload struct {
+	Msg string `json:"msg"`
+}
+
+func cursorPtr(s string) *string { return &s }
+
+// buildPollFilterStack builds a stack with a writable YieldingSource so
+// tests can inject events with crafted timestamps. Returns the source
+// directly (not a yield closure) so tests can manipulate the buffer.
+func buildPollFilterStack(t *testing.T) (*server.Server, *YieldingSource[fakeFilterPayload]) {
+	t.Helper()
+	src, _ := NewYieldingSource[fakeFilterPayload](EventDef{Name: "fake.event"})
+	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
+	Register(Config{
+		Sources:                  []EventSource{src},
+		Webhooks:                 NewWebhookRegistry(),
+		Server:                   srv,
+		UnsafeAnonymousPrincipal: "test-principal",
+	})
+	initParams := json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)
+	resp, err := srv.Dispatch(context.Background(), &core.Request{
+		JSONRPC: "2.0", ID: json.RawMessage(`0`), Method: "initialize", Params: initParams,
+	})
+	require.NoError(t, err)
+	require.Nil(t, resp.Error)
+	_, err = srv.Dispatch(context.Background(), &core.Request{
+		JSONRPC: "2.0", Method: "notifications/initialized",
+	})
+	require.NoError(t, err)
+	return srv, src
 }
 
 // TestInvalidCallbackUrl_UsesSpecCode verifies the InvalidCallbackUrl error
