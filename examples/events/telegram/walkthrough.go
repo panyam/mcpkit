@@ -272,7 +272,6 @@ func runDemo() {
 			sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
 				EventName:   "telegram.message",
 				CallbackURL: hookSrv.URL,
-				SubID:       "demo-telegram-webhook",
 			})
 			if err != nil {
 				fmt.Printf("    ERROR: subscribe failed: %v\n", err)
@@ -285,8 +284,9 @@ func runDemo() {
 			// refused" retry log on the server side after the demo ends.
 			defer func() {
 				sub.Stop()
+				// γ-2: unsubscribe by tuple (§"Unsubscribing" L509).
 				_, _ = c.Call("events/unsubscribe", map[string]any{
-					"id":       sub.ID(),
+					"name":     "telegram.message",
 					"delivery": map[string]any{"url": hookSrv.URL},
 				})
 			}()

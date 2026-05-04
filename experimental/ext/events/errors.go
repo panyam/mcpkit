@@ -18,12 +18,13 @@ package events
 //   -32016 SubscriptionNotFound    — Unsubscribe target doesn't exist
 //   -32017 DeliveryModeUnsupported — Event type doesn't support requested mode
 //
-// Only the two codes the events handlers currently emit are declared
-// below. Subsequent spec-alignment PRs (γ for auth, ζ for delivery
-// status / unsubscribe lookup, etc.) add the remaining constants in
-// the commit that introduces the behavior using them — keeps each
-// new code visible alongside its first use.
+// Only codes the events handlers currently emit are declared below.
+// Subsequent spec-alignment PRs (ζ for delivery status / unsubscribe
+// lookup, etc.) add the remaining constants in the commit that
+// introduces the behavior using them — keeps each new code visible
+// alongside its first use.
 const (
 	ErrCodeEventNotFound      = -32011 // Unknown event name
+	ErrCodeUnauthorized       = -32012 // Caller lacks permission for this event/params
 	ErrCodeInvalidCallbackUrl = -32015 // Webhook URL unreachable / rejected
 )

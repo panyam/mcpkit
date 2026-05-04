@@ -114,6 +114,36 @@ go run . --serve -webhook-ttl 5s
 
 Per spec, the webhook signing secret is **client-supplied only** (`whsec_` + base64 of 24-64 random bytes). The python `make webhook` and the Go SDK both auto-generate when the application doesn't supply one. See [`experimental/ext/events/README.md`](../../../experimental/ext/events/README.md) for the full configuration reference.
 
+## Auth posture (γ): demo escape vs real OIDC
+
+Per spec §"Subscription Identity" L361 webhook subscribe MUST require an authenticated principal. The demo auto-detects which posture to run in based on environment variables:
+
+```bash
+# Demo posture (default): no env vars set.
+# Server runs anonymous; events.Config.UnsafeAnonymousPrincipal="demo-user"
+# is the escape hatch so make demo works end-to-end without an OIDC provider.
+# Server logs:  [server] auth: demo (anonymous → UnsafeAnonymousPrincipal)
+make serve
+
+# Real-OIDC posture: set OAUTH_ISSUER (and optionally OAUTH_AUDIENCE / OAUTH_JWKS_URL).
+# Server wires server.WithAuth(JWTValidator) and follows the spec strictly —
+# anonymous webhook subscribes are rejected with -32012 Unauthorized.
+# Server logs:  [server] auth: real OIDC (...) — anonymous webhook subscribes rejected per spec
+OAUTH_ISSUER=http://localhost:8081/realms/demo \
+OAUTH_AUDIENCE=mcp-events \
+make serve
+```
+
+Recognized env vars:
+
+| Env var | Default | Notes |
+|---|---|---|
+| `OAUTH_ISSUER` | (unset → demo posture) | OIDC issuer URL. For Keycloak: `http://localhost:8081/realms/<realm>`. Setting this enables real auth. |
+| `OAUTH_JWKS_URL` | `<issuer>/protocol/openid-connect/certs` | Override for non-Keycloak providers. |
+| `OAUTH_AUDIENCE` | `mcp-events` | Tokens MUST have this audience claim. |
+
+The events package itself depends only on `core.Claims` (the abstract auth contract), not on any specific auth implementation — see [`experimental/ext/events/README.md`](../../../experimental/ext/events/README.md) "Auth + extension composition" for the design rationale.
+
 ## Make targets
 
 | Target | Description |

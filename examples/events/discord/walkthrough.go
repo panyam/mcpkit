@@ -364,7 +364,6 @@ func runDemo() {
 			sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
 				EventName:     "discord.message",
 				CallbackURL:   hookSrv.URL,
-				SubID:         "demo-webhook",
 				RefreshFactor: 0.5,
 				OnRefresh:     func() { atomic.AddInt32(&refreshes, 1) },
 			})
@@ -379,8 +378,11 @@ func runDemo() {
 			// refused" retry log on the server side after the demo ends.
 			defer func() {
 				sub.Stop()
+				// γ-2: unsubscribe by tuple (§"Unsubscribing" L509) —
+				// (name, params, delivery.url). The derived id is not
+				// accepted as input.
 				_, _ = c.Call("events/unsubscribe", map[string]any{
-					"id":       sub.ID(),
+					"name":     "discord.message",
 					"delivery": map[string]any{"url": hookSrv.URL},
 				})
 			}()
@@ -423,7 +425,6 @@ func runDemo() {
 		Note("Per spec, delivery.secret is REQUIRED on every events/subscribe — there is no server-side fallback. The server rejects at subscribe time so a subscription never exists that produces unverifiable deliveries. The Go SDK auto-generates a conforming whsec_ value via events.GenerateSecret() when SubscribeOptions.Secret is empty; this step makes a raw client.Call to bypass that and demonstrate the validator.").
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			_, err := c.Call("events/subscribe", map[string]any{
-				"id":   "validation-empty",
 				"name": "discord.message",
 				"delivery": map[string]any{
 					"mode": "webhook",
@@ -449,7 +450,6 @@ func runDemo() {
 		Note("The validator enforces the full Standard Webhooks format: whsec_ followed by base64 of 24-64 random bytes. A non-prefixed value, a too-short value, or non-base64 garbage all fail with -32602 InvalidParams. This is what catches IaC-pinned secrets that don't match the spec format before they create a broken subscription.").
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			_, err := c.Call("events/subscribe", map[string]any{
-				"id":   "validation-bad",
 				"name": "discord.message",
 				"delivery": map[string]any{
 					"mode":   "webhook",
@@ -469,18 +469,44 @@ func runDemo() {
 			return
 		})
 
-	// --- Step 9: Spec validation — valid secret accepted, response omits secret ---
-	demo.Step("Spec validation: valid whsec_ accepted; response does NOT echo secret").
+	// --- Step 9: Spec validation — client-supplied id is rejected (γ-3) ---
+	demo.Step("Spec validation: client-supplied id is rejected").
+		Arrow("Host", "Server", "events/subscribe { id: 'mine', ... }").
+		DashedArrow("Server", "Host", "-32602 InvalidParams: client-supplied id is not accepted").
+		Note("Per spec §\"Subscription Identity\" → \"Key composition\" L363: \"There is no client-generated id — a subscription is fully determined by what it listens for, where it delivers, and who asked.\" The server derives the id from (principal, name, params, url) and returns it; old SDKs sending an id field get a loud -32602 instead of a silent mis-keying.").
+		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
+			_, err := c.Call("events/subscribe", map[string]any{
+				"id":   "client-picked-id",
+				"name": "discord.message",
+				"delivery": map[string]any{
+					"mode":   "webhook",
+					"url":    "http://localhost:1/sink",
+					"secret": events.GenerateSecret(),
+				},
+			})
+			rpcErr, ok := err.(*client.RPCError)
+			if !ok {
+				fmt.Printf("    UNEXPECTED: want *client.RPCError, got %v\n", err)
+				return
+			}
+			fmt.Printf("    code=%d  message=%q\n", rpcErr.Code, rpcErr.Message)
+			if rpcErr.Code != -32602 {
+				fmt.Printf("    UNEXPECTED: want code=-32602\n")
+			}
+			return
+		})
+
+	// --- Step 10: Spec validation — valid secret accepted, response omits secret ---
+	demo.Step("Spec validation: valid whsec_ accepted; response carries server-derived id, no secret").
 		Arrow("Host", "Host", "events.GenerateSecret() → whsec_<base64 of 32 bytes>").
 		Arrow("Host", "Server", "events/subscribe { delivery: { secret: whsec_<valid> } }").
-		DashedArrow("Server", "Host", "{ id, cursor, refreshBefore }   (NO secret field per spec)").
-		Note("Counter-test for the validator: a freshly-generated whsec_ value is accepted. Note the response carries id + cursor + refreshBefore but no secret — the spec dropped it because the client supplied it (server doesn't need to echo) and echoing risks leaks via proxies, logs, or IDE network panes. The receiver verifies signatures with the value the client already knows.").
+		DashedArrow("Server", "Host", "{ id: sub_<base64-of-16-bytes>, cursor, refreshBefore }   (no secret per spec)").
+		Note("Counter-test: a freshly-generated whsec_ value is accepted. The response carries the server-derived id (sub_<base64>) per spec §\"Subscription Identity\" → \"Derived id\" L367 — non-load-bearing for security, surfaced as X-MCP-Subscription-Id on delivery POSTs (γ-4 wires the header). The response does NOT echo the secret because the client already supplied it; echoing would risk leaks via proxies / logs / IDE network panes.").
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			supplied := events.GenerateSecret()
 			fmt.Printf("    supplied secret:  %s...\n", truncate(supplied, 16))
 
 			res, err := c.Call("events/subscribe", map[string]any{
-				"id":   "validation-good",
 				"name": "discord.message",
 				"delivery": map[string]any{
 					"mode":   "webhook",
@@ -498,20 +524,21 @@ func runDemo() {
 				RefreshBefore string `json:"refreshBefore"`
 			}
 			_ = json.Unmarshal(res.Raw, &resp)
-			fmt.Printf("    response.id:            %q\n", resp.ID)
+			fmt.Printf("    response.id:            %q  (server-derived sub_<base64>)\n", resp.ID)
 			fmt.Printf("    response.refreshBefore: %q\n", resp.RefreshBefore)
 			fmt.Printf("    response.secret:        %q  (empty per spec)\n", resp.Secret)
 
-			// Eagerly unsubscribe so the validation-good subscription doesn't
-			// tie up a delivery target for a TTL window after the demo ends.
+			// Eagerly unsubscribe (γ-2: tuple form, no id) so the
+			// subscription doesn't tie up a delivery target for a TTL
+			// window after the demo ends.
 			_, _ = c.Call("events/unsubscribe", map[string]any{
-				"id":       "validation-good",
+				"name":     "discord.message",
 				"delivery": map[string]any{"url": "http://localhost:1/sink"},
 			})
 			return
 		})
 
-	// --- Step 10: Live Discord interaction ---
+	// --- Step 11: Live Discord interaction ---
 	// Uses demokit's Timeout (safety upper bound) + Cancellable (press-enter
 	// to end early in interactive non-TUI mode). Output streams live as
 	// events arrive — demokit v0.0.8+ tees step stdout to the renderer in

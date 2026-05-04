@@ -27,11 +27,6 @@ type SubscribeOptions struct {
 	// against this same value.
 	Secret string
 
-	// SubID is the client-side subscription id (for now; γ replaces
-	// id-keyed subscription identity with the (principal, name, params,
-	// url) tuple per spec).
-	SubID string
-
 	// Cursor controls the resume point. nil = "from now" (server returns
 	// its current head). Non-nil = explicit resume cursor.
 	Cursor *string
@@ -157,9 +152,13 @@ func (s *Subscription) Stop() {
 // subscribe performs one events/subscribe round-trip and updates state.
 // Caller is responsible for firing OnRefresh / OnRecover; this method
 // only handles the network call and state update.
+//
+// Per spec §"Subscription Identity" → "Derived id" L367, the server
+// derives the subscription id from (principal, name, params, url) — the
+// SDK does not send an id; it reads the derived id back from the
+// response (Subscription.ID()).
 func (s *Subscription) subscribe() error {
 	params := map[string]any{
-		"id":   s.opts.SubID,
 		"name": s.opts.EventName,
 		"delivery": map[string]any{
 			"mode":   "webhook",
