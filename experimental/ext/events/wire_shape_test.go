@@ -328,6 +328,79 @@ func TestSubscribe_DefaultsMaxAgeToZero(t *testing.T) {
 		"omitted maxAge must default to 0 (no floor)")
 }
 
+// TestEvent_MetaSerializesWithUnderscorePrefix verifies the spec
+// follow-on (commit d4faef9 2026-05-01) added optional `_meta` to
+// EventOccurrence. Wire key MUST be `_meta` (underscore prefix), not
+// `meta` — matches the Tool/Resource/Prompt convention from base MCP.
+//
+// Without the underscore prefix, clients written to the spec wouldn't
+// find the field; the underscore is the marker that says "namespaced
+// extension metadata, distinct from app data".
+func TestEvent_MetaSerializesWithUnderscorePrefix(t *testing.T) {
+	cursor := "c1"
+	e := Event{
+		EventID:   "evt_1",
+		Name:      "demo",
+		Timestamp: "t",
+		Data:      json.RawMessage(`{}`),
+		Cursor:    &cursor,
+		Meta:      map[string]any{"trace": "abc123"},
+	}
+	raw, err := json.Marshal(e)
+	require.NoError(t, err)
+	body := string(raw)
+
+	assert.Contains(t, body, `"_meta":{"trace":"abc123"}`,
+		"Event.Meta must marshal under key `_meta` (with underscore); got %s", body)
+	assert.False(t, strings.Contains(body, `"meta":`),
+		"unprefixed `meta` key must not appear; spec uses `_meta`")
+}
+
+// TestEvent_MetaOmitsWhenAbsent verifies omitempty: events without
+// metadata produce no `_meta` key on the wire. Important so the common
+// case (no metadata) doesn't add a bytes-on-wire tax to every event.
+func TestEvent_MetaOmitsWhenAbsent(t *testing.T) {
+	cursor := "c1"
+	e := Event{
+		EventID:   "evt_1",
+		Name:      "demo",
+		Timestamp: "t",
+		Data:      json.RawMessage(`{}`),
+		Cursor:    &cursor,
+	}
+	raw, err := json.Marshal(e)
+	require.NoError(t, err)
+	assert.False(t, strings.Contains(string(raw), `"_meta"`),
+		"absent Meta must omit the key entirely; got %s", string(raw))
+}
+
+// TestEventDef_MetaSerializesWithUnderscorePrefix verifies the same
+// `_meta` convention applies to event TYPE definitions surfaced via
+// events/list (per spec follow-on commit d4faef9 2026-05-01).
+func TestEventDef_MetaSerializesWithUnderscorePrefix(t *testing.T) {
+	d := EventDef{
+		Name:        "demo",
+		Description: "test",
+		Delivery:    []string{"poll"},
+		Meta:        map[string]any{"category": "system"},
+	}
+	raw, err := json.Marshal(d)
+	require.NoError(t, err)
+	body := string(raw)
+
+	assert.Contains(t, body, `"_meta":{"category":"system"}`,
+		"EventDef.Meta must marshal under key `_meta`; got %s", body)
+}
+
+// TestEventDef_MetaOmitsWhenAbsent — counter-test for omitempty on EventDef.
+func TestEventDef_MetaOmitsWhenAbsent(t *testing.T) {
+	d := EventDef{Name: "demo", Description: "test", Delivery: []string{"poll"}}
+	raw, err := json.Marshal(d)
+	require.NoError(t, err)
+	assert.False(t, strings.Contains(string(raw), `"_meta"`),
+		"absent Meta must omit the key entirely; got %s", string(raw))
+}
+
 // TestInvalidCallbackUrl_UsesSpecCode verifies the InvalidCallbackUrl error
 // uses spec code -32015, not the legacy -32005.
 func TestInvalidCallbackUrl_UsesSpecCode(t *testing.T) {

@@ -10,6 +10,9 @@ type Event[Data any] struct {
 	Timestamp string
 	Cursor    *string
 	Data      Data
+	// Meta mirrors the wire `_meta` field on EventOccurrence (spec
+	// follow-on commit d4faef9 2026-05-01). Opaque, app-defined.
+	Meta map[string]any
 }
 
 // HasCursor reports whether the event carries a cursor.
