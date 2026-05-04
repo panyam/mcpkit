@@ -25,6 +25,12 @@ type clientTransport interface {
 	connect() error
 	// call sends a JSON-RPC request and returns the response.
 	call(data []byte) (*rpcResponse, error)
+	// callWithOptions is like call but accepts per-call options (notification
+	// hook, etc.). Transports that can't honor opts (no per-call notification
+	// scoping) MUST still issue the call — the hook is a best-effort
+	// enhancement, not a requirement. Pass nil opts to behave identically
+	// to call().
+	callWithOptions(data []byte, opts *callOptions) (*rpcResponse, error)
 	// notify sends a JSON-RPC notification (no response expected).
 	notify(data []byte) error
 	// close shuts down the transport.
@@ -263,6 +269,13 @@ func (a *coreTransportAdapter) connect() error {
 }
 
 func (a *coreTransportAdapter) call(data []byte) (*rpcResponse, error) {
+	return a.callWithOptions(data, nil)
+}
+
+// callWithOptions on the core.Transport adapter ignores opts — core.Transport
+// has no notion of per-call notification scoping. Notifications still flow
+// through whatever notify path the underlying transport provides.
+func (a *coreTransportAdapter) callWithOptions(data []byte, _ *callOptions) (*rpcResponse, error) {
 	var req core.Request
 	if err := json.Unmarshal(data, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
@@ -790,6 +803,60 @@ func (c *Client) URL() string { return c.url }
 // to simulate DNS/load balancer changes.
 func (c *Client) SetURL(url string) { c.url = url }
 
+// callOptions holds per-call options resolved from CallOption funcs.
+type callOptions struct {
+	onNotify func(method string, params json.RawMessage)
+}
+
+// CallOption configures a single CallWithOptions invocation.
+type CallOption func(*callOptions)
+
+// WithCallNotifyHook installs a per-call notification hook for the lifetime
+// of one CallWithOptions invocation. Receives notifications arriving on the
+// call's response stream — for Streamable HTTP, that's the POST SSE response
+// stream the call holds open.
+//
+// Useful for long-lived calls where notifications need per-call routing —
+// most directly events/stream (notifications/events/* demuxed by requestId
+// is unnecessary because each Stream gets its own POST response and thus
+// its own hook), and likely future tasks/progress streaming RPCs.
+//
+// The hook is ADDITIVE: notifications still flow to the session-global
+// callback set via WithNotificationCallback. Both fire for the same
+// notification.
+//
+// Goroutine-safety: the hook may be called concurrently with the global
+// callback. The implementation MUST be safe under concurrent invocation.
+//
+// Transport coverage: wired on the Streamable HTTP transport (the path
+// used by events/stream). On stdio / SSE / in-memory transports the hook
+// is a no-op for now — notifications still flow only via the global
+// callback. Add wiring to those transports when a use case appears.
+func WithCallNotifyHook(hook func(method string, params json.RawMessage)) CallOption {
+	return func(o *callOptions) { o.onNotify = hook }
+}
+
+// CallWithOptions issues a JSON-RPC call with per-call options. Identical
+// behavior to Call when no options are passed.
+func (c *Client) CallWithOptions(method string, params any, opts ...CallOption) (*CallResult, error) {
+	var co callOptions
+	for _, o := range opts {
+		o(&co)
+	}
+	resp, err := c.rawCallWithOptions(method, params, &co)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Error != nil {
+		return nil, &RPCError{
+			Code:    resp.Error.Code,
+			Message: resp.Error.Message,
+			Data:    resp.Error.Data,
+		}
+	}
+	return &CallResult{Raw: resp.Result}, nil
+}
+
 // Call makes a JSON-RPC call and returns the parsed response.
 func (c *Client) Call(method string, params any) (*CallResult, error) {
 	// Apply client middleware chain if configured.
@@ -1107,6 +1174,12 @@ func (c *Client) nextRequestID() int {
 }
 
 func (c *Client) rawCall(method string, params any) (*rpcResponse, error) {
+	return c.rawCallWithOptions(method, params, nil)
+}
+
+// rawCallWithOptions is the underlying call path used by both Call and
+// CallWithOptions. opts may be nil for a no-options call.
+func (c *Client) rawCallWithOptions(method string, params any, opts *callOptions) (*rpcResponse, error) {
 	req := core.Request{
 		JSONRPC: "2.0",
 		ID:      marshalID(c.nextRequestID()),
@@ -1117,13 +1190,13 @@ func (c *Client) rawCall(method string, params any) (*rpcResponse, error) {
 	}
 	data, _ := json.Marshal(req)
 
-	resp, err := c.transport.call(data)
+	resp, err := c.transport.callWithOptions(data, opts)
 	if err != nil && c.maxRetries > 0 && IsTransientError(err) {
 		return c.retryWithReconnect(func() (*rpcResponse, error) {
 			// Re-build with new ID (old may have been consumed)
 			req.ID = marshalID(c.nextRequestID())
 			data, _ = json.Marshal(req)
-			return c.transport.call(data)
+			return c.transport.callWithOptions(data, opts)
 		})
 	}
 	return resp, err
@@ -1269,6 +1342,15 @@ func (t *streamableClientTransport) backgroundGetReader(body io.Reader) {
 // Shared by both readSSEResponse (POST SSE) and backgroundGetReader (GET SSE)
 // to avoid duplicating the probe-and-dispatch logic.
 func (t *streamableClientTransport) dispatchSSEEvent(data string) *rpcResponse {
+	return t.dispatchSSEEventWithHook(data, nil)
+}
+
+// dispatchSSEEventWithHook is the implementation. The optional per-call
+// hook fires for every notification frame in addition to the session-global
+// notifyHandler — used by events/stream's Stream() helper to receive
+// notifications/events/* on a per-call channel without polluting the
+// global callback.
+func (t *streamableClientTransport) dispatchSSEEventWithHook(data string, hook func(method string, params json.RawMessage)) *rpcResponse {
 	var probe struct {
 		ID     any    `json:"id"`
 		Method string `json:"method"`
@@ -1289,14 +1371,19 @@ func (t *streamableClientTransport) dispatchSSEEvent(data string) *rpcResponse {
 		return nil
 	}
 
-	// Notification (method set, no id) — deliver to handler
+	// Notification (method set, no id) — deliver to global handler AND
+	// the per-call hook (if any). Both fire on the same payload — the
+	// hook is additive, not a replacement.
 	if probe.Method != "" && probe.ID == nil {
+		var notif struct {
+			Params json.RawMessage `json:"params"`
+		}
+		json.Unmarshal([]byte(data), &notif)
 		if t.notifyHandler != nil {
-			var notif struct {
-				Params json.RawMessage `json:"params"`
-			}
-			json.Unmarshal([]byte(data), &notif)
 			t.notifyHandler(probe.Method, notif.Params)
+		}
+		if hook != nil {
+			hook(probe.Method, notif.Params)
 		}
 		return nil
 	}
@@ -1310,6 +1397,15 @@ func (t *streamableClientTransport) dispatchSSEEvent(data string) *rpcResponse {
 }
 
 func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
+	return t.callWithOptions(data, nil)
+}
+
+// callWithOptions issues the POST and, if the response is SSE, threads the
+// caller's per-call notify hook (opts.onNotify) into the SSE-frame loop so
+// notifications arriving on this call's response stream reach the hook in
+// addition to the session-global callback. Used by events/stream's Stream()
+// helper for per-stream demuxing without polluting the global callback.
+func (t *streamableClientTransport) callWithOptions(data []byte, opts *callOptions) (*rpcResponse, error) {
 	buildReq := func() (*http.Request, error) {
 		req, err := http.NewRequest("POST", t.url, bytes.NewReader(data))
 		if err != nil {
@@ -1344,7 +1440,11 @@ func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
 
 	ct := resp.Header.Get("Content-Type")
 	if strings.Contains(ct, "text/event-stream") {
-		return t.readSSEResponse(resp.Body)
+		var hook func(method string, params json.RawMessage)
+		if opts != nil {
+			hook = opts.onNotify
+		}
+		return t.readSSEResponseWithHook(resp.Body, hook)
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -1368,6 +1468,14 @@ func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
 // When a server-to-client request arrives (e.g., sampling/createMessage during
 // a tool call), the handler is called and the response is POSTed back to the server.
 func (t *streamableClientTransport) readSSEResponse(body io.Reader) (*rpcResponse, error) {
+	return t.readSSEResponseWithHook(body, nil)
+}
+
+// readSSEResponseWithHook is the implementation; the per-call notify hook
+// fires (in addition to the session-global notifyHandler) for every
+// notification frame on this response stream. Pass nil hook to behave
+// identically to readSSEResponse.
+func (t *streamableClientTransport) readSSEResponseWithHook(body io.Reader, hook func(method string, params json.RawMessage)) (*rpcResponse, error) {
 	reader := ssehttp.NewSSEEventReader(body)
 	var lastResponse *rpcResponse
 
@@ -1376,7 +1484,7 @@ func (t *streamableClientTransport) readSSEResponse(body io.Reader) (*rpcRespons
 		if err != nil {
 			// EOF (or EOF-mid-event) — process any final data, then break.
 			if ev.Data != "" {
-				if resp := t.dispatchSSEEvent(ev.Data); resp != nil {
+				if resp := t.dispatchSSEEventWithHook(ev.Data, hook); resp != nil {
 					lastResponse = resp
 				}
 			}
@@ -1391,7 +1499,7 @@ func (t *streamableClientTransport) readSSEResponse(body io.Reader) (*rpcRespons
 		if ev.Data == "" {
 			continue
 		}
-		if resp := t.dispatchSSEEvent(ev.Data); resp != nil {
+		if resp := t.dispatchSSEEventWithHook(ev.Data, hook); resp != nil {
 			lastResponse = resp
 		}
 	}
@@ -1682,6 +1790,14 @@ func (t *sseClientTransport) close() error {
 }
 
 func (t *sseClientTransport) getSessionID() string { return t.sessionID }
+
+// callWithOptions on the legacy SSE transport ignores opts — notifications
+// arrive on the GET stream (background reader), not on a per-call response,
+// so per-call scoping is not meaningful here. Notifications still reach
+// the session-global callback via the existing path.
+func (t *sseClientTransport) callWithOptions(data []byte, _ *callOptions) (*rpcResponse, error) {
+	return t.call(data)
+}
 
 func (t *sseClientTransport) call(data []byte) (*rpcResponse, error) {
 	// Check if the background reader is already dead before doing any work.

@@ -54,9 +54,16 @@ func (t *loggingTransport) connect() error {
 
 // call logs the JSON-RPC method name, latency, and result status.
 func (t *loggingTransport) call(data []byte) (*rpcResponse, error) {
+	return t.callWithOptions(data, nil)
+}
+
+// callWithOptions delegates to the wrapped transport's per-call options
+// path so events/stream's notify hook reaches Streamable HTTP through
+// the logging wrapper.
+func (t *loggingTransport) callWithOptions(data []byte, opts *callOptions) (*rpcResponse, error) {
 	method := ExtractMethodFromJSON(data)
 	start := time.Now()
-	resp, err := t.inner.call(data)
+	resp, err := t.inner.callWithOptions(data, opts)
 	elapsed := time.Since(start)
 	if err != nil {
 		t.logger.Printf("[mcpkit] → %s error=%v [%s]", method, err, elapsed)
