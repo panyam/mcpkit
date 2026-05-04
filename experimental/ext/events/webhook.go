@@ -48,11 +48,12 @@ func WithWebhookHeaderMode(mode WebhookHeaderMode) WebhookOption {
 // as the X-MCP-Subscription-Id header on every delivery POST per
 // §"Webhook Event Delivery" L390.
 type WebhookTarget struct {
-	CanonicalKey []byte    // canonical bytes of (principal, url, name, params)
-	ID           string    // server-derived routing handle (sub_<base64-of-16-bytes>)
-	URL          string    // delivery callback URL
-	Secret       string    // client-supplied HMAC signing secret (whsec_...)
-	ExpiresAt    time.Time // soft-state TTL expiry
+	CanonicalKey  []byte    // canonical bytes of (principal, url, name, params)
+	ID            string    // server-derived routing handle (sub_<base64-of-16-bytes>)
+	URL           string    // delivery callback URL
+	Secret        string    // client-supplied HMAC signing secret (whsec_...)
+	ExpiresAt     time.Time // soft-state TTL expiry
+	MaxAgeSeconds int       // δ-3: per-spec replay floor (§"Cursor Lifecycle" L529); 0 = no floor
 }
 
 // WebhookRegistry tracks outbound webhook subscriptions and delivers events
@@ -102,7 +103,14 @@ func NewWebhookRegistry(opts ...WebhookOption) *WebhookRegistry {
 // from identity.go. Passed in (rather than computed here) so the
 // caller can derive once and reuse for both Register and the
 // subscribe-response body.
-func (r *WebhookRegistry) Register(canonicalKey []byte, derivedID, urlStr, secret string) time.Time {
+//
+// maxAgeSeconds is the per-subscription replay floor per spec
+// §"Cursor Lifecycle" → "Bounding replay with maxAge" L529. Stored on
+// the target for use on (future) reconnect-with-replay; 0 means no
+// floor. On refresh, an explicit non-zero value replaces the prior
+// stored floor; 0 leaves the existing value untouched (treats omission
+// as "don't change").
+func (r *WebhookRegistry) Register(canonicalKey []byte, derivedID, urlStr, secret string, maxAgeSeconds int) time.Time {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.pruneExpiredLocked()
@@ -115,14 +123,18 @@ func (r *WebhookRegistry) Register(canonicalKey []byte, derivedID, urlStr, secre
 		if secret != "" {
 			existing.Secret = secret
 		}
+		if maxAgeSeconds > 0 {
+			existing.MaxAgeSeconds = maxAgeSeconds
+		}
 		r.targets[key] = existing
 	} else {
 		r.targets[key] = WebhookTarget{
-			CanonicalKey: canonicalKey,
-			ID:           derivedID,
-			URL:          urlStr,
-			Secret:       secret,
-			ExpiresAt:    expiresAt,
+			CanonicalKey:  canonicalKey,
+			ID:            derivedID,
+			URL:           urlStr,
+			Secret:        secret,
+			ExpiresAt:     expiresAt,
+			MaxAgeSeconds: maxAgeSeconds,
 		}
 	}
 	return expiresAt

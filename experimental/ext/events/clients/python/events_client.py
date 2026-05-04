@@ -282,6 +282,7 @@ class WebhookSubscription:
         on_event: callable = None,
         on_refresh: callable = None,
         on_recover: callable = None,
+        max_age: int = 0,
     ):
         """
         secret: client-supplied HMAC signing secret. Per spec, must be
@@ -300,6 +301,10 @@ class WebhookSubscription:
         on_recover: called when a refresh fails (subscription expired) and a
                     fresh subscribe succeeds. Receives no args. Both may fire
                     in the same cycle if the recovery succeeds.
+        max_age: per-subscription replay floor in seconds, sent on every
+                 subscribe per spec §"Cursor Lifecycle" → "Bounding replay
+                 with maxAge" L529. 0 means no floor. Bounds the worst-case
+                 replay on reconnect.
         """
         self.session = session
         self.event_name = event_name
@@ -309,6 +314,7 @@ class WebhookSubscription:
         self.on_event = on_event
         self.on_refresh = on_refresh
         self.on_recover = on_recover
+        self.max_age = max_age
 
         self._stop = threading.Event()
         self._thread = None
@@ -318,14 +324,17 @@ class WebhookSubscription:
         """Send events/subscribe and capture refreshBefore. Per spec the
         request does NOT carry id; server derives it over the canonical
         tuple (§"Subscription Identity" → "Key composition" L363)."""
-        resp = self.session.rpc("events/subscribe", {
+        params = {
             "name": self.event_name,
             "delivery": {
                 "mode": "webhook",
                 "url": self.callback_url,
                 "secret": self.secret,
             },
-        })
+        }
+        if self.max_age > 0:
+            params["maxAge"] = self.max_age
+        resp = self.session.rpc("events/subscribe", params)
         result = resp.get("result", {})
         rb_str = result.get("refreshBefore")
         if rb_str:
@@ -475,6 +484,7 @@ def cmd_webhook(session: MCPSession, args):
         callback_url=hook_url,
         secret=args.secret,  # empty → SDK auto-generates a whsec_ value
         refresh_factor=args.refresh_factor,
+        max_age=args.max_age,
     )
     secret_holder = [sub.secret]
 
@@ -531,10 +541,13 @@ def cmd_poll(session: MCPSession, args):
     cursor = "0"
     try:
         while True:
-            resp = session.rpc("events/poll", {
+            poll_params = {
                 "name": args.event,
                 "cursor": cursor,
-            })
+            }
+            if args.max_age > 0:
+                poll_params["maxAge"] = args.max_age
+            resp = session.rpc("events/poll", poll_params)
             result = resp.get("result", {})
             events = result.get("events", [])
             if result.get("truncated"):
@@ -584,9 +597,13 @@ def main():
     wp.add_argument("--secret", default="", help="HMAC signing secret (whsec_ + base64 of 24-64 bytes per spec). Empty → SDK auto-generates.")
     wp.add_argument("--refresh-factor", type=float, default=0.5,
                     help="Refresh subscription at this fraction of TTL (default 0.5)")
+    wp.add_argument("--max-age", type=int, default=0,
+                    help="Per-subscription replay floor in seconds (spec §'Cursor Lifecycle' L529). 0 = no floor.")
 
     pp = sub.add_parser("poll", help="Polling loop")
     pp.add_argument("--interval", type=int, default=5, help="Seconds between polls")
+    pp.add_argument("--max-age", type=int, default=0,
+                    help="Per-poll replay floor in seconds (spec §'Cursor Lifecycle' L529). 0 = no floor.")
 
     args = parser.parse_args()
     session = MCPSession(args.mcp)
