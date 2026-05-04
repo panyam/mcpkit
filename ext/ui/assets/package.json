@@ -4,13 +4,14 @@
   "private": true,
   "description": "Framework-agnostic postMessage bridge for MCP Apps (iframe side)",
   "scripts": {
-    "build": "tsc",
+    "build": "esbuild mcp-app-bridge.ts --bundle --format=iife --target=es2020 --outfile=mcp-app-bridge.js",
     "check": "tsc --noEmit",
     "test": "vitest run"
   },
   "devDependencies": {
+    "esbuild": "^0.28.0",
+    "jsdom": "^26.1.0",
     "typescript": "^5.7.0",
-    "vitest": "^3.2.0",
-    "jsdom": "^26.1.0"
+    "vitest": "^3.2.0"
   }
 }

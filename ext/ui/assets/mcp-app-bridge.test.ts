@@ -910,3 +910,287 @@ describe("idempotency", () => {
     expect((window as any).MCPApp).toBe(firstApp);
   });
 });
+
+// ---------------------------------------------------------------------------
+// SEP-2356 Phase 2.1 — file picker primitives
+// ---------------------------------------------------------------------------
+//
+// These tests exercise mcp.selectFile() / mcp.selectFiles() — the bridge's
+// in-iframe DOM file picker (Option B per issue #358). The bridge synthesizes
+// a hidden `<input type="file">` element, awaits the user's selection (or
+// cancel), runs descriptor validation (size + MIME), and returns an RFC 2397
+// base64 data URI matching `core.EncodeDataURI` byte-for-byte.
+//
+// Test kit overview
+// -----------------
+// `setupFilePicker(opts)` patches document.createElement('input') to return
+// a synthesizable input, replaces FileReader with a deterministic stub, and
+// returns a `pick(files)` callable that simulates the user selecting files.
+// Calling `pick(null)` simulates cancellation.
+//
+// Why: real browsers gate <input>.click() to user-gesture handlers + open a
+// native dialog. JSDom does neither. The kit lets tests exercise the
+// post-selection logic (validation, FileReader, percent-encoding) without
+// needing to drive a real file chooser.
+
+interface FilePickerKit {
+  /** Resolve the pending file picker with these files (null = cancel). */
+  pick: (files: File[] | null) => void;
+  /** Most recent input element synthesized by the bridge. */
+  lastInput: () => HTMLInputElement;
+  /** Restore original document.createElement / FileReader. */
+  restore: () => void;
+}
+
+function setupFilePicker(): FilePickerKit {
+  const inputs: HTMLInputElement[] = [];
+  let pendingResolve: ((files: File[] | null) => void) | null = null;
+
+  const realCreateElement = document.createElement.bind(document);
+  vi.spyOn(document, "createElement").mockImplementation(
+    function (this: Document, tag: string, options?: ElementCreationOptions) {
+      const el = realCreateElement(tag, options);
+      if (tag.toLowerCase() === "input") {
+        inputs.push(el as HTMLInputElement);
+        // Override .click() so calling it parks until pick(...) fires.
+        (el as any).click = () => {
+          // The bridge attaches change/cancel listeners before calling click().
+          // We capture a resolver that the test driver invokes via pick().
+          pendingResolve = (files) => {
+            if (files === null) {
+              el.dispatchEvent(new Event("cancel"));
+            } else {
+              Object.defineProperty(el, "files", {
+                value: makeFileList(files),
+                configurable: true,
+              });
+              el.dispatchEvent(new Event("change"));
+            }
+          };
+        };
+      }
+      return el;
+    } as typeof document.createElement
+  );
+
+  // Deterministic FileReader stub — readAsDataURL produces
+  // "data:<type>;base64,<payload>" without a name= parameter (just like a real
+  // browser). The bridge is responsible for injecting name= itself.
+  class StubFileReader {
+    public result: string | null = null;
+    public error: Error | null = null;
+    public onload: (() => void) | null = null;
+    public onerror: (() => void) | null = null;
+    readAsDataURL(file: File) {
+      // Read the underlying bytes synchronously via the bridge-supplied File
+      // (we use a custom File constructor that exposes _bytes for this).
+      const bytes: Uint8Array = (file as any)._bytes ?? new Uint8Array();
+      const base64 = btoa(String.fromCharCode(...bytes));
+      this.result = `data:${file.type};base64,${base64}`;
+      // Fire onload async to mirror real FileReader.
+      setTimeout(() => this.onload?.(), 0);
+    }
+  }
+  (globalThis as any).FileReader = StubFileReader;
+
+  return {
+    pick: (files) => {
+      if (!pendingResolve) {
+        throw new Error("selectFile() was not awaiting — pick() called too early");
+      }
+      const fn = pendingResolve;
+      pendingResolve = null;
+      fn(files);
+    },
+    lastInput: () => inputs[inputs.length - 1],
+    restore: () => {
+      vi.restoreAllMocks();
+      delete (globalThis as any).FileReader;
+    },
+  };
+}
+
+/** Construct a File-like with attached raw bytes for the StubFileReader. */
+function makeFile(name: string, type: string, bytes: Uint8Array): File {
+  const file = new File([bytes], name, { type });
+  (file as any)._bytes = bytes;
+  return file;
+}
+
+function makeFileList(files: File[]): FileList {
+  const list = files as unknown as FileList & File[];
+  Object.defineProperty(list, "item", {
+    value: (i: number) => files[i] ?? null,
+    configurable: true,
+  });
+  return list;
+}
+
+/** Decode the base64 payload from a data URI back to bytes. */
+function decodeDataURIBytes(uri: string): Uint8Array {
+  const comma = uri.indexOf(",");
+  const payload = uri.slice(comma + 1);
+  const binary = atob(payload);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+  return out;
+}
+
+describe("selectFile / selectFiles (SEP-2356 Phase 2.1)", () => {
+  let kit: FilePickerKit;
+
+  beforeEach(() => {
+    kit = setupFilePicker();
+  });
+
+  afterEach(() => {
+    kit.restore();
+  });
+
+  // verifies: the public surface advertises both single + multi entry points
+  // alongside the existing host-bound primitives.
+  it("exposes selectFile and selectFiles on MCPApp", () => {
+    const app = (window as any).MCPApp;
+    expect(typeof app.selectFile).toBe("function");
+    expect(typeof app.selectFiles).toBe("function");
+  });
+
+  // verifies: a successful selection resolves with an RFC 2397 base64 data URI
+  // carrying the file's media type. Critical happy-path round-trip.
+  it("selectFile resolves with a data URI on selection", async () => {
+    const app = (window as any).MCPApp;
+    const promise = app.selectFile();
+    const file = makeFile("hello.bin", "application/octet-stream", new Uint8Array([1, 2, 3]));
+    setTimeout(() => kit.pick([file]), 0);
+    const result = await promise;
+    expect(result).toMatch(/^data:application\/octet-stream;name=hello\.bin;base64,/);
+  });
+
+  // verifies: filenames with characters outside the unreserved set get
+  // percent-encoded so the wire shape matches `core.EncodeDataURI` exactly
+  // (Go side encodes parens as %28/%29 via url.PathEscape; we must match).
+  it("name= parameter percent-encodes special characters to match core.EncodeDataURI", async () => {
+    const app = (window as any).MCPApp;
+    const promise = app.selectFile();
+    const file = makeFile("my photo (1).png", "image/png", new Uint8Array([0]));
+    setTimeout(() => kit.pick([file]), 0);
+    const result = await promise;
+    expect(result).toContain(";name=my%20photo%20%281%29.png;");
+  });
+
+  // verifies: `accept` from the descriptor reaches the synthesized <input>'s
+  // accept attribute so the native picker pre-filters the file list. This is
+  // a hint — full enforcement runs post-selection (test below).
+  it("accept patterns are propagated to the input element", async () => {
+    const app = (window as any).MCPApp;
+    const promise = app.selectFile({ accept: ["image/*", ".pdf"] });
+    setTimeout(() => {
+      expect(kit.lastInput().accept).toBe("image/*,.pdf");
+      kit.pick([makeFile("x.png", "image/png", new Uint8Array([0]))]);
+    }, 0);
+    await promise;
+  });
+
+  // verifies: oversized files are rejected with MCPFileTooLarge BEFORE the
+  // FileReader runs — saves a wasted decode and matches server-side
+  // ValidateFileInput semantics (issue #361).
+  it("oversized file rejects with MCPFileTooLarge", async () => {
+    const app = (window as any).MCPApp;
+    const promise = app.selectFile({ maxSize: 4 });
+    const big = makeFile("big.bin", "application/octet-stream", new Uint8Array(8));
+    setTimeout(() => kit.pick([big]), 0);
+    await expect(promise).rejects.toMatchObject({ name: "MCPFileTooLarge" });
+  });
+
+  // verifies: MIME mismatch rejects with MCPFileTypeNotAccepted. Mirrors the
+  // server-side -32602 `file_type_not_accepted` reason from #361.
+  it("wrong MIME rejects with MCPFileTypeNotAccepted", async () => {
+    const app = (window as any).MCPApp;
+    const promise = app.selectFile({ accept: ["image/*"] });
+    const pdf = makeFile("doc.pdf", "application/pdf", new Uint8Array([0]));
+    setTimeout(() => kit.pick([pdf]), 0);
+    await expect(promise).rejects.toMatchObject({ name: "MCPFileTypeNotAccepted" });
+  });
+
+  // verifies: wildcard subtype matching ("image/*" accepts every image/...)
+  // matches the server-side validator's pattern rules.
+  it("wildcard subtype matches a concrete MIME", async () => {
+    const app = (window as any).MCPApp;
+    const promise = app.selectFile({ accept: ["image/*"] });
+    const png = makeFile("x.png", "image/png", new Uint8Array([0]));
+    setTimeout(() => kit.pick([png]), 0);
+    await expect(promise).resolves.toMatch(/^data:image\/png;/);
+  });
+
+  // verifies: extension-only accept patterns (".pdf") match by filename
+  // suffix, regardless of declared media type.
+  it("extension hint matches by filename suffix", async () => {
+    const app = (window as any).MCPApp;
+    const promise = app.selectFile({ accept: [".pdf"] });
+    const pdf = makeFile("doc.PDF", "application/pdf", new Uint8Array([0]));
+    setTimeout(() => kit.pick([pdf]), 0);
+    await expect(promise).resolves.toMatch(/^data:application\/pdf;/);
+  });
+
+  // verifies: an empty descriptor accepts any file (no constraints) — the
+  // "process_any_file" tool on the server side mirrors this.
+  it("empty descriptor accepts anything", async () => {
+    const app = (window as any).MCPApp;
+    const promise = app.selectFile();
+    const txt = makeFile("notes.txt", "text/plain", new Uint8Array([97, 98, 99]));
+    setTimeout(() => kit.pick([txt]), 0);
+    await expect(promise).resolves.toMatch(/^data:text\/plain;/);
+  });
+
+  // verifies: cancellation surfaces a typed error rather than hanging the
+  // Promise. Caller code can branch on the error name without parsing strings.
+  it("cancellation rejects with MCPFileSelectionCanceled", async () => {
+    const app = (window as any).MCPApp;
+    const promise = app.selectFile();
+    setTimeout(() => kit.pick(null), 0);
+    await expect(promise).rejects.toMatchObject({ name: "MCPFileSelectionCanceled" });
+  });
+
+  // verifies: selectFiles returns an array preserving selection order, and
+  // the synthesized input has the `multiple` attribute set so the native
+  // picker allows multi-select.
+  it("selectFiles returns an ordered array of data URIs", async () => {
+    const app = (window as any).MCPApp;
+    const promise = app.selectFiles({ accept: ["application/pdf"] });
+    const a = makeFile("a.pdf", "application/pdf", new Uint8Array([0]));
+    const b = makeFile("b.pdf", "application/pdf", new Uint8Array([1]));
+    setTimeout(() => {
+      expect(kit.lastInput().multiple).toBe(true);
+      kit.pick([a, b]);
+    }, 0);
+    const result = await promise;
+    expect(Array.isArray(result)).toBe(true);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toContain(";name=a.pdf;");
+    expect(result[1]).toContain(";name=b.pdf;");
+  });
+
+  // verifies: arbitrary binary bytes survive the round-trip — useful guard
+  // against accidental UTF-8 normalization or ASCII-only encoding paths.
+  it("binary bytes round-trip through base64", async () => {
+    const app = (window as any).MCPApp;
+    const promise = app.selectFile();
+    const bytes = new Uint8Array([0x00, 0x01, 0xff, 0xfe, 0x42]);
+    setTimeout(() => kit.pick([makeFile("x.bin", "application/octet-stream", bytes)]), 0);
+    const uri = await promise;
+    expect(decodeDataURIBytes(uri)).toEqual(bytes);
+  });
+
+  // verifies: the bridge produces the canonical Go-side string for a known
+  // input. If `core.EncodeDataURI` ever changes shape (separator order,
+  // encoding rules), this freezes the divergence and forces explicit
+  // resync. Frozen against core/datauri_test.go expectations.
+  it("canonical interop with core.EncodeDataURI for a known input", async () => {
+    const app = (window as any).MCPApp;
+    const promise = app.selectFile();
+    const file = makeFile("report.txt", "text/plain", new Uint8Array([104, 101, 108, 108, 111]));
+    setTimeout(() => kit.pick([file]), 0);
+    const result = await promise;
+    expect(result).toBe("data:text/plain;name=report.txt;base64,aGVsbG8=");
+  });
+});

@@ -240,6 +240,15 @@ func runDemo() {
 			return nil
 		})
 
+	demo.Section("MCP Apps mode (Phase 2.1)",
+		"This same server also registers two MCP App tools that drive the same handlers via in-iframe file pickers — the human-in-the-loop case file-uploads-wg flagged as a gap:",
+		"",
+		"- `apps_upload_image` — `ui://file-inputs/upload-image` — single image picker (`mcp.selectFile`)",
+		"- `apps_analyze_documents` — `ui://file-inputs/analyze-documents` — multi PDF picker (`mcp.selectFiles`)",
+		"",
+		"To exercise these, point a host that supports the MCP Apps extension (e.g. MCPJam) at this server and invoke either tool — the host renders the embedded HTML + bridge, the user clicks the picker, and the bridge encodes the chosen file(s) as data URI(s) before calling the regular tool. The walkthrough above doesn't drive these because demokit can't synthesize iframe user-gestures.",
+	)
+
 	demo.Section("Where to look in the code",
 		"- Schema helpers: `core.FileInputProperty` / `core.FileInputArrayProperty` / `core.ExtractFileInputDescriptor` — core/file_input.go",
 		"- Wire encoding: `core.EncodeDataURI` / `core.DecodeDataURI` / `core.IsDataURI` — core/datauri.go",
@@ -247,7 +256,8 @@ func runDemo() {
 		"- Server validation (Phase 1.4): `server.ValidateFileInput` — pending",
 		"- Capability gating (Phase 1.5): strip `x-mcp-file` from tools/list when client lacks the cap — pending",
 		"- Client helpers (Phase 1.6): `client.FileInputsFromTool` / `client.PrepareFileArg` — pending",
-		"- Bridge `selectFile` (Phase 2.1): `ext/ui/assets/mcp-app-bridge.ts` — pending",
+		"- Bridge `selectFile` / `selectFiles` (Phase 2.1): `ext/ui/assets/file-picker.ts` — shipped",
+		"- Apps fixtures: `examples/file-inputs/apps/upload-image.html`, `analyze-documents.html`",
 		"- SEP-2356 spec: modelcontextprotocol/specification PR 2356",
 	)
 
