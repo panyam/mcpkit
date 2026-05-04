@@ -25,12 +25,12 @@ type clientTransport interface {
 	connect() error
 	// call sends a JSON-RPC request and returns the response.
 	call(data []byte) (*rpcResponse, error)
-	// callWithOptions is like call but accepts per-call options (notification
-	// hook, etc.). Transports that can't honor opts (no per-call notification
-	// scoping) MUST still issue the call — the hook is a best-effort
-	// enhancement, not a requirement. Pass nil opts to behave identically
-	// to call().
-	callWithOptions(data []byte, opts *callOptions) (*rpcResponse, error)
+	// callWithContext is like call but accepts a typed CallContext carrying
+	// per-call cancellation and an optional notification hook. Transports
+	// that can't honor cc (no per-call notification scoping) MUST still
+	// issue the call — the hook is a best-effort enhancement, not a
+	// requirement. Pass nil cc to behave identically to call().
+	callWithContext(data []byte, cc *CallContext) (*rpcResponse, error)
 	// notify sends a JSON-RPC notification (no response expected).
 	notify(data []byte) error
 	// close shuts down the transport.
@@ -269,13 +269,13 @@ func (a *coreTransportAdapter) connect() error {
 }
 
 func (a *coreTransportAdapter) call(data []byte) (*rpcResponse, error) {
-	return a.callWithOptions(data, nil)
+	return a.callWithContext(data, nil)
 }
 
-// callWithOptions on the core.Transport adapter ignores opts — core.Transport
+// callWithContext on the core.Transport adapter ignores cc — core.Transport
 // has no notion of per-call notification scoping. Notifications still flow
 // through whatever notify path the underlying transport provides.
-func (a *coreTransportAdapter) callWithOptions(data []byte, _ *callOptions) (*rpcResponse, error) {
+func (a *coreTransportAdapter) callWithContext(data []byte, _ *CallContext) (*rpcResponse, error) {
 	var req core.Request
 	if err := json.Unmarshal(data, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
@@ -803,47 +803,53 @@ func (c *Client) URL() string { return c.url }
 // to simulate DNS/load balancer changes.
 func (c *Client) SetURL(url string) { c.url = url }
 
-// callOptions holds per-call options resolved from CallOption funcs.
-type callOptions struct {
-	onNotify func(method string, params json.RawMessage)
+// CallContext is a typed context for a single Client.CallContext invocation
+// — the client-side analogue of the typed handler contexts in core/ (per
+// constraint C1). Embeds context.Context for cancellation; carries a
+// per-call notification hook for long-lived calls that need their own
+// notification channel (events/stream and likely future tasks/progress
+// streaming RPCs).
+//
+// Construct via NewCallContext, configure via the chainable With*
+// methods, then pass to Client.CallContext.
+//
+// Goroutine model: the notify hook may be called concurrently with the
+// session-global callback (set via WithNotificationCallback). Both fire
+// on the same notification — the hook is additive, not a replacement.
+type CallContext struct {
+	context.Context
+	notifyHook func(method string, params json.RawMessage)
 }
 
-// CallOption configures a single CallWithOptions invocation.
-type CallOption func(*callOptions)
+// NewCallContext wraps a context.Context as a CallContext for use with
+// Client.CallContext. The wrapped context controls cancellation: on
+// Streamable HTTP, the underlying http.Request is built with it so
+// cancelling cancels the in-flight POST. Required for long-lived calls
+// (events/stream) so Stop() actually closes the connection.
+func NewCallContext(ctx context.Context) *CallContext {
+	return &CallContext{Context: ctx}
+}
 
-// WithCallNotifyHook installs a per-call notification hook for the lifetime
-// of one CallWithOptions invocation. Receives notifications arriving on the
-// call's response stream — for Streamable HTTP, that's the POST SSE response
-// stream the call holds open.
-//
-// Useful for long-lived calls where notifications need per-call routing —
-// most directly events/stream (notifications/events/* demuxed by requestId
-// is unnecessary because each Stream gets its own POST response and thus
-// its own hook), and likely future tasks/progress streaming RPCs.
-//
-// The hook is ADDITIVE: notifications still flow to the session-global
-// callback set via WithNotificationCallback. Both fire for the same
-// notification.
-//
-// Goroutine-safety: the hook may be called concurrently with the global
-// callback. The implementation MUST be safe under concurrent invocation.
+// WithNotifyHook installs a per-call notification hook. The hook fires
+// for every notification arriving on this call's response stream — for
+// Streamable HTTP, that's the POST SSE response stream the call holds
+// open. ADDITIVE to WithNotificationCallback (both fire on the same
+// notification).
 //
 // Transport coverage: wired on the Streamable HTTP transport (the path
-// used by events/stream). On stdio / SSE / in-memory transports the hook
-// is a no-op for now — notifications still flow only via the global
-// callback. Add wiring to those transports when a use case appears.
-func WithCallNotifyHook(hook func(method string, params json.RawMessage)) CallOption {
-	return func(o *callOptions) { o.onNotify = hook }
+// used by events/stream). On stdio / SSE / in-memory transports the
+// hook is a no-op for now — notifications still flow only via the
+// global callback.
+func (cc *CallContext) WithNotifyHook(hook func(method string, params json.RawMessage)) *CallContext {
+	cc.notifyHook = hook
+	return cc
 }
 
-// CallWithOptions issues a JSON-RPC call with per-call options. Identical
-// behavior to Call when no options are passed.
-func (c *Client) CallWithOptions(method string, params any, opts ...CallOption) (*CallResult, error) {
-	var co callOptions
-	for _, o := range opts {
-		o(&co)
-	}
-	resp, err := c.rawCallWithOptions(method, params, &co)
+// CallContext issues a JSON-RPC call with per-call configuration carried
+// on the typed CallContext. Identical to Call when cc has no hooks set
+// beyond a plain context.
+func (c *Client) CallContext(cc *CallContext, method string, params any) (*CallResult, error) {
+	resp, err := c.rawCallWithContext(method, params, cc)
 	if err != nil {
 		return nil, err
 	}
@@ -1174,12 +1180,12 @@ func (c *Client) nextRequestID() int {
 }
 
 func (c *Client) rawCall(method string, params any) (*rpcResponse, error) {
-	return c.rawCallWithOptions(method, params, nil)
+	return c.rawCallWithContext(method, params, nil)
 }
 
-// rawCallWithOptions is the underlying call path used by both Call and
-// CallWithOptions. opts may be nil for a no-options call.
-func (c *Client) rawCallWithOptions(method string, params any, opts *callOptions) (*rpcResponse, error) {
+// rawCallWithContext is the underlying call path used by both Call and
+// CallContext. cc may be nil for a no-context call (legacy Call path).
+func (c *Client) rawCallWithContext(method string, params any, cc *CallContext) (*rpcResponse, error) {
 	req := core.Request{
 		JSONRPC: "2.0",
 		ID:      marshalID(c.nextRequestID()),
@@ -1190,13 +1196,13 @@ func (c *Client) rawCallWithOptions(method string, params any, opts *callOptions
 	}
 	data, _ := json.Marshal(req)
 
-	resp, err := c.transport.callWithOptions(data, opts)
+	resp, err := c.transport.callWithContext(data, cc)
 	if err != nil && c.maxRetries > 0 && IsTransientError(err) {
 		return c.retryWithReconnect(func() (*rpcResponse, error) {
 			// Re-build with new ID (old may have been consumed)
 			req.ID = marshalID(c.nextRequestID())
 			data, _ = json.Marshal(req)
-			return c.transport.callWithOptions(data, opts)
+			return c.transport.callWithContext(data, cc)
 		})
 	}
 	return resp, err
@@ -1397,17 +1403,25 @@ func (t *streamableClientTransport) dispatchSSEEventWithHook(data string, hook f
 }
 
 func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
-	return t.callWithOptions(data, nil)
+	return t.callWithContext(data, nil)
 }
 
-// callWithOptions issues the POST and, if the response is SSE, threads the
-// caller's per-call notify hook (opts.onNotify) into the SSE-frame loop so
+// callWithContext issues the POST and, if the response is SSE, threads the
+// caller's per-call notify hook (cc.notifyHook) into the SSE-frame loop so
 // notifications arriving on this call's response stream reach the hook in
 // addition to the session-global callback. Used by events/stream's Stream()
 // helper for per-stream demuxing without polluting the global callback.
-func (t *streamableClientTransport) callWithOptions(data []byte, opts *callOptions) (*rpcResponse, error) {
+//
+// When cc carries a context, the underlying http.Request is built with it
+// so cancelling cancels the in-flight POST — required for events/stream's
+// Stop() to actually close the connection.
+func (t *streamableClientTransport) callWithContext(data []byte, cc *CallContext) (*rpcResponse, error) {
+	reqCtx := context.Background()
+	if cc != nil && cc.Context != nil {
+		reqCtx = cc.Context
+	}
 	buildReq := func() (*http.Request, error) {
-		req, err := http.NewRequest("POST", t.url, bytes.NewReader(data))
+		req, err := http.NewRequestWithContext(reqCtx, "POST", t.url, bytes.NewReader(data))
 		if err != nil {
 			return nil, err
 		}
@@ -1441,8 +1455,8 @@ func (t *streamableClientTransport) callWithOptions(data []byte, opts *callOptio
 	ct := resp.Header.Get("Content-Type")
 	if strings.Contains(ct, "text/event-stream") {
 		var hook func(method string, params json.RawMessage)
-		if opts != nil {
-			hook = opts.onNotify
+		if cc != nil {
+			hook = cc.notifyHook
 		}
 		return t.readSSEResponseWithHook(resp.Body, hook)
 	}
@@ -1791,11 +1805,11 @@ func (t *sseClientTransport) close() error {
 
 func (t *sseClientTransport) getSessionID() string { return t.sessionID }
 
-// callWithOptions on the legacy SSE transport ignores opts — notifications
+// callWithContext on the legacy SSE transport ignores cc — notifications
 // arrive on the GET stream (background reader), not on a per-call response,
 // so per-call scoping is not meaningful here. Notifications still reach
 // the session-global callback via the existing path.
-func (t *sseClientTransport) callWithOptions(data []byte, _ *callOptions) (*rpcResponse, error) {
+func (t *sseClientTransport) callWithContext(data []byte, _ *CallContext) (*rpcResponse, error) {
 	return t.call(data)
 }
 

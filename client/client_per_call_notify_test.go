@@ -1,6 +1,7 @@
 package client_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http/httptest"
 	"sync"
@@ -14,9 +15,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestCallWithOptions_NotifyHookFiresOnCallStreamNotifications verifies the
-// per-call notification hook (client.WithCallNotifyHook) receives notifications
-// arriving on the call's POST SSE response stream.
+// TestCallContext_NotifyHookFiresOnCallStreamNotifications verifies the
+// per-call notification hook on the typed CallContext (CallContext.WithNotifyHook)
+// receives notifications arriving on the call's POST SSE response stream.
 //
 // Foundation for events/stream's Stream() helper (ε-4): without per-call
 // routing, notifications/events/* would only reach the session-global
@@ -25,10 +26,10 @@ import (
 // sampling/elicitation flows) gets a private notification channel scoped
 // to its own response stream.
 //
-// Setup: a tool that emits a log notification mid-execution then returns.
+// Setup: a tool that emits a custom notification mid-execution then returns.
 // Both the global callback and the per-call hook should fire — the hook is
 // additive, not a replacement.
-func TestCallWithOptions_NotifyHookFiresOnCallStreamNotifications(t *testing.T) {
+func TestCallContext_NotifyHookFiresOnCallStreamNotifications(t *testing.T) {
 	srv := server.NewServer(core.ServerInfo{Name: "per-call-test", Version: "1.0"})
 	srv.RegisterTool(
 		core.ToolDef{
@@ -67,10 +68,11 @@ func TestCallWithOptions_NotifyHookFiresOnCallStreamNotifications(t *testing.T) 
 		hookCalls = append(hookCalls, method)
 	}
 
-	_, err := c.CallWithOptions("tools/call", map[string]any{
+	cc := client.NewCallContext(context.Background()).WithNotifyHook(hook)
+	_, err := c.CallContext(cc, "tools/call", map[string]any{
 		"name":      "emit-then-return",
 		"arguments": map[string]any{},
-	}, client.WithCallNotifyHook(hook))
+	})
 	require.NoError(t, err)
 
 	// Both the per-call hook AND the global callback must have observed
@@ -83,10 +85,10 @@ func TestCallWithOptions_NotifyHookFiresOnCallStreamNotifications(t *testing.T) 
 		"global callback must STILL fire (the per-call hook is additive, not a replacement)")
 }
 
-// TestCallWithOptions_NoHook_GlobalStillFires is the counter-test: without
+// TestCallContext_NoHook_GlobalStillFires is the counter-test: without
 // a per-call hook, the global callback continues to receive notifications
 // — proves the new code path doesn't accidentally swallow them.
-func TestCallWithOptions_NoHook_GlobalStillFires(t *testing.T) {
+func TestCallContext_NoHook_GlobalStillFires(t *testing.T) {
 	srv := server.NewServer(core.ServerInfo{Name: "no-hook-test", Version: "1.0"})
 	srv.RegisterTool(
 		core.ToolDef{
@@ -115,8 +117,9 @@ func TestCallWithOptions_NoHook_GlobalStillFires(t *testing.T) {
 	require.NoError(t, c.Connect())
 	defer c.Close()
 
-	// CallWithOptions with no options must behave identically to Call.
-	_, err := c.CallWithOptions("tools/call", map[string]any{
+	// CallContext with a bare context must behave identically to Call.
+	cc := client.NewCallContext(context.Background())
+	_, err := c.CallContext(cc, "tools/call", map[string]any{
 		"name":      "emit-then-return",
 		"arguments": map[string]any{},
 	})
