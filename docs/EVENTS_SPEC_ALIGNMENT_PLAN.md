@@ -159,9 +159,11 @@ The others (resource-template subsumption, MCP task event subsumption, event-nam
 - New file: `experimental/ext/events/identity.go` — pure-functional helpers `canonicalKey`, `deriveSubscriptionID`. Easy to unit-test.
 
 **Auth integration:**
-- mcpkit has an `ext/auth` package with `AuthContext` extraction. The events handler gets the principal via `auth.PrincipalFrom(ctx)` (or equivalent — verify exact API at impl time).
+- The events handler reads the principal via `core.MethodContext.AuthClaims()` returning `*core.Claims` (mcpkit core, not `ext/auth`). `claims.Subject` is the principal in the canonical tuple.
 - For unauthenticated mcpkit servers: webhook subscribe MUST return `-32012`. Poll and push are unaffected (they don't require auth per the spec).
-- For the discord + telegram demos: today they're anonymous. After γ, the webhook step in their walkthrough will fail unless we either (a) add a minimal auth shim to the demo server or (b) skip the webhook step in anonymous mode with an explanatory note. **Decision deferred to PR start time** — likely (b) for the demo, with a note pointing at how to enable auth.
+- For the discord + telegram demos: hybrid auto-detect via `OAUTH_ISSUER` env var. When set, wire `server.WithAuth(JWTValidator)` and follow spec strictly. When not set, fall back to `events.Config.UnsafeAnonymousPrincipal: "demo-user"` so `make demo` runs end-to-end without an OIDC provider. Server logs which posture is active at startup.
+
+**Composition note (WG-relevant):** `ext/events` has zero compile-time dependency on `ext/auth`. It depends on `core.Claims` (the abstract auth contract). Any auth provider that populates `core.Claims` works — JWT/OIDC via `ext/auth`, mTLS-derived principals, session cookies, custom validators. Auth and Events are independent extensions composed at the wiring layer (`server.WithAuth(...)` in `main.go`), not at the protocol-implementation layer. This is the right shape for MCP extensions: extensions depend on stable core abstractions, not on each other.
 
 **Acceptance:**
 - `make test-experimental` green
