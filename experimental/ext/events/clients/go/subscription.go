@@ -44,6 +44,12 @@ type SubscribeOptions struct {
 	// OnRecover fires when a refresh failed (the registry had already
 	// expired the subscription) and a fresh subscribe succeeded.
 	OnRecover func()
+
+	// MaxAge is the per-subscription replay floor sent on every subscribe
+	// per spec §"Cursor Lifecycle" → "Bounding replay with maxAge" L529.
+	// Zero means no floor (server defaults to "no maxAge"). Resolution is
+	// seconds; sub-second precision is dropped on the wire.
+	MaxAge time.Duration
 }
 
 // Subscription manages an events/subscribe lifecycle with automatic TTL
@@ -171,6 +177,9 @@ func (s *Subscription) subscribe() error {
 	} else {
 		// Explicit JSON null so the server resolves to "from now".
 		params["cursor"] = nil
+	}
+	if s.opts.MaxAge > 0 {
+		params["maxAge"] = int(s.opts.MaxAge / time.Second)
 	}
 
 	resp, err := s.sess.Call("events/subscribe", params)

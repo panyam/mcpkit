@@ -272,6 +272,10 @@ func runDemo() {
 			sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
 				EventName:   "telegram.message",
 				CallbackURL: hookSrv.URL,
+				// δ-3: bound worst-case replay on reconnect to 5 minutes
+				// (§"Cursor Lifecycle" L529). Stored on WebhookTarget
+				// for ζ's reconnect-with-replay logic.
+				MaxAge: 5 * time.Minute,
 			})
 			if err != nil {
 				fmt.Printf("    ERROR: subscribe failed: %v\n", err)

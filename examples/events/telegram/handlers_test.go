@@ -82,11 +82,11 @@ func TestEventsPollCursorPagination(t *testing.T) {
 	source, _ := preloadedSource(10)
 	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry())
 
+	// δ-1: flat events/poll request shape per spec L139-149.
 	result, err := c.Call("events/poll", map[string]any{
+		"name":      "telegram.message",
+		"cursor":    "0",
 		"maxEvents": 5,
-		"subscriptions": []map[string]any{
-			{"id": "page1", "name": "telegram.message", "cursor": "0"},
-		},
 	})
 	require.NoError(t, err)
 
@@ -97,10 +97,9 @@ func TestEventsPollCursorPagination(t *testing.T) {
 	assert.Equal(t, "5", *resp.Cursor)
 
 	result2, err := c.Call("events/poll", map[string]any{
+		"name":      "telegram.message",
+		"cursor":    *resp.Cursor,
 		"maxEvents": 5,
-		"subscriptions": []map[string]any{
-			{"id": "page2", "name": "telegram.message", "cursor": *resp.Cursor},
-		},
 	})
 	require.NoError(t, err)
 
@@ -118,9 +117,8 @@ func TestEventsPollEmptyStore(t *testing.T) {
 	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry())
 
 	result, err := c.Call("events/poll", map[string]any{
-		"subscriptions": []map[string]any{
-			{"id": "empty", "name": "telegram.message", "cursor": "0"},
-		},
+		"name":   "telegram.message",
+		"cursor": "0",
 	})
 	require.NoError(t, err)
 
@@ -140,9 +138,8 @@ func TestEventsPollUnknownEvent(t *testing.T) {
 	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry())
 
 	_, err := c.Call("events/poll", map[string]any{
-		"subscriptions": []map[string]any{
-			{"id": "bogus", "name": "nonexistent.event", "cursor": "0"},
-		},
+		"name":   "nonexistent.event",
+		"cursor": "0",
 	})
 	require.Error(t, err, "unknown event must return a JSON-RPC error")
 	rpcErr, ok := err.(*client.RPCError)
@@ -200,7 +197,7 @@ func TestWebhookHMACSignature_MCPHeaders(t *testing.T) {
 	// Direct registry poke (skip the JSON-RPC subscribe handler) — γ-2
 	// rekeyed Register on canonical-tuple bytes. Use a stub key for the
 	// HMAC delivery test; the canonical-key contents don't matter here.
-	webhooks.Register([]byte("hmac-test"), "sub_hmac_test", srv.URL, secret)
+	webhooks.Register([]byte("hmac-test"), "sub_hmac_test", srv.URL, secret, 0)
 
 	event := events.MakeEvent("telegram.message", "evt_1", "1", time.Now(),
 		map[string]string{"text": "hello"})
@@ -227,10 +224,9 @@ func TestEventsPollHasMore(t *testing.T) {
 	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry())
 
 	result, err := c.Call("events/poll", map[string]any{
+		"name":      "telegram.message",
+		"cursor":    "0",
 		"maxEvents": 3,
-		"subscriptions": []map[string]any{
-			{"id": "hm", "name": "telegram.message", "cursor": "0"},
-		},
 	})
 	require.NoError(t, err)
 
@@ -240,10 +236,9 @@ func TestEventsPollHasMore(t *testing.T) {
 	assert.True(t, resp.HasMore)
 
 	result2, err := c.Call("events/poll", map[string]any{
+		"name":      "telegram.message",
+		"cursor":    *resp.Cursor,
 		"maxEvents": 3,
-		"subscriptions": []map[string]any{
-			{"id": "hm2", "name": "telegram.message", "cursor": *resp.Cursor},
-		},
 	})
 	require.NoError(t, err)
 
@@ -292,8 +287,8 @@ func TestWebhookKeyedByCanonicalTuple(t *testing.T) {
 	webhooks := events.NewWebhookRegistry()
 	keyA := []byte("alice\x1fhttp://example.com/hook\x1ftelegram.message\x1f{}")
 	keyB := []byte("bob\x1fhttp://example.com/hook\x1ftelegram.message\x1f{}")
-	webhooks.Register(keyA, "sub_alice", "http://example.com/hook", "whsec_secret-1")
-	webhooks.Register(keyB, "sub_bob", "http://example.com/hook", "whsec_secret-2")
+	webhooks.Register(keyA, "sub_alice", "http://example.com/hook", "whsec_secret-1", 0)
+	webhooks.Register(keyB, "sub_bob", "http://example.com/hook", "whsec_secret-2", 0)
 
 	targets := webhooks.Targets()
 	assert.Len(t, targets, 2)
@@ -308,7 +303,7 @@ func TestWebhookKeyedByCanonicalTuple(t *testing.T) {
 // it claims — used by other tests that exercise post-TTL behavior.
 func TestWebhookTTLExpiry(t *testing.T) {
 	webhooks := events.NewWebhookRegistry()
-	webhooks.Register([]byte("exp-test"), "sub_exp", "http://example.com/hook", "whsec_secret")
+	webhooks.Register([]byte("exp-test"), "sub_exp", "http://example.com/hook", "whsec_secret", 0)
 	assert.Len(t, webhooks.Targets(), 1)
 
 	webhooks.ExpireAll()
@@ -335,7 +330,7 @@ func TestWebhookRetryOnServerError(t *testing.T) {
 	defer srv.Close()
 
 	webhooks := events.NewWebhookRegistry()
-	webhooks.Register([]byte("retry-test"), "sub_retry", srv.URL, "whsec_secret")
+	webhooks.Register([]byte("retry-test"), "sub_retry", srv.URL, "whsec_secret", 0)
 
 	event := events.MakeEvent("telegram.message", "evt_retry", "1", time.Now(),
 		map[string]string{"text": "retry me"})
@@ -363,7 +358,7 @@ func TestWebhookNoRetryOn4xx(t *testing.T) {
 	defer srv.Close()
 
 	webhooks := events.NewWebhookRegistry()
-	webhooks.Register([]byte("no-retry"), "sub_no_retry", srv.URL, "whsec_secret")
+	webhooks.Register([]byte("no-retry"), "sub_no_retry", srv.URL, "whsec_secret", 0)
 
 	event := events.MakeEvent("telegram.message", "evt_4xx", "1", time.Now(),
 		map[string]string{"text": "no retry"})

@@ -64,6 +64,8 @@ The others (resource-template subsumption, MCP task event subsumption, event-nam
 
 ### α — Wire renames + error code remap
 
+**Status:** merged via PR #353.
+
 **Goal:** make our wire bytes use the spec's vocabulary without changing semantics.
 
 **Spec deltas addressed:**
@@ -98,6 +100,8 @@ The others (resource-template subsumption, MCP task event subsumption, event-nam
 ---
 
 ### β — Collapse webhook secret modes to client-supplied only
+
+**Status:** merged via PR #355.
 
 **Goal:** match the spec's client-supplied-only secret model. The server no longer generates secrets; the client always provides the signing key on subscribe. Net-deletion PR.
 
@@ -137,6 +141,8 @@ The others (resource-template subsumption, MCP task event subsumption, event-nam
 ---
 
 ### γ — Auth + tuple subscription identity
+
+**Status:** merged via PR #356.
 
 **Goal:** key webhook subscriptions on `(principal, delivery.url, name, params)` per the spec; reject unauthenticated webhook subscribe / unsubscribe.
 
@@ -186,6 +192,8 @@ The others (resource-template subsumption, MCP task event subsumption, event-nam
 
 ### δ — Request shape alignment (flat poll, maxAge, EventOccurrence audit)
 
+**Status:** in flight on `feat/events-delta-wire-shapes`; 5 commits landed on the branch, PR pending.
+
 **Goal:** make `events/poll` and `events/subscribe` request bodies match the spec's flat shape; add `maxAge` floor; audit EventOccurrence fields.
 
 **Spec deltas addressed:**
@@ -197,14 +205,16 @@ The others (resource-template subsumption, MCP task event subsumption, event-nam
 
 The `nextCursor` and the two `_meta` fields are spec follow-ons added on 2026-05-01 (after the in-tree plan's first draft). Folded into δ rather than spinning a micro-PR because δ is already the "wire-shape audit" PR — these three are the same kind of work.
 
-**Files touched:**
-- `experimental/ext/events/events.go` — `events/poll` handler: parse the flat shape, single subscription
-- `experimental/ext/events/yield.go` — `Poll(cursor, limit)` becomes `Poll(cursor string, maxAge time.Duration, limit int)`. Apply `maxAge` floor: drop events with `timestamp < now - maxAge` from the returned slice
-- `experimental/ext/events/clients/go/subscription.go` — Subscribe options grow `MaxAge time.Duration`; sent on every refresh
-- Python SDK — same
-- Discord + telegram demos — update their `events/poll` calls to the flat shape; offer a `--max-age` flag in the python helper
+**Files touched (as built):**
+- `experimental/ext/events/events.go` — `registerPoll` flattens the request struct; `registerSubscribe` adds `MaxAge int`; new `listResultWire` typed struct gives `events/list` a `nextCursor` field with `omitempty`. `Event` and `EventDef` gain `Meta map[string]any` with JSON tag `_meta,omitempty`.
+- `experimental/ext/events/webhook.go` — `WebhookTarget` gains `MaxAgeSeconds int`; `Register` signature grows a `maxAgeSeconds` parameter (refresh treats `0` as "don't change", non-zero replaces stored floor).
+- `experimental/ext/events/clients/go/subscription.go` — `SubscribeOptions.MaxAge time.Duration`, sent on every subscribe + refresh.
+- `experimental/ext/events/clients/go/event.go` + `receiver.go` — `Event[Data].Meta map[string]any`, threaded through the receiver decoder.
+- `experimental/ext/events/clients/python/events_client.py` — `WebhookSubscription(max_age=0)` kwarg; `--max-age` flag on `webhook` and `poll` subcommands; receiver + cmd_poll printout surface `_meta`; `cmd_list` loops on `nextCursor`.
+- `experimental/ext/events/yield.go` — `YieldingSource.SetMetaFunc(func(Data) map[string]any)`. Typed setter (not a YieldingOption — option-functions don't compose with the generic `Data` type) so authors can derive per-event `_meta` without touching the yield closure signature.
+- Discord + telegram demos — every `events/poll` call site flattened. Both walkthroughs pass `MaxAge: 5*time.Minute` on subscribe (δ-3 plumbing). Discord additionally uses `SetMetaFunc` to derive `channel_type` + `mention_count` per event and `EventDef.Meta = {"category": "messaging"}` for type-level metadata.
 
-**Decision:** for emit-only sources (our YieldingSource ring), if `cursor` is older than `now - maxAge` AND the cursor has been evicted from the ring, the safer response is to set `truncated: true` + reset to current head — the spec explicitly permits this fallback when honouring `maxAge` literally would mean an expensive backfill scan. Implement that for `WithMaxSize` ring sources.
+**Decision:** kept `EventSource.Poll(cursor, limit)` interface unchanged. `maxAge` filtering happens at the handler layer in `registerPoll`, after `source.Poll()` returns: drop events with `timestamp < now - maxAge`, set `truncated: true` if any were dropped, advance `cursor` to source head when filtering removed everything (so the client doesn't re-poll for the dropped events). Avoids forcing every `EventSource` implementor to learn about replay floors. Sources with non-RFC3339 timestamps are conservatively kept.
 
 **Acceptance:**
 - `make test-experimental` green
@@ -212,9 +222,13 @@ The `nextCursor` and the two `_meta` fields are spec follow-ons added on 2026-05
 - `maxAge` floor test: subscribe with `maxAge: 1` after sleeping 2s past a known event, verify the event is dropped from replay
 - `EventOccurrence` field audit: every wire-format event has the five required fields with the right names
 
-**Tests:**
-- New `events_poll_shape_test.go` for the flat-request shape
-- Extend `yield_test.go` with `maxAge` filtering cases
+**Tests (as built):** added to `experimental/ext/events/wire_shape_test.go` —
+- `TestPoll_FlatRequestShape`, `TestPoll_RejectsLegacyWrapper` (δ-1)
+- `TestPoll_MaxAgeFiltersOldEvents`, `TestPoll_MaxAgeZeroMeansNoFilter` (δ-2)
+- `TestSubscribe_AcceptsMaxAge`, `TestSubscribe_DefaultsMaxAgeToZero` (δ-3)
+- `TestEvent_MetaSerializesWithUnderscorePrefix` + omits-when-absent counter; same pair for `EventDef` (δ-4)
+- `TestYieldingSource_MetaFunc` + nil-omits counter in `yield_test.go` (SetMetaFunc helper)
+- `TestList_NextCursorOmitsWhenEmpty`, `TestList_NextCursorPresentWhenSet` (δ-5)
 
 **Risk:** Low. Wire-breaking but the change is mechanical and the spec is firm.
 

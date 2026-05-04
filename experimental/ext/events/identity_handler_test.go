@@ -141,8 +141,8 @@ func TestSubscribe_TupleIsolationCrossPrincipal(t *testing.T) {
 	idBob := deriveSubscriptionID(keyBob)
 
 	// Same URL, name, params; different principal → distinct registry entries.
-	webhooks.Register(keyAlice, idAlice, "https://example.com/hook", "whsec_a")
-	webhooks.Register(keyBob, idBob, "https://example.com/hook", "whsec_b")
+	webhooks.Register(keyAlice, idAlice, "https://example.com/hook", "whsec_a", 0)
+	webhooks.Register(keyBob, idBob, "https://example.com/hook", "whsec_b", 0)
 
 	assert.Len(t, webhooks.Targets(), 2, "different principals must produce distinct registry entries")
 	assert.NotEqual(t, idAlice, idBob, "different canonical keys must derive different ids")
@@ -225,7 +225,7 @@ func TestDelivery_EmitsXMCPSubscriptionIDHeader(t *testing.T) {
 	webhooks := NewWebhookRegistry()
 	canonical := canonicalKey("test-principal", callback.URL, "fake.event", nil)
 	subID := deriveSubscriptionID(canonical)
-	webhooks.Register(canonical, subID, callback.URL, "whsec_"+strings.Repeat("a", 32))
+	webhooks.Register(canonical, subID, callback.URL, "whsec_"+strings.Repeat("a", 32), 0)
 
 	// Direct Deliver bypasses the JSON-RPC handler — what we want to
 	// inspect is the registry's outbound HTTP shape, not the subscribe

@@ -99,10 +99,10 @@ func TestE2EPollDelivery(t *testing.T) {
 	require.NoError(t, yield(newDiscordEvent("guild-1", "channel-1", "alice", "hello", time.Now())))
 	require.NoError(t, yield(newDiscordEvent("guild-1", "channel-1", "bob", "world", time.Now())))
 
+	// δ-1: flat events/poll request shape per spec L139-149.
 	result, err := c.Call("events/poll", map[string]any{
-		"subscriptions": []map[string]any{
-			{"id": "poll", "name": "discord.message", "cursor": "0"},
-		},
+		"name":   "discord.message",
+		"cursor": "0",
 	})
 	require.NoError(t, err)
 
@@ -487,9 +487,8 @@ func TestE2ECursorlessPollAlwaysEmpty(t *testing.T) {
 	}
 
 	result, err := c.Call("events/poll", map[string]any{
-		"subscriptions": []map[string]any{
-			{"id": "p", "name": "discord.typing", "cursor": "0"},
-		},
+		"name":   "discord.typing",
+		"cursor": "0",
 	})
 	require.NoError(t, err)
 
@@ -533,14 +532,20 @@ func TestE2EPollMultiSubRejected(t *testing.T) {
 	srv, _, _, _ := buildTestStack()
 	c, _ := connectClient(t, srv)
 
+	// δ-1: the {subscriptions: [...]} wrapper itself is rejected with a
+	// helpful error — multi-sub vs single-sub no longer matters since the
+	// spec's flat shape doesn't have an array at all. The
+	// TestPoll_RejectsLegacyWrapper test in wire_shape_test.go covers the
+	// wrapper-level rejection at the handler level; this demo test now just
+	// confirms the user-facing error message points at the spec.
 	_, err := c.Call("events/poll", map[string]any{
 		"subscriptions": []map[string]any{
-			{"id": "a", "name": "discord.message", "cursor": "0"},
-			{"id": "b", "name": "discord.typing", "cursor": "0"},
+			{"name": "discord.message", "cursor": "0"},
 		},
 	})
-	require.Error(t, err, "multi-subscription events/poll must be rejected")
-	assert.Contains(t, err.Error(), "exactly one subscription", "error message must point at the spec change")
+	require.Error(t, err, "legacy {subscriptions: [...]} wrapper must be rejected")
+	assert.Contains(t, err.Error(), "legacy", "error message must explain the wrapper rejection")
+	assert.Contains(t, err.Error(), "L139", "error must cite the spec section")
 }
 
 // TestE2EResourceByCursor verifies the per-message resource template resolves

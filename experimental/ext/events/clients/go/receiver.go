@@ -108,6 +108,7 @@ func (r *Receiver[Data]) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		Timestamp: wire.Timestamp,
 		Cursor:    wire.Cursor,
 		Data:      data,
+		Meta:      wire.Meta,
 	}
 
 	// Non-blocking send. A full channel signals a slow consumer; we'd
