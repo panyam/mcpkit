@@ -450,6 +450,9 @@ def _make_webhook_handler(secret_holder):
                 print(f"  name:    {event.get('name', '')}")
                 print(f"  time:    {event.get('timestamp', '')}")
                 print(f"  cursor:  {_fmt_cursor(event.get('cursor'))}")
+                meta = event.get("_meta")
+                if meta:
+                    print(f"  _meta:   {json.dumps(meta, separators=(',', ':'))}")
                 data = event.get("data")
                 if data:
                     print(json.dumps(data, indent=2))
@@ -560,6 +563,9 @@ def cmd_poll(session: MCPSession, args):
                     print(f"  name:    {ev.get('name', '')}")
                     print(f"  time:    {ev.get('timestamp', '')}")
                     print(f"  cursor:  {_fmt_cursor(ev.get('cursor'))}")
+                    meta = ev.get("_meta")
+                    if meta:
+                        print(f"  _meta:   {json.dumps(meta, separators=(',', ':'))}")
                     data = ev.get("data")
                     if data:
                         print(json.dumps(data, indent=2))

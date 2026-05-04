@@ -34,6 +34,11 @@ type Event struct {
 	Timestamp string          `json:"timestamp"`
 	Data      json.RawMessage `json:"data"`
 	Cursor    *string         `json:"cursor"`
+	// Meta is opaque per-occurrence metadata (spec follow-on commit
+	// d4faef9 2026-05-01). Mirrors the `_meta` field on Tool / Resource
+	// / Prompt in base MCP. Library threads it through; semantics are
+	// app-defined (trace ids, source-system tags, etc.).
+	Meta map[string]any `json:"_meta,omitempty"`
 }
 
 // HasCursor reports whether the event carries a cursor (cursored source) or
@@ -64,6 +69,11 @@ type EventDef struct {
 	Delivery      []string `json:"delivery"`
 	PayloadSchema any      `json:"payloadSchema,omitempty"`
 	Cursorless    bool     `json:"cursorless,omitempty"`
+	// Meta is opaque per-event-type metadata (spec follow-on commit
+	// d4faef9 2026-05-01). Same `_meta` convention as Event /
+	// Tool / Resource / Prompt. Sources set it once at construction
+	// and the library surfaces it on events/list.
+	Meta map[string]any `json:"_meta,omitempty"`
 }
 
 // PollResult holds the result of a cursor-based poll from an event source.
