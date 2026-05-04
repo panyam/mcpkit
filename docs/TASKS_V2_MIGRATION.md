@@ -210,4 +210,4 @@ The expected flow for a deployment migrating from v1 to v2 without downtime:
 - SEP-2243 (Mcp-Name HTTP header): adopted from spec discussion
 - Implementation plan + open questions: [`PLAN.md`](../PLAN.md)
 - v2 example walkthrough: [`examples/tasks-v2/WALKTHROUGH.md`](../examples/tasks-v2/WALKTHROUGH.md)
-- v2 conformance suite: [`conformance/tasks-v2/scenarios.test.ts`](../conformance/tasks-v2/scenarios.test.ts) (26 scenarios)
+- v2 conformance suite: [`conformance/tasks-v2/scenarios.test.ts`](../conformance/tasks-v2/scenarios.test.ts) (33 scenarios)
