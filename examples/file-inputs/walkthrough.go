@@ -2,6 +2,7 @@ package main
 
 import (
 	_ "embed"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -32,7 +33,9 @@ var fixtureAppendixPDF []byte
 var fixtureREADME []byte
 
 // filterFlags strips top-level flags so the inner flag.Parse on -addr is
-// happy when invoked from `make serve`. Same shape as list-ttl/walkthrough.go.
+// happy when invoked from `make serve`. Same shape as list-ttl/walkthrough.go,
+// updated for demokit v0.0.13's `--doc <format>` (replaces the removed
+// `--readme` flag) and `--from <trace>` companion.
 func filterFlags(args []string) []string {
 	out := make([]string, 0, len(args))
 	skip := false
@@ -41,11 +44,14 @@ func filterFlags(args []string) []string {
 			skip = false
 			continue
 		}
-		switch a {
-		case "--serve", "--tui", "--readme", "--non-interactive":
+		switch {
+		case a == "--serve", a == "--tui", a == "--non-interactive":
 			continue
-		case "--url":
+		case a == "--url", a == "--file", a == "--doc", a == "--from":
 			skip = true
+			continue
+		case strings.HasPrefix(a, "--doc="), strings.HasPrefix(a, "--from="),
+			strings.HasPrefix(a, "--url="), strings.HasPrefix(a, "--file="):
 			continue
 		}
 		out = append(out, a)
@@ -95,27 +101,27 @@ func runDemo() {
 		Arrow("Host", "Server", "POST /mcp — initialize (capabilities.fileInputs={})").
 		DashedArrow("Server", "Host", "serverInfo + capabilities").
 		Note("`client.NewClient(...)` + `Connect()`. Once Phase 1.6 lands, the client will auto-advertise `fileInputs` when the option is enabled; for now the demo connects with the default capability set and the server unconditionally exposes `x-mcp-file` so we can see the wire shape.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			c = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "file-inputs-host", Version: "1.0"},
 			)
 			if err := c.Connect(); err != nil {
 				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
-				return
+				return nil
 			}
 			fmt.Printf("    Connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)
-			return
+			return nil
 		})
 
 	demo.Step("tools/list — confirm x-mcp-file appears on inputSchemas").
 		Arrow("Host", "Server", "tools/list").
 		DashedArrow("Server", "Host", "tools[] with x-mcp-file marked properties").
 		Note("Bypass any typed helper and decode the raw response so we can see the JSON Schema shape exactly as a client would. `properties.image.x-mcp-file` carries `{accept: [\"image/*\"], maxSize: 5242880}` — that's the picker hint.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			raw, err := c.Call("tools/list", nil)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
-				return
+				return nil
 			}
 			var page struct {
 				Tools []struct {
@@ -125,7 +131,7 @@ func runDemo() {
 			}
 			if err := json.Unmarshal(raw.Raw, &page); err != nil {
 				fmt.Printf("    ERROR decoding tools/list: %v\n", err)
-				return
+				return nil
 			}
 			for _, t := range page.Tools {
 				fmt.Printf("    %-20s\n", t.Name)
@@ -139,35 +145,38 @@ func runDemo() {
 						prop, accepts(d), maxSize(d))
 				}
 			}
-			return
+			return nil
 		})
 
 	demo.Step("upload_image — encode + call with a real PNG").
 		Arrow("Host", "Server", "tools/call upload_image { image: data:image/png;name=…;base64,… }").
 		DashedArrow("Server", "Host", "text result with size + media type").
-		Note("Read `testdata/pixel.png` (a real 1×1 PNG, embedded at build time), encode it via `core.EncodeDataURI`, and pass the resulting string as the `image` argument. The handler runs `core.DecodeDataURI` to recover bytes, media type, and the original filename. Size and MIME validation will be enforced by `server.ValidateFileInput` once Phase 1.4 lands; today the handler trusts the input.").
-		Run(func() (result *demokit.StepResult) {
+		Note("Read `testdata/pixel.png` (a 24×24 RGB gradient, embedded at build time), encode it via `core.EncodeDataURI`, and pass the resulting string as the `image` argument. The handler runs `core.DecodeDataURI` to recover bytes, media type, and the original filename. Size and MIME validation will be enforced by `server.ValidateFileInput` once Phase 1.4 lands; today the handler trusts the input.").
+		Run(func(ctx demokit.StepContext) *demokit.StepResult {
+			previewFile("pixel.png", "image/png", fixturePixelPNG)
 			uri := core.EncodeDataURI(fixturePixelPNG, "image/png", "pixel.png")
 			fmt.Printf("    encoded data URI: %d bytes (preview: %s…)\n",
 				len(uri), shortPreview(uri, 80))
 
 			out, err := c.ToolCall("upload_image", map[string]any{
 				"image":   uri,
-				"caption": "smallest valid PNG",
+				"caption": "24×24 gradient swatch",
 			})
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
-				return
+				return nil
 			}
 			fmt.Printf("    server response:\n%s", indent(out, "      "))
-			return
+			return nil
 		})
 
 	demo.Step("analyze_documents — array-of-files input").
 		Arrow("Host", "Server", "tools/call analyze_documents { documents: [data:application/pdf;…, data:application/pdf;…] }").
 		DashedArrow("Server", "Host", "summary line per document").
 		Note("Demonstrates `core.FileInputArrayProperty` — the schema marks the `documents` array's *items* with `x-mcp-file`, so a host renders one picker per row. The walkthrough loads two embedded PDFs (`testdata/contract.pdf`, `testdata/appendix.pdf`) and sends both in one call.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) *demokit.StepResult {
+			previewFile("contract.pdf", "application/pdf", fixtureContractPDF)
+			previewFile("appendix.pdf", "application/pdf", fixtureAppendixPDF)
 			pdfs := []string{
 				core.EncodeDataURI(fixtureContractPDF, "application/pdf", "contract.pdf"),
 				core.EncodeDataURI(fixtureAppendixPDF, "application/pdf", "appendix.pdf"),
@@ -177,45 +186,47 @@ func runDemo() {
 			})
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
-				return
+				return nil
 			}
 			fmt.Printf("    server response:\n%s", indent(out, "      "))
-			return
+			return nil
 		})
 
 	demo.Step("process_any_file — no accept/maxSize filter").
 		Arrow("Host", "Server", "tools/call process_any_file { file: data:text/plain;name=README.txt;base64,… }").
 		DashedArrow("Server", "Host", "decoded media type + size").
 		Note("Empty `FileInputDescriptor{}` means \"any file, any size.\" Useful for ad-hoc inspection. The handler still decodes via `core.DecodeDataURI`, which rejects malformed or non-base64 URIs. The walkthrough reads `testdata/README.txt` so the payload is a real on-disk file.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) *demokit.StepResult {
+			previewFile("README.txt", "text/plain", fixtureREADME)
 			uri := core.EncodeDataURI(fixtureREADME, "text/plain", "README.txt")
 			out, err := c.ToolCall("process_any_file", map[string]any{
 				"file": uri,
 			})
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
-				return
+				return nil
 			}
 			fmt.Printf("    server response:\n%s", indent(out, "      "))
-			return
+			return nil
 		})
 
 	demo.Step("Optional: send a file from disk").
 		Arrow("Host", "Server", "tools/call upload_image (from --file <path>)").
 		DashedArrow("Server", "Host", "decoded metadata of the on-disk file").
 		Note("Pass `--file <path>` on the demo command line to read an image from disk and upload it. Skipped silently when the flag isn't set so the walkthrough stays hermetic; demonstrates the on-disk → data URI path you'd use in a real client integration. Phase 1.6 will fold this into `client.PrepareFileArg(path, descriptor)`.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			path := flagValue("--file")
 			if path == "" {
 				fmt.Printf("    skipped (pass --file <path> to exercise this step)\n")
-				return
+				return nil
 			}
 			data, err := os.ReadFile(path)
 			if err != nil {
 				fmt.Printf("    ERROR reading %s: %v\n", path, err)
-				return
+				return nil
 			}
 			mediaType := guessImageMIME(path)
+			previewFile(filepath.Base(path), mediaType, data)
 			uri := core.EncodeDataURI(data, mediaType, filepath.Base(path))
 			fmt.Printf("    %s (%s, %d bytes)\n", filepath.Base(path), mediaType, len(data))
 			out, err := c.ToolCall("upload_image", map[string]any{
@@ -223,10 +234,10 @@ func runDemo() {
 			})
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
-				return
+				return nil
 			}
 			fmt.Printf("    server response:\n%s", indent(out, "      "))
-			return
+			return nil
 		})
 
 	demo.Section("Where to look in the code",
@@ -310,6 +321,64 @@ func maxSize(d *core.FileInputDescriptor) string {
 		return "<unlimited>"
 	}
 	return fmt.Sprintf("%d bytes", *d.MaxSize)
+}
+
+// previewFile prints a small inline preview of the bytes about to be
+// uploaded so the demo viewer can sanity-check the payload visually before
+// it gets base64-stuffed into a data URI.
+//
+//   - image/*: emits the iTerm2 inline-image escape sequence
+//     (`\x1b]1337;File=…:base64\x07`). iTerm2, WezTerm, and Mintty render
+//     it as an inline thumbnail; other terminals consume the OSC silently.
+//   - text/*: prints the first ~3 lines of the file.
+//   - everything else: hex preview of the leading bytes.
+func previewFile(filename, mediaType string, data []byte) {
+	fmt.Printf("    ─ %s (%s, %d bytes) ─\n", filename, mediaType, len(data))
+	switch {
+	case strings.HasPrefix(mediaType, "image/"):
+		previewImage(filename, data)
+	case strings.HasPrefix(mediaType, "text/"):
+		previewText(data, 3)
+	default:
+		previewHex(data, 32)
+	}
+}
+
+func previewImage(filename string, data []byte) {
+	encoded := base64.StdEncoding.EncodeToString(data)
+	nameB64 := base64.StdEncoding.EncodeToString([]byte(filename))
+	// iTerm2 inline-image protocol: OSC 1337 ; File=… ST.
+	// width=auto + preserveAspectRatio=1 keeps tiny images legible.
+	fmt.Printf("      \x1b]1337;File=name=%s;inline=1;preserveAspectRatio=1;width=auto;height=auto:%s\x07\n",
+		nameB64, encoded)
+}
+
+func previewText(data []byte, maxLines int) {
+	scanner := strings.Split(string(data), "\n")
+	if len(scanner) > maxLines {
+		scanner = scanner[:maxLines]
+	}
+	for _, line := range scanner {
+		fmt.Printf("      │ %s\n", line)
+	}
+	fmt.Printf("      │ …\n")
+}
+
+func previewHex(data []byte, n int) {
+	if len(data) < n {
+		n = len(data)
+	}
+	var b strings.Builder
+	for i := 0; i < n; i++ {
+		if i > 0 && i%8 == 0 {
+			b.WriteByte(' ')
+		}
+		fmt.Fprintf(&b, "%02x ", data[i])
+	}
+	fmt.Printf("      │ %s\n", strings.TrimRight(b.String(), " "))
+	if len(data) > n {
+		fmt.Printf("      │ … (+%d bytes)\n", len(data)-n)
+	}
 }
 
 func shortPreview(s string, n int) string {
