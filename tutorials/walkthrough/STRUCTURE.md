@@ -33,6 +33,20 @@ This is dependency tracking for documentation. Instead of every page restating p
 
 Branch and leaf pages don't need the full contract — they elaborate on a part of a root and live within its parent's precondition envelope.
 
+### Optional pattern: FAQ-style roots
+
+A root may be organized as a series of **questions** rather than a single linear walkthrough. Each Q is a self-contained chunk; the set collectively covers the territory and establishes the End-state. Each Q can carry its own mid-journey `Branch →` callouts.
+
+This works well when:
+
+- The territory has multiple semi-independent angles a reader might want to skim selectively (taxonomy, mechanism, race conditions, integration with another concept, common gotcha).
+- The root grew out of a real conversation — the questions you actually wanted answered are usually the right shape for a teaching doc.
+- The reader can stop after any one Q with a partial-but-coherent end-state.
+
+Example: [notifications.md](./notifications.md) — five Qs covering taxonomy, the worked example (list-changed), cancellation, progress, and capability mismatch.
+
+Use sparingly. Most roots want a single linear walkthrough; FAQ-style is a tool for the surveyable-territory case.
+
 ## Per-page header
 
 Every page declares its position in the graph:
