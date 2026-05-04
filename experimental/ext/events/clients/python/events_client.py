@@ -173,10 +173,21 @@ def cmd_list(session: MCPSession, args):
     print()
 
     # events/list
+    # δ-5: pagination via nextCursor (spec follow-on 2026-05-01).
+    # Today the library returns all sources in one response, but a server
+    # author with many event types may paginate; the loop is forward-
+    # compatible with that.
     print("--- events/list ---")
-    resp = session.rpc("events/list", {})
-    for ev in resp.get("result", {}).get("events", []):
-        print(json.dumps(ev, indent=2))
+    cursor = None
+    while True:
+        params = {"cursor": cursor} if cursor else {}
+        resp = session.rpc("events/list", params)
+        result = resp.get("result", {})
+        for ev in result.get("events", []):
+            print(json.dumps(ev, indent=2))
+        cursor = result.get("nextCursor")
+        if not cursor:
+            break
     print()
 
     # events/poll

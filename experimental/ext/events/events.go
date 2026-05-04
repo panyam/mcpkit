@@ -274,13 +274,25 @@ type pollResultWire struct {
 	NextPollSeconds int     `json:"nextPollSeconds,omitempty"`
 }
 
+// listResultWire is the events/list response shape (spec follow-on
+// commit d4faef9 2026-05-01). Optional `nextCursor` matches the
+// tools/list / resources/list pagination convention. The library does
+// not paginate today (event-type lists are small in practice); the
+// field is plumbed for forward compatibility — servers that DO have a
+// large advertised set can wrap or replace this handler and emit
+// nextCursor without changing the wire shape.
+type listResultWire struct {
+	Events     []EventDef `json:"events"`
+	NextCursor string     `json:"nextCursor,omitempty"`
+}
+
 func registerList(srv *server.Server, sources []EventSource) {
 	srv.HandleMethod("events/list", func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		defs := make([]EventDef, 0, len(sources))
 		for _, s := range sources {
 			defs = append(defs, s.Def())
 		}
-		return core.NewResponse(id, map[string]any{"events": defs})
+		return core.NewResponse(id, listResultWire{Events: defs})
 	})
 }
 
