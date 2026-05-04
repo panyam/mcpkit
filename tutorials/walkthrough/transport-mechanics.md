@@ -402,9 +402,10 @@ After reading this root, downstream pages can assume:
 
 ## Leads to
 
-Roots that build on this end-state:
+Roots and pages that build on this end-state:
 
+- **(forthcoming) Notifications** — the session's state-change channel; uses the no-id JSON-RPC shape from this root, flows over the channels established here.
 - **(forthcoming) Per-request anatomy** — uses the wire model and correlation tables from this root to walk the dispatch journey.
 - **(forthcoming) Reverse-call mechanics** — concretizes the parent-handler-context constraint with a real `tools/call → elicitation/create` example.
-- **(forthcoming) Tasks subsystem (v1/v2/hybrid)** — long-running operations layered on top of correlation + notifications.
-- **(forthcoming) SSE resumption** — `Last-Event-ID` replay, the server's event store, in-flight response recovery. (Leaf, not a root.)
+- **(forthcoming) SSE resumption** *(leaf)* — `Last-Event-ID` replay, the server's event store, in-flight response recovery.
+- **[`experimental/ext/events/`](../../experimental/ext/events/README.md)** *(branch, target-shape)* — mcpkit's exploration of events as a first-class concept beyond raw SSE event-id replay.

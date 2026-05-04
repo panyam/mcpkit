@@ -37,10 +37,15 @@ type ElicitationCap struct {
 
 // ClientCapabilities describes features the client supports.
 type ClientCapabilities struct {
-	Sampling    *struct{}        `json:"sampling,omitempty"`
-	Roots       *RootsCap        `json:"roots,omitempty"`
-	Elicitation *ElicitationCap  `json:"elicitation,omitempty"`
-	Tasks       *ClientTasksCap  `json:"tasks,omitempty"`
+	Sampling    *struct{}       `json:"sampling,omitempty"`
+	Roots       *RootsCap       `json:"roots,omitempty"`
+	Elicitation *ElicitationCap `json:"elicitation,omitempty"`
+	Tasks       *ClientTasksCap `json:"tasks,omitempty"`
+	// FileInputs advertises SEP-2356 support: the client can render
+	// x-mcp-file schema properties as file pickers and encode the
+	// chosen files as RFC 2397 data URIs. Currently a marker — the
+	// SEP does not define sub-fields yet.
+	FileInputs *struct{} `json:"fileInputs,omitempty"`
 
 	// Extensions maps extension IDs to the client's capability declaration
 	// for that extension. Sent during initialize to advertise extension support.

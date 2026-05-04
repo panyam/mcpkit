@@ -18,7 +18,10 @@ Recommended reading order for someone new to the material:
 2. **[Transport mechanics: stdio vs. streamable HTTP](./transport-mechanics.md)** — *root, foundational*  
    What the wire actually looks like per transport. The SSE "upgrade" demystified, the standing-GET back-channel, JSON-RPC correlation, per-direction ID spaces, the reverse-call origination constraint. *End-state: you can read messages off the wire on either transport and follow the correlation model.*
 
-*(More roots get appended here as the conversation reaches them — per-request anatomy, reverse-call mechanics, notifications, tasks, …)*
+3. **[Notifications](./notifications.md)** — *root · FAQ-style*  
+   The session's state-change channel, in five questions: taxonomy + capability gating, the list-changed worked example, cancellation against the pending-id table, progress pairing via `_meta.progressToken`, and what receivers do with unknown notifications. *End-state: you know all six notification families, their direction, what gates each, and how progress and cancellation interact with session state.*
+
+*(More roots get appended here as the conversation reaches them — per-request anatomy, reverse-call mechanics, tasks, auth deep-dive, …)*
 
 ## Other entry points
 
