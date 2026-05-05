@@ -24,6 +24,7 @@ import (
 
 	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/ext/ui"
 	"github.com/panyam/mcpkit/server"
 )
 
@@ -69,12 +70,17 @@ func serve() {
 		server.WithListen(*addr),
 		server.WithRequestLogging(logger),
 		server.WithMiddleware(server.LoggingMiddleware(logger)),
+		// MCP Apps extension powers the in-iframe file picker apps
+		// registered in apps.go (SEP-2356 Phase 2.1).
+		server.WithExtension(&ui.UIExtension{}),
 	)
 
 	registerTools(srv, uploadDir)
+	registerAppsTools(srv, uploadDir)
 
 	log.Printf("[file-inputs-demo] listening on %s — POST /mcp", *addr)
 	log.Printf("[file-inputs-demo] tools: upload_image, analyze_documents, process_any_file")
+	log.Printf("[file-inputs-demo] apps:  apps_upload_image, apps_analyze_documents (in-iframe pickers)")
 	log.Printf("[file-inputs-demo] uploads will be written to %s (not auto-cleaned)", uploadDir)
 	if err := srv.ListenAndServe(server.WithStreamableHTTP(true)); err != nil {
 		log.Fatalf("ListenAndServe: %v", err)

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Upload Image</title>
+  <style>
+    * { box-sizing: border-box }
+    body { margin: 0; font-family: system-ui; padding: 1.5em; max-width: 480px }
+    h1 { font-size: 1.25em; margin: 0 0 0.5em }
+    p.hint { color: #666; margin: 0 0 1em }
+    button {
+      font-size: 1em; padding: 0.5em 1em; cursor: pointer;
+      border-radius: 6px; border: 1px solid #ccc; background: #f5f5f5;
+    }
+    button:hover { background: #e8e8e8 }
+    button:disabled { cursor: not-allowed; opacity: 0.5 }
+    #preview { margin-top: 1em; max-width: 100%; max-height: 200px; display: none }
+    #status { margin-top: 1em; font-family: ui-monospace, monospace; font-size: 0.9em; white-space: pre-wrap }
+    .err { color: #b00 }
+    .ok { color: #060 }
+  </style>
+  <script type="module">
+    window.MCPAppConfig = {
+      name: "{{ .Bridge.AppName }}",
+      version: "{{ .Bridge.AppVersion }}",
+      protocolVersion: "{{ .Bridge.ProtocolVersion }}"
+    };
+    {{ .Bridge.BridgeJS }}
+
+    // SEP-2356 Phase 2.1 — selectFile + callTool round-trip.
+    // Demonstrates: in-iframe native picker → data URI → server tool call.
+    const button  = document.getElementById('pick');
+    const status  = document.getElementById('status');
+    const preview = document.getElementById('preview');
+    const setStatus = (msg, cls) => { status.textContent = msg; status.className = cls || ''; };
+
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      setStatus('Opening picker...');
+      try {
+        // accept + maxSize match the upload_image tool's FileInputDescriptor
+        // exactly. The bridge enforces both client-side BEFORE encoding.
+        const dataUri = await MCPApp.selectFile({
+          accept: ['image/*'],
+          maxSize: 5 * 1024 * 1024,
+        });
+        preview.src = dataUri;
+        preview.style.display = 'block';
+        setStatus('Uploading via tools/call...');
+        const res = await MCPApp.callTool('upload_image', {
+          image: dataUri,
+          caption: 'selected via mcp.selectFile()',
+        });
+        const text = (res && res.content || []).map(c => c.text || '').join('\n');
+        setStatus(text || 'OK', 'ok');
+      } catch (err) {
+        // Sentinel error names align with server-side -32602 reasons:
+        //   MCPFileSelectionCanceled  — user cancel (no server-side equivalent)
+        //   MCPFileTooLarge           — matches `file_too_large`
+        //   MCPFileTypeNotAccepted    — matches `file_type_not_accepted`
+        if (err.name === 'MCPFileSelectionCanceled') {
+          setStatus('Cancelled.');
+        } else {
+          setStatus(`${err.name || 'Error'}: ${err.message}`, 'err');
+        }
+      } finally {
+        button.disabled = false;
+      }
+    });
+  </script>
+</head>
+<body>
+  <h1>SEP-2356 — single-file picker</h1>
+  <p class="hint">Click the button to choose an image. The bridge encodes it as a data URI and sends it through tools/call.</p>
+  <button id="pick">Select image</button>
+  <img id="preview" alt="preview">
+  <div id="status"></div>
+</body>
+</html>

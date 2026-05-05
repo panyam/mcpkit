@@ -140,20 +140,20 @@ Conformance-style tests:
 
 ## Phase 2: MCP Apps bridge integration
 
-### 2.1: Bridge `selectFile` API
+### 2.1: Bridge `selectFile` API ✅ shipped
 
-**Files:** `ext/ui/assets/mcp-app-bridge.ts`
+**Files:** `ext/ui/assets/mcp-app-bridge.ts`, `ext/ui/assets/file-picker.ts` (new), `ext/ui/assets/mcp-app-bridge.d.ts`, `ext/ui/assets/mcp-app-bridge.test.ts`, `ext/ui/assets/package.json`, `examples/file-inputs/apps/{upload-image,analyze-documents}.html`, `examples/file-inputs/apps.go`
 
-- [ ] New bridge method:
-  ```js
-  mcp.selectFile({ accept: ["image/*"], maxSize: 5242880 })
-    .then(dataUri => { /* "data:image/png;name=photo.png;base64,..." */ })
-  ```
-- [ ] Opens native `<input type="file">` with `accept` attribute from descriptor
-- [ ] Reads file via `FileReader.readAsDataURL`
-- [ ] Adds `name=` parameter (percent-encoded original filename)
-- [ ] Client-side size check against `maxSize` before encoding
-- [ ] Returns the data URI string for the app to include in tool arguments
+- [x] `mcp.selectFile(descriptor) → Promise<string>` (single) and `mcp.selectFiles(descriptor) → Promise<string[]>` (multi).
+- [x] Synthesizes a hidden `<input type="file">`; sets `accept` from descriptor (joined with comma); sets `multiple` for multi.
+- [x] FileReader → data URI; injects `name=<percent-encoded>` parameter using a PathEscape-equivalent encoder so output matches `core.EncodeDataURI` byte-for-byte.
+- [x] Client-side validation runs BEFORE FileReader: `maxSize` byte check, accept-pattern matcher (exact MIME / wildcard subtype / extension hint).
+- [x] Sentinel errors: `MCPFileSelectionCanceled`, `MCPFileTooLarge`, `MCPFileTypeNotAccepted`. `reason` fields align with server-side `-32602` codes from #361.
+- [x] Cancel detection: native `cancel` event (Chrome 113+ / Safari 17+ / Firefox 91+) plus focus-return fallback.
+- [x] Picker code lives in its own `file-picker.ts` module (extracted from the main bridge file); bundled via esbuild — build switched from `tsc` to `esbuild --bundle --format=iife`.
+- [x] 13 new vitest cases (61/61 total) covering happy path, percent-encoding, accept propagation, oversized rejection, MIME mismatch, wildcard match, extension match, empty descriptor, cancel, multi-file ordering, binary round-trip, canonical `core.EncodeDataURI` interop.
+- [x] Apps-mode fixtures in `examples/file-inputs/apps/` — `apps_upload_image` and `apps_analyze_documents` tools register `ui://` resources whose HTML drives `mcp.selectFile` / `mcp.selectFiles` then routes through the existing tool handlers.
+- [x] Host-mediated variant (`via: "host"` to route through host postMessage) deferred to follow-up issue #370.
 
 ### 2.2: Bridge elicitation file picker
 

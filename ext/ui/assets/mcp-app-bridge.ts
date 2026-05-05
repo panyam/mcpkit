@@ -8,8 +8,17 @@
  * Usage: include via <script> tag in server-generated HTML. The bridge
  * self-initializes on load and exposes a global `MCPApp` singleton.
  *
+ * Activity-specific modules (e.g. file-picker.ts) live alongside this file
+ * and are bundled in by esbuild at build time. Keep those modules small
+ * and self-contained — this file owns protocol shell + MCPApp singleton.
+ *
  * @see https://github.com/panyam/mcpkit
  */
+
+import {
+  selectFilesInternal,
+  type FileInputDescriptor,
+} from "./file-picker.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -700,6 +709,30 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
 
     downloadFile(url: string, filename?: string, options?: RequestOptions): Promise<unknown> {
       return request("ui/download-file", { url, filename }, options);
+    },
+
+    /**
+     * Open a native file picker in the iframe and resolve with the chosen
+     * file as an RFC 2397 base64 data URI (`data:<mediaType>;name=<...>;base64,<...>`).
+     *
+     * MUST be invoked from inside a user-gesture handler (button click,
+     * keypress, etc.) — modern browsers block programmatic .click() on
+     * file inputs otherwise.
+     *
+     * Wire format matches `core.EncodeDataURI` byte-for-byte so a server
+     * receiving the URI can decode it via `core.DecodeDataURI` without
+     * special-casing for browser-side encoding quirks.
+     */
+    selectFile(descriptor?: FileInputDescriptor): Promise<string> {
+      return selectFilesInternal(descriptor, false).then((uris) => uris[0]);
+    },
+
+    /**
+     * Open a multi-select file picker. Same wire format as `selectFile`;
+     * resolves with an array of data URIs in selection order.
+     */
+    selectFiles(descriptor?: FileInputDescriptor): Promise<string[]> {
+      return selectFilesInternal(descriptor, true);
     },
 
     requestDisplayMode(mode: string, options?: RequestOptions): Promise<unknown> {
