@@ -186,7 +186,16 @@ done in parallel after Fix 1 lands.
 
 ## Not in scope (deferred)
 
-- MRTR + tasks composition (issue 347, P2/parked — middleware redesign needed)
+- MRTR + tasks composition (issue 347, P2/parked — middleware redesign
+  needed; mrtr-08 conformance skip already exists in
+  `conformance/mrtr/scenarios.test.ts`).
+- MRTR resultType discriminator collision (`"input_required"` vs
+  `"incomplete"`) — SEP-2322 and SEP-2663 drafts disagree on the wire
+  value; awaiting alignment between the two SEP authors. Tracked on
+  PR 2663 comment 4381885336 + PR 2322 comment 4381884825. mcpkit
+  follows SEP-2663's `"incomplete"`. The mrtr conformance suite
+  centralizes the literal in `MRTR_INCOMPLETE_RESULT_TYPE` so the
+  eventual spec resolution is a single-line flip.
 - Partial inputResponses fulfillment test (P2 — nice to have)
 - TTL expiry post-path test (P2 — hard to test conformantly)
 - Polling rate-limit test (P2 — hard to test conformantly)
