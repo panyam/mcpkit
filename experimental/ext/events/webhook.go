@@ -15,7 +15,10 @@ import (
 	"time"
 )
 
-const defaultWebhookTTL = 60 * time.Second // 1 minute for POC (production: longer)
+const (
+	defaultWebhookTTL          = 60 * time.Second // 1 minute for POC (production: longer)
+	defaultWebhookMaxBodyBytes = 256 * 1024       // ζ-3 spec L487
+)
 
 // WebhookOption configures a WebhookRegistry at construction time.
 type WebhookOption func(*WebhookRegistry)
@@ -39,6 +42,22 @@ func WithWebhookTTL(ttl time.Duration) WebhookOption {
 func WithWebhookHeaderMode(mode WebhookHeaderMode) WebhookOption {
 	return func(r *WebhookRegistry) {
 		r.headerMode = mode
+	}
+}
+
+// WithWebhookMaxBodyBytes overrides the outbound delivery body cap.
+// Default is 256 KiB per spec §"Webhook Security" → "Delivery profile"
+// L487. Pass <=0 to keep the default.
+//
+// Cap mode is REJECT, not TRUNCATE — truncation would corrupt the
+// HMAC signature and silently drop event content. Events whose
+// serialized envelope exceeds the cap are logged and skipped (will
+// never get smaller on retry).
+func WithWebhookMaxBodyBytes(n int) WebhookOption {
+	return func(r *WebhookRegistry) {
+		if n > 0 {
+			r.maxBodyBytes = n
+		}
 	}
 }
 
@@ -105,6 +124,7 @@ type WebhookRegistry struct {
 	ttl                  time.Duration
 	headerMode           WebhookHeaderMode
 	allowPrivateNetworks bool // ζ-1: when false (default), Dialer.Control rejects private/loopback IPs
+	maxBodyBytes         int  // ζ-3: outbound POST body cap in bytes; default 256 KiB
 
 	// logf is the logging hook used by deliver paths. Defaults to log.Printf;
 	// tests override via setLogfForTest to capture failures (including SSRF
@@ -118,10 +138,11 @@ type WebhookRegistry struct {
 // Override via the With* options.
 func NewWebhookRegistry(opts ...WebhookOption) *WebhookRegistry {
 	r := &WebhookRegistry{
-		targets:    make(map[string]WebhookTarget),
-		ttl:        defaultWebhookTTL,
-		headerMode: StandardWebhooks,
-		logf:       log.Printf,
+		targets:      make(map[string]WebhookTarget),
+		ttl:          defaultWebhookTTL,
+		headerMode:   StandardWebhooks,
+		maxBodyBytes: defaultWebhookMaxBodyBytes,
+		logf:         log.Printf,
 	}
 	for _, o := range opts {
 		o(r)
@@ -341,6 +362,16 @@ func (r *WebhookRegistry) Deliver(event Event) {
 		return
 	}
 
+	// ζ-3: spec L487 caps outbound delivery bodies at 256 KiB (configurable
+	// via WithWebhookMaxBodyBytes). Reject oversized — truncation would
+	// corrupt the HMAC signature and silently drop event content.
+	// Re-trying won't shrink the body, so this is terminal for the event.
+	if len(body) > r.maxBodyBytes {
+		r.logf("[webhook] event %s body %d bytes exceeds cap %d; dropping (will not retry)",
+			event.EventID, len(body), r.maxBodyBytes)
+		return
+	}
+
 	for _, t := range targets {
 		go r.deliver(t, event.EventID, body)
 	}
@@ -406,6 +437,11 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, eventID string, body []b
 			// via CheckRedirect; a receiver returning 3xx is signalling
 			// "go elsewhere" but we're not allowed to. Re-trying won't
 			// change the response; treat as terminal.
+			return
+		}
+		if resp.StatusCode == http.StatusRequestEntityTooLarge {
+			// ζ-3 spec L487: 413 MUST be non-retryable. Receiver
+			// rejects our payload size; retrying won't change that.
 			return
 		}
 		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
