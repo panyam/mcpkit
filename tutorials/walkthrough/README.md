@@ -28,5 +28,5 @@ Recommended reading order for someone new to the material:
 
 ## Other entry points
 
-- **[STRUCTURE.md](./STRUCTURE.md)** — how this walkthrough is organized: the DAG model, the root contract (Preconditions / Body / End-state / Leads to), conventions for note blocks, branch points, spec/code anchors, target-shape tracking. Read this if you want to understand *why* pages look the way they do, or if you plan to author one.
+- **[STRUCTURE.md](./STRUCTURE.md)** — how this walkthrough is organized: the DAG model, the root contract (Prerequisites / Body / End-state / Next to read), conventions for note blocks, branch points, spec/code anchors, target-shape tracking. Read this if you want to understand *why* pages look the way they do, or if you plan to author one.
 - **[INDEX.md](./INDEX.md)** — single-page projection of the whole graph. Every page, its preconditions, end-state, successor pointers, and mid-journey branch points — in one table, with a full mermaid render. Read this to see the shape of what's covered (and what's planned) without opening individual files.

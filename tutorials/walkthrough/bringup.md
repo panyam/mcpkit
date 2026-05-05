@@ -3,10 +3,10 @@
 What happens between *"the host has a config entry mentioning this server"* and *"the host can issue useful requests."*
 
 > **Kind:** root · **Assumes:** nothing (foundational)
-> **Reachable from:** [README](./README.md) · **Branches into:** [transport mechanics](./transport-mechanics.md), (forthcoming) per-request anatomy
+> **Reachable from:** [README](./README.md) · **Branches into:** [transport mechanics](./transport-mechanics.md), [per-request anatomy](./request-anatomy.md) *(planned)*
 > **Spec:** [Lifecycle](https://modelcontextprotocol.io/specification/2025-06-18) · **Code:** `core/protocol.go`, `core/auth.go`, `core/www_authenticate.go`, `server/stdio_transport.go`, `server/streamable_transport.go`, `client/command_transport.go`, `ext/auth/`
 
-## Preconditions
+## Prerequisites
 
 **None — this is a foundational root.** A reader needs only general familiarity with client/server concepts, JSON, and HTTP. No other roots required.
 
@@ -108,26 +108,24 @@ After reading this root, the following are true and downstream pages may assume 
 
 What is **not** yet established (and lives in downstream pages):
 
-- The per-request flow itself — dispatch, middleware, handler context, typed binding (forthcoming: per-request anatomy).
+- The per-request flow itself — dispatch, middleware, handler context, typed binding ([per-request anatomy](./request-anatomy.md) *(planned)*).
 - The wire format and correlation model — covered by [transport mechanics](./transport-mechanics.md), itself a peer root.
 - Reverse calls, notifications, tasks, resumption — all build on those two roots.
 
-## Leads to
-
-Roots that build on this end-state:
+## Next to read
 
 - **[Transport mechanics](./transport-mechanics.md)** — drills into the wire format chosen during bring-up phase 2.
-- **(forthcoming) Notifications** — the session's state-change channel. Capability-gated by what was negotiated here. Assumes this root + transport mechanics.
-- **(forthcoming) Per-request anatomy** — the per-call flow that runs *inside* an established session: dispatch, middleware, handler context, typed binding. Assumes this root + transport mechanics + notifications.
-- **[Extension mechanisms](./extension-mechanisms.md)** — how MCP grows; capability flags negotiated here are the gate for all extensions. Assumes this root + transport mechanics + notifications.
-- **(forthcoming) Auth deep-dive** *(off-mainline root)* — full OAuth dance, PRM, JWT validation, fine-grained-auth per tool. Auth is a "bring-up extension" — it extends *this* root's connection-establishment phase, not the message exchange. Assumes this root + extension mechanisms.
-- **(forthcoming) Re-init / session resumption** *(leaf)* — what happens if the underlying transport drops mid-session.
+- **[Notifications](./notifications.md)** — the session's state-change channel. Capability-gated by what was negotiated here.
+- **[Per-request anatomy](./request-anatomy.md)** *(planned)* — the per-call flow that runs *inside* an established session: dispatch, middleware, handler context, typed binding.
+- **[Extension mechanisms](./extension-mechanisms.md)** — how MCP grows; capability flags negotiated here are the gate for all extensions.
+- **[Auth deep-dive](./auth.md)** *(planned, off-mainline)* — full OAuth dance, PRM, JWT validation, fine-grained-auth per tool. Auth is a "bring-up extension" — it extends *this* root's connection-establishment phase, not the message exchange.
+- **[Re-init / session resumption](./session-resumption.md)** *(planned, leaf)* — what happens if the underlying transport drops mid-session.
 
 ## Findings (about the DAG itself)
 
 This phase is structurally distinct from per-request flow, and walking it surfaced three structural decisions:
 
-1. **Two L1 anatomies, not one.** L1-bringup (this root) and L1-call (forthcoming). The `session resolution` step in L1-call either resolves to an existing session **or triggers L1-bringup**. Mirrors the spec's lifecycle/operation split.
+1. **Two L1 anatomies, not one.** L1-bringup (this root) and L1-call ([per-request anatomy](./request-anatomy.md), planned). The `session resolution` step in L1-call either resolves to an existing session **or triggers L1-bringup**. Mirrors the spec's lifecycle/operation split.
 
 2. **"Transport" is three concerns at different levels.**
    - At bring-up: transport *establishment* (fork+pipe vs. URL+session-id vs. …)

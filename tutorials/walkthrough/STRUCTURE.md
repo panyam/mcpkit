@@ -21,17 +21,17 @@ Every page declares its place in the graph so you can enter from anywhere.
 
 A **root** is a self-contained walkthrough that establishes a set of invariants downstream pages can assume. Every root follows the same four-part contract:
 
-1. **Preconditions** — what must be true going in. Stated explicitly at the top, with a *"if not, read [X]"* guard pointing at the root that establishes each missing precondition. A foundational root says "none — foundational."
-2. **Body** — the walkthrough itself.
+1. **Prerequisites** — what must be true going in. Stated explicitly at the top, with a *"if not, read [X]"* guard pointing at the root that establishes each missing prerequisite. A foundational root says "none — foundational."
+2. **Body** — the walkthrough itself. May begin with a short optional **Context** section (what the topic is and where it sits in MCP). Context isn't a contract requirement — it just helps the reader land softly. Don't use it to defend the page's existence.
 3. **End-state** — what is true after reading. Listed as bullets in a section near the end. Downstream roots may assume any of these without re-deriving.
-4. **Leads to** — which other roots build on this end-state. Pointers, not exhaustive.
+4. **Next to read** — which other roots and leaves build on this end-state. Pointers, not exhaustive.
 
-This is dependency tracking for documentation. Instead of every page restating preliminaries, a page declares its preconditions and moves on. As more roots get written, derived pages get *shorter*, not longer.
+This is dependency tracking for documentation. Instead of every page restating preliminaries, a page declares its prerequisites and moves on. As more roots get written, derived pages get *shorter*, not longer.
 
 > [!NOTE]
-> A root is a *self-contained chunk*. A reader who has the preconditions can read just this root and walk away with the end-state. They never need to read sibling roots they don't care about.
+> A root is a *self-contained chunk*. A reader who has the prerequisites can read just this root and walk away with the end-state. They never need to read sibling roots they don't care about.
 
-Branch and leaf pages don't need the full contract — they elaborate on a part of a root and live within its parent's precondition envelope.
+Branch and leaf pages don't need the full contract — they elaborate on a part of a root and live within its parent's prerequisite envelope.
 
 ### Optional pattern: FAQ-style roots
 
@@ -52,13 +52,13 @@ Use sparingly. Most roots want a single linear walkthrough; FAQ-style is a tool 
 Every page declares its position in the graph:
 
 ```markdown
-> **Kind:** root | branch | leaf · **Assumes:** <root pages whose end-state is a precondition>
+> **Kind:** root | branch | leaf · **Assumes:** <root pages whose end-state is a prerequisite>
 > **Reachable from:** <…> · **Branches into:** <…>
 > **Spec:** <spec link> · **Code:** <file paths>
 ```
 
-- **root** — establishes invariants. Must include explicit **Preconditions** (top) and **End-state** + **Leads to** (end) sections.
-- **branch** — drills into a part of a root or connects two roots. Lives within its parent root's precondition envelope.
+- **root** — establishes invariants. Must include explicit **Prerequisites** (top) and **End-state** + **Next to read** (end) sections.
+- **branch** — drills into a part of a root or connects two roots. Lives within its parent root's prerequisite envelope.
 - **leaf** — reference detail. Read on demand.
 
 ## Note blocks (textbook-style sidenotes)
@@ -85,7 +85,7 @@ GitHub-rendered Markdown doesn't support true marginalia (notes alongside the ma
 
 ## Branch points within a journey
 
-Preconditions and End-state are the trivial branch points (start and end of a root). Mid-journey branch points — *moments* in the walkthrough where the reader could profitably fork into a side-trip — are marked inline with a callout:
+Prerequisites and End-state are the trivial branch points (start and end of a root). Mid-journey branch points — *moments* in the walkthrough where the reader could profitably fork into a side-trip — are marked inline with a callout:
 
 ```markdown
 > [!NOTE]
@@ -103,6 +103,10 @@ Each page links to:
 
 External spec links happen at the *node* level. Inside a flow, links stay on-page so reading doesn't break. Click into a node only when you need normative detail.
 
+### Links to planned pages
+
+Pages that are referenced but not yet written should still be linked, marked `*(planned)*`. The link target is the canonical filename even if the file doesn't exist yet — clicking will 404, which is the desired reminder that this page is real-but-unwritten. Lock filenames early; rename costs more than getting them right up front. The forthcoming-nodes table in [INDEX.md](./INDEX.md) is the source of truth for canonical filenames.
+
 ## Target-shape tracking
 
 mcpkit is converging on a target shape (per the [Dec-2025 transport WG post](https://blog.modelcontextprotocol.io/posts/2025-12-19-mcp-transport-future/) and various SEPs). Where the current implementation diverges from the target, we mark it inline with one of two callout types:
@@ -114,20 +118,20 @@ As mcpkit converges, these blocks get deleted on the affected node and every jou
 
 ## The index file
 
-[INDEX.md](./INDEX.md) is a single-page projection of the entire graph: every page, its kind, preconditions, end-state summary, leads-to, and branch points — in one table, plus a full mermaid render distinguishing written from planned. Useful for:
+[INDEX.md](./INDEX.md) is a single-page projection of the entire graph: every page, its kind, prerequisites, end-state summary, leads-to, and branch points — in one table, plus a full mermaid render distinguishing written from planned. Useful for:
 
 - Drawing the full graph without parsing every page header
 - Spotting orphans, broken links, or roots whose end-state nothing depends on
-- Checking the precondition closure when adding a new root
+- Checking the prerequisite closure when adding a new root
 
 Per-page headers are the source of truth; the index is an aggregated view. When you add or change a page, also update the index entry.
 
 ## Authoring a new page (checklist)
 
 1. Decide kind: **root** (establishes invariants) | **branch** (elaborates a root) | **leaf** (reference detail).
-2. If root: identify which existing roots' end-states are preconditions. Add explicit *"if not, read X"* guards in the Preconditions section.
+2. If root: identify which existing roots' end-states are prerequisites. Add explicit *"if not, read X"* guards in the Prerequisites section.
 3. Write the per-page header (Kind / Assumes / Reachable from / Branches into / Spec / Code).
 4. Write the body. Use note blocks per the conventions above.
-5. If root: write **End-state** (bullets) and **Leads to** (pointers).
+5. If root: write **End-state** (bullets) and **Next to read** (pointers).
 6. Update [INDEX.md](./INDEX.md): add a row to the node table, log any new branch points, update the mermaid graph.
 7. Update [README.md](./README.md) if the new page belongs in the recommended reading order.
