@@ -29,6 +29,147 @@ The parent plan's gating condition was met:
 
 **A second motivation:** the planned multi-source kitchen-sink demo in `mcpcontribs/proposals/triggers-events-wg/poc-notes.md` ("kitchen-sink multi-source / multi-consumer example", post-η backlog) needs match/transform to demonstrate filtering by subscription params. Without it, the demo can't show "subscriber A watches channel X, subscriber B watches channel Y, same event source" — the differentiator the spec was designed for.
 
+## Spec idioms inventory: what we're translating from
+
+The Server SDK Guidance section of the spec is written as Python prose. This section catalogs each Pythonism the spec uses, what it actually means semantically, and where the Go translation is mechanical vs. where it forces a real design choice. The Open Design Questions below resolve the design-choice cases; everything in this inventory's "mechanical" column needs no further discussion.
+
+The Pythonisms cluster into six idioms, in rough order of how much friction they create on the Go side:
+
+### Idiom 1 — Decorator-based registration (`@server.event(...)`)
+
+**Spec excerpt** (L578-589):
+
+```python
+@server.event(
+    name="email.received",
+    description="New email arrives",
+    input_schema={ ... },
+    payload_schema={ ... },
+)
+async def check_email(context, params, cursor):
+    ...
+```
+
+**What it does semantically:** registers an event type with a name, description, schemas, and a check function — all in one declaration site. The decorator captures the function and stores it in a server-internal registry keyed by name.
+
+**Go mapping difficulty: mechanical.** Go has no decorators; the equivalent is the existing constructor pattern. mcpkit already does this with `events.NewYieldingSource[Data](events.EventDef{...})` returning `(*source, yieldFn)` and `events.TypedSource[Data](events.EventDef{...}, pollFn, latestFn)`. The decorator's "name + schemas + behavior in one site" property is preserved by passing `EventDef` and the callback to one constructor. **No design choice needed** — the existing surface absorbs decorator-style registration cleanly.
+
+**Why this is even a translation question:** because the Python spec's decorator nests `async def check_email(context, params, cursor)` inside the registration site, a reader unfamiliar with Go might wonder how the "check function" attaches to the EventDef. Answer: it's an argument to the constructor (`pollFn` for TypedSource) or implicit-via-yield (for YieldingSource). Both routes are spec-conformant.
+
+### Idiom 2 — `async def` everywhere
+
+**Spec excerpt** (L584, L647, L695, L700):
+
+```python
+async def check_email(context, params, cursor): ...
+async def on_pagerduty_webhook(payload): ...
+async def on_subscribe(context, params, subscription_id): ...
+async def on_unsubscribe(context, params, subscription_id): ...
+```
+
+**What it does semantically:** Python uses `async`/`await` for cooperative concurrency; the SDK's event loop schedules these coroutines. Returning a coroutine vs. returning a value is a hard syntactic distinction in Python.
+
+**Go mapping difficulty: mechanical, but flagged because the readability gap is real.** Go has no async; functions are functions, and concurrency is goroutines + channels. The Go signature for `check_email` is `func(ctx context.Context, params map[string]any, cursor string) (PollResult, error)` — synchronous, with cancellation via the context. **No design choice needed** for the SDK surface: every Python `async def` becomes a Go sync function with `context.Context` as the first parameter. (See Q3 below for the design-choice nuance — should match/transform also be sync? Yes, and the reason is hot-path performance, not the async syntax mapping.)
+
+**Why this is even a translation question:** the spec hints at I/O inside hooks (e.g., `await slack.join_channel(params["channel"])` on L697). Go authors will write blocking I/O inside `OnSubscribe` and rely on the context for cancellation, the same way they'd write it inside any `http.HandlerFunc`. The SDK invokes hooks from a goroutine that's already alive (the registerSubscribe handler goroutine, the registerStream stream goroutine, the poll-lease background goroutine); no new concurrency primitive needed.
+
+### Idiom 3 — Static methods on a class for hook bundling
+
+**Spec excerpt** (L633-644):
+
+```python
+@server.event(name="incident.created", ...)
+class IncidentCreated:
+    @staticmethod
+    def match(ctx: Context, event: Event, params: dict) -> bool:
+        sev = params.get("severity")
+        return sev is None or event.data["severity"] == sev
+
+    @staticmethod
+    def transform(ctx: Context, event: Event, params: dict) -> Event:
+        if params.get("redact_pii"):
+            return event.replace(data={**event.data, "reporter": None})
+        return event
+```
+
+**What it does semantically:** groups the `match` and `transform` hooks for one event type under a class so they're visually co-located with the event declaration. The class itself has no instance state — it's a namespace.
+
+**Go mapping difficulty: design choice.** This is Q1 in the design-questions section. Three legitimate Go translations exist:
+- (a) Fields on `EventDef` — `Match func(...) bool`, `Transform func(...) Event`
+- (b) Methods on the source — define an interface, sources opt in by implementing it
+- (c) Functional options on `events.Register` — `WithMatchFor("incident.created", matchFn)`
+
+The Python class-based bundling is *closer* to (a) and (b) than to (c) (the Python decorator co-locates with the event type, not with the registration call), but Python doesn't force a choice. Go does — see Q1 for the resolution and reasons. **This is real friction**, not just stylistic, because the chosen surface determines how mcpkit's existing `EventDef` evolves.
+
+### Idiom 4 — Dataclass-style `Event` with `event.replace(data=...)`
+
+**Spec excerpt** (L643):
+
+```python
+return event.replace(data={**event.data, "reporter": None})
+```
+
+**What it does semantically:** Python dataclasses (or attrs / pydantic) ship a `replace(**fields)` method that returns a new instance with selected fields overridden. The `{**event.data, "reporter": None}` spread merges the existing dict with one key shadowed.
+
+**Go mapping difficulty: mechanical, but with a hot-path optimization question.** mcpkit's `events.Event` is a struct; copy-and-modify is `e2 := e; e2.Data = newData; return e2`. Trivially expressible in Go. **No surface design choice** — but Q8 in the design questions notes that a `Transform` returning a brand-new Event per subscriber is N allocations per emit, which matters under fanout. Mitigation lives in the function signature `Transform func(...) (Event, bool)` where the bool says "I modified" vs "passthrough." That's an optimization, not a Pythonism translation issue.
+
+**Why this is even a translation question:** because Python authors think of immutable updates as cheap (the runtime hides the cost). Go authors writing transforms will instinctively allocate; the spec doesn't warn them, so the mcpkit godoc on `TransformFunc` should call this out explicitly.
+
+### Idiom 5 — Decorator-based lifecycle hooks (`@server.on_subscribe("name")`)
+
+**Spec excerpt** (L694-702):
+
+```python
+@server.on_subscribe("slack.message")
+async def on_subscribe(context, params, subscription_id):
+    """Set up upstream listener for this subscription's params."""
+    await slack.join_channel(params["channel"])
+
+@server.on_unsubscribe("slack.message")
+async def on_unsubscribe(context, params, subscription_id):
+    """Tear down upstream listener."""
+    await slack.leave_channel(params["channel"])
+```
+
+**What it does semantically:** registers a hook keyed by event name, separately from the event-type declaration. The decorator stores the function in a server-internal `{name → callback}` map.
+
+**Go mapping difficulty: design choice (same as Idiom 3, by extension).** The Python pattern *separates* the lifecycle hook decoration site from the event-type decoration site (Idiom 3 used a class to bundle match/transform with the event type; this idiom uses a separate `@server.on_subscribe` decorator). That's a Python-author convenience — the SDK doesn't actually require the separation, just allows it.
+
+For Go, the question is whether the SDK should mirror the separation (functional option `WithOnSubscribe(name, fn)`) or collapse it onto the EventDef (`OnSubscribe func(...) error` field). **Q1 resolves this consistently with match/transform: field on EventDef.** The same reasoning applies — the hook is per-event-type, the EventDef is per-event-type, putting them together keeps the author's mental model intact and makes the hook surface zero-value-friendly. The Python style of separate decorators is a Python ergonomic, not a semantic requirement.
+
+### Idiom 6 — Class with `pass` body for declaration-only event types
+
+**Spec excerpt** (L671-672):
+
+```python
+@server.event(name="incident.created", ..., emit_only=True, ...)
+class IncidentCreated:
+    pass
+```
+
+**What it does semantically:** declares an event type that has no check function (because it's emit-only, served from the SDK's ring buffer) and no hooks. The `class ... pass` is a Python placeholder so the decorator has something to wrap.
+
+**Go mapping difficulty: mechanical.** mcpkit already has this — `events.NewYieldingSource[Data](events.EventDef{...})` IS the emit-only path; the YieldingSource owns the ring buffer. The "class with pass body" is a Python syntactic placeholder; Go doesn't need a placeholder because the EventDef constructor doesn't require anything to wrap. **No design choice needed.**
+
+### Summary table
+
+| Idiom | What it is in Python | Go translation difficulty | Resolved in |
+|---|---|---|---|
+| 1 | `@server.event(...)` decorator | Mechanical (use existing constructor) | — |
+| 2 | `async def` hook signatures | Mechanical (sync + `context.Context`) | Q3 (sync semantic confirmed for hot path) |
+| 3 | `class IncidentCreated:` bundling match/transform | **Design choice** (field vs interface vs option) | Q1 (field on EventDef) |
+| 4 | `event.replace(data=...)` immutable update | Mechanical (struct copy), with allocation note | Q8 (`Transform` returns `(Event, bool)`) |
+| 5 | `@server.on_subscribe("name")` separate decorator | **Design choice** (separate option vs field on EventDef) | Q1 (consistent with Idiom 3 — field on EventDef) |
+| 6 | `class ...: pass` for emit-only types | Mechanical (existing YieldingSource constructor) | — |
+
+**Why the conversion is needed at all** — three reasons:
+
+1. **The spec uses Python because the WG's reference SDK is Python.** It's documenting *one viable shape* of the SDK surface, not normative. Implementations like mcpkit (Go) and others (TypeScript, Rust) need their own surfaces. The spec body section "Server SDK Guidance" L565 calls this out: "These guidelines are non-normative — they describe one viable SDK shape." The Go surface needs to be designed, not auto-translated.
+2. **Python's runtime hides the costs that Go forces visible.** Async coroutines, instance state (`self`), decorator-mutated registries — all "free" in Python's mental model, all explicit in Go (channels, struct fields, registration calls). The Go surface has to make the costs comfortable, which means picking the right idioms (Q1 field-on-EventDef vs separate-option) before the cost surface stabilizes for authors.
+3. **Two of the six idioms (3 and 5) collapse onto the same Go answer.** Python uses different decoration styles for different hook clusters (class for match/transform, separate `@on_subscribe` for lifecycle); Go's struct-with-fields gives us one consistent answer for both. **This is a simplification, not a loss** — but only if we make the call deliberately, hence Q1.
+
+Idioms 1, 2, 4, and 6 are mechanical translations the implementation will absorb without further discussion. Idioms 3 and 5 are Q1's territory. Everything else in the Open Design Questions section (Q2-Q8) addresses Go-side concerns (context type, hot-path discipline, lease semantics, quota) that the spec doesn't dictate at all — those aren't Pythonism translations, they're Go-native design choices the spec leaves to the SDK.
+
 ## Open design questions (Go ↔ Python mapping)
 
 The spec is Python-flavored. These are the choices Go forces on us; flagging here so the per-sub-PR sections can reference resolved decisions instead of relitigating.
