@@ -24,6 +24,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/examples/common"
 	"github.com/panyam/mcpkit/experimental/ext/events"
 	"github.com/panyam/mcpkit/ext/auth"
 	"github.com/panyam/mcpkit/server"
@@ -56,13 +57,7 @@ func serve() {
 		demokit.ValueFlag("--addr"),
 	))
 
-	logger := demokit.NewColorLogger("[mcp] ", []demokit.ColorRule{
-		{Contains: "error=", DarkColor: demokit.ANSIRed},
-		{Contains: "ERROR", DarkColor: demokit.ANSIRed},
-		{Contains: "[http] →", DarkColor: demokit.ANSIGray, LightColor: demokit.ANSIDimBlue},
-		{Contains: "[http] ←", DarkColor: demokit.ANSICyan, LightColor: demokit.ANSIBlue},
-		{Contains: "MCP ", DarkColor: demokit.ANSIBrightGreen, LightColor: demokit.ANSIGreen},
-	})
+	logger := common.NewMCPLogger("[mcp] ")
 
 	headerMode, err := events.ParseHeaderMode(*whHeaderMode)
 	if err != nil {
@@ -147,9 +142,8 @@ func serve() {
 	srvOpts := []server.Option{
 		server.WithListen(*addr),
 		server.WithSubscriptions(),
-		server.WithMiddleware(server.LoggingMiddleware(logger)),
-		server.WithRequestLogging(logger),
 	}
+	srvOpts = append(srvOpts, common.WithMCPLogging(logger)...)
 	authPosture := "demo (anonymous → UnsafeAnonymousPrincipal)"
 	if validator := tryEnableAuth(); validator != nil {
 		srvOpts = append(srvOpts, server.WithAuth(validator))
