@@ -4,7 +4,7 @@ How a single MCP request travels from the caller through middleware, dispatch, h
 
 > **Kind:** root *(FAQ-style)* · **Prerequisites:** [bring-up](./bringup.md), [transport-mechanics](./transport-mechanics.md), [notifications](./notifications.md)
 > **Reachable from:** [README](./README.md), [bring-up](./bringup.md) Next-to-read, [transport-mechanics](./transport-mechanics.md) Next-to-read, [notifications](./notifications.md) Next-to-read, [extension-mechanisms](./extension-mechanisms.md) Next-to-read
-> **Branches into:** [reverse-call](./reverse-call.md) *(planned)*, [tasks](./tasks.md) *(planned)*, [mrtr](./mrtr.md) *(planned)*, [middleware](./middleware.md) *(planned)*
+> **Branches into:** [reverse-call](./reverse-call.md) *(stub)*, [tasks](./tasks.md) *(stub)*, [mrtr](./mrtr.md) *(stub)*, [middleware](./middleware.md) *(stub)*
 > **Spec:** [Base protocol](https://modelcontextprotocol.io/specification/2025-06-18) · **Code:** `core/jsonrpc.go`, `core/handler_context.go`, `core/typed_tool.go`, `core/protocol.go`, `server/dispatch.go`, `server/registration.go`, `server/middleware.go`, `server/method_handler.go`, `server/mrtr.go`, `client/middleware.go`, `client/mrtr.go`
 
 ## Prerequisites
@@ -140,10 +140,10 @@ Each stack is a **pipeline** — middleware composes by wrapping the next handle
 > The cost is the awkwardness above: "server send-mw" carries reverse-call *requests*, not just responses. The middleware framework doesn't care; the naming just reads slightly oddly when you first encounter reverse calls. A role-based scheme (request-send-mw, response-recv-mw, …) would resolve the awkwardness but multiply the interception points 3× and force most middleware to either register at multiple points or constantly check "is this my role?" The simplification doesn't pay off in practice — but the awkwardness when reading reverse-call flows is real.
 
 > [!NOTE]
-> **Branch →** [Middleware composition](./middleware.md) *(planned)* — request-side vs. sending-side in detail, ordering rules, the `ext/auth` and `ext/ui` interception points, how middleware integrates with MRTR.
+> **Branch →** [Middleware composition](./middleware.md) *(stub)* — request-side vs. sending-side in detail, ordering rules, the `ext/auth` and `ext/ui` interception points, how middleware integrates with MRTR.
 
 > [!NOTE]
-> **Branch →** [MRTR (SEP-2322)](./mrtr.md) *(planned)* — mcpkit unifies the four conceptual stacks under MRTR (Message Routing Through Middleware), which knows direction (in/out) and side (client/server) as parameters. The four stacks are still distinct conceptually; MRTR is how mcpkit implements them.
+> **Branch →** [MRTR (SEP-2322)](./mrtr.md) *(stub)* — mcpkit unifies the four conceptual stacks under MRTR (Message Routing Through Middleware), which knows direction (in/out) and side (client/server) as parameters. The four stacks are still distinct conceptually; MRTR is how mcpkit implements them.
 
 ## Q4 — How does typed binding turn JSON into Go and back?
 
@@ -225,7 +225,7 @@ Two things to internalize:
 - **The pending-id table is per-direction**: the server's pending table tracks reverse calls it originated; the client's tracks forward calls it originated. They're independent. (See [transport-mechanics → reverse-call origination](./transport-mechanics.md#reverse-call-origination) for the diagram.)
 
 > [!NOTE]
-> **Branch →** [Reverse-call mechanics](./reverse-call.md) *(planned)* — concretizes this with a `tools/call → elicitation/create` walkthrough, including cancellation propagation through the forward-id back-pointer.
+> **Branch →** [Reverse-call mechanics](./reverse-call.md) *(stub)* — concretizes this with a `tools/call → elicitation/create` walkthrough, including cancellation propagation through the forward-id back-pointer.
 
 ## End-state (what downstream pages can assume)
 
@@ -237,8 +237,8 @@ Two things to internalize:
 
 ## Next to read
 
-- **[Reverse-call mechanics](./reverse-call.md)** *(planned, root)* — drills into the reverse-call subset of this anatomy with a concrete `tools/call → elicitation/create` walkthrough; covers the parent-id back-pointer for cancellation.
-- **[Tasks v1/v2/hybrid](./tasks.md)** *(planned, root)* — uses the handler context heavily, plus a separate task store; introduces detach/resume semantics that the per-request anatomy doesn't cover (a task can outlive the originating request).
-- **[Middleware composition](./middleware.md)** *(planned, branch)* — request-side vs. sending-side in detail, ordering, ext/auth and ext/ui interception points.
-- **[MRTR (SEP-2322)](./mrtr.md)** *(planned, branch)* — mcpkit's unified routing layer over the four conceptual stacks; both-sides symmetry; the ephemeral capability flag.
-- **[Elicitation](./elicitation.md)** · **[Sampling](./sampling.md)** · **[Roots/list](./roots-list.md)** *(planned, leaves)* — concrete reverse-call types as applications of the patterns from this page + reverse-call mechanics.
+- **[Reverse-call mechanics](./reverse-call.md)** *(stub, root)* — drills into the reverse-call subset of this anatomy with a concrete `tools/call → elicitation/create` walkthrough; covers the parent-id back-pointer for cancellation.
+- **[Tasks v1/v2/hybrid](./tasks.md)** *(stub, root)* — uses the handler context heavily, plus a separate task store; introduces detach/resume semantics that the per-request anatomy doesn't cover (a task can outlive the originating request).
+- **[Middleware composition](./middleware.md)** *(stub, branch)* — request-side vs. sending-side in detail, ordering, ext/auth and ext/ui interception points.
+- **[MRTR (SEP-2322)](./mrtr.md)** *(stub, branch)* — mcpkit's unified routing layer over the four conceptual stacks; both-sides symmetry; the ephemeral capability flag.
+- **[Elicitation](./elicitation.md)** · **[Sampling](./sampling.md)** · **[Roots/list](./roots-list.md)** *(stub, leaves)* — concrete reverse-call types as applications of the patterns from this page + reverse-call mechanics.

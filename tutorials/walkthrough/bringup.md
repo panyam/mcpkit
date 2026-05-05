@@ -3,7 +3,7 @@
 What happens between *"the host has a config entry mentioning this server"* and *"the host can issue useful requests."*
 
 > **Kind:** root · **Prerequisites:** nothing (foundational)
-> **Reachable from:** [README](./README.md) · **Branches into:** [transport mechanics](./transport-mechanics.md), [per-request anatomy](./request-anatomy.md) *(planned)*
+> **Reachable from:** [README](./README.md) · **Branches into:** [transport mechanics](./transport-mechanics.md), [per-request anatomy](./request-anatomy.md) *(stub)*
 > **Spec:** [Lifecycle](https://modelcontextprotocol.io/specification/2025-06-18) · **Code:** `core/protocol.go`, `core/auth.go`, `core/www_authenticate.go`, `server/stdio_transport.go`, `server/streamable_transport.go`, `client/command_transport.go`, `ext/auth/`
 
 ## Prerequisites
@@ -108,7 +108,7 @@ After reading this page, the following are true and downstream pages may assume 
 
 What is **not** yet established (and lives in downstream pages):
 
-- The per-request flow itself — dispatch, middleware, handler context, typed binding ([per-request anatomy](./request-anatomy.md) *(planned)*).
+- The per-request flow itself — dispatch, middleware, handler context, typed binding ([per-request anatomy](./request-anatomy.md) *(stub)*).
 - The wire format and correlation model — covered by [transport mechanics](./transport-mechanics.md), another foundational page.
 - Reverse calls, notifications, tasks, resumption — all build on those two pages.
 
@@ -118,8 +118,8 @@ What is **not** yet established (and lives in downstream pages):
 - **[Notifications](./notifications.md)** — the session's state-change channel. Capability-gated by what was negotiated here.
 - **[Per-request anatomy](./request-anatomy.md)** — the per-call flow that runs *inside* an established session: dispatch, middleware, handler context, typed binding.
 - **[Extension mechanisms](./extension-mechanisms.md)** — how MCP grows; capability flags negotiated here are the gate for all extensions.
-- **[Auth deep-dive](./auth.md)** *(planned, off-mainline)* — full OAuth dance, PRM, JWT validation, fine-grained-auth per tool. Auth is a "bring-up extension" — it extends *this* page's connection-establishment phase, not the message exchange.
-- **[Re-init / session resumption](./session-resumption.md)** *(planned, leaf)* — what happens if the underlying transport drops mid-session.
+- **[Auth deep-dive](./auth.md)** *(stub, off-mainline)* — full OAuth dance, PRM, JWT validation, fine-grained-auth per tool. Auth is a "bring-up extension" — it extends *this* page's connection-establishment phase, not the message exchange.
+- **[Re-init / session resumption](./session-resumption.md)** *(stub, leaf)* — what happens if the underlying transport drops mid-session.
 
 ## Findings (about the DAG itself)
 

@@ -4,7 +4,7 @@ How MCP grows. What counts as an extension, how new things get into the protocol
 
 > **Kind:** root *(FAQ-style)* · **Prerequisites:** [bring-up](./bringup.md), [transport-mechanics](./transport-mechanics.md), [notifications](./notifications.md), [request-anatomy](./request-anatomy.md)
 > **Reachable from:** [README](./README.md), [bring-up](./bringup.md) Leads-to, [notifications](./notifications.md) Leads-to
-> **Branches into:** [tasks](./tasks.md) *(planned)*, [auth deep-dive](./auth.md) *(planned)*, [apps](./apps.md) *(planned)*, [events](./events.md)
+> **Branches into:** [tasks](./tasks.md) *(stub)*, [auth deep-dive](./auth.md) *(stub)*, [apps](./apps.md) *(stub)*, [experimental events](../../experimental/ext/events/README.md)
 > **Spec:** [Lifecycle / capabilities](https://modelcontextprotocol.io/specification/2025-06-18) · SEP-2663 (tasks v2) · SEP-2549 (list-TTL) · SEP-2322 (MRTR) · **Code:** `core/protocol.go`, `core/typed_tool.go`, `server/registration.go`, `server/middleware.go`, `server/dispatch.go`, `server/mrtr.go`, `ext/auth/`, `ext/ui/`, `experimental/ext/`
 
 ## Prerequisites
@@ -63,9 +63,9 @@ graph LR
 
 **Concrete examples in mcpkit** (each gets its own page):
 
-- **SEP-2663 — [tasks v2](./tasks.md)** *(planned)*. Long-running operations as a first-class concept. Adds `tasks/*` methods + a `tasks` capability. mcpkit has v1 (frozen), v2 (canonical), and `RegisterTasksHybrid` for both — a transition pattern worth its own page.
-- **SEP-2549 — [list-TTL](./list-ttl.md)** *(planned)*. Three-state cache-lifetime hint on list responses (`nil` / `&0` / `&N>0`). Pure `_meta` extension — no new methods or capabilities.
-- **SEP-2322 — [MRTR](./mrtr.md)** *(planned)*. Middleware request/transport routing. Mostly mcpkit-architecture; thin spec surface (an ephemeral capability flag).
+- **SEP-2663 — [tasks v2](./tasks.md)** *(stub)*. Long-running operations as a first-class concept. Adds `tasks/*` methods + a `tasks` capability. mcpkit has v1 (frozen), v2 (canonical), and `RegisterTasksHybrid` for both — a transition pattern worth its own page.
+- **SEP-2549 — [list-TTL](./list-ttl.md)** *(stub)*. Three-state cache-lifetime hint on list responses (`nil` / `&0` / `&N>0`). Pure `_meta` extension — no new methods or capabilities.
+- **SEP-2322 — [MRTR](./mrtr.md)** *(stub)*. Middleware request/transport routing. Mostly mcpkit-architecture; thin spec surface (an ephemeral capability flag).
 
 ## Q3 — What does an extension look like in mcpkit's code organization?
 
@@ -163,10 +163,10 @@ After reading this page, downstream pages can assume:
 
 ## Next to read
 
-- **[Tasks v1/v2/hybrid](./tasks.md)** *(planned, root)* — the deep walk on the largest method-namespace extension, including the v1→v2 migration and `RegisterTasksHybrid` dispatch-by-capability pattern.
-- **[Auth deep-dive](./auth.md)** *(planned, root, off-mainline)* — the bring-up extension; full OAuth/PRM/JWT/fine-grained-auth.
-- **[Apps](./apps.md)** *(planned, root)* — the library-architecture extension; AppHost/Bridge JS/ServerRegistry. Mostly mcpkit-side, thin protocol surface.
-- **[Reverse-call mechanics](./reverse-call.md)** *(planned, root)* — concretizes elicitation, sampling, roots/list as the same method-namespace pattern.
-- **[MRTR deep-dive](./mrtr.md)** *(planned, branch off per-request anatomy)* — SEP-2322 in detail.
-- **[List-TTL (SEP-2549)](./list-ttl.md)** *(planned, leaf off notifications)* — the canonical `_meta`-only extension; orthogonal to list_changed.
-- **[Events](./events.md)** *(root)* — events as first-class. The worked example for the `experimental.events` capability classified in Q5 above; opens up the four-knob mapping, the three delivery modes, subscription identity, push and webhook on the wire, and source health signals. (Code: `experimental/ext/events/`.)
+- **[Tasks v1/v2/hybrid](./tasks.md)** *(stub, root)* — the deep walk on the largest method-namespace extension, including the v1→v2 migration and `RegisterTasksHybrid` dispatch-by-capability pattern.
+- **[Auth deep-dive](./auth.md)** *(stub, root, off-mainline)* — the bring-up extension; full OAuth/PRM/JWT/fine-grained-auth.
+- **[Apps](./apps.md)** *(stub, root)* — the library-architecture extension; AppHost/Bridge JS/ServerRegistry. Mostly mcpkit-side, thin protocol surface.
+- **[Reverse-call mechanics](./reverse-call.md)** *(stub, root)* — concretizes elicitation, sampling, roots/list as the same method-namespace pattern.
+- **[MRTR deep-dive](./mrtr.md)** *(stub, branch off per-request anatomy)* — SEP-2322 in detail.
+- **[List-TTL (SEP-2549)](./list-ttl.md)** *(stub, leaf off notifications)* — the canonical `_meta`-only extension; orthogonal to list_changed.
+- **[`experimental/ext/events/`](../../experimental/ext/events/README.md)** *(branch, target-shape)* — events as first-class.

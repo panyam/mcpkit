@@ -4,7 +4,7 @@ What the wire actually looks like, how server→client traffic flows on each tra
 
 > **Kind:** root · **Prerequisites:** nothing (foundational)
 > **Reachable from:** [bring-up](./bringup.md) phase 2–3, [README](./README.md)
-> **Branches into:** [reverse-call mechanics](./reverse-call.md) *(planned)*, [SSE resumption](./sse-resumption.md) *(planned)*, batching
+> **Branches into:** [reverse-call mechanics](./reverse-call.md) *(stub)*, [SSE resumption](./sse-resumption.md) *(stub)*, batching
 > **Spec:** [Base protocol](https://modelcontextprotocol.io/specification/2025-06-18) · [Transports](https://modelcontextprotocol.io/specification/2025-06-18) · **Code:** `core/jsonrpc.go`, `server/stdio_transport.go`, `server/streamable_transport.go`, `client/mrtr.go`, `server/event_ids.go`
 
 ## Prerequisites
@@ -249,10 +249,10 @@ Server returns `Content-Type: text/event-stream` and keeps it open. Each SSE eve
 > mcpkit's runtime models this directly. A handler's `requestFunc`/`notifyFunc` bound to a POST scope dies when that POST's response is sent. Background goroutines that need to outlive the POST must call `core.DetachForBackground(ctx)` to attach to the **session-level persistent push** — i.e., the standing GET back-channel. (See [CLAUDE.md → Gotchas → Background goroutines](../../CLAUDE.md).)
 
 > [!NOTE]
-> **Branch →** [SSE resumption](./sse-resumption.md) *(planned)*. The `Last-Event-ID` mechanic, what the server has to remember for replay, and how mcpkit's event store handles in-flight responses across reconnects.
+> **Branch →** [SSE resumption](./sse-resumption.md) *(stub)*. The `Last-Event-ID` mechanic, what the server has to remember for replay, and how mcpkit's event store handles in-flight responses across reconnects.
 
 > [!NOTE]
-> **Branch →** [events](./events.md) — mcpkit's MCP Events protocol exploration (code in `experimental/ext/events/`). Treats events as a first-class concept beyond raw SSE event-id replay. Out-of-scope here; visit if you're tracking where the protocol is heading.
+> **Branch →** [`experimental/ext/events/`](../../experimental/ext/events/README.md) — mcpkit's MCP Events protocol exploration. Treats events as a first-class concept beyond raw SSE event-id replay. Out-of-scope here; visit if you're tracking where the protocol is heading.
 
 > [!NOTE]
 > So there are really **two SSE patterns** on streamable HTTP:
@@ -381,7 +381,7 @@ mcpkit's `core/handler_context.go` is where both concerns meet — it's the hand
 > A reverse call attempted *outside* a handler context — e.g., from a background goroutine that has escaped its forward-request scope — is a programming error and a spec violation if it escapes onto the wire. mcpkit's `core.DetachForBackground(ctx)` is the supported way to keep using the session-level push channel from background work; see the GET section above.
 
 > [!NOTE]
-> **Branch →** [Reverse-call mechanics](./reverse-call.md) *(planned)*. Walks `tools/call → elicitation/create` end-to-end, with code references to `core/handler_context.go` and the mrtr origination path.
+> **Branch →** [Reverse-call mechanics](./reverse-call.md) *(stub)*. Walks `tools/call → elicitation/create` end-to-end, with code references to `core/handler_context.go` and the mrtr origination path.
 
 ### Order of arrival ≠ order of sending
 
@@ -404,6 +404,6 @@ After reading this page, downstream pages can assume:
 
 - **[Notifications](./notifications.md)** — the session's state-change channel; uses the no-id JSON-RPC shape from this page, flows over the channels established here.
 - **[Per-request anatomy](./request-anatomy.md)** — uses the wire model and correlation tables from this page to walk the dispatch journey.
-- **[Reverse-call mechanics](./reverse-call.md)** *(planned)* — concretizes the parent-handler-context constraint with a real `tools/call → elicitation/create` example.
-- **[SSE resumption](./sse-resumption.md)** *(planned, leaf)* — `Last-Event-ID` replay, the server's event store, in-flight response recovery.
-- **[Events](./events.md)** *(root)* — mcpkit's exploration of events as a first-class concept beyond raw SSE event-id replay. (Code: `experimental/ext/events/`.)
+- **[Reverse-call mechanics](./reverse-call.md)** *(stub)* — concretizes the parent-handler-context constraint with a real `tools/call → elicitation/create` example.
+- **[SSE resumption](./sse-resumption.md)** *(stub, leaf)* — `Last-Event-ID` replay, the server's event store, in-flight response recovery.
+- **[`experimental/ext/events/`](../../experimental/ext/events/README.md)** *(branch, target-shape)* — mcpkit's exploration of events as a first-class concept beyond raw SSE event-id replay.

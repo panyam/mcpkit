@@ -4,7 +4,7 @@ The session's state-change channel. Five common questions answered end-to-end.
 
 > **Kind:** root · **Assumes:** [bring-up](./bringup.md), [transport-mechanics](./transport-mechanics.md)
 > **Reachable from:** [README](./README.md), [bring-up](./bringup.md) Leads-to, [transport-mechanics](./transport-mechanics.md) Leads-to
-> **Branches into:** [per-request anatomy](./request-anatomy.md) *(planned)*, [tasks](./tasks.md) *(planned)*, [cancellation deep-dive](./cancellation.md) *(planned, leaf)*
+> **Branches into:** [per-request anatomy](./request-anatomy.md) *(stub)*, [tasks](./tasks.md) *(stub)*, [cancellation deep-dive](./cancellation.md) *(stub, leaf)*
 > **Spec:** [Base protocol — notifications](https://modelcontextprotocol.io/specification/2025-06-18) · [Cancellation](https://modelcontextprotocol.io/specification/2025-06-18) · [Progress](https://modelcontextprotocol.io/specification/2025-06-18) · [Logging](https://modelcontextprotocol.io/specification/2025-06-18) · **Code:** `core/jsonrpc.go`, `core/progress.go`, `core/logging.go`, `core/resource_notify.go`, `server/dispatch.go`
 
 ## Prerequisites
@@ -130,7 +130,7 @@ In short: **server-state-change** notifications fan out per-session; **call-targ
 mcpkit's runtime maintains the session map and dispatches accordingly. Servers built from scratch on top of `core/` need to do the same bookkeeping.
 
 > [!NOTE]
-> **Branch →** [List-TTL (SEP-2549)](./list-ttl.md) *(planned)* — mcpkit's `core/list_ttl_test.go` exercises a three-state TTL hint (`nil` / `&0` / `&N>0`) the server can attach to list responses to let clients cache more aggressively when notifications can't be relied on. Out-of-scope here; relevant if you care about cache lifetime semantics beyond list_changed.
+> **Branch →** [List-TTL (SEP-2549)](./list-ttl.md) *(stub)* — mcpkit's `core/list_ttl_test.go` exercises a three-state TTL hint (`nil` / `&0` / `&N>0`) the server can attach to list responses to let clients cache more aggressively when notifications can't be relied on. Out-of-scope here; relevant if you care about cache lifetime semantics beyond list_changed.
 
 ## Q3 — How does cancellation work given the request being cancelled has its own id?
 
@@ -183,7 +183,7 @@ If `pending[7]` doesn't exist → the request already completed. The cancellatio
 **One specific prohibition:** the spec forbids cancelling the `initialize` request. It's the bring-up barrier; cancelling it would leave the session in an undefined state.
 
 > [!NOTE]
-> **Branch →** [Cancellation deep-dive](./cancellation.md) *(planned, leaf)* — race scenarios, partial-state handling, timeout-vs-cancel distinction, mcpkit's `ctx.Done()` propagation paths.
+> **Branch →** [Cancellation deep-dive](./cancellation.md) *(stub, leaf)* — race scenarios, partial-state handling, timeout-vs-cancel distinction, mcpkit's `ctx.Done()` propagation paths.
 
 ## Q4 — How does the client tie a progress notification back to the right in-flight call?
 
@@ -285,6 +285,6 @@ After reading this page, downstream pages can assume:
 
 - **[Per-request anatomy](./request-anatomy.md)** *(root)* — folds notification dispatch into the broader picture: notifications travel through receiving middleware, hit a notification-specific dispatcher, and (unlike requests) never enter the pending-id table on the receive side.
 - **[Extension mechanisms](./extension-mechanisms.md)** *(root)* — pins the vocabulary for "what counts as an extension." Some notification additions (e.g. `notifications/resources/updated`) are themselves extensions; that page explains the meta-mechanism.
-- **[Tasks v1/v2/hybrid](./tasks.md)** *(planned, root)* — long-running operations as a first-class concept. Heavy user of progress notifications and cancellation; introduces detach/resume semantics that flat notifications don't cover.
-- **[Cancellation deep-dive](./cancellation.md)** *(planned, leaf)* — race scenarios, partial-state handling, timeout-vs-cancel distinction, mcpkit's `ctx.Done()` propagation paths.
-- **[List-TTL (SEP-2549)](./list-ttl.md)** *(planned, leaf)* — three-state cache-lifetime hint orthogonal to list_changed; relevant when notifications aren't reliable.
+- **[Tasks v1/v2/hybrid](./tasks.md)** *(stub, root)* — long-running operations as a first-class concept. Heavy user of progress notifications and cancellation; introduces detach/resume semantics that flat notifications don't cover.
+- **[Cancellation deep-dive](./cancellation.md)** *(stub, leaf)* — race scenarios, partial-state handling, timeout-vs-cancel distinction, mcpkit's `ctx.Done()` propagation paths.
+- **[List-TTL (SEP-2549)](./list-ttl.md)** *(stub, leaf)* — three-state cache-lifetime hint orthogonal to list_changed; relevant when notifications aren't reliable.
