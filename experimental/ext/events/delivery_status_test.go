@@ -183,6 +183,154 @@ func TestDeliveryStatus_LastErrorIsCategorical(t *testing.T) {
 	assert.NotEmpty(t, status["failedSince"], "failedSince MUST be set during a current failure run")
 }
 
+// TestSuspend_AfterThresholdConsecutiveFailures verifies the spec
+// suspend rule (§"Webhook Event Delivery" L413 + §"Webhook Delivery
+// Status" L460): after N consecutive delivery failures within a sliding
+// window W, the registry sets Active=false on the target. Subsequent
+// yields don't attempt delivery (covered by separate test below).
+//
+// Without this state machine, a permanently-down receiver would
+// accumulate retry traffic indefinitely — effectively a self-DoS for
+// every subscription pointing at a dead URL.
+func TestSuspend_AfterThresholdConsecutiveFailures(t *testing.T) {
+	// Receiver always returns 500 — every deliver() ends in failure.
+	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer receiver.Close()
+
+	const threshold = 3
+	r := NewWebhookRegistry(
+		WithWebhookAllowPrivateNetworks(true),
+		WithWebhookSuspendThreshold(threshold),
+		WithWebhookSuspendWindow(10*time.Second),
+	)
+	canonical := []byte("suspend-threshold-test")
+	r.Register(canonical, "sub_st", receiver.URL, "whsec_secret", 0)
+
+	// Drive `threshold` consecutive failed deliveries (each deliver()
+	// internally retries; we count whole-call outcomes, not retries).
+	for i := 0; i < threshold; i++ {
+		r.deliver(r.Targets()[0], "evt_"+string(rune('a'+i)), []byte(`{}`))
+	}
+
+	st := r.DeliveryStatus(canonical)
+	assert.False(t, st.Active,
+		"after %d consecutive failures, target MUST be suspended (Active=false); got %+v", threshold, st)
+}
+
+// TestSuspend_FailuresOutsideWindowDontAccumulate verifies the sliding-
+// window semantic: failures separated by more than W don't count
+// toward the same run. A receiver that has one failure per hour for
+// weeks shouldn't get suspended; only a *current* run of failures
+// does.
+//
+// Implementation strategy here: use a deliberately tiny window so
+// the test runs fast.
+func TestSuspend_FailuresOutsideWindowDontAccumulate(t *testing.T) {
+	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer receiver.Close()
+
+	const threshold = 3
+	r := NewWebhookRegistry(
+		WithWebhookAllowPrivateNetworks(true),
+		WithWebhookSuspendThreshold(threshold),
+		WithWebhookSuspendWindow(200*time.Millisecond),
+	)
+	canonical := []byte("suspend-window-test")
+	r.Register(canonical, "sub_sw", receiver.URL, "whsec_secret", 0)
+
+	// 2 failures, then sleep past the window, then 2 more.
+	// First-failure-time should reset on the post-sleep failures, so
+	// total counted-toward-current-run = 2 < threshold = 3 → still Active.
+	r.deliver(r.Targets()[0], "evt_1", []byte(`{}`))
+	r.deliver(r.Targets()[0], "evt_2", []byte(`{}`))
+
+	time.Sleep(300 * time.Millisecond) // > 200ms window
+
+	r.deliver(r.Targets()[0], "evt_3", []byte(`{}`))
+	r.deliver(r.Targets()[0], "evt_4", []byte(`{}`))
+
+	st := r.DeliveryStatus(canonical)
+	assert.True(t, st.Active,
+		"failures separated by more than the suspend window MUST NOT accumulate; got %+v", st)
+}
+
+// TestSuspend_SuccessfulRefreshReactivates verifies that re-subscribing
+// (idempotent refresh — same canonical tuple) flips a suspended target
+// back to Active=true, clearing the failure run. Per spec L460: "a
+// successful refresh reactivates."
+//
+// The reactivation path is: client retries subscribe → matches existing
+// canonical key → registry refresh path runs → sees Status.Active=false,
+// resets to true + clears failure state.
+func TestSuspend_SuccessfulRefreshReactivates(t *testing.T) {
+	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer receiver.Close()
+
+	r := NewWebhookRegistry(
+		WithWebhookAllowPrivateNetworks(true),
+		WithWebhookSuspendThreshold(2),
+		WithWebhookSuspendWindow(10*time.Second),
+	)
+	canonical := []byte("reactivate-test")
+	r.Register(canonical, "sub_react", receiver.URL, "whsec_secret", 0)
+
+	// Drive 2 consecutive failures → suspended.
+	r.deliver(r.Targets()[0], "evt_a", []byte(`{}`))
+	r.deliver(r.Targets()[0], "evt_b", []byte(`{}`))
+	require.False(t, r.DeliveryStatus(canonical).Active, "precondition: target should be suspended")
+
+	// Refresh — same canonical tuple, idempotent re-Register.
+	r.Register(canonical, "sub_react", receiver.URL, "whsec_secret", 0)
+
+	st := r.DeliveryStatus(canonical)
+	assert.True(t, st.Active, "successful refresh MUST reactivate; got %+v", st)
+	assert.Equal(t, DeliveryErrorNone, st.LastError, "refresh MUST clear lastError")
+	assert.Nil(t, st.FailedSince, "refresh MUST clear failedSince")
+}
+
+// TestSuspend_SuspendedTargetSkippedInDeliver verifies that a suspended
+// target is omitted from the broadcast list — yielded events no longer
+// attempt delivery to it. Without this skip, the suspend state would
+// be cosmetic (just a status flag) and the dead receiver would still
+// see retry traffic on every yield.
+func TestSuspend_SuspendedTargetSkippedInDeliver(t *testing.T) {
+	var hits atomic.Int32
+	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer receiver.Close()
+
+	r := NewWebhookRegistry(
+		WithWebhookAllowPrivateNetworks(true),
+		WithWebhookSuspendThreshold(2),
+		WithWebhookSuspendWindow(10*time.Second),
+	)
+	canonical := []byte("skip-deliver-test")
+	r.Register(canonical, "sub_skip", receiver.URL, "whsec_secret", 0)
+
+	// Drive 2 failures → suspended.
+	r.deliver(r.Targets()[0], "evt_a", []byte(`{}`))
+	r.deliver(r.Targets()[0], "evt_b", []byte(`{}`))
+	require.False(t, r.DeliveryStatus(canonical).Active)
+
+	// Note hits up to here so we measure only what happens AFTER suspension.
+	hitsBeforeSuspendYield := hits.Load()
+
+	// Yield via Deliver — suspended target should be skipped.
+	r.Deliver(MakeEvent("fake.event", "evt_post_suspend", "1", time.Now(), map[string]string{"k": "v"}))
+	time.Sleep(200 * time.Millisecond)
+
+	assert.Equal(t, hitsBeforeSuspendYield, hits.Load(),
+		"suspended target MUST NOT receive new delivery attempts; got %d new hits", hits.Load()-hitsBeforeSuspendYield)
+}
+
 // TestDeliveryStatus_LastErrorBucketsForConnectionRefused verifies the
 // connection_refused bucket — a receiver that's down (refused TCP).
 // Use a known-closed port.
