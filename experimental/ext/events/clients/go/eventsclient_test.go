@@ -30,6 +30,10 @@ type fakePayload struct {
 func stack(t *testing.T, whOpts ...events.WebhookOption) (*client.Client, func(fakePayload) error, *events.WebhookRegistry) {
 	t.Helper()
 
+	// ζ-1: SDK tests subscribe to httptest URLs (127.0.0.1:N). Prepend
+	// the loopback escape so the dial-time SSRF guard doesn't block
+	// the test deliveries. Per-test whOpts can still override.
+	whOpts = append([]events.WebhookOption{events.WithWebhookAllowPrivateNetworks(true)}, whOpts...)
 	webhooks := events.NewWebhookRegistry(whOpts...)
 	src, yield := events.NewYieldingSource[fakePayload](events.EventDef{
 		Name:        "fake.event",

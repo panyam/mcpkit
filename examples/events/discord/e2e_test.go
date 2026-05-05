@@ -28,6 +28,9 @@ import (
 // The cursorless typing source is registered alongside discord.message so
 // cursor-shape tests can exercise both modes against the same server.
 func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.YieldingSource[DiscordEventData], func(DiscordEventData) error, *events.WebhookRegistry) {
+	// ζ-1: tests subscribe to httptest URLs (127.0.0.1:N); bypass the
+	// production-default SSRF dial guard.
+	whOpts = append([]events.WebhookOption{events.WithWebhookAllowPrivateNetworks(true)}, whOpts...)
 	webhooks := events.NewWebhookRegistry(whOpts...)
 	source, yield := newDiscordSource()
 	typingSource, _ := newDiscordTypingSource()
@@ -51,6 +54,9 @@ func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.Yie
 // buildTestStackWithTyping returns the same wired server but exposes the
 // cursorless typing yield function too. Used by the cursorless e2e tests.
 func buildTestStackWithTyping(whOpts ...events.WebhookOption) (*server.Server, func(DiscordEventData) error, func(DiscordTypingData) error, *events.WebhookRegistry) {
+	// ζ-1: tests subscribe to httptest URLs (127.0.0.1:N); bypass the
+	// production-default SSRF dial guard.
+	whOpts = append([]events.WebhookOption{events.WithWebhookAllowPrivateNetworks(true)}, whOpts...)
 	webhooks := events.NewWebhookRegistry(whOpts...)
 	source, yield := newDiscordSource()
 	typingSource, yieldTyping := newDiscordTypingSource()

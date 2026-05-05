@@ -291,6 +291,8 @@ The TS reference's heartbeat doesn't carry a cursor today; the spec now requires
 
 ### ζ — Webhook hardening (delivery-time SSRF, body cap, control envelopes, deliveryStatus)
 
+**Status:** in flight on `feat/events-zeta-webhook-hardening`. All 6 commits landed. PR 375 ready for review. ζ-7 (source-side health signals → notifications/events/error and /terminated server emissions) tracked separately as issue 376. Race-clean across all four event modules.
+
 **Goal:** close the spec-mandated security and reliability gaps in our webhook delivery path.
 
 **Spec deltas addressed:**
@@ -302,27 +304,39 @@ The TS reference's heartbeat doesn't carry a cursor today; the spec now requires
 - **`deliveryStatus`** on `events/subscribe` refresh response: `{active, lastDeliveryAt, lastError, failedSince?}`. `lastError` is a categorical string from a fixed set: `connection_refused | timeout | tls_error | http_4xx | http_5xx | challenge_failed`. **Never** raw response bodies / headers / status lines (avoids becoming a response oracle for attacker-chosen URLs). (§"Webhook Delivery Status" L425-460)
 - **Suspend / reactivate state machine**: after repeated failures the server SHOULD set `active: false`; a successful refresh reactivates it (`active: true`) and resumes retrying pending events. (§"Webhook Event Delivery" L413 + §"Webhook Delivery Status" L460)
 
-**Files touched:**
-- `experimental/ext/events/webhook.go` — new `deliveryStatus` field on `WebhookTarget`. State machine transitions documented inline. Outbound `http.Client` configured with `CheckRedirect`. SSRF check moves to a `dialContext` hook so it runs on every connect, not just at subscribe.
-- New file: `experimental/ext/events/control.go` — signing + sending for `type:gap` and `type:terminated` envelopes. Reuses the headers code from α.
-- `experimental/ext/events/events.go` — `events/subscribe` refresh response includes `deliveryStatus` when present
-- `experimental/ext/events/headers.go` — confirm `X-MCP-Subscription-Id` is added to every outbound delivery
-- Go SDK `experimental/ext/events/clients/go/receiver.go` — handles control envelopes (top-level `type` field is the discriminator); routes `gap` and `terminated` to caller-supplied callbacks
-- Python SDK — same handling
+**Files touched (as built so far):**
+- `experimental/ext/events/webhook.go` — `net.Dialer.Control` SSRF guard inspecting resolved IP at dial time (TOCTOU-safe). `CheckRedirect: ErrUseLastResponse` on outbound http.Client. Body cap (default 256 KiB) enforced REJECT-not-truncate at Deliver entry. 413 + 3xx classified as non-retryable. New `WithWebhookAllowPrivateNetworks(bool)` (default false; demos opt in) and `WithWebhookMaxBodyBytes(int)` (default 256 KiB) options. `ValidateWebhookURL` converted to a `*WebhookRegistry` method so it can read the per-instance allowPrivate setting; strict-by-default for obvious loopback hostnames at subscribe time. (ζ-1, ζ-2, ζ-3)
+- New `experimental/ext/events/control.go` — `controlEnvelope`, `ControlError`, `WebhookRegistry.PostGap(canonicalKey, freshCursor)` and `PostTerminated(canonicalKey, ControlError)`. Single-attempt delivery (best-effort signal). PostTerminated removes the target from the registry regardless of POST outcome — no zombie entries. (ζ-4)
+- `experimental/ext/events/headers.go` — `newControlMessageID(typ)` mints `msg_<typ>_<random>`, finally honoring α's reserved-form stub. (ζ-4)
+- `experimental/ext/events/events.go` — registerSubscribe calls `webhooks.ValidateWebhookURL(...)` (method form). (ζ-1)
+- Go SDK `experimental/ext/events/clients/go/receiver.go` — `OnGap(cb)` + `OnTerminated(cb)` chainable callback installers + `ControlError` type. ServeHTTP probes top-level `type` BEFORE Event unmarshal so the common case (no `type` → event) doesn't pay a double-decode tax. (ζ-4)
+- Python SDK `events_client.py` — `_make_webhook_handler` dispatches by top-level `type`; pretty-prints `── WEBHOOK GAP / TERMINATED ──` frames distinctly. (ζ-4)
+- Test fixtures across all four event modules opt into `WithWebhookAllowPrivateNetworks(true)` since httptest binds to 127.0.0.1; demo binaries do too with a comment that production deployments leave it OFF.
 
-**Acceptance:**
-- `make test-experimental` green
-- SSRF integration test: subscribe with a hostname that resolves to a public IP, then arrange (mock DNS) for it to resolve to `127.0.0.1` at delivery time — verify the delivery is rejected
-- Redirect integration test: subscribe with a URL that 302s to `127.0.0.1` — verify the outbound delivery does NOT follow
-- Body cap integration test: emit an event that would serialize to >256 KiB — verify a 413 from the receiver is treated as non-retryable
-- Control envelope test: manually trigger a gap, verify a `{type:gap}` POST arrives with valid Standard Webhooks signature + `X-MCP-Subscription-Id`
-- `deliveryStatus` test: cause repeated 5xx failures, verify subsequent refresh response shows `active: false`; refresh again and verify reactivation behavior
+**Files touched (ζ-5, ζ-6 — landed):**
+- `experimental/ext/events/webhook.go` — `DeliveryStatus{Active, LastDeliveryAt, LastError, FailedSince}` + `DeliveryErrorBucket` typed string (categorical: connection_refused, timeout, tls_error, http_3xx_redirect, http_4xx, http_5xx, challenge_failed). `recordDeliverySuccess` / `recordDeliveryFailure` helpers + `classifyTransportError` (type-asserted markers, no err.Error() leakage). Suspend state machine: counter + first-failure-time + last-success-time per target; sliding window. `Targets()` filter excludes suspended; `Register` refresh path reactivates suspended targets. New `WithWebhookSuspendThreshold(n)` (default 5) + `WithWebhookSuspendWindow(d)` (default 10min) options.
+- `experimental/ext/events/events.go` — `registerSubscribe` refresh response includes `deliveryStatus` via new `deliveryStatusForResponse` projector when target has prior delivery attempts. Omitted on first subscribe (nothing to report).
 
-**Tests:**
-- `ssrf_delivery_test.go` (new) — DNS rebinding scenario
-- `control_envelope_test.go` (new) — gap + terminated paths
-- `delivery_status_test.go` (new) — suspension / reactivation state machine
-- Extend `headers_test.go` for the `X-MCP-Subscription-Id` presence
+**Acceptance (as verified so far):**
+- All four event modules pass `go test -count=1 -race ./...` after each commit (ζ-1 through ζ-4)
+- SSRF dial-time guard rejects 10 IP families (loopback, RFC1918, link-local, ULA, IPv4-mapped-IPv6, etc.) — pinned by table-driven `TestDelivery_DialBlocklistRanges`
+- 3xx redirect not followed — pinned by `TestDelivery_DoesNotFollowRedirects`
+- Oversized event not POSTed (REJECT not TRUNCATE) — pinned by `TestDelivery_OversizedEventNotPosted`
+- 413 from receiver = exactly 1 attempt — pinned by `TestDelivery_413NotRetried`
+- Control envelope wire shape (top-level `type`, `msg_<typ>_<random>` webhook-id, X-MCP-Subscription-Id presence) — pinned by `TestControlEnvelope_*` (server side) + `TestReceiver_RoutesGap/TerminatedToCallback` (SDK side)
+
+**Acceptance for ζ-5, ζ-6 (landed):**
+- `deliveryStatus` round-trip: refresh after success populates `lastDeliveryAt`; refresh after 5xx shows `lastError: http_5xx`; oracle-body test confirms raw response data NEVER leaks
+- Suspend: N consecutive failures within W → Active=false; failures outside W don't accumulate (sliding-window reset); successful refresh reactivates and clears state; suspended target skipped in Deliver fan-out
+
+**Tests added so far:**
+- `ssrf_delivery_test.go` — 5 tests (loopback rejected, escape allows, blocklist table, public allows, redirects rejected)
+- `body_cap_test.go` — 4 tests (oversized rejected, oversized logged, 413 not retried, default cap pin)
+- `control_envelope_test.go` (server) — 3 tests (gap shape, terminated shape, top-level type discriminator)
+- `clients/go/control_envelope_test.go` (SDK) — 3 tests (routes gap, routes terminated, no-callback-installed safe)
+
+**Tests added (ζ-5, ζ-6 — landed):**
+- `delivery_status_test.go` — 8 tests: deliveryStatus omission on first subscribe, lastDeliveryAt after success, lastError categorical (oracle-body leak check), connection_refused bucket, suspend after threshold, sliding-window reset, refresh reactivation, suspended skipped in Deliver
 
 **Risk:** Low to medium. Most changes are additive (new envelope types, new header, new field on response). The SSRF + redirect changes touch the http.Client setup, easy to land safely.
 
