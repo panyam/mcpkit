@@ -4,18 +4,18 @@ How MCP grows. What counts as an extension, how new things get into the protocol
 
 > **Kind:** root *(FAQ-style)* · **Assumes:** [bring-up](./bringup.md), [transport-mechanics](./transport-mechanics.md), [notifications](./notifications.md)
 > **Reachable from:** [README](./README.md), [bring-up](./bringup.md) Leads-to, [notifications](./notifications.md) Leads-to
-> **Branches into:** (forthcoming) tasks, auth deep-dive, apps, experimental events
+> **Branches into:** [tasks](./tasks.md) *(planned)*, [auth deep-dive](./auth.md) *(planned)*, [apps](./apps.md) *(planned)*, [experimental events](../../experimental/ext/events/README.md)
 > **Spec:** [Lifecycle / capabilities](https://modelcontextprotocol.io/specification/2025-06-18) · SEP-2663 (tasks v2) · SEP-2549 (list-TTL) · SEP-2322 (MRTR) · **Code:** `core/protocol.go`, `core/typed_tool.go`, `server/registration.go`, `server/middleware.go`, `server/dispatch.go`, `server/mrtr.go`, `ext/auth/`, `ext/ui/`, `experimental/ext/`
 
-## Preconditions
+## Prerequisites
 
 - You understand what a capability is and that capabilities are negotiated at bring-up. → If not, read [bring-up](./bringup.md).
 - You can read JSON-RPC messages and know that methods are named strings. → If not, read [transport mechanics](./transport-mechanics.md).
 - You know how notifications are gated by capability. → If not, read [notifications](./notifications.md).
 
-## Why a root
+## Context
 
-Tasks, auth, apps, events, list-TTL, MRTR — every "thing beyond the core protocol" works through a small set of shared mechanisms. Without naming those mechanisms once, every downstream root has to re-derive *what does it mean for this to be an extension at all*. This root pins the vocabulary; downstream roots assume it and skip straight to their specifics.
+MCP grows by extension. Tasks, auth, apps, events, list-TTL, MRTR — everything beyond the core protocol — works through a small set of shared mechanisms (capability flags, method namespaces, `_meta`, notifications) plus mcpkit's code-level extension points (registries, middleware, sub-modules). Naming the mechanisms once gives you the vocabulary to read "this extension uses SEP-X" or "this is a `_meta`-only extension" and immediately know what's going on.
 
 ## Q1 — What counts as an "extension" in MCP?
 
@@ -60,11 +60,11 @@ graph LR
 > [!IMPORTANT]
 > The `experimental` namespace is **not** a free-for-all. Receivers MUST ignore unrecognized experimentals — that's what lets emitters advertise them safely. But emitters MUST NOT depend on experimentals being supported; if the negotiated capabilities don't include yours, you don't use it. This is what makes SEPs land without breaking older clients.
 
-**Concrete examples in mcpkit** (each in its own forthcoming root or leaf):
+**Concrete examples in mcpkit** (each in its own root or leaf):
 
-- **SEP-2663 — tasks v2.** Long-running operations as a first-class concept. Adds `tasks/*` methods + a `tasks` capability. mcpkit has v1 (frozen), v2 (canonical), and `RegisterTasksHybrid` for both — a transition pattern worth its own root.
-- **SEP-2549 — list-TTL.** Three-state cache-lifetime hint on list responses (`nil` / `&0` / `&N>0`). Pure `_meta` extension — no new methods or capabilities.
-- **SEP-2322 — MRTR.** Middleware request/transport routing. Mostly mcpkit-architecture; thin spec surface (an ephemeral capability flag).
+- **SEP-2663 — [tasks v2](./tasks.md)** *(planned)*. Long-running operations as a first-class concept. Adds `tasks/*` methods + a `tasks` capability. mcpkit has v1 (frozen), v2 (canonical), and `RegisterTasksHybrid` for both — a transition pattern worth its own root.
+- **SEP-2549 — [list-TTL](./list-ttl.md)** *(planned)*. Three-state cache-lifetime hint on list responses (`nil` / `&0` / `&N>0`). Pure `_meta` extension — no new methods or capabilities.
+- **SEP-2322 — [MRTR](./mrtr.md)** *(planned)*. Middleware request/transport routing. Mostly mcpkit-architecture; thin spec surface (an ephemeral capability flag).
 
 ## Q3 — What does an extension look like in mcpkit's code organization?
 
@@ -117,7 +117,7 @@ mcpkit's extension points, roughly in order of how often you'll reach for them:
 The general shape: you add **registrations** at server start (or client side), the runtime picks them up via dispatch, and middleware wraps the call path. You never need to modify `core/` or `server/` to add functionality.
 
 > [!NOTE]
-> **Branch →** *(forthcoming)* Per-request anatomy. The dispatch + middleware + handler-context internals that make these extension points work. Important if you're writing custom middleware or doing anything past simple `RegisterTool`.
+> **Branch →** [Per-request anatomy](./request-anatomy.md) *(planned)*. The dispatch + middleware + handler-context internals that make these extension points work. Important if you're writing custom middleware or doing anything past simple `RegisterTool`.
 
 ## Q5 — Case studies: how tasks, auth, apps, events, list-TTL, MRTR, elicitation each map to the mechanisms above
 
@@ -160,15 +160,13 @@ After reading this root, downstream pages can assume:
 - You can read the **case-study table** and tell at a glance which surfaces each extension uses.
 - You can distinguish **protocol extension from host/client policy** — both are "new behavior," but only the former is an extension in the technical sense.
 
-## Leads to
+## Next to read
 
-Roots that build on this end-state:
-
-- **(forthcoming) Per-request anatomy** *(root, NEXT)* — dispatch internals that make registries + middleware + MRTR actually run.
-- **(forthcoming) Tasks v1/v2/hybrid** *(root)* — the deep walk on the largest method-namespace extension, including the v1→v2 migration and `RegisterTasksHybrid` dispatch-by-capability pattern.
-- **(forthcoming) Auth deep-dive** *(root, off-mainline)* — the bring-up extension; full OAuth/PRM/JWT/fine-grained-auth.
-- **(forthcoming) Apps** *(root)* — the library-architecture extension; AppHost/Bridge JS/ServerRegistry. Mostly mcpkit-side, thin protocol surface.
-- **(forthcoming) Reverse-call mechanics** *(root)* — concretizes elicitation, sampling, roots/list as the same method-namespace pattern.
-- **(forthcoming) MRTR deep-dive** *(branch off per-request anatomy)* — SEP-2322 in detail.
-- **(forthcoming) List-TTL (SEP-2549)** *(leaf off notifications)* — the canonical `_meta`-only extension; orthogonal to list_changed.
+- **[Per-request anatomy](./request-anatomy.md)** *(planned, root, NEXT)* — dispatch internals that make registries + middleware + MRTR actually run.
+- **[Tasks v1/v2/hybrid](./tasks.md)** *(planned, root)* — the deep walk on the largest method-namespace extension, including the v1→v2 migration and `RegisterTasksHybrid` dispatch-by-capability pattern.
+- **[Auth deep-dive](./auth.md)** *(planned, root, off-mainline)* — the bring-up extension; full OAuth/PRM/JWT/fine-grained-auth.
+- **[Apps](./apps.md)** *(planned, root)* — the library-architecture extension; AppHost/Bridge JS/ServerRegistry. Mostly mcpkit-side, thin protocol surface.
+- **[Reverse-call mechanics](./reverse-call.md)** *(planned, root)* — concretizes elicitation, sampling, roots/list as the same method-namespace pattern.
+- **[MRTR deep-dive](./mrtr.md)** *(planned, branch off per-request anatomy)* — SEP-2322 in detail.
+- **[List-TTL (SEP-2549)](./list-ttl.md)** *(planned, leaf off notifications)* — the canonical `_meta`-only extension; orthogonal to list_changed.
 - **[`experimental/ext/events/`](../../experimental/ext/events/README.md)** *(branch, target-shape)* — events as first-class.
