@@ -15,6 +15,7 @@ make testconf-tasks    # Tasks v1 conformance (27 scenarios, self-contained)
 make testconf-tasks-v2 # Tasks v2 conformance (33 scenarios, self-contained, SEP-2663)
 make testconf-mrtr     # MRTR conformance (7 scenarios + 1 deferred skip, SEP-2322)
 make testconf-list-ttl # List-TTL conformance (5 scenarios, SEP-2549)
+make testconf-file-inputs # File-inputs conformance (7 scenarios, SEP-2356; 6 green / 1 red awaiting #362)
 make testall           # Everything (12 stages) + Keycloak + HTML report
 make audit             # govulncheck + gosec + gitleaks + race
 make tag-push V=vX.Y.Z # Tag root + all sub-modules and push
@@ -59,7 +60,7 @@ Module-specific gotchas live in their READMEs.
 
 ## Conformance
 
-Server: 30/30, Auth: 14/14, Apps: 21, Tasks v1: 27/27, Tasks v2: 33/33 (SEP-2663), MRTR: 7/7 (SEP-2322, ephemeral; 1 task-composition scenario skipped pending follow-up), List-TTL: 5/5 (SEP-2549), Keycloak: 12/12, testall: 12/12 stages.
+Server: 30/30, Auth: 14/14, Apps: 21, Tasks v1: 27/27, Tasks v2: 33/33 (SEP-2663), MRTR: 7/7 (SEP-2322, ephemeral; 1 task-composition scenario skipped pending follow-up), List-TTL: 5/5 (SEP-2549), File-Inputs: 6/7 (SEP-2356; 1 awaiting #362 capability gating), Keycloak: 12/12, testall: 12/12 stages.
 
 ## Tasks v1 vs v2
 

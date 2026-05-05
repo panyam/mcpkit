@@ -43,6 +43,7 @@ type serverOptions struct {
 	onRootsChanged       func([]core.Root) // optional callback when client sends roots/list_changed
 	rootsFetchTimeout    time.Duration     // timeout for server-to-client roots/list requests (0 = default 30s)
 	skipSchemaValidation bool              // WithSchemaValidation(false) disables call-time validation
+	validateFileInputs   bool              // WithFileInputValidation enables SEP-2356 size + MIME enforcement
 	publicMethods        map[string]bool   // methods that bypass auth (pre-auth discovery)
 	customHandlers       map[string]MethodHandler // custom JSON-RPC method handlers
 	httpHandlers         []httpHandlerEntry       // custom HTTP endpoint handlers
@@ -250,6 +251,38 @@ func WithSchemaValidation(enabled bool) Option {
 	return func(o *serverOptions) { o.skipSchemaValidation = !enabled }
 }
 
+// WithFileInputValidation enables SEP-2356 server-side validation of
+// file-typed tool arguments. When enabled, the dispatcher walks each
+// tool's inputSchema for `x-mcp-file` properties (single string/uri or
+// array-items shape) and runs `core.ValidateFileInput` on every matching
+// argument BEFORE the handler is invoked.
+//
+// Failures surface as JSON-RPC -32602 with structured `data`:
+//
+//	{
+//	  "code": -32602,
+//	  "message": "file input \"image\" exceeds size limit",
+//	  "data": {
+//	    "reason": "file_too_large",
+//	    "field": "image",
+//	    "actualSize": 5243904,
+//	    "maxSize": 5242880
+//	  }
+//	}
+//
+// The wire shape is frozen by `conformance/file-inputs/scenarios.test.ts`
+// (the cross-impl contract). Disabled by default — handlers that prefer
+// to validate themselves can leave it off.
+//
+// Usage:
+//
+//	srv := server.NewServer(info,
+//	    server.WithFileInputValidation(),
+//	)
+func WithFileInputValidation() Option {
+	return func(o *serverOptions) { o.validateFileInputs = true }
+}
+
 // WithAllowedRoots restricts tool cwd to the given directory prefixes.
 func WithAllowedRoots(roots ...string) Option {
 	return func(o *serverOptions) { o.allowedRoots = roots }
@@ -279,6 +312,7 @@ func NewServer(info core.ServerInfo, opts ...Option) *Server {
 	// Propagate schema validation opt-out to the dispatcher so per-session
 	// clones inherit it via newSession().
 	s.dispatcher.skipSchemaValidation = s.options.skipSchemaValidation
+	s.dispatcher.validateFileInputs = s.options.validateFileInputs
 	s.dispatcher.customHandlers = s.options.customHandlers
 	// Wire registry change notifications to Server.Broadcast so that
 	// dynamic adds/removes automatically notify all connected sessions.
