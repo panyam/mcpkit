@@ -1,54 +1,32 @@
 === Stage 11/12: tasks-v2-conformance (make testconf-tasks-v2) ===
-Started: Mon May  4 13:52:51 PDT 2026
-2026/05/04 13:52:52 Tasks v2 demo server on :18092
-2026/05/04 13:52:52 Connect: http://localhost:18092/mcp
-2026/05/04 13:52:52 
-2026/05/04 13:52:52 Tools:
-2026/05/04 13:52:52   greet              — sync-only
-2026/05/04 13:52:52   slow_compute       — optional task (server-directed)
-2026/05/04 13:52:52   failing_job        — required task (tool error → completed + isError)
-2026/05/04 13:52:52   confirm_delete     — required task (input_required → tasks/update → completed)
-2026/05/04 13:52:52   protocol_error_job — required task (protocol error → failed + error)
-2026/05/04 13:52:52   external_job       — required task (TaskCallbacks proxy)
-2026/05/04 13:52:52 listen tcp :18092: bind: address already in use
-▶ MCP Tasks v2 Conformance (SEP-2663)
-  ✔ v2-01: sync tool call returns immediately, no task (2.314667ms)
-  ✔ v2-02: server creates task without client task param (1.151208ms)
-  ✔ v2-03: tasks/get returns status for active task (1.672583ms)
-  ✔ v2-04: tasks/get returns completed status with inlined result (1013.5285ms)
-  ✔ v2-05: tool execution error is completed with isError true (1015.642041ms)
-  ✔ v2-06: protocol error is failed with error field (610.150125ms)
-  ✔ v2-07: tasks/cancel returns empty ack; status settles to cancelled (6.73375ms)
-  ✔ v2-08: cancel completed task returns error (1014.242459ms)
-  ✔ v2-09: tasks/result is rejected (method removed in v2) (1013.791917ms)
-  ✔ v2-10: tasks/list is rejected (method removed in v2) (0.904458ms)
-  ✔ v2-11: tasks advertised under capabilities.extensions, not capabilities.tasks (0.101166ms)
-  ✔ v2-12: ttlSeconds + pollIntervalMilliseconds present (legacy v1 keys absent) (0.818416ms)
-  ✔ v2-13: task must not expire before TTL (1516.069417ms)
-  ✔ v2-14: tasks/get response may include requestState (1015.358459ms)
-  ✔ v2-15: client echoes requestState in subsequent requests (1.486625ms)
-  ✔ v2-16: input_required task has inputRequests map in tasks/get (1.192667ms)
-  ✔ v2-17: tasks/update inputResponses resume task (2.400834ms)
-  ✔ v2-18: status notifications include DetailedTask if sent (1511.878792ms)
-  ✔ v2-19: tools/call without task param creates task for async tools (1.172875ms)
-  ✔ v2-20: server may return immediate result for fast operations (0.754042ms)
-  ✔ v2-21: tasks/get inlined result does not include related-task _meta (1013.793709ms)
-  ✔ v2-22: tasks/* return -32601 when extension not negotiated (2.756666ms)
-  ✔ v2-23: tools/call without extension returns sync ToolResult (resultType:"complete", no task) (1.063375ms)
-  ✔ v2-24: Mcp-Name + Mcp-Method response headers on task-creating tools/call (0.852584ms)
-  ✔ v2-24b: Mcp-Name absent on sync tools/call response (Mcp-Method still present) (0.811ms)
-  ✔ v2-24c: Mcp-Method on tasks/get and tasks/cancel responses (2.70375ms)
-  ✔ v2-25: per-request _meta opt-in produces CreateTaskResult (1.049292ms)
-  ✔ v2-26: non-task responses carry resultType:"complete" (SEP-2322) (6.499791ms)
-  ✔ v2-27: tasks/get immediately after CreateTaskResult must resolve (1.868666ms)
-  ✔ v2-28: stale-but-valid requestState is tolerated (3.318542ms)
-✔ MCP Tasks v2 Conformance (SEP-2663) (9784.60025ms)
-ℹ tests 30
-ℹ suites 1
-ℹ pass 30
-ℹ fail 0
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 10007.109208
-Finished: Mon May  4 13:53:03 PDT 2026
+Started: Tue May  5 16:24:26 PDT 2026
+(cd /Users/dzshrh/newstack/mcpconformance && npm install --silent && \
+		TASKS_SERVER_URL=http://localhost:18092/mcp \
+		TASKS_SERVER_CMD="/Users/dzshrh/newstack/mcpkit/tasks/examples/tasks-v2/tasks-v2 --serve --addr :18092" \
+		npx vitest run src/scenarios/server/tasks/all-scenarios.test.ts)
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.5 [39m[90m/Users/dzshrh/newstack/mcpconformance[39m
+
+ [32m✓[39m src/scenarios/server/tasks/all-scenarios.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 9907[2mms[22m[39m
+     [33m[2m✓[22m[39m tasks-lifecycle — all checks succeed against fixture [33m 4696[2mms[22m[39m
+     [33m[2m✓[22m[39m tasks-wire-fields — all checks succeed against fixture [33m 2528[2mms[22m[39m
+     [33m[2m✓[22m[39m tasks-dispatch-and-envelope — all checks succeed against fixture [33m 1022[2mms[22m[39m
+     [33m[2m✓[22m[39m tasks-status-notifications — all checks succeed against fixture [33m 1012[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m8 passed[39m[22m[90m (8)[39m
+[2m   Start at [22m 16:24:29
+[2m   Duration [22m 10.10s[2m (transform 69ms, setup 0ms, import 88ms, tests 9.91s, environment 0ms)[22m
+
+(cd conformance && npm install --silent && npx vitest run tasks-v2/)
+
+ RUN  v2.1.9 /Users/dzshrh/newstack/mcpkit/tasks/conformance
+
+ ✓ tasks-v2/scenarios.test.ts (1 test) 1ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  16:24:40
+   Duration  654ms (transform 382ms, setup 0ms, collect 371ms, tests 1ms, environment 0ms, prepare 106ms)
+
+Finished: Tue May  5 16:24:41 PDT 2026

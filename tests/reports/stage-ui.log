@@ -1,15 +1,15 @@
 === Stage 4/12: ui (make test-ui) ===
-Started: Mon May  4 13:51:54 PDT 2026
+Started: Tue May  5 16:22:20 PDT 2026
 cd ext/ui && /Library/Developer/CommandLineTools/usr/bin/make test
 go test ./... -count=1 -timeout 30s
-ok  	github.com/panyam/mcpkit/ext/ui	0.780s
+ok  	github.com/panyam/mcpkit/ext/ui	0.430s
 cd assets && pnpm install --frozen-lockfile --silent && pnpm test
 
-> @mcpkit/app-bridge@0.1.0 test /Users/dzshrh/newstack/mcpkit/main/ext/ui/assets
+> @mcpkit/app-bridge@0.1.0 test /Users/dzshrh/newstack/mcpkit/tasks/ext/ui/assets
 > vitest run
 
 
- RUN  v3.2.4 /Users/dzshrh/newstack/mcpkit/main/ext/ui/assets
+ RUN  v3.2.4 /Users/dzshrh/newstack/mcpkit/tasks/ext/ui/assets
 
 stderr | mcp-app-bridge.test.ts > pre-handshake guarding > sendToolListChanged is silently dropped before handshake
 [MCPApp] notify blocked before handshake: notifications/tools/list_changed
@@ -17,11 +17,11 @@ stderr | mcp-app-bridge.test.ts > pre-handshake guarding > sendToolListChanged i
 stderr | mcp-app-bridge.test.ts > pre-handshake guarding > log is silently dropped before handshake
 [MCPApp] notify blocked before handshake: ui/log
 
- ✓ mcp-app-bridge.test.ts (48 tests) 675ms
+ ✓ mcp-app-bridge.test.ts (61 tests) 726ms
 
  Test Files  1 passed (1)
-      Tests  48 passed (48)
-   Start at  13:51:57
-   Duration  1.31s (transform 31ms, setup 0ms, collect 27ms, tests 675ms, environment 346ms, prepare 100ms)
+      Tests  61 passed (61)
+   Start at  16:22:22
+   Duration  1.52s (transform 46ms, setup 0ms, collect 43ms, tests 726ms, environment 391ms, prepare 134ms)
 
-Finished: Mon May  4 13:51:58 PDT 2026
+Finished: Tue May  5 16:22:24 PDT 2026
