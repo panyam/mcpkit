@@ -129,10 +129,15 @@ graph LR
 
 Two things to keep distinct:
 
-- **Request handling** — server recv-mw + handler + server send-mw forms the standard request → response chain.
-- **Reverse calls** — when a handler originates a reverse call, the call goes through **server send-mw** (outgoing) and the response comes back through **server recv-mw** (incoming) — the same stacks, used in their other direction. Middleware that's strictly for "incoming forward requests" should check direction; mcpkit middleware values typically know which direction they're seeing.
+- **Forward request handling** — server recv-mw → handler → server send-mw is the standard request → response chain. server-recv sees a request coming in; server-send sees the response going out.
+- **Reverse calls** — when a handler originates a reverse call, the request goes out through **server send-mw** (carrying a *request*, not a response) and the response comes back through **server recv-mw** (carrying a *response*, not a request). Same stacks, but each one now carries the *opposite role* from the standard case. The middleware doesn't care — direction is what defines the stack, not message kind.
 
 Each stack is a **pipeline** — middleware composes by wrapping the next handler in the chain. mcpkit's middleware shape: a function that takes the next handler and returns a wrapped handler. Standard onion model.
+
+> [!NOTE]
+> **Why "send/recv" naming and not "request/response" naming?** mcpkit names the stacks by *direction* (send/recv) rather than by *message kind* (request-handler / response-handler / notification-handler). Direction is the right cleavage because most cross-cutting middleware (logging, tracing, auth) cares about *which side of the wire it's on*, not *what role the message has*. A logger wants every outbound message; an auth verifier wants every inbound message; tracers want both. Role can be inferred from the message shape (`id` + `method` → request, `id` + `result`/`error` → response, no `id` → notification).
+>
+> The cost is the awkwardness above: "server send-mw" carries reverse-call *requests*, not just responses. The middleware framework doesn't care; the naming just reads slightly oddly when you first encounter reverse calls. A role-based scheme (request-send-mw, response-recv-mw, …) would resolve the awkwardness but multiply the interception points 3× and force most middleware to either register at multiple points or constantly check "is this my role?" The simplification doesn't pay off in practice — but the awkwardness when reading reverse-call flows is real.
 
 > [!NOTE]
 > **Branch →** [Middleware composition](./middleware.md) *(planned)* — request-side vs. sending-side in detail, ordering rules, the `ext/auth` and `ext/ui` interception points, how middleware integrates with MRTR.
