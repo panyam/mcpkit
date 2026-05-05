@@ -23,7 +23,7 @@ serve: ## Start the telegram-events server standalone (also works with MCPJam, V
 	fi
 
 readme: ## Regenerate WALKTHROUGH.md from demo definitions
-	go run . --doc=md > WALKTHROUGH.md
+	go run . --doc md > WALKTHROUGH.md
 
 build: ## Build the binary
 	go build -o telegram-events-demo .
@@ -61,3 +61,4 @@ poll:
 	@$(EVENTS_CLIENT) poll --interval $(or $(INTERVAL),5)
 
 .PHONY: run serve demo readme build test test-race inject inject-typing list listen webhook poll
+.DEFAULT_GOAL := demo
