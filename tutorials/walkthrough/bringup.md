@@ -2,7 +2,7 @@
 
 What happens between *"the host has a config entry mentioning this server"* and *"the host can issue useful requests."*
 
-> **Kind:** root · **Assumes:** nothing (foundational)
+> **Kind:** root · **Prerequisites:** nothing (foundational)
 > **Reachable from:** [README](./README.md) · **Branches into:** [transport mechanics](./transport-mechanics.md), [per-request anatomy](./request-anatomy.md) *(planned)*
 > **Spec:** [Lifecycle](https://modelcontextprotocol.io/specification/2025-06-18) · **Code:** `core/protocol.go`, `core/auth.go`, `core/www_authenticate.go`, `server/stdio_transport.go`, `server/streamable_transport.go`, `client/command_transport.go`, `ext/auth/`
 
@@ -116,7 +116,7 @@ What is **not** yet established (and lives in downstream pages):
 
 - **[Transport mechanics](./transport-mechanics.md)** — drills into the wire format chosen during bring-up phase 2.
 - **[Notifications](./notifications.md)** — the session's state-change channel. Capability-gated by what was negotiated here.
-- **[Per-request anatomy](./request-anatomy.md)** *(planned)* — the per-call flow that runs *inside* an established session: dispatch, middleware, handler context, typed binding.
+- **[Per-request anatomy](./request-anatomy.md)** — the per-call flow that runs *inside* an established session: dispatch, middleware, handler context, typed binding.
 - **[Extension mechanisms](./extension-mechanisms.md)** — how MCP grows; capability flags negotiated here are the gate for all extensions.
 - **[Auth deep-dive](./auth.md)** *(planned, off-mainline)* — full OAuth dance, PRM, JWT validation, fine-grained-auth per tool. Auth is a "bring-up extension" — it extends *this* root's connection-establishment phase, not the message exchange.
 - **[Re-init / session resumption](./session-resumption.md)** *(planned, leaf)* — what happens if the underlying transport drops mid-session.
