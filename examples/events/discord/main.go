@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -176,6 +177,42 @@ func serve() {
 		eventName := r.URL.Query().Get("event")
 		if eventName == "" {
 			eventName = "discord.message"
+		}
+
+		// ζ-7.4: source-side health-signal injection. Demo's stand-in
+		// for a real source bubbling upstream errors. Triggers
+		// notifications/events/error or /terminated on push subscribers,
+		// per spec §"Push-Based Delivery" → "Event Delivery" L255-271.
+		// `?action=error` is transient (stream stays); `?action=terminate`
+		// is one-shot terminal (stream closes; webhook subscribers get a
+		// type:terminated control envelope).
+		if action := r.URL.Query().Get("action"); action != "" {
+			code := -32603
+			if c := r.URL.Query().Get("code"); c != "" {
+				if parsed, err := strconv.Atoi(c); err == nil {
+					code = parsed
+				}
+			}
+			message := r.URL.Query().Get("message")
+			if message == "" {
+				message = "demo-injected " + action
+			}
+			derr := events.EventDeliveryError{Code: code, Message: message}
+			switch action {
+			case "error":
+				_ = source.YieldError(derr)
+			case "terminate":
+				_ = source.YieldTerminated(derr)
+			default:
+				http.Error(w, fmt.Sprintf("unknown action %q (want error or terminate)", action), http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{
+				"status": "ok", "event": eventName, "action": action,
+				"code": code, "message": message,
+			})
+			return
 		}
 
 		switch eventName {
