@@ -360,6 +360,27 @@ Reading: η-1 + η-2 are the foundation; can land in either order. η-3 needs bo
 - Per sub-PR: each carries the spec citation in commit + PR description (same convention as α-ζ).
 - WG demo opportunity: the kitchen-sink multi-source/multi-consumer example in `mcpcontribs/proposals/triggers-events-wg/poc-notes.md` ("kitchen-sink" backlog item) is the natural showcase for η. Worth filing a tracking issue when η-3 lands so the demo design can start in parallel.
 
+## Tutorial follow-up
+
+`tutorials/walkthrough/events.md` will need updates as η ships. Convention is post-implementation, not pre-doc — but tracking here so it doesn't get lost. Each sub-PR's PR description should include a "Tutorial impact" note pointing back at this section so reviewers know the doc work is queued, not forgotten.
+
+| When this lands | events.md change |
+|---|---|
+| **η-1** (poll-lease) | Q2 "Three delivery modes" table: poll-mode "Statefulness" cell currently says "Client persists `cursor`; server is idempotent on re-poll." Add: "server holds an ephemeral lease keyed on `(principal, name, params)` for lifecycle-hook firing — see Q8." |
+| **η-2** (hook surface) | No tutorial change in isolation — surface is invisible until η-3/η-4 wire it. Document together. |
+| **η-3 + η-4** (lifecycle + match/transform — most natural to land near each other) | **Add Q8 — "How does an author shape per-subscription delivery?"** Covers: the four hooks (`Match` / `Transform` / `OnSubscribe` / `OnUnsubscribe`) as `EventDef` fields; `HookContext` fields (Principal / SubscriptionID / Mode); when each hook fires per delivery mode (table); the suspend-≠-unsubscribe rule from Q4 in this plan; hot-path discipline (sync, panic-recovery, snapshot-and-drop-lock). Update Q4 ("What's a source?") `YieldingSource` row to mention hooks fire on `yield()` fanout; document explicitly that TypedSource authors apply filtering inside their `Poll` callback (no hook plumbing). End-state bullet: add "per-subscription filtering and lifecycle are first-class via `Match` / `Transform` / `OnSubscribe` / `OnUnsubscribe` hooks on EventDef." |
+| **η-5** (targeted emit) | Q1 four-knobs table is unchanged (no new wire surface). Q4 or new Q8: brief mention of `EmitToSubscription(srv, e, subID)` as the alternative to broadcast `Emit`, when authors already know the target sub from an `OnSubscribe`-provisioned listener. |
+| **η-6** (TooManySubscriptions) | Q3 IMPORTANT callout currently lists "three rules" — extend to four: add the quota-before-on-subscribe rule with the `-32013` error code reference. Brief — one bullet. |
+| **all of η shipped** | Header `Branches into:` already lists three planned leaves; consider adding a fourth leaf for hooks if any single piece (probably the lease semantics or the broadcast-vs-targeted decision flow) warrants its own page. Defer the call until η-4 lands and we can see what readers actually ask about. |
+
+**Cross-page check:**
+- `tutorials/walkthrough/extension-mechanisms.md` Q5 case-study row for events: currently says "experimental, target-shape, `experimental.events` capability." Stays as-is — it doesn't enumerate hook surface, only the capability. No change needed.
+- `tutorials/walkthrough/request-anatomy.md`: hooks are author-side surface, not dispatch internals. No change needed unless η-3's wiring introduces a new dispatch pattern worth calling out (current design slots into existing `HandleMethod` registration; expect no change).
+- `tutorials/walkthrough/notifications.md`: η doesn't touch notification mechanics. No change needed.
+- `tutorials/walkthrough/INDEX.md`: events row's End-state summary will need its bullet list extended with the hook surface once η-3 + η-4 land. `make graph` regenerates GRAPH.md automatically.
+
+**Operational reminder:** mcpkit docs work commits direct to main per the established workflow — same as the events.md initial drop. Each sub-PR can either bundle the tutorial update in the same commit (keeps doc + code in lockstep) or land them as separate same-day commits (cleaner per-file diff). Recommend the same-commit pattern for η-3/η-4 since the doc text references newly-shipped behavior literally.
+
 ## Out of scope
 
 - **Persistent lease/registry across server restart.** Spec is explicit that this is ephemeral SDK state (L715). Don't try to durable-store it.
