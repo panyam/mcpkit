@@ -63,22 +63,18 @@ Two phases: core protocol support (Phase 1), then MCP Apps bridge integration
 - [x] `FileInputArrayProperty(desc) map[string]any` — array of file-input items.
 - [x] `ExtractFileInputDescriptor(prop) *FileInputDescriptor` — handles both typed-value (`FileInputDescriptor` struct) and JSON-unmarshalled (`map[string]any`) shapes; the JSON path is needed when round-tripping schemas through `tools/list`.
 
-### 1.4: Server-side validation
+### 1.4: Server-side validation ✅ shipped
 
-**Files:** `server/file_validation.go` (new)
+**Files:** `core/file_validation.go` (new), `core/file_validation_test.go` (new), `server/file_validation.go` (new), `server/file_validation_test.go` (new), `server/dispatch.go`, `server/server.go`, `examples/file-inputs/main.go`
 
-- [ ] `ValidateFileInput(value string, desc *FileInputDescriptor) error`
-  — parse as data URI, check MIME against `accept` patterns, check decoded
-  size against `maxSize`
-- [ ] MIME matching: exact match (`image/png`), wildcard subtype (`image/*`),
-  extension hint (`.pdf` — match against known MIME types)
-- [ ] Return `-32602` with reason `"file_too_large"` for oversized files
-- [ ] Return `-32602` with reason `"file_type_not_accepted"` for MIME mismatch
-- [ ] Optional: middleware that auto-validates file inputs before handler runs
-  (inspect inputSchema for `x-mcp-file` properties, validate matching args)
-
-**Test:** `server/file_validation_test.go` — valid file passes, oversized rejected,
-wrong MIME rejected, wildcard matching, extension matching.
+- [x] `core.ValidateFileInput(uri, desc)` — decode data URI, check size + MIME.
+- [x] `core.FileMatchesAccept` — exact / wildcard subtype / extension hint matcher (mirrors JS-side `fileMatchesAccept` in `ext/ui/assets/file-picker.ts` so both sides agree).
+- [x] Typed errors `core.FileTooLargeError` + `core.FileTypeNotAcceptedError` carrying structured `Data()` payloads. Sentinels `core.ErrFileTooLarge` + `core.ErrFileTypeNotAccepted` for `errors.Is`.
+- [x] Reason constants `core.FileInputReasonTooLarge` ("file_too_large") and `core.FileInputReasonTypeNotAccepted` ("file_type_not_accepted") align with bridge JS sentinel error names.
+- [x] `server.WithFileInputValidation()` Option enables the dispatcher hook. Disabled by default — handlers can opt in.
+- [x] Dispatcher walks the tool's InputSchema for `x-mcp-file` properties (single + array `items` shape), runs `core.ValidateFileInput` on every matching arg, returns `-32602` with structured `data: {reason, field, actualSize, maxSize}` (too-large) or `data: {reason, field, mediaType, accept}` (wrong MIME) on failure. Wire shape frozen by `conformance/file-inputs/scenarios.test.ts`.
+- [x] `examples/file-inputs/` opts into the validator — manual hand-rolled checks dropped.
+- [x] 11 new core unit tests + 5 new server unit tests + 2 conformance scenarios (`file-inputs-04` + `file-inputs-05`) flipped from red to green.
 
 ### 1.5: Server capability gating
 

@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -32,32 +33,6 @@ var fixtureAppendixPDF []byte
 //go:embed testdata/README.txt
 var fixtureREADME []byte
 
-// filterFlags strips top-level flags so the inner flag.Parse on -addr is
-// happy when invoked from `make serve`. Same shape as list-ttl/walkthrough.go,
-// updated for demokit v0.0.13's `--doc <format>` (replaces the removed
-// `--readme` flag) and `--from <trace>` companion.
-func filterFlags(args []string) []string {
-	out := make([]string, 0, len(args))
-	skip := false
-	for _, a := range args {
-		if skip {
-			skip = false
-			continue
-		}
-		switch {
-		case a == "--serve", a == "--tui", a == "--non-interactive":
-			continue
-		case a == "--url", a == "--file", a == "--doc", a == "--from":
-			skip = true
-			continue
-		case strings.HasPrefix(a, "--doc="), strings.HasPrefix(a, "--from="),
-			strings.HasPrefix(a, "--url="), strings.HasPrefix(a, "--file="):
-			continue
-		}
-		out = append(out, a)
-	}
-	return out
-}
 
 func runDemo() {
 	serverURL := "http://localhost:8080"
@@ -240,6 +215,109 @@ func runDemo() {
 			return nil
 		})
 
+	// -- SEP-2356 Phase 1.4 — server-side validation rejection demos --
+
+	demo.Section("Validation — server rejects non-conforming uploads (Phase 1.4)",
+		"The server is started with `server.WithFileInputValidation()` (see `examples/file-inputs/main.go`), so the dispatcher walks each tool's `inputSchema` for `x-mcp-file` properties and runs `core.ValidateFileInput` on every matching arg BEFORE the handler runs. Failures surface as JSON-RPC `-32602` with a structured `data` payload — that exact shape is the contract pinned by `conformance/file-inputs/scenarios.test.ts`.",
+		"",
+		"The next three steps exercise all three failure modes the validator covers. They drive the server through the Go MCP client (`*client.Client`); the `client.RPCError` returned on rejection carries the same structured `data` field the wire emits. Each step prints `error.code`, `error.message`, and `error.data` so the rejection contract is visible in the demo output.",
+		"",
+		"Each step also attaches a copy-pasteable `bash` block (rendered via demokit `VerbatimLang` so the lines survive any terminal width) reproducing the same call on the wire — useful for validating from a non-Go SDK or sanity-checking the JSON shape directly.",
+	)
+
+	demo.Step("upload_image rejects wrong MIME (text/plain into image/* slot)").
+		Arrow("Host", "Server", "tools/call upload_image { image: data:text/plain;… }").
+		DashedArrow("Server", "Host", "-32602 + data: {reason: file_type_not_accepted, mediaType, accept, field}").
+		Note("The descriptor declares `accept: [\"image/*\"]`. Sending a text/plain data URI hits the dispatcher's accept-pattern matcher (`core.FileMatchesAccept`), which fails before the handler runs. The error data carries `mediaType` (what we sent) and `accept` (what the server requires) so a client can render a useful message.").
+		VerbatimLang("Reproduce on the wire", "bash", `# Mint a session
+SID=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -d '{"jsonrpc":"2.0","id":"i","method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"x","version":"1"},"capabilities":{"fileInputs":{}}}}' \
+  -D - -o /dev/null | grep -i 'mcp-session-id' | awk '{print $2}' | tr -d '\r\n')
+curl -s -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" -H "Accept: application/json" -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+
+# Send a text/plain payload into upload_image's image/* slot
+URI='data:text/plain;name=x.txt;base64,aGVsbG8='
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"upload_image\",\"arguments\":{\"image\":\"$URI\"}}}"
+`).
+		Run(func(ctx demokit.StepContext) *demokit.StepResult {
+			uri := core.EncodeDataURI([]byte("hello"), "text/plain", "x.txt")
+			fmt.Printf("    sending: data URI with mediaType=text/plain (%d bytes total)\n", len(uri))
+			_, err := c.Call("tools/call", map[string]any{
+				"name":      "upload_image",
+				"arguments": map[string]any{"image": uri},
+			})
+			printRPCError(err, "file_type_not_accepted")
+			return nil
+		})
+
+	demo.Step("upload_image rejects oversized payload (6 MiB into 5 MiB cap)").
+		Arrow("Host", "Server", "tools/call upload_image { image: data:image/png;… 6 MiB }").
+		DashedArrow("Server", "Host", "-32602 + data: {reason: file_too_large, actualSize, maxSize, field}").
+		Note("Same descriptor declares `maxSize: 5_242_880` (5 MiB). We synthesize a 6 MiB null-byte buffer, encode as `image/png`, and send it. The validator decodes the data URI, sees the size cap is exceeded, and short-circuits with structured size info.").
+		VerbatimLang("Reproduce on the wire", "bash", `# Mint a session
+SID=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -d '{"jsonrpc":"2.0","id":"i","method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"x","version":"1"},"capabilities":{"fileInputs":{}}}}' \
+  -D - -o /dev/null | grep -i 'mcp-session-id' | awk '{print $2}' | tr -d '\r\n')
+curl -s -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" -H "Accept: application/json" -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+
+# Generate a 6 MiB image/png payload (Python keeps the curl short)
+BIG=$(python3 -c 'import base64; print("data:image/png;name=big.png;base64," + base64.b64encode(b"\x00" * (6*1024*1024)).decode())')
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"upload_image\",\"arguments\":{\"image\":\"$BIG\"}}}"
+`).
+		Run(func(ctx demokit.StepContext) *demokit.StepResult {
+			big := make([]byte, 6*1024*1024) // 6 MiB of zeros
+			uri := core.EncodeDataURI(big, "image/png", "big.png")
+			fmt.Printf("    sending: 6 MiB image/png payload (server cap is 5 MiB)\n")
+			_, err := c.Call("tools/call", map[string]any{
+				"name":      "upload_image",
+				"arguments": map[string]any{"image": uri},
+			})
+			printRPCError(err, "file_too_large")
+			return nil
+		})
+
+	demo.Step("analyze_documents rejects per-element with field path tracking").
+		Arrow("Host", "Server", "tools/call analyze_documents { documents: [valid pdf, text/plain] }").
+		DashedArrow("Server", "Host", "-32602 + data.field = \"documents[1]\"").
+		Note("Send a 2-element array where element 0 is a valid PDF and element 1 is a text/plain payload. The dispatcher's array-items walker validates each element against `items.x-mcp-file` and surfaces the path of the offender — `data.field == \"documents[1]\"`. Useful so a client rendering rich error UX can highlight the specific input that failed instead of asking the user to re-pick everything.").
+		VerbatimLang("Reproduce on the wire", "bash", `# Mint a session
+SID=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -d '{"jsonrpc":"2.0","id":"i","method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"x","version":"1"},"capabilities":{"fileInputs":{}}}}' \
+  -D - -o /dev/null | grep -i 'mcp-session-id' | awk '{print $2}' | tr -d '\r\n')
+curl -s -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" -H "Accept: application/json" -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+
+# Send 2 documents — index 0 valid PDF, index 1 wrong MIME
+GOOD='data:application/pdf;name=ok.pdf;base64,JVBERi0xLjQKJSVFT0YK'
+BAD='data:text/plain;name=bad.txt;base64,aGVsbG8='
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"analyze_documents\",\"arguments\":{\"documents\":[\"$GOOD\",\"$BAD\"]}}}"
+`).
+		Run(func(ctx demokit.StepContext) *demokit.StepResult {
+			good := core.EncodeDataURI([]byte("%PDF-1.4\n%%EOF\n"), "application/pdf", "ok.pdf")
+			bad := core.EncodeDataURI([]byte("hello"), "text/plain", "bad.txt")
+			fmt.Printf("    sending: 2 documents (index 0: valid PDF, index 1: text/plain)\n")
+			_, err := c.Call("tools/call", map[string]any{
+				"name":      "analyze_documents",
+				"arguments": map[string]any{"documents": []string{good, bad}},
+			})
+			printRPCError(err, "file_type_not_accepted")
+			return nil
+		})
+
 	demo.Section("MCP Apps mode (Phase 2.1)",
 		"This same server also registers two MCP App tools that drive the same handlers via in-iframe file pickers — the human-in-the-loop case file-uploads-wg flagged as a gap:",
 		"",
@@ -261,11 +339,8 @@ func runDemo() {
 		"- SEP-2356 spec: modelcontextprotocol/specification PR 2356",
 	)
 
-	for _, arg := range os.Args[1:] {
-		if strings.TrimSpace(arg) == "--tui" {
-			demo.WithRenderer(tui.New())
-			break
-		}
+	if demokit.IsTUI() {
+		demo.WithRenderer(tui.New())
 	}
 
 	demo.Execute()
@@ -388,6 +463,37 @@ func previewHex(data []byte, n int) {
 	fmt.Printf("      │ %s\n", strings.TrimRight(b.String(), " "))
 	if len(data) > n {
 		fmt.Printf("      │ … (+%d bytes)\n", len(data)-n)
+	}
+}
+
+// printRPCError formats a `*client.RPCError` for the validation rejection
+// demo steps. wantReason is the SEP-2356 reason the demo expects to see —
+// printed alongside the actual reason so a regression in the wire shape
+// is visible in the demo output (and not just in the conformance suite).
+func printRPCError(err error, wantReason string) {
+	if err == nil {
+		fmt.Printf("    UNEXPECTED: server accepted the call; no validation triggered\n")
+		return
+	}
+	var rpc *client.RPCError
+	if !errors.As(err, &rpc) {
+		fmt.Printf("    transport error: %v\n", err)
+		return
+	}
+	fmt.Printf("    error.code:    %d\n", rpc.Code)
+	fmt.Printf("    error.message: %s\n", rpc.Message)
+	if rpc.Data == nil {
+		fmt.Printf("    error.data:    <none>\n")
+		return
+	}
+	pretty, _ := json.MarshalIndent(rpc.Data, "      ", "  ")
+	fmt.Printf("    error.data:    %s\n", string(pretty))
+	gotReason := ""
+	if m, ok := rpc.Data.(map[string]any); ok {
+		gotReason, _ = m["reason"].(string)
+	}
+	if wantReason != "" && gotReason != wantReason {
+		fmt.Printf("    WARN: data.reason = %q, expected %q\n", gotReason, wantReason)
 	}
 }
 
