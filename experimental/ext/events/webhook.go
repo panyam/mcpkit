@@ -2,13 +2,16 @@ package events
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -36,6 +39,32 @@ func WithWebhookTTL(ttl time.Duration) WebhookOption {
 func WithWebhookHeaderMode(mode WebhookHeaderMode) WebhookOption {
 	return func(r *WebhookRegistry) {
 		r.headerMode = mode
+	}
+}
+
+// WithWebhookAllowPrivateNetworks permits outbound webhook deliveries to
+// loopback / private / link-local IP ranges. The default is FALSE (strict);
+// turn this ON for demo and test setups that deliver to local httptest
+// servers, NEVER in production.
+//
+// Per spec §"Webhook Security" → "SSRF prevention" L464, deployments MUST
+// guard against DNS rebinding by checking the resolved IP at dial time.
+// ζ-1's net.Dialer.Control callback rejects:
+//   - 127.0.0.0/8, ::1 (loopback)
+//   - 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 (RFC1918 private IPv4)
+//   - 169.254.0.0/16, fe80::/10 (link-local — includes AWS metadata service)
+//   - fc00::/7 (IPv6 ULA)
+//   - 0.0.0.0, :: (unspecified)
+//   - 224.0.0.0/4, ff00::/8 (multicast)
+//   - 255.255.255.255 (broadcast)
+//   - IPv4-mapped IPv6 forms of any of the above
+//
+// When this option is enabled (allow=true), the guard is bypassed —
+// all of those ranges become dialable. The discord/telegram demos enable
+// this so `make demo` works against local httptest servers.
+func WithWebhookAllowPrivateNetworks(allow bool) WebhookOption {
+	return func(r *WebhookRegistry) {
+		r.allowPrivateNetworks = allow
 	}
 }
 
@@ -70,28 +99,131 @@ type WebhookTarget struct {
 // subscription. Cross-tenant isolation is by construction since
 // principal is part of the key.
 type WebhookRegistry struct {
-	mu         sync.RWMutex
-	targets    map[string]WebhookTarget // keyed by string(canonicalKey)
-	client     *http.Client
-	ttl        time.Duration
-	headerMode WebhookHeaderMode
+	mu                   sync.RWMutex
+	targets              map[string]WebhookTarget // keyed by string(canonicalKey)
+	client               *http.Client
+	ttl                  time.Duration
+	headerMode           WebhookHeaderMode
+	allowPrivateNetworks bool // ζ-1: when false (default), Dialer.Control rejects private/loopback IPs
+
+	// logf is the logging hook used by deliver paths. Defaults to log.Printf;
+	// tests override via setLogfForTest to capture failures (including SSRF
+	// dial-time rejections) for assertions.
+	logf func(format string, args ...any)
 }
 
 // NewWebhookRegistry creates an empty registry with the documented defaults:
-// 5-second HTTP timeout, 60-second TTL, StandardWebhooks signing. Override
-// via the With* options.
+// 5-second HTTP timeout, 60-second TTL, StandardWebhooks signing,
+// SSRF-strict outbound dialing (loopback / private / link-local rejected).
+// Override via the With* options.
 func NewWebhookRegistry(opts ...WebhookOption) *WebhookRegistry {
 	r := &WebhookRegistry{
 		targets:    make(map[string]WebhookTarget),
-		client:     &http.Client{Timeout: 5 * time.Second},
 		ttl:        defaultWebhookTTL,
 		headerMode: StandardWebhooks,
+		logf:       log.Printf,
 	}
 	for _, o := range opts {
 		o(r)
 	}
+	// http.Client wired AFTER options apply so the Dialer.Control callback
+	// can read the resolved allowPrivateNetworks setting. ζ-1 spec
+	// §"Webhook Security" → "SSRF prevention" L464.
+	r.client = &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: &http.Transport{
+			DialContext: r.dialContext(),
+		},
+	}
 	return r
 }
+
+// dialContext returns the net.Dialer.DialContext used by the outbound
+// http.Client. The Dialer's Control callback inspects the resolved
+// IP:port AFTER DNS resolution but BEFORE the connect syscall, rejecting
+// any address that falls in the SSRF blocklist (unless
+// allowPrivateNetworks is set). Per spec §"Webhook Security" → "SSRF
+// prevention" L464.
+//
+// Inspecting at Control rather than resolving manually avoids a TOCTOU
+// where the resolver and the dialer could see different addresses (DNS
+// rebinding); the address passed to Control is the exact one the
+// connect syscall will use.
+func (r *WebhookRegistry) dialContext() func(ctx context.Context, network, addr string) (net.Conn, error) {
+	dialer := &net.Dialer{
+		Timeout: 5 * time.Second,
+		Control: func(network, address string, _ syscall.RawConn) error {
+			if r.allowPrivateNetworks {
+				return nil
+			}
+			host, _, err := net.SplitHostPort(address)
+			if err != nil {
+				return fmt.Errorf("SSRF guard: invalid dial address %q: %w", address, err)
+			}
+			ip := net.ParseIP(host)
+			if ip == nil {
+				return fmt.Errorf("SSRF guard: unresolved dial address %q", address)
+			}
+			if reason := isBlockedIP(ip); reason != "" {
+				return fmt.Errorf("SSRF guard: blocked dial to %s (%s)", ip, reason)
+			}
+			return nil
+		},
+	}
+	return dialer.DialContext
+}
+
+// isBlockedIP returns a non-empty reason string when ip falls in any of
+// the SSRF-blocked ranges. Returns "" for public addresses. Handles
+// IPv4-mapped IPv6 by re-checking the unmapped form.
+//
+// Ranges blocked (must match the WithWebhookAllowPrivateNetworks doc):
+//   - loopback (127.0.0.0/8, ::1)
+//   - RFC1918 private IPv4 (10/8, 172.16/12, 192.168/16)
+//   - link-local (169.254.0.0/16, fe80::/10)
+//   - IPv6 ULA (fc00::/7)
+//   - unspecified (0.0.0.0, ::)
+//   - multicast (224.0.0.0/4, ff00::/8)
+//   - broadcast (255.255.255.255)
+func isBlockedIP(ip net.IP) string {
+	// Normalize IPv4-mapped-IPv6 to IPv4 form so "::ffff:127.0.0.1" is
+	// classified the same as "127.0.0.1".
+	if v4 := ip.To4(); v4 != nil {
+		ip = v4
+	}
+	switch {
+	case ip.IsLoopback():
+		return "loopback"
+	case ip.IsLinkLocalUnicast():
+		return "link-local"
+	case ip.IsLinkLocalMulticast(), ip.IsInterfaceLocalMulticast(), ip.IsMulticast():
+		return "multicast"
+	case ip.IsUnspecified():
+		return "unspecified"
+	case ip.IsPrivate():
+		// Covers RFC1918 (10/8, 172.16/12, 192.168/16) AND IPv6 ULA (fc00::/7).
+		return "private"
+	}
+	// Broadcast — net.IP.IsGlobalUnicast() returns false for it but we
+	// want a clear message.
+	if ip.Equal(net.IPv4bcast) {
+		return "broadcast"
+	}
+	return ""
+}
+
+// dialContextForTest exposes the dialer for unit tests that exercise
+// per-CIDR rejection without spinning up a server in every range.
+func (r *WebhookRegistry) dialContextForTest() func(ctx context.Context, network, addr string) (net.Conn, error) {
+	return r.dialContext()
+}
+
+// setLogfForTest swaps the registry's log hook so tests can capture
+// delivery failures (including SSRF dial-time rejections) for assertions.
+func (r *WebhookRegistry) setLogfForTest(f func(format string, args ...any)) {
+	r.logf = f
+}
+
 
 // Register adds or refreshes a webhook subscription keyed on the spec's
 // canonical tuple (§"Subscription Identity" → "Key composition" L363).
@@ -197,7 +329,7 @@ func (r *WebhookRegistry) Deliver(event Event) {
 
 	body, err := json.Marshal(event)
 	if err != nil {
-		log.Printf("[webhook] failed to marshal event: %v", err)
+		r.logf("[webhook] failed to marshal event: %v", err)
 		return
 	}
 
@@ -221,7 +353,7 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, eventID string, body []b
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
-			log.Printf("[webhook] retry %d/%d for %s (backoff %v)", attempt, maxRetries, target.URL, backoff)
+			r.logf("[webhook] retry %d/%d for %s (backoff %v)", attempt, maxRetries, target.URL, backoff)
 			time.Sleep(backoff)
 			backoff *= 2
 			if backoff > maxBackoff {
@@ -244,14 +376,14 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, eventID string, body []b
 
 		req, err := http.NewRequest("POST", target.URL, bytes.NewReader(signed.body))
 		if err != nil {
-			log.Printf("[webhook] failed to create request for %s: %v", target.URL, err)
+			r.logf("[webhook] failed to create request for %s: %v", target.URL, err)
 			return // not retryable
 		}
 		signed.applyHeaders(req)
 
 		resp, err := r.client.Do(req)
 		if err != nil {
-			log.Printf("[webhook] delivery to %s failed: %v", target.URL, err)
+			r.logf("[webhook] delivery to %s failed: %v", target.URL, err)
 			continue // retry
 		}
 		resp.Body.Close()
@@ -260,21 +392,26 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, eventID string, body []b
 			return // success
 		}
 
-		log.Printf("[webhook] delivery to %s returned %d", target.URL, resp.StatusCode)
+		r.logf("[webhook] delivery to %s returned %d", target.URL, resp.StatusCode)
 		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
 			return // 4xx = client error, not retryable
 		}
 		// 5xx = server error, retry
 	}
-	log.Printf("[webhook] delivery to %s failed after %d retries, giving up", target.URL, maxRetries)
+	r.logf("[webhook] delivery to %s failed after %d retries, giving up", target.URL, maxRetries)
 }
 
-// ValidateWebhookURL performs basic SSRF validation on a webhook callback URL.
-// Spec: "MUST validate callback URLs at subscribe time" and "SHOULD reject
-// URLs pointing to private/loopback ranges."
-// For this POC we reject obvious loopback and private schemes. Production
-// implementations should also resolve DNS and check the resulting IP.
-func ValidateWebhookURL(rawURL string) error {
+// ValidateWebhookURL is a fail-fast subscribe-time check on a webhook
+// callback URL. Rejects non-http(s) schemes and obvious loopback hostnames
+// unless the registry has WithWebhookAllowPrivateNetworks(true).
+//
+// This is the SUBSCRIBE-time check, not the load-bearing one. The
+// authoritative SSRF guard is the dial-time check in dialContext, which
+// is TOCTOU-safe under DNS rebinding (per spec §"Webhook Security" →
+// "SSRF prevention" L464). ValidateWebhookURL is a UX aid: catches
+// obvious mistakes at subscribe so the client gets -32015 InvalidCallbackUrl
+// immediately rather than a delayed delivery failure.
+func (r *WebhookRegistry) ValidateWebhookURL(rawURL string) error {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return fmt.Errorf("invalid URL: %w", err)
@@ -282,11 +419,16 @@ func ValidateWebhookURL(rawURL string) error {
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return fmt.Errorf("unsupported scheme %q (must be http or https)", u.Scheme)
 	}
-	host := strings.ToLower(u.Hostname())
-	if host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "0.0.0.0" {
-		// Allow in test/dev — production should reject these.
-		log.Printf("[webhook] WARNING: loopback webhook URL %s (allowed in POC mode)", rawURL)
+	if r.allowPrivateNetworks {
+		return nil
 	}
+	host := strings.ToLower(u.Hostname())
+	switch host {
+	case "localhost", "127.0.0.1", "::1", "0.0.0.0":
+		return fmt.Errorf("loopback hostnames are not permitted; set WithWebhookAllowPrivateNetworks(true) for demos")
+	}
+	// Hostnames that aren't bare loopback strings get a free pass at
+	// subscribe time — DNS resolution is the dial-time guard's job.
 	return nil
 }
 
