@@ -16,6 +16,7 @@ import (
 	"log"
 
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/examples/common"
 	"github.com/panyam/mcpkit/ext/ui"
 	"github.com/panyam/mcpkit/server"
 )
@@ -42,9 +43,11 @@ func main() {
 	}
 	dashboardHTML := buf.String()
 
+	opts := common.MCPServerOptions(*addr, "[mcp] ")
+	opts = append(opts, server.WithExtension(&ui.UIExtension{}))
 	srv := server.NewServer(
 		core.ServerInfo{Name: "dashboard-app", Version: "0.1.0"},
-		server.WithExtension(&ui.UIExtension{}),
+		opts...,
 	)
 
 	// Server-side tool: open_dashboard — opens the dashboard UI.
