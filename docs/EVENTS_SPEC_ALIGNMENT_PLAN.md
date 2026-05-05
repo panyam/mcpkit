@@ -291,7 +291,7 @@ The TS reference's heartbeat doesn't carry a cursor today; the spec now requires
 
 ### ζ — Webhook hardening (delivery-time SSRF, body cap, control envelopes, deliveryStatus)
 
-**Status:** in flight on `feat/events-zeta-webhook-hardening`. ζ-1 through ζ-4 landed (4/6 commits); ζ-5 (deliveryStatus) and ζ-6 (suspend/reactivate state machine) pending. Race-clean across all four event modules.
+**Status:** in flight on `feat/events-zeta-webhook-hardening`. All 6 commits landed. PR 375 ready for review. ζ-7 (source-side health signals → notifications/events/error and /terminated server emissions) tracked separately as issue 376. Race-clean across all four event modules.
 
 **Goal:** close the spec-mandated security and reliability gaps in our webhook delivery path.
 
@@ -313,9 +313,9 @@ The TS reference's heartbeat doesn't carry a cursor today; the spec now requires
 - Python SDK `events_client.py` — `_make_webhook_handler` dispatches by top-level `type`; pretty-prints `── WEBHOOK GAP / TERMINATED ──` frames distinctly. (ζ-4)
 - Test fixtures across all four event modules opt into `WithWebhookAllowPrivateNetworks(true)` since httptest binds to 127.0.0.1; demo binaries do too with a comment that production deployments leave it OFF.
 
-**Files still to touch (ζ-5, ζ-6):**
-- `experimental/ext/events/webhook.go` — `DeliveryStatus{Active, LastDeliveryAt, LastError, FailedSince}` field on WebhookTarget. Suspend/reactivate state machine (counter + first-failure-time + last-success-time, configurable threshold/window).
-- `experimental/ext/events/events.go` — registerSubscribe refresh-path response includes `deliveryStatus` when target has prior delivery attempts. New `WithWebhookSuspendThreshold(n)` + `WithWebhookSuspendWindow(d)` options.
+**Files touched (ζ-5, ζ-6 — landed):**
+- `experimental/ext/events/webhook.go` — `DeliveryStatus{Active, LastDeliveryAt, LastError, FailedSince}` + `DeliveryErrorBucket` typed string (categorical: connection_refused, timeout, tls_error, http_3xx_redirect, http_4xx, http_5xx, challenge_failed). `recordDeliverySuccess` / `recordDeliveryFailure` helpers + `classifyTransportError` (type-asserted markers, no err.Error() leakage). Suspend state machine: counter + first-failure-time + last-success-time per target; sliding window. `Targets()` filter excludes suspended; `Register` refresh path reactivates suspended targets. New `WithWebhookSuspendThreshold(n)` (default 5) + `WithWebhookSuspendWindow(d)` (default 10min) options.
+- `experimental/ext/events/events.go` — `registerSubscribe` refresh response includes `deliveryStatus` via new `deliveryStatusForResponse` projector when target has prior delivery attempts. Omitted on first subscribe (nothing to report).
 
 **Acceptance (as verified so far):**
 - All four event modules pass `go test -count=1 -race ./...` after each commit (ζ-1 through ζ-4)
@@ -325,9 +325,9 @@ The TS reference's heartbeat doesn't carry a cursor today; the spec now requires
 - 413 from receiver = exactly 1 attempt — pinned by `TestDelivery_413NotRetried`
 - Control envelope wire shape (top-level `type`, `msg_<typ>_<random>` webhook-id, X-MCP-Subscription-Id presence) — pinned by `TestControlEnvelope_*` (server side) + `TestReceiver_RoutesGap/TerminatedToCallback` (SDK side)
 
-**Pending (ζ-5, ζ-6):**
-- `deliveryStatus` test: cause repeated 5xx failures, verify subsequent refresh response shows `active: false`; refresh again and verify reactivation behavior
-- Suspend test: N consecutive failures within W → Active=false; failures outside W don't accumulate; successful refresh reactivates
+**Acceptance for ζ-5, ζ-6 (landed):**
+- `deliveryStatus` round-trip: refresh after success populates `lastDeliveryAt`; refresh after 5xx shows `lastError: http_5xx`; oracle-body test confirms raw response data NEVER leaks
+- Suspend: N consecutive failures within W → Active=false; failures outside W don't accumulate (sliding-window reset); successful refresh reactivates and clears state; suspended target skipped in Deliver fan-out
 
 **Tests added so far:**
 - `ssrf_delivery_test.go` — 5 tests (loopback rejected, escape allows, blocklist table, public allows, redirects rejected)
@@ -335,8 +335,8 @@ The TS reference's heartbeat doesn't carry a cursor today; the spec now requires
 - `control_envelope_test.go` (server) — 3 tests (gap shape, terminated shape, top-level type discriminator)
 - `clients/go/control_envelope_test.go` (SDK) — 3 tests (routes gap, routes terminated, no-callback-installed safe)
 
-**Pending tests (ζ-5, ζ-6):**
-- `delivery_status_test.go` — suspension/reactivation state machine, lastError categorical (no raw response leakage)
+**Tests added (ζ-5, ζ-6 — landed):**
+- `delivery_status_test.go` — 8 tests: deliveryStatus omission on first subscribe, lastDeliveryAt after success, lastError categorical (oracle-body leak check), connection_refused bucket, suspend after threshold, sliding-window reset, refresh reactivation, suspended skipped in Deliver
 
 **Risk:** Low to medium. Most changes are additive (new envelope types, new header, new field on response). The SSRF + redirect changes touch the http.Client setup, easy to land safely.
 
