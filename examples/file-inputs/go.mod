@@ -2,11 +2,15 @@ module github.com/panyam/mcpkit/examples/file-inputs
 
 go 1.26.2
 
-replace github.com/panyam/mcpkit => ../..
+replace (
+	github.com/panyam/mcpkit => ../..
+	github.com/panyam/mcpkit/ext/ui => ../../ext/ui
+)
 
 require (
 	github.com/panyam/demokit v0.0.13
 	github.com/panyam/mcpkit v0.2.41
+	github.com/panyam/mcpkit/ext/ui v0.0.0
 )
 
 require (
@@ -23,7 +27,6 @@ require (
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
-	github.com/kr/text v0.2.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-runewidth v0.0.23 // indirect
