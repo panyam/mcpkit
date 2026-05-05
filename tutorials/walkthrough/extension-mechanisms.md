@@ -4,7 +4,7 @@ How MCP grows. What counts as an extension, how new things get into the protocol
 
 > **Kind:** root *(FAQ-style)* · **Prerequisites:** [bring-up](./bringup.md), [transport-mechanics](./transport-mechanics.md), [notifications](./notifications.md), [request-anatomy](./request-anatomy.md)
 > **Reachable from:** [README](./README.md), [bring-up](./bringup.md) Leads-to, [notifications](./notifications.md) Leads-to
-> **Branches into:** [tasks](./tasks.md) *(planned)*, [auth deep-dive](./auth.md) *(planned)*, [apps](./apps.md) *(planned)*, [experimental events](../../experimental/ext/events/README.md)
+> **Branches into:** [tasks](./tasks.md) *(planned)*, [auth deep-dive](./auth.md) *(planned)*, [apps](./apps.md) *(planned)*, [events](./events.md)
 > **Spec:** [Lifecycle / capabilities](https://modelcontextprotocol.io/specification/2025-06-18) · SEP-2663 (tasks v2) · SEP-2549 (list-TTL) · SEP-2322 (MRTR) · **Code:** `core/protocol.go`, `core/typed_tool.go`, `server/registration.go`, `server/middleware.go`, `server/dispatch.go`, `server/mrtr.go`, `ext/auth/`, `ext/ui/`, `experimental/ext/`
 
 ## Prerequisites
@@ -169,4 +169,4 @@ After reading this page, downstream pages can assume:
 - **[Reverse-call mechanics](./reverse-call.md)** *(planned, root)* — concretizes elicitation, sampling, roots/list as the same method-namespace pattern.
 - **[MRTR deep-dive](./mrtr.md)** *(planned, branch off per-request anatomy)* — SEP-2322 in detail.
 - **[List-TTL (SEP-2549)](./list-ttl.md)** *(planned, leaf off notifications)* — the canonical `_meta`-only extension; orthogonal to list_changed.
-- **[`experimental/ext/events/`](../../experimental/ext/events/README.md)** *(branch, target-shape)* — events as first-class.
+- **[Events](./events.md)** *(root)* — events as first-class. The worked example for the `experimental.events` capability classified in Q5 above; opens up the four-knob mapping, the three delivery modes, subscription identity, push and webhook on the wire, and source health signals. (Code: `experimental/ext/events/`.)

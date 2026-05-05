@@ -27,6 +27,9 @@ Recommended reading order for someone new to the material:
 5. **[Extension mechanisms](./extension-mechanisms.md)** — *root · FAQ-style*  
    How MCP grows. Six questions: the four extension surfaces (method namespace, capability flags, notifications, `_meta`), the SEP process and `experimental.` namespace, mcpkit's three-tier code organization (`core/` → `ext/` → `experimental/ext/`), the mcpkit extension points you write against (registries, middleware, MRTR, custom transports), case studies (tasks, auth, apps, events, list-TTL, MRTR, elicitation), and the boundary between protocol extension and host/client policy. *End-state: you can read "this extension uses SEP-X" or "this is a `_meta`-only extension" and know what it means.*
 
+6. **[Events](./events.md)** — *root · FAQ-style*  
+   Events as a first-class extension, beyond the raw SSE-event-id replay streamable HTTP gives you for free. Seven questions: how events dial all four extension knobs (and how events differ from notifications), the three delivery modes (poll, push, webhook) and when to pick each, canonical-tuple subscription identity, the `YieldingSource` / `TypedSource` abstractions, push delivery on the wire (`events/stream` → SSE with five notification frames), webhook delivery (Standard Webhooks HMAC + the hardened delivery loop with SSRF guard / suspend / control envelopes / `deliveryStatus`), and source health signals (`YieldError` transient vs `YieldTerminated` terminal). *End-state: you can read code in `experimental/ext/events/` and recognize each piece's role; you can pick a delivery mode for a new source; you understand why subscription identity is a tuple, not a server-issued id.*
+
 *(More pages get appended here as the conversation reaches them — reverse-call mechanics, tasks, auth deep-dive, apps, …)*
 
 ## Other entry points
