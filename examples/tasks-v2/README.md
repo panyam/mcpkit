@@ -57,10 +57,9 @@ See [WALKTHROUGH.md](WALKTHROUGH.md) for the full step-by-step description and s
 
 ## Conformance
 
-- 21 scenarios in `conformance/tasks-v2/scenarios.test.ts` (Node + tsx)
-- Implementation plan: [`PLAN.md`](../../PLAN.md) (SEP-2663, marked COMPLETE)
+- Scenarios live in the [`panyam/mcpconformance`](https://github.com/panyam/mcpconformance) fork (branch `feat/tasks-mrtr-extension`, upstream Draft PR modelcontextprotocol/conformance#262). Run via `make testconf-tasks-v2` from the repo root — points the fork's vitest run at this binary.
 - Migration guide: [`docs/TASKS_V2_MIGRATION.md`](../../docs/TASKS_V2_MIGRATION.md)
-- Spec: [SEP-2557](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2557)
+- Spec: [SEP-2663](https://github.com/modelcontextprotocol/specification/pull/2663)
 
 ## Where to look in the code
 
@@ -68,4 +67,5 @@ See [WALKTHROUGH.md](WALKTHROUGH.md) for the full step-by-step description and s
 - Server library: [`server/tasks_v2.go`](../../server/tasks_v2.go)
 - Wire types: [`core/task_v2.go`](../../core/task_v2.go)
 - Client helpers: [`client/tasks.go`](../../client/tasks.go) (`ToolCall`, `GetTask`, `WaitForTask`, `UpdateTask`, `CancelTask`)
-- Conformance: [`conformance/tasks-v2/scenarios.test.ts`](../../conformance/tasks-v2/scenarios.test.ts)
+- Conformance scenarios: [panyam/mcpconformance — `src/scenarios/server/tasks/`](https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension/src/scenarios/server/tasks)
+- Local sentinel for mcpkit-stricter scenarios: [`conformance/tasks-v2/`](../../conformance/tasks-v2/)
