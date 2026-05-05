@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"sync/atomic"
@@ -119,6 +120,72 @@ func TestHasFileInputs(t *testing.T) {
 	caps.FileInputs = &struct{}{}
 	if !HasFileInputs(ctx) {
 		t.Error("HasFileInputs false despite capability set")
+	}
+}
+
+// verifies: StripFileInputKeywords removes the keyword from every property
+// (single + array items) without touching surrounding schema structure.
+// The result is a fresh copy — input must not be mutated.
+func TestStripFileInputKeywords_RemovesKeywordPreservesProperty(t *testing.T) {
+	max := 1024
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"image": FileInputProperty(FileInputDescriptor{Accept: []string{"image/*"}, MaxSize: &max}),
+			"docs":  FileInputArrayProperty(FileInputDescriptor{Accept: []string{".pdf"}}),
+			"plain": map[string]any{"type": "string"},
+		},
+		"required": []string{"image"},
+	}
+
+	stripped := StripFileInputKeywords(schema).(map[string]any)
+	props := stripped["properties"].(map[string]any)
+
+	// The image property survives, but the keyword is gone — type/format remain.
+	image := props["image"].(map[string]any)
+	if _, ok := image[FileInputSchemaKey]; ok {
+		t.Errorf("x-mcp-file should be stripped from image property")
+	}
+	if image["type"] != "string" || image["format"] != "uri" {
+		t.Errorf("image schema shape lost: %+v", image)
+	}
+
+	// Array items branch — stripped from items, not the outer.
+	docs := props["docs"].(map[string]any)
+	items := docs["items"].(map[string]any)
+	if _, ok := items[FileInputSchemaKey]; ok {
+		t.Errorf("x-mcp-file should be stripped from array items")
+	}
+	if docs["type"] != "array" {
+		t.Errorf("docs.type lost: %+v", docs)
+	}
+
+	// Plain property untouched.
+	if plain, ok := props["plain"].(map[string]any); !ok || plain["type"] != "string" {
+		t.Errorf("plain property mutated: %+v", props["plain"])
+	}
+
+	// Input was not mutated — keyword still present in the original schema.
+	origImage := schema["properties"].(map[string]any)["image"].(map[string]any)
+	if _, ok := origImage[FileInputSchemaKey]; !ok {
+		t.Error("input schema was mutated; expected deep-copy")
+	}
+}
+
+// verifies: schemas that aren't a map[string]any pass through unchanged.
+// Typed schema structs and json.RawMessage shapes both happen in the wild;
+// the stripper must be a no-op for them rather than blowing up.
+func TestStripFileInputKeywords_PassesThroughForeignShapes(t *testing.T) {
+	type typed struct {
+		Type string `json:"type"`
+	}
+	in := typed{Type: "object"}
+	if got := StripFileInputKeywords(in); got != in {
+		t.Errorf("typed struct should pass through unchanged")
+	}
+	raw := json.RawMessage(`{"type":"object"}`)
+	if got := StripFileInputKeywords(raw); !bytes.Equal(got.(json.RawMessage), raw) {
+		t.Errorf("RawMessage should pass through unchanged")
 	}
 }
 

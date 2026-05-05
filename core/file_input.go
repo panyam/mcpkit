@@ -93,6 +93,65 @@ func ExtractFileInputDescriptor(schemaProp map[string]any) *FileInputDescriptor 
 	return nil
 }
 
+// StripFileInputKeywords returns a deep-copy of the given JSON Schema
+// (typed as `any` because ToolDef.InputSchema and ElicitationRequest's
+// requestedSchema both accept arbitrary shapes) with every occurrence of
+// the `x-mcp-file` keyword removed. Properties remain — only the keyword
+// is stripped, so a tool advertising `{type: "string", format: "uri",
+// x-mcp-file: ...}` becomes `{type: "string", format: "uri"}` for clients
+// that did not declare the SEP-2356 fileInputs capability.
+//
+// Per spec interpretation locked by `conformance/file-inputs/`: keep the
+// property visible (so legacy clients can still call the tool with a
+// text-input fallback) instead of hiding the whole tool. The strip walks
+// recursively into `properties` and array `items` so both single and
+// array-of-files shapes are handled.
+//
+// The input is not mutated. Schemas in shapes other than `map[string]any`
+// (typed structs, json.RawMessage) pass through unchanged — they wouldn't
+// have an `x-mcp-file` keyword at the expected path anyway.
+func StripFileInputKeywords(schema any) any {
+	switch typed := schema.(type) {
+	case map[string]any:
+		return stripFileInputKeywordsMap(typed)
+	default:
+		return schema
+	}
+}
+
+func stripFileInputKeywordsMap(m map[string]any) map[string]any {
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		if k == FileInputSchemaKey {
+			continue
+		}
+		switch typed := v.(type) {
+		case map[string]any:
+			out[k] = stripFileInputKeywordsMap(typed)
+		case []any:
+			out[k] = stripFileInputKeywordsSlice(typed)
+		default:
+			out[k] = v
+		}
+	}
+	return out
+}
+
+func stripFileInputKeywordsSlice(s []any) []any {
+	out := make([]any, len(s))
+	for i, v := range s {
+		switch typed := v.(type) {
+		case map[string]any:
+			out[i] = stripFileInputKeywordsMap(typed)
+		case []any:
+			out[i] = stripFileInputKeywordsSlice(typed)
+		default:
+			out[i] = v
+		}
+	}
+	return out
+}
+
 func descriptorFromMap(m map[string]any) *FileInputDescriptor {
 	desc := FileInputDescriptor{}
 	if accept, ok := m["accept"].([]any); ok {
