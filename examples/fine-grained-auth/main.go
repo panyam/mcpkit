@@ -39,7 +39,6 @@ import (
 	oacore "github.com/panyam/oneauth/core"
 	"github.com/panyam/oneauth/keys"
 	"github.com/panyam/oneauth/utils"
-	gohttp "github.com/panyam/servicekit/http"
 	"github.com/panyam/servicekit/middleware"
 )
 
@@ -504,30 +503,13 @@ func serve() {
 	srv.UseMiddleware(auth.NewToolScopeMiddleware(srv.Registry()))
 	srv.UseMiddleware(paymentAuthorizationMiddleware())
 
-	// 4. HTTP mux with MCP endpoint, PRM, and demo bootstrap endpoint.
-	mux := http.NewServeMux()
+	// 4. CORS for browser-based MCP hosts; applied via WithHandlerWrap so
+	// it covers /mcp + the auth.MountAuth routes + /demo/bootstrap uniformly.
 	cors := middleware.CORS(nil,
 		middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
 		middleware.CORSAllowHeaders("Content-Type", "Authorization", "Mcp-Session-Id"),
 		middleware.CORSExposeHeaders("Mcp-Session-Id"),
 	)
-	mux.Handle("/mcp", cors(srv.Handler(server.WithStreamableHTTP(true))))
-	auth.MountAuth(mux, auth.AuthConfig{
-		ResourceURI:          listenURL,
-		AuthorizationServers: []string{asInfo.ASURL},
-		ScopesSupported:      []string{scopeRead, scopeCall},
-		MCPPath:              "/mcp",
-	})
-	mux.HandleFunc("GET /demo/bootstrap", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(bootstrapInfo{
-			ASURL:         asInfo.ASURL,
-			TokenEndpoint: asInfo.TokenEndpoint,
-			JWKSURL:       asInfo.JWKSURL,
-			ClientID:      asInfo.ClientID,
-			ClientSecret:  asInfo.ClientSecret,
-		})
-	})
 
 	fmt.Printf("Fine-Grained Auth server on %s\n", *addr)
 	fmt.Printf("MCP endpoint:   %s/mcp\n", listenURL)
@@ -544,12 +526,28 @@ func serve() {
 	fmt.Printf("\nSeed docs: doc-001, doc-123, doc-456\n")
 	fmt.Printf("Inspect:   ls %s/ ; cat %s/doc-123.txt\n", docDir, docDir)
 
-	// Manual gohttp.ListenAndServeGraceful since the MCP handler is wrapped
-	// with CORS middleware (browser-based MCP hosts like MCPJam need it),
-	// which means we can't use srv.ListenAndServe directly. Mirrors the
-	// graceful-shutdown shape from server/server.go.
-	httpSrv := &http.Server{Addr: *addr, Handler: mux, WriteTimeout: 0}
-	if err := gohttp.ListenAndServeGraceful(httpSrv, gohttp.WithOnShutdown(srv.CloseAllSessions)); err != nil {
+	if err := srv.ListenAndServe(
+		server.WithStreamableHTTP(true),
+		server.WithMux(func(mux *http.ServeMux) {
+			auth.MountAuth(mux, auth.AuthConfig{
+				ResourceURI:          listenURL,
+				AuthorizationServers: []string{asInfo.ASURL},
+				ScopesSupported:      []string{scopeRead, scopeCall},
+				MCPPath:              "/mcp",
+			})
+			mux.HandleFunc("GET /demo/bootstrap", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(bootstrapInfo{
+					ASURL:         asInfo.ASURL,
+					TokenEndpoint: asInfo.TokenEndpoint,
+					JWKSURL:       asInfo.JWKSURL,
+					ClientID:      asInfo.ClientID,
+					ClientSecret:  asInfo.ClientSecret,
+				})
+			})
+		}),
+		server.WithHandlerWrap(cors),
+	); err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
 		os.Exit(1)
 	}

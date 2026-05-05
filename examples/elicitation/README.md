@@ -35,5 +35,5 @@ See [WALKTHROUGH.md](WALKTHROUGH.md) for the full sequence diagram and step-by-s
 
 ## Notes
 
-- The CORS-wrapped MCP handler is registered manually on a custom mux (rather than via `srv.ListenAndServe`'s `WithMux`) because `server.WithMux` adds *additional* routes alongside the auto-registered MCP handler — it can't replace it with a CORS-wrapped variant. The example mirrors `gohttp.ListenAndServeGraceful` to keep graceful shutdown.
+- CORS is applied via `server.WithHandlerWrap(cors)` so it covers `/mcp` plus the `/approve` route registered through `server.WithMux`. Browser-based MCP hosts (MCPJam) need `Mcp-Session-Id` in both Allow- and Expose-Headers; the canonical CORS configuration lives in this example's `serve()` block.
 - The walkthrough's "Approve" button click is a real human-in-the-loop step; CI runs would need either a headless browser or a synthetic `POST /approve?ctx=...`.
