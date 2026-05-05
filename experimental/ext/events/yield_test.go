@@ -416,3 +416,99 @@ func readSubscriberEvent(t *testing.T, ch <-chan SubscriberEvent, d time.Duratio
 		return SubscriberEvent{}
 	}
 }
+
+// TestYieldingSource_YieldError_DeliversErrorVariant verifies the
+// ζ-7 source-side health signal: YieldError emits a SubscriberEvent
+// with Error set (no Event payload, not Truncated). Stream subscribers
+// map this onto a notifications/events/error frame; the subscription
+// stays open per spec L255+L261 (transient upstream failure).
+//
+// Without this primitive, sources have no way to signal "I tried to
+// fetch upstream and got a 503" — the pre-ζ-7 yield API only supports
+// successful events.
+func TestYieldingSource_YieldError_DeliversErrorVariant(t *testing.T) {
+	src, _ := NewYieldingSource[fakePayload](EventDef{Name: "fake"})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ch := src.Subscribe(ctx)
+	require.NoError(t, src.YieldError(EventDeliveryError{Code: -32603, Message: "upstream 503"}))
+
+	se := readSubscriberEvent(t, ch, time.Second)
+	require.NotNil(t, se.Error, "Error variant must populate the pointer field; got %+v", se)
+	assert.Equal(t, -32603, se.Error.Code)
+	assert.Equal(t, "upstream 503", se.Error.Message)
+	assert.Empty(t, se.Event.EventID, "Error variant must NOT carry an event payload")
+	assert.False(t, se.Truncated)
+	assert.Nil(t, se.Terminated)
+}
+
+// TestYieldingSource_YieldTerminated_DeliversTerminatedAndClosesChan
+// verifies the one-shot terminal signal: YieldTerminated emits a
+// SubscriberEvent{Terminated: ...} to every live subscriber AND
+// closes their channels. Stream subscribers map this onto a
+// notifications/events/terminated frame and close the stream per spec
+// L783-795.
+//
+// One-shot semantics: the source is gone; there's no "recovery" path.
+// Subsequent calls to yield/YieldError/YieldTerminated are silently
+// no-ops (covered by separate test).
+func TestYieldingSource_YieldTerminated_DeliversTerminatedAndClosesChan(t *testing.T) {
+	src, _ := NewYieldingSource[fakePayload](EventDef{Name: "fake"})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ch := src.Subscribe(ctx)
+	require.NoError(t, src.YieldTerminated(EventDeliveryError{Code: -32012, Message: "Unauthorized"}))
+
+	se := readSubscriberEvent(t, ch, time.Second)
+	require.NotNil(t, se.Terminated, "Terminated variant must populate the pointer field; got %+v", se)
+	assert.Equal(t, -32012, se.Terminated.Code)
+	assert.Equal(t, "Unauthorized", se.Terminated.Message)
+
+	// Channel must close after the terminated event so range loops
+	// in subscribers exit cleanly. Read again — should receive the
+	// zero value with ok=false.
+	select {
+	case _, ok := <-ch:
+		assert.False(t, ok, "subscriber chan must close after Terminated; got open chan with new value")
+	case <-time.After(time.Second):
+		t.Fatal("subscriber chan did not close within 1s of YieldTerminated")
+	}
+}
+
+// TestYieldingSource_YieldsAfterTerminatedAreNoOp pins the one-shot
+// semantic: once a source has yielded Terminated, subsequent yield /
+// YieldError / YieldTerminated calls return without effect. Subscribers
+// already saw the terminal signal and (likely) cleaned up their state;
+// late events would be ambiguous about whether the source is alive.
+func TestYieldingSource_YieldsAfterTerminatedAreNoOp(t *testing.T) {
+	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"})
+
+	// Subscribe, terminate, then drain the terminated event so the
+	// subscriber chan is closed and out of the picture.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ch := src.Subscribe(ctx)
+	require.NoError(t, src.YieldTerminated(EventDeliveryError{Code: 0, Message: "done"}))
+	_ = readSubscriberEvent(t, ch, time.Second) // drain terminated
+	// chan should be closed; drain once more to confirm.
+	select {
+	case _, ok := <-ch:
+		require.False(t, ok)
+	case <-time.After(time.Second):
+		t.Fatal("chan didn't close")
+	}
+
+	// Post-terminated calls all no-op; no errors, no panics, no new
+	// events flow. We can't observe "no event flowed" via the closed
+	// chan, but we CAN verify the calls don't panic and don't return
+	// errors.
+	assert.NoError(t, yield(fakePayload{Msg: "ghost"}))
+	assert.NoError(t, src.YieldError(EventDeliveryError{Code: 0, Message: "ghost-err"}))
+	assert.NoError(t, src.YieldTerminated(EventDeliveryError{Code: 0, Message: "ghost-term"}))
+
+	// Poll path also dead — Poll on a terminated source returns empty.
+	pr := src.Poll("", 10)
+	assert.Empty(t, pr.Events, "Poll on terminated source must return no events")
+}

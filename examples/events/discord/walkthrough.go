@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -20,55 +19,11 @@ import (
 	eventsclient "github.com/panyam/mcpkit/experimental/ext/events/clients/go"
 )
 
-// filterFlags strips the dispatcher flags so the inner flag.Parse on -addr
-// (or the demo's flag.Parse) doesn't choke on them.
-func filterFlags(args []string) []string {
-	out := make([]string, 0, len(args))
-	skip := false
-	for _, a := range args {
-		if skip {
-			skip = false
-			continue
-		}
-		switch a {
-		case "--serve", "--tui", "--readme", "--non-interactive":
-			continue
-		case "--url":
-			skip = true
-			continue
-		}
-		out = append(out, a)
-	}
-	return out
-}
-
 // liveInteractionMaxWait is the upper-bound on the live-interaction step.
 // User can press enter at any point to end the capture early (in
 // interactive non-TUI mode); otherwise the step ends after this duration.
 // Skipped entirely in --non-interactive mode.
 const liveInteractionMaxWait = 30 * time.Second
-
-func nonInteractive() bool {
-	for _, a := range os.Args[1:] {
-		if strings.TrimSpace(a) == "--non-interactive" {
-			return true
-		}
-	}
-	return false
-}
-
-// tuiMode reports whether the walkthrough is running in TUI mode (Bubble
-// Tea). In TUI Bubble Tea owns stdin, so demokit's Cancellable
-// (press-enter cancel) would conflict — we keep Timeout but skip
-// Cancellable in that mode.
-func tuiMode() bool {
-	for _, a := range os.Args[1:] {
-		if strings.TrimSpace(a) == "--tui" {
-			return true
-		}
-	}
-	return false
-}
 
 // runDemo drives the demokit walkthrough against a server that the user
 // started separately via `make serve`. Steps walk through every events-spec
@@ -296,6 +251,54 @@ func runDemo() {
 				}
 			case <-time.After(3 * time.Second):
 				fmt.Printf("    ERROR: no typing event within 3s\n")
+			}
+			return
+		})
+
+	// --- Step 5.5: Source-side health signals (ζ-7) ---
+	demo.Step("Health signals: source bubbles a transient upstream failure → notifications/events/error").
+		Arrow("Host", "Server", "events/stream { name: discord.message }").
+		DashedArrow("Server", "Host", "notifications/events/active").
+		Arrow("Receiver", "Server", "POST /inject?action=error").
+		DashedArrow("Server", "Host", "notifications/events/event/error { requestId, error: { code, message } }").
+		Note(
+			"Sources bubble health via YieldError(err) (transient, stream stays open) and YieldTerminated(err) (terminal, stream closes).",
+			"",
+			"- Stream subscribers map onto notifications/events/error (spec L255+L261, transient) and notifications/events/terminated (spec L783-795, terminal).",
+			"- Webhook subscribers don't see error envelopes (errors are upstream-side, not delivery-side); they DO see {type:terminated} control envelopes when the suspend state machine flips Active=false (ζ-6) or when the source itself terminates (ζ-7.3).",
+			"- This walkthrough step exercises only the transient error path — calling `inject?action=terminate` would one-shot terminate the discord.message source, breaking subsequent walkthrough steps that depend on it. Full terminate flow is covered by TestE2EHealthSignalsEndToEnd in this demo's e2e_test.go.",
+		).
+		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			gotError := make(chan error, 4)
+			stream, err := eventsclient.Stream(ctx, c, eventsclient.StreamOptions{
+				EventName: "discord.message",
+				OnError:   func(e error) { gotError <- e },
+			})
+			if err != nil {
+				fmt.Printf("    ERROR: Stream open failed: %v\n", err)
+				return
+			}
+			defer stream.Stop()
+
+			// Inject a transient upstream error.
+			injectErrURL := injectURL + "?action=error&code=-32603&message=demo+upstream+failure"
+			req, _ := http.NewRequest("POST", injectErrURL, nil)
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				return
+			}
+			resp.Body.Close()
+
+			select {
+			case e := <-gotError:
+				fmt.Printf("    notifications/events/error fired:\n      %v\n", e)
+				fmt.Printf("    Stream is still open (transient): subsequent events would still arrive.\n")
+			case <-time.After(3 * time.Second):
+				fmt.Printf("    ERROR: no notifications/events/error within 3s\n")
 			}
 			return
 		})
@@ -546,15 +549,15 @@ func runDemo() {
 			"- --non-interactive mode skips the wait so CI runs aren't slowed.",
 		).
 		Timeout(liveInteractionMaxWait).
-		Cancellable(!tuiMode()).
+		Cancellable(!demokit.IsTUI()).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
-			if nonInteractive() {
+			if demokit.IsNonInteractive() {
 				fmt.Printf("    Skipped in --non-interactive mode. Run without --non-interactive (and with the server in -token mode) to see live events.\n")
 				return
 			}
 
 			fmt.Printf("    Go to your Discord channel and start typing — typing indicators will show up here.\n")
-			if tuiMode() {
+			if demokit.IsTUI() {
 				fmt.Printf("    Press Ctrl+C to exit when done. Will stop automatically after %s.\n\n", liveInteractionMaxWait)
 			} else {
 				fmt.Printf("    Press enter (here, in this terminal) when you're done capturing events.\n")
@@ -627,11 +630,8 @@ func runDemo() {
 		"- Companion demo: `examples/events/telegram/` (lighter walkthrough — same protocol, different bot SDK)",
 	)
 
-	for _, arg := range os.Args[1:] {
-		if strings.TrimSpace(arg) == "--tui" {
-			demo.WithRenderer(tui.New())
-			break
-		}
+	if demokit.IsTUI() {
+		demo.WithRenderer(tui.New())
 	}
 
 	demo.Execute()

@@ -259,3 +259,79 @@ func TestStream_GapRecoveryEmitsFreshActive(t *testing.T) {
 	require.NoError(t, json.Unmarshal(ev.params, &evP))
 	assert.Equal(t, "evt_recovery", evP["eventId"])
 }
+
+// TestStream_EmitsNotificationsEventsError verifies the ζ-7.2 dispatch:
+// when a SubscriberEvent.Error arrives on the stream's source channel,
+// the handler emits notifications/events/error{requestId, error}
+// (spec L255+L261). Stream stays open — the error variant is transient.
+//
+// The fake source lets us inject the Error variant directly without
+// having to wire a real upstream-failure scenario.
+func TestStream_EmitsNotificationsEventsError(t *testing.T) {
+	fake := &fakeSubscribableSource{
+		def: EventDef{Name: "fake.event", Description: "test", Delivery: []string{"push"}},
+		ch:  make(chan SubscriberEvent, 4),
+	}
+	st := newStreamRoutingStack(t, []EventSource{fake}, 0)
+
+	rs := st.startStreamID(t, json.RawMessage(`600`), "fake.event")
+	defer rs.endAndAwait(t, time.Second)
+
+	expectNotif(t, st.notifs, "notifications/events/active", time.Second)
+
+	// Inject a transient error.
+	fake.ch <- SubscriberEvent{Error: &EventDeliveryError{Code: -32603, Message: "upstream 503"}}
+
+	n := expectNotif(t, st.notifs, "notifications/events/error", time.Second)
+	var p map[string]any
+	require.NoError(t, json.Unmarshal(n.params, &p))
+	assert.EqualValues(t, 600, p["requestId"], "requestId MUST echo the events/stream call id")
+	errMap, ok := p["error"].(map[string]any)
+	require.True(t, ok, "params.error MUST be an object; got %v", p["error"])
+	assert.EqualValues(t, -32603, errMap["code"])
+	assert.Equal(t, "upstream 503", errMap["message"])
+
+	// Stream must STAY OPEN. Sending an event after the error verifies
+	// the handler didn't return on the error frame.
+	cursor := "c1"
+	fake.ch <- SubscriberEvent{Event: Event{
+		EventID: "evt_post_error", Name: "fake.event",
+		Timestamp: "t", Data: json.RawMessage(`{}`), Cursor: &cursor,
+	}}
+	expectNotif(t, st.notifs, "notifications/events/event", time.Second)
+}
+
+// TestStream_EmitsNotificationsEventsTerminated verifies the ζ-7.2
+// terminal dispatch: SubscriberEvent.Terminated → notifications/events/
+// terminated{requestId, error} (spec L783-795) AND the stream returns
+// (closes). The handler returns the empty StreamEventsResult after
+// emitting the notification, so the SDK call's Done channel closes
+// shortly after.
+func TestStream_EmitsNotificationsEventsTerminated(t *testing.T) {
+	fake := &fakeSubscribableSource{
+		def: EventDef{Name: "fake.event", Description: "test", Delivery: []string{"push"}},
+		ch:  make(chan SubscriberEvent, 4),
+	}
+	st := newStreamRoutingStack(t, []EventSource{fake}, 0)
+
+	rs := st.startStreamID(t, json.RawMessage(`700`), "fake.event")
+	expectNotif(t, st.notifs, "notifications/events/active", time.Second)
+
+	// Inject terminal.
+	fake.ch <- SubscriberEvent{Terminated: &EventDeliveryError{Code: -32012, Message: "Unauthorized"}}
+
+	n := expectNotif(t, st.notifs, "notifications/events/terminated", time.Second)
+	var p map[string]any
+	require.NoError(t, json.Unmarshal(n.params, &p))
+	assert.EqualValues(t, 700, p["requestId"])
+	errMap, ok := p["error"].(map[string]any)
+	require.True(t, ok)
+	assert.EqualValues(t, -32012, errMap["code"])
+	assert.Equal(t, "Unauthorized", errMap["message"])
+
+	// Stream must close — call returns. We cancel ctx to be safe but
+	// the goroutine should already be done.
+	r := rs.endAndAwait(t, time.Second)
+	require.NoError(t, r.err)
+	require.Nil(t, r.resp.Error, "stream should close cleanly with StreamEventsResult, not an error")
+}

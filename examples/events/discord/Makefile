@@ -89,6 +89,19 @@ inject-typing:
 	  -H 'Content-Type: application/json' \
 	  -d '{"guild_id": "$(or $(GUILD),test-guild)", "channel_id": "$(or $(CHANNEL),test-channel)", "user": "$(or $(USER_NAME),test-user)"}' | jq .
 
+# ζ-7.4: source-side health-signal injection. inject-error sends a
+# transient upstream-failure signal (push subscribers see
+# notifications/events/error; subscription stays open). inject-terminate
+# is one-shot terminal (push subscribers see notifications/events/
+# terminated and stream closes; webhook subscribers get a type:terminated
+# control envelope). Both demonstrate the ε-2 dormant callbacks coming
+# alive via the ζ-7 source-side API.
+inject-error:
+	@curl -s -X POST '$(ADDR)/inject?action=error&code=$(or $(CODE),-32603)&message=$(or $(MESSAGE),demo+upstream+failure)' | jq .
+
+inject-terminate:
+	@curl -s -X POST '$(ADDR)/inject?action=terminate&code=$(or $(CODE),-32012)&message=$(or $(MESSAGE),demo+terminated)' | jq .
+
 list:
 	@$(EVENTS_CLIENT) list
 
@@ -101,4 +114,5 @@ webhook:
 poll:
 	@$(EVENTS_CLIENT) poll --interval $(or $(INTERVAL),5)
 
-.PHONY: run serve demo readme build test test-race test-ttl inject inject-typing list listen webhook poll
+.PHONY: run serve demo readme build test test-race test-ttl inject inject-typing inject-error inject-terminate list listen webhook poll
+.DEFAULT_GOAL := demo
