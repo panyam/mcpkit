@@ -4,12 +4,12 @@ Walks through SEP-2356, which lets servers declare file-input properties on tool
 
 ## What you'll learn
 
-- **Connect to the file-inputs server** — `client.NewClient(...)` + `Connect()`. Once Phase 1.6 lands, the client will auto-advertise `fileInputs` when the option is enabled; for now the demo connects with the default capability set and the server unconditionally exposes `x-mcp-file` so we can see the wire shape.
-- **tools/list — confirm x-mcp-file appears on inputSchemas** — Bypass any typed helper and decode the raw response so we can see the JSON Schema shape exactly as a client would. `properties.image.x-mcp-file` carries `{accept: ["image/*"], maxSize: 5242880}` — that's the picker hint.
+- **Connect to the file-inputs server** — `client.NewClient(...)` + `client.WithFileInputs()` + `Connect()`. The `WithFileInputs` option advertises `capabilities.fileInputs={}` on the wire — without it, the server would strip `x-mcp-file` from every tool's inputSchema (per SEP-2356 cap-gating). The next step inspects the raw response to confirm the keyword survives.
+- **tools/list — extract file-input descriptors** — `client.FileInputsFromTool(tool)` extracts the per-property descriptors a server advertised. Single-file properties land under their name (`"image"`); array-of-files shapes land under `name[]` (`"documents[]"`) so callers can disambiguate without re-walking the schema.
 - **upload_image — encode + call with a real PNG** — Read `testdata/pixel.png` (a 24×24 RGB gradient, embedded at build time), encode it via `core.EncodeDataURI`, and pass the resulting string as the `image` argument. The handler runs `core.DecodeDataURI` to recover bytes, media type, and the original filename. Size and MIME validation will be enforced by `server.ValidateFileInput` once Phase 1.4 lands; today the handler trusts the input.
 - **analyze_documents — array-of-files input** — Demonstrates `core.FileInputArrayProperty` — the schema marks the `documents` array's *items* with `x-mcp-file`, so a host renders one picker per row. The walkthrough loads two embedded PDFs (`testdata/contract.pdf`, `testdata/appendix.pdf`) and sends both in one call.
 - **process_any_file — no accept/maxSize filter** — Empty `FileInputDescriptor{}` means "any file, any size." Useful for ad-hoc inspection. The handler still decodes via `core.DecodeDataURI`, which rejects malformed or non-base64 URIs. The walkthrough reads `testdata/README.txt` so the payload is a real on-disk file.
-- **Optional: send a file from disk** — Pass `--file <path>` on the demo command line to read an image from disk and upload it. Skipped silently when the flag isn't set so the walkthrough stays hermetic; demonstrates the on-disk → data URI path you'd use in a real client integration. Phase 1.6 will fold this into `client.PrepareFileArg(path, descriptor)`.
+- **Optional: send a file from disk via client.PrepareFileArg** — Pass `--file <path>` on the demo command line to read an image from disk and upload it. Skipped silently when the flag isn't set so the walkthrough stays hermetic. The encode path is now `client.PrepareFileArg(path, descriptor)` — single call that reads the file, detects MIME, validates against the descriptor (size + accept patterns, same rules as the server-side validator), and returns the data URI. Failures surface as typed errors (`*core.FileTooLargeError`, `*core.FileTypeNotAcceptedError`) so callers can branch with `errors.As`.
 - **upload_image rejects wrong MIME (text/plain into image/* slot)** — The descriptor declares `accept: ["image/*"]`. Sending a text/plain data URI hits the dispatcher's accept-pattern matcher (`core.FileMatchesAccept`), which fails before the handler runs. The error data carries `mediaType` (what we sent) and `accept` (what the server requires) so a client can render a useful message.
 - **upload_image rejects oversized payload (6 MiB into 5 MiB cap)** — Same descriptor declares `maxSize: 5_242_880` (5 MiB). We synthesize a 6 MiB null-byte buffer, encode as `image/png`, and send it. The validator decodes the data URI, sees the size cap is exceeded, and short-circuits with structured size info.
 - **analyze_documents rejects per-element with field path tracking** — Send a 2-element array where element 0 is a valid PDF and element 1 is a text/plain payload. The dispatcher's array-items walker validates each element against `items.x-mcp-file` and surfaces the path of the offender — `data.field == "documents[1]"`. Useful so a client rendering rich error UX can highlight the specific input that failed instead of asking the user to re-pick everything.
@@ -25,7 +25,7 @@ sequenceDiagram
     Host->>Server: POST /mcp — initialize (capabilities.fileInputs={})
     Server-->>Host: serverInfo + capabilities
 
-    Note over Host,Server: Step 2: tools/list — confirm x-mcp-file appears on inputSchemas
+    Note over Host,Server: Step 2: tools/list — extract file-input descriptors
     Host->>Server: tools/list
     Server-->>Host: tools[] with x-mcp-file marked properties
 
@@ -41,7 +41,7 @@ sequenceDiagram
     Host->>Server: tools/call process_any_file { file: data:text/plain;name=README.txt;base64,… }
     Server-->>Host: decoded media type + size
 
-    Note over Host,Server: Step 6: Optional: send a file from disk
+    Note over Host,Server: Step 6: Optional: send a file from disk via client.PrepareFileArg
     Host->>Server: tools/call upload_image (from --file <path>)
     Server-->>Host: decoded metadata of the on-disk file
 
@@ -82,11 +82,11 @@ Capability negotiation: the client advertises `"fileInputs": {}` inside `ClientC
 
 ### Step 1: Connect to the file-inputs server
 
-`client.NewClient(...)` + `Connect()`. Once Phase 1.6 lands, the client will auto-advertise `fileInputs` when the option is enabled; for now the demo connects with the default capability set and the server unconditionally exposes `x-mcp-file` so we can see the wire shape.
+`client.NewClient(...)` + `client.WithFileInputs()` + `Connect()`. The `WithFileInputs` option advertises `capabilities.fileInputs={}` on the wire — without it, the server would strip `x-mcp-file` from every tool's inputSchema (per SEP-2356 cap-gating). The next step inspects the raw response to confirm the keyword survives.
 
-### Step 2: tools/list — confirm x-mcp-file appears on inputSchemas
+### Step 2: tools/list — extract file-input descriptors
 
-Bypass any typed helper and decode the raw response so we can see the JSON Schema shape exactly as a client would. `properties.image.x-mcp-file` carries `{accept: ["image/*"], maxSize: 5242880}` — that's the picker hint.
+`client.FileInputsFromTool(tool)` extracts the per-property descriptors a server advertised. Single-file properties land under their name (`"image"`); array-of-files shapes land under `name[]` (`"documents[]"`) so callers can disambiguate without re-walking the schema.
 
 ### Step 3: upload_image — encode + call with a real PNG
 
@@ -100,9 +100,9 @@ Demonstrates `core.FileInputArrayProperty` — the schema marks the `documents` 
 
 Empty `FileInputDescriptor{}` means "any file, any size." Useful for ad-hoc inspection. The handler still decodes via `core.DecodeDataURI`, which rejects malformed or non-base64 URIs. The walkthrough reads `testdata/README.txt` so the payload is a real on-disk file.
 
-### Step 6: Optional: send a file from disk
+### Step 6: Optional: send a file from disk via client.PrepareFileArg
 
-Pass `--file <path>` on the demo command line to read an image from disk and upload it. Skipped silently when the flag isn't set so the walkthrough stays hermetic; demonstrates the on-disk → data URI path you'd use in a real client integration. Phase 1.6 will fold this into `client.PrepareFileArg(path, descriptor)`.
+Pass `--file <path>` on the demo command line to read an image from disk and upload it. Skipped silently when the flag isn't set so the walkthrough stays hermetic. The encode path is now `client.PrepareFileArg(path, descriptor)` — single call that reads the file, detects MIME, validates against the descriptor (size + accept patterns, same rules as the server-side validator), and returns the data URI. Failures surface as typed errors (`*core.FileTooLargeError`, `*core.FileTypeNotAcceptedError`) so callers can branch with `errors.As`.
 
 ### Validation — server rejects non-conforming uploads (Phase 1.4)
 
