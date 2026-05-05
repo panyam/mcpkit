@@ -129,10 +129,18 @@ func NewWebhookRegistry(opts ...WebhookOption) *WebhookRegistry {
 	// http.Client wired AFTER options apply so the Dialer.Control callback
 	// can read the resolved allowPrivateNetworks setting. ζ-1 spec
 	// §"Webhook Security" → "SSRF prevention" L464.
+	//
+	// CheckRedirect (ζ-2): explicitly disable the default 10-redirect
+	// follow. A receiver returning 3xx to an internal address would
+	// otherwise bypass the dial-time SSRF guard via Go's redirect chain.
+	// Per spec same paragraph L464.
 	r.client = &http.Client{
 		Timeout: 5 * time.Second,
 		Transport: &http.Transport{
 			DialContext: r.dialContext(),
+		},
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
 		},
 	}
 	return r
@@ -393,6 +401,13 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, eventID string, body []b
 		}
 
 		r.logf("[webhook] delivery to %s returned %d", target.URL, resp.StatusCode)
+		if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+			// ζ-2: 3xx is non-retryable. We disabled redirect-following
+			// via CheckRedirect; a receiver returning 3xx is signalling
+			// "go elsewhere" but we're not allowed to. Re-trying won't
+			// change the response; treat as terminal.
+			return
+		}
 		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
 			return // 4xx = client error, not retryable
 		}
