@@ -100,6 +100,24 @@ func (r *WebhookRegistry) PostTerminated(canonicalKey []byte, controlErr Control
 	go r.deliverControl(target, "terminated", body)
 }
 
+// postTerminatedSilent POSTs a {type:terminated} envelope to a target
+// WITHOUT removing it from the registry. Distinct from the public
+// PostTerminated which removes — the suspend transition (ζ-6 →
+// ζ-7.3) needs the target to remain observable as Active=false so the
+// spec's "successful refresh reactivates" path stays available.
+//
+// Caller (recordDeliveryFailure on the suspend transition) passes the
+// target snapshot so this method doesn't need to re-acquire the lock.
+// Async delivery via deliverControl in a goroutine.
+func (r *WebhookRegistry) postTerminatedSilent(target WebhookTarget, controlErr ControlError) {
+	body, err := json.Marshal(controlEnvelope{Type: "terminated", Error: &controlErr})
+	if err != nil {
+		r.logf("[webhook] postTerminatedSilent: marshal failed: %v", err)
+		return
+	}
+	go r.deliverControl(target, "terminated", body)
+}
+
 // deliverControl POSTs a control envelope synchronously (caller starts
 // the goroutine). Uses newControlMessageID for the webhook-id so the
 // type prefix appears in the header. Reuses the per-mode signing

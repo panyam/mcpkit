@@ -9,6 +9,7 @@ Walks through the four delivery modes of the experimental MCP Events extension (
 - **Push: open events/stream, inject a message, observe per-call notifications** — events/stream is a long-lived JSON-RPC request — one per subscription. Spec §"Push-Based Delivery" L223-296.
 - **Poll: events/poll with the cursor we just saw** — Single-subscription per call (PR B removed batching). Polling at the head returns no new events but advances the cursor — the same response shape that would carry events if any had arrived since the last poll.
 - **Cursorless: open events/stream for typing, observe cursor:null on the wire** — WithoutCursors() sources don't buffer; the wire emits cursor:null.
+- **Health signals: source bubbles a transient upstream failure → notifications/events/error** — Sources bubble health via YieldError(err) (transient, stream stays open) and YieldTerminated(err) (terminal, stream closes).
 - **Webhook: subscribe via the typed Go SDK, observe HMAC delivery + auto-refresh** — clients/go provides Subscription (subscribe + auto-refresh) plus Receiver[Data] (typed inbound channel).
 - **Spec validation: empty delivery.secret is rejected** — delivery.secret is REQUIRED on every events/subscribe — no server-side fallback per spec.
 - **Spec validation: malformed delivery.secret is rejected** — The validator enforces the full Standard Webhooks format: `whsec_` followed by base64 of 24-64 random bytes.
@@ -49,7 +50,13 @@ sequenceDiagram
     Receiver->>Server: POST /inject?event=discord.typing
     Server-->>Host: notifications/events/event { cursor: null }
 
-    Note over Host,Receiver: Step 6: Webhook: subscribe via the typed Go SDK, observe HMAC delivery + auto-refresh
+    Note over Host,Receiver: Step 6: Health signals: source bubbles a transient upstream failure → notifications/events/error
+    Host->>Server: events/stream { name: discord.message }
+    Server-->>Host: notifications/events/active
+    Receiver->>Server: POST /inject?action=error
+    Server-->>Host: notifications/events/event/error { requestId, error: { code, message } }
+
+    Note over Host,Receiver: Step 7: Webhook: subscribe via the typed Go SDK, observe HMAC delivery + auto-refresh
     Receiver->>Receiver: spin up local httptest receiver on :random
     Host->>Server: events/subscribe { mode: webhook, url, secret: whsec_<client-supplied> }
     Server-->>Host: { id, refreshBefore }   (response does NOT echo secret per spec)
@@ -57,24 +64,24 @@ sequenceDiagram
     Server-->>Receiver: POST <url> + HMAC signature headers (default: webhook-* per Standard Webhooks; opt-in: X-MCP-* via -webhook-header-mode mcp)
     Host-->>Host: background loop: re-subscribe at 0.5 × TTL
 
-    Note over Host,Receiver: Step 7: Spec validation: empty delivery.secret is rejected
+    Note over Host,Receiver: Step 8: Spec validation: empty delivery.secret is rejected
     Host->>Server: events/subscribe { delivery: { ... } }   (no secret)
     Server-->>Host: -32602 InvalidParams: delivery.secret is required
 
-    Note over Host,Receiver: Step 8: Spec validation: malformed delivery.secret is rejected
+    Note over Host,Receiver: Step 9: Spec validation: malformed delivery.secret is rejected
     Host->>Server: events/subscribe { delivery: { secret: 'wrong' } }
     Server-->>Host: -32602 InvalidParams: delivery.secret invalid: must start with the whsec_ prefix
 
-    Note over Host,Receiver: Step 9: Spec validation: client-supplied id is rejected
+    Note over Host,Receiver: Step 10: Spec validation: client-supplied id is rejected
     Host->>Server: events/subscribe { id: 'mine', ... }
     Server-->>Host: -32602 InvalidParams: client-supplied id is not accepted
 
-    Note over Host,Receiver: Step 10: Spec validation: valid whsec_ accepted; response carries server-derived id, no secret
+    Note over Host,Receiver: Step 11: Spec validation: valid whsec_ accepted; response carries server-derived id, no secret
     Host->>Host: events.GenerateSecret() → whsec_<base64 of 32 bytes>
     Host->>Server: events/subscribe { delivery: { secret: whsec_<valid> } }
     Server-->>Host: { id: sub_<base64-of-16-bytes>, cursor, refreshBefore }   (no secret per spec)
 
-    Note over Host,Receiver: Step 11: Live Discord interaction (typing + message from a real Discord channel)
+    Note over Host,Receiver: Step 12: Live Discord interaction (typing + message from a real Discord channel)
     Discord->>Server: TypingStart event (when you start typing in the channel)
     Server-->>Host: notifications/events/event { name: discord.typing, cursor: null }
     Discord->>Server: MessageCreate event (when you press enter)
@@ -143,7 +150,15 @@ WithoutCursors() sources don't buffer; the wire emits cursor:null.
 - Heartbeats also carry cursor:null (spec L294: "null for event types that do not support replay").
 - Useful for ephemeral state (typing indicators, presence, current readings).
 
-### Step 6: Webhook: subscribe via the typed Go SDK, observe HMAC delivery + auto-refresh
+### Step 6: Health signals: source bubbles a transient upstream failure → notifications/events/error
+
+Sources bubble health via YieldError(err) (transient, stream stays open) and YieldTerminated(err) (terminal, stream closes).
+
+- Stream subscribers map onto notifications/events/error (spec L255+L261, transient) and notifications/events/terminated (spec L783-795, terminal).
+- Webhook subscribers don't see error envelopes (errors are upstream-side, not delivery-side); they DO see {type:terminated} control envelopes when the suspend state machine flips Active=false (ζ-6) or when the source itself terminates (ζ-7.3).
+- This walkthrough step exercises only the transient error path — calling `inject?action=terminate` would one-shot terminate the discord.message source, breaking subsequent walkthrough steps that depend on it. Full terminate flow is covered by TestE2EHealthSignalsEndToEnd in this demo's e2e_test.go.
+
+### Step 7: Webhook: subscribe via the typed Go SDK, observe HMAC delivery + auto-refresh
 
 clients/go provides Subscription (subscribe + auto-refresh) plus Receiver[Data] (typed inbound channel).
 
@@ -151,7 +166,7 @@ clients/go provides Subscription (subscribe + auto-refresh) plus Receiver[Data] 
 - Subscription.Secret() returns the value the SDK ended up using, so the receiver can verify with the same secret.
 - Receiver[DiscordEventData] verifies signatures and decodes the wire envelope into the typed Data shape — consumer reads `ev.Data.Content` directly, no re-parsing JSON.
 
-### Step 7: Spec validation: empty delivery.secret is rejected
+### Step 8: Spec validation: empty delivery.secret is rejected
 
 delivery.secret is REQUIRED on every events/subscribe — no server-side fallback per spec.
 
@@ -159,21 +174,21 @@ delivery.secret is REQUIRED on every events/subscribe — no server-side fallbac
 - The Go SDK auto-generates a conforming whsec_ value via events.GenerateSecret() when SubscribeOptions.Secret is empty.
 - This step makes a raw client.Call to bypass the SDK and demonstrate the server-side validator directly.
 
-### Step 8: Spec validation: malformed delivery.secret is rejected
+### Step 9: Spec validation: malformed delivery.secret is rejected
 
 The validator enforces the full Standard Webhooks format: `whsec_` followed by base64 of 24-64 random bytes.
 
 - A non-prefixed value, a too-short value, or non-base64 garbage all fail with -32602 InvalidParams.
 - Catches IaC-pinned secrets that don't match the spec format before they create a broken subscription.
 
-### Step 9: Spec validation: client-supplied id is rejected
+### Step 10: Spec validation: client-supplied id is rejected
 
 Spec §"Subscription Identity" → "Key composition" L363: "There is no client-generated id — a subscription is fully determined by what it listens for, where it delivers, and who asked."
 
 - Server derives the id from (principal, name, params, url) and returns it.
 - Old SDKs sending an id field get a loud -32602 instead of a silent mis-keying.
 
-### Step 10: Spec validation: valid whsec_ accepted; response carries server-derived id, no secret
+### Step 11: Spec validation: valid whsec_ accepted; response carries server-derived id, no secret
 
 Counter-test: a freshly-generated whsec_ value is accepted.
 
@@ -181,7 +196,7 @@ Counter-test: a freshly-generated whsec_ value is accepted.
 - The id is non-load-bearing for security; surfaced as X-MCP-Subscription-Id on delivery POSTs (γ-4 wires the header).
 - Response does NOT echo the secret — the client supplied it. Echoing would risk leaks via proxies / logs / IDE network panes.
 
-### Step 11: Live Discord interaction (typing + message from a real Discord channel)
+### Step 12: Live Discord interaction (typing + message from a real Discord channel)
 
 Setup: start the server with a Discord bot token and invite the bot to a channel you can post in.
 

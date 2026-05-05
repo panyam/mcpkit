@@ -11,7 +11,7 @@ replace (
 
 require (
 	github.com/bwmarrin/discordgo v0.28.1
-	github.com/panyam/demokit v0.0.14
+	github.com/panyam/demokit v0.0.16
 	github.com/panyam/mcpkit v0.2.40
 	github.com/panyam/mcpkit/experimental/ext/events v0.0.0
 	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.0.0-00010101000000-000000000000

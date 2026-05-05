@@ -38,6 +38,19 @@ See [`WALKTHROUGH.md`](WALKTHROUGH.md) for the full sequence diagram and step-by
 
 > **Going to production?** See [`experimental/ext/events/DEPLOYMENT.md`](../../../experimental/ext/events/DEPLOYMENT.md) for private-cloud / WAF guidance.
 
+## What it demonstrates
+
+Each bullet maps to a step in the demokit walkthrough:
+
+- **events/list** — the source catalog, including the `cursorless` flag.
+- **Push** — long-lived `events/stream` SSE; `notifications/events/event` arrives in real time.
+- **Poll** — single-subscription `events/poll` (multi-sub batching is not supported).
+- **Cursorless source** — typing indicators wired as `cursor: null`; subscribers see live events but can't replay.
+- **Webhook + auto-refresh** — `events/subscribe` driven via the typed `Subscription` + `Receiver[Data]` from `clients/go`, including HMAC verification and 0.5×TTL re-subscribe.
+- **Source-side health signals** — `YieldError(err)` (transient → `notifications/events/error`) and `YieldTerminated(err)` (terminal → `notifications/events/terminated`).
+- **Spec validation** — empty / malformed `delivery.secret` rejected with `-32602`; client-supplied `id` rejected; valid `whsec_` accepted with no secret echoed in the response.
+- **Live Discord interaction** — real typing + message events from a Discord channel (when started with `DISCORD_BOT_TOKEN`).
+
 ## Setup — getting a Discord bot token (Option B only)
 
 Skip this section if you're running in test mode (Option A above).
@@ -143,6 +156,18 @@ Recognized env vars:
 | `OAUTH_AUDIENCE` | `mcp-events` | Tokens MUST have this audience claim. |
 
 The events package itself depends only on `core.Claims` (the abstract auth contract), not on any specific auth implementation — see [`experimental/ext/events/README.md`](../../../experimental/ext/events/README.md) "Auth + extension composition" for the design rationale.
+
+## Where to look in the code
+
+- `examples/events/discord/main.go:serve` — server bootstrap (auth posture, source registration, `/inject` side endpoint via `server.WithMux`).
+- `examples/events/discord/walkthrough.go:runDemo` — demokit script driving every step in the bullet list above.
+- `examples/events/discord/events.go:newDiscordSource` — `events.YieldingSource[DiscordEventData]` construction (cursored).
+- `examples/events/discord/events.go:newDiscordTypingSource` — cursorless typing source via `events.WithoutCursors()`.
+- `examples/events/discord/handlers.go:registerResources` — typed resource handlers backed by the source's buffer.
+- `examples/events/discord/handlers.go:registerTools` — `discord.send_message` tool.
+- `experimental/ext/events/clients/go/subscription.go:Subscribe` — Go SDK subscribe + auto-refresh helper used in step 6.
+- `experimental/ext/events/clients/go/receiver.go:NewReceiver` — typed inbound webhook receiver with HMAC verification.
+- `experimental/ext/events/webhook.go:WebhookRegistry` — per-subscription delivery + signing + retry.
 
 ## Make targets
 

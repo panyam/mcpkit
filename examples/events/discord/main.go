@@ -17,12 +17,12 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/signal"
+	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/experimental/ext/events"
 	"github.com/panyam/mcpkit/ext/auth"
@@ -47,7 +47,22 @@ func serve() {
 	token := flag.String("token", "", "Discord bot token (omit for test mode)")
 	whTTL := flag.Duration("webhook-ttl", 0, "override webhook subscription TTL (default 60s; useful for driving the SDK refresh path in tests)")
 	whHeaderMode := flag.String("webhook-header-mode", "standard", "webhook header style: standard | mcp")
-	flag.CommandLine.Parse(filterFlags(os.Args[1:]))
+	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
+		demokit.BoolFlag("--serve"),
+		demokit.ValueFlag("--url"),
+		demokit.ValueFlag("--token"),
+		demokit.ValueFlag("--webhook-ttl"),
+		demokit.ValueFlag("--webhook-header-mode"),
+		demokit.ValueFlag("--addr"),
+	))
+
+	logger := demokit.NewColorLogger("[mcp] ", []demokit.ColorRule{
+		{Contains: "error=", DarkColor: demokit.ANSIRed},
+		{Contains: "ERROR", DarkColor: demokit.ANSIRed},
+		{Contains: "[http] →", DarkColor: demokit.ANSIGray, LightColor: demokit.ANSIDimBlue},
+		{Contains: "[http] ←", DarkColor: demokit.ANSICyan, LightColor: demokit.ANSIBlue},
+		{Contains: "MCP ", DarkColor: demokit.ANSIBrightGreen, LightColor: demokit.ANSIGreen},
+	})
 
 	headerMode, err := events.ParseHeaderMode(*whHeaderMode)
 	if err != nil {
@@ -130,9 +145,10 @@ func serve() {
 	// required" L361. Otherwise fall back to the demo escape hatch so
 	// `make demo` works end-to-end without an auth provider.
 	srvOpts := []server.Option{
+		server.WithListen(*addr),
 		server.WithSubscriptions(),
-		server.WithMiddleware(server.LoggingMiddleware(log.Default())),
-		server.WithRequestLogging(log.Default()),
+		server.WithMiddleware(server.LoggingMiddleware(logger)),
+		server.WithRequestLogging(logger),
 	}
 	authPosture := "demo (anonymous → UnsafeAnonymousPrincipal)"
 	if validator := tryEnableAuth(); validator != nil {
@@ -162,20 +178,46 @@ func serve() {
 	}
 	events.Register(cfg)
 
-	mux := http.NewServeMux()
-	mux.Handle("/mcp", srv.Handler(
-		server.WithStreamableHTTP(true),
-		server.WithSSE(true),
-		server.WithEventStore(gohttp.NewMemoryEventStore(eventStoreCap)),
-	))
-
-	// One endpoint, dispatch on ?event=<name>. Default is discord.message
-	// for backwards compatibility with the older inject script. Body shape
-	// varies per event — see the per-event branches below.
-	mux.HandleFunc("POST /inject", func(w http.ResponseWriter, r *http.Request) {
+	injectHandler := func(w http.ResponseWriter, r *http.Request) {
 		eventName := r.URL.Query().Get("event")
 		if eventName == "" {
 			eventName = "discord.message"
+		}
+
+		// ζ-7.4: source-side health-signal injection. Demo's stand-in
+		// for a real source bubbling upstream errors. Triggers
+		// notifications/events/error or /terminated on push subscribers,
+		// per spec §"Push-Based Delivery" → "Event Delivery" L255-271.
+		// `?action=error` is transient (stream stays); `?action=terminate`
+		// is one-shot terminal (stream closes; webhook subscribers get a
+		// type:terminated control envelope).
+		if action := r.URL.Query().Get("action"); action != "" {
+			code := -32603
+			if c := r.URL.Query().Get("code"); c != "" {
+				if parsed, err := strconv.Atoi(c); err == nil {
+					code = parsed
+				}
+			}
+			message := r.URL.Query().Get("message")
+			if message == "" {
+				message = "demo-injected " + action
+			}
+			derr := events.EventDeliveryError{Code: code, Message: message}
+			switch action {
+			case "error":
+				_ = source.YieldError(derr)
+			case "terminate":
+				_ = source.YieldTerminated(derr)
+			default:
+				http.Error(w, fmt.Sprintf("unknown action %q (want error or terminate)", action), http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{
+				"status": "ok", "event": eventName, "action": action,
+				"code": code, "message": message,
+			})
+			return
 		}
 
 		switch eventName {
@@ -218,20 +260,20 @@ func serve() {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{"status": "ok", "event": eventName})
-	})
+	}
 
 	log.Printf("[server] discord-events listening on %s (MCP at /mcp)", *addr)
 
-	go func() {
-		if err := http.ListenAndServe(*addr, mux); err != nil {
-			log.Fatal(err)
-		}
-	}()
-
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-	<-stop
-	log.Println("[server] shutting down")
+	if err := srv.ListenAndServe(
+		server.WithStreamableHTTP(true),
+		server.WithSSE(true),
+		server.WithEventStore(gohttp.NewMemoryEventStore(eventStoreCap)),
+		server.WithMux(func(mux *http.ServeMux) {
+			mux.HandleFunc("POST /inject", injectHandler)
+		}),
+	); err != nil {
+		log.Fatalf("ListenAndServe: %v", err)
+	}
 }
 
 // hasOAuthEnv reports whether OAUTH_ISSUER is set (real-auth posture).
