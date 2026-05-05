@@ -30,7 +30,9 @@ import (
 func buildAuthGateStack(t *testing.T, unsafeAnon string) (*server.Server, *WebhookRegistry) {
 	t.Helper()
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
-	webhooks := NewWebhookRegistry()
+	// ζ-1: tests subscribe to httptest URLs (127.0.0.1:N) — bypass
+	// the production-default SSRF dial guard.
+	webhooks := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true))
 	Register(Config{
 		Sources:                  []EventSource{fakeSecretValidationSource{}},
 		Webhooks:                 webhooks,
@@ -222,7 +224,10 @@ func TestDelivery_EmitsXMCPSubscriptionIDHeader(t *testing.T) {
 	}))
 	defer callback.Close()
 
-	webhooks := NewWebhookRegistry()
+	// ζ-1: httptest binds to 127.0.0.1; tests that drive an actual
+	// delivery need WithWebhookAllowPrivateNetworks(true) to bypass
+	// the dial-time SSRF guard.
+	webhooks := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true))
 	canonical := canonicalKey("test-principal", callback.URL, "fake.event", nil)
 	subID := deriveSubscriptionID(canonical)
 	webhooks.Register(canonical, subID, callback.URL, "whsec_"+strings.Repeat("a", 32), 0)

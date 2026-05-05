@@ -29,6 +29,9 @@ import (
 // The cursorless typing source is registered alongside telegram.message so
 // cursor-shape tests can exercise both modes against the same server.
 func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.YieldingSource[TelegramEventData], func(TelegramEventData) error, *events.WebhookRegistry) {
+	// ζ-1: tests subscribe to httptest URLs (127.0.0.1:N); bypass the
+	// production-default SSRF dial guard.
+	whOpts = append([]events.WebhookOption{events.WithWebhookAllowPrivateNetworks(true)}, whOpts...)
 	webhooks := events.NewWebhookRegistry(whOpts...)
 	source, yield := newTelegramSource()
 	typingSource, _ := newTelegramTypingSource()
@@ -54,7 +57,7 @@ func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.Yie
 // tests so they can publish typing events without spinning up a Telegram
 // session.
 func buildTestStackWithTyping() (*server.Server, func(TelegramEventData) error, func(TelegramTypingData) error) {
-	webhooks := events.NewWebhookRegistry()
+	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true))
 	source, yield := newTelegramSource()
 	typingSource, yieldTyping := newTelegramTypingSource()
 

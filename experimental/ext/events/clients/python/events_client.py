@@ -580,22 +580,59 @@ def _make_webhook_handler(secret_holder):
             mode = "standard" if self.headers.get("webhook-signature") else "mcp"
 
             label = f"{mode} sig OK" if sig_ok else f"{mode} sig FAIL"
+
+            # ζ-4: top-level `type` discriminator distinguishes control
+            # envelopes (gap, terminated) from event deliveries.
+            # Spec §"Non-event webhook bodies" L415-423.
+            try:
+                payload = json.loads(body)
+            except Exception:
+                print()
+                print(f"── WEBHOOK RAW ({label}) " + "─" * 30)
+                print(f"  raw: {body.decode(errors='replace')}")
+                print()
+                sys.stdout.flush()
+                self.send_response(200)
+                self.end_headers()
+                return
+
+            envelope_type = payload.get("type")
+            if envelope_type == "gap":
+                print()
+                print(f"── WEBHOOK GAP ({label}) " + "─" * 32)
+                print(f"  cursor:  {_fmt_cursor(payload.get('cursor'))}")
+                print(f"  → reset persisted cursor and re-fetch authoritative state if it matters")
+                print()
+                sys.stdout.flush()
+                self.send_response(200)
+                self.end_headers()
+                return
+            if envelope_type == "terminated":
+                err = payload.get("error") or {}
+                print()
+                print(f"── WEBHOOK TERMINATED ({label}) " + "─" * 26)
+                print(f"  code:    {err.get('code')}")
+                print(f"  message: {err.get('message')!r}")
+                print(f"  → server has stopped delivering; remove local subscription state")
+                print()
+                sys.stdout.flush()
+                self.send_response(200)
+                self.end_headers()
+                return
+
+            # Event delivery (default).
             print()
             print(f"── WEBHOOK EVENT ({label}) " + "─" * 30)
-            try:
-                event = json.loads(body)
-                print(f"  id:      {event.get('eventId', '')}")
-                print(f"  name:    {event.get('name', '')}")
-                print(f"  time:    {event.get('timestamp', '')}")
-                print(f"  cursor:  {_fmt_cursor(event.get('cursor'))}")
-                meta = event.get("_meta")
-                if meta:
-                    print(f"  _meta:   {json.dumps(meta, separators=(',', ':'))}")
-                data = event.get("data")
-                if data:
-                    print(json.dumps(data, indent=2))
-            except Exception:
-                print(f"  raw: {body.decode()}")
+            print(f"  id:      {payload.get('eventId', '')}")
+            print(f"  name:    {payload.get('name', '')}")
+            print(f"  time:    {payload.get('timestamp', '')}")
+            print(f"  cursor:  {_fmt_cursor(payload.get('cursor'))}")
+            meta = payload.get("_meta")
+            if meta:
+                print(f"  _meta:   {json.dumps(meta, separators=(',', ':'))}")
+            data = payload.get("data")
+            if data:
+                print(json.dumps(data, indent=2))
             print()
             sys.stdout.flush()
             self.send_response(200)
