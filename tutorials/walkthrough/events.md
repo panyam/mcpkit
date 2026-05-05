@@ -5,7 +5,7 @@ How a server tells a client "this domain thing happened" — events as a first-c
 > **Kind:** root *(FAQ-style)* · **Prerequisites:** [bring-up](./bringup.md), [transport-mechanics](./transport-mechanics.md), [notifications](./notifications.md), [request-anatomy](./request-anatomy.md), [extension-mechanisms](./extension-mechanisms.md)
 > **Reachable from:** [README](./README.md), [extension-mechanisms](./extension-mechanisms.md) Next-to-read + Q5 case-study row, [transport-mechanics](./transport-mechanics.md) "events as first-class" branch
 > **Branches into:** [events SSRF deep dive](./events-ssrf.md) *(stub, leaf)*, [HMAC + Standard Webhooks deep dive](./events-hmac.md) *(stub, leaf)*, [subscription identity tuple proof](./events-identity.md) *(stub, leaf)*
-> **Spec:** [triggers-events WG design sketch — pinned at SHA `3314cd8d`](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/3314cd8dbaccccd45702b2bc206342d394bf0e08/README.md) (canonical version-of-record for this page; `?plain=1#LN` URLs in citations below land on exact lines) · **Code:** [`experimental/ext/events/events.go`](https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/events.go) · [`yield.go`](https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/yield.go) · [`webhook.go`](https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/webhook.go) · [`stream.go`](https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/stream.go) · [`control.go`](https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/control.go) · [`identity.go`](https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/identity.go) · [`headers.go`](https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/headers.go)
+> **Spec:** [triggers-events WG design sketch][spec-base] (canonical reference — branch `pja/design-sketch` of `experimental-ext-triggers-events`; citations below resolve to section anchors via reference-style links) · **Code:** [`experimental/ext/events/events.go`](https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/events.go) · [`yield.go`](https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/yield.go) · [`webhook.go`](https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/webhook.go) · [`stream.go`](https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/stream.go) · [`control.go`](https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/control.go) · [`identity.go`](https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/identity.go) · [`headers.go`](https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/headers.go)
 
 ## Prerequisites
 
@@ -22,7 +22,9 @@ How a server tells a client "this domain thing happened" — events as a first-c
 We are NOT re-explaining what `experimental.<name>` means, how the SEP process works, or why extensions get their own `go.mod`. That all lives in extension-mechanisms.md. This page assumes you know the vocabulary; it shows the worked example.
 
 > [!NOTE]
-> **Spec is a living draft.** The triggers-events WG iterates on the design sketch in the open. **All spec citations on this page link to SHA [`3314cd8d`](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/3314cd8dbaccccd45702b2bc206342d394bf0e08/README.md)** — the version-of-record for what mcpkit's `experimental/ext/events` was built against. Line numbers are anchored to that SHA; later revisions may have moved the lines.
+> **Spec is a living draft.** The triggers-events WG iterates on the [design sketch][spec-base] in the open. Citations on this page link to **section anchors** in the spec — `#subscription-identity`, `#webhook-security`, etc. — which are auto-generated from heading text and stable across revisions. Earlier drafts of this page used line numbers (`#L363`); we moved off them because they rotted every time the spec was edited. Section anchors only break if a heading is renamed.
+>
+> All spec citation URLs are defined as reference-style links at the bottom of this file. To repoint at a different branch or repo, find-replace the URL prefix in that block once.
 
 ## Q1 — How does events dial the four extension knobs?
 
@@ -74,7 +76,7 @@ The picking rule:
 
 ## Q3 — What identifies a subscription?
 
-Per [spec §"Subscription Identity" → "Key composition" (L363)](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/3314cd8dbaccccd45702b2bc206342d394bf0e08/README.md?plain=1#L363), a webhook subscription is identified by the **canonical tuple**:
+Per [spec §"Subscription Identity"][spec-subscription-identity], a webhook subscription is identified by the **canonical tuple**:
 
 ```
 (principal, delivery.url, name, params)
@@ -212,7 +214,7 @@ Accept: application/json, text/event-stream
 }}
 ```
 
-**Step 2 — server upgrades to SSE and emits the confirmation frame** (`notifications/events/active`, [spec §"Push-Based Delivery" → "Request: events/stream" (L240)](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/3314cd8dbaccccd45702b2bc206342d394bf0e08/README.md?plain=1#L240)). `requestId: 42` echoes the originating request id so a stdio client can demux when push and other traffic interleave on the same pipe; `cursor` resolves `null` → `source.Latest()`:
+**Step 2 — server upgrades to SSE and emits the confirmation frame** (`notifications/events/active`, [spec §"Request: events/stream"][spec-request-eventsstream]). `requestId: 42` echoes the originating request id so a stdio client can demux when push and other traffic interleave on the same pipe; `cursor` resolves `null` → `source.Latest()`:
 
 ```http
 HTTP/1.1 200 OK                                      ← still HTTP request #N
@@ -225,7 +227,7 @@ data: {"jsonrpc":"2.0","method":"notifications/events/active","params":{
 }}
 ```
 
-**Step 3 — events arrive.** Each `yield()` in the source becomes one SSE event carrying `notifications/events/event` ([spec L243–271](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/3314cd8dbaccccd45702b2bc206342d394bf0e08/README.md?plain=1#L243-L271)):
+**Step 3 — events arrive.** Each `yield()` in the source becomes one SSE event carrying `notifications/events/event` ([spec §"Event Delivery"][spec-event-delivery]):
 
 ```http
 id: 2
@@ -244,7 +246,7 @@ data: {"jsonrpc":"2.0","method":"notifications/events/event","params":{
 }}
 ```
 
-**Step 4 — heartbeat during quiet periods** (`notifications/events/heartbeat`, [spec L294](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/3314cd8dbaccccd45702b2bc206342d394bf0e08/README.md?plain=1#L294), default every 30s; `Config.StreamHeartbeatInterval` overrides). Cursor carries the source's *current* head so the client's persisted cursor advances even with no event traffic — useful for clients that want to see the watermark move:
+**Step 4 — heartbeat during quiet periods** (`notifications/events/heartbeat`, [spec §"Lifecycle"][spec-lifecycle], default every 30s; `Config.StreamHeartbeatInterval` overrides). Cursor carries the source's *current* head so the client's persisted cursor advances even with no event traffic — useful for clients that want to see the watermark move:
 
 ```http
 id: 4
@@ -253,7 +255,7 @@ data: {"jsonrpc":"2.0","method":"notifications/events/heartbeat","params":{
 }}
 ```
 
-**Step 5 — close.** When the client disconnects (or `notifications/cancelled` arrives over stdio), the handler returns the typed final frame (`StreamEventsResult{Meta: {}}`, [spec L293](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/3314cd8dbaccccd45702b2bc206342d394bf0e08/README.md?plain=1#L293)):
+**Step 5 — close.** When the client disconnects (or `notifications/cancelled` arrives over stdio), the handler returns the typed final frame (`StreamEventsResult{Meta: {}}`, [spec §"Lifecycle"][spec-lifecycle]):
 
 ```http
 id: 5
@@ -267,7 +269,7 @@ Stream closes. HTTP request #N is now complete.
 - **Five distinct notification methods, one stream.** active (open), event (each delivery), heartbeat (idle), error (transient — Q8), terminated (terminal — Q8). Plus the typed result frame on close. The wire shape in `stream.go` `registerStream` is exactly this select loop: `evCh / ticker.C / ctx.Done`.
 - **`requestId` echo on every notification.** The notifications carry the originating events/stream request id in their params. On stdio (one pipe, multiplexed traffic) this is how a client demuxes events for *this* stream from notifications for some other in-flight call. On streamable HTTP, the SSE upgrade scopes the notifications to the POST already, but the field stays for stdio symmetry — same wire shape both transports.
 - **Cursor flows through the event payload.** Unlike `notifications/progress` where the pairing key is `progressToken` in `_meta`, events carry `cursor` as a top-level field on the notification params. Persist it client-side; pass it back on reconnect to replay missed events (cursored sources only).
-- **`Truncated` is a back-pressure signal.** If `yield()` finds a subscriber's channel full, it drops the event for that subscriber and sets `pendingTruncated`. The next successful send carries `truncated:true` on a fresh `notifications/events/active` frame ([spec L285](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/3314cd8dbaccccd45702b2bc206342d394bf0e08/README.md?plain=1#L285)) before the resumed event — the client knows it missed events and can re-fetch authoritative state if it cares. Riding the marker on the next event (rather than a separate frame) keeps channel order trivially correct under any buffer size; see `yield.go` `SubscriberEvent` discriminator commentary.
+- **`Truncated` is a back-pressure signal.** If `yield()` finds a subscriber's channel full, it drops the event for that subscriber and sets `pendingTruncated`. The next successful send carries `truncated:true` on a fresh `notifications/events/active` frame ([spec §"Event Delivery"][spec-event-delivery]) before the resumed event — the client knows it missed events and can re-fetch authoritative state if it cares. Riding the marker on the next event (rather than a separate frame) keeps channel order trivially correct under any buffer size; see `yield.go` `SubscriberEvent` discriminator commentary.
 
 ## Q6 — Subscription routing: when `yield()` fires, who gets the event?
 
@@ -301,7 +303,7 @@ A request that fails any check never reaches yield-time fan-out.
 
 `yield(data)` runs in the source author's goroutine. mcpkit's [`YieldingSource`](https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/yield.go) does, in order:
 
-1. **Match by source name.** Only subscriptions registered against *this* source receive the event. The spec calls this *per-stream isolation* ([spec L271](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/3314cd8dbaccccd45702b2bc206342d394bf0e08/README.md?plain=1#L271)): yields on source A surface only on streams subscribed to A, never on streams subscribed to B.
+1. **Match by source name.** Only subscriptions registered against *this* source receive the event. The spec calls this *per-stream isolation* ([spec §"Event Delivery"][spec-event-delivery]): yields on source A surface only on streams subscribed to A, never on streams subscribed to B.
 2. **Broadcast within the source.** *Every* matching subscription receives the event. mcpkit's default fan-out does **not** filter by `params` — even though `params` is part of subscription identity (Q3), it's a routing *key* (different params = different subscription) but **not** a built-in routing *filter* at emit time.
 3. **Dispatch per delivery mode** (a single yield can hit all three):
    - **Push** subscriptions → SSE event on the live `events/stream` channel.
@@ -342,7 +344,7 @@ Per the [extension-mechanisms Q1](./extension-mechanisms.md#q1--what-counts-as-a
 
 The subscribe call (Q3) registers `(canonicalKey, derivedID, url, secret, ttl)` in `WebhookRegistry`. After that, every `yield()` in the source fans out to `Deliver(event)` which fires one `deliver(target)` goroutine per non-expired non-suspended target.
 
-**The signed POST** (Standard Webhooks scheme, [spec §"Webhook Event Delivery" (L390 + L431)](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/3314cd8dbaccccd45702b2bc206342d394bf0e08/README.md?plain=1#L390), default `WithWebhookHeaderMode(StandardWebhooks)`):
+**The signed POST** (Standard Webhooks scheme, [spec §"Webhook Event Delivery"][spec-webhook-event-delivery], default `WithWebhookHeaderMode(StandardWebhooks)`):
 
 ```http
 POST /recv HTTP/1.1                                  ← server → callback URL
@@ -357,7 +359,7 @@ X-MCP-Subscription-Id: sub_xR9vK...                  ← MCP-specific; lets rece
  "data":{"severity":"P1","service":"checkout","message":"5xx spike"},"cursor":"138"}
 ```
 
-Receiver verifies signature → looks up secret by `X-MCP-Subscription-Id` → checks `webhook-timestamp` is not stale (>5 min old per [spec L431](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/3314cd8dbaccccd45702b2bc206342d394bf0e08/README.md?plain=1#L431)) → dedups on `webhook-id` → processes.
+Receiver verifies signature → looks up secret by `X-MCP-Subscription-Id` → checks `webhook-timestamp` is not stale (>5 min old per [spec §"Webhook Event Delivery"][spec-webhook-event-delivery]) → dedups on `webhook-id` → processes.
 
 ### The hardened delivery loop
 
@@ -365,12 +367,12 @@ Receiver verifies signature → looks up secret by `X-MCP-Subscription-Id` → c
 
 | Guard | What | Why | Code |
 |-------|------|-----|------|
-| **SSRF — dial-time** | `net.Dialer.Control` callback rejects loopback, RFC1918 private, link-local (incl. AWS metadata), IPv6 ULA, multicast, broadcast, IPv4-mapped forms of all of the above | DNS rebinding: a hostname resolved at subscribe-time can resolve elsewhere at delivery-time. Dial-time check is TOCTOU-safe; the address passed to `Control` is exactly the one `connect(2)` will use. Per [spec §"Webhook Security" → "SSRF prevention" (L464)](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/3314cd8dbaccccd45702b2bc206342d394bf0e08/README.md?plain=1#L464). | `webhook.go` `dialContext`, `isBlockedIP` |
+| **SSRF — dial-time** | `net.Dialer.Control` callback rejects loopback, RFC1918 private, link-local (incl. AWS metadata), IPv6 ULA, multicast, broadcast, IPv4-mapped forms of all of the above | DNS rebinding: a hostname resolved at subscribe-time can resolve elsewhere at delivery-time. Dial-time check is TOCTOU-safe; the address passed to `Control` is exactly the one `connect(2)` will use. Per [spec §"Webhook Security"][spec-webhook-security]. | `webhook.go` `dialContext`, `isBlockedIP` |
 | **No redirect-following** | `http.Client.CheckRedirect` returns `ErrUseLastResponse` | A receiver returning 3xx to an internal address would otherwise bypass the dial-time guard via Go's redirect chain. Treat 3xx as terminal `http_3xx_redirect`. | `NewWebhookRegistry` |
-| **Body cap** | 256 KiB default (`WithWebhookMaxBodyBytes`); REJECT mode, not TRUNCATE | Truncation would corrupt the HMAC signature and silently drop event content. Retrying won't shrink the body — terminal for the event. Per [spec L487](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/3314cd8dbaccccd45702b2bc206342d394bf0e08/README.md?plain=1#L487). | `Deliver()` `len(body) > r.maxBodyBytes` |
+| **Body cap** | 256 KiB default (`WithWebhookMaxBodyBytes`); REJECT mode, not TRUNCATE | Truncation would corrupt the HMAC signature and silently drop event content. Retrying won't shrink the body — terminal for the event. Per [spec §"Webhook Security"][spec-webhook-security]. | `Deliver()` `len(body) > r.maxBodyBytes` |
 | **413 non-retryable** | `StatusRequestEntityTooLarge` short-circuits the retry loop | Receiver rejects our payload size; retrying won't change that. | `deliver()` switch |
 | **5xx retry, exponential backoff** | 4 attempts (1 initial + 3 retries), 500ms → 1s → 2s → 5s cap | Standard webhook convention; matches Stripe / GitHub / Standard Webhooks spec. | `deliver()` `for attempt := 0; ...` |
-| **Suspend after N consecutive failures** | Default 5 failures within a 10-minute sliding window flips `Status.Active = false`; suspended targets are excluded from `Targets()` until refresh | A dead receiver shouldn't keep getting retry traffic forever. Per [spec L413, L460](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/3314cd8dbaccccd45702b2bc206342d394bf0e08/README.md?plain=1#L413) ("after repeated failures the server SHOULD set active: false"). | `recordDeliveryFailure`, `Targets()` |
+| **Suspend after N consecutive failures** | Default 5 failures within a 10-minute sliding window flips `Status.Active = false`; suspended targets are excluded from `Targets()` until refresh | A dead receiver shouldn't keep getting retry traffic forever. Per [spec §"Webhook Delivery Status"][spec-webhook-delivery-status] ("after repeated failures the server SHOULD set active: false"). | `recordDeliveryFailure`, `Targets()` |
 | **Auto-PostTerminated on suspend transition** | On the `true → false` transition, automatically POST a `{type:terminated}` control envelope (Q8 below) so the receiver learns the subscription died courtesy-style | Receiver may otherwise discover via a polled refresh — auto-post is a hint that the next refresh is needed. | `recordDeliveryFailure` ζ-7.3 block |
 
 > [!IMPORTANT]
@@ -384,7 +386,7 @@ Receiver verifies signature → looks up secret by `X-MCP-Subscription-Id` → c
 
 ### Control envelopes — non-event webhook bodies
 
-Two cases break the "every POST body is an event" pattern ([spec §"Non-event webhook bodies" (L415–423)](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/3314cd8dbaccccd45702b2bc206342d394bf0e08/README.md?plain=1#L415-L423)):
+Two cases break the "every POST body is an event" pattern ([spec §"Non-event webhook bodies"][spec-non-event-webhook-bodies]):
 
 | Envelope | Purpose | When emitted | webhook-id format | Removes registry entry? |
 |----------|---------|--------------|-------------------|--------------------------|
@@ -395,7 +397,7 @@ Same Standard Webhooks signature scheme as event deliveries; same `X-MCP-Subscri
 
 ### `deliveryStatus` on subscribe refresh
 
-Per [spec §"Webhook Delivery Status" (L425–460)](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/3314cd8dbaccccd45702b2bc206342d394bf0e08/README.md?plain=1#L425-L460), `events/subscribe` refresh responses carry a `deliveryStatus` block when the target has prior delivery attempts:
+Per [spec §"Webhook Delivery Status"][spec-webhook-delivery-status], `events/subscribe` refresh responses carry a `deliveryStatus` block when the target has prior delivery attempts:
 
 ```jsonc
 {
@@ -424,8 +426,8 @@ Domain sources fail. The upstream Discord gateway disconnects, the database driv
 |--------|------------------|--------------------------|---------------------|----------------------|--------------------|
 | **Event** | `yield(data)` | `Event` populated | `notifications/events/event` (Q5 step 3) | Standard Webhooks POST (Q7) | yes |
 | **Truncated** (back-pressure) | implicit — set when `yield` drops on a full subscriber buffer | `Truncated:true` riding next successful send | fresh `notifications/events/active{truncated:true, cursor:source.Latest()}` precedes the event | n/a (webhook delivery is independent — no per-subscriber back-pressure) | yes |
-| **Transient error** | `source.YieldError(EventDeliveryError{Code, Message})` | `Error` populated | `notifications/events/error{requestId, error{code,message}}` ([spec L255, L261](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/3314cd8dbaccccd45702b2bc206342d394bf0e08/README.md?plain=1#L255)) | n/a (errors are upstream-side, not delivery-side) | yes |
-| **Terminal** | `source.YieldTerminated(EventDeliveryError{Code, Message})` | `Terminated` populated; subscriber chan closed | `notifications/events/terminated{requestId, error{code,message}}` ([spec L783–795](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/3314cd8dbaccccd45702b2bc206342d394bf0e08/README.md?plain=1#L783-L795)) → handler returns `StreamEventsResult{Meta:{}}` | auto-emitted `{type:terminated}` control envelope to every webhook target on this source — see `postTerminatedSilent` | **no** |
+| **Transient error** | `source.YieldError(EventDeliveryError{Code, Message})` | `Error` populated | `notifications/events/error{requestId, error{code,message}}` ([spec §"Event Delivery"][spec-event-delivery]) | n/a (errors are upstream-side, not delivery-side) | yes |
+| **Terminal** | `source.YieldTerminated(EventDeliveryError{Code, Message})` | `Terminated` populated; subscriber chan closed | `notifications/events/terminated{requestId, error{code,message}}` ([spec §"Lifecycle"][spec-lifecycle]) → handler returns `StreamEventsResult{Meta:{}}` | auto-emitted `{type:terminated}` control envelope to every webhook target on this source — see `postTerminatedSilent` | **no** |
 
 `YieldError` is repeatable; `YieldTerminated` is **one-shot** — subsequent yields on the same source are silent no-ops, and `Poll()` returns empty. The terminated source is dead; recovery requires re-subscribing against a fresh source (typically after the host restarts the upstream connection).
 
@@ -471,3 +473,24 @@ After reading this page, downstream pages can assume:
 - **[subscription identity tuple proof](./events-identity.md)** *(stub, leaf)* — formal walk-through of why the four-tuple is necessary and sufficient: cross-tenant isolation, secret rotation, principal-mapping edge cases.
 - **[Tasks v1/v2/hybrid](./tasks.md)** *(planned, root)* — another method-namespace extension on the same maturity curve; useful contrast for what graduation from `experimental/ext/` to `ext/` looks like.
 - **[Reverse-call mechanics](./reverse-call.md)** *(planned, root)* — server-originated requests against a handler context; relevant if you ever want to push back at the model from inside an event-driven flow.
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+     Spec citation links — all anchors against:
+       https://github.com/modelcontextprotocol/experimental-ext-triggers-events
+       branch: pja/design-sketch
+       file:   docs/design-sketch-proposal.md
+     If the spec moves, find-replace the URL prefix in every [spec-*] line below.
+     Anchors are GitHub auto-generated from heading text in the spec — stable
+     as long as heading text doesn't change. Far less volatile than the line
+     numbers we used to cite.
+     ───────────────────────────────────────────────────────────────────────── -->
+
+[spec-base]:                     https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md
+[spec-subscription-identity]:    https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#subscription-identity
+[spec-request-eventsstream]:     https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#request-eventsstream
+[spec-event-delivery]:           https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#event-delivery
+[spec-lifecycle]:                https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#lifecycle
+[spec-webhook-event-delivery]:   https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#webhook-event-delivery
+[spec-webhook-delivery-status]:  https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#webhook-delivery-status
+[spec-non-event-webhook-bodies]: https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#non-event-webhook-bodies
+[spec-webhook-security]:         https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#webhook-security

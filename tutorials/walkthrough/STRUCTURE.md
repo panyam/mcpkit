@@ -103,6 +103,15 @@ Each page links to:
 
 Code paths in the page header AND inline in the body should be **clickable links** to the file on GitHub, e.g. `[`core/handler_context.go`](https://github.com/panyam/mcpkit/blob/main/core/handler_context.go)`. Don't include line numbers — they rot. Just the file. A reader who wants to see the code clicks once.
 
+### Spec citations
+
+Same idea for spec references: every citation should be a **clickable link to a stable anchor**. Two stability rules:
+
+- **Prefer section anchors over line anchors.** GitHub auto-generates anchors from heading text (`#### Subscription Identity` → `#subscription-identity`). Section anchors break only if the heading is renamed; line anchors break every time anything above them is edited.
+- **Use reference-style links** for the URL itself, defined once at the bottom of the page. The link text in the body says what's cited (e.g. `[spec §"Subscription Identity"][spec-subscription-identity]`); the label resolves to the URL in a single block at the bottom. To repoint at a different spec branch or repo, find-replace the URL prefix in that block once.
+
+[events.md](./events.md) is the worked example — eight section labels, one URL prefix, all in a comment-tagged block at the bottom of the file.
+
 ### Lists vs. prose
 
 When enumerating a set of items ("X are: A, B, C, D"), prefer a **bulleted or numbered list** over an inline comma-separated paragraph. Lists scan faster, let each item carry its own gloss, and don't visually merge with the surrounding prose. Reserve inline enumerations for genuinely tight cases where each item is a single short noun and no commentary is needed.
