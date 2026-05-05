@@ -17,7 +17,7 @@ How a server tells a client "this domain thing happened" — events as a first-c
 
 ## Context
 
-[Extension mechanisms](./extension-mechanisms.md) classified events at one row of its case-study table: "experimental, target-shape, `experimental.events` capability." This page opens that row up. The interesting questions are: how does events use the four extension knobs (Q1)? what does a client *do* with events — three delivery modes, pick by use case (Q2)? what stays stable across modes — subscription identity, source abstraction (Q3-Q4)? and what do the two delivery loops actually look like end-to-end (Q5-Q6)? Plus how upstream failures bubble out as first-class signals (Q7).
+[Extension mechanisms](./extension-mechanisms.md) classified events at one row of its case-study table: "experimental, target-shape, `experimental.events` capability." This page opens that row up. The interesting questions are: how does events use the four extension knobs (Q1)? what does a client *do* with events — three delivery modes, pick by use case (Q2)? what stays stable across modes — subscription identity, source abstraction (Q3-Q4)? what does push delivery look like on the wire (Q5)? when an event is yielded, *who* gets it (Q6)? what does webhook delivery look like (Q7)? and how do upstream failures bubble out as first-class signals (Q8)?
 
 We are NOT re-explaining what `experimental.<name>` means, how the SEP process works, or why extensions get their own `go.mod`. That all lives in extension-mechanisms.md. This page assumes you know the vocabulary; it shows the worked example.
 
@@ -32,7 +32,7 @@ Per [extension-mechanisms Q1](./extension-mechanisms.md#q1--what-counts-as-an-ex
 |------|------------------|------|
 | **Method namespace** | `events/list`, `events/poll`, `events/stream`, `events/subscribe`, `events/unsubscribe` — five methods under the `events/` prefix | `experimental/ext/events/events.go` (registerList, registerPoll, registerSubscribe, registerUnsubscribe), `stream.go` (registerStream) |
 | **Capability flag** | `experimental.events` declared by the server. Per the experimental-namespace contract from [extension-mechanisms Q2](./extension-mechanisms.md#q2--how-does-a-new-capability-get-into-the-protocol), receivers MUST ignore unrecognized experimentals; clients that do recognize it can call the methods above. | server's `initialize` response `capabilities.experimental` |
-| **Notification methods** | Five push frames (`notifications/events/active`, `…/event`, `…/heartbeat`, `…/error`, `…/terminated`) ride the events/stream POST per Q5 below. Two webhook control envelopes (`type:gap`, `type:terminated`) ride outbound HTTP per Q6. | `stream.go` (notification frames), `control.go` (control envelopes) |
+| **Notification methods** | Five push frames (`notifications/events/active`, `…/event`, `…/heartbeat`, `…/error`, `…/terminated`) ride the events/stream POST per Q5 below. Two webhook control envelopes (`type:gap`, `type:terminated`) ride outbound HTTP per Q7. | `stream.go` (notification frames), `control.go` (control envelopes) |
 | **`_meta` field** | Optional `_meta` on every `Event` envelope (per-occurrence metadata) and on every `EventDef` (per-event-type metadata). Same convention as `_meta` on Tool / Resource / Prompt in base MCP — opaque, app-defined. | `events.go` `Event.Meta`, `EventDef.Meta` (spec follow-on commit d4faef9, 2026-05-01) |
 
 ### Events versus notifications
@@ -67,7 +67,7 @@ The picking rule:
 - **Client cannot stay online but has a public callback URL** (third-party apps, automations, integrations whose process restarts often) → webhook. The server delivers when there's something to deliver; the client just needs to handle the POST.
 
 > [!IMPORTANT]
-> **Webhook reachability flips the topology.** Push and poll work over the same MCP transport the session was bring-up'd on — the server only ever responds to client-initiated requests. Webhook is the one mode where the *server* dials *out* to a URL the client supplies. That's why webhook is the only mode that ships with an SSRF guard (Q6) and an authentication requirement on subscribe (Q3): the URL is server-controllable input, and a misconfigured server is a confused-deputy waiting to happen.
+> **Webhook reachability flips the topology.** Push and poll work over the same MCP transport the session was bring-up'd on — the server only ever responds to client-initiated requests. Webhook is the one mode where the *server* dials *out* to a URL the client supplies. That's why webhook is the only mode that ships with an SSRF guard (Q7) and an authentication requirement on subscribe (Q3): the URL is server-controllable input, and a misconfigured server is a confused-deputy waiting to happen.
 
 > [!NOTE]
 > The three modes are not mutually exclusive per event source. The same `EventSource` can serve poll, push, and webhook simultaneously — `EventDef.Delivery` advertises which subset is offered. The library wires fanout once: a single `yield(data)` call inside the source goroutine reaches every push subscriber AND every webhook target AND becomes available to the next `events/poll`.
@@ -264,12 +264,79 @@ Stream closes. HTTP request #N is now complete.
 
 **Things to notice:**
 
-- **Five distinct notification methods, one stream.** active (open), event (each delivery), heartbeat (idle), error (transient — Q7), terminated (terminal — Q7). Plus the typed result frame on close. The wire shape in `stream.go` `registerStream` is exactly this select loop: `evCh / ticker.C / ctx.Done`.
+- **Five distinct notification methods, one stream.** active (open), event (each delivery), heartbeat (idle), error (transient — Q8), terminated (terminal — Q8). Plus the typed result frame on close. The wire shape in `stream.go` `registerStream` is exactly this select loop: `evCh / ticker.C / ctx.Done`.
 - **`requestId` echo on every notification.** The notifications carry the originating events/stream request id in their params. On stdio (one pipe, multiplexed traffic) this is how a client demuxes events for *this* stream from notifications for some other in-flight call. On streamable HTTP, the SSE upgrade scopes the notifications to the POST already, but the field stays for stdio symmetry — same wire shape both transports.
 - **Cursor flows through the event payload.** Unlike `notifications/progress` where the pairing key is `progressToken` in `_meta`, events carry `cursor` as a top-level field on the notification params. Persist it client-side; pass it back on reconnect to replay missed events (cursored sources only).
 - **`Truncated` is a back-pressure signal.** If `yield()` finds a subscriber's channel full, it drops the event for that subscriber and sets `pendingTruncated`. The next successful send carries `truncated:true` on a fresh `notifications/events/active` frame ([spec L285](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/3314cd8dbaccccd45702b2bc206342d394bf0e08/README.md?plain=1#L285)) before the resumed event — the client knows it missed events and can re-fetch authoritative state if it cares. Riding the marker on the next event (rather than a separate frame) keeps channel order trivially correct under any buffer size; see `yield.go` `SubscriberEvent` discriminator commentary.
 
-## Q6 — Webhook delivery walkthrough: HMAC, retries, suspend, control envelopes
+## Q6 — Subscription routing: when `yield()` fires, who gets the event?
+
+Q5 walked one push subscriber receiving events. The webhook walkthrough below walks one webhook target receiving events. In real systems, a source has *many* subscribers across *many* delivery modes, and the obvious questions are:
+
+- When the source author calls `yield(data)`, who exactly does that event reach?
+- Can two clients subscribed to the same source name see different events?
+- How are events scoped to a tenant / room / topic?
+
+Routing happens at three layers, with one rule per layer.
+
+| Layer | When it fires | Decided by | Rule |
+|---|---|---|---|
+| **Authorization** | subscription time (`events/subscribe`) | server's auth check | rejected requests never reach fan-out |
+| **Fan-out matching** | yield time (each `yield()`) | source-name match, default broadcast within source | every active subscription registered against this source name receives the event |
+| **Per-target liveness** | delivery time | server's transport state | matched subscriptions that aren't deliverable (closed SSE, suspended webhook) are skipped silently |
+
+### Layer 1 — Authorization (subscription time)
+
+When `events/subscribe` arrives:
+
+1. Server checks the principal is allowed to subscribe (auth — `ext/auth/`'s fine-grained-auth-per-source if configured, otherwise plain `experimental.events` capability).
+2. Server checks `name` is advertised on `events/list` (unknown source → reject).
+3. Server validates `params` against `EventDef.ParamsSchema` if one is defined.
+4. Server derives the subscription id from the canonical tuple `(principal, delivery.url, name, params)` (see [Q3](#q3--what-identifies-a-subscription)).
+5. Subscription is registered; identity returned.
+
+A request that fails any check never reaches yield-time fan-out.
+
+### Layer 2 — Fan-out (yield time)
+
+`yield(data)` runs in the source author's goroutine. mcpkit's [`YieldingSource`](https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/yield.go) does, in order:
+
+1. **Match by source name.** Only subscriptions registered against *this* source receive the event. The spec calls this *per-stream isolation* ([spec L271](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/3314cd8dbaccccd45702b2bc206342d394bf0e08/README.md?plain=1#L271)): yields on source A surface only on streams subscribed to A, never on streams subscribed to B.
+2. **Broadcast within the source.** *Every* matching subscription receives the event. mcpkit's default fan-out does **not** filter by `params` — even though `params` is part of subscription identity (Q3), it's a routing *key* (different params = different subscription) but **not** a built-in routing *filter* at emit time.
+3. **Dispatch per delivery mode** (a single yield can hit all three):
+   - **Push** subscriptions → SSE event on the live `events/stream` channel.
+   - **Webhook** subscriptions → enqueued HTTP POST to the registered `delivery.url`.
+   - **Poll** — no fan-out at yield; events go into the cursored ring buffer, read on the next `events/poll`.
+4. **Mark `Truncated`** if a push subscriber's channel is full (Q5 back-pressure signal).
+
+> [!IMPORTANT]
+> **mcpkit's default fan-out is broadcast, not filtered.** If two clients subscribe to `chat.message` with `room_id: "abc"` and `room_id: "xyz"` respectively, *both* receive every yield by default — `params` makes them distinct subscriptions but doesn't restrict delivery. To get per-subscriber filtering you have two clean options:
+>
+> 1. **Many narrow sources** — register `chat.message.abc` and `chat.message.xyz` as separate sources. Source-name match does the routing. Simplest when the topic space is finite.
+> 2. **Manual filtering at the source** — use `TypedSource` (caller-owned storage) and call `events.Emit(srv, e)` / `events.EmitToWebhooks(wh, e)` selectively per event. The author owns the routing logic.
+>
+> A third option ("filter inside `YieldingSource` based on subscriber params") is **not** a built-in API in mcpkit today; if you need it, build it on top of `TypedSource` or use multiple sources.
+
+### Layer 3 — Per-target liveness (delivery time)
+
+A "matched" subscription doesn't guarantee delivery:
+
+- **Push** subscriptions are alive only while the client's `events/stream` SSE is open. If the client disconnected, push is a no-op until they reconnect (with `cursor` for replay if cursored — Q4).
+- **Webhook** subscriptions can be **suspended** after N consecutive failures (`Status.Active = false`, default 5 failures in a 10-minute window). Suspended targets are excluded from `Targets()` and never receive new events until the subscription is refreshed (Q7).
+- **Poll** has no liveness — events accumulate in the buffer and are read on the next call.
+
+### Multi-tenant isolation is structural
+
+The canonical tuple includes `principal`. Same `name` + same `delivery.url` + same `params` from a *different* principal is a *different* subscription. Routing never crosses principals — a subscription's events go only to that principal's delivery target. There's no cross-tenant pushing built into the protocol; isolation falls out of the identity model in [Q3](#q3--what-identifies-a-subscription).
+
+### Two-line decision tree
+
+A simpler way to remember it:
+
+- **"Will subscriber S receive event E?"** — yes if S's source name matches E's source AND S's delivery target is live. That's it.
+- **"Can I filter by topic / room / tenant?"** — not via `params` alone; either split into more sources, or move to `TypedSource` and decide at emit.
+
+## Q7 — Webhook delivery walkthrough: HMAC, retries, suspend, control envelopes
 
 Per the [extension-mechanisms Q1](./extension-mechanisms.md#q1--what-counts-as-an-extension-in-mcp) styles table, webhook delivery is *not* a method-namespace extension at the wire layer — `events/subscribe` is, but the deliveries themselves are outbound HTTP-with-HMAC. That makes webhook-the-delivery-loop a closer analog of the **bring-up extension** style (auth's WWW-Authenticate / OAuth dance): it extends a layer below MCP, not the JSON-RPC message exchange.
 
@@ -304,7 +371,7 @@ Receiver verifies signature → looks up secret by `X-MCP-Subscription-Id` → c
 | **413 non-retryable** | `StatusRequestEntityTooLarge` short-circuits the retry loop | Receiver rejects our payload size; retrying won't change that. | `deliver()` switch |
 | **5xx retry, exponential backoff** | 4 attempts (1 initial + 3 retries), 500ms → 1s → 2s → 5s cap | Standard webhook convention; matches Stripe / GitHub / Standard Webhooks spec. | `deliver()` `for attempt := 0; ...` |
 | **Suspend after N consecutive failures** | Default 5 failures within a 10-minute sliding window flips `Status.Active = false`; suspended targets are excluded from `Targets()` until refresh | A dead receiver shouldn't keep getting retry traffic forever. Per [spec L413, L460](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/3314cd8dbaccccd45702b2bc206342d394bf0e08/README.md?plain=1#L413) ("after repeated failures the server SHOULD set active: false"). | `recordDeliveryFailure`, `Targets()` |
-| **Auto-PostTerminated on suspend transition** | On the `true → false` transition, automatically POST a `{type:terminated}` control envelope (Q7 below) so the receiver learns the subscription died courtesy-style | Receiver may otherwise discover via a polled refresh — auto-post is a hint that the next refresh is needed. | `recordDeliveryFailure` ζ-7.3 block |
+| **Auto-PostTerminated on suspend transition** | On the `true → false` transition, automatically POST a `{type:terminated}` control envelope (Q8 below) so the receiver learns the subscription died courtesy-style | Receiver may otherwise discover via a polled refresh — auto-post is a hint that the next refresh is needed. | `recordDeliveryFailure` ζ-7.3 block |
 
 > [!IMPORTANT]
 > **The dial-time SSRF guard runs on every connect, including retries and redirect-target dials.** A subscribe-time URL check (`ValidateWebhookURL`) catches obvious mistakes — bad scheme, literal `localhost` — but is not the load-bearing protection. Only the dialer's `Control` callback is TOCTOU-safe under DNS rebinding. The `WithWebhookAllowPrivateNetworks(true)` option bypasses both for demos against local httptest servers; **never enable it in production**.
@@ -349,13 +416,13 @@ Per [spec §"Webhook Delivery Status" (L425–460)](https://github.com/modelcont
 
 Successful refresh of a suspended subscription (`Active=false` → refresh) reactivates it: clears `failureCount`, resets `LastError` and `FailedSince`, flips `Active=true`. Pending events do **not** auto-replay (would re-flood a recovering receiver); the client signals replay intent by passing the persisted cursor on the refresh.
 
-## Q7 — Source health signals
+## Q8 — Source health signals
 
 Domain sources fail. The upstream Discord gateway disconnects, the database driver stops returning rows, an auth token expires. The library surfaces these as **first-class signals on the subscriber channel**, with explicit transient-vs-terminal semantics. (`yield.go` `SubscriberEvent` discriminator.)
 
 | Signal | Source-side call | Subscriber channel field | Stream wire mapping | Webhook wire mapping | Stream stays open? |
 |--------|------------------|--------------------------|---------------------|----------------------|--------------------|
-| **Event** | `yield(data)` | `Event` populated | `notifications/events/event` (Q5 step 3) | Standard Webhooks POST (Q6) | yes |
+| **Event** | `yield(data)` | `Event` populated | `notifications/events/event` (Q5 step 3) | Standard Webhooks POST (Q7) | yes |
 | **Truncated** (back-pressure) | implicit — set when `yield` drops on a full subscriber buffer | `Truncated:true` riding next successful send | fresh `notifications/events/active{truncated:true, cursor:source.Latest()}` precedes the event | n/a (webhook delivery is independent — no per-subscriber back-pressure) | yes |
 | **Transient error** | `source.YieldError(EventDeliveryError{Code, Message})` | `Error` populated | `notifications/events/error{requestId, error{code,message}}` ([spec L255, L261](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/3314cd8dbaccccd45702b2bc206342d394bf0e08/README.md?plain=1#L255)) | n/a (errors are upstream-side, not delivery-side) | yes |
 | **Terminal** | `source.YieldTerminated(EventDeliveryError{Code, Message})` | `Terminated` populated; subscriber chan closed | `notifications/events/terminated{requestId, error{code,message}}` ([spec L783–795](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/3314cd8dbaccccd45702b2bc206342d394bf0e08/README.md?plain=1#L783-L795)) → handler returns `StreamEventsResult{Meta:{}}` | auto-emitted `{type:terminated}` control envelope to every webhook target on this source — see `postTerminatedSilent` | **no** |
