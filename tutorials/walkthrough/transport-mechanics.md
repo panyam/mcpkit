@@ -252,7 +252,7 @@ Server returns `Content-Type: text/event-stream` and keeps it open. Each SSE eve
 > **Branch →** [SSE resumption](./sse-resumption.md) *(planned)*. The `Last-Event-ID` mechanic, what the server has to remember for replay, and how mcpkit's event store handles in-flight responses across reconnects.
 
 > [!NOTE]
-> **Branch →** [`experimental/ext/events/`](../../experimental/ext/events/README.md) — mcpkit's MCP Events protocol exploration. Treats events as a first-class concept beyond raw SSE event-id replay. Out-of-scope here; visit if you're tracking where the protocol is heading.
+> **Branch →** [events](./events.md) — mcpkit's MCP Events protocol exploration (code in `experimental/ext/events/`). Treats events as a first-class concept beyond raw SSE event-id replay. Out-of-scope here; visit if you're tracking where the protocol is heading.
 
 > [!NOTE]
 > So there are really **two SSE patterns** on streamable HTTP:
@@ -406,4 +406,4 @@ After reading this page, downstream pages can assume:
 - **[Per-request anatomy](./request-anatomy.md)** — uses the wire model and correlation tables from this page to walk the dispatch journey.
 - **[Reverse-call mechanics](./reverse-call.md)** *(planned)* — concretizes the parent-handler-context constraint with a real `tools/call → elicitation/create` example.
 - **[SSE resumption](./sse-resumption.md)** *(planned, leaf)* — `Last-Event-ID` replay, the server's event store, in-flight response recovery.
-- **[`experimental/ext/events/`](../../experimental/ext/events/README.md)** *(branch, target-shape)* — mcpkit's exploration of events as a first-class concept beyond raw SSE event-id replay.
+- **[Events](./events.md)** *(root)* — mcpkit's exploration of events as a first-class concept beyond raw SSE event-id replay. (Code: `experimental/ext/events/`.)
