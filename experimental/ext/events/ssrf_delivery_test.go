@@ -46,10 +46,9 @@ func ssrfTestRegistry(allowPrivate bool, captureLog *captureLog) *WebhookRegistr
 		opts = append(opts, WithWebhookAllowPrivateNetworks(true))
 	}
 	r := NewWebhookRegistry(opts...)
-	r.client = &http.Client{
-		Timeout:   2 * time.Second,
-		Transport: &http.Transport{DialContext: r.dialContextForTest()},
-	}
+	// Shorten the timeout so test failures are fast; preserve the
+	// SSRF Dialer.Control + CheckRedirect from NewWebhookRegistry.
+	r.client.Timeout = 2 * time.Second
 	if captureLog != nil {
 		captureLog.attach(r)
 	}
@@ -199,6 +198,49 @@ func TestDelivery_DialAllowsPublicIPs(t *testing.T) {
 // MakeEvent + the dial test helpers below reference the delivery-failure
 // log channel — confirm a failed dial classifies correctly.
 var _ = io.EOF // keep io import alive for potential future error checks
+
+// TestDelivery_DoesNotFollowRedirects verifies that the webhook
+// http.Client refuses to follow 3xx responses (ζ-2). Without this, a
+// receiver could 302 to an internal address (127.0.0.1, 10.x, etc.)
+// and bypass the dial-time SSRF guard via Go's default 10-redirect
+// follow behavior.
+//
+// Per spec §"Webhook Security" → "SSRF prevention" L464: redirects
+// MUST be explicitly disabled for outbound delivery POSTs.
+func TestDelivery_DoesNotFollowRedirects(t *testing.T) {
+	var hits, redirectHits atomic.Int32
+
+	// Final destination — should NEVER be hit if redirects are disabled.
+	finalSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		redirectHits.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer finalSrv.Close()
+
+	// Initial receiver — returns a 302 to finalSrv.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Location", finalSrv.URL)
+		w.WriteHeader(http.StatusFound) // 302
+	}))
+	defer srv.Close()
+
+	// Use the loopback escape so we can test the redirect specifically,
+	// not the SSRF dial guard.
+	r := ssrfTestRegistry(true, nil)
+	r.Register([]byte("k"), "sub_test", srv.URL, "whsec_secret", 0)
+	r.Deliver(MakeEvent("fake.event", "evt_1", "1", time.Now(),
+		map[string]string{"text": "hi"}))
+
+	// Wait long enough for the deliver loop to retry-and-fail (3xx
+	// classified as non-retryable per ζ-2 + retry semantics).
+	time.Sleep(300 * time.Millisecond)
+
+	assert.Equal(t, int32(1), hits.Load(),
+		"initial receiver should be POSTed exactly once — 3xx is non-retryable per ζ-2; got %d", hits.Load())
+	assert.Equal(t, int32(0), redirectHits.Load(),
+		"redirect target MUST NOT be followed; got %d follow-up POSTs", redirectHits.Load())
+}
 
 // errIsContextOrConn returns true if the error is the kind of network
 // failure we expect when a dial is allowed-by-SSRF but fails for other
