@@ -7,8 +7,8 @@ serve: ## Start the MCP server standalone (for MCPJam or other clients)
 kcl: ## Start Keycloak from repo root (convenience wrapper)
 	$(MAKE) -C ../.. upkcl
 
-readme: ## Regenerate README.md from demo definitions
-	go run . --readme > README.md
+readme: ## Regenerate WALKTHROUGH.md from demo definitions
+	go run . --doc md > WALKTHROUGH.md
 
 build: ## Build the example binary
 	go build -o fine-grained-auth-example .
