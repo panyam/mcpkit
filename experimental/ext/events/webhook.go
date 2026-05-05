@@ -544,10 +544,23 @@ func (r *WebhookRegistry) recordDeliveryFailure(canonicalKey []byte, bucket Deli
 	} else {
 		t.failureCount++
 	}
+	wasActive := t.Status.Active
 	if t.failureCount >= r.suspendThreshold {
 		t.Status.Active = false
 	}
 	r.targets[string(canonicalKey)] = t
+	// ζ-7.3: on the Active true→false transition, auto-Post a
+	// {type:terminated} envelope to the receiver as a courtesy
+	// notification. Uses postTerminatedSilent so the target stays
+	// in the registry (Active=false observable; reactivate via refresh).
+	// Snapshot the target struct before releasing the lock — the
+	// async deliverControl needs URL/Secret/ID outside the lock.
+	if wasActive && !t.Status.Active {
+		r.postTerminatedSilent(t, ControlError{
+			Code:    -32603,
+			Message: "subscription suspended after repeated delivery failures: " + string(bucket),
+		})
+	}
 }
 
 // DeliveryStatus returns a snapshot of the target's delivery health.
