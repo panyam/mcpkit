@@ -3,6 +3,11 @@
 # Sub-modules that get tagged alongside the root module
 SUB_MODS_TO_TAG := ext/auth ext/ui experimental/ext/protogen cmd/testclient tests/e2e tests/keycloak
 
+# Path to the upstream-portable conformance fork (panyam/mcpconformance).
+# tasks/mrtr scenarios live there now and run via vitest. Override via
+# `MCPCONFORMANCE_PATH=/elsewhere make testconf-tasks-v2`.
+MCPCONFORMANCE_PATH ?= $(HOME)/newstack/mcpconformance
+
 # =============================================================================
 # Build & test
 # =============================================================================
@@ -63,21 +68,31 @@ testconf-tasks: ## Run MCP Tasks v1 conformance (builds + starts server, runs te
 	SERVER_URL=http://localhost:18091/mcp npx tsx --test tasks/scenarios.test.ts); \
 	RC=$$?; kill $$PID 2>/dev/null; wait $$PID 2>/dev/null; exit $$RC
 
-testconf-tasks-v2: ## Run MCP Tasks v2 conformance (builds + starts server, runs tests, tears down)
-	@(cd examples/tasks-v2 && go build -o tasks-v2 .) && \
-	examples/tasks-v2/tasks-v2 --serve -addr :18092 & PID=$$!; \
-	sleep 1; \
-	(cd conformance && npm install --silent && \
-	SERVER_URL=http://localhost:18092/mcp npx tsx --test tasks-v2/scenarios.test.ts); \
-	RC=$$?; kill $$PID 2>/dev/null; wait $$PID 2>/dev/null; exit $$RC
+testconf-tasks-v2: ## Run SEP-2663 tasks conformance — fork-based scenarios + mcpkit-local stricter sentinel
+	@if [ ! -d "$(MCPCONFORMANCE_PATH)" ]; then \
+		echo "MCPCONFORMANCE_PATH=$(MCPCONFORMANCE_PATH) does not exist."; \
+		echo "Clone https://github.com/panyam/mcpconformance there or set MCPCONFORMANCE_PATH=<path-to-clone>."; \
+		exit 1; \
+	fi
+	@(cd examples/tasks-v2 && go build -o tasks-v2 .)
+	(cd $(MCPCONFORMANCE_PATH) && npm install --silent && \
+		TASKS_SERVER_URL=http://localhost:18092/mcp \
+		TASKS_SERVER_CMD="$(CURDIR)/examples/tasks-v2/tasks-v2 --serve --addr :18092" \
+		npx vitest run src/scenarios/server/tasks/all-scenarios.test.ts)
+	(cd conformance && npm install --silent && npx vitest run tasks-v2/)
 
-testconf-mrtr: ## Run MCP MRTR (SEP-2322) conformance (builds + starts server, runs tests, tears down)
-	@(cd examples/mrtr && go build -o mrtr-demo .) && \
-	examples/mrtr/mrtr-demo --serve -addr :18093 & PID=$$!; \
-	sleep 1; \
-	(cd conformance && npm install --silent && \
-	SERVER_URL=http://localhost:18093/mcp npx tsx --test mrtr/scenarios.test.ts); \
-	RC=$$?; kill $$PID 2>/dev/null; wait $$PID 2>/dev/null; exit $$RC
+testconf-mrtr: ## Run SEP-2322 MRTR conformance — fork-based scenarios + mcpkit-local stricter sentinel
+	@if [ ! -d "$(MCPCONFORMANCE_PATH)" ]; then \
+		echo "MCPCONFORMANCE_PATH=$(MCPCONFORMANCE_PATH) does not exist."; \
+		echo "Clone https://github.com/panyam/mcpconformance there or set MCPCONFORMANCE_PATH=<path-to-clone>."; \
+		exit 1; \
+	fi
+	@(cd examples/mrtr && go build -o mrtr-demo .)
+	(cd $(MCPCONFORMANCE_PATH) && npm install --silent && \
+		MRTR_SERVER_URL=http://localhost:18093/mcp \
+		MRTR_SERVER_CMD="$(CURDIR)/examples/mrtr/mrtr-demo --serve --addr :18093" \
+		npx vitest run src/scenarios/server/mrtr/all-scenarios.test.ts)
+	(cd conformance && npm install --silent && npx vitest run mrtr/)
 
 testconf-list-ttl: ## Run MCP SEP-2549 list-TTL conformance (builds + starts 3 servers, runs tests, tears down)
 	@(cd examples/list-ttl && go build -o list-ttl-demo .) && \
