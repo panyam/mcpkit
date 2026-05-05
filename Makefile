@@ -143,11 +143,20 @@ test-protogen: ## Run protogen sub-module tests + e2e example
 test-e2e: ## Run all E2E tests (auth, apps — no Docker)
 	cd tests/e2e && go test ./... -count=1 -timeout 60s
 
-test-experimental: ## Run experimental POC tests (ext/events library + Go client SDK + events demos under examples/)
-	cd experimental/ext/events && go test ./... -count=1 -timeout 120s
-	cd experimental/ext/events/clients/go && go test ./... -count=1 -timeout 60s
-	cd examples/events/discord && go test ./... -count=1 -timeout 60s
-	cd examples/events/telegram && go test ./... -count=1 -timeout 60s
+test-experimental: ## Run all experimental POC tests (delegates to experimental/Makefile)
+	$(MAKE) -C experimental test
+
+test-experimental-events: ## Run experimental ext/events library tests
+	$(MAKE) -C experimental test-events
+
+test-experimental-events-clients-go: ## Run experimental ext/events Go client SDK tests
+	$(MAKE) -C experimental test-events-clients-go
+
+test-experimental-events-discord: ## Run experimental events Discord example tests
+	$(MAKE) -C experimental test-events-discord
+
+test-experimental-events-telegram: ## Run experimental events Telegram example tests
+	$(MAKE) -C experimental test-events-telegram
 
 test-apps-playwright: ## Run ext-apps Playwright tests against testserver (needs Node.js + Playwright)
 	bash scripts/apps-playwright-test.sh
@@ -163,16 +172,21 @@ REPORT_DIR := tests/reports
 # Shell vars PASS, FAIL, STAGES must be initialized by the caller.
 define run_stage
 	STAGE_LOG=$(REPORT_DIR)/stage-$(3).log; \
+	STAGE_START=$$(date +%s); \
 	echo "--- [$(1)/$(2)] $(3) ---" | tee -a $(REPORT_DIR)/run.log; \
 	echo "=== Stage $(1)/$(2): $(3) (make $(4)) ===" > $$STAGE_LOG; \
 	echo "Started: $$(date)" >> $$STAGE_LOG; \
 	if $(MAKE) $(4) >> $$STAGE_LOG 2>&1; then \
-		echo "  PASS: $(3)" | tee -a $(REPORT_DIR)/run.log; PASS=$$((PASS+1)); STAGES="$$STAGES $(3):PASS:$(4)"; \
+		ELAPSED=$$(($$(date +%s) - STAGE_START)); \
+		echo "  PASS: $(3) ($${ELAPSED}s)" | tee -a $(REPORT_DIR)/run.log; \
+		PASS=$$((PASS+1)); STAGES="$$STAGES $(3):PASS:$(4):$${ELAPSED}s"; \
 	else \
-		echo "  FAIL: $(3)" | tee -a $(REPORT_DIR)/run.log; FAIL=$$((FAIL+1)); STAGES="$$STAGES $(3):FAIL:$(4)"; \
+		ELAPSED=$$(($$(date +%s) - STAGE_START)); \
+		echo "  FAIL: $(3) ($${ELAPSED}s)" | tee -a $(REPORT_DIR)/run.log; \
+		FAIL=$$((FAIL+1)); STAGES="$$STAGES $(3):FAIL:$(4):$${ELAPSED}s"; \
 		echo "  --- $(3) tail ---"; tail -20 $$STAGE_LOG; echo "  ---"; \
 	fi; \
-	echo "Finished: $$(date)" >> $$STAGE_LOG;
+	echo "Finished: $$(date) (elapsed $${ELAPSED}s)" >> $$STAGE_LOG;
 endef
 
 testall: ## Run ALL tests (starts Keycloak if needed) + per-stage HTML reports
@@ -188,7 +202,10 @@ testall: ## Run ALL tests (starts Keycloak if needed) + per-stage HTML reports
 	$(call run_stage,4,12,ui,test-ui) \
 	$(call run_stage,5,12,protogen,test-protogen) \
 	$(call run_stage,6,12,e2e,test-e2e) \
-	$(call run_stage,7,12,experimental,test-experimental) \
+	$(call run_stage,7a,12,experimental-events,test-experimental-events) \
+	$(call run_stage,7b,12,experimental-events-clients-go,test-experimental-events-clients-go) \
+	$(call run_stage,7c,12,experimental-events-discord,test-experimental-events-discord) \
+	$(call run_stage,7d,12,experimental-events-telegram,test-experimental-events-telegram) \
 	$(call run_stage,8,12,conformance,testconf) \
 	$(call run_stage,9,12,auth-conformance,testconfauth) \
 	$(call run_stage,10,12,tasks-conformance,testconf-tasks) \
