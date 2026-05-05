@@ -87,7 +87,7 @@ The wire only ships the LATEST round's `inputResponses`. Dispatch decodes prior 
 - Tool handler API: `ctx.RequestInput(reqs)` sentinel + `ctx.InputResponse(key)` / `HasInputResponses()` / `RequestState()` accessors — core/handler_context.go
 - Client auto-loop: `client.CallToolWithInputs` + `DefaultInputHandler` — client/mrtr.go
 - Client dispatch unification: `client.HandleServerRequestWithContext` — single switch for both real server-initiated requests AND MRTR-synthesized ones — client/client.go
-- Conformance: `conformance/mrtr/scenarios.test.ts` (7 scenarios + 1 skipped composition; `make testconf-mrtr`)
+- Conformance: panyam/mcpconformance fork (`src/scenarios/server/mrtr/`, 7 checks + 1 SKIPPED composition; upstream Draft PR modelcontextprotocol/conformance#262; `make testconf-mrtr` runs it)
 - SEP-2322 spec: https://github.com/modelcontextprotocol/specification/pull/2322
 
 ## Run it

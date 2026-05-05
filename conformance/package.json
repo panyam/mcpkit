@@ -5,7 +5,8 @@
   "scripts": {
     "test:tasks": "npx tsx --test tasks/scenarios.test.ts",
     "test:elicitation": "npx tsx --test elicitation/scenarios.test.ts",
-    "test:mrtr": "npx tsx --test mrtr/scenarios.test.ts",
+    "test:tasks-v2": "vitest run tasks-v2/",
+    "test:mrtr": "vitest run mrtr/",
     "test:list-ttl": "npx tsx --test list-ttl/scenarios.test.ts"
   },
   "dependencies": {
@@ -13,6 +14,7 @@
     "@modelcontextprotocol/node": "latest",
     "@modelcontextprotocol/server": "latest",
     "@cfworker/json-schema": "^4.1.1",
-    "tsx": "^4.0.0"
+    "tsx": "^4.0.0",
+    "vitest": "^2.0.0"
   }
 }
