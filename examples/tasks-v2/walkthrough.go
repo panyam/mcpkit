@@ -313,8 +313,8 @@ func runDemo() {
 		"- v2 server library: `server/tasks_v2.go` (RegisterTasks, gating, MRTR runtime)",
 		"- v2 wire types (`CreateTaskResult`, `DetailedTask`, `TaskInfoV2`, `UpdateTaskRequest`, `ResultTypeTask`): `core/task_v2.go` (SEP-2663)",
 		"- v2 client helpers (`ToolCall`, `GetTask`, `UpdateTask`, `WaitForTask`, `CancelTask`): `client/tasks.go`",
-		"- Conformance tests: `conformance/tasks-v2/scenarios.test.ts`",
-		"- Implementation plan + open questions: `PLAN.md`",
+		"- Conformance scenarios: panyam/mcpconformance fork (branch feat/tasks-mrtr-extension, upstream Draft PR modelcontextprotocol/conformance#262)",
+		"- Local sentinel for mcpkit-stricter tests: `conformance/tasks-v2/`",
 	)
 
 	common.SetupRenderer(demo)

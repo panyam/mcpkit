@@ -366,7 +366,8 @@ func TestMRTR_MultiRoundAccumulatesAnswers(t *testing.T) {
 // Resolving this is a real design choice (always-sync handler vs. handler-
 // signalled async) tracked as mcpkit issue 347. Re-enable by deleting the
 // t.Skip once that lands. A matching scenario lives skipped in the
-// conformance suite (conformance/mrtr/scenarios.test.ts:mrtr-08).
+// conformance suite (panyam/mcpconformance, branch feat/tasks-mrtr-extension,
+// src/scenarios/server/mrtr/ephemeral-flow.ts:mrtr-tasks-composition).
 func TestMRTR_TaskComposition_Skipped(t *testing.T) {
 	t.Skip("MRTR→Tasks composition deferred — tracking: mcpkit issue 347")
 

@@ -210,4 +210,4 @@ The expected flow for a deployment migrating from v1 to v2 without downtime:
 - SEP-2243 (Mcp-Name HTTP header): adopted from spec discussion
 - Implementation plan + open questions: [`PLAN.md`](../PLAN.md)
 - v2 example walkthrough: [`examples/tasks-v2/WALKTHROUGH.md`](../examples/tasks-v2/WALKTHROUGH.md)
-- v2 conformance suite: [`conformance/tasks-v2/scenarios.test.ts`](../conformance/tasks-v2/scenarios.test.ts) (33 scenarios)
+- v2 conformance suite: [panyam/mcpconformance — `src/scenarios/server/tasks/`](https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension/src/scenarios/server/tasks) (8 ClientScenario classes / ~33 internal checks; upstream Draft PR modelcontextprotocol/conformance#262). Local sentinel for mcpkit-stricter scenarios: [`conformance/tasks-v2/`](../conformance/tasks-v2/).

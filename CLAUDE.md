@@ -11,9 +11,9 @@ make test-ui           # ext/ui sub-module
 make test-e2e          # E2E tests (auth + apps)
 make testconf          # MCP conformance suite (needs Node.js)
 make testconfauth      # Auth conformance (client OAuth)
-make testconf-tasks    # Tasks v1 conformance (27 scenarios, self-contained)
-make testconf-tasks-v2 # Tasks v2 conformance (33 scenarios, self-contained, SEP-2663)
-make testconf-mrtr     # MRTR conformance (7 scenarios + 1 deferred skip, SEP-2322)
+make testconf-tasks    # Tasks v1 conformance (27 scenarios, local)
+make testconf-tasks-v2 # SEP-2663 — runs upstream fork at MCPCONFORMANCE_PATH + mcpkit-local stricter sentinel
+make testconf-mrtr     # SEP-2322 — runs upstream fork at MCPCONFORMANCE_PATH + mcpkit-local stricter sentinel
 make testconf-list-ttl # List-TTL conformance (5 scenarios, SEP-2549)
 make testconf-file-inputs # File-inputs conformance (7 scenarios, SEP-2356; 7/7 green)
 make testall           # Everything (12 stages) + Keycloak + HTML report
@@ -60,7 +60,7 @@ Module-specific gotchas live in their READMEs.
 
 ## Conformance
 
-Server: 30/30, Auth: 14/14, Apps: 21, Tasks v1: 27/27, Tasks v2: 33/33 (SEP-2663), MRTR: 7/7 (SEP-2322, ephemeral; 1 task-composition scenario skipped pending follow-up), List-TTL: 5/5 (SEP-2549), File-Inputs: 7/7 (SEP-2356), Keycloak: 12/12, testall: 12/12 stages.
+Server: 30/30, Auth: 14/14, Apps: 21, Tasks v1: 27/27, **Tasks v2 (SEP-2663) + MRTR (SEP-2322): runs via the upstream-portable conformance fork at `MCPCONFORMANCE_PATH` (default `~/newstack/mcpconformance`, branch `feat/tasks-mrtr-extension`)** — Tasks v2 8 ClientScenario classes / ~33 checks; MRTR 1 class / 7 checks + 1 skip. Both folders also keep a vitest sentinel locally (`conformance/{tasks-v2,mrtr}/`) for future mcpkit-stricter scenarios. List-TTL: 5/5 (SEP-2549), File-Inputs: 7/7 (SEP-2356), Keycloak: 12/12, testall: 12/12 stages.
 
 ## Tasks v1 vs v2
 
