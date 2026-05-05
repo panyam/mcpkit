@@ -21,7 +21,10 @@ Recommended reading order for someone new to the material:
 3. **[Notifications](./notifications.md)** — *root · FAQ-style*  
    The session's state-change channel, in five questions: taxonomy + capability gating, the list-changed worked example, cancellation against the pending-id table, progress pairing via `_meta.progressToken`, and what receivers do with unknown notifications. *End-state: you know all six notification families, their direction, what gates each, and how progress and cancellation interact with session state.*
 
-*(More roots get appended here as the conversation reaches them — per-request anatomy, reverse-call mechanics, tasks, auth deep-dive, …)*
+4. **[Extension mechanisms](./extension-mechanisms.md)** — *root · FAQ-style*  
+   How MCP grows. Six questions: the four extension surfaces (method namespace, capability flags, notifications, `_meta`), the SEP process and `experimental.` namespace, mcpkit's three-tier code organization (`core/` → `ext/` → `experimental/ext/`), the mcpkit extension points you write against (registries, middleware, MRTR, custom transports), case studies (tasks, auth, apps, events, list-TTL, MRTR, elicitation), and the boundary between protocol extension and host/client policy. *End-state: you can read "this extension uses SEP-X" or "this is a `_meta`-only extension" and know what it means.*
+
+*(More roots get appended here as the conversation reaches them — per-request anatomy, reverse-call mechanics, tasks, auth deep-dive, apps, …)*
 
 ## Other entry points
 

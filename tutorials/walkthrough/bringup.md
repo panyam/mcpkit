@@ -119,7 +119,8 @@ Roots that build on this end-state:
 - **[Transport mechanics](./transport-mechanics.md)** — drills into the wire format chosen during bring-up phase 2.
 - **(forthcoming) Notifications** — the session's state-change channel. Capability-gated by what was negotiated here. Assumes this root + transport mechanics.
 - **(forthcoming) Per-request anatomy** — the per-call flow that runs *inside* an established session: dispatch, middleware, handler context, typed binding. Assumes this root + transport mechanics + notifications.
-- **(forthcoming) Auth deep-dive** *(off-mainline root)* — full OAuth dance, PRM, JWT validation, fine-grained-auth per tool. Assumes this root.
+- **[Extension mechanisms](./extension-mechanisms.md)** — how MCP grows; capability flags negotiated here are the gate for all extensions. Assumes this root + transport mechanics + notifications.
+- **(forthcoming) Auth deep-dive** *(off-mainline root)* — full OAuth dance, PRM, JWT validation, fine-grained-auth per tool. Auth is a "bring-up extension" — it extends *this* root's connection-establishment phase, not the message exchange. Assumes this root + extension mechanisms.
 - **(forthcoming) Re-init / session resumption** *(leaf)* — what happens if the underlying transport drops mid-session.
 
 ## Findings (about the DAG itself)
