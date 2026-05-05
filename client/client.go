@@ -339,6 +339,7 @@ type Client struct {
 	samplingHandler              SamplingHandler
 	elicitationHandler           ElicitationHandler
 	elicitationURLSupport        bool
+	fileInputs                   bool
 	elicitationCompleteHandler   ElicitationCompleteHandler
 	rootsHandler                 RootsHandler
 
@@ -530,6 +531,9 @@ func (c *Client) doConnect() error {
 	}
 	if c.rootsHandler != nil {
 		caps.Roots = &core.RootsCap{ListChanged: true}
+	}
+	if c.fileInputs {
+		caps.FileInputs = &struct{}{}
 	}
 	if len(c.extensions) > 0 {
 		caps.Extensions = make(map[string]core.ClientExtensionCap, len(c.extensions))

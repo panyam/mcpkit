@@ -76,32 +76,26 @@ Two phases: core protocol support (Phase 1), then MCP Apps bridge integration
 - [x] `examples/file-inputs/` opts into the validator — manual hand-rolled checks dropped.
 - [x] 11 new core unit tests + 5 new server unit tests + 2 conformance scenarios (`file-inputs-04` + `file-inputs-05`) flipped from red to green.
 
-### 1.5: Server capability gating
+### 1.5: Server capability gating ✅ shipped
 
-**Files:** `server/dispatch.go`
+**Files:** `core/file_input.go`, `core/file_input_test.go`, `core/handler_context.go`, `server/dispatch.go`, `server/file_validation_test.go`
 
-- [ ] When building tool list for `tools/list`: if client does NOT have
-  `fileInputs` capability, strip `x-mcp-file` from schema properties
-  (or omit tools that require file input? spec says MUST NOT include
-  file input fields — clarify: strip the extension keyword, or hide the tool?)
-- [ ] Same for elicitation: strip `x-mcp-file` from `requestedSchema` if
-  client doesn't support
+- [x] `core.StripFileInputKeywords(schema any) any` — pure function, deep-copy walk that removes the keyword from every property (single + array items). Foreign shapes (typed structs, json.RawMessage on the elicitation path) pass through unchanged.
+- [x] Dispatcher's `handleToolsList` strips when `d.clientCaps.FileInputs == nil`. Stored ToolDef.InputSchema in the registry is never mutated — different clients on the same server may declare the cap and need the keyword back.
+- [x] `BaseContext.Elicit` strips `requestedSchema` (json.RawMessage decode → strip → re-encode) when `clientCaps.FileInputs == nil`. Round-trip cost only paid for cap-less clients.
+- [x] **Spec interpretation locked**: strip the keyword, keep the property visible (legacy clients still call the tool with a text-input fallback). Documented in `conformance/file-inputs/README.md`. Asserted by scenario `file-inputs-02`.
+- [x] Tests: 2 core (strip + foreign-shape passthrough), 2 server (cap-aware sees keyword, cap-less sees stripped property), 1 conformance scenario flipped red→green.
 
-**Test:** Tools/list with and without `fileInputs` capability.
+### 1.6: Client helpers ✅ shipped
 
-### 1.6: Client helpers
+**Files:** `client/file_input.go` (new), `client/file_input_test.go` (new), `client/client.go`
 
-**Files:** `client/file_input.go` (new)
-
-- [ ] `FileInputsFromTool(tool ToolDef) map[string]FileInputDescriptor`
-  — scan a tool's inputSchema for `x-mcp-file` properties, return map of
-  property name → descriptor
-- [ ] `PrepareFileArg(path string, desc *FileInputDescriptor) (string, error)`
-  — read file from path, validate against descriptor, encode as data URI
-- [ ] Declare `fileInputs` capability in client initialization when configured
-
-**Test:** `client/file_input_test.go` — extract descriptors from schema,
-encode file as data URI argument.
+- [x] `client.FileInputsFromTool(tool) map[string]FileInputDescriptor` — single-file lands under `"name"`, array shape under `"name[]"` so callers can disambiguate.
+- [x] `client.PrepareFileArg(path, desc) (string, error)` — reads file, detects MIME (extension lookup → http.DetectContentType fallback → octet-stream), runs validation via `core.ValidateFileInput` (same rules as server side), returns data URI. Surfaces typed errors (`*core.FileTooLargeError`, `*core.FileTypeNotAcceptedError`) so callers branch with `errors.As`.
+- [x] `client.WithFileInputs() ClientOption` — sets `capabilities.fileInputs={}` on initialize. Without it, the server-side gating from 1.5 strips `x-mcp-file` from `tools/list`.
+- [x] Plumbed into `Client.Connect()` capability building.
+- [x] Tests: 8 — single + array extraction, foreign-shape passthrough, happy-path round-trip, oversized + wrong-MIME rejection (with errors.Is + errors.As), nil descriptor skips validation, capability advertisement.
+- [x] Demo simplified: `examples/file-inputs/walkthrough.go` drops hand-rolled `walkSchemaForFileInputs` + `guessImageMIME` + manual `os.ReadFile` + `EncodeDataURI`. Now uses `WithFileInputs()` + `FileInputsFromTool` + `PrepareFileArg` end-to-end.
 
 ### 1.7: Example + tests 🟡 starter shipped (conformance pending)
 
@@ -126,13 +120,15 @@ Example showing:
 - Error responses for invalid inputs
 
 Conformance-style tests:
-- [ ] Client with `fileInputs` cap sees `x-mcp-file` in tool schema
-- [ ] Client without `fileInputs` cap does NOT see `x-mcp-file`
-- [ ] Valid file upload succeeds
-- [ ] Oversized file returns `-32602` with `"file_too_large"`
-- [ ] Wrong MIME type returns `-32602` with `"file_type_not_accepted"`
-- [ ] Multi-file array input works
-- [ ] Filename with special chars round-trips through percent-encoding
+- [x] Client with `fileInputs` cap sees `x-mcp-file` in tool schema
+- [x] Client without `fileInputs` cap does NOT see `x-mcp-file`
+- [x] Valid file upload succeeds
+- [x] Oversized file returns `-32602` with `"file_too_large"`
+- [x] Wrong MIME type returns `-32602` with `"file_type_not_accepted"`
+- [x] Multi-file array input works
+- [x] Filename with special chars round-trips through percent-encoding
+
+**`make testconf-file-inputs` — 7/7 passing.** Phase 1 of SEP-2356 fully implemented mcpkit-side. Suite is now the WG-facing acceptance bar — any reference impl can be pointed at it.
 
 ## Phase 2: MCP Apps bridge integration
 

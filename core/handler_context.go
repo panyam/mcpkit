@@ -152,12 +152,20 @@ func (bc BaseContext) Sample(req CreateMessageRequest) (CreateMessageResult, err
 }
 
 // Elicit sends an elicitation/create request to the connected client.
+//
+// SEP-2356: if the client did not declare the `fileInputs` capability,
+// the `x-mcp-file` keyword is stripped from `req.RequestedSchema` before
+// the request goes on the wire (spec mandate for cap-less clients —
+// matches the `tools/list` strip on the server-side dispatch path).
 func (bc BaseContext) Elicit(req ElicitationRequest) (ElicitationResult, error) {
 	if bc.sc == nil || bc.sc.request == nil {
 		return ElicitationResult{}, ErrNoRequestFunc
 	}
 	if bc.sc.clientCaps == nil || bc.sc.clientCaps.Elicitation == nil {
 		return ElicitationResult{}, ErrElicitationNotSupported
+	}
+	if bc.sc.clientCaps.FileInputs == nil {
+		req.RequestedSchema = stripFileInputKeywordsRaw(req.RequestedSchema)
 	}
 	raw, err := bc.sc.request(bc.Context, "elicitation/create", req)
 	if err != nil {
@@ -168,6 +176,29 @@ func (bc BaseContext) Elicit(req ElicitationRequest) (ElicitationResult, error) 
 		return ElicitationResult{}, err
 	}
 	return result, nil
+}
+
+// stripFileInputKeywordsRaw decodes a json.RawMessage schema, strips
+// every `x-mcp-file` keyword, and re-encodes. Returns the input
+// unchanged when decoding fails or the result has no file-input
+// keywords (so well-formed cap-aware schemas don't pay the round-trip
+// cost in the no-strip case).
+func stripFileInputKeywordsRaw(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return raw
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		// Couldn't decode — leave unchanged. Server didn't write it as
+		// an object schema; nothing to strip.
+		return raw
+	}
+	stripped := stripFileInputKeywordsMap(schema)
+	out, err := json.Marshal(stripped)
+	if err != nil {
+		return raw
+	}
+	return out
 }
 
 // Notify sends an arbitrary server-to-client JSON-RPC notification.
