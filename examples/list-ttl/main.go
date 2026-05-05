@@ -22,7 +22,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/examples/common"
 	"github.com/panyam/mcpkit/server"
 )
 
@@ -41,11 +43,14 @@ func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
 	// Negative default = unset → no ttl emitted on list responses.
 	ttl := flag.Int("ttl", -1, "list TTL in seconds (negative = unset, 0 = do not cache, positive = N seconds)")
-	flag.CommandLine.Parse(filterFlags(os.Args[1:]))
+	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
+		demokit.BoolFlag("--serve"),
+		demokit.ValueFlag("--url"),
+	))
 
-	opts := []server.Option{
-		server.WithListen(*addr),
-	}
+	logger := common.NewMCPLogger("[mcp] ")
+	opts := []server.Option{server.WithListen(*addr)}
+	opts = append(opts, common.WithMCPLogging(logger)...)
 	if *ttl >= 0 {
 		opts = append(opts, server.WithListTTL(*ttl))
 	}

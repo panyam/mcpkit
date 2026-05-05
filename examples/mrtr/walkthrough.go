@@ -5,34 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/panyam/demokit"
 	"github.com/panyam/demokit/tui"
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 )
-
-// filterFlags strips top-level flags so the inner flag.Parse on -addr is happy.
-func filterFlags(args []string) []string {
-	out := make([]string, 0, len(args))
-	skip := false
-	for _, a := range args {
-		if skip {
-			skip = false
-			continue
-		}
-		switch a {
-		case "--serve", "--tui", "--readme", "--non-interactive":
-			continue
-		case "--url":
-			skip = true
-			continue
-		}
-		out = append(out, a)
-	}
-	return out
-}
 
 func runDemo() {
 	serverURL := "http://localhost:8080"
@@ -77,7 +55,7 @@ func runDemo() {
 		Arrow("Host", "Server", "POST /mcp — initialize (capabilities: elicitation, sampling, roots)").
 		DashedArrow("Server", "Host", "serverInfo + capabilities").
 		Note("`client.WithElicitationHandler` / `WithSamplingHandler` / `WithRootsHandler` register the client-side callbacks. The walkthrough returns canned answers so the loop runs end-to-end without user interaction; in production these would prompt the user, hit an LLM, or read filesystem roots.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			c = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "mrtr-demo-host", Version: "1.0"},
 				client.WithElicitationHandler(func(ctx context.Context, req core.ElicitationRequest) (core.ElicitationResult, error) {
@@ -111,7 +89,7 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call: test_tool_with_elicitation {}").
 		DashedArrow("Server", "Host", "{ resultType: \"incomplete\", inputRequests: {user_name: {method: \"elicitation/create\", ...}}, requestState: \"<token>\" }").
 		Note("Bypass the auto-loop helper to see the raw IncompleteResult shape. The discriminator is `resultType` — camelCase like every other MCP wire field. `inputRequests` is keyed by server-chosen opaque ids the client must echo verbatim.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			res, err := client.ToolCall(c, "test_tool_with_elicitation", map[string]any{})
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
@@ -133,9 +111,9 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call (retry): {arguments: {}, inputResponses: {user_name: <result>}, requestState: <echo>}").
 		DashedArrow("Server", "Host", "ToolResult: \"Hello, Alice!\"").
 		Note("`client.CallToolWithInputs(ctx, c, name, args, handler)` collapses the whole loop. `DefaultInputHandler` synthesizes a server-to-client request for each `inputRequest` and routes it through `client.HandleServerRequestWithContext` — single source of truth for how the client responds to MCP method requests, whether they arrived over the back-channel or inlined inside an IncompleteResult.").
-		Run(func() (result *demokit.StepResult) {
-			ctx := context.Background()
-			res, err := client.CallToolWithInputs(ctx, c,
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
+			bgCtx := context.Background()
+			res, err := client.CallToolWithInputs(bgCtx, c,
 				"test_tool_with_elicitation", map[string]any{},
 				client.DefaultInputHandler(c),
 			)
@@ -159,9 +137,9 @@ func runDemo() {
 		Arrow("Host", "Server", "retry with inputResponses{step2} (NOT step1 — that's already in requestState)").
 		DashedArrow("Server", "Host", "Round 3 ToolResult: \"Hi Alice, your favorite color is Alice.\"").
 		Note("The wire only ships the LATEST round's `inputResponses`. Dispatch decodes prior answers from `requestState` (a signed `MRTRRoundState` containing the accumulated answers map), merges with the current round, and surfaces a unified map to the handler. Handlers stay stateless across rounds. The canned elicitation handler returns the same `name: Alice` for both prompts in this demo, hence the funny output — a real handler would branch on the elicitation message.").
-		Run(func() (result *demokit.StepResult) {
-			ctx := context.Background()
-			res, err := client.CallToolWithInputs(ctx, c,
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
+			bgCtx := context.Background()
+			res, err := client.CallToolWithInputs(bgCtx, c,
 				"test_incomplete_result_multi_round", map[string]any{},
 				client.DefaultInputHandler(c),
 			)
@@ -188,11 +166,8 @@ func runDemo() {
 		"- SEP-2322 spec: https://github.com/modelcontextprotocol/specification/pull/2322",
 	)
 
-	for _, arg := range os.Args[1:] {
-		if strings.TrimSpace(arg) == "--tui" {
-			demo.WithRenderer(tui.New())
-			break
-		}
+	if demokit.IsTUI() {
+		demo.WithRenderer(tui.New())
 	}
 
 	demo.Execute()

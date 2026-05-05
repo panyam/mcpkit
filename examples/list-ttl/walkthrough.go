@@ -1,39 +1,15 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/panyam/demokit"
 	"github.com/panyam/demokit/tui"
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 )
-
-// filterFlags strips top-level flags so the inner flag.Parse on -addr is
-// happy when invoked from `make serve`. Same shape as tasks-v2/walkthrough.go.
-func filterFlags(args []string) []string {
-	out := make([]string, 0, len(args))
-	skip := false
-	for _, a := range args {
-		if skip {
-			skip = false
-			continue
-		}
-		switch a {
-		case "--serve", "--tui", "--readme", "--non-interactive":
-			continue
-		case "--url":
-			skip = true
-			continue
-		}
-		out = append(out, a)
-	}
-	return out
-}
 
 func runDemo() {
 	serverURL := "http://localhost:8080"
@@ -80,7 +56,7 @@ func runDemo() {
 		Arrow("Host", "Server", "POST /mcp — initialize").
 		DashedArrow("Server", "Host", "serverInfo + capabilities").
 		Note("`client.NewClient(...)` + `Connect()`. SEP-2549 is purely a server-side concern; the client doesn't negotiate anything special.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			c = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "list-ttl-host", Version: "1.0"},
 			)
@@ -96,7 +72,7 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/list").
 		DashedArrow("Server", "Host", "{ tools: [...], ttl: 60 }").
 		Note("`client.ListToolsPage(\"\")` returns the full envelope including `TTL *int`. The pointer distinguishes nil (no guidance) from `&0` (explicit \"do not cache\") — plain `int` would conflate them.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			page, err := c.ListToolsPage("")
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
@@ -110,7 +86,7 @@ func runDemo() {
 	demo.Step("prompts/list / resources/list / resources/templates/list").
 		Arrow("Host", "Server", "(same TTL contract on all four endpoints)").
 		Note("SEP-2549 applies to every paginated list response. `WithListTTL(seconds)` configures the value uniformly — there's no per-endpoint override. Hit each endpoint and confirm they all return the configured TTL.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			prompts, err := c.ListPromptsPage("")
 			if err != nil {
 				fmt.Printf("    ERROR prompts: %v\n", err)
@@ -141,10 +117,7 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/list (raw)").
 		DashedArrow("Server", "Host", "raw JSON: ttl wire-format check").
 		Note("Bypass the typed helper and decode the raw response body to verify the wire shape — `\"ttl\": 60` as a JSON number, sitting alongside `\"tools\"` and (when paginated) `\"nextCursor\"`. Confirms the field is a JSON number, not stringified.").
-		Run(func() (result *demokit.StepResult) {
-			ctx, cancel := context.WithTimeout(context.Background(), 2_000_000_000)
-			_ = ctx
-			defer cancel()
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			raw, err := c.Call("tools/list", nil)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
@@ -185,11 +158,8 @@ func runDemo() {
 		"- SEP-2549 spec: https://github.com/modelcontextprotocol/specification/pull/2549",
 	)
 
-	for _, arg := range os.Args[1:] {
-		if strings.TrimSpace(arg) == "--tui" {
-			demo.WithRenderer(tui.New())
-			break
-		}
+	if demokit.IsTUI() {
+		demo.WithRenderer(tui.New())
 	}
 
 	demo.Execute()

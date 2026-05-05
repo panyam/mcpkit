@@ -98,17 +98,23 @@ func main() {
   ```
   Renderer / mode predicates use `demokit.IsTUI()` and `demokit.IsNonInteractive()` —
   no hand-rolled `os.Args` scans.
-- Logger via `demokit.NewColorLogger("[mcp] ", []demokit.ColorRule{...})` with
-  the same five rules every example uses (see file-inputs/main.go:51-57 for
-  the canonical set).
+- Logger + middleware come from `examples/common` — one line each, no
+  copy-paste of color rules:
+  ```go
+  logger := common.NewMCPLogger("[mcp] ")
+  opts := []server.Option{server.WithListen(*addr)}
+  opts = append(opts, common.WithMCPLogging(logger)...)
+  ```
+  `common.NewMCPLogger` wraps `demokit.NewColorLogger` with the canonical
+  five-rule set (see `examples/common/logger.go`); `common.WithMCPLogging`
+  returns `[]server.Option` for both transport-level request logging and
+  the MCP dispatch middleware. If you need to tint additional log lines,
+  pass `demokit.ColorRule`s as variadic extras to `NewMCPLogger`.
 - Server construction:
   ```go
   srv := server.NewServer(
       core.ServerInfo{Name: "<name>", Version: "0.1.0"},
-      server.WithListen(*addr),
-      server.WithRequestLogging(logger),
-      server.WithMiddleware(server.LoggingMiddleware(logger)),
-      // ... example-specific options
+      opts...,  // example-specific options append after common.WithMCPLogging
   )
   ```
 - Serve via `srv.ListenAndServe(server.WithStreamableHTTP(true))` — graceful
@@ -121,17 +127,18 @@ func main() {
 
 ### Logger color rules (canonical set)
 
-```go
-demokit.NewColorLogger("[mcp] ", []demokit.ColorRule{
-    {Contains: "error=", DarkColor: demokit.ANSIRed},
-    {Contains: "ERROR",  DarkColor: demokit.ANSIRed},
-    {Contains: "[http] →", DarkColor: demokit.ANSIGray,        LightColor: demokit.ANSIDimBlue},
-    {Contains: "[http] ←", DarkColor: demokit.ANSICyan,        LightColor: demokit.ANSIBlue},
-    {Contains: "MCP ",     DarkColor: demokit.ANSIBrightGreen, LightColor: demokit.ANSIGreen},
-})
-```
+The five-rule set lives in `examples/common/logger.go` (see
+`common.NewMCPLogger`). Examples consume it through the helper rather than
+inlining the rule list. If a future change adjusts the rules, every example
+picks it up via `examples/common` — that's the single point of update.
 
-Examples may add rules; they may not remove these.
+Tint additional example-specific lines via the variadic extras:
+
+```go
+logger := common.NewMCPLogger("[mcp] ",
+    demokit.ColorRule{Contains: "[upload]", DarkColor: demokit.ANSIYellow},
+)
+```
 
 ---
 
@@ -190,14 +197,20 @@ demo.Step("<Title>").
     Arrow("Host", "Server", "<solid-line label>").       // sync request
     DashedArrow("Server", "Host", "<dashed-line label>"). // async response/notification
     Note("<prose explaining the step; can be multi-line, can include code>").
-    Run(func(ctx demokit.StepContext) error {
+    Run(func(ctx demokit.StepContext) *demokit.StepResult {
         // 1. call MCP via *client.Client
         res, err := c.Call("tools/call", map[string]any{...})
-        if err != nil { return err }
+        if err != nil {
+            fmt.Printf("    ERROR: %v\n", err)
+            return nil
+        }
 
         // 2. unmarshal raw JSON for pretty-printing
         var v any
-        if err := json.Unmarshal(res.Raw, &v); err != nil { return err }
+        if err := json.Unmarshal(res.Raw, &v); err != nil {
+            fmt.Printf("    ERROR decoding raw: %v\n", err)
+            return nil
+        }
 
         // 3. print to demo stdout (demokit captures it for replay/doc mode)
         pretty, _ := json.MarshalIndent(v, "", "  ")
@@ -205,6 +218,17 @@ demo.Step("<Title>").
         return nil
     })
 ```
+
+A `nil` return means "step succeeded with no message" — the canonical
+shape across examples. Examples that want to surface a custom status or
+jump to a specific next step return a non-nil `*demokit.StepResult` (see
+`demokit/result.go`).
+
+If your `Run` body needs to call something that takes a
+`context.Context` (e.g. `client.CallToolWithInputs`), do **not** name a
+local variable `ctx` — the parameter is already named `ctx` and shadows
+won't compile via `:=`. Use `bgCtx := context.Background()` or pull from
+the demokit-provided `ctx.Ctx` (which honors `Timeout` / `Cancellable`).
 
 ### Client logging convention
 

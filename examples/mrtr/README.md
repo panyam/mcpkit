@@ -40,6 +40,14 @@ prompt the user, hit an LLM, or read filesystem roots.
 See [WALKTHROUGH.md](WALKTHROUGH.md) for the full sequence diagram and
 step-by-step description.
 
+## What it demonstrates
+
+- The full IncompleteResult round-trip — server returns `inputRequests + requestState`; client resolves each request locally and retries the same `tools/call` with `inputResponses` + the echoed state.
+- All three input methods inline-able inside the round: elicitation (`elicitation/create`), sampling (`sampling/createMessage`), and root listing (`roots/list`).
+- Multi-round accumulation across rounds via signed `requestState` — handlers stay stateless; dispatch merges accumulated answers.
+- The unified client dispatch path (`HandleServerRequestWithContext`) handling MRTR-synthesized requests identically to real server-initiated requests.
+- The `client.CallToolWithInputs` + `DefaultInputHandler` auto-loop that collapses the whole flow into a single call.
+
 ## Tools registered (matching the upstream conformance contract)
 
 | Tool | Scenario | Behavior |

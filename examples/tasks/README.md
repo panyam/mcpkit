@@ -4,6 +4,17 @@ Demonstrates MCP Tasks (spec 2025-11-25) — async tool execution with lifecycle
 
 > **🚀 [Skip to the guided walkthrough →](WALKTHROUGH.md)** — 8-step demokit walkthrough with sequence diagram covering sync calls, optional async tasks, polling, progress notifications via SSE, required-task tools, and cancellation. Run it with `make serve` + `make demo`.
 
+## What it demonstrates
+
+- The three task-support modes on `core.ToolDef.Execution`: sync-only (no Execution), optional (client picks sync vs async), required (must be async).
+- Task lifecycle states (`queued` → `running` → `completed` / `failed` / `cancelled`) and the polling pattern via `tasks/get`.
+- Progress notifications streamed over the GET SSE channel while a task runs.
+- Elicitation from a background task (`TaskContext.TaskElicit`) — pausing a task to ask the user a question.
+- Sampling from a background task (`TaskContext.TaskSample`) — pausing a task to query an LLM.
+- Cancellation propagation via `tasks/cancel`, including verifying the work actually stops.
+- TTL enforcement (tasks expire) and session isolation (cross-session task access denied).
+- The external-proxy pattern via `server.TaskCallbacks` — per-tool `GetTask` / `GetResult` overrides for tasks living in an external system (Step Functions, etc.).
+
 ## MCPKit Features Used
 
 | Category | Feature |

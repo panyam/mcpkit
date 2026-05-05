@@ -61,7 +61,7 @@ Apply fixes that bring an mcpkit example into compliance with `examples/CONVENTI
 
 For each ID, the upgrade applies this exact transformation. (Read CONVENTIONS.md for the *why*.)
 
-- **`logger-colorlogger`** — replace the existing logger construction in `serve()` with the canonical 5-rule `demokit.NewColorLogger(...)` from CONVENTIONS.md §2.
+- **`logger-colorlogger`** — replace the existing logger construction in `serve()` with `common.NewMCPLogger("[mcp] ")` + `common.WithMCPLogging(logger)` from `examples/common` (see CONVENTIONS.md §2). Add the `examples/common` dependency to `go.mod` if missing.
 - **`serve-srv-listenandserve`** — replace `http.ListenAndServe(*addr, mux)` with `srv.ListenAndServe(server.WithStreamableHTTP(true))`. If the example also needed a custom mux for side endpoints, lift those routes into `server.WithMux(func(mux *http.ServeMux) { ... })` passed to `NewServer`.
 - **`mux-withmux`** — extract any hand-rolled `http.Server{}` + custom mux into `server.WithMux(...)` on `server.NewServer(...)`. The side-endpoint handlers themselves don't change.
 - **`filterargs-promoted`** — replace `flag.CommandLine.Parse(filterFlags(os.Args[1:]))` with the canonical `demokit.FilterArgs(...)` call (see CONVENTIONS.md §2). Delete the local `filterFlags` definition entirely. Bump `go.mod` to the demokit version that has `FilterArgs` if not already there (`v0.0.16`+).
