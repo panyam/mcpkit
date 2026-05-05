@@ -89,6 +89,46 @@ Catalog is fresh again. Client's cache is repopulated.
 - **Same pattern applies to prompts/resources.** `notifications/prompts/list_changed` and `notifications/resources/list_changed` are identical mechanically — different area, same flow.
 - **The notification could equally arrive on a per-call SSE upgrade.** If the server happens to be in the middle of streaming a tool-call response when the catalog changes, the same notification can ride that POST's SSE stream. The standing GET is the channel for *unsolicited* pushes; per-call SSE is for *call-tied* pushes; either can carry list_changed because list_changed isn't tied to a specific call.
 
+### Multi-client fan-out
+
+The example above showed one client. If a server has 5 clients connected, each has its own session id (`abc123`, `def456`, …) and its own standing GET — and the protocol has **no broadcast primitive**. The server emits the notification *once per session*, walking its session map.
+
+For `notifications/tools/list_changed` specifically, the loop is:
+
+1. Iterate over live sessions.
+2. For each, check whether that session negotiated `tools.listChanged` at bring-up.
+3. For sessions that did, write the notification onto that session's GET stream.
+
+So a 5-client scenario can have anywhere from 0 to 5 actual emissions depending on per-session capability negotiation. Wire-level, each emission is an independent SSE write:
+
+```http
+                                                   ← session abc123's GET, sse id 17
+data: {"jsonrpc":"2.0","method":"notifications/tools/list_changed"}
+```
+```http
+                                                   ← session def456's GET, sse id 9 (independent counter)
+data: {"jsonrpc":"2.0","method":"notifications/tools/list_changed"}
+```
+
+Same JSON-RPC body, different streams, independent SSE-id counters per stream. (See [transport-mechanics → Mcp-Session-Id](./transport-mechanics.md#mcp-session-id) — sessions are isolated and the server can only push to sessions it has state for.)
+
+The **fan-out audience** depends on the notification kind:
+
+| Notification | Goes to which sessions |
+|--------------|------------------------|
+| `notifications/<area>/list_changed` (server-emitted) | every session that negotiated `<area>.listChanged` at bring-up |
+| `notifications/resources/updated` | only sessions that called `resources/subscribe` for that specific URI |
+| `notifications/message` (logging) | every session that negotiated `logging` (subject to per-session log level set via `logging/setLevel`) |
+| `notifications/cancelled` | the **specific session** whose request is being cancelled — not fan-out |
+| `notifications/progress` | the **specific session** whose request opted in via `progressToken` — not fan-out |
+
+In short: **server-state-change** notifications fan out per-session; **call-targeted** notifications go to exactly the one session that originated that call. Two distinct routing patterns, one wire format.
+
+> [!NOTE]
+> The lack of a broadcast primitive is deliberate. Each session has its own capability set, its own auth context, its own subscription state. Treating every client as an independent conversation keeps these isolated; the cost is more iterations on the server when state changes, which is cheap compared to the simplicity gain.
+
+mcpkit's runtime maintains the session map and dispatches accordingly. Servers built from scratch on top of `core/` need to do the same bookkeeping.
+
 > [!NOTE]
 > **Branch →** *(forthcoming)* List-TTL ([SEP-2549](https://modelcontextprotocol.io/specification/2025-06-18)) — mcpkit's `core/list_ttl_test.go` exercises a three-state TTL hint (`nil` / `&0` / `&N>0`) the server can attach to list responses to let clients cache more aggressively when notifications can't be relied on. Out-of-scope here; relevant if you care about cache lifetime semantics beyond list_changed.
 
@@ -235,6 +275,7 @@ After reading this root, downstream pages can assume:
 - You know the **six notification families**, their **direction**, and what **capability gate** (if any) controls each.
 - You know the gate is fixed at bring-up and **does not change mid-session**.
 - You know **list_changed is a hint, not a diff** — the client refetches when it cares.
+- You know **server-state-change notifications fan out per-session** (no protocol-level broadcast); the audience depends on the kind (capability for list_changed, subscription for resources/updated, capability + level for logging); **call-targeted notifications** (cancel, progress) go to exactly the one originating session.
 - You know `notifications/cancelled` carries the **request id of the call to cancel**, looked up in the receiver's pending table; cancellation is **best-effort** with a real race; the `initialize` request is the one prohibition.
 - You know progress is **opt-in per request via `_meta.progressToken`** (not capability-gated), and that the responder must not emit progress when no token was provided.
 - You know **unknown / un-gated notifications get dropped silently** by the receiver — the asymmetry vs. unknown requests is what enables forward-compatibility.
