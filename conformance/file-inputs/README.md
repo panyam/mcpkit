@@ -45,15 +45,14 @@ are not exercised here — they're bridge UX, not wire format.
 | `file-inputs-01` | client WITH `fileInputs` cap sees `x-mcp-file` on every file property | ✅ green | — |
 | `file-inputs-02` | client WITHOUT cap does NOT see `x-mcp-file` (but tools stay visible) | ❌ red | [#362 — A4 capability gating](https://github.com/panyam/mcpkit/issues/362) |
 | `file-inputs-03` | valid file upload round-trips bytes / media type / filename | ✅ green | — |
-| `file-inputs-04` | oversized file → `-32602` + `data.reason: "file_too_large"` | ❌ red | [#361 — A3 server validation](https://github.com/panyam/mcpkit/issues/361) |
-| `file-inputs-05` | wrong MIME → `-32602` + `data.reason: "file_type_not_accepted"` | ❌ red | [#361 — A3 server validation](https://github.com/panyam/mcpkit/issues/361) |
+| `file-inputs-04` | oversized file → `-32602` + `data.reason: "file_too_large"` | ✅ green (A3 shipped) | — |
+| `file-inputs-05` | wrong MIME → `-32602` + `data.reason: "file_type_not_accepted"` | ✅ green (A3 shipped) | — |
 | `file-inputs-06` | array-of-files input (`analyze_documents`) handles multiple URIs | ✅ green | — |
 | `file-inputs-07` | filename with special chars (parens, spaces, quotes) round-trips through percent-encoding | ✅ green | — |
 
-The 4 green scenarios are the contract A1 (#358, shipped) already
-satisfies. The 3 red scenarios are the done-bar for A3 (#361) and A4
-(#362). When all 7 are green, SEP-2356 Phase 1.4 + 1.5 are complete and
-this suite becomes the WG-facing acceptance bar.
+6 green, 1 red. The remaining red (cap-gating) is the done-bar for A4
+(#362). When `file-inputs-02` flips green, SEP-2356 Phase 1.4 + 1.5 are
+complete and this suite becomes the WG-facing acceptance bar.
 
 ## Running
 

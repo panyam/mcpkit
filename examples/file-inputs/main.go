@@ -73,6 +73,10 @@ func serve() {
 		// MCP Apps extension powers the in-iframe file picker apps
 		// registered in apps.go (SEP-2356 Phase 2.1).
 		server.WithExtension(&ui.UIExtension{}),
+		// SEP-2356 Phase 1.4 — auto-validate file-typed args (size +
+		// MIME) against the descriptor declared in each tool's
+		// InputSchema. Failures surface as -32602 with structured data.
+		server.WithFileInputValidation(),
 	)
 
 	registerTools(srv, uploadDir)

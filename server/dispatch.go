@@ -96,6 +96,16 @@ type Dispatcher struct {
 	// validation themselves. Default: validation enabled.
 	skipSchemaValidation bool
 
+	// validateFileInputs enables SEP-2356 file-input validation in the
+	// tools/call path. When true, the dispatcher walks the tool's
+	// inputSchema for `x-mcp-file` properties (single + array-items) and
+	// runs `core.ValidateFileInput` on every matching argument BEFORE the
+	// handler runs. Failures surface as -32602 with structured `data`
+	// (`{reason, actualSize, maxSize}` for oversized; `{reason, mediaType,
+	// accept, ...}` for MIME mismatches) — the wire shape is frozen by
+	// `conformance/file-inputs/`. Set via WithFileInputValidation().
+	validateFileInputs bool
+
 	// tasksCap is the tasks capability to advertise during initialize.
 	// nil means tasks are not enabled. Set via Server.SetTasksCap().
 	tasksCap *core.TasksCap
@@ -228,6 +238,7 @@ func (d *Dispatcher) newSession() *Dispatcher {
 		eventIDs:             newEventIDGen(),
 		requestIDs:           newEventIDGen(),
 		skipSchemaValidation: d.skipSchemaValidation,
+		validateFileInputs:   d.validateFileInputs,
 		tasksCap:             d.tasksCap,
 		customHandlers:       d.customHandlers,
 		mrtr:                 d.mrtr,
@@ -456,6 +467,18 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, pa
 		if ve := entry.schema.validate(envelope.Arguments); ve != nil {
 			return core.NewErrorResponseWithData(id, core.ErrCodeInvalidParams,
 				"argument validation failed", ve)
+		}
+	}
+
+	// SEP-2356 file-input validation. Walk the tool's inputSchema for
+	// `x-mcp-file` properties (single string/uri AND array-items shapes)
+	// and run `core.ValidateFileInput` on each matching argument. Failures
+	// surface as -32602 with the structured `data` payload locked by the
+	// `conformance/file-inputs/` suite. Skipped unless
+	// WithFileInputValidation() is enabled.
+	if d.validateFileInputs {
+		if resp := d.validateFileInputArgs(id, entry.def.InputSchema, envelope.Arguments); resp != nil {
+			return resp
 		}
 	}
 
