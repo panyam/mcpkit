@@ -27,20 +27,45 @@ type yieldingConfig struct {
 }
 
 // SubscriberEvent flows on the channel returned by YieldingSource.Subscribe.
-// Event is always populated for live deliveries. Truncated=true signals
-// "one or more events were dropped before this one" — consumers SHOULD
-// treat this as a possible state gap and re-fetch authoritative state if
-// it matters. Per spec §"Push-Based Delivery" → "Event Delivery" L285,
-// ε-2's stream handler maps Truncated=true onto a fresh
-// notifications/events/active{truncated:true} that precedes the event.
+// Discriminator semantics:
 //
-// Riding the flag on the next successful event (rather than a separate
+//   - Event delivery: Event populated; Error and Terminated nil.
+//     Truncated=true signals "one or more events were dropped before this
+//     one" — consumers SHOULD treat as a possible state gap and re-fetch
+//     authoritative state if it matters. Per spec §"Push-Based Delivery"
+//     → "Event Delivery" L285, ε-2's stream handler maps Truncated=true
+//     onto a fresh notifications/events/active{truncated:true} that
+//     precedes the event.
+//
+//   - Transient error: Error populated; Event/Terminated nil. Stream
+//     subscribers map onto notifications/events/error per spec L255+L261;
+//     stream stays open. Webhook delivery is unaffected (errors are
+//     upstream, not delivery-side). ζ-7.
+//
+//   - Terminal: Terminated populated; Event/Error nil. Stream subscribers
+//     map onto notifications/events/terminated per spec L783-795 and the
+//     stream closes. Subscriber chans close after the terminal event.
+//     One-shot — subsequent yields are no-ops. ζ-7.
+//
+// Riding Truncated on the next successful event (rather than a separate
 // marker frame) keeps the channel order trivially correct under any
 // buffer size and avoids the marker-starves-the-slot pathology when
 // consumers stay behind.
 type SubscriberEvent struct {
-	Event     Event
-	Truncated bool
+	Event      Event
+	Truncated  bool
+	Error      *EventDeliveryError
+	Terminated *EventDeliveryError
+}
+
+// EventDeliveryError is the error payload carried in SubscriberEvent
+// Error/Terminated variants and the stream notifications they map to
+// (notifications/events/error, notifications/events/terminated).
+// Mirrors a JSON-RPC error object shape — code + message — so receivers
+// handle it consistently with how they handle other JSON-RPC failures.
+type EventDeliveryError struct {
+	Code    int
+	Message string
 }
 
 // subscriberSlot is one registered Subscribe channel. pendingTruncated is
@@ -49,6 +74,17 @@ type SubscriberEvent struct {
 type subscriberSlot struct {
 	ch               chan SubscriberEvent
 	pendingTruncated atomic.Bool
+	// closeOnce gates the chan close so YieldTerminated and the
+	// Subscribe cleanup goroutine can both attempt close without
+	// racing into "close of closed channel". ζ-7.
+	closeOnce sync.Once
+}
+
+// closeChan idempotently closes the slot's channel. Safe to call from
+// either the YieldTerminated fanout (under s.mu write lock) or the
+// Subscribe cleanup goroutine (also under s.mu write lock).
+func (s *subscriberSlot) closeChan() {
+	s.closeOnce.Do(func() { close(s.ch) })
 }
 
 // WithSubscriberBuffer overrides the per-Subscribe channel buffer size
@@ -178,6 +214,7 @@ type YieldingSource[Data any] struct {
 	emitHook    func(Event)
 	metaFunc    func(Data) map[string]any
 	subscribers []*subscriberSlot
+	terminated  bool // ζ-7: one-shot YieldTerminated has fired; subsequent yields are no-ops
 }
 
 func (s *YieldingSource[Data]) Def() EventDef { return s.def }
@@ -195,6 +232,80 @@ func (s *YieldingSource[Data]) SetMetaFunc(f func(Data) map[string]any) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.metaFunc = f
+}
+
+// YieldError emits a transient-failure signal to all live subscribers
+// (ζ-7). Stream subscribers map this onto a notifications/events/error
+// frame per spec L255+L261; the subscription stays open. Webhook
+// delivery is unaffected (errors are upstream-side, not delivery-side).
+//
+// No-op after YieldTerminated has fired (one-shot terminal semantic).
+// Returns nil; the signature mirrors yield/YieldTerminated for consistency
+// even though there's no marshal-failure path.
+func (s *YieldingSource[Data]) YieldError(err EventDeliveryError) error {
+	s.mu.Lock()
+	if s.terminated {
+		s.mu.Unlock()
+		return nil
+	}
+	se := SubscriberEvent{Error: &err}
+	s.fanoutLocked(se)
+	s.mu.Unlock()
+	return nil
+}
+
+// YieldTerminated emits a terminal signal to all live subscribers and
+// closes their channels (ζ-7). Stream subscribers map this onto a
+// notifications/events/terminated frame per spec L783-795 and the
+// stream returns. After this call, the source is terminated: subsequent
+// yield / YieldError / YieldTerminated calls are silently dropped, and
+// Poll returns empty.
+//
+// One-shot. Receivers seeing the terminal signal SHOULD remove their
+// local subscription state — there's no recovery path for the source
+// itself; recovery requires re-subscribing.
+func (s *YieldingSource[Data]) YieldTerminated(err EventDeliveryError) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.terminated {
+		return nil
+	}
+	s.terminated = true
+
+	// Fanout the terminal event to every subscriber, then close their
+	// channels. Closing under the same lock that gates yield's send-to-
+	// chan ensures no concurrent writer can panic on the closed chan.
+	se := SubscriberEvent{Terminated: &err}
+	for _, sub := range s.subscribers {
+		select {
+		case sub.ch <- se:
+		default:
+			// If the chan is full, the subscriber is too far behind to
+			// see the terminal signal cleanly. Closing without it is
+			// acceptable — the chan-close itself is also a terminal
+			// signal (range loop exits, select-on-closed returns zero).
+		}
+		sub.closeChan()
+	}
+	s.subscribers = nil
+	return nil
+}
+
+// fanoutLocked sends a SubscriberEvent to every live subscriber.
+// Caller MUST hold s.mu (write lock) so the close-on-cleanup goroutine
+// in Subscribe doesn't race with our sends.
+func (s *YieldingSource[Data]) fanoutLocked(se SubscriberEvent) {
+	for _, sub := range s.subscribers {
+		select {
+		case sub.ch <- se:
+		default:
+			// Drop policy applies to Error variants too — slow consumer
+			// shouldn't back-pressure the source. Unlike event drops,
+			// errors don't carry a recovery semantic; the consumer just
+			// misses the error notification. Future events still get
+			// the Truncated flag if any actual events were dropped.
+		}
+	}
 }
 
 // Subscribe registers a per-call live-event channel for push delivery
@@ -228,8 +339,10 @@ func (s *YieldingSource[Data]) Subscribe(ctx context.Context) <-chan SubscriberE
 			}
 		}
 		// Close inside the same lock that the fanout in yield() takes —
-		// guarantees no concurrent send attempts a write to the closed chan.
-		close(slot.ch)
+		// guarantees no concurrent send attempts a write to the closed
+		// chan. Idempotent so YieldTerminated's close + this cleanup
+		// don't race into a double-close.
+		slot.closeChan()
 	}()
 
 	return slot.ch
@@ -258,6 +371,13 @@ func (s *YieldingSource[Data]) Poll(cursor string, limit int) PollResult {
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+
+	// ζ-7: terminated source returns empty. Poll callers — including
+	// the events/poll handler — should observe nothing-to-deliver
+	// rather than the residual entries from before termination.
+	if s.terminated {
+		return PollResult{}
+	}
 
 	c, _ := strconv.ParseInt(cursor, 10, 64)
 
@@ -353,6 +473,18 @@ func (s *YieldingSource[Data]) SetEmitHook(hook func(Event)) {
 }
 
 func (s *YieldingSource[Data]) yield(data Data) error {
+	// ζ-7 one-shot terminated check. Sources that have signaled
+	// terminal can't deliver new events to subscribers (chans are
+	// closed). Returning nil rather than error so callers wrapping
+	// yield in event-driven code paths don't have to special-case
+	// the post-terminated lifetime.
+	s.mu.RLock()
+	terminated := s.terminated
+	s.mu.RUnlock()
+	if terminated {
+		return nil
+	}
+
 	now := time.Now()
 	raw, err := json.Marshal(data)
 	if err != nil {
