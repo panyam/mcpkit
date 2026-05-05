@@ -110,19 +110,22 @@ for f in *.md; do
     done
 done
 
-# Distinguish written vs planned visually.
+# Style: distinguish written / stub / planned-missing visually.
 echo ""
 echo "    classDef written fill:#e8f5e9,stroke:#2e7d32,color:#000;"
+echo "    classDef stub fill:#fff3e0,stroke:#e65100,color:#000;"
 written=""
+stubs=""
 for f in *.md; do
     is_meta "$f" && continue
     base="${f%.md}"
-    if [ -z "$written" ]; then
-        written="$base"
+    if grep -q '^<!-- STUB -->' "$f" 2>/dev/null; then
+        if [ -z "$stubs" ]; then stubs="$base"; else stubs="$stubs,$base"; fi
     else
-        written="$written,$base"
+        if [ -z "$written" ]; then written="$base"; else written="$written,$base"; fi
     fi
 done
 [ -n "$written" ] && echo "    class $written written;"
+[ -n "$stubs" ]   && echo "    class $stubs stub;"
 
 echo '```'

@@ -103,9 +103,13 @@ Each page links to:
 
 External spec links happen at the *node* level. Inside a flow, links stay on-page so reading doesn't break. Click into a node only when you need normative detail.
 
-### Links to planned pages
+### Links to stub pages
 
-Pages that are referenced but not yet written should still be linked, marked `*(planned)*`. The link target is the canonical filename even if the file doesn't exist yet — clicking will 404, which is the desired reminder that this page is real-but-unwritten. Lock filenames early; rename costs more than getting them right up front. The forthcoming-nodes table in [INDEX.md](./INDEX.md) is the source of truth for canonical filenames.
+Every page referenced in any "Next to read" or "Branch →" callout must exist on disk — even if it's just a stub with a filled-out header and an outline body. Stubs are created at the same time as the link is added; clicking a `*(stub)*` link lands you on a real page that says "this is a stub, header is honest, body TBD." Tracking is in the [Stub pages table](./INDEX.md) in INDEX.
+
+Why stubs instead of 404s: the graph stays accurate (every node has a Prerequisites header to parse), `make check` can enforce no-broken-links, and a reader who clicks a forward reference gets a meaningful "this is coming, here's what it'll cover" page instead of a confusing GitHub 404.
+
+Stub pages carry a `<!-- STUB -->` HTML comment as the second line of the file (used by `build-graph.sh` to color stub nodes amber and to drive `make stats`). When a stub gets fully written, drop the comment and the linker should drop `*(stub)*` markers pointing at it.
 
 ## Target-shape tracking
 

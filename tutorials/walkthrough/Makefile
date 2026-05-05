@@ -11,7 +11,7 @@
 # Use bash for process substitution (`<(...)`) and other niceties.
 SHELL := /bin/bash
 
-.PHONY: help graph stats missing links check
+.PHONY: help graph stats missing stubs links check
 .DEFAULT_GOAL := help
 
 # Meta files don't appear as graph nodes.
@@ -25,18 +25,23 @@ graph: ## Auto-generate GRAPH.md from page Prerequisites headers
 	@./build-graph.sh > GRAPH.md
 	@echo "Wrote GRAPH.md ($$(wc -l < GRAPH.md | tr -d ' ') lines)"
 
-stats: ## Count pages by kind + planned-link totals
+stats: ## Count pages by kind, written/stub status, stub-link references
 	@printf "Content pages:    %s\n" "$$(echo $(PAGES) | wc -w | tr -d ' ')"
 	@printf "  roots:          %s\n" "$$(grep -l '\*\*Kind:\*\* root' $(PAGES) 2>/dev/null | wc -l | tr -d ' ')"
 	@printf "  branches:       %s\n" "$$(grep -l '\*\*Kind:\*\* branch' $(PAGES) 2>/dev/null | wc -l | tr -d ' ')"
 	@printf "  leaves:         %s\n" "$$(grep -l '\*\*Kind:\*\* leaf' $(PAGES) 2>/dev/null | wc -l | tr -d ' ')"
-	@printf "Planned links:    %s unique\n" "$$(grep -h '\*(planned)\*' *.md 2>/dev/null | grep -oE '\(\./[a-zA-Z-]+\.md\)' | sort -u | wc -l | tr -d ' ')"
-	@printf "Planned missing:  %s file(s)\n" "$$(make --silent missing | wc -l | tr -d ' ')"
+	@printf "  written:        %s\n" "$$( { for f in $(PAGES); do grep -L '^<!-- STUB -->' "$$f"; done; } | wc -l | tr -d ' ')"
+	@printf "  stubs:          %s\n" "$$(grep -l '^<!-- STUB -->' $(PAGES) 2>/dev/null | wc -l | tr -d ' ')"
+	@printf "Stub-link refs:   %s unique\n" "$$(grep -hoE '\*\(stub[^)]*\)\*' *.md 2>/dev/null | wc -l | tr -d ' ')"
+	@printf "Broken links:     %s file(s)\n" "$$(make --silent missing 2>/dev/null | wc -l | tr -d ' ')"
 
-missing: ## List planned pages not yet written
-	@for link in $$(grep -h '\*(planned)\*' *.md 2>/dev/null | grep -oE '\(\./[a-zA-Z-]+\.md\)' | sed 's|(\./||;s|)||' | sort -u); do \
+missing: ## List link targets that don't exist on disk (should be empty since all stubs are created)
+	@for link in $$(grep -hoE '\(\./[a-zA-Z-]+\.md\)' *.md 2>/dev/null | sed 's|(\./||;s|)||' | sort -u); do \
 		[ -f "$$link" ] || echo "$$link"; \
 	done
+
+stubs: ## List stub pages (header-only, body TBD)
+	@grep -l '^<!-- STUB -->' $(PAGES) 2>/dev/null | sort
 
 links: ## List all internal page links (deduped)
 	@grep -hoE '\(\./[a-zA-Z-]+\.md[^)]*\)' *.md 2>/dev/null | sort -u
