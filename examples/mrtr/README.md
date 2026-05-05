@@ -77,5 +77,5 @@ testconf-mrtr` from the repo root.
 | Tool handler API | [`core/handler_context.go`](../../core/handler_context.go) — `ctx.RequestInput` sentinel + `InputResponse(key)` / `HasInputResponses()` / `RequestState()` accessors |
 | Client auto-loop | [`client/mrtr.go`](../../client/mrtr.go) — `CallToolWithInputs` + `DefaultInputHandler` |
 | Single dispatcher | [`client.HandleServerRequestWithContext`](../../client/client.go) — same switch handles real server-initiated requests AND MRTR-synthesized ones |
-| Conformance | [`conformance/mrtr/scenarios.test.ts`](../../conformance/mrtr/scenarios.test.ts) |
+| Conformance | [panyam/mcpconformance — `src/scenarios/server/mrtr/`](https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension/src/scenarios/server/mrtr) (upstream Draft PR modelcontextprotocol/conformance#262); local sentinel: [`conformance/mrtr/`](../../conformance/mrtr/) |
 | SEP | [SEP-2322 spec PR](https://github.com/modelcontextprotocol/specification/pull/2322) |
