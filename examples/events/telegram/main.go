@@ -54,6 +54,12 @@ func serve() {
 
 	whOpts := []events.WebhookOption{
 		events.WithWebhookHeaderMode(headerMode),
+		// ζ-1 demo escape: the demo's webhook step subscribes to local
+		// httptest receivers (127.0.0.1:N). Production-default dial-time
+		// SSRF guard would block these. Production deployments leave
+		// this OFF so loopback/private-IP webhook URLs are rejected at
+		// dial per spec §"Webhook Security" L464.
+		events.WithWebhookAllowPrivateNetworks(true),
 	}
 	log.Printf("[server] webhook headers=%s; client-supplied secrets only", headerMode)
 

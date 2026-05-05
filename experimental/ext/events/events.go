@@ -474,7 +474,7 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 		if req.Delivery.URL == "" {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "delivery.url is required")
 		}
-		if err := ValidateWebhookURL(req.Delivery.URL); err != nil {
+		if err := webhooks.ValidateWebhookURL(req.Delivery.URL); err != nil {
 			return core.NewErrorResponse(id, ErrCodeInvalidCallbackUrl, err.Error())
 		}
 
@@ -536,12 +536,52 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 		// for security, used only as the X-MCP-Subscription-Id header
 		// value on delivery POSTs (γ-4 wires the header). Knowing the
 		// id grants no operations on the subscription (L378).
-		return core.NewResponse(id, map[string]any{
+		respBody := map[string]any{
 			"id":            derivedID,
 			"cursor":        wireCursor,
 			"refreshBefore": expiresAt.Format(time.RFC3339),
-		})
+		}
+		// ζ-5: include deliveryStatus on refresh response when the target
+		// has prior delivery attempts. Spec §"Webhook Delivery Status"
+		// L425-460. Omitted on first subscribe — there's nothing to
+		// report and an empty object would just be wire bloat.
+		if status, ok := deliveryStatusForResponse(webhooks.DeliveryStatus(canonical)); ok {
+			respBody["deliveryStatus"] = status
+		}
+		return core.NewResponse(id, respBody)
 	})
+}
+
+// deliveryStatusForResponse projects an internal DeliveryStatus into
+// the spec wire shape (§"Webhook Delivery Status" L425-460). Returns
+// (nil, false) when there's nothing to report (no prior attempts).
+//
+// Wire shape:
+//
+//	{
+//	  "active":         bool,
+//	  "lastDeliveryAt": "RFC3339" (omitted if nil),
+//	  "lastError":      "categorical" (omitted if empty),
+//	  "failedSince":    "RFC3339" (omitted if nil)
+//	}
+func deliveryStatusForResponse(s DeliveryStatus) (map[string]any, bool) {
+	// "Nothing to report" = no successes AND no failures.
+	if s.LastDeliveryAt == nil && s.LastError == DeliveryErrorNone && s.FailedSince == nil {
+		return nil, false
+	}
+	out := map[string]any{
+		"active": s.Active,
+	}
+	if s.LastDeliveryAt != nil {
+		out["lastDeliveryAt"] = s.LastDeliveryAt.Format(time.RFC3339)
+	}
+	if s.LastError != DeliveryErrorNone {
+		out["lastError"] = string(s.LastError)
+	}
+	if s.FailedSince != nil {
+		out["failedSince"] = s.FailedSince.Format(time.RFC3339)
+	}
+	return out, true
 }
 
 func registerUnsubscribe(srv *server.Server, webhooks *WebhookRegistry, unsafeAnon string) {
