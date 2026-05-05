@@ -4,7 +4,6 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -247,7 +246,7 @@ curl -s -X POST http://localhost:8080/mcp \
 				"name":      "upload_image",
 				"arguments": map[string]any{"image": uri},
 			})
-			printRPCError(err, "file_type_not_accepted")
+			common.PrintRPCError(err, "file_type_not_accepted")
 			return nil
 		})
 
@@ -278,7 +277,7 @@ curl -s -X POST http://localhost:8080/mcp \
 				"name":      "upload_image",
 				"arguments": map[string]any{"image": uri},
 			})
-			printRPCError(err, "file_too_large")
+			common.PrintRPCError(err, "file_too_large")
 			return nil
 		})
 
@@ -310,7 +309,7 @@ curl -s -X POST http://localhost:8080/mcp \
 				"name":      "analyze_documents",
 				"arguments": map[string]any{"documents": []string{good, bad}},
 			})
-			printRPCError(err, "file_type_not_accepted")
+			common.PrintRPCError(err, "file_type_not_accepted")
 			return nil
 		})
 
@@ -448,37 +447,6 @@ func previewHex(data []byte, n int) {
 	fmt.Printf("      │ %s\n", strings.TrimRight(b.String(), " "))
 	if len(data) > n {
 		fmt.Printf("      │ … (+%d bytes)\n", len(data)-n)
-	}
-}
-
-// printRPCError formats a `*client.RPCError` for the validation rejection
-// demo steps. wantReason is the SEP-2356 reason the demo expects to see —
-// printed alongside the actual reason so a regression in the wire shape
-// is visible in the demo output (and not just in the conformance suite).
-func printRPCError(err error, wantReason string) {
-	if err == nil {
-		fmt.Printf("    UNEXPECTED: server accepted the call; no validation triggered\n")
-		return
-	}
-	var rpc *client.RPCError
-	if !errors.As(err, &rpc) {
-		fmt.Printf("    transport error: %v\n", err)
-		return
-	}
-	fmt.Printf("    error.code:    %d\n", rpc.Code)
-	fmt.Printf("    error.message: %s\n", rpc.Message)
-	if rpc.Data == nil {
-		fmt.Printf("    error.data:    <none>\n")
-		return
-	}
-	pretty, _ := json.MarshalIndent(rpc.Data, "      ", "  ")
-	fmt.Printf("    error.data:    %s\n", string(pretty))
-	gotReason := ""
-	if m, ok := rpc.Data.(map[string]any); ok {
-		gotReason, _ = m["reason"].(string)
-	}
-	if wantReason != "" && gotReason != wantReason {
-		fmt.Printf("    WARN: data.reason = %q, expected %q\n", gotReason, wantReason)
 	}
 }
 
