@@ -15,6 +15,14 @@ go run ./unified
 
 The server prints tokens and a step-by-step exercise walkthrough. Connect your MCP host to `http://localhost:8080/mcp` (Streamable HTTP).
 
+## What it demonstrates
+
+- **Public discovery** — `tools/list` works without a token (per spec, capability discovery should be permitted pre-auth). Configured via `server.WithPublicMethods(...)`.
+- **JWT/JWKS validation** — protected methods require `Authorization: Bearer <RS256 JWT>`; the MCP server fetches the AS's JWKS and validates signatures via `auth.NewJWTValidator`.
+- **Per-tool scope enforcement** — `core.ToolDef.RequiredScopes` + `auth.NewToolScopeMiddleware` reject calls with insufficient scope. Spec-compliant `HTTP 403` + `WWW-Authenticate: Bearer error="insufficient_scope"` for client-driven step-up.
+- **Session binding** — once a session is established with one user's token, swapping tokens mid-session is rejected to prevent session hijacking. Subject captured at session creation; enforced in the streamable HTTP transport.
+- **Layered usage** — the unified example shows all four patterns running on a single server; the per-pattern sub-binaries (bearer/jwt/scopes/session-binding/public-discovery) are stripped-down fixtures for understanding each pattern in isolation.
+
 ## Examples
 
 | Port | Example | Auth Pattern |

@@ -16,6 +16,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -23,10 +24,10 @@ import (
 	"strings"
 
 	"github.com/panyam/demokit"
-	"github.com/panyam/demokit/tui"
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
-	"github.com/panyam/mcpkit/examples/auth/common"
+	authcommon "github.com/panyam/mcpkit/examples/auth/common"
+	"github.com/panyam/mcpkit/examples/common"
 	"github.com/panyam/mcpkit/ext/auth"
 	"github.com/panyam/mcpkit/server"
 )
@@ -52,12 +53,7 @@ type bootstrapInfo struct {
 }
 
 func runDemo() {
-	serverURL := "http://localhost:8080"
-	for i, arg := range os.Args[1:] {
-		if arg == "--url" && i+2 < len(os.Args) {
-			serverURL = os.Args[i+2]
-		}
-	}
+	serverURL := common.ServerURL()
 
 	demo := demokit.New("MCP Auth — Public Discovery + JWT + Scopes + Session Binding").
 		Dir("auth").
@@ -95,7 +91,7 @@ func runDemo() {
 		Arrow("Host", "Server", "GET /demo/bootstrap").
 		DashedArrow("Server", "Host", "{mcp_url, tok_read, tok_read_write, tok_all, tok_bob}").
 		Note("The server pre-mints four tokens for the demo and exposes them via a non-standard /demo/bootstrap endpoint. In production a host would do OAuth (or accept tokens via mcp.json config); this shortcut keeps the demo focused on auth behavior.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			resp, err := http.Get(serverURL + "/demo/bootstrap")
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
@@ -119,7 +115,7 @@ func runDemo() {
 		Arrow("Host", "Server", "POST /mcp — initialize + tools/list (no Authorization header)").
 		DashedArrow("Server", "Host", "tool list (3 tools, even without auth)").
 		Note("The server is configured with WithPublicMethods(\"initialize\", \"notifications/initialized\", \"tools/list\", \"prompts/list\", \"ping\"). These bypass the auth check so an unauthenticated client can discover what's available before requesting a token.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			c := client.NewClient(boot.MCPURL,
 				core.ClientInfo{Name: "demo-host-anon", Version: "1.0"},
 			)
@@ -145,7 +141,7 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call: echo  (no Authorization header)").
 		DashedArrow("Server", "Host", "HTTP 401 + WWW-Authenticate").
 		Note("tools/call is NOT in the public allowlist. The mcpkit client surfaces this as *client.ClientAuthError. A real MCP host would use this to trigger an OAuth flow.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			c := client.NewClient(boot.MCPURL,
 				core.ClientInfo{Name: "demo-host-anon", Version: "1.0"},
 			)
@@ -170,7 +166,7 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call: echo + Bearer alice/[read]").
 		DashedArrow("Server", "Host", "echo + claims (subject=alice, scopes=[read])").
 		Note("The mcpkit JWTValidator fetches the AS's JWKS, verifies the RS256 signature using kid lookup, and exposes the claims to handlers via core.AuthClaims(ctx). echo is a no-scope tool that reflects the authenticated identity back, so we can see the validated claims.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			readClient = client.NewClient(boot.MCPURL,
 				core.ClientInfo{Name: "demo-host-alice", Version: "1.0"},
 				client.WithClientBearerToken(boot.TokRead),
@@ -193,7 +189,7 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call: write-tool + Bearer alice/[read]").
 		DashedArrow("Server", "Host", "HTTP 403 + WWW-Authenticate: Bearer error=\"insufficient_scope\", scope=\"write\"").
 		Note("write-tool declares RequiredScopes: [\"write\"] on its ToolDef. The auth.NewToolScopeMiddleware short-circuits the request with HTTP 403 + WWW-Authenticate before the handler runs (per SEP-2643 UC2 + RFC 6750). Scope info is in the header — the client's RFC 6750 parser auto-populates RequiredScopes.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			_, err := readClient.ToolCall("write-tool", map[string]any{"data": "x"})
 			var authErr *client.ClientAuthError
 			if !errors.As(err, &authErr) {
@@ -213,7 +209,7 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call: write-tool").
 		DashedArrow("Server", "Host", "ok").
 		Note("New session with the broader token. write-tool runs because the token includes write. Scope step-up in real systems is driven by the WWW-Authenticate response from the previous step — see examples/fine-grained-auth/ for the full SEP-2643 UC2 flow.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			readWriteClient = client.NewClient(boot.MCPURL,
 				core.ClientInfo{Name: "demo-host-alice-rw", Version: "1.0"},
 				client.WithClientBearerToken(boot.TokReadWrite),
@@ -236,7 +232,7 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call: admin-tool + Bearer alice/[read write]").
 		DashedArrow("Server", "Host", "HTTP 403 + WWW-Authenticate: scope=\"admin\"").
 		Note("admin-tool requires \"admin\" scope. The same scope-enforcement middleware returns 403 + WWW-Authenticate with the missing scope.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			_, err := readWriteClient.ToolCall("admin-tool", map[string]any{"action": "rotate"})
 			var authErr *client.ClientAuthError
 			if !errors.As(err, &authErr) {
@@ -253,7 +249,7 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call: echo + Mcp-Session-Id=<alice's> + Bearer bob/[all]").
 		DashedArrow("Server", "Host", "HTTP 403 (subject mismatch)").
 		Note("mcpkit binds the principal (Claims.Subject) to the session at creation time. Subsequent requests on the same session must come from the same subject. Even though bob's token is independently valid (correct signature, fresh, has all scopes), it doesn't match alice's bound session — so the request is rejected. This prevents an attacker who steals a session ID from using their own valid token to take over.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			sid := readClient.SessionID()
 			fmt.Printf("    alice's session ID: %s\n", sid)
 			body := strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"echo","arguments":{"message":"hijack attempt"}}}`)
@@ -279,13 +275,7 @@ func runDemo() {
 		"- Session binding: enforced in `server/streamable_transport.go` (verifyPrincipal); subject is captured at session creation",
 	)
 
-	// Use TUI renderer if --tui flag is passed.
-	for _, arg := range os.Args[1:] {
-		if strings.TrimSpace(arg) == "--tui" {
-			demo.WithRenderer(tui.New())
-			break
-		}
-	}
+	common.SetupRenderer(demo)
 
 	demo.Execute()
 
@@ -300,36 +290,32 @@ func runDemo() {
 // --- Serve mode ---
 
 func serve() {
-	addr := ":8080"
-	for i, arg := range os.Args[1:] {
-		if arg == "--addr" && i+2 < len(os.Args) {
-			addr = os.Args[i+2]
-		}
-	}
+	addr := flag.String("addr", ":8080", "listen address")
+	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
+		demokit.BoolFlag("--serve"),
+		demokit.ValueFlag("--url"),
+	))
 
-	logger := demokit.NewColorLogger("[mcp] ", []demokit.ColorRule{
-		{Contains: "error=", DarkColor: demokit.ANSIRed},
-		{Contains: "ERROR", DarkColor: demokit.ANSIRed},
-		{Contains: "[http] →", DarkColor: demokit.ANSIGray, LightColor: demokit.ANSIDimBlue},
-		{Contains: "[http] ←", DarkColor: demokit.ANSICyan, LightColor: demokit.ANSIBlue},
-		{Contains: "MCP ", DarkColor: demokit.ANSIBrightGreen, LightColor: demokit.ANSIGreen},
-	})
+	logger := common.NewMCPLogger("[mcp] ")
 
-	env := common.NewEnv([]string{"read", "write", "admin"})
+	env := authcommon.NewEnv([]string{"read", "write", "admin"})
 	defer env.Close()
 
-	listenURL := fmt.Sprintf("http://localhost%s", addr)
+	listenURL := fmt.Sprintf("http://localhost%s", *addr)
 	validator := env.NewValidator(listenURL)
 
-	srv := server.NewServer(
-		core.ServerInfo{Name: "auth-unified", Version: "1.0"},
+	opts := []server.Option{server.WithListen(*addr)}
+	opts = append(opts, common.WithMCPLogging(logger)...)
+	opts = append(opts,
 		server.WithAuth(validator),
 		server.WithPublicMethods("initialize", "notifications/initialized", "tools/list", "prompts/list", "ping"),
-		server.WithRequestLogging(logger),
-		server.WithMiddleware(server.LoggingMiddleware(logger)),
 		server.WithMiddleware(server.ToolCallLogger(logger)),
 	)
-	common.RegisterEchoTools(srv)
+	srv := server.NewServer(
+		core.ServerInfo{Name: "auth-unified", Version: "1.0"},
+		opts...,
+	)
+	authcommon.RegisterEchoTools(srv)
 	srv.UseMiddleware(auth.NewToolScopeMiddleware(srv.Registry()))
 
 	// Pre-mint tokens for the walkthrough.
@@ -349,7 +335,7 @@ func serve() {
 	log.Printf("  alice/[read write admin]:  %s", tokAll)
 	log.Printf("  bob/[read write admin]:    %s", tokBob)
 
-	if err := srv.Run(addr,
+	if err := srv.ListenAndServe(
 		server.WithStreamableHTTP(true),
 		server.WithMux(func(m *http.ServeMux) {
 			// Bootstrap endpoint for the demokit walkthrough.
