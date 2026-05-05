@@ -4,6 +4,8 @@ Runnable examples covering authentication, async tasks, MCP Apps, and proto-base
 
 > **Most examples ship a guided walkthrough.** Each walkthrough is a scripted MCP host that drives the server through every wire-format detail of the feature. Two terminals: `make serve` (real MCP server, also works with VS Code/MCPJam/Claude Desktop) + `make demo` (the walkthrough). External MCP hosts are only needed when there is no `make demo`.
 
+> **Adding or auditing an example?** See [CONVENTIONS.md](CONVENTIONS.md) for the canonical structure (layout, server setup, walkthrough, Makefile). The `/example-new`, `/example-audit`, and `/example-upgrade` skills under `.claude/commands/` apply and enforce these conventions.
+
 ## Walkthrough-driven examples
 
 The primary path. Run the demo from the CLI and read the on-disk `WALKTHROUGH.md` for the sequence diagram and step-by-step explanation.
