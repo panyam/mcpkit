@@ -5,7 +5,7 @@ How a single MCP request travels from the caller through middleware, dispatch, h
 > **Kind:** root *(FAQ-style)* · **Prerequisites:** [bring-up](./bringup.md), [transport-mechanics](./transport-mechanics.md), [notifications](./notifications.md)
 > **Reachable from:** [README](./README.md), [bring-up](./bringup.md) Next-to-read, [transport-mechanics](./transport-mechanics.md) Next-to-read, [notifications](./notifications.md) Next-to-read, [extension-mechanisms](./extension-mechanisms.md) Next-to-read
 > **Branches into:** [reverse-call](./reverse-call.md) *(stub)*, [tasks](./tasks.md) *(stub)*, [mrtr](./mrtr.md) *(stub)*, [middleware](./middleware.md) *(stub)*
-> **Spec:** [Base protocol](https://modelcontextprotocol.io/specification/2025-06-18) · **Code:** `core/jsonrpc.go`, `core/handler_context.go`, `core/typed_tool.go`, `core/protocol.go`, `server/dispatch.go`, `server/registration.go`, `server/middleware.go`, `server/method_handler.go`, `server/mrtr.go`, `client/middleware.go`, `client/mrtr.go`
+> **Spec:** [Base protocol](https://modelcontextprotocol.io/specification/2025-06-18) · **Code:** [`core/jsonrpc.go`](https://github.com/panyam/mcpkit/blob/main/core/jsonrpc.go) · [`core/handler_context.go`](https://github.com/panyam/mcpkit/blob/main/core/handler_context.go) · [`core/typed_tool.go`](https://github.com/panyam/mcpkit/blob/main/core/typed_tool.go) · [`core/protocol.go`](https://github.com/panyam/mcpkit/blob/main/core/protocol.go) · [`server/dispatch.go`](https://github.com/panyam/mcpkit/blob/main/server/dispatch.go) · [`server/registration.go`](https://github.com/panyam/mcpkit/blob/main/server/registration.go) · [`server/middleware.go`](https://github.com/panyam/mcpkit/blob/main/server/middleware.go) · [`server/method_handler.go`](https://github.com/panyam/mcpkit/blob/main/server/method_handler.go) · [`server/mrtr.go`](https://github.com/panyam/mcpkit/blob/main/server/mrtr.go) · [`client/middleware.go`](https://github.com/panyam/mcpkit/blob/main/client/middleware.go) · [`client/mrtr.go`](https://github.com/panyam/mcpkit/blob/main/client/mrtr.go)
 
 ## Prerequisites
 
@@ -16,6 +16,8 @@ How a single MCP request travels from the caller through middleware, dispatch, h
 ## Context
 
 Bring-up gives you a session. Transport-mechanics gives you the wire. Notifications give you state-change channels. **This page explains what happens *between* a caller invoking `client.Call(...)` on one side and the handler running on the other side** — the dispatcher that finds the right handler, the handler context that gives the handler its environment, the middleware stacks that wrap each direction, the typed-binding layer that turns JSON into Go and back, and the response path that returns through all of it.
+
+**The anatomy is symmetric.** Both client and server have a method registry, a dispatch loop, and user-registered custom handlers. Forward calls (client→server, e.g. `tools/call`) reach a server-side handler via the server's dispatch. Reverse calls (server→client, e.g. `sampling/createMessage`, `elicitation/create`, `roots/list`) reach a client-side handler via the *client's* dispatch — the same shape, mirrored. Tasks plug into the server's dispatch via [`RegisterTasks`](https://github.com/panyam/mcpkit/blob/main/server/tasks_v2.go); the host plugs sampling/elicitation/roots delegates into the client's dispatch the same way. Same machinery on both sides.
 
 Almost every other planned page drills into a piece of this — reverse-call mechanics, tasks, middleware composition, MRTR. Pin this down once and they all open with *"assumes per-request anatomy"* and skip straight to specifics.
 
@@ -60,7 +62,15 @@ sequenceDiagram
 2. **Client send-middleware.** Wraps the outbound request. Common uses: auth header injection, logging, retry, tracing. The chain ends by encoding the message and writing it to the transport.
 3. **Wire.** Already covered in [transport-mechanics](./transport-mechanics.md). One POST for streamable HTTP; one `\n`-framed line for stdio.
 4. **Server recv-middleware.** First thing on the server side. Symmetric to client send-mw: auth verification, logging, tracing, deserialization checks. Eventually hands the decoded request to dispatch.
-5. **Dispatch.** Looks up the method name in the server's registry. mcpkit registries: `RegisterTool`, `RegisterPrompt`, `RegisterResource`, plus raw `MethodHandler` for non-typed escape hatches. Lookup miss → JSON-RPC error `-32601` ("Method not found"). Lookup hit → proceed.
+5. **Dispatch.** Looks up the method name in the server's registry; lookup miss → JSON-RPC error `-32601` ("Method not found"); lookup hit → proceed. mcpkit's server-side registries (in [`server/registration.go`](https://github.com/panyam/mcpkit/blob/main/server/registration.go)):
+
+   - **[`RegisterTool`](https://github.com/panyam/mcpkit/blob/main/server/registration.go)** — typed handler for `tools/call` (one tool name per registration).
+   - **[`RegisterPrompt`](https://github.com/panyam/mcpkit/blob/main/server/registration.go)** — typed handler for `prompts/get`.
+   - **[`RegisterResource`](https://github.com/panyam/mcpkit/blob/main/server/registration.go)** — typed handler for `resources/read` and friends.
+   - **[`RegisterTasks` / `RegisterTasksV1` / `RegisterTasksHybrid`](https://github.com/panyam/mcpkit/blob/main/server/tasks_v2.go)** — typed handlers for `tasks/*` (SEP-2663; hybrid dispatches by negotiated capability).
+   - **[`MethodHandler`](https://github.com/panyam/mcpkit/blob/main/server/method_handler.go)** — raw escape hatch for any method without typed binding.
+
+   The **client has the same shape** for incoming reverse calls. The host registers a sampling delegate, an elicitation handler, and a roots provider; when the server emits `sampling/createMessage`, the client's dispatch routes it to the sampling delegate the same way the server routes `tools/call` to a registered tool. Both sides have a method registry. Both sides have a dispatch loop. Both sides have user-provided custom handlers. (See [`client/mrtr.go`](https://github.com/panyam/mcpkit/blob/main/client/mrtr.go) for the client-side dispatch.)
 6. **Handler context construction.** Dispatch builds a per-request `HandlerContext` — covered in detail in [Q2](#q2--whats-in-the-handler-context). Carries the originating id, session reference, capabilities, request/notify hooks for reverse traffic, a cancel `ctx.Context`, and the typed params after binding.
 7. **Handler execution.** The user's registered function runs. It may:
    - Read the typed params, do its work, return a typed result.
@@ -79,7 +89,7 @@ Concurrency: many calls can be in flight at once. Each gets its own goroutine on
 
 ## Q2 — What's in the handler context?
 
-The handler context is the **runtime environment of one in-flight request on the server side**. mcpkit defines it in `core/handler_context.go`. Conceptually it carries everything a handler needs that isn't in the typed params.
+The handler context is the **runtime environment of one in-flight request on the server side**. mcpkit defines it in [`core/handler_context.go`](https://github.com/panyam/mcpkit/blob/main/core/handler_context.go). Conceptually it carries everything a handler needs that isn't in the typed params.
 
 | Field | Purpose |
 |-------|---------|
@@ -149,7 +159,7 @@ Each stack is a **pipeline** — middleware composes by wrapping the next handle
 
 mcpkit's value-add over raw JSON-RPC is **typed handlers**. You define a Go struct with json tags; mcpkit handles the marshalling, schema generation, validation, and binding into the handler.
 
-The pattern (`core/typed_tool.go`):
+The pattern (in [`core/typed_tool.go`](https://github.com/panyam/mcpkit/blob/main/core/typed_tool.go)):
 
 ```go
 type SearchArgs struct {
@@ -179,7 +189,7 @@ What happens at request time:
 
 The same pattern applies to prompts (`RegisterPrompt`), resources (`RegisterResource`), tasks (`RegisterTasks`), and so on — typed registries with auto-schema.
 
-If you need to bypass typed binding (custom JSON shape, dynamic schema, raw access), use `MethodHandler` directly via `server/method_handler.go`. You give up the schema auto-generation and have to handle JSON yourself.
+If you need to bypass typed binding (custom JSON shape, dynamic schema, raw access), use [`MethodHandler`](https://github.com/panyam/mcpkit/blob/main/server/method_handler.go) directly. You give up the schema auto-generation and have to handle JSON yourself.
 
 > [!NOTE]
 > Schema validation is one place where capability negotiation interacts with extensions. SEPs that introduce new `_meta` fields on existing requests need to extend the schemas so validators don't reject them. mcpkit's typed-binding generator is aware of `_meta` as a reserved field; SEP-driven additions go in there.
@@ -211,18 +221,19 @@ Symmetric on the client side.
 The forward path:
 
 1. Server handler is running, has its handler context.
-2. Handler calls `hc.Sample(...)` or `hc.Elicit(...)` or similar — internally the request hook.
+2. Handler calls `hc.Sample(...)` or `hc.Elicit(...)` or similar — internally the request hook on the handler context.
 3. Request hook allocates a new id from the **server's** id-space, registers `server.pending[newId] = handler-resume continuation`, records the back-pointer `(newId → originated-by → forwardId)` in handler context state.
 4. Goes through server send-mw, onto the wire (over the same channel — typically the same SSE stream that's carrying the forward call's response).
-5. Client receives, **client recv-mw** runs, dispatches to a client-side handler for that reverse method (e.g., the host's sampling delegate).
-6. Client-side handler runs, returns a result.
+5. Client receives, **client recv-mw** runs, **the client's dispatch routes the request by method name** (`sampling/createMessage`, `elicitation/create`, `roots/list`) **to a user-registered handler** — the host's sampling delegate, elicitation UI handler, or roots provider. This is the **same shape as server-side dispatch**: the client has its own method registry and its own custom-handler hooks.
+6. Client-side handler runs (with its own client-side handler context), returns a result.
 7. Client send-mw, onto the wire.
 8. Server recv-mw, looks up `server.pending[newId]`, resolves the continuation, the handler resumes.
 
-Two things to internalize:
+Three things to internalize:
 
 - **Reverse calls reuse the four middleware stacks**, in their reverse-direction roles (server send-mw on origination, server recv-mw on response).
 - **The pending-id table is per-direction**: the server's pending table tracks reverse calls it originated; the client's tracks forward calls it originated. They're independent. (See [transport-mechanics → reverse-call origination](./transport-mechanics.md#reverse-call-origination) for the diagram.)
+- **Sampling, elicitation, roots/list are not special** — they're standard request/response calls dispatched to custom handlers, just on the client side instead of the server side. Anyone implementing an MCP host registers handlers for them the same way a server author registers tools.
 
 > [!NOTE]
 > **Branch →** [Reverse-call mechanics](./reverse-call.md) *(stub)* — concretizes this with a `tools/call → elicitation/create` walkthrough, including cancellation propagation through the forward-id back-pointer.
