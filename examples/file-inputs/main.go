@@ -41,7 +41,11 @@ func main() {
 
 func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
-	flag.CommandLine.Parse(filterFlags(os.Args[1:]))
+	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
+		demokit.BoolFlag("--serve"),
+		demokit.ValueFlag("--url"),
+		demokit.ValueFlag("--file"),
+	))
 
 	// Same logger shape as examples/elicitation/main.go — tints request
 	// flow so a side-by-side `make serve` + `make demo` shows what the
