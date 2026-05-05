@@ -243,6 +243,7 @@ After reading this root, downstream pages can assume:
 ## Leads to
 
 - **(forthcoming) Per-request anatomy** *(root)* — folds notification dispatch into the broader picture: notifications travel through receiving middleware, hit a notification-specific dispatcher, and (unlike requests) never enter the pending-id table on the receive side.
+- **[Extension mechanisms](./extension-mechanisms.md)** *(root)* — pins the vocabulary for "what counts as an extension." Some notification additions (e.g. `notifications/resources/updated`) are themselves extensions; this root explains the meta-mechanism.
 - **(forthcoming) Tasks v1/v2/hybrid** *(root)* — long-running operations as a first-class concept. Heavy user of progress notifications and cancellation; introduces detach/resume semantics that flat notifications don't cover.
 - **(forthcoming) Cancellation deep-dive** *(leaf)* — race scenarios, partial-state handling, timeout-vs-cancel distinction, mcpkit's `ctx.Done()` propagation paths.
 - **(forthcoming) List-TTL ([SEP-2549](https://modelcontextprotocol.io/specification/2025-06-18))** *(leaf)* — three-state cache-lifetime hint orthogonal to list_changed; relevant when notifications aren't reliable.

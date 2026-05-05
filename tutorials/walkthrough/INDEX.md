@@ -20,7 +20,8 @@ Use this to:
 | [STRUCTURE](./STRUCTURE.md) | meta | — | author/reader knows the DAG model, root contract, note-block roles, branch-point convention, target-shape tracking | — |
 | [bring-up](./bringup.md) | root | none (foundational) | session live; transport chosen; auth resolved; protocol version + capabilities locked; `initialized` sent | transport-mechanics; (forthcoming) notifications; (forthcoming) per-request anatomy; (forthcoming) auth deep-dive; (forthcoming) re-init / resumption (leaf) |
 | [transport-mechanics](./transport-mechanics.md) | root | none (foundational) | host/session/HTTP-request/SSE-event/JSON-RPC-message arity distinct; wire format known per transport; layering (MCP/JSON-RPC/framing/bytes); POST vs GET roles (POST = client→server one-shot; GET = standing server→client back-channel, may idle); `Mcp-Session-Id` server-issued, mandatory on subsequent requests, **routing key on server (not client filter)**; sessions isolated; JSON-RPC correlation + per-direction ID spaces; reverse-call origination gated by handler context, recorded for cancellation propagation | notifications; (forthcoming) per-request anatomy; (forthcoming) reverse-call; SSE resumption (leaf); experimental events ext (branch) |
-| [notifications](./notifications.md) | root *(FAQ-style)* | bring-up, transport-mechanics | six notification families with direction + capability gates; gates fixed at bring-up; list_changed is a hint not a diff; `notifications/cancelled` carries `requestId`, best-effort, `initialize` not cancellable; progress is opt-in per-request via `_meta.progressToken` (not capability-gated); unknown / un-gated notifications dropped silently — asymmetry vs. unknown requests enables forward-compatibility | (forthcoming) per-request anatomy; (forthcoming) tasks; cancellation deep-dive (leaf); list-TTL (leaf, SEP-2549) |
+| [notifications](./notifications.md) | root *(FAQ-style)* | bring-up, transport-mechanics | six notification families with direction + capability gates; gates fixed at bring-up; list_changed is a hint not a diff; `notifications/cancelled` carries `requestId`, best-effort, `initialize` not cancellable; progress is opt-in per-request via `_meta.progressToken` (not capability-gated); unknown / un-gated notifications dropped silently — asymmetry vs. unknown requests enables forward-compatibility | extension-mechanisms; (forthcoming) per-request anatomy; (forthcoming) tasks; cancellation deep-dive (leaf); list-TTL (leaf, SEP-2549) |
+| [extension-mechanisms](./extension-mechanisms.md) | root *(FAQ-style)* | bring-up, transport-mechanics, notifications | four extension surfaces (method namespace · capability flags · notifications · `_meta`); five styles (method-namespace, capability-only, `_meta`-only, bring-up, library-architecture); SEP process + `experimental.<name>` sandbox + graduation; mcpkit's three-tier organization (`core/` → `ext/` → `experimental/ext/`); extension points (registries, middleware, MRTR, custom transports, capability advertisement); case-study table mapping tasks/auth/apps/events/list-TTL/MRTR/elicitation to surfaces; boundary protocol-extension-vs-host/client-policy | (forthcoming) per-request anatomy; (forthcoming) tasks; (forthcoming) auth deep-dive; (forthcoming) apps; (forthcoming) reverse-call; experimental events (branch); list-TTL leaf; MRTR branch |
 
 ## Mid-journey branch points
 
@@ -41,11 +42,13 @@ These are mentioned as "Leads to" or "Branch →" targets on existing pages. Wri
 | Planned page | Kind | Will assume | Will establish |
 |--------------|------|-------------|----------------|
 | **per-request anatomy** *(NEXT)* | root | bring-up, transport-mechanics, notifications | dispatch model, middleware chains, handler context, typed binding, response correlation |
-| reverse-call mechanics | root | bring-up, transport-mechanics, per-request anatomy | parent-handler-context constraint operating live; mrtr-on-both-sides symmetry |
-| tasks (v1 / v2 / hybrid) | root | per-request anatomy, notifications | long-running operations, detach/resume, task store; the v1→v2 migration shape |
-| auth deep-dive | root *(off-mainline)* | bring-up | full OAuth dance, PRM, JWT validation, fine-grained-auth per tool, retry semantics |
+| reverse-call mechanics | root | bring-up, transport-mechanics, per-request anatomy | parent-handler-context constraint operating live; mrtr-on-both-sides symmetry; concretizes elicitation/sampling/roots as method-namespace extensions |
+| tasks (v1 / v2 / hybrid) | root | per-request anatomy, notifications, extension-mechanisms | long-running operations, detach/resume, task store; the v1→v2 migration shape; `RegisterTasksHybrid` dispatch-by-capability |
+| auth deep-dive | root *(off-mainline)* | bring-up, extension-mechanisms | full OAuth dance, PRM, JWT validation, fine-grained-auth per tool, retry semantics; the canonical "bring-up extension" |
+| apps (`ext/ui/`) | root *(off-mainline)* | bring-up, transport-mechanics, extension-mechanisms | AppHost lifecycle, Bridge JS runtime, ServerRegistry; thin protocol surface, mostly host-architecture |
+| MRTR (SEP-2322) | branch | per-request anatomy, extension-mechanisms | message-routing-through-middleware in detail; both-sides symmetry |
 | cancellation deep-dive | leaf | notifications | race scenarios, partial-state handling, timeout-vs-cancel distinction, mcpkit's `ctx.Done()` propagation paths |
-| list-TTL (SEP-2549) | leaf | notifications | three-state cache-lifetime hint orthogonal to list_changed; for when notifications aren't reliable |
+| list-TTL (SEP-2549) | leaf | notifications, extension-mechanisms | three-state cache-lifetime hint orthogonal to list_changed; the canonical `_meta`-only extension |
 | SSE resumption | leaf | transport-mechanics | replay semantics; `event_ids.go` mechanics |
 | middleware composition | branch | per-request anatomy | request-side vs. sending-side; ext/auth and ext/ui interception points |
 | initialize deep-dive | leaf | bring-up | full capability flag enumeration; version negotiation edge cases |
@@ -61,14 +64,17 @@ graph TD
     bringup["bring-up<br/>(root, foundational)"]
     wire["transport mechanics<br/>(root, foundational)"]
     notif["notifications<br/>(root, FAQ)"]
+    ext["extension mechanisms<br/>(root, FAQ)"]
 
     anat["per-request anatomy<br/>(root, NEXT)"]
     rev["reverse-call mechanics<br/>(root, planned)"]
     tasks["tasks v1/v2/hybrid<br/>(root, planned)"]
     auth["auth deep-dive<br/>(root, off-mainline)"]
+    apps["apps (ext/ui)<br/>(root, off-mainline)"]
 
     resume["SSE resumption<br/>(leaf, planned)"]
     mw["middleware composition<br/>(branch, planned)"]
+    mrtr["MRTR SEP-2322<br/>(branch, planned)"]
     init["initialize deep-dive<br/>(leaf, planned)"]
     reinit["re-init / resumption<br/>(leaf, planned)"]
     events["experimental/ext/events<br/>(branch, target-shape)"]
@@ -83,18 +89,24 @@ graph TD
 
     bringup --> notif
     wire --> notif
+    notif --> ext
     bringup --> anat
     wire --> anat
     notif --> anat
-    bringup --> auth
 
+    ext --> tasks
+    ext --> auth
+    ext --> apps
+    ext --> events
+    ext --> mrtr
+    ext --> listttl
     anat --> rev
     anat --> mw
-    notif --> tasks
+    anat --> mrtr
     anat --> tasks
+    notif --> tasks
 
     wire --> resume
-    wire --> events
     bringup --> init
     bringup --> reinit
 
@@ -107,13 +119,14 @@ graph TD
     classDef written fill:#e8f5e9,stroke:#2e7d32,color:#000;
     classDef next fill:#fff3e0,stroke:#e65100,color:#000;
     classDef planned fill:#fafafa,stroke:#9e9e9e,stroke-dasharray:4 3,color:#555;
-    class bringup,wire,notif written;
+    class bringup,wire,notif,ext written;
     class anat next;
-    class rev,tasks,auth,resume,mw,init,reinit,events,elicit,sample,rootsLeaf,canceldeep,listttl planned;
+    class rev,tasks,auth,apps,resume,mw,mrtr,init,reinit,events,elicit,sample,rootsLeaf,canceldeep,listttl planned;
 
     click bringup "./bringup.md"
     click wire "./transport-mechanics.md"
     click notif "./notifications.md"
+    click ext "./extension-mechanisms.md"
 ```
 
 Solid green = written. Solid orange = next up. Dashed grey = planned but not yet written.
