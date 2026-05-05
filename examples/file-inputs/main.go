@@ -24,6 +24,7 @@ import (
 
 	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/examples/common"
 	"github.com/panyam/mcpkit/ext/ui"
 	"github.com/panyam/mcpkit/server"
 )
@@ -47,18 +48,7 @@ func serve() {
 		demokit.ValueFlag("--file"),
 	))
 
-	// Same logger shape as examples/elicitation/main.go — tints request
-	// flow so a side-by-side `make serve` + `make demo` shows what the
-	// server saw for every tools/list and tools/call. WithRequestLogging
-	// covers transport-level traffic; the LoggingMiddleware covers the
-	// MCP dispatch path (method + duration + outcome).
-	logger := demokit.NewColorLogger("[mcp] ", []demokit.ColorRule{
-		{Contains: "error=", DarkColor: demokit.ANSIRed},
-		{Contains: "ERROR", DarkColor: demokit.ANSIRed},
-		{Contains: "[http] →", DarkColor: demokit.ANSIGray, LightColor: demokit.ANSIDimBlue},
-		{Contains: "[http] ←", DarkColor: demokit.ANSICyan, LightColor: demokit.ANSIBlue},
-		{Contains: "MCP ", DarkColor: demokit.ANSIBrightGreen, LightColor: demokit.ANSIGreen},
-	})
+	logger := common.NewMCPLogger("[mcp] ")
 
 	// One temp dir per server run, NOT auto-cleaned — the whole point is
 	// that you can `ls` the directory and `open` the files after the
@@ -69,11 +59,9 @@ func serve() {
 		log.Fatalf("mktemp: %v", err)
 	}
 
-	srv := server.NewServer(
-		core.ServerInfo{Name: "file-inputs-demo", Version: "0.1.0"},
-		server.WithListen(*addr),
-		server.WithRequestLogging(logger),
-		server.WithMiddleware(server.LoggingMiddleware(logger)),
+	opts := []server.Option{server.WithListen(*addr)}
+	opts = append(opts, common.WithMCPLogging(logger)...)
+	opts = append(opts,
 		// MCP Apps extension powers the in-iframe file picker apps
 		// registered in apps.go (SEP-2356 Phase 2.1).
 		server.WithExtension(&ui.UIExtension{}),
@@ -81,6 +69,10 @@ func serve() {
 		// MIME) against the descriptor declared in each tool's
 		// InputSchema. Failures surface as -32602 with structured data.
 		server.WithFileInputValidation(),
+	)
+	srv := server.NewServer(
+		core.ServerInfo{Name: "file-inputs-demo", Version: "0.1.0"},
+		opts...,
 	)
 
 	registerTools(srv, uploadDir)

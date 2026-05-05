@@ -4,12 +4,14 @@ go 1.26.2
 
 replace (
 	github.com/panyam/mcpkit => ../..
+	github.com/panyam/mcpkit/examples/common => ../common
 	github.com/panyam/mcpkit/ext/ui => ../../ext/ui
 )
 
 require (
 	github.com/panyam/demokit v0.0.16
 	github.com/panyam/mcpkit v0.2.41
+	github.com/panyam/mcpkit/examples/common v0.0.0-00010101000000-000000000000
 	github.com/panyam/mcpkit/ext/ui v0.0.0
 )
 
