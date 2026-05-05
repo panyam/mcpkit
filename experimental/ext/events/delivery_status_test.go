@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -298,11 +299,26 @@ func TestSuspend_SuccessfulRefreshReactivates(t *testing.T) {
 // target is omitted from the broadcast list — yielded events no longer
 // attempt delivery to it. Without this skip, the suspend state would
 // be cosmetic (just a status flag) and the dead receiver would still
-// see retry traffic on every yield.
+// see event-retry traffic on every yield.
+//
+// Note: the receiver counts EVENT deliveries only — ζ-7.3 added an
+// auto-PostTerminated control envelope on the suspend transition,
+// which also hits the receiver but is a control body, not an event.
+// The discriminator is the body's top-level `type` field.
 func TestSuspend_SuspendedTargetSkippedInDeliver(t *testing.T) {
-	var hits atomic.Int32
-	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		hits.Add(1)
+	var eventHits atomic.Int32
+	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var env map[string]any
+		_ = json.Unmarshal(body, &env)
+		// ζ-7.3: distinguish event deliveries from the auto-Post
+		// terminated control envelope. Only count events for this
+		// test's "suspended target gets no new event deliveries" claim.
+		if env["type"] == "terminated" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		eventHits.Add(1)
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer receiver.Close()
@@ -321,14 +337,127 @@ func TestSuspend_SuspendedTargetSkippedInDeliver(t *testing.T) {
 	require.False(t, r.DeliveryStatus(canonical).Active)
 
 	// Note hits up to here so we measure only what happens AFTER suspension.
-	hitsBeforeSuspendYield := hits.Load()
+	hitsBeforeSuspendYield := eventHits.Load()
 
 	// Yield via Deliver — suspended target should be skipped.
 	r.Deliver(MakeEvent("fake.event", "evt_post_suspend", "1", time.Now(), map[string]string{"k": "v"}))
 	time.Sleep(200 * time.Millisecond)
 
-	assert.Equal(t, hitsBeforeSuspendYield, hits.Load(),
-		"suspended target MUST NOT receive new delivery attempts; got %d new hits", hits.Load()-hitsBeforeSuspendYield)
+	assert.Equal(t, hitsBeforeSuspendYield, eventHits.Load(),
+		"suspended target MUST NOT receive new event delivery attempts; got %d new event hits", eventHits.Load()-hitsBeforeSuspendYield)
+}
+
+// TestSuspend_AutoPostsTerminatedEnvelopeOnSuspension verifies the
+// ζ-7.3 wiring: when ζ-6's suspend transition flips Active=true→false,
+// the registry automatically POSTs a {type:"terminated", error:{...}}
+// control envelope to the receiver as a courtesy notification.
+//
+// Important behavior: the target is NOT removed from the registry
+// (distinct from explicit PostTerminated which removes). The auto-Post
+// uses postTerminatedSilent so deliveryStatus stays observable
+// (Active=false) for the spec-defined "successful refresh reactivates"
+// path (ζ-6).
+//
+// Without this auto-Post, the receiver would have no signal that its
+// subscription got suspended — it would just stop seeing events with
+// no explanation.
+func TestSuspend_AutoPostsTerminatedEnvelopeOnSuspension(t *testing.T) {
+	var sawTerminated atomic.Int32
+	var sawEvent atomic.Int32
+	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var env map[string]any
+		_ = json.Unmarshal(body, &env)
+		if env["type"] == "terminated" {
+			sawTerminated.Add(1)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		// Event delivery — return 500 so it counts as a failure for
+		// the suspend state machine.
+		sawEvent.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer receiver.Close()
+
+	r := NewWebhookRegistry(
+		WithWebhookAllowPrivateNetworks(true),
+		WithWebhookSuspendThreshold(2),
+		WithWebhookSuspendWindow(10*time.Second),
+	)
+	canonical := []byte("auto-terminated-test")
+	r.Register(canonical, "sub_at", receiver.URL, "whsec_secret", 0)
+
+	// Drive 2 failures → suspend transition fires.
+	r.deliver(r.Targets()[0], "evt_a", []byte(`{}`))
+	r.deliver(r.Targets()[0], "evt_b", []byte(`{}`))
+
+	require.Eventually(t, func() bool {
+		return sawTerminated.Load() == 1
+	}, 2*time.Second, 20*time.Millisecond,
+		"suspend transition MUST auto-POST a type:terminated envelope; got %d", sawTerminated.Load())
+
+	// The target MUST still be in the registry — Active=false but
+	// observable. This is what distinguishes the auto-Post from
+	// explicit PostTerminated (which removes).
+	st := r.DeliveryStatus(canonical)
+	assert.False(t, st.Active, "auto-Post must leave Active=false on the target, not remove it")
+	assert.NotEmpty(t, st.LastError, "auto-Post must preserve the deliveryStatus state")
+}
+
+// TestSuspend_DoesNotAutoPostTerminatedTwice verifies idempotence:
+// the auto-Post fires exactly once on the Active true→false transition,
+// not on every subsequent failed delivery while suspended. (Suspended
+// targets are filtered out of Deliver, so further deliveries shouldn't
+// happen at all — but the deliver()-via-direct-call path could
+// hypothetically still hit recordDeliveryFailure.)
+func TestSuspend_DoesNotAutoPostTerminatedTwice(t *testing.T) {
+	var sawTerminated atomic.Int32
+	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var env map[string]any
+		_ = json.Unmarshal(body, &env)
+		if env["type"] == "terminated" {
+			sawTerminated.Add(1)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer receiver.Close()
+
+	r := NewWebhookRegistry(
+		WithWebhookAllowPrivateNetworks(true),
+		WithWebhookSuspendThreshold(2),
+		WithWebhookSuspendWindow(10*time.Second),
+	)
+	canonical := []byte("idempotent-terminated-test")
+	r.Register(canonical, "sub_idem", receiver.URL, "whsec_secret", 0)
+
+	// Suspend.
+	r.deliver(r.Targets()[0], "evt_a", []byte(`{}`))
+	r.deliver(r.Targets()[0], "evt_b", []byte(`{}`))
+	require.Eventually(t, func() bool { return sawTerminated.Load() == 1 },
+		2*time.Second, 20*time.Millisecond)
+
+	// Now grab the suspended target directly (bypassing the Targets()
+	// filter that would skip it) and try another deliver. The target
+	// is already Active=false so no transition; auto-Post must NOT fire.
+	st := r.DeliveryStatus(canonical)
+	require.False(t, st.Active)
+
+	// Reach into the registry directly (this is what a corrupt caller
+	// or future code path might do).
+	r.mu.RLock()
+	target, ok := r.targets[string(canonical)]
+	r.mu.RUnlock()
+	require.True(t, ok)
+	r.deliver(target, "evt_c", []byte(`{}`))
+
+	// Wait long enough that any auto-Post would have happened.
+	time.Sleep(500 * time.Millisecond)
+	assert.Equal(t, int32(1), sawTerminated.Load(),
+		"auto-Post must fire exactly once on the suspend transition; got %d", sawTerminated.Load())
 }
 
 // TestDeliveryStatus_LastErrorBucketsForConnectionRefused verifies the
