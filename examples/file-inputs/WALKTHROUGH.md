@@ -10,6 +10,37 @@ Walks through SEP-2356, which lets servers declare file-input properties on tool
 - **analyze_documents — array-of-files input** — Demonstrates `core.FileInputArrayProperty` — the schema marks the `documents` array's *items* with `x-mcp-file`, so a host renders one picker per row. The walkthrough loads two embedded PDFs (`testdata/contract.pdf`, `testdata/appendix.pdf`) and sends both in one call.
 - **process_any_file — no accept/maxSize filter** — Empty `FileInputDescriptor{}` means "any file, any size." Useful for ad-hoc inspection. The handler still decodes via `core.DecodeDataURI`, which rejects malformed or non-base64 URIs. The walkthrough reads `testdata/README.txt` so the payload is a real on-disk file.
 - **Optional: send a file from disk** — Pass `--file <path>` on the demo command line to read an image from disk and upload it. Skipped silently when the flag isn't set so the walkthrough stays hermetic; demonstrates the on-disk → data URI path you'd use in a real client integration. Phase 1.6 will fold this into `client.PrepareFileArg(path, descriptor)`.
+- **upload_image rejects wrong MIME (text/plain into image/* slot)** — The descriptor declares `accept: ["image/*"]`. Sending a text/plain data URI hits the dispatcher's accept-pattern matcher (`core.FileMatchesAccept`), which fails before the handler runs. The error data carries `mediaType` (what we sent) and `accept` (what the server requires) so a client can render a useful message.
+
+Equivalent curl:
+
+```bash
+URI='data:text/plain;name=x.txt;base64,aGVsbG8='
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"upload_image\",\"arguments\":{\"image\":\"$URI\"}}}"
+```
+- **upload_image rejects oversized payload (6 MiB into 5 MiB cap)** — Same descriptor declares `maxSize: 5_242_880` (5 MiB). We synthesize a 6 MiB null-byte buffer, encode as `image/png`, and send it. The validator decodes the data URI, sees the size cap is exceeded, and short-circuits with structured size info.
+
+Equivalent curl (generates the 6 MiB payload via Python):
+
+```bash
+BIG=$(python3 -c 'import base64; print("data:image/png;name=big.png;base64," + base64.b64encode(b"\x00" * (6*1024*1024)).decode())')
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"upload_image\",\"arguments\":{\"image\":\"$BIG\"}}}"
+```
+- **analyze_documents rejects per-element with field path tracking** — Send a 2-element array where element 0 is a valid PDF and element 1 is a text/plain payload. The dispatcher's array-items walker validates each element against `items.x-mcp-file` and surfaces the path of the offender — `data.field == "documents[1]"`. Useful so a client rendering rich error UX can highlight the specific input that failed instead of asking the user to re-pick everything.
+
+Equivalent curl (note the array form in `arguments.documents`):
+
+```bash
+GOOD='data:application/pdf;name=ok.pdf;base64,JVBERi0xLjQKJSVFT0YK'
+BAD='data:text/plain;name=bad.txt;base64,aGVsbG8='
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"analyze_documents\",\"arguments\":{\"documents\":[\"$GOOD\",\"$BAD\"]}}}"
+```
 
 ## Flow
 
@@ -41,6 +72,18 @@ sequenceDiagram
     Note over Host,Server: Step 6: Optional: send a file from disk
     Host->>Server: tools/call upload_image (from --file <path>)
     Server-->>Host: decoded metadata of the on-disk file
+
+    Note over Host,Server: Step 7: upload_image rejects wrong MIME (text/plain into image/* slot)
+    Host->>Server: tools/call upload_image { image: data:text/plain;… }
+    Server-->>Host: -32602 + data: {reason: file_type_not_accepted, mediaType, accept, field}
+
+    Note over Host,Server: Step 8: upload_image rejects oversized payload (6 MiB into 5 MiB cap)
+    Host->>Server: tools/call upload_image { image: data:image/png;… 6 MiB }
+    Server-->>Host: -32602 + data: {reason: file_too_large, actualSize, maxSize, field}
+
+    Note over Host,Server: Step 9: analyze_documents rejects per-element with field path tracking
+    Host->>Server: tools/call analyze_documents { documents: [valid pdf, text/plain] }
+    Server-->>Host: -32602 + data.field = "documents[1]"
 ```
 
 ## Steps
@@ -88,6 +131,67 @@ Empty `FileInputDescriptor{}` means "any file, any size." Useful for ad-hoc insp
 ### Step 6: Optional: send a file from disk
 
 Pass `--file <path>` on the demo command line to read an image from disk and upload it. Skipped silently when the flag isn't set so the walkthrough stays hermetic; demonstrates the on-disk → data URI path you'd use in a real client integration. Phase 1.6 will fold this into `client.PrepareFileArg(path, descriptor)`.
+
+### Validation — server rejects non-conforming uploads (Phase 1.4)
+
+The server is started with `server.WithFileInputValidation()` (see `examples/file-inputs/main.go`), so the dispatcher walks each tool's `inputSchema` for `x-mcp-file` properties and runs `core.ValidateFileInput` on every matching arg BEFORE the handler runs. Failures surface as JSON-RPC `-32602` with a structured `data` payload — that exact shape is the contract pinned by `conformance/file-inputs/scenarios.test.ts`.
+
+The next three steps exercise all three failure modes the validator covers. Each step also includes the equivalent raw `curl` so you can repro on the wire — the demo's helpers (`c.Call`, `client.RPCError`) are just convenience wrappers over the same JSON-RPC traffic.
+
+To repro any of these manually:
+
+```bash
+# Init a session first
+SID=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -d '{"jsonrpc":"2.0","id":"i","method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"x","version":"1"},"capabilities":{"fileInputs":{}}}}' \
+  -D - -o /dev/null | grep -i 'mcp-session-id' | awk '{print $2}' | tr -d '\r\n')
+curl -s -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" -H "Accept: application/json" -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+```
+
+With `$SID` exported, the per-test curls below land cleanly on the running server.
+
+### Step 7: upload_image rejects wrong MIME (text/plain into image/* slot)
+
+The descriptor declares `accept: ["image/*"]`. Sending a text/plain data URI hits the dispatcher's accept-pattern matcher (`core.FileMatchesAccept`), which fails before the handler runs. The error data carries `mediaType` (what we sent) and `accept` (what the server requires) so a client can render a useful message.
+
+Equivalent curl:
+
+```bash
+URI='data:text/plain;name=x.txt;base64,aGVsbG8='
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"upload_image\",\"arguments\":{\"image\":\"$URI\"}}}"
+```
+
+### Step 8: upload_image rejects oversized payload (6 MiB into 5 MiB cap)
+
+Same descriptor declares `maxSize: 5_242_880` (5 MiB). We synthesize a 6 MiB null-byte buffer, encode as `image/png`, and send it. The validator decodes the data URI, sees the size cap is exceeded, and short-circuits with structured size info.
+
+Equivalent curl (generates the 6 MiB payload via Python):
+
+```bash
+BIG=$(python3 -c 'import base64; print("data:image/png;name=big.png;base64," + base64.b64encode(b"\x00" * (6*1024*1024)).decode())')
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"upload_image\",\"arguments\":{\"image\":\"$BIG\"}}}"
+```
+
+### Step 9: analyze_documents rejects per-element with field path tracking
+
+Send a 2-element array where element 0 is a valid PDF and element 1 is a text/plain payload. The dispatcher's array-items walker validates each element against `items.x-mcp-file` and surfaces the path of the offender — `data.field == "documents[1]"`. Useful so a client rendering rich error UX can highlight the specific input that failed instead of asking the user to re-pick everything.
+
+Equivalent curl (note the array form in `arguments.documents`):
+
+```bash
+GOOD='data:application/pdf;name=ok.pdf;base64,JVBERi0xLjQKJSVFT0YK'
+BAD='data:text/plain;name=bad.txt;base64,aGVsbG8='
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"analyze_documents\",\"arguments\":{\"documents\":[\"$GOOD\",\"$BAD\"]}}}"
+```
 
 ### MCP Apps mode (Phase 2.1)
 
