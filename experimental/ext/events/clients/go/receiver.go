@@ -24,6 +24,19 @@ type Receiver[Data any] struct {
 	out      chan Event[Data]
 	closed   bool
 	rejected uint64
+
+	// ζ-4 control envelope callbacks. Both are optional. The discriminator
+	// is the top-level `type` field per spec §"Non-event webhook bodies"
+	// L415: "gap" carries a fresh cursor; "terminated" carries an error.
+	onGap        func(cursor string)
+	onTerminated func(err ControlError)
+}
+
+// ControlError mirrors the JSON-RPC error object carried in a
+// type:terminated control envelope per spec L420.
+type ControlError struct {
+	Code    int
+	Message string
 }
 
 // NewReceiver constructs a typed receiver with the given verification
@@ -52,6 +65,30 @@ func (r *Receiver[Data]) SetSecret(secret string) {
 
 // Events returns the typed delivery channel. Closes when Close is called.
 func (r *Receiver[Data]) Events() <-chan Event[Data] { return r.out }
+
+// OnGap installs a callback invoked when the receiver gets a
+// {type:"gap", cursor:<fresh>} control envelope (spec L415). Caller
+// SHOULD reset its persisted cursor to the carried value and re-fetch
+// authoritative state if the gap matters for correctness.
+//
+// Receiver-callback semantics: invoked from the inbound HTTP handler
+// goroutine — must NOT block. Heavy work belongs in a separate
+// goroutine inside the callback.
+func (r *Receiver[Data]) OnGap(fn func(cursor string)) {
+	r.mu.Lock()
+	r.onGap = fn
+	r.mu.Unlock()
+}
+
+// OnTerminated installs a callback invoked when the receiver gets a
+// {type:"terminated", error:{...}} control envelope (spec L420). Caller
+// SHOULD remove its local subscription state — the server has already
+// stopped delivering. Same goroutine constraints as OnGap.
+func (r *Receiver[Data]) OnTerminated(fn func(err ControlError)) {
+	r.mu.Lock()
+	r.onTerminated = fn
+	r.mu.Unlock()
+}
 
 // Close stops accepting deliveries and closes the Events channel. Safe
 // to call multiple times.
@@ -85,6 +122,51 @@ func (r *Receiver[Data]) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	if !verifySignature(req.Header, body, secret) {
 		http.Error(w, "signature verification failed", http.StatusUnauthorized)
+		return
+	}
+
+	// ζ-4: top-level `type` field discriminates control envelopes from
+	// event deliveries (spec §"Non-event webhook bodies" L415-423).
+	// Probe with a minimal struct before unmarshaling as Event so we
+	// don't double-decode the common case (no `type` → event).
+	var probe struct {
+		Type string `json:"type"`
+	}
+	_ = json.Unmarshal(body, &probe)
+	switch probe.Type {
+	case "gap":
+		var env struct {
+			Cursor string `json:"cursor"`
+		}
+		_ = json.Unmarshal(body, &env)
+		r.mu.RLock()
+		cb := r.onGap
+		r.mu.RUnlock()
+		if cb != nil {
+			cb(env.Cursor)
+		}
+		w.WriteHeader(http.StatusOK)
+		return
+	case "terminated":
+		var env struct {
+			Error *struct {
+				Code    int    `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		_ = json.Unmarshal(body, &env)
+		r.mu.RLock()
+		cb := r.onTerminated
+		r.mu.RUnlock()
+		if cb != nil {
+			ce := ControlError{}
+			if env.Error != nil {
+				ce.Code = env.Error.Code
+				ce.Message = env.Error.Message
+			}
+			cb(ce)
+		}
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 

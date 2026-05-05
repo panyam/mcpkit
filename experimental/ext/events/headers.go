@@ -171,7 +171,7 @@ func signFor(mode WebhookHeaderMode, msgID string, body []byte, secret string, n
 // "msg_" prefix Stripe / Standard Webhooks examples use, with 16 random
 // bytes as URL-safe base64. Reserved for non-event POSTs (control
 // envelopes) — event deliveries use the event's own eventId so that
-// retries dedup correctly at the receiver. See ζ for control envelopes.
+// retries dedup correctly at the receiver. See ζ-4 for control envelopes.
 func newMessageID() string {
 	var buf [16]byte
 	if _, err := rand.Read(buf[:]); err != nil {
@@ -180,6 +180,23 @@ func newMessageID() string {
 		return "msg_" + strconv.FormatInt(time.Now().UnixNano(), 36)
 	}
 	return "msg_" + base64.RawURLEncoding.EncodeToString(buf[:])
+}
+
+// newControlMessageID mints a Standard-Webhooks-shaped message ID with
+// the type-tagged form msg_<typ>_<random>, used for non-event control
+// envelope POSTs (ζ-4 — type:gap, type:terminated). The type tag lets
+// receivers and operators distinguish control deliveries from event
+// deliveries (which use the event's eventId as webhook-id) without
+// parsing the body.
+//
+// Per spec §"Non-event webhook bodies" L417: control envelopes use the
+// pattern msg_<type>_<random> for webhook-id.
+func newControlMessageID(typ string) string {
+	var buf [12]byte // shorter random suffix; the type prefix carries info
+	if _, err := rand.Read(buf[:]); err != nil {
+		return "msg_" + typ + "_" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	}
+	return "msg_" + typ + "_" + base64.RawURLEncoding.EncodeToString(buf[:])
 }
 
 // VerifyMCPSignature checks an X-MCP-Signature header against body+timestamp.
