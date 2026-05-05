@@ -48,9 +48,7 @@ func serve() {
 		demokit.ValueFlag("--url"),
 	))
 
-	logger := common.NewMCPLogger("[mcp] ")
-	opts := []server.Option{server.WithListen(*addr)}
-	opts = append(opts, common.WithMCPLogging(logger)...)
+	opts := common.MCPServerOptions(*addr, "[mcp] ")
 	if *ttl >= 0 {
 		opts = append(opts, server.WithListTTL(*ttl))
 	}

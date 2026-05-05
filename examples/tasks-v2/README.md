@@ -34,6 +34,17 @@ make demo     # terminal 2: demokit walkthrough (7 steps)
 
 See [WALKTHROUGH.md](WALKTHROUGH.md) for the full step-by-step description and sequence diagram.
 
+## What it demonstrates
+
+- Tasks-as-extension negotiation — `client.WithTasksExtension()` opts in during initialize; servers gate task-creating `tools/call` and every `tasks/*` method on it.
+- Polymorphic `tools/call` with the `resultType: "task"` discriminator — the *server* decides whether to create a task, no client hint required.
+- Inlined results on terminal `tasks/get` — `result` / `error` / `inputRequests` arrive in one RTT, `tasks/result` removed.
+- Tool-vs-protocol error semantics — tool errors land in `status: completed, isError: true`; protocol errors in `status: failed` with structured `error`.
+- Empty-ack `tasks/cancel` plus follow-up `tasks/get` to observe the resulting `cancelled` status.
+- The new `tasks/update` MRTR resume path closing the elicitation/sampling loop.
+- The `Mcp-Name` HTTP response header (SEP-2243) carrying taskIds for observability without parsing the body.
+- TaskCallbacks proxy pattern (external task store) via `external_job`.
+
 ## Tools
 
 | Tool | TaskSupport | What it demonstrates |
@@ -51,8 +62,10 @@ See [WALKTHROUGH.md](WALKTHROUGH.md) for the full step-by-step description and s
 - Migration guide: [`docs/TASKS_V2_MIGRATION.md`](../../docs/TASKS_V2_MIGRATION.md)
 - Spec: [SEP-2557](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2557)
 
-## Related
+## Where to look in the code
 
 - v1 example: [`examples/tasks/`](../tasks/)
 - Server library: [`server/tasks_v2.go`](../../server/tasks_v2.go)
 - Wire types: [`core/task_v2.go`](../../core/task_v2.go)
+- Client helpers: [`client/tasks.go`](../../client/tasks.go) (`ToolCall`, `GetTask`, `WaitForTask`, `UpdateTask`, `CancelTask`)
+- Conformance: [`conformance/tasks-v2/scenarios.test.ts`](../../conformance/tasks-v2/scenarios.test.ts)

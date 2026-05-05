@@ -7,14 +7,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"sync/atomic"
 	"time"
 
 	"github.com/panyam/demokit"
-	"github.com/panyam/demokit/tui"
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/examples/common"
 	"github.com/panyam/mcpkit/experimental/ext/events"
 	eventsclient "github.com/panyam/mcpkit/experimental/ext/events/clients/go"
 )
@@ -30,12 +29,7 @@ const liveInteractionMaxWait = 30 * time.Second
 // feature mcpkit currently supports: list, push, poll, cursorless, webhook
 // + auto-refresh, all driven through the typed Go SDK at clients/go.
 func runDemo() {
-	serverURL := "http://localhost:8080"
-	for i, arg := range os.Args[1:] {
-		if arg == "--url" && i+2 < len(os.Args) {
-			serverURL = os.Args[i+2]
-		}
-	}
+	serverURL := common.ServerURL()
 	mcpURL := serverURL + "/mcp"
 	injectURL := serverURL + "/inject"
 
@@ -630,9 +624,7 @@ func runDemo() {
 		"- Companion demo: `examples/events/telegram/` (lighter walkthrough — same protocol, different bot SDK)",
 	)
 
-	if demokit.IsTUI() {
-		demo.WithRenderer(tui.New())
-	}
+	common.SetupRenderer(demo)
 
 	demo.Execute()
 

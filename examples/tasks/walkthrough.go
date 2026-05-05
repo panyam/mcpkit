@@ -7,18 +7,13 @@ import (
 	"time"
 
 	"github.com/panyam/demokit"
-	"github.com/panyam/demokit/tui"
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/examples/common"
 )
 
 func runDemo() {
-	serverURL := "http://localhost:8080"
-	for i, arg := range os.Args[1:] {
-		if arg == "--url" && i+2 < len(os.Args) {
-			serverURL = os.Args[i+2]
-		}
-	}
+	serverURL := common.ServerURL()
 
 	demo := demokit.New("MCP Tasks — Async Tool Execution Lifecycle").
 		Dir("tasks").
@@ -243,9 +238,7 @@ func runDemo() {
 		"For elicitation/sampling from inside a task (the `confirm_delete` and `write_haiku` tools also registered on this server), see `examples/tasks/run-exercises.sh`.",
 	)
 
-	if demokit.IsTUI() {
-		demo.WithRenderer(tui.New())
-	}
+	common.SetupRenderer(demo)
 
 	demo.Execute()
 

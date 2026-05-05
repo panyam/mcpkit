@@ -5,43 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/panyam/demokit"
-	"github.com/panyam/demokit/tui"
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/examples/common"
 )
 
-// filterFlags strips top-level flags so the inner flag.Parse on -addr is happy.
-func filterFlags(args []string) []string {
-	out := make([]string, 0, len(args))
-	skip := false
-	for _, a := range args {
-		if skip {
-			skip = false
-			continue
-		}
-		switch a {
-		case "--serve", "--tui", "--readme", "--non-interactive":
-			continue
-		case "--url":
-			skip = true
-			continue
-		}
-		out = append(out, a)
-	}
-	return out
-}
-
 func runDemo() {
-	serverURL := "http://localhost:8080"
-	for i, arg := range os.Args[1:] {
-		if arg == "--url" && i+2 < len(os.Args) {
-			serverURL = os.Args[i+2]
-		}
-	}
+	serverURL := common.ServerURL()
 
 	demo := demokit.New("MCP Tasks v2 (SEP-2663) — Server-Directed Async + MRTR").
 		Dir("tasks-v2").
@@ -82,7 +55,7 @@ func runDemo() {
 		Arrow("Host", "Server", "POST /mcp — initialize (declares io.modelcontextprotocol/tasks)").
 		DashedArrow("Server", "Host", "serverInfo + tasks extension advertised under capabilities.extensions").
 		Note("`client.WithTasksExtension()` adds `io.modelcontextprotocol/tasks` to ClientCapabilities.Extensions during initialize. Without that declaration, the v2 server falls through to synchronous tools/call and rejects tasks/* with -32601.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			c = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "tasks-v2-host", Version: "1.0"},
 				client.WithGetSSEStream(),
@@ -107,7 +80,7 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call: greet {name: \"world\"}").
 		DashedArrow("Server", "Host", "ToolResult (no resultType discriminator → ToolCallResult.Sync)").
 		Note("`client.ToolCall(c, name, args)` returns a polymorphic `*ToolCallResult`. For sync tools (no Execution / TaskSupport=forbidden) the server returns a plain `ToolResult` and the helper sets `Sync` (not `Task`). Callers branch on `result.IsTask()`.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			res, err := client.ToolCall(c, "greet", map[string]any{"name": "world"})
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
@@ -128,7 +101,7 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call: slow_compute {seconds: 3}").
 		DashedArrow("Server", "Host", "{resultType: \"task\", taskId, status: working, ttlSeconds, ...}\n+ Mcp-Name: <taskId> response header (SEP-2243)").
 		Note("Critical v2 semantics: no `task` param in the request — the server elects to create a task because slow_compute has TaskSupport=optional. The discriminator `resultType: \"task\"` lights up `result.IsTask()` on the helper. The Mcp-Name HTTP header carries the same taskId so HTTP routing/observability can key off it without parsing the body.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			var slowTaskID string
 			res, err := client.ToolCall(c, "slow_compute", map[string]any{"seconds": 3, "label": "demo"})
 			if err != nil {
@@ -151,10 +124,10 @@ func runDemo() {
 			}
 
 			// --- Step 4 (chained): WaitForTask honors PollIntervalMilliseconds ---
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			fmt.Printf("    waiting for terminal via client.WaitForTask ...\n")
-			final, err := client.WaitForTask(ctx, c, slowTaskID)
+			final, err := client.WaitForTask(bgCtx, c, slowTaskID)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
@@ -172,15 +145,15 @@ func runDemo() {
 		Arrow("Host", "Server", "WaitForTask polls tasks/get until terminal").
 		DashedArrow("Server", "Host", "{status: completed, result: {isError: true, content: [...]}}").
 		Note("In v2, a tool that returns an error result lands in status `completed` with `result.isError: true`. The task itself ran to completion — the *operation* failed but the *infrastructure* didn't. Distinct from protocol failures (next step).").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			res, err := client.ToolCall(c, "failing_job", map[string]any{})
 			if err != nil || !res.IsTask() {
 				fmt.Printf("    ERROR: %v / IsTask=%v\n", err, res != nil && res.IsTask())
 				return
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			final, err := client.WaitForTask(ctx, c, res.Task.TaskID)
+			final, err := client.WaitForTask(bgCtx, c, res.Task.TaskID)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
@@ -201,15 +174,15 @@ func runDemo() {
 		Arrow("Host", "Server", "WaitForTask polls tasks/get until terminal").
 		DashedArrow("Server", "Host", "{status: failed, error: {code, message}}").
 		Note("Protocol errors (panics, framework bugs, things that aren't the tool's fault) land in status `failed` with the error inlined as `error: {code, message, data}` mirroring the JSON-RPC error shape. The host should treat this as 'something is broken', not 'the tool said no'.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			res, err := client.ToolCall(c, "protocol_error_job", map[string]any{})
 			if err != nil || !res.IsTask() {
 				fmt.Printf("    ERROR: %v / IsTask=%v\n", err, res != nil && res.IsTask())
 				return
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			final, err := client.WaitForTask(ctx, c, res.Task.TaskID)
+			final, err := client.WaitForTask(bgCtx, c, res.Task.TaskID)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
@@ -233,7 +206,7 @@ func runDemo() {
 		Arrow("Host", "Server", "WaitForTask until terminal").
 		DashedArrow("Server", "Host", "{status: completed, result: {content: [\"deleted 'important.txt'\"]}}").
 		Note("This is the new SEP-2663 MRTR loop: the tool blocks on `TaskElicit`, the task parks in `input_required`, `tasks/get` surfaces the pending request under `inputRequests` (server-minted opaque keys), and `client.UpdateTask` delivers the matching response so the goroutine resumes. Cancellation during input_required propagates via ctx.Done() — see `TestV2_ElicitCancelUnblocks` in server tests.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			res, err := client.ToolCall(c, "confirm_delete", map[string]any{"filename": "important.txt"})
 			if err != nil || !res.IsTask() {
 				fmt.Printf("    ERROR: %v / IsTask=%v\n", err, res != nil && res.IsTask())
@@ -243,7 +216,7 @@ func runDemo() {
 			fmt.Printf("    taskId: %s\n", taskID)
 
 			// Poll until the task parks in input_required with a populated InputRequests map.
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			deadline := time.Now().Add(5 * time.Second)
 			var pending *core.DetailedTask
@@ -288,7 +261,7 @@ func runDemo() {
 			}
 
 			// Wait for completion.
-			final, err := client.WaitForTask(ctx, c, taskID)
+			final, err := client.WaitForTask(bgCtx, c, taskID)
 			if err != nil {
 				fmt.Printf("    ERROR WaitForTask: %v\n", err)
 				return
@@ -309,7 +282,7 @@ func runDemo() {
 		Arrow("Host", "Server", "WaitForTask polls tasks/get").
 		DashedArrow("Server", "Host", "{status: cancelled}").
 		Note("Same cooperative cancellation as v1 (server cancels the goroutine context; tools that select on ctx.Done() exit cleanly), but the response shape changed: SEP-2663 cancel returns an empty `{}` ack. Observe the `cancelled` status via the next `tasks/get` (or `WaitForTask` which does it for you).").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			res, err := client.ToolCall(c, "slow_compute", map[string]any{"seconds": 10, "label": "to-cancel"})
 			if err != nil || !res.IsTask() {
 				fmt.Printf("    ERROR: %v\n", err)
@@ -325,9 +298,9 @@ func runDemo() {
 				return
 			}
 
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			final, err := client.WaitForTask(ctx, c, cancelID)
+			final, err := client.WaitForTask(bgCtx, c, cancelID)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
@@ -344,12 +317,7 @@ func runDemo() {
 		"- Implementation plan + open questions: `PLAN.md`",
 	)
 
-	for _, arg := range os.Args[1:] {
-		if strings.TrimSpace(arg) == "--tui" {
-			demo.WithRenderer(tui.New())
-			break
-		}
-	}
+	common.SetupRenderer(demo)
 
 	demo.Execute()
 

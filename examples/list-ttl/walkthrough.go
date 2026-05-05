@@ -3,21 +3,15 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/panyam/demokit"
-	"github.com/panyam/demokit/tui"
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/examples/common"
 )
 
 func runDemo() {
-	serverURL := "http://localhost:8080"
-	for i, arg := range os.Args[1:] {
-		if arg == "--url" && i+2 < len(os.Args) {
-			serverURL = os.Args[i+2]
-		}
-	}
+	serverURL := common.ServerURL()
 
 	demo := demokit.New("MCP List TTL (SEP-2549) — Cache-Freshness Hint on List Results").
 		Dir("list-ttl").
@@ -158,9 +152,7 @@ func runDemo() {
 		"- SEP-2549 spec: https://github.com/modelcontextprotocol/specification/pull/2549",
 	)
 
-	if demokit.IsTUI() {
-		demo.WithRenderer(tui.New())
-	}
+	common.SetupRenderer(demo)
 
 	demo.Execute()
 

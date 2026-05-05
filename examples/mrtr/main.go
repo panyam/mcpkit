@@ -67,9 +67,7 @@ func serve() {
 		demokit.ValueFlag("--url"),
 	))
 
-	logger := common.NewMCPLogger("[mcp] ")
-	opts := []server.Option{server.WithListen(*addr)}
-	opts = append(opts, common.WithMCPLogging(logger)...)
+	opts := common.MCPServerOptions(*addr, "[mcp] ")
 	if *signingKey != "" {
 		opts = append(opts, server.WithRequestStateSigning([]byte(*signingKey), 24*time.Hour))
 	}

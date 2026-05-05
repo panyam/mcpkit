@@ -11,9 +11,9 @@ import (
 	"strings"
 
 	"github.com/panyam/demokit"
-	"github.com/panyam/demokit/tui"
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/examples/common"
 )
 
 // Walkthrough fixtures live on disk under testdata/ so readers can inspect
@@ -35,12 +35,7 @@ var fixtureREADME []byte
 
 
 func runDemo() {
-	serverURL := "http://localhost:8080"
-	for i, arg := range os.Args[1:] {
-		if arg == "--url" && i+2 < len(os.Args) {
-			serverURL = os.Args[i+2]
-		}
-	}
+	serverURL := common.ServerURL()
 
 	demo := demokit.New("MCP File Inputs (SEP-2356) — Data URI File Arguments").
 		Dir("file-inputs").
@@ -340,9 +335,7 @@ curl -s -X POST http://localhost:8080/mcp \
 		"- SEP-2356 spec: modelcontextprotocol/specification PR 2356",
 	)
 
-	if demokit.IsTUI() {
-		demo.WithRenderer(tui.New())
-	}
+	common.SetupRenderer(demo)
 
 	demo.Execute()
 
