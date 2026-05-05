@@ -2,7 +2,7 @@
 
 What the wire actually looks like, how server→client traffic flows on each transport, and how messages get correlated.
 
-> **Kind:** root · **Assumes:** nothing (foundational)
+> **Kind:** root · **Prerequisites:** nothing (foundational)
 > **Reachable from:** [bring-up](./bringup.md) phase 2–3, [README](./README.md)
 > **Branches into:** [reverse-call mechanics](./reverse-call.md) *(planned)*, [SSE resumption](./sse-resumption.md) *(planned)*, batching
 > **Spec:** [Base protocol](https://modelcontextprotocol.io/specification/2025-06-18) · [Transports](https://modelcontextprotocol.io/specification/2025-06-18) · **Code:** `core/jsonrpc.go`, `server/stdio_transport.go`, `server/streamable_transport.go`, `client/mrtr.go`, `server/event_ids.go`
@@ -403,7 +403,7 @@ After reading this root, downstream pages can assume:
 ## Next to read
 
 - **[Notifications](./notifications.md)** — the session's state-change channel; uses the no-id JSON-RPC shape from this root, flows over the channels established here.
-- **[Per-request anatomy](./request-anatomy.md)** *(planned)* — uses the wire model and correlation tables from this root to walk the dispatch journey.
+- **[Per-request anatomy](./request-anatomy.md)** — uses the wire model and correlation tables from this root to walk the dispatch journey.
 - **[Reverse-call mechanics](./reverse-call.md)** *(planned)* — concretizes the parent-handler-context constraint with a real `tools/call → elicitation/create` example.
 - **[SSE resumption](./sse-resumption.md)** *(planned, leaf)* — `Last-Event-ID` replay, the server's event store, in-flight response recovery.
 - **[`experimental/ext/events/`](../../experimental/ext/events/README.md)** *(branch, target-shape)* — mcpkit's exploration of events as a first-class concept beyond raw SSE event-id replay.

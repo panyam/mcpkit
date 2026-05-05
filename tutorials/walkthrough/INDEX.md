@@ -20,8 +20,9 @@ Use this to:
 | [STRUCTURE](./STRUCTURE.md) | meta | — | author/reader knows the DAG model, root contract, note-block roles, branch-point convention, target-shape tracking | — |
 | [bring-up](./bringup.md) | root | none (foundational) | session live; transport chosen; auth resolved; protocol version + capabilities locked; `initialized` sent | [transport-mechanics](./transport-mechanics.md); [notifications](./notifications.md); [per-request anatomy](./request-anatomy.md) *(planned)*; [auth deep-dive](./auth.md) *(planned)*; [session-resumption](./session-resumption.md) *(planned, leaf)* |
 | [transport-mechanics](./transport-mechanics.md) | root | none (foundational) | host/session/HTTP-request/SSE-event/JSON-RPC-message arity distinct; wire format known per transport; layering (MCP/JSON-RPC/framing/bytes); POST vs GET roles (POST = client→server one-shot; GET = standing server→client back-channel, may idle); `Mcp-Session-Id` server-issued, mandatory on subsequent requests, **routing key on server (not client filter)**; sessions isolated; JSON-RPC correlation + per-direction ID spaces; reverse-call origination gated by handler context, recorded for cancellation propagation | [notifications](./notifications.md); [per-request anatomy](./request-anatomy.md) *(planned)*; [reverse-call](./reverse-call.md) *(planned)*; [SSE resumption](./sse-resumption.md) *(planned, leaf)*; [experimental events](../../experimental/ext/events/README.md) *(branch)* |
-| [notifications](./notifications.md) | root *(FAQ-style)* | bring-up, transport-mechanics | six notification families with direction + capability gates; gates fixed at bring-up; list_changed is a hint not a diff; **multi-client fan-out is per-session, not broadcast** — server walks its session map and emits once per qualifying session (audience depends on kind); call-targeted notifs (cancel, progress) go to exactly the one originating session; `notifications/cancelled` carries `requestId`, best-effort, `initialize` not cancellable; progress is opt-in per-request via `_meta.progressToken` (not capability-gated); unknown / un-gated notifications dropped silently — asymmetry vs. unknown requests enables forward-compatibility | [extension-mechanisms](./extension-mechanisms.md); [per-request anatomy](./request-anatomy.md) *(planned)*; [tasks](./tasks.md) *(planned)*; [cancellation](./cancellation.md) *(planned, leaf)*; [list-ttl](./list-ttl.md) *(planned, leaf, SEP-2549)* |
-| [extension-mechanisms](./extension-mechanisms.md) | root *(FAQ-style)* | bring-up, transport-mechanics, notifications | four extension surfaces (method namespace · capability flags · notifications · `_meta`); five styles (method-namespace, capability-only, `_meta`-only, bring-up, library-architecture); SEP process + `experimental.<name>` sandbox + graduation; mcpkit's three-tier organization (`core/` → `ext/` → `experimental/ext/`); extension points (registries, middleware, MRTR, custom transports, capability advertisement); case-study table mapping tasks/auth/apps/events/list-TTL/MRTR/elicitation to surfaces; boundary protocol-extension-vs-host/client-policy | [per-request anatomy](./request-anatomy.md) *(planned)*; [tasks](./tasks.md) *(planned)*; [auth](./auth.md) *(planned)*; [apps](./apps.md) *(planned)*; [reverse-call](./reverse-call.md) *(planned)*; [experimental events](../../experimental/ext/events/README.md) *(branch)*; [list-ttl](./list-ttl.md) *(planned, leaf)*; [mrtr](./mrtr.md) *(planned, branch)* |
+| [notifications](./notifications.md) | root *(FAQ-style)* | bring-up, transport-mechanics | six notification families with direction + capability gates; gates fixed at bring-up; list_changed is a hint not a diff; **multi-client fan-out is per-session, not broadcast** — server walks its session map and emits once per qualifying session (audience depends on kind); call-targeted notifs (cancel, progress) go to exactly the one originating session; `notifications/cancelled` carries `requestId`, best-effort, `initialize` not cancellable; progress is opt-in per-request via `_meta.progressToken` (not capability-gated); unknown / un-gated notifications dropped silently — asymmetry vs. unknown requests enables forward-compatibility | [request-anatomy](./request-anatomy.md); [extension-mechanisms](./extension-mechanisms.md); [tasks](./tasks.md) *(planned)*; [cancellation](./cancellation.md) *(planned, leaf)*; [list-ttl](./list-ttl.md) *(planned, leaf, SEP-2549)* |
+| [request-anatomy](./request-anatomy.md) | root *(FAQ-style)* | bring-up, transport-mechanics, notifications | end-to-end journey of a request through 13 steps (origination → send-mw → wire → recv-mw → dispatch → handler-context → typed binding → handler → response-encoding → return); handler context contents (id, ctx, session, request/notify hooks, progress emitter, typed params) and lifetime (dies with request unless `DetachForBackground`); four conceptual middleware stacks (client × {send, recv}, server × {send, recv}); typed binding generates schema at registration time, decode + validate at request time; notifications skip pending-id step; reverse calls reuse the same path originated from handler context | [extension-mechanisms](./extension-mechanisms.md); [reverse-call](./reverse-call.md) *(planned)*; [tasks](./tasks.md) *(planned)*; [middleware](./middleware.md) *(planned, branch)*; [mrtr](./mrtr.md) *(planned, branch)* |
+| [extension-mechanisms](./extension-mechanisms.md) | root *(FAQ-style)* | bring-up, transport-mechanics, notifications, request-anatomy | four extension surfaces (method namespace · capability flags · notifications · `_meta`); five styles (method-namespace, capability-only, `_meta`-only, bring-up, library-architecture); SEP process + `experimental.<name>` sandbox + graduation; mcpkit's three-tier organization (`core/` → `ext/` → `experimental/ext/`); extension points (registries, middleware, MRTR, custom transports, capability advertisement); case-study table mapping tasks/auth/apps/events/list-TTL/MRTR/elicitation to surfaces; boundary protocol-extension-vs-host/client-policy | [tasks](./tasks.md) *(planned)*; [auth](./auth.md) *(planned)*; [apps](./apps.md) *(planned)*; [reverse-call](./reverse-call.md) *(planned)*; [experimental events](../../experimental/ext/events/README.md) *(branch)*; [list-ttl](./list-ttl.md) *(planned, leaf)*; [mrtr](./mrtr.md) *(planned, branch)* |
 
 ## Mid-journey branch points
 
@@ -42,9 +43,8 @@ These are mentioned as "Next to read" or "Branch →" targets on existing pages.
 
 | Planned page | Filename | Kind | Will assume | Will establish |
 |--------------|----------|------|-------------|----------------|
-| **per-request anatomy** *(NEXT)* | [request-anatomy.md](./request-anatomy.md) | root | bring-up, transport-mechanics, notifications | dispatch model, middleware chains, handler context, typed binding, response correlation |
-| reverse-call mechanics | [reverse-call.md](./reverse-call.md) | root | bring-up, transport-mechanics, per-request anatomy | parent-handler-context constraint operating live; mrtr-on-both-sides symmetry; concretizes elicitation/sampling/roots as method-namespace extensions |
-| tasks (v1 / v2 / hybrid) | [tasks.md](./tasks.md) | root | per-request anatomy, notifications, extension-mechanisms | long-running operations, detach/resume, task store; the v1→v2 migration shape; `RegisterTasksHybrid` dispatch-by-capability |
+| **reverse-call mechanics** *(NEXT)* | [reverse-call.md](./reverse-call.md) | root | bring-up, transport-mechanics, request-anatomy | parent-handler-context constraint operating live; mrtr-on-both-sides symmetry; concretizes elicitation/sampling/roots as method-namespace extensions |
+| tasks (v1 / v2 / hybrid) | [tasks.md](./tasks.md) | root | request-anatomy, notifications, extension-mechanisms | long-running operations, detach/resume, task store; the v1→v2 migration shape; `RegisterTasksHybrid` dispatch-by-capability |
 | auth deep-dive | [auth.md](./auth.md) | root *(off-mainline)* | bring-up, extension-mechanisms | full OAuth dance, PRM, JWT validation, fine-grained-auth per tool, retry semantics; the canonical "bring-up extension" |
 | apps (`ext/ui/`) | [apps.md](./apps.md) | root *(off-mainline)* | bring-up, transport-mechanics, extension-mechanisms | AppHost lifecycle, Bridge JS runtime, ServerRegistry; thin protocol surface, mostly host-architecture |
 | MRTR (SEP-2322) | [mrtr.md](./mrtr.md) | branch | per-request anatomy, extension-mechanisms | message-routing-through-middleware in detail; both-sides symmetry |
@@ -67,10 +67,10 @@ graph TD
     bringup["bring-up<br/>(root, foundational)"]
     wire["transport mechanics<br/>(root, foundational)"]
     notif["notifications<br/>(root, FAQ)"]
+    anat["per-request anatomy<br/>(root, FAQ)"]
     ext["extension mechanisms<br/>(root, FAQ)"]
 
-    anat["per-request anatomy<br/>(root, NEXT)"]
-    rev["reverse-call mechanics<br/>(root, planned)"]
+    rev["reverse-call mechanics<br/>(root, NEXT)"]
     tasks["tasks v1/v2/hybrid<br/>(root, planned)"]
     auth["auth deep-dive<br/>(root, off-mainline)"]
     apps["apps (ext/ui)<br/>(root, off-mainline)"]
@@ -92,10 +92,10 @@ graph TD
 
     bringup --> notif
     wire --> notif
-    notif --> ext
     bringup --> anat
     wire --> anat
     notif --> anat
+    anat --> ext
 
     ext --> tasks
     ext --> auth
@@ -122,13 +122,14 @@ graph TD
     classDef written fill:#e8f5e9,stroke:#2e7d32,color:#000;
     classDef next fill:#fff3e0,stroke:#e65100,color:#000;
     classDef planned fill:#fafafa,stroke:#9e9e9e,stroke-dasharray:4 3,color:#555;
-    class bringup,wire,notif,ext written;
-    class anat next;
-    class rev,tasks,auth,apps,resume,mw,mrtr,init,reinit,events,elicit,sample,rootsLeaf,canceldeep,listttl planned;
+    class bringup,wire,notif,anat,ext written;
+    class rev next;
+    class tasks,auth,apps,resume,mw,mrtr,init,reinit,events,elicit,sample,rootsLeaf,canceldeep,listttl planned;
 
     click bringup "./bringup.md"
     click wire "./transport-mechanics.md"
     click notif "./notifications.md"
+    click anat "./request-anatomy.md"
     click ext "./extension-mechanisms.md"
 ```
 

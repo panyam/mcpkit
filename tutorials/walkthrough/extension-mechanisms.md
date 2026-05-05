@@ -2,7 +2,7 @@
 
 How MCP grows. What counts as an extension, how new things get into the protocol, how mcpkit organizes them, and how you write your own without forking core. Six questions.
 
-> **Kind:** root *(FAQ-style)* · **Assumes:** [bring-up](./bringup.md), [transport-mechanics](./transport-mechanics.md), [notifications](./notifications.md)
+> **Kind:** root *(FAQ-style)* · **Prerequisites:** [bring-up](./bringup.md), [transport-mechanics](./transport-mechanics.md), [notifications](./notifications.md), [request-anatomy](./request-anatomy.md)
 > **Reachable from:** [README](./README.md), [bring-up](./bringup.md) Leads-to, [notifications](./notifications.md) Leads-to
 > **Branches into:** [tasks](./tasks.md) *(planned)*, [auth deep-dive](./auth.md) *(planned)*, [apps](./apps.md) *(planned)*, [experimental events](../../experimental/ext/events/README.md)
 > **Spec:** [Lifecycle / capabilities](https://modelcontextprotocol.io/specification/2025-06-18) · SEP-2663 (tasks v2) · SEP-2549 (list-TTL) · SEP-2322 (MRTR) · **Code:** `core/protocol.go`, `core/typed_tool.go`, `server/registration.go`, `server/middleware.go`, `server/dispatch.go`, `server/mrtr.go`, `ext/auth/`, `ext/ui/`, `experimental/ext/`
@@ -12,6 +12,7 @@ How MCP grows. What counts as an extension, how new things get into the protocol
 - You understand what a capability is and that capabilities are negotiated at bring-up. → If not, read [bring-up](./bringup.md).
 - You can read JSON-RPC messages and know that methods are named strings. → If not, read [transport mechanics](./transport-mechanics.md).
 - You know how notifications are gated by capability. → If not, read [notifications](./notifications.md).
+- You know what handler context, registries, and middleware are (referenced in Q4). → If not, read [per-request anatomy](./request-anatomy.md).
 
 ## Context
 
@@ -117,7 +118,7 @@ mcpkit's extension points, roughly in order of how often you'll reach for them:
 The general shape: you add **registrations** at server start (or client side), the runtime picks them up via dispatch, and middleware wraps the call path. You never need to modify `core/` or `server/` to add functionality.
 
 > [!NOTE]
-> **Branch →** [Per-request anatomy](./request-anatomy.md) *(planned)*. The dispatch + middleware + handler-context internals that make these extension points work. Important if you're writing custom middleware or doing anything past simple `RegisterTool`.
+> The dispatch + middleware + handler-context internals that make these extension points work are covered in [per-request anatomy](./request-anatomy.md) — the prerequisite root for this page.
 
 ## Q5 — Case studies: how tasks, auth, apps, events, list-TTL, MRTR, elicitation each map to the mechanisms above
 
@@ -162,7 +163,6 @@ After reading this root, downstream pages can assume:
 
 ## Next to read
 
-- **[Per-request anatomy](./request-anatomy.md)** *(planned, root, NEXT)* — dispatch internals that make registries + middleware + MRTR actually run.
 - **[Tasks v1/v2/hybrid](./tasks.md)** *(planned, root)* — the deep walk on the largest method-namespace extension, including the v1→v2 migration and `RegisterTasksHybrid` dispatch-by-capability pattern.
 - **[Auth deep-dive](./auth.md)** *(planned, root, off-mainline)* — the bring-up extension; full OAuth/PRM/JWT/fine-grained-auth.
 - **[Apps](./apps.md)** *(planned, root)* — the library-architecture extension; AppHost/Bridge JS/ServerRegistry. Mostly mcpkit-side, thin protocol surface.
