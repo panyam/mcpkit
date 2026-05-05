@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/examples/common"
 	"github.com/panyam/mcpkit/ext/ui"
 	"github.com/panyam/mcpkit/server"
 )
@@ -51,10 +52,11 @@ func main() {
 		Version: "0.1.0",
 	})
 
+	opts := common.MCPServerOptions(*addr, "[mcp] ")
+	opts = append(opts, server.WithExtension(&ui.UIExtension{}))
 	srv := server.NewServer(
 		core.ServerInfo{Name: "React MCP App", Version: "1.0.0"},
-		server.WithExtension(&ui.UIExtension{}),
-		server.WithMiddleware(server.LoggingMiddleware(log.Default())),
+		opts...,
 	)
 
 	// get-time tool — matches upstream basic-server-vanillajs.
