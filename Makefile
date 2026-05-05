@@ -95,6 +95,18 @@ testconf-list-ttl: ## Run MCP SEP-2549 list-TTL conformance (builds + starts 3 s
 	wait $$PID1 $$PID2 $$PID3 2>/dev/null; \
 	exit $$RC
 
+testconf-file-inputs: ## Run MCP SEP-2356 file-inputs conformance (builds + starts server, runs tests, tears down)
+	@(cd examples/file-inputs && go build -o file-inputs-demo .) && \
+	examples/file-inputs/file-inputs-demo --serve --addr=:18097 & PID=$$!; \
+	sleep 1; \
+	(cd conformance && npm install --silent && \
+	SERVER_URL=http://localhost:18097/mcp \
+	npx tsx --test file-inputs/scenarios.test.ts); \
+	RC=$$?; \
+	kill $$PID 2>/dev/null; \
+	wait $$PID 2>/dev/null; \
+	exit $$RC
+
 testconf-elicitation: ## Run elicitation conformance suite (SEP-1036 URL mode + form, requires Node.js, target server must be running)
 	cd conformance && npm install --silent && SERVER_URL=$${SERVER_URL:-http://localhost:8080/mcp} npx tsx --test elicitation/scenarios.test.ts
 

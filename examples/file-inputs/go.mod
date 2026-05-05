@@ -8,7 +8,7 @@ replace (
 )
 
 require (
-	github.com/panyam/demokit v0.0.13
+	github.com/panyam/demokit v0.0.16
 	github.com/panyam/mcpkit v0.2.41
 	github.com/panyam/mcpkit/ext/ui v0.0.0
 )
