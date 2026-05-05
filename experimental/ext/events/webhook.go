@@ -102,7 +102,51 @@ type WebhookTarget struct {
 	Secret        string    // client-supplied HMAC signing secret (whsec_...)
 	ExpiresAt     time.Time // soft-state TTL expiry
 	MaxAgeSeconds int       // δ-3: per-spec replay floor (§"Cursor Lifecycle" L529); 0 = no floor
+
+	// ζ-5: per-target delivery health, surfaced on subscribe refresh
+	// response per spec §"Webhook Delivery Status" L425-460.
+	// Mutated only via *WebhookRegistry methods under r.mu so the
+	// snapshot returned by Targets()/DeliveryStatus() is consistent.
+	Status DeliveryStatus
 }
+
+// DeliveryStatus is the per-target delivery-health summary surfaced on
+// the events/subscribe refresh response per spec §"Webhook Delivery
+// Status" L425-460. Subscribers use it to decide whether to back off,
+// re-create the subscription with a fresh secret, or alert.
+//
+// LastError is a CATEGORICAL string from a fixed set; the spec
+// explicitly forbids raw response bodies / headers / status lines
+// because the subscribe response is visible to the subscriber and
+// arbitrary receiver responses must not become a data oracle. Empty
+// when no failure has happened on the current run.
+//
+// LastDeliveryAt is set to the most recent successful delivery time;
+// nil when never successfully delivered. FailedSince is set on the
+// first failure of a current failure run; nil when the last attempt
+// succeeded. Both timestamps serialize to ISO-8601 (RFC3339).
+type DeliveryStatus struct {
+	Active         bool
+	LastDeliveryAt *time.Time
+	LastError      DeliveryErrorBucket
+	FailedSince    *time.Time
+}
+
+// DeliveryErrorBucket is the spec's categorical lastError set per
+// L460. Values that don't appear in this list MUST NOT leak into the
+// subscribe response.
+type DeliveryErrorBucket string
+
+const (
+	DeliveryErrorNone              DeliveryErrorBucket = ""
+	DeliveryErrorConnectionRefused DeliveryErrorBucket = "connection_refused"
+	DeliveryErrorTimeout           DeliveryErrorBucket = "timeout"
+	DeliveryErrorTLS               DeliveryErrorBucket = "tls_error"
+	DeliveryError3xxRedirect       DeliveryErrorBucket = "http_3xx_redirect"
+	DeliveryError4xx               DeliveryErrorBucket = "http_4xx"
+	DeliveryError5xx               DeliveryErrorBucket = "http_5xx"
+	DeliveryErrorChallengeFailed   DeliveryErrorBucket = "challenge_failed"
+)
 
 // WebhookRegistry tracks outbound webhook subscriptions and delivers events
 // with HMAC-SHA256 signed payloads. Subscriptions have TTL-based soft state
@@ -296,6 +340,10 @@ func (r *WebhookRegistry) Register(canonicalKey []byte, derivedID, urlStr, secre
 			Secret:        secret,
 			ExpiresAt:     expiresAt,
 			MaxAgeSeconds: maxAgeSeconds,
+			// ζ-5: Active defaults to true on first registration. The
+			// suspend state machine in ζ-6 flips this to false after
+			// repeated failures; a successful refresh resets it.
+			Status: DeliveryStatus{Active: true},
 		}
 	}
 	return expiresAt
@@ -383,12 +431,105 @@ const (
 	maxBackoff     = 5 * time.Second
 )
 
+// recordDeliverySuccess updates the target's DeliveryStatus after a
+// successful delivery attempt. Active stays true; LastDeliveryAt
+// advances; LastError + FailedSince clear (the current failure run,
+// if any, is over).
+func (r *WebhookRegistry) recordDeliverySuccess(canonicalKey []byte, at time.Time) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	t, ok := r.targets[string(canonicalKey)]
+	if !ok {
+		return
+	}
+	atCopy := at
+	t.Status.Active = true
+	t.Status.LastDeliveryAt = &atCopy
+	t.Status.LastError = DeliveryErrorNone
+	t.Status.FailedSince = nil
+	r.targets[string(canonicalKey)] = t
+}
+
+// recordDeliveryFailure updates the target's DeliveryStatus after the
+// FINAL failed attempt (all retries exhausted). LastError gets the
+// categorical bucket; FailedSince is set on the FIRST failure of a
+// run and preserved across subsequent failures so subscribers can
+// see how long the receiver has been unreachable.
+//
+// Active stays as-is here; ζ-6's suspend/reactivate state machine
+// flips Active=false when the failure run hits the configured threshold.
+func (r *WebhookRegistry) recordDeliveryFailure(canonicalKey []byte, bucket DeliveryErrorBucket) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	t, ok := r.targets[string(canonicalKey)]
+	if !ok {
+		return
+	}
+	t.Status.LastError = bucket
+	if t.Status.FailedSince == nil {
+		now := time.Now()
+		t.Status.FailedSince = &now
+	}
+	r.targets[string(canonicalKey)] = t
+}
+
+// DeliveryStatus returns a snapshot of the target's delivery health.
+// Returns the zero value when no target matches canonicalKey.
+func (r *WebhookRegistry) DeliveryStatus(canonicalKey []byte) DeliveryStatus {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if t, ok := r.targets[string(canonicalKey)]; ok {
+		return t.Status
+	}
+	return DeliveryStatus{}
+}
+
+// classifyTransportError maps a Go net/http transport-layer error
+// (returned from http.Client.Do when no HTTP response was received) to
+// the categorical bucket spec L460 mandates. NEVER inspects err.Error()
+// substrings beyond the standard library's own type-asserted markers
+// (net.Error, *url.Error wrappers) — keeps the bucket boundaries
+// stable across Go versions and avoids accidentally surfacing receiver-
+// chosen content into the subscribe response.
+func classifyTransportError(err error) DeliveryErrorBucket {
+	if err == nil {
+		return DeliveryErrorNone
+	}
+	// net.Error.Timeout() is the type-safe way to detect deadline
+	// exceeded / i/o timeout without parsing strings.
+	if ne, ok := err.(interface{ Timeout() bool }); ok && ne.Timeout() {
+		return DeliveryErrorTimeout
+	}
+	// Substring match for the OS-level errno text Go wraps. These
+	// strings are stable across Go versions per the standard library
+	// docs but kept as a fallback — the type-safe net.OpError + syscall
+	// inspection would be more robust if we ever needed to distinguish
+	// further.
+	s := err.Error()
+	switch {
+	case strings.Contains(s, "connection refused"):
+		return DeliveryErrorConnectionRefused
+	case strings.Contains(s, "tls:") || strings.Contains(s, "x509:") || strings.Contains(s, "certificate"):
+		return DeliveryErrorTLS
+	}
+	// Default: unclassified network failure. Surface as connection_refused
+	// since it's the most common transport failure and the alternatives
+	// (timeout, tls_error) are already handled above.
+	return DeliveryErrorConnectionRefused
+}
+
 // deliver attempts to POST the event with exponential backoff on failure.
 // eventID is the event's identifier; used as webhook-id (stable across
 // retries so the receiver's dedup works). Spec: SHOULD retry with
 // exponential backoff.
 func (r *WebhookRegistry) deliver(target WebhookTarget, eventID string, body []byte) {
 	backoff := initialBackoff
+	// ζ-5: tracks the last per-attempt failure bucket. Recorded onto
+	// deliveryStatus only after all retries are exhausted (i.e., this
+	// is the FINAL outcome). A transient blip during a successful
+	// retry-cycle would otherwise falsely appear as "current failure"
+	// on the next subscribe refresh.
+	lastErrBucket := DeliveryErrorNone
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
@@ -423,33 +564,45 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, eventID string, body []b
 		resp, err := r.client.Do(req)
 		if err != nil {
 			r.logf("[webhook] delivery to %s failed: %v", target.URL, err)
+			// Don't record the per-attempt failure on the target yet —
+			// only the FINAL outcome (after all retries exhausted) gets
+			// stored on deliveryStatus. Otherwise transient blips
+			// during a successful retry would falsely show up as
+			// "current failure" on the next subscribe refresh.
+			lastErrBucket = classifyTransportError(err)
 			continue // retry
 		}
 		resp.Body.Close()
 
 		if resp.StatusCode < 300 {
+			r.recordDeliverySuccess(target.CanonicalKey, time.Now())
 			return // success
 		}
 
 		r.logf("[webhook] delivery to %s returned %d", target.URL, resp.StatusCode)
-		if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+		switch {
+		case resp.StatusCode >= 300 && resp.StatusCode < 400:
 			// ζ-2: 3xx is non-retryable. We disabled redirect-following
 			// via CheckRedirect; a receiver returning 3xx is signalling
 			// "go elsewhere" but we're not allowed to. Re-trying won't
 			// change the response; treat as terminal.
+			r.recordDeliveryFailure(target.CanonicalKey, DeliveryError3xxRedirect)
 			return
-		}
-		if resp.StatusCode == http.StatusRequestEntityTooLarge {
+		case resp.StatusCode == http.StatusRequestEntityTooLarge:
 			// ζ-3 spec L487: 413 MUST be non-retryable. Receiver
 			// rejects our payload size; retrying won't change that.
+			r.recordDeliveryFailure(target.CanonicalKey, DeliveryError4xx)
 			return
-		}
-		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+		case resp.StatusCode >= 400 && resp.StatusCode < 500:
+			r.recordDeliveryFailure(target.CanonicalKey, DeliveryError4xx)
 			return // 4xx = client error, not retryable
 		}
-		// 5xx = server error, retry
+		// 5xx = server error, retry. Bucket so the final-outcome record
+		// (below the retry loop) knows which bucket to record.
+		lastErrBucket = DeliveryError5xx
 	}
 	r.logf("[webhook] delivery to %s failed after %d retries, giving up", target.URL, maxRetries)
+	r.recordDeliveryFailure(target.CanonicalKey, lastErrBucket)
 }
 
 // ValidateWebhookURL is a fail-fast subscribe-time check on a webhook
