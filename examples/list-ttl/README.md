@@ -33,6 +33,14 @@ make demo
 go run . --tui
 ```
 
+## What it demonstrates
+
+- The `ttl` field surfacing on every paginated list response (`tools/list`, `prompts/list`, `resources/list`, `resources/templates/list`).
+- The three-state contract on the wire: absent, `"ttl": 0`, `"ttl": <positive>`.
+- Server-side configuration via `server.WithListTTL(seconds)` — uniform across all four endpoints, with negative values omitting the field.
+- Client-side typed helpers — `client.ListToolsPage`, `ListPromptsPage`, `ListResourcesPage`, `ListResourceTemplatesPage` — that return `*int` TTL alongside the result envelope so callers can distinguish nil from `&0`.
+- Direct raw-JSON inspection to confirm the wire shape (`ttl` is a JSON number, not a stringified value).
+
 The walkthrough connects to the server, hits all four list endpoints via
 the new typed client helpers (`ListToolsPage`, `ListPromptsPage`,
 `ListResourcesPage`, `ListResourceTemplatesPage`), and prints the TTL it

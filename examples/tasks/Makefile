@@ -5,7 +5,7 @@ serve: ## Start the tasks MCP server standalone (for MCPJam, VS Code, Claude Des
 	go run . --serve
 
 readme: ## Regenerate WALKTHROUGH.md from demo definitions
-	go run . --readme > WALKTHROUGH.md
+	go run . --doc md > WALKTHROUGH.md
 
 runts: ## Run the TS reference server (parity check)
 	node ts-reference-server.mjs

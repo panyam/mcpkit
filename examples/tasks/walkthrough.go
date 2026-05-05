@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/panyam/demokit"
@@ -12,28 +11,6 @@ import (
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 )
-
-// filterFlags strips known top-level flags (--serve, --tui, --readme,
-// --non-interactive, --url) so the inner flag.Parse on -addr doesn't choke.
-func filterFlags(args []string) []string {
-	out := make([]string, 0, len(args))
-	skip := false
-	for _, a := range args {
-		if skip {
-			skip = false
-			continue
-		}
-		switch a {
-		case "--serve", "--tui", "--readme", "--non-interactive":
-			continue
-		case "--url":
-			skip = true
-			continue
-		}
-		out = append(out, a)
-	}
-	return out
-}
 
 func runDemo() {
 	serverURL := "http://localhost:8080"
@@ -81,7 +58,7 @@ func runDemo() {
 		Arrow("Host", "Server", "POST /mcp — initialize").
 		DashedArrow("Server", "Host", "serverInfo + Mcp-Session-Id + tasks capability").
 		Note("The server advertises tasks capability in initialize. The mcpkit client opens a GET SSE stream so server-pushed notifications (progress, status changes) reach us during polling.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			c = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "tasks-demo-host", Version: "1.0"},
 				client.WithGetSSEStream(),
@@ -115,7 +92,7 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call: greet {name: \"world\"}  (no task hint)").
 		DashedArrow("Server", "Host", "ToolResult immediately").
 		Note("greet is sync-only. The result returns directly in the tools/call response — no task created. This is the path most existing tools use today; tasks are opt-in per tool.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			text, err := c.ToolCall("greet", map[string]any{"name": "world"})
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
@@ -130,7 +107,7 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call: slow_compute {seconds:3} + task: {ttl: 60s}").
 		DashedArrow("Server", "Host", "{taskId, status: working, ttl, pollInterval}").
 		Note("slow_compute has taskSupport=optional. Sending the `task` hint tells the server to run it asynchronously. We get a taskId back immediately while the work runs in a background goroutine.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			res, err := client.ToolCallAsTaskV1(c, "slow_compute", map[string]any{
 				"seconds": 3, "label": "demo",
 			})
@@ -151,10 +128,10 @@ func runDemo() {
 		DashedArrow("Server", "Host", "notifications/progress (1/3, 2/3, 3/3) via SSE").
 		DashedArrow("Server", "Host", "{status: completed} on terminal poll").
 		Note("The server streams progress notifications over the GET SSE channel while the task runs. Our notification callback (set up in Step 1) prints them inline. Once status reaches `completed`, the polling stops.").
-		Run(func() (result *demokit.StepResult) {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
+			bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			final, err := client.WaitForTaskV1(ctx, c, slowTaskID, 500*time.Millisecond)
+			final, err := client.WaitForTaskV1(bgCtx, c, slowTaskID, 500*time.Millisecond)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
@@ -168,7 +145,7 @@ func runDemo() {
 		Arrow("Host", "Server", "tasks/result {taskId}").
 		DashedArrow("Server", "Host", "ToolResult").
 		Note("tasks/get returns task status only. To get the actual tool result (content blocks, isError flag, structured content), the host calls tasks/result with the same taskId.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			tr, _, err := client.GetTaskPayloadV1(c, slowTaskID)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
@@ -185,7 +162,7 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call: failing_job  (no task hint)").
 		DashedArrow("Server", "Host", "JSON-RPC error (taskSupport=required)").
 		Note("failing_job declares Execution.TaskSupport=required. Sync invocation returns an error telling the host to retry with a task hint. This guards expensive/long tools from blocking the request thread.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			_, err := c.ToolCall("failing_job", map[string]any{})
 			if err == nil {
 				fmt.Printf("    UNEXPECTED: sync call succeeded\n")
@@ -202,15 +179,15 @@ func runDemo() {
 		Arrow("Host", "Server", "tasks/get (polled)").
 		DashedArrow("Server", "Host", "{status: failed, error: \"simulated failure\"}").
 		Note("Errors from required-task tools surface as a terminal status of `failed`. The host gets the taskId immediately, polls, and learns the task failed via the status field — no exception thrown on the polling call.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			res, err := client.ToolCallAsTaskV1(c, "failing_job", map[string]any{})
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			final, err := client.WaitForTaskV1(ctx, c, res.Task.TaskID, 500*time.Millisecond)
+			final, err := client.WaitForTaskV1(bgCtx, c, res.Task.TaskID, 500*time.Millisecond)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
@@ -228,7 +205,7 @@ func runDemo() {
 		Arrow("Host", "Server", "tasks/get (final)").
 		DashedArrow("Server", "Host", "{status: cancelled}").
 		Note("Tasks support cooperative cancellation. The server cancels the goroutine's context; tools that select on ctx.Done() exit cleanly. Status transitions to `cancelled`. mcpkit guards against terminal-to-terminal transitions so a tool finishing normally after cancel doesn't overwrite the cancelled status.").
-		Run(func() (result *demokit.StepResult) {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			res, err := client.ToolCallAsTaskV1(c, "slow_compute", map[string]any{
 				"seconds": 10, "label": "to-cancel",
 			})
@@ -246,9 +223,9 @@ func runDemo() {
 				return
 			}
 
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			final, err := client.WaitForTaskV1(ctx, c, cancelTaskID, 200*time.Millisecond)
+			final, err := client.WaitForTaskV1(bgCtx, c, cancelTaskID, 200*time.Millisecond)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
@@ -266,12 +243,8 @@ func runDemo() {
 		"For elicitation/sampling from inside a task (the `confirm_delete` and `write_haiku` tools also registered on this server), see `examples/tasks/run-exercises.sh`.",
 	)
 
-	// Use TUI renderer if --tui flag is passed.
-	for _, arg := range os.Args[1:] {
-		if strings.TrimSpace(arg) == "--tui" {
-			demo.WithRenderer(tui.New())
-			break
-		}
+	if demokit.IsTUI() {
+		demo.WithRenderer(tui.New())
 	}
 
 	demo.Execute()

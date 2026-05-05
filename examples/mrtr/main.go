@@ -43,7 +43,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/examples/common"
 	"github.com/panyam/mcpkit/server"
 )
 
@@ -60,12 +62,14 @@ func main() {
 func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
 	signingKey := flag.String("signing-key", "mrtr-demo-signing-key", "HMAC key for requestState signing (empty = plaintext mode)")
-	flag.CommandLine.Parse(filterFlags(os.Args[1:]))
+	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
+		demokit.BoolFlag("--serve"),
+		demokit.ValueFlag("--url"),
+	))
 
-	opts := []server.Option{
-		server.WithListen(*addr),
-		server.WithMiddleware(server.LoggingMiddleware(log.Default())),
-	}
+	logger := common.NewMCPLogger("[mcp] ")
+	opts := []server.Option{server.WithListen(*addr)}
+	opts = append(opts, common.WithMCPLogging(logger)...)
 	if *signingKey != "" {
 		opts = append(opts, server.WithRequestStateSigning([]byte(*signingKey), 24*time.Hour))
 	}
