@@ -81,6 +81,24 @@ type heartbeatNotifParams struct {
 	Cursor    *string         `json:"cursor"`
 }
 
+// errorNotifParams is the shared wire shape of notifications/events/error
+// (spec L255+L261, transient — stream stays open) and
+// notifications/events/terminated (spec L783-795, terminal — stream
+// closes). Both carry the same {requestId, error{code,message}} envelope
+// per the spec's JSON-RPC-error-shaped error payload. ζ-7.
+type errorNotifParams struct {
+	RequestID json.RawMessage `json:"requestId"`
+	Error     errPayload      `json:"error"`
+}
+
+// errPayload mirrors the JSON-RPC error object shape used in the
+// error / terminated notification params. Distinct from ControlError
+// (control envelopes) only in serialization site — same fields.
+type errPayload struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
 func registerStream(srv *server.Server, sourceMap map[string]EventSource, unsafeAnon string, heartbeat time.Duration) {
 	if heartbeat <= 0 {
 		heartbeat = defaultStreamHeartbeatInterval
@@ -163,6 +181,29 @@ func registerStream(srv *server.Server, sourceMap map[string]EventSource, unsafe
 					// Treat as ctx done.
 					return core.NewResponse(id, StreamEventsResult{Meta: map[string]any{}})
 				}
+
+				// ζ-7: terminal source signal. Emit notifications/events/
+				// terminated per spec L783-795 and return — subscription
+				// has ended; SDK callback fires + stream closes.
+				if se.Terminated != nil {
+					ctx.Notify("notifications/events/terminated", errorNotifParams{
+						RequestID: id,
+						Error:     errPayload{Code: se.Terminated.Code, Message: se.Terminated.Message},
+					})
+					return core.NewResponse(id, StreamEventsResult{Meta: map[string]any{}})
+				}
+
+				// ζ-7: transient source signal. Emit notifications/events/
+				// error per spec L255+L261 and stay open — subscription
+				// remains active; the next event continues normally.
+				if se.Error != nil {
+					ctx.Notify("notifications/events/error", errorNotifParams{
+						RequestID: id,
+						Error:     errPayload{Code: se.Error.Code, Message: se.Error.Message},
+					})
+					continue
+				}
+
 				if se.Truncated {
 					// Spec L285: "the server sends a fresh
 					// notifications/events/active {requestId, cursor:<fresh>,
