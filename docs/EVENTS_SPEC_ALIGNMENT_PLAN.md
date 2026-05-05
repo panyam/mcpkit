@@ -291,7 +291,15 @@ The TS reference's heartbeat doesn't carry a cursor today; the spec now requires
 
 ### ζ — Webhook hardening (delivery-time SSRF, body cap, control envelopes, deliveryStatus)
 
-**Status:** in flight on `feat/events-zeta-webhook-hardening`. All 6 commits landed. PR 375 ready for review. ζ-7 (source-side health signals → notifications/events/error and /terminated server emissions) tracked separately as issue 376. Race-clean across all four event modules.
+**Status:** ζ merged via PR 375 (6 commits). ζ-7 (source-side health signals + auto-PostTerminated on suspend + discord demo step) in flight on `feat/events-zeta-7-source-health-signals` (4 commits landed); closes issue 376. Race-clean across all four event modules.
+
+ζ-7 surface (built on ε-2's dormant callbacks + ζ-4's PostTerminated + ζ-6's suspend state machine):
+- **YieldingSource.YieldError(EventDeliveryError)** — transient upstream-failure signal; stream subscribers see notifications/events/error (spec L255+L261); subscription stays open.
+- **YieldingSource.YieldTerminated(EventDeliveryError)** — one-shot terminal; stream subscribers see notifications/events/terminated (spec L783-795) and stream closes; future yields are no-ops.
+- **SubscriberEvent.Error / .Terminated** discriminator pointer fields, dispatched in stream.go's select loop.
+- **postTerminatedSilent** internal helper auto-Posts {type:terminated} control envelope on ζ-6's Active true→false suspend transition; target stays observable as Active=false (distinct from explicit PostTerminated which removes).
+- **subscriberSlot.closeOnce** prevents double-close race between YieldTerminated and the Subscribe ctx-cancel cleanup goroutine.
+- **Discord demo Step 5.5** + `make inject-error` / `make inject-terminate` Makefile targets exercise the transient path end-to-end; full terminate flow + auto-Post-on-suspend verified by TestE2EHealthSignalsEndToEnd (no cross-step state).
 
 **Goal:** close the spec-mandated security and reliability gaps in our webhook delivery path.
 
