@@ -16,8 +16,10 @@ import (
 )
 
 const (
-	defaultWebhookTTL          = 60 * time.Second // 1 minute for POC (production: longer)
-	defaultWebhookMaxBodyBytes = 256 * 1024       // ζ-3 spec L487
+	defaultWebhookTTL              = 60 * time.Second // 1 minute for POC (production: longer)
+	defaultWebhookMaxBodyBytes     = 256 * 1024       // ζ-3 spec L487
+	defaultWebhookSuspendThreshold = 5                // ζ-6: N consecutive failures
+	defaultWebhookSuspendWindow    = 10 * time.Minute // ζ-6: sliding window W
 )
 
 // WebhookOption configures a WebhookRegistry at construction time.
@@ -42,6 +44,37 @@ func WithWebhookTTL(ttl time.Duration) WebhookOption {
 func WithWebhookHeaderMode(mode WebhookHeaderMode) WebhookOption {
 	return func(r *WebhookRegistry) {
 		r.headerMode = mode
+	}
+}
+
+// WithWebhookSuspendThreshold overrides the count of consecutive
+// delivery failures (within the suspend window) that trips a target
+// into Active=false. Default 5. Pass <=0 to keep the default.
+//
+// Per spec §"Webhook Event Delivery" L413 + §"Webhook Delivery Status"
+// L460: "after repeated failures the server SHOULD set active: false."
+// The spec doesn't fix a number; this option lets deployments tune
+// hysteresis. ζ-6.
+func WithWebhookSuspendThreshold(n int) WebhookOption {
+	return func(r *WebhookRegistry) {
+		if n > 0 {
+			r.suspendThreshold = n
+		}
+	}
+}
+
+// WithWebhookSuspendWindow overrides the sliding window over which
+// consecutive failures count toward suspension. Default 10 minutes.
+// Pass <=0 to keep the default.
+//
+// Failures separated by more than W don't accumulate — a receiver
+// with one failure per hour for weeks shouldn't get suspended; only
+// a current run of failures does. ζ-6.
+func WithWebhookSuspendWindow(d time.Duration) WebhookOption {
+	return func(r *WebhookRegistry) {
+		if d > 0 {
+			r.suspendWindow = d
+		}
 	}
 }
 
@@ -108,6 +141,11 @@ type WebhookTarget struct {
 	// Mutated only via *WebhookRegistry methods under r.mu so the
 	// snapshot returned by Targets()/DeliveryStatus() is consistent.
 	Status DeliveryStatus
+
+	// ζ-6: internal counter for the suspend state machine. Tracks
+	// consecutive failures within the current sliding-window run.
+	// Not surfaced on the wire; the wire-visible signal is Status.Active.
+	failureCount int
 }
 
 // DeliveryStatus is the per-target delivery-health summary surfaced on
@@ -167,8 +205,10 @@ type WebhookRegistry struct {
 	client               *http.Client
 	ttl                  time.Duration
 	headerMode           WebhookHeaderMode
-	allowPrivateNetworks bool // ζ-1: when false (default), Dialer.Control rejects private/loopback IPs
-	maxBodyBytes         int  // ζ-3: outbound POST body cap in bytes; default 256 KiB
+	allowPrivateNetworks bool          // ζ-1: when false (default), Dialer.Control rejects private/loopback IPs
+	maxBodyBytes         int           // ζ-3: outbound POST body cap in bytes; default 256 KiB
+	suspendThreshold     int           // ζ-6: consecutive failures → Active=false; default 5
+	suspendWindow        time.Duration // ζ-6: sliding window over which failures accumulate; default 10min
 
 	// logf is the logging hook used by deliver paths. Defaults to log.Printf;
 	// tests override via setLogfForTest to capture failures (including SSRF
@@ -182,11 +222,13 @@ type WebhookRegistry struct {
 // Override via the With* options.
 func NewWebhookRegistry(opts ...WebhookOption) *WebhookRegistry {
 	r := &WebhookRegistry{
-		targets:      make(map[string]WebhookTarget),
-		ttl:          defaultWebhookTTL,
-		headerMode:   StandardWebhooks,
-		maxBodyBytes: defaultWebhookMaxBodyBytes,
-		logf:         log.Printf,
+		targets:          make(map[string]WebhookTarget),
+		ttl:              defaultWebhookTTL,
+		headerMode:       StandardWebhooks,
+		maxBodyBytes:     defaultWebhookMaxBodyBytes,
+		suspendThreshold: defaultWebhookSuspendThreshold,
+		suspendWindow:    defaultWebhookSuspendWindow,
+		logf:             log.Printf,
 	}
 	for _, o := range opts {
 		o(r)
@@ -331,6 +373,17 @@ func (r *WebhookRegistry) Register(canonicalKey []byte, derivedID, urlStr, secre
 		if maxAgeSeconds > 0 {
 			existing.MaxAgeSeconds = maxAgeSeconds
 		}
+		// ζ-6: a successful refresh reactivates a suspended target per
+		// spec L460. Clear the failure run so deliveries can resume.
+		// Pending events do NOT replay automatically (would re-flood a
+		// recovering receiver); the client signals replay intent via
+		// the next events/poll or by waiting for live events.
+		if !existing.Status.Active {
+			existing.Status.Active = true
+			existing.Status.LastError = DeliveryErrorNone
+			existing.Status.FailedSince = nil
+			existing.failureCount = 0
+		}
 		r.targets[key] = existing
 	} else {
 		r.targets[key] = WebhookTarget{
@@ -359,14 +412,21 @@ func (r *WebhookRegistry) Unregister(canonicalKey []byte) {
 	delete(r.targets, string(canonicalKey))
 }
 
-// Targets returns a snapshot of all non-expired webhook targets.
+// Targets returns a snapshot of all non-expired AND non-suspended
+// webhook targets. Used by Deliver to fan out an event; suspended
+// targets (ζ-6: Active=false after N consecutive failures) are
+// excluded so dead receivers don't keep getting retry traffic.
+//
+// Lookup-by-canonical-key paths (PostGap, PostTerminated) bypass this
+// filter — control envelopes for terminated/gap should still POST to
+// suspended targets if anything (last-gasp signals).
 func (r *WebhookRegistry) Targets() []WebhookTarget {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	now := time.Now()
 	out := make([]WebhookTarget, 0, len(r.targets))
 	for _, t := range r.targets {
-		if t.ExpiresAt.After(now) {
+		if t.ExpiresAt.After(now) && t.Status.Active {
 			out = append(out, t)
 		}
 	}
@@ -432,9 +492,10 @@ const (
 )
 
 // recordDeliverySuccess updates the target's DeliveryStatus after a
-// successful delivery attempt. Active stays true; LastDeliveryAt
-// advances; LastError + FailedSince clear (the current failure run,
-// if any, is over).
+// successful delivery attempt. Active stays/becomes true (clears any
+// prior suspension — ζ-6); LastDeliveryAt advances; LastError +
+// FailedSince clear (the current failure run, if any, is over);
+// failure counter resets to 0.
 func (r *WebhookRegistry) recordDeliverySuccess(canonicalKey []byte, at time.Time) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -447,17 +508,21 @@ func (r *WebhookRegistry) recordDeliverySuccess(canonicalKey []byte, at time.Tim
 	t.Status.LastDeliveryAt = &atCopy
 	t.Status.LastError = DeliveryErrorNone
 	t.Status.FailedSince = nil
+	t.failureCount = 0
 	r.targets[string(canonicalKey)] = t
 }
 
 // recordDeliveryFailure updates the target's DeliveryStatus after the
 // FINAL failed attempt (all retries exhausted). LastError gets the
 // categorical bucket; FailedSince is set on the FIRST failure of a
-// run and preserved across subsequent failures so subscribers can
-// see how long the receiver has been unreachable.
+// CURRENT run (sliding-window resets see ζ-6 suspendWindow) and
+// preserved across subsequent failures so subscribers can see how long
+// the receiver has been unreachable.
 //
-// Active stays as-is here; ζ-6's suspend/reactivate state machine
-// flips Active=false when the failure run hits the configured threshold.
+// Suspend rule (ζ-6): if FailedSince is older than suspendWindow,
+// reset the run (this failure starts a new run). Otherwise, count
+// consecutive failures within the run; on hitting suspendThreshold,
+// flip Active=false.
 func (r *WebhookRegistry) recordDeliveryFailure(canonicalKey []byte, bucket DeliveryErrorBucket) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -465,10 +530,22 @@ func (r *WebhookRegistry) recordDeliveryFailure(canonicalKey []byte, bucket Deli
 	if !ok {
 		return
 	}
+	now := time.Now()
 	t.Status.LastError = bucket
-	if t.Status.FailedSince == nil {
-		now := time.Now()
-		t.Status.FailedSince = &now
+
+	// ζ-6: sliding-window failure counting. If the current run is
+	// older than the window, reset — this failure starts a fresh run.
+	// failureCount is per-target; tracked alongside the wire-visible
+	// DeliveryStatus fields.
+	if t.Status.FailedSince == nil || now.Sub(*t.Status.FailedSince) > r.suspendWindow {
+		startCopy := now
+		t.Status.FailedSince = &startCopy
+		t.failureCount = 1
+	} else {
+		t.failureCount++
+	}
+	if t.failureCount >= r.suspendThreshold {
+		t.Status.Active = false
 	}
 	r.targets[string(canonicalKey)] = t
 }
