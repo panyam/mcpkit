@@ -238,7 +238,7 @@ The receiver doesn't care which channel it arrived on; the dispatch is by `progr
 - `message` *(optional)* — human-readable status string. Hosts surface it in the UI.
 
 > [!IMPORTANT]
-> Progress is **not** the same mechanism as tasks. Progress is a flat lightweight running-status channel for *one synchronous request*. Tasks are a separate first-class concept for long-running operations that can be detached, queried, and resumed. Tasks happen to use progress notifications heavily — but the inverse isn't true (you can have progress without tasks). Tasks gets its own root.
+> Progress is **not** the same mechanism as tasks. Progress is a flat lightweight running-status channel for *one synchronous request*. Tasks are a separate first-class concept for long-running operations that can be detached, queried, and resumed. Tasks happen to use progress notifications heavily — but the inverse isn't true (you can have progress without tasks). Tasks gets its own page.
 
 ## Q5 — What happens if a server emits a notification the client never advertised support for?
 
@@ -270,7 +270,7 @@ mcpkit's notification dispatcher (in `server/dispatch.go` and the symmetric clie
 
 ## End-state (what downstream pages can assume)
 
-After reading this root, downstream pages can assume:
+After reading this page, downstream pages can assume:
 
 - You know the **six notification families**, their **direction**, and what **capability gate** (if any) controls each.
 - You know the gate is fixed at bring-up and **does not change mid-session**.
@@ -284,7 +284,7 @@ After reading this root, downstream pages can assume:
 ## Next to read
 
 - **[Per-request anatomy](./request-anatomy.md)** *(root)* — folds notification dispatch into the broader picture: notifications travel through receiving middleware, hit a notification-specific dispatcher, and (unlike requests) never enter the pending-id table on the receive side.
-- **[Extension mechanisms](./extension-mechanisms.md)** *(root)* — pins the vocabulary for "what counts as an extension." Some notification additions (e.g. `notifications/resources/updated`) are themselves extensions; this root explains the meta-mechanism.
+- **[Extension mechanisms](./extension-mechanisms.md)** *(root)* — pins the vocabulary for "what counts as an extension." Some notification additions (e.g. `notifications/resources/updated`) are themselves extensions; that page explains the meta-mechanism.
 - **[Tasks v1/v2/hybrid](./tasks.md)** *(planned, root)* — long-running operations as a first-class concept. Heavy user of progress notifications and cancellation; introduces detach/resume semantics that flat notifications don't cover.
 - **[Cancellation deep-dive](./cancellation.md)** *(planned, leaf)* — race scenarios, partial-state handling, timeout-vs-cancel distinction, mcpkit's `ctx.Done()` propagation paths.
 - **[List-TTL (SEP-2549)](./list-ttl.md)** *(planned, leaf)* — three-state cache-lifetime hint orthogonal to list_changed; relevant when notifications aren't reliable.

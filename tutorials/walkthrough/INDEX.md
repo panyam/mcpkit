@@ -137,6 +137,6 @@ Solid green = written. Solid orange = next up. Dashed grey = planned but not yet
 
 ## Orphan / coverage check
 
-- **Pages with no inbound edges** (other than the README/L0): none currently — both written roots are foundational.
+- **Pages with no inbound edges** (other than the README/L0): none currently — bring-up and transport-mechanics are foundational.
 - **Pages with no outbound edges**: none currently.
 - **Roots whose end-state nothing depends on yet**: bring-up and transport-mechanics each have planned dependents, but until those are written, the dependency is implicit.

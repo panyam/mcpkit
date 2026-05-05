@@ -61,9 +61,9 @@ graph LR
 > [!IMPORTANT]
 > The `experimental` namespace is **not** a free-for-all. Receivers MUST ignore unrecognized experimentals — that's what lets emitters advertise them safely. But emitters MUST NOT depend on experimentals being supported; if the negotiated capabilities don't include yours, you don't use it. This is what makes SEPs land without breaking older clients.
 
-**Concrete examples in mcpkit** (each in its own root or leaf):
+**Concrete examples in mcpkit** (each gets its own page):
 
-- **SEP-2663 — [tasks v2](./tasks.md)** *(planned)*. Long-running operations as a first-class concept. Adds `tasks/*` methods + a `tasks` capability. mcpkit has v1 (frozen), v2 (canonical), and `RegisterTasksHybrid` for both — a transition pattern worth its own root.
+- **SEP-2663 — [tasks v2](./tasks.md)** *(planned)*. Long-running operations as a first-class concept. Adds `tasks/*` methods + a `tasks` capability. mcpkit has v1 (frozen), v2 (canonical), and `RegisterTasksHybrid` for both — a transition pattern worth its own page.
 - **SEP-2549 — [list-TTL](./list-ttl.md)** *(planned)*. Three-state cache-lifetime hint on list responses (`nil` / `&0` / `&N>0`). Pure `_meta` extension — no new methods or capabilities.
 - **SEP-2322 — [MRTR](./mrtr.md)** *(planned)*. Middleware request/transport routing. Mostly mcpkit-architecture; thin spec surface (an ephemeral capability flag).
 
@@ -118,11 +118,11 @@ mcpkit's extension points, roughly in order of how often you'll reach for them:
 The general shape: you add **registrations** at server start (or client side), the runtime picks them up via dispatch, and middleware wraps the call path. You never need to modify `core/` or `server/` to add functionality.
 
 > [!NOTE]
-> The dispatch + middleware + handler-context internals that make these extension points work are covered in [per-request anatomy](./request-anatomy.md) — the prerequisite root for this page.
+> The dispatch + middleware + handler-context internals that make these extension points work are covered in [per-request anatomy](./request-anatomy.md) — read that first.
 
 ## Q5 — Case studies: how tasks, auth, apps, events, list-TTL, MRTR, elicitation each map to the mechanisms above
 
-Brief — each gets its own full root or leaf.
+Brief — each gets its own full page later.
 
 | Extension | Style | Surfaces used | Where |
 |-----------|-------|---------------|-------|
@@ -152,7 +152,7 @@ The rule of thumb: **if it can be observed on the wire between client and server
 
 ## End-state (what downstream pages can assume)
 
-After reading this root, downstream pages can assume:
+After reading this page, downstream pages can assume:
 
 - You know the **four extension surfaces** (method namespace, capability flags, notifications, `_meta`) and the common **styles** that combine them.
 - You know the **SEP process** and the role of `experimental.<name>` capabilities as a sandbox; you can read "this extension uses SEP-XXXX" and have a sense of where it sits in the maturity curve.

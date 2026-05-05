@@ -17,35 +17,35 @@ Every page declares its place in the graph so you can enter from anywhere.
 > [!NOTE]
 > This document is being built **incrementally and conversationally** — one question at a time. New nodes appear as the discussion reaches them.
 
-## The root contract
+## The page contract (four parts)
 
-A **root** is a self-contained walkthrough that establishes a set of invariants downstream pages can assume. Every root follows the same four-part contract:
+A **root** is the kind of page that establishes a set of invariants downstream pages can assume. Root pages follow the same four-part contract:
 
-1. **Prerequisites** — what must be true going in. Stated explicitly at the top, with a *"if not, read [X]"* guard pointing at the root that establishes each missing prerequisite. A foundational root says "none — foundational."
+1. **Prerequisites** — what must be true going in. Stated explicitly at the top, with a *"if not, read [X]"* guard pointing at the page that establishes each missing prerequisite. A foundational page says "none — foundational."
 2. **Body** — the walkthrough itself. May begin with a short optional **Context** section (what the topic is and where it sits in MCP). Context isn't a contract requirement — it just helps the reader land softly. Don't use it to defend the page's existence.
-3. **End-state** — what is true after reading. Listed as bullets in a section near the end. Downstream roots may assume any of these without re-deriving.
-4. **Next to read** — which other roots and leaves build on this end-state. Pointers, not exhaustive.
+3. **End-state** — what is true after reading. Listed as bullets in a section near the end. Downstream pages may assume any of these without re-deriving.
+4. **Next to read** — which other pages build on this end-state. Pointers, not exhaustive.
 
-This is dependency tracking for documentation. Instead of every page restating preliminaries, a page declares its prerequisites and moves on. As more roots get written, derived pages get *shorter*, not longer.
+This is dependency tracking for documentation. Instead of every page restating preliminaries, a page declares its prerequisites and moves on. As more pages get written, derived ones get *shorter*, not longer.
 
 > [!NOTE]
-> A root is a *self-contained chunk*. A reader who has the prerequisites can read just this root and walk away with the end-state. They never need to read sibling roots they don't care about.
+> A root page is a *self-contained chunk*. A reader who has the prerequisites can read just this one page and walk away with its end-state. They never need to read sibling pages they don't care about.
 
 Branch and leaf pages don't need the full contract — they elaborate on a part of a root and live within its parent's prerequisite envelope.
 
-### Optional pattern: FAQ-style roots
+### Optional pattern: FAQ-style pages
 
-A root may be organized as a series of **questions** rather than a single linear walkthrough. Each Q is a self-contained chunk; the set collectively covers the territory and establishes the End-state. Each Q can carry its own mid-journey `Branch →` callouts.
+A page may be organized as a series of **questions** rather than a single linear walkthrough. Each Q is a self-contained chunk; the set collectively covers the territory and establishes the End-state. Each Q can carry its own mid-journey `Branch →` callouts.
 
 This works well when:
 
 - The territory has multiple semi-independent angles a reader might want to skim selectively (taxonomy, mechanism, race conditions, integration with another concept, common gotcha).
-- The root grew out of a real conversation — the questions you actually wanted answered are usually the right shape for a teaching doc.
+- The page grew out of a real conversation — the questions you actually wanted answered are usually the right shape for a teaching doc.
 - The reader can stop after any one Q with a partial-but-coherent end-state.
 
 Example: [notifications.md](./notifications.md) — five Qs covering taxonomy, the worked example (list-changed), cancellation, progress, and capability mismatch.
 
-Use sparingly. Most roots want a single linear walkthrough; FAQ-style is a tool for the surveyable-territory case.
+Use sparingly. Most pages want a single linear walkthrough; FAQ-style is a tool for the surveyable-territory case.
 
 ## Per-page header
 
