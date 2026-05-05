@@ -98,25 +98,25 @@ func main() {
   ```
   Renderer / mode predicates use `demokit.IsTUI()` and `demokit.IsNonInteractive()` —
   no hand-rolled `os.Args` scans.
-- Logger + middleware come from `examples/common` — one line each, no
-  copy-paste of color rules:
-  ```go
-  logger := common.NewMCPLogger("[mcp] ")
-  opts := []server.Option{server.WithListen(*addr)}
-  opts = append(opts, common.WithMCPLogging(logger)...)
-  ```
-  `common.NewMCPLogger` wraps `demokit.NewColorLogger` with the canonical
-  five-rule set (see `examples/common/logger.go`); `common.WithMCPLogging`
-  returns `[]server.Option` for both transport-level request logging and
-  the MCP dispatch middleware. If you need to tint additional log lines,
-  pass `demokit.ColorRule`s as variadic extras to `NewMCPLogger`.
-- Server construction:
+- Listen + logger + middleware come from `examples/common` in one call:
   ```go
   srv := server.NewServer(
       core.ServerInfo{Name: "<name>", Version: "0.1.0"},
-      opts...,  // example-specific options append after common.WithMCPLogging
+      common.MCPServerOptions(*addr, "[mcp] ")...,
   )
   ```
+  `common.MCPServerOptions` returns `[]server.Option` containing
+  `WithListen` plus the canonical color-logger wired to both
+  `WithRequestLogging` and `WithMiddleware(LoggingMiddleware)`. To append
+  example-specific options:
+  ```go
+  opts := common.MCPServerOptions(*addr, "[mcp] ")
+  opts = append(opts, server.WithListTTL(60), server.WithExtension(...))
+  srv := server.NewServer(info, opts...)
+  ```
+  Need the logger handle for non-server use (extra rules, custom log
+  lines)? Drop down to `common.NewMCPLogger(prefix, ...extraRules)` +
+  `common.WithMCPLogging(logger)`.
 - Serve via `srv.ListenAndServe(server.WithStreamableHTTP(true))` — graceful
   shutdown is built in (server/server.go:879 wraps
   `gohttp.ListenAndServeGraceful`). **Never** call `http.ListenAndServe`
@@ -150,21 +150,13 @@ logger := common.NewMCPLogger("[mcp] ",
 package main
 
 import (
-    "os"
-    "strings"
-
     "github.com/panyam/demokit"
-    "github.com/panyam/demokit/tui"
     "github.com/panyam/mcpkit/client"
+    "github.com/panyam/mcpkit/examples/common"
 )
 
 func runDemo() {
-    serverURL := "http://localhost:8080"
-    for i, arg := range os.Args[1:] {
-        if arg == "--url" && i+2 < len(os.Args) {
-            serverURL = os.Args[i+2]
-        }
-    }
+    serverURL := common.ServerURL()  // honors --url, $MCPKIT_SERVER_URL, or default :8080
 
     demo := demokit.New("<Title>").
         Dir("<name>").
@@ -180,9 +172,7 @@ func runDemo() {
 
     demo.Section("Where to look in the code", "- ...", "- ...")
 
-    if demokit.IsTUI() {
-        demo.WithRenderer(tui.New())
-    }
+    common.SetupRenderer(demo)  // applies tui.New() if --tui was passed
 
     demo.Execute()
 }

@@ -23,7 +23,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/examples/common"
 	"github.com/panyam/mcpkit/server"
 )
 
@@ -39,11 +41,14 @@ func main() {
 
 func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
-	flag.CommandLine.Parse(filterFlags(os.Args[1:]))
+	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
+		demokit.BoolFlag("--serve"),
+		demokit.ValueFlag("--url"),
+	))
 
 	srv := server.NewServer(
 		core.ServerInfo{Name: "tasks-v2-demo", Version: "0.1.0"},
-		server.WithMiddleware(server.LoggingMiddleware(log.Default())),
+		common.MCPServerOptions(*addr, "[mcp] ")...,
 	)
 
 	// greet: sync-only tool. No Execution field = taskSupport forbidden.

@@ -48,8 +48,6 @@ func serve() {
 		demokit.ValueFlag("--file"),
 	))
 
-	logger := common.NewMCPLogger("[mcp] ")
-
 	// One temp dir per server run, NOT auto-cleaned — the whole point is
 	// that you can `ls` the directory and `open` the files after the
 	// walkthrough finishes. A real handler would never persist user
@@ -59,8 +57,7 @@ func serve() {
 		log.Fatalf("mktemp: %v", err)
 	}
 
-	opts := []server.Option{server.WithListen(*addr)}
-	opts = append(opts, common.WithMCPLogging(logger)...)
+	opts := common.MCPServerOptions(*addr, "[mcp] ")
 	opts = append(opts,
 		// MCP Apps extension powers the in-iframe file picker apps
 		// registered in apps.go (SEP-2356 Phase 2.1).

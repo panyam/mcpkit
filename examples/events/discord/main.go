@@ -57,8 +57,6 @@ func serve() {
 		demokit.ValueFlag("--addr"),
 	))
 
-	logger := common.NewMCPLogger("[mcp] ")
-
 	headerMode, err := events.ParseHeaderMode(*whHeaderMode)
 	if err != nil {
 		log.Fatalf("invalid -webhook-header-mode: %v", err)
@@ -139,11 +137,8 @@ func serve() {
 	// rejected with -32012 per §"Subscription Identity" → "Authentication
 	// required" L361. Otherwise fall back to the demo escape hatch so
 	// `make demo` works end-to-end without an auth provider.
-	srvOpts := []server.Option{
-		server.WithListen(*addr),
-		server.WithSubscriptions(),
-	}
-	srvOpts = append(srvOpts, common.WithMCPLogging(logger)...)
+	srvOpts := common.MCPServerOptions(*addr, "[mcp] ")
+	srvOpts = append(srvOpts, server.WithSubscriptions())
 	authPosture := "demo (anonymous → UnsafeAnonymousPrincipal)"
 	if validator := tryEnableAuth(); validator != nil {
 		srvOpts = append(srvOpts, server.WithAuth(validator))
