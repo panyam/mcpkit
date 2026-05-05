@@ -4,8 +4,8 @@ demo: ## Run the demo interactively
 serve: ## Start the MCP server standalone (for MCPJam or other clients)
 	go run . --serve
 
-readme: ## Regenerate README.md from demo definitions
-	go run . --readme > README.md
+readme: ## Regenerate WALKTHROUGH.md from demo definitions
+	go run . --doc md > WALKTHROUGH.md
 
 build: ## Build the example binary
 	go build -o elicitation-example .

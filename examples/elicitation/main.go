@@ -15,6 +15,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -25,10 +26,11 @@ import (
 	"time"
 
 	"github.com/panyam/demokit"
-	"github.com/panyam/demokit/tui"
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/examples/common"
 	"github.com/panyam/mcpkit/server"
+	gohttp "github.com/panyam/servicekit/http"
 	"github.com/panyam/servicekit/middleware"
 )
 
@@ -46,12 +48,7 @@ func main() {
 // --- Demo client (scripted MCP host) ---
 
 func runDemo() {
-	serverURL := "http://localhost:8080"
-	for i, arg := range os.Args[1:] {
-		if arg == "--url" && i+2 < len(os.Args) {
-			serverURL = os.Args[i+2]
-		}
-	}
+	serverURL := common.ServerURL()
 
 	demo := demokit.New("URL Elicitation — Consent Approval Flow (UC1)").
 		Dir("elicitation").
@@ -85,7 +82,7 @@ func runDemo() {
 		DashedArrow("Server", "Host", "serverInfo + Mcp-Session-Id").
 		Arrow("Host", "Server", "GET /mcp — open SSE stream for notifications").
 		Note("Connect with a notification callback listening for notifications/elicitation/complete. The GET SSE stream receives server-pushed notifications.").
-		Run(func() {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			fmt.Printf("    Connecting to %s ...\n", serverURL)
 
 			c = client.NewClient(serverURL+"/mcp",
@@ -117,6 +114,7 @@ func runDemo() {
 			for _, t := range tools {
 				fmt.Printf("      - %s: %s\n", t.Name, t.Description)
 			}
+			return nil
 		})
 
 	// --- Step 2: Call tool — get denied ---
@@ -124,24 +122,15 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call: access_protected_resource").
 		DashedArrow("Server", "Host", "error -32042 + consent URL + authzContextId").
 		Note("The consent middleware intercepts the call and returns -32042 (URLElicitationRequired) with a URL the user must visit to approve access.").
-		Run(func() {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			_, err := c.ToolCall("access_protected_resource", map[string]any{"resourceId": "my-doc"})
-
-			var rpcErr *client.RPCError
-			if !errors.As(err, &rpcErr) {
-				fmt.Printf("    UNEXPECTED: %v\n", err)
-				return
-			}
-
-			// Show the full error response.
-			errJSON, _ := json.MarshalIndent(map[string]any{
-				"code":    rpcErr.Code,
-				"message": rpcErr.Message,
-				"data":    rpcErr.Data,
-			}, "    ", "  ")
-			fmt.Printf("    Response error:\n    %s\n\n", errJSON)
+			common.PrintRPCError(err, "")
 
 			// Parse the error data to extract consent URL and context ID.
+			var rpcErr *client.RPCError
+			if err == nil || !errors.As(err, &rpcErr) {
+				return nil
+			}
 			var data struct {
 				Authorization struct {
 					AuthorizationContextID string `json:"authorizationContextId"`
@@ -159,6 +148,7 @@ func runDemo() {
 			if len(data.Elicitations) > 0 {
 				fmt.Printf("    Consent URL: %s\n", data.Elicitations[0].URL)
 			}
+			return nil
 		})
 
 	// --- Step 3: Open browser, wait for notification, auto-retry ---
@@ -169,7 +159,7 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call + _meta.authorizationContextId (auto-retry)").
 		DashedArrow("Server", "Host", "Access granted to resource").
 		Note("The host opens the consent URL and waits for the server to send a notifications/elicitation/complete notification via the SSE stream. When it arrives, the host automatically retries with the authorizationContextId.").
-		Run(func() {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			approveURL := fmt.Sprintf("%s/approve?ctx=%s", serverURL, contextID)
 			fmt.Printf("    Opening browser: %s\n", approveURL)
 			openBrowser(approveURL)
@@ -186,7 +176,7 @@ func runDemo() {
 			}
 
 			// Retry with the context ID.
-			result, err := c.Call("tools/call", map[string]any{
+			res, err := c.Call("tools/call", map[string]any{
 				"name":      "access_protected_resource",
 				"arguments": map[string]any{"resourceId": "my-doc"},
 				"_meta": map[string]any{
@@ -195,20 +185,15 @@ func runDemo() {
 			})
 			if err != nil {
 				fmt.Printf("    UNEXPECTED error: %v\n", err)
-				return
+				return nil
 			}
 			var toolResult core.ToolResult
-			result.Unmarshal(&toolResult)
+			res.Unmarshal(&toolResult)
 			fmt.Printf("    Result: %s\n", toolResult.Content[0].Text)
+			return nil
 		})
 
-	// Use TUI renderer if --tui flag is passed.
-	for _, arg := range os.Args[1:] {
-		if strings.TrimSpace(arg) == "--tui" {
-			demo.WithRenderer(tui.New())
-			break
-		}
-	}
+	common.SetupRenderer(demo)
 
 	demo.Execute()
 
@@ -234,29 +219,19 @@ func openBrowser(url string) {
 // --- Serve mode: standalone MCP server ---
 
 func serve() {
-	addr := ":8080"
-	for i, arg := range os.Args[1:] {
-		if arg == "--addr" && i+2 < len(os.Args) {
-			addr = os.Args[i+2]
-		}
-	}
-	listenURL := fmt.Sprintf("http://localhost%s", addr)
+	addr := flag.String("addr", ":8080", "listen address")
+	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
+		demokit.BoolFlag("--serve"),
+		demokit.ValueFlag("--url"),
+	))
+	listenURL := fmt.Sprintf("http://localhost%s", *addr)
 	consent := newConsentStore()
 
-	logger := demokit.NewColorLogger("[mcp] ", []demokit.ColorRule{
-		{Contains: "error=", DarkColor: demokit.ANSIRed},
-		{Contains: "ERROR", DarkColor: demokit.ANSIRed},
-		{Contains: "[http] →", DarkColor: demokit.ANSIGray, LightColor: demokit.ANSIDimBlue},
-		{Contains: "[http] ←", DarkColor: demokit.ANSICyan, LightColor: demokit.ANSIBlue},
-		{Contains: "MCP ", DarkColor: demokit.ANSIBrightGreen, LightColor: demokit.ANSIGreen},
-	})
+	logger := common.NewMCPLogger("[mcp] ")
 	srv := server.NewServer(core.ServerInfo{
 		Name:    "elicitation-example",
 		Version: "1.0.0",
-	},
-		server.WithRequestLogging(logger),
-		server.WithMiddleware(server.LoggingMiddleware(logger)),
-	)
+	}, append([]server.Option{server.WithListen(*addr)}, common.WithMCPLogging(logger)...)...)
 
 	srv.RegisterTool(
 		core.ToolDef{
@@ -293,10 +268,16 @@ func serve() {
 	mux.Handle("/mcp", cors(srv.Handler(server.WithStreamableHTTP(true))))
 	mux.HandleFunc("/approve", consent.handleApprove)
 
-	fmt.Printf("Elicitation example server on %s\n", addr)
+	fmt.Printf("Elicitation example server on %s\n", *addr)
 	fmt.Printf("MCP endpoint: %s/mcp\n", listenURL)
 	fmt.Printf("Tools: access_protected_resource\n")
-	if err := http.ListenAndServe(addr, mux); err != nil {
+
+	// Manual gohttp.ListenAndServeGraceful since the MCP handler is wrapped
+	// with CORS middleware (browser-based MCP hosts like MCPJam need it),
+	// which means we can't use srv.ListenAndServe directly. Mirrors the
+	// graceful-shutdown shape from server/server.go.
+	httpSrv := &http.Server{Addr: *addr, Handler: mux, WriteTimeout: 0}
+	if err := gohttp.ListenAndServeGraceful(httpSrv, gohttp.WithOnShutdown(srv.CloseAllSessions)); err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
 		os.Exit(1)
 	}

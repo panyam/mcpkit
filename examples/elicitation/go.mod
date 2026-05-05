@@ -4,9 +4,12 @@ go 1.26.2
 
 replace github.com/panyam/mcpkit => ../..
 
+replace github.com/panyam/mcpkit/examples/common => ../common
+
 require (
-	github.com/panyam/demokit v0.0.4
-	github.com/panyam/mcpkit v0.2.40
+	github.com/panyam/demokit v0.0.16
+	github.com/panyam/mcpkit v0.2.41
+	github.com/panyam/mcpkit/examples/common v0.0.0-00010101000000-000000000000
 	github.com/panyam/servicekit v0.0.26
 )
 
@@ -24,18 +27,18 @@ require (
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
-	github.com/kr/text v0.2.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-runewidth v0.0.23 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/panyam/gocurrent v0.1.0 // indirect
-	github.com/panyam/goutils v0.1.8 // indirect
+	github.com/panyam/goutils v0.1.13 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
+	github.com/yuin/goldmark v1.8.2 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/text v0.33.0 // indirect
