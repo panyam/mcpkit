@@ -227,8 +227,12 @@ the demokit-provided `ctx.Ctx` (which honors `Timeout` / `Cancellable`).
 - Use `*client.Client` from `github.com/panyam/mcpkit/client`, not raw HTTP.
 - Pretty-print the **raw** JSON (`res.Raw`) — never the typed struct. The
   point is to show the wire format.
-- For error paths: print the JSON-RPC error code + message + structured data
-  via a small `printRPCError(err, label)` helper.
+- For error paths: render the JSON-RPC error via `common.PrintRPCError(err,
+  wantReason)`. Pass `wantReason=""` for plain rendering; pass a non-empty
+  string when the demo wants to assert that `err.Data["reason"]` matches a
+  spec-defined value (a WARN line is printed on mismatch — useful for
+  spec-validation demos where wire-shape regressions should surface in
+  stdout, not just in the conformance suite).
 
 ### Fixtures
 
@@ -370,9 +374,12 @@ output rather than emitted as N/A.
 - [ ] `filterargs-promoted` — call site uses `demokit.FilterArgs(args, extras...)`
   with `BoolFlag("--serve")` to override demokit's value-form `--serve`. No
   inline `filterFlags()` definition remains.
-- [ ] `tui-helper` — `walkthrough.go` uses
-  `if demokit.IsTUI() { demo.WithRenderer(tui.New()) }` before `demo.Execute()`
-  (no hand-rolled `os.Args` scan).
+- [ ] `tui-helper` — `walkthrough.go` uses `common.SetupRenderer(demo)`
+  before `demo.Execute()` (no inline `os.Args` scan, no hand-rolled
+  `if demokit.IsTUI() { demo.WithRenderer(tui.New()) }` block).
+- [ ] `url-helper` — `runDemo()` reads the server URL via
+  `common.ServerURL()` (no inline `for _, arg := range os.Args[1:]`
+  scan, no per-example hardcoded `"http://localhost:8080"` default).
 - [ ] `mode-helpers` — mode predicates use `demokit.IsTUI()` /
   `demokit.IsNonInteractive()`; no local `tuiMode()` / `nonInteractive()`
   helpers. (Skip `IsNonInteractive` check if the example doesn't reference
@@ -384,10 +391,10 @@ output rather than emitted as N/A.
   Skip for steps that don't make an MCP call (e.g. a step that calls a
   bootstrap HTTP endpoint to mint demo tokens has no `res.Raw`).
 - [ ] `error-path-helper` — error-path step `Run()` blocks render the
-  JSON-RPC error via a small `printRPCError(err, label)`-style helper
-  (CONVENTIONS.md §3 "Client logging convention"), not ad-hoc inline
-  `json.MarshalIndent` blocks. Skip if the example has no error-path
-  steps.
+  JSON-RPC error via `common.PrintRPCError(err, wantReason)` (see §3
+  "Client logging convention"), not ad-hoc inline `json.MarshalIndent`
+  blocks or a per-example `printRPCError` copy. Skip if the example has
+  no error-path steps.
 - [ ] `walkthrough-md-fresh` — committed `WALKTHROUGH.md` matches
   `go run . --doc md` output (no drift).
 - [ ] `makefile-baseline` — Makefile has the four baseline targets (`demo` /

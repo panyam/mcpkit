@@ -61,11 +61,13 @@ Apply fixes that bring an mcpkit example into compliance with `examples/CONVENTI
 
 For each ID, the upgrade applies this exact transformation. (Read CONVENTIONS.md for the *why*.)
 
-- **`logger-colorlogger`** — replace the existing logger construction in `serve()` with `common.NewMCPLogger("[mcp] ")` + `common.WithMCPLogging(logger)` from `examples/common` (see CONVENTIONS.md §2). Add the `examples/common` dependency to `go.mod` if missing.
+- **`logger-colorlogger`** — replace the existing logger construction in `serve()` with `common.MCPServerOptions(*addr, "[mcp] ")` from `examples/common` — single line for listen + canonical color-logger middleware (see CONVENTIONS.md §2). Drop down to `common.NewMCPLogger` + `common.WithMCPLogging` only if the example needs the logger handle separately. Add the `examples/common` dependency to `go.mod` if missing (`require ... + replace ... => ../common`).
+- **`error-path-helper`** — replace inline `json.MarshalIndent(rpcErr.Data, ...)` blocks (or per-example `printRPCError` copies) with `common.PrintRPCError(err, wantReason)`. Pass `wantReason=""` unless the demo wants to assert a specific spec-defined `data.reason` value. Drop unused `errors` / `client` imports if they were only used by the old inline rendering.
 - **`serve-srv-listenandserve`** — replace `http.ListenAndServe(*addr, mux)` with `srv.ListenAndServe(server.WithStreamableHTTP(true))`. If the example also needed a custom mux for side endpoints, lift those routes into `server.WithMux(func(mux *http.ServeMux) { ... })` passed to `NewServer`.
 - **`mux-withmux`** — extract any hand-rolled `http.Server{}` + custom mux into `server.WithMux(...)` on `server.NewServer(...)`. The side-endpoint handlers themselves don't change.
 - **`filterargs-promoted`** — replace `flag.CommandLine.Parse(filterFlags(os.Args[1:]))` with the canonical `demokit.FilterArgs(...)` call (see CONVENTIONS.md §2). Delete the local `filterFlags` definition entirely. Bump `go.mod` to the demokit version that has `FilterArgs` if not already there (`v0.0.16`+).
-- **`tui-helper`** — replace the `for _, arg := range os.Args[1:] { if ... "--tui" ... }` block with `if demokit.IsTUI() { demo.WithRenderer(tui.New()) }`.
+- **`tui-helper`** — replace the `for _, arg := range os.Args[1:] { if ... "--tui" ... }` block with `common.SetupRenderer(demo)`. Drop unused `tui` import.
+- **`url-helper`** — replace the inline `--url` arg scan + hardcoded `"http://localhost:8080"` default with `serverURL := common.ServerURL()`. Drop unused `os` import if it was only used for the scan.
 - **`mode-helpers`** — delete local `tuiMode()` / `nonInteractive()` helpers; replace their call sites with `demokit.IsTUI()` / `demokit.IsNonInteractive()`.
 - **`makefile-baseline`** — rewrite the Makefile to the four-target baseline from CONVENTIONS.md §6, **preserving any example-specific extras** (the user added them deliberately) under their existing section comment dividers.
 - **`makefile-default-goal`** — append `.DEFAULT_GOAL := demo` to the Makefile if missing.
