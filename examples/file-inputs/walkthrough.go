@@ -75,49 +75,40 @@ func runDemo() {
 	demo.Step("Connect to the file-inputs server").
 		Arrow("Host", "Server", "POST /mcp — initialize (capabilities.fileInputs={})").
 		DashedArrow("Server", "Host", "serverInfo + capabilities").
-		Note("`client.NewClient(...)` + `Connect()`. Once Phase 1.6 lands, the client will auto-advertise `fileInputs` when the option is enabled; for now the demo connects with the default capability set and the server unconditionally exposes `x-mcp-file` so we can see the wire shape.").
+		Note("`client.NewClient(...)` + `client.WithFileInputs()` + `Connect()`. The `WithFileInputs` option advertises `capabilities.fileInputs={}` on the wire — without it, the server would strip `x-mcp-file` from every tool's inputSchema (per SEP-2356 cap-gating). The next step inspects the raw response to confirm the keyword survives.").
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			c = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "file-inputs-host", Version: "1.0"},
+				client.WithFileInputs(),
 			)
 			if err := c.Connect(); err != nil {
 				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
 				return nil
 			}
-			fmt.Printf("    Connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)
+			fmt.Printf("    Connected to %s %s (fileInputs cap declared)\n", c.ServerInfo.Name, c.ServerInfo.Version)
 			return nil
 		})
 
-	demo.Step("tools/list — confirm x-mcp-file appears on inputSchemas").
+	demo.Step("tools/list — extract file-input descriptors").
 		Arrow("Host", "Server", "tools/list").
 		DashedArrow("Server", "Host", "tools[] with x-mcp-file marked properties").
-		Note("Bypass any typed helper and decode the raw response so we can see the JSON Schema shape exactly as a client would. `properties.image.x-mcp-file` carries `{accept: [\"image/*\"], maxSize: 5242880}` — that's the picker hint.").
+		Note("`client.FileInputsFromTool(tool)` extracts the per-property descriptors a server advertised. Single-file properties land under their name (`\"image\"`); array-of-files shapes land under `name[]` (`\"documents[]\"`) so callers can disambiguate without re-walking the schema.").
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
-			raw, err := c.Call("tools/list", nil)
+			page, err := c.ListToolsPage("")
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return nil
 			}
-			var page struct {
-				Tools []struct {
-					Name        string         `json:"name"`
-					InputSchema map[string]any `json:"inputSchema"`
-				} `json:"tools"`
-			}
-			if err := json.Unmarshal(raw.Raw, &page); err != nil {
-				fmt.Printf("    ERROR decoding tools/list: %v\n", err)
-				return nil
-			}
-			for _, t := range page.Tools {
-				fmt.Printf("    %-20s\n", t.Name)
-				descs := walkSchemaForFileInputs(t.InputSchema)
+			for _, tool := range page.Tools {
+				fmt.Printf("    %-20s\n", tool.Name)
+				descs := client.FileInputsFromTool(tool)
 				if len(descs) == 0 {
 					fmt.Printf("      (no x-mcp-file properties)\n")
 					continue
 				}
 				for prop, d := range descs {
 					fmt.Printf("      %-15s accept=%v maxSize=%s\n",
-						prop, accepts(d), maxSize(d))
+						prop, accepts(&d), maxSize(&d))
 				}
 			}
 			return nil
@@ -185,25 +176,35 @@ func runDemo() {
 			return nil
 		})
 
-	demo.Step("Optional: send a file from disk").
+	demo.Step("Optional: send a file from disk via client.PrepareFileArg").
 		Arrow("Host", "Server", "tools/call upload_image (from --file <path>)").
 		DashedArrow("Server", "Host", "decoded metadata of the on-disk file").
-		Note("Pass `--file <path>` on the demo command line to read an image from disk and upload it. Skipped silently when the flag isn't set so the walkthrough stays hermetic; demonstrates the on-disk → data URI path you'd use in a real client integration. Phase 1.6 will fold this into `client.PrepareFileArg(path, descriptor)`.").
+		Note("Pass `--file <path>` on the demo command line to read an image from disk and upload it. Skipped silently when the flag isn't set so the walkthrough stays hermetic. The encode path is now `client.PrepareFileArg(path, descriptor)` — single call that reads the file, detects MIME, validates against the descriptor (size + accept patterns, same rules as the server-side validator), and returns the data URI. Failures surface as typed errors (`*core.FileTooLargeError`, `*core.FileTypeNotAcceptedError`) so callers can branch with `errors.As`.").
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			path := flagValue("--file")
 			if path == "" {
 				fmt.Printf("    skipped (pass --file <path> to exercise this step)\n")
 				return nil
 			}
-			data, err := os.ReadFile(path)
+			// Pull the descriptor straight from the server's tools/list so
+			// we send a payload that satisfies whatever constraints the
+			// server actually advertised — no risk of a stale local copy
+			// drifting from the descriptor's accept list.
+			tools, err := c.ListToolsPage("")
 			if err != nil {
-				fmt.Printf("    ERROR reading %s: %v\n", path, err)
+				fmt.Printf("    ERROR listing tools: %v\n", err)
 				return nil
 			}
-			mediaType := guessImageMIME(path)
-			previewFile(filepath.Base(path), mediaType, data)
-			uri := core.EncodeDataURI(data, mediaType, filepath.Base(path))
-			fmt.Printf("    %s (%s, %d bytes)\n", filepath.Base(path), mediaType, len(data))
+			descs := client.FileInputsFromTool(findTool(tools.Tools, "upload_image"))
+			imageDesc := descs["image"]
+
+			uri, err := client.PrepareFileArg(path, &imageDesc)
+			if err != nil {
+				fmt.Printf("    ERROR (%T): %v\n", err, err)
+				return nil
+			}
+			fmt.Printf("    %s prepared (%d bytes encoded)\n", filepath.Base(path), len(uri))
+
 			out, err := c.ToolCall("upload_image", map[string]any{
 				"image": uri,
 			})
@@ -372,26 +373,17 @@ func displayName(filename string) string {
 
 // --- walkthrough-only helpers ---
 
-func walkSchemaForFileInputs(schema map[string]any) map[string]*core.FileInputDescriptor {
-	out := map[string]*core.FileInputDescriptor{}
-	props, _ := schema["properties"].(map[string]any)
-	for name, raw := range props {
-		prop, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		if d := core.ExtractFileInputDescriptor(prop); d != nil {
-			out[name] = d
-			continue
-		}
-		// array-of-files: items carries the descriptor.
-		if items, ok := prop["items"].(map[string]any); ok {
-			if d := core.ExtractFileInputDescriptor(items); d != nil {
-				out[name+"[]"] = d
-			}
+// findTool picks a tool by name from a ListToolsPage result. The demo
+// uses this to look up the descriptor a server advertised before
+// preparing a payload, so the encode pipeline always matches whatever
+// constraints the server actually wants.
+func findTool(tools []core.ToolDef, name string) core.ToolDef {
+	for _, t := range tools {
+		if t.Name == name {
+			return t
 		}
 	}
-	return out
+	return core.ToolDef{}
 }
 
 func accepts(d *core.FileInputDescriptor) string {
@@ -524,19 +516,4 @@ func flagValue(name string) string {
 	return ""
 }
 
-func guessImageMIME(path string) string {
-	switch strings.ToLower(filepath.Ext(path)) {
-	case ".png":
-		return "image/png"
-	case ".jpg", ".jpeg":
-		return "image/jpeg"
-	case ".gif":
-		return "image/gif"
-	case ".webp":
-		return "image/webp"
-	case ".svg":
-		return "image/svg+xml"
-	}
-	return "application/octet-stream"
-}
 

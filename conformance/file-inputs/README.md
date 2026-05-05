@@ -40,19 +40,20 @@ are not exercised here — they're bridge UX, not wire format.
 
 ## Scenarios
 
-| ID | What it tests | Status today | Unblocked by |
-|----|---------------|--------------|--------------|
-| `file-inputs-01` | client WITH `fileInputs` cap sees `x-mcp-file` on every file property | ✅ green | — |
-| `file-inputs-02` | client WITHOUT cap does NOT see `x-mcp-file` (but tools stay visible) | ❌ red | [#362 — A4 capability gating](https://github.com/panyam/mcpkit/issues/362) |
-| `file-inputs-03` | valid file upload round-trips bytes / media type / filename | ✅ green | — |
-| `file-inputs-04` | oversized file → `-32602` + `data.reason: "file_too_large"` | ✅ green (A3 shipped) | — |
-| `file-inputs-05` | wrong MIME → `-32602` + `data.reason: "file_type_not_accepted"` | ✅ green (A3 shipped) | — |
-| `file-inputs-06` | array-of-files input (`analyze_documents`) handles multiple URIs | ✅ green | — |
-| `file-inputs-07` | filename with special chars (parens, spaces, quotes) round-trips through percent-encoding | ✅ green | — |
+| ID | What it tests | Status |
+|----|---------------|--------|
+| `file-inputs-01` | client WITH `fileInputs` cap sees `x-mcp-file` on every file property | ✅ green |
+| `file-inputs-02` | client WITHOUT cap does NOT see `x-mcp-file` (but tools stay visible) | ✅ green |
+| `file-inputs-03` | valid file upload round-trips bytes / media type / filename | ✅ green |
+| `file-inputs-04` | oversized file → `-32602` + `data.reason: "file_too_large"` | ✅ green |
+| `file-inputs-05` | wrong MIME → `-32602` + `data.reason: "file_type_not_accepted"` | ✅ green |
+| `file-inputs-06` | array-of-files input (`analyze_documents`) handles multiple URIs | ✅ green |
+| `file-inputs-07` | filename with special chars (parens, spaces, quotes) round-trips through percent-encoding | ✅ green |
 
-6 green, 1 red. The remaining red (cap-gating) is the done-bar for A4
-(#362). When `file-inputs-02` flips green, SEP-2356 Phase 1.4 + 1.5 are
-complete and this suite becomes the WG-facing acceptance bar.
+**7/7 green.** SEP-2356 Phase 1 (types, codec, validation, capability
+gating) fully implemented mcpkit-side. This suite is now the WG-facing
+acceptance bar — any reference impl can be pointed at it via the
+spawn-fixture pattern (`make testconf-file-inputs`).
 
 ## Running
 

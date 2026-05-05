@@ -1,6 +1,7 @@
 package server_test
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -137,6 +138,107 @@ func TestFileInputValidation_ArrayItems(t *testing.T) {
 	require.NoError(t, json.Unmarshal(dataRaw, &data))
 	require.Equal(t, "documents[1]", data.Field,
 		"field path must reflect the offending array index")
+}
+
+// verifies: SEP-2356 capability gating — `tools/list` strips
+// `x-mcp-file` from emitted schemas when the client didn't declare the
+// `fileInputs` capability. Property remains visible (as plain
+// string/uri) so the tool is still callable; only the picker hint
+// disappears. Mirrors the conformance-suite scenario `file-inputs-02`.
+func TestFileInputCapGating_StripsKeywordWithoutCap(t *testing.T) {
+	// Initialize WITHOUT fileInputs capability.
+	srv := server.NewServer(core.ServerInfo{Name: "gating-test", Version: "1.0"})
+	initReq := &core.Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "initialize",
+		Params:  json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+	}
+	resp, _ := srv.Dispatch(context.Background(), initReq)
+	require.Nil(t, resp.Error, "initialize should succeed")
+	srv.Dispatch(context.Background(), &core.Request{JSONRPC: "2.0", Method: "notifications/initialized"})
+
+	max := 1024
+	srv.RegisterTool(
+		core.ToolDef{
+			Name: "upload_image",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"image": core.FileInputProperty(core.FileInputDescriptor{
+						Accept:  []string{"image/*"},
+						MaxSize: &max,
+					}),
+				},
+				"required": []string{"image"},
+			},
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			return core.TextResult("ok"), nil
+		},
+	)
+
+	// tools/list — keyword MUST be stripped.
+	listReq := &core.Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`2`),
+		Method:  "tools/list",
+	}
+	listResp, _ := srv.Dispatch(context.Background(), listReq)
+	require.Nil(t, listResp.Error)
+
+	raw, err := json.Marshal(listResp.Result)
+	require.NoError(t, err)
+	require.NotContains(t, string(raw), "x-mcp-file",
+		"x-mcp-file MUST be stripped for clients without fileInputs cap")
+	// Property still emitted with type/format — just no picker hint.
+	require.Contains(t, string(raw), `"image"`,
+		"image property must still appear in the schema")
+	require.Contains(t, string(raw), `"format":"uri"`,
+		"format:uri must survive the strip")
+}
+
+// verifies: when the client DOES declare `fileInputs`, the keyword
+// passes through to `tools/list` unchanged.
+func TestFileInputCapGating_PreservesKeywordWithCap(t *testing.T) {
+	srv := server.NewServer(core.ServerInfo{Name: "gating-test", Version: "1.0"})
+	initReq := &core.Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "initialize",
+		Params:  json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{"fileInputs":{}},"clientInfo":{"name":"test","version":"1.0"}}`),
+	}
+	resp, _ := srv.Dispatch(context.Background(), initReq)
+	require.Nil(t, resp.Error, "initialize should succeed")
+	srv.Dispatch(context.Background(), &core.Request{JSONRPC: "2.0", Method: "notifications/initialized"})
+
+	srv.RegisterTool(
+		core.ToolDef{
+			Name: "upload_image",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"image": core.FileInputProperty(core.FileInputDescriptor{
+						Accept: []string{"image/*"},
+					}),
+				},
+			},
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			return core.TextResult("ok"), nil
+		},
+	)
+
+	listResp, _ := srv.Dispatch(context.Background(), &core.Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`2`),
+		Method:  "tools/list",
+	})
+	require.Nil(t, listResp.Error)
+
+	raw, _ := json.Marshal(listResp.Result)
+	require.Contains(t, string(raw), "x-mcp-file",
+		"keyword MUST appear when client declared fileInputs cap")
 }
 
 // verifies: the option-disabled path leaves arguments untouched and
