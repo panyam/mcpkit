@@ -300,6 +300,54 @@ func runDemo() {
 			return
 		})
 
+	// --- Step 5.5: Source-side health signals (ζ-7) ---
+	demo.Step("Health signals: source bubbles a transient upstream failure → notifications/events/error").
+		Arrow("Host", "Server", "events/stream { name: discord.message }").
+		DashedArrow("Server", "Host", "notifications/events/active").
+		Arrow("Receiver", "Server", "POST /inject?action=error").
+		DashedArrow("Server", "Host", "notifications/events/event/error { requestId, error: { code, message } }").
+		Note(
+			"Sources bubble health via YieldError(err) (transient, stream stays open) and YieldTerminated(err) (terminal, stream closes).",
+			"",
+			"- Stream subscribers map onto notifications/events/error (spec L255+L261, transient) and notifications/events/terminated (spec L783-795, terminal).",
+			"- Webhook subscribers don't see error envelopes (errors are upstream-side, not delivery-side); they DO see {type:terminated} control envelopes when the suspend state machine flips Active=false (ζ-6) or when the source itself terminates (ζ-7.3).",
+			"- This walkthrough step exercises only the transient error path — calling `inject?action=terminate` would one-shot terminate the discord.message source, breaking subsequent walkthrough steps that depend on it. Full terminate flow is covered by TestE2EHealthSignalsEndToEnd in this demo's e2e_test.go.",
+		).
+		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			gotError := make(chan error, 4)
+			stream, err := eventsclient.Stream(ctx, c, eventsclient.StreamOptions{
+				EventName: "discord.message",
+				OnError:   func(e error) { gotError <- e },
+			})
+			if err != nil {
+				fmt.Printf("    ERROR: Stream open failed: %v\n", err)
+				return
+			}
+			defer stream.Stop()
+
+			// Inject a transient upstream error.
+			injectErrURL := injectURL + "?action=error&code=-32603&message=demo+upstream+failure"
+			req, _ := http.NewRequest("POST", injectErrURL, nil)
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				return
+			}
+			resp.Body.Close()
+
+			select {
+			case e := <-gotError:
+				fmt.Printf("    notifications/events/error fired:\n      %v\n", e)
+				fmt.Printf("    Stream is still open (transient): subsequent events would still arrive.\n")
+			case <-time.After(3 * time.Second):
+				fmt.Printf("    ERROR: no notifications/events/error within 3s\n")
+			}
+			return
+		})
+
 	// --- Step 6: Webhook + auto-refresh via Go SDK ---
 	demo.Step("Webhook: subscribe via the typed Go SDK, observe HMAC delivery + auto-refresh").
 		Arrow("Receiver", "Receiver", "spin up local httptest receiver on :random").
