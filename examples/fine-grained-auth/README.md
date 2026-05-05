@@ -42,6 +42,6 @@ See [WALKTHROUGH.md](WALKTHROUGH.md) for the full sequence diagram and step-by-s
 
 ## Notes
 
-- Same CORS-wrap → manual `gohttp.ListenAndServeGraceful` pattern as `examples/elicitation/`. `server.WithMux` adds *additional* routes alongside the auto-registered MCP handler — it can't replace it with a CORS-wrapped variant.
+- CORS for browser-based MCP hosts is applied via `server.WithHandlerWrap(cors)` so it covers `/mcp` plus the `auth.MountAuth` routes plus `/demo/bootstrap` uniformly. Same pattern as `examples/elicitation/`.
 - The walkthrough's "no user interaction" assumption is **demo only**. A real banking host would prompt the user to confirm the payment amount/payee before requesting the RAR-bound token.
 - The custom `isError=true` and `tool=` color rules on the demo server logger are passed as variadic extras to `common.NewMCPLogger` — they layer on top of the canonical 5-rule set without re-declaring it.

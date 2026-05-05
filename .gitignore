@@ -32,10 +32,35 @@ Thumbs.db
 /testclient
 docs/COMPETITIVE_ANALYSIS.md
 
-# Example binaries (go build . produces binary matching dir name)
+# Example binaries (go build . produces a binary matching the dir name).
+# Each Makefile's build target writes a *-demo or *-example variant; the
+# bare-name binaries appear when someone runs `go build .` directly.
 examples/apps/htmx/htmx
+examples/apps/dashboard/dashboard
+examples/apps/interactive/interactive
 examples/apps/react/server/server
+examples/apps/todolist/todolist
+examples/apps/vanilla/vanilla
+examples/auth/auth
+examples/auth/bearer/bearer
+examples/auth/jwt/jwt
+examples/auth/scopes/scopes
+examples/auth/session-binding/session-binding
+examples/auth/public-discovery/public-discovery
+examples/auth/unified/unified
+examples/elicitation/elicitation
+examples/events/discord/discord
+examples/events/telegram/telegram
+examples/file-inputs/file-inputs
+examples/fine-grained-auth/fine-grained-auth
+examples/host/01-apphost/01-apphost
+examples/host/02-multi-server/02-multi-server
+examples/list-ttl/list-ttl
+examples/mrtr/mrtr
 examples/tasks/tasks
 examples/tasks-v2/tasks-v2
-examples/elicitation/elicitation
-examples/fine-grained-auth/fine-grained-auth
+
+# Make build artifacts (Makefile `build` target → <name>-demo or
+# <name>-example). Globs catch every example's named output.
+examples/**/*-demo
+examples/**/*-example

@@ -30,7 +30,6 @@ import (
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
 	"github.com/panyam/mcpkit/server"
-	gohttp "github.com/panyam/servicekit/http"
 	"github.com/panyam/servicekit/middleware"
 )
 
@@ -259,25 +258,25 @@ func serve() {
 
 	srv.UseMiddleware(consentMiddleware(consent, listenURL))
 
-	mux := http.NewServeMux()
 	cors := middleware.CORS(nil,
 		middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
 		middleware.CORSAllowHeaders("Content-Type", "Authorization", "Mcp-Session-Id"),
 		middleware.CORSExposeHeaders("Mcp-Session-Id"),
 	)
-	mux.Handle("/mcp", cors(srv.Handler(server.WithStreamableHTTP(true))))
-	mux.HandleFunc("/approve", consent.handleApprove)
 
 	fmt.Printf("Elicitation example server on %s\n", *addr)
 	fmt.Printf("MCP endpoint: %s/mcp\n", listenURL)
 	fmt.Printf("Tools: access_protected_resource\n")
 
-	// Manual gohttp.ListenAndServeGraceful since the MCP handler is wrapped
-	// with CORS middleware (browser-based MCP hosts like MCPJam need it),
-	// which means we can't use srv.ListenAndServe directly. Mirrors the
-	// graceful-shutdown shape from server/server.go.
-	httpSrv := &http.Server{Addr: *addr, Handler: mux, WriteTimeout: 0}
-	if err := gohttp.ListenAndServeGraceful(httpSrv, gohttp.WithOnShutdown(srv.CloseAllSessions)); err != nil {
+	if err := srv.ListenAndServe(
+		server.WithStreamableHTTP(true),
+		server.WithMux(func(mux *http.ServeMux) {
+			mux.HandleFunc("/approve", consent.handleApprove)
+		}),
+		// Browser-based MCP hosts (MCPJam) need CORS on /mcp; WithHandlerWrap
+		// applies it to every route the server exposes, including /approve.
+		server.WithHandlerWrap(cors),
+	); err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
 		os.Exit(1)
 	}

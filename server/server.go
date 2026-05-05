@@ -865,6 +865,11 @@ func (s *Server) ListenAndServe(opts ...TransportOption) error {
 		cfg.muxSetup(mux)
 		handler = mux
 	}
+	// Apply caller-supplied handler wraps (CORS, rate limiting, etc.).
+	// First-registered is innermost; last-registered is outermost.
+	for _, wrap := range cfg.handlerWraps {
+		handler = wrap(handler)
+	}
 
 	httpSrv := &http.Server{
 		Addr:         addr,
@@ -897,6 +902,7 @@ type transportConfig struct {
 	keepaliveMaxFails int            // max consecutive ping failures before session cleanup (default 3)
 	sseGracePeriod    time.Duration  // 0 = immediate cleanup on SSE disconnect (backward compat)
 	muxSetup          func(*http.ServeMux) // optional: register additional routes on the server mux
+	handlerWraps      []func(http.Handler) http.Handler // applied after mux composition; first registered = innermost
 }
 
 func defaultTransportConfig() transportConfig {
@@ -1011,6 +1017,32 @@ func WithKeepalive(interval time.Duration, maxFailures int) TransportOption {
 //	)
 func WithMux(setup func(*http.ServeMux)) TransportOption {
 	return func(c *transportConfig) { c.muxSetup = setup }
+}
+
+// WithHandlerWrap wraps the final HTTP handler (after WithMux composition,
+// if any) before it's served. Useful for cross-cutting concerns that should
+// apply to every route the server exposes — CORS for browser-based MCP
+// hosts, rate limiting, request tracing, etc.
+//
+// Multiple WithHandlerWrap options compose: the first one registered is
+// innermost (closest to the MCP handler), and the last one registered is
+// outermost (the first to see an incoming request and last to see the
+// outgoing response). This matches conventional HTTP middleware ordering.
+//
+// Example — applying CORS so MCPJam (browser-based) can connect:
+//
+//	cors := middleware.CORS(nil,
+//	    middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
+//	    middleware.CORSAllowHeaders("Content-Type", "Authorization", "Mcp-Session-Id"),
+//	    middleware.CORSExposeHeaders("Mcp-Session-Id"),
+//	)
+//	srv.ListenAndServe(
+//	    server.WithStreamableHTTP(true),
+//	    server.WithMux(func(m *http.ServeMux) { m.HandleFunc("/approve", ...) }),
+//	    server.WithHandlerWrap(cors),
+//	)
+func WithHandlerWrap(wrap func(http.Handler) http.Handler) TransportOption {
+	return func(c *transportConfig) { c.handlerWraps = append(c.handlerWraps, wrap) }
 }
 
 // WithStateless enables stateless mode for the Streamable HTTP transport.
