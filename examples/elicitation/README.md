@@ -1,69 +1,39 @@
 # URL Elicitation — Consent Approval Flow (UC1)
 
-**EXPERIMENTAL** — Tracks SEP-2643 (Structured Authorization Denials), currently a draft. A scripted MCP host walking through the UC1 consent approval flow. Wire format may change as the SEP evolves.
+> ⚠ **EXPERIMENTAL** — Tracks [SEP-2643](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2643) (Structured Authorization Denials), currently a draft. Wire format may change as the SEP evolves.
 
-## What you'll learn
+A scripted MCP host walking through the **UC1 consent approval flow**: a tool call gets denied with a JSON-RPC `-32042` (URLElicitationRequired) carrying a consent URL; the host opens the URL in a browser; the user approves; the server pushes a `notifications/elicitation/complete` notification over SSE; the host auto-retries with the `authorizationContextId` and gets the result.
 
-- **Connect to the MCP server and initialize session** — Connect with a notification callback listening for notifications/elicitation/complete. The GET SSE stream receives server-pushed notifications.
-- **Call access_protected_resource — denied with consent URL** — The consent middleware intercepts the call and returns -32042 (URLElicitationRequired) with a URL the user must visit to approve access.
-- **Open consent URL → wait for approval notification → auto-retry** — The host opens the consent URL and waits for the server to send a notifications/elicitation/complete notification via the SSE stream. When it arrives, the host automatically retries with the authorizationContextId.
-
-## Flow
-
-```mermaid
-sequenceDiagram
-    participant Host as MCP Host (this client)
-    participant Server as MCP Server (make serve)
-    participant Browser as User Browser
-
-    Note over Host,Browser: Step 1: Connect to the MCP server and initialize session
-    Host->>Server: POST /mcp — initialize
-    Server-->>Host: serverInfo + Mcp-Session-Id
-    Host->>Server: GET /mcp — open SSE stream for notifications
-
-    Note over Host,Browser: Step 2: Call access_protected_resource — denied with consent URL
-    Host->>Server: tools/call: access_protected_resource
-    Server-->>Host: error -32042 + consent URL + authzContextId
-
-    Note over Host,Browser: Step 3: Open consent URL → wait for approval notification → auto-retry
-    Host->>Browser: open consent URL
-    Browser->>Server: POST /approve?ctx=...
-    Server-->>Host: notifications/elicitation/complete (via SSE)
-    Host->>Server: tools/call + _meta.authorizationContextId (auto-retry)
-    Server-->>Host: Access granted to resource
-```
-
-## Steps
-
-### Setup
-
-Before running this demo, start the MCP server in a separate terminal:
-
-```
-Terminal 1:  make serve        # start the MCP server on :8080
-Terminal 2:  make run          # run this demo
-```
-
-### Step 1: Connect to the MCP server and initialize session
-
-Connect with a notification callback listening for notifications/elicitation/complete. The GET SSE stream receives server-pushed notifications.
-
-### Step 2: Call access_protected_resource — denied with consent URL
-
-The consent middleware intercepts the call and returns -32042 (URLElicitationRequired) with a URL the user must visit to approve access.
-
-### Step 3: Open consent URL → wait for approval notification → auto-retry
-
-The host opens the consent URL and waits for the server to send a notifications/elicitation/complete notification via the SSE stream. When it arrives, the host automatically retries with the authorizationContextId.
-
-## Run it
+## Quick Start
 
 ```bash
-go run ./examples/elicitation/
+# Terminal 1 — start the MCP server
+make serve
+
+# Terminal 2 — run the scripted walkthrough
+make demo
 ```
 
-Pass `--non-interactive` to skip pauses:
+The walkthrough opens a browser to `http://localhost:8080/approve?ctx=...`. Click **Approve** there; the demo auto-retries and completes.
 
-```bash
-go run ./examples/elicitation/ --non-interactive
-```
+See [WALKTHROUGH.md](WALKTHROUGH.md) for the full sequence diagram and step-by-step description (regenerate via `make readme`).
+
+## What it demonstrates
+
+- The **`-32042` URLElicitationRequired** denial shape — `error.code` + `error.data.authorization.authorizationContextId` + `error.data.elicitations[].url`.
+- The **GET SSE notification stream** carrying `notifications/elicitation/complete` from server to host while the user interacts with the consent URL out-of-band.
+- The **auto-retry pattern**: host parses the denial, opens the URL, waits for the SSE notification, then re-issues `tools/call` with `_meta.authorizationContextId` set to the captured value.
+- The **server-side consent middleware** that intercepts `tools/call` for protected tools, mints a context, denies with the URL, persists approval state, and lets the retry through once approved.
+- **CORS configuration** for browser-based MCP hosts (MCPJam) — `Mcp-Session-Id` in both Allow-Headers and Expose-Headers, `DELETE` in allowed methods.
+
+## Where to look in the code
+
+- Walkthrough steps + denial parsing: [`main.go`](main.go) (the `runDemo` block)
+- Consent middleware + store + `/approve` handler: [`main.go`](main.go) (after `serve()`)
+- SEP-2643 wire constants: [`core.MetaKeyAuthorizationContextID`](../../core/meta.go) and the `-32042` URLElicitationRequired error code
+- Companion: [`examples/fine-grained-auth/`](../fine-grained-auth/) — UC2 (scope step-up) + UC3 (RAR per-payment credentials)
+
+## Notes
+
+- The CORS-wrapped MCP handler is registered manually on a custom mux (rather than via `srv.ListenAndServe`'s `WithMux`) because `server.WithMux` adds *additional* routes alongside the auto-registered MCP handler — it can't replace it with a CORS-wrapped variant. The example mirrors `gohttp.ListenAndServeGraceful` to keep graceful shutdown.
+- The walkthrough's "Approve" button click is a real human-in-the-loop step; CI runs would need either a headless browser or a synthetic `POST /approve?ctx=...`.
