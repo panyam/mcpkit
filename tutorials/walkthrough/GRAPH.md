@@ -1,20 +1,20 @@
 # Walkthrough graph (auto-generated)
 
 Run `make graph` to regenerate. Source of truth: each page's `**Prerequisites:**` header.
-Nodes are clickable — they link to the page on disk (or 404 if planned-but-unwritten).
+Nodes are clickable — they link to the page on GitHub (planned pages 404 by design).
 
 ```mermaid
 graph TD
     bringup["bringup<br/>(root)"]
-    click bringup "./bringup.md"
+    click bringup "https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/bringup.md"
     extension-mechanisms["extension-mechanisms<br/>(root)"]
-    click extension-mechanisms "./extension-mechanisms.md"
+    click extension-mechanisms "https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/extension-mechanisms.md"
     notifications["notifications<br/>(root)"]
-    click notifications "./notifications.md"
+    click notifications "https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/notifications.md"
     request-anatomy["request-anatomy<br/>(root)"]
-    click request-anatomy "./request-anatomy.md"
+    click request-anatomy "https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/request-anatomy.md"
     transport-mechanics["transport-mechanics<br/>(root)"]
-    click transport-mechanics "./transport-mechanics.md"
+    click transport-mechanics "https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/transport-mechanics.md"
 
     bringup --> extension-mechanisms
     transport-mechanics --> extension-mechanisms
