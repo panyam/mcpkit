@@ -7,39 +7,15 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/panyam/demokit"
-	"github.com/panyam/demokit/tui"
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/examples/common"
 	"github.com/panyam/mcpkit/experimental/ext/events"
 	eventsclient "github.com/panyam/mcpkit/experimental/ext/events/clients/go"
 )
-
-// filterFlags strips the dispatcher flags so the inner serve flag.Parse
-// doesn't choke on them.
-func filterFlags(args []string) []string {
-	out := make([]string, 0, len(args))
-	skip := false
-	for _, a := range args {
-		if skip {
-			skip = false
-			continue
-		}
-		switch a {
-		case "--serve", "--tui", "--readme", "--non-interactive":
-			continue
-		case "--url":
-			skip = true
-			continue
-		}
-		out = append(out, a)
-	}
-	return out
-}
 
 // liveInteractionMaxWait is the upper-bound on the live-interaction step.
 // User can press enter at any point to end the capture early (in
@@ -47,39 +23,12 @@ func filterFlags(args []string) []string {
 // Skipped entirely in --non-interactive mode.
 const liveInteractionMaxWait = 30 * time.Second
 
-func nonInteractive() bool {
-	for _, a := range os.Args[1:] {
-		if strings.TrimSpace(a) == "--non-interactive" {
-			return true
-		}
-	}
-	return false
-}
-
-// tuiMode reports whether the walkthrough is running in TUI mode (Bubble
-// Tea). In TUI Bubble Tea owns stdin, so demokit's Cancellable
-// (press-enter cancel) would conflict — we keep Timeout but skip
-// Cancellable in that mode.
-func tuiMode() bool {
-	for _, a := range os.Args[1:] {
-		if strings.TrimSpace(a) == "--tui" {
-			return true
-		}
-	}
-	return false
-}
-
 // runDemo drives a lighter walkthrough than the discord version — the
 // protocol is the same, so this one focuses on the telegram-specific
 // payload shape (chat_id, user, text) and the typed Go SDK at clients/go.
 // For the full protocol exposition see examples/events/discord.
 func runDemo() {
-	serverURL := "http://localhost:8080"
-	for i, arg := range os.Args[1:] {
-		if arg == "--url" && i+2 < len(os.Args) {
-			serverURL = os.Args[i+2]
-		}
-	}
+	serverURL := common.ServerURL()
 	mcpURL := serverURL + "/mcp"
 	injectURL := serverURL + "/inject"
 
@@ -319,15 +268,15 @@ func runDemo() {
 			"- --non-interactive mode skips the wait so CI runs aren't slowed.",
 		).
 		Timeout(liveInteractionMaxWait).
-		Cancellable(!tuiMode()).
+		Cancellable(!demokit.IsTUI()).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
-			if nonInteractive() {
+			if demokit.IsNonInteractive() {
 				fmt.Printf("    Skipped in --non-interactive mode. Run without --non-interactive (and with the server in -token mode) to see live events.\n")
 				return
 			}
 
 			fmt.Printf("    Open a chat with your bot in Telegram and send messages.\n")
-			if tuiMode() {
+			if demokit.IsTUI() {
 				fmt.Printf("    Press Ctrl+C to exit when done. Will stop automatically after %s.\n\n", liveInteractionMaxWait)
 			} else {
 				fmt.Printf("    Press enter (here, in this terminal) when you're done capturing events.\n")
@@ -373,12 +322,7 @@ func runDemo() {
 		"Both demos share `experimental/ext/events` (library), `clients/go/` (Go SDK), and `clients/python/events_client.py` (Python SDK).",
 	)
 
-	for _, arg := range os.Args[1:] {
-		if strings.TrimSpace(arg) == "--tui" {
-			demo.WithRenderer(tui.New())
-			break
-		}
-	}
+	common.SetupRenderer(demo)
 
 	demo.Execute()
 

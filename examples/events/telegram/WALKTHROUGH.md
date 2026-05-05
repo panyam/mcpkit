@@ -7,8 +7,8 @@ A condensed walkthrough showing the same MCP Events extension wired against a Te
 - **Connect to the events server** — Plain MCP initialize over Streamable HTTP. Push delivery uses events/stream (a long-lived per-subscription POST that returns SSE), not the session GET stream — no transport-level wiring needed in the client.
 - **Push: open events/stream, inject a telegram message, observe per-call notifications** — events/stream is a long-lived per-subscription POST returning SSE — see the discord walkthrough for the full protocol exposition. Telegram's flat payload (chat_id, user, text) wires through the same Stream() helper as discord's nested one; only the Data shape changes.
 - **Cursorless: open events/stream for telegram.typing, observe cursor:null** — Telegram's typing chat-action is ephemeral — no replay value, no buffer. Same WithoutCursors() story as discord.typing. Wire-shape contract per spec L294: cursorless emits cursor:null, never an empty string or absent key.
-- **Webhook: subscribe via the typed Go SDK, receive a TelegramEventData** — The typed Receiver[TelegramEventData] decodes the wire envelope's Data field directly into TelegramEventData, so the consumer reads `ev.Data.Text` rather than re-parsing JSON. Same `Subscription` + `Receiver[Data]` pair as the discord webhook step — the only differences are the type parameter and the payload field names. Per spec, the SDK auto-generates a whsec_ secret when SubscribeOptions.Secret is empty (events.GenerateSecret).
-- **Live Telegram interaction (real message from a Telegram chat)** — Requires the server to be running with -token + you having a chat open with the bot. No typing parallel here — Telegram's Bot API doesn't expose user typing events to bots (only the bot can send typing chat actions, not the other way around). Discord does have user-typing events; see ../discord/WALKTHROUGH.md for the live-typing demo. In --non-interactive mode this step skips the wait so CI runs aren't slowed.
+- **Webhook: subscribe via the typed Go SDK, receive a TelegramEventData** — Same `Subscription` + `Receiver[Data]` pair as the discord webhook step.
+- **Live Telegram interaction (real message from a Telegram chat)** — Setup: start the server with a Telegram bot token and open a chat with the bot in the Telegram app.
 
 ## Flow
 
@@ -87,11 +87,25 @@ Telegram's typing chat-action is ephemeral — no replay value, no buffer. Same 
 
 ### Step 4: Webhook: subscribe via the typed Go SDK, receive a TelegramEventData
 
-The typed Receiver[TelegramEventData] decodes the wire envelope's Data field directly into TelegramEventData, so the consumer reads `ev.Data.Text` rather than re-parsing JSON. Same `Subscription` + `Receiver[Data]` pair as the discord webhook step — the only differences are the type parameter and the payload field names. Per spec, the SDK auto-generates a whsec_ secret when SubscribeOptions.Secret is empty (events.GenerateSecret).
+Same `Subscription` + `Receiver[Data]` pair as the discord webhook step.
+
+- Receiver[TelegramEventData] decodes the wire envelope's Data field directly into TelegramEventData — consumer reads `ev.Data.Text`, no re-parsing JSON.
+- The only differences from discord: the type parameter and the payload field names.
+- SDK auto-generates a whsec_ secret when SubscribeOptions.Secret is empty (events.GenerateSecret).
 
 ### Step 5: Live Telegram interaction (real message from a Telegram chat)
 
-Requires the server to be running with -token + you having a chat open with the bot. No typing parallel here — Telegram's Bot API doesn't expose user typing events to bots (only the bot can send typing chat actions, not the other way around). Discord does have user-typing events; see ../discord/WALKTHROUGH.md for the live-typing demo. In --non-interactive mode this step skips the wait so CI runs aren't slowed.
+Setup: start the server with a Telegram bot token and open a chat with the bot in the Telegram app.
+
+```
+TELEGRAM_BOT_TOKEN=<your-token> make serve
+```
+
+Bot setup (BotFather token, chat link) is documented in this demo's README.md.
+
+- No typing parallel here — Telegram's Bot API doesn't expose user typing events to bots (only the bot can send typing chat actions, not the other way).
+- Discord does have user-typing events; see ../discord/WALKTHROUGH.md for the live-typing demo.
+- --non-interactive mode skips the wait so CI runs aren't slowed.
 
 ### More
 

@@ -40,6 +40,23 @@ Generated walkthrough in [`WALKTHROUGH.md`](WALKTHROUGH.md) — regenerate via `
 
 > **Going to production?** See [`experimental/ext/events/DEPLOYMENT.md`](../../../experimental/ext/events/DEPLOYMENT.md) for private-cloud / WAF guidance.
 
+## What it demonstrates
+
+- The same MCP Events extension wire protocol as discord, against a Telegram-shaped event source.
+- Push delivery via `events/stream` (long-lived per-subscription POST returning SSE) carrying the telegram-specific payload (`chat_id`, `user`, `text`).
+- Cursorless event sources (`telegram.typing`) — `cursor: null` on the wire, no replay buffer.
+- The typed Go SDK at `experimental/ext/events/clients/go/` consuming the same `Stream()` / `Subscribe()` helpers as discord, just with a different `Data` shape.
+- A `/inject` POST endpoint (wired via `server.WithMux`) that synthesizes events for the test-mode walkthrough — same convention as discord-events.
+
+## Where to look in the code
+
+- Event source registration: [`telegram.go`](telegram.go), [`events.go`](events.go)
+- Webhook + inject handler wiring: [`main.go`](main.go) (the `server.WithMux` callback)
+- Walkthrough steps: [`walkthrough.go`](walkthrough.go)
+- Spec library: [`experimental/ext/events/`](../../../experimental/ext/events/)
+- Typed Go SDK: [`experimental/ext/events/clients/go/`](../../../experimental/ext/events/clients/go/)
+- Companion (full-protocol) walkthrough: [`examples/events/discord/`](../discord/)
+
 ## Setup — getting a Telegram bot token (Option B only)
 
 Skip this section if you're running in test mode (Option A above).

@@ -53,8 +53,8 @@ github.com/mattn/go-runewidth v0.0.23 h1:7ykA0T0jkPpzSvMS5i9uoNn2Xy3R383f9HDx3Ry
 github.com/mattn/go-runewidth v0.0.23/go.mod h1:XBkDxAl56ILZc9knddidhrOlY5R/pDhgLpndooCuJAs=
 github.com/muesli/cancelreader v0.2.2 h1:3I4Kt4BQjOR54NavqnDogx/MIoWBFa0StPA8ELUXHmA=
 github.com/muesli/cancelreader v0.2.2/go.mod h1:3XuTXfFS2VjM+HTLZY9Ak0l6eUKfijIfMUZ4EgX0QYo=
-github.com/panyam/demokit v0.0.14 h1:vqEz6Q3i1cIG0wpRNXPvSwwBADM5Ou0bSPCA8Tl4HXc=
-github.com/panyam/demokit v0.0.14/go.mod h1:JCOqPCWUBMrA95pTCyTIXrgN+X1xlSKR+QcG7Ve8AqY=
+github.com/panyam/demokit v0.0.16 h1:BkD6h0/RTgxuWHQkDc6K3wHFLq9yB3VUnHr3mHx2xvE=
+github.com/panyam/demokit v0.0.16/go.mod h1:JCOqPCWUBMrA95pTCyTIXrgN+X1xlSKR+QcG7Ve8AqY=
 github.com/panyam/gocurrent v0.1.0 h1:AW8ctsSQHtoj8QXN55e9n+TYxtq+noF/ikPsRLiihiM=
 github.com/panyam/gocurrent v0.1.0/go.mod h1:jIIhcNfNnnIe2JXH8aY2+ba+/5G1fzwCWoZXdcMNw6o=
 github.com/panyam/goutils v0.1.13 h1:V819IdZTEJ3rpu33ZqohC6O9ou7KOu6cxfigoYT12OQ=

@@ -22,7 +22,9 @@ import (
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/examples/common"
 	"github.com/panyam/mcpkit/experimental/ext/events"
 	"github.com/panyam/mcpkit/ext/auth"
 	"github.com/panyam/mcpkit/server"
@@ -45,7 +47,10 @@ func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
 	token := flag.String("token", "", "Telegram bot token (omit for test mode)")
 	whHeaderMode := flag.String("webhook-header-mode", "standard", "webhook header style: standard | mcp")
-	flag.CommandLine.Parse(filterFlags(os.Args[1:]))
+	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
+		demokit.BoolFlag("--serve"),
+		demokit.ValueFlag("--url"),
+	))
 
 	headerMode, err := events.ParseHeaderMode(*whHeaderMode)
 	if err != nil {
@@ -84,11 +89,8 @@ func serve() {
 	// strictly (anonymous webhook subscribes rejected with -32012 per
 	// §"Subscription Identity" L361). Otherwise fall back to the demo
 	// escape hatch so `make demo` works without an auth provider.
-	srvOpts := []server.Option{
-		server.WithSubscriptions(),
-		server.WithMiddleware(server.LoggingMiddleware(log.Default())),
-		server.WithRequestLogging(log.Default()),
-	}
+	srvOpts := common.MCPServerOptions(*addr, "[mcp] ")
+	srvOpts = append(srvOpts, server.WithSubscriptions())
 	authPosture := "demo (anonymous → UnsafeAnonymousPrincipal)"
 	if validator := tryEnableAuth(); validator != nil {
 		srvOpts = append(srvOpts, server.WithAuth(validator))
@@ -114,80 +116,81 @@ func serve() {
 	}
 	events.Register(cfg)
 
-	mux := http.NewServeMux()
-	mux.Handle("/mcp", srv.Handler(
+	transportOpts := []server.TransportOption{
 		server.WithStreamableHTTP(true),
 		server.WithSSE(true),
 		server.WithEventStore(gohttp.NewMemoryEventStore(eventStoreCap)),
-	))
-	mux.HandleFunc("POST /webhook/telegram", func(w http.ResponseWriter, r *http.Request) {
-		if handleTelegramWebhook(yield, r) {
-			srv.NotifyResourceUpdated("telegram://messages/recent")
-		}
-		w.WriteHeader(http.StatusOK)
-	})
-
-	// One endpoint, dispatch on ?event=<name>. Default is telegram.message
-	// for backwards compatibility with the older inject script. Body shape
-	// varies per event — see the per-event branches below.
-	mux.HandleFunc("POST /inject", func(w http.ResponseWriter, r *http.Request) {
-		eventName := r.URL.Query().Get("event")
-		if eventName == "" {
-			eventName = "telegram.message"
-		}
-
-		switch eventName {
-		case "telegram.message":
-			var msg struct {
-				ChatID int64  `json:"chat_id"`
-				Sender string `json:"sender"`
-				Text   string `json:"text"`
-			}
-			if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			if msg.Sender == "" {
-				msg.Sender = "injected"
-			}
-			now := time.Now()
-			_ = yield(TelegramEventData{
-				ChatID:    strconv.FormatInt(msg.ChatID, 10),
-				User:      msg.Sender,
-				Text:      msg.Text,
-				Timestamp: now.Format(time.RFC3339),
+		server.WithMux(func(mux *http.ServeMux) {
+			mux.HandleFunc("POST /webhook/telegram", func(w http.ResponseWriter, r *http.Request) {
+				if handleTelegramWebhook(yield, r) {
+					srv.NotifyResourceUpdated("telegram://messages/recent")
+				}
+				w.WriteHeader(http.StatusOK)
 			})
-			srv.NotifyResourceUpdated("telegram://messages/recent")
-			log.Printf("[inject] sender=%s text=%q", msg.Sender, msg.Text)
 
-		case "telegram.typing":
-			var msg struct {
-				ChatID int64  `json:"chat_id"`
-				User   string `json:"user"`
-			}
-			if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			if msg.User == "" {
-				msg.User = "injected-typing"
-			}
-			_ = yieldTyping(newTelegramTypingEvent(msg.ChatID, msg.User, time.Now()))
+			// One endpoint, dispatch on ?event=<name>. Default is telegram.message
+			// for backwards compatibility with the older inject script. Body shape
+			// varies per event — see the per-event branches below.
+			mux.HandleFunc("POST /inject", func(w http.ResponseWriter, r *http.Request) {
+				eventName := r.URL.Query().Get("event")
+				if eventName == "" {
+					eventName = "telegram.message"
+				}
 
-		default:
-			http.Error(w, fmt.Sprintf("unknown event %q (want telegram.message or telegram.typing)", eventName), http.StatusBadRequest)
-			return
-		}
+				switch eventName {
+				case "telegram.message":
+					var msg struct {
+						ChatID int64  `json:"chat_id"`
+						Sender string `json:"sender"`
+						Text   string `json:"text"`
+					}
+					if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
+						http.Error(w, err.Error(), http.StatusBadRequest)
+						return
+					}
+					if msg.Sender == "" {
+						msg.Sender = "injected"
+					}
+					now := time.Now()
+					_ = yield(TelegramEventData{
+						ChatID:    strconv.FormatInt(msg.ChatID, 10),
+						User:      msg.Sender,
+						Text:      msg.Text,
+						Timestamp: now.Format(time.RFC3339),
+					})
+					srv.NotifyResourceUpdated("telegram://messages/recent")
+					log.Printf("[inject] sender=%s text=%q", msg.Sender, msg.Text)
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"status": "ok", "event": eventName})
-	})
+				case "telegram.typing":
+					var msg struct {
+						ChatID int64  `json:"chat_id"`
+						User   string `json:"user"`
+					}
+					if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
+						http.Error(w, err.Error(), http.StatusBadRequest)
+						return
+					}
+					if msg.User == "" {
+						msg.User = "injected-typing"
+					}
+					_ = yieldTyping(newTelegramTypingEvent(msg.ChatID, msg.User, time.Now()))
+
+				default:
+					http.Error(w, fmt.Sprintf("unknown event %q (want telegram.message or telegram.typing)", eventName), http.StatusBadRequest)
+					return
+				}
+
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(map[string]any{"status": "ok", "event": eventName})
+			})
+		}),
+	}
 
 	log.Printf("[server] telegram-events listening on %s (MCP at /mcp)", *addr)
 	if bot != nil {
 		go startTelegramPolling(bot, yield)
 	}
-	if err := http.ListenAndServe(*addr, mux); err != nil {
+	if err := srv.ListenAndServe(transportOpts...); err != nil {
 		log.Fatal(err)
 	}
 }
