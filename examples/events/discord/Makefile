@@ -115,3 +115,4 @@ poll:
 	@$(EVENTS_CLIENT) poll --interval $(or $(INTERVAL),5)
 
 .PHONY: run serve demo readme build test test-race test-ttl inject inject-typing inject-error inject-terminate list listen webhook poll
+.DEFAULT_GOAL := demo

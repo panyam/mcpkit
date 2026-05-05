@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -20,55 +19,11 @@ import (
 	eventsclient "github.com/panyam/mcpkit/experimental/ext/events/clients/go"
 )
 
-// filterFlags strips the dispatcher flags so the inner flag.Parse on -addr
-// (or the demo's flag.Parse) doesn't choke on them.
-func filterFlags(args []string) []string {
-	out := make([]string, 0, len(args))
-	skip := false
-	for _, a := range args {
-		if skip {
-			skip = false
-			continue
-		}
-		switch a {
-		case "--serve", "--tui", "--readme", "--non-interactive":
-			continue
-		case "--url":
-			skip = true
-			continue
-		}
-		out = append(out, a)
-	}
-	return out
-}
-
 // liveInteractionMaxWait is the upper-bound on the live-interaction step.
 // User can press enter at any point to end the capture early (in
 // interactive non-TUI mode); otherwise the step ends after this duration.
 // Skipped entirely in --non-interactive mode.
 const liveInteractionMaxWait = 30 * time.Second
-
-func nonInteractive() bool {
-	for _, a := range os.Args[1:] {
-		if strings.TrimSpace(a) == "--non-interactive" {
-			return true
-		}
-	}
-	return false
-}
-
-// tuiMode reports whether the walkthrough is running in TUI mode (Bubble
-// Tea). In TUI Bubble Tea owns stdin, so demokit's Cancellable
-// (press-enter cancel) would conflict — we keep Timeout but skip
-// Cancellable in that mode.
-func tuiMode() bool {
-	for _, a := range os.Args[1:] {
-		if strings.TrimSpace(a) == "--tui" {
-			return true
-		}
-	}
-	return false
-}
 
 // runDemo drives the demokit walkthrough against a server that the user
 // started separately via `make serve`. Steps walk through every events-spec
@@ -594,15 +549,15 @@ func runDemo() {
 			"- --non-interactive mode skips the wait so CI runs aren't slowed.",
 		).
 		Timeout(liveInteractionMaxWait).
-		Cancellable(!tuiMode()).
+		Cancellable(!demokit.IsTUI()).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
-			if nonInteractive() {
+			if demokit.IsNonInteractive() {
 				fmt.Printf("    Skipped in --non-interactive mode. Run without --non-interactive (and with the server in -token mode) to see live events.\n")
 				return
 			}
 
 			fmt.Printf("    Go to your Discord channel and start typing — typing indicators will show up here.\n")
-			if tuiMode() {
+			if demokit.IsTUI() {
 				fmt.Printf("    Press Ctrl+C to exit when done. Will stop automatically after %s.\n\n", liveInteractionMaxWait)
 			} else {
 				fmt.Printf("    Press enter (here, in this terminal) when you're done capturing events.\n")
@@ -675,11 +630,8 @@ func runDemo() {
 		"- Companion demo: `examples/events/telegram/` (lighter walkthrough — same protocol, different bot SDK)",
 	)
 
-	for _, arg := range os.Args[1:] {
-		if strings.TrimSpace(arg) == "--tui" {
-			demo.WithRenderer(tui.New())
-			break
-		}
+	if demokit.IsTUI() {
+		demo.WithRenderer(tui.New())
 	}
 
 	demo.Execute()
