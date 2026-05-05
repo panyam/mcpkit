@@ -4,8 +4,8 @@ demo: ## Run the demokit walkthrough (interactive, TUI)
 serve: ## Start the unified MCP server standalone (for MCPJam, VS Code, Claude Desktop)
 	go run . --serve
 
-readme: ## Regenerate README.md from demo definitions
-	go run . --readme > WALKTHROUGH.md
+readme: ## Regenerate WALKTHROUGH.md from demo definitions
+	go run . --doc md > WALKTHROUGH.md
 
 build: ## Build the binary
 	go build -o auth-demo .

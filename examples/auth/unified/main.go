@@ -17,6 +17,7 @@ import (
 
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/auth/common"
+	mcpcommon "github.com/panyam/mcpkit/examples/common"
 	"github.com/panyam/mcpkit/ext/auth"
 	"github.com/panyam/mcpkit/server"
 )
@@ -31,11 +32,14 @@ func main() {
 	listenURL := fmt.Sprintf("http://localhost%s", *addr)
 	validator := env.NewValidator(listenURL)
 
-	srv := server.NewServer(
-		core.ServerInfo{Name: "auth-unified", Version: "1.0"},
+	opts := mcpcommon.MCPServerOptions(*addr, "[mcp] ")
+	opts = append(opts,
 		server.WithAuth(validator),
 		server.WithPublicMethods("initialize", "notifications/initialized", "tools/list", "prompts/list", "ping"),
-		server.WithMiddleware(server.LoggingMiddleware(log.Default())),
+	)
+	srv := server.NewServer(
+		core.ServerInfo{Name: "auth-unified", Version: "1.0"},
+		opts...,
 	)
 	common.RegisterEchoTools(srv)
 	srv.UseMiddleware(auth.NewToolScopeMiddleware(srv.Registry()))

@@ -12,6 +12,7 @@ import (
 
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/auth/common"
+	mcpcommon "github.com/panyam/mcpkit/examples/common"
 	"github.com/panyam/mcpkit/server"
 )
 
@@ -19,10 +20,11 @@ func main() {
 	addr := flag.String("addr", ":8081", "listen address")
 	flag.Parse()
 
+	opts := mcpcommon.MCPServerOptions(*addr, "[mcp] ")
+	opts = append(opts, server.WithBearerToken("my-secret-token"))
 	srv := server.NewServer(
 		core.ServerInfo{Name: "auth-bearer", Version: "1.0"},
-		server.WithBearerToken("my-secret-token"),
-		server.WithMiddleware(server.LoggingMiddleware(log.Default())),
+		opts...,
 	)
 	common.RegisterEchoTools(srv)
 
