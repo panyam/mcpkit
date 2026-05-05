@@ -431,7 +431,29 @@ func (d *Dispatcher) handleToolsList(id json.RawMessage, params json.RawMessage)
 	d.Reg.mu.RUnlock()
 
 	page, nextCursor, _ := paginate(tools, cursor, defaultPageSize)
+
+	// SEP-2356: clients that did not declare the `fileInputs` capability
+	// MUST NOT see the `x-mcp-file` keyword. Strip it (keeping the
+	// underlying string/uri property visible so the tool stays callable
+	// on legacy clients). Wire shape locked by `conformance/file-inputs/`.
+	if d.clientCaps.FileInputs == nil {
+		page = stripFileInputsFromTools(page)
+	}
+
 	return core.NewResponse(id, core.ToolsListResult{Tools: page, NextCursor: nextCursor, TTL: d.listTTL})
+}
+
+// stripFileInputsFromTools returns a copy of `tools` with every
+// occurrence of `x-mcp-file` removed from each tool's InputSchema.
+// Keeps the registry's stored ToolDefs untouched (a different client on
+// the same server might declare the cap and need the keyword back).
+func stripFileInputsFromTools(tools []core.ToolDef) []core.ToolDef {
+	out := make([]core.ToolDef, len(tools))
+	for i, t := range tools {
+		t.InputSchema = core.StripFileInputKeywords(t.InputSchema)
+		out[i] = t
+	}
+	return out
 }
 
 // parsePaginationParams extracts cursor from request params.
