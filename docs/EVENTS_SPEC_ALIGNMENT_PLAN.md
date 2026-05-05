@@ -352,15 +352,20 @@ The TS reference's heartbeat doesn't carry a cursor today; the spec now requires
 
 ---
 
-### η — SDK hooks (deferred until ε settles)
+### η — SDK hooks
 
-**Goal:** add the per-subscription `match`/`transform` async hooks, `on_subscribe`/`on_unsubscribe` lifecycle hooks, and poll-lease tracking.
+**Status:** planned. Detailed plan: [`docs/EVENTS_ETA_PLAN.md`](./EVENTS_ETA_PLAN.md) (drafted 2026-05-05). Six sub-PRs (η-1 poll-lease, η-2 hook surface, η-3 lifecycle wiring, η-4 match/transform, η-5 targeted emit, η-6 TooManySubscriptions enforcement). Total ~600-900 LOC including tests.
 
-**Why deferred:** the design needs more thought than the others. The spec's hook surface — `match`/`transform` per-subscription (§"Server SDK Guidance" L599-635) and `on_subscribe`/`on_unsubscribe` lifecycle (§"Server SDK Guidance" → "Subscription lifecycle hooks" L667-691) — is described in Python-flavored prose; mapping it to Go's type system + concurrency model is its own design exercise. Worth doing *after* ε proves out the per-subscription event flow, since these hooks gate per-subscription delivery decisions.
+**Goal:** add the per-subscription `match`/`transform` hooks, `on_subscribe`/`on_unsubscribe` lifecycle hooks, and poll-lease tracking.
 
-**When to revisit:** after ε merges and the discord/telegram demos run on real `events/stream`. By that point we'll have load-bearing per-subscription state to hang the hooks off, instead of bolting them onto the broadcast path.
+**Why this position:** ε settled (events/stream + per-stream Subscribe channel) and ζ landed on top of it (suspend, control envelopes, deliveryStatus). The per-subscription state the hooks need to hang off is now load-bearing; poll is the only mode without per-subscription state, which η-1's poll-lease infrastructure fixes.
 
-**Out of scope for this plan:** the design questions for η will be captured in their own plan when we're ready to start.
+**Spec deltas addressed** (full mapping in EVENTS_ETA_PLAN.md):
+- `(§"Server SDK Guidance" L623-629)` — match/transform hooks on broadcast emit
+- `(§"Server SDK Guidance" → "Subscription lifecycle hooks" L691-705)` — on_subscribe/on_unsubscribe across all three modes
+- `(§"Server SDK Guidance" → "Unsubscribe timing by mode" L707-715)` — poll-lease soft state with TTL
+- `(§"Server SDK Guidance" L630)` — targeted emit by subscription id
+- `(§"Server SDK Guidance" L705)` — TooManySubscriptions enforcement before on_subscribe
 
 ## Dependency graph
 
