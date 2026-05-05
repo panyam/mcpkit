@@ -27,6 +27,20 @@ import { strict as assert } from 'node:assert';
 
 const SERVER_URL = process.env.SERVER_URL || 'http://localhost:18093/mcp';
 
+// SPEC WATCH — MRTR resultType discriminator value
+//
+// SEP-2322 (MRTR) and SEP-2663 (Tasks Extension) currently disagree on the
+// wire value for the "needs more input" discriminator: SEP-2322's draft
+// uses "input_required", SEP-2663's draft uses "incomplete". Neither PR
+// documents the transition, so SDKs implementing against 2322 first would
+// silently break when 2663 lands. prezaei flagged the collision on the
+// SEP-2663 PR; awaiting alignment between the two SEP authors. When the
+// spec converges, flipping this single const updates every assertion in
+// this suite.
+//
+// Tracking: PR 2663 comment 4381885336 + PR 2322 comment 4381884825.
+const MRTR_INCOMPLETE_RESULT_TYPE = 'incomplete';
+
 let sessionId: string;
 let nextId = 1;
 
@@ -128,7 +142,7 @@ async function rawRequest(method: string, params: any): Promise<any> {
 
 function isIncompleteResult(result: any): boolean {
     if (!result) return false;
-    if (result.resultType === 'incomplete') return true;
+    if (result.resultType === MRTR_INCOMPLETE_RESULT_TYPE) return true;
     return 'inputRequests' in result || 'requestState' in result;
 }
 
@@ -172,7 +186,8 @@ describe('SEP-2322 MRTR ephemeral IncompleteResult flow', () => {
             arguments: {},
         });
         assert.ok(isIncompleteResult(r1), `round 1 must be IncompleteResult; got ${JSON.stringify(r1)}`);
-        assert.equal(r1.resultType, 'incomplete', 'resultType discriminator must be camelCase "incomplete"');
+        assert.equal(r1.resultType, MRTR_INCOMPLETE_RESULT_TYPE,
+            `resultType discriminator must be camelCase "${MRTR_INCOMPLETE_RESULT_TYPE}"`);
         assert.ok(r1.inputRequests, 'IncompleteResult must carry inputRequests');
         assert.ok(r1.inputRequests.user_name, 'inputRequests must include "user_name" key');
         assert.equal(r1.inputRequests.user_name.method, 'elicitation/create');
@@ -331,9 +346,21 @@ describe('SEP-2322 MRTR ephemeral IncompleteResult flow', () => {
     // -------- B1 (skipped): MRTR → Tasks composition --------
     test.skip('mrtr-08: MRTR loop gathers input then final round returns CreateTaskResult (deferred)', async () => {
         // Tracking placeholder — matches server/mrtr_test.go:TestMRTR_TaskComposition_Skipped.
-        // SEP-2663 commit 451f5e1 made this flow normative; gap is on our side.
-        // Re-enable once the v2 task middleware learns to inspect the handler's
-        // IsIncomplete signal before creating a task. Tracking: mcpkit issue 347.
+        // SEP-2663 commit 451f5e1 made this flow normative.
+        //
+        // Two blockers; both must be resolved before this test can be enabled:
+        //
+        // 1. Implementation gap (mcpkit issue 347) — the v2 task middleware
+        //    creates the task BEFORE the handler runs, so it never observes
+        //    the handler's IsIncomplete signal. Re-enabling this test
+        //    requires inverting the middleware so round 1 runs synchronously
+        //    and the task is only spun up on a handler-signalled async path.
+        //
+        // 2. Spec watch (prezaei comment on PR 2663) — SEP-2322 and SEP-2663
+        //    currently disagree on whether the MRTR discriminator value is
+        //    "input_required" or "incomplete". This scenario uses
+        //    MRTR_INCOMPLETE_RESULT_TYPE so the eventual spec resolution is
+        //    a single-line flip.
         const r1 = await rawRequest('tools/call', {
             name: 'test_tool_with_task',
             arguments: {},
