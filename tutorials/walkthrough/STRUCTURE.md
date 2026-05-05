@@ -99,7 +99,13 @@ This keeps the main journey continuous while flagging where divergences live. [I
 Each page links to:
 
 - **Spec anchor** — the normative MCP spec section
-- **Code anchor** — relevant `path/to/file.go` in mcpkit (line numbers omitted on purpose; they rot)
+- **Code anchor** — relevant `path/to/file.go` in mcpkit, **as a real GitHub blob URL**
+
+Code paths in the page header AND inline in the body should be **clickable links** to the file on GitHub, e.g. `[`core/handler_context.go`](https://github.com/panyam/mcpkit/blob/main/core/handler_context.go)`. Don't include line numbers — they rot. Just the file. A reader who wants to see the code clicks once.
+
+### Lists vs. prose
+
+When enumerating a set of items ("X are: A, B, C, D"), prefer a **bulleted or numbered list** over an inline comma-separated paragraph. Lists scan faster, let each item carry its own gloss, and don't visually merge with the surrounding prose. Reserve inline enumerations for genuinely tight cases where each item is a single short noun and no commentary is needed.
 
 External spec links happen at the *node* level. Inside a flow, links stay on-page so reading doesn't break. Click into a node only when you need normative detail.
 
