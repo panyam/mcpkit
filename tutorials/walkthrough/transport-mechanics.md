@@ -9,7 +9,7 @@ What the wire actually looks like, how server→client traffic flows on each tra
 
 ## Prerequisites
 
-**None — this is a foundational root.** A reader needs general familiarity with HTTP, SSE, and JSON-RPC at a vocabulary level. No other roots required.
+**None — this is a foundational page.** A reader needs general familiarity with HTTP, SSE, and JSON-RPC at a vocabulary level. No other pages required.
 
 ## What both transports share
 
@@ -389,7 +389,7 @@ On a full-duplex transport (stdio, or SSE-streamed HTTP), either side may have m
 
 ## End-state (what downstream pages can assume)
 
-After reading this root, downstream pages can assume:
+After reading this page, downstream pages can assume:
 
 - You distinguish **host process / MCP session / transport transaction** as three different lifetimes. A session is per-server-per-host, may live for hours, and is reused across many tool calls.
 - You can read a JSON-RPC message off the wire for either transport and tell whether it's a request, response, or notification.
@@ -402,8 +402,8 @@ After reading this root, downstream pages can assume:
 
 ## Next to read
 
-- **[Notifications](./notifications.md)** — the session's state-change channel; uses the no-id JSON-RPC shape from this root, flows over the channels established here.
-- **[Per-request anatomy](./request-anatomy.md)** — uses the wire model and correlation tables from this root to walk the dispatch journey.
+- **[Notifications](./notifications.md)** — the session's state-change channel; uses the no-id JSON-RPC shape from this page, flows over the channels established here.
+- **[Per-request anatomy](./request-anatomy.md)** — uses the wire model and correlation tables from this page to walk the dispatch journey.
 - **[Reverse-call mechanics](./reverse-call.md)** *(planned)* — concretizes the parent-handler-context constraint with a real `tools/call → elicitation/create` example.
 - **[SSE resumption](./sse-resumption.md)** *(planned, leaf)* — `Last-Event-ID` replay, the server's event store, in-flight response recovery.
 - **[`experimental/ext/events/`](../../experimental/ext/events/README.md)** *(branch, target-shape)* — mcpkit's exploration of events as a first-class concept beyond raw SSE event-id replay.

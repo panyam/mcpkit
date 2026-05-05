@@ -15,9 +15,9 @@ How a single MCP request travels from the caller through middleware, dispatch, h
 
 ## Context
 
-Bring-up gives you a session. Transport-mechanics gives you the wire. Notifications give you state-change channels. **This root explains what happens *between* a caller invoking `client.Call(...)` on one side and the handler running on the other side** — the dispatcher that finds the right handler, the handler context that gives the handler its environment, the middleware stacks that wrap each direction, the typed-binding layer that turns JSON into Go and back, and the response path that returns through all of it.
+Bring-up gives you a session. Transport-mechanics gives you the wire. Notifications give you state-change channels. **This page explains what happens *between* a caller invoking `client.Call(...)` on one side and the handler running on the other side** — the dispatcher that finds the right handler, the handler context that gives the handler its environment, the middleware stacks that wrap each direction, the typed-binding layer that turns JSON into Go and back, and the response path that returns through all of it.
 
-Almost every other planned root drills into a piece of this — reverse-call mechanics, tasks, middleware composition, MRTR. Pin this down once and they all open with *"assumes per-request anatomy"* and skip straight to specifics.
+Almost every other planned page drills into a piece of this — reverse-call mechanics, tasks, middleware composition, MRTR. Pin this down once and they all open with *"assumes per-request anatomy"* and skip straight to specifics.
 
 ## Q1 — Walk me through `tools/call` end-to-end
 
@@ -236,4 +236,4 @@ Two things to internalize:
 - **[Tasks v1/v2/hybrid](./tasks.md)** *(planned, root)* — uses the handler context heavily, plus a separate task store; introduces detach/resume semantics that the per-request anatomy doesn't cover (a task can outlive the originating request).
 - **[Middleware composition](./middleware.md)** *(planned, branch)* — request-side vs. sending-side in detail, ordering, ext/auth and ext/ui interception points.
 - **[MRTR (SEP-2322)](./mrtr.md)** *(planned, branch)* — mcpkit's unified routing layer over the four conceptual stacks; both-sides symmetry; the ephemeral capability flag.
-- **[Elicitation](./elicitation.md)** · **[Sampling](./sampling.md)** · **[Roots/list](./roots-list.md)** *(planned, leaves)* — concrete reverse-call types as applications of the patterns from this root + reverse-call mechanics.
+- **[Elicitation](./elicitation.md)** · **[Sampling](./sampling.md)** · **[Roots/list](./roots-list.md)** *(planned, leaves)* — concrete reverse-call types as applications of the patterns from this page + reverse-call mechanics.

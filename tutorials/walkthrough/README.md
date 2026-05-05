@@ -4,7 +4,7 @@ A journey-shaped tour of what actually happens when an MCP client and server tal
 
 Complementary to the [official MCP spec](https://modelcontextprotocol.io/specification/2025-06-18). The spec is reference-shaped (feature-by-feature, normative shapes); this walkthrough is journey-shaped (follow a request, see every layer it touches, in the order it touches them).
 
-This is a **working document, built incrementally and conversationally** — one question at a time. New roots get added as the discussion reaches them.
+This is a **working document, built incrementally and conversationally** — one question at a time. New pages get added as the discussion reaches them.
 
 ## Where to start
 
@@ -27,9 +27,9 @@ Recommended reading order for someone new to the material:
 5. **[Extension mechanisms](./extension-mechanisms.md)** — *root · FAQ-style*  
    How MCP grows. Six questions: the four extension surfaces (method namespace, capability flags, notifications, `_meta`), the SEP process and `experimental.` namespace, mcpkit's three-tier code organization (`core/` → `ext/` → `experimental/ext/`), the mcpkit extension points you write against (registries, middleware, MRTR, custom transports), case studies (tasks, auth, apps, events, list-TTL, MRTR, elicitation), and the boundary between protocol extension and host/client policy. *End-state: you can read "this extension uses SEP-X" or "this is a `_meta`-only extension" and know what it means.*
 
-*(More roots get appended here as the conversation reaches them — reverse-call mechanics, tasks, auth deep-dive, apps, …)*
+*(More pages get appended here as the conversation reaches them — reverse-call mechanics, tasks, auth deep-dive, apps, …)*
 
 ## Other entry points
 
-- **[STRUCTURE.md](./STRUCTURE.md)** — how this walkthrough is organized: the DAG model, the root contract (Prerequisites / Body / End-state / Next to read), conventions for note blocks, branch points, spec/code anchors, target-shape tracking. Read this if you want to understand *why* pages look the way they do, or if you plan to author one.
+- **[STRUCTURE.md](./STRUCTURE.md)** — how this walkthrough is organized: the DAG model, the four-part page contract (Prerequisites / Body / End-state / Next to read), conventions for note blocks, branch points, spec/code anchors, target-shape tracking. Read this if you want to understand *why* pages look the way they do, or if you plan to author one.
 - **[INDEX.md](./INDEX.md)** — single-page projection of the whole graph. Every page, its preconditions, end-state, successor pointers, and mid-journey branch points — in one table, with a full mermaid render. Read this to see the shape of what's covered (and what's planned) without opening individual files.

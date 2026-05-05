@@ -8,7 +8,7 @@ What happens between *"the host has a config entry mentioning this server"* and 
 
 ## Prerequisites
 
-**None — this is a foundational root.** A reader needs only general familiarity with client/server concepts, JSON, and HTTP. No other roots required.
+**None — this is a foundational page.** A reader needs only general familiarity with client/server concepts, JSON, and HTTP. No other pages required.
 
 ## The four phases
 
@@ -97,7 +97,7 @@ Three things to internalize:
 
 ## End-state (what downstream pages can assume)
 
-After reading this root, the following are true and downstream pages may assume them without re-deriving:
+After reading this page, the following are true and downstream pages may assume them without re-deriving:
 
 - A **session exists** between exactly one client and one server.
 - A **transport is chosen** (stdio | streamable HTTP | …) and bytes can flow in both directions.
@@ -109,8 +109,8 @@ After reading this root, the following are true and downstream pages may assume 
 What is **not** yet established (and lives in downstream pages):
 
 - The per-request flow itself — dispatch, middleware, handler context, typed binding ([per-request anatomy](./request-anatomy.md) *(planned)*).
-- The wire format and correlation model — covered by [transport mechanics](./transport-mechanics.md), itself a peer root.
-- Reverse calls, notifications, tasks, resumption — all build on those two roots.
+- The wire format and correlation model — covered by [transport mechanics](./transport-mechanics.md), another foundational page.
+- Reverse calls, notifications, tasks, resumption — all build on those two pages.
 
 ## Next to read
 
@@ -118,14 +118,14 @@ What is **not** yet established (and lives in downstream pages):
 - **[Notifications](./notifications.md)** — the session's state-change channel. Capability-gated by what was negotiated here.
 - **[Per-request anatomy](./request-anatomy.md)** — the per-call flow that runs *inside* an established session: dispatch, middleware, handler context, typed binding.
 - **[Extension mechanisms](./extension-mechanisms.md)** — how MCP grows; capability flags negotiated here are the gate for all extensions.
-- **[Auth deep-dive](./auth.md)** *(planned, off-mainline)* — full OAuth dance, PRM, JWT validation, fine-grained-auth per tool. Auth is a "bring-up extension" — it extends *this* root's connection-establishment phase, not the message exchange.
+- **[Auth deep-dive](./auth.md)** *(planned, off-mainline)* — full OAuth dance, PRM, JWT validation, fine-grained-auth per tool. Auth is a "bring-up extension" — it extends *this* page's connection-establishment phase, not the message exchange.
 - **[Re-init / session resumption](./session-resumption.md)** *(planned, leaf)* — what happens if the underlying transport drops mid-session.
 
 ## Findings (about the DAG itself)
 
 This phase is structurally distinct from per-request flow, and walking it surfaced three structural decisions:
 
-1. **Two L1 anatomies, not one.** L1-bringup (this root) and L1-call ([per-request anatomy](./request-anatomy.md), planned). The `session resolution` step in L1-call either resolves to an existing session **or triggers L1-bringup**. Mirrors the spec's lifecycle/operation split.
+1. **Two L1 anatomies, not one.** L1-bringup (this page) and L1-call ([per-request anatomy](./request-anatomy.md), planned). The `session resolution` step in L1-call either resolves to an existing session **or triggers L1-bringup**. Mirrors the spec's lifecycle/operation split.
 
 2. **"Transport" is three concerns at different levels.**
    - At bring-up: transport *establishment* (fork+pipe vs. URL+session-id vs. …)
