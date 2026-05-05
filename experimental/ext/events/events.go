@@ -474,7 +474,7 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 		if req.Delivery.URL == "" {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "delivery.url is required")
 		}
-		if err := ValidateWebhookURL(req.Delivery.URL); err != nil {
+		if err := webhooks.ValidateWebhookURL(req.Delivery.URL); err != nil {
 			return core.NewErrorResponse(id, ErrCodeInvalidCallbackUrl, err.Error())
 		}
 
