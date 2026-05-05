@@ -19,6 +19,7 @@ import (
 	"crypto/rsa"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -28,9 +29,9 @@ import (
 	"strings"
 
 	"github.com/panyam/demokit"
-	"github.com/panyam/demokit/tui"
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/examples/common"
 	"github.com/panyam/mcpkit/ext/auth"
 	"github.com/panyam/mcpkit/server"
 	"github.com/panyam/oneauth/admin"
@@ -38,6 +39,7 @@ import (
 	oacore "github.com/panyam/oneauth/core"
 	"github.com/panyam/oneauth/keys"
 	"github.com/panyam/oneauth/utils"
+	gohttp "github.com/panyam/servicekit/http"
 	"github.com/panyam/servicekit/middleware"
 )
 
@@ -65,12 +67,7 @@ func main() {
 // --- Demo client (scripted MCP host) ---
 
 func runDemo() {
-	serverURL := "http://localhost:8080"
-	for i, arg := range os.Args[1:] {
-		if arg == "--url" && i+2 < len(os.Args) {
-			serverURL = os.Args[i+2]
-		}
-	}
+	serverURL := common.ServerURL()
 
 	demo := demokit.New("Fine-Grained Authorization — Scope Step-Up (UC2) + Ephemeral Credentials (UC3)").
 		Dir("fine-grained-auth").
@@ -125,7 +122,7 @@ func runDemo() {
 		Arrow("Host", "Server", "GET /demo/bootstrap").
 		DashedArrow("Server", "Host", "{as_url, client_id, client_secret}").
 		Note("The MCP server exposes a non-standard bootstrap endpoint that hands the host the in-process AS URL and a pre-registered client credential. In production, the host would do OAuth Dynamic Client Registration; this shortcut keeps the demo focused on SEP-2643.").
-		Run(func() {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			resp, err := http.Get(serverURL + "/demo/bootstrap")
 			if err != nil {
 				fmt.Printf("    ERROR: server not reachable at %s: %v\n", serverURL, err)
@@ -142,6 +139,7 @@ func runDemo() {
 			fmt.Printf("    JWKS endpt:    %s\n", bootstrap.JWKSURL)
 			fmt.Printf("    client_id:     %s\n", bootstrap.ClientID)
 			fmt.Printf("    client_secret: %s\n", bootstrap.ClientSecret)
+			return nil
 		})
 
 	// --- Step 2: Get read-only token ---
@@ -149,7 +147,7 @@ func runDemo() {
 		Arrow("Host", "AS", "POST /token — grant_type=client_credentials, scope=tools-read").
 		DashedArrow("AS", "Host", "access_token (tools-read only)").
 		Note("Standard OAuth 2.0 client_credentials grant. The token is RS256-signed by the AS and can be validated against the AS's JWKS endpoint.").
-		Run(func() {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			tok, err := requestToken(bootstrap, []string{scopeRead}, nil)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
@@ -158,6 +156,7 @@ func runDemo() {
 			tokRead = tok
 			fmt.Printf("    Scopes requested: %s\n", scopeRead)
 			fmt.Printf("    Token: %s...%s\n", tokRead[:min(20, len(tokRead))], tokRead[max(0, len(tokRead)-10):])
+			return nil
 		})
 
 	// --- Step 3: Connect with read-only token ---
@@ -165,7 +164,7 @@ func runDemo() {
 		Arrow("Host", "Server", "POST /mcp — initialize + Authorization: Bearer <read-token>").
 		DashedArrow("Server", "Host", "serverInfo + Mcp-Session-Id").
 		Note("JWT validation against the AS's JWKS endpoint succeeds — token is valid, just limited in scope.").
-		Run(func() {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			fmt.Printf("    Connecting to %s ...\n", serverURL)
 			readClient = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "demo-host", Version: "1.0"},
@@ -182,6 +181,7 @@ func runDemo() {
 			for _, t := range tools {
 				fmt.Printf("      - %s: %s\n", t.Name, t.Description)
 			}
+			return nil
 		})
 
 	// --- Step 4: read_document succeeds ---
@@ -189,13 +189,14 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call: read_document {docId: \"doc-123\"}").
 		DashedArrow("Server", "Host", "Document content").
 		Note("The read_document tool only requires tools-read scope. Our token has it, so the call succeeds.").
-		Run(func() {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			text, err := readClient.ToolCall("read_document", map[string]any{"docId": "doc-123"})
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
 			}
 			fmt.Printf("    Result: %s\n", text)
+			return nil
 		})
 
 	// --- Step 5: update_document → HTTP 403 + WWW-Authenticate (UC2 spec-correct) ---
@@ -203,7 +204,7 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call: update_document {docId: \"doc-123\"}").
 		DashedArrow("Server", "Host", "HTTP 403 + WWW-Authenticate: Bearer error=\"insufficient_scope\", scope=\"tools-call\"").
 		Note("Per SEP-2643 (FineGrainedAuth UC2): the server's auth.NewToolScopeMiddleware returns HTTP 403 with WWW-Authenticate before the handler runs. The mcpkit client surfaces this as *client.ClientAuthError with the required scopes already parsed from the header (RFC 6750).").
-		Run(func() {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			_, err := readClient.ToolCallFull("update_document", map[string]any{
 				"docId": "doc-123", "content": "Updated content",
 			})
@@ -223,6 +224,7 @@ func runDemo() {
 			fmt.Printf("    → RequiredScopes (parsed from header per RFC 6750): %v\n",
 				authErr.RequiredScopes)
 			requiredScopes = authErr.RequiredScopes
+			return nil
 		})
 
 	// --- Step 6: Auto-step-up using scopes from WWW-Authenticate ---
@@ -230,7 +232,7 @@ func runDemo() {
 		Arrow("Host", "AS", "POST /token — scope=<from WWW-Authenticate>").
 		DashedArrow("AS", "Host", "access_token with broader scopes").
 		Note("Spec-driven smart-host behavior: the WWW-Authenticate header named the required scopes; the host complies. We also re-include tools-read so the broader token works for both reads and writes (typical OAuth step-up: ask for the union, not a replacement).").
-		Run(func() {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			if len(requiredScopes) == 0 {
 				fmt.Printf("    ERROR: no requiredScopes from previous step\n")
 				return
@@ -244,6 +246,7 @@ func runDemo() {
 			tokReadCall = tok
 			fmt.Printf("    Scopes requested: %v\n", scopes)
 			fmt.Printf("    New token: %s...%s\n", tokReadCall[:min(20, len(tokReadCall))], tokReadCall[max(0, len(tokReadCall)-10):])
+			return nil
 		})
 
 	// --- Step 7: Retry with broader token ---
@@ -253,7 +256,7 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call: update_document").
 		DashedArrow("Server", "Host", "Document updated successfully").
 		Note("New session with the broader token. update_document succeeds because the token includes tools-call.").
-		Run(func() {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			callClient = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "demo-host", Version: "1.0"},
 				client.WithClientBearerToken(tokReadCall),
@@ -272,6 +275,7 @@ func runDemo() {
 				return
 			}
 			fmt.Printf("    Result: %s\n", text)
+			return nil
 		})
 
 	demo.Section("UC3: Per-Operation Ephemeral Credential",
@@ -286,7 +290,7 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call: initiate_payment {amount: 150 EUR, payee: ACME}").
 		DashedArrow("Server", "Host", "JSON-RPC error + credentialDisposition: additional + payment_initiation RAR").
 		Note("The payment tool requires a transaction-specific ephemeral credential. Our broader token has tools-call but no authorization_details bound to this payment, so the server returns the SEP-2643 envelope with an oauth_authorization_details remediationHint describing the exact authorization the host must request.").
-		Run(func() {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			_, err := callClient.ToolCall("initiate_payment", map[string]any{
 				"amount":   "150.00",
 				"currency": "EUR",
@@ -294,20 +298,15 @@ func runDemo() {
 			})
 			if err == nil {
 				fmt.Printf("    UNEXPECTED: tool succeeded (expected denial)\n")
-				return
+				return nil
 			}
+
+			common.PrintRPCError(err, "")
 
 			var rpcErr *client.RPCError
 			if !errors.As(err, &rpcErr) {
-				fmt.Printf("    UNEXPECTED error type: %T %v\n", err, err)
-				return
+				return nil
 			}
-
-			fmt.Printf("    JSON-RPC error %d: %s\n", rpcErr.Code, rpcErr.Message)
-
-			// Pretty-print the full denial.
-			data, _ := json.MarshalIndent(rpcErr.Data, "    ", "  ")
-			fmt.Printf("    error.data:\n    %s\n\n", data)
 
 			// Parse the SEP-2643 envelope.
 			raw, _ := json.Marshal(rpcErr.Data)
@@ -331,6 +330,7 @@ func runDemo() {
 					fmt.Printf("    → authorization_details (RFC 9396):\n    %s\n", adJSON)
 				}
 			}
+			return nil
 		})
 
 	// --- Step 9: Request RAR-bound token ---
@@ -338,7 +338,7 @@ func runDemo() {
 		Arrow("Host", "AS", "POST /token — authorization_details=[payment_initiation, ...]").
 		DashedArrow("AS", "Host", "access_token with authorization_details claim").
 		Note("The host uses the authorization_details from the remediationHint *verbatim* in the OAuth token request (RFC 9396). The AS validates and embeds the authorization_details into the JWT as a claim. The host now holds two tokens: the original tools-read+tools-call token (for everything else) and this short-lived payment-bound token.").
-		Run(func() {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			if len(paymentAuthzDetails) == 0 {
 				fmt.Printf("    ERROR: no authorization_details from previous step\n")
 				return
@@ -350,6 +350,7 @@ func runDemo() {
 			}
 			tokPayment = tok
 			fmt.Printf("    New token: %s...%s\n", tokPayment[:min(20, len(tokPayment))], tokPayment[max(0, len(tokPayment)-10):])
+			return nil
 		})
 
 	// --- Step 10: Retry with RAR-bound token — succeeds ---
@@ -359,7 +360,7 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call: initiate_payment {amount: 150 EUR, payee: ACME}").
 		DashedArrow("Server", "Host", "Payment initiated").
 		Note("The server's initiate_payment handler reads authorization_details from the JWT claims and validates that a payment_initiation entry matches the request (amount, currency, payee). It does — the host minted exactly the token the server asked for in the previous denial.").
-		Run(func() {
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			payClient = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "demo-host", Version: "1.0"},
 				client.WithClientBearerToken(tokPayment),
@@ -381,15 +382,10 @@ func runDemo() {
 			}
 			fmt.Printf("    Result: %s\n", text)
 			fmt.Printf("\n    Note: the original tokReadCall is unchanged and still valid for non-payment ops.\n")
+			return nil
 		})
 
-	// Use TUI renderer if --tui flag is passed.
-	for _, arg := range os.Args[1:] {
-		if strings.TrimSpace(arg) == "--tui" {
-			demo.WithRenderer(tui.New())
-			break
-		}
-	}
+	common.SetupRenderer(demo)
 
 	demo.Execute()
 
@@ -453,22 +449,18 @@ func requestToken(b bootstrapInfo, scopes []string, authzDetails []map[string]an
 // --- Serve mode: standalone MCP server with in-process AS ---
 
 func serve() {
-	addr := ":8080"
-	for i, arg := range os.Args[1:] {
-		if arg == "--addr" && i+2 < len(os.Args) {
-			addr = os.Args[i+2]
-		}
-	}
+	addr := flag.String("addr", ":8080", "listen address")
+	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
+		demokit.BoolFlag("--serve"),
+		demokit.ValueFlag("--url"),
+	))
 
-	logger := demokit.NewColorLogger("[mcp] ", []demokit.ColorRule{
-		{Contains: "isError=true", DarkColor: demokit.ANSIBrightYellow, LightColor: demokit.ANSIYellow},
-		{Contains: "error=", DarkColor: demokit.ANSIRed},
-		{Contains: "ERROR", DarkColor: demokit.ANSIRed},
-		{Contains: "tool=", DarkColor: demokit.ANSIBrightCyan, LightColor: demokit.ANSIBlue},
-		{Contains: "[http] →", DarkColor: demokit.ANSIGray, LightColor: demokit.ANSIDimBlue},
-		{Contains: "[http] ←", DarkColor: demokit.ANSICyan, LightColor: demokit.ANSIBlue},
-		{Contains: "MCP ", DarkColor: demokit.ANSIBrightGreen, LightColor: demokit.ANSIGreen},
-	})
+	// Canonical 5 rules + two example-specific tints (isError on tool results,
+	// tool= on dispatch logs). Passed as variadic extras to NewMCPLogger.
+	logger := common.NewMCPLogger("[mcp] ",
+		demokit.ColorRule{Contains: "isError=true", DarkColor: demokit.ANSIBrightYellow, LightColor: demokit.ANSIYellow},
+		demokit.ColorRule{Contains: "tool=", DarkColor: demokit.ANSIBrightCyan, LightColor: demokit.ANSIBlue},
+	)
 
 	// 1. Spin up the in-process oneauth AS.
 	asInfo, err := startInProcessAS()
@@ -486,7 +478,7 @@ func serve() {
 	defer os.RemoveAll(docDir)
 
 	// 3. mcpkit JWT validator pointed at the AS's JWKS endpoint.
-	listenURL := fmt.Sprintf("http://localhost%s", addr)
+	listenURL := fmt.Sprintf("http://localhost%s", *addr)
 	validator := auth.NewJWTValidator(auth.JWTConfig{
 		JWKSURL:             asInfo.JWKSURL,
 		Issuer:              asInfo.ASURL,
@@ -498,12 +490,15 @@ func serve() {
 	defer validator.Stop()
 
 	// 3. MCP server with auth + scope-enforcement middleware.
+	opts := []server.Option{server.WithListen(*addr)}
+	opts = append(opts, common.WithMCPLogging(logger)...)
+	opts = append(opts,
+		server.WithAuth(validator),
+		server.WithMiddleware(server.ToolCallLogger(logger)),
+	)
 	srv := server.NewServer(
 		core.ServerInfo{Name: "fine-grained-auth-example", Version: "1.0.0"},
-		server.WithAuth(validator),
-		server.WithRequestLogging(logger),
-		server.WithMiddleware(server.LoggingMiddleware(logger)),
-		server.WithMiddleware(server.ToolCallLogger(logger)),
+		opts...,
 	)
 	registerTools(srv)
 	srv.UseMiddleware(auth.NewToolScopeMiddleware(srv.Registry()))
@@ -534,7 +529,7 @@ func serve() {
 		})
 	})
 
-	fmt.Printf("Fine-Grained Auth server on %s\n", addr)
+	fmt.Printf("Fine-Grained Auth server on %s\n", *addr)
 	fmt.Printf("MCP endpoint:   %s/mcp\n", listenURL)
 	fmt.Printf("AS URL:         %s\n", asInfo.ASURL)
 	fmt.Printf("AS JWKS:        %s\n", asInfo.JWKSURL)
@@ -549,7 +544,12 @@ func serve() {
 	fmt.Printf("\nSeed docs: doc-001, doc-123, doc-456\n")
 	fmt.Printf("Inspect:   ls %s/ ; cat %s/doc-123.txt\n", docDir, docDir)
 
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	// Manual gohttp.ListenAndServeGraceful since the MCP handler is wrapped
+	// with CORS middleware (browser-based MCP hosts like MCPJam need it),
+	// which means we can't use srv.ListenAndServe directly. Mirrors the
+	// graceful-shutdown shape from server/server.go.
+	httpSrv := &http.Server{Addr: *addr, Handler: mux, WriteTimeout: 0}
+	if err := gohttp.ListenAndServeGraceful(httpSrv, gohttp.WithOnShutdown(srv.CloseAllSessions)); err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
 		os.Exit(1)
 	}

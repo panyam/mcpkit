@@ -3,8 +3,9 @@ module github.com/panyam/mcpkit/examples/fine-grained-auth
 go 1.26.2
 
 require (
-	github.com/panyam/demokit v0.0.4
-	github.com/panyam/mcpkit v0.2.40
+	github.com/panyam/demokit v0.0.16
+	github.com/panyam/mcpkit v0.2.41
+	github.com/panyam/mcpkit/examples/common v0.0.0-00010101000000-000000000000
 	github.com/panyam/mcpkit/ext/auth v0.2.36
 	github.com/panyam/oneauth v0.0.79
 	github.com/panyam/servicekit v0.0.26
@@ -31,12 +32,13 @@ require (
 	github.com/mattn/go-runewidth v0.0.23 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/panyam/gocurrent v0.1.0 // indirect
-	github.com/panyam/goutils v0.1.8 // indirect
+	github.com/panyam/goutils v0.1.13 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
+	github.com/yuin/goldmark v1.8.2 // indirect
 	golang.org/x/crypto v0.46.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
@@ -51,5 +53,6 @@ require (
 
 replace (
 	github.com/panyam/mcpkit => ../..
+	github.com/panyam/mcpkit/examples/common => ../common
 	github.com/panyam/mcpkit/ext/auth => ../../ext/auth
 )
