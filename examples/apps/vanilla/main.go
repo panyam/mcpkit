@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/examples/common"
 	"github.com/panyam/mcpkit/ext/ui"
 	"github.com/panyam/mcpkit/server"
 )
@@ -47,9 +48,11 @@ func main() {
 	}
 	diceHTML := buf.String()
 
+	opts := common.MCPServerOptions(*addr, "[mcp] ")
+	opts = append(opts, server.WithExtension(&ui.UIExtension{}))
 	srv := server.NewServer(
 		core.ServerInfo{Name: "dice-app", Version: "0.1.0"},
-		server.WithExtension(&ui.UIExtension{}),
+		opts...,
 	)
 
 	type rollDiceInput struct {
