@@ -317,10 +317,14 @@ Desktop) drives interaction, not demokit. They follow these rules instead:
 - **Makefile** can be minimal (a single `run: ; go run .` target). If you
   add `serve`, alias it to `run`.
 
-What UI examples still share with non-UI: `demokit.NewColorLogger`,
-`server.WithRequestLogging`, `server.WithMiddleware(server.LoggingMiddleware(logger))`,
-default port `:8080`, and the README's "Where to look in the code" pointer
-list.
+**UI examples must use the same logger as non-UI** —
+`demokit.NewColorLogger` with the canonical 5-rule set from §2,
+`server.WithRequestLogging(logger)`, and
+`server.WithMiddleware(server.LoggingMiddleware(logger))`. Even minimal UI
+examples (e.g. apps/vanilla) carry the middleware so a side-by-side
+`go run .` + host shows the same tinted MCP traffic readers see in non-UI
+demos. Also shared: default port `:8080`, and the README's "Where to look in
+the code" pointer list.
 
 ---
 
@@ -361,8 +365,15 @@ output rather than emitted as N/A.
   non-interactive mode.)
 - [ ] `client-close` — walkthrough closes the client (`c.Close()` deferred or
   after `Execute`).
-- [ ] `pretty-print-raw` — step `Run()` blocks `json.Unmarshal(res.Raw, &v)`
-  and pretty-print, not the typed struct.
+- [ ] `pretty-print-raw` — **success-path** MCP-call step `Run()` blocks
+  `json.Unmarshal(res.Raw, &v)` and pretty-print, not the typed struct.
+  Skip for steps that don't make an MCP call (e.g. a step that calls a
+  bootstrap HTTP endpoint to mint demo tokens has no `res.Raw`).
+- [ ] `error-path-helper` — error-path step `Run()` blocks render the
+  JSON-RPC error via a small `printRPCError(err, label)`-style helper
+  (CONVENTIONS.md §3 "Client logging convention"), not ad-hoc inline
+  `json.MarshalIndent` blocks. Skip if the example has no error-path
+  steps.
 - [ ] `walkthrough-md-fresh` — committed `WALKTHROUGH.md` matches
   `go run . --doc md` output (no drift).
 - [ ] `makefile-baseline` — Makefile has the four baseline targets (`demo` /
@@ -386,6 +397,72 @@ output rather than emitted as N/A.
 - [ ] `ui-no-walkthrough` — no `walkthrough.go` / `WALKTHROUGH.md` exist.
 - [ ] `ui-readme-diagrams` — README contains sequence diagrams and references
   to the `screenshots/` directory.
-- [ ] `logger-colorlogger` — same as non-UI.
+- [ ] `logger-colorlogger` — same as non-UI; required even for minimal UI
+  examples per §7.
 - [ ] `mux-withmux` — same as non-UI (skip if no side endpoints).
-- [ ] Logger + middleware match the non-UI conventions.
+
+### Host-side examples
+
+Host-side examples (`host/01-apphost`, `host/02-multi-server`) are
+in-process by construction — see §9. Apply the non-UI walkthrough rules
+(`tui-helper`, `mode-helpers`, `client-close`, `pretty-print-raw`,
+`error-path-helper`) and the README rules (`readme-quickstart`,
+`readme-what-it-demonstrates`, `readme-where-to-look`). The following
+non-UI checks **do not apply** and must be omitted from the audit output
+(not emitted as `[FAIL]`):
+
+- `dispatch-loop` — host examples are single-mode (no `--serve` branch).
+- `logger-colorlogger` — no HTTP middleware in an in-process demo.
+- `serve-srv-listenandserve` — no HTTP server.
+- `mux-withmux` — no side endpoints.
+- `filterargs-promoted` — only relevant if the example runs its own
+  `flag.Parse` for server-side flags.
+
+Plus a host-specific Makefile rule:
+
+- [ ] `host-makefile-baseline` — Makefile has `demo` and `readme` targets
+  only (no `serve`, no `build` — there's nothing to start standalone and
+  no binary to ship). `.DEFAULT_GOAL := demo` still applies.
+
+---
+
+## 9. Host-side examples — addendum
+
+Host-side examples demonstrate mcpkit's **host-side Go APIs** (`AppHost`,
+`ServerRegistry`, `InProcessAppBridge`, etc.) — i.e. the code an MCP host
+author writes to consume servers and bridge to apps. They follow most of
+the non-UI conventions but with a different process shape:
+
+- **Single-process by construction.** A host example brings up server +
+  client + AppHost + (in-process) AppBridge inside one `go run .`
+  invocation. `InProcessAppBridge` is part of what's being demonstrated —
+  "you can exercise host code without spinning up an iframe app." There is
+  no separate-process server to start, so `make serve` doesn't apply.
+- **`main.go` is single-mode.** No `--serve` flag, no `runDemo()` —
+  `main()` directly constructs the demo and calls `demo.Execute()`.
+- **No HTTP middleware.** All transports are in-process, so
+  `WithRequestLogging` / `WithMiddleware(LoggingMiddleware)` aren't wired.
+  Demokit owns the user-facing output via its renderer.
+- **Multi-actor demos.** Walkthroughs typically declare 4 actors (e.g.
+  `Srv` / `Client` / `Host` / `Bridge`) instead of the non-UI two-actor
+  shape, because the demo's narrative arc traverses both client→server
+  and host→bridge legs.
+- **Makefile reduced.** Only `demo` and `readme` targets — no `serve`, no
+  `build`. `.DEFAULT_GOAL := demo` still applies.
+
+What host examples still share with non-UI:
+
+- `walkthrough.go` structure (demokit `.Section` / `.Step` pattern, raw
+  JSON pretty-print on success, `printRPCError` helper on errors, client
+  closes after `Execute`).
+- `WALKTHROUGH.md` auto-generated via `make readme` → `go run . --doc md`.
+- README sections: Quick Start (single-terminal — just `make demo`), What
+  it demonstrates, Where to look in the code.
+- `demokit.IsTUI()` / `demokit.IsNonInteractive()` for renderer + mode
+  selection.
+
+**If a host example later needs to expose its server over HTTP** (so an
+external host like MCPJam could connect), promote it to a non-UI example
+shape and drop this addendum's relaxations. That's a per-example decision,
+not a global policy — see the rationale conversation in PR/commit history
+if relitigating.
