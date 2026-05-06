@@ -1,32 +1,35 @@
-# MRTR (Message Routing Through Middleware, SEP-2322)
+# MRTR — Multi Round-Trip Requests (SEP-2322)
 
 <!-- STUB -->
 
 > [!IMPORTANT]
 > **Stub page.** Header is filled out so the graph and links stay accurate, but the body below is an outline only. Track progress in [INDEX.md](./INDEX.md).
 
-> **Kind:** branch *(of [request-anatomy](./request-anatomy.md))* · **Prerequisites:** [request-anatomy](./request-anatomy.md), [extension-mechanisms](./extension-mechanisms.md)
-> **Reachable from:** [request-anatomy](./request-anatomy.md) Next-to-read, [extension-mechanisms](./extension-mechanisms.md) Next-to-read
-> **Spec:** [SEP-2322 (MRTR)](https://modelcontextprotocol.io/specification/2025-06-18) · **Code:** `server/mrtr.go`, `client/mrtr.go`, `server/mrtr_test.go`, `client/mrtr_test.go`
+> **Kind:** root · **Prerequisites:** [request-anatomy](./request-anatomy.md), [extension-mechanisms](./extension-mechanisms.md)
+> **Reachable from:** [extension-mechanisms](./extension-mechanisms.md) Next-to-read, [request-anatomy](./request-anatomy.md) Next-to-read
+> **Branches into:** [tasks](./tasks.md) *(stub, root)*
+> **Spec:** [SEP-2322 (MRTR)](https://modelcontextprotocol.io/specification/2025-06-18) · **Code:** [`server/mrtr.go`](https://github.com/panyam/mcpkit/blob/main/server/mrtr.go) · [`client/mrtr.go`](https://github.com/panyam/mcpkit/blob/main/client/mrtr.go) · [`core/handler_context.go`](https://github.com/panyam/mcpkit/blob/main/core/handler_context.go) *(NewToolContextWithMRTR)* · [`server/mrtr_test.go`](https://github.com/panyam/mcpkit/blob/main/server/mrtr_test.go) · [`client/mrtr_test.go`](https://github.com/panyam/mcpkit/blob/main/client/mrtr_test.go)
 
 ## Prerequisites
 
-- You know the four conceptual middleware stacks (client × {send, recv}, server × {send, recv}). → If not, read [request-anatomy](./request-anatomy.md).
-- You know how SEP-tracked extensions land in mcpkit. → If not, read [extension-mechanisms](./extension-mechanisms.md).
+- You understand how a `tools/call` dispatches and what the handler context provides. → If not, read [request-anatomy](./request-anatomy.md).
+- You know what an ephemeral capability is and the `_meta`-extension pattern. → If not, read [extension-mechanisms](./extension-mechanisms.md).
 
 ## Context
 
-[Per-request-anatomy](./request-anatomy.md) describes four conceptual middleware stacks. MRTR is the unification — a single routing layer that takes (direction, side) as parameters and runs middleware uniformly for all four. Same code path for forward calls and reverse calls, both sides of the wire. SEP-2322 codifies the API.
+MRTR (**Multi Round-Trip Requests**, SEP-2322) lets a `tools/call` pause for input *without holding the call open*. Instead of awaiting a synchronous reverse call (sampling, elicitation, roots/list) inside the handler, the server returns `IncompleteResult` with a list of input requests + a signed `requestState` token. The client resolves the inputs, retries the same `tools/call` with `inputResponses` + the echoed token, and the server completes (or asks for another round). **The server keeps no state between rounds — the token is the round handle.**
+
+mcpkit's default client-side `InputHandler` bridges MRTR's input requests onto the same handlers reverse calls use (sampling, elicitation, roots) — so a host that already supports those gets MRTR for free.
 
 ## What this page will cover
 
-- The per-direction-per-side abstraction collapsed into one routing pipeline
-- How the same MRTR runs middleware for: forward request handling, response sending, reverse-call origination, reverse-call response handling
-- The ephemeral capability flag: mcpkit signals MRTR support but doesn't require it
-- The 7-scenario conformance suite (`make testconf-mrtr`) and the 1 deferred task-composition scenario
-- Wiring: how to plug middleware into MRTR vs. legacy middleware registries
-- Migration: which middleware should move to MRTR, which can stay legacy
+- Wire shape: `IncompleteResult`, the `inputRequests` map, `requestState`, the round retry with `inputResponses`
+- Server-side: returning `IncompleteResult` from a handler, what's in the signed token, why HMAC + TTL, why stateless across rounds matters
+- Client-side: `CallToolWithInputs`, `InputHandler` shape, `DefaultInputHandler`'s bridge to existing capability handlers, `WithMaxMRTRRounds` bounding, `ErrMRTRMaxRounds`
+- MRTR vs reverse calls — comparison table: detach-friendliness, server-side state, latency, retry semantics, when to pick which
+- Composition with tasks (v2): a task that returns `IncompleteResult`; how the task store and MRTR token interact; the deferred conformance scenario in `make testconf-mrtr`
 
 ## Next to read
 
-- **[Middleware composition](./middleware.md)** *(stub branch)* — request-side vs. sending-side in detail; legacy middleware vs. MRTR.
+- **[Tasks](./tasks.md)** *(stub, root)* — long-running operations; tasks v2 returns `IncompleteResult`, the same shape MRTR uses for `tools/call`.
+- **[Reverse-call mechanics](./reverse-call.md)** *(stub, root)* — the synchronous-during-handler alternative; understanding the contrast clarifies when to use which.

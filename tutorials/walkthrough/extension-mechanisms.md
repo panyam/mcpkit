@@ -65,7 +65,7 @@ graph LR
 
 - **SEP-2663 — [tasks v2](./tasks.md)** *(stub)*. Long-running operations as a first-class concept. Adds `tasks/*` methods + a `tasks` capability. mcpkit has v1 (frozen), v2 (canonical), and `RegisterTasksHybrid` for both — a transition pattern worth its own page.
 - **SEP-2549 — [list-TTL](./list-ttl.md)** *(stub)*. Three-state cache-lifetime hint on list responses (`nil` / `&0` / `&N>0`). Pure `_meta` extension — no new methods or capabilities.
-- **SEP-2322 — [MRTR](./mrtr.md)** *(stub)*. Middleware request/transport routing. Mostly mcpkit-architecture; thin spec surface (an ephemeral capability flag).
+- **SEP-2322 — [MRTR](./mrtr.md)** *(stub)*. Multi Round-Trip Requests. A `tools/call` can return `IncompleteResult` carrying input requests + a signed `requestState` token; the client resolves the inputs and retries the call with `inputResponses` + the echoed token. Stateless across rounds (token is the round handle). Default client `InputHandler` bridges to sampling/elicitation/roots handlers, so hosts get MRTR for free if they already support reverse calls.
 
 ## Q3 — What does an extension look like in mcpkit's code organization?
 
@@ -109,7 +109,6 @@ mcpkit's extension points, roughly in order of how often you'll reach for them:
 | **Tool / prompt / resource registries** | a function or struct that handles one named item | `RegisterTool`, `RegisterPrompt`, `RegisterResource` in `server/registration.go` |
 | **Typed binding** | Go structs with tags; mcpkit handles JSON↔Go marshal + schema validation | `core/typed_tool.go` |
 | **Middleware** | wrap any method or all methods on either receive-side or send-side | `server/middleware.go`, `client/middleware.go` |
-| **MRTR (SEP-2322)** | message-routing pipeline, generalizes middleware across sides | `server/mrtr.go`, `client/mrtr.go` |
 | **Custom transports** | implement the transport interface | `server/transport.go` (interfaces); existing examples in `stdio_transport.go`, `streamable_transport.go`, `memory_transport.go` |
 | **Capability advertisement** | declare your custom capabilities in `initialize` response (server) or request (client) | `core/protocol.go` |
 | **Method handlers** | bypass typed binding for raw JSON-RPC handling | `server/method_handler.go` |
@@ -131,7 +130,7 @@ Brief — each gets its own full page later.
 | **Apps** | library-architecture | thin protocol surface; bulk is host-architecture (AppHost lifecycle, Bridge JS runtime, ServerRegistry tracking live servers) | `ext/ui/` (separate `go.mod`) · docs in `docs/APPS_DESIGN.md`, `docs/APPS_HOST.md`, `docs/APPS_ONBOARDING.md` |
 | **Events** | experimental, target-shape | `experimental.events` capability; explores events as first-class beyond raw SSE event-id replay | `experimental/ext/events/` |
 | **List-TTL** (SEP-2549) | `_meta`-only | a `*int` field with explicit-zero semantics on list responses; no new methods or capabilities | hooked into existing list responses; conformance via `make testconf-list-ttl` |
-| **MRTR** (SEP-2322) | library-architecture w/ thin protocol surface | message-routing-through-middleware on both sides; ephemeral capability flag | `server/mrtr.go`, `client/mrtr.go` |
+| **MRTR** (SEP-2322) | method-namespace + `_meta` | extends `tools/call` — server can return `IncompleteResult` with `inputRequests` + signed `requestState`; client retries with `inputResponses` + echoed token; stateless across rounds. Default `InputHandler` bridges to sampling/elicitation/roots | [`server/mrtr.go`](https://github.com/panyam/mcpkit/blob/main/server/mrtr.go), [`client/mrtr.go`](https://github.com/panyam/mcpkit/blob/main/client/mrtr.go) |
 | **Elicitation** | method-namespace | `elicitation/create` method + `elicitation` capability declared by client; Form mode + URL mode | `core/elicitation.go` · server-originates, client receives |
 
 Reading this table is the fastest way to see the *shape* of MCP's extension landscape. Each extension turns one or more of the four knobs from Q1.
@@ -157,7 +156,7 @@ After reading this page, downstream pages can assume:
 - You know the **four extension surfaces** (method namespace, capability flags, notifications, `_meta`) and the common **styles** that combine them.
 - You know the **SEP process** and the role of `experimental.<name>` capabilities as a sandbox; you can read "this extension uses SEP-XXXX" and have a sense of where it sits in the maturity curve.
 - You know mcpkit's **three-tier organization** (`core/` → `ext/` → `experimental/ext/`) and why some extensions get their own `go.mod`.
-- You know the **mcpkit extension points** — registries, middleware, MRTR, custom transports, capability advertisement — and that you don't need to fork core to add a server-side feature.
+- You know the **mcpkit extension points** — registries, middleware, custom transports, capability advertisement — and that you don't need to fork core to add a server-side feature.
 - You can read the **case-study table** and tell at a glance which surfaces each extension uses.
 - You can distinguish **protocol extension from host/client policy** — both are "new behavior," but only the former is an extension in the technical sense.
 
@@ -167,6 +166,6 @@ After reading this page, downstream pages can assume:
 - **[Auth deep-dive](./auth.md)** *(stub, root, off-mainline)* — the bring-up extension; full OAuth/PRM/JWT/fine-grained-auth.
 - **[Apps](./apps.md)** *(stub, root)* — the library-architecture extension; AppHost/Bridge JS/ServerRegistry. Mostly mcpkit-side, thin protocol surface.
 - **[Reverse-call mechanics](./reverse-call.md)** *(stub, root)* — concretizes elicitation, sampling, roots/list as the same method-namespace pattern.
-- **[MRTR deep-dive](./mrtr.md)** *(stub, branch off per-request anatomy)* — SEP-2322 in detail.
+- **[MRTR](./mrtr.md)** *(stub, root)* — Multi Round-Trip Requests; the stateless-server alternative to synchronous reverse calls during a `tools/call`.
 - **[List-TTL (SEP-2549)](./list-ttl.md)** *(stub, leaf off notifications)* — the canonical `_meta`-only extension; orthogonal to list_changed.
 - **[`experimental/ext/events/`](../../experimental/ext/events/README.md)** *(branch, target-shape)* — events as first-class.
