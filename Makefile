@@ -5,8 +5,12 @@ SUB_MODS_TO_TAG := ext/auth ext/ui experimental/ext/protogen cmd/testclient test
 
 # Path to the upstream-portable conformance fork (panyam/mcpconformance).
 # tasks/mrtr scenarios live there now and run via vitest. Override via
-# `MCPCONFORMANCE_PATH=/elsewhere make testconf-tasks-v2`.
-MCPCONFORMANCE_PATH ?= $(HOME)/newstack/mcpconformance
+# `MCPCONFORMANCE_PATH=/elsewhere make testconf-tasks-v2`. The default
+# points at the feat/tasks-mrtr-extension worktree (where the tasks +
+# mrtr scenarios currently live, paired with upstream Draft PR
+# modelcontextprotocol/conformance#262); switch to a different
+# worktree if you're running scenarios from another feat branch.
+MCPCONFORMANCE_PATH ?= $(HOME)/newstack/mcpkit/conf-template
 
 # =============================================================================
 # Build & test
