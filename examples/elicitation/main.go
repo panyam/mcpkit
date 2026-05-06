@@ -81,6 +81,26 @@ func runDemo() {
 		DashedArrow("Server", "Host", "serverInfo + Mcp-Session-Id").
 		Arrow("Host", "Server", "GET /mcp — open SSE stream for notifications").
 		Note("Connect with a notification callback listening for notifications/elicitation/complete. The GET SSE stream receives server-pushed notifications.").
+		VerbatimLang("Reproduce on the wire", "bash", `# Initialize an MCP session and capture the session id returned in the headers.
+SID=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":"i","method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"x","version":"1"},"capabilities":{}}}' \
+  -D - -o /dev/null | grep -i 'mcp-session-id' | awk '{print $2}' | tr -d '\r\n')
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+echo "SID=$SID"
+
+# In a SECOND terminal, open the SSE notification stream so the
+# notifications/elicitation/complete event in step 3 arrives there:
+#
+#   curl -N http://localhost:8080/mcp \
+#        -H "Mcp-Session-Id: $SID" \
+#        -H 'Accept: text/event-stream'
+#
+# Keep that terminal open. The notification will appear there once the user
+# clicks Approve in step 3.`).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			fmt.Printf("    Connecting to %s ...\n", serverURL)
 
@@ -121,6 +141,19 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call: access_protected_resource").
 		DashedArrow("Server", "Host", "error -32042 + consent URL + authzContextId").
 		Note("The consent middleware intercepts the call and returns -32042 (URLElicitationRequired) with a URL the user must visit to approve access.").
+		VerbatimLang("Reproduce on the wire", "bash", `# Call the protected tool. Response is JSON-RPC error -32042 carrying the
+# consent URL and the authorizationContextId you must echo on retry.
+RESP=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":"c","method":"tools/call","params":{"name":"access_protected_resource","arguments":{"resourceId":"my-doc"}}}')
+echo "$RESP" | jq '.error'
+
+# Capture the context id and the consent URL into shell vars for step 3.
+export CTX=$(echo "$RESP" | jq -r .error.data.authorization.authorizationContextId)
+export APPROVE_URL=$(echo "$RESP" | jq -r '.error.data.elicitations[0].url')
+echo "CTX=$CTX"
+echo "APPROVE_URL=$APPROVE_URL"`).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			_, err := c.ToolCall("access_protected_resource", map[string]any{"resourceId": "my-doc"})
 			common.PrintRPCError(err, "")
@@ -158,6 +191,22 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call + _meta.authorizationContextId (auto-retry)").
 		DashedArrow("Server", "Host", "Access granted to resource").
 		Note("The host opens the consent URL and waits for the server to send a notifications/elicitation/complete notification via the SSE stream. When it arrives, the host automatically retries with the authorizationContextId.").
+		VerbatimLang("Reproduce on the wire", "bash", `# Approve the context. You can either click Approve in a browser at
+# $APPROVE_URL, or POST to it directly:
+curl -s -X POST "$APPROVE_URL" >/dev/null
+
+# The SECOND terminal (running the SSE stream from step 1) should now print
+# something like:
+#   event: message
+#   data: {"jsonrpc":"2.0","method":"notifications/elicitation/complete","params":{"elicitationId":"..."}}
+
+# Retry tools/call with the context id echoed under the SEP-2643 _meta key.
+# The server matches it against the approved context and lets the call through.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":\"r\",\"method\":\"tools/call\",\"params\":{\"name\":\"access_protected_resource\",\"arguments\":{\"resourceId\":\"my-doc\"},\"_meta\":{\"io.modelcontextprotocol/authorization-context-id\":\"$CTX\"}}}" \
+  | jq .`).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			approveURL := fmt.Sprintf("%s/approve?ctx=%s", serverURL, contextID)
 			fmt.Printf("    Opening browser: %s\n", approveURL)
