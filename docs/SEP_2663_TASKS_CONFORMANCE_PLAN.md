@@ -229,3 +229,23 @@ done in parallel after Fix 1 lands.
 - Conformance suite scrubbed of mcpkit-specific framing (in-repo / in-tree
   references, "mcpkit picks…" phrasing in open-spec-questions). The suite
   now reads as a brand-neutral SEP-2663 / 2322 / 2575 / 2243 server check.
+
+## Final disposition (2026-05-05)
+
+The full suite graduated upstream to the brand-neutral
+[`panyam/mcpconformance`](https://github.com/panyam/mcpconformance) fork
+on branch `feat/tasks-mrtr-extension`. 8 ClientScenario classes (~33
+checks) for SEP-2663 tasks plus 1 class (7 checks + 1 SKIPPED for
+mrtr-tasks-composition) for SEP-2322 MRTR. Upstream issue posted +
+Draft PR `modelcontextprotocol/conformance#262` opened against
+`modelcontextprotocol/conformance:main`, awaiting maintainer review.
+
+Mcpkit's `conformance/tasks-v2/` and `conformance/mrtr/` folders now
+host vitest sentinels (placeholder tests) reserved for future
+mcpkit-stricter scenarios — assertions that go beyond what the spec
+mandates because mcpkit deliberately picks the louder / safer option in
+spec-silent corners. `make testconf-tasks-v2` and `make testconf-mrtr`
+delegate to the fork via `MCPCONFORMANCE_PATH` and chain the local
+sentinel run.
+
+Released in mcpkit `v0.2.44`.
