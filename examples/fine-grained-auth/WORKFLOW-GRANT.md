@@ -197,7 +197,5 @@ The asymmetry is intentional. The **MCP server is the source of truth** for what
 
 ## References
 
-```
-SEP-2643  https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2643
-RFC 9396  https://www.rfc-editor.org/rfc/rfc9396  (Rich Authorization Requests)
-```
+[SEP-2643](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2643)
+[RFC 9396](https://www.rfc-editor.org/rfc/rfc9396  (Rich Authorization Requests)
