@@ -55,12 +55,13 @@ Project-wide: `CONSTRAINTS.md`. Per-package: `core/CONSTRAINTS.md`, `server/CONS
 - **Demokit non-interactive + browser steps**: Steps that open a browser and expect user action will fail in `--non-interactive` mode. Interactive mode is the primary path.
 - **Three-state TTL needs `*int` + omitempty**: SEP-2549 distinguishes `nil` (no guidance), `&0` (do not cache), `&N>0` (fresh for N seconds). Plain `int` with omitempty would conflate `nil` with `&0`. Same pattern fits any spec field with explicit-zero semantics.
 - **Conformance suites are brand-neutral**: `conformance/*/` assert what the spec says, not what mcpkit does. mcpkit-specific behavior (e.g., echoing SEP-2243 routing headers on responses) belongs in `server/*_test.go`, not in conformance scenarios. The conformance suites are the marketing — keep them framed as "what any server must do."
+- **`MCPCONFORMANCE_PATH`** (default `$HOME/newstack/mcpconformance`): tasks-v2 + MRTR conformance run from a clone of the [`panyam/mcpconformance`](https://github.com/panyam/mcpconformance) fork. `make testconf-tasks-v2` / `testconf-mrtr` shell out into that path. Override the var if you cloned elsewhere; the targets fail-fast with a remediation message if the path is missing.
 
 Module-specific gotchas live in their READMEs.
 
 ## Conformance
 
-Server: 30/30, Auth: 14/14, Apps: 21, Tasks v1: 27/27, **Tasks v2 (SEP-2663) + MRTR (SEP-2322): runs via the upstream-portable conformance fork at `MCPCONFORMANCE_PATH` (default `~/newstack/mcpconformance`, branch `feat/tasks-mrtr-extension`)** — Tasks v2 8 ClientScenario classes / ~33 checks; MRTR 1 class / 7 checks + 1 skip. Both folders also keep a vitest sentinel locally (`conformance/{tasks-v2,mrtr}/`) for future mcpkit-stricter scenarios. List-TTL: 5/5 (SEP-2549), File-Inputs: 7/7 (SEP-2356), Keycloak: 12/12, testall: 12/12 stages.
+Server 30/30, Auth 14/14, Apps 21, Tasks v1 27/27, Tasks v2 8 classes / ~33 checks (SEP-2663, fork), MRTR 1 class / 7 + 1 skip (SEP-2322, fork), List-TTL 5/5 (SEP-2549), File-Inputs 7/7 (SEP-2356), Keycloak 12/12, testall 12/12 stages. Tasks v2 + MRTR live in the upstream-portable [`panyam/mcpconformance`](https://github.com/panyam/mcpconformance) fork; see CAPABILITIES.md `mcp-tasks-v2-conformance`.
 
 ## Tasks v1 vs v2
 
