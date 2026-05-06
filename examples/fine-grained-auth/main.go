@@ -121,6 +121,14 @@ func runDemo() {
 		Arrow("Host", "Server", "GET /demo/bootstrap").
 		DashedArrow("Server", "Host", "{as_url, client_id, client_secret}").
 		Note("The MCP server exposes a non-standard bootstrap endpoint that hands the host the in-process AS URL and a pre-registered client credential. In production, the host would do OAuth Dynamic Client Registration; this shortcut keeps the demo focused on SEP-2643.").
+		VerbatimLang("Reproduce on the wire", "bash", `# Fetch the in-process AS bootstrap into shell vars used by every step below.
+BS=$(curl -s http://localhost:8080/demo/bootstrap)
+export AS_URL=$(echo "$BS" | jq -r .as_url)
+export TOKEN_ENDPT=$(echo "$BS" | jq -r .token_endpoint)
+export JWKS_URL=$(echo "$BS" | jq -r .jwks_url)
+export CLIENT_ID=$(echo "$BS" | jq -r .client_id)
+export CLIENT_SECRET=$(echo "$BS" | jq -r .client_secret)
+echo "AS=$AS_URL  client_id=$CLIENT_ID"`).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			resp, err := http.Get(serverURL + "/demo/bootstrap")
 			if err != nil {
@@ -146,6 +154,13 @@ func runDemo() {
 		Arrow("Host", "AS", "POST /token — grant_type=client_credentials, scope=tools-read").
 		DashedArrow("AS", "Host", "access_token (tools-read only)").
 		Note("Standard OAuth 2.0 client_credentials grant. The token is RS256-signed by the AS and can be validated against the AS's JWKS endpoint.").
+		VerbatimLang("Reproduce on the wire", "bash", `# Mint a token with scope=tools-read. (oneauth's token endpoint accepts a JSON body
+# in this demo, hence the application/json content type.)
+export TOK_READ=$(curl -s -X POST "$TOKEN_ENDPT" \
+  -H 'Content-Type: application/json' \
+  -d "{\"grant_type\":\"client_credentials\",\"client_id\":\"$CLIENT_ID\",\"client_secret\":\"$CLIENT_SECRET\",\"scope\":\"tools-read\"}" \
+  | jq -r .access_token)
+echo "TOK_READ=${TOK_READ:0:30}..."`).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			tok, err := requestToken(bootstrap, []string{scopeRead}, nil)
 			if err != nil {
@@ -163,6 +178,19 @@ func runDemo() {
 		Arrow("Host", "Server", "POST /mcp — initialize + Authorization: Bearer <read-token>").
 		DashedArrow("Server", "Host", "serverInfo + Mcp-Session-Id").
 		Note("JWT validation against the AS's JWKS endpoint succeeds — token is valid, just limited in scope.").
+		VerbatimLang("Reproduce on the wire", "bash", `# Initialize an MCP session with the read-only token. The Mcp-Session-Id
+# returned in the response headers is what every subsequent call must echo.
+SID=$(curl -s -X POST http://localhost:8080/mcp \
+  -H "Authorization: Bearer $TOK_READ" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":"i","method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"x","version":"1"},"capabilities":{}}}' \
+  -D - -o /dev/null | grep -i 'mcp-session-id' | awk '{print $2}' | tr -d '\r\n')
+curl -s -X POST http://localhost:8080/mcp \
+  -H "Authorization: Bearer $TOK_READ" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+echo "SID=$SID"`).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			fmt.Printf("    Connecting to %s ...\n", serverURL)
 			readClient = client.NewClient(serverURL+"/mcp",
@@ -188,6 +216,13 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call: read_document {docId: \"doc-123\"}").
 		DashedArrow("Server", "Host", "Document content").
 		Note("The read_document tool only requires tools-read scope. Our token has it, so the call succeeds.").
+		VerbatimLang("Reproduce on the wire", "bash", `# Read a document. Succeeds because tools-read is enough.
+curl -s -X POST http://localhost:8080/mcp \
+  -H "Authorization: Bearer $TOK_READ" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":"r","method":"tools/call","params":{"name":"read_document","arguments":{"docId":"doc-123"}}}' \
+  | jq .`).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			text, err := readClient.ToolCall("read_document", map[string]any{"docId": "doc-123"})
 			if err != nil {
@@ -203,6 +238,16 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call: update_document {docId: \"doc-123\"}").
 		DashedArrow("Server", "Host", "HTTP 403 + WWW-Authenticate: Bearer error=\"insufficient_scope\", scope=\"tools-call\"").
 		Note("Per SEP-2643 (FineGrainedAuth UC2): the server's auth.NewToolScopeMiddleware returns HTTP 403 with WWW-Authenticate before the handler runs. The mcpkit client surfaces this as *client.ClientAuthError with the required scopes already parsed from the header (RFC 6750).").
+		VerbatimLang("Reproduce on the wire", "bash", `# Try update_document with the read-only token. -i shows response headers
+# so the WWW-Authenticate scope-step-up signal is visible.
+curl -i -s -X POST http://localhost:8080/mcp \
+  -H "Authorization: Bearer $TOK_READ" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":"u","method":"tools/call","params":{"name":"update_document","arguments":{"docId":"doc-123","content":"new content"}}}'
+# Look for:
+#   HTTP/1.1 403 Forbidden
+#   WWW-Authenticate: Bearer error="insufficient_scope", scope="tools-call"`).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			_, err := readClient.ToolCallFull("update_document", map[string]any{
 				"docId": "doc-123", "content": "Updated content",
@@ -231,6 +276,12 @@ func runDemo() {
 		Arrow("Host", "AS", "POST /token — scope=<from WWW-Authenticate>").
 		DashedArrow("AS", "Host", "access_token with broader scopes").
 		Note("Spec-driven smart-host behavior: the WWW-Authenticate header named the required scopes; the host complies. We also re-include tools-read so the broader token works for both reads and writes (typical OAuth step-up: ask for the union, not a replacement).").
+		VerbatimLang("Reproduce on the wire", "bash", `# Mint a broader token with both scopes (the union, not a replacement).
+export TOK_CALL=$(curl -s -X POST "$TOKEN_ENDPT" \
+  -H 'Content-Type: application/json' \
+  -d "{\"grant_type\":\"client_credentials\",\"client_id\":\"$CLIENT_ID\",\"client_secret\":\"$CLIENT_SECRET\",\"scope\":\"tools-read tools-call\"}" \
+  | jq -r .access_token)
+echo "TOK_CALL=${TOK_CALL:0:30}..."`).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			if len(requiredScopes) == 0 {
 				fmt.Printf("    ERROR: no requiredScopes from previous step\n")
@@ -255,6 +306,23 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call: update_document").
 		DashedArrow("Server", "Host", "Document updated successfully").
 		Note("New session with the broader token. update_document succeeds because the token includes tools-call.").
+		VerbatimLang("Reproduce on the wire", "bash", `# New session with the broader token, then repeat update_document.
+SID2=$(curl -s -X POST http://localhost:8080/mcp \
+  -H "Authorization: Bearer $TOK_CALL" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":"i","method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"x","version":"1"},"capabilities":{}}}' \
+  -D - -o /dev/null | grep -i 'mcp-session-id' | awk '{print $2}' | tr -d '\r\n')
+curl -s -X POST http://localhost:8080/mcp \
+  -H "Authorization: Bearer $TOK_CALL" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID2" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+curl -s -X POST http://localhost:8080/mcp \
+  -H "Authorization: Bearer $TOK_CALL" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID2" \
+  -d '{"jsonrpc":"2.0","id":"u","method":"tools/call","params":{"name":"update_document","arguments":{"docId":"doc-123","content":"new content"}}}' \
+  | jq .`).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			callClient = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "demo-host", Version: "1.0"},
@@ -289,6 +357,19 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call: initiate_payment {amount: 150 EUR, payee: ACME}").
 		DashedArrow("Server", "Host", "JSON-RPC error + credentialDisposition: additional + payment_initiation RAR").
 		Note("The payment tool requires a transaction-specific ephemeral credential. Our broader token has tools-call but no authorization_details bound to this payment, so the server returns the SEP-2643 envelope with an oauth_authorization_details remediationHint describing the exact authorization the host must request.").
+		VerbatimLang("Reproduce on the wire", "bash", `# Try initiate_payment with the broader token. The token has tools-call scope
+# but no payment-bound RAR claim, so the server returns the SEP-2643 envelope.
+# jq surfaces just the authorization block so you can see the remediation hint.
+curl -s -X POST http://localhost:8080/mcp \
+  -H "Authorization: Bearer $TOK_CALL" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID2" \
+  -d '{"jsonrpc":"2.0","id":"p","method":"tools/call","params":{"name":"initiate_payment","arguments":{"amount":"150.00","currency":"EUR","payee":"ACME Corp"}}}' \
+  | jq '.error.data.authorization'
+# Inspect:
+#   credentialDisposition: "additional"  (keep the original token)
+#   remediationHints[].type: "oauth_authorization_details"
+#   remediationHints[].authorization_details: [{type:"payment_initiation", ...}]`).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			_, err := callClient.ToolCall("initiate_payment", map[string]any{
 				"amount":   "150.00",
@@ -337,6 +418,16 @@ func runDemo() {
 		Arrow("Host", "AS", "POST /token — authorization_details=[payment_initiation, ...]").
 		DashedArrow("AS", "Host", "access_token with authorization_details claim").
 		Note("The host uses the authorization_details from the remediationHint *verbatim* in the OAuth token request (RFC 9396). The AS validates and embeds the authorization_details into the JWT as a claim. The host now holds two tokens: the original tools-read+tools-call token (for everything else) and this short-lived payment-bound token.").
+		VerbatimLang("Reproduce on the wire", "bash", `# Echo the authorization_details from step 8 verbatim into a token request.
+export TOK_PAY=$(curl -s -X POST "$TOKEN_ENDPT" \
+  -H 'Content-Type: application/json' \
+  -d "{\"grant_type\":\"client_credentials\",\"client_id\":\"$CLIENT_ID\",\"client_secret\":\"$CLIENT_SECRET\",\"authorization_details\":[{\"type\":\"payment_initiation\",\"actions\":[\"initiate\"],\"instructedAmount\":{\"currency\":\"EUR\",\"amount\":\"150.00\"},\"creditorName\":\"ACME Corp\"}]}" \
+  | jq -r .access_token)
+echo "TOK_PAY=${TOK_PAY:0:30}..."
+
+# Decode the JWT payload. The authorization_details claim is embedded directly,
+# which is what makes the token "self-describing" for the RS to validate.
+echo "$TOK_PAY" | cut -d. -f2 | base64 -d 2>/dev/null | jq`).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			if len(paymentAuthzDetails) == 0 {
 				fmt.Printf("    ERROR: no authorization_details from previous step\n")
@@ -358,6 +449,23 @@ func runDemo() {
 		DashedArrow("Server", "Host", "new session").
 		Arrow("Host", "Server", "tools/call: initiate_payment {amount: 150 EUR, payee: ACME}").
 		DashedArrow("Server", "Host", "Payment initiated").
+		VerbatimLang("Reproduce on the wire", "bash", `# New session with the RAR-bound token, then retry initiate_payment.
+SID3=$(curl -s -X POST http://localhost:8080/mcp \
+  -H "Authorization: Bearer $TOK_PAY" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":"i","method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"x","version":"1"},"capabilities":{}}}' \
+  -D - -o /dev/null | grep -i 'mcp-session-id' | awk '{print $2}' | tr -d '\r\n')
+curl -s -X POST http://localhost:8080/mcp \
+  -H "Authorization: Bearer $TOK_PAY" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID3" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+curl -s -X POST http://localhost:8080/mcp \
+  -H "Authorization: Bearer $TOK_PAY" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID3" \
+  -d '{"jsonrpc":"2.0","id":"p","method":"tools/call","params":{"name":"initiate_payment","arguments":{"amount":"150.00","currency":"EUR","payee":"ACME Corp"}}}' \
+  | jq .`).
 		Note("The server's initiate_payment handler reads authorization_details from the JWT claims and validates that a payment_initiation entry matches the request (amount, currency, payee). It does — the host minted exactly the token the server asked for in the previous denial.").
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			payClient = client.NewClient(serverURL+"/mcp",
