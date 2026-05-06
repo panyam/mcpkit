@@ -31,7 +31,7 @@ graph TD
     click list-ttl "https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/list-ttl.md"
     middleware["middleware<br/>(branch *(of [request-anatomy](./request-anatomy.md))*)"]
     click middleware "https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/middleware.md"
-    mrtr["mrtr<br/>(branch *(of [request-anatomy](./request-anatomy.md))*)"]
+    mrtr["mrtr<br/>(root)"]
     click mrtr "https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/mrtr.md"
     notifications["notifications<br/>(root)"]
     click notifications "https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/notifications.md"
@@ -76,7 +76,6 @@ graph TD
     extension-mechanisms --> list-ttl
     request-anatomy --> middleware
     request-anatomy --> middleware
-    request-anatomy --> mrtr
     request-anatomy --> mrtr
     extension-mechanisms --> mrtr
     bringup --> request-anatomy

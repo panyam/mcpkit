@@ -4,7 +4,7 @@ How a single MCP request travels from the caller through middleware, dispatch, h
 
 > **Kind:** root *(FAQ-style)* · **Prerequisites:** [bring-up](./bringup.md), [transport-mechanics](./transport-mechanics.md), [notifications](./notifications.md)
 > **Reachable from:** [README](./README.md), [bring-up](./bringup.md) Next-to-read, [transport-mechanics](./transport-mechanics.md) Next-to-read, [notifications](./notifications.md) Next-to-read, [extension-mechanisms](./extension-mechanisms.md) Next-to-read
-> **Branches into:** [reverse-call](./reverse-call.md) *(stub)*, [tasks](./tasks.md) *(stub)*, [mrtr](./mrtr.md) *(stub)*, [middleware](./middleware.md) *(stub)*
+> **Branches into:** [reverse-call](./reverse-call.md) *(stub)*, [tasks](./tasks.md) *(stub)*, [middleware](./middleware.md) *(stub)*
 > **Spec:** [Base protocol](https://modelcontextprotocol.io/specification/2025-06-18) · **Code:** [`core/jsonrpc.go`](https://github.com/panyam/mcpkit/blob/main/core/jsonrpc.go) · [`core/handler_context.go`](https://github.com/panyam/mcpkit/blob/main/core/handler_context.go) · [`core/typed_tool.go`](https://github.com/panyam/mcpkit/blob/main/core/typed_tool.go) · [`core/protocol.go`](https://github.com/panyam/mcpkit/blob/main/core/protocol.go) · [`server/dispatch.go`](https://github.com/panyam/mcpkit/blob/main/server/dispatch.go) · [`server/registration.go`](https://github.com/panyam/mcpkit/blob/main/server/registration.go) · [`server/middleware.go`](https://github.com/panyam/mcpkit/blob/main/server/middleware.go) · [`server/method_handler.go`](https://github.com/panyam/mcpkit/blob/main/server/method_handler.go) · [`server/mrtr.go`](https://github.com/panyam/mcpkit/blob/main/server/mrtr.go) · [`client/middleware.go`](https://github.com/panyam/mcpkit/blob/main/client/middleware.go) · [`client/mrtr.go`](https://github.com/panyam/mcpkit/blob/main/client/mrtr.go)
 
 ## Prerequisites
@@ -70,7 +70,7 @@ sequenceDiagram
    - **[`RegisterTasks` / `RegisterTasksV1` / `RegisterTasksHybrid`](https://github.com/panyam/mcpkit/blob/main/server/tasks_v2.go)** — typed handlers for `tasks/*` (SEP-2663; hybrid dispatches by negotiated capability).
    - **[`MethodHandler`](https://github.com/panyam/mcpkit/blob/main/server/method_handler.go)** — raw escape hatch for any method without typed binding.
 
-   The **client has the same shape** for incoming reverse calls. The host registers a sampling delegate, an elicitation handler, and a roots provider; when the server emits `sampling/createMessage`, the client's dispatch routes it to the sampling delegate the same way the server routes `tools/call` to a registered tool. Both sides have a method registry. Both sides have a dispatch loop. Both sides have user-provided custom handlers. (See [`client/mrtr.go`](https://github.com/panyam/mcpkit/blob/main/client/mrtr.go) for the client-side dispatch.)
+   The **client has the same shape** for incoming reverse calls. The host registers a sampling delegate, an elicitation handler, and a roots provider; when the server emits `sampling/createMessage`, the client's dispatch routes it to the sampling delegate the same way the server routes `tools/call` to a registered tool. Both sides have a method registry. Both sides have a dispatch loop. Both sides have user-provided custom handlers.
 6. **Handler context construction.** Dispatch builds a per-request `HandlerContext` — covered in detail in [Q2](#q2--whats-in-the-handler-context). Carries the originating id, session reference, capabilities, request/notify hooks for reverse traffic, a cancel `ctx.Context`, and the typed params after binding.
 7. **Handler execution.** The user's registered function runs. It may:
    - Read the typed params, do its work, return a typed result.
@@ -151,9 +151,6 @@ Each stack is a **pipeline** — middleware composes by wrapping the next handle
 
 > [!NOTE]
 > **Branch →** [Middleware composition](./middleware.md) *(stub)* — request-side vs. sending-side in detail, ordering rules, the `ext/auth` and `ext/ui` interception points, how middleware integrates with MRTR.
-
-> [!NOTE]
-> **Branch →** [MRTR (SEP-2322)](./mrtr.md) *(stub)* — mcpkit unifies the four conceptual stacks under MRTR (Message Routing Through Middleware), which knows direction (in/out) and side (client/server) as parameters. The four stacks are still distinct conceptually; MRTR is how mcpkit implements them.
 
 ## Q4 — How does typed binding turn JSON into Go and back?
 
@@ -242,7 +239,7 @@ Three things to internalize:
 
 - You can trace a request from `client.Call` through middleware, transport, dispatch, handler context, handler, and back. You know the **13 steps** and which layer each lives at.
 - You know what's in the **handler context** — id, ctx, session, request hook, notify hook, progress emitter, typed params — and that it dies with the request unless escaped via `DetachForBackground`.
-- You know there are **four conceptual middleware stacks** (client × {send, recv}, server × {send, recv}); reverse calls reuse the same four in their other direction; mcpkit unifies the implementation under MRTR.
+- You know there are **four conceptual middleware stacks** (client × {send, recv}, server × {send, recv}); reverse calls reuse the same four in their other direction.
 - You know **typed binding** turns Go structs into JSON Schema + decoder + validator at registration time, so handlers see typed params and return typed results; raw `MethodHandler` is the escape hatch.
 - You know **notifications skip the pending-id step** (no id, no correlation, no resumption). **Reverse calls reuse the entire path** but originate from a handler context instead of a wire receive.
 
@@ -251,5 +248,5 @@ Three things to internalize:
 - **[Reverse-call mechanics](./reverse-call.md)** *(stub, root)* — drills into the reverse-call subset of this anatomy with a concrete `tools/call → elicitation/create` walkthrough; covers the parent-id back-pointer for cancellation.
 - **[Tasks v1/v2/hybrid](./tasks.md)** *(stub, root)* — uses the handler context heavily, plus a separate task store; introduces detach/resume semantics that the per-request anatomy doesn't cover (a task can outlive the originating request).
 - **[Middleware composition](./middleware.md)** *(stub, branch)* — request-side vs. sending-side in detail, ordering, ext/auth and ext/ui interception points.
-- **[MRTR (SEP-2322)](./mrtr.md)** *(stub, branch)* — mcpkit's unified routing layer over the four conceptual stacks; both-sides symmetry; the ephemeral capability flag.
+- **[MRTR (SEP-2322)](./mrtr.md)** *(stub, root)* — Multi Round-Trip Requests; the stateless-server alternative to synchronous reverse calls during a `tools/call`.
 - **[Elicitation](./elicitation.md)** · **[Sampling](./sampling.md)** · **[Roots/list](./roots-list.md)** *(stub, leaves)* — concrete reverse-call types as applications of the patterns from this page + reverse-call mechanics.

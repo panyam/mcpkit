@@ -25,7 +25,7 @@ When a server handler needs information from the client mid-call — sample an L
 - Wire-level: server allocates id from its own space; no parent field on the wire
 - Handler-level: the request hook on the handler context, the `pending[reverseId] → originated-by → forwardId` back-pointer
 - Cancellation propagation: when the forward call is cancelled, the back-pointer drives cleanup of in-flight reverse calls
-- mrtr-on-both-sides symmetry: client-side dispatches the reverse call to a host-provided delegate (sampling delegate, elicitation UI handler, etc.)
+- Client-side dispatch symmetry: when the reverse call lands on the client, it routes by method name to a host-provided delegate (sampling delegate, elicitation UI handler, roots provider) — same shape as server-side dispatch for forward calls
 - The three concrete call types as applications: sampling, elicitation, roots/list
 
 ## Next to read
