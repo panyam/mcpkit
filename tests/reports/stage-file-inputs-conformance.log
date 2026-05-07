@@ -1,0 +1,18 @@
+=== Stage 8g/9: file-inputs-conformance (make testconf-file-inputs) ===
+Started: Wed May  6 18:20:18 PDT 2026
+/Library/Developer/CommandLineTools/usr/bin/make -C conformance testconf-file-inputs
+(cd /Users/dzshrh/newstack/mcpkit/conf-pending && npm install --silent && \
+		FILE_INPUTS_SERVER_URL=http://localhost:18097/mcp \
+		FILE_INPUTS_SERVER_CMD="/Users/dzshrh/newstack/mcpkit/tasks/examples/file-inputs/file-inputs-demo --serve --addr=:18097" \
+		npx vitest run src/scenarios/server/file-inputs/file-inputs.test.ts)
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.5 [39m[90m/Users/dzshrh/newstack/mcpkit/conf-pending[39m
+
+ [32m✓[39m src/scenarios/server/file-inputs/file-inputs.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 915[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m   Start at [22m 18:20:20
+[2m   Duration [22m 1.15s[2m (transform 37ms, setup 0ms, import 131ms, tests 915ms, environment 0ms)[22m
+
+Finished: Wed May  6 18:20:21 PDT 2026 (elapsed 3s)

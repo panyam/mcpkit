@@ -3,21 +3,9 @@
 # Sub-modules that get tagged alongside the root module
 SUB_MODS_TO_TAG := ext/auth ext/ui experimental/ext/protogen cmd/testclient tests/e2e tests/keycloak
 
-# Per-suite paths to the upstream-portable conformance fork
-# (panyam/mcpconformance). Each suite points at the worktree that holds
-# its scenarios — different SEPs live on different branches while their
-# upstream PRs are still draft. Resolving relative to this Makefile's
-# directory keeps absolute paths out of committed code.
-#
-# Override per-invocation when scenarios move (e.g., a SEP splits from
-# `pending` into its own feat branch waiting upstream approval):
-#   MCPCONFORMANCE_FILE_INPUTS_PATH=$(realpath ../conf-sep-2356) \
-#     make testconf-file-inputs
+# Conformance test orchestration lives in `conformance/Makefile`.
+# Per-suite MCPCONFORMANCE_*_PATH vars are documented there.
 MCPKIT_DIR := $(abspath $(dir $(firstword $(MAKEFILE_LIST))))
-MCPCONFORMANCE_TASKS_V2_PATH    ?= $(abspath $(MCPKIT_DIR)/../conf-template)
-MCPCONFORMANCE_MRTR_PATH        ?= $(abspath $(MCPKIT_DIR)/../conf-template)
-MCPCONFORMANCE_FILE_INPUTS_PATH ?= $(abspath $(MCPKIT_DIR)/../conf-pending)
-MCPCONFORMANCE_LIST_TTL_PATH    ?= $(abspath $(MCPKIT_DIR)/../conf-pending)
 
 # =============================================================================
 # Build & test
@@ -66,80 +54,34 @@ cover-all: ## Run coverage across root + all sub-modules, generate per-module HT
 smoke: ## Run smoke tests (starts test servers, tests both transports via curl)
 	bash scripts/smoke-test.sh
 
-testconfall: testconf testconfauth
+# Conformance shims — actual logic lives in conformance/Makefile.
 
-testconf: ## Run MCP conformance test suite (requires Node.js/npx)
-	bash scripts/conformance-test.sh
+testconfall: ## Run base + auth conformance only (delegates to conformance/Makefile)
+	$(MAKE) -C conformance testconfall
 
-testconf-tasks: ## Run MCP Tasks v1 conformance (builds + starts server, runs tests, tears down)
-	@(cd examples/tasks && go build -o tasks .) && \
-	examples/tasks/tasks -addr :18091 & PID=$$!; \
-	sleep 1; \
-	(cd conformance && npm install --silent && \
-	SERVER_URL=http://localhost:18091/mcp npx tsx --test tasks/scenarios.test.ts); \
-	RC=$$?; kill $$PID 2>/dev/null; wait $$PID 2>/dev/null; exit $$RC
+testconf: ## Run MCP conformance test suite (delegates to conformance/Makefile)
+	$(MAKE) -C conformance testconf
 
-testconf-tasks-v2: ## Run SEP-2663 tasks conformance — fork-based scenarios + mcpkit-local stricter sentinel
-	@if [ ! -d "$(MCPCONFORMANCE_TASKS_V2_PATH)" ]; then \
-		echo "MCPCONFORMANCE_TASKS_V2_PATH=$(MCPCONFORMANCE_TASKS_V2_PATH) does not exist."; \
-		echo "Clone https://github.com/panyam/mcpconformance there or set MCPCONFORMANCE_TASKS_V2_PATH=<path-to-clone>."; \
-		exit 1; \
-	fi
-	@(cd examples/tasks-v2 && go build -o tasks-v2 .)
-	(cd $(MCPCONFORMANCE_TASKS_V2_PATH) && npm install --silent && \
-		TASKS_SERVER_URL=http://localhost:18092/mcp \
-		TASKS_SERVER_CMD="$(CURDIR)/examples/tasks-v2/tasks-v2 --serve --addr :18092" \
-		npx vitest run src/scenarios/server/tasks/all-scenarios.test.ts)
-	(cd conformance && npm install --silent && npx vitest run tasks-v2/)
+testconfauth: ## Run MCP Auth conformance suite (delegates to conformance/Makefile)
+	$(MAKE) -C conformance testconfauth
 
-testconf-mrtr: ## Run SEP-2322 MRTR conformance — fork-based scenarios + mcpkit-local stricter sentinel
-	@if [ ! -d "$(MCPCONFORMANCE_MRTR_PATH)" ]; then \
-		echo "MCPCONFORMANCE_MRTR_PATH=$(MCPCONFORMANCE_MRTR_PATH) does not exist."; \
-		echo "Clone https://github.com/panyam/mcpconformance there or set MCPCONFORMANCE_MRTR_PATH=<path-to-clone>."; \
-		exit 1; \
-	fi
-	@(cd examples/mrtr && go build -o mrtr-demo .)
-	(cd $(MCPCONFORMANCE_MRTR_PATH) && npm install --silent && \
-		MRTR_SERVER_URL=http://localhost:18093/mcp \
-		MRTR_SERVER_CMD="$(CURDIR)/examples/mrtr/mrtr-demo --serve --addr :18093" \
-		npx vitest run src/scenarios/server/mrtr/all-scenarios.test.ts)
-	(cd conformance && npm install --silent && npx vitest run mrtr/)
+testconf-tasks: ## Run MCP Tasks v1 conformance (delegates to conformance/Makefile)
+	$(MAKE) -C conformance testconf-tasks
 
-testconf-list-ttl: ## Run SEP-2549 list-TTL conformance — fork-based scenarios (auto-spawns 3 fixtures)
-	@if [ ! -d "$(MCPCONFORMANCE_LIST_TTL_PATH)" ]; then \
-		echo "MCPCONFORMANCE_LIST_TTL_PATH=$(MCPCONFORMANCE_LIST_TTL_PATH) does not exist."; \
-		echo "Clone https://github.com/panyam/mcpconformance there or set MCPCONFORMANCE_LIST_TTL_PATH=<path-to-clone>."; \
-		echo "Default expects the 'pending' branch checked out at ../conf-pending."; \
-		exit 1; \
-	fi
-	@(cd examples/list-ttl && go build -o list-ttl-demo .)
-	(cd $(MCPCONFORMANCE_LIST_TTL_PATH) && npm install --silent && \
-		LIST_TTL_POSITIVE_URL=http://localhost:18094/mcp \
-		LIST_TTL_POSITIVE_CMD="$(CURDIR)/examples/list-ttl/list-ttl-demo --serve --addr=:18094 --ttl=60" \
-		LIST_TTL_ZERO_URL=http://localhost:18095/mcp \
-		LIST_TTL_ZERO_CMD="$(CURDIR)/examples/list-ttl/list-ttl-demo --serve --addr=:18095 --ttl=0" \
-		LIST_TTL_UNSET_URL=http://localhost:18096/mcp \
-		LIST_TTL_UNSET_CMD="$(CURDIR)/examples/list-ttl/list-ttl-demo --serve --addr=:18096" \
-		npx vitest run src/scenarios/server/list-ttl/list-ttl.test.ts)
+testconf-tasks-v2: ## Run SEP-2663 tasks conformance — fork-based + mcpkit-local sentinel (delegates to conformance/Makefile)
+	$(MAKE) -C conformance testconf-tasks-v2
 
-testconf-file-inputs: ## Run SEP-2356 file-inputs conformance — fork-based scenarios (auto-spawns fixture)
-	@if [ ! -d "$(MCPCONFORMANCE_FILE_INPUTS_PATH)" ]; then \
-		echo "MCPCONFORMANCE_FILE_INPUTS_PATH=$(MCPCONFORMANCE_FILE_INPUTS_PATH) does not exist."; \
-		echo "Clone https://github.com/panyam/mcpconformance there or set MCPCONFORMANCE_FILE_INPUTS_PATH=<path-to-clone>."; \
-		echo "Default expects the 'pending' branch checked out at ../conf-pending."; \
-		exit 1; \
-	fi
-	@(cd examples/file-inputs && go build -o file-inputs-demo .)
-	(cd $(MCPCONFORMANCE_FILE_INPUTS_PATH) && npm install --silent && \
-		FILE_INPUTS_SERVER_URL=http://localhost:18097/mcp \
-		FILE_INPUTS_SERVER_CMD="$(CURDIR)/examples/file-inputs/file-inputs-demo --serve --addr=:18097" \
-		npx vitest run src/scenarios/server/file-inputs/file-inputs.test.ts)
+testconf-mrtr: ## Run SEP-2322 MRTR conformance — fork-based + mcpkit-local sentinel (delegates to conformance/Makefile)
+	$(MAKE) -C conformance testconf-mrtr
 
-testconf-elicitation: ## Run elicitation conformance suite (SEP-1036 URL mode + form, requires Node.js, target server must be running)
-	cd conformance && npm install --silent && SERVER_URL=$${SERVER_URL:-http://localhost:8080/mcp} npx tsx --test elicitation/scenarios.test.ts
+testconf-list-ttl: ## Run SEP-2549 list-TTL conformance — fork-based, 3 fixtures (delegates to conformance/Makefile)
+	$(MAKE) -C conformance testconf-list-ttl
 
-testconfauth: ## Run MCP Auth conformance suite (client-side, requires mcpkit/auth)
-	bash scripts/conformance-auth-test.sh
+testconf-file-inputs: ## Run SEP-2356 file-inputs conformance — fork-based (delegates to conformance/Makefile)
+	$(MAKE) -C conformance testconf-file-inputs
+
+testconf-elicitation: ## Run SEP-1036 elicitation conformance (delegates to conformance/Makefile)
+	$(MAKE) -C conformance testconf-elicitation
 
 test-auth: ## Run auth sub-module tests
 	cd ext/auth && go test ./... -count=1 -timeout 30s
@@ -209,21 +151,24 @@ testall: ## Run ALL tests (starts Keycloak if needed) + per-stage HTML reports
 	@echo "Started: $$(date)" | tee -a $(REPORT_DIR)/run.log
 	@PASS=0; FAIL=0; STAGES=""; \
 	echo "" | tee -a $(REPORT_DIR)/run.log; \
-	$(call run_stage,1,12,unit+coverage,cover-html) \
-	$(call run_stage,2,12,race,test-race) \
-	$(call run_stage,3,12,auth,test-auth) \
-	$(call run_stage,4,12,ui,test-ui) \
-	$(call run_stage,5,12,protogen,test-protogen) \
-	$(call run_stage,6,12,e2e,test-e2e) \
-	$(call run_stage,7a,12,experimental-events,test-experimental-events) \
-	$(call run_stage,7b,12,experimental-events-clients-go,test-experimental-events-clients-go) \
-	$(call run_stage,7c,12,experimental-events-discord,test-experimental-events-discord) \
-	$(call run_stage,7d,12,experimental-events-telegram,test-experimental-events-telegram) \
-	$(call run_stage,8,12,conformance,testconf) \
-	$(call run_stage,9,12,auth-conformance,testconfauth) \
-	$(call run_stage,10,12,tasks-conformance,testconf-tasks) \
-	$(call run_stage,11,12,tasks-v2-conformance,testconf-tasks-v2) \
-	$(call run_stage,12,12,keycloak,testkcl-auto) \
+	$(call run_stage,1,9,unit+coverage,cover-html) \
+	$(call run_stage,2,9,race,test-race) \
+	$(call run_stage,3,9,auth,test-auth) \
+	$(call run_stage,4,9,ui,test-ui) \
+	$(call run_stage,5,9,protogen,test-protogen) \
+	$(call run_stage,6,9,e2e,test-e2e) \
+	$(call run_stage,7a,9,experimental-events,test-experimental-events) \
+	$(call run_stage,7b,9,experimental-events-clients-go,test-experimental-events-clients-go) \
+	$(call run_stage,7c,9,experimental-events-discord,test-experimental-events-discord) \
+	$(call run_stage,7d,9,experimental-events-telegram,test-experimental-events-telegram) \
+	$(call run_stage,8a,9,conformance,testconf) \
+	$(call run_stage,8b,9,auth-conformance,testconfauth) \
+	$(call run_stage,8c,9,tasks-conformance,testconf-tasks) \
+	$(call run_stage,8d,9,tasks-v2-conformance,testconf-tasks-v2) \
+	$(call run_stage,8e,9,mrtr-conformance,testconf-mrtr) \
+	$(call run_stage,8f,9,list-ttl-conformance,testconf-list-ttl) \
+	$(call run_stage,8g,9,file-inputs-conformance,testconf-file-inputs) \
+	$(call run_stage,9,9,keycloak,testkcl-auto) \
 	echo "" | tee -a $(REPORT_DIR)/run.log; \
 	echo "=== Results: $$PASS passed, $$FAIL failed ===" | tee -a $(REPORT_DIR)/run.log; \
 	echo "Finished: $$(date)" | tee -a $(REPORT_DIR)/run.log; \
@@ -476,5 +421,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-protogen test-e2e test-experimental test-apps-playwright testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth testconf-tasks testconf-tasks-v2 vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
+.PHONY: build test test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-protogen test-e2e test-experimental test-apps-playwright testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-list-ttl testconf-file-inputs testconf-elicitation vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
 .DEFAULT_GOAL := help
