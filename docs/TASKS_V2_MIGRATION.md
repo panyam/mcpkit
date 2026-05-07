@@ -40,7 +40,7 @@ v1 server decides based on whether the client sent a `task` hint. v2 server deci
 // v2 — sync
 { "content": [...], "isError": false }
 // v2 — task (server elected; SEP-2663 flat shape: Result & Task)
-{ "resultType": "task", "taskId": "...", "status": "working", "ttlSeconds": 60, "pollIntervalMilliseconds": 1000 }
+{ "resultType": "task", "taskId": "...", "status": "working", "ttlMs": 60000, "pollIntervalMs": 1000 }
 ```
 
 Client-side, use `client.ToolCall` (returns a polymorphic `*ToolCallResult`):
@@ -66,8 +66,8 @@ v1 needed two round-trips for a completed task: `tasks/get` for status, then `ta
   "status": "completed",
   "createdAt": "...",
   "lastUpdatedAt": "...",
-  "ttlSeconds": 60,
-  "pollIntervalMilliseconds": 1000,
+  "ttlMs": 60000,
+  "pollIntervalMs": 1000,
   "result": { "content": [...], "isError": false },
   "requestState": "opaque-token"
 }
@@ -102,8 +102,8 @@ Map keys are server-minted opaque strings. Clients MUST treat them as round-trip
 | | v1 | v2 |
 |---|---|---|
 | `tasks/cancel` response | `{taskId, status: cancelled, ...}` | `{}` (empty ack) |
-| TTL field | `ttl` (units by convention) | `ttlSeconds` (units in the name) |
-| Poll-interval field | `pollInterval` | `pollIntervalMilliseconds` |
+| TTL field | `ttl` (ms by convention) | `ttlMs` (integer milliseconds, units in the name) |
+| Poll-interval field | `pollInterval` | `pollIntervalMs` (integer milliseconds) |
 | `parentTaskId` | present | removed |
 | Mcp-Name HTTP header | not set | set on task-creating responses (SEP-2243) |
 
@@ -192,7 +192,7 @@ client.UpdateTask(c, core.UpdateTaskRequest{
 client.CancelTask(c, taskID)
 ```
 
-`WaitForTask` honors the server's `pollIntervalMilliseconds` hint (with a 1s floor and 30s ceiling), and threads `requestState` echo automatically across iterations.
+`WaitForTask` honors the server's `pollIntervalMs` hint (with a 1s floor and 30s ceiling), and threads `requestState` echo automatically across iterations. To abort the loop the moment you call `CancelTask`, derive a child context with `context.WithCancel`, pass it as the `ctx` argument, and cancel it after `CancelTask` returns. `WaitForTask` exits with `context.Canceled` rather than waiting for the server to surface `cancelled` status.
 
 ## Rolling-upgrade recipe
 

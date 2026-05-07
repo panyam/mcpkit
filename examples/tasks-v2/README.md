@@ -18,8 +18,8 @@ Server-side implementation of the v2 Tasks extension. v2 inverts v1's client-dri
 | Result on terminal `tasks/get` | only status — fetch separately | inlined `result` / `error` / `inputRequests` |
 | MRTR resume path | side-channel via `tasks/result` long-poll | `tasks/update` (new method) |
 | `tasks/cancel` response | rich task envelope | empty `{}` ack |
-| TTL field | `ttl` (ms by convention) | `ttlSeconds` |
-| Poll-interval field | `pollInterval` | `pollIntervalMilliseconds` |
+| TTL field | `ttl` (ms by convention) | `ttlMs` (integer milliseconds) |
+| Poll-interval field | `pollInterval` | `pollIntervalMs` (integer milliseconds) |
 | Tool errors | `status: failed` | `status: completed, result.isError: true` |
 | Protocol errors | `status: failed, error: ...` | `status: failed, error: {code, message, data}` |
 | `tasks/list` | exists | **removed** |

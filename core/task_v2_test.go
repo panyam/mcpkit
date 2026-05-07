@@ -160,7 +160,7 @@ func TestDetailedTaskInputRequestsTyped(t *testing.T) {
 			Status:        TaskInputRequired,
 			CreatedAt:     "2025-01-15T10:00:00Z",
 			LastUpdatedAt: "2025-01-15T10:00:01Z",
-			TTLSeconds:    IntPtr(60),
+			TTLMs:    IntPtr(60),
 		},
 		InputRequests: InputRequests{
 			"elicit-1": InputRequest{
@@ -212,7 +212,7 @@ func TestDetailedTaskRequestStateOmitEmpty(t *testing.T) {
 		TaskInfoV2: TaskInfoV2{
 			TaskID: "t1", Status: TaskWorking,
 			CreatedAt: "2025-01-15T10:00:00Z", LastUpdatedAt: "2025-01-15T10:00:00Z",
-			TTLSeconds: IntPtr(30),
+			TTLMs: IntPtr(30),
 		},
 	}
 	data, _ := json.Marshal(res)
@@ -225,16 +225,16 @@ func TestDetailedTaskRequestStateOmitEmpty(t *testing.T) {
 
 // --- SEP-2663 wire-shape tests ---
 
-// TestTaskInfoV2WireFields verifies the renamed wire fields (ttlSeconds,
-// pollIntervalMilliseconds) and the absence of a parentTaskId field.
+// TestTaskInfoV2WireFields verifies the renamed wire fields (ttlMs,
+// pollIntervalMs) and the absence of a parentTaskId field.
 func TestTaskInfoV2WireFields(t *testing.T) {
 	info := TaskInfoV2{
 		TaskID:                   "task-123",
 		Status:                   TaskWorking,
 		CreatedAt:                "2025-01-15T10:00:00Z",
 		LastUpdatedAt:            "2025-01-15T10:00:01Z",
-		TTLSeconds:               IntPtr(300),
-		PollIntervalMilliseconds: IntPtr(1000),
+		TTLMs:               IntPtr(300),
+		PollIntervalMs: IntPtr(1000),
 	}
 	data, err := json.Marshal(info)
 	if err != nil {
@@ -243,7 +243,7 @@ func TestTaskInfoV2WireFields(t *testing.T) {
 	var m map[string]any
 	json.Unmarshal(data, &m)
 
-	for _, key := range []string{"taskId", "status", "createdAt", "lastUpdatedAt", "ttlSeconds", "pollIntervalMilliseconds"} {
+	for _, key := range []string{"taskId", "status", "createdAt", "lastUpdatedAt", "ttlMs", "pollIntervalMs"} {
 		if _, ok := m[key]; !ok {
 			t.Errorf("TaskInfoV2 missing %q; got %s", key, data)
 		}
@@ -254,33 +254,33 @@ func TestTaskInfoV2WireFields(t *testing.T) {
 			t.Errorf("TaskInfoV2 should not emit v1 key %q; got %s", key, data)
 		}
 	}
-	if m["ttlSeconds"] != float64(300) {
-		t.Errorf("ttlSeconds = %v, want 300", m["ttlSeconds"])
+	if m["ttlMs"] != float64(300) {
+		t.Errorf("ttlMs = %v, want 300", m["ttlMs"])
 	}
-	if m["pollIntervalMilliseconds"] != float64(1000) {
-		t.Errorf("pollIntervalMilliseconds = %v, want 1000", m["pollIntervalMilliseconds"])
+	if m["pollIntervalMs"] != float64(1000) {
+		t.Errorf("pollIntervalMs = %v, want 1000", m["pollIntervalMs"])
 	}
 }
 
-// TestTaskInfoV2TTLSecondsNullable verifies that ttlSeconds is required-but-
+// TestTaskInfoV2TTLMsNullable verifies that ttlMs is required-but-
 // nullable (present as null when nil). Mirrors v1 TaskInfo.TTL semantics.
-func TestTaskInfoV2TTLSecondsNullable(t *testing.T) {
+func TestTaskInfoV2TTLMsNullable(t *testing.T) {
 	info := TaskInfoV2{
 		TaskID:        "t1",
 		Status:        TaskWorking,
 		CreatedAt:     "2025-01-15T10:00:00Z",
 		LastUpdatedAt: "2025-01-15T10:00:00Z",
-		TTLSeconds:    nil,
+		TTLMs:    nil,
 	}
 	data, _ := json.Marshal(info)
 	var m map[string]any
 	json.Unmarshal(data, &m)
-	val, ok := m["ttlSeconds"]
+	val, ok := m["ttlMs"]
 	if !ok {
-		t.Fatalf("ttlSeconds must be present even when nil; got %s", data)
+		t.Fatalf("ttlMs must be present even when nil; got %s", data)
 	}
 	if val != nil {
-		t.Errorf("ttlSeconds = %v, want null", val)
+		t.Errorf("ttlMs = %v, want null", val)
 	}
 }
 
@@ -297,8 +297,8 @@ func TestCreateTaskResultWireShape(t *testing.T) {
 			Status:                   TaskWorking,
 			CreatedAt:                "2025-01-15T10:00:00Z",
 			LastUpdatedAt:            "2025-01-15T10:00:00Z",
-			TTLSeconds:               IntPtr(60),
-			PollIntervalMilliseconds: IntPtr(1000),
+			TTLMs:               IntPtr(60),
+			PollIntervalMs: IntPtr(1000),
 		},
 	}
 	data, err := json.Marshal(res)
@@ -316,7 +316,7 @@ func TestCreateTaskResultWireShape(t *testing.T) {
 	if _, ok := m["task"]; ok {
 		t.Errorf("SEP-2663 CreateTaskResult must not nest under a \"task\" wrapper; got %s", data)
 	}
-	for _, key := range []string{"taskId", "status", "createdAt", "lastUpdatedAt", "ttlSeconds", "pollIntervalMilliseconds"} {
+	for _, key := range []string{"taskId", "status", "createdAt", "lastUpdatedAt", "ttlMs", "pollIntervalMs"} {
 		if _, ok := m[key]; !ok {
 			t.Errorf("CreateTaskResult missing top-level %q; got %s", key, data)
 		}
@@ -341,11 +341,11 @@ func TestCreateTaskResultWireShape(t *testing.T) {
 	if decoded.TaskID != "task-abc" {
 		t.Errorf("decoded.TaskID = %q, want task-abc", decoded.TaskID)
 	}
-	if decoded.TTLSeconds == nil || *decoded.TTLSeconds != 60 {
-		t.Errorf("decoded.TTLSeconds = %v, want *60", decoded.TTLSeconds)
+	if decoded.TTLMs == nil || *decoded.TTLMs != 60 {
+		t.Errorf("decoded.TTLMs = %v, want *60", decoded.TTLMs)
 	}
-	if decoded.PollIntervalMilliseconds == nil || *decoded.PollIntervalMilliseconds != 1000 {
-		t.Errorf("decoded.PollIntervalMilliseconds = %v, want *1000", decoded.PollIntervalMilliseconds)
+	if decoded.PollIntervalMs == nil || *decoded.PollIntervalMs != 1000 {
+		t.Errorf("decoded.PollIntervalMs = %v, want *1000", decoded.PollIntervalMs)
 	}
 }
 
@@ -358,7 +358,7 @@ func TestDetailedTaskCompletedShape(t *testing.T) {
 			Status:        TaskCompleted,
 			CreatedAt:     "2025-01-15T10:00:00Z",
 			LastUpdatedAt: "2025-01-15T10:00:05Z",
-			TTLSeconds:    IntPtr(60),
+			TTLMs:    IntPtr(60),
 		},
 		Result: &ToolResult{Content: []Content{{Type: "text", Text: "done"}}},
 	}
@@ -388,7 +388,7 @@ func TestDetailedTaskFailedShape(t *testing.T) {
 			Status:        TaskFailed,
 			CreatedAt:     "2025-01-15T10:00:00Z",
 			LastUpdatedAt: "2025-01-15T10:00:05Z",
-			TTLSeconds:    IntPtr(60),
+			TTLMs:    IntPtr(60),
 		},
 		Error: &TaskError{Code: -32603, Message: "internal error"},
 	}

@@ -34,8 +34,9 @@ func ClientSupportsTasks(ctx context.Context) bool {
 //   - tasks/get returns DetailedTask: a discriminated union by status that
 //     inlines result / error / inputRequests / requestState in one trip.
 //   - tasks/cancel and tasks/update return empty acks (no task state).
-//   - Task wire fields renamed: ttlSeconds, pollIntervalMilliseconds.
-//     Internal stores still use ms; conversion happens at the wire boundary.
+//   - Task wire fields use the Ms suffix: ttlMs, pollIntervalMs (both
+//     integer milliseconds). Internal stores already use ms, so the v2
+//     wire boundary is a pass-through (no unit conversion).
 //   - parentTaskId removed (SEP-2663 does not model task parentage).
 //   - Tool errors: status "completed" with result.isError == true.
 //   - Protocol errors: status "failed" with the error inlined.
@@ -73,26 +74,28 @@ type InputResponses = map[string]json.RawMessage
 
 // TaskInfoV2 is the v2 wire shape for task metadata. Differences from
 // (v1) TaskInfo:
-//   - ttl renamed to ttlSeconds (units now part of the field name).
-//   - pollInterval renamed to pollIntervalMilliseconds.
-//   - parentTaskId removed; SEP-2663 does not expose task parentage.
+//   - ttl renamed to ttlMs. Units in the field name. Integer milliseconds.
+//   - pollInterval renamed to pollIntervalMs. Integer milliseconds.
+//   - parentTaskId removed. SEP-2663 does not expose task parentage.
 //
-// Internally, the TaskStore uses TaskInfo (ttl in milliseconds). Conversion
-// happens at the v2 wire boundary in the tasks_v2 server handlers.
+// The TaskStore already uses milliseconds internally, so the v2 wire surface
+// is a pass-through (no unit conversion at the boundary). Per SEP-2663 the
+// server MAY change ttlMs over the lifetime of a task (e.g. reset on each
+// tasks/get to extend liveness while a client is observing it).
 type TaskInfoV2 struct {
-	TaskID                   string     `json:"taskId"`
-	Status                   TaskStatus `json:"status"`
-	StatusMessage            string     `json:"statusMessage,omitempty"`
-	CreatedAt                string     `json:"createdAt"`
-	LastUpdatedAt            string     `json:"lastUpdatedAt"`
-	TTLSeconds               *int       `json:"ttlSeconds"`                         // required+nullable; null = unlimited
-	PollIntervalMilliseconds *int       `json:"pollIntervalMilliseconds,omitempty"` // optional
+	TaskID         string     `json:"taskId"`
+	Status         TaskStatus `json:"status"`
+	StatusMessage  string     `json:"statusMessage,omitempty"`
+	CreatedAt      string     `json:"createdAt"`
+	LastUpdatedAt  string     `json:"lastUpdatedAt"`
+	TTLMs          *int       `json:"ttlMs"`                    // required+nullable, null = unlimited
+	PollIntervalMs *int       `json:"pollIntervalMs,omitempty"` // optional
 }
 
 // CreateTaskResult is returned by tools/call when the server elects to handle
 // the call as an async task. Per SEP-2663 it is `Result & Task` — a flat
 // intersection where the discriminator and the task fields share one object
-// (taskId / status / ttlSeconds / ... at the top level alongside resultType).
+// (taskId / status / ttlMs / ... at the top level alongside resultType).
 //
 // Per SEP-2663, this envelope MUST NOT carry result, error, inputRequests,
 // or requestState — those belong on tasks/get's DetailedTask response.
@@ -100,8 +103,8 @@ type TaskInfoV2 struct {
 // Wire shape (flat — no `task` wrapper):
 //
 //	{"resultType": "task", "taskId": "...", "status": "working",
-//	 "createdAt": "...", "lastUpdatedAt": "...", "ttlSeconds": 60,
-//	 "pollIntervalMilliseconds": 1000}
+//	 "createdAt": "...", "lastUpdatedAt": "...", "ttlMs": 60000,
+//	 "pollIntervalMs": 1000}
 //
 // TaskInfoV2 is embedded so encoding/json promotes its fields to the parent
 // (same trick DetailedTask uses); no custom MarshalJSON is needed.

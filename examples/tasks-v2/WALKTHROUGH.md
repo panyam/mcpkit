@@ -29,7 +29,7 @@ sequenceDiagram
 
     Note over Host,Server: Step 3: slow_compute (no task hint!) — server creates a task → ToolCall returns Task variant
     Host->>Server: tools/call: slow_compute {seconds: 3}
-    Server-->>Host: {resultType: "task", taskId, status: working, ttlSeconds, ...}
+    Server-->>Host: {resultType: "task", taskId, status: working, ttlMs, ...}
 + Mcp-Name: <taskId> response header (SEP-2243)
 
     Note over Host,Server: Step 4: failing_job → status: completed, result.isError: true (TOOL error semantics)
@@ -82,7 +82,7 @@ v1 (SEP-1036, MCP spec 2025-11-25) had the *client* hint at task vs sync via a `
 - **`tasks/get` returns `DetailedTask`** with inlined `result` / `error` / `inputRequests` / `requestState` per status. No separate `tasks/result` round-trip.
 - **`tasks/cancel` returns an empty ack**. Observe the resulting `cancelled` status with the next `tasks/get`.
 - **`tasks/update` is the SEP-2663 resume path** for MRTR input rounds — the client delivers `inputResponses` keyed to whatever `inputRequests` the server emitted.
-- **Wire fields renamed**: `ttlSeconds`, `pollIntervalMilliseconds`. `parentTaskId` removed.
+- **Wire fields renamed**: `ttlMs`, `pollIntervalMs` (both integer milliseconds, per the 2026-05-07 SEP-2663 commit aligning duration suffixes). `parentTaskId` removed.
 - **Mcp-Name HTTP header** (SEP-2243) carries the new taskId on task-creating responses.
 - **Error semantics**: tool errors → `status: completed, isError: true`. Protocol errors → `status: failed` + `error` object.
 - **`tasks/result` and `tasks/list` removed** — `tasks/get` is the single read endpoint.
