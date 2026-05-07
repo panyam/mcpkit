@@ -103,7 +103,7 @@ type Dispatcher struct {
 	// handler runs. Failures surface as -32602 with structured `data`
 	// (`{reason, actualSize, maxSize}` for oversized; `{reason, mediaType,
 	// accept, ...}` for MIME mismatches) — the wire shape is frozen by
-	// `conformance/file-inputs/`. Set via WithFileInputValidation().
+	// panyam/mcpconformance `pending` (`src/scenarios/server/file-inputs/`). Set via WithFileInputValidation().
 	validateFileInputs bool
 
 	// tasksCap is the tasks capability to advertise during initialize.
@@ -435,7 +435,7 @@ func (d *Dispatcher) handleToolsList(id json.RawMessage, params json.RawMessage)
 	// SEP-2356: clients that did not declare the `fileInputs` capability
 	// MUST NOT see the `x-mcp-file` keyword. Strip it (keeping the
 	// underlying string/uri property visible so the tool stays callable
-	// on legacy clients). Wire shape locked by `conformance/file-inputs/`.
+	// on legacy clients). Wire shape locked by panyam/mcpconformance `pending` (`src/scenarios/server/file-inputs/`).
 	if d.clientCaps.FileInputs == nil {
 		page = stripFileInputsFromTools(page)
 	}
@@ -496,7 +496,7 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, pa
 	// `x-mcp-file` properties (single string/uri AND array-items shapes)
 	// and run `core.ValidateFileInput` on each matching argument. Failures
 	// surface as -32602 with the structured `data` payload locked by the
-	// `conformance/file-inputs/` suite. Skipped unless
+	// panyam/mcpconformance `pending` (`src/scenarios/server/file-inputs/`) suite. Skipped unless
 	// WithFileInputValidation() is enabled.
 	if d.validateFileInputs {
 		if resp := d.validateFileInputArgs(id, entry.def.InputSchema, envelope.Arguments); resp != nil {

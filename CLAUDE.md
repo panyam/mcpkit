@@ -12,10 +12,10 @@ make test-e2e          # E2E tests (auth + apps)
 make testconf          # MCP conformance suite (needs Node.js)
 make testconfauth      # Auth conformance (client OAuth)
 make testconf-tasks    # Tasks v1 conformance (27 scenarios, local)
-make testconf-tasks-v2 # SEP-2663 — runs upstream fork at MCPCONFORMANCE_PATH + mcpkit-local stricter sentinel
-make testconf-mrtr     # SEP-2322 — runs upstream fork at MCPCONFORMANCE_PATH + mcpkit-local stricter sentinel
-make testconf-list-ttl # List-TTL conformance (5 scenarios, SEP-2549)
-make testconf-file-inputs # File-inputs conformance (7 scenarios, SEP-2356; 7/7 green)
+make testconf-tasks-v2 # SEP-2663 — fork @ MCPCONFORMANCE_TASKS_V2_PATH + mcpkit-local stricter sentinel
+make testconf-mrtr     # SEP-2322 — fork @ MCPCONFORMANCE_MRTR_PATH + mcpkit-local stricter sentinel
+make testconf-list-ttl # SEP-2549 — fork @ MCPCONFORMANCE_LIST_TTL_PATH (5 checks, 3 fixtures)
+make testconf-file-inputs # SEP-2356 — fork @ MCPCONFORMANCE_FILE_INPUTS_PATH (7 checks)
 make testall           # Everything (12 stages) + Keycloak + HTML report
 make audit             # govulncheck + gosec + gitleaks + race
 make tag-push V=vX.Y.Z # Tag root + all sub-modules and push
@@ -55,7 +55,7 @@ Project-wide: `CONSTRAINTS.md`. Per-package: `core/CONSTRAINTS.md`, `server/CONS
 - **Demokit non-interactive + browser steps**: Steps that open a browser and expect user action will fail in `--non-interactive` mode. Interactive mode is the primary path.
 - **Three-state TTL needs `*int` + omitempty**: SEP-2549 distinguishes `nil` (no guidance), `&0` (do not cache), `&N>0` (fresh for N seconds). Plain `int` with omitempty would conflate `nil` with `&0`. Same pattern fits any spec field with explicit-zero semantics.
 - **Conformance suites are brand-neutral**: `conformance/*/` assert what the spec says, not what mcpkit does. mcpkit-specific behavior (e.g., echoing SEP-2243 routing headers on responses) belongs in `server/*_test.go`, not in conformance scenarios. The conformance suites are the marketing — keep them framed as "what any server must do."
-- **`MCPCONFORMANCE_PATH`** (default `$HOME/newstack/mcpkit/conf-template`): tasks-v2 + MRTR conformance run from a worktree of the [`panyam/mcpconformance`](https://github.com/panyam/mcpconformance) fork (default points at `feat/tasks-mrtr-extension`). `make testconf-tasks-v2` / `testconf-mrtr` shell out into that path. Override the var when running scenarios from another feat branch (e.g., `MCPCONFORMANCE_PATH=$HOME/newstack/mcpkit/conf-pending make ...`); the targets fail-fast with a remediation message if the path is missing.
+- **`MCPCONFORMANCE_*_PATH` (per-suite)**: each `testconf-*` target points at its own worktree of the [`panyam/mcpconformance`](https://github.com/panyam/mcpconformance) fork because different SEPs live on different branches while their upstream PRs are still draft. Defaults (resolved relative to the Makefile dir): `MCPCONFORMANCE_TASKS_V2_PATH` and `MCPCONFORMANCE_MRTR_PATH` → `../conf-template` (`feat/tasks-mrtr-extension`); `MCPCONFORMANCE_FILE_INPUTS_PATH` and `MCPCONFORMANCE_LIST_TTL_PATH` → `../conf-pending` (`pending`). Override per-invocation when a SEP splits to its own branch waiting upstream approval. Each target fail-fasts with a remediation message if its path is missing.
 
 Module-specific gotchas live in their READMEs.
 
