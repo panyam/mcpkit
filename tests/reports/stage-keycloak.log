@@ -1,0 +1,29 @@
+=== Stage 9/9: keycloak (make testkcl-auto) ===
+Started: Wed May  6 18:20:21 PDT 2026
+=== RUN   TestKeycloak_MCPServer_ValidToken
+--- PASS: TestKeycloak_MCPServer_ValidToken (0.03s)
+=== RUN   TestKeycloak_MCPServer_TamperedToken
+--- PASS: TestKeycloak_MCPServer_TamperedToken (0.01s)
+=== RUN   TestKeycloak_MCPServer_ScopeAllowed
+--- PASS: TestKeycloak_MCPServer_ScopeAllowed (0.01s)
+=== RUN   TestKeycloak_MCPServer_ScopeDenied
+--- PASS: TestKeycloak_MCPServer_ScopeDenied (0.01s)
+=== RUN   TestKeycloak_MCPServer_PRM
+--- PASS: TestKeycloak_MCPServer_PRM (0.01s)
+=== RUN   TestKeycloak_MCPServer_WWWAuthenticate
+--- PASS: TestKeycloak_MCPServer_WWWAuthenticate (0.01s)
+=== RUN   TestKeycloak_MCPServer_PasswordGrant
+--- PASS: TestKeycloak_MCPServer_PasswordGrant (0.04s)
+=== RUN   TestKeycloak_PublicMethods_DiscoverWithoutAuth
+--- PASS: TestKeycloak_PublicMethods_DiscoverWithoutAuth (0.01s)
+=== RUN   TestKeycloak_PublicMethods_ToolCallRequiresAuth
+--- PASS: TestKeycloak_PublicMethods_ToolCallRequiresAuth (0.01s)
+=== RUN   TestKeycloak_SessionHijack_DifferentUserRejected
+--- PASS: TestKeycloak_SessionHijack_DifferentUserRejected (0.06s)
+=== RUN   TestKeycloak_SessionHijack_SameUserAllowed
+--- PASS: TestKeycloak_SessionHijack_SameUserAllowed (0.04s)
+=== RUN   TestKeycloak_TokenRefresh_PasswordGrant
+--- PASS: TestKeycloak_TokenRefresh_PasswordGrant (0.04s)
+PASS
+ok  	github.com/panyam/mcpkit/tests/keycloak	0.720s
+Finished: Wed May  6 18:20:23 PDT 2026 (elapsed 2s)

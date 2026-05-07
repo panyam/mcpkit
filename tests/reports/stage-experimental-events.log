@@ -1,0 +1,6 @@
+=== Stage 7a/9: experimental-events (make test-experimental-events) ===
+Started: Wed May  6 18:17:53 PDT 2026
+/Library/Developer/CommandLineTools/usr/bin/make -C experimental test-events
+cd /Users/dzshrh/newstack/mcpkit/tasks/experimental/ext/events && go test ./... -count=1 -timeout 120s
+ok  	github.com/panyam/mcpkit/experimental/ext/events	67.855s
+Finished: Wed May  6 18:19:01 PDT 2026 (elapsed 69s)

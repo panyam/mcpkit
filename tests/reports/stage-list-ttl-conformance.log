@@ -1,0 +1,22 @@
+=== Stage 8f/9: list-ttl-conformance (make testconf-list-ttl) ===
+Started: Wed May  6 18:20:10 PDT 2026
+/Library/Developer/CommandLineTools/usr/bin/make -C conformance testconf-list-ttl
+(cd /Users/dzshrh/newstack/mcpkit/conf-pending && npm install --silent && \
+		LIST_TTL_POSITIVE_URL=http://localhost:18094/mcp \
+		LIST_TTL_POSITIVE_CMD="/Users/dzshrh/newstack/mcpkit/tasks/examples/list-ttl/list-ttl-demo --serve --addr=:18094 --ttl=60" \
+		LIST_TTL_ZERO_URL=http://localhost:18095/mcp \
+		LIST_TTL_ZERO_CMD="/Users/dzshrh/newstack/mcpkit/tasks/examples/list-ttl/list-ttl-demo --serve --addr=:18095 --ttl=0" \
+		LIST_TTL_UNSET_URL=http://localhost:18096/mcp \
+		LIST_TTL_UNSET_CMD="/Users/dzshrh/newstack/mcpkit/tasks/examples/list-ttl/list-ttl-demo --serve --addr=:18096" \
+		npx vitest run src/scenarios/server/list-ttl/list-ttl.test.ts)
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.5 [39m[90m/Users/dzshrh/newstack/mcpkit/conf-pending[39m
+
+ [32m✓[39m src/scenarios/server/list-ttl/list-ttl.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 5240[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m   Start at [22m 18:20:12
+[2m   Duration [22m 5.51s[2m (transform 32ms, setup 0ms, import 164ms, tests 5.24s, environment 0ms)[22m
+
+Finished: Wed May  6 18:20:18 PDT 2026 (elapsed 8s)
