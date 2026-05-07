@@ -129,12 +129,16 @@ testconf-auth-server: ## Run server-side auth conformance — fork-based scenari
 	done; \
 	BOOT=$$(curl -sf http://localhost:18098/demo/bootstrap); \
 	TOK_VALID=$$(echo "$$BOOT" | python3 -c 'import json,sys;print(json.load(sys.stdin)["tok_read"])' 2>/dev/null); \
+	TOK_RW=$$(echo "$$BOOT" | python3 -c 'import json,sys;print(json.load(sys.stdin)["tok_read_write"])' 2>/dev/null); \
+	TOK_FULL=$$(echo "$$BOOT" | python3 -c 'import json,sys;print(json.load(sys.stdin)["tok_all"])' 2>/dev/null); \
 	TOK_EXPIRED=$$(echo "$$BOOT" | python3 -c 'import json,sys;print(json.load(sys.stdin)["tok_expired"])' 2>/dev/null); \
 	TOK_WRONG_AUD=$$(echo "$$BOOT" | python3 -c 'import json,sys;print(json.load(sys.stdin)["tok_wrong_audience"])' 2>/dev/null); \
 	TOK_WRONG_ISS=$$(echo "$$BOOT" | python3 -c 'import json,sys;print(json.load(sys.stdin)["tok_wrong_issuer"])' 2>/dev/null); \
 	(cd $(MCPCONFORMANCE_AUTH_PATH) && \
 	  AUTH_SERVER_URL=http://localhost:18098/mcp \
 	  AUTH_VALID_TOKEN="$$TOK_VALID" \
+	  AUTH_READWRITE_TOKEN="$$TOK_RW" \
+	  AUTH_FULL_TOKEN="$$TOK_FULL" \
 	  AUTH_EXPIRED_TOKEN="$$TOK_EXPIRED" \
 	  AUTH_WRONG_AUDIENCE_TOKEN="$$TOK_WRONG_AUD" \
 	  AUTH_WRONG_ISSUER_TOKEN="$$TOK_WRONG_ISS" \
