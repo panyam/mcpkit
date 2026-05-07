@@ -23,15 +23,17 @@ MCPCONFORMANCE_TASKS_V2_PATH    ?= $(abspath $(REPO_ROOT)/../conf-template)
 MCPCONFORMANCE_MRTR_PATH        ?= $(abspath $(REPO_ROOT)/../conf-template)
 MCPCONFORMANCE_FILE_INPUTS_PATH ?= $(abspath $(REPO_ROOT)/../conf-pending)
 MCPCONFORMANCE_LIST_TTL_PATH    ?= $(abspath $(REPO_ROOT)/../conf-pending)
+MCPCONFORMANCE_AUTH_PATH        ?= $(abspath $(REPO_ROOT)/../conf-pending)
 
 .PHONY: test testconfall testconf testconfauth \
         testconf-tasks testconf-tasks-v2 testconf-mrtr \
-        testconf-list-ttl testconf-file-inputs testconf-elicitation help
+        testconf-list-ttl testconf-file-inputs testconf-auth-server \
+        testconf-elicitation help
 
 # Default umbrella — runs every conformance suite. Fork-based suites
 # require their MCPCONFORMANCE_*_PATH worktree to exist (each target
 # fail-fasts with a remediation message if missing).
-test: testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-list-ttl testconf-file-inputs ## Run all conformance suites (needs fork worktrees for SEP scenarios)
+test: testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-list-ttl testconf-file-inputs testconf-auth-server ## Run all conformance suites (needs fork worktrees for SEP scenarios)
 
 testconfall: testconf testconfauth ## Run base + auth conformance only
 
@@ -104,6 +106,19 @@ testconf-file-inputs: ## Run SEP-2356 file-inputs conformance — fork-based sce
 		FILE_INPUTS_SERVER_URL=http://localhost:18097/mcp \
 		FILE_INPUTS_SERVER_CMD="$(REPO_ROOT)/examples/file-inputs/file-inputs-demo --serve --addr=:18097" \
 		npx vitest run src/scenarios/server/file-inputs/file-inputs.test.ts)
+
+testconf-auth-server: ## Run server-side auth conformance — fork-based scenarios (RFC 9728 PRM + RFC 8414 AS metadata; auto-spawns fixture)
+	@if [ ! -d "$(MCPCONFORMANCE_AUTH_PATH)" ]; then \
+		echo "MCPCONFORMANCE_AUTH_PATH=$(MCPCONFORMANCE_AUTH_PATH) does not exist."; \
+		echo "Clone https://github.com/panyam/mcpconformance there or set MCPCONFORMANCE_AUTH_PATH=<path-to-clone>."; \
+		echo "Default expects the 'pending' branch checked out at ../conf-pending."; \
+		exit 1; \
+	fi
+	@(cd $(REPO_ROOT)/examples/auth && go build -o auth-demo .)
+	(cd $(MCPCONFORMANCE_AUTH_PATH) && npm install --silent && \
+		AUTH_SERVER_URL=http://localhost:18098/mcp \
+		AUTH_SERVER_CMD="$(REPO_ROOT)/examples/auth/auth-demo --serve --addr=:18098" \
+		npx vitest run src/scenarios/server/auth/auth.test.ts)
 
 testconf-elicitation: ## Run elicitation conformance suite (SEP-1036 URL mode + form, requires Node.js, target server must be running)
 	cd $(CONFORMANCE_DIR) && npm install --silent && \
