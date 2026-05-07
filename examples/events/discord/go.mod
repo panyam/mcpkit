@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/examples/events/discord
 
-go 1.26.2
+go 1.26.3
 
 replace (
 	github.com/panyam/mcpkit => ../../..
@@ -45,7 +45,7 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/panyam/gocurrent v0.1.0 // indirect
 	github.com/panyam/goutils v0.1.13 // indirect
-	github.com/panyam/oneauth v0.0.79 // indirect
+	github.com/panyam/oneauth v0.0.82 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
