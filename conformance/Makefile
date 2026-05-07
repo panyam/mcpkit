@@ -107,7 +107,7 @@ testconf-file-inputs: ## Run SEP-2356 file-inputs conformance — fork-based sce
 		FILE_INPUTS_SERVER_CMD="$(REPO_ROOT)/examples/file-inputs/file-inputs-demo --serve --addr=:18097" \
 		npx vitest run src/scenarios/server/file-inputs/file-inputs.test.ts)
 
-testconf-auth-server: ## Run server-side auth conformance — fork-based scenarios (RFC 9728 PRM + RFC 8414 AS metadata; auto-spawns fixture)
+testconf-auth-server: ## Run server-side auth conformance — fork-based scenarios (RFC 9728 PRM + RFC 8414 AS metadata + RFC 6750 Bearer enforcement)
 	@if [ ! -d "$(MCPCONFORMANCE_AUTH_PATH)" ]; then \
 		echo "MCPCONFORMANCE_AUTH_PATH=$(MCPCONFORMANCE_AUTH_PATH) does not exist."; \
 		echo "Clone https://github.com/panyam/mcpconformance there or set MCPCONFORMANCE_AUTH_PATH=<path-to-clone>."; \
@@ -115,10 +115,26 @@ testconf-auth-server: ## Run server-side auth conformance — fork-based scenari
 		exit 1; \
 	fi
 	@(cd $(REPO_ROOT)/examples/auth && go build -o auth-demo .)
-	(cd $(MCPCONFORMANCE_AUTH_PATH) && npm install --silent && \
-		AUTH_SERVER_URL=http://localhost:18098/mcp \
-		AUTH_SERVER_CMD="$(REPO_ROOT)/examples/auth/auth-demo --serve --addr=:18098" \
-		npx vitest run src/scenarios/server/auth/auth.test.ts)
+	@(cd $(MCPCONFORMANCE_AUTH_PATH) && npm install --silent)
+	# Manual spawn: Phase 2's tampered/valid-token checks need a real
+	# token from the fixture's bootstrap endpoint, so we spawn here
+	# (instead of letting vitest auto-spawn) and curl /demo/bootstrap
+	# before invoking the scenarios.
+	@$(REPO_ROOT)/examples/auth/auth-demo --serve --addr=:18098 > /tmp/auth-demo.log 2>&1 & \
+	PID=$$!; \
+	for i in 1 2 3 4 5 6 7 8 9 10; do \
+	  curl -sf http://localhost:18098/.well-known/oauth-protected-resource > /dev/null 2>&1 && break; \
+	  sleep 0.5; \
+	done; \
+	TOK=$$(curl -sf http://localhost:18098/demo/bootstrap | python3 -c 'import json,sys;print(json.load(sys.stdin)["tok_read"])' 2>/dev/null); \
+	(cd $(MCPCONFORMANCE_AUTH_PATH) && \
+	  AUTH_SERVER_URL=http://localhost:18098/mcp \
+	  AUTH_VALID_TOKEN="$$TOK" \
+	  npx vitest run src/scenarios/server/auth/auth.test.ts); \
+	RC=$$?; \
+	kill $$PID 2>/dev/null; \
+	wait $$PID 2>/dev/null; \
+	exit $$RC
 
 testconf-elicitation: ## Run elicitation conformance suite (SEP-1036 URL mode + form, requires Node.js, target server must be running)
 	cd $(CONFORMANCE_DIR) && npm install --silent && \
