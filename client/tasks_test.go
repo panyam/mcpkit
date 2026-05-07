@@ -211,7 +211,7 @@ func TestWaitForTask(t *testing.T) {
 }
 
 // TestWaitForTask_HonorsServerPollHint verifies the loop respects the
-// server's PollIntervalMilliseconds. We set DefaultPollMs=50 in the fixture,
+// server's PollIntervalMs. We set DefaultPollMs=50 in the fixture,
 // kick off a task that takes ~150ms, and assert the wait stretches at least
 // across one server-suggested interval (i.e., we don't poll the server in a
 // tight loop).
@@ -247,7 +247,7 @@ func TestWaitForTask_HonorsServerPollHint(t *testing.T) {
 	// busy-looped, elapsed would be ~equal to the work duration (150ms).
 	// With a 50ms hint we expect elapsed ≥ ~200ms (work + at least one poll).
 	if elapsed < 100*time.Millisecond {
-		t.Errorf("elapsed %s suspiciously short — likely busy-looped instead of honoring server's PollIntervalMilliseconds", elapsed)
+		t.Errorf("elapsed %s suspiciously short — likely busy-looped instead of honoring server's PollIntervalMs", elapsed)
 	}
 }
 
@@ -282,6 +282,53 @@ func TestWaitForTask_RespectsCallerOverride(t *testing.T) {
 		// With a 10ms override + ~20ms work we should finish quickly.
 		// The server's 50ms hint should NOT have applied.
 		t.Errorf("elapsed %s — caller's 10ms override doesn't seem to have taken effect over the server's 50ms hint", elapsed)
+	}
+}
+
+// TestWaitForTask_AbortOnCancel verifies the SEP-2663 commit a1ed0703
+// guidance: a client may stop polling the moment it issues tasks/cancel
+// rather than waiting for the server to surface "cancelled" status.
+//
+// The pattern is to derive a child context, kick off CancelTask, then
+// cancel the context. WaitForTask returns context.Canceled on the next
+// select point without waiting for the task's "cancelled" status to land.
+func TestWaitForTask_AbortOnCancel(t *testing.T) {
+	url, _ := newTaskV2TestServer(t)
+	c := connectV2TaskClient(t, url)
+
+	// slow-task blocks until unblock fires; we never close it from this test
+	// so the task stays in "working" indefinitely. The point of the test is
+	// that WaitForTask exits long before the task ever transitions.
+	res, err := client.ToolCall(c, "slow-task", map[string]any{})
+	if err != nil || !res.IsTask() {
+		t.Fatalf("ToolCall(slow-task): err=%v res=%+v", err, res)
+	}
+	taskID := res.Task.TaskID
+
+	pollCtx, stopPoll := context.WithCancel(context.Background())
+
+	// Cancel the task and stop polling after one server-suggested poll
+	// interval so the test exercises the abort path during a select wait.
+	go func() {
+		time.Sleep(75 * time.Millisecond)
+		_ = client.CancelTask(c, taskID)
+		stopPoll()
+	}()
+
+	start := time.Now()
+	dt, err := client.WaitForTask(pollCtx, c, taskID)
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatalf("WaitForTask returned (dt=%+v, nil) — expected context.Canceled", dt)
+	}
+	if err != context.Canceled {
+		t.Fatalf("WaitForTask err = %v, want context.Canceled", err)
+	}
+	// The task is still "working" on the server (slow-task never released).
+	// The point: we did NOT wait for it to flip to "cancelled".
+	if elapsed > time.Second {
+		t.Errorf("WaitForTask took %s after cancel — should abort within one poll iteration", elapsed)
 	}
 }
 

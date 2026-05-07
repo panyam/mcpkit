@@ -18,12 +18,13 @@ type TasksConfig struct {
 	// Server is the MCP server to register tasks on.
 	Server *Server
 
-	// DefaultTTLSeconds is the default task TTL in seconds (v2 uses seconds, not ms).
-	// Default: 300 (5 minutes).
-	DefaultTTLSeconds int
+	// DefaultTTLMs is the default task TTL in integer milliseconds. Per
+	// SEP-2663 the wire surfaces ttlMs and the store also uses ms, so this
+	// value flows through unchanged. Default: 300000 (5 minutes).
+	DefaultTTLMs int
 
 	// DefaultPollMs is the suggested poll interval in milliseconds,
-	// returned to clients in CreateTaskResult. Default: 1000 (1 second).
+	// returned to clients in CreateTaskResult as pollIntervalMs. Default: 1000 (1 second).
 	DefaultPollMs int
 
 	// RequestStateKey is the HMAC-SHA256 key the server uses to sign and
@@ -48,8 +49,8 @@ func (c *TasksConfig) defaults() {
 	if c.Store == nil {
 		c.Store = NewInMemoryStore()
 	}
-	if c.DefaultTTLSeconds <= 0 {
-		c.DefaultTTLSeconds = 300
+	if c.DefaultTTLMs <= 0 {
+		c.DefaultTTLMs = 300000
 	}
 	if c.DefaultPollMs <= 0 {
 		c.DefaultPollMs = 1000
@@ -457,9 +458,9 @@ func taskV2Middleware(reg *Registry, rt *v2TaskRuntime, cfg TasksConfig) Middlew
 		taskID := generateTaskID()
 		now := time.Now().UTC().Format(time.RFC3339)
 
-		// v2: TTL in seconds for the wire, but the shared TaskStore uses ms internally.
-		ttlSec := cfg.DefaultTTLSeconds
-		ttlMs := ttlSec * 1000
+		// SEP-2663 wire and TaskStore both use milliseconds, so the config
+		// value flows through unchanged in either direction.
+		ttlMs := cfg.DefaultTTLMs
 		pollMs := cfg.DefaultPollMs
 
 		info := core.TaskInfo{
@@ -573,7 +574,7 @@ func taskV2Middleware(reg *Registry, rt *v2TaskRuntime, cfg TasksConfig) Middlew
 		// MUST NOT carry result/error/inputRequests/requestState (SEP-2663 —
 		// those belong on DetailedTask returned by tasks/get).
 		wireTask := toTaskInfoV2(info)
-		wireTask.TTLSeconds = core.IntPtr(ttlSec)
+		wireTask.TTLMs = core.IntPtr(ttlMs)
 		return core.NewResponse(req.ID, core.CreateTaskResult{
 			ResultType: core.ResultTypeTask,
 			TaskInfoV2: wireTask,
@@ -749,10 +750,10 @@ func makeV2CancelHandler(rt *v2TaskRuntime) MethodHandler {
 
 // --- Helpers ---
 
-// toTaskInfoV2 converts the internal TaskInfo (TTL stored as milliseconds) to
-// the v2 wire shape (ttlSeconds, pollIntervalMilliseconds; no parentTaskId).
-// nil TTL stays nil ("unlimited"); positive ms round down to whole seconds
-// with a 1-second floor so sub-second TTLs don't collapse to "expired".
+// toTaskInfoV2 converts the internal TaskInfo to the v2 wire shape (ttlMs,
+// pollIntervalMs, no parentTaskId). The store uses milliseconds internally
+// and the wire surface uses milliseconds, so this is a pass-through with
+// no unit conversion. nil TTL stays nil ("unlimited") per SEP-2663.
 func toTaskInfoV2(info core.TaskInfo) core.TaskInfoV2 {
 	out := core.TaskInfoV2{
 		TaskID:        info.TaskID,
@@ -762,15 +763,12 @@ func toTaskInfoV2(info core.TaskInfo) core.TaskInfoV2 {
 		LastUpdatedAt: info.LastUpdatedAt,
 	}
 	if info.TTL != nil && *info.TTL > 0 {
-		sec := *info.TTL / 1000
-		if sec <= 0 {
-			sec = 1
-		}
-		out.TTLSeconds = &sec
+		ms := *info.TTL
+		out.TTLMs = &ms
 	}
 	if info.PollInterval > 0 {
 		pi := info.PollInterval
-		out.PollIntervalMilliseconds = &pi
+		out.PollIntervalMs = &pi
 	}
 	return out
 }
@@ -783,11 +781,9 @@ func toTaskInfoV2(info core.TaskInfo) core.TaskInfoV2 {
 // from notifications so a stateless deployment can pick the conversation
 // back up without an extra tasks/get round-trip.
 //
-// Wire fields: payload embeds TaskInfoV2, so the JSON keys are `ttlSeconds`
-// and `pollIntervalMilliseconds` (renamed with units per pja-ant's accepted
-// feedback). The spec's notification example in commit ed4c83e still shows
-// the older `ttl`/`pollInterval` keys — that example is stale; the
-// normative TaskInfo schema uses the renamed fields and our output matches.
+// Wire fields: payload embeds TaskInfoV2, so the JSON keys are `ttlMs` and
+// `pollIntervalMs` per the 2026-05-07 SEP-2663 commit (62758914) that aligned
+// all duration fields on the Ms suffix and integer milliseconds.
 //
 // Stream routing (Streamable HTTP): the bgCtx passed in here was produced
 // by core.DetachForBackground in taskV2Middleware, which swaps the dead

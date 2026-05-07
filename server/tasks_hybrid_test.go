@@ -92,7 +92,7 @@ func TestHybrid_V1ClientSeesV1Shapes(t *testing.T) {
 	if created.Task.TaskID == "" {
 		t.Fatal("v1 task creation should yield a taskId")
 	}
-	// v1 wire: TaskInfo with `ttl` (ms) at root, no `ttlSeconds`.
+	// v1 wire: TaskInfo with `ttl` (ms) at root, no `ttlMs`.
 	if created.Task.TTL == nil || *created.Task.TTL <= 0 {
 		t.Errorf("v1 CreateTaskResultV1.task.ttl should be positive ms; got %v", created.Task.TTL)
 	}
@@ -139,9 +139,9 @@ func TestHybrid_V2ClientSeesV2Shapes(t *testing.T) {
 		t.Errorf("resultType = %q, want %q", res.Task.ResultType, core.ResultTypeTask)
 	}
 	// v2 wire: TaskInfoV2 fields embedded directly on CreateTaskResult, with
-	// `ttlSeconds` (no v1 `ttl` ms field).
-	if res.Task.TTLSeconds == nil || *res.Task.TTLSeconds <= 0 {
-		t.Errorf("v2 ttlSeconds should be positive; got %v", res.Task.TTLSeconds)
+	// `ttlMs` (no v1 `ttl` ms field).
+	if res.Task.TTLMs == nil || *res.Task.TTLMs <= 0 {
+		t.Errorf("v2 ttlMs should be positive; got %v", res.Task.TTLMs)
 	}
 
 	// v2 tasks/get returns DetailedTask with inlined result.
@@ -209,7 +209,7 @@ func TestHybrid_V2ExtensionTakesPriority(t *testing.T) {
 	if ctr.ResultType != core.ResultTypeTask {
 		t.Errorf("resultType = %q, want %q (v2 should win when extension declared)", ctr.ResultType, core.ResultTypeTask)
 	}
-	if ctr.TTLSeconds == nil {
-		t.Errorf("expected v2 wire shape (TTLSeconds present); got %+v", ctr)
+	if ctr.TTLMs == nil {
+		t.Errorf("expected v2 wire shape (TTLMs present); got %+v", ctr)
 	}
 }

@@ -42,7 +42,7 @@ func runDemo() {
 		"- **`tasks/get` returns `DetailedTask`** with inlined `result` / `error` / `inputRequests` / `requestState` per status. No separate `tasks/result` round-trip.",
 		"- **`tasks/cancel` returns an empty ack**. Observe the resulting `cancelled` status with the next `tasks/get`.",
 		"- **`tasks/update` is the SEP-2663 resume path** for MRTR input rounds — the client delivers `inputResponses` keyed to whatever `inputRequests` the server emitted.",
-		"- **Wire fields renamed**: `ttlSeconds`, `pollIntervalMilliseconds`. `parentTaskId` removed.",
+		"- **Wire fields renamed**: `ttlMs`, `pollIntervalMs` (both integer milliseconds, per the 2026-05-07 SEP-2663 commit aligning duration suffixes). `parentTaskId` removed.",
 		"- **Mcp-Name HTTP header** (SEP-2243) carries the new taskId on task-creating responses.",
 		"- **Error semantics**: tool errors → `status: completed, isError: true`. Protocol errors → `status: failed` + `error` object.",
 		"- **`tasks/result` and `tasks/list` removed** — `tasks/get` is the single read endpoint.",
@@ -99,7 +99,7 @@ func runDemo() {
 	// --- Step 3: Polymorphic tools/call — task branch ---
 	demo.Step("slow_compute (no task hint!) — server creates a task → ToolCall returns Task variant").
 		Arrow("Host", "Server", "tools/call: slow_compute {seconds: 3}").
-		DashedArrow("Server", "Host", "{resultType: \"task\", taskId, status: working, ttlSeconds, ...}\n+ Mcp-Name: <taskId> response header (SEP-2243)").
+		DashedArrow("Server", "Host", "{resultType: \"task\", taskId, status: working, ttlMs, ...}\n+ Mcp-Name: <taskId> response header (SEP-2243)").
 		Note("Critical v2 semantics: no `task` param in the request — the server elects to create a task because slow_compute has TaskSupport=optional. The discriminator `resultType: \"task\"` lights up `result.IsTask()` on the helper. The Mcp-Name HTTP header carries the same taskId so HTTP routing/observability can key off it without parsing the body.").
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			var slowTaskID string
@@ -116,14 +116,14 @@ func runDemo() {
 			fmt.Printf("    resultType:   %s\n", res.Task.ResultType)
 			fmt.Printf("    taskId:        %s\n", slowTaskID)
 			fmt.Printf("    status:        %s\n", res.Task.Status)
-			if res.Task.TTLSeconds != nil {
-				fmt.Printf("    ttlSeconds:    %d\n", *res.Task.TTLSeconds)
+			if res.Task.TTLMs != nil {
+				fmt.Printf("    ttlMs:    %d\n", *res.Task.TTLMs)
 			}
-			if res.Task.PollIntervalMilliseconds != nil {
-				fmt.Printf("    pollIntervalMilliseconds: %d\n", *res.Task.PollIntervalMilliseconds)
+			if res.Task.PollIntervalMs != nil {
+				fmt.Printf("    pollIntervalMs: %d\n", *res.Task.PollIntervalMs)
 			}
 
-			// --- Step 4 (chained): WaitForTask honors PollIntervalMilliseconds ---
+			// --- Step 4 (chained): WaitForTask honors PollIntervalMs ---
 			bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			fmt.Printf("    waiting for terminal via client.WaitForTask ...\n")
