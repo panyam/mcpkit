@@ -148,7 +148,7 @@ func runDemo() {
 		"- Server option: `server.WithListTTL(seconds int)` — server/server.go",
 		"- Wire types: `core.ToolsListResult.TTL` / PromptsListResult / ResourcesListResult / ResourceTemplatesListResult — core/{tool,prompt,resource}.go",
 		"- Client typed helpers: `client.ListToolsPage` / ListPromptsPage / ListResourcesPage / ListResourceTemplatesPage — client/iterators.go",
-		"- Conformance: `conformance/list-ttl/scenarios.test.ts` (5 scenarios across 3 server processes; `make testconf-list-ttl` spawns + tears down)",
+		"- Conformance: SEP-2549 scenarios on panyam/mcpconformance `pending` (`src/scenarios/server/list-ttl/`) — 5 checks across 3 server processes; `make testconf-list-ttl` spawns + tears down",
 		"- SEP-2549 spec: https://github.com/modelcontextprotocol/specification/pull/2549",
 	)
 

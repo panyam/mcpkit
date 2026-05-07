@@ -65,11 +65,12 @@ unset default).
 
 ## Conformance fixture
 
-The same binary is reused as the fixture for the
-[`conformance/list-ttl/`](../../conformance/list-ttl/) suite, which spawns
-three independent processes (one per TTL state) in parallel so all three
-wire shapes flow through a real dispatcher in a single test run. Run via
-`make testconf-list-ttl` from the repo root.
+The same binary is reused as the fixture for the SEP-2549 conformance
+suite on the [panyam/mcpconformance `pending` branch](https://github.com/panyam/mcpconformance/tree/pending/src/scenarios/server/list-ttl).
+The runner spawns three independent processes (one per TTL state) in
+parallel so all three wire shapes flow through a real dispatcher in a
+single test run. Drive it via `make testconf-list-ttl` from the repo
+root.
 
 ## Where to look in the code
 
@@ -78,5 +79,5 @@ wire shapes flow through a real dispatcher in a single test run. Run via
 | Server option | [`server.WithListTTL`](../../server/server.go) |
 | Wire types | [`core.ToolsListResult.TTL`](../../core/tool.go), `PromptsListResult` ([`core/prompt.go`](../../core/prompt.go)), `ResourcesListResult` / `ResourceTemplatesListResult` ([`core/resource.go`](../../core/resource.go)) |
 | Client helpers | [`client.ListToolsPage`](../../client/iterators.go) and the three siblings |
-| Conformance | [`conformance/list-ttl/scenarios.test.ts`](../../conformance/list-ttl/scenarios.test.ts) |
+| Conformance | [SEP-2549 scenarios on panyam/mcpconformance `pending`](https://github.com/panyam/mcpconformance/tree/pending/src/scenarios/server/list-ttl) — drive via `make testconf-list-ttl` |
 | SEP | [SEP-2549 spec PR](https://github.com/modelcontextprotocol/specification/pull/2549) |

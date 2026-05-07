@@ -11,7 +11,8 @@
 // each list endpoint via the new client helpers and prints the TTL.
 //
 // The same binary doubles as the conformance fixture: pass `--serve`
-// to run the server. The conformance/list-ttl/ suite spawns three
+// to run the server. The SEP-2549 conformance suite (panyam/mcpconformance
+// `pending` branch, `src/scenarios/server/list-ttl/`) spawns three
 // processes (positive / zero / unset) via the `--ttl` flag.
 package main
 

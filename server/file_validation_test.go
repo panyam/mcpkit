@@ -43,7 +43,7 @@ func newFileInputTestServer(t *testing.T) *server.Server {
 
 // verifies: WithFileInputValidation enabled + a 2 KiB payload against a
 // 1 KiB cap returns -32602 with the wire shape pinned by
-// `conformance/file-inputs/scenarios.test.ts`:
+// panyam/mcpconformance `pending` (`src/scenarios/server/file-inputs/`):
 // `data: {reason: "file_too_large", field, actualSize, maxSize}`.
 func TestFileInputValidation_OversizedReturns32602(t *testing.T) {
 	srv := newFileInputTestServer(t)
