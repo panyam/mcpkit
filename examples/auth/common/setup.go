@@ -5,6 +5,8 @@
 package common
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
 	"fmt"
 	"log"
 	"strings"
@@ -14,6 +16,7 @@ import (
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/ext/auth"
 	"github.com/panyam/mcpkit/server"
+	"github.com/panyam/oneauth/apiauth"
 	"github.com/panyam/oneauth/testutil"
 )
 
@@ -26,8 +29,31 @@ type Env struct {
 
 // NewEnv creates an in-process authorization server with JWKS + token endpoint.
 // Call SetAudience(url) after the MCP server starts to bind tokens to the server URL.
+//
+// The fixture advertises RFC 9207 (iss parameter) and the RFC 7523 §2.1
+// jwt-bearer + RFC 8693 token-exchange grants by default — this is what
+// the panyam/mcpconformance MCP-auth conformance suite Phase 3b/3c
+// metadata-layer checks against. A throwaway "test-upstream-idp" key is
+// generated per-process so the trusted-issuer registry is non-empty
+// (which both wires the handler and auto-advertises the grants); no
+// JWTs are minted for that issuer here — this is the metadata-layer
+// turn-on, not the flow-layer (which awaits the conformance suite's
+// OAuth flow-driver).
 func NewEnv(scopes []string) *Env {
-	as, err := testutil.NewAuthServer(testutil.WithScopes(scopes))
+	upstreamKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	as, err := testutil.NewAuthServer(
+		testutil.WithScopes(scopes),
+		testutil.WithIssParameterSupported(true),
+		testutil.WithTrustedAssertionIssuers([]apiauth.TrustedAssertionIssuer{{
+			Issuer:             "https://test-upstream-idp.example.invalid",
+			PublicKey:          &upstreamKey.PublicKey,
+			AcceptedAlgorithms: []string{"RS256"},
+		}}),
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
