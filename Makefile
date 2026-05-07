@@ -3,14 +3,21 @@
 # Sub-modules that get tagged alongside the root module
 SUB_MODS_TO_TAG := ext/auth ext/ui experimental/ext/protogen cmd/testclient tests/e2e tests/keycloak
 
-# Path to the upstream-portable conformance fork (panyam/mcpconformance).
-# tasks/mrtr scenarios live there now and run via vitest. Override via
-# `MCPCONFORMANCE_PATH=/elsewhere make testconf-tasks-v2`. The default
-# points at the feat/tasks-mrtr-extension worktree (where the tasks +
-# mrtr scenarios currently live, paired with upstream Draft PR
-# modelcontextprotocol/conformance#262); switch to a different
-# worktree if you're running scenarios from another feat branch.
-MCPCONFORMANCE_PATH ?= $(HOME)/newstack/mcpkit/conf-template
+# Per-suite paths to the upstream-portable conformance fork
+# (panyam/mcpconformance). Each suite points at the worktree that holds
+# its scenarios — different SEPs live on different branches while their
+# upstream PRs are still draft. Resolving relative to this Makefile's
+# directory keeps absolute paths out of committed code.
+#
+# Override per-invocation when scenarios move (e.g., a SEP splits from
+# `pending` into its own feat branch waiting upstream approval):
+#   MCPCONFORMANCE_FILE_INPUTS_PATH=$(realpath ../conf-sep-2356) \
+#     make testconf-file-inputs
+MCPKIT_DIR := $(abspath $(dir $(firstword $(MAKEFILE_LIST))))
+MCPCONFORMANCE_TASKS_V2_PATH    ?= $(abspath $(MCPKIT_DIR)/../conf-template)
+MCPCONFORMANCE_MRTR_PATH        ?= $(abspath $(MCPKIT_DIR)/../conf-template)
+MCPCONFORMANCE_FILE_INPUTS_PATH ?= $(abspath $(MCPKIT_DIR)/../conf-pending)
+MCPCONFORMANCE_LIST_TTL_PATH    ?= $(abspath $(MCPKIT_DIR)/../conf-pending)
 
 # =============================================================================
 # Build & test
@@ -73,58 +80,60 @@ testconf-tasks: ## Run MCP Tasks v1 conformance (builds + starts server, runs te
 	RC=$$?; kill $$PID 2>/dev/null; wait $$PID 2>/dev/null; exit $$RC
 
 testconf-tasks-v2: ## Run SEP-2663 tasks conformance — fork-based scenarios + mcpkit-local stricter sentinel
-	@if [ ! -d "$(MCPCONFORMANCE_PATH)" ]; then \
-		echo "MCPCONFORMANCE_PATH=$(MCPCONFORMANCE_PATH) does not exist."; \
-		echo "Clone https://github.com/panyam/mcpconformance there or set MCPCONFORMANCE_PATH=<path-to-clone>."; \
+	@if [ ! -d "$(MCPCONFORMANCE_TASKS_V2_PATH)" ]; then \
+		echo "MCPCONFORMANCE_TASKS_V2_PATH=$(MCPCONFORMANCE_TASKS_V2_PATH) does not exist."; \
+		echo "Clone https://github.com/panyam/mcpconformance there or set MCPCONFORMANCE_TASKS_V2_PATH=<path-to-clone>."; \
 		exit 1; \
 	fi
 	@(cd examples/tasks-v2 && go build -o tasks-v2 .)
-	(cd $(MCPCONFORMANCE_PATH) && npm install --silent && \
+	(cd $(MCPCONFORMANCE_TASKS_V2_PATH) && npm install --silent && \
 		TASKS_SERVER_URL=http://localhost:18092/mcp \
 		TASKS_SERVER_CMD="$(CURDIR)/examples/tasks-v2/tasks-v2 --serve --addr :18092" \
 		npx vitest run src/scenarios/server/tasks/all-scenarios.test.ts)
 	(cd conformance && npm install --silent && npx vitest run tasks-v2/)
 
 testconf-mrtr: ## Run SEP-2322 MRTR conformance — fork-based scenarios + mcpkit-local stricter sentinel
-	@if [ ! -d "$(MCPCONFORMANCE_PATH)" ]; then \
-		echo "MCPCONFORMANCE_PATH=$(MCPCONFORMANCE_PATH) does not exist."; \
-		echo "Clone https://github.com/panyam/mcpconformance there or set MCPCONFORMANCE_PATH=<path-to-clone>."; \
+	@if [ ! -d "$(MCPCONFORMANCE_MRTR_PATH)" ]; then \
+		echo "MCPCONFORMANCE_MRTR_PATH=$(MCPCONFORMANCE_MRTR_PATH) does not exist."; \
+		echo "Clone https://github.com/panyam/mcpconformance there or set MCPCONFORMANCE_MRTR_PATH=<path-to-clone>."; \
 		exit 1; \
 	fi
 	@(cd examples/mrtr && go build -o mrtr-demo .)
-	(cd $(MCPCONFORMANCE_PATH) && npm install --silent && \
+	(cd $(MCPCONFORMANCE_MRTR_PATH) && npm install --silent && \
 		MRTR_SERVER_URL=http://localhost:18093/mcp \
 		MRTR_SERVER_CMD="$(CURDIR)/examples/mrtr/mrtr-demo --serve --addr :18093" \
 		npx vitest run src/scenarios/server/mrtr/all-scenarios.test.ts)
 	(cd conformance && npm install --silent && npx vitest run mrtr/)
 
-testconf-list-ttl: ## Run MCP SEP-2549 list-TTL conformance (builds + starts 3 servers, runs tests, tears down)
-	@(cd examples/list-ttl && go build -o list-ttl-demo .) && \
-	examples/list-ttl/list-ttl-demo --serve --addr=:18094 --ttl=60 & PID1=$$!; \
-	examples/list-ttl/list-ttl-demo --serve --addr=:18095 --ttl=0  & PID2=$$!; \
-	examples/list-ttl/list-ttl-demo --serve --addr=:18096           & PID3=$$!; \
-	sleep 1; \
-	(cd conformance && npm install --silent && \
-	SERVER_URL_POSITIVE=http://localhost:18094/mcp \
-	SERVER_URL_ZERO=http://localhost:18095/mcp \
-	SERVER_URL_UNSET=http://localhost:18096/mcp \
-	npx tsx --test list-ttl/scenarios.test.ts); \
-	RC=$$?; \
-	kill $$PID1 $$PID2 $$PID3 2>/dev/null; \
-	wait $$PID1 $$PID2 $$PID3 2>/dev/null; \
-	exit $$RC
+testconf-list-ttl: ## Run SEP-2549 list-TTL conformance — fork-based scenarios (auto-spawns 3 fixtures)
+	@if [ ! -d "$(MCPCONFORMANCE_LIST_TTL_PATH)" ]; then \
+		echo "MCPCONFORMANCE_LIST_TTL_PATH=$(MCPCONFORMANCE_LIST_TTL_PATH) does not exist."; \
+		echo "Clone https://github.com/panyam/mcpconformance there or set MCPCONFORMANCE_LIST_TTL_PATH=<path-to-clone>."; \
+		echo "Default expects the 'pending' branch checked out at ../conf-pending."; \
+		exit 1; \
+	fi
+	@(cd examples/list-ttl && go build -o list-ttl-demo .)
+	(cd $(MCPCONFORMANCE_LIST_TTL_PATH) && npm install --silent && \
+		LIST_TTL_POSITIVE_URL=http://localhost:18094/mcp \
+		LIST_TTL_POSITIVE_CMD="$(CURDIR)/examples/list-ttl/list-ttl-demo --serve --addr=:18094 --ttl=60" \
+		LIST_TTL_ZERO_URL=http://localhost:18095/mcp \
+		LIST_TTL_ZERO_CMD="$(CURDIR)/examples/list-ttl/list-ttl-demo --serve --addr=:18095 --ttl=0" \
+		LIST_TTL_UNSET_URL=http://localhost:18096/mcp \
+		LIST_TTL_UNSET_CMD="$(CURDIR)/examples/list-ttl/list-ttl-demo --serve --addr=:18096" \
+		npx vitest run src/scenarios/server/list-ttl/list-ttl.test.ts)
 
-testconf-file-inputs: ## Run MCP SEP-2356 file-inputs conformance (builds + starts server, runs tests, tears down)
-	@(cd examples/file-inputs && go build -o file-inputs-demo .) && \
-	examples/file-inputs/file-inputs-demo --serve --addr=:18097 & PID=$$!; \
-	sleep 1; \
-	(cd conformance && npm install --silent && \
-	SERVER_URL=http://localhost:18097/mcp \
-	npx tsx --test file-inputs/scenarios.test.ts); \
-	RC=$$?; \
-	kill $$PID 2>/dev/null; \
-	wait $$PID 2>/dev/null; \
-	exit $$RC
+testconf-file-inputs: ## Run SEP-2356 file-inputs conformance — fork-based scenarios (auto-spawns fixture)
+	@if [ ! -d "$(MCPCONFORMANCE_FILE_INPUTS_PATH)" ]; then \
+		echo "MCPCONFORMANCE_FILE_INPUTS_PATH=$(MCPCONFORMANCE_FILE_INPUTS_PATH) does not exist."; \
+		echo "Clone https://github.com/panyam/mcpconformance there or set MCPCONFORMANCE_FILE_INPUTS_PATH=<path-to-clone>."; \
+		echo "Default expects the 'pending' branch checked out at ../conf-pending."; \
+		exit 1; \
+	fi
+	@(cd examples/file-inputs && go build -o file-inputs-demo .)
+	(cd $(MCPCONFORMANCE_FILE_INPUTS_PATH) && npm install --silent && \
+		FILE_INPUTS_SERVER_URL=http://localhost:18097/mcp \
+		FILE_INPUTS_SERVER_CMD="$(CURDIR)/examples/file-inputs/file-inputs-demo --serve --addr=:18097" \
+		npx vitest run src/scenarios/server/file-inputs/file-inputs.test.ts)
 
 testconf-elicitation: ## Run elicitation conformance suite (SEP-1036 URL mode + form, requires Node.js, target server must be running)
 	cd conformance && npm install --silent && SERVER_URL=$${SERVER_URL:-http://localhost:8080/mcp} npx tsx --test elicitation/scenarios.test.ts

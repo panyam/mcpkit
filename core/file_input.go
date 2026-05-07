@@ -101,7 +101,7 @@ func ExtractFileInputDescriptor(schemaProp map[string]any) *FileInputDescriptor 
 // x-mcp-file: ...}` becomes `{type: "string", format: "uri"}` for clients
 // that did not declare the SEP-2356 fileInputs capability.
 //
-// Per spec interpretation locked by `conformance/file-inputs/`: keep the
+// Per spec interpretation locked by panyam/mcpconformance `pending` (`src/scenarios/server/file-inputs/`): keep the
 // property visible (so legacy clients can still call the tool with a
 // text-input fallback) instead of hiding the whole tool. The strip walks
 // recursively into `properties` and array `items` so both single and

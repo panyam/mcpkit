@@ -270,7 +270,7 @@ func WithSchemaValidation(enabled bool) Option {
 //	  }
 //	}
 //
-// The wire shape is frozen by `conformance/file-inputs/scenarios.test.ts`
+// The wire shape is frozen by panyam/mcpconformance `pending` (`src/scenarios/server/file-inputs/`)
 // (the cross-impl contract). Disabled by default — handlers that prefer
 // to validate themselves can leave it off.
 //

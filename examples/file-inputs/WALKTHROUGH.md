@@ -106,7 +106,7 @@ Pass `--file <path>` on the demo command line to read an image from disk and upl
 
 ### Validation — server rejects non-conforming uploads (Phase 1.4)
 
-The server is started with `server.WithFileInputValidation()` (see `examples/file-inputs/main.go`), so the dispatcher walks each tool's `inputSchema` for `x-mcp-file` properties and runs `core.ValidateFileInput` on every matching arg BEFORE the handler runs. Failures surface as JSON-RPC `-32602` with a structured `data` payload — that exact shape is the contract pinned by `conformance/file-inputs/scenarios.test.ts`.
+The server is started with `server.WithFileInputValidation()` (see `examples/file-inputs/main.go`), so the dispatcher walks each tool's `inputSchema` for `x-mcp-file` properties and runs `core.ValidateFileInput` on every matching arg BEFORE the handler runs. Failures surface as JSON-RPC `-32602` with a structured `data` payload — that exact shape is the contract pinned by the SEP-2356 conformance scenarios on the panyam/mcpconformance `pending` branch (`src/scenarios/server/file-inputs/`).
 
 The next three steps exercise all three failure modes the validator covers. They drive the server through the Go MCP client (`*client.Client`); the `client.RPCError` returned on rejection carries the same structured `data` field the wire emits. Each step prints `error.code`, `error.message`, and `error.data` so the rejection contract is visible in the demo output.
 
