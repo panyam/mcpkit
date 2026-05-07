@@ -249,3 +249,17 @@ delegate to the fork via `MCPCONFORMANCE_PATH` and chain the local
 sentinel run.
 
 Released in mcpkit `v0.2.44`.
+
+## Postscript: 2026-05-07 wire field rename
+
+SEP-2663 commit `62758914` (2026-05-07) aligned all duration fields on the
+`Ms` suffix and integer milliseconds. The `ttlSeconds` and
+`pollIntervalMilliseconds` references in Fix 1 and Fix 3 above are
+historical, retained as a record of the prior wire shape. The current wire
+contract uses `ttlMs` and `pollIntervalMs` instead, with values in integer
+milliseconds (so `ttlSeconds: 60` maps to `ttlMs: 60000`).
+
+The mcpkit code, tests, walkthrough, migration guide, and brand-neutral
+conformance fork on branch `feat/tasks-mrtr-extension` all carry the new
+names. The shape, round-trip, and required-but-nullable semantics covered
+by Fix 1 and Fix 3 still hold under the new keys.
