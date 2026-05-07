@@ -1,13 +1,13 @@
 module github.com/panyam/mcpkit/examples/fine-grained-auth
 
-go 1.26.2
+go 1.26.3
 
 require (
 	github.com/panyam/demokit v0.0.16
 	github.com/panyam/mcpkit v0.2.41
 	github.com/panyam/mcpkit/examples/common v0.0.0-00010101000000-000000000000
 	github.com/panyam/mcpkit/ext/auth v0.2.36
-	github.com/panyam/oneauth v0.0.79
+	github.com/panyam/oneauth v0.0.82
 	github.com/panyam/servicekit v0.0.26
 )
 

@@ -1,12 +1,12 @@
 module github.com/panyam/mcpkit/ext/auth
 
-go 1.26.2
+go 1.26.3
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/panyam/gocurrent v0.1.0
 	github.com/panyam/mcpkit v0.2.3
-	github.com/panyam/oneauth v0.0.79
+	github.com/panyam/oneauth v0.0.82
 	github.com/stretchr/testify v1.11.1
 )
 
@@ -27,7 +27,7 @@ require (
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	golang.org/x/crypto v0.46.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
-	golang.org/x/sys v0.40.0 // indirect
+	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/text v0.33.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260120221211-b8f7ae30c516 // indirect
