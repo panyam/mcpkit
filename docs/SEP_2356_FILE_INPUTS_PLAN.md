@@ -72,7 +72,7 @@ Two phases: core protocol support (Phase 1), then MCP Apps bridge integration
 - [x] Typed errors `core.FileTooLargeError` + `core.FileTypeNotAcceptedError` carrying structured `Data()` payloads. Sentinels `core.ErrFileTooLarge` + `core.ErrFileTypeNotAccepted` for `errors.Is`.
 - [x] Reason constants `core.FileInputReasonTooLarge` ("file_too_large") and `core.FileInputReasonTypeNotAccepted` ("file_type_not_accepted") align with bridge JS sentinel error names.
 - [x] `server.WithFileInputValidation()` Option enables the dispatcher hook. Disabled by default — handlers can opt in.
-- [x] Dispatcher walks the tool's InputSchema for `x-mcp-file` properties (single + array `items` shape), runs `core.ValidateFileInput` on every matching arg, returns `-32602` with structured `data: {reason, field, actualSize, maxSize}` (too-large) or `data: {reason, field, mediaType, accept}` (wrong MIME) on failure. Wire shape frozen by `conformance/file-inputs/scenarios.test.ts`.
+- [x] Dispatcher walks the tool's InputSchema for `x-mcp-file` properties (single + array `items` shape), runs `core.ValidateFileInput` on every matching arg, returns `-32602` with structured `data: {reason, field, actualSize, maxSize}` (too-large) or `data: {reason, field, mediaType, accept}` (wrong MIME) on failure. Wire shape frozen by the SEP-2356 conformance scenarios on the panyam/mcpconformance `pending` branch (`src/scenarios/server/file-inputs/`).
 - [x] `examples/file-inputs/` opts into the validator — manual hand-rolled checks dropped.
 - [x] 11 new core unit tests + 5 new server unit tests + 2 conformance scenarios (`file-inputs-04` + `file-inputs-05`) flipped from red to green.
 
@@ -83,7 +83,7 @@ Two phases: core protocol support (Phase 1), then MCP Apps bridge integration
 - [x] `core.StripFileInputKeywords(schema any) any` — pure function, deep-copy walk that removes the keyword from every property (single + array items). Foreign shapes (typed structs, json.RawMessage on the elicitation path) pass through unchanged.
 - [x] Dispatcher's `handleToolsList` strips when `d.clientCaps.FileInputs == nil`. Stored ToolDef.InputSchema in the registry is never mutated — different clients on the same server may declare the cap and need the keyword back.
 - [x] `BaseContext.Elicit` strips `requestedSchema` (json.RawMessage decode → strip → re-encode) when `clientCaps.FileInputs == nil`. Round-trip cost only paid for cap-less clients.
-- [x] **Spec interpretation locked**: strip the keyword, keep the property visible (legacy clients still call the tool with a text-input fallback). Documented in `conformance/file-inputs/README.md`. Asserted by scenario `file-inputs-02`.
+- [x] **Spec interpretation locked**: strip the keyword, keep the property visible (legacy clients still call the tool with a text-input fallback). Documented in the SEP-2356 conformance README on the panyam/mcpconformance `pending` branch. Asserted by check `file-inputs-x-mcp-file-stripped-without-cap`.
 - [x] Tests: 2 core (strip + foreign-shape passthrough), 2 server (cap-aware sees keyword, cap-less sees stripped property), 1 conformance scenario flipped red→green.
 
 ### 1.6: Client helpers ✅ shipped

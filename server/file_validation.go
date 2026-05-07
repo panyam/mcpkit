@@ -19,7 +19,7 @@ import (
 //
 // The error data payload is the typed `Data()` method on the matching
 // `core.FileTooLargeError` / `core.FileTypeNotAcceptedError` — frozen by
-// `conformance/file-inputs/scenarios.test.ts` as the cross-impl contract.
+// panyam/mcpconformance `pending` (`src/scenarios/server/file-inputs/`) as the cross-impl contract.
 func (d *Dispatcher) validateFileInputArgs(id json.RawMessage, inputSchema any, args json.RawMessage) *core.Response {
 	schemaMap, ok := inputSchema.(map[string]any)
 	if !ok {

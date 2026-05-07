@@ -12,7 +12,7 @@ import (
 //
 // The error types carry structured fields the dispatcher packs into the
 // JSON-RPC `data` object on the wire — the on-wire shape is frozen by
-// `conformance/file-inputs/scenarios.test.ts` (the cross-impl contract).
+// panyam/mcpconformance `pending` (`src/scenarios/server/file-inputs/`) (the cross-impl contract).
 
 // Sentinel errors for callers that just want to test category. The typed
 // errors below carry structured fields; these constants are useful for

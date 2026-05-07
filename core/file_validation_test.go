@@ -171,7 +171,7 @@ func TestValidateFileInput_MalformedURI(t *testing.T) {
 // verifies: typed-error Data() methods produce JSON matching the wire
 // shape locked by the conformance suite (`{reason, actualSize, maxSize}`
 // and `{reason, mediaType, accept}`). If this test fails, the
-// `conformance/file-inputs/` scenarios will too — they assert the same
+// panyam/mcpconformance `pending` (`src/scenarios/server/file-inputs/`) scenarios will too — they assert the same
 // keys on the JSON-RPC error.data object.
 func TestFileInputErrorData_WireShape(t *testing.T) {
 	tooBig := (&FileTooLargeError{ActualSize: 100, MaxSize: 64}).Data()
