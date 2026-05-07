@@ -10,8 +10,11 @@ package client
 //   - tasks/get returns DetailedTask with inlined result/error/inputRequests.
 //   - tasks/update is the new resume path for MRTR input rounds.
 //   - tasks/cancel returns an empty ack.
-//   - WaitForTask polls tasks/get and honors the server's
-//     PollIntervalMilliseconds hint, automatically echoing requestState.
+//   - WaitForTask polls tasks/get and honors the server's PollIntervalMs
+//     hint, automatically echoing requestState. Per SEP-2663 (commit a1ed0703)
+//     a caller that has issued tasks/cancel may abort the poll loop without
+//     waiting for "cancelled" status to surface; cancel the ctx passed to
+//     WaitForTask and it returns context.Canceled.
 
 import (
 	"context"
@@ -38,7 +41,7 @@ type TaskOptions struct {
 
 // WaitOptions configures WaitForTask.
 type WaitOptions struct {
-	// PollInterval overrides the server's PollIntervalMilliseconds hint.
+	// PollInterval overrides the server's PollIntervalMs hint.
 	// 0 (the default) means: respect whatever the server returned, with a
 	// 1-second floor and a 30-second cap if the server didn't say.
 	PollInterval time.Duration
@@ -214,7 +217,7 @@ const (
 // ctx fires. Each iteration honors:
 //
 //   - opts[0].PollInterval if non-zero (caller override),
-//   - else the server's PollIntervalMilliseconds on the most recent response,
+//   - else the server's PollIntervalMs on the most recent response,
 //   - else the 1-second default.
 //
 // requestState is threaded automatically: each poll echoes the requestState
@@ -223,6 +226,20 @@ const (
 // per SEP-2663). Note that input_required is NOT terminal — callers wanting
 // to handle the MRTR resume should poll until terminal or use a tighter
 // loop that checks for input_required and calls UpdateTask in between.
+//
+// Cancel-poll abort (SEP-2663 commit a1ed0703): a caller that issues
+// tasks/cancel may stop polling immediately without waiting for the server
+// to surface "cancelled" status. The recommended pattern is to derive a
+// child context for the wait and cancel it after CancelTask returns:
+//
+//	pollCtx, stopPoll := context.WithCancel(ctx)
+//	defer stopPoll()
+//	go func() {
+//	    <-userCancelSignal
+//	    client.CancelTask(ctx, taskID, nil)
+//	    stopPoll()
+//	}()
+//	dt, err := client.WaitForTask(pollCtx, taskID)  // err == context.Canceled on abort
 func WaitForTask(ctx context.Context, c *Client, taskID string, opts ...WaitOptions) (*core.DetailedTask, error) {
 	var override time.Duration
 	state := ""
@@ -232,6 +249,15 @@ func WaitForTask(ctx context.Context, c *Client, taskID string, opts ...WaitOpti
 	}
 
 	for {
+		// Honor an already-cancelled ctx before issuing the next poll so a
+		// caller that cancels just after a poll returns short-circuits
+		// without one more tasks/get round-trip.
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
 		dt, err := GetTask(c, taskID, TaskOptions{RequestState: state})
 		if err != nil {
 			return nil, err
@@ -243,7 +269,7 @@ func WaitForTask(ctx context.Context, c *Client, taskID string, opts ...WaitOpti
 			state = dt.RequestState
 		}
 
-		wait := nextPollWait(override, dt.PollIntervalMilliseconds)
+		wait := nextPollWait(override, dt.PollIntervalMs)
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()

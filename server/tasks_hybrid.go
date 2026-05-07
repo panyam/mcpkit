@@ -26,7 +26,7 @@ type TasksHybridConfig struct {
 	// match RegisterTasksV1's standalone behavior.
 	V1 TasksConfigV1
 
-	// V2 carries the v2-side configuration (TaskStore, DefaultTTLSeconds,
+	// V2 carries the v2-side configuration (TaskStore, DefaultTTLMs,
 	// DefaultPollMs). All optional — defaults match RegisterTasks's
 	// standalone behavior.
 	V2 TasksConfig
