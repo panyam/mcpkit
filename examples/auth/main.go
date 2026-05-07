@@ -50,6 +50,16 @@ type bootstrapInfo struct {
 	TokReadWrite string `json:"tok_read_write"`
 	TokAll       string `json:"tok_all"`
 	TokBob       string `json:"tok_bob"`
+
+	// Deliberately-bad tokens for conformance testing — used by the
+	// SEP-2356 file-inputs / MCP-auth conformance suites in
+	// panyam/mcpconformance. Properly signed by this AS so the JWKS
+	// signature check passes, but each violates one specific RFC 7519
+	// claim that the server MUST reject. Demokit walkthroughs ignore
+	// these fields.
+	TokExpired        string `json:"tok_expired"`
+	TokWrongAudience  string `json:"tok_wrong_audience"`
+	TokWrongIssuer    string `json:"tok_wrong_issuer"`
 }
 
 func runDemo() {
@@ -324,6 +334,13 @@ func serve() {
 	tokAll := env.MintToken("alice", []string{"read", "write", "admin"})
 	tokBob := env.MintToken("bob", []string{"read", "write", "admin"})
 
+	// Pre-mint deliberately-bad tokens for the SEP-2356 / MCP-auth
+	// conformance suites. Each is properly signed (signature passes
+	// JWKS verification) but violates one specific RFC 7519 claim.
+	tokExpired := env.MintExpiredToken("alice", []string{"read"})
+	tokWrongAud := env.MintWrongAudienceToken("alice", []string{"read"})
+	tokWrongIss := env.MintWrongIssuerToken("alice", []string{"read"})
+
 	log.Printf("Auth example on %s", addr)
 	log.Printf("MCP endpoint: %s/mcp", listenURL)
 	log.Printf("Bootstrap:    %s/demo/bootstrap", listenURL)
@@ -342,11 +359,14 @@ func serve() {
 			m.HandleFunc("GET /demo/bootstrap", func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				json.NewEncoder(w).Encode(bootstrapInfo{
-					MCPURL:       listenURL + "/mcp",
-					TokRead:      tokRead,
-					TokReadWrite: tokReadWrite,
-					TokAll:       tokAll,
-					TokBob:       tokBob,
+					MCPURL:           listenURL + "/mcp",
+					TokRead:          tokRead,
+					TokReadWrite:     tokReadWrite,
+					TokAll:           tokAll,
+					TokBob:           tokBob,
+					TokExpired:       tokExpired,
+					TokWrongAudience: tokWrongAud,
+					TokWrongIssuer:   tokWrongIss,
 				})
 			})
 			auth.MountAuth(m, auth.AuthConfig{
