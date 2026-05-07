@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/panyam/mcpkit/core"
@@ -53,6 +54,71 @@ func (e *Env) NewValidator(audience string) *auth.JWTValidator {
 func (e *Env) MintToken(subject string, scopes []string) string {
 	claims := jwt.MapClaims{
 		"sub": subject,
+	}
+	if e.AS.APIAuth.JWTAudience != "" {
+		claims["aud"] = e.AS.APIAuth.JWTAudience
+	}
+	if len(scopes) > 0 {
+		claims["scope"] = strings.Join(scopes, " ")
+	}
+	tok, err := e.AS.MintTokenWithClaims(claims)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return tok
+}
+
+// MintExpiredToken creates a properly signed RS256 JWT whose `exp` claim is
+// 1 hour in the past. Conformance fixtures use this to verify that servers
+// reject expired tokens — the signature still verifies (same AS key), but
+// the standard JWT exp validation MUST reject it.
+func (e *Env) MintExpiredToken(subject string, scopes []string) string {
+	now := time.Now()
+	claims := jwt.MapClaims{
+		"sub": subject,
+		"iat": now.Add(-2 * time.Hour).Unix(),
+		"exp": now.Add(-1 * time.Hour).Unix(),
+	}
+	if e.AS.APIAuth.JWTAudience != "" {
+		claims["aud"] = e.AS.APIAuth.JWTAudience
+	}
+	if len(scopes) > 0 {
+		claims["scope"] = strings.Join(scopes, " ")
+	}
+	tok, err := e.AS.MintTokenWithClaims(claims)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return tok
+}
+
+// MintWrongAudienceToken creates a properly signed token whose `aud` claim
+// points at a different resource. Conformance fixtures use this to verify
+// audience enforcement — RFC 7519 requires servers to reject tokens whose
+// aud doesn't match.
+func (e *Env) MintWrongAudienceToken(subject string, scopes []string) string {
+	claims := jwt.MapClaims{
+		"sub": subject,
+		"aud": "https://wrong-audience.example.invalid",
+	}
+	if len(scopes) > 0 {
+		claims["scope"] = strings.Join(scopes, " ")
+	}
+	tok, err := e.AS.MintTokenWithClaims(claims)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return tok
+}
+
+// MintWrongIssuerToken creates a token signed by THIS AS (so the signature
+// verifies against the JWKS at the configured issuer) but whose `iss` claim
+// claims a DIFFERENT issuer. RFC 7519 + standard JWT validation requires
+// servers to reject when iss doesn't match the configured Issuer.
+func (e *Env) MintWrongIssuerToken(subject string, scopes []string) string {
+	claims := jwt.MapClaims{
+		"sub": subject,
+		"iss": "https://wrong-issuer.example.invalid",
 	}
 	if e.AS.APIAuth.JWTAudience != "" {
 		claims["aud"] = e.AS.APIAuth.JWTAudience
