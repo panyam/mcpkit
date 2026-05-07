@@ -1,0 +1,6 @@
+=== Stage 7d/9: experimental-events-telegram (make test-experimental-events-telegram) ===
+Started: Wed May  6 18:19:14 PDT 2026
+/Library/Developer/CommandLineTools/usr/bin/make -C experimental test-events-telegram
+cd /Users/dzshrh/newstack/mcpkit/tasks/examples/events/telegram && go test ./... -count=1 -timeout 60s
+ok  	github.com/panyam/mcpkit/examples/events/telegram	7.515s
+Finished: Wed May  6 18:19:22 PDT 2026 (elapsed 8s)

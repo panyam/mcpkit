@@ -1,5 +1,6 @@
-=== Stage 10/12: tasks-conformance (make testconf-tasks) ===
-Started: Tue May  5 16:24:10 PDT 2026
+=== Stage 8c/9: tasks-conformance (make testconf-tasks) ===
+Started: Wed May  6 18:19:29 PDT 2026
+/Library/Developer/CommandLineTools/usr/bin/make -C conformance testconf-tasks
 ========================================================================
   MCP Tasks — Async Tool Execution Lifecycle
   Walks through the MCP Tasks (SEP-1036) lifecycle: optional/required task support, polling, progress notifications, and cancellation.
@@ -157,34 +158,34 @@ Started: Tue May  5 16:24:10 PDT 2026
 
 === Done ===
 ▶ MCP Tasks Conformance
-  ✔ scenario 01: sync tool call returns immediately (4.319667ms)
-  ✔ scenario 02: async task creation returns CreateTaskResult (1.447208ms)
-  ✔ scenario 03: tasks/get returns flat task info (2.500667ms)
-  ✔ scenario 04: failing tool transitions to failed (1017.388417ms)
-  ✔ scenario 05: tasks/result returns ToolResult with related-task meta (1023.708166ms)
-  ✔ scenario 06: cancel returns cancelled status (5.533042ms)
-  ✔ scenario 07: tasks/list returns task array (1.825458ms)
-  ✔ scenario 08: required tool without task hint returns error (1.213792ms)
-  ✔ scenario 09: forbidden tool with task hint returns error (1.059625ms)
-  ✔ scenario 10: external proxy tool completes via task callbacks (1024.912583ms)
-  ✔ scenario 11: external proxy tool tasks/get returns task info (3.302875ms)
-  ✔ scenario 12: optional tool without hint runs synchronously (1002.788458ms)
-  ✔ scenario 13: tasks/get with bogus taskId returns error (3.783708ms)
-  ✔ scenario 14: tasks/cancel with bogus taskId returns error (3.241208ms)
-  ✔ scenario 15: cancel completed task returns error (1024.140208ms)
-  ✔ scenario 16: CreateTaskResult includes a TTL (0.954292ms)
-  ✔ scenario 17: CreateTaskResult pollInterval is valid if present (0.80125ms)
-  ✔ scenario 18: task must not expire before TTL (1515.387625ms)
-  ✔ scenario 19: concurrent task creation produces unique taskIds (1029.259542ms)
-  ✔ scenario 20: tasks/result for failed task has isError true (1016.148167ms)
-  ✔ scenario 21: tools/list includes execution.taskSupport (3.52975ms)
-  ✔ scenario 22: elicitation round-trip via tasks/result (8.091292ms)
-  ✔ scenario 23: sampling round-trip via tasks/result (7.881667ms)
-  ✔ scenario 24: progress notifications are well-formed if sent (2030.035083ms)
-  ✔ scenario 25: status notifications match task state if sent (1518.897417ms)
-  ✔ scenario 26: tasks/result includes related-task _meta (1015.762708ms)
-  ✔ scenario 27: tasks/get does not include related-task _meta (1.336125ms)
-✔ MCP Tasks Conformance (13286.400042ms)
+  ✔ scenario 01: sync tool call returns immediately (4.297792ms)
+  ✔ scenario 02: async task creation returns CreateTaskResult (1.311792ms)
+  ✔ scenario 03: tasks/get returns flat task info (2.47525ms)
+  ✔ scenario 04: failing tool transitions to failed (1039.07275ms)
+  ✔ scenario 05: tasks/result returns ToolResult with related-task meta (1042.809542ms)
+  ✔ scenario 06: cancel returns cancelled status (10.241125ms)
+  ✔ scenario 07: tasks/list returns task array (5.666417ms)
+  ✔ scenario 08: required tool without task hint returns error (3.02225ms)
+  ✔ scenario 09: forbidden tool with task hint returns error (2.324375ms)
+  ✔ scenario 10: external proxy tool completes via task callbacks (1033.622167ms)
+  ✔ scenario 11: external proxy tool tasks/get returns task info (6.107833ms)
+  ✔ scenario 12: optional tool without hint runs synchronously (1005.281167ms)
+  ✔ scenario 13: tasks/get with bogus taskId returns error (4.992ms)
+  ✔ scenario 14: tasks/cancel with bogus taskId returns error (3.679167ms)
+  ✔ scenario 15: cancel completed task returns error (1046.40575ms)
+  ✔ scenario 16: CreateTaskResult includes a TTL (3.955666ms)
+  ✔ scenario 17: CreateTaskResult pollInterval is valid if present (4.856833ms)
+  ✔ scenario 18: task must not expire before TTL (1540.65225ms)
+  ✔ scenario 19: concurrent task creation produces unique taskIds (1072.77625ms)
+  ✔ scenario 20: tasks/result for failed task has isError true (1042.347417ms)
+  ✔ scenario 21: tools/list includes execution.taskSupport (8.19575ms)
+  ✔ scenario 22: elicitation round-trip via tasks/result (14.709875ms)
+  ✔ scenario 23: sampling round-trip via tasks/result (11.355209ms)
+  ✔ scenario 24: progress notifications are well-formed if sent (2068.105625ms)
+  ✔ scenario 25: status notifications match task state if sent (1537.445791ms)
+  ✔ scenario 26: tasks/result includes related-task _meta (1036.496958ms)
+  ✔ scenario 27: tasks/get does not include related-task _meta (3.881292ms)
+✔ MCP Tasks Conformance (13573.62825ms)
 ℹ tests 27
 ℹ suites 1
 ℹ pass 27
@@ -192,5 +193,5 @@ Started: Tue May  5 16:24:10 PDT 2026
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 13570.505125
-Finished: Tue May  5 16:24:26 PDT 2026
+ℹ duration_ms 13861.695625
+Finished: Wed May  6 18:19:46 PDT 2026 (elapsed 17s)
