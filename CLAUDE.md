@@ -16,7 +16,7 @@ make testconf-tasks-v2 # SEP-2663 — fork @ MCPCONFORMANCE_TASKS_V2_PATH + mcpk
 make testconf-mrtr     # SEP-2322 — fork @ MCPCONFORMANCE_MRTR_PATH + mcpkit-local stricter sentinel
 make testconf-list-ttl # SEP-2549 — fork @ MCPCONFORMANCE_LIST_TTL_PATH (5 checks, 3 fixtures)
 make testconf-file-inputs # SEP-2356 — fork @ MCPCONFORMANCE_FILE_INPUTS_PATH (7 checks)
-make testconf-auth-server # MCP authz 2025-11-25 — fork @ MCPCONFORMANCE_AUTH_PATH (5 checks: PRM + AS metadata, Phase 1)
+make testconf-auth-server # MCP authz 2025-11-25 — fork @ MCPCONFORMANCE_AUTH_PATH (6 scenarios, 23 checks: 18 active, 5 SKIPPED gaps for unsupported features)
 make testall           # Everything (9 stages, 18 sub-stages) + Keycloak + HTML report
 make audit             # govulncheck + gosec + gitleaks + race
 make tag-push V=vX.Y.Z # Tag root + all sub-modules and push
