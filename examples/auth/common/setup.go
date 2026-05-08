@@ -20,11 +20,23 @@ import (
 	"github.com/panyam/oneauth/testutil"
 )
 
+// UpstreamIdpIssuer is the iss claim value the fixture's AS will accept
+// on RFC 7523 §2.1 jwt-bearer assertions and RFC 8693 token-exchange
+// subject_tokens. Stable per-process so MintUpstreamAssertion produces
+// JWTs the AS validates.
+const UpstreamIdpIssuer = "https://test-upstream-idp.example.invalid"
+
 // Env holds the shared auth infrastructure for an example.
 type Env struct {
 	AS        *testutil.TestAuthServer
 	Validator *auth.JWTValidator
 	Scopes    []string
+
+	// upstreamKey is the RSA private key for the synthetic
+	// UpstreamIdpIssuer the fixture trusts. Used by MintUpstreamAssertion
+	// to sign assertions for the conformance suite's RFC 7523 / RFC 8693
+	// flow-layer checks. Process-local — never persisted.
+	upstreamKey *rsa.PrivateKey
 }
 
 // NewEnv creates an in-process authorization server with JWKS + token endpoint.
@@ -49,7 +61,7 @@ func NewEnv(scopes []string) *Env {
 		testutil.WithScopes(scopes),
 		testutil.WithIssParameterSupported(true),
 		testutil.WithTrustedAssertionIssuers([]apiauth.TrustedAssertionIssuer{{
-			Issuer:             "https://test-upstream-idp.example.invalid",
+			Issuer:             UpstreamIdpIssuer,
 			PublicKey:          &upstreamKey.PublicKey,
 			AcceptedAlgorithms: []string{"RS256"},
 		}}),
@@ -57,7 +69,7 @@ func NewEnv(scopes []string) *Env {
 	if err != nil {
 		log.Fatal(err)
 	}
-	return &Env{AS: as, Scopes: scopes}
+	return &Env{AS: as, Scopes: scopes, upstreamKey: upstreamKey}
 }
 
 // NewValidator creates a JWTValidator pointed at the AS's JWKS.
@@ -73,6 +85,43 @@ func (e *Env) NewValidator(audience string) *auth.JWTValidator {
 	v.Start()
 	e.Validator = v
 	return v
+}
+
+// MintUpstreamAssertion signs a JWT with the synthetic upstream IdP's
+// private key (UpstreamIdpIssuer), suitable for use as an
+// `assertion` parameter on a jwt-bearer (RFC 7523 §2.1) grant or as a
+// `subject_token` (subject_token_type=jwt) on a token-exchange
+// (RFC 8693) grant at the AS's token endpoint.
+//
+// The audience matches APIAuth.JWTAudience (the AS's configured
+// audience identifier). RFC 7523 §3 requires the assertion's `aud` to
+// identify the AS that will accept it; oneauth's validator defaults
+// the expected audience to JWTAudience when the trusted-issuer entry
+// has no Audiences pinned (which is our setup), so this matches.
+//
+// iat / exp are set to a 5-min validity window. nbf is unset (the jwt
+// library treats absent nbf as "no not-before constraint", which
+// avoids clock-skew flakes in CI).
+//
+// Used by the panyam/mcpconformance suite's flow-layer Phase 3c check
+// (auth-enterprise-managed-token-exchange-flow-shape) and is exposed
+// via /demo/bootstrap as `tok_upstream_assertion` so the conformance
+// test runner can read it without re-implementing the signing logic.
+func (e *Env) MintUpstreamAssertion(subject string) string {
+	now := time.Now()
+	claims := jwt.MapClaims{
+		"iss": UpstreamIdpIssuer,
+		"sub": subject,
+		"aud": e.AS.APIAuth.JWTAudience,
+		"iat": now.Unix(),
+		"exp": now.Add(5 * time.Minute).Unix(),
+	}
+	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	signed, err := tok.SignedString(e.upstreamKey)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return signed
 }
 
 // MintToken creates a valid RS256 JWT for the given subject and scopes,
