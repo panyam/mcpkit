@@ -127,7 +127,7 @@ go run . --serve -webhook-ttl 5s
 
 Per spec, the webhook signing secret is **client-supplied only** (`whsec_` + base64 of 24-64 random bytes). The python `make webhook` and the Go SDK both auto-generate when the application doesn't supply one. See [`experimental/ext/events/README.md`](../../../experimental/ext/events/README.md) for the full configuration reference.
 
-## Auth posture (γ): demo escape vs real OIDC
+## Auth posture: demo escape vs real OIDC
 
 Per spec §"Subscription Identity" L361 webhook subscribe MUST require an authenticated principal. The demo auto-detects which posture to run in based on environment variables:
 

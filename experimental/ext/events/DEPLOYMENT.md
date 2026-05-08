@@ -118,10 +118,10 @@ Per spec, the webhook signing secret is **client-supplied only** (`whsec_` + bas
 Operational notes:
 
 - **Receiver and subscriber must agree on the secret.** If they're the same process (e.g., a forward proxy that subscribes on its own behalf), this is automatic. If they're different — e.g., proxy receives, app subscribes — the subscriber must communicate the secret to the proxy out-of-band. SDKs auto-generate by default; surface the value via your secrets-manager / proxy-config path.
-- **Rotation is client-initiated.** Supply a new `whsec_` value on a refresh `events/subscribe` call. The server replaces the stored value; in-flight deliveries signed with the old secret will fail verification at the receiver. Spec describes a Standard-Webhooks dual-sign grace window for this case (not yet implemented in mcpkit; tracked under PR group ζ).
+- **Rotation is client-initiated.** Supply a new `whsec_` value on a refresh `events/subscribe` call. The server replaces the stored value; in-flight deliveries signed with the old secret will fail verification at the receiver. Spec describes a Standard-Webhooks dual-sign grace window for this case (not yet implemented in mcpkit).
 - **Treat each `whsec_` value as a credential.** Provision via secrets manager (Vault, AWS Secrets Manager, GCP Secret Manager, K8s secret with appropriate restrictions) when subscribing programmatically. Compromise of one secret only compromises that subscription's deliveries — there's no master root.
 
-## Auth + tuple subscription identity (γ)
+## Auth and tuple subscription identity
 
 Per spec §"Subscription Identity" → "Authentication required" L361, webhook `events/subscribe` and `events/unsubscribe` MUST require an authenticated principal — servers reject unauthenticated calls with `-32012 Unauthorized`. The registry keys subscriptions on the canonical tuple `(principal, delivery.url, name, params)`; cross-tenant isolation is by construction since the principal is part of the key.
 

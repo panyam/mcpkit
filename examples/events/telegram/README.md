@@ -98,9 +98,9 @@ go run . --serve -webhook-header-mode mcp
 
 Per spec, the webhook signing secret is **client-supplied only** (`whsec_` + base64 of 24-64 random bytes). See [`experimental/ext/events/README.md`](../../../experimental/ext/events/README.md) for the full configuration reference.
 
-## Auth posture (γ)
+## Auth posture
 
-Same auto-detect pattern as the discord demo — see [`../discord/README.md`](../discord/README.md#auth-posture-γ-demo-escape-vs-real-oidc) for the full env-var contract. TL;DR:
+Same auto-detect pattern as the discord demo — see [`../discord/README.md`](../discord/README.md#auth-posture-demo-escape-vs-real-oidc) for the full env-var contract. TL;DR:
 
 ```bash
 make serve                                                      # demo posture (anonymous escape)
