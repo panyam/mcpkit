@@ -2,13 +2,15 @@ package client
 
 // SEP-2322 MRTR (Multi Round-Trip Requests) — client side.
 //
-// On a tools/call response with resultType: "incomplete", the client must
-// resolve each entry in the returned inputRequests map into a response
+// On a tools/call response with resultType: "input_required", the client
+// must resolve each entry in the returned inputRequests map into a response
 // payload and retry the call with inputResponses + the echoed requestState.
 // CallToolWithInputs runs that loop automatically; DefaultInputHandler
 // bridges the most common method types (elicitation/create,
 // sampling/createMessage, roots/list) onto the client's existing
 // capability handlers (samplingHandler, elicitationHandler, rootsHandler).
+// "input_required" was renamed from "incomplete" in SEP-2322 commit
+// de6d76fb (merged 2026-05-06).
 
 import (
 	"context"
@@ -19,7 +21,7 @@ import (
 	"github.com/panyam/mcpkit/core"
 )
 
-// InputHandler resolves an MRTR IncompleteResult's inputRequests into the
+// InputHandler resolves an MRTR InputRequiredResult's inputRequests into the
 // echoed inputResponses payload. Called once per retry round; returning
 // an error aborts the loop.
 //
@@ -37,7 +39,7 @@ type mrtrConfig struct {
 }
 
 // WithMaxMRTRRounds caps how many times CallToolWithInputs will retry a
-// tools/call when the server keeps returning IncompleteResult. Default is
+// tools/call when the server keeps returning InputRequiredResult. Default is
 // 16 (enough for any sane workflow; high enough that hitting it suggests
 // a bug). Zero or negative values fall back to the default.
 func WithMaxMRTRRounds(n int) MRTROption {
@@ -54,7 +56,7 @@ func WithMaxMRTRRounds(n int) MRTROption {
 var ErrMRTRMaxRounds = errors.New("MRTR max rounds exceeded")
 
 // CallToolWithInputs invokes a tool with automatic SEP-2322 MRTR retry.
-// On IncompleteResult, the handler is called to resolve the inputRequests;
+// On InputRequiredResult, the handler is called to resolve the inputRequests;
 // the call is then retried with inputResponses + the echoed requestState.
 // The loop terminates as soon as the server returns a complete ToolResult,
 // a CreateTaskResult, or an error. Returns ErrMRTRMaxRounds if the round
@@ -84,16 +86,16 @@ func CallToolWithInputs(ctx context.Context, c *Client, name string, args any, h
 		return nil, err
 	}
 
-	for round := 0; res.IsIncomplete(); round++ {
+	for round := 0; res.IsInputRequired(); round++ {
 		if round >= cfg.maxRounds {
 			return nil, fmt.Errorf("%w (rounds=%d, last requestState=%q)",
-				ErrMRTRMaxRounds, cfg.maxRounds, res.Incomplete.RequestState)
+				ErrMRTRMaxRounds, cfg.maxRounds, res.InputRequired.RequestState)
 		}
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 
-		responses, err := handler(ctx, res.Incomplete.InputRequests)
+		responses, err := handler(ctx, res.InputRequired.InputRequests)
 		if err != nil {
 			return nil, fmt.Errorf("MRTR input handler: %w", err)
 		}
@@ -105,8 +107,8 @@ func CallToolWithInputs(ctx context.Context, c *Client, name string, args any, h
 			"arguments":      args,
 			"inputResponses": responses,
 		}
-		if res.Incomplete.RequestState != "" {
-			params["requestState"] = res.Incomplete.RequestState
+		if res.InputRequired.RequestState != "" {
+			params["requestState"] = res.InputRequired.RequestState
 		}
 		resp, err := c.Call("tools/call", params)
 		if err != nil {

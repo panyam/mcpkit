@@ -547,11 +547,11 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, pa
 	}
 
 	// SEP-2322: handler signalled "I need more input" — reshape the
-	// response on the wire as IncompleteResult and mint a fresh
+	// response on the wire as InputRequiredResult and mint a fresh
 	// requestState carrying the merged accumulated answers so the next
 	// round sees them too.
-	if result.IsIncomplete {
-		return core.NewResponse(id, core.IncompleteResult{
+	if result.IsInputRequired {
+		return core.NewResponse(id, core.InputRequiredResult{
 			InputRequests: result.InputRequests,
 			RequestState:  d.mrtr.mintRequestState(envelope.Name, mergedResponses),
 		})
