@@ -74,6 +74,20 @@ type EventDef struct {
 	// Tool / Resource / Prompt. Sources set it once at construction
 	// and the library surfaces it on events/list.
 	Meta map[string]any `json:"_meta,omitempty"`
+
+	// Per-subscription author hooks (η-2). All four are zero-value-
+	// friendly — nil means baseline behavior (deliver to all,
+	// passthrough, no lifecycle work). Tagged json:"-" because
+	// EventDef is JSON-serialized for events/list and function
+	// fields neither serialize nor belong on the wire.
+	//
+	// Wiring is in the η-3 / η-4 sub-PRs; this PR ships the surface
+	// and panic-recovery wrappers. See docs/EVENTS_ETA_PLAN.md
+	// Q1-Q4 for the design, and hooks.go for the function types.
+	Match         MatchFunc       `json:"-"`
+	Transform     TransformFunc   `json:"-"`
+	OnSubscribe   SubscribeFunc   `json:"-"`
+	OnUnsubscribe UnsubscribeFunc `json:"-"`
 }
 
 // PollResult holds the result of a cursor-based poll from an event source.
@@ -205,6 +219,19 @@ type Config struct {
 	// the spec-recommended 30s. Override to a smaller value in tests
 	// that need to observe heartbeats quickly.
 	StreamHeartbeatInterval time.Duration
+
+	// PollLeases tracks poll-mode subscriptions as ephemeral leases
+	// so on_subscribe / on_unsubscribe can fire consistently across
+	// delivery modes (η-1 — foundation for η-3's lifecycle wiring).
+	// Spec §"Server SDK Guidance" → "Unsubscribe timing by mode"
+	// L707-715.
+	//
+	// nil leaves Register to construct a default table (5 minute
+	// TTL, no hooks) — equivalent to "infrastructure present, no
+	// authors plugged in yet". Authors that want lifecycle hooks
+	// or a different TTL construct one explicitly via
+	// NewPollLeaseTable + WithPollLease* options and pass it here.
+	PollLeases *PollLeaseTable
 }
 
 // Register hooks up events/list, events/poll, events/subscribe, and
@@ -233,8 +260,13 @@ func Register(cfg Config) {
 		}
 	}
 
+	leases := cfg.PollLeases
+	if leases == nil {
+		leases = NewPollLeaseTable()
+	}
+
 	registerList(srv, sources)
-	registerPoll(srv, sourceMap)
+	registerPoll(srv, sourceMap, cfg.UnsafeAnonymousPrincipal, leases)
 	registerStream(srv, sourceMap, cfg.UnsafeAnonymousPrincipal, cfg.StreamHeartbeatInterval)
 	if webhooks != nil {
 		registerSubscribe(srv, sourceMap, webhooks, cfg.UnsafeAnonymousPrincipal)
@@ -304,7 +336,7 @@ func registerList(srv *server.Server, sources []EventSource) {
 	})
 }
 
-func registerPoll(srv *server.Server, sourceMap map[string]EventSource) {
+func registerPoll(srv *server.Server, sourceMap map[string]EventSource, unsafeAnon string, leases *PollLeaseTable) {
 	srv.HandleMethod("events/poll", func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		// Spec §"Poll-Based Delivery" → "Request: events/poll" L139-149:
 		// flat top-level shape — no subscriptions[] wrapper. Phase 1 dropped
@@ -343,6 +375,23 @@ func registerPoll(srv *server.Server, sourceMap map[string]EventSource) {
 		if !ok {
 			return core.NewErrorResponse(id, ErrCodeEventNotFound, "EventNotFound")
 		}
+
+		// η-1: poll-lease bookkeeping. The lease keys on
+		// (principal-or-anon, name, paramsHash) per spec L707.
+		// resolvePrincipal returns "" when there's no auth claim AND
+		// no UnsafeAnonymousPrincipal fallback — that empty string
+		// IS the shared-anon slot the spec describes for
+		// unauthenticated servers. We deliberately ignore the ok
+		// flag here: poll has no spec-mandated reject rule, unlike
+		// subscribe / stream.
+		//
+		// Touch fires OnCreate the first time a (principal, name,
+		// params) tuple is seen and renews the lease on subsequent
+		// polls. η-3 wires OnCreate/OnExpire to safeOnSubscribe /
+		// safeOnUnsubscribe so author hooks fire consistently with
+		// webhook + push lifecycle.
+		principal, _ := resolvePrincipal(ctx, unsafeAnon)
+		leases.Touch(principal, req.Name, req.Params)
 
 		cursorless := source.Def().Cursorless
 
