@@ -134,6 +134,8 @@ testconf-auth-server: ## Run server-side auth conformance — fork-based scenari
 	TOK_EXPIRED=$$(echo "$$BOOT" | python3 -c 'import json,sys;print(json.load(sys.stdin)["tok_expired"])' 2>/dev/null); \
 	TOK_WRONG_AUD=$$(echo "$$BOOT" | python3 -c 'import json,sys;print(json.load(sys.stdin)["tok_wrong_audience"])' 2>/dev/null); \
 	TOK_WRONG_ISS=$$(echo "$$BOOT" | python3 -c 'import json,sys;print(json.load(sys.stdin)["tok_wrong_issuer"])' 2>/dev/null); \
+	TOK_UPSTREAM=$$(echo "$$BOOT" | python3 -c 'import json,sys;print(json.load(sys.stdin)["tok_upstream_assertion"])' 2>/dev/null); \
+	AS_TOKEN_ENDPOINT=$$(curl -sf http://localhost:18098/.well-known/oauth-authorization-server | python3 -c 'import json,sys;print(json.load(sys.stdin)["token_endpoint"])' 2>/dev/null); \
 	(cd $(MCPCONFORMANCE_AUTH_PATH) && \
 	  AUTH_SERVER_URL=http://localhost:18098/mcp \
 	  AUTH_VALID_TOKEN="$$TOK_VALID" \
@@ -142,6 +144,8 @@ testconf-auth-server: ## Run server-side auth conformance — fork-based scenari
 	  AUTH_EXPIRED_TOKEN="$$TOK_EXPIRED" \
 	  AUTH_WRONG_AUDIENCE_TOKEN="$$TOK_WRONG_AUD" \
 	  AUTH_WRONG_ISSUER_TOKEN="$$TOK_WRONG_ISS" \
+	  AUTH_SUBJECT_ASSERTION_TOKEN="$$TOK_UPSTREAM" \
+	  AUTH_AS_TOKEN_ENDPOINT="$$AS_TOKEN_ENDPOINT" \
 	  npx vitest run src/scenarios/server/auth/auth.test.ts); \
 	RC=$$?; \
 	kill $$PID 2>/dev/null; \
