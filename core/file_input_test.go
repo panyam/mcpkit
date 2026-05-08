@@ -11,14 +11,15 @@ import (
 func TestFileInputDescriptorJSON(t *testing.T) {
 	max := 5 * 1024 * 1024
 	desc := FileInputDescriptor{
-		Accept:  []string{"image/*", ".pdf"},
-		MaxSize: &max,
+		Accept:        []string{"image/*", ".pdf"},
+		MaxSize:       &max,
+		TransferModes: []FileInputTransferMode{FileInputTransferModeInline, FileInputTransferModeUpload},
 	}
 	raw, err := json.Marshal(desc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"accept":["image/*",".pdf"],"maxSize":5242880}`
+	want := `{"accept":["image/*",".pdf"],"maxSize":5242880,"transferModes":["inline","upload"]}`
 	if string(raw) != want {
 		t.Errorf("marshal = %s, want %s", raw, want)
 	}
@@ -27,6 +28,12 @@ func TestFileInputDescriptorJSON(t *testing.T) {
 	empty, _ := json.Marshal(FileInputDescriptor{})
 	if string(empty) != `{}` {
 		t.Errorf("empty descriptor = %s, want {}", empty)
+	}
+
+	// transferModes is omitempty — descriptor without it must not emit the key.
+	noModes, _ := json.Marshal(FileInputDescriptor{Accept: []string{"image/png"}})
+	if string(noModes) != `{"accept":["image/png"]}` {
+		t.Errorf("descriptor without transferModes = %s", noModes)
 	}
 }
 
@@ -67,7 +74,7 @@ func TestExtractFileInputDescriptorFromJSON(t *testing.T) {
 	raw := `{
 		"type": "string",
 		"format": "uri",
-		"x-mcp-file": {"accept": ["image/png"], "maxSize": 2048}
+		"x-mcp-file": {"accept": ["image/png"], "maxSize": 2048, "transferModes": ["inline", "upload"]}
 	}`
 	var prop map[string]any
 	if err := json.Unmarshal([]byte(raw), &prop); err != nil {
@@ -82,6 +89,41 @@ func TestExtractFileInputDescriptorFromJSON(t *testing.T) {
 	}
 	if desc.MaxSize == nil || *desc.MaxSize != 2048 {
 		t.Errorf("maxSize = %v", desc.MaxSize)
+	}
+	if len(desc.TransferModes) != 2 ||
+		desc.TransferModes[0] != FileInputTransferModeInline ||
+		desc.TransferModes[1] != FileInputTransferModeUpload {
+		t.Errorf("transferModes = %v", desc.TransferModes)
+	}
+}
+
+// verifies: descriptorFromMap accepts transferModes in all three shapes
+// callers might pass (Go-typed []FileInputTransferMode, []string, and the
+// JSON-unmarshalled []any).
+func TestExtractFileInputDescriptorTransferModesShapes(t *testing.T) {
+	cases := []struct {
+		name string
+		val  any
+	}{
+		{"any-slice", []any{"inline", "upload"}},
+		{"string-slice", []string{"inline", "upload"}},
+		{"typed-slice", []FileInputTransferMode{FileInputTransferModeInline, FileInputTransferModeUpload}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			prop := map[string]any{
+				FileInputSchemaKey: map[string]any{"transferModes": c.val},
+			}
+			desc := ExtractFileInputDescriptor(prop)
+			if desc == nil {
+				t.Fatal("descriptor not extracted")
+			}
+			if len(desc.TransferModes) != 2 ||
+				desc.TransferModes[0] != FileInputTransferModeInline ||
+				desc.TransferModes[1] != FileInputTransferModeUpload {
+				t.Errorf("transferModes = %v", desc.TransferModes)
+			}
+		})
 	}
 }
 
