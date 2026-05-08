@@ -86,10 +86,10 @@ func runDemo() {
 	)
 
 	// --- Step 1: Connect ---
-	demo.Step("Connect to the events server").
+	demo.Step("How do I open the conversation?").
 		Arrow("Host", "Server", "POST /mcp — initialize").
 		DashedArrow("Server", "Host", "serverInfo + capabilities").
-		Note("Plain MCP initialize over Streamable HTTP. We're not declaring any extension capability — events/* are server-side custom methods registered via experimental/ext/events. Push delivery uses events/stream (a long-lived per-subscription POST that returns SSE), not the session GET stream — no transport-level wiring needed in the client.").
+		Note("Vanilla MCP `initialize` over Streamable HTTP. The events extension doesn't declare any new capability — `events/*` methods are registered server-side via the events library. Push delivery rides a long-lived per-subscription POST that returns SSE (`events/stream`), not the session GET back-channel, so the client doesn't need any transport-level wiring to receive events.").
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			c = client.NewClient(mcpURL,
 				core.ClientInfo{Name: "discord-events-host", Version: "1.0"},
@@ -103,11 +103,13 @@ func runDemo() {
 		})
 
 	// --- Step 2: events/list ---
-	demo.Step("events/list — see the source catalog").
+	demo.Step("What kinds of events does this server even emit?").
 		Arrow("Host", "Server", "events/list").
 		DashedArrow("Server", "Host", "[discord.message (cursored), discord.typing (cursorless)]").
 		Note(
-			"The `cursorless` flag tells subscribers whether the source supports cursor-based replay. discord.message buffers events and accepts cursors; discord.typing emits ephemerally and always wires cursor:null.",
+			"`events/list` returns the catalog of event **types** the server can emit — not a list of recent event instances. (The naming is a touch misleading: it's much closer in spirit to `tools/list` than to a CRUD listing. Think of each entry as the schema for a kind of event that subscribers can ask for, not as data.)",
+			"",
+			"Each entry advertises a name, description, the supported delivery modes, an auto-derived `payloadSchema`, and the `cursorless` flag — `discord.message` buffers events and accepts replay cursors, `discord.typing` emits ephemerally and always wires `cursor: null`.",
 			"",
 			"- Each `EventDef` may carry an opaque `_meta` map for app-defined per-event-type metadata (mirrors the `_meta` convention on Tool / Resource / Prompt in base MCP). The same `_meta` convention applies on `EventOccurrence` (the wire-format Event envelope). The discord sources don't set `_meta` here; servers that want to surface trace ids, source-system tags, or other per-type annotations populate it on construction.",
 			"- The events/list response carries an optional `nextCursor` for forward-compatible pagination (mirrors the tools/list / resources/list convention). Library doesn't paginate today (advertised sets are small in practice); the field is plumbed for forward compatibility.",
@@ -126,14 +128,14 @@ func runDemo() {
 		})
 
 	// --- Step 3: Push delivery via events/stream ---
-	demo.Step("Push: open events/stream, inject a message, observe per-call notifications").
+	demo.Step("Can I get events as they happen?").
 		Arrow("Host", "Server", "events/stream { name: discord.message }").
 		DashedArrow("Server", "Host", "notifications/events/active { requestId, cursor }").
 		Arrow("Receiver", "Server", "POST /inject (simulated Discord message)").
 		DashedArrow("Server", "Host", "notifications/events/event { requestId, eventId, ... }").
 		DashedArrow("Host", "Server", "(close request) → StreamEventsResult final frame").
 		Note(
-			"events/stream is a long-lived JSON-RPC request — one per subscription. Spec §\"Push-Based Delivery\" L223-296.",
+			"Yes — `events/stream` is the answer. It's a long-lived JSON-RPC request, one per subscription, that returns its events as `notifications/events/event` frames on the call's own SSE response stream. Spec §\"Push-Based Delivery\" L223-296.",
 			"",
 			"- Server confirms with notifications/events/active, then delivers events as notifications/events/event on the call's own SSE response stream.",
 			"- Heartbeats fire every ≥30s carrying the source's current cursor so the client's persisted cursor advances during quiet periods.",
@@ -181,10 +183,10 @@ func runDemo() {
 		})
 
 	// --- Step 4: Poll delivery ---
-	demo.Step("Poll: events/poll with the cursor we just saw").
-		Arrow("Host", "Server", "events/poll {subscriptions: [{name: discord.message, cursor: <head>}]}").
+	demo.Step("What if I can't keep a long-lived stream open?").
+		Arrow("Host", "Server", "events/poll {name: discord.message, cursor: <head>}").
 		DashedArrow("Server", "Host", "{events: [], cursor: <head>, hasMore: false}").
-		Note("Single-subscription per call (PR B removed batching). Polling at the head returns no new events but advances the cursor — the same response shape that would carry events if any had arrived since the last poll.").
+		Note("Poll instead. `events/poll` is single-subscription per call (multi-sub batching was removed) with a flat top-level shape: `{name, params, cursor, maxAge, maxEvents}` in, `{events, cursor, hasMore, truncated, nextPollSeconds}` out. Polling at the head returns no new events but advances the cursor — the response shape is identical whether or not events are waiting, so the client's polling loop has one code path.").
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			cursor := "0"
 			if messageCursor != nil {
@@ -211,13 +213,13 @@ func runDemo() {
 		})
 
 	// --- Step 5: Cursorless source ---
-	demo.Step("Cursorless: open events/stream for typing, observe cursor:null on the wire").
+	demo.Step("What about events I don't need to replay, like 'user is typing'?").
 		Arrow("Host", "Server", "events/stream { name: discord.typing }").
 		DashedArrow("Server", "Host", "notifications/events/active { cursor: null }").
 		Arrow("Receiver", "Server", "POST /inject?event=discord.typing").
 		DashedArrow("Server", "Host", "notifications/events/event { cursor: null }").
 		Note(
-			"WithoutCursors() sources don't buffer; the wire emits cursor:null.",
+			"On the wire, the event type is marked cursorless: `events/list` advertises `cursorless: true` for that EventDef, every event delivery emits `cursor: null`, and `events/poll` always returns empty with `cursor: null` (there's nothing buffered to serve). Push delivery still fans out events live — the only thing that changes versus a cursored source is replay. (in mcpkit: source authors opt in via `events.NewYieldingSource[T](def, events.WithoutCursors())`)",
 			"",
 			"- Push delivery via events/stream still works — there's just nothing to replay.",
 			"- Heartbeats also carry cursor:null (spec L294: \"null for event types that do not support replay\").",
@@ -262,15 +264,14 @@ func runDemo() {
 		})
 
 	// --- Step 5.5: Source-side health signals (ζ-7) ---
-	demo.Step("Health signals: source bubbles a transient upstream failure → notifications/events/error").
+	demo.Step("What happens when the upstream source has a hiccup?").
 		Arrow("Host", "Server", "events/stream { name: discord.message }").
 		DashedArrow("Server", "Host", "notifications/events/active").
 		Arrow("Receiver", "Server", "POST /inject?action=error").
 		DashedArrow("Server", "Host", "notifications/events/event/error { requestId, error: { code, message } }").
 		Note(
-			"Sources bubble health via YieldError(err) (transient, stream stays open) and YieldTerminated(err) (terminal, stream closes).",
+			"On the wire, two notification methods carry source health. `notifications/events/error` (spec L255+L261) is transient — the source had a failure, the stream stays open, subsequent events still arrive. `notifications/events/terminated` (spec L783-795) is terminal — the subscription has ended. This step exercises the transient path: `inject?action=error` causes the source to surface one upstream failure, the open stream sees `notifications/events/error` arrive while staying connected. (in mcpkit: server authors trigger these via `source.YieldError(err)` / `source.YieldTerminated(err)`)",
 			"",
-			"- Stream subscribers map onto notifications/events/error (spec L255+L261, transient) and notifications/events/terminated (spec L783-795, terminal).",
 			"- Webhook subscribers don't see error envelopes (errors are upstream-side, not delivery-side); they DO see {type:terminated} control envelopes when the suspend state machine flips Active=false or when the source itself terminates.",
 			"- This walkthrough step exercises only the transient error path — calling `inject?action=terminate` would one-shot terminate the discord.message source, breaking subsequent walkthrough steps that depend on it. Full terminate flow is covered by TestE2EHealthSignalsEndToEnd in this demo's e2e_test.go.",
 		).
@@ -310,7 +311,7 @@ func runDemo() {
 		})
 
 	// --- Step 6: Webhook + auto-refresh via Go SDK ---
-	demo.Step("Webhook: subscribe via the typed Go SDK, observe HMAC delivery + auto-refresh").
+	demo.Step("What if my client itself keeps restarting, but I have a public callback URL?").
 		Arrow("Receiver", "Receiver", "spin up local httptest receiver on :random").
 		Arrow("Host", "Server", "events/subscribe { mode: webhook, url, secret: whsec_<client-supplied> }").
 		DashedArrow("Server", "Host", "{ id, refreshBefore }   (response does NOT echo secret per spec)").
@@ -318,7 +319,7 @@ func runDemo() {
 		DashedArrow("Server", "Receiver", "POST <url> + HMAC signature headers (default: webhook-* per Standard Webhooks; opt-in: X-MCP-* via -webhook-header-mode mcp)").
 		DashedArrow("Host", "Host", "background loop: re-subscribe at 0.5 × TTL").
 		Note(
-			"clients/go provides Subscription (subscribe + auto-refresh) plus Receiver[Data] (typed inbound channel).",
+			"Use webhook delivery. `events/subscribe` registers a callback URL plus a client-supplied `whsec_` secret with a TTL; the server POSTs HMAC-signed events to that URL as they happen, the subscription is soft-state on the server (in-memory with TTL), and the client refreshes before `refreshBefore` to keep it alive. If the client process dies and reconnects later with the same canonical tuple, the subscription either is still alive (refresh is idempotent) or has lapsed and the next subscribe creates a fresh one with the supplied cursor as the replay point. (in mcpkit: `clients/go` provides `Subscription` for subscribe + auto-refresh and `Receiver[Data]` for a typed inbound channel)",
 			"",
 			"- HMAC signing secret is client-supplied per spec; SDK auto-generates a whsec_ value via events.GenerateSecret() when SubscribeOptions.Secret is empty.",
 			"- Subscription.Secret() returns the value the SDK ended up using, so the receiver can verify with the same secret.",
@@ -404,7 +405,7 @@ func runDemo() {
 		})
 
 	// --- Step 6.5: Multi-subscription routing (γ-4 + ε requestId echo) ---
-	demo.Step("Multi-sub routing: two webhook subs to discord.message, distinguished by X-MCP-Subscription-Id").
+	demo.Step("Two subs to the same event with different params — how do I tell deliveries apart?").
 		Arrow("Host", "Server", "events/subscribe { name: discord.message, params: {channel_id: 'alpha'}, ... }").
 		DashedArrow("Server", "Host", "{ id: sub_<A>, ... }").
 		Arrow("Host", "Server", "events/subscribe { name: discord.message, params: {channel_id: 'beta'}, ... }").
@@ -413,11 +414,9 @@ func runDemo() {
 		DashedArrow("Server", "Receiver", "POST <url> + X-MCP-Subscription-Id: sub_<A>").
 		DashedArrow("Server", "Receiver", "POST <url> + X-MCP-Subscription-Id: sub_<B>").
 		Note(
-			"Demonstrates that the spec's canonical-tuple identity plus the per-delivery `X-MCP-Subscription-Id` header make multi-sub-same-event-name routing unambiguous on the wire.",
+			"Each delivery POST carries its own `X-MCP-Subscription-Id` header (per spec §\"Webhook Event Delivery\" L390), and on the push side every notification echoes the originating `events/stream` request id in `params.requestId`. Subscriptions are identified by the canonical tuple `(principal, delivery.url, name, params)` (spec §\"Subscription Identity\" → \"Key composition\" L363), so two subscribes with the same `(principal, url, name)` but different `params` produce different ids — and the receiver branches by header without parsing the body.",
 			"",
-			"- Two subscribes with the same `(principal, url, name)` but different `params` produce different canonical bytes (`identity.go canonicalKey`) and therefore different derived ids (`deriveSubscriptionID`).",
 			"- The library fans out one yielded event to **both** webhook targets today — there is no per-subscription `match` filter yet (that's the upcoming SDK-hooks plan; see `docs/EVENTS_ETA_PLAN.md`).",
-			"- Each delivery POST carries its own `X-MCP-Subscription-Id` header so the receiver can route or branch by sub even when the body is identical.",
 			"- Push side: the same routing works via the `requestId` echo on every `notifications/events/event` payload — each `events/stream` POST gets its own JSON-RPC id, and notifications carry it in `params.requestId`.",
 		).
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
@@ -526,7 +525,7 @@ func runDemo() {
 		})
 
 	// --- Step 6.7: Webhook delivery health (ζ-5 deliveryStatus + ζ-6 suspend) ---
-	demo.Step("Webhook delivery health: deliveryStatus on subscribe-refresh + suspend transition").
+	demo.Step("My webhook receiver just died. How does the server let me know?").
 		Arrow("Receiver", "Receiver", "spin up failing receiver (returns 500 on event POSTs)").
 		Arrow("Host", "Server", "events/subscribe { name: discord.message, ... }").
 		DashedArrow("Server", "Host", "{ id, refreshBefore }   (no deliveryStatus on first subscribe — nothing to report)").
@@ -536,12 +535,12 @@ func runDemo() {
 		DashedArrow("Server", "Host", "{ id, refreshBefore, deliveryStatus: { active, lastDeliveryAt, lastError, failedSince } }").
 		DashedArrow("Server", "Receiver", "(if suspend fires) POST <url> body={type:terminated, error}  + webhook-id=msg_terminated_<random>").
 		Note(
-			"Demonstrates the `deliveryStatus` block on subscribe-refresh and the suspend state machine plus auto-PostTerminated control envelope.",
+			"Two answers, layered. First, every subscribe-refresh response carries a `deliveryStatus` block when the target has prior delivery attempts (spec §\"Webhook Delivery Status\" L425-460): `active` / `lastDeliveryAt` / `lastError` / `failedSince`. Second, after N consecutive failures within a sliding window, the server flips `active: false` and auto-Posts a `{type:terminated}` control envelope to the receiver as a courtesy heads-up. Refresh of a suspended target reactivates it.",
 			"",
-			"- Per spec §\"Webhook Delivery Status\" L425-460, refresh responses carry `deliveryStatus` when the target has prior delivery attempts. `lastError` is from a **closed categorical set** (`connection_refused`, `timeout`, `tls_error`, `http_3xx_redirect`, `http_4xx`, `http_5xx`, `challenge_failed`); the spec forbids raw response bodies / headers / status lines because the subscribe response is visible to the subscriber and arbitrary receiver responses must not become a data oracle.",
+			"- `lastError` is from a **closed categorical set** (`connection_refused`, `timeout`, `tls_error`, `http_3xx_redirect`, `http_4xx`, `http_5xx`, `challenge_failed`); the spec forbids raw response bodies / headers / status lines because the subscribe response is visible to the subscriber and arbitrary receiver responses must not become a data oracle.",
 			"- `failedSince` is set on the **first failure of the current run** and preserved across subsequent failures, so subscribers can see how long the receiver has been unreachable.",
-			"- Spec §\"Webhook Event Delivery\" L413+L460: \"after repeated failures the server SHOULD set active: false.\" The library fires this transition after 5 consecutive failures within a 10-min sliding window (configurable via `WithWebhookSuspendThreshold` / `WithWebhookSuspendWindow`). On the `true→false` transition the library auto-Posts a `{type:terminated}` control envelope to the (now-suspended) receiver as a courtesy notification — `webhook-id` prefix is `msg_terminated_<random>` so receivers can distinguish it from event deliveries (which use `evt_<eventId>`).",
-			"- A successful refresh of a suspended target reactivates it: clears `failureCount`, resets `lastError` and `failedSince`, flips `active` back to true.",
+			"- Spec §\"Webhook Event Delivery\" L413+L460: \"after repeated failures the server SHOULD set active: false.\" The transition fires after 5 consecutive failures within a 10-min sliding window. On the `true→false` transition the server auto-Posts a `{type:terminated}` control envelope to the (now-suspended) receiver — `webhook-id` prefix is `msg_terminated_<random>` so receivers can distinguish it from event deliveries (which use `evt_<eventId>`). (in mcpkit: knobs are `events.WithWebhookSuspendThreshold(n)` and `events.WithWebhookSuspendWindow(d)`)",
+			"- A successful refresh of a suspended target reactivates it: clears the failure run, resets `lastError` and `failedSince`, flips `active` back to true.",
 			"",
 			"**Fast-mode tip:** with the default `make serve` (`-webhook-suspend-threshold 5`), this step demonstrates the deliveryStatus reporting (lastError populated, failedSince populated, active still true) — full suspend takes 5 failed deliveries × ~8.5s each. To see suspend fire after ONE failure (~12s total step time), restart the server with `make serve-fast-suspend` (sets `-webhook-suspend-threshold 1`).",
 		).
@@ -659,15 +658,13 @@ func runDemo() {
 		})
 
 	// --- Step 7: Spec validation — empty secret rejected ---
-	demo.Step("Spec validation: empty delivery.secret is rejected").
+	demo.Step("What if I forget the secret?").
 		Arrow("Host", "Server", "events/subscribe { delivery: { ... } }   (no secret)").
 		DashedArrow("Server", "Host", "-32602 InvalidParams: delivery.secret is required").
 		Note(
-			"delivery.secret is REQUIRED on every events/subscribe — no server-side fallback per spec.",
+			"Rejected with `-32602 InvalidParams` at subscribe time. `delivery.secret` is REQUIRED on every `events/subscribe` per spec — there's no server-side fallback. Rejecting at subscribe time means a malformed subscription never exists in the registry, so the server can't ever produce unverifiable deliveries.",
 			"",
-			"- Server rejects at subscribe time so a subscription never exists that produces unverifiable deliveries.",
-			"- The Go SDK auto-generates a conforming whsec_ value via events.GenerateSecret() when SubscribeOptions.Secret is empty.",
-			"- This step makes a raw client.Call to bypass the SDK and demonstrate the server-side validator directly.",
+			"- This step makes a raw client.Call to bypass the SDK and demonstrate the server-side validator directly. (in mcpkit: the Go SDK auto-generates a conforming whsec_ value via `events.GenerateSecret()` when `SubscribeOptions.Secret` is empty — this step skips that on purpose)",
 		).
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			_, err := c.Call("events/subscribe", map[string]any{
@@ -690,14 +687,11 @@ func runDemo() {
 		})
 
 	// --- Step 8: Spec validation — malformed secret rejected ---
-	demo.Step("Spec validation: malformed delivery.secret is rejected").
+	demo.Step("What if I supply garbage instead of a `whsec_` value?").
 		Arrow("Host", "Server", "events/subscribe { delivery: { secret: 'wrong' } }").
 		DashedArrow("Server", "Host", "-32602 InvalidParams: delivery.secret invalid: must start with the whsec_ prefix").
 		Note(
-			"The validator enforces the full Standard Webhooks format: `whsec_` followed by base64 of 24-64 random bytes.",
-			"",
-			"- A non-prefixed value, a too-short value, or non-base64 garbage all fail with -32602 InvalidParams.",
-			"- Catches IaC-pinned secrets that don't match the spec format before they create a broken subscription.",
+			"Rejected with `-32602 InvalidParams`. The validator enforces the full Standard Webhooks format: `whsec_` followed by base64 of 24-64 random bytes. A non-prefixed value, a too-short value, or non-base64 garbage all fail at subscribe time — catches IaC-pinned secrets that don't match the spec format before they create a broken subscription.",
 		).
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			_, err := c.Call("events/subscribe", map[string]any{
@@ -721,14 +715,11 @@ func runDemo() {
 		})
 
 	// --- Step 9: Spec validation — client-supplied id is rejected (γ-3) ---
-	demo.Step("Spec validation: client-supplied id is rejected").
+	demo.Step("What if I try to pick my own subscription id?").
 		Arrow("Host", "Server", "events/subscribe { id: 'mine', ... }").
 		DashedArrow("Server", "Host", "-32602 InvalidParams: client-supplied id is not accepted").
 		Note(
-			"Spec §\"Subscription Identity\" → \"Key composition\" L363: \"There is no client-generated id — a subscription is fully determined by what it listens for, where it delivers, and who asked.\"",
-			"",
-			"- Server derives the id from (principal, name, params, url) and returns it.",
-			"- Old SDKs sending an id field get a loud -32602 instead of a silent mis-keying.",
+			"Rejected with `-32602 InvalidParams`. Per spec §\"Subscription Identity\" → \"Key composition\" L363, the id is server-derived from `(principal, name, params, url)` — there is no client-generated id. Old SDKs that send an `id` field get a loud error rather than a silent mis-keying that would alias subscriptions and break tenant isolation.",
 		).
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			_, err := c.Call("events/subscribe", map[string]any{
@@ -753,16 +744,14 @@ func runDemo() {
 		})
 
 	// --- Step 10: Spec validation — valid secret accepted, response omits secret ---
-	demo.Step("Spec validation: valid whsec_ accepted; response carries server-derived id, no secret").
+	demo.Step("And when everything is right?").
 		Arrow("Host", "Host", "events.GenerateSecret() → whsec_<base64 of 32 bytes>").
 		Arrow("Host", "Server", "events/subscribe { delivery: { secret: whsec_<valid> } }").
 		DashedArrow("Server", "Host", "{ id: sub_<base64-of-16-bytes>, cursor, refreshBefore }   (no secret per spec)").
 		Note(
-			"Counter-test: a freshly-generated whsec_ value is accepted.",
+			"Subscribe succeeds. The response carries the server-derived `id` (`sub_<base64>` per spec §\"Subscription Identity\" → \"Derived id\" L367), plus `cursor` and `refreshBefore`. Notably absent: the `secret` — the client supplied it, so the server doesn't echo it back. Echoing would risk leaks via proxies, logs, or IDE network panes.",
 			"",
-			"- Response carries the server-derived id (sub_<base64>) per spec §\"Subscription Identity\" → \"Derived id\" L367.",
-			"- The id is non-load-bearing for security; surfaced as X-MCP-Subscription-Id on delivery POSTs.",
-			"- Response does NOT echo the secret — the client supplied it. Echoing would risk leaks via proxies / logs / IDE network panes.",
+			"- The id is non-load-bearing for security; it's surfaced as `X-MCP-Subscription-Id` on delivery POSTs but knowing the value grants no operations on the subscription.",
 		).
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			supplied := events.GenerateSecret()
@@ -801,7 +790,7 @@ func runDemo() {
 	// events arrive — demokit v0.0.8+ tees step stdout to the renderer in
 	// real time rather than buffering until Run returns. Cancellable is
 	// disabled in TUI mode because Bubble Tea owns stdin.
-	demo.Step("Live Discord interaction (typing + message from a real Discord channel)").
+	demo.Step("Now let's see it against a real bot").
 		Arrow("Discord", "Server", "TypingStart event (when you start typing in the channel)").
 		DashedArrow("Server", "Host", "notifications/events/event { name: discord.typing, cursor: null }").
 		Arrow("Discord", "Server", "MessageCreate event (when you press enter)").
