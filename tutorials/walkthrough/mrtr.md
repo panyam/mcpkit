@@ -11,7 +11,7 @@ How a `tools/call` pauses for input *without* holding the call open. Six questio
 
 - You understand how a `tools/call` dispatches and what the handler context provides. → If not, read [request-anatomy](./request-anatomy.md).
 - You know what `_meta` and method-namespace extensions are. → If not, read [extension-mechanisms](./extension-mechanisms.md).
-- *(Helpful but not required)* You know the reverse-call pattern (sampling, elicitation, roots) — MRTR is the contrast. See [reverse-call](./reverse-call.md) *(stub)*.
+- *(Helpful but not required)* You know the reverse-call pattern (sampling, elicitation, roots) — MRTR is the contrast. See [reverse-call](./reverse-call.md).
 
 ## Context
 
@@ -296,5 +296,5 @@ After reading this page, downstream pages can assume:
 ## Next to read
 
 - **[Tasks](./tasks.md)** *(stub, root)* — long-running operations; tasks in `input_required` state use the same `InputRequiredResult`-shaped pattern. The deeper task lifecycle, store, queue, and detach/resume story.
-- **[Reverse-call mechanics](./reverse-call.md)** *(stub, root)* — the synchronous-during-handler alternative; understanding the contrast clarifies when to use which.
+- **[Reverse-call mechanics](./reverse-call.md)** — the synchronous-during-handler alternative; understanding the contrast clarifies when to use which.
 - **[Cancellation deep-dive](./cancellation.md)** *(stub, leaf)* — how cancellation interacts with mid-MRTR-round state (the call across rounds is *not* one in-flight call from the cancel-id perspective, since each round is its own JSON-RPC request id).

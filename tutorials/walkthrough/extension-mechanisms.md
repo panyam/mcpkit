@@ -165,7 +165,7 @@ After reading this page, downstream pages can assume:
 - **[Tasks v1/v2/hybrid](./tasks.md)** *(stub, root)* — the deep walk on the largest method-namespace extension, including the v1→v2 migration and `RegisterTasksHybrid` dispatch-by-capability pattern.
 - **[Auth deep-dive](./auth.md)** *(stub, root, off-mainline)* — the bring-up extension; full OAuth/PRM/JWT/fine-grained-auth.
 - **[Apps](./apps.md)** *(stub, root)* — the library-architecture extension; AppHost/Bridge JS/ServerRegistry. Mostly mcpkit-side, thin protocol surface.
-- **[Reverse-call mechanics](./reverse-call.md)** *(stub, root)* — concretizes elicitation, sampling, roots/list as the same method-namespace pattern.
+- **[Reverse-call mechanics](./reverse-call.md)** — concretizes elicitation, sampling, roots/list as the same method-namespace pattern.
 - **[MRTR](./mrtr.md)** — Multi Round-Trip Requests; the stateless-server alternative to synchronous reverse calls during a `tools/call`.
 - **[List-TTL (SEP-2549)](./list-ttl.md)** *(stub, leaf off notifications)* — the canonical `_meta`-only extension; orthogonal to list_changed.
 - **[`experimental/ext/events/`](../../experimental/ext/events/README.md)** *(branch, target-shape)* — events as first-class.
