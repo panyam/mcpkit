@@ -26,47 +26,48 @@ sequenceDiagram
     participant Host as MCP Host (this client)
     participant Server as MCP Server (make serve)
     participant Receiver as Local webhook receiver (this process)
+    participant Discord as Discord (real bot mode only)
 
-    Note over Host,Receiver: Step 1: How do I open the conversation?
+    Note over Host,Discord: Step 1: How do I open the conversation?
     Host->>Server: POST /mcp — initialize
     Server-->>Host: serverInfo + capabilities
 
-    Note over Host,Receiver: Step 2: What kinds of events does this server even emit?
+    Note over Host,Discord: Step 2: What kinds of events does this server even emit?
     Host->>Server: events/list
     Server-->>Host: [discord.message (cursored), discord.typing (cursorless)]
 
-    Note over Host,Receiver: Step 3: Can I get events as they happen?
+    Note over Host,Discord: Step 3: Can I get events as they happen?
     Host->>Server: events/stream { name: discord.message }
     Server-->>Host: notifications/events/active { requestId, cursor }
     Receiver->>Server: POST /inject (simulated Discord message)
     Server-->>Host: notifications/events/event { requestId, eventId, ... }
     Host-->>Server: (close request) → StreamEventsResult final frame
 
-    Note over Host,Receiver: Step 4: What if I can't keep a long-lived stream open?
+    Note over Host,Discord: Step 4: What if I can't keep a long-lived stream open?
     Host->>Server: events/poll {name: discord.message, cursor: <head>}
     Server-->>Host: {events: [], cursor: <head>, hasMore: false}
 
-    Note over Host,Receiver: Step 5: What about events I don't need to replay, like 'user is typing'?
+    Note over Host,Discord: Step 5: What about events I don't need to replay, like 'user is typing'?
     Host->>Server: events/stream { name: discord.typing }
     Server-->>Host: notifications/events/active { cursor: null }
     Receiver->>Server: POST /inject?event=discord.typing
     Server-->>Host: notifications/events/event { cursor: null }
 
-    Note over Host,Receiver: Step 6: What happens when the upstream source has a hiccup?
+    Note over Host,Discord: Step 6: What happens when the upstream source has a hiccup?
     Host->>Server: events/stream { name: discord.message }
     Server-->>Host: notifications/events/active
     Receiver->>Server: POST /inject?action=error
     Server-->>Host: notifications/events/event/error { requestId, error: { code, message } }
 
-    Note over Host,Receiver: Step 7: What if my client itself keeps restarting, but I have a public callback URL?
+    Note over Host,Discord: Step 7: What if my client itself keeps restarting, but I have a public callback URL?
     Receiver->>Receiver: spin up local httptest receiver on :random
     Host->>Server: events/subscribe { mode: webhook, url, secret: whsec_<client-supplied> }
     Server-->>Host: { id, refreshBefore }   (response does NOT echo secret per spec)
     Receiver->>Server: POST /inject (simulated message)
-    Server-->>Receiver: POST <url> + HMAC signature headers (default: webhook-* per Standard Webhooks; opt-in: X-MCP-* via -webhook-header-mode mcp)
+    Server-->>Receiver: POST <url> + HMAC signature headers (default webhook-* per Standard Webhooks, opt-in X-MCP-* via -webhook-header-mode mcp)
     Host-->>Host: background loop: re-subscribe at 0.5 × TTL
 
-    Note over Host,Receiver: Step 8: Two subs to the same event with different params — how do I tell deliveries apart?
+    Note over Host,Discord: Step 8: Two subs to the same event with different params — how do I tell deliveries apart?
     Host->>Server: events/subscribe { name: discord.message, params: {channel_id: 'alpha'}, ... }
     Server-->>Host: { id: sub_<A>, ... }
     Host->>Server: events/subscribe { name: discord.message, params: {channel_id: 'beta'}, ... }
@@ -75,7 +76,7 @@ sequenceDiagram
     Server-->>Receiver: POST <url> + X-MCP-Subscription-Id: sub_<A>
     Server-->>Receiver: POST <url> + X-MCP-Subscription-Id: sub_<B>
 
-    Note over Host,Receiver: Step 9: My webhook receiver just died. How does the server let me know?
+    Note over Host,Discord: Step 9: My webhook receiver just died. How does the server let me know?
     Receiver->>Receiver: spin up failing receiver (returns 500 on event POSTs)
     Host->>Server: events/subscribe { name: discord.message, ... }
     Server-->>Host: { id, refreshBefore }   (no deliveryStatus on first subscribe — nothing to report)
@@ -85,24 +86,24 @@ sequenceDiagram
     Server-->>Host: { id, refreshBefore, deliveryStatus: { active, lastDeliveryAt, lastError, failedSince } }
     Server-->>Receiver: (if suspend fires) POST <url> body={type:terminated, error}  + webhook-id=msg_terminated_<random>
 
-    Note over Host,Receiver: Step 10: What if I forget the secret?
+    Note over Host,Discord: Step 10: What if I forget the secret?
     Host->>Server: events/subscribe { delivery: { ... } }   (no secret)
     Server-->>Host: -32602 InvalidParams: delivery.secret is required
 
-    Note over Host,Receiver: Step 11: What if I supply garbage instead of a `whsec_` value?
+    Note over Host,Discord: Step 11: What if I supply garbage instead of a `whsec_` value?
     Host->>Server: events/subscribe { delivery: { secret: 'wrong' } }
     Server-->>Host: -32602 InvalidParams: delivery.secret invalid: must start with the whsec_ prefix
 
-    Note over Host,Receiver: Step 12: What if I try to pick my own subscription id?
+    Note over Host,Discord: Step 12: What if I try to pick my own subscription id?
     Host->>Server: events/subscribe { id: 'mine', ... }
     Server-->>Host: -32602 InvalidParams: client-supplied id is not accepted
 
-    Note over Host,Receiver: Step 13: And when everything is right?
+    Note over Host,Discord: Step 13: And when everything is right?
     Host->>Host: events.GenerateSecret() → whsec_<base64 of 32 bytes>
     Host->>Server: events/subscribe { delivery: { secret: whsec_<valid> } }
     Server-->>Host: { id: sub_<base64-of-16-bytes>, cursor, refreshBefore }   (no secret per spec)
 
-    Note over Host,Receiver: Step 14: Now let's see it against a real bot
+    Note over Host,Discord: Step 14: Now let's see it against a real bot
     Discord->>Server: TypingStart event (when you start typing in the channel)
     Server-->>Host: notifications/events/event { name: discord.typing, cursor: null }
     Discord->>Server: MessageCreate event (when you press enter)

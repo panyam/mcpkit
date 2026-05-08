@@ -37,7 +37,7 @@ sequenceDiagram
     Host->>Server: events/subscribe { mode: webhook, url, secret: whsec_<client-supplied>, name: telegram.message }
     Server-->>Host: { id, refreshBefore }   (response does NOT echo secret per spec)
     Receiver->>Server: POST /inject (simulated message)
-    Server-->>Receiver: POST <url> + HMAC signature headers (default: webhook-* per Standard Webhooks; opt-in: X-MCP-* via -webhook-header-mode mcp)
+    Server-->>Receiver: POST <url> + HMAC signature headers (default webhook-* per Standard Webhooks, opt-in X-MCP-* via -webhook-header-mode mcp)
 
     Note over Host,Receiver: Step 5: Live Telegram interaction (real message from a Telegram chat)
     Telegram->>Server: MessageCreate event (when you send a message to the bot)
