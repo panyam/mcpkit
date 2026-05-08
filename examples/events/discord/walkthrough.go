@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -64,11 +66,16 @@ func runDemo() {
 	)
 
 	demo.Section("What this demo covers",
-		"- **events/list** — the source catalog, including the new `cursorless` flag.",
+		"- **events/list** — the source catalog, including the new `cursorless` flag and the `_meta` per-type metadata field (δ-4).",
 		"- **Push** — long-lived SSE stream; `notifications/events/event` arrives in real time.",
 		"- **Poll** — single-subscription `events/poll` (multi-sub batching is not supported).",
 		"- **Cursorless source** — typing indicators that wire as `cursor: null`. Subscribers can't replay, only see live events.",
-		"- **Webhook + auto-refresh** — `events/subscribe` with the typed `Subscription` + `Receiver[Data]` from `clients/go`.",
+		"- **Source-side health signals** — `YieldError` (transient `notifications/events/error`, stream stays open).",
+		"- **Webhook + auto-refresh** — `events/subscribe` with the typed `Subscription` + `Receiver[Data]` from `clients/go`. Includes the hardened delivery loop: dial-time SSRF guard (ζ-1), no-redirects (ζ-2), 256 KiB body cap with 413 non-retryable (ζ-3), Standard Webhooks signature scheme as default.",
+		"- **Multi-subscription routing** — two subs to `discord.message` with different params; one event fans out to both, distinguished by `X-MCP-Subscription-Id` (γ-4 + ε requestId echo).",
+		"- **Webhook delivery health** — `deliveryStatus` block on subscribe-refresh response after a failed delivery (ζ-5); suspend state machine flips Active=false after N consecutive failures and auto-Posts a `{type:terminated}` control envelope (ζ-6) when run with `make serve-fast-suspend`.",
+		"- **Auth posture** — `events/subscribe` requires an authenticated principal per spec; demo runs anonymously via `UnsafeAnonymousPrincipal` (γ-5). Production deployments wire real OIDC and reject anonymous subscribes with `-32012`.",
+		"- **Spec validation** — empty / malformed `delivery.secret` rejected; client-supplied `id` rejected; valid `whsec_` accepted with no secret echoed.",
 		"",
 		"Identity-mode subscribe and Standard Webhooks header naming are exercised by the unit tests in `experimental/ext/events/` and by `discord-events`'s e2e tests; they require the server to be started with mode flags so they're documented in the README rather than driven from this walkthrough.",
 	)
@@ -99,7 +106,12 @@ func runDemo() {
 	demo.Step("events/list — see the source catalog").
 		Arrow("Host", "Server", "events/list").
 		DashedArrow("Server", "Host", "[discord.message (cursored), discord.typing (cursorless)]").
-		Note("The new `cursorless` flag (added in PR B) tells subscribers whether the source supports cursor-based replay. discord.message buffers events and accepts cursors; discord.typing emits ephemerally and always wires cursor:null.").
+		Note(
+			"The `cursorless` flag (added in PR B) tells subscribers whether the source supports cursor-based replay. discord.message buffers events and accepts cursors; discord.typing emits ephemerally and always wires cursor:null.",
+			"",
+			"- δ-4: each `EventDef` may carry an opaque `_meta` map for app-defined per-event-type metadata (mirrors the `_meta` convention on Tool / Resource / Prompt in base MCP). The same `_meta` convention applies on `EventOccurrence` (the wire-format Event envelope). The discord sources don't set `_meta` here; servers that want to surface trace ids, source-system tags, or other per-type annotations populate it on construction.",
+			"- δ-5: events/list response carries an optional `nextCursor` for forward-compatible pagination (mirrors the tools/list / resources/list convention). Library doesn't paginate today (advertised sets are small in practice); the field is plumbed for forward compatibility.",
+		).
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			res, err := c.Call("events/list", map[string]any{})
 			if err != nil {
@@ -311,6 +323,16 @@ func runDemo() {
 			"- HMAC signing secret is client-supplied per spec; SDK auto-generates a whsec_ value via events.GenerateSecret() when SubscribeOptions.Secret is empty.",
 			"- Subscription.Secret() returns the value the SDK ended up using, so the receiver can verify with the same secret.",
 			"- Receiver[DiscordEventData] verifies signatures and decodes the wire envelope into the typed Data shape — consumer reads `ev.Data.Content` directly, no re-parsing JSON.",
+			"- Default header mode is **Standard Webhooks** (spec L390+L431): `webhook-id` / `webhook-timestamp` / `webhook-signature: v1,<base64>` plus the MCP-specific `X-MCP-Subscription-Id`. Off-the-shelf Svix-style verifiers work. `MCPHeaders` (`X-MCP-Signature` + `X-MCP-Timestamp`) is the opt-in legacy via `-webhook-header-mode mcp`.",
+			"",
+			"**Hardened delivery loop** (`webhook.go` `deliver()`):",
+			"",
+			"- ζ-1 dial-time SSRF guard rejects loopback / RFC1918 / link-local / IPv6-ULA / multicast at the `net.Dialer.Control` callback (TOCTOU-safe under DNS rebinding). The demo bypasses this via `WithWebhookAllowPrivateNetworks(true)` because it delivers to a local httptest receiver; production deployments leave the guard ON. Spec §\"Webhook Security\" L464.",
+			"- ζ-2 no-redirect-following: `http.Client.CheckRedirect` returns `ErrUseLastResponse` so a receiver returning 3xx to an internal address can't bypass the dial-time guard via Go's redirect chain. 3xx is terminal `http_3xx_redirect`.",
+			"- ζ-3 256 KiB body cap (REJECT not TRUNCATE — truncation would corrupt the HMAC); 413 from the receiver is non-retryable. Spec L487.",
+			"- 5xx retry with exponential backoff (4 attempts: 500ms → 1s → 2s → 5s cap). Standard webhook convention.",
+			"",
+			"**Auth posture** (γ-5): `events/subscribe` requires an authenticated principal per spec §\"Subscription Identity\" → \"Authentication required\" L361. The demo runs anonymously via `events.Config.UnsafeAnonymousPrincipal=\"demo-user\"` (logged at startup as \"auth: demo (anonymous → UnsafeAnonymousPrincipal)\"). Production deployments unset that field AND wire `server.WithAuth(JWTValidator)` so anonymous subscribes hit the spec-mandated `-32012 Unauthorized`. See README \"Auth posture (γ): demo escape vs real OIDC\".",
 		).
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			recv := eventsclient.NewReceiver[DiscordEventData]("")
@@ -378,6 +400,262 @@ func runDemo() {
 
 			fmt.Printf("    on_refresh callbacks fired so far: %d (initial subscribe + any auto-refreshes)\n",
 				atomic.LoadInt32(&refreshes))
+			return
+		})
+
+	// --- Step 6.5: Multi-subscription routing (γ-4 + ε requestId echo) ---
+	demo.Step("Multi-sub routing: two webhook subs to discord.message, distinguished by X-MCP-Subscription-Id").
+		Arrow("Host", "Server", "events/subscribe { name: discord.message, params: {channel_id: 'alpha'}, ... }").
+		DashedArrow("Server", "Host", "{ id: sub_<A>, ... }").
+		Arrow("Host", "Server", "events/subscribe { name: discord.message, params: {channel_id: 'beta'}, ... }").
+		DashedArrow("Server", "Host", "{ id: sub_<B>, ... }   (id differs from A — different params → different canonical tuple)").
+		Arrow("Receiver", "Server", "POST /inject (one event)").
+		DashedArrow("Server", "Receiver", "POST <url> + X-MCP-Subscription-Id: sub_<A>").
+		DashedArrow("Server", "Receiver", "POST <url> + X-MCP-Subscription-Id: sub_<B>").
+		Note(
+			"Demonstrates that the spec's canonical-tuple identity (γ) plus the per-delivery `X-MCP-Subscription-Id` header (γ-4) make multi-sub-same-event-name routing unambiguous on the wire.",
+			"",
+			"- Two subscribes with the same `(principal, url, name)` but different `params` produce different canonical bytes (`identity.go canonicalKey`) and therefore different derived ids (`deriveSubscriptionID`).",
+			"- The library fans out one yielded event to **both** webhook targets today — there is no per-subscription `match` filter yet (that's η-4 in the upcoming SDK-hooks plan).",
+			"- Each delivery POST carries its own `X-MCP-Subscription-Id` header so the receiver can route or branch by sub even when the body is identical.",
+			"- Push side: the same routing works via the `requestId` echo (ε) on every `notifications/events/event` payload — each `events/stream` POST gets its own JSON-RPC id, and notifications carry it in `params.requestId`.",
+			"- This was an honest gap at the 2026-05-01 demo (gap analysis #11/#22): we had `Server.Broadcast` for push + URL-keyed routing for webhook, neither of which distinguished multiple subs to the same event name with different params. γ-4 + ε closed the gap.",
+		).
+		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
+			// One receiver, two subs. Capture each delivery's
+			// X-MCP-Subscription-Id to show they differ.
+			type delivery struct {
+				SubID string
+				Body  []byte
+			}
+			gotDelivery := make(chan delivery, 8)
+			recv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body, _ := io.ReadAll(r.Body)
+				gotDelivery <- delivery{
+					SubID: r.Header.Get("X-MCP-Subscription-Id"),
+					Body:  body,
+				}
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer recv.Close()
+
+			subscribe := func(channelLabel string) (string, error) {
+				supplied := events.GenerateSecret()
+				res, err := c.Call("events/subscribe", map[string]any{
+					"name":   "discord.message",
+					"params": map[string]any{"channel_id": channelLabel},
+					"delivery": map[string]any{
+						"mode":   "webhook",
+						"url":    recv.URL,
+						"secret": supplied,
+					},
+				})
+				if err != nil {
+					return "", err
+				}
+				var body struct {
+					ID string `json:"id"`
+				}
+				_ = json.Unmarshal(res.Raw, &body)
+				return body.ID, nil
+			}
+
+			subA, err := subscribe("alpha")
+			if err != nil {
+				fmt.Printf("    ERROR: subscribe alpha: %v\n", err)
+				return
+			}
+			subB, err := subscribe("beta")
+			if err != nil {
+				fmt.Printf("    ERROR: subscribe beta: %v\n", err)
+				return
+			}
+			fmt.Printf("    sub_alpha id: %s\n", subA)
+			fmt.Printf("    sub_beta  id: %s\n", subB)
+			if subA == subB {
+				fmt.Printf("    UNEXPECTED: ids should differ — different params → different canonical tuple\n")
+				return
+			}
+
+			// Eager unsubscribe on both at the end.
+			defer func() {
+				_, _ = c.Call("events/unsubscribe", map[string]any{
+					"name":     "discord.message",
+					"params":   map[string]any{"channel_id": "alpha"},
+					"delivery": map[string]any{"url": recv.URL},
+				})
+				_, _ = c.Call("events/unsubscribe", map[string]any{
+					"name":     "discord.message",
+					"params":   map[string]any{"channel_id": "beta"},
+					"delivery": map[string]any{"url": recv.URL},
+				})
+			}()
+
+			// One inject; the library should fan out to both registered
+			// targets (no match filter yet).
+			body := map[string]any{
+				"guild_id":   "demo-guild",
+				"channel_id": "demo-channel",
+				"sender":     "carol",
+				"text":       "hello to both subs",
+			}
+			if err := postInject(injectURL, "discord.message", body); err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				return
+			}
+
+			seen := map[string]bool{}
+			deadline := time.After(4 * time.Second)
+			for len(seen) < 2 {
+				select {
+				case d := <-gotDelivery:
+					seen[d.SubID] = true
+					fmt.Printf("    delivery #%d  X-MCP-Subscription-Id=%s  bytes=%d\n",
+						len(seen), d.SubID, len(d.Body))
+				case <-deadline:
+					fmt.Printf("    ERROR: only saw %d/2 deliveries within 4s\n", len(seen))
+					return
+				}
+			}
+
+			if seen[subA] && seen[subB] {
+				fmt.Printf("    Both sub ids observed in delivery headers — routing-handle works.\n")
+			} else {
+				fmt.Printf("    UNEXPECTED: did not observe both sub ids; saw %v\n", seen)
+			}
+			return
+		})
+
+	// --- Step 6.7: Webhook delivery health (ζ-5 deliveryStatus + ζ-6 suspend) ---
+	demo.Step("Webhook delivery health: deliveryStatus on subscribe-refresh + suspend transition").
+		Arrow("Receiver", "Receiver", "spin up failing receiver (returns 500 on event POSTs)").
+		Arrow("Host", "Server", "events/subscribe { name: discord.message, ... }").
+		DashedArrow("Server", "Host", "{ id, refreshBefore }   (no deliveryStatus on first subscribe — nothing to report)").
+		Arrow("Receiver", "Server", "POST /inject (one event)").
+		DashedArrow("Server", "Receiver", "POST <url>  → 500  (×4 retries with exponential backoff, then recordDeliveryFailure)").
+		Arrow("Host", "Server", "events/subscribe (refresh — same canonical tuple)").
+		DashedArrow("Server", "Host", "{ id, refreshBefore, deliveryStatus: { active, lastDeliveryAt, lastError, failedSince } }").
+		DashedArrow("Server", "Receiver", "(if suspend fires) POST <url> body={type:terminated, error}  + webhook-id=msg_terminated_<random>").
+		Note(
+			"Demonstrates ζ-5 (`deliveryStatus` block on subscribe-refresh) and ζ-6 (suspend state machine + auto-PostTerminated control envelope).",
+			"",
+			"- Per spec §\"Webhook Delivery Status\" L425-460, refresh responses carry `deliveryStatus` when the target has prior delivery attempts. `lastError` is from a **closed categorical set** (`connection_refused`, `timeout`, `tls_error`, `http_3xx_redirect`, `http_4xx`, `http_5xx`, `challenge_failed`); the spec forbids raw response bodies / headers / status lines because the subscribe response is visible to the subscriber and arbitrary receiver responses must not become a data oracle.",
+			"- `failedSince` is set on the **first failure of the current run** and preserved across subsequent failures, so subscribers can see how long the receiver has been unreachable.",
+			"- Spec §\"Webhook Event Delivery\" L413+L460: \"after repeated failures the server SHOULD set active: false.\" The library fires this transition after 5 consecutive failures within a 10-min sliding window (configurable via `WithWebhookSuspendThreshold` / `WithWebhookSuspendWindow`). On the `true→false` transition the library auto-Posts a `{type:terminated}` control envelope to the (now-suspended) receiver as a courtesy notification — `webhook-id` prefix is `msg_terminated_<random>` so receivers can distinguish it from event deliveries (which use `evt_<eventId>`).",
+			"- A successful refresh of a suspended target reactivates it: clears `failureCount`, resets `lastError` and `failedSince`, flips `active` back to true.",
+			"",
+			"**Fast-mode tip:** with the default `make serve` (`-webhook-suspend-threshold 5`), this step demonstrates ζ-5 (lastError populated, failedSince populated, active still true) — full ζ-6 suspend takes 5 failed deliveries × ~8.5s each. To see ζ-6 fire after ONE failure (~12s total step time), restart the server with `make serve-fast-suspend` (sets `-webhook-suspend-threshold 1`).",
+		).
+		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
+			// Receiver returns 500 on event deliveries (forces failures);
+			// returns 200 on control-envelope POSTs (and captures them).
+			// Discriminator: webhook-id prefix `evt_` = event,
+			// `msg_terminated_` = control. Per webhook.go control.go.
+			var gotControl atomic.Bool
+			var controlBody []byte
+			deadReceiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				whID := r.Header.Get("webhook-id")
+				if strings.HasPrefix(whID, "msg_terminated_") {
+					body, _ := io.ReadAll(r.Body)
+					controlBody = body
+					gotControl.Store(true)
+					w.WriteHeader(http.StatusOK)
+					return
+				}
+				// Event delivery — simulate persistent receiver-side failure.
+				w.WriteHeader(http.StatusInternalServerError)
+			}))
+			defer deadReceiver.Close()
+
+			supplied := events.GenerateSecret()
+			subParams := map[string]any{
+				"name":   "discord.message",
+				"params": map[string]any{"role": "health-demo"},
+				"delivery": map[string]any{
+					"mode":   "webhook",
+					"url":    deadReceiver.URL,
+					"secret": supplied,
+				},
+			}
+
+			// Initial subscribe — first call has no priorities, no
+			// deliveryStatus block per spec L548 ("Omitted on first
+			// subscribe — there's nothing to report").
+			res, err := c.Call("events/subscribe", subParams)
+			if err != nil {
+				fmt.Printf("    ERROR: initial subscribe failed: %v\n", err)
+				return
+			}
+			defer func() {
+				_, _ = c.Call("events/unsubscribe", map[string]any{
+					"name":     "discord.message",
+					"params":   map[string]any{"role": "health-demo"},
+					"delivery": map[string]any{"url": deadReceiver.URL},
+				})
+			}()
+			var firstResp map[string]any
+			_ = json.Unmarshal(res.Raw, &firstResp)
+			if _, hasStatus := firstResp["deliveryStatus"]; hasStatus {
+				fmt.Printf("    UNEXPECTED: deliveryStatus present on first subscribe (spec L548 says it's omitted)\n")
+			} else {
+				fmt.Printf("    First subscribe: no deliveryStatus block (correct per spec — nothing to report)\n")
+			}
+
+			// Inject one event — server will retry 4 times with exponential
+			// backoff (500ms / 1s / 2s / 5s cap), then recordDeliveryFailure.
+			fmt.Printf("    Injecting one event; waiting for retry cycle to exhaust (~8.5s)...\n")
+			body := map[string]any{
+				"guild_id":   "demo-guild",
+				"channel_id": "demo-channel",
+				"sender":     "dave",
+				"text":       "hello to a dead receiver",
+			}
+			if err := postInject(injectURL, "discord.message", body); err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				return
+			}
+
+			// Wait for the retry cycle: initial + 3 retries with 0.5/1/2/5s
+			// backoff = ~8.5s. Plus a small buffer.
+			time.Sleep(10 * time.Second)
+
+			// Re-subscribe (refresh) on same canonical tuple — response
+			// should now carry deliveryStatus per spec L425-460.
+			res2, err := c.Call("events/subscribe", subParams)
+			if err != nil {
+				fmt.Printf("    ERROR: refresh subscribe failed: %v\n", err)
+				return
+			}
+			var refreshResp map[string]any
+			_ = json.Unmarshal(res2.Raw, &refreshResp)
+			pretty, _ := json.MarshalIndent(refreshResp, "    ", "  ")
+			fmt.Printf("    Refresh response (note deliveryStatus block):\n%s\n", string(pretty))
+
+			status, _ := refreshResp["deliveryStatus"].(map[string]any)
+			if status == nil {
+				fmt.Printf("    ERROR: deliveryStatus missing — server should populate it after a failed delivery\n")
+				return
+			}
+			active, _ := status["active"].(bool)
+			fmt.Printf("    deliveryStatus.active=%v  lastError=%v  failedSince=%v\n",
+				active, status["lastError"], status["failedSince"])
+			if active {
+				fmt.Printf("    Suspend has NOT fired (default threshold = 5; need 5 failed deliveries).\n")
+				fmt.Printf("    For a fast suspend demo, restart server with `make serve-fast-suspend`\n")
+				fmt.Printf("    (sets -webhook-suspend-threshold 1 so ONE failure flips Active=false).\n")
+			} else {
+				fmt.Printf("    Suspend FIRED — Active=false. Refresh of this subscription will reactivate.\n")
+				if gotControl.Load() {
+					fmt.Printf("    {type:terminated} control envelope was POSTed to the receiver:\n")
+					var env map[string]any
+					_ = json.Unmarshal(controlBody, &env)
+					envPretty, _ := json.MarshalIndent(env, "      ", "  ")
+					fmt.Printf("%s\n", string(envPretty))
+				} else {
+					fmt.Printf("    (Control envelope POST was attempted; receiver may not have captured it within the wait window — re-run if needed.)\n")
+				}
+			}
+
 			return
 		})
 

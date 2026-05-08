@@ -19,6 +19,9 @@ serve: ## Start the discord-events server standalone (also works with MCPJam, VS
 	  go run . --serve -addr :8080; \
 	fi
 
+serve-fast-suspend: ## Start the server with -webhook-suspend-threshold 1 so the suspend-transition demo step fires after a single failed delivery cycle (~12s instead of ~42s with the default threshold of 5).
+	go run . --serve -addr :8080 -webhook-suspend-threshold 1
+
 demo: ## Run the demokit walkthrough (interactive, TUI). Server must be up via `make serve` in another terminal.
 	go run . --tui
 
@@ -114,5 +117,5 @@ webhook:
 poll:
 	@$(EVENTS_CLIENT) poll --interval $(or $(INTERVAL),5)
 
-.PHONY: run serve demo readme build test test-race test-ttl inject inject-typing inject-error inject-terminate list listen webhook poll
+.PHONY: run serve serve-fast-suspend demo readme build test test-race test-ttl inject inject-typing inject-error inject-terminate list listen webhook poll
 .DEFAULT_GOAL := demo
