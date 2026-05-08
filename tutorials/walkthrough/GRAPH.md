@@ -94,6 +94,6 @@ graph TD
 
     classDef written fill:#e8f5e9,stroke:#2e7d32,color:#000;
     classDef stub fill:#fff3e0,stroke:#e65100,color:#000;
-    class bringup,events,extension-mechanisms,notifications,request-anatomy,transport-mechanics written;
-    class apps,auth,cancellation,elicitation,events-hmac,events-identity,events-ssrf,initialize,list-ttl,middleware,mrtr,reverse-call,roots-list,sampling,session-resumption,sse-resumption,tasks stub;
+    class bringup,events,extension-mechanisms,mrtr,notifications,request-anatomy,transport-mechanics written;
+    class apps,auth,cancellation,elicitation,events-hmac,events-identity,events-ssrf,initialize,list-ttl,middleware,reverse-call,roots-list,sampling,session-resumption,sse-resumption,tasks stub;
 ```

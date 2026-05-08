@@ -248,5 +248,5 @@ Three things to internalize:
 - **[Reverse-call mechanics](./reverse-call.md)** *(stub, root)* — drills into the reverse-call subset of this anatomy with a concrete `tools/call → elicitation/create` walkthrough; covers the parent-id back-pointer for cancellation.
 - **[Tasks v1/v2/hybrid](./tasks.md)** *(stub, root)* — uses the handler context heavily, plus a separate task store; introduces detach/resume semantics that the per-request anatomy doesn't cover (a task can outlive the originating request).
 - **[Middleware composition](./middleware.md)** *(stub, branch)* — request-side vs. sending-side in detail, ordering, ext/auth and ext/ui interception points.
-- **[MRTR (SEP-2322)](./mrtr.md)** *(stub, root)* — Multi Round-Trip Requests; the stateless-server alternative to synchronous reverse calls during a `tools/call`.
+- **[MRTR (SEP-2322)](./mrtr.md)** — Multi Round-Trip Requests; the stateless-server alternative to synchronous reverse calls during a `tools/call`.
 - **[Elicitation](./elicitation.md)** · **[Sampling](./sampling.md)** · **[Roots/list](./roots-list.md)** *(stub, leaves)* — concrete reverse-call types as applications of the patterns from this page + reverse-call mechanics.
