@@ -57,9 +57,18 @@ type bootstrapInfo struct {
 	// signature check passes, but each violates one specific RFC 7519
 	// claim that the server MUST reject. Demokit walkthroughs ignore
 	// these fields.
-	TokExpired        string `json:"tok_expired"`
-	TokWrongAudience  string `json:"tok_wrong_audience"`
-	TokWrongIssuer    string `json:"tok_wrong_issuer"`
+	TokExpired       string `json:"tok_expired"`
+	TokWrongAudience string `json:"tok_wrong_audience"`
+	TokWrongIssuer   string `json:"tok_wrong_issuer"`
+
+	// TokUpstreamAssertion is a JWT signed by a synthetic upstream IdP
+	// the AS trusts (UpstreamIdpIssuer in common/setup.go). The
+	// conformance suite uses this as a `subject_token` for the RFC 8693
+	// token-exchange flow check (Phase 3c
+	// auth-enterprise-managed-token-exchange-flow-shape) — POSTed to
+	// /api/token with grant_type=token-exchange + subject_token_type=jwt
+	// to verify the token-exchange response shape per RFC 8693 §2.2.
+	TokUpstreamAssertion string `json:"tok_upstream_assertion"`
 }
 
 func runDemo() {
@@ -341,6 +350,12 @@ func serve() {
 	tokWrongAud := env.MintWrongAudienceToken("alice", []string{"read"})
 	tokWrongIss := env.MintWrongIssuerToken("alice", []string{"read"})
 
+	// Pre-mint an upstream-IdP-style assertion the AS trusts. Used by
+	// the panyam/mcpconformance Phase 3c
+	// auth-enterprise-managed-token-exchange-flow-shape check as the
+	// `subject_token` parameter for the RFC 8693 token-exchange grant.
+	tokUpstreamAssertion := env.MintUpstreamAssertion("alice")
+
 	log.Printf("Auth example on %s", addr)
 	log.Printf("MCP endpoint: %s/mcp", listenURL)
 	log.Printf("Bootstrap:    %s/demo/bootstrap", listenURL)
@@ -359,14 +374,15 @@ func serve() {
 			m.HandleFunc("GET /demo/bootstrap", func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				json.NewEncoder(w).Encode(bootstrapInfo{
-					MCPURL:           listenURL + "/mcp",
-					TokRead:          tokRead,
-					TokReadWrite:     tokReadWrite,
-					TokAll:           tokAll,
-					TokBob:           tokBob,
-					TokExpired:       tokExpired,
-					TokWrongAudience: tokWrongAud,
-					TokWrongIssuer:   tokWrongIss,
+					MCPURL:               listenURL + "/mcp",
+					TokRead:              tokRead,
+					TokReadWrite:         tokReadWrite,
+					TokAll:               tokAll,
+					TokBob:               tokBob,
+					TokExpired:           tokExpired,
+					TokWrongAudience:     tokWrongAud,
+					TokWrongIssuer:       tokWrongIss,
+					TokUpstreamAssertion: tokUpstreamAssertion,
 				})
 			})
 			auth.MountAuth(m, auth.AuthConfig{
