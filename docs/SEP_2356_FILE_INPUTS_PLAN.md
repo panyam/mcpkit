@@ -40,7 +40,7 @@ Two phases: core protocol support (Phase 1), then MCP Apps bridge integration
 
 **Files:** `core/file_input.go`, `core/protocol.go`
 
-- [x] `FileInputDescriptor` struct with `Accept []string` + `MaxSize *int` (`omitempty` JSON tags).
+- [x] `FileInputDescriptor` struct with `Accept []string` + `MaxSize *int` + `TransferModes []FileInputTransferMode` (all `omitempty` JSON tags). `TransferModes` lands in alignment with PR 2631's 2026-05-07 harmonize commit; mcpkit currently supports inline only — see Phase 3 for the upload-mode plan.
 - [x] `FileInputs *struct{}` added to `ClientCapabilities`.
 - [x] `core.HasFileInputs(ctx) bool` helper.
 - [x] `core.FileInputSchemaKey = "x-mcp-file"` constant.
@@ -168,6 +168,147 @@ Conformance-style tests:
 - [ ] Ensure bridge CSP allows `data:` URIs in relevant contexts
 - [ ] Document that `data:` URIs may be blocked by strict CSP policies
 
+## Phase 3: Upload-mode transfer (deferred — gated on SEP-2631)
+
+SEP-2631 (File Objects and Transfer) layers an out-of-band transfer
+contract on top of the SEP-2356 keyword surface. Casey's 2026-05-07
+rebase aligned 2631 with `x-mcp-file`, so the inline pieces mcpkit has
+shipped stay valid. Upload mode is the additive surface for files that
+shouldn't ride the JSON-RPC payload.
+
+**Why deferred:**
+
+1. SEP-2631 is OPEN and still iterating. Implementing the protocol now
+   risks re-implementing after the WG converges.
+2. The hardest pieces (storage abstraction, upload endpoint auth,
+   lifetime/GC semantics) are precisely the parts SEP-2631 says least
+   about. We'd be inventing more than implementing.
+3. There is no cross-impl conformance bar yet for upload mode — the
+   acceptance contract for "supports upload" is unverifiable until the
+   spec lands.
+
+`TransferModes` ships now as forward-compat plumbing — the descriptor
+field is exposed and the `FileInputTransferModeUpload` constant exists,
+but the validator only validates inline data URIs. A descriptor that
+restricts to `transferModes: ["upload"]` is well-formed but cannot be
+satisfied by an mcpkit client today.
+
+### Layer breakdown (when we pick this back up)
+
+| Layer | What's needed |
+|-------|---------------|
+| RPC types | `files/prepareUpload` + `files/getDownload` request/response in `core/`, dispatcher routes, `ClientCapabilities.files.{upload,download}` (separate from existing `fileInputs` cap) |
+| Storage abstraction | `FileStore` interface (`PrepareUpload(meta) → (uploadURL, fileURI)`, `Resolve(fileURI) → bytes/metadata`); at least an in-memory and a filesystem impl; lifetime/GC semantics |
+| HTTP upload endpoint | Server-exposed PUT/POST that accepts the actual bytes out-of-band; signed/scoped URL; size enforcement at upload time; streaming for large files |
+| URI scheme | Pick a scheme for file URIs — likely `mcp-file://<opaque>` to keep them distinct from resource URIs |
+| Validator extension | `core.ValidateFileInput` learns to detect non-data URIs, resolve via the FileStore, run size+accept checks against resolved bytes; enforce `TransferModes` (reject inline when descriptor allows only upload, etc.) |
+| Client helpers | `client.UploadFileArg(path, desc)` parallel to `PrepareFileArg`; mode selection logic from descriptor's `TransferModes` plus a size threshold |
+| Bridge (ext/ui) | `selectFile()` chooses between data URI and upload; browser-side HTTPS upload from the bridge iframe; CSP for cross-origin upload endpoints |
+| Conformance | Upload-mode scenarios on top of the existing 7 inline ones — prepareUpload negotiation, upload size enforcement, end-to-end round-trip, cap gating, mixed-mode descriptor selection |
+
+### Open design questions for the WG
+
+These are the calls the implementation needs the spec to settle. Each
+records a recommendation grounded in mcpkit's existing surface so the
+WG can react to a concrete starting point rather than a blank slate.
+
+**Q1 — `FileValue` scope.** Casey's 2026-05-07 ask: should `FileValue
+{uri, name?, mimeType?, size?}` upstream from SEP-2631 to SEP-2356 as a
+universal value shape for `x-mcp-file` arguments?
+
+  *Recommendation:* scope `FileValue` to OOB file URIs only, not as a
+  universal value shape. Inline data URIs already carry `name=` and
+  the media type via RFC 2397 parameters — the FileValue object would
+  be redundant for inline. Keeping inline values as bare URI strings
+  preserves the simpler contract. `FileValue` would apply when the
+  value is a file URI returned by `files/prepareUpload`, where the
+  bare URI carries no metadata.
+
+**Q2 — `transferModes` selection.** When `transferModes:
+["inline","upload"]`, who picks?
+
+  *Recommendation:* client picks, optionally informed by `maxSize`. If
+  `maxSize` is set, treat it as the implicit inline-budget threshold
+  (use upload above, inline below). No server-side `preferUpload` flag
+  — keeps the surface small, lets the descriptor stay declarative.
+
+**Q3 — `fileInputs` cap vs `files.upload/download` cap.** How do these
+two caps compose?
+
+  *Recommendation:* independent. `fileInputs` gates whether the client
+  renders a picker (controls visibility of the `x-mcp-file` keyword).
+  `files.upload` gates whether OOB transfer is available. A client may
+  declare `fileInputs: {}` without `files.upload` (data URIs only).
+  Cap-gating logic for an unsatisfiable descriptor (e.g.
+  `transferModes: ["upload"]` on a client without `files.upload`)
+  should mirror the existing `fileInputs` strip — keep the property,
+  drop the file-input shape so the tool is still callable with a
+  text-input fallback.
+
+**Q4 — File URI scheme.** What URI scheme do the file URIs returned by
+`files/prepareUpload` use?
+
+  *Recommendation:* `mcp-file://<opaque>`. Keeps them distinct from
+  `resources/read`-resolved `https://` URIs. The opaque part is
+  server-internal — clients treat it as a token. Resolution flows
+  through `files/getDownload`, not `resources/read`.
+
+**Q5 — Storage lifetime.** When does an uploaded file become eligible
+for GC?
+
+  *Recommendation:* session-scoped by default with optional explicit
+  `files/release`. Per-tool-call is too aggressive (retries break);
+  rely-only-on-explicit-release leaks under abandoned sessions. The
+  server can override TTL in the `files/prepareUpload` response.
+
+**Q6 — Upload endpoint authentication.** Is the upload URL itself
+signed? Bearer-protected? Server-implementation-specific?
+
+  *Recommendation:* server-implementation-specific, but the SEP MUST
+  mandate "unguessable / scoped to a single upload." Reference impls
+  can use signed URLs (S3-style) or short-lived bearer tokens. The
+  spec shouldn't pin the mechanism.
+
+**Q7 — Streaming and chunked uploads.** Does the upload protocol
+support resumable / chunked uploads for files larger than memory?
+
+  *Recommendation:* single PUT for v1; punt resumable to a follow-up
+  SEP. Keeps the surface area small enough to converge on. Servers
+  that need streaming today can run their own out-of-band channel and
+  hand back a file URI through `files/prepareUpload`.
+
+**Q8 — Error reasons.** Inline mode pins `file_too_large` /
+`file_type_not_accepted` in the JSON-RPC `data` payload (frozen by the
+mcpconformance suite). What does upload mode add?
+
+  *Recommendation:* reuse those two; add `upload_failed` (transport
+  error during the PUT), `file_not_found` (file URI does not resolve),
+  and `file_expired` (TTL elapsed). Same structured `data` shape:
+  `{reason, ...}` keyed by the constants in `core/file_validation.go`.
+
+**Q9 — Capability gating for descriptors with mode constraints.** What
+should servers do when a descriptor restricts `transferModes` to a
+mode the client cannot satisfy (e.g. `["upload"]` on a client without
+`files.upload`)?
+
+  *Recommendation:* same strip-keyword-keep-property pattern Phase 1.5
+  uses for `fileInputs`-less clients. Tool stays callable with a
+  text-input fallback; the strict `x-mcp-file` shape is hidden because
+  it can't be satisfied. Servers that want stricter behavior can
+  reject at validation time.
+
+**Q10 — Working data point on cap-gating semantics.** Phase 1.5 ships
+a strip-keyword-keep-property interpretation of "MUST NOT include file
+input fields without the `fileInputs` capability" (asserted by the
+`file-inputs-x-mcp-file-stripped-without-cap` conformance scenario).
+Casey's 2026-05-06 inline review at line 87 of PR 2356 asks how
+fallback works for non-cap'd clients.
+
+  *Recommendation:* surface the strip-keyword interpretation back to
+  the WG as a working data point. It's one valid answer to Casey's
+  fallback question and is already cross-impl-asserted via the
+  conformance bar.
+
 ## Implementation order
 
 ```
@@ -179,10 +320,14 @@ Phase 1:
 Phase 2 (follow-up PR):
   2.1 (bridge selectFile) → 2.2 (elicitation file picker) →
   2.3 + 2.4 (docs)
+
+Phase 3 (deferred — gated on SEP-2631 stabilizing):
+  RPC types → storage abstraction → upload endpoint →
+  validator extension → client helpers → bridge → conformance
 ```
 
 Phase 1 is self-contained. Phase 2 depends on Phase 1 types but can be a
-separate PR.
+separate PR. Phase 3 lands when the SEP-2631 wire shape stops moving.
 
 ## Cross-SEP interactions
 
