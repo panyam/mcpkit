@@ -106,7 +106,7 @@ sequenceDiagram
     Discord->>Server: TypingStart event (when you start typing in the channel)
     Server-->>Host: notifications/events/event { name: discord.typing, cursor: null }
     Discord->>Server: MessageCreate event (when you press enter)
-    Server-->>Host: notifications/events/event { name: discord.message, cursor: <new> }
+    Server-->>Host: notifications/events/event { name: discord.message, cursor: <fresh> }
 ```
 
 ## Steps

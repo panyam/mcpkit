@@ -253,7 +253,7 @@ func runDemo() {
 	// disabled in TUI mode because Bubble Tea owns stdin.
 	demo.Step("Live Telegram interaction (real message from a Telegram chat)").
 		Arrow("Telegram", "Server", "MessageCreate event (when you send a message to the bot)").
-		DashedArrow("Server", "Host", "notifications/events/event { name: telegram.message, cursor: <new> }").
+		DashedArrow("Server", "Host", "notifications/events/event { name: telegram.message, cursor: <fresh> }").
 		Note(
 			"Setup: start the server with a Telegram bot token and open a chat with the bot in the Telegram app.",
 			"",
