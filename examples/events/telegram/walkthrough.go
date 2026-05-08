@@ -177,7 +177,7 @@ func runDemo() {
 		Arrow("Host", "Server", "events/subscribe { mode: webhook, url, secret: whsec_<client-supplied>, name: telegram.message }").
 		DashedArrow("Server", "Host", "{ id, refreshBefore }   (response does NOT echo secret per spec)").
 		Arrow("Receiver", "Server", "POST /inject (simulated message)").
-		DashedArrow("Server", "Receiver", "POST <url> + HMAC signature headers (default: webhook-* per Standard Webhooks; opt-in: X-MCP-* via -webhook-header-mode mcp)").
+		DashedArrow("Server", "Receiver", "POST <url> + HMAC signature headers (default webhook-* per Standard Webhooks, opt-in X-MCP-* via -webhook-header-mode mcp)").
 		Note(
 			"Same `Subscription` + `Receiver[Data]` pair as the discord webhook step.",
 			"",

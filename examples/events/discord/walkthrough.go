@@ -42,6 +42,7 @@ func runDemo() {
 			demokit.Actor("Host", "MCP Host (this client)"),
 			demokit.Actor("Server", "MCP Server (make serve)"),
 			demokit.Actor("Receiver", "Local webhook receiver (this process)"),
+			demokit.Actor("Discord", "Discord (real bot mode only)"),
 		)
 
 	demo.Section("Setup — two modes",
@@ -316,7 +317,7 @@ func runDemo() {
 		Arrow("Host", "Server", "events/subscribe { mode: webhook, url, secret: whsec_<client-supplied> }").
 		DashedArrow("Server", "Host", "{ id, refreshBefore }   (response does NOT echo secret per spec)").
 		Arrow("Receiver", "Server", "POST /inject (simulated message)").
-		DashedArrow("Server", "Receiver", "POST <url> + HMAC signature headers (default: webhook-* per Standard Webhooks; opt-in: X-MCP-* via -webhook-header-mode mcp)").
+		DashedArrow("Server", "Receiver", "POST <url> + HMAC signature headers (default webhook-* per Standard Webhooks, opt-in X-MCP-* via -webhook-header-mode mcp)").
 		DashedArrow("Host", "Host", "background loop: re-subscribe at 0.5 × TTL").
 		Note(
 			"Use webhook delivery. `events/subscribe` registers a callback URL plus a client-supplied `whsec_` secret with a TTL; the server POSTs HMAC-signed events to that URL as they happen, the subscription is soft-state on the server (in-memory with TTL), and the client refreshes before `refreshBefore` to keep it alive. If the client process dies and reconnects later with the same canonical tuple, the subscription either is still alive (refresh is idempotent) or has lapsed and the next subscribe creates a fresh one with the supplied cursor as the replay point. (in mcpkit: `clients/go` provides `Subscription` for subscribe + auto-refresh and `Receiver[Data]` for a typed inbound channel)",
