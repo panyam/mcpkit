@@ -11,7 +11,9 @@ import (
 )
 
 // TestResultTypeConstants verifies the wire values of the ResultType
-// discriminator. "task" is SEP-2557; "complete"/"incomplete" are SEP-2322 (MRTR).
+// discriminator. "task" is SEP-2557; "complete" / "input_required" are
+// SEP-2322 (MRTR), with "input_required" renamed from the earlier
+// "incomplete" in commit de6d76fb (merged 2026-05-06).
 func TestResultTypeConstants(t *testing.T) {
 	cases := []struct {
 		rt   ResultType
@@ -19,7 +21,7 @@ func TestResultTypeConstants(t *testing.T) {
 	}{
 		{ResultTypeTask, "task"},
 		{ResultTypeComplete, "complete"},
-		{ResultTypeIncomplete, "incomplete"},
+		{ResultTypeInputRequired, "input_required"},
 	}
 	for _, tc := range cases {
 		if string(tc.rt) != tc.want {
@@ -476,12 +478,14 @@ func TestUpdateTaskRequestOmitEmpty(t *testing.T) {
 	}
 }
 
-// TestIncompleteResultWireShape verifies the SEP-2322 ephemeral wire shape:
-// {"resultType": "incomplete", "inputRequests": {...}, "requestState": "..."}.
-// resultType is camelCase like every other MCP wire field — Luca confirmed
-// camelCase is the SEP-2322 spec standard.
-func TestIncompleteResultWireShape(t *testing.T) {
-	res := IncompleteResult{
+// TestInputRequiredResultWireShape verifies the SEP-2322 ephemeral wire
+// shape: {"resultType": "input_required", "inputRequests": {...},
+// "requestState": "..."}. resultType is camelCase like every other MCP
+// wire field — Luca confirmed camelCase is the SEP-2322 spec standard.
+// "input_required" is the SEP-2322 wire variant value, renamed from
+// "incomplete" in commit de6d76fb (merged 2026-05-06).
+func TestInputRequiredResultWireShape(t *testing.T) {
+	res := InputRequiredResult{
 		InputRequests: InputRequests{
 			"user_name": InputRequest{
 				Method: "elicitation/create",
@@ -499,8 +503,8 @@ func TestIncompleteResultWireShape(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if m["resultType"] != "incomplete" {
-		t.Errorf("resultType = %v, want \"incomplete\"; got %s", m["resultType"], data)
+	if m["resultType"] != "input_required" {
+		t.Errorf("resultType = %v, want \"input_required\"; got %s", m["resultType"], data)
 	}
 	if _, ok := m["result_type"]; ok {
 		t.Errorf("snake_case result_type must NOT appear (camelCase is the wire field); got %s", data)
@@ -521,19 +525,19 @@ func TestIncompleteResultWireShape(t *testing.T) {
 	}
 }
 
-// TestIncompleteResultDefaultsResultType verifies that a zero-value
-// IncompleteResult marshals with resultType = "incomplete" so handlers
-// can build IncompleteResult{InputRequests: ...} without setting the
-// discriminator manually.
-func TestIncompleteResultDefaultsResultType(t *testing.T) {
-	data, err := json.Marshal(IncompleteResult{})
+// TestInputRequiredResultDefaultsResultType verifies that a zero-value
+// InputRequiredResult marshals with resultType = "input_required" so
+// handlers can build InputRequiredResult{InputRequests: ...} without
+// setting the discriminator manually.
+func TestInputRequiredResultDefaultsResultType(t *testing.T) {
+	data, err := json.Marshal(InputRequiredResult{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var m map[string]any
 	json.Unmarshal(data, &m)
-	if m["resultType"] != "incomplete" {
-		t.Errorf("zero-value IncompleteResult.resultType = %v, want \"incomplete\"; got %s",
+	if m["resultType"] != "input_required" {
+		t.Errorf("zero-value InputRequiredResult.resultType = %v, want \"input_required\"; got %s",
 			m["resultType"], data)
 	}
 }

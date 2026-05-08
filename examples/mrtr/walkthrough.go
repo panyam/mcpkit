@@ -14,9 +14,9 @@ import (
 func runDemo() {
 	serverURL := common.ServerURL()
 
-	demo := demokit.New("MCP MRTR (SEP-2322) — Ephemeral IncompleteResult Round-Trips").
+	demo := demokit.New("MCP MRTR (SEP-2322) — Ephemeral InputRequiredResult Round-Trips").
 		Dir("mrtr").
-		Description("Walks through the SEP-2322 ephemeral Multi Round-Trip Requests flow. The server returns `IncompleteResult{inputRequests, requestState}` when it needs more input from the client; the client resolves each `inputRequest` (elicitation, sampling, roots) locally and retries the SAME `tools/call` with `inputResponses` + the echoed `requestState`. Stateless on the server side — accumulated answers live inside `requestState` across rounds.").
+		Description("Walks through the SEP-2322 ephemeral Multi Round-Trip Requests flow. The server returns `InputRequiredResult{inputRequests, requestState}` when it needs more input from the client; the client resolves each `inputRequest` (elicitation, sampling, roots) locally and retries the SAME `tools/call` with `inputResponses` + the echoed `requestState`. Stateless on the server side — accumulated answers live inside `requestState` across rounds. Renamed from `IncompleteResult` in SEP-2322 commit de6d76fb (merged 2026-05-06).").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this client)"),
 			demokit.Actor("Server", "MCP Server (make serve)"),
@@ -36,7 +36,7 @@ func runDemo() {
 		"",
 		"- **`resultType: \"complete\"`** (or absent) — sync ToolResult, the call is done.",
 		"- **`resultType: \"task\"`** — server elected to spin off a task; client polls via `tasks/get` (SEP-2663).",
-		"- **`resultType: \"incomplete\"`** — server needs more input. The response carries `inputRequests` (a map of opaque keys → `{method, params}`) and an opaque `requestState`. The client resolves each input request locally, then RETRIES the same `tools/call` with the original arguments PLUS `inputResponses` (keyed by the same opaque ids) AND the echoed `requestState`.",
+		"- **`resultType: \"input_required\"`** — server needs more input. The response carries `inputRequests` (a map of opaque keys → `{method, params}`) and an opaque `requestState`. The client resolves each input request locally, then RETRIES the same `tools/call` with the original arguments PLUS `inputResponses` (keyed by the same opaque ids) AND the echoed `requestState`. Renamed from `\"incomplete\"` in SEP-2322 commit de6d76fb (merged 2026-05-06).",
 		"",
 		"The `inputRequests` methods are real MCP method names (`elicitation/create`, `sampling/createMessage`, `roots/list`). The client routes each through the same dispatcher it uses for real server-initiated requests — `client.HandleServerRequestWithContext` — so your existing `WithElicitationHandler` / `WithSamplingHandler` / `WithRootsHandler` callbacks just work.",
 		"",
@@ -79,32 +79,32 @@ func runDemo() {
 			return
 		})
 
-	demo.Step("Round 1 (raw): tools/call → IncompleteResult").
+	demo.Step("Round 1 (raw): tools/call → InputRequiredResult").
 		Arrow("Host", "Server", "tools/call: test_tool_with_elicitation {}").
-		DashedArrow("Server", "Host", "{ resultType: \"incomplete\", inputRequests: {user_name: {method: \"elicitation/create\", ...}}, requestState: \"<token>\" }").
-		Note("Bypass the auto-loop helper to see the raw IncompleteResult shape. The discriminator is `resultType` — camelCase like every other MCP wire field. `inputRequests` is keyed by server-chosen opaque ids the client must echo verbatim.").
+		DashedArrow("Server", "Host", "{ resultType: \"input_required\", inputRequests: {user_name: {method: \"elicitation/create\", ...}}, requestState: \"<token>\" }").
+		Note("Bypass the auto-loop helper to see the raw InputRequiredResult shape. The discriminator is `resultType` — camelCase like every other MCP wire field. `inputRequests` is keyed by server-chosen opaque ids the client must echo verbatim. SEP-2322 commit de6d76fb (merged 2026-05-06) renamed this variant from IncompleteResult / `\"incomplete\"`.").
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			res, err := client.ToolCall(c, "test_tool_with_elicitation", map[string]any{})
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
 			}
-			if !res.IsIncomplete() {
-				fmt.Printf("    UNEXPECTED: round 1 was not Incomplete (got %+v)\n", res)
+			if !res.IsInputRequired() {
+				fmt.Printf("    UNEXPECTED: round 1 was not InputRequired (got %+v)\n", res)
 				return
 			}
-			pretty, _ := json.MarshalIndent(res.Incomplete, "    ", "  ")
-			fmt.Printf("    raw IncompleteResult:\n%s\n", string(pretty))
+			pretty, _ := json.MarshalIndent(res.InputRequired, "    ", "  ")
+			fmt.Printf("    raw InputRequiredResult:\n%s\n", string(pretty))
 			return
 		})
 
 	demo.Step("Auto-loop: CallToolWithInputs runs the round-trip").
 		Arrow("Host", "Server", "tools/call: test_tool_with_elicitation").
-		DashedArrow("Server", "Host", "IncompleteResult{user_name elicitation}").
+		DashedArrow("Server", "Host", "InputRequiredResult{user_name elicitation}").
 		Arrow("Host", "Host", "DefaultInputHandler → c.elicitationHandler → ElicitationResult{name: Alice}").
 		Arrow("Host", "Server", "tools/call (retry): {arguments: {}, inputResponses: {user_name: <result>}, requestState: <echo>}").
 		DashedArrow("Server", "Host", "ToolResult: \"Hello, Alice!\"").
-		Note("`client.CallToolWithInputs(ctx, c, name, args, handler)` collapses the whole loop. `DefaultInputHandler` synthesizes a server-to-client request for each `inputRequest` and routes it through `client.HandleServerRequestWithContext` — single source of truth for how the client responds to MCP method requests, whether they arrived over the back-channel or inlined inside an IncompleteResult.").
+		Note("`client.CallToolWithInputs(ctx, c, name, args, handler)` collapses the whole loop. `DefaultInputHandler` synthesizes a server-to-client request for each `inputRequest` and routes it through `client.HandleServerRequestWithContext` — single source of truth for how the client responds to MCP method requests, whether they arrived over the back-channel or inlined inside an InputRequiredResult.").
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			bgCtx := context.Background()
 			res, err := client.CallToolWithInputs(bgCtx, c,
@@ -115,7 +115,7 @@ func runDemo() {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
 			}
-			if res.IsIncomplete() || res.IsTask() {
+			if res.IsInputRequired() || res.IsTask() {
 				fmt.Printf("    UNEXPECTED: expected sync ToolResult, got %+v\n", res)
 				return
 			}
@@ -125,9 +125,9 @@ func runDemo() {
 
 	demo.Step("Multi-round: server accumulates answers across rounds via requestState").
 		Arrow("Host", "Server", "tools/call: test_incomplete_result_multi_round").
-		DashedArrow("Server", "Host", "Round 1 IncompleteResult: ask step1 (name)").
+		DashedArrow("Server", "Host", "Round 1 InputRequiredResult: ask step1 (name)").
 		Arrow("Host", "Server", "retry with inputResponses{step1}").
-		DashedArrow("Server", "Host", "Round 2 IncompleteResult: ask step2 (color) — requestState now carries step1's answer").
+		DashedArrow("Server", "Host", "Round 2 InputRequiredResult: ask step2 (color) — requestState now carries step1's answer").
 		Arrow("Host", "Server", "retry with inputResponses{step2} (NOT step1 — that's already in requestState)").
 		DashedArrow("Server", "Host", "Round 3 ToolResult: \"Hi Alice, your favorite color is Alice.\"").
 		Note("The wire only ships the LATEST round's `inputResponses`. Dispatch decodes prior answers from `requestState` (a signed `MRTRRoundState` containing the accumulated answers map), merges with the current round, and surfaces a unified map to the handler. Handlers stay stateless across rounds. The canned elicitation handler returns the same `name: Alice` for both prompts in this demo, hence the funny output — a real handler would branch on the elicitation message.").
@@ -150,9 +150,9 @@ func runDemo() {
 		})
 
 	demo.Section("Where to look in the code",
-		"- Server dispatch: `server/dispatch.go` (handleToolsCall reshapes Incomplete into the wire envelope; merges accumulated answers from `requestState`)",
+		"- Server dispatch: `server/dispatch.go` (handleToolsCall reshapes InputRequired into the wire envelope; merges accumulated answers from `requestState`)",
 		"- Server runtime: `server/mrtr.go` (`mrtrRuntime` — sign / verify / mint requestState tokens; `WithRequestStateSigning(key, ttl)` shared with SEP-2663 Tasks)",
-		"- Wire types: `core.IncompleteResult` / `MRTRRoundState` / `Sign|VerifyMRTRState` — core/task_v2.go",
+		"- Wire types: `core.InputRequiredResult` / `MRTRRoundState` / `Sign|VerifyMRTRState` — core/task_v2.go",
 		"- Tool handler API: `ctx.RequestInput(reqs)` sentinel + `ctx.InputResponse(key)` / `HasInputResponses()` / `RequestState()` accessors — core/handler_context.go",
 		"- Client auto-loop: `client.CallToolWithInputs` + `DefaultInputHandler` — client/mrtr.go",
 		"- Client dispatch unification: `client.HandleServerRequestWithContext` — single switch for both real server-initiated requests AND MRTR-synthesized ones — client/client.go",

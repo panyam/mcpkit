@@ -12,7 +12,7 @@ import (
 
 // SEP-2322 MRTR (Multi Round-Trip Requests) — ephemeral, stateless flow.
 //
-// The server returns IncompleteResult{inputRequests, requestState}; the
+// The server returns InputRequiredResult{inputRequests, requestState}; the
 // client retries the SAME tools/call with inputResponses + the echoed
 // requestState. There is no per-round server-side state — the requestState
 // token is the entire round handle, which is why integrity matters.
@@ -51,7 +51,7 @@ type mrtrRuntime struct {
 // snapshot).
 //
 // Returns "" when encoding fails — dispatch then omits requestState
-// entirely on the IncompleteResult, which is spec-legal (the field is
+// entirely on the InputRequiredResult, which is spec-legal (the field is
 // optional). Failure here is non-fatal because handler progress is more
 // important than session continuity.
 func (r *mrtrRuntime) mintRequestState(toolName string, answered map[string]json.RawMessage) string {
@@ -154,7 +154,7 @@ func (r *mrtrRuntime) effectiveTTL() time.Duration {
 // mrtrPlaintextNonce returns a 128-bit base64url-encoded random string for
 // use as a plaintext-mode requestState. Random failures are reduced to an
 // empty string (the dispatcher then omits requestState entirely on the
-// IncompleteResult, which is spec-legal — the field is optional).
+// InputRequiredResult, which is spec-legal — the field is optional).
 func mrtrPlaintextNonce() string {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
@@ -186,7 +186,7 @@ type toolsCallMeta struct {
 
 // WithRequestStateSigning configures the HMAC-SHA256 key the server uses
 // to sign and verify SEP-2322 requestState tokens. The same key is shared
-// by ephemeral MRTR (tools/call IncompleteResult round-trips) and SEP-2663
+// by ephemeral MRTR (tools/call InputRequiredResult round-trips) and SEP-2663
 // Tasks (tasks/get / tasks/update / tasks/cancel) so production deployments
 // only configure HMAC once and have all signed-state surfaces work.
 //
