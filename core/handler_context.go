@@ -26,7 +26,7 @@ type ToolContext struct {
 
 	// inputResponses + requestState carry the SEP-2322 ephemeral MRTR
 	// continuation payload — the client echoes them back into the SAME
-	// tools/call request when retrying after a previous IncompleteResult.
+	// tools/call request when retrying after a previous InputRequiredResult.
 	// Set by dispatch from the request envelope; nil/empty on the first call.
 	inputResponses InputResponses
 	requestState   string
@@ -354,7 +354,7 @@ func (tc ToolContext) EmitContent(requestID json.RawMessage, content Content) {
 // --- SEP-2322 MRTR (Multi Round-Trip Requests) accessors ---
 
 // InputResponses returns the SEP-2322 inputResponses map the client echoed
-// back into this tools/call. Nil on the first call (no prior IncompleteResult)
+// back into this tools/call. Nil on the first call (no prior InputRequiredResult)
 // or when the client did not include the field.
 //
 // Handlers branch on this to detect retries: nil = first call, ask for input;
@@ -394,7 +394,7 @@ func (tc ToolContext) RequestState() string {
 // RequestInput is the SEP-2322 ephemeral retry primitive. Handlers return
 // the value as their ToolResult to signal "I need more input from the
 // client before I can produce a final result"; the dispatch layer
-// reshapes the response on the wire as an IncompleteResult and mints a
+// reshapes the response on the wire as an InputRequiredResult and mints a
 // fresh requestState for the next round.
 //
 // Usage in a tool handler:
@@ -415,7 +415,7 @@ func (tc ToolContext) RequestState() string {
 // reads as a single return statement matching the ToolHandler signature.
 func (tc ToolContext) RequestInput(reqs InputRequests) (ToolResult, error) {
 	return ToolResult{
-		IsIncomplete:  true,
-		InputRequests: reqs,
+		IsInputRequired: true,
+		InputRequests:   reqs,
 	}, nil
 }

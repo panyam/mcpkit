@@ -13,7 +13,7 @@ import (
 
 // TestMRTR_BasicElicitationRoundTrip exercises the SEP-2322 ephemeral flow
 // end-to-end through the live HTTP transport: round 1 returns
-// IncompleteResult{inputRequests, requestState}; round 2 (same tool, same
+// InputRequiredResult{inputRequests, requestState}; round 2 (same tool, same
 // arguments, but with the echoed inputResponses + requestState) returns a
 // complete ToolResult. Mirrors the upstream conformance scenario A1.
 func TestMRTR_BasicElicitationRoundTrip(t *testing.T) {
@@ -50,7 +50,7 @@ func TestMRTR_BasicElicitationRoundTrip(t *testing.T) {
 
 	c := connectMRTRClient(t, srv)
 
-	// Round 1: no inputResponses → expect IncompleteResult
+	// Round 1: no inputResponses → expect InputRequiredResult
 	r1, err := c.Call("tools/call", map[string]any{
 		"name":      "test_tool_with_elicitation",
 		"arguments": map[string]any{},
@@ -62,7 +62,7 @@ func TestMRTR_BasicElicitationRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(r1.Raw, &m1); err != nil {
 		t.Fatalf("unmarshal r1: %v", err)
 	}
-	if m1["resultType"] != "incomplete" {
+	if m1["resultType"] != "input_required" {
 		t.Fatalf("round 1 resultType = %v, want \"incomplete\"; raw=%s", m1["resultType"], r1.Raw)
 	}
 	reqs, ok := m1["inputRequests"].(map[string]any)
@@ -296,7 +296,7 @@ func TestMRTR_MultiRoundAccumulatesAnswers(t *testing.T) {
 	}
 	var m1 map[string]any
 	json.Unmarshal(r1.Raw, &m1)
-	if m1["resultType"] != "incomplete" {
+	if m1["resultType"] != "input_required" {
 		t.Fatalf("round 1 not incomplete; raw=%s", r1.Raw)
 	}
 	state1 := m1["requestState"].(string)
@@ -318,7 +318,7 @@ func TestMRTR_MultiRoundAccumulatesAnswers(t *testing.T) {
 	}
 	var m2 map[string]any
 	json.Unmarshal(r2.Raw, &m2)
-	if m2["resultType"] != "incomplete" {
+	if m2["resultType"] != "input_required" {
 		t.Fatalf("round 2 not incomplete; raw=%s", r2.Raw)
 	}
 	state2 := m2["requestState"].(string)
@@ -360,7 +360,7 @@ func TestMRTR_MultiRoundAccumulatesAnswers(t *testing.T) {
 // composition (gather input via MRTR rounds, then return CreateTaskResult on
 // the final round). SEP-2663 commit 451f5e1 (Apr 30) made this flow normative,
 // but our taskV2Middleware (server/tasks_v2.go) creates the task BEFORE the
-// handler runs, so the handler never gets to return IncompleteResult on
+// handler runs, so the handler never gets to return InputRequiredResult on
 // round 1 — the middleware has already sent CreateTaskResult to the client.
 //
 // Resolving this is a real design choice (always-sync handler vs. handler-
@@ -407,7 +407,7 @@ func TestMRTR_TaskComposition_Skipped(t *testing.T) {
 	}
 	var m1 map[string]any
 	json.Unmarshal(r1.Raw, &m1)
-	if m1["resultType"] != "incomplete" {
+	if m1["resultType"] != "input_required" {
 		t.Fatalf("round 1 should be incomplete; raw=%s", r1.Raw)
 	}
 

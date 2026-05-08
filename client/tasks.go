@@ -53,8 +53,8 @@ type WaitOptions struct {
 }
 
 // ToolCallResult is the discriminated union returned by ToolCall. Exactly
-// one of Sync, Task, or Incomplete is non-nil — branch on which is set
-// (or use the IsTask / IsIncomplete helpers).
+// one of Sync, Task, or InputRequired is non-nil — branch on which is set
+// (or use the IsTask / IsInputRequired helpers).
 type ToolCallResult struct {
 	// Sync is populated when the server ran the tool to completion in the
 	// same request and returned a ToolResult directly (resultType:
@@ -65,22 +65,26 @@ type ToolCallResult struct {
 	// resultType: "task" discriminator was present on the response).
 	Task *core.CreateTaskResult
 
-	// Incomplete is populated when the server returned an SEP-2322
-	// IncompleteResult — it needs more input before it can produce a
+	// InputRequired is populated when the server returned an SEP-2322
+	// InputRequiredResult — it needs more input before it can produce a
 	// final result. Callers using the bare ToolCall must handle this
 	// themselves (resolve inputRequests, retry tools/call with
 	// inputResponses + requestState); CallToolWithInputs handles the
-	// loop automatically.
-	Incomplete *core.IncompleteResult
+	// loop automatically. Renamed from Incomplete in lockstep with
+	// SEP-2322 commit de6d76fb (merged 2026-05-06).
+	InputRequired *core.InputRequiredResult
 }
 
 // IsTask reports whether the result is the task-creation variant.
 func (r *ToolCallResult) IsTask() bool { return r != nil && r.Task != nil }
 
-// IsIncomplete reports whether the server returned an IncompleteResult
+// IsInputRequired reports whether the server returned an InputRequiredResult
 // (SEP-2322 ephemeral MRTR). Callers needing the auto-retry loop should
-// use CallToolWithInputs instead of inspecting this directly.
-func (r *ToolCallResult) IsIncomplete() bool { return r != nil && r.Incomplete != nil }
+// use CallToolWithInputs instead of inspecting this directly. Renamed
+// from IsIncomplete to track the SEP-2322 wire-variant rename.
+func (r *ToolCallResult) IsInputRequired() bool {
+	return r != nil && r.InputRequired != nil
+}
 
 // --- Wire-format params ---
 
@@ -132,12 +136,12 @@ func parseToolCallResult(raw json.RawMessage) (*ToolCallResult, error) {
 			return nil, fmt.Errorf("unmarshal CreateTaskResult: %w", err)
 		}
 		return &ToolCallResult{Task: &r}, nil
-	case core.ResultTypeIncomplete:
-		var r core.IncompleteResult
+	case core.ResultTypeInputRequired:
+		var r core.InputRequiredResult
 		if err := json.Unmarshal(raw, &r); err != nil {
-			return nil, fmt.Errorf("unmarshal IncompleteResult: %w", err)
+			return nil, fmt.Errorf("unmarshal InputRequiredResult: %w", err)
 		}
-		return &ToolCallResult{Incomplete: &r}, nil
+		return &ToolCallResult{InputRequired: &r}, nil
 	}
 
 	var r core.ToolResult
