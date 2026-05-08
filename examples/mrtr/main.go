@@ -1,5 +1,5 @@
 // Example: SEP-2322 MRTR (Multi Round-Trip Requests) — ephemeral
-// IncompleteResult flow.
+// InputRequiredResult flow.
 //
 // Two-process architecture:
 //
@@ -8,7 +8,7 @@
 //
 // The server is a real MCP server — any host can connect to it. The
 // walkthrough acts as a scripted MCP host that drives `tools/call`
-// through one full IncompleteResult round-trip and prints the wire
+// through one full InputRequiredResult round-trip and prints the wire
 // fields at each step.
 //
 // The same binary doubles as the conformance fixture: pass `--serve`
@@ -28,7 +28,7 @@
 //                                                 sends a wrong inputResponses key
 //
 // The MRTR loop is server-driven and stateless: the server returns
-// IncompleteResult{inputRequests, requestState}; the client retries the
+// InputRequiredResult{inputRequests, requestState}; the client retries the
 // SAME tools/call with inputResponses + the echoed requestState. Dispatch
 // transparently merges accumulated answers across rounds via requestState
 // (see core.MRTRRoundState), so handlers stay stateless.
@@ -124,7 +124,7 @@ func registerMRTRTools(srv *server.Server) {
 	srv.RegisterTool(
 		core.ToolDef{
 			Name:        "test_incomplete_result_multiple_inputs",
-			Description: "A5: round 1 asks for elicitation + sampling + roots in one IncompleteResult.",
+			Description: "A5: round 1 asks for elicitation + sampling + roots in one InputRequiredResult.",
 			InputSchema: map[string]any{"type": "object"},
 		},
 		multipleInputsTool,

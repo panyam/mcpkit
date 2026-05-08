@@ -30,7 +30,11 @@ func ClientSupportsTasks(ctx context.Context) bool {
 //
 // Wire-format differences from v1:
 //   - tools/call carries a resultType discriminator: "task" (this file),
-//     "complete" / "incomplete" (MRTR — see ResultType constants).
+//     "complete" / "input_required" (MRTR — see ResultType constants).
+//     The "input_required" variant was renamed from "incomplete" in
+//     SEP-2322 commit de6d76fb (merged 2026-05-06) per dsp-ant request,
+//     to avoid the semantic collision with task-creating tools/call
+//     responses (which are also "incomplete" in some sense).
 //   - tasks/get returns DetailedTask: a discriminated union by status that
 //     inlines result / error / inputRequests / requestState in one trip.
 //   - tasks/cancel and tasks/update return empty acks (no task state).
@@ -44,14 +48,16 @@ func ClientSupportsTasks(ctx context.Context) bool {
 // ResultType is the discriminator on a tools/call response.
 //
 // "task" indicates a task-based response (CreateTaskResult). The "complete"
-// and "incomplete" values come from MRTR (Multi-Round Tool Result, SEP-2322)
-// and signal whether a tool result is final or expects further input rounds.
+// and "input_required" values come from MRTR (Multi-Round Tool Result,
+// SEP-2322) and signal whether a tool result is final or expects further
+// input rounds. The "input_required" variant was renamed from "incomplete"
+// in SEP-2322 commit de6d76fb, merged 2026-05-06.
 type ResultType string
 
 const (
-	ResultTypeTask       ResultType = "task"
-	ResultTypeComplete   ResultType = "complete"   // SEP-2322
-	ResultTypeIncomplete ResultType = "incomplete" // SEP-2322
+	ResultTypeTask          ResultType = "task"
+	ResultTypeComplete      ResultType = "complete"       // SEP-2322
+	ResultTypeInputRequired ResultType = "input_required" // SEP-2322
 )
 
 // InputRequest is a single MRTR input request enqueued by a server during
@@ -237,19 +243,29 @@ func (c CancelTaskResult) MarshalJSON() ([]byte, error) {
 	return json.Marshal(alias(c))
 }
 
-// IncompleteResult is the SEP-2322 wire envelope returned by tools/call (and
-// other request methods, in principle) when the server needs additional input
-// from the client before it can produce a final result. Clients retry the
-// same request with `inputResponses` (and the echoed `requestState`) until
-// the server returns a complete result, a CreateTaskResult, or an error.
+// InputRequiredResult is the SEP-2322 wire envelope returned by tools/call
+// (and other request methods, in principle) when the server needs additional
+// input from the client before it can produce a final result. Clients retry
+// the same request with `inputResponses` (and the echoed `requestState`)
+// until the server returns a complete result, a CreateTaskResult, or an
+// error.
+//
+// Renamed from IncompleteResult in SEP-2322 commit de6d76fb (merged
+// 2026-05-06) per dsp-ant request. The wire `resultType` value flipped
+// from "incomplete" to "input_required" at the same time. SEP-2663 had
+// not yet adopted the rename as of 2026-05-07 PM, but Caitie committed
+// to a coherent Draft Spec + Schema at the 5/15 RC (issue comment
+// 4384052694), so the alignment direction is "input_required" both
+// places.
 //
 // Wire-format note: the `resultType` discriminator is camelCase like every
 // other MCP wire field — Luca confirmed camelCase is the SEP-2322 spec
 // standard. (The upstream conformance suite briefly used snake_case but
 // that's being corrected on their side.)
-type IncompleteResult struct {
-	// ResultType is always "incomplete". Defaulted by MarshalJSON when empty
-	// so server handlers can build the struct without thinking about it.
+type InputRequiredResult struct {
+	// ResultType is always "input_required". Defaulted by MarshalJSON when
+	// empty so server handlers can build the struct without thinking about
+	// it.
 	ResultType ResultType `json:"resultType"`
 
 	// InputRequests is the map of server-chosen request keys → InputRequest
@@ -263,12 +279,13 @@ type IncompleteResult struct {
 	RequestState string `json:"requestState,omitempty"`
 }
 
-// MarshalJSON defaults ResultType to ResultTypeIncomplete so handlers that
-// build an IncompleteResult{} literal don't have to set the discriminator.
-func (r IncompleteResult) MarshalJSON() ([]byte, error) {
-	type alias IncompleteResult
+// MarshalJSON defaults ResultType to ResultTypeInputRequired so handlers
+// that build an InputRequiredResult{} literal don't have to set the
+// discriminator.
+func (r InputRequiredResult) MarshalJSON() ([]byte, error) {
+	type alias InputRequiredResult
 	if r.ResultType == "" {
-		r.ResultType = ResultTypeIncomplete
+		r.ResultType = ResultTypeInputRequired
 	}
 	return json.Marshal(alias(r))
 }

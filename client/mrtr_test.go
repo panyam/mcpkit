@@ -14,7 +14,7 @@ import (
 )
 
 // TestCallToolWithInputs_Elicitation drives a minimal SEP-2322 round-trip
-// through the public client API: server returns IncompleteResult asking
+// through the public client API: server returns InputRequiredResult asking
 // for an elicitation, the DefaultInputHandler routes it to the client's
 // registered elicitationHandler, the client retries with inputResponses,
 // and the server's second invocation returns a complete ToolResult.
@@ -39,7 +39,7 @@ func TestCallToolWithInputs_Elicitation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CallToolWithInputs: %v", err)
 	}
-	if res.IsIncomplete() || res.IsTask() {
+	if res.IsInputRequired() || res.IsTask() {
 		t.Fatalf("expected sync result, got %+v", res)
 	}
 	if res.Sync == nil || len(res.Sync.Content) == 0 {
@@ -52,7 +52,7 @@ func TestCallToolWithInputs_Elicitation(t *testing.T) {
 }
 
 // TestCallToolWithInputs_MaxRounds verifies the loop bails out cleanly
-// when the server keeps responding with IncompleteResult past the
+// when the server keeps responding with InputRequiredResult past the
 // configured cap. Without this guard, a misbehaving server could pin
 // the client in an infinite retry loop.
 func TestCallToolWithInputs_MaxRounds(t *testing.T) {
@@ -105,27 +105,27 @@ func TestCallToolWithInputs_HandlerError(t *testing.T) {
 	}
 }
 
-// TestParseToolCallResult_Incomplete verifies the wire-shape probe
-// recognises the SEP-2322 resultType:"incomplete" discriminator and
-// surfaces the IncompleteResult payload to callers using the bare
+// TestParseToolCallResult_InputRequired verifies the wire-shape probe
+// recognises the SEP-2322 resultType:"input_required" discriminator and
+// surfaces the InputRequiredResult payload to callers using the bare
 // ToolCall API.
-func TestParseToolCallResult_Incomplete(t *testing.T) {
+func TestParseToolCallResult_InputRequired(t *testing.T) {
 	srv := mrtrTestServer(t)
 	c, _ := connectMRTRClient(t, srv)
 
-	// Bare ToolCall — should surface Incomplete on round 1.
+	// Bare ToolCall — should surface InputRequired on round 1.
 	res, err := client.ToolCall(c, "test_tool_with_elicitation", map[string]any{})
 	if err != nil {
 		t.Fatalf("ToolCall: %v", err)
 	}
-	if !res.IsIncomplete() {
-		t.Fatalf("expected Incomplete; got %+v", res)
+	if !res.IsInputRequired() {
+		t.Fatalf("expected InputRequired; got %+v", res)
 	}
-	if res.Incomplete.InputRequests["user_name"].Method != "elicitation/create" {
-		t.Errorf("unexpected method: %+v", res.Incomplete.InputRequests)
+	if res.InputRequired.InputRequests["user_name"].Method != "elicitation/create" {
+		t.Errorf("unexpected method: %+v", res.InputRequired.InputRequests)
 	}
-	if res.Incomplete.RequestState == "" {
-		t.Error("expected non-empty requestState on Incomplete")
+	if res.InputRequired.RequestState == "" {
+		t.Error("expected non-empty requestState on InputRequired")
 	}
 }
 

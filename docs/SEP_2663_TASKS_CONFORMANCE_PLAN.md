@@ -190,12 +190,14 @@ done in parallel after Fix 1 lands.
   needed; mrtr-08 conformance skip already exists in
   `conformance/mrtr/scenarios.test.ts`).
 - MRTR resultType discriminator collision (`"input_required"` vs
-  `"incomplete"`) — SEP-2322 and SEP-2663 drafts disagree on the wire
-  value; awaiting alignment between the two SEP authors. Tracked on
-  PR 2663 comment 4381885336 + PR 2322 comment 4381884825. mcpkit
-  follows SEP-2663's `"incomplete"`. The mrtr conformance suite
-  centralizes the literal in `MRTR_INCOMPLETE_RESULT_TYPE` so the
-  eventual spec resolution is a single-line flip.
+  `"incomplete"`) — Resolved on the SEP-2322 side. Caitie's pre-merge
+  commit de6d76fb (merged 2026-05-06) renamed IncompleteResult to
+  InputRequiredResult and the wire literal from `"incomplete"` to
+  `"input_required"` per dsp-ant request. mcpkit and the conformance
+  fork now follow `"input_required"`. SEP-2663 PR head as of 2026-05-07
+  PM still uses `"incomplete"` on line 121 of the mdx, but Caitie
+  committed (issue comment 4384052694) to making the Draft Spec and
+  Schema coherent at the 5/15 RC. Both SEPs land on `"input_required"`.
 - Partial inputResponses fulfillment test (P2 — nice to have)
 - TTL expiry post-path test (P2 — hard to test conformantly)
 - Polling rate-limit test (P2 — hard to test conformantly)

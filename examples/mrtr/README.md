@@ -1,10 +1,15 @@
-# SEP-2322 MRTR — Ephemeral IncompleteResult Round-Trips
+# SEP-2322 MRTR — Ephemeral InputRequiredResult Round-Trips
 
 Demonstrates the SEP-2322 ephemeral Multi Round-Trip Requests pattern:
-the server returns `IncompleteResult{inputRequests, requestState}` when
-it needs more input from the client; the client resolves each
+the server returns `InputRequiredResult{inputRequests, requestState}`
+when it needs more input from the client; the client resolves each
 `inputRequest` (elicitation, sampling, roots) locally and retries the
 SAME `tools/call` with `inputResponses` + the echoed `requestState`.
+
+Renamed from `IncompleteResult` / `"incomplete"` in SEP-2322 commit
+de6d76fb (merged 2026-05-06) per dsp-ant request, since "incomplete"
+collided semantically with task-creating tools/call responses (which
+are also "incomplete" in some sense).
 
 Spec: [SEP-2322](https://github.com/modelcontextprotocol/specification/pull/2322).
 
@@ -14,7 +19,7 @@ Spec: [SEP-2322](https://github.com/modelcontextprotocol/specification/pull/2322
 |--------------|---------------|---------------|
 | `"complete"` (or absent) | Sync `ToolResult` | done |
 | `"task"` | `CreateTaskResult` (SEP-2663) | poll `tasks/get` |
-| `"incomplete"` | `IncompleteResult{inputRequests, requestState}` | resolve inputs, retry the same call |
+| `"input_required"` | `InputRequiredResult{inputRequests, requestState}` | resolve inputs, retry the same call |
 
 The discriminator is `resultType` — camelCase like every other MCP wire
 field (`inputRequests`, `inputResponses`, `requestState`, `taskId`, …).
@@ -42,7 +47,7 @@ step-by-step description.
 
 ## What it demonstrates
 
-- The full IncompleteResult round-trip — server returns `inputRequests + requestState`; client resolves each request locally and retries the same `tools/call` with `inputResponses` + the echoed state.
+- The full InputRequiredResult round-trip — server returns `inputRequests + requestState`; client resolves each request locally and retries the same `tools/call` with `inputResponses` + the echoed state.
 - All three input methods inline-able inside the round: elicitation (`elicitation/create`), sampling (`sampling/createMessage`), and root listing (`roots/list`).
 - Multi-round accumulation across rounds via signed `requestState` — handlers stay stateless; dispatch merges accumulated answers.
 - The unified client dispatch path (`HandleServerRequestWithContext`) handling MRTR-synthesized requests identically to real server-initiated requests.
@@ -58,7 +63,7 @@ step-by-step description.
 | `test_incomplete_result_request_state` | A4 | round 1: emit requestState; round 2: validate echo |
 | `test_incomplete_result_multiple_inputs` | A5 | round 1: emit elicitation + sampling + roots in one map |
 | `test_incomplete_result_multi_round` | A6 | two rounds of elicitation, accumulating across `requestState` |
-| `test_incomplete_result_elicitation` | A7 | re-request via new IncompleteResult on wrong-key inputResponses |
+| `test_incomplete_result_elicitation` | A7 | re-request via new InputRequiredResult on wrong-key inputResponses |
 
 ## Conformance fixture
 
@@ -71,9 +76,9 @@ testconf-mrtr` from the repo root.
 
 | What | Where |
 |------|-------|
-| Server dispatch | [`server/dispatch.go`](../../server/dispatch.go) — handleToolsCall reshapes Incomplete; merges accumulated answers from `requestState` |
+| Server dispatch | [`server/dispatch.go`](../../server/dispatch.go) — handleToolsCall reshapes InputRequired; merges accumulated answers from `requestState` |
 | Server runtime | [`server/mrtr.go`](../../server/mrtr.go) — `mrtrRuntime`, sign / verify / mint requestState tokens |
-| Wire types | [`core.IncompleteResult`](../../core/task_v2.go), `MRTRRoundState`, `Sign|VerifyMRTRState` |
+| Wire types | [`core.InputRequiredResult`](../../core/task_v2.go), `MRTRRoundState`, `Sign|VerifyMRTRState` |
 | Tool handler API | [`core/handler_context.go`](../../core/handler_context.go) — `ctx.RequestInput` sentinel + `InputResponse(key)` / `HasInputResponses()` / `RequestState()` accessors |
 | Client auto-loop | [`client/mrtr.go`](../../client/mrtr.go) — `CallToolWithInputs` + `DefaultInputHandler` |
 | Single dispatcher | [`client.HandleServerRequestWithContext`](../../client/client.go) — same switch handles real server-initiated requests AND MRTR-synthesized ones |
