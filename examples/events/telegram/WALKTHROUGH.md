@@ -41,7 +41,7 @@ sequenceDiagram
 
     Note over Host,Receiver: Step 5: Live Telegram interaction (real message from a Telegram chat)
     Telegram->>Server: MessageCreate event (when you send a message to the bot)
-    Server-->>Host: notifications/events/event { name: telegram.message, cursor: <new> }
+    Server-->>Host: notifications/events/event { name: telegram.message, cursor: <fresh> }
 ```
 
 ## Steps

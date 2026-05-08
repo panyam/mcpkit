@@ -794,7 +794,7 @@ func runDemo() {
 		Arrow("Discord", "Server", "TypingStart event (when you start typing in the channel)").
 		DashedArrow("Server", "Host", "notifications/events/event { name: discord.typing, cursor: null }").
 		Arrow("Discord", "Server", "MessageCreate event (when you press enter)").
-		DashedArrow("Server", "Host", "notifications/events/event { name: discord.message, cursor: <new> }").
+		DashedArrow("Server", "Host", "notifications/events/event { name: discord.message, cursor: <fresh> }").
 		Note(
 			"Setup: start the server with a Discord bot token and invite the bot to a channel you can post in.",
 			"",
