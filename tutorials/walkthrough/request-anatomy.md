@@ -4,7 +4,7 @@ How a single MCP request travels from the caller through middleware, dispatch, h
 
 > **Kind:** root *(FAQ-style)* · **Prerequisites:** [bring-up](./bringup.md), [transport-mechanics](./transport-mechanics.md), [notifications](./notifications.md)
 > **Reachable from:** [README](./README.md), [bring-up](./bringup.md) Next-to-read, [transport-mechanics](./transport-mechanics.md) Next-to-read, [notifications](./notifications.md) Next-to-read, [extension-mechanisms](./extension-mechanisms.md) Next-to-read
-> **Branches into:** [reverse-call](./reverse-call.md) *(stub)*, [tasks](./tasks.md) *(stub)*, [middleware](./middleware.md) *(stub)*
+> **Branches into:** [reverse-call](./reverse-call.md), [tasks](./tasks.md) *(stub)*, [middleware](./middleware.md) *(stub)*
 > **Spec:** [Base protocol](https://modelcontextprotocol.io/specification/2025-06-18) · **Code:** [`core/jsonrpc.go`](https://github.com/panyam/mcpkit/blob/main/core/jsonrpc.go) · [`core/handler_context.go`](https://github.com/panyam/mcpkit/blob/main/core/handler_context.go) · [`core/typed_tool.go`](https://github.com/panyam/mcpkit/blob/main/core/typed_tool.go) · [`core/protocol.go`](https://github.com/panyam/mcpkit/blob/main/core/protocol.go) · [`server/dispatch.go`](https://github.com/panyam/mcpkit/blob/main/server/dispatch.go) · [`server/registration.go`](https://github.com/panyam/mcpkit/blob/main/server/registration.go) · [`server/middleware.go`](https://github.com/panyam/mcpkit/blob/main/server/middleware.go) · [`server/method_handler.go`](https://github.com/panyam/mcpkit/blob/main/server/method_handler.go) · [`server/mrtr.go`](https://github.com/panyam/mcpkit/blob/main/server/mrtr.go) · [`client/middleware.go`](https://github.com/panyam/mcpkit/blob/main/client/middleware.go) · [`client/mrtr.go`](https://github.com/panyam/mcpkit/blob/main/client/mrtr.go)
 
 ## Prerequisites
@@ -233,7 +233,7 @@ Three things to internalize:
 - **Sampling, elicitation, roots/list are not special** — they're standard request/response calls dispatched to custom handlers, just on the client side instead of the server side. Anyone implementing an MCP host registers handlers for them the same way a server author registers tools.
 
 > [!NOTE]
-> **Branch →** [Reverse-call mechanics](./reverse-call.md) *(stub)* — concretizes this with a `tools/call → elicitation/create` walkthrough, including cancellation propagation through the forward-id back-pointer.
+> **Branch →** [Reverse-call mechanics](./reverse-call.md) — concretizes this with a `tools/call → elicitation/create` walkthrough, including cancellation propagation through the forward-id back-pointer.
 
 ## End-state (what downstream pages can assume)
 
@@ -245,8 +245,8 @@ Three things to internalize:
 
 ## Next to read
 
-- **[Reverse-call mechanics](./reverse-call.md)** *(stub, root)* — drills into the reverse-call subset of this anatomy with a concrete `tools/call → elicitation/create` walkthrough; covers the parent-id back-pointer for cancellation.
+- **[Reverse-call mechanics](./reverse-call.md)** — drills into the reverse-call subset of this anatomy with a concrete `tools/call → elicitation/create` walkthrough; covers the parent-id back-pointer for cancellation.
 - **[Tasks v1/v2/hybrid](./tasks.md)** *(stub, root)* — uses the handler context heavily, plus a separate task store; introduces detach/resume semantics that the per-request anatomy doesn't cover (a task can outlive the originating request).
 - **[Middleware composition](./middleware.md)** *(stub, branch)* — request-side vs. sending-side in detail, ordering, ext/auth and ext/ui interception points.
-- **[MRTR (SEP-2322)](./mrtr.md)** *(stub, root)* — Multi Round-Trip Requests; the stateless-server alternative to synchronous reverse calls during a `tools/call`.
+- **[MRTR (SEP-2322)](./mrtr.md)** — Multi Round-Trip Requests; the stateless-server alternative to synchronous reverse calls during a `tools/call`.
 - **[Elicitation](./elicitation.md)** · **[Sampling](./sampling.md)** · **[Roots/list](./roots-list.md)** *(stub, leaves)* — concrete reverse-call types as applications of the patterns from this page + reverse-call mechanics.

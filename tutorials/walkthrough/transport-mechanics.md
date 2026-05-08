@@ -4,7 +4,7 @@ What the wire actually looks like, how server→client traffic flows on each tra
 
 > **Kind:** root · **Prerequisites:** nothing (foundational)
 > **Reachable from:** [bring-up](./bringup.md) phase 2–3, [README](./README.md)
-> **Branches into:** [reverse-call mechanics](./reverse-call.md) *(stub)*, [SSE resumption](./sse-resumption.md) *(stub)*, batching
+> **Branches into:** [reverse-call mechanics](./reverse-call.md), [SSE resumption](./sse-resumption.md) *(stub)*, batching
 > **Spec:** [Base protocol](https://modelcontextprotocol.io/specification/2025-06-18) · [Transports](https://modelcontextprotocol.io/specification/2025-06-18) · **Code:** `core/jsonrpc.go`, `server/stdio_transport.go`, `server/streamable_transport.go`, `client/mrtr.go`, `server/event_ids.go`
 
 ## Prerequisites
@@ -381,7 +381,7 @@ mcpkit's `core/handler_context.go` is where both concerns meet — it's the hand
 > A reverse call attempted *outside* a handler context — e.g., from a background goroutine that has escaped its forward-request scope — is a programming error and a spec violation if it escapes onto the wire. mcpkit's `core.DetachForBackground(ctx)` is the supported way to keep using the session-level push channel from background work; see the GET section above.
 
 > [!NOTE]
-> **Branch →** [Reverse-call mechanics](./reverse-call.md) *(stub)*. Walks `tools/call → elicitation/create` end-to-end, with code references to `core/handler_context.go` and the mrtr origination path.
+> **Branch →** [Reverse-call mechanics](./reverse-call.md). Walks `tools/call → elicitation/create` end-to-end, with code references to `core/handler_context.go` and the mrtr origination path.
 
 ### Order of arrival ≠ order of sending
 
