@@ -30,4 +30,4 @@
 
 ## Next to read
 
-- **[MRTR (SEP-2322)](./mrtr.md)** *(stub, root)* — Multi Round-Trip Requests: a tools/call extension where the server returns `InputRequiredResult` with input requests + a signed token instead of holding the call open for synchronous reverse calls. Different mechanism, comparable end goal (server gets data from client mid-call) — worth understanding the contrast.
+- **[MRTR (SEP-2322)](./mrtr.md)** — Multi Round-Trip Requests: a tools/call extension where the server returns `InputRequiredResult` with input requests + a signed token instead of holding the call open for synchronous reverse calls. Different mechanism, comparable end goal (server gets data from client mid-call) — worth understanding the contrast.

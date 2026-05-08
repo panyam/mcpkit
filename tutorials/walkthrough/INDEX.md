@@ -21,8 +21,9 @@ Use this to:
 | [bring-up](./bringup.md) | root | none (foundational) | session live; transport chosen; auth resolved; protocol version + capabilities locked; `initialized` sent | [transport-mechanics](./transport-mechanics.md); [notifications](./notifications.md); [per-request anatomy](./request-anatomy.md) *(stub)*; [auth deep-dive](./auth.md) *(stub)*; [session-resumption](./session-resumption.md) *(stub, leaf)* |
 | [transport-mechanics](./transport-mechanics.md) | root | none (foundational) | host/session/HTTP-request/SSE-event/JSON-RPC-message arity distinct; wire format known per transport; layering (MCP/JSON-RPC/framing/bytes); POST vs GET roles (POST = client→server one-shot; GET = standing server→client back-channel, may idle); `Mcp-Session-Id` server-issued, mandatory on subsequent requests, **routing key on server (not client filter)**; sessions isolated; JSON-RPC correlation + per-direction ID spaces; reverse-call origination gated by handler context, recorded for cancellation propagation | [notifications](./notifications.md); [per-request anatomy](./request-anatomy.md) *(stub)*; [reverse-call](./reverse-call.md) *(stub)*; [SSE resumption](./sse-resumption.md) *(stub, leaf)*; [experimental events](../../experimental/ext/events/README.md) *(branch)* |
 | [notifications](./notifications.md) | root *(FAQ-style)* | bring-up, transport-mechanics | six notification families with direction + capability gates; gates fixed at bring-up; list_changed is a hint not a diff; **multi-client fan-out is per-session, not broadcast** — server walks its session map and emits once per qualifying session (audience depends on kind); call-targeted notifs (cancel, progress) go to exactly the one originating session; `notifications/cancelled` carries `requestId`, best-effort, `initialize` not cancellable; progress is opt-in per-request via `_meta.progressToken` (not capability-gated); unknown / un-gated notifications dropped silently — asymmetry vs. unknown requests enables forward-compatibility | [request-anatomy](./request-anatomy.md); [extension-mechanisms](./extension-mechanisms.md); [tasks](./tasks.md) *(stub)*; [cancellation](./cancellation.md) *(stub, leaf)*; [list-ttl](./list-ttl.md) *(stub, leaf, SEP-2549)* |
-| [request-anatomy](./request-anatomy.md) | root *(FAQ-style)* | bring-up, transport-mechanics, notifications | end-to-end journey of a request through 13 steps (origination → send-mw → wire → recv-mw → dispatch → handler-context → typed binding → handler → response-encoding → return); handler context contents (id, ctx, session, request/notify hooks, progress emitter, typed params) and lifetime (dies with request unless `DetachForBackground`); four conceptual middleware stacks (client × {send, recv}, server × {send, recv}); typed binding generates schema at registration time, decode + validate at request time; notifications skip pending-id step; reverse calls reuse the same path originated from handler context | [extension-mechanisms](./extension-mechanisms.md); [reverse-call](./reverse-call.md) *(stub)*; [tasks](./tasks.md) *(stub)*; [mrtr](./mrtr.md) *(stub)*; [middleware](./middleware.md) *(stub, branch)* |
-| [extension-mechanisms](./extension-mechanisms.md) | root *(FAQ-style)* | bring-up, transport-mechanics, notifications, request-anatomy | four extension surfaces (method namespace · capability flags · notifications · `_meta`); five styles (method-namespace, capability-only, `_meta`-only, bring-up, library-architecture); SEP process + `experimental.<name>` sandbox + graduation; mcpkit's three-tier organization (`core/` → `ext/` → `experimental/ext/`); extension points (registries, middleware, custom transports, capability advertisement); case-study table mapping tasks/auth/apps/events/list-TTL/MRTR/elicitation to surfaces; boundary protocol-extension-vs-host/client-policy | [tasks](./tasks.md) *(stub)*; [auth](./auth.md) *(stub)*; [apps](./apps.md) *(stub)*; [reverse-call](./reverse-call.md) *(stub)*; [mrtr](./mrtr.md) *(stub)*; [experimental events](../../experimental/ext/events/README.md) *(branch)*; [list-ttl](./list-ttl.md) *(stub, leaf)* |
+| [request-anatomy](./request-anatomy.md) | root *(FAQ-style)* | bring-up, transport-mechanics, notifications | end-to-end journey of a request through 13 steps (origination → send-mw → wire → recv-mw → dispatch → handler-context → typed binding → handler → response-encoding → return); handler context contents (id, ctx, session, request/notify hooks, progress emitter, typed params) and lifetime (dies with request unless `DetachForBackground`); four conceptual middleware stacks (client × {send, recv}, server × {send, recv}); typed binding generates schema at registration time, decode + validate at request time; notifications skip pending-id step; reverse calls reuse the same path originated from handler context | [extension-mechanisms](./extension-mechanisms.md); [mrtr](./mrtr.md); [reverse-call](./reverse-call.md) *(stub)*; [tasks](./tasks.md) *(stub)*; [middleware](./middleware.md) *(stub, branch)* |
+| [extension-mechanisms](./extension-mechanisms.md) | root *(FAQ-style)* | bring-up, transport-mechanics, notifications, request-anatomy | four extension surfaces (method namespace · capability flags · notifications · `_meta`); five styles (method-namespace, capability-only, `_meta`-only, bring-up, library-architecture); SEP process + `experimental.<name>` sandbox + graduation; mcpkit's three-tier organization (`core/` → `ext/` → `experimental/ext/`); extension points (registries, middleware, custom transports, capability advertisement); case-study table mapping tasks/auth/apps/events/list-TTL/MRTR/elicitation to surfaces; boundary protocol-extension-vs-host/client-policy | [tasks](./tasks.md) *(stub)*; [auth](./auth.md) *(stub)*; [apps](./apps.md) *(stub)*; [reverse-call](./reverse-call.md) *(stub)*; [mrtr](./mrtr.md); [experimental events](../../experimental/ext/events/README.md) *(branch)*; [list-ttl](./list-ttl.md) *(stub, leaf)* |
+| [mrtr](./mrtr.md) | root *(FAQ-style)* | request-anatomy, extension-mechanisms | `InputRequiredResult` envelope (resultType:"input_required", inputRequests, requestState); retry shape (same tools/call + inputResponses + echoed token); server keeps no state between rounds; `ctx.RequestInput()` handler primitive; dispatch reshape via IsInputRequired sentinel; `CallToolWithInputs` client loop (default 16-round cap, `ErrMRTRMaxRounds`); `DefaultInputHandler` bridges via `dispatchMRTRInputRequest` to same dispatcher real reverse calls use — host's existing sampling/elicitation/roots handlers serve MRTR for free; signed mode (HMAC-SHA256, TTL-bounded, tool-name-pinned) vs plaintext (dev-only); `WithRequestStateSigning` configures both ephemeral MRTR and SEP-2663 tasks; tasks v2 reuses same envelope shape | [tasks](./tasks.md) *(stub)*; [reverse-call](./reverse-call.md) *(stub)*; [cancellation](./cancellation.md) *(stub, leaf)* |
 
 ## Mid-journey branch points
 
@@ -43,11 +44,10 @@ Each entry below has a real file on disk with a complete page header (Kind, Prer
 
 | Planned page | Filename | Kind | Will assume | Will establish |
 |--------------|----------|------|-------------|----------------|
-| **reverse-call mechanics** *(NEXT)* | [reverse-call.md](./reverse-call.md) | root | bring-up, transport-mechanics, request-anatomy | parent-handler-context constraint operating live; concretizes elicitation/sampling/roots as method-namespace extensions; the synchronous-during-handler counterpart to MRTR's stateless round-trip pattern |
-| tasks (v1 / v2 / hybrid) | [tasks.md](./tasks.md) | root | request-anatomy, notifications, extension-mechanisms | long-running operations, detach/resume, task store; the v1→v2 migration shape; `RegisterTasksHybrid` dispatch-by-capability |
+| **tasks (v2)** *(NEXT)* | [tasks.md](./tasks.md) | root | request-anatomy, notifications, extension-mechanisms, mrtr | long-running operations (SEP-2663), task lifecycle, store, queue, session; detach / attach / resume; reuses MRTR's `InputRequiredResult` shape for `input_required` state; `RegisterTasks` (canonical) and `RegisterTasksHybrid` for v1→v2 transition |
+| reverse-call mechanics | [reverse-call.md](./reverse-call.md) | root | bring-up, transport-mechanics, request-anatomy | parent-handler-context constraint operating live; concretizes elicitation/sampling/roots as method-namespace extensions; the synchronous-during-handler counterpart to MRTR's stateless round-trip pattern |
 | auth deep-dive | [auth.md](./auth.md) | root *(off-mainline)* | bring-up, extension-mechanisms | full OAuth dance, PRM, JWT validation, fine-grained-auth per tool, retry semantics; the canonical "bring-up extension" |
 | apps (`ext/ui/`) | [apps.md](./apps.md) | root *(off-mainline)* | bring-up, transport-mechanics, extension-mechanisms | AppHost lifecycle, Bridge JS runtime, ServerRegistry; thin protocol surface, mostly host-architecture |
-| MRTR (SEP-2322) | [mrtr.md](./mrtr.md) | root | request-anatomy, extension-mechanisms | Multi Round-Trip Requests; `tools/call` returning `InputRequiredResult` with `inputRequests` + signed `requestState`; client retries with `inputResponses` + echoed token; stateless across rounds; default `InputHandler` bridges to sampling/elicitation/roots; tasks v2 reuses the same InputRequired shape |
 | cancellation deep-dive | [cancellation.md](./cancellation.md) | leaf | notifications | race scenarios, partial-state handling, timeout-vs-cancel distinction, mcpkit's `ctx.Done()` propagation paths |
 | list-TTL (SEP-2549) | [list-ttl.md](./list-ttl.md) | leaf | notifications, extension-mechanisms | three-state cache-lifetime hint orthogonal to list_changed; the canonical `_meta`-only extension |
 | SSE resumption | [sse-resumption.md](./sse-resumption.md) | leaf | transport-mechanics | replay semantics; `event_ids.go` mechanics |
@@ -77,7 +77,7 @@ graph TD
 
     resume["SSE resumption<br/>(leaf, stub)"]
     mw["middleware composition<br/>(branch, stub)"]
-    mrtr["MRTR SEP-2322<br/>(root, stub)"]
+    mrtr["MRTR SEP-2322<br/>(root, FAQ)"]
     init["initialize deep-dive<br/>(leaf, stub)"]
     reinit["re-init / resumption<br/>(leaf, stub)"]
     events["experimental/ext/events<br/>(branch, target-shape)"]
@@ -122,9 +122,9 @@ graph TD
     classDef written fill:#e8f5e9,stroke:#2e7d32,color:#000;
     classDef next fill:#fff3e0,stroke:#e65100,color:#000;
     classDef stub fill:#fff3e0,stroke:#e65100,color:#000,stroke-dasharray:4 3;
-    class bringup,wire,notif,anat,ext,events written;
-    class rev next;
-    class tasks,auth,apps,resume,mw,mrtr,init,reinit,elicit,sample,rootsLeaf,canceldeep,listttl stub;
+    class bringup,wire,notif,anat,ext,events,mrtr written;
+    class tasks next;
+    class auth,apps,resume,mw,rev,init,reinit,elicit,sample,rootsLeaf,canceldeep,listttl stub;
 
     click bringup "./bringup.md"
     click wire "./transport-mechanics.md"
@@ -132,6 +132,7 @@ graph TD
     click anat "./request-anatomy.md"
     click ext "./extension-mechanisms.md"
     click events "./events.md"
+    click mrtr "./mrtr.md"
 ```
 
 Solid green = written. Amber = stub (header only). Solid orange = next up.
