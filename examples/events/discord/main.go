@@ -48,12 +48,14 @@ func serve() {
 	token := flag.String("token", "", "Discord bot token (omit for test mode)")
 	whTTL := flag.Duration("webhook-ttl", 0, "override webhook subscription TTL (default 60s; useful for driving the SDK refresh path in tests)")
 	whHeaderMode := flag.String("webhook-header-mode", "standard", "webhook header style: standard | mcp")
+	whSuspendThreshold := flag.Int("webhook-suspend-threshold", 0, "override consecutive-failures count that flips a webhook target to Active=false (default 5; lower to 1 for demoing the ζ-6 suspend transition without waiting 5×retry-cycles)")
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.BoolFlag("--serve"),
 		demokit.ValueFlag("--url"),
 		demokit.ValueFlag("--token"),
 		demokit.ValueFlag("--webhook-ttl"),
 		demokit.ValueFlag("--webhook-header-mode"),
+		demokit.ValueFlag("--webhook-suspend-threshold"),
 		demokit.ValueFlag("--addr"),
 	))
 
@@ -74,6 +76,10 @@ func serve() {
 	if *whTTL > 0 {
 		whOpts = append(whOpts, events.WithWebhookTTL(*whTTL))
 		log.Printf("[server] webhook TTL overridden to %s", *whTTL)
+	}
+	if *whSuspendThreshold > 0 {
+		whOpts = append(whOpts, events.WithWebhookSuspendThreshold(*whSuspendThreshold))
+		log.Printf("[server] webhook suspend threshold overridden to %d (default 5)", *whSuspendThreshold)
 	}
 	log.Printf("[server] webhook headers=%s; client-supplied secrets only", headerMode)
 
