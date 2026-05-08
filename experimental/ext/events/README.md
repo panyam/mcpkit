@@ -165,7 +165,7 @@ from events_client import generate_webhook_secret
 secret = generate_webhook_secret()
 ```
 
-### Subscription identity + auth gate (γ)
+### Subscription identity and auth gate
 
 Per spec §"Subscription Identity" L361-378, webhook subscribe and unsubscribe MUST require an authenticated principal; the registry keys subscriptions on the canonical tuple `(principal, delivery.url, name, params)` and derives a routing handle (`X-MCP-Subscription-Id`) over the same canonical bytes. Two distinct tenants subscribing to the same `(name, params, url)` get distinct subscriptions — cross-tenant isolation by construction.
 
@@ -225,7 +225,7 @@ The Python `events_client.py` receiver auto-detects which header set is on the i
 
 ### Unsubscribe
 
-Today: keyed on `(url, id)`. γ replaces this with the spec's `(principal, name, params, url)` tuple per the latest sketch.
+Today: keyed on the canonical tuple `(principal, name, params, url)` per spec §"Subscription Identity" → "Key composition" L363. The derived id is NOT accepted as input on `events/unsubscribe` — callers resolve via the same tuple they used to subscribe.
 
 ```jsonc
 {"id": "sub-1", "delivery": {"url": "https://..."}}

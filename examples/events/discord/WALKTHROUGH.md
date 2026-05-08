@@ -5,14 +5,14 @@ Walks through the four delivery modes of the experimental MCP Events extension (
 ## What you'll learn
 
 - **Connect to the events server** — Plain MCP initialize over Streamable HTTP. We're not declaring any extension capability — events/* are server-side custom methods registered via experimental/ext/events. Push delivery uses events/stream (a long-lived per-subscription POST that returns SSE), not the session GET stream — no transport-level wiring needed in the client.
-- **events/list — see the source catalog** — The `cursorless` flag (added in PR B) tells subscribers whether the source supports cursor-based replay. discord.message buffers events and accepts cursors; discord.typing emits ephemerally and always wires cursor:null.
+- **events/list — see the source catalog** — The `cursorless` flag tells subscribers whether the source supports cursor-based replay. discord.message buffers events and accepts cursors; discord.typing emits ephemerally and always wires cursor:null.
 - **Push: open events/stream, inject a message, observe per-call notifications** — events/stream is a long-lived JSON-RPC request — one per subscription. Spec §"Push-Based Delivery" L223-296.
 - **Poll: events/poll with the cursor we just saw** — Single-subscription per call (PR B removed batching). Polling at the head returns no new events but advances the cursor — the same response shape that would carry events if any had arrived since the last poll.
 - **Cursorless: open events/stream for typing, observe cursor:null on the wire** — WithoutCursors() sources don't buffer; the wire emits cursor:null.
 - **Health signals: source bubbles a transient upstream failure → notifications/events/error** — Sources bubble health via YieldError(err) (transient, stream stays open) and YieldTerminated(err) (terminal, stream closes).
 - **Webhook: subscribe via the typed Go SDK, observe HMAC delivery + auto-refresh** — clients/go provides Subscription (subscribe + auto-refresh) plus Receiver[Data] (typed inbound channel).
-- **Multi-sub routing: two webhook subs to discord.message, distinguished by X-MCP-Subscription-Id** — Demonstrates that the spec's canonical-tuple identity (γ) plus the per-delivery `X-MCP-Subscription-Id` header (γ-4) make multi-sub-same-event-name routing unambiguous on the wire.
-- **Webhook delivery health: deliveryStatus on subscribe-refresh + suspend transition** — Demonstrates ζ-5 (`deliveryStatus` block on subscribe-refresh) and ζ-6 (suspend state machine + auto-PostTerminated control envelope).
+- **Multi-sub routing: two webhook subs to discord.message, distinguished by X-MCP-Subscription-Id** — Demonstrates that the spec's canonical-tuple identity plus the per-delivery `X-MCP-Subscription-Id` header make multi-sub-same-event-name routing unambiguous on the wire.
+- **Webhook delivery health: deliveryStatus on subscribe-refresh + suspend transition** — Demonstrates the `deliveryStatus` block on subscribe-refresh and the suspend state machine plus auto-PostTerminated control envelope.
 - **Spec validation: empty delivery.secret is rejected** — delivery.secret is REQUIRED on every events/subscribe — no server-side fallback per spec.
 - **Spec validation: malformed delivery.secret is rejected** — The validator enforces the full Standard Webhooks format: `whsec_` followed by base64 of 24-64 random bytes.
 - **Spec validation: client-supplied id is rejected** — Spec §"Subscription Identity" → "Key composition" L363: "There is no client-generated id — a subscription is fully determined by what it listens for, where it delivers, and who asked."
@@ -134,15 +134,15 @@ Terminal 2:  make demo                                 # this walkthrough
 
 ### What this demo covers
 
-- **events/list** — the source catalog, including the new `cursorless` flag and the `_meta` per-type metadata field (δ-4).
+- **events/list** — the source catalog, including the `cursorless` flag and the `_meta` per-type metadata field.
 - **Push** — long-lived SSE stream; `notifications/events/event` arrives in real time.
 - **Poll** — single-subscription `events/poll` (multi-sub batching is not supported).
 - **Cursorless source** — typing indicators that wire as `cursor: null`. Subscribers can't replay, only see live events.
 - **Source-side health signals** — `YieldError` (transient `notifications/events/error`, stream stays open).
-- **Webhook + auto-refresh** — `events/subscribe` with the typed `Subscription` + `Receiver[Data]` from `clients/go`. Includes the hardened delivery loop: dial-time SSRF guard (ζ-1), no-redirects (ζ-2), 256 KiB body cap with 413 non-retryable (ζ-3), Standard Webhooks signature scheme as default.
-- **Multi-subscription routing** — two subs to `discord.message` with different params; one event fans out to both, distinguished by `X-MCP-Subscription-Id` (γ-4 + ε requestId echo).
-- **Webhook delivery health** — `deliveryStatus` block on subscribe-refresh response after a failed delivery (ζ-5); suspend state machine flips Active=false after N consecutive failures and auto-Posts a `{type:terminated}` control envelope (ζ-6) when run with `make serve-fast-suspend`.
-- **Auth posture** — `events/subscribe` requires an authenticated principal per spec; demo runs anonymously via `UnsafeAnonymousPrincipal` (γ-5). Production deployments wire real OIDC and reject anonymous subscribes with `-32012`.
+- **Webhook + auto-refresh** — `events/subscribe` with the typed `Subscription` + `Receiver[Data]` from `clients/go`. Includes the hardened delivery loop: dial-time SSRF guard, no-redirects, 256 KiB body cap with 413 non-retryable, Standard Webhooks signature scheme as default.
+- **Multi-subscription routing** — two subs to `discord.message` with different params; one event fans out to both, distinguished by `X-MCP-Subscription-Id` plus push-side `requestId` echo on every notification.
+- **Webhook delivery health** — `deliveryStatus` block on subscribe-refresh response after a failed delivery; suspend state machine flips Active=false after N consecutive failures and auto-Posts a `{type:terminated}` control envelope when run with `make serve-fast-suspend`.
+- **Auth posture** — `events/subscribe` requires an authenticated principal per spec; demo runs anonymously via `UnsafeAnonymousPrincipal`. Production deployments wire real OIDC and reject anonymous subscribes with `-32012`.
 - **Spec validation** — empty / malformed `delivery.secret` rejected; client-supplied `id` rejected; valid `whsec_` accepted with no secret echoed.
 
 Identity-mode subscribe and Standard Webhooks header naming are exercised by the unit tests in `experimental/ext/events/` and by `discord-events`'s e2e tests; they require the server to be started with mode flags so they're documented in the README rather than driven from this walkthrough.
@@ -153,10 +153,10 @@ Plain MCP initialize over Streamable HTTP. We're not declaring any extension cap
 
 ### Step 2: events/list — see the source catalog
 
-The `cursorless` flag (added in PR B) tells subscribers whether the source supports cursor-based replay. discord.message buffers events and accepts cursors; discord.typing emits ephemerally and always wires cursor:null.
+The `cursorless` flag tells subscribers whether the source supports cursor-based replay. discord.message buffers events and accepts cursors; discord.typing emits ephemerally and always wires cursor:null.
 
-- δ-4: each `EventDef` may carry an opaque `_meta` map for app-defined per-event-type metadata (mirrors the `_meta` convention on Tool / Resource / Prompt in base MCP). The same `_meta` convention applies on `EventOccurrence` (the wire-format Event envelope). The discord sources don't set `_meta` here; servers that want to surface trace ids, source-system tags, or other per-type annotations populate it on construction.
-- δ-5: events/list response carries an optional `nextCursor` for forward-compatible pagination (mirrors the tools/list / resources/list convention). Library doesn't paginate today (advertised sets are small in practice); the field is plumbed for forward compatibility.
+- Each `EventDef` may carry an opaque `_meta` map for app-defined per-event-type metadata (mirrors the `_meta` convention on Tool / Resource / Prompt in base MCP). The same `_meta` convention applies on `EventOccurrence` (the wire-format Event envelope). The discord sources don't set `_meta` here; servers that want to surface trace ids, source-system tags, or other per-type annotations populate it on construction.
+- The events/list response carries an optional `nextCursor` for forward-compatible pagination (mirrors the tools/list / resources/list convention). Library doesn't paginate today (advertised sets are small in practice); the field is plumbed for forward compatibility.
 
 ### Step 3: Push: open events/stream, inject a message, observe per-call notifications
 
@@ -184,7 +184,7 @@ WithoutCursors() sources don't buffer; the wire emits cursor:null.
 Sources bubble health via YieldError(err) (transient, stream stays open) and YieldTerminated(err) (terminal, stream closes).
 
 - Stream subscribers map onto notifications/events/error (spec L255+L261, transient) and notifications/events/terminated (spec L783-795, terminal).
-- Webhook subscribers don't see error envelopes (errors are upstream-side, not delivery-side); they DO see {type:terminated} control envelopes when the suspend state machine flips Active=false (ζ-6) or when the source itself terminates (ζ-7.3).
+- Webhook subscribers don't see error envelopes (errors are upstream-side, not delivery-side); they DO see {type:terminated} control envelopes when the suspend state machine flips Active=false or when the source itself terminates.
 - This walkthrough step exercises only the transient error path — calling `inject?action=terminate` would one-shot terminate the discord.message source, breaking subsequent walkthrough steps that depend on it. Full terminate flow is covered by TestE2EHealthSignalsEndToEnd in this demo's e2e_test.go.
 
 ### Step 7: Webhook: subscribe via the typed Go SDK, observe HMAC delivery + auto-refresh
@@ -198,33 +198,32 @@ clients/go provides Subscription (subscribe + auto-refresh) plus Receiver[Data] 
 
 **Hardened delivery loop** (`webhook.go` `deliver()`):
 
-- ζ-1 dial-time SSRF guard rejects loopback / RFC1918 / link-local / IPv6-ULA / multicast at the `net.Dialer.Control` callback (TOCTOU-safe under DNS rebinding). The demo bypasses this via `WithWebhookAllowPrivateNetworks(true)` because it delivers to a local httptest receiver; production deployments leave the guard ON. Spec §"Webhook Security" L464.
-- ζ-2 no-redirect-following: `http.Client.CheckRedirect` returns `ErrUseLastResponse` so a receiver returning 3xx to an internal address can't bypass the dial-time guard via Go's redirect chain. 3xx is terminal `http_3xx_redirect`.
-- ζ-3 256 KiB body cap (REJECT not TRUNCATE — truncation would corrupt the HMAC); 413 from the receiver is non-retryable. Spec L487.
+- Dial-time SSRF guard rejects loopback / RFC1918 / link-local / IPv6-ULA / multicast at the `net.Dialer.Control` callback (TOCTOU-safe under DNS rebinding). The demo bypasses this via `WithWebhookAllowPrivateNetworks(true)` because it delivers to a local httptest receiver; production deployments leave the guard ON. Spec §"Webhook Security" L464.
+- No-redirect-following: `http.Client.CheckRedirect` returns `ErrUseLastResponse` so a receiver returning 3xx to an internal address can't bypass the dial-time guard via Go's redirect chain. 3xx is terminal `http_3xx_redirect`.
+- 256 KiB body cap (REJECT not TRUNCATE — truncation would corrupt the HMAC); 413 from the receiver is non-retryable. Spec L487.
 - 5xx retry with exponential backoff (4 attempts: 500ms → 1s → 2s → 5s cap). Standard webhook convention.
 
-**Auth posture** (γ-5): `events/subscribe` requires an authenticated principal per spec §"Subscription Identity" → "Authentication required" L361. The demo runs anonymously via `events.Config.UnsafeAnonymousPrincipal="demo-user"` (logged at startup as "auth: demo (anonymous → UnsafeAnonymousPrincipal)"). Production deployments unset that field AND wire `server.WithAuth(JWTValidator)` so anonymous subscribes hit the spec-mandated `-32012 Unauthorized`. See README "Auth posture (γ): demo escape vs real OIDC".
+**Auth posture:** `events/subscribe` requires an authenticated principal per spec §"Subscription Identity" → "Authentication required" L361. The demo runs anonymously via `events.Config.UnsafeAnonymousPrincipal="demo-user"` (logged at startup as "auth: demo (anonymous → UnsafeAnonymousPrincipal)"). Production deployments unset that field AND wire `server.WithAuth(JWTValidator)` so anonymous subscribes hit the spec-mandated `-32012 Unauthorized`. See README "Auth posture: demo escape vs real OIDC".
 
 ### Step 8: Multi-sub routing: two webhook subs to discord.message, distinguished by X-MCP-Subscription-Id
 
-Demonstrates that the spec's canonical-tuple identity (γ) plus the per-delivery `X-MCP-Subscription-Id` header (γ-4) make multi-sub-same-event-name routing unambiguous on the wire.
+Demonstrates that the spec's canonical-tuple identity plus the per-delivery `X-MCP-Subscription-Id` header make multi-sub-same-event-name routing unambiguous on the wire.
 
 - Two subscribes with the same `(principal, url, name)` but different `params` produce different canonical bytes (`identity.go canonicalKey`) and therefore different derived ids (`deriveSubscriptionID`).
-- The library fans out one yielded event to **both** webhook targets today — there is no per-subscription `match` filter yet (that's η-4 in the upcoming SDK-hooks plan).
+- The library fans out one yielded event to **both** webhook targets today — there is no per-subscription `match` filter yet (that's the upcoming SDK-hooks plan; see `docs/EVENTS_ETA_PLAN.md`).
 - Each delivery POST carries its own `X-MCP-Subscription-Id` header so the receiver can route or branch by sub even when the body is identical.
-- Push side: the same routing works via the `requestId` echo (ε) on every `notifications/events/event` payload — each `events/stream` POST gets its own JSON-RPC id, and notifications carry it in `params.requestId`.
-- This was an honest gap at the 2026-05-01 demo (gap analysis #11/#22): we had `Server.Broadcast` for push + URL-keyed routing for webhook, neither of which distinguished multiple subs to the same event name with different params. γ-4 + ε closed the gap.
+- Push side: the same routing works via the `requestId` echo on every `notifications/events/event` payload — each `events/stream` POST gets its own JSON-RPC id, and notifications carry it in `params.requestId`.
 
 ### Step 9: Webhook delivery health: deliveryStatus on subscribe-refresh + suspend transition
 
-Demonstrates ζ-5 (`deliveryStatus` block on subscribe-refresh) and ζ-6 (suspend state machine + auto-PostTerminated control envelope).
+Demonstrates the `deliveryStatus` block on subscribe-refresh and the suspend state machine plus auto-PostTerminated control envelope.
 
 - Per spec §"Webhook Delivery Status" L425-460, refresh responses carry `deliveryStatus` when the target has prior delivery attempts. `lastError` is from a **closed categorical set** (`connection_refused`, `timeout`, `tls_error`, `http_3xx_redirect`, `http_4xx`, `http_5xx`, `challenge_failed`); the spec forbids raw response bodies / headers / status lines because the subscribe response is visible to the subscriber and arbitrary receiver responses must not become a data oracle.
 - `failedSince` is set on the **first failure of the current run** and preserved across subsequent failures, so subscribers can see how long the receiver has been unreachable.
 - Spec §"Webhook Event Delivery" L413+L460: "after repeated failures the server SHOULD set active: false." The library fires this transition after 5 consecutive failures within a 10-min sliding window (configurable via `WithWebhookSuspendThreshold` / `WithWebhookSuspendWindow`). On the `true→false` transition the library auto-Posts a `{type:terminated}` control envelope to the (now-suspended) receiver as a courtesy notification — `webhook-id` prefix is `msg_terminated_<random>` so receivers can distinguish it from event deliveries (which use `evt_<eventId>`).
 - A successful refresh of a suspended target reactivates it: clears `failureCount`, resets `lastError` and `failedSince`, flips `active` back to true.
 
-**Fast-mode tip:** with the default `make serve` (`-webhook-suspend-threshold 5`), this step demonstrates ζ-5 (lastError populated, failedSince populated, active still true) — full ζ-6 suspend takes 5 failed deliveries × ~8.5s each. To see ζ-6 fire after ONE failure (~12s total step time), restart the server with `make serve-fast-suspend` (sets `-webhook-suspend-threshold 1`).
+**Fast-mode tip:** with the default `make serve` (`-webhook-suspend-threshold 5`), this step demonstrates the deliveryStatus reporting (lastError populated, failedSince populated, active still true) — full suspend takes 5 failed deliveries × ~8.5s each. To see suspend fire after ONE failure (~12s total step time), restart the server with `make serve-fast-suspend` (sets `-webhook-suspend-threshold 1`).
 
 ### Step 10: Spec validation: empty delivery.secret is rejected
 
@@ -253,7 +252,7 @@ Spec §"Subscription Identity" → "Key composition" L363: "There is no client-g
 Counter-test: a freshly-generated whsec_ value is accepted.
 
 - Response carries the server-derived id (sub_<base64>) per spec §"Subscription Identity" → "Derived id" L367.
-- The id is non-load-bearing for security; surfaced as X-MCP-Subscription-Id on delivery POSTs (γ-4 wires the header).
+- The id is non-load-bearing for security; surfaced as X-MCP-Subscription-Id on delivery POSTs.
 - Response does NOT echo the secret — the client supplied it. Echoing would risk leaks via proxies / logs / IDE network panes.
 
 ### Step 14: Live Discord interaction (typing + message from a real Discord channel)
