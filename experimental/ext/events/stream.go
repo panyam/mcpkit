@@ -30,24 +30,6 @@ import (
 	"github.com/panyam/mcpkit/server"
 )
 
-// newStreamSubscriptionID generates the server-derived sub_<base64>
-// handle for a push stream (η-3). Streams have no canonical-tuple
-// identity (no delivery URL), and the same (principal, name, params)
-// can be open across multiple concurrent streams — each is its own
-// runtime subscription. A random 16-byte sub id keeps SubscriptionID()
-// usable on HookContext for push without conflating concurrent
-// streams.
-//
-// Webhook uses deriveSubscriptionID over the canonical tuple so two
-// subscribes with identical inputs collapse onto one id; that property
-// is correct for webhook (refresh ≠ new sub) but wrong for push (each
-// stream open IS a new sub). Hence the different generation strategy.
-func newStreamSubscriptionID() string {
-	var buf [16]byte
-	_, _ = rand.Read(buf[:])
-	return "sub_" + base64.RawURLEncoding.EncodeToString(buf[:])
-}
-
 const defaultStreamHeartbeatInterval = 30 * time.Second
 
 // StreamEventsResult is the typed final frame of an events/stream call per
@@ -67,8 +49,14 @@ type StreamEventsResult struct {
 // does not (it has no internal buffer to fan out from). registerStream
 // rejects events/stream for sources lacking this capability with -32017
 // DeliveryModeUnsupported per spec.
+//
+// SubscribeOpts (η-4): the SDK passes the resolved subscriber identity
+// (Principal / SubscriptionID / Params) at Subscribe time so the
+// source can stash it on its subscriberSlot and apply the EventDef's
+// Match / Transform on fanout. Implementations that don't care can
+// ignore the opts.
 type streamSubscribable interface {
-	Subscribe(ctx context.Context) <-chan SubscriberEvent
+	Subscribe(ctx context.Context, opts SubscribeOpts) <-chan SubscriberEvent
 }
 
 // activeNotifParams is the wire shape of notifications/events/active per
@@ -176,21 +164,44 @@ func registerStream(srv *server.Server, sourceMap map[string]EventSource, unsafe
 			}
 		}
 
-		// Send the confirmation notification. Per spec L240, this MUST
-		// arrive before any event delivery.
+		// η-3 / η-4: derive the per-stream sub id BEFORE subscribing
+		// so it can ride on the subscriberSlot for fanout-time
+		// HookContext construction. Each stream open gets a fresh
+		// random sub id — push doesn't share canonical-tuple identity
+		// across concurrent streams from the same principal/name/params,
+		// so unlike webhook (where deriveSubscriptionID collapses
+		// duplicate subscribes), every open IS a new subscription.
+		var subIDBuf [16]byte
+		_, _ = rand.Read(subIDBuf[:])
+		streamSubID := "sub_" + base64.RawURLEncoding.EncodeToString(subIDBuf[:])
+
+		// Subscribe BEFORE sending the active notification. Per spec
+		// L240 active MUST arrive before any event delivery, but
+		// "delivery" here means the handler's select loop reading
+		// from evCh — that loop doesn't start until below. Doing
+		// Subscribe first eliminates a race where a client that
+		// observes active and immediately triggers a yield could see
+		// the yield miss this stream because the slot wasn't yet
+		// registered.
+		evCh := sub.Subscribe(ctx, SubscribeOpts{
+			Principal:      principal,
+			SubscriptionID: streamSubID,
+			Params:         req.Params,
+		})
+
+		// Send the confirmation notification. The loop below reads
+		// from evCh; active goes out via ctx.Notify before the loop
+		// starts, so any events queued on evCh between Subscribe and
+		// Notify still arrive AFTER the active frame on the wire.
 		ctx.Notify("notifications/events/active", activeNotifParams{
 			RequestID: id,
 			Cursor:    initialCursor,
 		})
 
-		evCh := sub.Subscribe(ctx)
-
 		// η-3: lifecycle hooks for push. on_subscribe fires after the
 		// channel is acquired (the subscription is now live and would
 		// receive events); on_unsubscribe fires on every return path
-		// via defer. The fresh sub id is unique per stream so concurrent
-		// streams from the same principal/name/params don't conflate.
-		streamSubID := newStreamSubscriptionID()
+		// via defer.
 		hc := newHookContext(ctx, principal, streamSubID, DeliveryModePush)
 		if err := safeOnSubscribe(def.OnSubscribe, hc, req.Params); err != nil {
 			// Author rejected provisioning; close out the stream
