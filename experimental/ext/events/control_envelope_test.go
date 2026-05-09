@@ -13,16 +13,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// ζ-4 — control envelopes (type:gap, type:terminated).
-//
-// Spec §"Non-event webhook bodies" L415-423: the server POSTs signed
-// envelopes to webhook receivers when (a) a gap is detected between
-// refreshes (type:gap, carries fresh cursor) or (b) the subscription
-// has ended (type:terminated, carries error). Both use Standard
-// Webhooks headers + X-MCP-Subscription-Id, distinguished from event
+// Control envelopes (type:gap, type:terminated). Spec §"Non-event
+// webhook bodies" L415-423: the server POSTs signed envelopes to
+// webhook receivers when (a) a gap is detected between refreshes
+// (type:gap, carries fresh cursor) or (b) the subscription has ended
+// (type:terminated, carries error). Both use Standard Webhooks
+// headers + X-MCP-Subscription-Id, distinguished from event
 // deliveries by the top-level `type` field discriminator AND by the
-// webhook-id pattern: msg_<type>_<random> vs eventId for events
-// (see α's newMessageID; ζ-4 finally uses the typed form).
+// webhook-id pattern: msg_<type>_<random> vs eventId for events.
 
 // captureControlPost records what the receiver saw — body, headers —
 // for the test to inspect after PostGap / PostTerminated returns.
@@ -68,9 +66,9 @@ func readAll(r interface {
 // TestControlEnvelope_GapShape verifies PostGap POSTs a body matching
 // {type:"gap", cursor:"<fresh>"} per spec L415, with Standard Webhooks
 // headers (webhook-id, webhook-timestamp, webhook-signature) and the
-// γ-4 X-MCP-Subscription-Id header. webhook-id format is
-// msg_gap_<random> per spec, distinguishing control POSTs from event
-// deliveries (which use eventId).
+// X-MCP-Subscription-Id header (spec §"Webhook Event Delivery" L390).
+// webhook-id format is msg_gap_<random> per spec, distinguishing
+// control POSTs from event deliveries (which use eventId).
 func TestControlEnvelope_GapShape(t *testing.T) {
 	cap := &captureControlPost{}
 	srv := httptest.NewServer(cap.handler())
@@ -106,10 +104,11 @@ func TestControlEnvelope_GapShape(t *testing.T) {
 	assert.NotEmpty(t, cap.headers.Get("webhook-timestamp"))
 	assert.NotEmpty(t, cap.headers.Get("webhook-signature"))
 
-	// γ-4 X-MCP-Subscription-Id MUST appear on every webhook delivery,
-	// including control envelopes.
+	// X-MCP-Subscription-Id MUST appear on every webhook delivery,
+	// including control envelopes (spec §"Webhook Event Delivery"
+	// L390 + §"Webhook Security" → "Signature scheme" L472).
 	assert.Equal(t, subID, cap.headers.Get("X-MCP-Subscription-Id"),
-		"control envelopes MUST carry X-MCP-Subscription-Id (γ-4 + spec L390/L472)")
+		"control envelopes MUST carry X-MCP-Subscription-Id (spec L390/L472)")
 }
 
 // TestControlEnvelope_TerminatedShape verifies PostTerminated POSTs

@@ -19,10 +19,11 @@ import (
 // test means a client decoding the spec shape would not find its data — or
 // would find it under the legacy nested key path.
 //
-// The legacy results[] wrapper was a partial-success container from the
-// batching era (one entry per subscription, each with its own error field).
-// Phase 1 dropped batching at the protocol level; α drops the now-vestigial
-// wrapper at the wire level too.
+// The legacy results[] wrapper was a partial-success container from
+// the batching era (one entry per subscription, each with its own
+// error field). Batching went away at the protocol level when the
+// spec moved to single-subscription requests; the wire layer
+// followed.
 func TestPollResponse_FlatShape(t *testing.T) {
 	cursor := "cursor_xyz"
 	wire := pollResultWire{
@@ -95,9 +96,8 @@ func TestEventNotFound_UsesSpecCode(t *testing.T) {
 // TestPoll_FlatRequestShape pins the spec contract for events/poll
 // REQUEST shape per §"Poll-Based Delivery" → "Request: events/poll"
 // L139-149: top-level {name, cursor?, maxEvents?, params?} — no
-// subscriptions[] wrapper. δ-1 dropped the wrapper after phase 1
-// removed batching at the protocol level. Failing this test means
-// a spec-conformant client's request would not parse.
+// subscriptions[] wrapper. Failing this test means a spec-conformant
+// client's request would not parse.
 func TestPoll_FlatRequestShape(t *testing.T) {
 	srv := buildSecretValidationStack(t)
 	rawReq, err := json.Marshal(map[string]any{
@@ -112,11 +112,11 @@ func TestPoll_FlatRequestShape(t *testing.T) {
 	require.Nil(t, resp.Error, "flat top-level shape must be accepted; got %+v", resp.Error)
 }
 
-// TestPoll_RejectsLegacyWrapper verifies that a request still using the
-// pre-δ {subscriptions: [...]} wrapper gets a -32602 with a message
-// pointing at the spec change. Without this helpful diagnostic, an old
-// SDK sending the legacy shape would just see "name is required" and
-// have no clue why.
+// TestPoll_RejectsLegacyWrapper verifies that a request still using
+// the legacy {subscriptions: [...]} wrapper gets a -32602 with a
+// message pointing at the spec change. Without this helpful
+// diagnostic, an old SDK sending the legacy shape would just see
+// "name is required" and have no clue why.
 func TestPoll_RejectsLegacyWrapper(t *testing.T) {
 	srv := buildSecretValidationStack(t)
 	rawReq, err := json.Marshal(map[string]any{
@@ -151,8 +151,8 @@ func TestPoll_MaxAgeFiltersOldEvents(t *testing.T) {
 	// Yield 2 events that are "old" (manipulate their timestamp via
 	// the underlying source) and 2 fresh ones. Easier to backdate
 	// the events post-yield by walking the source's ring directly —
-	// but for δ-2's purposes we just yield them at different real
-	// times and use a small maxAge to filter.
+	// but for these maxAge tests we just yield them at different
+	// real times and use a small maxAge to filter.
 
 	// Yield "old" events with a backdated timestamp 10s in the past.
 	src.entries = append(src.entries,
@@ -254,7 +254,7 @@ func TestPoll_MaxAgeZeroMeansNoFilter(t *testing.T) {
 	}
 }
 
-// --- shared helpers for δ-2 tests ---
+// --- shared helpers for poll maxAge tests ---
 
 type fakeFilterPayload struct {
 	Msg string `json:"msg"`
@@ -291,12 +291,12 @@ func buildPollFilterStack(t *testing.T) (*server.Server, *YieldingSource[fakeFil
 // TestSubscribe_AcceptsMaxAge verifies the spec's maxAge floor on
 // events/subscribe per §"Cursor Lifecycle" → "Bounding replay with
 // maxAge" L529. Client supplies a per-subscription replay floor that
-// the server records on the WebhookTarget for use on (future) reconnect
-// — δ-3 plumbs the field, ζ wires the actual replay-with-floor logic.
+// the server records on the WebhookTarget for use on (future)
+// reconnect-with-replay.
 //
 // Without storing maxAge on the target, a long-offline subscriber's
-// reconnect would replay everything the cursor still covers; with it,
-// the server can bound replay to the requested floor.
+// reconnect would replay everything the cursor still covers; with
+// it, the server can bound replay to the requested floor.
 func TestSubscribe_AcceptsMaxAge(t *testing.T) {
 	srv, webhooks := buildAuthGateStack(t, "test-principal")
 	params := validSubscribeParams()

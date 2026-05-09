@@ -287,11 +287,12 @@ func TestYieldingSource_MetaFuncReturningNilOmits(t *testing.T) {
 	assert.NotContains(t, string(raw), `"_meta"`, "omitempty must keep _meta off the wire when nil")
 }
 
-// TestYieldingSource_SubscribeReceivesYieldedEvents verifies the ε-1
+// TestYieldingSource_SubscribeReceivesYieldedEvents verifies the
 // per-call subscription channel: Subscribe(ctx) returns a chan that
 // receives a SubscriberEvent for every subsequent yield. The push
-// delivery model (events/stream, ε-2) sits on top of this primitive —
-// each open stream handler holds one subscription chan.
+// delivery model (events/stream, spec §"Push-Based Delivery" L223+)
+// sits on top of this primitive — each open stream handler holds
+// one subscription chan.
 //
 // Failing this test means events/stream cannot deliver anything: the
 // stream handler would have no source-level channel to select on.
@@ -418,14 +419,14 @@ func readSubscriberEvent(t *testing.T, ch <-chan SubscriberEvent, d time.Duratio
 }
 
 // TestYieldingSource_YieldError_DeliversErrorVariant verifies the
-// ζ-7 source-side health signal: YieldError emits a SubscriberEvent
-// with Error set (no Event payload, not Truncated). Stream subscribers
+// source-side health signal: YieldError emits a SubscriberEvent with
+// Error set (no Event payload, not Truncated). Stream subscribers
 // map this onto a notifications/events/error frame; the subscription
-// stays open per spec L255+L261 (transient upstream failure).
+// stays open per spec §"Push-Based Delivery" L255+L261 (transient
+// upstream failure).
 //
-// Without this primitive, sources have no way to signal "I tried to
-// fetch upstream and got a 503" — the pre-ζ-7 yield API only supports
-// successful events.
+// Without this primitive, sources would have no way to signal "I
+// tried to fetch upstream and got a 503" — only successful events.
 func TestYieldingSource_YieldError_DeliversErrorVariant(t *testing.T) {
 	src, _ := NewYieldingSource[fakePayload](EventDef{Name: "fake"})
 	ctx, cancel := context.WithCancel(context.Background())

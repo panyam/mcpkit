@@ -17,9 +17,9 @@ import (
 
 const (
 	defaultWebhookTTL              = 60 * time.Second // 1 minute for POC (production: longer)
-	defaultWebhookMaxBodyBytes     = 256 * 1024       // ζ-3 spec L487
-	defaultWebhookSuspendThreshold = 5                // ζ-6: N consecutive failures
-	defaultWebhookSuspendWindow    = 10 * time.Minute // ζ-6: sliding window W
+	defaultWebhookMaxBodyBytes     = 256 * 1024       // spec §"Webhook Security" → "Delivery profile" L487
+	defaultWebhookSuspendThreshold = 5                // N consecutive failures before Active=false
+	defaultWebhookSuspendWindow    = 10 * time.Minute // sliding window over which failures accumulate
 )
 
 // WebhookOption configures a WebhookRegistry at construction time.
@@ -28,8 +28,9 @@ type WebhookOption func(*WebhookRegistry)
 // WebhookOnRemoveHook fires whenever a target is actually removed from
 // the registry — explicit Unregister, TTL prune, or PostTerminated.
 // Does NOT fire on the suspend transition (Active=true→false), which
-// keeps the target in the registry as paused (η-3 / Q4: suspend ≠
-// unsubscribe; refresh reactivates without re-firing on_subscribe).
+// keeps the target in the registry as paused — suspend ≠ unsubscribe;
+// refresh reactivates without re-firing on_subscribe per spec
+// §"Webhook Delivery Status" L460.
 //
 // Hooks fire OUTSIDE the registry's lock so a slow listener can't
 // serialize Register/Unregister/PostTerminated.
@@ -78,7 +79,7 @@ func WithWebhookHeaderMode(mode WebhookHeaderMode) WebhookOption {
 // Per spec §"Webhook Event Delivery" L413 + §"Webhook Delivery Status"
 // L460: "after repeated failures the server SHOULD set active: false."
 // The spec doesn't fix a number; this option lets deployments tune
-// hysteresis. ζ-6.
+// hysteresis.
 func WithWebhookSuspendThreshold(n int) WebhookOption {
 	return func(r *WebhookRegistry) {
 		if n > 0 {
@@ -93,7 +94,7 @@ func WithWebhookSuspendThreshold(n int) WebhookOption {
 //
 // Failures separated by more than W don't accumulate — a receiver
 // with one failure per hour for weeks shouldn't get suspended; only
-// a current run of failures does. ζ-6.
+// a current run of failures does.
 func WithWebhookSuspendWindow(d time.Duration) WebhookOption {
 	return func(r *WebhookRegistry) {
 		if d > 0 {
@@ -125,7 +126,7 @@ func WithWebhookMaxBodyBytes(n int) WebhookOption {
 //
 // Per spec §"Webhook Security" → "SSRF prevention" L464, deployments MUST
 // guard against DNS rebinding by checking the resolved IP at dial time.
-// ζ-1's net.Dialer.Control callback rejects:
+// The net.Dialer.Control callback installed by NewWebhookRegistry rejects:
 //   - 127.0.0.0/8, ::1 (loopback)
 //   - 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 (RFC1918 private IPv4)
 //   - 169.254.0.0/16, fe80::/10 (link-local — includes AWS metadata service)
@@ -153,31 +154,32 @@ func WithWebhookAllowPrivateNetworks(allow bool) WebhookOption {
 // as the X-MCP-Subscription-Id header on every delivery POST per
 // §"Webhook Event Delivery" L390.
 //
-// EventName, Principal, Params (η-3): copies of the identity components
-// stored separately so OnRemove hooks (and η-4 match/transform on
-// fanout) can construct a HookContext + params payload without
-// re-parsing canonical bytes. Redundant with CanonicalKey; cheap to
-// store, and the registry already owns the only writer.
+// EventName, Principal, Params: copies of the identity components
+// stored separately so OnRemove hooks (and Match / Transform on
+// fanout) can construct a HookContext + params payload per spec
+// §"Server SDK Guidance" L623-629 without re-parsing canonical
+// bytes. Redundant with CanonicalKey; cheap to store, and the
+// registry already owns the only writer.
 type WebhookTarget struct {
 	CanonicalKey  []byte    // canonical bytes of (principal, url, name, params)
 	ID            string    // server-derived routing handle (sub_<base64-of-16-bytes>)
 	URL           string    // delivery callback URL
 	Secret        string    // client-supplied HMAC signing secret (whsec_...)
 	ExpiresAt     time.Time // soft-state TTL expiry
-	MaxAgeSeconds int       // δ-3: per-spec replay floor (§"Cursor Lifecycle" L529); 0 = no floor
+	MaxAgeSeconds int       // per-spec replay floor (§"Cursor Lifecycle" L529); 0 = no floor
 
-	EventName string         // event-type name (η-3 hook lookup)
-	Principal string         // resolved subscription principal (η-3 HookContext)
-	Params    map[string]any // canonicalized subscription params (η-3 hook payload)
+	EventName string         // event-type name (used by Match / Transform / OnRemove lookup)
+	Principal string         // resolved subscription principal (used by HookContext)
+	Params    map[string]any // canonicalized subscription params (passed to hooks)
 
-	// ζ-5: per-target delivery health, surfaced on subscribe refresh
+	// Status is per-target delivery health, surfaced on subscribe refresh
 	// response per spec §"Webhook Delivery Status" L425-460.
 	// Mutated only via *WebhookRegistry methods under r.mu so the
 	// snapshot returned by Targets()/DeliveryStatus() is consistent.
 	Status DeliveryStatus
 
-	// ζ-6: internal counter for the suspend state machine. Tracks
-	// consecutive failures within the current sliding-window run.
+	// failureCount is the internal counter for the suspend state machine.
+	// Tracks consecutive failures within the current sliding-window run.
 	// Not surfaced on the wire; the wire-visible signal is Status.Active.
 	failureCount int
 }
@@ -239,25 +241,28 @@ type WebhookRegistry struct {
 	client               *http.Client
 	ttl                  time.Duration
 	headerMode           WebhookHeaderMode
-	allowPrivateNetworks bool          // ζ-1: when false (default), Dialer.Control rejects private/loopback IPs
-	maxBodyBytes         int           // ζ-3: outbound POST body cap in bytes; default 256 KiB
-	suspendThreshold     int           // ζ-6: consecutive failures → Active=false; default 5
-	suspendWindow        time.Duration // ζ-6: sliding window over which failures accumulate; default 10min
+	allowPrivateNetworks bool          // when false (default), Dialer.Control rejects private/loopback IPs (spec §"Webhook Security" → "SSRF prevention" L464)
+	maxBodyBytes         int           // outbound POST body cap (spec §"Webhook Security" → "Delivery profile" L487); default 256 KiB
+	suspendThreshold     int           // consecutive failures → Active=false (spec §"Webhook Delivery Status" L460); default 5
+	suspendWindow        time.Duration // sliding window over which failures accumulate; default 10min
 
 	// onRemoveHooks fire when a target is actually removed from the
-	// registry (Unregister, TTL prune, PostTerminated). η-3.
+	// registry (Unregister, TTL prune, PostTerminated). The SDK uses
+	// these to drive on_unsubscribe and quota release per spec
+	// §"Server SDK Guidance" → "Subscription lifecycle hooks" L691.
 	// Mutated only at construction (WithWebhookOnRemove) and via
 	// AddOnRemoveHook; reads under mu.RLock. Hooks fire OUTSIDE the
 	// lock to keep a slow listener from serializing the registry.
 	onRemoveHooks []WebhookOnRemoveHook
 
 	// defResolver lets Deliver look up an event-type's Match /
-	// Transform hooks at fanout time without WebhookRegistry needing
-	// to know about EventDef directly. events.Register installs this;
-	// callers that hand-deliver events (e.g., TypedSource authors
-	// reaching for EmitToWebhooks themselves) get a no-op resolver
-	// and the per-target match/transform path is a passthrough.
-	// η-4. Set under mu, read under mu.RLock.
+	// Transform hooks (spec §"Server SDK Guidance" L623-629) at
+	// fanout time without WebhookRegistry needing to know about
+	// EventDef directly. events.Register installs this; callers that
+	// hand-deliver events (e.g., TypedSource authors reaching for
+	// EmitToWebhooks themselves) get a no-op resolver and the
+	// per-target match/transform path is a passthrough.
+	// Set under mu, read under mu.RLock.
 	defResolver func(eventName string) EventDef
 
 	// logf is the logging hook used by deliver paths. Defaults to log.Printf;
@@ -330,13 +335,13 @@ func NewWebhookRegistry(opts ...WebhookOption) *WebhookRegistry {
 		o(r)
 	}
 	// http.Client wired AFTER options apply so the Dialer.Control callback
-	// can read the resolved allowPrivateNetworks setting. ζ-1 spec
+	// can read the resolved allowPrivateNetworks setting. Spec
 	// §"Webhook Security" → "SSRF prevention" L464.
 	//
-	// CheckRedirect (ζ-2): explicitly disable the default 10-redirect
-	// follow. A receiver returning 3xx to an internal address would
-	// otherwise bypass the dial-time SSRF guard via Go's redirect chain.
-	// Per spec same paragraph L464.
+	// CheckRedirect: explicitly disable the default 10-redirect follow.
+	// A receiver returning 3xx to an internal address would otherwise
+	// bypass the dial-time SSRF guard via Go's redirect chain. Per
+	// spec same paragraph L464.
 	r.client = &http.Client{
 		Timeout: 5 * time.Second,
 		Transport: &http.Transport{
@@ -436,10 +441,9 @@ func (r *WebhookRegistry) setLogfForTest(f func(format string, args ...any)) {
 }
 
 
-// RegisterParams bundles the inputs for Register. Promoted to a struct
-// over a long positional list because η-3 added EventName / Principal
-// / Params to the identity-side state — six positional args was
-// already at the readability ceiling.
+// RegisterParams bundles the inputs for Register. A struct rather than
+// a positional list because EventName / Principal / Params took the
+// arg count past the readability ceiling.
 type RegisterParams struct {
 	CanonicalKey  []byte
 	DerivedID     string
@@ -447,11 +451,12 @@ type RegisterParams struct {
 	Secret        string
 	MaxAgeSeconds int
 
-	// EventName / Principal / Params (η-3): copies of the identity
+	// EventName / Principal / Params: copies of the identity
 	// components the registry stores so OnRemove hooks have full
-	// HookContext + payload available without re-parsing canonical
-	// bytes. Fed by the same canonical-tuple inputs the caller
-	// already used to compute CanonicalKey.
+	// HookContext + payload available (per spec §"Server SDK
+	// Guidance" → "Subscription lifecycle hooks" L691) without
+	// re-parsing canonical bytes. Fed by the same canonical-tuple
+	// inputs the caller already used to compute CanonicalKey.
 	EventName string
 	Principal string
 	Params    map[string]any
@@ -463,9 +468,10 @@ type RegisterParams struct {
 // — second call refreshes TTL + replaces secret.
 //
 // Returns (expiresAt, isNew). isNew is true on first registration
-// (caller fires safeOnSubscribe) and false on refresh (η-3 / Q4:
-// refresh ≠ subscribe). Caller resolves the distinction; the registry
-// just reports it.
+// (caller fires safeOnSubscribe per spec §"Server SDK Guidance" L691)
+// and false on refresh — refresh ≠ subscribe, so on_subscribe MUST
+// NOT re-fire. Caller resolves the distinction; the registry just
+// reports it.
 //
 // DerivedID is the X-MCP-Subscription-Id value the registry emits on
 // every delivery POST; it MUST be deriveSubscriptionID(CanonicalKey)
@@ -481,8 +487,9 @@ type RegisterParams struct {
 // as "don't change").
 //
 // Side effect: prunes expired targets before registering. Each pruned
-// target fires the onRemove hooks (η-3: lifecycle parity — TTL expiry
-// is an unsubscribe).
+// target fires the onRemove hooks — TTL expiry counts as an
+// unsubscribe (spec §"Server SDK Guidance" → "Unsubscribe timing by
+// mode" L707).
 func (r *WebhookRegistry) Register(p RegisterParams) (expiresAt time.Time, isNew bool) {
 	r.mu.Lock()
 	pruned := r.pruneExpiredLocked()
@@ -498,11 +505,12 @@ func (r *WebhookRegistry) Register(p RegisterParams) (expiresAt time.Time, isNew
 		if p.MaxAgeSeconds > 0 {
 			existing.MaxAgeSeconds = p.MaxAgeSeconds
 		}
-		// ζ-6: a successful refresh reactivates a suspended target per
-		// spec L460. Clear the failure run so deliveries can resume.
-		// Pending events do NOT replay automatically (would re-flood a
-		// recovering receiver); the client signals replay intent via
-		// the next events/poll or by waiting for live events.
+		// A successful refresh reactivates a suspended target per spec
+		// §"Webhook Delivery Status" L460. Clear the failure run so
+		// deliveries can resume. Pending events do NOT replay
+		// automatically (would re-flood a recovering receiver); the
+		// client signals replay intent via the next events/poll or by
+		// waiting for live events.
 		if !existing.Status.Active {
 			existing.Status.Active = true
 			existing.Status.LastError = DeliveryErrorNone
@@ -522,9 +530,10 @@ func (r *WebhookRegistry) Register(p RegisterParams) (expiresAt time.Time, isNew
 			EventName:     p.EventName,
 			Principal:     p.Principal,
 			Params:        p.Params,
-			// ζ-5: Active defaults to true on first registration. The
-			// suspend state machine in ζ-6 flips this to false after
-			// repeated failures; a successful refresh resets it.
+			// Active defaults to true on first registration. The
+			// suspend state machine flips this to false after
+			// repeated failures (spec §"Webhook Delivery Status"
+			// L460); a successful refresh resets it.
 			Status: DeliveryStatus{Active: true},
 		}
 		isNew = true
@@ -546,9 +555,10 @@ func (r *WebhookRegistry) Register(p RegisterParams) (expiresAt time.Time, isNew
 // L509, the derived id is not accepted as input — callers resolve via
 // the same canonical tuple they would for a subscribe.
 //
-// Fires onRemove hooks for the deleted target — η-3's lifecycle
-// parity. Callers that explicitly Unregister get the same on_unsubscribe
-// behavior as TTL prune and PostTerminated.
+// Fires onRemove hooks for the deleted target — explicit Unregister
+// gets the same on_unsubscribe lifecycle (spec §"Server SDK
+// Guidance" → "Unsubscribe timing by mode" L707) as TTL prune and
+// PostTerminated.
 func (r *WebhookRegistry) Unregister(canonicalKey []byte) {
 	r.mu.Lock()
 	target, ok := r.targets[string(canonicalKey)]
@@ -563,8 +573,9 @@ func (r *WebhookRegistry) Unregister(canonicalKey []byte) {
 
 // Targets returns a snapshot of all non-expired AND non-suspended
 // webhook targets. Used by Deliver to fan out an event; suspended
-// targets (ζ-6: Active=false after N consecutive failures) are
-// excluded so dead receivers don't keep getting retry traffic.
+// targets (Active=false after N consecutive failures, per spec
+// §"Webhook Delivery Status" L460) are excluded so dead receivers
+// don't keep getting retry traffic.
 //
 // Lookup-by-canonical-key paths (PostGap, PostTerminated) bypass this
 // filter — control envelopes for terminated/gap should still POST to
@@ -584,8 +595,8 @@ func (r *WebhookRegistry) Targets() []WebhookTarget {
 
 // pruneExpiredLocked removes expired subscriptions and returns the
 // removed targets so the caller can fire onRemove hooks OUTSIDE the
-// lock (η-3: lifecycle parity — TTL prune is an unsubscribe). Must
-// hold r.mu write lock.
+// lock — TTL prune is an unsubscribe per spec §"Server SDK Guidance"
+// → "Unsubscribe timing by mode" L707. Must hold r.mu write lock.
 func (r *WebhookRegistry) pruneExpiredLocked() []WebhookTarget {
 	now := time.Now()
 	var removed []WebhookTarget
@@ -602,9 +613,9 @@ func (r *WebhookRegistry) pruneExpiredLocked() []WebhookTarget {
 // DeliverToTarget POSTs an event to a single target identified by
 // canonical key, bypassing the broadcast fanout (and thus skipping
 // Match / Transform). Used by EmitToSubscription for targeted delivery
-// (η-5) — the spec's "the author has already shaped this event for
-// this specific subscription" model means hooks are deliberately not
-// applied here.
+// per spec §"Server SDK Guidance" L630 — the "the author has already
+// shaped this event for this specific subscription" model means
+// hooks are deliberately not applied here.
 //
 // Returns false when there is no live target for the canonical key
 // (unregistered between the index lookup and this call, suspended,
@@ -648,7 +659,7 @@ func (r *WebhookRegistry) ExpireAll() {
 
 // Deliver sends an event to webhook subscribers of that event name.
 //
-// Per-target processing (η-4):
+// Per-target processing (spec §"Server SDK Guidance" L623-629):
 //  1. Filter by event name — only targets whose EventName matches the
 //     event are considered.
 //  2. safeMatch with the EventDef's Match — skip target if false.
@@ -673,18 +684,19 @@ func (r *WebhookRegistry) Deliver(event Event) {
 
 	// One marshal upfront for the unmodified path; per-target
 	// re-marshal only when transform actually changes the event
-	// (Q8 short-circuit).
+	// (passthrough short-circuit avoids the alloc).
 	originalBody, err := json.Marshal(event)
 	if err != nil {
 		r.logf("[webhook] failed to marshal event: %v", err)
 		return
 	}
 	if len(originalBody) > r.maxBodyBytes {
-		// ζ-3: spec L487 caps outbound delivery bodies at 256 KiB
-		// (configurable via WithWebhookMaxBodyBytes). Reject
-		// oversized — truncation would corrupt the HMAC signature
-		// and silently drop event content. Re-trying won't shrink
-		// the body, so this is terminal for the event.
+		// Spec §"Webhook Security" → "Delivery profile" L487 caps
+		// outbound delivery bodies at 256 KiB (configurable via
+		// WithWebhookMaxBodyBytes). Reject oversized — truncation
+		// would corrupt the HMAC signature and silently drop event
+		// content. Re-trying won't shrink the body, so this is
+		// terminal for the event.
 		r.logf("[webhook] event %s body %d bytes exceeds cap %d; dropping (will not retry)",
 			event.EventID, len(originalBody), r.maxBodyBytes)
 		return
@@ -700,10 +712,10 @@ func (r *WebhookRegistry) Deliver(event Event) {
 
 	for _, t := range targets {
 		if t.EventName != "" && t.EventName != event.Name {
-			// Pre-η-3 targets had no EventName recorded — skip the
-			// filter for those (zero string) so legacy fixtures
-			// keep working. Real targets registered via the
-			// subscribe handler always carry the name.
+			// Targets whose EventName is unset are pre-identity-
+			// tracking fixtures — skip the name filter for them so
+			// legacy tests keep working. Real targets registered
+			// via the subscribe handler always carry the name.
 			continue
 		}
 
@@ -740,9 +752,9 @@ const (
 
 // recordDeliverySuccess updates the target's DeliveryStatus after a
 // successful delivery attempt. Active stays/becomes true (clears any
-// prior suspension — ζ-6); LastDeliveryAt advances; LastError +
-// FailedSince clear (the current failure run, if any, is over);
-// failure counter resets to 0.
+// prior suspension per spec §"Webhook Delivery Status" L460);
+// LastDeliveryAt advances; LastError + FailedSince clear (the current
+// failure run, if any, is over); failure counter resets to 0.
 func (r *WebhookRegistry) recordDeliverySuccess(canonicalKey []byte, at time.Time) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -762,14 +774,14 @@ func (r *WebhookRegistry) recordDeliverySuccess(canonicalKey []byte, at time.Tim
 // recordDeliveryFailure updates the target's DeliveryStatus after the
 // FINAL failed attempt (all retries exhausted). LastError gets the
 // categorical bucket; FailedSince is set on the FIRST failure of a
-// CURRENT run (sliding-window resets see ζ-6 suspendWindow) and
-// preserved across subsequent failures so subscribers can see how long
-// the receiver has been unreachable.
+// CURRENT run (sliding-window resets via suspendWindow) and preserved
+// across subsequent failures so subscribers can see how long the
+// receiver has been unreachable.
 //
-// Suspend rule (ζ-6): if FailedSince is older than suspendWindow,
-// reset the run (this failure starts a new run). Otherwise, count
-// consecutive failures within the run; on hitting suspendThreshold,
-// flip Active=false.
+// Suspend rule (spec §"Webhook Delivery Status" L460): if FailedSince
+// is older than suspendWindow, reset the run (this failure starts a
+// new run). Otherwise, count consecutive failures within the run; on
+// hitting suspendThreshold, flip Active=false.
 func (r *WebhookRegistry) recordDeliveryFailure(canonicalKey []byte, bucket DeliveryErrorBucket) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -780,8 +792,8 @@ func (r *WebhookRegistry) recordDeliveryFailure(canonicalKey []byte, bucket Deli
 	now := time.Now()
 	t.Status.LastError = bucket
 
-	// ζ-6: sliding-window failure counting. If the current run is
-	// older than the window, reset — this failure starts a fresh run.
+	// Sliding-window failure counting. If the current run is older
+	// than the window, reset — this failure starts a fresh run.
 	// failureCount is per-target; tracked alongside the wire-visible
 	// DeliveryStatus fields.
 	if t.Status.FailedSince == nil || now.Sub(*t.Status.FailedSince) > r.suspendWindow {
@@ -796,12 +808,14 @@ func (r *WebhookRegistry) recordDeliveryFailure(canonicalKey []byte, bucket Deli
 		t.Status.Active = false
 	}
 	r.targets[string(canonicalKey)] = t
-	// ζ-7.3: on the Active true→false transition, auto-Post a
+	// On the Active true→false transition, auto-Post a
 	// {type:terminated} envelope to the receiver as a courtesy
-	// notification. Uses postTerminatedSilent so the target stays
-	// in the registry (Active=false observable; reactivate via refresh).
-	// Snapshot the target struct before releasing the lock — the
-	// async deliverControl needs URL/Secret/ID outside the lock.
+	// notification (spec §"Non-event webhook bodies" L420). Uses
+	// postTerminatedSilent so the target stays in the registry
+	// (Active=false observable; reactivate via refresh per
+	// §"Webhook Delivery Status" L460). Snapshot the target struct
+	// before releasing the lock — the async deliverControl needs
+	// URL/Secret/ID outside the lock.
 	if wasActive && !t.Status.Active {
 		r.postTerminatedSilent(t, ControlError{
 			Code:    -32603,
@@ -861,7 +875,7 @@ func classifyTransportError(err error) DeliveryErrorBucket {
 // exponential backoff.
 func (r *WebhookRegistry) deliver(target WebhookTarget, eventID string, body []byte) {
 	backoff := initialBackoff
-	// ζ-5: tracks the last per-attempt failure bucket. Recorded onto
+	// Tracks the last per-attempt failure bucket. Recorded onto
 	// deliveryStatus only after all retries are exhausted (i.e., this
 	// is the FINAL outcome). A transient blip during a successful
 	// retry-cycle would otherwise falsely appear as "current failure"
@@ -883,8 +897,9 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, eventID string, body []b
 		// (webhook emit + poll backfill of the same upstream event collapse
 		// under the receiver's eventId-keyed dedup).
 		//
-		// X-MCP-Subscription-Id carries target.ID (γ-2's derived id over
-		// the canonical tuple) so the receiver can select the correct
+		// X-MCP-Subscription-Id carries target.ID (the spec's derived
+		// id over the canonical tuple, §"Subscription Identity" →
+		// "Derived id" L367) so the receiver can select the correct
 		// secret without parsing the body. Per spec §"Webhook Event
 		// Delivery" L390 + §"Webhook Security" L472: this is the only
 		// MCP-specific header on a Standard Webhooks delivery.
@@ -919,15 +934,17 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, eventID string, body []b
 		r.logf("[webhook] delivery to %s returned %d", target.URL, resp.StatusCode)
 		switch {
 		case resp.StatusCode >= 300 && resp.StatusCode < 400:
-			// ζ-2: 3xx is non-retryable. We disabled redirect-following
+			// 3xx is non-retryable. We disabled redirect-following
 			// via CheckRedirect; a receiver returning 3xx is signalling
-			// "go elsewhere" but we're not allowed to. Re-trying won't
+			// "go elsewhere" but we're not allowed to (spec §"Webhook
+			// Security" → "SSRF prevention" L464). Re-trying won't
 			// change the response; treat as terminal.
 			r.recordDeliveryFailure(target.CanonicalKey, DeliveryError3xxRedirect)
 			return
 		case resp.StatusCode == http.StatusRequestEntityTooLarge:
-			// ζ-3 spec L487: 413 MUST be non-retryable. Receiver
-			// rejects our payload size; retrying won't change that.
+			// Spec §"Webhook Security" → "Delivery profile" L487:
+			// 413 MUST be non-retryable. Receiver rejects our
+			// payload size; retrying won't change that.
 			r.recordDeliveryFailure(target.CanonicalKey, DeliveryError4xx)
 			return
 		case resp.StatusCode >= 400 && resp.StatusCode < 500:

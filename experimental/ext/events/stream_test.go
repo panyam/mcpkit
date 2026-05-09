@@ -14,9 +14,10 @@ import (
 
 // streamTestStack wires a server with a YieldingSource backing a fake event
 // + an InProcessTransport that captures every notification onto a channel.
-// All ε-2 tests share this fixture — events/stream is a long-lived call so
-// every test follows the same pattern: start the call in a goroutine, read
-// notifications, cancel ctx, verify the final response.
+// All events/stream tests share this fixture — events/stream is a
+// long-lived call so every test follows the same pattern: start the
+// call in a goroutine, read notifications, cancel ctx, verify the
+// final response.
 //
 // unsafeAnon "" → spec-strict auth (anonymous calls fail -32012);
 // non-empty   → demo escape hatch.

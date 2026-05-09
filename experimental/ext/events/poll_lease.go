@@ -2,8 +2,9 @@ package events
 
 // Poll-lease table — in-memory soft state tracking which (principal,
 // eventName, params) tuples have recent poll activity, with TTL-based
-// expiry and lifecycle callbacks. Foundation for η-3's poll-mode
-// on_subscribe / on_unsubscribe wiring (η-1).
+// expiry and lifecycle callbacks. Provides the per-subscription
+// identity poll otherwise lacks, so on_subscribe / on_unsubscribe
+// can fire consistently with webhook + push.
 //
 // Spec §"Server SDK Guidance" → "Unsubscribe timing by mode" L707-715:
 // "the SDK treats poll subscriptions as leased. The lease is keyed on
@@ -30,9 +31,10 @@ const (
 )
 
 // PollLeaseHook is the callback signature for OnCreate / OnExpire. The
-// SDK invokes it with the lease's identity tuple so authors (typically
-// via the η-3 wiring that turns these into on_subscribe / on_unsubscribe
-// calls) can provision and tear down upstream resources.
+// SDK invokes it with the lease's identity tuple; events.Register
+// chains an internal hook that turns these into on_subscribe /
+// on_unsubscribe calls per spec §"Server SDK Guidance" →
+// "Subscription lifecycle hooks" L691.
 //
 // Hooks fire from the goroutine that called Touch (OnCreate) or the
 // background sweep goroutine (OnExpire). Authors that need to do
@@ -189,7 +191,8 @@ func (t *PollLeaseTable) Touch(principal, eventName string, params map[string]an
 
 // Remove drops a lease for (principal, eventName, params) immediately,
 // without firing OnExpire. Returns true when an entry actually went
-// away. Used by the η-6 quota wiring to roll back a Touch when
+// away. Used by the quota wiring (spec §"Server SDK Guidance" →
+// "Subscription lifecycle hooks" L705) to roll back a Touch when
 // Reserve fails — the lease was just created but the principal is
 // over their cap, so the lease should never have been there.
 //

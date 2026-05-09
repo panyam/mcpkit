@@ -76,15 +76,12 @@ type EventDef struct {
 	// and the library surfaces it on events/list.
 	Meta map[string]any `json:"_meta,omitempty"`
 
-	// Per-subscription author hooks (η-2). All four are zero-value-
-	// friendly — nil means baseline behavior (deliver to all,
-	// passthrough, no lifecycle work). Tagged json:"-" because
-	// EventDef is JSON-serialized for events/list and function
-	// fields neither serialize nor belong on the wire.
-	//
-	// Wiring is in the η-3 / η-4 sub-PRs; this PR ships the surface
-	// and panic-recovery wrappers. See docs/EVENTS_ETA_PLAN.md
-	// Q1-Q4 for the design, and hooks.go for the function types.
+	// Per-subscription author hooks per spec §"Server SDK Guidance"
+	// L623-705. All four are zero-value-friendly — nil means baseline
+	// behavior (deliver to all, passthrough, no lifecycle work).
+	// Tagged json:"-" because EventDef is JSON-serialized for
+	// events/list and function fields neither serialize nor belong
+	// on the wire. See hooks.go for the function types.
 	Match         MatchFunc       `json:"-"`
 	Transform     TransformFunc   `json:"-"`
 	OnSubscribe   SubscribeFunc   `json:"-"`
@@ -211,7 +208,7 @@ type Config struct {
 	// Empty (default) keeps the spec-strict behavior. Production
 	// deployments wire auth via server.WithAuth(...) and leave this
 	// empty; ctx.AuthClaims().Subject becomes the principal in the
-	// canonical tuple. See γ PLAN.md for the design rationale.
+	// canonical tuple per spec §"Subscription Identity" L361.
 	UnsafeAnonymousPrincipal string
 
 	// StreamHeartbeatInterval is how often events/stream emits
@@ -223,9 +220,8 @@ type Config struct {
 
 	// PollLeases tracks poll-mode subscriptions as ephemeral leases
 	// so on_subscribe / on_unsubscribe can fire consistently across
-	// delivery modes (η-1 — foundation for η-3's lifecycle wiring).
-	// Spec §"Server SDK Guidance" → "Unsubscribe timing by mode"
-	// L707-715.
+	// delivery modes per spec §"Server SDK Guidance" → "Unsubscribe
+	// timing by mode" L707-715.
 	//
 	// nil leaves Register to construct a default table (5 minute
 	// TTL, no hooks) — equivalent to "infrastructure present, no
@@ -235,12 +231,13 @@ type Config struct {
 	PollLeases *PollLeaseTable
 
 	// SubscriptionIndex maps server-derived sub ids to per-
-	// subscription deliver closures so EmitToSubscription can
-	// route by id without scanning every source / target (η-5).
-	// Populated by the lifecycle wiring inside Register
-	// (registerStream Add/Remove on stream open/close, webhook
-	// subscribe Add + onRemove Remove). Poll subscriptions are not
-	// indexed (no sub id; lease tuple is the routing identity).
+	// subscription deliver closures so EmitToSubscription (spec
+	// §"Server SDK Guidance" L630) can route by id without scanning
+	// every source / target. Populated by the lifecycle wiring
+	// inside Register (registerStream Add/Remove on stream
+	// open/close, webhook subscribe Add + onRemove Remove). Poll
+	// subscriptions are not indexed (no sub id; lease tuple is the
+	// routing identity).
 	//
 	// Authors that want to call EmitToSubscription should construct
 	// one via NewSubscriptionIndex and pass it here so they hold a
@@ -250,10 +247,12 @@ type Config struct {
 	SubscriptionIndex *SubscriptionIndex
 
 	// Quota enforces per-principal-per-event-type subscription caps
-	// per spec L705 (η-6). Reserve fires BEFORE on_subscribe; if the
-	// principal is at cap, the request is rejected with -32013
-	// TooManySubscriptions and on_subscribe never runs (no upstream
-	// resource provisioning for a rejected sub).
+	// per spec §"Server SDK Guidance" → "Subscription lifecycle
+	// hooks" L705 ("Servers SHOULD enforce TooManySubscriptions
+	// before invoking on_subscribe"). If the principal is at cap,
+	// the request is rejected with -32013 TooManySubscriptions and
+	// on_subscribe never runs (no upstream resource provisioning
+	// for a rejected sub).
 	//
 	// Authors configure caps via NewQuota(WithMaxSubscriptionsPerPrincipal(name, n)...)
 	// and pass the result here. nil leaves Register to construct an
@@ -301,26 +300,30 @@ func Register(cfg Config) {
 		quota = NewQuota() // no caps configured → every Reserve succeeds
 	}
 
-	// η-3: lifecycle hook wiring. The SDK installs onRemove on the
-	// webhook registry (fires safeOnUnsubscribe for explicit
-	// Unregister, TTL prune, PostTerminated) and chains an onExpire
-	// hook on the poll-lease table (fires safeOnUnsubscribe when a
-	// poll lease ages out). on_subscribe firing happens inline at
-	// the per-mode call sites (registerSubscribe for webhook,
-	// registerStream for push, registerPoll for poll) — those have
-	// the live HookContext / params at hand.
+	// Lifecycle hook wiring per spec §"Server SDK Guidance" →
+	// "Subscription lifecycle hooks" L691-705. The SDK installs
+	// onRemove on the webhook registry (fires safeOnUnsubscribe
+	// for explicit Unregister, TTL prune, PostTerminated) and
+	// chains an onExpire hook on the poll-lease table (fires
+	// safeOnUnsubscribe when a poll lease ages out). on_subscribe
+	// firing happens inline at the per-mode call sites
+	// (registerSubscribe for webhook, registerStream for push,
+	// registerPoll for poll) — those have the live HookContext /
+	// params at hand.
 	if webhooks != nil {
 		webhooks.AddOnRemoveHook(func(t WebhookTarget) {
-			// η-5: drop the index entry first so a racing
+			// Drop the index entry first so a racing
 			// EmitToSubscription that hasn't yet reached its
 			// Lookup will get the unknown-id branch (clean drop)
 			// rather than calling DeliverToTarget on a registry
 			// the target was just removed from.
 			idx.Remove(t.ID)
-			// η-6: release the quota slot. Pairs with the Reserve
-			// in registerSubscribe — fires once per actual removal
-			// (Unregister, prune, PostTerminated; NOT suspend per
-			// Q4). Safe for uncapped event-types (no-op).
+			// Release the quota slot. Pairs with the Reserve in
+			// registerSubscribe — fires once per actual removal
+			// (Unregister, prune, PostTerminated; NOT suspend —
+			// suspend ≠ unsubscribe per spec §"Webhook Delivery
+			// Status" L460). Safe for uncapped event-types
+			// (no-op).
 			quota.Release(t.Principal, t.EventName)
 			source, ok := sourceMap[t.EventName]
 			if !ok {
@@ -329,8 +332,9 @@ func Register(cfg Config) {
 			hc := newHookContext(context.Background(), t.Principal, t.ID, DeliveryModeWebhook)
 			safeOnUnsubscribe(source.Def().OnUnsubscribe, hc, t.Params)
 		})
-		// η-4: let Deliver look up Match / Transform per event name
-		// without leaking sourceMap onto WebhookRegistry.
+		// Let Deliver look up Match / Transform per event name
+		// (spec §"Server SDK Guidance" L623-629) without leaking
+		// sourceMap onto WebhookRegistry.
 		webhooks.SetDefResolver(func(eventName string) EventDef {
 			source, ok := sourceMap[eventName]
 			if !ok {
@@ -346,7 +350,7 @@ func Register(cfg Config) {
 	// PollLeaseTable.mu so it's safe even if the sweeper has already
 	// started reading it.
 	sdkOnExpire := func(principal, eventName string, params map[string]any) {
-		// η-6: release the quota slot. Pairs with the Reserve in
+		// Release the quota slot. Pairs with the Reserve in
 		// registerPoll on isNew. Fires once per actual lease
 		// expiry (the sweeper drives this).
 		quota.Release(principal, eventName)
@@ -355,7 +359,9 @@ func Register(cfg Config) {
 			return
 		}
 		// Poll has no subscription id — the lease tuple IS the
-		// identity. SubscriptionID() returns empty per Q4.
+		// routing identity per spec §"Server SDK Guidance" →
+		// "Unsubscribe timing by mode" L707. SubscriptionID()
+		// returns empty.
 		hc := newHookContext(context.Background(), principal, "", DeliveryModePoll)
 		safeOnUnsubscribe(source.Def().OnUnsubscribe, hc, params)
 	}
@@ -443,10 +449,10 @@ func registerList(srv *server.Server, sources []EventSource) {
 
 func registerPoll(srv *server.Server, sourceMap map[string]EventSource, unsafeAnon string, leases *PollLeaseTable, quota *Quota) {
 	srv.HandleMethod("events/poll", func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
-		// Spec §"Poll-Based Delivery" → "Request: events/poll" L139-149:
-		// flat top-level shape — no subscriptions[] wrapper. Phase 1 dropped
-		// batching at the protocol level; δ-1 drops the now-vestigial
-		// wrapper at the wire level. δ-2 added MaxAge.
+		// Spec §"Poll-Based Delivery" → "Request: events/poll"
+		// L139-149: flat top-level shape — no subscriptions[]
+		// wrapper. MaxAge per spec §"Cursor Lifecycle" →
+		// "Bounding replay with maxAge" L529.
 		var req struct {
 			Name      string         `json:"name"`
 			Params    map[string]any `json:"params,omitempty"`
@@ -481,24 +487,27 @@ func registerPoll(srv *server.Server, sourceMap map[string]EventSource, unsafeAn
 			return core.NewErrorResponse(id, ErrCodeEventNotFound, "EventNotFound")
 		}
 
-		// η-1: poll-lease bookkeeping. The lease keys on
-		// (principal-or-anon, name, paramsHash) per spec L707.
-		// resolvePrincipal returns "" when there's no auth claim AND
-		// no UnsafeAnonymousPrincipal fallback — that empty string
-		// IS the shared-anon slot the spec describes for
-		// unauthenticated servers. We deliberately ignore the ok
-		// flag here: poll has no spec-mandated reject rule, unlike
+		// Poll-lease bookkeeping per spec §"Server SDK Guidance" →
+		// "Unsubscribe timing by mode" L707. The lease keys on
+		// (principal-or-anon, name, paramsHash). resolvePrincipal
+		// returns "" when there's no auth claim AND no
+		// UnsafeAnonymousPrincipal fallback — that empty string IS
+		// the shared-anon slot the spec describes for unauthenticated
+		// servers ("on unauthenticated servers all callers share one
+		// lease per (name, params)"). The ok flag is intentionally
+		// ignored here: poll has no spec-mandated reject rule, unlike
 		// subscribe / stream.
 		//
 		// Touch fires OnCreate the first time a (principal, name,
 		// params) tuple is seen and renews the lease on subsequent
-		// polls. η-3 fires safeOnSubscribe inline when Touch reports
+		// polls. We fire safeOnSubscribe inline when Touch reports
 		// "newly created" — the lease's onExpire (chained by
 		// Register) handles the unsubscribe side from the background
 		// sweep goroutine.
 		principal, _ := resolvePrincipal(ctx, unsafeAnon)
 		if leases.Touch(principal, req.Name, req.Params) {
-			// η-6: enforce quota BEFORE on_subscribe per spec L705.
+			// Enforce quota BEFORE on_subscribe per spec §"Server
+			// SDK Guidance" → "Subscription lifecycle hooks" L705.
 			// Touch already created the lease; if Reserve fails,
 			// roll back the lease so a rejected subscription
 			// doesn't sit in the table holding a slot it never
@@ -543,13 +552,13 @@ func registerPoll(srv *server.Server, sourceMap map[string]EventSource, unsafeAn
 			resultCursor = events[len(events)-1].CursorStr()
 		}
 
-		// η-4: per-call match/transform on the events the source
-		// returned. Match drops events the caller's params don't
-		// want; Transform shapes the event for this caller. Spec
-		// L629: "Poll subscribers see the same filtering and shaping
-		// as push/webhook subscribers." We apply BEFORE the maxAge
-		// floor so authors who use Transform to backdate timestamps
-		// (or whatever) still get a consistent floor.
+		// Per-call match/transform on the events the source returned.
+		// Match drops events the caller's params don't want; Transform
+		// shapes the event for this caller. Spec §"Server SDK
+		// Guidance" L629: "Poll subscribers see the same filtering and
+		// shaping as push/webhook subscribers." Applied BEFORE the
+		// maxAge floor so authors who use Transform to backdate
+		// timestamps still get a consistent floor.
 		def := source.Def()
 		if def.Match != nil || def.Transform != nil {
 			hc := newHookContext(ctx, principal, "", DeliveryModePoll)
@@ -564,12 +573,11 @@ func registerPoll(srv *server.Server, sourceMap map[string]EventSource, unsafeAn
 			events = kept
 		}
 
-		// δ-2: maxAge replay floor per spec §"Cursor Lifecycle" →
+		// maxAge replay floor per spec §"Cursor Lifecycle" →
 		// "Bounding replay with maxAge" L529. Drop events whose
 		// timestamp predates now - maxAge. If filtering removes any,
-		// set Truncated=true (signals the gap to the client).
-		// When req.MaxAge is 0 (default), no filtering — preserves
-		// pre-δ-2 behavior for callers that don't pass the field.
+		// set Truncated=true (signals the gap to the client). When
+		// req.MaxAge is 0 (default), no filtering applies.
 		if req.MaxAge > 0 && len(events) > 0 {
 			floor := time.Now().Add(-time.Duration(req.MaxAge) * time.Second)
 			kept := make([]Event, 0, len(events))
@@ -643,9 +651,9 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 			// sends the legacy field. Per spec §"Subscription Identity"
 			// → "Key composition" L363: "There is no client-generated id
 			// — a subscription is fully determined by what it listens
-			// for, where it delivers, and who asked." γ-3 rejects
-			// client-supplied id at the wire level so old SDKs fail
-			// loudly instead of silently mis-keying.
+			// for, where it delivers, and who asked." Rejecting a
+			// client-supplied id at the wire level makes old SDKs
+			// fail loudly instead of silently mis-keying.
 			ID       string         `json:"id"`
 			Name     string         `json:"name"`
 			Params   map[string]any `json:"params,omitempty"`
@@ -655,7 +663,7 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 				Secret string `json:"secret,omitempty"`
 			} `json:"delivery"`
 			Cursor *string `json:"cursor"`
-			MaxAge int     `json:"maxAge,omitempty"` // δ-3: spec §"Cursor Lifecycle" L529; seconds, 0 = no floor
+			MaxAge int     `json:"maxAge,omitempty"` // spec §"Cursor Lifecycle" L529; seconds, 0 = no floor
 		}
 		if err := json.Unmarshal(params, &req); err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
@@ -720,14 +728,17 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 			Params:        req.Params,
 		})
 
-		// η-3 / η-6: on first registration, enforce the quota then
-		// fire on_subscribe. Refresh of an existing subscription is
-		// renewal, not subscribe (Q4); skip both. The webhook
-		// on_unsubscribe path + the quota Release run from the
-		// registry's onRemove hook (installed in Register above).
+		// On first registration only, enforce the quota then fire
+		// on_subscribe. Refresh of an existing subscription is
+		// renewal, not subscribe — neither hook re-fires (per spec
+		// §"Webhook Delivery Status" L460 + §"Server SDK Guidance"
+		// L691). The webhook on_unsubscribe path + the quota Release
+		// run from the registry's onRemove hook (installed in
+		// Register above).
 		if isNew {
-			// η-6: enforce cap BEFORE on_subscribe per spec L705.
-			// If Reserve fails, roll back the registration so a
+			// Enforce cap BEFORE on_subscribe per spec §"Server SDK
+			// Guidance" → "Subscription lifecycle hooks" L705. If
+			// Reserve fails, roll back the registration so a
 			// rejected sub doesn't sit in the registry holding a
 			// slot it never got. Unregister fires onRemove →
 			// quota.Release (a no-op here because we never
@@ -747,7 +758,7 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 				return core.NewErrorResponse(id, ErrCodeTooManySubscriptions,
 					"on_subscribe rejected: "+err.Error())
 			}
-			// η-5: register this webhook target in the SubscriptionIndex
+			// Register this webhook target in the SubscriptionIndex
 			// AFTER on_subscribe succeeded — no half-provisioned
 			// entries. Refresh-of-existing skips the Add entirely
 			// (entry from the original subscribe still routes
@@ -778,19 +789,21 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 		// client supplied it, so the client already knows it.
 		//
 		// The id field is the SERVER-DERIVED routing handle per spec
-		// §"Subscription Identity" → "Derived id" L367 — non-load-bearing
-		// for security, used only as the X-MCP-Subscription-Id header
-		// value on delivery POSTs (γ-4 wires the header). Knowing the
-		// id grants no operations on the subscription (L378).
+		// §"Subscription Identity" → "Derived id" L367 —
+		// non-load-bearing for security, used only as the
+		// X-MCP-Subscription-Id header value on delivery POSTs (per
+		// §"Webhook Event Delivery" L390). Knowing the id grants no
+		// operations on the subscription (L378).
 		respBody := map[string]any{
 			"id":            derivedID,
 			"cursor":        wireCursor,
 			"refreshBefore": expiresAt.Format(time.RFC3339),
 		}
-		// ζ-5: include deliveryStatus on refresh response when the target
-		// has prior delivery attempts. Spec §"Webhook Delivery Status"
-		// L425-460. Omitted on first subscribe — there's nothing to
-		// report and an empty object would just be wire bloat.
+		// Include deliveryStatus on refresh response when the target
+		// has prior delivery attempts (spec §"Webhook Delivery
+		// Status" L425-460). Omitted on first subscribe — there's
+		// nothing to report and an empty object would just be wire
+		// bloat.
 		if status, ok := deliveryStatusForResponse(webhooks.DeliveryStatus(canonical)); ok {
 			respBody["deliveryStatus"] = status
 		}

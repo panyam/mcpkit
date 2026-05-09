@@ -16,9 +16,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Per-subscription Match / Transform on broadcast emit (η-4).
+// Per-subscription Match / Transform on broadcast emit. Spec
+// §"Server SDK Guidance" L623-629.
 //
-// Coverage targets per docs/EVENTS_ETA_PLAN.md η-4 acceptance:
+// Coverage targets:
 //   - Match returning false filters that subscriber out.
 //   - Transform changes the delivered event per subscriber.
 //   - nil hooks are no-op (passthrough; baseline).
@@ -330,9 +331,8 @@ func TestMatchTransform_Webhook_MatchAndTransformPerTarget(t *testing.T) {
 
 func TestMatchTransform_Webhook_FiltersByEventName(t *testing.T) {
 	// Two sources sharing one registry: a yield from source A must
-	// NOT deliver to source B's webhook subscribers. (Pre-η-4 the
-	// registry didn't filter by name; η-4's per-target processing
-	// adds the filter.)
+	// NOT deliver to source B's webhook subscribers. The per-target
+	// processing in Deliver enforces the event-name filter.
 	srcA, yieldA := NewYieldingSource[sevPayload](EventDef{
 		Name:        "src.a",
 		Description: "source A",

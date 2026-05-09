@@ -16,7 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Lifecycle hook firings across all three delivery modes (η-3).
+// Lifecycle hook firings across all three delivery modes. Spec
+// §"Server SDK Guidance" → "Subscription lifecycle hooks" L691-715.
 //
 // Acceptance per docs/EVENTS_ETA_PLAN.md:
 //   - Hooks fire exactly once per subscription lifecycle in each mode.
@@ -326,9 +327,9 @@ func TestLifecycle_Webhook_PostTerminatedFiresOnUnsubscribe(t *testing.T) {
 
 // TestLifecycle_Webhook_SuspendDoesNotFireOnUnsubscribe verifies that
 // the suspend transition (Active=true→false from repeated delivery
-// failures, ζ-6) does NOT fire on_unsubscribe — the subscription is
-// paused, not removed; refresh reactivates without re-firing
-// on_subscribe (Q4).
+// failures, spec §"Webhook Delivery Status" L460) does NOT fire
+// on_unsubscribe — the subscription is paused, not removed; refresh
+// reactivates without re-firing on_subscribe.
 func TestLifecycle_Webhook_SuspendDoesNotFireOnUnsubscribe(t *testing.T) {
 	hooks := &hookCounter{}
 	const threshold = 2
