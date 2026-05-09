@@ -1,6 +1,7 @@
 package events
 
-// events/stream — push delivery for the MCP Events extension (ε-2).
+// events/stream — push delivery for the MCP Events extension. Spec
+// §"Push-Based Delivery" → "Request: events/stream" L240-294.
 //
 // One open events/stream call holds a single subscription's per-stream
 // goroutine. The handler:
@@ -9,7 +10,7 @@ package events
 //     source supports push).
 //  2. Sends notifications/events/active with the resolved cursor (§"Push-
 //     Based Delivery" → "Request: events/stream" L240).
-//  3. Subscribes to the source's live channel (ε-1's Subscribe API).
+//  3. Subscribes to the source's live channel.
 //  4. Loops on (event arrival, heartbeat tick, ctx.Done):
 //     - Event arrival → notifications/events/event (L243-271). If the source
 //       signals Truncated=true, prepends a fresh notifications/events/active
@@ -50,16 +51,17 @@ type StreamEventsResult struct {
 // rejects events/stream for sources lacking this capability with -32017
 // DeliveryModeUnsupported per spec.
 //
-// SubscribeOpts (η-4): the SDK passes the resolved subscriber identity
+// SubscribeOpts: the SDK passes the resolved subscriber identity
 // (Principal / SubscriptionID / Params) at Subscribe time so the
 // source can stash it on its subscriberSlot and apply the EventDef's
-// Match / Transform on fanout. Implementations that don't care can
-// ignore the opts.
+// Match / Transform (spec §"Server SDK Guidance" L623-629) on fanout.
+// Implementations that don't care can ignore the opts.
 //
-// Returns (chan, sender). The sender (η-5) delivers a single event to
-// THIS specific subscription, bypassing Match / Transform — used by
-// EmitToSubscription to route by sub id. Sources that don't support
-// targeted delivery can return a no-op sender.
+// Returns (chan, sender). The sender delivers a single event to THIS
+// specific subscription, bypassing Match / Transform — used by
+// EmitToSubscription (spec §"Server SDK Guidance" L630) to route by
+// sub id. Sources that don't support targeted delivery can return a
+// no-op sender.
 type streamSubscribable interface {
 	Subscribe(ctx context.Context, opts SubscribeOpts) (<-chan SubscriberEvent, func(Event))
 }
@@ -98,7 +100,7 @@ type heartbeatNotifParams struct {
 // (spec L255+L261, transient — stream stays open) and
 // notifications/events/terminated (spec L783-795, terminal — stream
 // closes). Both carry the same {requestId, error{code,message}} envelope
-// per the spec's JSON-RPC-error-shaped error payload. ζ-7.
+// per the spec's JSON-RPC-error-shaped error payload.
 type errorNotifParams struct {
 	RequestID json.RawMessage `json:"requestId"`
 	Error     errPayload      `json:"error"`
@@ -136,7 +138,7 @@ func registerStream(srv *server.Server, sourceMap map[string]EventSource, unsafe
 		// Spec §"Subscription Identity" → "Authentication required" L361:
 		// events/stream MUST be called with an authenticated principal —
 		// the spec lists Unauthorized among events/stream's immediate
-		// errors at L267. Same auth gate as events/subscribe (γ-2).
+		// errors at L267. Same auth gate as events/subscribe.
 		principal, ok := resolvePrincipal(ctx, unsafeAnon)
 		if !ok {
 			return core.NewErrorResponse(id, ErrCodeUnauthorized, "Unauthorized")
@@ -151,7 +153,8 @@ func registerStream(srv *server.Server, sourceMap map[string]EventSource, unsafe
 				"DeliveryModeUnsupported: source does not support push delivery")
 		}
 
-		// η-6: enforce quota BEFORE Subscribe + on_subscribe per spec
+		// Enforce quota BEFORE Subscribe + on_subscribe per spec
+		// §"Server SDK Guidance" → "Subscription lifecycle hooks"
 		// L705. Done early so a rejected stream never registers a
 		// slot or fires any author hooks. Defer the Release on every
 		// return path below — pairs 1:1 with this Reserve regardless
@@ -180,12 +183,12 @@ func registerStream(srv *server.Server, sourceMap map[string]EventSource, unsafe
 			}
 		}
 
-		// η-3 / η-4: derive the per-stream sub id BEFORE subscribing
-		// so it can ride on the subscriberSlot for fanout-time
-		// HookContext construction. Each stream open gets a fresh
-		// random sub id — push doesn't share canonical-tuple identity
-		// across concurrent streams from the same principal/name/params,
-		// so unlike webhook (where deriveSubscriptionID collapses
+		// Derive the per-stream sub id BEFORE subscribing so it can
+		// ride on the subscriberSlot for fanout-time HookContext
+		// construction. Each stream open gets a fresh random sub id —
+		// push doesn't share canonical-tuple identity across
+		// concurrent streams from the same principal/name/params, so
+		// unlike webhook (where deriveSubscriptionID collapses
 		// duplicate subscribes), every open IS a new subscription.
 		var subIDBuf [16]byte
 		_, _ = rand.Read(subIDBuf[:])
@@ -205,10 +208,11 @@ func registerStream(srv *server.Server, sourceMap map[string]EventSource, unsafe
 			Params:         req.Params,
 		})
 
-		// η-5: register this stream's sender in the SubscriptionIndex
-		// so EmitToSubscription(idx, event, streamSubID) routes here.
-		// Removed on every return path so a closed stream's id can't
-		// match a stale entry.
+		// Register this stream's sender in the SubscriptionIndex so
+		// EmitToSubscription(idx, event, streamSubID) routes here
+		// (spec §"Server SDK Guidance" L630). Removed on every
+		// return path so a closed stream's id can't match a stale
+		// entry.
 		idx.Add(streamSubID, DeliveryModePush, sender)
 		defer idx.Remove(streamSubID)
 
@@ -221,10 +225,11 @@ func registerStream(srv *server.Server, sourceMap map[string]EventSource, unsafe
 			Cursor:    initialCursor,
 		})
 
-		// η-3: lifecycle hooks for push. on_subscribe fires after the
-		// channel is acquired (the subscription is now live and would
-		// receive events); on_unsubscribe fires on every return path
-		// via defer.
+		// Lifecycle hooks for push (spec §"Server SDK Guidance" →
+		// "Subscription lifecycle hooks" L691). on_subscribe fires
+		// after the channel is acquired (the subscription is now
+		// live and would receive events); on_unsubscribe fires on
+		// every return path via defer.
 		hc := newHookContext(ctx, principal, streamSubID, DeliveryModePush)
 		if err := safeOnSubscribe(def.OnSubscribe, hc, req.Params); err != nil {
 			// Author rejected provisioning; close out the stream
@@ -254,9 +259,10 @@ func registerStream(srv *server.Server, sourceMap map[string]EventSource, unsafe
 					return core.NewResponse(id, StreamEventsResult{Meta: map[string]any{}})
 				}
 
-				// ζ-7: terminal source signal. Emit notifications/events/
-				// terminated per spec L783-795 and return — subscription
-				// has ended; SDK callback fires + stream closes.
+				// Terminal source signal. Emit notifications/events/
+				// terminated per spec L783-795 and return —
+				// subscription has ended; SDK callback fires + stream
+				// closes.
 				if se.Terminated != nil {
 					ctx.Notify("notifications/events/terminated", errorNotifParams{
 						RequestID: id,
@@ -265,9 +271,10 @@ func registerStream(srv *server.Server, sourceMap map[string]EventSource, unsafe
 					return core.NewResponse(id, StreamEventsResult{Meta: map[string]any{}})
 				}
 
-				// ζ-7: transient source signal. Emit notifications/events/
-				// error per spec L255+L261 and stay open — subscription
-				// remains active; the next event continues normally.
+				// Transient source signal. Emit notifications/events/
+				// error per spec L255+L261 and stay open —
+				// subscription remains active; the next event
+				// continues normally.
 				if se.Error != nil {
 					ctx.Notify("notifications/events/error", errorNotifParams{
 						RequestID: id,

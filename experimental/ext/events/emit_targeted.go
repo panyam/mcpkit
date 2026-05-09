@@ -3,7 +3,7 @@ package events
 import "log"
 
 // EmitToSubscription delivers an event to exactly one subscription
-// identified by sub id, bypassing the broadcast fanout (η-5).
+// identified by sub id, bypassing the broadcast fanout.
 //
 // Spec §"Server SDK Guidance" L630: targeted emit is appropriate when
 // the server has set up a per-subscription upstream listener and

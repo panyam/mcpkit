@@ -4,8 +4,9 @@ import "sync"
 
 // SubscriptionIndex maps a server-derived subscription id to the
 // callback that delivers an event to that specific subscription. It
-// is the routing table consulted by EmitToSubscription (η-5) so an
-// author who knows the target sub id can bypass broadcast fanout.
+// is the routing table consulted by EmitToSubscription (spec §"Server
+// SDK Guidance" L630) so an author who knows the target sub id can
+// bypass broadcast fanout.
 //
 // The index is maintained by the lifecycle wiring in Register:
 // per-mode registration sites call Add when a subscription becomes
@@ -14,12 +15,14 @@ import "sync"
 // can do so without scanning the deliver closure.
 //
 // Push subscriptions: each open events/stream gets its own random
-// sub id (η-3) — concurrent streams from the same principal/name/
-// params are distinct entries in the index. Webhook subscriptions:
-// the spec's derived id (deriveSubscriptionID over the canonical
-// tuple) is reused — refresh keeps the same id, so the index entry
-// also stays put. Poll subscriptions are NOT indexed (no sub id;
-// the lease tuple is the routing identity per Q4).
+// sub id — concurrent streams from the same principal/name/params
+// are distinct entries in the index. Webhook subscriptions: the
+// spec's derived id (deriveSubscriptionID over the canonical tuple,
+// §"Subscription Identity" → "Derived id" L367) is reused — refresh
+// keeps the same id, so the index entry also stays put. Poll
+// subscriptions are NOT indexed (no sub id; the lease tuple is the
+// routing identity per spec §"Server SDK Guidance" → "Unsubscribe
+// timing by mode" L707).
 type SubscriptionIndex struct {
 	mu      sync.RWMutex
 	entries map[string]subscriptionEntry

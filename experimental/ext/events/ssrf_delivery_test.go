@@ -18,18 +18,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// ζ-1 — delivery-time SSRF guard.
+// Delivery-time SSRF guard. Spec §"Webhook Security" → "SSRF
+// prevention" L464.
 //
-// The pre-ζ webhook registry only checked the URL hostname at subscribe
-// time, with a "WARNING: allowed in POC mode" log that allowed loopback
-// through. This is unsafe under DNS rebinding: an attacker registers a
-// public hostname, then changes its DNS to resolve to an internal IP at
-// delivery time. The pre-ζ check has nothing to say about that.
-//
-// ζ-1 moves the check into the http.Client's Dialer.Control callback so
-// it runs on EVERY connect attempt against the resolved IP — TOCTOU-free
-// because the IP we inspect is the same one about to be used for the
-// connect syscall. Per spec §"Webhook Security" → "SSRF prevention" L464.
+// A subscribe-time hostname check would be unsafe under DNS rebinding:
+// an attacker registers a public hostname, then changes its DNS to
+// resolve to an internal IP at delivery time. The check moved into
+// the http.Client's Dialer.Control callback runs on EVERY connect
+// attempt against the resolved IP — TOCTOU-free because the IP we
+// inspect is the same one about to be used for the connect syscall.
 
 // captureDeliveryFailure returns a webhook registry configured with a
 // captured-failure log so tests can observe whether a delivery attempt
@@ -90,8 +87,8 @@ func (c *captureLog) containsSSRFBlock() bool {
 
 // TestDelivery_RejectsLoopbackAtDialTime verifies the dial-time guard
 // rejects 127.0.0.1 — the canonical SSRF target — when the demo escape
-// hatch (WithWebhookAllowPrivateNetworks) is OFF. Pre-ζ this would have
-// connected silently with only a "WARNING" log; the spec requires hard
+// hatch (WithWebhookAllowPrivateNetworks) is OFF. The spec
+// (§"Webhook Security" → "SSRF prevention" L464) requires hard
 // rejection in production.
 func TestDelivery_RejectsLoopbackAtDialTime(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -200,7 +197,7 @@ func TestDelivery_DialAllowsPublicIPs(t *testing.T) {
 var _ = io.EOF // keep io import alive for potential future error checks
 
 // TestDelivery_DoesNotFollowRedirects verifies that the webhook
-// http.Client refuses to follow 3xx responses (ζ-2). Without this, a
+// http.Client refuses to follow 3xx responses. Without this, a
 // receiver could 302 to an internal address (127.0.0.1, 10.x, etc.)
 // and bypass the dial-time SSRF guard via Go's default 10-redirect
 // follow behavior.
@@ -233,11 +230,12 @@ func TestDelivery_DoesNotFollowRedirects(t *testing.T) {
 		map[string]string{"text": "hi"}))
 
 	// Wait long enough for the deliver loop to retry-and-fail (3xx
-	// classified as non-retryable per ζ-2 + retry semantics).
+	// is classified as non-retryable per the registry's retry
+	// semantics).
 	time.Sleep(300 * time.Millisecond)
 
 	assert.Equal(t, int32(1), hits.Load(),
-		"initial receiver should be POSTed exactly once — 3xx is non-retryable per ζ-2; got %d", hits.Load())
+		"initial receiver should be POSTed exactly once — 3xx is non-retryable; got %d", hits.Load())
 	assert.Equal(t, int32(0), redirectHits.Load(),
 		"redirect target MUST NOT be followed; got %d follow-up POSTs", redirectHits.Load())
 }
