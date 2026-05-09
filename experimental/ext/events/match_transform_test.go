@@ -91,9 +91,9 @@ func TestMatchTransform_Push_MatchFiltersSubscribers(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	chHigh := src.Subscribe(ctx, SubscribeOpts{Principal: "alice", Params: map[string]any{"severity": "high"}})
-	chLow := src.Subscribe(ctx, SubscribeOpts{Principal: "bob", Params: map[string]any{"severity": "low"}})
-	chAll := src.Subscribe(ctx, SubscribeOpts{Principal: "carol", Params: nil})
+	chHigh, _ := src.Subscribe(ctx, SubscribeOpts{Principal: "alice", Params: map[string]any{"severity": "high"}})
+	chLow, _ := src.Subscribe(ctx, SubscribeOpts{Principal: "bob", Params: map[string]any{"severity": "low"}})
+	chAll, _ := src.Subscribe(ctx, SubscribeOpts{Principal: "carol", Params: nil})
 
 	require.NoError(t, yield(sevPayload{Severity: "high", Reporter: "alice@x"}))
 
@@ -127,8 +127,8 @@ func TestMatchTransform_Push_TransformShapesPerSubscriber(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	chRedact := src.Subscribe(ctx, SubscribeOpts{Params: map[string]any{"redact_pii": true}})
-	chRaw := src.Subscribe(ctx, SubscribeOpts{Params: map[string]any{"redact_pii": false}})
+	chRedact, _ := src.Subscribe(ctx, SubscribeOpts{Params: map[string]any{"redact_pii": true}})
+	chRaw, _ := src.Subscribe(ctx, SubscribeOpts{Params: map[string]any{"redact_pii": false}})
 
 	require.NoError(t, yield(sevPayload{Severity: "high", Reporter: "alice@x"}))
 
@@ -163,7 +163,7 @@ func TestMatchTransform_Push_NilHooksAreNoop(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ch := src.Subscribe(ctx, SubscribeOpts{Params: map[string]any{"severity": "low"}})
+	ch, _ := src.Subscribe(ctx, SubscribeOpts{Params: map[string]any{"severity": "low"}})
 
 	require.NoError(t, yield(sevPayload{Severity: "high", Reporter: "alice@x"}))
 
@@ -195,7 +195,7 @@ func TestMatchTransform_Push_PanicSafe(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ch := src.Subscribe(ctx, SubscribeOpts{Params: map[string]any{"severity": "high"}})
+	ch, _ := src.Subscribe(ctx, SubscribeOpts{Params: map[string]any{"severity": "high"}})
 
 	require.NoError(t, yield(sevPayload{Severity: "high", Reporter: "alice@x"}))
 
@@ -484,7 +484,7 @@ func TestMatchTransform_CrossModeParity(t *testing.T) {
 	// the full events/stream flow.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	pushCh := src.Subscribe(ctx, SubscribeOpts{Principal: "alice", Params: matchParams})
+	pushCh, _ := src.Subscribe(ctx, SubscribeOpts{Principal: "alice", Params: matchParams})
 
 	// Webhook
 	var whBody []byte
