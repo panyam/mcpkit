@@ -1,24 +1,28 @@
 package events
 
 // Hook surface for per-event-type author behavior — match / transform on
-// broadcast emit and on_subscribe / on_unsubscribe on lifecycle (η-2).
+// broadcast emit (spec §"Server SDK Guidance" L623-629) and
+// on_subscribe / on_unsubscribe on lifecycle (spec §"Server SDK
+// Guidance" → "Subscription lifecycle hooks" L691-705).
 //
 // Design context:
 //
-//   - Spec §"Server SDK Guidance" L565+ describes hooks in Python prose.
-//     Idioms 3 and 5 (class-bundled match/transform; separate
-//     @on_subscribe decorator) collapse onto a single Go answer: fields
-//     on EventDef. See docs/EVENTS_ETA_PLAN.md Q1.
+//   - The spec describes hooks in Python prose. The class-bundled
+//     match/transform pattern and the separate @on_subscribe decorator
+//     collapse onto a single Go answer: fields on EventDef. Storing
+//     all four hooks in one place mirrors how the spec ties them to
+//     an event type.
 //
-//   - Hooks are sync per Q3 — goroutines that call yield/Subscribe/
+//   - Hooks are sync — goroutines that call yield / Subscribe /
 //     Register already exist; no new concurrency primitive needed.
 //
-//   - Hooks are zero-value-friendly: nil = "not set" = baseline behavior
-//     (all subscribers receive, payload unchanged, no lifecycle work).
+//   - Hooks are zero-value-friendly: nil = "not set" = baseline
+//     behavior (all subscribers receive, payload unchanged, no
+//     lifecycle work).
 //
-// This file defines the type aliases, the HookContext, and the panic-
-// recovery wrappers. Wiring into the four call sites (events/poll,
-// events/stream, events/subscribe, the emit fanout) is η-3 / η-4 / η-5.
+// This file defines the type aliases, the HookContext, and the
+// panic-recovery wrappers. Wiring lives in the four call sites
+// (events/poll, events/stream, events/subscribe, the emit fanout).
 
 import (
 	"context"
@@ -130,7 +134,7 @@ func (h *hookContext) Mode() DeliveryMode {
 }
 
 // newHookContext is the package-internal constructor used by the
-// wiring sub-PRs (η-3 / η-4) when invoking the safe* wrappers.
+// per-mode handlers when invoking the safe* wrappers.
 func newHookContext(ctx context.Context, principal, subID string, mode DeliveryMode) HookContext {
 	return &hookContext{ctx: ctx, principal: principal, subscriptionID: subID, mode: mode}
 }
@@ -197,14 +201,16 @@ type TransformFunc func(ctx HookContext, event Event, params map[string]any) (Ev
 // closest analog to a Python coroutine raising. The Python signature
 // has `subscription_id` as a third positional argument; Go folds it
 // onto HookContext.SubscriptionID() so the call site stays uniform
-// across delivery modes (poll has no sub id and the field is empty
-// — see Q4). Stored as a field on EventDef rather than a separate
-// `@server.on_subscribe(name)` decorator (Q1 — same answer as match/
-// transform, since it's still per-event-type state).
+// across delivery modes (poll has no sub id and the field is empty —
+// the lease tuple is the routing identity per spec §"Server SDK
+// Guidance" → "Unsubscribe timing by mode" L707). Stored as a field
+// on EventDef rather than a separate `@server.on_subscribe(name)`
+// decorator — same answer as match/transform, since it's still
+// per-event-type state.
 //
 // Returning a non-nil error fails the subscribe call: the SDK
-// surfaces it as -32013 TooManySubscriptions today (η-6 may add a
-// dedicated SubscribeFailed code if a real use case appears). The
+// surfaces it as -32013 TooManySubscriptions today (a dedicated
+// SubscribeFailed code may follow if a real use case appears). The
 // SDK does NOT roll back webhook registration / push stream open on
 // hook failure; authors that need rollback should arrange it inside
 // the hook before returning the error.

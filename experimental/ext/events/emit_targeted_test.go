@@ -16,10 +16,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// EmitToSubscription targeted delivery (η-5). Spec §"Server SDK
-// Guidance" L630.
+// EmitToSubscription targeted delivery. Spec §"Server SDK Guidance"
+// L630.
 //
-// Coverage targets per docs/EVENTS_ETA_PLAN.md η-5 acceptance:
+// Coverage targets:
 //   - EmitToSubscription delivers to exactly the named subscription
 //     regardless of Match.
 //   - Unknown subID drops with a debug log (no panic, no error).

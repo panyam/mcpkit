@@ -19,10 +19,9 @@ package events
 //   -32017 DeliveryModeUnsupported — Event type doesn't support requested mode
 //
 // Only codes the events handlers currently emit are declared below.
-// Subsequent spec-alignment PRs (ζ for delivery status / unsubscribe
-// lookup, etc.) add the remaining constants in the commit that
-// introduces the behavior using them — keeps each new code visible
-// alongside its first use.
+// New constants get added in the same commit that introduces the
+// behavior using them — keeps each new code visible alongside its
+// first use.
 const (
 	ErrCodeEventNotFound           = -32011 // Unknown event name
 	ErrCodeUnauthorized            = -32012 // Caller lacks permission for this event/params

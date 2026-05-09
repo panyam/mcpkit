@@ -1,10 +1,9 @@
 package events
 
-// ζ-4 — control envelopes for non-event webhook bodies.
-//
-// Spec §"Non-event webhook bodies" L415-423: the server POSTs signed
-// envelopes to webhook receivers when the event-delivery channel
-// can't carry the signal:
+// Control envelopes for non-event webhook bodies. Spec §"Non-event
+// webhook bodies" L415-423: the server POSTs signed envelopes to
+// webhook receivers when the event-delivery channel can't carry the
+// signal:
 //
 //   - {type: "gap", cursor: "<fresh>"} — a gap was detected between
 //     refreshes (e.g., a yield queue overflowed). Tells the receiver
@@ -14,8 +13,8 @@ package events
 //     the server removes the registry target.
 //
 // Both use Standard Webhooks signature headers (webhook-id /
-// webhook-timestamp / webhook-signature) plus the γ-4
-// X-MCP-Subscription-Id header. webhook-id format is
+// webhook-timestamp / webhook-signature) plus the X-MCP-Subscription-Id
+// header (spec §"Webhook Event Delivery" L390). webhook-id format is
 // msg_<type>_<random> per spec L417, distinguishing control POSTs from
 // event deliveries (which use the event's eventId so retries dedup
 // correctly).
@@ -92,10 +91,11 @@ func (r *WebhookRegistry) PostTerminated(canonicalKey []byte, controlErr Control
 	if !ok {
 		return
 	}
-	// η-3: PostTerminated is server-initiated subscription death;
-	// onRemove fires on actual registry deletion. Suspend (handled
-	// via postTerminatedSilent) deliberately does NOT fire — the
-	// target stays in the registry as paused.
+	// PostTerminated is server-initiated subscription death;
+	// onRemove fires on actual registry deletion (per spec §"Server
+	// SDK Guidance" → "Unsubscribe timing by mode" L707). Suspend
+	// (handled via postTerminatedSilent) deliberately does NOT fire
+	// — the target stays in the registry as paused.
 	r.fireOnRemove(target)
 	body, err := json.Marshal(controlEnvelope{Type: "terminated", Error: &controlErr})
 	if err != nil {
@@ -107,9 +107,10 @@ func (r *WebhookRegistry) PostTerminated(canonicalKey []byte, controlErr Control
 
 // postTerminatedSilent POSTs a {type:terminated} envelope to a target
 // WITHOUT removing it from the registry. Distinct from the public
-// PostTerminated which removes — the suspend transition (ζ-6 →
-// ζ-7.3) needs the target to remain observable as Active=false so the
-// spec's "successful refresh reactivates" path stays available.
+// PostTerminated which removes — the suspend transition (per spec
+// §"Webhook Delivery Status" L460) needs the target to remain
+// observable as Active=false so the spec's "successful refresh
+// reactivates" path stays available.
 //
 // Caller (recordDeliveryFailure on the suspend transition) passes the
 // target snapshot so this method doesn't need to re-acquire the lock.

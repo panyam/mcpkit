@@ -131,9 +131,9 @@ func TestStandardWebhooks_WebhookIDIsStableAcrossRetries(t *testing.T) {
 		"signature regenerates per retry because timestamp is part of the signed input")
 }
 
-// TestStandardWebhooks_EmitsSubscriptionIDHeader verifies γ-4's spec
-// contract (§"Webhook Event Delivery" L390 + §"Webhook Security" →
-// "Signature scheme" L472): every delivery MUST include
+// TestStandardWebhooks_EmitsSubscriptionIDHeader verifies the spec
+// contract at §"Webhook Event Delivery" L390 + §"Webhook Security" →
+// "Signature scheme" L472: every delivery MUST include
 // X-MCP-Subscription-Id carrying the spec's derived subscription id
 // so the receiver can select the correct secret without parsing the
 // body.
@@ -173,10 +173,10 @@ func TestStandardWebhooks_SubscriptionIDStableAcrossRetries(t *testing.T) {
 }
 
 // TestStandardWebhooks_WithEmptySubscriptionIDIsNoOp verifies that
-// withSubscriptionID("") leaves the headers untouched. Defensive — the
-// registry's deliver path always passes target.ID (always set post-γ-2),
-// but the empty-string case shouldn't crash or add a misleading
-// "X-MCP-Subscription-Id: " header.
+// withSubscriptionID("") leaves the headers untouched. Defensive —
+// the registry's deliver path always passes target.ID (always set on
+// real registrations), but the empty-string case shouldn't crash or
+// add a misleading "X-MCP-Subscription-Id: " header.
 func TestStandardWebhooks_WithEmptySubscriptionIDIsNoOp(t *testing.T) {
 	body := []byte(`{}`)
 	signed := signStandardWebhooks("evt_1", body, "whsec_test", time.Unix(1700000000, 0)).

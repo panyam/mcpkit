@@ -10,7 +10,7 @@ import (
 
 // testHC returns an empty HookContext for tests that don't care about
 // its fields (panic recovery, nil-vs-not). Wiring tests that DO care
-// (η-3 / η-4) construct via newHookContext directly.
+// per-mode wiring tests construct via newHookContext directly.
 func testHC() HookContext {
 	return newHookContext(nil, "", "", deliveryModeUnset)
 }

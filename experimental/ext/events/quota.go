@@ -1,9 +1,8 @@
 package events
 
-// Per-principal-per-event-type subscription quota (η-6). Spec
-// §"Server SDK Guidance" → "Subscription lifecycle hooks" L705:
-// "Servers SHOULD enforce TooManySubscriptions before invoking
-// on_subscribe."
+// Per-principal-per-event-type subscription quota. Spec §"Server SDK
+// Guidance" → "Subscription lifecycle hooks" L705: "Servers SHOULD
+// enforce TooManySubscriptions before invoking on_subscribe."
 //
 // Why per-principal-per-event-type:
 //
@@ -18,9 +17,8 @@ package events
 //     "one client spawning 10000 subs to one event" pattern without
 //     getting in the way of normal cross-event-type usage.
 //
-// docs/EVENTS_ETA_PLAN.md Q7 picks (per-principal, per-event-type)
-// as the default; the other axes can be added behind options later
-// if a deployment needs them.
+// (per-principal, per-event-type) is the default; the other axes
+// can be added behind options later if a deployment needs them.
 //
 // Implementation note: built on golang.org/x/sync/semaphore.Weighted,
 // which is the canonical Go primitive for "at most N concurrent
