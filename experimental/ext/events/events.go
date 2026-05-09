@@ -13,6 +13,7 @@
 package events
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"time"
@@ -265,6 +266,35 @@ func Register(cfg Config) {
 		leases = NewPollLeaseTable()
 	}
 
+	// η-3: lifecycle hook wiring. The SDK installs onRemove on the
+	// webhook registry (fires safeOnUnsubscribe for explicit
+	// Unregister, TTL prune, PostTerminated) and chains an onExpire
+	// hook on the poll-lease table (fires safeOnUnsubscribe when a
+	// poll lease ages out). on_subscribe firing happens inline at
+	// the per-mode call sites (registerSubscribe for webhook,
+	// registerStream for push, registerPoll for poll) — those have
+	// the live HookContext / params at hand.
+	if webhooks != nil {
+		webhooks.AddOnRemoveHook(func(t WebhookTarget) {
+			source, ok := sourceMap[t.EventName]
+			if !ok {
+				return
+			}
+			hc := newHookContext(context.Background(), t.Principal, t.ID, DeliveryModeWebhook)
+			safeOnUnsubscribe(source.Def().OnUnsubscribe, hc, t.Params)
+		})
+	}
+	leases.chainOnExpire(func(principal, eventName string, params map[string]any) {
+		source, ok := sourceMap[eventName]
+		if !ok {
+			return
+		}
+		// Poll has no subscription id — the lease tuple IS the
+		// identity. SubscriptionID() returns empty per Q4.
+		hc := newHookContext(context.Background(), principal, "", DeliveryModePoll)
+		safeOnUnsubscribe(source.Def().OnUnsubscribe, hc, params)
+	})
+
 	registerList(srv, sources)
 	registerPoll(srv, sourceMap, cfg.UnsafeAnonymousPrincipal, leases)
 	registerStream(srv, sourceMap, cfg.UnsafeAnonymousPrincipal, cfg.StreamHeartbeatInterval)
@@ -387,11 +417,25 @@ func registerPoll(srv *server.Server, sourceMap map[string]EventSource, unsafeAn
 		//
 		// Touch fires OnCreate the first time a (principal, name,
 		// params) tuple is seen and renews the lease on subsequent
-		// polls. η-3 wires OnCreate/OnExpire to safeOnSubscribe /
-		// safeOnUnsubscribe so author hooks fire consistently with
-		// webhook + push lifecycle.
+		// polls. η-3 fires safeOnSubscribe inline when Touch reports
+		// "newly created" — the lease's onExpire (chained by
+		// Register) handles the unsubscribe side from the background
+		// sweep goroutine.
 		principal, _ := resolvePrincipal(ctx, unsafeAnon)
-		leases.Touch(principal, req.Name, req.Params)
+		if leases.Touch(principal, req.Name, req.Params) {
+			hc := newHookContext(ctx, principal, "", DeliveryModePoll)
+			if err := safeOnSubscribe(source.Def().OnSubscribe, hc, req.Params); err != nil {
+				// on_subscribe rejected the lease — surface the
+				// failure to the caller. The lease is already in
+				// the table; rather than racing to remove it, we
+				// rely on its TTL to clean up. The sub will not
+				// have provisioned upstream resources (the author's
+				// hook returned error before that), so the empty
+				// lease is harmless.
+				return core.NewErrorResponse(id, ErrCodeTooManySubscriptions,
+					"on_subscribe rejected: "+err.Error())
+			}
+		}
 
 		cursorless := source.Def().Cursorless
 
@@ -559,7 +603,37 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 		canonical := canonicalKey(principal, req.Delivery.URL, req.Name, req.Params)
 		derivedID := deriveSubscriptionID(canonical)
 
-		expiresAt := webhooks.Register(canonical, derivedID, req.Delivery.URL, req.Delivery.Secret, req.MaxAge)
+		expiresAt, isNew := webhooks.Register(RegisterParams{
+			CanonicalKey:  canonical,
+			DerivedID:     derivedID,
+			URL:           req.Delivery.URL,
+			Secret:        req.Delivery.Secret,
+			MaxAgeSeconds: req.MaxAge,
+			EventName:     req.Name,
+			Principal:     principal,
+			Params:        req.Params,
+		})
+
+		// η-3: fire safeOnSubscribe ONLY on first registration. Refresh
+		// of an existing subscription is renewal, not subscribe (Q4); we
+		// do not re-fire so authors don't churn upstream listeners on
+		// every TTL refresh. The webhook on_unsubscribe path runs from
+		// the registry's onRemove hook (installed in Register above).
+		if isNew {
+			source := sourceMap[req.Name]
+			def := source.Def()
+			hc := newHookContext(ctx, principal, derivedID, DeliveryModeWebhook)
+			if err := safeOnSubscribe(def.OnSubscribe, hc, req.Params); err != nil {
+				// on_subscribe rejected: roll back the registration
+				// (otherwise an unprovisioned subscription would still
+				// receive deliveries) and surface the error. η-6 will
+				// add a dedicated SubscribeFailed code; for now use
+				// TooManySubscriptions per the plan's Q3 mapping.
+				webhooks.Unregister(canonical)
+				return core.NewErrorResponse(id, ErrCodeTooManySubscriptions,
+					"on_subscribe rejected: "+err.Error())
+			}
+		}
 
 		// Resolve `cursor: null` to the source's current head ("from now")
 		// for cursored sources. Cursorless sources always serialize as null.

@@ -79,7 +79,7 @@ func TestControlEnvelope_GapShape(t *testing.T) {
 	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true))
 	canonical := canonicalKey("alice", srv.URL, "fake.event", nil)
 	subID := deriveSubscriptionID(canonical)
-	r.Register(canonical, subID, srv.URL, "whsec_"+strings.Repeat("a", 32), 0)
+	r.Register(RegisterParams{CanonicalKey: canonical, DerivedID: subID, URL: srv.URL, Secret: "whsec_"+strings.Repeat("a", 32), MaxAgeSeconds: 0})
 
 	r.PostGap(canonical, "fresh-cursor-123")
 
@@ -125,7 +125,7 @@ func TestControlEnvelope_TerminatedShape(t *testing.T) {
 	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true))
 	canonical := canonicalKey("alice", srv.URL, "fake.event", nil)
 	subID := deriveSubscriptionID(canonical)
-	r.Register(canonical, subID, srv.URL, "whsec_"+strings.Repeat("a", 32), 0)
+	r.Register(RegisterParams{CanonicalKey: canonical, DerivedID: subID, URL: srv.URL, Secret: "whsec_"+strings.Repeat("a", 32), MaxAgeSeconds: 0})
 
 	r.PostTerminated(canonical, ControlError{Code: -32012, Message: "Unauthorized"})
 
@@ -170,7 +170,7 @@ func TestControlEnvelope_TypeDiscriminatorIsTopLevel(t *testing.T) {
 	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true))
 	canonical := canonicalKey("alice", srv.URL, "fake.event", nil)
 	subID := deriveSubscriptionID(canonical)
-	r.Register(canonical, subID, srv.URL, "whsec_"+strings.Repeat("a", 32), 0)
+	r.Register(RegisterParams{CanonicalKey: canonical, DerivedID: subID, URL: srv.URL, Secret: "whsec_"+strings.Repeat("a", 32), MaxAgeSeconds: 0})
 
 	r.PostGap(canonical, "c1")
 

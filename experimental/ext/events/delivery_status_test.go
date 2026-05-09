@@ -207,7 +207,7 @@ func TestSuspend_AfterThresholdConsecutiveFailures(t *testing.T) {
 		WithWebhookSuspendWindow(10*time.Second),
 	)
 	canonical := []byte("suspend-threshold-test")
-	r.Register(canonical, "sub_st", receiver.URL, "whsec_secret", 0)
+	r.Register(RegisterParams{CanonicalKey: canonical, DerivedID: "sub_st", URL: receiver.URL, Secret: "whsec_secret", MaxAgeSeconds: 0})
 
 	// Drive `threshold` consecutive failed deliveries (each deliver()
 	// internally retries; we count whole-call outcomes, not retries).
@@ -241,7 +241,7 @@ func TestSuspend_FailuresOutsideWindowDontAccumulate(t *testing.T) {
 		WithWebhookSuspendWindow(200*time.Millisecond),
 	)
 	canonical := []byte("suspend-window-test")
-	r.Register(canonical, "sub_sw", receiver.URL, "whsec_secret", 0)
+	r.Register(RegisterParams{CanonicalKey: canonical, DerivedID: "sub_sw", URL: receiver.URL, Secret: "whsec_secret", MaxAgeSeconds: 0})
 
 	// 2 failures, then sleep past the window, then 2 more.
 	// First-failure-time should reset on the post-sleep failures, so
@@ -279,7 +279,7 @@ func TestSuspend_SuccessfulRefreshReactivates(t *testing.T) {
 		WithWebhookSuspendWindow(10*time.Second),
 	)
 	canonical := []byte("reactivate-test")
-	r.Register(canonical, "sub_react", receiver.URL, "whsec_secret", 0)
+	r.Register(RegisterParams{CanonicalKey: canonical, DerivedID: "sub_react", URL: receiver.URL, Secret: "whsec_secret", MaxAgeSeconds: 0})
 
 	// Drive 2 consecutive failures → suspended.
 	r.deliver(r.Targets()[0], "evt_a", []byte(`{}`))
@@ -287,7 +287,7 @@ func TestSuspend_SuccessfulRefreshReactivates(t *testing.T) {
 	require.False(t, r.DeliveryStatus(canonical).Active, "precondition: target should be suspended")
 
 	// Refresh — same canonical tuple, idempotent re-Register.
-	r.Register(canonical, "sub_react", receiver.URL, "whsec_secret", 0)
+	r.Register(RegisterParams{CanonicalKey: canonical, DerivedID: "sub_react", URL: receiver.URL, Secret: "whsec_secret", MaxAgeSeconds: 0})
 
 	st := r.DeliveryStatus(canonical)
 	assert.True(t, st.Active, "successful refresh MUST reactivate; got %+v", st)
@@ -329,7 +329,7 @@ func TestSuspend_SuspendedTargetSkippedInDeliver(t *testing.T) {
 		WithWebhookSuspendWindow(10*time.Second),
 	)
 	canonical := []byte("skip-deliver-test")
-	r.Register(canonical, "sub_skip", receiver.URL, "whsec_secret", 0)
+	r.Register(RegisterParams{CanonicalKey: canonical, DerivedID: "sub_skip", URL: receiver.URL, Secret: "whsec_secret", MaxAgeSeconds: 0})
 
 	// Drive 2 failures → suspended.
 	r.deliver(r.Targets()[0], "evt_a", []byte(`{}`))
@@ -386,7 +386,7 @@ func TestSuspend_AutoPostsTerminatedEnvelopeOnSuspension(t *testing.T) {
 		WithWebhookSuspendWindow(10*time.Second),
 	)
 	canonical := []byte("auto-terminated-test")
-	r.Register(canonical, "sub_at", receiver.URL, "whsec_secret", 0)
+	r.Register(RegisterParams{CanonicalKey: canonical, DerivedID: "sub_at", URL: receiver.URL, Secret: "whsec_secret", MaxAgeSeconds: 0})
 
 	// Drive 2 failures → suspend transition fires.
 	r.deliver(r.Targets()[0], "evt_a", []byte(`{}`))
@@ -432,7 +432,7 @@ func TestSuspend_DoesNotAutoPostTerminatedTwice(t *testing.T) {
 		WithWebhookSuspendWindow(10*time.Second),
 	)
 	canonical := []byte("idempotent-terminated-test")
-	r.Register(canonical, "sub_idem", receiver.URL, "whsec_secret", 0)
+	r.Register(RegisterParams{CanonicalKey: canonical, DerivedID: "sub_idem", URL: receiver.URL, Secret: "whsec_secret", MaxAgeSeconds: 0})
 
 	// Suspend.
 	r.deliver(r.Targets()[0], "evt_a", []byte(`{}`))
