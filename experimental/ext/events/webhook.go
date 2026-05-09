@@ -599,6 +599,42 @@ func (r *WebhookRegistry) pruneExpiredLocked() []WebhookTarget {
 	return removed
 }
 
+// DeliverToTarget POSTs an event to a single target identified by
+// canonical key, bypassing the broadcast fanout (and thus skipping
+// Match / Transform). Used by EmitToSubscription for targeted delivery
+// (η-5) — the spec's "the author has already shaped this event for
+// this specific subscription" model means hooks are deliberately not
+// applied here.
+//
+// Returns false when there is no live target for the canonical key
+// (unregistered between the index lookup and this call, suspended,
+// or expired). Caller treats this as a normal drop — racing
+// targeted-emit against teardown is expected, not an error.
+func (r *WebhookRegistry) DeliverToTarget(canonicalKey []byte, event Event) bool {
+	r.mu.RLock()
+	target, ok := r.targets[string(canonicalKey)]
+	r.mu.RUnlock()
+	if !ok {
+		return false
+	}
+	if !target.Status.Active || time.Now().After(target.ExpiresAt) {
+		return false
+	}
+
+	body, err := json.Marshal(event)
+	if err != nil {
+		r.logf("[webhook] DeliverToTarget: marshal failed for %s: %v", target.ID, err)
+		return false
+	}
+	if len(body) > r.maxBodyBytes {
+		r.logf("[webhook] DeliverToTarget: event %s body %d bytes exceeds cap %d for %s; dropping",
+			event.EventID, len(body), r.maxBodyBytes, target.ID)
+		return false
+	}
+	go r.deliver(target, event.EventID, body)
+	return true
+}
+
 // ExpireAll forcibly expires all subscriptions (test helper).
 func (r *WebhookRegistry) ExpireAll() {
 	r.mu.Lock()

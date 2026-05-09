@@ -55,8 +55,13 @@ type StreamEventsResult struct {
 // source can stash it on its subscriberSlot and apply the EventDef's
 // Match / Transform on fanout. Implementations that don't care can
 // ignore the opts.
+//
+// Returns (chan, sender). The sender (η-5) delivers a single event to
+// THIS specific subscription, bypassing Match / Transform — used by
+// EmitToSubscription to route by sub id. Sources that don't support
+// targeted delivery can return a no-op sender.
 type streamSubscribable interface {
-	Subscribe(ctx context.Context, opts SubscribeOpts) <-chan SubscriberEvent
+	Subscribe(ctx context.Context, opts SubscribeOpts) (<-chan SubscriberEvent, func(Event))
 }
 
 // activeNotifParams is the wire shape of notifications/events/active per
@@ -107,7 +112,7 @@ type errPayload struct {
 	Message string `json:"message"`
 }
 
-func registerStream(srv *server.Server, sourceMap map[string]EventSource, unsafeAnon string, heartbeat time.Duration) {
+func registerStream(srv *server.Server, sourceMap map[string]EventSource, unsafeAnon string, heartbeat time.Duration, idx *SubscriptionIndex) {
 	if heartbeat <= 0 {
 		heartbeat = defaultStreamHeartbeatInterval
 	}
@@ -183,11 +188,18 @@ func registerStream(srv *server.Server, sourceMap map[string]EventSource, unsafe
 		// observes active and immediately triggers a yield could see
 		// the yield miss this stream because the slot wasn't yet
 		// registered.
-		evCh := sub.Subscribe(ctx, SubscribeOpts{
+		evCh, sender := sub.Subscribe(ctx, SubscribeOpts{
 			Principal:      principal,
 			SubscriptionID: streamSubID,
 			Params:         req.Params,
 		})
+
+		// η-5: register this stream's sender in the SubscriptionIndex
+		// so EmitToSubscription(idx, event, streamSubID) routes here.
+		// Removed on every return path so a closed stream's id can't
+		// match a stale entry.
+		idx.Add(streamSubID, DeliveryModePush, sender)
+		defer idx.Remove(streamSubID)
 
 		// Send the confirmation notification. The loop below reads
 		// from evCh; active goes out via ctx.Notify before the loop

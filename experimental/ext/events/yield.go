@@ -116,6 +116,28 @@ func (s *subscriberSlot) closeChan() {
 	s.closeOnce.Do(func() { close(s.ch) })
 }
 
+// deliverEvent sends one event to the slot's channel non-blocking,
+// honoring the existing pendingTruncated bookkeeping. Used by both
+// the per-yield fanout (after match/transform) and the η-5 targeted
+// deliver path (which bypasses match/transform).
+//
+// Tolerates a closed-channel race: if Subscribe's cleanup goroutine
+// has raced ahead and close()-d the channel between our read of
+// the slot and our send, the recovered panic is treated as a normal
+// drop. The slot is being torn down anyway.
+func (s *subscriberSlot) deliverEvent(event Event) {
+	defer func() { _ = recover() }()
+	truncated := s.pendingTruncated.Load()
+	select {
+	case s.ch <- SubscriberEvent{Event: event, Truncated: truncated}:
+		if truncated {
+			s.pendingTruncated.Store(false)
+		}
+	default:
+		s.pendingTruncated.Store(true)
+	}
+}
+
 // WithSubscriberBuffer overrides the per-Subscribe channel buffer size
 // (default 64). Larger buffers tolerate slower consumers without dropping;
 // smaller buffers fail fast and surface gaps via Truncated markers earlier.
@@ -357,7 +379,12 @@ func (s *YieldingSource[Data]) fanoutLocked(se SubscriberEvent) {
 //
 // Cursorless sources still buffer-and-fanout to subscribers (push delivery
 // works fine without replay); only Poll returns empty on cursorless.
-func (s *YieldingSource[Data]) Subscribe(ctx context.Context, opts SubscribeOpts) <-chan SubscriberEvent {
+// Returns (chan, sender). The sender closure delivers a single event
+// to THIS specific slot, bypassing the per-yield fanout's Match /
+// Transform — used by η-5's EmitToSubscription so an author who has
+// the sub id can route directly to one subscriber. Callers that only
+// want broadcast delivery can ignore the second return.
+func (s *YieldingSource[Data]) Subscribe(ctx context.Context, opts SubscribeOpts) (<-chan SubscriberEvent, func(Event)) {
 	slot := &subscriberSlot{
 		ch:             make(chan SubscriberEvent, s.subscriberBuf),
 		principal:      opts.Principal,
@@ -385,7 +412,8 @@ func (s *YieldingSource[Data]) Subscribe(ctx context.Context, opts SubscribeOpts
 		slot.closeChan()
 	}()
 
-	return slot.ch
+	sender := func(event Event) { slot.deliverEvent(event) }
+	return slot.ch, sender
 }
 
 // SubscriberCount returns the number of live Subscribe channels. Test/
@@ -563,8 +591,8 @@ func (s *YieldingSource[Data]) yield(data Data) error {
 	// whole source on a slow author callback. The cleanup goroutine
 	// in Subscribe also takes s.mu before close()-ing the chan, so
 	// snapshotting + sending later means a closed-chan send is
-	// possible during a close-vs-send race; we tolerate that with a
-	// non-blocking send + recover (see deliverEventToSlot below).
+	// possible during a close-vs-send race; subscriberSlot.deliverEvent
+	// owns the recover for that.
 	subs := append([]*subscriberSlot(nil), s.subscribers...)
 	hook := s.emitHook
 	matchFn := s.def.Match
@@ -583,7 +611,9 @@ func (s *YieldingSource[Data]) yield(data Data) error {
 
 // deliverEventToSlot applies the EventDef's Match / Transform for one
 // subscriber and sends the resulting event onto its channel. Extracted
-// from yield() to keep the per-subscriber logic readable.
+// from yield() to keep the per-subscriber logic readable; tied to
+// private subscriberSlot internals + yield's lock discipline so it's
+// not reusable outside this file.
 //
 // Hot-path discipline (Q8):
 //   - safeMatch / safeTransform are nil-tolerant + panic-recovering;
@@ -592,33 +622,14 @@ func (s *YieldingSource[Data]) yield(data Data) error {
 //   - Transform returning (event, false) is the passthrough fast
 //     path — we send the unmodified event reference, no per-subscriber
 //     allocation cost.
-//   - The send is still non-blocking + drop-with-Truncated; pinning a
-//     slow consumer with backpressure would serialize the source.
-//   - close-vs-send race: defer/recover catches the rare case where
-//     the cleanup goroutine closed the chan between our snapshot and
-//     send. Treated as a normal drop (the subscriber is gone).
+//   - subscriberSlot.deliverEvent owns the close-vs-send race recovery
+//     and the non-blocking + drop-with-Truncated semantics; same
+//     codepath as the η-5 targeted-deliver closure.
 func (s *YieldingSource[Data]) deliverEventToSlot(sub *subscriberSlot, event Event, matchFn MatchFunc, transformFn TransformFunc) {
-	defer func() {
-		if r := recover(); r != nil {
-			// Most likely a "send on closed channel" because Subscribe's
-			// cleanup goroutine raced ahead. The slot is being torn
-			// down anyway; treat as a normal drop.
-		}
-	}()
-
 	hc := newHookContext(context.Background(), sub.principal, sub.subscriptionID, DeliveryModePush)
 	if !safeMatch(matchFn, hc, event, sub.params) {
 		return
 	}
 	delivered, _ := safeTransform(transformFn, hc, event, sub.params)
-
-	truncated := sub.pendingTruncated.Load()
-	select {
-	case sub.ch <- SubscriberEvent{Event: delivered, Truncated: truncated}:
-		if truncated {
-			sub.pendingTruncated.Store(false)
-		}
-	default:
-		sub.pendingTruncated.Store(true)
-	}
+	sub.deliverEvent(delivered)
 }
