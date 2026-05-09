@@ -25,6 +25,30 @@ const (
 // WebhookOption configures a WebhookRegistry at construction time.
 type WebhookOption func(*WebhookRegistry)
 
+// WebhookOnRemoveHook fires whenever a target is actually removed from
+// the registry — explicit Unregister, TTL prune, or PostTerminated.
+// Does NOT fire on the suspend transition (Active=true→false), which
+// keeps the target in the registry as paused (η-3 / Q4: suspend ≠
+// unsubscribe; refresh reactivates without re-firing on_subscribe).
+//
+// Hooks fire OUTSIDE the registry's lock so a slow listener can't
+// serialize Register/Unregister/PostTerminated.
+type WebhookOnRemoveHook func(t WebhookTarget)
+
+// WithWebhookOnRemove registers a callback that fires when a target is
+// actually removed from the registry. Multiple calls accumulate — all
+// hooks fire in registration order. events.Register installs an SDK-
+// internal hook here to fire safeOnUnsubscribe on the EventDef's
+// OnUnsubscribe field; deployments wanting their own diagnostic
+// listener can pass an additional hook via this option.
+func WithWebhookOnRemove(h WebhookOnRemoveHook) WebhookOption {
+	return func(r *WebhookRegistry) {
+		if h != nil {
+			r.onRemoveHooks = append(r.onRemoveHooks, h)
+		}
+	}
+}
+
 // WithWebhookTTL overrides the registry's subscription TTL. Useful for tests
 // (drive the SDK's TTL refresh behavior in seconds rather than minutes) and
 // for deployments that want longer-lived subscriptions. Pass <=0 to keep
@@ -128,6 +152,12 @@ func WithWebhookAllowPrivateNetworks(allow bool) WebhookOption {
 // (§"Subscription Identity" → "Derived id" L367), surfaced on the wire
 // as the X-MCP-Subscription-Id header on every delivery POST per
 // §"Webhook Event Delivery" L390.
+//
+// EventName, Principal, Params (η-3): copies of the identity components
+// stored separately so OnRemove hooks (and η-4 match/transform on
+// fanout) can construct a HookContext + params payload without
+// re-parsing canonical bytes. Redundant with CanonicalKey; cheap to
+// store, and the registry already owns the only writer.
 type WebhookTarget struct {
 	CanonicalKey  []byte    // canonical bytes of (principal, url, name, params)
 	ID            string    // server-derived routing handle (sub_<base64-of-16-bytes>)
@@ -135,6 +165,10 @@ type WebhookTarget struct {
 	Secret        string    // client-supplied HMAC signing secret (whsec_...)
 	ExpiresAt     time.Time // soft-state TTL expiry
 	MaxAgeSeconds int       // δ-3: per-spec replay floor (§"Cursor Lifecycle" L529); 0 = no floor
+
+	EventName string         // event-type name (η-3 hook lookup)
+	Principal string         // resolved subscription principal (η-3 HookContext)
+	Params    map[string]any // canonicalized subscription params (η-3 hook payload)
 
 	// ζ-5: per-target delivery health, surfaced on subscribe refresh
 	// response per spec §"Webhook Delivery Status" L425-460.
@@ -210,10 +244,52 @@ type WebhookRegistry struct {
 	suspendThreshold     int           // ζ-6: consecutive failures → Active=false; default 5
 	suspendWindow        time.Duration // ζ-6: sliding window over which failures accumulate; default 10min
 
+	// onRemoveHooks fire when a target is actually removed from the
+	// registry (Unregister, TTL prune, PostTerminated). η-3.
+	// Mutated only at construction (WithWebhookOnRemove) and via
+	// AddOnRemoveHook; reads under mu.RLock. Hooks fire OUTSIDE the
+	// lock to keep a slow listener from serializing the registry.
+	onRemoveHooks []WebhookOnRemoveHook
+
 	// logf is the logging hook used by deliver paths. Defaults to log.Printf;
 	// tests override via setLogfForTest to capture failures (including SSRF
 	// dial-time rejections) for assertions.
 	logf func(format string, args ...any)
+}
+
+// AddOnRemoveHook registers a callback that fires when a target is
+// actually removed from the registry. Equivalent to WithWebhookOnRemove
+// but callable after construction — used by events.Register to install
+// the SDK's safeOnUnsubscribe wiring on a registry the user
+// constructed.
+func (r *WebhookRegistry) AddOnRemoveHook(h WebhookOnRemoveHook) {
+	if h == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.onRemoveHooks = append(r.onRemoveHooks, h)
+}
+
+// fireOnRemove invokes every registered onRemove hook with the given
+// target. MUST be called outside r.mu so a slow listener doesn't
+// serialize the registry. Each hook runs with panic recovery — a
+// buggy listener can't take down the caller (Unregister / Register's
+// prune path / PostTerminated).
+func (r *WebhookRegistry) fireOnRemove(t WebhookTarget) {
+	r.mu.RLock()
+	hooks := append([]WebhookOnRemoveHook(nil), r.onRemoveHooks...)
+	r.mu.RUnlock()
+	for _, h := range hooks {
+		func() {
+			defer func() {
+				if rec := recover(); rec != nil {
+					r.logf("[webhook] OnRemove hook panic for target %s: %v", t.ID, rec)
+				}
+			}()
+			h(t)
+		}()
+	}
 }
 
 // NewWebhookRegistry creates an empty registry with the documented defaults:
@@ -340,38 +416,67 @@ func (r *WebhookRegistry) setLogfForTest(f func(format string, args ...any)) {
 }
 
 
+// RegisterParams bundles the inputs for Register. Promoted to a struct
+// over a long positional list because η-3 added EventName / Principal
+// / Params to the identity-side state — six positional args was
+// already at the readability ceiling.
+type RegisterParams struct {
+	CanonicalKey  []byte
+	DerivedID     string
+	URL           string
+	Secret        string
+	MaxAgeSeconds int
+
+	// EventName / Principal / Params (η-3): copies of the identity
+	// components the registry stores so OnRemove hooks have full
+	// HookContext + payload available without re-parsing canonical
+	// bytes. Fed by the same canonical-tuple inputs the caller
+	// already used to compute CanonicalKey.
+	EventName string
+	Principal string
+	Params    map[string]any
+}
+
 // Register adds or refreshes a webhook subscription keyed on the spec's
 // canonical tuple (§"Subscription Identity" → "Key composition" L363).
-// Two calls with the same canonicalKey refer to the same subscription
-// — second call refreshes TTL + replaces secret. Returns the expiry time.
+// Two calls with the same CanonicalKey refer to the same subscription
+// — second call refreshes TTL + replaces secret.
 //
-// The derivedID is the X-MCP-Subscription-Id value the registry emits
-// on every delivery POST; it MUST be deriveSubscriptionID(canonicalKey)
+// Returns (expiresAt, isNew). isNew is true on first registration
+// (caller fires safeOnSubscribe) and false on refresh (η-3 / Q4:
+// refresh ≠ subscribe). Caller resolves the distinction; the registry
+// just reports it.
+//
+// DerivedID is the X-MCP-Subscription-Id value the registry emits on
+// every delivery POST; it MUST be deriveSubscriptionID(CanonicalKey)
 // from identity.go. Passed in (rather than computed here) so the
 // caller can derive once and reuse for both Register and the
 // subscribe-response body.
 //
-// maxAgeSeconds is the per-subscription replay floor per spec
+// MaxAgeSeconds is the per-subscription replay floor per spec
 // §"Cursor Lifecycle" → "Bounding replay with maxAge" L529. Stored on
 // the target for use on (future) reconnect-with-replay; 0 means no
 // floor. On refresh, an explicit non-zero value replaces the prior
 // stored floor; 0 leaves the existing value untouched (treats omission
 // as "don't change").
-func (r *WebhookRegistry) Register(canonicalKey []byte, derivedID, urlStr, secret string, maxAgeSeconds int) time.Time {
+//
+// Side effect: prunes expired targets before registering. Each pruned
+// target fires the onRemove hooks (η-3: lifecycle parity — TTL expiry
+// is an unsubscribe).
+func (r *WebhookRegistry) Register(p RegisterParams) (expiresAt time.Time, isNew bool) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.pruneExpiredLocked()
-	expiresAt := time.Now().Add(r.ttl)
-	key := string(canonicalKey)
+	pruned := r.pruneExpiredLocked()
+	expiresAt = time.Now().Add(r.ttl)
+	key := string(p.CanonicalKey)
 	if existing, ok := r.targets[key]; ok {
 		// Refresh: update expiry and secret if provided. Secret rotation
 		// per spec is allowed by supplying a new value on refresh.
 		existing.ExpiresAt = expiresAt
-		if secret != "" {
-			existing.Secret = secret
+		if p.Secret != "" {
+			existing.Secret = p.Secret
 		}
-		if maxAgeSeconds > 0 {
-			existing.MaxAgeSeconds = maxAgeSeconds
+		if p.MaxAgeSeconds > 0 {
+			existing.MaxAgeSeconds = p.MaxAgeSeconds
 		}
 		// ζ-6: a successful refresh reactivates a suspended target per
 		// spec L460. Clear the failure run so deliveries can resume.
@@ -385,31 +490,55 @@ func (r *WebhookRegistry) Register(canonicalKey []byte, derivedID, urlStr, secre
 			existing.failureCount = 0
 		}
 		r.targets[key] = existing
+		isNew = false
 	} else {
 		r.targets[key] = WebhookTarget{
-			CanonicalKey:  canonicalKey,
-			ID:            derivedID,
-			URL:           urlStr,
-			Secret:        secret,
+			CanonicalKey:  p.CanonicalKey,
+			ID:            p.DerivedID,
+			URL:           p.URL,
+			Secret:        p.Secret,
 			ExpiresAt:     expiresAt,
-			MaxAgeSeconds: maxAgeSeconds,
+			MaxAgeSeconds: p.MaxAgeSeconds,
+			EventName:     p.EventName,
+			Principal:     p.Principal,
+			Params:        p.Params,
 			// ζ-5: Active defaults to true on first registration. The
 			// suspend state machine in ζ-6 flips this to false after
 			// repeated failures; a successful refresh resets it.
 			Status: DeliveryStatus{Active: true},
 		}
+		isNew = true
 	}
-	return expiresAt
+	r.mu.Unlock()
+
+	// Fire onRemove for any pruned targets OUTSIDE the lock — a slow
+	// listener (e.g., one that releases an upstream resource via
+	// blocking I/O inside on_unsubscribe) shouldn't serialize the
+	// registry's hot path.
+	for _, t := range pruned {
+		r.fireOnRemove(t)
+	}
+	return expiresAt, isNew
 }
 
 // Unregister removes a webhook subscription by canonical-tuple key.
 // No-op if no entry matches. Per spec §"Unsubscribing: events/unsubscribe"
 // L509, the derived id is not accepted as input — callers resolve via
 // the same canonical tuple they would for a subscribe.
+//
+// Fires onRemove hooks for the deleted target — η-3's lifecycle
+// parity. Callers that explicitly Unregister get the same on_unsubscribe
+// behavior as TTL prune and PostTerminated.
 func (r *WebhookRegistry) Unregister(canonicalKey []byte) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	delete(r.targets, string(canonicalKey))
+	target, ok := r.targets[string(canonicalKey)]
+	if ok {
+		delete(r.targets, string(canonicalKey))
+	}
+	r.mu.Unlock()
+	if ok {
+		r.fireOnRemove(target)
+	}
 }
 
 // Targets returns a snapshot of all non-expired AND non-suspended
@@ -433,15 +562,21 @@ func (r *WebhookRegistry) Targets() []WebhookTarget {
 	return out
 }
 
-// pruneExpiredLocked removes expired subscriptions. Must hold r.mu write lock.
-func (r *WebhookRegistry) pruneExpiredLocked() {
+// pruneExpiredLocked removes expired subscriptions and returns the
+// removed targets so the caller can fire onRemove hooks OUTSIDE the
+// lock (η-3: lifecycle parity — TTL prune is an unsubscribe). Must
+// hold r.mu write lock.
+func (r *WebhookRegistry) pruneExpiredLocked() []WebhookTarget {
 	now := time.Now()
+	var removed []WebhookTarget
 	for key, t := range r.targets {
 		if t.ExpiresAt.Before(now) {
 			log.Printf("[webhook] subscription %s expired, removing", t.ID)
 			delete(r.targets, key)
+			removed = append(removed, t)
 		}
 	}
+	return removed
 }
 
 // ExpireAll forcibly expires all subscriptions (test helper).
