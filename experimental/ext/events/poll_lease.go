@@ -187,6 +187,29 @@ func (t *PollLeaseTable) Touch(principal, eventName string, params map[string]an
 	return true
 }
 
+// Remove drops a lease for (principal, eventName, params) immediately,
+// without firing OnExpire. Returns true when an entry actually went
+// away. Used by the η-6 quota wiring to roll back a Touch when
+// Reserve fails — the lease was just created but the principal is
+// over their cap, so the lease should never have been there.
+//
+// The "no OnExpire fired" semantic distinguishes this from the
+// natural sweep path: OnExpire is the SDK's lifecycle signal that
+// the subscription has actually ended; a quota rollback never
+// crossed the live-subscription line, so on_unsubscribe MUST NOT
+// fire (no on_subscribe ever fired either, since the rollback
+// happens before that).
+func (t *PollLeaseTable) Remove(principal, eventName string, params map[string]any) bool {
+	key := pollLeaseKey(principal, eventName, params)
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if _, ok := t.leases[key]; !ok {
+		return false
+	}
+	delete(t.leases, key)
+	return true
+}
+
 // Len reports the current number of live leases. Snapshot — callers
 // must not race on it for correctness.
 func (t *PollLeaseTable) Len() int {

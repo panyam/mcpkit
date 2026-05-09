@@ -248,6 +248,18 @@ type Config struct {
 	// Register to construct an internal default — fine for servers
 	// that only do broadcast emit.
 	SubscriptionIndex *SubscriptionIndex
+
+	// Quota enforces per-principal-per-event-type subscription caps
+	// per spec L705 (η-6). Reserve fires BEFORE on_subscribe; if the
+	// principal is at cap, the request is rejected with -32013
+	// TooManySubscriptions and on_subscribe never runs (no upstream
+	// resource provisioning for a rejected sub).
+	//
+	// Authors configure caps via NewQuota(WithMaxSubscriptionsPerPrincipal(name, n)...)
+	// and pass the result here. nil leaves Register to construct an
+	// internal no-caps Quota — every Reserve succeeds, no
+	// enforcement.
+	Quota *Quota
 }
 
 // Register hooks up events/list, events/poll, events/subscribe, and
@@ -284,6 +296,10 @@ func Register(cfg Config) {
 	if idx == nil {
 		idx = NewSubscriptionIndex()
 	}
+	quota := cfg.Quota
+	if quota == nil {
+		quota = NewQuota() // no caps configured → every Reserve succeeds
+	}
 
 	// η-3: lifecycle hook wiring. The SDK installs onRemove on the
 	// webhook registry (fires safeOnUnsubscribe for explicit
@@ -301,6 +317,11 @@ func Register(cfg Config) {
 			// rather than calling DeliverToTarget on a registry
 			// the target was just removed from.
 			idx.Remove(t.ID)
+			// η-6: release the quota slot. Pairs with the Reserve
+			// in registerSubscribe — fires once per actual removal
+			// (Unregister, prune, PostTerminated; NOT suspend per
+			// Q4). Safe for uncapped event-types (no-op).
+			quota.Release(t.Principal, t.EventName)
 			source, ok := sourceMap[t.EventName]
 			if !ok {
 				return
@@ -325,6 +346,10 @@ func Register(cfg Config) {
 	// PollLeaseTable.mu so it's safe even if the sweeper has already
 	// started reading it.
 	sdkOnExpire := func(principal, eventName string, params map[string]any) {
+		// η-6: release the quota slot. Pairs with the Reserve in
+		// registerPoll on isNew. Fires once per actual lease
+		// expiry (the sweeper drives this).
+		quota.Release(principal, eventName)
 		source, ok := sourceMap[eventName]
 		if !ok {
 			return
@@ -346,10 +371,10 @@ func Register(cfg Config) {
 	leases.mu.Unlock()
 
 	registerList(srv, sources)
-	registerPoll(srv, sourceMap, cfg.UnsafeAnonymousPrincipal, leases)
-	registerStream(srv, sourceMap, cfg.UnsafeAnonymousPrincipal, cfg.StreamHeartbeatInterval, idx)
+	registerPoll(srv, sourceMap, cfg.UnsafeAnonymousPrincipal, leases, quota)
+	registerStream(srv, sourceMap, cfg.UnsafeAnonymousPrincipal, cfg.StreamHeartbeatInterval, idx, quota)
 	if webhooks != nil {
-		registerSubscribe(srv, sourceMap, webhooks, cfg.UnsafeAnonymousPrincipal, idx)
+		registerSubscribe(srv, sourceMap, webhooks, cfg.UnsafeAnonymousPrincipal, idx, quota)
 		registerUnsubscribe(srv, webhooks, cfg.UnsafeAnonymousPrincipal)
 	}
 	if cfg.UnsafeAnonymousPrincipal != "" {
@@ -416,7 +441,7 @@ func registerList(srv *server.Server, sources []EventSource) {
 	})
 }
 
-func registerPoll(srv *server.Server, sourceMap map[string]EventSource, unsafeAnon string, leases *PollLeaseTable) {
+func registerPoll(srv *server.Server, sourceMap map[string]EventSource, unsafeAnon string, leases *PollLeaseTable, quota *Quota) {
 	srv.HandleMethod("events/poll", func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		// Spec §"Poll-Based Delivery" → "Request: events/poll" L139-149:
 		// flat top-level shape — no subscriptions[] wrapper. Phase 1 dropped
@@ -473,15 +498,25 @@ func registerPoll(srv *server.Server, sourceMap map[string]EventSource, unsafeAn
 		// sweep goroutine.
 		principal, _ := resolvePrincipal(ctx, unsafeAnon)
 		if leases.Touch(principal, req.Name, req.Params) {
+			// η-6: enforce quota BEFORE on_subscribe per spec L705.
+			// Touch already created the lease; if Reserve fails,
+			// roll back the lease so a rejected subscription
+			// doesn't sit in the table holding a slot it never
+			// got. PollLeaseTable.Remove deletes without firing
+			// OnExpire (no on_unsubscribe — the sub never crossed
+			// the live line).
+			if err := quota.Reserve(principal, req.Name); err != nil {
+				leases.Remove(principal, req.Name, req.Params)
+				return core.NewErrorResponse(id, ErrCodeTooManySubscriptions, err.Error())
+			}
 			hc := newHookContext(ctx, principal, "", DeliveryModePoll)
 			if err := safeOnSubscribe(source.Def().OnSubscribe, hc, req.Params); err != nil {
-				// on_subscribe rejected the lease — surface the
-				// failure to the caller. The lease is already in
-				// the table; rather than racing to remove it, we
-				// rely on its TTL to clean up. The sub will not
-				// have provisioned upstream resources (the author's
-				// hook returned error before that), so the empty
-				// lease is harmless.
+				// on_subscribe rejected: roll back both the lease
+				// and the quota slot — the subscription never
+				// became live, so neither side should retain
+				// state.
+				leases.Remove(principal, req.Name, req.Params)
+				quota.Release(principal, req.Name)
 				return core.NewErrorResponse(id, ErrCodeTooManySubscriptions,
 					"on_subscribe rejected: "+err.Error())
 			}
@@ -601,7 +636,7 @@ func resolvePrincipal(ctx core.MethodContext, unsafeAnon string) (string, bool) 
 	return "", false
 }
 
-func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, webhooks *WebhookRegistry, unsafeAnon string, idx *SubscriptionIndex) {
+func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, webhooks *WebhookRegistry, unsafeAnon string, idx *SubscriptionIndex, quota *Quota) {
 	srv.HandleMethod("events/subscribe", func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		var req struct {
 			// ID is parsed only to surface a helpful error if a client
@@ -685,23 +720,29 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 			Params:        req.Params,
 		})
 
-		// η-3: fire safeOnSubscribe ONLY on first registration. Refresh
-		// of an existing subscription is renewal, not subscribe (Q4); we
-		// do not re-fire so authors don't churn upstream listeners on
-		// every TTL refresh. The webhook on_unsubscribe path runs from
-		// the registry's onRemove hook (installed in Register above).
+		// η-3 / η-6: on first registration, enforce the quota then
+		// fire on_subscribe. Refresh of an existing subscription is
+		// renewal, not subscribe (Q4); skip both. The webhook
+		// on_unsubscribe path + the quota Release run from the
+		// registry's onRemove hook (installed in Register above).
 		if isNew {
+			// η-6: enforce cap BEFORE on_subscribe per spec L705.
+			// If Reserve fails, roll back the registration so a
+			// rejected sub doesn't sit in the registry holding a
+			// slot it never got. Unregister fires onRemove →
+			// quota.Release (a no-op here because we never
+			// successfully Reserved) and idx.Remove (also no-op).
+			if err := quota.Reserve(principal, req.Name); err != nil {
+				webhooks.Unregister(canonical)
+				return core.NewErrorResponse(id, ErrCodeTooManySubscriptions, err.Error())
+			}
 			source := sourceMap[req.Name]
 			def := source.Def()
 			hc := newHookContext(ctx, principal, derivedID, DeliveryModeWebhook)
 			if err := safeOnSubscribe(def.OnSubscribe, hc, req.Params); err != nil {
-				// on_subscribe rejected: roll back the registration
-				// (otherwise an unprovisioned subscription would still
-				// receive deliveries) and surface the error. The
-				// Unregister fires onRemove → idx.Remove (no entry to
-				// remove since we haven't Add'd yet — no-op). η-6 may
-				// add a dedicated SubscribeFailed code; for now use
-				// TooManySubscriptions per the plan's Q3 mapping.
+				// on_subscribe rejected: roll back the registration.
+				// Unregister fires onRemove → quota.Release pairs
+				// with the Reserve above (one Release per Reserve).
 				webhooks.Unregister(canonical)
 				return core.NewErrorResponse(id, ErrCodeTooManySubscriptions,
 					"on_subscribe rejected: "+err.Error())
