@@ -71,13 +71,42 @@ type EventDeliveryError struct {
 // subscriberSlot is one registered Subscribe channel. pendingTruncated is
 // set when a yield is dropped because the chan is full; the next successful
 // send delivers a Truncated marker before the event itself.
+//
+// principal / subscriptionID / params (η-4): per-subscriber identity
+// captured at Subscribe time so the per-yield fanout can build a
+// HookContext + apply the EventDef's Match / Transform per subscriber.
+// Spec §"Server SDK Guidance" L623-629.
 type subscriberSlot struct {
 	ch               chan SubscriberEvent
+	principal        string
+	subscriptionID   string
+	params           map[string]any
 	pendingTruncated atomic.Bool
 	// closeOnce gates the chan close so YieldTerminated and the
 	// Subscribe cleanup goroutine can both attempt close without
 	// racing into "close of closed channel". ζ-7.
 	closeOnce sync.Once
+}
+
+// SubscribeOpts bundles the per-subscriber metadata Subscribe needs.
+// Promoted to a struct over a positional list because η-4 added two
+// fields to the existing (ctx) signature; future additions (MaxAge,
+// per-subscriber backpressure tuning) extend the struct without
+// rippling through every caller.
+type SubscribeOpts struct {
+	// Principal is the resolved subscription principal. Surfaced on
+	// HookContext.Principal() during fanout so author Match /
+	// Transform can do principal-aware filtering.
+	Principal string
+	// SubscriptionID is the server-derived sub_<base64> handle
+	// (per-stream for push). Surfaced on HookContext.SubscriptionID()
+	// during fanout. Empty for callers that don't have one.
+	SubscriptionID string
+	// Params is the subscribe-time parameter map. Surfaced as the
+	// `params` argument to Match / Transform so authors can implement
+	// "deliver only when params.severity matches event.data.severity"
+	// per spec L633-644.
+	Params map[string]any
 }
 
 // closeChan idempotently closes the slot's channel. Safe to call from
@@ -314,6 +343,12 @@ func (s *YieldingSource[Data]) fanoutLocked(se SubscriberEvent) {
 // the slot is removed from the source and the channel is closed (range
 // loops exit cleanly, select-on-closed returns the zero value).
 //
+// SubscribeOpts (η-4) carries per-subscriber identity (Principal,
+// SubscriptionID, Params) onto the slot so fanout can build a
+// HookContext and apply the EventDef's Match / Transform per
+// subscriber. Pass the zero value for hook-less callers; the safe
+// wrappers tolerate empty fields.
+//
 // On a slow consumer (channel full), yield does NOT block — the event
 // is dropped for that subscriber and a Truncated marker is sent on the
 // next successful send. Stream handlers map Truncated=true onto a fresh
@@ -322,8 +357,13 @@ func (s *YieldingSource[Data]) fanoutLocked(se SubscriberEvent) {
 //
 // Cursorless sources still buffer-and-fanout to subscribers (push delivery
 // works fine without replay); only Poll returns empty on cursorless.
-func (s *YieldingSource[Data]) Subscribe(ctx context.Context) <-chan SubscriberEvent {
-	slot := &subscriberSlot{ch: make(chan SubscriberEvent, s.subscriberBuf)}
+func (s *YieldingSource[Data]) Subscribe(ctx context.Context, opts SubscribeOpts) <-chan SubscriberEvent {
+	slot := &subscriberSlot{
+		ch:             make(chan SubscriberEvent, s.subscriberBuf),
+		principal:      opts.Principal,
+		subscriptionID: opts.SubscriptionID,
+		params:         opts.Params,
+	}
 	s.mu.Lock()
 	s.subscribers = append(s.subscribers, slot)
 	s.mu.Unlock()
@@ -517,27 +557,68 @@ func (s *YieldingSource[Data]) yield(data Data) error {
 			s.entries = s.entries[len(s.entries)-s.maxSize:]
 		}
 	}
-	// Fanout to live Subscribe channels under the same lock that gates
-	// close() in the cleanup goroutine — guarantees we never send to a
-	// closed channel. Sends are non-blocking; on a full subscriber buffer
-	// the event is dropped for that subscriber and pendingTruncated flips
-	// so the next successful send carries Truncated=true.
-	for _, sub := range s.subscribers {
-		truncated := sub.pendingTruncated.Load()
-		select {
-		case sub.ch <- SubscriberEvent{Event: event, Truncated: truncated}:
-			if truncated {
-				sub.pendingTruncated.Store(false)
-			}
-		default:
-			sub.pendingTruncated.Store(true)
-		}
-	}
+	// η-4: snapshot subscribers under the lock, then drop the lock
+	// before invoking author hooks. Match / Transform fire on the hot
+	// path — running them while holding s.mu would serialize the
+	// whole source on a slow author callback. The cleanup goroutine
+	// in Subscribe also takes s.mu before close()-ing the chan, so
+	// snapshotting + sending later means a closed-chan send is
+	// possible during a close-vs-send race; we tolerate that with a
+	// non-blocking send + recover (see deliverEventToSlot below).
+	subs := append([]*subscriberSlot(nil), s.subscribers...)
 	hook := s.emitHook
+	matchFn := s.def.Match
+	transformFn := s.def.Transform
 	s.mu.Unlock()
+
+	for _, sub := range subs {
+		s.deliverEventToSlot(sub, event, matchFn, transformFn)
+	}
 
 	if hook != nil {
 		hook(event)
 	}
 	return nil
+}
+
+// deliverEventToSlot applies the EventDef's Match / Transform for one
+// subscriber and sends the resulting event onto its channel. Extracted
+// from yield() to keep the per-subscriber logic readable.
+//
+// Hot-path discipline (Q8):
+//   - safeMatch / safeTransform are nil-tolerant + panic-recovering;
+//     a buggy author hook can't take down the fanout.
+//   - Match=false skips the subscriber outright (and skips Transform).
+//   - Transform returning (event, false) is the passthrough fast
+//     path — we send the unmodified event reference, no per-subscriber
+//     allocation cost.
+//   - The send is still non-blocking + drop-with-Truncated; pinning a
+//     slow consumer with backpressure would serialize the source.
+//   - close-vs-send race: defer/recover catches the rare case where
+//     the cleanup goroutine closed the chan between our snapshot and
+//     send. Treated as a normal drop (the subscriber is gone).
+func (s *YieldingSource[Data]) deliverEventToSlot(sub *subscriberSlot, event Event, matchFn MatchFunc, transformFn TransformFunc) {
+	defer func() {
+		if r := recover(); r != nil {
+			// Most likely a "send on closed channel" because Subscribe's
+			// cleanup goroutine raced ahead. The slot is being torn
+			// down anyway; treat as a normal drop.
+		}
+	}()
+
+	hc := newHookContext(context.Background(), sub.principal, sub.subscriptionID, DeliveryModePush)
+	if !safeMatch(matchFn, hc, event, sub.params) {
+		return
+	}
+	delivered, _ := safeTransform(transformFn, hc, event, sub.params)
+
+	truncated := sub.pendingTruncated.Load()
+	select {
+	case sub.ch <- SubscriberEvent{Event: delivered, Truncated: truncated}:
+		if truncated {
+			sub.pendingTruncated.Store(false)
+		}
+	default:
+		sub.pendingTruncated.Store(true)
+	}
 }

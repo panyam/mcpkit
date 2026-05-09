@@ -283,8 +283,23 @@ func Register(cfg Config) {
 			hc := newHookContext(context.Background(), t.Principal, t.ID, DeliveryModeWebhook)
 			safeOnUnsubscribe(source.Def().OnUnsubscribe, hc, t.Params)
 		})
+		// η-4: let Deliver look up Match / Transform per event name
+		// without leaking sourceMap onto WebhookRegistry.
+		webhooks.SetDefResolver(func(eventName string) EventDef {
+			source, ok := sourceMap[eventName]
+			if !ok {
+				return EventDef{}
+			}
+			return source.Def()
+		})
 	}
-	leases.chainOnExpire(func(principal, eventName string, params map[string]any) {
+	// Chain the SDK's onExpire onto whatever the user already
+	// configured (via WithPollLeaseOnExpire on the table they passed).
+	// Both fire — user diagnostic stays observable while the SDK
+	// dispatches to safeOnUnsubscribe. Mutating onExpire under
+	// PollLeaseTable.mu so it's safe even if the sweeper has already
+	// started reading it.
+	sdkOnExpire := func(principal, eventName string, params map[string]any) {
 		source, ok := sourceMap[eventName]
 		if !ok {
 			return
@@ -293,7 +308,17 @@ func Register(cfg Config) {
 		// identity. SubscriptionID() returns empty per Q4.
 		hc := newHookContext(context.Background(), principal, "", DeliveryModePoll)
 		safeOnUnsubscribe(source.Def().OnUnsubscribe, hc, params)
-	})
+	}
+	leases.mu.Lock()
+	if prev := leases.onExpire; prev != nil {
+		leases.onExpire = func(p, n string, params map[string]any) {
+			prev(p, n, params)
+			sdkOnExpire(p, n, params)
+		}
+	} else {
+		leases.onExpire = sdkOnExpire
+	}
+	leases.mu.Unlock()
 
 	registerList(srv, sources)
 	registerPoll(srv, sourceMap, cfg.UnsafeAnonymousPrincipal, leases)
@@ -456,6 +481,27 @@ func registerPoll(srv *server.Server, sourceMap map[string]EventSource, unsafeAn
 		if hasMore {
 			events = events[:req.MaxEvents]
 			resultCursor = events[len(events)-1].CursorStr()
+		}
+
+		// η-4: per-call match/transform on the events the source
+		// returned. Match drops events the caller's params don't
+		// want; Transform shapes the event for this caller. Spec
+		// L629: "Poll subscribers see the same filtering and shaping
+		// as push/webhook subscribers." We apply BEFORE the maxAge
+		// floor so authors who use Transform to backdate timestamps
+		// (or whatever) still get a consistent floor.
+		def := source.Def()
+		if def.Match != nil || def.Transform != nil {
+			hc := newHookContext(ctx, principal, "", DeliveryModePoll)
+			kept := make([]Event, 0, len(events))
+			for _, e := range events {
+				if !safeMatch(def.Match, hc, e, req.Params) {
+					continue
+				}
+				delivered, _ := safeTransform(def.Transform, hc, e, req.Params)
+				kept = append(kept, delivered)
+			}
+			events = kept
 		}
 
 		// δ-2: maxAge replay floor per spec §"Cursor Lifecycle" →
