@@ -251,10 +251,30 @@ type WebhookRegistry struct {
 	// lock to keep a slow listener from serializing the registry.
 	onRemoveHooks []WebhookOnRemoveHook
 
+	// defResolver lets Deliver look up an event-type's Match /
+	// Transform hooks at fanout time without WebhookRegistry needing
+	// to know about EventDef directly. events.Register installs this;
+	// callers that hand-deliver events (e.g., TypedSource authors
+	// reaching for EmitToWebhooks themselves) get a no-op resolver
+	// and the per-target match/transform path is a passthrough.
+	// η-4. Set under mu, read under mu.RLock.
+	defResolver func(eventName string) EventDef
+
 	// logf is the logging hook used by deliver paths. Defaults to log.Printf;
 	// tests override via setLogfForTest to capture failures (including SSRF
 	// dial-time rejections) for assertions.
 	logf func(format string, args ...any)
+}
+
+// SetDefResolver installs the resolver Deliver uses to look up an
+// event-type's Match / Transform hooks at fanout time. events.Register
+// is the only caller — it points the resolver at the source map so the
+// registry stays decoupled from EventDef. Safe to call after the
+// registry has been handed out; the field is mu-guarded.
+func (r *WebhookRegistry) SetDefResolver(fn func(eventName string) EventDef) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.defResolver = fn
 }
 
 // AddOnRemoveHook registers a callback that fires when a target is
@@ -590,33 +610,89 @@ func (r *WebhookRegistry) ExpireAll() {
 	}
 }
 
-// Deliver sends an event to all non-expired webhooks. Each POST includes an
-// HMAC-SHA256 signature in X-MCP-Signature and a timestamp in X-MCP-Timestamp.
-// Delivery failures are retried with exponential backoff per spec.
+// Deliver sends an event to webhook subscribers of that event name.
+//
+// Per-target processing (η-4):
+//  1. Filter by event name — only targets whose EventName matches the
+//     event are considered.
+//  2. safeMatch with the EventDef's Match — skip target if false.
+//  3. safeTransform with the EventDef's Transform — use the returned
+//     event's body when the bool says modified, otherwise reuse the
+//     original marshal.
+//
+// Each POST carries an HMAC-SHA256 signature; failures retry with
+// exponential backoff. When transform modifies the event, the per-
+// target body is re-marshaled and re-signed (the receiver's HMAC
+// check would fail otherwise) and re-checked against the body cap.
+//
+// Match / Transform are looked up via SetDefResolver. Callers that
+// haven't installed a resolver (TypedSource authors hand-emitting)
+// get a passthrough — Match=nil delivers to all matching-name targets,
+// Transform=nil reuses the original body.
 func (r *WebhookRegistry) Deliver(event Event) {
 	targets := r.Targets()
 	if len(targets) == 0 {
 		return
 	}
 
-	body, err := json.Marshal(event)
+	// One marshal upfront for the unmodified path; per-target
+	// re-marshal only when transform actually changes the event
+	// (Q8 short-circuit).
+	originalBody, err := json.Marshal(event)
 	if err != nil {
 		r.logf("[webhook] failed to marshal event: %v", err)
 		return
 	}
-
-	// ζ-3: spec L487 caps outbound delivery bodies at 256 KiB (configurable
-	// via WithWebhookMaxBodyBytes). Reject oversized — truncation would
-	// corrupt the HMAC signature and silently drop event content.
-	// Re-trying won't shrink the body, so this is terminal for the event.
-	if len(body) > r.maxBodyBytes {
+	if len(originalBody) > r.maxBodyBytes {
+		// ζ-3: spec L487 caps outbound delivery bodies at 256 KiB
+		// (configurable via WithWebhookMaxBodyBytes). Reject
+		// oversized — truncation would corrupt the HMAC signature
+		// and silently drop event content. Re-trying won't shrink
+		// the body, so this is terminal for the event.
 		r.logf("[webhook] event %s body %d bytes exceeds cap %d; dropping (will not retry)",
-			event.EventID, len(body), r.maxBodyBytes)
+			event.EventID, len(originalBody), r.maxBodyBytes)
 		return
 	}
 
+	r.mu.RLock()
+	resolver := r.defResolver
+	r.mu.RUnlock()
+	var def EventDef
+	if resolver != nil {
+		def = resolver(event.Name)
+	}
+
 	for _, t := range targets {
-		go r.deliver(t, event.EventID, body)
+		if t.EventName != "" && t.EventName != event.Name {
+			// Pre-η-3 targets had no EventName recorded — skip the
+			// filter for those (zero string) so legacy fixtures
+			// keep working. Real targets registered via the
+			// subscribe handler always carry the name.
+			continue
+		}
+
+		hc := newHookContext(context.Background(), t.Principal, t.ID, DeliveryModeWebhook)
+		if !safeMatch(def.Match, hc, event, t.Params) {
+			continue
+		}
+		delivered, modified := safeTransform(def.Transform, hc, event, t.Params)
+
+		body := originalBody
+		if modified {
+			b, err := json.Marshal(delivered)
+			if err != nil {
+				r.logf("[webhook] transform-modified event %s: marshal failed for target %s: %v",
+					event.EventID, t.ID, err)
+				continue
+			}
+			if len(b) > r.maxBodyBytes {
+				r.logf("[webhook] transform-modified event %s: body %d bytes exceeds cap %d for target %s; dropping",
+					event.EventID, len(b), r.maxBodyBytes, t.ID)
+				continue
+			}
+			body = b
+		}
+		go r.deliver(t, delivered.EventID, body)
 	}
 }
 

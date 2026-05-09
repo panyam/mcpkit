@@ -201,7 +201,7 @@ type fakeSubscribableSource struct {
 func (f *fakeSubscribableSource) Def() EventDef                  { return f.def }
 func (f *fakeSubscribableSource) Poll(string, int) PollResult    { return PollResult{} }
 func (f *fakeSubscribableSource) Latest() string                 { return f.latest }
-func (f *fakeSubscribableSource) Subscribe(context.Context) <-chan SubscriberEvent {
+func (f *fakeSubscribableSource) Subscribe(context.Context, SubscribeOpts) <-chan SubscriberEvent {
 	return f.ch
 }
 

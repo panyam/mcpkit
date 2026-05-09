@@ -300,7 +300,7 @@ func TestYieldingSource_SubscribeReceivesYieldedEvents(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	ch := src.Subscribe(ctx)
+	ch := src.Subscribe(ctx, SubscribeOpts{})
 	require.NotNil(t, ch, "Subscribe must return a non-nil channel")
 
 	require.NoError(t, yield(fakePayload{Msg: "alpha"}))
@@ -329,9 +329,9 @@ func TestYieldingSource_MultipleSubscribersAllReceive(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	subA := src.Subscribe(ctx)
-	subB := src.Subscribe(ctx)
-	subC := src.Subscribe(ctx)
+	subA := src.Subscribe(ctx, SubscribeOpts{})
+	subB := src.Subscribe(ctx, SubscribeOpts{})
+	subC := src.Subscribe(ctx, SubscribeOpts{})
 
 	require.NoError(t, yield(fakePayload{Msg: "x"}))
 
@@ -350,7 +350,7 @@ func TestYieldingSource_SubscribeCleanupOnContextCancel(t *testing.T) {
 	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"})
 
 	ctx, cancel := context.WithCancel(context.Background())
-	_ = src.Subscribe(ctx)
+	_ = src.Subscribe(ctx, SubscribeOpts{})
 	assert.Equal(t, 1, src.SubscriberCount(), "subscribe should register one slot")
 
 	cancel()
@@ -377,7 +377,7 @@ func TestYieldingSource_SubscribeDropsOnSlowConsumer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	ch := src.Subscribe(ctx)
+	ch := src.Subscribe(ctx, SubscribeOpts{})
 
 	// Fill the buffer (cap=1) and then keep yielding without draining.
 	require.NoError(t, yield(fakePayload{Msg: "a"}))
@@ -431,7 +431,7 @@ func TestYieldingSource_YieldError_DeliversErrorVariant(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	ch := src.Subscribe(ctx)
+	ch := src.Subscribe(ctx, SubscribeOpts{})
 	require.NoError(t, src.YieldError(EventDeliveryError{Code: -32603, Message: "upstream 503"}))
 
 	se := readSubscriberEvent(t, ch, time.Second)
@@ -458,7 +458,7 @@ func TestYieldingSource_YieldTerminated_DeliversTerminatedAndClosesChan(t *testi
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	ch := src.Subscribe(ctx)
+	ch := src.Subscribe(ctx, SubscribeOpts{})
 	require.NoError(t, src.YieldTerminated(EventDeliveryError{Code: -32012, Message: "Unauthorized"}))
 
 	se := readSubscriberEvent(t, ch, time.Second)
@@ -489,7 +489,7 @@ func TestYieldingSource_YieldsAfterTerminatedAreNoOp(t *testing.T) {
 	// subscriber chan is closed and out of the picture.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ch := src.Subscribe(ctx)
+	ch := src.Subscribe(ctx, SubscribeOpts{})
 	require.NoError(t, src.YieldTerminated(EventDeliveryError{Code: 0, Message: "done"}))
 	_ = readSubscriberEvent(t, ch, time.Second) // drain terminated
 	// chan should be closed; drain once more to confirm.
