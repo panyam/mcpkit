@@ -201,8 +201,11 @@ type fakeSubscribableSource struct {
 func (f *fakeSubscribableSource) Def() EventDef                  { return f.def }
 func (f *fakeSubscribableSource) Poll(string, int) PollResult    { return PollResult{} }
 func (f *fakeSubscribableSource) Latest() string                 { return f.latest }
-func (f *fakeSubscribableSource) Subscribe(context.Context, SubscribeOpts) <-chan SubscriberEvent {
-	return f.ch
+func (f *fakeSubscribableSource) Subscribe(context.Context, SubscribeOpts) (<-chan SubscriberEvent, func(Event)) {
+	// Hand-built test source: targeted-deliver path is unused; return
+	// a no-op sender so EmitToSubscription against this source is a
+	// silent drop rather than panicking on a nil func.
+	return f.ch, func(Event) {}
 }
 
 // TestStream_GapRecoveryEmitsFreshActive verifies the spec L285 contract:
