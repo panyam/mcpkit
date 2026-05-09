@@ -112,7 +112,7 @@ type errPayload struct {
 	Message string `json:"message"`
 }
 
-func registerStream(srv *server.Server, sourceMap map[string]EventSource, unsafeAnon string, heartbeat time.Duration, idx *SubscriptionIndex) {
+func registerStream(srv *server.Server, sourceMap map[string]EventSource, unsafeAnon string, heartbeat time.Duration, idx *SubscriptionIndex, quota *Quota) {
 	if heartbeat <= 0 {
 		heartbeat = defaultStreamHeartbeatInterval
 	}
@@ -150,6 +150,17 @@ func registerStream(srv *server.Server, sourceMap map[string]EventSource, unsafe
 			return core.NewErrorResponse(id, ErrCodeDeliveryModeUnsupported,
 				"DeliveryModeUnsupported: source does not support push delivery")
 		}
+
+		// η-6: enforce quota BEFORE Subscribe + on_subscribe per spec
+		// L705. Done early so a rejected stream never registers a
+		// slot or fires any author hooks. Defer the Release on every
+		// return path below — pairs 1:1 with this Reserve regardless
+		// of how the stream ends (ctx cancel, evCh close, terminated
+		// frame, panic).
+		if err := quota.Reserve(principal, req.Name); err != nil {
+			return core.NewErrorResponse(id, ErrCodeTooManySubscriptions, err.Error())
+		}
+		defer quota.Release(principal, req.Name)
 
 		def := source.Def()
 		cursorless := def.Cursorless
