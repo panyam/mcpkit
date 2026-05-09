@@ -268,6 +268,32 @@ func (t *PollLeaseTable) sweepExpired() {
 // deterministically without waiting for the ticker.
 func (t *PollLeaseTable) sweepExpiredForTest() { t.sweepExpired() }
 
+// chainOnExpire appends an additional OnExpire hook that fires after
+// any user-supplied one. Used by events.Register to install the
+// SDK's safeOnUnsubscribe wiring on a table the user may have
+// constructed with their own OnExpire diagnostic hook. Chaining
+// (rather than overwriting) keeps both observable.
+//
+// Package-internal: the public surface is WithPollLeaseOnExpire
+// (single hook at construction). η-3 is the only caller — adding
+// the SDK's lifecycle wiring on a per-Register basis.
+func (t *PollLeaseTable) chainOnExpire(h PollLeaseHook) {
+	if h == nil {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	prev := t.onExpire
+	if prev == nil {
+		t.onExpire = h
+		return
+	}
+	t.onExpire = func(principal, eventName string, params map[string]any) {
+		prev(principal, eventName, params)
+		h(principal, eventName, params)
+	}
+}
+
 // invokeLeaseHook invokes a PollLeaseHook with panic recovery. A
 // hook that panics shouldn't take down the sweep goroutine or the
 // poll handler; log + swallow.

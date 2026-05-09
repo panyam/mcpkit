@@ -21,12 +21,32 @@ package events
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"time"
 
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/server"
 )
+
+// newStreamSubscriptionID generates the server-derived sub_<base64>
+// handle for a push stream (η-3). Streams have no canonical-tuple
+// identity (no delivery URL), and the same (principal, name, params)
+// can be open across multiple concurrent streams — each is its own
+// runtime subscription. A random 16-byte sub id keeps SubscriptionID()
+// usable on HookContext for push without conflating concurrent
+// streams.
+//
+// Webhook uses deriveSubscriptionID over the canonical tuple so two
+// subscribes with identical inputs collapse onto one id; that property
+// is correct for webhook (refresh ≠ new sub) but wrong for push (each
+// stream open IS a new sub). Hence the different generation strategy.
+func newStreamSubscriptionID() string {
+	var buf [16]byte
+	_, _ = rand.Read(buf[:])
+	return "sub_" + base64.RawURLEncoding.EncodeToString(buf[:])
+}
 
 const defaultStreamHeartbeatInterval = 30 * time.Second
 
@@ -124,7 +144,8 @@ func registerStream(srv *server.Server, sourceMap map[string]EventSource, unsafe
 		// events/stream MUST be called with an authenticated principal —
 		// the spec lists Unauthorized among events/stream's immediate
 		// errors at L267. Same auth gate as events/subscribe (γ-2).
-		if _, ok := resolvePrincipal(ctx, unsafeAnon); !ok {
+		principal, ok := resolvePrincipal(ctx, unsafeAnon)
+		if !ok {
 			return core.NewErrorResponse(id, ErrCodeUnauthorized, "Unauthorized")
 		}
 
@@ -163,6 +184,23 @@ func registerStream(srv *server.Server, sourceMap map[string]EventSource, unsafe
 		})
 
 		evCh := sub.Subscribe(ctx)
+
+		// η-3: lifecycle hooks for push. on_subscribe fires after the
+		// channel is acquired (the subscription is now live and would
+		// receive events); on_unsubscribe fires on every return path
+		// via defer. The fresh sub id is unique per stream so concurrent
+		// streams from the same principal/name/params don't conflate.
+		streamSubID := newStreamSubscriptionID()
+		hc := newHookContext(ctx, principal, streamSubID, DeliveryModePush)
+		if err := safeOnSubscribe(def.OnSubscribe, hc, req.Params); err != nil {
+			// Author rejected provisioning; close out the stream
+			// before any delivery happens. Returning an error here
+			// produces a JSON-RPC error response per the spec's
+			// "events/stream's immediate errors" at L267.
+			return core.NewErrorResponse(id, ErrCodeTooManySubscriptions,
+				"on_subscribe rejected: "+err.Error())
+		}
+		defer safeOnUnsubscribe(def.OnUnsubscribe, hc, req.Params)
 
 		ticker := time.NewTicker(heartbeat)
 		defer ticker.Stop()
