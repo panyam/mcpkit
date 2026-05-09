@@ -213,7 +213,7 @@ func TestWebhookHMACSignature_MCPHeaders(t *testing.T) {
 	// Direct registry poke (skip the JSON-RPC subscribe handler) — γ-2
 	// rekeyed Register on canonical-tuple bytes. Use a stub key for the
 	// HMAC delivery test; the canonical-key contents don't matter here.
-	webhooks.Register([]byte("hmac-test"), "sub_hmac_test", srv.URL, secret, 0)
+	webhooks.Register(events.RegisterParams{CanonicalKey: []byte("hmac-test"), DerivedID: "sub_hmac_test", URL: srv.URL, Secret: secret, MaxAgeSeconds: 0})
 
 	event := events.MakeEvent("telegram.message", "evt_1", "1", time.Now(),
 		map[string]string{"text": "hello"})
@@ -305,8 +305,8 @@ func TestWebhookKeyedByCanonicalTuple(t *testing.T) {
 	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true))
 	keyA := []byte("alice\x1fhttp://example.com/hook\x1ftelegram.message\x1f{}")
 	keyB := []byte("bob\x1fhttp://example.com/hook\x1ftelegram.message\x1f{}")
-	webhooks.Register(keyA, "sub_alice", "http://example.com/hook", "whsec_secret-1", 0)
-	webhooks.Register(keyB, "sub_bob", "http://example.com/hook", "whsec_secret-2", 0)
+	webhooks.Register(events.RegisterParams{CanonicalKey: keyA, DerivedID: "sub_alice", URL: "http://example.com/hook", Secret: "whsec_secret-1", MaxAgeSeconds: 0})
+	webhooks.Register(events.RegisterParams{CanonicalKey: keyB, DerivedID: "sub_bob", URL: "http://example.com/hook", Secret: "whsec_secret-2", MaxAgeSeconds: 0})
 
 	targets := webhooks.Targets()
 	assert.Len(t, targets, 2)
@@ -321,7 +321,7 @@ func TestWebhookKeyedByCanonicalTuple(t *testing.T) {
 // it claims — used by other tests that exercise post-TTL behavior.
 func TestWebhookTTLExpiry(t *testing.T) {
 	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true))
-	webhooks.Register([]byte("exp-test"), "sub_exp", "http://example.com/hook", "whsec_secret", 0)
+	webhooks.Register(events.RegisterParams{CanonicalKey: []byte("exp-test"), DerivedID: "sub_exp", URL: "http://example.com/hook", Secret: "whsec_secret", MaxAgeSeconds: 0})
 	assert.Len(t, webhooks.Targets(), 1)
 
 	webhooks.ExpireAll()
@@ -348,7 +348,7 @@ func TestWebhookRetryOnServerError(t *testing.T) {
 	defer srv.Close()
 
 	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true))
-	webhooks.Register([]byte("retry-test"), "sub_retry", srv.URL, "whsec_secret", 0)
+	webhooks.Register(events.RegisterParams{CanonicalKey: []byte("retry-test"), DerivedID: "sub_retry", URL: srv.URL, Secret: "whsec_secret", MaxAgeSeconds: 0})
 
 	event := events.MakeEvent("telegram.message", "evt_retry", "1", time.Now(),
 		map[string]string{"text": "retry me"})
@@ -376,7 +376,7 @@ func TestWebhookNoRetryOn4xx(t *testing.T) {
 	defer srv.Close()
 
 	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true))
-	webhooks.Register([]byte("no-retry"), "sub_no_retry", srv.URL, "whsec_secret", 0)
+	webhooks.Register(events.RegisterParams{CanonicalKey: []byte("no-retry"), DerivedID: "sub_no_retry", URL: srv.URL, Secret: "whsec_secret", MaxAgeSeconds: 0})
 
 	event := events.MakeEvent("telegram.message", "evt_4xx", "1", time.Now(),
 		map[string]string{"text": "no retry"})

@@ -92,6 +92,11 @@ func (r *WebhookRegistry) PostTerminated(canonicalKey []byte, controlErr Control
 	if !ok {
 		return
 	}
+	// η-3: PostTerminated is server-initiated subscription death;
+	// onRemove fires on actual registry deletion. Suspend (handled
+	// via postTerminatedSilent) deliberately does NOT fire — the
+	// target stays in the registry as paused.
+	r.fireOnRemove(target)
 	body, err := json.Marshal(controlEnvelope{Type: "terminated", Error: &controlErr})
 	if err != nil {
 		r.logf("[webhook] PostTerminated: marshal failed: %v", err)

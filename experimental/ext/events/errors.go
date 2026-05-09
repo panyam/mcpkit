@@ -26,6 +26,7 @@ package events
 const (
 	ErrCodeEventNotFound           = -32011 // Unknown event name
 	ErrCodeUnauthorized            = -32012 // Caller lacks permission for this event/params
+	ErrCodeTooManySubscriptions    = -32013 // Server-imposed subscription limit reached / on_subscribe refused
 	ErrCodeInvalidCallbackUrl      = -32015 // Webhook URL unreachable / rejected
 	ErrCodeDeliveryModeUnsupported = -32017 // Event type doesn't support requested mode
 )

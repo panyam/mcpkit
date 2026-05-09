@@ -217,8 +217,7 @@ func TestE2EHealthSignalsEndToEnd(t *testing.T) {
 	defer webhookReceiver.Close()
 
 	canonical := []byte("health-test-canonical")
-	webhooks.Register(canonical, "sub_health", webhookReceiver.URL,
-		"whsec_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 0)
+	webhooks.Register(events.RegisterParams{CanonicalKey: canonical, DerivedID: "sub_health", URL: webhookReceiver.URL, Secret: "whsec_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", MaxAgeSeconds: 0})
 
 	// Step 1: transient error → stream OnError fires; webhook unaffected.
 	require.NoError(t, source.YieldError(events.EventDeliveryError{
