@@ -233,6 +233,21 @@ type Config struct {
 	// or a different TTL construct one explicitly via
 	// NewPollLeaseTable + WithPollLease* options and pass it here.
 	PollLeases *PollLeaseTable
+
+	// SubscriptionIndex maps server-derived sub ids to per-
+	// subscription deliver closures so EmitToSubscription can
+	// route by id without scanning every source / target (η-5).
+	// Populated by the lifecycle wiring inside Register
+	// (registerStream Add/Remove on stream open/close, webhook
+	// subscribe Add + onRemove Remove). Poll subscriptions are not
+	// indexed (no sub id; lease tuple is the routing identity).
+	//
+	// Authors that want to call EmitToSubscription should construct
+	// one via NewSubscriptionIndex and pass it here so they hold a
+	// reference to the same instance the SDK populates. nil leaves
+	// Register to construct an internal default — fine for servers
+	// that only do broadcast emit.
+	SubscriptionIndex *SubscriptionIndex
 }
 
 // Register hooks up events/list, events/poll, events/subscribe, and
@@ -265,6 +280,10 @@ func Register(cfg Config) {
 	if leases == nil {
 		leases = NewPollLeaseTable()
 	}
+	idx := cfg.SubscriptionIndex
+	if idx == nil {
+		idx = NewSubscriptionIndex()
+	}
 
 	// η-3: lifecycle hook wiring. The SDK installs onRemove on the
 	// webhook registry (fires safeOnUnsubscribe for explicit
@@ -276,6 +295,12 @@ func Register(cfg Config) {
 	// the live HookContext / params at hand.
 	if webhooks != nil {
 		webhooks.AddOnRemoveHook(func(t WebhookTarget) {
+			// η-5: drop the index entry first so a racing
+			// EmitToSubscription that hasn't yet reached its
+			// Lookup will get the unknown-id branch (clean drop)
+			// rather than calling DeliverToTarget on a registry
+			// the target was just removed from.
+			idx.Remove(t.ID)
 			source, ok := sourceMap[t.EventName]
 			if !ok {
 				return
@@ -322,9 +347,9 @@ func Register(cfg Config) {
 
 	registerList(srv, sources)
 	registerPoll(srv, sourceMap, cfg.UnsafeAnonymousPrincipal, leases)
-	registerStream(srv, sourceMap, cfg.UnsafeAnonymousPrincipal, cfg.StreamHeartbeatInterval)
+	registerStream(srv, sourceMap, cfg.UnsafeAnonymousPrincipal, cfg.StreamHeartbeatInterval, idx)
 	if webhooks != nil {
-		registerSubscribe(srv, sourceMap, webhooks, cfg.UnsafeAnonymousPrincipal)
+		registerSubscribe(srv, sourceMap, webhooks, cfg.UnsafeAnonymousPrincipal, idx)
 		registerUnsubscribe(srv, webhooks, cfg.UnsafeAnonymousPrincipal)
 	}
 	if cfg.UnsafeAnonymousPrincipal != "" {
@@ -576,7 +601,7 @@ func resolvePrincipal(ctx core.MethodContext, unsafeAnon string) (string, bool) 
 	return "", false
 }
 
-func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, webhooks *WebhookRegistry, unsafeAnon string) {
+func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, webhooks *WebhookRegistry, unsafeAnon string, idx *SubscriptionIndex) {
 	srv.HandleMethod("events/subscribe", func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		var req struct {
 			// ID is parsed only to surface a helpful error if a client
@@ -672,13 +697,24 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 			if err := safeOnSubscribe(def.OnSubscribe, hc, req.Params); err != nil {
 				// on_subscribe rejected: roll back the registration
 				// (otherwise an unprovisioned subscription would still
-				// receive deliveries) and surface the error. η-6 will
+				// receive deliveries) and surface the error. The
+				// Unregister fires onRemove → idx.Remove (no entry to
+				// remove since we haven't Add'd yet — no-op). η-6 may
 				// add a dedicated SubscribeFailed code; for now use
 				// TooManySubscriptions per the plan's Q3 mapping.
 				webhooks.Unregister(canonical)
 				return core.NewErrorResponse(id, ErrCodeTooManySubscriptions,
 					"on_subscribe rejected: "+err.Error())
 			}
+			// η-5: register this webhook target in the SubscriptionIndex
+			// AFTER on_subscribe succeeded — no half-provisioned
+			// entries. Refresh-of-existing skips the Add entirely
+			// (entry from the original subscribe still routes
+			// correctly; the canonical key didn't change).
+			canonicalCopy := append([]byte(nil), canonical...)
+			idx.Add(derivedID, DeliveryModeWebhook, func(event Event) {
+				webhooks.DeliverToTarget(canonicalCopy, event)
+			})
 		}
 
 		// Resolve `cursor: null` to the source's current head ("from now")
