@@ -187,15 +187,16 @@ func TestSubscribe_ResponseDoesNotEchoSecret(t *testing.T) {
 }
 
 // TestUnsubscribe_RequiresTupleNotSecret verifies the handler ignores
-// the legacy proof-of-possession secret-form unsubscribe — γ keys
-// unsubscribe on the (principal, name, params, delivery.url) tuple
-// per spec §"Unsubscribing: events/unsubscribe" L509. A request that
+// the legacy proof-of-possession secret-form unsubscribe — the spec
+// keys unsubscribe on the (principal, name, params, delivery.url)
+// tuple per §"Unsubscribing: events/unsubscribe" L509. A request that
 // supplies only delivery.url + delivery.secret (no name) is rejected
 // with name-required because the secret field is no longer part of the
 // unsubscribe surface.
 func TestUnsubscribe_RequiresTupleNotSecret(t *testing.T) {
 	resp := callUnsubscribeHandler(t, map[string]any{
-		// name intentionally omitted; secret would have worked pre-β
+		// name intentionally omitted; the legacy secret-form would
+		// have worked here, but the spec now requires the tuple.
 		"delivery": map[string]any{
 			"url":    "https://example.com/hook",
 			"secret": "whsec_should-not-be-accepted-here",
@@ -219,12 +220,12 @@ func (fakeSecretValidationSource) Latest() string                  { return "" }
 
 // buildSecretValidationStack returns a server with the events handlers
 // registered (with UnsafeAnonymousPrincipal: "test-principal" so the
-// handlers don't reject every test request with -32012 Unauthorized —
-// γ adds spec-mandated auth gating, but the secret-validation tests
-// here are concerned with the validator and unsubscribe shape, not
-// the auth gate. Auth-specific tests live in identity_handler_test.go
-// (γ-2 follow-on).) The initialize handshake is completed so subsequent
-// Dispatch calls accept arbitrary methods.
+// handlers don't reject every test request with -32012 Unauthorized
+// per spec §"Subscription Identity" → "Authentication required" L361.
+// The secret-validation tests here are concerned with the validator
+// and unsubscribe shape, not the auth gate; auth-specific tests live
+// in identity_handler_test.go.) The initialize handshake is completed
+// so subsequent Dispatch calls accept arbitrary methods.
 func buildSecretValidationStack(t *testing.T) *server.Server {
 	t.Helper()
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})

@@ -33,19 +33,19 @@ type yieldingConfig struct {
 //     Truncated=true signals "one or more events were dropped before this
 //     one" — consumers SHOULD treat as a possible state gap and re-fetch
 //     authoritative state if it matters. Per spec §"Push-Based Delivery"
-//     → "Event Delivery" L285, ε-2's stream handler maps Truncated=true
+//     → "Event Delivery" L285, the stream handler maps Truncated=true
 //     onto a fresh notifications/events/active{truncated:true} that
 //     precedes the event.
 //
 //   - Transient error: Error populated; Event/Terminated nil. Stream
 //     subscribers map onto notifications/events/error per spec L255+L261;
 //     stream stays open. Webhook delivery is unaffected (errors are
-//     upstream, not delivery-side). ζ-7.
+//     upstream, not delivery-side).
 //
 //   - Terminal: Terminated populated; Event/Error nil. Stream subscribers
 //     map onto notifications/events/terminated per spec L783-795 and the
 //     stream closes. Subscriber chans close after the terminal event.
-//     One-shot — subsequent yields are no-ops. ζ-7.
+//     One-shot — subsequent yields are no-ops.
 //
 // Riding Truncated on the next successful event (rather than a separate
 // marker frame) keeps the channel order trivially correct under any
@@ -72,10 +72,10 @@ type EventDeliveryError struct {
 // set when a yield is dropped because the chan is full; the next successful
 // send delivers a Truncated marker before the event itself.
 //
-// principal / subscriptionID / params (η-4): per-subscriber identity
+// principal / subscriptionID / params: per-subscriber identity
 // captured at Subscribe time so the per-yield fanout can build a
-// HookContext + apply the EventDef's Match / Transform per subscriber.
-// Spec §"Server SDK Guidance" L623-629.
+// HookContext + apply the EventDef's Match / Transform per subscriber
+// per spec §"Server SDK Guidance" L623-629.
 type subscriberSlot struct {
 	ch               chan SubscriberEvent
 	principal        string
@@ -84,15 +84,14 @@ type subscriberSlot struct {
 	pendingTruncated atomic.Bool
 	// closeOnce gates the chan close so YieldTerminated and the
 	// Subscribe cleanup goroutine can both attempt close without
-	// racing into "close of closed channel". ζ-7.
+	// racing into "close of closed channel".
 	closeOnce sync.Once
 }
 
 // SubscribeOpts bundles the per-subscriber metadata Subscribe needs.
-// Promoted to a struct over a positional list because η-4 added two
-// fields to the existing (ctx) signature; future additions (MaxAge,
-// per-subscriber backpressure tuning) extend the struct without
-// rippling through every caller.
+// A struct rather than a positional list so future additions (MaxAge,
+// per-subscriber backpressure tuning) extend without rippling through
+// every caller.
 type SubscribeOpts struct {
 	// Principal is the resolved subscription principal. Surfaced on
 	// HookContext.Principal() during fanout so author Match /
@@ -118,8 +117,9 @@ func (s *subscriberSlot) closeChan() {
 
 // deliverEvent sends one event to the slot's channel non-blocking,
 // honoring the existing pendingTruncated bookkeeping. Used by both
-// the per-yield fanout (after match/transform) and the η-5 targeted
-// deliver path (which bypasses match/transform).
+// the per-yield fanout (after match/transform) and the targeted-
+// deliver path used by EmitToSubscription (spec §"Server SDK
+// Guidance" L630), which bypasses match/transform.
 //
 // Tolerates a closed-channel race: if Subscribe's cleanup goroutine
 // has raced ahead and close()-d the channel between our read of
@@ -265,7 +265,7 @@ type YieldingSource[Data any] struct {
 	emitHook    func(Event)
 	metaFunc    func(Data) map[string]any
 	subscribers []*subscriberSlot
-	terminated  bool // ζ-7: one-shot YieldTerminated has fired; subsequent yields are no-ops
+	terminated  bool // one-shot YieldTerminated has fired; subsequent yields are no-ops
 }
 
 func (s *YieldingSource[Data]) Def() EventDef { return s.def }
@@ -285,10 +285,11 @@ func (s *YieldingSource[Data]) SetMetaFunc(f func(Data) map[string]any) {
 	s.metaFunc = f
 }
 
-// YieldError emits a transient-failure signal to all live subscribers
-// (ζ-7). Stream subscribers map this onto a notifications/events/error
-// frame per spec L255+L261; the subscription stays open. Webhook
-// delivery is unaffected (errors are upstream-side, not delivery-side).
+// YieldError emits a transient-failure signal to all live subscribers.
+// Stream subscribers map this onto a notifications/events/error frame
+// per spec §"Push-Based Delivery" L255+L261; the subscription stays
+// open. Webhook delivery is unaffected (errors are upstream-side, not
+// delivery-side).
 //
 // No-op after YieldTerminated has fired (one-shot terminal semantic).
 // Returns nil; the signature mirrors yield/YieldTerminated for consistency
@@ -306,11 +307,11 @@ func (s *YieldingSource[Data]) YieldError(err EventDeliveryError) error {
 }
 
 // YieldTerminated emits a terminal signal to all live subscribers and
-// closes their channels (ζ-7). Stream subscribers map this onto a
-// notifications/events/terminated frame per spec L783-795 and the
-// stream returns. After this call, the source is terminated: subsequent
-// yield / YieldError / YieldTerminated calls are silently dropped, and
-// Poll returns empty.
+// closes their channels. Stream subscribers map this onto a
+// notifications/events/terminated frame per spec §"Authorization"
+// L783-795 and the stream returns. After this call, the source is
+// terminated: subsequent yield / YieldError / YieldTerminated calls
+// are silently dropped, and Poll returns empty.
 //
 // One-shot. Receivers seeing the terminal signal SHOULD remove their
 // local subscription state — there's no recovery path for the source
@@ -360,16 +361,18 @@ func (s *YieldingSource[Data]) fanoutLocked(se SubscriberEvent) {
 }
 
 // Subscribe registers a per-call live-event channel for push delivery
-// (ε-1 — foundation for events/stream). The returned channel receives a
-// SubscriberEvent for every yield() until ctx is Done; on cancellation
-// the slot is removed from the source and the channel is closed (range
-// loops exit cleanly, select-on-closed returns the zero value).
+// (the foundation for events/stream, spec §"Push-Based Delivery"
+// L223+). The returned channel receives a SubscriberEvent for every
+// yield() until ctx is Done; on cancellation the slot is removed from
+// the source and the channel is closed (range loops exit cleanly,
+// select-on-closed returns the zero value).
 //
-// SubscribeOpts (η-4) carries per-subscriber identity (Principal,
+// SubscribeOpts carries per-subscriber identity (Principal,
 // SubscriptionID, Params) onto the slot so fanout can build a
-// HookContext and apply the EventDef's Match / Transform per
-// subscriber. Pass the zero value for hook-less callers; the safe
-// wrappers tolerate empty fields.
+// HookContext and apply the EventDef's Match / Transform (spec
+// §"Server SDK Guidance" L623-629) per subscriber. Pass the zero
+// value for hook-less callers; the safe wrappers tolerate empty
+// fields.
 //
 // On a slow consumer (channel full), yield does NOT block — the event
 // is dropped for that subscriber and a Truncated marker is sent on the
@@ -377,13 +380,14 @@ func (s *YieldingSource[Data]) fanoutLocked(se SubscriberEvent) {
 // notifications/events/active{truncated:true, cursor:source.Latest()}
 // per spec §"Push-Based Delivery" → "Event Delivery" L285.
 //
-// Cursorless sources still buffer-and-fanout to subscribers (push delivery
-// works fine without replay); only Poll returns empty on cursorless.
-// Returns (chan, sender). The sender closure delivers a single event
-// to THIS specific slot, bypassing the per-yield fanout's Match /
-// Transform — used by η-5's EmitToSubscription so an author who has
-// the sub id can route directly to one subscriber. Callers that only
-// want broadcast delivery can ignore the second return.
+// Cursorless sources still buffer-and-fanout to subscribers (push
+// delivery works fine without replay); only Poll returns empty on
+// cursorless. Returns (chan, sender). The sender closure delivers a
+// single event to THIS specific slot, bypassing the per-yield
+// fanout's Match / Transform — used by EmitToSubscription (spec
+// §"Server SDK Guidance" L630) so an author who has the sub id can
+// route directly to one subscriber. Callers that only want broadcast
+// delivery can ignore the second return.
 func (s *YieldingSource[Data]) Subscribe(ctx context.Context, opts SubscribeOpts) (<-chan SubscriberEvent, func(Event)) {
 	slot := &subscriberSlot{
 		ch:             make(chan SubscriberEvent, s.subscriberBuf),
@@ -440,9 +444,9 @@ func (s *YieldingSource[Data]) Poll(cursor string, limit int) PollResult {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	// ζ-7: terminated source returns empty. Poll callers — including
-	// the events/poll handler — should observe nothing-to-deliver
-	// rather than the residual entries from before termination.
+	// Terminated source returns empty. Poll callers — including the
+	// events/poll handler — should observe nothing-to-deliver rather
+	// than the residual entries from before termination.
 	if s.terminated {
 		return PollResult{}
 	}
@@ -541,11 +545,11 @@ func (s *YieldingSource[Data]) SetEmitHook(hook func(Event)) {
 }
 
 func (s *YieldingSource[Data]) yield(data Data) error {
-	// ζ-7 one-shot terminated check. Sources that have signaled
-	// terminal can't deliver new events to subscribers (chans are
-	// closed). Returning nil rather than error so callers wrapping
-	// yield in event-driven code paths don't have to special-case
-	// the post-terminated lifetime.
+	// One-shot terminated check. Sources that have signaled terminal
+	// can't deliver new events to subscribers (chans are closed).
+	// Returning nil rather than error so callers wrapping yield in
+	// event-driven code paths don't have to special-case the
+	// post-terminated lifetime.
 	s.mu.RLock()
 	terminated := s.terminated
 	s.mu.RUnlock()
@@ -585,14 +589,14 @@ func (s *YieldingSource[Data]) yield(data Data) error {
 			s.entries = s.entries[len(s.entries)-s.maxSize:]
 		}
 	}
-	// η-4: snapshot subscribers under the lock, then drop the lock
-	// before invoking author hooks. Match / Transform fire on the hot
-	// path — running them while holding s.mu would serialize the
-	// whole source on a slow author callback. The cleanup goroutine
-	// in Subscribe also takes s.mu before close()-ing the chan, so
-	// snapshotting + sending later means a closed-chan send is
-	// possible during a close-vs-send race; subscriberSlot.deliverEvent
-	// owns the recover for that.
+	// Snapshot subscribers under the lock, then drop the lock before
+	// invoking author hooks. Match / Transform (spec §"Server SDK
+	// Guidance" L623-629) fire on the hot path — running them while
+	// holding s.mu would serialize the whole source on a slow author
+	// callback. The cleanup goroutine in Subscribe also takes s.mu
+	// before close()-ing the chan, so snapshotting + sending later
+	// means a closed-chan send is possible during a close-vs-send
+	// race; subscriberSlot.deliverEvent owns the recover for that.
 	subs := append([]*subscriberSlot(nil), s.subscribers...)
 	hook := s.emitHook
 	matchFn := s.def.Match
@@ -615,7 +619,7 @@ func (s *YieldingSource[Data]) yield(data Data) error {
 // private subscriberSlot internals + yield's lock discipline so it's
 // not reusable outside this file.
 //
-// Hot-path discipline (Q8):
+// Hot-path discipline:
 //   - safeMatch / safeTransform are nil-tolerant + panic-recovering;
 //     a buggy author hook can't take down the fanout.
 //   - Match=false skips the subscriber outright (and skips Transform).
@@ -624,7 +628,8 @@ func (s *YieldingSource[Data]) yield(data Data) error {
 //     allocation cost.
 //   - subscriberSlot.deliverEvent owns the close-vs-send race recovery
 //     and the non-blocking + drop-with-Truncated semantics; same
-//     codepath as the η-5 targeted-deliver closure.
+//     codepath as the targeted-deliver closure used by
+//     EmitToSubscription (spec §"Server SDK Guidance" L630).
 func (s *YieldingSource[Data]) deliverEventToSlot(sub *subscriberSlot, event Event, matchFn MatchFunc, transformFn TransformFunc) {
 	hc := newHookContext(context.Background(), sub.principal, sub.subscriptionID, DeliveryModePush)
 	if !safeMatch(matchFn, hc, event, sub.params) {

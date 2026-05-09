@@ -96,9 +96,10 @@ func requestIDOf(t *testing.T, n capturedNotif) string {
 // source A must surface only on the stream subscribed to A, never on the
 // stream subscribed to B.
 //
-// Without isolation, the broadcast model from before ε would resurface:
+// Without isolation, the legacy broadcast model would resurface:
 // every open stream would see every event from every source. The
-// requestId echo + per-source Subscribe channel are what make this work.
+// requestId echo + per-source Subscribe channel are what make this
+// work.
 func TestStream_TwoConcurrentStreamsIsolated(t *testing.T) {
 	srcA, yieldA := NewYieldingSource[fakePayload](EventDef{Name: "fake.A", Description: "A", Delivery: []string{"push"}})
 	srcB, _ := NewYieldingSource[fakePayload](EventDef{Name: "fake.B", Description: "B", Delivery: []string{"push"}})
@@ -148,8 +149,8 @@ func TestStream_TwoConcurrentStreamsIsolated(t *testing.T) {
 
 // TestStream_TwoConcurrentStreamsSameSourceBothReceive verifies the
 // fanout-of-fanout case: two streams against the SAME source both
-// receive every yielded event. ε-1's Subscribe slice + the handler
-// re-subscribing per call is what makes this work.
+// receive every yielded event. The source's Subscribe slice + the
+// handler re-subscribing per call is what makes this work.
 //
 // Without fanout, only one stream would hear each event (or worse,
 // they'd race for the single Subscribe channel).
@@ -263,10 +264,11 @@ func TestStream_GapRecoveryEmitsFreshActive(t *testing.T) {
 	assert.Equal(t, "evt_recovery", evP["eventId"])
 }
 
-// TestStream_EmitsNotificationsEventsError verifies the ζ-7.2 dispatch:
-// when a SubscriberEvent.Error arrives on the stream's source channel,
-// the handler emits notifications/events/error{requestId, error}
-// (spec L255+L261). Stream stays open — the error variant is transient.
+// TestStream_EmitsNotificationsEventsError verifies that when a
+// SubscriberEvent.Error arrives on the stream's source channel, the
+// handler emits notifications/events/error{requestId, error} per
+// spec §"Push-Based Delivery" L255+L261. Stream stays open — the
+// error variant is transient.
 //
 // The fake source lets us inject the Error variant directly without
 // having to wire a real upstream-failure scenario.
@@ -304,12 +306,12 @@ func TestStream_EmitsNotificationsEventsError(t *testing.T) {
 	expectNotif(t, st.notifs, "notifications/events/event", time.Second)
 }
 
-// TestStream_EmitsNotificationsEventsTerminated verifies the ζ-7.2
-// terminal dispatch: SubscriberEvent.Terminated → notifications/events/
-// terminated{requestId, error} (spec L783-795) AND the stream returns
-// (closes). The handler returns the empty StreamEventsResult after
-// emitting the notification, so the SDK call's Done channel closes
-// shortly after.
+// TestStream_EmitsNotificationsEventsTerminated verifies the
+// terminal dispatch: SubscriberEvent.Terminated →
+// notifications/events/terminated{requestId, error} per spec
+// §"Authorization" L783-795, AND the stream returns (closes). The
+// handler returns the empty StreamEventsResult after emitting the
+// notification, so the SDK call's Done channel closes shortly after.
 func TestStream_EmitsNotificationsEventsTerminated(t *testing.T) {
 	fake := &fakeSubscribableSource{
 		def: EventDef{Name: "fake.event", Description: "test", Delivery: []string{"push"}},

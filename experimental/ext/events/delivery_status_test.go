@@ -17,10 +17,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// ζ-5 — deliveryStatus on events/subscribe refresh response.
-//
-// Spec §"Webhook Delivery Status" L425-460: the registry tracks per-
-// target delivery health. Subscribe refresh response includes:
+// deliveryStatus on events/subscribe refresh response. Spec
+// §"Webhook Delivery Status" L425-460: the registry tracks per-target
+// delivery health. Subscribe refresh response includes:
 //
 //   deliveryStatus: {
 //     active:         bool,
@@ -301,19 +300,21 @@ func TestSuspend_SuccessfulRefreshReactivates(t *testing.T) {
 // be cosmetic (just a status flag) and the dead receiver would still
 // see event-retry traffic on every yield.
 //
-// Note: the receiver counts EVENT deliveries only — ζ-7.3 added an
-// auto-PostTerminated control envelope on the suspend transition,
-// which also hits the receiver but is a control body, not an event.
-// The discriminator is the body's top-level `type` field.
+// Note: the receiver counts EVENT deliveries only — the suspend
+// transition auto-POSTs a {type:terminated} control envelope (spec
+// §"Non-event webhook bodies" L420), which also hits the receiver
+// but is a control body, not an event. The discriminator is the
+// body's top-level `type` field.
 func TestSuspend_SuspendedTargetSkippedInDeliver(t *testing.T) {
 	var eventHits atomic.Int32
 	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		var env map[string]any
 		_ = json.Unmarshal(body, &env)
-		// ζ-7.3: distinguish event deliveries from the auto-Post
-		// terminated control envelope. Only count events for this
-		// test's "suspended target gets no new event deliveries" claim.
+		// Distinguish event deliveries from the auto-Post terminated
+		// control envelope (spec §"Non-event webhook bodies" L420).
+		// Only count events for this test's "suspended target gets
+		// no new event deliveries" claim.
 		if env["type"] == "terminated" {
 			w.WriteHeader(http.StatusOK)
 			return
@@ -347,16 +348,17 @@ func TestSuspend_SuspendedTargetSkippedInDeliver(t *testing.T) {
 		"suspended target MUST NOT receive new event delivery attempts; got %d new event hits", eventHits.Load()-hitsBeforeSuspendYield)
 }
 
-// TestSuspend_AutoPostsTerminatedEnvelopeOnSuspension verifies the
-// ζ-7.3 wiring: when ζ-6's suspend transition flips Active=true→false,
-// the registry automatically POSTs a {type:"terminated", error:{...}}
-// control envelope to the receiver as a courtesy notification.
+// TestSuspend_AutoPostsTerminatedEnvelopeOnSuspension verifies that
+// when the suspend transition flips Active=true→false (spec §"Webhook
+// Delivery Status" L460), the registry automatically POSTs a
+// {type:"terminated", error:{...}} control envelope to the receiver
+// as a courtesy notification (spec §"Non-event webhook bodies" L420).
 //
 // Important behavior: the target is NOT removed from the registry
-// (distinct from explicit PostTerminated which removes). The auto-Post
-// uses postTerminatedSilent so deliveryStatus stays observable
-// (Active=false) for the spec-defined "successful refresh reactivates"
-// path (ζ-6).
+// (distinct from explicit PostTerminated which removes). The
+// auto-Post uses postTerminatedSilent so deliveryStatus stays
+// observable (Active=false) for the spec-defined "successful refresh
+// reactivates" path.
 //
 // Without this auto-Post, the receiver would have no signal that its
 // subscription got suspended — it would just stop seeing events with

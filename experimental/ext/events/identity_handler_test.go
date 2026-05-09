@@ -15,12 +15,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Handler-level tests for γ-2's auth gate + tuple-keyed registry. Tests
-// here build a server WITHOUT UnsafeAnonymousPrincipal so they exercise
-// the spec-strict path-3 rejection. The shared fixture in
-// secret_validation_test.go uses UnsafeAnonymousPrincipal: "test-principal"
-// for tests that aren't concerned with the auth gate; this file's tests
-// build their own minimal stack so they can vary the auth posture.
+// Handler-level tests for the spec auth gate (§"Subscription
+// Identity" → "Authentication required" L361) + tuple-keyed
+// registry. Tests here build a server WITHOUT
+// UnsafeAnonymousPrincipal so they exercise the strict rejection
+// path. The shared fixture in secret_validation_test.go uses
+// UnsafeAnonymousPrincipal: "test-principal" for tests that aren't
+// concerned with the auth gate; this file's tests build their own
+// minimal stack so they can vary the auth posture.
 
 // buildAuthGateStack returns a server with the events handlers registered
 // + a reference to the registry so tests can inspect target state.
@@ -30,8 +32,9 @@ import (
 func buildAuthGateStack(t *testing.T, unsafeAnon string) (*server.Server, *WebhookRegistry) {
 	t.Helper()
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
-	// ζ-1: tests subscribe to httptest URLs (127.0.0.1:N) — bypass
-	// the production-default SSRF dial guard.
+	// Tests subscribe to httptest URLs (127.0.0.1:N) — bypass the
+	// production-default SSRF dial guard (spec §"Webhook Security"
+	// → "SSRF prevention" L464).
 	webhooks := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true))
 	Register(Config{
 		Sources:                  []EventSource{fakeSecretValidationSource{}},
@@ -156,7 +159,7 @@ func TestSubscribe_TupleIsolationCrossPrincipal(t *testing.T) {
 	assert.Equal(t, idBob, targets[0].ID, "unregister(alice's tuple) must not affect bob's subscription")
 }
 
-// TestSubscribe_RejectsClientSuppliedID verifies γ-3's wire-strict
+// TestSubscribe_RejectsClientSuppliedID verifies the wire-strict
 // rejection of legacy id-bearing subscribe requests. Per spec
 // §"Subscription Identity" → "Key composition" L363: "There is no
 // client-generated id — a subscription is fully determined by what it
@@ -166,7 +169,7 @@ func TestSubscribe_TupleIsolationCrossPrincipal(t *testing.T) {
 func TestSubscribe_RejectsClientSuppliedID(t *testing.T) {
 	srv, _ := buildAuthGateStack(t, "test-principal")
 	params := validSubscribeParams()
-	params["id"] = "client-picked-id" // pre-γ wire shape
+	params["id"] = "client-picked-id" // legacy wire shape
 
 	resp := dispatchSubscribe(t, srv, params)
 	require.NotNil(t, resp.Error, "client-supplied id must be rejected")
@@ -202,12 +205,12 @@ func TestUnsubscribe_ByTuple(t *testing.T) {
 	assert.Empty(t, webhooks.Targets(), "tuple-form unsubscribe must remove the matching entry")
 }
 
-// TestDelivery_EmitsXMCPSubscriptionIDHeader verifies γ-4's end-to-end
-// header wiring: a real subscribe → yield → POST round-trip carries
+// TestDelivery_EmitsXMCPSubscriptionIDHeader verifies the end-to-end
+// header wiring per spec §"Webhook Event Delivery" L390 + §"Webhook
+// Security" L472: a real subscribe → yield → POST round-trip carries
 // the X-MCP-Subscription-Id header on the outbound delivery, and the
-// header value matches the server-derived id returned in the subscribe
-// response. Per spec §"Webhook Event Delivery" L390 + §"Webhook
-// Security" L472.
+// header value matches the server-derived id returned in the
+// subscribe response.
 //
 // Without this test, a regression in the deliver path could drop the
 // header silently — receivers on shared callback URLs would still
@@ -224,9 +227,10 @@ func TestDelivery_EmitsXMCPSubscriptionIDHeader(t *testing.T) {
 	}))
 	defer callback.Close()
 
-	// ζ-1: httptest binds to 127.0.0.1; tests that drive an actual
+	// httptest binds to 127.0.0.1; tests that drive an actual
 	// delivery need WithWebhookAllowPrivateNetworks(true) to bypass
-	// the dial-time SSRF guard.
+	// the dial-time SSRF guard (spec §"Webhook Security" → "SSRF
+	// prevention" L464).
 	webhooks := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true))
 	canonical := canonicalKey("test-principal", callback.URL, "fake.event", nil)
 	subID := deriveSubscriptionID(canonical)

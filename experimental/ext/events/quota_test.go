@@ -16,8 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TooManySubscriptions enforcement per spec L705 (η-6). Acceptance
-// per docs/EVENTS_ETA_PLAN.md:
+// TooManySubscriptions enforcement per spec §"Server SDK Guidance" →
+// "Subscription lifecycle hooks" L705. Acceptance:
 //   - Cap of N per-event-type per-principal: (N+1)th subscribe
 //     returns -32013.
 //   - Same cap applies to push and poll modes consistently.
