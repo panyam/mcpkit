@@ -12,12 +12,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// ζ-4 receiver-side dispatch — these tests stand up an httptest receiver
-// (the eventsclient.Receiver), point a server-side WebhookRegistry at
-// it, and trigger PostGap / PostTerminated. They verify the receiver's
-// top-level `type` discriminator routes the body to the right typed
-// callback (OnGap / OnTerminated) instead of falling through to the
-// Event[Data] channel.
+// Receiver-side control-envelope dispatch — these tests stand up an
+// httptest receiver (the eventsclient.Receiver), point a server-side
+// WebhookRegistry at it, and trigger PostGap / PostTerminated. They
+// verify the receiver's top-level `type` discriminator (spec
+// §"Non-event webhook bodies" L415-423) routes the body to the right
+// typed callback (OnGap / OnTerminated) instead of falling through
+// to the Event[Data] channel.
 //
 // The HTTP path / signature / headers are the same as event deliveries
 // (covered by other tests); these focus on the dispatch.

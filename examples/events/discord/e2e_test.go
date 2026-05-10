@@ -28,8 +28,9 @@ import (
 // The cursorless typing source is registered alongside discord.message so
 // cursor-shape tests can exercise both modes against the same server.
 func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.YieldingSource[DiscordEventData], func(DiscordEventData) error, *events.WebhookRegistry) {
-	// ζ-1: tests subscribe to httptest URLs (127.0.0.1:N); bypass the
-	// production-default SSRF dial guard.
+	// Tests subscribe to httptest URLs (127.0.0.1:N); bypass the
+	// production-default SSRF dial guard (spec §"Webhook Security"
+	// → "SSRF prevention" L464).
 	whOpts = append([]events.WebhookOption{events.WithWebhookAllowPrivateNetworks(true)}, whOpts...)
 	webhooks := events.NewWebhookRegistry(whOpts...)
 	source, yield := newDiscordSource()
@@ -45,7 +46,7 @@ func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.Yie
 		Sources:                  []events.EventSource{source, typingSource},
 		Webhooks:                 webhooks,
 		Server:                   srv,
-		UnsafeAnonymousPrincipal: "test-principal", // tests don't wire auth; γ-2 spec gate would reject otherwise
+		UnsafeAnonymousPrincipal: "test-principal", // tests don't wire auth; spec gate at §"Subscription Identity" L361 would reject otherwise
 	})
 
 	return srv, source, yield, webhooks
@@ -54,8 +55,9 @@ func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.Yie
 // buildTestStackWithTyping returns the same wired server but exposes the
 // cursorless typing yield function too. Used by the cursorless e2e tests.
 func buildTestStackWithTyping(whOpts ...events.WebhookOption) (*server.Server, func(DiscordEventData) error, func(DiscordTypingData) error, *events.WebhookRegistry) {
-	// ζ-1: tests subscribe to httptest URLs (127.0.0.1:N); bypass the
-	// production-default SSRF dial guard.
+	// Tests subscribe to httptest URLs (127.0.0.1:N); bypass the
+	// production-default SSRF dial guard (spec §"Webhook Security"
+	// → "SSRF prevention" L464).
 	whOpts = append([]events.WebhookOption{events.WithWebhookAllowPrivateNetworks(true)}, whOpts...)
 	webhooks := events.NewWebhookRegistry(whOpts...)
 	source, yield := newDiscordSource()
@@ -107,7 +109,8 @@ func TestE2EPollDelivery(t *testing.T) {
 	require.NoError(t, yield(newDiscordEvent("guild-1", "channel-1", "alice", "hello", time.Now())))
 	require.NoError(t, yield(newDiscordEvent("guild-1", "channel-1", "bob", "world", time.Now())))
 
-	// δ-1: flat events/poll request shape per spec L139-149.
+	// Flat events/poll request shape per spec §"Poll-Based Delivery"
+	// → "Request: events/poll" L139-149.
 	result, err := c.Call("events/poll", map[string]any{
 		"name":   "discord.message",
 		"cursor": "0",
@@ -135,9 +138,9 @@ func TestE2EPollDelivery(t *testing.T) {
 //   - Verify OnEvent callback fires with the spec EventOccurrence shape
 //   - Stop() the stream and confirm clean shutdown via Done()
 //
-// This is the E2E coverage for the new push delivery model. The legacy
-// broadcast path is still exercised by TestE2EPushDelivery below; both
-// stay until ε-6's deprecation lands in η.
+// This is the E2E coverage for the per-stream push delivery model.
+// The legacy broadcast path is still exercised by TestE2EPushDelivery
+// below; both stay while the legacy path is in transition.
 func TestE2EStreamDelivery(t *testing.T) {
 	srv, _, yield, _ := buildTestStack()
 	c, _ := connectClient(t, srv)
@@ -174,11 +177,13 @@ func TestE2EStreamDelivery(t *testing.T) {
 	}
 }
 
-// TestE2EHealthSignalsEndToEnd is the end-to-end ζ-7 verification:
-// source-side YieldError / YieldTerminated bubble through to BOTH
-// stream subscribers (notifications/events/error and /terminated)
-// AND webhook subscribers (auto-PostTerminated control envelope on
-// the suspend / source-terminate path).
+// TestE2EHealthSignalsEndToEnd is the end-to-end source-health
+// verification: source-side YieldError / YieldTerminated bubble
+// through to BOTH stream subscribers (notifications/events/error
+// and /terminated per spec §"Push-Based Delivery" L255+L261 and
+// §"Authorization" L783-795) AND webhook subscribers
+// (auto-PostTerminated control envelope on the suspend /
+// source-terminate path).
 //
 // The walkthrough Step 5.5 only exercises the transient path because
 // YieldTerminated is one-shot — it would break subsequent walkthrough
@@ -234,12 +239,11 @@ func TestE2EHealthSignalsEndToEnd(t *testing.T) {
 	// Step 2: terminate → stream OnTerminated fires + Stream's
 	// internal goroutine returns (Done unblocks). Webhook subscriber
 	// is unaffected by source termination directly — it gets a
-	// type:terminated envelope only when ζ-6's suspend state machine
-	// flips Active=false (separate path covered by ζ-7.3 unit tests).
-	// This test exercises the source-side terminate flow on the
-	// stream side; webhook auto-PostTerminated is verified by
-	// TestSuspend_AutoPostsTerminatedEnvelopeOnSuspension in the
-	// events module.
+	// type:terminated envelope only when the suspend state machine
+	// flips Active=false (spec §"Webhook Delivery Status" L460;
+	// covered by TestSuspend_AutoPostsTerminatedEnvelopeOnSuspension
+	// in the events module). This test exercises the source-side
+	// terminate flow on the stream side.
 	require.NoError(t, source.YieldTerminated(events.EventDeliveryError{
 		Code: -32012, Message: "demo terminated",
 	}))
@@ -715,10 +719,12 @@ func TestE2EPollMultiSubRejected(t *testing.T) {
 	srv, _, _, _ := buildTestStack()
 	c, _ := connectClient(t, srv)
 
-	// δ-1: the {subscriptions: [...]} wrapper itself is rejected with a
-	// helpful error — multi-sub vs single-sub no longer matters since the
-	// spec's flat shape doesn't have an array at all. The
-	// TestPoll_RejectsLegacyWrapper test in wire_shape_test.go covers the
+	// The legacy {subscriptions: [...]} wrapper itself is rejected
+	// with a helpful error — multi-sub vs single-sub no longer
+	// matters since the spec's flat shape (§"Poll-Based Delivery" →
+	// "Request: events/poll" L139-149) doesn't have an array at all.
+	// The TestPoll_RejectsLegacyWrapper test in wire_shape_test.go
+	// covers the
 	// wrapper-level rejection at the handler level; this demo test now just
 	// confirms the user-facing error message points at the spec.
 	_, err := c.Call("events/poll", map[string]any{

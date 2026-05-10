@@ -49,7 +49,7 @@ func streamStack(t *testing.T, heartbeat time.Duration) (*client.Client, func(fa
 // TestStream_DeliversEventsViaCallback verifies the typed callback path:
 // open a Stream, yield events server-side, OnEvent fires per event with
 // the spec-shape EventOccurrence in the wire payload. This is the
-// happy-path that the discord/telegram demos will rely on after ε-6.
+// happy-path that the discord/telegram demos rely on.
 //
 // Failing this means the SDK's per-call notify hook plumbing is broken
 // or the Stream goroutine isn't dispatching to OnEvent.

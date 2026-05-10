@@ -25,9 +25,10 @@ type Receiver[Data any] struct {
 	closed   bool
 	rejected uint64
 
-	// ζ-4 control envelope callbacks. Both are optional. The discriminator
-	// is the top-level `type` field per spec §"Non-event webhook bodies"
-	// L415: "gap" carries a fresh cursor; "terminated" carries an error.
+	// Control envelope callbacks per spec §"Non-event webhook bodies"
+	// L415-423. Both are optional. The discriminator is the top-level
+	// `type` field: "gap" carries a fresh cursor; "terminated"
+	// carries an error.
 	onGap        func(cursor string)
 	onTerminated func(err ControlError)
 }
@@ -125,7 +126,7 @@ func (r *Receiver[Data]) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// ζ-4: top-level `type` field discriminates control envelopes from
+	// Top-level `type` field discriminates control envelopes from
 	// event deliveries (spec §"Non-event webhook bodies" L415-423).
 	// Probe with a minimal struct before unmarshaling as Event so we
 	// don't double-decode the common case (no `type` → event).

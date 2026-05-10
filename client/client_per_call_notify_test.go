@@ -19,12 +19,12 @@ import (
 // per-call notification hook on the typed CallContext (CallContext.WithNotifyHook)
 // receives notifications arriving on the call's POST SSE response stream.
 //
-// Foundation for events/stream's Stream() helper (ε-4): without per-call
+// Foundation for the events/stream client helper: without per-call
 // routing, notifications/events/* would only reach the session-global
-// callback, forcing every consumer to demux globally. With this hook, each
-// long-lived call (events/stream today, future tasks/progress streams,
-// sampling/elicitation flows) gets a private notification channel scoped
-// to its own response stream.
+// callback, forcing every consumer to demux globally. With this hook,
+// each long-lived call (events/stream today, future tasks/progress
+// streams, sampling/elicitation flows) gets a private notification
+// channel scoped to its own response stream.
 //
 // Setup: a tool that emits a custom notification mid-execution then returns.
 // Both the global callback and the per-call hook should fire — the hook is

@@ -30,8 +30,9 @@ type fakePayload struct {
 func stack(t *testing.T, whOpts ...events.WebhookOption) (*client.Client, func(fakePayload) error, *events.WebhookRegistry) {
 	t.Helper()
 
-	// ζ-1: SDK tests subscribe to httptest URLs (127.0.0.1:N). Prepend
-	// the loopback escape so the dial-time SSRF guard doesn't block
+	// SDK tests subscribe to httptest URLs (127.0.0.1:N). Prepend
+	// the loopback escape so the dial-time SSRF guard (spec
+	// §"Webhook Security" → "SSRF prevention" L464) doesn't block
 	// the test deliveries. Per-test whOpts can still override.
 	whOpts = append([]events.WebhookOption{events.WithWebhookAllowPrivateNetworks(true)}, whOpts...)
 	webhooks := events.NewWebhookRegistry(whOpts...)
@@ -49,7 +50,7 @@ func stack(t *testing.T, whOpts ...events.WebhookOption) (*client.Client, func(f
 		Sources:                  []events.EventSource{src},
 		Webhooks:                 webhooks,
 		Server:                   srv,
-		UnsafeAnonymousPrincipal: "test-principal", // SDK tests don't wire auth; γ-2 spec gate would reject otherwise
+		UnsafeAnonymousPrincipal: "test-principal", // SDK tests don't wire auth; spec gate at §"Subscription Identity" L361 would reject otherwise
 	})
 
 	handler := srv.Handler(server.WithStreamableHTTP(true))
