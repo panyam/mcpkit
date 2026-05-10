@@ -17,7 +17,7 @@ How a server tells a client "this domain thing happened" — events as a first-c
 
 ## Context
 
-[Extension mechanisms](./extension-mechanisms.md) classified events at one row of its case-study table: "experimental, target-shape, `experimental.events` capability." This page opens that row up. The interesting questions are: how does events use the four extension knobs (Q1)? what does a client *do* with events — three delivery modes, pick by use case (Q2)? what stays stable across modes — subscription identity, source abstraction (Q3-Q4)? what does push delivery look like on the wire (Q5)? when an event is yielded, *who* gets it (Q6)? what does webhook delivery look like (Q7)? and how do upstream failures bubble out as first-class signals (Q8)?
+[Extension mechanisms](./extension-mechanisms.md) classified events at one row of its case-study table: "experimental, target-shape, `experimental.events` capability." This page opens that row up. The interesting questions are: how does events use the four extension knobs (Q1)? what does a client *do* with events — three delivery modes, pick by use case (Q2)? what stays stable across modes — subscription identity, source abstraction (Q3-Q4)? what does push delivery look like on the wire (Q5)? when an event is yielded, *who* gets it (Q6)? what does webhook delivery look like (Q7)? how do upstream failures bubble out as first-class signals (Q8)? and once subscriptions exist, how does an author shape per-subscription delivery — filter, transform, lifecycle hooks, quotas (Q9)?
 
 We are NOT re-explaining what `experimental.<name>` means, how the SEP process works, or why extensions get their own `go.mod`. That all lives in extension-mechanisms.md. This page assumes you know the vocabulary; it shows the worked example.
 
@@ -58,7 +58,7 @@ All three modes are method-namespace extensions per Q1; what differs is the conv
 
 | Mode | Method | Who initiates | Wire shape | Reachability needed | Latency | Statefulness |
 |------|--------|---------------|------------|---------------------|---------|--------------|
-| **Poll** | `events/poll` | Client (each call) | One-shot JSON-RPC request; response carries `events[]`, fresh `cursor`, `nextPollSeconds` hint | None beyond MCP transport | Bounded by poll interval | Client persists `cursor`; server is idempotent on re-poll |
+| **Poll** | `events/poll` | Client (each call) | One-shot JSON-RPC request; response carries `events[]`, fresh `cursor`, `nextPollSeconds` hint | None beyond MCP transport | Bounded by poll interval | Client persists `cursor`; server is idempotent on re-poll. Server also holds an ephemeral *poll lease* keyed on `(principal, name, params)` so lifecycle hooks can fire consistently with push + webhook — see [Q9](#q9--how-does-an-author-shape-per-subscription-delivery). |
 | **Push** | `events/stream` | Client (one long-lived call) | Long-lived JSON-RPC request returning SSE; events arrive as `notifications/events/event` frames; final empty `StreamEventsResult` on close | Client must hold the request open (HTTP) or the pipe (stdio) | Server-push; bounded by handler latency | Server holds per-call state for the open stream |
 | **Webhook** | `events/subscribe` | Client (subscribe), Server (delivery) | Subscribe is one-shot JSON-RPC with TTL; deliveries are HMAC-signed POSTs from server to a callback URL | **Server must be able to dial the client's callback URL** | Server-push; bounded by webhook handler retries | Server holds subscription registry; client refreshes by-tuple before TTL expiry |
 
@@ -91,11 +91,12 @@ id = "sub_" + base64(SHA256(canonical)[:16])     // experimental/ext/events/iden
 …and surfaces it on every delivery POST as `X-MCP-Subscription-Id`. The id is **non-load-bearing for security** — knowing another tenant's id grants no operations, because every call resolves on the canonical tuple, not on the id.
 
 > [!IMPORTANT]
-> **Three rules fall out of the tuple immediately.** Each is enforced in `experimental/ext/events/events.go`:
+> **Four rules fall out of the tuple immediately.** Each is enforced in `experimental/ext/events/events.go`:
 >
 > 1. **No client-supplied id.** A subscribe request that includes an `id` field is rejected with `-32602 InvalidParams`. The id is server-derived; accepting one would let clients alias subscriptions and break tenant isolation. (`registerSubscribe`, the `req.ID != ""` guard.)
 > 2. **Authentication required on subscribe and unsubscribe.** Without `claims.Subject` the principal is undefined and the canonical tuple is uncomputable; the handler returns `-32012 Unauthorized`. The `UnsafeAnonymousPrincipal` config field is a deliberate spec deviation for demos — gated by an `Unsafe` prefix and a startup warning. (`resolvePrincipal`.)
 > 3. **Secret is client-supplied and required.** `delivery.secret` must be `whsec_<base64 of 24-64 random bytes>` per Standard Webhooks. Server-generated secrets would let anyone subscribe with `url=<victim>` and have the server happily POST signed events to the victim — HMAC would prove "the MCP server sent this," not "the URL owner asked for it." Client-supplied flips that. (`validateClientSecret`.)
+> 4. **`TooManySubscriptions` enforced before `OnSubscribe` fires.** When a `Quota` is configured (`events.NewQuota(events.WithMaxSubscriptionsPerPrincipal(name, n))`) and a principal hits cap on a given event type, the next subscribe is rejected with `-32013 TooManySubscriptions` *before* the author's `OnSubscribe` hook runs — so a rejected subscription never provisions upstream resources. Same enforcement on push (`events/stream`) and poll (`events/poll`). See [Q9](#q9--how-does-an-author-shape-per-subscription-delivery). (`registerSubscribe`'s `quota.Reserve` call.)
 
 ### Worked example: refresh vs. distinct subscription
 
@@ -142,6 +143,7 @@ A **source** is the thing that produces events. Two abstractions in `experimenta
 | **Construction** | `events.NewYieldingSource[Data](def)` returns `(*source, yield func(Data) error)` | `events.TypedSource[Data](def, poll, latest)` |
 | **How events get in** | Call `yield(data)` from wherever you produce events (bot callback, channel reader, HTTP handler) | Server calls your `Poll(cursor, limit)` / `Latest()` callbacks |
 | **Push fanout** | Library — `yield()` automatically fans out to push subscribers + webhook targets via the `SetEmitHook` wiring in `events.Register` | You — call `events.Emit(srv, e)` and `events.EmitToWebhooks(wh, e)` from your write path |
+| **Per-subscription hooks** | `Match` / `Transform` fire automatically per subscriber on every `yield()` fanout; `OnSubscribe` / `OnUnsubscribe` fire from the SDK lifecycle wiring across all three modes (see [Q9](#q9--how-does-an-author-shape-per-subscription-delivery)) | None on the SDK side — apply filtering inside your `Poll` callback yourself, where you have direct access to your storage and per-event control. Hooks are deliberately not plumbed on `TypedSource` (would duplicate logic the author is better positioned to write). |
 | **Cursorless option** | `events.WithoutCursors()` — events emit with `cursor: null`, no buffer, poll always empty | Return `""` from `Latest()` and the wire layer handles the rest |
 | **Code** | `yield.go` | `events.go` `TypedSource` + `typedSource` struct |
 
@@ -312,12 +314,11 @@ A request that fails any check never reaches yield-time fan-out.
 4. **Mark `Truncated`** if a push subscriber's channel is full (Q5 back-pressure signal).
 
 > [!IMPORTANT]
-> **mcpkit's default fan-out is broadcast, not filtered.** If two clients subscribe to `chat.message` with `room_id: "abc"` and `room_id: "xyz"` respectively, *both* receive every yield by default — `params` makes them distinct subscriptions but doesn't restrict delivery. To get per-subscriber filtering you have two clean options:
+> **mcpkit's default fan-out is broadcast within source name, but per-subscriber filtering is opt-in.** If two clients subscribe to `chat.message` with `room_id: "abc"` and `room_id: "xyz"` respectively, *both* receive every yield by default — `params` makes them distinct subscriptions but doesn't restrict delivery automatically. Three clean ways to filter:
 >
-> 1. **Many narrow sources** — register `chat.message.abc` and `chat.message.xyz` as separate sources. Source-name match does the routing. Simplest when the topic space is finite.
-> 2. **Manual filtering at the source** — use `TypedSource` (caller-owned storage) and call `events.Emit(srv, e)` / `events.EmitToWebhooks(wh, e)` selectively per event. The author owns the routing logic.
->
-> A third option ("filter inside `YieldingSource` based on subscriber params") is **not** a built-in API in mcpkit today; if you need it, build it on top of `TypedSource` or use multiple sources.
+> 1. **Set `EventDef.Match`** — a per-subscriber filter that fires on every emit. The hook receives the subscriber's `params` plus the event; return `false` to skip this subscriber. See [Q9](#q9--how-does-an-author-shape-per-subscription-delivery). Cleanest for "deliver only when `params.severity` matches `event.data.severity`" style filters.
+> 2. **Many narrow sources** — register `chat.message.abc` and `chat.message.xyz` as separate sources. Source-name match does the routing. Simplest when the topic space is finite.
+> 3. **Manual filtering at the source** — use `TypedSource` (caller-owned storage) and call `events.Emit(srv, e)` / `events.EmitToWebhooks(wh, e)` selectively per event. The author owns the routing logic. Right tool when filtering depends on source-side state rather than per-subscriber params.
 
 ### Layer 3 — Per-target liveness (delivery time)
 
@@ -451,6 +452,131 @@ Run a `make webhook` receiver alongside and you'll see the control envelope POST
 > [!NOTE]
 > **The drop policy on the Error variant is intentional.** Like event drops, error fanout is non-blocking — a slow consumer that backs up doesn't block the source. Unlike event drops, errors don't carry recovery semantics, so missing one is acceptable; future events still get the `Truncated` flag if any actual events were dropped. See `fanoutLocked` commentary.
 
+## Q9 — How does an author shape per-subscription delivery?
+
+[Q6](#q6--subscription-routing-when-yield-fires-who-gets-the-event) said the default fan-out is broadcast within source name. mcpkit also exposes per-subscription **author hooks** on `EventDef` so you can filter / shape / lifecycle each subscription without dropping to `TypedSource`. Per spec [§"Server SDK Guidance"][spec-server-sdk-guidance].
+
+Four hooks, all nil-friendly (nil = baseline behavior; configure only what you need):
+
+| Field | Signature | Fires when | Default if nil |
+|---|---|---|---|
+| `Match` | `func(HookContext, Event, params) bool` | per subscriber on every emit | deliver to all matching-name subscribers |
+| `Transform` | `func(HookContext, Event, params) (Event, bool)` | per subscriber on every emit, after `Match` passes | reuse the original event; second return is `false` (passthrough) |
+| `OnSubscribe` | `func(HookContext, params) error` | once when a subscription becomes live | no-op |
+| `OnUnsubscribe` | `func(HookContext, params)` | once when a subscription is actually torn down | no-op |
+
+`HookContext` carries the per-invocation context:
+
+| Method | What |
+|---|---|
+| `Context()` | underlying `context.Context` for cancellation / deadlines from blocking I/O inside the hook |
+| `Principal()` | the resolved subscription principal (post-`UnsafeAnonymousPrincipal` fallback) |
+| `SubscriptionID()` | server-derived `sub_<base64>` for webhook + push (non-empty); empty for poll (the lease tuple is the routing identity, not an id) |
+| `Mode()` | `DeliveryModePoll` / `DeliveryModePush` / `DeliveryModeWebhook` so authors can branch on delivery mode if needed |
+
+### When each hook fires per delivery mode
+
+| Mode | `OnSubscribe` fires when | `OnUnsubscribe` fires when |
+|------|-------------------------|---------------------------|
+| **Webhook** | First `Register` call for a (principal, url, name, params) tuple. NOT on refresh — refresh is renewal of the same subscription. | Explicit `Unregister`, TTL prune, or server-initiated `PostTerminated`. NOT on suspend (Active=true→false from delivery failures) — see callout below. |
+| **Push** | Stream open, after `sub.Subscribe(ctx)` succeeds. | Stream close — every return path (ctx.Done, evCh closed, terminated frame, panic). |
+| **Poll** | First poll for a `(principal-or-anon, name, paramsHash)` lease tuple. The poll-lease table tracks soft state for lifecycle parity with webhook + push (5 minute default TTL). | Lease expiry — the background sweeper drives this when no poll renews the lease within the TTL window. |
+
+> [!IMPORTANT]
+> **Suspend ≠ unsubscribe.** When a webhook target's delivery loop accumulates N consecutive failures (Q7), the registry flips `Status.Active = false` but keeps the target in place — `OnUnsubscribe` does NOT fire. The subscription is paused, not removed; a successful subscribe-refresh ([Q3](#q3--what-identifies-a-subscription)) reactivates it without re-firing `OnSubscribe`. This is intentional: receivers with intermittent connectivity shouldn't churn upstream resources every time their callback flaps. The `OnUnsubscribe` hook fires only on actual registry deletion (explicit Unregister, TTL prune, server-initiated `PostTerminated`).
+
+### Worked example — author-side wiring
+
+```go
+type AlertParams struct {
+    Severity   string `json:"severity"`
+    RedactPII  bool   `json:"redact_pii"`
+}
+
+def := events.EventDef{
+    Name:        "alert.fired",
+    Description: "Fires when a new alert is triggered",
+    Delivery:    []string{"push", "poll", "webhook"},
+    // Filter: deliver only when subscriber's params.severity matches the event's severity
+    // (or when params.severity is unset — default broadcast).
+    Match: func(_ events.HookContext, e events.Event, params map[string]any) bool {
+        want, _ := params["severity"].(string)
+        if want == "" {
+            return true
+        }
+        var p AlertData
+        _ = json.Unmarshal(e.Data, &p)
+        return p.Severity == want
+    },
+    // Transform: redact reporter when the subscriber asked for PII redaction.
+    // Return (event, true) to signal "I modified it; re-marshal"; (event, false)
+    // is the passthrough path that skips per-subscriber re-marshal cost.
+    Transform: func(_ events.HookContext, e events.Event, params map[string]any) (events.Event, bool) {
+        if v, _ := params["redact_pii"].(bool); !v {
+            return e, false
+        }
+        var p AlertData
+        _ = json.Unmarshal(e.Data, &p)
+        p.Reporter = ""
+        raw, _ := json.Marshal(p)
+        e.Data = raw
+        return e, true
+    },
+    // Lifecycle: provision an upstream listener per subscription.
+    OnSubscribe: func(hc events.HookContext, params map[string]any) error {
+        return upstream.JoinChannel(hc.Principal(), params["channel_id"].(string))
+    },
+    OnUnsubscribe: func(hc events.HookContext, params map[string]any) {
+        upstream.LeaveChannel(hc.Principal(), params["channel_id"].(string))
+    },
+}
+src, yield := events.NewYieldingSource[AlertData](def)
+```
+
+### Targeted emit — when the author already knows the recipient
+
+Sometimes `OnSubscribe` provisions a per-subscription upstream listener (joined a Slack channel, opened a database cursor) and the upstream events arrive tagged with the originating subscription. In that case the broadcast-and-Match-filter dance is wasted work — the author already knows which subscription the event is for. Use `EmitToSubscription`:
+
+```go
+// Inside the per-subscription upstream handler that OnSubscribe wired up.
+func onSlackMessage(msg slack.Message, subID string) {
+    e := events.MakeEvent(...)
+    events.EmitToSubscription(idx, e, subID)  // routes to exactly this subscription
+}
+```
+
+`EmitToSubscription` skips both `Match` and `Transform` (per spec — the author has already shaped the event for this specific subscription). Bypasses fan-out; routes via the SDK's `SubscriptionIndex` (populated automatically by the lifecycle wiring). Unknown sub id is a no-op drop with a debug log — racing `EmitToSubscription` against teardown is normal, not an error. Push gets a fresh random sub id per stream open (concurrent streams from the same principal are distinct subscriptions); webhook reuses the spec's derived id (refresh keeps the same id, so the index entry stays put).
+
+### Hot-path discipline
+
+`Match` and `Transform` fire **per subscriber, per emit**. They're on the source's hot path. Three rules:
+
+1. **Sync.** Hook signatures are sync `func(...)` rather than goroutine-spawning. Authors who need I/O inside `Match` should pre-compute or cache; the `HookContext.Context()` is available for cancellation.
+2. **Panic-recovering.** Each hook invocation is wrapped in defer/recover. A panicking `Match` is treated as `false` (skip the subscriber); a panicking `Transform` is treated as passthrough (use the original event); panicking `OnSubscribe` / `OnUnsubscribe` log + swallow. A buggy hook can't take down the fanout.
+3. **Snapshot-and-drop-lock.** mcpkit snapshots the subscriber list under the source's mutex, drops the lock, then iterates and invokes hooks per slot. Otherwise a slow author callback would serialize the whole source.
+
+### Quota — `TooManySubscriptions`
+
+Authors can cap how many subscriptions a single principal can have to a given event type. Configure via:
+
+```go
+quota := events.NewQuota(
+    events.WithMaxSubscriptionsPerPrincipal("alert.fired", 10),
+)
+events.Register(events.Config{
+    Sources:  ...,
+    Webhooks: ...,
+    Server:   srv,
+    Quota:    quota,
+})
+```
+
+The N+1th subscribe (in any mode) returns `-32013 TooManySubscriptions` *before* `OnSubscribe` runs, so a rejected subscription never provisions upstream resources. Caps are per-event-type per-principal; cross-event-type and cross-principal counts are isolated. Enforcement is mode-uniform — webhook subscribe, push stream open, and poll first-touch all go through the same `quota.Reserve` call. Backed by `golang.org/x/sync/semaphore.Weighted`; release pairs 1:1 with the lifecycle (`Unregister` / TTL prune / `PostTerminated` / stream close / lease expiry).
+
+### `TypedSource` doesn't get hook plumbing
+
+Hooks are wired only on the `YieldingSource` path. `TypedSource` authors own their `Poll(cursor, limit)` callback; per-subscription filtering belongs *inside* that callback, where the author has direct access to the source's storage and can decide per-event whether to return it. Adding hook plumbing to `TypedSource` would duplicate logic the author is better positioned to write themselves. Use `YieldingSource` if you want the hooks; use `TypedSource` if you want the simpler "I own everything" story.
+
 ## End-state (what downstream pages can assume)
 
 After reading this page, downstream pages can assume:
@@ -465,6 +591,7 @@ After reading this page, downstream pages can assume:
 - **Webhook delivery** is HMAC-signed Standard Webhooks with a hardened delivery loop: dial-time SSRF guard (TOCTOU-safe under DNS rebinding), no redirects, 256 KiB body cap (REJECT not TRUNCATE), 413 non-retryable, exponential backoff on 5xx, suspend after N failures in a sliding window, auto-PostTerminated on the suspend transition.
 - **`deliveryStatus`** rides subscribe-refresh responses with a categorical `lastError` (closed set; spec forbids raw receiver content). Refresh of a suspended subscription reactivates it.
 - **Source health signals are first-class:** `YieldError` (transient — stream stays) and `YieldTerminated` (terminal one-shot — stream closes, control envelopes posted to webhooks).
+- **Per-subscription filtering and lifecycle are first-class.** `Match` / `Transform` filter and shape per subscriber on every emit; `OnSubscribe` / `OnUnsubscribe` fire on per-subscription lifecycle (with suspend-≠-unsubscribe semantics). All four are nil-friendly fields on `EventDef`. `EmitToSubscription` is the targeted-delivery shortcut when the author already knows the recipient. Per-event-type subscription caps via `events.NewQuota`. The poll path holds an ephemeral lease so lifecycle hooks fire consistently with push and webhook.
 
 ## Next to read
 
@@ -494,3 +621,4 @@ After reading this page, downstream pages can assume:
 [spec-webhook-delivery-status]:  https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#webhook-delivery-status
 [spec-non-event-webhook-bodies]: https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#non-event-webhook-bodies
 [spec-webhook-security]:         https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#webhook-security
+[spec-server-sdk-guidance]:      https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#server-sdk-guidance
