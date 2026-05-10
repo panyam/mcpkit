@@ -104,8 +104,10 @@ func Subscribe(parent context.Context, sess *client.Client, opts SubscribeOption
 }
 
 // ID returns the subscription id the SDK supplied (echoed by the
-// server). γ replaces id-keyed subscription identity with the
-// (principal, name, params, url) tuple per spec.
+// server). The spec replaces id-keyed subscription identity with the
+// (principal, name, params, url) tuple per §"Subscription Identity"
+// → "Key composition" L363; this id is the server-derived routing
+// handle, not the canonical key.
 func (s *Subscription) ID() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

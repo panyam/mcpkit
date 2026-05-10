@@ -48,7 +48,7 @@ func serve() {
 	token := flag.String("token", "", "Discord bot token (omit for test mode)")
 	whTTL := flag.Duration("webhook-ttl", 0, "override webhook subscription TTL (default 60s; useful for driving the SDK refresh path in tests)")
 	whHeaderMode := flag.String("webhook-header-mode", "standard", "webhook header style: standard | mcp")
-	whSuspendThreshold := flag.Int("webhook-suspend-threshold", 0, "override consecutive-failures count that flips a webhook target to Active=false (default 5; lower to 1 for demoing the ζ-6 suspend transition without waiting 5×retry-cycles)")
+	whSuspendThreshold := flag.Int("webhook-suspend-threshold", 0, "override consecutive-failures count that flips a webhook target to Active=false (default 5; lower to 1 for demoing the suspend transition without waiting 5×retry-cycles)")
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.BoolFlag("--serve"),
 		demokit.ValueFlag("--url"),
@@ -66,11 +66,11 @@ func serve() {
 
 	whOpts := []events.WebhookOption{
 		events.WithWebhookHeaderMode(headerMode),
-		// ζ-1 demo escape: the demo's webhook step subscribes to local
+		// Demo escape: the demo's webhook step subscribes to local
 		// httptest receivers (127.0.0.1:N), which the production-default
 		// dial-time SSRF guard would block. Production deployments leave
 		// this OFF so loopback/private-IP webhook URLs are rejected at
-		// dial per spec §"Webhook Security" L464.
+		// dial per spec §"Webhook Security" → "SSRF prevention" L464.
 		events.WithWebhookAllowPrivateNetworks(true),
 	}
 	if *whTTL > 0 {
@@ -136,7 +136,7 @@ func serve() {
 		log.Println("[discord] no token provided — running in test mode")
 	}
 
-	// γ-5: auto-detect auth posture.
+	// Auto-detect auth posture.
 	//
 	// If OAUTH_ISSUER is set, wire real OIDC auth via server.WithAuth(...)
 	// and follow the spec strictly — anonymous webhook subscribes are
@@ -179,10 +179,11 @@ func serve() {
 			eventName = "discord.message"
 		}
 
-		// ζ-7.4: source-side health-signal injection. Demo's stand-in
-		// for a real source bubbling upstream errors. Triggers
-		// notifications/events/error or /terminated on push subscribers,
-		// per spec §"Push-Based Delivery" → "Event Delivery" L255-271.
+		// Source-side health-signal injection. Demo's stand-in for a
+		// real source bubbling upstream errors. Triggers
+		// notifications/events/error or /terminated on push
+		// subscribers per spec §"Push-Based Delivery" → "Event
+		// Delivery" L255-271.
 		// `?action=error` is transient (stream stays); `?action=terminate`
 		// is one-shot terminal (stream closes; webhook subscribers get a
 		// type:terminated control envelope).

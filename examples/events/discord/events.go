@@ -9,10 +9,11 @@ import (
 // typed payloads back via source.Recent / source.ByCursor — single source of
 // truth, no duplication, no resource-side unmarshaling.
 //
-// δ-4: the source attaches per-event `_meta` derived from the payload
-// (spec follow-on commit d4faef9 2026-05-01). channel_type and mention_count
-// are app-defined classifications that don't fit `data` — exactly what
-// `_meta` is for. Receivers see them under the spec-canonical `_meta` key.
+// The source attaches per-event `_meta` derived from the payload
+// (spec follow-on commit d4faef9 2026-05-01). channel_type and
+// mention_count are app-defined classifications that don't fit
+// `data` — exactly what `_meta` is for. Receivers see them under the
+// spec-canonical `_meta` key.
 func newDiscordSource() (*events.YieldingSource[DiscordEventData], func(DiscordEventData) error) {
 	src, yield := events.NewYieldingSource[DiscordEventData](events.EventDef{
 		Name:        "discord.message",

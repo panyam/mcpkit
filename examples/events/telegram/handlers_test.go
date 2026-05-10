@@ -82,7 +82,8 @@ func TestEventsPollCursorPagination(t *testing.T) {
 	source, _ := preloadedSource(10)
 	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true)))
 
-	// δ-1: flat events/poll request shape per spec L139-149.
+	// Flat events/poll request shape per spec §"Poll-Based Delivery"
+	// → "Request: events/poll" L139-149.
 	result, err := c.Call("events/poll", map[string]any{
 		"name":      "telegram.message",
 		"cursor":    "0",
@@ -208,11 +209,12 @@ func TestWebhookHMACSignature_MCPHeaders(t *testing.T) {
 
 	webhooks := events.NewWebhookRegistry(
 		events.WithWebhookHeaderMode(events.MCPHeaders),
-		events.WithWebhookAllowPrivateNetworks(true), // ζ-1: httptest is loopback
+		events.WithWebhookAllowPrivateNetworks(true), // httptest is loopback; bypass SSRF dial guard
 	)
-	// Direct registry poke (skip the JSON-RPC subscribe handler) — γ-2
-	// rekeyed Register on canonical-tuple bytes. Use a stub key for the
-	// HMAC delivery test; the canonical-key contents don't matter here.
+	// Direct registry poke (skip the JSON-RPC subscribe handler).
+	// Register is keyed on canonical-tuple bytes (spec §"Subscription
+	// Identity" → "Key composition" L363); the contents don't matter
+	// for this HMAC delivery test, so we use a stub key.
 	webhooks.Register(events.RegisterParams{CanonicalKey: []byte("hmac-test"), DerivedID: "sub_hmac_test", URL: srv.URL, Secret: secret, MaxAgeSeconds: 0})
 
 	event := events.MakeEvent("telegram.message", "evt_1", "1", time.Now(),
@@ -285,7 +287,7 @@ func TestSubscribeReturnsRefreshBefore(t *testing.T) {
 		RefreshBefore string `json:"refreshBefore"`
 	}
 	require.NoError(t, json.Unmarshal(result.Raw, &resp))
-	// γ-2: server-derived id replaces client-supplied id per spec
+	// Server-derived id replaces client-supplied id per spec
 	// §"Subscription Identity" → "Derived id" L367.
 	assert.True(t, strings.HasPrefix(resp.ID, "sub_"), "id must be server-derived sub_<base64>; got %q", resp.ID)
 	assert.NotEmpty(t, resp.RefreshBefore)
@@ -295,12 +297,14 @@ func TestSubscribeReturnsRefreshBefore(t *testing.T) {
 	assert.True(t, rb.After(time.Now()))
 }
 
-// TestWebhookKeyedByCanonicalTuple verifies γ-2 registry keying: two
-// distinct canonical keys (different principals subscribing to the same
-// URL) coexist as distinct entries; Unregister by canonical key removes
-// only the matching entry. This is the spec's cross-tenant isolation
-// property (§"Subscription Identity" → "Cross-tenant isolation" L378)
-// at the registry level.
+// TestWebhookKeyedByCanonicalTuple verifies the registry's
+// canonical-tuple keying (spec §"Subscription Identity" → "Key
+// composition" L363): two distinct canonical keys (different
+// principals subscribing to the same URL) coexist as distinct
+// entries; Unregister by canonical key removes only the matching
+// entry. This is the spec's cross-tenant isolation property
+// (§"Subscription Identity" → "Cross-tenant isolation" L378) at
+// the registry level.
 func TestWebhookKeyedByCanonicalTuple(t *testing.T) {
 	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true))
 	keyA := []byte("alice\x1fhttp://example.com/hook\x1ftelegram.message\x1f{}")
