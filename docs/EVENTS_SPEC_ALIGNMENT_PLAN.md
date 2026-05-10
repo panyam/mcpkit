@@ -354,7 +354,7 @@ The TS reference's heartbeat doesn't carry a cursor today; the spec now requires
 
 ### η — SDK hooks
 
-**Status:** planned. Detailed plan: [`docs/EVENTS_ETA_PLAN.md`](./EVENTS_ETA_PLAN.md) (drafted 2026-05-05). Six sub-PRs (η-1 poll-lease, η-2 hook surface, η-3 lifecycle wiring, η-4 match/transform, η-5 targeted emit, η-6 TooManySubscriptions enforcement). Total ~600-900 LOC including tests.
+**Status:** shipped 2026-05-09 via #399 (η-1 + η-2), #400 (η-3), #401 (η-4), #402 (η-5), #403 (η-6). Followed by #404 + #405 — the post-η Greek-to-SEP code-comment sweep that replaced mcpkit-internal phase labels with spec citations across the events package + clients/go + examples (231 refs → 0; planning docs untouched). Detailed plan: [`docs/EVENTS_ETA_PLAN.md`](./EVENTS_ETA_PLAN.md) (drafted 2026-05-05). Tutorial follow-ups in `tutorials/walkthrough/events.md` are tracked in that plan's "Tutorial follow-up" table — direct-to-main per the project convention, not yet done.
 
 **Goal:** add the per-subscription `match`/`transform` hooks, `on_subscribe`/`on_unsubscribe` lifecycle hooks, and poll-lease tracking.
 
