@@ -29,8 +29,9 @@ import (
 // The cursorless typing source is registered alongside telegram.message so
 // cursor-shape tests can exercise both modes against the same server.
 func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.YieldingSource[TelegramEventData], func(TelegramEventData) error, *events.WebhookRegistry) {
-	// ζ-1: tests subscribe to httptest URLs (127.0.0.1:N); bypass the
-	// production-default SSRF dial guard.
+	// Tests subscribe to httptest URLs (127.0.0.1:N); bypass the
+	// production-default SSRF dial guard (spec §"Webhook Security"
+	// → "SSRF prevention" L464).
 	whOpts = append([]events.WebhookOption{events.WithWebhookAllowPrivateNetworks(true)}, whOpts...)
 	webhooks := events.NewWebhookRegistry(whOpts...)
 	source, yield := newTelegramSource()
@@ -103,7 +104,8 @@ func TestE2EPollDelivery(t *testing.T) {
 	require.NoError(t, yieldText(yield, 100, "bob", "world"))
 	require.NoError(t, yieldText(yield, 100, "carol", "!"))
 
-	// δ-1: flat events/poll request shape per spec L139-149.
+	// Flat events/poll request shape per spec §"Poll-Based Delivery"
+	// → "Request: events/poll" L139-149.
 	result, err := c.Call("events/poll", map[string]any{
 		"name":      "telegram.message",
 		"cursor":    "0",
@@ -292,10 +294,11 @@ func TestE2EWebhookDelivery(t *testing.T) {
 	require.NoError(t, err)
 
 	// Spec: subscribe response carries id (server-derived per
-	// §"Subscription Identity" → "Derived id" L367) but does NOT echo
-	// the secret. The client already supplied the secret; receiver
-	// verifies with that value. The id is the X-MCP-Subscription-Id
-	// routing handle (γ-4 wires the header).
+	// §"Subscription Identity" → "Derived id" L367) but does NOT
+	// echo the secret. The client already supplied the secret;
+	// receiver verifies with that value. The id is the
+	// X-MCP-Subscription-Id routing handle (spec §"Webhook Event
+	// Delivery" L390 + §"Webhook Security" L472).
 	var subResp struct {
 		ID     string `json:"id"`
 		Secret string `json:"secret"`
@@ -572,8 +575,9 @@ func TestE2EPollMultiSubRejected(t *testing.T) {
 	c := client.NewClient(tsrv.URL+"/mcp", core.ClientInfo{Name: "multi-sub", Version: "1.0"})
 	require.NoError(t, c.Connect())
 
-	// δ-1: the {subscriptions: [...]} wrapper is rejected with a helpful
-	// error pointing at the spec change (L139-149).
+	// The legacy {subscriptions: [...]} wrapper is rejected with a
+	// helpful error pointing at the spec change (§"Poll-Based
+	// Delivery" → "Request: events/poll" L139-149).
 	_, err := c.Call("events/poll", map[string]any{
 		"subscriptions": []map[string]any{
 			{"name": "telegram.message", "cursor": "0"},

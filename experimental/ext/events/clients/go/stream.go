@@ -1,12 +1,14 @@
 package eventsclient
 
-// Stream — events/stream client helper (ε-4b).
+// Stream — events/stream client helper. Spec §"Push-Based Delivery"
+// L223+.
 //
 // One Stream holds one open events/stream call. The helper:
 //
-//  1. Issues an events/stream POST via client.CallWithOptions, threading
-//     a per-call notification hook (ε-4a) so notifications/events/* land
-//     here rather than only on the session-global callback.
+//  1. Issues an events/stream POST via client.CallWithOptions,
+//     threading a per-call notification hook (CallContext.WithNotifyHook)
+//     so notifications/events/* land here rather than only on the
+//     session-global callback.
 //  2. Routes each notification by method to the matching typed callback
 //     (OnEvent, OnHeartbeat, OnTruncated, OnError, OnTerminated).
 //  3. Returns from the constructor once the initial
