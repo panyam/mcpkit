@@ -198,9 +198,10 @@ func runDemo() {
 			sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
 				EventName:   "telegram.message",
 				CallbackURL: hookSrv.URL,
-				// δ-3: bound worst-case replay on reconnect to 5 minutes
-				// (§"Cursor Lifecycle" L529). Stored on WebhookTarget
-				// for ζ's reconnect-with-replay logic.
+				// Bound worst-case replay on reconnect to 5 minutes
+				// per spec §"Cursor Lifecycle" → "Bounding replay
+				// with maxAge" L529. Stored on WebhookTarget for
+				// future reconnect-with-replay logic.
 				MaxAge: 5 * time.Minute,
 			})
 			if err != nil {
@@ -214,7 +215,8 @@ func runDemo() {
 			// refused" retry log on the server side after the demo ends.
 			defer func() {
 				sub.Stop()
-				// γ-2: unsubscribe by tuple (§"Unsubscribing" L509).
+				// Unsubscribe by tuple per spec §"Unsubscribing:
+				// events/unsubscribe" L509.
 				_, _ = c.Call("events/unsubscribe", map[string]any{
 					"name":     "telegram.message",
 					"delivery": map[string]any{"url": hookSrv.URL},

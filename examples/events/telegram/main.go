@@ -59,11 +59,12 @@ func serve() {
 
 	whOpts := []events.WebhookOption{
 		events.WithWebhookHeaderMode(headerMode),
-		// ζ-1 demo escape: the demo's webhook step subscribes to local
-		// httptest receivers (127.0.0.1:N). Production-default dial-time
-		// SSRF guard would block these. Production deployments leave
-		// this OFF so loopback/private-IP webhook URLs are rejected at
-		// dial per spec §"Webhook Security" L464.
+		// Demo escape: the demo's webhook step subscribes to local
+		// httptest receivers (127.0.0.1:N). Production-default
+		// dial-time SSRF guard would block these. Production
+		// deployments leave this OFF so loopback/private-IP webhook
+		// URLs are rejected at dial per spec §"Webhook Security" →
+		// "SSRF prevention" L464.
 		events.WithWebhookAllowPrivateNetworks(true),
 	}
 	log.Printf("[server] webhook headers=%s; client-supplied secrets only", headerMode)
@@ -84,11 +85,12 @@ func serve() {
 		log.Println("[telegram] no token provided — running in test mode")
 	}
 
-	// γ-5: auto-detect auth posture. Identical pattern to discord's main.go
-	// — if OAUTH_ISSUER is set, wire real OIDC auth and follow the spec
-	// strictly (anonymous webhook subscribes rejected with -32012 per
-	// §"Subscription Identity" L361). Otherwise fall back to the demo
-	// escape hatch so `make demo` works without an auth provider.
+	// Auto-detect auth posture. Identical pattern to discord's
+	// main.go — if OAUTH_ISSUER is set, wire real OIDC auth and
+	// follow the spec strictly (anonymous webhook subscribes
+	// rejected with -32012 per §"Subscription Identity" L361).
+	// Otherwise fall back to the demo escape hatch so `make demo`
+	// works without an auth provider.
 	srvOpts := common.MCPServerOptions(*addr, "[mcp] ")
 	srvOpts = append(srvOpts, server.WithSubscriptions())
 	authPosture := "demo (anonymous → UnsafeAnonymousPrincipal)"

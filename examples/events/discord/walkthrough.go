@@ -193,7 +193,7 @@ func runDemo() {
 			if messageCursor != nil {
 				cursor = *messageCursor
 			}
-			// δ-1: flat top-level shape per spec §"Poll-Based Delivery"
+			// Flat top-level shape per spec §"Poll-Based Delivery"
 			// → "Request: events/poll" L139-149.
 			res, err := c.Call("events/poll", map[string]any{
 				"name":   "discord.message",
@@ -264,7 +264,7 @@ func runDemo() {
 			return
 		})
 
-	// --- Step 5.5: Source-side health signals (ζ-7) ---
+	// --- Step 5.5: Source-side health signals ---
 	demo.Step("What happens when the upstream source has a hiccup?").
 		Arrow("Host", "Server", "events/stream { name: discord.message }").
 		DashedArrow("Server", "Host", "notifications/events/active").
@@ -352,9 +352,10 @@ func runDemo() {
 				CallbackURL:   hookSrv.URL,
 				RefreshFactor: 0.5,
 				OnRefresh:     func() { atomic.AddInt32(&refreshes, 1) },
-				// δ-3: bound worst-case replay on reconnect to 5 minutes
-				// (§"Cursor Lifecycle" L529). Stored on WebhookTarget
-				// for ζ's reconnect-with-replay logic.
+				// Bound worst-case replay on reconnect to 5 minutes
+				// per spec §"Cursor Lifecycle" → "Bounding replay
+				// with maxAge" L529. Stored on WebhookTarget for
+				// future reconnect-with-replay logic.
 				MaxAge: 5 * time.Minute,
 			})
 			if err != nil {
@@ -368,9 +369,10 @@ func runDemo() {
 			// refused" retry log on the server side after the demo ends.
 			defer func() {
 				sub.Stop()
-				// γ-2: unsubscribe by tuple (§"Unsubscribing" L509) —
-				// (name, params, delivery.url). The derived id is not
-				// accepted as input.
+				// Unsubscribe by tuple (spec §"Unsubscribing:
+				// events/unsubscribe" L509) — (name, params,
+				// delivery.url). The derived id is not accepted
+				// as input.
 				_, _ = c.Call("events/unsubscribe", map[string]any{
 					"name":     "discord.message",
 					"delivery": map[string]any{"url": hookSrv.URL},
@@ -405,7 +407,7 @@ func runDemo() {
 			return
 		})
 
-	// --- Step 6.5: Multi-subscription routing (γ-4 + ε requestId echo) ---
+	// --- Step 6.5: Multi-subscription routing (X-MCP-Subscription-Id + requestId echo) ---
 	demo.Step("Two subs to the same event with different params — how do I tell deliveries apart?").
 		Arrow("Host", "Server", "events/subscribe { name: discord.message, params: {channel_id: 'alpha'}, ... }").
 		DashedArrow("Server", "Host", "{ id: sub_<A>, ... }").
@@ -525,7 +527,7 @@ func runDemo() {
 			return
 		})
 
-	// --- Step 6.7: Webhook delivery health (ζ-5 deliveryStatus + ζ-6 suspend) ---
+	// --- Step 6.7: Webhook delivery health (deliveryStatus + suspend) ---
 	demo.Step("My webhook receiver just died. How does the server let me know?").
 		Arrow("Receiver", "Receiver", "spin up failing receiver (returns 500 on event POSTs)").
 		Arrow("Host", "Server", "events/subscribe { name: discord.message, ... }").
@@ -715,7 +717,7 @@ func runDemo() {
 			return
 		})
 
-	// --- Step 9: Spec validation — client-supplied id is rejected (γ-3) ---
+	// --- Step 9: Spec validation — client-supplied id is rejected ---
 	demo.Step("What if I try to pick my own subscription id?").
 		Arrow("Host", "Server", "events/subscribe { id: 'mine', ... }").
 		DashedArrow("Server", "Host", "-32602 InvalidParams: client-supplied id is not accepted").
@@ -775,9 +777,10 @@ func runDemo() {
 			pretty, _ := json.MarshalIndent(v, "    ", "  ")
 			fmt.Printf("    events/subscribe response (server-derived id, no secret echo per spec):\n%s\n", string(pretty))
 
-			// Eagerly unsubscribe (γ-2: tuple form, no id) so the
-			// subscription doesn't tie up a delivery target for a TTL
-			// window after the demo ends.
+			// Eagerly unsubscribe (tuple form per spec
+			// §"Unsubscribing: events/unsubscribe" L509, no id) so
+			// the subscription doesn't tie up a delivery target
+			// for a TTL window after the demo ends.
 			_, _ = c.Call("events/unsubscribe", map[string]any{
 				"name":     "discord.message",
 				"delivery": map[string]any{"url": "http://localhost:1/sink"},
