@@ -19,6 +19,19 @@ Six sub-PRs, dependency-ordered. Total ~600-900 LOC including tests. The infrast
 
 The pattern across the six: **one author API, four call sites** (events/poll, events/stream, events/subscribe, the emit fanout). Most of the implementation cost is wiring the same hook through four places, not the hook surface itself.
 
+## Status (as of 2026-05-13)
+
+| Item | Status | Where |
+|---|---|---|
+| η-1 — Poll-lease infrastructure | Shipped | PR 399 (2026-05-08) |
+| η-2 — Hook registration surface on EventDef | Shipped | PR 399 (2026-05-08) |
+| η-3 — Lifecycle hook wiring across delivery modes | Shipped | PR 400 (commit `5af4880`) |
+| η-4 — match / transform on broadcast emit | Shipped | PR 401 (commit `ef03b57`) |
+| η-5 — Targeted emit by subscription id | Shipped | PR 402 (commit `892d6b7`) |
+| η-6 — TooManySubscriptions enforcement | Shipped | PR 403 (commit `5964c92`) |
+
+All six η sub-PRs shipped. PR 399 landed the η-1 poll-lease infrastructure plus the η-2 hook registration surface. PRs 400 through 403 landed the per-mode wiring (η-3 lifecycle, η-4 match/transform on broadcast emit, η-5 targeted emit by sub id, η-6 TooManySubscriptions enforcement). Per-item design sections below remain as the canonical reference.
+
 ## Why now
 
 The parent plan's gating condition was met:
@@ -299,7 +312,7 @@ Hot-path concerns when match/transform fire:
 
 ### η-1 — Poll-lease infrastructure
 
-**Status:** not started.
+**Status:** shipped via PR 399 (2026-05-08).
 
 **Goal:** add an in-memory soft-state table that tracks which (principal, name, params) tuples have recent poll activity, with TTL-based expiry and a callback fired when a lease is created or expires. Foundation for η-3's poll-mode lifecycle hooks.
 
@@ -328,7 +341,7 @@ Hot-path concerns when match/transform fire:
 
 ### η-2 — Hook registration surface on EventDef
 
-**Status:** not started.
+**Status:** shipped via PR 399 (2026-05-08).
 
 **Goal:** add `Match`, `Transform`, `OnSubscribe`, `OnUnsubscribe` fields to `EventDef`. These are zero-value-friendly (nil = no-op). Defines the contract the four wiring sub-PRs (η-3, η-4) plug into. No behavior change yet — fields are accepted and stored but not invoked.
 
@@ -355,7 +368,7 @@ Hot-path concerns when match/transform fire:
 
 ### η-3 — Lifecycle hook wiring across all three delivery modes
 
-**Status:** not started. Depends on η-1 + η-2.
+**Status:** shipped via PR 400 (commit `5af4880`).
 
 **Goal:** wire `OnSubscribe` / `OnUnsubscribe` to fire at the right moment for each delivery mode. Authors implement the hook once on the EventDef; the SDK fires it from poll, push, and webhook code paths consistently.
 
@@ -388,7 +401,7 @@ Hot-path concerns when match/transform fire:
 
 ### η-4 — match / transform on broadcast emit
 
-**Status:** not started. Depends on η-2.
+**Status:** shipped via PR 401 (commit `ef03b57`).
 
 **Goal:** fire `Match` and `Transform` per-subscription when an event is emitted via `Emit` (push) or `EmitToWebhooks` (webhook). Authors filter and shape per-subscription without touching wire code.
 
@@ -418,7 +431,7 @@ Hot-path concerns when match/transform fire:
 
 ### η-5 — Targeted emit by subscription id
 
-**Status:** not started. Depends on η-4.
+**Status:** shipped via PR 402 (commit `892d6b7`).
 
 **Goal:** add `events.EmitToSubscription(srv, event, subID)` for authors who already know which subscription the event belongs to (typical when `on_subscribe` provisioned a per-subscription upstream listener that returns events tagged with the sub id).
 
@@ -448,7 +461,7 @@ Hot-path concerns when match/transform fire:
 
 ### η-6 — TooManySubscriptions enforcement
 
-**Status:** not started. Independent of η-3/4/5.
+**Status:** shipped via PR 403 (commit `5964c92`).
 
 **Goal:** enforce a per-principal-per-event-type subscription cap. Reject new subscribes (and lease creations) with `-32013 TooManySubscriptions` BEFORE on_subscribe fires, so a rejected subscription never provisions upstream resources.
 
