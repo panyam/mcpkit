@@ -45,7 +45,7 @@ testconfauth: ## Run MCP Auth conformance suite (client-side, requires mcpkit/au
 
 testconf-tasks: ## Run MCP Tasks v1 conformance (builds + starts server, runs tests, tears down)
 	@(cd $(REPO_ROOT)/examples/tasks && go build -o tasks .) && \
-	$(REPO_ROOT)/examples/tasks/tasks -addr :18091 & PID=$$!; \
+	$(REPO_ROOT)/examples/tasks/tasks --serve -addr :18091 & PID=$$!; \
 	sleep 1; \
 	(cd $(CONFORMANCE_DIR) && npm install --silent && \
 	SERVER_URL=http://localhost:18091/mcp npx tsx --test tasks/scenarios.test.ts); \
