@@ -63,3 +63,31 @@ func ReplaceSessionNotifyFunc(ctx context.Context, fn NotifyFunc) context.Contex
 	newSC.notify = fn
 	return context.WithValue(ctx, sessionCtxKey, &newSC)
 }
+
+// ApplySessionNotifyFilter wraps the session's current notifyFunc with a
+// filter that silently drops notifications whose method matches any entry in
+// dropMethods, forwarding everything else to the inner notifyFunc. Used by
+// execution surfaces that need to suppress notification kinds disallowed by
+// their spec — for example, SEP-2663 forbids notifications/progress and
+// notifications/message on tasks, so the v2 task goroutine applies this filter
+// before invoking the inner tool handler.
+//
+// No-op if the context has no session, has no notifyFunc, or dropMethods is
+// empty.
+func ApplySessionNotifyFilter(ctx context.Context, dropMethods ...string) context.Context {
+	sc := sessionFromContext(ctx)
+	if sc == nil || sc.notify == nil || len(dropMethods) == 0 {
+		return ctx
+	}
+	inner := sc.notify
+	drop := make(map[string]struct{}, len(dropMethods))
+	for _, m := range dropMethods {
+		drop[m] = struct{}{}
+	}
+	return ReplaceSessionNotifyFunc(ctx, func(method string, params any) {
+		if _, blocked := drop[method]; blocked {
+			return
+		}
+		inner(method, params)
+	})
+}

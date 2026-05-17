@@ -210,6 +210,34 @@ The expected flow for a deployment migrating from v1 to v2 without downtime:
 2. **Clients**: roll out the v2-aware client one cohort at a time. Each upgraded client adds `client.WithTasksExtension()` and switches to the v2 helpers.
 3. Once the v1 client population is empty, switch the server from `RegisterTasksHybrid` to `RegisterTasks` and remove the v1 sub-config.
 
+## Known behaviours after SEP-2663 merge
+
+SEP-2663 was merged Final at spec commit `c47bd846` on 2026-05-15. The merge picked up several normative clarifications that mcpkit had partially anticipated. The notes below capture how mcpkit lands against each.
+
+### G4: schema categories removed
+
+The spec dropped a set of MDX `@category` markers (`notifications/tasks/status`, `tasks`, `tasks/get`, `tasks/result`, `tasks/list`, `tasks/cancel`, `tasks/input_response`) in spec commit `304aa7bf`. These were documentation-site-only constructs and never appeared as runtime constants in mcpkit. No-op for the implementation; `tasks/input_response` in particular was a never-shipped method name.
+
+### G5: notifications/cancelled does not cancel tasks
+
+The spec clarified (commits `3f33c7d1` and `46394d21`) that `notifications/cancelled` applies to in-flight `tools/call` cancellation, not to task lifecycle. v2 task cancellation goes through `tasks/cancel` (`server/tasks_v2.go` `makeV2CancelHandler`); the existing `notifications/cancelled` handler in `server/dispatch.go` does not mutate task state. No code change required.
+
+### G6: notifications/progress and notifications/message disallowed on tasks
+
+The spec hardened (commit `2dba297b`) to: "`notifications/progress` and `notifications/message` notifications MUST NOT be sent on the `subscriptions/listen` stream for a task, and are not supported on tasks in general." mcpkit enforces this at the session-notify boundary: the v2 task goroutine wraps its background context with `core.ApplySessionNotifyFilter` (defined in `core/background.go`) so a tool that calls `ToolContext.EmitProgress` or `BaseContext.EmitLog` while running as a task silently no-ops on those two methods. Tool authors do not need to know the rule; the framework drops the emissions.
+
+### G12a: tasks/get response shapes per status
+
+The spec added (commit `b15331ef`) five status-specific MUST rules for the `tasks/get` response shape: `working` returns the Task, `input_required` includes `inputRequests`, `completed` includes `result`, `cancelled` returns the Task, `failed` includes the error. mcpkit's `makeV2GetHandler` complies for the in-process execution path. External-backed tools (the planned `TaskCallbacks.OnInputResponse` extension point) are not yet wired and will need to surface the same fields once that path lands; tracked alongside the existing v2 callbacks work.
+
+### G12b: Auth binding on every task-related request
+
+The spec added (commit `527e5c5b`) the requirement that servers MUST authenticate and authorize each task-related request. mcpkit binds at two layers: the streamable transport's session-hijack protection binds `Claims.Subject` at session creation and re-verifies on each POST/GET/DELETE; the task handlers then scope every store lookup to the requesting session via `store.Get(taskID, sessionID)` / `store.Cancel(taskID, sessionID)`. Cross-session attempts surface as "task not found" rather than leaking task existence.
+
+### G12c: required-tasks return -32003 instead of silently downgrading to sync
+
+The spec added (commit `6e4fd57c`) the requirement that a server which cannot service a request without returning `CreateTaskResult` (i.e. a tool with `TaskSupport=required`) MUST return error `-32003` (Missing Required Client Capability) with a `data.requiredCapabilities` payload, rather than silently downgrading. mcpkit's `taskV2Middleware` now evaluates `TaskSupport` before checking extension declaration; required tools called by clients that have not declared `io.modelcontextprotocol/tasks` get `-32003` with a structured payload. `TaskSupport=optional` retains the sync-fallback behaviour because the server can still service those without a task. The new error code is exported as `core.ErrCodeMissingRequiredClientCapability`.
+
 ## Reference
 
 - SEP-2663 (Tasks Extension): https://github.com/modelcontextprotocol/specification/pull/2663
