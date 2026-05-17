@@ -16,7 +16,7 @@ How MCP grows. What counts as an extension, how new things get into the protocol
 
 ## Context
 
-MCP grows by extension. Tasks, auth, apps, events, list-TTL, MRTR — everything beyond the core protocol — works through a small set of shared mechanisms (capability flags, method namespaces, `_meta`, notifications) plus mcpkit's code-level extension points (registries, middleware, sub-modules). Naming the mechanisms once gives you the vocabulary to read "this extension uses SEP-X" or "this is a `_meta`-only extension" and immediately know what's going on.
+MCP grows by extension. Tasks, auth, apps, events, list-TTL, MRTR — everything beyond the core protocol — works through a small set of shared mechanisms (capability flags, method namespaces, `_meta`, notifications), the `capabilities.extensions` map that advertises them, and mcpkit's code-level extension points (registries, middleware, sub-modules). Naming the mechanisms once gives you the vocabulary to read "this extension uses SEP-X" or "this is a `_meta`-only extension" and immediately know what's going on.
 
 ## Q1 — What counts as an "extension" in MCP?
 
@@ -25,7 +25,7 @@ The protocol has **four extension surfaces**. Any extension uses one or more of 
 | Surface | What it lets you add | Gated by | Example |
 |---------|---------------------|----------|---------|
 | **Method namespace** | new JSON-RPC methods, typically under a prefix (`tasks/*`, `elicitation/*`) | a capability declared at bring-up | `tasks/create` (SEP-2663), `elicitation/create` |
-| **Capability flags** | new keys under each side's `capabilities` object — stable or `experimental.<name>` | spec assigns the name; experimental is a sandbox | `tools.listChanged`, `experimental.events` |
+| **Capability flags** | a *core capability slot* (fixed, spec-defined set) **or** an entry in the open-ended `capabilities.extensions` map | core slots: the core spec. extensions map: keyed by extension ID, carries `{specVersion, stability}` — see [Q2](#q2--how-does-a-new-capability-get-declared-and-negotiated) | core slot: `tools.listChanged`. extension: `capabilities.extensions["io.modelcontextprotocol/tasks"]` |
 | **Notification methods** | new fire-and-forget messages, capability-gated | usually a `<area>.listChanged`-style flag declared by the emitter | `notifications/resources/updated` |
 | **`_meta` fields** | opt-in metadata on existing requests/responses; doesn't change the method's semantics | per-call opt-in by the requester | `_meta.progressToken` (progress), `_meta` cache-TTL hint (SEP-2549) |
 
@@ -41,31 +41,74 @@ Most extensions combine multiple surfaces. Useful **styles** to recognize:
 
 Worth internalizing: **the four surfaces are knobs, not categories.** A new feature picks which knobs to turn. Tasks turns three (methods + capability + notifications); list-TTL turns one (`_meta`); auth turns none of the four because it extends the layer below MCP.
 
-## Q2 — How does a new capability get into the protocol?
+## Q2 — How does a new capability get declared and negotiated?
 
-Through **SEPs (Standard Enhancement Proposals)** — MCP's RFC-style process. Roughly:
+Two shapes of capability, one governance process.
 
-1. **Proposal** — someone files a SEP in the `modelcontextprotocol/specification` repo. Numbered (e.g. SEP-2663). Specifies the new methods / capabilities / notifications / `_meta` fields.
-2. **Experimental landing** — the SEP can be implemented behind an `experimental.<name>` capability. Both sides advertise it; receivers MUST ignore experimentals they don't recognize. This is the protocol's sandbox.
-3. **Conformance work** — implementations like mcpkit run conformance suites against the SEP (mcpkit: `make testconf`, plus per-SEP suites — `testconf-tasks-v2` for SEP-2663, `testconf-list-ttl` for SEP-2549, `testconf-mrtr` for SEP-2322).
-4. **Graduation** — when the design stabilizes, the SEP merges into a stable spec version. The `experimental.` prefix drops; the capability gets a stable name.
+### Core capability slots vs. the `extensions` map
+
+The `capabilities` object exchanged at [bring-up](./bringup.md) has two kinds of entry:
+
+1. **Core capability slots** — a *fixed, spec-defined* set of keys. Server-side: `tools`, `resources`, `prompts`, `logging`, `completions`. Client-side: `sampling`, `roots`, `elicitation`, `fileInputs`. The core MCP spec owns this list; adding a slot means changing the core spec. Each slot is a typed struct (`tools.listChanged`, `resources.subscribe`, …).
+
+2. **The `extensions` map** — `capabilities.extensions`, a map keyed by **extension ID**. This is the open-ended slot: a new extension lands here *without touching the core capability schema*. Extension IDs are reverse-DNS strings — `io.modelcontextprotocol/tasks`, `io.modelcontextprotocol/ui`, `io.mcpkit/auth`.
+
+The map's *values* differ by side:
+
+- **Server → client**: `ExtensionCapability { specVersion, stability }` — "I implement extension X at spec version Y, maturity Z."
+- **Client → server**: an extension-specific shape (`ClientExtensionCap`). MCP Apps, for instance, has the client declare the `mimeTypes` it can render. What's inside is the extension's business.
+
+### `stability` is the maturity marker — in-band, per-extension
+
+`stability` is an enum (`core.Stability`): `experimental`, `stable`, `deprecated`. It travels *inside* each extension's map entry. An extension graduating from experimental to stable flips its `stability` value — **the extension ID never changes**. There is no `experimental.`-prefixed capability name; maturity is a field, not a namespace.
+
+### Who populates the map (server side)
+
+| Step | What | Code |
+|------|------|------|
+| **Declare** | an extension is a `core.Extension { ID, SpecVersion, Stability, Config }`, surfaced via the `core.ExtensionProvider` interface (`Extension() Extension`) | [`core/auth.go`](https://github.com/panyam/mcpkit/blob/main/core/auth.go) — `Extension`, `ExtensionProvider`, `Stability` live here |
+| **Register** | `WithExtension(provider)` at construction, or `Server.RegisterExtension(provider)` at runtime | [`server/server.go`](https://github.com/panyam/mcpkit/blob/main/server/server.go) |
+| **Advertise** | registered extensions are serialized into `capabilities.extensions` on the `initialize` response | the dispatcher's `extensions` map |
+
+mcpkit extensions **self-register**: `RegisterTasks` internally calls `RegisterExtension(tasksExtensionProvider{})`, so wiring up the feature advertises the extension automatically — the caller doesn't thread a separate option.
+
+### How it's negotiated
+
+Both sides advertise their extensions in `initialize`. A server handler then gates extension-specific behaviour on what the client declared:
+
+```go
+if core.ClientSupportsExtension(ctx, core.TasksExtensionID) {
+    // client negotiated the tasks extension — safe to use the tasks/* surface
+}
+```
+
+`bc.ClientSupportsExtension(id)` is the handler-context form. Each extension usually ships a typed helper — `ClientSupportsTasks(ctx)` wraps `ClientSupportsExtension(ctx, TasksExtensionID)`. **Receivers ignore extension IDs they don't recognize** — that's the forward-compatibility guarantee that lets a new extension ship without breaking old peers.
+
+### The SEP governance process
+
+SEPs (Standard Enhancement Proposals) are MCP's RFC process. A SEP specifies the methods / capabilities / notifications / `_meta` an extension adds. It gets prototyped, conformance-tested (mcpkit runs per-SEP suites — `make testconf-tasks-v2` for SEP-2663, `testconf-mrtr` for SEP-2322, …), and iterated. The extension ID and its `capabilities.extensions` entry exist from day one; what *changes* as the SEP matures is the `stability` value and `specVersion`.
 
 ```mermaid
 graph LR
-    proposal["proposal<br/>(SEP filed)"] --> exp["experimental.X capability<br/>(implementations land)"]
-    exp --> conf["conformance + iteration"]
-    conf --> stable["stable capability<br/>(spec version bump)"]
-    exp -. could be abandoned .-> dead["dropped"]
+    sep["SEP filed<br/>(design proposal)"] --> reg["extension registered<br/>stability: experimental"]
+    reg --> conf["conformance + iteration"]
+    conf --> stable["stability: stable"]
+    conf -. design abandoned .-> dep["stability: deprecated → removed"]
 ```
 
-> [!IMPORTANT]
-> The `experimental` namespace is **not** a free-for-all. Receivers MUST ignore unrecognized experimentals — that's what lets emitters advertise them safely. But emitters MUST NOT depend on experimentals being supported; if the negotiated capabilities don't include yours, you don't use it. This is what makes SEPs land without breaking older clients.
+### Worked example: tasks moved from core to extension
 
-**Concrete examples in mcpkit** (each gets its own page):
+mcpkit's **tasks v1** was a **core capability** — `ServerCapabilities.Tasks`, a fixed slot sitting right next to `tools` / `resources` / `prompts`. It was added speculatively, before the long-running-operations design had settled.
 
-- **SEP-2663 — [tasks v2](./tasks.md)** *(stub)*. Long-running operations as a first-class concept. Adds `tasks/*` methods + a `tasks` capability. mcpkit has v1 (frozen), v2 (canonical), and `RegisterTasksHybrid` for both — a transition pattern worth its own page.
-- **SEP-2549 — [list-TTL](./list-ttl.md)** *(stub)*. Three-state cache-lifetime hint on list responses (`nil` / `&0` / `&N>0`). Pure `_meta` extension — no new methods or capabilities.
-- **SEP-2322 — [MRTR](./mrtr.md)**. Multi Round-Trip Requests. A `tools/call` can return `InputRequiredResult` carrying input requests + a signed `requestState` token; the client resolves the inputs and retries the call with `inputResponses` + the echoed token. Stateless across rounds (token is the round handle). Default client `InputHandler` bridges to sampling/elicitation/roots handlers, so hosts get MRTR for free if they already support reverse calls.
+**SEP-2663 (tasks v2) moves tasks into the `extensions` map.** It's now extension ID `io.modelcontextprotocol/tasks`, advertised via `capabilities.extensions`, currently `stability: experimental` / `specVersion: draft`.
+
+Why move a feature *out* of core:
+
+- **Opt-in vs. forced.** A core slot makes every implementation reason about tasks. An extension is opt-in — a server that doesn't do long-running work carries zero task surface, and a client that doesn't understand `io.modelcontextprotocol/tasks` simply ignores the map entry.
+- **Versionable.** A core slot is binary — present or absent. An extension entry carries `specVersion` + `stability`, so tasks can iterate its design and signal maturity *without a core protocol-version bump*.
+- **Keeps core small.** The core capability set stays short and stable; speculative features live in the `extensions` map until proven.
+
+mcpkit keeps both alive during the transition via three entry points: `RegisterTasksV1` (frozen — advertises the legacy core `capabilities.tasks` slot), `RegisterTasks` (v2 — advertises the `io.modelcontextprotocol/tasks` extension), and `RegisterTasksHybrid` (advertises **both** — core slot for v1 clients, extension entry for v2 clients — and dispatches each `tasks/*` call by which the client negotiated). The deep v1↔v2 wire-shape and registration detail lives in [tasks](./tasks.md).
 
 ## Q3 — What does an extension look like in mcpkit's code organization?
 
@@ -110,7 +153,7 @@ mcpkit's extension points, roughly in order of how often you'll reach for them:
 | **Typed binding** | Go structs with tags; mcpkit handles JSON↔Go marshal + schema validation | `core/typed_tool.go` |
 | **Middleware** | wrap any method or all methods on either receive-side or send-side | `server/middleware.go`, `client/middleware.go` |
 | **Custom transports** | implement the transport interface | `server/transport.go` (interfaces); existing examples in `stdio_transport.go`, `streamable_transport.go`, `memory_transport.go` |
-| **Capability advertisement** | declare your custom capabilities in `initialize` response (server) or request (client) | `core/protocol.go` |
+| **Extension registration** | declare a protocol extension (`ID`, `specVersion`, `stability`) so it's advertised in `capabilities.extensions` at `initialize` | `WithExtension` / `Server.RegisterExtension` in `server/server.go`; `core.Extension` / `ExtensionProvider` in `core/auth.go` |
 | **Method handlers** | bypass typed binding for raw JSON-RPC handling | `server/method_handler.go` |
 | **Tasks (`RegisterTasks` / hybrid)** | register long-running operation handlers | `server/tasks_v2.go`, `server/tasks_hybrid.go` |
 
@@ -125,10 +168,10 @@ Brief — each gets its own full page later.
 
 | Extension | Style | Surfaces used | Where |
 |-----------|-------|---------------|-------|
-| **Tasks** (SEP-2663) | method-namespace | `tasks/*` methods + `tasks` capability + reuses progress notifications + has its own task store concept | `server/tasks_v2.go`, `server/task_store.go` · v1/v2/hybrid coexistence is mcpkit-specific |
+| **Tasks** (SEP-2663) | method-namespace | `tasks/*` methods + the `io.modelcontextprotocol/tasks` entry in `capabilities.extensions` (v1 used a core `tasks` slot — see [Q2 worked example](#worked-example-tasks-moved-from-core-to-extension)) + reuses progress notifications + own task store | `server/tasks_v2.go`, `server/task_store.go` · v1/v2/hybrid coexistence is mcpkit-specific |
 | **Auth** | bring-up extension | none of the four MCP surfaces — extends the HTTP layer below: `WWW-Authenticate` + OAuth + bearer token per request | `core/auth.go`, `core/www_authenticate.go`, `ext/auth/` (separate `go.mod`) |
 | **Apps** | library-architecture | thin protocol surface; bulk is host-architecture (AppHost lifecycle, Bridge JS runtime, ServerRegistry tracking live servers) | `ext/ui/` (separate `go.mod`) · docs in `docs/APPS_DESIGN.md`, `docs/APPS_HOST.md`, `docs/APPS_ONBOARDING.md` |
-| **Events** | experimental, target-shape | `experimental.events` capability; explores events as first-class beyond raw SSE event-id replay | `experimental/ext/events/` |
+| **Events** | method-namespace, target-shape | registered as an extension with `stability: experimental`; explores events as first-class beyond raw SSE event-id replay | `experimental/ext/events/` |
 | **List-TTL** (SEP-2549) | `_meta`-only | a `*int` field with explicit-zero semantics on list responses; no new methods or capabilities | hooked into existing list responses; conformance via `make testconf-list-ttl` |
 | **MRTR** (SEP-2322) | method-namespace + `_meta` | extends `tools/call` — server can return `InputRequiredResult` with `inputRequests` + signed `requestState`; client retries with `inputResponses` + echoed token; stateless across rounds. Default `InputHandler` bridges to sampling/elicitation/roots | [`server/mrtr.go`](https://github.com/panyam/mcpkit/blob/main/server/mrtr.go), [`client/mrtr.go`](https://github.com/panyam/mcpkit/blob/main/client/mrtr.go) |
 | **Elicitation** | method-namespace | `elicitation/create` method + `elicitation` capability declared by client; Form mode + URL mode | `core/elicitation.go` · server-originates, client receives |
@@ -154,7 +197,8 @@ The rule of thumb: **if it can be observed on the wire between client and server
 After reading this page, downstream pages can assume:
 
 - You know the **four extension surfaces** (method namespace, capability flags, notifications, `_meta`) and the common **styles** that combine them.
-- You know the **SEP process** and the role of `experimental.<name>` capabilities as a sandbox; you can read "this extension uses SEP-XXXX" and have a sense of where it sits in the maturity curve.
+- You know the **`capabilities.extensions` map** — keyed by reverse-DNS extension ID, server-side values carry `{specVersion, stability}` — and that `WithExtension` / `RegisterExtension` populate it. You know `stability` (`experimental` / `stable` / `deprecated`) is an in-band per-extension marker, **not** a capability-name prefix. You know the **SEP process** and can read "this extension uses SEP-XXXX" with a sense of where it sits on the maturity curve.
+- You know why a feature can move **from a core capability slot to the extensions map** (tasks v1 → v2): opt-in vs. forced, versionable via `specVersion`/`stability`, and keeping the core capability set small.
 - You know mcpkit's **three-tier organization** (`core/` → `ext/` → `experimental/ext/`) and why some extensions get their own `go.mod`.
 - You know the **mcpkit extension points** — registries, middleware, custom transports, capability advertisement — and that you don't need to fork core to add a server-side feature.
 - You can read the **case-study table** and tell at a glance which surfaces each extension uses.
