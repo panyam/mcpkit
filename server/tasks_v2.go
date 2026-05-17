@@ -430,6 +430,19 @@ func taskV2Middleware(reg *Registry, rt *v2TaskRuntime, cfg TasksConfig) Middlew
 			return next(ctx, req)
 		}
 
+		// Determine effective taskSupport first. Absent Execution = forbidden.
+		// In v2 this is a server-internal hint about which tools should be
+		// async — clients no longer opt in via a `task` param.
+		effectiveSupport := core.TaskSupportForbidden
+		if def.Execution != nil {
+			effectiveSupport = def.Execution.TaskSupport
+		}
+
+		// forbidden/absent: pass through (sync), regardless of extension state.
+		if effectiveSupport == core.TaskSupportForbidden {
+			return next(ctx, req)
+		}
+
 		// SEP-2663: server MUST NOT return CreateTaskResult unless the client
 		// negotiated the io.modelcontextprotocol/tasks extension, either at
 		// session level (initialize handshake) or per-request (SEP-2575).
@@ -438,19 +451,27 @@ func taskV2Middleware(reg *Registry, rt *v2TaskRuntime, cfg TasksConfig) Middlew
 			perRequestCapsRaw = envelope.Meta.ClientCapabilitiesRaw
 		}
 		if !core.ClientSupportsExtensionForRequest(ctx, core.TasksExtensionID, perRequestCapsRaw) {
-			return next(ctx, req)
-		}
-
-		// Determine effective taskSupport. Absent Execution = forbidden.
-		// In v2 this is a server-internal hint about which tools should be
-		// async — clients no longer opt in via a `task` param.
-		effectiveSupport := core.TaskSupportForbidden
-		if def.Execution != nil {
-			effectiveSupport = def.Execution.TaskSupport
-		}
-
-		// In v2, forbidden/absent → pass through (sync).
-		if effectiveSupport == core.TaskSupportForbidden {
+			// SEP-2663 (spec commit 6e4fd57c in PR 2663): if the server cannot
+			// service the request without returning CreateTaskResult — i.e. the
+			// tool's TaskSupport is `required` — it MUST return -32003 with a
+			// machine-readable `requiredCapabilities` payload so the client can
+			// self-describe what to add. For `optional`, the server still CAN
+			// service the request without a task, so falling through to sync
+			// remains correct.
+			if effectiveSupport == core.TaskSupportRequired {
+				return core.NewErrorResponseWithData(
+					req.ID,
+					core.ErrCodeMissingRequiredClientCapability,
+					"client must declare extension "+core.TasksExtensionID,
+					map[string]any{
+						"requiredCapabilities": map[string]any{
+							"extensions": map[string]any{
+								core.TasksExtensionID: map[string]any{},
+							},
+						},
+					},
+				), nil
+			}
 			return next(ctx, req)
 		}
 
@@ -500,6 +521,15 @@ func taskV2Middleware(reg *Registry, rt *v2TaskRuntime, cfg TasksConfig) Middlew
 				progressToken: progressToken,
 			}
 			bgCtx = WithTaskContext(bgCtx, tc)
+			// SEP-2663: notifications/progress and notifications/message MUST
+			// NOT be sent on tasks. Filter at the session-notify boundary so
+			// any tool handler that calls EmitProgress or EmitLog while it
+			// happens to be running as a task silently no-ops rather than
+			// leaking onto the session stream. Spec commit 2dba297b in PR 2663.
+			bgCtx = core.ApplySessionNotifyFilter(bgCtx,
+				"notifications/progress",
+				"notifications/message",
+			)
 			rt.register(taskID, envelope.Name, &activeTask{cancel: cancelFunc, inputState: inputState})
 
 			defer func() {
