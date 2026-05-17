@@ -109,6 +109,14 @@ Map keys are server-minted opaque strings. Clients MUST treat them as round-trip
 
 After `tasks/cancel`, observe the resulting `cancelled` status via the next `tasks/get`.
 
+### 6. Status notification method renamed
+
+| | v1 | v2 |
+|---|---|---|
+| Status notification method | `notifications/tasks/status` | `notifications/tasks` |
+
+Payload shape is unchanged on the v2 path (still a `DetailedTask` carrying the SEP-2322 `requestState`). Only the JSON-RPC method name moved. The v1 method name is preserved, so hybrid servers emit both names — v2 clients subscribe to `notifications/tasks`, v1 clients keep their existing `notifications/tasks/status` subscription. (Spec commit `1d3813ab` in PR 2663.)
+
 ## Server migration paths
 
 ### Pure v1 server (no change required)
