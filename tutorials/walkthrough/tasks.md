@@ -22,14 +22,15 @@ Some operations don't fit the single-request → single-response model. They run
 
 ## What this page will cover
 
-- The task lifecycle states (created, running, completed, failed, cancelled)
-- v1 (frozen, original SEP) vs. v2 (canonical, SEP-2663) on-the-wire shape differences
-- mcpkit's three entry points: `RegisterTasksV1`, `RegisterTasks`, `RegisterTasksHybrid` — the hybrid dispatches by negotiated capability
+- **Core capability → extension.** v1 tasks was a core `capabilities.tasks` slot; SEP-2663 v2 moves tasks into the `capabilities.extensions` map as `io.modelcontextprotocol/tasks`. The *why* is covered in [extension-mechanisms Q2 → "tasks moved from core to extension"](./extension-mechanisms.md#worked-example-tasks-moved-from-core-to-extension); this page owns the *what-changed-on-the-wire* detail.
+- The task lifecycle states (created, running, completed, failed, cancelled, `input_required`)
+- v1 vs. v2 on-the-wire shape differences (`ttl` → `ttlSeconds`, `pollInterval` → `pollIntervalMilliseconds`, `parentTaskId` dropped, …)
+- mcpkit's three entry points: `RegisterTasksV1`, `RegisterTasks`, `RegisterTasksHybrid` — the hybrid advertises both the core slot and the extension entry, dispatches by negotiated capability
 - The task store — what's persisted, restart durability, query semantics
 - Detach/resume — how a task can outlive the originating request
 - Progress notifications integration: `progressToken` pairing for tasks
+- The `input_required` state — tasks reuse MRTR's `InputRequiredResult` shape; one `WithRequestStateSigning` key covers both (see [mrtr Q6](./mrtr.md#q6--composition-with-tasks-v2))
 - Cancellation across task lifecycle (`notifications/cancelled` vs task-level cancel)
-- The migration shape: register both v1 and v2 handlers, pick at dispatch time
 
 ## Next to read
 
