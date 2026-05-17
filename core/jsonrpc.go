@@ -78,6 +78,18 @@ const (
 	// the authorization denial envelope is additive metadata in the same data
 	// object, alongside the elicitations array.
 	ErrCodeURLElicitationRequired = -32042
+
+	// ErrCodeMissingRequiredClientCapability is returned when the server
+	// cannot service a request because the client did not declare a
+	// capability the server requires for that request. The error data SHOULD
+	// carry a `requiredCapabilities` object mirroring the InitializeRequest
+	// capabilities shape so the client can self-describe what to add.
+	//
+	// Defined by SEP-2663 (Tasks Extension) for the case where a tool with
+	// TaskSupport=required is called by a client that has not declared the
+	// io.modelcontextprotocol/tasks extension. Reusable for any future
+	// extension whose required-mode path needs the same affordance.
+	ErrCodeMissingRequiredClientCapability = -32003
 )
 
 // NewResponse creates a success response for the given request ID.

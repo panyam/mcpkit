@@ -152,6 +152,54 @@ func TestV2_TaskCreationWithExtension(t *testing.T) {
 	}
 }
 
+// TestV2_RequiredTaskRejectsClientWithoutExtension verifies SEP-2663's
+// required-tasks error spec (spec commit 6e4fd57c in PR 2663). When a tool
+// declared with TaskSupport=required is invoked by a client that has not
+// negotiated the io.modelcontextprotocol/tasks extension, the server MUST
+// return -32003 (Missing Required Client Capability) with a structured
+// `requiredCapabilities` payload — NOT silently fall through to synchronous
+// execution. TaskSupport=optional retains the sync-fallback behaviour
+// because the server can still service those requests without a task.
+func TestV2_RequiredTaskRejectsClientWithoutExtension(t *testing.T) {
+	srv := newTaskV2Server(t)
+	c := connectV2Client(t, srv) // no WithTasksExtension
+
+	_, err := c.Call("tools/call", map[string]any{
+		"name":      "must-task",
+		"arguments": map[string]any{},
+	})
+	if err == nil {
+		t.Fatal("must-task without extension should reject with -32003, got nil error")
+	}
+	rpcErr, ok := err.(*client.RPCError)
+	if !ok {
+		t.Fatalf("expected *client.RPCError, got %T: %v", err, err)
+	}
+	if rpcErr.Code != core.ErrCodeMissingRequiredClientCapability {
+		t.Errorf("code = %d, want %d (-32003 Missing Required Client Capability)",
+			rpcErr.Code, core.ErrCodeMissingRequiredClientCapability)
+	}
+
+	// Validate the data shape: requiredCapabilities.extensions.<tasksExtensionID>.
+	// Use round-trip JSON to normalize map types regardless of decoder path.
+	raw, err := json.Marshal(rpcErr.Data)
+	if err != nil {
+		t.Fatalf("marshal error data: %v", err)
+	}
+	var data struct {
+		RequiredCapabilities struct {
+			Extensions map[string]json.RawMessage `json:"extensions"`
+		} `json:"requiredCapabilities"`
+	}
+	if err := json.Unmarshal(raw, &data); err != nil {
+		t.Fatalf("unmarshal error data: %v (raw=%s)", err, raw)
+	}
+	if _, present := data.RequiredCapabilities.Extensions[core.TasksExtensionID]; !present {
+		t.Errorf("required extension %q missing from error data; got %s",
+			core.TasksExtensionID, raw)
+	}
+}
+
 // TestV2_TasksGetRejectedWithoutExtension verifies tasks/get returns
 // -32601 (method not found) when the client has not negotiated the extension.
 func TestV2_TasksGetRejectedWithoutExtension(t *testing.T) {
@@ -999,6 +1047,93 @@ func TestV2_StatusNotificationCarriesRequestState(t *testing.T) {
 			return
 		case <-deadline:
 			t.Fatalf("timed out waiting for notifications/tasks with requestState for %s", taskID)
+		}
+	}
+}
+
+// TestV2_NoProgressOrMessageOnTaskGoroutine verifies that a tool which calls
+// EmitProgress or EmitLog while running as a task does not leak
+// notifications/progress or notifications/message onto the session stream.
+// SEP-2663 (spec commit 2dba297b in PR 2663) tightened the rule to a MUST
+// NOT, and mcpkit enforces it at the session-notify boundary by wrapping the
+// bgCtx with core.ApplySessionNotifyFilter so neither emission path reaches
+// the wire — regardless of whether the tool author remembers the rule.
+func TestV2_NoProgressOrMessageOnTaskGoroutine(t *testing.T) {
+	srv := newTaskV2Server(t)
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "progress-emit-task",
+			Description: "Emits progress + log notifications while running as a task; tests SEP-2663 G6 filter",
+			InputSchema: map[string]any{"type": "object"},
+			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			// Both of these would normally fan out on the session stream.
+			// The v2 task filter is expected to drop both silently.
+			ctx.EmitProgress("ignored-token", 1, 2, "halfway")
+			ctx.EmitLog(core.LogInfo, "test-logger", map[string]any{"msg": "from-task"})
+			return core.TextResult("progress-done"), nil
+		},
+	)
+
+	handler := srv.Handler(WithStreamableHTTP(true))
+	ts := httptest.NewServer(handler)
+	t.Cleanup(ts.Close)
+
+	// Capture every notification the client sees so we can assert the filter
+	// is comprehensive (no leakage of either method).
+	type seen struct {
+		method string
+	}
+	notifs := make(chan seen, 16)
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "v2-g6-test", Version: "0.0.1"},
+		client.WithGetSSEStream(),
+		client.WithTasksExtension(),
+		client.WithNotificationCallback(func(method string, _ any) {
+			select {
+			case notifs <- seen{method}:
+			default:
+			}
+		}),
+	)
+	if err := c.Connect(); err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(func() { c.Close() })
+
+	res, err := c.Call("tools/call", map[string]any{
+		"name":      "progress-emit-task",
+		"arguments": map[string]any{},
+	})
+	if err != nil {
+		t.Fatalf("tools/call: %v", err)
+	}
+	var ctr core.CreateTaskResult
+	if err := json.Unmarshal(res.Raw, &ctr); err != nil {
+		t.Fatalf("unmarshal CreateTaskResult: %v", err)
+	}
+
+	// Poll until terminal so the goroutine has run + emitted (and we know the
+	// filter has had its chance to drop).
+	pollV2Detailed(t, context.Background(), c, ctr.TaskID, 10*time.Millisecond, func(d core.DetailedTask) bool {
+		return d.Status.IsTerminal()
+	})
+
+	// Drain notifications with a short tail wait so any leaked emission has
+	// time to land on the SSE stream before we judge.
+	deadline := time.After(200 * time.Millisecond)
+drain:
+	for {
+		select {
+		case n := <-notifs:
+			switch n.method {
+			case "notifications/progress":
+				t.Fatalf("SEP-2663 G6 violation: notifications/progress leaked onto task stream")
+			case "notifications/message":
+				t.Fatalf("SEP-2663 G6 violation: notifications/message leaked onto task stream")
+			}
+		case <-deadline:
+			break drain
 		}
 	}
 }
