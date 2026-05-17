@@ -136,7 +136,7 @@ func (rt *v2TaskRuntime) getToolCallbacks(taskID string) *TaskCallbacks {
 }
 
 // makeRequestState mints the SEP-2322 requestState string the server hands
-// to clients on tasks/get responses and notifications/tasks/status events.
+// to clients on tasks/get responses and notifications/tasks events.
 // When a signing key is configured (TasksConfig.RequestStateKey), the token
 // is HMAC-SHA256 signed with an embedded expiry; otherwise it falls back to
 // the bare taskID for backward compat with minimal-config setups and tests.
@@ -827,7 +827,7 @@ func notifyV2TaskStatus(ctx context.Context, rt *v2TaskRuntime, store TaskStore,
 		}
 	}
 
-	core.Notify(ctx, "notifications/tasks/status", payload)
+	core.Notify(ctx, "notifications/tasks", payload)
 }
 
 // notifyV2TaskStatusFromInfo sends a status notification through the live
@@ -847,5 +847,5 @@ func notifyV2TaskStatusFromInfo(ctx core.MethodContext, rt *v2TaskRuntime, info 
 			payload.Error = te
 		}
 	}
-	ctx.Notify("notifications/tasks/status", payload)
+	ctx.Notify("notifications/tasks", payload)
 }
