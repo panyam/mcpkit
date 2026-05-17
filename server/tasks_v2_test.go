@@ -915,7 +915,7 @@ func TestV2_UpdateUnknownKeyIgnored(t *testing.T) {
 }
 
 // TestV2_StatusNotificationCarriesRequestState verifies that
-// notifications/tasks/status events carry the SEP-2322 requestState string.
+// notifications/tasks events carry the SEP-2322 requestState string.
 // Clients update their tracked requestState from notifications so a
 // stateless deployment can pick the conversation back up without an extra
 // tasks/get round-trip — but only if the server actually emits it.
@@ -926,7 +926,7 @@ func TestV2_UpdateUnknownKeyIgnored(t *testing.T) {
 func TestV2_StatusNotificationCarriesRequestState(t *testing.T) {
 	srv := newTaskV2Server(t)
 
-	// Capture incoming notifications/tasks/status payloads. Use a buffered
+	// Capture incoming notifications/tasks payloads. Use a buffered
 	// channel + select so the test isn't sensitive to delivery ordering vs
 	// the SSE stream lifecycle.
 	notifs := make(chan core.DetailedTask, 8)
@@ -938,7 +938,7 @@ func TestV2_StatusNotificationCarriesRequestState(t *testing.T) {
 		client.WithGetSSEStream(),
 		client.WithTasksExtension(),
 		client.WithNotificationCallback(func(method string, params any) {
-			if method != "notifications/tasks/status" {
+			if method != "notifications/tasks" {
 				return
 			}
 			raw, err := json.Marshal(params)
@@ -984,7 +984,7 @@ func TestV2_StatusNotificationCarriesRequestState(t *testing.T) {
 				continue
 			}
 			if dt.RequestState == "" {
-				t.Fatalf("notifications/tasks/status for %s missing requestState (full payload: %+v)", taskID, dt)
+				t.Fatalf("notifications/tasks for %s missing requestState (full payload: %+v)", taskID, dt)
 			}
 			// SEP-2322: same body as the next tasks/get would mint —
 			// clients can drop-in update their tracked state.
@@ -998,7 +998,7 @@ func TestV2_StatusNotificationCarriesRequestState(t *testing.T) {
 			}
 			return
 		case <-deadline:
-			t.Fatalf("timed out waiting for notifications/tasks/status with requestState for %s", taskID)
+			t.Fatalf("timed out waiting for notifications/tasks with requestState for %s", taskID)
 		}
 	}
 }
