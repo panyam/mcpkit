@@ -152,14 +152,14 @@ func TestV2_TaskCreationWithExtension(t *testing.T) {
 	}
 }
 
-// TestV2_RequiredTaskRejectsClientWithoutExtension verifies SEP-2663's
-// required-tasks error spec (spec commit 6e4fd57c in PR 2663). When a tool
-// declared with TaskSupport=required is invoked by a client that has not
-// negotiated the io.modelcontextprotocol/tasks extension, the server MUST
-// return -32003 (Missing Required Client Capability) with a structured
-// `requiredCapabilities` payload — NOT silently fall through to synchronous
-// execution. TaskSupport=optional retains the sync-fallback behaviour
-// because the server can still service those requests without a task.
+// TestV2_RequiredTaskRejectsClientWithoutExtension verifies the merged
+// SEP-2663 required-tasks error spec. When a tool declared with
+// TaskSupport=required is invoked by a client that has not negotiated the
+// io.modelcontextprotocol/tasks extension, the server MUST return -32003
+// (Missing Required Client Capability) with a structured `requiredCapabilities`
+// payload — NOT silently fall through to synchronous execution.
+// TaskSupport=optional retains the sync-fallback behaviour because the
+// server can still service those requests without a task.
 func TestV2_RequiredTaskRejectsClientWithoutExtension(t *testing.T) {
 	srv := newTaskV2Server(t)
 	c := connectV2Client(t, srv) // no WithTasksExtension
@@ -962,22 +962,19 @@ func TestV2_UpdateUnknownKeyIgnored(t *testing.T) {
 	})
 }
 
-// TestV2_StatusNotificationCarriesRequestState verifies that
-// notifications/tasks events carry the SEP-2322 requestState string.
-// Clients update their tracked requestState from notifications so a
-// stateless deployment can pick the conversation back up without an extra
-// tasks/get round-trip — but only if the server actually emits it.
-//
-// The fixture wires a notification handler before creating a fast task,
-// then waits for the terminal-status notification and asserts requestState
-// is non-empty (matches the same value tasks/get would have minted).
-func TestV2_StatusNotificationCarriesRequestState(t *testing.T) {
+// TestV2_StatusNotificationOmitsRequestState verifies that notifications/tasks
+// payloads MUST NOT carry `requestState`. The merged SEP-2663 removed the
+// field from the Task base interface, so the DetailedTask shape on every
+// task-bearing message — CreateTaskResult, tasks/get, and these
+// notifications — omits it. The test inspects the raw JSON payload (rather
+// than the typed DetailedTask, which would lose the field at the struct
+// boundary) so a server that re-introduces the field would be caught.
+func TestV2_StatusNotificationOmitsRequestState(t *testing.T) {
 	srv := newTaskV2Server(t)
 
-	// Capture incoming notifications/tasks payloads. Use a buffered
-	// channel + select so the test isn't sensitive to delivery ordering vs
-	// the SSE stream lifecycle.
-	notifs := make(chan core.DetailedTask, 8)
+	// Capture incoming notifications/tasks payloads as raw JSON so we can
+	// assert on the actual wire field set.
+	notifs := make(chan map[string]any, 8)
 	handler := srv.Handler(WithStreamableHTTP(true))
 	ts := httptest.NewServer(handler)
 	t.Cleanup(ts.Close)
@@ -993,12 +990,12 @@ func TestV2_StatusNotificationCarriesRequestState(t *testing.T) {
 			if err != nil {
 				return
 			}
-			var dt core.DetailedTask
-			if err := json.Unmarshal(raw, &dt); err != nil {
+			var m map[string]any
+			if err := json.Unmarshal(raw, &m); err != nil {
 				return
 			}
 			select {
-			case notifs <- dt:
+			case notifs <- m:
 			default:
 			}
 		}),
@@ -1022,31 +1019,21 @@ func TestV2_StatusNotificationCarriesRequestState(t *testing.T) {
 	}
 	taskID := ctr.TaskID
 
-	// Wait up to 2s for a notification carrying requestState. Loop because
-	// the server may emit multiple status notifications before terminal.
+	// Wait up to 2s for any notification matching our task and assert the
+	// raw payload omits `requestState`.
 	deadline := time.After(2 * time.Second)
 	for {
 		select {
-		case dt := <-notifs:
-			if dt.TaskID != taskID {
+		case m := <-notifs:
+			if m["taskId"] != taskID {
 				continue
 			}
-			if dt.RequestState == "" {
-				t.Fatalf("notifications/tasks for %s missing requestState (full payload: %+v)", taskID, dt)
-			}
-			// SEP-2322: same body as the next tasks/get would mint —
-			// clients can drop-in update their tracked state.
-			got, err := client.GetTask(c, taskID)
-			if err != nil {
-				t.Fatalf("GetTask: %v", err)
-			}
-			if got.RequestState != dt.RequestState {
-				t.Errorf("notification requestState %q != tasks/get requestState %q",
-					dt.RequestState, got.RequestState)
+			if _, present := m["requestState"]; present {
+				t.Fatalf("notifications/tasks for %s carries requestState; merged SEP-2663 removed it from the v2 wire (payload: %+v)", taskID, m)
 			}
 			return
 		case <-deadline:
-			t.Fatalf("timed out waiting for notifications/tasks with requestState for %s", taskID)
+			t.Fatalf("timed out waiting for notifications/tasks for %s", taskID)
 		}
 	}
 }
@@ -1054,10 +1041,10 @@ func TestV2_StatusNotificationCarriesRequestState(t *testing.T) {
 // TestV2_NoProgressOrMessageOnTaskGoroutine verifies that a tool which calls
 // EmitProgress or EmitLog while running as a task does not leak
 // notifications/progress or notifications/message onto the session stream.
-// SEP-2663 (spec commit 2dba297b in PR 2663) tightened the rule to a MUST
-// NOT, and mcpkit enforces it at the session-notify boundary by wrapping the
-// bgCtx with core.ApplySessionNotifyFilter so neither emission path reaches
-// the wire — regardless of whether the tool author remembers the rule.
+// The merged SEP-2663 made this a MUST NOT; mcpkit enforces it at the
+// session-notify boundary by wrapping the bgCtx with
+// core.ApplySessionNotifyFilter so neither emission path reaches the wire
+// — regardless of whether the tool author remembers the rule.
 func TestV2_NoProgressOrMessageOnTaskGoroutine(t *testing.T) {
 	srv := newTaskV2Server(t)
 	srv.RegisterTool(
@@ -1135,279 +1122,5 @@ drain:
 		case <-deadline:
 			break drain
 		}
-	}
-}
-
-// --- Gap 3: HMAC-signed requestState (end-to-end) ---
-
-// newSignedTaskV2Server is a hybrid-of-newTaskV2Server-and-WithRequestStateKey
-// fixture used by the HMAC-mode tests. Wires the same fast-task tool but
-// configures TasksConfig with a fixed signing key + short TTL so each
-// request-cycle exercises the sign / verify path end-to-end.
-func newSignedTaskV2Server(t *testing.T, ttl time.Duration) (*Server, []byte) {
-	t.Helper()
-	srv := NewServer(core.ServerInfo{Name: "v2-signed-test", Version: "0.0.1"})
-
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "fast-task",
-			Description: "completes immediately",
-			InputSchema: map[string]any{"type": "object"},
-			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			return core.TextResult("fast-done"), nil
-		},
-	)
-
-	key := []byte("conformance-test-32-bytes-secret-key")
-	RegisterTasks(TasksConfig{
-		Server:          srv,
-		RequestStateKey: key,
-		RequestStateTTL: ttl,
-	})
-	return srv, key
-}
-
-// TestV2_RequestState_SignedRoundTrip verifies that with a signing key
-// configured, the server emits HMAC-signed requestState on tasks/get and
-// accepts the same token echoed back on tasks/get / tasks/cancel.
-func TestV2_RequestState_SignedRoundTrip(t *testing.T) {
-	srv, _ := newSignedTaskV2Server(t, time.Hour)
-	c := connectV2Client(t, srv, client.WithTasksExtension())
-
-	// Create a task. CreateTaskResult itself doesn't carry requestState
-	// (per SEP-2663) — the first signed token comes from the next tasks/get.
-	res, err := client.ToolCall(c, "fast-task", map[string]any{})
-	if err != nil || !res.IsTask() {
-		t.Fatalf("ToolCall: %v / IsTask=%v", err, res != nil && res.IsTask())
-	}
-	taskID := res.Task.TaskID
-
-	first, err := client.GetTask(c, taskID)
-	if err != nil {
-		t.Fatalf("GetTask: %v", err)
-	}
-	// Signed tokens have a "." separator and base64 segments — assert
-	// shape rather than the exact bytes (which depend on time).
-	if !strings.Contains(first.RequestState, ".") {
-		t.Fatalf("expected HMAC-signed requestState (contains '.'); got %q", first.RequestState)
-	}
-	if first.RequestState == taskID {
-		t.Errorf("HMAC mode produced plaintext requestState (= taskID); signing not applied")
-	}
-
-	// Echo the token back — server should accept and emit a fresh one
-	// (different `exp`, but verifiable).
-	second, err := client.GetTask(c, taskID, client.TaskOptions{RequestState: first.RequestState})
-	if err != nil {
-		t.Fatalf("GetTask with echoed requestState: %v", err)
-	}
-	if second.RequestState == "" {
-		t.Errorf("server should mint a fresh requestState on each tasks/get")
-	}
-}
-
-// TestV2_RequestState_TamperedRejected verifies that a token whose payload
-// is modified (after the server minted it) is rejected with -32602 on every
-// requestState-bearing handler.
-func TestV2_RequestState_TamperedRejected(t *testing.T) {
-	srv, _ := newSignedTaskV2Server(t, time.Hour)
-	c := connectV2Client(t, srv, client.WithTasksExtension())
-
-	res, _ := client.ToolCall(c, "fast-task", map[string]any{})
-	taskID := res.Task.TaskID
-	first, _ := client.GetTask(c, taskID)
-
-	// Tamper the payload segment by re-encoding a different taskId.
-	dot := strings.IndexByte(first.RequestState, '.')
-	if dot < 0 {
-		t.Fatalf("expected '.' in signed requestState; got %q", first.RequestState)
-	}
-	tampered := first.RequestState[:dot+1] + "ZXZpbA" // "evil" base64
-
-	// tasks/get
-	_, err := c.Call("tasks/get", map[string]any{"taskId": taskID, "requestState": tampered})
-	rpcErr, ok := err.(*client.RPCError)
-	if !ok || rpcErr.Code != core.ErrCodeInvalidParams {
-		t.Errorf("tasks/get tampered: err=%v; want -32602", err)
-	}
-
-	// tasks/update
-	err = client.UpdateTask(c, core.UpdateTaskRequest{TaskID: taskID, RequestState: tampered})
-	rpcErr, ok = err.(*client.RPCError)
-	if !ok || rpcErr.Code != core.ErrCodeInvalidParams {
-		t.Errorf("tasks/update tampered: err=%v; want -32602", err)
-	}
-
-	// tasks/cancel
-	err = client.CancelTask(c, taskID, client.TaskOptions{RequestState: tampered})
-	rpcErr, ok = err.(*client.RPCError)
-	if !ok || rpcErr.Code != core.ErrCodeInvalidParams {
-		t.Errorf("tasks/cancel tampered: err=%v; want -32602", err)
-	}
-}
-
-// TestV2_RequestState_ExpiredRejected verifies that a token whose embedded
-// expiry has passed is rejected. Uses TTL=1s and sleep=2s — the embedded
-// `exp` is unix SECONDS, so a sub-second TTL would round to the same second
-// as `now`, making the test flake. The 1s/2s combo cleanly crosses the
-// seconds boundary regardless of when within a second the test starts.
-func TestV2_RequestState_ExpiredRejected(t *testing.T) {
-	srv, _ := newSignedTaskV2Server(t, time.Second)
-	c := connectV2Client(t, srv, client.WithTasksExtension())
-
-	res, _ := client.ToolCall(c, "fast-task", map[string]any{})
-	taskID := res.Task.TaskID
-	first, _ := client.GetTask(c, taskID)
-
-	// Wait past the TTL (≥ 1s past the embedded exp, regardless of jitter).
-	time.Sleep(2 * time.Second)
-
-	_, err := c.Call("tasks/get", map[string]any{"taskId": taskID, "requestState": first.RequestState})
-	rpcErr, ok := err.(*client.RPCError)
-	if !ok {
-		t.Fatalf("expected *client.RPCError, got %T: %v", err, err)
-	}
-	if rpcErr.Code != core.ErrCodeInvalidParams {
-		t.Errorf("expired requestState: code=%d; want -32602", rpcErr.Code)
-	}
-	if !strings.Contains(rpcErr.Message, "expired") {
-		t.Errorf("expired requestState: message=%q; want it to mention \"expired\"", rpcErr.Message)
-	}
-}
-
-// TestV2_StrongConsistency_ImmediateGet verifies SEP-2663's durable-create
-// guarantee: "A server MUST NOT return CreateTaskResult until the task is
-// durably created — that is, until a tasks/get for the returned taskId would
-// resolve."
-//
-// Our middleware calls store.Create synchronously before building the
-// response, so the task is queryable the instant the client sees the
-// CreateTaskResult. This test codifies that ordering — if a future refactor
-// pushed store.Create into the background goroutine, this would catch it.
-func TestV2_StrongConsistency_ImmediateGet(t *testing.T) {
-	srv, _ := newTaskV2ServerWithSlow(t)
-	c := connectV2Client(t, srv, client.WithTasksExtension())
-
-	res, err := c.Call("tools/call", map[string]any{
-		"name":      "slow-task",
-		"arguments": map[string]any{},
-	})
-	if err != nil {
-		t.Fatalf("tools/call: %v", err)
-	}
-	var ctr core.CreateTaskResult
-	if err := json.Unmarshal(res.Raw, &ctr); err != nil {
-		t.Fatalf("unmarshal CreateTaskResult: %v", err)
-	}
-	if ctr.TaskID == "" {
-		t.Fatal("missing taskId in CreateTaskResult")
-	}
-
-	// Immediately query — no sleep, no poll, no goroutine yield. SEP-2663
-	// says this MUST resolve, even if the tool's background goroutine hasn't
-	// been scheduled yet.
-	got, err := c.Call("tasks/get", map[string]any{"taskId": ctr.TaskID})
-	if err != nil {
-		t.Fatalf("immediate tasks/get after CreateTaskResult must resolve (SEP-2663): %v", err)
-	}
-	var dt core.DetailedTask
-	if err := json.Unmarshal(got.Raw, &dt); err != nil {
-		t.Fatalf("unmarshal DetailedTask: %v", err)
-	}
-	if dt.TaskID != ctr.TaskID {
-		t.Errorf("tasks/get returned wrong taskId: got %q, want %q", dt.TaskID, ctr.TaskID)
-	}
-	// Status should be non-terminal (slow-task blocks until unblocked); the
-	// exact value doesn't matter — what matters is that the task exists.
-	if dt.Status.IsTerminal() {
-		t.Errorf("expected non-terminal status (task is blocked), got %q", dt.Status)
-	}
-}
-
-// TestV2_RequestState_StaleTolerance verifies SEP-2663's "Servers MUST tolerate
-// receiving a stale or outdated value gracefully" requirement. Each tasks/get
-// mints a fresh signed requestState (different `exp`), so an earlier token
-// becomes "stale" the moment the next one is minted — but stale-but-not-expired
-// tokens MUST still verify and the request MUST succeed (not -32602).
-//
-// Our HMAC verifier only checks signature validity + expiry, never "latest
-// version," so this test codifies the existing behavior. Servers that decide
-// to track a "latest only" notion would fail here, which is the point.
-func TestV2_RequestState_StaleTolerance(t *testing.T) {
-	srv, _ := newSignedTaskV2Server(t, time.Hour)
-	c := connectV2Client(t, srv, client.WithTasksExtension())
-
-	res, err := client.ToolCall(c, "fast-task", map[string]any{})
-	if err != nil || !res.IsTask() {
-		t.Fatalf("ToolCall: %v / IsTask=%v", err, res != nil && res.IsTask())
-	}
-	taskID := res.Task.TaskID
-
-	// Mint tokenA via the first tasks/get.
-	first, err := client.GetTask(c, taskID)
-	if err != nil {
-		t.Fatalf("first GetTask: %v", err)
-	}
-	tokenA := first.RequestState
-	if tokenA == "" {
-		t.Fatal("expected non-empty requestState from signed-mode server")
-	}
-
-	// Sleep ≥1s so the next mint embeds a different `exp` (unix seconds
-	// granularity) — that's what makes tokenA "stale."
-	time.Sleep(1100 * time.Millisecond)
-
-	second, err := client.GetTask(c, taskID, client.TaskOptions{RequestState: tokenA})
-	if err != nil {
-		t.Fatalf("second GetTask (echoing tokenA): %v", err)
-	}
-	tokenB := second.RequestState
-	if tokenB == "" || tokenB == tokenA {
-		t.Fatalf("expected fresh token on second tasks/get; got %q (vs A=%q)", tokenB, tokenA)
-	}
-
-	// Now echo the older tokenA — it's stale (a newer token has been minted)
-	// but still within its TTL, so the server MUST accept it.
-	stale, err := client.GetTask(c, taskID, client.TaskOptions{RequestState: tokenA})
-	if err != nil {
-		t.Fatalf("stale-token GetTask: %v — server must tolerate stale-but-valid tokens (SEP-2663)", err)
-	}
-	if stale.TaskID != taskID {
-		t.Errorf("stale-token GetTask returned wrong taskId: got %q, want %q", stale.TaskID, taskID)
-	}
-}
-
-// TestV2_RequestState_LegacyPlaintext verifies that with no key configured
-// (the default), the server falls back to plaintext requestState (== taskID).
-// Existing tests / clients that don't echo requestState keep working.
-func TestV2_RequestState_LegacyPlaintext(t *testing.T) {
-	srv := newTaskV2Server(t) // no RequestStateKey
-	c := connectV2Client(t, srv, client.WithTasksExtension())
-
-	res, _ := client.ToolCall(c, "fast-task", map[string]any{})
-	taskID := res.Task.TaskID
-	first, err := client.GetTask(c, taskID)
-	if err != nil {
-		t.Fatalf("GetTask: %v", err)
-	}
-	if first.RequestState != taskID {
-		t.Errorf("legacy mode: requestState = %q, want plaintext taskID %q",
-			first.RequestState, taskID)
-	}
-
-	// Echoing the plaintext state still works (matches taskID).
-	_, err = client.GetTask(c, taskID, client.TaskOptions{RequestState: taskID})
-	if err != nil {
-		t.Errorf("legacy mode echo: %v", err)
-	}
-
-	// A non-matching string still gets rejected even in legacy mode —
-	// minimal protection against a client confusing two task IDs.
-	_, err = c.Call("tasks/get", map[string]any{"taskId": taskID, "requestState": "not-the-task-id"})
-	rpcErr, ok := err.(*client.RPCError)
-	if !ok || rpcErr.Code != core.ErrCodeInvalidParams {
-		t.Errorf("legacy mode mismatched state: err=%v; want -32602", err)
 	}
 }

@@ -127,10 +127,6 @@ type CreateTaskResult struct {
 //   - completed        → Result populated
 //   - failed           → Error populated
 //   - cancelled        → no inlined payload
-//
-// RequestState is opaque session-continuation state for stateless deployments;
-// servers MAY include it on any status, clients MUST echo it back on the
-// next tasks/get / tasks/update / tasks/cancel for the same task. // SEP-2322
 type DetailedTask struct {
 	// ResultType is the SEP-2322 polymorphic-dispatch discriminator. For
 	// tasks/get responses it is always "complete" — the JSON-RPC request
@@ -153,9 +149,6 @@ type DetailedTask struct {
 	// InputRequests is populated when Status == TaskInputRequired and lists
 	// the MRTR input requests the client must satisfy via tasks/update. // SEP-2322
 	InputRequests InputRequests `json:"inputRequests,omitempty"`
-
-	// RequestState is the opaque session-continuation token. // SEP-2322
-	RequestState string `json:"requestState,omitempty"`
 }
 
 // MarshalJSON defaults ResultType to ResultTypeComplete when empty so every
@@ -193,11 +186,10 @@ type TaskError struct {
 
 // UpdateTaskRequest is the params payload for tasks/update — the MRTR-driven
 // resume path. The client supplies InputResponses keyed by the same ids
-// returned in DetailedTask.InputRequests, optionally echoing RequestState. // SEP-2663
+// returned in DetailedTask.InputRequests. // SEP-2663
 type UpdateTaskRequest struct {
 	TaskID         string         `json:"taskId"`
 	InputResponses InputResponses `json:"inputResponses,omitempty"`
-	RequestState   string         `json:"requestState,omitempty"` // SEP-2322
 }
 
 // UpdateTaskResult is the (essentially empty) ack returned by tasks/update.
@@ -290,16 +282,24 @@ func (r InputRequiredResult) MarshalJSON() ([]byte, error) {
 	return json.Marshal(alias(r))
 }
 
-// --- SEP-2322 requestState signing ---
+// --- MRTR requestState signing ---
 //
-// SEP-2663 says servers MUST treat requestState as attacker-controlled. The
-// helpers below implement an HMAC-SHA256-signed encoding so a server that
-// minted a token can verify the same token came back unmodified, with no
-// per-task state on the server side (stateless deployments).
+// SEP-2322's InputRequiredResult.RequestState carries an opaque token from
+// server to client which the client MUST echo on subsequent requests. The
+// helpers below implement an HMAC-SHA256-signed encoding so a stateless
+// server can verify the token came back unmodified, plus a plaintext mode
+// for deployments without a signing key.
 //
-// Wire format: "<base64url-signature>.<base64url-payload>" where payload is
-// the JSON encoding of requestStatePayload {taskId, exp}. base64url is
-// chosen to keep the token URL/header-safe without escaping.
+// Wire format (signed): "<base64url-signature>.<base64url-payload>" where
+// payload is the JSON encoding of MRTRRoundState {tool, answered, exp}.
+// base64url is chosen to keep the token URL/header-safe without escaping.
+//
+// SignRequestState / VerifyRequestState use the older requestStatePayload
+// {taskId, exp} shape. SEP-2663 removed `requestState` from the tasks-v2
+// wire, so the tasks-v2 paths no longer call them. They are retained
+// because server/mrtr.go reads legacy single-round tokens with this shape
+// for backward compatibility; that shim is removable once all in-flight
+// rounds have rotated past.
 
 // ErrRequestStateMalformed indicates the encoded requestState couldn't be
 // parsed (missing separator, bad base64, bad JSON inside the payload).
@@ -313,7 +313,8 @@ var ErrRequestStateInvalidSignature = errors.New("requestState signature invalid
 var ErrRequestStateExpired = errors.New("requestState expired")
 
 // requestStatePayload is the JSON body wrapped inside a signed
-// requestState token. Compact (two fields) so the encoded form stays small.
+// requestState token (legacy single-round MRTR shape). Compact (two
+// fields) so the encoded form stays small.
 type requestStatePayload struct {
 	TaskID string `json:"taskId"`
 	Exp    int64  `json:"exp"` // unix seconds
@@ -321,13 +322,12 @@ type requestStatePayload struct {
 
 // SignRequestState produces an HMAC-SHA256-signed requestState token for
 // the given taskID, valid for ttl. The encoded form is opaque to clients
-// and round-trippable via VerifyRequestState. Panics if key is empty —
-// callers MUST check before invoking (see v2TaskRuntime.makeRequestState
-// which falls back to plaintext when the key is unset).
+// and round-trippable via VerifyRequestState. Panics if key is empty.
+//
+// Retained for backward-compat with legacy MRTR tokens; see the section
+// banner above.
 func SignRequestState(key []byte, taskID string, ttl time.Duration) string {
 	if len(key) == 0 {
-		// Indicates a programming error — the runtime should fall back to
-		// plain taskID in legacy mode rather than calling Sign with no key.
 		panic("core.SignRequestState: empty key")
 	}
 	payload := requestStatePayload{
@@ -336,7 +336,6 @@ func SignRequestState(key []byte, taskID string, ttl time.Duration) string {
 	}
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		// json.Marshal of a tiny struct can't realistically fail.
 		panic(fmt.Sprintf("core.SignRequestState: marshal payload: %v", err))
 	}
 	mac := hmac.New(sha256.New, key)
@@ -344,6 +343,47 @@ func SignRequestState(key []byte, taskID string, ttl time.Duration) string {
 	sig := mac.Sum(nil)
 	return base64.RawURLEncoding.EncodeToString(sig) + "." +
 		base64.RawURLEncoding.EncodeToString(payloadBytes)
+}
+
+// VerifyRequestState checks an incoming requestState token against the
+// signing key and current time. Returns the embedded taskID on success.
+// Errors:
+//   - ErrRequestStateMalformed: structural parse failures (split, base64, JSON)
+//   - ErrRequestStateInvalidSignature: signature mismatch (tampered or wrong key)
+//   - ErrRequestStateExpired: payload exp is in the past
+//
+// Uses hmac.Equal for constant-time signature comparison. Retained for
+// backward-compat with legacy MRTR tokens; see the section banner above.
+func VerifyRequestState(key []byte, state string) (taskID string, err error) {
+	if len(key) == 0 {
+		return "", ErrRequestStateMalformed
+	}
+	dot := strings.IndexByte(state, '.')
+	if dot < 0 {
+		return "", ErrRequestStateMalformed
+	}
+	sig, err := base64.RawURLEncoding.DecodeString(state[:dot])
+	if err != nil {
+		return "", ErrRequestStateMalformed
+	}
+	payloadBytes, err := base64.RawURLEncoding.DecodeString(state[dot+1:])
+	if err != nil {
+		return "", ErrRequestStateMalformed
+	}
+	mac := hmac.New(sha256.New, key)
+	mac.Write(payloadBytes)
+	expected := mac.Sum(nil)
+	if !hmac.Equal(sig, expected) {
+		return "", ErrRequestStateInvalidSignature
+	}
+	var payload requestStatePayload
+	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
+		return "", ErrRequestStateMalformed
+	}
+	if payload.Exp > 0 && time.Now().Unix() > payload.Exp {
+		return "", ErrRequestStateExpired
+	}
+	return payload.TaskID, nil
 }
 
 // MRTRRoundState is the payload encoded inside an SEP-2322 ephemeral
@@ -460,42 +500,3 @@ func DecodeMRTRStatePlaintext(token string) (MRTRRoundState, error) {
 	return state, nil
 }
 
-// VerifyRequestState checks an incoming requestState token against the
-// signing key and current time. Returns the embedded taskID on success.
-// Errors:
-//   - ErrRequestStateMalformed: structural parse failures (split, base64, JSON)
-//   - ErrRequestStateInvalidSignature: signature mismatch (tampered or wrong key)
-//   - ErrRequestStateExpired: payload exp is in the past
-//
-// Uses hmac.Equal for constant-time signature comparison.
-func VerifyRequestState(key []byte, state string) (taskID string, err error) {
-	if len(key) == 0 {
-		return "", ErrRequestStateMalformed
-	}
-	dot := strings.IndexByte(state, '.')
-	if dot < 0 {
-		return "", ErrRequestStateMalformed
-	}
-	sig, err := base64.RawURLEncoding.DecodeString(state[:dot])
-	if err != nil {
-		return "", ErrRequestStateMalformed
-	}
-	payloadBytes, err := base64.RawURLEncoding.DecodeString(state[dot+1:])
-	if err != nil {
-		return "", ErrRequestStateMalformed
-	}
-	mac := hmac.New(sha256.New, key)
-	mac.Write(payloadBytes)
-	expected := mac.Sum(nil)
-	if !hmac.Equal(sig, expected) {
-		return "", ErrRequestStateInvalidSignature
-	}
-	var payload requestStatePayload
-	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
-		return "", ErrRequestStateMalformed
-	}
-	if payload.Exp > 0 && time.Now().Unix() > payload.Exp {
-		return "", ErrRequestStateExpired
-	}
-	return payload.TaskID, nil
-}

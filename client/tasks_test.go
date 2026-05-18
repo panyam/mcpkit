@@ -160,9 +160,9 @@ func TestToolCall_TaskResult(t *testing.T) {
 
 // --- GetTask ---
 
-// TestGetTask returns DetailedTask with the v2 wire shape (TaskInfoV2 fields,
-// requestState present). Status may be working or already terminal — both
-// are valid as long as the shape decodes.
+// TestGetTask returns DetailedTask with the v2 wire shape (TaskInfoV2 fields).
+// Status may be working or already terminal — both are valid as long as the
+// shape decodes.
 func TestGetTask(t *testing.T) {
 	url, _ := newTaskV2TestServer(t)
 	c := connectV2TaskClient(t, url)
@@ -179,9 +179,6 @@ func TestGetTask(t *testing.T) {
 	}
 	if dt.TaskID != taskID {
 		t.Errorf("TaskID = %q, want %q", dt.TaskID, taskID)
-	}
-	if dt.RequestState == "" {
-		t.Errorf("expected non-empty requestState (server should emit one)")
 	}
 }
 
@@ -378,7 +375,6 @@ func TestUpdateTask_FullElicitLoop(t *testing.T) {
 		InputResponses: core.InputResponses{
 			key: json.RawMessage(`{"action":"accept","content":{"confirm":true}}`),
 		},
-		RequestState: pending.RequestState,
 	}); err != nil {
 		t.Fatalf("UpdateTask: %v", err)
 	}
