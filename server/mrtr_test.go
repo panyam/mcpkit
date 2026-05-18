@@ -432,67 +432,6 @@ func TestMRTR_TaskComposition_Skipped(t *testing.T) {
 	}
 }
 
-// TestRequestStateSigning_SharedByMRTRAndTasks verifies that a server-wide
-// WithRequestStateSigning is inherited by RegisterTasks when
-// TasksConfig.RequestStateKey is left unset — production deployments
-// should configure the HMAC key once and have BOTH ephemeral MRTR and
-// SEP-2663 task requestStates signed with the same secret.
-func TestRequestStateSigning_SharedByMRTRAndTasks(t *testing.T) {
-	signingKey := []byte("shared-signing-key")
-
-	srv := NewServer(
-		core.ServerInfo{Name: "mrtr-shared-key", Version: "0.0.1"},
-		WithRequestStateSigning(signingKey, time.Hour),
-	)
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "fast-task",
-			Description: "Async-eligible, completes immediately",
-			InputSchema: map[string]any{"type": "object"},
-			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			return core.TextResult("done"), nil
-		},
-	)
-	// No RequestStateKey on the TasksConfig — should inherit from server-wide.
-	RegisterTasks(TasksConfig{Server: srv})
-
-	c := connectMRTRClient(t, srv, client.WithTasksExtension())
-
-	// Drive task creation and pull tasks/get to inspect the requestState
-	// the server minted; if inheritance worked, it's HMAC-signed (sig.payload),
-	// otherwise it's the legacy plaintext taskID.
-	res, err := c.Call("tools/call", map[string]any{
-		"name":      "fast-task",
-		"arguments": map[string]any{},
-	})
-	if err != nil {
-		t.Fatalf("tools/call: %v", err)
-	}
-	var ctr core.CreateTaskResult
-	if err := json.Unmarshal(res.Raw, &ctr); err != nil {
-		t.Fatalf("unmarshal CreateTaskResult: %v", err)
-	}
-	getRes, err := c.Call("tasks/get", map[string]any{"taskId": ctr.TaskID})
-	if err != nil {
-		t.Fatalf("tasks/get: %v", err)
-	}
-	var dt core.DetailedTask
-	json.Unmarshal(getRes.Raw, &dt)
-	if dt.RequestState == "" {
-		t.Fatal("DetailedTask.requestState empty; expected signed token")
-	}
-	if !strings.Contains(dt.RequestState, ".") {
-		t.Errorf("DetailedTask.requestState = %q, want sig.payload form (server-wide signing didn't reach tasks)", dt.RequestState)
-	}
-
-	// And the same key must verify the token end-to-end via the public helper.
-	if _, err := core.VerifyRequestState(signingKey, dt.RequestState); err != nil {
-		t.Errorf("VerifyRequestState: %v (token=%q)", err, dt.RequestState)
-	}
-}
-
 // connectMRTRClient is a one-off helper for MRTR tests — most existing v2
 // fixtures register a full tasks setup we don't need here.
 func connectMRTRClient(t *testing.T, srv *Server, opts ...client.ClientOption) *client.Client {

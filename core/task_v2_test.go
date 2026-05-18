@@ -170,7 +170,6 @@ func TestDetailedTaskInputRequestsTyped(t *testing.T) {
 				Params: json.RawMessage(`{"message":"Proceed?"}`),
 			},
 		},
-		RequestState: "opaque-state-token",
 	}
 	data, err := json.Marshal(res)
 	if err != nil {
@@ -192,9 +191,6 @@ func TestDetailedTaskInputRequestsTyped(t *testing.T) {
 	if entry["method"] != "elicitation/create" {
 		t.Errorf("inputRequests[elicit-1].method = %v, want elicitation/create", entry["method"])
 	}
-	if m["requestState"] != "opaque-state-token" {
-		t.Errorf("requestState = %v, want opaque-state-token", m["requestState"])
-	}
 
 	// Typed round-trip preserves InputRequest.Method through GetTaskResult,
 	// which is an alias for DetailedTask.
@@ -207,9 +203,11 @@ func TestDetailedTaskInputRequestsTyped(t *testing.T) {
 	}
 }
 
-// TestDetailedTaskRequestStateOmitEmpty verifies that RequestState is omitted
-// when empty on DetailedTask (it's optional per SEP-2322).
-func TestDetailedTaskRequestStateOmitEmpty(t *testing.T) {
+// TestDetailedTaskNoRequestState verifies that DetailedTask never emits a
+// `requestState` JSON field — the merged SEP-2663 removed the field from
+// the tasks-v2 wire entirely. (MRTR's InputRequiredResult.RequestState
+// remains on a different surface; see TestInputRequiredResult below.)
+func TestDetailedTaskNoRequestState(t *testing.T) {
 	res := DetailedTask{
 		TaskInfoV2: TaskInfoV2{
 			TaskID: "t1", Status: TaskWorking,
@@ -221,7 +219,7 @@ func TestDetailedTaskRequestStateOmitEmpty(t *testing.T) {
 	var m map[string]any
 	json.Unmarshal(data, &m)
 	if _, ok := m["requestState"]; ok {
-		t.Errorf("DetailedTask: requestState should be omitted when empty; got %s", data)
+		t.Errorf("DetailedTask: requestState MUST NOT appear on the tasks-v2 wire; got %s", data)
 	}
 }
 
@@ -416,15 +414,14 @@ func TestDetailedTaskFailedShape(t *testing.T) {
 }
 
 // TestUpdateTaskRequestWireShape verifies the SEP-2663 tasks/update params:
-// {taskId, inputResponses, requestState}. inputResponses preserves opaque
-// per-key payloads (json.RawMessage).
+// {taskId, inputResponses}. inputResponses preserves opaque per-key payloads
+// (json.RawMessage). The merged spec removed requestState from this shape.
 func TestUpdateTaskRequestWireShape(t *testing.T) {
 	req := UpdateTaskRequest{
 		TaskID: "task-xyz",
 		InputResponses: InputResponses{
 			"elicit-1": json.RawMessage(`{"action":"accept","content":{"ok":true}}`),
 		},
-		RequestState: "state-1",
 	}
 	data, err := json.Marshal(req)
 	if err != nil {
@@ -436,8 +433,8 @@ func TestUpdateTaskRequestWireShape(t *testing.T) {
 	if m["taskId"] != "task-xyz" {
 		t.Errorf("taskId = %v, want task-xyz", m["taskId"])
 	}
-	if m["requestState"] != "state-1" {
-		t.Errorf("requestState = %v, want state-1", m["requestState"])
+	if _, ok := m["requestState"]; ok {
+		t.Errorf("requestState MUST NOT appear on UpdateTaskRequest (removed by merged SEP-2663); got %s", data)
 	}
 	resps, ok := m["inputResponses"].(map[string]any)
 	if !ok {
@@ -464,17 +461,15 @@ func TestUpdateTaskRequestWireShape(t *testing.T) {
 	}
 }
 
-// TestUpdateTaskRequestOmitEmpty verifies that inputResponses and requestState
-// are omitted when empty/zero (only taskId is required).
+// TestUpdateTaskRequestOmitEmpty verifies that inputResponses is omitted
+// when empty (only taskId is required).
 func TestUpdateTaskRequestOmitEmpty(t *testing.T) {
 	req := UpdateTaskRequest{TaskID: "t1"}
 	data, _ := json.Marshal(req)
 	var m map[string]any
 	json.Unmarshal(data, &m)
-	for _, absent := range []string{"inputResponses", "requestState"} {
-		if _, ok := m[absent]; ok {
-			t.Errorf("%q should be omitted when empty; got %s", absent, data)
-		}
+	if _, ok := m["inputResponses"]; ok {
+		t.Errorf("inputResponses should be omitted when empty; got %s", data)
 	}
 }
 
