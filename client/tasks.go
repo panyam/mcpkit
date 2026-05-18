@@ -11,10 +11,9 @@ package client
 //   - tasks/update is the new resume path for MRTR input rounds.
 //   - tasks/cancel returns an empty ack.
 //   - WaitForTask polls tasks/get and honors the server's PollIntervalMs
-//     hint, automatically echoing requestState. Per SEP-2663 (commit a1ed0703)
-//     a caller that has issued tasks/cancel may abort the poll loop without
-//     waiting for "cancelled" status to surface; cancel the ctx passed to
-//     WaitForTask and it returns context.Canceled.
+//     hint. Per SEP-2663 a caller that has issued tasks/cancel may abort
+//     the poll loop without waiting for "cancelled" status to surface;
+//     cancel the ctx passed to WaitForTask and it returns context.Canceled.
 
 import (
 	"context"
@@ -27,29 +26,12 @@ import (
 
 // --- Public option types ---
 
-// TaskOptions configures a single tasks/get or tasks/cancel call.
-// The zero value sends no requestState; pass an explicit value to echo a
-// requestState the server returned on a previous response (SEP-2322 stateless
-// deployments). Polling helpers (WaitForTask) thread requestState
-// automatically and don't require callers to pass it manually.
-type TaskOptions struct {
-	// RequestState is the opaque session-continuation token the server
-	// returned on the most recent DetailedTask. Echoed verbatim — clients
-	// MUST treat it as opaque.
-	RequestState string
-}
-
 // WaitOptions configures WaitForTask.
 type WaitOptions struct {
 	// PollInterval overrides the server's PollIntervalMs hint.
 	// 0 (the default) means: respect whatever the server returned, with a
 	// 1-second floor and a 30-second cap if the server didn't say.
 	PollInterval time.Duration
-
-	// RequestState seeds the echo loop. When the server returns an updated
-	// requestState in a poll response, WaitForTask switches to using it on
-	// the next call.
-	RequestState string
 }
 
 // ToolCallResult is the discriminated union returned by ToolCall. Exactly
@@ -71,7 +53,8 @@ type ToolCallResult struct {
 	// themselves (resolve inputRequests, retry tools/call with
 	// inputResponses + requestState); CallToolWithInputs handles the
 	// loop automatically. Renamed from Incomplete in lockstep with
-	// SEP-2322 commit de6d76fb (merged 2026-05-06).
+	// SEP-2322. The `requestState` echo on retry remains valid for the
+	// MRTR surface even though the tasks-v2 wire no longer carries it.
 	InputRequired *core.InputRequiredResult
 }
 
@@ -89,13 +72,11 @@ func (r *ToolCallResult) IsInputRequired() bool {
 // --- Wire-format params ---
 
 type tasksGetParams struct {
-	TaskID       string `json:"taskId"`
-	RequestState string `json:"requestState,omitempty"`
+	TaskID string `json:"taskId"`
 }
 
 type tasksCancelParams struct {
-	TaskID       string `json:"taskId"`
-	RequestState string `json:"requestState,omitempty"`
+	TaskID string `json:"taskId"`
 }
 
 // --- Polymorphic tools/call ---
@@ -154,15 +135,11 @@ func parseToolCallResult(raw json.RawMessage) (*ToolCallResult, error) {
 // --- tasks/get / tasks/update / tasks/cancel ---
 
 // GetTask fetches the current state of a v2 task as a DetailedTask, with
-// inlined result / error / inputRequests / requestState depending on status.
-// Idempotent — safe to call as often as needed; servers gate this method on
-// the io.modelcontextprotocol/tasks extension being negotiated.
-func GetTask(c *Client, taskID string, opts ...TaskOptions) (*core.DetailedTask, error) {
-	params := tasksGetParams{TaskID: taskID}
-	if len(opts) > 0 {
-		params.RequestState = opts[0].RequestState
-	}
-	resp, err := c.Call("tasks/get", params)
+// inlined result / error / inputRequests depending on status. Idempotent —
+// safe to call as often as needed; servers gate this method on the
+// io.modelcontextprotocol/tasks extension being negotiated.
+func GetTask(c *Client, taskID string) (*core.DetailedTask, error) {
+	resp, err := c.Call("tasks/get", tasksGetParams{TaskID: taskID})
 	if err != nil {
 		return nil, err
 	}
@@ -194,12 +171,8 @@ func UpdateTask(c *Client, req core.UpdateTaskRequest) error {
 // CancelTask cancels a running task. Returns nil on success — the server
 // response is an empty ack per SEP-2663 (no task state). Issue GetTask if
 // you need to observe the resulting "cancelled" status.
-func CancelTask(c *Client, taskID string, opts ...TaskOptions) error {
-	params := tasksCancelParams{TaskID: taskID}
-	if len(opts) > 0 {
-		params.RequestState = opts[0].RequestState
-	}
-	if _, err := c.Call("tasks/cancel", params); err != nil {
+func CancelTask(c *Client, taskID string) error {
+	if _, err := c.Call("tasks/cancel", tasksCancelParams{TaskID: taskID}); err != nil {
 		return err
 	}
 	return nil
@@ -224,32 +197,29 @@ const (
 //   - else the server's PollIntervalMs on the most recent response,
 //   - else the 1-second default.
 //
-// requestState is threaded automatically: each poll echoes the requestState
-// the server returned on the previous response. Returns the final
-// DetailedTask snapshot (which inlines the result / error / inputRequests
-// per SEP-2663). Note that input_required is NOT terminal — callers wanting
-// to handle the MRTR resume should poll until terminal or use a tighter
-// loop that checks for input_required and calls UpdateTask in between.
+// Returns the final DetailedTask snapshot (which inlines the result / error
+// / inputRequests per SEP-2663). Note that input_required is NOT terminal —
+// callers wanting to handle the MRTR resume should poll until terminal or
+// use a tighter loop that checks for input_required and calls UpdateTask in
+// between.
 //
-// Cancel-poll abort (SEP-2663 commit a1ed0703): a caller that issues
-// tasks/cancel may stop polling immediately without waiting for the server
-// to surface "cancelled" status. The recommended pattern is to derive a
-// child context for the wait and cancel it after CancelTask returns:
+// Cancel-poll abort (SEP-2663): a caller that issues tasks/cancel may stop
+// polling immediately without waiting for the server to surface "cancelled"
+// status. The recommended pattern is to derive a child context for the wait
+// and cancel it after CancelTask returns:
 //
 //	pollCtx, stopPoll := context.WithCancel(ctx)
 //	defer stopPoll()
 //	go func() {
 //	    <-userCancelSignal
-//	    client.CancelTask(ctx, taskID, nil)
+//	    client.CancelTask(c, taskID)
 //	    stopPoll()
 //	}()
 //	dt, err := client.WaitForTask(pollCtx, taskID)  // err == context.Canceled on abort
 func WaitForTask(ctx context.Context, c *Client, taskID string, opts ...WaitOptions) (*core.DetailedTask, error) {
 	var override time.Duration
-	state := ""
 	if len(opts) > 0 {
 		override = opts[0].PollInterval
-		state = opts[0].RequestState
 	}
 
 	for {
@@ -262,15 +232,12 @@ func WaitForTask(ctx context.Context, c *Client, taskID string, opts ...WaitOpti
 		default:
 		}
 
-		dt, err := GetTask(c, taskID, TaskOptions{RequestState: state})
+		dt, err := GetTask(c, taskID)
 		if err != nil {
 			return nil, err
 		}
 		if dt.Status.IsTerminal() {
 			return dt, nil
-		}
-		if dt.RequestState != "" {
-			state = dt.RequestState
 		}
 
 		wait := nextPollWait(override, dt.PollIntervalMs)
