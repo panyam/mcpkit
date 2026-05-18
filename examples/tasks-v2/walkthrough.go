@@ -254,7 +254,6 @@ func runDemo() {
 				InputResponses: core.InputResponses{
 					key: json.RawMessage(`{"action":"accept","content":{"confirm":true}}`),
 				},
-				RequestState: pending.RequestState,
 			}); err != nil {
 				fmt.Printf("    ERROR tasks/update: %v\n", err)
 				return
