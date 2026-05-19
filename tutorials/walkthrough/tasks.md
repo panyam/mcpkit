@@ -18,18 +18,18 @@
 
 ## Context
 
-Some operations don't fit the single-request → single-response model. They run for minutes, need to be queryable, must survive transport drops, may be cancelled by either side. **Tasks** is MCP's first-class long-running-operation primitive (SEP-2663). This page covers the v1 / v2 / hybrid coexistence pattern in mcpkit, the task store, detach/resume semantics, and how progress notifications integrate.
+Some operations don't fit the single-request → single-response model. They run for minutes, need to be queryable, must survive transport drops, may be cancelled by either side. **Tasks** is MCP's first-class long-running-operation primitive (SEP-2663, merged Final 2026-05-15). This page covers the v1 → v2 transition in mcpkit, the task store, detach/resume semantics, and how progress notifications integrate.
 
 ## What this page will cover
 
 - **Core capability → extension.** v1 tasks was a core `capabilities.tasks` slot; SEP-2663 v2 moves tasks into the `capabilities.extensions` map as `io.modelcontextprotocol/tasks`. The *why* is covered in [extension-mechanisms Q2 → "tasks moved from core to extension"](./extension-mechanisms.md#worked-example-tasks-moved-from-core-to-extension); this page owns the *what-changed-on-the-wire* detail.
 - The task lifecycle states (created, running, completed, failed, cancelled, `input_required`)
-- v1 vs. v2 on-the-wire shape differences (`ttl` → `ttlSeconds`, `pollInterval` → `pollIntervalMilliseconds`, `parentTaskId` dropped, …)
-- mcpkit's three entry points: `RegisterTasksV1`, `RegisterTasks`, `RegisterTasksHybrid` — the hybrid advertises both the core slot and the extension entry, dispatches by negotiated capability
+- v1 vs. v2 on-the-wire shape differences (`ttl` → `ttlMs`, `pollInterval` → `pollIntervalMs`, `parentTaskId` dropped, `requestState` dropped from the v2 wire, …)
+- mcpkit's two entry points: `server.RegisterTasksV1` (frozen) and `tasks.Register` from the `ext/tasks/` sub-module (v2, canonical). The prior `RegisterTasksHybrid` was removed when v2 moved out of `server/`; servers needing both surfaces during a rolling upgrade install them side by side.
 - The task store — what's persisted, restart durability, query semantics
 - Detach/resume — how a task can outlive the originating request
-- Progress notifications integration: `progressToken` pairing for tasks
-- The `input_required` state — tasks reuse MRTR's `InputRequiredResult` shape; one `WithRequestStateSigning` key covers both (see [mrtr Q6](./mrtr.md#q6--composition-with-tasks-v2))
+- Progress notifications integration: `progressToken` pairing for tasks. Note that SEP-2663 forbids `notifications/progress` and `notifications/message` on task streams; mcpkit drops them at the session-notify boundary.
+- The `input_required` state — tasks reuse MRTR's `InputRequiredResult` shape (see [mrtr Q6](./mrtr.md#q6--composition-with-tasks-v2))
 - Cancellation across task lifecycle (`notifications/cancelled` vs task-level cancel)
 
 ## Next to read
