@@ -52,7 +52,7 @@ func WithMCPLogging(logger *log.Logger) []server.Option {
 // Callers append example-specific options:
 //
 //	opts := common.MCPServerOptions(*addr, "[mcp] ")
-//	opts = append(opts, server.WithListTTL(60))
+//	opts = append(opts, server.WithListTTLMs(60000))
 //	srv := server.NewServer(info, opts...)
 //
 // If you need the logger handle (custom tinted log lines, extra rules),

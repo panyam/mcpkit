@@ -116,12 +116,29 @@ type Dispatcher struct {
 	// plaintext mode.
 	mrtr *mrtrRuntime
 
-	// listTTL is the SEP-2549 cache freshness hint (seconds) attached to
-	// every tools/list, prompts/list, resources/list, and
-	// resources/templates/list response. nil = no hint emitted (clients
-	// fall back to list_changed); &0 = explicit "do not cache"; &N>0 =
-	// fresh for N seconds. Set via WithListTTL.
-	listTTL *int
+	// SEP-2549 cache hints. listTTLMs / listCacheScope are attached to every
+	// tools/list, prompts/list, resources/list, and resources/templates/list
+	// response. readTTLMs / readCacheScope are the defaults for resources/read
+	// (a handler may override either per-read via core.ResourceResult). A nil
+	// *int or empty string omits the field. Set via WithListTTLMs /
+	// WithListCacheControl / WithReadResourceCacheControl.
+	listTTLMs      *int
+	listCacheScope string
+	readTTLMs      *int
+	readCacheScope string
+}
+
+// applyReadCacheControl fills the SEP-2549 ttlMs / cacheScope hints on a
+// resources/read result. A handler that already set either field on its
+// return value keeps that value (per-read override); the server-wide
+// default from WithReadResourceCacheControl fills only the unset fields.
+func (d *Dispatcher) applyReadCacheControl(r *core.ResourceResult) {
+	if r.TTLMs == nil {
+		r.TTLMs = d.readTTLMs
+	}
+	if r.CacheScope == "" {
+		r.CacheScope = d.readCacheScope
+	}
 }
 
 // SetNotifyFunc sets the notification delivery function for this dispatcher.
@@ -242,7 +259,10 @@ func (d *Dispatcher) newSession() *Dispatcher {
 		tasksCap:             d.tasksCap,
 		customHandlers:       d.customHandlers,
 		mrtr:                 d.mrtr,
-		listTTL:              d.listTTL,
+		listTTLMs:            d.listTTLMs,
+		listCacheScope:       d.listCacheScope,
+		readTTLMs:            d.readTTLMs,
+		readCacheScope:       d.readCacheScope,
 	}
 }
 
@@ -440,7 +460,7 @@ func (d *Dispatcher) handleToolsList(id json.RawMessage, params json.RawMessage)
 		page = stripFileInputsFromTools(page)
 	}
 
-	return core.NewResponse(id, core.ToolsListResult{Tools: page, NextCursor: nextCursor, TTL: d.listTTL})
+	return core.NewResponse(id, core.ToolsListResult{Tools: page, NextCursor: nextCursor, TTLMs: d.listTTLMs, CacheScope: d.listCacheScope})
 }
 
 // stripFileInputsFromTools returns a copy of `tools` with every
@@ -575,7 +595,7 @@ func (d *Dispatcher) handleResourcesList(id json.RawMessage, params json.RawMess
 	d.Reg.mu.RUnlock()
 
 	page, nextCursor, _ := paginate(resources, cursor, defaultPageSize)
-	return core.NewResponse(id, core.ResourcesListResult{Resources: page, NextCursor: nextCursor, TTL: d.listTTL})
+	return core.NewResponse(id, core.ResourcesListResult{Resources: page, NextCursor: nextCursor, TTLMs: d.listTTLMs, CacheScope: d.listCacheScope})
 }
 
 func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
@@ -599,6 +619,7 @@ func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage
 		if err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeResourceError, fmt.Sprintf("resource %q: %v", envelope.URI, err))
 		}
+		d.applyReadCacheControl(&result)
 		return core.NewResponse(id, result)
 	}
 
@@ -630,6 +651,7 @@ func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage
 		if err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeResourceError, fmt.Sprintf("resource template %q: %v", matchedTmplURI, err))
 		}
+		d.applyReadCacheControl(&result)
 		return core.NewResponse(id, result)
 	}
 
@@ -649,7 +671,7 @@ func (d *Dispatcher) handleResourcesTemplatesList(id json.RawMessage, params jso
 	d.Reg.mu.RUnlock()
 
 	page, nextCursor, _ := paginate(templates, cursor, defaultPageSize)
-	return core.NewResponse(id, core.ResourceTemplatesListResult{ResourceTemplates: page, NextCursor: nextCursor, TTL: d.listTTL})
+	return core.NewResponse(id, core.ResourceTemplatesListResult{ResourceTemplates: page, NextCursor: nextCursor, TTLMs: d.listTTLMs, CacheScope: d.listCacheScope})
 }
 
 // --- Resource Subscriptions ---
@@ -700,7 +722,7 @@ func (d *Dispatcher) handlePromptsList(id json.RawMessage, params json.RawMessag
 	d.Reg.mu.RUnlock()
 
 	page, nextCursor, _ := paginate(prompts, cursor, defaultPageSize)
-	return core.NewResponse(id, core.PromptsListResult{Prompts: page, NextCursor: nextCursor, TTL: d.listTTL})
+	return core.NewResponse(id, core.PromptsListResult{Prompts: page, NextCursor: nextCursor, TTLMs: d.listTTLMs, CacheScope: d.listCacheScope})
 }
 
 func (d *Dispatcher) handlePromptsGet(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
