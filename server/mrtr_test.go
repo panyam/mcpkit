@@ -370,66 +370,11 @@ func TestMRTR_MultiRoundAccumulatesAnswers(t *testing.T) {
 // src/scenarios/server/mrtr/ephemeral-flow.ts:mrtr-tasks-composition).
 func TestMRTR_TaskComposition_Skipped(t *testing.T) {
 	t.Skip("MRTR→Tasks composition deferred — tracking: mcpkit issue 347")
-
-	srv := NewServer(
-		core.ServerInfo{Name: "mrtr-task-compose", Version: "0.0.1"},
-		WithRequestStateSigning([]byte("compose-key"), time.Hour),
-	)
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "test_tool_with_task",
-			Description: "Gather input then spin off a task",
-			InputSchema: map[string]any{"type": "object"},
-			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			if ctx.InputResponse("input") == nil {
-				return ctx.RequestInput(core.InputRequests{
-					"input": core.InputRequest{
-						Method: "elicitation/create",
-						Params: json.RawMessage(`{"message":"Provide input"}`),
-					},
-				})
-			}
-			return core.TextResult("processing"), nil
-		},
-	)
-	RegisterTasks(TasksConfig{Server: srv})
-
-	c := connectMRTRClient(t, srv, client.WithTasksExtension())
-
-	r1, err := c.Call("tools/call", map[string]any{
-		"name":      "test_tool_with_task",
-		"arguments": map[string]any{},
-	})
-	if err != nil {
-		t.Fatalf("round 1: %v", err)
-	}
-	var m1 map[string]any
-	json.Unmarshal(r1.Raw, &m1)
-	if m1["resultType"] != "input_required" {
-		t.Fatalf("round 1 should be incomplete; raw=%s", r1.Raw)
-	}
-
-	r2, err := c.Call("tools/call", map[string]any{
-		"name":      "test_tool_with_task",
-		"arguments": map[string]any{},
-		"inputResponses": map[string]any{
-			"input": map[string]any{"action": "accept", "content": map[string]any{"value": "x"}},
-		},
-		"requestState": m1["requestState"],
-	})
-	if err != nil {
-		t.Fatalf("round 2: %v", err)
-	}
-	var m2 map[string]any
-	json.Unmarshal(r2.Raw, &m2)
-	if m2["resultType"] != "task" {
-		t.Errorf("round 2 resultType = %v, want \"task\"; raw=%s", m2["resultType"], r2.Raw)
-	}
-	if _, ok := m2["task"].(map[string]any); !ok {
-		t.Errorf("round 2 missing task envelope; raw=%s", r2.Raw)
-	}
+	// Implementation cross-cuts MRTR (server/) and v2 tasks (ext/tasks/);
+	// rebuild as an integration test under ext/tasks/ when mcpkit issue 347
+	// lands. A matching scenario lives skipped in the conformance suite
+	// (panyam/mcpconformance, branch feat/tasks-mrtr-extension,
+	// src/scenarios/server/mrtr/ephemeral-flow.ts:mrtr-tasks-composition).
 }
 
 // connectMRTRClient is a one-off helper for MRTR tests — most existing v2

@@ -8,6 +8,12 @@ import (
 	"github.com/panyam/mcpkit/core"
 )
 
+// V1-RETIREMENT: this entire file becomes pure deletion fodder when v1
+// retires. ext/tasks defines its own v2-shaped TaskContext + WithTaskContext +
+// GetTaskContext; there is no v1/v2 sharing here. The whole side-channel
+// machinery (sideChannelRequest / sideChannelResponse / requestInputV1 /
+// sendSideChannel) is v1-only by construction.
+
 // sideChannelRequest is sent by TaskElicit/TaskSample to the tasks/result
 // handler via the TaskContext's request channel. The handler proxies the
 // request through its live connection and sends the response back.
@@ -45,9 +51,8 @@ type TaskContext struct {
 	taskID        string
 	sessionID     string
 	store         TaskStore
-	requests      chan sideChannelRequest // v1 only: read by tasks/result handler
-	inputState    *v2InputState           // v2 only: SEP-2663 input request flow
-	progressToken any                     // original _meta.progressToken from client
+	requests      chan sideChannelRequest
+	progressToken any // original _meta.progressToken from client
 }
 
 type taskContextKey struct{}
@@ -93,20 +98,11 @@ func (tc *TaskContext) SetStatus(status core.TaskStatus) error {
 	return err
 }
 
-// TaskElicit asks the client for elicitation input from inside a running task.
+// TaskElicit asks the client for elicitation input from inside a running v1
+// task. The request is enqueued on a side-channel proxied by the
+// tasks/result long-poll handler.
 //
-// Behavior depends on which task runtime owns this TaskContext:
-//
-//   - v2 (SEP-2663): the request is stashed on the task's inputState under a
-//     monotonic key, the task transitions to input_required, and the goroutine
-//     blocks on a per-key waiter channel. The client observes the pending
-//     request via tasks/get's DetailedTask.InputRequests and resumes the task
-//     by sending the matching response via tasks/update. ctx cancellation
-//     unblocks the wait with the corresponding context error.
-//   - v1 (legacy): the request is enqueued on a side-channel proxied by the
-//     tasks/result long-poll handler.
-//
-// Status transitions for both paths: working → input_required → working.
+// Status transitions: working → input_required → working.
 func (tc *TaskContext) TaskElicit(req core.ElicitationRequest) (core.ElicitationResult, error) {
 	// Inject related-task metadata so out-of-band consumers can correlate.
 	if req.Meta == nil {
@@ -119,7 +115,7 @@ func (tc *TaskContext) TaskElicit(req core.ElicitationRequest) (core.Elicitation
 		return core.ElicitationResult{}, fmt.Errorf("marshal elicitation request: %w", err)
 	}
 
-	resp, err := tc.requestInput("elicit", "elicitation/create", params)
+	resp, err := tc.requestInputV1("elicitation/create", params)
 	if err != nil {
 		return core.ElicitationResult{}, err
 	}
@@ -131,7 +127,7 @@ func (tc *TaskContext) TaskElicit(req core.ElicitationRequest) (core.Elicitation
 }
 
 // TaskSample asks the client for a sampling/createMessage response from
-// inside a running task. See TaskElicit for the v1 vs v2 routing.
+// inside a running v1 task. See TaskElicit for the side-channel flow.
 //
 // Status transitions: working → input_required → working.
 func (tc *TaskContext) TaskSample(req core.CreateMessageRequest) (core.CreateMessageResult, error) {
@@ -145,7 +141,7 @@ func (tc *TaskContext) TaskSample(req core.CreateMessageRequest) (core.CreateMes
 		return core.CreateMessageResult{}, fmt.Errorf("marshal sampling request: %w", err)
 	}
 
-	resp, err := tc.requestInput("sample", "sampling/createMessage", params)
+	resp, err := tc.requestInputV1("sampling/createMessage", params)
 	if err != nil {
 		return core.CreateMessageResult{}, err
 	}
@@ -154,64 +150,6 @@ func (tc *TaskContext) TaskSample(req core.CreateMessageRequest) (core.CreateMes
 		return core.CreateMessageResult{}, fmt.Errorf("unmarshal sampling result: %w", err)
 	}
 	return result, nil
-}
-
-// requestInput is the routing layer behind TaskElicit / TaskSample. It picks
-// the v2 SEP-2663 path when an inputState is attached and falls back to the
-// v1 side-channel otherwise. methodPrefix is a short readable tag used to
-// mint stable keys ("elicit-1", "sample-2") on the v2 path; jsonRpcMethod
-// is the actual JSON-RPC method name routed to the client.
-func (tc *TaskContext) requestInput(methodPrefix, jsonRpcMethod string, params json.RawMessage) (json.RawMessage, error) {
-	if tc.inputState != nil {
-		return tc.requestInputV2(methodPrefix, jsonRpcMethod, params)
-	}
-	return tc.requestInputV1(jsonRpcMethod, params)
-}
-
-// requestInputV2 implements the SEP-2663 input-request flow.
-func (tc *TaskContext) requestInputV2(methodPrefix, jsonRpcMethod string, params json.RawMessage) (json.RawMessage, error) {
-	_, waiter := tc.inputState.enqueue(methodPrefix, core.InputRequest{
-		Method: jsonRpcMethod,
-		Params: params,
-	})
-
-	// Transition to input_required and notify status so polling clients
-	// pick up the new pending request on the next tasks/get.
-	if err := tc.store.Update(tc.taskID, tc.sessionID, func(t *core.TaskInfo) {
-		t.Status = core.TaskInputRequired
-	}); err != nil {
-		return nil, fmt.Errorf("task %s: set input_required: %w", tc.taskID, err)
-	}
-	notifyTaskStatus(tc.Context, tc.store, tc.taskID, tc.sessionID)
-
-	// Wait for either tasks/update delivery or context cancellation.
-	var payload json.RawMessage
-	select {
-	case payload = <-waiter:
-		// Closed-channel receive yields nil payload + ok=false; treat as cancel.
-		if payload == nil {
-			return nil, fmt.Errorf("task %s: input wait cancelled", tc.taskID)
-		}
-	case <-tc.Context.Done():
-		return nil, tc.Context.Err()
-	}
-
-	// Transition back to working before returning — but only if no other
-	// inputs are still pending. A fan-out tool that has multiple TaskElicit /
-	// TaskSample calls in flight must stay in input_required until every
-	// one has been answered, otherwise tasks/get would briefly report
-	// "working" while some inputs are still un-fulfilled (and a polling
-	// client could miss the partial-fulfillment window). Best-effort: if
-	// the task has already gone terminal, the store's terminal guard
-	// rejects this.
-	if !tc.inputState.hasPending() {
-		tc.store.Update(tc.taskID, tc.sessionID, func(t *core.TaskInfo) {
-			t.Status = core.TaskWorking
-		})
-		notifyTaskStatus(tc.Context, tc.store, tc.taskID, tc.sessionID)
-	}
-
-	return payload, nil
 }
 
 // requestInputV1 implements the legacy v1 side-channel flow (tasks/result
