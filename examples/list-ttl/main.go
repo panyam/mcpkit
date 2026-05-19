@@ -2,18 +2,19 @@
 //
 // Two-process architecture:
 //
-//	Terminal 1:  make serve         # MCP server on :8080 with WithListTTL(60)
+//	Terminal 1:  make serve         # MCP server on :8080 with WithListTTLMs(60000)
 //	Terminal 2:  make demo          # demokit walkthrough (or `make demo --tui`)
 //
 // The server is a real MCP server — any host can connect to it (Claude
-// Desktop, MCPJam, VS Code) and observe the SEP-2549 `ttl` field on every
-// list response. The walkthrough acts as a scripted MCP host that calls
-// each list endpoint via the new client helpers and prints the TTL.
+// Desktop, MCPJam, VS Code) and observe the SEP-2549 `ttlMs` and
+// `cacheScope` fields on every list response and on resources/read. The
+// walkthrough acts as a scripted MCP host that calls each endpoint via the
+// client helpers and prints the cache hints.
 //
 // The same binary doubles as the conformance fixture: pass `--serve`
 // to run the server. The SEP-2549 conformance suite (panyam/mcpconformance
 // `pending` branch, `src/scenarios/server/list-ttl/`) spawns three
-// processes (positive / zero / unset) via the `--ttl` flag.
+// processes (positive / zero / unset) via the `--ttl-ms` flag.
 package main
 
 import (
@@ -42,16 +43,22 @@ func main() {
 
 func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
-	// Negative default = unset → no ttl emitted on list responses.
-	ttl := flag.Int("ttl", -1, "list TTL in seconds (negative = unset, 0 = do not cache, positive = N seconds)")
+	// Negative default = unset → no ttlMs emitted on responses.
+	ttlMs := flag.Int("ttl-ms", -1, "cache TTL in milliseconds (negative = unset, 0 = immediately stale, positive = fresh for N ms)")
+	scope := flag.String("cache-scope", "", `SEP-2549 cacheScope: "public", "private", or "" to omit`)
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.BoolFlag("--serve"),
 		demokit.ValueFlag("--url"),
 	))
 
 	opts := common.MCPServerOptions(*addr, "[mcp] ")
-	if *ttl >= 0 {
-		opts = append(opts, server.WithListTTL(*ttl))
+	// The same ttlMs / cacheScope applies to the four list endpoints and to
+	// resources/read — SEP-2549 added resources/read to the coverage list.
+	if *ttlMs >= 0 || *scope != "" {
+		opts = append(opts,
+			server.WithListCacheControl(*ttlMs, *scope),
+			server.WithReadResourceCacheControl(*ttlMs, *scope),
+		)
 	}
 
 	srv := server.NewServer(core.ServerInfo{Name: "list-ttl-demo", Version: "0.1.0"}, opts...)
@@ -105,12 +112,16 @@ func serve() {
 	)
 
 	mode := "unset"
-	if *ttl == 0 {
-		mode = "0 (do not cache)"
-	} else if *ttl > 0 {
-		mode = fmt.Sprintf("%d seconds", *ttl)
+	if *ttlMs == 0 {
+		mode = "0 (immediately stale)"
+	} else if *ttlMs > 0 {
+		mode = fmt.Sprintf("%d ms", *ttlMs)
 	}
-	log.Printf("[list-ttl-demo] listening on %s — list TTL: %s", *addr, mode)
+	scopeMode := *scope
+	if scopeMode == "" {
+		scopeMode = "unset"
+	}
+	log.Printf("[list-ttl-demo] listening on %s — ttlMs: %s, cacheScope: %s", *addr, mode, scopeMode)
 	if err := srv.ListenAndServe(server.WithStreamableHTTP(true)); err != nil {
 		log.Fatalf("ListenAndServe: %v", err)
 	}

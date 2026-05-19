@@ -57,20 +57,34 @@ type ToolsListResult struct {
 	Tools      []ToolDef `json:"tools"`
 	NextCursor string    `json:"nextCursor,omitempty"`
 
-	// TTL is the SEP-2549 cache freshness hint in SECONDS that the client
-	// MAY use to cache the tools list before re-fetching. Semantics mirror
-	// HTTP Cache-Control: max-age:
+	// TTLMs is the SEP-2549 cache-freshness hint, in integer milliseconds,
+	// that the client MAY use to cache the tools list before re-fetching.
+	// Semantics mirror HTTP Cache-Control: max-age:
 	//
-	//   - nil (omitted on the wire) — no server guidance; client falls back
-	//     to notifications/list_changed or its own heuristics.
-	//   - &0 ("ttl": 0 on the wire) — explicit "do not cache"; client SHOULD
-	//     re-fetch every time the list is needed.
-	//   - >0 — the list is fresh for this many seconds; the client SHOULD NOT
-	//     re-fetch before the TTL expires unless it receives list_changed.
+	//   - nil (field omitted) — no server guidance. Per the merged spec
+	//     clients treat an absent ttlMs the same as 0: the response is
+	//     immediately stale. This is the "older server / not configured"
+	//     case; clients fall back to notifications/list_changed or their
+	//     own heuristics.
+	//   - &0 ("ttlMs": 0 on the wire) — the response SHOULD be considered
+	//     immediately stale; the client MAY re-fetch every time the list is
+	//     needed. Wire-distinct from nil but client-equivalent — the pointer
+	//     just lets a server state the 0 deliberately.
+	//   - &N>0 — the list is fresh for N milliseconds from receipt; the
+	//     client SHOULD NOT re-fetch before it expires unless it receives a
+	//     list_changed notification.
 	//
-	// Pointer semantics matter: omitempty omits nil but keeps a pointer to 0,
-	// so the spec's three states (absent / 0 / positive) round-trip correctly.
-	TTL *int `json:"ttl,omitempty"`
+	// SEP-2549 renamed this field from `ttl` (integer seconds) to `ttlMs`
+	// (integer milliseconds) during its final review. See
+	// docs/LIST_TTL_MIGRATION.md.
+	TTLMs *int `json:"ttlMs,omitempty"`
+
+	// CacheScope is the SEP-2549 hint controlling who may serve a cached
+	// copy of this response — core.CacheScopePublic or CacheScopePrivate.
+	// Empty (field omitted) defaults to "public" client-side, so a server
+	// whose tool list varies per caller MUST set CacheScopePrivate. See
+	// docs/LIST_TTL_MIGRATION.md for the security rationale.
+	CacheScope string `json:"cacheScope,omitempty"`
 }
 
 // ToolRequest is the validated input passed to a ToolHandler.
