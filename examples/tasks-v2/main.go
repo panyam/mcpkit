@@ -27,6 +27,7 @@ import (
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
 	"github.com/panyam/mcpkit/server"
+	"github.com/panyam/mcpkit/ext/tasks"
 )
 
 func main() {
@@ -101,7 +102,7 @@ func serve() {
 
 			log.Printf("[slow_compute] starting %q: sleeping %ds...", args.Label, args.Seconds)
 			var progressToken any
-			if tc := server.GetTaskContext(ctx); tc != nil {
+			if tc := tasks.GetTaskContext(ctx); tc != nil {
 				progressToken = tc.ProgressToken()
 				if progressToken == nil {
 					progressToken = tc.TaskID()
@@ -161,7 +162,7 @@ func serve() {
 			Execution: &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
 		},
 		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			tc := server.GetTaskContext(ctx)
+			tc := tasks.GetTaskContext(ctx)
 			if tc == nil {
 				return core.ToolResult{}, fmt.Errorf("confirm_delete requires task context")
 			}
@@ -209,7 +210,7 @@ func serve() {
 			Execution: &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
 		},
 		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			tc := server.GetTaskContext(ctx)
+			tc := tasks.GetTaskContext(ctx)
 			if tc == nil {
 				return core.ToolResult{}, fmt.Errorf("multi_input requires task context")
 			}
@@ -314,7 +315,7 @@ func serve() {
 
 	// Register v2 tasks on the server (canonical RegisterTasks since SEP-2663
 	// — v2 takes the canonical name; v1 lives at RegisterTasksV1).
-	server.RegisterTasks(server.TasksConfig{Server: srv})
+	tasks.Register(tasks.Config{Server: srv})
 
 	log.Printf("Tasks v2 demo server on %s", *addr)
 	log.Printf("Connect: http://localhost%s/mcp", *addr)
