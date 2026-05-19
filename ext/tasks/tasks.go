@@ -1,4 +1,4 @@
-package server
+package tasks
 
 import (
 	"context"
@@ -8,15 +8,16 @@ import (
 	"time"
 
 	"github.com/panyam/mcpkit/core"
+	server "github.com/panyam/mcpkit/server"
 )
 
-// TasksConfig holds the options for registering v2 tasks support on an MCP server.
-type TasksConfig struct {
+// Config holds the options for registering v2 tasks support on an MCP server.
+type Config struct {
 	// Store is the task state backend. If nil, an InMemoryTaskStore is used.
-	Store TaskStore
+	Store server.TaskStore
 
 	// Server is the MCP server to register tasks on.
-	Server *Server
+	Server *server.Server
 
 	// DefaultTTLMs is the default task TTL in integer milliseconds. Per
 	// SEP-2663 the wire surfaces ttlMs and the store also uses ms, so this
@@ -28,9 +29,9 @@ type TasksConfig struct {
 	DefaultPollMs int
 }
 
-func (c *TasksConfig) defaults() {
+func (c *Config) defaults() {
 	if c.Store == nil {
-		c.Store = NewInMemoryStore()
+		c.Store = server.NewInMemoryStore()
 	}
 	if c.DefaultTTLMs <= 0 {
 		c.DefaultTTLMs = 300000
@@ -41,10 +42,10 @@ func (c *TasksConfig) defaults() {
 }
 
 // v2TaskRuntime holds per-registration state for v2 tasks, shared between
-// middleware and handlers. Scoped to a single RegisterTasks call (C3).
+// middleware and handlers. Scoped to a single Register call (C3).
 type v2TaskRuntime struct {
-	store    TaskStore
-	registry *Registry
+	store    server.TaskStore
+	registry *server.Registry
 
 	mu sync.Mutex
 	active   map[string]*activeTask
@@ -55,7 +56,7 @@ type v2TaskRuntime struct {
 	creatorToolForTask map[string]string
 }
 
-func newV2TaskRuntime(cfg TasksConfig) *v2TaskRuntime {
+func newV2TaskRuntime(cfg Config) *v2TaskRuntime {
 	return &v2TaskRuntime{
 		store:              cfg.Store,
 		registry:           cfg.Server.Registry(),
@@ -98,7 +99,7 @@ func (rt *v2TaskRuntime) cancelTask(taskID string) {
 	}
 }
 
-func (rt *v2TaskRuntime) getToolCallbacks(taskID string) *TaskCallbacks {
+func (rt *v2TaskRuntime) getToolCallbacks(taskID string) *server.TaskCallbacks {
 	rt.mu.Lock()
 	name := rt.creatorToolForTask[taskID]
 	rt.mu.Unlock()
@@ -117,7 +118,7 @@ func (rt *v2TaskRuntime) getToolCallbacks(taskID string) *TaskCallbacks {
 // status changes.
 //
 // External-backed tools (Temporal, Step Functions, SQS, ...) will also
-// route through here once a planned TaskCallbacks.OnInputResponse field
+// route through here once a planned server.TaskCallbacks.OnInputResponse field
 // exists; until that lands, they won't have an inputState attached and
 // this method is a no-op for them.
 func (rt *v2TaskRuntime) deliverInputResponses(taskID string, responses core.InputResponses) {
@@ -175,14 +176,14 @@ type v2InputWait struct {
 // clients MUST treat them as round-trip echo strings and MUST NOT parse them.
 // We are free to change the generator (e.g., to UUIDs) without breaking any
 // conformant client.
-func (s *v2InputState) enqueue(methodPrefix string, req core.InputRequest) (key string, waiter chan json.RawMessage) {
+func (s *v2InputState) Enqueue(methodPrefix string, req core.InputRequest) (key string, waiter <-chan json.RawMessage) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.counter++
 	key = fmt.Sprintf("%s-%d", methodPrefix, s.counter)
-	waiter = make(chan json.RawMessage, 1)
-	s.pending[key] = &v2InputWait{request: req, waiter: waiter}
-	return key, waiter
+	ch := make(chan json.RawMessage, 1)
+	s.pending[key] = &v2InputWait{request: req, waiter: ch}
+	return key, ch
 }
 
 // deliver routes a tasks/update payload to the waiter for key, returning
@@ -224,10 +225,10 @@ func (s *v2InputState) snapshot() core.InputRequests {
 	return out
 }
 
-// hasPending reports whether any input requests are still awaiting a
+// HasPending reports whether any input requests are still awaiting a
 // tasks/update response. Used by requestInputV2 to keep the task in
 // input_required while a fan-out tool has only been partially answered.
-func (s *v2InputState) hasPending() bool {
+func (s *v2InputState) HasPending() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return len(s.pending) > 0
@@ -248,13 +249,13 @@ func (s *v2InputState) cancelAll() {
 }
 
 // tasksExtensionProvider implements core.ExtensionProvider for the SEP-2663
-// Tasks extension. RegisterTasks hands an instance to Server.RegisterExtension
+// Tasks extension. Register hands an instance to Server.RegisterExtension
 // so the extension is advertised in capabilities.extensions during initialize.
 type tasksExtensionProvider struct{}
 
 // Extension declares the SEP-2663 Tasks extension.
 //
-//nolint:unused // referenced by RegisterTasks only when the v2 path is wired
+//nolint:unused // referenced by Register only when the v2 path is wired
 func (tasksExtensionProvider) Extension() core.Extension {
 	return core.Extension{
 		ID:          core.TasksExtensionID,
@@ -263,7 +264,7 @@ func (tasksExtensionProvider) Extension() core.Extension {
 	}
 }
 
-// RegisterTasks hooks up v2 tasks support on the given server:
+// Register hooks up v2 tasks support on the given server:
 //   - Advertises the io.modelcontextprotocol/tasks extension in initialize
 //     (replacing the v1 ServerCapabilities.Tasks declaration).
 //   - Installs middleware that intercepts tools/call for task-eligible tools
@@ -279,7 +280,7 @@ func (tasksExtensionProvider) Extension() core.Extension {
 //     not the v1 ServerCapabilities.Tasks slot.
 //
 // Must be called before accepting connections.
-func RegisterTasks(cfg TasksConfig) {
+func Register(cfg Config) {
 	srv := cfg.Server
 	cfg.defaults()
 	rt := newV2TaskRuntime(cfg)
@@ -301,7 +302,7 @@ func RegisterTasks(cfg TasksConfig) {
 // -32601 (method not found) instead of the real handler's response. This is
 // the SEP-2663 contract: tasks/* methods MUST NOT exist for clients that did
 // not negotiate the extension during initialize.
-func gateOnTasksExtension(inner MethodHandler) MethodHandler {
+func gateOnTasksExtension(inner server.MethodHandler) server.MethodHandler {
 	return func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		if !ctx.ClientSupportsExtension(core.TasksExtensionID) {
 			return core.NewErrorResponse(id, core.ErrCodeMethodNotFound,
@@ -311,7 +312,7 @@ func gateOnTasksExtension(inner MethodHandler) MethodHandler {
 	}
 }
 
-// --- Middleware ---
+// --- server.Middleware ---
 
 // taskV2Middleware intercepts tools/call requests. In v2, the server decides
 // whether to create a task based on the tool's configuration — the client
@@ -321,8 +322,8 @@ func gateOnTasksExtension(inner MethodHandler) MethodHandler {
 //   - required: always create a task (no client hint needed)
 //   - optional: create a task (server-directed)
 //   - forbidden/absent: pass through (sync execution)
-func taskV2Middleware(reg *Registry, rt *v2TaskRuntime, cfg TasksConfig) Middleware {
-	return func(ctx context.Context, req *core.Request, next MiddlewareFunc) (*core.Response, error) {
+func taskV2Middleware(reg *server.Registry, rt *v2TaskRuntime, cfg Config) server.Middleware {
+	return func(ctx context.Context, req *core.Request, next server.MiddlewareFunc) (*core.Response, error) {
 		if req.Method != "tools/call" {
 			return next(ctx, req)
 		}
@@ -396,7 +397,7 @@ func taskV2Middleware(reg *Registry, rt *v2TaskRuntime, cfg TasksConfig) Middlew
 		taskID := generateTaskID()
 		now := time.Now().UTC().Format(time.RFC3339)
 
-		// SEP-2663 wire and TaskStore both use milliseconds, so the config
+		// SEP-2663 wire and server.TaskStore both use milliseconds, so the config
 		// value flows through unchanged in either direction.
 		ttlMs := cfg.DefaultTTLMs
 		pollMs := cfg.DefaultPollMs
@@ -537,7 +538,7 @@ const mcpNameHeader = "Mcp-Name"
 
 // --- Method Handlers ---
 
-func makeV2GetHandler(rt *v2TaskRuntime) MethodHandler {
+func makeV2GetHandler(rt *v2TaskRuntime) server.MethodHandler {
 	return func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		var p struct {
 			TaskID string `json:"taskId"`
@@ -607,9 +608,9 @@ func makeV2GetHandler(rt *v2TaskRuntime) MethodHandler {
 // in-process tasks, that means matching keys to per-key channels on the
 // taskEntry and unblocking the waiting goroutine; for external-backed tools
 // (Temporal, Step Functions, SQS, ...), Phase 5 routes through a planned
-// TaskCallbacks.OnInputResponse extension point so the proxy can forward the
+// server.TaskCallbacks.OnInputResponse extension point so the proxy can forward the
 // payload to the orchestrator. Either way, the handler shape stays the same.
-func makeV2UpdateHandler(rt *v2TaskRuntime) MethodHandler {
+func makeV2UpdateHandler(rt *v2TaskRuntime) server.MethodHandler {
 	return func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		var p core.UpdateTaskRequest
 		if err := json.Unmarshal(params, &p); err != nil {
@@ -641,7 +642,7 @@ func makeV2UpdateHandler(rt *v2TaskRuntime) MethodHandler {
 	}
 }
 
-func makeV2CancelHandler(rt *v2TaskRuntime) MethodHandler {
+func makeV2CancelHandler(rt *v2TaskRuntime) server.MethodHandler {
 	return func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		var p struct {
 			TaskID string `json:"taskId"`
@@ -710,7 +711,7 @@ func toTaskInfoV2(info core.TaskInfo) core.TaskInfoV2 {
 // larger transport change (per-task SSE-stream registry, tasks/get
 // hold-open semantics). Tracked as mcpkit issue 346; current behavior
 // matches what the v2-18 conformance test allows.
-func notifyV2TaskStatus(ctx context.Context, rt *v2TaskRuntime, store TaskStore, taskID, sessionID string) {
+func notifyV2TaskStatus(ctx context.Context, rt *v2TaskRuntime, store server.TaskStore, taskID, sessionID string) {
 	info, ok := store.Get(taskID, sessionID)
 	if !ok {
 		return
