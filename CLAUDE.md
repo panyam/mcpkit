@@ -27,9 +27,10 @@ make tag-push V=vX.Y.Z # Tag root + all sub-modules and push
 | Package | Docs |
 |---------|------|
 | `core/` — Protocol types, typed contexts, session APIs | `core/README.md`, `core/CONSTRAINTS.md` |
-| `server/` — Server, transports, middleware, tasks | `server/README.md`, `server/CONSTRAINTS.md` |
+| `server/` — Server, transports, middleware, v1 tasks (frozen) | `server/README.md`, `server/CONSTRAINTS.md` |
 | `client/` — Client, transports, reconnection, auth retry | `client/README.md`, `client/CONSTRAINTS.md` |
 | `ext/auth/` — JWT, PRM, OAuth (separate go.mod) | `ext/auth/docs/DESIGN.md` |
+| `ext/tasks/` — SEP-2663 v2 tasks extension (separate go.mod) | `ext/tasks/README.md` |
 | `ext/ui/` — MCP Apps, Bridge JS, AppHost, ServerRegistry (separate go.mod) | `docs/APPS_DESIGN.md`, `docs/APPS_HOST.md`, `docs/APPS_ONBOARDING.md` |
 | `experimental/ext/protogen/` — Proto → MCP codegen | `experimental/ext/protogen/docs/DESIGN.md` |
 | `experimental/ext/events/` — MCP Events protocol | `experimental/ext/events/README.md` |
@@ -39,7 +40,7 @@ make tag-push V=vX.Y.Z # Tag root + all sub-modules and push
 
 ## Sub-Modules
 
-`ext/auth/`, `ext/ui/`, `experimental/ext/protogen/` have separate `go.mod` — `make test` does NOT cover them. Run `make tidy-all` after touching `core/` imports.
+`ext/auth/`, `ext/tasks/`, `ext/ui/`, `experimental/ext/protogen/` have separate `go.mod` — `make test` does NOT cover them. Run `make tidy-all` after touching `core/` imports.
 
 ## Constraints
 
@@ -66,4 +67,4 @@ Server 30/30, Auth 14/14, Apps 21, Tasks v1 27/27, Tasks v2 8 classes / ~33 chec
 
 ## Tasks v1 vs v2
 
-Two surfaces, three entry points: `RegisterTasksV1` (frozen), `RegisterTasks` (v2/SEP-2663, canonical), `RegisterTasksHybrid` (both, dispatch by negotiated cap). See [`docs/TASKS_V2_MIGRATION.md`](docs/TASKS_V2_MIGRATION.md).
+Two surfaces, two entry points: `server.RegisterTasksV1` (frozen) and `tasks.Register` (v2/SEP-2663, canonical, in `ext/tasks/`). See [`docs/TASKS_V2_MIGRATION.md`](docs/TASKS_V2_MIGRATION.md).
