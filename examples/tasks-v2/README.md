@@ -4,7 +4,7 @@ Server-side implementation of the v2 Tasks extension. v2 inverts v1's client-dri
 
 > **🚀 [Skip to the guided walkthrough →](WALKTHROUGH.md)** — 8-step demokit walkthrough covering the full v2 surface: extension negotiation, polymorphic `tools/call`, inlined results, the new `tasks/update` MRTR loop, ack-only cancel, and tool-vs-protocol error semantics. Run it with `make serve` + `make demo`.
 >
-> **🔁 Migrating from v1?** See the [v1 → v2 migration guide](../../docs/TASKS_V2_MIGRATION.md) for the wire-shape diff, server entry points (`RegisterTasks` / `RegisterTasksV1` / `RegisterTasksHybrid`), and the rolling-upgrade recipe.
+> **🔁 Migrating from v1?** See the [v1 → v2 migration guide](../../docs/TASKS_V2_MIGRATION.md) for the wire-shape diff, server entry points (`tasks.Register` in `ext/tasks` / `server.RegisterTasksV1`), and the rolling-upgrade recipe.
 
 ## Key Differences from v1
 

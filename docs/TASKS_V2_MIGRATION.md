@@ -8,9 +8,9 @@ This guide explains how to move an mcpkit server or client from the v1 task surf
 
 | You are | You want | Do |
 |---|---|---|
-| Building a new server today | v2 only | `server.RegisterTasks(server.TasksConfig{Server: srv})` |
+| Building a new server today | v2 only | `tasks.Register(tasks.Config{Server: srv})` (import `github.com/panyam/mcpkit/ext/tasks`) |
 | Maintaining an existing v1 server | Keep working v1 clients alive | `server.RegisterTasksV1(server.TasksConfigV1{Server: srv})` (no change — `RegisterTasks` was renamed) |
-| Migrating a v1 server to v2 | Both clients on one endpoint | `server.RegisterTasksHybrid(server.TasksHybridConfig{Server: srv})` |
+| Migrating a v1 server to v2 | Both clients on one endpoint | Register both independently: `server.RegisterTasksV1(...)` + `tasks.Register(...)`. The previous `RegisterTasksHybrid` was removed when v2 moved to `ext/tasks/`. Last-write-wins on `tasks/get` / `tasks/cancel` registration. |
 | Building a new v2 client | – | `client.WithTasksExtension()` + `client.ToolCall` / `GetTask` / `UpdateTask` / `WaitForTask` / `CancelTask` |
 | Maintaining a v1 client | – | `client.ToolCallAsTaskV1` / `GetTaskV1` / etc. (renamed; behavior unchanged) |
 
@@ -123,42 +123,43 @@ Payload shape is unchanged on the v2 path (still a `DetailedTask` carrying the S
 
 ```go
 srv := server.NewServer(info)
-// Was: server.RegisterTasks(server.TasksConfig{Server: srv})
 server.RegisterTasksV1(server.TasksConfigV1{Server: srv})
 ```
 
-That's it. The names changed but the shapes are identical to before.
+That's it. v1 stays where it always was — `server/tasks_v1.go`.
 
 ### Pure v2 server
 
 ```go
+import (
+    "github.com/panyam/mcpkit/server"
+    "github.com/panyam/mcpkit/ext/tasks"
+)
+
 srv := server.NewServer(info)
-server.RegisterTasks(server.TasksConfig{Server: srv})
+tasks.Register(tasks.Config{Server: srv})
 ```
 
-V2 server gates `tools/call` task creation on the client declaring the `io.modelcontextprotocol/tasks` extension. V1 clients (no declaration) see synchronous `tools/call` responses; `tasks/*` returns `-32601`.
+The v2 task surface lives at `github.com/panyam/mcpkit/ext/tasks` (separate go.mod sub-module, mirrors `ext/auth` and `ext/ui`). v2 server gates `tools/call` task creation on the client declaring the `io.modelcontextprotocol/tasks` extension. v1 clients (no declaration) see synchronous `tools/call` responses; `tasks/*` returns `-32601`.
 
-### Hybrid server (v1 + v2 on the same endpoint)
+### v1 + v2 on the same endpoint (no longer a single helper)
 
-Use this during a rolling client upgrade — keeps existing v1 clients working while new v2 clients land:
+`RegisterTasksHybrid` was removed when v2 moved to `ext/tasks/`. The hybrid helper relied on access to v1's unexported internals (`taskMiddleware`, `makeGetHandler`, etc.), which would have required exporting them just for hybrid; the project chose not to.
+
+Servers needing both surfaces during a rolling upgrade window should register independently:
 
 ```go
+import (
+    "github.com/panyam/mcpkit/server"
+    "github.com/panyam/mcpkit/ext/tasks"
+)
+
 srv := server.NewServer(info)
-server.RegisterTasksHybrid(server.TasksHybridConfig{
-    Server: srv,
-    // V1 + V2 sub-configs are optional; defaults match the standalone helpers.
-})
+server.RegisterTasksV1(server.TasksConfigV1{Server: srv})
+tasks.Register(tasks.Config{Server: srv})
 ```
 
-The hybrid server:
-
-- Advertises **both** `capabilities.tasks` and `capabilities.extensions["io.modelcontextprotocol/tasks"]`.
-- Routes per-request: `tools/call` and `tasks/get` / `tasks/cancel` dispatch to v2 when the client negotiated the extension, else v1.
-- `tasks/update` is v2-only.
-- `tasks/result` and `tasks/list` are v1-only — v2 clients hitting them get `-32601`.
-- A client that declares both AND sends a `task` hint gets v2 (the modern path wins).
-
-There's a small per-request dispatching cost; if you only need one path, prefer `RegisterTasks` or `RegisterTasksV1`.
+Caveat: `srv.HandleMethod` uses last-write-wins for `tasks/get` and `tasks/cancel` (both v1 and v2 register handlers for those slots). The example above registers v1 first and v2 second, so v2 wins. v1-only paths (`tasks/result`, `tasks/list`) continue to work. Per-request capability-aware dispatch (the old hybrid's behaviour) is not provided post-move; a v1 client sending a `task` hint to this server will hit the v2 handler, which doesn't know about the v1 `task` hint and falls through to sync execution. If your deployment needs per-request dispatch, do it at the transport / load-balancer layer instead.
 
 ## Client migration paths
 
@@ -206,9 +207,9 @@ client.CancelTask(c, taskID)
 
 The expected flow for a deployment migrating from v1 to v2 without downtime:
 
-1. **Server**: switch from `RegisterTasksV1` to `RegisterTasksHybrid`. Existing v1 clients keep working.
+1. **Server**: install both surfaces side-by-side. Call `server.RegisterTasksV1(...)` then `tasks.Register(...)`. v1 clients hit the v1 paths (`tasks/result`, `tasks/list`, and `tasks/get` if no extension is declared — though see the dispatch caveat in the "v1 + v2 on the same endpoint" section above).
 2. **Clients**: roll out the v2-aware client one cohort at a time. Each upgraded client adds `client.WithTasksExtension()` and switches to the v2 helpers.
-3. Once the v1 client population is empty, switch the server from `RegisterTasksHybrid` to `RegisterTasks` and remove the v1 sub-config.
+3. Once the v1 client population is empty, drop the `server.RegisterTasksV1(...)` line. Only `tasks.Register(...)` remains.
 
 ## Known behaviours after SEP-2663 merge
 
