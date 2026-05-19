@@ -1,8 +1,8 @@
 demo: ## Run the demokit walkthrough (interactive, TUI)
 	go run . --tui
 
-serve: ## Start the list-ttl demo server (default :8080, ttl=60)
-	go run . --serve --ttl=60
+serve: ## Start the list-ttl demo server (default :8080, ttl-ms=60000)
+	go run . --serve --ttl-ms=60000
 
 readme: ## Regenerate WALKTHROUGH.md from demo definitions
 	go run . --doc md > WALKTHROUGH.md

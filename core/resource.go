@@ -61,10 +61,13 @@ type ResourcesListResult struct {
 	Resources  []ResourceDef `json:"resources"`
 	NextCursor string        `json:"nextCursor,omitempty"`
 
-	// TTL is the SEP-2549 cache freshness hint in seconds. See
-	// ToolsListResult.TTL for full semantics — same three-state pointer
-	// shape (nil = no guidance, &0 = do not cache, &N>0 = N seconds fresh).
-	TTL *int `json:"ttl,omitempty"`
+	// TTLMs is the SEP-2549 cache-freshness hint in integer milliseconds.
+	// See ToolsListResult.TTLMs for full semantics — nil/absent and &0 are
+	// both "immediately stale", &N>0 is "fresh for N milliseconds".
+	TTLMs *int `json:"ttlMs,omitempty"`
+
+	// CacheScope is the SEP-2549 cache-scope hint. See ToolsListResult.CacheScope.
+	CacheScope string `json:"cacheScope,omitempty"`
 }
 
 // ResourceTemplatesListResult is the typed result for resources/templates/list responses.
@@ -72,10 +75,13 @@ type ResourceTemplatesListResult struct {
 	ResourceTemplates []ResourceTemplate `json:"resourceTemplates"`
 	NextCursor        string             `json:"nextCursor,omitempty"`
 
-	// TTL is the SEP-2549 cache freshness hint in seconds. See
-	// ToolsListResult.TTL for full semantics — same three-state pointer
-	// shape (nil = no guidance, &0 = do not cache, &N>0 = N seconds fresh).
-	TTL *int `json:"ttl,omitempty"`
+	// TTLMs is the SEP-2549 cache-freshness hint in integer milliseconds.
+	// See ToolsListResult.TTLMs for full semantics — nil/absent and &0 are
+	// both "immediately stale", &N>0 is "fresh for N milliseconds".
+	TTLMs *int `json:"ttlMs,omitempty"`
+
+	// CacheScope is the SEP-2549 cache-scope hint. See ToolsListResult.CacheScope.
+	CacheScope string `json:"cacheScope,omitempty"`
 }
 
 // ResourceReadContent is a single content item returned by resources/read.
@@ -96,23 +102,42 @@ type ResourceRequest struct {
 	URI string
 }
 
-// ResourceResult is the response from a resource handler.
+// ResourceResult is the response from a resource handler — the typed
+// result for resources/read responses (the spec calls it ReadResourceResult).
 type ResourceResult struct {
 	Contents []ResourceReadContent `json:"contents"`
+
+	// TTLMs is the SEP-2549 cache-freshness hint in integer milliseconds
+	// for this resources/read response. See ToolsListResult.TTLMs for
+	// semantics. A resource handler MAY set this per-read on its return
+	// value; if it leaves the field nil the server applies the
+	// WithReadResourceCacheControl default.
+	TTLMs *int `json:"ttlMs,omitempty"`
+
+	// CacheScope is the SEP-2549 cache-scope hint. resources/read responses
+	// frequently depend on the authenticated user — set CacheScopePrivate
+	// when the content varies per caller. See ToolsListResult.CacheScope.
+	// A handler MAY set this per-read; otherwise the server applies the
+	// WithReadResourceCacheControl default.
+	CacheScope string `json:"cacheScope,omitempty"`
 }
 
 // UnmarshalJSON decodes a ResourceResult, tolerating a single-object
 // `contents` form from peers that emit a bare object instead of the
 // spec-canonical array. Single objects are wrapped into a 1-element slice.
-// See #81.
+// See #81. The SEP-2549 ttlMs / cacheScope hints are decoded alongside.
 func (r *ResourceResult) UnmarshalJSON(data []byte) error {
 	var aux struct {
-		Contents json.RawMessage `json:"contents"`
+		Contents   json.RawMessage `json:"contents"`
+		TTLMs      *int            `json:"ttlMs"`
+		CacheScope string          `json:"cacheScope"`
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
 	r.Contents = nil
+	r.TTLMs = aux.TTLMs
+	r.CacheScope = aux.CacheScope
 	return decodeResourceReadSlice(aux.Contents, &r.Contents)
 }
 

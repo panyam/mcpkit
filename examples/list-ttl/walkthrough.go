@@ -13,35 +13,41 @@ import (
 func runDemo() {
 	serverURL := common.ServerURL()
 
-	demo := demokit.New("MCP List TTL (SEP-2549) — Cache-Freshness Hint on List Results").
+	demo := demokit.New("MCP List TTL (SEP-2549) — Cache Hints on List and Read Results").
 		Dir("list-ttl").
-		Description("Walks through SEP-2549, which adds an optional `ttl` (seconds) cache-freshness hint to every paginated list response (tools/list, prompts/list, resources/list, resources/templates/list). Clients use it to cache the registered surface between `notifications/list_changed` instead of re-fetching on every poll.").
+		Description("Walks through SEP-2549, which adds two cache hints — `ttlMs` (integer milliseconds) and `cacheScope` (`public`/`private`) — to every paginated list response (tools/list, prompts/list, resources/list, resources/templates/list) and to resources/read. Clients use them to cache the registered surface between `notifications/list_changed` instead of re-fetching on every poll.").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this client)"),
-			demokit.Actor("Server", "MCP Server (make serve, WithListTTL(60))"),
+			demokit.Actor("Server", "MCP Server (make serve, WithListTTLMs(60000))"),
 		)
 
 	demo.Section("Setup",
 		"Start the MCP server in a separate terminal first:",
 		"",
 		"```",
-		"Terminal 1:  make serve         # list-ttl server on :8080 with WithListTTL(60)",
+		"Terminal 1:  make serve         # list-ttl server on :8080 with WithListTTLMs(60000)",
 		"Terminal 2:  make demo          # this walkthrough (--tui for the interactive TUI)",
 		"```",
 	)
 
-	demo.Section("Three-state TTL contract",
-		"The `ttl` field is optional and has three distinct wire shapes:",
+	demo.Section("The ttlMs cache hint",
+		"The `ttlMs` field is an integer-milliseconds freshness hint. Per the merged SEP-2549 spec it has two client-visible behaviors:",
 		"",
-		"- **absent** (`ttl` field omitted) — no server guidance; client falls back to `notifications/list_changed` or its own heuristics.",
-		"- **`\"ttl\": 0`** — explicit \"do not cache\"; client SHOULD re-fetch every time the list is needed.",
-		"- **`\"ttl\": <positive int>`** — fresh for N seconds; client SHOULD NOT re-fetch before TTL expires unless it receives `list_changed`.",
+		"- **absent or `\"ttlMs\": 0`** — the response is immediately stale; the client MAY re-fetch every time the list is needed. An absent field is the \"older server / not configured\" case; clients treat it the same as 0.",
+		"- **`\"ttlMs\": <positive int>`** — fresh for N milliseconds from receipt; the client SHOULD NOT re-fetch before it expires unless it receives `list_changed`.",
 		"",
-		"Server-side, `mcpkit.WithListTTL(seconds)` configures the value uniformly for all four endpoints. Negative values are treated as \"unset\" so the wire field is omitted.",
+		"Server-side, `mcpkit.WithListTTLMs(ms)` configures the value uniformly for all four list endpoints. Negative values are treated as \"unset\" so the wire field is omitted. mcpkit keeps `TTLMs` a `*int`: that lets a server emit an explicit `\"ttlMs\": 0` distinct from omitting the field, even though clients treat the two the same.",
 		"",
-		"Client-side, `mcpkit/client.ListToolsPage(cursor)` and its three siblings (`ListPromptsPage`, `ListResourcesPage`, `ListResourceTemplatesPage`) return the typed result envelope so callers can read `TTL` alongside `NextCursor`. The pre-existing zero-arg `ListTools()` and the auto-paginating `Tools(ctx)` iterator drop the envelope — use the `*Page` helpers when the TTL hint matters.",
+		"Client-side, `mcpkit/client.ListToolsPage(cursor)` and its three siblings (`ListPromptsPage`, `ListResourcesPage`, `ListResourceTemplatesPage`) return the typed result envelope so callers can read `TTLMs` and `CacheScope` alongside `NextCursor`. The pre-existing zero-arg `ListTools()` and the auto-paginating `Tools(ctx)` iterator drop the envelope — use the `*Page` helpers when the cache hints matter.",
+	)
+
+	demo.Section("The cacheScope hint",
+		"The `cacheScope` field controls who may serve a cached copy of a response, mirroring HTTP `Cache-Control: public` vs `private`:",
 		"",
-		"This demo connects to a server configured with `WithListTTL(60)` and inspects each endpoint. To see the other two states, restart the server with `--ttl 0` (do not cache) or omit `--ttl` entirely (unset).",
+		"- **`\"public\"`** — no caller-specific data; any client, shared gateway, or caching proxy MAY store the response and serve it to any user.",
+		"- **`\"private\"`** — caller-specific data; a cache MAY be reused only within the same authorization context and MUST NOT be shared across access tokens.",
+		"",
+		"When `cacheScope` is absent clients default to `\"public\"`, so a server whose response varies per caller MUST set `private` explicitly. Set both hints in one call with `server.WithListCacheControl(ttlMs, scope)`.",
 	)
 
 	var c *client.Client
@@ -62,10 +68,10 @@ func runDemo() {
 			return
 		})
 
-	demo.Step("tools/list — TTL surfaces on the list response").
+	demo.Step("tools/list — cache hints surface on the list response").
 		Arrow("Host", "Server", "tools/list").
-		DashedArrow("Server", "Host", "{ tools: [...], ttl: 60 }").
-		Note("`client.ListToolsPage(\"\")` returns the full envelope including `TTL *int`. The pointer distinguishes nil (no guidance) from `&0` (explicit \"do not cache\") — plain `int` would conflate them.").
+		DashedArrow("Server", "Host", "{ tools: [...], ttlMs: 60000 }").
+		Note("`client.ListToolsPage(\"\")` returns the full envelope including `TTLMs *int` and `CacheScope string`.").
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			page, err := c.ListToolsPage("")
 			if err != nil {
@@ -73,44 +79,61 @@ func runDemo() {
 				return
 			}
 			fmt.Printf("    tools count: %d\n", len(page.Tools))
-			fmt.Printf("    TTL:         %s\n", formatTTL(page.TTL))
+			fmt.Printf("    ttlMs:       %s\n", formatTTLMs(page.TTLMs))
+			fmt.Printf("    cacheScope:  %s\n", formatScope(page.CacheScope))
 			return
 		})
 
 	demo.Step("prompts/list / resources/list / resources/templates/list").
-		Arrow("Host", "Server", "(same TTL contract on all four endpoints)").
-		Note("SEP-2549 applies to every paginated list response. `WithListTTL(seconds)` configures the value uniformly — there's no per-endpoint override. Hit each endpoint and confirm they all return the configured TTL.").
+		Arrow("Host", "Server", "(same cache-hint contract on all four list endpoints)").
+		Note("SEP-2549 applies to every paginated list response. `WithListTTLMs` / `WithListCacheControl` configure the values uniformly — there's no per-endpoint override. Hit each endpoint and confirm they all return the configured hints.").
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			prompts, err := c.ListPromptsPage("")
 			if err != nil {
 				fmt.Printf("    ERROR prompts: %v\n", err)
 				return
 			}
-			fmt.Printf("    prompts/list:                  ttl=%s, count=%d\n",
-				formatTTL(prompts.TTL), len(prompts.Prompts))
+			fmt.Printf("    prompts/list:                  ttlMs=%s, scope=%s, count=%d\n",
+				formatTTLMs(prompts.TTLMs), formatScope(prompts.CacheScope), len(prompts.Prompts))
 
 			resources, err := c.ListResourcesPage("")
 			if err != nil {
 				fmt.Printf("    ERROR resources: %v\n", err)
 				return
 			}
-			fmt.Printf("    resources/list:                ttl=%s, count=%d\n",
-				formatTTL(resources.TTL), len(resources.Resources))
+			fmt.Printf("    resources/list:                ttlMs=%s, scope=%s, count=%d\n",
+				formatTTLMs(resources.TTLMs), formatScope(resources.CacheScope), len(resources.Resources))
 
 			templates, err := c.ListResourceTemplatesPage("")
 			if err != nil {
 				fmt.Printf("    ERROR templates: %v\n", err)
 				return
 			}
-			fmt.Printf("    resources/templates/list:      ttl=%s, count=%d\n",
-				formatTTL(templates.TTL), len(templates.ResourceTemplates))
+			fmt.Printf("    resources/templates/list:      ttlMs=%s, scope=%s, count=%d\n",
+				formatTTLMs(templates.TTLMs), formatScope(templates.CacheScope), len(templates.ResourceTemplates))
+			return
+		})
+
+	demo.Step("resources/read — cache hints on a read response").
+		Arrow("Host", "Server", "resources/read file:///fixture").
+		DashedArrow("Server", "Host", "{ contents: [...], ttlMs: 60000 }").
+		Note("SEP-2549 added resources/read to the cacheable coverage mid-cycle. `client.ReadResourceFull` returns `core.ResourceResult`, which carries the same `TTLMs` / `CacheScope` fields. A read handler MAY override either per-read; otherwise the `WithReadResourceCacheControl` server default applies.").
+		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
+			rr, err := c.ReadResourceFull("file:///fixture")
+			if err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				return
+			}
+			fmt.Printf("    contents:   %d item(s)\n", len(rr.Contents))
+			fmt.Printf("    ttlMs:      %s\n", formatTTLMs(rr.TTLMs))
+			fmt.Printf("    cacheScope: %s\n", formatScope(rr.CacheScope))
 			return
 		})
 
 	demo.Step("Inspect the raw JSON-RPC envelope").
 		Arrow("Host", "Server", "tools/list (raw)").
-		DashedArrow("Server", "Host", "raw JSON: ttl wire-format check").
-		Note("Bypass the typed helper and decode the raw response body to verify the wire shape — `\"ttl\": 60` as a JSON number, sitting alongside `\"tools\"` and (when paginated) `\"nextCursor\"`. Confirms the field is a JSON number, not stringified.").
+		DashedArrow("Server", "Host", "raw JSON: ttlMs + cacheScope wire-format check").
+		Note("Bypass the typed helper and decode the raw response body to verify the wire shape — `\"ttlMs\": 60000` as a JSON number and `\"cacheScope\"` as a string, sitting alongside `\"tools\"` and (when paginated) `\"nextCursor\"`.").
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			raw, err := c.Call("tools/list", nil)
 			if err != nil {
@@ -128,27 +151,28 @@ func runDemo() {
 		})
 
 	demo.Section("Caching pattern",
-		"A typical client integrates the TTL like this:",
+		"A typical client integrates the hints like this:",
 		"",
 		"```go",
 		"page, err := c.ListToolsPage(\"\")",
 		"if err != nil { /* ... */ }",
 		"cache.Tools = page.Tools",
-		"if page.TTL != nil && *page.TTL > 0 {",
-		"    cache.ToolsExpiresAt = time.Now().Add(time.Duration(*page.TTL) * time.Second)",
+		"if page.TTLMs != nil && *page.TTLMs > 0 {",
+		"    cache.ToolsExpiresAt = time.Now().Add(time.Duration(*page.TTLMs) * time.Millisecond)",
 		"}",
 		"// Subsequent reads check cache.ToolsExpiresAt; on miss, re-fetch.",
 		"// On notifications/list_changed, invalidate immediately regardless of TTL.",
 		"```",
 		"",
-		"`page.TTL == nil` (absent) and `*page.TTL == 0` (do not cache) both mean \"don't cache from this response\"; the difference is whether the server gave guidance at all (clients may still cache nil-TTL responses with their own heuristics, but should re-fetch every time on `&0`).",
+		"An absent `TTLMs` and `*page.TTLMs == 0` both mean \"immediately stale — do not rely on this response being fresh\". A `private` cacheScope means the entry MUST NOT be reused across authorization contexts; key any shared cache by access token.",
 	)
 
 	demo.Section("Where to look in the code",
-		"- Server option: `server.WithListTTL(seconds int)` — server/server.go",
-		"- Wire types: `core.ToolsListResult.TTL` / PromptsListResult / ResourcesListResult / ResourceTemplatesListResult — core/{tool,prompt,resource}.go",
-		"- Client typed helpers: `client.ListToolsPage` / ListPromptsPage / ListResourcesPage / ListResourceTemplatesPage — client/iterators.go",
-		"- Conformance: SEP-2549 scenarios on panyam/mcpconformance `pending` (`src/scenarios/server/list-ttl/`) — 5 checks across 3 server processes; `make testconf-list-ttl` spawns + tears down",
+		"- Server options: `server.WithListTTLMs` / `WithListCacheControl` / `WithReadResourceCacheControl` — server/server.go",
+		"- Wire types: `core.ToolsListResult` / PromptsListResult / ResourcesListResult / ResourceTemplatesListResult / ResourceResult — core/{tool,prompt,resource}.go; `core.CacheScopePublic` / `CacheScopePrivate` — core/cache.go",
+		"- Client typed helpers: `client.ListToolsPage` / ListPromptsPage / ListResourcesPage / ListResourceTemplatesPage / ReadResource — client/iterators.go",
+		"- Migration guide: docs/LIST_TTL_MIGRATION.md",
+		"- Conformance: SEP-2549 scenarios on panyam/mcpconformance `pending` (`src/scenarios/server/list-ttl/`) — drive via `make testconf-list-ttl`",
 		"- SEP-2549 spec: https://github.com/modelcontextprotocol/specification/pull/2549",
 	)
 
@@ -161,15 +185,23 @@ func runDemo() {
 	}
 }
 
-// formatTTL renders the three-state TTL pointer in a human-readable form
-// for the demo output. Mirrors the wire semantics: nil = "<absent>", &0 =
-// "0 (do not cache)", &N = "N seconds".
-func formatTTL(ttl *int) string {
+// formatTTLMs renders the TTLMs pointer in a human-readable form for the
+// demo output. Mirrors the merged SEP-2549 wire semantics: nil = absent,
+// &0 = "0 (immediately stale)", &N = "N ms".
+func formatTTLMs(ttl *int) string {
 	if ttl == nil {
-		return "<absent — no server guidance>"
+		return "<absent — immediately stale>"
 	}
 	if *ttl == 0 {
-		return "0 (do not cache)"
+		return "0 (immediately stale)"
 	}
-	return fmt.Sprintf("%d seconds", *ttl)
+	return fmt.Sprintf("%d ms", *ttl)
+}
+
+// formatScope renders the cacheScope string, naming the absent-field default.
+func formatScope(scope string) string {
+	if scope == "" {
+		return `<absent — defaults to "public">`
+	}
+	return scope
 }
