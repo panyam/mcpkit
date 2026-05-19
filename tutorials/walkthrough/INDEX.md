@@ -45,7 +45,7 @@ Each entry below has a real file on disk with a complete page header (Kind, Prer
 
 | Planned page | Filename | Kind | Will assume | Will establish |
 |--------------|----------|------|-------------|----------------|
-| **tasks (v2)** *(NEXT)* | [tasks.md](./tasks.md) | root | request-anatomy, notifications, extension-mechanisms, mrtr | long-running operations (SEP-2663), task lifecycle, store, queue, session; detach / attach / resume; reuses MRTR's `InputRequiredResult` shape for `input_required` state; `RegisterTasks` (canonical) and `RegisterTasksHybrid` for v1→v2 transition |
+| **tasks (v2)** *(NEXT)* | [tasks.md](./tasks.md) | root | request-anatomy, notifications, extension-mechanisms, mrtr | long-running operations (SEP-2663), task lifecycle, store, queue, session; detach / attach / resume; reuses MRTR's `InputRequiredResult` shape for `input_required` state; `tasks.Register` in `ext/tasks/` (canonical) alongside `server.RegisterTasksV1` (frozen) for v1→v2 transition |
 | auth deep-dive | [auth.md](./auth.md) | root *(off-mainline)* | bring-up, extension-mechanisms | full OAuth dance, PRM, JWT validation, fine-grained-auth per tool, retry semantics; the canonical "bring-up extension" |
 | apps (`ext/ui/`) | [apps.md](./apps.md) | root *(off-mainline)* | bring-up, transport-mechanics, extension-mechanisms | AppHost lifecycle, Bridge JS runtime, ServerRegistry; thin protocol surface, mostly host-architecture |
 | cancellation deep-dive | [cancellation.md](./cancellation.md) | leaf | notifications | race scenarios, partial-state handling, timeout-vs-cancel distinction, mcpkit's `ctx.Done()` propagation paths |

@@ -67,7 +67,7 @@ sequenceDiagram
    - **[`RegisterTool`](https://github.com/panyam/mcpkit/blob/main/server/registration.go)** — typed handler for `tools/call` (one tool name per registration).
    - **[`RegisterPrompt`](https://github.com/panyam/mcpkit/blob/main/server/registration.go)** — typed handler for `prompts/get`.
    - **[`RegisterResource`](https://github.com/panyam/mcpkit/blob/main/server/registration.go)** — typed handler for `resources/read` and friends.
-   - **[`RegisterTasks` / `RegisterTasksV1` / `RegisterTasksHybrid`](https://github.com/panyam/mcpkit/blob/main/server/tasks_v2.go)** — typed handlers for `tasks/*` (SEP-2663; hybrid dispatches by negotiated capability).
+   - **[`tasks.Register`](https://github.com/panyam/mcpkit/blob/main/ext/tasks/tasks.go)** (SEP-2663 v2, canonical) and [`server.RegisterTasksV1`](https://github.com/panyam/mcpkit/blob/main/server/tasks_v1.go) (frozen) — typed handlers for `tasks/*`. The v2 surface lives in the `ext/tasks/` sub-module; v1 stays in `server/` until decommissioned. Servers wanting both during a rolling upgrade install them side by side.
    - **[`MethodHandler`](https://github.com/panyam/mcpkit/blob/main/server/method_handler.go)** — raw escape hatch for any method without typed binding.
 
    The **client has the same shape** for incoming reverse calls. The host registers a sampling delegate, an elicitation handler, and a roots provider; when the server emits `sampling/createMessage`, the client's dispatch routes it to the sampling delegate the same way the server routes `tools/call` to a registered tool. Both sides have a method registry. Both sides have a dispatch loop. Both sides have user-provided custom handlers.

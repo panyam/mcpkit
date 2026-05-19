@@ -273,10 +273,10 @@ Tasks v2 ([SEP-2663](https://modelcontextprotocol.io/specification/2025-06-18)) 
 
 Two consequences worth noting:
 
-- **One signing key covers both.** `WithRequestStateSigning(key, ttl)` configures the HMAC for ephemeral MRTR (`tools/call` round-trips) *and* for SEP-2663 task `requestState`. Production deployments configure once and have signed-state work across both surfaces. Per-`RegisterTasks` override (`TasksConfig.RequestStateKey`) wins when set explicitly, for callers that need separate keys per security boundary.
+- **One signing key for MRTR.** `WithRequestStateSigning(key, ttl)` configures the HMAC for ephemeral MRTR (`tools/call` round-trips). SEP-2663 removed `requestState` from the tasks-v2 wire, so the v2 task surface no longer signs anything; the server-wide option is MRTR-only.
 - **The `DefaultInputHandler` bridge applies to tasks too.** Whether the input request originated from a `tools/call` InputRequiredResult or a task in `input_required` state, the client-side handler dispatches it through the same Client-level dispatcher. The host doesn't write task-specific input handling.
 
-The deeper task story — lifecycle, store, queue, detach/resume, the `RegisterTasksHybrid` migration — lives in [tasks](./tasks.md) *(stub)*.
+The deeper task story — lifecycle, store, queue, detach/resume, the side-by-side v1+v2 registration pattern (the prior `RegisterTasksHybrid` was removed when v2 moved to `ext/tasks/`) — lives in [tasks](./tasks.md) *(stub)*.
 
 > [!NOTE]
 > **Mental model: MRTR is the wire mechanism, tasks is one place it gets used.** "Ephemeral" MRTR (the `tools/call` flow) and tasks v2 are different *surfaces* that share the same `InputRequiredResult` envelope, the same `InputRequest`/`InputResponses` types, and the same signing infrastructure. Read MRTR first; tasks builds on it.
