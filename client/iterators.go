@@ -70,14 +70,14 @@ func (c *Client) Prompts(ctx context.Context) iter.Seq2[core.PromptDef, error] {
 	)
 }
 
-// --- Single-page list helpers (SEP-2549 TTL accessible) ---
+// --- Single-page list helpers (SEP-2549 cache hints accessible) ---
 //
 // The Tools/Resources/Prompts/ResourceTemplates iterators above are
-// item-by-item — they discard the per-page envelope (NextCursor, TTL)
-// once items have been yielded. The pre-existing zero-arg helpers
-// (ListTools/ListResources/ListPrompts/ListResourceTemplates on
-// client.go) likewise drop the envelope. Callers that need the
-// SEP-2549 TTL hint to drive client-side caching should use the
+// item-by-item — they discard the per-page envelope (NextCursor, TTLMs,
+// CacheScope) once items have been yielded. The pre-existing zero-arg
+// helpers (ListTools/ListResources/ListPrompts/ListResourceTemplates on
+// client.go) likewise drop the envelope. Callers that need the SEP-2549
+// ttlMs / cacheScope hints to drive client-side caching should use the
 // `ListXPage(cursor)` helpers below: each fetches ONE page and returns
 // the typed result intact.
 //
@@ -86,7 +86,8 @@ func (c *Client) Prompts(ctx context.Context) iter.Seq2[core.PromptDef, error] {
 // NextCursor for subsequent pages; loop until NextCursor is empty.
 
 // ListToolsPage fetches one page of tools/list and returns the typed
-// result including SEP-2549 TTL and pagination cursor. Use Tools(ctx)
+// result including the SEP-2549 ttlMs / cacheScope hints and pagination
+// cursor. Use Tools(ctx)
 // for the auto-paginating item iterator when you don't need the envelope
 // metadata, or the zero-arg ListTools() if you only want the items from
 // the first page.
@@ -99,7 +100,8 @@ func (c *Client) ListToolsPage(cursor string) (*core.ToolsListResult, error) {
 }
 
 // ListResourcesPage fetches one page of resources/list and returns the
-// typed result including SEP-2549 TTL and pagination cursor.
+// typed result including the SEP-2549 ttlMs / cacheScope hints and
+// pagination cursor.
 func (c *Client) ListResourcesPage(cursor string) (*core.ResourcesListResult, error) {
 	var out core.ResourcesListResult
 	if err := callListPage(c, "resources/list", cursor, &out); err != nil {
@@ -109,7 +111,8 @@ func (c *Client) ListResourcesPage(cursor string) (*core.ResourcesListResult, er
 }
 
 // ListResourceTemplatesPage fetches one page of resources/templates/list
-// and returns the typed result including SEP-2549 TTL and pagination cursor.
+// and returns the typed result including the SEP-2549 ttlMs / cacheScope
+// hints and pagination cursor.
 func (c *Client) ListResourceTemplatesPage(cursor string) (*core.ResourceTemplatesListResult, error) {
 	var out core.ResourceTemplatesListResult
 	if err := callListPage(c, "resources/templates/list", cursor, &out); err != nil {
@@ -119,7 +122,8 @@ func (c *Client) ListResourceTemplatesPage(cursor string) (*core.ResourceTemplat
 }
 
 // ListPromptsPage fetches one page of prompts/list and returns the typed
-// result including SEP-2549 TTL and pagination cursor.
+// result including the SEP-2549 ttlMs / cacheScope hints and pagination
+// cursor.
 func (c *Client) ListPromptsPage(cursor string) (*core.PromptsListResult, error) {
 	var out core.PromptsListResult
 	if err := callListPage(c, "prompts/list", cursor, &out); err != nil {
