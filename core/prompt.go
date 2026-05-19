@@ -31,10 +31,13 @@ type PromptsListResult struct {
 	Prompts    []PromptDef `json:"prompts"`
 	NextCursor string      `json:"nextCursor,omitempty"`
 
-	// TTL is the SEP-2549 cache freshness hint in seconds. See
-	// ToolsListResult.TTL for full semantics — same three-state pointer
-	// shape (nil = no guidance, &0 = do not cache, &N>0 = N seconds fresh).
-	TTL *int `json:"ttl,omitempty"`
+	// TTLMs is the SEP-2549 cache-freshness hint in integer milliseconds.
+	// See ToolsListResult.TTLMs for full semantics — nil/absent and &0 are
+	// both "immediately stale", &N>0 is "fresh for N milliseconds".
+	TTLMs *int `json:"ttlMs,omitempty"`
+
+	// CacheScope is the SEP-2549 cache-scope hint. See ToolsListResult.CacheScope.
+	CacheScope string `json:"cacheScope,omitempty"`
 }
 
 // PromptArgument describes a single argument to a prompt.

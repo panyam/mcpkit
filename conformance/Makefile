@@ -87,9 +87,9 @@ testconf-list-ttl: ## Run SEP-2549 list-TTL conformance — fork-based scenarios
 	@(cd $(REPO_ROOT)/examples/list-ttl && go build -o list-ttl-demo .)
 	(cd $(MCPCONFORMANCE_LIST_TTL_PATH) && npm install --silent && \
 		LIST_TTL_POSITIVE_URL=http://localhost:18094/mcp \
-		LIST_TTL_POSITIVE_CMD="$(REPO_ROOT)/examples/list-ttl/list-ttl-demo --serve --addr=:18094 --ttl=60" \
+		LIST_TTL_POSITIVE_CMD="$(REPO_ROOT)/examples/list-ttl/list-ttl-demo --serve --addr=:18094 --ttl-ms=60000 --cache-scope=public" \
 		LIST_TTL_ZERO_URL=http://localhost:18095/mcp \
-		LIST_TTL_ZERO_CMD="$(REPO_ROOT)/examples/list-ttl/list-ttl-demo --serve --addr=:18095 --ttl=0" \
+		LIST_TTL_ZERO_CMD="$(REPO_ROOT)/examples/list-ttl/list-ttl-demo --serve --addr=:18095 --ttl-ms=0" \
 		LIST_TTL_UNSET_URL=http://localhost:18096/mcp \
 		LIST_TTL_UNSET_CMD="$(REPO_ROOT)/examples/list-ttl/list-ttl-demo --serve --addr=:18096" \
 		npx vitest run src/scenarios/server/list-ttl/list-ttl.test.ts)
