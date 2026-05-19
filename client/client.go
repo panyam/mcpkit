@@ -1031,6 +1031,23 @@ func (c *Client) ReadResource(uri string) (string, error) {
 	return extractResourceText(result.Raw)
 }
 
+// ReadResourceFull reads a resource by URI and returns the full typed
+// result — every content item plus the SEP-2549 ttlMs / cacheScope cache
+// hints. The plain ReadResource helper drops that envelope and returns only
+// the first text content; callers that want to cache a read response should
+// use ReadResourceFull.
+func (c *Client) ReadResourceFull(uri string) (*core.ResourceResult, error) {
+	result, err := c.Call("resources/read", map[string]string{"uri": uri})
+	if err != nil {
+		return nil, err
+	}
+	var out core.ResourceResult
+	if err := json.Unmarshal(result.Raw, &out); err != nil {
+		return nil, fmt.Errorf("unmarshal resource result: %w", err)
+	}
+	return &out, nil
+}
+
 // SubscribeResource subscribes to change notifications for a resource URI.
 // The server will send notifications/resources/updated when the resource changes.
 func (c *Client) SubscribeResource(uri string) error {

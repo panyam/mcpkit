@@ -49,7 +49,10 @@ type serverOptions struct {
 	httpHandlers         []httpHandlerEntry       // custom HTTP endpoint handlers
 	requestStateKey      []byte                   // SEP-2322 requestState HMAC key — shared by MRTR + Tasks (nil = plaintext / unsigned)
 	requestStateTTL      time.Duration            // SEP-2322 requestState validity (0 = 24h default)
-	listTTL              *int                     // SEP-2549 cache freshness hint (seconds) attached to every list response (nil = omit)
+	listTTLMs            *int                     // SEP-2549 cache-freshness hint (ms) attached to every list response (nil = omit)
+	listCacheScope       string                   // SEP-2549 cacheScope attached to every list response ("" = omit)
+	readTTLMs            *int                     // SEP-2549 resources/read default cache-freshness hint (ms); handler may override per-read
+	readCacheScope       string                   // SEP-2549 resources/read default cacheScope; handler may override per-read
 }
 
 type httpHandlerEntry struct {
@@ -201,34 +204,75 @@ func WithToolTimeout(d time.Duration) Option {
 	return func(o *serverOptions) { o.toolTimeout = d }
 }
 
-// WithListTTL configures the SEP-2549 cache-freshness hint (in seconds)
-// attached to every tools/list, prompts/list, resources/list, and
-// resources/templates/list response. The TTL tells clients how long they
-// MAY serve a cached copy of the list before re-fetching:
+// WithListTTLMs configures the SEP-2549 cache-freshness hint, in integer
+// milliseconds, attached to every tools/list, prompts/list, resources/list,
+// and resources/templates/list response. The hint tells clients how long
+// they MAY serve a cached copy of the list before re-fetching:
 //
 //   - Negative values are treated as "no hint" (the wire field is omitted),
 //     so clients fall back to notifications/list_changed or their own
 //     heuristics. This is also the default when the option is not set.
-//   - 0 sends an explicit `"ttl": 0` meaning "do not cache" — clients
-//     SHOULD re-fetch every time the list is needed.
-//   - Positive values send `"ttl": N` meaning "fresh for N seconds";
-//     clients SHOULD NOT re-fetch before TTL expires unless they receive
-//     a list_changed notification.
+//   - 0 sends an explicit `"ttlMs": 0` — the response SHOULD be considered
+//     immediately stale; clients MAY re-fetch every time the list is needed.
+//   - Positive values send `"ttlMs": N` meaning "fresh for N milliseconds";
+//     clients SHOULD NOT re-fetch before it expires unless they receive a
+//     list_changed notification.
 //
-// The hint applies uniformly to all four list endpoints. Per-endpoint
-// granularity (e.g. shorter TTL for tools that change often, longer for
-// prompts) is a future option if the simple uniform default proves too
-// coarse.
-func WithListTTL(seconds int) Option {
+// The hint applies uniformly to all four list endpoints. To also set the
+// SEP-2549 cacheScope in one call, use WithListCacheControl.
+//
+// SEP-2549's final review renamed this option's predecessor WithListTTL
+// (integer seconds) to milliseconds. See docs/LIST_TTL_MIGRATION.md.
+func WithListTTLMs(ms int) Option {
 	return func(o *serverOptions) {
-		if seconds < 0 {
-			o.listTTL = nil
+		if ms < 0 {
+			o.listTTLMs = nil
 			return
 		}
 		// Allocate a new int so multiple servers with different TTLs
 		// don't share storage.
-		v := seconds
-		o.listTTL = &v
+		v := ms
+		o.listTTLMs = &v
+	}
+}
+
+// WithListCacheControl configures both SEP-2549 list cache hints in a
+// single call: ttlMs (see WithListTTLMs for value semantics) and cacheScope
+// (core.CacheScopePublic or core.CacheScopePrivate; "" omits the field,
+// which clients default to "public"). The hints apply uniformly to all four
+// list endpoints. Use WithListTTLMs when only the TTL is needed.
+func WithListCacheControl(ttlMs int, scope string) Option {
+	return func(o *serverOptions) {
+		if ttlMs < 0 {
+			o.listTTLMs = nil
+		} else {
+			v := ttlMs
+			o.listTTLMs = &v
+		}
+		o.listCacheScope = scope
+	}
+}
+
+// WithReadResourceCacheControl sets the default SEP-2549 cache hints for
+// resources/read responses: ttlMs (integer milliseconds; negative omits the
+// field) and cacheScope (core.CacheScopePublic or CacheScopePrivate).
+//
+// A resource (or template) handler MAY override either hint per-read by
+// setting core.ResourceResult.TTLMs / .CacheScope on its return value; the
+// server applies these defaults only to fields the handler left unset.
+//
+// resources/read responses frequently depend on the authenticated user —
+// pass core.CacheScopePrivate unless the content is identical for every
+// caller. See docs/LIST_TTL_MIGRATION.md for the security rationale.
+func WithReadResourceCacheControl(ttlMs int, scope string) Option {
+	return func(o *serverOptions) {
+		if ttlMs < 0 {
+			o.readTTLMs = nil
+		} else {
+			v := ttlMs
+			o.readTTLMs = &v
+		}
+		o.readCacheScope = scope
 	}
 }
 
@@ -332,8 +376,11 @@ func NewServer(info core.ServerInfo, opts ...Option) *Server {
 		s.dispatcher.mrtr.signingKey = s.options.requestStateKey
 	}
 	s.dispatcher.mrtr.ttl = s.options.requestStateTTL
-	// SEP-2549 list TTL — propagated unchanged (nil = no hint emitted).
-	s.dispatcher.listTTL = s.options.listTTL
+	// SEP-2549 cache hints — propagated unchanged (nil/"" = field omitted).
+	s.dispatcher.listTTLMs = s.options.listTTLMs
+	s.dispatcher.listCacheScope = s.options.listCacheScope
+	s.dispatcher.readTTLMs = s.options.readTTLMs
+	s.dispatcher.readCacheScope = s.options.readCacheScope
 	// Initialize subscription support if enabled
 	if s.options.subscriptionsEnabled {
 		s.subRegistry = &subscriptionRegistry{
