@@ -100,7 +100,7 @@ graph LR
 
 mcpkit's **tasks v1** was a **core capability** — `ServerCapabilities.Tasks`, a fixed slot sitting right next to `tools` / `resources` / `prompts`. It was added speculatively, before the long-running-operations design had settled.
 
-**SEP-2663 (tasks v2) moves tasks into the `extensions` map.** It's now extension ID `io.modelcontextprotocol/tasks`, advertised via `capabilities.extensions`, currently `stability: experimental` / `specVersion: draft`.
+**SEP-2663 (tasks v2) moves tasks into the `extensions` map.** It's now extension ID `io.modelcontextprotocol/tasks`, advertised via `capabilities.extensions`. SEP-2663 merged Final on 2026-05-15.
 
 Why move a feature *out* of core:
 
@@ -108,7 +108,7 @@ Why move a feature *out* of core:
 - **Versionable.** A core slot is binary — present or absent. An extension entry carries `specVersion` + `stability`, so tasks can iterate its design and signal maturity *without a core protocol-version bump*.
 - **Keeps core small.** The core capability set stays short and stable; speculative features live in the `extensions` map until proven.
 
-mcpkit keeps both alive during the transition via three entry points: `RegisterTasksV1` (frozen — advertises the legacy core `capabilities.tasks` slot), `RegisterTasks` (v2 — advertises the `io.modelcontextprotocol/tasks` extension), and `RegisterTasksHybrid` (advertises **both** — core slot for v1 clients, extension entry for v2 clients — and dispatches each `tasks/*` call by which the client negotiated). The deep v1↔v2 wire-shape and registration detail lives in [tasks](./tasks.md).
+mcpkit keeps both surfaces alive during the transition via two entry points: `server.RegisterTasksV1` (frozen — advertises the legacy core `capabilities.tasks` slot) and `tasks.Register` in the `github.com/panyam/mcpkit/ext/tasks` sub-module (v2 — advertises the `io.modelcontextprotocol/tasks` extension). Servers needing both surfaces during a rolling upgrade install them independently. The deep v1↔v2 wire-shape and registration detail lives in [tasks](./tasks.md).
 
 ## Q3 — What does an extension look like in mcpkit's code organization?
 
@@ -206,7 +206,7 @@ After reading this page, downstream pages can assume:
 
 ## Next to read
 
-- **[Tasks v1/v2/hybrid](./tasks.md)** *(stub, root)* — the deep walk on the largest method-namespace extension, including the v1→v2 migration and `RegisterTasksHybrid` dispatch-by-capability pattern.
+- **[Tasks v1/v2](./tasks.md)** *(stub, root)* — the deep walk on the largest method-namespace extension, including the v1→v2 migration and the side-by-side registration pattern that replaced the removed `RegisterTasksHybrid`.
 - **[Auth deep-dive](./auth.md)** *(stub, root, off-mainline)* — the bring-up extension; full OAuth/PRM/JWT/fine-grained-auth.
 - **[Apps](./apps.md)** *(stub, root)* — the library-architecture extension; AppHost/Bridge JS/ServerRegistry. Mostly mcpkit-side, thin protocol surface.
 - **[Reverse-call mechanics](./reverse-call.md)** — concretizes elicitation, sampling, roots/list as the same method-namespace pattern.

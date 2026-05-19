@@ -2,7 +2,7 @@
 
 This guide explains how to move an mcpkit server or client from the v1 task surface (MCP spec 2025-11-25) to the v2 surface (SEP-2663 Tasks Extension), and how to keep both running on the same server during a rolling transition.
 
-> **Status:** v2 is in spec draft (SEP-2663) at the time of writing. The wire shapes implemented here track the spec; expect minor follow-ups as it finalizes. v1 stays frozen and supported.
+> **Status:** SEP-2663 merged Final on 2026-05-15. The wire shapes documented below track the merged spec. v1 stays frozen and supported.
 
 ## TL;DR
 
