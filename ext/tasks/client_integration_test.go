@@ -1,4 +1,4 @@
-package client_test
+package tasks_test
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	client "github.com/panyam/mcpkit/client"
 	core "github.com/panyam/mcpkit/core"
 	server "github.com/panyam/mcpkit/server"
+	tasks "github.com/panyam/mcpkit/ext/tasks"
 )
 
 // --- v2 task client fixtures ---
@@ -70,7 +71,7 @@ func newTaskV2TestServer(t *testing.T) (string, chan struct{}) {
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
 		},
 		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			tc := server.GetTaskContext(ctx)
+			tc := tasks.GetTaskContext(ctx)
 			if tc == nil {
 				return core.ToolResult{}, errString("no task ctx")
 			}
@@ -90,7 +91,7 @@ func newTaskV2TestServer(t *testing.T) (string, chan struct{}) {
 		},
 	)
 
-	server.RegisterTasks(server.TasksConfig{Server: srv, DefaultPollMs: 50})
+	tasks.Register(tasks.Config{Server: srv, DefaultPollMs: 50})
 
 	handler := srv.Handler(server.WithStreamableHTTP(true))
 	ts := httptest.NewServer(handler)

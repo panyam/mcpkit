@@ -1,4 +1,4 @@
-package server_test
+package tasks_test
 
 import (
 	"bytes"
@@ -14,6 +14,7 @@ import (
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 	. "github.com/panyam/mcpkit/server"
+	tasks "github.com/panyam/mcpkit/ext/tasks"
 )
 
 // newTaskV2Server registers a v2 tasks server with three tools:
@@ -61,7 +62,7 @@ func newTaskV2Server(t *testing.T) *Server {
 		},
 	)
 
-	RegisterTasks(TasksConfig{Server: srv})
+	tasks.Register(tasks.Config{Server: srv})
 	return srv
 }
 
@@ -721,7 +722,7 @@ func newTaskV2ServerWithElicit(t *testing.T) *Server {
 			Execution: &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
 		},
 		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			tc := GetTaskContext(ctx)
+			tc := tasks.GetTaskContext(ctx)
 			if tc == nil {
 				return core.ToolResult{}, errorString("confirm-delete requires task context")
 			}
