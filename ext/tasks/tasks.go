@@ -271,10 +271,11 @@ func (tasksExtensionProvider) Extension() core.Extension {
 //     (server-directed, no client task param needed). Task creation is
 //     gated on the client supporting the extension — either at session
 //     level (initialize handshake) or per-request (SEP-2575 _meta).
-//   - Registers tasks/get and tasks/cancel handlers, gated on session-level
-//     extension support; otherwise the handlers return -32601 (method not
-//     found) so unsupported clients don't see a tasks surface they didn't
-//     ask for.
+//   - Registers tasks/get, tasks/update, and tasks/cancel handlers, gated
+//     on session-level extension support; otherwise the handlers return
+//     -32003 (Missing Required Client Capability, SEP-2575) with a
+//     machine-readable `requiredCapabilities` payload so unsupported
+//     clients can self-describe what to add.
 //   - Does NOT register tasks/result or tasks/list (removed in v2).
 //   - Does NOT call SetTasksCap — v2 tasks live under capabilities.extensions,
 //     not the v1 ServerCapabilities.Tasks slot.
@@ -299,14 +300,25 @@ func Register(cfg Config) {
 }
 
 // gateOnTasksExtension wraps a tasks/* handler so unsupported clients get
-// -32601 (method not found) instead of the real handler's response. This is
-// the SEP-2663 contract: tasks/* methods MUST NOT exist for clients that did
-// not negotiate the extension during initialize.
+// -32003 (Missing Required Client Capability, SEP-2575) instead of the real
+// handler's response. The error data carries the same `requiredCapabilities`
+// shape the required-task middleware emits, so a client that hits the
+// gate can self-describe what to add and retry.
 func gateOnTasksExtension(inner server.MethodHandler) server.MethodHandler {
 	return func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		if !ctx.ClientSupportsExtension(core.TasksExtensionID) {
-			return core.NewErrorResponse(id, core.ErrCodeMethodNotFound,
-				"method requires extension "+core.TasksExtensionID)
+			return core.NewErrorResponseWithData(
+				id,
+				core.ErrCodeMissingRequiredClientCapability,
+				"method requires extension "+core.TasksExtensionID,
+				map[string]any{
+					"requiredCapabilities": map[string]any{
+						"extensions": map[string]any{
+							core.TasksExtensionID: map[string]any{},
+						},
+					},
+				},
+			)
 		}
 		return inner(ctx, id, params)
 	}
@@ -649,6 +661,14 @@ func makeV2CancelHandler(rt *v2TaskRuntime) server.MethodHandler {
 		}
 		if err := json.Unmarshal(params, &p); err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
+		}
+
+		// SEP-2663 cancel is idempotent — if the task is already terminal,
+		// return the same empty ack as on an active task so clients don't
+		// have to race observation vs cancel. Skip the store mutation in
+		// that case.
+		if info, ok := rt.store.Get(p.TaskID, ctx.SessionID()); ok && info.Status.IsTerminal() {
+			return core.NewResponse(id, core.CancelTaskResult{})
 		}
 
 		info, err := rt.store.Cancel(p.TaskID, ctx.SessionID())
