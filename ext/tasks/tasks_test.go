@@ -202,7 +202,8 @@ func TestV2_RequiredTaskRejectsClientWithoutExtension(t *testing.T) {
 }
 
 // TestV2_TasksGetRejectedWithoutExtension verifies tasks/get returns
-// -32601 (method not found) when the client has not negotiated the extension.
+// -32003 (Missing Required Client Capability, SEP-2575) when the client has
+// not negotiated the tasks extension.
 func TestV2_TasksGetRejectedWithoutExtension(t *testing.T) {
 	srv := newTaskV2Server(t)
 	c := connectV2Client(t, srv) // no WithTasksExtension
@@ -215,13 +216,13 @@ func TestV2_TasksGetRejectedWithoutExtension(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected *client.RPCError, got %T: %v", err, err)
 	}
-	if rpcErr.Code != core.ErrCodeMethodNotFound {
-		t.Errorf("code = %d, want %d (method not found)", rpcErr.Code, core.ErrCodeMethodNotFound)
+	if rpcErr.Code != core.ErrCodeMissingRequiredClientCapability {
+		t.Errorf("code = %d, want %d (missing required client capability)", rpcErr.Code, core.ErrCodeMissingRequiredClientCapability)
 	}
 }
 
 // TestV2_TasksCancelRejectedWithoutExtension verifies tasks/cancel returns
-// -32601 when the client has not negotiated the extension.
+// -32003 when the client has not negotiated the tasks extension.
 func TestV2_TasksCancelRejectedWithoutExtension(t *testing.T) {
 	srv := newTaskV2Server(t)
 	c := connectV2Client(t, srv) // no WithTasksExtension
@@ -234,8 +235,8 @@ func TestV2_TasksCancelRejectedWithoutExtension(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected *client.RPCError, got %T: %v", err, err)
 	}
-	if rpcErr.Code != core.ErrCodeMethodNotFound {
-		t.Errorf("code = %d, want %d (method not found)", rpcErr.Code, core.ErrCodeMethodNotFound)
+	if rpcErr.Code != core.ErrCodeMissingRequiredClientCapability {
+		t.Errorf("code = %d, want %d (missing required client capability)", rpcErr.Code, core.ErrCodeMissingRequiredClientCapability)
 	}
 }
 
@@ -459,8 +460,9 @@ func TestV2_UpdateTerminalRejected(t *testing.T) {
 	}
 }
 
-// TestV2_UpdateRejectedWithoutExtension verifies tasks/update returns -32601
-// when the client did not negotiate the tasks extension at session level.
+// TestV2_UpdateRejectedWithoutExtension verifies tasks/update returns -32003
+// (Missing Required Client Capability, SEP-2575) when the client did not
+// negotiate the tasks extension at session level.
 func TestV2_UpdateRejectedWithoutExtension(t *testing.T) {
 	srv := newTaskV2Server(t)
 	c := connectV2Client(t, srv) // no WithTasksExtension
@@ -473,8 +475,8 @@ func TestV2_UpdateRejectedWithoutExtension(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected *client.RPCError, got %T: %v", err, err)
 	}
-	if rpcErr.Code != core.ErrCodeMethodNotFound {
-		t.Errorf("code = %d, want %d (method not found)", rpcErr.Code, core.ErrCodeMethodNotFound)
+	if rpcErr.Code != core.ErrCodeMissingRequiredClientCapability {
+		t.Errorf("code = %d, want %d (missing required client capability)", rpcErr.Code, core.ErrCodeMissingRequiredClientCapability)
 	}
 }
 

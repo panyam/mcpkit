@@ -85,10 +85,11 @@ const (
 	// carry a `requiredCapabilities` object mirroring the InitializeRequest
 	// capabilities shape so the client can self-describe what to add.
 	//
-	// Defined by SEP-2663 (Tasks Extension) for the case where a tool with
-	// TaskSupport=required is called by a client that has not declared the
-	// io.modelcontextprotocol/tasks extension. Reusable for any future
-	// extension whose required-mode path needs the same affordance.
+	// Defined by SEP-2575 §"Missing Required Capabilities". SEP-2663
+	// applies the rule to the tasks extension (TaskSupport=required tools
+	// reject with this code when the client did not declare
+	// io.modelcontextprotocol/tasks). Reusable for any future extension
+	// whose required-mode path needs the same affordance.
 	ErrCodeMissingRequiredClientCapability = -32003
 )
 
