@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"github.com/panyam/demokit"
+	"github.com/panyam/demokit/notebookbridge"
 	"github.com/panyam/demokit/tui"
 )
 
@@ -36,11 +37,17 @@ func ServerURL() string {
 	return DefaultServerURL
 }
 
-// SetupRenderer wires the Bubble Tea TUI renderer onto demo if `--tui`
-// was passed on the command line. No-op otherwise (demokit's default
-// terminal renderer stays in place).
+// SetupRenderer wires the renderer matching demokit's --mode (or
+// the legacy --tui alias):
+//
+//	--mode=tui      → tui.New()                 (Lipgloss boxes)
+//	--mode=notebook → notebookbridge.New()      (cell-based UI)
+//	default         → demokit's PlainRenderer
 func SetupRenderer(demo *demokit.Demo) {
-	if demokit.IsTUI() {
+	switch demokit.Mode() {
+	case "tui":
 		demo.WithRenderer(tui.New())
+	case "notebook":
+		demo.WithRenderer(notebookbridge.New())
 	}
 }
