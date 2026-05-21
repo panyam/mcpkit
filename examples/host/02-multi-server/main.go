@@ -65,7 +65,7 @@ func main() {
 		Arrow("C", "C", "list_events, create_event, get_info").
 		Arrow("K", "K", "get_time").
 		Note("Weather and Calendar both have a 'get_info' tool — this will cause a collision in the registry.").
-		Run(func() {
+		Run(func(_ demokit.StepContext) *demokit.StepResult {
 			weatherClient = newServer("weather", map[string]string{
 				"get_forecast": "Get weather forecast",
 				"get_alerts":   "Get weather alerts",
@@ -81,6 +81,7 @@ func main() {
 			})
 			fmt.Println("  Created 3 servers: weather (3 tools), calendar (3 tools), clock (1 tool)")
 			fmt.Println("  Note: 'get_info' exists in both weather and calendar")
+			return nil
 		})
 
 	// --- Step 2: Create registry with resolver ---
@@ -89,7 +90,7 @@ func main() {
 		Arrow("Reg", "Reg", "WithToolResolver(arg-based routing)").
 		Arrow("Reg", "Reg", "WithCollisionHandler(log collisions)").
 		Note("The resolver picks a server based on args. The collision handler logs when ambiguity is detected.").
-		Run(func() {
+		Run(func(_ demokit.StepContext) *demokit.StepResult {
 			reg = ui.NewServerRegistry(
 				ui.WithToolResolver(func(ctx context.Context, name string, candidates []ui.RegisteredTool, args map[string]any) (string, error) {
 					// Route based on a "source" hint in the args.
@@ -109,6 +110,7 @@ func main() {
 				}),
 			)
 			fmt.Println("  Registry created with arg-based resolver and collision logger")
+			return nil
 		})
 
 	// --- Step 3: Add servers ---
@@ -117,7 +119,7 @@ func main() {
 		Arrow("Reg", "C", "Add(\"calendar\", calendarClient)").
 		Arrow("Reg", "K", "Add(\"clock\", clockClient)").
 		Note("When calendar is added, the registry detects that 'get_info' now exists in both weather and calendar.").
-		Run(func() {
+		Run(func(_ demokit.StepContext) *demokit.StepResult {
 			reg.Add(ctx, "weather", weatherClient)
 			fmt.Println("  Added weather")
 			reg.Add(ctx, "calendar", calendarClient)
@@ -125,18 +127,20 @@ func main() {
 			reg.Add(ctx, "clock", clockClient)
 			fmt.Println("  Added clock")
 			fmt.Printf("  Servers: %v\n", reg.Servers())
+			return nil
 		})
 
 	// --- Step 4: AllTools ---
 	demo.Step("AllTools — aggregated tool list with routing metadata").
 		Arrow("Reg", "Reg", "AllTools()").
 		Note("Returns all tools from all servers. Each tool has clean name + ServerID metadata.").
-		Run(func() {
+		Run(func(_ demokit.StepContext) *demokit.StepResult {
 			tools, _ := reg.AllTools(ctx)
 			fmt.Printf("  %d tools across 3 servers:\n", len(tools))
 			for _, t := range tools {
 				fmt.Printf("    %-15s  server=%-10s  %s\n", t.Name, t.ServerID, t.Description)
 			}
+			return nil
 		})
 
 	// --- Step 5: Unambiguous call ---
@@ -144,13 +148,14 @@ func main() {
 		Arrow("Reg", "W", "CallTool(\"get_forecast\")").
 		DashedArrow("W", "Reg", "ToolResult").
 		Note("get_forecast exists only in weather — no resolver needed, routes directly.").
-		Run(func() {
+		Run(func(_ demokit.StepContext) *demokit.StepResult {
 			result, err := reg.CallTool(ctx, "get_forecast", nil)
 			if err != nil {
 				fmt.Printf("  ERROR: %v\n", err)
-				return
+				return nil
 			}
 			fmt.Printf("  Result: %s\n", result.Content[0].Text)
+			return nil
 		})
 
 	// --- Step 6: Ambiguous call ---
@@ -160,13 +165,14 @@ func main() {
 		Arrow("Reg", "C", "tools/call").
 		DashedArrow("C", "Reg", "ToolResult").
 		Note("get_info is ambiguous (weather + calendar). The resolver sees {source: \"calendar\"} and picks calendar.").
-		Run(func() {
+		Run(func(_ demokit.StepContext) *demokit.StepResult {
 			result, err := reg.CallTool(ctx, "get_info", map[string]any{"source": "calendar"})
 			if err != nil {
 				fmt.Printf("  ERROR: %v\n", err)
-				return
+				return nil
 			}
 			fmt.Printf("  Result: %s\n", result.Content[0].Text)
+			return nil
 		})
 
 	// --- Step 7: Explicit routing ---
@@ -174,20 +180,21 @@ func main() {
 		Arrow("Reg", "W", "CallToolOn(\"weather\", \"get_info\")").
 		DashedArrow("W", "Reg", "ToolResult").
 		Note("CallToolOn routes directly to the specified server. No resolver involved.").
-		Run(func() {
+		Run(func(_ demokit.StepContext) *demokit.StepResult {
 			result, err := reg.CallToolOn(ctx, "weather", "get_info", nil)
 			if err != nil {
 				fmt.Printf("  ERROR: %v\n", err)
-				return
+				return nil
 			}
 			fmt.Printf("  Result: %s\n", result.Content[0].Text)
+			return nil
 		})
 
 	// --- Step 8: Remove server ---
 	demo.Step("Remove server — tools disappear from index").
 		Arrow("Reg", "K", "Remove(\"clock\")").
 		Note("After removing clock, get_time is no longer available.").
-		Run(func() {
+		Run(func(_ demokit.StepContext) *demokit.StepResult {
 			reg.Remove("clock")
 			fmt.Printf("  Remaining servers: %v\n", reg.Servers())
 
@@ -195,6 +202,7 @@ func main() {
 			if err != nil {
 				fmt.Printf("  CallTool(\"get_time\"): %v ✓\n", err)
 			}
+			return nil
 		})
 
 	// --- Step 9: Add with app bridge ---
@@ -203,7 +211,7 @@ func main() {
 		Arrow("Reg", "K", "AddWithBridge(\"clock-v2\", client, bridge)").
 		Arrow("Br", "Br", "RegisterTool(\"app_stopwatch\")").
 		Note("Re-adds clock with an app bridge that provides an extra tool. Both server and app tools appear in AllTools.").
-		Run(func() {
+		Run(func(_ demokit.StepContext) *demokit.StepResult {
 			// Recreate clock server.
 			clockClient = newServer("clock-v2", map[string]string{
 				"get_time": "Get current time (v2)",
@@ -231,9 +239,10 @@ func main() {
 			result, err := reg.CallTool(ctx, "app_stopwatch", nil)
 			if err != nil {
 				fmt.Printf("  ERROR: %v\n", err)
-				return
+				return nil
 			}
 			fmt.Printf("  Called app_stopwatch → %s\n", result.Content[0].Text)
+			return nil
 		})
 
 	demo.Execute()
