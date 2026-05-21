@@ -47,7 +47,7 @@ func main() {
 		Arrow("Srv", "Srv", "RegisterTool(\"server_echo\")").
 		Arrow("Srv", "Srv", "RegisterTool(\"server_time\")").
 		Note("The server provides two tools: echo (returns input) and time (returns current time).").
-		Run(func() {
+		Run(func(_ demokit.StepContext) *demokit.StepResult {
 			srv = server.NewServer(core.ServerInfo{Name: "demo-server", Version: "1.0"})
 
 			srv.RegisterTool(
@@ -67,6 +67,7 @@ func main() {
 				},
 			)
 			fmt.Println("  Server created with 2 tools: server_echo, server_time")
+			return nil
 		})
 
 	// --- Step 2: Connect client ---
@@ -74,7 +75,7 @@ func main() {
 		Arrow("Client", "Srv", "initialize").
 		DashedArrow("Srv", "Client", "capabilities, serverInfo").
 		Note("The client connects without HTTP — using InProcessTransport for direct dispatch.").
-		Run(func() {
+		Run(func(_ demokit.StepContext) *demokit.StepResult {
 			xport := server.NewInProcessTransport(srv)
 			c = client.NewClient("memory://", core.ClientInfo{Name: "demo-host", Version: "1.0"},
 				client.WithTransport(xport),
@@ -82,7 +83,7 @@ func main() {
 			)
 			if err := c.Connect(); err != nil {
 				fmt.Printf("  ERROR: %v\n", err)
-				return
+				return nil
 			}
 			fmt.Printf("  Connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)
 
@@ -95,6 +96,7 @@ func main() {
 				fmt.Print(t.Name)
 			}
 			fmt.Println()
+			return nil
 		})
 
 	// --- Step 3: Create app bridge with tools ---
@@ -103,7 +105,7 @@ func main() {
 		Arrow("Bridge", "Bridge", "RegisterTool(\"app_greet\")").
 		Arrow("Bridge", "Bridge", "RegisterTool(\"app_counter\")").
 		Note("The bridge simulates an MCP App (iframe). It registers two tools that the host/model can call directly.").
-		Run(func() {
+		Run(func(_ demokit.StepContext) *demokit.StepResult {
 			bridge = ui.NewInProcessAppBridge()
 
 			bridge.RegisterTool("app_greet", core.ToolDef{
@@ -129,6 +131,7 @@ func main() {
 			})
 
 			fmt.Println("  Bridge created with 2 app tools: app_greet, app_counter")
+			return nil
 		})
 
 	// --- Step 4: Create and start AppHost ---
@@ -139,13 +142,14 @@ func main() {
 		Arrow("Host", "Bridge", "Send(tools/list) — initial fetch").
 		DashedArrow("Bridge", "Host", "{tools: [app_greet, app_counter]}").
 		Note("AppHost wires up bidirectional routing and fetches the initial app tool list.").
-		Run(func() {
+		Run(func(_ demokit.StepContext) *demokit.StepResult {
 			host = ui.NewAppHost(c, bridge)
 			if err := host.Start(ctx); err != nil {
 				fmt.Printf("  ERROR: %v\n", err)
-				return
+				return nil
 			}
 			fmt.Println("  AppHost started — bridge handlers wired, initial tool list fetched")
+			return nil
 		})
 
 	// --- Step 5: List all tools ---
@@ -155,16 +159,17 @@ func main() {
 		Arrow("Host", "Bridge", "cached app tools").
 		DashedArrow("Bridge", "Host", "[app_greet, app_counter]").
 		Note("ListAllTools merges tools from the MCP server and the app bridge into a single list.").
-		Run(func() {
+		Run(func(_ demokit.StepContext) *demokit.StepResult {
 			tools, err := host.ListAllTools(ctx)
 			if err != nil {
 				fmt.Printf("  ERROR: %v\n", err)
-				return
+				return nil
 			}
 			fmt.Printf("  All tools (%d total):\n", len(tools))
 			for _, t := range tools {
 				fmt.Printf("    - %s (%s)\n", t.Name, t.Description)
 			}
+			return nil
 		})
 
 	// --- Step 6: Call app tool ---
@@ -172,11 +177,11 @@ func main() {
 		Arrow("Host", "Bridge", "Send(tools/call, {name: \"app_greet\", args: {name: \"World\"}})").
 		DashedArrow("Bridge", "Host", "ToolResult {text: \"Hello, World!\"}").
 		Note("The host calls a tool registered by the app. The bridge dispatches to the Go handler.").
-		Run(func() {
+		Run(func(_ demokit.StepContext) *demokit.StepResult {
 			result, err := host.CallAppTool(ctx, "app_greet", map[string]any{"name": "World"})
 			if err != nil {
 				fmt.Printf("  ERROR: %v\n", err)
-				return
+				return nil
 			}
 			fmt.Printf("  Result: %s\n", result.Content[0].Text)
 
@@ -184,6 +189,7 @@ func main() {
 			host.CallAppTool(ctx, "app_counter", nil)
 			result2, _ := host.CallAppTool(ctx, "app_counter", nil)
 			fmt.Printf("  Counter after 2 calls: %s\n", result2.Content[0].Text)
+			return nil
 		})
 
 	// --- Step 7: App calls server tool ---
@@ -195,19 +201,20 @@ func main() {
 		DashedArrow("Client", "Host", "CallResult").
 		DashedArrow("Host", "Bridge", "Response").
 		Note("The app calls a server-side tool through the bridge. AppHost forwards to the MCP server via the Client.").
-		Run(func() {
+		Run(func(_ demokit.StepContext) *demokit.StepResult {
 			resp, err := bridge.SendToHost(ctx, "tools/call", map[string]any{
 				"name":      "server_echo",
 				"arguments": map[string]any{"msg": "from the app"},
 			})
 			if err != nil {
 				fmt.Printf("  ERROR: %v\n", err)
-				return
+				return nil
 			}
 			raw, _ := ui.ToBytes(resp.Result)
 			var result core.ToolResult
 			json.Unmarshal(raw, &result)
 			fmt.Printf("  App called server_echo → %s\n", result.Content[0].Text)
+			return nil
 		})
 
 	// --- Step 8: Dynamic tool registration ---
@@ -217,7 +224,7 @@ func main() {
 		Arrow("Host", "Bridge", "Send(tools/list) — refresh").
 		DashedArrow("Bridge", "Host", "{tools: [app_greet, app_counter, app_dice]}").
 		Note("The app registers a new tool after startup. AppHost detects the change and refreshes its cache.").
-		Run(func() {
+		Run(func(_ demokit.StepContext) *demokit.StepResult {
 			bridge.RegisterTool("app_dice", core.ToolDef{
 				Description: "Roll a random die",
 			}, func(args map[string]any) (any, error) {
@@ -237,6 +244,7 @@ func main() {
 
 			result, _ := host.CallAppTool(ctx, "app_dice", nil)
 			fmt.Printf("  Called app_dice → %s\n", result.Content[0].Text)
+			return nil
 		})
 
 	demo.Section("Cleanup",
