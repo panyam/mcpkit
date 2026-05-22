@@ -214,6 +214,47 @@ shape across examples. Examples that want to surface a custom status or
 jump to a specific next step return a non-nil `*demokit.StepResult` (see
 `demokit/result.go`).
 
+### Verbatim variants — "Reproduce on the wire"
+
+Every step that makes an MCP call attaches a `VerbatimVariants("Reproduce on
+the wire", ...)` block, chained between `.Note(...)` and `.Run(...)`. Two
+variants per call step:
+
+- `curl` (marked `.Default()`) — raw JSON-RPC over HTTP, copy-pasteable.
+  Shows the wire format directly so readers can validate behaviour from a
+  non-Go SDK or sanity-check the JSON shape.
+- `go` — the equivalent `*client.Client` form, mirroring what the step's
+  `Run` closure actually does.
+
+```go
+.Note("...").
+VerbatimVariants("Reproduce on the wire",
+    demokit.MakeVariant("curl", "bash", `curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"foo","arguments":{}}}' | jq '.result'`).Default(),
+    demokit.MakeVariant("go", "go", `res, _ := c.ToolCall("foo", map[string]any{})
+// ... mirror the Run closure`),
+).
+Run(func(ctx demokit.StepContext) ...
+```
+
+The curl variants chain shell vars (`$SID`, `$TOK_*`, etc.) set up by an
+earlier step — the first call-making step mints the session id via the
+standard initialize + `notifications/initialized` ack pattern. See
+`examples/elicitation/main.go` and `examples/fine-grained-auth/main.go`
+for canonical chains.
+
+Default markdown output (the form written to `WALKTHROUGH.md`) shows only
+the curl variant — `walkthrough-md-fresh` runs `go run . --doc md` with no
+`--variant` flag and asserts that. Pass `--variant=go` or `--variant=all`
+at the CLI to render the Go form; TUI / notebook renderers surface both
+with copyable variant labels regardless.
+
+Inside Go raw-string literals (backticks) you cannot include a backtick.
+Avoid struct tags in the Go variant; use double-quoted strings with
+escapes if you need quoted JSON inline, or describe the value in a `//`
+comment.
+
 If your `Run` body needs to call something that takes a
 `context.Context` (e.g. `client.CallToolWithInputs`), do **not** name a
 local variable `ctx` — the parameter is already named `ctx` and shadows
@@ -284,6 +325,9 @@ token", "Make targets" (only if the Makefile has more than the baseline four).
 demo: ## Run the demokit walkthrough (interactive, TUI)
 	go run . --tui
 
+note: ## Run the walkthrough in notebook mode (Bubble Tea cells)
+	go run . --note
+
 serve: ## Start the <name> demo server (default :8080)
 	go run . --serve
 
@@ -293,7 +337,7 @@ readme: ## Regenerate WALKTHROUGH.md from demo definitions
 build: ## Build the binary
 	go build -o <name>-demo .
 
-.PHONY: demo serve readme build
+.PHONY: demo note serve readme build
 .DEFAULT_GOAL := demo
 ```
 
@@ -302,6 +346,12 @@ build: ## Build the binary
 - `.DEFAULT_GOAL := demo` so a bare `make` runs the walkthrough.
 - `--doc md` (no `=`) is the canonical form; `--doc=md` works too but the
   convention is the spaced form for readability.
+- `make note` shells out to `--note`, which `demokit.Mode()` resolves to
+  `"notebook"`. `common.SetupRenderer` routes that to
+  `notebookbridge.New()` — wired once centrally, so every walkthrough
+  inherits notebook mode without per-example renderer glue. Notebook
+  output cells render with horizontal-only borders (no vertical bars),
+  which keeps streamed output clean to mouse-select and copy.
 
 ### Extras (allowed, example-specific)
 
@@ -396,9 +446,15 @@ output rather than emitted as N/A.
   blocks or a per-example `printRPCError` copy. Skip if the example has
   no error-path steps.
 - [ ] `walkthrough-md-fresh` — committed `WALKTHROUGH.md` matches
-  `go run . --doc md` output (no drift).
-- [ ] `makefile-baseline` — Makefile has the four baseline targets (`demo` /
-  `serve` / `readme` / `build`) with `## help-text` comments.
+  `go run . --doc md` output (no drift). Note the canonical form takes no
+  `--variant` flag, so the committed markdown shows only the curl
+  (`.Default()`) variant of each `VerbatimVariants` block.
+- [ ] `makefile-baseline` — Makefile has the five baseline targets (`demo` /
+  `note` / `serve` / `readme` / `build`) with `## help-text` comments.
+- [ ] `wire-verbatim-variants` — every demo step that makes an MCP call
+  attaches a `VerbatimVariants("Reproduce on the wire", curl(Default), go)`
+  block between `.Note(...)` and `.Run(...)` (see §3 "Verbatim variants").
+  Skip steps that don't make a call (bootstrap HTTP, narrative-only).
 - [ ] `makefile-default-goal` — Makefile sets `.DEFAULT_GOAL := demo`.
 - [ ] `readme-quickstart` — README has a Quick Start block with `make serve`
   + `make demo`.
@@ -441,9 +497,10 @@ non-UI checks **do not apply** and must be omitted from the audit output
 
 Plus a host-specific Makefile rule:
 
-- [ ] `host-makefile-baseline` — Makefile has `demo` and `readme` targets
-  only (no `serve`, no `build` — there's nothing to start standalone and
-  no binary to ship). `.DEFAULT_GOAL := demo` still applies.
+- [ ] `host-makefile-baseline` — Makefile has `demo`, `note`, and `readme`
+  targets only (no `serve`, no `build` — there's nothing to start
+  standalone and no binary to ship). `.DEFAULT_GOAL := demo` still
+  applies.
 
 ---
 
@@ -468,8 +525,10 @@ the non-UI conventions but with a different process shape:
   `Srv` / `Client` / `Host` / `Bridge`) instead of the non-UI two-actor
   shape, because the demo's narrative arc traverses both client→server
   and host→bridge legs.
-- **Makefile reduced.** Only `demo` and `readme` targets — no `serve`, no
-  `build`. `.DEFAULT_GOAL := demo` still applies.
+- **Makefile reduced.** Only `demo`, `note`, and `readme` targets — no
+  `serve`, no `build`. `.DEFAULT_GOAL := demo` still applies. `note` loops
+  through each contained example with `--note`, mirroring how `demo` loops
+  with `--non-interactive` (see `examples/host/Makefile`).
 
 What host examples still share with non-UI:
 
