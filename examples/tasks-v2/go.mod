@@ -9,7 +9,7 @@ replace github.com/panyam/mcpkit/examples/common => ../common
 replace github.com/panyam/mcpkit/ext/tasks => ../../ext/tasks
 
 require (
-	github.com/panyam/demokit v0.0.21
+	github.com/panyam/demokit v0.0.25
 	github.com/panyam/mcpkit v0.2.45
 	github.com/panyam/mcpkit/examples/common v0.0.0-00010101000000-000000000000
 	github.com/panyam/mcpkit/ext/tasks v0.0.0-00010101000000-000000000000
@@ -44,7 +44,7 @@ require (
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
-	github.com/panyam/demokit/notebook v0.0.1 // indirect
+	github.com/panyam/demokit/notebook v0.0.25 // indirect
 	github.com/panyam/gocurrent v0.1.1 // indirect
 	github.com/panyam/goutils v0.1.13 // indirect
 	github.com/panyam/servicekit v0.1.1 // indirect

@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"github.com/panyam/demokit"
+	"github.com/panyam/demokit/notebookbridge"
+	"github.com/panyam/demokit/tui"
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/host/refs"
@@ -244,6 +246,15 @@ func main() {
 			fmt.Printf("  Called app_stopwatch → %s\n", result.Content[0].Text)
 			return nil
 		})
+
+	// --mode=plain (default) | tui | notebook. --tui / --note are honored
+	// as aliases for --mode=tui / --mode=notebook.
+	switch demokit.Mode() {
+	case "tui":
+		demo.WithRenderer(tui.New())
+	case "notebook":
+		demo.WithRenderer(notebookbridge.New())
+	}
 
 	demo.Execute()
 

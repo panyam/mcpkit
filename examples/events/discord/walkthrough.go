@@ -91,6 +91,24 @@ func runDemo() {
 		Arrow("Host", "Server", "POST /mcp — initialize").
 		DashedArrow("Server", "Host", "serverInfo + capabilities").
 		Note("Vanilla MCP `initialize` over Streamable HTTP. The events extension doesn't declare any new capability — `events/*` methods are registered server-side via the events library. Push delivery rides a long-lived per-subscription POST that returns SSE (`events/stream`), not the session GET back-channel, so the client doesn't need any transport-level wiring to receive events.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# Vanilla MCP initialize over Streamable HTTP — mints the session id.
+# The events extension declares no new capability; events/* are server-side methods.
+SID=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":"i","method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"x","version":"1"},"capabilities":{}}}' \
+  -D - -o /dev/null | grep -i 'mcp-session-id' | awk '{print $2}' | tr -d '\r\n')
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+echo "SID=$SID"`).Default(),
+			demokit.MakeVariant("go", "go", `// Vanilla MCP initialize over Streamable HTTP — no new capability declared.
+c := client.NewClient(mcpURL, core.ClientInfo{Name: "discord-events-host", Version: "1.0"})
+if err := c.Connect(); err != nil {
+    log.Fatalf("connect failed (start the server with: make serve): %v", err)
+}
+fmt.Printf("Connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)`),
+		).
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			c = client.NewClient(mcpURL,
 				core.ClientInfo{Name: "discord-events-host", Version: "1.0"},
@@ -114,6 +132,19 @@ func runDemo() {
 			"",
 			"- Each `EventDef` may carry an opaque `_meta` map for app-defined per-event-type metadata (mirrors the `_meta` convention on Tool / Resource / Prompt in base MCP). The same `_meta` convention applies on `EventOccurrence` (the wire-format Event envelope). The discord sources don't set `_meta` here; servers that want to surface trace ids, source-system tags, or other per-type annotations populate it on construction.",
 			"- The events/list response carries an optional `nextCursor` for forward-compatible pagination (mirrors the tools/list / resources/list convention). Library doesn't paginate today (advertised sets are small in practice); the field is plumbed for forward compatibility.",
+		).
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# events/list returns the catalog of event TYPES (closer to tools/list than a CRUD listing).
+# Each entry advertises name, deliveryModes, payloadSchema, the cursorless flag, and optional _meta.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"events/list","params":{}}' | jq '.result'`).Default(),
+			demokit.MakeVariant("go", "go", `// events/list returns the catalog of event TYPES, not recent instances.
+res, err := c.Call("events/list", map[string]any{})
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf("events/list response:\n%s\n", string(res.Raw))`),
 		).
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			res, err := c.Call("events/list", map[string]any{})
@@ -142,6 +173,25 @@ func runDemo() {
 			"- Heartbeats fire every ≥30s carrying the source's current cursor so the client's persisted cursor advances during quiet periods.",
 			"- Replaces the broadcast-to-all-listeners model from Phase 1; per-stream isolation comes for free since each stream is its own POST.",
 			"- Typed Go SDK Stream() helper (experimental/ext/events/clients/go) threads the per-call notification hook (client.CallContext.WithNotifyHook) so callbacks fire only for THIS stream's notifications.",
+		).
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# events/stream is a long-lived JSON-RPC request; its events arrive as
+# notifications/events/event frames on the call's own SSE response stream.
+# Server first confirms with notifications/events/active { requestId, cursor }.
+# (Inject a message from another terminal: make inject TEXT='hello')
+curl -N -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"events/stream","params":{"name":"discord.message"}}'`).Default(),
+			demokit.MakeVariant("go", "go", `// events/stream { name: discord.message } — long-lived request, one per subscription.
+// The typed Stream() helper delivers notifications/events/event frames to OnEvent.
+stream, err := eventsclient.Stream(ctx, c, eventsclient.StreamOptions{
+    EventName: "discord.message",
+    OnEvent:   func(ev events.Event) { gotEvent <- ev },
+})
+if err != nil {
+    log.Fatalf("Stream open failed: %v", err)
+}
+defer stream.Stop()`),
 		).
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			ctx, cancel := context.WithCancel(context.Background())
@@ -188,6 +238,22 @@ func runDemo() {
 		Arrow("Host", "Server", "events/poll {name: discord.message, cursor: <head>}").
 		DashedArrow("Server", "Host", "{events: [], cursor: <head>, hasMore: false}").
 		Note("Poll instead. `events/poll` is single-subscription per call (multi-sub batching was removed) with a flat top-level shape: `{name, params, cursor, maxAge, maxEvents}` in, `{events, cursor, hasMore, truncated, nextPollSeconds}` out. Polling at the head returns no new events but advances the cursor — the response shape is identical whether or not events are waiting, so the client's polling loop has one code path.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# events/poll is single-subscription per call with a flat top-level shape.
+# Polling at the head returns no new events but advances the cursor — same shape either way.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":3,"method":"events/poll","params":{"name":"discord.message","cursor":"0"}}' | jq '.result'`).Default(),
+			demokit.MakeVariant("go", "go", `// events/poll { name, cursor } — flat top-level shape, single subscription per call.
+res, err := c.Call("events/poll", map[string]any{
+    "name":   "discord.message",
+    "cursor": cursor, // last-seen cursor, or "0" at the head
+})
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf("events/poll response:\n%s\n", string(res.Raw))`),
+		).
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			cursor := "0"
 			if messageCursor != nil {
@@ -225,6 +291,23 @@ func runDemo() {
 			"- Push delivery via events/stream still works — there's just nothing to replay.",
 			"- Heartbeats also carry cursor:null (spec L294: \"null for event types that do not support replay\").",
 			"- Useful for ephemeral state (typing indicators, presence, current readings).",
+		).
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# Same events/stream method, but discord.typing is a cursorless source:
+# every delivery (and heartbeat) carries cursor:null — push still fans out live,
+# only replay is unavailable. (Inject from another terminal: make inject-typing)
+curl -N -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":4,"method":"events/stream","params":{"name":"discord.typing"}}'`).Default(),
+			demokit.MakeVariant("go", "go", `// events/stream { name: discord.typing } — cursorless source, every event wires cursor:null.
+stream, err := eventsclient.Stream(ctx, c, eventsclient.StreamOptions{
+    EventName: "discord.typing",
+    OnEvent:   func(ev events.Event) { gotEvent <- ev }, // ev.Cursor stays nil
+})
+if err != nil {
+    log.Fatalf("Stream open failed: %v", err)
+}
+defer stream.Stop()`),
 		).
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			ctx, cancel := context.WithCancel(context.Background())
@@ -275,6 +358,25 @@ func runDemo() {
 			"",
 			"- Webhook subscribers don't see error envelopes (errors are upstream-side, not delivery-side); they DO see {type:terminated} control envelopes when the suspend state machine flips Active=false or when the source itself terminates.",
 			"- This walkthrough step exercises only the transient error path — calling `inject?action=terminate` would one-shot terminate the discord.message source, breaking subsequent walkthrough steps that depend on it. Full terminate flow is covered by TestE2EHealthSignalsEndToEnd in this demo's e2e_test.go.",
+		).
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# Open an events/stream, then trigger a transient upstream failure on the source.
+# notifications/events/error arrives on the open stream — which stays connected.
+# (notifications/events/terminated would be terminal; this path is transient only.)
+curl -N -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":5,"method":"events/stream","params":{"name":"discord.message"}}' &
+curl -s -X POST 'http://localhost:8080/inject?action=error&code=-32603&message=demo+upstream+failure'`).Default(),
+			demokit.MakeVariant("go", "go", `// events/stream { name: discord.message } — watch the source-health channel.
+// A transient YieldError surfaces via OnError; the stream stays open.
+stream, err := eventsclient.Stream(ctx, c, eventsclient.StreamOptions{
+    EventName: "discord.message",
+    OnError:   func(e error) { gotError <- e }, // notifications/events/error (transient)
+})
+if err != nil {
+    log.Fatalf("Stream open failed: %v", err)
+}
+defer stream.Stop()`),
 		).
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			ctx, cancel := context.WithCancel(context.Background())
@@ -335,6 +437,32 @@ func runDemo() {
 			"- 5xx retry with exponential backoff (4 attempts: 500ms → 1s → 2s → 5s cap). Standard webhook convention.",
 			"",
 			"**Auth posture:** `events/subscribe` requires an authenticated principal per spec §\"Subscription Identity\" → \"Authentication required\" L361. The demo runs anonymously via `events.Config.UnsafeAnonymousPrincipal=\"demo-user\"` (logged at startup as \"auth: demo (anonymous → UnsafeAnonymousPrincipal)\"). Production deployments unset that field AND wire `server.WithAuth(JWTValidator)` so anonymous subscribes hit the spec-mandated `-32012 Unauthorized`. See README \"Auth posture: demo escape vs real OIDC\".",
+		).
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# events/subscribe registers a callback URL + a client-supplied whsec_ secret with a TTL.
+# Response carries { id, refreshBefore } and does NOT echo the secret (spec).
+# Tear down by tuple (name, params, delivery.url) — the derived id is not accepted as input.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":6,"method":"events/subscribe","params":{"name":"discord.message","delivery":{"mode":"webhook","url":"https://receiver.example/hook","secret":"whsec_<client-supplied>"},"maxAge":300}}' | jq '.result'
+# later: events/unsubscribe { name, delivery: { url } }`).Default(),
+			demokit.MakeVariant("go", "go", `// events/subscribe via the typed SDK: subscribe + background auto-refresh at 0.5xTTL.
+// Secret auto-generated when empty; Receiver[Data] decodes the typed webhook envelope.
+sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
+    EventName:     "discord.message",
+    CallbackURL:   hookSrv.URL,
+    RefreshFactor: 0.5,
+    MaxAge:        5 * time.Minute, // bound worst-case replay on reconnect
+})
+if err != nil {
+    log.Fatalf("subscribe failed: %v", err)
+}
+defer sub.Stop()
+// Tear down by tuple (the derived id is not accepted as input):
+defer c.Call("events/unsubscribe", map[string]any{
+    "name":     "discord.message",
+    "delivery": map[string]any{"url": hookSrv.URL},
+})`),
 		).
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			recv := eventsclient.NewReceiver[DiscordEventData]("")
@@ -421,6 +549,32 @@ func runDemo() {
 			"",
 			"- The library fans out one yielded event to **both** webhook targets today — there is no per-subscription `match` filter yet (that's the upcoming SDK-hooks plan; see `docs/EVENTS_ETA_PLAN.md`).",
 			"- Push side: the same routing works via the `requestId` echo on every `notifications/events/event` payload — each `events/stream` POST gets its own JSON-RPC id, and notifications carry it in `params.requestId`.",
+		).
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# Two subscribes, same (principal, url, name) but different params → different ids.
+# One event then fans out to both; each delivery POST carries its own X-MCP-Subscription-Id.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":7,"method":"events/subscribe","params":{"name":"discord.message","params":{"channel_id":"alpha"},"delivery":{"mode":"webhook","url":"https://receiver.example/hook","secret":"whsec_<a>"}}}' | jq '.result.id'
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":8,"method":"events/subscribe","params":{"name":"discord.message","params":{"channel_id":"beta"},"delivery":{"mode":"webhook","url":"https://receiver.example/hook","secret":"whsec_<b>"}}}' | jq '.result.id'
+# later: events/unsubscribe per tuple — { name, params: { channel_id }, delivery: { url } }`).Default(),
+			demokit.MakeVariant("go", "go", `// Two events/subscribe to the same name+url but different params → distinct ids.
+// One yielded event fans out to both targets (no per-sub match filter yet).
+res, err := c.Call("events/subscribe", map[string]any{
+    "name":   "discord.message",
+    "params": map[string]any{"channel_id": channelLabel}, // "alpha" then "beta"
+    "delivery": map[string]any{
+        "mode":   "webhook",
+        "url":    recv.URL,
+        "secret": events.GenerateSecret(),
+    },
+})
+if err != nil {
+    log.Fatal(err)
+}
+// res.Raw → { "id": "sub_...", ... }; the two labels yield different ids.`),
 		).
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			// One receiver, two subs. Capture each delivery's
@@ -547,6 +701,37 @@ func runDemo() {
 			"",
 			"**Fast-mode tip:** with the default `make serve` (`-webhook-suspend-threshold 5`), this step demonstrates the deliveryStatus reporting (lastError populated, failedSince populated, active still true) — full suspend takes 5 failed deliveries × ~8.5s each. To see suspend fire after ONE failure (~12s total step time), restart the server with `make serve-fast-suspend` (sets `-webhook-suspend-threshold 1`).",
 		).
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# First subscribe has no deliveryStatus (nothing to report yet).
+# After a failed delivery, re-subscribe on the SAME tuple → response carries
+# deliveryStatus { active, lastDeliveryAt, lastError, failedSince }.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":9,"method":"events/subscribe","params":{"name":"discord.message","params":{"role":"health-demo"},"delivery":{"mode":"webhook","url":"https://dead-receiver.example/hook","secret":"whsec_<v>"}}}' | jq '.result'
+# (inject an event, let the ~8.5s retry cycle exhaust, then re-issue the SAME subscribe to see deliveryStatus)`).Default(),
+			demokit.MakeVariant("go", "go", `// events/subscribe twice on the same canonical tuple: initial, then refresh.
+// The refresh response carries a deliveryStatus block once a delivery has failed.
+subParams := map[string]any{
+    "name":   "discord.message",
+    "params": map[string]any{"role": "health-demo"},
+    "delivery": map[string]any{
+        "mode":   "webhook",
+        "url":    deadReceiver.URL,
+        "secret": events.GenerateSecret(),
+    },
+}
+res, err := c.Call("events/subscribe", subParams) // initial: no deliveryStatus
+if err != nil {
+    log.Fatal(err)
+}
+_ = res
+// ... inject one event, wait out the retry cycle (~8.5s) ...
+res2, err := c.Call("events/subscribe", subParams) // refresh: res2.Raw has deliveryStatus
+if err != nil {
+    log.Fatal(err)
+}
+_ = res2`),
+		).
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			// Receiver returns 500 on event deliveries (forces failures);
 			// returns 200 on control-envelope POSTs (and captures them).
@@ -669,6 +854,22 @@ func runDemo() {
 			"",
 			"- This step makes a raw client.Call to bypass the SDK and demonstrate the server-side validator directly. (in mcpkit: the Go SDK auto-generates a conforming whsec_ value via `events.GenerateSecret()` when `SubscribeOptions.Secret` is empty — this step skips that on purpose)",
 		).
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# delivery.secret is REQUIRED on every events/subscribe — no server-side fallback.
+# Omitting it is rejected at subscribe time with -32602 InvalidParams.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":10,"method":"events/subscribe","params":{"name":"discord.message","delivery":{"mode":"webhook","url":"http://localhost:1/sink"}}}' | jq '.error'`).Default(),
+			demokit.MakeVariant("go", "go", `// Raw call with no delivery.secret → server returns -32602 InvalidParams.
+_, err := c.Call("events/subscribe", map[string]any{
+    "name": "discord.message",
+    "delivery": map[string]any{
+        "mode": "webhook",
+        "url":  "http://localhost:1/sink",
+    },
+})
+rpcErr := err.(*client.RPCError) // code == -32602, delivery.secret is required`),
+		).
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			_, err := c.Call("events/subscribe", map[string]any{
 				"name": "discord.message",
@@ -695,6 +896,22 @@ func runDemo() {
 		DashedArrow("Server", "Host", "-32602 InvalidParams: delivery.secret invalid: must start with the whsec_ prefix").
 		Note(
 			"Rejected with `-32602 InvalidParams`. The validator enforces the full Standard Webhooks format: `whsec_` followed by base64 of 24-64 random bytes. A non-prefixed value, a too-short value, or non-base64 garbage all fail at subscribe time — catches IaC-pinned secrets that don't match the spec format before they create a broken subscription.",
+		).
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# A non-whsec_ value fails the Standard Webhooks format check → -32602 InvalidParams.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":11,"method":"events/subscribe","params":{"name":"discord.message","delivery":{"mode":"webhook","url":"http://localhost:1/sink","secret":"wrong"}}}' | jq '.error'`).Default(),
+			demokit.MakeVariant("go", "go", `// Garbage secret (not whsec_<base64>) → server returns -32602 InvalidParams.
+_, err := c.Call("events/subscribe", map[string]any{
+    "name": "discord.message",
+    "delivery": map[string]any{
+        "mode":   "webhook",
+        "url":    "http://localhost:1/sink",
+        "secret": "wrong",
+    },
+})
+rpcErr := err.(*client.RPCError) // code == -32602, must start with the whsec_ prefix`),
 		).
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			_, err := c.Call("events/subscribe", map[string]any{
@@ -723,6 +940,23 @@ func runDemo() {
 		DashedArrow("Server", "Host", "-32602 InvalidParams: client-supplied id is not accepted").
 		Note(
 			"Rejected with `-32602 InvalidParams`. Per spec §\"Subscription Identity\" → \"Key composition\" L363, the id is server-derived from `(principal, name, params, url)` — there is no client-generated id. Old SDKs that send an `id` field get a loud error rather than a silent mis-keying that would alias subscriptions and break tenant isolation.",
+		).
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# The id is server-derived; a client-supplied id field is rejected → -32602 InvalidParams.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":12,"method":"events/subscribe","params":{"id":"client-picked-id","name":"discord.message","delivery":{"mode":"webhook","url":"http://localhost:1/sink","secret":"whsec_<valid>"}}}' | jq '.error'`).Default(),
+			demokit.MakeVariant("go", "go", `// Passing a client-chosen id → server returns -32602 InvalidParams.
+_, err := c.Call("events/subscribe", map[string]any{
+    "id":   "client-picked-id",
+    "name": "discord.message",
+    "delivery": map[string]any{
+        "mode":   "webhook",
+        "url":    "http://localhost:1/sink",
+        "secret": events.GenerateSecret(),
+    },
+})
+rpcErr := err.(*client.RPCError) // code == -32602, client-supplied id is not accepted`),
 		).
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			_, err := c.Call("events/subscribe", map[string]any{
@@ -755,6 +989,32 @@ func runDemo() {
 			"Subscribe succeeds. The response carries the server-derived `id` (`sub_<base64>` per spec §\"Subscription Identity\" → \"Derived id\" L367), plus `cursor` and `refreshBefore`. Notably absent: the `secret` — the client supplied it, so the server doesn't echo it back. Echoing would risk leaks via proxies, logs, or IDE network panes.",
 			"",
 			"- The id is non-load-bearing for security; it's surfaced as `X-MCP-Subscription-Id` on delivery POSTs but knowing the value grants no operations on the subscription.",
+		).
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# A valid whsec_ secret succeeds: response carries the server-derived id, cursor,
+# and refreshBefore — and notably NOT the secret (the server never echoes it).
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":13,"method":"events/subscribe","params":{"name":"discord.message","delivery":{"mode":"webhook","url":"http://localhost:1/sink","secret":"whsec_<valid>"}}}' | jq '.result'
+# then tear down by tuple: events/unsubscribe { name, delivery: { url } }`).Default(),
+			demokit.MakeVariant("go", "go", `// A conforming whsec_ secret succeeds; res.Raw has id + cursor + refreshBefore, no secret echo.
+res, err := c.Call("events/subscribe", map[string]any{
+    "name": "discord.message",
+    "delivery": map[string]any{
+        "mode":   "webhook",
+        "url":    "http://localhost:1/sink",
+        "secret": events.GenerateSecret(),
+    },
+})
+if err != nil {
+    log.Fatal(err)
+}
+_ = res
+// Tear down by tuple (no id):
+c.Call("events/unsubscribe", map[string]any{
+    "name":     "discord.message",
+    "delivery": map[string]any{"url": "http://localhost:1/sink"},
+})`),
 		).
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			supplied := events.GenerateSecret()
@@ -814,6 +1074,34 @@ func runDemo() {
 		).
 		Timeout(liveInteractionMaxWait).
 		Cancellable(!demokit.IsTUI()).
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# Hold two concurrent events/stream requests open against the same session,
+# one per subscription (spec L271). Then type + send in the real Discord channel:
+# discord.typing arrives with cursor:null, discord.message with a fresh cursor.
+curl -N -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":14,"method":"events/stream","params":{"name":"discord.message"}}' &
+curl -N -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":15,"method":"events/stream","params":{"name":"discord.typing"}}' &`).Default(),
+			demokit.MakeVariant("go", "go", `// Two concurrent events/stream calls on one session — one per subscription (spec L271).
+msgStream, err := eventsclient.Stream(liveCtx, c, eventsclient.StreamOptions{
+    EventName: "discord.message",
+    OnEvent:   func(ev events.Event) { gotMsg <- ev }, // cursored
+})
+if err != nil {
+    log.Fatalf("open discord.message stream: %v", err)
+}
+defer msgStream.Stop()
+typingStream, err := eventsclient.Stream(liveCtx, c, eventsclient.StreamOptions{
+    EventName: "discord.typing",
+    OnEvent:   func(ev events.Event) { gotTyping <- ev }, // cursorless
+})
+if err != nil {
+    log.Fatalf("open discord.typing stream: %v", err)
+}
+defer typingStream.Stop()`),
+		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			if demokit.IsNonInteractive() {
 				fmt.Printf("    Skipped in --non-interactive mode. Run without --non-interactive (and with the server in -token mode) to see live events.\n")

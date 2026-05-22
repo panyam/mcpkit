@@ -152,6 +152,21 @@ Identity-mode subscribe and Standard Webhooks header naming are exercised by the
 
 Vanilla MCP `initialize` over Streamable HTTP. The events extension doesn't declare any new capability — `events/*` methods are registered server-side via the events library. Push delivery rides a long-lived per-subscription POST that returns SSE (`events/stream`), not the session GET back-channel, so the client doesn't need any transport-level wiring to receive events.
 
+#### Reproduce on the wire
+
+```bash
+# Vanilla MCP initialize over Streamable HTTP — mints the session id.
+# The events extension declares no new capability; events/* are server-side methods.
+SID=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":"i","method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"x","version":"1"},"capabilities":{}}}' \
+  -D - -o /dev/null | grep -i 'mcp-session-id' | awk '{print $2}' | tr -d '\r\n')
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+echo "SID=$SID"
+```
+
 ### Step 2: What kinds of events does this server even emit?
 
 `events/list` returns the catalog of event **types** the server can emit — not a list of recent event instances. (The naming is a touch misleading: it's much closer in spirit to `tools/list` than to a CRUD listing. Think of each entry as the schema for a kind of event that subscribers can ask for, not as data.)
@@ -160,6 +175,16 @@ Each entry advertises a name, description, the supported delivery modes, an auto
 
 - Each `EventDef` may carry an opaque `_meta` map for app-defined per-event-type metadata (mirrors the `_meta` convention on Tool / Resource / Prompt in base MCP). The same `_meta` convention applies on `EventOccurrence` (the wire-format Event envelope). The discord sources don't set `_meta` here; servers that want to surface trace ids, source-system tags, or other per-type annotations populate it on construction.
 - The events/list response carries an optional `nextCursor` for forward-compatible pagination (mirrors the tools/list / resources/list convention). Library doesn't paginate today (advertised sets are small in practice); the field is plumbed for forward compatibility.
+
+#### Reproduce on the wire
+
+```bash
+# events/list returns the catalog of event TYPES (closer to tools/list than a CRUD listing).
+# Each entry advertises name, deliveryModes, payloadSchema, the cursorless flag, and optional _meta.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"events/list","params":{}}' | jq '.result'
+```
 
 ### Step 3: Can I get events as they happen?
 
@@ -170,9 +195,31 @@ Yes — `events/stream` is the answer. It's a long-lived JSON-RPC request, one p
 - Replaces the broadcast-to-all-listeners model from Phase 1; per-stream isolation comes for free since each stream is its own POST.
 - Typed Go SDK Stream() helper (experimental/ext/events/clients/go) threads the per-call notification hook (client.CallContext.WithNotifyHook) so callbacks fire only for THIS stream's notifications.
 
+#### Reproduce on the wire
+
+```bash
+# events/stream is a long-lived JSON-RPC request; its events arrive as
+# notifications/events/event frames on the call's own SSE response stream.
+# Server first confirms with notifications/events/active { requestId, cursor }.
+# (Inject a message from another terminal: make inject TEXT='hello')
+curl -N -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"events/stream","params":{"name":"discord.message"}}'
+```
+
 ### Step 4: What if I can't keep a long-lived stream open?
 
 Poll instead. `events/poll` is single-subscription per call (multi-sub batching was removed) with a flat top-level shape: `{name, params, cursor, maxAge, maxEvents}` in, `{events, cursor, hasMore, truncated, nextPollSeconds}` out. Polling at the head returns no new events but advances the cursor — the response shape is identical whether or not events are waiting, so the client's polling loop has one code path.
+
+#### Reproduce on the wire
+
+```bash
+# events/poll is single-subscription per call with a flat top-level shape.
+# Polling at the head returns no new events but advances the cursor — same shape either way.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":3,"method":"events/poll","params":{"name":"discord.message","cursor":"0"}}' | jq '.result'
+```
 
 ### Step 5: What about events I don't need to replay, like 'user is typing'?
 
@@ -182,12 +229,35 @@ On the wire, the event type is marked cursorless: `events/list` advertises `curs
 - Heartbeats also carry cursor:null (spec L294: "null for event types that do not support replay").
 - Useful for ephemeral state (typing indicators, presence, current readings).
 
+#### Reproduce on the wire
+
+```bash
+# Same events/stream method, but discord.typing is a cursorless source:
+# every delivery (and heartbeat) carries cursor:null — push still fans out live,
+# only replay is unavailable. (Inject from another terminal: make inject-typing)
+curl -N -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":4,"method":"events/stream","params":{"name":"discord.typing"}}'
+```
+
 ### Step 6: What happens when the upstream source has a hiccup?
 
 On the wire, two notification methods carry source health. `notifications/events/error` (spec L255+L261) is transient — the source had a failure, the stream stays open, subsequent events still arrive. `notifications/events/terminated` (spec L783-795) is terminal — the subscription has ended. This step exercises the transient path: `inject?action=error` causes the source to surface one upstream failure, the open stream sees `notifications/events/error` arrive while staying connected. (in mcpkit: server authors trigger these via `source.YieldError(err)` / `source.YieldTerminated(err)`)
 
 - Webhook subscribers don't see error envelopes (errors are upstream-side, not delivery-side); they DO see {type:terminated} control envelopes when the suspend state machine flips Active=false or when the source itself terminates.
 - This walkthrough step exercises only the transient error path — calling `inject?action=terminate` would one-shot terminate the discord.message source, breaking subsequent walkthrough steps that depend on it. Full terminate flow is covered by TestE2EHealthSignalsEndToEnd in this demo's e2e_test.go.
+
+#### Reproduce on the wire
+
+```bash
+# Open an events/stream, then trigger a transient upstream failure on the source.
+# notifications/events/error arrives on the open stream — which stays connected.
+# (notifications/events/terminated would be terminal; this path is transient only.)
+curl -N -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":5,"method":"events/stream","params":{"name":"discord.message"}}' &
+curl -s -X POST 'http://localhost:8080/inject?action=error&code=-32603&message=demo+upstream+failure'
+```
 
 ### Step 7: What if my client itself keeps restarting, but I have a public callback URL?
 
@@ -207,12 +277,38 @@ Use webhook delivery. `events/subscribe` registers a callback URL plus a client-
 
 **Auth posture:** `events/subscribe` requires an authenticated principal per spec §"Subscription Identity" → "Authentication required" L361. The demo runs anonymously via `events.Config.UnsafeAnonymousPrincipal="demo-user"` (logged at startup as "auth: demo (anonymous → UnsafeAnonymousPrincipal)"). Production deployments unset that field AND wire `server.WithAuth(JWTValidator)` so anonymous subscribes hit the spec-mandated `-32012 Unauthorized`. See README "Auth posture: demo escape vs real OIDC".
 
+#### Reproduce on the wire
+
+```bash
+# events/subscribe registers a callback URL + a client-supplied whsec_ secret with a TTL.
+# Response carries { id, refreshBefore } and does NOT echo the secret (spec).
+# Tear down by tuple (name, params, delivery.url) — the derived id is not accepted as input.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":6,"method":"events/subscribe","params":{"name":"discord.message","delivery":{"mode":"webhook","url":"https://receiver.example/hook","secret":"whsec_<client-supplied>"},"maxAge":300}}' | jq '.result'
+# later: events/unsubscribe { name, delivery: { url } }
+```
+
 ### Step 8: Two subs to the same event with different params — how do I tell deliveries apart?
 
 Each delivery POST carries its own `X-MCP-Subscription-Id` header (per spec §"Webhook Event Delivery" L390), and on the push side every notification echoes the originating `events/stream` request id in `params.requestId`. Subscriptions are identified by the canonical tuple `(principal, delivery.url, name, params)` (spec §"Subscription Identity" → "Key composition" L363), so two subscribes with the same `(principal, url, name)` but different `params` produce different ids — and the receiver branches by header without parsing the body.
 
 - The library fans out one yielded event to **both** webhook targets today — there is no per-subscription `match` filter yet (that's the upcoming SDK-hooks plan; see `docs/EVENTS_ETA_PLAN.md`).
 - Push side: the same routing works via the `requestId` echo on every `notifications/events/event` payload — each `events/stream` POST gets its own JSON-RPC id, and notifications carry it in `params.requestId`.
+
+#### Reproduce on the wire
+
+```bash
+# Two subscribes, same (principal, url, name) but different params → different ids.
+# One event then fans out to both; each delivery POST carries its own X-MCP-Subscription-Id.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":7,"method":"events/subscribe","params":{"name":"discord.message","params":{"channel_id":"alpha"},"delivery":{"mode":"webhook","url":"https://receiver.example/hook","secret":"whsec_<a>"}}}' | jq '.result.id'
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":8,"method":"events/subscribe","params":{"name":"discord.message","params":{"channel_id":"beta"},"delivery":{"mode":"webhook","url":"https://receiver.example/hook","secret":"whsec_<b>"}}}' | jq '.result.id'
+# later: events/unsubscribe per tuple — { name, params: { channel_id }, delivery: { url } }
+```
 
 ### Step 9: My webhook receiver just died. How does the server let me know?
 
@@ -225,25 +321,76 @@ Two answers, layered. First, every subscribe-refresh response carries a `deliver
 
 **Fast-mode tip:** with the default `make serve` (`-webhook-suspend-threshold 5`), this step demonstrates the deliveryStatus reporting (lastError populated, failedSince populated, active still true) — full suspend takes 5 failed deliveries × ~8.5s each. To see suspend fire after ONE failure (~12s total step time), restart the server with `make serve-fast-suspend` (sets `-webhook-suspend-threshold 1`).
 
+#### Reproduce on the wire
+
+```bash
+# First subscribe has no deliveryStatus (nothing to report yet).
+# After a failed delivery, re-subscribe on the SAME tuple → response carries
+# deliveryStatus { active, lastDeliveryAt, lastError, failedSince }.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":9,"method":"events/subscribe","params":{"name":"discord.message","params":{"role":"health-demo"},"delivery":{"mode":"webhook","url":"https://dead-receiver.example/hook","secret":"whsec_<v>"}}}' | jq '.result'
+# (inject an event, let the ~8.5s retry cycle exhaust, then re-issue the SAME subscribe to see deliveryStatus)
+```
+
 ### Step 10: What if I forget the secret?
 
 Rejected with `-32602 InvalidParams` at subscribe time. `delivery.secret` is REQUIRED on every `events/subscribe` per spec — there's no server-side fallback. Rejecting at subscribe time means a malformed subscription never exists in the registry, so the server can't ever produce unverifiable deliveries.
 
 - This step makes a raw client.Call to bypass the SDK and demonstrate the server-side validator directly. (in mcpkit: the Go SDK auto-generates a conforming whsec_ value via `events.GenerateSecret()` when `SubscribeOptions.Secret` is empty — this step skips that on purpose)
 
+#### Reproduce on the wire
+
+```bash
+# delivery.secret is REQUIRED on every events/subscribe — no server-side fallback.
+# Omitting it is rejected at subscribe time with -32602 InvalidParams.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":10,"method":"events/subscribe","params":{"name":"discord.message","delivery":{"mode":"webhook","url":"http://localhost:1/sink"}}}' | jq '.error'
+```
+
 ### Step 11: What if I supply garbage instead of a `whsec_` value?
 
 Rejected with `-32602 InvalidParams`. The validator enforces the full Standard Webhooks format: `whsec_` followed by base64 of 24-64 random bytes. A non-prefixed value, a too-short value, or non-base64 garbage all fail at subscribe time — catches IaC-pinned secrets that don't match the spec format before they create a broken subscription.
 
+#### Reproduce on the wire
+
+```bash
+# A non-whsec_ value fails the Standard Webhooks format check → -32602 InvalidParams.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":11,"method":"events/subscribe","params":{"name":"discord.message","delivery":{"mode":"webhook","url":"http://localhost:1/sink","secret":"wrong"}}}' | jq '.error'
+```
+
 ### Step 12: What if I try to pick my own subscription id?
 
 Rejected with `-32602 InvalidParams`. Per spec §"Subscription Identity" → "Key composition" L363, the id is server-derived from `(principal, name, params, url)` — there is no client-generated id. Old SDKs that send an `id` field get a loud error rather than a silent mis-keying that would alias subscriptions and break tenant isolation.
+
+#### Reproduce on the wire
+
+```bash
+# The id is server-derived; a client-supplied id field is rejected → -32602 InvalidParams.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":12,"method":"events/subscribe","params":{"id":"client-picked-id","name":"discord.message","delivery":{"mode":"webhook","url":"http://localhost:1/sink","secret":"whsec_<valid>"}}}' | jq '.error'
+```
 
 ### Step 13: And when everything is right?
 
 Subscribe succeeds. The response carries the server-derived `id` (`sub_<base64>` per spec §"Subscription Identity" → "Derived id" L367), plus `cursor` and `refreshBefore`. Notably absent: the `secret` — the client supplied it, so the server doesn't echo it back. Echoing would risk leaks via proxies, logs, or IDE network panes.
 
 - The id is non-load-bearing for security; it's surfaced as `X-MCP-Subscription-Id` on delivery POSTs but knowing the value grants no operations on the subscription.
+
+#### Reproduce on the wire
+
+```bash
+# A valid whsec_ secret succeeds: response carries the server-derived id, cursor,
+# and refreshBefore — and notably NOT the secret (the server never echoes it).
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":13,"method":"events/subscribe","params":{"name":"discord.message","delivery":{"mode":"webhook","url":"http://localhost:1/sink","secret":"whsec_<valid>"}}}' | jq '.result'
+# then tear down by tuple: events/unsubscribe { name, delivery: { url } }
+```
 
 ### Step 14: Now let's see it against a real bot
 
@@ -258,6 +405,20 @@ Bot setup (token + invite URL) is documented in this demo's README.md.
 - TypingStart handler in main.go yields a cursorless discord.typing event; MessageCreate yields the cursored discord.message.
 - Discord's typing indicator fires once when you start (then refires every ~8s if you keep typing), not per keystroke.
 - --non-interactive mode skips the wait so CI runs aren't slowed.
+
+#### Reproduce on the wire
+
+```bash
+# Hold two concurrent events/stream requests open against the same session,
+# one per subscription (spec L271). Then type + send in the real Discord channel:
+# discord.typing arrives with cursor:null, discord.message with a fresh cursor.
+curl -N -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":14,"method":"events/stream","params":{"name":"discord.message"}}' &
+curl -N -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":15,"method":"events/stream","params":{"name":"discord.typing"}}' &
+```
 
 ### Where each piece lives in mcpkit
 
