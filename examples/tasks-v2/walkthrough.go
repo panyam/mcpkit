@@ -55,6 +55,31 @@ func runDemo() {
 		Arrow("Host", "Server", "POST /mcp — initialize (declares io.modelcontextprotocol/tasks)").
 		DashedArrow("Server", "Host", "serverInfo + tasks extension advertised under capabilities.extensions").
 		Note("`client.WithTasksExtension()` adds `io.modelcontextprotocol/tasks` to ClientCapabilities.Extensions during initialize. Without that declaration, the v2 server falls through to synchronous tools/call and rejects tasks/* with -32601.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# initialize MUST declare the tasks extension under capabilities.extensions,
+# else the server treats you as a v1/sync-only client and rejects tasks/* with -32601.
+SID=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":"i","method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"x","version":"1"},"capabilities":{"extensions":{"io.modelcontextprotocol/tasks":{}}}}}' \
+  -D - -o /dev/null | grep -i 'mcp-session-id' | awk '{print $2}' | tr -d '\r\n')
+# notifications/initialized completes the handshake (no response body)
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+echo "SID=$SID"`).Default(),
+			demokit.MakeVariant("go", "go", `// WithTasksExtension declares io.modelcontextprotocol/tasks during initialize;
+// WithGetSSEStream opens the server-push channel for progress notifications.
+c := client.NewClient(serverURL+"/mcp",
+    core.ClientInfo{Name: "tasks-v2-host", Version: "1.0"},
+    client.WithGetSSEStream(),
+    client.WithTasksExtension(),
+    client.WithNotificationCallback(func(method string, params any) {
+        // notifications/progress arrive here over the GET SSE channel
+    }),
+)
+if err := c.Connect(); err != nil { panic(err) }
+_ = c.ServerSupportsExtension(core.TasksExtensionID) // true once negotiated`),
+		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			c = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "tasks-v2-host", Version: "1.0"},
@@ -80,6 +105,22 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call: greet {name: \"world\"}").
 		DashedArrow("Server", "Host", "ToolResult (no resultType discriminator → ToolCallResult.Sync)").
 		Note("`client.ToolCall(c, name, args)` returns a polymorphic `*ToolCallResult`. For sync tools (no Execution / TaskSupport=forbidden) the server returns a plain `ToolResult` and the helper sets `Sync` (not `Task`). Callers branch on `result.IsTask()`.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# v2 tools/call has NO task hint — just name+arguments; the server decides.
+# A sync tool returns a plain ToolResult: no .result.resultType discriminator.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream, application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"greet","arguments":{"name":"world"}}}' \
+  | jq '.result'`).Default(),
+			demokit.MakeVariant("go", "go", `// Polymorphic helper: greet is sync, so res.IsTask() is false and res.Sync is set.
+res, err := client.ToolCall(c, "greet", map[string]any{"name": "world"})
+if err != nil { panic(err) }
+if !res.IsTask() && len(res.Sync.Content) > 0 {
+    _ = res.Sync.Content[0].Text
+}`),
+		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			res, err := client.ToolCall(c, "greet", map[string]any{"name": "world"})
 			if err != nil {
@@ -101,6 +142,35 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call: slow_compute {seconds: 3}").
 		DashedArrow("Server", "Host", "{resultType: \"task\", taskId, status: working, ttlMs, ...}\n+ Mcp-Name: <taskId> response header (SEP-2243)").
 		Note("Critical v2 semantics: no `task` param in the request — the server elects to create a task because slow_compute has TaskSupport=optional. The discriminator `resultType: \"task\"` lights up `result.IsTask()` on the helper. The Mcp-Name HTTP header carries the same taskId so HTTP routing/observability can key off it without parsing the body.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# Same plain tools/call (no hint). The server elects a task: the response carries
+# .result.resultType=="task", .result.taskId, .result.status, ttlMs/pollIntervalMs (int ms),
+# plus an Mcp-Name: <taskId> response header. Capture the taskId for tasks/get.
+R=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream, application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":3,"label":"demo"}}}')
+echo "$R" | jq '.result'
+TID=$(echo "$R" | jq -r '.result.taskId')
+# poll tasks/get until terminal; the DetailedTask inlines the result (no tasks/result in v2)
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TID\"}}" \
+  | jq '.result'`).Default(),
+			demokit.MakeVariant("go", "go", `// No task hint sent — the server creates the task; res.IsTask() is true.
+res, err := client.ToolCall(c, "slow_compute", map[string]any{"seconds": 3, "label": "demo"})
+if err != nil { panic(err) }
+if res.IsTask() {
+    _ = res.Task.ResultType     // "task"
+    _ = res.Task.TaskID
+    _ = res.Task.TTLMs          // *int ms
+    _ = res.Task.PollIntervalMs // *int ms
+    // WaitForTask polls tasks/get honoring PollIntervalMs until terminal.
+    final, _ := client.WaitForTask(context.Background(), c, res.Task.TaskID)
+    _ = final.Status
+}`),
+		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			var slowTaskID string
 			res, err := client.ToolCall(c, "slow_compute", map[string]any{"seconds": 3, "label": "demo"})
@@ -145,6 +215,29 @@ func runDemo() {
 		Arrow("Host", "Server", "WaitForTask polls tasks/get until terminal").
 		DashedArrow("Server", "Host", "{status: completed, result: {isError: true, content: [...]}}").
 		Note("In v2, a tool that returns an error result lands in status `completed` with `result.isError: true`. The task itself ran to completion — the *operation* failed but the *infrastructure* didn't. Distinct from protocol failures (next step).").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# Create the task, then poll tasks/get. A TOOL error settles as
+# status: completed with result.isError: true (the result is inlined).
+R=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream, application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"failing_job","arguments":{}}}')
+TID=$(echo "$R" | jq -r '.result.taskId')
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TID\"}}" \
+  | jq '.result'   # => {status:"completed", result:{isError:true, content:[...]}}`).Default(),
+			demokit.MakeVariant("go", "go", `// Tool error → terminal status "completed" with final.Result.IsError true.
+res, err := client.ToolCall(c, "failing_job", map[string]any{})
+if err != nil || !res.IsTask() { panic("expected a task") }
+final, err := client.WaitForTask(context.Background(), c, res.Task.TaskID)
+if err != nil { panic(err) }
+_ = final.Status        // "completed"
+if final.Result != nil {
+    _ = final.Result.IsError // true
+}`),
+		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			res, err := client.ToolCall(c, "failing_job", map[string]any{})
 			if err != nil || !res.IsTask() {
@@ -174,6 +267,30 @@ func runDemo() {
 		Arrow("Host", "Server", "WaitForTask polls tasks/get until terminal").
 		DashedArrow("Server", "Host", "{status: failed, error: {code, message}}").
 		Note("Protocol errors (panics, framework bugs, things that aren't the tool's fault) land in status `failed` with the error inlined as `error: {code, message, data}` mirroring the JSON-RPC error shape. The host should treat this as 'something is broken', not 'the tool said no'.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# Same create+poll, but a PROTOCOL error settles as status: failed with the
+# error inlined under .result.error (code+message), not under result.isError.
+R=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream, application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"protocol_error_job","arguments":{}}}')
+TID=$(echo "$R" | jq -r '.result.taskId')
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TID\"}}" \
+  | jq '.result'   # => {status:"failed", error:{code,message}}`).Default(),
+			demokit.MakeVariant("go", "go", `// Protocol error → terminal status "failed" with final.Error populated.
+res, err := client.ToolCall(c, "protocol_error_job", map[string]any{})
+if err != nil || !res.IsTask() { panic("expected a task") }
+final, err := client.WaitForTask(context.Background(), c, res.Task.TaskID)
+if err != nil { panic(err) }
+_ = final.Status        // "failed"
+if final.Error != nil {
+    _ = final.Error.Code
+    _ = final.Error.Message
+}`),
+		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			res, err := client.ToolCall(c, "protocol_error_job", map[string]any{})
 			if err != nil || !res.IsTask() {
@@ -206,6 +323,48 @@ func runDemo() {
 		Arrow("Host", "Server", "WaitForTask until terminal").
 		DashedArrow("Server", "Host", "{status: completed, result: {content: [\"deleted 'important.txt'\"]}}").
 		Note("This is the new SEP-2663 MRTR loop: the tool blocks on `TaskElicit`, the task parks in `input_required`, `tasks/get` surfaces the pending request under `inputRequests` (server-minted opaque keys), and `client.UpdateTask` delivers the matching response so the goroutine resumes. Cancellation during input_required propagates via ctx.Done() — see `TestV2_ElicitCancelUnblocks` in server tests.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# Create the task, poll until status:input_required, then read the opaque key
+# the server minted under .result.inputRequests, and resume with tasks/update.
+R=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream, application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"confirm_delete","arguments":{"filename":"important.txt"}}}')
+TID=$(echo "$R" | jq -r '.result.taskId')
+# poll tasks/get until status:input_required, then grab the server-minted opaque key
+KEY=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TID\"}}" \
+  | jq -r '.result.inputRequests | keys[0]')
+# tasks/update delivers the matching response keyed by that opaque key → empty {} ack
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"tasks/update\",\"params\":{\"taskId\":\"$TID\",\"inputResponses\":{\"$KEY\":{\"action\":\"accept\",\"content\":{\"confirm\":true}}}}}" \
+  | jq '.result'   # => {} ack; next tasks/get shows status:completed`).Default(),
+			demokit.MakeVariant("go", "go", `// MRTR resume: poll GetTask until input_required, read the opaque key, then UpdateTask.
+res, err := client.ToolCall(c, "confirm_delete", map[string]any{"filename": "important.txt"})
+if err != nil || !res.IsTask() { panic("expected a task") }
+taskID := res.Task.TaskID
+var key string
+for {
+    dt, err := client.GetTask(c, taskID) // *core.DetailedTask
+    if err != nil { panic(err) }
+    if dt.Status == core.TaskInputRequired && len(dt.InputRequests) > 0 {
+        for k := range dt.InputRequests { key = k; break } // server-minted, opaque
+        break
+    }
+    time.Sleep(100 * time.Millisecond)
+}
+// InputResponses[key] = {"action":"accept","content":{"confirm":true}}
+err = client.UpdateTask(c, core.UpdateTaskRequest{
+    TaskID:         taskID,
+    InputResponses: core.InputResponses{ /* key -> accept+confirm payload */ },
+})
+if err != nil { panic(err) }
+final, _ := client.WaitForTask(context.Background(), c, taskID)
+_ = final.Status // "completed"`),
+		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			res, err := client.ToolCall(c, "confirm_delete", map[string]any{"filename": "important.txt"})
 			if err != nil || !res.IsTask() {
@@ -281,6 +440,33 @@ func runDemo() {
 		Arrow("Host", "Server", "WaitForTask polls tasks/get").
 		DashedArrow("Server", "Host", "{status: cancelled}").
 		Note("Same cooperative cancellation as v1 (server cancels the goroutine context; tools that select on ctx.Done() exit cleanly), but the response shape changed: SEP-2663 cancel returns an empty `{}` ack. Observe the `cancelled` status via the next `tasks/get` (or `WaitForTask` which does it for you).").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# Start a long task, cancel it (empty {} ack), then observe cancelled via tasks/get.
+R=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream, application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":10,"label":"to-cancel"}}}')
+TID=$(echo "$R" | jq -r '.result.taskId')
+# tasks/cancel returns an empty {} ack — no task state in the response (SEP-2663)
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"tasks/cancel\",\"params\":{\"taskId\":\"$TID\"}}" \
+  | jq '.result'   # => {}
+# follow-up tasks/get shows the settled status
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":13,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TID\"}}" \
+  | jq '.result.status'   # => "cancelled"`).Default(),
+			demokit.MakeVariant("go", "go", `// CancelTask sends tasks/cancel (empty ack); WaitForTask then settles to cancelled.
+res, err := client.ToolCall(c, "slow_compute", map[string]any{"seconds": 10, "label": "to-cancel"})
+if err != nil || !res.IsTask() { panic("expected a task") }
+cancelID := res.Task.TaskID
+time.Sleep(500 * time.Millisecond)
+if err := client.CancelTask(c, cancelID); err != nil { panic(err) }
+final, _ := client.WaitForTask(context.Background(), c, cancelID)
+_ = final.Status // "cancelled"`),
+		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			res, err := client.ToolCall(c, "slow_compute", map[string]any{"seconds": 10, "label": "to-cancel"})
 			if err != nil || !res.IsTask() {
