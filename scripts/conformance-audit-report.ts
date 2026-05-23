@@ -344,14 +344,14 @@ function main() {
 
   const harnessGaps = scenarios.filter(s => !s.hasResults);
 
-  const now = new Date().toISOString();
-
+  // No `Audit run:` wall-clock — would create churn in the committed snapshot
+  // every CI run. Upstream+mcpkit SHAs and scenario-status are the only header
+  // fields that change with real content.
   const md = [
     '# Upstream Conformance Audit',
     '',
     `Snapshot of mcpkit graded against \`modelcontextprotocol/conformance@${upstreamSha}\` — *${upstreamSubject}*.`,
     '',
-    `**Audit run:** ${now}  `,
     `**mcpkit HEAD:** \`${mcpkitSha}\`  `,
     '**Driver:** `cmd/testserver` (server scenarios) + `cmd/testclient` (client scenarios)',
     '',

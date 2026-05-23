@@ -2,7 +2,6 @@
 
 Snapshot of mcpkit graded against `modelcontextprotocol/conformance@bcfd400` — *chore: bump version to 0.2.0-alpha.0 (#306)*.
 
-**Audit run:** 2026-05-23T16:37:02.005Z  
 **mcpkit HEAD:** `bcfd400`  
 **Driver:** `cmd/testserver` (server scenarios) + `cmd/testclient` (client scenarios)
 
@@ -213,7 +212,7 @@ Legend: **pass** = no FAILURE checks · **partial** = at least one SUCCESS and o
 
 ## Methodology
 
-- `make testconf-upstream-audit` spawns `cmd/testserver` (Streamable HTTP on port 18099), builds `cmd/testclient`, then drives upstream's CLI: `node dist/index.js server --url ... --suite all` and `... client --command ... --suite all`.
+- `make testconf-upstream-audit` spawns `cmd/testserver` (Streamable HTTP on port 18099), builds `cmd/testclient`, then drives upstream's CLI: `node dist/index.js server --url ... --suite all` once, and `... client --command ... --scenario <name>` per scenario in a loop (sequentially — upstream's parallel `--suite all` mode is flaky on the client side).
 - Upstream's CLI writes one `<scenario>/checks.json` per scenario; this report aggregates by `specReferences[]` (first matching `SEP-NNNN` wins as primary group).
 - Scenarios with no `checks.json` are tagged `harness-gap` — they require driver work in `cmd/testclient` (or a dedicated client harness) before the upstream runner can invoke them.
 - `also-covered-by-fork` is hand-maintained in `scripts/conformance-audit-report.ts` (`FORK_OVERLAP` map). Update there as SEP-fork targets land coverage.
