@@ -37,12 +37,18 @@ func ServerURL() string {
 	return DefaultServerURL
 }
 
-// SetupRenderer wires the renderer matching demokit's --mode (or
-// the legacy --tui alias):
+// SetupRenderer wires the renderer matching demokit's --mode (or the
+// bare --tui / --note aliases):
 //
-//	--mode=tui      → tui.New()                 (Lipgloss boxes)
-//	--mode=notebook → notebookbridge.New()      (cell-based UI)
-//	default         → demokit's PlainRenderer
+//	--mode=tui      / --tui  → tui.New()            (Lipgloss boxes)
+//	--mode=notebook / --note → notebookbridge.New() (cell-based UI)
+//	default                  → demokit's PlainRenderer
+//
+// Every example's `make note` target shells out to `--note`, which
+// demokit.Mode() resolves to "notebook" — so notebook mode is wired
+// once here and applies to all walkthroughs uniformly. notebookbridge
+// renders output cells with horizontal-only borders (no vertical
+// bars) so streamed output is clean to mouse-select and copy.
 func SetupRenderer(demo *demokit.Demo) {
 	switch demokit.Mode() {
 	case "tui":

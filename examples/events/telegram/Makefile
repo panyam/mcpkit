@@ -11,6 +11,9 @@ EVENTS_CLIENT := python3 ../../../experimental/ext/events/clients/python/events_
 demo: ## Run the demokit walkthrough (interactive, TUI). Server must be up via `make serve` in another terminal.
 	go run . --tui
 
+note: ## Run the walkthrough in notebook mode (Bubble Tea cells). Server must be up via `make serve`.
+	go run . --note
+
 run: serve  ## Alias for serve
 
 serve: ## Start the telegram-events server standalone (also works with MCPJam, VS Code, Claude Desktop)
@@ -60,5 +63,5 @@ webhook:
 poll:
 	@$(EVENTS_CLIENT) poll --interval $(or $(INTERVAL),5)
 
-.PHONY: run serve demo readme build test test-race inject inject-typing list listen webhook poll
+.PHONY: run serve demo note readme build test test-race inject inject-typing list listen webhook poll
 .DEFAULT_GOAL := demo

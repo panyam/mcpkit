@@ -85,33 +85,158 @@ For task invocations, the server responds with `{taskId, ttl, pollInterval}`. Th
 
 The server advertises tasks capability in initialize. The mcpkit client opens a GET SSE stream so server-pushed notifications (progress, status changes) reach us during polling.
 
+#### Reproduce on the wire
+
+```bash
+# initialize: capture the Mcp-Session-Id response header into $SID
+SID=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":"i","method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"x","version":"1"},"capabilities":{}}}' \
+  -D - -o /dev/null | grep -i 'mcp-session-id' | awk '{print $2}' | tr -d '\r\n')
+# notifications/initialized: complete the handshake (no response body)
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+echo "SID=$SID"
+```
+
 ### Step 2: Sync call: greet (taskSupport=forbidden)
 
 greet is sync-only. The result returns directly in the tools/call response — no task created. This is the path most existing tools use today; tasks are opt-in per tool.
+
+#### Reproduce on the wire
+
+```bash
+# tools/call with no task hint: result returns inline under .result
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream, application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"greet","arguments":{"name":"world"}}}' \
+  | jq '.result'
+```
 
 ### Step 3: Optional task: slow_compute as task → CreateTaskResult
 
 slow_compute has taskSupport=optional. Sending the `task` hint tells the server to run it asynchronously. We get a taskId back immediately while the work runs in a background goroutine.
 
+#### Reproduce on the wire
+
+```bash
+# SEP-1036: the task hint is a sibling of name+arguments under params.
+# Response carries {taskId, status, pollInterval, ttl} under .result.
+# Capture the taskId for the poll/result steps below.
+R=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream, application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":3,"label":"demo"},"task":{"ttl":60000}}}')
+echo "$R" | jq '.result'
+TID=$(echo "$R" | jq -r '.result.taskId')
+```
+
 ### Step 4: Poll tasks/get until terminal — receive notifications/progress
 
 The server streams progress notifications over the GET SSE channel while the task runs. Our notification callback (set up in Step 1) prints them inline. Once status reaches `completed`, the polling stops.
+
+#### Reproduce on the wire
+
+```bash
+# tasks/get returns task status only; poll it every pollInterval until terminal.
+# progress notifications (1/3, 2/3, 3/3) arrive separately over the GET SSE channel.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream, application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tasks/get","params":{"taskId":"'"$TID"'"}}' \
+  | jq '.result'
+```
 
 ### Step 5: Fetch the result payload via tasks/result
 
 tasks/get returns task status only. To get the actual tool result (content blocks, isError flag, structured content), the host calls tasks/result with the same taskId.
 
+#### Reproduce on the wire
+
+```bash
+# tasks/result returns the actual ToolResult (content blocks, isError, structured)
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream, application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":4,"method":"tasks/result","params":{"taskId":"'"$TID"'"}}' \
+  | jq '.result'
+```
+
 ### Step 6: Required task: failing_job — sync call returns an error
 
 failing_job declares Execution.TaskSupport=required. Sync invocation returns an error telling the host to retry with a task hint. This guards expensive/long tools from blocking the request thread.
+
+#### Reproduce on the wire
+
+```bash
+# tools/call with no task hint on a required-task tool: response carries a
+# JSON-RPC .error telling the host to retry with a task hint.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream, application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"failing_job","arguments":{}}}' \
+  | jq '.error'
+```
 
 ### Step 7: Invoke failing_job as task → terminal status: failed
 
 Errors from required-task tools surface as a terminal status of `failed`. The host gets the taskId immediately, polls, and learns the task failed via the status field — no exception thrown on the polling call.
 
+#### Reproduce on the wire
+
+```bash
+# create the task (task hint sibling under params), capture taskId
+R=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream, application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"failing_job","arguments":{},"task":{"ttl":60000}}}')
+TID=$(echo "$R" | jq -r '.result.taskId')
+# poll tasks/get: the error surfaces as a terminal status: failed (not a JSON-RPC error)
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream, application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":7,"method":"tasks/get","params":{"taskId":"'"$TID"'"}}' \
+  | jq '.result'
+```
+
 ### Step 8: Cancel a long-running task mid-flight
 
 Tasks support cooperative cancellation. The server cancels the goroutine's context; tools that select on ctx.Done() exit cleanly. Status transitions to `cancelled`. mcpkit guards against terminal-to-terminal transitions so a tool finishing normally after cancel doesn't overwrite the cancelled status.
+
+#### Reproduce on the wire
+
+```bash
+# start a long task, capture taskId
+R=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream, application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":10,"label":"to-cancel"},"task":{"ttl":60000}}}')
+TID=$(echo "$R" | jq -r '.result.taskId')
+# tasks/cancel: server cancels the goroutine's context (cooperative)
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream, application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":9,"method":"tasks/cancel","params":{"taskId":"'"$TID"'"}}' \
+  | jq '.result'
+# final tasks/get shows status: cancelled
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream, application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":10,"method":"tasks/get","params":{"taskId":"'"$TID"'"}}' \
+  | jq '.result'
+```
 
 ### Where each piece lives in mcpkit
 
