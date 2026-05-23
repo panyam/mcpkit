@@ -53,6 +53,28 @@ const FORK_OVERLAP: Record<string, string> = {
   'caching': 'testconf-list-ttl',
 };
 
+// --- Spec URL overrides ------------------------------------------------------
+//
+// A few `specReferences[].url` strings in upstream scenario source point at
+// files that no longer exist (404). We override them here so the audit's group
+// headings link somewhere useful. Remove an entry when upstream fixes its
+// reference. Keyed by the ref's `id` exactly as upstream emits it.
+//
+// Tracked upstream — when these are fixed in modelcontextprotocol/conformance,
+// drop the corresponding entry here:
+//   - SEP-986: src/scenarios/server/tools.ts cites SEP/SEP-986.md which no
+//     longer exists in modelcontextprotocol/modelcontextprotocol. The tool
+//     name format is now part of the spec under server/tools.
+//   - SEP-990-Enterprise-Managed-OAuth: src/scenarios/client/auth/
+//     spec-references.ts cites enterprise-oauth.mdx; the actual file is
+//     enterprise-managed-authorization.mdx.
+const SPEC_URL_OVERRIDES: Record<string, string> = {
+  'SEP-986':
+    'https://modelcontextprotocol.io/specification/draft/server/tools',
+  'SEP-990-Enterprise-Managed-OAuth':
+    'https://github.com/modelcontextprotocol/ext-auth/blob/main/specification/draft/enterprise-managed-authorization.mdx',
+};
+
 // --- Parse one scenario directory -------------------------------------------
 
 function parseScenarioDir(dir: string, surface: 'server' | 'client'): ScenarioResult {
@@ -88,10 +110,11 @@ function parseScenarioDir(dir: string, surface: 'server' | 'client'): ScenarioRe
   const specRefSet = new Map<string, string>();
   for (const c of checks) {
     for (const r of c.specReferences ?? []) {
-      specRefSet.set(r.id, r.url);
+      const fixedUrl = SPEC_URL_OVERRIDES[r.id] ?? r.url;
+      specRefSet.set(r.id, fixedUrl);
       if (!primarySEP && /^SEP-\d+/i.test(r.id)) {
         primarySEP = r.id.toUpperCase();
-        primarySEPUrl = r.url;
+        primarySEPUrl = fixedUrl;
       }
     }
   }
@@ -266,12 +289,12 @@ function renderScenarioRow(s: ScenarioResult): string {
   const info = s.checks.filter(c => c.status === 'INFO').length;
   const skip = s.checks.filter(c => c.status === 'SKIPPED').length;
   const parts: string[] = [];
-  if (pass) parts.push(`${pass}P`);
-  if (fail) parts.push(`${fail}F`);
-  if (warn) parts.push(`${warn}W`);
-  if (info) parts.push(`${info}I`);
-  if (skip) parts.push(`${skip}S`);
-  const counts = s.hasResults ? (parts.join(' / ') || '0') : '—';
+  if (pass) parts.push(`${pass} pass`);
+  if (fail) parts.push(`${fail} fail`);
+  if (warn) parts.push(`${warn} warn`);
+  if (info) parts.push(`${info} info`);
+  if (skip) parts.push(`${skip} skip`);
+  const counts = s.hasResults ? (parts.join(' / ') || '0 checks') : '—';
   let note = '';
   if (cat === 'also-covered-by-fork') {
     note = `Also graded by \`${FORK_OVERLAP[s.scenarioId]}\``;
@@ -357,7 +380,7 @@ function main() {
     '',
     'Informational report — not a CI gate. Regenerate via `make testconf-upstream-audit`.',
     '',
-    'Legend: **pass** = no FAILURE checks · **partial** = at least one SUCCESS and one FAILURE · **fail** = all checks FAILURE · **harness-gap** = no `checks.json` produced (driver missing) · **fork-covered** = same surface graded by an existing `testconf-*` SEP fork target. Count suffix: `P`=pass · `F`=fail · `W`=warn · `I`=info · `S`=skipped.',
+    'Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCESS and one FAILURE · **fail** = all checks FAILURE · **harness-gap** = no `checks.json` produced (driver missing) · **fork-covered** = same surface graded by an existing `testconf-*` SEP fork target.',
     '',
     '## Summary',
     '',
