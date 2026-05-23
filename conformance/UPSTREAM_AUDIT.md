@@ -82,7 +82,7 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 | `tools-call-with-logging` | server | pass | 1 pass |  |
 | `tools-call-with-progress` | server | pass | 1 pass |  |
 
-### [SEP-986](https://modelcontextprotocol.io/specification/draft/server/tools) (1 scenarios)
+### [SEP-986](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/986) (1 scenarios)
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
