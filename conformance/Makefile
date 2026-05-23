@@ -24,11 +24,15 @@ MCPCONFORMANCE_MRTR_PATH        ?= $(abspath $(REPO_ROOT)/../conf-template)
 MCPCONFORMANCE_FILE_INPUTS_PATH ?= $(abspath $(REPO_ROOT)/../conf-pending)
 MCPCONFORMANCE_LIST_TTL_PATH    ?= $(abspath $(REPO_ROOT)/../conf-pending)
 MCPCONFORMANCE_AUTH_PATH        ?= $(abspath $(REPO_ROOT)/../conf-pending)
+# Audit harness: points at a direct clone of modelcontextprotocol/conformance@main
+# (the real upstream, not our panyam fork). Used by testconf-upstream-audit to
+# grade mcpkit against every scenario upstream currently ships.
+MCPCONFORMANCE_BASE_PATH        ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
 
 .PHONY: test testconfall testconf testconfauth \
         testconf-tasks testconf-tasks-v2 testconf-mrtr \
         testconf-list-ttl testconf-file-inputs testconf-auth-server \
-        testconf-elicitation help
+        testconf-elicitation testconf-upstream-audit help
 
 # Default umbrella — runs every conformance suite. Fork-based suites
 # require their MCPCONFORMANCE_*_PATH worktree to exist (each target
@@ -156,6 +160,16 @@ testconf-elicitation: ## Run elicitation conformance suite (SEP-1036 URL mode + 
 	cd $(CONFORMANCE_DIR) && npm install --silent && \
 	SERVER_URL=$${SERVER_URL:-http://localhost:8080/mcp} \
 	npx tsx --test elicitation/scenarios.test.ts
+
+testconf-upstream-audit: ## Audit mcpkit against modelcontextprotocol/conformance@main (informational — exit 0 regardless of scenario pass/fail). Output: conformance/UPSTREAM_AUDIT.md.
+	@if [ ! -d "$(MCPCONFORMANCE_BASE_PATH)" ]; then \
+		echo "MCPCONFORMANCE_BASE_PATH=$(MCPCONFORMANCE_BASE_PATH) does not exist."; \
+		echo "Clone https://github.com/modelcontextprotocol/conformance there:"; \
+		echo "  git clone https://github.com/modelcontextprotocol/conformance.git $(MCPCONFORMANCE_BASE_PATH)"; \
+		echo "Or set MCPCONFORMANCE_BASE_PATH=<path-to-clone>."; \
+		exit 1; \
+	fi
+	cd $(REPO_ROOT) && MCPCONFORMANCE_BASE_PATH="$(MCPCONFORMANCE_BASE_PATH)" bash scripts/conformance-audit.sh
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-30s\033[0m %s\n", $$1, $$2}'
