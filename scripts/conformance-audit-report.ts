@@ -60,17 +60,18 @@ const FORK_OVERLAP: Record<string, string> = {
 // headings link somewhere useful. Remove an entry when upstream fixes its
 // reference. Keyed by the ref's `id` exactly as upstream emits it.
 //
-// Tracked upstream — when these are fixed in modelcontextprotocol/conformance,
-// drop the corresponding entry here:
+// Tracked upstream in modelcontextprotocol/conformance issue 313 (filed by us)
+// with a fix PR from panyam:mcpconformance:fix/spec-references-404-urls.
+// When that PR merges, drop the corresponding entry here:
 //   - SEP-986: src/scenarios/server/tools.ts cites SEP/SEP-986.md which no
-//     longer exists in modelcontextprotocol/modelcontextprotocol. The tool
-//     name format is now part of the spec under server/tools.
+//     longer exists. Mirror upstream's proposed fix and point at issues/986
+//     (matches the convention other SEPs in that file use).
 //   - SEP-990-Enterprise-Managed-OAuth: src/scenarios/client/auth/
 //     spec-references.ts cites enterprise-oauth.mdx; the actual file is
 //     enterprise-managed-authorization.mdx.
 const SPEC_URL_OVERRIDES: Record<string, string> = {
   'SEP-986':
-    'https://modelcontextprotocol.io/specification/draft/server/tools',
+    'https://github.com/modelcontextprotocol/modelcontextprotocol/issues/986',
   'SEP-990-Enterprise-Managed-OAuth':
     'https://github.com/modelcontextprotocol/ext-auth/blob/main/specification/draft/enterprise-managed-authorization.mdx',
 };
