@@ -34,10 +34,12 @@ MCPCONFORMANCE_BASE_PATH        ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
         testconf-list-ttl testconf-file-inputs testconf-auth-server \
         testconf-elicitation testconf-upstream-audit help
 
-# Default umbrella — runs every conformance suite. Fork-based suites
-# require their MCPCONFORMANCE_*_PATH worktree to exist (each target
-# fail-fasts with a remediation message if missing).
-test: testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-list-ttl testconf-file-inputs testconf-auth-server ## Run all conformance suites (needs fork worktrees for SEP scenarios)
+# Default umbrella — runs every conformance suite. Fork-based suites and the
+# upstream-main audit each require their MCPCONFORMANCE_*_PATH worktree to
+# exist (each target fail-fasts with a remediation message if missing). Fair
+# game: contributors should have all conf-* sibling clones before pushing
+# anything that touches conformance surfaces.
+test: testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-list-ttl testconf-file-inputs testconf-auth-server testconf-upstream-audit ## Run all conformance suites (needs fork worktrees + conf-upstream-main)
 
 testconfall: testconf testconfauth ## Run base + auth conformance only
 
