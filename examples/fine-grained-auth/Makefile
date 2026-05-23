@@ -1,6 +1,9 @@
 demo: ## Run the demo interactively (requires Keycloak — see 'make kcl')
 	go run . --tui
 
+note: ## Run the walkthrough in notebook mode (requires Keycloak — see 'make kcl')
+	go run . --note
+
 serve: ## Start the MCP server standalone (for MCPJam or other clients)
 	go run . --serve
 
@@ -13,5 +16,5 @@ readme: ## Regenerate WALKTHROUGH.md from demo definitions
 build: ## Build the example binary
 	go build -o fine-grained-auth-example .
 
-.PHONY: demo serve kcl readme build
+.PHONY: demo note serve kcl readme build
 .DEFAULT_GOAL := demo

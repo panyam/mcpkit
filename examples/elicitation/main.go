@@ -81,7 +81,8 @@ func runDemo() {
 		DashedArrow("Server", "Host", "serverInfo + Mcp-Session-Id").
 		Arrow("Host", "Server", "GET /mcp — open SSE stream for notifications").
 		Note("Connect with a notification callback listening for notifications/elicitation/complete. The GET SSE stream receives server-pushed notifications.").
-		VerbatimLang("Reproduce on the wire", "bash", `# Initialize an MCP session and capture the session id returned in the headers.
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# Initialize an MCP session and capture the session id returned in the headers.
 SID=$(curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":"i","method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"x","version":"1"},"capabilities":{}}}' \
@@ -100,7 +101,21 @@ echo "SID=$SID"
 #        -H 'Accept: text/event-stream'
 #
 # Keep that terminal open. The notification will appear there once the user
-# clicks Approve in step 3.`).
+# clicks Approve in step 3.`).Default(),
+			demokit.MakeVariant("go", "go", `// mcpkit client: WithGetSSEStream opens the GET /mcp stream for
+// server-pushed notifications; the callback watches for the approval.
+c := client.NewClient(serverURL+"/mcp",
+    core.ClientInfo{Name: "demo-host", Version: "1.0"},
+    client.WithNotificationCallback(func(method string, params any) {
+        if method == "notifications/elicitation/complete" {
+            // signal the waiting goroutine (see step 3)
+        }
+    }),
+    client.WithGetSSEStream(),
+)
+if err := c.Connect(); err != nil { /* server not up — run: make serve */ }
+tools, _ := c.ListTools()`),
+		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			fmt.Printf("    Connecting to %s ...\n", serverURL)
 
@@ -141,7 +156,8 @@ echo "SID=$SID"
 		Arrow("Host", "Server", "tools/call: access_protected_resource").
 		DashedArrow("Server", "Host", "error -32042 + consent URL + authzContextId").
 		Note("The consent middleware intercepts the call and returns -32042 (URLElicitationRequired) with a URL the user must visit to approve access.").
-		VerbatimLang("Reproduce on the wire", "bash", `# Call the protected tool. Response is JSON-RPC error -32042 carrying the
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# Call the protected tool. Response is JSON-RPC error -32042 carrying the
 # consent URL and the authorizationContextId you must echo on retry.
 RESP=$(curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: application/json' \
@@ -153,7 +169,26 @@ echo "$RESP" | jq '.error'
 export CTX=$(echo "$RESP" | jq -r .error.data.authorization.authorizationContextId)
 export APPROVE_URL=$(echo "$RESP" | jq -r '.error.data.elicitations[0].url')
 echo "CTX=$CTX"
-echo "APPROVE_URL=$APPROVE_URL"`).
+echo "APPROVE_URL=$APPROVE_URL"`).Default(),
+			demokit.MakeVariant("go", "go", `// The denial comes back as a *client.RPCError with code -32042. Read
+// err.Data for the consent URL and authorizationContextId to retry with.
+_, err := c.ToolCall("access_protected_resource",
+    map[string]any{"resourceId": "my-doc"})
+
+var rpcErr *client.RPCError
+if errors.As(err, &rpcErr) {
+    var data struct {
+        Authorization struct {
+            AuthorizationContextID string ` + "`json:\"authorizationContextId\"`" + `
+        } ` + "`json:\"authorization\"`" + `
+        Elicitations []struct{ URL string ` + "`json:\"url\"`" + ` } ` + "`json:\"elicitations\"`" + `
+    }
+    raw, _ := json.Marshal(rpcErr.Data)
+    json.Unmarshal(raw, &data)
+    contextID := data.Authorization.AuthorizationContextID // echo on retry
+    _ = contextID
+}`),
+		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			_, err := c.ToolCall("access_protected_resource", map[string]any{"resourceId": "my-doc"})
 			common.PrintRPCError(err, "")
@@ -191,7 +226,8 @@ echo "APPROVE_URL=$APPROVE_URL"`).
 		Arrow("Host", "Server", "tools/call + _meta.authorizationContextId (auto-retry)").
 		DashedArrow("Server", "Host", "Access granted to resource").
 		Note("The host opens the consent URL and waits for the server to send a notifications/elicitation/complete notification via the SSE stream. When it arrives, the host automatically retries with the authorizationContextId.").
-		VerbatimLang("Reproduce on the wire", "bash", `# Approve the context. You can either click Approve in a browser at
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# Approve the context. You can either click Approve in a browser at
 # $APPROVE_URL, or POST to it directly:
 curl -s -X POST "$APPROVE_URL" >/dev/null
 
@@ -206,7 +242,23 @@ curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: application/json' \
   -H "Mcp-Session-Id: $SID" \
   -d "{\"jsonrpc\":\"2.0\",\"id\":\"r\",\"method\":\"tools/call\",\"params\":{\"name\":\"access_protected_resource\",\"arguments\":{\"resourceId\":\"my-doc\"},\"_meta\":{\"io.modelcontextprotocol/authorization-context-id\":\"$CTX\"}}}" \
-  | jq .`).
+  | jq .`).Default(),
+			demokit.MakeVariant("go", "go", `// Approval (browser click or POST to the consent URL) triggers the
+// SSE notification the step-1 callback is watching for. Once it fires,
+// retry with the context id under the SEP-2643 _meta key.
+openBrowser(approveURL)
+<-approved // notifications/elicitation/complete delivered the elicitationId
+
+res, _ := c.Call("tools/call", map[string]any{
+    "name":      "access_protected_resource",
+    "arguments": map[string]any{"resourceId": "my-doc"},
+    "_meta": map[string]any{
+        core.MetaKeyAuthorizationContextID: contextID,
+    },
+})
+var toolResult core.ToolResult
+res.Unmarshal(&toolResult) // toolResult.Content[0].Text → "Access granted ..."`),
+		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			approveURL := fmt.Sprintf("%s/approve?ctx=%s", serverURL, contextID)
 			fmt.Printf("    Opening browser: %s\n", approveURL)

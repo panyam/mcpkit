@@ -67,17 +67,85 @@ The `inputRequests` methods are real MCP method names (`elicitation/create`, `sa
 
 `client.WithElicitationHandler` / `WithSamplingHandler` / `WithRootsHandler` register the client-side callbacks. The walkthrough returns canned answers so the loop runs end-to-end without user interaction; in production these would prompt the user, hit an LLM, or read filesystem roots.
 
+#### Reproduce on the wire
+
+```bash
+# Initialize a session declaring the capabilities the server's inputRequests
+# will exercise (elicitation, sampling, roots), then capture the session id.
+SID=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":"i","method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"x","version":"1"},"capabilities":{"elicitation":{},"sampling":{},"roots":{}}}}' \
+  -D - -o /dev/null | grep -i 'mcp-session-id' | awk '{print $2}' | tr -d '\r\n')
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+echo "SID=$SID"
+```
+
 ### Step 2: Round 1 (raw): tools/call → InputRequiredResult
 
 Bypass the auto-loop helper to see the raw InputRequiredResult shape. The discriminator is `resultType` — camelCase like every other MCP wire field. `inputRequests` is keyed by server-chosen opaque ids the client must echo verbatim. SEP-2322 commit de6d76fb (merged 2026-05-06) renamed this variant from IncompleteResult / `"incomplete"`.
+
+#### Reproduce on the wire
+
+```bash
+# A bare tools/call. The server needs input, so result comes back with
+# resultType:"input_required", an inputRequests map (opaque key -> {method,
+# params}), and an opaque requestState you echo verbatim on retry.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"test_tool_with_elicitation","arguments":{}}}' \
+  | jq '.result'
+```
 
 ### Step 3: Auto-loop: CallToolWithInputs runs the round-trip
 
 `client.CallToolWithInputs(ctx, c, name, args, handler)` collapses the whole loop. `DefaultInputHandler` synthesizes a server-to-client request for each `inputRequest` and routes it through `client.HandleServerRequestWithContext` — single source of truth for how the client responds to MCP method requests, whether they arrived over the back-channel or inlined inside an InputRequiredResult.
 
+#### Reproduce on the wire
+
+```bash
+# Round 1: tools/call returns input_required + requestState.
+R1=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"test_tool_with_elicitation","arguments":{}}}')
+STATE=$(echo "$R1" | jq -r '.result.requestState')
+
+# Resolve the elicitation locally (canned {name: Alice} here), then RETRY the
+# same tools/call with inputResponses (keyed by the opaque id round 1 returned,
+# "user_name") PLUS the echoed requestState.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"test_tool_with_elicitation\",\"arguments\":{},\"inputResponses\":{\"user_name\":{\"action\":\"accept\",\"content\":{\"name\":\"Alice\"}}},\"requestState\":\"$STATE\"}}" \
+  | jq '.result'
+```
+
 ### Step 4: Multi-round: server accumulates answers across rounds via requestState
 
 The wire only ships the LATEST round's `inputResponses`. Dispatch decodes prior answers from `requestState` (a signed `MRTRRoundState` containing the accumulated answers map), merges with the current round, and surfaces a unified map to the handler. Handlers stay stateless across rounds. The canned elicitation handler returns the same `name: Alice` for both prompts in this demo, hence the funny output — a real handler would branch on the elicitation message.
+
+#### Reproduce on the wire
+
+```bash
+# Round 1: server asks step1 (name).
+R1=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"test_incomplete_result_multi_round","arguments":{}}}')
+S1=$(echo "$R1" | jq -r '.result.requestState')
+
+# Round 2: retry with step1's answer. Server asks step2 (color); the new
+# requestState now also encodes step1's answer.
+R2=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"test_incomplete_result_multi_round\",\"arguments\":{},\"inputResponses\":{\"step1\":{\"action\":\"accept\",\"content\":{\"name\":\"Alice\"}}},\"requestState\":\"$S1\"}}")
+S2=$(echo "$R2" | jq -r '.result.requestState')
+
+# Round 3: retry with ONLY step2 — step1 already rides inside requestState.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"test_incomplete_result_multi_round\",\"arguments\":{},\"inputResponses\":{\"step2\":{\"action\":\"accept\",\"content\":{\"color\":\"Alice\"}}},\"requestState\":\"$S2\"}}" \
+  | jq '.result'
+```
 
 ### Where to look in the code
 

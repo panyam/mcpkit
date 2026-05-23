@@ -49,6 +49,34 @@ func runDemo() {
 		Arrow("Host", "Server", "POST /mcp — initialize (capabilities: elicitation, sampling, roots)").
 		DashedArrow("Server", "Host", "serverInfo + capabilities").
 		Note("`client.WithElicitationHandler` / `WithSamplingHandler` / `WithRootsHandler` register the client-side callbacks. The walkthrough returns canned answers so the loop runs end-to-end without user interaction; in production these would prompt the user, hit an LLM, or read filesystem roots.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# Initialize a session declaring the capabilities the server's inputRequests
+# will exercise (elicitation, sampling, roots), then capture the session id.
+SID=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":"i","method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"x","version":"1"},"capabilities":{"elicitation":{},"sampling":{},"roots":{}}}}' \
+  -D - -o /dev/null | grep -i 'mcp-session-id' | awk '{print $2}' | tr -d '\r\n')
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+echo "SID=$SID"`).Default(),
+			demokit.MakeVariant("go", "go", `// Register the client-side capability handlers MRTR drives. The canned
+// answers keep the demo non-interactive; in production they prompt the user,
+// hit an LLM, or read filesystem roots.
+c := client.NewClient(serverURL+"/mcp",
+    core.ClientInfo{Name: "mrtr-demo-host", Version: "1.0"},
+    client.WithElicitationHandler(func(ctx context.Context, req core.ElicitationRequest) (core.ElicitationResult, error) {
+        return core.ElicitationResult{Action: "accept", Content: map[string]any{"name": "Alice"}}, nil
+    }),
+    client.WithSamplingHandler(func(ctx context.Context, req core.CreateMessageRequest) (core.CreateMessageResult, error) {
+        return core.CreateMessageResult{Role: "assistant", Content: core.Content{Type: "text", Text: "Paris"}, Model: "demo-stub", StopReason: "endTurn"}, nil
+    }),
+    client.WithRootsHandler(func(ctx context.Context) ([]core.Root, error) {
+        return []core.Root{{URI: "file:///demo/root", Name: "Demo Root"}}, nil
+    }),
+)
+if err := c.Connect(); err != nil { /* server not up — run: make serve */ }`),
+		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			c = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "mrtr-demo-host", Version: "1.0"},
@@ -83,6 +111,22 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call: test_tool_with_elicitation {}").
 		DashedArrow("Server", "Host", "{ resultType: \"input_required\", inputRequests: {user_name: {method: \"elicitation/create\", ...}}, requestState: \"<token>\" }").
 		Note("Bypass the auto-loop helper to see the raw InputRequiredResult shape. The discriminator is `resultType` — camelCase like every other MCP wire field. `inputRequests` is keyed by server-chosen opaque ids the client must echo verbatim. SEP-2322 commit de6d76fb (merged 2026-05-06) renamed this variant from IncompleteResult / `\"incomplete\"`.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# A bare tools/call. The server needs input, so result comes back with
+# resultType:"input_required", an inputRequests map (opaque key -> {method,
+# params}), and an opaque requestState you echo verbatim on retry.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"test_tool_with_elicitation","arguments":{}}}' \
+  | jq '.result'`).Default(),
+			demokit.MakeVariant("go", "go", `// client.ToolCall returns a polymorphic *ToolCallResult. IsInputRequired()
+// is the third terminal shape (alongside sync + task).
+res, _ := client.ToolCall(c, "test_tool_with_elicitation", map[string]any{})
+if res.IsInputRequired() {
+    // res.InputRequired.InputRequests — opaque key -> {method, params}
+    // res.InputRequired.RequestState  — echo verbatim on the retry
+}`),
+		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			res, err := client.ToolCall(c, "test_tool_with_elicitation", map[string]any{})
 			if err != nil {
@@ -105,6 +149,29 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/call (retry): {arguments: {}, inputResponses: {user_name: <result>}, requestState: <echo>}").
 		DashedArrow("Server", "Host", "ToolResult: \"Hello, Alice!\"").
 		Note("`client.CallToolWithInputs(ctx, c, name, args, handler)` collapses the whole loop. `DefaultInputHandler` synthesizes a server-to-client request for each `inputRequest` and routes it through `client.HandleServerRequestWithContext` — single source of truth for how the client responds to MCP method requests, whether they arrived over the back-channel or inlined inside an InputRequiredResult.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# Round 1: tools/call returns input_required + requestState.
+R1=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"test_tool_with_elicitation","arguments":{}}}')
+STATE=$(echo "$R1" | jq -r '.result.requestState')
+
+# Resolve the elicitation locally (canned {name: Alice} here), then RETRY the
+# same tools/call with inputResponses (keyed by the opaque id round 1 returned,
+# "user_name") PLUS the echoed requestState.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"test_tool_with_elicitation\",\"arguments\":{},\"inputResponses\":{\"user_name\":{\"action\":\"accept\",\"content\":{\"name\":\"Alice\"}}},\"requestState\":\"$STATE\"}}" \
+  | jq '.result'`).Default(),
+			demokit.MakeVariant("go", "go", `// CallToolWithInputs runs the whole round-trip: it resolves each inputRequest
+// via DefaultInputHandler (which routes to the WithXHandler callbacks) and
+// retries with inputResponses + requestState until a terminal result.
+res, _ := client.CallToolWithInputs(context.Background(), c,
+    "test_tool_with_elicitation", map[string]any{},
+    client.DefaultInputHandler(c),
+)
+// res.Sync.Content[0].Text == "Hello, Alice!"`),
+		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			bgCtx := context.Background()
 			res, err := client.CallToolWithInputs(bgCtx, c,
@@ -131,6 +198,34 @@ func runDemo() {
 		Arrow("Host", "Server", "retry with inputResponses{step2} (NOT step1 — that's already in requestState)").
 		DashedArrow("Server", "Host", "Round 3 ToolResult: \"Hi Alice, your favorite color is Alice.\"").
 		Note("The wire only ships the LATEST round's `inputResponses`. Dispatch decodes prior answers from `requestState` (a signed `MRTRRoundState` containing the accumulated answers map), merges with the current round, and surfaces a unified map to the handler. Handlers stay stateless across rounds. The canned elicitation handler returns the same `name: Alice` for both prompts in this demo, hence the funny output — a real handler would branch on the elicitation message.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# Round 1: server asks step1 (name).
+R1=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"test_incomplete_result_multi_round","arguments":{}}}')
+S1=$(echo "$R1" | jq -r '.result.requestState')
+
+# Round 2: retry with step1's answer. Server asks step2 (color); the new
+# requestState now also encodes step1's answer.
+R2=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"test_incomplete_result_multi_round\",\"arguments\":{},\"inputResponses\":{\"step1\":{\"action\":\"accept\",\"content\":{\"name\":\"Alice\"}}},\"requestState\":\"$S1\"}}")
+S2=$(echo "$R2" | jq -r '.result.requestState')
+
+# Round 3: retry with ONLY step2 — step1 already rides inside requestState.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"test_incomplete_result_multi_round\",\"arguments\":{},\"inputResponses\":{\"step2\":{\"action\":\"accept\",\"content\":{\"color\":\"Alice\"}}},\"requestState\":\"$S2\"}}" \
+  | jq '.result'`).Default(),
+			demokit.MakeVariant("go", "go", `// Same one-liner — CallToolWithInputs drives all three rounds. The wire
+// only ever ships the latest round's inputResponses; prior answers ride
+// along inside the signed requestState, so handlers stay stateless.
+res, _ := client.CallToolWithInputs(context.Background(), c,
+    "test_incomplete_result_multi_round", map[string]any{},
+    client.DefaultInputHandler(c),
+)
+// res.Sync.Content[0].Text holds the final greeting.`),
+		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			bgCtx := context.Background()
 			res, err := client.CallToolWithInputs(bgCtx, c,

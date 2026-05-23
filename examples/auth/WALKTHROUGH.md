@@ -78,33 +78,140 @@ Terminal 2:  make run          # this demo
 
 The server pre-mints four tokens for the demo and exposes them via a non-standard /demo/bootstrap endpoint. In production a host would do OAuth (or accept tokens via mcp.json config); this shortcut keeps the demo focused on auth behavior.
 
+#### Reproduce on the wire
+
+```bash
+# The demo server pre-mints tokens and serves them at /demo/bootstrap.
+# Capture the MCP URL and tokens into shell vars used by every step below.
+BOOT=$(curl -s http://localhost:8080/demo/bootstrap)
+MCP=$(echo "$BOOT" | jq -r .mcp_url)
+TOK_READ=$(echo "$BOOT" | jq -r .tok_read)
+TOK_RW=$(echo "$BOOT" | jq -r .tok_read_write)
+TOK_BOB=$(echo "$BOOT" | jq -r .tok_bob)
+echo "MCP=$MCP"
+```
+
 ### Step 2: Public discovery: tools/list without a token
 
 The server is configured with WithPublicMethods("initialize", "notifications/initialized", "tools/list", "prompts/list", "ping"). These bypass the auth check so an unauthenticated client can discover what's available before requesting a token.
+
+#### Reproduce on the wire
+
+```bash
+# Mint a session (no Authorization header — initialize is public) and capture
+# the session id, then call the public tools/list.
+SID=$(curl -s -X POST "$MCP" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":"i","method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"x","version":"1"},"capabilities":{}}}' \
+  -D - -o /dev/null | grep -i 'mcp-session-id' | awk '{print $2}' | tr -d '\r\n')
+curl -s -X POST "$MCP" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+curl -s -X POST "$MCP" \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | jq '.result.tools | length'
+```
 
 ### Step 3: Protected method without a token → 401
 
 tools/call is NOT in the public allowlist. The mcpkit client surfaces this as *client.ClientAuthError. A real MCP host would use this to trigger an OAuth flow.
 
+#### Reproduce on the wire
+
+```bash
+# Same unauthenticated session ($SID from the previous step). tools/call is
+# NOT public, so the server replies 401 + WWW-Authenticate. -i shows headers.
+curl -s -i -X POST "$MCP" \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"echo","arguments":{"message":"hi"}}}' \
+  | grep -iE 'HTTP/|www-authenticate'
+```
+
 ### Step 4: Call echo with alice's read-only token (JWT validated via JWKS)
 
 The mcpkit JWTValidator fetches the AS's JWKS, verifies the RS256 signature using kid lookup, and exposes the claims to handlers via core.AuthClaims(ctx). echo is a no-scope tool that reflects the authenticated identity back, so we can see the validated claims.
+
+#### Reproduce on the wire
+
+```bash
+# Mint a fresh session carrying alice's read token, then call echo (no scope
+# required). The server validates the RS256 JWT against the AS's JWKS.
+SID=$(curl -s -X POST "$MCP" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -H "Authorization: Bearer $TOK_READ" \
+  -d '{"jsonrpc":"2.0","id":"i","method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"x","version":"1"},"capabilities":{}}}' \
+  -D - -o /dev/null | grep -i 'mcp-session-id' | awk '{print $2}' | tr -d '\r\n')
+curl -s -X POST "$MCP" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" -H "Authorization: Bearer $TOK_READ" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+curl -s -X POST "$MCP" \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" -H "Authorization: Bearer $TOK_READ" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"echo","arguments":{"message":"hello"}}}' | jq '.result'
+```
 
 ### Step 5: Call write-tool with read-only token → 403 + insufficient_scope
 
 write-tool declares RequiredScopes: ["write"] on its ToolDef. The auth.NewToolScopeMiddleware short-circuits the request with HTTP 403 + WWW-Authenticate before the handler runs (per SEP-2643 UC2 + RFC 6750). Scope info is in the header — the client's RFC 6750 parser auto-populates RequiredScopes.
 
+#### Reproduce on the wire
+
+```bash
+# Same read-token session ($SID). write-tool needs the "write" scope the token
+# lacks → 403 + WWW-Authenticate: Bearer error="insufficient_scope", scope="write".
+curl -s -i -X POST "$MCP" \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" -H "Authorization: Bearer $TOK_READ" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"write-tool","arguments":{"data":"x"}}}' \
+  | grep -iE 'HTTP/|www-authenticate'
+```
+
 ### Step 6: Reconnect with read+write token → write-tool succeeds
 
 New session with the broader token. write-tool runs because the token includes write. Scope step-up in real systems is driven by the WWW-Authenticate response from the previous step — see examples/fine-grained-auth/ for the full SEP-2643 UC2 flow.
+
+#### Reproduce on the wire
+
+```bash
+# New session with the read+write token; now write-tool succeeds.
+SID_RW=$(curl -s -X POST "$MCP" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -H "Authorization: Bearer $TOK_RW" \
+  -d '{"jsonrpc":"2.0","id":"i","method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"x","version":"1"},"capabilities":{}}}' \
+  -D - -o /dev/null | grep -i 'mcp-session-id' | awk '{print $2}' | tr -d '\r\n')
+curl -s -X POST "$MCP" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID_RW" -H "Authorization: Bearer $TOK_RW" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+curl -s -X POST "$MCP" \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID_RW" -H "Authorization: Bearer $TOK_RW" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"write-tool","arguments":{"data":"hello write"}}}' | jq '.result'
+```
 
 ### Step 7: admin-tool with read+write token → 403 (needs admin)
 
 admin-tool requires "admin" scope. The same scope-enforcement middleware returns 403 + WWW-Authenticate with the missing scope.
 
+#### Reproduce on the wire
+
+```bash
+# Same read+write session ($SID_RW). admin-tool needs "admin" → 403 +
+# WWW-Authenticate: Bearer error="insufficient_scope", scope="admin".
+curl -s -i -X POST "$MCP" \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID_RW" -H "Authorization: Bearer $TOK_RW" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"admin-tool","arguments":{"action":"rotate"}}}' \
+  | grep -iE 'HTTP/|www-authenticate'
+```
+
 ### Step 8: Session binding: bob's token on alice's session → rejected
 
 mcpkit binds the principal (Claims.Subject) to the session at creation time. Subsequent requests on the same session must come from the same subject. Even though bob's token is independently valid (correct signature, fresh, has all scopes), it doesn't match alice's bound session — so the request is rejected. This prevents an attacker who steals a session ID from using their own valid token to take over.
+
+#### Reproduce on the wire
+
+```bash
+# Replay alice's session id ($SID) but with bob's (independently valid) token.
+# The session is bound to alice's subject, so the swap is rejected with 403.
+curl -s -i -X POST "$MCP" \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" -H "Authorization: Bearer $TOK_BOB" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"echo","arguments":{"message":"hijack attempt"}}}' \
+  | grep -iE 'HTTP/'
+```
 
 ### Where each pattern lives in the code
 

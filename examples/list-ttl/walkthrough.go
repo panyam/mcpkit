@@ -56,6 +56,22 @@ func runDemo() {
 		Arrow("Host", "Server", "POST /mcp — initialize").
 		DashedArrow("Server", "Host", "serverInfo + capabilities").
 		Note("`client.NewClient(...)` + `Connect()`. SEP-2549 is purely a server-side concern; the client doesn't negotiate anything special.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# Initialize a session and capture the session id. SEP-2549 negotiates
+# nothing special — a plain initialize is enough.
+SID=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":"i","method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"x","version":"1"},"capabilities":{}}}' \
+  -D - -o /dev/null | grep -i 'mcp-session-id' | awk '{print $2}' | tr -d '\r\n')
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+echo "SID=$SID"`).Default(),
+			demokit.MakeVariant("go", "go", `c := client.NewClient(serverURL+"/mcp",
+    core.ClientInfo{Name: "list-ttl-host", Version: "1.0"},
+)
+if err := c.Connect(); err != nil { /* server not up — run: make serve */ }`),
+		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			c = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "list-ttl-host", Version: "1.0"},
@@ -72,6 +88,19 @@ func runDemo() {
 		Arrow("Host", "Server", "tools/list").
 		DashedArrow("Server", "Host", "{ tools: [...], ttlMs: 60000 }").
 		Note("`client.ListToolsPage(\"\")` returns the full envelope including `TTLMs *int` and `CacheScope string`.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# tools/list — the cache hints ride alongside "tools" in the result.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
+  | jq '{ttlMs: .result.ttlMs, cacheScope: .result.cacheScope, count: (.result.tools | length)}'`).Default(),
+			demokit.MakeVariant("go", "go", `// The *Page helpers return the typed envelope; the zero-arg ListTools()
+// and the Tools(ctx) iterator drop the cache hints.
+page, _ := c.ListToolsPage("")
+_ = page.TTLMs      // *int — nil/absent and 0 both mean "immediately stale"
+_ = page.CacheScope // "" defaults to "public"
+_ = page.Tools`),
+		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			page, err := c.ListToolsPage("")
 			if err != nil {
@@ -87,6 +116,22 @@ func runDemo() {
 	demo.Step("prompts/list / resources/list / resources/templates/list").
 		Arrow("Host", "Server", "(same cache-hint contract on all four list endpoints)").
 		Note("SEP-2549 applies to every paginated list response. `WithListTTLMs` / `WithListCacheControl` configure the values uniformly — there's no per-endpoint override. Hit each endpoint and confirm they all return the configured hints.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# Same cache-hint contract on the other three list endpoints.
+for M in prompts/list resources/list resources/templates/list; do
+  curl -s -X POST http://localhost:8080/mcp \
+    -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+    -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"$M\",\"params\":{}}" \
+    | jq "{method: \"$M\", ttlMs: .result.ttlMs, cacheScope: .result.cacheScope}"
+done`).Default(),
+			demokit.MakeVariant("go", "go", `// Each *Page sibling carries the same TTLMs / CacheScope hints.
+prompts, _ := c.ListPromptsPage("")
+resources, _ := c.ListResourcesPage("")
+templates, _ := c.ListResourceTemplatesPage("")
+_ = prompts.TTLMs
+_ = resources.CacheScope
+_ = templates.TTLMs`),
+		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			prompts, err := c.ListPromptsPage("")
 			if err != nil {
@@ -118,6 +163,19 @@ func runDemo() {
 		Arrow("Host", "Server", "resources/read file:///fixture").
 		DashedArrow("Server", "Host", "{ contents: [...], ttlMs: 60000 }").
 		Note("SEP-2549 added resources/read to the cacheable coverage mid-cycle. `client.ReadResourceFull` returns `core.ResourceResult`, which carries the same `TTLMs` / `CacheScope` fields. A read handler MAY override either per-read; otherwise the `WithReadResourceCacheControl` server default applies.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# resources/read carries the same hints (SEP-2549 added it mid-cycle).
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"resources/read","params":{"uri":"file:///fixture"}}' \
+  | jq '{ttlMs: .result.ttlMs, cacheScope: .result.cacheScope, contents: (.result.contents | length)}'`).Default(),
+			demokit.MakeVariant("go", "go", `// ReadResourceFull returns core.ResourceResult with the cache hints; the
+// plain ReadResource drops them.
+rr, _ := c.ReadResourceFull("file:///fixture")
+_ = rr.TTLMs
+_ = rr.CacheScope
+_ = rr.Contents`),
+		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			rr, err := c.ReadResourceFull("file:///fixture")
 			if err != nil {

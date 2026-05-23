@@ -91,29 +91,157 @@ v1 (SEP-1036, MCP spec 2025-11-25) had the *client* hint at task vs sync via a `
 
 `client.WithTasksExtension()` adds `io.modelcontextprotocol/tasks` to ClientCapabilities.Extensions during initialize. Without that declaration, the v2 server falls through to synchronous tools/call and rejects tasks/* with -32601.
 
+#### Reproduce on the wire
+
+```bash
+# initialize MUST declare the tasks extension under capabilities.extensions,
+# else the server treats you as a v1/sync-only client and rejects tasks/* with -32601.
+SID=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":"i","method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"x","version":"1"},"capabilities":{"extensions":{"io.modelcontextprotocol/tasks":{}}}}}' \
+  -D - -o /dev/null | grep -i 'mcp-session-id' | awk '{print $2}' | tr -d '\r\n')
+# notifications/initialized completes the handshake (no response body)
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+echo "SID=$SID"
+```
+
 ### Step 2: Sync call: greet — ToolCall returns Sync variant
 
 `client.ToolCall(c, name, args)` returns a polymorphic `*ToolCallResult`. For sync tools (no Execution / TaskSupport=forbidden) the server returns a plain `ToolResult` and the helper sets `Sync` (not `Task`). Callers branch on `result.IsTask()`.
+
+#### Reproduce on the wire
+
+```bash
+# v2 tools/call has NO task hint — just name+arguments; the server decides.
+# A sync tool returns a plain ToolResult: no .result.resultType discriminator.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream, application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"greet","arguments":{"name":"world"}}}' \
+  | jq '.result'
+```
 
 ### Step 3: slow_compute (no task hint!) — server creates a task → ToolCall returns Task variant
 
 Critical v2 semantics: no `task` param in the request — the server elects to create a task because slow_compute has TaskSupport=optional. The discriminator `resultType: "task"` lights up `result.IsTask()` on the helper. The Mcp-Name HTTP header carries the same taskId so HTTP routing/observability can key off it without parsing the body.
 
+#### Reproduce on the wire
+
+```bash
+# Same plain tools/call (no hint). The server elects a task: the response carries
+# .result.resultType=="task", .result.taskId, .result.status, ttlMs/pollIntervalMs (int ms),
+# plus an Mcp-Name: <taskId> response header. Capture the taskId for tasks/get.
+R=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream, application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":3,"label":"demo"}}}')
+echo "$R" | jq '.result'
+TID=$(echo "$R" | jq -r '.result.taskId')
+# poll tasks/get until terminal; the DetailedTask inlines the result (no tasks/result in v2)
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TID\"}}" \
+  | jq '.result'
+```
+
 ### Step 4: failing_job → status: completed, result.isError: true (TOOL error semantics)
 
 In v2, a tool that returns an error result lands in status `completed` with `result.isError: true`. The task itself ran to completion — the *operation* failed but the *infrastructure* didn't. Distinct from protocol failures (next step).
+
+#### Reproduce on the wire
+
+```bash
+# Create the task, then poll tasks/get. A TOOL error settles as
+# status: completed with result.isError: true (the result is inlined).
+R=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream, application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"failing_job","arguments":{}}}')
+TID=$(echo "$R" | jq -r '.result.taskId')
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TID\"}}" \
+  | jq '.result'   # => {status:"completed", result:{isError:true, content:[...]}}
+```
 
 ### Step 5: protocol_error_job → status: failed, error: {...} (PROTOCOL error semantics)
 
 Protocol errors (panics, framework bugs, things that aren't the tool's fault) land in status `failed` with the error inlined as `error: {code, message, data}` mirroring the JSON-RPC error shape. The host should treat this as 'something is broken', not 'the tool said no'.
 
+#### Reproduce on the wire
+
+```bash
+# Same create+poll, but a PROTOCOL error settles as status: failed with the
+# error inlined under .result.error (code+message), not under result.isError.
+R=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream, application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"protocol_error_job","arguments":{}}}')
+TID=$(echo "$R" | jq -r '.result.taskId')
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TID\"}}" \
+  | jq '.result'   # => {status:"failed", error:{code,message}}
+```
+
 ### Step 6: confirm_delete → input_required → tasks/update → completed (SEP-2663 MRTR)
 
 This is the new SEP-2663 MRTR loop: the tool blocks on `TaskElicit`, the task parks in `input_required`, `tasks/get` surfaces the pending request under `inputRequests` (server-minted opaque keys), and `client.UpdateTask` delivers the matching response so the goroutine resumes. Cancellation during input_required propagates via ctx.Done() — see `TestV2_ElicitCancelUnblocks` in server tests.
 
+#### Reproduce on the wire
+
+```bash
+# Create the task, poll until status:input_required, then read the opaque key
+# the server minted under .result.inputRequests, and resume with tasks/update.
+R=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream, application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"confirm_delete","arguments":{"filename":"important.txt"}}}')
+TID=$(echo "$R" | jq -r '.result.taskId')
+# poll tasks/get until status:input_required, then grab the server-minted opaque key
+KEY=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TID\"}}" \
+  | jq -r '.result.inputRequests | keys[0]')
+# tasks/update delivers the matching response keyed by that opaque key → empty {} ack
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"tasks/update\",\"params\":{\"taskId\":\"$TID\",\"inputResponses\":{\"$KEY\":{\"action\":\"accept\",\"content\":{\"confirm\":true}}}}}" \
+  | jq '.result'   # => {} ack; next tasks/get shows status:completed
+```
+
 ### Step 7: Cancel a long-running task → empty ack, status settles to cancelled
 
 Same cooperative cancellation as v1 (server cancels the goroutine context; tools that select on ctx.Done() exit cleanly), but the response shape changed: SEP-2663 cancel returns an empty `{}` ack. Observe the `cancelled` status via the next `tasks/get` (or `WaitForTask` which does it for you).
+
+#### Reproduce on the wire
+
+```bash
+# Start a long task, cancel it (empty {} ack), then observe cancelled via tasks/get.
+R=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream, application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"slow_compute","arguments":{"seconds":10,"label":"to-cancel"}}}')
+TID=$(echo "$R" | jq -r '.result.taskId')
+# tasks/cancel returns an empty {} ack — no task state in the response (SEP-2663)
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"tasks/cancel\",\"params\":{\"taskId\":\"$TID\"}}" \
+  | jq '.result'   # => {}
+# follow-up tasks/get shows the settled status
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":13,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TID\"}}" \
+  | jq '.result.status'   # => "cancelled"
+```
 
 ### Where each piece lives in mcpkit
 

@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/panyam/demokit"
+	"github.com/panyam/demokit/notebookbridge"
+	"github.com/panyam/demokit/tui"
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/host/refs"
@@ -251,6 +253,15 @@ func main() {
 		"AppHost.Close() closes the bridge. The caller closes the Client separately.",
 		"In a real application, you'd defer these in the appropriate scope.",
 	)
+
+	// --mode=plain (default) | tui | notebook. --tui / --note are honored
+	// as aliases for --mode=tui / --mode=notebook.
+	switch demokit.Mode() {
+	case "tui":
+		demo.WithRenderer(tui.New())
+	case "notebook":
+		demo.WithRenderer(notebookbridge.New())
+	}
 
 	demo.Execute()
 

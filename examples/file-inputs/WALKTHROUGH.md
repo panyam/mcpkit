@@ -110,7 +110,7 @@ The server is started with `server.WithFileInputValidation()` (see `examples/fil
 
 The next three steps exercise all three failure modes the validator covers. They drive the server through the Go MCP client (`*client.Client`); the `client.RPCError` returned on rejection carries the same structured `data` field the wire emits. Each step prints `error.code`, `error.message`, and `error.data` so the rejection contract is visible in the demo output.
 
-Each step also attaches a copy-pasteable `bash` block (rendered via demokit `VerbatimLang` so the lines survive any terminal width) reproducing the same call on the wire — useful for validating from a non-Go SDK or sanity-checking the JSON shape directly.
+Each step also attaches a copy-pasteable verbatim block with two variants (rendered via demokit `VerbatimVariants`): a `curl` form (the default — for validating from a non-Go SDK or sanity-checking the JSON shape directly) and a `go` form showing the equivalent `*client.Client` call. Pass `--variant=go` to render only the Go form.
 
 ### Step 7: upload_image rejects wrong MIME (text/plain into image/* slot)
 

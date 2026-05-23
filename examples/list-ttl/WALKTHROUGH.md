@@ -72,17 +72,64 @@ When `cacheScope` is absent clients default to `"public"`, so a server whose res
 
 `client.NewClient(...)` + `Connect()`. SEP-2549 is purely a server-side concern; the client doesn't negotiate anything special.
 
+#### Reproduce on the wire
+
+```bash
+# Initialize a session and capture the session id. SEP-2549 negotiates
+# nothing special — a plain initialize is enough.
+SID=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":"i","method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"x","version":"1"},"capabilities":{}}}' \
+  -D - -o /dev/null | grep -i 'mcp-session-id' | awk '{print $2}' | tr -d '\r\n')
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+echo "SID=$SID"
+```
+
 ### Step 2: tools/list — cache hints surface on the list response
 
 `client.ListToolsPage("")` returns the full envelope including `TTLMs *int` and `CacheScope string`.
+
+#### Reproduce on the wire
+
+```bash
+# tools/list — the cache hints ride alongside "tools" in the result.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
+  | jq '{ttlMs: .result.ttlMs, cacheScope: .result.cacheScope, count: (.result.tools | length)}'
+```
 
 ### Step 3: prompts/list / resources/list / resources/templates/list
 
 SEP-2549 applies to every paginated list response. `WithListTTLMs` / `WithListCacheControl` configure the values uniformly — there's no per-endpoint override. Hit each endpoint and confirm they all return the configured hints.
 
+#### Reproduce on the wire
+
+```bash
+# Same cache-hint contract on the other three list endpoints.
+for M in prompts/list resources/list resources/templates/list; do
+  curl -s -X POST http://localhost:8080/mcp \
+    -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+    -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"$M\",\"params\":{}}" \
+    | jq "{method: \"$M\", ttlMs: .result.ttlMs, cacheScope: .result.cacheScope}"
+done
+```
+
 ### Step 4: resources/read — cache hints on a read response
 
 SEP-2549 added resources/read to the cacheable coverage mid-cycle. `client.ReadResourceFull` returns `core.ResourceResult`, which carries the same `TTLMs` / `CacheScope` fields. A read handler MAY override either per-read; otherwise the `WithReadResourceCacheControl` server default applies.
+
+#### Reproduce on the wire
+
+```bash
+# resources/read carries the same hints (SEP-2549 added it mid-cycle).
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"resources/read","params":{"uri":"file:///fixture"}}' \
+  | jq '{ttlMs: .result.ttlMs, cacheScope: .result.cacheScope, contents: (.result.contents | length)}'
+```
 
 ### Step 5: Inspect the raw JSON-RPC envelope
 
