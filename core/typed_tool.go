@@ -49,7 +49,17 @@ func TypedTool[In, Out any](name, desc string,
 		o(&cfg)
 	}
 
-	inputSchema := GenerateSchema[In]()
+	// Schema derivation. By default we reflect on In to produce a JSON Schema
+	// from struct tags. WithInputSchemaOverride bypasses that reflection and
+	// uses the caller-supplied schema verbatim — for cases where the required
+	// schema uses JSON Schema 2020-12 features (conditional if/then/else,
+	// $anchor, allOf/anyOf composition, etc.) that struct tags cannot express.
+	// The handler still unmarshals into In, so caller is responsible for
+	// keeping the override compatible with In's wire shape.
+	inputSchema := cfg.inputSchemaOverride
+	if inputSchema == nil {
+		inputSchema = GenerateSchema[In]()
+	}
 
 	var outputSchema any
 	outType := reflect.TypeOf((*Out)(nil)).Elem()
@@ -106,10 +116,11 @@ func TextTool[In any](name, desc string,
 type TypedToolOption func(*typedToolConfig)
 
 type typedToolConfig struct {
-	annotations    map[string]any
-	meta           *ToolMeta
-	timeout        time.Duration
-	requiredScopes []string
+	annotations         map[string]any
+	meta                *ToolMeta
+	timeout             time.Duration
+	requiredScopes      []string
+	inputSchemaOverride any
 }
 
 // WithToolAnnotations sets the Annotations field on the generated ToolDef.
@@ -133,6 +144,35 @@ func WithTypedToolTimeout(d time.Duration) TypedToolOption {
 // transport layer with HTTP 403 + WWW-Authenticate per RFC 6750.
 func WithToolRequiredScopes(scopes ...string) TypedToolOption {
 	return func(c *typedToolConfig) { c.requiredScopes = scopes }
+}
+
+// WithInputSchemaOverride replaces the reflection-derived input schema with a
+// caller-supplied schema. Use this when the tool's input shape needs JSON
+// Schema 2020-12 features that struct tags cannot express — for example
+// conditional validation (if/then/else), composition (allOf/anyOf), shared
+// definitions with $anchor / $ref, or a custom $schema dialect declaration.
+//
+// The override is preserved as-is through tools/list (per ToolDef.InputSchema
+// docs). The handler still unmarshals request arguments into In, so callers
+// are responsible for keeping the override compatible with In's wire shape.
+//
+// Example:
+//
+//	type DeployInput struct {
+//	    Env      string `json:"env"`
+//	    Approver string `json:"approver,omitempty"`
+//	}
+//	schema := map[string]any{
+//	    "type":     "object",
+//	    "properties": map[string]any{ /* ... */ },
+//	    "if":   map[string]any{"properties": map[string]any{"env": map[string]any{"const": "prod"}}},
+//	    "then": map[string]any{"required": []string{"approver"}},
+//	}
+//	r := core.TypedTool[DeployInput, string]("deploy", "Deploy to env", handler,
+//	    core.WithInputSchemaOverride(schema),
+//	)
+func WithInputSchemaOverride(schema any) TypedToolOption {
+	return func(c *typedToolConfig) { c.inputSchemaOverride = schema }
 }
 
 // wrapOutput converts a typed handler output into a ToolResult.
