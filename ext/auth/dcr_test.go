@@ -113,4 +113,10 @@ func TestDefaultClientRegistration(t *testing.T) {
 	if meta.TokenEndpointAuthMethod != "none" {
 		t.Errorf("token_endpoint_auth_method = %q, want %q", meta.TokenEndpointAuthMethod, "none")
 	}
+	// SEP-837: MCP clients are installed (CLI/SDK), so application_type is
+	// "native". The conformance suite accepts "native" or "web"; mcpkit picks
+	// "native".
+	if meta.ApplicationType != "native" {
+		t.Errorf("application_type = %q, want %q", meta.ApplicationType, "native")
+	}
 }
