@@ -314,6 +314,61 @@ func registerConformanceTools(srv *server.Server) {
 			return core.TextResult(fmt.Sprintf("Default form mode: action=%s, content=%s", result.Action, string(contentJSON))), nil
 		},
 	))
+
+	// json_schema_2020_12_tool: fixture for SEP-1613 (schema-keyword preservation)
+	// and SEP-2106 (broader 2020-12 vocabulary). The conformance scenario only
+	// inspects tools/list to check that mcpkit doesn't strip $schema, $defs,
+	// $anchor, $ref, allOf/anyOf, if/then/else, or additionalProperties from
+	// the registered inputSchema. The handler is intentionally trivial; the
+	// scenario never calls the tool.
+	//
+	// The schema is hand-rolled (not derived from a Go struct) because
+	// reflection-based schema generation cannot produce 2020-12 features like
+	// $anchor or conditional keywords. ToolDef.InputSchema is `any` and the
+	// core contract preserves arbitrary keys through serialization.
+	srv.Register(server.Tool{
+		ToolDef: core.ToolDef{
+			Name:        "json_schema_2020_12_tool",
+			Description: "Tool with JSON Schema 2020-12 features (SEP-1613, SEP-2106)",
+			InputSchema: map[string]any{
+				"$schema": "https://json-schema.org/draft/2020-12/schema",
+				"type":    "object",
+				"$defs": map[string]any{
+					"address": map[string]any{
+						"$anchor": "addressDef",
+						"type":    "object",
+						"properties": map[string]any{
+							"street": map[string]any{"type": "string"},
+							"city":   map[string]any{"type": "string"},
+						},
+					},
+				},
+				"properties": map[string]any{
+					"name":          map[string]any{"type": "string"},
+					"address":       map[string]any{"$ref": "#/$defs/address"},
+					"contactMethod": map[string]any{"type": "string", "enum": []string{"phone", "email"}},
+					"phone":         map[string]any{"type": "string"},
+					"email":         map[string]any{"type": "string"},
+				},
+				"allOf": []map[string]any{
+					{"anyOf": []map[string]any{
+						{"required": []string{"phone"}},
+						{"required": []string{"email"}},
+					}},
+				},
+				"if": map[string]any{
+					"properties": map[string]any{"contactMethod": map[string]any{"const": "phone"}},
+					"required":   []string{"contactMethod"},
+				},
+				"then":                 map[string]any{"required": []string{"phone"}},
+				"else":                 map[string]any{"required": []string{"email"}},
+				"additionalProperties": false,
+			},
+		},
+		Handler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			return core.TextResult("json_schema_2020_12_tool invoked"), nil
+		},
+	})
 }
 
 // minimalPNG returns a valid 1x1 red PNG image (67 bytes).
