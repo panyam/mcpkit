@@ -16,7 +16,10 @@ var RegisterClient = client.RegisterClient
 
 // DefaultClientRegistration returns a sensible default DCR request for an MCP client.
 // This remains in mcpkit because the defaults are MCP-specific (client name,
-// redirect URIs, grant types, auth method).
+// redirect URIs, grant types, auth method, application_type).
+//
+// ApplicationType is set to "native" per SEP-837: MCP clients are CLI/SDK
+// (installed) clients, not web-server-hosted clients.
 func DefaultClientRegistration() client.ClientRegistrationRequest {
 	return client.ClientRegistrationRequest{
 		ClientName:              "mcpkit-client",
@@ -24,5 +27,6 @@ func DefaultClientRegistration() client.ClientRegistrationRequest {
 		GrantTypes:              []string{"authorization_code"},
 		ResponseTypes:           []string{"code"},
 		TokenEndpointAuthMethod: "none",
+		ApplicationType:         "native",
 	}
 }
