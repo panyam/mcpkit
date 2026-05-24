@@ -49,9 +49,7 @@ interface ScenarioResult {
 //
 // Keys are scenario IDs as upstream lists them; values are the fork target
 // name that already grades this scenario.
-const FORK_OVERLAP: Record<string, string> = {
-  'caching': 'testconf-list-ttl',
-};
+const FORK_OVERLAP: Record<string, string> = {};
 
 // --- Spec URL overrides ------------------------------------------------------
 //

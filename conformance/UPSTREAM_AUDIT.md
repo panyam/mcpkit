@@ -201,7 +201,7 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `caching` | server | fork-covered | 7 fail | Also graded by `testconf-list-ttl` |
+| `caching` | server | fail | 7 fail | `tools/list response missing ttlMs; tools/list response missing cacheScope` |
 
 ### [SEP-2575](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2575) (1 scenarios)
 

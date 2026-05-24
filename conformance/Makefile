@@ -22,7 +22,6 @@ REPO_ROOT       := $(abspath $(CONFORMANCE_DIR)/..)
 MCPCONFORMANCE_TASKS_V2_PATH    ?= $(abspath $(REPO_ROOT)/../conf-tasks-mrtr)
 MCPCONFORMANCE_MRTR_PATH        ?= $(abspath $(REPO_ROOT)/../conf-tasks-mrtr)
 MCPCONFORMANCE_FILE_INPUTS_PATH ?= $(abspath $(REPO_ROOT)/../conf-pending)
-MCPCONFORMANCE_LIST_TTL_PATH    ?= $(abspath $(REPO_ROOT)/../conf-pending)
 MCPCONFORMANCE_AUTH_PATH        ?= $(abspath $(REPO_ROOT)/../conf-pending)
 # Audit harness: points at a direct clone of modelcontextprotocol/conformance@main
 # (the real upstream, not our panyam fork). Used by testconf-upstream-audit to
@@ -31,7 +30,7 @@ MCPCONFORMANCE_BASE_PATH        ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
 
 .PHONY: test testconfall testconf testconfauth \
         testconf-tasks testconf-tasks-v2 testconf-mrtr \
-        testconf-list-ttl testconf-file-inputs testconf-auth-server \
+        testconf-file-inputs testconf-auth-server \
         testconf-elicitation testconf-upstream-audit help
 
 # Default umbrella — runs every conformance suite. Fork-based suites and the
@@ -39,7 +38,7 @@ MCPCONFORMANCE_BASE_PATH        ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
 # exist (each target fail-fasts with a remediation message if missing). Fair
 # game: contributors should have all conf-* sibling clones before pushing
 # anything that touches conformance surfaces.
-test: testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-list-ttl testconf-file-inputs testconf-auth-server testconf-upstream-audit ## Run all conformance suites (needs fork worktrees + conf-upstream-main)
+test: testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-upstream-audit ## Run all conformance suites (needs fork worktrees + conf-upstream-main)
 
 testconfall: testconf testconfauth ## Run base + auth conformance only
 
@@ -82,23 +81,6 @@ testconf-mrtr: ## Run SEP-2322 MRTR conformance — fork-based scenarios + mcpki
 		MRTR_SERVER_CMD="$(REPO_ROOT)/examples/mrtr/mrtr-demo --serve --addr :18093" \
 		npx vitest run src/scenarios/server/mrtr/all-scenarios.test.ts)
 	(cd $(CONFORMANCE_DIR) && npm install --silent && npx vitest run mrtr/)
-
-testconf-list-ttl: ## Run SEP-2549 list-TTL conformance — fork-based scenarios (auto-spawns 3 fixtures)
-	@if [ ! -d "$(MCPCONFORMANCE_LIST_TTL_PATH)" ]; then \
-		echo "MCPCONFORMANCE_LIST_TTL_PATH=$(MCPCONFORMANCE_LIST_TTL_PATH) does not exist."; \
-		echo "Clone https://github.com/panyam/mcpconformance there or set MCPCONFORMANCE_LIST_TTL_PATH=<path-to-clone>."; \
-		echo "Default expects the 'pending' branch checked out at ../conf-pending."; \
-		exit 1; \
-	fi
-	@(cd $(REPO_ROOT)/examples/list-ttl && go build -o list-ttl-demo .)
-	(cd $(MCPCONFORMANCE_LIST_TTL_PATH) && npm install --silent && \
-		LIST_TTL_POSITIVE_URL=http://localhost:18094/mcp \
-		LIST_TTL_POSITIVE_CMD="$(REPO_ROOT)/examples/list-ttl/list-ttl-demo --serve --addr=:18094 --ttl-ms=60000 --cache-scope=public" \
-		LIST_TTL_ZERO_URL=http://localhost:18095/mcp \
-		LIST_TTL_ZERO_CMD="$(REPO_ROOT)/examples/list-ttl/list-ttl-demo --serve --addr=:18095 --ttl-ms=0" \
-		LIST_TTL_UNSET_URL=http://localhost:18096/mcp \
-		LIST_TTL_UNSET_CMD="$(REPO_ROOT)/examples/list-ttl/list-ttl-demo --serve --addr=:18096" \
-		npx vitest run src/scenarios/server/list-ttl/list-ttl.test.ts)
 
 testconf-file-inputs: ## Run SEP-2356 file-inputs conformance — fork-based scenarios (auto-spawns fixture)
 	@if [ ! -d "$(MCPCONFORMANCE_FILE_INPUTS_PATH)" ]; then \
