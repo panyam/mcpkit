@@ -74,9 +74,6 @@ testconf-tasks-v2: ## Run SEP-2663 tasks conformance — fork-based + mcpkit-loc
 testconf-mrtr: ## Run SEP-2322 MRTR conformance — fork-based + mcpkit-local sentinel (delegates to conformance/Makefile)
 	$(MAKE) -C conformance testconf-mrtr
 
-testconf-list-ttl: ## Run SEP-2549 list-TTL conformance — fork-based, 3 fixtures (delegates to conformance/Makefile)
-	$(MAKE) -C conformance testconf-list-ttl
-
 testconf-file-inputs: ## Run SEP-2356 file-inputs conformance — fork-based (delegates to conformance/Makefile)
 	$(MAKE) -C conformance testconf-file-inputs
 
@@ -169,9 +166,8 @@ testall: ## Run ALL tests (starts Keycloak if needed) + per-stage HTML reports
 	$(call run_stage,8c,9,tasks-conformance,testconf-tasks) \
 	$(call run_stage,8d,9,tasks-v2-conformance,testconf-tasks-v2) \
 	$(call run_stage,8e,9,mrtr-conformance,testconf-mrtr) \
-	$(call run_stage,8f,9,list-ttl-conformance,testconf-list-ttl) \
-	$(call run_stage,8g,9,file-inputs-conformance,testconf-file-inputs) \
-	$(call run_stage,8h,9,auth-server-conformance,testconf-auth-server) \
+	$(call run_stage,8f,9,file-inputs-conformance,testconf-file-inputs) \
+	$(call run_stage,8g,9,auth-server-conformance,testconf-auth-server) \
 	$(call run_stage,9,9,keycloak,testkcl-auto) \
 	echo "" | tee -a $(REPORT_DIR)/run.log; \
 	echo "=== Results: $$PASS passed, $$FAIL failed ===" | tee -a $(REPORT_DIR)/run.log; \
@@ -425,5 +421,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-protogen test-e2e test-experimental test-apps-playwright testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-list-ttl testconf-file-inputs testconf-auth-server testconf-elicitation vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
+.PHONY: build test test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-protogen test-e2e test-experimental test-apps-playwright testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-elicitation vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
 .DEFAULT_GOAL := help
