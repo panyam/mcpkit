@@ -13,9 +13,9 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 
 | Surface | Scenarios | Checks | Pass | Fail | Warn | Info | Skipped | Harness-gap |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Server | 51 | 120 | 51 | 42 | 12 | 6 | 9 | 0 |
+| Server | 51 | 126 | 58 | 41 | 12 | 6 | 9 | 0 |
 | Client | 40 | 1117 | 390 | 66 | 4 | 649 | 8 | 1 |
-| **Total** | **91** | **1237** | **441** | **108** | **16** | **655** | **17** | **1** |
+| **Total** | **91** | **1243** | **448** | **107** | **16** | **655** | **17** | **1** |
 
 ## Harness gaps
 
@@ -118,7 +118,7 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `json-schema-2020-12` | server | fail | 1 fail | `Tool 'json_schema_2020_12_tool' not found. Available tools: echo, add, fail, test_simple_text, test_…` |
+| `json-schema-2020-12` | server | pass | 7 pass |  |
 
 ### [SEP-1699](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1699) (3 scenarios)
 
