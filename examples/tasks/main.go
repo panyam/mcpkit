@@ -64,33 +64,13 @@ func serve() {
 
 	// slow_compute: optional task support. Can be called sync (blocks) or
 	// async (returns task immediately, poll for result).
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "slow_compute",
-			Description: "Simulate a slow computation (sleeps for the given duration). Supports optional async task execution.",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"seconds": map[string]any{
-						"type":        "integer",
-						"description": "How many seconds to compute (sleep)",
-						"default":     3,
-					},
-					"label": map[string]any{
-						"type":        "string",
-						"description": "A label for the computation",
-						"default":     "default",
-					},
-				},
-			},
-			Execution: &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-			var args struct {
-				Seconds int    `json:"seconds"`
-				Label   string `json:"label"`
-			}
-			json.Unmarshal(req.Arguments, &args)
+	type slowComputeInput struct {
+		Seconds int    `json:"seconds,omitempty"`
+		Label   string `json:"label,omitempty"`
+	}
+	srv.Register(core.TypedTool[slowComputeInput, core.ToolResult]("slow_compute",
+		"Simulate a slow computation (sleeps for the given duration). Supports optional async task execution.",
+		func(ctx core.ToolContext, args slowComputeInput) (core.ToolResult, error) {
 			if args.Seconds <= 0 {
 				args.Seconds = 3
 			}
@@ -125,56 +105,49 @@ func serve() {
 
 			return core.TextResult(fmt.Sprintf("Computation %q completed after %d seconds. Result: 42.", args.Label, args.Seconds)), nil
 		},
-	)
+		core.WithInputSchemaOverride(map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"seconds": map[string]any{
+					"type":        "integer",
+					"description": "How many seconds to compute (sleep)",
+					"default":     3,
+				},
+				"label": map[string]any{
+					"type":        "string",
+					"description": "A label for the computation",
+					"default":     "default",
+				},
+			},
+		}),
+		core.WithToolExecution(&core.ToolExecution{TaskSupport: core.TaskSupportOptional}),
+	))
 
 	// failing_job: required task support. Must be invoked as a task.
 	// Calling without a task hint returns an error. Always fails after a delay.
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "failing_job",
-			Description: "A job that always fails after 1 second. Requires task invocation — calling without 'task' hint returns an error.",
-			InputSchema: map[string]any{
-				"type":       "object",
-				"properties": map[string]any{},
-			},
-			Execution: &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+	srv.Register(core.TypedTool[struct{}, core.ToolResult]("failing_job",
+		"A job that always fails after 1 second. Requires task invocation — calling without 'task' hint returns an error.",
+		func(ctx core.ToolContext, _ struct{}) (core.ToolResult, error) {
 			log.Printf("[failing_job] starting (will fail in 1s)...")
 			time.Sleep(1 * time.Second)
 			return core.ToolResult{}, fmt.Errorf("simulated failure: job crashed")
 		},
-	)
+		core.WithToolExecution(&core.ToolExecution{TaskSupport: core.TaskSupportRequired}),
+	))
 
 	// confirm_delete: demonstrates elicitation from a background task.
 	// Requires task invocation. Uses TaskElicit to ask the user for confirmation
 	// before "deleting" a file.
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "confirm_delete",
-			Description: "Asks for confirmation before deleting a file. Demonstrates task-based elicitation.",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"filename": map[string]any{
-						"type":        "string",
-						"description": "File to delete",
-						"default":     "important.txt",
-					},
-				},
-			},
-			Execution: &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+	type confirmDeleteInput struct {
+		Filename string `json:"filename,omitempty"`
+	}
+	srv.Register(core.TypedTool[confirmDeleteInput, core.ToolResult]("confirm_delete",
+		"Asks for confirmation before deleting a file. Demonstrates task-based elicitation.",
+		func(ctx core.ToolContext, args confirmDeleteInput) (core.ToolResult, error) {
 			tc := server.GetTaskContext(ctx)
 			if tc == nil {
 				return core.ToolResult{}, fmt.Errorf("confirm_delete requires task context")
 			}
-
-			var args struct {
-				Filename string `json:"filename"`
-			}
-			json.Unmarshal(req.Arguments, &args)
 			if args.Filename == "" {
 				args.Filename = "important.txt"
 			}
@@ -198,36 +171,31 @@ func serve() {
 			log.Printf("[confirm_delete] user declined deletion of %q", args.Filename)
 			return core.TextResult("Deletion cancelled"), nil
 		},
-	)
+		core.WithInputSchemaOverride(map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"filename": map[string]any{
+					"type":        "string",
+					"description": "File to delete",
+					"default":     "important.txt",
+				},
+			},
+		}),
+		core.WithToolExecution(&core.ToolExecution{TaskSupport: core.TaskSupportRequired}),
+	))
 
 	// write_haiku: demonstrates sampling from a background task.
 	// Requires task invocation. Uses TaskSample to ask the LLM to generate a haiku.
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "write_haiku",
-			Description: "Asks the LLM to write a haiku on a topic. Demonstrates task-based sampling.",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"topic": map[string]any{
-						"type":        "string",
-						"description": "Topic for the haiku",
-						"default":     "nature",
-					},
-				},
-			},
-			Execution: &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+	type writeHaikuInput struct {
+		Topic string `json:"topic,omitempty"`
+	}
+	srv.Register(core.TypedTool[writeHaikuInput, core.ToolResult]("write_haiku",
+		"Asks the LLM to write a haiku on a topic. Demonstrates task-based sampling.",
+		func(ctx core.ToolContext, args writeHaikuInput) (core.ToolResult, error) {
 			tc := server.GetTaskContext(ctx)
 			if tc == nil {
 				return core.ToolResult{}, fmt.Errorf("write_haiku requires task context")
 			}
-
-			var args struct {
-				Topic string `json:"topic"`
-			}
-			json.Unmarshal(req.Arguments, &args)
 			if args.Topic == "" {
 				args.Topic = "nature"
 			}
@@ -247,7 +215,18 @@ func serve() {
 			log.Printf("[write_haiku] received haiku from %s", result.Model)
 			return core.TextResult(fmt.Sprintf("Haiku about %s:\n%s", args.Topic, result.Content.Text)), nil
 		},
-	)
+		core.WithInputSchemaOverride(map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"topic": map[string]any{
+					"type":        "string",
+					"description": "Topic for the haiku",
+					"default":     "nature",
+				},
+			},
+		}),
+		core.WithToolExecution(&core.ToolExecution{TaskSupport: core.TaskSupportRequired}),
+	))
 
 	// external_job: demonstrates TaskCallbacks (per-tool getTask/getResult overrides).
 	// Simulates proxying an external job system where the tool provides custom
