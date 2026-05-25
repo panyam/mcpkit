@@ -52,6 +52,9 @@ func main() {
 		// Connected without auth — verify session works
 		_, err := noAuthClient.ListTools()
 		if err == nil {
+			if len(ctx.ToolCalls) > 0 {
+				driveToolCalls(noAuthClient, ctx.ToolCalls)
+			}
 			noAuthClient.Close()
 			log.Println("SUCCESS: connected without auth")
 			return
@@ -96,7 +99,7 @@ func main() {
 	}
 	defer c.Close()
 
-	// Step 4: Verify session — tools/list + optional tools/call.
+	// Step 4: Verify session — tools/list + tool call(s).
 	// The client transport handles 401 (token refresh) and 403 (scope step-up
 	// via OAuthTokenSource.TokenForScopes) automatically.
 	log.Println("Step 4: Verifying session with tools/list...")
@@ -106,17 +109,18 @@ func main() {
 	} else {
 		log.Printf("tools/list: %d tools available", len(tools))
 
-		if len(tools) > 0 {
+		switch {
+		case len(ctx.ToolCalls) > 0:
+			// Directed: scenario specified exact toolCalls to invoke.
+			driveToolCalls(c, ctx.ToolCalls)
+		case len(tools) > 0:
+			// Fallback: best-effort call the first tool, no args.
 			toolName := tools[0].Name
-			log.Printf("Calling tool '%s'...", toolName)
-			_, err := c.Call("tools/call", map[string]any{
-				"name":      toolName,
-				"arguments": map[string]any{},
-			})
-			if err != nil {
-				log.Printf("tools/call '%s': %v (may be expected)", toolName, err)
+			log.Printf("Calling tool %q (default fallback)...", toolName)
+			if _, err := c.ToolCall(toolName, map[string]any{}); err != nil {
+				log.Printf("tools/call %q: %v (may be expected)", toolName, err)
 			} else {
-				log.Printf("tools/call '%s': ok", toolName)
+				log.Printf("tools/call %q: ok", toolName)
 			}
 		}
 	}
@@ -126,7 +130,31 @@ func main() {
 
 // conformanceContext holds scenario-specific data from the conformance runner.
 type conformanceContext struct {
-	Name         string `json:"name"`
-	ClientID     string `json:"client_id"`
-	ClientSecret string `json:"client_secret"`
+	Name         string         `json:"name"`
+	ClientID     string         `json:"client_id"`
+	ClientSecret string         `json:"client_secret"`
+	ToolCalls    []toolCallSpec `json:"toolCalls"`
+}
+
+// toolCallSpec is one directed tools/call invocation requested by the scenario.
+// Upstream's SEP-2243 http-custom-headers scenario sends a toolCalls array
+// instead of relying on the driver's "call first tool" default; each entry
+// specifies the exact tool name and arguments to invoke.
+type toolCallSpec struct {
+	Name      string         `json:"name"`
+	Arguments map[string]any `json:"arguments"`
+}
+
+// driveToolCalls invokes each scenario-directed tool call in sequence via the
+// canonical client.Client.ToolCall typed helper. Errors are logged but
+// non-fatal: some scenarios deliberately set up calls that should fail
+// (custom-header validation, etc.) and grade the wire-level behavior of the
+// call itself rather than its success.
+func driveToolCalls(c *client.Client, calls []toolCallSpec) {
+	for i, tc := range calls {
+		log.Printf("Directed call %d/%d: tool=%q with %d args", i+1, len(calls), tc.Name, len(tc.Arguments))
+		if _, err := c.ToolCall(tc.Name, tc.Arguments); err != nil {
+			log.Printf("tools/call %q: %v (non-fatal — scenario may expect)", tc.Name, err)
+		}
+	}
 }
