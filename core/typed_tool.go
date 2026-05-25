@@ -78,6 +78,7 @@ func TypedTool[In, Out any](name, desc string,
 		Meta:           cfg.meta,
 		Timeout:        cfg.timeout,
 		RequiredScopes: cfg.requiredScopes,
+		Execution:      cfg.toolExecution,
 	}
 
 	wrappedHandler := func(ctx ToolContext, req ToolRequest) (ToolResult, error) {
@@ -121,6 +122,7 @@ type typedToolConfig struct {
 	timeout             time.Duration
 	requiredScopes      []string
 	inputSchemaOverride any
+	toolExecution       *ToolExecution
 }
 
 // WithToolAnnotations sets the Annotations field on the generated ToolDef.
@@ -173,6 +175,32 @@ func WithToolRequiredScopes(scopes ...string) TypedToolOption {
 //	)
 func WithInputSchemaOverride(schema any) TypedToolOption {
 	return func(c *typedToolConfig) { c.inputSchemaOverride = schema }
+}
+
+// WithToolExecution sets the Execution field on the generated ToolDef. Use this
+// for tools that participate in the v2 tasks protocol (SEP-2557) and need to
+// declare task-support semantics (TaskSupportRequired, TaskSupportOptional, or
+// the default TaskSupportForbidden). Without this option the generated ToolDef
+// has no Execution field, which is equivalent to TaskSupportForbidden per the
+// spec (sync-only tool).
+//
+// Example:
+//
+//	type SlowComputeInput struct {
+//	    Seconds int `json:"seconds"`
+//	}
+//	r := core.TypedTool[SlowComputeInput, core.ToolResult]("slow_compute", "...",
+//	    func(ctx core.ToolContext, in SlowComputeInput) (core.ToolResult, error) { ... },
+//	    core.WithToolExecution(&core.ToolExecution{TaskSupport: core.TaskSupportOptional}),
+//	)
+//
+// For tools that also need server-side per-tool task callbacks
+// (TaskCallbacks for GetTask/GetResult overrides), use the lower-level
+// server.Tool{ToolDef, Handler, TaskCallbacks} struct path instead —
+// TaskCallbacks is a server-level concept that cannot be exposed via this
+// core-only helper without crossing module boundaries.
+func WithToolExecution(execution *ToolExecution) TypedToolOption {
+	return func(c *typedToolConfig) { c.toolExecution = execution }
 }
 
 // wrapOutput converts a typed handler output into a ToolResult.

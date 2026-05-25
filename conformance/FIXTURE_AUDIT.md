@@ -17,10 +17,10 @@ Driven by [issue 456](https://github.com/panyam/mcpkit/issues/456). The audit wa
 |---|---:|
 | PASS | 13 |
 | JUSTIFIED | 3 |
-| PROMOTE (follow-up filed) | 1 (issue [#457](https://github.com/panyam/mcpkit/issues/457)) |
+| PROMOTE (resolved) | 1 — [#457](https://github.com/panyam/mcpkit/issues/457) landed `core.WithToolExecution`; affected examples migrated |
 | MIGRATE | 0 |
 
-No surface uses an undocumented path. All deviations from the typed-helper happy path are either canonical (RegisterTool / RegisterResource / RegisterPrompt are documented public methods), justified (TaskCallbacks needs `server.Tool{}` for architectural reasons), or filed for follow-up (`WithToolExecution`).
+No surface uses an undocumented path. All deviations from the typed-helper happy path are either canonical (`RegisterTool` / `RegisterResource` / `RegisterPrompt` are documented public methods), justified (TaskCallbacks needs `server.Tool{}` for architectural reasons), or resolved by a follow-up.
 
 ## Per-surface verdicts
 
@@ -57,15 +57,15 @@ OAuth driver uses `client.NewClient(...)`, `client.WithClientLogging`, `client.W
 
 Uses `server.NewServer` with documented option helpers. Tools registered via canonical paths (no raw `server.Tool{}` found in grep). Documentation block at `main.go:1-14` explicitly covers the two-process architecture from `examples/CONVENTIONS.md`.
 
-### `examples/tasks-v2/` — JUSTIFIED + PROMOTE filed (#457)
+### `examples/tasks-v2/` — JUSTIFIED
 
-One raw `server.Tool{}` usage at `main.go:275` for `external_job` — needed because the tool registers `TaskCallbacks: &server.TaskCallbacks{GetTask: ..., GetResult: ...}` for the external-proxy pattern. `TaskCallbacks` is a `server.Tool` field that `core.TypedTool` cannot expose without creating a `core → server` import (wrong direction). **JUSTIFIED with no in-scope migration.**
+One raw `server.Tool{}` usage at `main.go` for `external_job` — needed because the tool registers `TaskCallbacks: &server.TaskCallbacks{GetTask: ..., GetResult: ...}` for the external-proxy pattern. `TaskCallbacks` is a `server.Tool` field that `core.TypedTool` cannot expose without creating a `core → server` import (wrong direction). **JUSTIFIED with no in-scope migration.**
 
-Multiple `srv.RegisterTool(core.ToolDef{...}, handler)` direct calls for tools that set `Execution: &core.ToolExecution{TaskSupport: ...}`. `RegisterTool` is public + documented, but `TypedTool` doesn't expose `Execution` via a `With*` option, so users with task-support tools drop out of the typed-helper ergonomics. **PROMOTE** — issue [#457](https://github.com/panyam/mcpkit/issues/457) tracks adding `core.WithToolExecution`.
+All other tools (`slow_compute`, `failing_job`, `confirm_delete`, `multi_input`, `protocol_error_job`) migrated to `srv.Register(core.TypedTool[...](..., core.WithInputSchemaOverride(...), core.WithToolExecution(...)))` per [#457](https://github.com/panyam/mcpkit/issues/457) resolution. The typed-helper path now covers every tool with `Execution` set.
 
-### `examples/mrtr/` — PASS (with PROMOTE overlap)
+### `examples/mrtr/` — JUSTIFIED
 
-All registrations via `srv.RegisterTool(core.ToolDef{...}, handler)` — canonical, but each tool sets `Execution.TaskSupport`. Will benefit from #457's `WithToolExecution` migration. No raw `server.Tool{}` usage.
+All 7 MRTR tools register via `srv.RegisterTool(def, handler)` with the named-handler `func(ctx, req) (ToolResult, error)` shape. The handlers need raw `req.Arguments` access to inspect `inputResponses` and `requestState` for the SEP-2322 MRTR round-trip protocol — `TypedTool`'s typed handler signature (`func(ctx, In) (Out, error)`) does not expose the raw `ToolRequest`, so migration is not feasible without a new typed-helper API for MRTR-style stateful tools. **JUSTIFIED** — rationale is the handler-signature requirement, not `Execution`. None of the MRTR tools set `Execution`; they're driven by the MRTR helpers, not the v2 tasks protocol.
 
 ### `examples/list-ttl/` — PASS
 
@@ -75,9 +75,9 @@ All registrations via `srv.RegisterTool(core.ToolDef{...}, handler)` — canonic
 
 Imports `ext/ui` and uses `ui.RequestDisplayMode` / `ui.FileInputAnnotation` helpers (the documented `ext/ui` surface). `srv.RegisterTool` for SEP-2356 file-input tools. No raw struct usage.
 
-### `examples/tasks/` — JUSTIFIED + PROMOTE filed (#457)
+### `examples/tasks/` — JUSTIFIED
 
-Same shape as `examples/tasks-v2/`: one raw `server.Tool{TaskCallbacks: ...}` at `main.go:255` for the same `external_job` proxy pattern (JUSTIFIED, same reason), and multiple `RegisterTool` calls for `Execution.TaskSupport`-setting tools (PROMOTE, tracked in [#457](https://github.com/panyam/mcpkit/issues/457)).
+Same shape as `examples/tasks-v2/`: one raw `server.Tool{TaskCallbacks: ...}` for the `external_job` proxy pattern (JUSTIFIED, same reason). All other tools (`slow_compute`, `failing_job`, `confirm_delete`, `write_haiku`) migrated to `core.TypedTool` + `WithInputSchemaOverride` + `WithToolExecution` per [#457](https://github.com/panyam/mcpkit/issues/457) resolution.
 
 ### `scripts/conformance-audit.sh` — PASS
 
@@ -116,7 +116,8 @@ Canonical paths used as reference:
 |---|---|
 | Tool registration | `srv.Register(core.TextTool[In](...))` / `srv.Register(core.TypedTool[In, Out](..., opts...))` |
 | Tool with raw 2020-12 schema | `core.TypedTool[In, Out](..., core.WithInputSchemaOverride(schema))` (post PR 455) |
-| Tool with `Execution`/`TaskCallbacks` | `srv.RegisterTool(def, handler)` / `srv.Register(server.Tool{ToolDef, Handler, TaskCallbacks})` (until [#457](https://github.com/panyam/mcpkit/issues/457) lands `WithToolExecution`) |
+| Tool with `Execution` | `srv.Register(core.TypedTool[In, Out](..., core.WithToolExecution(...)))` (post [#457](https://github.com/panyam/mcpkit/issues/457)) |
+| Tool with `TaskCallbacks` | `srv.Register(server.Tool{ToolDef, Handler, TaskCallbacks})` (no typed helper — server-level concept) |
 | Resource registration | `srv.RegisterResource(core.ResourceDef{...}, handler)` |
 | Resource template | `srv.RegisterResourceTemplate(core.ResourceTemplate{...}, handler)` |
 | Prompt registration | `srv.RegisterPrompt(core.PromptDef{...}, handler)` |
