@@ -288,7 +288,7 @@ type AuthError struct {
 |------|-----------|----------------|
 | `JWTValidator` | `AuthValidator` + `ClaimsProvider` | `jwt.Parse` with JWKS keyfunc (`JWKSKeyStore.GetKeyByKid`) |
 | `OAuthTokenSource` | `TokenSource` | `client.LoginWithBrowser` + `client.DiscoverAS` |
-| `ClientCredentialsSource` | `TokenSource` | `client.ClientCredentialsToken` |
+| `ClientCredentialsTokenSource` | `TokenSource` + `ScopeAwareTokenSource` | `client.ClientCredentialsSource` (basic and `private_key_jwt` per SEP-1046) |
 | `AuthExtension` | `ExtensionProvider` | (none — declares MCP auth extension metadata) |
 
 ## Server Usage
