@@ -165,6 +165,10 @@ type conformanceContext struct {
 	ClientSecret     string         `json:"client_secret"`
 	PrivateKeyPEM    string         `json:"private_key_pem"`
 	SigningAlgorithm string         `json:"signing_algorithm"`
+	IdpClientID      string         `json:"idp_client_id"`
+	IdpIDToken       string         `json:"idp_id_token"`
+	IdpIssuer        string         `json:"idp_issuer"`
+	IdpTokenEndpoint string         `json:"idp_token_endpoint"`
 	ToolCalls        []toolCallSpec `json:"toolCalls"`
 }
 
@@ -177,14 +181,25 @@ type toolCallSpec struct {
 	Arguments map[string]any `json:"arguments"`
 }
 
-// pickTokenSource decides between OAuthTokenSource (authorization_code) and
-// ClientCredentialsTokenSource (SEP-1046). PrivateKeyPEM uniquely identifies
-// private_key_jwt. For the basic variant, ctx shape (client_id + client_secret)
-// overlaps with auth-code pre-registration scenarios, so a discovery probe
-// disambiguates via AS grant_types_supported. The probe is gated on
-// `ClientID != ""` to keep DCR scenarios with no pre-registered credentials
-// on the OAuthTokenSource fast path without spurious PRM/AS round trips.
+// pickTokenSource decides which TokenSource to use based on context shape:
+// SEP-990 (idp_id_token), SEP-1046 private_key_jwt (private_key_pem),
+// SEP-1046 basic (AS advertises only client_credentials), or the default
+// authorization_code flow. The AS-discovery probe is gated on ClientID != ""
+// to keep DCR scenarios with no pre-registered credentials on the
+// OAuthTokenSource fast path without spurious PRM/AS round trips.
 func pickTokenSource(serverURL string, ctx conformanceContext) core.TokenSource {
+	if ctx.IdpIDToken != "" && ctx.IdpTokenEndpoint != "" {
+		log.Println("Step 2: ctx has idp_id_token + idp_token_endpoint → EnterpriseManagedTokenSource (SEP-990)")
+		return &auth.EnterpriseManagedTokenSource{
+			ServerURL:        serverURL,
+			ClientID:         ctx.ClientID,
+			ClientSecret:     ctx.ClientSecret,
+			IdpClientID:      ctx.IdpClientID,
+			IdpIDToken:       ctx.IdpIDToken,
+			IdpTokenEndpoint: ctx.IdpTokenEndpoint,
+			AllowInsecure:    true,
+		}
+	}
 	if ctx.PrivateKeyPEM != "" {
 		log.Println("Step 2: ctx has private_key_pem → ClientCredentialsTokenSource (private_key_jwt)")
 		return &auth.ClientCredentialsTokenSource{
