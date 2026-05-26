@@ -60,6 +60,32 @@ func TestHandleStore_Delete(t *testing.T) {
 	}
 }
 
+func TestHandleStore_Put(t *testing.T) {
+	s := NewHandleStore[cart]()
+	defer s.Close()
+
+	id := s.Mint(cart{Total: 1}, 0)
+	// Put under an existing id → overwrite + report existed.
+	existed := s.Put(id, cart{Total: 99, Items: []string{"x"}}, 0)
+	if !existed {
+		t.Errorf("Put returned existed=false for known id")
+	}
+	got, ok := s.Get(id)
+	if !ok || got.Total != 99 || len(got.Items) != 1 {
+		t.Errorf("Get after Put returned %+v ok=%v, want updated value", got, ok)
+	}
+
+	// Put under an unknown id → insert + report existed=false.
+	existed = s.Put("never-minted", cart{Total: 7}, 0)
+	if existed {
+		t.Errorf("Put returned existed=true for unknown id")
+	}
+	got, ok = s.Get("never-minted")
+	if !ok || got.Total != 7 {
+		t.Errorf("Get after seed-Put returned %+v ok=%v, want Total=7", got, ok)
+	}
+}
+
 func TestHandleStore_LazyExpiry(t *testing.T) {
 	// No gc goroutine — verify Get returns ok=false past TTL.
 	s := NewHandleStore[cart]()
