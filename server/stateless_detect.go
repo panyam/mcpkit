@@ -66,8 +66,9 @@ func detectWireKind(r *http.Request, body []byte, req *core.Request, mode statel
 		return wireLegacy
 	}
 
-	// Signal 2: distinctly-stateless method.
-	if req.Method == "server/discover" {
+	// Signal 2: distinctly-stateless methods.
+	switch req.Method {
+	case "server/discover", "subscriptions/listen":
 		return wireStateless
 	}
 

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -49,6 +48,11 @@ type streamableTransport struct {
 	// session dispatcher; pure-Legacy mode leaves this nil and never routes
 	// to stateless. Singleton — no per-request state lives on it.
 	statelessDispatcher *stateless.Dispatcher
+
+	// statelessSubs holds the set of open subscriptions/listen streams.
+	// Initialized alongside statelessDispatcher. broadcast() fans
+	// list-changed notifications through this on every Server.Broadcast.
+	statelessSubs *statelessSubMap
 }
 
 // sessionEntry wraps a Dispatcher with idle-timeout support. When a session
@@ -93,11 +97,13 @@ func newStreamableTransport(s *Server, cfg transportConfig) *streamableTransport
 		config:        cfg,
 	}
 
-	// Construct the SEP-2575 stateless dispatcher when the mode permits it.
-	// Pure-Legacy mode leaves it nil; the detect helper short-circuits to
-	// the legacy path regardless of incoming shape.
+	// Construct the SEP-2575 stateless dispatcher + subscription map when
+	// the mode permits the stateless wire. Pure-Legacy mode leaves them
+	// nil; the detect helper short-circuits to the legacy path regardless
+	// of incoming shape, and broadcast() skips the nil-check no-op.
 	if cfg.statelessMode != stateless.ModeLegacyOnly {
 		t.statelessDispatcher = stateless.New(newStatelessBackend(s))
+		t.statelessSubs = newStatelessSubMap()
 	}
 	return t
 }
@@ -184,24 +190,9 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Read body first — needed for method peek and dispatch.
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "failed to read body", http.StatusBadRequest)
+	body, claims, ok := readAndAuthorize(w, r, t.server)
+	if !ok {
 		return
-	}
-
-	// Auth check — peek at method for public method bypass.
-	var claims *core.Claims
-	if method := extractMethodFromJSON(body); t.server.IsPublicMethod(method) {
-		// Public method — skip auth, dispatch without claims.
-		claims, _ = t.server.CheckAuth(r) // best-effort: populate claims if token present
-	} else {
-		claims, err = t.server.CheckAuth(r)
-		if err != nil {
-			writeAuthError(w, err)
-			return
-		}
 	}
 
 	// Detect if the incoming message is a JSON-RPC response (from the client
@@ -253,6 +244,13 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 	// short-circuits to legacy regardless of incoming shape.
 	if t.statelessDispatcher != nil {
 		if detectWireKind(r, body, &req, t.config.statelessMode) == wireStateless {
+			// subscriptions/listen is the only stateless method that
+			// returns a stream rather than a synchronous response. It
+			// runs its own SSE pump independent of the dispatcher.
+			if req.Method == "subscriptions/listen" {
+				t.handleStatelessSubscribe(w, r, &req)
+				return
+			}
 			t.handleStatelessPost(w, r, claims, &req)
 			return
 		}
@@ -847,6 +845,12 @@ func (t *streamableTransport) handleBatchPost(w http.ResponseWriter, r *http.Req
 
 // broadcast sends a notification to all active Streamable HTTP sessions.
 // Sessions without a GET SSE stream have nil notifyFunc and are skipped safely.
+//
+// Also fans out to all open SEP-2575 subscriptions/listen streams whose
+// per-subscription filter admits the method. The two paths are
+// independent — a deployment running in dual mode delivers the same
+// notification to legacy-session GET SSE clients AND stateless listen
+// clients in one Broadcast call.
 func (t *streamableTransport) broadcast(method string, params any) {
 	t.sessions.Range(func(_ string, entry *sessionEntry) bool {
 		d := entry.dispatcher
@@ -855,6 +859,9 @@ func (t *streamableTransport) broadcast(method string, params any) {
 		}
 		return true
 	})
+	if t.statelessSubs != nil {
+		t.statelessSubs.fanout(method, params)
+	}
 }
 
 // resolveSessionID determines the session ID to use for a new session.
