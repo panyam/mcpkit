@@ -176,3 +176,120 @@ func TestMcpParamHeaderName(t *testing.T) {
 		t.Errorf("got %q, want Mcp-Param-Method", got)
 	}
 }
+
+// validateMcpParamHeaders — SEP-2243 schema-validation rules.
+
+func TestValidateMcpParamHeaders_Valid(t *testing.T) {
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"region":   map[string]any{"type": "string", "x-mcp-header": "Region"},
+			"priority": map[string]any{"type": "integer", "x-mcp-header": "Priority"},
+			"verbose":  map[string]any{"type": "boolean", "x-mcp-header": "Verbose"},
+			// Property with no annotation — OK.
+			"query": map[string]any{"type": "string"},
+		},
+	}
+	if err := validateMcpParamHeaders(schema); err != nil {
+		t.Errorf("valid schema rejected: %v", err)
+	}
+}
+
+func TestValidateMcpParamHeaders_NilSchemaPasses(t *testing.T) {
+	if err := validateMcpParamHeaders(nil); err != nil {
+		t.Errorf("nil schema should pass, got %v", err)
+	}
+}
+
+// The invalid-case table mirrors the upstream HttpInvalidToolHeadersScenario
+// in modelcontextprotocol/conformance: each row is a tool that must be
+// rejected, one rule per row.
+func TestValidateMcpParamHeaders_InvalidCases(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		schema map[string]any
+	}{
+		{
+			"empty-header-value",
+			map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"value": map[string]any{"type": "string", "x-mcp-header": ""}},
+			},
+		},
+		{
+			"object-typed-property",
+			map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"data": map[string]any{"type": "object", "x-mcp-header": "Data"}},
+			},
+		},
+		{
+			"array-typed-property",
+			map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"items": map[string]any{"type": "array", "x-mcp-header": "Items"}},
+			},
+		},
+		{
+			"null-typed-property",
+			map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"nil": map[string]any{"type": "null", "x-mcp-header": "Nil"}},
+			},
+		},
+		{
+			"duplicate-same-case",
+			map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"field1": map[string]any{"type": "string", "x-mcp-header": "Region"},
+					"field2": map[string]any{"type": "string", "x-mcp-header": "Region"},
+				},
+			},
+		},
+		{
+			"duplicate-case-insensitive",
+			map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"field1": map[string]any{"type": "string", "x-mcp-header": "MyField"},
+					"field2": map[string]any{"type": "string", "x-mcp-header": "myfield"},
+				},
+			},
+		},
+		{
+			"space-in-name",
+			map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"value": map[string]any{"type": "string", "x-mcp-header": "My Region"}},
+			},
+		},
+		{
+			"colon-in-name",
+			map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"value": map[string]any{"type": "string", "x-mcp-header": "Region:Primary"}},
+			},
+		},
+		{
+			"non-ascii-name",
+			map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"value": map[string]any{"type": "string", "x-mcp-header": "Région"}},
+			},
+		},
+		{
+			"control-char-name",
+			map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"value": map[string]any{"type": "string", "x-mcp-header": "Region\t1"}},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := validateMcpParamHeaders(tc.schema); err == nil {
+				t.Errorf("expected error for %s, got nil", tc.name)
+			}
+		})
+	}
+}
