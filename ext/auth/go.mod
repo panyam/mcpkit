@@ -6,7 +6,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/panyam/gocurrent v0.1.1
 	github.com/panyam/mcpkit v0.2.3
-	github.com/panyam/oneauth v0.1.2
+	github.com/panyam/oneauth v0.1.5
 	github.com/stretchr/testify v1.11.1
 )
 

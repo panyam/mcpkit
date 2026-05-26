@@ -112,7 +112,7 @@ func (t *streamableTransport) handleStatelessSubscribe(w http.ResponseWriter, r 
 	// Header / _meta cross-check (same precedence as handleStatelessPost).
 	if hdrVer := r.Header.Get(mcpProtocolVersionHeader); hdrVer != "" {
 		metaVer := peekMetaProtocolVersion(req.Params)
-		if resp := headerMismatchResponse(id, hdrVer, metaVer); resp != nil {
+		if resp := statelessVersionMismatch(id, hdrVer, metaVer); resp != nil {
 			writeStatelessResponse(w, resp)
 			return
 		}

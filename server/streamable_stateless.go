@@ -38,7 +38,7 @@ func (t *streamableTransport) handleStatelessPost(w http.ResponseWriter, r *http
 	// when both are present → -32001 HeaderMismatch.
 	if hdrVer := r.Header.Get(mcpProtocolVersionHeader); hdrVer != "" {
 		metaVer := peekMetaProtocolVersion(req.Params)
-		if mismatchResp := headerMismatchResponse(id, hdrVer, metaVer); mismatchResp != nil {
+		if mismatchResp := statelessVersionMismatch(id, hdrVer, metaVer); mismatchResp != nil {
 			writeStatelessResponse(w, mismatchResp)
 			return
 		}

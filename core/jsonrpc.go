@@ -92,12 +92,16 @@ const (
 	// whose required-mode path needs the same affordance.
 	ErrCodeMissingRequiredClientCapability = -32003
 
-	// ErrCodeHeaderMismatch is returned by the SEP-2575 stateless wire when
-	// the MCP-Protocol-Version HTTP header and the _meta protocolVersion
-	// field do not agree. The transport MUST reject with HTTP 400.
+	// ErrCodeHeaderMismatch indicates an HTTP-header / body cross-check
+	// failure. Two surfaces use the same code:
 	//
-	// Originally minted by SEP-2243 (HTTP standardization); SEP-2575 reuses
-	// it for the per-request envelope cross-check.
+	//   - SEP-2243 §Server Validation: the request's Mcp-Method /
+	//     Mcp-Name routing headers disagree with the JSON-RPC body, or
+	//     a required routing header is missing.
+	//   - SEP-2575 stateless wire: the MCP-Protocol-Version HTTP header
+	//     and the _meta protocolVersion field do not agree.
+	//
+	// Both surfaces pair the code with HTTP 400 Bad Request.
 	ErrCodeHeaderMismatch = -32001
 
 	// ErrCodeUnsupportedProtocolVersion is returned by the SEP-2575

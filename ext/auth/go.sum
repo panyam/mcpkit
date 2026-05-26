@@ -1,3 +1,5 @@
+github.com/alexedwards/scs/v2 v2.8.0 h1:h31yUYoycPuL0zt14c0gd+oqxfRwIj6SOjHdKRZxhEw=
+github.com/alexedwards/scs/v2 v2.8.0/go.mod h1:ToaROZxyKukJKT/xLcVQAChi5k6+Pn1Gvmdl7h3RRj8=
 github.com/bahlo/generic-list-go v0.2.0 h1:5sz/EEAK+ls5wF+NeqDpk5+iNdMDXrh3z3nPnH1Wvgk=
 github.com/bahlo/generic-list-go v0.2.0/go.mod h1:2KvAjgMlE5NNynlg/5iLrrCCZ2+5xWbdbCW3pNTGyYg=
 github.com/buger/jsonparser v1.1.1 h1:2PnMjfWD7wBILjqQbt530v576A/cAbQvEW9gGIpYMUs=
@@ -32,8 +34,8 @@ github.com/panyam/gocurrent v0.1.1 h1:UFFCkAxYNdGL4RuUCYBneWCS0jIlquIpvgvDcezega
 github.com/panyam/gocurrent v0.1.1/go.mod h1:jIIhcNfNnnIe2JXH8aY2+ba+/5G1fzwCWoZXdcMNw6o=
 github.com/panyam/goutils v0.1.8 h1:5UscYTP892k54+Nyb01tKGGwZxczZ5k7BC+c0nXmcoc=
 github.com/panyam/goutils v0.1.8/go.mod h1:ntucs8GJOHQ0LmlRGRjeup3aDC2t7xPMudrRwUHrJNM=
-github.com/panyam/oneauth v0.1.2 h1:tEH9uLTrmMbKEYw6RcPNQ2JsMGDNFP/+NmfN3xSkxB8=
-github.com/panyam/oneauth v0.1.2/go.mod h1:EAmer8OH3x4QRM5VueLANJgfAyzivhGwaSfJZ3rUrbM=
+github.com/panyam/oneauth v0.1.5 h1:YQMy4V54tLSwyZd/NS7KwS5Q3Is/mu0UZWXd7csEb3M=
+github.com/panyam/oneauth v0.1.5/go.mod h1:EAmer8OH3x4QRM5VueLANJgfAyzivhGwaSfJZ3rUrbM=
 github.com/panyam/servicekit v0.0.25 h1:JeTRyz5ZZY3beENg0N3tLW+O39/foTuHMPAf+rpwYhM=
 github.com/panyam/servicekit v0.0.25/go.mod h1:9TkF2LRqiPC9bgu0bYVdky7rnHEuBvzGzrsoL++Ra5c=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
