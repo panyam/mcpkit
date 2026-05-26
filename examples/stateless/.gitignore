@@ -1,0 +1,4 @@
+# Built binaries — `go build` defaults to the directory name; the
+# Makefile's build target writes stateless-demo. Both are local-only.
+stateless
+stateless-demo
