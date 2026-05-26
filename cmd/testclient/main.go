@@ -19,6 +19,7 @@ import (
 	"errors"
 	"log"
 	"os"
+	"slices"
 
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
@@ -95,18 +96,12 @@ func main() {
 		log.Printf("Direct connect failed: %v — proceeding with OAuth flow", err)
 	}
 
-	// Step 2: Build OAuthTokenSource with discovered credentials.
-	// OAuthTokenSource handles: PRM discovery → AS metadata → PKCE → DCR → token exchange.
-	// FollowRedirects provides headless OAuth (follows 302s instead of opening browser).
-	log.Println("Step 2: Setting up OAuthTokenSource...")
-	ts := &auth.OAuthTokenSource{
-		ServerURL:     serverURL,
-		ClientID:      ctx.ClientID,
-		ClientSecret:  ctx.ClientSecret,
-		EnableDCR:     true,  // fallback to DCR if no pre-registered client_id
-		AllowInsecure: true,  // conformance mock AS uses HTTP, not HTTPS
-		OpenBrowser:   oneauthclient.FollowRedirects(nil), // nil = default client (follows redirects)
-	}
+	// Step 2: Build a TokenSource. Pick the variant by AS grant_types_supported:
+	// SEP-1046 scenarios advertise only client_credentials (no authorization_code),
+	// so a quick discovery probe tells us which grant the AS will accept. The
+	// presence of PrivateKeyPEM additionally pins us to the private_key_jwt
+	// variant — no other scenario provides one.
+	ts := pickTokenSource(serverURL, ctx)
 
 	// Step 3: Connect with auth token.
 	log.Println("Step 3: MCP initialize with OAuth token...")
@@ -165,10 +160,12 @@ func conformanceElicitationHandler(_ context.Context, _ core.ElicitationRequest)
 
 // conformanceContext holds scenario-specific data from the conformance runner.
 type conformanceContext struct {
-	Name         string         `json:"name"`
-	ClientID     string         `json:"client_id"`
-	ClientSecret string         `json:"client_secret"`
-	ToolCalls    []toolCallSpec `json:"toolCalls"`
+	Name             string         `json:"name"`
+	ClientID         string         `json:"client_id"`
+	ClientSecret     string         `json:"client_secret"`
+	PrivateKeyPEM    string         `json:"private_key_pem"`
+	SigningAlgorithm string         `json:"signing_algorithm"`
+	ToolCalls        []toolCallSpec `json:"toolCalls"`
 }
 
 // toolCallSpec is one directed tools/call invocation requested by the scenario.
@@ -178,6 +175,50 @@ type conformanceContext struct {
 type toolCallSpec struct {
 	Name      string         `json:"name"`
 	Arguments map[string]any `json:"arguments"`
+}
+
+// pickTokenSource decides between OAuthTokenSource (authorization_code) and
+// ClientCredentialsTokenSource (SEP-1046). PrivateKeyPEM uniquely identifies
+// private_key_jwt. For the basic variant, ctx shape (client_id + client_secret)
+// overlaps with auth-code pre-registration scenarios, so a discovery probe
+// disambiguates via AS grant_types_supported. The probe is gated on
+// `ClientID != ""` to keep DCR scenarios with no pre-registered credentials
+// on the OAuthTokenSource fast path without spurious PRM/AS round trips.
+func pickTokenSource(serverURL string, ctx conformanceContext) core.TokenSource {
+	if ctx.PrivateKeyPEM != "" {
+		log.Println("Step 2: ctx has private_key_pem → ClientCredentialsTokenSource (private_key_jwt)")
+		return &auth.ClientCredentialsTokenSource{
+			ServerURL:        serverURL,
+			ClientID:         ctx.ClientID,
+			PrivateKeyPEM:    ctx.PrivateKeyPEM,
+			SigningAlgorithm: ctx.SigningAlgorithm,
+			AllowInsecure:    true,
+		}
+	}
+	if ctx.ClientID != "" {
+		info, err := auth.DiscoverMCPAuth(serverURL)
+		if err == nil && info.ASMetadata != nil {
+			grants := info.ASMetadata.GrantTypesSupported
+			if slices.Contains(grants, "client_credentials") && !slices.Contains(grants, "authorization_code") {
+				log.Println("Step 2: AS advertises only client_credentials → ClientCredentialsTokenSource (basic)")
+				return &auth.ClientCredentialsTokenSource{
+					ServerURL:     serverURL,
+					ClientID:      ctx.ClientID,
+					ClientSecret:  ctx.ClientSecret,
+					AllowInsecure: true,
+				}
+			}
+		}
+	}
+	log.Println("Step 2: Setting up OAuthTokenSource...")
+	return &auth.OAuthTokenSource{
+		ServerURL:     serverURL,
+		ClientID:      ctx.ClientID,
+		ClientSecret:  ctx.ClientSecret,
+		EnableDCR:     true,
+		AllowInsecure: true,
+		OpenBrowser:   oneauthclient.FollowRedirects(nil),
+	}
 }
 
 // driveToolCalls invokes each scenario-directed tool call in sequence via the
