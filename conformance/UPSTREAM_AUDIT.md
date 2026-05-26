@@ -14,8 +14,8 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 | Surface | Scenarios | Checks | Pass | Fail | Warn | Info | Skipped | Harness-gap |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Server | 51 | 126 | 58 | 41 | 12 | 6 | 9 | 0 |
-| Client | 40 | 1130 | 416 | 53 | 4 | 649 | 8 | 1 |
-| **Total** | **91** | **1256** | **474** | **94** | **16** | **655** | **17** | **1** |
+| Client | 40 | 1130 | 432 | 37 | 4 | 649 | 8 | 1 |
+| **Total** | **91** | **1256** | **490** | **78** | **16** | **655** | **17** | **1** |
 
 ## Harness gaps
 
@@ -151,8 +151,8 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `http-custom-headers` | client | partial | 2 pass / 16 fail |  |
 | `http-custom-header-server-validation` | server | pass | 5 skip |  |
+| `http-custom-headers` | client | pass | 18 pass |  |
 
 ### [SEP-2243-SERVER-VALIDATION](https://modelcontextprotocol.io/specification/draft/basic/transports#server-validation) (1 scenarios)
 
