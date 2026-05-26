@@ -116,23 +116,33 @@ func DecodeRequestMeta(rawParams json.RawMessage) (*RequestMeta, error) {
 
 // UnsupportedProtocolVersionData is the structured error payload returned
 // when a stateless request advertises a protocol version this server does
-// not implement. The Supported field carries the server's full
-// SupportedStatelessVersions list so the client can pick a fallback.
+// not implement. Supported lists the server's full SupportedStatelessVersions
+// so the client can pick a fallback; Requested echoes the version string
+// the client sent for diagnostics.
 //
-// HTTP status: 400. JSON-RPC code: ErrCodeInvalidParams (-32602), matching
-// the legacy wire's negotiation-failure shape.
+// HTTP status: 400. JSON-RPC code: ErrCodeUnsupportedProtocolVersion (-32004).
 type UnsupportedProtocolVersionData struct {
 	Supported []string `json:"supported"`
+	Requested string   `json:"requested"`
 }
 
 // MissingRequiredClientCapabilityData is the structured error payload for
-// ErrCodeMissingRequiredClientCapability (-32003). RequiredCapabilities is
-// a list of capability identifiers the server needs the client to declare
-// in _meta[MetaKeyClientCapabilities] before this request can proceed.
+// ErrCodeMissingRequiredClientCapability (-32003). RequiredCapabilities
+// mirrors the ClientCapabilities shape — the server returns the same
+// capability object it expects the client to declare, so the client can
+// merge it into its next request's _meta[MetaKeyClientCapabilities] and
+// retry. Example: {"elicitation": {}} for a tool that requires elicitation.
 //
 // HTTP status: 400. JSON-RPC code: -32003.
+//
+// Wire-shape note: the SEP-2575 conformance scenario as of this writing
+// checks for a string-array shape (Array.isArray + .includes("sampling")),
+// which contradicts the schema's object shape exemplified at
+// schema/draft/examples/MissingRequiredClientCapabilityError/. We emit
+// the schema-correct object shape; an upstream conformance follow-up is
+// tracked to align the test.
 type MissingRequiredClientCapabilityData struct {
-	RequiredCapabilities []string `json:"requiredCapabilities"`
+	RequiredCapabilities ClientCapabilities `json:"requiredCapabilities"`
 }
 
 // HeaderMismatchData is the structured error payload for ErrCodeHeaderMismatch
