@@ -281,6 +281,24 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 	defer entry.idleTimer.Release()
 	dispatcher := entry.dispatcher
 
+	// SEP-2243 §Server Validation: Mcp-Method (always) and Mcp-Name
+	// (when body carries a name-shaped param) MUST match the body, or
+	// the server rejects with HTTP 400 + JSON-RPC -32001.
+	//
+	// Gated on the session's negotiated protocol version because
+	// SEP-2243 lives in DRAFT-2026-v1 only — no dated release imposes
+	// the routing-header contract today, and the SDKs every MCP client
+	// uses (official TS/Python, mcpjam, VS Code, Cursor, ...) do not
+	// emit these headers yet. Validating unconditionally would 400
+	// every existing client. Once SEP-2243 ships in a dated release
+	// the gate can widen to include that version.
+	if isSEP2243EnforcedVersion(dispatcher.negotiatedVersion) {
+		if errResp := validateRoutingHeaders(&req, r.Header); errResp != nil {
+			writeHeaderMismatch(w, errResp)
+			return
+		}
+	}
+
 	// Validate MCP-Protocol-Version if present.
 	// Per spec: "If the server receives a request with an invalid or unsupported
 	// MCP-Protocol-Version, it MUST respond with 400 Bad core.Request."

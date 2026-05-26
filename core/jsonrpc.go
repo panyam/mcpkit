@@ -91,6 +91,12 @@ const (
 	// io.modelcontextprotocol/tasks). Reusable for any future extension
 	// whose required-mode path needs the same affordance.
 	ErrCodeMissingRequiredClientCapability = -32003
+
+	// ErrCodeHeaderMismatch indicates the request's SEP-2243 routing
+	// headers (Mcp-Method, Mcp-Name) disagree with the JSON-RPC body,
+	// or that a required routing header is missing. Paired with HTTP
+	// 400 Bad Request. Defined by SEP-2243 §Server Validation.
+	ErrCodeHeaderMismatch = -32001
 )
 
 // NewResponse creates a success response for the given request ID.
