@@ -14,8 +14,8 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 | Surface | Scenarios | Checks | Pass | Fail | Warn | Info | Skipped | Harness-gap |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Server | 51 | 126 | 58 | 41 | 12 | 6 | 9 | 0 |
-| Client | 40 | 1136 | 434 | 37 | 4 | 655 | 6 | 1 |
-| **Total** | **91** | **1262** | **492** | **78** | **16** | **661** | **15** | **1** |
+| Client | 40 | 1141 | 437 | 36 | 4 | 658 | 6 | 1 |
+| **Total** | **91** | **1267** | **495** | **77** | **16** | **664** | **15** | **1** |
 
 ## Harness gaps
 
@@ -124,9 +124,9 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `sse-retry` | client | partial | 1 fail / 8 info |  |
 | `server-sse-multiple-streams` | server | pass | 2 pass |  |
 | `server-sse-polling` | server | pass | 3 warn / 6 info |  |
+| `sse-retry` | client | pass | 3 pass / 11 info |  |
 
 ### [SEP-2106](https://modelcontextprotocol.io/seps/2106-json-schema-2020-12#security-implications) (1 scenarios)
 
