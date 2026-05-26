@@ -189,3 +189,71 @@ func TestHandleStore_CloseIsIdempotent(t *testing.T) {
 	s.Close()
 	s.Close() // must not panic / deadlock
 }
+
+// TestHandleStore_InterfaceSeamSwappable demonstrates the
+// design intent: tool authors program against the HandleStore[T]
+// interface, so a future Redis-backed (or any) implementation drops
+// in without changing call sites. fakeStore is a trivial alternate
+// impl that records last-mint args; the consumer below uses the
+// HandleStore[T] interface so it accepts either backend.
+func TestHandleStore_InterfaceSeamSwappable(t *testing.T) {
+	// Default impl path.
+	var s HandleStore[cart] = NewHandleStore[cart]()
+	defer s.Close()
+	useStore(t, s)
+
+	// Alternate impl path — same consumer, no code change at call site.
+	fake := &fakeStore[cart]{values: make(map[string]cart)}
+	defer fake.Close()
+	useStore(t, fake)
+}
+
+func useStore(t *testing.T, s HandleStore[cart]) {
+	t.Helper()
+	id := s.Mint(cart{Total: 42}, 0)
+	got, ok := s.Get(id)
+	if !ok || got.Total != 42 {
+		t.Errorf("Mint/Get round-trip via interface failed: ok=%v got=%+v", ok, got)
+	}
+	if !s.Delete(id) {
+		t.Errorf("Delete returned false via interface")
+	}
+}
+
+// fakeStore is a one-off alternate HandleStore impl used only by the
+// interface-seam test. Mirror surface, no TTL/no gc, trivial map.
+type fakeStore[T any] struct {
+	mu     sync.Mutex
+	values map[string]T
+	next   int
+}
+
+func (f *fakeStore[T]) Mint(v T, _ time.Duration) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.next++
+	id := "fake-" + string(rune('A'+f.next%26))
+	f.values[id] = v
+	return id
+}
+func (f *fakeStore[T]) Get(id string) (T, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	v, ok := f.values[id]
+	return v, ok
+}
+func (f *fakeStore[T]) Delete(id string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.values[id]; !ok {
+		return false
+	}
+	delete(f.values, id)
+	return true
+}
+func (f *fakeStore[T]) Len() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.values)
+}
+func (f *fakeStore[T]) Close() {}
