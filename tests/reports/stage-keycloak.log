@@ -1,5 +1,5 @@
 === Stage 9/9: keycloak (make testkcl-auto) ===
-Started: Wed May  6 18:20:21 PDT 2026
+Started: Mon May 25 22:58:02 PDT 2026
 === RUN   TestKeycloak_MCPServer_ValidToken
 --- PASS: TestKeycloak_MCPServer_ValidToken (0.03s)
 === RUN   TestKeycloak_MCPServer_TamperedToken
@@ -19,11 +19,11 @@ Started: Wed May  6 18:20:21 PDT 2026
 === RUN   TestKeycloak_PublicMethods_ToolCallRequiresAuth
 --- PASS: TestKeycloak_PublicMethods_ToolCallRequiresAuth (0.01s)
 === RUN   TestKeycloak_SessionHijack_DifferentUserRejected
---- PASS: TestKeycloak_SessionHijack_DifferentUserRejected (0.06s)
+--- PASS: TestKeycloak_SessionHijack_DifferentUserRejected (0.07s)
 === RUN   TestKeycloak_SessionHijack_SameUserAllowed
 --- PASS: TestKeycloak_SessionHijack_SameUserAllowed (0.04s)
 === RUN   TestKeycloak_TokenRefresh_PasswordGrant
---- PASS: TestKeycloak_TokenRefresh_PasswordGrant (0.04s)
+--- PASS: TestKeycloak_TokenRefresh_PasswordGrant (0.05s)
 PASS
-ok  	github.com/panyam/mcpkit/tests/keycloak	0.720s
-Finished: Wed May  6 18:20:23 PDT 2026 (elapsed 2s)
+ok  	github.com/panyam/mcpkit/tests/keycloak	0.698s
+Finished: Mon May 25 22:58:04 PDT 2026 (elapsed 2s)

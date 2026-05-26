@@ -57,7 +57,7 @@ require (
 	github.com/panyam/demokit/notebook v0.0.25 // indirect
 	github.com/panyam/gocurrent v0.1.1 // indirect
 	github.com/panyam/goutils v0.1.13 // indirect
-	github.com/panyam/oneauth v0.0.82 // indirect
+	github.com/panyam/oneauth v0.0.85 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect

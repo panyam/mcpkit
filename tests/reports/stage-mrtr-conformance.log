@@ -1,29 +1,40 @@
 === Stage 8e/9: mrtr-conformance (make testconf-mrtr) ===
-Started: Wed May  6 18:20:04 PDT 2026
+Started: Mon May 25 22:57:51 PDT 2026
 /Library/Developer/CommandLineTools/usr/bin/make -C conformance testconf-mrtr
-(cd /Users/dzshrh/newstack/mcpkit/conf-template && npm install --silent && \
+(cd /Users/dzshrh/newstack/mcpkit/conf-tasks-mrtr && npm install --silent && \
 		MRTR_SERVER_URL=http://localhost:18093/mcp \
 		MRTR_SERVER_CMD="/Users/dzshrh/newstack/mcpkit/tasks/examples/mrtr/mrtr-demo --serve --addr :18093" \
 		npx vitest run src/scenarios/server/mrtr/all-scenarios.test.ts)
+[34mℹ[39m [34mtsdown v0.21.10[39m powered by [38;2;255;126;23mrolldown v1.0.0-rc.17[39m
+[34mℹ[39m config file: [4m/Users/dzshrh/newstack/mcpkit/conf-tasks-mrtr/package.json[24m 
+[34mℹ[39m entry: [34msrc/index.ts[39m
+[34mℹ[39m target: [34mnode20[39m
+[34mℹ[39m tsconfig: [34mtsconfig.json[39m
+[34mℹ[39m Build start
+[34mℹ[39m Cleaning 1 files
+[34mℹ[39m Granting execute permission to [4mdist/index.js[24m
+[34mℹ[39m [2mdist/[22m[1mindex.js[22m  [2m429.07 kB[22m [2m│ gzip: 89.66 kB[22m
+[34mℹ[39m 1 files, total: 429.07 kB
+[32m✔[39m Build complete in [32m46ms[39m
 
-[1m[30m[46m RUN [49m[39m[22m [36mv4.1.5 [39m[90m/Users/dzshrh/newstack/mcpkit/conf-template[39m
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.5 [39m[90m/Users/dzshrh/newstack/mcpkit/conf-tasks-mrtr[39m
 
- [32m✓[39m src/scenarios/server/mrtr/all-scenarios.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 709[2mms[22m[39m
+ [32m✓[39m src/scenarios/server/mrtr/all-scenarios.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 478[2mms[22m[39m
 
 [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
 [2m      Tests [22m [1m[32m1 passed[39m[22m[90m (1)[39m
-[2m   Start at [22m 18:20:07
-[2m   Duration [22m 1.01s[2m (transform 42ms, setup 0ms, import 186ms, tests 709ms, environment 0ms)[22m
+[2m   Start at [22m 22:57:53
+[2m   Duration [22m 758ms[2m (transform 42ms, setup 0ms, import 162ms, tests 478ms, environment 0ms)[22m
 
 (cd /Users/dzshrh/newstack/mcpkit/tasks/conformance && npm install --silent && npx vitest run mrtr/)
 
  RUN  v2.1.9 /Users/dzshrh/newstack/mcpkit/tasks/conformance
 
- ✓ mrtr/scenarios.test.ts (1 test) 1ms
+ ✓ mrtr/scenarios.test.ts (1 test) 2ms
 
  Test Files  1 passed (1)
       Tests  1 passed (1)
-   Start at  18:20:09
-   Duration  301ms (transform 29ms, setup 0ms, collect 24ms, tests 1ms, environment 0ms, prepare 107ms)
+   Start at  22:57:55
+   Duration  423ms (transform 44ms, setup 0ms, collect 38ms, tests 2ms, environment 0ms, prepare 110ms)
 
-Finished: Wed May  6 18:20:10 PDT 2026 (elapsed 6s)
+Finished: Mon May 25 22:57:56 PDT 2026 (elapsed 5s)

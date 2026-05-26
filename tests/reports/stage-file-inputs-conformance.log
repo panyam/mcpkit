@@ -1,18 +1,29 @@
-=== Stage 8g/9: file-inputs-conformance (make testconf-file-inputs) ===
-Started: Wed May  6 18:20:18 PDT 2026
+=== Stage 8f/9: file-inputs-conformance (make testconf-file-inputs) ===
+Started: Mon May 25 22:57:56 PDT 2026
 /Library/Developer/CommandLineTools/usr/bin/make -C conformance testconf-file-inputs
 (cd /Users/dzshrh/newstack/mcpkit/conf-pending && npm install --silent && \
 		FILE_INPUTS_SERVER_URL=http://localhost:18097/mcp \
 		FILE_INPUTS_SERVER_CMD="/Users/dzshrh/newstack/mcpkit/tasks/examples/file-inputs/file-inputs-demo --serve --addr=:18097" \
 		npx vitest run src/scenarios/server/file-inputs/file-inputs.test.ts)
+[34mℹ[39m [34mtsdown v0.21.10[39m powered by [38;2;255;126;23mrolldown v1.0.0-rc.17[39m
+[34mℹ[39m config file: [4m/Users/dzshrh/newstack/mcpkit/conf-pending/package.json[24m 
+[34mℹ[39m entry: [34msrc/index.ts[39m
+[34mℹ[39m target: [34mnode20[39m
+[34mℹ[39m tsconfig: [34mtsconfig.json[39m
+[34mℹ[39m Build start
+[34mℹ[39m Cleaning 1 files
+[34mℹ[39m Granting execute permission to [4mdist/index.js[24m
+[34mℹ[39m [2mdist/[22m[1mindex.js[22m  [2m413.74 kB[22m [2m│ gzip: 88.34 kB[22m
+[34mℹ[39m 1 files, total: 413.74 kB
+[32m✔[39m Build complete in [32m78ms[39m
 
 [1m[30m[46m RUN [49m[39m[22m [36mv4.1.5 [39m[90m/Users/dzshrh/newstack/mcpkit/conf-pending[39m
 
- [32m✓[39m src/scenarios/server/file-inputs/file-inputs.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 915[2mms[22m[39m
+ [32m✓[39m src/scenarios/server/file-inputs/file-inputs.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 708[2mms[22m[39m
 
 [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
 [2m      Tests [22m [1m[32m1 passed[39m[22m[90m (1)[39m
-[2m   Start at [22m 18:20:20
-[2m   Duration [22m 1.15s[2m (transform 37ms, setup 0ms, import 131ms, tests 915ms, environment 0ms)[22m
+[2m   Start at [22m 22:57:58
+[2m   Duration [22m 987ms[2m (transform 35ms, setup 0ms, import 167ms, tests 708ms, environment 0ms)[22m
 
-Finished: Wed May  6 18:20:21 PDT 2026 (elapsed 3s)
+Finished: Mon May 25 22:57:59 PDT 2026 (elapsed 3s)
