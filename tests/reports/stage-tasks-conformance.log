@@ -1,45 +1,45 @@
 === Stage 8c/9: tasks-conformance (make testconf-tasks) ===
-Started: Tue May 26 00:21:16 PDT 2026
+Started: Tue May 26 09:45:18 PDT 2026
 /Library/Developer/CommandLineTools/usr/bin/make -C conformance testconf-tasks
-2026/05/26 00:21:17 Tasks demo server on :18091
-2026/05/26 00:21:17 Connect MCPJam or VS Code: http://localhost:18091/mcp
-2026/05/26 00:21:17 
-2026/05/26 00:21:17 Tools:
-2026/05/26 00:21:17   greet          — sync-only (no task support)
-2026/05/26 00:21:17   slow_compute   — optional task support (try with/without 'task' hint)
-2026/05/26 00:21:17   failing_job    — required task support (must include 'task' hint)
-2026/05/26 00:21:17   confirm_delete — required task + elicitation (asks user before deleting)
-2026/05/26 00:21:17   write_haiku    — required task + sampling (asks LLM to write a haiku)
-2026/05/26 00:21:17 listen tcp :18091: bind: address already in use
+2026/05/26 09:45:20 Tasks demo server on :18091
+2026/05/26 09:45:20 Connect MCPJam or VS Code: http://localhost:18091/mcp
+2026/05/26 09:45:20 
+2026/05/26 09:45:20 Tools:
+2026/05/26 09:45:20   greet          — sync-only (no task support)
+2026/05/26 09:45:20   slow_compute   — optional task support (try with/without 'task' hint)
+2026/05/26 09:45:20   failing_job    — required task support (must include 'task' hint)
+2026/05/26 09:45:20   confirm_delete — required task + elicitation (asks user before deleting)
+2026/05/26 09:45:20   write_haiku    — required task + sampling (asks LLM to write a haiku)
+2026/05/26 09:45:20 listen tcp :18091: bind: address already in use
 ▶ MCP Tasks Conformance
-  ✔ scenario 01: sync tool call returns immediately (4.442375ms)
-  ✔ scenario 02: async task creation returns CreateTaskResult (1.865834ms)
-  ✔ scenario 03: tasks/get returns flat task info (3.208917ms)
-  ✔ scenario 04: failing tool transitions to failed (1013.520917ms)
-  ✔ scenario 05: tasks/result returns ToolResult with related-task meta (1024.511208ms)
-  ✔ scenario 06: cancel returns cancelled status (5.204458ms)
-  ✔ scenario 07: tasks/list returns task array (2.652792ms)
-  ✔ scenario 08: required tool without task hint returns error (1.346833ms)
-  ✔ scenario 09: forbidden tool with task hint returns error (1.044292ms)
-  ✔ scenario 10: external proxy tool completes via task callbacks (1019.229917ms)
-  ✔ scenario 11: external proxy tool tasks/get returns task info (3.118083ms)
-  ✔ scenario 12: optional tool without hint runs synchronously (1002.141625ms)
-  ✔ scenario 13: tasks/get with bogus taskId returns error (1.820791ms)
-  ✔ scenario 14: tasks/cancel with bogus taskId returns error (1.676791ms)
-  ✔ scenario 15: cancel completed task returns error (1021.962917ms)
-  ✔ scenario 16: CreateTaskResult includes a TTL (1.7105ms)
-  ✔ scenario 17: CreateTaskResult pollInterval is valid if present (1.280041ms)
-  ✔ scenario 18: task must not expire before TTL (1518.329958ms)
-  ✔ scenario 19: concurrent task creation produces unique taskIds (1036.494ms)
-  ✔ scenario 20: tasks/result for failed task has isError true (1023.507083ms)
-  ✔ scenario 21: tools/list includes execution.taskSupport (3.867792ms)
-  ✔ scenario 22: elicitation round-trip via tasks/result (10.151958ms)
-  ✔ scenario 23: sampling round-trip via tasks/result (11.171125ms)
-  ✔ scenario 24: progress notifications are well-formed if sent (2041.303416ms)
-  ✔ scenario 25: status notifications match task state if sent (1522.404334ms)
-  ✔ scenario 26: tasks/result includes related-task _meta (1019.474667ms)
-  ✔ scenario 27: tasks/get does not include related-task _meta (2.960416ms)
-✔ MCP Tasks Conformance (13313.070708ms)
+  ✔ scenario 01: sync tool call returns immediately (5.511208ms)
+  ✔ scenario 02: async task creation returns CreateTaskResult (1.456667ms)
+  ✔ scenario 03: tasks/get returns flat task info (3.738375ms)
+  ✔ scenario 04: failing tool transitions to failed (1018.380834ms)
+  ✔ scenario 05: tasks/result returns ToolResult with related-task meta (1022.606667ms)
+  ✔ scenario 06: cancel returns cancelled status (6.216458ms)
+  ✔ scenario 07: tasks/list returns task array (6.346792ms)
+  ✔ scenario 08: required tool without task hint returns error (2.616666ms)
+  ✔ scenario 09: forbidden tool with task hint returns error (1.95825ms)
+  ✔ scenario 10: external proxy tool completes via task callbacks (1022.263291ms)
+  ✔ scenario 11: external proxy tool tasks/get returns task info (3.527625ms)
+  ✔ scenario 12: optional tool without hint runs synchronously (1002.171417ms)
+  ✔ scenario 13: tasks/get with bogus taskId returns error (2.301875ms)
+  ✔ scenario 14: tasks/cancel with bogus taskId returns error (1.943625ms)
+  ✔ scenario 15: cancel completed task returns error (1020.8845ms)
+  ✔ scenario 16: CreateTaskResult includes a TTL (1.715042ms)
+  ✔ scenario 17: CreateTaskResult pollInterval is valid if present (1.589583ms)
+  ✔ scenario 18: task must not expire before TTL (1520.409625ms)
+  ✔ scenario 19: concurrent task creation produces unique taskIds (1043.1295ms)
+  ✔ scenario 20: tasks/result for failed task has isError true (1022.2475ms)
+  ✔ scenario 21: tools/list includes execution.taskSupport (3.592833ms)
+  ✔ scenario 22: elicitation round-trip via tasks/result (17.385583ms)
+  ✔ scenario 23: sampling round-trip via tasks/result (13.325084ms)
+  ✔ scenario 24: progress notifications are well-formed if sent (2051.448208ms)
+  ✔ scenario 25: status notifications match task state if sent (1521.659334ms)
+  ✔ scenario 26: tasks/result includes related-task _meta (1020.5245ms)
+  ✔ scenario 27: tasks/get does not include related-task _meta (5.031083ms)
+✔ MCP Tasks Conformance (13363.878542ms)
 ℹ tests 27
 ℹ suites 1
 ℹ pass 27
@@ -47,5 +47,5 @@ Started: Tue May 26 00:21:16 PDT 2026
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 13605.398833
-Finished: Tue May 26 00:21:32 PDT 2026 (elapsed 16s)
+ℹ duration_ms 13682.773042
+Finished: Tue May 26 09:45:43 PDT 2026 (elapsed 25s)

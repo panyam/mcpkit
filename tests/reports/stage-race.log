@@ -1,9 +1,9 @@
 === Stage 2/9: race (make test-race) ===
-Started: Tue May 26 00:19:19 PDT 2026
+Started: Tue May 26 09:42:55 PDT 2026
 go test -race ./... -count=1 -timeout 60s
-ok  	github.com/panyam/mcpkit/client	8.778s
+ok  	github.com/panyam/mcpkit/client	10.692s
 ?   	github.com/panyam/mcpkit/cmd/testserver	[no test files]
-ok  	github.com/panyam/mcpkit/core	1.572s
-ok  	github.com/panyam/mcpkit/server	11.327s
-ok  	github.com/panyam/mcpkit/testutil	1.681s
-Finished: Tue May 26 00:19:33 PDT 2026 (elapsed 14s)
+ok  	github.com/panyam/mcpkit/core	3.961s
+ok  	github.com/panyam/mcpkit/server	13.337s
+ok  	github.com/panyam/mcpkit/testutil	4.673s
+Finished: Tue May 26 09:43:10 PDT 2026 (elapsed 15s)
