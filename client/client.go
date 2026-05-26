@@ -398,6 +398,18 @@ type Client struct {
 	// Particularly important for CommandTransport where a misconfigured
 	// subprocess may start but never speak the expected protocol.
 	connectTimeout time.Duration
+
+	// SEP-2575 wire-mode selection. Seeded by NewClient from
+	// ResolveClientMode (option > env > package default). Adaptive
+	// is the shipping default. See client/stateless_mode.go.
+	mode ClientMode
+
+	// useStatelessWire is set during Connect after wire negotiation:
+	// true when the server speaks the SEP-2575 stateless wire (either
+	// because ClientModeStateless was pinned OR Adaptive discovered it
+	// via server/discover); false when this connection is on the legacy
+	// session wire. Once set it does not change for this Client's lifetime.
+	useStatelessWire bool
 }
 
 // NewClient creates a new MCP client targeting the given server URL.
@@ -408,6 +420,9 @@ func NewClient(url string, info core.ClientInfo, opts ...ClientOption) *Client {
 		url:    url,
 		info:   info,
 		nextID: 1,
+		// SEP-2575 wire mode seeded from env/default; WithClientMode
+		// option (if passed) clobbers via the loop below.
+		mode: ResolveClientMode(),
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -522,6 +537,44 @@ func (c *Client) doConnect() error {
 
 	if err := c.transport.connect(); err != nil {
 		return fmt.Errorf("transport connect: %w", err)
+	}
+
+	// SEP-2575 wire-mode branching. Three paths:
+	//   ClientModeStateless → skip legacy initialize; mark stateless.
+	//   ClientModeAdaptive  → probe server/discover first; fall back
+	//                         to legacy initialize on -32601/404.
+	//   ClientModeLegacyOnly→ original behavior, drop through.
+	if c.mode == ClientModeStateless {
+		c.useStatelessWire = true
+		// Populate ServerInfo via discover so callers don't see a
+		// zero ServerInfo struct post-Connect. Failure here is fatal
+		// for stateless mode — the client explicitly opted in.
+		dr, fallback, err := c.adaptiveProbe()
+		if err != nil {
+			return fmt.Errorf("stateless mode: server/discover failed: %w", err)
+		}
+		if fallback {
+			return fmt.Errorf("stateless mode: server does not implement server/discover")
+		}
+		c.ServerInfo = dr.ServerInfo
+		c.captureServerExtensions(dr.Capabilities)
+		c.startKeepalive()
+		return nil
+	}
+	if c.mode == ClientModeAdaptive {
+		dr, fallback, err := c.adaptiveProbe()
+		if err != nil {
+			return fmt.Errorf("adaptive probe failed: %w", err)
+		}
+		if !fallback {
+			// Server speaks stateless wire.
+			c.useStatelessWire = true
+			c.ServerInfo = dr.ServerInfo
+			c.captureServerExtensions(dr.Capabilities)
+			c.startKeepalive()
+			return nil
+		}
+		// Fallback: continue to the legacy initialize handshake below.
 	}
 
 	// Build client capabilities based on registered handlers
@@ -1336,6 +1389,12 @@ func (c *Client) rawCall(method string, params any) (*rpcResponse, error) {
 // rawCallWithContext is the underlying call path used by both Call and
 // CallContext. cc may be nil for a no-context call (legacy Call path).
 func (c *Client) rawCallWithContext(method string, params any, cc *CallContext) (*rpcResponse, error) {
+	// SEP-2575 stateless wire: every outgoing call carries the _meta
+	// envelope (protocolVersion, clientInfo, clientCapabilities).
+	// No-op when c.useStatelessWire is false — legacy callers see
+	// the same params they passed in.
+	params = c.wrapParamsForStatelessWire(params)
+
 	req := core.Request{
 		JSONRPC: "2.0",
 		ID:      marshalID(c.nextRequestID()),
@@ -1580,6 +1639,12 @@ func (t *streamableClientTransport) callWithContext(data []byte, cc *CallContext
 		if t.sessionID != "" {
 			req.Header.Set("Mcp-Session-Id", t.sessionID)
 		}
+		// SEP-2575: clients on the stateless wire MUST send the
+		// protocol version on every request so the server can
+		// cross-check it against the _meta envelope.
+		if t.client != nil && t.client.useStatelessWire {
+			req.Header.Set(core.HTTPProtocolVersionHeader, core.DraftProtocolVersion2026V1)
+		}
 		// Caller-supplied per-call headers (SEP-2243 Mcp-Param-* mirroring
 		// from ToolCall). Applied after the transport defaults so a caller
 		// can't accidentally clobber them — Mcp-Param-* names are reserved
@@ -1602,8 +1667,21 @@ func (t *streamableClientTransport) callWithContext(data []byte, cc *CallContext
 	defer resp.Body.Close()
 
 	// Non-2xx responses (401/403 already handled by DoWithAuthRetry).
+	// SEP-2575 stateless servers return 4xx with a JSON-RPC error body
+	// for HeaderMismatch (-32001), MissingRequiredClientCap (-32003),
+	// UnsupportedVersion (-32004), method-not-found on removed methods
+	// (-32601), etc. Gated on stateless-wire mode AND Content-Type so
+	// legacy 4xx/5xx with non-JSON bodies still surface as HTTPStatusError
+	// (preserves backward-compat for callers that consume header data
+	// like Retry-After).
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
+		if t.client != nil && t.client.useStatelessWire &&
+			strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") {
+			if rpcResp := tryDecodeJSONRPC(body); rpcResp != nil {
+				return &rpcResponse{ID: rpcResp.ID, Result: nil, Error: rpcResp.Error}, nil
+			}
+		}
 		return nil, &HTTPStatusError{StatusCode: resp.StatusCode, Header: resp.Header.Clone(), Body: strings.TrimSpace(string(body))}
 	}
 
