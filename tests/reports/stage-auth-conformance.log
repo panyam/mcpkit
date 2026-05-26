@@ -1,68 +1,10 @@
 === Stage 8b/9: auth-conformance (make testconfauth) ===
-Started: Mon May 25 22:57:16 PDT 2026
+Started: Tue May 26 00:21:16 PDT 2026
 /Library/Developer/CommandLineTools/usr/bin/make -C conformance testconfauth
 cd /Users/dzshrh/newstack/mcpkit/tasks && bash scripts/conformance-auth-test.sh
 Building testclient...
-=== Running MCP Auth conformance suite ===
-Command: npx -y @modelcontextprotocol/conformance client --suite auth --command "./bin/testclient" --expected-failures conformance/baseline.yml
-
-Running auth suite (14 scenarios) in parallel...
-
-Starting scenario: auth/metadata-default
-Starting scenario: auth/metadata-var1
-Starting scenario: auth/metadata-var2
-Starting scenario: auth/metadata-var3
-Starting scenario: auth/basic-cimd
-Starting scenario: auth/scope-from-www-authenticate
-Starting scenario: auth/scope-from-scopes-supported
-Starting scenario: auth/scope-omitted-when-undefined
-Starting scenario: auth/scope-step-up
-Starting scenario: auth/scope-retry-limit
-Starting scenario: auth/token-endpoint-auth-basic
-Starting scenario: auth/token-endpoint-auth-post
-Starting scenario: auth/token-endpoint-auth-none
-Starting scenario: auth/pre-registration
-Executing client: ./bin/testclient http://localhost:64608/mcp
-Executing client: ./bin/testclient http://localhost:64609/mcp
-Executing client: ./bin/testclient http://localhost:64610/mcp
-Executing client: ./bin/testclient http://localhost:64611/mcp
-Executing client: ./bin/testclient http://localhost:64612/mcp
-Executing client: ./bin/testclient http://localhost:64613/mcp
-Executing client: ./bin/testclient http://localhost:64614/mcp
-Executing client: ./bin/testclient http://localhost:64615/mcp
-Executing client: ./bin/testclient http://localhost:64616/mcp
-Executing client: ./bin/testclient http://localhost:64617/mcp
-Executing client: ./bin/testclient http://localhost:64618/mcp
-Executing client: ./bin/testclient http://localhost:64619/mcp
-Executing client: ./bin/testclient http://localhost:64620/mcp
-Executing client: ./bin/testclient http://localhost:64621/mcp
-With context: {"client_id":"pre-registered-client","client_secret":"pre-registered-secret"}
-(node:41497) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
-(Use `node --trace-deprecation ...` to show where the warning was created)
-
-=== SUITE SUMMARY ===
-
-✓ auth/metadata-default: 13 passed, 0 failed
-✓ auth/metadata-var1: 13 passed, 0 failed
-✓ auth/metadata-var2: 13 passed, 0 failed
-✓ auth/metadata-var3: 13 passed, 0 failed
-✗ auth/basic-cimd: 13 passed, 0 failed, 1 warnings
-✓ auth/scope-from-www-authenticate: 14 passed, 0 failed
-✓ auth/scope-from-scopes-supported: 14 passed, 0 failed
-✓ auth/scope-omitted-when-undefined: 14 passed, 0 failed
-✓ auth/scope-step-up: 20 passed, 0 failed
-✓ auth/scope-retry-limit: 16 passed, 0 failed
-✓ auth/token-endpoint-auth-basic: 18 passed, 0 failed
-✓ auth/token-endpoint-auth-post: 18 passed, 0 failed
-✓ auth/token-endpoint-auth-none: 18 passed, 0 failed
-✓ auth/pre-registration: 13 passed, 0 failed
-
-Total: 210 passed, 0 failed, 1 warnings
-
-[33mExpected failures (in baseline):[0m
-  ~ auth/basic-cimd
-
-[32mBaseline check passed: all failures are expected.[0m
-
-=== AUTH CONFORMANCE TESTS PASSED ===
-Finished: Mon May 25 22:57:18 PDT 2026 (elapsed 2s)
+go: updates to go.mod needed; to update it:
+	go mod tidy
+make[2]: *** [testconfauth] Error 1
+make[1]: *** [testconfauth] Error 2
+Finished: Tue May 26 00:21:16 PDT 2026 (elapsed 0s)

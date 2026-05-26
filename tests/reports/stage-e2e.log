@@ -1,6 +1,6 @@
 === Stage 6/9: e2e (make test-e2e) ===
-Started: Mon May 25 22:55:30 PDT 2026
+Started: Tue May 26 00:19:42 PDT 2026
 cd tests/e2e && go test ./... -count=1 -timeout 60s
-ok  	github.com/panyam/mcpkit/tests/e2e	3.870s
-ok  	github.com/panyam/mcpkit/tests/e2e/apps	0.770s
-Finished: Mon May 25 22:55:34 PDT 2026 (elapsed 4s)
+ok  	github.com/panyam/mcpkit/tests/e2e	3.480s
+ok  	github.com/panyam/mcpkit/tests/e2e/apps	0.570s
+Finished: Tue May 26 00:19:46 PDT 2026 (elapsed 4s)
