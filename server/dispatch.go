@@ -17,7 +17,13 @@ import (
 // supportedProtocolVersions lists the MCP protocol versions this server supports,
 // ordered newest-first. During initialization the server picks the client's requested
 // version if it appears in this list; otherwise it rejects with the full list.
-var supportedProtocolVersions = []string{"2025-11-25", "2025-03-26", "2024-11-05"}
+//
+// "DRAFT-2026-v1" is the in-flight 2026 protocol revision that carries the SEP-2663
+// tasks extension, SEP-2575 stateless capability override, and SEP-2322 MRTR base
+// types. Accepting it lets draft-aware conformance suites (panyam/mcpconformance
+// feat/tasks-mrtr-extension, upstream PR 262) complete the initialize handshake
+// without forcing them to lie about which version they speak.
+var supportedProtocolVersions = []string{"DRAFT-2026-v1", "2025-11-25", "2025-03-26", "2024-11-05"}
 
 // ErrCodeCancelled is the JSON-RPC error code for a cancelled request.
 const ErrCodeCancelled = -32800
