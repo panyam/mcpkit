@@ -1,5 +1,5 @@
 === Stage 8e/9: mrtr-conformance (make testconf-mrtr) ===
-Started: Tue May 26 00:21:48 PDT 2026
+Started: Tue May 26 09:46:14 PDT 2026
 /Library/Developer/CommandLineTools/usr/bin/make -C conformance testconf-mrtr
 (cd /Users/dzshrh/newstack/mcpkit/conf-tasks-mrtr && npm install --silent && \
 		MRTR_SERVER_URL=http://localhost:18093/mcp \
@@ -15,26 +15,26 @@ Started: Tue May 26 00:21:48 PDT 2026
 [34mℹ[39m Granting execute permission to [4mdist/index.js[24m
 [34mℹ[39m [2mdist/[22m[1mindex.js[22m  [2m429.07 kB[22m [2m│ gzip: 89.66 kB[22m
 [34mℹ[39m 1 files, total: 429.07 kB
-[32m✔[39m Build complete in [32m35ms[39m
+[32m✔[39m Build complete in [32m49ms[39m
 
 [1m[30m[46m RUN [49m[39m[22m [36mv4.1.5 [39m[90m/Users/dzshrh/newstack/mcpkit/conf-tasks-mrtr[39m
 
- [32m✓[39m src/scenarios/server/mrtr/all-scenarios.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 670[2mms[22m[39m
+ [32m✓[39m src/scenarios/server/mrtr/all-scenarios.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 1515[2mms[22m[39m
 
 [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
 [2m      Tests [22m [1m[32m1 passed[39m[22m[90m (1)[39m
-[2m   Start at [22m 00:21:51
-[2m   Duration [22m 934ms[2m (transform 41ms, setup 0ms, import 163ms, tests 670ms, environment 0ms)[22m
+[2m   Start at [22m 09:46:19
+[2m   Duration [22m 1.79s[2m (transform 45ms, setup 0ms, import 154ms, tests 1.51s, environment 0ms)[22m
 
 (cd /Users/dzshrh/newstack/mcpkit/tasks/conformance && npm install --silent && npx vitest run mrtr/)
 
  RUN  v2.1.9 /Users/dzshrh/newstack/mcpkit/tasks/conformance
 
- ✓ mrtr/scenarios.test.ts (1 test) 1ms
+ ✓ mrtr/scenarios.test.ts (1 test) 2ms
 
  Test Files  1 passed (1)
       Tests  1 passed (1)
-   Start at  00:21:53
-   Duration  252ms (transform 46ms, setup 0ms, collect 55ms, tests 1ms, environment 0ms, prepare 54ms)
+   Start at  09:46:25
+   Duration  437ms (transform 62ms, setup 0ms, collect 65ms, tests 2ms, environment 0ms, prepare 110ms)
 
-Finished: Tue May 26 00:21:53 PDT 2026 (elapsed 5s)
+Finished: Tue May 26 09:46:26 PDT 2026 (elapsed 12s)

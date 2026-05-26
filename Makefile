@@ -352,9 +352,11 @@ serve-both: ## Start test server (both transports)
 tidy: ## Run go mod tidy on root module only
 	go mod tidy
 
-# All sub-modules (including tests/*) that have their own go.mod and require
-# the root module. Used by tidy-all and bump-root targets.
-SUB_MODS_ALL := ext/auth ext/tasks ext/ui experimental/ext/protogen cmd/testclient tests/e2e tests/keycloak
+# All sub-modules with their own go.mod (root excluded — handled separately).
+# Dynamically discovered so new examples / sub-packages are picked up
+# automatically by tidy-all. bump-root iterates the same list but skips
+# modules that don't `require` the root (see its guard below).
+SUB_MODS_ALL := $(shell find . -name go.mod -not -path '*/node_modules/*' -not -path './go.mod' | sed 's|^\./||;s|/go.mod$$||' | sort)
 
 tidy-all: ## Run go mod tidy across root + every sub-module
 	@echo "==> tidy root"
