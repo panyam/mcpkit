@@ -178,9 +178,12 @@ type toolCallSpec struct {
 }
 
 // pickTokenSource decides between OAuthTokenSource (authorization_code) and
-// ClientCredentialsTokenSource (SEP-1046) by probing the AS once for its
-// grant_types_supported. If discovery fails or the AS advertises
-// authorization_code, fall back to OAuthTokenSource — the existing behavior.
+// ClientCredentialsTokenSource (SEP-1046). PrivateKeyPEM uniquely identifies
+// private_key_jwt. For the basic variant, ctx shape (client_id + client_secret)
+// overlaps with auth-code pre-registration scenarios, so a discovery probe
+// disambiguates via AS grant_types_supported. The probe is gated on
+// `ClientID != ""` to keep DCR scenarios with no pre-registered credentials
+// on the OAuthTokenSource fast path without spurious PRM/AS round trips.
 func pickTokenSource(serverURL string, ctx conformanceContext) core.TokenSource {
 	if ctx.PrivateKeyPEM != "" {
 		log.Println("Step 2: ctx has private_key_pem → ClientCredentialsTokenSource (private_key_jwt)")
@@ -192,16 +195,18 @@ func pickTokenSource(serverURL string, ctx conformanceContext) core.TokenSource 
 			AllowInsecure:    true,
 		}
 	}
-	info, err := auth.DiscoverMCPAuth(serverURL)
-	if err == nil && info.ASMetadata != nil {
-		grants := info.ASMetadata.GrantTypesSupported
-		if slices.Contains(grants, "client_credentials") && !slices.Contains(grants, "authorization_code") {
-			log.Println("Step 2: AS advertises only client_credentials → ClientCredentialsTokenSource (basic)")
-			return &auth.ClientCredentialsTokenSource{
-				ServerURL:     serverURL,
-				ClientID:      ctx.ClientID,
-				ClientSecret:  ctx.ClientSecret,
-				AllowInsecure: true,
+	if ctx.ClientID != "" {
+		info, err := auth.DiscoverMCPAuth(serverURL)
+		if err == nil && info.ASMetadata != nil {
+			grants := info.ASMetadata.GrantTypesSupported
+			if slices.Contains(grants, "client_credentials") && !slices.Contains(grants, "authorization_code") {
+				log.Println("Step 2: AS advertises only client_credentials → ClientCredentialsTokenSource (basic)")
+				return &auth.ClientCredentialsTokenSource{
+					ServerURL:     serverURL,
+					ClientID:      ctx.ClientID,
+					ClientSecret:  ctx.ClientSecret,
+					AllowInsecure: true,
+				}
 			}
 		}
 	}
