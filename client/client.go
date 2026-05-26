@@ -371,6 +371,13 @@ type Client struct {
 	keepaliveMaxFails int               // max consecutive failures before close/reconnect
 	keepaliveCancel   context.CancelFunc // cancels keepalive goroutine
 
+	// toolSchemas caches inputSchemas from tools/list responses, keyed by
+	// tool name. Populated by ListTools (and refreshed on each call). Used
+	// by ToolCall to extract SEP-2243 x-mcp-header annotations without an
+	// extra round-trip. Guarded by toolSchemasMu.
+	toolSchemas   map[string]core.ToolDef
+	toolSchemasMu sync.RWMutex
+
 	// Stdio transport fields (set by WithStdioTransport).
 	stdioReader io.Reader
 	stdioWriter io.Writer
@@ -823,6 +830,13 @@ func (c *Client) SetURL(url string) { c.url = url }
 type CallContext struct {
 	context.Context
 	notifyHook func(method string, params json.RawMessage)
+	// Headers are additional HTTP headers to attach to the outbound request
+	// (Streamable HTTP transport only). Used by ToolCall to inject SEP-2243
+	// Mcp-Param-* headers derived from the tool's x-mcp-header inputSchema
+	// annotations; other transports ignore. Caller-supplied keys override the
+	// transport's defaults (Content-Type, Accept, Mcp-Session-Id) only if the
+	// caller deliberately sets them — which they shouldn't.
+	Headers map[string]string
 }
 
 // NewCallContext wraps a context.Context as a CallContext for use with
@@ -992,15 +1006,80 @@ func ToolCallTyped[T any](c *Client, name string, args any) (T, error) {
 }
 
 // ToolCall invokes a tool and returns the first text content.
+//
+// If the tool's inputSchema (cached by a prior ListTools call) carries
+// SEP-2243 x-mcp-header annotations on primitive-typed properties, the
+// corresponding argument values are mirrored as Mcp-Param-{Name} HTTP
+// headers on the outbound tools/call request (in addition to the JSON
+// body). Header values are encoded plain-ASCII or =?base64?{...}?= per
+// SEP-2243 §value-encoding. Tools without cached schemas or without
+// x-mcp-header annotations send no extra headers (identical to pre-
+// SEP-2243 behavior). Caller-side note: middleware registered via
+// WithCallMiddleware does not run on the header-mirroring path.
 func (c *Client) ToolCall(name string, args any) (string, error) {
-	result, err := c.Call("tools/call", map[string]any{
-		"name":      name,
-		"arguments": args,
-	})
+	params := map[string]any{"name": name, "arguments": args}
+	headers := c.buildToolCallHeaders(name, args)
+	result, err := c.callForToolCall(params, headers)
 	if err != nil {
 		return "", err
 	}
 	return extractToolText(result.Raw)
+}
+
+// buildToolCallHeaders extracts SEP-2243 Mcp-Param-* headers for a tool
+// call, consulting the schema cache populated by ListTools. Returns nil
+// when no schema is cached or when no x-mcp-header annotations apply to
+// the provided args, so callers can use the fast (no-header) path.
+func (c *Client) buildToolCallHeaders(name string, args any) map[string]string {
+	def, ok := c.lookupToolSchema(name)
+	if !ok {
+		return nil
+	}
+	mapping := extractMcpParamHeaders(def.InputSchema)
+	if len(mapping) == 0 {
+		return nil
+	}
+	argsMap, ok := args.(map[string]any)
+	if !ok {
+		return nil
+	}
+	headers := map[string]string{}
+	for propName, headerFragment := range mapping {
+		v, present := argsMap[propName]
+		if !present {
+			continue
+		}
+		encoded, sendHeader := encodeMcpParamHeaderValue(v)
+		if !sendHeader {
+			continue
+		}
+		headers[mcpParamHeaderName(headerFragment)] = encoded
+	}
+	if len(headers) == 0 {
+		return nil
+	}
+	return headers
+}
+
+// callForToolCall dispatches a tools/call. With no headers, takes the
+// standard middleware-wrapped Call path. With headers, bypasses
+// middleware and goes directly via rawCallWithContext so the per-call
+// Headers reach the streamable transport. The middleware bypass is a
+// known trade-off; SEP-2243 tool calls are typically conformance / wire-
+// behavior paths where middleware doesn't apply.
+func (c *Client) callForToolCall(params map[string]any, headers map[string]string) (*CallResult, error) {
+	if len(headers) == 0 {
+		return c.Call("tools/call", params)
+	}
+	cc := &CallContext{Headers: headers}
+	resp, err := c.rawCallWithContext("tools/call", params, cc)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Error != nil {
+		return nil, &RPCError{Code: resp.Error.Code, Message: resp.Error.Message, Data: resp.Error.Data}
+	}
+	return &CallResult{Raw: resp.Result}, nil
 }
 
 // ToolCallFull invokes a tool and returns the complete result including
@@ -1061,7 +1140,10 @@ func (c *Client) UnsubscribeResource(uri string) error {
 	return err
 }
 
-// ListTools returns all registered tool definitions.
+// ListTools returns all registered tool definitions. As a side effect it
+// caches each tool's full ToolDef (including inputSchema) keyed by name —
+// ToolCall consults this cache to detect SEP-2243 x-mcp-header annotations
+// without a second round-trip.
 func (c *Client) ListTools() ([]core.ToolDef, error) {
 	result, err := c.Call("tools/list", nil)
 	if err != nil {
@@ -1073,7 +1155,31 @@ func (c *Client) ListTools() ([]core.ToolDef, error) {
 	if err := result.Unmarshal(&resp); err != nil {
 		return nil, err
 	}
+	c.cacheToolSchemas(resp.Tools)
 	return resp.Tools, nil
+}
+
+// cacheToolSchemas replaces the tool-schema cache with the supplied tools.
+// Replace-rather-than-merge so a refreshed tools/list properly reflects
+// server-side removals (server sent a tools/listChanged notification and
+// we re-listed).
+func (c *Client) cacheToolSchemas(tools []core.ToolDef) {
+	c.toolSchemasMu.Lock()
+	defer c.toolSchemasMu.Unlock()
+	c.toolSchemas = make(map[string]core.ToolDef, len(tools))
+	for _, t := range tools {
+		c.toolSchemas[t.Name] = t
+	}
+}
+
+// lookupToolSchema returns the cached ToolDef for the given tool name, if
+// any. Callers must not retain the returned ToolDef beyond their immediate
+// use — the cache may be replaced concurrently.
+func (c *Client) lookupToolSchema(name string) (core.ToolDef, bool) {
+	c.toolSchemasMu.RLock()
+	defer c.toolSchemasMu.RUnlock()
+	t, ok := c.toolSchemas[name]
+	return t, ok
 }
 
 // ListToolsForModel returns tools visible to the LLM, filtering out tools
@@ -1450,6 +1556,15 @@ func (t *streamableClientTransport) callWithContext(data []byte, cc *CallContext
 		req.Header.Set("Accept", core.StreamableHTTPAccept)
 		if t.sessionID != "" {
 			req.Header.Set("Mcp-Session-Id", t.sessionID)
+		}
+		// Caller-supplied per-call headers (SEP-2243 Mcp-Param-* mirroring
+		// from ToolCall). Applied after the transport defaults so a caller
+		// can't accidentally clobber them — Mcp-Param-* names are reserved
+		// for the SEP-2243 mechanism.
+		if cc != nil {
+			for name, value := range cc.Headers {
+				req.Header.Set(name, value)
+			}
 		}
 		if t.modifyReq != nil {
 			t.modifyReq(req)
