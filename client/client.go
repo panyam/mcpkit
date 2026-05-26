@@ -1144,6 +1144,12 @@ func (c *Client) UnsubscribeResource(uri string) error {
 // caches each tool's full ToolDef (including inputSchema) keyed by name —
 // ToolCall consults this cache to detect SEP-2243 x-mcp-header annotations
 // without a second round-trip.
+//
+// Tools whose inputSchema fails SEP-2243 x-mcp-header validation (empty
+// values, non-primitive types, name charset, case-insensitive duplicates)
+// are silently filtered out. Spec: "Client MUST keep valid tools while
+// excluding invalid ones." The cache and the returned slice are kept
+// consistent — invalid tools never become callable through this client.
 func (c *Client) ListTools() ([]core.ToolDef, error) {
 	result, err := c.Call("tools/list", nil)
 	if err != nil {
@@ -1155,8 +1161,15 @@ func (c *Client) ListTools() ([]core.ToolDef, error) {
 	if err := result.Unmarshal(&resp); err != nil {
 		return nil, err
 	}
-	c.cacheToolSchemas(resp.Tools)
-	return resp.Tools, nil
+	valid := make([]core.ToolDef, 0, len(resp.Tools))
+	for _, t := range resp.Tools {
+		if err := validateMcpParamHeaders(t.InputSchema); err != nil {
+			continue
+		}
+		valid = append(valid, t)
+	}
+	c.cacheToolSchemas(valid)
+	return valid, nil
 }
 
 // cacheToolSchemas replaces the tool-schema cache with the supplied tools.

@@ -7,6 +7,7 @@ import (
 	"strings"
 )
 
+
 // SEP-2243 custom-header mirroring for tools/call.
 //
 // When a tool's inputSchema marks a primitive-typed property with the
@@ -158,4 +159,86 @@ func needsBase64Encoding(s string) bool {
 // `Mcp-Param-{fragment}`.
 func mcpParamHeaderName(fragment string) string {
 	return "Mcp-Param-" + fragment
+}
+
+// validateMcpParamHeaders verifies a tool's inputSchema against SEP-2243's
+// rules for `x-mcp-header` annotations. Returns nil if every annotation is
+// spec-compliant (or the schema has no annotations at all), or an error
+// describing the first violation if any property breaks the rules. Used by
+// Client.ListTools to filter out tools whose schemas cannot be safely called.
+//
+// Rules per SEP-2243 §custom-headers-from-tool-parameters:
+//   - The keyword value MUST be a non-empty string.
+//   - The keyword MUST only appear on primitive-typed properties
+//     (string / number / integer / boolean).
+//   - The keyword value MUST contain only printable-ASCII chars excluding
+//     space, colon, tab, control chars, and non-ASCII.
+//   - The keyword values within a single tool MUST be unique, case-insensitive
+//     (e.g. "MyField" and "myfield" collide and the tool is invalid).
+//
+// Schemas not shaped as `{properties: {name: {...}}}` (or `inputSchema` nil)
+// return nil — there's nothing to validate.
+func validateMcpParamHeaders(inputSchema any) error {
+	schema, ok := inputSchema.(map[string]any)
+	if !ok {
+		return nil
+	}
+	props, ok := schema["properties"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	seen := map[string]string{} // lowercased value → first property name that used it
+	for propName, raw := range props {
+		propMap, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		rawHeader, present := propMap["x-mcp-header"]
+		if !present {
+			continue
+		}
+		headerName, ok := rawHeader.(string)
+		if !ok {
+			return fmt.Errorf("property %q: x-mcp-header value must be a string", propName)
+		}
+		if headerName == "" {
+			return fmt.Errorf("property %q: x-mcp-header value must not be empty", propName)
+		}
+		propType, _ := propMap["type"].(string)
+		switch propType {
+		case "string", "number", "integer", "boolean":
+			// ok
+		default:
+			return fmt.Errorf("property %q: x-mcp-header may only appear on primitive types (got %q)", propName, propType)
+		}
+		if err := validateMcpHeaderName(headerName); err != nil {
+			return fmt.Errorf("property %q: %w", propName, err)
+		}
+		key := strings.ToLower(headerName)
+		if prev, dup := seen[key]; dup {
+			return fmt.Errorf("property %q: x-mcp-header %q collides with property %q (case-insensitive)", propName, headerName, prev)
+		}
+		seen[key] = propName
+	}
+	return nil
+}
+
+// validateMcpHeaderName enforces the SEP-2243 charset rule for an x-mcp-header
+// value: ASCII-only, no space, colon, tab, or control characters.
+func validateMcpHeaderName(s string) error {
+	for _, r := range s {
+		switch {
+		case r > 0x7e:
+			return fmt.Errorf("x-mcp-header %q contains non-ASCII char %q", s, r)
+		case r < 0x20:
+			return fmt.Errorf("x-mcp-header %q contains control char (0x%02x)", s, r)
+		case r == ' ':
+			return fmt.Errorf("x-mcp-header %q contains a space", s)
+		case r == ':':
+			return fmt.Errorf("x-mcp-header %q contains a colon", s)
+		case r == '\t':
+			return fmt.Errorf("x-mcp-header %q contains a tab", s)
+		}
+	}
+	return nil
 }
