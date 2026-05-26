@@ -14,6 +14,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log"
@@ -46,7 +47,14 @@ func main() {
 	log.Println("Step 1: Trying direct connect (no auth)...")
 	noAuthClient := client.NewClient(serverURL,
 		core.ClientInfo{Name: "mcpkit-testclient", Version: "0.1.0"},
-		client.WithClientLogging(log.Default()))
+		client.WithClientLogging(log.Default()),
+		client.WithElicitationHandler(conformanceElicitationHandler),
+		// Open a background GET SSE so server-to-client requests
+		// (elicitation/create, sampling/createMessage) sent on the
+		// session-wide stream by SDK-conformant servers reach us.
+		// Without this, scenarios that drive elicitation via
+		// StreamableHTTPServerTransport hang waiting on the wrong stream.
+		client.WithGetSSEStream())
 
 	if err := noAuthClient.Connect(); err == nil {
 		// Connected without auth — verify session works
@@ -106,6 +114,8 @@ func main() {
 		core.ClientInfo{Name: "mcpkit-testclient", Version: "0.1.0"},
 		client.WithTokenSource(ts),
 		client.WithClientLogging(log.Default()),
+		client.WithElicitationHandler(conformanceElicitationHandler),
+		client.WithGetSSEStream(),
 	)
 
 	if err := c.Connect(); err != nil {
@@ -140,6 +150,17 @@ func main() {
 	}
 
 	log.Println("SUCCESS: auth flow complete")
+}
+
+// conformanceElicitationHandler returns an accept-with-empty-content
+// response for any elicitation/create. mcpkit's client library then
+// fills in SEP-1034 schema defaults before forwarding to the server —
+// which is exactly what the SEP-1034 conformance scenario grades. A
+// real interactive user would prompt; this fixture short-circuits to
+// the spec's "user accepted with no overrides" path so the default-
+// filling behavior is observable on the wire.
+func conformanceElicitationHandler(_ context.Context, _ core.ElicitationRequest) (core.ElicitationResult, error) {
+	return core.ElicitationResult{Action: "accept", Content: nil}, nil
 }
 
 // conformanceContext holds scenario-specific data from the conformance runner.

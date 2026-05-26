@@ -767,6 +767,16 @@ func (c *Client) HandleServerRequestWithContext(ctx context.Context, req *core.R
 		if err != nil {
 			return core.NewErrorResponse(req.ID, core.ErrCodeInternal, err.Error())
 		}
+		// SEP-1034: when the user accepted the elicitation, fill in any
+		// schema-declared defaults for keys the handler omitted before
+		// forwarding the response. Lets handler authors stay
+		// SEP-1034-unaware — they return user input as-is. Defaults only
+		// apply on "accept" because the result's Content is undefined for
+		// reject/cancel.
+		if result.Action == "accept" {
+			defaults := extractElicitationDefaults(params.RequestedSchema)
+			result.Content = mergeElicitationDefaults(result.Content, defaults)
+		}
 		return core.NewResponse(req.ID, result)
 
 	case "roots/list":
