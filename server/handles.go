@@ -10,54 +10,50 @@ import (
 // SEP-2567 ("Sessionless MCP via Explicit State Handles") bundled
 // helper.
 //
-// HandleStore[T] gives tool authors a typed, opaque-id-keyed store for
-// the "create_*() → handle, subsequent calls take handle as a parameter"
-// pattern the SEP recommends. The SEP itself is design guidance with no
-// upstream conformance suite — this helper exists so demos and integrators
-// don't reinvent the small but easy-to-get-wrong pieces (collision-free
-// ids, TTL gc, value isolation).
+// HandleStore[T] is the interface tool authors program against. The
+// default constructor NewHandleStore returns an in-memory implementation
+// (InMemoryHandleStore[T]); persistent backends — Redis etc. — satisfy
+// the same interface from their own constructors. Tracked separately:
+// see panyam/mcpkit#471 (Redis), #472 (admin endpoints).
 //
-// In-memory only by design. Persistent backends (Redis etc.) for shared
-// stateless deployments behind a load balancer are tracked separately —
-// see panyam/mcpkit#471. The interface here is deliberately small so a
-// wrapper backend implementation requires only Mint/Get/Delete to satisfy
-// the same surface a tool handler uses.
+// SEP-2567 itself ships no upstream conformance suite — this is
+// pattern-support, not a tested wire surface.
 
-// HandleStore is a generic typed store keyed by opaque server-minted
-// handle ids. Concurrent-safe; entries expire automatically when their
-// per-handle TTL is reached.
+// HandleStore is the typed store for SEP-2567 state handles. One store
+// per logical type (cart, document, transaction, ...) keeps the type
+// assertions in tool handlers clean. A single Server may hold any
+// number of HandleStores side by side; they share no state.
 //
-// One store per logical type (cart, document, transaction, ...) keeps
-// the type assertions in tool handlers clean. A single Server may hold
-// any number of HandleStores side by side; they share no state.
-type HandleStore[T any] struct {
-	mu      sync.RWMutex
-	entries map[string]handleEntry[T]
+// All methods are safe for concurrent use.
+type HandleStore[T any] interface {
+	// Mint stores v under a freshly-minted opaque id and returns the
+	// id. ttl=0 falls back to the store's default TTL (if any); ttl<0
+	// forces "never expires" regardless of any default; ttl>0 pins a
+	// per-handle override.
+	Mint(v T, ttl time.Duration) string
 
-	// defaultTTL is applied by Mint when the per-call ttl arg is zero.
-	// 0 here means "no expiry" — entries live until Delete is called.
-	// Set via NewHandleStore's defaultTTL parameter.
-	defaultTTL time.Duration
+	// Get returns the value stored under id, or zero+false if no such
+	// handle is registered OR if the handle has expired. Lazy expiry —
+	// implementations are expected to surface ok=false past TTL even
+	// without a background sweep.
+	Get(id string) (T, bool)
 
-	// idPrefix is prepended to every minted handle. Lets multi-store
-	// deployments tell handles apart at a glance ("cart-AB12..." vs
-	// "doc-XYZ..."). Empty string skips the prefix.
-	idPrefix string
+	// Delete removes the entry under id and returns whether it was
+	// present. Safe to call with an unknown id (no-op).
+	Delete(id string) bool
 
-	// gcInterval drives the background sweep; <= 0 disables. Set via
-	// WithHandleGCInterval — tests can shorten to exercise expiry paths.
-	gcInterval time.Duration
-	gcStop     chan struct{}
-	gcDone     chan struct{}
+	// Len returns the current entry count (may include expired-but-
+	// not-swept entries depending on the implementation). Primarily
+	// for tests and ops introspection.
+	Len() int
+
+	// Close releases any background resources (GC goroutines, network
+	// connections to backends). Always safe to call; idempotent.
+	Close()
 }
 
-// handleEntry holds one stored value with its expiry.
-type handleEntry[T any] struct {
-	value     T
-	expiresAt time.Time // zero = never expires
-}
-
-// HandleStoreOption configures a new HandleStore at construction time.
+// HandleStoreOption configures an InMemoryHandleStore at construction.
+// Backend-specific implementations may accept their own option types.
 type HandleStoreOption func(*handleStoreOpts)
 
 type handleStoreOpts struct {
@@ -90,17 +86,57 @@ func WithHandleGCInterval(d time.Duration) HandleStoreOption {
 	return func(o *handleStoreOpts) { o.gcInterval = d }
 }
 
-// NewHandleStore builds an empty store. The generic parameter T fixes
-// the value type; instantiate one per logical type the server owns.
+// NewHandleStore returns the default in-memory implementation. Most
+// callers should use this; integrators who need cross-replica sharing
+// construct a backend-specific store directly (which returns the same
+// HandleStore[T] interface).
 //
 // Pass WithHandleGCInterval to enable background expiry sweeps; without
 // it the store relies on lazy expiry (Get checks the timestamp).
-func NewHandleStore[T any](opts ...HandleStoreOption) *HandleStore[T] {
+func NewHandleStore[T any](opts ...HandleStoreOption) HandleStore[T] {
+	return NewInMemoryHandleStore[T](opts...)
+}
+
+// InMemoryHandleStore is the default HandleStore implementation. Holds
+// entries in a Go map under an RWMutex. No persistence across process
+// restarts — for cross-replica deployments use a backend-backed
+// implementation (tracked by panyam/mcpkit#471).
+//
+// Exported so tests and code that needs the concrete type (e.g. for
+// custom introspection beyond Len) can construct it directly. New code
+// should prefer NewHandleStore's interface return.
+type InMemoryHandleStore[T any] struct {
+	mu      sync.RWMutex
+	entries map[string]handleEntry[T]
+
+	defaultTTL time.Duration
+	idPrefix   string
+
+	gcInterval time.Duration
+	gcStop     chan struct{}
+	gcDone     chan struct{}
+}
+
+// handleEntry holds one stored value with its expiry.
+type handleEntry[T any] struct {
+	value     T
+	expiresAt time.Time // zero = never expires
+}
+
+// Compile-time check that InMemoryHandleStore satisfies the interface
+// for an arbitrary type. The struct{}-instance is throwaway; the
+// assertion only catches drift between the interface and the impl.
+var _ HandleStore[struct{}] = (*InMemoryHandleStore[struct{}])(nil)
+
+// NewInMemoryHandleStore constructs the in-memory implementation
+// directly, returning the concrete struct for callers that need it.
+// Most call sites should prefer NewHandleStore (returns interface).
+func NewInMemoryHandleStore[T any](opts ...HandleStoreOption) *InMemoryHandleStore[T] {
 	o := handleStoreOpts{}
 	for _, opt := range opts {
 		opt(&o)
 	}
-	s := &HandleStore[T]{
+	s := &InMemoryHandleStore[T]{
 		entries:    make(map[string]handleEntry[T]),
 		defaultTTL: o.defaultTTL,
 		idPrefix:   o.idPrefix,
@@ -121,11 +157,8 @@ func NewHandleStore[T any](opts ...HandleStoreOption) *HandleStore[T] {
 // when the store has a non-zero default.
 //
 // IDs are 128 bits of crypto-random base32 (26 chars), optionally
-// prefixed via WithHandleIDPrefix. Collision is statistically negligible
-// for any sane store size; on the vanishingly rare collision (or a
-// degraded crypto/rand) Mint retries up to 8 times before returning the
-// shortest deterministic fallback.
-func (s *HandleStore[T]) Mint(v T, ttl time.Duration) string {
+// prefixed via WithHandleIDPrefix.
+func (s *InMemoryHandleStore[T]) Mint(v T, ttl time.Duration) string {
 	id := s.newID()
 	expiresAt := time.Time{}
 	switch {
@@ -151,7 +184,7 @@ func (s *HandleStore[T]) Mint(v T, ttl time.Duration) string {
 // that absolutely must operate atomically should arrange transactional
 // locking outside this store (or use a persistent backend with native
 // atomic ops — see panyam/mcpkit#471).
-func (s *HandleStore[T]) Get(id string) (T, bool) {
+func (s *InMemoryHandleStore[T]) Get(id string) (T, bool) {
 	s.mu.RLock()
 	entry, ok := s.entries[id]
 	s.mu.RUnlock()
@@ -161,8 +194,7 @@ func (s *HandleStore[T]) Get(id string) (T, bool) {
 	}
 	if !entry.expiresAt.IsZero() && time.Now().After(entry.expiresAt) {
 		// Lazy delete on read of an expired entry so the next gc tick
-		// has less to do. Best-effort — concurrent reads may all see
-		// the expired entry and all delete; final state is the same.
+		// has less to do.
 		s.mu.Lock()
 		delete(s.entries, id)
 		s.mu.Unlock()
@@ -174,7 +206,7 @@ func (s *HandleStore[T]) Get(id string) (T, bool) {
 
 // Delete removes the entry under id and returns whether it was present.
 // Safe to call with an unknown id (no-op).
-func (s *HandleStore[T]) Delete(id string) bool {
+func (s *InMemoryHandleStore[T]) Delete(id string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.entries[id]; !ok {
@@ -185,22 +217,19 @@ func (s *HandleStore[T]) Delete(id string) bool {
 }
 
 // Len returns the current entry count (including expired-but-not-swept).
-// Primarily useful for tests and ops introspection.
-func (s *HandleStore[T]) Len() int {
+func (s *InMemoryHandleStore[T]) Len() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.entries)
 }
 
-// Close stops the background gc goroutine, if any. Always safe to call;
-// idempotent. Stores constructed without WithHandleGCInterval are no-op.
-func (s *HandleStore[T]) Close() {
+// Close stops the background gc goroutine, if any. Idempotent.
+func (s *InMemoryHandleStore[T]) Close() {
 	if s.gcStop == nil {
 		return
 	}
 	select {
 	case <-s.gcStop:
-		// already closed
 		return
 	default:
 	}
@@ -210,7 +239,7 @@ func (s *HandleStore[T]) Close() {
 }
 
 // gcLoop is the background expiry sweeper. Exits on Close.
-func (s *HandleStore[T]) gcLoop() {
+func (s *InMemoryHandleStore[T]) gcLoop() {
 	defer close(s.gcDone)
 	t := time.NewTicker(s.gcInterval)
 	defer t.Stop()
@@ -226,7 +255,7 @@ func (s *HandleStore[T]) gcLoop() {
 
 // sweepExpired walks the store under write-lock removing every entry
 // whose expiresAt is non-zero and in the past.
-func (s *HandleStore[T]) sweepExpired() {
+func (s *InMemoryHandleStore[T]) sweepExpired() {
 	now := time.Now()
 	s.mu.Lock()
 	for id, e := range s.entries {
@@ -242,11 +271,9 @@ func (s *HandleStore[T]) sweepExpired() {
 // time-derived id on read failure (the platform's crypto source is
 // dead — best-effort uniqueness keeps the system limping rather than
 // erroring out from a Mint call).
-func (s *HandleStore[T]) newID() string {
+func (s *InMemoryHandleStore[T]) newID() string {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		// Time-based fallback; not security-grade but unique enough
-		// for the degenerate "rand source dead" case.
 		fb := time.Now().UnixNano()
 		for i := 0; i < 8; i++ {
 			b[i] = byte(fb >> (i * 8))
