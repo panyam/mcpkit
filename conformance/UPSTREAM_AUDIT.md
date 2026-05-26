@@ -14,8 +14,8 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 | Surface | Scenarios | Checks | Pass | Fail | Warn | Info | Skipped | Harness-gap |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Server | 51 | 126 | 58 | 41 | 12 | 6 | 9 | 0 |
-| Client | 40 | 1130 | 432 | 37 | 4 | 649 | 8 | 1 |
-| **Total** | **91** | **1256** | **490** | **78** | **16** | **655** | **17** | **1** |
+| Client | 40 | 1136 | 434 | 37 | 4 | 655 | 6 | 1 |
+| **Total** | **91** | **1262** | **492** | **78** | **16** | **661** | **15** | **1** |
 
 ## Harness gaps
 
@@ -37,7 +37,6 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 | `auth/metadata-issuer-mismatch` | client | partial | 14 pass / 1 fail / 22 info |  |
 | `auth/resource-mismatch` | client | partial | 14 pass / 1 fail / 22 info |  |
 | `initialize` | client | partial | 1 fail / 1 info |  |
-| `tools_call` | client | partial | 1 fail / 6 info |  |
 | `request-metadata` | client | harness-gap | — | No `checks.json` written — driver does not handle this scenario |
 | `auth/basic-cimd` | client | pass | 14 pass / 1 warn / 22 info |  |
 | `auth/iss-not-advertised` | client | pass | 15 pass / 22 info |  |
@@ -71,6 +70,7 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 | `resources-templates-read` | server | pass | 1 pass |  |
 | `resources-unsubscribe` | server | pass | 1 pass |  |
 | `server-initialize` | server | pass | 2 pass |  |
+| `tools_call` | client | pass | 1 pass / 8 info |  |
 | `tools-call-audio` | server | pass | 1 pass |  |
 | `tools-call-elicitation` | server | pass | 1 pass |  |
 | `tools-call-embedded-resource` | server | pass | 1 pass |  |
@@ -98,7 +98,7 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `elicitation-sep1034-client-defaults` | client | partial | 5 fail / 6 info |  |
+| `elicitation-sep1034-client-defaults` | client | partial | 5 fail / 7 info |  |
 | `elicitation-sep1034-defaults` | server | pass | 5 pass |  |
 
 ### [SEP-1046-CLIENT-CREDENTIALS](https://github.com/modelcontextprotocol/ext-auth/blob/main/specification/draft/oauth-client-credentials.mdx) (2 scenarios)
@@ -124,7 +124,7 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `sse-retry` | client | partial | 1 fail / 5 info |  |
+| `sse-retry` | client | partial | 1 fail / 8 info |  |
 | `server-sse-multiple-streams` | server | pass | 2 pass |  |
 | `server-sse-polling` | server | pass | 3 warn / 6 info |  |
 
@@ -164,13 +164,13 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `http-invalid-tool-headers` | client | partial | 10 pass / 1 fail |  |
+| `http-invalid-tool-headers` | client | pass | 11 pass |  |
 
 ### [SEP-2243-STANDARD-HEADERS](https://modelcontextprotocol.io/specification/draft/basic/transports#standard-mcp-request-headers) (1 scenarios)
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `http-standard-headers` | client | partial | 3 fail / 8 skip |  |
+| `http-standard-headers` | client | partial | 5 fail / 6 skip |  |
 
 ### [SEP-2322](https://modelcontextprotocol.io/specification/draft/basic/utilities/mrtr) (14 scenarios)
 
