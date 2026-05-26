@@ -91,6 +91,11 @@ const (
 	// io.modelcontextprotocol/tasks). Reusable for any future extension
 	// whose required-mode path needs the same affordance.
 	ErrCodeMissingRequiredClientCapability = -32003
+
+	// ErrCodeHeaderMismatch is returned by the SEP-2575 stateless wire when
+	// the MCP-Protocol-Version HTTP header and the _meta protocolVersion
+	// field do not agree. The transport MUST reject with HTTP 400.
+	ErrCodeHeaderMismatch = -32001
 )
 
 // NewResponse creates a success response for the given request ID.
