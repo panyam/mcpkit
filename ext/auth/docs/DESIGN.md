@@ -289,6 +289,7 @@ type AuthError struct {
 | `JWTValidator` | `AuthValidator` + `ClaimsProvider` | `jwt.Parse` with JWKS keyfunc (`JWKSKeyStore.GetKeyByKid`) |
 | `OAuthTokenSource` | `TokenSource` | `client.LoginWithBrowser` + `client.DiscoverAS` |
 | `ClientCredentialsTokenSource` | `TokenSource` + `ScopeAwareTokenSource` | `client.ClientCredentialsSource` (basic and `private_key_jwt` per SEP-1046) |
+| `EnterpriseManagedTokenSource` | `TokenSource` + `ScopeAwareTokenSource` | `client.TokenExchange` (RFC 8693) → `client.JwtBearerGrant` (RFC 7523 §2.1), two-stage chain per SEP-990 |
 | `AuthExtension` | `ExtensionProvider` | (none — declares MCP auth extension metadata) |
 
 ## Server Usage
