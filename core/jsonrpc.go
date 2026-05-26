@@ -95,7 +95,18 @@ const (
 	// ErrCodeHeaderMismatch is returned by the SEP-2575 stateless wire when
 	// the MCP-Protocol-Version HTTP header and the _meta protocolVersion
 	// field do not agree. The transport MUST reject with HTTP 400.
+	//
+	// Originally minted by SEP-2243 (HTTP standardization); SEP-2575 reuses
+	// it for the per-request envelope cross-check.
 	ErrCodeHeaderMismatch = -32001
+
+	// ErrCodeUnsupportedProtocolVersion is returned by the SEP-2575
+	// stateless wire when the request's protocol version is unknown or
+	// has been declined by this server. The error data carries
+	// {supported: [...], requested: "..."} (see UnsupportedProtocolVersionData)
+	// so the client can pick a mutually supported version and retry.
+	// HTTP status: 400.
+	ErrCodeUnsupportedProtocolVersion = -32004
 )
 
 // NewResponse creates a success response for the given request ID.

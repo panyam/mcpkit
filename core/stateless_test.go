@@ -151,7 +151,10 @@ func TestErrorPayloadShapes(t *testing.T) {
 	// Wire shape verification — payload field names must match the
 	// SEP-2575 conformance suite's JSON path expectations.
 	t.Run("UnsupportedProtocolVersionData", func(t *testing.T) {
-		d := UnsupportedProtocolVersionData{Supported: []string{"DRAFT-2026-v1"}}
+		d := UnsupportedProtocolVersionData{
+			Supported: []string{"DRAFT-2026-v1", "2025-11-25"},
+			Requested: "1900-01-01",
+		}
 		b, err := json.Marshal(d)
 		if err != nil {
 			t.Fatal(err)
@@ -163,10 +166,19 @@ func TestErrorPayloadShapes(t *testing.T) {
 		if _, ok := m["supported"]; !ok {
 			t.Errorf(`payload missing "supported" key; got %s`, b)
 		}
+		if m["requested"] != "1900-01-01" {
+			t.Errorf(`payload "requested" wrong; got %s`, b)
+		}
 	})
 
 	t.Run("MissingRequiredClientCapabilityData", func(t *testing.T) {
-		d := MissingRequiredClientCapabilityData{RequiredCapabilities: []string{"sampling"}}
+		// Object shape per upstream schema (not string-array). Mirrors a
+		// ClientCapabilities value the client can merge and retry with.
+		d := MissingRequiredClientCapabilityData{
+			RequiredCapabilities: ClientCapabilities{
+				Elicitation: &ElicitationCap{Form: &ElicitationFormCap{}},
+			},
+		}
 		b, err := json.Marshal(d)
 		if err != nil {
 			t.Fatal(err)
@@ -175,8 +187,12 @@ func TestErrorPayloadShapes(t *testing.T) {
 		if err := json.Unmarshal(b, &m); err != nil {
 			t.Fatal(err)
 		}
-		if _, ok := m["requiredCapabilities"]; !ok {
-			t.Errorf(`payload missing "requiredCapabilities" key; got %s`, b)
+		req, ok := m["requiredCapabilities"].(map[string]any)
+		if !ok {
+			t.Fatalf(`requiredCapabilities not an object; got %s`, b)
+		}
+		if _, ok := req["elicitation"]; !ok {
+			t.Errorf(`requiredCapabilities missing "elicitation" sub-key; got %s`, b)
 		}
 	})
 
@@ -203,5 +219,8 @@ func TestErrorCodeConstants(t *testing.T) {
 	}
 	if ErrCodeMissingRequiredClientCapability != -32003 {
 		t.Errorf("ErrCodeMissingRequiredClientCapability = %d, want -32003", ErrCodeMissingRequiredClientCapability)
+	}
+	if ErrCodeUnsupportedProtocolVersion != -32004 {
+		t.Errorf("ErrCodeUnsupportedProtocolVersion = %d, want -32004", ErrCodeUnsupportedProtocolVersion)
 	}
 }
