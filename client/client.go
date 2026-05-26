@@ -1641,9 +1641,21 @@ func (t *streamableClientTransport) readSSEResponse(body io.Reader) (*rpcRespons
 func (t *streamableClientTransport) readSSEResponseWithHook(body io.Reader, hook func(method string, params json.RawMessage)) (*rpcResponse, error) {
 	reader := ssehttp.NewSSEEventReader(body)
 	var lastResponse *rpcResponse
+	var lastEventID string
+	var retryMs int
 
 	for {
 		ev, err := reader.ReadEvent()
+		// Track id + retry from every event (even empty-data ones — the
+		// SEP-1699 priming event has id+retry but no data). Used for the
+		// reconnect path below when the stream closes before producing a
+		// JSON-RPC response.
+		if ev.ID != "" {
+			lastEventID = ev.ID
+		}
+		if ev.Retry > 0 {
+			retryMs = ev.Retry
+		}
 		if err != nil {
 			// EOF (or EOF-mid-event) — process any final data, then break.
 			if ev.Data != "" {
@@ -1670,7 +1682,80 @@ func (t *streamableClientTransport) readSSEResponseWithHook(body io.Reader, hook
 	if lastResponse != nil {
 		return lastResponse, nil
 	}
-	return nil, fmt.Errorf("no JSON-RPC response in SSE stream")
+
+	// Stream closed gracefully without delivering a JSON-RPC response. Per
+	// SEP-1699 (https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1699),
+	// the client MUST treat this as a reconnect opportunity: wait the
+	// server-supplied retry interval, then issue a GET to the same MCP
+	// endpoint with Last-Event-ID set. The response is expected to arrive
+	// on the GET SSE stream. If we don't have a Last-Event-ID to resume
+	// from, fall back to the legacy error path — without an id the server
+	// has no way to replay missed events to us.
+	if lastEventID == "" {
+		return nil, fmt.Errorf("no JSON-RPC response in SSE stream")
+	}
+	return t.resumeViaGET(lastEventID, retryMs, hook)
+}
+
+// resumeViaGET implements the SEP-1699 client-side reconnect after a
+// graceful POST SSE close. It waits retryMs (defaulting to 1000 ms if the
+// server didn't set a retry field), then issues a GET to the MCP endpoint
+// carrying Last-Event-ID. The response is expected to arrive on the
+// resulting SSE stream. Server-to-client requests (sampling/elicitation)
+// continue to thread through the per-call notify hook.
+func (t *streamableClientTransport) resumeViaGET(lastEventID string, retryMs int, hook func(method string, params json.RawMessage)) (*rpcResponse, error) {
+	if retryMs <= 0 {
+		retryMs = 1000
+	}
+	time.Sleep(time.Duration(retryMs) * time.Millisecond)
+
+	buildReq := func() (*http.Request, error) {
+		req, err := http.NewRequest("GET", t.url, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Accept", "text/event-stream")
+		req.Header.Set("Last-Event-ID", lastEventID)
+		if t.sessionID != "" {
+			req.Header.Set("Mcp-Session-Id", t.sessionID)
+		}
+		if t.modifyReq != nil {
+			t.modifyReq(req)
+		}
+		return req, nil
+	}
+
+	resp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
+	if err != nil {
+		return nil, fmt.Errorf("SEP-1699 resume GET: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &HTTPStatusError{StatusCode: resp.StatusCode, Header: resp.Header.Clone(), Body: strings.TrimSpace(string(body))}
+	}
+
+	reader := ssehttp.NewSSEEventReader(resp.Body)
+	for {
+		ev, err := reader.ReadEvent()
+		if err != nil {
+			if ev.Data != "" {
+				if r := t.dispatchSSEEventWithHook(ev.Data, hook); r != nil {
+					return r, nil
+				}
+			}
+			if err == io.EOF {
+				return nil, fmt.Errorf("SEP-1699 resume GET closed without response")
+			}
+			return nil, fmt.Errorf("reading resume GET SSE: %w", err)
+		}
+		if ev.Data == "" {
+			continue
+		}
+		if r := t.dispatchSSEEventWithHook(ev.Data, hook); r != nil {
+			return r, nil
+		}
+	}
 }
 
 // postResponse sends a JSON-RPC response back to the server via POST.
