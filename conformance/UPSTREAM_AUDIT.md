@@ -14,8 +14,8 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 | Surface | Scenarios | Checks | Pass | Fail | Warn | Info | Skipped | Harness-gap |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Server | 51 | 126 | 58 | 41 | 12 | 6 | 9 | 0 |
-| Client | 40 | 1206 | 442 | 31 | 4 | 723 | 6 | 1 |
-| **Total** | **91** | **1332** | **500** | **72** | **16** | **729** | **15** | **1** |
+| Client | 40 | 1242 | 448 | 27 | 4 | 757 | 6 | 1 |
+| **Total** | **91** | **1368** | **506** | **68** | **16** | **763** | **15** | **1** |
 
 ## Harness gaps
 
@@ -45,7 +45,7 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 | `auth/metadata-var1` | client | pass | 14 pass / 26 info |  |
 | `auth/metadata-var2` | client | pass | 14 pass / 26 info |  |
 | `auth/metadata-var3` | client | pass | 14 pass / 26 info |  |
-| `auth/pre-registration` | client | pass | 13 pass / 22 info |  |
+| `auth/pre-registration` | client | pass | 15 pass / 28 info |  |
 | `auth/scope-from-scopes-supported` | client | pass | 15 pass / 24 info |  |
 | `auth/scope-from-www-authenticate` | client | pass | 15 pass / 24 info |  |
 | `auth/scope-omitted-when-undefined` | client | pass | 15 pass / 24 info |  |
@@ -92,7 +92,7 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `auth/enterprise-managed-authorization` | client | partial | 8 pass / 2 fail / 12 info |  |
+| `auth/enterprise-managed-authorization` | client | partial | 10 pass / 2 fail / 18 info |  |
 
 ### [SEP-1034](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1034) (2 scenarios)
 
@@ -105,8 +105,8 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `auth/client-credentials-basic` | client | partial | 8 pass / 2 fail / 12 info |  |
-| `auth/client-credentials-jwt` | client | partial | 8 pass / 2 fail / 12 info |  |
+| `auth/client-credentials-basic` | client | pass | 10 pass / 26 info |  |
+| `auth/client-credentials-jwt` | client | pass | 8 pass / 20 info |  |
 
 ### [SEP-1330](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1330) (1 scenarios)
 
