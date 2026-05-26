@@ -14,8 +14,8 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 | Surface | Scenarios | Checks | Pass | Fail | Warn | Info | Skipped | Harness-gap |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Server | 51 | 126 | 58 | 41 | 12 | 6 | 9 | 0 |
-| Client | 40 | 1452 | 496 | 27 | 4 | 919 | 6 | 1 |
-| **Total** | **91** | **1578** | **554** | **68** | **16** | **925** | **15** | **1** |
+| Client | 40 | 1242 | 448 | 27 | 4 | 757 | 6 | 1 |
+| **Total** | **91** | **1368** | **506** | **68** | **16** | **763** | **15** | **1** |
 
 ## Harness gaps
 
@@ -27,33 +27,33 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `auth/2025-03-26-oauth-endpoint-fallback` | client | partial | 3 fail / 14 info |  |
-| `auth/2025-03-26-oauth-metadata-backcompat` | client | partial | 4 fail / 14 info |  |
-| `auth/authorization-server-migration` | client | partial | 17 pass / 1 fail / 38 info |  |
-| `auth/iss-normalized` | client | partial | 16 pass / 1 fail / 30 info |  |
-| `auth/iss-supported-missing` | client | partial | 16 pass / 1 fail / 30 info |  |
-| `auth/iss-unexpected` | client | partial | 16 pass / 1 fail / 30 info |  |
-| `auth/iss-wrong-issuer` | client | partial | 16 pass / 1 fail / 30 info |  |
-| `auth/metadata-issuer-mismatch` | client | partial | 16 pass / 1 fail / 30 info |  |
-| `auth/resource-mismatch` | client | partial | 16 pass / 1 fail / 30 info |  |
+| `auth/2025-03-26-oauth-endpoint-fallback` | client | partial | 3 fail / 8 info |  |
+| `auth/2025-03-26-oauth-metadata-backcompat` | client | partial | 4 fail / 8 info |  |
+| `auth/authorization-server-migration` | client | partial | 15 pass / 1 fail / 32 info |  |
+| `auth/iss-normalized` | client | partial | 14 pass / 1 fail / 24 info |  |
+| `auth/iss-supported-missing` | client | partial | 14 pass / 1 fail / 24 info |  |
+| `auth/iss-unexpected` | client | partial | 14 pass / 1 fail / 24 info |  |
+| `auth/iss-wrong-issuer` | client | partial | 14 pass / 1 fail / 24 info |  |
+| `auth/metadata-issuer-mismatch` | client | partial | 14 pass / 1 fail / 24 info |  |
+| `auth/resource-mismatch` | client | partial | 14 pass / 1 fail / 24 info |  |
 | `initialize` | client | partial | 1 fail / 1 info |  |
 | `request-metadata` | client | harness-gap | — | No `checks.json` written — driver does not handle this scenario |
-| `auth/basic-cimd` | client | pass | 16 pass / 1 warn / 30 info |  |
-| `auth/iss-not-advertised` | client | pass | 17 pass / 30 info |  |
-| `auth/iss-supported` | client | pass | 17 pass / 30 info |  |
-| `auth/metadata-default` | client | pass | 16 pass / 30 info |  |
-| `auth/metadata-var1` | client | pass | 16 pass / 34 info |  |
-| `auth/metadata-var2` | client | pass | 16 pass / 34 info |  |
-| `auth/metadata-var3` | client | pass | 16 pass / 34 info |  |
+| `auth/basic-cimd` | client | pass | 14 pass / 1 warn / 24 info |  |
+| `auth/iss-not-advertised` | client | pass | 15 pass / 24 info |  |
+| `auth/iss-supported` | client | pass | 15 pass / 24 info |  |
+| `auth/metadata-default` | client | pass | 14 pass / 24 info |  |
+| `auth/metadata-var1` | client | pass | 14 pass / 26 info |  |
+| `auth/metadata-var2` | client | pass | 14 pass / 26 info |  |
+| `auth/metadata-var3` | client | pass | 14 pass / 26 info |  |
 | `auth/pre-registration` | client | pass | 15 pass / 28 info |  |
-| `auth/scope-from-scopes-supported` | client | pass | 17 pass / 30 info |  |
-| `auth/scope-from-www-authenticate` | client | pass | 17 pass / 30 info |  |
-| `auth/scope-omitted-when-undefined` | client | pass | 17 pass / 30 info |  |
-| `auth/scope-retry-limit` | client | pass | 19 pass / 42 info |  |
-| `auth/scope-step-up` | client | pass | 21 pass / 2 warn / 40 info |  |
-| `auth/token-endpoint-auth-basic` | client | pass | 21 pass / 30 info |  |
-| `auth/token-endpoint-auth-none` | client | pass | 21 pass / 30 info |  |
-| `auth/token-endpoint-auth-post` | client | pass | 21 pass / 30 info |  |
+| `auth/scope-from-scopes-supported` | client | pass | 15 pass / 24 info |  |
+| `auth/scope-from-www-authenticate` | client | pass | 15 pass / 24 info |  |
+| `auth/scope-omitted-when-undefined` | client | pass | 15 pass / 24 info |  |
+| `auth/scope-retry-limit` | client | pass | 17 pass / 36 info |  |
+| `auth/scope-step-up` | client | pass | 19 pass / 2 warn / 34 info |  |
+| `auth/token-endpoint-auth-basic` | client | pass | 19 pass / 24 info |  |
+| `auth/token-endpoint-auth-none` | client | pass | 19 pass / 24 info |  |
+| `auth/token-endpoint-auth-post` | client | pass | 19 pass / 24 info |  |
 | `completion-complete` | server | pass | 1 pass |  |
 | `dns-rebinding-protection` | server | pass | 2 pass |  |
 | `logging-set-level` | server | pass | 1 pass |  |
@@ -144,8 +144,8 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `auth/offline-access-not-supported` | client | pass | 17 pass / 30 info |  |
-| `auth/offline-access-scope` | client | pass | 16 pass / 1 warn / 31 info |  |
+| `auth/offline-access-not-supported` | client | pass | 15 pass / 24 info |  |
+| `auth/offline-access-scope` | client | pass | 14 pass / 1 warn / 25 info |  |
 
 ### [SEP-2243-CUSTOM-HEADERS](https://modelcontextprotocol.io/specification/draft/basic/transports#server-behavior-for-custom-headers) (2 scenarios)
 
