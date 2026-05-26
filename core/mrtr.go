@@ -107,6 +107,77 @@ func (r InputRequiredResult) MarshalJSON() ([]byte, error) {
 	return json.Marshal(alias(r))
 }
 
+// SEP-2575 stateless-wire bridge helpers.
+//
+// The SEP-2575 stateless wire forbids server-initiated JSON-RPC requests
+// on a tools/call response stream (the conformance check
+// HttpServerNoIndependentRequestsOnStream is explicit). That means
+// ctx.Sample / ctx.Elicit's legacy push path cannot be used on the
+// stateless wire — handlers must route the request through MRTR
+// (SEP-2322) instead: enqueue an InputRequest, return InputRequiredResult,
+// let the client retry the same tools/call with the answer in
+// inputResponses.
+//
+// These helpers package the same CreateMessageRequest and ElicitationRequest
+// types ctx.Sample/Elicit accept as MRTR-compatible InputRequest values.
+// The example fixture in examples/stateless/ demonstrates the pattern
+// end-to-end via test_streaming_elicitation.
+
+// NewSamplingInputRequest wraps a CreateMessageRequest as a MRTR
+// InputRequest the handler can enqueue under any key in InputRequests.
+// The wire method is sampling/createMessage, identical to the legacy
+// server-initiated path — client-side dispatch routes either form into
+// the same SamplingHandler.
+//
+// On a marshal failure the returned InputRequest has empty Params; the
+// dispatch path will surface that as a client-side validation error so
+// the round trip still terminates rather than hanging.
+func NewSamplingInputRequest(req CreateMessageRequest) InputRequest {
+	raw, _ := MarshalJSON(req)
+	return InputRequest{
+		Method: "sampling/createMessage",
+		Params: raw,
+	}
+}
+
+// NewElicitationInputRequest wraps an ElicitationRequest as a MRTR
+// InputRequest. The wire method is elicitation/create. Symmetric with
+// NewSamplingInputRequest above.
+//
+// Caller is responsible for any SEP-2356 fileInputs schema stripping if
+// the calling client may not declare the capability — the legacy
+// ctx.Elicit does this transparently; the MRTR path is opt-in so the
+// caller stays in control.
+func NewElicitationInputRequest(req ElicitationRequest) InputRequest {
+	raw, _ := MarshalJSON(req)
+	return InputRequest{
+		Method: "elicitation/create",
+		Params: raw,
+	}
+}
+
+// DecodeSamplingInputResponse decodes a single inputResponses entry as
+// a CreateMessageResult — symmetric with NewSamplingInputRequest above.
+// Used on the second tools/call round after the client has answered
+// the sampling request.
+func DecodeSamplingInputResponse(raw json.RawMessage) (CreateMessageResult, error) {
+	var out CreateMessageResult
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return CreateMessageResult{}, fmt.Errorf("decode sampling response: %w", err)
+	}
+	return out, nil
+}
+
+// DecodeElicitationInputResponse decodes a single inputResponses entry
+// as an ElicitationResult.
+func DecodeElicitationInputResponse(raw json.RawMessage) (ElicitationResult, error) {
+	var out ElicitationResult
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return ElicitationResult{}, fmt.Errorf("decode elicitation response: %w", err)
+	}
+	return out, nil
+}
+
 // --- MRTR requestState signing ---
 //
 // SEP-2322's InputRequiredResult.RequestState carries an opaque token from
