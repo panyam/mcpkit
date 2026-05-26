@@ -125,3 +125,10 @@ type ExtensionCapability struct {
 // StreamableHTTPAccept is the Accept header value for Streamable HTTP requests.
 // Per MCP spec: clients MUST include both application/json and text/event-stream.
 const StreamableHTTPAccept = "application/json, text/event-stream"
+
+// DraftProtocolVersion2026V1 names the in-flight draft series that carries
+// the next round of MCP SEPs (2243, 2549, 2356, 2567, 2575, 2663, ...) ahead
+// of their inclusion in a dated stable. Shared by every draft-targeted SEP,
+// not specific to any one of them — see core/stateless.go for the SEP-2575
+// stateless-wire surfaces that key off this version string.
+const DraftProtocolVersion2026V1 = "DRAFT-2026-v1"
