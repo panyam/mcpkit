@@ -943,6 +943,12 @@ type transportConfig struct {
 	streamableHTTP bool     // enable Streamable HTTP transport
 	sse            bool     // enable legacy SSE transport
 	stateless      bool          // stateless mode: no sessions, fresh dispatcher per request
+	// statelessMode picks the wire — SEP-2575 stateless, legacy session,
+	// or both on one URL. Orthogonal to stateless above; the latter is
+	// process-architecture, this is the protocol shape. See StatelessMode.
+	// Seeded by defaultTransportConfig from MCPKIT_STATELESS_MODE env or
+	// DefaultStatelessMode; WithStatelessMode option overrides if passed.
+	statelessMode  StatelessMode
 	sessionTimeout time.Duration // idle timeout for Streamable HTTP sessions (0 = no timeout)
 	eventStore     gohttp.EventStore // optional: persists SSE events for Last-Event-ID replay
 	keepaliveInterval time.Duration  // 0 = disabled; interval for JSON-RPC ping requests
@@ -958,6 +964,7 @@ func defaultTransportConfig() transportConfig {
 		keepalivePeriod: 30 * time.Second,
 		sse:             true,
 		streamableHTTP:  false,
+		statelessMode:   resolveStatelessMode(),
 	}
 }
 
