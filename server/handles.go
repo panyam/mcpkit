@@ -32,6 +32,19 @@ type HandleStore[T any] interface {
 	// per-handle override.
 	Mint(v T, ttl time.Duration) string
 
+	// Put updates the value stored under an existing id, refreshing
+	// its TTL (same ttl semantics as Mint). Returns true when an
+	// entry existed under id (now overwritten); false when there
+	// was no such entry (in which case Put inserts it under that
+	// id — useful for callers that already have a id from elsewhere
+	// they want the store to honor, e.g. a deterministic id derived
+	// from input).
+	//
+	// Mint vs Put: use Mint when you want the store to choose an id;
+	// use Put to update-in-place after an earlier Mint, or to seed
+	// an entry under a caller-chosen id.
+	Put(id string, v T, ttl time.Duration) bool
+
 	// Get returns the value stored under id, or zero+false if no such
 	// handle is registered OR if the handle has expired. Lazy expiry —
 	// implementations are expected to surface ok=false past TTL even
@@ -173,6 +186,27 @@ func (s *InMemoryHandleStore[T]) Mint(v T, ttl time.Duration) string {
 	s.entries[id] = handleEntry[T]{value: v, expiresAt: expiresAt}
 	s.mu.Unlock()
 	return id
+}
+
+// Put updates the entry under id with v and refreshes its TTL using
+// the same semantics as Mint. Returns true when an entry existed
+// under id (now overwritten); false when there was no such entry
+// (Put inserts it under that id either way).
+func (s *InMemoryHandleStore[T]) Put(id string, v T, ttl time.Duration) bool {
+	expiresAt := time.Time{}
+	switch {
+	case ttl < 0:
+		// caller-forced no-expiry
+	case ttl == 0 && s.defaultTTL > 0:
+		expiresAt = time.Now().Add(s.defaultTTL)
+	case ttl > 0:
+		expiresAt = time.Now().Add(ttl)
+	}
+	s.mu.Lock()
+	_, existed := s.entries[id]
+	s.entries[id] = handleEntry[T]{value: v, expiresAt: expiresAt}
+	s.mu.Unlock()
+	return existed
 }
 
 // Get returns the value stored under id, or zero value + false if no
