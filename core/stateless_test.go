@@ -196,20 +196,9 @@ func TestErrorPayloadShapes(t *testing.T) {
 		}
 	})
 
-	t.Run("HeaderMismatchData", func(t *testing.T) {
-		d := HeaderMismatchData{HeaderProtocolVersion: "v999.0.0", MetaProtocolVersion: "DRAFT-2026-v1"}
-		b, err := json.Marshal(d)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var m map[string]any
-		if err := json.Unmarshal(b, &m); err != nil {
-			t.Fatal(err)
-		}
-		if m["headerProtocolVersion"] != "v999.0.0" || m["metaProtocolVersion"] != "DRAFT-2026-v1" {
-			t.Errorf("payload shape wrong; got %s", b)
-		}
-	})
+	// HeaderMismatchData was removed during the merge with main — the
+	// SEP-2243 path's generic map shape (server/header_validation.go)
+	// is canonical for both routing-header and version-header mismatches.
 }
 
 func TestErrorCodeConstants(t *testing.T) {

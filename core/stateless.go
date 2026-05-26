@@ -145,16 +145,13 @@ type MissingRequiredClientCapabilityData struct {
 	RequiredCapabilities ClientCapabilities `json:"requiredCapabilities"`
 }
 
-// HeaderMismatchData is the structured error payload for ErrCodeHeaderMismatch
-// (-32001), returned when the MCP-Protocol-Version HTTP header and the _meta
-// protocolVersion field disagree. Both observed values are surfaced for
-// client-side diagnostics.
-//
-// HTTP status: 400. JSON-RPC code: -32001.
-type HeaderMismatchData struct {
-	HeaderProtocolVersion string `json:"headerProtocolVersion"`
-	MetaProtocolVersion   string `json:"metaProtocolVersion"`
-}
+// HeaderMismatch payload note: the structured data for ErrCodeHeaderMismatch
+// (-32001) is a generic {reason, header, expected, received, ...} map built
+// by the SEP-2243 path (server/header_validation.go) — shared by both the
+// SEP-2243 routing-header check (Mcp-Method/Mcp-Name) and the SEP-2575
+// version-header cross-check (MCP-Protocol-Version vs _meta protocolVersion).
+// Conformance test for SEP-2575 only checks status code + JSON-RPC code,
+// not the payload shape, so the shared map suffices for both surfaces.
 
 // MissingCapabilityError is a typed error tool/resource/prompt handlers
 // return when the per-request _meta.clientCapabilities does not declare

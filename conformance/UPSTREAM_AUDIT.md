@@ -13,9 +13,9 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 
 | Surface | Scenarios | Checks | Pass | Fail | Warn | Info | Skipped | Harness-gap |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Server | 51 | 126 | 58 | 41 | 12 | 6 | 9 | 0 |
-| Client | 40 | 1242 | 448 | 27 | 4 | 757 | 6 | 1 |
-| **Total** | **91** | **1368** | **506** | **68** | **16** | **763** | **15** | **1** |
+| Server | 51 | 126 | 66 | 38 | 7 | 6 | 9 | 0 |
+| Client | 40 | 1241 | 447 | 25 | 4 | 759 | 6 | 1 |
+| **Total** | **91** | **1367** | **513** | **63** | **11** | **765** | **15** | **1** |
 
 ## Harness gaps
 
@@ -92,7 +92,7 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `auth/enterprise-managed-authorization` | client | partial | 10 pass / 2 fail / 18 info |  |
+| `auth/enterprise-managed-authorization` | client | pass | 9 pass / 20 info |  |
 
 ### [SEP-1034](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1034) (2 scenarios)
 
@@ -158,7 +158,7 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `http-header-validation` | server | partial | 5 pass / 3 fail / 5 warn |  |
+| `http-header-validation` | server | pass | 13 pass |  |
 
 ### [SEP-2243-X-MCP-HEADER](https://modelcontextprotocol.io/specification/draft/server/tools#x-mcp-header) (1 scenarios)
 
