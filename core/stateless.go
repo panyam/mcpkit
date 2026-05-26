@@ -155,3 +155,32 @@ type HeaderMismatchData struct {
 	HeaderProtocolVersion string `json:"headerProtocolVersion"`
 	MetaProtocolVersion   string `json:"metaProtocolVersion"`
 }
+
+// MissingCapabilityError is a typed error tool/resource/prompt handlers
+// return when the per-request _meta.clientCapabilities does not declare
+// a capability the handler needs. The stateless dispatcher detects the
+// type via errors.As at the tools/call boundary and translates it into
+// a JSON-RPC -32003 response carrying MissingRequiredClientCapabilityData.
+//
+// Usage from inside a tool handler under the SEP-2575 wire:
+//
+//	if meta.ClientCapabilities.Sampling == nil {
+//	    return core.ToolResult{}, &core.MissingCapabilityError{
+//	        Required: core.ClientCapabilities{Sampling: &struct{}{}},
+//	        Message:  "this tool requires the sampling capability",
+//	    }
+//	}
+//
+// Required mirrors the shape of ClientCapabilities so the client can merge
+// it into the next request's _meta envelope and retry without guessing.
+type MissingCapabilityError struct {
+	Required ClientCapabilities
+	Message  string
+}
+
+func (e *MissingCapabilityError) Error() string {
+	if e.Message == "" {
+		return "server requires a client capability the client did not declare"
+	}
+	return e.Message
+}
