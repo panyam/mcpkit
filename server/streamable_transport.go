@@ -14,6 +14,7 @@ import (
 
 	conc "github.com/panyam/gocurrent"
 	core "github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/server/stateless"
 	gohttp "github.com/panyam/servicekit/http"
 	mw "github.com/panyam/servicekit/middleware"
 )
@@ -41,6 +42,13 @@ type streamableTransport struct {
 	sseHub        *gohttp.SSEHub[SSEData] // for GET SSE streams (server-initiated notifications)
 	originChecker *mw.OriginChecker       // nil = allow all (set by allowedOrigins config)
 	config        transportConfig
+
+	// SEP-2575 stateless-wire dispatcher. Non-nil iff statelessMode allows
+	// the stateless wire (ModeDual or ModeStateless). The detection helper
+	// (stateless_detect.go) routes per-request between this and the legacy
+	// session dispatcher; pure-Legacy mode leaves this nil and never routes
+	// to stateless. Singleton — no per-request state lives on it.
+	statelessDispatcher *stateless.Dispatcher
 }
 
 // sessionEntry wraps a Dispatcher with idle-timeout support. When a session
@@ -78,12 +86,20 @@ func newStreamableTransport(s *Server, cfg transportConfig) *streamableTransport
 		checker = mw.NewLocalhostOriginChecker()
 	}
 
-	return &streamableTransport{
+	t := &streamableTransport{
 		server:        s,
 		sseHub:        gohttp.NewSSEHub[SSEData](),
 		originChecker: checker,
 		config:        cfg,
 	}
+
+	// Construct the SEP-2575 stateless dispatcher when the mode permits it.
+	// Pure-Legacy mode leaves it nil; the detect helper short-circuits to
+	// the legacy path regardless of incoming shape.
+	if cfg.statelessMode != stateless.ModeLegacyOnly {
+		t.statelessDispatcher = stateless.New(newStatelessBackend(s))
+	}
+	return t
 }
 
 // handler returns an http.Handler that serves the Streamable HTTP endpoint.
@@ -230,6 +246,16 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 		raw, _ := marshalJSON(errResp)
 		w.Write(raw)
 		return
+	}
+
+	// SEP-2575 stateless-wire routing. The detect helper inspects method,
+	// headers, and _meta to pick a dispatch path; pure-Legacy mode
+	// short-circuits to legacy regardless of incoming shape.
+	if t.statelessDispatcher != nil {
+		if detectWireKind(r, body, &req, t.config.statelessMode) == wireStateless {
+			t.handleStatelessPost(w, r, claims, &req)
+			return
+		}
 	}
 
 	// Stateless mode: every request gets a fresh dispatcher, no session tracking.
