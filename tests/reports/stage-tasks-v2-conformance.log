@@ -1,5 +1,5 @@
 === Stage 8d/9: tasks-v2-conformance (make testconf-tasks-v2) ===
-Started: Mon May 25 22:57:34 PDT 2026
+Started: Tue May 26 00:21:32 PDT 2026
 /Library/Developer/CommandLineTools/usr/bin/make -C conformance testconf-tasks-v2
 (cd /Users/dzshrh/newstack/mcpkit/conf-tasks-mrtr && npm install --silent && \
 		TASKS_SERVER_URL=http://localhost:18092/mcp \
@@ -15,19 +15,19 @@ Started: Mon May 25 22:57:34 PDT 2026
 [34mℹ[39m Granting execute permission to [4mdist/index.js[24m
 [34mℹ[39m [2mdist/[22m[1mindex.js[22m  [2m429.07 kB[22m [2m│ gzip: 89.66 kB[22m
 [34mℹ[39m 1 files, total: 429.07 kB
-[32m✔[39m Build complete in [32m76ms[39m
+[32m✔[39m Build complete in [32m73ms[39m
 
 [1m[30m[46m RUN [49m[39m[22m [36mv4.1.5 [39m[90m/Users/dzshrh/newstack/mcpkit/conf-tasks-mrtr[39m
 
- [32m✓[39m src/scenarios/server/tasks/all-scenarios.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 11905[2mms[22m[39m
-     [33m[2m✓[22m[39m tasks-lifecycle — all checks succeed against fixture [33m 4797[2mms[22m[39m
-     [33m[2m✓[22m[39m tasks-wire-fields — all checks succeed against fixture [33m 2570[2mms[22m[39m
-     [33m[2m✓[22m[39m tasks-dispatch-and-envelope — all checks succeed against fixture [33m 1054[2mms[22m[39m
+ [32m✓[39m src/scenarios/server/tasks/all-scenarios.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 11953[2mms[22m[39m
+     [33m[2m✓[22m[39m tasks-lifecycle — all checks succeed against fixture [33m 4728[2mms[22m[39m
+     [33m[2m✓[22m[39m tasks-wire-fields — all checks succeed against fixture [33m 2532[2mms[22m[39m
+     [33m[2m✓[22m[39m tasks-dispatch-and-envelope — all checks succeed against fixture [33m 1035[2mms[22m[39m
 
 [2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
 [2m      Tests [22m [1m[32m9 passed[39m[22m[90m (9)[39m
-[2m   Start at [22m 22:57:37
-[2m   Duration [22m 12.27s[2m (transform 97ms, setup 0ms, import 248ms, tests 11.90s, environment 0ms)[22m
+[2m   Start at [22m 00:21:35
+[2m   Duration [22m 12.22s[2m (transform 56ms, setup 0ms, import 175ms, tests 11.95s, environment 0ms)[22m
 
 (cd /Users/dzshrh/newstack/mcpkit/tasks/conformance && npm install --silent && npx vitest run tasks-v2/)
 
@@ -37,7 +37,7 @@ Started: Mon May 25 22:57:34 PDT 2026
 
  Test Files  1 passed (1)
       Tests  1 passed (1)
-   Start at  22:57:50
-   Duration  315ms (transform 75ms, setup 0ms, collect 81ms, tests 1ms, environment 0ms, prepare 78ms)
+   Start at  00:21:48
+   Duration  336ms (transform 50ms, setup 0ms, collect 45ms, tests 1ms, environment 0ms, prepare 119ms)
 
-Finished: Mon May 25 22:57:51 PDT 2026 (elapsed 17s)
+Finished: Tue May 26 00:21:48 PDT 2026 (elapsed 16s)

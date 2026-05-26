@@ -1,5 +1,5 @@
 === MCPKit Comprehensive Test Suite ===
-Started: Mon May 25 22:54:52 PDT 2026
+Started: Tue May 26 00:19:06 PDT 2026
 
 --- [1/9] unit+coverage ---
   PASS: unit+coverage (13s)
@@ -10,33 +10,33 @@ Started: Mon May 25 22:54:52 PDT 2026
 --- [4/9] ui ---
   PASS: ui (4s)
 --- [5/9] protogen ---
-  PASS: protogen (6s)
+  PASS: protogen (4s)
 --- [6/9] e2e ---
   PASS: e2e (4s)
 --- [7a/9] experimental-events ---
-  PASS: experimental-events (77s)
+  PASS: experimental-events (76s)
 --- [7b/9] experimental-events-clients-go ---
-  PASS: experimental-events-clients-go (7s)
+  PASS: experimental-events-clients-go (8s)
 --- [7c/9] experimental-events-discord ---
-  PASS: experimental-events-discord (5s)
+  FAIL: experimental-events-discord (0s)
 --- [7d/9] experimental-events-telegram ---
-  PASS: experimental-events-telegram (8s)
+  FAIL: experimental-events-telegram (0s)
 --- [8a/9] conformance ---
   PASS: conformance (5s)
 --- [8b/9] auth-conformance ---
-  PASS: auth-conformance (2s)
+  FAIL: auth-conformance (0s)
 --- [8c/9] tasks-conformance ---
   PASS: tasks-conformance (16s)
 --- [8d/9] tasks-v2-conformance ---
-  PASS: tasks-v2-conformance (17s)
+  PASS: tasks-v2-conformance (16s)
 --- [8e/9] mrtr-conformance ---
   PASS: mrtr-conformance (5s)
 --- [8f/9] file-inputs-conformance ---
   PASS: file-inputs-conformance (3s)
 --- [8g/9] auth-server-conformance ---
-  PASS: auth-server-conformance (3s)
+  PASS: auth-server-conformance (4s)
 --- [9/9] keycloak ---
-  PASS: keycloak (2s)
+  PASS: keycloak (13s)
 
-=== Results: 18 passed, 0 failed ===
-Finished: Mon May 25 22:58:04 PDT 2026
+=== Results: 15 passed, 3 failed ===
+Finished: Tue May 26 00:22:13 PDT 2026

@@ -1,6 +1,9 @@
 === Stage 7c/9: experimental-events-discord (make test-experimental-events-discord) ===
-Started: Mon May 25 22:56:58 PDT 2026
+Started: Tue May 26 00:21:10 PDT 2026
 /Library/Developer/CommandLineTools/usr/bin/make -C experimental test-events-discord
 cd /Users/dzshrh/newstack/mcpkit/tasks/examples/events/discord && go test ./... -count=1 -timeout 60s
-ok  	github.com/panyam/mcpkit/examples/events/discord	4.134s
-Finished: Mon May 25 22:57:03 PDT 2026 (elapsed 5s)
+go: updates to go.mod needed; to update it:
+	go mod tidy
+make[2]: *** [test-events-discord] Error 1
+make[1]: *** [test-experimental-events-discord] Error 2
+Finished: Tue May 26 00:21:10 PDT 2026 (elapsed 0s)
