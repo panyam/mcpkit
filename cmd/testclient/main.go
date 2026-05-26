@@ -50,10 +50,24 @@ func main() {
 
 	if err := noAuthClient.Connect(); err == nil {
 		// Connected without auth — verify session works
-		_, err := noAuthClient.ListTools()
+		tools, err := noAuthClient.ListTools()
 		if err == nil {
-			if len(ctx.ToolCalls) > 0 {
+			switch {
+			case len(ctx.ToolCalls) > 0:
+				// Directed: scenario specified exact toolCalls to invoke.
 				driveToolCalls(noAuthClient, ctx.ToolCalls)
+			case len(tools) > 0:
+				// Fallback: best-effort call the first tool, no args.
+				// Mirrors the OAuth-success path so scenarios that don't
+				// direct toolCalls still exercise a tools/call request
+				// against the server (required by e.g. SEP-2243
+				// http-invalid-tool-headers, which grades whether the
+				// client calls the valid_tool the server advertises).
+				toolName := tools[0].Name
+				log.Printf("Calling tool %q (no-auth fallback)...", toolName)
+				if _, err := noAuthClient.ToolCall(toolName, map[string]any{}); err != nil {
+					log.Printf("tools/call %q: %v (may be expected)", toolName, err)
+				}
 			}
 			noAuthClient.Close()
 			log.Println("SUCCESS: connected without auth")
