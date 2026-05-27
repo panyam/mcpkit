@@ -1,6 +1,8 @@
 package stateless
 
 import (
+	"context"
+
 	core "github.com/panyam/mcpkit/core"
 )
 
@@ -60,4 +62,21 @@ type Backend interface {
 	// to every list response. A nil *int / empty string omits the field.
 	ListTTLMs() *int
 	ListCacheScope() string
+
+	// InvokeWithMiddleware runs the server's middleware chain around
+	// invoking the given request, returning the JSON-RPC response.
+	//
+	// Used by the stateless dispatcher for methods that must traverse
+	// server-level middleware on the stateless wire — SEP-2663 tools/call
+	// (so taskV2Middleware fires) and tasks/get|update|cancel (registered
+	// via Server.HandleMethod). Without this seam, extensions installed
+	// via Server.UseMiddleware / HandleMethod would be invisible to the
+	// stateless dispatcher.
+	//
+	// Returns (response, true) when the backend handled the request; the
+	// dispatcher uses that response verbatim. Returns (nil, false) to let
+	// the dispatcher fall back to its built-in per-method handler — used
+	// by minimal test fakes that don't carry middleware or custom-method
+	// registrations.
+	InvokeWithMiddleware(ctx context.Context, req *core.Request) (*core.Response, bool)
 }

@@ -1,6 +1,11 @@
 package server
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+
 	core "github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/server/stateless"
 )
@@ -207,4 +212,102 @@ func (b *statelessBackend) ListTTLMs() *int {
 // ListCacheScope returns the SEP-2549 cacheScope hint applied to list responses.
 func (b *statelessBackend) ListCacheScope() string {
 	return b.s.options.listCacheScope
+}
+
+// InvokeWithMiddleware runs the server's middleware chain (s.options.middleware)
+// around a terminal handler that dispatches by method:
+//
+//   - "tools/call" → look up the registered tool, invoke it, translate
+//     *core.MissingCapabilityError into a SEP-2575 -32003 response.
+//   - any other method → consult s.dispatcher.customHandlers (the map populated
+//     by Server.HandleMethod, used by tasks.Register for tasks/get|update|cancel).
+//     Returns -32601 when no handler is registered for the method.
+//
+// The middleware chain matters because the v2 tasks extension installs
+// taskV2Middleware via Server.UseMiddleware; without traversing that chain
+// the stateless wire's tools/call would never produce a CreateTaskResult.
+//
+// Background goroutines spawned from middleware (e.g., the v2 task runner)
+// have no session-level notify path on the stateless wire — there's no
+// persistent GET SSE stream to push notifications onto. notifications/tasks
+// emissions silently drop, which matches the SEP-2575 design (no server-
+// initiated push); clients observe state via tasks/get polling.
+//
+// All stateless task store entries currently key under sessionID=""
+// (no session). This means stateless tasks share one bucket per process,
+// which is acceptable for the single-tenant fixtures the conformance
+// suite covers; multi-tenant deployments should layer an auth-subject-
+// keyed store wrapper. Tracked for a follow-up.
+func (b *statelessBackend) InvokeWithMiddleware(ctx context.Context, req *core.Request) (*core.Response, bool) {
+	terminal := MiddlewareFunc(func(ctx context.Context, req *core.Request) (*core.Response, error) {
+		switch req.Method {
+		case "tools/call":
+			return b.callToolForStateless(ctx, req), nil
+		default:
+			if h, ok := b.s.dispatcher.customHandlers[req.Method]; ok {
+				return h(core.NewMethodContext(ctx), req.ID, req.Params), nil
+			}
+			return core.NewErrorResponse(req.ID, core.ErrCodeMethodNotFound,
+				"method not found: "+req.Method), nil
+		}
+	})
+
+	handler := terminal
+	for i := len(b.s.options.middleware) - 1; i >= 0; i-- {
+		next := handler
+		mw := b.s.options.middleware[i]
+		handler = func(ctx context.Context, req *core.Request) (*core.Response, error) {
+			return mw(ctx, req, next)
+		}
+	}
+
+	resp, err := handler(ctx, req)
+	if err != nil {
+		return core.NewErrorResponse(req.ID, core.ErrCodeInternal, err.Error()), true
+	}
+	return resp, true
+}
+
+// callToolForStateless replicates the decode → look-up → invoke → translate
+// flow that stateless.handleToolsCall used to do directly. Kept here so the
+// stateless dispatcher's per-method file stays thin and the middleware-aware
+// path lives next to the rest of the Backend impl.
+func (b *statelessBackend) callToolForStateless(ctx context.Context, req *core.Request) *core.Response {
+	var env struct {
+		Name      string          `json:"name"`
+		Arguments json.RawMessage `json:"arguments,omitempty"`
+	}
+	if err := json.Unmarshal(req.Params, &env); err != nil {
+		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
+			"invalid tools/call params: "+err.Error())
+	}
+	_, handler, ok := b.Tool(env.Name)
+	if !ok {
+		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
+			"unknown tool: "+env.Name)
+	}
+	result, err := handler(core.NewToolContext(ctx), core.ToolRequest{
+		Name:      env.Name,
+		Arguments: env.Arguments,
+	})
+	if err != nil {
+		var missing *core.MissingCapabilityError
+		if errors.As(err, &missing) {
+			return core.NewErrorResponseWithData(
+				req.ID,
+				core.ErrCodeMissingRequiredClientCapability,
+				missing.Error(),
+				core.MissingRequiredClientCapabilityData{
+					RequiredCapabilities: missing.Required,
+				},
+			)
+		}
+		// Plain handler error becomes isError content in a SUCCESS JSON-RPC
+		// response, matching the legacy dispatch path (server/dispatch.go
+		// handleToolsCall). For SEP-2663 task-creating calls this is load-
+		// bearing: the v2 task middleware sees resp.Error == nil and stores
+		// the task as `completed` with isError, per spec — not as `failed`.
+		result = core.ErrorResult(fmt.Sprintf("tool %q: %v", env.Name, err))
+	}
+	return core.NewResponse(req.ID, result)
 }
