@@ -40,11 +40,17 @@ func (k wireKind) String() string {
 //	1. Method == initialize / notifications/initialized → legacy
 //	   (these methods don't exist on stateless)
 //	2. Method == server/discover → stateless (doesn't exist on legacy)
-//	3. MCP-Protocol-Version HTTP header present with value in
-//	   core.SupportedStatelessVersions → stateless
-//	4. params._meta protocolVersion present → stateless
-//	5. Mcp-Session-Id HTTP header present → legacy (mid-session call)
-//	6. Otherwise → legacy under Dual mode (backward compat)
+//	3. params._meta protocolVersion present → stateless
+//	4. Mcp-Session-Id HTTP header present → legacy (mid-session call)
+//	5. Otherwise → legacy under Dual mode (backward compat)
+//
+// The HTTP MCP-Protocol-Version header is intentionally NOT a wire
+// signal: per the MCP 2025-11-25 transport spec it's a universal
+// post-initialize requirement on every HTTP request regardless of
+// wire, so its presence discriminates nothing. The header is still
+// cross-checked against _meta.protocolVersion on requests already
+// routed to stateless (see statelessVersionMismatch) — that's a
+// value check, not a routing decision.
 //
 // Pure-Stateless and Pure-Legacy modes short-circuit: an incoming
 // shape that doesn't match the configured mode still routes to that
@@ -72,29 +78,20 @@ func detectWireKind(r *http.Request, body []byte, req *core.Request, mode statel
 		return wireStateless
 	}
 
-	// Signal 3: MCP-Protocol-Version HTTP header naming a stateless version.
-	if hdr := r.Header.Get(mcpProtocolVersionHeader); hdr != "" {
-		for _, sv := range core.SupportedStatelessVersions {
-			if hdr == sv {
-				return wireStateless
-			}
-		}
-	}
-
-	// Signal 4: params._meta carries a protocolVersion (stateless envelope).
+	// Signal 3: params._meta carries a protocolVersion (stateless envelope).
 	if hasStatelessMetaProtocolVersion(req.Params) {
 		return wireStateless
 	}
 
-	// Signal 5: legacy session id present.
+	// Signal 4: legacy session id present.
 	if r.Header.Get(mcpSessionIDHeader) != "" {
 		return wireLegacy
 	}
 
-	// Signal 6: Dual default — fall back to legacy for backward compat.
-	// A stateless client that forgot all of MCP-Protocol-Version,
-	// _meta, and server/discover will surface as a legacy-shaped
-	// missing-session error, which is the right "wake up" signal.
+	// Signal 5: Dual default — fall back to legacy for backward compat.
+	// A stateless client that forgot both _meta and server/discover
+	// will surface as a legacy-shaped missing-session error, which is
+	// the right "wake up" signal.
 	return wireLegacy
 }
 

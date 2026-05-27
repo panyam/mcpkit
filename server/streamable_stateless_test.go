@@ -150,8 +150,10 @@ func TestStatelessRouting_DualMode_RemovedMethodReturns404(t *testing.T) {
 	_, url, teardown := newStatelessTestServer(t, stateless.ModeDual)
 	defer teardown()
 
-	// Force the stateless path via the header even though the method
-	// itself is "ping" (which is legacy-only). Detection rule 3 wins.
+	// Force the stateless path via the body _meta envelope even though
+	// the method itself is "ping" (which is legacy-only). Signal 3
+	// (_meta.protocolVersion present) routes to stateless; the
+	// dispatcher then -32601s because "ping" isn't a stateless method.
 	resp := postStatelessJSON(t, url, map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "ping",
 		"params": validMetaParams(),
@@ -318,11 +320,16 @@ func TestStatelessRouting_DetectionPriorities(t *testing.T) {
 		{"initialize → legacy regardless of stateless header",
 			"initialize", map[string]string{mcpProtocolVersionHeader: draftVersion}, true, wireLegacy},
 		{"server/discover → stateless", "server/discover", nil, true, wireStateless},
-		{"header signals stateless", "tools/list",
-			map[string]string{mcpProtocolVersionHeader: draftVersion}, false, wireStateless},
+		{"header alone is not a wire signal (universal post-init header)",
+			"tools/list", map[string]string{mcpProtocolVersionHeader: draftVersion}, false, wireLegacy},
 		{"_meta-only → stateless", "tools/list", nil, true, wireStateless},
 		{"session-id only → legacy", "tools/list",
 			map[string]string{mcpSessionIDHeader: "abc"}, false, wireLegacy},
+		{"session-id + header → legacy (universal header doesn't override session)",
+			"tools/list", map[string]string{
+				mcpSessionIDHeader:       "abc",
+				mcpProtocolVersionHeader: draftVersion,
+			}, false, wireLegacy},
 		{"no signals → legacy default", "tools/list", nil, false, wireLegacy},
 	}
 	for _, c := range cases {
