@@ -12,6 +12,7 @@ import (
 	"time"
 
 	core "github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/server/stateless"
 	gohttp "github.com/panyam/servicekit/http"
 )
 
@@ -942,7 +943,13 @@ type transportConfig struct {
 	allowedOrigins []string // allowed Origin values for DNS rebinding protection
 	streamableHTTP bool     // enable Streamable HTTP transport
 	sse            bool     // enable legacy SSE transport
-	stateless      bool          // stateless mode: no sessions, fresh dispatcher per request
+	stateless bool // stateless mode: no sessions, fresh dispatcher per request
+	// statelessMode picks the wire — SEP-2575 stateless, legacy session,
+	// or both on one URL. Orthogonal to stateless above; the latter is
+	// process-architecture, this is the protocol shape. See stateless.Mode.
+	// Seeded by defaultTransportConfig from MCPKIT_STATELESS_MODE env or
+	// stateless.DefaultMode; WithStatelessMode option overrides if passed.
+	statelessMode  stateless.Mode
 	sessionTimeout time.Duration // idle timeout for Streamable HTTP sessions (0 = no timeout)
 	eventStore     gohttp.EventStore // optional: persists SSE events for Last-Event-ID replay
 	keepaliveInterval time.Duration  // 0 = disabled; interval for JSON-RPC ping requests
@@ -958,6 +965,7 @@ func defaultTransportConfig() transportConfig {
 		keepalivePeriod: 30 * time.Second,
 		sse:             true,
 		streamableHTTP:  false,
+		statelessMode:   stateless.ResolveMode(),
 	}
 }
 

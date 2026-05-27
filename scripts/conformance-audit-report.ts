@@ -49,7 +49,12 @@ interface ScenarioResult {
 //
 // Keys are scenario IDs as upstream lists them; values are the fork target
 // name that already grades this scenario.
-const FORK_OVERLAP: Record<string, string> = {};
+const FORK_OVERLAP: Record<string, string> = {
+  // SEP-2575 stateless wire — covered by testconf-stateless, which
+  // drives examples/stateless via upstream's ServerStatelessScenario
+  // (the scenario lives in upstream-main, no fork needed).
+  'server-stateless': 'testconf-stateless',
+};
 
 // --- Spec URL overrides ------------------------------------------------------
 //

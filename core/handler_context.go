@@ -132,7 +132,20 @@ func (bc BaseContext) SessionID() string {
 	return bc.sc.sessionID
 }
 
-// Sample sends a sampling/createMessage request to the connected client.
+// Sample sends a sampling/createMessage request to the connected client
+// via the legacy server-initiated push path.
+//
+// Returns ErrNoRequestFunc on the SEP-2575 stateless wire (no per-request
+// push channel exists — the spec forbids independent JSON-RPC requests
+// on a tools/call response stream). Stateless handlers must enqueue a
+// sampling request via MRTR instead:
+//
+//	return ctx.RequestInput(core.InputRequests{
+//	    "draft-summary": core.NewSamplingInputRequest(req),
+//	})
+//
+// The client retries the same tools/call; the handler reads the answer
+// via ctx.InputResponse("draft-summary") + core.DecodeSamplingInputResponse.
 func (bc BaseContext) Sample(req CreateMessageRequest) (CreateMessageResult, error) {
 	if bc.sc == nil || bc.sc.request == nil {
 		return CreateMessageResult{}, ErrNoRequestFunc
@@ -151,12 +164,24 @@ func (bc BaseContext) Sample(req CreateMessageRequest) (CreateMessageResult, err
 	return result, nil
 }
 
-// Elicit sends an elicitation/create request to the connected client.
+// Elicit sends an elicitation/create request to the connected client
+// via the legacy server-initiated push path.
 //
 // SEP-2356: if the client did not declare the `fileInputs` capability,
 // the `x-mcp-file` keyword is stripped from `req.RequestedSchema` before
 // the request goes on the wire (spec mandate for cap-less clients —
 // matches the `tools/list` strip on the server-side dispatch path).
+//
+// Returns ErrNoRequestFunc on the SEP-2575 stateless wire (server-initiated
+// push is forbidden on tools/call streams). Stateless handlers route
+// elicitation through MRTR:
+//
+//	return ctx.RequestInput(core.InputRequests{
+//	    "user-name": core.NewElicitationInputRequest(req),
+//	})
+//
+// Caller is responsible for any SEP-2356 strip in that path — the MRTR
+// helpers do not introspect ctx for the cap declaration.
 func (bc BaseContext) Elicit(req ElicitationRequest) (ElicitationResult, error) {
 	if bc.sc == nil || bc.sc.request == nil {
 		return ElicitationResult{}, ErrNoRequestFunc
