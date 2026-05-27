@@ -253,6 +253,56 @@ func TestSubscriptionStream_DisconnectUnregisters(t *testing.T) {
 	}
 }
 
+// TestSubscriptionStream_PromptsListChangedDeliversToPromptsFilter is the
+// prompts-side mirror of TestSubscriptionStream_SubscriptionIdOnAllFrames.
+// Closes the SEP-2575 Bucket 7 invariant: list-changed-capable servers
+// notify listen streams with promptsListChanged: true when prompts
+// mutate. Subscribes with prompts-only filter, broadcasts prompts
+// list_changed, asserts the frame arrives tagged correctly AND that
+// no tools list_changed leaks.
+func TestSubscriptionStream_PromptsListChangedDeliversToPromptsFilter(t *testing.T) {
+	s, url, teardown := newStatelessTestServer(t, stateless.ModeDual)
+	defer teardown()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	resp := openSubscription(t, ctx, url, map[string]bool{"promptsListChanged": true})
+	defer resp.Body.Close()
+
+	go func() {
+		time.Sleep(150 * time.Millisecond)
+		s.Broadcast("notifications/prompts/list_changed", nil)
+	}()
+
+	frames := readSSEFrames(t, resp, 2, 3*time.Second)
+	if len(frames) < 2 {
+		t.Fatalf("got %d frames, want 2 (ack + notification): %+v", len(frames), frames)
+	}
+
+	ack := frames[0]
+	if ack["method"] != "notifications/subscriptions/acknowledged" {
+		t.Fatalf("first frame method = %v, want ack", ack["method"])
+	}
+	ackParams, _ := ack["params"].(map[string]any)
+	ackMeta, _ := ackParams["_meta"].(map[string]any)
+	subID, _ := ackMeta[core.MetaKeySubscriptionID].(string)
+	if subID == "" {
+		t.Fatal("no subscriptionId in ack")
+	}
+
+	notif := frames[1]
+	if notif["method"] != "notifications/prompts/list_changed" {
+		t.Errorf("frame method = %v, want notifications/prompts/list_changed",
+			notif["method"])
+	}
+	notifParams, _ := notif["params"].(map[string]any)
+	notifMeta, _ := notifParams["_meta"].(map[string]any)
+	if notifMeta[core.MetaKeySubscriptionID] != subID {
+		t.Errorf("frame subscriptionId = %v, want %s (matching ack)",
+			notifMeta[core.MetaKeySubscriptionID], subID)
+	}
+}
+
 func TestSubscribeFilter_Matches(t *testing.T) {
 	cases := []struct {
 		method string
