@@ -19,6 +19,29 @@ func marshalJSON(v any) ([]byte, error) {
 	return core.MarshalJSON(v)
 }
 
+// readAndAuthorize reads the request body, peeks the JSON-RPC method, and
+// runs the auth check. Public methods bypass auth (claims are still populated
+// best-effort if a token is present); protected methods require a valid
+// principal. On failure the HTTP error has already been written and callers
+// must return without further response writes.
+func readAndAuthorize(w http.ResponseWriter, r *http.Request, s *Server) (body []byte, claims *core.Claims, ok bool) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "failed to read body", http.StatusBadRequest)
+		return nil, nil, false
+	}
+	if method := extractMethodFromJSON(body); s.IsPublicMethod(method) {
+		claims, _ = s.CheckAuth(r)
+		return body, claims, true
+	}
+	claims, err = s.CheckAuth(r)
+	if err != nil {
+		writeAuthError(w, err)
+		return nil, nil, false
+	}
+	return body, claims, true
+}
+
 // sseSessionEntry wraps a Dispatcher with session metadata and an optional
 // grace period timer. When a grace period is configured, the session survives
 // brief disconnects — the Dispatcher stays alive while the timer counts down,
@@ -35,6 +58,22 @@ type sseSessionEntry struct {
 	// without going through the hub's SendEventWithID abstraction. Reset on
 	// reconnect. Nil during grace period (between OnClose and OnStart).
 	conn *mcpSSEConn
+}
+
+// verifyPrincipal checks that the request's authenticated principal matches
+// the session's bound principal. Returns true if allowed, false if rejected
+// (403 already written). Sessions created without auth (empty subject) allow
+// any caller — backward compatible with unauthenticated servers. Mirrors
+// sessionEntry.verifyPrincipal on the streamable transport.
+func (e *sseSessionEntry) verifyPrincipal(w http.ResponseWriter, claims *core.Claims) bool {
+	if e.subject == "" {
+		return true
+	}
+	if claims != nil && claims.Subject == e.subject {
+		return true
+	}
+	http.Error(w, "forbidden: session principal mismatch", http.StatusForbidden)
+	return false
 }
 
 // sseTransport implements the MCP HTTP+SSE transport (2024-11-05 spec).
@@ -132,21 +171,9 @@ func (t *sseTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Auth check — peek at method for public method bypass.
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "failed to read body", http.StatusBadRequest)
+	body, claims, ok := readAndAuthorize(w, r, t.server)
+	if !ok {
 		return
-	}
-	var claims *core.Claims
-	if method := extractMethodFromJSON(body); t.server.IsPublicMethod(method) {
-		claims, _ = t.server.CheckAuth(r) // best-effort: populate claims if token present
-	} else {
-		claims, err = t.server.CheckAuth(r)
-		if err != nil {
-			writeAuthError(w, err)
-			return
-		}
 	}
 
 	sessionID := r.URL.Query().Get("sessionId")
@@ -160,18 +187,10 @@ func (t *sseTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "session not found or expired", http.StatusGone)
 		return
 	}
-	dispatcher := entry.dispatcher
-
-	// Verify the POST principal matches the session-opening principal.
-	// Prevents user B (with a valid token) from posting to user A's session.
-	if entry.subject != "" {
-		if claims == nil || claims.Subject != entry.subject {
-			http.Error(w, "forbidden: session principal mismatch", http.StatusForbidden)
-			return
-		}
+	if !entry.verifyPrincipal(w, claims) {
+		return
 	}
-
-	// body already read above for method peek.
+	dispatcher := entry.dispatcher
 
 	// Detect if the incoming message is a JSON-RPC response (from the client
 	// answering a server-to-client request like sampling/createMessage).
@@ -496,12 +515,8 @@ func (h *mcpSSEHandler) Validate(w http.ResponseWriter, r *http.Request) (*mcpSS
 	// period), reuse it instead of creating a new one.
 	if reqSessionID := r.URL.Query().Get("sessionId"); reqSessionID != "" {
 		if entry, ok := h.transport.sessions.Load(reqSessionID); ok {
-			// Verify principal matches — prevents session hijacking.
-			if entry.subject != "" {
-				if claims == nil || claims.Subject != entry.subject {
-					http.Error(w, "forbidden: session principal mismatch", http.StatusForbidden)
-					return nil, false
-				}
+			if !entry.verifyPrincipal(w, claims) {
+				return nil, false
 			}
 			// Cancel the grace timer — session is being resumed.
 			if entry.graceTimer != nil {

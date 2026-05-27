@@ -92,11 +92,25 @@ const (
 	// whose required-mode path needs the same affordance.
 	ErrCodeMissingRequiredClientCapability = -32003
 
-	// ErrCodeHeaderMismatch indicates the request's SEP-2243 routing
-	// headers (Mcp-Method, Mcp-Name) disagree with the JSON-RPC body,
-	// or that a required routing header is missing. Paired with HTTP
-	// 400 Bad Request. Defined by SEP-2243 §Server Validation.
+	// ErrCodeHeaderMismatch indicates an HTTP-header / body cross-check
+	// failure. Two surfaces use the same code:
+	//
+	//   - SEP-2243 §Server Validation: the request's Mcp-Method /
+	//     Mcp-Name routing headers disagree with the JSON-RPC body, or
+	//     a required routing header is missing.
+	//   - SEP-2575 stateless wire: the MCP-Protocol-Version HTTP header
+	//     and the _meta protocolVersion field do not agree.
+	//
+	// Both surfaces pair the code with HTTP 400 Bad Request.
 	ErrCodeHeaderMismatch = -32001
+
+	// ErrCodeUnsupportedProtocolVersion is returned by the SEP-2575
+	// stateless wire when the request's protocol version is unknown or
+	// has been declined by this server. The error data carries
+	// {supported: [...], requested: "..."} (see UnsupportedProtocolVersionData)
+	// so the client can pick a mutually supported version and retry.
+	// HTTP status: 400.
+	ErrCodeUnsupportedProtocolVersion = -32004
 )
 
 // NewResponse creates a success response for the given request ID.
@@ -160,6 +174,93 @@ func NewErrorResponseWithData(id json.RawMessage, code int, message string, data
 		ID:      id,
 		Error:   &Error{Code: code, Message: message, Data: data},
 	}
+}
+
+// HeaderMismatchData is the typed shape of the structured `data` payload
+// carried on every -32001 ErrCodeHeaderMismatch response. Clients decode
+// resp.Error.Data into this to inspect which header disagreed with what
+// value. Matches the wire shape emitted by both surfaces that use the
+// code (SEP-2243 routing-header validation and SEP-2575 protocol-version
+// cross-check) — see server/header_validation.go for the producer.
+//
+// Extra carries any additional surface-specific key/value pairs the
+// server tacked on (for instance, the tool name on Mcp-Name mismatch).
+// MarshalJSON flattens Extra into the top-level object alongside the
+// fixed fields, matching how the server emits it.
+type HeaderMismatchData struct {
+	// Reason is a human-readable description, e.g.
+	// "Mcp-Method header value does not match request body" or
+	// "MCP-Protocol-Version header value does not match request body".
+	Reason string `json:"reason"`
+
+	// Header is the HTTP header name that triggered the mismatch.
+	Header string `json:"header"`
+
+	// Expected is what the server computed from the JSON-RPC body —
+	// the value the header SHOULD have carried.
+	Expected string `json:"expected"`
+
+	// Received is what the header actually carried (empty when the
+	// header was required-but-absent rather than mismatched).
+	Received string `json:"received"`
+
+	// Extra holds extension-specific context (e.g., "tool" = "create_cart"
+	// for Mcp-Name failures). Decoded into the same JSON object as the
+	// fixed fields above; MarshalJSON flattens on the way out.
+	Extra map[string]any `json:"-"`
+}
+
+// MarshalJSON flattens Extra keys into the top-level alongside the
+// four fixed fields, matching server/header_validation.go's emit shape.
+func (d HeaderMismatchData) MarshalJSON() ([]byte, error) {
+	out := map[string]any{
+		"reason":   d.Reason,
+		"header":   d.Header,
+		"expected": d.Expected,
+		"received": d.Received,
+	}
+	for k, v := range d.Extra {
+		if _, taken := out[k]; taken {
+			continue // fixed fields win over extras with colliding names
+		}
+		out[k] = v
+	}
+	return MarshalJSON(out)
+}
+
+// UnmarshalJSON populates the fixed fields and collects everything else
+// into Extra so callers see the same structure regardless of which
+// producer (SEP-2243, SEP-2575, future) emitted the response.
+func (d *HeaderMismatchData) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if v, ok := raw["reason"]; ok {
+		_ = json.Unmarshal(v, &d.Reason)
+		delete(raw, "reason")
+	}
+	if v, ok := raw["header"]; ok {
+		_ = json.Unmarshal(v, &d.Header)
+		delete(raw, "header")
+	}
+	if v, ok := raw["expected"]; ok {
+		_ = json.Unmarshal(v, &d.Expected)
+		delete(raw, "expected")
+	}
+	if v, ok := raw["received"]; ok {
+		_ = json.Unmarshal(v, &d.Received)
+		delete(raw, "received")
+	}
+	if len(raw) > 0 {
+		d.Extra = make(map[string]any, len(raw))
+		for k, v := range raw {
+			var any any
+			_ = json.Unmarshal(v, &any)
+			d.Extra[k] = any
+		}
+	}
+	return nil
 }
 
 // URLElicitationRequiredErrorData is the structured data for a -32042 error.
