@@ -23,6 +23,10 @@ MCPCONFORMANCE_TASKS_V2_PATH    ?= $(abspath $(REPO_ROOT)/../conf-tasks-mrtr)
 MCPCONFORMANCE_MRTR_PATH        ?= $(abspath $(REPO_ROOT)/../conf-tasks-mrtr)
 MCPCONFORMANCE_FILE_INPUTS_PATH ?= $(abspath $(REPO_ROOT)/../conf-pending)
 MCPCONFORMANCE_AUTH_PATH        ?= $(abspath $(REPO_ROOT)/../conf-pending)
+# SEP-2575 stateless wire — the scenario lives in upstream-main (no fork
+# diverged yet), so the path defaults to the same upstream clone the
+# audit uses. Override per-invocation if it ever splits out.
+MCPCONFORMANCE_STATELESS_PATH   ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
 # Audit harness: points at a direct clone of modelcontextprotocol/conformance@main
 # (the real upstream, not our panyam fork). Used by testconf-upstream-audit to
 # grade mcpkit against every scenario upstream currently ships.
@@ -31,6 +35,7 @@ MCPCONFORMANCE_BASE_PATH        ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
 .PHONY: test testconfall testconf testconfauth \
         testconf-tasks testconf-tasks-v2 testconf-mrtr \
         testconf-file-inputs testconf-auth-server \
+        testconf-stateless \
         testconf-elicitation testconf-upstream-audit help
 
 # Default umbrella — runs every conformance suite. Fork-based suites and the
@@ -38,7 +43,7 @@ MCPCONFORMANCE_BASE_PATH        ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
 # exist (each target fail-fasts with a remediation message if missing). Fair
 # game: contributors should have all conf-* sibling clones before pushing
 # anything that touches conformance surfaces.
-test: testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-upstream-audit ## Run all conformance suites (needs fork worktrees + conf-upstream-main)
+test: testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-stateless testconf-upstream-audit ## Run all conformance suites (needs fork worktrees + conf-upstream-main)
 
 testconfall: testconf testconfauth ## Run base + auth conformance only
 
@@ -81,6 +86,62 @@ testconf-mrtr: ## Run SEP-2322 MRTR conformance — fork-based scenarios + mcpki
 		MRTR_SERVER_CMD="$(REPO_ROOT)/examples/mrtr/mrtr-demo --serve --addr :18093" \
 		npx vitest run src/scenarios/server/mrtr/all-scenarios.test.ts)
 	(cd $(CONFORMANCE_DIR) && npm install --silent && npx vitest run mrtr/)
+
+testconf-stateless: ## Run SEP-2575 stateless conformance — drives examples/stateless via upstream's ServerStatelessScenario class
+	@if [ ! -d "$(MCPCONFORMANCE_STATELESS_PATH)" ]; then \
+		echo "MCPCONFORMANCE_STATELESS_PATH=$(MCPCONFORMANCE_STATELESS_PATH) does not exist."; \
+		echo "Clone https://github.com/modelcontextprotocol/conformance there:"; \
+		echo "  git clone https://github.com/modelcontextprotocol/conformance.git $(MCPCONFORMANCE_STATELESS_PATH)"; \
+		echo "Or set MCPCONFORMANCE_STATELESS_PATH=<path-to-clone>."; \
+		exit 1; \
+	fi
+	@(cd $(REPO_ROOT)/examples/stateless && go build -o stateless-demo .)
+	@OUT=$$(mktemp -d -t conf-stateless.XXXXXX); \
+	echo "Spawning fixture on :18100, scratch dir $$OUT"; \
+	$(REPO_ROOT)/examples/stateless/stateless-demo --serve --addr=:18100 > $$OUT/server.log 2>&1 & \
+	PID=$$!; \
+	for i in 1 2 3 4 5 6 7 8 9 10; do \
+		curl -sf -X POST -H "Content-Type: application/json" \
+			-d '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"DRAFT-2026-v1","io.modelcontextprotocol/clientInfo":{"name":"poll","version":"1"},"io.modelcontextprotocol/clientCapabilities":{}}}}' \
+			-H "MCP-Protocol-Version: DRAFT-2026-v1" \
+			http://localhost:18100/mcp > /dev/null 2>&1 && break; \
+		sleep 0.3; \
+	done; \
+	(cd $(MCPCONFORMANCE_STATELESS_PATH) && \
+		node dist/index.js server \
+			--url http://localhost:18100/mcp \
+			--scenario server-stateless \
+			-o $$OUT/checks > $$OUT/runner.log 2>&1); \
+	RC=$$?; \
+	kill $$PID 2>/dev/null; \
+	wait $$PID 2>/dev/null; \
+	CHECKS=$$(ls -t $$OUT/checks/server-server-stateless-*/checks.json 2>/dev/null | head -1); \
+	if [ -z "$$CHECKS" ] || [ ! -f "$$CHECKS" ]; then \
+		echo "testconf-stateless: upstream runner produced no checks.json"; \
+		tail -30 $$OUT/runner.log; \
+		exit 1; \
+	fi; \
+	FAILS=$$(grep -c '"status": "FAILURE"' $$CHECKS); \
+	PASSES=$$(grep -c '"status": "SUCCESS"' $$CHECKS); \
+	SKIPS=$$(grep -c '"status": "SKIPPED"' $$CHECKS); \
+	WARNS=$$(grep -c '"status": "WARNING"' $$CHECKS); \
+	echo "testconf-stateless: $$PASSES pass / $$FAILS fail / $$WARNS warn / $$SKIPS skip (artifact: $$CHECKS)"; \
+	UNEXPECTED=$$(grep -B 2 '"status": "FAILURE"' $$CHECKS | grep '"name"' | grep -v "ServerRejectsUndeclaredCapability" | wc -l | tr -d ' '); \
+	if [ "$$UNEXPECTED" -gt 0 ]; then \
+		echo "Unexpected FAILURE rows:"; \
+		grep -B 2 '"status": "FAILURE"' $$CHECKS | head -60; \
+		exit 1; \
+	fi; \
+	if [ "$$FAILS" -gt 1 ]; then \
+		echo "More FAILURE rows than the known upstream-test bug (-32003 array-vs-object); aborting"; \
+		grep -B 2 '"status": "FAILURE"' $$CHECKS | head -60; \
+		exit 1; \
+	fi
+# Known upstream test bug: ServerRejectsUndeclaredCapability checks for
+# requiredCapabilities as a string-array but the SEP-2575 schema says
+# ClientCapabilities object. mcpkit follows the schema; the test will
+# align in a follow-up upstream PR. Until then this target tolerates
+# exactly one FAILURE row and verifies it's that specific check.
 
 testconf-file-inputs: ## Run SEP-2356 file-inputs conformance — fork-based scenarios (auto-spawns fixture)
 	@if [ ! -d "$(MCPCONFORMANCE_FILE_INPUTS_PATH)" ]; then \
