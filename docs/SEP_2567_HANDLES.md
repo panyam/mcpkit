@@ -2,7 +2,9 @@
 
 [SEP-2567](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2567) ("Sessionless MCP via Explicit State Handles") is the SEP-2575 stateless wire's *application-layer* counterpart: the wire removes session machinery; SEP-2567 explains how to model stateful flows *without* sessions, using explicit server-minted handles threaded through tool parameters.
 
-The two SEPs are designed to compose. mcpkit bundles support for both: SEP-2575 ships the wire (`server/stateless/`), SEP-2567 ships as a typed helper (`server.HandleStore[T]`) plus the worked example in `examples/stateless/`'s cart story.
+**SEP-2567 is design guidance — there is no wire contract and no upstream conformance suite.** Any storage you can hand a tool handler satisfies it: Redis, SQL, an in-memory `sync.Map`, a custom RPC backend, whatever. The SEP cares about *behavior* (server-minted opaque ids, threaded through tool args, no implicit session state) — not about any specific Go API.
+
+mcpkit ships `server.HandleStore[T]` as **opt-in scaffolding** for the common case where you don't already have a store wired up. It handles opaque-id minting (collision-resistant base32), TTL/GC, and typed get/put/delete behind a small interface. Use it, replace it with your own store, or skip it entirely — all three are equally SEP-2567-compliant. The worked example in `examples/stateless/`'s cart story uses `HandleStore` for the on-ramp; a production deployment would as likely call Redis directly.
 
 ## The pattern in one example
 
