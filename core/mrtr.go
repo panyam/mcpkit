@@ -166,6 +166,20 @@ func NewElicitationInputRequest(req ElicitationRequest) InputRequest {
 	}
 }
 
+// NewListRootsInputRequest builds the MRTR InputRequest the server sends
+// when it needs the client's current set of workspace roots. Symmetric
+// with NewSamplingInputRequest / NewElicitationInputRequest. The wire
+// method is roots/list and the spec defines no params — the value
+// carries an empty `{}` so wire decoders that branch on params shape
+// stay on the common path. Used by the SEP-2322
+// `input-required-result-basic-list-roots` conformance scenario.
+func NewListRootsInputRequest() InputRequest {
+	return InputRequest{
+		Method: "roots/list",
+		Params: json.RawMessage(`{}`),
+	}
+}
+
 // DecodeSamplingInputResponse decodes a single inputResponses entry as
 // a CreateMessageResult — symmetric with NewSamplingInputRequest above.
 // Used on the second tools/call round after the client has answered
@@ -184,6 +198,17 @@ func DecodeElicitationInputResponse(raw json.RawMessage) (ElicitationResult, err
 	var out ElicitationResult
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return ElicitationResult{}, fmt.Errorf("decode elicitation response: %w", err)
+	}
+	return out, nil
+}
+
+// DecodeListRootsInputResponse decodes a single inputResponses entry as a
+// RootsListResult — symmetric with NewListRootsInputRequest. Used on the
+// second tools/call round after the client has reported its current roots.
+func DecodeListRootsInputResponse(raw json.RawMessage) (RootsListResult, error) {
+	var out RootsListResult
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return RootsListResult{}, fmt.Errorf("decode roots/list response: %w", err)
 	}
 	return out, nil
 }
