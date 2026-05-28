@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -301,15 +302,20 @@ func (v *JWTValidator) jwksKeyFunc(token *jwt.Token) (any, error) {
 	if !ok || kid == "" {
 		return nil, fmt.Errorf("missing kid header")
 	}
-	rec, err := v.ks.GetKeyByKid(kid)
+	rec, err := v.ks.GetKeyByKid(context.Background(), &keys.GetKeyByKidRequest{Kid: kid})
 	if err != nil {
 		return nil, fmt.Errorf("key not found for kid %q: %w", kid, err)
 	}
-	alg, _ := token.Header["alg"].(string)
-	if alg != rec.Algorithm {
-		return nil, fmt.Errorf("algorithm mismatch: token has %s, key expects %s", alg, rec.Algorithm)
+	// oneauth 0.1.9 (#217): GetKeyByKidResponse wraps a *KeyRecord rather
+	// than inlining its fields. Access fields via Record.
+	if rec == nil || rec.Record == nil {
+		return nil, fmt.Errorf("key not found for kid %q", kid)
 	}
-	return utils.DecodeVerifyKey(rec.Key, rec.Algorithm)
+	alg, _ := token.Header["alg"].(string)
+	if alg != rec.Record.Algorithm {
+		return nil, fmt.Errorf("algorithm mismatch: token has %s, key expects %s", alg, rec.Record.Algorithm)
+	}
+	return utils.DecodeVerifyKey(rec.Record.Key, rec.Record.Algorithm)
 }
 
 // unauthorized returns an AuthError with 401 and a WWW-Authenticate header

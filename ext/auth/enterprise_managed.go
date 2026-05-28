@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"sync"
@@ -157,7 +158,8 @@ func (s *EnterpriseManagedTokenSource) refetchLocked() (string, error) {
 	idp := client.NewAuthClient(s.IdpTokenEndpoint, nil,
 		client.WithASMetadata(&client.ASMetadata{TokenEndpoint: s.IdpTokenEndpoint}))
 
-	exch, err := idp.TokenExchange(&client.TokenExchangeRequest{
+	// oneauth 0.1.9 (#217): TokenExchange now takes (ctx, *TokenExchangeRequest).
+	exch, err := idp.TokenExchange(context.Background(), &client.TokenExchangeRequest{
 		ClientID:           s.IdpClientID,
 		SubjectToken:       s.IdpIDToken,
 		SubjectTokenType:   "urn:ietf:params:oauth:token-type:id_token",
@@ -180,7 +182,7 @@ func (s *EnterpriseManagedTokenSource) refetchLocked() (string, error) {
 			TokenEndpointAuthMethods: s.authInfo.ASMetadata.TokenEndpointAuthMethods,
 		}))
 
-	cred, err := as.JwtBearerGrant(&client.JwtBearerGrantRequest{
+	cred, err := as.JwtBearerGrant(context.Background(), &client.JwtBearerGrantRequest{
 		ClientID:     s.ClientID,
 		ClientSecret: s.ClientSecret,
 		Assertion:    exch.AccessToken,
