@@ -45,7 +45,7 @@ func RegisterBookServiceMCP(srv *server.Server, impl BookServiceMCPServer) {
 				Description: "Search the book catalog",
 				InputSchema: json.RawMessage(`{"properties":{"genre":{"type":"string"},"max_results":{"type":"integer"},"query":{"type":"string"}},"required":["query","max_results","genre"],"type":"object"}`),
 			},
-			Handler: func(ctx mcpcore.ToolContext, req mcpcore.ToolRequest) (mcpcore.ToolResult, error) {
+			Handler: func(ctx mcpcore.ToolContext, req mcpcore.ToolRequest) (mcpcore.ToolResponse, error) {
 				var in SearchBooksRequest
 				if err := runtime.BindProto(req, &in); err != nil {
 					return mcpcore.ErrorResult(err.Error()), nil
@@ -63,7 +63,7 @@ func RegisterBookServiceMCP(srv *server.Server, impl BookServiceMCPServer) {
 				Description: "Generate an AI review of a book, with user approval",
 				InputSchema: json.RawMessage(`{"properties":{"book_id":{"type":"string"}},"required":["book_id"],"type":"object"}`),
 			},
-			Handler: func(ctx mcpcore.ToolContext, req mcpcore.ToolRequest) (mcpcore.ToolResult, error) {
+			Handler: func(ctx mcpcore.ToolContext, req mcpcore.ToolRequest) (mcpcore.ToolResponse, error) {
 				var in ReviewBookRequest
 				if err := runtime.BindProto(req, &in); err != nil {
 					return mcpcore.ErrorResult(err.Error()), nil
@@ -144,7 +144,7 @@ func RegisterBookServiceMCPPrompts(srv *server.Server, impl BookServiceMCPPrompt
 					{Name: "style", Description: "", Required: false},
 				},
 			},
-			Handler: func(ctx mcpcore.PromptContext, req mcpcore.PromptRequest) (mcpcore.PromptResult, error) {
+			Handler: func(ctx mcpcore.PromptContext, req mcpcore.PromptRequest) (mcpcore.PromptResponse, error) {
 				var in SummarizeBookRequest
 				if err := runtime.BindPromptArgs(req.Arguments, &in); err != nil {
 					return mcpcore.PromptResult{}, err
@@ -166,7 +166,7 @@ func RegisterBookServiceMCPPrompts(srv *server.Server, impl BookServiceMCPPrompt
 					{Name: "count", Description: "", Required: true},
 				},
 			},
-			Handler: func(ctx mcpcore.PromptContext, req mcpcore.PromptRequest) (mcpcore.PromptResult, error) {
+			Handler: func(ctx mcpcore.PromptContext, req mcpcore.PromptRequest) (mcpcore.PromptResponse, error) {
 				var in RecommendBooksRequest
 				if err := runtime.BindPromptArgs(req.Arguments, &in); err != nil {
 					return mcpcore.PromptResult{}, err

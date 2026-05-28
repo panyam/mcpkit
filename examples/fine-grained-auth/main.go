@@ -797,8 +797,16 @@ func startInProcessAS() (*inProcessAS, error) {
 	// Keystore: register the AS's *public* key (PEM bytes) under a sentinel
 	// client_id so the JWKSHandler publishes it. APIAuth signs with the
 	// matching private key (passed via JWTSigningKey, below).
+	// oneauth 0.1.9 (#217): RegisterKey was replaced by the gRPC-shape
+	// PutKey(ctx, *PutKeyRequest); key material moves into a KeyRecord.
 	ks := keys.NewInMemoryKeyStore()
-	if err := ks.RegisterKey(asKeyID, pubPEM, "RS256"); err != nil {
+	if _, err := ks.PutKey(context.Background(), &keys.PutKeyRequest{
+		Record: &keys.KeyRecord{
+			ClientID:  asKeyID,
+			Key:       pubPEM,
+			Algorithm: "RS256",
+		},
+	}); err != nil {
 		return nil, fmt.Errorf("register AS key: %w", err)
 	}
 
