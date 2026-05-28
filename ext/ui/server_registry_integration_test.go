@@ -23,7 +23,7 @@ func newTestServer(tools map[string]string) *server.Server {
 		n, d := name, desc // capture
 		srv.RegisterTool(
 			core.ToolDef{Name: n, Description: d, InputSchema: map[string]any{"type": "object"}},
-			func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 				return core.TextResult(n + ":ok"), nil
 			},
 		)

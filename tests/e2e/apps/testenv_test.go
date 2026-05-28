@@ -46,7 +46,7 @@ func newConformanceServer() *server.Server {
 				},
 			},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("Dashboard displayed"), nil
 		},
 	)
@@ -66,7 +66,7 @@ func newConformanceServer() *server.Server {
 				},
 			},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			var args struct{ Page string `json:"page"` }
 			req.Bind(&args)
 			return core.TextResult("Navigated to " + args.Page), nil
@@ -86,7 +86,7 @@ func newConformanceServer() *server.Server {
 				},
 			},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult(`Dashboard data: {"widgets": 5}`), nil
 		},
 	)
@@ -104,7 +104,7 @@ func newConformanceServer() *server.Server {
 				},
 			},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			core.NotifyResourcesChanged(ctx)
 			return core.TextResult("Dashboard mutated"), nil
 		},
@@ -117,7 +117,7 @@ func newConformanceServer() *server.Server {
 			Description: "Tool without UI metadata",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("plain result"), nil
 		},
 	)

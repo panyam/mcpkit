@@ -27,7 +27,7 @@ func TestConcurrentRequestsGetCorrectResponses(t *testing.T) {
 			Description: "Returns the request argument as-is for identification",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{"tag": map[string]any{"type": "string"}}},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			var p struct{ Tag string `json:"tag"` }
 			req.Bind(&p)
 			time.Sleep(10 * time.Millisecond) // simulate work
@@ -76,7 +76,7 @@ func TestDuplicateRequestIDRejected(t *testing.T) {
 			Description: "Takes 100ms to complete",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			time.Sleep(100 * time.Millisecond)
 			return core.TextResult("done"), nil
 		},

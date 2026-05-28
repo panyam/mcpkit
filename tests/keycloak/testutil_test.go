@@ -147,7 +147,7 @@ func NewMCPTestEnv(t *testing.T, extraOpts ...server.Option) *MCPTestEnv {
 			Description: "Echoes input and reports claims. No scope required.",
 			InputSchema: json.RawMessage(`{"type":"object","properties":{"msg":{"type":"string"}}}`),
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			claims := core.AuthClaims(ctx)
 			var args map[string]any
 			json.Unmarshal(req.Arguments, &args)
@@ -168,7 +168,7 @@ func NewMCPTestEnv(t *testing.T, extraOpts ...server.Option) *MCPTestEnv {
 			Description: "Requires tools-call scope.",
 			InputSchema: json.RawMessage(`{"type":"object"}`),
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			if err := auth.RequireScope(ctx, scopeToolsCall); err != nil {
 				return core.TextResult("error: " + err.Error()), nil
 			}

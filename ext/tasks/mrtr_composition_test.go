@@ -38,7 +38,7 @@ func TestMRTR_TaskComposition(t *testing.T) {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			if tasks.GetTaskContext(ctx) != nil {
 				// Continuation phase: produce the final result.
 				var er struct {
@@ -63,7 +63,7 @@ func TestMRTR_TaskComposition(t *testing.T) {
 					},
 				})
 			}
-			return core.ToolResult{GoAsync: true}, nil
+			return core.GoAsyncResult{}, nil
 		},
 	)
 

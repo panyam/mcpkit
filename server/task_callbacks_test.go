@@ -27,7 +27,7 @@ func TestTaskCallbacksGetTask(t *testing.T) {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
 		},
-		Handler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		Handler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			select {
 			case <-unblock:
 			case <-ctx.Done():
@@ -89,7 +89,7 @@ func TestTaskCallbacksGetResult(t *testing.T) {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
 		},
-		Handler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		Handler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("store-result"), nil
 		},
 		TaskCallbacks: &TaskCallbacks{
@@ -154,7 +154,7 @@ func TestTaskCallbacksFallthrough(t *testing.T) {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
 		},
-		Handler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		Handler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("real-result"), nil
 		},
 		TaskCallbacks: &TaskCallbacks{

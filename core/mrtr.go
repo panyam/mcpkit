@@ -96,6 +96,9 @@ type InputRequiredResult struct {
 	RequestState string `json:"requestState,omitempty"`
 }
 
+// toolResponse marks InputRequiredResult as a [ToolResponse] variant.
+func (InputRequiredResult) toolResponse() {}
+
 // MarshalJSON defaults ResultType to ResultTypeInputRequired so handlers
 // that build an InputRequiredResult{} literal don't have to set the
 // discriminator.

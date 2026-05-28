@@ -22,6 +22,9 @@ type TypedToolResult struct {
 // The Out type parameter controls output behavior:
 //   - string: handler returns text, wrapped via TextResult. No OutputSchema.
 //   - ToolResult: handler returns a ToolResult directly. No OutputSchema.
+//   - ToolResponse: handler returns any ToolResponse variant (ToolResult,
+//     InputRequiredResult, CreateTaskResult, GoAsyncResult). No OutputSchema.
+//     Use this for MRTR / SEP-2663 tools.
 //   - any struct: handler returns typed data. OutputSchema auto-derived from Out.
 //     Result uses StructuredResult with JSON text fallback.
 //
@@ -65,7 +68,8 @@ func TypedTool[In, Out any](name, desc string,
 	outType := reflect.TypeOf((*Out)(nil)).Elem()
 	isStringOut := outType.Kind() == reflect.String
 	isToolResultOut := outType == reflect.TypeOf(ToolResult{})
-	if !isStringOut && !isToolResultOut {
+	isToolResponseOut := outType == reflect.TypeOf((*ToolResponse)(nil)).Elem()
+	if !isStringOut && !isToolResultOut && !isToolResponseOut {
 		outputSchema = GenerateSchema[Out]()
 	}
 
@@ -81,7 +85,7 @@ func TypedTool[In, Out any](name, desc string,
 		Execution:      cfg.toolExecution,
 	}
 
-	wrappedHandler := func(ctx ToolContext, req ToolRequest) (ToolResult, error) {
+	wrappedHandler := func(ctx ToolContext, req ToolRequest) (ToolResponse, error) {
 		var input In
 		if err := json.Unmarshal(req.Arguments, &input); err != nil {
 			return ErrorResult(fmt.Sprintf("invalid arguments: %v", err)), nil
@@ -90,7 +94,7 @@ func TypedTool[In, Out any](name, desc string,
 		if err != nil {
 			return ToolResult{}, err
 		}
-		return wrapOutput(out, isStringOut, isToolResultOut)
+		return wrapOutput(out, isStringOut, isToolResultOut, isToolResponseOut)
 	}
 
 	return TypedToolResult{ToolDef: def, Handler: wrappedHandler}
@@ -189,8 +193,8 @@ func WithInputSchemaOverride(schema any) TypedToolOption {
 //	type SlowComputeInput struct {
 //	    Seconds int `json:"seconds"`
 //	}
-//	r := core.TypedTool[SlowComputeInput, core.ToolResult]("slow_compute", "...",
-//	    func(ctx core.ToolContext, in SlowComputeInput) (core.ToolResult, error) { ... },
+//	r := core.TypedTool[SlowComputeInput, core.ToolResponse]("slow_compute", "...",
+//	    func(ctx core.ToolContext, in SlowComputeInput) (core.ToolResponse, error) { ... },
 //	    core.WithToolExecution(&core.ToolExecution{TaskSupport: core.TaskSupportOptional}),
 //	)
 //
@@ -203,13 +207,16 @@ func WithToolExecution(execution *ToolExecution) TypedToolOption {
 	return func(c *typedToolConfig) { c.toolExecution = execution }
 }
 
-// wrapOutput converts a typed handler output into a ToolResult.
-func wrapOutput[Out any](out Out, isString, isToolResult bool) (ToolResult, error) {
+// wrapOutput converts a typed handler output into a ToolResponse.
+func wrapOutput[Out any](out Out, isString, isToolResult, isToolResponse bool) (ToolResponse, error) {
 	if isString {
 		return TextResult(any(out).(string)), nil
 	}
 	if isToolResult {
 		return any(out).(ToolResult), nil
+	}
+	if isToolResponse {
+		return any(out).(ToolResponse), nil
 	}
 	data, err := json.Marshal(out)
 	if err != nil {

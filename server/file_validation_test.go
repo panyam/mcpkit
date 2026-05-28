@@ -33,7 +33,7 @@ func newFileInputTestServer(t *testing.T) *server.Server {
 				"required": []string{"image"},
 			},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			// Should never be reached on rejection paths.
 			return core.TextResult("handler reached"), nil
 		},
@@ -119,7 +119,7 @@ func TestFileInputValidation_ArrayItems(t *testing.T) {
 				"required": []string{"documents"},
 			},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("ok"), nil
 		},
 	)
@@ -173,7 +173,7 @@ func TestFileInputCapGating_StripsKeywordWithoutCap(t *testing.T) {
 				"required": []string{"image"},
 			},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("ok"), nil
 		},
 	)
@@ -224,7 +224,7 @@ func TestFileInputCapGating_PreservesKeywordWithCap(t *testing.T) {
 				},
 			},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("ok"), nil
 		},
 	)
@@ -263,7 +263,7 @@ func TestFileInputValidation_DisabledByDefault(t *testing.T) {
 				"required": []string{"image"},
 			},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("handler reached"), nil
 		},
 	)

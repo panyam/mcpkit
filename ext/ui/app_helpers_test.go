@@ -19,7 +19,7 @@ func TestRegisterAppTool(t *testing.T) {
 		Description: "Build a slide deck",
 		InputSchema: map[string]any{"type": "object"},
 		ResourceURI: "ui://decks/view",
-		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("ok"), nil
 		},
 		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
@@ -159,7 +159,7 @@ func TestRegisterAppToolTemplate(t *testing.T) {
 		Description: "Show a pizza",
 		InputSchema: map[string]any{"type": "object"},
 		ResourceURI: "ui://pizzas/{pizzaId}/details",
-		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("ok"), nil
 		},
 		TemplateHandler: func(ctx core.ResourceContext, uri string, params map[string]string) (core.ResourceResult, error) {
@@ -215,7 +215,7 @@ func TestRegisterAppToolTemplateNilHandlerPanics(t *testing.T) {
 	RegisterAppTool(reg, AppToolConfig{
 		Name:        "bad_template",
 		ResourceURI: "ui://items/{id}/view",
-		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("ok"), nil
 		},
 		// TemplateHandler intentionally nil
@@ -237,7 +237,7 @@ func TestRegisterAppToolConcreteNilHandlerPanics(t *testing.T) {
 	RegisterAppTool(reg, AppToolConfig{
 		Name:        "bad_concrete",
 		ResourceURI: "ui://items/view",
-		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("ok"), nil
 		},
 		// ResourceHandler intentionally nil
@@ -252,7 +252,7 @@ func TestRegisterAppToolSupportedDisplayModes(t *testing.T) {
 	RegisterAppTool(reg, AppToolConfig{
 		Name:        "dashboard",
 		ResourceURI: "ui://dashboard/view",
-		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("ok"), nil
 		},
 		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
@@ -287,7 +287,7 @@ func TestTemplateManualHybrid(t *testing.T) {
 		Description: "Manual hybrid",
 		InputSchema: map[string]any{"type": "object"},
 		ResourceURI: "ui://app/{id}/view",
-		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("ok"), nil
 		},
 		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
@@ -347,7 +347,7 @@ func TestTemplateToolNotifiesResourceUpdated(t *testing.T) {
 			"widget_id": map[string]any{"type": "string"},
 		}},
 		ResourceURI: "ui://widgets/{widget_id}/preview",
-		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("previewed"), nil
 		},
 		TemplateHandler: func(ctx core.ResourceContext, uri string, params map[string]string) (core.ResourceResult, error) {
@@ -375,9 +375,13 @@ func TestTemplateToolNotifiesResourceUpdated(t *testing.T) {
 	toolCtx := core.NewToolContext(ctx)
 
 	args, _ := json.Marshal(map[string]string{"widget_id": "w42"})
-	result, err := reg.toolHandlers[0](toolCtx, core.ToolRequest{Arguments: args})
+	resp, err := reg.toolHandlers[0](toolCtx, core.ToolRequest{Arguments: args})
 	if err != nil {
 		t.Fatalf("tool handler error: %v", err)
+	}
+	result, ok := resp.(core.ToolResult)
+	if !ok {
+		t.Fatalf("unexpected response type %T", resp)
 	}
 	if result.IsError {
 		t.Fatalf("tool returned error: %s", result.Content[0].Text)

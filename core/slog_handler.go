@@ -15,7 +15,7 @@ import (
 //
 // Create via NewMCPLogHandler inside a tool/resource/prompt handler:
 //
-//	func myTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+//	func myTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 //	    logger := slog.New(core.NewMCPLogHandler(ctx, nil))
 //	    logger.Info("processing", "key", "value")  // → notifications/message
 //	    ...

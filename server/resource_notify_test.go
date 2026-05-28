@@ -29,7 +29,7 @@ func TestNotifyResourceUpdatedFromHandler(t *testing.T) {
 	var handlerCalled bool
 	srv.RegisterTool(
 		core.ToolDef{Name: "mutate", InputSchema: map[string]any{"type": "object"}},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			handlerCalled = true
 			core.NotifyResourceUpdated(ctx, "test://res")
 			return core.TextResult("ok"), nil
