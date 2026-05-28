@@ -737,11 +737,18 @@ func (d *Dispatcher) handlePromptsList(id json.RawMessage, params json.RawMessag
 	return core.NewResponse(id, core.PromptsListResult{Prompts: page, NextCursor: nextCursor, TTLMs: d.listTTLMs, CacheScope: d.listCacheScope})
 }
 
+// promptsGetEnvelope is the MRTR-aware prompts/get request shape. The
+// MRTR fields (inputResponses, requestState) live alongside name +
+// arguments at the params top level — same shape as toolsCallEnvelope.
+type promptsGetEnvelope struct {
+	Name           string              `json:"name"`
+	Arguments      map[string]any      `json:"arguments,omitempty"`
+	InputResponses core.InputResponses `json:"inputResponses,omitempty"`
+	RequestState   string              `json:"requestState,omitempty"`
+}
+
 func (d *Dispatcher) handlePromptsGet(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
-	var envelope struct {
-		Name      string         `json:"name"`
-		Arguments map[string]any `json:"arguments"`
-	}
+	var envelope promptsGetEnvelope
 	if err := json.Unmarshal(params, &envelope); err != nil {
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 	}
@@ -784,17 +791,42 @@ func (d *Dispatcher) handlePromptsGet(ctx context.Context, id json.RawMessage, p
 		ctx = tctx
 	}
 
+	// SEP-2322: verify any echoed requestState (rejects tampered tokens
+	// before the handler runs) and pull out the accumulated inputResponses
+	// from prior rounds. Symmetric with the tools/call MRTR flow above —
+	// the same mrtrRuntime + token shape is shared across both surfaces.
+	prevState, err := d.mrtr.verifyRequestState(envelope.RequestState, envelope.Name)
+	if err != nil {
+		return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
+			"invalid requestState: "+err.Error())
+	}
+	mergedResponses := mergeInputResponses(prevState.Answered, envelope.InputResponses)
+
 	req := core.PromptRequest{
-		Name:      envelope.Name,
-		Arguments: envelope.Arguments,
+		Name:           envelope.Name,
+		Arguments:      envelope.Arguments,
+		InputResponses: mergedResponses,
+		RequestState:   envelope.RequestState,
 	}
 
-	result, err := entry.handler(core.NewPromptContext(ctx), req)
+	pc := core.NewPromptContextWithMRTR(ctx, mergedResponses, envelope.RequestState)
+	result, err := entry.handler(pc, req)
 	if err != nil {
 		return core.NewErrorResponse(id, core.ErrCodePromptError, fmt.Sprintf("prompt %q: %v", envelope.Name, err))
 	}
 
-	return core.NewResponse(id, result)
+	// SEP-2322 reshape: InputRequiredResult variants get a fresh requestState
+	// carrying the merged answers forward. Every other PromptResponse
+	// (today only PromptResult) flows through as-is.
+	switch r := result.(type) {
+	case core.InputRequiredResult:
+		return core.NewResponse(id, core.InputRequiredResult{
+			InputRequests: r.InputRequests,
+			RequestState:  d.mrtr.mintRequestState(envelope.Name, mergedResponses),
+		})
+	default:
+		return core.NewResponse(id, result)
+	}
 }
 
 // --- Completion ---

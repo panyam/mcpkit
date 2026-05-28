@@ -243,6 +243,8 @@ func (b *statelessBackend) InvokeWithMiddleware(ctx context.Context, req *core.R
 		switch req.Method {
 		case "tools/call":
 			return b.callToolForStateless(ctx, req), nil
+		case "prompts/get":
+			return b.callPromptForStateless(ctx, req), nil
 		default:
 			if h, ok := b.s.dispatcher.customHandlers[req.Method]; ok {
 				return h(core.NewMethodContext(ctx), req.ID, req.Params), nil
@@ -343,6 +345,56 @@ func (b *statelessBackend) callToolForStateless(ctx context.Context, req *core.R
 	// SEP-2322 reshape: an InputRequiredResult variant gets a freshly-minted
 	// requestState carrying the merged accumulated answers so the next round
 	// sees them too. Every other ToolResponse flows through as-is.
+	switch r := result.(type) {
+	case core.InputRequiredResult:
+		return core.NewResponse(req.ID, core.InputRequiredResult{
+			InputRequests: r.InputRequests,
+			RequestState:  b.s.dispatcher.mrtr.mintRequestState(env.Name, mergedResponses),
+		})
+	default:
+		return core.NewResponse(req.ID, result)
+	}
+}
+
+// callPromptForStateless mirrors callToolForStateless above on the
+// prompts/get surface: decode the SEP-2322 MRTR envelope, verify+merge
+// requestState via the shared mrtrRuntime, populate PromptContext with
+// the MRTR view, and reshape any handler-returned InputRequiredResult
+// (PromptResponse variant) with a freshly-minted requestState. SEP-2322
+// scopes the input-required flow to any request method whose response
+// shape can accept it — prompts/get is the canonical second surface and
+// the conformance scenario `input-required-result-non-tool-request`
+// exercises it.
+func (b *statelessBackend) callPromptForStateless(ctx context.Context, req *core.Request) *core.Response {
+	var env promptsGetEnvelope
+	if err := json.Unmarshal(req.Params, &env); err != nil {
+		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
+			"invalid prompts/get params: "+err.Error())
+	}
+	_, handler, ok := b.Prompt(env.Name)
+	if !ok {
+		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
+			"unknown prompt: "+env.Name)
+	}
+
+	prevState, err := b.s.dispatcher.mrtr.verifyRequestState(env.RequestState, env.Name)
+	if err != nil {
+		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
+			"invalid requestState: "+err.Error())
+	}
+	mergedResponses := mergeInputResponses(prevState.Answered, env.InputResponses)
+
+	pc := core.NewPromptContextWithMRTR(ctx, mergedResponses, env.RequestState)
+	result, err := handler(pc, core.PromptRequest{
+		Name:           env.Name,
+		Arguments:      env.Arguments,
+		InputResponses: mergedResponses,
+		RequestState:   env.RequestState,
+	})
+	if err != nil {
+		return core.NewErrorResponse(req.ID, core.ErrCodePromptError, err.Error())
+	}
+
 	switch r := result.(type) {
 	case core.InputRequiredResult:
 		return core.NewResponse(req.ID, core.InputRequiredResult{

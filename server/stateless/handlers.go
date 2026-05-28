@@ -166,6 +166,25 @@ type promptsGetEnvelope struct {
 }
 
 func (d *Dispatcher) handlePromptsGet(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
+	// Prefer the middleware-aware path so server-level middleware fires
+	// uniformly on the stateless wire AND so the MRTR envelope
+	// (inputResponses + requestState) is decoded and the requestState
+	// minted by the backend's shared mrtrRuntime. Backends that don't
+	// carry middleware return ok=false and we fall back to the direct
+	// invocation below — used by minimal test fakes only.
+	req := &core.Request{
+		JSONRPC: "2.0",
+		ID:      id,
+		Method:  "prompts/get",
+		Params:  params,
+	}
+	if resp, ok := d.Backend.InvokeWithMiddleware(ctx, req); ok {
+		return resp
+	}
+
+	// Fallback path (test fakes with no middleware support): no MRTR
+	// envelope handling, no requestState signing — just look up the
+	// prompt and invoke directly.
 	var env promptsGetEnvelope
 	if err := json.Unmarshal(params, &env); err != nil {
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams,

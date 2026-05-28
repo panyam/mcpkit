@@ -40,10 +40,20 @@ type ResourceContext struct {
 }
 
 // PromptContext is the context passed to PromptHandler and
-// CompletionHandler functions. It embeds BaseContext with no additional
-// methods.
+// CompletionHandler functions. It embeds BaseContext and adds SEP-2322
+// MRTR accessors symmetric with ToolContext — a prompts/get handler can
+// branch on `ctx.HasInputResponses()`, return `ctx.RequestInput(...)` on
+// the first call, and decode `ctx.InputResponse("key")` on the second.
 type PromptContext struct {
 	BaseContext
+
+	// inputResponses + requestState carry the SEP-2322 ephemeral MRTR
+	// continuation payload — the client echoes them back into the SAME
+	// prompts/get request when retrying after a previous
+	// InputRequiredResult. Set by dispatch from the request envelope;
+	// nil/empty on the first call.
+	inputResponses InputResponses
+	requestState   string
 }
 
 // MethodContext is the context passed to custom JSON-RPC method handlers
@@ -102,7 +112,20 @@ func NewResourceContext(ctx context.Context) ResourceContext {
 
 // NewPromptContext constructs a PromptContext from a standard context.Context.
 func NewPromptContext(ctx context.Context) PromptContext {
-	return PromptContext{BaseContext{ctx, sessionFromContext(ctx)}}
+	return PromptContext{BaseContext: BaseContext{ctx, sessionFromContext(ctx)}}
+}
+
+// NewPromptContextWithMRTR constructs a PromptContext for an SEP-2322 MRTR
+// retry: the inputResponses/requestState the client echoed back into the
+// prompts/get request. Called by the dispatch layer after parsing the
+// envelope; handlers read the values via ctx.InputResponse / ctx.InputResponses
+// / ctx.RequestState.
+func NewPromptContextWithMRTR(ctx context.Context, inputResponses InputResponses, requestState string) PromptContext {
+	return PromptContext{
+		BaseContext:    BaseContext{ctx, sessionFromContext(ctx)},
+		inputResponses: inputResponses,
+		requestState:   requestState,
+	}
 }
 
 // --- BaseContext methods (shared by all handler types) ---
@@ -330,7 +353,11 @@ func (rc ResourceContext) DetachFromClient() ResourceContext {
 // DetachFromClient returns a PromptContext that preserves session state but is
 // NOT cancelled when the client disconnects.
 func (pc PromptContext) DetachFromClient() PromptContext {
-	return PromptContext{pc.BaseContext.DetachFromClient()}
+	return PromptContext{
+		BaseContext:    pc.BaseContext.DetachFromClient(),
+		inputResponses: pc.inputResponses,
+		requestState:   pc.requestState,
+	}
 }
 
 // --- ToolContext-only methods ---
@@ -441,6 +468,49 @@ func (tc ToolContext) RequestState() string {
 // The concrete return type is InputRequiredResult (not ToolResponse) so
 // callers can use the typed value directly when they need to.
 func (tc ToolContext) RequestInput(reqs InputRequests) (InputRequiredResult, error) {
+	return InputRequiredResult{
+		InputRequests: reqs,
+	}, nil
+}
+
+// --- SEP-2322 MRTR accessors on PromptContext ---
+//
+// Symmetric with the ToolContext accessors above. SEP-2322 input-required
+// flows are scoped to "any request method whose response shape can accept
+// it" — prompts/get is the second such method after tools/call (see the
+// upstream input-required-result-non-tool-request scenario).
+
+// InputResponses returns the SEP-2322 inputResponses map the client echoed
+// back into this prompts/get. Nil on the first call.
+func (pc PromptContext) InputResponses() InputResponses {
+	return pc.inputResponses
+}
+
+// InputResponse returns the raw response payload for a specific request key
+// from the inputResponses map, or nil if the key is missing.
+func (pc PromptContext) InputResponse(key string) json.RawMessage {
+	if pc.inputResponses == nil {
+		return nil
+	}
+	return pc.inputResponses[key]
+}
+
+// HasInputResponses reports whether the client echoed any inputResponses back.
+func (pc PromptContext) HasInputResponses() bool {
+	return len(pc.inputResponses) > 0
+}
+
+// RequestState returns the SEP-2322 requestState token the client echoed
+// back. Empty on the first call. Already verified by dispatch when a
+// signing key is configured.
+func (pc PromptContext) RequestState() string {
+	return pc.requestState
+}
+
+// RequestInput is the SEP-2322 ephemeral retry primitive for prompts/get.
+// Symmetric with ToolContext.RequestInput; the dispatch layer reshapes the
+// InputRequiredResult onto the wire with a freshly-minted requestState.
+func (pc PromptContext) RequestInput(reqs InputRequests) (InputRequiredResult, error) {
 	return InputRequiredResult{
 		InputRequests: reqs,
 	}, nil
