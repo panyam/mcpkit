@@ -10,5 +10,8 @@ run: ## Interactive — pause between steps
 demo: ## Non-interactive — full output
 	cd .. && go run -buildvcs=false ./$(EXAMPLE_DIR)/ --non-interactive
 
+note: ## Run the walkthrough in notebook mode (Bubble Tea cells)
+	cd .. && go run -buildvcs=false ./$(EXAMPLE_DIR)/ --note
+
 readme: ## Regenerate README.md from code
 	cd .. && go run -buildvcs=false ./$(EXAMPLE_DIR)/ --readme > $(EXAMPLE_DIR)/README.md

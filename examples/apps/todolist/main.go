@@ -86,7 +86,7 @@ func main() {
 		Title    string `json:"title"    jsonschema:"description=Task title,required"`
 		Priority string `json:"priority,omitempty" jsonschema:"enum=low,enum=medium,enum=high,default=medium"`
 	}
-	ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[addTaskInput, core.ToolResult]{
+	ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[addTaskInput, core.ToolResponse]{
 		Name:        "add_task",
 		Description: "Add a task to the board",
 		Handler: func(ctx core.ToolContext, input addTaskInput) (core.ToolResponse, error) {
