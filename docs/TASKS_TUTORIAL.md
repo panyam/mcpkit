@@ -28,10 +28,12 @@ Has the client negotiated the tasks extension?
   └── Yes → run the handler, then peek at what it returned
        ↓
 Handler returned what?
-  ├── core.InputRequiredResult (MRTR) → return as-is, no task created
-  ├── core.ToolResult{GoAsync: true} → mint task, spawn continuation
-  └── core.ToolResult (no GoAsync) → mint born-terminal task
+  ├── core.InputRequiredResult (MRTR)        → return as-is, no task created
+  ├── core.GoAsyncResult                     → mint task, spawn continuation
+  └── core.ToolResult (or any other variant) → mint born-terminal task
 ```
+
+The four return shapes are the four concrete variants of the sealed [`core.ToolResponse`](https://github.com/panyam/mcpkit/blob/main/core/tool.go) interface — `ToolResult` for sync results, `InputRequiredResult` for MRTR rounds, `CreateTaskResult` for already-shaped task envelopes (rarely returned directly by handlers), and `GoAsyncResult` as the in-process discriminator that asks the middleware to mint a task and continue in a goroutine. See [`docs/HANDLER_RETURNS_MIGRATION.md`](HANDLER_RETURNS_MIGRATION.md) for the shape post-issue-486.
 
 This is the heart of SEP-2663's *"server decides"* posture: the v1 `task` hint in the client request is gone. The server runs the handler, sees what it produced, and decides whether to wrap it in task envelopes.
 
@@ -146,7 +148,7 @@ srv.RegisterTool(
 
 Three values:
 
-- **`TaskSupportForbidden`** (or absent `Execution`) — tool never runs as a task. Handler returns sync. Server ignores `GoAsync` if the handler somehow sets it.
+- **`TaskSupportForbidden`** (or absent `Execution`) — tool never runs as a task. Handler returns sync. Server ignores `core.GoAsyncResult` if the handler somehow returns it.
 - **`TaskSupportOptional`** — tool *may* run as a task, depending on what the handler does. If the client hasn't negotiated the tasks extension, the server falls back to sync.
 - **`TaskSupportRequired`** — tool *must* run as a task. If the client hasn't negotiated the tasks extension, the server returns `-32003` (Missing Required Client Capability) with a structured `requiredCapabilities` payload so the client knows what to add.
 
@@ -183,9 +185,11 @@ tasks.Register(tasks.Config{Server: srv})
 
 ---
 
-## 4. The GoAsync sentinel + middleware peek
+## 4. The GoAsync return + middleware peek
 
-The 2026-05-19 design lock-in on [mcpkit#347](https://github.com/panyam/mcpkit/issues/347) (shipped in [PR 484](https://github.com/panyam/mcpkit/pull/484)) chose **Option 2**: the handler signals async escalation via an explicit sentinel on `ToolResult`, and the middleware peeks at the handler's return before deciding what to do.
+The 2026-05-19 design lock-in on [mcpkit#347](https://github.com/panyam/mcpkit/issues/347) (shipped in [PR 484](https://github.com/panyam/mcpkit/pull/484), refined under [issue 486](https://github.com/panyam/mcpkit/issues/486)) chose **Option 2**: the handler signals async escalation by returning a dedicated variant on the sealed `core.ToolResponse` interface, and the middleware peeks at the handler's return before deciding what to do.
+
+> **API-shape note.** PR 484 first shipped this as a `GoAsync: bool` field on `core.ToolResult` — three in-process sentinel fields (`IsInputRequired`, `InputRequests`, `GoAsync`) coexisted with the wire fields, all marked `json:"-"`. Issue 486 promoted the sum type out of the field-flag form into a sealed interface: handler returns `core.ToolResponse`, with four concrete variants — `ToolResult`, `InputRequiredResult`, `CreateTaskResult`, `GoAsyncResult`. The conceptual mechanism (handler runs sync first, middleware peeks, dispatches on the variant) is unchanged; only the discriminator's shape changed from "bool field on a wire struct" to "type identity of the return value." See [`docs/HANDLER_RETURNS_MIGRATION.md`](HANDLER_RETURNS_MIGRATION.md) for the API-shape diff.
 
 ### Why the inversion matters
 
@@ -194,20 +198,20 @@ Pre-Option-2, mcpkit's middleware minted the task *before* the handler ran, then
 Option 2 inverts this:
 
 1. Middleware runs the handler **synchronously** via `next(ctx, req)`.
-2. Looks at what came back via a type switch on `resp.Result`.
+2. Looks at what came back via a type switch on the concrete `ToolResponse` variant.
 3. Dispatches:
    - `core.InputRequiredResult` → pass through; no task created
-   - `core.ToolResult{GoAsync: true}` → mint task, spawn continuation goroutine, re-invoke handler with `TaskContext` attached, return `CreateTaskResult`
-   - `core.ToolResult` (no GoAsync) → mint a born-terminal task, store the result, return `CreateTaskResult`
+   - `core.GoAsyncResult` → mint task, spawn continuation goroutine, re-invoke handler with `TaskContext` attached, return `CreateTaskResult`
+   - `core.ToolResult` (or any other complete-shaped variant) → mint a born-terminal task, store the result, return `CreateTaskResult`
 
 This is what unblocked the MRTR↔Tasks composition flow tested by the [`mrtr-tasks-composition`](https://github.com/panyam/mcpconformance) conformance scenario.
 
 ### The handler is a state machine
 
-Because GoAsync is a `bool` sentinel (not a closure carrier), the goroutine **re-invokes the same handler** with the TaskContext plumbed in. The handler is a single function that branches on whether a TaskContext is present:
+`GoAsyncResult` is a marker variant — it carries no payload, just type identity. So the goroutine **re-invokes the same handler** with the TaskContext plumbed in; the handler is a single function that branches on whether a TaskContext is present:
 
 ```go
-func myHandler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+func myHandler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
     // Branch 3: re-invocation inside the continuation goroutine
     if tasks.GetTaskContext(ctx) != nil {
         return doRealWork(ctx, req)
@@ -219,16 +223,16 @@ func myHandler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, err
     }
 
     // Branch 2: sync preflight done; escalate to async
-    return core.ToolResult{GoAsync: true}, nil
+    return core.GoAsyncResult{}, nil
 }
 ```
 
 For tools that *don't* need any MRTR preflight, the pattern shortens to "no TaskContext → GoAsync; have TaskContext → real work":
 
 ```go
-func slowTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+func slowTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
     if tasks.GetTaskContext(ctx) == nil {
-        return core.ToolResult{GoAsync: true}, nil
+        return core.GoAsyncResult{}, nil
     }
     return doSlowWork(ctx, req)
 }
@@ -236,7 +240,7 @@ func slowTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, erro
 
 This is the canonical pattern and what every fixture in [`examples/tasks-v2/main.go`](../examples/tasks-v2/main.go) uses.
 
-> **Note.** The handler runs **twice** for any GoAsync `tools/call`: once sync (returns the sentinel), once in the goroutine (does the work). The TaskContext gate is what prevents side effects from double-firing. PR 484's Decision log and Risks sections call this out — a handler that does logging / metrics / DB writes on the non-GoAsync branch will fire twice unless gated.
+> **Note.** The handler runs **twice** for any GoAsync `tools/call`: once sync (returns `core.GoAsyncResult{}`), once in the goroutine (does the work). The TaskContext gate is what prevents side effects from double-firing. PR 484's Decision log and Risks sections call this out — a handler that does logging / metrics / DB writes on the non-GoAsync branch will fire twice unless gated.
 
 ### What happens to a sync handler on a `TaskSupport=optional` tool?
 
@@ -330,10 +334,10 @@ This is the symmetric counterpart of MRTR's `InputRequiredResult` round, scoped 
 ### The handler-side API
 
 ```go
-func confirmDeleteHandler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+func confirmDeleteHandler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
     tc := tasks.GetTaskContext(ctx)
     if tc == nil {
-        return core.ToolResult{GoAsync: true}, nil
+        return core.GoAsyncResult{}, nil
     }
 
     // The goroutine actually BLOCKS here:
@@ -508,7 +512,7 @@ Two distinct mechanisms for "server-asks-client-for-something," scoped to two di
 The killer pattern — and what [PR 484](https://github.com/panyam/mcpkit/pull/484) unblocked — is a single tool that uses all three:
 
 ```go
-func compositeHandler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+func compositeHandler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
     // PHASE 3: in the continuation goroutine
     if tc := tasks.GetTaskContext(ctx); tc != nil {
         // Maybe call TaskElicit mid-work if something new comes up
@@ -531,7 +535,7 @@ func compositeHandler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResu
     }
 
     // PHASE 2: preflight done; escalate to async
-    return core.ToolResult{GoAsync: true}, nil
+    return core.GoAsyncResult{}, nil
 }
 ```
 
@@ -546,9 +550,9 @@ Three orthogonal mechanisms, one handler. The key spec separations (asserted by 
 If your tool just needs to run a long-blocking computation with no upfront input, skip MRTR entirely:
 
 ```go
-func longRunner(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+func longRunner(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
     if tasks.GetTaskContext(ctx) == nil {
-        return core.ToolResult{GoAsync: true}, nil
+        return core.GoAsyncResult{}, nil
     }
     return runForAWhile(ctx, req)
 }
@@ -559,7 +563,7 @@ func longRunner(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, er
 If your tool just needs to gather input once and then return synchronously, skip the task escalation:
 
 ```go
-func quickInteractive(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+func quickInteractive(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
     if ctx.InputResponse("answer") == nil {
         return ctx.RequestInput(askForAnswer)
     }
@@ -629,29 +633,29 @@ tasks.Register(tasks.Config{
 
 ```go
 // Slow / blocking work, no MRTR input
-func slowOnly(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+func slowOnly(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
     if tasks.GetTaskContext(ctx) == nil {
-        return core.ToolResult{GoAsync: true}, nil
+        return core.GoAsyncResult{}, nil
     }
     return doSlowWork(ctx, req)
 }
 
 // MRTR-then-async (the composition pattern)
-func mrtrThenAsync(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+func mrtrThenAsync(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
     if tasks.GetTaskContext(ctx) != nil {
         return doRealWork(ctx, req)
     }
     if ctx.InputResponse("foo") == nil {
         return ctx.RequestInput(needFoo)
     }
-    return core.ToolResult{GoAsync: true}, nil
+    return core.GoAsyncResult{}, nil
 }
 
 // In-task input mid-execution
-func midTaskElicit(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+func midTaskElicit(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
     tc := tasks.GetTaskContext(ctx)
     if tc == nil {
-        return core.ToolResult{GoAsync: true}, nil
+        return core.GoAsyncResult{}, nil
     }
     result, err := tc.TaskElicit(elicitRequest)
     if err != nil {
@@ -700,6 +704,7 @@ err := client.CancelTask(c, taskID)
 ## See also
 
 - [`docs/MRTR_TUTORIAL.md`](MRTR_TUTORIAL.md) — sibling tutorial for SEP-2322 MRTR (capabilities across wires, progressToken, push-vs-MRTR-vs-task-input decision flow).
+- [`docs/HANDLER_RETURNS_MIGRATION.md`](HANDLER_RETURNS_MIGRATION.md) — issue 486 migration cheat-sheet for the sealed-interface `ToolResponse` / `PromptResponse` shapes (the API shape this tutorial uses for all handler examples).
 - [`docs/TASKS_V2_MIGRATION.md`](TASKS_V2_MIGRATION.md) — v1 → v2 migration guide.
 - [`ext/tasks/README.md`](../ext/tasks/README.md) — task extension API reference.
 - [`docs/SEP_2663_TASKS_CONFORMANCE_PLAN.md`](SEP_2663_TASKS_CONFORMANCE_PLAN.md) — conformance plan + status.

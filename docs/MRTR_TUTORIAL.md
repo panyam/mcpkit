@@ -326,10 +326,10 @@ The pattern the previous section's table hints at deserves a closer look because
 │   │   to gather upfront input.       │                          │
 │   │   Eventually returns one of:     │                          │
 │   │   ├── ToolResult (done)          │                          │
-│   │   └── ToolResult{GoAsync: true}  │                          │
+│   │   └── GoAsyncResult{}            │                          │
 │   └────┬─────────────────────────────┘                          │
 │        │                                                        │
-│        │ GoAsync                                                │
+│        │ GoAsyncResult                                          │
 │        ↓                                                        │
 │   ┌─────────────────────────────────┐                           │
 │   │   PHASE 2: in the goroutine     │                           │
@@ -376,7 +376,7 @@ Both look identical from the handler author's perspective (you write what looks 
 
 You might ask: *why not just use the task input flow for everything?* Or: *why not just use MRTR for everything?* The spec keeps both because each has a constraint the other doesn't satisfy:
 
-- **MRTR can't pause a running computation.** Once the handler has returned `GoAsync: true` and the goroutine is busy with real work, there's no way to issue an `InputRequiredResult` — the response to the original `tools/call` already went out (as `CreateTaskResult`).
+- **MRTR can't pause a running computation.** Once the handler has returned `core.GoAsyncResult{}` and the goroutine is busy with real work, there's no way to issue an `InputRequiredResult` — the response to the original `tools/call` already went out (as `CreateTaskResult`).
 - **Task input flow requires a task to exist.** You can't use `TaskElicit` from a sync handler that hasn't been escalated yet — there's no `TaskContext` to call it on, no goroutine to park, no `inputState` to enqueue against.
 - **MRTR is replica-portable.** A stateless deployment where each round can land on a different Lambda invocation: MRTR just works (the token has everything). The task input flow doesn't — the goroutine is pinned.
 - **Task input flow can react to *what work uncovered*.** A long-running compute that hits a missing dependency at minute 8 and needs the user to pick a version: you couldn't have asked for that up front because you didn't know it would be needed. MRTR can't gracefully discover and ask for that mid-flight.
@@ -404,7 +404,7 @@ MRTR handlers are state machines on `InputResponses`. The same handler runs on e
 ### One-round example (basic elicitation)
 
 ```go
-func basicElicitationTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+func basicElicitationTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
     resp := ctx.InputResponse("user_name")
     if resp == nil {
         // Round 1 — ask.
@@ -432,7 +432,7 @@ The full set of seven canonical patterns (sampling, roots, multi-input, multi-ro
 ### Multi-round example (accumulate state across rounds)
 
 ```go
-func multiRoundTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+func multiRoundTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
     if ctx.InputResponse("step1") == nil {
         return ctx.RequestInput(core.InputRequests{
             "step1": core.InputRequest{Method: "elicitation/create", Params: ...},
@@ -463,7 +463,7 @@ The killer composition: a single tool can run an MRTR round-trip to gather input
 The pattern:
 
 ```go
-func mrtrTaskCompositionTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+func mrtrTaskCompositionTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
     // Phase 3: running inside the continuation goroutine (a task was minted).
     if tasks.GetTaskContext(ctx) != nil {
         // Do the heavy work; TaskContext gives us TaskElicit / SetStatus / etc.
@@ -479,14 +479,14 @@ func mrtrTaskCompositionTool(ctx core.ToolContext, req core.ToolRequest) (core.T
     }
 
     // Phase 2: sync, MRTR loop is done — escalate to async.
-    return core.ToolResult{GoAsync: true}, nil
+    return core.GoAsyncResult{}, nil
 }
 ```
 
 Three phases, one handler:
 
-1. **Sync, no `user_name` yet** → return `InputRequiredResult`. `taskV2Middleware` sees an MRTR round; passes through unchanged; no task created.
-2. **Sync, `user_name` present** → return `core.ToolResult{GoAsync: true}`. `taskV2Middleware` sees the sentinel; mints a task; spawns a continuation goroutine; returns `CreateTaskResult`.
+1. **Sync, no `user_name` yet** → return `InputRequiredResult` (via `ctx.RequestInput`). `taskV2Middleware` sees an MRTR variant; passes through unchanged; no task created.
+2. **Sync, `user_name` present** → return `core.GoAsyncResult{}`. `taskV2Middleware` sees the `GoAsyncResult` variant; mints a task; spawns a continuation goroutine; returns `CreateTaskResult` to the client.
 3. **Goroutine, `TaskContext` attached** → real work runs here. The handler detects the `TaskContext` and branches into the async path. The result is stored on the task; the client retrieves via `tasks/get`.
 
 ### Spec separation that you can rely on (per SEP-2663)
@@ -499,7 +499,7 @@ mcpkit's [`mrtr-08`](https://github.com/panyam/mcpconformance) conformance scena
 
 ### Why this needed a middleware refactor
 
-Pre-Option-2, mcpkit's `taskV2Middleware` minted the task **before** the handler ran. That made the composition impossible: round 1 always emitted `CreateTaskResult` first, because the task was already minted before the handler could ever return `InputRequiredResult`. The 2026-05-19 decision on issue 347 inverted the order — handler runs synchronously first, middleware peeks at what came back, dispatches accordingly. See PR 484's "Decision log" for the alternative shapes considered (closure-carrying sentinel, always-goroutine for sync results, etc.) and why we landed on Option A strict.
+Pre-Option-2, mcpkit's `taskV2Middleware` minted the task **before** the handler ran. That made the composition impossible: round 1 always emitted `CreateTaskResult` first, because the task was already minted before the handler could ever return `InputRequiredResult`. The 2026-05-19 decision on issue 347 inverted the order — handler runs synchronously first, middleware peeks at what came back, dispatches accordingly. See PR 484's "Decision log" for the alternative shapes considered (closure-carrying sentinel, always-goroutine for sync results, etc.) and why we landed on Option A strict. Issue 486 then refined the discriminator from a `bool` field on `ToolResult` (`GoAsync: true`) to a dedicated `core.GoAsyncResult` variant on the sealed `core.ToolResponse` interface — the middleware peek now type-switches on the concrete variant. See [`docs/HANDLER_RETURNS_MIGRATION.md`](HANDLER_RETURNS_MIGRATION.md) for the API-shape diff.
 
 ---
 
@@ -513,7 +513,7 @@ import (
     tasks "github.com/panyam/mcpkit/ext/tasks"
 )
 
-func handler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+func handler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
     // (Optional, when composing with tasks v2)
     if tasks.GetTaskContext(ctx) != nil {
         return doAsyncWork(ctx, req)
@@ -527,7 +527,7 @@ func handler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error
     }
 
     // Everything gathered — either return sync result, or escalate to async.
-    return core.ToolResult{GoAsync: true}, nil  // or do sync work and return
+    return core.GoAsyncResult{}, nil  // or return a core.ToolResult to finish sync
 }
 ```
 
@@ -588,7 +588,8 @@ tasks.Register(tasks.Config{Server: srv})  // if any tools opt into TaskSupport
 
 ## See also
 
-- [`docs/TASKS_TUTORIAL.md`](TASKS_TUTORIAL.md) — sibling tutorial for SEP-2663 tasks (server-directed async, the GoAsync sentinel, task lifecycle, in-task input flow, cancellation). Read alongside this one when working with tools that compose MRTR with task escalation.
+- [`docs/TASKS_TUTORIAL.md`](TASKS_TUTORIAL.md) — sibling tutorial for SEP-2663 tasks (server-directed async, the `GoAsyncResult` return, task lifecycle, in-task input flow, cancellation). Read alongside this one when working with tools that compose MRTR with task escalation.
+- [`docs/HANDLER_RETURNS_MIGRATION.md`](HANDLER_RETURNS_MIGRATION.md) — issue 486 migration cheat-sheet for the sealed-interface `ToolResponse` / `PromptResponse` shapes the code examples here use.
 - [`docs/TASKS_V2_MIGRATION.md`](TASKS_V2_MIGRATION.md) — v1 → v2 task migration guide.
 - [`docs/SEP_2663_TASKS_CONFORMANCE_PLAN.md`](SEP_2663_TASKS_CONFORMANCE_PLAN.md) — task conformance status.
 - [`ext/tasks/README.md`](../ext/tasks/README.md) — task extension API reference.
