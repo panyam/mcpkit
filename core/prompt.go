@@ -95,6 +95,18 @@ func (m *PromptMessage) UnmarshalJSON(data []byte) error {
 type PromptRequest struct {
 	Name      string
 	Arguments map[string]any
+
+	// InputResponses is the SEP-2322 ephemeral MRTR retry payload — the
+	// client echoes the inputResponses map back into the SAME prompts/get
+	// request that previously returned an InputRequiredResult. Symmetric
+	// with ToolRequest.InputResponses. Nil on the first call.
+	InputResponses InputResponses
+
+	// RequestState is the opaque session-continuation token the client
+	// echoed back from a previous InputRequiredResult. The dispatch layer
+	// verifies it (HMAC when a key is configured) before invoking the
+	// handler. Empty on the first call.
+	RequestState string
 }
 
 // PromptResponse is the sealed interface returned by PromptHandler
