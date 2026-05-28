@@ -35,7 +35,7 @@ func newTestMCPServer() *server.Server {
 				},
 			},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("ui ok"), nil
 		},
 	)
@@ -585,7 +585,7 @@ func newExtraSchemaServer() *server.Server {
 				},
 			},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("ok"), nil
 		},
 	)
@@ -713,7 +713,7 @@ func newNotifyTestServer() *server.Server {
 				"properties": map[string]any{"tag": map[string]any{"type": "string"}},
 			},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			var p struct {
 				Tag string `json:"tag"`
 			}
@@ -737,7 +737,7 @@ func newNotifyTestServer() *server.Server {
 				"properties": map[string]any{"message": map[string]any{"type": "string"}},
 				"required":   []string{"message"},
 			}},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			var p struct {
 				Message string `json:"message"`
 			}

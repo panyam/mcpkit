@@ -41,7 +41,7 @@ func newTaskV2TestServer(t *testing.T) (string, chan struct{}) {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("fast-done"), nil
 		},
 	)
@@ -54,13 +54,13 @@ func newTaskV2TestServer(t *testing.T) (string, chan struct{}) {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			// SEP-2663 Option-2 / Go side: tools whose work is actually async
 			// MUST opt into the goroutine via GoAsync. On the first (sync) pass
 			// there is no TaskContext, so we signal "go async"; the middleware
 			// re-invokes us in the continuation goroutine with TaskContext set.
 			if tasks.GetTaskContext(ctx) == nil {
-				return core.ToolResult{GoAsync: true}, nil
+				return core.GoAsyncResult{}, nil
 			}
 			select {
 			case <-unblock:
@@ -77,13 +77,13 @@ func newTaskV2TestServer(t *testing.T) (string, chan struct{}) {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			tc := tasks.GetTaskContext(ctx)
 			if tc == nil {
 				// First (sync) pass — defer the elicit-driven work to the
 				// continuation goroutine where TaskContext (and TaskElicit)
 				// are available.
-				return core.ToolResult{GoAsync: true}, nil
+				return core.GoAsyncResult{}, nil
 			}
 			res, err := tc.TaskElicit(core.ElicitationRequest{
 				Message:         "delete?",

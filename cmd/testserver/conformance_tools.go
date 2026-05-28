@@ -34,8 +34,8 @@ func registerConformanceTools(srv *server.Server) {
 	))
 
 	// test_image_content: returns base64 PNG image content
-	srv.Register(core.TypedTool[emptyInput, core.ToolResult]("test_image_content", "Returns image content for conformance testing",
-		func(ctx core.ToolContext, _ emptyInput) (core.ToolResult, error) {
+	srv.Register(core.TypedTool[emptyInput, core.ToolResponse]("test_image_content", "Returns image content for conformance testing",
+		func(ctx core.ToolContext, _ emptyInput) (core.ToolResponse, error) {
 			pngBytes := minimalPNG()
 			return core.ToolResult{
 				Content: []core.Content{{
@@ -48,8 +48,8 @@ func registerConformanceTools(srv *server.Server) {
 	))
 
 	// test_audio_content: returns base64 audio content
-	srv.Register(core.TypedTool[emptyInput, core.ToolResult]("test_audio_content", "Returns audio content for conformance testing",
-		func(ctx core.ToolContext, _ emptyInput) (core.ToolResult, error) {
+	srv.Register(core.TypedTool[emptyInput, core.ToolResponse]("test_audio_content", "Returns audio content for conformance testing",
+		func(ctx core.ToolContext, _ emptyInput) (core.ToolResponse, error) {
 			wavBytes := minimalWAV()
 			return core.ToolResult{
 				Content: []core.Content{{
@@ -62,8 +62,8 @@ func registerConformanceTools(srv *server.Server) {
 	))
 
 	// test_multiple_content_types: returns text + image + embedded resource content
-	srv.Register(core.TypedTool[emptyInput, core.ToolResult]("test_multiple_content_types", "Returns mixed text, image, and resource content for conformance testing",
-		func(ctx core.ToolContext, _ emptyInput) (core.ToolResult, error) {
+	srv.Register(core.TypedTool[emptyInput, core.ToolResponse]("test_multiple_content_types", "Returns mixed text, image, and resource content for conformance testing",
+		func(ctx core.ToolContext, _ emptyInput) (core.ToolResponse, error) {
 			pngBytes := minimalPNG()
 			return core.ToolResult{
 				Content: []core.Content{
@@ -111,8 +111,8 @@ func registerConformanceTools(srv *server.Server) {
 	))
 
 	// test_embedded_resource: returns a resource content item
-	srv.Register(core.TypedTool[emptyInput, core.ToolResult]("test_embedded_resource", "Returns embedded resource content for conformance testing",
-		func(ctx core.ToolContext, _ emptyInput) (core.ToolResult, error) {
+	srv.Register(core.TypedTool[emptyInput, core.ToolResponse]("test_embedded_resource", "Returns embedded resource content for conformance testing",
+		func(ctx core.ToolContext, _ emptyInput) (core.ToolResponse, error) {
 			return core.ToolResult{
 				Content: []core.Content{{
 					Type: "resource",
@@ -129,8 +129,8 @@ func registerConformanceTools(srv *server.Server) {
 	// test_sampling: calls sampling/createMessage during tool execution.
 	// The conformance suite's client must respond to the server-to-client request
 	// with an LLM inference result. The tool returns the model's response text.
-	srv.Register(core.TypedTool[emptyInput, core.ToolResult]("test_sampling", "Calls sampling/createMessage and returns the LLM response for conformance testing",
-		func(ctx core.ToolContext, _ emptyInput) (core.ToolResult, error) {
+	srv.Register(core.TypedTool[emptyInput, core.ToolResponse]("test_sampling", "Calls sampling/createMessage and returns the LLM response for conformance testing",
+		func(ctx core.ToolContext, _ emptyInput) (core.ToolResponse, error) {
 			result, err := ctx.Sample(core.CreateMessageRequest{
 				Messages: []core.SamplingMessage{{
 					Role:    "user",
@@ -148,8 +148,8 @@ func registerConformanceTools(srv *server.Server) {
 	// test_elicitation: calls elicitation/create during tool execution.
 	// The conformance suite's client must respond to the server-to-client request
 	// with user input. The tool returns the user's action and content.
-	srv.Register(core.TypedTool[emptyInput, core.ToolResult]("test_elicitation", "Calls elicitation/create and returns user input for conformance testing",
-		func(ctx core.ToolContext, _ emptyInput) (core.ToolResult, error) {
+	srv.Register(core.TypedTool[emptyInput, core.ToolResponse]("test_elicitation", "Calls elicitation/create and returns user input for conformance testing",
+		func(ctx core.ToolContext, _ emptyInput) (core.ToolResponse, error) {
 			result, err := ctx.Elicit(core.ElicitationRequest{
 				Message:         "Please provide your name",
 				RequestedSchema: json.RawMessage(`{"type":"object","properties":{"name":{"type":"string","description":"Your name"}}}`),
@@ -169,8 +169,8 @@ func registerConformanceTools(srv *server.Server) {
 	// containing default values for all primitive types (SEP-1034 conformance).
 	// Schema includes: string, integer, number, enum with default, and boolean,
 	// each with a default value set.
-	srv.Register(core.TypedTool[emptyInput, core.ToolResult]("test_elicitation_sep1034_defaults", "Calls elicitation/create with default values for all primitive types (SEP-1034)",
-		func(ctx core.ToolContext, _ emptyInput) (core.ToolResult, error) {
+	srv.Register(core.TypedTool[emptyInput, core.ToolResponse]("test_elicitation_sep1034_defaults", "Calls elicitation/create with default values for all primitive types (SEP-1034)",
+		func(ctx core.ToolContext, _ emptyInput) (core.ToolResponse, error) {
 			schema := json.RawMessage(`{
 				"type": "object",
 				"properties": {
@@ -197,8 +197,8 @@ func registerConformanceTools(srv *server.Server) {
 	// variants defined in SEP-1330 conformance: untitled single-select, titled
 	// single-select (oneOf), legacy titled (enumNames), untitled multi-select,
 	// and titled multi-select (anyOf).
-	srv.Register(core.TypedTool[emptyInput, core.ToolResult]("test_elicitation_sep1330_enums", "Calls elicitation/create with all 5 enum variants (SEP-1330)",
-		func(ctx core.ToolContext, _ emptyInput) (core.ToolResult, error) {
+	srv.Register(core.TypedTool[emptyInput, core.ToolResponse]("test_elicitation_sep1330_enums", "Calls elicitation/create with all 5 enum variants (SEP-1330)",
+		func(ctx core.ToolContext, _ emptyInput) (core.ToolResponse, error) {
 			schema := json.RawMessage(`{
 				"type": "object",
 				"properties": {
@@ -252,8 +252,8 @@ func registerConformanceTools(srv *server.Server) {
 
 	// test_elicitation_url_mode: calls elicitation/create in URL mode (SEP-1036).
 	// The server sends a URL for out-of-band interaction and returns the client's response.
-	srv.Register(core.TypedTool[emptyInput, core.ToolResult]("test_elicitation_url_mode", "Calls elicitation/create in URL mode (SEP-1036)",
-		func(ctx core.ToolContext, _ emptyInput) (core.ToolResult, error) {
+	srv.Register(core.TypedTool[emptyInput, core.ToolResponse]("test_elicitation_url_mode", "Calls elicitation/create in URL mode (SEP-1036)",
+		func(ctx core.ToolContext, _ emptyInput) (core.ToolResponse, error) {
 			result, err := core.ElicitURL(ctx, core.ElicitationRequest{
 				Message:       "Please approve access by visiting this URL",
 				URL:           "https://example.com/approve?session=test123",
@@ -268,8 +268,8 @@ func registerConformanceTools(srv *server.Server) {
 
 	// test_elicitation_url_required_error: returns a -32042 URLElicitationRequiredError
 	// to test client handling of the error code and embedded elicitation list.
-	srv.Register(core.TypedTool[emptyInput, core.ToolResult]("test_elicitation_url_required_error", "Returns -32042 URLElicitationRequiredError for conformance testing",
-		func(ctx core.ToolContext, _ emptyInput) (core.ToolResult, error) {
+	srv.Register(core.TypedTool[emptyInput, core.ToolResponse]("test_elicitation_url_required_error", "Returns -32042 URLElicitationRequiredError for conformance testing",
+		func(ctx core.ToolContext, _ emptyInput) (core.ToolResponse, error) {
 			// This tool always returns an error to test the -32042 code path.
 			// In practice, this would be returned by middleware or auth checks.
 			return core.ErrorResult("requires URL elicitation"), fmt.Errorf("url_elicitation_required")
@@ -278,8 +278,8 @@ func registerConformanceTools(srv *server.Server) {
 
 	// test_elicitation_complete_notification: triggers a URL elicitation, then
 	// sends notifications/elicitation/complete after a short delay.
-	srv.Register(core.TypedTool[emptyInput, core.ToolResult]("test_elicitation_complete_notification", "URL elicitation with completion notification (SEP-1036)",
-		func(ctx core.ToolContext, _ emptyInput) (core.ToolResult, error) {
+	srv.Register(core.TypedTool[emptyInput, core.ToolResponse]("test_elicitation_complete_notification", "URL elicitation with completion notification (SEP-1036)",
+		func(ctx core.ToolContext, _ emptyInput) (core.ToolResponse, error) {
 			elicitID := "elicit-complete-test-001"
 
 			// Send the URL elicitation.
@@ -301,8 +301,8 @@ func registerConformanceTools(srv *server.Server) {
 
 	// test_elicitation_mode_default_form: calls elicitation/create with no mode
 	// set (should default to form). Verifies backwards compatibility.
-	srv.Register(core.TypedTool[emptyInput, core.ToolResult]("test_elicitation_mode_default_form", "Calls elicitation/create with no mode (defaults to form, backwards compat)",
-		func(ctx core.ToolContext, _ emptyInput) (core.ToolResult, error) {
+	srv.Register(core.TypedTool[emptyInput, core.ToolResponse]("test_elicitation_mode_default_form", "Calls elicitation/create with no mode (defaults to form, backwards compat)",
+		func(ctx core.ToolContext, _ emptyInput) (core.ToolResponse, error) {
 			result, err := ctx.Elicit(core.ElicitationRequest{
 				Message:         "Pick a color (no mode set)",
 				RequestedSchema: json.RawMessage(`{"type":"object","properties":{"color":{"type":"string"}}}`),
@@ -327,10 +327,10 @@ func registerConformanceTools(srv *server.Server) {
 	// a real mcpkit user with an advanced schema would write — keep the typed
 	// In struct for unmarshalling, supply the schema by hand for the 2020-12
 	// features struct tags cannot express.
-	srv.Register(core.TypedTool[contact2020Input, core.ToolResult](
+	srv.Register(core.TypedTool[contact2020Input, core.ToolResponse](
 		"json_schema_2020_12_tool",
 		"Tool with JSON Schema 2020-12 features (SEP-1613, SEP-2106)",
-		func(ctx core.ToolContext, _ contact2020Input) (core.ToolResult, error) {
+		func(ctx core.ToolContext, _ contact2020Input) (core.ToolResponse, error) {
 			return core.TextResult("json_schema_2020_12_tool invoked"), nil
 		},
 		core.WithInputSchemaOverride(map[string]any{

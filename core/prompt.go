@@ -97,11 +97,28 @@ type PromptRequest struct {
 	Arguments map[string]any
 }
 
+// PromptResponse is the sealed interface returned by PromptHandler
+// implementations. Today only [PromptResult] (the sync wire envelope)
+// implements it; a future [InputRequiredResult] PromptResponse impl plugs in
+// by adding a one-line promptResponse() method (see issue #452 / SEP-2322
+// prompt scenarios).
+//
+// The interface is sealed via the unexported promptResponse() marker so
+// external types cannot impersonate a core response variant.
+type PromptResponse interface {
+	promptResponse()
+}
+
 // PromptResult is the response from a prompt handler.
 type PromptResult struct {
 	Description string          `json:"description,omitempty"`
 	Messages    []PromptMessage `json:"messages"`
 }
 
+func (PromptResult) promptResponse() {}
+
 // PromptHandler generates prompt messages, optionally using arguments.
-type PromptHandler func(ctx PromptContext, req PromptRequest) (PromptResult, error)
+//
+// Returns the sealed [PromptResponse] interface — handlers typically return
+// a [PromptResult] literal which satisfies the interface.
+type PromptHandler func(ctx PromptContext, req PromptRequest) (PromptResponse, error)

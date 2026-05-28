@@ -209,7 +209,7 @@ func newListTTLClient(t *testing.T, opts ...Option) *client.Client {
 
 	srv.RegisterTool(
 		core.ToolDef{Name: "echo", Description: "echo", InputSchema: map[string]any{"type": "object"}},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("ok"), nil
 		},
 	)
@@ -231,7 +231,7 @@ func newListTTLClient(t *testing.T, opts ...Option) *client.Client {
 	)
 	srv.RegisterPrompt(
 		core.PromptDef{Name: "hello", Description: "hello"},
-		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResult, error) {
+		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResponse, error) {
 			return core.PromptResult{}, nil
 		},
 	)

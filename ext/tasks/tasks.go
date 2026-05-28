@@ -460,23 +460,24 @@ func taskV2Middleware(reg *server.Registry, rt *v2TaskRuntime, cfg Config) serve
 			// MRTR round — let the dispatcher's reshaped response flow back
 			// to the client unchanged. No task is created during MRTR rounds;
 			// task creation happens (if at all) on a later round when the
-			// handler returns GoAsync or a final sync result.
+			// handler returns GoAsyncResult or a final sync result.
 			return resp, nil
 
-		case core.ToolResult:
+		case core.GoAsyncResult:
 			var progressToken any
 			if envelope.Meta != nil {
 				progressToken = envelope.Meta.ProgressToken
 			}
-			if r.GoAsync {
-				return spawnGoAsyncTask(ctx, req, next, rt, cfg, envelope.Name, progressToken)
-			}
+			return spawnGoAsyncTask(ctx, req, next, rt, cfg, envelope.Name, progressToken)
+
+		case core.ToolResult:
 			return wrapSyncAsCompletedTask(ctx, req, rt, cfg, r)
 
 		default:
 			// Some other result shape (e.g. an upstream middleware already
 			// produced a CreateTaskResult, or a non-tool response sneaks
 			// through). Pass through unchanged.
+			_ = r
 			return resp, nil
 		}
 	}
@@ -575,20 +576,17 @@ func spawnGoAsyncTask(
 			return
 		}
 
-		raw, err := json.Marshal(resp.Result)
-		if err != nil {
-			te := &core.TaskError{Code: -32603, Message: "failed to marshal tool result"}
+		// The continuation handler is expected to return a sync ToolResult on
+		// its final invocation. Other ToolResponse variants are programmer
+		// errors at this point — they'd indicate the handler is trying to
+		// re-enter the MRTR loop or re-spawn from inside an async task, which
+		// SEP-2663 does not allow. We surface them as protocol failures.
+		toolResult, ok := resp.Result.(core.ToolResult)
+		if !ok {
+			msg := fmt.Sprintf("tool returned unexpected %T inside async continuation; expected core.ToolResult", resp.Result)
+			te := &core.TaskError{Code: -32603, Message: msg}
 			rt.setTaskError(taskID, te)
-			store.StoreTerminalResult(taskID, sessionID, core.TaskFailed, core.ErrorResult("failed to marshal tool result"), "")
-			notifyV2TaskStatus(bgCtx, rt, store, taskID, sessionID)
-			return
-		}
-
-		var toolResult core.ToolResult
-		if err := json.Unmarshal(raw, &toolResult); err != nil {
-			te := &core.TaskError{Code: -32603, Message: "failed to unmarshal tool result"}
-			rt.setTaskError(taskID, te)
-			store.StoreTerminalResult(taskID, sessionID, core.TaskFailed, core.ErrorResult("failed to unmarshal tool result"), "")
+			store.StoreTerminalResult(taskID, sessionID, core.TaskFailed, core.ErrorResult(msg), msg)
 			notifyV2TaskStatus(bgCtx, rt, store, taskID, sessionID)
 			return
 		}

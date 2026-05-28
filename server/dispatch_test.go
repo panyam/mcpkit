@@ -40,7 +40,7 @@ func testDispatcher() *Dispatcher {
 				"required": []string{"message"},
 			},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			var args struct {
 				Message string `json:"message"`
 			}
@@ -187,6 +187,83 @@ func TestDispatchToolsCall(t *testing.T) {
 	}
 }
 
+// TestDispatchToolsCall_HandlerReturnsTypedVariants verifies that a tool
+// handler can return any of the sealed ToolResponse variants directly —
+// without going through ctx.RequestInput or relying on a sentinel field
+// flip on ToolResult — and that dispatch emits the matching wire envelope.
+// Red-before-green for the SEP-486 sealed-interface refactor: under the
+// old field-on-struct dispatch, only ctx.RequestInput()'s flag-set path
+// produced an input_required envelope; a handler that returned an
+// InputRequiredResult literal would have been marshaled as a malformed
+// ToolResult ({"resultType":"input_required","content":null,...}).
+func TestDispatchToolsCall_HandlerReturnsTypedVariants(t *testing.T) {
+	cases := []struct {
+		name           string
+		handler        func(core.ToolContext, core.ToolRequest) (core.ToolResponse, error)
+		wantResultType core.ResultType
+	}{
+		{
+			name: "input_required",
+			handler: func(core.ToolContext, core.ToolRequest) (core.ToolResponse, error) {
+				return core.InputRequiredResult{
+					InputRequests: core.InputRequests{
+						"k": {Method: "elicitation/create", Params: json.RawMessage(`{}`)},
+					},
+				}, nil
+			},
+			wantResultType: core.ResultTypeInputRequired,
+		},
+		{
+			name: "task_envelope",
+			handler: func(core.ToolContext, core.ToolRequest) (core.ToolResponse, error) {
+				return core.CreateTaskResult{
+					ResultType: core.ResultTypeTask,
+					TaskInfoV2: core.TaskInfoV2{
+						TaskID:        "t-abc",
+						Status:        core.TaskWorking,
+						CreatedAt:     "2026-05-28T00:00:00Z",
+						LastUpdatedAt: "2026-05-28T00:00:00Z",
+					},
+				}, nil
+			},
+			wantResultType: core.ResultTypeTask,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			d := NewDispatcher(core.ServerInfo{Name: "test-server", Version: "1.0.0"})
+			d.RegisterTool(
+				core.ToolDef{
+					Name:        "typed_variant",
+					Description: "returns a typed ToolResponse variant",
+					InputSchema: map[string]any{"type": "object"},
+				},
+				tc.handler,
+			)
+			initDispatcher(d)
+			resp := d.Dispatch(context.Background(), &core.Request{
+				JSONRPC: "2.0",
+				ID:      json.RawMessage(`9`),
+				Method:  "tools/call",
+				Params:  json.RawMessage(`{"name":"typed_variant","arguments":{}}`),
+			})
+			if resp == nil || resp.Error != nil {
+				t.Fatalf("unexpected error: %+v", resp)
+			}
+			raw, _ := core.MarshalJSON(resp.Result)
+			var probe struct {
+				ResultType core.ResultType `json:"resultType"`
+			}
+			if err := json.Unmarshal(raw, &probe); err != nil {
+				t.Fatalf("decode resultType from %s: %v", raw, err)
+			}
+			if probe.ResultType != tc.wantResultType {
+				t.Errorf("resultType = %q, want %q (raw=%s)", probe.ResultType, tc.wantResultType, raw)
+			}
+		})
+	}
+}
+
 func TestDispatchToolsCallUnknown(t *testing.T) {
 	d := testDispatcher()
 	resp := d.Dispatch(context.Background(), &core.Request{
@@ -270,7 +347,7 @@ func TestDispatchToolsCallHandlerError(t *testing.T) {
 	// Register a tool that always returns a Go error
 	d.RegisterTool(
 		core.ToolDef{Name: "failing", Description: "always fails"},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.ToolResult{}, fmt.Errorf("something broke")
 		},
 	)
@@ -309,7 +386,7 @@ func TestDispatchToolsCallHandlerError(t *testing.T) {
 func TestDispatchToolOrder(t *testing.T) {
 	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
 	for _, name := range []string{"charlie", "alpha", "bravo"} {
-		d.RegisterTool(core.ToolDef{Name: name, Description: name}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		d.RegisterTool(core.ToolDef{Name: name, Description: name}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult(name), nil
 		})
 	}
@@ -456,7 +533,7 @@ func TestDispatchBeforeInitialized(t *testing.T) {
 	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
 	d.RegisterTool(
 		core.ToolDef{Name: "echo", Description: "echoes"},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("hi"), nil
 		},
 	)
@@ -491,7 +568,7 @@ func TestDispatchToolsCallBeforeAnyInit(t *testing.T) {
 	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
 	d.RegisterTool(
 		core.ToolDef{Name: "echo", Description: "echoes"},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("hi"), nil
 		},
 	)
@@ -663,7 +740,7 @@ func TestDispatchToolsCallWithProgressToken(t *testing.T) {
 	var gotToken any
 	d.RegisterTool(
 		core.ToolDef{Name: "progress_tool", Description: "captures progress token"},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			gotToken = req.ProgressToken
 			return core.TextResult("ok"), nil
 		},
@@ -689,7 +766,7 @@ func TestDispatchToolsCallWithoutProgressToken(t *testing.T) {
 	var gotToken any = "sentinel"
 	d.RegisterTool(
 		core.ToolDef{Name: "no_progress", Description: "no progress token"},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			gotToken = req.ProgressToken
 			return core.TextResult("ok"), nil
 		},
@@ -737,7 +814,7 @@ func TestDispatchToolsListExtraSchemaFields(t *testing.T) {
 				},
 			},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("ok"), nil
 		},
 	)
@@ -813,7 +890,7 @@ func TestToolsListMeta(t *testing.T) {
 				},
 			},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("ok"), nil
 		},
 	)
@@ -823,7 +900,7 @@ func TestToolsListMeta(t *testing.T) {
 			Description: "Tool without UI metadata",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("ok"), nil
 		},
 	)

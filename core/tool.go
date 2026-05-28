@@ -122,7 +122,26 @@ type ToolRequest struct {
 	RequestState string
 }
 
-// ToolResult is the response from a tool handler.
+// ToolResponse is the sealed interface returned by ToolHandler implementations.
+//
+// Four core variants implement it:
+//
+//   - [ToolResult]          — the sync "complete" wire envelope.
+//   - [InputRequiredResult] — the SEP-2322 multi-round "input_required" envelope.
+//   - [CreateTaskResult]    — the SEP-2663 "task" envelope (handler-emitted; rare).
+//   - [GoAsyncResult]       — in-process signal that the ext/tasks middleware
+//     should mint a task and run the handler again on a background goroutine.
+//     Never serialized.
+//
+// The interface is sealed via the unexported toolResponse() marker so external
+// types cannot impersonate a core response variant. Dispatch type-switches on
+// the concrete value; the previous IsInputRequired/InputRequests/GoAsync
+// sentinel fields on ToolResult are gone.
+type ToolResponse interface {
+	toolResponse()
+}
+
+// ToolResult is the sync "complete" response from a tool handler.
 type ToolResult struct {
 	// ResultType is the SEP-2322 polymorphic-dispatch discriminator. For
 	// sync tools/call responses the wire value is "complete" (defaulted by
@@ -145,51 +164,39 @@ type ToolResult struct {
 
 	// Meta holds optional result metadata (e.g., pagination cursor).
 	Meta *ToolResultMeta `json:"_meta,omitempty"`
-
-	// IsInputRequired is the in-process sentinel signalling that the handler
-	// is returning an MRTR InputRequiredResult rather than a final tool result.
-	// Set by ctx.RequestInput; the dispatch layer detects it, mints / refreshes
-	// the requestState, and reshapes the wire payload as InputRequiredResult.
-	// Never serialized — this field is in-process plumbing only.
-	//
-	// Renamed from IsIncomplete in lockstep with the SEP-2322 wire-variant
-	// rename (commit de6d76fb merged 2026-05-06).
-	IsInputRequired bool `json:"-"`
-
-	// InputRequests is the SEP-2322 inputRequests map staged by ctx.RequestInput
-	// when IsInputRequired is true. Dispatch reads it to build the
-	// InputRequiredResult envelope. Nil for normal complete results. Never
-	// serialized through ToolResult — dispatch reshapes the response into
-	// InputRequiredResult.
-	InputRequests InputRequests `json:"-"`
-
-	// GoAsync is the SEP-2663 in-process sentinel signalling that the handler
-	// has finished its synchronous work (e.g. gathering input via MRTR) and
-	// wants the remainder of its execution to run as a background task. When
-	// the ext/tasks middleware sees GoAsync=true on a non-InputRequired result
-	// from a tool whose Execution.TaskSupport is optional/required and the
-	// client has negotiated the io.modelcontextprotocol/tasks extension, it:
-	//
-	//  1. mints a fresh task,
-	//  2. spawns a goroutine that re-invokes the handler with a
-	//     [tasks.TaskContext] available (the handler discovers it via
-	//     [tasks.GetTaskContext] and switches to the async branch), and
-	//  3. returns CreateTaskResult to the original caller.
-	//
-	// The continuation goroutine is what runs the "real" work, so a handler
-	// that emits notifications/progress or notifications/message from the
-	// async branch gets the SEP-2663 G6 session-notify filter applied.
-	// A sync-returning handler (GoAsync=false) does NOT get that filter,
-	// because no goroutine ever runs.
-	//
-	// Ignored when:
-	//   - IsInputRequired is true (the result is an MRTR InputRequiredResult)
-	//   - the tool's Execution.TaskSupport is forbidden or absent
-	//   - the client has not negotiated the tasks extension
-	//
-	// Never serialized — this field is in-process plumbing only.
-	GoAsync bool `json:"-"`
 }
+
+func (ToolResult) toolResponse() {}
+
+// GoAsyncResult is an in-process signal returned by a tool handler when it
+// has finished its synchronous work (e.g. gathering input via MRTR) and wants
+// the remainder of its execution to run as a background task.
+//
+// The ext/tasks middleware observes a GoAsyncResult on a tool whose
+// Execution.TaskSupport is optional/required when the client has negotiated
+// the io.modelcontextprotocol/tasks extension. On observation it:
+//
+//  1. mints a fresh task,
+//  2. spawns a goroutine that re-invokes the handler with a
+//     [tasks.TaskContext] attached (the handler discovers it via
+//     [tasks.GetTaskContext] and switches to the async branch), and
+//  3. returns CreateTaskResult to the original caller.
+//
+// The continuation goroutine is what runs the "real" work, so a handler
+// that emits notifications/progress or notifications/message from the
+// async branch gets the SEP-2663 G6 session-notify filter applied.
+// A handler that returns ToolResult sync (no GoAsyncResult) does NOT get
+// that filter, because no goroutine ever runs.
+//
+// Ignored when:
+//   - the tool's Execution.TaskSupport is forbidden or absent
+//   - the client has not negotiated the tasks extension
+//
+// GoAsyncResult has no wire envelope of its own — it never escapes the
+// in-process boundary.
+type GoAsyncResult struct{}
+
+func (GoAsyncResult) toolResponse() {}
 
 // MarshalJSON ensures every ToolResult on the wire carries a ResultType.
 // Empty defaults to ResultTypeComplete so existing callers and struct
@@ -330,4 +337,13 @@ func (r *ToolRequest) Bind(v any) error {
 // ToolHandler is the function signature for tool implementations.
 // The ToolContext provides typed access to session capabilities (EmitLog,
 // EmitProgress, EmitContent, Sample, Elicit, etc.) with IDE discoverability.
-type ToolHandler func(ctx ToolContext, req ToolRequest) (ToolResult, error)
+//
+// The return type is the sealed [ToolResponse] interface — handlers may
+// return any of [ToolResult], [InputRequiredResult], [CreateTaskResult],
+// or [GoAsyncResult]. The most common form is a [ToolResult] literal:
+//
+//	return core.ToolResult{Content: []core.Content{{Type: "text", Text: "ok"}}}, nil
+//
+// Or the convenience helpers — TextResult, ErrorResult, StructuredResult —
+// which return concrete ToolResult values that satisfy ToolResponse.
+type ToolHandler func(ctx ToolContext, req ToolRequest) (ToolResponse, error)

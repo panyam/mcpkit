@@ -53,7 +53,7 @@ func ContentChunkMethodFromContext(ctx context.Context) string {
 //
 // Example:
 //
-//	func myTool(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+//	func myTool(ctx context.Context, req core.ToolRequest) (core.ToolResponse, error) {
 //	    core.EmitContent(ctx, req.RequestID, core.Content{Type: "text", Text: "Step 1..."})
 //	    // ... work ...
 //	    core.EmitContent(ctx, req.RequestID, core.Content{Type: "text", Text: "Step 2..."})

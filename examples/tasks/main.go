@@ -68,9 +68,9 @@ func serve() {
 		Seconds int    `json:"seconds,omitempty"`
 		Label   string `json:"label,omitempty"`
 	}
-	srv.Register(core.TypedTool[slowComputeInput, core.ToolResult]("slow_compute",
+	srv.Register(core.TypedTool[slowComputeInput, core.ToolResponse]("slow_compute",
 		"Simulate a slow computation (sleeps for the given duration). Supports optional async task execution.",
-		func(ctx core.ToolContext, args slowComputeInput) (core.ToolResult, error) {
+		func(ctx core.ToolContext, args slowComputeInput) (core.ToolResponse, error) {
 			if args.Seconds <= 0 {
 				args.Seconds = 3
 			}
@@ -125,9 +125,9 @@ func serve() {
 
 	// failing_job: required task support. Must be invoked as a task.
 	// Calling without a task hint returns an error. Always fails after a delay.
-	srv.Register(core.TypedTool[struct{}, core.ToolResult]("failing_job",
+	srv.Register(core.TypedTool[struct{}, core.ToolResponse]("failing_job",
 		"A job that always fails after 1 second. Requires task invocation — calling without 'task' hint returns an error.",
-		func(ctx core.ToolContext, _ struct{}) (core.ToolResult, error) {
+		func(ctx core.ToolContext, _ struct{}) (core.ToolResponse, error) {
 			log.Printf("[failing_job] starting (will fail in 1s)...")
 			time.Sleep(1 * time.Second)
 			return core.ToolResult{}, fmt.Errorf("simulated failure: job crashed")
@@ -141,9 +141,9 @@ func serve() {
 	type confirmDeleteInput struct {
 		Filename string `json:"filename,omitempty"`
 	}
-	srv.Register(core.TypedTool[confirmDeleteInput, core.ToolResult]("confirm_delete",
+	srv.Register(core.TypedTool[confirmDeleteInput, core.ToolResponse]("confirm_delete",
 		"Asks for confirmation before deleting a file. Demonstrates task-based elicitation.",
-		func(ctx core.ToolContext, args confirmDeleteInput) (core.ToolResult, error) {
+		func(ctx core.ToolContext, args confirmDeleteInput) (core.ToolResponse, error) {
 			tc := server.GetTaskContext(ctx)
 			if tc == nil {
 				return core.ToolResult{}, fmt.Errorf("confirm_delete requires task context")
@@ -189,9 +189,9 @@ func serve() {
 	type writeHaikuInput struct {
 		Topic string `json:"topic,omitempty"`
 	}
-	srv.Register(core.TypedTool[writeHaikuInput, core.ToolResult]("write_haiku",
+	srv.Register(core.TypedTool[writeHaikuInput, core.ToolResponse]("write_haiku",
 		"Asks the LLM to write a haiku on a topic. Demonstrates task-based sampling.",
-		func(ctx core.ToolContext, args writeHaikuInput) (core.ToolResult, error) {
+		func(ctx core.ToolContext, args writeHaikuInput) (core.ToolResponse, error) {
 			tc := server.GetTaskContext(ctx)
 			if tc == nil {
 				return core.ToolResult{}, fmt.Errorf("write_haiku requires task context")
@@ -247,7 +247,7 @@ func serve() {
 			},
 			Execution: &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
 		},
-		Handler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		Handler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			var args struct {
 				JobID string `json:"job_id"`
 			}

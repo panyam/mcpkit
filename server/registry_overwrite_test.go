@@ -22,7 +22,7 @@ import (
 func TestAddTool_OverwriteDoesNotDuplicateOrder(t *testing.T) {
 	d := testDynamicDispatcher()
 
-	handler := func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+	handler := func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 		return core.TextResult("v1"), nil
 	}
 	d.Reg.AddTool(core.ToolDef{Name: "dup", Description: "first"}, handler)
@@ -95,7 +95,7 @@ func TestAddResourceTemplate_OverwriteDoesNotDuplicateOrder(t *testing.T) {
 func TestAddPrompt_OverwriteDoesNotDuplicateOrder(t *testing.T) {
 	d := testDynamicDispatcher()
 
-	handler := func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResult, error) {
+	handler := func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResponse, error) {
 		return core.PromptResult{}, nil
 	}
 	d.Reg.AddPrompt(core.PromptDef{Name: "dup", Description: "first"}, handler)

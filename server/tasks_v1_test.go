@@ -43,7 +43,7 @@ func newTaskServer(t *testing.T) (*Server, chan struct{}) {
 			}},
 			Execution: &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			// Wait for unblock signal OR context cancellation (Phase 5).
 			select {
 			case <-unblock:
@@ -66,7 +66,7 @@ func newTaskServer(t *testing.T) (*Server, chan struct{}) {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.ToolResult{}, fmt.Errorf("boom")
 		},
 	)
@@ -79,7 +79,7 @@ func newTaskServer(t *testing.T) (*Server, chan struct{}) {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("ok"), nil
 		},
 	)
@@ -92,7 +92,7 @@ func newTaskServer(t *testing.T) (*Server, chan struct{}) {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("sync-only"), nil
 		},
 	)
@@ -673,7 +673,7 @@ func TestTaskPanicRecovery(t *testing.T) {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			panic("test panic")
 		},
 	)
@@ -808,7 +808,7 @@ func TestGetTaskContextNilForSync(t *testing.T) {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			tc := GetTaskContext(ctx)
 			gotTC = tc != nil
 			return core.TextResult("ok"), nil
@@ -840,7 +840,7 @@ func TestGetTaskContextAvailableForAsync(t *testing.T) {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			tc := GetTaskContext(ctx)
 			if tc != nil {
 				gotTaskID <- tc.TaskID()
@@ -890,7 +890,7 @@ func TestTaskInputRequiredTransition(t *testing.T) {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			tc := GetTaskContext(ctx)
 			if tc == nil {
 				return core.TextResult("no task context"), nil
@@ -1008,7 +1008,7 @@ func TestQueueCleanupOnCancel(t *testing.T) {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			select {} // block forever
 		},
 	)
@@ -1063,7 +1063,7 @@ func TestTaskElicitE2E(t *testing.T) {
 			},
 			Execution: &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			tc := GetTaskContext(ctx)
 			if tc == nil {
 				return core.ToolResult{}, fmt.Errorf("expected TaskContext")
@@ -1145,7 +1145,7 @@ func TestTaskSampleE2E(t *testing.T) {
 			},
 			Execution: &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			tc := GetTaskContext(ctx)
 			if tc == nil {
 				return core.ToolResult{}, fmt.Errorf("expected TaskContext")
@@ -1270,7 +1270,7 @@ func TestTaskProgressFromBackgroundNoPanic(t *testing.T) {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			// Emit progress — this should not panic even without GET SSE.
 			ctx.EmitProgress("token", 1, 2, "halfway")
 			ctx.EmitProgress("token", 2, 2, "done")
@@ -1319,7 +1319,7 @@ func TestTaskCancelStopsGoroutine(t *testing.T) {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			// Wait for cancellation or timeout.
 			select {
 			case <-ctx.Done():
@@ -1366,7 +1366,7 @@ func TestTaskStatusNotificationOnComplete(t *testing.T) {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("done"), nil
 		},
 	)
@@ -1416,7 +1416,7 @@ func TestTaskStatusNotificationOnCancel(t *testing.T) {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			<-ctx.Done()
 			return core.TextResult("cancelled"), nil
 		},
@@ -1476,7 +1476,7 @@ func TestTaskProgressTokenPreserved(t *testing.T) {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			tc := GetTaskContext(ctx)
 			gotToken <- tc.ProgressToken()
 			return core.TextResult("ok"), nil
@@ -1518,7 +1518,7 @@ func TestTaskDoubleCompletionRejected(t *testing.T) {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("done"), nil
 		},
 	)
@@ -1625,7 +1625,7 @@ func TestToolCallAsTaskWithProgressToken(t *testing.T) {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			tc := GetTaskContext(ctx)
 			gotToken <- tc.ProgressToken()
 			return core.TextResult("ok"), nil

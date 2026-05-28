@@ -180,7 +180,7 @@ func RegisterAppTool(reg ToolResourceRegistrar, cfg AppToolConfig) {
 		// from tool arguments after each successful call, then notify
 		// the host that the concrete fallback resource has new content.
 		origHandler := cfg.ToolHandler
-		wrappedHandler := func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		wrappedHandler := func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			result, err := origHandler(ctx, req)
 			if err == nil {
 				params := extractTemplateParams(templateVars, req.Arguments)

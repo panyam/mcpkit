@@ -567,23 +567,29 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, pa
 	}
 
 	tc := core.NewToolContextWithMRTR(ctx, progressToken, mergedResponses, envelope.RequestState)
-	result, hErr := entry.handler(tc, req)
+	resp, hErr := entry.handler(tc, req)
 	if hErr != nil {
-		result = core.ErrorResult(fmt.Sprintf("tool %q: %v", envelope.Name, hErr))
+		resp = core.ErrorResult(fmt.Sprintf("tool %q: %v", envelope.Name, hErr))
 	}
 
-	// SEP-2322: handler signalled "I need more input" — reshape the
-	// response on the wire as InputRequiredResult and mint a fresh
-	// requestState carrying the merged accumulated answers so the next
-	// round sees them too.
-	if result.IsInputRequired {
+	// Type-switch on the sealed ToolResponse interface. SEP-2322
+	// InputRequiredResult gets a freshly-minted requestState that carries the
+	// merged accumulated answers so the next round sees them too. Every other
+	// variant — ToolResult, CreateTaskResult, GoAsyncResult — flows through
+	// to the response as-is. GoAsyncResult is in-process plumbing the
+	// ext/tasks middleware intercepts before the response reaches the wire;
+	// if no middleware is installed and a handler still emits GoAsyncResult,
+	// it marshals to "{}" which is a programmer error to be diagnosed at
+	// registration time, not silently absorbed here.
+	switch r := resp.(type) {
+	case core.InputRequiredResult:
 		return core.NewResponse(id, core.InputRequiredResult{
-			InputRequests: result.InputRequests,
+			InputRequests: r.InputRequests,
 			RequestState:  d.mrtr.mintRequestState(envelope.Name, mergedResponses),
 		})
+	default:
+		return core.NewResponse(id, resp)
 	}
-
-	return core.NewResponse(id, result)
 }
 
 // --- Resources ---

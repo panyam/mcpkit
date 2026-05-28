@@ -40,7 +40,7 @@ func newAppTestServer() *server.Server {
 				},
 			},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			var p struct{ Title string `json:"title"` }
 			req.Bind(&p)
 			return core.TextResult(fmt.Sprintf("built: %s", p.Title)), nil
@@ -54,7 +54,7 @@ func newAppTestServer() *server.Server {
 			Description: "Echo input",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("echo"), nil
 		},
 	)

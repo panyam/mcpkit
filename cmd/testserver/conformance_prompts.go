@@ -20,7 +20,7 @@ func registerConformancePrompts(srv *server.Server) {
 			Name:        "test_simple_prompt",
 			Description: "A simple prompt for conformance testing",
 		},
-		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResult, error) {
+		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResponse, error) {
 			return core.PromptResult{
 				Description: "A simple test prompt",
 				Messages: []core.PromptMessage{{
@@ -41,7 +41,7 @@ func registerConformancePrompts(srv *server.Server) {
 				{Name: "arg2", Description: "Second test argument", Required: true},
 			},
 		},
-		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResult, error) {
+		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResponse, error) {
 			arg1 := req.Arguments["arg1"]
 			arg2 := req.Arguments["arg2"]
 			return core.PromptResult{
@@ -63,7 +63,7 @@ func registerConformancePrompts(srv *server.Server) {
 				{Name: "resourceUri", Description: "URI of the resource to embed", Required: true},
 			},
 		},
-		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResult, error) {
+		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResponse, error) {
 			uri, _ := req.Arguments["resourceUri"].(string)
 			return core.PromptResult{
 				Description: "A prompt with an embedded resource",
@@ -88,7 +88,7 @@ func registerConformancePrompts(srv *server.Server) {
 			Name:        "test_prompt_with_image",
 			Description: "A prompt that includes an image",
 		},
-		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResult, error) {
+		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResponse, error) {
 			pngBytes := minimalPNG() // reuse from conformance_tools.go
 			return core.PromptResult{
 				Description: "A prompt with image content",
