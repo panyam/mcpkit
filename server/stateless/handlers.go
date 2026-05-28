@@ -43,6 +43,22 @@ type toolsCallEnvelope struct {
 }
 
 func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
+	// Prefer the middleware-aware path so server-level middleware (notably
+	// the v2 task middleware from ext/tasks) fires on the stateless wire
+	// just like it does on the legacy wire. Backends that don't carry
+	// middleware (test fakes) return ok=false and we fall back to direct
+	// invocation below.
+	req := &core.Request{
+		JSONRPC: "2.0",
+		ID:      id,
+		Method:  "tools/call",
+		Params:  params,
+	}
+	if resp, ok := d.Backend.InvokeWithMiddleware(ctx, req); ok {
+		return resp
+	}
+
+	// Fallback path: no middleware support on this backend.
 	var env toolsCallEnvelope
 	if err := json.Unmarshal(params, &env); err != nil {
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
