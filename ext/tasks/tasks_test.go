@@ -337,6 +337,12 @@ func newTaskV2ServerWithSlow(t *testing.T) (*Server, chan struct{}) {
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
 		},
 		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			// SEP-2663 Option 2: slow / blocking work must opt into the
+			// continuation goroutine via GoAsync. The middleware re-invokes us
+			// in the goroutine with TaskContext set.
+			if tasks.GetTaskContext(ctx) == nil {
+				return core.ToolResult{GoAsync: true}, nil
+			}
 			select {
 			case <-unblock:
 			case <-ctx.Done():
@@ -726,7 +732,9 @@ func newTaskV2ServerWithElicit(t *testing.T) *Server {
 		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
 			tc := tasks.GetTaskContext(ctx)
 			if tc == nil {
-				return core.ToolResult{}, errorString("confirm-delete requires task context")
+				// SEP-2663 Option 2: TaskElicit requires the continuation
+				// goroutine's TaskContext, so signal GoAsync on the sync pass.
+				return core.ToolResult{GoAsync: true}, nil
 			}
 
 			var args struct {
@@ -1058,6 +1066,13 @@ func TestV2_NoProgressOrMessageOnTaskGoroutine(t *testing.T) {
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
 		},
 		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			// SEP-2663 G6 filter is installed only on the continuation-goroutine
+			// bgCtx, so emissions only get dropped if the handler opts into
+			// GoAsync. A sync return would emit on the unfiltered POST ctx and
+			// leak — explicitly NOT what this test is asserting.
+			if tasks.GetTaskContext(ctx) == nil {
+				return core.ToolResult{GoAsync: true}, nil
+			}
 			// Both of these would normally fan out on the session stream.
 			// The v2 task filter is expected to drop both silently.
 			ctx.EmitProgress("ignored-token", 1, 2, "halfway")

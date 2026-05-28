@@ -73,7 +73,9 @@ func newStatelessTaskServer(t *testing.T) string {
 		func(ctx core.ToolContext, _ core.ToolRequest) (core.ToolResult, error) {
 			tc := tasks.GetTaskContext(ctx)
 			if tc == nil {
-				return core.ToolResult{}, errors.New("no task ctx")
+				// SEP-2663 Option 2: TaskElicit needs the continuation
+				// goroutine's TaskContext.
+				return core.ToolResult{GoAsync: true}, nil
 			}
 			res, err := tc.TaskElicit(core.ElicitationRequest{
 				Message:         "delete?",

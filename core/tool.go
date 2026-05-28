@@ -162,6 +162,33 @@ type ToolResult struct {
 	// serialized through ToolResult — dispatch reshapes the response into
 	// InputRequiredResult.
 	InputRequests InputRequests `json:"-"`
+
+	// GoAsync is the SEP-2663 in-process sentinel signalling that the handler
+	// has finished its synchronous work (e.g. gathering input via MRTR) and
+	// wants the remainder of its execution to run as a background task. When
+	// the ext/tasks middleware sees GoAsync=true on a non-InputRequired result
+	// from a tool whose Execution.TaskSupport is optional/required and the
+	// client has negotiated the io.modelcontextprotocol/tasks extension, it:
+	//
+	//  1. mints a fresh task,
+	//  2. spawns a goroutine that re-invokes the handler with a
+	//     [tasks.TaskContext] available (the handler discovers it via
+	//     [tasks.GetTaskContext] and switches to the async branch), and
+	//  3. returns CreateTaskResult to the original caller.
+	//
+	// The continuation goroutine is what runs the "real" work, so a handler
+	// that emits notifications/progress or notifications/message from the
+	// async branch gets the SEP-2663 G6 session-notify filter applied.
+	// A sync-returning handler (GoAsync=false) does NOT get that filter,
+	// because no goroutine ever runs.
+	//
+	// Ignored when:
+	//   - IsInputRequired is true (the result is an MRTR InputRequiredResult)
+	//   - the tool's Execution.TaskSupport is forbidden or absent
+	//   - the client has not negotiated the tasks extension
+	//
+	// Never serialized — this field is in-process plumbing only.
+	GoAsync bool `json:"-"`
 }
 
 // MarshalJSON ensures every ToolResult on the wire carries a ResultType.
