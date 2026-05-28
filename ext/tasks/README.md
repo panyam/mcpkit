@@ -24,11 +24,11 @@ srv.RegisterTool(
         Description: "...",
         Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
     },
-    func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+    func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
         // Handlers whose work is genuinely async opt into the continuation
-        // goroutine via the GoAsync sentinel — see "Handler pattern" below.
+        // goroutine by returning core.GoAsyncResult{} — see "Handler pattern" below.
         if tasks.GetTaskContext(ctx) == nil {
-            return core.ToolResult{GoAsync: true}, nil
+            return core.GoAsyncResult{}, nil
         }
         // Real work runs here, with TaskContext available for TaskElicit /
         // TaskSample / SetStatus / progress emission under the G6 filter.
@@ -41,20 +41,22 @@ tasks.Register(tasks.Config{Server: srv})
 
 `tasks.Register` installs the v2 middleware that intercepts `tools/call` for task-eligible tools, registers the `tasks/get` / `tasks/update` / `tasks/cancel` method handlers (all gated on the client declaring the extension), and advertises the extension in the `initialize` response.
 
-## Handler pattern (SEP-2663 Option 2: GoAsync)
+> **API note.** As of issue 486, `ToolHandler` returns the sealed [`core.ToolResponse`](https://github.com/panyam/mcpkit/blob/main/core/tool.go) interface instead of `core.ToolResult`. The middleware dispatches on the concrete variant — `ToolResult`, `InputRequiredResult`, `CreateTaskResult`, or `GoAsyncResult` — rather than on `bool` fields. Migration cheat-sheet: [`docs/HANDLER_RETURNS_MIGRATION.md`](../../docs/HANDLER_RETURNS_MIGRATION.md).
 
-Per the 2026-05-19 design decision on issue 347, mcpkit's v2 middleware runs the handler **synchronously first** and then dispatches on what it returned. The handler chooses one of three shapes:
+## Handler pattern (SEP-2663 Option 2: GoAsync return)
+
+Per the 2026-05-19 design decision on issue 347 (refined under issue 486), mcpkit's v2 middleware runs the handler **synchronously first** and then dispatches on the concrete `ToolResponse` variant it returned. The handler chooses one of three shapes:
 
 | Handler returns | Middleware does | When to use |
 |---|---|---|
 | `core.InputRequiredResult` via `ctx.RequestInput(...)` | Passes through unchanged; no task created | SEP-2322 MRTR round — gather input before deciding whether to escalate |
-| `core.ToolResult{GoAsync: true}` | Mints a task, spawns continuation goroutine that re-invokes the handler with `TaskContext` attached, returns `CreateTaskResult` | Slow / blocking work, `TaskElicit` / `TaskSample` calls, progress emission that should be filtered |
-| `core.ToolResult{...}` (no GoAsync, no IsInputRequired) | Wraps as a born-terminal task (`status: completed`, result stored, one `notifications/tasks` event fired), returns `CreateTaskResult` | Sync work that finishes immediately on a `TaskSupport=optional/required` tool |
+| `core.GoAsyncResult{}` | Mints a task, spawns continuation goroutine that re-invokes the handler with `TaskContext` attached, returns `CreateTaskResult` | Slow / blocking work, `TaskElicit` / `TaskSample` calls, progress emission that should be filtered |
+| `core.ToolResult{...}` (a regular sync result) | Wraps as a born-terminal task (`status: completed`, result stored, one `notifications/tasks` event fired), returns `CreateTaskResult` | Sync work that finishes immediately on a `TaskSupport=optional/required` tool |
 
 The continuation goroutine re-invokes the same handler with a `TaskContext` accessible via `tasks.GetTaskContext(ctx)`. The handler typically branches on that:
 
 ```go
-func myHandler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+func myHandler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
     if tasks.GetTaskContext(ctx) != nil {
         // Continuation: do the real work. TaskElicit / TaskSample / SetStatus
         // are all available; emissions are filtered per SEP-2663 G6.
@@ -62,6 +64,8 @@ func myHandler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, err
     }
 
     // Optional MRTR phase: gather input via ctx.RequestInput first.
+    // ctx.RequestInput returns (core.InputRequiredResult, error) directly;
+    // InputRequiredResult satisfies ToolResponse.
     if ctx.InputResponse("user_name") == nil {
         return ctx.RequestInput(core.InputRequests{
             "user_name": core.InputRequest{Method: "elicitation/create", Params: ...},
@@ -69,7 +73,7 @@ func myHandler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, err
     }
 
     // MRTR complete; defer the rest to the continuation goroutine.
-    return core.ToolResult{GoAsync: true}, nil
+    return core.GoAsyncResult{}, nil
 }
 ```
 
