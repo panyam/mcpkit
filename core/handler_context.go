@@ -128,6 +128,40 @@ func NewPromptContextWithMRTR(ctx context.Context, inputResponses InputResponses
 	}
 }
 
+// ClientCaps returns the client capabilities the handler should gate
+// against for THIS request. SEP-2322 says servers MUST only emit
+// inputRequests for methods the client declared support for; the rule
+// is the same on both wires, but the source of truth differs:
+//
+//   - Legacy wire: capabilities are negotiated once during `initialize`
+//     and cached on the session.
+//   - Stateless wire (SEP-2575): no session — capabilities are declared
+//     per-request inside the _meta envelope, fresh on every call.
+//
+// This accessor coalesces the two into a single typed view so handlers
+// don't have to special-case the wire. On the legacy wire it returns
+// the session-cached caps; on the stateless wire it returns the per-
+// request envelope's caps (which is the only source there). Either
+// pointer may be nil — handlers MUST nil-check before reading sub-
+// capabilities.
+//
+// Usage in a tool handler that wants to skip elicitation inputRequests
+// when the client did not declare elicitation:
+//
+//	caps := ctx.ClientCaps()
+//	if caps != nil && caps.Elicitation != nil {
+//	    reqs["user_name"] = core.InputRequest{Method: "elicitation/create", ...}
+//	}
+func (bc BaseContext) ClientCaps() *ClientCapabilities {
+	if meta := RequestMetaFromContext(bc.Context); meta != nil {
+		return meta.ClientCapabilities
+	}
+	if bc.sc != nil {
+		return bc.sc.clientCaps
+	}
+	return nil
+}
+
 // --- BaseContext methods (shared by all handler types) ---
 
 // EmitLog sends a log notification at the given severity level.
