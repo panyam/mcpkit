@@ -63,7 +63,7 @@ func TestCallToolWithInputs_MaxRounds(t *testing.T) {
 			Description: "Always asks for more input",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return ctx.RequestInput(core.InputRequests{
 				"loop": core.InputRequest{Method: "elicitation/create", Params: json.RawMessage(`{}`)},
 			})
@@ -140,7 +140,7 @@ func mrtrTestServer(t *testing.T) *server.Server {
 			Description: "Asks for user name then greets them",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			if !ctx.HasInputResponses() {
 				return ctx.RequestInput(core.InputRequests{
 					"user_name": core.InputRequest{

@@ -22,7 +22,7 @@ func TestAppHost_EndToEnd(t *testing.T) {
 	srv := server.NewServer(core.ServerInfo{Name: "test-server", Version: "1.0"})
 	srv.RegisterTool(
 		core.ToolDef{Name: "server_echo", Description: "Server-side echo"},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			var args map[string]string
 			json.Unmarshal(req.Arguments, &args)
 			return core.TextResult("server:" + args["msg"]), nil

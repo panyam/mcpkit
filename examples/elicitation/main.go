@@ -344,7 +344,7 @@ func serve() {
 				}
 			}`),
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			var args struct {
 				ResourceID string `json:"resourceId"`
 			}

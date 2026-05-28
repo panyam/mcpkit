@@ -37,7 +37,7 @@ func TestE2E_SchemaValidationErrorOverWire(t *testing.T) {
 				},
 			},
 		},
-	}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+	}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 		return core.TextResult("ok"), nil
 	})
 

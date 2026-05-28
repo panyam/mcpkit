@@ -9,6 +9,23 @@ import (
 	core "github.com/panyam/mcpkit/core"
 )
 
+// callToolExec runs a ToolExec handler and unwraps the response to the
+// concrete ToolResult. Bound to ToolExec's contract (it always returns a
+// terminal sync ToolResult), so this helper does not need to handle the
+// other ToolResponse variants.
+func callToolExec(t *testing.T, tool Tool, req core.ToolRequest) (core.ToolResult, error) {
+	t.Helper()
+	resp, err := tool.Handler(core.NewToolContext(context.Background()), req)
+	if err != nil {
+		return core.ToolResult{}, err
+	}
+	tr, ok := resp.(core.ToolResult)
+	if !ok {
+		t.Fatalf("ToolExec returned unexpected response type %T", resp)
+	}
+	return tr, nil
+}
+
 // TestToolExec_Echo wraps the "echo" command as an MCP tool and verifies that
 // the subprocess stdout is returned as a TextResult. This is the simplest
 // ToolExec scenario: static args, no dynamic BuildArgs, no timeout.
@@ -19,9 +36,7 @@ func TestToolExec_Echo(t *testing.T) {
 		Args:    []string{"hello"},
 	})
 
-	result, err := tool.Handler(core.NewToolContext(context.Background()), core.ToolRequest{
-		Name: "echo-test",
-	})
+	result, err := callToolExec(t, tool, core.ToolRequest{Name: "echo-test"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -52,7 +67,7 @@ func TestToolExec_BuildArgs(t *testing.T) {
 		},
 	})
 
-	result, err := tool.Handler(core.NewToolContext(context.Background()), core.ToolRequest{
+	result, err := callToolExec(t, tool, core.ToolRequest{
 		Name:      "echo-dynamic",
 		Arguments: json.RawMessage(`{"message":"world"}`),
 	})
@@ -77,9 +92,7 @@ func TestToolExec_NonZeroExit(t *testing.T) {
 		Args:    []string{"-c", "echo fail >&2; exit 1"},
 	})
 
-	result, err := tool.Handler(core.NewToolContext(context.Background()), core.ToolRequest{
-		Name: "fail-test",
-	})
+	result, err := callToolExec(t, tool, core.ToolRequest{Name: "fail-test"})
 	if err != nil {
 		t.Fatalf("unexpected transport error: %v", err)
 	}
@@ -107,9 +120,7 @@ func TestToolExec_Timeout(t *testing.T) {
 	})
 
 	start := time.Now()
-	result, err := tool.Handler(core.NewToolContext(context.Background()), core.ToolRequest{
-		Name: "timeout-test",
-	})
+	result, err := callToolExec(t, tool, core.ToolRequest{Name: "timeout-test"})
 	elapsed := time.Since(start)
 
 	if err != nil {

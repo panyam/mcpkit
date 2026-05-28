@@ -45,7 +45,7 @@ func newTaskV2Server(t *testing.T) *Server {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("fast-done"), nil
 		},
 	)
@@ -57,7 +57,7 @@ func newTaskV2Server(t *testing.T) *Server {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("must-done"), nil
 		},
 	)
@@ -336,12 +336,12 @@ func newTaskV2ServerWithSlow(t *testing.T) (*Server, chan struct{}) {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			// SEP-2663 Option 2: slow / blocking work must opt into the
 			// continuation goroutine via GoAsync. The middleware re-invokes us
 			// in the goroutine with TaskContext set.
 			if tasks.GetTaskContext(ctx) == nil {
-				return core.ToolResult{GoAsync: true}, nil
+				return core.GoAsyncResult{}, nil
 			}
 			select {
 			case <-unblock:
@@ -729,12 +729,12 @@ func newTaskV2ServerWithElicit(t *testing.T) *Server {
 			},
 			Execution: &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			tc := tasks.GetTaskContext(ctx)
 			if tc == nil {
 				// SEP-2663 Option 2: TaskElicit requires the continuation
 				// goroutine's TaskContext, so signal GoAsync on the sync pass.
-				return core.ToolResult{GoAsync: true}, nil
+				return core.GoAsyncResult{}, nil
 			}
 
 			var args struct {
@@ -1065,13 +1065,13 @@ func TestV2_NoProgressOrMessageOnTaskGoroutine(t *testing.T) {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			// SEP-2663 G6 filter is installed only on the continuation-goroutine
 			// bgCtx, so emissions only get dropped if the handler opts into
 			// GoAsync. A sync return would emit on the unfiltered POST ctx and
 			// leak — explicitly NOT what this test is asserting.
 			if tasks.GetTaskContext(ctx) == nil {
-				return core.ToolResult{GoAsync: true}, nil
+				return core.GoAsyncResult{}, nil
 			}
 			// Both of these would normally fan out on the session stream.
 			// The v2 task filter is expected to drop both silently.

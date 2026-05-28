@@ -927,7 +927,7 @@ func registerTools(srv *server.Server) {
 				}
 			}`),
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			var args struct {
 				DocID string `json:"docId"`
 			}
@@ -961,7 +961,7 @@ func registerTools(srv *server.Server) {
 				"required": ["docId", "content"]
 			}`),
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			var args struct {
 				DocID   string `json:"docId"`
 				Content string `json:"content"`
@@ -993,7 +993,7 @@ func registerTools(srv *server.Server) {
 				"required": ["amount", "currency", "payee"]
 			}`),
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			var args struct {
 				Amount   string `json:"amount"`
 				Currency string `json:"currency"`

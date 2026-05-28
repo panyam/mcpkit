@@ -35,7 +35,7 @@ func newUITestServer() *server.Server {
 			Description: "Visible to everyone",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("public"), nil
 		},
 	)
@@ -52,7 +52,7 @@ func newUITestServer() *server.Server {
 				},
 			},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("model"), nil
 		},
 	)
@@ -70,7 +70,7 @@ func newUITestServer() *server.Server {
 				},
 			},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("both"), nil
 		},
 	)
@@ -87,7 +87,7 @@ func newUITestServer() *server.Server {
 				},
 			},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("app-only"), nil
 		},
 	)
@@ -99,7 +99,7 @@ func newUITestServer() *server.Server {
 			Description: "Reports client UI support",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			if core.ClientSupportsUI(ctx) {
 				return core.TextResult("ui: yes"), nil
 			}
@@ -180,7 +180,7 @@ func TestClientServerSupportsUI(t *testing.T) {
 		srv := server.NewServer(core.ServerInfo{Name: "plain", Version: "1.0"})
 		srv.RegisterTool(
 			core.ToolDef{Name: "noop", Description: "noop", InputSchema: map[string]any{"type": "object"}},
-			func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 				return core.TextResult("ok"), nil
 			},
 		)

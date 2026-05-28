@@ -204,7 +204,7 @@ func TestDispatch_ToolsCallMissingCapReturns32003(t *testing.T) {
 	// required-cap payload shape. Locked here so future refactors of
 	// translateToolError surface in this test, not the conformance audit.
 	required := core.ClientCapabilities{Sampling: &struct{}{}}
-	h := func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+	h := func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 		return core.ToolResult{}, &core.MissingCapabilityError{
 			Required: required,
 			Message:  "this tool requires sampling",

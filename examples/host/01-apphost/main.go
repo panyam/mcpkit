@@ -56,7 +56,7 @@ func main() {
 				core.ToolDef{Name: "server_echo", Description: "Echo back the input", InputSchema: map[string]any{
 					"type": "object", "properties": map[string]any{"msg": map[string]any{"type": "string"}},
 				}},
-				func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+				func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 					var args struct{ Msg string `json:"msg"` }
 					req.Bind(&args)
 					return core.TextResult("echo: " + args.Msg), nil
@@ -64,7 +64,7 @@ func main() {
 			)
 			srv.RegisterTool(
 				core.ToolDef{Name: "server_time", Description: "Get current time", InputSchema: map[string]any{"type": "object"}},
-				func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+				func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 					return core.TextResult(time.Now().Format(time.RFC3339)), nil
 				},
 			)

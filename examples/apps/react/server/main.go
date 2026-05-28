@@ -63,7 +63,7 @@ func main() {
 	ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[struct{}, core.ToolResult]{
 		Name:        "get-time",
 		Description: "Returns the current server time as an ISO 8601 string.",
-		Handler: func(ctx core.ToolContext, _ struct{}) (core.ToolResult, error) {
+		Handler: func(ctx core.ToolContext, _ struct{}) (core.ToolResponse, error) {
 			t := time.Now().UTC().Format(time.RFC3339)
 			return core.StructuredResult(t, map[string]string{"time": t}), nil
 		},
@@ -145,7 +145,7 @@ func main() {
 				{Name: "timezone", Description: "Timezone (e.g., UTC, US/Eastern)", Required: false},
 			},
 		},
-		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResult, error) {
+		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResponse, error) {
 			tz := "UTC"
 			if v, ok := req.Arguments["timezone"]; ok && v != "" {
 				tz, _ = v.(string)

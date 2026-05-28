@@ -79,6 +79,13 @@ type CreateTaskResult struct {
 	TaskInfoV2
 }
 
+// toolResponse marks CreateTaskResult as a [ToolResponse] variant. A handler
+// can return this directly when it has already minted a task identifier and
+// wants to hand the response off to the client without going through the
+// middleware-driven goroutine spawn path (rare — most handlers return
+// [GoAsyncResult] and let the tasks middleware do the work).
+func (CreateTaskResult) toolResponse() {}
+
 // DetailedTask is the SEP-2663 discriminated union returned by tasks/get.
 // The Status field discriminates which optional fields are populated:
 //

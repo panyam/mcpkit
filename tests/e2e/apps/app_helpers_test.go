@@ -25,7 +25,7 @@ func TestRegisterAppToolE2E(t *testing.T) {
 		Description: "Build a slide deck",
 		InputSchema: map[string]any{"type": "object"},
 		ResourceURI: "ui://decks/view",
-		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("deck built"), nil
 		},
 		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
@@ -109,7 +109,7 @@ func TestNotifyResourcesChangedE2E(t *testing.T) {
 			Description: "Mutates state and notifies",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			core.NotifyResourcesChanged(ctx)
 			return core.TextResult("mutated"), nil
 		},

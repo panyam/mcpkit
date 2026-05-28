@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 )
@@ -211,5 +212,48 @@ func TestEmptyResultJSON(t *testing.T) {
 	}
 	if string(raw) != "{}" {
 		t.Errorf("struct{}{} JSON = %q, want {}", string(raw))
+	}
+}
+
+// TestToolResponseSealedInterface verifies that the four core ToolResponse
+// variants — ToolResult, InputRequiredResult, CreateTaskResult, GoAsyncResult —
+// satisfy the ToolResponse interface, and that PromptResult satisfies
+// PromptResponse. Sealing is enforced at compile time via the unexported
+// toolResponse()/promptResponse() marker methods.
+func TestToolResponseSealedInterface(t *testing.T) {
+	var _ ToolResponse = ToolResult{}
+	var _ ToolResponse = InputRequiredResult{}
+	var _ ToolResponse = CreateTaskResult{}
+	var _ ToolResponse = GoAsyncResult{}
+	var _ PromptResponse = PromptResult{}
+}
+
+// TestGoAsyncResultZeroValue verifies that the GoAsyncResult sentinel carries
+// no fields: it is an in-process discriminator, never serialized on the wire.
+// Marshalling it produces "{}" — which the dispatch path passes through to a
+// tasks middleware that intercepts on the type.
+func TestGoAsyncResultZeroValue(t *testing.T) {
+	raw, err := json.Marshal(GoAsyncResult{})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if string(raw) != "{}" {
+		t.Errorf("GoAsyncResult JSON = %q, want {}", string(raw))
+	}
+}
+
+// TestRequestInputReturnsInputRequiredResult verifies that ctx.RequestInput
+// returns a typed core.InputRequiredResult value (not a generic ToolResponse)
+// so callers that want the concrete type don't need a type assertion.
+func TestRequestInputReturnsInputRequiredResult(t *testing.T) {
+	tc := NewToolContext(context.Background())
+	got, err := tc.RequestInput(InputRequests{
+		"k": {Method: "elicitation/create"},
+	})
+	if err != nil {
+		t.Fatalf("RequestInput err: %v", err)
+	}
+	if _, ok := got.InputRequests["k"]; !ok {
+		t.Errorf("RequestInput dropped key k: %+v", got)
 	}
 }

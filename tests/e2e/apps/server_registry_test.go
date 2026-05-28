@@ -25,7 +25,7 @@ func newSimpleServer(t *testing.T, tools map[string]string) *client.Client {
 		n, d := name, desc
 		srv.RegisterTool(
 			core.ToolDef{Name: n, Description: d, InputSchema: map[string]any{"type": "object"}},
-			func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 				return core.TextResult(n + ":result"), nil
 			},
 		)

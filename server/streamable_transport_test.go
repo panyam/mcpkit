@@ -29,7 +29,7 @@ func testStreamableServer(opts ...TransportOption) *httptest.Server {
 				},
 			},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			var args struct {
 				Message string `json:"message"`
 			}
@@ -378,7 +378,7 @@ func TestStreamableAuthRequired(t *testing.T) {
 	)
 	srv.RegisterTool(
 		core.ToolDef{Name: "echo", Description: "echo"},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("ok"), nil
 		},
 	)
@@ -507,13 +507,13 @@ func testStreamableServerWithLogging(opts ...TransportOption) *httptest.Server {
 	srv := NewServer(core.ServerInfo{Name: "test-streamable-sse", Version: "0.1.0"})
 	srv.RegisterTool(
 		core.ToolDef{Name: "echo", Description: "Echoes input", InputSchema: map[string]any{"type": "object"}},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("ok"), nil
 		},
 	)
 	srv.RegisterTool(
 		core.ToolDef{Name: "log_tool", Description: "Emits logs", InputSchema: map[string]any{"type": "object"}},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			core.EmitLog(ctx, core.LogInfo, "test", "step one")
 			core.EmitLog(ctx, core.LogInfo, "test", "step two")
 			return core.TextResult("done"), nil

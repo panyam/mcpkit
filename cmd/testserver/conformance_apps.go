@@ -109,8 +109,8 @@ func registerConformanceApps(srv *server.Server) {
 	))
 
 	// elicit-with-ui: demonstrates app-backed elicitation with _meta.ui
-	srv.Register(core.TypedTool[struct{}, core.ToolResult]("elicit-with-ui", "Elicits input using an MCP App UI",
-		func(ctx core.ToolContext, _ struct{}) (core.ToolResult, error) {
+	srv.Register(core.TypedTool[struct{}, core.ToolResponse]("elicit-with-ui", "Elicits input using an MCP App UI",
+		func(ctx core.ToolContext, _ struct{}) (core.ToolResponse, error) {
 			result, err := ctx.Elicit(core.ElicitationRequest{
 				Message: "Choose a dashboard widget",
 				Meta: &core.ElicitationMeta{

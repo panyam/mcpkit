@@ -37,7 +37,7 @@ func TestCallContext_NotifyHookFiresOnCallStreamNotifications(t *testing.T) {
 			Description: "Emits a custom notification, then returns success",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, _ core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, _ core.ToolRequest) (core.ToolResponse, error) {
 			// Use a custom method via ctx.Notify so the test doesn't depend
 			// on logging/setLevel having been called (log notifications are
 			// gated by the per-session log level).
@@ -96,7 +96,7 @@ func TestCallContext_NoHook_GlobalStillFires(t *testing.T) {
 			Description: "Emits + returns",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, _ core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, _ core.ToolRequest) (core.ToolResponse, error) {
 			ctx.Notify("notifications/test/ping", map[string]any{"from": "handler"})
 			return core.TextResult("ok"), nil
 		},

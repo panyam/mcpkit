@@ -46,7 +46,7 @@ func newStatelessTaskServer(t *testing.T) string {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
 		},
-		func(ctx core.ToolContext, _ core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, _ core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("done"), nil
 		},
 	)
@@ -58,7 +58,7 @@ func newStatelessTaskServer(t *testing.T) string {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
 		},
-		func(ctx core.ToolContext, _ core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, _ core.ToolRequest) (core.ToolResponse, error) {
 			return core.ToolResult{}, errors.New("planned failure")
 		},
 	)
@@ -70,12 +70,12 @@ func newStatelessTaskServer(t *testing.T) string {
 			InputSchema: map[string]any{"type": "object"},
 			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
 		},
-		func(ctx core.ToolContext, _ core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, _ core.ToolRequest) (core.ToolResponse, error) {
 			tc := tasks.GetTaskContext(ctx)
 			if tc == nil {
 				// SEP-2663 Option 2: TaskElicit needs the continuation
 				// goroutine's TaskContext.
-				return core.ToolResult{GoAsync: true}, nil
+				return core.GoAsyncResult{}, nil
 			}
 			res, err := tc.TaskElicit(core.ElicitationRequest{
 				Message:         "delete?",

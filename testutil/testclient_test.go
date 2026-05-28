@@ -25,7 +25,7 @@ func newTestServer(t *testing.T) *server.Server {
 				"properties": map[string]any{"name": map[string]any{"type": "string"}},
 			},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			var p struct {
 				Name string `json:"name"`
 			}

@@ -89,7 +89,7 @@ func main() {
 	ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[addTaskInput, core.ToolResult]{
 		Name:        "add_task",
 		Description: "Add a task to the board",
-		Handler: func(ctx core.ToolContext, input addTaskInput) (core.ToolResult, error) {
+		Handler: func(ctx core.ToolContext, input addTaskInput) (core.ToolResponse, error) {
 			if input.Priority == "" {
 				input.Priority = "medium"
 			}
@@ -140,8 +140,8 @@ func main() {
 		},
 	))
 
-	srv.Register(core.TypedTool[struct{}, core.ToolResult]("list_tasks", "List all tasks on the board",
-		func(ctx core.ToolContext, _ struct{}) (core.ToolResult, error) {
+	srv.Register(core.TypedTool[struct{}, core.ToolResponse]("list_tasks", "List all tasks on the board",
+		func(ctx core.ToolContext, _ struct{}) (core.ToolResponse, error) {
 			tasksMu.Lock()
 			data, _ := json.Marshal(tasks)
 			tasksMu.Unlock()
@@ -233,7 +233,7 @@ func main() {
 			Name:        "task_summary",
 			Description: "Returns a formatted summary of all tasks on the board",
 		},
-		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResult, error) {
+		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResponse, error) {
 			tasksMu.Lock()
 			snapshot := make([]Task, len(tasks))
 			copy(snapshot, tasks)

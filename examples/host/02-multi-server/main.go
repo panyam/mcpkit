@@ -47,7 +47,7 @@ func main() {
 			n := tName
 			srv.RegisterTool(
 				core.ToolDef{Name: n, Description: desc, InputSchema: map[string]any{"type": "object"}},
-				func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+				func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 					return core.TextResult(fmt.Sprintf("[%s] %s: ok", name, n)), nil
 				},
 			)
