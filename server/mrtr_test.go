@@ -356,27 +356,6 @@ func TestMRTR_MultiRoundAccumulatesAnswers(t *testing.T) {
 	}
 }
 
-// TestMRTR_TaskComposition_Skipped is a tracking placeholder for MRTR↔Tasks
-// composition (gather input via MRTR rounds, then return CreateTaskResult on
-// the final round). SEP-2663 commit 451f5e1 (Apr 30) made this flow normative,
-// but our taskV2Middleware (server/tasks_v2.go) creates the task BEFORE the
-// handler runs, so the handler never gets to return InputRequiredResult on
-// round 1 — the middleware has already sent CreateTaskResult to the client.
-//
-// Resolving this is a real design choice (always-sync handler vs. handler-
-// signalled async) tracked as mcpkit issue 347. Re-enable by deleting the
-// t.Skip once that lands. A matching scenario lives skipped in the
-// conformance suite (panyam/mcpconformance, branch feat/tasks-mrtr-extension,
-// src/scenarios/server/mrtr/ephemeral-flow.ts:mrtr-tasks-composition).
-func TestMRTR_TaskComposition_Skipped(t *testing.T) {
-	t.Skip("MRTR→Tasks composition deferred — tracking: mcpkit issue 347")
-	// Implementation cross-cuts MRTR (server/) and v2 tasks (ext/tasks/);
-	// rebuild as an integration test under ext/tasks/ when mcpkit issue 347
-	// lands. A matching scenario lives skipped in the conformance suite
-	// (panyam/mcpconformance, branch feat/tasks-mrtr-extension,
-	// src/scenarios/server/mrtr/ephemeral-flow.ts:mrtr-tasks-composition).
-}
-
 // connectMRTRClient is a one-off helper for MRTR tests — most existing v2
 // fixtures register a full tasks setup we don't need here.
 func connectMRTRClient(t *testing.T, srv *Server, opts ...client.ClientOption) *client.Client {

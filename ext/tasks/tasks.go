@@ -345,13 +345,30 @@ func gateOnTasksExtension(inner server.MethodHandler) server.MethodHandler {
 // --- server.Middleware ---
 
 // taskV2Middleware intercepts tools/call requests. In v2, the server decides
-// whether to create a task based on the tool's configuration — the client
-// does NOT send a `task` param.
+// whether to create a task based on the tool's configuration AND on what the
+// handler returns — the client does NOT send a `task` param.
 //
-// Behavior by taskSupport:
-//   - required: always create a task (no client hint needed)
-//   - optional: create a task (server-directed)
-//   - forbidden/absent: pass through (sync execution)
+// Flow (per the SEP-2663 + SEP-2322 composition contract):
+//
+//  1. taskSupport=forbidden/absent → pass through (sync execution).
+//  2. taskSupport=optional/required + client hasn't negotiated the tasks
+//     extension → -32003 for required, sync fallback for optional.
+//  3. Otherwise run the handler synchronously via next() FIRST, then dispatch
+//     on the returned result:
+//     - core.InputRequiredResult → MRTR round; return as-is, no task created.
+//       Lets a handler gather input via the MRTR loop and only later switch
+//       to async (SEP-2663 451f5e1).
+//     - core.ToolResult with GoAsync=true → mint a task, spawn a continuation
+//       goroutine that re-invokes the handler with a [TaskContext] attached,
+//       and return CreateTaskResult to the client. The handler's second
+//       invocation detects the TaskContext via [GetTaskContext] and runs the
+//       async branch (typically the "expensive work").
+//     - core.ToolResult (sync return, no GoAsync) → mint a task that is born
+//       terminal: StoreTerminalResult with TaskCompleted, fire one
+//       notifications/tasks event, and return CreateTaskResult. No goroutine
+//       runs. SEP-2663 G6 (no progress/log on task streams) only applies to
+//       the goroutine continuation, since that's where the session-notify
+//       filter is installed.
 func taskV2Middleware(reg *server.Registry, rt *v2TaskRuntime, cfg Config) server.Middleware {
 	return func(ctx context.Context, req *core.Request, next server.MiddlewareFunc) (*core.Response, error) {
 		if req.Method != "tools/call" {
@@ -379,8 +396,8 @@ func taskV2Middleware(reg *server.Registry, rt *v2TaskRuntime, cfg Config) serve
 		}
 
 		// Determine effective taskSupport first. Absent Execution = forbidden.
-		// In v2 this is a server-internal hint about which tools should be
-		// async — clients no longer opt in via a `task` param.
+		// In v2 this is a server-internal hint about which tools may be
+		// surfaced as tasks — clients no longer opt in via a `task` param.
 		effectiveSupport := core.TaskSupportForbidden
 		if def.Execution != nil {
 			effectiveSupport = def.Execution.TaskSupport
@@ -423,141 +440,228 @@ func taskV2Middleware(reg *server.Registry, rt *v2TaskRuntime, cfg Config) serve
 			return next(ctx, req)
 		}
 
-		// required or optional → server creates a task.
-		taskID := generateTaskID()
-		now := time.Now().UTC().Format(time.RFC3339)
-
-		// SEP-2663 wire and server.TaskStore both use milliseconds, so the config
-		// value flows through unchanged in either direction.
-		ttlMs := cfg.DefaultTTLMs
-		pollMs := cfg.DefaultPollMs
-
-		info := core.TaskInfo{
-			TaskID:        taskID,
-			Status:        core.TaskWorking,
-			CreatedAt:     now,
-			LastUpdatedAt: now,
-			TTL:           core.IntPtr(ttlMs), // store uses ms internally
-			PollInterval:  pollMs,
+		// SEP-2322 + SEP-2663 composition: run the handler synchronously so we
+		// can observe whether it wants to stay in an MRTR loop, finish sync,
+		// or escalate to a background task. This is the key inversion vs the
+		// pre-Option-2 "create task up-front, run handler in goroutine" shape
+		// — that pattern could not surface a round-1 InputRequiredResult on a
+		// task-eligible tool, because the task was already minted before the
+		// handler ran. Tracked / locked in on mcpkit#347.
+		resp, mwErr := next(ctx, req)
+		if mwErr != nil {
+			return resp, mwErr
 		}
-		store := rt.store
-		sessionID := core.GetSessionID(ctx)
-		if err := store.Create(info, sessionID); err != nil {
-			return core.NewErrorResponse(req.ID, -32603, "failed to create task: "+err.Error()), nil
+		if resp == nil || resp.Error != nil {
+			return resp, nil
 		}
 
-		var progressToken any
-		if envelope.Meta != nil {
-			progressToken = envelope.Meta.ProgressToken
+		switch r := resp.Result.(type) {
+		case core.InputRequiredResult:
+			// MRTR round — let the dispatcher's reshaped response flow back
+			// to the client unchanged. No task is created during MRTR rounds;
+			// task creation happens (if at all) on a later round when the
+			// handler returns GoAsync or a final sync result.
+			return resp, nil
+
+		case core.ToolResult:
+			var progressToken any
+			if envelope.Meta != nil {
+				progressToken = envelope.Meta.ProgressToken
+			}
+			if r.GoAsync {
+				return spawnGoAsyncTask(ctx, req, next, rt, cfg, envelope.Name, progressToken)
+			}
+			return wrapSyncAsCompletedTask(ctx, req, rt, cfg, r)
+
+		default:
+			// Some other result shape (e.g. an upstream middleware already
+			// produced a CreateTaskResult, or a non-tool response sneaks
+			// through). Pass through unchanged.
+			return resp, nil
 		}
+	}
+}
 
-		// Run the tool asynchronously.
-		go func() {
-			bgCtx := core.DetachForBackground(ctx)
-			bgCtx, cancelFunc := context.WithCancel(bgCtx)
+// spawnGoAsyncTask mints a v2 task, spawns the continuation goroutine that
+// re-invokes the handler with TaskContext attached, and returns the
+// CreateTaskResult envelope to the original caller.
+//
+// The handler is expected to be a state machine that detects the TaskContext
+// on re-invocation (via [GetTaskContext]) and runs its async branch — e.g.
+// the long-running work that was deferred after the MRTR loop completed.
+func spawnGoAsyncTask(
+	ctx context.Context,
+	req *core.Request,
+	next server.MiddlewareFunc,
+	rt *v2TaskRuntime,
+	cfg Config,
+	toolName string,
+	progressToken any,
+) (*core.Response, error) {
+	taskID := generateTaskID()
+	now := time.Now().UTC().Format(time.RFC3339)
+	ttlMs := cfg.DefaultTTLMs
+	pollMs := cfg.DefaultPollMs
 
-			// SEP-2663 input-request flow: each v2 task gets its own
-			// inputState. TaskContext.TaskElicit / TaskSample stash pending
-			// requests here; tasks/update delivers responses; tasks/get
-			// snapshots them for the DetailedTask wire shape.
-			inputState := newV2InputState()
-			tc := &TaskContext{
-				taskID:        taskID,
-				sessionID:     sessionID,
-				store:         store,
-				inputState:    inputState,
-				progressToken: progressToken,
-			}
-			bgCtx = WithTaskContext(bgCtx, tc)
-			// SEP-2663: notifications/progress and notifications/message MUST
-			// NOT be sent on tasks. Filter at the session-notify boundary so
-			// any tool handler that calls EmitProgress or EmitLog while it
-			// happens to be running as a task silently no-ops rather than
-			// leaking onto the session stream.
-			bgCtx = core.ApplySessionNotifyFilter(bgCtx,
-				"notifications/progress",
-				"notifications/message",
-			)
-			rt.register(taskID, envelope.Name, &activeTask{cancel: cancelFunc, inputState: inputState})
+	info := core.TaskInfo{
+		TaskID:        taskID,
+		Status:        core.TaskWorking,
+		CreatedAt:     now,
+		LastUpdatedAt: now,
+		TTL:           core.IntPtr(ttlMs),
+		PollInterval:  pollMs,
+	}
+	store := rt.store
+	sessionID := core.GetSessionID(ctx)
+	if err := store.Create(info, sessionID); err != nil {
+		return core.NewErrorResponse(req.ID, -32603, "failed to create task: "+err.Error()), nil
+	}
 
-			defer func() {
-				cancelFunc()
-				rt.unregister(taskID)
-				if r := recover(); r != nil {
-					// Panic = protocol-level error in v2.
-					msg := fmt.Sprintf("internal error: %v", r)
-					te := &core.TaskError{Code: -32603, Message: msg}
-					rt.setTaskError(taskID, te)
-					store.StoreTerminalResult(taskID, sessionID, core.TaskFailed, core.ErrorResult(msg), msg)
-					notifyV2TaskStatus(bgCtx, rt, store, taskID, sessionID)
-				}
-			}()
+	go func() {
+		bgCtx := core.DetachForBackground(ctx)
+		bgCtx, cancelFunc := context.WithCancel(bgCtx)
 
-			resp, mwErr := next(bgCtx, req)
+		// SEP-2663 input-request flow: each v2 task gets its own inputState.
+		// TaskContext.TaskElicit / TaskSample stash pending requests here;
+		// tasks/update delivers responses; tasks/get snapshots them for the
+		// DetailedTask wire shape. Per the spec separation rules, this
+		// inputState is scoped to the task lifetime — NOT carried over from
+		// the preceding MRTR phase's inputResponses.
+		inputState := newV2InputState()
+		tc := &TaskContext{
+			taskID:        taskID,
+			sessionID:     sessionID,
+			store:         store,
+			inputState:    inputState,
+			progressToken: progressToken,
+		}
+		bgCtx = WithTaskContext(bgCtx, tc)
+		// SEP-2663 G6: notifications/progress and notifications/message MUST
+		// NOT be sent on tasks. Filter at the session-notify boundary so any
+		// tool handler that calls EmitProgress or EmitLog while it happens to
+		// be running as the GoAsync continuation silently no-ops rather than
+		// leaking onto the session stream.
+		bgCtx = core.ApplySessionNotifyFilter(bgCtx,
+			"notifications/progress",
+			"notifications/message",
+		)
+		rt.register(taskID, toolName, &activeTask{cancel: cancelFunc, inputState: inputState})
 
-			// If middleware returned a transport-level error, treat it as a task failure.
-			if mwErr != nil {
-				te := &core.TaskError{Code: -32603, Message: mwErr.Error()}
+		defer func() {
+			cancelFunc()
+			rt.unregister(taskID)
+			if rec := recover(); rec != nil {
+				msg := fmt.Sprintf("internal error: %v", rec)
+				te := &core.TaskError{Code: -32603, Message: msg}
 				rt.setTaskError(taskID, te)
-				store.StoreTerminalResult(taskID, sessionID, core.TaskFailed, core.ErrorResult(mwErr.Error()), mwErr.Error())
+				store.StoreTerminalResult(taskID, sessionID, core.TaskFailed, core.ErrorResult(msg), msg)
 				notifyV2TaskStatus(bgCtx, rt, store, taskID, sessionID)
-				return
 			}
-
-			// Check if already cancelled — StoreTerminalResult rejects terminal→terminal.
-			if resp.Error != nil {
-				// Protocol/framework error (e.g., middleware failure, marshaling bug).
-				te := &core.TaskError{
-					Code:    resp.Error.Code,
-					Message: resp.Error.Message,
-				}
-				rt.setTaskError(taskID, te)
-				store.StoreTerminalResult(taskID, sessionID, core.TaskFailed, core.ErrorResult(resp.Error.Message), resp.Error.Message)
-				notifyV2TaskStatus(bgCtx, rt, store, taskID, sessionID)
-				return
-			}
-
-			raw, err := json.Marshal(resp.Result)
-			if err != nil {
-				te := &core.TaskError{Code: -32603, Message: "failed to marshal tool result"}
-				rt.setTaskError(taskID, te)
-				store.StoreTerminalResult(taskID, sessionID, core.TaskFailed, core.ErrorResult("failed to marshal tool result"), "")
-				notifyV2TaskStatus(bgCtx, rt, store, taskID, sessionID)
-				return
-			}
-
-			var toolResult core.ToolResult
-			if err := json.Unmarshal(raw, &toolResult); err != nil {
-				te := &core.TaskError{Code: -32603, Message: "failed to unmarshal tool result"}
-				rt.setTaskError(taskID, te)
-				store.StoreTerminalResult(taskID, sessionID, core.TaskFailed, core.ErrorResult("failed to unmarshal tool result"), "")
-				notifyV2TaskStatus(bgCtx, rt, store, taskID, sessionID)
-				return
-			}
-
-			// v2 error semantics: tool execution errors are "completed" with isError:true.
-			// Only protocol errors (resp.Error != nil) are "failed".
-			store.StoreTerminalResult(taskID, sessionID, core.TaskCompleted, toolResult, "")
-			notifyV2TaskStatus(bgCtx, rt, store, taskID, sessionID)
 		}()
 
-		// SEP-2243: stage Mcp-Name on the HTTP response so transports / proxies
-		// / observability can route or log against the task id without parsing
-		// the JSON body. No-op for non-HTTP transports (stdio, in-process).
-		core.SetResponseHeader(ctx, mcpNameHeader, taskID)
+		resp, mwErr := next(bgCtx, req)
+		if mwErr != nil {
+			te := &core.TaskError{Code: -32603, Message: mwErr.Error()}
+			rt.setTaskError(taskID, te)
+			store.StoreTerminalResult(taskID, sessionID, core.TaskFailed, core.ErrorResult(mwErr.Error()), mwErr.Error())
+			notifyV2TaskStatus(bgCtx, rt, store, taskID, sessionID)
+			return
+		}
+		if resp.Error != nil {
+			te := &core.TaskError{Code: resp.Error.Code, Message: resp.Error.Message}
+			rt.setTaskError(taskID, te)
+			store.StoreTerminalResult(taskID, sessionID, core.TaskFailed, core.ErrorResult(resp.Error.Message), resp.Error.Message)
+			notifyV2TaskStatus(bgCtx, rt, store, taskID, sessionID)
+			return
+		}
 
-		// Build the v2 wire envelope. SEP-2663 defines CreateTaskResult as
-		// `Result & Task` — a flat intersection — so the task fields are
-		// inlined alongside resultType, NOT nested under a "task" key.
-		// MUST NOT carry result/error/inputRequests/requestState (SEP-2663 —
-		// those belong on DetailedTask returned by tasks/get).
-		wireTask := toTaskInfoV2(info)
-		wireTask.TTLMs = core.IntPtr(ttlMs)
-		return core.NewResponse(req.ID, core.CreateTaskResult{
-			ResultType: core.ResultTypeTask,
-			TaskInfoV2: wireTask,
-		}), nil
+		raw, err := json.Marshal(resp.Result)
+		if err != nil {
+			te := &core.TaskError{Code: -32603, Message: "failed to marshal tool result"}
+			rt.setTaskError(taskID, te)
+			store.StoreTerminalResult(taskID, sessionID, core.TaskFailed, core.ErrorResult("failed to marshal tool result"), "")
+			notifyV2TaskStatus(bgCtx, rt, store, taskID, sessionID)
+			return
+		}
+
+		var toolResult core.ToolResult
+		if err := json.Unmarshal(raw, &toolResult); err != nil {
+			te := &core.TaskError{Code: -32603, Message: "failed to unmarshal tool result"}
+			rt.setTaskError(taskID, te)
+			store.StoreTerminalResult(taskID, sessionID, core.TaskFailed, core.ErrorResult("failed to unmarshal tool result"), "")
+			notifyV2TaskStatus(bgCtx, rt, store, taskID, sessionID)
+			return
+		}
+
+		// v2 error semantics: tool execution errors are "completed" with
+		// isError:true. Only protocol errors (resp.Error != nil) are "failed".
+		store.StoreTerminalResult(taskID, sessionID, core.TaskCompleted, toolResult, "")
+		notifyV2TaskStatus(bgCtx, rt, store, taskID, sessionID)
+	}()
+
+	core.SetResponseHeader(ctx, mcpNameHeader, taskID)
+	wireTask := toTaskInfoV2(info)
+	wireTask.TTLMs = core.IntPtr(ttlMs)
+	return core.NewResponse(req.ID, core.CreateTaskResult{
+		ResultType: core.ResultTypeTask,
+		TaskInfoV2: wireTask,
+	}), nil
+}
+
+// wrapSyncAsCompletedTask handles the case where the handler returned a sync
+// ToolResult without the GoAsync sentinel. The task is born terminal: we mint
+// it, immediately StoreTerminalResult with TaskCompleted, fire one
+// notifications/tasks event on the session-level stream, and return the
+// CreateTaskResult envelope. No goroutine ever runs; the work is already done.
+func wrapSyncAsCompletedTask(
+	ctx context.Context,
+	req *core.Request,
+	rt *v2TaskRuntime,
+	cfg Config,
+	result core.ToolResult,
+) (*core.Response, error) {
+	taskID := generateTaskID()
+	now := time.Now().UTC().Format(time.RFC3339)
+	ttlMs := cfg.DefaultTTLMs
+	pollMs := cfg.DefaultPollMs
+
+	// Create in TaskWorking so the immediately-following StoreTerminalResult
+	// can transition to completed and persist the result; the store rejects
+	// terminal→terminal transitions to guard against cancel/complete races.
+	info := core.TaskInfo{
+		TaskID:        taskID,
+		Status:        core.TaskWorking,
+		CreatedAt:     now,
+		LastUpdatedAt: now,
+		TTL:           core.IntPtr(ttlMs),
+		PollInterval:  pollMs,
 	}
+	store := rt.store
+	sessionID := core.GetSessionID(ctx)
+	if err := store.Create(info, sessionID); err != nil {
+		return core.NewErrorResponse(req.ID, -32603, "failed to create task: "+err.Error()), nil
+	}
+	if err := store.StoreTerminalResult(taskID, sessionID, core.TaskCompleted, result, ""); err != nil {
+		return core.NewErrorResponse(req.ID, -32603, "failed to store sync result: "+err.Error()), nil
+	}
+	// Reflect the just-stored terminal status in the wire envelope so the
+	// CreateTaskResult shows status="completed" instead of the transient
+	// "working" we used to bootstrap the store entry.
+	info.Status = core.TaskCompleted
+
+	// Route the lifecycle notification through the session-level GET SSE
+	// stream so clients holding a long-lived listener still see the
+	// terminal transition (matches the GoAsync path).
+	bgCtx := core.DetachForBackground(ctx)
+	notifyV2TaskStatus(bgCtx, rt, store, taskID, sessionID)
+
+	core.SetResponseHeader(ctx, mcpNameHeader, taskID)
+	wireTask := toTaskInfoV2(info)
+	wireTask.TTLMs = core.IntPtr(ttlMs)
+	return core.NewResponse(req.ID, core.CreateTaskResult{
+		ResultType: core.ResultTypeTask,
+		TaskInfoV2: wireTask,
+	}), nil
 }
 
 // mcpNameHeader is the SEP-2243 HTTP response header carrying the taskId
