@@ -23,7 +23,14 @@ srv.RegisterTool(
         Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportOptional},
     },
     func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
-        // ...
+        // Handlers whose work is genuinely async opt into the continuation
+        // goroutine via the GoAsync sentinel — see "Handler pattern" below.
+        if tasks.GetTaskContext(ctx) == nil {
+            return core.ToolResult{GoAsync: true}, nil
+        }
+        // Real work runs here, with TaskContext available for TaskElicit /
+        // TaskSample / SetStatus / progress emission under the G6 filter.
+        return core.TextResult("done"), nil
     },
 )
 
@@ -31,6 +38,42 @@ tasks.Register(tasks.Config{Server: srv})
 ```
 
 `tasks.Register` installs the v2 middleware that intercepts `tools/call` for task-eligible tools, registers the `tasks/get` / `tasks/update` / `tasks/cancel` method handlers (all gated on the client declaring the extension), and advertises the extension in the `initialize` response.
+
+## Handler pattern (SEP-2663 Option 2: GoAsync)
+
+Per the 2026-05-19 design decision on issue 347, mcpkit's v2 middleware runs the handler **synchronously first** and then dispatches on what it returned. The handler chooses one of three shapes:
+
+| Handler returns | Middleware does | When to use |
+|---|---|---|
+| `core.InputRequiredResult` via `ctx.RequestInput(...)` | Passes through unchanged; no task created | SEP-2322 MRTR round — gather input before deciding whether to escalate |
+| `core.ToolResult{GoAsync: true}` | Mints a task, spawns continuation goroutine that re-invokes the handler with `TaskContext` attached, returns `CreateTaskResult` | Slow / blocking work, `TaskElicit` / `TaskSample` calls, progress emission that should be filtered |
+| `core.ToolResult{...}` (no GoAsync, no IsInputRequired) | Wraps as a born-terminal task (`status: completed`, result stored, one `notifications/tasks` event fired), returns `CreateTaskResult` | Sync work that finishes immediately on a `TaskSupport=optional/required` tool |
+
+The continuation goroutine re-invokes the same handler with a `TaskContext` accessible via `tasks.GetTaskContext(ctx)`. The handler typically branches on that:
+
+```go
+func myHandler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+    if tasks.GetTaskContext(ctx) != nil {
+        // Continuation: do the real work. TaskElicit / TaskSample / SetStatus
+        // are all available; emissions are filtered per SEP-2663 G6.
+        return doRealWork(ctx, req)
+    }
+
+    // Optional MRTR phase: gather input via ctx.RequestInput first.
+    if ctx.InputResponse("user_name") == nil {
+        return ctx.RequestInput(core.InputRequests{
+            "user_name": core.InputRequest{Method: "elicitation/create", Params: ...},
+        })
+    }
+
+    // MRTR complete; defer the rest to the continuation goroutine.
+    return core.ToolResult{GoAsync: true}, nil
+}
+```
+
+The `examples/mrtr` reference fixture's `test_tool_with_task` walks this exact pattern end-to-end (drives the matching `mrtr-tasks-composition` conformance scenario). For the full conceptual walk-through — MRTR as a stateless continuation primitive, capabilities across wires, progressToken, the G6 filter replacement table, MRTR vs push vs task-input-flow — see [`docs/MRTR_TUTORIAL.md`](../../docs/MRTR_TUTORIAL.md).
+
+**G6 filter scope:** the SEP-2663 G6 session-notify filter (`notifications/progress` and `notifications/message` MUST NOT be sent on tasks) is installed only on the continuation goroutine's `bgCtx`. A sync-returning handler runs on the unfiltered POST ctx — it is responsible for not leaking those notifications itself.
 
 ## Surface
 

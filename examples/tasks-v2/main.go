@@ -75,9 +75,19 @@ func serve() {
 				args.Label = "default"
 			}
 
-			// Immediate result shortcut: 0 seconds means instant.
+			// Immediate result shortcut: 0 seconds means instant. The middleware
+			// will wrap this as an already-completed task (taskSupport=optional
+			// + sync return) so the wire shape stays CreateTaskResult.
 			if args.Seconds <= 0 {
 				return core.TextResult(fmt.Sprintf("Computation %q completed instantly. Result: 42.", args.Label)), nil
+			}
+
+			// SEP-2663 Option 2: the slow loop blocks and emits progress, both
+			// of which must run inside the continuation goroutine (so the
+			// G6 filter is active and the response isn't held open). On the
+			// first sync pass there's no TaskContext, so signal GoAsync.
+			if tasks.GetTaskContext(ctx) == nil {
+				return core.ToolResult{GoAsync: true}, nil
 			}
 
 			log.Printf("[slow_compute] starting %q: sleeping %ds...", args.Label, args.Seconds)
@@ -123,6 +133,9 @@ func serve() {
 	srv.Register(core.TypedTool[struct{}, core.ToolResult]("failing_job",
 		"A job that always fails after 1 second. In v2: tool error = completed + isError:true.",
 		func(ctx core.ToolContext, _ struct{}) (core.ToolResult, error) {
+			if tasks.GetTaskContext(ctx) == nil {
+				return core.ToolResult{GoAsync: true}, nil
+			}
 			log.Printf("[failing_job] starting (will fail in 1s)...")
 			time.Sleep(1 * time.Second)
 			return core.ToolResult{}, fmt.Errorf("simulated failure: job crashed")
@@ -142,7 +155,9 @@ func serve() {
 		func(ctx core.ToolContext, args confirmDeleteInput) (core.ToolResult, error) {
 			tc := tasks.GetTaskContext(ctx)
 			if tc == nil {
-				return core.ToolResult{}, fmt.Errorf("confirm_delete requires task context")
+				// SEP-2663 Option 2: TaskElicit needs the continuation
+				// goroutine's TaskContext.
+				return core.ToolResult{GoAsync: true}, nil
 			}
 			if args.Filename == "" {
 				args.Filename = "important.txt"
@@ -188,7 +203,9 @@ func serve() {
 		func(ctx core.ToolContext, _ struct{}) (core.ToolResult, error) {
 			tc := tasks.GetTaskContext(ctx)
 			if tc == nil {
-				return core.ToolResult{}, fmt.Errorf("multi_input requires task context")
+				// SEP-2663 Option 2: TaskElicit needs the continuation
+				// goroutine's TaskContext.
+				return core.ToolResult{GoAsync: true}, nil
 			}
 
 			var (
@@ -234,6 +251,11 @@ func serve() {
 	srv.Register(core.TypedTool[struct{}, core.ToolResult]("protocol_error_job",
 		"A job that triggers a protocol-level error (panic). In v2: failed + error field.",
 		func(ctx core.ToolContext, _ struct{}) (core.ToolResult, error) {
+			if tasks.GetTaskContext(ctx) == nil {
+				// Run the panic inside the goroutine so the middleware's
+				// recover() turns it into a failed task, not a sync 500.
+				return core.ToolResult{GoAsync: true}, nil
+			}
 			log.Printf("[protocol_error_job] starting (will panic in 500ms)...")
 			time.Sleep(500 * time.Millisecond)
 			panic("simulated protocol error: server internal failure")
@@ -259,6 +281,9 @@ func serve() {
 			Execution: &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
 		},
 		Handler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+			if tasks.GetTaskContext(ctx) == nil {
+				return core.ToolResult{GoAsync: true}, nil
+			}
 			var args struct {
 				JobID string `json:"job_id"`
 			}

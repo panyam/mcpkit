@@ -1,15 +1,18 @@
 module github.com/panyam/mcpkit/examples/mrtr
 
-go 1.26.2
+go 1.26.3
 
 replace github.com/panyam/mcpkit => ../..
 
 replace github.com/panyam/mcpkit/examples/common => ../common
 
+replace github.com/panyam/mcpkit/ext/tasks => ../../ext/tasks
+
 require (
 	github.com/panyam/demokit v0.0.25
-	github.com/panyam/mcpkit v0.2.41
+	github.com/panyam/mcpkit v0.2.45
 	github.com/panyam/mcpkit/examples/common v0.0.0-00010101000000-000000000000
+	github.com/panyam/mcpkit/ext/tasks v0.0.0-00010101000000-000000000000
 )
 
 require (

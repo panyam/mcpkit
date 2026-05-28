@@ -1,8 +1,12 @@
 # mcpkit/conformance/mrtr — sentinel
 
-The full SEP-2322 MRTR server-conformance suite migrated upstream to
-the [`panyam/mcpconformance`](https://github.com/panyam/mcpconformance)
-fork, on the
+The full SEP-2322 MRTR server-conformance suite — 8 checks: basic
+elicitation, sampling, and roots/list round-trips; `requestState`
+validation; multi-input single round; multi-round answer accumulation;
+wrong-key tolerance; and the SEP-2663 **MRTR → Tasks composition flow**
+— lives in the
+[`panyam/mcpconformance`](https://github.com/panyam/mcpconformance)
+fork on the
 [`feat/tasks-mrtr-extension`](https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension)
 branch (paired with the SEP-2663 tasks scenarios since the two surfaces
 share base types). Run from mcpkit via:
@@ -12,7 +16,8 @@ make testconf-mrtr
 ```
 
 The Makefile target invokes vitest in the fork (auto-spawning the
-`examples/mrtr` Go fixture) and then runs this folder's local sentinel
+`examples/mrtr` Go fixture — which registers `test_tool_with_task` for
+the composition scenario) and then runs this folder's local sentinel
 afterward.
 
 ## What lives here
