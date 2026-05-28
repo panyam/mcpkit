@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -85,6 +86,43 @@ func TestDecodeRequestMeta_MissingRequiredSubfields(t *testing.T) {
 				t.Errorf("Field = %q, want %q", ve.Field, tc.wantField)
 			}
 		})
+	}
+}
+
+// TestClientCaps_StatelessWire verifies that ctx.ClientCaps() returns the
+// per-request capability envelope set by the SEP-2575 stateless dispatcher.
+// The cap-gating capability-check conformance scenario relies on this.
+func TestClientCaps_StatelessWire(t *testing.T) {
+	meta := &RequestMeta{
+		ProtocolVersion:    DraftProtocolVersion2026V1,
+		ClientInfo:         &ClientInfo{Name: "x", Version: "1"},
+		ClientCapabilities: &ClientCapabilities{Sampling: &struct{}{}},
+	}
+	ctx := WithRequestMeta(context.Background(), meta)
+	tc := NewToolContext(ctx)
+	caps := tc.ClientCaps()
+	if caps == nil {
+		t.Fatal("ClientCaps() = nil, want per-request caps from envelope")
+	}
+	if caps.Sampling == nil {
+		t.Errorf("Sampling = nil, want declared")
+	}
+	if caps.Elicitation != nil {
+		t.Errorf("Elicitation = %+v, want nil (not declared)", caps.Elicitation)
+	}
+	// Symmetric check on PromptContext.
+	pc := NewPromptContext(ctx)
+	if pc.ClientCaps() != caps {
+		t.Errorf("PromptContext.ClientCaps mismatch with ToolContext.ClientCaps")
+	}
+}
+
+// TestClientCaps_BareContext_NilSafe documents the no-session, no-meta
+// fallback: a bare ctx.Background() yields nil caps without panic.
+func TestClientCaps_BareContext_NilSafe(t *testing.T) {
+	tc := NewToolContext(context.Background())
+	if got := tc.ClientCaps(); got != nil {
+		t.Errorf("ClientCaps() on bare ctx = %+v, want nil", got)
 	}
 }
 
