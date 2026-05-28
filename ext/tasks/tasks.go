@@ -304,9 +304,27 @@ func Register(cfg Config) {
 // handler's response. The error data carries the same `requiredCapabilities`
 // shape the required-task middleware emits, so a client that hits the
 // gate can self-describe what to add and retry.
+//
+// Capability sourcing is two-layered: session-level declaration (legacy
+// initialize handshake) OR per-request _meta.io.modelcontextprotocol/
+// clientCapabilities override (SEP-2575 stateless wire). The latter is the
+// only path available on the stateless wire — there is no initialize
+// handshake to seed session caps from — so without it tasks/* would always
+// emit -32003 on the stateless wire even when the client did declare the
+// extension per-request.
 func gateOnTasksExtension(inner server.MethodHandler) server.MethodHandler {
 	return func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
-		if !ctx.ClientSupportsExtension(core.TasksExtensionID) {
+		var envelope struct {
+			Meta *struct {
+				ClientCapabilitiesRaw json.RawMessage `json:"io.modelcontextprotocol/clientCapabilities,omitempty"`
+			} `json:"_meta,omitempty"`
+		}
+		var perRequestCapsRaw json.RawMessage
+		if err := json.Unmarshal(params, &envelope); err == nil && envelope.Meta != nil {
+			perRequestCapsRaw = envelope.Meta.ClientCapabilitiesRaw
+		}
+
+		if !core.ClientSupportsExtensionForRequest(ctx, core.TasksExtensionID, perRequestCapsRaw) {
 			return core.NewErrorResponseWithData(
 				id,
 				core.ErrCodeMissingRequiredClientCapability,
