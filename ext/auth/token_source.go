@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -225,23 +226,25 @@ func (s *OAuthTokenSource) Token() (string, error) {
 	// (4) Full browser login flow with explicit endpoints from discovery.
 	// Pass TokenEndpointAuthMethods from AS metadata so auth method negotiation
 	// works correctly even with explicit endpoints (oneauth#74).
-	loginCfg := client.BrowserLoginConfig{
-		AuthorizationEndpoint:   s.authInfo.ASMetadata.AuthorizationEndpoint,
-		TokenEndpoint:           s.authInfo.ASMetadata.TokenEndpoint,
+	// oneauth 0.1.9 (#217): BrowserLoginConfig renamed to BrowserLoginRequest;
+	// LoginWithBrowser now takes (ctx, *BrowserLoginRequest).
+	loginReq := &client.BrowserLoginRequest{
+		AuthorizationEndpoint:    s.authInfo.ASMetadata.AuthorizationEndpoint,
+		TokenEndpoint:            s.authInfo.ASMetadata.TokenEndpoint,
 		TokenEndpointAuthMethods: s.authInfo.ASMetadata.TokenEndpointAuthMethods,
-		ClientID:                clientID,
-		ClientSecret:            clientSecret,
-		Scopes:                  scopes,
-		Resource:                s.ServerURL, // RFC 8707: bind token to this MCP server
-		OpenBrowser:             s.OpenBrowser,
+		ClientID:                 clientID,
+		ClientSecret:             clientSecret,
+		Scopes:                   scopes,
+		Resource:                 s.ServerURL, // RFC 8707: bind token to this MCP server
+		OpenBrowser:              s.OpenBrowser,
 	}
 	if s.HTTPClient != nil {
-		loginCfg.HTTPClient = s.HTTPClient
+		loginReq.HTTPClient = s.HTTPClient
 	}
-	// ClientSecret is passed in BrowserLoginConfig above — oneauth's
+	// ClientSecret is passed in BrowserLoginRequest above — oneauth's
 	// SelectAuthMethod handles negotiation (basic/post/none) based on AS metadata.
 
-	cred, err := s.oaClient.LoginWithBrowser(loginCfg)
+	cred, err := s.oaClient.LoginWithBrowser(context.Background(), loginReq)
 	if err != nil {
 		return "", fmt.Errorf("oauth login: %w", err)
 	}

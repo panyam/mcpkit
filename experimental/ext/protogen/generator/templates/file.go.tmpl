@@ -104,7 +104,7 @@ func Register{{ .Name }}MCP(srv *server.Server, impl {{ .Name }}MCPServer) {
 	srv.Register(
 {{- range .Tools }}
 		{{ template "toolDef" . }}
-			Handler: func(ctx mcpcore.ToolContext, req mcpcore.ToolRequest) (mcpcore.ToolResult, error) {
+			Handler: func(ctx mcpcore.ToolContext, req mcpcore.ToolRequest) (mcpcore.ToolResponse, error) {
 				var in {{ .RequestType }}
 				if err := runtime.BindProto(req, &in); err != nil {
 					return mcpcore.ErrorResult(err.Error()), nil
@@ -142,7 +142,7 @@ func Forward{{ .Name }}ToGRPC(srv *server.Server, client {{ .Name }}GRPCClient) 
 	srv.Register(
 {{- range .Tools }}
 		{{ template "toolDef" . }}
-			Handler: func(ctx mcpcore.ToolContext, req mcpcore.ToolRequest) (mcpcore.ToolResult, error) {
+			Handler: func(ctx mcpcore.ToolContext, req mcpcore.ToolRequest) (mcpcore.ToolResponse, error) {
 				var in {{ .RequestType }}
 				if err := runtime.BindProto(req, &in); err != nil {
 					return mcpcore.ErrorResult(err.Error()), nil
@@ -180,7 +180,7 @@ func Forward{{ .Name }}ToConnect(srv *server.Server, client Connect{{ .Name }}Cl
 	srv.Register(
 {{- range .Tools }}
 		{{ template "toolDef" . }}
-			Handler: func(ctx mcpcore.ToolContext, req mcpcore.ToolRequest) (mcpcore.ToolResult, error) {
+			Handler: func(ctx mcpcore.ToolContext, req mcpcore.ToolRequest) (mcpcore.ToolResponse, error) {
 				var in {{ .RequestType }}
 				if err := runtime.BindProto(req, &in); err != nil {
 					return mcpcore.ErrorResult(err.Error()), nil
@@ -407,7 +407,7 @@ func Register{{ .Name }}MCPPrompts(srv *server.Server, impl {{ .Name }}MCPPrompt
 				{{- end }}
 				},
 			},
-			Handler: func(ctx mcpcore.PromptContext, req mcpcore.PromptRequest) (mcpcore.PromptResult, error) {
+			Handler: func(ctx mcpcore.PromptContext, req mcpcore.PromptRequest) (mcpcore.PromptResponse, error) {
 				var in {{ .RequestType }}
 				if err := runtime.BindPromptArgs(req.Arguments, &in); err != nil {
 					return mcpcore.PromptResult{}, err
@@ -448,7 +448,7 @@ func Forward{{ .Name }}PromptsToGRPC(srv *server.Server, client {{ .Name }}Promp
 				{{- end }}
 				},
 			},
-			Handler: func(ctx mcpcore.PromptContext, req mcpcore.PromptRequest) (mcpcore.PromptResult, error) {
+			Handler: func(ctx mcpcore.PromptContext, req mcpcore.PromptRequest) (mcpcore.PromptResponse, error) {
 				var in {{ .RequestType }}
 				if err := runtime.BindPromptArgs(req.Arguments, &in); err != nil {
 					return mcpcore.PromptResult{}, err
@@ -489,7 +489,7 @@ func Forward{{ .Name }}PromptsToConnect(srv *server.Server, client Connect{{ .Na
 				{{- end }}
 				},
 			},
-			Handler: func(ctx mcpcore.PromptContext, req mcpcore.PromptRequest) (mcpcore.PromptResult, error) {
+			Handler: func(ctx mcpcore.PromptContext, req mcpcore.PromptRequest) (mcpcore.PromptResponse, error) {
 				var in {{ .RequestType }}
 				if err := runtime.BindPromptArgs(req.Arguments, &in); err != nil {
 					return mcpcore.PromptResult{}, err
