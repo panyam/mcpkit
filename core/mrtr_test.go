@@ -199,6 +199,17 @@ func TestInputRequiredResultWireShape(t *testing.T) {
 	}
 }
 
+// TestInputRequiredResult_SatisfiesBothResponseInterfaces guards the
+// sealed-interface marker methods: SEP-2322 InputRequiredResult is a
+// variant of BOTH ToolResponse (tools/call) AND PromptResponse
+// (prompts/get, per upstream's input-required-result-non-tool-request
+// scenario). Compile-time check via interface assertion — if either
+// marker is dropped, this test stops building.
+func TestInputRequiredResult_SatisfiesBothResponseInterfaces(t *testing.T) {
+	var _ ToolResponse = InputRequiredResult{}
+	var _ PromptResponse = InputRequiredResult{}
+}
+
 // TestInputRequiredResultDefaultsResultType verifies that a zero-value
 // InputRequiredResult marshals with resultType = "input_required" so
 // handlers can build InputRequiredResult{InputRequests: ...} without

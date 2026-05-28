@@ -99,6 +99,13 @@ type InputRequiredResult struct {
 // toolResponse marks InputRequiredResult as a [ToolResponse] variant.
 func (InputRequiredResult) toolResponse() {}
 
+// promptResponse marks InputRequiredResult as a [PromptResponse] variant.
+// SEP-2322 scopes the input-required flow to "any request method, in
+// principle" — tools/call is the headline case, prompts/get is the second
+// case the spec calls out and the upstream conformance scenario
+// `input-required-result-non-tool-request` exercises.
+func (InputRequiredResult) promptResponse() {}
+
 // MarshalJSON defaults ResultType to ResultTypeInputRequired so handlers
 // that build an InputRequiredResult{} literal don't have to set the
 // discriminator.
