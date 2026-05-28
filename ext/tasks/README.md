@@ -71,7 +71,7 @@ func myHandler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, err
 }
 ```
 
-The `examples/mrtr` reference fixture's `test_tool_with_task` walks this exact pattern end-to-end (drives the matching `mrtr-tasks-composition` conformance scenario).
+The `examples/mrtr` reference fixture's `test_tool_with_task` walks this exact pattern end-to-end (drives the matching `mrtr-tasks-composition` conformance scenario). For the full conceptual walk-through — MRTR as a stateless continuation primitive, capabilities across wires, progressToken, the G6 filter replacement table, MRTR vs push vs task-input-flow — see [`docs/MRTR_TUTORIAL.md`](../../docs/MRTR_TUTORIAL.md).
 
 **G6 filter scope:** the SEP-2663 G6 session-notify filter (`notifications/progress` and `notifications/message` MUST NOT be sent on tasks) is installed only on the continuation goroutine's `bgCtx`. A sync-returning handler runs on the unfiltered POST ctx — it is responsible for not leaking those notifications itself.
 
