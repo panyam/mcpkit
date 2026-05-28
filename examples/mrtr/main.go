@@ -46,6 +46,7 @@ import (
 	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
+	tasks "github.com/panyam/mcpkit/ext/tasks"
 	"github.com/panyam/mcpkit/server"
 )
 
@@ -75,6 +76,13 @@ func serve() {
 	srv := server.NewServer(core.ServerInfo{Name: "mrtr-demo", Version: "0.1.0"}, opts...)
 
 	registerMRTRTools(srv)
+
+	// SEP-2322 + SEP-2663 composition: the registry holds at least one
+	// task-eligible tool (test_tool_with_task) that gathers input via MRTR
+	// rounds and then escalates to async via the GoAsync sentinel. The
+	// taskV2Middleware is what observes the GoAsync return and spawns the
+	// continuation goroutine.
+	tasks.Register(tasks.Config{Server: srv})
 
 	log.Printf("[mrtr-demo] listening on %s", *addr)
 	if err := srv.ListenAndServe(server.WithStreamableHTTP(true)); err != nil {
@@ -146,6 +154,23 @@ func registerMRTRTools(srv *server.Server) {
 			InputSchema: map[string]any{"type": "object"},
 		},
 		basicElicitationTool, // same handler — already re-requests on missing key
+	)
+
+	// A8: SEP-2322 + SEP-2663 composition. The handler runs through an MRTR
+	// round (gathering user_name) and only then escalates to async by
+	// returning the GoAsync sentinel. taskV2Middleware observes the GoAsync
+	// return and spawns a continuation goroutine that re-invokes the handler
+	// with a TaskContext attached; the goroutine does the "expensive work"
+	// and stores the final ToolResult on the task. Conformance scenario
+	// "mrtr-08" / mrtr-tasks-composition drives this fixture.
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "test_tool_with_task",
+			Description: "A8: MRTR elicit for user_name, then escalate to async via GoAsync. The continuation goroutine does the work and returns a greeting.",
+			InputSchema: map[string]any{"type": "object"},
+			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
+		},
+		mrtrTaskCompositionTool,
 	)
 }
 
@@ -310,4 +335,65 @@ func multiRoundTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult
 	json.Unmarshal(ctx.InputResponse("step1"), &s1)
 	json.Unmarshal(ctx.InputResponse("step2"), &s2)
 	return core.TextResult(fmt.Sprintf("Hi %s, your favorite color is %s.", s1.Content.Name, s2.Content.Color)), nil
+}
+
+// --- A8: MRTR → Tasks composition (SEP-2322 + SEP-2663) ---
+
+// mrtrTaskCompositionTool walks two distinct phases that meet at the GoAsync
+// sentinel:
+//
+//   Phase 1 (synchronous, no TaskContext):
+//     - If user_name hasn't been answered yet → return InputRequiredResult via
+//       ctx.RequestInput. taskV2Middleware sees IncompleteResult and lets it
+//       through; the client sees a normal MRTR InputRequiredResult.
+//     - Once user_name is present → return ToolResult{GoAsync: true}.
+//       taskV2Middleware mints a fresh task and spawns the continuation.
+//
+//   Phase 2 (in the continuation goroutine, TaskContext attached):
+//     - Detect the TaskContext, do the "expensive" work, return a normal
+//       ToolResult. taskV2Middleware stores it as the task's terminal result;
+//       the client retrieves it via tasks/get.
+//
+// Per SEP-2663 spec separation rules:
+//   - MRTR requestState is NOT carried into the task's requestState (the task
+//     gets its own per-task inputState).
+//   - Task inputRequests keys (if the goroutine called TaskElicit / TaskSample)
+//     are scoped to the task's lifetime — distinct from the MRTR phase keys.
+//   - Clients do NOT need to deduplicate across the two flows.
+func mrtrTaskCompositionTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+	// Phase 2: running inside the continuation goroutine. The TaskContext
+	// gates us into the async branch.
+	if tasks.GetTaskContext(ctx) != nil {
+		// "Expensive" work simulator. A real handler would call out to a
+		// downstream service, run a long computation, etc.
+		time.Sleep(50 * time.Millisecond)
+		var er struct {
+			Action  string `json:"action"`
+			Content struct {
+				Name string `json:"name"`
+			} `json:"content"`
+		}
+		if raw := ctx.InputResponse("user_name"); raw != nil {
+			_ = json.Unmarshal(raw, &er)
+		}
+		if er.Content.Name == "" {
+			return core.ErrorResult("task continuation lost user_name"), nil
+		}
+		return core.TextResult(fmt.Sprintf("Hello, %s! (computed in task)", er.Content.Name)), nil
+	}
+
+	// Phase 1: synchronous. Drive the MRTR round-trip for user_name first; do
+	// NOT mint a task until the input is in hand.
+	if ctx.InputResponse("user_name") == nil {
+		return ctx.RequestInput(core.InputRequests{
+			"user_name": core.InputRequest{
+				Method: "elicitation/create",
+				Params: json.RawMessage(`{"message":"What is your name?","requestedSchema":{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}}`),
+			},
+		})
+	}
+
+	// MRTR loop is complete; escalate to async so the heavy work happens
+	// in the continuation goroutine (with the SEP-2663 G6 filter applied).
+	return core.ToolResult{GoAsync: true}, nil
 }
