@@ -37,6 +37,23 @@ func main() {
 
 	log.Printf("scenario=%s server=%s", scenario, serverURL)
 
+	// SEP-2322 client scenarios — the upstream fixtures are bare-HTTP
+	// JSON-RPC endpoints (no initialize handshake, no server/discover),
+	// so mcpkit's connected client doesn't apply. Drive them via raw
+	// HTTP through driveSEP2322ClientRequestState, which exercises the
+	// MRTR retry contract the scenario grades:
+	//   - echo requestState byte-for-byte on retry,
+	//   - omit requestState when the server didn't send one,
+	//   - use a different JSON-RPC id on retry,
+	//   - keep MRTR state isolated across unrelated tool calls.
+	if scenario == "sep-2322-client-request-state" {
+		if err := driveSEP2322ClientRequestState(serverURL); err != nil {
+			log.Fatalf("sep-2322-client-request-state: %v", err)
+		}
+		log.Println("SUCCESS: sep-2322-client-request-state driven")
+		return
+	}
+
 	var ctx conformanceContext
 	if contextJSON != "" {
 		json.Unmarshal([]byte(contextJSON), &ctx)

@@ -14,8 +14,8 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 | Surface | Scenarios | Checks | Pass | Fail | Warn | Info | Skipped | Harness-gap |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Server | 51 | 135 | 105 | 8 | 7 | 6 | 9 | 0 |
-| Client | 40 | 1241 | 447 | 25 | 4 | 759 | 6 | 1 |
-| **Total** | **91** | **1376** | **552** | **33** | **11** | **765** | **15** | **1** |
+| Client | 40 | 1241 | 452 | 20 | 4 | 759 | 6 | 1 |
+| **Total** | **91** | **1376** | **557** | **28** | **11** | **765** | **15** | **1** |
 
 ## Harness gaps
 
@@ -195,7 +195,7 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `sep-2322-client-request-state` | client | fail | 5 fail |  |
+| `sep-2322-client-request-state` | client | pass | 5 pass |  |
 
 ### [SEP-2549](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2549) (1 scenarios)
 
