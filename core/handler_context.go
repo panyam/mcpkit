@@ -417,14 +417,14 @@ func (tc ToolContext) RequestState() string {
 }
 
 // RequestInput is the SEP-2322 ephemeral retry primitive. Handlers return
-// the value as their ToolResult to signal "I need more input from the
-// client before I can produce a final result"; the dispatch layer
-// reshapes the response on the wire as an InputRequiredResult and mints a
-// fresh requestState for the next round.
+// the value as their ToolResponse to signal "I need more input from the
+// client before I can produce a final result"; the dispatch layer mints a
+// fresh requestState onto the returned InputRequiredResult before emitting
+// it on the wire.
 //
 // Usage in a tool handler:
 //
-//	func myTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+//	func myTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 //	    if !ctx.HasInputResponses() {
 //	        return ctx.RequestInput(core.InputRequests{
 //	            "user_name": {
@@ -438,9 +438,10 @@ func (tc ToolContext) RequestState() string {
 //
 // The error return is always nil — the helper exists so the call site
 // reads as a single return statement matching the ToolHandler signature.
-func (tc ToolContext) RequestInput(reqs InputRequests) (ToolResult, error) {
-	return ToolResult{
-		IsInputRequired: true,
-		InputRequests:   reqs,
+// The concrete return type is InputRequiredResult (not ToolResponse) so
+// callers can use the typed value directly when they need to.
+func (tc ToolContext) RequestInput(reqs InputRequests) (InputRequiredResult, error) {
+	return InputRequiredResult{
+		InputRequests: reqs,
 	}, nil
 }

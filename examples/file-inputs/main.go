@@ -111,7 +111,7 @@ func registerTools(srv *server.Server, uploadDir string) {
 				"required": []string{"image"},
 			},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return uploadImageHandler(ctx, req, uploadDir)
 		},
 	)
@@ -131,7 +131,7 @@ func registerTools(srv *server.Server, uploadDir string) {
 				"required": []string{"documents"},
 			},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return analyzeDocumentsHandler(ctx, req, uploadDir)
 		},
 	)
@@ -148,13 +148,13 @@ func registerTools(srv *server.Server, uploadDir string) {
 				"required": []string{"file"},
 			},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return processAnyFileHandler(ctx, req, uploadDir)
 		},
 	)
 }
 
-func uploadImageHandler(ctx core.ToolContext, req core.ToolRequest, uploadDir string) (core.ToolResult, error) {
+func uploadImageHandler(ctx core.ToolContext, req core.ToolRequest, uploadDir string) (core.ToolResponse, error) {
 	args, err := parseArgs(req.Arguments)
 	if err != nil {
 		return core.ErrorResult("invalid arguments: " + err.Error()), nil
@@ -191,7 +191,7 @@ func uploadImageHandler(ctx core.ToolContext, req core.ToolRequest, uploadDir st
 	return core.TextResult(b.String()), nil
 }
 
-func analyzeDocumentsHandler(ctx core.ToolContext, req core.ToolRequest, uploadDir string) (core.ToolResult, error) {
+func analyzeDocumentsHandler(ctx core.ToolContext, req core.ToolRequest, uploadDir string) (core.ToolResponse, error) {
 	args, err := parseArgs(req.Arguments)
 	if err != nil {
 		return core.ErrorResult("invalid arguments: " + err.Error()), nil
@@ -229,7 +229,7 @@ func analyzeDocumentsHandler(ctx core.ToolContext, req core.ToolRequest, uploadD
 	return core.TextResult(b.String()), nil
 }
 
-func processAnyFileHandler(ctx core.ToolContext, req core.ToolRequest, uploadDir string) (core.ToolResult, error) {
+func processAnyFileHandler(ctx core.ToolContext, req core.ToolRequest, uploadDir string) (core.ToolResponse, error) {
 	args, err := parseArgs(req.Arguments)
 	if err != nil {
 		return core.ErrorResult("invalid arguments: " + err.Error()), nil

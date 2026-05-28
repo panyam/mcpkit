@@ -23,7 +23,7 @@ func newStatelessTestServer(t *testing.T, mode stateless.Mode) (*Server, string,
 	// Register a trivial tool so tools/list returns something.
 	if err := s.Registry().AddTool(
 		core.ToolDef{Name: "echo", Description: "echoes back"},
-		func(_ core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(_ core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.ToolResult{Content: []core.Content{{Type: "text", Text: string(req.Arguments)}}}, nil
 		},
 	); err != nil {
@@ -33,7 +33,7 @@ func newStatelessTestServer(t *testing.T, mode stateless.Mode) (*Server, string,
 	// translateToolError end-to-end.
 	if err := s.Registry().AddTool(
 		core.ToolDef{Name: "test_missing_capability"},
-		func(_ core.ToolContext, _ core.ToolRequest) (core.ToolResult, error) {
+		func(_ core.ToolContext, _ core.ToolRequest) (core.ToolResponse, error) {
 			return core.ToolResult{}, &core.MissingCapabilityError{
 				Required: core.ClientCapabilities{Sampling: &struct{}{}},
 				Message:  "this tool requires sampling",

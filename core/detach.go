@@ -37,7 +37,7 @@ import "context"
 //
 // Example:
 //
-//	func longRunningTool(ctx context.Context, req core.ToolRequest) (core.ToolResult, error) {
+//	func longRunningTool(ctx context.Context, req core.ToolRequest) (core.ToolResponse, error) {
 //	    // Hint the client to reconnect in 5 minutes
 //	    core.EmitSSERetry(ctx, 5*time.Minute)
 //

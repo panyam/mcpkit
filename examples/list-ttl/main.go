@@ -69,7 +69,7 @@ func serve() {
 			Description: "Returns 'pong'",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("pong"), nil
 		},
 	)
@@ -106,7 +106,7 @@ func serve() {
 
 	srv.RegisterPrompt(
 		core.PromptDef{Name: "hello", Description: "Sample prompt"},
-		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResult, error) {
+		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResponse, error) {
 			return core.PromptResult{}, nil
 		},
 	)

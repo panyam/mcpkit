@@ -52,7 +52,7 @@ func registerAppsTools(srv *server.Server, uploadDir string) {
 		},
 		ResourceURI: "ui://file-inputs/upload-image",
 		Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
-		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			// When invoked by the model with `image` already populated, fall
 			// through to the regular handler. When invoked by the user
 			// clicking the in-app button (which round-trips back as
@@ -83,7 +83,7 @@ func registerAppsTools(srv *server.Server, uploadDir string) {
 		},
 		ResourceURI: "ui://file-inputs/analyze-documents",
 		Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
-		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return analyzeDocumentsHandler(ctx, req, uploadDir)
 		},
 		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {

@@ -147,7 +147,7 @@ func registerCartTools(srv *server.Server, carts server.HandleStore[Cart]) {
 				"SEP-2567: subsequent tools thread cart_id as a parameter.",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(_ core.ToolContext, _ core.ToolRequest) (core.ToolResult, error) {
+		func(_ core.ToolContext, _ core.ToolRequest) (core.ToolResponse, error) {
 			id := carts.Mint(Cart{}, 0)
 			out := map[string]any{"cart_id": id}
 			raw, _ := json.Marshal(out)
@@ -172,7 +172,7 @@ func registerCartTools(srv *server.Server, carts server.HandleStore[Cart]) {
 				"required": []string{"cart_id", "sku", "quantity"},
 			},
 		},
-		func(_ core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(_ core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			var args struct {
 				CartID   string `json:"cart_id"`
 				SKU      string `json:"sku"`
@@ -222,7 +222,7 @@ func registerCartTools(srv *server.Server, carts server.HandleStore[Cart]) {
 				"required":   []string{"cart_id"},
 			},
 		},
-		func(_ core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(_ core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			var args struct {
 				CartID string `json:"cart_id"`
 			}
@@ -258,7 +258,7 @@ func registerDiagnosticTools(srv *server.Server) {
 			Description: "SEP-2575 conformance hook: rejects with -32003 when the per-request _meta.clientCapabilities lacks 'sampling'.",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, _ core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, _ core.ToolRequest) (core.ToolResponse, error) {
 			meta := stateless.RequestMetaFromContext(ctx)
 			if meta == nil || meta.ClientCapabilities == nil || meta.ClientCapabilities.Sampling == nil {
 				return core.ToolResult{}, &core.MissingCapabilityError{
@@ -276,7 +276,7 @@ func registerDiagnosticTools(srv *server.Server) {
 			Description: "SEP-2575 conformance hook: emits an InputRequiredResult (MRTR) instead of a server-initiated request on the response stream.",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, _ core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, _ core.ToolRequest) (core.ToolResponse, error) {
 			if !ctx.HasInputResponses() {
 				return ctx.RequestInput(core.InputRequests{
 					"name": core.NewElicitationInputRequest(core.ElicitationRequest{
@@ -299,7 +299,7 @@ func registerDiagnosticTools(srv *server.Server) {
 			Description: "SEP-2575 conformance hook: emits notifications/message ONLY if the per-request _meta.logLevel is set.",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, _ core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, _ core.ToolRequest) (core.ToolResponse, error) {
 			meta := stateless.RequestMetaFromContext(ctx)
 			if meta != nil && meta.LogLevel != "" {
 				if lvl, ok := core.ParseLogLevel(meta.LogLevel); ok {
@@ -317,11 +317,11 @@ func registerDiagnosticTools(srv *server.Server) {
 			Description: "SEP-2575 conformance hook: mutates the tool registry to broadcast notifications/tools/list_changed.",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(_ core.ToolContext, _ core.ToolRequest) (core.ToolResult, error) {
+		func(_ core.ToolContext, _ core.ToolRequest) (core.ToolResponse, error) {
 			name := fmt.Sprintf("_synthetic_%d", time.Now().UnixNano())
 			_ = srv.Registry().AddTool(
 				core.ToolDef{Name: name, Description: "synthetic"},
-				func(_ core.ToolContext, _ core.ToolRequest) (core.ToolResult, error) {
+				func(_ core.ToolContext, _ core.ToolRequest) (core.ToolResponse, error) {
 					return core.TextResult("synthetic"), nil
 				},
 			)
@@ -336,11 +336,11 @@ func registerDiagnosticTools(srv *server.Server) {
 			Description: "SEP-2575 conformance hook: mutates the prompt registry to broadcast notifications/prompts/list_changed.",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(_ core.ToolContext, _ core.ToolRequest) (core.ToolResult, error) {
+		func(_ core.ToolContext, _ core.ToolRequest) (core.ToolResponse, error) {
 			name := fmt.Sprintf("_synthetic_prompt_%d", time.Now().UnixNano())
 			_ = srv.Registry().AddPrompt(
 				core.PromptDef{Name: name, Description: "synthetic"},
-				func(_ core.PromptContext, _ core.PromptRequest) (core.PromptResult, error) {
+				func(_ core.PromptContext, _ core.PromptRequest) (core.PromptResponse, error) {
 					return core.PromptResult{}, nil
 				},
 			)
@@ -359,7 +359,7 @@ func registerSeedPrompt(srv *server.Server) {
 			Name:        "greeting",
 			Description: "Demo prompt so prompts/list and prompts cap are non-empty.",
 		},
-		func(_ core.PromptContext, _ core.PromptRequest) (core.PromptResult, error) {
+		func(_ core.PromptContext, _ core.PromptRequest) (core.PromptResponse, error) {
 			return core.PromptResult{
 				Messages: []core.PromptMessage{{
 					Role:    "user",

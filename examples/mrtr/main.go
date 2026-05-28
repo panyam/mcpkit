@@ -176,7 +176,7 @@ func registerMRTRTools(srv *server.Server) {
 
 // --- A1: basic elicitation ---
 
-func basicElicitationTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+func basicElicitationTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 	resp := ctx.InputResponse("user_name")
 	if resp == nil {
 		return ctx.RequestInput(core.InputRequests{
@@ -203,7 +203,7 @@ func basicElicitationTool(ctx core.ToolContext, req core.ToolRequest) (core.Tool
 
 // --- A2: basic sampling ---
 
-func basicSamplingTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+func basicSamplingTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 	resp := ctx.InputResponse("capital_question")
 	if resp == nil {
 		return ctx.RequestInput(core.InputRequests{
@@ -227,7 +227,7 @@ func basicSamplingTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolRes
 
 // --- A3: basic list roots ---
 
-func basicListRootsTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+func basicListRootsTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 	resp := ctx.InputResponse("client_roots")
 	if resp == nil {
 		return ctx.RequestInput(core.InputRequests{
@@ -255,7 +255,7 @@ func basicListRootsTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolRe
 
 // --- A4: requestState round-trip ---
 
-func requestStateTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+func requestStateTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 	resp := ctx.InputResponse("confirm")
 	if resp == nil {
 		return ctx.RequestInput(core.InputRequests{
@@ -273,7 +273,7 @@ func requestStateTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResu
 
 // --- A5: multiple inputs in one round ---
 
-func multipleInputsTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+func multipleInputsTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 	if !ctx.HasInputResponses() {
 		return ctx.RequestInput(core.InputRequests{
 			"user_name": core.InputRequest{
@@ -305,7 +305,7 @@ func multipleInputsTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolRe
 
 // --- A6: multi-round (step1 → step2 → complete) ---
 
-func multiRoundTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+func multiRoundTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 	if ctx.InputResponse("step1") == nil {
 		return ctx.RequestInput(core.InputRequests{
 			"step1": core.InputRequest{
@@ -360,7 +360,7 @@ func multiRoundTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult
 //   - Task inputRequests keys (if the goroutine called TaskElicit / TaskSample)
 //     are scoped to the task's lifetime — distinct from the MRTR phase keys.
 //   - Clients do NOT need to deduplicate across the two flows.
-func mrtrTaskCompositionTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+func mrtrTaskCompositionTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 	// Phase 2: running inside the continuation goroutine. The TaskContext
 	// gates us into the async branch.
 	if tasks.GetTaskContext(ctx) != nil {
@@ -395,5 +395,5 @@ func mrtrTaskCompositionTool(ctx core.ToolContext, req core.ToolRequest) (core.T
 
 	// MRTR loop is complete; escalate to async so the heavy work happens
 	// in the continuation goroutine (with the SEP-2663 G6 filter applied).
-	return core.ToolResult{GoAsync: true}, nil
+	return core.GoAsyncResult{}, nil
 }

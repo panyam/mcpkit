@@ -78,7 +78,7 @@ func TestRequestMeta_LogLevelThreadingExposedToHandlers(t *testing.T) {
 				tool: func(name string) (core.ToolDef, core.ToolHandler, bool) {
 					if name == "spy_log_level" {
 						return core.ToolDef{Name: name},
-							func(ctx core.ToolContext, _ core.ToolRequest) (core.ToolResult, error) {
+							func(ctx core.ToolContext, _ core.ToolRequest) (core.ToolResponse, error) {
 								captured = RequestMetaFromContext(ctx)
 								return core.TextResult("ok"), nil
 							}, true

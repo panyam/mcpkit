@@ -27,7 +27,7 @@ func TestPerToolTimeout(t *testing.T) {
 			InputSchema: map[string]any{"type": "object"},
 			Timeout:     50 * time.Millisecond,
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			select {
 			case <-ctx.Done():
 				return core.ErrorResult("timed out"), ctx.Err()
@@ -44,7 +44,7 @@ func TestPerToolTimeout(t *testing.T) {
 			Description: "Returns immediately",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("fast result"), nil
 		},
 	)
@@ -111,7 +111,7 @@ func TestPerPromptTimeout(t *testing.T) {
 			Description: "Takes too long",
 			Timeout:     50 * time.Millisecond,
 		},
-		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResult, error) {
+		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResponse, error) {
 			select {
 			case <-ctx.Done():
 				return core.PromptResult{}, ctx.Err()
@@ -147,7 +147,7 @@ func TestServerWideTimeoutIsFallback(t *testing.T) {
 			InputSchema: map[string]any{"type": "object"},
 			// No Timeout set — uses server-wide
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			select {
 			case <-ctx.Done():
 				return core.ErrorResult("timed out"), ctx.Err()

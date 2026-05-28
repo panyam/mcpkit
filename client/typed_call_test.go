@@ -29,7 +29,7 @@ func TestToolCallTyped(t *testing.T) {
 			InputSchema:  map[string]any{"type": "object"},
 			OutputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.StructuredResult("found 2 items", SearchResult{
 				Items: []string{"a", "b"},
 				Total: 2,
@@ -62,7 +62,7 @@ func TestToolCallTypedNoStructuredContent(t *testing.T) {
 			Description: "Returns text only",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("just text"), nil
 		},
 	)
@@ -91,7 +91,7 @@ func TestToolCallTypedToolError(t *testing.T) {
 			Description: "Always fails",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.ErrorResult("something went wrong"), nil
 		},
 	)
@@ -120,7 +120,7 @@ func TestToolCallFullSuccess(t *testing.T) {
 			Description: "Returns a greeting",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("hello world"), nil
 		},
 	)
@@ -151,7 +151,7 @@ func TestToolCallFullError(t *testing.T) {
 			Description: "Returns a structured error",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.StructuredError("version conflict", map[string]any{
 				"error":           "version_conflict",
 				"current_version": 5,
@@ -205,7 +205,7 @@ func TestToolCallFullStructuredSuccess(t *testing.T) {
 			InputSchema:  map[string]any{"type": "object"},
 			OutputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.StructuredResult("found 2 items", SearchResult{
 				Items: []string{"a", "b"},
 				Total: 2,

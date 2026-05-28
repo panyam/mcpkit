@@ -33,7 +33,7 @@ func TestUIExtensionNegotiationE2E(t *testing.T) {
 			Description: "Reports whether client supports UI",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			mu.Lock()
 			uiSupported = core.ClientSupportsUI(ctx)
 			mu.Unlock()

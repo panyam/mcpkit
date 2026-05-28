@@ -70,7 +70,7 @@ func TestPrompts_IteratesAll(t *testing.T) {
 		n := name
 		srv.RegisterPrompt(
 			core.PromptDef{Name: n, Description: "prompt " + n},
-			func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResult, error) {
+			func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResponse, error) {
 				return core.PromptResult{}, nil
 			},
 		)

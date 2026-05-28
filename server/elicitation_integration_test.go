@@ -185,7 +185,7 @@ func TestElicitModeValidation(t *testing.T) {
 			Description: "Sends raw URL-mode elicitation/create",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			// Use ElicitURL which checks capabilities.
 			result, err := core.ElicitURL(ctx, core.ElicitationRequest{
 				Message:       "Visit URL",
@@ -234,7 +234,7 @@ func newURLElicitationTestServer() *server.Server {
 			Description: "Calls ElicitURL and returns the user's response",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			result, err := core.ElicitURL(ctx, core.ElicitationRequest{
 				Message:       "Please approve access",
 				URL:           "https://example.com/approve?session=test",
@@ -253,7 +253,7 @@ func newURLElicitationTestServer() *server.Server {
 			Description: "URL elicitation with completion notification",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			elicitID := "elicit-complete-001"
 			result, err := core.ElicitURL(ctx, core.ElicitationRequest{
 				Message:       "Visit URL to approve",
@@ -355,7 +355,7 @@ func newElicitationTestServer() *server.Server {
 			Description: "Calls elicitation/create and returns the user's response",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			result, err := core.Elicit(ctx, core.ElicitationRequest{
 				Message:         "Pick a color",
 				RequestedSchema: json.RawMessage(`{"type":"object","properties":{"color":{"type":"string","enum":["red","green","blue"]}}}`),

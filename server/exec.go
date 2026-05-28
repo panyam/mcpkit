@@ -80,7 +80,7 @@ func ToolExec(cfg ExecConfig) Tool {
 			InputSchema: schema,
 			Timeout:     cfg.Timeout,
 		},
-		Handler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		Handler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			// Build the full argument list: static args + dynamic args.
 			args := make([]string, len(cfg.Args))
 			copy(args, cfg.Args)

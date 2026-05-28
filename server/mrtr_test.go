@@ -25,7 +25,7 @@ func TestMRTR_BasicElicitationRoundTrip(t *testing.T) {
 			Description: "Asks for user name then greets them",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			if !ctx.HasInputResponses() {
 				return ctx.RequestInput(core.InputRequests{
 					"user_name": core.InputRequest{
@@ -131,7 +131,7 @@ func TestMRTR_RequestStateSigned(t *testing.T) {
 			Description: "Confirms requestState validation",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			if ctx.RequestState() == "" {
 				return ctx.RequestInput(core.InputRequests{
 					"confirm": core.InputRequest{
@@ -208,7 +208,7 @@ func TestMRTR_TamperedRequestStateRejected(t *testing.T) {
 			Description: "",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("ok"), nil
 		},
 	)
@@ -255,7 +255,7 @@ func TestMRTR_MultiRoundAccumulatesAnswers(t *testing.T) {
 			Description: "Two-step elicitation",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResult, error) {
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			if ctx.InputResponse("step1") == nil {
 				return ctx.RequestInput(core.InputRequests{
 					"step1": core.InputRequest{

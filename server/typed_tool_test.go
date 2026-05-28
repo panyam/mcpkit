@@ -132,8 +132,8 @@ func TestTypedTool_OutputSchemaGeneration(t *testing.T) {
 	assert.Nil(t, stringTool.OutputSchema, "string Out should not generate OutputSchema")
 
 	// core.ToolResult Out → no OutputSchema
-	resultTool := core.TypedTool[greetInput, core.ToolResult]("c", "desc",
-		func(ctx core.ToolContext, input greetInput) (core.ToolResult, error) {
+	resultTool := core.TypedTool[greetInput, core.ToolResponse]("c", "desc",
+		func(ctx core.ToolContext, input greetInput) (core.ToolResponse, error) {
 			return core.TextResult("raw"), nil
 		},
 	)
@@ -259,8 +259,8 @@ func TestTypedTool_StructuredOutput(t *testing.T) {
 // Out type passes the handler's result through without modification.
 func TestTypedTool_ToolResultPassthrough(t *testing.T) {
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
-	srv.Register(core.TypedTool[greetInput, core.ToolResult]("multi", "Multi-content",
-		func(ctx core.ToolContext, input greetInput) (core.ToolResult, error) {
+	srv.Register(core.TypedTool[greetInput, core.ToolResponse]("multi", "Multi-content",
+		func(ctx core.ToolContext, input greetInput) (core.ToolResponse, error) {
 			return core.ToolResult{
 				Content: []core.Content{
 					{Type: "text", Text: "line 1"},
