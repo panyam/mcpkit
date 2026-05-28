@@ -50,6 +50,11 @@ func main() {
 		server.WithToolTimeout(30*time.Second),
 		server.WithSubscriptions(),
 		server.WithExtension(testUIExtension{}),
+		// SEP-2322 tampered-state conformance scenario requires
+		// requestState to be integrity-protected. Static key here is fine
+		// for a conformance testserver — production deployments would
+		// inject the key via environment or secret manager.
+		server.WithRequestStateSigning([]byte("testserver-conformance-key-32-bytes-min"), 0),
 	)
 	// Enable HTTP-level request logging if VERBOSE is set
 	if os.Getenv("VERBOSE") == "1" {
@@ -95,6 +100,7 @@ func main() {
 	registerConformanceResources(srv)
 	registerConformancePrompts(srv)
 	registerConformanceApps(srv)
+	registerInputRequiredResultFixtures(srv)
 
 	// Self-test mode: creates an in-process client with LoggingTransport,
 	// lists tools via auto-pagination iterator, and calls each one.
