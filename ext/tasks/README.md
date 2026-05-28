@@ -41,11 +41,11 @@ tasks.Register(tasks.Config{Server: srv})
 
 `tasks.Register` installs the v2 middleware that intercepts `tools/call` for task-eligible tools, registers the `tasks/get` / `tasks/update` / `tasks/cancel` method handlers (all gated on the client declaring the extension), and advertises the extension in the `initialize` response.
 
-> **API note.** As of issue 486, `ToolHandler` returns the sealed [`core.ToolResponse`](https://github.com/panyam/mcpkit/blob/main/core/tool.go) interface instead of `core.ToolResult`. The middleware dispatches on the concrete variant — `ToolResult`, `InputRequiredResult`, `CreateTaskResult`, or `GoAsyncResult` — rather than on `bool` fields. Migration cheat-sheet: [`docs/HANDLER_RETURNS_MIGRATION.md`](../../docs/HANDLER_RETURNS_MIGRATION.md).
+`ToolHandler` returns the sealed [`core.ToolResponse`](https://github.com/panyam/mcpkit/blob/main/core/tool.go) interface; the middleware dispatches on the concrete variant — `ToolResult`, `InputRequiredResult`, `CreateTaskResult`, or `GoAsyncResult`.
 
-## Handler pattern (SEP-2663 Option 2: GoAsync return)
+## Handler pattern
 
-Per the 2026-05-19 design decision on issue 347 (refined under issue 486), mcpkit's v2 middleware runs the handler **synchronously first** and then dispatches on the concrete `ToolResponse` variant it returned. The handler chooses one of three shapes:
+mcpkit's v2 middleware runs the handler **synchronously first** and then dispatches on the concrete `ToolResponse` variant it returned. The handler chooses one of three shapes:
 
 | Handler returns | Middleware does | When to use |
 |---|---|---|

@@ -33,7 +33,7 @@ Handler returned what?
   └── core.ToolResult (or any other variant) → mint born-terminal task
 ```
 
-The four return shapes are the four concrete variants of the sealed [`core.ToolResponse`](https://github.com/panyam/mcpkit/blob/main/core/tool.go) interface — `ToolResult` for sync results, `InputRequiredResult` for MRTR rounds, `CreateTaskResult` for already-shaped task envelopes (rarely returned directly by handlers), and `GoAsyncResult` as the in-process discriminator that asks the middleware to mint a task and continue in a goroutine. See [`docs/HANDLER_RETURNS_MIGRATION.md`](HANDLER_RETURNS_MIGRATION.md) for the shape post-issue-486.
+The four return shapes are the four concrete variants of the sealed [`core.ToolResponse`](https://github.com/panyam/mcpkit/blob/main/core/tool.go) interface — `ToolResult` for sync results, `InputRequiredResult` for MRTR rounds, `CreateTaskResult` for already-shaped task envelopes (rarely returned directly by handlers), and `GoAsyncResult` as the in-process marker that asks the middleware to mint a task and continue in a goroutine.
 
 This is the heart of SEP-2663's *"server decides"* posture: the v1 `task` hint in the client request is gone. The server runs the handler, sees what it produced, and decides whether to wrap it in task envelopes.
 
@@ -187,15 +187,13 @@ tasks.Register(tasks.Config{Server: srv})
 
 ## 4. The GoAsync return + middleware peek
 
-The 2026-05-19 design lock-in on [mcpkit#347](https://github.com/panyam/mcpkit/issues/347) (shipped in [PR 484](https://github.com/panyam/mcpkit/pull/484), refined under [issue 486](https://github.com/panyam/mcpkit/issues/486)) chose **Option 2**: the handler signals async escalation by returning a dedicated variant on the sealed `core.ToolResponse` interface, and the middleware peeks at the handler's return before deciding what to do.
+The handler signals async escalation by returning a dedicated variant on the sealed `core.ToolResponse` interface, and the middleware peeks at the return value before deciding what to do.
 
-> **API-shape note.** PR 484 first shipped this as a `GoAsync: bool` field on `core.ToolResult` — three in-process sentinel fields (`IsInputRequired`, `InputRequests`, `GoAsync`) coexisted with the wire fields, all marked `json:"-"`. Issue 486 promoted the sum type out of the field-flag form into a sealed interface: handler returns `core.ToolResponse`, with four concrete variants — `ToolResult`, `InputRequiredResult`, `CreateTaskResult`, `GoAsyncResult`. The conceptual mechanism (handler runs sync first, middleware peeks, dispatches on the variant) is unchanged; only the discriminator's shape changed from "bool field on a wire struct" to "type identity of the return value." See [`docs/HANDLER_RETURNS_MIGRATION.md`](HANDLER_RETURNS_MIGRATION.md) for the API-shape diff.
+### Why the middleware peeks at the response
 
-### Why the inversion matters
+The middleware runs the handler **synchronously first**, then dispatches on the concrete `ToolResponse` variant the handler returned. This is what makes the MRTR↔Tasks composition (a single tool gathering input via MRTR rounds first, then escalating to async) possible — if the middleware created the task before the handler ran, round 1 would always emit `CreateTaskResult` and the handler would never get to return `InputRequiredResult`.
 
-Pre-Option-2, mcpkit's middleware minted the task *before* the handler ran, then dispatched the handler in a goroutine. That made one critical pattern impossible: a tool that wants to gather input via MRTR rounds *first* and then escalate to async would always emit `CreateTaskResult` on round 1, because the task was already minted before the handler could return `InputRequiredResult`.
-
-Option 2 inverts this:
+The flow:
 
 1. Middleware runs the handler **synchronously** via `next(ctx, req)`.
 2. Looks at what came back via a type switch on the concrete `ToolResponse` variant.
@@ -204,7 +202,7 @@ Option 2 inverts this:
    - `core.GoAsyncResult` → mint task, spawn continuation goroutine, re-invoke handler with `TaskContext` attached, return `CreateTaskResult`
    - `core.ToolResult` (or any other complete-shaped variant) → mint a born-terminal task, store the result, return `CreateTaskResult`
 
-This is what unblocked the MRTR↔Tasks composition flow tested by the [`mrtr-tasks-composition`](https://github.com/panyam/mcpconformance) conformance scenario.
+This is what the [`mrtr-tasks-composition`](https://github.com/panyam/mcpconformance) conformance scenario asserts.
 
 ### The handler is a state machine
 
@@ -240,7 +238,7 @@ func slowTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, er
 
 This is the canonical pattern and what every fixture in [`examples/tasks-v2/main.go`](../examples/tasks-v2/main.go) uses.
 
-> **Note.** The handler runs **twice** for any GoAsync `tools/call`: once sync (returns `core.GoAsyncResult{}`), once in the goroutine (does the work). The TaskContext gate is what prevents side effects from double-firing. PR 484's Decision log and Risks sections call this out — a handler that does logging / metrics / DB writes on the non-GoAsync branch will fire twice unless gated.
+> **Note.** The handler runs **twice** for any GoAsync `tools/call`: once sync (returns `core.GoAsyncResult{}`), once in the goroutine (does the work). The TaskContext gate is what prevents side effects from double-firing — a handler that does logging / metrics / DB writes on the non-GoAsync branch will fire twice unless gated.
 
 ### What happens to a sync handler on a `TaskSupport=optional` tool?
 
@@ -467,7 +465,7 @@ So a handler written for the pre-G6 world doesn't break — it just stops emitti
 
 ### Filter scope is goroutine-only
 
-The filter is applied **only** to the continuation goroutine's `bgCtx`. A sync handler returning a `ToolResult` (or running an MRTR round) on a `TaskSupport=optional/required` tool runs on the **unfiltered** POST ctx — `EmitProgress` and `EmitLog` work normally there. This is a deliberate narrowing documented in PR 484's Decision log: sync handlers are responsible for not leaking notifications they shouldn't.
+The filter is applied **only** to the continuation goroutine's `bgCtx`. A sync handler returning a `ToolResult` (or running an MRTR round) on a `TaskSupport=optional/required` tool runs on the **unfiltered** POST ctx — `EmitProgress` and `EmitLog` work normally there. This is a deliberate narrowing: sync handlers are responsible for not leaking notifications they shouldn't.
 
 For deeper coverage of how `progressToken` works across both paths, see [`docs/MRTR_TUTORIAL.md` §5](MRTR_TUTORIAL.md#5-progresstoken--who-mints-it-and-what-its-for).
 
@@ -509,7 +507,7 @@ Two distinct mechanisms for "server-asks-client-for-something," scoped to two di
 
 ### Composition: MRTR + GoAsync + in-task input
 
-The killer pattern — and what [PR 484](https://github.com/panyam/mcpkit/pull/484) unblocked — is a single tool that uses all three:
+The killer pattern is a single tool that uses all three:
 
 ```go
 func compositeHandler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
@@ -704,7 +702,6 @@ err := client.CancelTask(c, taskID)
 ## See also
 
 - [`docs/MRTR_TUTORIAL.md`](MRTR_TUTORIAL.md) — sibling tutorial for SEP-2322 MRTR (capabilities across wires, progressToken, push-vs-MRTR-vs-task-input decision flow).
-- [`docs/HANDLER_RETURNS_MIGRATION.md`](HANDLER_RETURNS_MIGRATION.md) — issue 486 migration cheat-sheet for the sealed-interface `ToolResponse` / `PromptResponse` shapes (the API shape this tutorial uses for all handler examples).
 - [`docs/TASKS_V2_MIGRATION.md`](TASKS_V2_MIGRATION.md) — v1 → v2 migration guide.
 - [`ext/tasks/README.md`](../ext/tasks/README.md) — task extension API reference.
 - [`docs/SEP_2663_TASKS_CONFORMANCE_PLAN.md`](SEP_2663_TASKS_CONFORMANCE_PLAN.md) — conformance plan + status.

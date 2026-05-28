@@ -458,7 +458,7 @@ If the client sends an `inputResponses` key the server didn't emit, the handler'
 
 ## 10. Composing MRTR with tasks — the GoAsync pattern (SEP-2663)
 
-The killer composition: a single tool can run an MRTR round-trip to gather input *first*, then escalate to a background task for the slow work. This is what mcpkit issue 347 / PR 484 unblocked.
+The killer composition: a single tool can run an MRTR round-trip to gather input *first*, then escalate to a background task for the slow work.
 
 The pattern:
 
@@ -497,9 +497,9 @@ Three phases, one handler:
 
 mcpkit's [`mrtr-08`](https://github.com/panyam/mcpconformance) conformance scenario asserts all three.
 
-### Why this needed a middleware refactor
+### Why the middleware peeks at the response
 
-Pre-Option-2, mcpkit's `taskV2Middleware` minted the task **before** the handler ran. That made the composition impossible: round 1 always emitted `CreateTaskResult` first, because the task was already minted before the handler could ever return `InputRequiredResult`. The 2026-05-19 decision on issue 347 inverted the order — handler runs synchronously first, middleware peeks at what came back, dispatches accordingly. See PR 484's "Decision log" for the alternative shapes considered (closure-carrying sentinel, always-goroutine for sync results, etc.) and why we landed on Option A strict. Issue 486 then refined the discriminator from a `bool` field on `ToolResult` (`GoAsync: true`) to a dedicated `core.GoAsyncResult` variant on the sealed `core.ToolResponse` interface — the middleware peek now type-switches on the concrete variant. See [`docs/HANDLER_RETURNS_MIGRATION.md`](HANDLER_RETURNS_MIGRATION.md) for the API-shape diff.
+The middleware runs the handler synchronously first, then dispatches on the concrete `core.ToolResponse` variant the handler returned. This is what makes the MRTR-then-task composition work — if the middleware created the task before the handler ran, round 1 would always emit `CreateTaskResult` and the handler would never get to return `InputRequiredResult` to drive the MRTR loop.
 
 ---
 
@@ -589,7 +589,6 @@ tasks.Register(tasks.Config{Server: srv})  // if any tools opt into TaskSupport
 ## See also
 
 - [`docs/TASKS_TUTORIAL.md`](TASKS_TUTORIAL.md) — sibling tutorial for SEP-2663 tasks (server-directed async, the `GoAsyncResult` return, task lifecycle, in-task input flow, cancellation). Read alongside this one when working with tools that compose MRTR with task escalation.
-- [`docs/HANDLER_RETURNS_MIGRATION.md`](HANDLER_RETURNS_MIGRATION.md) — issue 486 migration cheat-sheet for the sealed-interface `ToolResponse` / `PromptResponse` shapes the code examples here use.
 - [`docs/TASKS_V2_MIGRATION.md`](TASKS_V2_MIGRATION.md) — v1 → v2 task migration guide.
 - [`docs/SEP_2663_TASKS_CONFORMANCE_PLAN.md`](SEP_2663_TASKS_CONFORMANCE_PLAN.md) — task conformance status.
 - [`ext/tasks/README.md`](../ext/tasks/README.md) — task extension API reference.
