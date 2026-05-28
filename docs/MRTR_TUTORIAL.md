@@ -294,7 +294,7 @@ Is the server-to-client request happening inside a tool call?
     ├── Is the tool registered with TaskSupport=optional/required AND running as a task?
     │   ├── Yes → tc.TaskElicit / tc.TaskSample (parks the task, resumes via tasks/update)
     │   └── No → MRTR (ctx.RequestInput returns InputRequiredResult)
-    └── For the gather-then-go-async pattern (gather input fast via MRTR, then escalate to a task for the slow work), see §9.
+    └── For the gather-then-go-async pattern (gather input fast via MRTR, then escalate to a task for the slow work), see §10.
 ```
 
 ### Where push is heading
@@ -307,7 +307,97 @@ Once SEP-2322 is widely negotiated, the push path is reachable by deprecation:
 
 ---
 
-## 8. Writing handlers — the canonical state machine pattern
+## 8. Two mechanisms, two phases — MRTR vs in-task input flow
+
+The pattern the previous section's table hints at deserves a closer look because it's the conceptual symmetry at the heart of SEP-2322 + SEP-2663. The spec gives you **two different mechanisms for "the server asks the client for something,"** scoped to two different phases of a tool's lifetime. They look superficially similar but have completely different mechanics — and they're different on purpose, because the phases have different constraints.
+
+### The two phases
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│   tools/call arrives                                            │
+│         │                                                       │
+│   ┌─────┴────────────────────────────┐                          │
+│   │   PHASE 1: synchronous           │                          │
+│   │                                  │                          │
+│   │   Handler runs sync.             │                          │
+│   │   May return InputRequiredResult │ ← MRTR (this file)       │
+│   │   to gather upfront input.       │                          │
+│   │   Eventually returns one of:     │                          │
+│   │   ├── ToolResult (done)          │                          │
+│   │   └── ToolResult{GoAsync: true}  │                          │
+│   └────┬─────────────────────────────┘                          │
+│        │                                                        │
+│        │ GoAsync                                                │
+│        ↓                                                        │
+│   ┌─────────────────────────────────┐                           │
+│   │   PHASE 2: in the goroutine     │                           │
+│   │                                 │                           │
+│   │   Continuation runs with        │                           │
+│   │   TaskContext attached.         │                           │
+│   │   May call TaskElicit /         │ ← Task input flow         │
+│   │   TaskSample to gather more     │   (TASKS_TUTORIAL.md §7)  │
+│   │   input mid-execution.          │                           │
+│   │   Eventually returns final      │                           │
+│   │   ToolResult.                   │                           │
+│   └─────────────────────────────────┘                           │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Side-by-side comparison
+
+| Aspect | MRTR (`ctx.RequestInput`) | Task input flow (`tc.TaskElicit` / `tc.TaskSample`) |
+|---|---|---|
+| **Phase** | Before task escalation (sync preflight) | After task escalation (inside the goroutine) |
+| **Spec** | SEP-2322 | SEP-2663 |
+| **Handler does what** | `return ctx.RequestInput(InputRequests{...})` | `result, err := tc.TaskElicit(req)` — a blocking call |
+| **What the goroutine does** | No goroutine — the handler returned | Parks on a per-key waiter channel; `<-waiter` blocks |
+| **Wire shape returned to client** | `InputRequiredResult` on the `tools/call` response | `notifications/tasks` lifecycle event; `DetailedTask.InputRequests` visible via `tasks/get` |
+| **How the client delivers the answer** | Re-invokes the same `tools/call` with `inputResponses` + the echoed `requestState` | Calls `tasks/update` with `inputResponses` keyed by the per-task input key |
+| **Server-side state across rounds** | None — the `requestState` token carries everything | Lots — `activeTask` + `inputState` + parked goroutine all live in server memory until resumed or cancelled |
+| **Restartable across server replicas** | Yes — the token is the entire conversation handle | No — the goroutine is pinned to one process; if the replica dies the task dies with it |
+| **Multiple input requests in one round** | Yes — `inputRequests` is a map; one round can carry N keys, all resolved on one client re-invocation | Yes — concurrent `TaskElicit` calls fan out; task surfaces all pending keys; `tasks/update` can deliver them partially or in any order |
+| **Map keys** | Opaque, server-chosen, scoped to the MRTR round | Opaque, server-chosen, scoped to the task lifetime — distinct namespace from MRTR keys |
+| **Cancellation** | Client just stops re-invoking; the server has no goroutine to interrupt | `tasks/cancel` triggers `ctx.Done()`; `TaskElicit` returns the context error; handler unwinds |
+| **Best for** | "I know up front I need input X before I can decide what to do at all" | "I started the work and only *discovered* I need more input partway through" |
+
+### The "pause and resume" intuition — when it actually applies
+
+A natural first-pass intuition for either mechanism is *"the server pauses the handler and resumes it when the client replies."* This intuition is **wrong for MRTR but right for the task input flow** — and recognizing the difference makes the mental model click:
+
+- **MRTR is not pause and resume.** The handler **returns** on every round. State is serialized into the `requestState` token. The server is stateless across rounds — same handler, same registration, just different `inputResponses` in the `ToolRequest`. It's a state machine that *replays* with accumulated state, not a coroutine that's paused.
+- **The task input flow *is* pause and resume.** The goroutine literally blocks on a `<-waiter` channel call. State lives in the in-process `activeTask` + `inputState`. The server is stateful across the suspended call. The client's `tasks/update` is the resume signal.
+
+Both look identical from the handler author's perspective (you write what looks like a synchronous "ask for X, get answer Y"), but the *mechanics* are completely different. The asymmetry is the whole reason the spec defines both.
+
+### Why two mechanisms instead of one
+
+You might ask: *why not just use the task input flow for everything?* Or: *why not just use MRTR for everything?* The spec keeps both because each has a constraint the other doesn't satisfy:
+
+- **MRTR can't pause a running computation.** Once the handler has returned `GoAsync: true` and the goroutine is busy with real work, there's no way to issue an `InputRequiredResult` — the response to the original `tools/call` already went out (as `CreateTaskResult`).
+- **Task input flow requires a task to exist.** You can't use `TaskElicit` from a sync handler that hasn't been escalated yet — there's no `TaskContext` to call it on, no goroutine to park, no `inputState` to enqueue against.
+- **MRTR is replica-portable.** A stateless deployment where each round can land on a different Lambda invocation: MRTR just works (the token has everything). The task input flow doesn't — the goroutine is pinned.
+- **Task input flow can react to *what work uncovered*.** A long-running compute that hits a missing dependency at minute 8 and needs the user to pick a version: you couldn't have asked for that up front because you didn't know it would be needed. MRTR can't gracefully discover and ask for that mid-flight.
+
+The two mechanisms aren't redundant; they sit at different abstraction levels and answer different questions. MRTR is the **stateless wire-layer** mechanism; the task input flow is the **stateful task-layer** mechanism.
+
+### Spec separation guarantees
+
+Per SEP-2663, asserted by the [`mrtr-tasks-composition`](https://github.com/panyam/mcpconformance) conformance scenario:
+
+- MRTR `requestState` does **not** flow into the task's `requestState`. Each MRTR phase has its own ephemeral continuation; the task has its own per-task `inputState` keyed by `taskID`.
+- MRTR `inputRequests` keys live in the round's `requestState` token; task `inputRequests` keys (`elicit-1`, `elicit-2`, ...) live in the task's `inputState`. They never collide because they live in different wire envelopes.
+- Clients don't have to deduplicate across the two flows. Round 2 goes on `tools/call`; the task answer goes on `tasks/update`. The wire shape tells the client which it is.
+
+This is the property that makes the MRTR-then-GoAsync-then-TaskElicit composition (see §10) *actually work*: a single tool can use all three mechanisms without their state spaces colliding.
+
+For the full tasks-side picture — task lifecycle, the `tc.TaskElicit` / `tc.TaskSample` API, wire choreography for `tasks/update`, parallel fan-out, cancellation — see [`docs/TASKS_TUTORIAL.md`](TASKS_TUTORIAL.md), in particular §7 (in-task input flow).
+
+---
+
+## 9. Writing handlers — the canonical state machine pattern
 
 MRTR handlers are state machines on `InputResponses`. The same handler runs on every round; it branches on what's been answered so far.
 
@@ -366,7 +456,7 @@ If the client sends an `inputResponses` key the server didn't emit, the handler'
 
 ---
 
-## 9. Composing MRTR with tasks — the GoAsync pattern (SEP-2663)
+## 10. Composing MRTR with tasks — the GoAsync pattern (SEP-2663)
 
 The killer composition: a single tool can run an MRTR round-trip to gather input *first*, then escalate to a background task for the slow work. This is what mcpkit issue 347 / PR 484 unblocked.
 
@@ -413,7 +503,7 @@ Pre-Option-2, mcpkit's `taskV2Middleware` minted the task **before** the handler
 
 ---
 
-## 10. Quick reference
+## 11. Quick reference
 
 ### Tool handler shape
 
@@ -498,11 +588,12 @@ tasks.Register(tasks.Config{Server: srv})  // if any tools opt into TaskSupport
 
 ## See also
 
+- [`docs/TASKS_TUTORIAL.md`](TASKS_TUTORIAL.md) — sibling tutorial for SEP-2663 tasks (server-directed async, the GoAsync sentinel, task lifecycle, in-task input flow, cancellation). Read alongside this one when working with tools that compose MRTR with task escalation.
+- [`docs/TASKS_V2_MIGRATION.md`](TASKS_V2_MIGRATION.md) — v1 → v2 task migration guide.
+- [`docs/SEP_2663_TASKS_CONFORMANCE_PLAN.md`](SEP_2663_TASKS_CONFORMANCE_PLAN.md) — task conformance status.
+- [`ext/tasks/README.md`](../ext/tasks/README.md) — task extension API reference.
 - [`examples/mrtr/main.go`](../examples/mrtr/main.go) — eight canonical MRTR fixtures including the composition pattern (A8 / `test_tool_with_task`).
 - [`examples/tasks-v2/main.go`](../examples/tasks-v2/main.go) — task fixtures (slow_compute, confirm_delete, multi_input, etc.) all using the GoAsync pattern.
-- [`ext/tasks/README.md`](../ext/tasks/README.md) — task extension overview and handler-pattern reference.
-- [`docs/TASKS_V2_MIGRATION.md`](TASKS_V2_MIGRATION.md) — v1 → v2 migration guide.
-- [`docs/SEP_2663_TASKS_CONFORMANCE_PLAN.md`](SEP_2663_TASKS_CONFORMANCE_PLAN.md) — task conformance status.
 - [panyam/mcpconformance](https://github.com/panyam/mcpconformance), branch `feat/tasks-mrtr-extension` — SEP-2322 + SEP-2663 conformance scenarios.
-- Issue 452 — stateless MRTR support follow-up.
-- Issue 485 — multi-tenant isolation for stateless task store follow-up.
+- [Issue 452](https://github.com/panyam/mcpkit/issues/452) — stateless wire MRTR support follow-up.
+- [Issue 485](https://github.com/panyam/mcpkit/issues/485) — multi-tenant isolation for stateless task store follow-up.

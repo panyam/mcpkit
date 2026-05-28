@@ -2,6 +2,8 @@
 
 Go module for the v2 task surface defined by [SEP-2663](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663) (merged Final 2026-05-15). Provides server-directed async task execution registered as a protocol extension under `capabilities.extensions["io.modelcontextprotocol/tasks"]`.
 
+> **Looking for a guided walk-through?** Read [`docs/TASKS_TUTORIAL.md`](../../docs/TASKS_TUTORIAL.md) — covers when to use tasks vs sync vs MRTR, the GoAsync sentinel + middleware peek, lifecycle, the in-task input flow (`TaskElicit` / `TaskSample`), notifications + the G6 filter, cancellation semantics, and the multi-tenancy caveat on stateless. For the sibling MRTR surface (SEP-2322 multi-round-trip requests), see [`docs/MRTR_TUTORIAL.md`](../../docs/MRTR_TUTORIAL.md). This README is the API reference; the tutorials are the conceptual walk-throughs.
+
 ## Why a sub-module
 
 SEP-2663 defines tasks as an **extension**, not a top-level capability. ext/tasks mirrors the same pattern `ext/auth` and `ext/ui` use: a separate `go.mod` consumed by servers that opt into the extension. v1 (the legacy `capabilities.tasks` surface) stays in `server/` as `RegisterTasksV1` and continues to ship until decommissioned.
