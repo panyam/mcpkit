@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/examples/list-ttl
 
-go 1.26.2
+go 1.26.3
 
 replace github.com/panyam/mcpkit => ../..
 
