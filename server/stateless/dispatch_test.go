@@ -278,7 +278,7 @@ func TestRequestMetaFromContext(t *testing.T) {
 		t.Errorf("RequestMetaFromContext(bare) = %+v, want nil", got)
 	}
 	meta := &core.RequestMeta{ProtocolVersion: "DRAFT-2026-v1"}
-	ctx := withRequestMeta(context.Background(), meta)
+	ctx := core.WithRequestMeta(context.Background(), meta)
 	if got := RequestMetaFromContext(ctx); got != meta {
 		t.Errorf("RequestMetaFromContext: got %+v, want %+v", got, meta)
 	}

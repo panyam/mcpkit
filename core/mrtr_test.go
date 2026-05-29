@@ -199,6 +199,40 @@ func TestInputRequiredResultWireShape(t *testing.T) {
 	}
 }
 
+// TestInputRequiredResult_SatisfiesBothResponseInterfaces guards the
+// sealed-interface marker methods: SEP-2322 InputRequiredResult is a
+// variant of BOTH ToolResponse (tools/call) AND PromptResponse
+// (prompts/get, per upstream's input-required-result-non-tool-request
+// scenario). Compile-time check via interface assertion — if either
+// marker is dropped, this test stops building.
+func TestInputRequiredResult_SatisfiesBothResponseInterfaces(t *testing.T) {
+	var _ ToolResponse = InputRequiredResult{}
+	var _ PromptResponse = InputRequiredResult{}
+}
+
+// TestNewListRootsInputRequest_RoundTrip verifies the helper builds a
+// well-formed roots/list InputRequest with an empty params object (no
+// fields are defined by the spec) and that the response decoder yields
+// the canonical RootsListResult shape.
+func TestNewListRootsInputRequest_RoundTrip(t *testing.T) {
+	req := NewListRootsInputRequest()
+	if req.Method != "roots/list" {
+		t.Errorf("Method = %q, want roots/list", req.Method)
+	}
+	if string(req.Params) != `{}` {
+		t.Errorf("Params = %s, want {}", req.Params)
+	}
+
+	raw := json.RawMessage(`{"roots":[{"uri":"file:///work/project","name":"project"}]}`)
+	got, err := DecodeListRootsInputResponse(raw)
+	if err != nil {
+		t.Fatalf("DecodeListRootsInputResponse: %v", err)
+	}
+	if len(got.Roots) != 1 || got.Roots[0].URI != "file:///work/project" {
+		t.Errorf("Roots = %+v, want one root with file:///work/project", got.Roots)
+	}
+}
+
 // TestInputRequiredResultDefaultsResultType verifies that a zero-value
 // InputRequiredResult marshals with resultType = "input_required" so
 // handlers can build InputRequiredResult{InputRequests: ...} without

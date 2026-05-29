@@ -243,6 +243,8 @@ func (b *statelessBackend) InvokeWithMiddleware(ctx context.Context, req *core.R
 		switch req.Method {
 		case "tools/call":
 			return b.callToolForStateless(ctx, req), nil
+		case "prompts/get":
+			return b.callPromptForStateless(ctx, req), nil
 		default:
 			if h, ok := b.s.dispatcher.customHandlers[req.Method]; ok {
 				return h(core.NewMethodContext(ctx), req.ID, req.Params), nil
@@ -268,15 +270,24 @@ func (b *statelessBackend) InvokeWithMiddleware(ctx context.Context, req *core.R
 	return resp, true
 }
 
-// callToolForStateless replicates the decode → look-up → invoke → translate
-// flow that stateless.handleToolsCall used to do directly. Kept here so the
-// stateless dispatcher's per-method file stays thin and the middleware-aware
-// path lives next to the rest of the Backend impl.
+// callToolForStateless mirrors the legacy Dispatcher.handleToolsCall MRTR
+// flow on the stateless wire: decode the full SEP-2322 envelope
+// (inputResponses + requestState alongside the tool name + arguments),
+// verify the echoed requestState through the shared mrtrRuntime, merge
+// accumulated answers from prior rounds into the current call, populate
+// ToolContext with the merged view, and reshape any handler-returned
+// InputRequiredResult into a wire response that carries a freshly-minted
+// requestState. Without this parity the stateless tools/call path strips
+// every MRTR field on entry, which is why upstream's input-required-result-*
+// conformance scenarios fail with "Expected InputRequiredResult..." before
+// this change.
+//
+// progressToken is read off the same envelope (params._meta.progressToken),
+// not the SEP-2575 _meta envelope (which is for protocolVersion / clientInfo
+// / clientCapabilities). The stateless dispatcher's _meta validation runs
+// upstream of this call so we don't re-validate here.
 func (b *statelessBackend) callToolForStateless(ctx context.Context, req *core.Request) *core.Response {
-	var env struct {
-		Name      string          `json:"name"`
-		Arguments json.RawMessage `json:"arguments,omitempty"`
-	}
+	var env toolsCallEnvelope
 	if err := json.Unmarshal(req.Params, &env); err != nil {
 		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
 			"invalid tools/call params: "+err.Error())
@@ -286,9 +297,30 @@ func (b *statelessBackend) callToolForStateless(ctx context.Context, req *core.R
 		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
 			"unknown tool: "+env.Name)
 	}
-	result, err := handler(core.NewToolContext(ctx), core.ToolRequest{
-		Name:      env.Name,
-		Arguments: env.Arguments,
+
+	// SEP-2322: verify the echoed requestState (rejects tampered or expired
+	// tokens before the handler ever runs) and pull out the accumulated
+	// inputResponses carried inside it from prior rounds.
+	prevState, err := b.s.dispatcher.mrtr.verifyRequestState(env.RequestState, env.Name)
+	if err != nil {
+		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
+			"invalid requestState: "+err.Error())
+	}
+	mergedResponses := mergeInputResponses(prevState.Answered, env.InputResponses)
+
+	var progressToken any
+	if env.Meta != nil {
+		progressToken = env.Meta.ProgressToken
+	}
+
+	tc := core.NewToolContextWithMRTR(ctx, progressToken, mergedResponses, env.RequestState)
+	result, err := handler(tc, core.ToolRequest{
+		Name:           env.Name,
+		Arguments:      env.Arguments,
+		RequestID:      req.ID,
+		InputResponses: mergedResponses,
+		RequestState:   env.RequestState,
+		ProgressToken:  progressToken,
 	})
 	if err != nil {
 		var missing *core.MissingCapabilityError
@@ -309,5 +341,67 @@ func (b *statelessBackend) callToolForStateless(ctx context.Context, req *core.R
 		// the task as `completed` with isError, per spec — not as `failed`.
 		result = core.ErrorResult(fmt.Sprintf("tool %q: %v", env.Name, err))
 	}
-	return core.NewResponse(req.ID, result)
+
+	// SEP-2322 reshape: an InputRequiredResult variant gets a freshly-minted
+	// requestState carrying the merged accumulated answers so the next round
+	// sees them too. Every other ToolResponse flows through as-is.
+	switch r := result.(type) {
+	case core.InputRequiredResult:
+		return core.NewResponse(req.ID, core.InputRequiredResult{
+			InputRequests: r.InputRequests,
+			RequestState:  b.s.dispatcher.mrtr.mintRequestState(env.Name, mergedResponses),
+		})
+	default:
+		return core.NewResponse(req.ID, result)
+	}
+}
+
+// callPromptForStateless mirrors callToolForStateless above on the
+// prompts/get surface: decode the SEP-2322 MRTR envelope, verify+merge
+// requestState via the shared mrtrRuntime, populate PromptContext with
+// the MRTR view, and reshape any handler-returned InputRequiredResult
+// (PromptResponse variant) with a freshly-minted requestState. SEP-2322
+// scopes the input-required flow to any request method whose response
+// shape can accept it — prompts/get is the canonical second surface and
+// the conformance scenario `input-required-result-non-tool-request`
+// exercises it.
+func (b *statelessBackend) callPromptForStateless(ctx context.Context, req *core.Request) *core.Response {
+	var env promptsGetEnvelope
+	if err := json.Unmarshal(req.Params, &env); err != nil {
+		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
+			"invalid prompts/get params: "+err.Error())
+	}
+	_, handler, ok := b.Prompt(env.Name)
+	if !ok {
+		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
+			"unknown prompt: "+env.Name)
+	}
+
+	prevState, err := b.s.dispatcher.mrtr.verifyRequestState(env.RequestState, env.Name)
+	if err != nil {
+		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
+			"invalid requestState: "+err.Error())
+	}
+	mergedResponses := mergeInputResponses(prevState.Answered, env.InputResponses)
+
+	pc := core.NewPromptContextWithMRTR(ctx, mergedResponses, env.RequestState)
+	result, err := handler(pc, core.PromptRequest{
+		Name:           env.Name,
+		Arguments:      env.Arguments,
+		InputResponses: mergedResponses,
+		RequestState:   env.RequestState,
+	})
+	if err != nil {
+		return core.NewErrorResponse(req.ID, core.ErrCodePromptError, err.Error())
+	}
+
+	switch r := result.(type) {
+	case core.InputRequiredResult:
+		return core.NewResponse(req.ID, core.InputRequiredResult{
+			InputRequests: r.InputRequests,
+			RequestState:  b.s.dispatcher.mrtr.mintRequestState(env.Name, mergedResponses),
+		})
+	default:
+		return core.NewResponse(req.ID, result)
+	}
 }

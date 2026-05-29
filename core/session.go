@@ -79,7 +79,14 @@ const responseHeadersKey responseHeadersCtxKey = 0
 
 type ctxKey int
 
-const sessionCtxKey ctxKey = iota
+const (
+	sessionCtxKey ctxKey = iota
+	// requestMetaCtxKey is the ctx key under which the validated SEP-2575
+	// per-request _meta envelope (RequestMeta) is threaded by the stateless
+	// dispatcher. Lives in core (not server/stateless) so handlers can read
+	// it via ctx.ClientCaps() without an import cycle.
+	requestMetaCtxKey
+)
 
 // ContextWithSession returns a context carrying the session's notification state,
 // request sender, client capabilities, and authenticated claims.
@@ -153,6 +160,29 @@ func GetSessionID(ctx context.Context) string {
 func sessionFromContext(ctx context.Context) *sessionCtx {
 	sc, _ := ctx.Value(sessionCtxKey).(*sessionCtx)
 	return sc
+}
+
+// WithRequestMeta returns a derived context carrying the validated
+// SEP-2575 per-request _meta envelope. The stateless dispatcher calls
+// this after validating the envelope so handlers can read the per-
+// request capabilities via ctx.ClientCaps(). Returns ctx unchanged when
+// meta is nil so callers can drop the nil-check at the call site.
+func WithRequestMeta(ctx context.Context, meta *RequestMeta) context.Context {
+	if meta == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, requestMetaCtxKey, meta)
+}
+
+// RequestMetaFromContext returns the validated SEP-2575 per-request
+// _meta envelope attached by the stateless dispatcher, or nil if the
+// call did not arrive over the stateless wire. Handlers that just want
+// to check whether a capability is declared should prefer the typed
+// ctx.ClientCaps() accessor; this raw view is for the rare path that
+// needs the full envelope.
+func RequestMetaFromContext(ctx context.Context) *RequestMeta {
+	meta, _ := ctx.Value(requestMetaCtxKey).(*RequestMeta)
+	return meta
 }
 
 // ClientSupportsExtension checks whether the connected client declared support
