@@ -102,7 +102,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) *core.Resp
 	// Thread the validated envelope through ctx so handlers and
 	// downstream helpers (per-request cap checks, log-level gating)
 	// can read it without the Backend interface needing a getter.
-	ctx = withRequestMeta(ctx, meta)
+	// The ctx key lives in core so handler accessors like
+	// ctx.ClientCaps() can read it without an import cycle.
+	ctx = core.WithRequestMeta(ctx, meta)
 
 	switch req.Method {
 	case "server/discover":
@@ -152,24 +154,16 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) *core.Resp
 	}
 }
 
-// requestMetaCtxKey is the unexported ctx key under which the validated
-// per-request _meta envelope is threaded to handlers and helpers.
-type requestMetaCtxKey struct{}
-
-// withRequestMeta attaches the validated envelope to ctx.
-func withRequestMeta(ctx context.Context, meta *core.RequestMeta) context.Context {
-	return context.WithValue(ctx, requestMetaCtxKey{}, meta)
-}
-
 // RequestMetaFromContext returns the validated SEP-2575 _meta envelope
 // attached to ctx by the stateless dispatcher, or nil if the call did
-// not arrive over the stateless wire. Handlers that need to gate on
-// per-request caps should prefer core.ClientSupportsExtensionForRequest;
-// this accessor is for the rare path that needs protocolVersion or
-// clientInfo directly.
+// not arrive over the stateless wire. Thin re-export of
+// core.RequestMetaFromContext so packages already importing
+// server/stateless don't need to add a core import for this one accessor.
+//
+// Handlers that just want to know whether a capability is declared
+// should prefer the typed ctx.ClientCaps() accessor on ToolContext or
+// PromptContext; this raw view is for the rare path that needs
+// protocolVersion or clientInfo directly.
 func RequestMetaFromContext(ctx context.Context) *core.RequestMeta {
-	if v, ok := ctx.Value(requestMetaCtxKey{}).(*core.RequestMeta); ok {
-		return v
-	}
-	return nil
+	return core.RequestMetaFromContext(ctx)
 }

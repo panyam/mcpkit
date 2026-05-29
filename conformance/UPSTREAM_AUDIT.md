@@ -13,9 +13,9 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 
 | Surface | Scenarios | Checks | Pass | Fail | Warn | Info | Skipped | Harness-gap |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Server | 51 | 127 | 78 | 21 | 13 | 6 | 9 | 0 |
-| Client | 40 | 1241 | 447 | 25 | 4 | 759 | 6 | 1 |
-| **Total** | **91** | **1368** | **525** | **46** | **17** | **765** | **15** | **1** |
+| Server | 51 | 135 | 105 | 8 | 7 | 6 | 9 | 0 |
+| Client | 40 | 1241 | 452 | 20 | 4 | 759 | 6 | 1 |
+| **Total** | **91** | **1376** | **557** | **28** | **11** | **765** | **15** | **1** |
 
 ## Harness gaps
 
@@ -158,7 +158,7 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `http-header-validation` | server | partial | 5 pass / 3 fail / 5 warn |  |
+| `http-header-validation` | server | pass | 13 pass |  |
 
 ### [SEP-2243-X-MCP-HEADER](https://modelcontextprotocol.io/specification/draft/server/tools#x-mcp-header) (1 scenarios)
 
@@ -176,26 +176,26 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `input-required-result-basic-elicitation` | server | fail | 1 fail | `JSON-RPC error: unknown tool: test_input_required_result_elicitation` |
-| `input-required-result-basic-list-roots` | server | fail | 1 fail | `JSON-RPC error: unknown tool: test_input_required_result_list_roots` |
-| `input-required-result-basic-sampling` | server | fail | 1 fail | `JSON-RPC error: unknown tool: test_input_required_result_sampling` |
-| `input-required-result-capability-check` | server | fail | 1 fail | `JSON-RPC error: unknown tool: test_input_required_result_capabilities` |
-| `input-required-result-multi-round` | server | fail | 1 fail | `Expected InputRequiredResult with inputRequests and requestState` |
-| `input-required-result-multiple-input-requests` | server | fail | 1 fail | `JSON-RPC error: unknown tool: test_input_required_result_multiple_inputs` |
-| `input-required-result-non-tool-request` | server | fail | 1 fail | `JSON-RPC error: unknown prompt: test_input_required_result_prompt` |
-| `input-required-result-request-state` | server | fail | 1 fail | `JSON-RPC error: unknown tool: test_input_required_result_request_state` |
-| `input-required-result-result-type` | server | fail | 1 fail | `JSON-RPC error: unknown tool: test_input_required_result_elicitation` |
-| `input-required-result-tampered-state` | server | fail | 1 fail | `Prerequisite failed: could not get initial InputRequiredResult with requestState` |
-| `input-required-result-ignore-extra-params` | server | pass | 1 warn |  |
-| `input-required-result-missing-input-response` | server | pass | 1 warn |  |
+| `input-required-result-basic-elicitation` | server | pass | 2 pass |  |
+| `input-required-result-basic-list-roots` | server | pass | 2 pass |  |
+| `input-required-result-basic-sampling` | server | pass | 2 pass |  |
+| `input-required-result-capability-check` | server | pass | 1 pass |  |
+| `input-required-result-ignore-extra-params` | server | pass | 1 pass |  |
+| `input-required-result-missing-input-response` | server | pass | 1 pass |  |
+| `input-required-result-multi-round` | server | pass | 3 pass |  |
+| `input-required-result-multiple-input-requests` | server | pass | 2 pass |  |
+| `input-required-result-non-tool-request` | server | pass | 2 pass |  |
+| `input-required-result-request-state` | server | pass | 2 pass |  |
+| `input-required-result-result-type` | server | pass | 1 pass |  |
+| `input-required-result-tampered-state` | server | pass | 1 pass |  |
 | `input-required-result-unsupported-methods` | server | pass | 1 pass |  |
-| `input-required-result-validate-input` | server | pass | 2 pass |  |
+| `input-required-result-validate-input` | server | pass | 1 pass / 1 warn |  |
 
 ### [SEP-2322-MRTR](https://modelcontextprotocol.io/specification/draft/basic/utilities/mrtr) (1 scenarios)
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `sep-2322-client-request-state` | client | fail | 5 fail |  |
+| `sep-2322-client-request-state` | client | pass | 5 pass |  |
 
 ### [SEP-2549](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2549) (1 scenarios)
 
