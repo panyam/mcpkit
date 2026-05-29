@@ -30,6 +30,8 @@ locallinks/
 Thumbs.db
 /testserver
 /testclient
+cmd/testclient/testclient
+cmd/testserver/testserver
 docs/COMPETITIVE_ANALYSIS.md
 
 # Example binaries (go build . produces a binary matching the dir name).
