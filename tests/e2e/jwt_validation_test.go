@@ -143,13 +143,20 @@ func TestE2E_NoAuthHeader_Rejected(t *testing.T) {
 // flow: register an app via the admin API, obtain a token from the HTTP token
 // endpoint, and use it to call an MCP tool. This tests the token endpoint →
 // JWKS → JWTValidator pipeline with a real HTTP token exchange.
+//
+// Registration uses RFC 7591 Dynamic Client Registration at /apps/dcr.
+// (oneauth v0.1.9 removed the proprietary /apps/register route in favor of
+// the standards-compliant DCR endpoint; both endpoints sit behind the same
+// admin auth in the testutil fixture, so X-Admin-Key is still required.)
 func TestE2E_ClientCredentials_FullFlow(t *testing.T) {
 	env := NewTestEnv(t)
 
-	// Register a client app via the admin registration endpoint.
-	// The response includes client_id and client_secret.
-	regBody := `{"client_domain":"e2e-test-app","signing_alg":"HS256"}`
-	regReq, _ := http.NewRequest("POST", env.AS.URL()+"/apps/register", strings.NewReader(regBody))
+	// Register a client app via RFC 7591 DCR. The body is the standard
+	// client_metadata shape (client_name + grant_types +
+	// token_endpoint_auth_method); the response is the RFC 7591
+	// ClientInformation shape (client_id + client_secret).
+	regBody := `{"client_name":"e2e-test-app","grant_types":["client_credentials"],"token_endpoint_auth_method":"client_secret_post"}`
+	regReq, _ := http.NewRequest("POST", env.AS.URL()+"/apps/dcr", strings.NewReader(regBody))
 	regReq.Header.Set("Content-Type", "application/json")
 	regReq.Header.Set("X-Admin-Key", env.AS.AdminKey())
 	regResp, err := http.DefaultClient.Do(regReq)

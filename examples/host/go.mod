@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/examples/host
 
-go 1.26.2
+go 1.26.3
 
 require (
 	github.com/panyam/demokit v0.0.25
