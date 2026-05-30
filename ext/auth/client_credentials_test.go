@@ -47,8 +47,11 @@ func newCCMockAS(t *testing.T, authMethods []string) *ccMockAS {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 	})
 	mux.HandleFunc("/.well-known/oauth-protected-resource/mcp", func(w http.ResponseWriter, r *http.Request) {
+		// PRM `resource` MUST match the URL the client invokes
+		// DiscoverMCPAuth against (ServerURL below = mock.URL + "/mcp").
+		// validatePRMResource in discovery.go rejects any mismatch.
 		prm := ProtectedResourceMetadata{
-			Resource:             mock.URL,
+			Resource:             mock.URL + "/mcp",
 			AuthorizationServers: []string{mock.URL},
 			ScopesSupported:      []string{"mcp.tools"},
 		}

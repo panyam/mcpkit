@@ -75,9 +75,12 @@ func newEnterpriseMockServers(t *testing.T) *enterpriseMockServers {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 	})
 	mcpMux.HandleFunc("/.well-known/oauth-protected-resource/mcp", func(w http.ResponseWriter, r *http.Request) {
+		// PRM `resource` MUST match the URL the client invokes
+		// DiscoverMCPAuth against (ServerURL: mock.mcpAndAS.URL + "/mcp").
+		// validatePRMResource in discovery.go rejects any mismatch.
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(ProtectedResourceMetadata{
-			Resource:             m.mcpAndAS.URL,
+			Resource:             m.mcpAndAS.URL + "/mcp",
 			AuthorizationServers: []string{m.mcpAndAS.URL},
 		})
 	})
