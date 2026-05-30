@@ -224,3 +224,102 @@ func TestClient_RetryLimit_Double401(t *testing.T) {
 type localStaticToken struct{ token string }
 
 func (s *localStaticToken) Token() (string, error) { return s.token, nil }
+
+// mockInvalidatingTokenSource records the order of Invalidate() vs
+// Token() calls so a test can prove Invalidate fired before the retry's
+// Token call.
+type mockInvalidatingTokenSource struct {
+	mockTokenSource
+	invalidateCalls atomic.Int32
+	callOrder       []string // appends "invalidate" / "token" in observed order
+}
+
+func (m *mockInvalidatingTokenSource) Token() (string, error) {
+	m.callOrder = append(m.callOrder, "token")
+	return m.mockTokenSource.Token()
+}
+
+func (m *mockInvalidatingTokenSource) Invalidate() {
+	m.invalidateCalls.Add(1)
+	m.callOrder = append(m.callOrder, "invalidate")
+}
+
+// TestClient_401_CallsInvalidateBeforeRetry verifies that when the
+// token source implements core.InvalidatingTokenSource, DoWithAuthRetry
+// calls Invalidate() before re-calling Token() on a 401 — necessary for
+// SEP-2352 AS-change re-discovery to fire on the next request, since
+// the source's cached authInfo would otherwise mask the AS swap.
+func TestClient_401_CallsInvalidateBeforeRetry(t *testing.T) {
+	var requestCount atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := requestCount.Add(1)
+		if n == 1 {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer ts.Close()
+
+	tokenSrc := &mockInvalidatingTokenSource{
+		mockTokenSource: mockTokenSource{tokens: []string{"stale", "fresh"}},
+	}
+
+	buildReq := func() (*http.Request, error) {
+		return http.NewRequest("POST", ts.URL, strings.NewReader(`{}`))
+	}
+
+	resp, err := client.DoWithAuthRetry(tokenSrc, buildReq, http.DefaultClient.Do)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
+
+	require.Equal(t, int32(1), tokenSrc.invalidateCalls.Load(), "Invalidate should fire once on 401")
+	// Expected sequence: token (initial SetAuth) → invalidate → token+
+	// (OnUnauthorized's Token call and retry's SetAuth Token call). The
+	// load-bearing assertion is that Invalidate fires between the first
+	// Token call and every Token call that follows — no retry-path Token
+	// can run with stale cached state.
+	require.GreaterOrEqual(t, len(tokenSrc.callOrder), 3, "trace too short: %v", tokenSrc.callOrder)
+	require.Equal(t, "token", tokenSrc.callOrder[0], "first call should be SetAuth's Token")
+	require.Equal(t, "invalidate", tokenSrc.callOrder[1], "Invalidate MUST precede the retry path")
+	for i, c := range tokenSrc.callOrder[2:] {
+		require.Equal(t, "token", c, "post-invalidate call %d should be Token, got %s", i+2, c)
+	}
+}
+
+// TestClient_401_NoInvalidateForPlainSource is the negative pair: a
+// token source that does NOT implement InvalidatingTokenSource keeps
+// the existing behavior unchanged — DoWithAuthRetry only calls
+// Token() on retry, no Invalidate attempted. Confirms the new seam is
+// opt-in and doesn't break sources that have no internal cache.
+func TestClient_401_NoInvalidateForPlainSource(t *testing.T) {
+	var requestCount atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := requestCount.Add(1)
+		if n == 1 {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	tokenSrc := &mockTokenSource{tokens: []string{"t1", "t2"}}
+
+	buildReq := func() (*http.Request, error) {
+		return http.NewRequest("POST", ts.URL, strings.NewReader(`{}`))
+	}
+
+	resp, err := client.DoWithAuthRetry(tokenSrc, buildReq, http.DefaultClient.Do)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
+	// Multiple Token calls are fine (initial + OnUnauthorized's refresh +
+	// retry SetAuth). The load-bearing assertion is that no Invalidate seam
+	// fired for a source that doesn't implement InvalidatingTokenSource —
+	// confirmed by the type, which would have grown an Invalidate counter
+	// otherwise.
+	require.Greater(t, tokenSrc.calls.Load(), int32(1))
+}

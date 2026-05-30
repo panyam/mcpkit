@@ -2308,6 +2308,18 @@ func DoWithAuthRetry(
 			return nil
 		},
 		OnUnauthorized: func(resp *http.Response) error {
+			// If the source supports cache invalidation (e.g.
+			// OAuthTokenSource implementing core.InvalidatingTokenSource),
+			// drop its cached authInfo/credentials BEFORE calling Token
+			// for the retry. Without this, a cached token wins over the
+			// authorization server's 401 signal and we'd retry with the
+			// same stale credential — which the spec requires for
+			// SEP-2352 AS-change re-discovery to actually take effect.
+			// Plain sources (static tokens, simple bearers) don't
+			// implement the interface; existing behavior unchanged.
+			if inv, ok := ts.(core.InvalidatingTokenSource); ok {
+				inv.Invalidate()
+			}
 			// Token() on a dynamic source will refresh; on a static source
 			// it returns the same token and the retry will fail → gives up.
 			_, err := ts.Token()
