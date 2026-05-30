@@ -55,6 +55,17 @@ func main() {
 		// for a conformance testserver — production deployments would
 		// inject the key via environment or secret manager.
 		server.WithRequestStateSigning([]byte("testserver-conformance-key-32-bytes-min"), 0),
+		// SEP-2549 caching hints. The upstream `caching` conformance
+		// scenario verifies that tools/list, prompts/list, resources/list,
+		// resources/templates/list, AND resources/read responses ALL carry
+		// `ttlMs` (non-negative int) + `cacheScope` ("public" | "private").
+		// 60s is the same default the existing examples/list-ttl fixture
+		// uses; public scope is correct for tools/prompts/resources lists
+		// because the catalog doesn't vary per caller. resources/read
+		// content frequently does, so its default is private — handlers
+		// can still override per-read via ResourceResult.CacheScope.
+		server.WithListCacheControl(60_000, core.CacheScopePublic),
+		server.WithReadResourceCacheControl(60_000, core.CacheScopePrivate),
 	)
 	// Enable HTTP-level request logging if VERBOSE is set
 	if os.Getenv("VERBOSE") == "1" {
