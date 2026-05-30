@@ -81,6 +81,16 @@ func extractRoutingName(req *core.Request) (field, value string, ok bool) {
 			return "uri", "", true
 		}
 		return "uri", p.URI, true
+	case "tasks/get", "tasks/update", "tasks/cancel":
+		// SEP-2663 elevates Mcp-Name: <taskId> to a required client
+		// header on these methods, so SEP-2243's universal MUST applies.
+		var p struct {
+			TaskID string `json:"taskId"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return "taskId", "", true
+		}
+		return "taskId", p.TaskID, true
 	default:
 		return "", "", false
 	}

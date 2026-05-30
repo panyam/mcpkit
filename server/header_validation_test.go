@@ -121,3 +121,41 @@ func TestValidateRoutingHeaders_MismatchedResourcesReadURI(t *testing.T) {
 		t.Fatalf("expected -32001 HeaderMismatch for URI mismatch, got %+v", resp)
 	}
 }
+
+// SEP-2663 elevates Mcp-Name: <taskId> to a required client header on
+// tasks/get, tasks/update, and tasks/cancel. The SEP-2243 universal
+// MUST therefore applies — server rejects mismatched or missing
+// Mcp-Name with -32001 HeaderMismatch.
+func TestValidateRoutingHeaders_TasksMethodsCarryTaskID(t *testing.T) {
+	for _, method := range []string{"tasks/get", "tasks/update", "tasks/cancel"} {
+		method := method
+		t.Run(method+"/matched", func(t *testing.T) {
+			req := makeReq(t, method, map[string]any{"taskId": "task-abc"})
+			h := http.Header{}
+			h.Set("Mcp-Method", method)
+			h.Set("Mcp-Name", "task-abc")
+			if resp := validateRoutingHeaders(req, h); resp != nil {
+				t.Fatalf("matched Mcp-Name should pass, got %+v", resp)
+			}
+		})
+		t.Run(method+"/mismatched", func(t *testing.T) {
+			req := makeReq(t, method, map[string]any{"taskId": "task-abc"})
+			h := http.Header{}
+			h.Set("Mcp-Method", method)
+			h.Set("Mcp-Name", "task-xyz")
+			resp := validateRoutingHeaders(req, h)
+			if resp == nil || resp.Error == nil || resp.Error.Code != core.ErrCodeHeaderMismatch {
+				t.Fatalf("expected -32001 HeaderMismatch for taskId mismatch, got %+v", resp)
+			}
+		})
+		t.Run(method+"/missing", func(t *testing.T) {
+			req := makeReq(t, method, map[string]any{"taskId": "task-abc"})
+			h := http.Header{}
+			h.Set("Mcp-Method", method)
+			resp := validateRoutingHeaders(req, h)
+			if resp == nil || resp.Error == nil || resp.Error.Code != core.ErrCodeHeaderMismatch {
+				t.Fatalf("expected -32001 HeaderMismatch for missing Mcp-Name, got %+v", resp)
+			}
+		})
+	}
+}
