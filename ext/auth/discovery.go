@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +11,24 @@ import (
 
 	"github.com/panyam/oneauth/client"
 )
+
+// ErrPRMResourceMismatch is returned by DiscoverMCPAuth when the
+// Protected Resource Metadata document's `resource` field points at a
+// URL that differs from the MCP server URL the client is connecting to.
+//
+// Per RFC 8707 §2 (Resource Indicators) and the upstream
+// `auth/resource-mismatch` conformance scenario, clients MUST validate
+// that PRM `resource` matches the protected resource they're trying to
+// access — otherwise a server-controlled PRM can redirect the client
+// to an attacker-controlled authorization server that issues tokens
+// for a different audience (a token-recipient-confusion attack).
+//
+// Comparison normalizes scheme + host to lowercase (RFC 3986
+// §6.2.2.1) and ignores a trailing slash on the path. An empty
+// PRM.Resource is treated as "no binding asserted" and accepted —
+// some early PRM emitters omit the field, and rejecting outright
+// would break working integrations.
+var ErrPRMResourceMismatch = errors.New("PRM resource does not match MCP server URL")
 
 // MCPAuthInfo holds the combined discovery results for an MCP server's auth configuration.
 type MCPAuthInfo struct {
@@ -169,6 +188,14 @@ func DiscoverMCPAuth(serverURL string, opts ...DiscoverOption) (*MCPAuthInfo, er
 		info.PRM = prm
 	}
 
+	// RFC 8707 §2 — PRM resource MUST match the protected resource URL
+	// the client is accessing. Server-controlled PRMs that emit a
+	// foreign resource are rejected to prevent token-recipient-confusion
+	// attacks. See ErrPRMResourceMismatch for normalization rules.
+	if err := validatePRMResource(info.PRM, u); err != nil {
+		return nil, err
+	}
+
 	// Step 4: Extract authorization_servers from PRM
 	info.AuthorizationServers = info.PRM.AuthorizationServers
 	if len(info.AuthorizationServers) == 0 {
@@ -217,4 +244,63 @@ func parsePRM(body []byte) (*ProtectedResourceMetadata, error) {
 		return nil, fmt.Errorf("invalid PRM JSON: %w (body: %s)", err, string(body))
 	}
 	return &prm, nil
+}
+
+// validatePRMResource enforces the RFC 8707 §2 binding between the PRM
+// document's `resource` field and the MCP server URL the client is
+// connecting to. Returns nil for the explicit-omission case (empty
+// `resource`), wraps ErrPRMResourceMismatch with diagnostic context
+// otherwise.
+//
+// Comparison rules:
+//   - Scheme + host are compared case-insensitively (RFC 3986 §6.2.2.1).
+//   - Path matches if (a) the PRM path equals the server path after
+//     trailing-slash normalization, OR (b) the PRM path is empty (the
+//     resource scope is the whole origin — emitted by AS-coupled MCP
+//     deployments where the PRM document covers every path on the
+//     host).
+//   - Query + fragment on PRM `resource` are not part of the comparison
+//     (the spec doesn't expect them).
+//
+// Stricter byte-for-byte path comparison rejects real-world PRMs that
+// emit either form interchangeably and fails the upstream
+// `auth/metadata-var*` scenarios where the fixture emits an
+// origin-only resource against a server mounted at a path. The
+// load-bearing check the upstream `auth/resource-mismatch` scenario
+// grades is the ORIGIN mismatch; the path-empty carve-out is
+// orthogonal to that.
+func validatePRMResource(prm *ProtectedResourceMetadata, serverURL *url.URL) error {
+	if prm == nil || prm.Resource == "" {
+		return nil
+	}
+	prmURL, err := url.Parse(prm.Resource)
+	if err != nil {
+		return fmt.Errorf("%w: invalid resource URL %q: %v",
+			ErrPRMResourceMismatch, prm.Resource, err)
+	}
+	if !sameResourceURL(prmURL, serverURL) {
+		return fmt.Errorf("%w: PRM resource=%q, server=%q",
+			ErrPRMResourceMismatch, prm.Resource, serverURL.String())
+	}
+	return nil
+}
+
+// sameResourceURL compares two resource URLs under the normalization
+// rules documented on validatePRMResource: case-insensitive scheme +
+// host, then either path equality (trailing slash ignored) OR an empty
+// PRM path matching any server path.
+func sameResourceURL(prmURL, serverURL *url.URL) bool {
+	if !strings.EqualFold(prmURL.Scheme, serverURL.Scheme) {
+		return false
+	}
+	if !strings.EqualFold(prmURL.Host, serverURL.Host) {
+		return false
+	}
+	prmPath := strings.TrimRight(prmURL.Path, "/")
+	if prmPath == "" {
+		// PRM covers the whole origin — common for AS-coupled deployments
+		// where the entire host is the protected resource.
+		return true
+	}
+	return prmPath == strings.TrimRight(serverURL.Path, "/")
 }

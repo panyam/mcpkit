@@ -113,6 +113,30 @@ type ScopeAwareTokenSource interface {
 	TokenForScopes(scopes []string) (string, error)
 }
 
+// InvalidatingTokenSource extends TokenSource with an explicit
+// cache-invalidation hook. Retry layers call Invalidate before
+// re-calling Token to force the source to re-run discovery and any
+// client-credential resolution — necessary when the upstream
+// authorization server has changed (SEP-2352) or when a previously
+// cached token has been rejected with 401.
+//
+// Without this hook, a TokenSource that caches an authInfo / DCR
+// credentials pair will keep handing back the same stale token on
+// every retry, defeating the retry. With it, the source has a defined
+// moment to drop cached state.
+//
+// Optional — implementations that have no internal cache (static
+// tokens, the simple Bearer wrapper) need not implement it.
+// DoWithAuthRetry checks for the interface via type assertion.
+type InvalidatingTokenSource interface {
+	TokenSource
+	// Invalidate drops cached discovery, client credentials, and any
+	// cached access token. The next Token call MUST re-run the full
+	// flow. Safe to call multiple times — implementations clear what
+	// they have and otherwise no-op.
+	Invalidate()
+}
+
 // Stability represents the maturity level of an extension.
 type Stability string
 

@@ -111,8 +111,44 @@ type OAuthTokenSource struct {
 	memoryStore *MemoryCredentialStore
 
 	// dcrClientID/dcrClientSecret are cached from a successful DCR call.
+	// dcrAS is the authorization-server URL the DCR was performed
+	// against — used by resolveClientID to detect SEP-2352 AS migration
+	// (a server's PRM authorization_servers changes mid-flight) and
+	// drop the cache so the client re-registers at the new AS rather
+	// than presenting AS₁'s client_id to AS₂.
 	dcrClientID     string
 	dcrClientSecret string
+	dcrAS           string
+}
+
+// Invalidate implements core.InvalidatingTokenSource. It drops cached
+// discovery, the cached access token, the AuthClient handle, and the
+// in-memory credential store entry, so the next Token call re-runs
+// the full discovery + auth flow. DoWithAuthRetry calls this before
+// re-issuing Token on a 401 — necessary for SEP-2352 AS-change
+// re-discovery to actually fire, since the cached authInfo would
+// otherwise mask the AS swap.
+//
+// DCR client credentials are intentionally NOT cleared here.
+// resolveClientID handles that lazily, comparing the current AS
+// against the cached dcrAS and dropping the cache only on mismatch.
+// This keeps Invalidate cheap for the common case (same AS, fresh
+// token needed) while still meeting SEP-2352 when the AS truly
+// changes.
+//
+// Safe to call multiple times.
+func (s *OAuthTokenSource) Invalidate() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.authInfo = nil
+	s.token = ""
+	s.expiry = time.Time{}
+	s.oaClient = nil
+	if s.memoryStore != nil {
+		// Drop the cached credential so the next Token() can't shortcut
+		// via the (2) CredStore path before discovery re-runs.
+		_ = s.memoryStore.RemoveCredential(s.ServerURL)
+	}
 }
 
 // Token implements core.TokenSource.
@@ -367,6 +403,15 @@ func (s *OAuthTokenSource) Close() error {
 // 2. CIMD ClientMetadataURL → use URL as client_id
 // 3. DCR → register dynamically if enabled and AS supports it
 // 4. Error
+//
+// SEP-2352 cross-AS credential-reuse prevention: before consulting the
+// cached DCR credentials, compare the AS they were issued against
+// (dcrAS) with the current AS (from authInfo). On mismatch — i.e., the
+// server's PRM has switched authorization_servers since the cache was
+// populated — drop the cache so the DCR branch below re-registers at
+// the new AS. Without this, the client would silently present AS₁'s
+// client_id to AS₂, which the upstream `sep-2352-no-reuse-on-as-change`
+// check rejects as a security violation.
 func (s *OAuthTokenSource) resolveClientID() (clientID, clientSecret string, err error) {
 	// 1. Pre-registered
 	if s.ClientID != "" {
@@ -381,6 +426,20 @@ func (s *OAuthTokenSource) resolveClientID() (clientID, clientSecret string, err
 		} else {
 			return s.ClientMetadataURL, "", nil
 		}
+	}
+
+	// SEP-2352: clear cached DCR credentials when the AS has changed
+	// since they were issued. currentAS may be empty when authInfo is
+	// not yet populated; that's harmless (the cache is also empty in
+	// that case).
+	currentAS := ""
+	if s.authInfo != nil && len(s.authInfo.AuthorizationServers) > 0 {
+		currentAS = s.authInfo.AuthorizationServers[0]
+	}
+	if s.dcrClientID != "" && s.dcrAS != "" && s.dcrAS != currentAS {
+		s.dcrClientID = ""
+		s.dcrClientSecret = ""
+		s.dcrAS = ""
 	}
 
 	// 3. DCR (C9) — cached after first successful registration
@@ -399,6 +458,7 @@ func (s *OAuthTokenSource) resolveClientID() (clientID, clientSecret string, err
 		}
 		s.dcrClientID = resp.ClientID
 		s.dcrClientSecret = resp.ClientSecret
+		s.dcrAS = currentAS
 		return resp.ClientID, resp.ClientSecret, nil
 	}
 
