@@ -14,8 +14,8 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 | Surface | Scenarios | Checks | Pass | Fail | Warn | Info | Skipped | Harness-gap |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Server | 51 | 135 | 112 | 1 | 7 | 6 | 9 | 0 |
-| Client | 40 | 1241 | 452 | 20 | 4 | 759 | 6 | 1 |
-| **Total** | **91** | **1376** | **564** | **21** | **11** | **765** | **15** | **1** |
+| Client | 40 | 1232 | 451 | 18 | 4 | 753 | 6 | 1 |
+| **Total** | **91** | **1367** | **563** | **19** | **11** | **759** | **15** | **1** |
 
 ## Harness gaps
 
@@ -29,15 +29,14 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 |---|---|---|---|---|
 | `auth/2025-03-26-oauth-endpoint-fallback` | client | partial | 3 fail / 8 info |  |
 | `auth/2025-03-26-oauth-metadata-backcompat` | client | partial | 4 fail / 8 info |  |
-| `auth/authorization-server-migration` | client | partial | 15 pass / 1 fail / 32 info |  |
 | `auth/iss-normalized` | client | partial | 14 pass / 1 fail / 24 info |  |
 | `auth/iss-supported-missing` | client | partial | 14 pass / 1 fail / 24 info |  |
 | `auth/iss-unexpected` | client | partial | 14 pass / 1 fail / 24 info |  |
 | `auth/iss-wrong-issuer` | client | partial | 14 pass / 1 fail / 24 info |  |
 | `auth/metadata-issuer-mismatch` | client | partial | 14 pass / 1 fail / 24 info |  |
-| `auth/resource-mismatch` | client | partial | 14 pass / 1 fail / 24 info |  |
 | `initialize` | client | partial | 1 fail / 1 info |  |
 | `request-metadata` | client | harness-gap | — | No `checks.json` written — driver does not handle this scenario |
+| `auth/authorization-server-migration` | client | pass | 26 pass / 44 info |  |
 | `auth/basic-cimd` | client | pass | 14 pass / 1 warn / 24 info |  |
 | `auth/iss-not-advertised` | client | pass | 15 pass / 24 info |  |
 | `auth/iss-supported` | client | pass | 15 pass / 24 info |  |
@@ -46,6 +45,7 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 | `auth/metadata-var2` | client | pass | 14 pass / 26 info |  |
 | `auth/metadata-var3` | client | pass | 14 pass / 26 info |  |
 | `auth/pre-registration` | client | pass | 15 pass / 28 info |  |
+| `auth/resource-mismatch` | client | pass | 2 pass / 6 info |  |
 | `auth/scope-from-scopes-supported` | client | pass | 15 pass / 24 info |  |
 | `auth/scope-from-www-authenticate` | client | pass | 15 pass / 24 info |  |
 | `auth/scope-omitted-when-undefined` | client | pass | 15 pass / 24 info |  |
