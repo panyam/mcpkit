@@ -26,8 +26,14 @@ echo "==============================="
 echo "=== SSE TRANSPORT TESTS     ==="
 echo "==============================="
 
+# Build once, reuse for both SSE and Streamable HTTP launches below.
+# Avoids the `go run` orphan-child pattern described in
+# scripts/conformance-test.sh.
+echo "=== Building test server ==="
+go build -o cmd/testserver/testserver ./cmd/testserver
+
 echo "=== Starting SSE test server on :$SSE_PORT ==="
-PORT=$SSE_PORT go run ./cmd/testserver &
+PORT=$SSE_PORT ./cmd/testserver/testserver &
 PIDS+=($!)
 sleep 2
 
@@ -76,7 +82,7 @@ echo "=== STREAMABLE HTTP TESTS   ==="
 echo "==============================="
 
 echo "=== Starting Streamable HTTP test server on :$STREAMABLE_PORT ==="
-STREAMABLE=1 PORT=$STREAMABLE_PORT go run ./cmd/testserver &
+STREAMABLE=1 PORT=$STREAMABLE_PORT ./cmd/testserver/testserver &
 PIDS+=($!)
 sleep 2
 
