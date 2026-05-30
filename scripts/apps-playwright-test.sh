@@ -59,9 +59,15 @@ if lsof -ti:$PORT >/dev/null 2>&1; then
     sleep 1
 fi
 
-# Start mcpkit test server
+# Build the testserver binary, then run it directly. `go run` spawns the
+# compiled binary as a separate macOS child process; killing the wrapper
+# leaves the child orphaned, which hangs make after a successful test.
+# See scripts/conformance-test.sh for the same fix.
+echo "Building mcpkit test server..."
+go build -o cmd/testserver/testserver ./cmd/testserver
+
 echo "Starting mcpkit test server on port $PORT..."
-STREAMABLE=1 PORT=$PORT go run ./cmd/testserver &
+STREAMABLE=1 PORT=$PORT ./cmd/testserver/testserver &
 SERVER_PID=$!
 
 # Wait for server readiness

@@ -37,8 +37,18 @@ if lsof -i ":$PORT" -t >/dev/null 2>&1; then
     sleep 1
 fi
 
+echo "=== Building test server ==="
+# Build first, then run the binary directly. Previously this script used
+# `go run ./cmd/testserver &` and captured $! — but on macOS `go run` spawns
+# the compiled binary as a separate child, so killing $SERVER_PID at cleanup
+# leaves the child as an orphan that hangs `make testconf` after a
+# successful run (the npm conformance harness exits clean, but make waits
+# on the lingering testserver). Building to a binary makes $! unambiguously
+# the fixture PID, matching the pattern testconf-tasks already uses.
+go build -o cmd/testserver/testserver ./cmd/testserver
+
 echo "=== Starting test server on :$PORT (Streamable HTTP) ==="
-STREAMABLE=1 PORT=$PORT go run ./cmd/testserver &
+STREAMABLE=1 PORT=$PORT ./cmd/testserver/testserver &
 SERVER_PID=$!
 
 # Wait for server to be ready
