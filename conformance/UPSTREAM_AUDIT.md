@@ -14,8 +14,8 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 | Surface | Scenarios | Checks | Pass | Fail | Warn | Info | Skipped | Harness-gap |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Server | 51 | 135 | 112 | 1 | 7 | 6 | 9 | 0 |
-| Client | 40 | 1232 | 451 | 18 | 4 | 753 | 6 | 1 |
-| **Total** | **91** | **1367** | **563** | **19** | **11** | **759** | **15** | **1** |
+| Client | 40 | 1204 | 440 | 17 | 4 | 737 | 6 | 1 |
+| **Total** | **91** | **1339** | **552** | **18** | **11** | **743** | **15** | **1** |
 
 ## Harness gaps
 
@@ -33,7 +33,6 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 | `auth/iss-supported-missing` | client | partial | 14 pass / 1 fail / 24 info |  |
 | `auth/iss-unexpected` | client | partial | 14 pass / 1 fail / 24 info |  |
 | `auth/iss-wrong-issuer` | client | partial | 14 pass / 1 fail / 24 info |  |
-| `auth/metadata-issuer-mismatch` | client | partial | 14 pass / 1 fail / 24 info |  |
 | `initialize` | client | partial | 1 fail / 1 info |  |
 | `request-metadata` | client | harness-gap | — | No `checks.json` written — driver does not handle this scenario |
 | `auth/authorization-server-migration` | client | pass | 26 pass / 44 info |  |
@@ -41,6 +40,7 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 | `auth/iss-not-advertised` | client | pass | 15 pass / 24 info |  |
 | `auth/iss-supported` | client | pass | 15 pass / 24 info |  |
 | `auth/metadata-default` | client | pass | 14 pass / 24 info |  |
+| `auth/metadata-issuer-mismatch` | client | pass | 3 pass / 8 info |  |
 | `auth/metadata-var1` | client | pass | 14 pass / 26 info |  |
 | `auth/metadata-var2` | client | pass | 14 pass / 26 info |  |
 | `auth/metadata-var3` | client | pass | 14 pass / 26 info |  |
