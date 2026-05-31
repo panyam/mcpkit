@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "docs": "https://github.com/modelcontextprotocol/conformance/blob/main/AGENTS.md#traceability-manifest",
+  "source": "mcpkit-test-fixture",
+  "seps": {
+    "2322": {
+      "yaml": "src/seps/sep-2322.yaml",
+      "specUrl": "https://modelcontextprotocol.io/specification/draft/basic/utilities/mrtr",
+      "requirements": [
+        {
+          "check": "sep-2322-result-type-included",
+          "status": "tested",
+          "text": "The resultType field MUST be included to indicate the type of the result."
+        },
+        {
+          "check": "sep-2322-input-required-on-allowed-method",
+          "status": "untested",
+          "text": "Servers MUST only send InputRequiredResult for tools/call, prompts/get, or completion/complete."
+        }
+      ],
+      "excluded": [],
+      "unkeyed": [],
+      "untracked": [],
+      "summary": {
+        "tested": 1,
+        "untested": 1,
+        "excluded": 0,
+        "untracked": 0,
+        "unkeyed": 0
+      }
+    },
+    "2549": {
+      "yaml": "src/seps/sep-2549.yaml",
+      "specUrl": "https://modelcontextprotocol.io/seps/2549-list-ttl",
+      "requirements": [
+        {
+          "check": "sep-2549-ttl-ms-respected",
+          "status": "tested",
+          "text": "Clients MUST treat absent ttlMs the same as ttlMs: 0."
+        }
+      ],
+      "excluded": [],
+      "unkeyed": [],
+      "untracked": [],
+      "summary": {
+        "tested": 1,
+        "untested": 0,
+        "excluded": 0,
+        "untracked": 0,
+        "unkeyed": 0
+      }
+    }
+  }
+}
