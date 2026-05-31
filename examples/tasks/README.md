@@ -1,5 +1,7 @@
 # Tasks Example Server
 
+> **SEP-2577 deprecation note**: this example demonstrates `TaskContext.TaskSample(...)`, which is deprecated per SEP-2577 (scheduled for removal in mcpkit v0.4). The code still works on v0.3.x. See [`docs/SEP_2577_DEPRECATIONS.md`](../../docs/SEP_2577_DEPRECATIONS.md) for the migration story.
+
 Demonstrates MCP Tasks (spec 2025-11-25) — async tool execution with lifecycle tracking.
 
 > **🚀 [Skip to the guided walkthrough →](WALKTHROUGH.md)** — 8-step demokit walkthrough with sequence diagram covering sync calls, optional async tasks, polling, progress notifications via SSE, required-task tools, and cancellation. Run it with `make serve` + `make demo`.

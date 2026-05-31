@@ -1,5 +1,7 @@
 # examples/stateless — SEP-2575 stateless wire + SEP-2567 handle pattern
 
+> **SEP-2577 deprecation note**: this example uses `core.EmitLog(...)`, which is deprecated per SEP-2577 (scheduled for removal in mcpkit v0.4). The code still works on v0.3.x. See [`docs/SEP_2577_DEPRECATIONS.md`](../../docs/SEP_2577_DEPRECATIONS.md) for the migration story.
+
 A single mcpkit server that demonstrates two complementary draft SEPs:
 
 | SEP | What this example shows |

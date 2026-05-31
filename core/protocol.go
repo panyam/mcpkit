@@ -76,6 +76,8 @@ type Root struct {
 }
 
 // RootsListResult is the response to a roots/list server-to-client request.
+//
+// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
 type RootsListResult struct {
 	Roots []Root `json:"roots"`
 }
