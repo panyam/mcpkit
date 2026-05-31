@@ -43,6 +43,12 @@ srv.Run(":8787") // Streamable HTTP
 
 **30/30** server scenarios, **14/14** auth scenarios, **21** MCP Apps conformance tests passing against the [official MCP conformance suite](https://github.com/modelcontextprotocol/conformance) and internal test suites.
 
+Three artifacts describe mcpkit's conformance posture at increasing granularity:
+
+- [`CONFORMANCE.md`](CONFORMANCE.md) — auto-generated per-SEP rollup (regenerated on every PR; CI-gated for staleness).
+- [`conformance/UPSTREAM_AUDIT.md`](conformance/UPSTREAM_AUDIT.md) — per-scenario pass/fail against upstream's full test set (`make testconf-upstream-audit`).
+- [`conformance/AUTH_SPEC_COVERAGE.md`](conformance/AUTH_SPEC_COVERAGE.md) — hand-curated per-clause traceability for the auth surface: every MUST/SHOULD → mcpkit impl file:line → test that proves it.
+
 ## Testing
 
 ```bash
