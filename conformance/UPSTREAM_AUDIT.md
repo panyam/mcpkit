@@ -14,8 +14,8 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 | Surface | Scenarios | Checks | Pass | Fail | Warn | Info | Skipped | Harness-gap |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Server | 51 | 135 | 112 | 1 | 7 | 6 | 9 | 0 |
-| Client | 40 | 1204 | 440 | 17 | 4 | 737 | 6 | 1 |
-| **Total** | **91** | **1339** | **552** | **18** | **11** | **743** | **15** | **1** |
+| Client | 40 | 1147 | 422 | 14 | 4 | 701 | 6 | 1 |
+| **Total** | **91** | **1282** | **534** | **15** | **11** | **707** | **15** | **1** |
 
 ## Harness gaps
 
@@ -29,16 +29,16 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 |---|---|---|---|---|
 | `auth/2025-03-26-oauth-endpoint-fallback` | client | partial | 3 fail / 8 info |  |
 | `auth/2025-03-26-oauth-metadata-backcompat` | client | partial | 4 fail / 8 info |  |
-| `auth/iss-normalized` | client | partial | 14 pass / 1 fail / 24 info |  |
 | `auth/iss-supported-missing` | client | partial | 14 pass / 1 fail / 24 info |  |
-| `auth/iss-unexpected` | client | partial | 14 pass / 1 fail / 24 info |  |
-| `auth/iss-wrong-issuer` | client | partial | 14 pass / 1 fail / 24 info |  |
 | `initialize` | client | partial | 1 fail / 1 info |  |
 | `request-metadata` | client | harness-gap | — | No `checks.json` written — driver does not handle this scenario |
 | `auth/authorization-server-migration` | client | pass | 26 pass / 44 info |  |
 | `auth/basic-cimd` | client | pass | 14 pass / 1 warn / 24 info |  |
+| `auth/iss-normalized` | client | pass | 8 pass / 12 info |  |
 | `auth/iss-not-advertised` | client | pass | 15 pass / 24 info |  |
 | `auth/iss-supported` | client | pass | 15 pass / 24 info |  |
+| `auth/iss-unexpected` | client | pass | 8 pass / 12 info |  |
+| `auth/iss-wrong-issuer` | client | pass | 8 pass / 12 info |  |
 | `auth/metadata-default` | client | pass | 14 pass / 24 info |  |
 | `auth/metadata-issuer-mismatch` | client | pass | 3 pass / 8 info |  |
 | `auth/metadata-var1` | client | pass | 14 pass / 26 info |  |
