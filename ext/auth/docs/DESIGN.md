@@ -4,6 +4,19 @@
 
 MCPKit implements the MCP Authorization specification (draft, based on OAuth 2.1 + RFC 9728) for enterprise deployment. This document covers the architecture, protocol flows, and extension/experimental marking system.
 
+## Supported spec versions
+
+mcpkit targets the **2025-11-25 MCP Authorization spec** and the in-flight **DRAFT-2026-v1** draft. The auth-flow shapes from the **2025-03-26 spec** (rootless OAuth metadata, OAuth-endpoint root fallback when no metadata endpoints exist) are intentionally **not supported** — those shapes were removed by the spec itself in 2025-06-18, and implementing them would mean carrying deprecated code paths indefinitely for a tiny pool of servers that haven't tracked the spec for more than a year.
+
+Concretely:
+
+- mcpkit's client **requires a PRM endpoint** (`/.well-known/oauth-protected-resource{path}` or `/.well-known/oauth-protected-resource`). If PRM is missing, `ext/auth/discovery.go` returns a clear `PRM endpoint returned 404` error — that error is the actionable signal that the server is on the deprecated spec.
+- The OAuth-endpoint root fallback (`/authorize`, `/token`, `/register` at server root without metadata discovery) is also unsupported. Same rationale: spec removed it; mcpkit doesn't carry it.
+
+The conformance audit's two `auth/2025-03-26-*` scenarios live in `conformance/baseline.yml` as expected-failures and in `conformance/known-gaps.yaml` with this rationale + a tracking link to #451. The upstream audit report (`conformance/UPSTREAM_AUDIT.md`) still shows them as `partial`; that's correct — we don't pass them, and that's intentional.
+
+Note: this is distinct from MCP **protocol version** negotiation. mcpkit's `server.supportedProtocolVersions` includes `2024-11-05`, `2025-03-26`, `2025-11-25`, and `DRAFT-2026-v1` — clients on the older protocol version still negotiate successfully. The thing that's unsupported is the *auth-flow shape* the 2025-03-26 spec mandated, which is independent of the protocol version field.
+
 ## Design Principles
 
 1. **Core module stays zero-auth-deps** — static bearer token validation works out of the box. JWT/OIDC/OAuth lives in `mcpkit/auth`, a separate Go sub-module that imports oneauth.
