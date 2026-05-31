@@ -19,6 +19,8 @@ make testconf-file-inputs # SEP-2356 — fork @ MCPCONFORMANCE_FILE_INPUTS_PATH 
 make testconf-auth-server # MCP authz 2025-11-25 — fork @ MCPCONFORMANCE_AUTH_PATH (6 scenarios, 23 checks: 18 active, 5 SKIPPED gaps for unsupported features)
 make testconf-stateless # SEP-2575 — upstream @ MCPCONFORMANCE_STATELESS_PATH; drives examples/stateless fixture (25 pass / 1 known upstream-test fail)
 make testconf-upstream-audit # Audit mcpkit against modelcontextprotocol/conformance@main → conformance/UPSTREAM_AUDIT.md (informational scenario-level pass/fail; runs in the conformance umbrella but exits 0 by design)
+make refresh-conformance # Regenerate CONFORMANCE.md from upstream tier-check + traceability (issue #498). Driver: scripts/refresh-conformance.sh, renderer: tools/conformance-report.
+make check-conformance-stale # CI gate — refresh + git diff --exit-code CONFORMANCE.md (issue #498). Wired into .github/workflows/test.yml on every PR.
 make testall           # Everything (9 stages, 18 sub-stages) + Keycloak + HTML report
 make audit             # govulncheck + gosec + gitleaks + race
 make tag-push V=vX.Y.Z # Tag root + all sub-modules and push

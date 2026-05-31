@@ -67,3 +67,47 @@ jobs:
 
       - name: Run ui sub-module tests
         run: cd ext/ui && go test ./... -v -count=1 -timeout 30s
+
+  conformance-report:
+    # Regenerates CONFORMANCE.md against the current testserver + upstream
+    # conformance@main and fails if the committed file is stale. See issue #498.
+    # Driver: scripts/refresh-conformance.sh → tools/conformance-report.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout mcpkit
+        uses: actions/checkout@v4
+        with:
+          path: mcpkit
+
+      - name: Checkout modelcontextprotocol/conformance@main
+        uses: actions/checkout@v4
+        with:
+          repository: modelcontextprotocol/conformance
+          path: conf-upstream-main
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: mcpkit/go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run renderer unit tests
+        working-directory: mcpkit/tools/conformance-report
+        run: |
+          npm install --silent
+          npm test
+
+      - name: Check CONFORMANCE.md is fresh
+        working-directory: mcpkit
+        env:
+          # tier-check needs a GH token to query repo-side signals (labels,
+          # triage, etc.). The renderer drops those slices from CONFORMANCE.md
+          # so they don't affect the diff; the token only keeps tier-check
+          # from bailing during data collection.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MCPCONFORMANCE_BASE_PATH: ${{ github.workspace }}/conf-upstream-main
+        run: make check-conformance-stale

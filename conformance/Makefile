@@ -36,7 +36,8 @@ MCPCONFORMANCE_BASE_PATH        ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
         testconf-tasks testconf-tasks-v2 testconf-mrtr \
         testconf-file-inputs testconf-auth-server \
         testconf-stateless \
-        testconf-elicitation testconf-upstream-audit help
+        testconf-elicitation testconf-upstream-audit \
+        refresh-conformance check-conformance-stale help
 
 # Default umbrella — runs every conformance suite. Fork-based suites and the
 # upstream-main audit each require their MCPCONFORMANCE_*_PATH worktree to
@@ -205,6 +206,26 @@ testconf-elicitation: ## Run elicitation conformance suite (SEP-1036 URL mode + 
 	cd $(CONFORMANCE_DIR) && npm install --silent && \
 	SERVER_URL=$${SERVER_URL:-http://localhost:8080/mcp} \
 	npx tsx --test elicitation/scenarios.test.ts
+
+refresh-conformance: ## Regenerate CONFORMANCE.md from upstream tier-check + traceability (issue #498). Output: CONFORMANCE.md at repo root.
+	@if [ ! -d "$(MCPCONFORMANCE_BASE_PATH)" ]; then \
+		echo "MCPCONFORMANCE_BASE_PATH=$(MCPCONFORMANCE_BASE_PATH) does not exist."; \
+		echo "Clone https://github.com/modelcontextprotocol/conformance there:"; \
+		echo "  git clone https://github.com/modelcontextprotocol/conformance.git $(MCPCONFORMANCE_BASE_PATH)"; \
+		echo "Or set MCPCONFORMANCE_BASE_PATH=<path-to-clone>."; \
+		exit 1; \
+	fi
+	cd $(REPO_ROOT) && MCPCONFORMANCE_BASE_PATH="$(MCPCONFORMANCE_BASE_PATH)" bash scripts/refresh-conformance.sh
+
+check-conformance-stale: refresh-conformance ## CI gate — fail if CONFORMANCE.md is stale (issue #498). Run after refresh-conformance; diff must be empty.
+	@cd $(REPO_ROOT) && git diff --exit-code CONFORMANCE.md > /dev/null 2>&1 || { \
+		echo "CONFORMANCE.md is stale relative to current testserver + upstream conformance."; \
+		echo "Run 'make refresh-conformance' locally and commit the regenerated file."; \
+		echo ""; \
+		git diff CONFORMANCE.md | head -60; \
+		exit 1; \
+	}
+	@echo "CONFORMANCE.md is up to date."
 
 testconf-upstream-audit: ## Audit mcpkit against modelcontextprotocol/conformance@main (informational — exit 0 regardless of scenario pass/fail). Output: conformance/UPSTREAM_AUDIT.md.
 	@if [ ! -d "$(MCPCONFORMANCE_BASE_PATH)" ]; then \
