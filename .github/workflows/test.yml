@@ -69,9 +69,16 @@ jobs:
         run: cd ext/ui && go test ./... -v -count=1 -timeout 30s
 
   conformance-report:
-    # Regenerates CONFORMANCE.md against the current testserver + upstream
-    # conformance@main and fails if the committed file is stale. See issue #498.
-    # Driver: scripts/refresh-conformance.sh → tools/conformance-report.
+    # Regenerates CONFORMANCE.md against the current testserver + the upstream
+    # conformance SHA pinned in the committed file's stamp line, and fails if
+    # the result is stale. See issue 498.
+    #
+    # Why pin instead of tracking upstream/main: upstream advances daily, so
+    # tracking main would make this gate fail on every PR until a maintainer
+    # ran `make refresh-conformance` locally. Pinning to the stamp lets the
+    # gate verify "the committed file is reproducible from its declared
+    # inputs" — bumping upstream becomes an explicit, reviewable change
+    # (run `make refresh-conformance` + commit the diff).
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -81,10 +88,27 @@ jobs:
         with:
           path: mcpkit
 
-      - name: Checkout modelcontextprotocol/conformance@main
+      - name: Extract pinned upstream-conformance SHA from CONFORMANCE.md
+        id: pin
+        working-directory: mcpkit
+        run: |
+          # Stamp line shape: "<!-- generated against upstream-conformance@<sha> · protocol <ver> · ... -->"
+          # The regex restricts capture to hex chars, so a maliciously crafted
+          # body cannot inject anything into the `ref:` parameter below.
+          SHA="$(sed -n 's/.*upstream-conformance@\([a-f0-9]\{4,\}\).*/\1/p' CONFORMANCE.md | head -1)"
+          if [ -z "$SHA" ]; then
+            echo "::error::Could not extract upstream-conformance SHA from CONFORMANCE.md stamp line."
+            echo "::error::Run 'make refresh-conformance' locally to regenerate the file."
+            exit 1
+          fi
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Pinned upstream-conformance@$SHA"
+
+      - name: Checkout modelcontextprotocol/conformance at pinned SHA
         uses: actions/checkout@v4
         with:
           repository: modelcontextprotocol/conformance
+          ref: ${{ steps.pin.outputs.sha }}
           path: conf-upstream-main
 
       - uses: actions/setup-go@v5

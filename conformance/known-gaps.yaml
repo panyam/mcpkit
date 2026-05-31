@@ -18,7 +18,7 @@
 # Keep entries terse; the renderer puts them straight into a table cell.
 
 scenarios:
-  "stateless":
+  "server-stateless":
     issue: "upstream conformance test bug"
     note: "ServerRejectsUndeclaredCapability checks requiredCapabilities as string-array but SEP-2575 schema says object — mcpkit follows schema. Tracked in CLAUDE.md gotchas."
 
