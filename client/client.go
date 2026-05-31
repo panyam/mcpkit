@@ -23,16 +23,24 @@ import (
 type clientTransport interface {
 	// connect establishes the transport connection.
 	connect() error
-	// call sends a JSON-RPC request and returns the response.
-	call(data []byte) (*rpcResponse, error)
+	// call sends a JSON-RPC request and returns the response. The method
+	// argument is the JSON-RPC method name carried in data; the streamable
+	// HTTP transport mirrors it onto the SEP-2243 Mcp-Method routing
+	// header. Other transports may ignore it.
+	call(method string, data []byte) (*rpcResponse, error)
 	// callWithContext is like call but accepts a typed CallContext carrying
-	// per-call cancellation and an optional notification hook. Transports
-	// that can't honor cc (no per-call notification scoping) MUST still
-	// issue the call — the hook is a best-effort enhancement, not a
-	// requirement. Pass nil cc to behave identically to call().
-	callWithContext(data []byte, cc *CallContext) (*rpcResponse, error)
-	// notify sends a JSON-RPC notification (no response expected).
-	notify(data []byte) error
+	// per-call cancellation, an optional notification hook, and (on the
+	// streamable HTTP transport) the SEP-2243 Mcp-Name header value via
+	// cc.mcpName. Transports that can't honor cc (no per-call notification
+	// scoping) MUST still issue the call — the hook is a best-effort
+	// enhancement, not a requirement. Pass nil cc to behave identically
+	// to call().
+	callWithContext(method string, data []byte, cc *CallContext) (*rpcResponse, error)
+	// notify sends a JSON-RPC notification (no response expected). The
+	// method argument is the JSON-RPC method name carried in data; the
+	// streamable HTTP transport mirrors it onto the SEP-2243 Mcp-Method
+	// routing header. Other transports may ignore it.
+	notify(method string, data []byte) error
 	// close shuts down the transport.
 	close() error
 	// getSessionID returns the current session ID (empty if none).
@@ -276,14 +284,16 @@ func (a *coreTransportAdapter) connect() error {
 	return a.inner.Connect(context.Background())
 }
 
-func (a *coreTransportAdapter) call(data []byte) (*rpcResponse, error) {
-	return a.callWithContext(data, nil)
+func (a *coreTransportAdapter) call(method string, data []byte) (*rpcResponse, error) {
+	return a.callWithContext(method, data, nil)
 }
 
-// callWithContext on the core.Transport adapter ignores cc — core.Transport
-// has no notion of per-call notification scoping. Notifications still flow
-// through whatever notify path the underlying transport provides.
-func (a *coreTransportAdapter) callWithContext(data []byte, _ *CallContext) (*rpcResponse, error) {
+// callWithContext on the core.Transport adapter ignores method and cc —
+// core.Transport has no notion of per-call notification scoping, and the
+// underlying transport carries its own method routing inside the JSON-RPC
+// envelope. Notifications still flow through whatever notify path the
+// underlying transport provides.
+func (a *coreTransportAdapter) callWithContext(_ string, data []byte, _ *CallContext) (*rpcResponse, error) {
 	var req core.Request
 	if err := json.Unmarshal(data, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
@@ -312,7 +322,7 @@ func (a *coreTransportAdapter) callWithContext(data []byte, _ *CallContext) (*rp
 	}, nil
 }
 
-func (a *coreTransportAdapter) notify(data []byte) error {
+func (a *coreTransportAdapter) notify(_ string, data []byte) error {
 	var req core.Request
 	if err := json.Unmarshal(data, &req); err != nil {
 		return fmt.Errorf("invalid notification: %w", err)
@@ -612,7 +622,7 @@ func (c *Client) doConnect() error {
 
 	// Initialize handshake
 	resp, err := c.rawCall("initialize", initializeParams{
-		ProtocolVersion: "2024-11-05",
+		ProtocolVersion: "2025-11-25",
 		Capabilities:    caps,
 		ClientInfo:      c.info,
 	})
@@ -910,6 +920,13 @@ type CallContext struct {
 	// transport's defaults (Content-Type, Accept, Mcp-Session-Id) only if the
 	// caller deliberately sets them — which they shouldn't.
 	Headers map[string]string
+	// mcpName carries the SEP-2243 Mcp-Name routing header value for the
+	// methods that have one (tools/call → params.name, prompts/get →
+	// params.name, resources/read → params.uri). Set by the wrapper that
+	// builds the call (ToolCall / PromptGet / ResourceRead); the streamable
+	// HTTP transport mirrors it onto the wire header. Unexported because
+	// callers shouldn't override the wrapper's value.
+	mcpName string
 }
 
 // NewCallContext wraps a context.Context as a CallContext for use with
@@ -1399,6 +1416,19 @@ func (c *Client) rawCall(method string, params any) (*rpcResponse, error) {
 // rawCallWithContext is the underlying call path used by both Call and
 // CallContext. cc may be nil for a no-context call (legacy Call path).
 func (c *Client) rawCallWithContext(method string, params any, cc *CallContext) (*rpcResponse, error) {
+	// SEP-2243 routing-header derivation runs against the caller's original
+	// params (pre-stateless-wrap) so the name/uri stays unwrapped. Allocates
+	// a CallContext only when needed so legacy callers without per-call
+	// state still see nil cc downstream where it matters.
+	if name := deriveMcpName(method, params); name != "" {
+		if cc == nil {
+			cc = &CallContext{}
+		}
+		if cc.mcpName == "" {
+			cc.mcpName = name
+		}
+	}
+
 	// SEP-2575 stateless wire: every outgoing call carries the _meta
 	// envelope (protocolVersion, clientInfo, clientCapabilities).
 	// No-op when c.useStatelessWire is false — legacy callers see
@@ -1415,13 +1445,13 @@ func (c *Client) rawCallWithContext(method string, params any, cc *CallContext) 
 	}
 	data, _ := json.Marshal(req)
 
-	resp, err := c.transport.callWithContext(data, cc)
+	resp, err := c.transport.callWithContext(method, data, cc)
 	if err != nil && c.maxRetries > 0 && IsTransientError(err) {
 		return c.retryWithReconnect(func() (*rpcResponse, error) {
 			// Re-build with new ID (old may have been consumed)
 			req.ID = marshalID(c.nextRequestID())
 			data, _ = json.Marshal(req)
-			return c.transport.callWithContext(data, cc)
+			return c.transport.callWithContext(method, data, cc)
 		})
 	}
 	return resp, err
@@ -1443,11 +1473,11 @@ func (c *Client) notifyMethod(method string, params any) error {
 	}
 	data, _ := json.Marshal(req)
 
-	err := c.transport.notify(data)
+	err := c.transport.notify(method, data)
 	if err != nil && c.maxRetries > 0 && IsTransientError(err) {
 		return c.retryNotifyWithReconnect(func() error {
 			data, _ = json.Marshal(req)
-			return c.transport.notify(data)
+			return c.transport.notify(method, data)
 		})
 	}
 	return err
@@ -1621,8 +1651,8 @@ func (t *streamableClientTransport) dispatchSSEEventWithHook(data string, hook f
 	return nil
 }
 
-func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
-	return t.callWithContext(data, nil)
+func (t *streamableClientTransport) call(method string, data []byte) (*rpcResponse, error) {
+	return t.callWithContext(method, data, nil)
 }
 
 // callWithContext issues the POST and, if the response is SSE, threads the
@@ -1634,7 +1664,7 @@ func (t *streamableClientTransport) call(data []byte) (*rpcResponse, error) {
 // When cc carries a context, the underlying http.Request is built with it
 // so cancelling cancels the in-flight POST — required for events/stream's
 // Stop() to actually close the connection.
-func (t *streamableClientTransport) callWithContext(data []byte, cc *CallContext) (*rpcResponse, error) {
+func (t *streamableClientTransport) callWithContext(method string, data []byte, cc *CallContext) (*rpcResponse, error) {
 	reqCtx := context.Background()
 	if cc != nil && cc.Context != nil {
 		reqCtx = cc.Context
@@ -1655,6 +1685,11 @@ func (t *streamableClientTransport) callWithContext(data []byte, cc *CallContext
 		if t.client != nil && t.client.useStatelessWire {
 			req.Header.Set(core.HTTPProtocolVersionHeader, core.DraftProtocolVersion2026V1)
 		}
+		// SEP-2243 standard routing headers: mirror the JSON-RPC method
+		// and (when set by callers like ToolCall / ResourceRead /
+		// PromptGet) the per-method name onto Mcp-Method / Mcp-Name so
+		// proxies and middleware can route without parsing the body.
+		setSEP2243RoutingHeaders(req, method, cc)
 		// Caller-supplied per-call headers (SEP-2243 Mcp-Param-* mirroring
 		// from ToolCall). Applied after the transport defaults so a caller
 		// can't accidentally clobber them — Mcp-Param-* names are reserved
@@ -1885,7 +1920,7 @@ func (t *streamableClientTransport) postResponse(resp *core.Response) {
 	httpResp.Body.Close()
 }
 
-func (t *streamableClientTransport) notify(data []byte) error {
+func (t *streamableClientTransport) notify(method string, data []byte) error {
 	buildReq := func() (*http.Request, error) {
 		req, err := http.NewRequest("POST", t.url, bytes.NewReader(data))
 		if err != nil {
@@ -1896,6 +1931,9 @@ func (t *streamableClientTransport) notify(data []byte) error {
 		if t.sessionID != "" {
 			req.Header.Set("Mcp-Session-Id", t.sessionID)
 		}
+		// SEP-2243 routing headers — notifications never carry an Mcp-Name
+		// (no params.name/uri), so cc is nil here on purpose.
+		setSEP2243RoutingHeaders(req, method, nil)
 		if t.modifyReq != nil {
 			t.modifyReq(req)
 		}
@@ -2137,15 +2175,17 @@ func (t *sseClientTransport) close() error {
 
 func (t *sseClientTransport) getSessionID() string { return t.sessionID }
 
-// callWithContext on the legacy SSE transport ignores cc — notifications
-// arrive on the GET stream (background reader), not on a per-call response,
-// so per-call scoping is not meaningful here. Notifications still reach
-// the session-global callback via the existing path.
-func (t *sseClientTransport) callWithContext(data []byte, _ *CallContext) (*rpcResponse, error) {
-	return t.call(data)
+// callWithContext on the legacy SSE transport ignores method and cc —
+// notifications arrive on the GET stream (background reader), not on a
+// per-call response, so per-call scoping is not meaningful here. The SEP-2243
+// routing headers are also a no-op on this transport (legacy SSE predates
+// the SEP). Notifications still reach the session-global callback via the
+// existing path.
+func (t *sseClientTransport) callWithContext(method string, data []byte, _ *CallContext) (*rpcResponse, error) {
+	return t.call(method, data)
 }
 
-func (t *sseClientTransport) call(data []byte) (*rpcResponse, error) {
+func (t *sseClientTransport) call(_ string, data []byte) (*rpcResponse, error) {
 	// Check if the background reader is already dead before doing any work.
 	select {
 	case <-t.done:
@@ -2209,7 +2249,7 @@ func (t *sseClientTransport) call(data []byte) (*rpcResponse, error) {
 	}
 }
 
-func (t *sseClientTransport) notify(data []byte) error {
+func (t *sseClientTransport) notify(_ string, data []byte) error {
 	// Check if the background reader is already dead before POSTing.
 	select {
 	case <-t.done:
