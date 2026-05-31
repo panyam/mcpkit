@@ -62,7 +62,7 @@ _Status reflects upstream-declared requirements only. Scenario→SEP attribution
 
 | Scenario | Surface | Checks fail/pass | Tracking |
 |---|---|---:|---|
-| `server-stateless` | server | 1/19 | — |
+| `server-stateless` | server | 1/19 | upstream conformance test bug — ServerRejectsUndeclaredCapability checks requiredCapabilities as string-array but SEP-2575 schema says object — mcpkit follows schema. Tracked in CLAUDE.md gotchas. |
 
 ### Declared requirements with no emitted check
 
