@@ -265,6 +265,23 @@ func (s *OAuthTokenSource) Token() (string, error) {
 	// oneauth 0.1.9 (#217): BrowserLoginConfig renamed to BrowserLoginRequest;
 	// LoginWithBrowser now takes (ctx, *BrowserLoginRequest).
 	expectedIssuer := s.authInfo.AuthorizationServers[0]
+	// SEP-2468 / RFC 9207 §2.4: validate the iss query parameter on the
+	// OAuth callback before token exchange. oneauth surfaces the value
+	// via OnCallback (#235) but explicitly leaves enforcement policy to
+	// the consumer. mcpkit's policy:
+	//   iss present → MUST match expected issuer (byte-for-byte; §2.4
+	//                 forbids normalization)
+	//   iss absent + AS advertised → MUST reject (the advertisement
+	//                                 promise binds the AS)
+	//   iss absent + AS did not advertise → accept (legacy AS pre-9207)
+	//
+	// asAdvertisedSupport is read from the AS metadata field surfaced
+	// by oneauth v0.1.12 (oneauth#239). nil means the AS metadata didn't
+	// include the field at all → treat as legacy.
+	asAdvertisedSupport := false
+	if flag := s.authInfo.ASMetadata.AuthorizationResponseIssParameterSupported; flag != nil && *flag {
+		asAdvertisedSupport = true
+	}
 	loginReq := &client.BrowserLoginRequest{
 		AuthorizationEndpoint:    s.authInfo.ASMetadata.AuthorizationEndpoint,
 		TokenEndpoint:            s.authInfo.ASMetadata.TokenEndpoint,
@@ -274,21 +291,8 @@ func (s *OAuthTokenSource) Token() (string, error) {
 		Scopes:                   scopes,
 		Resource:                 s.ServerURL, // RFC 8707: bind token to this MCP server
 		OpenBrowser:              s.OpenBrowser,
-		// SEP-2468 / RFC 9207 §2.4: validate the iss query parameter on
-		// the OAuth callback before token exchange. oneauth surfaces the
-		// value via OnCallback (#235) but explicitly leaves enforcement
-		// policy to the consumer. mcpkit's policy:
-		//   iss present → MUST match expected issuer
-		//   iss absent  → accept (treated as legacy AS pre-9207)
-		//
-		// The full RFC 9207 §2.4 rule also rejects "iss absent + AS
-		// advertised support" — but that branch needs the
-		// authorization_response_iss_parameter_supported flag which
-		// client.ASMetadata in oneauth v0.1.11 does not yet expose
-		// (tracked at panyam/oneauth#239). Once that lands and we bump,
-		// this closure passes the advertised flag instead of false.
 		OnCallback: func(_ context.Context, p client.CallbackParams) error {
-			return validateIss(p.Iss, expectedIssuer, false /* asAdvertisedSupport */)
+			return validateIss(p.Iss, expectedIssuer, asAdvertisedSupport)
 		},
 	}
 	if s.HTTPClient != nil {
