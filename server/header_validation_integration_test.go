@@ -5,10 +5,44 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	core "github.com/panyam/mcpkit/core"
 )
+
+// testStreamableServerAllowLegacyOnDraft builds a streamable server
+// configured with WithAllowLegacyOnDraft so the SEP-2243 routing-header
+// integration tests can drive the legacy initialize+session wire on
+// DRAFT-2026-v1 without tripping the strict SEP-2575 _meta enforcement.
+// These tests precisely cover the back-compat path the new option
+// preserves; everywhere else the default (strict, off) applies.
+func testStreamableServerAllowLegacyOnDraft() *httptest.Server {
+	srv := NewServer(
+		core.ServerInfo{Name: "test-streamable", Version: "0.1.0"},
+		WithAllowLegacyOnDraft(),
+	)
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "echo",
+			Description: "Echoes the input",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"message": map[string]any{"type": "string"},
+				},
+			},
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+			var args struct {
+				Message string `json:"message"`
+			}
+			req.Bind(&args)
+			return core.TextResult("echo: " + args.Message), nil
+		},
+	)
+	return httptest.NewServer(srv.Handler(WithStreamableHTTP(true), WithSSE(false)))
+}
 
 // initDraftSession bootstraps a Streamable HTTP session that negotiated
 // the DRAFT-2026-v1 protocol version, so subsequent POSTs go through
@@ -76,7 +110,7 @@ func decodeJSONRPCError(t *testing.T, resp *http.Response) *core.Error {
 }
 
 func TestHeaderValidation_DraftSession_RejectsMismatchedMethod(t *testing.T) {
-	ts := testStreamableServer()
+	ts := testStreamableServerAllowLegacyOnDraft()
 	defer ts.Close()
 	sessionID := initDraftSession(t, ts.URL)
 
@@ -95,7 +129,7 @@ func TestHeaderValidation_DraftSession_RejectsMismatchedMethod(t *testing.T) {
 }
 
 func TestHeaderValidation_DraftSession_AcceptsMatchedHeaders(t *testing.T) {
-	ts := testStreamableServer()
+	ts := testStreamableServerAllowLegacyOnDraft()
 	defer ts.Close()
 	sessionID := initDraftSession(t, ts.URL)
 
@@ -134,7 +168,7 @@ func TestHeaderValidation_DatedSession_SkipsValidation(t *testing.T) {
 }
 
 func TestHeaderValidation_DraftSession_MismatchedToolName(t *testing.T) {
-	ts := testStreamableServer()
+	ts := testStreamableServerAllowLegacyOnDraft()
 	defer ts.Close()
 	sessionID := initDraftSession(t, ts.URL)
 

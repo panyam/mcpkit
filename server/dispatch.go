@@ -132,6 +132,16 @@ type Dispatcher struct {
 	listCacheScope string
 	readTTLMs      *int
 	readCacheScope string
+
+	// allowLegacyOnDraft is an opt-in back-compat escape hatch: when true,
+	// the legacy initialize+session wire is accepted on DRAFT-2026-v1 without
+	// per-request _meta enforcement. Default false — SEP-2575 (Accepted)
+	// removes the initialize handshake on draft and mandates per-request
+	// `params._meta.io.modelcontextprotocol/{protocolVersion,clientInfo,
+	// clientCapabilities}` on every follow-up; missing _meta MUST be
+	// rejected with -32602. Set via WithAllowLegacyOnDraft() for servers
+	// that prefer leniency over strict spec conformance.
+	allowLegacyOnDraft bool
 }
 
 // applyReadCacheControl fills the SEP-2549 ttlMs / cacheScope hints on a
@@ -269,6 +279,7 @@ func (d *Dispatcher) newSession() *Dispatcher {
 		listCacheScope:       d.listCacheScope,
 		readTTLMs:            d.readTTLMs,
 		readCacheScope:       d.readCacheScope,
+		allowLegacyOnDraft:   d.allowLegacyOnDraft,
 	}
 }
 
@@ -343,6 +354,26 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) *core.Resp
 	default:
 		if !d.initialized {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidRequest, "server not initialized")
+		}
+
+		// SEP-2575 (Accepted): on DRAFT-2026-v1, the initialize handshake is
+		// removed; every request MUST carry the per-request _meta envelope
+		// (params._meta.io.modelcontextprotocol/{protocolVersion, clientInfo,
+		// clientCapabilities}). We retain initialize+session as a back-compat
+		// entry point so clients pinned to older versions still negotiate, but
+		// once the negotiated version is DRAFT-2026-v1 every follow-up request
+		// must carry _meta or the server MUST reject with -32602 InvalidParams.
+		// allowLegacyOnDraft (WithAllowLegacyOnDraft) is an opt-in escape
+		// hatch for server authors who want to be forgiving — off by default.
+		if d.negotiatedVersion == core.DraftProtocolVersion2026V1 && !d.allowLegacyOnDraft {
+			if _, err := core.DecodeRequestMeta(req.Params); err != nil {
+				field := "io.modelcontextprotocol/protocolVersion"
+				if mve, ok := err.(*core.MetaValidationError); ok && mve.Field != "_meta" {
+					field = "io.modelcontextprotocol/" + mve.Field
+				}
+				return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
+					"Missing required metadata: "+field)
+			}
 		}
 
 		// Track in-flight request for cancellation support.
