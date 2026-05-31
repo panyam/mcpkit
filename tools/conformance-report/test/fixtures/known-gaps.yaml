@@ -1,0 +1,10 @@
+# Hand-annotated overlay for test fixtures.
+# Production overlay lives at conformance/known-gaps.yaml.
+scenarios:
+  "mrtr-basic":
+    issue: "mcpkit#487"
+    note: "stateless wire drops inputResponses (gotcha tracked in CLAUDE.md)"
+checks:
+  "sep-2322-input-required-on-allowed-method":
+    issue: "conformance#262"
+    note: "scenario coverage pending upstream merge"
