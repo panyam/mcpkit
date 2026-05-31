@@ -217,12 +217,12 @@ refresh-conformance: ## Regenerate CONFORMANCE.md from upstream tier-check + tra
 	fi
 	cd $(REPO_ROOT) && MCPCONFORMANCE_BASE_PATH="$(MCPCONFORMANCE_BASE_PATH)" bash scripts/refresh-conformance.sh
 
-check-conformance-stale: refresh-conformance ## CI gate — fail if CONFORMANCE.md is stale (issue #498). Run after refresh-conformance; diff must be empty.
-	@cd $(REPO_ROOT) && git diff --exit-code CONFORMANCE.md > /dev/null 2>&1 || { \
+check-conformance-stale: refresh-conformance ## CI gate — fail if CONFORMANCE.md is stale (issue 498). Compares working tree to HEAD so the gate is robust to staging order.
+	@cd $(REPO_ROOT) && git diff --exit-code HEAD -- CONFORMANCE.md > /dev/null 2>&1 || { \
 		echo "CONFORMANCE.md is stale relative to current testserver + upstream conformance."; \
 		echo "Run 'make refresh-conformance' locally and commit the regenerated file."; \
 		echo ""; \
-		git diff CONFORMANCE.md | head -60; \
+		git diff HEAD -- CONFORMANCE.md | head -60; \
 		exit 1; \
 	}
 	@echo "CONFORMANCE.md is up to date."
