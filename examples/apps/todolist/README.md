@@ -1,5 +1,7 @@
 # Todo List — MCP App
 
+> **SEP-2577 deprecation note**: this example demonstrates `ctx.Sample(...)`, which is deprecated per SEP-2577 (scheduled for removal in mcpkit v0.4). The code still works on v0.3.x. See [`docs/SEP_2577_DEPRECATIONS.md`](../../../docs/SEP_2577_DEPRECATIONS.md) for the migration story.
+
 A server-rendered MCP App with inline JavaScript. The initial state is rendered server-side in the resource handler. Live updates arrive via the bridge's `toolresult` event and update the DOM with inline JS. Demonstrates the full MCP protocol surface: tools, elicitation, sampling, and prompts.
 
 ## MCPKit Features Used
