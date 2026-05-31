@@ -1,0 +1,67 @@
+{
+  "repo": "panyam/mcpkit",
+  "branch": "main",
+  "timestamp": "2026-05-30T00:00:00.000Z",
+  "version": "v0.2.43",
+  "checks": {
+    "conformance": {
+      "status": "partial",
+      "pass_rate": 0.75,
+      "passed": 3,
+      "failed": 1,
+      "total": 4,
+      "details": [
+        {
+          "scenario": "server-ping-2026-05-31T00-07-40-860Z",
+          "passed": true,
+          "checks_passed": 2,
+          "checks_failed": 0,
+          "specVersions": ["2025-11-25"]
+        },
+        {
+          "scenario": "server-tools-dynamic-2026-05-31T00-07-41-198Z",
+          "passed": true,
+          "checks_passed": 5,
+          "checks_failed": 0,
+          "specVersions": ["2025-11-25", "DRAFT-2026-v1"]
+        },
+        {
+          "scenario": "server-mrtr-basic-2026-05-31T00-07-41-512Z",
+          "passed": false,
+          "checks_passed": 3,
+          "checks_failed": 2,
+          "specVersions": ["DRAFT-2026-v1"]
+        },
+        {
+          "scenario": "server-tools-structured-output-2026-05-31T00-07-42-001Z",
+          "passed": true,
+          "checks_passed": 4,
+          "checks_failed": 0,
+          "specVersions": ["2025-11-25"]
+        }
+      ]
+    },
+    "client_conformance": {
+      "status": "pass",
+      "pass_rate": 1,
+      "passed": 1,
+      "failed": 0,
+      "total": 1,
+      "details": [
+        {
+          "scenario": "auth-basic-2026-05-31T00-07-43-001Z",
+          "passed": true,
+          "checks_passed": 14,
+          "checks_failed": 0,
+          "specVersions": ["2025-11-25"]
+        }
+      ]
+    }
+  },
+  "implied_tier": {
+    "tier": 2,
+    "tier1_blockers": ["server_conformance"],
+    "tier2_met": true,
+    "note": "Server conformance has 1 failing scenario; tier 2 thresholds met."
+  }
+}

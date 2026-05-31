@@ -1,0 +1,23 @@
+{
+  "name": "@mcpkit/conformance-report",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Renders CONFORMANCE.md from upstream tier-check JSON + traceability manifest. In-tree for now; intended to upstream as `tier-check --format markdown` (issue #498 Phase 3).",
+  "bin": {
+    "conformance-report": "src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "yaml": "^2.5.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^2.0.0",
+    "@types/node": "^22.0.0"
+  }
+}

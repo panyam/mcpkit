@@ -1,0 +1,29 @@
+# Hand-annotated overlay for CONFORMANCE.md "Open Gaps" section.
+#
+# Joined by tools/conformance-report at render time with the raw FAILURE /
+# untested rows from upstream tier-check + traceability. Adding an entry here
+# does NOT mark a gap as resolved — it just attaches a tracking link + one-line
+# context so reviewers know we're aware of it.
+#
+# Schema:
+#   scenarios:
+#     <scenario-id>:           # exact upstream scenario name after timestamp
+#       issue: <link>          #   normalization (e.g. "tools-dynamic")
+#       note: <one line>
+#   checks:
+#     <check-id>:              # check ID from src/seps/*.yaml
+#       issue: <link>          #   (e.g. "sep-2243-server-not-expect-null")
+#       note: <one line>
+#
+# Keep entries terse; the renderer puts them straight into a table cell.
+
+scenarios:
+  "stateless":
+    issue: "upstream conformance test bug"
+    note: "ServerRejectsUndeclaredCapability checks requiredCapabilities as string-array but SEP-2575 schema says object — mcpkit follows schema. Tracked in CLAUDE.md gotchas."
+
+checks:
+  "sep-2243-server-not-expect-null":
+    note: "MCP-Name fail-closed semantics on tasks/* — covered locally by server/middleware test"
+  "sep-2243-server-reject-missing-required":
+    note: "MCP-Name fail-closed semantics on tasks/* — covered locally by server/middleware test"
