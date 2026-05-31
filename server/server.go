@@ -329,6 +329,8 @@ func WithFileInputValidation() Option {
 }
 
 // WithAllowedRoots restricts tool cwd to the given directory prefixes.
+//
+// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
 func WithAllowedRoots(roots ...string) Option {
 	return func(o *serverOptions) { o.allowedRoots = roots }
 }
@@ -337,6 +339,8 @@ func WithAllowedRoots(roots ...string) Option {
 // requests issued after notifications/roots/list_changed. Default is 30s.
 // Decrease for aggressive fail-fast; increase for slow clients with large
 // root enumerations (monorepos, network mounts). Issue #198.
+//
+// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
 func WithRootsFetchTimeout(d time.Duration) Option {
 	return func(o *serverOptions) { o.rootsFetchTimeout = d }
 }

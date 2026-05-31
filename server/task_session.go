@@ -130,6 +130,8 @@ func (tc *TaskContext) TaskElicit(req core.ElicitationRequest) (core.Elicitation
 // inside a running v1 task. See TaskElicit for the side-channel flow.
 //
 // Status transitions: working → input_required → working.
+//
+// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
 func (tc *TaskContext) TaskSample(req core.CreateMessageRequest) (core.CreateMessageResult, error) {
 	if req.Meta == nil {
 		req.Meta = &core.SamplingMeta{}
