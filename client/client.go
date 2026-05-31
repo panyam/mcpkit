@@ -66,6 +66,8 @@ func WithTokenSource(ts core.TokenSource) ClientOption {
 
 // SamplingHandler handles a server-to-client sampling/createMessage request.
 // The client performs LLM inference and returns the result.
+//
+// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
 type SamplingHandler func(context.Context, core.CreateMessageRequest) (core.CreateMessageResult, error)
 
 // ElicitationHandler handles a server-to-client elicitation/create request.
@@ -82,10 +84,14 @@ type ElicitationCompleteHandler func(context.Context, core.ElicitationCompletePa
 
 // RootsHandler handles a server-to-client roots/list request.
 // The client returns its current filesystem roots.
+//
+// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
 type RootsHandler func(context.Context) ([]core.Root, error)
 
 // WithSamplingHandler registers a handler for server-to-client sampling requests.
 // When set, the client advertises the "sampling" capability during initialization.
+//
+// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
 func WithSamplingHandler(h SamplingHandler) ClientOption {
 	return func(c *Client) { c.samplingHandler = h }
 }
@@ -114,6 +120,8 @@ func WithElicitationCompleteHandler(h ElicitationCompleteHandler) ClientOption {
 // When set, the client advertises the "roots" capability (with listChanged: true)
 // during initialization, enabling the server to fetch the client's filesystem roots
 // after receiving a notifications/roots/list_changed notification.
+//
+// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
 func WithRootsHandler(h RootsHandler) ClientOption {
 	return func(c *Client) { c.rootsHandler = h }
 }
@@ -850,6 +858,8 @@ func (c *Client) HandleServerRequestWithContext(ctx context.Context, req *core.R
 // NotifyRootsChanged sends a notifications/roots/list_changed notification
 // to the server. Call this after the client's filesystem roots have changed
 // so the server can re-fetch the current list via a roots/list request.
+//
+// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
 func (c *Client) NotifyRootsChanged() error {
 	return c.notifyMethod("notifications/roots/list_changed", nil)
 }
