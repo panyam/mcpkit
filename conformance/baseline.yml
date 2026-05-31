@@ -34,3 +34,13 @@ client:
 
   # Required — CIMD (warning: not using Client ID Metadata Documents yet)
   - auth/basic-cimd                         # Client ID Metadata Document flow (warning)
+
+  # 2025-03-26 spec backcompat — wontfix per #451. Both scenarios test
+  # the auth flow shapes the spec removed in 2025-06-18 (rootless OAuth
+  # metadata, fallback to OAuth-standard endpoints when no metadata
+  # endpoints exist). mcpkit targets 2025-11-25 + DRAFT-2026-v1; servers
+  # stuck on 2025-03-26 hit a clear "PRM endpoint missing" error from
+  # ext/auth/discovery.go that points at the spec gap. See
+  # ext/auth/docs/DESIGN.md "Supported spec versions" for the policy.
+  - auth/2025-03-26-oauth-endpoint-fallback # legacy OAuth-endpoint root fallback (#451 wontfix)
+  - auth/2025-03-26-oauth-metadata-backcompat # legacy rootless OAuth metadata (#451 wontfix)
