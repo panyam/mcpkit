@@ -54,6 +54,20 @@ func main() {
 		return
 	}
 
+	// SEP-2575 request-metadata scenario — the upstream fixture is a bare
+	// HTTP server (not an MCP server: no initialize, but it DOES handle
+	// server/discover so a stateless-wire client connects cleanly). Drive
+	// it through driveRequestMetadata, which exercises the per-request
+	// _meta envelope + MCP-Protocol-Version header checks the scenario
+	// grades.
+	if scenario == "request-metadata" {
+		if err := driveRequestMetadata(serverURL); err != nil {
+			log.Fatalf("request-metadata: %v", err)
+		}
+		log.Println("SUCCESS: request-metadata driven")
+		return
+	}
+
 	var ctx conformanceContext
 	if contextJSON != "" {
 		json.Unmarshal([]byte(contextJSON), &ctx)
@@ -95,6 +109,7 @@ func main() {
 					log.Printf("tools/call %q: %v (may be expected)", toolName, err)
 				}
 			}
+			driveStandardHeadersCoverage(noAuthClient)
 			noAuthClient.Close()
 			log.Println("SUCCESS: connected without auth")
 			return
@@ -159,9 +174,33 @@ func main() {
 				log.Printf("tools/call %q: ok", toolName)
 			}
 		}
+		driveStandardHeadersCoverage(c)
 	}
 
 	log.Println("SUCCESS: auth flow complete")
+}
+
+// driveStandardHeadersCoverage exercises resources/* and prompts/* on a
+// connected client so the SEP-2243 http-standard-headers scenario's
+// `ClientMcp{Method,Name}Header_{resources,prompts}_*` checks observe the
+// routing headers on the wire (otherwise they stay SKIPPED). Errors are
+// non-fatal — most non-SEP-2243 scenario mocks return generic responses
+// to these methods and the test goal is header emission, not response
+// fidelity. Safe to call against any connected client; it's a few extra
+// POSTs per scenario run, which is cheap relative to the audit value.
+func driveStandardHeadersCoverage(c *client.Client) {
+	if _, err := c.Call("resources/list", map[string]any{}); err != nil {
+		log.Printf("resources/list: %v (non-fatal — coverage)", err)
+	}
+	if _, err := c.Call("resources/read", map[string]any{"uri": "test://coverage"}); err != nil {
+		log.Printf("resources/read: %v (non-fatal — coverage)", err)
+	}
+	if _, err := c.Call("prompts/list", map[string]any{}); err != nil {
+		log.Printf("prompts/list: %v (non-fatal — coverage)", err)
+	}
+	if _, err := c.Call("prompts/get", map[string]any{"name": "coverage"}); err != nil {
+		log.Printf("prompts/get: %v (non-fatal — coverage)", err)
+	}
 }
 
 // conformanceElicitationHandler returns an accept-with-empty-content

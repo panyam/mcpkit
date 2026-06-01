@@ -14,45 +14,44 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 | Surface | Scenarios | Checks | Pass | Fail | Warn | Info | Skipped | Harness-gap |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Server | 51 | 135 | 112 | 1 | 7 | 6 | 9 | 0 |
-| Client | 40 | 1128 | 422 | 7 | 4 | 689 | 6 | 1 |
-| **Total** | **91** | **1263** | **534** | **8** | **11** | **695** | **15** | **1** |
+| Client | 40 | 1395 | 512 | 7 | 5 | 869 | 2 | 0 |
+| **Total** | **91** | **1530** | **624** | **8** | **12** | **875** | **11** | **0** |
 
 ## Harness gaps
 
-- `request-metadata` (client)
+_None — every scenario produced results._
 
 ## By SEP
 
-### Core / Unattributed (54 scenarios)
+### Core / Unattributed (53 scenarios)
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
 | `auth/2025-03-26-oauth-endpoint-fallback` | client | partial | 3 fail / 8 info |  |
 | `auth/2025-03-26-oauth-metadata-backcompat` | client | partial | 4 fail / 8 info |  |
-| `request-metadata` | client | harness-gap | — | No `checks.json` written — driver does not handle this scenario |
-| `auth/authorization-server-migration` | client | pass | 26 pass / 44 info |  |
-| `auth/basic-cimd` | client | pass | 14 pass / 1 warn / 24 info |  |
+| `auth/authorization-server-migration` | client | pass | 30 pass / 52 info |  |
+| `auth/basic-cimd` | client | pass | 18 pass / 1 warn / 32 info |  |
 | `auth/iss-normalized` | client | pass | 8 pass / 12 info |  |
-| `auth/iss-not-advertised` | client | pass | 15 pass / 24 info |  |
-| `auth/iss-supported` | client | pass | 15 pass / 24 info |  |
+| `auth/iss-not-advertised` | client | pass | 19 pass / 32 info |  |
+| `auth/iss-supported` | client | pass | 19 pass / 32 info |  |
 | `auth/iss-supported-missing` | client | pass | 8 pass / 12 info |  |
 | `auth/iss-unexpected` | client | pass | 8 pass / 12 info |  |
 | `auth/iss-wrong-issuer` | client | pass | 8 pass / 12 info |  |
-| `auth/metadata-default` | client | pass | 14 pass / 24 info |  |
+| `auth/metadata-default` | client | pass | 18 pass / 32 info |  |
 | `auth/metadata-issuer-mismatch` | client | pass | 3 pass / 8 info |  |
-| `auth/metadata-var1` | client | pass | 14 pass / 26 info |  |
-| `auth/metadata-var2` | client | pass | 14 pass / 26 info |  |
-| `auth/metadata-var3` | client | pass | 14 pass / 26 info |  |
-| `auth/pre-registration` | client | pass | 15 pass / 28 info |  |
+| `auth/metadata-var1` | client | pass | 18 pass / 34 info |  |
+| `auth/metadata-var2` | client | pass | 18 pass / 34 info |  |
+| `auth/metadata-var3` | client | pass | 18 pass / 34 info |  |
+| `auth/pre-registration` | client | pass | 19 pass / 36 info |  |
 | `auth/resource-mismatch` | client | pass | 2 pass / 6 info |  |
-| `auth/scope-from-scopes-supported` | client | pass | 15 pass / 24 info |  |
-| `auth/scope-from-www-authenticate` | client | pass | 15 pass / 24 info |  |
-| `auth/scope-omitted-when-undefined` | client | pass | 15 pass / 24 info |  |
+| `auth/scope-from-scopes-supported` | client | pass | 19 pass / 32 info |  |
+| `auth/scope-from-www-authenticate` | client | pass | 19 pass / 32 info |  |
+| `auth/scope-omitted-when-undefined` | client | pass | 19 pass / 32 info |  |
 | `auth/scope-retry-limit` | client | pass | 17 pass / 36 info |  |
 | `auth/scope-step-up` | client | pass | 19 pass / 2 warn / 34 info |  |
-| `auth/token-endpoint-auth-basic` | client | pass | 19 pass / 24 info |  |
-| `auth/token-endpoint-auth-none` | client | pass | 19 pass / 24 info |  |
-| `auth/token-endpoint-auth-post` | client | pass | 19 pass / 24 info |  |
+| `auth/token-endpoint-auth-basic` | client | pass | 23 pass / 32 info |  |
+| `auth/token-endpoint-auth-none` | client | pass | 23 pass / 32 info |  |
+| `auth/token-endpoint-auth-post` | client | pass | 23 pass / 32 info |  |
 | `completion-complete` | server | pass | 1 pass |  |
 | `dns-rebinding-protection` | server | pass | 2 pass |  |
 | `initialize` | client | pass | 1 pass / 1 info |  |
@@ -70,7 +69,7 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 | `resources-templates-read` | server | pass | 1 pass |  |
 | `resources-unsubscribe` | server | pass | 1 pass |  |
 | `server-initialize` | server | pass | 2 pass |  |
-| `tools_call` | client | pass | 1 pass / 10 info |  |
+| `tools_call` | client | pass | 1 pass / 18 info |  |
 | `tools-call-audio` | server | pass | 1 pass |  |
 | `tools-call-elicitation` | server | pass | 1 pass |  |
 | `tools-call-embedded-resource` | server | pass | 1 pass |  |
@@ -92,21 +91,21 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `auth/enterprise-managed-authorization` | client | pass | 9 pass / 20 info |  |
+| `auth/enterprise-managed-authorization` | client | pass | 13 pass / 28 info |  |
 
 ### [SEP-1034](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1034) (2 scenarios)
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `elicitation-sep1034-client-defaults` | client | pass | 5 pass / 12 info |  |
+| `elicitation-sep1034-client-defaults` | client | pass | 5 pass / 20 info |  |
 | `elicitation-sep1034-defaults` | server | pass | 5 pass |  |
 
 ### [SEP-1046-CLIENT-CREDENTIALS](https://github.com/modelcontextprotocol/ext-auth/blob/main/specification/draft/oauth-client-credentials.mdx) (2 scenarios)
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `auth/client-credentials-basic` | client | pass | 10 pass / 26 info |  |
-| `auth/client-credentials-jwt` | client | pass | 8 pass / 20 info |  |
+| `auth/client-credentials-basic` | client | pass | 14 pass / 34 info |  |
+| `auth/client-credentials-jwt` | client | pass | 12 pass / 28 info |  |
 
 ### [SEP-1330](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1330) (1 scenarios)
 
@@ -126,7 +125,7 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 |---|---|---|---|---|
 | `server-sse-multiple-streams` | server | pass | 2 pass |  |
 | `server-sse-polling` | server | pass | 3 warn / 6 info |  |
-| `sse-retry` | client | pass | 3 pass / 13 info |  |
+| `sse-retry` | client | pass | 3 pass / 17 info |  |
 
 ### [SEP-2106](https://modelcontextprotocol.io/seps/2106-json-schema-2020-12#security-implications) (1 scenarios)
 
@@ -144,8 +143,8 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `auth/offline-access-not-supported` | client | pass | 15 pass / 24 info |  |
-| `auth/offline-access-scope` | client | pass | 14 pass / 1 warn / 25 info |  |
+| `auth/offline-access-not-supported` | client | pass | 19 pass / 32 info |  |
+| `auth/offline-access-scope` | client | pass | 18 pass / 1 warn / 33 info |  |
 
 ### [SEP-2243-CUSTOM-HEADERS](https://modelcontextprotocol.io/specification/draft/basic/transports#server-behavior-for-custom-headers) (2 scenarios)
 
@@ -170,7 +169,7 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `http-standard-headers` | client | pass | 5 pass / 6 skip |  |
+| `http-standard-headers` | client | pass | 11 pass |  |
 
 ### [SEP-2322](https://modelcontextprotocol.io/specification/draft/basic/utilities/mrtr) (14 scenarios)
 
@@ -203,11 +202,12 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 |---|---|---|---|---|
 | `caching` | server | pass | 7 pass |  |
 
-### [SEP-2575](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2575) (1 scenarios)
+### [SEP-2575](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2575) (2 scenarios)
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
 | `server-stateless` | server | fork-covered | 19 pass / 1 fail / 2 warn / 4 skip | Also graded by `testconf-stateless` |
+| `request-metadata` | client | pass | 4 pass / 1 warn / 2 skip |  |
 
 
 ## Methodology
