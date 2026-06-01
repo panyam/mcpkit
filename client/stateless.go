@@ -98,13 +98,33 @@ type discoverResult struct {
 // across both wires.
 func (c *Client) buildRequestMeta() map[string]any {
 	return map[string]any{
-		core.MetaKeyProtocolVersion: core.DraftProtocolVersion2026V1,
+		core.MetaKeyProtocolVersion: c.getNegotiatedVersion(),
 		core.MetaKeyClientInfo: map[string]any{
 			"name":    c.info.Name,
 			"version": c.info.Version,
 		},
 		core.MetaKeyClientCapabilities: c.computeClientCapabilities(),
 	}
+}
+
+// getNegotiatedVersion returns the protocol version the client emits on
+// the SEP-2575 stateless wire. Initialized to DraftProtocolVersion2026V1
+// in NewClient; mutated by setNegotiatedVersion when a server -32001/-32004
+// response triggers a retry-with-downgrade.
+func (c *Client) getNegotiatedVersion() string {
+	c.negotiatedVersionMu.RLock()
+	defer c.negotiatedVersionMu.RUnlock()
+	return c.negotiatedVersion
+}
+
+// setNegotiatedVersion records a new negotiated protocol version. Called
+// from the rawCallWithContext retry path when isUnsupportedVersionError
+// yields a usable downgrade. Subsequent requests on this client emit the
+// new version automatically.
+func (c *Client) setNegotiatedVersion(v string) {
+	c.negotiatedVersionMu.Lock()
+	defer c.negotiatedVersionMu.Unlock()
+	c.negotiatedVersion = v
 }
 
 // computeClientCapabilities returns the ClientCapabilities object the
