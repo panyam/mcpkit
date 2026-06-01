@@ -105,12 +105,12 @@ func (c *Client) reconnect() error {
 		Method:  "initialize",
 	}
 	initReq.Params, _ = json.Marshal(initializeParams{
-		ProtocolVersion: "2024-11-05",
+		ProtocolVersion: "2025-11-25",
 		Capabilities:    core.ClientCapabilities{},
 		ClientInfo:      c.info,
 	})
 	data, _ := json.Marshal(initReq)
-	resp, err := c.transport.call(data)
+	resp, err := c.transport.call("initialize", data)
 	if err != nil {
 		return err
 	}
@@ -127,7 +127,7 @@ func (c *Client) reconnect() error {
 		Method:  "notifications/initialized",
 	}
 	data, _ = json.Marshal(notifReq)
-	if err := c.transport.notify(data); err != nil {
+	if err := c.transport.notify("notifications/initialized", data); err != nil {
 		return err
 	}
 

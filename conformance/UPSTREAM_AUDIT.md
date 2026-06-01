@@ -14,8 +14,8 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 | Surface | Scenarios | Checks | Pass | Fail | Warn | Info | Skipped | Harness-gap |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Server | 51 | 135 | 112 | 1 | 7 | 6 | 9 | 0 |
-| Client | 40 | 1128 | 416 | 13 | 4 | 689 | 6 | 1 |
-| **Total** | **91** | **1263** | **528** | **14** | **11** | **695** | **15** | **1** |
+| Client | 40 | 1128 | 422 | 7 | 4 | 689 | 6 | 1 |
+| **Total** | **91** | **1263** | **534** | **8** | **11** | **695** | **15** | **1** |
 
 ## Harness gaps
 
@@ -29,7 +29,6 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 |---|---|---|---|---|
 | `auth/2025-03-26-oauth-endpoint-fallback` | client | partial | 3 fail / 8 info |  |
 | `auth/2025-03-26-oauth-metadata-backcompat` | client | partial | 4 fail / 8 info |  |
-| `initialize` | client | partial | 1 fail / 1 info |  |
 | `request-metadata` | client | harness-gap | — | No `checks.json` written — driver does not handle this scenario |
 | `auth/authorization-server-migration` | client | pass | 26 pass / 44 info |  |
 | `auth/basic-cimd` | client | pass | 14 pass / 1 warn / 24 info |  |
@@ -56,6 +55,7 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 | `auth/token-endpoint-auth-post` | client | pass | 19 pass / 24 info |  |
 | `completion-complete` | server | pass | 1 pass |  |
 | `dns-rebinding-protection` | server | pass | 2 pass |  |
+| `initialize` | client | pass | 1 pass / 1 info |  |
 | `logging-set-level` | server | pass | 1 pass |  |
 | `ping` | server | pass | 1 pass |  |
 | `prompts-get-embedded-resource` | server | pass | 1 pass |  |
@@ -170,7 +170,7 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `http-standard-headers` | client | partial | 5 fail / 6 skip |  |
+| `http-standard-headers` | client | pass | 5 pass / 6 skip |  |
 
 ### [SEP-2322](https://modelcontextprotocol.io/specification/draft/basic/utilities/mrtr) (14 scenarios)
 

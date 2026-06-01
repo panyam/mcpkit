@@ -3,9 +3,74 @@ package client
 import (
 	"encoding/base64"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 )
+
+// SEP-2243 standard routing headers. Mirrors the JSON-RPC method (and, for
+// tools/call / prompts/get / resources/read, the params.name or params.uri)
+// onto HTTP headers so proxies and middleware can route requests without
+// parsing the JSON body. See server/header_validation.go for the matching
+// server-side check.
+const (
+	mcpMethodHeader = "Mcp-Method"
+	mcpNameHeader   = "Mcp-Name"
+)
+
+// setSEP2243RoutingHeaders attaches the SEP-2243 standard routing headers to a
+// streamable HTTP request. method is the JSON-RPC method carried in the body
+// and is always mirrored onto Mcp-Method; cc may carry a per-call mcpName
+// (derived centrally in rawCallWithContext for tools/call / prompts/get /
+// resources/read) that is mirrored onto Mcp-Name. Passing nil cc, or a cc
+// without mcpName set, simply skips Mcp-Name — Mcp-Method is unconditional.
+func setSEP2243RoutingHeaders(req *http.Request, method string, cc *CallContext) {
+	if method != "" {
+		req.Header.Set(mcpMethodHeader, method)
+	}
+	if cc != nil && cc.mcpName != "" {
+		req.Header.Set(mcpNameHeader, cc.mcpName)
+	}
+}
+
+// deriveMcpName extracts the SEP-2243 Mcp-Name value from a JSON-RPC params
+// payload for the three methods that carry a routable name/URI in their
+// params: tools/call (params.name), prompts/get (params.name), and
+// resources/read (params.uri). Returns "" for any other method or when the
+// field is missing / non-string — callers should skip emitting Mcp-Name
+// in that case (server-side fail-closed will reject mismatches).
+//
+// params is the Go value the caller passed to Call / rawCallWithContext —
+// typically map[string]any or a concrete struct. Supports both shapes so
+// no caller has to flatten ahead of time.
+func deriveMcpName(method string, params any) string {
+	if params == nil {
+		return ""
+	}
+	switch method {
+	case "tools/call", "prompts/get":
+		return stringField(params, "name")
+	case "resources/read":
+		return stringField(params, "uri")
+	}
+	return ""
+}
+
+// stringField reads a string-typed field from a params value by name. Handles
+// the common map[string]any and map[string]string shapes; struct-typed params
+// are out of scope here (the routing-header helpers only fire for the three
+// SEP-2243 methods, and mcpkit's call sites for those use map shapes).
+func stringField(params any, field string) string {
+	switch p := params.(type) {
+	case map[string]any:
+		if v, ok := p[field].(string); ok {
+			return v
+		}
+	case map[string]string:
+		return p[field]
+	}
+	return ""
+}
 
 
 // SEP-2243 custom-header mirroring for tools/call.

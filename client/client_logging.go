@@ -53,17 +53,16 @@ func (t *loggingTransport) connect() error {
 }
 
 // call logs the JSON-RPC method name, latency, and result status.
-func (t *loggingTransport) call(data []byte) (*rpcResponse, error) {
-	return t.callWithContext(data, nil)
+func (t *loggingTransport) call(method string, data []byte) (*rpcResponse, error) {
+	return t.callWithContext(method, data, nil)
 }
 
 // callWithContext delegates to the wrapped transport's per-call context
 // path so events/stream's notify hook reaches Streamable HTTP through
 // the logging wrapper.
-func (t *loggingTransport) callWithContext(data []byte, cc *CallContext) (*rpcResponse, error) {
-	method := ExtractMethodFromJSON(data)
+func (t *loggingTransport) callWithContext(method string, data []byte, cc *CallContext) (*rpcResponse, error) {
 	start := time.Now()
-	resp, err := t.inner.callWithContext(data, cc)
+	resp, err := t.inner.callWithContext(method, data, cc)
 	elapsed := time.Since(start)
 	if err != nil {
 		t.logger.Printf("[mcpkit] → %s error=%v [%s]", method, err, elapsed)
@@ -77,10 +76,9 @@ func (t *loggingTransport) callWithContext(data []byte, cc *CallContext) (*rpcRe
 }
 
 // notify logs the JSON-RPC notification method and any error.
-func (t *loggingTransport) notify(data []byte) error {
-	method := ExtractMethodFromJSON(data)
+func (t *loggingTransport) notify(method string, data []byte) error {
 	start := time.Now()
-	err := t.inner.notify(data)
+	err := t.inner.notify(method, data)
 	elapsed := time.Since(start)
 	if err != nil {
 		t.logger.Printf("[mcpkit] → %s (notify) error=%v [%s]", method, err, elapsed)
