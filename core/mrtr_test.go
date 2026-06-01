@@ -42,6 +42,23 @@ func TestResultTypeConstants(t *testing.T) {
 	}
 }
 
+func TestDefaultResultType(t *testing.T) {
+	t.Run("empty-gets-default", func(t *testing.T) {
+		var rt ResultType
+		defaultResultType(&rt, ResultTypeComplete)
+		if rt != ResultTypeComplete {
+			t.Errorf("empty → %q, want %q", rt, ResultTypeComplete)
+		}
+	})
+	t.Run("non-empty-preserved", func(t *testing.T) {
+		rt := ResultTypeTask
+		defaultResultType(&rt, ResultTypeComplete)
+		if rt != ResultTypeTask {
+			t.Errorf("preset %q clobbered to %q", ResultTypeTask, rt)
+		}
+	})
+}
+
 // TestInputRequestJSON verifies wire shape: {"method": "...", "params": {...}}
 // with params omitted when nil. Round-trip must preserve raw params bytes.
 func TestInputRequestJSON(t *testing.T) {
