@@ -1,0 +1,66 @@
+---
+title: "mcpkit"
+description: "Go library for building production-grade MCP servers and clients."
+---
+
+<section class="hero">
+    <h1>mcpkit</h1>
+    <p class="hero-tagline">A Go library for building production-grade Model Context Protocol servers and clients.</p>
+    <div class="hero-actions">
+        <a class="btn btn-primary" href="{{ .Site.PathPrefix }}/conformance/">View the conformance report</a>
+        <a class="btn btn-secondary" href="{{ (json "SiteMetadata.json" "repository") }}">GitHub</a>
+    </div>
+</section>
+
+<section class="pillars">
+    <div class="pillar">
+        <h3>Conformance</h3>
+        <p>Per-SEP coverage, scenario-level grading against upstream <code>main</code>, and fixture-level parity — refreshed by CI on every PR.</p>
+        <p>
+            <a href="{{ .Site.PathPrefix }}/conformance/">Coverage matrix</a> ·
+            <a href="{{ .Site.PathPrefix }}/conformance/upstream-audit/">Upstream audit</a> ·
+            <a href="{{ .Site.PathPrefix }}/conformance/fixture-audit/">Fixture audit</a>
+        </p>
+    </div>
+
+    <div class="pillar">
+        <h3>Capabilities</h3>
+        <p>Feature inventory tracked alongside the spec — what mcpkit ships today, what's deferred, what's experimental.</p>
+        <p><a href="{{ .Site.PathPrefix }}/capabilities/">Browse capabilities</a></p>
+    </div>
+
+    <div class="pillar">
+        <h3>Packages</h3>
+        <p>Per-package READMEs for <code>core</code>, <code>server</code>, <code>client</code>, and the <code>ext/*</code> sub-modules.</p>
+        <p>
+            <a href="{{ .Site.PathPrefix }}/packages/core/">core</a> ·
+            <a href="{{ .Site.PathPrefix }}/packages/server/">server</a> ·
+            <a href="{{ .Site.PathPrefix }}/packages/client/">client</a> ·
+            <a href="{{ .Site.PathPrefix }}/packages/ext-auth/">ext/auth</a> ·
+            <a href="{{ .Site.PathPrefix }}/packages/ext-tasks/">ext/tasks</a> ·
+            <a href="{{ .Site.PathPrefix }}/packages/ext-ui/">ext/ui</a>
+        </p>
+    </div>
+
+    <div class="pillar">
+        <h3>Design Docs</h3>
+        <p>Architectural notes and migration guides for the SEPs mcpkit implements.</p>
+        <p>
+            <a href="{{ .Site.PathPrefix }}/design/apps/">MCP Apps</a> ·
+            <a href="{{ .Site.PathPrefix }}/design/tasks-v2-migration/">Tasks v2</a> ·
+            <a href="{{ .Site.PathPrefix }}/design/sep-2567-handles/">SEP-2567 handles</a> ·
+            <a href="{{ .Site.PathPrefix }}/design/sep-2577-deprecations/">SEP-2577 deprecations</a>
+        </p>
+    </div>
+</section>
+
+<section class="why">
+    <h2>Why a site, not just the README?</h2>
+    <p>
+        mcpkit's conformance posture is a public contract, not an internal scorecard.
+        Once it shows up in the
+        <a href="https://github.com/modelcontextprotocol/conformance">upstream conformance discussion</a>
+        and in the MCP Discord, a stable URL with navigation beats a tree of markdown blobs.
+        The source-of-truth files still live in the repository — this site only renders them.
+    </p>
+</section>
