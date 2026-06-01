@@ -1,6 +1,0 @@
-=== Stage 7b/9: experimental-events-clients-go (make test-experimental-events-clients-go) ===
-Started: Tue May 26 09:44:43 PDT 2026
-/Library/Developer/CommandLineTools/usr/bin/make -C experimental test-events-clients-go
-cd /Users/dzshrh/newstack/mcpkit/tasks/experimental/ext/events/clients/go && go test ./... -count=1 -timeout 60s
-ok  	github.com/panyam/mcpkit/experimental/ext/events/clients/go	6.687s
-Finished: Tue May 26 09:44:51 PDT 2026 (elapsed 8s)

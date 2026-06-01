@@ -12,6 +12,12 @@ bin
 *.out
 coverage.html
 
+# Test-run reports — written by `make test*`, transient by design.
+# Kept untracked so re-running locally doesn't show up as drift.
+tests/reports/*.log
+tests/reports/*.html
+tests/reports/*.out
+
 # Go
 vendor/
 
