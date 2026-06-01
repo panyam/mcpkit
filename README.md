@@ -1,6 +1,16 @@
-# MCPKit
+# mcpkit
 
 Production-grade MCP (Model Context Protocol) server and client library for Go.
+
+[![Go Reference](https://pkg.go.dev/badge/github.com/panyam/mcpkit.svg)](https://pkg.go.dev/github.com/panyam/mcpkit)
+[![Go Report Card](https://goreportcard.com/badge/github.com/panyam/mcpkit)](https://goreportcard.com/report/github.com/panyam/mcpkit)
+[![CI](https://github.com/panyam/mcpkit/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/panyam/mcpkit/actions/workflows/test.yml)
+[![Conformance](https://img.shields.io/badge/MCP%20conformance-passing-success)](https://panyam.github.io/mcpkit/conformance/)
+[![Docs](https://img.shields.io/badge/docs-panyam.github.io%2Fmcpkit-blue)](https://panyam.github.io/mcpkit/)
+[![License](https://img.shields.io/github/license/panyam/mcpkit)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/panyam/mcpkit?style=social)](https://github.com/panyam/mcpkit/stargazers)
+
+**[Docs site](https://panyam.github.io/mcpkit/)** · **[Conformance report](https://panyam.github.io/mcpkit/conformance/)** · **[Capabilities](https://panyam.github.io/mcpkit/capabilities/)** · **[Quick Start](#quick-start)**
 
 ## Quick Start
 
@@ -41,12 +51,12 @@ srv.Run(":8787") // Streamable HTTP
 
 ## Conformance
 
-**30/30** server scenarios, **14/14** auth scenarios, **21** MCP Apps conformance tests passing against the [official MCP conformance suite](https://github.com/modelcontextprotocol/conformance) and internal test suites.
+**30/30** server scenarios, **14/14** auth scenarios, **21** MCP Apps conformance tests passing against the [official MCP conformance suite](https://github.com/modelcontextprotocol/conformance) and internal test suites. The full per-SEP rollup is published at [panyam.github.io/mcpkit/conformance](https://panyam.github.io/mcpkit/conformance/).
 
 Three artifacts describe mcpkit's conformance posture at increasing granularity:
 
-- [`CONFORMANCE.md`](CONFORMANCE.md) — auto-generated per-SEP rollup (regenerated on every PR; CI-gated for staleness).
-- [`conformance/UPSTREAM_AUDIT.md`](conformance/UPSTREAM_AUDIT.md) — per-scenario pass/fail against upstream's full test set (`make testconf-upstream-audit`).
+- [`CONFORMANCE.md`](CONFORMANCE.md) — auto-generated per-SEP rollup (regenerated on every PR; CI-gated for staleness). [Live site](https://panyam.github.io/mcpkit/conformance/).
+- [`conformance/UPSTREAM_AUDIT.md`](conformance/UPSTREAM_AUDIT.md) — per-scenario pass/fail against upstream's full test set (`make testconf-upstream-audit`). [Live site](https://panyam.github.io/mcpkit/conformance/upstream-audit/).
 - [`conformance/AUTH_SPEC_COVERAGE.md`](conformance/AUTH_SPEC_COVERAGE.md) — hand-curated per-clause traceability for the auth surface: every MUST/SHOULD → mcpkit impl file:line → test that proves it.
 
 ## Testing
@@ -109,3 +119,9 @@ For best performance, configure your authorization server to use **ES256 (ECDSA 
 
 - `servicekit` v0.0.22 — SSE hub, graceful shutdown, HTTP error types
 - `oneauth` v0.0.64 — JWT/OIDC (only via `ext/auth` sub-module)
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=panyam/mcpkit&type=Date)](https://star-history.com/#panyam/mcpkit&Date)
+
+If mcpkit is useful to you, starring the repo is the cheapest way to help — it's the main signal we use to prioritize what to ship next.
