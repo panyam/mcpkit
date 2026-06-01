@@ -1,6 +1,6 @@
 # MCP Conformance
 
-mcpkit's posture against the [MCP conformance suite](https://github.com/modelcontextprotocol/conformance) and the per-SEP traceability manifest, regenerated on every PR and gated for staleness by CI.
+mcpkit's posture against the [MCP conformance suite](https://github.com/modelcontextprotocol/conformance) and the per-SEP traceability manifest. Refreshed before each tagged release; CI keeps the rendering in sync on PRs.
 
 This file has two parts:
 
