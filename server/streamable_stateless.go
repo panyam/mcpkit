@@ -52,7 +52,7 @@ func (t *streamableTransport) handleStatelessPost(w http.ResponseWriter, r *http
 	// the conformance suite locks. Header *presence* without a match
 	// surfaces -32001 via headerMismatchResponse with the diagnostic
 	// `data` payload (header, expected, received).
-	if r.Header.Get(mcpMethodHeader) != "" {
+	if r.Header.Get(core.McpMethodHeader) != "" {
 		if errResp := validateRoutingHeaders(req, r.Header); errResp != nil {
 			writeHeaderMismatch(w, errResp)
 			return

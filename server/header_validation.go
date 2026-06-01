@@ -9,14 +9,6 @@ import (
 	"github.com/panyam/mcpkit/core"
 )
 
-// SEP-2243 routing header names. Lookups via http.Header.Get are
-// case-insensitive on the name side; values are case-sensitive per
-// SEP-2243 (e.g. `tools/list` and `TOOLS/LIST` are distinct).
-const (
-	mcpMethodHeader = "Mcp-Method"
-	mcpNameHeader   = "Mcp-Name"
-)
-
 // sep2243EnforcedVersions enumerates the negotiated MCP protocol
 // versions that mandate SEP-2243 routing-header validation server-side.
 // SEP-2243 is currently draft-only; widen this list when a dated
@@ -42,17 +34,17 @@ func isSEP2243EnforcedVersion(negotiated string) bool {
 // Returns a JSON-RPC error frame on mismatch (caller writes HTTP 400 +
 // the frame as the body). Returns nil when the request passes.
 func validateRoutingHeaders(req *core.Request, headers http.Header) *core.Response {
-	hdrMethod := strings.TrimSpace(headers.Get(mcpMethodHeader))
+	hdrMethod := strings.TrimSpace(headers.Get(core.McpMethodHeader))
 	if hdrMethod != req.Method {
-		return headerMismatchResponse(req.ID, mcpMethodHeader, hdrMethod, req.Method)
+		return headerMismatchResponse(req.ID, core.McpMethodHeader, hdrMethod, req.Method)
 	}
 	field, bodyValue, requiresName := extractRoutingName(req)
 	if !requiresName {
 		return nil
 	}
-	hdrName := strings.TrimSpace(headers.Get(mcpNameHeader))
+	hdrName := strings.TrimSpace(headers.Get(core.McpNameHeader))
 	if hdrName != bodyValue {
-		return headerMismatchResponse(req.ID, mcpNameHeader, hdrName, bodyValue,
+		return headerMismatchResponse(req.ID, core.McpNameHeader, hdrName, bodyValue,
 			"bodyField", field)
 	}
 	return nil
