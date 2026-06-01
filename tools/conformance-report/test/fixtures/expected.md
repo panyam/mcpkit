@@ -1,5 +1,5 @@
 <!-- begin:generated -->
-<!-- generated against upstream-conformance@abc1234 · protocol 2025-11-25 · regenerate via scripts/refresh-conformance.sh -->
+<!-- generated against upstream-conformance@abc1234567890abcdef1234567890abcdef123456 · protocol 2025-11-25 · regenerate via scripts/refresh-conformance.sh -->
 
 ## Conformance Summary
 

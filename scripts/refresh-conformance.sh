@@ -92,7 +92,9 @@ echo ""
 echo "=== Installing upstream conformance deps (builds dist/ via prepare) ==="
 (cd "$CONF_DIR" && npm install --silent)
 
-UPSTREAM_SHA="$(cd "$CONF_DIR" && git rev-parse --short HEAD)"
+# Full 40-char SHA — actions/checkout@v4 in the CI freshness gate cannot
+# resolve short SHAs as refs (it tries to fetch them as branch/tag names).
+UPSTREAM_SHA="$(cd "$CONF_DIR" && git rev-parse HEAD)"
 PROTOCOL_VERSION="${REFRESH_PROTOCOL:-2025-11-25}"
 
 echo ""
