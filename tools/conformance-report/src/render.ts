@@ -37,6 +37,10 @@ export function renderGeneratedBlock(input: RenderInput): string {
   lines.push('');
   lines.push(...renderSepTable(input));
   lines.push('');
+  lines.push('## SEP Detail');
+  lines.push('');
+  lines.push(...renderSepDetail(input));
+  lines.push('');
   lines.push('## Open Gaps');
   lines.push('');
   lines.push(...renderGaps(input));
@@ -145,15 +149,184 @@ function renderSepTable(input: RenderInput): string[] {
         : s.summary.tested === 0
           ? '_untested_'
           : 'partial';
-    lines.push(
-      `| ${label} | ${s.summary.tested} | ${s.summary.excluded} | ${s.summary.untested} | ${status} |`
-    );
+    const tested = numericCell(s.summary.tested, sep, 'tested', summarizeTested(s));
+    const excluded = numericCell(s.summary.excluded, sep, 'excluded', summarizeExcluded(s));
+    const untested = numericCell(s.summary.untested, sep, 'untested', summarizeUntested(s));
+    lines.push(`| ${label} | ${tested} | ${excluded} | ${untested} | ${status} |`);
   }
   lines.push('');
   lines.push(
-    '_Status reflects upstream-declared requirements only. Scenario→SEP attribution is not exposed in tier-check JSON today; this column tracks "does upstream have a check ID for this SEP requirement", not "does mcpkit pass it". Per-SEP scenario pass/fail lives in `conformance/UPSTREAM_AUDIT.md`._'
+    '_Numeric cells link to per-SEP detail below; hover/long-press surfaces a one-line summary. Status reflects upstream-declared requirements only — Scenario→SEP attribution is not exposed in tier-check JSON today; this column tracks "does upstream have a check ID for this SEP requirement", not "does mcpkit pass it". Per-SEP scenario pass/fail lives in `conformance/UPSTREAM_AUDIT.md`._'
   );
   return lines;
+}
+
+// numericCell renders an integer count as either a plain `0` (no anchor when
+// there's nothing to link to) or a clickable markdown link of the form
+// `[N](#sep-NNNN-status "tooltip text")`. On GitHub-flavored markdown this
+// becomes a hover tooltip on desktop and a tap-to-jump anchor on mobile.
+function numericCell(
+  count: number,
+  sep: string,
+  status: 'tested' | 'excluded' | 'untested',
+  tooltip: string
+): string {
+  if (count === 0) return '0';
+  return `[${count}](#sep-${sep}-${status} "${escapeTitle(tooltip)}")`;
+}
+
+// escapeTitle keeps the title attribute parseable as markdown. Double-quotes
+// would close the title; backslashes are escape characters in many markdown
+// parsers. Newlines collapse to spaces in browser tooltip rendering, so we
+// drop them too.
+function escapeTitle(s: string): string {
+  return s.replace(/[\\"]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+// summarizeTested returns a short string for the hover tooltip on the
+// "Tested reqs" cell — first three check IDs and an ellipsis if more.
+function summarizeTested(s: TraceabilityManifest['seps'][string]): string {
+  const ids = s.requirements
+    .filter((r) => r.status === 'tested')
+    .map((r) => r.check);
+  if (ids.length === 0) return 'No tested requirements.';
+  const shown = ids.slice(0, 3).join(', ');
+  return ids.length <= 3 ? `Tested: ${shown}.` : `Tested: ${shown}, +${ids.length - 3} more.`;
+}
+
+// summarizeUntested returns the untested check IDs verbatim — they are
+// almost always few enough to fit.
+function summarizeUntested(s: TraceabilityManifest['seps'][string]): string {
+  const ids = s.requirements
+    .filter((r) => r.status === 'untested')
+    .map((r) => r.check);
+  if (ids.length === 0) return 'No untested requirements.';
+  return `Untested: ${ids.join(', ')}.`;
+}
+
+// summarizeExcluded groups exclusions by reason and emits a "Nx <reason>"
+// breakdown. Long reasons are truncated so the tooltip stays readable;
+// the full text lives in the SEP Detail section below.
+function summarizeExcluded(s: TraceabilityManifest['seps'][string]): string {
+  if (s.excluded.length === 0) return 'No exclusions.';
+  const tally = new Map<string, number>();
+  for (const e of s.excluded) {
+    const r = (e.reason || '(no reason given)').slice(0, 60);
+    tally.set(r, (tally.get(r) ?? 0) + 1);
+  }
+  const parts = Array.from(tally.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([reason, n]) => `${n}x ${reason}`);
+  return parts.join('; ');
+}
+
+// --- SEP detail -------------------------------------------------------------
+//
+// One subsection per SEP that enumerates tested check IDs, excluded
+// requirements (with reasons), and untested check IDs. The SEP Coverage
+// table's numeric cells link here. The detail anchors are stable HTML
+// `<a id="sep-NNNN-status">` so they survive markdown auto-id changes
+// across renderers (GitHub, goldmark on the docs site, etc.).
+
+function renderSepDetail(input: RenderInput): string[] {
+  const sepIds = Object.keys(input.traceability.seps).sort((a, b) => Number(a) - Number(b));
+  if (sepIds.length === 0) {
+    return ['_No SEPs declared._'];
+  }
+  const lines: string[] = [];
+  lines.push(
+    'Per-SEP breakdown of upstream traceability — what is exercised, what is intentionally excluded, and what is declared but not yet exercised. Useful for auditing whether each exclusion still makes sense as upstream evolves. Check IDs link to their definition in the upstream SEP YAML.'
+  );
+  lines.push('');
+  for (const sep of sepIds) {
+    const s = input.traceability.seps[sep];
+    lines.push(`### SEP-${sep}`);
+    lines.push('');
+    lines.push(...renderSepDetailBlock(sep, s, input.upstreamSha));
+    lines.push('');
+  }
+  return lines;
+}
+
+// upstreamYamlUrl builds the GitHub blob URL for the upstream SEP YAML at
+// the pinned conformance SHA. Returns null when traceability did not record
+// a yaml path for this SEP (the manifest field is nullable).
+function upstreamYamlUrl(yamlPath: string | null, sha: string): string | null {
+  if (!yamlPath) return null;
+  return `https://github.com/modelcontextprotocol/conformance/blob/${sha}/${yamlPath}`;
+}
+
+// linkCheck wraps a check ID in a markdown link to the upstream SEP YAML so
+// the reader can jump straight to the scenario/check definition. Falls back
+// to a plain code span when no yaml path is available.
+function linkCheck(checkId: string, yamlUrl: string | null): string {
+  if (!yamlUrl) return `\`${checkId}\``;
+  return `[\`${checkId}\`](${yamlUrl})`;
+}
+
+function renderSepDetailBlock(
+  sep: string,
+  s: TraceabilityManifest['seps'][string],
+  sha: string
+): string[] {
+  const out: string[] = [];
+  const yamlUrl = upstreamYamlUrl(s.yaml, sha);
+
+  const tested = s.requirements.filter((r) => r.status === 'tested');
+  out.push(`<a id="sep-${sep}-tested"></a>`);
+  out.push('');
+  out.push(`**Tested (${tested.length})**`);
+  out.push('');
+  if (tested.length === 0) {
+    out.push('_None._');
+  } else {
+    for (const r of tested) {
+      out.push(`- ${linkCheck(r.check, yamlUrl)}`);
+    }
+  }
+  out.push('');
+
+  out.push(`<a id="sep-${sep}-excluded"></a>`);
+  out.push('');
+  out.push(`**Excluded (${s.excluded.length})**`);
+  out.push('');
+  if (s.excluded.length === 0) {
+    out.push('_None._');
+  } else {
+    out.push('| Requirement | Upstream reason |');
+    out.push('|---|---|');
+    for (const e of s.excluded) {
+      const reqText = inlineCell(e.text);
+      const reasonAndIssue = e.issue
+        ? `${inlineCell(e.reason || 'No reason given.')} (${inlineCell(e.issue)})`
+        : inlineCell(e.reason || 'No reason given.');
+      out.push(`| ${reqText} | ${reasonAndIssue} |`);
+    }
+  }
+  out.push('');
+
+  const untested = s.requirements.filter((r) => r.status === 'untested');
+  out.push(`<a id="sep-${sep}-untested"></a>`);
+  out.push('');
+  out.push(`**Untested (${untested.length})**`);
+  out.push('');
+  if (untested.length === 0) {
+    out.push('_None._');
+  } else {
+    for (const r of untested) {
+      const detail = r.text ? ` — ${inlineCell(r.text)}` : '';
+      out.push(`- ${linkCheck(r.check, yamlUrl)}${detail}`);
+    }
+  }
+
+  return out;
+}
+
+// inlineCell collapses whitespace and escapes pipe characters so a
+// requirement quote stays on one table row without breaking the markdown
+// table's column boundaries.
+function inlineCell(s: string): string {
+  return s.replace(/\s+/g, ' ').replace(/\|/g, '\\|').trim();
 }
 
 // --- Open gaps --------------------------------------------------------------
