@@ -93,9 +93,11 @@ jobs:
         working-directory: mcpkit
         run: |
           # Stamp line shape: "<!-- generated against upstream-conformance@<sha> · protocol <ver> · ... -->"
+          # Requires the full 40-char SHA — actions/checkout@v4 cannot resolve
+          # short SHAs as refs (it tries to fetch them as branch/tag names).
           # The regex restricts capture to hex chars, so a maliciously crafted
           # body cannot inject anything into the `ref:` parameter below.
-          SHA="$(sed -n 's/.*upstream-conformance@\([a-f0-9]\{4,\}\).*/\1/p' CONFORMANCE.md | head -1)"
+          SHA="$(sed -n 's/.*upstream-conformance@\([a-f0-9]\{40\}\).*/\1/p' CONFORMANCE.md | head -1)"
           if [ -z "$SHA" ]; then
             echo "::error::Could not extract upstream-conformance SHA from CONFORMANCE.md stamp line."
             echo "::error::Run 'make refresh-conformance' locally to regenerate the file."

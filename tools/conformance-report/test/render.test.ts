@@ -17,7 +17,7 @@ function loadFixtures() {
     scorecard: loadScorecard(join(here, 'scorecard.json')),
     traceability: loadTraceability(join(here, 'traceability.json')),
     knownGaps: loadKnownGaps(join(here, 'known-gaps.yaml')),
-    upstreamSha: 'abc1234',
+    upstreamSha: 'abc1234567890abcdef1234567890abcdef123456',
     protocolVersion: '2025-11-25'
   };
 }
