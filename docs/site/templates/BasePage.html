@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+{{# include "Header.html" #}}
+{{# include "Sidebar.html" #}}
+{{# include "Content.html" #}}
+{{# include "Footer.html" #}}
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="{{ if .FrontMatter.description }}{{ .FrontMatter.description }}{{ else }}{{ (json "SiteMetadata.json" "siteDescription") }}{{ end }}">
+    <title>{{ if .FrontMatter.title }}{{ .FrontMatter.title }} · {{ end }}{{ (json "SiteMetadata.json" "siteName") }}</title>
+
+    <link rel="stylesheet" href="{{.Site.PathPrefix}}/static/css/main.css">
+</head>
+<body>
+    {{ template "Header" . }}
+
+    <div class="page">
+        {{ template "Sidebar" . }}
+        <main class="main">
+            {{ template "Content" . }}
+        </main>
+    </div>
+
+    {{ template "Footer" . }}
+</body>
+</html>

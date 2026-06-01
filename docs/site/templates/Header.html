@@ -1,0 +1,17 @@
+{{ define "Header" }}
+<header class="site-header">
+    <div class="site-header-inner">
+        {{ $Site := .Site }}
+        <a class="brand" href="{{ $Site.PathPrefix }}/">
+            <span class="brand-name">{{ (json "SiteMetadata.json" "siteName") }}</span>
+        </a>
+        <nav class="top-nav">
+            {{ $navLinks := (json "HeaderNavLinks.json" "") }}
+            {{ range $navLinks }}
+            <a class="top-nav-link" href="{{ $Site.PathPrefix }}/{{ .url }}">{{ .name }}</a>
+            {{ end }}
+            <a class="top-nav-link external" href="{{ (json "SiteMetadata.json" "repository") }}">GitHub</a>
+        </nav>
+    </div>
+</header>
+{{ end }}
