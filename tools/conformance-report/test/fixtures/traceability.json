@@ -18,13 +18,23 @@
           "text": "Servers MUST only send InputRequiredResult for tools/call, prompts/get, or completion/complete."
         }
       ],
-      "excluded": [],
+      "excluded": [
+        {
+          "text": "Internal requestState format; not observable at protocol level",
+          "reason": "Server-internal opaque blob — only protocol-observable invariant is round-trip equality, exercised elsewhere."
+        },
+        {
+          "text": "inputRequests is a JSON object; duplicate keys are collapsed by JSON parsing before the harness sees the request.",
+          "reason": "Not protocol-observable post-parsing.",
+          "issue": "modelcontextprotocol/conformance#999"
+        }
+      ],
       "unkeyed": [],
       "untracked": [],
       "summary": {
         "tested": 1,
         "untested": 1,
-        "excluded": 0,
+        "excluded": 2,
         "untracked": 0,
         "unkeyed": 0
       }
