@@ -42,6 +42,16 @@ const (
 	ResultTypeInputRequired ResultType = "input_required" // SEP-2322
 )
 
+// defaultResultType assigns want when r points at the zero value. Used by
+// MarshalJSON impls of response types whose ResultType discriminator is
+// mandatory on the wire — callers and struct literals shouldn't have to
+// set the obvious value.
+func defaultResultType(r *ResultType, want ResultType) {
+	if *r == "" {
+		*r = want
+	}
+}
+
 // InputRequest is a single MRTR input request enqueued by a server during
 // tool execution: a method (e.g., "elicitation/create", "sampling/createMessage")
 // plus opaque params encoded per that method's request schema. // SEP-2322
@@ -111,9 +121,7 @@ func (InputRequiredResult) promptResponse() {}
 // discriminator.
 func (r InputRequiredResult) MarshalJSON() ([]byte, error) {
 	type alias InputRequiredResult
-	if r.ResultType == "" {
-		r.ResultType = ResultTypeInputRequired
-	}
+	defaultResultType(&r.ResultType, ResultTypeInputRequired)
 	return json.Marshal(alias(r))
 }
 
