@@ -54,6 +54,7 @@ type serverOptions struct {
 	listCacheScope       string                   // SEP-2549 cacheScope attached to every list response ("" = omit)
 	readTTLMs            *int                     // SEP-2549 resources/read default cache-freshness hint (ms); handler may override per-read
 	readCacheScope       string                   // SEP-2549 resources/read default cacheScope; handler may override per-read
+	allowLegacyOnDraft   bool                     // WithAllowLegacyOnDraft — opt-in SEP-2575 leniency on the legacy wire (off by default; strict per spec)
 }
 
 type httpHandlerEntry struct {
@@ -335,6 +336,24 @@ func WithAllowedRoots(roots ...string) Option {
 	return func(o *serverOptions) { o.allowedRoots = roots }
 }
 
+// WithAllowLegacyOnDraft is an opt-in back-compat escape hatch for the
+// SEP-2575 enforcement on DRAFT-2026-v1. When set, the legacy session
+// wire (initialize + Mcp-Session-Id) is accepted on the draft protocol
+// version without enforcing the per-request _meta envelope on follow-up
+// requests.
+//
+// Default (option NOT set): the dispatcher enforces SEP-2575 strictly —
+// on DRAFT-2026-v1, every post-initialize request MUST carry
+// `params._meta.io.modelcontextprotocol/{protocolVersion, clientInfo,
+// clientCapabilities}`; missing _meta is rejected with -32602.
+//
+// Use this only if you have legacy clients pinned to DRAFT-2026-v1 that
+// haven't migrated to per-request metadata yet. New servers should leave
+// this off so non-conformant clients fail loudly.
+func WithAllowLegacyOnDraft() Option {
+	return func(o *serverOptions) { o.allowLegacyOnDraft = true }
+}
+
 // WithRootsFetchTimeout sets the deadline for server-to-client roots/list
 // requests issued after notifications/roots/list_changed. Default is 30s.
 // Decrease for aggressive fail-fast; increase for slow clients with large
@@ -362,6 +381,7 @@ func NewServer(info core.ServerInfo, opts ...Option) *Server {
 	// clones inherit it via newSession().
 	s.dispatcher.skipSchemaValidation = s.options.skipSchemaValidation
 	s.dispatcher.validateFileInputs = s.options.validateFileInputs
+	s.dispatcher.allowLegacyOnDraft = s.options.allowLegacyOnDraft
 	s.dispatcher.customHandlers = s.options.customHandlers
 	// Wire registry change notifications to Server.Broadcast so that
 	// dynamic adds/removes automatically notify all connected sessions.
