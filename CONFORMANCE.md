@@ -28,7 +28,7 @@ Needs Node.js 22+ and a clone of `modelcontextprotocol/conformance` at `../conf-
 ---
 
 <!-- begin:generated -->
-<!-- generated against upstream-conformance@bcfd400 · protocol 2025-11-25 · regenerate via scripts/refresh-conformance.sh -->
+<!-- generated against upstream-conformance@bcfd400c9a53dd133f315c3afafc7961e488a005 · protocol 2025-11-25 · regenerate via scripts/refresh-conformance.sh -->
 
 ## Conformance Summary
 
