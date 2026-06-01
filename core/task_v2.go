@@ -123,9 +123,7 @@ type DetailedTask struct {
 // every call site having to set it. The task lifecycle stays on Status.
 func (d DetailedTask) MarshalJSON() ([]byte, error) {
 	type alias DetailedTask
-	if d.ResultType == "" {
-		d.ResultType = ResultTypeComplete
-	}
+	defaultResultType(&d.ResultType, ResultTypeComplete)
 	return json.Marshal(alias(d))
 }
 
@@ -175,9 +173,7 @@ type UpdateTaskResult struct {
 // without thinking about it.
 func (u UpdateTaskResult) MarshalJSON() ([]byte, error) {
 	type alias UpdateTaskResult
-	if u.ResultType == "" {
-		u.ResultType = ResultTypeComplete
-	}
+	defaultResultType(&u.ResultType, ResultTypeComplete)
 	return json.Marshal(alias(u))
 }
 
@@ -196,8 +192,6 @@ type CancelTaskResult struct {
 // (CancelTaskResult{}) emits the spec-compliant wire shape automatically.
 func (c CancelTaskResult) MarshalJSON() ([]byte, error) {
 	type alias CancelTaskResult
-	if c.ResultType == "" {
-		c.ResultType = ResultTypeComplete
-	}
+	defaultResultType(&c.ResultType, ResultTypeComplete)
 	return json.Marshal(alias(c))
 }

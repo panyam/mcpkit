@@ -205,9 +205,7 @@ func (GoAsyncResult) toolResponse() {}
 // dispatch sync vs task vs multi-round without inspecting payload shape.
 func (r ToolResult) MarshalJSON() ([]byte, error) {
 	type alias ToolResult
-	if r.ResultType == "" {
-		r.ResultType = ResultTypeComplete
-	}
+	defaultResultType(&r.ResultType, ResultTypeComplete)
 	return json.Marshal(alias(r))
 }
 
