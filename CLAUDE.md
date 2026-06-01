@@ -44,7 +44,7 @@ make tag-push V=vX.Y.Z # Tag root + all sub-modules and push
 
 ## Sub-Modules
 
-`ext/auth/`, `ext/tasks/`, `ext/ui/`, `experimental/ext/protogen/` have separate `go.mod` — `make test` does NOT cover them. Run `make tidy-all` after touching `core/` imports.
+`ext/auth/`, `ext/tasks/`, `ext/ui/`, `experimental/ext/protogen/`, `docs/site/` have separate `go.mod` — `make test` does NOT cover them. Run `make tidy-all` after touching `core/` imports. `docs/site/` is the GitHub Pages renderer (issue 508); it is a tool, not a library, and is excluded from `SUB_MODS_TO_TAG`.
 
 ## Constraints
 

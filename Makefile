@@ -390,6 +390,19 @@ bump-root: ## Update sub-modules to require a specific root version (usage: make
 	@$(MAKE) -s verify-submodule-deps
 
 # =============================================================================
+# Docs site (issue 508 — GitHub Pages)
+# =============================================================================
+
+docs-site-build: ## Build docs/site/ into docs/site/dist/docs (mirrors what CI ships to gh-pages)
+	$(MAKE) -C docs/site build
+
+docs-site-serve: ## Run the docs site dev server on :8085 with live rebuild
+	$(MAKE) -C docs/site run
+
+docs-site-deploy: ## Build + force-push docs/site/dist/docs to the gh-pages branch (one-shot manual deploy)
+	$(MAKE) -C docs/site gh-pages
+
+# =============================================================================
 # Release
 # =============================================================================
 
@@ -429,5 +442,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-protogen test-e2e test-experimental test-apps-playwright testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-elicitation refresh-conformance check-conformance-stale vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
+.PHONY: build test test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-protogen test-e2e test-experimental test-apps-playwright testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-elicitation refresh-conformance check-conformance-stale vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root docs-site-build docs-site-serve docs-site-deploy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
 .DEFAULT_GOAL := help

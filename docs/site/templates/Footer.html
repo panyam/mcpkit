@@ -1,0 +1,11 @@
+{{ define "Footer" }}
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="{{ (json "SiteMetadata.json" "repository") }}">{{ (json "SiteMetadata.json" "repository") }}</a> ·
+            Licensed under {{ (json "SiteMetadata.json" "license") }} ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+{{ end }}
