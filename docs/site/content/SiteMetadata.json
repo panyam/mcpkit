@@ -1,0 +1,7 @@
+{
+  "siteName": "mcpkit",
+  "siteDescription": "Go library for building production-grade Model Context Protocol servers and clients — conformance, design, package docs.",
+  "repository": "https://github.com/panyam/mcpkit",
+  "issues": "https://github.com/panyam/mcpkit/issues",
+  "license": "Apache-2.0"
+}

@@ -1,0 +1,20 @@
+{{ define "Sidebar" }}
+<aside class="sidebar">
+    {{ $Site := .Site }}
+    {{ $navLinks := (json "HeaderNavLinks.json" "") }}
+    <nav class="sidebar-nav">
+        {{ range $navLinks }}
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="{{ $Site.PathPrefix }}/{{ .url }}">{{ .name }}</a>
+            {{ if .children }}
+            <ul class="sidebar-list">
+                {{ range .children }}
+                <li><a href="{{ $Site.PathPrefix }}/{{ .url }}">{{ .name }}</a></li>
+                {{ end }}
+            </ul>
+            {{ end }}
+        </div>
+        {{ end }}
+    </nav>
+</aside>
+{{ end }}

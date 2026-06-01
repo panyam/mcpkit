@@ -1,0 +1,21 @@
+{{ define "Content" }}
+<article class="content">
+    {{ if .FrontMatter.title }}
+    <header class="content-header">
+        <h1>{{ .FrontMatter.title }}</h1>
+        {{ if .FrontMatter.description }}
+        <p class="lead">{{ .FrontMatter.description }}</p>
+        {{ end }}
+        {{ if .FrontMatter.source }}
+        <p class="source-link">
+            Source: <a href="{{ (json "SiteMetadata.json" "repository") }}/blob/main/{{ .FrontMatter.source }}"><code>{{ .FrontMatter.source }}</code></a>
+        </p>
+        {{ end }}
+    </header>
+    {{ end }}
+
+    <div class="content-body">
+        {{ BytesToString .Content | HTML }}
+    </div>
+</article>
+{{ end }}
