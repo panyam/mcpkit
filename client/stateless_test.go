@@ -86,8 +86,9 @@ func TestWrapParamsForStatelessWire_NoOpUnlessStateless(t *testing.T) {
 
 func TestWrapParamsForStatelessWire_AddsEnvelope(t *testing.T) {
 	c := &Client{
-		info:             core.ClientInfo{Name: "t", Version: "1"},
-		useStatelessWire: true,
+		info:              core.ClientInfo{Name: "t", Version: "1"},
+		useStatelessWire:  true,
+		negotiatedVersion: core.DraftProtocolVersion2026V1,
 	}
 	got := c.wrapParamsForStatelessWire(map[string]any{"name": "echo"})
 	m, ok := got.(map[string]any)
@@ -109,8 +110,9 @@ func TestWrapParamsForStatelessWire_AddsEnvelope(t *testing.T) {
 
 func TestWrapParamsForStatelessWire_PreservesCallerMeta(t *testing.T) {
 	c := &Client{
-		info:             core.ClientInfo{Name: "t", Version: "1"},
-		useStatelessWire: true,
+		info:              core.ClientInfo{Name: "t", Version: "1"},
+		useStatelessWire:  true,
+		negotiatedVersion: core.DraftProtocolVersion2026V1,
 	}
 	in := map[string]any{
 		"_meta": map[string]any{

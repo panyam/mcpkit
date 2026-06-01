@@ -14,8 +14,8 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 | Surface | Scenarios | Checks | Pass | Fail | Warn | Info | Skipped | Harness-gap |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Server | 51 | 135 | 112 | 1 | 7 | 6 | 9 | 0 |
-| Client | 40 | 1395 | 512 | 7 | 5 | 869 | 2 | 0 |
-| **Total** | **91** | **1530** | **624** | **8** | **12** | **875** | **11** | **0** |
+| Client | 40 | 1395 | 513 | 7 | 4 | 869 | 2 | 0 |
+| **Total** | **91** | **1530** | **625** | **8** | **11** | **875** | **11** | **0** |
 
 ## Harness gaps
 
@@ -207,7 +207,7 @@ _None — every scenario produced results._
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
 | `server-stateless` | server | fork-covered | 19 pass / 1 fail / 2 warn / 4 skip | Also graded by `testconf-stateless` |
-| `request-metadata` | client | pass | 4 pass / 1 warn / 2 skip |  |
+| `request-metadata` | client | pass | 5 pass / 2 skip |  |
 
 
 ## Methodology

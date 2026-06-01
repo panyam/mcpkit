@@ -428,6 +428,17 @@ type Client struct {
 	// via server/discover); false when this connection is on the legacy
 	// session wire. Once set it does not change for this Client's lifetime.
 	useStatelessWire bool
+
+	// negotiatedVersion is the protocol version this client emits in the
+	// SEP-2575 _meta envelope and the MCP-Protocol-Version HTTP header on
+	// every stateless-wire request. Initialized to
+	// core.DraftProtocolVersion2026V1 in NewClient and updated when a
+	// server rejects a request with -32001/-32004 + data.supported and
+	// the intersection with [core.SupportedStatelessVersions] yields a
+	// usable downgrade. Guarded by negotiatedVersionMu — reads happen on
+	// every request, writes only on retry, so RWMutex is the right shape.
+	negotiatedVersion   string
+	negotiatedVersionMu sync.RWMutex
 }
 
 // NewClient creates a new MCP client targeting the given server URL.
@@ -440,7 +451,8 @@ func NewClient(url string, info core.ClientInfo, opts ...ClientOption) *Client {
 		nextID: 1,
 		// SEP-2575 wire mode seeded from env/default; WithClientMode
 		// option (if passed) clobbers via the loop below.
-		mode: ResolveClientMode(),
+		mode:              ResolveClientMode(),
+		negotiatedVersion: core.DraftProtocolVersion2026V1,
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -1429,32 +1441,45 @@ func (c *Client) rawCallWithContext(method string, params any, cc *CallContext) 
 		}
 	}
 
-	// SEP-2575 stateless wire: every outgoing call carries the _meta
-	// envelope (protocolVersion, clientInfo, clientCapabilities).
-	// No-op when c.useStatelessWire is false — legacy callers see
-	// the same params they passed in.
-	params = c.wrapParamsForStatelessWire(params)
+	resp, err := c.doRawCall(method, params, cc)
+	if err != nil && c.maxRetries > 0 && IsTransientError(err) {
+		return c.retryWithReconnect(func() (*rpcResponse, error) {
+			return c.doRawCall(method, params, cc)
+		})
+	}
+	// SEP-2575 §protocol-version-header: on -32001/-32004 + data.supported,
+	// downgrade the negotiated version (so subsequent requests stop hitting
+	// the same rejection) and retry this call once with a fresh _meta envelope
+	// + MCP-Protocol-Version header. Bounded to one attempt — if the retry
+	// also fails, return the second response as-is.
+	if retry, picked := isUnsupportedVersionError(resp); retry {
+		if c.logger != nil {
+			c.logger.Printf("[mcpkit] server rejected protocolVersion=%q; downgrading to %q and retrying",
+				c.getNegotiatedVersion(), picked)
+		}
+		c.setNegotiatedVersion(picked)
+		return c.doRawCall(method, params, cc)
+	}
+	return resp, err
+}
 
+// doRawCall is the inner stateless-wrap + marshal + transport-call slice
+// shared between rawCallWithContext's first attempt, its transient-error
+// retry loop, and its SEP-2575 version-downgrade retry. Each call rebuilds
+// params (so the _meta envelope picks up any negotiated-version update)
+// and mints a fresh JSON-RPC id (servers reject reused ids).
+func (c *Client) doRawCall(method string, params any, cc *CallContext) (*rpcResponse, error) {
+	wrapped := c.wrapParamsForStatelessWire(params)
 	req := core.Request{
 		JSONRPC: "2.0",
 		ID:      marshalID(c.nextRequestID()),
 		Method:  method,
 	}
-	if params != nil {
-		req.Params, _ = json.Marshal(params)
+	if wrapped != nil {
+		req.Params, _ = json.Marshal(wrapped)
 	}
 	data, _ := json.Marshal(req)
-
-	resp, err := c.transport.callWithContext(method, data, cc)
-	if err != nil && c.maxRetries > 0 && IsTransientError(err) {
-		return c.retryWithReconnect(func() (*rpcResponse, error) {
-			// Re-build with new ID (old may have been consumed)
-			req.ID = marshalID(c.nextRequestID())
-			data, _ = json.Marshal(req)
-			return c.transport.callWithContext(method, data, cc)
-		})
-	}
-	return resp, err
+	return c.transport.callWithContext(method, data, cc)
 }
 
 // marshalID converts an integer request ID to json.RawMessage.
@@ -1681,9 +1706,11 @@ func (t *streamableClientTransport) callWithContext(method string, data []byte, 
 		}
 		// SEP-2575: clients on the stateless wire MUST send the
 		// protocol version on every request so the server can
-		// cross-check it against the _meta envelope.
+		// cross-check it against the _meta envelope. The version
+		// tracks Client.negotiatedVersion so retry-with-downgrade
+		// flows through here automatically.
 		if t.client != nil && t.client.useStatelessWire {
-			req.Header.Set(core.HTTPProtocolVersionHeader, core.DraftProtocolVersion2026V1)
+			req.Header.Set(core.HTTPProtocolVersionHeader, t.client.getNegotiatedVersion())
 		}
 		// SEP-2243 standard routing headers: mirror the JSON-RPC method
 		// and (when set by callers like ToolCall / ResourceRead /
