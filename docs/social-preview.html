@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>mcpkit — social preview (1280×640)</title>
+<!--
+   Source for the GitHub social preview image at
+   github.com/panyam/mcpkit → Settings → General → Social preview.
+
+   The forge metaphor: mcpkit forges MCP tools and servers. The glowing
+   workpiece on the anvil is a stylized server rack; the hammer is the
+   library shaping it; sparks fly upward into the heat haze.
+
+   To regenerate the PNG:
+     1. Open this file in Chrome.
+     2. DevTools (Cmd+Option+I) → toggle device toolbar (Cmd+Shift+M).
+     3. Set viewport to exactly 1280 × 640.
+     4. DevTools 3-dot menu → Capture screenshot.
+     5. Upload the PNG to Settings → General → Social preview.
+
+   Iteration tip: tweak any of the colors, copy strings, or the SVG
+   directly in this file and re-screenshot. The card is exactly
+   1280×640 with no body padding so the screenshot crop is automatic.
+-->
+<style>
+  :root {
+    --bg-0: #0a0e16;
+    --bg-1: #131826;
+    --slate: #2a313e;
+    --slate-2: #3a4252;
+    --slate-3: #4a5566;
+    --steel: #c1c7d0;
+    --steel-light: #e8edf2;
+    --wood: #6b4226;
+    --ember: #ff7a18;
+    --ember-bright: #ff9d4d;
+    --glow: #ffd166;
+    --text: #f0f4f8;
+    --text-muted: #8a93a0;
+    --accent: #ff7a18;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    width: 1280px;
+    height: 640px;
+    overflow: hidden;
+    font-family: -apple-system, "SF Pro Display", "Inter", BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg-0);
+    color: var(--text);
+    font-feature-settings: "ss01", "cv01", "cv11";
+  }
+
+  .card {
+    position: relative;
+    width: 1280px;
+    height: 640px;
+    background:
+      radial-gradient(ellipse 60% 80% at 78% 55%, rgba(255, 122, 24, 0.18) 0%, transparent 60%),
+      radial-gradient(ellipse 100% 100% at 50% 50%, var(--bg-1) 0%, var(--bg-0) 100%);
+    overflow: hidden;
+  }
+
+  /* Faint blueprint grid */
+  .grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+
+  /* Vignette to soften corners */
+  .vignette {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 100% 100% at 50% 50%, transparent 40%, rgba(0, 0, 0, 0.5) 100%);
+    pointer-events: none;
+  }
+
+  .text {
+    position: absolute;
+    top: 80px;
+    left: 80px;
+    width: 680px;
+    z-index: 2;
+  }
+
+  .wordmark {
+    font-size: 128px;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    line-height: 1;
+    color: var(--text);
+    background: linear-gradient(180deg, #ffffff 0%, #c8d0dc 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .tagline {
+    margin-top: 28px;
+    font-size: 32px;
+    line-height: 1.3;
+    color: var(--text-muted);
+    font-weight: 400;
+    max-width: 620px;
+    letter-spacing: -0.01em;
+  }
+
+  .tagline strong {
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  .pills {
+    margin-top: 56px;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .pill {
+    padding: 10px 18px;
+    border-radius: 999px;
+    font-size: 18px;
+    font-weight: 500;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-muted);
+    letter-spacing: 0.01em;
+  }
+
+  .pill.primary {
+    background: linear-gradient(180deg, rgba(255, 122, 24, 0.18), rgba(255, 122, 24, 0.08));
+    border-color: rgba(255, 157, 77, 0.5);
+    color: var(--ember-bright);
+    font-weight: 600;
+  }
+
+  .repo {
+    position: absolute;
+    bottom: 48px;
+    left: 80px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 20px;
+    color: var(--text-muted);
+    letter-spacing: 0.02em;
+    z-index: 2;
+  }
+
+  .repo .at {
+    color: var(--accent);
+  }
+
+  /* Forge composition (right side) */
+  .forge {
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 560px;
+    height: 640px;
+    z-index: 1;
+  }
+
+  .forge svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  /* Subtle ember dots floating in the heat haze */
+  .embers {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .embers span {
+    position: absolute;
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--glow);
+    box-shadow: 0 0 6px var(--ember-bright);
+    opacity: 0.7;
+  }
+  .embers span:nth-child(1) { top: 240px; left: 820px; opacity: 0.5; }
+  .embers span:nth-child(2) { top: 180px; left: 920px; }
+  .embers span:nth-child(3) { top: 280px; left: 1000px; opacity: 0.4; }
+  .embers span:nth-child(4) { top: 150px; left: 1080px; opacity: 0.6; }
+  .embers span:nth-child(5) { top: 320px; left: 880px; opacity: 0.3; width: 2px; height: 2px; }
+  .embers span:nth-child(6) { top: 200px; left: 1140px; opacity: 0.5; width: 2px; height: 2px; }
+  .embers span:nth-child(7) { top: 100px; left: 980px; opacity: 0.7; }
+  .embers span:nth-child(8) { top: 350px; left: 1040px; opacity: 0.4; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="grid"></div>
+
+    <div class="text">
+      <div class="wordmark">mcpkit</div>
+      <div class="tagline">
+        Forge production-grade <strong>MCP servers and clients</strong> in&nbsp;Go.
+      </div>
+      <div class="pills">
+        <span class="pill">OAuth · PRM · DCR</span>
+        <span class="pill">MCP Apps</span>
+        <span class="pill">Tasks v2</span>
+        <span class="pill primary">Full upstream conformance</span>
+      </div>
+    </div>
+
+    <div class="repo"><span class="at">github.com/</span>panyam/mcpkit</div>
+
+    <div class="forge">
+      <svg viewBox="0 0 560 640" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <radialGradient id="heat" cx="0.5" cy="0.55" r="0.55">
+            <stop offset="0%" stop-color="#ffd166" stop-opacity="0.7"/>
+            <stop offset="35%" stop-color="#ff7a18" stop-opacity="0.45"/>
+            <stop offset="80%" stop-color="#ff5500" stop-opacity="0.12"/>
+            <stop offset="100%" stop-color="#ff5500" stop-opacity="0"/>
+          </radialGradient>
+
+          <linearGradient id="anvilFace" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#5a6577"/>
+            <stop offset="100%" stop-color="#3a4252"/>
+          </linearGradient>
+
+          <linearGradient id="anvilNeck" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#3a4252"/>
+            <stop offset="100%" stop-color="#2a313e"/>
+          </linearGradient>
+
+          <linearGradient id="anvilBase" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#2a313e"/>
+            <stop offset="100%" stop-color="#1a1f2e"/>
+          </linearGradient>
+
+          <linearGradient id="hammerHead" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#e8edf2"/>
+            <stop offset="50%" stop-color="#c1c7d0"/>
+            <stop offset="100%" stop-color="#8a93a0"/>
+          </linearGradient>
+
+          <linearGradient id="workpiece" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#ffd166"/>
+            <stop offset="60%" stop-color="#ff7a18"/>
+            <stop offset="100%" stop-color="#cc4400"/>
+          </linearGradient>
+
+          <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="6" result="blur"/>
+            <feMerge>
+              <feMergeNode in="blur"/>
+              <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+          </filter>
+        </defs>
+
+        <!-- Heat haze behind the workpiece -->
+        <ellipse cx="280" cy="380" rx="240" ry="170" fill="url(#heat)"/>
+
+        <!-- Anvil base (trapezoid) -->
+        <path d="M 150 540 L 410 540 L 440 600 L 120 600 Z" fill="url(#anvilBase)"/>
+        <!-- Anvil base ridge -->
+        <rect x="120" y="535" width="320" height="8" fill="#1a1f2e"/>
+
+        <!-- Anvil neck -->
+        <path d="M 190 470 L 370 470 L 380 535 L 180 535 Z" fill="url(#anvilNeck)"/>
+
+        <!-- Anvil face (top) with horn jutting left -->
+        <path d="M 100 410 L 410 410 L 440 430 L 430 460 L 410 470 L 170 470 L 160 460 L 100 460 Z" fill="url(#anvilFace)"/>
+        <!-- Horn tip -->
+        <path d="M 60 425 L 100 410 L 100 460 L 70 458 Z" fill="#3a4252"/>
+        <!-- Face highlight line -->
+        <rect x="105" y="412" width="305" height="3" fill="#7a8597" opacity="0.6"/>
+
+        <!-- Hardy hole shadow -->
+        <ellipse cx="350" cy="420" rx="14" ry="4" fill="#1a1f2e"/>
+
+        <!-- Workpiece: stylized server rack being shaped -->
+        <g transform="translate(0,0)">
+          <!-- glow halo -->
+          <ellipse cx="260" cy="395" rx="100" ry="22" fill="#ff7a18" opacity="0.5" filter="url(#softGlow)"/>
+          <!-- workpiece body -->
+          <rect x="190" y="370" width="140" height="42" rx="3" fill="url(#workpiece)" filter="url(#softGlow)"/>
+          <!-- rack slots -->
+          <rect x="200" y="378" width="32" height="5" rx="1" fill="#fff5cc" opacity="0.85"/>
+          <rect x="238" y="378" width="84" height="5" rx="1" fill="#fff5cc" opacity="0.65"/>
+          <rect x="200" y="389" width="60" height="5" rx="1" fill="#fff5cc" opacity="0.75"/>
+          <rect x="266" y="389" width="56" height="5" rx="1" fill="#fff5cc" opacity="0.55"/>
+          <rect x="200" y="400" width="44" height="5" rx="1" fill="#fff5cc" opacity="0.7"/>
+          <rect x="250" y="400" width="72" height="5" rx="1" fill="#fff5cc" opacity="0.5"/>
+        </g>
+
+        <!-- Hammer, mid-strike, angled -->
+        <g transform="translate(260 260) rotate(-22)">
+          <!-- handle -->
+          <rect x="-7" y="0" width="14" height="180" rx="4" fill="url(#anvilNeck)"/>
+          <rect x="-7" y="0" width="14" height="180" rx="4" fill="#6b4226" opacity="0.85"/>
+          <rect x="-4" y="6" width="2" height="170" fill="#3a2010" opacity="0.7"/>
+          <!-- head -->
+          <rect x="-50" y="-46" width="100" height="46" rx="4" fill="url(#hammerHead)"/>
+          <rect x="-50" y="-46" width="100" height="6" rx="3" fill="#e8edf2"/>
+          <!-- striking face -->
+          <rect x="38" y="-42" width="8" height="38" fill="#7a8597"/>
+        </g>
+
+        <!-- Sparks: short streaks + dots radiating from impact point -->
+        <g fill="#ffd166" filter="url(#softGlow)">
+          <circle cx="220" cy="320" r="2.5"/>
+          <circle cx="290" cy="305" r="3"/>
+          <circle cx="335" cy="335" r="2"/>
+          <circle cx="180" cy="350" r="2"/>
+          <circle cx="160" cy="295" r="1.5"/>
+          <circle cx="370" cy="290" r="2"/>
+          <circle cx="395" cy="345" r="1.5"/>
+          <circle cx="265" cy="270" r="2"/>
+          <line x1="200" y1="320" x2="180" y2="290" stroke="#ffd166" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="310" y1="310" x2="335" y2="280" stroke="#ffd166" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="240" y1="295" x2="245" y2="265" stroke="#ffd166" stroke-width="1.5" stroke-linecap="round"/>
+        </g>
+
+        <!-- Subtle steam/heat lines rising above -->
+        <g stroke="#ffd166" stroke-width="1.5" stroke-linecap="round" opacity="0.25" fill="none">
+          <path d="M 230 220 Q 235 200 230 180 T 230 140"/>
+          <path d="M 290 210 Q 295 190 290 170 T 290 130"/>
+          <path d="M 330 230 Q 335 210 330 190 T 330 150"/>
+        </g>
+      </svg>
+    </div>
+
+    <div class="embers">
+      <span></span><span></span><span></span><span></span>
+      <span></span><span></span><span></span><span></span>
+    </div>
+
+    <div class="vignette"></div>
+  </div>
+</body>
+</html>
