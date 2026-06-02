@@ -83,11 +83,27 @@ type AppToolConfig struct {
 	// Name is the tool identifier used in tools/call.
 	Name string
 
+	// Title is an optional human-readable display name. Per MCP spec hosts
+	// SHOULD prefer Title for user-facing surfaces; Name is the machine
+	// identifier passed to tools/call.
+	Title string
+
 	// Description is a human-readable summary of what the tool does.
 	Description string
 
 	// InputSchema is the JSON Schema for the tool's arguments.
 	InputSchema any
+
+	// OutputSchema is the optional JSON Schema for the tool's
+	// structuredContent output. When set, the host knows the tool's
+	// response shape and can validate / render structured results.
+	OutputSchema any
+
+	// Execution declares task-execution metadata for this tool. Most
+	// non-tasks-v2 tools set this to &core.ToolExecution{TaskSupport:
+	// "forbidden"} to explicitly signal they don't participate in async
+	// task flow.
+	Execution *core.ToolExecution
 
 	// ResourceURI is the ui:// URI for the app's HTML resource.
 	ResourceURI string
@@ -224,10 +240,13 @@ func RegisterAppTool(reg ToolResourceRegistrar, cfg AppToolConfig) {
 		// resourceUri in _meta.ui.
 		reg.RegisterTool(
 			core.ToolDef{
-				Name:        cfg.Name,
-				Description: cfg.Description,
-				InputSchema: cfg.InputSchema,
-				Meta:        &core.ToolMeta{UI: uiMeta},
+				Name:         cfg.Name,
+				Title:        cfg.Title,
+				Description:  cfg.Description,
+				InputSchema:  cfg.InputSchema,
+				OutputSchema: cfg.OutputSchema,
+				Execution:    cfg.Execution,
+				Meta:         &core.ToolMeta{UI: uiMeta},
 			},
 			wrappedHandler,
 		)
@@ -237,10 +256,13 @@ func RegisterAppTool(reg ToolResourceRegistrar, cfg AppToolConfig) {
 	// Concrete URI path: register tool and resource directly.
 	reg.RegisterTool(
 		core.ToolDef{
-			Name:        cfg.Name,
-			Description: cfg.Description,
-			InputSchema: cfg.InputSchema,
-			Meta:        &core.ToolMeta{UI: uiMeta},
+			Name:         cfg.Name,
+			Title:        cfg.Title,
+			Description:  cfg.Description,
+			InputSchema:  cfg.InputSchema,
+			OutputSchema: cfg.OutputSchema,
+			Execution:    cfg.Execution,
+			Meta:         &core.ToolMeta{UI: uiMeta},
 		},
 		cfg.ToolHandler,
 	)

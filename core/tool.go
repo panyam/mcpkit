@@ -10,6 +10,13 @@ type ToolDef struct {
 	// Name is the tool identifier used in tools/call.
 	Name string `json:"name"`
 
+	// Title is an optional human-readable display name distinct from Name.
+	// Per MCP spec: hosts SHOULD prefer Title for user-facing surfaces
+	// (dropdowns, button labels) and use Name only as the machine identifier
+	// passed to tools/call. Omitted when empty so existing tools without a
+	// Title don't drift on the wire.
+	Title string `json:"title,omitempty"`
+
 	// Description is a human-readable summary of what the tool does.
 	Description string `json:"description"`
 
