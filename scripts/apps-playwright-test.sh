@@ -96,17 +96,23 @@ case "$EXAMPLE" in
         ;;
 esac
 
-# Mcpkit-local snapshot dir. Lives under the fixture so each compat fixture
-# owns its own baseline and we never touch upstream's tests/e2e/.*-snapshots/
-# tree.
+# Per-fixture committed baseline. Lives under the fixture so each compat
+# fixture owns its own PNG. Why per-fixture (instead of pointing at upstream's
+# shared tests/e2e/servers.spec.ts-snapshots/ tree): basic-host renders one
+# entry per server in its dropdown, and upstream's CI runs all 25 example
+# servers at once so their PNG has a 25-entry dropdown. Compat runs spin up
+# only the single example under test, so the dropdown has 1 entry — host UI
+# layout shifts by ~8px Y. That's our run's real rendering; comparing it
+# against upstream's multi-server PNG would always fail visual checks even
+# with byte-for-byte tools/list parity (drift check confirms surface match).
 SNAPSHOT_DIR_ABS="$MCPKIT_ROOT/$FIXTURE_DIR/__snapshots__"
 mkdir -p "$SNAPSHOT_DIR_ABS"
 
 # Per-fixture test-results dir (Playwright output: -actual.png / -diff.png
-# on failure, traces, the HTML report). Co-located with __snapshots__ so each
-# fixture owns both its baseline and its run artifacts. Gitignored — never
-# committed. Split into artifacts/ + report/ siblings because Playwright
-# refuses to let the HTML reporter folder sit inside the outputDir.
+# on failure, traces, the HTML report). Co-located in the fixture's own dir
+# so artifacts stay scoped per-fixture. Gitignored — never committed. Split
+# into artifacts/ + report/ siblings because Playwright refuses to let the
+# HTML reporter folder sit inside the outputDir.
 RESULTS_DIR_ABS="$MCPKIT_ROOT/$FIXTURE_DIR/.test-results"
 ARTIFACTS_DIR_ABS="$RESULTS_DIR_ABS/artifacts"
 REPORT_DIR_ABS="$RESULTS_DIR_ABS/report"
