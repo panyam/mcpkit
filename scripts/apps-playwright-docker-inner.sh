@@ -153,23 +153,21 @@ else
     done
 
     echo ""
-    echo "=== tools/list parity check (warn-only) ==="
+    echo "=== tools/list parity check ==="
     # Copy the diff script into ext-apps so Node's ESM resolver walks up into
     # ext-apps' node_modules naturally (NODE_PATH only works for CJS; the
     # script imports @modelcontextprotocol/sdk as ESM).
     cp /mcpkit/scripts/apps-playwright-tools-diff.mjs "$EXT_APPS_DIR/.tools-diff.mjs"
-    DRIFT_DETECTED=0
-    node "$EXT_APPS_DIR/.tools-diff.mjs" \
+    if ! node "$EXT_APPS_DIR/.tools-diff.mjs" \
         "mcpkit" "http://localhost:$FIXTURE_PORT/mcp" \
-        "upstream" "http://localhost:$UPSTREAM_PORT/mcp" || DRIFT_DETECTED=$?
-    if [ "$DRIFT_DETECTED" -ne 0 ]; then
+        "upstream" "http://localhost:$UPSTREAM_PORT/mcp"; then
+        DRIFT_EXIT=$?
         echo ""
-        echo "NOTE: tools/list drift is reported as WARN, not FAIL, because the"
-        echo "remaining drift items track real mcpkit library gaps (outputSchema"
-        echo "wire propagation, Title support in TypedAppToolConfig, taskSupport,"
-        echo "ext-apps fallback _meta key). Tracked separately — see PR 537"
-        echo "description for the umbrella issue. Re-tighten this gate to fail-on-drift"
-        echo "once those land."
+        echo "Protocol-surface drift between the mcpkit fixture and upstream's TS server."
+        echo "Update the fixture under examples/apps/compat/<name>/main.go to match,"
+        echo "or — if the gap is a real ext/ui library issue — file it and SKIP_DRIFT_CHECK=1"
+        echo "to keep iterating while it's tracked."
+        exit $DRIFT_EXIT
     fi
     echo ""
 

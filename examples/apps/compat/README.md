@@ -99,26 +99,44 @@ check for everyday iteration.
 ## Protocol-surface drift check (DOCKER mode)
 
 The screenshot test is a **regression check, not an upstream-parity check** —
-it compares each run against our own committed PNG, not against upstream's.
-That means if upstream changes their fixture's tool description, schema, or
-`_meta.ui` shape, our test still passes (we regen our PNG against our own
-unchanged fixture; upstream regens theirs against the changed one), even
-though we've silently fallen behind upstream's protocol surface.
+it compares each run against our own committed PNG. That's by design (see
+the *Why not point at upstream's PNG?* note below). The upstream-parity
+gate is a different mechanism: in DOCKER mode the wrapper spins up
+upstream's own TypeScript reference server on a side port (`UPSTREAM_PORT`,
+default 3102) and JSON-diffs `tools/list` against the mcpkit fixture
+before Playwright runs. **The drift gate is strict** — any divergence
+fails the build immediately. That makes the protocol surface the
+load-bearing parity check; the PNG check covers visual regression on
+top.
 
-To catch that, DOCKER mode runs upstream's own TypeScript reference server
-on a side port (`UPSTREAM_PORT`, default 3102) and JSON-diffs `tools/list`
-against the mcpkit fixture before Playwright runs. Today the check is
-**warn-only** — drift is printed but doesn't fail the build, because
-several remaining drift items track real library gaps in `ext/ui`'s
-`TypedAppToolConfig` (no `Title` field, `OutputSchema` not propagated to
-the wire, `Execution.TaskSupport` not exposed) plus an ext-apps SDK
-convention (`_meta["ui/resourceUri"]` fallback key). Once those land,
-flip the check from warn-only to fail-on-drift.
+The drift diff filters two keys before comparison: `$schema` (different
+SDKs emit different valid draft URLs — mcpkit emits draft-2020-12 via
+invopop, upstream's TS SDK emits draft-07 via zod-to-json-schema; both
+forward `$schema` on the wire for clients, but the value-level diff is
+noise) and `additionalProperties` (mcpkit's schema generator deliberately
+allows additional properties; upstream's is strict — `core/schema.go`
+documents the rationale).
 
-Skip the check with `SKIP_DRIFT_CHECK=1`. Native mode doesn't run the
-drift check — would require Node + ext-apps build artifacts + the
-upstream server runtime on the host, which fights the "fast local
-iteration" goal of native mode.
+Skip the gate with `SKIP_DRIFT_CHECK=1` if you need to iterate while
+tracking a known library gap. Native mode doesn't run the drift check —
+would require Node + ext-apps build artifacts + the upstream server
+runtime on the host, which fights the "fast local iteration" goal of
+native mode.
+
+### Why not point at upstream's PNG?
+
+Tempting because once mcpkit's `tools/list` matches upstream's byte-for-
+byte (which it now does — see drift gate above), the rendered iframe
+should be identical too. We tried it; it doesn't work cleanly.
+
+`basic-host` renders one entry per server in its dropdown. Upstream's
+CI generates their PNG with all 25 example servers running at once —
+their dropdown has 25 entries. Compat runs spin up only the example
+under test, so the dropdown has 1 entry, and the whole iframe shifts
+up by ~8px Y. With strict pixel-ratio checks, even byte-for-byte
+surface parity isn't enough to match a multi-server baseline. Per-
+fixture committed PNGs capture our actual run shape, which is the only
+fair regression check we can do.
 
 ## Where test results land
 
@@ -159,11 +177,6 @@ feature — visual regression is the kind of check you want on stable
 infrastructure, not on whatever Chromium font fallback your laptop ships
 this month. The `loads app UI` test is what carries the fast-local-iteration
 story; that one passes anywhere.
-
-Future direction (see issue 538): once mcpkit's `tools/list` surface matches
-upstream byte-for-byte, the per-fixture `__snapshots__/` dir disappears
-entirely — Playwright will compare against upstream's own committed PNG in
-the ext-apps tree, so we inherit upstream's regenerations automatically.
 
 ## Status legend
 

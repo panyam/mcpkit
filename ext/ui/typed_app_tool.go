@@ -12,8 +12,19 @@ type TypedAppToolConfig[In, Out any] struct {
 	// Name is the tool identifier used in tools/call.
 	Name string
 
+	// Title is an optional human-readable display name. Per MCP spec hosts
+	// SHOULD prefer Title for user-facing surfaces; Name remains the
+	// machine identifier passed to tools/call.
+	Title string
+
 	// Description is a human-readable summary of what the tool does.
 	Description string
+
+	// Execution declares task-execution metadata for this tool. Most
+	// non-tasks-v2 tools set this to &core.ToolExecution{TaskSupport:
+	// "forbidden"} to explicitly signal they don't participate in async
+	// task flow.
+	Execution *core.ToolExecution
 
 	// Handler handles tool invocations with typed input.
 	Handler func(ctx core.ToolContext, input In) (Out, error)
@@ -71,8 +82,11 @@ func RegisterTypedAppTool[In, Out any](reg ToolResourceRegistrar, cfg TypedAppTo
 	typed := core.TypedTool[In, Out](cfg.Name, cfg.Description, cfg.Handler)
 	RegisterAppTool(reg, AppToolConfig{
 		Name:                  cfg.Name,
+		Title:                 cfg.Title,
 		Description:           cfg.Description,
 		InputSchema:           typed.InputSchema,
+		OutputSchema:          typed.OutputSchema,
+		Execution:             cfg.Execution,
 		ResourceURI:           cfg.ResourceURI,
 		ToolHandler:           typed.Handler,
 		ResourceHandler:       cfg.ResourceHandler,

@@ -42,9 +42,15 @@ func GenerateSchema[T any]() json.RawMessage {
 
 // newInvopopSchemaGen creates a SchemaGenerator backed by invopop/jsonschema.
 // Configured to produce clean MCP-compatible schemas:
+//   - $schema set to invopop's default draft URL (draft-2020-12) — emitted so
+//     clients know which JSON Schema dialect to validate against. Other MCP
+//     SDKs may emit different drafts (e.g. upstream's TS SDK emits draft-07
+//     via zod-to-json-schema); both are valid self-describing schemas.
 //   - No $id (Anonymous)
 //   - No $defs/$ref (DoNotReference) — all types inlined
-//   - No additionalProperties restriction (AllowAdditionalProperties)
+//   - No additionalProperties restriction (AllowAdditionalProperties) —
+//     mcpkit's deliberate permissive default; tools that need strict
+//     validation can override per-schema.
 //   - Required fields inferred from omitempty absence (Go JSON convention)
 func newInvopopSchemaGen() SchemaGenerator {
 	r := &jsonschema.Reflector{
@@ -54,7 +60,11 @@ func newInvopopSchemaGen() SchemaGenerator {
 	}
 	return func(v any) json.RawMessage {
 		s := r.Reflect(v)
-		s.Version = ""
+		// Keep s.Version (invopop default) so the produced schema is
+		// self-describing — clients can pick the right validator. The
+		// previous behavior of stripping it produced schemas without a
+		// dialect declaration, which is honest only if clients have
+		// out-of-band knowledge of the draft used.
 		s.ID = ""
 		data, err := json.Marshal(s)
 		if err != nil {
