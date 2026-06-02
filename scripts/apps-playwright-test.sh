@@ -81,17 +81,37 @@ done
 # --- Map upstream EXAMPLE → mcpkit fixture path -----------------------------
 
 case "$EXAMPLE" in
+    # All basic-* arms map upstream EXAMPLE name → mcpkit fixture path + a
+    # server-name regex that scopes Playwright to this example's describe
+    # block (skips unrelated pdf-* / interaction specs).
     basic-server-vanillajs)
         FIXTURE_DIR="examples/apps/compat/basic-vanillajs"
-        # Server-name regex playwright uses to scope to this example only,
-        # skipping the dozens of pdf-* / other server tests that run regardless
-        # of EXAMPLE env var (they live in separate .spec.ts files).
         GREP_PATTERN="Vanilla JS"
+        ;;
+    basic-server-preact)
+        FIXTURE_DIR="examples/apps/compat/basic-preact"
+        GREP_PATTERN="\(Preact\)"
+        ;;
+    basic-server-react)
+        FIXTURE_DIR="examples/apps/compat/basic-react"
+        GREP_PATTERN="\(React\)"
+        ;;
+    basic-server-solid)
+        FIXTURE_DIR="examples/apps/compat/basic-solid"
+        GREP_PATTERN="\(Solid\)"
+        ;;
+    basic-server-svelte)
+        FIXTURE_DIR="examples/apps/compat/basic-svelte"
+        GREP_PATTERN="\(Svelte\)"
+        ;;
+    basic-server-vue)
+        FIXTURE_DIR="examples/apps/compat/basic-vue"
+        GREP_PATTERN="\(Vue\)"
         ;;
     *)
         echo "ERROR: no mcpkit fixture for upstream example '$EXAMPLE'"
         echo "Available fixtures under examples/apps/compat/:"
-        ls examples/apps/compat/ 2>/dev/null || echo "  (none — only basic-vanillajs is implemented so far)"
+        ls examples/apps/compat/ 2>/dev/null || echo "  (none yet)"
         exit 1
         ;;
 esac
