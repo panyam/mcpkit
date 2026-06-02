@@ -91,6 +91,9 @@ cleanup() {
     if [ -n "${FIXTURE_PID:-}" ]; then
         kill "$FIXTURE_PID" 2>/dev/null || true
     fi
+    if [ -n "${UPSTREAM_PID:-}" ]; then
+        kill "$UPSTREAM_PID" 2>/dev/null || true
+    fi
     if [ -n "${HARNESS_PID:-}" ]; then
         kill "$HARNESS_PID" 2>/dev/null || true
     fi
@@ -113,6 +116,69 @@ for i in $(seq 1 20); do
     fi
     sleep 1
 done
+
+# --- tools/list parity check vs upstream TS server --------------------------
+# Start upstream's own basic-server-vanillajs on a side port, fetch tools/list
+# from both servers, JSON-diff. Catches protocol-surface drift that the
+# pixel snapshot test silently swallows when both sides regenerate against
+# their own past output. SKIP_DRIFT_CHECK=1 opts out (debugging only).
+
+if [ "${SKIP_DRIFT_CHECK:-}" = "1" ]; then
+    echo "SKIP_DRIFT_CHECK=1 — skipping tools/list parity check"
+else
+    UPSTREAM_PORT="${UPSTREAM_PORT:-3102}"
+
+    echo "Starting upstream TS server on :$UPSTREAM_PORT (for tools/list drift check)..."
+    (
+        cd "$EXT_APPS_DIR/examples/$EXAMPLE"
+        PORT="$UPSTREAM_PORT" node dist/index.js > /tmp/upstream-server.log 2>&1
+    ) &
+    UPSTREAM_PID=$!
+
+    for i in $(seq 1 20); do
+        if curl -sf -X POST "http://localhost:$UPSTREAM_PORT/mcp" \
+            -H "Content-Type: application/json" \
+            -H "Accept: application/json, text/event-stream" \
+            -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"probe","version":"0"}}}' \
+            -o /dev/null 2>/dev/null; then
+            echo "Upstream TS server ready on :$UPSTREAM_PORT"
+            break
+        fi
+        if [ "$i" -eq 20 ]; then
+            echo "ERROR: upstream TS server failed to start. Log:"
+            tail -20 /tmp/upstream-server.log
+            exit 1
+        fi
+        sleep 1
+    done
+
+    echo ""
+    echo "=== tools/list parity check (warn-only) ==="
+    # Copy the diff script into ext-apps so Node's ESM resolver walks up into
+    # ext-apps' node_modules naturally (NODE_PATH only works for CJS; the
+    # script imports @modelcontextprotocol/sdk as ESM).
+    cp /mcpkit/scripts/apps-playwright-tools-diff.mjs "$EXT_APPS_DIR/.tools-diff.mjs"
+    DRIFT_DETECTED=0
+    node "$EXT_APPS_DIR/.tools-diff.mjs" \
+        "mcpkit" "http://localhost:$FIXTURE_PORT/mcp" \
+        "upstream" "http://localhost:$UPSTREAM_PORT/mcp" || DRIFT_DETECTED=$?
+    if [ "$DRIFT_DETECTED" -ne 0 ]; then
+        echo ""
+        echo "NOTE: tools/list drift is reported as WARN, not FAIL, because the"
+        echo "remaining drift items track real mcpkit library gaps (outputSchema"
+        echo "wire propagation, Title support in TypedAppToolConfig, taskSupport,"
+        echo "ext-apps fallback _meta key). Tracked separately — see PR 537"
+        echo "description for the umbrella issue. Re-tighten this gate to fail-on-drift"
+        echo "once those land."
+    fi
+    echo ""
+
+    # Drift check done — release the upstream server before basic-host starts
+    # (basic-host's SERVERS env only points at the mcpkit fixture).
+    kill "$UPSTREAM_PID" 2>/dev/null || true
+    wait "$UPSTREAM_PID" 2>/dev/null || true
+    UPSTREAM_PID=""
+fi
 
 # --- Start basic-host inside the container ----------------------------------
 

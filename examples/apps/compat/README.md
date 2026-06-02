@@ -101,6 +101,30 @@ The Playwright config templates the snapshot filename with `{platform}` so
 directory; the runner auto-picks the file matching the run's OS, so no script
 flag is needed to switch baselines.
 
+## Protocol-surface drift check (DOCKER mode)
+
+The screenshot test is a **regression check, not an upstream-parity check** —
+it compares each run against our own committed PNG, not against upstream's.
+That means if upstream changes their fixture's tool description, schema, or
+`_meta.ui` shape, our test still passes (we regen our PNG against our own
+unchanged fixture; upstream regens theirs against the changed one), even
+though we've silently fallen behind upstream's protocol surface.
+
+To catch that, DOCKER mode runs upstream's own TypeScript reference server
+on a side port (`UPSTREAM_PORT`, default 3102) and JSON-diffs `tools/list`
+against the mcpkit fixture before Playwright runs. Today the check is
+**warn-only** — drift is printed but doesn't fail the build, because
+several remaining drift items track real library gaps in `ext/ui`'s
+`TypedAppToolConfig` (no `Title` field, `OutputSchema` not propagated to
+the wire, `Execution.TaskSupport` not exposed) plus an ext-apps SDK
+convention (`_meta["ui/resourceUri"]` fallback key). Once those land,
+flip the check from warn-only to fail-on-drift.
+
+Skip the check with `SKIP_DRIFT_CHECK=1`. Native mode doesn't run the
+drift check — would require Node + ext-apps build artifacts + the
+upstream server runtime on the host, which fights the "fast local
+iteration" goal of native mode.
+
 ## Where test results land
 
 Whenever a run produces artifacts (failure diffs, traces, the HTML
