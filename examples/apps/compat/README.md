@@ -69,31 +69,56 @@ upstream's TS server at the wire level.
 2. Add a `case` arm in `scripts/apps-playwright-test.sh` mapping the upstream
    `EXAMPLE` value to your `FIXTURE_DIR` and a `GREP_PATTERN` that scopes
    Playwright to your example's `test.describe` block.
-3. Generate the baseline:
+3. Generate the canonical (Linux / Docker) baseline:
+   ```bash
+   DOCKER=1 UPDATE_SNAPSHOTS=1 EXAMPLE=<name> make test-apps-playwright
+   ```
+   This writes `examples/apps/compat/<fixture>/__snapshots__/<key>-linux.png`.
+4. (Optional) Generate the macOS dev baseline so local non-Docker iteration
+   on darwin still passes visual checks:
    ```bash
    UPDATE_SNAPSHOTS=1 EXAMPLE=<name> make test-apps-playwright
    ```
-   This writes `examples/apps/compat/<fixture>/__snapshots__/<key>.png`.
-4. Verify a clean run passes:
+   Writes `<key>-darwin.png` alongside the linux one.
+5. Verify clean runs pass:
    ```bash
-   EXAMPLE=<name> make test-apps-playwright
+   EXAMPLE=<name> make test-apps-playwright            # native (uses your OS's baseline)
+   DOCKER=1 EXAMPLE=<name> make test-apps-playwright   # CI-identical
    ```
-5. Commit the fixture, the script arm, and the baseline PNG.
+6. Commit the fixture, the script arm, and the baseline PNG(s).
+
+## Native vs Docker modes
+
+Two run modes, same wrapper:
+
+| Mode | Invocation | Snapshot suffix | Purpose |
+|---|---|---|---|
+| Native (default) | `make test-apps-playwright` | `-darwin` / `-linux` | Fast local iteration on the host OS. |
+| Docker | `make test-apps-playwright-docker` (or `DOCKER=1 …`) | `-linux` | CI-identical run inside `mcr.microsoft.com/playwright:v1.57.0-noble` — same image upstream's `test:e2e:docker` uses. Cross-compiles the Go fixture for `linux/amd64` on the host, mounts it into the container; `basic-host` + Playwright run inside. Use this to generate the canonical linux baseline. |
+
+The Playwright config templates the snapshot filename with `{platform}` so
+`-darwin.png` and `-linux.png` coexist under the same `__snapshots__/`
+directory; the runner auto-picks the file matching the run's OS, so no script
+flag is needed to switch baselines.
 
 ## Snapshot baseline platform
 
-`__snapshots__/*.png` files are committed per-fixture and are
-**platform-specific**. Chromium's font fallback differs between Linux (Docker)
-and macOS, producing ~5–10px layout shifts that exceed
-`maxDiffPixelRatio: 0.06`. Regenerate on the OS that CI will use for the
-comparison run; otherwise comparison runs on a different OS will fail visual
-checks even though the protocol surface is correct.
+Chromium's font fallback differs across operating systems, producing ~5–10px
+layout shifts that exceed `maxDiffPixelRatio: 0.06`. The wrapper commits one
+baseline per supported platform (`-darwin`, `-linux`) and Playwright resolves
+the right one at runtime via the `{platform}` snapshot template token.
 
-Upstream documents the same constraint and pins their own snapshots to a
-Linux Docker image (`mcr.microsoft.com/playwright:v1.57.0-noble`). We currently
-pin our baseline to the platform of whoever ran `UPDATE_SNAPSHOTS=1` last; the
-make target is not yet wired into CI. When it is, regenerate the baselines
-inside the CI image and re-commit.
+- **Linux baseline (`*-linux.png`)** is canonical. Generated under Docker
+  using the same image upstream uses for `test:e2e:docker`, so the file is
+  byte-identical to what their CI would produce.
+- **macOS baseline (`*-darwin.png`)** is convenience. Lets contributors on
+  Mac run `make test-apps-playwright` without Docker and still see visual
+  regressions. Re-generate after any code change that affects the rendered
+  output, the same way you'd re-generate the linux one.
+
+If your platform has no committed baseline, the wrapper warns at startup
+with the exact command to generate it. Windows / other Unices aren't
+supported today (no `-win32` baseline); use Docker mode.
 
 ## Status legend
 

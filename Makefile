@@ -122,6 +122,9 @@ test-experimental-events-telegram: ## Run experimental events Telegram example t
 test-apps-playwright: ## Run ext-apps Playwright tests against testserver (needs Node.js + Playwright)
 	bash scripts/apps-playwright-test.sh
 
+test-apps-playwright-docker: ## Same as test-apps-playwright but inside upstream's playwright Docker image — CI-identical baselines
+	DOCKER=1 bash scripts/apps-playwright-test.sh
+
 testkcl: ## Run Keycloak auth interop tests (requires Docker, run upkcl first)
 	cd tests/keycloak && go test ./... -count=1 -timeout 120s -v
 
@@ -442,5 +445,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-protogen test-e2e test-experimental test-apps-playwright testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-elicitation refresh-conformance check-conformance-stale vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root docs-site-build docs-site-serve docs-site-deploy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
+.PHONY: build test test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-protogen test-e2e test-experimental test-apps-playwright test-apps-playwright-docker testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-elicitation refresh-conformance check-conformance-stale vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root docs-site-build docs-site-serve docs-site-deploy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
 .DEFAULT_GOAL := help
