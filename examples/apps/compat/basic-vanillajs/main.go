@@ -81,13 +81,15 @@ func main() {
 
 	resourceURI := "ui://get-time/mcp-app.html"
 
-	// Visibility intentionally NOT set — upstream's basic-server-vanillajs
-	// doesn't emit _meta.ui.visibility, and including it would diverge from
-	// upstream's tools/list surface. Apps-compat fixtures mirror upstream
-	// byte-for-byte where mcpkit's surface allows.
+	// Fields match upstream basic-server-vanillajs's registerAppTool call
+	// byte-for-byte (Title, Description, Execution.TaskSupport=forbidden).
+	// Visibility intentionally NOT set — upstream doesn't emit
+	// _meta.ui.visibility either.
 	ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[struct{}, getTimeOutput]{
 		Name:        "get-time",
+		Title:       "Get Time",
 		Description: "Returns the current server time as an ISO 8601 string.",
+		Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
 		Handler: func(ctx core.ToolContext, _ struct{}) (getTimeOutput, error) {
 			return getTimeOutput{Time: time.Now().UTC().Format(time.RFC3339Nano)}, nil
 		},

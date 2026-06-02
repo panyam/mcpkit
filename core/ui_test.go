@@ -71,6 +71,126 @@ func TestToolDefMetaSerialization(t *testing.T) {
 	})
 }
 
+// TestToolMetaDualResourceURI verifies the spec/SDK compat behavior added
+// for ext-apps parity (issue 538): when UI.ResourceUri is set, the wire
+// JSON carries the value under BOTH _meta.ui.resourceUri (nested) and
+// _meta["ui/resourceUri"] (flat). Mirrors upstream @modelcontextprotocol/
+// ext-apps's registerAppTool helper.
+func TestToolMetaDualResourceURI(t *testing.T) {
+	t.Run("marshal emits both keys", func(t *testing.T) {
+		m := ToolMeta{UI: &UIMetadata{ResourceUri: "ui://x/y"}}
+		data, err := json.Marshal(m)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(data, &raw); err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := raw["ui"]; !ok {
+			t.Errorf("expected nested 'ui' key in %s", data)
+		}
+		if _, ok := raw["ui/resourceUri"]; !ok {
+			t.Errorf("expected flat 'ui/resourceUri' key in %s", data)
+		}
+		var flat string
+		if err := json.Unmarshal(raw["ui/resourceUri"], &flat); err != nil {
+			t.Fatal(err)
+		}
+		if flat != "ui://x/y" {
+			t.Errorf("flat key = %q, want %q", flat, "ui://x/y")
+		}
+	})
+
+	t.Run("marshal omits flat key when ResourceUri empty", func(t *testing.T) {
+		// UI metadata without a ResourceUri (e.g., only Visibility) shouldn't
+		// emit the flat fallback key — there's nothing to fall back to.
+		m := ToolMeta{UI: &UIMetadata{Visibility: []UIVisibility{UIVisibilityModel}}}
+		data, err := json.Marshal(m)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(data, &raw); err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := raw["ui/resourceUri"]; ok {
+			t.Errorf("flat key should be absent when ResourceUri is empty, got %s", data)
+		}
+	})
+
+	t.Run("unmarshal nested form", func(t *testing.T) {
+		data := []byte(`{"ui":{"resourceUri":"ui://a/b"}}`)
+		var m ToolMeta
+		if err := json.Unmarshal(data, &m); err != nil {
+			t.Fatal(err)
+		}
+		if m.UI == nil || m.UI.ResourceUri != "ui://a/b" {
+			t.Errorf("UI.ResourceUri = %v, want %q", m.UI, "ui://a/b")
+		}
+	})
+
+	t.Run("unmarshal flat form only", func(t *testing.T) {
+		// Older clients that emit only the flat fallback key — mcpkit should
+		// still recover the ResourceUri so tool handlers see it the same way.
+		data := []byte(`{"ui/resourceUri":"ui://a/b"}`)
+		var m ToolMeta
+		if err := json.Unmarshal(data, &m); err != nil {
+			t.Fatal(err)
+		}
+		if m.UI == nil || m.UI.ResourceUri != "ui://a/b" {
+			t.Errorf("UI.ResourceUri = %v, want %q from flat-only input", m.UI, "ui://a/b")
+		}
+	})
+
+	t.Run("unmarshal both forms agreeing", func(t *testing.T) {
+		data := []byte(`{"ui":{"resourceUri":"ui://a/b"},"ui/resourceUri":"ui://a/b"}`)
+		var m ToolMeta
+		if err := json.Unmarshal(data, &m); err != nil {
+			t.Fatal(err)
+		}
+		if m.UI == nil || m.UI.ResourceUri != "ui://a/b" {
+			t.Errorf("UI.ResourceUri = %v, want %q", m.UI, "ui://a/b")
+		}
+	})
+
+	t.Run("unmarshal disagreement: nested wins", func(t *testing.T) {
+		// Contract per ToolMeta.UnmarshalJSON godoc — nested form is the
+		// more complete one, so when both keys are present and disagree the
+		// nested wins. Other UI fields would only travel under the nested
+		// form anyway.
+		data := []byte(`{"ui":{"resourceUri":"ui://nested"},"ui/resourceUri":"ui://flat"}`)
+		var m ToolMeta
+		if err := json.Unmarshal(data, &m); err != nil {
+			t.Fatal(err)
+		}
+		if m.UI.ResourceUri != "ui://nested" {
+			t.Errorf("UI.ResourceUri = %q, want nested 'ui://nested' to win", m.UI.ResourceUri)
+		}
+	})
+
+	t.Run("round trip preserves value", func(t *testing.T) {
+		orig := ToolMeta{UI: &UIMetadata{
+			ResourceUri: "ui://round/trip",
+			Visibility:  []UIVisibility{UIVisibilityModel, UIVisibilityApp},
+		}}
+		data, err := json.Marshal(orig)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got ToolMeta
+		if err := json.Unmarshal(data, &got); err != nil {
+			t.Fatal(err)
+		}
+		if got.UI.ResourceUri != orig.UI.ResourceUri {
+			t.Errorf("ResourceUri mismatch: %q vs %q", got.UI.ResourceUri, orig.UI.ResourceUri)
+		}
+		if len(got.UI.Visibility) != len(orig.UI.Visibility) {
+			t.Errorf("Visibility len mismatch: %v vs %v", got.UI.Visibility, orig.UI.Visibility)
+		}
+	})
+}
+
 // TestResourceReadContentMetaSerialization verifies that ResourceReadContent
 // serializes the _meta field correctly. Per the MCP Apps spec, per-content _meta
 // takes precedence over resource-level metadata from resources/list.

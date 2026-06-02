@@ -34,11 +34,19 @@ async function listTools(url) {
     return tools;
 }
 
+// Keys stripped before comparison — see core/schema.go for the rationale on
+// `additionalProperties`. `$schema` differs across language SDKs (mcpkit emits
+// draft-2020-12 via invopop, upstream's TS SDK emits draft-07 via
+// zod-to-json-schema); the *presence* of $schema is what matters for clients,
+// not the specific draft URL, so we strip the value entirely from the diff.
+const IGNORE_KEYS = new Set(["$schema", "additionalProperties"]);
+
 function deepSortKeys(value) {
     if (Array.isArray(value)) return value.map(deepSortKeys);
     if (value && typeof value === "object") {
         const sorted = {};
         for (const k of Object.keys(value).sort()) {
+            if (IGNORE_KEYS.has(k)) continue;
             sorted[k] = deepSortKeys(value[k]);
         }
         return sorted;
