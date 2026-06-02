@@ -75,7 +75,7 @@ const artifactsDir =
 
 export default {
     ...rest,
-    snapshotPathTemplate: \`\${snapshotDir}/{arg}-{platform}{ext}\`,
+    snapshotPathTemplate: \`\${snapshotDir}/{arg}{ext}\`,
     outputDir: artifactsDir,
 };
 CFG

@@ -160,10 +160,12 @@ const artifactsDir =
 export default {
     ...rest,
     // webServer omitted — caller starts basic-host + fixture externally.
-    // snapshotPathTemplate points at the mcpkit repo's per-fixture baseline,
-    // with the {platform} token suffixed so darwin + linux baselines coexist
-    // (visible as basic-vanillajs-darwin.png / basic-vanillajs-linux.png).
-    snapshotPathTemplate: \`\${snapshotDir}/{arg}-{platform}{ext}\`,
+    // snapshotPathTemplate points at the mcpkit repo's per-fixture baseline.
+    // No {platform} suffix: a single Linux-Docker-generated PNG is canonical,
+    // mirroring upstream's pinning convention. macOS native runs will fail
+    // the screenshot test against the Linux baseline — that's intentional;
+    // use DOCKER=1 for visual checks anywhere outside CI.
+    snapshotPathTemplate: \`\${snapshotDir}/{arg}{ext}\`,
     // outputDir collects failure artifacts (actual / diff PNGs, traces) per
     // test under the fixture's .test-results/ — visible to the host whether
     // running native or docker (via the /mcpkit bind-mount).
@@ -220,25 +222,18 @@ if [ "$DOCKER" = "1" ]; then
     EXIT_CODE=$?
 else
     # ------------------------------------------------------------------ Native
-    # Heads-up before the first run if your platform's baseline isn't committed
-    # yet — saves a confused-debugging loop.
+    # The committed baseline is generated under Docker and pinned to Linux
+    # Chromium font fallback. Running visual checks on macOS will fail the
+    # `screenshot matches golden` test (~0.07 pixel ratio diff vs the 0.06
+    # threshold) — intentional. Use DOCKER=1 for the real visual gate; the
+    # `loads app UI` test still passes natively for fast iteration.
     PLATFORM_LOWER="$(uname -s | tr '[:upper:]' '[:lower:]')"
-    case "$PLATFORM_LOWER" in
-        darwin) EXPECTED_PLATFORM="darwin" ;;
-        linux)  EXPECTED_PLATFORM="linux"  ;;
-        *)      EXPECTED_PLATFORM=""       ;;
-    esac
-    if [ -n "$EXPECTED_PLATFORM" ] && \
-       [ "$UPDATE_SNAPSHOTS" != "1" ] && \
-       [ -d "$SNAPSHOT_DIR_ABS" ] && \
-       ! ls "$SNAPSHOT_DIR_ABS"/*-"$EXPECTED_PLATFORM".png >/dev/null 2>&1; then
+    if [ "$PLATFORM_LOWER" != "linux" ] && [ "$UPDATE_SNAPSHOTS" != "1" ]; then
         echo ""
-        echo "WARN: no committed baseline for platform '$EXPECTED_PLATFORM' under"
-        echo "      $SNAPSHOT_DIR_ABS"
-        echo "      Visual checks will fail until you run:"
-        echo "        UPDATE_SNAPSHOTS=1 $0"
-        echo "      to generate one (or DOCKER=1 UPDATE_SNAPSHOTS=1 to regenerate"
-        echo "      the canonical linux baseline)."
+        echo "NOTE: native mode on $PLATFORM_LOWER will pass 'loads app UI' but"
+        echo "      fail 'screenshot matches golden' against the Docker-pinned"
+        echo "      Linux baseline. Run visual checks with:"
+        echo "        DOCKER=1 $0"
         echo ""
     fi
 
@@ -363,9 +358,9 @@ else
     echo "Example:    $EXAMPLE"
     echo "Fixture:    http://localhost:$FIXTURE_PORT/mcp"
     echo "Harness:    http://localhost:$HARNESS_PORT"
-    echo "Snapshots:  $SNAPSHOT_DIR_ABS  (suffix: -$EXPECTED_PLATFORM)"
+    echo "Snapshots:  $SNAPSHOT_DIR_ABS"
     if [ "$UPDATE_SNAPSHOTS" = "1" ]; then
-        echo "MODE:       --update-snapshots (regenerating baseline for -$EXPECTED_PLATFORM)"
+        echo "MODE:       --update-snapshots (regenerating baseline)"
     fi
     echo ""
 
