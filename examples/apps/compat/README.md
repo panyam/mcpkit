@@ -138,6 +138,36 @@ surface parity isn't enough to match a multi-server baseline. Per-
 fixture committed PNGs capture our actual run shape, which is the only
 fair regression check we can do.
 
+## Watching a run interactively
+
+**Native mode opens a visible browser by default** — local dev iteration
+is the primary use case for native mode, and watching what's happening
+is the whole point. Three env switches control the visible-browser
+modes:
+
+| Flag | What it does |
+|---|---|
+| `HEADLESS=1` | Force headless even in native mode. CI / conformance runs should set this. |
+| `DEBUG_PW=1` | Launches Playwright's Inspector. Pauses at every test step; click "step over" to advance. Overrides headless default. |
+| `UI=1` | Launches Playwright's full UI runner — time-travel debugging, watch-mode, action timeline. Heavyweight. Overrides headless default. |
+
+`HEADED=1` is also accepted (it's the explicit way to opt in) but
+unnecessary in native mode.
+
+All four are **native-mode only**. `DOCKER=1` is implicitly headless —
+the guard rail just silently downgrades for `HEADED`, but errors out
+clearly for `DEBUG_PW=1` or `UI=1` since those make no sense without
+a display. Run native mode for visible-browser debugging; run Docker
+mode for the strict drift gate.
+
+```bash
+make test-apps-playwright                        # headed native (local default)
+HEADLESS=1 make test-apps-playwright             # native, headless (CI / conformance)
+DEBUG_PW=1 make test-apps-playwright             # step through with Inspector
+UI=1 make test-apps-playwright                   # full Playwright UI runner
+make test-apps-playwright-docker                 # docker, always headless
+```
+
 ## Where test results land
 
 Whenever a run produces artifacts (failure diffs, traces, the HTML

@@ -45,7 +45,24 @@
 #                      regeneration does NOT overwrite native-mode baselines.
 #   DOCKER             Set to 1 to run everything inside upstream's Playwright
 #                      image (mcr.microsoft.com/playwright:v1.57.0-noble) for
-#                      CI-identical baselines.
+#                      CI-identical baselines. Implies headless.
+#   HEADLESS           Set to 1 to force-disable the visible browser in native
+#                      mode (default is headed locally — see HEADED below).
+#                      CI / conformance runs should set this.
+#   HEADED             Set to 1 (default in native mode) to run the browser
+#                      visible. Set to 0 or unset together with HEADLESS=1 to
+#                      go headless. Implies --workers=1 + --reporter=list so
+#                      the browser doesn't multi-thread and you can see which
+#                      test is running. Native mode only; errors out under
+#                      DOCKER=1. The flip-default-to-headed convention is for
+#                      local-dev ergonomics; if you'd rather always opt in,
+#                      override with HEADLESS=1 in your shell rc.
+#   DEBUG_PW           Set to 1 to launch Playwright's Inspector (--debug).
+#                      Pauses at every test step so you can inspect / step
+#                      through. Native mode only; implies HEADED behavior.
+#   UI                 Set to 1 to launch Playwright's UI mode (--ui) — full
+#                      interactive test runner with time-travel debugging.
+#                      Native mode only.
 
 set -euo pipefail
 
@@ -57,7 +74,41 @@ FIXTURE_PORT="${FIXTURE_PORT:-3101}"
 EXAMPLE="${EXAMPLE:-basic-server-vanillajs}"
 UPDATE_SNAPSHOTS="${UPDATE_SNAPSHOTS:-}"
 DOCKER="${DOCKER:-}"
+HEADLESS="${HEADLESS:-}"
+DEBUG_PW="${DEBUG_PW:-}"
+UI="${UI:-}"
 DOCKER_IMAGE="mcr.microsoft.com/playwright:v1.57.0-noble"
+
+# Native mode defaults to headed (visible browser) for local-dev ergonomics —
+# the user explicitly asked for this as the default. HEADLESS=1 (CI /
+# conformance) overrides. DOCKER=1 forces headless via the guard rail below.
+if [ -z "${HEADED:-}" ]; then
+    if [ "$DOCKER" = "1" ] || [ "$HEADLESS" = "1" ]; then
+        HEADED=""
+    else
+        HEADED="1"
+    fi
+fi
+
+# Guard rails: visible-browser modes don't make sense inside Docker (would
+# need X11 forwarding into the container, OS-dependent and brittle). Fail
+# clearly so the user can re-run without DOCKER=1. Only fire when the user
+# explicitly opted in — the auto-default above already silently downgrades
+# HEADED under DOCKER=1.
+if [ "$DOCKER" = "1" ]; then
+    for v in DEBUG_PW UI; do
+        case "$v" in
+            DEBUG_PW) val="$DEBUG_PW" ;;
+            UI) val="$UI" ;;
+        esac
+        if [ "$val" = "1" ]; then
+            echo "ERROR: $v=1 is not supported with DOCKER=1 — visible-browser modes need a"
+            echo "display, and X11-forwarding into the Playwright container isn't worth the"
+            echo "setup cost for the 'see what's happening' use case. Re-run without DOCKER=1."
+            exit 1
+        fi
+    done
+fi
 
 # Absolute path to this repo root — needed because we generate playwright config
 # inside the ext-apps tree but want snapshots to resolve back to our tree.
@@ -107,6 +158,14 @@ case "$EXAMPLE" in
     basic-server-vue)
         FIXTURE_DIR="examples/apps/compat/basic-vue"
         GREP_PATTERN="\(Vue\)"
+        ;;
+    quickstart)
+        FIXTURE_DIR="examples/apps/compat/quickstart"
+        GREP_PATTERN="Quickstart MCP App Server"
+        ;;
+    transcript-server)
+        FIXTURE_DIR="examples/apps/compat/transcript"
+        GREP_PATTERN="Transcript Server"
         ;;
     *)
         echo "ERROR: no mcpkit fixture for upstream example '$EXAMPLE'"
@@ -378,6 +437,16 @@ else
     if [ "$UPDATE_SNAPSHOTS" = "1" ]; then
         PLAYWRIGHT_ARGS="$PLAYWRIGHT_ARGS --update-snapshots"
     fi
+    # Visible-browser flags. --workers=1 keeps tests serial so the user can
+    # follow what's happening; --reporter=list streams test names. UI mode
+    # replaces the regular run with Playwright's interactive runner.
+    if [ "$UI" = "1" ]; then
+        PLAYWRIGHT_ARGS="$PLAYWRIGHT_ARGS --ui"
+    elif [ "$DEBUG_PW" = "1" ]; then
+        PLAYWRIGHT_ARGS="$PLAYWRIGHT_ARGS --debug --workers=1 --reporter=list"
+    elif [ "$HEADED" = "1" ]; then
+        PLAYWRIGHT_ARGS="$PLAYWRIGHT_ARGS --headed --workers=1 --reporter=list"
+    fi
 
     echo ""
     echo "=== Running upstream Playwright tests against mcpkit fixture (native) ==="
@@ -387,6 +456,13 @@ else
     echo "Snapshots:  $SNAPSHOT_DIR_ABS"
     if [ "$UPDATE_SNAPSHOTS" = "1" ]; then
         echo "MODE:       --update-snapshots (regenerating baseline)"
+    fi
+    if [ "$UI" = "1" ]; then
+        echo "MODE:       --ui (Playwright UI runner)"
+    elif [ "$DEBUG_PW" = "1" ]; then
+        echo "MODE:       --debug (Playwright Inspector, step-through)"
+    elif [ "$HEADED" = "1" ]; then
+        echo "MODE:       --headed (visible browser, serial)"
     fi
     echo ""
 
