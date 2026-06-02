@@ -140,24 +140,32 @@ fair regression check we can do.
 
 ## Watching a run interactively
 
-Three native-mode env switches for when you want to *see* what's happening
-in the browser (debugging a fixture, exploring how `basic-host` renders
-your tool surface, etc.):
+**Native mode opens a visible browser by default** — local dev iteration
+is the primary use case for native mode, and watching what's happening
+is the whole point. Three env switches control the visible-browser
+modes:
 
 | Flag | What it does |
 |---|---|
-| `HEADED=1` | Opens a visible browser; runs tests serially. Best for "watch what's happening." |
-| `DEBUG_PW=1` | Launches Playwright's Inspector. Pauses at every test step; click "step over" to advance. |
-| `UI=1` | Launches Playwright's full UI runner — time-travel debugging, watch-mode, action timeline. Heavyweight. |
+| `HEADLESS=1` | Force headless even in native mode. CI / conformance runs should set this. |
+| `DEBUG_PW=1` | Launches Playwright's Inspector. Pauses at every test step; click "step over" to advance. Overrides headless default. |
+| `UI=1` | Launches Playwright's full UI runner — time-travel debugging, watch-mode, action timeline. Heavyweight. Overrides headless default. |
 
-All three are **native-mode only**. Running with `DOCKER=1` errors out
-cleanly — getting a visible browser out of the Docker image would need
-X11 forwarding (XQuartz on macOS, etc.), which isn't worth the setup
-cost for the "see what's happening" use case. Run native mode for that;
-run Docker mode for the strict drift gate.
+`HEADED=1` is also accepted (it's the explicit way to opt in) but
+unnecessary in native mode.
+
+All four are **native-mode only**. `DOCKER=1` is implicitly headless —
+the guard rail just silently downgrades for `HEADED`, but errors out
+clearly for `DEBUG_PW=1` or `UI=1` since those make no sense without
+a display. Run native mode for visible-browser debugging; run Docker
+mode for the strict drift gate.
 
 ```bash
-HEADED=1 EXAMPLE=basic-server-vanillajs make test-apps-playwright
+make test-apps-playwright                        # headed native (local default)
+HEADLESS=1 make test-apps-playwright             # native, headless (CI / conformance)
+DEBUG_PW=1 make test-apps-playwright             # step through with Inspector
+UI=1 make test-apps-playwright                   # full Playwright UI runner
+make test-apps-playwright-docker                 # docker, always headless
 ```
 
 ## Where test results land

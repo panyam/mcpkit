@@ -45,13 +45,18 @@
 #                      regeneration does NOT overwrite native-mode baselines.
 #   DOCKER             Set to 1 to run everything inside upstream's Playwright
 #                      image (mcr.microsoft.com/playwright:v1.57.0-noble) for
-#                      CI-identical baselines.
-#   HEADED             Set to 1 to run the browser visible (native mode only —
-#                      X11 forwarding into the Playwright Docker image isn't
-#                      worth the complexity for the "watch what's happening"
-#                      use case). Implies --workers=1 + --reporter=list so the
-#                      browser doesn't multi-thread and you can see which test
-#                      is running. Errors out under DOCKER=1.
+#                      CI-identical baselines. Implies headless.
+#   HEADLESS           Set to 1 to force-disable the visible browser in native
+#                      mode (default is headed locally — see HEADED below).
+#                      CI / conformance runs should set this.
+#   HEADED             Set to 1 (default in native mode) to run the browser
+#                      visible. Set to 0 or unset together with HEADLESS=1 to
+#                      go headless. Implies --workers=1 + --reporter=list so
+#                      the browser doesn't multi-thread and you can see which
+#                      test is running. Native mode only; errors out under
+#                      DOCKER=1. The flip-default-to-headed convention is for
+#                      local-dev ergonomics; if you'd rather always opt in,
+#                      override with HEADLESS=1 in your shell rc.
 #   DEBUG_PW           Set to 1 to launch Playwright's Inspector (--debug).
 #                      Pauses at every test step so you can inspect / step
 #                      through. Native mode only; implies HEADED behavior.
@@ -69,18 +74,30 @@ FIXTURE_PORT="${FIXTURE_PORT:-3101}"
 EXAMPLE="${EXAMPLE:-basic-server-vanillajs}"
 UPDATE_SNAPSHOTS="${UPDATE_SNAPSHOTS:-}"
 DOCKER="${DOCKER:-}"
-HEADED="${HEADED:-}"
+HEADLESS="${HEADLESS:-}"
 DEBUG_PW="${DEBUG_PW:-}"
 UI="${UI:-}"
 DOCKER_IMAGE="mcr.microsoft.com/playwright:v1.57.0-noble"
 
+# Native mode defaults to headed (visible browser) for local-dev ergonomics —
+# the user explicitly asked for this as the default. HEADLESS=1 (CI /
+# conformance) overrides. DOCKER=1 forces headless via the guard rail below.
+if [ -z "${HEADED:-}" ]; then
+    if [ "$DOCKER" = "1" ] || [ "$HEADLESS" = "1" ]; then
+        HEADED=""
+    else
+        HEADED="1"
+    fi
+fi
+
 # Guard rails: visible-browser modes don't make sense inside Docker (would
 # need X11 forwarding into the container, OS-dependent and brittle). Fail
-# clearly so the user can re-run without DOCKER=1.
+# clearly so the user can re-run without DOCKER=1. Only fire when the user
+# explicitly opted in — the auto-default above already silently downgrades
+# HEADED under DOCKER=1.
 if [ "$DOCKER" = "1" ]; then
-    for v in HEADED DEBUG_PW UI; do
+    for v in DEBUG_PW UI; do
         case "$v" in
-            HEADED) val="$HEADED" ;;
             DEBUG_PW) val="$DEBUG_PW" ;;
             UI) val="$UI" ;;
         esac
