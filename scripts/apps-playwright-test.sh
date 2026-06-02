@@ -108,6 +108,14 @@ case "$EXAMPLE" in
         FIXTURE_DIR="examples/apps/compat/basic-vue"
         GREP_PATTERN="\(Vue\)"
         ;;
+    quickstart)
+        FIXTURE_DIR="examples/apps/compat/quickstart"
+        GREP_PATTERN="Quickstart MCP App Server"
+        ;;
+    transcript-server)
+        FIXTURE_DIR="examples/apps/compat/transcript"
+        GREP_PATTERN="Transcript Server"
+        ;;
     *)
         echo "ERROR: no mcpkit fixture for upstream example '$EXAMPLE'"
         echo "Available fixtures under examples/apps/compat/:"
