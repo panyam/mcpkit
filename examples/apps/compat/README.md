@@ -69,37 +69,32 @@ upstream's TS server at the wire level.
 2. Add a `case` arm in `scripts/apps-playwright-test.sh` mapping the upstream
    `EXAMPLE` value to your `FIXTURE_DIR` and a `GREP_PATTERN` that scopes
    Playwright to your example's `test.describe` block.
-3. Generate the canonical (Linux / Docker) baseline:
+3. Generate the canonical baseline (Docker, byte-identical to what
+   upstream's CI would produce):
    ```bash
    DOCKER=1 UPDATE_SNAPSHOTS=1 EXAMPLE=<name> make test-apps-playwright
    ```
-   This writes `examples/apps/compat/<fixture>/__snapshots__/<key>-linux.png`.
-4. (Optional) Generate the macOS dev baseline so local non-Docker iteration
-   on darwin still passes visual checks:
+   Writes `examples/apps/compat/<fixture>/__snapshots__/<key>.png`.
+4. Verify clean runs pass:
    ```bash
-   UPDATE_SNAPSHOTS=1 EXAMPLE=<name> make test-apps-playwright
+   DOCKER=1 EXAMPLE=<name> make test-apps-playwright   # visual + protocol gate
+   EXAMPLE=<name> make test-apps-playwright            # native — `loads app UI` only
    ```
-   Writes `<key>-darwin.png` alongside the linux one.
-5. Verify clean runs pass:
-   ```bash
-   EXAMPLE=<name> make test-apps-playwright            # native (uses your OS's baseline)
-   DOCKER=1 EXAMPLE=<name> make test-apps-playwright   # CI-identical
-   ```
-6. Commit the fixture, the script arm, and the baseline PNG(s).
+5. Commit the fixture, the script arm, and the baseline PNG.
 
 ## Native vs Docker modes
 
 Two run modes, same wrapper:
 
-| Mode | Invocation | Snapshot suffix | Purpose |
-|---|---|---|---|
-| Native (default) | `make test-apps-playwright` | `-darwin` / `-linux` | Fast local iteration on the host OS. |
-| Docker | `make test-apps-playwright-docker` (or `DOCKER=1 …`) | `-linux` | CI-identical run inside `mcr.microsoft.com/playwright:v1.57.0-noble` — same image upstream's `test:e2e:docker` uses. Cross-compiles the Go fixture for `linux/amd64` on the host, mounts it into the container; `basic-host` + Playwright run inside. Use this to generate the canonical linux baseline. |
+| Mode | Invocation | Purpose |
+|---|---|---|
+| Native (default) | `make test-apps-playwright` | Fast local iteration. Runs `loads app UI` (functional check) — passes anywhere. Runs `screenshot matches golden` — **expected to fail on non-Linux hosts** because the committed baseline is Docker-pinned. |
+| Docker | `make test-apps-playwright-docker` (or `DOCKER=1 …`) | CI-identical run inside `mcr.microsoft.com/playwright:v1.57.0-noble` — same image upstream's `test:e2e:docker` uses. Cross-compiles the Go fixture for `linux/amd64` on the host, mounts it in; `basic-host` + Playwright run inside. The real visual gate. |
 
-The Playwright config templates the snapshot filename with `{platform}` so
-`-darwin.png` and `-linux.png` coexist under the same `__snapshots__/`
-directory; the runner auto-picks the file matching the run's OS, so no script
-flag is needed to switch baselines.
+One canonical baseline per fixture (no `{platform}` suffix), matching
+upstream's pinning convention. macOS / Windows contributors use Docker mode
+when they want the visual check; native mode gives them the fast `loads app UI`
+check for everyday iteration.
 
 ## Protocol-surface drift check (DOCKER mode)
 
@@ -143,24 +138,32 @@ volume surfaces the dir back to the host filesystem, so you can open
 volume gymnastics. The wrapper prints both paths at the end of any
 failed run. The whole dir is gitignored.
 
-## Snapshot baseline platform
+## Snapshot baseline pinning
 
 Chromium's font fallback differs across operating systems, producing ~5–10px
-layout shifts that exceed `maxDiffPixelRatio: 0.06`. The wrapper commits one
-baseline per supported platform (`-darwin`, `-linux`) and Playwright resolves
-the right one at runtime via the `{platform}` snapshot template token.
+layout shifts that exceed `maxDiffPixelRatio: 0.06`. We pin one canonical
+baseline per fixture to Linux Chromium (generated via Docker), matching
+upstream's own pattern — `modelcontextprotocol/ext-apps` commits a single
+PNG per example, pinned to the `mcr.microsoft.com/playwright:v1.57.0-noble`
+image their `test:e2e:docker` target uses, and so do we.
 
-- **Linux baseline (`*-linux.png`)** is canonical. Generated under Docker
-  using the same image upstream uses for `test:e2e:docker`, so the file is
-  byte-identical to what their CI would produce.
-- **macOS baseline (`*-darwin.png`)** is convenience. Lets contributors on
-  Mac run `make test-apps-playwright` without Docker and still see visual
-  regressions. Re-generate after any code change that affects the rendered
-  output, the same way you'd re-generate the linux one.
+Regenerate with:
 
-If your platform has no committed baseline, the wrapper warns at startup
-with the exact command to generate it. Windows / other Unices aren't
-supported today (no `-win32` baseline); use Docker mode.
+```bash
+DOCKER=1 UPDATE_SNAPSHOTS=1 EXAMPLE=<name> make test-apps-playwright
+```
+
+The native (non-Docker) wrapper still runs the visual test on the host, but
+on non-Linux hosts it will fail vs the pinned Linux baseline. That's a
+feature — visual regression is the kind of check you want on stable
+infrastructure, not on whatever Chromium font fallback your laptop ships
+this month. The `loads app UI` test is what carries the fast-local-iteration
+story; that one passes anywhere.
+
+Future direction (see issue 538): once mcpkit's `tools/list` surface matches
+upstream byte-for-byte, the per-fixture `__snapshots__/` dir disappears
+entirely — Playwright will compare against upstream's own committed PNG in
+the ext-apps tree, so we inherit upstream's regenerations automatically.
 
 ## Status legend
 
