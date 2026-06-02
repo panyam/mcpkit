@@ -102,8 +102,20 @@ esac
 SNAPSHOT_DIR_ABS="$MCPKIT_ROOT/$FIXTURE_DIR/__snapshots__"
 mkdir -p "$SNAPSHOT_DIR_ABS"
 
-# Container-side view of the snapshot dir (only used when DOCKER=1).
+# Per-fixture test-results dir (Playwright output: -actual.png / -diff.png
+# on failure, traces, the HTML report). Co-located with __snapshots__ so each
+# fixture owns both its baseline and its run artifacts. Gitignored — never
+# committed. Split into artifacts/ + report/ siblings because Playwright
+# refuses to let the HTML reporter folder sit inside the outputDir.
+RESULTS_DIR_ABS="$MCPKIT_ROOT/$FIXTURE_DIR/.test-results"
+ARTIFACTS_DIR_ABS="$RESULTS_DIR_ABS/artifacts"
+REPORT_DIR_ABS="$RESULTS_DIR_ABS/report"
+mkdir -p "$ARTIFACTS_DIR_ABS" "$REPORT_DIR_ABS"
+
+# Container-side views (only used when DOCKER=1).
 SNAPSHOT_DIR_CONTAINER="/mcpkit/$FIXTURE_DIR/__snapshots__"
+ARTIFACTS_DIR_CONTAINER="/mcpkit/$FIXTURE_DIR/.test-results/artifacts"
+REPORT_DIR_CONTAINER="/mcpkit/$FIXTURE_DIR/.test-results/report"
 
 # --- Clone or update upstream (native only) ---------------------------------
 # Docker mode clones into a container-side named volume — the inner script
@@ -142,6 +154,8 @@ const { webServer, ...rest } = baseConfig as any;
 
 const snapshotDir =
     process.env.MCPKIT_SNAPSHOT_DIR ?? "$SNAPSHOT_DIR_ABS";
+const artifactsDir =
+    process.env.MCPKIT_ARTIFACTS_DIR ?? "$ARTIFACTS_DIR_ABS";
 
 export default {
     ...rest,
@@ -150,6 +164,10 @@ export default {
     // with the {platform} token suffixed so darwin + linux baselines coexist
     // (visible as basic-vanillajs-darwin.png / basic-vanillajs-linux.png).
     snapshotPathTemplate: \`\${snapshotDir}/{arg}-{platform}{ext}\`,
+    // outputDir collects failure artifacts (actual / diff PNGs, traces) per
+    // test under the fixture's .test-results/ — visible to the host whether
+    // running native or docker (via the /mcpkit bind-mount).
+    outputDir: artifactsDir,
 };
 EOF
 fi
@@ -185,6 +203,8 @@ if [ "$DOCKER" = "1" ]; then
         -e GREP_PATTERN="$GREP_PATTERN" \
         -e FIXTURE_BIN="$FIXTURE_BIN_CONTAINER" \
         -e MCPKIT_SNAPSHOT_DIR="$SNAPSHOT_DIR_CONTAINER" \
+        -e MCPKIT_ARTIFACTS_DIR="$ARTIFACTS_DIR_CONTAINER" \
+        -e MCPKIT_REPORT_DIR="$REPORT_DIR_CONTAINER" \
         -e HARNESS_PORT="$HARNESS_PORT" \
         -e SANDBOX_PORT="$SANDBOX_PORT" \
         -e FIXTURE_PORT="$FIXTURE_PORT" \
@@ -352,7 +372,10 @@ else
     set +e
     (
         cd "$EXT_APPS_DIR"
-        EXAMPLE="$EXAMPLE" npx playwright test \
+        EXAMPLE="$EXAMPLE" \
+        PLAYWRIGHT_HTML_OUTPUT_DIR="$REPORT_DIR_ABS" \
+        PLAYWRIGHT_HTML_OPEN=never \
+            npx playwright test \
             --config=playwright.config.mcpkit.ts \
             --grep "$GREP_PATTERN" \
             $PLAYWRIGHT_ARGS
@@ -366,6 +389,11 @@ if [ "$EXIT_CODE" -eq 0 ]; then
     echo "=== PASSED ($EXAMPLE against mcpkit fixture${DOCKER:+, docker}) ==="
 else
     echo "=== FAILED ($EXAMPLE against mcpkit fixture${DOCKER:+, docker}, exit $EXIT_CODE) ==="
+    echo ""
+    echo "Artifacts (actual / diff PNGs, traces) under:"
+    echo "  $ARTIFACTS_DIR_ABS"
+    echo "HTML report:"
+    echo "  $REPORT_DIR_ABS/index.html"
 fi
 
 exit $EXIT_CODE

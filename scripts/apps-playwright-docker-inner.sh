@@ -59,8 +59,10 @@ echo "Building $EXAMPLE upstream UI (for dist/mcp-app.html)..."
 
 # --- Write the local playwright config inside the container -----------------
 # Mirrors the host-side native config writer in apps-playwright-test.sh —
-# strips upstream's webServer block, points snapshots at the mcpkit repo's
-# per-fixture __snapshots__/ dir via MCPKIT_SNAPSHOT_DIR (container path).
+# strips upstream's webServer block, points snapshots + failure artifacts at
+# the mcpkit repo's per-fixture dirs (via MCPKIT_SNAPSHOT_DIR /
+# MCPKIT_ARTIFACTS_DIR — container paths that the /mcpkit bind-mount maps
+# back to the host so test-results survive after docker exit).
 cat > "$EXT_APPS_DIR/playwright.config.mcpkit.ts" <<CFG
 import baseConfig from "./playwright.config";
 
@@ -68,10 +70,13 @@ const { webServer, ...rest } = baseConfig as any;
 
 const snapshotDir =
     process.env.MCPKIT_SNAPSHOT_DIR ?? "$MCPKIT_SNAPSHOT_DIR";
+const artifactsDir =
+    process.env.MCPKIT_ARTIFACTS_DIR ?? "$MCPKIT_ARTIFACTS_DIR";
 
 export default {
     ...rest,
     snapshotPathTemplate: \`\${snapshotDir}/{arg}-{platform}{ext}\`,
+    outputDir: artifactsDir,
 };
 CFG
 
@@ -162,6 +167,9 @@ set +e
     cd "$EXT_APPS_DIR"
     EXAMPLE="$EXAMPLE" \
     MCPKIT_SNAPSHOT_DIR="$MCPKIT_SNAPSHOT_DIR" \
+    MCPKIT_ARTIFACTS_DIR="$MCPKIT_ARTIFACTS_DIR" \
+    PLAYWRIGHT_HTML_OUTPUT_DIR="$MCPKIT_REPORT_DIR" \
+    PLAYWRIGHT_HTML_OPEN=never \
         npx playwright test \
         --config=playwright.config.mcpkit.ts \
         --grep "$GREP_PATTERN" \

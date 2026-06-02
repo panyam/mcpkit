@@ -101,6 +101,24 @@ The Playwright config templates the snapshot filename with `{platform}` so
 directory; the runner auto-picks the file matching the run's OS, so no script
 flag is needed to switch baselines.
 
+## Where test results land
+
+Whenever a run produces artifacts (failure diffs, traces, the HTML
+report), they land under the fixture's `.test-results/` dir:
+
+```
+examples/apps/compat/<fixture>/.test-results/
+├── artifacts/   ← per-test failure dirs: -actual.png / -diff.png /
+│                  -expected.png / trace.zip / error-context.md
+└── report/      ← Playwright HTML report; open index.html in a browser
+```
+
+Same paths in both modes — in Docker mode, the bind-mounted `/mcpkit`
+volume surfaces the dir back to the host filesystem, so you can open
+`report/index.html` in your local browser without `docker cp` or
+volume gymnastics. The wrapper prints both paths at the end of any
+failed run. The whole dir is gitignored.
+
 ## Snapshot baseline platform
 
 Chromium's font fallback differs across operating systems, producing ~5–10px
