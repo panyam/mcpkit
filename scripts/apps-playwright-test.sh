@@ -23,12 +23,16 @@
 #   bash scripts/apps-playwright-test.sh
 #
 # Environment:
-#   EXT_APPS_DIR    Path to ext-apps checkout (default: /tmp/ext-apps)
-#   HARNESS_PORT    basic-host HTTP port (default: 8080)
-#   SANDBOX_PORT    basic-host sandbox port (default: 8081)
-#   FIXTURE_PORT    mcpkit fixture port (default: 3101)
-#   EXAMPLE         Upstream example folder name (default: basic-server-vanillajs)
-#   VERBOSE         Set to 1 for verbose playwright reporter
+#   EXT_APPS_DIR       Path to ext-apps checkout (default: /tmp/ext-apps)
+#   HARNESS_PORT       basic-host HTTP port (default: 8080)
+#   SANDBOX_PORT       basic-host sandbox port (default: 8081)
+#   FIXTURE_PORT       mcpkit fixture port (default: 3101)
+#   EXAMPLE            Upstream example folder name (default: basic-server-vanillajs)
+#   VERBOSE            Set to 1 for verbose playwright reporter
+#   UPDATE_SNAPSHOTS   Set to 1 to (re)generate the mcpkit baseline PNGs under
+#                      examples/apps/compat/<fixture>/__snapshots__/. Must be run
+#                      on the same OS that subsequent comparison runs use, since
+#                      Chromium font fallback differs across platforms.
 
 set -euo pipefail
 
@@ -38,6 +42,11 @@ HARNESS_PORT="${HARNESS_PORT:-8080}"
 SANDBOX_PORT="${SANDBOX_PORT:-8081}"
 FIXTURE_PORT="${FIXTURE_PORT:-3101}"
 EXAMPLE="${EXAMPLE:-basic-server-vanillajs}"
+UPDATE_SNAPSHOTS="${UPDATE_SNAPSHOTS:-}"
+
+# Absolute path to this repo root — needed because we generate playwright config
+# inside the ext-apps tree but want snapshots to resolve back to our tree.
+MCPKIT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 FIXTURE_PID=""
 HARNESS_PID=""
@@ -87,6 +96,11 @@ case "$EXAMPLE" in
         ;;
 esac
 
+# Mcpkit-local snapshot dir. Lives under the fixture so each compat fixture owns
+# its own baseline and we never touch upstream's tests/e2e/.*-snapshots/ tree.
+SNAPSHOT_DIR_ABS="$MCPKIT_ROOT/$FIXTURE_DIR/__snapshots__"
+mkdir -p "$SNAPSHOT_DIR_ABS"
+
 # --- Clone or update upstream -----------------------------------------------
 
 if [ -d "$EXT_APPS_DIR/.git" ]; then
@@ -120,7 +134,7 @@ echo "Building $EXAMPLE (for dist/mcp-app.html)..."
 # snapshot config, etc.).
 
 LOCAL_CONFIG="$EXT_APPS_DIR/playwright.config.mcpkit.ts"
-cat > "$LOCAL_CONFIG" <<'EOF'
+cat > "$LOCAL_CONFIG" <<EOF
 import baseConfig from "./playwright.config";
 
 const { webServer, ...rest } = baseConfig as any;
@@ -128,6 +142,10 @@ const { webServer, ...rest } = baseConfig as any;
 export default {
     ...rest,
     // webServer omitted — caller starts basic-host + fixture externally
+    // snapshotPathTemplate points at the mcpkit repo's per-fixture baseline so
+    // (a) we never overwrite upstream's tests/e2e/.*-snapshots/, and
+    // (b) each compat fixture owns its own PNG independent of upstream's tree.
+    snapshotPathTemplate: "$SNAPSHOT_DIR_ABS/{arg}{ext}",
 };
 EOF
 
@@ -209,12 +227,19 @@ PLAYWRIGHT_ARGS=""
 if [ "${VERBOSE:-}" = "1" ]; then
     PLAYWRIGHT_ARGS="--reporter=list"
 fi
+if [ "$UPDATE_SNAPSHOTS" = "1" ]; then
+    PLAYWRIGHT_ARGS="$PLAYWRIGHT_ARGS --update-snapshots"
+fi
 
 echo ""
 echo "=== Running upstream Playwright tests against mcpkit fixture ==="
-echo "Example:  $EXAMPLE"
-echo "Fixture:  http://localhost:$FIXTURE_PORT/mcp"
-echo "Harness:  http://localhost:$HARNESS_PORT"
+echo "Example:    $EXAMPLE"
+echo "Fixture:    http://localhost:$FIXTURE_PORT/mcp"
+echo "Harness:    http://localhost:$HARNESS_PORT"
+echo "Snapshots:  $SNAPSHOT_DIR_ABS"
+if [ "$UPDATE_SNAPSHOTS" = "1" ]; then
+    echo "MODE:       --update-snapshots (regenerating baseline PNGs)"
+fi
 echo ""
 
 set +e
