@@ -128,10 +128,23 @@ if [ "${SKIP_DRIFT_CHECK:-}" = "1" ]; then
 else
     UPSTREAM_PORT="${UPSTREAM_PORT:-3102}"
 
-    echo "Starting upstream TS server on :$UPSTREAM_PORT (for tools/list drift check)..."
+    # Most upstream examples ship a built dist/index.js (via `bun build
+    # main.ts --outfile dist/index.js`). A few (quickstart, ...) only ship
+    # the iframe HTML and run the server directly from main.ts via tsx. Try
+    # node first, fall back to tsx.
+    UPSTREAM_DIR="$EXT_APPS_DIR/examples/$EXAMPLE"
+    if [ -f "$UPSTREAM_DIR/dist/index.js" ]; then
+        UPSTREAM_CMD="node dist/index.js"
+    elif [ -f "$UPSTREAM_DIR/main.ts" ]; then
+        UPSTREAM_CMD="npx tsx main.ts"
+    else
+        echo "ERROR: don't know how to start upstream server for $EXAMPLE — no dist/index.js or main.ts"
+        exit 1
+    fi
+    echo "Starting upstream TS server on :$UPSTREAM_PORT (for tools/list drift check; cmd: $UPSTREAM_CMD)..."
     (
-        cd "$EXT_APPS_DIR/examples/$EXAMPLE"
-        PORT="$UPSTREAM_PORT" node dist/index.js > /tmp/upstream-server.log 2>&1
+        cd "$UPSTREAM_DIR"
+        PORT="$UPSTREAM_PORT" sh -c "$UPSTREAM_CMD" > /tmp/upstream-server.log 2>&1
     ) &
     UPSTREAM_PID=$!
 
