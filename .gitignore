@@ -72,3 +72,12 @@ examples/tasks-v2/tasks-v2
 # <name>-example). Globs catch every example's named output.
 examples/**/*-demo
 examples/**/*-example
+
+# apps/compat Playwright run artifacts (actual / diff PNGs, traces, HTML
+# report). Written to .test-results/ next to each fixture's __snapshots__/
+# dir by apps-playwright-test.sh. Per-run; never committed.
+examples/apps/compat/*/.test-results/
+
+# apps/compat docker-mode cross-compiled fixture binaries — host-side
+# scratch only, the docker run mounts them into the container.
+.tmp-fixture-linux-amd64-*
