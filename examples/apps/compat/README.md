@@ -138,6 +138,28 @@ surface parity isn't enough to match a multi-server baseline. Per-
 fixture committed PNGs capture our actual run shape, which is the only
 fair regression check we can do.
 
+## Watching a run interactively
+
+Three native-mode env switches for when you want to *see* what's happening
+in the browser (debugging a fixture, exploring how `basic-host` renders
+your tool surface, etc.):
+
+| Flag | What it does |
+|---|---|
+| `HEADED=1` | Opens a visible browser; runs tests serially. Best for "watch what's happening." |
+| `DEBUG_PW=1` | Launches Playwright's Inspector. Pauses at every test step; click "step over" to advance. |
+| `UI=1` | Launches Playwright's full UI runner — time-travel debugging, watch-mode, action timeline. Heavyweight. |
+
+All three are **native-mode only**. Running with `DOCKER=1` errors out
+cleanly — getting a visible browser out of the Docker image would need
+X11 forwarding (XQuartz on macOS, etc.), which isn't worth the setup
+cost for the "see what's happening" use case. Run native mode for that;
+run Docker mode for the strict drift gate.
+
+```bash
+HEADED=1 EXAMPLE=basic-server-vanillajs make test-apps-playwright
+```
+
 ## Where test results land
 
 Whenever a run produces artifacts (failure diffs, traces, the HTML
