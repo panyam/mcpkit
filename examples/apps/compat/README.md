@@ -8,6 +8,38 @@ hosts can drive any client that targets the upstream examples.
 
 Tracked under issue 533 (umbrella) and the per-example issues it links to.
 
+## Wiring overview
+
+Each box is a separate process the wrapper script orchestrates; the labels
+show the env var that picks its port or path.
+
+```mermaid
+flowchart LR
+  PW["Playwright<br/>(chromium)"]
+
+  subgraph Host["basic-host (upstream)"]
+    HARNESS["http server<br/>HARNESS_PORT=8080"]
+    SANDBOX["sandbox iframe<br/>SANDBOX_PORT=8081"]
+  end
+
+  FIX["mcpkit Go fixture<br/>FIXTURE_PORT=3101<br/>POST /mcp"]
+  EXT["$EXT_APPS_DIR<br/>/tmp/ext-apps<br/>examples/&lt;name&gt;/dist/mcp-app.html"]
+
+  PW -->|page| HARNESS
+  HARNESS -->|iframe src| SANDBOX
+  SANDBOX -->|fetch resource| FIX
+  HARNESS -->|MCP via SERVERS env| FIX
+  EXT -.->|read at startup| FIX
+```
+
+- `EXT_APPS_DIR` — upstream checkout the script clones / updates; the
+  fixture reads `dist/mcp-app.html` from here verbatim.
+- `HARNESS_PORT` — basic-host's HTTP listen port; Playwright drives this.
+- `SANDBOX_PORT` — basic-host's sandbox-iframe origin; the app iframe
+  loads inside it.
+- `FIXTURE_PORT` — the mcpkit Go binary's MCP endpoint; basic-host
+  connects here via the `SERVERS` env var.
+
 ## Drop-in shape
 
 A compat fixture must match its upstream counterpart on three things:
