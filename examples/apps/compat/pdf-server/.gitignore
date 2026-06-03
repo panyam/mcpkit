@@ -1,0 +1,3 @@
+# Local build artifact + Playwright outputs
+/pdf-server
+/.test-results/
