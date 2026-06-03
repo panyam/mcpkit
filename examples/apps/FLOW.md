@@ -110,11 +110,78 @@ A separate-origin iframe basic-host uses to isolate the App from the host page. 
 - **Sandbox attribute**: the iframe `sandbox` attribute restricts the App's capabilities (no top navigation, no parent access, etc.) from `_meta.ui.permissions`
 - **Origin isolation**: a malicious App can't escape into basic-host's origin
 
-### The App iframe (HTML bundle, served by the MCP server)
+### The App iframe (HTML bundle, delivered by the MCP server)
 
 What the user actually sees. Each upstream example builds its own `dist/mcp-app.html` — a single-file bundle (Vite + `vite-plugin-singlefile`) containing the App's UI code and the `mcp-app-bridge.js` library.
 
 The compat fixtures **don't build their own App HTML**. They read upstream's `dist/mcp-app.html` from `$EXT_APPS_DIR` at startup and serve it byte-for-byte verbatim. That's the contract — pretend to be upstream's TS server, including identical HTML.
+
+### How the App HTML gets to the iframe (and why it's not at the server's URL)
+
+A common misconception: the App iframe is **not** loaded via `<iframe src="http://your-mcp-server/...">`. The flow is:
+
+1. The host calls the MCP `resources/read` method (over the same JSON-RPC channel it's using for everything else)
+2. The MCP server's resource handler returns the App's HTML **as bytes inside the JSON-RPC response**
+3. The host renders those bytes into the iframe using `srcdoc="..."` (inline HTML) or a `blob:` URL
+
+So if your MCP server is at `http://localhost:3101/mcp`, the App is **not** at `http://localhost:3101/myapp` — there's no such HTTP endpoint. The HTML is delivered as a JSON-RPC payload through `/mcp` and rendered into an iframe at whatever origin the host chose for the sandbox (`localhost:8081` in basic-host) or a unique `blob:` / `about:srcdoc` origin.
+
+Consequences:
+
+| Question | Answer |
+|---|---|
+| Can the App make `fetch()` calls directly to the MCP server? | No (and that's intentional) — the iframe doesn't run at the server's origin; cross-origin would be blocked. The App talks to the server only via `mcp.callTool` / `mcp.readResource` through the bridge. |
+| Does the MCP server have to be HTTP-reachable from the browser? | No — only the **host** needs to talk to it. A stdio MCP server (Cursor, Claude Desktop) can still expose Apps; the host receives the HTML over stdio and renders it the same way. |
+| Can the server generate the HTML per-call? | Yes. `resources/read` is just a handler; the server can return different HTML per user, per tenant, per call. |
+| Can the App reference external origins (CDNs, fonts)? | Yes, but only the ones whitelisted in `_meta.ui.csp`. The host builds a Content-Security-Policy header from those declarations and applies it to the sandbox iframe. |
+| Could the App HTML come from somewhere other than the MCP server? | The host decides. By convention the `ui://` URI is a resource on the same MCP server, but nothing in the protocol forbids returning bytes pulled from elsewhere. In practice, App HTML is bundled and returned inline from the MCP server. |
+
+### Why two layers of iframe (not just one)
+
+The sandbox iframe is the *outer* iframe; the App iframe is *nested* inside it.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Host page (basic-host, origin A: localhost:8080)        │
+│                                                         │
+│   ┌─────────────────────────────────────────────────┐   │
+│   │ Sandbox iframe (origin B: localhost:8081)       │   │
+│   │ Different origin from the host — "origin moat"  │   │
+│   │                                                 │   │
+│   │   ┌─────────────────────────────────────────┐   │   │
+│   │   │ App iframe (sandbox="..." attribute)    │   │   │
+│   │   │ Your App HTML + bridge.js               │   │   │
+│   │   │ User interacts with this                │   │   │
+│   │   └─────────────────────────────────────────┘   │   │
+│   └─────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────┘
+```
+
+Two defenses, layered:
+
+1. **Origin moat** (the outer sandbox iframe): the sandbox runs at a different *origin* from the host. Even if an App escapes the inner sandbox attribute, browser same-origin policy stops it from touching the host's DOM, cookies, or storage. The two halves can communicate ONLY via `postMessage`.
+2. **Sandbox attribute** (the inner App iframe): a per-App `sandbox="..."` HTML attribute built from `_meta.ui.permissions` — restricts top-level navigation, popups, form submission, etc. Per-App finer-grained control.
+
+postMessage flow from App → host crosses both iframe boundaries: App → (boundary) → Sandbox → (boundary) → Host. Each hop is `window.parent.postMessage(...)`.
+
+### Is it efficient to ship the App as a single inline payload?
+
+Yes, with caveats. Typical bundle sizes from our compat fixtures range 100 KB to ~1 MB (the larger ones being Three.js / CesiumJS / shader-heavy Apps). Three reasons it's tolerable:
+
+1. **Fetched once per App invocation, not per tool call.** The host loads the App iframe HTML once when the user invokes the tool with the UI; subsequent `tools/call` operations into the same App don't re-fetch. Data flows separately through `mcp.callTool` bridge calls.
+2. **Inline-everything is intentional.** Upstream examples use `vite-plugin-singlefile` so the bundle has zero extra fetches once delivered. CSS, fonts (base64), JS — all in one payload, no waterfall.
+3. **Local transport.** In practice the bytes flow server-process → host-process on the user's machine (stdio for Cursor / Claude Desktop; localhost HTTP for browser hosts). The wire isn't a public internet link.
+
+When it isn't enough, the escape hatches:
+
+| Scenario | Mitigation |
+|---|---|
+| App needs heavy libraries (Three.js, CesiumJS, WASM) | Reference via CDN URLs in the HTML; CSP-whitelist those origins via `_meta.ui.csp`. Bundle stays small; heavy stuff streams from a real CDN with HTTP caching. |
+| App needs megabytes of user data | Keep data out of the HTML. Return it via `tools/call` `structuredContent` or separate `resources/read` data resources. HTML is the App shell; data flows via bridge calls. |
+| App invoked very frequently | Host implementations cache the App HTML keyed by resource URI between invocations. Not mandated by the spec, but real hosts do it. |
+| Resource templates (`ui://app/{userId}/view`) producing per-user HTML | Same caching, keyed by the resolved URI. Server still generates per-user; host avoids re-fetch within a session. |
+
+The single-payload model trades raw bandwidth for *correctness, simplicity, and stdio-compatibility* — a stdio MCP server can expose Apps without needing an HTTP layer at all, which is a real feature when the server runs in a Cursor or Claude Desktop process.
 
 ### The bridge (`mcp-app-bridge.js`, upstream)
 

@@ -71,6 +71,85 @@ This is why mcpkit ships **both** server-side Go code (`core/`, `server/`, `ext/
 
 In the apps-compat flow we test against (`examples/apps/compat/`), the App HTML comes from upstream verbatim and embeds upstream's bridge, so our Go fixtures only need the server side. But when *you* write a new App, mcpkit's bridge JS is what goes in your App HTML.
 
+## "Tool" vs "App tool" — when to use each
+
+A plain MCP **tool** is any callable function a client/host can invoke via `tools/call`. It returns text or structured content. No UI.
+
+An **App tool** is a tool that *also* exposes an interactive UI — its definition carries `_meta.ui.resourceUri` pointing at HTML the host fetches and renders as an iframe. Mechanically it's just a tool with extra metadata + a paired resource.
+
+| Pattern | API | When to use |
+|---|---|---|
+| **Plain tool** | `srv.RegisterTool(def, handler)` or `core.TypedTool[In, Out](...)` | Tool that produces text/structured output. No UI. Most "regular" MCP tools. |
+| **App tool with its own UI** | `ui.RegisterTypedAppTool(reg, TypedAppToolConfig[In, Out]{...})` | Tool whose result is best rendered as an interactive App (chart, map, form, code editor). The helper auto-pairs the tool with its UI resource and sets `_meta.ui.resourceUri`. |
+| **App-only tool sharing another App's iframe** | `core.TypedTool` + manual `ToolDef.Meta.UI` mutation + `srv.RegisterTool` | App-side helper called via the bridge from inside an existing App's iframe (e.g., polling for stats, logging events). Doesn't render anything itself; `_meta.ui.visibility = ["app"]` hides it from the model. See `examples/apps/compat/system-monitor` and `debug-server`. |
+
+So **every App tool is also an MCP tool**; "App tool" is shorthand for "tool with bonus UI metadata + a paired HTML resource". `RegisterTypedAppTool` is the ergonomic helper that sets all the metadata correctly and validates the pairing. When you don't fit its shape (no UI resource of your own), drop down to the lower-level API.
+
+> Improvement tracked in [issue 548](https://github.com/panyam/mcpkit/issues/548): making the `RegisterTypedAppTool` helper accept an optional empty `ResourceURI` for the app-only-tool case so you don't have to drop down to `core.TypedTool`.
+
+## How the server and the App actually talk
+
+The server and the App page **never communicate directly** — they talk through the host (basic-host, Claude.ai, ChatGPT, etc.) using two completely different channels.
+
+```mermaid
+flowchart LR
+  subgraph Server["Server process (Go binary)"]
+    MCP["mcpkit<br/>(core / server / ext/ui)"]
+  end
+  subgraph Browser["Browser process"]
+    direction TB
+    Host["Host page<br/>(basic-host, Claude.ai, ...)"]
+    Sandbox["Sandbox iframe<br/>(different origin)"]
+    App["App iframe<br/>(your HTML)"]
+    Bridge["mcp-app-bridge.js<br/>(inside the App)"]
+    App -.->|loads| Bridge
+  end
+  Host <-- "Channel 1: MCP/JSON-RPC<br/>over Streamable HTTP / stdio" --> MCP
+  Bridge -- "Channel 2: postMessage<br/>(across iframe boundaries)" --> Sandbox
+  Sandbox -- "postMessage relay" --> Host
+```
+
+Channel 1 is **HTTP/JSON-RPC** (or stdio) between the host and the server. That's what `core/` and `server/` implement on the Go side.
+
+Channel 2 is **postMessage** between iframes inside the browser. The App can't reach the host's window directly (they're in different origins by design), so each `mcp.callTool(...)` / `mcp.sendMessage(...)` becomes a `postMessage` to the sandbox iframe, which relays to the host.
+
+The host is the bridge between the two channels: it speaks JSON-RPC to your Go server AND postMessage to the App. The App never makes an HTTP call to your Go server. The Go server never speaks postMessage.
+
+Two example flows make the distinction visible:
+
+```mermaid
+sequenceDiagram
+    participant App
+    participant Bridge as bridge.js
+    participant Sandbox
+    participant Host
+    participant Server as MCP server<br/>(mcpkit)
+
+    Note over App: A — App calls a server tool
+    App->>Bridge: mcp.callTool({name: "refresh-data"})
+    Bridge->>Sandbox: postMessage(tools/call)
+    Sandbox->>Host: relay
+    Host->>Server: tools/call (MCP/JSON-RPC)
+    Server-->>Host: result
+    Host-->>Sandbox: result
+    Sandbox-->>Bridge: postMessage
+    Bridge-->>App: resolve callTool() promise
+
+    Note over App: B — App pushes a host event (no server round-trip)
+    App->>Bridge: mcp.sendMessage("done!")
+    Bridge->>Sandbox: postMessage(ui/message)
+    Sandbox->>Host: relay
+    Host->>Host: handle locally —<br/>e.g., chat insert, log line
+```
+
+Three concrete consequences for Go developers:
+
+1. **You don't need a separate HTTP server for your App's HTML.** The App is delivered as a `resources/read` JSON-RPC response payload — the same `/mcp` endpoint mcpkit's server already exposes handles it. (Even stdio MCP servers can expose Apps; the host just gets the HTML over stdio.)
+2. **The App can't `fetch()` your Go server.** If it tries, browser same-origin policy blocks it (the iframe runs at the host's sandbox origin, not your server's origin). All interaction goes through the bridge.
+3. **You need both halves of mcpkit to write a real App from scratch.** The Go side (`core/` + `server/` + `ext/ui/`) handles Channel 1. The JS bridge (`ext/ui/assets/mcp-app-bridge.ts` → compiled JS) handles Channel 2's App end. In compat fixtures the App HTML comes from upstream verbatim, so the JS bridge is upstream's; for non-compat Apps the JS bridge is mcpkit's.
+
+For the full runtime architecture — iframe nesting, postMessage relay details, where the App HTML comes from — see [`examples/apps/FLOW.md`](../../examples/apps/FLOW.md).
+
 ## What this package provides
 
 ### Server-side Go API
