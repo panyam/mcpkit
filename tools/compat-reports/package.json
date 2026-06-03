@@ -1,0 +1,19 @@
+{
+  "name": "@mcpkit/compat-reports",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Renders extension-compat conformance reports (apps, tasks-v2, mrtr, ...) from their hand-maintained umbrella-issue status tables. Shared lib/ for issue fetch + table parse + render so each extension's entry point is just CLI flags + extension-specific intro prose.",
+  "bin": {
+    "apps-compat-report": "src/apps.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^2.0.0"
+  }
+}
