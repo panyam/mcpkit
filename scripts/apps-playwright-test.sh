@@ -171,6 +171,29 @@ case "$EXAMPLE" in
         FIXTURE_DIR="examples/apps/compat/sheet-music"
         GREP_PATTERN="Sheet Music Server"
         ;;
+    integration-server)
+        FIXTURE_DIR="examples/apps/compat/integration"
+        # "Integration Test Server" substring-matches BOTH the standard
+        # describe ("Integration Test Server") and the interactions describe
+        # ("Integration Test Server - Interactions") in upstream's spec.
+        GREP_PATTERN="Integration Test Server"
+        ;;
+    system-monitor-server)
+        FIXTURE_DIR="examples/apps/compat/system-monitor"
+        GREP_PATTERN="System Monitor Server"
+        ;;
+    cohort-heatmap-server)
+        FIXTURE_DIR="examples/apps/compat/cohort-heatmap"
+        GREP_PATTERN="Cohort Heatmap Server"
+        ;;
+    customer-segmentation-server)
+        FIXTURE_DIR="examples/apps/compat/customer-segmentation"
+        GREP_PATTERN="Customer Segmentation Server"
+        ;;
+    debug-server)
+        FIXTURE_DIR="examples/apps/compat/debug-server"
+        GREP_PATTERN="Debug MCP App Server"
+        ;;
     *)
         echo "ERROR: no mcpkit fixture for upstream example '$EXAMPLE'"
         echo "Available fixtures under examples/apps/compat/:"

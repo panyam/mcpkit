@@ -1,5 +1,10 @@
 # apps/compat — mcpkit-Go drop-ins for upstream ext-apps parity testing
 
+> **New to MCP Apps?** Read [`examples/apps/FLOW.md`](../FLOW.md) first — explains
+> the full architecture (basic-host, sandbox, App iframe, bridge JS) and where
+> mcpkit fits in the picture.
+
+
 Each subdirectory here is a mcpkit-Go MCP server that mimics one of
 [`modelcontextprotocol/ext-apps`](https://github.com/modelcontextprotocol/ext-apps)'s
 TypeScript example servers byte-for-byte at the protocol surface. We run
@@ -148,7 +153,7 @@ server`, `lazy-auth-server`) — there's a separate target:
 make demo-app EXAMPLE=video-resource-server
 make demo-app EXAMPLE=lazy-auth-server
 make demo-app EXAMPLE=basic-server-vanillajs       # also works for testable examples
-make demo-app EXAMPLE=quickstart OPEN=1            # auto-open in browser
+OPEN=0 make demo-app EXAMPLE=quickstart            # don't auto-open (CI / no display)
 ```
 
 What it does (pure browse, no Playwright, no Docker, no drift check, no
@@ -161,12 +166,42 @@ snapshots):
    produced one, falls back to `npx tsx main.ts`.
 4. Starts `basic-host` on `HARNESS_PORT` (default 8080) with `SERVERS`
    pointing at the TS server
-5. Prints the URL; press Ctrl-C to stop.
+5. Opens the URL in your default browser (suppress with `OPEN=0`).
 
-Set `OPEN=1` to auto-open the browser. Use this when you want to see an
-example without driving the test suite, when comparing what upstream's TS
-renders vs. what a mcpkit-Go drop-in would render, or when poking at a SKIP
-example.
+The browser opens by default — the whole point of this target is to see
+an example without driving the test suite. Use it when comparing what
+upstream's TS renders vs. what a mcpkit-Go drop-in would render, or when
+poking at a SKIP example. CI / headless invocations should pass `OPEN=0`.
+
+### Inspecting the protocol surface (`make inspect-app`)
+
+Sibling target: instead of opening basic-host (which renders the App),
+runs **MCPJam Inspector locally** (`npx @mcpjam/inspector@latest`) and
+boots the upstream TS server alongside. MCPJam opens its own browser tab;
+you paste the upstream server URL into MCPJam to connect.
+
+```bash
+make inspect-app EXAMPLE=basic-server-vanillajs
+make inspect-app EXAMPLE=integration-server
+make inspect-app EXAMPLE=debug-server
+```
+
+The wrapper prints a step-by-step banner: where the upstream server is
+serving, what to paste into MCPJam, what to look for in each section.
+Once MCPJam's browser tab is open, you'll see the wire — raw
+`tools/list` JSON, `_meta.ui` structure, tool-call payloads, resource
+bytes.
+
+Decision matrix:
+
+| Goal | Use |
+|---|---|
+| "Does this App render correctly? Does the bridge work?" | `make demo-app` |
+| "What does the tool surface actually look like on the wire? What's in `_meta.ui`?" | `make inspect-app` |
+| "Strict parity check against upstream's TS reference" | `make test-apps-playwright-docker` |
+
+The console banner printed by each target tells you what to do once the
+browser opens.
 
 ## Watching a run interactively
 
