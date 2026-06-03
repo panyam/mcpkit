@@ -178,6 +178,22 @@ case "$EXAMPLE" in
         # ("Integration Test Server - Interactions") in upstream's spec.
         GREP_PATTERN="Integration Test Server"
         ;;
+    map-server)
+        FIXTURE_DIR="examples/apps/compat/map"
+        GREP_PATTERN="CesiumJS Map Server"
+        ;;
+    threejs-server)
+        FIXTURE_DIR="examples/apps/compat/threejs"
+        GREP_PATTERN="Three.js Server"
+        ;;
+    shadertoy-server)
+        FIXTURE_DIR="examples/apps/compat/shadertoy"
+        GREP_PATTERN="ShaderToy Server"
+        ;;
+    wiki-explorer-server)
+        FIXTURE_DIR="examples/apps/compat/wiki-explorer"
+        GREP_PATTERN="Wiki Explorer"
+        ;;
     system-monitor-server)
         FIXTURE_DIR="examples/apps/compat/system-monitor"
         GREP_PATTERN="System Monitor Server"
