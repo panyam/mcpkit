@@ -35,31 +35,33 @@ HARNESS_PORT="${HARNESS_PORT:-8080}"
 SANDBOX_PORT="${SANDBOX_PORT:-8081}"
 SERVER_PORT="${SERVER_PORT:-3101}"
 EXAMPLE="${EXAMPLE:-}"
-OPEN="${OPEN:-}"
+# Default OPEN=1 — the whole point of `make demo-app` is to look at an
+# example in a real browser. CI / no-display use cases override with OPEN=0.
+OPEN="${OPEN:-1}"
 
 if [ -z "$EXAMPLE" ]; then
     cat <<'HELP'
 Usage:
-  make demo-app EXAMPLE=<name> [OPEN=1]
+  make demo-app EXAMPLE=<name> [OPEN=0]
 
 What it does:
-  Spins up upstream's TS server + basic-host for one ext-apps example so
-  you can browse it in a real browser. No Playwright, no Docker, no drift
+  Spins up upstream's TS server + basic-host for one ext-apps example and
+  opens it in your default browser. No Playwright, no Docker, no drift
   check. Useful for SKIP examples (no automated tests) or just looking at
   what something renders to.
 
 Quick examples:
   make demo-app EXAMPLE=video-resource-server
   make demo-app EXAMPLE=lazy-auth-server
-  make demo-app EXAMPLE=quickstart OPEN=1
   make demo-app EXAMPLE=basic-server-vanillajs SERVER_PORT=3201 HARNESS_PORT=8180
+  OPEN=0 make demo-app EXAMPLE=quickstart       # don't auto-open (CI / headless)
 
 Env vars (with defaults):
   EXT_APPS_DIR=/tmp/ext-apps    where ext-apps is cloned / will be cloned
   HARNESS_PORT=8080             basic-host port
   SANDBOX_PORT=8081             basic-host sandbox port
   SERVER_PORT=3101              upstream TS server port
-  OPEN=                         set to 1 to auto-open the browser
+  OPEN=1                        auto-open the browser; set to 0 to skip
 
 HELP
     if [ -d "${EXT_APPS_DIR:-/tmp/ext-apps}/examples" ]; then
@@ -230,8 +232,20 @@ URL="http://localhost:$HARNESS_PORT"
 
 echo ""
 echo "===================================================================="
-echo " $EXAMPLE is now serving."
+echo " $EXAMPLE is now serving (rendered via basic-host)."
 echo " Open in your browser:  $URL"
+echo ""
+echo " What you're seeing:"
+echo "   basic-host (upstream's MCP Apps host) on :$HARNESS_PORT loads the"
+echo "   example's iframe (the App) in a sandboxed iframe. The App's"
+echo "   mcp-app-bridge.js uses postMessage to call back into the host —"
+echo "   that's why buttons inside the App ('Send Message', 'Send Log',"
+echo "   'Open Link') actually do something."
+echo ""
+echo " Want the protocol surface instead of the rendered App?"
+echo "   Run \`make inspect-app EXAMPLE=$EXAMPLE\` in another terminal —"
+echo "   opens MCPJam Inspector pointed at the same server. Shows raw"
+echo "   tools/list JSON, _meta.ui structure, tool-call payloads."
 echo ""
 echo " Logs:"
 echo "   TS server:  /tmp/apps-demo-server.log"
