@@ -6,6 +6,71 @@ Separate Go module (`github.com/panyam/mcpkit/ext/ui`) so the core mcpkit module
 
 > **Looking for the architecture overview?** Read [`examples/apps/FLOW.md`](../../examples/apps/FLOW.md) — explains how basic-host, the sandbox iframe, the App, the bridge JS, and the MCP server fit together.
 
+## Why the bridge exists
+
+The App is a regular HTML/JS bundle running inside a sandboxed iframe in the host's browser. The MCP server is a separate process speaking JSON-RPC. Three problems immediately:
+
+1. **The App can't speak MCP/JSON-RPC directly.** It's in a sandboxed iframe with no network access to the server (sandbox attribute + CSP enforce this).
+2. **The App needs to talk to the *host*, not just the server.** Things like "push a message into the chat", "trigger a file download", "request fullscreen" — those aren't MCP tool calls; they're host capabilities the App needs to invoke.
+3. **The host and the App live in different iframe origins** (basic-host on `:8080`, sandbox iframe on `:8081`, App iframe nested inside the sandbox). Cross-origin communication has to go through `postMessage`.
+
+The bridge is what lets the App act on all three needs without seeing the MCP protocol directly:
+
+```mermaid
+flowchart LR
+  subgraph Server["Server process (your Go binary)"]
+    MCP["mcpkit<br/>core / server / ext/ui"]
+  end
+  subgraph Browser["Browser process"]
+    direction TB
+    Host["Host page<br/>basic-host, Claude.ai, ..."]
+    Sandbox["Sandbox iframe<br/>(different origin)"]
+    App["App iframe<br/>your HTML"]
+    Bridge["mcp-app-bridge.js<br/>inside the App"]
+    App -.->|loads| Bridge
+  end
+  Host -- "MCP/JSON-RPC<br/>over Streamable HTTP" --> MCP
+  MCP -- "tools, resources" --> Host
+  Bridge -- "postMessage" --> Sandbox
+  Sandbox -- "postMessage" --> Host
+```
+
+The App calls `mcp.callTool(...)` / `mcp.sendMessage(...)` / etc. Those calls become `postMessage` to the parent (sandbox), which relays to the host. The host then either:
+
+- handles the call locally (it's a host-capability like `sendMessage`, `openLink`, `requestDisplayMode`), or
+- forwards it to the MCP server as a JSON-RPC call (it's a `callTool` / `readResource`).
+
+Two example flows make the distinction visible:
+
+```mermaid
+sequenceDiagram
+    participant App
+    participant Bridge as bridge.js
+    participant Sandbox
+    participant Host
+    participant Server as MCP server<br/>(mcpkit)
+
+    Note over App: A — App calls a server tool
+    App->>Bridge: mcp.callTool({name: "refresh-data"})
+    Bridge->>Sandbox: postMessage(tools/call)
+    Sandbox->>Host: relay
+    Host->>Server: tools/call (MCP/JSON-RPC)
+    Server-->>Host: result
+    Host-->>Sandbox: result
+    Sandbox-->>Bridge: postMessage
+    Bridge-->>App: resolve callTool() promise
+
+    Note over App: B — App pushes a host event<br/>(no server round-trip)
+    App->>Bridge: mcp.sendMessage("done!")
+    Bridge->>Sandbox: postMessage(ui/message)
+    Sandbox->>Host: relay
+    Host->>Host: handle locally —<br/>e.g., chat insert, log line
+```
+
+This is why mcpkit ships **both** server-side Go code (`core/`, `server/`, `ext/ui/`) **and** a bridge JS library (`ext/ui/assets/mcp-app-bridge.ts` → compiled JS). You need both to write an App from scratch — server-side for the MCP surface, browser-side for the App's interactive behavior.
+
+In the apps-compat flow we test against (`examples/apps/compat/`), the App HTML comes from upstream verbatim and embeds upstream's bridge, so our Go fixtures only need the server side. But when *you* write a new App, mcpkit's bridge JS is what goes in your App HTML.
+
 ## What this package provides
 
 ### Server-side Go API
