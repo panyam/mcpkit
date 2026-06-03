@@ -1,10 +1,12 @@
 // Drop-in mcpkit equivalent of upstream's debug-server example.
 //
-// One tool — debug-tool — with a kitchen-sink input schema (content type
-// enum, boolean toggles with defaults, optional fields, etc.) and a small
-// structured output. No commas in any default values; struct tags handle
-// the whole input surface. Numerics float64 to match upstream's
-// zod-from-`z.number()`.
+// Three tools — debug-tool (kitchen-sink), debug-refresh (app-only
+// polling), debug-log (app-only logging). No commas in any default
+// values; struct tags handle the input surface for debug-tool. The
+// debug-log tool's `payload: z.unknown()` field uses InputSchemaOverride
+// because invopop's reflection of `any` produces a schema the MCP SDK's
+// zod validator rejects (gap 2 in issue 548). Idiomatic Go int types
+// for counters and byte lengths.
 //
 // Run:  EXT_APPS_DIR=/tmp/ext-apps PORT=3101 go run .
 package main
@@ -25,25 +27,25 @@ import (
 )
 
 type debugInput struct {
-	ContentType              string  `json:"contentType,omitempty" jsonschema:"enum=text,enum=image,enum=audio,enum=resource,enum=resourceLink,enum=mixed,default=text"`
-	MultipleBlocks           bool    `json:"multipleBlocks,omitempty" jsonschema:"default=true"`
-	IncludeStructuredContent bool    `json:"includeStructuredContent,omitempty" jsonschema:"default=true"`
-	IncludeMeta              bool    `json:"includeMeta,omitempty" jsonschema:"default=true"`
-	LargeInput               string  `json:"largeInput,omitempty"`
-	SimulateError            bool    `json:"simulateError,omitempty" jsonschema:"default=false"`
-	DelayMs                  float64 `json:"delayMs,omitempty"`
+	ContentType              string `json:"contentType,omitempty" jsonschema:"enum=text,enum=image,enum=audio,enum=resource,enum=resourceLink,enum=mixed,default=text"`
+	MultipleBlocks           bool   `json:"multipleBlocks,omitempty" jsonschema:"default=true"`
+	IncludeStructuredContent bool   `json:"includeStructuredContent,omitempty" jsonschema:"default=true"`
+	IncludeMeta              bool   `json:"includeMeta,omitempty" jsonschema:"default=true"`
+	LargeInput               string `json:"largeInput,omitempty"`
+	SimulateError            bool   `json:"simulateError,omitempty" jsonschema:"default=false"`
+	DelayMs                  int    `json:"delayMs,omitempty"`
 }
 
 type debugOutput struct {
 	Config           map[string]any `json:"config"`
 	Timestamp        string         `json:"timestamp"`
-	Counter          float64        `json:"counter"`
-	LargeInputLength float64        `json:"largeInputLength,omitempty"`
+	Counter          int64          `json:"counter"`
+	LargeInputLength int            `json:"largeInputLength,omitempty"`
 }
 
 type debugRefreshOutput struct {
-	Timestamp string  `json:"timestamp"`
-	Counter   float64 `json:"counter"`
+	Timestamp string `json:"timestamp"`
+	Counter   int64  `json:"counter"`
 }
 
 type debugLogInput struct {
@@ -100,10 +102,10 @@ func main() {
 			out := debugOutput{
 				Config:    map[string]any{"contentType": in.ContentType},
 				Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
-				Counter:   float64(counter),
+				Counter:   counter,
 			}
 			if in.LargeInput != "" {
-				out.LargeInputLength = float64(len(in.LargeInput))
+				out.LargeInputLength = len(in.LargeInput)
 			}
 			return out, nil
 		},
@@ -126,7 +128,7 @@ func main() {
 		func(ctx core.ToolContext, _ struct{}) (debugRefreshOutput, error) {
 			return debugRefreshOutput{
 				Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
-				Counter:   float64(callCounter.Load()),
+				Counter:   callCounter.Load(),
 			}, nil
 		},
 		core.WithToolExecution(&core.ToolExecution{TaskSupport: core.TaskSupportForbidden}),

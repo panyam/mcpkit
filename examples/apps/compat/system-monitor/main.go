@@ -32,21 +32,20 @@ import (
 	"github.com/panyam/servicekit/middleware"
 )
 
-// All numeric fields below use float64 so the auto-derived JSON Schema
-// emits "type": "number" — upstream's zod schemas always do that, and
-// mcpkit's invopop reflection emits "integer" for Go int/int64/uint64
-// (real type-system divergence: Go has distinct numeric types, TS just
-// has `number`). Filed as a follow-up gap; float64 is the workaround
-// until either an OutputSchemaOverride lands or the schema generator
-// gains a "force number" option.
+// All numeric fields are semantically integers (counts, byte totals,
+// whole-number percentages, CPU timer ticks, uptime seconds). Using Go
+// `int` / `uint64` emits JSON Schema "type": "integer" — strictly more
+// precise than upstream's zod-everywhere "type": "number". The drift
+// comparator normalizes the two as equivalent (integer ⊂ number), so the
+// idiomatic Go types win.
 
 type systemInfoCPU struct {
-	Model string  `json:"model"`
-	Count float64 `json:"count"`
+	Model string `json:"model"`
+	Count int    `json:"count"`
 }
 
 type systemInfoMemory struct {
-	TotalBytes float64 `json:"totalBytes"`
+	TotalBytes uint64 `json:"totalBytes"`
 }
 
 type systemInfoOutput struct {
@@ -58,8 +57,8 @@ type systemInfoOutput struct {
 }
 
 type cpuCore struct {
-	Idle  float64 `json:"idle"`
-	Total float64 `json:"total"`
+	Idle  int64 `json:"idle"`
+	Total int64 `json:"total"`
 }
 
 type pollStatsCPU struct {
@@ -67,13 +66,13 @@ type pollStatsCPU struct {
 }
 
 type pollStatsMemory struct {
-	UsedBytes   float64 `json:"usedBytes"`
-	UsedPercent float64 `json:"usedPercent"`
-	FreeBytes   float64 `json:"freeBytes"`
+	UsedBytes   uint64 `json:"usedBytes"`
+	UsedPercent int    `json:"usedPercent"`
+	FreeBytes   uint64 `json:"freeBytes"`
 }
 
 type pollStatsUptime struct {
-	Seconds float64 `json:"seconds"`
+	Seconds int64 `json:"seconds"`
 }
 
 type pollStatsOutput struct {
@@ -91,7 +90,7 @@ func getSystemInfo() systemInfoOutput {
 		Arch:     runtime.GOARCH,
 		CPU: systemInfoCPU{
 			Model: "Unknown",
-			Count: float64(runtime.NumCPU()),
+			Count: runtime.NumCPU(),
 		},
 		Memory: systemInfoMemory{
 			TotalBytes: 0, // placeholder; visual test doesn't depend on accuracy

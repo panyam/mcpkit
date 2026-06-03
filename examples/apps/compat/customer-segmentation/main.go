@@ -2,10 +2,11 @@
 //
 // Single get-customer-data tool with an optional enum input ("All" + the four
 // SEGMENTS) and a structured output of customers + segment summaries. No
-// commas in the input description, so struct tags work. Numerics are float64
-// throughout to match upstream's zod-from-`z.number()` "type": "number".
-// Visual test is a random scatter plot upstream masks at the host level —
-// our stub returns empty arrays; the iframe generates its own demo data.
+// commas in the input description, so struct tags work. Idiomatic Go types:
+// counts and dollar/score figures are int; EngagementScore stays float64
+// (it's typically a 0-100 fractional). Visual test is a random scatter
+// plot upstream masks at the host level — our stub returns empty arrays;
+// the iframe generates its own demo data.
 //
 // Run:  EXT_APPS_DIR=/tmp/ext-apps PORT=3101 go run .
 package main
@@ -31,18 +32,18 @@ type customer struct {
 	ID              string  `json:"id"`
 	Name            string  `json:"name"`
 	Segment         string  `json:"segment"`
-	AnnualRevenue   float64 `json:"annualRevenue"`
-	EmployeeCount   float64 `json:"employeeCount"`
-	AccountAge      float64 `json:"accountAge"`
+	AnnualRevenue   int     `json:"annualRevenue"`
+	EmployeeCount   int     `json:"employeeCount"`
+	AccountAge      int     `json:"accountAge"`
 	EngagementScore float64 `json:"engagementScore"`
-	SupportTickets  float64 `json:"supportTickets"`
-	NPS             float64 `json:"nps"`
+	SupportTickets  int     `json:"supportTickets"`
+	NPS             int     `json:"nps"`
 }
 
 type segmentSummary struct {
-	Name  string  `json:"name"`
-	Count float64 `json:"count"`
-	Color string  `json:"color"`
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+	Color string `json:"color"`
 }
 
 type customerDataOutput struct {
