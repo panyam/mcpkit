@@ -2,10 +2,11 @@
 //
 // One tool — get-cohort-data — with an enum/default-laden input schema and
 // a deeply nested output schema. Defaults are single values (no commas), so
-// struct-tag reflection works cleanly. All numerics use float64 so the
-// auto-derived schema emits "type": "number" matching upstream's zod-from-
-// `z.number()` shape (mcpkit's invopop reflects int → "integer", which
-// diverges from upstream — same gap as system-monitor).
+// struct-tag reflection works cleanly. Idiomatic Go types throughout —
+// counts and indexes are int; Retention is float64 (it's a ratio like
+// 0.85). The drift comparator normalizes "integer" ↔ "number" so the
+// idiomatic types pass cleanly against upstream's "number"-everywhere
+// zod-derived schema.
 //
 // Run:  EXT_APPS_DIR=/tmp/ext-apps PORT=3101 go run .
 package main
@@ -25,24 +26,24 @@ import (
 )
 
 type cohortInput struct {
-	Metric      string  `json:"metric,omitempty" jsonschema:"enum=retention,enum=revenue,enum=active,default=retention"`
-	PeriodType  string  `json:"periodType,omitempty" jsonschema:"enum=monthly,enum=weekly,default=monthly"`
-	CohortCount float64 `json:"cohortCount,omitempty" jsonschema:"minimum=3,maximum=24,default=12"`
-	MaxPeriods  float64 `json:"maxPeriods,omitempty" jsonschema:"minimum=3,maximum=24,default=12"`
+	Metric      string `json:"metric,omitempty" jsonschema:"enum=retention,enum=revenue,enum=active,default=retention"`
+	PeriodType  string `json:"periodType,omitempty" jsonschema:"enum=monthly,enum=weekly,default=monthly"`
+	CohortCount int    `json:"cohortCount,omitempty" jsonschema:"minimum=3,maximum=24,default=12"`
+	MaxPeriods  int    `json:"maxPeriods,omitempty" jsonschema:"minimum=3,maximum=24,default=12"`
 }
 
 type cohortCell struct {
-	CohortIndex   float64 `json:"cohortIndex"`
-	PeriodIndex   float64 `json:"periodIndex"`
+	CohortIndex   int     `json:"cohortIndex"`
+	PeriodIndex   int     `json:"periodIndex"`
 	Retention     float64 `json:"retention"`
-	UsersRetained float64 `json:"usersRetained"`
-	UsersOriginal float64 `json:"usersOriginal"`
+	UsersRetained int     `json:"usersRetained"`
+	UsersOriginal int     `json:"usersOriginal"`
 }
 
 type cohortRow struct {
 	CohortID      string       `json:"cohortId"`
 	CohortLabel   string       `json:"cohortLabel"`
-	OriginalUsers float64      `json:"originalUsers"`
+	OriginalUsers int          `json:"originalUsers"`
 	Cells         []cohortCell `json:"cells"`
 }
 
