@@ -9,6 +9,7 @@ replace (
 )
 
 require (
+	github.com/panyam/gocurrent v0.1.1
 	github.com/panyam/mcpkit v0.2.41
 	github.com/panyam/mcpkit/examples/common v0.0.0
 	github.com/panyam/mcpkit/ext/ui v0.0.0
@@ -46,7 +47,6 @@ require (
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/panyam/demokit v0.0.25 // indirect
 	github.com/panyam/demokit/notebook v0.0.25 // indirect
-	github.com/panyam/gocurrent v0.1.1 // indirect
 	github.com/panyam/goutils v0.1.13 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect

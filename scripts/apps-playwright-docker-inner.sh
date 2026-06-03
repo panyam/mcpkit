@@ -141,6 +141,12 @@ else
         echo "ERROR: don't know how to start upstream server for $EXAMPLE — no dist/index.js or main.ts"
         exit 1
     fi
+    # pdf-server ships two surfaces (4-tool default, 9-tool --enable-interact).
+    # mcpkit fixture targets the 9-tool surface, so the drift-check upstream
+    # must boot with the flag too. Issue 554.
+    if [ "$EXAMPLE" = "pdf-server" ]; then
+        UPSTREAM_CMD="$UPSTREAM_CMD --enable-interact"
+    fi
     echo "Starting upstream TS server on :$UPSTREAM_PORT (for tools/list drift check; cmd: $UPSTREAM_CMD)..."
     (
         cd "$UPSTREAM_DIR"
