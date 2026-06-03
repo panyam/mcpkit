@@ -167,6 +167,10 @@ case "$EXAMPLE" in
         FIXTURE_DIR="examples/apps/compat/transcript"
         GREP_PATTERN="Transcript Server"
         ;;
+    sheet-music-server)
+        FIXTURE_DIR="examples/apps/compat/sheet-music"
+        GREP_PATTERN="Sheet Music Server"
+        ;;
     *)
         echo "ERROR: no mcpkit fixture for upstream example '$EXAMPLE'"
         echo "Available fixtures under examples/apps/compat/:"
