@@ -48,6 +48,22 @@ var (
 	ErrIndexEntryMissingDigest      = errors.New("skills: index entry missing digest")
 )
 
+// Provider configuration and walk errors.
+var (
+	// ErrProviderMissingFS is returned by NewProvider when no fs.FS was
+	// supplied via WithFS or WithDirectory.
+	ErrProviderMissingFS = errors.New("skills: provider needs WithFS or WithDirectory")
+
+	// ErrSkillNameMismatch is returned by NewProvider when a skill's
+	// SKILL.md frontmatter name does not equal the parent directory base
+	// name. SEP-2640 requires the two to match.
+	ErrSkillNameMismatch = errors.New("skills: frontmatter name does not match directory")
+
+	// ErrNestedSkill is returned by NewProvider when a SKILL.md is found
+	// inside an existing skill's subtree. SEP-2640 forbids skill nesting.
+	ErrNestedSkill = errors.New("skills: nested skill")
+)
+
 // Frontmatter parsing errors.
 var (
 	// ErrMissingFrontmatter is returned when a SKILL.md does not begin with
