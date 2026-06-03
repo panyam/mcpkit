@@ -260,6 +260,66 @@ func TestResolveRelative_Absolute(t *testing.T) {
 	}
 }
 
+func TestResolveRelative_IdempotentManifest(t *testing.T) {
+	// Resolving "SKILL.md" from the manifest URI itself is a no-op that
+	// lands back on the same SKILL.md. Allowed by SEP-2640 (no nesting
+	// happens) and exercised here so the deeper-SKILL.md check does not
+	// over-reject.
+	root, err := skills.ParseURI("skill://acme/billing/refunds/SKILL.md")
+	if err != nil {
+		t.Fatalf("ParseURI: %v", err)
+	}
+	got, err := skills.ResolveRelative(root, "SKILL.md")
+	if err != nil {
+		t.Fatalf("ResolveRelative(SKILL.md): %v", err)
+	}
+	if !got.IsManifest {
+		t.Errorf("IsManifest = false, want true")
+	}
+	if got.String() != "skill://acme/billing/refunds/SKILL.md" {
+		t.Errorf("String() = %q", got.String())
+	}
+}
+
+func TestResolveRelative_RejectsResolveToRoot(t *testing.T) {
+	// "." and "./" resolve back to the skill root directory with no file
+	// referenced. The caller almost certainly has a bug; reject rather
+	// than silently return an empty FilePath.
+	root, err := skills.ParseURI("skill://git-workflow/SKILL.md")
+	if err != nil {
+		t.Fatalf("ParseURI: %v", err)
+	}
+	for _, rel := range []string{".", "./", "references/.."} {
+		t.Run(rel, func(t *testing.T) {
+			_, err := skills.ResolveRelative(root, rel)
+			if !errors.Is(err, skills.ErrEmptyPathSegment) {
+				t.Errorf("ResolveRelative(%q) err = %v, want ErrEmptyPathSegment", rel, err)
+			}
+		})
+	}
+}
+
+func TestResolveRelative_RejectsCrossOrigin(t *testing.T) {
+	// A reference that carries its own scheme or authority would
+	// short-circuit RFC 3986 reference resolution to a different origin.
+	root, err := skills.ParseURI("skill://git-workflow/SKILL.md")
+	if err != nil {
+		t.Fatalf("ParseURI: %v", err)
+	}
+	for _, rel := range []string{
+		"https://evil.example.com/payload",
+		"skill://other-skill/SKILL.md",
+		"//other/path",
+	} {
+		t.Run(rel, func(t *testing.T) {
+			_, err := skills.ResolveRelative(root, rel)
+			if !errors.Is(err, skills.ErrRelativeEscapesSkill) {
+				t.Errorf("ResolveRelative(%q) err = %v, want ErrRelativeEscapesSkill", rel, err)
+			}
+		})
+	}
+}
+
 func TestResolveRelative_RejectsNestedManifest(t *testing.T) {
 	root, err := skills.ParseURI("skill://git-workflow/SKILL.md")
 	if err != nil {

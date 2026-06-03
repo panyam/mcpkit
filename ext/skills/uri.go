@@ -3,7 +3,6 @@ package skills
 import (
 	"fmt"
 	"net/url"
-	"path"
 	"strings"
 )
 
@@ -292,20 +291,28 @@ func ValidateSkillName(name string) error {
 //
 // SEP-2640 specifies that relative references within a skill resolve like
 // filesystem paths against the skill's root directory (the directory
-// containing SKILL.md). A SKILL.md URI is treated as identifying that root
-// for resolution purposes, exactly as a filesystem path to SKILL.md does.
+// containing SKILL.md). Resolution delegates to RFC 3986 reference
+// resolution via net/url, then checks the result stays inside the skill's
+// scope.
 //
 // Behavior:
 //   - skillRoot must have SkillPath populated (typically a manifest URI
 //     produced by ParseURI). ResolveRelative returns ErrNotManifestURI if
 //     not.
-//   - rel may use "/" as the separator, ".", and ".." segments. Empty
-//     segments (e.g., trailing "/") are rejected.
-//   - Resolution that escapes the skill root via ".." returns
-//     ErrRelativeEscapesSkill. References to "." or "" stay within scope.
-//   - The result reuses skillRoot.SkillPath; FilePath holds the resolved
-//     file path segments. IsManifest is set if the resolution lands on
-//     SKILL.md.
+//   - rel is a relative reference per RFC 3986. Dot-segment normalization
+//     (". ", "..") is delegated to the stdlib resolver.
+//   - References that carry their own scheme or authority, an absolute path,
+//     or an empty path are rejected before resolution because RFC 3986
+//     would let any of them short-circuit out of the skill scope.
+//   - After resolution, the result MUST still start with
+//     skillRoot.SkillPath. Otherwise the reference escaped (e.g., excess
+//     ".." segments) and ErrRelativeEscapesSkill is returned.
+//   - A resolved URI whose final segment is SKILL.md at a deeper position
+//     than the skill root is rejected with ErrManifestNotInRoot because
+//     SEP-2640 forbids skill nesting.
+//   - The result reuses skillRoot.SkillPath. FilePath holds the resolved
+//     file path segments. IsManifest is set when the resolution lands on
+//     the skill's own SKILL.md (the idempotent case).
 func ResolveRelative(skillRoot URIParts, rel string) (URIParts, error) {
 	if len(skillRoot.SkillPath) == 0 {
 		return URIParts{}, ErrNotManifestURI
@@ -314,44 +321,79 @@ func ResolveRelative(skillRoot URIParts, rel string) (URIParts, error) {
 		return URIParts{}, fmt.Errorf("%w: empty relative reference", ErrEmptyPathSegment)
 	}
 
-	// path.Clean handles . and .. resolution. We normalize the input first
-	// and reject absolute references (those are not "relative").
-	if strings.HasPrefix(rel, "/") {
+	base, err := url.Parse(skillRoot.ManifestURI())
+	if err != nil {
+		return URIParts{}, fmt.Errorf("skills: re-parse skill root: %w", err)
+	}
+	ref, err := url.Parse(rel)
+	if err != nil {
+		return URIParts{}, fmt.Errorf("%w: invalid reference %q: %v", ErrInvalidScheme, rel, err)
+	}
+	// RFC 3986 reference resolution honors a reference's scheme or
+	// authority and treats an absolute path as overriding. All three would
+	// silently short-circuit out of the skill scope, so reject them before
+	// handing off to ResolveReference.
+	if ref.Scheme != "" || ref.Host != "" {
+		return URIParts{}, fmt.Errorf("%w: reference carries its own scheme or authority %q", ErrRelativeEscapesSkill, rel)
+	}
+	if strings.HasPrefix(ref.Path, "/") {
 		return URIParts{}, fmt.Errorf("%w: absolute path %q", ErrRelativeEscapesSkill, rel)
 	}
-	cleaned := path.Clean(rel)
-	if cleaned == "." {
-		return URIParts{}, fmt.Errorf("%w: resolves to skill root", ErrEmptyPathSegment)
+	if ref.Path == "" {
+		return URIParts{}, fmt.Errorf("%w: empty relative reference", ErrEmptyPathSegment)
 	}
-	if cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+
+	resolved := base.ResolveReference(ref)
+
+	// Re-parse the resolved URI through ParseURI so it inherits the
+	// canonical segment shape, percent decoding, and the
+	// no-nested-SKILL.md rule that ParseURI already enforces on the URI
+	// string. Any error from ParseURI propagates with its named sentinel.
+	parsed, err := ParseURI(resolved.String())
+	if err != nil {
+		return URIParts{}, err
+	}
+
+	// RFC 3986 dot-segment removal silently collapses excess ".."
+	// segments against the path root, producing a URI that no longer
+	// starts with skillRoot.SkillPath. The prefix check below is the
+	// canonical escape detector.
+	if !hasPrefixSegments(parsed.AllSegments, skillRoot.SkillPath) {
 		return URIParts{}, fmt.Errorf("%w: %q", ErrRelativeEscapesSkill, rel)
 	}
 
-	segments := strings.Split(cleaned, "/")
-	for i, seg := range segments {
-		if seg == "" {
-			return URIParts{}, fmt.Errorf("%w: at index %d", ErrEmptyPathSegment, i)
-		}
-		// SKILL.md only valid if it's the sole resolved segment AND happens
-		// to be the manifest itself, which is a no-op (already at root).
-		// Per SEP-2640, a SKILL.md anywhere descendant is forbidden.
-		if seg == ManifestFilename && !(len(segments) == 1) {
-			return URIParts{}, ErrManifestNotInRoot
-		}
+	// Resolution landed back on the skill root directory itself (e.g.,
+	// rel normalized to no path segments). Treat as a caller mistake.
+	if len(parsed.AllSegments) == len(skillRoot.SkillPath) {
+		return URIParts{}, fmt.Errorf("%w: resolves to skill root", ErrEmptyPathSegment)
 	}
 
-	skillCopy := append([]string(nil), skillRoot.SkillPath...)
-	allSegs := append(skillCopy, segments...)
+	// ParseURI treats any terminal SKILL.md as a manifest URI. After
+	// resolution, a manifest deeper than the original skill root means the
+	// reference pointed at a nested skill, which SEP-2640 forbids. The
+	// idempotent case (resolving back to the same manifest) is allowed.
+	if parsed.IsManifest && len(parsed.SkillPath) > len(skillRoot.SkillPath) {
+		return URIParts{}, fmt.Errorf("%w: nested SKILL.md in resolved path", ErrManifestNotInRoot)
+	}
 
-	return URIParts{
-		Scheme:      Scheme,
-		AllSegments: allSegs,
-		SkillPath:   skillCopy,
-		FilePath:    segments,
-		SkillName:   skillRoot.SkillName,
-		IsManifest:  len(segments) == 1 && segments[0] == ManifestFilename,
-		Raw:         "",
-	}, nil
+	// Re-split at the original skill boundary so the result reflects this
+	// skill's identity rather than whatever ParseURI inferred from the
+	// terminal segment.
+	return parsed.SplitAt(len(skillRoot.SkillPath))
+}
+
+// hasPrefixSegments reports whether segs begins with prefix, segment by
+// segment.
+func hasPrefixSegments(segs, prefix []string) bool {
+	if len(segs) < len(prefix) {
+		return false
+	}
+	for i, p := range prefix {
+		if segs[i] != p {
+			return false
+		}
+	}
+	return true
 }
 
 // IsIndexURI reports whether s is the reserved skill://index.json URI.
