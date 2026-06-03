@@ -125,8 +125,7 @@ test-apps-playwright: ## Run ext-apps Playwright tests against testserver (needs
 test-apps-playwright-docker: ## Same as test-apps-playwright but inside upstream's playwright Docker image — CI-identical baselines
 	DOCKER=1 bash scripts/apps-playwright-test.sh
 
-demo-app: ## Browse a single upstream ext-apps example in your browser (no Playwright). Usage: make demo-app EXAMPLE=<name> [OPEN=1]
-	@if [ -z "$(EXAMPLE)" ]; then echo "ERROR: pass EXAMPLE=<upstream-example-name>, e.g. make demo-app EXAMPLE=video-resource-server"; exit 1; fi
+demo-app: ## Browse a single upstream ext-apps example in your browser (no Playwright). Usage: make demo-app EXAMPLE=<name> [OPEN=1]. Run without EXAMPLE for help.
 	EXAMPLE=$(EXAMPLE) OPEN=$(OPEN) bash scripts/apps-demo.sh
 
 testkcl: ## Run Keycloak auth interop tests (requires Docker, run upkcl first)
