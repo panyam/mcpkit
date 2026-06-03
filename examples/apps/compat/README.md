@@ -171,15 +171,21 @@ poking at a SKIP example. CI / headless invocations should pass `OPEN=0`.
 ### Inspecting the protocol surface (`make inspect-app`)
 
 Sibling target: instead of opening basic-host (which renders the App),
-open **MCPJam Inspector** pointed at the same server. Shows you the wire
-— raw `tools/list` JSON, `_meta.ui` structure, tool-call payloads,
-resource bytes.
+runs **MCPJam Inspector locally** (`npx @mcpjam/inspector@latest`) and
+boots the upstream TS server alongside. MCPJam opens its own browser tab;
+you paste the upstream server URL into MCPJam to connect.
 
 ```bash
 make inspect-app EXAMPLE=basic-server-vanillajs
 make inspect-app EXAMPLE=integration-server
-OPEN=0 make inspect-app EXAMPLE=quickstart      # don't auto-open
+make inspect-app EXAMPLE=debug-server
 ```
+
+The wrapper prints a step-by-step banner: where the upstream server is
+serving, what to paste into MCPJam, what to look for in each section.
+Once MCPJam's browser tab is open, you'll see the wire — raw
+`tools/list` JSON, `_meta.ui` structure, tool-call payloads, resource
+bytes.
 
 Decision matrix:
 

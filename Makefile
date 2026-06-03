@@ -128,8 +128,8 @@ test-apps-playwright-docker: ## Same as test-apps-playwright but inside upstream
 demo-app: ## Browse a single upstream ext-apps example in your browser via basic-host (renders the App iframe). Usage: make demo-app EXAMPLE=<name> [OPEN=0]. Run without EXAMPLE for help.
 	EXAMPLE=$(EXAMPLE) OPEN=$(OPEN) bash scripts/apps-demo.sh
 
-inspect-app: ## Boot an upstream example and open MCPJam Inspector — shows the protocol surface (tools/list JSON, _meta.ui, tool-call payloads). Sibling to demo-app. Usage: make inspect-app EXAMPLE=<name> [OPEN=0].
-	EXAMPLE=$(EXAMPLE) OPEN=$(OPEN) bash scripts/apps-inspect.sh
+inspect-app: ## Boot an upstream example and run MCPJam Inspector locally (npx @mcpjam/inspector@latest) — shows the protocol surface. Sibling to demo-app. Usage: make inspect-app EXAMPLE=<name>.
+	EXAMPLE=$(EXAMPLE) bash scripts/apps-inspect.sh
 
 testkcl: ## Run Keycloak auth interop tests (requires Docker, run upkcl first)
 	cd tests/keycloak && go test ./... -count=1 -timeout 120s -v
