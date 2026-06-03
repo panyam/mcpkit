@@ -125,8 +125,11 @@ test-apps-playwright: ## Run ext-apps Playwright tests against testserver (needs
 test-apps-playwright-docker: ## Same as test-apps-playwright but inside upstream's playwright Docker image — CI-identical baselines
 	DOCKER=1 bash scripts/apps-playwright-test.sh
 
-demo-app: ## Browse a single upstream ext-apps example in your browser (no Playwright). Usage: make demo-app EXAMPLE=<name> [OPEN=1]. Run without EXAMPLE for help.
+demo-app: ## Browse a single upstream ext-apps example in your browser via basic-host (renders the App iframe). Usage: make demo-app EXAMPLE=<name> [OPEN=0]. Run without EXAMPLE for help.
 	EXAMPLE=$(EXAMPLE) OPEN=$(OPEN) bash scripts/apps-demo.sh
+
+inspect-app: ## Boot an upstream example and open MCPJam Inspector — shows the protocol surface (tools/list JSON, _meta.ui, tool-call payloads). Sibling to demo-app. Usage: make inspect-app EXAMPLE=<name> [OPEN=0].
+	EXAMPLE=$(EXAMPLE) OPEN=$(OPEN) bash scripts/apps-inspect.sh
 
 testkcl: ## Run Keycloak auth interop tests (requires Docker, run upkcl first)
 	cd tests/keycloak && go test ./... -count=1 -timeout 120s -v
@@ -448,5 +451,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-protogen test-e2e test-experimental test-apps-playwright test-apps-playwright-docker demo-app testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-elicitation refresh-conformance check-conformance-stale vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root docs-site-build docs-site-serve docs-site-deploy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
+.PHONY: build test test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-protogen test-e2e test-experimental test-apps-playwright test-apps-playwright-docker demo-app inspect-app testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-elicitation refresh-conformance check-conformance-stale vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root docs-site-build docs-site-serve docs-site-deploy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
 .DEFAULT_GOAL := help

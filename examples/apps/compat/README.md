@@ -168,6 +168,30 @@ an example without driving the test suite. Use it when comparing what
 upstream's TS renders vs. what a mcpkit-Go drop-in would render, or when
 poking at a SKIP example. CI / headless invocations should pass `OPEN=0`.
 
+### Inspecting the protocol surface (`make inspect-app`)
+
+Sibling target: instead of opening basic-host (which renders the App),
+open **MCPJam Inspector** pointed at the same server. Shows you the wire
+— raw `tools/list` JSON, `_meta.ui` structure, tool-call payloads,
+resource bytes.
+
+```bash
+make inspect-app EXAMPLE=basic-server-vanillajs
+make inspect-app EXAMPLE=integration-server
+OPEN=0 make inspect-app EXAMPLE=quickstart      # don't auto-open
+```
+
+Decision matrix:
+
+| Goal | Use |
+|---|---|
+| "Does this App render correctly? Does the bridge work?" | `make demo-app` |
+| "What does the tool surface actually look like on the wire? What's in `_meta.ui`?" | `make inspect-app` |
+| "Strict parity check against upstream's TS reference" | `make test-apps-playwright-docker` |
+
+The console banner printed by each target tells you what to do once the
+browser opens.
+
 ## Watching a run interactively
 
 **Native mode opens a visible browser by default** — local dev iteration
