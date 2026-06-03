@@ -44,7 +44,7 @@ require (
 	github.com/panyam/demokit/notebook v0.0.25 // indirect
 	github.com/panyam/gocurrent v0.1.1 // indirect
 	github.com/panyam/goutils v0.1.13 // indirect
-	github.com/panyam/servicekit v0.1.1 // indirect
+	github.com/panyam/servicekit v0.1.2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
