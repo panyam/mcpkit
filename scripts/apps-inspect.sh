@@ -1,22 +1,24 @@
 #!/usr/bin/env bash
 # Sibling to apps-demo.sh — boots upstream's TS server for an ext-apps
-# example, then opens MCPJam Inspector instead of basic-host. Where
-# demo-app shows you the *rendered App* (full basic-host + sandbox iframe +
-# bridge protocol), inspect-app shows you the *protocol surface*: raw
-# tools/list JSON, _meta.ui structure, tool-call payloads, resource list.
-# Useful for cross-checking what mcpkit's drop-in fixture is actually
-# putting on the wire, or for poking at tools individually.
+# example, then runs MCPJam Inspector (`npx @mcpjam/inspector@latest`)
+# pointed at it. Where demo-app shows you the *rendered App* (full
+# basic-host + sandbox iframe + bridge protocol), inspect-app shows you
+# the *protocol surface*: raw tools/list JSON, _meta.ui structure,
+# tool-call payloads, resource list. Useful for cross-checking what
+# mcpkit's drop-in fixture is actually putting on the wire, or for poking
+# at tools individually.
 #
 # Usage:
-#   make inspect-app EXAMPLE=<name> [OPEN=0]
+#   make inspect-app EXAMPLE=<name>
 #
 # Env vars:
 #   EXT_APPS_DIR    Path to ext-apps checkout (default: /tmp/ext-apps)
 #   SERVER_PORT     upstream TS server port (default: 3101)
 #   EXAMPLE         Upstream example folder name (required)
-#   OPEN            Set to 0 to skip auto-opening MCPJam (CI / headless)
 #
-# Runs in the foreground; Ctrl-C tears the server down.
+# Runs in the foreground; Ctrl-C tears the upstream server down. MCPJam
+# handles its own browser opening and lifecycle — when you quit MCPJam,
+# you'll need to Ctrl-C this script to release the upstream server too.
 
 set -euo pipefail
 
@@ -24,29 +26,28 @@ EXT_APPS_DIR="${EXT_APPS_DIR:-/tmp/ext-apps}"
 EXT_APPS_REPO="https://github.com/modelcontextprotocol/ext-apps.git"
 SERVER_PORT="${SERVER_PORT:-3101}"
 EXAMPLE="${EXAMPLE:-}"
-OPEN="${OPEN:-1}"
-MCPJAM_URL="https://www.mcpjam.com/"
 
 if [ -z "$EXAMPLE" ]; then
     cat <<HELP
 Usage:
-  make inspect-app EXAMPLE=<name> [OPEN=0]
+  make inspect-app EXAMPLE=<name>
 
 What it does:
-  Boots upstream's TS server for an ext-apps example and opens MCPJam
-  Inspector at $MCPJAM_URL — a generic MCP inspector that surfaces the
-  raw protocol (tools/list JSON, _meta.ui structure, tool-call payloads).
-  Where `make demo-app` shows the rendered App, this shows the wire.
+  Boots upstream's TS server for an ext-apps example on a local port,
+  then runs MCPJam Inspector locally (\`npx @mcpjam/inspector@latest\`)
+  which opens its own browser UI. You connect MCPJam to the upstream
+  server by pasting the URL the banner prints. Where \`make demo-app\`
+  shows the rendered App, this shows the wire (tools/list JSON,
+  _meta.ui structure, tool-call payloads).
 
 Examples:
   make inspect-app EXAMPLE=basic-server-vanillajs
   make inspect-app EXAMPLE=integration-server
-  OPEN=0 make inspect-app EXAMPLE=quickstart       # don't auto-open
+  make inspect-app EXAMPLE=debug-server
 
 Env vars (with defaults):
   EXT_APPS_DIR=/tmp/ext-apps    where ext-apps is cloned / will be cloned
   SERVER_PORT=3101              upstream TS server port
-  OPEN=1                        auto-open MCPJam; set to 0 to skip
 
 HELP
     if [ -d "$EXT_APPS_DIR/examples" ]; then
@@ -163,52 +164,50 @@ SERVER_URL="http://localhost:$SERVER_PORT/mcp"
 cat <<BANNER
 
 ====================================================================
- $EXAMPLE is serving an MCP endpoint at:
-   $SERVER_URL
+ STEP 1: upstream's $EXAMPLE TS server is now running.
+         MCP endpoint:  $SERVER_URL
 
- MCPJam Inspector: $MCPJAM_URL
+ STEP 2: launching MCPJam Inspector via npx (this may take a few
+         seconds the first time as npm fetches the package)...
 
- Once MCPJam loads:
-   1. Click "Add Server" (or "Connect to MCP Server")
-   2. Paste the URL above  →  $SERVER_URL
-   3. Pick "Streamable HTTP" as the transport
-   4. Once connected, browse the left nav:
+         MCPJam will open its own browser tab. When it does:
 
-      Tools         →  see the example's tools/list. Note the
-                       _meta.ui.resourceUri pointing at the App's
-                       HTML, the visibility array, output schemas, etc.
-      Resources     →  ui://<name>/mcp-app.html is the App's iframe
-                       HTML. Click "Read" to see the bytes (this is
-                       what basic-host fetches and renders).
-      Logs / Events →  watch the JSON-RPC frames as you make calls.
+         a. Find the "Add Server" / "Connect" / "+ Server" control
+         b. Paste the URL above  →  $SERVER_URL
+         c. Pick "Streamable HTTP" as the transport
+         d. Connect.
 
-   5. Pick a tool, fill any required args, click "Call". The response
-      shows you exactly what's on the wire — text + structured content
-      + any tool-level _meta.
+ STEP 3: browse the left nav once connected:
 
- What this is testing (vs make demo-app):
-   demo-app    → drives basic-host, RENDERS the App iframe + drives the
-                 bridge postMessage protocol (the user-facing App).
-   inspect-app → shows you the protocol SURFACE — tools/list JSON,
-                 _meta.ui structure, tool-call payloads, resource bytes.
-                 Useful for cross-checking what mcpkit's drop-in fixture
-                 puts on the wire, or for poking at tools individually.
+         Tools         →  see the example's tools/list. Note the
+                          _meta.ui.resourceUri pointing at the App's
+                          HTML, the visibility array, output schemas.
+         Resources     →  ui://<name>/mcp-app.html is the App's iframe
+                          HTML — click "Read" to see the bytes.
+         Logs / Events →  watch the JSON-RPC frames as you make calls.
 
- Logs:
-   TS server:  /tmp/apps-inspect-server.log
+         Pick a tool, fill any required args, click "Call". The response
+         shows exactly what's on the wire — text content + structured
+         content + any tool-level _meta.
 
- Press Ctrl-C to stop.
+ inspect-app vs demo-app:
+   demo-app    → basic-host RENDERS the App iframe + drives the bridge
+                 protocol (the user-facing App view).
+   inspect-app → MCPJam shows you the protocol SURFACE — useful for
+                 cross-checking what's on the wire or poking at tools
+                 individually.
+
+ Logs:  /tmp/apps-inspect-server.log (upstream TS server)
+
+ When you're done: close MCPJam's browser tab, then Ctrl-C here to
+ release the upstream server.
 ====================================================================
 
 BANNER
 
-if [ "$OPEN" = "1" ]; then
-    if command -v open >/dev/null 2>&1; then
-        open "$MCPJAM_URL"
-    elif command -v xdg-open >/dev/null 2>&1; then
-        xdg-open "$MCPJAM_URL" >/dev/null 2>&1 &
-    fi
-fi
-
-# Wait forever (until Ctrl-C triggers cleanup)
-wait $SERVER_PID
+# MCPJam Inspector handles its own browser opening + lifecycle. Run it in
+# the foreground; when the user quits MCPJam (or Ctrl-Cs here), our trap
+# tears the upstream server down.
+echo "Running: npx @mcpjam/inspector@latest"
+echo ""
+npx @mcpjam/inspector@latest
