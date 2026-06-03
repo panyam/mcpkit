@@ -26,6 +26,21 @@ type TypedAppToolConfig[In, Out any] struct {
 	// task flow.
 	Execution *core.ToolExecution
 
+	// InputSchemaOverride replaces the InputSchema that would otherwise be
+	// auto-derived from the In type parameter. Use when struct-tag-based
+	// reflection can't produce the exact schema you need — e.g., defaults or
+	// descriptions containing commas (invopop's tag parser truncates at the
+	// first comma; see issue 542), schemas using JSON Schema 2020-12
+	// features (if/then/else, $anchor, complex allOf composition), or
+	// fixtures that need byte-for-byte parity with an external reference
+	// schema.
+	//
+	// When set, the handler still unmarshals into In, so the override must
+	// stay compatible with In's wire shape (same field names + types). Pass
+	// a json.RawMessage or any value that marshals to the desired JSON
+	// Schema.
+	InputSchemaOverride any
+
 	// Handler handles tool invocations with typed input.
 	Handler func(ctx core.ToolContext, input In) (Out, error)
 
@@ -79,7 +94,11 @@ type TypedAppToolConfig[In, Out any] struct {
 //	    ResourceHandler: serveBoardHTML,
 //	})
 func RegisterTypedAppTool[In, Out any](reg ToolResourceRegistrar, cfg TypedAppToolConfig[In, Out]) {
-	typed := core.TypedTool[In, Out](cfg.Name, cfg.Description, cfg.Handler)
+	var typedOpts []core.TypedToolOption
+	if cfg.InputSchemaOverride != nil {
+		typedOpts = append(typedOpts, core.WithInputSchemaOverride(cfg.InputSchemaOverride))
+	}
+	typed := core.TypedTool[In, Out](cfg.Name, cfg.Description, cfg.Handler, typedOpts...)
 	RegisterAppTool(reg, AppToolConfig{
 		Name:                  cfg.Name,
 		Title:                 cfg.Title,
