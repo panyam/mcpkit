@@ -9,16 +9,31 @@ import (
 
 // URIParts is a parsed skill:// URI.
 //
-// SEP-2640 splits a skill URI into a skill path (locating the skill directory
-// within the server's namespace) and a file path (the file inside the skill).
-// For manifest URIs (ending in /SKILL.md) the boundary is uniquely determined
-// by the SKILL.md suffix and ParseURI sets SkillPath, FilePath, SkillName,
-// and IsManifest accordingly. For non-manifest URIs the boundary is not
-// recoverable from the URI alone; ParseURI returns the parsed segments in
-// AllSegments and leaves SkillPath/FilePath empty. Callers establish the
-// boundary via SplitAt (when the skill path is known from the index or a
-// prior manifest read) or via ResolveRelative (when computing a sibling URI
-// from a known skill root).
+// SEP-2640 splits a skill URI into a skill path (locating the skill
+// directory within the server's namespace) and a file path (the file inside
+// the skill). For manifest URIs ending in /SKILL.md the boundary is fixed
+// by the SKILL.md suffix, and ParseURI sets SkillPath, FilePath, SkillName,
+// and IsManifest from it.
+//
+// For non-manifest URIs the boundary cannot be recovered from the URI
+// alone. SEP-2640's claim that "the skill name is always recoverable from
+// the URI alone, without reading frontmatter" is grounded in two
+// manifest-URI examples where SKILL.md acts as the boundary. The spec also
+// allows prefix segments to be any RFC 3986 path segment with no further
+// constraint, so a prefix segment and an intermediate file-path segment
+// share the same character class. In
+// skill://acme/billing/refunds/templates/email.md the segments refunds,
+// templates, billing, and acme all satisfy the Agent Skills name rules,
+// and a URI-only scan cannot pick refunds over templates without external
+// knowledge from the discovery index or a prior manifest read. SEP-2640's
+// host workflow always supplies that knowledge, so the spec's claim holds
+// operationally even though the URI string in isolation is ambiguous.
+//
+// ParseURI therefore returns parsed segments in AllSegments and leaves
+// SkillPath, FilePath, SkillName, and IsManifest unset for non-manifest
+// URIs. Callers establish the boundary by calling SplitAt(n) when the
+// skill path length is known from an index entry or a prior manifest read,
+// or by calling ResolveRelative from a known skill root.
 type URIParts struct {
 	// Scheme is always "skill" for URIs that pass ParseURI's validation.
 	Scheme string
