@@ -15,7 +15,6 @@ package main
 import (
 	"flag"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -24,30 +23,8 @@ import (
 	"github.com/panyam/mcpkit/examples/common"
 	"github.com/panyam/mcpkit/ext/ui"
 	"github.com/panyam/mcpkit/server"
+	"github.com/panyam/servicekit/middleware"
 )
-
-// permissiveCORS is sized for the test fixture only — basic-host fetches our
-// MCP endpoint from a different localhost port, so the browser needs CORS
-// headers exposing Mcp-Session-Id and the standard MCP request headers.
-func permissiveCORS(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		origin := r.Header.Get("Origin")
-		if origin == "" {
-			origin = "*"
-		}
-		h := w.Header()
-		h.Set("Access-Control-Allow-Origin", origin)
-		h.Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-		h.Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version")
-		h.Set("Access-Control-Expose-Headers", "Mcp-Session-Id")
-		h.Set("Access-Control-Allow-Credentials", "true")
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
 
 type getTimeOutput struct {
 	Time string `json:"time"`
@@ -103,7 +80,13 @@ func main() {
 
 	log.Printf("basic-vanillajs compat fixture listening on %s (MCP at /mcp)", *addr)
 	log.Printf("serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
-	if err := srv.Run(*addr, server.WithHandlerWrap(permissiveCORS)); err != nil {
+	cors := middleware.CORS(nil,
+		middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
+		middleware.CORSAllowHeaders("Content-Type", "Authorization", "Mcp-Session-Id", "Mcp-Protocol-Version"),
+		middleware.CORSExposeHeaders("Mcp-Session-Id"),
+	)
+
+	if err := srv.Run(*addr, server.WithHandlerWrap(cors)); err != nil {
 		log.Fatal(err)
 	}
 }

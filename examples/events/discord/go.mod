@@ -18,7 +18,7 @@ require (
 	github.com/panyam/mcpkit/experimental/ext/events v0.0.0
 	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.0.0-00010101000000-000000000000
 	github.com/panyam/mcpkit/ext/auth v0.2.42
-	github.com/panyam/servicekit v0.1.1
+	github.com/panyam/servicekit v0.1.2
 	github.com/stretchr/testify v1.11.1
 )
 
