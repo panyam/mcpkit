@@ -138,6 +138,36 @@ surface parity isn't enough to match a multi-server baseline. Per-
 fixture committed PNGs capture our actual run shape, which is the only
 fair regression check we can do.
 
+## Browsing an upstream example without Playwright
+
+If you just want to *see* what an upstream example looks like in `basic-host`
+— including the SKIP ones that don't have automated tests (`video-resource-
+server`, `lazy-auth-server`) — there's a separate target:
+
+```bash
+make demo-app EXAMPLE=video-resource-server
+make demo-app EXAMPLE=lazy-auth-server
+make demo-app EXAMPLE=basic-server-vanillajs       # also works for testable examples
+make demo-app EXAMPLE=quickstart OPEN=1            # auto-open in browser
+```
+
+What it does (pure browse, no Playwright, no Docker, no drift check, no
+snapshots):
+
+1. Clones / updates `$EXT_APPS_DIR` (default `/tmp/ext-apps`)
+2. Runs `npm install` if needed + `npm run build` for the chosen example
+3. Starts the upstream **TS** server (not a mcpkit-Go fixture) on
+   `SERVER_PORT` (default 3101). Uses `node dist/index.js` if the build
+   produced one, falls back to `npx tsx main.ts`.
+4. Starts `basic-host` on `HARNESS_PORT` (default 8080) with `SERVERS`
+   pointing at the TS server
+5. Prints the URL; press Ctrl-C to stop.
+
+Set `OPEN=1` to auto-open the browser. Use this when you want to see an
+example without driving the test suite, when comparing what upstream's TS
+renders vs. what a mcpkit-Go drop-in would render, or when poking at a SKIP
+example.
+
 ## Watching a run interactively
 
 **Native mode opens a visible browser by default** — local dev iteration
