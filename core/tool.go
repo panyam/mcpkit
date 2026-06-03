@@ -245,6 +245,12 @@ type RelatedTaskMeta struct {
 }
 
 // ToolResultMeta carries optional metadata on a tool result.
+//
+// On the wire `_meta` is an open object — extensions can carry
+// vendor- or feature-namespaced keys alongside the typed fields. The
+// `Extras` field is the seam for that: typed fields take precedence
+// when their keys collide, otherwise extras spread at the top level.
+// Same pattern used by ErrorData.Extra in core/jsonrpc.go.
 type ToolResultMeta struct {
 	// NextCursor is a pagination cursor for fetching the next page.
 	// Empty when there are no more pages.
@@ -253,6 +259,74 @@ type ToolResultMeta struct {
 	// RelatedTask identifies a task associated with this result.
 	// Per MCP spec: set by tasks/result responses.
 	RelatedTask *RelatedTaskMeta `json:"io.modelcontextprotocol/related-task,omitempty"`
+
+	// Extras carries extension- or feature-namespaced metadata that
+	// doesn't fit the typed fields above. Keys serialize at the top
+	// level of the `_meta` object alongside the typed fields. Use
+	// namespaced keys ("vendor.com/feature") to avoid collisions with
+	// future spec fields. Typed fields take precedence on collision.
+	Extras map[string]any `json:"-"`
+}
+
+// MarshalJSON spreads Extras at the top level alongside the typed
+// fields. Typed fields take precedence if a key collides.
+func (m ToolResultMeta) MarshalJSON() ([]byte, error) {
+	out := map[string]json.RawMessage{}
+	for k, v := range m.Extras {
+		b, err := json.Marshal(v)
+		if err != nil {
+			return nil, err
+		}
+		out[k] = b
+	}
+	if m.NextCursor != "" {
+		b, err := json.Marshal(m.NextCursor)
+		if err != nil {
+			return nil, err
+		}
+		out["nextCursor"] = b
+	}
+	if m.RelatedTask != nil {
+		b, err := json.Marshal(m.RelatedTask)
+		if err != nil {
+			return nil, err
+		}
+		out["io.modelcontextprotocol/related-task"] = b
+	}
+	return json.Marshal(out)
+}
+
+// UnmarshalJSON absorbs unknown keys into Extras so round-tripping
+// peer-emitted _meta doesn't drop extension data.
+func (m *ToolResultMeta) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if v, ok := raw["nextCursor"]; ok {
+		if err := json.Unmarshal(v, &m.NextCursor); err != nil {
+			return err
+		}
+		delete(raw, "nextCursor")
+	}
+	if v, ok := raw["io.modelcontextprotocol/related-task"]; ok {
+		m.RelatedTask = &RelatedTaskMeta{}
+		if err := json.Unmarshal(v, m.RelatedTask); err != nil {
+			return err
+		}
+		delete(raw, "io.modelcontextprotocol/related-task")
+	}
+	if len(raw) > 0 {
+		m.Extras = make(map[string]any, len(raw))
+		for k, v := range raw {
+			var any any
+			if err := json.Unmarshal(v, &any); err != nil {
+				return err
+			}
+			m.Extras[k] = any
+		}
+	}
+	return nil
 }
 
 // Content is a single content item in a tool result.

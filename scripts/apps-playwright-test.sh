@@ -220,15 +220,14 @@ case "$EXAMPLE" in
         ;;
     pdf-server)
         FIXTURE_DIR="examples/apps/compat/pdf-server"
-        # Negative-lookahead grep: match "PDF Server" only when NOT
-        # followed by " -" or " —". That keeps the bare servers.spec.ts
-        # describe ("PDF Server › …") in scope while excluding the 4
-        # extra pdf-*.spec.ts files whose describes start with
-        # "PDF Server - Annotations", "PDF Server - get_viewer_state",
-        # "PDF Server — incremental loading", and "PDF Server —
-        # annotation tombstone preservation". Those need the full
-        # interact command-queue + long-poll backend; tracked separately.
-        GREP_PATTERN='PDF Server(?! [—-])'
+        # Match all PDF-related describes: servers.spec.ts standard
+        # ("PDF Server"), pdf-annotations / pdf-incremental-load /
+        # pdf-annotations.spec ("PDF Server - …", "PDF Server — …"),
+        # and pdf-viewer-zoom ("PDF Viewer — …"). pdf-annotations-api
+        # ("PDF Annotation — API …") is LLM-gated upstream
+        # (ANTHROPIC_API_KEY) and auto-skips when no key is set.
+        # Issue 554.
+        GREP_PATTERN='PDF (Server|Viewer|Annotation)'
         ;;
     *)
         echo "ERROR: no mcpkit fixture for upstream example '$EXAMPLE'"
