@@ -38,13 +38,48 @@ EXAMPLE="${EXAMPLE:-}"
 OPEN="${OPEN:-}"
 
 if [ -z "$EXAMPLE" ]; then
-    echo "ERROR: EXAMPLE is required. Set to an upstream ext-apps example folder name."
+    cat <<'HELP'
+Usage:
+  make demo-app EXAMPLE=<name> [OPEN=1]
+
+What it does:
+  Spins up upstream's TS server + basic-host for one ext-apps example so
+  you can browse it in a real browser. No Playwright, no Docker, no drift
+  check. Useful for SKIP examples (no automated tests) or just looking at
+  what something renders to.
+
+Quick examples:
+  make demo-app EXAMPLE=video-resource-server
+  make demo-app EXAMPLE=lazy-auth-server
+  make demo-app EXAMPLE=quickstart OPEN=1
+  make demo-app EXAMPLE=basic-server-vanillajs SERVER_PORT=3201 HARNESS_PORT=8180
+
+Env vars (with defaults):
+  EXT_APPS_DIR=/tmp/ext-apps    where ext-apps is cloned / will be cloned
+  HARNESS_PORT=8080             basic-host port
+  SANDBOX_PORT=8081             basic-host sandbox port
+  SERVER_PORT=3101              upstream TS server port
+  OPEN=                         set to 1 to auto-open the browser
+
+HELP
+    if [ -d "${EXT_APPS_DIR:-/tmp/ext-apps}/examples" ]; then
+        echo "Available examples (from ${EXT_APPS_DIR:-/tmp/ext-apps}/examples/):"
+        for d in "${EXT_APPS_DIR:-/tmp/ext-apps}/examples/"*/; do
+            name="$(basename "$d")"
+            # Skip basic-host (the harness, not a demo target)
+            if [ "$name" = "basic-host" ]; then continue; fi
+            echo "  $name"
+        done
+    else
+        echo "Available examples: ${EXT_APPS_DIR:-/tmp/ext-apps} isn't cloned yet."
+        echo "Pass any EXAMPLE=<name> to trigger the first clone; pick from"
+        echo "the upstream list at https://github.com/modelcontextprotocol/ext-apps/tree/main/examples"
+    fi
     echo ""
-    echo "Examples:"
-    echo "  make demo-app EXAMPLE=video-resource-server"
-    echo "  make demo-app EXAMPLE=lazy-auth-server"
-    echo "  make demo-app EXAMPLE=basic-server-vanillajs"
-    exit 1
+    echo "Tip: 'make test-apps-playwright EXAMPLE=<name>' runs the full Playwright suite"
+    echo "against a mcpkit-Go fixture if one exists under examples/apps/compat/. The"
+    echo "demo-app target is the lighter-weight 'just let me look at it' alternative."
+    exit 0
 fi
 
 # --- Prerequisites ----------------------------------------------------------
