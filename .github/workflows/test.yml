@@ -137,3 +137,32 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MCPCONFORMANCE_BASE_PATH: ${{ github.workspace }}/conf-upstream-main
         run: make check-conformance-stale
+
+  apps-compat-report:
+    # Mirrors conformance-report: regenerates conformance/apps/COMPAT.md
+    # from umbrella tracking issue panyam/mcpkit#533 and fails if the
+    # committed file is stale. Forces every fixture PR to update both the
+    # umbrella row and the rendered report in lock-step. See issue 541.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run apps-compat renderer unit tests
+        working-directory: tools/compat-reports
+        run: |
+          npm install --silent
+          npm test
+
+      - name: Check conformance/apps/COMPAT.md is fresh
+        env:
+          # GH_TOKEN is enough — the umbrella body is read via gh CLI
+          # which inherits this from the env.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: make check-apps-compat-stale

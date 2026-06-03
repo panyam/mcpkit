@@ -5,7 +5,8 @@
     "children": [
       { "name": "Coverage matrix", "url": "conformance/" },
       { "name": "Upstream audit",  "url": "conformance/upstream-audit/" },
-      { "name": "Fixture audit",   "url": "conformance/fixture-audit/" }
+      { "name": "Fixture audit",   "url": "conformance/fixture-audit/" },
+      { "name": "Apps compat",     "url": "conformance/apps/compat/" }
     ]
   },
   {
