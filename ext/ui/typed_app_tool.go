@@ -41,6 +41,19 @@ type TypedAppToolConfig[In, Out any] struct {
 	// Schema.
 	InputSchemaOverride any
 
+	// OutputSchemaOverride is the symmetric mirror of InputSchemaOverride for
+	// the OutputSchema field. Use when Out's auto-derived schema can't be
+	// made byte-identical to an external reference — common cases are
+	// nullable types (upstream's `z.string().nullable()` wants
+	// `{"type": ["string", "null"]}` which Go reflection won't produce),
+	// `interface{}` / `any` fields that invopop reflects to schemas strict
+	// MCP-SDK clients reject, or apps/compat fixtures that need byte-for-byte
+	// parity with an upstream reference.
+	//
+	// The override is preserved as-is on the wire. The handler still returns
+	// Out, so the override must stay compatible with Out's wire shape.
+	OutputSchemaOverride any
+
 	// Handler handles tool invocations with typed input.
 	Handler func(ctx core.ToolContext, input In) (Out, error)
 
@@ -97,6 +110,9 @@ func RegisterTypedAppTool[In, Out any](reg ToolResourceRegistrar, cfg TypedAppTo
 	var typedOpts []core.TypedToolOption
 	if cfg.InputSchemaOverride != nil {
 		typedOpts = append(typedOpts, core.WithInputSchemaOverride(cfg.InputSchemaOverride))
+	}
+	if cfg.OutputSchemaOverride != nil {
+		typedOpts = append(typedOpts, core.WithOutputSchemaOverride(cfg.OutputSchemaOverride))
 	}
 	typed := core.TypedTool[In, Out](cfg.Name, cfg.Description, cfg.Handler, typedOpts...)
 	RegisterAppTool(reg, AppToolConfig{

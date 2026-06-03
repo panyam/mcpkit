@@ -69,7 +69,9 @@ func TypedTool[In, Out any](name, desc string,
 	isStringOut := outType.Kind() == reflect.String
 	isToolResultOut := outType == reflect.TypeOf(ToolResult{})
 	isToolResponseOut := outType == reflect.TypeOf((*ToolResponse)(nil)).Elem()
-	if !isStringOut && !isToolResultOut && !isToolResponseOut {
+	if cfg.outputSchemaOverride != nil {
+		outputSchema = cfg.outputSchemaOverride
+	} else if !isStringOut && !isToolResultOut && !isToolResponseOut {
 		outputSchema = GenerateSchema[Out]()
 	}
 
@@ -121,12 +123,13 @@ func TextTool[In any](name, desc string,
 type TypedToolOption func(*typedToolConfig)
 
 type typedToolConfig struct {
-	annotations         map[string]any
-	meta                *ToolMeta
-	timeout             time.Duration
-	requiredScopes      []string
-	inputSchemaOverride any
-	toolExecution       *ToolExecution
+	annotations          map[string]any
+	meta                 *ToolMeta
+	timeout              time.Duration
+	requiredScopes       []string
+	inputSchemaOverride  any
+	outputSchemaOverride any
+	toolExecution        *ToolExecution
 }
 
 // WithToolAnnotations sets the Annotations field on the generated ToolDef.
@@ -179,6 +182,21 @@ func WithToolRequiredScopes(scopes ...string) TypedToolOption {
 //	)
 func WithInputSchemaOverride(schema any) TypedToolOption {
 	return func(c *typedToolConfig) { c.inputSchemaOverride = schema }
+}
+
+// WithOutputSchemaOverride replaces the reflection-derived output schema with
+// a caller-supplied schema. Symmetric mirror of WithInputSchemaOverride for
+// the OutputSchema field. Use when struct-tag reflection can't express the
+// exact output shape — common cases include nullable types (upstream's
+// `z.string().nullable()` wants `{"type": ["string", "null"]}` which Go
+// reflection won't produce), `interface{}` / `any` fields that invopop
+// reflects to schemas strict MCP-SDK clients reject, or matching an external
+// reference schema byte-for-byte.
+//
+// The override is preserved as-is on the wire. The handler still returns Out,
+// so callers must keep the override compatible with Out's wire shape.
+func WithOutputSchemaOverride(schema any) TypedToolOption {
+	return func(c *typedToolConfig) { c.outputSchemaOverride = schema }
 }
 
 // WithToolExecution sets the Execution field on the generated ToolDef. Use this
