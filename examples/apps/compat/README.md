@@ -1,5 +1,10 @@
 # apps/compat — mcpkit-Go drop-ins for upstream ext-apps parity testing
 
+> **New to MCP Apps?** Read [`examples/apps/FLOW.md`](../FLOW.md) first — explains
+> the full architecture (basic-host, sandbox, App iframe, bridge JS) and where
+> mcpkit fits in the picture.
+
+
 Each subdirectory here is a mcpkit-Go MCP server that mimics one of
 [`modelcontextprotocol/ext-apps`](https://github.com/modelcontextprotocol/ext-apps)'s
 TypeScript example servers byte-for-byte at the protocol surface. We run
