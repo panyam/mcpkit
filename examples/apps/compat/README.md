@@ -148,7 +148,7 @@ server`, `lazy-auth-server`) — there's a separate target:
 make demo-app EXAMPLE=video-resource-server
 make demo-app EXAMPLE=lazy-auth-server
 make demo-app EXAMPLE=basic-server-vanillajs       # also works for testable examples
-make demo-app EXAMPLE=quickstart OPEN=1            # auto-open in browser
+OPEN=0 make demo-app EXAMPLE=quickstart            # don't auto-open (CI / no display)
 ```
 
 What it does (pure browse, no Playwright, no Docker, no drift check, no
@@ -161,12 +161,12 @@ snapshots):
    produced one, falls back to `npx tsx main.ts`.
 4. Starts `basic-host` on `HARNESS_PORT` (default 8080) with `SERVERS`
    pointing at the TS server
-5. Prints the URL; press Ctrl-C to stop.
+5. Opens the URL in your default browser (suppress with `OPEN=0`).
 
-Set `OPEN=1` to auto-open the browser. Use this when you want to see an
-example without driving the test suite, when comparing what upstream's TS
-renders vs. what a mcpkit-Go drop-in would render, or when poking at a SKIP
-example.
+The browser opens by default — the whole point of this target is to see
+an example without driving the test suite. Use it when comparing what
+upstream's TS renders vs. what a mcpkit-Go drop-in would render, or when
+poking at a SKIP example. CI / headless invocations should pass `OPEN=0`.
 
 ## Watching a run interactively
 
