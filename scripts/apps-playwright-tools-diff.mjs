@@ -34,12 +34,23 @@ async function listTools(url) {
     return tools;
 }
 
-// Keys stripped before comparison — see core/schema.go for the rationale on
-// `additionalProperties`. `$schema` differs across language SDKs (mcpkit emits
-// draft-2020-12 via invopop, upstream's TS SDK emits draft-07 via
-// zod-to-json-schema); the *presence* of $schema is what matters for clients,
-// not the specific draft URL, so we strip the value entirely from the diff.
-const IGNORE_KEYS = new Set(["$schema", "additionalProperties"]);
+// Keys stripped before comparison — these are SDK-level emit differences
+// that don't change semantics on the wire:
+//
+//   $schema             — mcpkit emits draft-2020-12 via invopop, upstream's
+//                         TS SDK emits draft-07 via zod-to-json-schema.
+//                         Presence matters for clients; value is the SDK's
+//                         own draft choice.
+//
+//   additionalProperties — mcpkit's invopop omits (permissive default);
+//                          upstream's zod-to-json-schema emits `false`
+//                          (strict). Documented in core/schema.go.
+//
+//   propertyNames        — upstream's zod `z.record(z.string(), z.unknown())`
+//                          emits `{"propertyNames": {"type": "string"}}` for
+//                          string-keyed maps; mcpkit's `map[string]any`
+//                          omits it. Both mean the same thing.
+const IGNORE_KEYS = new Set(["$schema", "additionalProperties", "propertyNames"]);
 
 function deepSortKeys(value) {
     if (Array.isArray(value)) return value.map(deepSortKeys);

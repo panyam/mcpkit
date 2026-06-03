@@ -1,0 +1,184 @@
+// Drop-in mcpkit equivalent of upstream's debug-server example.
+//
+// One tool — debug-tool — with a kitchen-sink input schema (content type
+// enum, boolean toggles with defaults, optional fields, etc.) and a small
+// structured output. No commas in any default values; struct tags handle
+// the whole input surface. Numerics float64 to match upstream's
+// zod-from-`z.number()`.
+//
+// Run:  EXT_APPS_DIR=/tmp/ext-apps PORT=3101 go run .
+package main
+
+import (
+	"flag"
+	"log"
+	"os"
+	"path/filepath"
+	"sync/atomic"
+	"time"
+
+	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/examples/common"
+	"github.com/panyam/mcpkit/ext/ui"
+	"github.com/panyam/mcpkit/server"
+	"github.com/panyam/servicekit/middleware"
+)
+
+type debugInput struct {
+	ContentType              string  `json:"contentType,omitempty" jsonschema:"enum=text,enum=image,enum=audio,enum=resource,enum=resourceLink,enum=mixed,default=text"`
+	MultipleBlocks           bool    `json:"multipleBlocks,omitempty" jsonschema:"default=true"`
+	IncludeStructuredContent bool    `json:"includeStructuredContent,omitempty" jsonschema:"default=true"`
+	IncludeMeta              bool    `json:"includeMeta,omitempty" jsonschema:"default=true"`
+	LargeInput               string  `json:"largeInput,omitempty"`
+	SimulateError            bool    `json:"simulateError,omitempty" jsonschema:"default=false"`
+	DelayMs                  float64 `json:"delayMs,omitempty"`
+}
+
+type debugOutput struct {
+	Config           map[string]any `json:"config"`
+	Timestamp        string         `json:"timestamp"`
+	Counter          float64        `json:"counter"`
+	LargeInputLength float64        `json:"largeInputLength,omitempty"`
+}
+
+type debugRefreshOutput struct {
+	Timestamp string  `json:"timestamp"`
+	Counter   float64 `json:"counter"`
+}
+
+type debugLogInput struct {
+	Type    string `json:"type" jsonschema:"required"`
+	Payload any    `json:"payload"`
+}
+
+type debugLogOutput struct {
+	Logged  bool   `json:"logged"`
+	LogFile string `json:"logFile"`
+}
+
+// callCounter is a per-process counter incremented on each tool call —
+// matches upstream's stateful demo behavior. The visual test doesn't check
+// the value; it's here so the response shape stays honest.
+var callCounter atomic.Int64
+
+func main() {
+	defaultPort := "3101"
+	if p := os.Getenv("PORT"); p != "" {
+		defaultPort = p
+	}
+	addr := flag.String("addr", ":"+defaultPort, "listen address")
+	flag.Parse()
+
+	extAppsDir := os.Getenv("EXT_APPS_DIR")
+	if extAppsDir == "" {
+		extAppsDir = "/tmp/ext-apps"
+	}
+	htmlPath := filepath.Join(extAppsDir, "examples", "debug-server", "dist", "mcp-app.html")
+	htmlBytes, err := os.ReadFile(htmlPath)
+	if err != nil {
+		log.Fatalf("read %s: %v (set EXT_APPS_DIR and `npm run build` upstream)", htmlPath, err)
+	}
+	html := string(htmlBytes)
+
+	opts := common.MCPServerOptions(*addr, "[debug-server] ")
+	opts = append(opts, server.WithExtension(&ui.UIExtension{}))
+	srv := server.NewServer(
+		core.ServerInfo{Name: "Debug MCP App Server", Version: "1.0.0"},
+		opts...,
+	)
+
+	resourceURI := "ui://debug-tool/mcp-app.html"
+
+	// Tool 1: debug-tool — the kitchen-sink tool with its own UI resource.
+	ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[debugInput, debugOutput]{
+		Name:        "debug-tool",
+		Title:       "Debug Tool",
+		Description: "Comprehensive debug tool for testing MCP Apps SDK. Configure content types, error simulation, delays, and more.",
+		Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
+		Handler: func(ctx core.ToolContext, in debugInput) (debugOutput, error) {
+			counter := callCounter.Add(1)
+			out := debugOutput{
+				Config:    map[string]any{"contentType": in.ContentType},
+				Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+				Counter:   float64(counter),
+			}
+			if in.LargeInput != "" {
+				out.LargeInputLength = float64(len(in.LargeInput))
+			}
+			return out, nil
+		},
+		ResourceURI: resourceURI,
+		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
+			return core.ResourceResult{Contents: []core.ResourceReadContent{{
+				URI: req.URI, MimeType: core.AppMIMEType, Text: html,
+			}}}, nil
+		},
+	})
+
+	// Tool 2: debug-refresh — app-only polling tool, shares the iframe.
+	// Resource URI in _meta but visibility=["app"] (model can't see it).
+	// Like system-monitor's poll-system-stats, drops to core.TypedTool to
+	// avoid double-registering the UI resource RegisterTypedAppTool would
+	// otherwise insist on.
+	refreshTyped := core.TypedTool[struct{}, debugRefreshOutput](
+		"debug-refresh",
+		"App-only tool for polling server state. Not visible to the model.",
+		func(ctx core.ToolContext, _ struct{}) (debugRefreshOutput, error) {
+			return debugRefreshOutput{
+				Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+				Counter:   float64(callCounter.Load()),
+			}, nil
+		},
+		core.WithToolExecution(&core.ToolExecution{TaskSupport: core.TaskSupportForbidden}),
+		core.WithToolMeta(&core.ToolMeta{
+			UI: &core.UIMetadata{
+				ResourceUri: resourceURI,
+				Visibility:  []core.UIVisibility{core.UIVisibilityApp},
+			},
+		}),
+	)
+	refreshTyped.Title = "Refresh Debug Info"
+	srv.RegisterTool(refreshTyped.ToolDef, refreshTyped.Handler)
+
+	// Tool 3: debug-log — app-only logging tool. Same shape as debug-refresh
+	// (resourceUri + visibility=["app"] in _meta.ui). The payload field is
+	// `z.unknown()` upstream; invopop reflects Go `any` into something the
+	// MCP client SDK's zod validator rejects, so we override with the
+	// matching empty-schema shape directly.
+	logTyped := core.TypedTool[debugLogInput, debugLogOutput](
+		"debug-log",
+		"App-only tool for logging events to the server log file. Not visible to the model.",
+		func(ctx core.ToolContext, _ debugLogInput) (debugLogOutput, error) {
+			return debugLogOutput{Logged: true, LogFile: "/tmp/mcp-apps-debug-server.log"}, nil
+		},
+		core.WithToolExecution(&core.ToolExecution{TaskSupport: core.TaskSupportForbidden}),
+		core.WithToolMeta(&core.ToolMeta{
+			UI: &core.UIMetadata{
+				ResourceUri: resourceURI,
+				Visibility:  []core.UIVisibility{core.UIVisibilityApp},
+			},
+		}),
+		core.WithInputSchemaOverride(map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"type":    map[string]any{"type": "string"},
+				"payload": map[string]any{}, // z.unknown() — no constraints
+			},
+			"required": []string{"type", "payload"},
+		}),
+	)
+	logTyped.Title = "Log to File"
+	srv.RegisterTool(logTyped.ToolDef, logTyped.Handler)
+
+	cors := middleware.CORS(nil,
+		middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
+		middleware.CORSAllowHeaders("Content-Type", "Authorization", "Mcp-Session-Id", "Mcp-Protocol-Version"),
+		middleware.CORSExposeHeaders("Mcp-Session-Id"),
+	)
+
+	log.Printf("debug-server compat fixture listening on %s (MCP at /mcp)", *addr)
+	log.Printf("serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
+	if err := srv.Run(*addr, server.WithHandlerWrap(cors)); err != nil {
+		log.Fatal(err)
+	}
+}
