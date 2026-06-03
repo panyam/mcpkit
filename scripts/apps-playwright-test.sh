@@ -194,6 +194,14 @@ case "$EXAMPLE" in
         FIXTURE_DIR="examples/apps/compat/wiki-explorer"
         GREP_PATTERN="Wiki Explorer"
         ;;
+    budget-allocator-server)
+        FIXTURE_DIR="examples/apps/compat/budget-allocator"
+        GREP_PATTERN="Budget Allocator Server"
+        ;;
+    scenario-modeler-server)
+        FIXTURE_DIR="examples/apps/compat/scenario-modeler"
+        GREP_PATTERN="SaaS Scenario Modeler"
+        ;;
     system-monitor-server)
         FIXTURE_DIR="examples/apps/compat/system-monitor"
         GREP_PATTERN="System Monitor Server"
