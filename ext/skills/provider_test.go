@@ -173,6 +173,31 @@ func TestProvider_Catalog(t *testing.T) {
 	}
 }
 
+func TestProvider_AcceptsNonStrictPrefixSiblings(t *testing.T) {
+	// Regression: the no-nesting check (strings.HasPrefix(cur, prev+"/"))
+	// must not flag two sibling skill directories whose names share a
+	// textual prefix without a separating slash. "foo" and "foo-bar" are
+	// independent skills, not parent and child.
+	p, err := skills.NewProvider(skills.WithDirectory("testdata/valid-prefix-pair"))
+	if err != nil {
+		t.Fatalf("NewProvider on prefix-pair siblings: %v (must NOT trip ErrNestedSkill)", err)
+	}
+
+	got := urisOf(p.Resources())
+	want := []string{
+		"skill://foo-bar/SKILL.md",
+		"skill://foo/SKILL.md",
+	}
+	if !equalSlices(got, want) {
+		t.Errorf("URIs = %v, want %v", got, want)
+	}
+
+	cat := p.Catalog()
+	if len(cat) != 2 {
+		t.Errorf("catalog len = %d, want 2 (foo + foo-bar)", len(cat))
+	}
+}
+
 func TestProvider_RejectsNameMismatch(t *testing.T) {
 	_, err := skills.NewProvider(skills.WithDirectory("testdata/bad-name-mismatch"))
 	if !errors.Is(err, skills.ErrSkillNameMismatch) {
