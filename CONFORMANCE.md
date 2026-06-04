@@ -37,6 +37,22 @@ Needs Node.js 22+ and a clone of `modelcontextprotocol/conformance` at `../conf-
 | Server | 46/47 | 92/1 |
 | Client | 0/0 | 0/0 |
 
+## mcpkit-local Conformance Suites
+
+These suites exercise SEP-specific behavior beyond what upstream's tier-check covers. Each is wired into `make testall` as a separate stage and may show as PASS, FAIL, INFO (informational, not gating), or SKIP. INFO typically means "work in flight" — see the Tracking column.
+
+| Suite | Covers | Stage | Status | Tracking |
+|---|---|:---:|:---:|---|
+| `testconf-tasks-v2` | SEP-2663 Tasks v2 | 8d | **PASS** | — |
+| `testconf-mrtr` | SEP-2322 MRTR | 8e | **PASS** | — |
+| `testconf-file-inputs` | SEP-2356 File inputs | 8f | **PASS** | — |
+| `testconf-auth-server` | MCP authz 2025-11-25 | 8g | **PASS** | — |
+| `testconf-stateless` | SEP-2575 Stateless wire | - | **PASS**<sup>1</sup> | — |
+| `testconf-skills` | SEP-2640 Skills | 8h | _INFO_<sup>2</sup> | mcpkit 567 |
+
+<sup>1</sup> 25 pass / 1 known upstream-test fail (array-vs-object requiredCapabilities).
+<sup>2</sup> Fixture spawns and runs cleanly. Fork-side Scenario classes blocked on WG iteration of sep-2640.yaml in panyam/mcpconformance PR 330.
+
 ## SEP Coverage
 
 | SEP | Tested reqs | Excluded | Untested | Status |

@@ -1,0 +1,19 @@
+# Test fixture for the mcpkit-local conformance suites manifest.
+suites:
+  - suite: testconf-example-pass
+    sep: Example PASS SEP
+    stage: 8a
+    status: PASS
+
+  - suite: testconf-example-info
+    sep: Example INFO SEP
+    stage: 8b
+    status: INFO
+    note: "Fixture-side note for the INFO row."
+    tracking: "mcpkit 999"
+
+  - suite: testconf-example-skip
+    sep: Example SKIP SEP
+    stage: "-"
+    status: SKIP
+    note: "Intentionally not run in this revision."

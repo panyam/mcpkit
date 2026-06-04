@@ -98,12 +98,46 @@ export interface KnownGaps {
   checks?: Record<string, KnownGapEntry>;
 }
 
+// --- mcpkit-local conformance suites manifest -------------------------------
+//
+// Source: conformance/local-suites.yaml. Surfaces SEP-specific suites that
+// run alongside upstream tier-check. The renderer emits a table from this
+// manifest into CONFORMANCE.md between the upstream Conformance Summary and
+// the SEP Coverage section.
+
+export type LocalSuiteStatus = 'PASS' | 'FAIL' | 'INFO' | 'SKIP';
+
+export interface LocalSuite {
+  // Make target name, e.g. "testconf-skills".
+  suite: string;
+  // Short human-readable description of what the suite covers, used as the
+  // "Covers" column (e.g. "SEP-2640 Skills").
+  sep: string;
+  // testall stage label, e.g. "8h". "-" for suites that exist as standalone
+  // targets but are not wired into testall.
+  stage: string;
+  // Current declared status. Mismatches with the Makefile wiring are caught
+  // by scripts/check-local-suites.sh in CI.
+  status: LocalSuiteStatus;
+  // Optional one-line footnote attached as a numeric reference.
+  note?: string;
+  // Plain-text tracking reference (issue/PR number); avoids GitHub backlink
+  // firing. Rendered alongside the status row.
+  tracking?: string;
+}
+
+export interface LocalSuitesManifest {
+  suites: LocalSuite[];
+}
+
 // --- Render input -----------------------------------------------------------
 
 export interface RenderInput {
   scorecard: TierScorecard;
   traceability: TraceabilityManifest;
   knownGaps: KnownGaps;
+  // Hand-maintained manifest of mcpkit-local conformance suites.
+  localSuites: LocalSuitesManifest;
   // Provenance — used for the stamp comment at the top of the generated block.
   upstreamSha: string;
   protocolVersion: string;

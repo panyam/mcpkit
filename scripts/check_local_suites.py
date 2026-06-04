@@ -1,0 +1,153 @@
+#!/usr/bin/env python3
+"""Staleness gate for conformance/local-suites.yaml.
+
+Catches three mechanical drift cases against conformance/Makefile and the
+root Makefile's testall stage list:
+
+    A. Suite added to conformance/Makefile as a testconf-* target but not
+       declared in local-suites.yaml. Docs site would silently omit it.
+    B. Suite declared in local-suites.yaml but no matching testconf-*
+       target. Docs site would show a phantom row.
+    C. Suite's `stage:` field in YAML does not match the stage label used
+       in the testall macro call. Docs site would point at the wrong stage.
+
+Drift case D (declared status diverges from actual run result) is not
+checked here. Tracked separately.
+
+Allowlists for targets that are NOT individual SEP suites:
+    testconf, testconfall, testconfauth, testconf-tasks (v1 frozen),
+    testconf-upstream-audit, testconf-elicitation.
+
+Exit codes:
+    0   manifest and Makefile agree
+    1   drift detected, see stderr
+    2   bad input (missing file, malformed YAML)
+
+Runs on any platform with Python 3.8+ and PyYAML.
+"""
+
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError:
+    sys.stderr.write(
+        "check_local_suites: PyYAML not available. Install with: pip install pyyaml\n"
+    )
+    sys.exit(2)
+
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+MANIFEST = REPO_ROOT / "conformance" / "local-suites.yaml"
+CONF_MAKEFILE = REPO_ROOT / "conformance" / "Makefile"
+ROOT_MAKEFILE = REPO_ROOT / "Makefile"
+
+ALLOWLIST = {
+    "testconf",  # umbrella
+    "testconfall",  # umbrella
+    "testconfauth",  # alias
+    "testconf-tasks",  # SEP-2663 v1, frozen, no SEP coverage row
+    "testconf-elicitation",  # SEP-1036, lives in conformance/elicitation/
+    "testconf-upstream-audit",  # informational audit, not a SEP suite
+}
+
+# Matches a testconf-* target definition at the start of a Makefile line.
+TARGET_RE = re.compile(r"^(testconf[-a-z0-9]*):", re.MULTILINE)
+
+# Matches a $(call run_stage*,X,9,name,testconf-*) line in the root Makefile
+# and captures (stage, target). Tolerates both run_stage and run_stage_info.
+RUN_STAGE_RE = re.compile(
+    r"\$\(call\s+run_stage[a-z_]*\s*,\s*([0-9a-z]+)\s*,\s*\d+\s*,\s*[^,]+\s*,\s*(testconf[-a-z0-9]+)"
+)
+
+
+def die(msg: str, code: int = 2) -> None:
+    sys.stderr.write(f"check_local_suites: {msg}\n")
+    sys.exit(code)
+
+
+def load_inputs():
+    if not MANIFEST.exists():
+        die(f"{MANIFEST} not found")
+    if not CONF_MAKEFILE.exists():
+        die(f"{CONF_MAKEFILE} not found")
+    if not ROOT_MAKEFILE.exists():
+        die(f"{ROOT_MAKEFILE} not found")
+
+    try:
+        manifest = yaml.safe_load(MANIFEST.read_text())
+    except yaml.YAMLError as exc:
+        die(f"{MANIFEST}: invalid YAML: {exc}")
+
+    if not isinstance(manifest, dict):
+        die(f"{MANIFEST}: top-level value must be a mapping")
+
+    suites = manifest.get("suites")
+    if not isinstance(suites, list):
+        die(f"{MANIFEST}: `suites` must be a list")
+
+    makefile_targets = set(TARGET_RE.findall(CONF_MAKEFILE.read_text()))
+    stage_map = {}
+    for stage, target in RUN_STAGE_RE.findall(ROOT_MAKEFILE.read_text()):
+        stage_map[target] = stage
+
+    return suites, makefile_targets, stage_map
+
+
+def main() -> int:
+    suites, makefile_targets, stage_map = load_inputs()
+    yaml_targets = {s["suite"] for s in suites if "suite" in s}
+
+    drifts = []
+
+    for t in sorted(makefile_targets - yaml_targets - ALLOWLIST):
+        drifts.append(
+            f"case A: {t} is a testconf target in conformance/Makefile but has no entry in {MANIFEST.relative_to(REPO_ROOT)}"
+        )
+
+    for s in sorted(yaml_targets - makefile_targets):
+        drifts.append(
+            f"case B: {s} is declared in {MANIFEST.relative_to(REPO_ROOT)} but no matching testconf target in conformance/Makefile"
+        )
+
+    for entry in suites:
+        suite = entry.get("suite")
+        yaml_stage = str(entry.get("stage", "")).strip()
+        if not suite:
+            continue
+        if suite not in makefile_targets:
+            continue
+        actual_stage = stage_map.get(suite)
+        if actual_stage is None:
+            if yaml_stage != "-":
+                drifts.append(
+                    f'case C: {suite} declares stage={yaml_stage!r} in YAML but is not wired into testall; '
+                    f'YAML should say stage: "-"'
+                )
+        elif actual_stage != yaml_stage:
+            drifts.append(
+                f"case C: {suite} declares stage={yaml_stage!r} in YAML but testall wires it at stage={actual_stage!r}"
+            )
+
+    if drifts:
+        for d in drifts:
+            sys.stderr.write(f"check_local_suites: {d}\n")
+        sys.stderr.write("\n")
+        sys.stderr.write(
+            "check_local_suites: drift detected. Update conformance/local-suites.yaml,\n"
+            "                    conformance/Makefile, and/or the testall stage list\n"
+            "                    so the three sources agree. Then run:\n"
+            "                      make refresh-conformance && make check-conformance-stale\n"
+        )
+        return 1
+
+    print(f"check_local_suites: {len(yaml_targets)} suites checked, no drift.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

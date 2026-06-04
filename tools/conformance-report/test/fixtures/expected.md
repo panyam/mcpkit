@@ -8,6 +8,19 @@
 | Server | 3/4 | 14/2 |
 | Client | 1/1 | 14/0 |
 
+## mcpkit-local Conformance Suites
+
+These suites exercise SEP-specific behavior beyond what upstream's tier-check covers. Each is wired into `make testall` as a separate stage and may show as PASS, FAIL, INFO (informational, not gating), or SKIP. INFO typically means "work in flight" — see the Tracking column.
+
+| Suite | Covers | Stage | Status | Tracking |
+|---|---|:---:|:---:|---|
+| `testconf-example-pass` | Example PASS SEP | 8a | **PASS** | — |
+| `testconf-example-info` | Example INFO SEP | 8b | _INFO_<sup>1</sup> | mcpkit 999 |
+| `testconf-example-skip` | Example SKIP SEP | - | _SKIP_<sup>2</sup> | — |
+
+<sup>1</sup> Fixture-side note for the INFO row.
+<sup>2</sup> Intentionally not run in this revision.
+
 ## SEP Coverage
 
 | SEP | Tested reqs | Excluded | Untested | Status |
