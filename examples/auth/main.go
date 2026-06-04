@@ -459,20 +459,6 @@ func serve() {
 	listenURL := fmt.Sprintf("http://localhost%s", *addr)
 	validator := env.NewValidator(listenURL)
 
-	opts := []server.Option{server.WithListen(*addr)}
-	opts = append(opts, common.WithMCPLogging(logger)...)
-	opts = append(opts,
-		server.WithAuth(validator),
-		server.WithPublicMethods("initialize", "notifications/initialized", "tools/list", "prompts/list", "ping"),
-		server.WithMiddleware(server.ToolCallLogger(logger)),
-	)
-	srv := server.NewServer(
-		core.ServerInfo{Name: "auth-unified", Version: "1.0"},
-		opts...,
-	)
-	authcommon.RegisterEchoTools(srv)
-	srv.UseMiddleware(auth.NewToolScopeMiddleware(srv.Registry()))
-
 	// Pre-mint tokens for the walkthrough.
 	tokRead := env.MintToken("alice", []string{"read"})
 	tokReadWrite := env.MintToken("alice", []string{"read", "write"})
@@ -492,7 +478,6 @@ func serve() {
 	// `subject_token` parameter for the RFC 8693 token-exchange grant.
 	tokUpstreamAssertion := env.MintUpstreamAssertion("alice")
 
-	log.Printf("Auth example on %s", addr)
 	log.Printf("MCP endpoint: %s/mcp", listenURL)
 	log.Printf("Bootstrap:    %s/demo/bootstrap", listenURL)
 	log.Printf("AS issuer:    %s", env.AS.Issuer())
@@ -503,32 +488,46 @@ func serve() {
 	log.Printf("  alice/[read write admin]:  %s", tokAll)
 	log.Printf("  bob/[read write admin]:    %s", tokBob)
 
-	if err := srv.ListenAndServe(
-		server.WithStreamableHTTP(true),
-		server.WithMux(func(m *http.ServeMux) {
-			// Bootstrap endpoint for the demokit walkthrough.
-			m.HandleFunc("GET /demo/bootstrap", func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(bootstrapInfo{
-					MCPURL:               listenURL + "/mcp",
-					TokRead:              tokRead,
-					TokReadWrite:         tokReadWrite,
-					TokAll:               tokAll,
-					TokBob:               tokBob,
-					TokExpired:           tokExpired,
-					TokWrongAudience:     tokWrongAud,
-					TokWrongIssuer:       tokWrongIss,
-					TokUpstreamAssertion: tokUpstreamAssertion,
+	if err := common.RunServer(common.ServerConfig{
+		Name:    "auth-unified",
+		Version: "1.0",
+		Addr:    *addr,
+		Logger:  logger,
+		Options: []server.Option{
+			server.WithAuth(validator),
+			server.WithPublicMethods("initialize", "notifications/initialized", "tools/list", "prompts/list", "ping"),
+			server.WithMiddleware(server.ToolCallLogger(logger)),
+		},
+		Register: func(srv *server.Server) {
+			authcommon.RegisterEchoTools(srv)
+			srv.UseMiddleware(auth.NewToolScopeMiddleware(srv.Registry()))
+		},
+		TransportOptions: []server.TransportOption{
+			server.WithMux(func(m *http.ServeMux) {
+				// Bootstrap endpoint for the demokit walkthrough.
+				m.HandleFunc("GET /demo/bootstrap", func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(bootstrapInfo{
+						MCPURL:               listenURL + "/mcp",
+						TokRead:              tokRead,
+						TokReadWrite:         tokReadWrite,
+						TokAll:               tokAll,
+						TokBob:               tokBob,
+						TokExpired:           tokExpired,
+						TokWrongAudience:     tokWrongAud,
+						TokWrongIssuer:       tokWrongIss,
+						TokUpstreamAssertion: tokUpstreamAssertion,
+					})
 				})
-			})
-			auth.MountAuth(m, auth.AuthConfig{
-				ResourceURI:          listenURL,
-				AuthorizationServers: []string{env.AS.Issuer()},
-				ScopesSupported:      env.Scopes,
-				MCPPath:              "/mcp",
-			})
-		}),
-	); err != nil {
+				auth.MountAuth(m, auth.AuthConfig{
+					ResourceURI:          listenURL,
+					AuthorizationServers: []string{env.AS.Issuer()},
+					ScopesSupported:      env.Scopes,
+					MCPPath:              "/mcp",
+				})
+			}),
+		},
+	}); err != nil {
 		log.Fatal(err)
 	}
 }

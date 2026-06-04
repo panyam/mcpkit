@@ -704,21 +704,6 @@ func serve() {
 	validator.Start()
 	defer validator.Stop()
 
-	// 3. MCP server with auth + scope-enforcement middleware.
-	opts := []server.Option{server.WithListen(*addr)}
-	opts = append(opts, common.WithMCPLogging(logger)...)
-	opts = append(opts,
-		server.WithAuth(validator),
-		server.WithMiddleware(server.ToolCallLogger(logger)),
-	)
-	srv := server.NewServer(
-		core.ServerInfo{Name: "fine-grained-auth-example", Version: "1.0.0"},
-		opts...,
-	)
-	registerTools(srv)
-	srv.UseMiddleware(auth.NewToolScopeMiddleware(srv.Registry()))
-	srv.UseMiddleware(paymentAuthorizationMiddleware())
-
 	// 4. CORS for browser-based MCP hosts; applied via WithHandlerWrap so
 	// it covers /mcp + the auth.MountAuth routes + /demo/bootstrap uniformly.
 	cors := middleware.CORS(nil,
@@ -727,7 +712,6 @@ func serve() {
 		middleware.CORSExposeHeaders("Mcp-Session-Id"),
 	)
 
-	fmt.Printf("Fine-Grained Auth server on %s\n", *addr)
 	fmt.Printf("MCP endpoint:   %s/mcp\n", listenURL)
 	fmt.Printf("AS URL:         %s\n", asInfo.ASURL)
 	fmt.Printf("AS JWKS:        %s\n", asInfo.JWKSURL)
@@ -742,28 +726,43 @@ func serve() {
 	fmt.Printf("\nSeed docs: doc-001, doc-123, doc-456\n")
 	fmt.Printf("Inspect:   ls %s/ ; cat %s/doc-123.txt\n", docDir, docDir)
 
-	if err := srv.ListenAndServe(
-		server.WithStreamableHTTP(true),
-		server.WithMux(func(mux *http.ServeMux) {
-			auth.MountAuth(mux, auth.AuthConfig{
-				ResourceURI:          listenURL,
-				AuthorizationServers: []string{asInfo.ASURL},
-				ScopesSupported:      []string{scopeRead, scopeCall},
-				MCPPath:              "/mcp",
-			})
-			mux.HandleFunc("GET /demo/bootstrap", func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(bootstrapInfo{
-					ASURL:         asInfo.ASURL,
-					TokenEndpoint: asInfo.TokenEndpoint,
-					JWKSURL:       asInfo.JWKSURL,
-					ClientID:      asInfo.ClientID,
-					ClientSecret:  asInfo.ClientSecret,
+	// 3. MCP server with auth + scope-enforcement middleware.
+	if err := common.RunServer(common.ServerConfig{
+		Name:    "fine-grained-auth-example",
+		Version: "1.0.0",
+		Addr:    *addr,
+		Logger:  logger,
+		Options: []server.Option{
+			server.WithAuth(validator),
+			server.WithMiddleware(server.ToolCallLogger(logger)),
+		},
+		Register: func(srv *server.Server) {
+			registerTools(srv)
+			srv.UseMiddleware(auth.NewToolScopeMiddleware(srv.Registry()))
+			srv.UseMiddleware(paymentAuthorizationMiddleware())
+		},
+		TransportOptions: []server.TransportOption{
+			server.WithMux(func(mux *http.ServeMux) {
+				auth.MountAuth(mux, auth.AuthConfig{
+					ResourceURI:          listenURL,
+					AuthorizationServers: []string{asInfo.ASURL},
+					ScopesSupported:      []string{scopeRead, scopeCall},
+					MCPPath:              "/mcp",
 				})
-			})
-		}),
-		server.WithHandlerWrap(cors),
-	); err != nil {
+				mux.HandleFunc("GET /demo/bootstrap", func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(bootstrapInfo{
+						ASURL:         asInfo.ASURL,
+						TokenEndpoint: asInfo.TokenEndpoint,
+						JWKSURL:       asInfo.JWKSURL,
+						ClientID:      asInfo.ClientID,
+						ClientSecret:  asInfo.ClientSecret,
+					})
+				})
+			}),
+			server.WithHandlerWrap(cors),
+		},
+	}); err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
 		os.Exit(1)
 	}

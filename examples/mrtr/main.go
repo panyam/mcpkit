@@ -68,24 +68,25 @@ func serve() {
 		demokit.ValueFlag("--url"),
 	))
 
-	opts := common.MCPServerOptions(*addr, "[mcp] ")
+	var extraOpts []server.Option
 	if *signingKey != "" {
-		opts = append(opts, server.WithRequestStateSigning([]byte(*signingKey), 24*time.Hour))
+		extraOpts = append(extraOpts, server.WithRequestStateSigning([]byte(*signingKey), 24*time.Hour))
 	}
 
-	srv := server.NewServer(core.ServerInfo{Name: "mrtr-demo", Version: "0.1.0"}, opts...)
-
-	registerMRTRTools(srv)
-
-	// SEP-2322 + SEP-2663 composition: the registry holds at least one
-	// task-eligible tool (test_tool_with_task) that gathers input via MRTR
-	// rounds and then escalates to async via the GoAsync sentinel. The
-	// taskV2Middleware is what observes the GoAsync return and spawns the
-	// continuation goroutine.
-	tasks.Register(tasks.Config{Server: srv})
-
-	log.Printf("[mrtr-demo] listening on %s", *addr)
-	if err := srv.ListenAndServe(server.WithStreamableHTTP(true)); err != nil {
+	if err := common.RunServer(common.ServerConfig{
+		Name:    "mrtr-demo",
+		Addr:    *addr,
+		Options: extraOpts,
+		Register: func(srv *server.Server) {
+			registerMRTRTools(srv)
+			// SEP-2322 + SEP-2663 composition: the registry holds at least one
+			// task-eligible tool (test_tool_with_task) that gathers input via
+			// MRTR rounds and then escalates to async via the GoAsync sentinel.
+			// The taskV2Middleware is what observes the GoAsync return and spawns
+			// the continuation goroutine.
+			tasks.Register(tasks.Config{Server: srv})
+		},
+	}); err != nil {
 		log.Fatalf("ListenAndServe: %v", err)
 	}
 }
