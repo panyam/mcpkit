@@ -75,38 +75,17 @@ func main() {
 		Title:       "Get First-Degree Links",
 		Description: "Returns all Wikipedia pages that the given page links to directly. The widget is interactive and exposes tools for exploring the graph (expanding nodes to see their links), searching for articles, and querying visible nodes.",
 		Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
-		OutputSchemaOverride: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"page": map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"url":   map[string]any{"type": "string"},
-						"title": map[string]any{"type": "string"},
-					},
-					"required": []string{"url", "title"},
+		// Reflection covers page + links cleanly from the Go struct; only
+		// the nullable `error` field needs help. Upstream's `z.string()
+		// .nullable()` emits an anyOf — Go's `*string` reflects to plain
+		// `"type": "string"`. Patch.Replace lands the matching shape.
+		OutputSchemaPatch: func(s *core.SchemaBuilder) {
+			s.Prop("error").Replace(map[string]any{
+				"anyOf": []any{
+					map[string]any{"type": "string"},
+					map[string]any{"type": "null"},
 				},
-				"links": map[string]any{
-					"type": "array",
-					"items": map[string]any{
-						"type": "object",
-						"properties": map[string]any{
-							"url":   map[string]any{"type": "string"},
-							"title": map[string]any{"type": "string"},
-						},
-						"required": []string{"url", "title"},
-					},
-				},
-				// Upstream's `z.string().nullable()` serializes as anyOf,
-				// not as the `type: ["string", "null"]` array form.
-				"error": map[string]any{
-					"anyOf": []any{
-						map[string]any{"type": "string"},
-						map[string]any{"type": "null"},
-					},
-				},
-			},
-			"required": []string{"page", "links", "error"},
+			})
 		},
 		Handler: func(ctx core.ToolContext, in wikiInput) (wikiLinksOutput, error) {
 			// Visual test masks the graph (HOST_MASKS["wiki-explorer"] = ["#graph"]).

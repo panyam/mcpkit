@@ -59,9 +59,18 @@ func TypedTool[In, Out any](name, desc string,
 	// $anchor, allOf/anyOf composition, etc.) that struct tags cannot express.
 	// The handler still unmarshals into In, so caller is responsible for
 	// keeping the override compatible with In's wire shape.
+	//
+	// Precedence between Override and Patch: Override is verbatim; if
+	// set, the reflected schema is discarded entirely and Patch is
+	// silently skipped (godoc on the With* options spells this out).
+	// When neither is set, reflection runs and Patch (if present) edits
+	// the result.
 	inputSchema := cfg.inputSchemaOverride
 	if inputSchema == nil {
 		inputSchema = GenerateSchema[In]()
+		if cfg.inputSchemaPatch != nil {
+			inputSchema = applyPatchToAny(inputSchema, cfg.inputSchemaPatch)
+		}
 	}
 
 	var outputSchema any
@@ -73,6 +82,9 @@ func TypedTool[In, Out any](name, desc string,
 		outputSchema = cfg.outputSchemaOverride
 	} else if !isStringOut && !isToolResultOut && !isToolResponseOut {
 		outputSchema = GenerateSchema[Out]()
+		if cfg.outputSchemaPatch != nil {
+			outputSchema = applyPatchToAny(outputSchema, cfg.outputSchemaPatch)
+		}
 	}
 
 	def := ToolDef{
@@ -129,6 +141,8 @@ type typedToolConfig struct {
 	requiredScopes       []string
 	inputSchemaOverride  any
 	outputSchemaOverride any
+	inputSchemaPatch     func(*SchemaBuilder)
+	outputSchemaPatch    func(*SchemaBuilder)
 	toolExecution        *ToolExecution
 }
 

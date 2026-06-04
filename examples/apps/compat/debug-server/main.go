@@ -1,12 +1,10 @@
 // Drop-in mcpkit equivalent of upstream's debug-server example.
 //
 // Three tools — debug-tool (kitchen-sink), debug-refresh (app-only
-// polling), debug-log (app-only logging). No commas in any default
-// values; struct tags handle the input surface for debug-tool. The
-// debug-log tool's `payload: z.unknown()` field uses InputSchemaOverride
-// because invopop's reflection of `any` produces a schema the MCP SDK's
-// zod validator rejects (gap 2 in issue 548). Idiomatic Go int types
-// for counters and byte lengths.
+// polling), debug-log (app-only logging). With the core/schema.go fix
+// for `any` reflection landed in issue 548 Gap 2, the debug-log tool's
+// `Payload any` field reflects to `{}` directly — no InputSchemaOverride
+// needed. Idiomatic Go int types for counters and byte lengths.
 //
 // Run:  EXT_APPS_DIR=/tmp/ext-apps PORT=3101 go run .
 package main
@@ -143,10 +141,9 @@ func main() {
 	srv.RegisterTool(refreshTyped.ToolDef, refreshTyped.Handler)
 
 	// Tool 3: debug-log — app-only logging tool. Same shape as debug-refresh
-	// (resourceUri + visibility=["app"] in _meta.ui). The payload field is
-	// `z.unknown()` upstream; invopop reflects Go `any` into something the
-	// MCP client SDK's zod validator rejects, so we override with the
-	// matching empty-schema shape directly.
+	// (resourceUri + visibility=["app"] in _meta.ui). The Payload field is
+	// `any`; with the core/schema.go reflection fix it lands as `{}` on the
+	// wire, matching upstream's `z.unknown()` byte-for-byte without override.
 	logTyped := core.TypedTool[debugLogInput, debugLogOutput](
 		"debug-log",
 		"App-only tool for logging events to the server log file. Not visible to the model.",
@@ -159,14 +156,6 @@ func main() {
 				ResourceUri: resourceURI,
 				Visibility:  []core.UIVisibility{core.UIVisibilityApp},
 			},
-		}),
-		core.WithInputSchemaOverride(map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"type":    map[string]any{"type": "string"},
-				"payload": map[string]any{}, // z.unknown() — no constraints
-			},
-			"required": []string{"type", "payload"},
 		}),
 	)
 	logTyped.Title = "Log to File"
