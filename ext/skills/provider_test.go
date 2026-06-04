@@ -298,6 +298,7 @@ func TestProvider_Integration(t *testing.T) {
 		"skill://acme/billing/refunds/SKILL.md",
 		"skill://acme/billing/refunds/templates/email.md",
 		"skill://git-workflow/SKILL.md",
+		"skill://index.json",
 		"skill://pdf-processing/SKILL.md",
 		"skill://pdf-processing/references/FORMS.md",
 		"skill://pdf-processing/scripts/extract.py",

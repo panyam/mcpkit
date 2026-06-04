@@ -3,16 +3,19 @@ package skills
 import (
 	"io/fs"
 	"os"
+	"time"
 )
 
 // ProviderOption configures a Provider via NewProvider.
 type ProviderOption func(*providerConfig)
 
 type providerConfig struct {
-	fsys       fs.FS
-	root       string
-	uriPrefix  []string
-	metaPrefix string
+	fsys           fs.FS
+	root           string
+	uriPrefix      []string
+	metaPrefix     string
+	suppressIndex  bool
+	indexCacheTTL  time.Duration
 }
 
 // WithFS supplies the io/fs.FS that the Provider walks for skills. The
@@ -57,5 +60,28 @@ func WithURIPrefix(prefix string) ProviderOption {
 func WithMetaPrefix(prefix string) ProviderOption {
 	return func(c *providerConfig) {
 		c.metaPrefix = prefix
+	}
+}
+
+// WithoutIndex suppresses the auto-registration of skill://index.json
+// when the Provider's RegisterWith is called. Use this when the server
+// wants to expose individual skill files but not the discovery index
+// (e.g., a generated catalog the SEP says hosts MUST NOT treat absence
+// as proof of "no skills"), or when the caller wants to construct and
+// register an Indexer explicitly with non-default options.
+func WithoutIndex() ProviderOption {
+	return func(c *providerConfig) {
+		c.suppressIndex = true
+	}
+}
+
+// WithIndexCacheTTL forwards a cache TTL to the Indexer that
+// Provider.RegisterWith builds for skill://index.json. Equivalent to
+// constructing an Indexer explicitly with WithIndexerCacheTTL(d).
+// Ignored when WithoutIndex is also supplied. See Indexer for the full
+// cache semantics including the zero-mtime fallback.
+func WithIndexCacheTTL(d time.Duration) ProviderOption {
+	return func(c *providerConfig) {
+		c.indexCacheTTL = d
 	}
 }
