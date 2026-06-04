@@ -10,12 +10,14 @@ import (
 type ProviderOption func(*providerConfig)
 
 type providerConfig struct {
-	fsys           fs.FS
-	root           string
-	uriPrefix      []string
-	metaPrefix     string
-	suppressIndex  bool
-	indexCacheTTL  time.Duration
+	fsys             fs.FS
+	root             string
+	uriPrefix        []string
+	metaPrefix       string
+	suppressIndex    bool
+	indexCacheTTL    time.Duration
+	archiveMode      ArchiveFormat
+	archiveMaxBytes  int64
 }
 
 // WithFS supplies the io/fs.FS that the Provider walks for skills. The
@@ -83,5 +85,33 @@ func WithoutIndex() ProviderOption {
 func WithIndexCacheTTL(d time.Duration) ProviderOption {
 	return func(c *providerConfig) {
 		c.indexCacheTTL = d
+	}
+}
+
+// WithArchiveMode publishes every skill as a single archive resource at
+// skill://<path><suffix> instead of registering each file individually.
+// Per SEP-2640, archive mode is a server-side packaging optimization
+// that delivers a multi-file skill atomically in one round trip without
+// changing the post-unpack virtual namespace hosts observe.
+//
+// Index entries for archive-mode skills carry Type:archive, URL ending
+// in the format suffix, and a Digest computed over the archive bytes.
+//
+// Archive mode is per-Provider in this revision. Per-skill mode
+// (mixing archive-served and file-served skills under one Provider) is
+// deliberately out of scope; file a follow-up if a use case surfaces.
+func WithArchiveMode(format ArchiveFormat) ProviderOption {
+	return func(c *providerConfig) {
+		c.archiveMode = format
+	}
+}
+
+// WithArchiveMaxBytes caps the unpacked size of any archive the Provider
+// produces or that an associated ArchiveFS reads. Pass 0 to use
+// DefaultArchiveMaxBytes (100 MiB), pass -1 to disable the cap
+// entirely (NOT recommended for untrusted archives).
+func WithArchiveMaxBytes(n int64) ProviderOption {
+	return func(c *providerConfig) {
+		c.archiveMaxBytes = n
 	}
 }
