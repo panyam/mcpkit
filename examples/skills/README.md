@@ -1,86 +1,108 @@
 # examples/skills
 
-Minimal mcpkit server that exposes skills per SEP-2640 (Skills extension).
+End-to-end example for SEP-2640 (Skills extension): a mcpkit server that
+exposes Agent Skills under the `skill://` URI scheme, plus a demokit
+walkthrough that drives a host against it.
 
-This example doubles as the fixture target for `make testconf-skills` in
-the conformance suite. A scripted walkthrough is deferred; see mcpkit
-566 for the full demokit treatment.
-
-## What the server does
-
-Walks the bundled `skills/` directory through
-`github.com/panyam/mcpkit/ext/skills.SkillProvider` and publishes each
-skill as MCP resources. Two distribution modes are supported via the
-`--mode` flag:
-
-- `file` (default): each file in every skill becomes a resource at
-  `skill://<skill-path>/<file-path>`. SKILL.md gets `Name` and
-  `Description` from its frontmatter; Extra frontmatter fields land in
-  `Annotations` keyed by `io.modelcontextprotocol.skills/`.
-- `archive` (`.tar.gz`) or `zip`: each skill becomes one archive
-  resource at `skill://<skill-path>.tar.gz` (or `.zip`). The blob is
-  packed on demand and digested for the index entry.
-
-In both modes `skill://index.json` is auto-registered and the
-`io.modelcontextprotocol/skills` capability appears under
-`capabilities.extensions` in the initialize response.
-
-## Fixture skills
-
-Three skills mirror the SEP-2640 examples table:
-
-| Skill path | Files |
-|---|---|
-| `git-workflow` | `SKILL.md` |
-| `pdf-processing` | `SKILL.md`, `references/FORMS.md`, `scripts/extract.py` |
-| `acme/billing/refunds` | `SKILL.md`, `templates/email.md` |
-
-`pdf-processing/SKILL.md` carries Extra frontmatter (`version`, `tags`)
-to exercise the `Annotations` surface.
+The walkthrough exercises the SEP's wire shape step by step:
+capability declaration, the discovery index, SHA-256 digest
+verification, and reading both single-segment and nested-prefix skills.
+Full step-by-step is in [WALKTHROUGH.md](./WALKTHROUGH.md) (regenerate
+via `make readme`).
 
 ## Running
 
+### Two-terminal walkthrough (recommended)
+
 ```bash
-# file mode on :8080
+# Terminal 1: start the server
 make serve
 
-# archive mode on :8080 (.tar.gz per skill)
-make serve-archive
+# Terminal 2: drive the walkthrough
+make demo        # text mode (non-interactive)
+make tui         # interactive TUI (paginated, key-driven)
+make note        # notebook mode (Bubble Tea cells)
+```
 
-# zip mode on :8080
-make serve-zip
+### Other server modes
 
-# custom port + skills dir
+```bash
+make serve-archive   # publishes each skill as one .tar.gz resource
+make serve-zip       # publishes each skill as one .zip resource
+```
+
+In archive mode `resources/list` returns one URI per skill (e.g.
+`skill://pdf-processing.tar.gz`) instead of N URIs per file. The
+post-unpack virtual namespace hosts see is identical either way — that's
+SEP-2640's whole-skill atomic-delivery story.
+
+### Custom port or skills directory
+
+```bash
 go run . --serve --addr=:9090 --skills=./some-other-skills
 ```
 
-## Smoke test
+## Bundled fixture
+
+Three skills under `skills/` mirror the SEP-2640 Examples table:
+
+| Skill path             | Files                                                       |
+|------------------------|-------------------------------------------------------------|
+| `git-workflow`         | `SKILL.md`                                                  |
+| `pdf-processing`       | `SKILL.md`, `references/FORMS.md`, `scripts/extract.py`     |
+| `acme/billing/refunds` | `SKILL.md`, `templates/email.md`                            |
+
+`pdf-processing/SKILL.md` carries Extra frontmatter (`version`, `tags`)
+to exercise the `Annotations` surface that surfaces extras under the
+`io.modelcontextprotocol.skills/` reverse-domain prefix.
+
+## Adding a real-world skill (anthropics/skills docx)
 
 ```bash
-# in another shell
-curl -s -X POST http://localhost:8080/mcp \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize",
-       "params":{"protocolVersion":"2025-11-25","capabilities":{},
-                 "clientInfo":{"name":"test","version":"0"}}}' \
-  | grep skills
+make fetch-docx
+make serve
 ```
 
-Expect the response to include
-`"io.modelcontextprotocol/skills":{...}` under
-`result.capabilities.extensions`.
+`make fetch-docx` clones the public [`anthropics/skills`](https://github.com/anthropics/skills) repo
+to `/tmp/anthropics-skills-cache` (override via `ANTHROPIC_SKILLS_CACHE`),
+copies the `docx` skill into `skills/docx`, and warns if the upstream
+frontmatter `name` does not match the staged path (SEP-2640 requires
+them to be equal). Re-running is idempotent.
+
+The fetch-at-run-time pattern keeps this repo's history small and side-steps
+licence ambiguity around vendoring third-party skill bundles. Same shape
+as `scripts/apps-playwright-test.sh`.
+
+## What the walkthrough proves
+
+- The `io.modelcontextprotocol/skills` capability appears under
+  `capabilities.extensions` in the `initialize` response (object, not
+  array).
+- `skill://index.json` round-trips and parses against the
+  `https://schemas.agentskills.io/discovery/0.2.0/schema.json` shape.
+- Every `skill-md` index entry's `digest` is `sha256:[a-f0-9]{64}` and
+  matches `sha256.Sum256` of the served bytes — satisfies the SEP-2640
+  MUST that hosts verify retrieved content against the digest.
+- Resources/read works for both single-segment skills (`git-workflow`)
+  and nested-prefix skills (`acme/billing/refunds`), confirming the
+  prefix-segment routing is uniform.
+- Relative references inside a skill (e.g. `templates/email.md` from
+  `acme/billing/refunds/SKILL.md`) resolve via
+  `skills.ResolveRelative(skillRoot, ref)`.
 
 ## Conformance
+
+This server also doubles as the fixture for the SEP-2640 conformance
+suite:
 
 ```bash
 # from repo root
 MCPCONFORMANCE_SKILLS_PATH=$HOME/newstack/mcpkit/conf-main make testconf-skills
 ```
 
-The target launches this server in the configured mode, runs the
-SEP-2640 scenario suite from the panyam/mcpconformance fork, and
-reports per-scenario pass/fail wired to check IDs in
-`src/seps/sep-2640.yaml`.
+The Makefile target spawns this binary in `--serve` mode on `:18099`
+before invoking the fork-side scenario runner. The fork-side Scenario
+classes are tracked under mcpkit#567.
 
 ## Spec reference
 

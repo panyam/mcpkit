@@ -7,8 +7,23 @@ serve-archive: ## Start the server in archive mode (.tar.gz per skill)
 serve-zip: ## Start the server in archive mode (.zip per skill)
 	go run . --serve --mode=zip
 
+demo: ## Run the demokit walkthrough (text, non-interactive). Server must be up via `make serve` in another terminal.
+	go run .
+
+tui: ## Run the walkthrough in interactive TUI mode (paginated, key-driven).
+	go run . --tui
+
+note: ## Run the walkthrough in notebook mode (Bubble Tea cells).
+	go run . --note
+
+readme: ## Regenerate WALKTHROUGH.md from the demo definitions.
+	go run . --doc=md > WALKTHROUGH.md
+
+fetch-docx: ## Stage Anthropic's docx skill from github.com/anthropics/skills into skills/ for a real-world demo.
+	bash scripts/fetch-docx-skill.sh
+
 build: ## Build the binary to ./skills-demo
 	go build -o skills-demo .
 
-.PHONY: serve serve-archive serve-zip build
+.PHONY: serve serve-archive serve-zip demo tui note readme fetch-docx build
 .DEFAULT_GOAL := serve
