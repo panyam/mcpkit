@@ -54,6 +54,23 @@ type TypedAppToolConfig[In, Out any] struct {
 	// Out, so the override must stay compatible with Out's wire shape.
 	OutputSchemaOverride any
 
+	// InputSchemaPatch runs against the reflected input schema after
+	// generation. The patch fn sees a SchemaBuilder over the live map
+	// and edits in place (e.g., `s.Prop("url").Desc(...).Default(...)`).
+	// Lighter-weight than InputSchemaOverride for the common case of
+	// "tweak a few fields"; falls back to Override-style replacement
+	// via `PropertyBuilder.Replace(...)` for the irreducible cases
+	// (nullable, anyOf, record-of-union). Precedence: if both
+	// InputSchemaOverride and InputSchemaPatch are set, Override wins
+	// and Patch is silently skipped. Issue 556.
+	InputSchemaPatch func(*core.SchemaBuilder)
+
+	// OutputSchemaPatch is the symmetric mirror for the output schema.
+	// Skipped when Out is `string` / `core.ToolResult` / `core.ToolResponse`
+	// (those don't generate an output schema). Same Override/Patch
+	// precedence rule as InputSchemaPatch. Issue 556.
+	OutputSchemaPatch func(*core.SchemaBuilder)
+
 	// Handler handles tool invocations with typed input.
 	Handler func(ctx core.ToolContext, input In) (Out, error)
 
@@ -113,6 +130,12 @@ func RegisterTypedAppTool[In, Out any](reg ToolResourceRegistrar, cfg TypedAppTo
 	}
 	if cfg.OutputSchemaOverride != nil {
 		typedOpts = append(typedOpts, core.WithOutputSchemaOverride(cfg.OutputSchemaOverride))
+	}
+	if cfg.InputSchemaPatch != nil {
+		typedOpts = append(typedOpts, core.WithInputSchemaPatch(cfg.InputSchemaPatch))
+	}
+	if cfg.OutputSchemaPatch != nil {
+		typedOpts = append(typedOpts, core.WithOutputSchemaPatch(cfg.OutputSchemaPatch))
 	}
 	typed := core.TypedTool[In, Out](cfg.Name, cfg.Description, cfg.Handler, typedOpts...)
 	RegisterAppTool(reg, AppToolConfig{

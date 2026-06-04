@@ -90,25 +90,22 @@ func main() {
 		Title:       "Show Three.js Scene",
 		Description: "Render an interactive 3D scene with custom Three.js code. Supports transparent backgrounds (alpha: true) for seamless host UI integration. Available globals: THREE, OrbitControls, EffectComposer, RenderPass, UnrealBloomPass, canvas, width, height.",
 		Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
-		InputSchemaOverride: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"code": map[string]any{
-					"type":        "string",
-					"default":     defaultThreeJSCode,
-					"description": "JavaScript code to render the 3D scene",
-				},
-				"height": map[string]any{
-					"type":             "integer",
-					"exclusiveMinimum": 0,
-					// Upstream's zod `.int()` emits Number.MAX_SAFE_INTEGER
-					// as the maximum. Mirror it for parity.
-					"maximum":     9007199254740991,
-					"default":     400,
-					"description": "Height in pixels",
-				},
-			},
-			// Neither field is required — both have defaults.
+		// `code` uses Patch (multi-line default with commas would lose to
+		// struct-tag truncation); `height` uses Replace because upstream
+		// emits exclusiveMinimum + Number.MAX_SAFE_INTEGER bounds the
+		// PropertyBuilder doesn't have direct methods for.
+		InputSchemaPatch: func(s *core.SchemaBuilder) {
+			s.Prop("code").
+				Desc("JavaScript code to render the 3D scene").
+				Default(defaultThreeJSCode)
+			s.Prop("height").Replace(map[string]any{
+				"type":             "integer",
+				"exclusiveMinimum": 0,
+				// Mirror upstream's zod `.int()` Number.MAX_SAFE_INTEGER cap.
+				"maximum":     9007199254740991,
+				"default":     400,
+				"description": "Height in pixels",
+			})
 		},
 		Handler: func(ctx core.ToolContext, _ showThreeJSInput) (showThreeJSOutput, error) {
 			return showThreeJSOutput{Success: true}, nil

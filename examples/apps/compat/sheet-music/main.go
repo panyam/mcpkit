@@ -81,17 +81,14 @@ func main() {
 			"For accurate renditions of well-known tunes, look up the ABC notation from " +
 			"abcnotation.com or thesession.org rather than recalling from memory.",
 		Execution: &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
-		// InputSchemaOverride preserves the multi-comma default verbatim —
-		// struct-tag reflection would truncate at the first comma (issue 542).
-		InputSchemaOverride: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"abcNotation": map[string]any{
-					"type":        "string",
-					"default":     defaultABCNotation,
-					"description": "ABC notation string to render as sheet music with audio playback",
-				},
-			},
+		// InputSchemaPatch lands the multi-comma default verbatim without
+		// the struct-tag parser truncating at the first comma (issue 542).
+		// Reflection still emits `type: string`; the patch just adds the
+		// description + default.
+		InputSchemaPatch: func(s *core.SchemaBuilder) {
+			s.Prop("abcNotation").
+				Desc("ABC notation string to render as sheet music with audio playback").
+				Default(defaultABCNotation)
 		},
 		Handler: func(ctx core.ToolContext, _ playSheetMusicInput) (string, error) {
 			// Upstream validates ABC notation via abcjs; the screenshot test

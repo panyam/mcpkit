@@ -70,6 +70,76 @@ func newInvopopSchemaGen() SchemaGenerator {
 		if err != nil {
 			panic(fmt.Sprintf("mcpkit: failed to marshal schema for %T: %v", v, err))
 		}
+		return normalizeBareTrueSchemas(data)
+	}
+}
+
+// normalizeBareTrueSchemas walks an emitted JSON Schema and replaces any
+// bare-`true` property / item schemas with the empty object form `{}`.
+//
+// Why: invopop emits `"payload": true` for an `interface{}` / `any` field.
+// That's spec-valid JSON Schema 2020-12 (means "anything goes"), but the
+// MCP TypeScript SDK's zod validator rejects it on tools/list because it
+// expects every property's schema to be an object. Upstream's `z.unknown()`
+// emits `{}` (no constraints) which validates fine. Issue 548 Gap 2.
+//
+// Scope: only `properties.*` values, `items`, and `allOf` / `anyOf` /
+// `oneOf` array elements are normalized. `additionalProperties: true`
+// stays — there the boolean has a distinct semantic meaning (allow
+// extra properties of any shape), not "schema for one property".
+func normalizeBareTrueSchemas(data json.RawMessage) json.RawMessage {
+	var root any
+	if err := json.Unmarshal(data, &root); err != nil {
 		return data
 	}
+	if normalized, changed := walkNormalizeBareTrue(root); changed {
+		if b, err := json.Marshal(normalized); err == nil {
+			return b
+		}
+	}
+	return data
+}
+
+func walkNormalizeBareTrue(node any) (any, bool) {
+	m, ok := node.(map[string]any)
+	if !ok {
+		return node, false
+	}
+	changed := false
+	if props, ok := m["properties"].(map[string]any); ok {
+		for k, v := range props {
+			if v == true {
+				props[k] = map[string]any{}
+				changed = true
+				continue
+			}
+			if sub, sc := walkNormalizeBareTrue(v); sc {
+				props[k] = sub
+				changed = true
+			}
+		}
+	}
+	if items, ok := m["items"]; ok {
+		if items == true {
+			m["items"] = map[string]any{}
+			changed = true
+		} else if sub, sc := walkNormalizeBareTrue(items); sc {
+			m["items"] = sub
+			changed = true
+		}
+	}
+	for _, key := range []string{"allOf", "anyOf", "oneOf"} {
+		if arr, ok := m[key].([]any); ok {
+			for i, e := range arr {
+				if e == true {
+					arr[i] = map[string]any{}
+					changed = true
+				} else if sub, sc := walkNormalizeBareTrue(e); sc {
+					arr[i] = sub
+					changed = true
+				}
+			}
+		}
+	}
+	return m, changed
 }

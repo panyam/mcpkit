@@ -147,6 +147,55 @@ func (m *mockRegistrar) RegisterResourceTemplate(def core.ResourceTemplate, h co
 	m.templateHandlers = append(m.templateHandlers, h)
 }
 
+// TestRegisterAppTool_EmptyResourceURI verifies that an empty ResourceURI
+// skips the companion resource registration entirely — the tool still
+// lands with its UIMetadata (Visibility, CSP, etc.) but no resourceUri.
+// Lets app-only tools (poll-system-stats, debug-refresh, debug-log, ...)
+// register through TypedAppToolConfig without falling out to manual
+// core.TypedTool + Title-mutation. Issue 548 Gap 3.
+func TestRegisterAppTool_EmptyResourceURI(t *testing.T) {
+	reg := &mockRegistrar{}
+
+	RegisterAppTool(reg, AppToolConfig{
+		Name:        "debug_log",
+		Title:       "Log to File",
+		Description: "Backend-only logging tool",
+		InputSchema: map[string]any{"type": "object"},
+		// ResourceURI deliberately omitted.
+		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+			return core.TextResult("logged"), nil
+		},
+		Visibility: []core.UIVisibility{core.UIVisibilityApp},
+	})
+
+	if len(reg.tools) != 1 {
+		t.Fatalf("expected 1 tool, got %d", len(reg.tools))
+	}
+	td := reg.tools[0]
+	if td.Name != "debug_log" {
+		t.Errorf("tool name = %q", td.Name)
+	}
+	if td.Title != "Log to File" {
+		t.Errorf("title = %q, want %q", td.Title, "Log to File")
+	}
+	if td.Meta == nil || td.Meta.UI == nil {
+		t.Fatal("tool Meta.UI nil — Visibility / CSP / etc. should still ride through")
+	}
+	if td.Meta.UI.ResourceUri != "" {
+		t.Errorf("resourceUri should be empty, got %q", td.Meta.UI.ResourceUri)
+	}
+	if len(td.Meta.UI.Visibility) != 1 || td.Meta.UI.Visibility[0] != core.UIVisibilityApp {
+		t.Errorf("visibility = %v", td.Meta.UI.Visibility)
+	}
+	// No resource should be registered for an empty URI.
+	if len(reg.resources) != 0 {
+		t.Errorf("expected 0 resources, got %d", len(reg.resources))
+	}
+	if len(reg.templates) != 0 {
+		t.Errorf("expected 0 templates, got %d", len(reg.templates))
+	}
+}
+
 // TestRegisterAppToolTemplate verifies that RegisterAppTool detects a template
 // URI, registers both a template resource and a concrete fallback, and
 // advertises the concrete fallback URI in the tool's _meta.ui.resourceUri

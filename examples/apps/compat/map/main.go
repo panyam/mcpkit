@@ -82,11 +82,9 @@ func main() {
 	})
 
 	// Tool 2: geocode — plain MCP tool (no UI), called by the App via the
-	// bridge. Description on the input contains commas inside parens
-	// ("e.g., 'Paris', 'Golden Gate Bridge', '1600 Pennsylvania Ave'"), so
-	// InputSchemaOverride is required to preserve them through invopop's
-	// comma-as-separator tag parser. Upstream uses `server.registerTool`
-	// (not `registerAppTool`) — no _meta.ui on this one.
+	// bridge. InputSchemaPatch lets us land the comma-rich description
+	// without struct-tag truncation; reflection still emits the
+	// `type: string` shape.
 	geocodeTyped := core.TypedTool[geocodeInput, string](
 		"geocode",
 		"Search for places using OpenStreetMap. Returns coordinates and bounding boxes for up to 5 matches.",
@@ -94,15 +92,10 @@ func main() {
 			return "No results.", nil
 		},
 		core.WithToolExecution(&core.ToolExecution{TaskSupport: core.TaskSupportForbidden}),
-		core.WithInputSchemaOverride(map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"query": map[string]any{
-					"type":        "string",
-					"description": "Place name or address to search for (e.g., 'Paris', 'Golden Gate Bridge', '1600 Pennsylvania Ave')",
-				},
-			},
-			"required": []string{"query"},
+		core.WithInputSchemaPatch(func(s *core.SchemaBuilder) {
+			s.Prop("query").
+				Desc("Place name or address to search for (e.g., 'Paris', 'Golden Gate Bridge', '1600 Pennsylvania Ave')").
+				Required()
 		}),
 	)
 	geocodeTyped.Title = "Geocode"
