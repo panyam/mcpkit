@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	core "github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/server/stateless"
 	gohttp "github.com/panyam/servicekit/http"
+	"golang.org/x/time/rate"
 )
 
 // Server is an MCP server that can run over multiple transports.
@@ -39,6 +41,10 @@ type serverOptions struct {
 	requestInterceptors  []RequestInterceptor // outgoing server-to-client request interceptors
 	requestLogger        *log.Logger          // HTTP-level request/response logging
 	subscriptionsEnabled bool        // enable resources/subscribe and resources/unsubscribe
+	subscriptionCap      int         // per-session concurrent-subscription cap (0 = unlimited)
+	subscriptionRate     rate.Limit  // per-session subscribe/unsubscribe rate cap (0 = unlimited)
+	subscriptionBurst    int         // per-session burst alongside subscriptionRate (ignored when subscriptionRate == 0)
+	subscriptionReject   SubscriptionRejectFunc // optional hook fired when a subscribe is refused
 	errorHandler         ErrorHandler // optional out-of-band error callback
 	contentChunkMethod   string       // custom notification method for streaming content (empty = default)
 	onRootsChanged       func([]core.Root) // optional callback when client sends roots/list_changed
@@ -197,8 +203,59 @@ func WithContentChunkMethod(method string) Option {
 //
 // Use Server.NotifyResourceUpdated(uri) to push change notifications to all
 // sessions that have subscribed to the given URI.
+//
+// For public-facing deployments also pass [WithSubscriptionCap] (and
+// optionally [WithSubscriptionRateLimit]); without those a misbehaving
+// client can subscribe unboundedly and exhaust server resources.
 func WithSubscriptions() Option {
 	return func(o *serverOptions) { o.subscriptionsEnabled = true }
+}
+
+// SubscriptionRejectFunc is invoked when resources/subscribe is refused
+// because the session has hit the configured cap or rate limit. reason is
+// one of "cap_exceeded" or "rate_limited". The hook is called outside the
+// subscription registry's lock; implementations may block but doing so
+// will not delay other requests on the session.
+type SubscriptionRejectFunc func(sessionID, uri, reason string)
+
+// WithSubscriptionCap sets the maximum number of concurrent
+// resources/subscribe registrations a single session may hold. Once the
+// session is at the cap, additional resources/subscribe calls fail with
+// [core.ErrCodeSubscriptionLimitExceeded] (-32010). Unsubscribing frees
+// a slot for the same session.
+//
+// Off by default (n <= 0 means unlimited). Recommended for any
+// public-facing deployment; 100 is a reasonable starting point. The cap
+// is per-session, not global — two sessions can each hold n
+// subscriptions simultaneously.
+func WithSubscriptionCap(n int) Option {
+	return func(o *serverOptions) { o.subscriptionCap = n }
+}
+
+// WithSubscriptionRateLimit bounds how fast a single session may issue
+// resources/subscribe calls. Implemented as a per-session token bucket
+// with refill rate r and burst b. burst is the largest spike the bucket
+// will admit before throttling kicks in; the steady-state ceiling is r
+// subscribes per second per session. Exceeded calls fail with
+// [core.ErrCodeSubscriptionLimitExceeded] (-32010) carrying reason
+// "rate_limited".
+//
+// Off by default (r <= 0 means unlimited). unsubscribe is not metered —
+// the goal is to bound the cost of registration churn, not to penalize
+// cleanup.
+func WithSubscriptionRateLimit(r rate.Limit, burst int) Option {
+	return func(o *serverOptions) {
+		o.subscriptionRate = r
+		o.subscriptionBurst = burst
+	}
+}
+
+// WithSubscriptionRejectHook installs a callback fired every time a
+// resources/subscribe is refused by [WithSubscriptionCap] or
+// [WithSubscriptionRateLimit]. Operators can use it to emit metrics or
+// audit logs without changing the wire response.
+func WithSubscriptionRejectHook(fn SubscriptionRejectFunc) Option {
+	return func(o *serverOptions) { o.subscriptionReject = fn }
 }
 
 // WithToolTimeout sets the maximum duration for tool execution.
@@ -410,6 +467,12 @@ func NewServer(info core.ServerInfo, opts ...Option) *Server {
 	if s.options.subscriptionsEnabled {
 		s.subRegistry = &subscriptionRegistry{
 			subscribers: make(map[string]map[string]*Dispatcher),
+			counts:      make(map[string]int),
+			limiters:    make(map[string]*rate.Limiter),
+			cap:         s.options.subscriptionCap,
+			rateLimit:   s.options.subscriptionRate,
+			rateBurst:   s.options.subscriptionBurst,
+			onReject:    s.options.subscriptionReject,
 		}
 		s.dispatcher.subscriptionsEnabled = true
 		s.dispatcher.subManager = s.subRegistry
@@ -1228,36 +1291,112 @@ var errUnauthorized = &core.AuthError{Code: http.StatusUnauthorized, Message: "u
 // subscriptionRegistry tracks which sessions have subscribed to which resource URIs.
 // It lives on the Server so it can fan out notifications across all sessions.
 // Thread-safe: all methods acquire the mutex.
+//
+// Cap and rate-limit enforcement also lives here. Counts are tracked per
+// sessionID so subscribe() can refuse without scanning the subscribers
+// map. Limiters are lazy: created on first metered call and dropped when
+// the session unsubscribes all (or disconnects). Per-session bookkeeping
+// is the right scope because the issue motivating the backpressure (PR
+// 568) is a single client exhausting the registry, not aggregate load.
 type subscriptionRegistry struct {
 	mu          sync.RWMutex
 	subscribers map[string]map[string]*Dispatcher // uri → sessionID → dispatcher
+	counts      map[string]int                    // sessionID → live subscription count
+	limiters    map[string]*rate.Limiter          // sessionID → token bucket (nil when rate limit disabled)
+
+	// Configured once at construction time; safe to read without the
+	// mutex.
+	cap       int
+	rateLimit rate.Limit
+	rateBurst int
+	onReject  SubscriptionRejectFunc
 }
 
-// subscribe registers a session's interest in a resource URI.
-func (r *subscriptionRegistry) subscribe(sessionID string, d *Dispatcher, uri string) {
+// ErrSubscriptionCapExceeded indicates the calling session has hit
+// the per-session concurrent-subscription cap configured via
+// [WithSubscriptionCap]. Returned by subscribe so handleResourcesSubscribe
+// can map it to the wire error.
+var ErrSubscriptionCapExceeded = errors.New("subscription cap exceeded")
+
+// ErrSubscriptionRateLimited indicates the calling session has exceeded
+// the per-session subscribe rate configured via
+// [WithSubscriptionRateLimit].
+var ErrSubscriptionRateLimited = errors.New("subscription rate limited")
+
+// subscribe registers a session's interest in a resource URI. Returns
+// nil on success, [ErrSubscriptionCapExceeded] or
+// [ErrSubscriptionRateLimited] when refused. Idempotent: subscribing the
+// same (session, uri) pair twice succeeds without double-counting.
+func (r *subscriptionRegistry) subscribe(sessionID string, d *Dispatcher, uri string) error {
+	r.mu.Lock()
+	subs, ok := r.subscribers[uri]
+	if !ok {
+		subs = make(map[string]*Dispatcher)
+	}
+	_, alreadyHeld := subs[sessionID]
+
+	if !alreadyHeld && r.cap > 0 && r.counts[sessionID] >= r.cap {
+		r.mu.Unlock()
+		if r.onReject != nil {
+			r.onReject(sessionID, uri, "cap_exceeded")
+		}
+		return fmt.Errorf("%w: session at %d/%d subscriptions", ErrSubscriptionCapExceeded, r.cap, r.cap)
+	}
+
+	if !alreadyHeld && r.rateLimit > 0 {
+		lim, ok := r.limiters[sessionID]
+		if !ok {
+			lim = rate.NewLimiter(r.rateLimit, r.rateBurst)
+			r.limiters[sessionID] = lim
+		}
+		if !lim.Allow() {
+			r.mu.Unlock()
+			if r.onReject != nil {
+				r.onReject(sessionID, uri, "rate_limited")
+			}
+			return fmt.Errorf("%w: %v subscribes/sec, burst %d", ErrSubscriptionRateLimited, r.rateLimit, r.rateBurst)
+		}
+	}
+
+	if !ok {
+		r.subscribers[uri] = subs
+	}
+	if !alreadyHeld {
+		subs[sessionID] = d
+		r.counts[sessionID]++
+	}
+	r.mu.Unlock()
+	return nil
+}
+
+// unsubscribe removes a session's subscription for a resource URI. No-op
+// if the session was not subscribed to the URI.
+func (r *subscriptionRegistry) unsubscribe(sessionID, uri string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	subs, ok := r.subscribers[uri]
 	if !ok {
-		subs = make(map[string]*Dispatcher)
-		r.subscribers[uri] = subs
+		return
 	}
-	subs[sessionID] = d
-}
-
-// unsubscribe removes a session's subscription for a resource URI.
-func (r *subscriptionRegistry) unsubscribe(sessionID, uri string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if subs, ok := r.subscribers[uri]; ok {
-		delete(subs, sessionID)
-		if len(subs) == 0 {
-			delete(r.subscribers, uri)
-		}
+	if _, held := subs[sessionID]; !held {
+		return
+	}
+	delete(subs, sessionID)
+	if len(subs) == 0 {
+		delete(r.subscribers, uri)
+	}
+	if r.counts[sessionID] > 0 {
+		r.counts[sessionID]--
+	}
+	if r.counts[sessionID] == 0 {
+		delete(r.counts, sessionID)
+		delete(r.limiters, sessionID)
 	}
 }
 
 // unsubscribeAll removes all subscriptions for a session (called on disconnect).
+// Drops the per-session count and limiter so the session leaves no state
+// behind on the registry.
 func (r *subscriptionRegistry) unsubscribeAll(sessionID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1267,6 +1406,8 @@ func (r *subscriptionRegistry) unsubscribeAll(sessionID string) {
 			delete(r.subscribers, uri)
 		}
 	}
+	delete(r.counts, sessionID)
+	delete(r.limiters, sessionID)
 }
 
 // notify sends a notifications/resources/updated to all sessions subscribed to the URI.
