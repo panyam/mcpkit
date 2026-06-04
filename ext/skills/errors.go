@@ -38,6 +38,16 @@ var (
 	ErrNotManifestURI = errors.New("skills: not a SKILL.md URI")
 )
 
+// Client-side errors.
+var (
+	// ErrDigestMismatch is returned by Client.ReadAndVerify when the
+	// SHA-256 over the served bytes does not equal the expected digest
+	// the caller supplied. Per SEP-2640's Integrity and Verification
+	// section, hosts MUST NOT use unverified content; surfacing this as
+	// a typed error makes the contract explicit at the call site.
+	ErrDigestMismatch = errors.New("skills: digest mismatch — content MUST NOT be used")
+)
+
 // Index validation errors.
 var (
 	ErrIndexMissingSchema           = errors.New("skills: index missing $schema")
