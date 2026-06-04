@@ -75,50 +75,54 @@ func main() {
 	}
 	html := string(htmlBytes)
 
-	opts := common.MCPServerOptions(*addr, "[cohort-heatmap] ")
-	opts = append(opts, server.WithExtension(&ui.UIExtension{}))
-	srv := server.NewServer(
-		core.ServerInfo{Name: "Cohort Heatmap Server", Version: "1.0.0"},
-		opts...,
-	)
-
-	resourceURI := "ui://get-cohort-data/mcp-app.html"
-
-	ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[cohortInput, cohortDataOutput]{
-		Name:        "get-cohort-data",
-		Title:       "Get Cohort Retention Data",
-		Description: "Returns cohort retention heatmap data showing customer retention over time by signup month",
-		Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
-		Handler: func(ctx core.ToolContext, in cohortInput) (cohortDataOutput, error) {
-			// Visual test never asserts on the data shape — return a stub
-			// matching the declared types. Upstream's iframe generates its
-			// own demo data when the tool returns empty arrays.
-			return cohortDataOutput{
-				Cohorts:      []cohortRow{},
-				Periods:      []string{},
-				PeriodLabels: []string{},
-				Metric:       in.Metric,
-				PeriodType:   in.PeriodType,
-				GeneratedAt:  time.Now().UTC().Format(time.RFC3339Nano),
-			}, nil
-		},
-		ResourceURI: resourceURI,
-		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
-			return core.ResourceResult{Contents: []core.ResourceReadContent{{
-				URI: req.URI, MimeType: core.AppMIMEType, Text: html,
-			}}}, nil
-		},
-	})
-
 	cors := middleware.CORS(nil,
 		middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
 		middleware.CORSAllowHeaders("Content-Type", "Authorization", "Mcp-Session-Id", "Mcp-Protocol-Version"),
 		middleware.CORSExposeHeaders("Mcp-Session-Id"),
 	)
 
-	log.Printf("cohort-heatmap compat fixture listening on %s (MCP at /mcp)", *addr)
-	log.Printf("serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
-	if err := srv.Run(*addr, server.WithHandlerWrap(cors)); err != nil {
+	log.Printf("[cohort-heatmap] serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
+
+	resourceURI := "ui://get-cohort-data/mcp-app.html"
+	if err := common.RunServer(common.ServerConfig{
+		Name:      "Cohort Heatmap Server",
+		Version:   "1.0.0",
+		Addr:      *addr,
+		LogPrefix: "[cohort-heatmap] ",
+		Options: []server.Option{
+			server.WithExtension(&ui.UIExtension{}),
+		},
+		Register: func(srv *server.Server) {
+			ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[cohortInput, cohortDataOutput]{
+				Name:        "get-cohort-data",
+				Title:       "Get Cohort Retention Data",
+				Description: "Returns cohort retention heatmap data showing customer retention over time by signup month",
+				Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
+				Handler: func(ctx core.ToolContext, in cohortInput) (cohortDataOutput, error) {
+					// Visual test never asserts on the data shape — return a stub
+					// matching the declared types. Upstream's iframe generates its
+					// own demo data when the tool returns empty arrays.
+					return cohortDataOutput{
+						Cohorts:      []cohortRow{},
+						Periods:      []string{},
+						PeriodLabels: []string{},
+						Metric:       in.Metric,
+						PeriodType:   in.PeriodType,
+						GeneratedAt:  time.Now().UTC().Format(time.RFC3339Nano),
+					}, nil
+				},
+				ResourceURI: resourceURI,
+				ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
+					return core.ResourceResult{Contents: []core.ResourceReadContent{{
+						URI: req.URI, MimeType: core.AppMIMEType, Text: html,
+					}}}, nil
+				},
+			})
+		},
+		TransportOptions: []server.TransportOption{
+			server.WithHandlerWrap(cors),
+		},
+	}); err != nil {
 		log.Fatal(err)
 	}
 }

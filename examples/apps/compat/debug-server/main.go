@@ -80,13 +80,34 @@ func main() {
 	}
 	html := string(htmlBytes)
 
-	opts := common.MCPServerOptions(*addr, "[debug-server] ")
-	opts = append(opts, server.WithExtension(&ui.UIExtension{}))
-	srv := server.NewServer(
-		core.ServerInfo{Name: "Debug MCP App Server", Version: "1.0.0"},
-		opts...,
+	cors := middleware.CORS(nil,
+		middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
+		middleware.CORSAllowHeaders("Content-Type", "Authorization", "Mcp-Session-Id", "Mcp-Protocol-Version"),
+		middleware.CORSExposeHeaders("Mcp-Session-Id"),
 	)
 
+	log.Printf("[debug-server] serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
+
+	if err := common.RunServer(common.ServerConfig{
+		Name:      "Debug MCP App Server",
+		Version:   "1.0.0",
+		Addr:      *addr,
+		LogPrefix: "[debug-server] ",
+		Options: []server.Option{
+			server.WithExtension(&ui.UIExtension{}),
+		},
+		Register: func(srv *server.Server) {
+			registerDebugServerTools(srv, html)
+		},
+		TransportOptions: []server.TransportOption{
+			server.WithHandlerWrap(cors),
+		},
+	}); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func registerDebugServerTools(srv *server.Server, html string) {
 	resourceURI := "ui://debug-tool/mcp-app.html"
 
 	// Tool 1: debug-tool — the kitchen-sink tool with its own UI resource.
@@ -160,16 +181,4 @@ func main() {
 	)
 	logTyped.Title = "Log to File"
 	srv.RegisterTool(logTyped.ToolDef, logTyped.Handler)
-
-	cors := middleware.CORS(nil,
-		middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
-		middleware.CORSAllowHeaders("Content-Type", "Authorization", "Mcp-Session-Id", "Mcp-Protocol-Version"),
-		middleware.CORSExposeHeaders("Mcp-Session-Id"),
-	)
-
-	log.Printf("debug-server compat fixture listening on %s (MCP at /mcp)", *addr)
-	log.Printf("serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
-	if err := srv.Run(*addr, server.WithHandlerWrap(cors)); err != nil {
-		log.Fatal(err)
-	}
 }
