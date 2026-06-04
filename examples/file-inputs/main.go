@@ -57,29 +57,27 @@ func serve() {
 		log.Fatalf("mktemp: %v", err)
 	}
 
-	opts := common.MCPServerOptions(*addr, "[mcp] ")
-	opts = append(opts,
-		// MCP Apps extension powers the in-iframe file picker apps
-		// registered in apps.go (SEP-2356 Phase 2.1).
-		server.WithExtension(&ui.UIExtension{}),
-		// SEP-2356 Phase 1.4 — auto-validate file-typed args (size +
-		// MIME) against the descriptor declared in each tool's
-		// InputSchema. Failures surface as -32602 with structured data.
-		server.WithFileInputValidation(),
-	)
-	srv := server.NewServer(
-		core.ServerInfo{Name: "file-inputs-demo", Version: "0.1.0"},
-		opts...,
-	)
-
-	registerTools(srv, uploadDir)
-	registerAppsTools(srv, uploadDir)
-
-	log.Printf("[file-inputs-demo] listening on %s — POST /mcp", *addr)
+	log.Printf("[file-inputs-demo] POST /mcp")
 	log.Printf("[file-inputs-demo] tools: upload_image, analyze_documents, process_any_file")
 	log.Printf("[file-inputs-demo] apps:  apps_upload_image, apps_analyze_documents (in-iframe pickers)")
 	log.Printf("[file-inputs-demo] uploads will be written to %s (not auto-cleaned)", uploadDir)
-	if err := srv.ListenAndServe(server.WithStreamableHTTP(true)); err != nil {
+	if err := common.RunServer(common.ServerConfig{
+		Name: "file-inputs-demo",
+		Addr: *addr,
+		Options: []server.Option{
+			// MCP Apps extension powers the in-iframe file picker apps
+			// registered in apps.go (SEP-2356 Phase 2.1).
+			server.WithExtension(&ui.UIExtension{}),
+			// SEP-2356 Phase 1.4 — auto-validate file-typed args (size +
+			// MIME) against the descriptor declared in each tool's
+			// InputSchema. Failures surface as -32602 with structured data.
+			server.WithFileInputValidation(),
+		},
+		Register: func(srv *server.Server) {
+			registerTools(srv, uploadDir)
+			registerAppsTools(srv, uploadDir)
+		},
+	}); err != nil {
 		log.Fatalf("ListenAndServe: %v", err)
 	}
 }

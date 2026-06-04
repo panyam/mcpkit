@@ -47,11 +47,29 @@ func serve() {
 		demokit.ValueFlag("--url"),
 	))
 
-	srv := server.NewServer(
-		core.ServerInfo{Name: "tasks-v2-demo", Version: "0.1.0"},
-		common.MCPServerOptions(*addr, "[mcp] ")...,
-	)
+	log.Printf("Connect: http://localhost%s/mcp", *addr)
+	log.Printf("")
+	log.Printf("Tools:")
+	log.Printf("  greet              — sync-only")
+	log.Printf("  slow_compute       — optional task (server-directed)")
+	log.Printf("  failing_job        — required task (tool error → completed + isError)")
+	log.Printf("  confirm_delete     — required task (input_required → tasks/update → completed)")
+	log.Printf("  multi_input        — required task (two simultaneous inputRequests for partial fulfillment)")
+	log.Printf("  protocol_error_job — required task (protocol error → failed + error)")
+	log.Printf("  external_job       — required task (TaskCallbacks proxy)")
 
+	if err := common.RunServer(common.ServerConfig{
+		Name: "tasks-v2-demo",
+		Addr: *addr,
+		Register: func(srv *server.Server) {
+			registerTasksV2DemoTools(srv)
+		},
+	}); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func registerTasksV2DemoTools(srv *server.Server) {
 	// greet: sync-only tool. No Execution field = taskSupport forbidden.
 	type greetInput struct {
 		Name string `json:"name" jsonschema:"description=Name to greet,required"`
@@ -311,19 +329,4 @@ func serve() {
 	// Register v2 tasks on the server (canonical RegisterTasks since SEP-2663
 	// — v2 takes the canonical name; v1 lives at RegisterTasksV1).
 	tasks.Register(tasks.Config{Server: srv})
-
-	log.Printf("Tasks v2 demo server on %s", *addr)
-	log.Printf("Connect: http://localhost%s/mcp", *addr)
-	log.Printf("")
-	log.Printf("Tools:")
-	log.Printf("  greet              — sync-only")
-	log.Printf("  slow_compute       — optional task (server-directed)")
-	log.Printf("  failing_job        — required task (tool error → completed + isError)")
-	log.Printf("  confirm_delete     — required task (input_required → tasks/update → completed)")
-	log.Printf("  multi_input        — required task (two simultaneous inputRequests for partial fulfillment)")
-	log.Printf("  protocol_error_job — required task (protocol error → failed + error)")
-	log.Printf("  external_job       — required task (TaskCallbacks proxy)")
-	if err := srv.Run(*addr); err != nil {
-		log.Fatal(err)
-	}
 }
