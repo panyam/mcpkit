@@ -2,7 +2,12 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { loadKnownGaps, loadScorecard, loadTraceability } from '../src/parse.js';
+import {
+  loadKnownGaps,
+  loadLocalSuites,
+  loadScorecard,
+  loadTraceability
+} from '../src/parse.js';
 import {
   BEGIN_GENERATED,
   END_GENERATED,
@@ -17,6 +22,7 @@ function loadFixtures() {
     scorecard: loadScorecard(join(here, 'scorecard.json')),
     traceability: loadTraceability(join(here, 'traceability.json')),
     knownGaps: loadKnownGaps(join(here, 'known-gaps.yaml')),
+    localSuites: loadLocalSuites(join(here, 'local-suites.yaml')),
     upstreamSha: 'abc1234567890abcdef1234567890abcdef123456',
     protocolVersion: '2025-11-25'
   };
