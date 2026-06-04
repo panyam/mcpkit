@@ -156,11 +156,11 @@ function renderLocalSuites(input: RenderInput): string[] {
   }
   const lines: string[] = [];
   lines.push(
-    'These suites exercise SEP-specific behavior beyond what upstream\'s tier-check covers. Each is wired into `make testall` as a separate stage and may show as PASS, FAIL, INFO (informational, not gating), or SKIP. INFO typically means "work in flight" — see the Tracking column.'
+    'These suites exercise SEP-specific behavior beyond what upstream\'s tier-check covers. Each is wired into `make testall` as a separate stage and may show as PASS, FAIL, INFO (informational, not gating), or SKIP. INFO typically means "work in flight" — see the Tracking column. The Source column links to the branch the scenarios live on; per-suite env vars and default checkout paths are listed below the table.'
   );
   lines.push('');
-  lines.push('| Suite | Covers | Stage | Status | Tracking |');
-  lines.push('|---|---|:---:|:---:|---|');
+  lines.push('| Suite | Covers | Stage | Status | Source | Tracking |');
+  lines.push('|---|---|:---:|:---:|---|---|');
   const footnotes: string[] = [];
   for (const s of suites) {
     let statusCell: string;
@@ -183,13 +183,46 @@ function renderLocalSuites(input: RenderInput): string[] {
       statusCell = `${statusCell}<sup>${idx}</sup>`;
       footnotes.push(`<sup>${idx}</sup> ${s.note}`);
     }
+    let sourceCell: string;
+    if (s.source) {
+      const url = `https://github.com/${s.source.repo}/tree/${s.source.branch}`;
+      sourceCell = `[\`${s.source.repo}@${s.source.branch}\`](${url})`;
+    } else {
+      sourceCell = '—';
+    }
     const tracking = s.tracking ? s.tracking : '—';
-    lines.push(`| \`${s.suite}\` | ${s.sep} | ${s.stage} | ${statusCell} | ${tracking} |`);
+    lines.push(
+      `| \`${s.suite}\` | ${s.sep} | ${s.stage} | ${statusCell} | ${sourceCell} | ${tracking} |`
+    );
   }
   if (footnotes.length > 0) {
     lines.push('');
     for (const f of footnotes) {
       lines.push(f);
+    }
+  }
+
+  // Per-suite setup detail: env var + default path. Lets a reader who wants
+  // to actually run the suite see where to clone, what to clone, and what
+  // env var to override if their worktree lives elsewhere. Listed only for
+  // suites that declared a source block.
+  const withSource = suites.filter((s) => s.source);
+  if (withSource.length > 0) {
+    lines.push('');
+    lines.push('### Setup — clone the right worktree per suite');
+    lines.push('');
+    lines.push(
+      "Each suite's Makefile target reads `MCPCONFORMANCE_*_PATH` to find its scenario worktree. Defaults assume sibling clones of the source repo at the relative path shown. Override per-invocation when the worktree lives elsewhere."
+    );
+    lines.push('');
+    lines.push('| Suite | Env var | Default path | Clone command |');
+    lines.push('|---|---|---|---|');
+    for (const s of withSource) {
+      const src = s.source!;
+      const clone = `\`git clone -b ${src.branch} https://github.com/${src.repo}.git ${src.defaultPath}\``;
+      lines.push(
+        `| \`${s.suite}\` | \`${src.pathVar}\` | \`${src.defaultPath}\` | ${clone} |`
+      );
     }
   }
   return lines;

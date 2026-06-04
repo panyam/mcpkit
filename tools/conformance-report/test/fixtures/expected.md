@@ -10,16 +10,25 @@
 
 ## mcpkit-local Conformance Suites
 
-These suites exercise SEP-specific behavior beyond what upstream's tier-check covers. Each is wired into `make testall` as a separate stage and may show as PASS, FAIL, INFO (informational, not gating), or SKIP. INFO typically means "work in flight" — see the Tracking column.
+These suites exercise SEP-specific behavior beyond what upstream's tier-check covers. Each is wired into `make testall` as a separate stage and may show as PASS, FAIL, INFO (informational, not gating), or SKIP. INFO typically means "work in flight" — see the Tracking column. The Source column links to the branch the scenarios live on; per-suite env vars and default checkout paths are listed below the table.
 
-| Suite | Covers | Stage | Status | Tracking |
-|---|---|:---:|:---:|---|
-| `testconf-example-pass` | Example PASS SEP | 8a | **PASS** | — |
-| `testconf-example-info` | Example INFO SEP | 8b | _INFO_<sup>1</sup> | mcpkit 999 |
-| `testconf-example-skip` | Example SKIP SEP | - | _SKIP_<sup>2</sup> | — |
+| Suite | Covers | Stage | Status | Source | Tracking |
+|---|---|:---:|:---:|---|---|
+| `testconf-example-pass` | Example PASS SEP | 8a | **PASS** | [`example/conformance-fork@feat/pass-suite`](https://github.com/example/conformance-fork/tree/feat/pass-suite) | — |
+| `testconf-example-info` | Example INFO SEP | 8b | _INFO_<sup>1</sup> | [`example/conformance-fork@pending`](https://github.com/example/conformance-fork/tree/pending) | mcpkit 999 |
+| `testconf-example-skip` | Example SKIP SEP | - | _SKIP_<sup>2</sup> | — | — |
 
 <sup>1</sup> Fixture-side note for the INFO row.
 <sup>2</sup> Intentionally not run in this revision.
+
+### Setup — clone the right worktree per suite
+
+Each suite's Makefile target reads `MCPCONFORMANCE_*_PATH` to find its scenario worktree. Defaults assume sibling clones of the source repo at the relative path shown. Override per-invocation when the worktree lives elsewhere.
+
+| Suite | Env var | Default path | Clone command |
+|---|---|---|---|
+| `testconf-example-pass` | `MCPCONFORMANCE_PASS_PATH` | `../conf-pass` | `git clone -b feat/pass-suite https://github.com/example/conformance-fork.git ../conf-pass` |
+| `testconf-example-info` | `MCPCONFORMANCE_INFO_PATH` | `../conf-pending-example` | `git clone -b pending https://github.com/example/conformance-fork.git ../conf-pending-example` |
 
 ## SEP Coverage
 

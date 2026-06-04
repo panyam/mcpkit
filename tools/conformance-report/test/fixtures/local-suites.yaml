@@ -4,11 +4,21 @@ suites:
     sep: Example PASS SEP
     stage: 8a
     status: PASS
+    source:
+      repo: example/conformance-fork
+      branch: feat/pass-suite
+      path_var: MCPCONFORMANCE_PASS_PATH
+      default_path: ../conf-pass
 
   - suite: testconf-example-info
     sep: Example INFO SEP
     stage: 8b
     status: INFO
+    source:
+      repo: example/conformance-fork
+      branch: pending
+      path_var: MCPCONFORMANCE_INFO_PATH
+      default_path: ../conf-pending-example
     note: "Fixture-side note for the INFO row."
     tracking: "mcpkit 999"
 

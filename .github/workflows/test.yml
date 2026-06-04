@@ -121,6 +121,15 @@ jobs:
         with:
           node-version: '22'
 
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          working-directory: mcpkit
+
+      - name: Sync Python tooling env
+        working-directory: mcpkit
+        run: uv sync
+
       - name: Run renderer unit tests
         working-directory: mcpkit/tools/conformance-report
         run: |

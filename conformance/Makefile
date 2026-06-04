@@ -19,19 +19,12 @@
 CONFORMANCE_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 REPO_ROOT       := $(abspath $(CONFORMANCE_DIR)/..)
 
-MCPCONFORMANCE_TASKS_V2_PATH    ?= $(abspath $(REPO_ROOT)/../conf-tasks-mrtr)
-MCPCONFORMANCE_MRTR_PATH        ?= $(abspath $(REPO_ROOT)/../conf-tasks-mrtr)
-MCPCONFORMANCE_FILE_INPUTS_PATH ?= $(abspath $(REPO_ROOT)/../conf-pending)
-MCPCONFORMANCE_AUTH_PATH        ?= $(abspath $(REPO_ROOT)/../conf-pending)
-# SEP-2640 skills — scenarios live on the main fork branch alongside the
-# sep-2640.yaml requirement-traceability file (panyam/mcpconformance PR
-# 330). Override per-invocation if the SEP work splits to its own feat
-# branch waiting upstream approval.
-MCPCONFORMANCE_SKILLS_PATH      ?= $(abspath $(REPO_ROOT)/../conf-main)
-# SEP-2575 stateless wire — the scenario lives in upstream-main (no fork
-# diverged yet), so the path defaults to the same upstream clone the
-# audit uses. Override per-invocation if it ever splits out.
-MCPCONFORMANCE_STATELESS_PATH   ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
+# Per-suite MCPCONFORMANCE_*_PATH defaults are generated from
+# conformance/local-suites.yaml. After editing the YAML's source.default_path
+# for any suite, regenerate with:
+#   uv run scripts/gen_conf_paths.py --write
+# CI's check-local-suites-stale rejects drift (case E).
+include $(CONFORMANCE_DIR)/path-defaults.mk
 # Audit harness: points at a direct clone of modelcontextprotocol/conformance@main
 # (the real upstream, not our panyam fork). Used by testconf-upstream-audit to
 # grade mcpkit against every scenario upstream currently ships.
