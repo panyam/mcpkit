@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -722,6 +723,11 @@ func (d *Dispatcher) handleResourcesTemplatesList(id json.RawMessage, params jso
 // handleResourcesSubscribe registers the current session's interest in a resource URI.
 // The server will send notifications/resources/updated to this session when the
 // resource changes (triggered by Server.NotifyResourceUpdated).
+//
+// Returns ErrCodeSubscriptionLimitExceeded (-32010) when the session has hit
+// the per-session cap or rate limit configured via WithSubscriptionCap /
+// WithSubscriptionRateLimit. The error.data carries a `reason` field
+// ("cap_exceeded" or "rate_limited") for client-side adaptive backoff.
 func (d *Dispatcher) handleResourcesSubscribe(id json.RawMessage, params json.RawMessage) *core.Response {
 	var p struct {
 		URI string `json:"uri"`
@@ -730,7 +736,17 @@ func (d *Dispatcher) handleResourcesSubscribe(id json.RawMessage, params json.Ra
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 	}
 	if d.subManager != nil {
-		d.subManager.subscribe(d.sessionID, d, p.URI)
+		if err := d.subManager.subscribe(d.sessionID, d, p.URI); err != nil {
+			reason := "cap_exceeded"
+			if errors.Is(err, ErrSubscriptionRateLimited) {
+				reason = "rate_limited"
+			}
+			return core.NewErrorResponseWithData(id,
+				core.ErrCodeSubscriptionLimitExceeded,
+				err.Error(),
+				map[string]any{"reason": reason, "uri": p.URI},
+			)
+		}
 	}
 	return core.NewResponse(id, struct{}{})
 }
