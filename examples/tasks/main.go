@@ -46,11 +46,27 @@ func serve() {
 		demokit.ValueFlag("--url"),
 	))
 
-	srv := server.NewServer(
-		core.ServerInfo{Name: "tasks-demo", Version: "0.1.0"},
-		common.MCPServerOptions(*addr, "[mcp] ")...,
-	)
+	registerAll := func(srv *server.Server) { registerTasksDemoTools(srv) }
 
+	log.Printf("Connect MCPJam or VS Code: http://localhost%s/mcp", *addr)
+	log.Printf("")
+	log.Printf("Tools:")
+	log.Printf("  greet          — sync-only (no task support)")
+	log.Printf("  slow_compute   — optional task support (try with/without 'task' hint)")
+	log.Printf("  failing_job    — required task support (must include 'task' hint)")
+	log.Printf("  confirm_delete — required task + elicitation (asks user before deleting)")
+	log.Printf("  write_haiku    — required task + sampling (asks LLM to write a haiku)")
+
+	if err := common.RunServer(common.ServerConfig{
+		Name:     "tasks-demo",
+		Addr:     *addr,
+		Register: registerAll,
+	}); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func registerTasksDemoTools(srv *server.Server) {
 	// greet: sync-only tool. No Execution field means taskSupport = forbidden.
 	// Calling with a task hint will return an error.
 	type greetInput struct {
@@ -277,17 +293,4 @@ func serve() {
 
 	// Register v1 tasks capability on the server.
 	server.RegisterTasksV1(server.TasksConfigV1{Server: srv})
-
-	log.Printf("Tasks demo server on %s", *addr)
-	log.Printf("Connect MCPJam or VS Code: http://localhost%s/mcp", *addr)
-	log.Printf("")
-	log.Printf("Tools:")
-	log.Printf("  greet          — sync-only (no task support)")
-	log.Printf("  slow_compute   — optional task support (try with/without 'task' hint)")
-	log.Printf("  failing_job    — required task support (must include 'task' hint)")
-	log.Printf("  confirm_delete — required task + elicitation (asks user before deleting)")
-	log.Printf("  write_haiku    — required task + sampling (asks LLM to write a haiku)")
-	if err := srv.Run(*addr); err != nil {
-		log.Fatal(err)
-	}
 }

@@ -326,38 +326,7 @@ func serve() {
 	))
 	listenURL := fmt.Sprintf("http://localhost%s", *addr)
 	consent := newConsentStore()
-
 	logger := common.NewMCPLogger("[mcp] ")
-	srv := server.NewServer(core.ServerInfo{
-		Name:    "elicitation-example",
-		Version: "1.0.0",
-	}, append([]server.Option{server.WithListen(*addr)}, common.WithMCPLogging(logger)...)...)
-
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "access_protected_resource",
-			Description: "Access a protected resource. Requires user approval via URL consent flow on first call.",
-			InputSchema: json.RawMessage(`{
-				"type": "object",
-				"properties": {
-					"resourceId": {"type": "string", "description": "Resource to access"}
-				}
-			}`),
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
-			var args struct {
-				ResourceID string `json:"resourceId"`
-			}
-			json.Unmarshal(req.Arguments, &args)
-			if args.ResourceID == "" {
-				args.ResourceID = "default-resource"
-			}
-			return core.TextResult(fmt.Sprintf(
-				"Access granted to resource %q (approved via consent)", args.ResourceID)), nil
-		},
-	)
-
-	srv.UseMiddleware(consentMiddleware(consent, listenURL))
 
 	cors := middleware.CORS(nil,
 		middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
@@ -365,19 +334,49 @@ func serve() {
 		middleware.CORSExposeHeaders("Mcp-Session-Id"),
 	)
 
-	fmt.Printf("Elicitation example server on %s\n", *addr)
 	fmt.Printf("MCP endpoint: %s/mcp\n", listenURL)
 	fmt.Printf("Tools: access_protected_resource\n")
 
-	if err := srv.ListenAndServe(
-		server.WithStreamableHTTP(true),
-		server.WithMux(func(mux *http.ServeMux) {
-			mux.HandleFunc("/approve", consent.handleApprove)
-		}),
-		// Browser-based MCP hosts (MCPJam) need CORS on /mcp; WithHandlerWrap
-		// applies it to every route the server exposes, including /approve.
-		server.WithHandlerWrap(cors),
-	); err != nil {
+	if err := common.RunServer(common.ServerConfig{
+		Name:    "elicitation-example",
+		Version: "1.0.0",
+		Addr:    *addr,
+		Logger:  logger,
+		Register: func(srv *server.Server) {
+			srv.RegisterTool(
+				core.ToolDef{
+					Name:        "access_protected_resource",
+					Description: "Access a protected resource. Requires user approval via URL consent flow on first call.",
+					InputSchema: json.RawMessage(`{
+						"type": "object",
+						"properties": {
+							"resourceId": {"type": "string", "description": "Resource to access"}
+						}
+					}`),
+				},
+				func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+					var args struct {
+						ResourceID string `json:"resourceId"`
+					}
+					json.Unmarshal(req.Arguments, &args)
+					if args.ResourceID == "" {
+						args.ResourceID = "default-resource"
+					}
+					return core.TextResult(fmt.Sprintf(
+						"Access granted to resource %q (approved via consent)", args.ResourceID)), nil
+				},
+			)
+			srv.UseMiddleware(consentMiddleware(consent, listenURL))
+		},
+		TransportOptions: []server.TransportOption{
+			server.WithMux(func(mux *http.ServeMux) {
+				mux.HandleFunc("/approve", consent.handleApprove)
+			}),
+			// Browser-based MCP hosts (MCPJam) need CORS on /mcp; WithHandlerWrap
+			// applies it to every route the server exposes, including /approve.
+			server.WithHandlerWrap(cors),
+		},
+	}); err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
 		os.Exit(1)
 	}

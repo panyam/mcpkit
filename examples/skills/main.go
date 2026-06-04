@@ -29,7 +29,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
 	"github.com/panyam/mcpkit/ext/skills"
 	"github.com/panyam/mcpkit/server"
@@ -72,15 +71,15 @@ func serve() {
 		log.Fatalf("skills.NewProvider: %v", err)
 	}
 
-	srvOpts := common.MCPServerOptions(*addr, "[skills] ")
-	srv := server.NewServer(
-		core.ServerInfo{Name: "skills-demo", Version: "0.1.0"},
-		srvOpts...,
-	)
-	provider.RegisterWith(srv)
-
-	log.Printf("[skills-demo] mode=%s skills=%s listening on %s", *modeFlag, *skillsDir, *addr)
-	if err := srv.ListenAndServe(server.WithStreamableHTTP(true)); err != nil {
+	log.Printf("[skills-demo] mode=%s skills=%s", *modeFlag, *skillsDir)
+	if err := common.RunServer(common.ServerConfig{
+		Name:      "skills-demo",
+		Addr:      *addr,
+		LogPrefix: "[skills] ",
+		Register: func(srv *server.Server) {
+			provider.RegisterWith(srv)
+		},
+	}); err != nil {
 		log.Fatalf("ListenAndServe: %v", err)
 	}
 }
