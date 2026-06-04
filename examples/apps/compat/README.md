@@ -13,6 +13,40 @@ hosts can drive any client that targets the upstream examples.
 
 Tracked under issue 533 (umbrella) and the per-example issues it links to.
 
+## Reading order — examples ladder
+
+Examples are ordered so each rung adds one new dimension over the
+previous. Read top-down to walk the surface from a minimal one-tool
+fixture up to a 9-tool backend-state-heavy one. The published parity
+report at [conformance/apps/compat](https://panyam.github.io/mcpkit/conformance/apps/compat/)
+shows the current status of each row.
+
+| Rung | What's new | Examples |
+|---|---|---|
+| **1. Minimum viable App.** Start here. | One tool, one resource, vanilla-JS iframe. The smallest thing that exercises the full host ↔ server ↔ iframe round trip. | [`basic-vanillajs`](basic-vanillajs/README.md) |
+| **2. Framework freedom.** Skim — same shape, different framework. | Identical wire surface; the iframe just happens to be Preact/React/Solid/Svelte/Vue. Demonstrates the protocol doesn't care about the iframe's stack. | [`basic-preact`](basic-preact/README.md) · [`basic-react`](basic-react/README.md) · [`basic-solid`](basic-solid/README.md) · [`basic-svelte`](basic-svelte/README.md) · [`basic-vue`](basic-vue/README.md) |
+| **3. Single tool, richer payload.** | Same one-tool shape but the output is structured. First taste of typed-handler + Go struct → reflection schema. | [`quickstart`](quickstart/README.md) · [`transcript`](transcript/README.md) · [`sheet-music`](sheet-music/README.md) |
+| **4. Deeply nested data shapes.** | Multi-level nested objects in the output. First place reflection meets its limits — nullable fields, anyOf composition. Introduces the `InputSchemaPatch` / `OutputSchemaPatch` escape hatches. | [`budget-allocator`](budget-allocator/README.md) · [`scenario-modeler`](scenario-modeler/README.md) · [`cohort-heatmap`](cohort-heatmap/README.md) · [`customer-segmentation`](customer-segmentation/README.md) |
+| **5. Multi-tool fixtures.** | More than one tool registered on the same server. The host's tool dropdown picks up multiple entries; iframe and "plain" tools share the surface. | [`map`](map/README.md) · [`threejs`](threejs/README.md) · [`wiki-explorer`](wiki-explorer/README.md) · [`shadertoy`](shadertoy/README.md) |
+| **6. App-only tools + host interactions.** | Some tools never appear in the model's dropdown — they're called by the iframe via the bridge. Introduces `Visibility: ["app"]`. Integration server adds host-callback tests (Send Message, Send Log, Open Link). | [`system-monitor`](system-monitor/README.md) · [`debug-server`](debug-server/README.md) · [`integration`](integration/README.md) |
+| **7. Backend state machinery.** | Per-viewUUID command queue, long-poll endpoint, server-initiated rendezvous (server enqueues a command, viewer responds via separate tool, server's await unblocks). Most complex fixture. | [`pdf-server`](pdf-server/README.md) |
+
+Each example's own `README.md` lists prompts to try against it in
+MCPJam Inspector or basic-host. Run a single one with:
+
+```bash
+make demo-app EXAMPLE=basic-server-vanillajs    # upstream TS server
+make inspect-app EXAMPLE=basic-server-vanillajs # MCPJam Inspector
+```
+
+**SKIP rows** — examples upstream's `servers.spec.ts` deliberately
+excludes (special build-time deps or out of the default test matrix).
+The fixtures still exist as browsable references via `make demo-app`:
+[`lazy-auth-server`](https://github.com/modelcontextprotocol/ext-apps/tree/main/examples/lazy-auth-server),
+[`qr-server`](https://github.com/modelcontextprotocol/ext-apps/tree/main/examples/qr-server),
+[`say-server`](https://github.com/modelcontextprotocol/ext-apps/tree/main/examples/say-server),
+[`video-resource-server`](https://github.com/modelcontextprotocol/ext-apps/tree/main/examples/video-resource-server).
+
 ## Wiring overview
 
 Each box is a separate process the wrapper script orchestrates; the labels
