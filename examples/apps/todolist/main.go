@@ -74,13 +74,22 @@ func main() {
 		return buf.String()
 	}
 
-	opts := common.MCPServerOptions(*addr, "[mcp] ")
-	opts = append(opts, server.WithExtension(&ui.UIExtension{}))
-	srv := server.NewServer(
-		core.ServerInfo{Name: "task-board", Version: "0.1.0"},
-		opts...,
-	)
+	log.Printf("MCP at /mcp")
+	if err := common.RunServer(common.ServerConfig{
+		Name: "task-board",
+		Addr: *addr,
+		Options: []server.Option{
+			server.WithExtension(&ui.UIExtension{}),
+		},
+		Register: func(srv *server.Server) {
+			registerTodoTools(srv, renderPage)
+		},
+	}); err != nil {
+		log.Fatal(err)
+	}
+}
 
+func registerTodoTools(srv *server.Server, renderPage func() string) {
 	// Register tools.
 	type addTaskInput struct {
 		Title    string `json:"title"    jsonschema:"description=Task title,required"`
@@ -270,8 +279,4 @@ func main() {
 		},
 	)
 
-	log.Printf("task-board listening on %s (MCP at /mcp)", *addr)
-	if err := srv.Run(*addr, server.WithStreamableHTTP(true)); err != nil {
-		log.Fatal(err)
-	}
 }

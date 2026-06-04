@@ -88,13 +88,22 @@ func main() {
 	}
 	gameHTML := buf.String()
 
-	opts := common.MCPServerOptions(*addr, "[mcp] ")
-	opts = append(opts, server.WithExtension(&ui.UIExtension{}))
-	srv := server.NewServer(
-		core.ServerInfo{Name: "tictactoe-app", Version: "0.1.0"},
-		opts...,
-	)
+	log.Printf("MCP at /mcp")
+	if err := common.RunServer(common.ServerConfig{
+		Name: "tictactoe-app",
+		Addr: *addr,
+		Options: []server.Option{
+			server.WithExtension(&ui.UIExtension{}),
+		},
+		Register: func(srv *server.Server) {
+			registerTicTacToeTools(srv, gameHTML)
+		},
+	}); err != nil {
+		log.Fatal(err)
+	}
+}
 
+func registerTicTacToeTools(srv *server.Server, gameHTML string) {
 	// Server-side tool: new_game — resets the board.
 	ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[struct{}, string]{
 		Name:        "new_game",
@@ -172,8 +181,4 @@ func main() {
 		},
 	))
 
-	log.Printf("tictactoe-app listening on %s (MCP at /mcp)", *addr)
-	if err := srv.Run(*addr); err != nil {
-		log.Fatal(err)
-	}
 }
