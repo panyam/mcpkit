@@ -43,31 +43,32 @@ func main() {
 	}
 	dashboardHTML := buf.String()
 
-	opts := common.MCPServerOptions(*addr, "[mcp] ")
-	opts = append(opts, server.WithExtension(&ui.UIExtension{}))
-	srv := server.NewServer(
-		core.ServerInfo{Name: "dashboard-app", Version: "0.1.0"},
-		opts...,
-	)
+	log.Printf("MCP at /mcp")
 
-	// Server-side tool: open_dashboard — opens the dashboard UI.
-	ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[struct{}, string]{
-		Name:        "open_dashboard",
-		Description: "Open the interactive dashboard with data tools",
-		Handler: func(ctx core.ToolContext, _ struct{}) (string, error) {
-			return "Dashboard opened. The app provides tools for querying data, filtering, exporting, and settings. Ask the model to query data or check settings.", nil
+	if err := common.RunServer(common.ServerConfig{
+		Name: "dashboard-app",
+		Addr: *addr,
+		Options: []server.Option{
+			server.WithExtension(&ui.UIExtension{}),
 		},
-		ResourceURI: "ui://dashboard/view",
-		Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
-		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
-			return core.ResourceResult{Contents: []core.ResourceReadContent{{
-				URI: req.URI, MimeType: core.AppMIMEType, Text: dashboardHTML,
-			}}}, nil
+		Register: func(srv *server.Server) {
+			// Server-side tool: open_dashboard — opens the dashboard UI.
+			ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[struct{}, string]{
+				Name:        "open_dashboard",
+				Description: "Open the interactive dashboard with data tools",
+				Handler: func(ctx core.ToolContext, _ struct{}) (string, error) {
+					return "Dashboard opened. The app provides tools for querying data, filtering, exporting, and settings. Ask the model to query data or check settings.", nil
+				},
+				ResourceURI: "ui://dashboard/view",
+				Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
+				ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
+					return core.ResourceResult{Contents: []core.ResourceReadContent{{
+						URI: req.URI, MimeType: core.AppMIMEType, Text: dashboardHTML,
+					}}}, nil
+				},
+			})
 		},
-	})
-
-	log.Printf("dashboard-app listening on %s (MCP at /mcp)", *addr)
-	if err := srv.Run(*addr); err != nil {
+	}); err != nil {
 		log.Fatal(err)
 	}
 }
