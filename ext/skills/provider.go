@@ -41,9 +41,10 @@ type skillEntry struct {
 type resourceEntry struct {
 	URI        string
 	skill      *skillEntry
-	fsPath     string // path within cfg.fsys
+	fsPath     string // path within cfg.fsys; for archive resources this is the skill dir
 	mimeType   string
 	isManifest bool
+	isArchive  bool
 }
 
 // NewProvider walks the configured fs.FS and returns a Provider with
@@ -161,6 +162,10 @@ func (p *Provider) registerSkill(dirPath string) error {
 	}
 	p.skills = append(p.skills, skill)
 
+	if p.cfg.archiveMode != ArchiveFormatUnknown {
+		return p.registerArchive(skill)
+	}
+
 	return fs.WalkDir(p.cfg.fsys, dirPath, func(walkPath string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -176,6 +181,24 @@ func (p *Provider) registerSkill(dirPath string) error {
 		fileSegs := strings.Split(rel, "/")
 		return p.registerResource(skill, fileSegs, walkPath)
 	})
+}
+
+func (p *Provider) registerArchive(skill *skillEntry) error {
+	suffix := p.cfg.archiveMode.Suffix()
+	uri := Scheme + "://" + joinSegments(skill.uriSegs) + suffix
+	if _, exists := p.byURI[uri]; exists {
+		return fmt.Errorf("skills: duplicate archive URI %q", uri)
+	}
+	entry := &resourceEntry{
+		URI:       uri,
+		skill:     skill,
+		fsPath:    skill.dirPath,
+		mimeType:  p.cfg.archiveMode.MimeType(),
+		isArchive: true,
+	}
+	p.resources = append(p.resources, entry)
+	p.byURI[uri] = entry
+	return nil
 }
 
 func (p *Provider) registerResource(skill *skillEntry, fileSegs []string, fsPath string) error {
@@ -217,6 +240,13 @@ func (p *Provider) Resources() []core.ResourceDef {
 // the underlying fs.FS at request time. Resources are registered in
 // stable URI-sorted order.
 //
+// RegisterWith also declares the io.modelcontextprotocol/skills
+// extension on srv via srv.RegisterExtension so the capability appears
+// in the initialize response. RegisterExtension is keyed by extension
+// ID and idempotent, so an explicit srv.RegisterExtension or
+// server.WithExtension call on the same SkillsExtension causes no
+// double-emit.
+//
 // Unless WithoutIndex was supplied to NewProvider, RegisterWith also
 // constructs an internal Indexer and registers skill://index.json on
 // srv. Use WithIndexCacheTTL to tune the index's cache freshness or
@@ -229,6 +259,7 @@ func (p *Provider) RegisterWith(srv *server.Server) {
 	for _, r := range p.resources {
 		srv.RegisterResource(p.defFor(r), p.makeHandler(r))
 	}
+	srv.RegisterExtension(SkillsExtension{})
 	if !p.cfg.suppressIndex {
 		var opts []IndexerOption
 		if p.cfg.indexCacheTTL > 0 {
@@ -244,7 +275,7 @@ func (p *Provider) defFor(r *resourceEntry) core.ResourceDef {
 		Name:     path.Base(r.fsPath),
 		MimeType: r.mimeType,
 	}
-	if r.isManifest {
+	if r.isManifest || r.isArchive {
 		def.Name = r.skill.fm.Name
 		def.Description = r.skill.fm.Description
 		if len(r.skill.fm.Extra) > 0 && p.cfg.metaPrefix != "" {
@@ -259,6 +290,19 @@ func (p *Provider) defFor(r *resourceEntry) core.ResourceDef {
 
 func (p *Provider) makeHandler(r *resourceEntry) core.ResourceHandler {
 	return func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
+		if r.isArchive {
+			data, err := PackSkill(p.cfg.fsys, r.fsPath, p.cfg.archiveMode)
+			if err != nil {
+				return core.ResourceResult{}, fmt.Errorf("skills: pack %s: %w", r.fsPath, err)
+			}
+			return core.ResourceResult{
+				Contents: []core.ResourceReadContent{{
+					URI:      r.URI,
+					MimeType: r.mimeType,
+					Blob:     base64.StdEncoding.EncodeToString(data),
+				}},
+			}, nil
+		}
 		f, err := p.cfg.fsys.Open(r.fsPath)
 		if err != nil {
 			return core.ResourceResult{}, fmt.Errorf("skills: open %s: %w", r.fsPath, err)
