@@ -1,0 +1,94 @@
+# mcpkit-local conformance suites manifest.
+#
+# Joined by tools/conformance-report at render time with the upstream
+# tier-check + traceability output. Adding an entry here surfaces it in
+# the "mcpkit-local Conformance Suites" section of CONFORMANCE.md.
+#
+# Schema:
+#   suites:
+#     - suite:       <make target name, e.g. testconf-skills>
+#       sep:         <one-line description used as the "Covers" column>
+#       stage:       <testall stage label, e.g. 8h. Use - for suites not in testall.>
+#       status:      <PASS | FAIL | INFO | SKIP>
+#       source:      <where the scenarios live>
+#         repo:           <e.g. panyam/mcpconformance, modelcontextprotocol/conformance>
+#         branch:         <fork branch or upstream branch, e.g. feat/tasks-mrtr-extension>
+#         path_var:       <MCPCONFORMANCE_*_PATH env var the testconf-* target reads>
+#         default_path:   <where it defaults to, relative to repo root, e.g. ../conf-main>
+#       note:        <one-line context, used as a footnote when set>
+#       tracking:    <plain-text issue/PR ref, e.g. "mcpkit 567". Optional.>
+#
+# Drift-checked against conformance/Makefile by scripts/check-local-suites.sh.
+# CI fails if a testconf-* target exists in the Makefile but is missing here
+# (or vice versa), or if the stage label disagrees with the testall wiring.
+#
+# Status semantics:
+#   PASS  — suite runs green today
+#   FAIL  — suite runs and has known failures that block the umbrella
+#   INFO  — suite runs (or fails-fast) and is wired through run_stage_info
+#           in testall so it does not count toward PASS/FAIL totals
+#   SKIP  — suite intentionally not run in this revision; explain why in note
+
+suites:
+  - suite: testconf-tasks-v2
+    sep: SEP-2663 Tasks v2
+    stage: 8d
+    status: PASS
+    source:
+      repo: panyam/mcpconformance
+      branch: feat/tasks-mrtr-extension
+      path_var: MCPCONFORMANCE_TASKS_V2_PATH
+      default_path: ../conf-tasks-mrtr
+
+  - suite: testconf-mrtr
+    sep: SEP-2322 MRTR
+    stage: 8e
+    status: PASS
+    source:
+      repo: panyam/mcpconformance
+      branch: feat/tasks-mrtr-extension
+      path_var: MCPCONFORMANCE_MRTR_PATH
+      default_path: ../conf-tasks-mrtr
+
+  - suite: testconf-file-inputs
+    sep: SEP-2356 File inputs
+    stage: 8f
+    status: PASS
+    source:
+      repo: panyam/mcpconformance
+      branch: pending
+      path_var: MCPCONFORMANCE_FILE_INPUTS_PATH
+      default_path: ../conf-pending
+
+  - suite: testconf-auth-server
+    sep: MCP authz 2025-11-25
+    stage: 8g
+    status: PASS
+    source:
+      repo: panyam/mcpconformance
+      branch: pending
+      path_var: MCPCONFORMANCE_AUTH_PATH
+      default_path: ../conf-pending
+
+  - suite: testconf-stateless
+    sep: SEP-2575 Stateless wire
+    stage: "-"
+    status: PASS
+    source:
+      repo: modelcontextprotocol/conformance
+      branch: main
+      path_var: MCPCONFORMANCE_STATELESS_PATH
+      default_path: ../conf-upstream-main
+    note: "25 pass / 1 known upstream-test fail (array-vs-object requiredCapabilities)."
+
+  - suite: testconf-skills
+    sep: SEP-2640 Skills
+    stage: 8h
+    status: INFO
+    source:
+      repo: panyam/mcpconformance
+      branch: chore/sep-2640-yaml
+      path_var: MCPCONFORMANCE_SKILLS_PATH
+      default_path: ../conf-main
+    note: "Fixture spawns and runs cleanly. Fork-side Scenario classes blocked on WG iteration of sep-2640.yaml in panyam/mcpconformance PR 330."
+    tracking: "mcpkit 567"

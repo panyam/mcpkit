@@ -37,6 +37,35 @@ Needs Node.js 22+ and a clone of `modelcontextprotocol/conformance` at `../conf-
 | Server | 46/47 | 92/1 |
 | Client | 0/0 | 0/0 |
 
+## mcpkit-local Conformance Suites
+
+These suites exercise SEP-specific behavior beyond what upstream's tier-check covers. Each is wired into `make testall` as a separate stage and may show as PASS, FAIL, INFO (informational, not gating), or SKIP. INFO typically means "work in flight" — see the Tracking column. The Source column links to the branch the scenarios live on; per-suite env vars and default checkout paths are listed below the table.
+
+| Suite | Covers | Stage | Status | Source | Tracking |
+|---|---|:---:|:---:|---|---|
+| `testconf-tasks-v2` | SEP-2663 Tasks v2 | 8d | **PASS** | [`panyam/mcpconformance@feat/tasks-mrtr-extension`](https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension) | — |
+| `testconf-mrtr` | SEP-2322 MRTR | 8e | **PASS** | [`panyam/mcpconformance@feat/tasks-mrtr-extension`](https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension) | — |
+| `testconf-file-inputs` | SEP-2356 File inputs | 8f | **PASS** | [`panyam/mcpconformance@pending`](https://github.com/panyam/mcpconformance/tree/pending) | — |
+| `testconf-auth-server` | MCP authz 2025-11-25 | 8g | **PASS** | [`panyam/mcpconformance@pending`](https://github.com/panyam/mcpconformance/tree/pending) | — |
+| `testconf-stateless` | SEP-2575 Stateless wire | - | **PASS**<sup>1</sup> | [`modelcontextprotocol/conformance@main`](https://github.com/modelcontextprotocol/conformance/tree/main) | — |
+| `testconf-skills` | SEP-2640 Skills | 8h | _INFO_<sup>2</sup> | [`panyam/mcpconformance@chore/sep-2640-yaml`](https://github.com/panyam/mcpconformance/tree/chore/sep-2640-yaml) | mcpkit 567 |
+
+<sup>1</sup> 25 pass / 1 known upstream-test fail (array-vs-object requiredCapabilities).
+<sup>2</sup> Fixture spawns and runs cleanly. Fork-side Scenario classes blocked on WG iteration of sep-2640.yaml in panyam/mcpconformance PR 330.
+
+### Setup — clone the right worktree per suite
+
+Each suite's Makefile target reads `MCPCONFORMANCE_*_PATH` to find its scenario worktree. Defaults assume sibling clones of the source repo at the relative path shown. Override per-invocation when the worktree lives elsewhere.
+
+| Suite | Env var | Default path | Clone command |
+|---|---|---|---|
+| `testconf-tasks-v2` | `MCPCONFORMANCE_TASKS_V2_PATH` | `../conf-tasks-mrtr` | `git clone -b feat/tasks-mrtr-extension https://github.com/panyam/mcpconformance.git ../conf-tasks-mrtr` |
+| `testconf-mrtr` | `MCPCONFORMANCE_MRTR_PATH` | `../conf-tasks-mrtr` | `git clone -b feat/tasks-mrtr-extension https://github.com/panyam/mcpconformance.git ../conf-tasks-mrtr` |
+| `testconf-file-inputs` | `MCPCONFORMANCE_FILE_INPUTS_PATH` | `../conf-pending` | `git clone -b pending https://github.com/panyam/mcpconformance.git ../conf-pending` |
+| `testconf-auth-server` | `MCPCONFORMANCE_AUTH_PATH` | `../conf-pending` | `git clone -b pending https://github.com/panyam/mcpconformance.git ../conf-pending` |
+| `testconf-stateless` | `MCPCONFORMANCE_STATELESS_PATH` | `../conf-upstream-main` | `git clone -b main https://github.com/modelcontextprotocol/conformance.git ../conf-upstream-main` |
+| `testconf-skills` | `MCPCONFORMANCE_SKILLS_PATH` | `../conf-main` | `git clone -b chore/sep-2640-yaml https://github.com/panyam/mcpconformance.git ../conf-main` |
+
 ## SEP Coverage
 
 | SEP | Tested reqs | Excluded | Untested | Status |
