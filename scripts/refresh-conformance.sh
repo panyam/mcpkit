@@ -120,6 +120,7 @@ echo "=== Rendering CONFORMANCE.md ==="
     --scorecard "$WORK_DIR/scorecard.json" \
     --traceability "$CONF_DIR/src/seps/traceability.json" \
     --known-gaps "$REPO_ROOT/conformance/known-gaps.yaml" \
+    --local-suites "$REPO_ROOT/conformance/local-suites.yaml" \
     --out "$OUT" \
     --upstream-sha "$UPSTREAM_SHA" \
     --protocol "$PROTOCOL_VERSION")

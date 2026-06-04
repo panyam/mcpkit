@@ -1,0 +1,24 @@
+[project]
+name = "mcpkit-scripts"
+version = "0.0.1"
+description = "Python tooling used by mcpkit's repo scripts (conformance gates, doc-site generators, fixture fetchers)."
+requires-python = ">=3.9"
+dependencies = [
+    "PyYAML>=6.0.0",
+]
+
+# This is NOT a published package. It exists so `uv sync` produces a
+# consistent virtualenv across Linux, macOS, and Windows for the scripts/
+# tools. Each script is a thin file under scripts/; the heavy lifting (yaml,
+# requests, etc.) lives in this env.
+#
+# Local setup:
+#     uv sync
+#     uv run scripts/<name>.py
+#
+# CI installs uv (single-binary install via astral.sh's setup-uv action) and
+# runs `uv sync` once before invoking any script.
+
+[tool.uv]
+# Empty for now. Configure dev dependencies, indexes, or Python pin overrides
+# here as the tooling surface grows.
