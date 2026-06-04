@@ -51,65 +51,15 @@ func serve() {
 		demokit.ValueFlag("--url"),
 	))
 
-	opts := common.MCPServerOptions(*addr, "[mcp] ")
 	// The same ttlMs / cacheScope applies to the four list endpoints and to
 	// resources/read — SEP-2549 added resources/read to the coverage list.
+	var extraOpts []server.Option
 	if *ttlMs >= 0 || *scope != "" {
-		opts = append(opts,
+		extraOpts = append(extraOpts,
 			server.WithListCacheControl(*ttlMs, *scope),
 			server.WithReadResourceCacheControl(*ttlMs, *scope),
 		)
 	}
-
-	srv := server.NewServer(core.ServerInfo{Name: "list-ttl-demo", Version: "0.1.0"}, opts...)
-
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "ping",
-			Description: "Returns 'pong'",
-			InputSchema: map[string]any{"type": "object"},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
-			return core.TextResult("pong"), nil
-		},
-	)
-
-	srv.RegisterResource(
-		core.ResourceDef{
-			URI:      "file:///fixture",
-			Name:     "fixture",
-			MimeType: "text/plain",
-		},
-		func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
-			return core.ResourceResult{
-				Contents: []core.ResourceReadContent{{
-					URI:      req.URI,
-					MimeType: "text/plain",
-					Text:     "fixture",
-				}},
-			}, nil
-		},
-	)
-
-	srv.RegisterResourceTemplate(
-		core.ResourceTemplate{URITemplate: "file:///t/{name}", Name: "tmpl"},
-		func(ctx core.ResourceContext, uri string, params map[string]string) (core.ResourceResult, error) {
-			return core.ResourceResult{
-				Contents: []core.ResourceReadContent{{
-					URI:      uri,
-					MimeType: "text/plain",
-					Text:     "templated:" + params["name"],
-				}},
-			}, nil
-		},
-	)
-
-	srv.RegisterPrompt(
-		core.PromptDef{Name: "hello", Description: "Sample prompt"},
-		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResponse, error) {
-			return core.PromptResult{}, nil
-		},
-	)
 
 	mode := "unset"
 	if *ttlMs == 0 {
@@ -121,8 +71,62 @@ func serve() {
 	if scopeMode == "" {
 		scopeMode = "unset"
 	}
-	log.Printf("[list-ttl-demo] listening on %s — ttlMs: %s, cacheScope: %s", *addr, mode, scopeMode)
-	if err := srv.ListenAndServe(server.WithStreamableHTTP(true)); err != nil {
+	log.Printf("[list-ttl-demo] ttlMs: %s, cacheScope: %s", mode, scopeMode)
+
+	if err := common.RunServer(common.ServerConfig{
+		Name:    "list-ttl-demo",
+		Addr:    *addr,
+		Options: extraOpts,
+		Register: func(srv *server.Server) {
+			srv.RegisterTool(
+				core.ToolDef{
+					Name:        "ping",
+					Description: "Returns 'pong'",
+					InputSchema: map[string]any{"type": "object"},
+				},
+				func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+					return core.TextResult("pong"), nil
+				},
+			)
+
+			srv.RegisterResource(
+				core.ResourceDef{
+					URI:      "file:///fixture",
+					Name:     "fixture",
+					MimeType: "text/plain",
+				},
+				func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
+					return core.ResourceResult{
+						Contents: []core.ResourceReadContent{{
+							URI:      req.URI,
+							MimeType: "text/plain",
+							Text:     "fixture",
+						}},
+					}, nil
+				},
+			)
+
+			srv.RegisterResourceTemplate(
+				core.ResourceTemplate{URITemplate: "file:///t/{name}", Name: "tmpl"},
+				func(ctx core.ResourceContext, uri string, params map[string]string) (core.ResourceResult, error) {
+					return core.ResourceResult{
+						Contents: []core.ResourceReadContent{{
+							URI:      uri,
+							MimeType: "text/plain",
+							Text:     "templated:" + params["name"],
+						}},
+					}, nil
+				},
+			)
+
+			srv.RegisterPrompt(
+				core.PromptDef{Name: "hello", Description: "Sample prompt"},
+				func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResponse, error) {
+					return core.PromptResult{}, nil
+				},
+			)
+		},
+	}); err != nil {
 		log.Fatalf("ListenAndServe: %v", err)
 	}
 }

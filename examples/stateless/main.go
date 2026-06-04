@@ -67,21 +67,20 @@ func serve() {
 		log.Fatalf("invalid --mode: %q (want legacy|dual|stateless)", *modeFlag)
 	}
 
-	opts := common.MCPServerOptions(*addr, "[stateless] ")
-	srv := server.NewServer(
-		core.ServerInfo{Name: "stateless-demo", Version: "0.1.0"},
-		opts...,
-	)
-
-	registerCartTools(srv, newCartStore())
-	registerDiagnosticTools(srv)
-	registerSeedPrompt(srv)
-
-	log.Printf("[stateless-demo] mode=%s listening on %s", mode, *addr)
-	if err := srv.ListenAndServe(
-		server.WithStreamableHTTP(true),
-		server.WithStatelessMode(mode),
-	); err != nil {
+	log.Printf("[stateless-demo] mode=%s", mode)
+	if err := common.RunServer(common.ServerConfig{
+		Name:      "stateless-demo",
+		Addr:      *addr,
+		LogPrefix: "[stateless] ",
+		Register: func(srv *server.Server) {
+			registerCartTools(srv, newCartStore())
+			registerDiagnosticTools(srv)
+			registerSeedPrompt(srv)
+		},
+		TransportOptions: []server.TransportOption{
+			server.WithStatelessMode(mode),
+		},
+	}); err != nil {
 		log.Fatalf("ListenAndServe: %v", err)
 	}
 }

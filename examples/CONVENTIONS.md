@@ -98,32 +98,52 @@ func main() {
   ```
   Renderer / mode predicates use `demokit.IsTUI()` and `demokit.IsNonInteractive()` —
   no hand-rolled `os.Args` scans.
-- Listen + logger + middleware come from `examples/common` in one call:
+- The full bootstrap-and-serve loop comes from `common.RunServer`. Construct
+  the canonical baseline (listen + logger + middleware), register tools, log
+  `[<name>] listening on <addr>`, and call `srv.ListenAndServe(WithStreamableHTTP(true), ...)`
+  with graceful-shutdown wiring in one call:
   ```go
-  srv := server.NewServer(
-      core.ServerInfo{Name: "<name>", Version: "0.1.0"},
-      common.MCPServerOptions(*addr, "[mcp] ")...,
-  )
+  if err := common.RunServer(common.ServerConfig{
+      Name: "<name>",
+      Addr: *addr,
+      Options: []server.Option{
+          server.WithExtension(&ui.UIExtension{}),
+          server.WithFileInputValidation(),
+      },
+      Register: func(srv *server.Server) {
+          registerTools(srv)
+      },
+  }); err != nil {
+      log.Fatalf("ListenAndServe: %v", err)
+  }
   ```
-  `common.MCPServerOptions` returns `[]server.Option` containing
-  `WithListen` plus the canonical color-logger wired to both
-  `WithRequestLogging` and `WithMiddleware(LoggingMiddleware)`. To append
-  example-specific options:
-  ```go
-  opts := common.MCPServerOptions(*addr, "[mcp] ")
-  opts = append(opts, server.WithListTTL(60), server.WithExtension(...))
-  srv := server.NewServer(info, opts...)
-  ```
-  Need the logger handle for non-server use (extra rules, custom log
-  lines)? Drop down to `common.NewMCPLogger(prefix, ...extraRules)` +
-  `common.WithMCPLogging(logger)`.
-- Serve via `srv.ListenAndServe(server.WithStreamableHTTP(true))` — graceful
-  shutdown is built in (server/server.go:879 wraps
-  `gohttp.ListenAndServeGraceful`). **Never** call `http.ListenAndServe`
-  directly.
+  Fields beyond `Name`/`Addr`:
+  - `Version` defaults to `"0.1.0"`.
+  - `LogPrefix` defaults to `"[mcp] "` and is passed to the canonical
+    color logger.
+  - `Options` appends `server.Option`s (e.g. `WithExtension`,
+    `WithListCacheControl`, `WithAuth`) to the baseline before `NewServer`.
+  - `Register` runs after `NewServer` so it has the `*server.Server` for
+    `RegisterTool` / `UseMiddleware` / extension registration.
+  - `TransportOptions` appends `server.TransportOption`s after
+    `WithStreamableHTTP(true)` at `ListenAndServe` time — use for
+    `WithStatelessMode`, `WithMux`, `WithHandlerWrap`, `WithSSE`, etc.
+  - `Logger` (optional `*log.Logger`) — when set, RunServer skips
+    `MCPServerOptions` and uses `WithMCPLogging(Logger)` instead, so
+    callers that need custom color rules (`NewMCPLogger(prefix, extras...)`)
+    keep their handle.
+
+  When the serve loop diverges substantially from this shape (parallel
+  webhook listeners, multiple servers in one process), fall back to
+  manual `common.MCPServerOptions(*addr, "[mcp] ")` + `server.NewServer`
+  + `srv.ListenAndServe(...)`. The canonical exception today is
+  `examples/events/discord/` — see its `main.go` for why.
+
 - Side endpoints (e.g. `/inject` for synthetic events) go through
-  `server.WithMux(func(mux *http.ServeMux) { ... })` — not a hand-rolled
-  `http.Server{}`.
+  `server.WithMux(func(mux *http.ServeMux) { ... })` (in `TransportOptions`)
+  — not a hand-rolled `http.Server{}`. Graceful shutdown is built into
+  `srv.ListenAndServe` via `gohttp.ListenAndServeGraceful`; **never** call
+  `http.ListenAndServe` directly.
 
 ### Logger color rules (canonical set)
 
@@ -416,8 +436,11 @@ output rather than emitted as N/A.
   through to `runDemo()` otherwise.
 - [ ] `logger-colorlogger` — `serve()` uses `demokit.NewColorLogger` (not
   `log.Default()`, not stdlib `log` only).
-- [ ] `serve-srv-listenandserve` — `serve()` uses `srv.ListenAndServe(...)`,
-  not `http.ListenAndServe(...)`.
+- [ ] `serve-srv-listenandserve` — `serve()` uses `common.RunServer(...)` or
+  `srv.ListenAndServe(...)` (never `http.ListenAndServe(...)`). Prefer
+  `common.RunServer` for the canonical bootstrap-and-serve loop; fall back
+  to manual `ListenAndServe` only when the example has a documented
+  divergence (e.g. `examples/events/discord/`).
 - [ ] `mux-withmux` — side-endpoint registration uses `server.WithMux(...)`,
   not a hand-rolled `http.Server{}`. (Skip if the example has no side
   endpoints.)
