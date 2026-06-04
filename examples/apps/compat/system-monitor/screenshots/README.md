@@ -1,0 +1,7 @@
+# Screenshots — system-monitor
+
+Capture by running `make demo-app EXAMPLE=system-monitor-server`.
+
+| File | What to capture |
+|---|---|
+| `01-dashboard.png` | System Monitor iframe showing the live dashboard: CPU / memory / disk gauges + per-process table. Updates as the iframe polls `poll-system-stats` every few seconds. |
