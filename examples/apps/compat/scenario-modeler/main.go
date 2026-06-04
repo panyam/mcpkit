@@ -152,71 +152,75 @@ func main() {
 	}
 	html := string(htmlBytes)
 
-	opts := common.MCPServerOptions(*addr, "[scenario-modeler] ")
-	opts = append(opts, server.WithExtension(&ui.UIExtension{}))
-	srv := server.NewServer(
-		core.ServerInfo{Name: "SaaS Scenario Modeler", Version: "1.0.0"},
-		opts...,
-	)
-
-	resourceURI := "ui://scenario-modeler/mcp-app.html"
-
-	ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[getScenarioInput, getScenarioOutput]{
-		Name:        "get-scenario-data",
-		Title:       "Get Scenario Data",
-		Description: "Returns SaaS scenario templates and optionally computes custom projections for given inputs",
-		Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
-		// InputSchemaPatch just adds the description on `customInputs` —
-		// reflection of `*scenarioInputs` already produces the matching
-		// nested object shape.
-		InputSchemaPatch: func(s *core.SchemaBuilder) {
-			s.Prop("customInputs").Desc("Custom scenario parameters to compute projections for")
-		},
-		// OutputSchemaOverride stays: the nullable `breakEvenMonth` appears
-		// at two nesting depths (templates[].summary.breakEvenMonth and
-		// customSummary.breakEvenMonth) via the same scenarioSummarySchema
-		// map. Hand-stitching that with Patch.Replace at deep paths is
-		// uglier than the explicit override.
-		OutputSchemaOverride: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"templates": map[string]any{
-					"type":  "array",
-					"items": scenarioTemplateSchema,
-				},
-				"defaultInputs": scenarioInputsSchemaMap,
-				"customProjections": map[string]any{
-					"type":  "array",
-					"items": monthlyProjectionSchema,
-				},
-				"customSummary": scenarioSummarySchema,
-			},
-			"required": []string{"templates", "defaultInputs"},
-		},
-		Handler: func(ctx core.ToolContext, _ getScenarioInput) (getScenarioOutput, error) {
-			// Visual test doesn't depend on the data shape.
-			return getScenarioOutput{
-				Templates:     []scenarioTemplate{},
-				DefaultInputs: scenarioInputs{},
-			}, nil
-		},
-		ResourceURI: resourceURI,
-		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
-			return core.ResourceResult{Contents: []core.ResourceReadContent{{
-				URI: req.URI, MimeType: core.AppMIMEType, Text: html,
-			}}}, nil
-		},
-	})
-
 	cors := middleware.CORS(nil,
 		middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
 		middleware.CORSAllowHeaders("Content-Type", "Authorization", "Mcp-Session-Id", "Mcp-Protocol-Version"),
 		middleware.CORSExposeHeaders("Mcp-Session-Id"),
 	)
 
-	log.Printf("scenario-modeler compat fixture listening on %s (MCP at /mcp)", *addr)
-	log.Printf("serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
-	if err := srv.Run(*addr, server.WithHandlerWrap(cors)); err != nil {
+	log.Printf("[scenario-modeler] serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
+
+	resourceURI := "ui://scenario-modeler/mcp-app.html"
+	if err := common.RunServer(common.ServerConfig{
+		Name:      "SaaS Scenario Modeler",
+		Version:   "1.0.0",
+		Addr:      *addr,
+		LogPrefix: "[scenario-modeler] ",
+		Options: []server.Option{
+			server.WithExtension(&ui.UIExtension{}),
+		},
+		Register: func(srv *server.Server) {
+			ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[getScenarioInput, getScenarioOutput]{
+				Name:        "get-scenario-data",
+				Title:       "Get Scenario Data",
+				Description: "Returns SaaS scenario templates and optionally computes custom projections for given inputs",
+				Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
+				// InputSchemaPatch just adds the description on `customInputs` —
+				// reflection of `*scenarioInputs` already produces the matching
+				// nested object shape.
+				InputSchemaPatch: func(s *core.SchemaBuilder) {
+					s.Prop("customInputs").Desc("Custom scenario parameters to compute projections for")
+				},
+				// OutputSchemaOverride stays: the nullable `breakEvenMonth` appears
+				// at two nesting depths (templates[].summary.breakEvenMonth and
+				// customSummary.breakEvenMonth) via the same scenarioSummarySchema
+				// map. Hand-stitching that with Patch.Replace at deep paths is
+				// uglier than the explicit override.
+				OutputSchemaOverride: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"templates": map[string]any{
+							"type":  "array",
+							"items": scenarioTemplateSchema,
+						},
+						"defaultInputs": scenarioInputsSchemaMap,
+						"customProjections": map[string]any{
+							"type":  "array",
+							"items": monthlyProjectionSchema,
+						},
+						"customSummary": scenarioSummarySchema,
+					},
+					"required": []string{"templates", "defaultInputs"},
+				},
+				Handler: func(ctx core.ToolContext, _ getScenarioInput) (getScenarioOutput, error) {
+					// Visual test doesn't depend on the data shape.
+					return getScenarioOutput{
+						Templates:     []scenarioTemplate{},
+						DefaultInputs: scenarioInputs{},
+					}, nil
+				},
+				ResourceURI: resourceURI,
+				ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
+					return core.ResourceResult{Contents: []core.ResourceReadContent{{
+						URI: req.URI, MimeType: core.AppMIMEType, Text: html,
+					}}}, nil
+				},
+			})
+		},
+		TransportOptions: []server.TransportOption{
+			server.WithHandlerWrap(cors),
+		},
+	}); err != nil {
 		log.Fatal(err)
 	}
 }

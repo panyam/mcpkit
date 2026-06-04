@@ -61,58 +61,62 @@ func main() {
 	}
 	html := string(htmlBytes)
 
-	opts := common.MCPServerOptions(*addr, "[wiki-explorer] ")
-	opts = append(opts, server.WithExtension(&ui.UIExtension{}))
-	srv := server.NewServer(
-		core.ServerInfo{Name: "Wiki Explorer", Version: "1.0.0"},
-		opts...,
-	)
-
-	resourceURI := "ui://wiki-explorer/mcp-app.html"
-
-	ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[wikiInput, wikiLinksOutput]{
-		Name:        "get-first-degree-links",
-		Title:       "Get First-Degree Links",
-		Description: "Returns all Wikipedia pages that the given page links to directly. The widget is interactive and exposes tools for exploring the graph (expanding nodes to see their links), searching for articles, and querying visible nodes.",
-		Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
-		// Reflection covers page + links cleanly from the Go struct; only
-		// the nullable `error` field needs help. Upstream's `z.string()
-		// .nullable()` emits an anyOf — Go's `*string` reflects to plain
-		// `"type": "string"`. Patch.Replace lands the matching shape.
-		OutputSchemaPatch: func(s *core.SchemaBuilder) {
-			s.Prop("error").Replace(map[string]any{
-				"anyOf": []any{
-					map[string]any{"type": "string"},
-					map[string]any{"type": "null"},
-				},
-			})
-		},
-		Handler: func(ctx core.ToolContext, in wikiInput) (wikiLinksOutput, error) {
-			// Visual test masks the graph (HOST_MASKS["wiki-explorer"] = ["#graph"]).
-			// Stub response — iframe renders its own layout.
-			return wikiLinksOutput{
-				Page:  wikiPage{URL: in.URL, Title: "Model Context Protocol"},
-				Links: []wikiPage{},
-				Error: nil, // serializes to JSON null
-			}, nil
-		},
-		ResourceURI: resourceURI,
-		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
-			return core.ResourceResult{Contents: []core.ResourceReadContent{{
-				URI: req.URI, MimeType: core.AppMIMEType, Text: html,
-			}}}, nil
-		},
-	})
-
 	cors := middleware.CORS(nil,
 		middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
 		middleware.CORSAllowHeaders("Content-Type", "Authorization", "Mcp-Session-Id", "Mcp-Protocol-Version"),
 		middleware.CORSExposeHeaders("Mcp-Session-Id"),
 	)
 
-	log.Printf("wiki-explorer compat fixture listening on %s (MCP at /mcp)", *addr)
-	log.Printf("serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
-	if err := srv.Run(*addr, server.WithHandlerWrap(cors)); err != nil {
+	log.Printf("[wiki-explorer] serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
+
+	resourceURI := "ui://wiki-explorer/mcp-app.html"
+	if err := common.RunServer(common.ServerConfig{
+		Name:      "Wiki Explorer",
+		Version:   "1.0.0",
+		Addr:      *addr,
+		LogPrefix: "[wiki-explorer] ",
+		Options: []server.Option{
+			server.WithExtension(&ui.UIExtension{}),
+		},
+		Register: func(srv *server.Server) {
+			ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[wikiInput, wikiLinksOutput]{
+				Name:        "get-first-degree-links",
+				Title:       "Get First-Degree Links",
+				Description: "Returns all Wikipedia pages that the given page links to directly. The widget is interactive and exposes tools for exploring the graph (expanding nodes to see their links), searching for articles, and querying visible nodes.",
+				Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
+				// Reflection covers page + links cleanly from the Go struct; only
+				// the nullable `error` field needs help. Upstream's `z.string()
+				// .nullable()` emits an anyOf — Go's `*string` reflects to plain
+				// `"type": "string"`. Patch.Replace lands the matching shape.
+				OutputSchemaPatch: func(s *core.SchemaBuilder) {
+					s.Prop("error").Replace(map[string]any{
+						"anyOf": []any{
+							map[string]any{"type": "string"},
+							map[string]any{"type": "null"},
+						},
+					})
+				},
+				Handler: func(ctx core.ToolContext, in wikiInput) (wikiLinksOutput, error) {
+					// Visual test masks the graph (HOST_MASKS["wiki-explorer"] = ["#graph"]).
+					// Stub response — iframe renders its own layout.
+					return wikiLinksOutput{
+						Page:  wikiPage{URL: in.URL, Title: "Model Context Protocol"},
+						Links: []wikiPage{},
+						Error: nil, // serializes to JSON null
+					}, nil
+				},
+				ResourceURI: resourceURI,
+				ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
+					return core.ResourceResult{Contents: []core.ResourceReadContent{{
+						URI: req.URI, MimeType: core.AppMIMEType, Text: html,
+					}}}, nil
+				},
+			})
+		},
+		TransportOptions: []server.TransportOption{
+			server.WithHandlerWrap(cors),
+		},
+	}); err != nil {
 		log.Fatal(err)
 	}
 }

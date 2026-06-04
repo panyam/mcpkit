@@ -127,13 +127,34 @@ func main() {
 	}
 	html := string(htmlBytes)
 
-	opts := common.MCPServerOptions(*addr, "[system-monitor] ")
-	opts = append(opts, server.WithExtension(&ui.UIExtension{}))
-	srv := server.NewServer(
-		core.ServerInfo{Name: "System Monitor Server", Version: "1.0.0"},
-		opts...,
+	cors := middleware.CORS(nil,
+		middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
+		middleware.CORSAllowHeaders("Content-Type", "Authorization", "Mcp-Session-Id", "Mcp-Protocol-Version"),
+		middleware.CORSExposeHeaders("Mcp-Session-Id"),
 	)
 
+	log.Printf("[system-monitor] serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
+
+	if err := common.RunServer(common.ServerConfig{
+		Name:      "System Monitor Server",
+		Version:   "1.0.0",
+		Addr:      *addr,
+		LogPrefix: "[system-monitor] ",
+		Options: []server.Option{
+			server.WithExtension(&ui.UIExtension{}),
+		},
+		Register: func(srv *server.Server) {
+			registerSystemMonitorTools(srv, html)
+		},
+		TransportOptions: []server.TransportOption{
+			server.WithHandlerWrap(cors),
+		},
+	}); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func registerSystemMonitorTools(srv *server.Server, html string) {
 	resourceURI := "ui://system-monitor/mcp-app.html"
 
 	// Tool 1: get-system-info — has the UI resource (standard pattern).
@@ -172,16 +193,4 @@ func main() {
 	)
 	pollTyped.Title = "Poll System Stats"
 	srv.RegisterTool(pollTyped.ToolDef, pollTyped.Handler)
-
-	cors := middleware.CORS(nil,
-		middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
-		middleware.CORSAllowHeaders("Content-Type", "Authorization", "Mcp-Session-Id", "Mcp-Protocol-Version"),
-		middleware.CORSExposeHeaders("Mcp-Session-Id"),
-	)
-
-	log.Printf("system-monitor compat fixture listening on %s (MCP at /mcp)", *addr)
-	log.Printf("serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
-	if err := srv.Run(*addr, server.WithHandlerWrap(cors)); err != nil {
-		log.Fatal(err)
-	}
 }

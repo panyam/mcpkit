@@ -108,52 +108,56 @@ func main() {
 	}
 	html := string(htmlBytes)
 
-	opts := common.MCPServerOptions(*addr, "[shadertoy] ")
-	opts = append(opts, server.WithExtension(&ui.UIExtension{}))
-	srv := server.NewServer(
-		core.ServerInfo{Name: "ShaderToy Server", Version: "1.0.0"},
-		opts...,
-	)
-
-	resourceURI := "ui://shadertoy/mcp-app.html"
-
-	ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[renderShadertoyInput, string]{
-		Name:        "render-shadertoy",
-		Title:       "ShaderToy Renderer",
-		Description: toolDescription,
-		Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
-		// InputSchemaPatch lands the multi-line GLSL default verbatim
-		// without struct-tag truncation at the first comma (issue 542).
-		InputSchemaPatch: func(s *core.SchemaBuilder) {
-			s.Prop("fragmentShader").
-				Desc("Main Image shader - ShaderToy GLSL code").
-				Default(defaultFragmentShader)
-			s.Prop("common").Desc("Common code shared across all shaders (optional)")
-			s.Prop("bufferA").Desc("Buffer A shader code - accessible as iChannel0 (optional)")
-			s.Prop("bufferB").Desc("Buffer B shader code - accessible as iChannel1 (optional)")
-			s.Prop("bufferC").Desc("Buffer C shader code - accessible as iChannel2 (optional)")
-			s.Prop("bufferD").Desc("Buffer D shader code - accessible as iChannel3 (optional)")
-		},
-		Handler: func(ctx core.ToolContext, _ renderShadertoyInput) (string, error) {
-			return "Shader rendered successfully", nil
-		},
-		ResourceURI: resourceURI,
-		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
-			return core.ResourceResult{Contents: []core.ResourceReadContent{{
-				URI: req.URI, MimeType: core.AppMIMEType, Text: html,
-			}}}, nil
-		},
-	})
-
 	cors := middleware.CORS(nil,
 		middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
 		middleware.CORSAllowHeaders("Content-Type", "Authorization", "Mcp-Session-Id", "Mcp-Protocol-Version"),
 		middleware.CORSExposeHeaders("Mcp-Session-Id"),
 	)
 
-	log.Printf("shadertoy compat fixture listening on %s (MCP at /mcp)", *addr)
-	log.Printf("serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
-	if err := srv.Run(*addr, server.WithHandlerWrap(cors)); err != nil {
+	log.Printf("[shadertoy] serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
+
+	resourceURI := "ui://shadertoy/mcp-app.html"
+	if err := common.RunServer(common.ServerConfig{
+		Name:      "ShaderToy Server",
+		Version:   "1.0.0",
+		Addr:      *addr,
+		LogPrefix: "[shadertoy] ",
+		Options: []server.Option{
+			server.WithExtension(&ui.UIExtension{}),
+		},
+		Register: func(srv *server.Server) {
+			ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[renderShadertoyInput, string]{
+				Name:        "render-shadertoy",
+				Title:       "ShaderToy Renderer",
+				Description: toolDescription,
+				Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
+				// InputSchemaPatch lands the multi-line GLSL default verbatim
+				// without struct-tag truncation at the first comma (issue 542).
+				InputSchemaPatch: func(s *core.SchemaBuilder) {
+					s.Prop("fragmentShader").
+						Desc("Main Image shader - ShaderToy GLSL code").
+						Default(defaultFragmentShader)
+					s.Prop("common").Desc("Common code shared across all shaders (optional)")
+					s.Prop("bufferA").Desc("Buffer A shader code - accessible as iChannel0 (optional)")
+					s.Prop("bufferB").Desc("Buffer B shader code - accessible as iChannel1 (optional)")
+					s.Prop("bufferC").Desc("Buffer C shader code - accessible as iChannel2 (optional)")
+					s.Prop("bufferD").Desc("Buffer D shader code - accessible as iChannel3 (optional)")
+				},
+				Handler: func(ctx core.ToolContext, _ renderShadertoyInput) (string, error) {
+					return "Shader rendered successfully", nil
+				},
+				ResourceURI: resourceURI,
+				ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
+					return core.ResourceResult{Contents: []core.ResourceReadContent{{
+						URI: req.URI, MimeType: core.AppMIMEType, Text: html,
+					}}}, nil
+				},
+			})
+		},
+		TransportOptions: []server.TransportOption{
+			server.WithHandlerWrap(cors),
+		},
+	}); err != nil {
 		log.Fatal(err)
 	}
 }
