@@ -46,42 +46,46 @@ func main() {
 	}
 	html := string(htmlBytes)
 
-	opts := common.MCPServerOptions(*addr, "[transcript] ")
-	opts = append(opts, server.WithExtension(&ui.UIExtension{}))
-	srv := server.NewServer(
-		core.ServerInfo{Name: "Transcript Server", Version: "1.0.0"},
-		opts...,
-	)
+	log.Printf("[transcript] serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
 
-	// Resource URI matches upstream's transcript-server (not the get-time
-	// pattern the basic-* cluster uses).
-	resourceURI := "ui://transcript/mcp-app.html"
-
-	ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[struct{}, string]{
-		Name:        "transcribe",
-		Title:       "Transcribe Speech",
-		Description: "Opens a live speech transcription interface using the Web Speech API.",
-		Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
-		Handler: func(ctx core.ToolContext, _ struct{}) (string, error) {
-			return transcribeReady, nil
-		},
-		ResourceURI: resourceURI,
-		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
-			return core.ResourceResult{Contents: []core.ResourceReadContent{{
-				URI: req.URI, MimeType: core.AppMIMEType, Text: html,
-			}}}, nil
-		},
-	})
-
-	log.Printf("transcript compat fixture listening on %s (MCP at /mcp)", *addr)
-	log.Printf("serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
 	cors := middleware.CORS(nil,
 		middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
 		middleware.CORSAllowHeaders("Content-Type", "Authorization", "Mcp-Session-Id", "Mcp-Protocol-Version"),
 		middleware.CORSExposeHeaders("Mcp-Session-Id"),
 	)
 
-	if err := srv.Run(*addr, server.WithHandlerWrap(cors)); err != nil {
+	// Resource URI matches upstream's transcript-server (not the get-time
+	// pattern the basic-* cluster uses).
+	resourceURI := "ui://transcript/mcp-app.html"
+	if err := common.RunServer(common.ServerConfig{
+		Name:      "Transcript Server",
+		Version:   "1.0.0",
+		Addr:      *addr,
+		LogPrefix: "[transcript] ",
+		Options: []server.Option{
+			server.WithExtension(&ui.UIExtension{}),
+		},
+		Register: func(srv *server.Server) {
+			ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[struct{}, string]{
+				Name:        "transcribe",
+				Title:       "Transcribe Speech",
+				Description: "Opens a live speech transcription interface using the Web Speech API.",
+				Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
+				Handler: func(ctx core.ToolContext, _ struct{}) (string, error) {
+					return transcribeReady, nil
+				},
+				ResourceURI: resourceURI,
+				ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
+					return core.ResourceResult{Contents: []core.ResourceReadContent{{
+						URI: req.URI, MimeType: core.AppMIMEType, Text: html,
+					}}}, nil
+				},
+			})
+		},
+		TransportOptions: []server.TransportOption{
+			server.WithHandlerWrap(cors),
+		},
+	}); err != nil {
 		log.Fatal(err)
 	}
 }

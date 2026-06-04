@@ -46,42 +46,46 @@ func main() {
 	}
 	html := string(htmlBytes)
 
-	opts := common.MCPServerOptions(*addr, "[basic-svelte] ")
-	opts = append(opts, server.WithExtension(&ui.UIExtension{}))
-	srv := server.NewServer(
-		core.ServerInfo{Name: "Basic MCP App Server (Svelte)", Version: "1.0.0"},
-		opts...,
-	)
+	log.Printf("[basic-svelte] serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
 
-	resourceURI := "ui://get-time/mcp-app.html"
-
-	// Out=string so RegisterTypedAppTool emits no outputSchema, matching
-	// upstream basic-server-svelte's text-only get-time output.
-	ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[struct{}, string]{
-		Name:        "get-time",
-		Title:       "Get Time",
-		Description: "Returns the current server time as an ISO 8601 string.",
-		Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
-		Handler: func(ctx core.ToolContext, _ struct{}) (string, error) {
-			return time.Now().UTC().Format(time.RFC3339Nano), nil
-		},
-		ResourceURI: resourceURI,
-		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
-			return core.ResourceResult{Contents: []core.ResourceReadContent{{
-				URI: req.URI, MimeType: core.AppMIMEType, Text: html,
-			}}}, nil
-		},
-	})
-
-	log.Printf("basic-svelte compat fixture listening on %s (MCP at /mcp)", *addr)
-	log.Printf("serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
 	cors := middleware.CORS(nil,
 		middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
 		middleware.CORSAllowHeaders("Content-Type", "Authorization", "Mcp-Session-Id", "Mcp-Protocol-Version"),
 		middleware.CORSExposeHeaders("Mcp-Session-Id"),
 	)
 
-	if err := srv.Run(*addr, server.WithHandlerWrap(cors)); err != nil {
+	resourceURI := "ui://get-time/mcp-app.html"
+	if err := common.RunServer(common.ServerConfig{
+		Name:      "Basic MCP App Server (Svelte)",
+		Version:   "1.0.0",
+		Addr:      *addr,
+		LogPrefix: "[basic-svelte] ",
+		Options: []server.Option{
+			server.WithExtension(&ui.UIExtension{}),
+		},
+		Register: func(srv *server.Server) {
+			// Out=string so RegisterTypedAppTool emits no outputSchema, matching
+			// upstream basic-server-svelte's text-only get-time output.
+			ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[struct{}, string]{
+				Name:        "get-time",
+				Title:       "Get Time",
+				Description: "Returns the current server time as an ISO 8601 string.",
+				Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
+				Handler: func(ctx core.ToolContext, _ struct{}) (string, error) {
+					return time.Now().UTC().Format(time.RFC3339Nano), nil
+				},
+				ResourceURI: resourceURI,
+				ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
+					return core.ResourceResult{Contents: []core.ResourceReadContent{{
+						URI: req.URI, MimeType: core.AppMIMEType, Text: html,
+					}}}, nil
+				},
+			})
+		},
+		TransportOptions: []server.TransportOption{
+			server.WithHandlerWrap(cors),
+		},
+	}); err != nil {
 		log.Fatal(err)
 	}
 }

@@ -75,73 +75,77 @@ func main() {
 	}
 	html := string(htmlBytes)
 
-	opts := common.MCPServerOptions(*addr, "[threejs] ")
-	opts = append(opts, server.WithExtension(&ui.UIExtension{}))
-	srv := server.NewServer(
-		core.ServerInfo{Name: "Three.js Server", Version: "1.0.0"},
-		opts...,
-	)
-
-	resourceURI := "ui://threejs/mcp-app.html"
-
-	// Tool 1: show_threejs_scene — the App tool with its own UI iframe.
-	ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[showThreeJSInput, showThreeJSOutput]{
-		Name:        "show_threejs_scene",
-		Title:       "Show Three.js Scene",
-		Description: "Render an interactive 3D scene with custom Three.js code. Supports transparent backgrounds (alpha: true) for seamless host UI integration. Available globals: THREE, OrbitControls, EffectComposer, RenderPass, UnrealBloomPass, canvas, width, height.",
-		Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
-		// `code` uses Patch (multi-line default with commas would lose to
-		// struct-tag truncation); `height` uses Replace because upstream
-		// emits exclusiveMinimum + Number.MAX_SAFE_INTEGER bounds the
-		// PropertyBuilder doesn't have direct methods for.
-		InputSchemaPatch: func(s *core.SchemaBuilder) {
-			s.Prop("code").
-				Desc("JavaScript code to render the 3D scene").
-				Default(defaultThreeJSCode)
-			s.Prop("height").Replace(map[string]any{
-				"type":             "integer",
-				"exclusiveMinimum": 0,
-				// Mirror upstream's zod `.int()` Number.MAX_SAFE_INTEGER cap.
-				"maximum":     9007199254740991,
-				"default":     400,
-				"description": "Height in pixels",
-			})
-		},
-		Handler: func(ctx core.ToolContext, _ showThreeJSInput) (showThreeJSOutput, error) {
-			return showThreeJSOutput{Success: true}, nil
-		},
-		ResourceURI: resourceURI,
-		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
-			return core.ResourceResult{Contents: []core.ResourceReadContent{{
-				URI: req.URI, MimeType: core.AppMIMEType, Text: html,
-			}}}, nil
-		},
-	})
-
-	// Tool 2: learn_threejs — plain MCP tool returning Three.js documentation.
-	// Visual test never invokes it; the actual doc string returned isn't
-	// asserted on. Tool definition (name/title/description/empty input
-	// schema) is what the drift check compares.
-	learnTyped := core.TypedTool[struct{}, string](
-		"learn_threejs",
-		"Get documentation and examples for using the Three.js View",
-		func(ctx core.ToolContext, _ struct{}) (string, error) {
-			return "See https://threejs.org for documentation.", nil
-		},
-		core.WithToolExecution(&core.ToolExecution{TaskSupport: core.TaskSupportForbidden}),
-	)
-	learnTyped.Title = "Learn Three.js"
-	srv.RegisterTool(learnTyped.ToolDef, learnTyped.Handler)
-
 	cors := middleware.CORS(nil,
 		middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
 		middleware.CORSAllowHeaders("Content-Type", "Authorization", "Mcp-Session-Id", "Mcp-Protocol-Version"),
 		middleware.CORSExposeHeaders("Mcp-Session-Id"),
 	)
 
-	log.Printf("threejs compat fixture listening on %s (MCP at /mcp)", *addr)
-	log.Printf("serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
-	if err := srv.Run(*addr, server.WithHandlerWrap(cors)); err != nil {
+	log.Printf("[threejs] serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
+
+	resourceURI := "ui://threejs/mcp-app.html"
+	if err := common.RunServer(common.ServerConfig{
+		Name:      "Three.js Server",
+		Version:   "1.0.0",
+		Addr:      *addr,
+		LogPrefix: "[threejs] ",
+		Options: []server.Option{
+			server.WithExtension(&ui.UIExtension{}),
+		},
+		Register: func(srv *server.Server) {
+			// Tool 1: show_threejs_scene — the App tool with its own UI iframe.
+			ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[showThreeJSInput, showThreeJSOutput]{
+				Name:        "show_threejs_scene",
+				Title:       "Show Three.js Scene",
+				Description: "Render an interactive 3D scene with custom Three.js code. Supports transparent backgrounds (alpha: true) for seamless host UI integration. Available globals: THREE, OrbitControls, EffectComposer, RenderPass, UnrealBloomPass, canvas, width, height.",
+				Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
+				// `code` uses Patch (multi-line default with commas would lose to
+				// struct-tag truncation); `height` uses Replace because upstream
+				// emits exclusiveMinimum + Number.MAX_SAFE_INTEGER bounds the
+				// PropertyBuilder doesn't have direct methods for.
+				InputSchemaPatch: func(s *core.SchemaBuilder) {
+					s.Prop("code").
+						Desc("JavaScript code to render the 3D scene").
+						Default(defaultThreeJSCode)
+					s.Prop("height").Replace(map[string]any{
+						"type":             "integer",
+						"exclusiveMinimum": 0,
+						// Mirror upstream's zod `.int()` Number.MAX_SAFE_INTEGER cap.
+						"maximum":     9007199254740991,
+						"default":     400,
+						"description": "Height in pixels",
+					})
+				},
+				Handler: func(ctx core.ToolContext, _ showThreeJSInput) (showThreeJSOutput, error) {
+					return showThreeJSOutput{Success: true}, nil
+				},
+				ResourceURI: resourceURI,
+				ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
+					return core.ResourceResult{Contents: []core.ResourceReadContent{{
+						URI: req.URI, MimeType: core.AppMIMEType, Text: html,
+					}}}, nil
+				},
+			})
+
+			// Tool 2: learn_threejs — plain MCP tool returning Three.js documentation.
+			// Visual test never invokes it; the actual doc string returned isn't
+			// asserted on. Tool definition (name/title/description/empty input
+			// schema) is what the drift check compares.
+			learnTyped := core.TypedTool[struct{}, string](
+				"learn_threejs",
+				"Get documentation and examples for using the Three.js View",
+				func(ctx core.ToolContext, _ struct{}) (string, error) {
+					return "See https://threejs.org for documentation.", nil
+				},
+				core.WithToolExecution(&core.ToolExecution{TaskSupport: core.TaskSupportForbidden}),
+			)
+			learnTyped.Title = "Learn Three.js"
+			srv.RegisterTool(learnTyped.ToolDef, learnTyped.Handler)
+		},
+		TransportOptions: []server.TransportOption{
+			server.WithHandlerWrap(cors),
+		},
+	}); err != nil {
 		log.Fatal(err)
 	}
 }

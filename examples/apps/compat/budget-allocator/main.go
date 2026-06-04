@@ -84,54 +84,58 @@ func main() {
 	}
 	html := string(htmlBytes)
 
-	opts := common.MCPServerOptions(*addr, "[budget-allocator] ")
-	opts = append(opts, server.WithExtension(&ui.UIExtension{}))
-	srv := server.NewServer(
-		core.ServerInfo{Name: "Budget Allocator Server", Version: "1.0.0"},
-		opts...,
-	)
-
-	resourceURI := "ui://budget-allocator/mcp-app.html"
-
-	ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[struct{}, budgetDataOutput]{
-		Name:        "get-budget-data",
-		Title:       "Get Budget Data",
-		Description: "Returns budget configuration with 24 months of historical allocations and industry benchmarks by company stage. The widget is interactive and exposes tools for reading/modifying allocations, adjusting budgets, and comparing against industry benchmarks.",
-		Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
-		Handler: func(ctx core.ToolContext, _ struct{}) (budgetDataOutput, error) {
-			// Visual test doesn't depend on the data shape; the iframe renders
-			// its own demo content. Return an empty-but-typed payload.
-			return budgetDataOutput{
-				Config: budgetConfig{
-					Categories:     []budgetCategory{},
-					PresetBudgets:  []float64{},
-					Currency:       "USD",
-					CurrencySymbol: "$",
-				},
-				Analytics: budgetAnalytics{
-					History:    []historicalMonth{},
-					Benchmarks: []stageBenchmark{},
-					Stages:     []string{},
-				},
-			}, nil
-		},
-		ResourceURI: resourceURI,
-		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
-			return core.ResourceResult{Contents: []core.ResourceReadContent{{
-				URI: req.URI, MimeType: core.AppMIMEType, Text: html,
-			}}}, nil
-		},
-	})
-
 	cors := middleware.CORS(nil,
 		middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
 		middleware.CORSAllowHeaders("Content-Type", "Authorization", "Mcp-Session-Id", "Mcp-Protocol-Version"),
 		middleware.CORSExposeHeaders("Mcp-Session-Id"),
 	)
 
-	log.Printf("budget-allocator compat fixture listening on %s (MCP at /mcp)", *addr)
-	log.Printf("serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
-	if err := srv.Run(*addr, server.WithHandlerWrap(cors)); err != nil {
+	log.Printf("[budget-allocator] serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
+
+	resourceURI := "ui://budget-allocator/mcp-app.html"
+	if err := common.RunServer(common.ServerConfig{
+		Name:      "Budget Allocator Server",
+		Version:   "1.0.0",
+		Addr:      *addr,
+		LogPrefix: "[budget-allocator] ",
+		Options: []server.Option{
+			server.WithExtension(&ui.UIExtension{}),
+		},
+		Register: func(srv *server.Server) {
+			ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[struct{}, budgetDataOutput]{
+				Name:        "get-budget-data",
+				Title:       "Get Budget Data",
+				Description: "Returns budget configuration with 24 months of historical allocations and industry benchmarks by company stage. The widget is interactive and exposes tools for reading/modifying allocations, adjusting budgets, and comparing against industry benchmarks.",
+				Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
+				Handler: func(ctx core.ToolContext, _ struct{}) (budgetDataOutput, error) {
+					// Visual test doesn't depend on the data shape; the iframe renders
+					// its own demo content. Return an empty-but-typed payload.
+					return budgetDataOutput{
+						Config: budgetConfig{
+							Categories:     []budgetCategory{},
+							PresetBudgets:  []float64{},
+							Currency:       "USD",
+							CurrencySymbol: "$",
+						},
+						Analytics: budgetAnalytics{
+							History:    []historicalMonth{},
+							Benchmarks: []stageBenchmark{},
+							Stages:     []string{},
+						},
+					}, nil
+				},
+				ResourceURI: resourceURI,
+				ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
+					return core.ResourceResult{Contents: []core.ResourceReadContent{{
+						URI: req.URI, MimeType: core.AppMIMEType, Text: html,
+					}}}, nil
+				},
+			})
+		},
+		TransportOptions: []server.TransportOption{
+			server.WithHandlerWrap(cors),
+		},
+	}); err != nil {
 		log.Fatal(err)
 	}
 }

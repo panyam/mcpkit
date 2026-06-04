@@ -53,63 +53,67 @@ func main() {
 	}
 	html := string(htmlBytes)
 
-	opts := common.MCPServerOptions(*addr, "[map] ")
-	opts = append(opts, server.WithExtension(&ui.UIExtension{}))
-	srv := server.NewServer(
-		core.ServerInfo{Name: "CesiumJS Map Server", Version: "1.0.0"},
-		opts...,
-	)
-
-	resourceURI := "ui://cesium-map/mcp-app.html"
-
-	// Tool 1: show-map — App tool with its own UI iframe.
-	ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[showMapInput, string]{
-		Name:        "show-map",
-		Title:       "Show Map",
-		Description: "Display an interactive world map zoomed to a specific bounding box. Use the GeoCode tool to find the bounding box of a location. The widget is interactive and exposes tools for navigation (fly to locations) and querying the current view.",
-		Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
-		Handler: func(ctx core.ToolContext, in showMapInput) (string, error) {
-			// Visual test doesn't depend on the response content; the iframe's
-			// CesiumJS does the rendering. Upstream returns a text summary.
-			return "Displaying globe.", nil
-		},
-		ResourceURI: resourceURI,
-		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
-			return core.ResourceResult{Contents: []core.ResourceReadContent{{
-				URI: req.URI, MimeType: core.AppMIMEType, Text: html,
-			}}}, nil
-		},
-	})
-
-	// Tool 2: geocode — plain MCP tool (no UI), called by the App via the
-	// bridge. InputSchemaPatch lets us land the comma-rich description
-	// without struct-tag truncation; reflection still emits the
-	// `type: string` shape.
-	geocodeTyped := core.TypedTool[geocodeInput, string](
-		"geocode",
-		"Search for places using OpenStreetMap. Returns coordinates and bounding boxes for up to 5 matches.",
-		func(ctx core.ToolContext, _ geocodeInput) (string, error) {
-			return "No results.", nil
-		},
-		core.WithToolExecution(&core.ToolExecution{TaskSupport: core.TaskSupportForbidden}),
-		core.WithInputSchemaPatch(func(s *core.SchemaBuilder) {
-			s.Prop("query").
-				Desc("Place name or address to search for (e.g., 'Paris', 'Golden Gate Bridge', '1600 Pennsylvania Ave')").
-				Required()
-		}),
-	)
-	geocodeTyped.Title = "Geocode"
-	srv.RegisterTool(geocodeTyped.ToolDef, geocodeTyped.Handler)
-
 	cors := middleware.CORS(nil,
 		middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
 		middleware.CORSAllowHeaders("Content-Type", "Authorization", "Mcp-Session-Id", "Mcp-Protocol-Version"),
 		middleware.CORSExposeHeaders("Mcp-Session-Id"),
 	)
 
-	log.Printf("map compat fixture listening on %s (MCP at /mcp)", *addr)
-	log.Printf("serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
-	if err := srv.Run(*addr, server.WithHandlerWrap(cors)); err != nil {
+	log.Printf("[map] serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
+
+	resourceURI := "ui://cesium-map/mcp-app.html"
+	if err := common.RunServer(common.ServerConfig{
+		Name:      "CesiumJS Map Server",
+		Version:   "1.0.0",
+		Addr:      *addr,
+		LogPrefix: "[map] ",
+		Options: []server.Option{
+			server.WithExtension(&ui.UIExtension{}),
+		},
+		Register: func(srv *server.Server) {
+			// Tool 1: show-map — App tool with its own UI iframe.
+			ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[showMapInput, string]{
+				Name:        "show-map",
+				Title:       "Show Map",
+				Description: "Display an interactive world map zoomed to a specific bounding box. Use the GeoCode tool to find the bounding box of a location. The widget is interactive and exposes tools for navigation (fly to locations) and querying the current view.",
+				Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
+				Handler: func(ctx core.ToolContext, in showMapInput) (string, error) {
+					// Visual test doesn't depend on the response content; the iframe's
+					// CesiumJS does the rendering. Upstream returns a text summary.
+					return "Displaying globe.", nil
+				},
+				ResourceURI: resourceURI,
+				ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
+					return core.ResourceResult{Contents: []core.ResourceReadContent{{
+						URI: req.URI, MimeType: core.AppMIMEType, Text: html,
+					}}}, nil
+				},
+			})
+
+			// Tool 2: geocode — plain MCP tool (no UI), called by the App via the
+			// bridge. InputSchemaPatch lets us land the comma-rich description
+			// without struct-tag truncation; reflection still emits the
+			// `type: string` shape.
+			geocodeTyped := core.TypedTool[geocodeInput, string](
+				"geocode",
+				"Search for places using OpenStreetMap. Returns coordinates and bounding boxes for up to 5 matches.",
+				func(ctx core.ToolContext, _ geocodeInput) (string, error) {
+					return "No results.", nil
+				},
+				core.WithToolExecution(&core.ToolExecution{TaskSupport: core.TaskSupportForbidden}),
+				core.WithInputSchemaPatch(func(s *core.SchemaBuilder) {
+					s.Prop("query").
+						Desc("Place name or address to search for (e.g., 'Paris', 'Golden Gate Bridge', '1600 Pennsylvania Ave')").
+						Required()
+				}),
+			)
+			geocodeTyped.Title = "Geocode"
+			srv.RegisterTool(geocodeTyped.ToolDef, geocodeTyped.Handler)
+		},
+		TransportOptions: []server.TransportOption{
+			server.WithHandlerWrap(cors),
+		},
+	}); err != nil {
 		log.Fatal(err)
 	}
 }
