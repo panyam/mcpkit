@@ -1,5 +1,9 @@
-// Example: SEP-2640 skills extension — server fixture for the
-// conformance suite and minimal worked example.
+// Example: SEP-2640 skills extension — server fixture + demokit walkthrough.
+//
+// Two-process architecture (matches the events/discord and tasks examples):
+//
+//	Terminal 1:  make serve         # skills server on :8080 in file mode
+//	Terminal 2:  make demo          # walkthrough (--tui for interactive TUI)
 //
 // Walks the bundled skills/ directory through ext/skills.SkillProvider
 // and exposes each skill either as individual file resources (file
@@ -13,15 +17,14 @@
 //	go run . --serve                    # file mode on :8080
 //	go run . --serve --mode=archive     # archive mode on :8080
 //	go run . --serve --addr=:9090       # different port
-//
-// The walkthrough.go scripted demo is deferred — see mcpkit#566 for
-// the demokit walkthrough sweep that will turn this into a fully
-// documented example.
+//	go run .                            # walkthrough (against --url, default localhost:8080)
+//	go run . --tui                      # walkthrough in interactive TUI
+//	go run . --note                     # walkthrough in notebook mode
+//	go run . --doc=md                   # regenerate WALKTHROUGH.md
 package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -39,8 +42,7 @@ func main() {
 			return
 		}
 	}
-	fmt.Println("examples/skills — see --serve to run the MCP server.")
-	fmt.Println("Conformance: cd ../../conformance && make testconf-skills")
+	runDemo()
 }
 
 func serve() {
