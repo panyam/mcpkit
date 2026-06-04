@@ -40,7 +40,13 @@ import (
 // the stateless dispatcher requires; servers that ignore _meta but
 // understand the method (none currently exist) still get classified
 // as stateless via the success path.
-func (c *Client) adaptiveProbe() (result *discoverResult, fallback bool, err error) {
+//
+// adaptiveProbe is the internal classifier; ad-hoc callers (CLI
+// inspectors, conformance harnesses) use the public Client.Discover()
+// helper which calls into the same machinery and surfaces -32601 /
+// HTTP 404 as a typed *UnsupportedDiscoverError instead of a
+// fallback bool.
+func (c *Client) adaptiveProbe() (result *DiscoverResult, fallback bool, err error) {
 	params := map[string]any{
 		"_meta": c.buildRequestMeta(),
 	}
@@ -76,20 +82,66 @@ func (c *Client) adaptiveProbe() (result *discoverResult, fallback bool, err err
 		// reason (invalid _meta, version mismatch, etc.).
 		return nil, false, fmt.Errorf("server/discover failed: %s", resp.Error.Message)
 	}
-	var dr discoverResult
+	var dr DiscoverResult
 	if err := json.Unmarshal(resp.Result, &dr); err != nil {
 		return nil, false, fmt.Errorf("server/discover returned malformed result: %w", err)
 	}
 	return &dr, false, nil
 }
 
-// discoverResult mirrors stateless.DiscoverResult shape. Defined locally
+// DiscoverResult mirrors stateless.DiscoverResult shape. Defined locally
 // so client/ does not import server/stateless/ (the package boundary
 // runs the other direction; client only knows wire types in core/).
-type discoverResult struct {
+//
+// Surfaced through the public Client.Discover() helper for ad-hoc
+// callers (CLI inspectors, conformance harnesses) that want to
+// introspect a server's discovery payload without going through the
+// Connect handshake.
+type DiscoverResult struct {
 	SupportedVersions []string                `json:"supportedVersions"`
 	Capabilities      core.ServerCapabilities `json:"capabilities"`
 	ServerInfo        core.ServerInfo         `json:"serverInfo"`
+}
+
+// UnsupportedDiscoverError is returned by Client.Discover() when the
+// server reports it does not implement server/discover (either via
+// JSON-RPC -32601 in a 200 body, which is what mcpkit's legacy
+// dispatcher emits, or via HTTP 404 from a transport that does not
+// route the method). Callers branch on this to fall back to the
+// legacy initialize handshake when appropriate.
+type UnsupportedDiscoverError struct {
+	// Source describes how the server signaled the gap, useful for
+	// diagnostics. Either "jsonrpc-32601" or "http-404".
+	Source string
+}
+
+func (e *UnsupportedDiscoverError) Error() string {
+	return "server does not implement server/discover (" + e.Source + ")"
+}
+
+// Discover sends server/discover and returns the server's discovery
+// response payload. Does not mutate the client's session state. On a
+// server that does not implement server/discover (e.g., a legacy-only
+// mcpkit server before SEP-2575 rolled out), Discover returns a typed
+// *UnsupportedDiscoverError so callers can branch cleanly. Transport-
+// level failures (network, TLS) propagate as-is.
+//
+// Connect must be called before Discover so the underlying transport
+// is initialized. Discover is the public entry point built on top of
+// adaptiveProbe; Connect's ClientModeAdaptive path continues to call
+// adaptiveProbe directly for the boolean fallback signal.
+func (c *Client) Discover() (*DiscoverResult, error) {
+	dr, fallback, err := c.adaptiveProbe()
+	if err != nil {
+		return nil, err
+	}
+	if fallback {
+		// adaptiveProbe folds both -32601 and HTTP 404 into the same
+		// boolean. Tag the source from the call site so Source carries
+		// useful diagnostics.
+		return nil, &UnsupportedDiscoverError{Source: "jsonrpc-32601-or-http-404"}
+	}
+	return dr, nil
 }
 
 // buildRequestMeta builds the per-request _meta envelope the SEP-2575

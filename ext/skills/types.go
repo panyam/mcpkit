@@ -87,6 +87,27 @@ func NewIndex(entries ...IndexEntry) Index {
 	return Index{Schema: IndexSchemaURI, Skills: entries}
 }
 
+// Lookup returns the IndexEntry whose URL exactly matches uri. The
+// second return value reports whether a match was found.
+//
+// Client-side use: a host that receives a skill:// URI from server
+// instructions, the user, or another skill can call Lookup against
+// the index it fetched via ListSkills. A hit gives the host
+// digest-verifiable metadata; a miss is the SEP-2640-sanctioned
+// "skill exists but is not enumerated" case where the host falls back
+// to a bare ReadSkillURI.
+//
+// Comparison is exact-string. A trailing slash or differing percent
+// encoding on the input is the caller's bug, not Lookup's concern.
+func (i Index) Lookup(uri string) (IndexEntry, bool) {
+	for _, e := range i.Skills {
+		if e.URL == uri {
+			return e, true
+		}
+	}
+	return IndexEntry{}, false
+}
+
 // Validate checks every entry and the top-level shape. It is intended for
 // servers preparing an index for publication; clients receiving an index
 // SHOULD skip entries with unrecognized types rather than reject the
