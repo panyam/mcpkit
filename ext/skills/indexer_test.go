@@ -356,6 +356,60 @@ func TestIndexer_RegisterWith_AddsIndexResource(t *testing.T) {
 	}
 }
 
+func TestIndexer_Index_ConcurrentSafe(t *testing.T) {
+	// Race-detector smoke test. The cache mutex is taken at the top of
+	// Index() and held through both isFresh() and build(). Multiple
+	// goroutines hammering Index() with a short TTL must produce no
+	// data race and consistent digests for the same artifact.
+	p := mustProvider(t, "testdata/valid")
+	idx := skills.NewIndexer(p, skills.WithIndexerCacheTTL(2*time.Millisecond))
+
+	const goroutines = 16
+	const iterations = 50
+
+	first, err := idx.Index()
+	if err != nil {
+		t.Fatalf("Index #1: %v", err)
+	}
+	wantDigests := make(map[string]string, len(first.Skills))
+	for _, e := range first.Skills {
+		wantDigests[e.URL] = e.Digest
+	}
+
+	errCh := make(chan error, goroutines)
+	for g := 0; g < goroutines; g++ {
+		go func() {
+			for i := 0; i < iterations; i++ {
+				got, err := idx.Index()
+				if err != nil {
+					errCh <- err
+					return
+				}
+				for _, e := range got.Skills {
+					if want := wantDigests[e.URL]; e.Digest != want {
+						errCh <- &digestDriftErr{url: e.URL, want: want, got: e.Digest}
+						return
+					}
+				}
+			}
+			errCh <- nil
+		}()
+	}
+	for g := 0; g < goroutines; g++ {
+		if err := <-errCh; err != nil {
+			t.Fatalf("goroutine err: %v", err)
+		}
+	}
+}
+
+type digestDriftErr struct {
+	url, want, got string
+}
+
+func (e *digestDriftErr) Error() string {
+	return "digest drift for " + e.url + ": want " + e.want + ", got " + e.got
+}
+
 // --- helpers ---
 
 func mustProvider(t *testing.T, dir string) *skills.Provider {
