@@ -175,12 +175,37 @@ define run_stage
 	echo "Finished: $$(date) (elapsed $${ELAPSED}s)" >> $$STAGE_LOG;
 endef
 
+# run_stage_info is the soft-failure variant for experimental or in-flight
+# conformance work where the suite SHOULD surface in testall reports but
+# MUST NOT block the build. Failure is recorded as INFO and counted
+# separately so a failing experimental stage does not show up in the
+# PASS/FAIL tallies. Shell vars PASS, FAIL, INFO, STAGES must be
+# initialized by the caller.
+define run_stage_info
+	STAGE_LOG=$(REPORT_DIR)/stage-$(3).log; \
+	STAGE_START=$$(date +%s); \
+	echo "--- [$(1)/$(2)] $(3) (informational) ---" | tee -a $(REPORT_DIR)/run.log; \
+	echo "=== Stage $(1)/$(2): $(3) (make $(4)) [informational] ===" > $$STAGE_LOG; \
+	echo "Started: $$(date)" >> $$STAGE_LOG; \
+	if $(MAKE) $(4) >> $$STAGE_LOG 2>&1; then \
+		ELAPSED=$$(($$(date +%s) - STAGE_START)); \
+		echo "  PASS: $(3) ($${ELAPSED}s, informational)" | tee -a $(REPORT_DIR)/run.log; \
+		PASS=$$((PASS+1)); STAGES="$$STAGES $(3):PASS:$(4):$${ELAPSED}s"; \
+	else \
+		ELAPSED=$$(($$(date +%s) - STAGE_START)); \
+		echo "  INFO: $(3) ($${ELAPSED}s, informational, not counted as failure)" | tee -a $(REPORT_DIR)/run.log; \
+		INFO=$$((INFO+1)); STAGES="$$STAGES $(3):INFO:$(4):$${ELAPSED}s"; \
+		echo "  --- $(3) tail ---"; tail -20 $$STAGE_LOG; echo "  ---"; \
+	fi; \
+	echo "Finished: $$(date) (elapsed $${ELAPSED}s)" >> $$STAGE_LOG;
+endef
+
 testall: ## Run ALL tests (starts Keycloak if needed) + per-stage HTML reports
 	@mkdir -p $(REPORT_DIR)
 	@rm -f $(REPORT_DIR)/stage-*.log
 	@echo "=== MCPKit Comprehensive Test Suite ===" | tee $(REPORT_DIR)/run.log
 	@echo "Started: $$(date)" | tee -a $(REPORT_DIR)/run.log
-	@PASS=0; FAIL=0; STAGES=""; \
+	@PASS=0; FAIL=0; INFO=0; STAGES=""; \
 	echo "" | tee -a $(REPORT_DIR)/run.log; \
 	$(call run_stage,1,9,unit+coverage,cover-html) \
 	$(call run_stage,2,9,race,test-race) \
@@ -199,9 +224,10 @@ testall: ## Run ALL tests (starts Keycloak if needed) + per-stage HTML reports
 	$(call run_stage,8e,9,mrtr-conformance,testconf-mrtr) \
 	$(call run_stage,8f,9,file-inputs-conformance,testconf-file-inputs) \
 	$(call run_stage,8g,9,auth-server-conformance,testconf-auth-server) \
+	$(call run_stage_info,8h,9,skills-conformance,testconf-skills) \
 	$(call run_stage,9,9,keycloak,testkcl-auto) \
 	echo "" | tee -a $(REPORT_DIR)/run.log; \
-	echo "=== Results: $$PASS passed, $$FAIL failed ===" | tee -a $(REPORT_DIR)/run.log; \
+	echo "=== Results: $$PASS passed, $$FAIL failed, $$INFO informational ===" | tee -a $(REPORT_DIR)/run.log; \
 	echo "Finished: $$(date)" | tee -a $(REPORT_DIR)/run.log; \
 	echo "Per-stage logs: $(REPORT_DIR)/stage-*.log"; \
 	$(MAKE) -s test-report STAGES="$$STAGES"; \
@@ -242,6 +268,7 @@ test-report: ## Generate HTML report with per-stage collapsible logs
 	echo '.pass { color: #22863a; font-weight: 600; }' >> $$R; \
 	echo '.fail { color: #cb2431; font-weight: 600; }' >> $$R; \
 	echo '.skip { color: #6a737d; font-weight: 600; }' >> $$R; \
+	echo '.info { color: #b08800; font-weight: 600; }' >> $$R; \
 	echo '.summary-pass { background: #dcffe4; padding: 12px 20px; border-radius: 6px; font-size: 18px; }' >> $$R; \
 	echo '.summary-fail { background: #ffdce0; padding: 12px 20px; border-radius: 6px; font-size: 18px; }' >> $$R; \
 	echo 'details { margin: 8px 0; }' >> $$R; \
@@ -253,7 +280,7 @@ test-report: ## Generate HTML report with per-stage collapsible logs
 	echo "<h1>MCPKit Test Report</h1>" >> $$R; \
 	echo "<div class='meta'>Branch: <strong>$$BRANCH</strong> | Commit: <code>$$COMMIT</code> | Date: $$TIMESTAMP</div>" >> $$R; \
 	\
-	PASS=0; FAIL=0; \
+	PASS=0; FAIL=0; INFO=0; \
 	echo "<table><tr><th>Stage</th><th>Result</th><th>Re-run</th></tr>" >> $$R; \
 	for entry in $(STAGES); do \
 		STAGE=$$(echo $$entry | cut -d: -f1); \
@@ -264,6 +291,9 @@ test-report: ## Generate HTML report with per-stage collapsible logs
 			PASS=$$((PASS+1)); \
 		elif [ "$$RESULT" = "SKIP" ]; then \
 			echo "<tr><td>$$STAGE</td><td class='skip'>SKIP</td><td><code class='cmd'>make $$TARGET</code></td></tr>" >> $$R; \
+		elif [ "$$RESULT" = "INFO" ]; then \
+			echo "<tr><td><a href='#log-$$STAGE'>$$STAGE</a></td><td class='info'>INFO</td><td><code class='cmd'>make $$TARGET</code></td></tr>" >> $$R; \
+			INFO=$$((INFO+1)); \
 		else \
 			echo "<tr><td><a href='#log-$$STAGE'>$$STAGE</a></td><td class='fail'>FAIL</td><td><code class='cmd'>make $$TARGET</code></td></tr>" >> $$R; \
 			FAIL=$$((FAIL+1)); \
@@ -271,10 +301,12 @@ test-report: ## Generate HTML report with per-stage collapsible logs
 	done; \
 	echo "</table>" >> $$R; \
 	\
-	if [ $$FAIL -eq 0 ]; then \
+	if [ $$FAIL -eq 0 ] && [ $$INFO -eq 0 ]; then \
 		echo "<div class='summary-pass'>All $$PASS stages passed</div>" >> $$R; \
+	elif [ $$FAIL -eq 0 ]; then \
+		echo "<div class='summary-pass'>$$PASS passed, $$INFO informational (no failures)</div>" >> $$R; \
 	else \
-		echo "<div class='summary-fail'>$$PASS passed, $$FAIL failed</div>" >> $$R; \
+		echo "<div class='summary-fail'>$$PASS passed, $$FAIL failed, $$INFO informational</div>" >> $$R; \
 	fi; \
 	\
 	echo "<h2>Stage Logs</h2>" >> $$R; \
@@ -282,8 +314,14 @@ test-report: ## Generate HTML report with per-stage collapsible logs
 		STAGE=$$(echo $$entry | cut -d: -f1); \
 		RESULT=$$(echo $$entry | cut -d: -f2); \
 		LOGFILE=$(REPORT_DIR)/stage-$$STAGE.log; \
-		OPEN=""; if [ "$$RESULT" = "FAIL" ]; then OPEN=" open"; fi; \
-		echo "<details id='log-$$STAGE'$$OPEN><summary class='$$( [ "$$RESULT" = "PASS" ] && echo pass || echo fail )'>$$STAGE — $$RESULT</summary><pre>" >> $$R; \
+		OPEN=""; if [ "$$RESULT" = "FAIL" ] || [ "$$RESULT" = "INFO" ]; then OPEN=" open"; fi; \
+		case "$$RESULT" in \
+			PASS) CLS=pass ;; \
+			INFO) CLS=info ;; \
+			SKIP) CLS=skip ;; \
+			*) CLS=fail ;; \
+		esac; \
+		echo "<details id='log-$$STAGE'$$OPEN><summary class='$$CLS'>$$STAGE — $$RESULT</summary><pre>" >> $$R; \
 		if [ -f "$$LOGFILE" ]; then \
 			sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' "$$LOGFILE" >> $$R; \
 		else \
