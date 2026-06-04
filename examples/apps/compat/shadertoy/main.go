@@ -122,35 +122,17 @@ func main() {
 		Title:       "ShaderToy Renderer",
 		Description: toolDescription,
 		Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
-		InputSchemaOverride: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"fragmentShader": map[string]any{
-					"type":        "string",
-					"default":     defaultFragmentShader,
-					"description": "Main Image shader - ShaderToy GLSL code",
-				},
-				"common": map[string]any{
-					"type":        "string",
-					"description": "Common code shared across all shaders (optional)",
-				},
-				"bufferA": map[string]any{
-					"type":        "string",
-					"description": "Buffer A shader code - accessible as iChannel0 (optional)",
-				},
-				"bufferB": map[string]any{
-					"type":        "string",
-					"description": "Buffer B shader code - accessible as iChannel1 (optional)",
-				},
-				"bufferC": map[string]any{
-					"type":        "string",
-					"description": "Buffer C shader code - accessible as iChannel2 (optional)",
-				},
-				"bufferD": map[string]any{
-					"type":        "string",
-					"description": "Buffer D shader code - accessible as iChannel3 (optional)",
-				},
-			},
+		// InputSchemaPatch lands the multi-line GLSL default verbatim
+		// without struct-tag truncation at the first comma (issue 542).
+		InputSchemaPatch: func(s *core.SchemaBuilder) {
+			s.Prop("fragmentShader").
+				Desc("Main Image shader - ShaderToy GLSL code").
+				Default(defaultFragmentShader)
+			s.Prop("common").Desc("Common code shared across all shaders (optional)")
+			s.Prop("bufferA").Desc("Buffer A shader code - accessible as iChannel0 (optional)")
+			s.Prop("bufferB").Desc("Buffer B shader code - accessible as iChannel1 (optional)")
+			s.Prop("bufferC").Desc("Buffer C shader code - accessible as iChannel2 (optional)")
+			s.Prop("bufferD").Desc("Buffer D shader code - accessible as iChannel3 (optional)")
 		},
 		Handler: func(ctx core.ToolContext, _ renderShadertoyInput) (string, error) {
 			return "Shader rendered successfully", nil

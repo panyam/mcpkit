@@ -261,37 +261,20 @@ func registerReadPdfBytes(srv *server.Server) {
 		core.WithToolMeta(&core.ToolMeta{
 			UI: &core.UIMetadata{Visibility: []core.UIVisibility{core.UIVisibilityApp}},
 		}),
-		core.WithInputSchemaOverride(map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"url": map[string]any{
-					"type":        "string",
-					"description": "PDF URL or local file path",
-				},
-				"offset": map[string]any{
-					"type":        "number",
-					"minimum":     0,
-					"default":     0,
-					"description": "Byte offset",
-				},
-				"byteCount": map[string]any{
-					"type":        "number",
-					"minimum":     1,
-					"maximum":     maxChunkBytes,
-					"default":     maxChunkBytes,
-					"description": "Bytes to read",
-				},
-			},
-			"required": []string{"url"},
+		core.WithInputSchemaPatch(func(s *core.SchemaBuilder) {
+			s.Prop("url").Desc("PDF URL or local file path").Required()
+			s.Prop("offset").Type("number").Desc("Byte offset").Min(0).Default(0)
+			s.Prop("byteCount").Type("number").
+				Desc("Bytes to read").
+				Min(1).Max(maxChunkBytes).Default(maxChunkBytes)
 		}),
+		// Output handler returns core.ToolResult, so reflection skips the
+		// output schema — Override is the only path for the wire shape.
 		core.WithOutputSchemaOverride(map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"url": stringSchema,
-				"bytes": map[string]any{
-					"type":        "string",
-					"description": "Base64 encoded bytes",
-				},
+				"url":        stringSchema,
+				"bytes":      map[string]any{"type": "string", "description": "Base64 encoded bytes"},
 				"offset":     map[string]any{"type": "number"},
 				"byteCount":  map[string]any{"type": "number"},
 				"totalBytes": map[string]any{"type": "number"},
@@ -331,27 +314,17 @@ Set ` + "`elicit_form_inputs`" + ` to true to prompt the user to fill form field
 		Title:       "Display PDF",
 		Description: desc,
 		Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
-		InputSchemaOverride: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"url": map[string]any{
-					"type":        "string",
-					"default":     defaultPDF,
-					"description": "PDF URL or local file path",
-				},
-				"page": map[string]any{
-					"type":        "number",
-					"minimum":     1,
-					"default":     1,
-					"description": "Initial page",
-				},
-				"elicit_form_inputs": map[string]any{
-					"type":        "boolean",
-					"default":     false,
-					"description": "If true and the PDF has form fields, prompt the user to fill them before displaying",
-				},
-			},
+		InputSchemaPatch: func(s *core.SchemaBuilder) {
+			s.Prop("url").Desc("PDF URL or local file path").Default(defaultPDF)
+			s.Prop("page").Type("number").Desc("Initial page").Min(1).Default(1)
+			s.Prop("elicit_form_inputs").Type("boolean").
+				Desc("If true and the PDF has form fields, prompt the user to fill them before displaying").
+				Default(false)
 		},
+		// Output handler returns core.ToolResult — Override is the only path
+		// (typed Out=ToolResult skips reflection + patch). Keeps the deeply
+		// nested formFields[].items + formFieldValues record-of-union shapes
+		// matching upstream byte-for-byte.
 		OutputSchemaOverride: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -769,15 +742,8 @@ func registerPollPdfCommands(srv *server.Server, h *hub) {
 		core.WithToolMeta(&core.ToolMeta{
 			UI: &core.UIMetadata{Visibility: []core.UIVisibility{core.UIVisibilityApp}},
 		}),
-		core.WithInputSchemaOverride(map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"viewUUID": map[string]any{
-					"type":        "string",
-					"description": "The viewUUID of the PDF viewer",
-				},
-			},
-			"required": []string{"viewUUID"},
+		core.WithInputSchemaPatch(func(s *core.SchemaBuilder) {
+			s.Prop("viewUUID").Desc("The viewUUID of the PDF viewer").Required()
 		}),
 	)
 	t.Title = "Poll PDF Commands"
@@ -851,23 +817,10 @@ func registerSubmitSaveData(srv *server.Server, h *hub) {
 		core.WithToolMeta(&core.ToolMeta{
 			UI: &core.UIMetadata{Visibility: []core.UIVisibility{core.UIVisibilityApp}},
 		}),
-		core.WithInputSchemaOverride(map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"requestId": map[string]any{
-					"type":        "string",
-					"description": "The request ID from the save_as command",
-				},
-				"data": map[string]any{
-					"type":        "string",
-					"description": "Base64-encoded PDF bytes",
-				},
-				"error": map[string]any{
-					"type":        "string",
-					"description": "Error message if the viewer failed to build bytes",
-				},
-			},
-			"required": []string{"requestId"},
+		core.WithInputSchemaPatch(func(s *core.SchemaBuilder) {
+			s.Prop("requestId").Desc("The request ID from the save_as command").Required()
+			s.Prop("data").Desc("Base64-encoded PDF bytes")
+			s.Prop("error").Desc("Error message if the viewer failed to build bytes")
 		}),
 	)
 	t.Title = "Submit Save Data"
@@ -892,23 +845,10 @@ func registerSubmitViewerState(srv *server.Server, h *hub) {
 		core.WithToolMeta(&core.ToolMeta{
 			UI: &core.UIMetadata{Visibility: []core.UIVisibility{core.UIVisibilityApp}},
 		}),
-		core.WithInputSchemaOverride(map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"requestId": map[string]any{
-					"type":        "string",
-					"description": "The request ID from the get_viewer_state command",
-				},
-				"state": map[string]any{
-					"type":        "string",
-					"description": "JSON-encoded viewer state snapshot",
-				},
-				"error": map[string]any{
-					"type":        "string",
-					"description": "Error message if the viewer failed to read state",
-				},
-			},
-			"required": []string{"requestId"},
+		core.WithInputSchemaPatch(func(s *core.SchemaBuilder) {
+			s.Prop("requestId").Desc("The request ID from the get_viewer_state command").Required()
+			s.Prop("state").Desc("JSON-encoded viewer state snapshot")
+			s.Prop("error").Desc("Error message if the viewer failed to read state")
 		}),
 	)
 	t.Title = "Submit Viewer State"
@@ -926,28 +866,12 @@ func registerSavePdf(srv *server.Server) {
 		core.WithToolMeta(&core.ToolMeta{
 			UI: &core.UIMetadata{Visibility: []core.UIVisibility{core.UIVisibilityApp}},
 		}),
-		core.WithInputSchemaOverride(map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"url": map[string]any{
-					"type":        "string",
-					"description": "Original PDF URL or local file path",
-				},
-				"data": map[string]any{
-					"type":        "string",
-					"description": "Base64-encoded PDF bytes",
-				},
-			},
-			"required": []string{"url", "data"},
+		core.WithInputSchemaPatch(func(s *core.SchemaBuilder) {
+			s.Prop("url").Desc("Original PDF URL or local file path").Required()
+			s.Prop("data").Desc("Base64-encoded PDF bytes").Required()
 		}),
-		core.WithOutputSchemaOverride(map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"filePath": stringSchema,
-				"mtimeMs":  map[string]any{"type": "number"},
-			},
-			"required": []string{"filePath", "mtimeMs"},
-		}),
+		// Reflection on savePdfOutput emits filePath + mtimeMs already;
+		// no patch needed — drift parity holds against upstream.
 	)
 	t.Title = "Save PDF"
 	srv.RegisterTool(t.ToolDef, t.Handler)

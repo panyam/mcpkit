@@ -166,6 +166,27 @@ func RegisterAppTool(reg ToolResourceRegistrar, cfg AppToolConfig) {
 		SupportedDisplayModes: cfg.SupportedDisplayModes,
 	}
 
+	// App-only tools that share another tool's UI resource (or have no
+	// UI at all — pure backend tools the host calls from script) can omit
+	// ResourceURI. Tool registers with the rest of the UI metadata
+	// (Visibility, CSP, etc.) but no _meta.ui.resourceUri and no
+	// companion resource registration. Issue 548 Gap 3.
+	if cfg.ResourceURI == "" {
+		reg.RegisterTool(
+			core.ToolDef{
+				Name:         cfg.Name,
+				Title:        cfg.Title,
+				Description:  cfg.Description,
+				InputSchema:  cfg.InputSchema,
+				OutputSchema: cfg.OutputSchema,
+				Execution:    cfg.Execution,
+				Meta:         &core.ToolMeta{UI: uiMeta},
+			},
+			cfg.ToolHandler,
+		)
+		return
+	}
+
 	templateVars := core.URITemplateVars(cfg.ResourceURI)
 	if len(templateVars) > 0 && cfg.TemplateHandler != nil {
 		// Auto-fallback path: consumer provides a TemplateHandler and mcpkit
