@@ -216,12 +216,25 @@ func (p *Provider) Resources() []core.ResourceDef {
 // existing RegisterResource path. The handler streams the file from
 // the underlying fs.FS at request time. Resources are registered in
 // stable URI-sorted order.
+//
+// Unless WithoutIndex was supplied to NewProvider, RegisterWith also
+// constructs an internal Indexer and registers skill://index.json on
+// srv. Use WithIndexCacheTTL to tune the index's cache freshness or
+// WithoutIndex to suppress registration entirely (when, for example,
+// the caller wants to construct and register a custom Indexer).
 func (p *Provider) RegisterWith(srv *server.Server) {
 	sort.SliceStable(p.resources, func(i, j int) bool {
 		return p.resources[i].URI < p.resources[j].URI
 	})
 	for _, r := range p.resources {
 		srv.RegisterResource(p.defFor(r), p.makeHandler(r))
+	}
+	if !p.cfg.suppressIndex {
+		var opts []IndexerOption
+		if p.cfg.indexCacheTTL > 0 {
+			opts = append(opts, WithIndexerCacheTTL(p.cfg.indexCacheTTL))
+		}
+		NewIndexer(p, opts...).RegisterWith(srv)
 	}
 }
 
