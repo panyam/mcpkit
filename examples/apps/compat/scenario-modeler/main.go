@@ -166,26 +166,17 @@ func main() {
 		Title:       "Get Scenario Data",
 		Description: "Returns SaaS scenario templates and optionally computes custom projections for given inputs",
 		Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
-		// InputSchemaOverride: customInputs is described with text from a
-		// .describe() call — no commas in it, so reflection would technically
-		// work. But the nested object structure is reused (ScenarioInputs
-		// appears in input + output + templates) and being explicit here
-		// matches upstream's shape byte-for-byte.
-		InputSchemaOverride: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"customInputs": func() map[string]any {
-					m := map[string]any{}
-					for k, v := range scenarioInputsSchemaMap {
-						m[k] = v
-					}
-					m["description"] = "Custom scenario parameters to compute projections for"
-					return m
-				}(),
-			},
+		// InputSchemaPatch just adds the description on `customInputs` —
+		// reflection of `*scenarioInputs` already produces the matching
+		// nested object shape.
+		InputSchemaPatch: func(s *core.SchemaBuilder) {
+			s.Prop("customInputs").Desc("Custom scenario parameters to compute projections for")
 		},
-		// OutputSchemaOverride: needed for the nullable breakEvenMonth field
-		// (z.number().nullable() emits anyOf, Go reflection emits "number").
+		// OutputSchemaOverride stays: the nullable `breakEvenMonth` appears
+		// at two nesting depths (templates[].summary.breakEvenMonth and
+		// customSummary.breakEvenMonth) via the same scenarioSummarySchema
+		// map. Hand-stitching that with Patch.Replace at deep paths is
+		// uglier than the explicit override.
 		OutputSchemaOverride: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
