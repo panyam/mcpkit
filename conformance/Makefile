@@ -23,6 +23,11 @@ MCPCONFORMANCE_TASKS_V2_PATH    ?= $(abspath $(REPO_ROOT)/../conf-tasks-mrtr)
 MCPCONFORMANCE_MRTR_PATH        ?= $(abspath $(REPO_ROOT)/../conf-tasks-mrtr)
 MCPCONFORMANCE_FILE_INPUTS_PATH ?= $(abspath $(REPO_ROOT)/../conf-pending)
 MCPCONFORMANCE_AUTH_PATH        ?= $(abspath $(REPO_ROOT)/../conf-pending)
+# SEP-2640 skills — scenarios live on the main fork branch alongside the
+# sep-2640.yaml requirement-traceability file (panyam/mcpconformance PR
+# 330). Override per-invocation if the SEP work splits to its own feat
+# branch waiting upstream approval.
+MCPCONFORMANCE_SKILLS_PATH      ?= $(abspath $(REPO_ROOT)/../conf-main)
 # SEP-2575 stateless wire — the scenario lives in upstream-main (no fork
 # diverged yet), so the path defaults to the same upstream clone the
 # audit uses. Override per-invocation if it ever splits out.
@@ -35,7 +40,7 @@ MCPCONFORMANCE_BASE_PATH        ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
 .PHONY: test testconfall testconf testconfauth \
         testconf-tasks testconf-tasks-v2 testconf-mrtr \
         testconf-file-inputs testconf-auth-server \
-        testconf-stateless \
+        testconf-stateless testconf-skills \
         testconf-elicitation testconf-upstream-audit \
         refresh-conformance check-conformance-stale help
 
@@ -44,7 +49,7 @@ MCPCONFORMANCE_BASE_PATH        ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
 # exist (each target fail-fasts with a remediation message if missing). Fair
 # game: contributors should have all conf-* sibling clones before pushing
 # anything that touches conformance surfaces.
-test: testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-stateless testconf-upstream-audit refresh-conformance ## Run all conformance suites (needs fork worktrees + conf-upstream-main)
+test: testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-stateless testconf-skills testconf-upstream-audit refresh-conformance ## Run all conformance suites (needs fork worktrees + conf-upstream-main)
 
 testconfall: testconf testconfauth ## Run base + auth conformance only
 
@@ -201,6 +206,41 @@ testconf-auth-server: ## Run server-side auth conformance — fork-based scenari
 	kill $$PID 2>/dev/null; \
 	wait $$PID 2>/dev/null; \
 	exit $$RC
+
+testconf-skills: ## Run SEP-2640 skills conformance — drives examples/skills via the fork's scenario runner. Scenarios land in a follow-up using the Scenario class primitives PR 8 introduced; this target wires the fixture spawn + URL today so the conf-side PR plugs in cleanly.
+	@if [ ! -d "$(MCPCONFORMANCE_SKILLS_PATH)" ]; then \
+		echo "MCPCONFORMANCE_SKILLS_PATH=$(MCPCONFORMANCE_SKILLS_PATH) does not exist."; \
+		echo "Clone https://github.com/panyam/mcpconformance there or set MCPCONFORMANCE_SKILLS_PATH=<path-to-clone>."; \
+		echo "Default expects the main branch (PR 330) checked out at ../conf-main."; \
+		exit 1; \
+	fi
+	@(cd $(REPO_ROOT)/examples/skills && go build -o skills-demo .)
+	@OUT=$$(mktemp -d -t conf-skills.XXXXXX); \
+	echo "Spawning fixture on :18099, scratch dir $$OUT"; \
+	$(REPO_ROOT)/examples/skills/skills-demo --serve --addr=:18099 --skills=$(REPO_ROOT)/examples/skills/skills > $$OUT/server.log 2>&1 & \
+	PID=$$!; \
+	for i in 1 2 3 4 5 6 7 8 9 10; do \
+		curl -sf -o /dev/null -X OPTIONS http://localhost:18099/mcp && break; \
+		sleep 0.3; \
+	done; \
+	(cd $(MCPCONFORMANCE_SKILLS_PATH) && \
+		node dist/index.js server \
+			--url http://localhost:18099/mcp \
+			--scenario sep-2640-skills \
+			-o $$OUT/checks > $$OUT/runner.log 2>&1); \
+	RC=$$?; \
+	kill $$PID 2>/dev/null; \
+	wait $$PID 2>/dev/null; \
+	if [ $$RC -ne 0 ]; then \
+		echo "testconf-skills: runner exited $$RC (artifacts in $$OUT)"; \
+		tail -30 $$OUT/runner.log 2>/dev/null; \
+		exit $$RC; \
+	fi
+# Scenario class for SEP-2640 to be registered under the name
+# "sep-2640-skills" in the fork's src/scenarios/index.ts, mirroring how
+# tasks-v2 and stateless are wired. Per Paul Carleton's review, the
+# scenarios use ctx.connect() + Connection.request() primitives instead
+# of a per-SEP all-scenarios.test.ts file. Tracking: mcpkit#567.
 
 testconf-elicitation: ## Run elicitation conformance suite (SEP-1036 URL mode + form, requires Node.js, target server must be running)
 	cd $(CONFORMANCE_DIR) && npm install --silent && \
