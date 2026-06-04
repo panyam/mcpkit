@@ -149,11 +149,17 @@ test-experimental-events-discord: ## Run experimental events Discord example tes
 test-experimental-events-telegram: ## Run experimental events Telegram example tests
 	$(MAKE) -C experimental test-events-telegram
 
-test-apps-playwright: ## Run ext-apps Playwright tests against testserver (needs Node.js + Playwright)
-	bash scripts/apps-playwright-test.sh
+test-apps-playwright: ## Run ext-apps Playwright tests against testserver (needs Node.js + Playwright). EXAMPLE=<name> picks a fixture.
+	uv run scripts/apps_playwright_test.py
 
 test-apps-playwright-docker: ## Same as test-apps-playwright but inside upstream's playwright Docker image — CI-identical baselines
-	DOCKER=1 bash scripts/apps-playwright-test.sh
+	uv run scripts/apps_playwright_test.py --docker
+
+test-apps-playwright-all: ## Sweep every registered compat fixture sequentially. Exits non-zero if any fail.
+	uv run scripts/apps_playwright_test.py --all
+
+test-apps-playwright-docker-all: ## --all + --docker. The canonical visual gate across all 21 compat fixtures.
+	uv run scripts/apps_playwright_test.py --docker --all
 
 demo-app: ## Browse a single upstream ext-apps example in your browser via basic-host (renders the App iframe). Usage: make demo-app EXAMPLE=<name> [OPEN=0]. Run without EXAMPLE for help.
 	EXAMPLE=$(EXAMPLE) OPEN=$(OPEN) bash scripts/apps-demo.sh
@@ -519,5 +525,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-skills test-mcpskills build-mcpskills test-mcpskills-walkthrough test-protogen test-e2e test-experimental test-apps-playwright test-apps-playwright-docker demo-app inspect-app testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-elicitation testconf-skills refresh-conformance check-conformance-stale check-local-suites-stale refresh-apps-compat-report check-apps-compat-stale vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root docs-site-build docs-site-serve docs-site-deploy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
+.PHONY: build test test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-skills test-mcpskills build-mcpskills test-mcpskills-walkthrough test-protogen test-e2e test-experimental test-apps-playwright test-apps-playwright-docker test-apps-playwright-all test-apps-playwright-docker-all demo-app inspect-app testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-elicitation testconf-skills refresh-conformance check-conformance-stale check-local-suites-stale refresh-apps-compat-report check-apps-compat-stale vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root docs-site-build docs-site-serve docs-site-deploy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
 .DEFAULT_GOAL := help
