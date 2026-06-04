@@ -1,7 +1,7 @@
 # MCPKit Makefile
 
 # Sub-modules that get tagged alongside the root module
-SUB_MODS_TO_TAG := ext/auth ext/ui experimental/ext/protogen cmd/testclient tests/e2e tests/keycloak
+SUB_MODS_TO_TAG := ext/auth ext/ui experimental/ext/protogen cmd/testclient cmd/common cmd/mcpskills tests/e2e tests/keycloak
 
 # Conformance test orchestration lives in `conformance/Makefile`.
 # Per-suite MCPCONFORMANCE_*_PATH vars are documented there.
@@ -113,6 +113,14 @@ test-ui: ## Run UI extension sub-module tests
 
 test-skills: ## Run skills extension sub-module tests (SEP-2640, experimental)
 	cd ext/skills && go test ./... -count=1 -timeout 30s
+
+test-mcpskills: ## Run cmd/mcpskills CLI smoke tests (SEP-2640)
+	cd cmd/mcpskills && go test ./... -count=1 -timeout 60s
+
+build-mcpskills: ## Build the mcpskills CLI binary into ./bin/mcpskills
+	@mkdir -p bin
+	cd cmd/mcpskills && go build -o ../../bin/mcpskills .
+	@echo "wrote bin/mcpskills"
 
 build-bridge: ## Compile mcp-app-bridge.ts → .js (delegates to ext/ui)
 	cd ext/ui && $(MAKE) build-bridge
@@ -508,5 +516,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-skills test-protogen test-e2e test-experimental test-apps-playwright test-apps-playwright-docker demo-app inspect-app testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-elicitation testconf-skills refresh-conformance check-conformance-stale check-local-suites-stale refresh-apps-compat-report check-apps-compat-stale vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root docs-site-build docs-site-serve docs-site-deploy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
+.PHONY: build test test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-skills test-mcpskills build-mcpskills test-protogen test-e2e test-experimental test-apps-playwright test-apps-playwright-docker demo-app inspect-app testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-elicitation testconf-skills refresh-conformance check-conformance-stale check-local-suites-stale refresh-apps-compat-report check-apps-compat-stale vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root docs-site-build docs-site-serve docs-site-deploy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
 .DEFAULT_GOAL := help
