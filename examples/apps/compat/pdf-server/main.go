@@ -24,7 +24,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
 	"github.com/panyam/mcpkit/ext/ui"
 	"github.com/panyam/mcpkit/server"
@@ -60,24 +59,30 @@ func main() {
 	}
 	html := string(htmlBytes)
 
-	opts := common.MCPServerOptions(*addr, defaultLogTag)
-	opts = append(opts, server.WithExtension(&ui.UIExtension{}))
-	srv := server.NewServer(
-		core.ServerInfo{Name: pdfDisplayName, Version: pdfServerVer},
-		opts...,
-	)
-
-	registerAllTools(srv, newHub(), html)
-
 	cors := middleware.CORS(nil,
 		middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
 		middleware.CORSAllowHeaders("Content-Type", "Authorization", "Mcp-Session-Id", "Mcp-Protocol-Version"),
 		middleware.CORSExposeHeaders("Mcp-Session-Id"),
 	)
 
-	log.Printf("pdf-server compat fixture listening on %s (MCP at /mcp)", *addr)
-	log.Printf("serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
-	if err := srv.Run(*addr, server.WithHandlerWrap(cors)); err != nil {
+	log.Printf("%sserving mcp-app.html from %s (%d bytes)", defaultLogTag, htmlPath, len(html))
+
+	hub := newHub()
+	if err := common.RunServer(common.ServerConfig{
+		Name:      pdfDisplayName,
+		Version:   pdfServerVer,
+		Addr:      *addr,
+		LogPrefix: defaultLogTag,
+		Options: []server.Option{
+			server.WithExtension(&ui.UIExtension{}),
+		},
+		Register: func(srv *server.Server) {
+			registerAllTools(srv, hub, html)
+		},
+		TransportOptions: []server.TransportOption{
+			server.WithHandlerWrap(cors),
+		},
+	}); err != nil {
 		log.Fatal(err)
 	}
 }

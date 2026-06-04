@@ -47,13 +47,34 @@ func main() {
 	}
 	html := string(htmlBytes)
 
-	opts := common.MCPServerOptions(*addr, "[integration] ")
-	opts = append(opts, server.WithExtension(&ui.UIExtension{}))
-	srv := server.NewServer(
-		core.ServerInfo{Name: "Integration Test Server", Version: "1.0.0"},
-		opts...,
+	cors := middleware.CORS(nil,
+		middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
+		middleware.CORSAllowHeaders("Content-Type", "Authorization", "Mcp-Session-Id", "Mcp-Protocol-Version"),
+		middleware.CORSExposeHeaders("Mcp-Session-Id"),
 	)
 
+	log.Printf("[integration] serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
+
+	if err := common.RunServer(common.ServerConfig{
+		Name:      "Integration Test Server",
+		Version:   "1.0.0",
+		Addr:      *addr,
+		LogPrefix: "[integration] ",
+		Options: []server.Option{
+			server.WithExtension(&ui.UIExtension{}),
+		},
+		Register: func(srv *server.Server) {
+			registerIntegrationTools(srv, html)
+		},
+		TransportOptions: []server.TransportOption{
+			server.WithHandlerWrap(cors),
+		},
+	}); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func registerIntegrationTools(srv *server.Server, html string) {
 	resourceURI := "ui://get-time/mcp-app.html"
 	const sampleDownloadURI = "resource:///sample-report.txt"
 
@@ -93,16 +114,4 @@ func main() {
 			}}}, nil
 		},
 	)
-
-	cors := middleware.CORS(nil,
-		middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
-		middleware.CORSAllowHeaders("Content-Type", "Authorization", "Mcp-Session-Id", "Mcp-Protocol-Version"),
-		middleware.CORSExposeHeaders("Mcp-Session-Id"),
-	)
-
-	log.Printf("integration compat fixture listening on %s (MCP at /mcp)", *addr)
-	log.Printf("serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
-	if err := srv.Run(*addr, server.WithHandlerWrap(cors)); err != nil {
-		log.Fatal(err)
-	}
 }

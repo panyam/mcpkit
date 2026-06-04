@@ -42,44 +42,48 @@ func main() {
 	}
 	html := string(htmlBytes)
 
-	opts := common.MCPServerOptions(*addr, "[quickstart] ")
-	opts = append(opts, server.WithExtension(&ui.UIExtension{}))
-	srv := server.NewServer(
-		core.ServerInfo{Name: "Quickstart MCP App Server", Version: "1.0.0"},
-		opts...,
-	)
+	log.Printf("[quickstart] serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
 
-	resourceURI := "ui://get-time/mcp-app.html"
-
-	// Matches upstream's quickstart registerAppTool: same tool name, same
-	// title, slightly shorter description ("Returns the current server
-	// time." with no ISO 8601 suffix — drift check enforces this), text-only
-	// output (no outputSchema).
-	ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[struct{}, string]{
-		Name:        "get-time",
-		Title:       "Get Time",
-		Description: "Returns the current server time.",
-		Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
-		Handler: func(ctx core.ToolContext, _ struct{}) (string, error) {
-			return time.Now().UTC().Format(time.RFC3339Nano), nil
-		},
-		ResourceURI: resourceURI,
-		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
-			return core.ResourceResult{Contents: []core.ResourceReadContent{{
-				URI: req.URI, MimeType: core.AppMIMEType, Text: html,
-			}}}, nil
-		},
-	})
-
-	log.Printf("quickstart compat fixture listening on %s (MCP at /mcp)", *addr)
-	log.Printf("serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
 	cors := middleware.CORS(nil,
 		middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
 		middleware.CORSAllowHeaders("Content-Type", "Authorization", "Mcp-Session-Id", "Mcp-Protocol-Version"),
 		middleware.CORSExposeHeaders("Mcp-Session-Id"),
 	)
 
-	if err := srv.Run(*addr, server.WithHandlerWrap(cors)); err != nil {
+	resourceURI := "ui://get-time/mcp-app.html"
+	if err := common.RunServer(common.ServerConfig{
+		Name:      "Quickstart MCP App Server",
+		Version:   "1.0.0",
+		Addr:      *addr,
+		LogPrefix: "[quickstart] ",
+		Options: []server.Option{
+			server.WithExtension(&ui.UIExtension{}),
+		},
+		Register: func(srv *server.Server) {
+			// Matches upstream's quickstart registerAppTool: same tool name, same
+			// title, slightly shorter description ("Returns the current server
+			// time." with no ISO 8601 suffix — drift check enforces this), text-only
+			// output (no outputSchema).
+			ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[struct{}, string]{
+				Name:        "get-time",
+				Title:       "Get Time",
+				Description: "Returns the current server time.",
+				Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
+				Handler: func(ctx core.ToolContext, _ struct{}) (string, error) {
+					return time.Now().UTC().Format(time.RFC3339Nano), nil
+				},
+				ResourceURI: resourceURI,
+				ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
+					return core.ResourceResult{Contents: []core.ResourceReadContent{{
+						URI: req.URI, MimeType: core.AppMIMEType, Text: html,
+					}}}, nil
+				},
+			})
+		},
+		TransportOptions: []server.TransportOption{
+			server.WithHandlerWrap(cors),
+		},
+	}); err != nil {
 		log.Fatal(err)
 	}
 }

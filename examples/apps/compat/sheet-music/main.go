@@ -63,56 +63,60 @@ func main() {
 	}
 	html := string(htmlBytes)
 
-	opts := common.MCPServerOptions(*addr, "[sheet-music] ")
-	opts = append(opts, server.WithExtension(&ui.UIExtension{}))
-	srv := server.NewServer(
-		core.ServerInfo{Name: "Sheet Music Server", Version: "1.0.0"},
-		opts...,
-	)
-
-	resourceURI := "ui://sheet-music/mcp-app.html"
-
-	ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[playSheetMusicInput, string]{
-		Name:  "play-sheet-music",
-		Title: "Play Sheet Music",
-		Description: "Plays music from ABC notation with audio playback and visual sheet music. " +
-			"Use this to compose original songs (for birthdays, holidays, or any occasion) " +
-			"or perform well-known tunes (folk songs, nursery rhymes, hymns, classical melodies). " +
-			"For accurate renditions of well-known tunes, look up the ABC notation from " +
-			"abcnotation.com or thesession.org rather than recalling from memory.",
-		Execution: &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
-		// InputSchemaPatch lands the multi-comma default verbatim without
-		// the struct-tag parser truncating at the first comma (issue 542).
-		// Reflection still emits `type: string`; the patch just adds the
-		// description + default.
-		InputSchemaPatch: func(s *core.SchemaBuilder) {
-			s.Prop("abcNotation").
-				Desc("ABC notation string to render as sheet music with audio playback").
-				Default(defaultABCNotation)
-		},
-		Handler: func(ctx core.ToolContext, _ playSheetMusicInput) (string, error) {
-			// Upstream validates ABC notation via abcjs; the screenshot test
-			// never clicks "play" so only the success-path response shape
-			// matters here.
-			return "Input parsed successfully.", nil
-		},
-		ResourceURI: resourceURI,
-		ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
-			return core.ResourceResult{Contents: []core.ResourceReadContent{{
-				URI: req.URI, MimeType: core.AppMIMEType, Text: html,
-			}}}, nil
-		},
-	})
-
 	cors := middleware.CORS(nil,
 		middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
 		middleware.CORSAllowHeaders("Content-Type", "Authorization", "Mcp-Session-Id", "Mcp-Protocol-Version"),
 		middleware.CORSExposeHeaders("Mcp-Session-Id"),
 	)
 
-	log.Printf("sheet-music compat fixture listening on %s (MCP at /mcp)", *addr)
-	log.Printf("serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
-	if err := srv.Run(*addr, server.WithHandlerWrap(cors)); err != nil {
+	log.Printf("[sheet-music] serving mcp-app.html from %s (%d bytes)", htmlPath, len(html))
+
+	resourceURI := "ui://sheet-music/mcp-app.html"
+	if err := common.RunServer(common.ServerConfig{
+		Name:      "Sheet Music Server",
+		Version:   "1.0.0",
+		Addr:      *addr,
+		LogPrefix: "[sheet-music] ",
+		Options: []server.Option{
+			server.WithExtension(&ui.UIExtension{}),
+		},
+		Register: func(srv *server.Server) {
+			ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[playSheetMusicInput, string]{
+				Name:  "play-sheet-music",
+				Title: "Play Sheet Music",
+				Description: "Plays music from ABC notation with audio playback and visual sheet music. " +
+					"Use this to compose original songs (for birthdays, holidays, or any occasion) " +
+					"or perform well-known tunes (folk songs, nursery rhymes, hymns, classical melodies). " +
+					"For accurate renditions of well-known tunes, look up the ABC notation from " +
+					"abcnotation.com or thesession.org rather than recalling from memory.",
+				Execution: &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
+				// InputSchemaPatch lands the multi-comma default verbatim without
+				// the struct-tag parser truncating at the first comma (issue 542).
+				// Reflection still emits `type: string`; the patch just adds the
+				// description + default.
+				InputSchemaPatch: func(s *core.SchemaBuilder) {
+					s.Prop("abcNotation").
+						Desc("ABC notation string to render as sheet music with audio playback").
+						Default(defaultABCNotation)
+				},
+				Handler: func(ctx core.ToolContext, _ playSheetMusicInput) (string, error) {
+					// Upstream validates ABC notation via abcjs; the screenshot test
+					// never clicks "play" so only the success-path response shape
+					// matters here.
+					return "Input parsed successfully.", nil
+				},
+				ResourceURI: resourceURI,
+				ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
+					return core.ResourceResult{Contents: []core.ResourceReadContent{{
+						URI: req.URI, MimeType: core.AppMIMEType, Text: html,
+					}}}, nil
+				},
+			})
+		},
+		TransportOptions: []server.TransportOption{
+			server.WithHandlerWrap(cors),
+		},
+	}); err != nil {
 		log.Fatal(err)
 	}
 }
