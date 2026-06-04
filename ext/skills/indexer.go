@@ -147,8 +147,7 @@ func (i *Indexer) isFresh() bool {
 		if !ok {
 			return false
 		}
-		manifest := manifestPath(skill.dirPath)
-		got, err := mtimeOf(i.provider.cfg.fsys, manifest)
+		got, err := i.skillMtime(skill)
 		if err != nil {
 			return false
 		}
@@ -159,29 +158,83 @@ func (i *Indexer) isFresh() bool {
 	return true
 }
 
+// skillMtime returns the mtime the cache uses to drive invalidation for
+// the given skill. In file mode the cache invalidates on changes to
+// SKILL.md only because the entry digest is over SKILL.md bytes alone.
+// In archive mode the digest is over the packed archive, so any file
+// in the skill's subtree contributes; the max mtime across the subtree
+// is what we track.
+func (i *Indexer) skillMtime(skill *skillEntry) (time.Time, error) {
+	if i.provider.cfg.archiveMode != ArchiveFormatUnknown {
+		return subtreeMaxMtime(i.provider.cfg.fsys, skill.dirPath)
+	}
+	return mtimeOf(i.provider.cfg.fsys, manifestPath(skill.dirPath))
+}
+
+func subtreeMaxMtime(fsys fs.FS, root string) (time.Time, error) {
+	var latest time.Time
+	err := fs.WalkDir(fsys, root, func(p string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		info, err := fs.Stat(fsys, p)
+		if err != nil {
+			return err
+		}
+		mt := info.ModTime()
+		if mt.After(latest) {
+			latest = mt
+		}
+		return nil
+	})
+	return latest, err
+}
+
 func (i *Indexer) build() (Index, map[string]time.Time, bool, error) {
 	entries := make([]IndexEntry, 0, len(i.provider.skills))
 	mtimes := make(map[string]time.Time, len(i.provider.skills))
 	var anyZeroMtime bool
 
 	for _, skill := range i.provider.skills {
-		manifest := manifestPath(skill.dirPath)
-		raw, err := fs.ReadFile(i.provider.cfg.fsys, manifest)
-		if err != nil {
-			return Index{}, nil, false, fmt.Errorf("skills: read %s for digest: %w", manifest, err)
+		var (
+			entryType   SkillType
+			entryURL    string
+			digestBytes []byte
+		)
+
+		if i.provider.cfg.archiveMode != ArchiveFormatUnknown {
+			packed, err := PackSkill(i.provider.cfg.fsys, skill.dirPath, i.provider.cfg.archiveMode)
+			if err != nil {
+				return Index{}, nil, false, fmt.Errorf("skills: pack %s for digest: %w", skill.dirPath, err)
+			}
+			entryType = SkillTypeArchive
+			entryURL = Scheme + "://" + joinSegments(skill.uriSegs) + i.provider.cfg.archiveMode.Suffix()
+			digestBytes = packed
+		} else {
+			manifest := manifestPath(skill.dirPath)
+			raw, err := fs.ReadFile(i.provider.cfg.fsys, manifest)
+			if err != nil {
+				return Index{}, nil, false, fmt.Errorf("skills: read %s for digest: %w", manifest, err)
+			}
+			entryType = SkillTypeSkillMD
+			entryURL = skillManifestURI(skill.uriSegs)
+			digestBytes = raw
 		}
-		digest := digestOf(raw)
+
 		entries = append(entries, IndexEntry{
-			Type:        SkillTypeSkillMD,
+			Type:        entryType,
 			Name:        skill.fm.Name,
 			Description: skill.fm.Description,
-			URL:         skillManifestURI(skill.uriSegs),
-			Digest:      digest,
+			URL:         entryURL,
+			Digest:      digestOf(digestBytes),
 		})
 
-		mtime, err := mtimeOf(i.provider.cfg.fsys, manifest)
+		mtime, err := i.skillMtime(skill)
 		if err != nil {
-			return Index{}, nil, false, fmt.Errorf("skills: stat %s: %w", manifest, err)
+			return Index{}, nil, false, fmt.Errorf("skills: mtime %s: %w", skill.dirPath, err)
 		}
 		if mtime.IsZero() {
 			anyZeroMtime = true
