@@ -107,6 +107,25 @@ export interface KnownGaps {
 
 export type LocalSuiteStatus = 'PASS' | 'FAIL' | 'INFO' | 'SKIP';
 
+// Describes where a suite's scenarios live. mcpkit points at separate
+// worktrees of panyam/mcpconformance because different SEPs ride on
+// different branches while their upstream PRs are still draft; one suite
+// (testconf-stateless) points at the real upstream
+// modelcontextprotocol/conformance@main. Rendered into CONFORMANCE.md as
+// the "Source" column plus a setup subsection so readers know where to
+// clone from.
+export interface LocalSuiteSource {
+  // GitHub `owner/repo` slug. Used to build the branch link.
+  repo: string;
+  // Branch the suite expects the worktree to be checked out at.
+  branch: string;
+  // The MCPCONFORMANCE_*_PATH env var the testconf-* target reads to
+  // locate the worktree.
+  pathVar: string;
+  // Default value if the env var is not set. Relative to the repo root.
+  defaultPath: string;
+}
+
 export interface LocalSuite {
   // Make target name, e.g. "testconf-skills".
   suite: string;
@@ -117,8 +136,12 @@ export interface LocalSuite {
   // targets but are not wired into testall.
   stage: string;
   // Current declared status. Mismatches with the Makefile wiring are caught
-  // by scripts/check-local-suites.sh in CI.
+  // by scripts/check_local_suites.py in CI.
   status: LocalSuiteStatus;
+  // Where the scenarios live. Optional only during the initial bootstrap of
+  // a suite; existing suites must declare this so readers know what to
+  // clone.
+  source?: LocalSuiteSource;
   // Optional one-line footnote attached as a numeric reference.
   note?: string;
   // Plain-text tracking reference (issue/PR number); avoids GitHub backlink

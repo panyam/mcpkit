@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Staleness gate for conformance/local-suites.yaml.
 
-Catches three mechanical drift cases against conformance/Makefile and the
+Catches four mechanical drift cases against conformance/Makefile and the
 root Makefile's testall stage list:
 
     A. Suite added to conformance/Makefile as a testconf-* target but not
@@ -10,6 +10,10 @@ root Makefile's testall stage list:
        target. Docs site would show a phantom row.
     C. Suite's `stage:` field in YAML does not match the stage label used
        in the testall macro call. Docs site would point at the wrong stage.
+    E. conformance/path-defaults.mk is out of sync with the YAML's
+       source.default_path declarations. The generated include would
+       point testconf-* targets at the wrong worktree. Delegates to
+       scripts/gen_conf_paths.py --check.
 
 Drift case D (declared status diverges from actual run result) is not
 checked here. Tracked separately.
@@ -144,6 +148,18 @@ def main() -> int:
             "                      make refresh-conformance && make check-conformance-stale\n"
         )
         return 1
+
+    # Case E: conformance/path-defaults.mk must match what
+    # gen_conf_paths.py would produce from the YAML. Run the generator in
+    # --check mode and propagate its exit code.
+    import subprocess  # local import; only needed when no earlier drift fired
+    gen_script = Path(__file__).with_name("gen_conf_paths.py")
+    result = subprocess.run(
+        [sys.executable, str(gen_script), "--check"],
+        cwd=REPO_ROOT,
+    )
+    if result.returncode != 0:
+        return result.returncode
 
     print(f"check_local_suites: {len(yaml_targets)} suites checked, no drift.")
     return 0

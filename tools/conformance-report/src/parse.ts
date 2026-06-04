@@ -54,22 +54,46 @@ export function loadLocalSuites(path: string): LocalSuitesManifest {
   if (!parsed || typeof parsed !== 'object') {
     return { suites: [] };
   }
-  const suites = ((parsed as { suites?: unknown }).suites as LocalSuite[]) ?? [];
-  if (!Array.isArray(suites)) {
+  const rawSuites = (parsed as { suites?: unknown }).suites;
+  if (!Array.isArray(rawSuites)) {
     throw new Error(`local-suites.yaml: \`suites\` must be a list`);
   }
   const valid: LocalSuiteStatus[] = ['PASS', 'FAIL', 'INFO', 'SKIP'];
-  for (const s of suites) {
-    if (!s.suite || !s.sep || !s.stage || !s.status) {
+  const suites: LocalSuite[] = [];
+  for (const r of rawSuites as Array<Record<string, unknown>>) {
+    if (!r.suite || !r.sep || !r.stage || !r.status) {
       throw new Error(
-        `local-suites.yaml: entry missing required field (suite, sep, stage, status): ${JSON.stringify(s)}`
+        `local-suites.yaml: entry missing required field (suite, sep, stage, status): ${JSON.stringify(r)}`
       );
     }
-    if (!valid.includes(s.status)) {
+    if (!valid.includes(r.status as LocalSuiteStatus)) {
       throw new Error(
-        `local-suites.yaml: invalid status ${JSON.stringify(s.status)} for suite ${s.suite}. Expected one of ${valid.join(', ')}`
+        `local-suites.yaml: invalid status ${JSON.stringify(r.status)} for suite ${r.suite}. Expected one of ${valid.join(', ')}`
       );
     }
+    const entry: LocalSuite = {
+      suite: r.suite as string,
+      sep: r.sep as string,
+      stage: r.stage as string,
+      status: r.status as LocalSuiteStatus
+    };
+    if (r.source) {
+      const s = r.source as Record<string, unknown>;
+      if (!s.repo || !s.branch || !s.path_var || !s.default_path) {
+        throw new Error(
+          `local-suites.yaml: source block for ${r.suite} missing required field (repo, branch, path_var, default_path): ${JSON.stringify(s)}`
+        );
+      }
+      entry.source = {
+        repo: s.repo as string,
+        branch: s.branch as string,
+        pathVar: s.path_var as string,
+        defaultPath: s.default_path as string
+      };
+    }
+    if (r.note) entry.note = r.note as string;
+    if (r.tracking) entry.tracking = r.tracking as string;
+    suites.push(entry);
   }
   return { suites };
 }
