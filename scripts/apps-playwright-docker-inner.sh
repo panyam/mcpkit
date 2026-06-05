@@ -28,6 +28,12 @@ set -euo pipefail
 EXT_APPS_REPO="${EXT_APPS_REPO:-https://github.com/modelcontextprotocol/ext-apps.git}"
 if [ -d "$EXT_APPS_DIR/.git" ]; then
     echo "Updating ext-apps inside container..."
+    # Discard any dirty state left by a prior fixture's run in this shared
+    # volume — `npm install` and example builds can dirty package-lock.json
+    # and dist/ entries. Without this, `git pull` fails with "would be
+    # overwritten by merge" and subsequent fixtures inherit an inconsistent
+    # tree. Issue 601 / PR 596 --all reliability fix.
+    (cd "$EXT_APPS_DIR" && git reset --hard HEAD --quiet && git clean -fd --quiet) || true
     (cd "$EXT_APPS_DIR" && git pull --quiet) || true
 else
     echo "Cloning ext-apps into container volume..."
