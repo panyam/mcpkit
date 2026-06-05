@@ -1,6 +1,6 @@
 # Screenshots — integration
 
-Capture by running `RENDERER=basic-host make demo-app EXAMPLE=integration`.
+Capture by running `make demo-app EXAMPLE=integration`.
 
 | File | What to capture |
 |---|---|

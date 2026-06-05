@@ -1,6 +1,6 @@
 # Screenshots — sheet-music
 
-Capture by running `RENDERER=basic-host make demo-app EXAMPLE=sheet-music`.
+Capture by running `make demo-app EXAMPLE=sheet-music`.
 
 | File | What to capture |
 |---|---|

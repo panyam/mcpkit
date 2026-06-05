@@ -1,6 +1,6 @@
 # Screenshots — shadertoy
 
-Capture by running `RENDERER=basic-host make demo-app EXAMPLE=shadertoy`.
+Capture by running `make demo-app EXAMPLE=shadertoy`.
 
 | File | What to capture |
 |---|---|

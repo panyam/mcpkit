@@ -25,7 +25,7 @@ all interaction (sliders, stage switcher, benchmark comparison) goes
 through the same MCP wire:
 
 ```bash
-RENDERER=basic-host make demo-app EXAMPLE=budget-allocator
+make demo-app EXAMPLE=budget-allocator
 ```
 
 A browser opens at `http://localhost:8080`. First-touch flow:
@@ -42,39 +42,7 @@ A browser opens at `http://localhost:8080`. First-touch flow:
 
 ![Budget Allocator iframe showing benchmark comparison for Series A stage with per-category percentile bands](screenshots/03-series-a-benchmark.png)
 
-### [Optional] Other ways to look at it
-
-- **Connect from any MCP host.** The Go fixture is just a spec-compliant
-  MCP server on `http://localhost:3101/mcp`. Boot it stand-alone with
-  `cd examples/apps/compat/budget-allocator && go run .` and connect from
-  VS Code, Claude Desktop, [MCPJam Inspector](https://github.com/MCPJam/inspector),
-  your own client, or any host that speaks MCP. Hosts that drive an LLM
-  let you ask things like *"show me my SaaS budget allocation"* or *"how
-  should a Series A company allocate their budget?"* — the model calls
-  `get-budget-data` and the iframe handles the rest.
-
-- **Wire inspection.** If you want to browse `tools/list`, `_meta.ui`,
-  and raw tool-call payloads:
-
-  ```bash
-  RENDERER=mcpjam make demo-app EXAMPLE=budget-allocator
-  ```
-
-  Launches MCPJam Inspector in your browser; paste
-  `http://localhost:3101/mcp` into its server list.
-
-- **Compare against upstream's TS reference server** in either renderer:
-
-  ```bash
-  RENDERER=basic-host make demo-upstream EXAMPLE=budget-allocator
-  ```
-
-- **Strict parity gate** (Playwright `tools/list` diff + visual PNG
-  baseline; requires Docker):
-
-  ```bash
-  EXAMPLE=budget-allocator make test-apps-playwright-docker
-  ```
+See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, the strict Playwright gate, and connecting from VS Code / Claude Desktop / other MCP hosts.
 
 ### Verify the wire shape (no LLM needed)
 
