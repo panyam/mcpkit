@@ -18,6 +18,7 @@ import (
 //	-32004 UnsupportedProtocolVersion    → 400 Bad Request
 //	-32602 Invalid params                → 400 Bad Request (missing _meta etc.)
 //	-32700 Parse / -32600 InvalidRequest → 400 Bad Request
+//	-32010 SubscriptionLimitExceeded     → 429 Too Many Requests
 //	everything else                      → 200 OK (body carries the error)
 //
 // Notification frames (no id, no error) are out of scope for this
@@ -33,6 +34,8 @@ func HTTPStatusForCode(code int) int {
 		core.ErrCodeParse,
 		core.ErrCodeInvalidRequest:
 		return 400
+	case core.ErrCodeSubscriptionLimitExceeded:
+		return 429
 	default:
 		return 200
 	}
