@@ -54,36 +54,7 @@ make demo-app EXAMPLE=pdf-server
 Paste `http://localhost:3101/mcp` into MCPJam's server list and connect.
 Then browse `tools/list`, `_meta.ui`, and tool-call payloads on the wire.
 
-### [Optional] You can also do…
-
-- **See the App rendered in basic-host.** Same Go fixture, but driven by
-  basic-host (the canonical reference UI) instead of MCPJam. Opens a
-  browser at `http://localhost:8080`:
-
-  ```bash
-  RENDERER=basic-host make demo-app EXAMPLE=pdf-server
-  ```
-
-- **Hit upstream's TS reference server instead.** Useful for comparing
-  the Go fixture's wire surface against the canonical implementation:
-
-  ```bash
-  make demo-upstream EXAMPLE=pdf-server
-  ```
-
-  Add `RENDERER=basic-host` to render the upstream TS in basic-host
-  instead of MCPJam.
-
-- **Strict parity check against the mcpkit-Go fixture.** Runs upstream's
-  Playwright suite against the Go binary — wire-level `tools/list` diff
-  + visual PNG gate. Requires Docker:
-
-  ```bash
-  EXAMPLE=pdf-server make test-apps-playwright-docker
-  ```
-
-Default PDF is `https://arxiv.org/pdf/1706.03762` ("Attention Is All
-You Need") — upstream's default too.
+See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, and the strict Playwright gate.
 
 ## Prompts to try
 

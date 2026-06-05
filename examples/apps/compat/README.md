@@ -32,18 +32,22 @@ shows the current status of each row.
 | **7. Backend state machinery.** | Per-viewUUID command queue, long-poll endpoint, server-initiated rendezvous (server enqueues a command, viewer responds via separate tool, server's await unblocks). Most complex fixture. | [`pdf-server`](pdf-server/README.md) |
 
 Each example's own `README.md` lists prompts to try against it in
-MCPJam Inspector or basic-host. Run a single one with:
+basic-host (default, no LLM required) or MCPJam Inspector (wire-level
+inspection). Run a single one with:
 
 ```bash
-# mcpkit-Go fixture + MCPJam (default — wire-level inspection)
+# mcpkit-Go fixture + basic-host visual demo (default — no LLM needed)
 make demo-app EXAMPLE=basic-vanillajs
 
-# mcpkit-Go fixture + basic-host (visual demo — renders the App iframe)
-RENDERER=basic-host make demo-app EXAMPLE=basic-vanillajs
+# Wire inspection instead of visual rendering
+RENDERER=mcpjam make demo-app EXAMPLE=basic-vanillajs
 
-# upstream TS reference server + MCPJam (use for SKIP examples below)
+# Upstream TS reference server (use for SKIP examples below)
 make demo-upstream EXAMPLE=basic-vanillajs
 ```
+
+See [Other ways to test a fixture](#other-ways-to-test-a-fixture) for
+the full 2×2 of server × renderer.
 
 **SKIP rows** — examples upstream's `servers.spec.ts` deliberately
 excludes (special build-time deps or out of the default test matrix).
@@ -229,46 +233,65 @@ surface parity isn't enough to match a multi-server baseline. Per-
 fixture committed PNGs capture our actual run shape, which is the only
 fair regression check we can do.
 
-## Browsing a fixture interactively
+## Other ways to test a fixture
+
+Every per-fixture README leads with the default visual demo
+(`make demo-app EXAMPLE=<name>`, which boots the mcpkit-Go fixture in
+upstream's `basic-host` and opens a browser — no LLM needed). This
+section is the single source of truth for the other axes.
+
+`<name>` everywhere below is the fixture directory basename — one of
+the names in the [examples ladder](#reading-order--examples-ladder)
+table at the top of this page (`basic-vanillajs`, `quickstart`,
+`transcript`, `budget-allocator`, …). Run `ls examples/apps/compat/`
+for the canonical list.
+
+### The 2×2 grid
 
 The demo targets pick a server and a renderer independently:
 
 | Command | MCP server | Renderer |
 |---|---|---|
-| `make demo-app EXAMPLE=<name>` | **mcpkit-Go fixture** | **MCPJam Inspector** (default) |
-| `RENDERER=basic-host make demo-app EXAMPLE=<name>` | mcpkit-Go fixture | basic-host (iframe rendering) |
-| `make demo-upstream EXAMPLE=<name>` | **upstream TS reference** | MCPJam Inspector (default) |
-| `RENDERER=basic-host make demo-upstream EXAMPLE=<name>` | upstream TS reference | basic-host (iframe rendering) |
+| `make demo-app EXAMPLE=<name>` | **mcpkit-Go fixture** | **basic-host** (default) |
+| `RENDERER=mcpjam make demo-app EXAMPLE=<name>` | mcpkit-Go fixture | MCPJam Inspector |
+| `make demo-upstream EXAMPLE=<name>` | **upstream TS reference** | basic-host (default) |
+| `RENDERER=mcpjam make demo-upstream EXAMPLE=<name>` | upstream TS reference | MCPJam Inspector |
 
-### When to use which
+### When to reach for each
 
-- **`make demo-app`** (Go + MCPJam) — the default. Wire-level inspection
-  of the mcpkit fixture. Open MCPJam, paste the server URL into its
-  server list, browse `tools/list` JSON, `_meta.ui` structure, tool-call
-  payloads, resource list. No upstream JS build needed for inspection.
-- **`RENDERER=basic-host make demo-app`** — visual demo of the Go fixture.
-  Renders the App's iframe + bridge JS in `basic-host`. Use this to
-  verify the round-trip end-to-end (server → host → iframe → bridge
-  callback). Requires upstream's `dist/mcp-app.html` build.
-- **`make demo-upstream`** (TS + MCPJam) — same UX as `demo-app` but
-  hits upstream's TypeScript reference server. Use this for SKIP
-  examples without a Go drop-in (`lazy-auth-server`,
-  `video-resource-server`, `qr-server`, `say-server`), or to compare
-  the Go fixture's wire surface against the canonical TS implementation.
-- **`RENDERER=basic-host make demo-upstream`** — see the upstream TS
-  example rendered in basic-host (the original `make demo-app` from
-  before issue 608).
+- **Default (`make demo-app`, Go + basic-host).** Visual demo of the
+  mcpkit fixture. **No LLM required** — the App's iframe + bridge
+  drives the tool calls itself. Best first-touch experience. Use this
+  unless you have a reason not to.
+- **`RENDERER=mcpjam make demo-app`** — same Go fixture, but launches
+  [MCPJam Inspector](https://github.com/MCPJam/inspector) instead of
+  basic-host. Use when you want to browse `tools/list` JSON, `_meta.ui`
+  structure, tool-call payloads, resource list on the wire. (MCPJam has
+  a free-token cap on its model integration; the inspection itself
+  doesn't need one.)
+- **Connect from any spec-compliant MCP host.** The Go fixture is just
+  an MCP server on `http://localhost:3101/mcp`. Boot it stand-alone
+  with `cd examples/apps/compat/<name> && go run .` and connect from
+  VS Code, Claude Desktop, MCPJam, or your own client. Useful for the
+  LLM-driven flow (ask the model to call the tool) and for verifying
+  cross-host compatibility.
+- **`make demo-upstream`** — upstream's TypeScript reference server
+  instead of the Go fixture. Use this to compare the Go fixture's wire
+  surface against the canonical implementation, or to browse the SKIP
+  examples that have no Go drop-in (`lazy-auth-server`,
+  `video-resource-server`, `qr-server`, `say-server`).
 - **`make test-apps-playwright-docker EXAMPLE=<name>`** — strict parity
-  check (visual + `tools/list` diff). Separate axis; not interactive.
+  gate. Wire-level `tools/list` diff + visual PNG baseline. Requires
+  Docker. Separate axis; not interactive.
 
 ### Friendly errors
 
 `make demo-app EXAMPLE=<name>` requires a mcpkit-Go drop-in to exist
-under `examples/apps/compat/`. For SKIP examples that don't have one
-(see the list above), the wrapper prints a redirect:
+under `examples/apps/compat/`. For SKIP examples that don't have one,
+the wrapper prints a redirect:
 
 ```
-ERROR: no mcpkit-Go drop-in for upstream example 'lazy-auth-server'.
+ERROR: no mcpkit-Go drop-in for 'lazy-auth-server'.
 
   Try `make demo-upstream EXAMPLE=lazy-auth-server` to browse the upstream
   TS reference instead.
@@ -285,16 +308,16 @@ For either `demo-app` or `demo-upstream`:
 3. Start the chosen MCP server (Go fixture or upstream TS) on
    `SERVER_PORT` (default 3101).
 4. Start the renderer:
+   - `RENDERER=basic-host` (default): start basic-host on `HARNESS_PORT`
+     (default 8080) with `SERVERS` pointing at the MCP server, auto-open
+     the browser (suppress with `OPEN=0`).
    - `RENDERER=mcpjam`: launch `npx -y @mcpjam/inspector@latest`, opens
      its own browser tab. Paste `http://localhost:3101/mcp` into the
      server list.
-   - `RENDERER=basic-host`: start basic-host on `HARNESS_PORT` (default
-     8080) with `SERVERS` pointing at the MCP server, auto-open the
-     browser (suppress with `OPEN=0`).
 
-Foreground only — Ctrl-C tears the MCP server down. MCPJam manages its
-own browser lifecycle; when you quit MCPJam, you'll still need Ctrl-C to
-release the MCP server.
+Foreground only — Ctrl-C tears the MCP server down. MCPJam (if used)
+manages its own browser lifecycle; when you quit it, you'll still need
+Ctrl-C to release the MCP server.
 
 ## Watching a run interactively
 

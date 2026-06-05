@@ -20,9 +20,10 @@ host ↔ server ↔ App-iframe round trip.
 
 ## Run it
 
-Start here — boots the mcpkit-Go fixture (`main.go` in this folder) and
-opens [MCPJam Inspector](https://github.com/MCPJam/inspector) so you can
-poke at the protocol surface:
+Start here — boots the mcpkit-Go fixture (`main.go` in this folder)
+inside upstream's `basic-host` so you can see the App render in a real
+browser. **No LLM required** — the iframe's bridge JS calls `get-time`
+on its own and the result is inlined into the page:
 
 ```bash
 make demo-app EXAMPLE=basic-vanillajs
@@ -32,43 +33,17 @@ What runs:
 
 - **mcpkit-Go fixture** on `http://localhost:3101/mcp` — the Go binary
   built from `main.go` in this folder.
-- **MCPJam Inspector** opens in your default browser. Paste
-  `http://localhost:3101/mcp` into MCPJam's server list and connect.
-  Then browse `tools/list`, `_meta.ui`, and tool-call payloads on the
-  wire.
+- **basic-host** opens at `http://localhost:8080`. Pick **Basic MCP App
+  Server (Vanilla JS)** from the server dropdown, call **get-time** with
+  empty input, watch the iframe inline the ISO 8601 timestamp.
 
-### [Optional] You can also do…
-
-- **See the App rendered in basic-host (Go fixture).** Same Go server,
-  but driven by basic-host (the canonical reference UI). Opens a
-  browser at `http://localhost:8080`:
-
-  ```bash
-  RENDERER=basic-host make demo-app EXAMPLE=basic-vanillajs
-  ```
-
-- **Hit upstream's TS reference server instead.** Useful for comparing
-  the Go fixture's wire surface against the canonical implementation:
-
-  ```bash
-  make demo-upstream EXAMPLE=basic-vanillajs
-  ```
-
-  Add `RENDERER=basic-host` to render the upstream TS in basic-host
-  instead of MCPJam.
-
-- **Strict parity check against the mcpkit-Go fixture.** Runs upstream's
-  Playwright suite against the Go binary — wire-level `tools/list` diff
-  + visual PNG gate. Requires Docker:
-
-  ```bash
-  EXAMPLE=basic-vanillajs make test-apps-playwright-docker
-  ```
+See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, and the strict Playwright gate.
 
 ## Prompts to try
 
-In [MCPJam Inspector](https://github.com/MCPJam/inspector) or
-basic-host, connect to `Basic MCP App Server (Vanilla JS)`, then paste
+Connect to `Basic MCP App Server (Vanilla JS)` from any MCP host with an
+LLM (Claude Desktop, VS Code, etc. — see the [centralized guide](../README.md#other-ways-to-test-a-fixture)),
+then paste
 any of these into the chat:
 
 ```

@@ -7,26 +7,29 @@ Two axes:
     go (default)          mcpkit-Go fixture built from examples/apps/compat/
     upstream              upstream TS reference server from $EXT_APPS_DIR
 
-  --renderer=mcpjam|basic-host    pick the renderer
-    mcpjam (default)      launch `npx @mcpjam/inspector@latest`
-                          opens its own browser; you paste the MCP URL
-                          into the server list. Wire-level inspection.
-    basic-host            launch upstream's basic-host harness
-                          renders the App's iframe + bridge JS. Visual
-                          demo. Needs the example's dist/mcp-app.html.
+  --renderer=basic-host|mcpjam    pick the renderer
+    basic-host (default)  open upstream's basic-host harness in your
+                          browser. Renders the App's iframe + bridge
+                          JS. Visual demo, no LLM required -- the App
+                          drives all tool calls itself via postMessage.
+    mcpjam                launch `npx @mcpjam/inspector@latest` for
+                          wire-level inspection (tools/list, _meta.ui,
+                          tool-call payloads). MCPJam manages its own
+                          browser tab; you paste the MCP URL into its
+                          server list.
 
 Replaces the older `make demo-app` (server=upstream, renderer=basic-host) and
 `make inspect-app` (server=upstream, renderer=mcpjam). The split is now on
 the *server* axis, not the renderer:
 
-  make demo-app EXAMPLE=<name>        # default: server=go,       renderer=mcpjam
-  make demo-upstream EXAMPLE=<name>   # default: server=upstream, renderer=mcpjam
+  make demo-app EXAMPLE=<name>        # default: server=go,       renderer=basic-host
+  make demo-upstream EXAMPLE=<name>   # default: server=upstream, renderer=basic-host
 
-Either can be overridden with RENDERER=basic-host.
+Either can be overridden with RENDERER=mcpjam.
 
 Usage:
   uv run scripts/apps_demo.py --example basic-vanillajs
-  uv run scripts/apps_demo.py --example basic-vanillajs --renderer basic-host
+  uv run scripts/apps_demo.py --example basic-vanillajs --renderer mcpjam
   uv run scripts/apps_demo.py --example lazy-auth-server --server upstream
 
 EXAMPLE values are the *mcpkit-fixture directory basename* (i.e. what
@@ -43,7 +46,7 @@ Env vars (preserved from the bash predecessors for drop-in Makefile compatibilit
   SERVER_PORT        MCP server port on which Go or upstream binds (default: 3101)
   EXAMPLE            mcpkit fixture directory basename (required)
   SERVER             go | upstream (default: go)
-  RENDERER           mcpjam | basic-host (default: mcpjam)
+  RENDERER           basic-host | mcpjam (default: basic-host)
   OPEN               1 to auto-open basic-host in a browser (basic-host
                      renderer only; MCPJam manages its own browser).
 
@@ -137,7 +140,7 @@ def build_argparser() -> argparse.ArgumentParser:
         "--renderer",
         choices=VALID_RENDERERS,
         default=None,
-        help="Renderer. Default: $RENDERER or 'mcpjam'.",
+        help="Renderer. Default: $RENDERER or 'basic-host'.",
     )
     parser.add_argument("--ext-apps-dir", default=None)
     parser.add_argument("--harness-port", type=int, default=None)
@@ -244,7 +247,7 @@ def main() -> int:
     if server not in VALID_SERVERS:
         die(f"--server must be one of {VALID_SERVERS}, got {server!r}")
 
-    renderer = args.renderer or env_str("RENDERER", "mcpjam")
+    renderer = args.renderer or env_str("RENDERER", "basic-host")
     if renderer not in VALID_RENDERERS:
         die(f"--renderer must be one of {VALID_RENDERERS}, got {renderer!r}")
 

@@ -161,11 +161,11 @@ test-apps-playwright-all: ## Sweep every registered compat fixture sequentially.
 test-apps-playwright-docker-all: ## --all + --docker. The canonical visual gate across all 21 compat fixtures.
 	uv run scripts/apps_playwright_test.py --docker --all
 
-demo-app: ## Browse a compat fixture interactively. Default: mcpkit-Go server + MCPJam. Override with RENDERER=basic-host. Usage: make demo-app EXAMPLE=<name>.
-	EXAMPLE=$(EXAMPLE) SERVER=$${SERVER:-go} RENDERER=$${RENDERER:-mcpjam} OPEN=$(OPEN) uv run scripts/apps_demo.py
+demo-app: ## Browse a compat fixture interactively. Default: mcpkit-Go server + basic-host (no LLM needed). Override with RENDERER=mcpjam for wire inspection. Usage: make demo-app EXAMPLE=<name>.
+	EXAMPLE=$(EXAMPLE) SERVER=$${SERVER:-go} RENDERER=$${RENDERER:-basic-host} OPEN=$(OPEN) uv run scripts/apps_demo.py
 
 demo-upstream: ## Browse the upstream TS reference server instead of the Go fixture. Same axes as demo-app. Use this for SKIP examples (lazy-auth-server, video-resource-server, qr-server, say-server) that have no Go drop-in. Usage: make demo-upstream EXAMPLE=<name>.
-	EXAMPLE=$(EXAMPLE) SERVER=upstream RENDERER=$${RENDERER:-mcpjam} OPEN=$(OPEN) uv run scripts/apps_demo.py
+	EXAMPLE=$(EXAMPLE) SERVER=upstream RENDERER=$${RENDERER:-basic-host} OPEN=$(OPEN) uv run scripts/apps_demo.py
 
 testkcl: ## Run Keycloak auth interop tests (requires Docker, run upkcl first)
 	cd tests/keycloak && go test ./... -count=1 -timeout 120s -v
