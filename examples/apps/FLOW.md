@@ -45,7 +45,7 @@ sequenceDiagram
     Browser->>Host: tool click (or auto-call via ?call=true)
     Host->>Server: tools/call
     Server-->>Host: content + structuredContent + _meta
-    Note over Host: reads _meta.ui.resourceUri = "ui://..."<br/>fetches the App HTML
+    Note over Host: reads _meta.ui.resourceUri = "ui://..."
     Host->>Server: resources/read("ui://...")
     Server-->>Host: HTML (text/html, profile=mcp-app)
     Host->>Sandbox: render sandbox iframe (different origin :8081)
@@ -232,6 +232,24 @@ Outside compat (a "normal" mcpkit App you'd ship in production), mcpkit addition
 
 - **`ext/ui/assets/mcp-app-bridge.js`** — our own bridge JS for Apps you author in Go. Spec-compatible with upstream's bridge; you'd embed it in your own App HTML.
 - **`ext/ui/AppHost`, `ServerRegistry`** — if you want a Go program to act AS an Apps host (not the test scenario; relevant for headless agent harnesses).
+
+## Why mcpkit doesn't ship a browser harness
+
+mcpkit provides host-side primitives (`ext/ui/AppHost`, `ServerRegistry`) but **not** a browser SPA equivalent of basic-host. That's deliberate, not an omission. The two host roles differ:
+
+| | basic-host (TS) | mcpkit `ext/ui/AppHost` (Go) |
+|---|---|---|
+| Audience | a human in a browser | a Go process |
+| Renders the App | yes, in a sandboxed iframe | no — drives the bridge protocol programmatically |
+| Use case | "see / debug an App" | headless agent harnesses, integration tests |
+
+Three reasons we don't ship the browser variant:
+
+1. **The host slot belongs to a product, not a library.** In real deployments the host is Claude.ai, ChatGPT, Cursor, Claude Desktop — each with its own chrome, auth, LLM integration, settings UI. A mcpkit-branded harness SPA would compete with all of them and nobody would adopt it.
+2. **Ecosystem mismatch.** A browser harness is a TS/React/Vite project. mcpkit is a Go library; shipping and maintaining a parallel TS SPA would drift from upstream's basic-host (the canonical reference *and* the bar production hosts measure themselves against).
+3. **Wire compatibility is the leverage point.** Our value is that any mcpkit Go server works inside *any* spec-compliant host — basic-host today, the production hosts tomorrow. Shipping our own browser host would tempt App authors to code to mcpkit-host quirks instead of the spec, diluting that guarantee.
+
+For testing we lean on basic-host directly (Playwright drives upstream's harness), plus `ext/ui/AppHost` for the Go-programmatic side. No browser harness of our own needed.
 
 ## The three workflows in this repo
 
