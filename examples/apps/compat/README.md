@@ -59,32 +59,77 @@ No mcpkit-Go drop-in exists for these; browse them with
 Each box is a separate process the wrapper script orchestrates; the labels
 show the env var that picks its port or path.
 
+Two topologies, picked by the `RENDERER` knob (or by `test-apps-playwright`).
+The MCP server slot is the same in both — Go fixture or upstream TS depending
+on `demo-app` vs `demo-upstream` (or always Go fixture under
+`test-apps-playwright`).
+
+### basic-host renderer (Playwright or interactive)
+
+Used by `make test-apps-playwright[-docker]` (Playwright drives) and
+`RENDERER=basic-host make demo-app|demo-upstream` (your browser drives).
+Renders the App iframe end-to-end.
+
 ```mermaid
 flowchart LR
-  PW["Playwright<br/>(chromium)"]
+  DRIVER["Playwright (chromium)<br/>OR user's browser"]
 
   subgraph Host["basic-host (upstream)"]
     HARNESS["http server<br/>HARNESS_PORT=8080"]
     SANDBOX["sandbox iframe<br/>SANDBOX_PORT=8081"]
   end
 
-  FIX["mcpkit Go fixture<br/>FIXTURE_PORT=3101<br/>POST /mcp"]
+  FIX["MCP server<br/>FIXTURE_PORT=3101<br/>POST /mcp"]
   EXT["$EXT_APPS_DIR<br/>/tmp/ext-apps<br/>examples/&lt;name&gt;/dist/mcp-app.html"]
 
-  PW -->|page| HARNESS
+  DRIVER -->|page| HARNESS
   HARNESS -->|iframe src| SANDBOX
   SANDBOX -->|fetch resource| FIX
   HARNESS -->|MCP via SERVERS env| FIX
   EXT -.->|read at startup| FIX
 ```
 
-- `EXT_APPS_DIR` — upstream checkout the script clones / updates; the
-  fixture reads `dist/mcp-app.html` from here verbatim.
-- `HARNESS_PORT` — basic-host's HTTP listen port; Playwright drives this.
-- `SANDBOX_PORT` — basic-host's sandbox-iframe origin; the app iframe
-  loads inside it.
-- `FIXTURE_PORT` — the mcpkit Go binary's MCP endpoint; basic-host
-  connects here via the `SERVERS` env var.
+### MCPJam Inspector renderer (default for `demo-app` / `demo-upstream`)
+
+Used by `make demo-app` and `make demo-upstream` without a `RENDERER`
+flag. Shows the wire (`tools/list`, `_meta.ui`, tool-call payloads); does
+**not** render the App iframe — that's basic-host's job.
+
+```mermaid
+flowchart LR
+  Browser["user's browser"]
+
+  subgraph Inspector["MCPJam Inspector<br/>(npx @mcpjam/inspector)"]
+    UI["inspector UI<br/>(picks its own port)"]
+  end
+
+  FIX["MCP server<br/>FIXTURE_PORT=3101<br/>POST /mcp"]
+
+  Browser -->|page| UI
+  UI -->|MCP — user pastes URL| FIX
+```
+
+Simpler than basic-host because there's no sandbox, no iframe, and no
+`$EXT_APPS_DIR` dependency — MCPJam never asks for `dist/mcp-app.html`.
+That's why MCPJam is the default renderer for SKIP examples (they have
+no `dist/mcp-app.html` to render anyway).
+
+Production hosts (Claude.ai, ChatGPT, Cursor, Claude Desktop) plug into
+the same MCP server slot as `FIX` above — different chrome around it, same
+wire contract. See [`../FLOW.md`](../FLOW.md#production-hosts-vs-basic-host).
+
+### Env vars
+
+- `EXT_APPS_DIR` — upstream checkout the script clones / updates; basic-host
+  and (when applicable) upstream TS read `dist/mcp-app.html` from here.
+- `HARNESS_PORT` — basic-host's HTTP listen port; Playwright or browser drives
+  this in the basic-host topology.
+- `SANDBOX_PORT` — basic-host's sandbox-iframe origin; the App iframe loads
+  inside it.
+- `FIXTURE_PORT` — the MCP server's endpoint. The Go fixture (`demo-app`,
+  `test-apps-playwright`) or upstream's TS server (`demo-upstream`) listens
+  here.
+- `RENDERER` — `mcpjam` (default) or `basic-host`. Picks which topology runs.
 
 ## Drop-in shape
 
