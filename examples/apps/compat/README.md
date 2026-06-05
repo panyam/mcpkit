@@ -319,6 +319,77 @@ Foreground only — Ctrl-C tears the MCP server down. MCPJam (if used)
 manages its own browser lifecycle; when you quit it, you'll still need
 Ctrl-C to release the MCP server.
 
+## Authoring a playable walkthrough
+
+Fixtures can ship a demokit walkthrough — a scripted trace through the
+fixture's tools that publishes as a playable animation on the docs site
+(`https://panyam.github.io/mcpkit/walkthroughs/examples/.../`). The
+pattern works for any example, not just compat fixtures.
+
+### Single-trace layout (the common case)
+
+```
+examples/<fixture>/
+├── walkthrough.go           # demokit walkthrough definition
+├── walkthrough.trace.json   # committed source of truth
+└── bundle/                  # committed playable HTML + JS/CSS
+    └── index.html + sibling assets
+```
+
+Author flow:
+
+```bash
+# Edit walkthrough.go.
+# Record a new trace -- press Enter to advance each step (server in another terminal):
+make serve   # terminal 1
+make record  # terminal 2
+
+# Regenerate the bundle from the trace:
+make bundle  # aliases: make walkthrough, make walk
+
+# Commit walkthrough.go, walkthrough.trace.json, and bundle/ together.
+```
+
+URL on gh-pages: the fixture's repo-relative path mirrored under
+`/walkthroughs/`. So `examples/apps/compat/basic-vanillajs/bundle/index.html`
+publishes to
+`https://panyam.github.io/mcpkit/walkthroughs/examples/apps/compat/basic-vanillajs/`.
+
+### Multi-trace layout (opt-in)
+
+For a fixture that wants more than one playable scenario:
+
+```
+examples/<fixture>/
+├── walkthrough.go
+├── walkthroughs/            # directory of named traces
+│   ├── happy.trace.json
+│   └── error.trace.json
+└── bundle/
+    ├── happy/               # one bundle subdir per trace
+    │   └── index.html
+    └── error/
+        └── index.html
+```
+
+URLs become `.../walkthroughs/examples/<fixture>/happy/` and `.../error/`.
+The fixture's Makefile orchestrates `record-happy` / `record-error` /
+multi-trace `bundle` targets — see `examples/apps/compat/basic-vanillajs/Makefile`
+for the single-trace template.
+
+### Discovery + publish
+
+A repo-root collector (`scripts/collect_walkthroughs.py`, invoked by
+`make collect-walkthroughs`) walks `examples/` for any `bundle/` directory
+paired with a `walkthrough.trace.json` (or `walkthroughs/` dir) sibling
+and mirrors it into `docs/site/dist/docs/walkthroughs/<fixture-path>/`.
+`make docs-site-build` / `docs-site-deploy` depend on it; you don't need
+to invoke it manually.
+
+A fixture opts in to publishing simply by committing `walkthrough.go`,
+`walkthrough.trace.json`, and `bundle/` — no central registry, no
+per-fixture config change anywhere else.
+
 ## Watching a run interactively
 
 **Native mode opens a visible browser by default** — local dev iteration

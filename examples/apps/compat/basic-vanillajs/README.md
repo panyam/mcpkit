@@ -20,10 +20,12 @@ host ↔ server ↔ App-iframe round trip.
 
 ## Run it
 
-Boots the mcpkit-Go fixture (`main.go` in this folder) inside upstream's
-`basic-host` so you can see the App render in a real browser. **No LLM
-required** — the App's bridge JS calls `get-time` on its own and the
-result is inlined into the page:
+> ▶ **[Play the walkthrough in your browser](https://panyam.github.io/mcpkit/walkthroughs/examples/apps/compat/basic-vanillajs/)** — animated playback of every curl / Go call the walkthrough makes, step-by-step. No clone, no setup.
+
+Or run it yourself. `make demo-app` boots the mcpkit-Go fixture
+(`main.go` in this folder) inside upstream's `basic-host` so you can see
+the App render in a real browser. **No LLM required** — the App's bridge
+JS calls `get-time` on its own and the result is inlined into the page:
 
 ```bash
 make demo-app EXAMPLE=basic-vanillajs

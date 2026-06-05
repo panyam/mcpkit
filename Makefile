@@ -476,13 +476,16 @@ bump-root: ## Update sub-modules to require a specific root version (usage: make
 # Docs site (issue 508 — GitHub Pages)
 # =============================================================================
 
-docs-site-build: ## Build docs/site/ into docs/site/dist/docs (mirrors what CI ships to gh-pages)
+collect-walkthroughs: ## Mirror every examples/.../bundle/ (with a sibling walkthrough.trace.json) into docs/site/dist/docs/walkthroughs/<example-path>/
+	uv run scripts/collect_walkthroughs.py
+
+docs-site-build: collect-walkthroughs ## Build docs/site/ into docs/site/dist/docs (mirrors what CI ships to gh-pages). Picks up walkthrough bundles collected from examples/.
 	$(MAKE) -C docs/site build
 
-docs-site-serve: ## Run the docs site dev server on :8085 with live rebuild
+docs-site-serve: collect-walkthroughs ## Run the docs site dev server on :8085 with live rebuild
 	$(MAKE) -C docs/site run
 
-docs-site-deploy: ## Build + force-push docs/site/dist/docs to the gh-pages branch (one-shot manual deploy)
+docs-site-deploy: collect-walkthroughs ## Build + force-push docs/site/dist/docs to the gh-pages branch (one-shot manual deploy)
 	$(MAKE) -C docs/site gh-pages
 
 # =============================================================================
@@ -525,5 +528,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-skills test-mcpskills build-mcpskills test-mcpskills-walkthrough test-protogen test-e2e test-experimental test-apps-playwright test-apps-playwright-docker test-apps-playwright-all test-apps-playwright-docker-all demo-app demo-upstream testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-elicitation testconf-skills refresh-conformance check-conformance-stale check-local-suites-stale refresh-apps-compat-report check-apps-compat-stale vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root docs-site-build docs-site-serve docs-site-deploy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
+.PHONY: build test test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-skills test-mcpskills build-mcpskills test-mcpskills-walkthrough test-protogen test-e2e test-experimental test-apps-playwright test-apps-playwright-docker test-apps-playwright-all test-apps-playwright-docker-all demo-app demo-upstream testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-elicitation testconf-skills refresh-conformance check-conformance-stale check-local-suites-stale refresh-apps-compat-report check-apps-compat-stale vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root collect-walkthroughs docs-site-build docs-site-serve docs-site-deploy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
 .DEFAULT_GOAL := help
