@@ -476,16 +476,16 @@ bump-root: ## Update sub-modules to require a specific root version (usage: make
 # Docs site (issue 508 — GitHub Pages)
 # =============================================================================
 
-collect-walkthroughs: ## Mirror every examples/.../bundle/ (with a sibling walkthrough.trace.json) into docs/site/dist/docs/walkthroughs/<example-path>/
+collect-walkthroughs: ## Manually mirror every examples/.../bundle/ (with a sibling walkthrough.trace.json) into docs/site/dist/docs/walkthroughs/<example-path>/. Normally runs automatically as a tail step of docs/site/Makefile's `build`.
 	uv run scripts/collect_walkthroughs.py
 
-docs-site-build: collect-walkthroughs ## Build docs/site/ into docs/site/dist/docs (mirrors what CI ships to gh-pages). Picks up walkthrough bundles collected from examples/.
+docs-site-build: ## Build docs/site/ into docs/site/dist/docs (mirrors what CI ships to gh-pages). Includes walkthrough bundles via docs/site/Makefile's build tail.
 	$(MAKE) -C docs/site build
 
-docs-site-serve: collect-walkthroughs ## Run the docs site dev server on :8085 with live rebuild
+docs-site-serve: ## Run the docs site dev server on :8085 with live rebuild
 	$(MAKE) -C docs/site run
 
-docs-site-deploy: collect-walkthroughs ## Build + force-push docs/site/dist/docs to the gh-pages branch (one-shot manual deploy)
+docs-site-deploy: ## Build + force-push docs/site/dist/docs to the gh-pages branch (one-shot manual deploy)
 	$(MAKE) -C docs/site gh-pages
 
 # =============================================================================
