@@ -1,6 +1,6 @@
 # Screenshots — customer-segmentation
 
-Capture by running `RENDERER=basic-host make demo-app EXAMPLE=customer-segmentation-server`.
+Capture by running `RENDERER=basic-host make demo-app EXAMPLE=customer-segmentation`.
 
 | File | What to capture |
 |---|---|

@@ -1,6 +1,6 @@
 # Screenshots — system-monitor
 
-Capture by running `RENDERER=basic-host make demo-app EXAMPLE=system-monitor-server`.
+Capture by running `RENDERER=basic-host make demo-app EXAMPLE=system-monitor`.
 
 | File | What to capture |
 |---|---|

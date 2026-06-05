@@ -25,16 +25,23 @@ the *server* axis, not the renderer:
 Either can be overridden with RENDERER=basic-host.
 
 Usage:
-  uv run scripts/apps_demo.py --example basic-server-vanillajs
-  uv run scripts/apps_demo.py --example basic-server-vanillajs --renderer basic-host
+  uv run scripts/apps_demo.py --example basic-vanillajs
+  uv run scripts/apps_demo.py --example basic-vanillajs --renderer basic-host
   uv run scripts/apps_demo.py --example lazy-auth-server --server upstream
+
+EXAMPLE values are the *mcpkit-fixture directory basename* (i.e. what
+`ls examples/apps/compat/` shows), not the upstream `ext-apps/examples/`
+folder name. The script translates internally when finding upstream's
+iframe HTML / TS server. For SKIP examples that have no Go drop-in
+(lazy-auth-server, video-resource-server, qr-server, say-server), pass
+upstream's name directly to `--server upstream`.
 
 Env vars (preserved from the bash predecessors for drop-in Makefile compatibility):
   EXT_APPS_DIR       Path to ext-apps checkout (default: /tmp/ext-apps)
   HARNESS_PORT       basic-host HTTP port (default: 8080)
   SANDBOX_PORT       basic-host sandbox port (default: 8081)
   SERVER_PORT        MCP server port on which Go or upstream binds (default: 3101)
-  EXAMPLE            upstream example folder name (required)
+  EXAMPLE            mcpkit fixture directory basename (required)
   SERVER             go | upstream (default: go)
   RENDERER           mcpjam | basic-host (default: mcpjam)
   OPEN               1 to auto-open basic-host in a browser (basic-host
@@ -64,6 +71,7 @@ from _apps_common import (
     DEFAULT_SANDBOX_PORT,
     FIXTURES,
     FIXTURES_BY_NAME,
+    Fixture,
     MCPKIT_ROOT,
     build_go_fixture,
     build_upstream_example,
@@ -175,22 +183,24 @@ def start_upstream_ts_server(
     )
 
 
-def ensure_go_fixture_exists(example: str) -> Path:
-    """Resolve a Go fixture path for the given upstream example, or die
-    with a friendly redirect to demo-upstream if none exists.
+def ensure_go_fixture(example: str) -> Fixture:
+    """Resolve a Fixture for the given EXAMPLE (directory basename), or
+    die with a friendly redirect to demo-upstream if no Go drop-in is
+    registered for it. SKIP examples (lazy-auth-server,
+    video-resource-server, ...) hit this path.
     """
     fixture = FIXTURES_BY_NAME.get(example)
     if fixture is None:
         info("")
-        info(f"ERROR: no mcpkit-Go drop-in for upstream example '{example}'.")
+        info(f"ERROR: no mcpkit-Go drop-in for '{example}'.")
         info("")
         info(f"  Try `make demo-upstream EXAMPLE={example}` to browse the upstream TS reference instead.")
         info("")
-        info("Available Go fixtures:")
+        info("Available Go fixtures (EXAMPLE name = directory basename):")
         for f in FIXTURES:
-            info(f"  {f.example}")
+            info(f"  {f.name:<28}  ({f.upstream_example})")
         sys.exit(1)
-    return MCPKIT_ROOT / fixture.fixture_dir
+    return fixture
 
 
 # --- Renderer launchers (renderer-axis) -----------------------------------
@@ -285,14 +295,15 @@ def main() -> int:
         # --- Build + start the MCP server -----------------------------------
         kill_port(server_port)
         if server == "go":
-            fixture_dir = ensure_go_fixture_exists(example)
+            fixture = ensure_go_fixture(example)
+            fixture_dir = MCPKIT_ROOT / fixture.fixture_dir
             # Go fixtures read upstream's pre-built iframe HTML at startup.
             # If upstream isn't built yet, we need to build it.
             install_upstream_deps(ext_apps_dir)
-            build_upstream_example(ext_apps_dir, example)
-            fixture_bin = Path(f"/tmp/mcpkit-fixture-{fixture_dir.name}")
+            build_upstream_example(ext_apps_dir, fixture.upstream_example)
+            fixture_bin = Path(f"/tmp/mcpkit-fixture-{fixture.name}")
             build_go_fixture(fixture_dir, fixture_bin)
-            info(f"Starting mcpkit Go fixture on :{server_port}...")
+            info(f"Starting mcpkit Go fixture ({fixture.name}) on :{server_port}...")
             server_proc = start_go_fixture(
                 fixture_bin,
                 server_port,
@@ -300,11 +311,16 @@ def main() -> int:
                 log_file=server_log,
             )
         else:
-            # Upstream TS server.
+            # Upstream TS server. If the user passed an EXAMPLE that's in
+            # our registry (e.g. EXAMPLE=basic-solid), translate to the
+            # upstream folder name (basic-server-solid). For SKIP examples
+            # (lazy-auth-server, ...) the user passes upstream's name
+            # directly and we use it as-is.
+            upstream_example = FIXTURES_BY_NAME[example].upstream_example if example in FIXTURES_BY_NAME else example
             install_upstream_deps(ext_apps_dir)
-            build_upstream_example(ext_apps_dir, example)
-            info(f"Starting upstream TS server for {example} on :{server_port}...")
-            server_proc = start_upstream_ts_server(ext_apps_dir, example, server_port, server_log)
+            build_upstream_example(ext_apps_dir, upstream_example)
+            info(f"Starting upstream TS server for {upstream_example} on :{server_port}...")
+            server_proc = start_upstream_ts_server(ext_apps_dir, upstream_example, server_port, server_log)
 
         if not wait_for_fixture(server_port, timeout_s=30):
             info(f"ERROR: MCP server failed to start on :{server_port}. Tail of {server_log}:")

@@ -25,7 +25,7 @@ Boots the mcpkit-Go fixture (`main.go` in this folder) and opens
 at the protocol surface:
 
 ```bash
-make demo-app EXAMPLE=map-server
+make demo-app EXAMPLE=map
 ```
 
 Paste `http://localhost:3101/mcp` into MCPJam's server list and connect.
@@ -38,14 +38,14 @@ Then browse `tools/list`, `_meta.ui`, and tool-call payloads on the wire.
   browser at `http://localhost:8080`:
 
   ```bash
-  RENDERER=basic-host make demo-app EXAMPLE=map-server
+  RENDERER=basic-host make demo-app EXAMPLE=map
   ```
 
 - **Hit upstream's TS reference server instead.** Useful for comparing
   the Go fixture's wire surface against the canonical implementation:
 
   ```bash
-  make demo-upstream EXAMPLE=map-server
+  make demo-upstream EXAMPLE=map
   ```
 
   Add `RENDERER=basic-host` to render the upstream TS in basic-host
@@ -56,7 +56,7 @@ Then browse `tools/list`, `_meta.ui`, and tool-call payloads on the wire.
   + visual PNG gate. Requires Docker:
 
   ```bash
-  EXAMPLE=map-server make test-apps-playwright-docker
+  EXAMPLE=map make test-apps-playwright-docker
   ```
 
 ## Prompts to try
