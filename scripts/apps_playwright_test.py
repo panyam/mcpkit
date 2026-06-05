@@ -331,9 +331,9 @@ def run_native(config: Config, fixture: Fixture) -> int:
     if rc != 0:
         die("playwright install failed", code=rc)
 
-    build_upstream_example(config.ext_apps_dir, fixture.example)
+    build_upstream_example(config.ext_apps_dir, fixture.upstream_example)
 
-    fixture_bin = Path(f"/tmp/mcpkit-fixture-{Path(fixture.fixture_dir).name}")
+    fixture_bin = Path(f"/tmp/mcpkit-fixture-{fixture.name}")
     build_go_fixture(MCPKIT_ROOT / fixture.fixture_dir, fixture_bin)
 
     fixture_proc: Optional[subprocess.Popen] = None
@@ -402,7 +402,7 @@ def run_native(config: Config, fixture: Fixture) -> int:
 
         info("")
         info("=== Running upstream Playwright tests against mcpkit fixture (native) ===")
-        info(f"Example:    {fixture.example}")
+        info(f"Example:    {fixture.name} (upstream: {fixture.upstream_example})")
         info(f"Fixture:    http://localhost:{config.fixture_port}/mcp")
         info(f"Harness:    http://localhost:{config.harness_port}")
         info(f"Snapshots:  {snapshot_dir}")
@@ -417,7 +417,7 @@ def run_native(config: Config, fixture: Fixture) -> int:
         info("")
 
         pw_env = os.environ.copy()
-        pw_env["EXAMPLE"] = fixture.example
+        pw_env["EXAMPLE"] = fixture.upstream_example
         pw_env["PLAYWRIGHT_HTML_OUTPUT_DIR"] = str(report_dir)
         pw_env["PLAYWRIGHT_HTML_OPEN"] = "never"
         rc = subprocess.run(
@@ -453,7 +453,7 @@ def run_docker(config: Config, fixture: Fixture) -> int:
     artifacts_dir_container = f"/mcpkit/{fixture.fixture_dir}/.test-results/artifacts"
     report_dir_container = f"/mcpkit/{fixture.fixture_dir}/.test-results/report"
 
-    fixture_bin_host = MCPKIT_ROOT / f".tmp-fixture-linux-amd64-{Path(fixture.fixture_dir).name}"
+    fixture_bin_host = MCPKIT_ROOT / f".tmp-fixture-linux-amd64-{fixture.name}"
     fixture_bin_container = "/tmp/fixture-linux-amd64"
 
     try:
@@ -465,7 +465,7 @@ def run_docker(config: Config, fixture: Fixture) -> int:
         info("")
         info(f"=== Launching {DOCKER_IMAGE} (volume: {DOCKER_VOLUME}) ===")
         env_pass = {
-            "EXAMPLE": fixture.example,
+            "EXAMPLE": fixture.upstream_example,
             "GREP_PATTERN": fixture.grep_pattern,
             "FIXTURE_BIN": fixture_bin_container,
             "MCPKIT_SNAPSHOT_DIR": snapshot_dir_container,
@@ -508,9 +508,9 @@ def report_outcome(rc: int, fixture: Fixture, *, docker: bool, artifacts_dir: Pa
     info("")
     suffix = ", docker" if docker else ""
     if rc == 0:
-        info(f"=== PASSED ({fixture.example} against mcpkit fixture{suffix}) ===")
+        info(f"=== PASSED ({fixture.name} against mcpkit fixture{suffix}) ===")
     else:
-        info(f"=== FAILED ({fixture.example} against mcpkit fixture{suffix}, exit {rc}) ===")
+        info(f"=== FAILED ({fixture.name} against mcpkit fixture{suffix}, exit {rc}) ===")
         info("")
         info("Artifacts (actual / diff PNGs, traces) under:")
         info(f"  {artifacts_dir}")
@@ -526,16 +526,16 @@ def run_all(config: Config) -> int:
     shared_ports = [config.harness_port, config.sandbox_port, config.fixture_port]
     for i, fixture in enumerate(FIXTURES, 1):
         info("")
-        info(f"=== [{i}/{len(FIXTURES)}] Running {fixture.example} ===")
+        info(f"=== [{i}/{len(FIXTURES)}] Running {fixture.name} ===")
         if config.docker:
             rc = run_docker(config, fixture)
         else:
             rc = run_native(config, fixture)
         if rc == 0:
-            info(f"PASS: {fixture.example}")
+            info(f"PASS: {fixture.name}")
         else:
-            info(f"FAIL: {fixture.example} (exit {rc})")
-            failed.append((fixture.example, rc))
+            info(f"FAIL: {fixture.name} (exit {rc})")
+            failed.append((fixture.name, rc))
         # Issue 601: between-fixture port-cleanup wait. The per-fixture
         # finally block already killed the processes; this lets the kernel
         # release sockets out of TIME_WAIT before the next fixture binds,
@@ -580,10 +580,10 @@ def main() -> int:
 
     fixture = FIXTURES_BY_NAME.get(config.example)
     if fixture is None:
-        info(f"ERROR: no mcpkit fixture for upstream example '{config.example}'")
-        info("Available fixtures:")
+        info(f"ERROR: no mcpkit compat fixture for '{config.example}'")
+        info("Available fixtures (EXAMPLE name = directory basename):")
         for f in FIXTURES:
-            info(f"  {f.example:<32}  →  {f.fixture_dir}")
+            info(f"  {f.name:<28}  ({f.upstream_example})")
         return 1
 
     if config.docker:

@@ -49,7 +49,7 @@ DEFAULT_EXT_APPS_DIR = "/tmp/ext-apps"
 DEFAULT_HARNESS_PORT = 8080
 DEFAULT_SANDBOX_PORT = 8081
 DEFAULT_FIXTURE_PORT = 3101
-DEFAULT_EXAMPLE = "basic-server-vanillajs"
+DEFAULT_EXAMPLE = "basic-vanillajs"
 
 # Repo root (one level up from scripts/).
 MCPKIT_ROOT = Path(__file__).resolve().parent.parent
@@ -60,53 +60,63 @@ MCPKIT_ROOT = Path(__file__).resolve().parent.parent
 
 @dataclass(frozen=True)
 class Fixture:
-    """One row of the EXAMPLE -> mcpkit fixture mapping.
+    """One row of the mcpkit-fixture / upstream-example mapping.
 
-    grep_pattern is the regex Playwright uses to scope to the matching
-    describe block in upstream's servers.spec.ts. Demo mode ignores it
-    (no test selection happens), but it's kept here as the single source
-    of truth alongside the directory mapping.
+    `name` is the user-facing identifier — the directory basename under
+    examples/apps/compat/<name>/. This is what `EXAMPLE=<name>` should
+    be on the command line, and what the per-fixture README's "## Run
+    it" block uses. Stays short and matches what `ls` shows.
+
+    `upstream_example` is the matching upstream `ext-apps/examples/<dir>/`
+    name. Sometimes equal to `name` (quickstart, pdf-server, debug-server),
+    sometimes prefixed with `basic-server-` or suffixed with `-server`
+    depending on upstream's naming. Used internally to find upstream's
+    iframe HTML, start the upstream TS reference server, and build the
+    example.
+
+    `grep_pattern` is the regex Playwright uses to scope to the matching
+    describe block in upstream's servers.spec.ts. Demo mode ignores it.
     """
 
-    example: str
+    name: str
     fixture_dir: str
+    upstream_example: str
     grep_pattern: str
 
 
-# Ordering matches the bash predecessor's case statement and the
-# examples/apps/compat README's reading-order table.
+# Ordering matches the examples/apps/compat README's reading-order table.
 FIXTURES: list[Fixture] = [
-    Fixture("basic-server-vanillajs", "examples/apps/compat/basic-vanillajs", "Vanilla JS"),
-    Fixture("basic-server-preact", "examples/apps/compat/basic-preact", r"\(Preact\)"),
-    Fixture("basic-server-react", "examples/apps/compat/basic-react", r"\(React\)"),
-    Fixture("basic-server-solid", "examples/apps/compat/basic-solid", r"\(Solid\)"),
-    Fixture("basic-server-svelte", "examples/apps/compat/basic-svelte", r"\(Svelte\)"),
-    Fixture("basic-server-vue", "examples/apps/compat/basic-vue", r"\(Vue\)"),
-    Fixture("quickstart", "examples/apps/compat/quickstart", "Quickstart MCP App Server"),
-    Fixture("transcript-server", "examples/apps/compat/transcript", "Transcript Server"),
-    Fixture("sheet-music-server", "examples/apps/compat/sheet-music", "Sheet Music Server"),
+    Fixture("basic-vanillajs", "examples/apps/compat/basic-vanillajs", "basic-server-vanillajs", "Vanilla JS"),
+    Fixture("basic-preact", "examples/apps/compat/basic-preact", "basic-server-preact", r"\(Preact\)"),
+    Fixture("basic-react", "examples/apps/compat/basic-react", "basic-server-react", r"\(React\)"),
+    Fixture("basic-solid", "examples/apps/compat/basic-solid", "basic-server-solid", r"\(Solid\)"),
+    Fixture("basic-svelte", "examples/apps/compat/basic-svelte", "basic-server-svelte", r"\(Svelte\)"),
+    Fixture("basic-vue", "examples/apps/compat/basic-vue", "basic-server-vue", r"\(Vue\)"),
+    Fixture("quickstart", "examples/apps/compat/quickstart", "quickstart", "Quickstart MCP App Server"),
+    Fixture("transcript", "examples/apps/compat/transcript", "transcript-server", "Transcript Server"),
+    Fixture("sheet-music", "examples/apps/compat/sheet-music", "sheet-music-server", "Sheet Music Server"),
     # "Integration Test Server" substring-matches BOTH the standard describe
     # ("Integration Test Server") and the interactions describe
     # ("Integration Test Server - Interactions") in upstream's spec.
-    Fixture("integration-server", "examples/apps/compat/integration", "Integration Test Server"),
-    Fixture("map-server", "examples/apps/compat/map", "CesiumJS Map Server"),
-    Fixture("threejs-server", "examples/apps/compat/threejs", "Three.js Server"),
-    Fixture("shadertoy-server", "examples/apps/compat/shadertoy", "ShaderToy Server"),
-    Fixture("wiki-explorer-server", "examples/apps/compat/wiki-explorer", "Wiki Explorer"),
-    Fixture("budget-allocator-server", "examples/apps/compat/budget-allocator", "Budget Allocator Server"),
-    Fixture("scenario-modeler-server", "examples/apps/compat/scenario-modeler", "SaaS Scenario Modeler"),
-    Fixture("system-monitor-server", "examples/apps/compat/system-monitor", "System Monitor Server"),
-    Fixture("cohort-heatmap-server", "examples/apps/compat/cohort-heatmap", "Cohort Heatmap Server"),
-    Fixture("customer-segmentation-server", "examples/apps/compat/customer-segmentation", "Customer Segmentation Server"),
-    Fixture("debug-server", "examples/apps/compat/debug-server", "Debug MCP App Server"),
+    Fixture("integration", "examples/apps/compat/integration", "integration-server", "Integration Test Server"),
+    Fixture("map", "examples/apps/compat/map", "map-server", "CesiumJS Map Server"),
+    Fixture("threejs", "examples/apps/compat/threejs", "threejs-server", "Three.js Server"),
+    Fixture("shadertoy", "examples/apps/compat/shadertoy", "shadertoy-server", "ShaderToy Server"),
+    Fixture("wiki-explorer", "examples/apps/compat/wiki-explorer", "wiki-explorer-server", "Wiki Explorer"),
+    Fixture("budget-allocator", "examples/apps/compat/budget-allocator", "budget-allocator-server", "Budget Allocator Server"),
+    Fixture("scenario-modeler", "examples/apps/compat/scenario-modeler", "scenario-modeler-server", "SaaS Scenario Modeler"),
+    Fixture("system-monitor", "examples/apps/compat/system-monitor", "system-monitor-server", "System Monitor Server"),
+    Fixture("cohort-heatmap", "examples/apps/compat/cohort-heatmap", "cohort-heatmap-server", "Cohort Heatmap Server"),
+    Fixture("customer-segmentation", "examples/apps/compat/customer-segmentation", "customer-segmentation-server", "Customer Segmentation Server"),
+    Fixture("debug-server", "examples/apps/compat/debug-server", "debug-server", "Debug MCP App Server"),
     # Match all PDF-related describes: standard ("PDF Server"), pdf-annotations
     # / pdf-incremental-load ("PDF Server - ..."), and pdf-viewer-zoom
     # ("PDF Viewer - ..."). pdf-annotations-api ("PDF Annotation - API ...") is
     # LLM-gated upstream (ANTHROPIC_API_KEY) and auto-skips when no key is set.
-    Fixture("pdf-server", "examples/apps/compat/pdf-server", r"PDF (Server|Viewer|Annotation)"),
+    Fixture("pdf-server", "examples/apps/compat/pdf-server", "pdf-server", r"PDF (Server|Viewer|Annotation)"),
 ]
 
-FIXTURES_BY_NAME: dict[str, Fixture] = {f.example: f for f in FIXTURES}
+FIXTURES_BY_NAME: dict[str, Fixture] = {f.name: f for f in FIXTURES}
 
 
 # --- Output helpers --------------------------------------------------------

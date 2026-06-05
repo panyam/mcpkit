@@ -36,13 +36,13 @@ MCPJam Inspector or basic-host. Run a single one with:
 
 ```bash
 # mcpkit-Go fixture + MCPJam (default — wire-level inspection)
-make demo-app EXAMPLE=basic-server-vanillajs
+make demo-app EXAMPLE=basic-vanillajs
 
 # mcpkit-Go fixture + basic-host (visual demo — renders the App iframe)
-RENDERER=basic-host make demo-app EXAMPLE=basic-server-vanillajs
+RENDERER=basic-host make demo-app EXAMPLE=basic-vanillajs
 
 # upstream TS reference server + MCPJam (use for SKIP examples below)
-make demo-upstream EXAMPLE=basic-server-vanillajs
+make demo-upstream EXAMPLE=basic-vanillajs
 ```
 
 **SKIP rows** — examples upstream's `servers.spec.ts` deliberately
