@@ -47,7 +47,7 @@ sequenceDiagram
     Server-->>Host: content + structuredContent + _meta
     Note over Host: reads _meta.ui.resourceUri = "ui://..."<br/>fetches the App HTML
     Host->>Server: resources/read("ui://...")
-    Server-->>Host: HTML (text/html;profile=mcp-app)
+    Server-->>Host: HTML (text/html, profile=mcp-app)
     Host->>Sandbox: render sandbox iframe (different origin :8081)
     Sandbox->>App: nest App iframe, load HTML
     App->>Bridge: <script src="mcp-app-bridge.js">
