@@ -23,7 +23,7 @@
     "title": "tools/call get-time — capture the ISO 8601 timestamp",
     "step_id": "step-3",
     "visit": 1,
-    "output": "    structuredContent: {\n        \"time\": \"2026-06-05T22:45:45.040036Z\"\n      }\n"
+    "output": "    structuredContent: {\n        \"time\": \"2026-06-05T22:58:20.250332Z\"\n      }\n"
   },
   {
     "kind": "step",
