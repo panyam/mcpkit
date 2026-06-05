@@ -44,7 +44,7 @@ Connect to `Integration Test Server`, then paste any of these:
 What's the current server time?
 ```
 
-![Integration Test Server App: iframe with the get-time result rendered plus three buttons — Send Message, Send Log, Open Link — for host-callback interactions](screenshots/01-integration-buttons.png)
+<a href="screenshots/01-integration-buttons.png" target="_blank"><img src="screenshots/01-integration-buttons.png" alt="Integration Test Server App: iframe with the get-time result rendered plus three buttons — Send Message, Send Log, Open Link — for host-callback interactions" width="50%"></a>
 
 ```
 Use the get-time tool.
@@ -53,7 +53,7 @@ Use the get-time tool.
 After the tool call lands, click any of the three buttons in the
 iframe directly to see the host respond:
 
-![basic-host showing a host-side message banner after the App clicked Send Message; demonstrates the App-to-host callback over the bridge](screenshots/02-host-callback.png)
+<a href="screenshots/02-host-callback.png" target="_blank"><img src="screenshots/02-host-callback.png" alt="basic-host showing a host-side message banner after the App clicked Send Message; demonstrates the App-to-host callback over the bridge" width="50%"></a>
 
 The model calls `get-time`. The interesting bits are inside the
 iframe — click "Send Message", "Send Log", or "Open Link" directly in

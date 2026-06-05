@@ -46,7 +46,7 @@ paste any of these into the chat:
 Show me what the Wikipedia page for Model Context Protocol links to.
 ```
 
-![Wiki Explorer App: force-directed graph in the iframe with the Model Context Protocol page at the center and its first-degree links spread around it](screenshots/01-mcp-graph.png)
+<a href="screenshots/01-mcp-graph.png" target="_blank"><img src="screenshots/01-mcp-graph.png" alt="Wiki Explorer App: force-directed graph in the iframe with the Model Context Protocol page at the center and its first-degree links spread around it" width="50%"></a>
 
 ```
 Explore the link graph from https://en.wikipedia.org/wiki/Knowledge_graph
@@ -60,7 +60,7 @@ Get first-degree links for the Wikipedia article about Transformer architecture.
 Build me a one-hop link graph starting at https://en.wikipedia.org/wiki/Model_context_protocol
 ```
 
-![Wiki Explorer App after clicking a node directly: graph has expanded to show two-hop links; demonstrates the App-side bridge call (no model in the loop)](screenshots/02-expanded-graph.png)
+<a href="screenshots/02-expanded-graph.png" target="_blank"><img src="screenshots/02-expanded-graph.png" alt="Wiki Explorer App after clicking a node directly: graph has expanded to show two-hop links; demonstrates the App-side bridge call (no model in the loop)" width="50%"></a>
 
 Any of these should make the model call `get-first-degree-links`. The
 App iframe renders the result as a force-directed graph — click a

@@ -42,7 +42,7 @@ Connect to `ShaderToy Server`, then paste any of these:
 Render a ShaderToy shader.
 ```
 
-![ShaderToy App: iframe shows the default UV gradient shader running in WebGL](screenshots/01-default-shader.png)
+<a href="screenshots/01-default-shader.png" target="_blank"><img src="screenshots/01-default-shader.png" alt="ShaderToy App: iframe shows the default UV gradient shader running in WebGL" width="50%"></a>
 
 ```
 Show me a shader that displays rainbow colors that shift over time.
@@ -52,7 +52,7 @@ Show me a shader that displays rainbow colors that shift over time.
 Render a Mandelbrot fractal as a fragment shader.
 ```
 
-![ShaderToy App: iframe shows a Mandelbrot fractal rendered from the model-supplied GLSL fragmentShader](screenshots/02-mandelbrot.png)
+<a href="screenshots/02-mandelbrot.png" target="_blank"><img src="screenshots/02-mandelbrot.png" alt="ShaderToy App: iframe shows a Mandelbrot fractal rendered from the model-supplied GLSL fragmentShader" width="50%"></a>
 
 ```
 Show me a plasma effect using sin and cos of iTime.
@@ -62,7 +62,7 @@ Show me a plasma effect using sin and cos of iTime.
 Render a shader that draws concentric pulsing circles centered at the screen.
 ```
 
-![ShaderToy App: iframe shows pulsing concentric circles animating with iTime; demonstrates the iTime / iResolution uniforms working](screenshots/03-pulsing-circles.png)
+<a href="screenshots/03-pulsing-circles.png" target="_blank"><img src="screenshots/03-pulsing-circles.png" alt="ShaderToy App: iframe shows pulsing concentric circles animating with iTime; demonstrates the iTime / iResolution uniforms working" width="50%"></a>
 
 The model calls `render-shadertoy` with the generated GLSL; the
 iframe compiles and runs it on the GPU.

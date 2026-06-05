@@ -67,7 +67,7 @@ Open a PDF:
 Show me the "Attention Is All You Need" paper.
 ```
 
-![PDF Server with the default arxiv paper rendered in the iframe; tool result panel shows viewUUID in structuredContent and interactEnabled in _meta](screenshots/01-default-pdf.png)
+<a href="screenshots/01-default-pdf.png" target="_blank"><img src="screenshots/01-default-pdf.png" alt="PDF Server with the default arxiv paper rendered in the iframe; tool result panel shows viewUUID in structuredContent and interactEnabled in _meta" width="50%"></a>
 
 Navigate:
 
@@ -81,7 +81,7 @@ Highlight matches across the visible page:
 Highlight every occurrence of "attention" in yellow.
 ```
 
-![Yellow highlights on every "attention" match on the page; demonstrates fire-and-forget interact → long-poll → iframe rendering](screenshots/02-highlights.png)
+<a href="screenshots/02-highlights.png" target="_blank"><img src="screenshots/02-highlights.png" alt="Yellow highlights on every &quot;attention&quot; match on the page; demonstrates fire-and-forget interact → long-poll → iframe rendering" width="50%"></a>
 
 Search:
 
@@ -95,7 +95,7 @@ Zoom:
 Zoom in to 150%.
 ```
 
-![PDF rendered at 150% zoom](screenshots/03-zoom.png)
+<a href="screenshots/03-zoom.png" target="_blank"><img src="screenshots/03-zoom.png" alt="PDF rendered at 150% zoom" width="50%"></a>
 
 Extract content:
 
@@ -107,7 +107,7 @@ Get the text from pages 2 through 4.
 Take a screenshot of the current page.
 ```
 
-![Result panel showing a base64-encoded PNG of the current page returned via the submit_page_data rendezvous](screenshots/04-screenshot-in-result.png)
+<a href="screenshots/04-screenshot-in-result.png" target="_blank"><img src="screenshots/04-screenshot-in-result.png" alt="Result panel showing a base64-encoded PNG of the current page returned via the submit_page_data rendezvous" width="50%"></a>
 
 Read the live viewer state (server-initiated rendezvous):
 
@@ -115,7 +115,7 @@ Read the live viewer state (server-initiated rendezvous):
 What page am I currently on, and what's the zoom level?
 ```
 
-![Result panel showing viewer state JSON — currentPage, zoom, displayMode, selection — returned via submit_viewer_state rendezvous](screenshots/05-viewer-state.png)
+<a href="screenshots/05-viewer-state.png" target="_blank"><img src="screenshots/05-viewer-state.png" alt="Result panel showing viewer state JSON — currentPage, zoom, displayMode, selection — returned via submit_viewer_state rendezvous" width="50%"></a>
 
 Behind the scenes:
 

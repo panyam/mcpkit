@@ -36,11 +36,11 @@ A browser opens at `http://localhost:8080`. First-touch flow:
 3. The iframe renders. Interact directly — drag the sliders, switch
    company stages, compare against the benchmark bands.
 
-![Budget Allocator App: iframe shows the budget configuration with category sliders + preset chips + the analytics charts panel](screenshots/01-default-budget.png)
+<a href="screenshots/01-default-budget.png" target="_blank"><img src="screenshots/01-default-budget.png" alt="Budget Allocator App: iframe shows the budget configuration with category sliders + preset chips + the analytics charts panel" width="50%"></a>
 
-![Analytics panel of the Budget Allocator iframe showing 24 months of historical category allocations + the stage-benchmark comparison](screenshots/02-analytics-view.png)
+<a href="screenshots/02-analytics-view.png" target="_blank"><img src="screenshots/02-analytics-view.png" alt="Analytics panel of the Budget Allocator iframe showing 24 months of historical category allocations + the stage-benchmark comparison" width="50%"></a>
 
-![Budget Allocator iframe showing benchmark comparison for Series A stage with per-category percentile bands](screenshots/03-series-a-benchmark.png)
+<a href="screenshots/03-series-a-benchmark.png" target="_blank"><img src="screenshots/03-series-a-benchmark.png" alt="Budget Allocator iframe showing benchmark comparison for Series A stage with per-category percentile bands" width="50%"></a>
 
 See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, the strict Playwright gate, and connecting from VS Code / Claude Desktop / other MCP hosts.
 

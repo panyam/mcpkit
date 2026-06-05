@@ -42,13 +42,13 @@ then paste any of these into the chat:
 Show me a map of Paris.
 ```
 
-![CesiumJS Map App: iframe shows the globe zoomed to Paris with the camera positioned over the city center](screenshots/01-paris-map.png)
+<a href="screenshots/01-paris-map.png" target="_blank"><img src="screenshots/01-paris-map.png" alt="CesiumJS Map App: iframe shows the globe zoomed to Paris with the camera positioned over the city center" width="50%"></a>
 
 ```
 Where is the Golden Gate Bridge? Show it on a map.
 ```
 
-![CesiumJS Map App: iframe shows the bridge bounding box overlay on the San Francisco Bay view](screenshots/02-golden-gate.png)
+<a href="screenshots/02-golden-gate.png" target="_blank"><img src="screenshots/02-golden-gate.png" alt="CesiumJS Map App: iframe shows the bridge bounding box overlay on the San Francisco Bay view" width="50%"></a>
 
 ```
 Geocode "1600 Pennsylvania Avenue" and then display it on the map.
@@ -58,7 +58,7 @@ Geocode "1600 Pennsylvania Avenue" and then display it on the map.
 Zoom in on Tokyo Tower.
 ```
 
-![CesiumJS Map App: iframe zoomed close to Tokyo Tower; demonstrates fine-grained bounding box from geocode](screenshots/03-tokyo-tower.png)
+<a href="screenshots/03-tokyo-tower.png" target="_blank"><img src="screenshots/03-tokyo-tower.png" alt="CesiumJS Map App: iframe zoomed close to Tokyo Tower; demonstrates fine-grained bounding box from geocode" width="50%"></a>
 
 Each should make the model call `geocode` (to resolve the place name
 into a bounding box) followed by `show-map` (with that bounding box).

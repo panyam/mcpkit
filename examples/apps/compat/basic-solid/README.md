@@ -35,7 +35,7 @@ Connect to `Basic MCP App Server (Solid)`, then paste any of these:
 What's the current server time?
 ```
 
-![basic-solid App rendered in basic-host: Solid-built iframe showing the ISO timestamp from get-time](screenshots/01-get-time.png)
+<a href="screenshots/01-get-time.png" target="_blank"><img src="screenshots/01-get-time.png" alt="basic-solid App rendered in basic-host: Solid-built iframe showing the ISO timestamp from get-time" width="50%"></a>
 
 ```
 Get the current time and tell me what day of the week that is.

@@ -37,7 +37,7 @@ Connect to `Transcript Server`, then paste any of these:
 Transcribe the audio at <some-audio-url>.
 ```
 
-![Transcript Server App rendered in basic-host: iframe shows the structured transcript with segments and timing](screenshots/01-transcript-view.png)
+<a href="screenshots/01-transcript-view.png" target="_blank"><img src="screenshots/01-transcript-view.png" alt="Transcript Server App rendered in basic-host: iframe shows the structured transcript with segments and timing" width="50%"></a>
 
 ```
 Use the transcribe tool to convert this audio to text.
@@ -47,7 +47,7 @@ Use the transcribe tool to convert this audio to text.
 Get me a transcript with timing segments.
 ```
 
-![Tool result panel expanded showing structuredContent with the transcript segments + per-segment timing](screenshots/02-structured-result.png)
+<a href="screenshots/02-structured-result.png" target="_blank"><img src="screenshots/02-structured-result.png" alt="Tool result panel expanded showing structuredContent with the transcript segments + per-segment timing" width="50%"></a>
 
 The model calls `transcribe`; the iframe renders the result as a
 structured transcript view.

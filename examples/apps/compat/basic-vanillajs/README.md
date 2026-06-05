@@ -50,7 +50,7 @@ any of these into the chat:
 What's the current server time?
 ```
 
-![basic-vanillajs App rendered in basic-host: iframe with a button showing the ISO timestamp returned by get-time](screenshots/01-get-time.png)
+<a href="screenshots/01-get-time.png" target="_blank"><img src="screenshots/01-get-time.png" alt="basic-vanillajs App rendered in basic-host: iframe with a button showing the ISO timestamp returned by get-time" width="50%"></a>
 
 ```
 Get the current time and tell me what day of the week that is.

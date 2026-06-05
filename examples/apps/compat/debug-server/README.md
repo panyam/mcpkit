@@ -40,7 +40,7 @@ Connect to `Debug MCP App Server`, then paste any of these:
 Use the debug tool to show me text content.
 ```
 
-![Debug Server App: iframe shows the kitchen-sink debug surface with content-type / multiple-blocks / structured-content / error toggles; a recent text-content response is displayed](screenshots/01-debug-text.png)
+<a href="screenshots/01-debug-text.png" target="_blank"><img src="screenshots/01-debug-text.png" alt="Debug Server App: iframe shows the kitchen-sink debug surface with content-type / multiple-blocks / structured-content / error toggles; a recent text-content response is displayed" width="50%"></a>
 
 ```
 Debug tool with content type "image" and include structured content.
@@ -50,7 +50,7 @@ Debug tool with content type "image" and include structured content.
 Run the debug tool with mixed content blocks and a 500ms delay.
 ```
 
-![Debug Server iframe rendering a mixed-content response (text + image + audio blocks side by side in the result panel)](screenshots/02-mixed-content.png)
+<a href="screenshots/02-mixed-content.png" target="_blank"><img src="screenshots/02-mixed-content.png" alt="Debug Server iframe rendering a mixed-content response (text + image + audio blocks side by side in the result panel)" width="50%"></a>
 
 ```
 Simulate an error in the debug tool.
