@@ -61,6 +61,18 @@ const (
 	// Avoid using this directly — prefer the MCP-specific codes below.
 	ErrCodeServerError = -32000
 
+	// ErrCodeSubscriptionLimitExceeded is returned by resources/subscribe
+	// when the requesting session has hit a server-configured cap on
+	// concurrent subscriptions or on subscribe/unsubscribe churn rate.
+	// The error data SHOULD carry a `reason` string ("cap_exceeded" or
+	// "rate_limited") and MAY carry the configured limit for client-side
+	// adaptive backoff. Mcpkit servers ship the cap off by default; it
+	// is opt-in via server.WithSubscriptionCap and
+	// server.WithSubscriptionRateLimit. The wire shape is a standard
+	// JSON-RPC error response so spec-conformant clients handle it
+	// generically.
+	ErrCodeSubscriptionLimitExceeded = -32010
+
 	// MCP application error codes — outside the JSON-RPC reserved range.
 	// These indicate application-level failures in tool, resource, or prompt handlers.
 	ErrCodeToolExecutionError = -31000 // Tool handler returned an error
