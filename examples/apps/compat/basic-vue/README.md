@@ -13,19 +13,44 @@ mcpkit hosts can drive a Vue-based App with no special handling.
 
 ## Run it
 
+Boots the mcpkit-Go fixture (`main.go` in this folder) and opens
+[MCPJam Inspector](https://github.com/MCPJam/inspector) so you can poke
+at the protocol surface:
+
 ```bash
-# mcpkit-Go fixture + MCPJam (default — wire-level inspection)
 make demo-app EXAMPLE=basic-server-vue
-
-# Same Go fixture rendered in basic-host (iframe + bridge JS)
-RENDERER=basic-host make demo-app EXAMPLE=basic-server-vue
-
-# Compare against upstream's TS reference server
-make demo-upstream EXAMPLE=basic-server-vue
-
-# Strict parity check (visual baseline + tools/list diff, requires Docker)
-EXAMPLE=basic-server-vue make test-apps-playwright-docker
 ```
+
+Paste `http://localhost:3101/mcp` into MCPJam's server list and connect.
+Then browse `tools/list`, `_meta.ui`, and tool-call payloads on the wire.
+
+### [Optional] You can also do…
+
+- **See the App rendered in basic-host.** Same Go fixture, but driven by
+  basic-host (the canonical reference UI) instead of MCPJam. Opens a
+  browser at `http://localhost:8080`:
+
+  ```bash
+  RENDERER=basic-host make demo-app EXAMPLE=basic-server-vue
+  ```
+
+- **Hit upstream's TS reference server instead.** Useful for comparing
+  the Go fixture's wire surface against the canonical implementation:
+
+  ```bash
+  make demo-upstream EXAMPLE=basic-server-vue
+  ```
+
+  Add `RENDERER=basic-host` to render the upstream TS in basic-host
+  instead of MCPJam.
+
+- **Strict parity check against the mcpkit-Go fixture.** Runs upstream's
+  Playwright suite against the Go binary — wire-level `tools/list` diff
+  + visual PNG gate. Requires Docker:
+
+  ```bash
+  EXAMPLE=basic-server-vue make test-apps-playwright-docker
+  ```
 
 ## Prompts to try
 
