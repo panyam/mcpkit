@@ -61,6 +61,7 @@ import argparse
 import os
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -336,6 +337,38 @@ def kill_port(port: int) -> None:
                 pass
     except Exception:
         pass
+
+
+def port_is_free(port: int) -> bool:
+    """True if nothing is currently bound on localhost:port.
+
+    Uses a plain bind() probe with SO_REUSEADDR=0 so a socket still in
+    TIME_WAIT counts as in-use — that's the exact race --all hits between
+    fixtures.
+    """
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind(("127.0.0.1", port))
+        return True
+    except OSError:
+        return False
+    finally:
+        sock.close()
+
+
+def wait_for_ports_free(ports: list[int], timeout_s: int = 10) -> bool:
+    """Poll until none of the listed ports are bound (or timeout).
+
+    Used between fixtures in --all mode so the next fixture's Popen doesn't
+    race a TIME_WAIT socket from the previous fixture and time out on its
+    initialize probe.
+    """
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if all(port_is_free(p) for p in ports):
+            return True
+        time.sleep(0.5)
+    return False
 
 
 def wait_for_url(url: str, timeout_s: int, *, method: str = "GET", data: Optional[bytes] = None, headers: Optional[dict] = None) -> bool:
@@ -683,6 +716,7 @@ def report_outcome(rc: int, fixture: Fixture, *, docker: bool, artifacts_dir: Pa
 
 def run_all(config: Config) -> int:
     failed: list[tuple[str, int]] = []
+    shared_ports = [config.harness_port, config.sandbox_port, config.fixture_port]
     for i, fixture in enumerate(FIXTURES, 1):
         info("")
         info(f"=== [{i}/{len(FIXTURES)}] Running {fixture.example} ===")
@@ -695,6 +729,12 @@ def run_all(config: Config) -> int:
         else:
             info(f"FAIL: {fixture.example} (exit {rc})")
             failed.append((fixture.example, rc))
+        # Issue 601: between-fixture port-cleanup wait. The per-fixture
+        # finally block already killed the processes; this lets the kernel
+        # release sockets out of TIME_WAIT before the next fixture binds,
+        # which was the integration-server flake we saw under --all.
+        if i < len(FIXTURES) and not wait_for_ports_free(shared_ports, timeout_s=10):
+            info(f"WARN: ports {shared_ports} still bound after 10s; next fixture may race")
 
     info("")
     info("=== Summary ===")
