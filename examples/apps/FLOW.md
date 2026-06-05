@@ -2,7 +2,7 @@
 
 How the pieces fit together when an MCP Apps tool is invoked, what each
 component does, and where mcpkit fits in. Specific to the workflows in
-this repo (`demo-app`, `inspect-app`, `test-apps-playwright`).
+this repo (`demo-app`, `demo-upstream`, `test-apps-playwright`).
 
 ## The cast of characters
 
@@ -96,9 +96,11 @@ This is the one slot in the flow that can be **either** upstream's TS **or** our
 
 | Workflow | Server is… | Owner |
 |---|---|---|
-| `make demo-app` | upstream's TS server (`basic-server-vanillajs/dist/index.js` etc.) | upstream |
-| `make inspect-app` | upstream's TS server (same as demo-app) | upstream |
+| `make demo-app` (any `RENDERER`) | mcpkit-Go drop-in (`examples/apps/compat/<name>/main.go`) | us |
+| `make demo-upstream` (any `RENDERER`) | upstream's TS server (`basic-server-vanillajs/dist/index.js` etc.) | upstream |
 | `make test-apps-playwright[-docker]` | mcpkit-Go drop-in (`examples/apps/compat/<name>/main.go`) | us |
+
+In `test-apps-playwright-docker` mode, upstream's TS *also* runs on a side port (`UPSTREAM_PORT`, default 3102) so the wrapper can JSON-diff `tools/list` against the Go fixture before Playwright starts — the strict drift gate. Playwright itself only drives the Go fixture on `:3101`.
 
 Either way the **wire surface is identical**: respond to MCP/JSON-RPC over Streamable HTTP, return tool definitions with `_meta.ui.resourceUri`, serve the App HTML when the host fetches the `ui://...` resource. The compat fixtures' whole purpose is to be indistinguishable from upstream's TS at the wire layer.
 
@@ -251,15 +253,23 @@ Three reasons we don't ship the browser variant:
 
 For testing we lean on basic-host directly (Playwright drives upstream's harness), plus `ext/ui/AppHost` for the Go-programmatic side. No browser harness of our own needed.
 
-## The three workflows in this repo
+## The workflows in this repo
 
-| Command | What runs | What you're testing |
-|---|---|---|
-| `make demo-app EXAMPLE=<name>` | upstream's TS server + basic-host | "Show me what this App looks like, rendered." Browses upstream's reference behavior. |
-| `make inspect-app EXAMPLE=<name>` | upstream's TS server + MCPJam Inspector (`npx`) | "Show me the protocol surface — tools/list JSON, `_meta.ui`, tool-call payloads." Browses the wire. |
-| `make test-apps-playwright[-docker] EXAMPLE=<name>` | **mcpkit-Go fixture** + basic-host + Playwright | "Does mcpkit's Go drop-in match upstream's TS, byte-for-byte at the wire AND visually after rendering?" Tests our parity. |
+Two axes — **server** (Go fixture vs. upstream TS) × **renderer** (MCPJam for the wire, basic-host for the iframe). Plus a separate strict-parity target.
 
-The first two use upstream's TS servers (to see / inspect upstream's reference). The third is the only one that exercises mcpkit's Go server. The strict `tools/list` parity check in DOCKER mode compares our Go fixture's wire output against upstream's TS, both running side-by-side.
+| You want to… | Use |
+|---|---|
+| Inspect the wire of the **mcpkit Go fixture** | `make demo-app EXAMPLE=<name>` |
+| See the **mcpkit Go fixture** rendered in basic-host | `RENDERER=basic-host make demo-app EXAMPLE=<name>` |
+| Inspect the wire of **upstream's TS reference** (incl. SKIP examples) | `make demo-upstream EXAMPLE=<name>` |
+| See **upstream's TS reference** rendered in basic-host | `RENDERER=basic-host make demo-upstream EXAMPLE=<name>` |
+| Strict parity check — Go fixture wire vs upstream TS wire + visual regression | `make test-apps-playwright-docker EXAMPLE=<name>` |
+
+Demo targets default to **MCPJam** (lower-friction first-touch, works for SKIP examples that have no `dist/mcp-app.html` to render). `RENDERER=basic-host` flips to the iframe-rendering path when you want to *see* the App rather than inspect its wire.
+
+`demo-upstream` is how you reach SKIP examples (`video-resource-server`, `lazy-auth-server`, `qr-server`, `say-server`) — they have no Go drop-in yet, but upstream's TS server still runs them.
+
+Only `test-apps-playwright[-docker]` exercises the Go fixture under upstream's Playwright suite. In DOCKER mode it also runs upstream's TS on a side port for the strict `tools/list` drift diff.
 
 ## On the `ui://` URI scheme
 

@@ -17,8 +17,16 @@ plots + per-segment summaries.
 ## Run it
 
 ```bash
+# mcpkit-Go fixture + MCPJam (default — wire-level inspection)
 make demo-app EXAMPLE=customer-segmentation-server
-make inspect-app EXAMPLE=customer-segmentation-server
+
+# Same Go fixture rendered in basic-host (iframe + bridge JS)
+RENDERER=basic-host make demo-app EXAMPLE=customer-segmentation-server
+
+# Compare against upstream's TS reference server
+make demo-upstream EXAMPLE=customer-segmentation-server
+
+# Strict parity check (visual baseline + tools/list diff, requires Docker)
 EXAMPLE=customer-segmentation-server make test-apps-playwright-docker
 ```
 

@@ -3,7 +3,7 @@
 Placeholder paths referenced from `../README.md`. Capture by running:
 
 ```bash
-make demo-app EXAMPLE=basic-server-preact
+RENDERER=basic-host make demo-app EXAMPLE=basic-server-preact
 ```
 
 | File | What to capture |

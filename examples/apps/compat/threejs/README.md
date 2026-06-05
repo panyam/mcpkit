@@ -25,8 +25,16 @@ literally a multi-line JavaScript program.
 ## Run it
 
 ```bash
+# mcpkit-Go fixture + MCPJam (default — wire-level inspection)
 make demo-app EXAMPLE=threejs-server
-make inspect-app EXAMPLE=threejs-server
+
+# Same Go fixture rendered in basic-host (iframe + bridge JS)
+RENDERER=basic-host make demo-app EXAMPLE=threejs-server
+
+# Compare against upstream's TS reference server
+make demo-upstream EXAMPLE=threejs-server
+
+# Strict parity check (visual baseline + tools/list diff, requires Docker)
 EXAMPLE=threejs-server make test-apps-playwright-docker
 ```
 

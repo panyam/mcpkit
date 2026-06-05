@@ -25,8 +25,16 @@ work, not just printing the tool result.
 ## Run it
 
 ```bash
+# mcpkit-Go fixture + MCPJam (default — wire-level inspection)
 make demo-app EXAMPLE=wiki-explorer-server
-make inspect-app EXAMPLE=wiki-explorer-server
+
+# Same Go fixture rendered in basic-host (iframe + bridge JS)
+RENDERER=basic-host make demo-app EXAMPLE=wiki-explorer-server
+
+# Compare against upstream's TS reference server
+make demo-upstream EXAMPLE=wiki-explorer-server
+
+# Strict parity check (visual baseline + tools/list diff, requires Docker)
 EXAMPLE=wiki-explorer-server make test-apps-playwright-docker
 ```
 

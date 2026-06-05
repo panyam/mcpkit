@@ -1,6 +1,6 @@
 # Screenshots — map
 
-Capture by running `make demo-app EXAMPLE=map-server`.
+Capture by running `RENDERER=basic-host make demo-app EXAMPLE=map-server`.
 
 | File | What to capture |
 |---|---|

@@ -21,8 +21,16 @@ iframe polls from inside via the bridge. First fixture introducing
 ## Run it
 
 ```bash
+# mcpkit-Go fixture + MCPJam (default — wire-level inspection)
 make demo-app EXAMPLE=system-monitor-server
-make inspect-app EXAMPLE=system-monitor-server
+
+# Same Go fixture rendered in basic-host (iframe + bridge JS)
+RENDERER=basic-host make demo-app EXAMPLE=system-monitor-server
+
+# Compare against upstream's TS reference server
+make demo-upstream EXAMPLE=system-monitor-server
+
+# Strict parity check (visual baseline + tools/list diff, requires Docker)
 EXAMPLE=system-monitor-server make test-apps-playwright-docker
 ```
 
