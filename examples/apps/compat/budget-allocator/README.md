@@ -18,81 +18,73 @@ without override.
 
 ## Run it
 
-Boots the mcpkit-Go fixture (`main.go` in this folder) and opens
-[MCPJam Inspector](https://github.com/MCPJam/inspector) so you can poke
-at the protocol surface:
+Boots the mcpkit-Go fixture (`main.go` in this folder) inside upstream's
+`basic-host` so you can see the App render in a real browser. **No LLM
+required** — the App's bridge JS calls `get-budget-data` on its own and
+all interaction (sliders, stage switcher, benchmark comparison) goes
+through the same MCP wire:
 
 ```bash
-make demo-app EXAMPLE=budget-allocator
+RENDERER=basic-host make demo-app EXAMPLE=budget-allocator
 ```
 
-Paste `http://localhost:3101/mcp` into MCPJam's server list and connect.
-Then browse `tools/list`, `_meta.ui`, and tool-call payloads on the wire.
+A browser opens at `http://localhost:8080`. First-touch flow:
 
-### [Optional] You can also do…
+1. Pick **Budget Allocator Server** from the server dropdown.
+2. Pick **get-budget-data** from the tool dropdown, click **Call Tool**
+   with empty input.
+3. The iframe renders. Interact directly — drag the sliders, switch
+   company stages, compare against the benchmark bands.
 
-- **See the App rendered in basic-host.** Same Go fixture, but driven by
-  basic-host (the canonical reference UI) instead of MCPJam. Opens a
-  browser at `http://localhost:8080`:
+![Budget Allocator App: iframe shows the budget configuration with category sliders + preset chips + the analytics charts panel](screenshots/01-default-budget.png)
+
+![Analytics panel of the Budget Allocator iframe showing 24 months of historical category allocations + the stage-benchmark comparison](screenshots/02-analytics-view.png)
+
+![Budget Allocator iframe showing benchmark comparison for Series A stage with per-category percentile bands](screenshots/03-series-a-benchmark.png)
+
+### [Optional] Other ways to look at it
+
+- **Connect from any MCP host.** The Go fixture is just a spec-compliant
+  MCP server on `http://localhost:3101/mcp`. Boot it stand-alone with
+  `cd examples/apps/compat/budget-allocator && go run .` and connect from
+  VS Code, Claude Desktop, [MCPJam Inspector](https://github.com/MCPJam/inspector),
+  your own client, or any host that speaks MCP. Hosts that drive an LLM
+  let you ask things like *"show me my SaaS budget allocation"* or *"how
+  should a Series A company allocate their budget?"* — the model calls
+  `get-budget-data` and the iframe handles the rest.
+
+- **Wire inspection.** If you want to browse `tools/list`, `_meta.ui`,
+  and raw tool-call payloads:
 
   ```bash
-  RENDERER=basic-host make demo-app EXAMPLE=budget-allocator
+  RENDERER=mcpjam make demo-app EXAMPLE=budget-allocator
   ```
 
-- **Hit upstream's TS reference server instead.** Useful for comparing
-  the Go fixture's wire surface against the canonical implementation:
+  Launches MCPJam Inspector in your browser; paste
+  `http://localhost:3101/mcp` into its server list.
+
+- **Compare against upstream's TS reference server** in either renderer:
 
   ```bash
-  make demo-upstream EXAMPLE=budget-allocator
+  RENDERER=basic-host make demo-upstream EXAMPLE=budget-allocator
   ```
 
-  Add `RENDERER=basic-host` to render the upstream TS in basic-host
-  instead of MCPJam.
-
-- **Strict parity check against the mcpkit-Go fixture.** Runs upstream's
-  Playwright suite against the Go binary — wire-level `tools/list` diff
-  + visual PNG gate. Requires Docker:
+- **Strict parity gate** (Playwright `tools/list` diff + visual PNG
+  baseline; requires Docker):
 
   ```bash
   EXAMPLE=budget-allocator make test-apps-playwright-docker
   ```
 
-## Prompts to try
+### Verify the wire shape (no LLM needed)
 
-Connect to `Budget Allocator Server`, then paste any of these:
-
-```
-Show me my SaaS budget allocation.
-```
-
-![Budget Allocator App: iframe shows the budget configuration with category sliders + preset chips + the analytics charts panel](screenshots/01-default-budget.png)
-
-```
-What does my budget look like for an early-stage startup?
-```
-
-```
-Display the budget allocator with the analytics for the last 24 months.
-```
-
-![Analytics panel of the Budget Allocator iframe showing 24 months of historical category allocations + the stage-benchmark comparison](screenshots/02-analytics-view.png)
-
-```
-How should a Series A company allocate their budget across categories?
-```
-
-![Budget Allocator iframe showing benchmark comparison for Series A stage with per-category percentile bands](screenshots/03-series-a-benchmark.png)
-
-The model calls `get-budget-data`; the iframe renders an interactive
-budget allocator (sliders for categories, analytics charts, benchmark
-comparison).
-
-### Direct tool call (no LLM needed)
+Useful for spot-checking what the Go fixture puts on the wire vs. what
+the iframe reads:
 
 | What | How | What you should see |
 |---|---|---|
-| Smoke test | Select `get-budget-data`, call with empty input | Tool result: `{"config": {"categories": [...], "presetBudgets": [...]}, "analytics": {"history": [...], "benchmarks": [...]}}` |
-| Verify the nested shape | Expand `outputSchema.properties.analytics.properties.history.items` | Nested item schema with month + per-category allocations — reflected from the Go struct, no override |
+| Smoke test | Call `get-budget-data` with empty input (basic-host or MCPJam) | Tool result `structuredContent`: `{"config": {"categories": [...5 entries], "presetBudgets": [50000, 100000, 250000, 500000], "defaultBudget": 100000, "currency": "USD", "currencySymbol": "$"}, "analytics": {"history": [...24 months], "benchmarks": [...4 stages], "stages": ["Seed", "Series A", "Series B", "Growth"], "defaultStage": "Series A"}}` |
+| Verify the nested shape | Expand `outputSchema.properties.analytics.properties.history.items` in MCPJam | Nested item schema with month + per-category allocations — reflected from the Go struct, no override |
 
 ## What to look at next
 
