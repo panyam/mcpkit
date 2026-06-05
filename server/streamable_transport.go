@@ -103,7 +103,13 @@ func newStreamableTransport(s *Server, cfg transportConfig) *streamableTransport
 	// of incoming shape, and broadcast() skips the nil-check no-op.
 	if cfg.statelessMode != stateless.ModeLegacyOnly {
 		t.statelessDispatcher = stateless.New(newStatelessBackend(s))
-		t.statelessSubs = newStatelessSubMap()
+		t.statelessSubs = newStatelessSubMap(
+			s.options.statelessSubCap,
+			s.options.statelessSubRate,
+			s.options.statelessSubBurst,
+			s.options.subscriptionReject,
+			s.options.statelessSubScope,
+		)
 	}
 	return t
 }
