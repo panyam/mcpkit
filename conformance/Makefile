@@ -35,7 +35,8 @@ MCPCONFORMANCE_BASE_PATH        ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
         testconf-file-inputs testconf-auth-server \
         testconf-stateless testconf-skills \
         testconf-elicitation testconf-upstream-audit \
-        refresh-conformance check-conformance-stale help
+        refresh-conformance check-conformance-stale \
+        sync-conformance check-conformance-sync help
 
 # Default umbrella — runs every conformance suite. Fork-based suites and the
 # upstream-main audit each require their MCPCONFORMANCE_*_PATH worktree to
@@ -70,7 +71,7 @@ testconf-tasks-v2: ## Run SEP-2663 tasks conformance — fork-based scenarios + 
 	(cd $(MCPCONFORMANCE_TASKS_V2_PATH) && npm install --silent && \
 		TASKS_SERVER_URL=http://localhost:18092/mcp \
 		TASKS_SERVER_CMD="$(REPO_ROOT)/examples/tasks-v2/tasks-v2 --serve --addr :18092" \
-		npx vitest run src/scenarios/server/tasks/all-scenarios.test.ts)
+		npx vitest run src/scenarios/server/all-scenarios.test.ts)
 	(cd $(CONFORMANCE_DIR) && npm install --silent && npx vitest run tasks-v2/)
 
 testconf-mrtr: ## Run SEP-2322 MRTR conformance — fork-based scenarios + mcpkit-local stricter sentinel
@@ -83,7 +84,7 @@ testconf-mrtr: ## Run SEP-2322 MRTR conformance — fork-based scenarios + mcpki
 	(cd $(MCPCONFORMANCE_MRTR_PATH) && npm install --silent && \
 		MRTR_SERVER_URL=http://localhost:18093/mcp \
 		MRTR_SERVER_CMD="$(REPO_ROOT)/examples/mrtr/mrtr-demo --serve --addr :18093" \
-		npx vitest run src/scenarios/server/mrtr/all-scenarios.test.ts)
+		npx vitest run src/scenarios/server/negative-mrtr.test.ts)
 	(cd $(CONFORMANCE_DIR) && npm install --silent && npx vitest run mrtr/)
 
 testconf-stateless: ## Run SEP-2575 stateless conformance — drives examples/stateless via upstream's ServerStatelessScenario class
@@ -249,6 +250,12 @@ refresh-conformance: ## Regenerate CONFORMANCE.md from upstream tier-check + tra
 		exit 1; \
 	fi
 	cd $(REPO_ROOT) && MCPCONFORMANCE_BASE_PATH="$(MCPCONFORMANCE_BASE_PATH)" bash scripts/refresh-conformance.sh
+
+sync-conformance: ## Fetch all conformance worktrees + validate (run before `make -C conformance test`). Catches stale Makefile paths, dirty trees, behind-origin branches.
+	cd $(REPO_ROOT) && uv run scripts/sync_conformance_worktrees.py --fetch
+
+check-conformance-sync: ## Validate conformance worktrees without fetching (preflight gate; faster than sync-conformance).
+	cd $(REPO_ROOT) && uv run scripts/sync_conformance_worktrees.py
 
 check-conformance-stale: refresh-conformance ## CI gate — fail if CONFORMANCE.md is stale (issue 498). Compares working tree to HEAD so the gate is robust to staging order.
 	@cd $(REPO_ROOT) && git diff --exit-code HEAD -- CONFORMANCE.md > /dev/null 2>&1 || { \
