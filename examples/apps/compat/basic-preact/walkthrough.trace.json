@@ -1,0 +1,40 @@
+[
+  {
+    "kind": "section",
+    "title": "Setup",
+    "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nAny MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam, basic-host). The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `make demo-app EXAMPLE=basic-preact` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+  },
+  {
+    "kind": "step",
+    "title": "Connect to the fixture",
+    "step_id": "step-1",
+    "visit": 1,
+    "output": "    connected to Basic MCP App Server (Preact) 1.0.0\n"
+  },
+  {
+    "kind": "step",
+    "title": "tools/list — verify get-time + its UI resource",
+    "step_id": "step-2",
+    "visit": 1,
+    "output": "    get-time\n      _meta: {\n        \"ui\": {\n          \"resourceUri\": \"ui://get-time/mcp-app.html\"\n        },\n        \"ui/resourceUri\": \"ui://get-time/mcp-app.html\"\n      }\n"
+  },
+  {
+    "kind": "step",
+    "title": "tools/call get-time — capture the ISO 8601 timestamp",
+    "step_id": "step-3",
+    "visit": 1,
+    "output": "    structuredContent: null\n"
+  },
+  {
+    "kind": "step",
+    "title": "resources/read on ui://get-time/mcp-app.html",
+    "step_id": "step-4",
+    "visit": 1,
+    "output": "    348452 bytes total; first 200:\n      \u003c!DOCTYPE html\u003e\n\u003chtml lang=\"en\"\u003e\n\u003chead\u003e\n  \u003cmeta charset=\"UTF-8\"\u003e\n  \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"\u003e\n  \u003cmeta name=\"color-scheme\" content=\"light dark\"\u003e\n  \u003ctitle\u003eGet…\n"
+  },
+  {
+    "kind": "section",
+    "title": "Where to look in the code",
+    "body": "- `main.go` — fixture is ~60 lines: one typed tool, one paired UI resource, CORS for browser hosts.\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + screenshots + the centralized [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) guide."
+  }
+]
