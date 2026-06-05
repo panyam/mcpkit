@@ -9,6 +9,7 @@
 package main
 
 import (
+	"strings"
 	"flag"
 	"log"
 	"os"
@@ -28,6 +29,20 @@ import (
 const transcribeReady = `{"status":"ready","message":"Transcription UI opened. Speak into your microphone."}`
 
 func main() {
+	// Dual-mode dispatcher: `--demo` runs the demokit walkthrough (acts as
+	// an MCP client against a running server in another terminal). Default
+	// (no flag) keeps the existing server behaviour so apps_demo.py and
+	// the Playwright wrapper continue to work unchanged.
+	for _, arg := range os.Args[1:] {
+		if strings.TrimSpace(arg) == "--demo" {
+			runDemo()
+			return
+		}
+	}
+	serve()
+}
+
+func serve() {
 	defaultPort := "3101"
 	if p := os.Getenv("PORT"); p != "" {
 		defaultPort = p

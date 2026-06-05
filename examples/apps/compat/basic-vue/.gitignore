@@ -1,0 +1,7 @@
+# walkthrough.trace.json is the SOURCE of truth -- commit it.
+# bundle/ is the GENERATED playable HTML + sibling JS/CSS -- commit it too,
+# so docs-site can publish without regenerating. Run `make bundle` to
+# refresh after editing walkthrough.go or re-recording.
+#
+# Only the compiled fixture binary is gitignored here.
+basic-vue-demo
