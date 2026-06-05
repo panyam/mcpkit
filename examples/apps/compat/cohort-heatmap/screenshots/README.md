@@ -1,6 +1,6 @@
 # Screenshots — cohort-heatmap
 
-Capture by running `RENDERER=basic-host make demo-app EXAMPLE=cohort-heatmap-server`.
+Capture by running `RENDERER=basic-host make demo-app EXAMPLE=cohort-heatmap`.
 
 | File | What to capture |
 |---|---|

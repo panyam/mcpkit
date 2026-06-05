@@ -1,6 +1,6 @@
 # Screenshots — threejs
 
-Capture by running `RENDERER=basic-host make demo-app EXAMPLE=threejs-server`.
+Capture by running `RENDERER=basic-host make demo-app EXAMPLE=threejs`.
 
 | File | What to capture |
 |---|---|
