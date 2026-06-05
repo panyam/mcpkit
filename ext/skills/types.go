@@ -14,35 +14,33 @@ const (
 	// resource. The archive's URL suffix (.tar.gz or .zip) determines the
 	// expected format.
 	SkillTypeArchive SkillType = "archive"
-
-	// SkillTypeResourceTemplate describes a parameterized skill namespace as
-	// an RFC 6570 URI template. Hosts surface these as interactive discovery
-	// points, not as concrete skills.
-	SkillTypeResourceTemplate SkillType = "mcp-resource-template"
 )
 
 // Valid reports whether t is one of the SkillType values defined by SEP-2640.
+// The previously valid "mcp-resource-template" type was dropped from the SEP
+// on 2026-06-04; entries that carry it are now invalid.
 func (t SkillType) Valid() bool {
 	switch t {
-	case SkillTypeSkillMD, SkillTypeArchive, SkillTypeResourceTemplate:
+	case SkillTypeSkillMD, SkillTypeArchive:
 		return true
 	}
 	return false
 }
 
 // HasManifestFields reports whether entries of this type carry a Name and
-// Digest. The mcp-resource-template type omits both because no concrete
-// SKILL.md is materialized at index time.
+// Digest. After the 2026-06-04 SEP HEAD removal of mcp-resource-template,
+// both surviving types require both fields; the helper is retained for
+// callers that still want to dispatch on the type symbolically.
 func (t SkillType) HasManifestFields() bool {
 	return t == SkillTypeSkillMD || t == SkillTypeArchive
 }
 
 // IndexEntry is a single skill entry in a server's skill://index.json.
 //
-// Per SEP-2640, Name and Digest are required for the skill-md and archive
-// types and omitted for mcp-resource-template. The JSON encoding uses
-// omitempty so unmarshalled documents round-trip cleanly when those fields
-// are absent.
+// Per SEP-2640, Name and Digest are required for both the skill-md and
+// archive types. The JSON encoding keeps `omitempty` on both fields so
+// future spec revisions that re-introduce a manifest-less entry type can
+// be parsed without a struct-shape change.
 type IndexEntry struct {
 	Type        SkillType `json:"type"`
 	Name        string    `json:"name,omitempty"`

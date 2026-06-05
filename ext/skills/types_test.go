@@ -35,11 +35,6 @@ const sepExampleIndex = `{
       "description": "Extract, fill, and assemble PDF documents",
       "url": "skill://pdf-processing.tar.gz",
       "digest": "sha256:c4d5e6f7..."
-    },
-    {
-      "type": "mcp-resource-template",
-      "description": "Per-product documentation skill",
-      "url": "skill://docs/{product}/SKILL.md"
     }
   ]
 }`
@@ -52,8 +47,8 @@ func TestIndex_UnmarshalSEPExample(t *testing.T) {
 	if idx.Schema != skills.IndexSchemaURI {
 		t.Errorf("Schema = %q, want %q", idx.Schema, skills.IndexSchemaURI)
 	}
-	if len(idx.Skills) != 4 {
-		t.Fatalf("Skills count = %d, want 4", len(idx.Skills))
+	if len(idx.Skills) != 3 {
+		t.Fatalf("Skills count = %d, want 3", len(idx.Skills))
 	}
 
 	// Verify each entry's type-specific shape.
@@ -66,7 +61,6 @@ func TestIndex_UnmarshalSEPExample(t *testing.T) {
 		{skills.SkillTypeSkillMD, "git-workflow", "skill://git-workflow/SKILL.md", true},
 		{skills.SkillTypeSkillMD, "refunds", "skill://acme/billing/refunds/SKILL.md", true},
 		{skills.SkillTypeArchive, "pdf-processing", "skill://pdf-processing.tar.gz", true},
-		{skills.SkillTypeResourceTemplate, "", "skill://docs/{product}/SKILL.md", false},
 	}
 	for i, w := range want {
 		got := idx.Skills[i]
@@ -111,23 +105,6 @@ func TestIndexEntry_RoundTrip(t *testing.T) {
 			t.Errorf("entry %d: round-trip mismatch\n  orig = %#v\n  new  = %#v", i, orig.Skills[i], second.Skills[i])
 		}
 	}
-
-	// The mcp-resource-template entry must encode without name or digest
-	// keys (omitempty in practice). Re-encode it individually to assert.
-	tmpl := orig.Skills[3]
-	if tmpl.Type != skills.SkillTypeResourceTemplate {
-		t.Fatalf("test fixture drift: expected template at index 3, got %q", tmpl.Type)
-	}
-	tplBytes, err := json.Marshal(tmpl)
-	if err != nil {
-		t.Fatalf("Marshal template: %v", err)
-	}
-	if strings.Contains(string(tplBytes), `"name"`) {
-		t.Errorf("template entry should omit name: %s", tplBytes)
-	}
-	if strings.Contains(string(tplBytes), `"digest"`) {
-		t.Errorf("template entry should omit digest: %s", tplBytes)
-	}
 }
 
 func TestIndexEntry_Validate(t *testing.T) {
@@ -157,12 +134,9 @@ func TestIndexEntry_Validate(t *testing.T) {
 			},
 		},
 		{
-			name: "valid template",
-			entry: skills.IndexEntry{
-				Type:        skills.SkillTypeResourceTemplate,
-				Description: "per-product docs",
-				URL:         "skill://docs/{product}/SKILL.md",
-			},
+			name:  "removed mcp-resource-template type",
+			entry: skills.IndexEntry{Type: "mcp-resource-template", Description: "x", URL: "y"},
+			want:  skills.ErrUnknownSkillType,
 		},
 		{
 			name:  "unknown type",
@@ -231,11 +205,11 @@ func TestSkillType(t *testing.T) {
 	if !skills.SkillTypeArchive.HasManifestFields() {
 		t.Error("archive should have manifest fields")
 	}
-	if skills.SkillTypeResourceTemplate.HasManifestFields() {
-		t.Error("template should not have manifest fields")
-	}
 	if skills.SkillType("nope").Valid() {
 		t.Error("garbage value should not validate")
+	}
+	if skills.SkillType("mcp-resource-template").Valid() {
+		t.Error("mcp-resource-template was dropped from SEP-2640 HEAD on 2026-06-04; Valid() must return false")
 	}
 }
 

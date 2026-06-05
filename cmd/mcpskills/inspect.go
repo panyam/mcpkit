@@ -79,17 +79,11 @@ Examples:
 
 			for _, e := range idx.Skills {
 				row := inspectEntry{
-					Name:        firstNonEmpty(e.Name, "(template)"),
+					Name:        e.Name,
 					Type:        string(e.Type),
 					URL:         e.URL,
 					Digest:      e.Digest,
 					Description: e.Description,
-				}
-				if e.Type == skills.SkillTypeResourceTemplate {
-					// Templates carry no digest; skip verification.
-					row.Verified = nil
-					report.Entries = append(report.Entries, row)
-					continue
 				}
 				result, verifyErr := sc.ReadAndVerify(e.URL, e.Digest)
 				switch {
@@ -145,9 +139,10 @@ type inspectEntry struct {
 	URL         string `json:"url"`
 	Digest      string `json:"digest,omitempty"`
 	Description string `json:"description,omitempty"`
-	// Verified is nil for template entries (no digest), true on match,
-	// false on mismatch or read failure. Pointer-of-bool keeps the
-	// three-state semantic over the wire and in JSON.
+	// Verified is true on digest match, false on mismatch or read
+	// failure. Pointer-of-bool is retained so a future SEP revision
+	// that re-introduces a digest-less entry type can flow through
+	// without a struct-shape change.
 	Verified *bool  `json:"verified,omitempty"`
 	Error    string `json:"error,omitempty"`
 }
@@ -169,7 +164,7 @@ func renderText(out io.Writer, p *common.Painter, r *inspectReport) error {
 	}
 	for _, e := range r.Entries {
 		marker := p.Dim("·")
-		status := p.Dim("(template, no digest)")
+		status := p.Dim("(no digest)")
 		if e.Verified != nil {
 			if *e.Verified {
 				marker = p.Green("✓")
