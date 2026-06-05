@@ -18,8 +18,8 @@ Coverage in this revision:
 - Manifest required at root (negative)
 - Frontmatter required fields: `name`, `description`
 - Index `$schema` URI present
-- Index entry conditional fields (`name` + `digest` required for
-  `skill-md` and `archive`, omitted for `mcp-resource-template`)
+- Index entry required fields: `name` and `digest` for every entry
+  (both `skill-md` and `archive`)
 - Digest format (`sha256:` + 64 lowercase hex)
 - Digest correctness (recompute over the served bytes, compare)
 - Archive safety: reject path traversal, absolute paths, escaping
@@ -30,11 +30,6 @@ Coverage in this revision:
 - `_meta` reverse-domain prefix
 - Host loads by URI alone (no index required)
 - Server exposes `skill://index.json`
-
-Skipped with documented reasons:
-
-- `mcp-resource-template` entries — Provider does not register
-  resource templates yet, tracked separately.
 
 ## Prerequisites
 

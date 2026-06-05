@@ -105,7 +105,7 @@ In file mode the list has N entries per skill (one for SKILL.md, one for each su
 
 ### The discovery index
 
-`skill://index.json` is the well-known enumeration resource. It's optional in the SEP (servers MAY decline to expose it) but mcpkit auto-registers it unless `WithoutIndex()` is supplied. The index has a fixed JSON shape: a `$schema` URI pinning the index version and a `skills[]` array where each entry has `type` (`skill-md`, `archive`, or `mcp-resource-template`), `description`, `url`, plus (for `skill-md` and `archive` entries) `name` and `digest`.
+`skill://index.json` is the well-known enumeration resource. It's optional in the SEP (servers MAY decline to expose it) but mcpkit auto-registers it unless `WithoutIndex()` is supplied. The index has a fixed JSON shape: a `$schema` URI pinning the index version and a `skills[]` array where each entry has `type` (`skill-md` or `archive`), `description`, `url`, `name`, and `digest`.
 
 ### Step 3: Read skill://index.json
 
