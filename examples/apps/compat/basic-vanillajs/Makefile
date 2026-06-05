@@ -10,8 +10,10 @@ serve: ## Start the basic-vanillajs compat fixture (default :3101)
 readme: ## Regenerate WALKTHROUGH.md from the walkthrough definitions
 	go run . --demo --doc md > WALKTHROUGH.md
 
-record: ## Capture a non-interactive trace of the walkthrough (requires `make serve` in another terminal)
-	go run . --demo --record .walkthrough.trace.json --non-interactive
+record: ## Capture a trace of the walkthrough (interactive — press Enter to advance each step; requires `make serve` in another terminal)
+	go run . --demo --record .walkthrough.trace.json
+	@echo ""
+	@echo "Trace written to .walkthrough.trace.json — commit it (it's the source of truth for the docs-site bundle)."
 
 bundle: record ## Build a self-contained HTML player from the recorded trace (output: walkthrough/index.html + sibling JS/CSS)
 	@mkdir -p walkthrough
