@@ -20,8 +20,16 @@ app-only helpers (refresh / log) the iframe uses internally.
 ## Run it
 
 ```bash
+# mcpkit-Go fixture + MCPJam (default — wire-level inspection)
 make demo-app EXAMPLE=debug-server
-make inspect-app EXAMPLE=debug-server
+
+# Same Go fixture rendered in basic-host (iframe + bridge JS)
+RENDERER=basic-host make demo-app EXAMPLE=debug-server
+
+# Compare against upstream's TS reference server
+make demo-upstream EXAMPLE=debug-server
+
+# Strict parity check (visual baseline + tools/list diff, requires Docker)
 EXAMPLE=debug-server make test-apps-playwright-docker
 ```
 

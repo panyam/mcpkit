@@ -14,8 +14,16 @@ mcpkit hosts can drive a React-based App with no special handling.
 ## Run it
 
 ```bash
+# mcpkit-Go fixture + MCPJam (default — wire-level inspection)
 make demo-app EXAMPLE=basic-server-react
-make inspect-app EXAMPLE=basic-server-react
+
+# Same Go fixture rendered in basic-host (iframe + bridge JS)
+RENDERER=basic-host make demo-app EXAMPLE=basic-server-react
+
+# Compare against upstream's TS reference server
+make demo-upstream EXAMPLE=basic-server-react
+
+# Strict parity check (visual baseline + tools/list diff, requires Docker)
 EXAMPLE=basic-server-react make test-apps-playwright-docker
 ```
 

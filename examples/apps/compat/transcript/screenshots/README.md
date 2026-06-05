@@ -1,6 +1,6 @@
 # Screenshots — transcript
 
-Capture by running `make demo-app EXAMPLE=transcript-server`.
+Capture by running `RENDERER=basic-host make demo-app EXAMPLE=transcript-server`.
 
 | File | What to capture |
 |---|---|

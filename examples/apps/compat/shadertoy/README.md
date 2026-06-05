@@ -22,8 +22,16 @@ fixture targeted at WebGL-style rendering inside the App iframe.
 ## Run it
 
 ```bash
+# mcpkit-Go fixture + MCPJam (default — wire-level inspection)
 make demo-app EXAMPLE=shadertoy-server
-make inspect-app EXAMPLE=shadertoy-server
+
+# Same Go fixture rendered in basic-host (iframe + bridge JS)
+RENDERER=basic-host make demo-app EXAMPLE=shadertoy-server
+
+# Compare against upstream's TS reference server
+make demo-upstream EXAMPLE=shadertoy-server
+
+# Strict parity check (visual baseline + tools/list diff, requires Docker)
 EXAMPLE=shadertoy-server make test-apps-playwright-docker
 ```
 

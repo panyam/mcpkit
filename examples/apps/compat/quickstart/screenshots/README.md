@@ -1,6 +1,6 @@
 # Screenshots — quickstart
 
-Capture by running `make demo-app EXAMPLE=quickstart`.
+Capture by running `RENDERER=basic-host make demo-app EXAMPLE=quickstart`.
 
 | File | What to capture |
 |---|---|

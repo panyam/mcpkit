@@ -59,89 +59,55 @@ from __future__ import annotations
 
 import argparse
 import os
-import shutil
-import signal
-import socket
 import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+# Shared with scripts/apps_demo.py — constants, fixture registry, port helpers,
+# upstream clone/install/build, fixture-binary launch. See _apps_common.py.
+from _apps_common import (
+    DEFAULT_EXAMPLE,
+    DEFAULT_EXT_APPS_DIR,
+    DEFAULT_FIXTURE_PORT,
+    DEFAULT_HARNESS_PORT,
+    DEFAULT_SANDBOX_PORT,
+    EXT_APPS_REPO,
+    FIXTURES,
+    FIXTURES_BY_NAME,
+    Fixture,
+    MCPKIT_ROOT,
+    build_go_fixture,
+    build_upstream_example,
+    cleanup_proc,
+    die,
+    ensure_ext_apps_clone,
+    have_cmd,
+    info,
+    install_upstream_deps,
+    kill_port,
+    port_is_free,
+    start_basic_host,
+    start_go_fixture,
+    tail_file,
+    wait_for_fixture,
+    wait_for_ports_free,
+    wait_for_url,
+)
 
-# --- Constants --------------------------------------------------------------
+
+# --- Constants (Playwright-specific) ---------------------------------------
 
 DOCKER_IMAGE = "mcr.microsoft.com/playwright:v1.57.0-noble"
-EXT_APPS_REPO = "https://github.com/modelcontextprotocol/ext-apps.git"
 DOCKER_VOLUME = "mcpkit-ext-apps"
-
-DEFAULT_EXT_APPS_DIR = "/tmp/ext-apps"
-DEFAULT_HARNESS_PORT = 8080
-DEFAULT_SANDBOX_PORT = 8081
-DEFAULT_FIXTURE_PORT = 3101
-DEFAULT_EXAMPLE = "basic-server-vanillajs"
-
-MCPKIT_ROOT = Path(__file__).resolve().parent.parent
 
 # Inner Docker script — kept as bash because it runs inside a pinned Linux
 # container. Cross-platform reproducibility isn't a concern there.
 DOCKER_INNER_SCRIPT = "scripts/apps-playwright-docker-inner.sh"
-
-
-# --- Fixture registry ------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class Fixture:
-    """One row of the EXAMPLE → mcpkit fixture mapping.
-
-    grep_pattern is the regex Playwright uses to scope to the matching
-    describe block in upstream's servers.spec.ts so unrelated fixtures'
-    tests don't run.
-    """
-
-    example: str
-    fixture_dir: str
-    grep_pattern: str
-
-
-# Ordering matches the bash predecessor's case statement and the
-# examples/apps/compat README's reading-order table.
-FIXTURES: list[Fixture] = [
-    Fixture("basic-server-vanillajs", "examples/apps/compat/basic-vanillajs", "Vanilla JS"),
-    Fixture("basic-server-preact", "examples/apps/compat/basic-preact", r"\(Preact\)"),
-    Fixture("basic-server-react", "examples/apps/compat/basic-react", r"\(React\)"),
-    Fixture("basic-server-solid", "examples/apps/compat/basic-solid", r"\(Solid\)"),
-    Fixture("basic-server-svelte", "examples/apps/compat/basic-svelte", r"\(Svelte\)"),
-    Fixture("basic-server-vue", "examples/apps/compat/basic-vue", r"\(Vue\)"),
-    Fixture("quickstart", "examples/apps/compat/quickstart", "Quickstart MCP App Server"),
-    Fixture("transcript-server", "examples/apps/compat/transcript", "Transcript Server"),
-    Fixture("sheet-music-server", "examples/apps/compat/sheet-music", "Sheet Music Server"),
-    # "Integration Test Server" substring-matches BOTH the standard describe
-    # ("Integration Test Server") and the interactions describe
-    # ("Integration Test Server - Interactions") in upstream's spec.
-    Fixture("integration-server", "examples/apps/compat/integration", "Integration Test Server"),
-    Fixture("map-server", "examples/apps/compat/map", "CesiumJS Map Server"),
-    Fixture("threejs-server", "examples/apps/compat/threejs", "Three.js Server"),
-    Fixture("shadertoy-server", "examples/apps/compat/shadertoy", "ShaderToy Server"),
-    Fixture("wiki-explorer-server", "examples/apps/compat/wiki-explorer", "Wiki Explorer"),
-    Fixture("budget-allocator-server", "examples/apps/compat/budget-allocator", "Budget Allocator Server"),
-    Fixture("scenario-modeler-server", "examples/apps/compat/scenario-modeler", "SaaS Scenario Modeler"),
-    Fixture("system-monitor-server", "examples/apps/compat/system-monitor", "System Monitor Server"),
-    Fixture("cohort-heatmap-server", "examples/apps/compat/cohort-heatmap", "Cohort Heatmap Server"),
-    Fixture("customer-segmentation-server", "examples/apps/compat/customer-segmentation", "Customer Segmentation Server"),
-    Fixture("debug-server", "examples/apps/compat/debug-server", "Debug MCP App Server"),
-    # Match all PDF-related describes: standard ("PDF Server"), pdf-annotations
-    # / pdf-incremental-load ("PDF Server - …"), and pdf-viewer-zoom
-    # ("PDF Viewer — …"). pdf-annotations-api ("PDF Annotation — API …") is
-    # LLM-gated upstream (ANTHROPIC_API_KEY) and auto-skips when no key is set.
-    Fixture("pdf-server", "examples/apps/compat/pdf-server", r"PDF (Server|Viewer|Annotation)"),
-]
-
-FIXTURES_BY_NAME: dict[str, Fixture] = {f.example: f for f in FIXTURES}
 
 
 # --- Config resolution -----------------------------------------------------
@@ -294,23 +260,13 @@ def resolve_config(args: argparse.Namespace) -> Config:
     )
 
 
-# --- Utilities --------------------------------------------------------------
-
-
-def die(msg: str, code: int = 1) -> None:
-    print(f"ERROR: {msg}", file=sys.stderr)
-    sys.exit(code)
-
-
-def info(msg: str) -> None:
-    print(msg, flush=True)
-
-
-def have_cmd(cmd: str) -> bool:
-    return shutil.which(cmd) is not None
+# --- Playwright-specific helpers -------------------------------------------
 
 
 def check_prerequisites(docker: bool) -> None:
+    """Per-mode binary deps. Native needs npx + bun; Docker needs docker.
+    Both need go for the fixture build.
+    """
     required = ["go"]
     required += ["docker"] if docker else ["npx", "bun"]
     missing = [c for c in required if not have_cmd(c)]
@@ -318,106 +274,7 @@ def check_prerequisites(docker: bool) -> None:
         die(f"missing commands: {', '.join(missing)}. Install before running.")
 
 
-def kill_port(port: int) -> None:
-    """Best-effort: SIGKILL anything listening on the given port via lsof."""
-    if not have_cmd("lsof"):
-        return
-    try:
-        result = subprocess.run(
-            ["lsof", "-ti", f":{port}"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        pids = result.stdout.strip().splitlines()
-        for pid in pids:
-            try:
-                os.kill(int(pid), signal.SIGKILL)
-            except (ValueError, ProcessLookupError, PermissionError):
-                pass
-    except Exception:
-        pass
-
-
-def port_is_free(port: int) -> bool:
-    """True if nothing is currently bound on localhost:port.
-
-    Uses a plain bind() probe with SO_REUSEADDR=0 so a socket still in
-    TIME_WAIT counts as in-use — that's the exact race --all hits between
-    fixtures.
-    """
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    try:
-        sock.bind(("127.0.0.1", port))
-        return True
-    except OSError:
-        return False
-    finally:
-        sock.close()
-
-
-def wait_for_ports_free(ports: list[int], timeout_s: int = 10) -> bool:
-    """Poll until none of the listed ports are bound (or timeout).
-
-    Used between fixtures in --all mode so the next fixture's Popen doesn't
-    race a TIME_WAIT socket from the previous fixture and time out on its
-    initialize probe.
-    """
-    deadline = time.monotonic() + timeout_s
-    while time.monotonic() < deadline:
-        if all(port_is_free(p) for p in ports):
-            return True
-        time.sleep(0.5)
-    return False
-
-
-def wait_for_url(url: str, timeout_s: int, *, method: str = "GET", data: Optional[bytes] = None, headers: Optional[dict] = None) -> bool:
-    """Poll the URL until it responds (any 2xx-5xx) or timeout. Returns True on success."""
-    deadline = time.monotonic() + timeout_s
-    req = urllib.request.Request(url, data=data, method=method, headers=headers or {})
-    while time.monotonic() < deadline:
-        try:
-            with urllib.request.urlopen(req, timeout=2) as resp:
-                # Any response means the server is up.
-                _ = resp.read(1)
-                return True
-        except urllib.error.HTTPError:
-            # 4xx/5xx still means the server is alive.
-            return True
-        except (urllib.error.URLError, ConnectionError, TimeoutError):
-            time.sleep(1)
-    return False
-
-
-def wait_for_fixture(port: int, timeout_s: int = 20) -> bool:
-    """Send a real MCP initialize to be sure the fixture is fully booted."""
-    body = (
-        b'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":'
-        b'"2024-11-05","capabilities":{},"clientInfo":{"name":"probe","version":"0"}}}'
-    )
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json, text/event-stream",
-    }
-    return wait_for_url(
-        f"http://localhost:{port}/mcp",
-        timeout_s,
-        method="POST",
-        data=body,
-        headers=headers,
-    )
-
-
 # --- Native mode -----------------------------------------------------------
-
-
-def ensure_ext_apps_clone(ext_apps_dir: Path) -> None:
-    if (ext_apps_dir / ".git").exists():
-        info(f"Updating ext-apps in {ext_apps_dir}...")
-        subprocess.run(["git", "pull", "--quiet"], cwd=ext_apps_dir, check=False)
-    else:
-        info(f"Cloning ext-apps to {ext_apps_dir}...")
-        subprocess.run(["git", "clone", "--quiet", EXT_APPS_REPO, str(ext_apps_dir)], check=True)
 
 
 def write_playwright_config(ext_apps_dir: Path, snapshot_dir_abs: Path, artifacts_dir_abs: Path) -> None:
@@ -463,12 +320,7 @@ def run_native(config: Config, fixture: Fixture) -> int:
     ensure_ext_apps_clone(config.ext_apps_dir)
     write_playwright_config(config.ext_apps_dir, snapshot_dir, artifacts_dir)
 
-    info("Installing upstream npm deps...")
-    subprocess.run(
-        ["npm", "install", "--silent", "--no-audit", "--no-fund"],
-        cwd=config.ext_apps_dir,
-        check=False,
-    )
+    install_upstream_deps(config.ext_apps_dir)
 
     info("Installing Playwright Chromium...")
     rc = subprocess.run(
@@ -479,21 +331,10 @@ def run_native(config: Config, fixture: Fixture) -> int:
     if rc != 0:
         die("playwright install failed", code=rc)
 
-    info(f"Building {fixture.example} (for dist/mcp-app.html)...")
-    subprocess.run(
-        ["npm", "run", "build"],
-        cwd=config.ext_apps_dir / "examples" / fixture.example,
-        check=False,
-    )
+    build_upstream_example(config.ext_apps_dir, fixture.example)
 
-    # Build the mcpkit fixture.
-    info(f"Building mcpkit fixture: {fixture.fixture_dir}...")
     fixture_bin = Path(f"/tmp/mcpkit-fixture-{Path(fixture.fixture_dir).name}")
-    subprocess.run(
-        ["go", "build", "-o", str(fixture_bin), "."],
-        cwd=MCPKIT_ROOT / fixture.fixture_dir,
-        check=True,
-    )
+    build_go_fixture(MCPKIT_ROOT / fixture.fixture_dir, fixture_bin)
 
     fixture_proc: Optional[subprocess.Popen] = None
     harness_proc: Optional[subprocess.Popen] = None
@@ -501,16 +342,8 @@ def run_native(config: Config, fixture: Fixture) -> int:
     harness_log = Path("/tmp/basic-host.log")
 
     def cleanup() -> None:
-        for proc in (fixture_proc, harness_proc):
-            if proc and proc.poll() is None:
-                try:
-                    proc.terminate()
-                    try:
-                        proc.wait(timeout=5)
-                    except subprocess.TimeoutExpired:
-                        proc.kill()
-                except Exception:
-                    pass
+        cleanup_proc(fixture_proc)
+        cleanup_proc(harness_proc)
         # Sweep ports — basic-host's bun process spawns children.
         for port in (config.harness_port, config.sandbox_port, config.fixture_port):
             kill_port(port)
@@ -519,14 +352,11 @@ def run_native(config: Config, fixture: Fixture) -> int:
         # Start fixture.
         kill_port(config.fixture_port)
         info(f"Starting mcpkit fixture on port {config.fixture_port}...")
-        fixture_env = os.environ.copy()
-        fixture_env["EXT_APPS_DIR"] = str(config.ext_apps_dir)
-        fixture_env["PORT"] = str(config.fixture_port)
-        fixture_proc = subprocess.Popen(
-            [str(fixture_bin)],
-            stdout=fixture_log.open("w"),
-            stderr=subprocess.STDOUT,
-            env=fixture_env,
+        fixture_proc = start_go_fixture(
+            fixture_bin,
+            config.fixture_port,
+            ext_apps_dir=config.ext_apps_dir,
+            log_file=fixture_log,
         )
         if not wait_for_fixture(config.fixture_port, timeout_s=20):
             info(f"ERROR: fixture failed to start. Tail of {fixture_log}:")
@@ -543,17 +373,12 @@ def run_native(config: Config, fixture: Fixture) -> int:
             f"Starting basic-host on {config.harness_port} (sandbox {config.sandbox_port}), "
             "SERVERS pointing at fixture..."
         )
-        servers_json = f'["http://localhost:{config.fixture_port}/mcp"]'
-        harness_env = os.environ.copy()
-        harness_env["SERVERS"] = servers_json
-        harness_env["HOST_PORT"] = str(config.harness_port)
-        harness_env["SANDBOX_PORT"] = str(config.sandbox_port)
-        harness_proc = subprocess.Popen(
-            ["npm", "run", "start"],
-            cwd=config.ext_apps_dir / "examples" / "basic-host",
-            stdout=harness_log.open("w"),
-            stderr=subprocess.STDOUT,
-            env=harness_env,
+        harness_proc = start_basic_host(
+            config.ext_apps_dir,
+            f"http://localhost:{config.fixture_port}/mcp",
+            harness_port=config.harness_port,
+            sandbox_port=config.sandbox_port,
+            log_file=harness_log,
         )
         if not wait_for_url(f"http://localhost:{config.harness_port}/", timeout_s=60):
             info(f"ERROR: basic-host failed to start within 60s. Tail of {harness_log}:")
@@ -613,15 +438,6 @@ def run_native(config: Config, fixture: Fixture) -> int:
         cleanup()
 
 
-def tail_file(path: Path, n: int) -> None:
-    try:
-        lines = path.read_text(errors="replace").splitlines()
-    except OSError:
-        return
-    for line in lines[-n:]:
-        info(line)
-
-
 # --- Docker mode -----------------------------------------------------------
 
 
@@ -641,16 +457,7 @@ def run_docker(config: Config, fixture: Fixture) -> int:
     fixture_bin_container = "/tmp/fixture-linux-amd64"
 
     try:
-        info("Cross-compiling fixture for linux/amd64...")
-        build_env = os.environ.copy()
-        build_env["GOOS"] = "linux"
-        build_env["GOARCH"] = "amd64"
-        subprocess.run(
-            ["go", "build", "-o", str(fixture_bin_host), "."],
-            cwd=MCPKIT_ROOT / fixture.fixture_dir,
-            env=build_env,
-            check=True,
-        )
+        build_go_fixture(MCPKIT_ROOT / fixture.fixture_dir, fixture_bin_host, linux_amd64=True)
 
         info(f"Pulling {DOCKER_IMAGE} if needed...")
         subprocess.run(["docker", "pull", "--quiet", DOCKER_IMAGE], check=False)

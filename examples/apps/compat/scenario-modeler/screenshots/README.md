@@ -1,6 +1,6 @@
 # Screenshots — scenario-modeler
 
-Capture by running `make demo-app EXAMPLE=scenario-modeler-server`.
+Capture by running `RENDERER=basic-host make demo-app EXAMPLE=scenario-modeler-server`.
 
 | File | What to capture |
 |---|---|

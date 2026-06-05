@@ -15,8 +15,16 @@ mcpkit hosts can drive a Solid-based App with no special handling.
 ## Run it
 
 ```bash
+# mcpkit-Go fixture + MCPJam (default — wire-level inspection)
 make demo-app EXAMPLE=basic-server-solid
-make inspect-app EXAMPLE=basic-server-solid
+
+# Same Go fixture rendered in basic-host (iframe + bridge JS)
+RENDERER=basic-host make demo-app EXAMPLE=basic-server-solid
+
+# Compare against upstream's TS reference server
+make demo-upstream EXAMPLE=basic-server-solid
+
+# Strict parity check (visual baseline + tools/list diff, requires Docker)
 EXAMPLE=basic-server-solid make test-apps-playwright-docker
 ```
 

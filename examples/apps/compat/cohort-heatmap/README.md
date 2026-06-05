@@ -19,8 +19,16 @@ cohort-retention heatmap.
 ## Run it
 
 ```bash
+# mcpkit-Go fixture + MCPJam (default — wire-level inspection)
 make demo-app EXAMPLE=cohort-heatmap-server
-make inspect-app EXAMPLE=cohort-heatmap-server
+
+# Same Go fixture rendered in basic-host (iframe + bridge JS)
+RENDERER=basic-host make demo-app EXAMPLE=cohort-heatmap-server
+
+# Compare against upstream's TS reference server
+make demo-upstream EXAMPLE=cohort-heatmap-server
+
+# Strict parity check (visual baseline + tools/list diff, requires Docker)
 EXAMPLE=cohort-heatmap-server make test-apps-playwright-docker
 ```
 
