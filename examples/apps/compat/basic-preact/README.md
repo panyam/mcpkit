@@ -13,6 +13,8 @@ mcpkit hosts can drive a Preact-based App with no special handling.
 
 ## Run it
 
+> ▶ **[Play the walkthrough in your browser](https://panyam.github.io/mcpkit/walkthroughs/examples/apps/compat/basic-preact/)** — animated playback of every curl / Go call the walkthrough makes, step-by-step. No clone, no setup.
+
 Boots the mcpkit-Go fixture (`main.go` in this folder) and opens
 [MCPJam Inspector](https://github.com/MCPJam/inspector) so you can poke
 at the protocol surface:
