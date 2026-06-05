@@ -1,6 +1,6 @@
 # Screenshots — budget-allocator
 
-Capture by running `make demo-app EXAMPLE=budget-allocator-server`.
+Capture by running `RENDERER=basic-host make demo-app EXAMPLE=budget-allocator-server`.
 
 | File | What to capture |
 |---|---|

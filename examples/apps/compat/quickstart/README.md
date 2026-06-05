@@ -18,8 +18,16 @@ rather than a hand-rolled minimal one.
 ## Run it
 
 ```bash
+# mcpkit-Go fixture + MCPJam (default — wire-level inspection)
 make demo-app EXAMPLE=quickstart
-make inspect-app EXAMPLE=quickstart
+
+# Same Go fixture rendered in basic-host (iframe + bridge JS)
+RENDERER=basic-host make demo-app EXAMPLE=quickstart
+
+# Compare against upstream's TS reference server
+make demo-upstream EXAMPLE=quickstart
+
+# Strict parity check (visual baseline + tools/list diff, requires Docker)
 EXAMPLE=quickstart make test-apps-playwright-docker
 ```
 

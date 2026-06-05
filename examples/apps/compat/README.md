@@ -35,13 +35,20 @@ Each example's own `README.md` lists prompts to try against it in
 MCPJam Inspector or basic-host. Run a single one with:
 
 ```bash
-make demo-app EXAMPLE=basic-server-vanillajs    # upstream TS server
-make inspect-app EXAMPLE=basic-server-vanillajs # MCPJam Inspector
+# mcpkit-Go fixture + MCPJam (default — wire-level inspection)
+make demo-app EXAMPLE=basic-server-vanillajs
+
+# mcpkit-Go fixture + basic-host (visual demo — renders the App iframe)
+RENDERER=basic-host make demo-app EXAMPLE=basic-server-vanillajs
+
+# upstream TS reference server + MCPJam (use for SKIP examples below)
+make demo-upstream EXAMPLE=basic-server-vanillajs
 ```
 
 **SKIP rows** — examples upstream's `servers.spec.ts` deliberately
 excludes (special build-time deps or out of the default test matrix).
-The fixtures still exist as browsable references via `make demo-app`:
+No mcpkit-Go drop-in exists for these; browse them with
+`make demo-upstream`:
 [`lazy-auth-server`](https://github.com/modelcontextprotocol/ext-apps/tree/main/examples/lazy-auth-server),
 [`qr-server`](https://github.com/modelcontextprotocol/ext-apps/tree/main/examples/qr-server),
 [`say-server`](https://github.com/modelcontextprotocol/ext-apps/tree/main/examples/say-server),
@@ -177,65 +184,72 @@ surface parity isn't enough to match a multi-server baseline. Per-
 fixture committed PNGs capture our actual run shape, which is the only
 fair regression check we can do.
 
-## Browsing an upstream example without Playwright
+## Browsing a fixture interactively
 
-If you just want to *see* what an upstream example looks like in `basic-host`
-— including the SKIP ones that don't have automated tests (`video-resource-
-server`, `lazy-auth-server`) — there's a separate target:
+The demo targets pick a server and a renderer independently:
 
-```bash
-make demo-app EXAMPLE=video-resource-server
-make demo-app EXAMPLE=lazy-auth-server
-make demo-app EXAMPLE=basic-server-vanillajs       # also works for testable examples
-OPEN=0 make demo-app EXAMPLE=quickstart            # don't auto-open (CI / no display)
+| Command | MCP server | Renderer |
+|---|---|---|
+| `make demo-app EXAMPLE=<name>` | **mcpkit-Go fixture** | **MCPJam Inspector** (default) |
+| `RENDERER=basic-host make demo-app EXAMPLE=<name>` | mcpkit-Go fixture | basic-host (iframe rendering) |
+| `make demo-upstream EXAMPLE=<name>` | **upstream TS reference** | MCPJam Inspector (default) |
+| `RENDERER=basic-host make demo-upstream EXAMPLE=<name>` | upstream TS reference | basic-host (iframe rendering) |
+
+### When to use which
+
+- **`make demo-app`** (Go + MCPJam) — the default. Wire-level inspection
+  of the mcpkit fixture. Open MCPJam, paste the server URL into its
+  server list, browse `tools/list` JSON, `_meta.ui` structure, tool-call
+  payloads, resource list. No upstream JS build needed for inspection.
+- **`RENDERER=basic-host make demo-app`** — visual demo of the Go fixture.
+  Renders the App's iframe + bridge JS in `basic-host`. Use this to
+  verify the round-trip end-to-end (server → host → iframe → bridge
+  callback). Requires upstream's `dist/mcp-app.html` build.
+- **`make demo-upstream`** (TS + MCPJam) — same UX as `demo-app` but
+  hits upstream's TypeScript reference server. Use this for SKIP
+  examples without a Go drop-in (`lazy-auth-server`,
+  `video-resource-server`, `qr-server`, `say-server`), or to compare
+  the Go fixture's wire surface against the canonical TS implementation.
+- **`RENDERER=basic-host make demo-upstream`** — see the upstream TS
+  example rendered in basic-host (the original `make demo-app` from
+  before issue 608).
+- **`make test-apps-playwright-docker EXAMPLE=<name>`** — strict parity
+  check (visual + `tools/list` diff). Separate axis; not interactive.
+
+### Friendly errors
+
+`make demo-app EXAMPLE=<name>` requires a mcpkit-Go drop-in to exist
+under `examples/apps/compat/`. For SKIP examples that don't have one
+(see the list above), the wrapper prints a redirect:
+
+```
+ERROR: no mcpkit-Go drop-in for upstream example 'lazy-auth-server'.
+
+  Try `make demo-upstream EXAMPLE=lazy-auth-server` to browse the upstream
+  TS reference instead.
 ```
 
-What it does (pure browse, no Playwright, no Docker, no drift check, no
-snapshots):
+### What runs under the hood
 
-1. Clones / updates `$EXT_APPS_DIR` (default `/tmp/ext-apps`)
-2. Runs `npm install` if needed + `npm run build` for the chosen example
-3. Starts the upstream **TS** server (not a mcpkit-Go fixture) on
-   `SERVER_PORT` (default 3101). Uses `node dist/index.js` if the build
-   produced one, falls back to `npx tsx main.ts`.
-4. Starts `basic-host` on `HARNESS_PORT` (default 8080) with `SERVERS`
-   pointing at the TS server
-5. Opens the URL in your default browser (suppress with `OPEN=0`).
+For either `demo-app` or `demo-upstream`:
 
-The browser opens by default — the whole point of this target is to see
-an example without driving the test suite. Use it when comparing what
-upstream's TS renders vs. what a mcpkit-Go drop-in would render, or when
-poking at a SKIP example. CI / headless invocations should pass `OPEN=0`.
+1. Clone / update `$EXT_APPS_DIR` (default `/tmp/ext-apps`).
+2. Run `npm install` if needed + `npm run build` for the example
+   (the iframe `dist/mcp-app.html` is needed by basic-host, and the
+   upstream server build by `demo-upstream`).
+3. Start the chosen MCP server (Go fixture or upstream TS) on
+   `SERVER_PORT` (default 3101).
+4. Start the renderer:
+   - `RENDERER=mcpjam`: launch `npx -y @mcpjam/inspector@latest`, opens
+     its own browser tab. Paste `http://localhost:3101/mcp` into the
+     server list.
+   - `RENDERER=basic-host`: start basic-host on `HARNESS_PORT` (default
+     8080) with `SERVERS` pointing at the MCP server, auto-open the
+     browser (suppress with `OPEN=0`).
 
-### Inspecting the protocol surface (`make inspect-app`)
-
-Sibling target: instead of opening basic-host (which renders the App),
-runs **MCPJam Inspector locally** (`npx @mcpjam/inspector@latest`) and
-boots the upstream TS server alongside. MCPJam opens its own browser tab;
-you paste the upstream server URL into MCPJam to connect.
-
-```bash
-make inspect-app EXAMPLE=basic-server-vanillajs
-make inspect-app EXAMPLE=integration-server
-make inspect-app EXAMPLE=debug-server
-```
-
-The wrapper prints a step-by-step banner: where the upstream server is
-serving, what to paste into MCPJam, what to look for in each section.
-Once MCPJam's browser tab is open, you'll see the wire — raw
-`tools/list` JSON, `_meta.ui` structure, tool-call payloads, resource
-bytes.
-
-Decision matrix:
-
-| Goal | Use |
-|---|---|
-| "Does this App render correctly? Does the bridge work?" | `make demo-app` |
-| "What does the tool surface actually look like on the wire? What's in `_meta.ui`?" | `make inspect-app` |
-| "Strict parity check against upstream's TS reference" | `make test-apps-playwright-docker` |
-
-The console banner printed by each target tells you what to do once the
-browser opens.
+Foreground only — Ctrl-C tears the MCP server down. MCPJam manages its
+own browser lifecycle; when you quit MCPJam, you'll still need Ctrl-C to
+release the MCP server.
 
 ## Watching a run interactively
 

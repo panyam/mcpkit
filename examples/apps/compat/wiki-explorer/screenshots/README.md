@@ -1,6 +1,6 @@
 # Screenshots — wiki-explorer
 
-Capture by running `make demo-app EXAMPLE=wiki-explorer-server`.
+Capture by running `RENDERER=basic-host make demo-app EXAMPLE=wiki-explorer-server`.
 
 | File | What to capture |
 |---|---|

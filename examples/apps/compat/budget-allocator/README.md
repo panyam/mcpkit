@@ -19,8 +19,16 @@ without override.
 ## Run it
 
 ```bash
+# mcpkit-Go fixture + MCPJam (default — wire-level inspection)
 make demo-app EXAMPLE=budget-allocator-server
-make inspect-app EXAMPLE=budget-allocator-server
+
+# Same Go fixture rendered in basic-host (iframe + bridge JS)
+RENDERER=basic-host make demo-app EXAMPLE=budget-allocator-server
+
+# Compare against upstream's TS reference server
+make demo-upstream EXAMPLE=budget-allocator-server
+
+# Strict parity check (visual baseline + tools/list diff, requires Docker)
 EXAMPLE=budget-allocator-server make test-apps-playwright-docker
 ```
 

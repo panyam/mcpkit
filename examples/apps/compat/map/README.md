@@ -21,8 +21,16 @@ App calls via the bridge.
 ## Run it
 
 ```bash
+# mcpkit-Go fixture + MCPJam (default — wire-level inspection)
 make demo-app EXAMPLE=map-server
-make inspect-app EXAMPLE=map-server
+
+# Same Go fixture rendered in basic-host (iframe + bridge JS)
+RENDERER=basic-host make demo-app EXAMPLE=map-server
+
+# Compare against upstream's TS reference server
+make demo-upstream EXAMPLE=map-server
+
+# Strict parity check (visual baseline + tools/list diff, requires Docker)
 EXAMPLE=map-server make test-apps-playwright-docker
 ```
 

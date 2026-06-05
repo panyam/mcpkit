@@ -3,9 +3,7 @@
 Placeholder paths referenced from `../README.md`. Capture by running:
 
 ```bash
-make demo-app EXAMPLE=pdf-server
-# or
-make inspect-app EXAMPLE=pdf-server
+RENDERER=basic-host make demo-app EXAMPLE=pdf-server
 ```
 
 Then drive the prompts in `../README.md` and screenshot the host UI
