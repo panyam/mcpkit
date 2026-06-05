@@ -37,7 +37,7 @@ Connect to `Customer Segmentation Server`, then paste any of these:
 Show me my customer segments.
 ```
 
-![Customer Segmentation App: iframe shows the cluster scatter plot with color-coded segments + the per-segment summary panel on the right](screenshots/01-cluster-view.png)
+<a href="screenshots/01-cluster-view.png" target="_blank"><img src="screenshots/01-cluster-view.png" alt="Customer Segmentation App: iframe shows the cluster scatter plot with color-coded segments + the per-segment summary panel on the right" width="50%"></a>
 
 ```
 Cluster my customers and visualize the segments.
@@ -47,7 +47,7 @@ Cluster my customers and visualize the segments.
 Which customer segments are most valuable?
 ```
 
-![Customer Segmentation iframe with the high-value segment highlighted and its feature averages shown in the summary panel](screenshots/02-high-value-segment.png)
+<a href="screenshots/02-high-value-segment.png" target="_blank"><img src="screenshots/02-high-value-segment.png" alt="Customer Segmentation iframe with the high-value segment highlighted and its feature averages shown in the summary panel" width="50%"></a>
 
 ```
 Display customer segmentation with average revenue per cluster.

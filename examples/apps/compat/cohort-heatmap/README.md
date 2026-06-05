@@ -39,7 +39,7 @@ Connect to `Cohort Heatmap Server`, then paste any of these:
 Show me a cohort retention heatmap.
 ```
 
-![Cohort Heatmap App: iframe shows the full retention matrix with cohorts on one axis, time-period columns on the other, color-graded retention percentages](screenshots/01-default-heatmap.png)
+<a href="screenshots/01-default-heatmap.png" target="_blank"><img src="screenshots/01-default-heatmap.png" alt="Cohort Heatmap App: iframe shows the full retention matrix with cohorts on one axis, time-period columns on the other, color-graded retention percentages" width="50%"></a>
 
 ```
 What's my user retention by signup month?
@@ -53,7 +53,7 @@ Display the cohort analysis dashboard.
 How is retention looking month-over-month for the last six cohorts?
 ```
 
-![Cohort Heatmap iframe filtered to the last six cohorts; the color gradient makes the retention dropoff visible at a glance](screenshots/02-recent-cohorts.png)
+<a href="screenshots/02-recent-cohorts.png" target="_blank"><img src="screenshots/02-recent-cohorts.png" alt="Cohort Heatmap iframe filtered to the last six cohorts; the color gradient makes the retention dropoff visible at a glance" width="50%"></a>
 
 The model calls `get-cohort-data`; the iframe renders the heatmap
 with cohorts on one axis, time periods on the other.

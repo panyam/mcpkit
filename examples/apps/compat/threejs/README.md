@@ -46,7 +46,7 @@ paste any of these into the chat:
 Render a 3D scene using Three.js.
 ```
 
-![Three.js App: iframe shows the default rotating cube rendered with the OrbitControls camera](screenshots/01-default-cube.png)
+<a href="screenshots/01-default-cube.png" target="_blank"><img src="screenshots/01-default-cube.png" alt="Three.js App: iframe shows the default rotating cube rendered with the OrbitControls camera" width="50%"></a>
 
 ```
 Show me a green wireframe sphere rotating slowly.
@@ -60,7 +60,7 @@ Make a Three.js scene with three colored cubes arranged in a triangle.
 Render a torus knot with rainbow material that rotates on all three axes.
 ```
 
-![Three.js App: iframe shows a rainbow torus knot generated from a model-supplied code string](screenshots/02-custom-torus.png)
+<a href="screenshots/02-custom-torus.png" target="_blank"><img src="screenshots/02-custom-torus.png" alt="Three.js App: iframe shows a rainbow torus knot generated from a model-supplied code string" width="50%"></a>
 
 ```
 How do I use OrbitControls in Three.js?

@@ -41,7 +41,7 @@ Connect to `System Monitor Server`, then paste any of these:
 Show me the system monitor dashboard.
 ```
 
-![System Monitor App: iframe shows the live dashboard with CPU / memory / disk gauges + per-process table; the dashboard updates as the iframe polls poll-system-stats every few seconds](screenshots/01-dashboard.png)
+<a href="screenshots/01-dashboard.png" target="_blank"><img src="screenshots/01-dashboard.png" alt="System Monitor App: iframe shows the live dashboard with CPU / memory / disk gauges + per-process table; the dashboard updates as the iframe polls poll-system-stats every few seconds" width="50%"></a>
 
 ```
 What does my system look like right now? CPU, memory, disk?

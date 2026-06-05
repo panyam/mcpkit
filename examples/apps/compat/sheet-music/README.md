@@ -40,7 +40,7 @@ Connect to `Sheet Music Server`, then paste any of these:
 Play Twinkle Twinkle Little Star on the sheet music tool.
 ```
 
-![Sheet Music App rendered in basic-host: iframe shows Twinkle Twinkle as rendered sheet music with a play button](screenshots/01-twinkle.png)
+<a href="screenshots/01-twinkle.png" target="_blank"><img src="screenshots/01-twinkle.png" alt="Sheet Music App rendered in basic-host: iframe shows Twinkle Twinkle as rendered sheet music with a play button" width="50%"></a>
 
 ```
 Show me sheet music for "Mary Had a Little Lamb" in C major.
@@ -54,7 +54,7 @@ Use the play-sheet-music tool with the default ABC notation.
 Render Greensleeves in the key of A minor.
 ```
 
-![Sheet music for Greensleeves in A minor with audio playback controls](screenshots/02-greensleeves.png)
+<a href="screenshots/02-greensleeves.png" target="_blank"><img src="screenshots/02-greensleeves.png" alt="Sheet music for Greensleeves in A minor with audio playback controls" width="50%"></a>
 
 The model calls `play-sheet-music` with ABC notation (recalling it or
 constructing it); the iframe renders the sheet music and lets you

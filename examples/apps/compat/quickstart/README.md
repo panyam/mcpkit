@@ -38,7 +38,7 @@ Connect to `Quickstart MCP App Server`, then paste any of these:
 What's the current server time?
 ```
 
-![quickstart App rendered in basic-host: iframe shows the ISO timestamp from get-time](screenshots/01-get-time.png)
+<a href="screenshots/01-get-time.png" target="_blank"><img src="screenshots/01-get-time.png" alt="quickstart App rendered in basic-host: iframe shows the ISO timestamp from get-time" width="50%"></a>
 
 ```
 Use the get-time tool.
