@@ -9,7 +9,9 @@
 // at startup. Fails loudly if not found — caller must have cloned upstream and
 // run `npm run build` for basic-server-vanillajs.
 //
-// Run:  EXT_APPS_DIR=/tmp/ext-apps PORT=3101 go run .
+// Run:
+//   EXT_APPS_DIR=/tmp/ext-apps PORT=3101 go run .           # default: serve
+//   go run . --demo                                          # walkthrough
 package main
 
 import (
@@ -17,6 +19,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/panyam/mcpkit/core"
@@ -31,6 +34,20 @@ type getTimeOutput struct {
 }
 
 func main() {
+	// Dual-mode dispatcher: `--demo` runs the demokit walkthrough (acts as
+	// an MCP client against a running server in another terminal). Default
+	// (no flag) keeps the existing server behaviour so apps_demo.py and
+	// the Playwright wrapper continue to work unchanged.
+	for _, arg := range os.Args[1:] {
+		if strings.TrimSpace(arg) == "--demo" {
+			runDemo()
+			return
+		}
+	}
+	serve()
+}
+
+func serve() {
 	defaultPort := "3101"
 	if p := os.Getenv("PORT"); p != "" {
 		defaultPort = p
