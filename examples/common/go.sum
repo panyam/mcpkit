@@ -70,10 +70,10 @@ github.com/muesli/cancelreader v0.2.2 h1:3I4Kt4BQjOR54NavqnDogx/MIoWBFa0StPA8ELU
 github.com/muesli/cancelreader v0.2.2/go.mod h1:3XuTXfFS2VjM+HTLZY9Ak0l6eUKfijIfMUZ4EgX0QYo=
 github.com/muesli/termenv v0.16.0 h1:S5AlUN9dENB57rsbnkPyfdGuWIlkmzJjbFf0Tf5FWUc=
 github.com/muesli/termenv v0.16.0/go.mod h1:ZRfOIKPFDYQoDFF4Olj7/QJbW60Ol/kL1pU3VfY/Cnk=
-github.com/panyam/demokit v0.0.27 h1:+Yceye8bg2l3tdg6Fxbs056GsLIn0/Hu2fNHWySMvlk=
-github.com/panyam/demokit v0.0.27/go.mod h1:4OZtua8YGCD1k3XDkX4kl15x63l1KdKycm2wpLYJYS0=
-github.com/panyam/demokit/notebook v0.0.26 h1:i6oYbGyRYIOkxyc8hWEXD49LkWzjnxZYYXIRSfA65c8=
-github.com/panyam/demokit/notebook v0.0.26/go.mod h1:412YG4kCp9K/VqrfAg6cJqaBhcRQOi0Jc81Nc75nf0k=
+github.com/panyam/demokit v0.0.29 h1:XKdPyqsLH2FKF/z/Y7tHifZ5j1YWT8bXfcFXyM7oeRg=
+github.com/panyam/demokit v0.0.29/go.mod h1:Lyz5i2DGL2c2s/9tW1Nru+kKU02CLfp5ls02JLsrj30=
+github.com/panyam/demokit/notebook v0.0.28 h1:gzR6X9c/XlkTqKHkbtTK8K0QobIAYARt+zvFfOrZr1c=
+github.com/panyam/demokit/notebook v0.0.28/go.mod h1:412YG4kCp9K/VqrfAg6cJqaBhcRQOi0Jc81Nc75nf0k=
 github.com/panyam/gocurrent v0.1.1 h1:UFFCkAxYNdGL4RuUCYBneWCS0jIlquIpvgvDcezegaU=
 github.com/panyam/gocurrent v0.1.1/go.mod h1:jIIhcNfNnnIe2JXH8aY2+ba+/5G1fzwCWoZXdcMNw6o=
 github.com/panyam/goutils v0.1.13 h1:V819IdZTEJ3rpu33ZqohC6O9ou7KOu6cxfigoYT12OQ=

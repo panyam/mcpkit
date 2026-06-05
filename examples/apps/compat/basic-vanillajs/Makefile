@@ -11,7 +11,7 @@ readme: ## Regenerate WALKTHROUGH.md from the walkthrough definitions
 	go run . --demo --doc md > WALKTHROUGH.md
 
 record: ## Capture a trace of the walkthrough (interactive — press Enter to advance each step; requires `make serve` in another terminal)
-	go run . --demo --record .walkthrough.trace.json
+	go run . --demo --tui --record .walkthrough.trace.json
 	@echo ""
 	@echo "Trace written to .walkthrough.trace.json — commit it (it's the source of truth for the docs-site bundle)."
 
