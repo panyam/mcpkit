@@ -45,8 +45,8 @@ require (
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
-	github.com/panyam/demokit v0.0.27 // indirect
-	github.com/panyam/demokit/notebook v0.0.26 // indirect
+	github.com/panyam/demokit v0.0.29 // indirect
+	github.com/panyam/demokit/notebook v0.0.28 // indirect
 	github.com/panyam/goutils v0.1.13 // indirect
 	github.com/panyam/templar v0.1.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
