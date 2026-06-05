@@ -22,10 +22,10 @@ host ↔ server ↔ App-iframe round trip.
 
 > ▶ **[Play the walkthrough in your browser](https://panyam.github.io/mcpkit/walkthroughs/examples/apps/compat/basic-vanillajs/)** — animated playback of every curl / Go call the walkthrough makes, step-by-step. No clone, no setup.
 
-Or run it yourself. `make demo-app` boots the mcpkit-Go fixture
-(`main.go` in this folder) inside upstream's `basic-host` so you can see
-the App render in a real browser. **No LLM required** — the App's bridge
-JS calls `get-time` on its own and the result is inlined into the page:
+Boots the mcpkit-Go fixture (`main.go` in this folder) inside upstream's
+`basic-host` so you can see the App render in a real browser. **No LLM
+required** — the App's bridge JS calls `get-time` on its own and the
+result is inlined into the page:
 
 ```bash
 make demo-app EXAMPLE=basic-vanillajs
@@ -42,68 +42,16 @@ A browser opens at `http://localhost:8080`. First-touch flow:
 
 <a href="screenshots/01-get-time.png" target="_blank"><img src="screenshots/01-get-time.png" alt="basic-vanillajs App rendered in basic-host: iframe with a button showing the ISO timestamp returned by get-time" width="50%"></a>
 
-See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, and the strict Playwright gate.
+See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, the strict Playwright gate, and connecting from VS Code / Claude Desktop / other MCP hosts.
 
-## On the wire
+### Verify the wire shape (no LLM needed)
 
-You can also drive the fixture without any host UI — it's just an MCP
-server. Run these three curls in order in the same shell; each one is
-copy-pastable on its own:
+Useful for spot-checking what the Go fixture puts on the wire vs. what the iframe reads:
 
-**1. Initialize a session** — captures `Mcp-Session-Id` from the
-response headers into `$SID` for the next two calls:
-
-```bash
-SID=$(curl -si -X POST http://localhost:3101/mcp \
-  -H 'Content-Type: application/json' \
-  -H 'Accept: text/event-stream, application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"curl","version":"1"}}}' \
-  | awk 'tolower($1) == "mcp-session-id:" {gsub(/\r/,""); print $2}')
-```
-
-**2. Acknowledge initialization** — server's dispatcher unblocks after
-this `notifications/initialized`:
-
-```bash
-curl -s -X POST http://localhost:3101/mcp \
-  -H "Mcp-Session-Id: $SID" \
-  -H 'Content-Type: application/json' \
-  -H 'Accept: text/event-stream, application/json' \
-  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}'
-```
-
-**3. Call `get-time`**:
-
-```bash
-curl -s -X POST http://localhost:3101/mcp \
-  -H "Mcp-Session-Id: $SID" \
-  -H 'Content-Type: application/json' \
-  -H 'Accept: text/event-stream, application/json' \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get-time","arguments":{}}}'
-```
-
-Expected `structuredContent`: `{"time": "2026-…Z"}`. Same shape the
-iframe reads.
-
-`_meta.ui.resourceUri` is what tells the host this tool has a UI to
-render. Check it via `tools/list` — `ui://get-time/mcp-app.html` shows
-up under both the nested form (`_meta.ui.resourceUri`) and the flat
-form (`_meta.ui/resourceUri`) for backward compat.
-
-## In an LLM-driven host (optional)
-
-If you connect from a host that drives a model (Claude Desktop, VS Code
-with a model, MCPJam Pro, …), you can ask things like:
-
-> "What's the current server time?"
->
-> "Get the current time and tell me what day of the week that is."
->
-> "Use the get-time tool."
-
-The model decides to call `get-time`; the iframe renders the result.
-Token-cap quirks of free tiers vary — see the centralized guide for the
-[other host options](../README.md#other-ways-to-test-a-fixture).
+| What | How | What you should see |
+|---|---|---|
+| Smoke test the tool | Call `get-time` with empty input (basic-host or MCPJam) | Tool result `structuredContent`: `{"time": "2026-…Z"}` — same shape the iframe inlines |
+| Check `_meta.ui.resourceUri` | Expand the tool's `_meta` field in `tools/list` | `{"ui": {"resourceUri": "ui://get-time/mcp-app.html"}, "ui/resourceUri": "ui://get-time/mcp-app.html"}` — both the nested and flat forms are emitted for backward compat |
 
 ## What to look at next
 

@@ -20,6 +20,7 @@ build:
 	@echo "Building mcpkit docs site..."
 	MCPKIT_DOCS_ENV=production go run . -build
 	@cp -R static dist/docs/static
+	@cd ../.. && uv run scripts/collect_walkthroughs.py
 
 run:
 	MCPKIT_DOCS_ENV=dev MCPKIT_DOCS_PORT=$(PORT) go run .
