@@ -20,16 +20,50 @@ host ↔ server ↔ App-iframe round trip.
 
 ## Run it
 
+Start here — boots the mcpkit-Go fixture (`main.go` in this folder) and
+opens [MCPJam Inspector](https://github.com/MCPJam/inspector) so you can
+poke at the protocol surface:
+
 ```bash
-# Boots upstream's TS reference server + basic-host, opens browser
 make demo-app EXAMPLE=basic-server-vanillajs
-
-# Same but with MCPJam Inspector for raw protocol inspection
-make inspect-app EXAMPLE=basic-server-vanillajs
-
-# Run the upstream Playwright suite against this Go drop-in (drift + visual)
-EXAMPLE=basic-server-vanillajs make test-apps-playwright-docker
 ```
+
+What runs:
+
+- **mcpkit-Go fixture** on `http://localhost:3101/mcp` — the Go binary
+  built from `main.go` in this folder.
+- **MCPJam Inspector** opens in your default browser. Paste
+  `http://localhost:3101/mcp` into MCPJam's server list and connect.
+  Then browse `tools/list`, `_meta.ui`, and tool-call payloads on the
+  wire.
+
+### [Optional] You can also do…
+
+- **See the App rendered in basic-host (Go fixture).** Same Go server,
+  but driven by basic-host (the canonical reference UI). Opens a
+  browser at `http://localhost:8080`:
+
+  ```bash
+  RENDERER=basic-host make demo-app EXAMPLE=basic-server-vanillajs
+  ```
+
+- **Hit upstream's TS reference server instead.** Useful for comparing
+  the Go fixture's wire surface against the canonical implementation:
+
+  ```bash
+  make demo-upstream EXAMPLE=basic-server-vanillajs
+  ```
+
+  Add `RENDERER=basic-host` to render the upstream TS in basic-host
+  instead of MCPJam.
+
+- **Strict parity check against the mcpkit-Go fixture.** Runs upstream's
+  Playwright suite against the Go binary — wire-level `tools/list` diff
+  + visual PNG gate. Requires Docker:
+
+  ```bash
+  EXAMPLE=basic-server-vanillajs make test-apps-playwright-docker
+  ```
 
 ## Prompts to try
 
@@ -70,7 +104,7 @@ the wire shape:
 - Move up the [examples ladder](../README.md#reading-order--examples-ladder) — rung 2
   shows the same shape behind frameworks; rung 3 onwards introduces
   richer payloads.
-- Compare upstream's TS server side-by-side: `make demo-app
+- Compare upstream's TS server side-by-side: `make demo-upstream
   EXAMPLE=basic-server-vanillajs` runs the TS one; the visual + wire
   surface should be identical.
 - See [`main.go`](main.go) — fixture is ~60 lines.

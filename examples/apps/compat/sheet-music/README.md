@@ -20,8 +20,16 @@ schema. Introduces the `InputSchemaPatch` escape hatch.
 ## Run it
 
 ```bash
+# mcpkit-Go fixture + MCPJam (default — wire-level inspection)
 make demo-app EXAMPLE=sheet-music-server
-make inspect-app EXAMPLE=sheet-music-server
+
+# Same Go fixture rendered in basic-host (iframe + bridge JS)
+RENDERER=basic-host make demo-app EXAMPLE=sheet-music-server
+
+# Compare against upstream's TS reference server
+make demo-upstream EXAMPLE=sheet-music-server
+
+# Strict parity check (visual baseline + tools/list diff, requires Docker)
 EXAMPLE=sheet-music-server make test-apps-playwright-docker
 ```
 

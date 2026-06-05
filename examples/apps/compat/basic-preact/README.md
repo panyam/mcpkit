@@ -14,8 +14,16 @@ mcpkit hosts can drive a Preact-based App with no special handling.
 ## Run it
 
 ```bash
+# mcpkit-Go fixture + MCPJam (default — wire-level inspection)
 make demo-app EXAMPLE=basic-server-preact
-make inspect-app EXAMPLE=basic-server-preact
+
+# Same Go fixture rendered in basic-host (iframe + bridge JS)
+RENDERER=basic-host make demo-app EXAMPLE=basic-server-preact
+
+# Compare against upstream's TS reference server
+make demo-upstream EXAMPLE=basic-server-preact
+
+# Strict parity check (visual baseline + tools/list diff, requires Docker)
 EXAMPLE=basic-server-preact make test-apps-playwright-docker
 ```
 

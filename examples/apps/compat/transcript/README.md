@@ -17,8 +17,16 @@ meaningful work in the iframe (rather than just rendering a value).
 ## Run it
 
 ```bash
+# mcpkit-Go fixture + MCPJam (default — wire-level inspection)
 make demo-app EXAMPLE=transcript-server
-make inspect-app EXAMPLE=transcript-server
+
+# Same Go fixture rendered in basic-host (iframe + bridge JS)
+RENDERER=basic-host make demo-app EXAMPLE=transcript-server
+
+# Compare against upstream's TS reference server
+make demo-upstream EXAMPLE=transcript-server
+
+# Strict parity check (visual baseline + tools/list diff, requires Docker)
 EXAMPLE=transcript-server make test-apps-playwright-docker
 ```
 
