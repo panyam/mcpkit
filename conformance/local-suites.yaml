@@ -89,6 +89,6 @@ suites:
       repo: panyam/mcpconformance
       branch: chore/sep-2640-yaml
       path_var: MCPCONFORMANCE_SKILLS_PATH
-      default_path: ../conf-main
+      default_path: ../conf-skills
     note: "Fixture spawns and runs cleanly. Fork-side Scenario classes blocked on WG iteration of sep-2640.yaml in panyam/mcpconformance PR 330."
     tracking: "mcpkit 567"

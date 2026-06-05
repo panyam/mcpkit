@@ -1,8 +1,8 @@
 # Upstream Conformance Audit
 
-Snapshot of mcpkit graded against `modelcontextprotocol/conformance@bcfd400` — *chore: bump version to 0.2.0-alpha.0 (#306)*.
+Snapshot of mcpkit graded against `modelcontextprotocol/conformance@25fd443` — *chore: bump version to 0.2.0-alpha.2 (#328)*.
 
-**mcpkit HEAD:** `bcfd400`  
+**mcpkit HEAD:** `25fd443`  
 **Driver:** `cmd/testserver` (server scenarios) + `cmd/testclient` (client scenarios)
 
 Informational report — not a CI gate. Regenerate via `make testconf-upstream-audit`.
@@ -13,9 +13,9 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 
 | Surface | Scenarios | Checks | Pass | Fail | Warn | Info | Skipped | Harness-gap |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Server | 51 | 135 | 112 | 1 | 7 | 6 | 9 | 0 |
-| Client | 40 | 1395 | 513 | 7 | 4 | 869 | 2 | 0 |
-| **Total** | **91** | **1530** | **625** | **8** | **11** | **875** | **11** | **0** |
+| Server | 51 | 135 | 109 | 3 | 8 | 6 | 9 | 0 |
+| Client | 40 | 1219 | 453 | 9 | 4 | 751 | 2 | 0 |
+| **Total** | **91** | **1354** | **562** | **12** | **12** | **757** | **11** | **0** |
 
 ## Harness gaps
 
@@ -27,31 +27,32 @@ _None — every scenario produced results._
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
+| `tools_call` | client | fail | 1 fail |  |
 | `auth/2025-03-26-oauth-endpoint-fallback` | client | partial | 3 fail / 8 info |  |
 | `auth/2025-03-26-oauth-metadata-backcompat` | client | partial | 4 fail / 8 info |  |
-| `auth/authorization-server-migration` | client | pass | 30 pass / 52 info |  |
-| `auth/basic-cimd` | client | pass | 18 pass / 1 warn / 32 info |  |
+| `auth/authorization-server-migration` | client | partial | 12 pass / 1 fail / 16 info |  |
+| `auth/basic-cimd` | client | pass | 17 pass / 1 warn / 32 info |  |
 | `auth/iss-normalized` | client | pass | 8 pass / 12 info |  |
-| `auth/iss-not-advertised` | client | pass | 19 pass / 32 info |  |
-| `auth/iss-supported` | client | pass | 19 pass / 32 info |  |
+| `auth/iss-not-advertised` | client | pass | 12 pass / 16 info |  |
+| `auth/iss-supported` | client | pass | 12 pass / 16 info |  |
 | `auth/iss-supported-missing` | client | pass | 8 pass / 12 info |  |
 | `auth/iss-unexpected` | client | pass | 8 pass / 12 info |  |
 | `auth/iss-wrong-issuer` | client | pass | 8 pass / 12 info |  |
-| `auth/metadata-default` | client | pass | 18 pass / 32 info |  |
+| `auth/metadata-default` | client | pass | 17 pass / 32 info |  |
 | `auth/metadata-issuer-mismatch` | client | pass | 3 pass / 8 info |  |
-| `auth/metadata-var1` | client | pass | 18 pass / 34 info |  |
-| `auth/metadata-var2` | client | pass | 18 pass / 34 info |  |
-| `auth/metadata-var3` | client | pass | 18 pass / 34 info |  |
+| `auth/metadata-var1` | client | pass | 17 pass / 34 info |  |
+| `auth/metadata-var2` | client | pass | 17 pass / 34 info |  |
+| `auth/metadata-var3` | client | pass | 17 pass / 34 info |  |
 | `auth/pre-registration` | client | pass | 19 pass / 36 info |  |
 | `auth/resource-mismatch` | client | pass | 2 pass / 6 info |  |
-| `auth/scope-from-scopes-supported` | client | pass | 19 pass / 32 info |  |
-| `auth/scope-from-www-authenticate` | client | pass | 19 pass / 32 info |  |
-| `auth/scope-omitted-when-undefined` | client | pass | 19 pass / 32 info |  |
-| `auth/scope-retry-limit` | client | pass | 17 pass / 36 info |  |
-| `auth/scope-step-up` | client | pass | 19 pass / 2 warn / 34 info |  |
-| `auth/token-endpoint-auth-basic` | client | pass | 23 pass / 32 info |  |
-| `auth/token-endpoint-auth-none` | client | pass | 23 pass / 32 info |  |
-| `auth/token-endpoint-auth-post` | client | pass | 23 pass / 32 info |  |
+| `auth/scope-from-scopes-supported` | client | pass | 18 pass / 32 info |  |
+| `auth/scope-from-www-authenticate` | client | pass | 18 pass / 32 info |  |
+| `auth/scope-omitted-when-undefined` | client | pass | 18 pass / 32 info |  |
+| `auth/scope-retry-limit` | client | pass | 16 pass / 36 info |  |
+| `auth/scope-step-up` | client | pass | 18 pass / 2 warn / 34 info |  |
+| `auth/token-endpoint-auth-basic` | client | pass | 22 pass / 32 info |  |
+| `auth/token-endpoint-auth-none` | client | pass | 22 pass / 32 info |  |
+| `auth/token-endpoint-auth-post` | client | pass | 22 pass / 32 info |  |
 | `completion-complete` | server | pass | 1 pass |  |
 | `dns-rebinding-protection` | server | pass | 2 pass |  |
 | `initialize` | client | pass | 1 pass / 1 info |  |
@@ -69,7 +70,6 @@ _None — every scenario produced results._
 | `resources-templates-read` | server | pass | 1 pass |  |
 | `resources-unsubscribe` | server | pass | 1 pass |  |
 | `server-initialize` | server | pass | 2 pass |  |
-| `tools_call` | client | pass | 1 pass / 18 info |  |
 | `tools-call-audio` | server | pass | 1 pass |  |
 | `tools-call-elicitation` | server | pass | 1 pass |  |
 | `tools-call-embedded-resource` | server | pass | 1 pass |  |
@@ -143,8 +143,8 @@ _None — every scenario produced results._
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `auth/offline-access-not-supported` | client | pass | 19 pass / 32 info |  |
-| `auth/offline-access-scope` | client | pass | 18 pass / 1 warn / 33 info |  |
+| `auth/offline-access-not-supported` | client | pass | 12 pass / 16 info |  |
+| `auth/offline-access-scope` | client | pass | 11 pass / 1 warn / 17 info |  |
 
 ### [SEP-2243-CUSTOM-HEADERS](https://modelcontextprotocol.io/specification/draft/basic/transports#server-behavior-for-custom-headers) (2 scenarios)
 
@@ -157,7 +157,7 @@ _None — every scenario produced results._
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `http-header-validation` | server | pass | 13 pass |  |
+| `http-header-validation` | server | partial | 11 pass / 1 fail / 1 warn |  |
 
 ### [SEP-2243-X-MCP-HEADER](https://modelcontextprotocol.io/specification/draft/server/tools#x-mcp-header) (1 scenarios)
 
@@ -200,7 +200,7 @@ _None — every scenario produced results._
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `caching` | server | pass | 7 pass |  |
+| `caching` | server | partial | 6 pass / 1 fail |  |
 
 ### [SEP-2575](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2575) (2 scenarios)
 
