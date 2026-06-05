@@ -25,7 +25,7 @@ opens [MCPJam Inspector](https://github.com/MCPJam/inspector) so you can
 poke at the protocol surface:
 
 ```bash
-make demo-app EXAMPLE=basic-server-vanillajs
+make demo-app EXAMPLE=basic-vanillajs
 ```
 
 What runs:
@@ -44,14 +44,14 @@ What runs:
   browser at `http://localhost:8080`:
 
   ```bash
-  RENDERER=basic-host make demo-app EXAMPLE=basic-server-vanillajs
+  RENDERER=basic-host make demo-app EXAMPLE=basic-vanillajs
   ```
 
 - **Hit upstream's TS reference server instead.** Useful for comparing
   the Go fixture's wire surface against the canonical implementation:
 
   ```bash
-  make demo-upstream EXAMPLE=basic-server-vanillajs
+  make demo-upstream EXAMPLE=basic-vanillajs
   ```
 
   Add `RENDERER=basic-host` to render the upstream TS in basic-host
@@ -62,7 +62,7 @@ What runs:
   + visual PNG gate. Requires Docker:
 
   ```bash
-  EXAMPLE=basic-server-vanillajs make test-apps-playwright-docker
+  EXAMPLE=basic-vanillajs make test-apps-playwright-docker
   ```
 
 ## Prompts to try
@@ -105,6 +105,6 @@ the wire shape:
   shows the same shape behind frameworks; rung 3 onwards introduces
   richer payloads.
 - Compare upstream's TS server side-by-side: `make demo-upstream
-  EXAMPLE=basic-server-vanillajs` runs the TS one; the visual + wire
+  EXAMPLE=basic-vanillajs` runs the TS one; the visual + wire
   surface should be identical.
 - See [`main.go`](main.go) — fixture is ~60 lines.
