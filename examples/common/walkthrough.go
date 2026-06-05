@@ -50,12 +50,20 @@ func ServerURL() string {
 // a recorded trace) and `--serve <addr>` (live HTTP+WS player) for
 // free. The recipe to publish a playable trace:
 //
-//	# Record a trace once (non-interactive so it doesn't pause for input):
-//	go run . --demo --record .walkthrough.trace.json --non-interactive
+//	# Record a trace once (author at the keyboard; press Enter to
+//	# advance each step). Commit the resulting JSON as the
+//	# source-of-truth for downstream bundle generation:
+//	go run . --demo --record .walkthrough.trace.json
 //
 //	# Bundle the trace + the player into one HTML page (+ sibling
-//	# JS/CSS assets) ready to host on gh-pages / docs.site:
+//	# JS/CSS assets) ready to host on gh-pages / docs.site -- no
+//	# server needed at build time, the trace contains everything:
 //	go run . --demo --doc bundle --from .walkthrough.trace.json --out walkthrough/index.html
+//
+// Non-interactive recording (`--non-interactive`) is currently unsafe
+// for walkthroughs with input steps: demokit silently omits inputs
+// that have no Default declared (panyam/demokit#59 tracks the
+// fail-fast fix). Until that ships, prefer interactive recording.
 //
 // `make note` target shells out to `--note`, which demokit.Mode()
 // resolves to "notebook" — so notebook mode is wired once here and
