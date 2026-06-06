@@ -13,6 +13,7 @@ import (
 
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/server"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -147,9 +148,15 @@ func TestQuota_Webhook_RejectsThirdSubscribe(t *testing.T) {
 	require.Nil(t, subscribe(t, "b").Error)
 	resp := subscribe(t, "c")
 	require.NotNil(t, resp.Error, "third subscribe should be rejected")
-	require.Equal(t, ErrCodeTooManySubscriptions, resp.Error.Code)
+	require.Equal(t, ErrCodeResourceExhausted, resp.Error.Code)
 	require.Contains(t, resp.Error.Message, "alert.fired")
 	require.Contains(t, resp.Error.Message, "cap 2")
+	// Typed data payload: clients branch on (limit, max) without
+	// parsing the human-readable message.
+	dataBytes, err := json.Marshal(resp.Error.Data)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"limit":"subscriptions","max":2}`, string(dataBytes),
+		"quota Reserve failure must carry typed ResourceExhaustedData with the configured cap")
 }
 
 func TestQuota_Webhook_UnsubscribeReleases(t *testing.T) {
@@ -428,7 +435,7 @@ func TestQuota_Poll_RejectsOverCap(t *testing.T) {
 	// Distinct params → would be a NEW lease → should hit cap.
 	resp := poll("b")
 	require.NotNil(t, resp.Error)
-	require.Equal(t, ErrCodeTooManySubscriptions, resp.Error.Code)
+	require.Equal(t, ErrCodeResourceExhausted, resp.Error.Code)
 	// Lease for "b" must NOT have been retained — rollback path.
 	require.Equal(t, 1, leases.Len(), "rejected poll should not leave a lease behind")
 
