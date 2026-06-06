@@ -174,7 +174,7 @@ func validStreamParams() map[string]any {
 }
 
 // TestStream_RejectsUnknownEvent verifies the spec contract that an
-// events/stream against an unknown event name fails with -32011 EventNotFound
+// events/stream against an unknown event name fails with -32011 NotFound
 // before any stream is opened (§"Push-Based Delivery" → "Request: events/stream"
 // L269: "If the subscription is invalid, the server responds immediately with
 // a JSON-RPC error and no stream is opened").
@@ -184,7 +184,7 @@ func TestStream_RejectsUnknownEvent(t *testing.T) {
 	r := rs.endAndAwait(t, time.Second)
 	require.NoError(t, r.err)
 	require.NotNil(t, r.resp.Error, "expected -32011; got result")
-	assert.Equal(t, ErrCodeEventNotFound, r.resp.Error.Code)
+	assert.Equal(t, ErrCodeNotFound, r.resp.Error.Code)
 }
 
 // TestStream_RejectsAnonymousUnderStrictSpec verifies events/stream enforces
@@ -199,8 +199,8 @@ func TestStream_RejectsAnonymousUnderStrictSpec(t *testing.T) {
 	rs := st.startStream(t, validStreamParams())
 	r := rs.endAndAwait(t, time.Second)
 	require.NoError(t, r.err)
-	require.NotNil(t, r.resp.Error, "expected -32012 Unauthorized; got result")
-	assert.Equal(t, ErrCodeUnauthorized, r.resp.Error.Code)
+	require.NotNil(t, r.resp.Error, "expected -32012 Forbidden; got result")
+	assert.Equal(t, ErrCodeForbidden, r.resp.Error.Code)
 }
 
 // TestStream_ActiveNotificationFiresFirst verifies the first frame on a

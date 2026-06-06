@@ -48,8 +48,8 @@ type StreamEventsResult struct {
 // streamSubscribable is the optional interface a source implements to support
 // events/stream push delivery. YieldingSource satisfies this; TypedSource
 // does not (it has no internal buffer to fan out from). registerStream
-// rejects events/stream for sources lacking this capability with -32017
-// DeliveryModeUnsupported per spec.
+// rejects events/stream for sources lacking this capability with -32014
+// Unsupported (data.feature="deliveryMode", data.value="push") per spec.
 //
 // SubscribeOpts: the SDK passes the resolved subscriber identity
 // (Principal / SubscriptionID / Params) at Subscribe time so the
@@ -132,25 +132,25 @@ func registerStream(srv *server.Server, sourceMap map[string]EventSource, unsafe
 		}
 		source, ok := sourceMap[req.Name]
 		if !ok {
-			return core.NewErrorResponse(id, ErrCodeEventNotFound, "EventNotFound")
+			return newNotFoundError(id, "event", "NotFound")
 		}
 
 		// Spec §"Subscription Identity" → "Authentication required" L361:
 		// events/stream MUST be called with an authenticated principal —
-		// the spec lists Unauthorized among events/stream's immediate
+		// the spec lists -32012 Forbidden among events/stream's immediate
 		// errors at L267. Same auth gate as events/subscribe.
 		principal, ok := resolvePrincipal(ctx, unsafeAnon)
 		if !ok {
-			return core.NewErrorResponse(id, ErrCodeUnauthorized, "Unauthorized")
+			return newForbiddenError(id, "Forbidden")
 		}
 
 		// Sources that don't expose a Subscribe channel (TypedSource today)
-		// can't be served via push. Spec lists DeliveryModeUnsupported
-		// among events/stream's immediate errors at L267.
+		// can't be served via push. Spec lists -32014 Unsupported among
+		// events/stream's immediate errors at L267.
 		sub, ok := source.(streamSubscribable)
 		if !ok {
-			return core.NewErrorResponse(id, ErrCodeDeliveryModeUnsupported,
-				"DeliveryModeUnsupported: source does not support push delivery")
+			return newUnsupportedError(id, "deliveryMode", "push",
+				"Unsupported: source does not support push delivery")
 		}
 
 		// Enforce quota BEFORE Subscribe + on_subscribe per spec
@@ -161,7 +161,7 @@ func registerStream(srv *server.Server, sourceMap map[string]EventSource, unsafe
 		// of how the stream ends (ctx cancel, evCh close, terminated
 		// frame, panic).
 		if err := quota.Reserve(principal, req.Name); err != nil {
-			return core.NewErrorResponse(id, ErrCodeTooManySubscriptions, err.Error())
+			return newResourceExhaustedError(id, "subscriptions", int64(quota.Cap(req.Name)), err.Error())
 		}
 		defer quota.Release(principal, req.Name)
 
@@ -236,7 +236,9 @@ func registerStream(srv *server.Server, sourceMap map[string]EventSource, unsafe
 			// before any delivery happens. Returning an error here
 			// produces a JSON-RPC error response per the spec's
 			// "events/stream's immediate errors" at L267.
-			return core.NewErrorResponse(id, ErrCodeTooManySubscriptions,
+			// Cap unknown at this site — author-defined refusal is
+			// not a server-side quota, so Max is omitted.
+			return newResourceExhaustedError(id, "subscriptions", 0,
 				"on_subscribe rejected: "+err.Error())
 		}
 		defer safeOnUnsubscribe(def.OnUnsubscribe, hc, req.Params)

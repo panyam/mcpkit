@@ -131,7 +131,7 @@ func TestEventsPollEmptyStore(t *testing.T) {
 }
 
 // TestEventsPollUnknownEvent verifies unknown event names surface as a
-// top-level JSON-RPC error (-32011 EventNotFound per spec), not as an
+// top-level JSON-RPC error (-32011 NotFound, data.kind="event" per spec), not as an
 // embedded per-result error from the legacy partial-success model.
 // Single-sub call, single-sub response, single-sub error path.
 func TestEventsPollUnknownEvent(t *testing.T) {
@@ -145,7 +145,7 @@ func TestEventsPollUnknownEvent(t *testing.T) {
 	require.Error(t, err, "unknown event must return a JSON-RPC error")
 	rpcErr, ok := err.(*client.RPCError)
 	require.True(t, ok, "error should be RPCError, got %T", err)
-	assert.Equal(t, events.ErrCodeEventNotFound, rpcErr.Code, "spec code -32011 EventNotFound")
+	assert.Equal(t, events.ErrCodeNotFound, rpcErr.Code, "spec code -32011 NotFound")
 }
 
 // TestResourceRecentMessages verifies the recent messages resource returns
