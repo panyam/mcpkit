@@ -92,8 +92,8 @@ func TestSubscribe_RejectsAnonymousUnderStrictSpec(t *testing.T) {
 	resp := dispatchSubscribe(t, srv, validSubscribeParams())
 
 	require.NotNil(t, resp.Error, "expected -32012; got success result")
-	assert.Equal(t, ErrCodeUnauthorized, resp.Error.Code,
-		"spec-mandated -32012 Unauthorized for anonymous webhook subscribe")
+	assert.Equal(t, ErrCodeForbidden, resp.Error.Code,
+		"spec-mandated -32012 Forbidden for anonymous webhook subscribe")
 }
 
 // TestSubscribe_AcceptsAnonymousWithEscape verifies the demo escape

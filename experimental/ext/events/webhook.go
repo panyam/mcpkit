@@ -967,8 +967,8 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, eventID string, body []b
 // authoritative SSRF guard is the dial-time check in dialContext, which
 // is TOCTOU-safe under DNS rebinding (per spec §"Webhook Security" →
 // "SSRF prevention" L464). ValidateWebhookURL is a UX aid: catches
-// obvious mistakes at subscribe so the client gets -32015 InvalidCallbackUrl
-// immediately rather than a delayed delivery failure.
+// obvious mistakes at subscribe so the client gets -32015
+// CallbackEndpointError immediately rather than a delayed delivery failure.
 func (r *WebhookRegistry) ValidateWebhookURL(rawURL string) error {
 	u, err := url.Parse(rawURL)
 	if err != nil {

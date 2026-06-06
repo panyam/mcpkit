@@ -95,7 +95,7 @@ myDB.OnInsert = func(row Row) {
 | Method | Description |
 |--------|-------------|
 | `events/list` | Returns event definitions with auto-derived `payloadSchema` and `cursorless` flag |
-| `events/poll` | Single-subscription polling, flat top-level response shape (`{events, cursor, hasMore, truncated, nextPollSeconds}`); error responses use spec error codes `-32011 EventNotFound` / `-32015 InvalidCallbackUrl` |
+| `events/poll` | Single-subscription polling, flat top-level response shape (`{events, cursor, hasMore, truncated, nextPollSeconds}`); error responses use spec error codes `-32011 NotFound` (`data.kind: "event"`) / `-32015 CallbackEndpointError` |
 | `events/subscribe` | Webhook registration with HMAC secret + TTL + `refreshBefore`. `cursor: null` means "from now" — server resolves to source's current head |
 | `events/unsubscribe` | Webhook removal by `(url, id)` or `(url, secret)` |
 
@@ -182,7 +182,7 @@ events.Register(events.Config{
 })
 ```
 
-When set, anonymous webhook subscribes are accepted under the configured principal. The server logs a startup warning so deployments using it know they're off-spec. **Production deployments leave this empty AND wire `server.WithAuth(validator)` so unauthenticated subscribe attempts hit the spec-mandated `-32012 Unauthorized` rejection.**
+When set, anonymous webhook subscribes are accepted under the configured principal. The server logs a startup warning so deployments using it know they're off-spec. **Production deployments leave this empty AND wire `server.WithAuth(validator)` so unauthenticated subscribe attempts hit the spec-mandated `-32012 Forbidden` rejection.**
 
 ### Auth + extension composition
 
