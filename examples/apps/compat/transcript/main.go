@@ -92,7 +92,24 @@ func serve() {
 				ResourceURI: resourceURI,
 				ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 					return core.ResourceResult{Contents: []core.ResourceReadContent{{
-						URI: req.URI, MimeType: core.AppMIMEType, Text: html,
+						URI:      req.URI,
+						MimeType: core.AppMIMEType,
+						Text:     html,
+						// Spec puts iframe Permission-Policy capabilities on the
+						// resource's _meta.ui.permissions — hosts read this to set
+						// the `<iframe allow=...>` attribute. The transcript App
+						// needs microphone (Web Speech API) and clipboardWrite
+						// (its copy-transcript button). Without this _meta block,
+						// basic-host renders the iframe with no policy grant and
+						// recognition.start() silently fails.
+						Meta: &core.ResourceContentMeta{
+							UI: &core.UIMetadata{
+								Permissions: &core.UIPermissions{
+									Microphone:     &struct{}{},
+									ClipboardWrite: &struct{}{},
+								},
+							},
+						},
 					}}}, nil
 				},
 			})

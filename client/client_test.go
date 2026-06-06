@@ -50,7 +50,7 @@ func newTestMCPServer() *server.Server {
 				Meta: &core.ResourceContentMeta{
 					UI: &core.UIMetadata{
 						ResourceUri: "ui://test/view",
-						Permissions: []string{"clipboard-write"},
+						Permissions: &core.UIPermissions{ClipboardWrite: &struct{}{}},
 					},
 				},
 			}}}, nil
@@ -335,8 +335,8 @@ func TestClientReadResourceMeta(t *testing.T) {
 		if content.Meta.UI.ResourceUri != "ui://test/view" {
 			t.Errorf("resourceUri = %q, want %q", content.Meta.UI.ResourceUri, "ui://test/view")
 		}
-		if len(content.Meta.UI.Permissions) != 1 || content.Meta.UI.Permissions[0] != "clipboard-write" {
-			t.Errorf("permissions = %v, want [clipboard-write]", content.Meta.UI.Permissions)
+		if content.Meta.UI.Permissions == nil || content.Meta.UI.Permissions.ClipboardWrite == nil {
+			t.Errorf("permissions: expected ClipboardWrite set, got %+v", content.Meta.UI.Permissions)
 		}
 	})
 }

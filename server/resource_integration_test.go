@@ -490,7 +490,7 @@ func TestResourcesReadMeta(t *testing.T) {
 				Meta: &core.ResourceContentMeta{
 					UI: &core.UIMetadata{
 						ResourceUri:   "ui://app/view",
-						Permissions:   []string{"clipboard-write"},
+						Permissions:   &core.UIPermissions{ClipboardWrite: &struct{}{}},
 						PrefersBorder: boolPtr(false),
 					},
 				},
@@ -543,8 +543,8 @@ func TestResourcesReadMeta(t *testing.T) {
 	if meta.UI.ResourceUri != "ui://app/view" {
 		t.Errorf("resourceUri = %q, want %q", meta.UI.ResourceUri, "ui://app/view")
 	}
-	if len(meta.UI.Permissions) != 1 || meta.UI.Permissions[0] != "clipboard-write" {
-		t.Errorf("permissions = %v, want [clipboard-write]", meta.UI.Permissions)
+	if meta.UI.Permissions == nil || meta.UI.Permissions.ClipboardWrite == nil {
+		t.Errorf("permissions: expected ClipboardWrite set, got %+v", meta.UI.Permissions)
 	}
 	if meta.UI.PrefersBorder == nil || *meta.UI.PrefersBorder != false {
 		t.Errorf("prefersBorder = %v, want false", meta.UI.PrefersBorder)

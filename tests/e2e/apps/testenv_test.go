@@ -41,7 +41,7 @@ func newConformanceServer() *server.Server {
 					CSP: &core.UICSPConfig{
 						ResourceDomains: []string{"cdn.example.com"},
 					},
-					Permissions:   []string{"clipboard-write"},
+					Permissions:   &core.UIPermissions{ClipboardWrite: &struct{}{}},
 					PrefersBorder: &border,
 				},
 			},
@@ -133,7 +133,7 @@ func newConformanceServer() *server.Server {
 				Meta: &core.ResourceContentMeta{
 					UI: &core.UIMetadata{
 						ResourceUri: "ui://dashboard/view",
-						Permissions: []string{"clipboard-write"},
+						Permissions: &core.UIPermissions{ClipboardWrite: &struct{}{}},
 					},
 				},
 			}}}, nil

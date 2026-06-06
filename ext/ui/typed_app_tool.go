@@ -86,8 +86,13 @@ type TypedAppToolConfig[In, Out any] struct {
 	// CSP declares external domains the app needs.
 	CSP *core.UICSPConfig
 
-	// Permissions lists browser capabilities the app requests.
-	Permissions []string
+	// Permissions declares Permission-Policy capabilities the App needs.
+	// See core.UIPermissions for the wire shape. Note that per the MCP Apps
+	// spec, permissions belong on the UI resource's _meta.ui — set this
+	// field on your ResourceHandler's per-content Meta to take effect.
+	// Setting it here flows into the tool's _meta.ui for symmetry, but
+	// basic-host does not read permissions from tool meta.
+	Permissions *core.UIPermissions
 
 	// PrefersBorder hints whether the host should draw a visible border.
 	PrefersBorder *bool
