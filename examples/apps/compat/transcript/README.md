@@ -38,10 +38,20 @@ Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `h
 Open <http://localhost:8080> in your browser. Then:
 
 1. Pick **Transcript Server** from the server dropdown.
-2. Pick **transcribe** from the tool dropdown, click **Call Tool**.
-3. The iframe renders the result; interact with it directly to drive subsequent tool calls (no model in the loop).
+2. Pick **transcribe** from the tool dropdown, click **Call Tool** with the default empty input.
 
-<a href="screenshots/01-transcript-view.png" target="_blank"><img src="screenshots/01-transcript-view.png" alt="Transcript Server App rendered in basic-host: iframe shows the structured transcript with segments and timing" width="50%"></a>
+   The iframe loads with the Start button, the empty transcript area ("Your speech will appear here…"), and the Tool Result panel shows the immediate `{status:"ready", message:"Transcription UI opened…"}` payload — that's the synchronous text content the Go handler returns. The interactive piece is everything that follows.
+
+   <a href="screenshots/01-transcript-view.png" target="_blank"><img src="screenshots/01-transcript-view.png" alt="basic-host with the transcribe call open: iframe shows the Start/Clear/Send buttons and an empty transcript area; Tool Result panel below shows the {status:ready} response" width="50%"></a>
+
+3. Click **Start**. The first time you do this, the browser prompts for microphone access — that prompt only fires because the Go fixture declares `microphone` on the resource's `_meta.ui.permissions` (see [The iframe permission contract](#the-iframe-permission-contract) below). Allow it.
+4. Speak. The iframe transcribes inline as you talk — each utterance lands as a timestamped row above the buttons.
+
+   <a href="screenshots/02-structured-result.png" target="_blank"><img src="screenshots/02-structured-result.png" alt="Live transcription in basic-host: four captured rows ('Twinkle Twinkle Little Star', 'how I wonder what you are' x2, 'how about that was so high like a diamond') with timestamps; Model Context panel below the iframe shows tool: transcribe, status: listening, unsent-entries: 4" width="50%"></a>
+
+5. Watch the **Model Context** block populate below the iframe. This is what the model would see on its next turn — the App is feeding structured context back through the bridge (`status: listening`, current entries, unsent count). The Tool Result block is the synchronous response from step 2; the Model Context block is everything the App has pushed since.
+
+   <a href="screenshots/03-wire-data.png" target="_blank"><img src="screenshots/03-wire-data.png" alt="Zoomed view of the Model Context block (tool: transcribe, status: listening, unsent-entries: 4, plus the four transcribed lines) and the Tool Result block showing the JSON content array with the structured ready payload" width="50%"></a>
 
 ## Try It Out from a Host
 
