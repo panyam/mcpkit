@@ -13,6 +13,15 @@ meaningful work in the iframe (rather than just rendering a value).
   from the struct alone — no override needed. A clean middle ground
   between rung 1's trivial output and rung 4's nullable / nested
   shapes.
+- **Iframe Permission-Policy declaration.** First fixture to set
+  `_meta.ui.permissions` on the resource read response — declares the
+  Web Speech API (`microphone`) and the copy-transcript button
+  (`clipboardWrite`) so basic-host (and any spec-compliant host)
+  passes the right `<iframe allow=...>` attribute through to the
+  sandbox. Without this declaration, `recognition.start()` silently
+  fails inside the iframe — the browser blocks mic access by default.
+  See [The iframe permission contract](#the-iframe-permission-contract)
+  below for the wire shape and the spec-conformance footnote.
 
 ## Or Run Live
 
@@ -55,6 +64,77 @@ structured transcript view.
 | Iframe renders the transcript | Same call, scroll up | App iframe lays out the transcript with segments |
 
 See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, the strict Playwright gate, and connecting from VS Code / Claude Desktop / other MCP hosts.
+
+## The iframe permission contract
+
+The transcript App calls the browser's Web Speech API (`recognition.start()`),
+which requires the host to grant the `microphone` Permission-Policy on the
+sandbox iframe. The mcpkit-Go fixture declares this on the resource's
+per-content `_meta.ui.permissions`:
+
+```go
+return core.ResourceResult{Contents: []core.ResourceReadContent{{
+    URI:      req.URI,
+    MimeType: core.AppMIMEType,
+    Text:     html,
+    Meta: &core.ResourceContentMeta{
+        UI: &core.UIMetadata{
+            Permissions: &core.UIPermissions{
+                Microphone:     &struct{}{},
+                ClipboardWrite: &struct{}{},
+            },
+        },
+    },
+}}}, nil
+```
+
+On the wire (`resources/read` response):
+
+```json
+"_meta": {
+  "ui": {
+    "permissions": { "microphone": {}, "clipboardWrite": {} }
+  }
+}
+```
+
+basic-host reads this object and propagates each key into the iframe's
+`allow=` attribute (`microphone; clipboard-write`). The browser then prompts
+for mic access on the first `recognition.start()` call. Without the `_meta`
+block, the iframe loads with no policy grant and recognition silently fails
+with no prompt.
+
+### Why an object (and not an array)?
+
+The spec defines `McpUiResourcePermissions` as a named-and-typed interface
+where each value is an empty object `{}`:
+
+```ts
+interface McpUiResourcePermissions {
+  camera?: {};
+  microphone?: {};
+  geolocation?: {};
+  clipboardWrite?: {};
+}
+```
+
+The empty-object values are a placeholder — future revisions can add
+per-permission options without a wire break (e.g. `microphone: { autoGain: true }`).
+mcpkit mirrors this with the `core.UIPermissions` struct (pointer-to-`struct{}`
+fields, JSON-marshalled to the object form). Pre-`v0.3.x`, mcpkit serialized
+permissions as a JSON array of strings — basic-host did property lookups on
+that array and treated every permission as absent. The shape fix landed
+alongside this fixture's `_meta` wiring.
+
+### Spec-conformance footnote
+
+The MCP Apps spec also says permissions belong **only on the UI resource**,
+not on tool `_meta` (`permissions?: never` on `McpUiToolMeta`). The
+`AppToolConfig.Permissions` / `TypedAppToolConfig.Permissions` fields in
+`ext/ui` currently flow into tool `_meta.ui` for backward compatibility,
+but basic-host does not read them from there. To make a permission take
+effect in the iframe, you must set it on the **resource's** per-content
+`_meta.ui` as shown above. A follow-up will deprecate the tool-meta path.
 
 ## What to Try Next
 

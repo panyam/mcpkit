@@ -270,7 +270,10 @@ func TestUIMetadataJSONRoundTrip(t *testing.T) {
 			FrameDomains:    []string{"embed.example.com"},
 			BaseUriDomains:  []string{"example.com"},
 		},
-		Permissions:   []string{"camera", "microphone"},
+		Permissions: &UIPermissions{
+			Camera:     &struct{}{},
+			Microphone: &struct{}{},
+		},
 		PrefersBorder: &border,
 		Domain:        "myapp",
 	}
@@ -306,14 +309,45 @@ func TestUIMetadataJSONRoundTrip(t *testing.T) {
 	if len(got.CSP.BaseUriDomains) != 1 || got.CSP.BaseUriDomains[0] != "example.com" {
 		t.Errorf("CSP.BaseUriDomains = %v, want [example.com]", got.CSP.BaseUriDomains)
 	}
-	if len(got.Permissions) != 2 {
-		t.Errorf("Permissions length = %d, want 2", len(got.Permissions))
+	if got.Permissions == nil {
+		t.Fatal("Permissions is nil after round-trip")
+	}
+	if got.Permissions.Camera == nil || got.Permissions.Microphone == nil {
+		t.Errorf("Permissions: Camera or Microphone is nil, got %+v", got.Permissions)
+	}
+	if got.Permissions.Geolocation != nil || got.Permissions.ClipboardWrite != nil {
+		t.Errorf("Permissions: Geolocation/ClipboardWrite should be nil, got %+v", got.Permissions)
 	}
 	if got.PrefersBorder == nil || *got.PrefersBorder != true {
 		t.Errorf("PrefersBorder = %v, want true", got.PrefersBorder)
 	}
 	if got.Domain != "myapp" {
 		t.Errorf("Domain = %q, want %q", got.Domain, "myapp")
+	}
+}
+
+// TestUIPermissionsWireShape pins the wire shape of permissions to the
+// upstream MCP Apps spec form: a JSON object with per-permission keys whose
+// values are empty objects (placeholders for future per-permission options).
+//
+// Pre-fix, mcpkit emitted permissions as a JSON array of strings
+// (`["microphone", "clipboardWrite"]`). basic-host's app-bridge.ts reads
+// `permissions.microphone` etc. as property lookups on an object, so the
+// array form produced empty `<iframe allow=>` attributes and silently
+// blocked browser-policy capabilities. This test guards the new shape.
+func TestUIPermissionsWireShape(t *testing.T) {
+	p := UIPermissions{
+		Microphone:     &struct{}{},
+		ClipboardWrite: &struct{}{},
+	}
+	data, err := json.Marshal(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data)
+	want := `{"microphone":{},"clipboardWrite":{}}`
+	if got != want {
+		t.Errorf("UIPermissions wire shape = %s, want %s", got, want)
 	}
 }
 

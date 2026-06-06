@@ -32,9 +32,18 @@ type UIMetadata struct {
 	// Hosts construct Content-Security-Policy from these declarations.
 	CSP *UICSPConfig `json:"csp,omitempty"`
 
-	// Permissions lists browser capabilities the app requests
-	// (e.g., "camera", "microphone", "geolocation", "clipboardWrite").
-	Permissions []string `json:"permissions,omitempty"`
+	// Permissions declares browser Permission-Policy capabilities the App
+	// requests (camera, microphone, geolocation, clipboardWrite).
+	//
+	// Per the MCP Apps spec (McpUiResourcePermissions), permissions belong
+	// on the UI **resource** _meta.ui — NOT on tool _meta. mcpkit emits
+	// permissions only via ResourceContentMeta.UI; setting Permissions on
+	// a tool's UIMetadata has no wire effect.
+	//
+	// Wire shape is an object with optional keys per the spec, each value
+	// an empty object `{}` (placeholder for future per-permission options):
+	//   "permissions": { "microphone": {}, "clipboardWrite": {} }
+	Permissions *UIPermissions `json:"permissions,omitempty"`
 
 	// PrefersBorder hints whether the host should draw a visible border.
 	// nil = host decides, true = border, false = no border.
@@ -47,6 +56,34 @@ type UIMetadata struct {
 	// SupportedDisplayModes declares which display modes this app can render in.
 	// Nil means the host decides. Hosts use this to offer mode switching UI.
 	SupportedDisplayModes []DisplayMode `json:"supportedDisplayModes,omitempty"`
+}
+
+// UIPermissions declares browser Permission-Policy capabilities the App
+// requests. Mirrors the upstream MCP Apps spec's McpUiResourcePermissions
+// shape: a named struct with optional pointer-to-struct{} fields.
+//
+// The pointer-to-empty-struct pattern matches the spec's wire shape — each
+// permission field marshals to `{}` when set (placeholder for future
+// per-permission options) and is omitted entirely when nil.
+//
+// Wire example:
+//
+//	"permissions": { "microphone": {}, "clipboardWrite": {} }
+//
+// Hosts MAY honor these by setting iframe `allow=` attributes. Apps SHOULD
+// NOT assume permissions are granted — use JS feature detection as fallback.
+type UIPermissions struct {
+	// Camera maps to Permission Policy `camera`.
+	Camera *struct{} `json:"camera,omitempty"`
+
+	// Microphone maps to Permission Policy `microphone`.
+	Microphone *struct{} `json:"microphone,omitempty"`
+
+	// Geolocation maps to Permission Policy `geolocation`.
+	Geolocation *struct{} `json:"geolocation,omitempty"`
+
+	// ClipboardWrite maps to Permission Policy `clipboard-write`.
+	ClipboardWrite *struct{} `json:"clipboardWrite,omitempty"`
 }
 
 // UICSPConfig declares external domains for Content-Security-Policy construction.
