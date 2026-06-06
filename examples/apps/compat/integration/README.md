@@ -5,7 +5,7 @@ Most-tested fixture in the cluster — passes the 2 standard
 servers.spec.ts tests PLUS 3 host-callback interaction tests (Send
 Message, Send Log, Open Link).
 
-## What it shows
+## What it Shows
 
 - **Host callbacks from the App.** The App iframe surfaces buttons
   that drive **host-level** interactions over the bridge — not just
@@ -21,46 +21,41 @@ Message, Send Log, Open Link).
   triggers host callback`, `Open Link button triggers host
   callback`). Highest pass count of any compat fixture in DOCKER mode.
 
-## Run it
+## Or Run Live
 
-Boots the mcpkit-Go fixture (`main.go` in this folder) and opens
-[MCPJam Inspector](https://github.com/MCPJam/inspector) so you can poke
-at the protocol surface:
+### Start Server
 
 ```bash
 make demo-app EXAMPLE=integration
 ```
 
-Paste `http://localhost:3101/mcp` into MCPJam's server list and connect.
-Then browse `tools/list`, `_meta.ui`, and tool-call payloads on the wire.
+Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `http://localhost:8080`. (Pass `OPEN=1` to auto-open the browser.)
 
-See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, and the strict Playwright gate.
+## Try It Out on basic-host
 
-## Prompts to try
+Open <http://localhost:8080> in your browser. Then:
 
-Connect to `Integration Test Server`, then paste any of these:
-
-```
-What's the current server time?
-```
+1. Pick **Integration Test Server** from the server dropdown.
+2. Pick **get-time** from the tool dropdown, click **Call Tool**.
+3. The iframe renders the result; interact with it directly to drive subsequent tool calls (no model in the loop).
 
 <a href="screenshots/01-integration-buttons.png" target="_blank"><img src="screenshots/01-integration-buttons.png" alt="Integration Test Server App: iframe with the get-time result rendered plus three buttons — Send Message, Send Log, Open Link — for host-callback interactions" width="50%"></a>
 
-```
-Use the get-time tool.
-```
+## Try It Out from a Host
 
-After the tool call lands, click any of the three buttons in the
-iframe directly to see the host respond:
+Connect to `http://localhost:3101/mcp` from your favorite MCP host — VS Code, Claude Desktop, [MCPJam Inspector](https://github.com/MCPJam/inspector), or any spec-compliant client.
 
-<a href="screenshots/02-host-callback.png" target="_blank"><img src="screenshots/02-host-callback.png" alt="basic-host showing a host-side message banner after the App clicked Send Message; demonstrates the App-to-host callback over the bridge" width="50%"></a>
+**Prompts to try** (LLM-driven hosts):
+
+> "What's the current server time?"
+> "Use the get-time tool."
 
 The model calls `get-time`. The interesting bits are inside the
 iframe — click "Send Message", "Send Log", or "Open Link" directly in
 the App to see the host pick up the callback (basic-host renders the
 message in its UI).
 
-### Direct tool call (no LLM needed)
+**Verify the wire shape** (no LLM needed):
 
 | What | How | What you should see |
 |---|---|---|
@@ -69,7 +64,9 @@ message in its UI).
 | Send Log button | Click "Send Log" in the App | basic-host's log surface picks it up |
 | Open Link button | Click "Open Link" in the App | basic-host emits an open-link event |
 
-## What to look at next
+See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, the strict Playwright gate, and connecting from VS Code / Claude Desktop / other MCP hosts.
+
+## What to Try Next
 
 - [`system-monitor`](../system-monitor/README.md) /
   [`debug-server`](../debug-server/README.md) — rung-6 siblings,

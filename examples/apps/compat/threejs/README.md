@@ -5,7 +5,7 @@ Two tools — one renders an interactive Three.js scene, the other
 exposes documentation. First example where a tool's input is
 literally a multi-line JavaScript program.
 
-## What it shows
+## What it Shows
 
 - **Two tools on one server.** `show_threejs_scene` carries the App
   iframe; `learn_threejs` is a plain (no-UI) tool that returns the
@@ -22,56 +22,44 @@ literally a multi-line JavaScript program.
   fixture uses `PropertyBuilder.Replace(rawSchema)` for that one
   field while patching the others normally.
 
-## Run it
+## Or Run Live
 
-Boots the mcpkit-Go fixture (`main.go` in this folder) and opens
-[MCPJam Inspector](https://github.com/MCPJam/inspector) so you can poke
-at the protocol surface:
+### Start Server
 
 ```bash
 make demo-app EXAMPLE=threejs
 ```
 
-Paste `http://localhost:3101/mcp` into MCPJam's server list and connect.
-Then browse `tools/list`, `_meta.ui`, and tool-call payloads on the wire.
+Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `http://localhost:8080`. (Pass `OPEN=1` to auto-open the browser.)
 
-See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, and the strict Playwright gate.
+## Try It Out on basic-host
 
-## Prompts to try
+Open <http://localhost:8080> in your browser. Then:
 
-In MCPJam Inspector or basic-host, connect to `Three.js Server`, then
-paste any of these into the chat:
-
-```
-Render a 3D scene using Three.js.
-```
+1. Pick **Three.js Server** from the server dropdown.
+2. Pick **show_threejs_scene** from the tool dropdown, click **Call Tool**.
+3. The iframe renders the result; interact with it directly to drive subsequent tool calls (no model in the loop).
 
 <a href="screenshots/01-default-cube.png" target="_blank"><img src="screenshots/01-default-cube.png" alt="Three.js App: iframe shows the default rotating cube rendered with the OrbitControls camera" width="50%"></a>
 
-```
-Show me a green wireframe sphere rotating slowly.
-```
+## Try It Out from a Host
 
-```
-Make a Three.js scene with three colored cubes arranged in a triangle.
-```
+Connect to `http://localhost:3101/mcp` from your favorite MCP host — VS Code, Claude Desktop, [MCPJam Inspector](https://github.com/MCPJam/inspector), or any spec-compliant client.
 
-```
-Render a torus knot with rainbow material that rotates on all three axes.
-```
+**Prompts to try** (LLM-driven hosts):
 
-<a href="screenshots/02-custom-torus.png" target="_blank"><img src="screenshots/02-custom-torus.png" alt="Three.js App: iframe shows a rainbow torus knot generated from a model-supplied code string" width="50%"></a>
-
-```
-How do I use OrbitControls in Three.js?
-```
+> "Render a 3D scene using Three.js."
+> "Show me a green wireframe sphere rotating slowly."
+> "Make a Three.js scene with three colored cubes arranged in a triangle."
+> "Render a torus knot with rainbow material that rotates on all three axes."
+> "How do I use OrbitControls in Three.js?"
 
 The first four should make the model call `show_threejs_scene` with a
 generated `code` payload; the iframe renders the scene. The last one
 should make the model call `learn_threejs` (no iframe — plain text
 docs back).
 
-### Direct tool call (no LLM needed)
+**Verify the wire shape** (no LLM needed):
 
 | What | How | What you should see |
 |---|---|---|
@@ -79,7 +67,9 @@ docs back).
 | Verify the multi-line default landed intact | Expand `show_threejs_scene`'s `inputSchema.properties.code.default` | The full multi-line JavaScript program — newlines and commas preserved verbatim, no struct-tag truncation. |
 | Plain (no-UI) tool | Select `learn_threejs`, call with empty input | Tool result is a text block of Three.js API docs. No iframe — this tool has no `_meta.ui` block. |
 
-## What to look at next
+See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, the strict Playwright gate, and connecting from VS Code / Claude Desktop / other MCP hosts.
+
+## What to Try Next
 
 - [`shadertoy`](../shadertoy/README.md) (rung 5, sibling) — same
   "multi-line code as input" pattern, but for GLSL fragment shaders.

@@ -5,7 +5,7 @@ Upstream's "quickstart" template — same `get-time` tool as the basic-*
 fixtures, but the iframe ships from a default scaffolded build setup
 rather than a hand-rolled minimal one.
 
-## What it shows
+## What it Shows
 
 - **Same one-tool wire surface** as basic-vanillajs. The
   differentiator is the upstream-side build pipeline (a sensible
@@ -15,48 +15,41 @@ rather than a hand-rolled minimal one.
   `npx tsx main.ts` to run the server. That fallback lives in
   `scripts/apps-playwright-docker-inner.sh`.
 
-## Run it
+## Or Run Live
 
-Boots the mcpkit-Go fixture (`main.go` in this folder) and opens
-[MCPJam Inspector](https://github.com/MCPJam/inspector) so you can poke
-at the protocol surface:
+### Start Server
 
 ```bash
 make demo-app EXAMPLE=quickstart
 ```
 
-Paste `http://localhost:3101/mcp` into MCPJam's server list and connect.
-Then browse `tools/list`, `_meta.ui`, and tool-call payloads on the wire.
+Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `http://localhost:8080`. (Pass `OPEN=1` to auto-open the browser.)
 
-See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, and the strict Playwright gate.
+## Try It Out on basic-host
 
-## Prompts to try
+Open <http://localhost:8080> in your browser. Then:
 
-Connect to `Quickstart MCP App Server`, then paste any of these:
-
-```
-What's the current server time?
-```
+1. Pick **Quickstart MCP App Server** from the server dropdown.
+2. Pick **get-time** from the tool dropdown, click **Call Tool**.
+3. The iframe renders the result; interact with it directly to drive subsequent tool calls (no model in the loop).
 
 <a href="screenshots/01-get-time.png" target="_blank"><img src="screenshots/01-get-time.png" alt="quickstart App rendered in basic-host: iframe shows the ISO timestamp from get-time" width="50%"></a>
 
-```
-Use the get-time tool.
-```
+## Try It Out from a Host
 
-```
-What time is it right now in UTC?
-```
+Connect to `http://localhost:3101/mcp` from your favorite MCP host — VS Code, Claude Desktop, [MCPJam Inspector](https://github.com/MCPJam/inspector), or any spec-compliant client.
+
+**Prompts to try** (LLM-driven hosts):
+
+> "What's the current server time?"
+> "Use the get-time tool."
+> "What time is it right now in UTC?"
 
 The model calls `get-time`; the iframe renders the result.
 
-### Direct tool call (no LLM needed)
+See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, the strict Playwright gate, and connecting from VS Code / Claude Desktop / other MCP hosts.
 
-Same as [basic-vanillajs](../basic-vanillajs/README.md#direct-tool-call-no-llm-needed)
-— select `get-time`, call with empty input, verify
-`structuredContent.time` is an ISO 8601 string.
-
-## What to look at next
+## What to Try Next
 
 - [`basic-vanillajs`](../basic-vanillajs/README.md) — the
   no-build-pipeline variant of the same tool.
