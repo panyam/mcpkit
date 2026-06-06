@@ -9,7 +9,7 @@ responds via separate tool, server's `Await` unblocks).
 If you've worked through the earlier rungs, this is where the
 patterns compound.
 
-## What it shows
+## What it Shows
 
 - **9 tools**, mirroring upstream's `--enable-interact` surface:
   - `list_pdfs`, `read_pdf_bytes`, `display_pdf`, `save_pdf` — the
@@ -41,83 +41,40 @@ patterns compound.
   extension-namespaced keys spread at the top level of the meta
   object.
 
-## Run it
+## Or Run Live
 
-Boots the mcpkit-Go fixture (`main.go` in this folder) and opens
-[MCPJam Inspector](https://github.com/MCPJam/inspector) so you can poke
-at the protocol surface:
+### Start Server
 
 ```bash
 make demo-app EXAMPLE=pdf-server
 ```
 
-Paste `http://localhost:3101/mcp` into MCPJam's server list and connect.
-Then browse `tools/list`, `_meta.ui`, and tool-call payloads on the wire.
+Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `http://localhost:8080`. (Pass `OPEN=1` to auto-open the browser.)
 
-See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, and the strict Playwright gate.
+## Try It Out on basic-host
 
-## Prompts to try
+Open <http://localhost:8080> in your browser. Then:
 
-In MCPJam Inspector or basic-host, connect to `PDF Server`, then paste
-prompts into the chat. Each builds on the previous — start at the top.
-
-Open a PDF:
-
-```
-Show me the "Attention Is All You Need" paper.
-```
+1. Pick **PDF Server** from the server dropdown.
+2. Pick **display_pdf** from the tool dropdown, click **Call Tool**.
+3. The iframe renders the result; interact with it directly to drive subsequent tool calls (no model in the loop).
 
 <a href="screenshots/01-default-pdf.png" target="_blank"><img src="screenshots/01-default-pdf.png" alt="PDF Server with the default arxiv paper rendered in the iframe; tool result panel shows viewUUID in structuredContent and interactEnabled in _meta" width="50%"></a>
 
-Navigate:
+## Try It Out from a Host
 
-```
-Navigate to page 3.
-```
+Connect to `http://localhost:3101/mcp` from your favorite MCP host — VS Code, Claude Desktop, [MCPJam Inspector](https://github.com/MCPJam/inspector), or any spec-compliant client.
 
-Highlight matches across the visible page:
+**Prompts to try** (LLM-driven hosts):
 
-```
-Highlight every occurrence of "attention" in yellow.
-```
-
-<a href="screenshots/02-highlights.png" target="_blank"><img src="screenshots/02-highlights.png" alt="Yellow highlights on every &quot;attention&quot; match on the page; demonstrates fire-and-forget interact → long-poll → iframe rendering" width="50%"></a>
-
-Search:
-
-```
-Search for "transformer" and jump to the first match.
-```
-
-Zoom:
-
-```
-Zoom in to 150%.
-```
-
-<a href="screenshots/03-zoom.png" target="_blank"><img src="screenshots/03-zoom.png" alt="PDF rendered at 150% zoom" width="50%"></a>
-
-Extract content:
-
-```
-Get the text from pages 2 through 4.
-```
-
-```
-Take a screenshot of the current page.
-```
-
-<a href="screenshots/04-screenshot-in-result.png" target="_blank"><img src="screenshots/04-screenshot-in-result.png" alt="Result panel showing a base64-encoded PNG of the current page returned via the submit_page_data rendezvous" width="50%"></a>
-
-Read the live viewer state (server-initiated rendezvous):
-
-```
-What page am I currently on, and what's the zoom level?
-```
-
-<a href="screenshots/05-viewer-state.png" target="_blank"><img src="screenshots/05-viewer-state.png" alt="Result panel showing viewer state JSON — currentPage, zoom, displayMode, selection — returned via submit_viewer_state rendezvous" width="50%"></a>
-
-Behind the scenes:
+> "Show me the "Attention Is All You Need" paper."
+> "Navigate to page 3."
+> "Highlight every occurrence of "attention" in yellow."
+> "Search for "transformer" and jump to the first match."
+> "Zoom in to 150%."
+> "Get the text from pages 2 through 4."
+> "Take a screenshot of the current page."
+> "What page am I currently on, and what's the zoom level?"
 
 - The first prompt makes the model call `display_pdf` (the iframe
   renders the PDF, the tool result carries `viewUUID`). Subsequent
@@ -129,7 +86,7 @@ Behind the scenes:
   request/response: server enqueues + blocks; viewer responds via
   `submit_page_data` / `submit_viewer_state`.
 
-### Direct tool call (no LLM needed)
+**Verify the wire shape** (no LLM needed):
 
 | What | How | What you should see |
 |---|---|---|
@@ -140,7 +97,9 @@ Behind the scenes:
 | Batched commands | `interact` with `{"viewUUID":"<uuid>","commands":[{"action":"navigate","page":1},{"action":"highlight_text","query":"transformer"},{"action":"zoom","scale":1.5}]}` | Three commands ride one tool call. Iframe applies them in order. |
 | Server-initiated rendezvous | `interact` with `{"viewUUID":"<uuid>","action":"get_viewer_state"}` | Server enqueues a command with a generated requestId, blocks on its rendezvous channel. Iframe sees the command via the long-poll, then calls `submit_viewer_state` with that requestId carrying its live state. Server's await unblocks; the rendezvous payload becomes the tool result. |
 
-## What to look at next
+See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, the strict Playwright gate, and connecting from VS Code / Claude Desktop / other MCP hosts.
+
+## What to Try Next
 
 - This is the top of the ladder. If you want to see how the patterns
   compound from the bottom up, walk back through [`map`](../map/README.md)

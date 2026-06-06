@@ -5,7 +5,7 @@ One tool, but the input has a multi-line default value with commas —
 the first fixture where reflection alone won't produce the right
 schema. Introduces the `InputSchemaPatch` escape hatch.
 
-## What it shows
+## What it Shows
 
 - **ABC notation input.** `play-sheet-music` accepts an ABC notation
   string and the iframe renders it as both readable sheet music and
@@ -17,57 +17,51 @@ schema. Introduces the `InputSchemaPatch` escape hatch.
   land the default verbatim via
   `s.Prop("abcNotation").Default(defaultABCNotation)`.
 
-## Run it
+## Or Run Live
 
-Boots the mcpkit-Go fixture (`main.go` in this folder) and opens
-[MCPJam Inspector](https://github.com/MCPJam/inspector) so you can poke
-at the protocol surface:
+### Start Server
 
 ```bash
 make demo-app EXAMPLE=sheet-music
 ```
 
-Paste `http://localhost:3101/mcp` into MCPJam's server list and connect.
-Then browse `tools/list`, `_meta.ui`, and tool-call payloads on the wire.
+Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `http://localhost:8080`. (Pass `OPEN=1` to auto-open the browser.)
 
-See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, and the strict Playwright gate.
+## Try It Out on basic-host
 
-## Prompts to try
+Open <http://localhost:8080> in your browser. Then:
 
-Connect to `Sheet Music Server`, then paste any of these:
-
-```
-Play Twinkle Twinkle Little Star on the sheet music tool.
-```
+1. Pick **Sheet Music Server** from the server dropdown.
+2. Pick **play-sheet-music** from the tool dropdown, click **Call Tool**.
+3. The iframe renders the result; interact with it directly to drive subsequent tool calls (no model in the loop).
 
 <a href="screenshots/01-twinkle.png" target="_blank"><img src="screenshots/01-twinkle.png" alt="Sheet Music App rendered in basic-host: iframe shows Twinkle Twinkle as rendered sheet music with a play button" width="50%"></a>
 
-```
-Show me sheet music for "Mary Had a Little Lamb" in C major.
-```
+## Try It Out from a Host
 
-```
-Use the play-sheet-music tool with the default ABC notation.
-```
+Connect to `http://localhost:3101/mcp` from your favorite MCP host — VS Code, Claude Desktop, [MCPJam Inspector](https://github.com/MCPJam/inspector), or any spec-compliant client.
 
-```
-Render Greensleeves in the key of A minor.
-```
+**Prompts to try** (LLM-driven hosts):
 
-<a href="screenshots/02-greensleeves.png" target="_blank"><img src="screenshots/02-greensleeves.png" alt="Sheet music for Greensleeves in A minor with audio playback controls" width="50%"></a>
+> "Play Twinkle Twinkle Little Star on the sheet music tool."
+> "Show me sheet music for "Mary Had a Little Lamb" in C major."
+> "Use the play-sheet-music tool with the default ABC notation."
+> "Render Greensleeves in the key of A minor."
 
 The model calls `play-sheet-music` with ABC notation (recalling it or
 constructing it); the iframe renders the sheet music and lets you
 play it back.
 
-### Direct tool call (no LLM needed)
+**Verify the wire shape** (no LLM needed):
 
 | What | How | What you should see |
 |---|---|---|
 | Default tune | Select `play-sheet-music`, call with empty input | Iframe renders Twinkle Twinkle as sheet music + audio player |
 | Verify the multi-line default landed intact | Expand `inputSchema.properties.abcNotation.default` | The full 11-line ABC notation including commas — no truncation. This is what `InputSchemaPatch` preserves. |
 
-## What to look at next
+See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, the strict Playwright gate, and connecting from VS Code / Claude Desktop / other MCP hosts.
+
+## What to Try Next
 
 - [`shadertoy`](../shadertoy/README.md) — same "multi-line code as
   input" pattern for GLSL.
