@@ -161,7 +161,7 @@ test-apps-playwright-all: ## Sweep every registered compat fixture sequentially.
 test-apps-playwright-docker-all: ## --all + --docker. The canonical visual gate across all 21 compat fixtures.
 	uv run scripts/apps_playwright_test.py --docker --all
 
-demo-app: ## Browse a compat fixture interactively. Default: mcpkit-Go server + basic-host (no LLM needed). Override with RENDERER=mcpjam for wire inspection. Usage: make demo-app EXAMPLE=<name>.
+demo-app: ## Browse a compat fixture interactively. Default: mcpkit-Go server + basic-host (no LLM needed). basic-host runs on :8080; open it manually (or pass OPEN=1 to auto-open). Override with RENDERER=mcpjam for wire inspection. Usage: make demo-app EXAMPLE=<name>.
 	EXAMPLE=$(EXAMPLE) SERVER=$${SERVER:-go} RENDERER=$${RENDERER:-basic-host} OPEN=$(OPEN) uv run scripts/apps_demo.py
 
 demo-upstream: ## Browse the upstream TS reference server instead of the Go fixture. Same axes as demo-app. Use this for SKIP examples (lazy-auth-server, video-resource-server, qr-server, say-server) that have no Go drop-in. Usage: make demo-upstream EXAMPLE=<name>.

@@ -6,7 +6,7 @@ with multi-month history and stage benchmarks). First fixture where
 reflection of nested Go structs + maps produces the matching shape
 without override.
 
-## What it shows
+## What it Shows
 
 - **Multi-level nested output.** `get-budget-data` returns a Budget
   Config (categories + presets) plus Analytics (24 months of
@@ -16,19 +16,19 @@ without override.
 - **No override needed.** Standard struct tags get this right. Sits
   in the sweet spot of what reflection can handle.
 
-## Run it
+## Or Run Live
 
-Boots the mcpkit-Go fixture (`main.go` in this folder) inside upstream's
-`basic-host` so you can see the App render in a real browser. **No LLM
-required** — the App's bridge JS calls `get-budget-data` on its own and
-all interaction (sliders, stage switcher, benchmark comparison) goes
-through the same MCP wire:
+### Start Server
 
 ```bash
 make demo-app EXAMPLE=budget-allocator
 ```
 
-A browser opens at `http://localhost:8080`. First-touch flow:
+Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `http://localhost:8080`. (Pass `OPEN=1` to auto-open the browser.)
+
+## Try It Out on basic-host
+
+Open <http://localhost:8080> in your browser. Then:
 
 1. Pick **Budget Allocator Server** from the server dropdown.
 2. Pick **get-budget-data** from the tool dropdown, click **Call Tool**
@@ -42,19 +42,13 @@ A browser opens at `http://localhost:8080`. First-touch flow:
 
 <a href="screenshots/03-series-a-benchmark.png" target="_blank"><img src="screenshots/03-series-a-benchmark.png" alt="Budget Allocator iframe showing benchmark comparison for Series A stage with per-category percentile bands" width="50%"></a>
 
+## Try It Out from a Host
+
+Connect to `http://localhost:3101/mcp` from your favorite MCP host — VS Code, Claude Desktop, [MCPJam Inspector](https://github.com/MCPJam/inspector), or any spec-compliant client.
+
 See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, the strict Playwright gate, and connecting from VS Code / Claude Desktop / other MCP hosts.
 
-### Verify the wire shape (no LLM needed)
-
-Useful for spot-checking what the Go fixture puts on the wire vs. what
-the iframe reads:
-
-| What | How | What you should see |
-|---|---|---|
-| Smoke test | Call `get-budget-data` with empty input (basic-host or MCPJam) | Tool result `structuredContent`: `{"config": {"categories": [...5 entries], "presetBudgets": [50000, 100000, 250000, 500000], "defaultBudget": 100000, "currency": "USD", "currencySymbol": "$"}, "analytics": {"history": [...24 months], "benchmarks": [...4 stages], "stages": ["Seed", "Series A", "Series B", "Growth"], "defaultStage": "Series A"}}` |
-| Verify the nested shape | Expand `outputSchema.properties.analytics.properties.history.items` in MCPJam | Nested item schema with month + per-category allocations — reflected from the Go struct, no override |
-
-## What to look at next
+## What to Try Next
 
 - [`scenario-modeler`](../scenario-modeler/README.md) — rung-4
   sibling; adds a nullable field at depth that reflection alone

@@ -4,7 +4,7 @@ Rung 5 on the [examples ladder](../README.md#reading-order--examples-ladder).
 Two tools — one carries the iframe, the other is a plain MCP tool the
 App calls via the bridge.
 
-## What it shows
+## What it Shows
 
 - **App-side bridge calls.** `show-map` renders a CesiumJS globe in
   the iframe. The App calls `geocode` over the bridge (not via the
@@ -18,57 +18,42 @@ App calls via the bridge.
   lands the full description through `Prop("query").Desc(...)
   .Required()`.
 
-## Run it
+## Or Run Live
 
-Boots the mcpkit-Go fixture (`main.go` in this folder) and opens
-[MCPJam Inspector](https://github.com/MCPJam/inspector) so you can poke
-at the protocol surface:
+### Start Server
 
 ```bash
 make demo-app EXAMPLE=map
 ```
 
-Paste `http://localhost:3101/mcp` into MCPJam's server list and connect.
-Then browse `tools/list`, `_meta.ui`, and tool-call payloads on the wire.
+Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `http://localhost:8080`. (Pass `OPEN=1` to auto-open the browser.)
 
-See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, and the strict Playwright gate.
+## Try It Out on basic-host
 
-## Prompts to try
+Open <http://localhost:8080> in your browser. Then:
 
-In MCPJam Inspector or basic-host, connect to `CesiumJS Map Server`,
-then paste any of these into the chat:
-
-```
-Show me a map of Paris.
-```
+1. Pick **CesiumJS Map Server** from the server dropdown.
+2. Pick **geocode** from the tool dropdown, click **Call Tool**.
+3. The iframe renders the result; interact with it directly to drive subsequent tool calls (no model in the loop).
 
 <a href="screenshots/01-paris-map.png" target="_blank"><img src="screenshots/01-paris-map.png" alt="CesiumJS Map App: iframe shows the globe zoomed to Paris with the camera positioned over the city center" width="50%"></a>
 
-```
-Where is the Golden Gate Bridge? Show it on a map.
-```
+## Try It Out from a Host
 
-<a href="screenshots/02-golden-gate.png" target="_blank"><img src="screenshots/02-golden-gate.png" alt="CesiumJS Map App: iframe shows the bridge bounding box overlay on the San Francisco Bay view" width="50%"></a>
+Connect to `http://localhost:3101/mcp` from your favorite MCP host — VS Code, Claude Desktop, [MCPJam Inspector](https://github.com/MCPJam/inspector), or any spec-compliant client.
 
-```
-Geocode "1600 Pennsylvania Avenue" and then display it on the map.
-```
+**Prompts to try** (LLM-driven hosts):
 
-```
-Zoom in on Tokyo Tower.
-```
-
-<a href="screenshots/03-tokyo-tower.png" target="_blank"><img src="screenshots/03-tokyo-tower.png" alt="CesiumJS Map App: iframe zoomed close to Tokyo Tower; demonstrates fine-grained bounding box from geocode" width="50%"></a>
-
-Each should make the model call `geocode` (to resolve the place name
-into a bounding box) followed by `show-map` (with that bounding box).
-The iframe pans to the location.
+> "Show me a map of Paris."
+> "Where is the Golden Gate Bridge? Show it on a map."
+> "Geocode "1600 Pennsylvania Avenue" and then display it on the map."
+> "Zoom in on Tokyo Tower."
 
 The iframe also has its own search field — type a place name directly
 and the App calls `geocode` via the bridge and updates the map (no
 model in the loop).
 
-### Direct tool call (no LLM needed)
+**Verify the wire shape** (no LLM needed):
 
 | What | How | What you should see |
 |---|---|---|
@@ -76,7 +61,9 @@ model in the loop).
 | Geocode a place | Select `geocode`, call with `{"query": "Paris"}` | Tool result: text block with coordinates + bounding box for up to 5 matches |
 | Inspect comma-rich description | Expand `geocode`'s `inputSchema.properties.query.description` | The full `"...e.g., 'Paris', 'Golden Gate Bridge', '1600 Pennsylvania Ave'"` string survives intact |
 
-## What to look at next
+See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, the strict Playwright gate, and connecting from VS Code / Claude Desktop / other MCP hosts.
+
+## What to Try Next
 
 - [`wiki-explorer`](../wiki-explorer/README.md) (rung 5, sibling) —
   one-tool interactive graph; the App does the work itself.

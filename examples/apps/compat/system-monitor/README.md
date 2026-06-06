@@ -5,7 +5,7 @@ Two tools — one the model calls to render the dashboard, one the
 iframe polls from inside via the bridge. First fixture introducing
 `Visibility: ["app"]`.
 
-## What it shows
+## What it Shows
 
 - **One model-visible tool, one app-only tool.** `get-system-info`
   appears in the model's tool dropdown; the model calls it once and
@@ -18,44 +18,41 @@ iframe polls from inside via the bridge. First fixture introducing
   `get-system-info`) and references the same URI from
   `poll-system-stats` without re-registering.
 
-## Run it
+## Or Run Live
 
-Boots the mcpkit-Go fixture (`main.go` in this folder) and opens
-[MCPJam Inspector](https://github.com/MCPJam/inspector) so you can poke
-at the protocol surface:
+### Start Server
 
 ```bash
 make demo-app EXAMPLE=system-monitor
 ```
 
-Paste `http://localhost:3101/mcp` into MCPJam's server list and connect.
-Then browse `tools/list`, `_meta.ui`, and tool-call payloads on the wire.
+Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `http://localhost:8080`. (Pass `OPEN=1` to auto-open the browser.)
 
-See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, and the strict Playwright gate.
+## Try It Out on basic-host
 
-## Prompts to try
+Open <http://localhost:8080> in your browser. Then:
 
-Connect to `System Monitor Server`, then paste any of these:
-
-```
-Show me the system monitor dashboard.
-```
+1. Pick **System Monitor Server** from the server dropdown.
+2. Pick **get-system-info** from the tool dropdown, click **Call Tool**.
+3. The iframe renders the result; interact with it directly to drive subsequent tool calls (no model in the loop).
 
 <a href="screenshots/01-dashboard.png" target="_blank"><img src="screenshots/01-dashboard.png" alt="System Monitor App: iframe shows the live dashboard with CPU / memory / disk gauges + per-process table; the dashboard updates as the iframe polls poll-system-stats every few seconds" width="50%"></a>
 
-```
-What does my system look like right now? CPU, memory, disk?
-```
+## Try It Out from a Host
 
-```
-Open the live system stats view.
-```
+Connect to `http://localhost:3101/mcp` from your favorite MCP host — VS Code, Claude Desktop, [MCPJam Inspector](https://github.com/MCPJam/inspector), or any spec-compliant client.
+
+**Prompts to try** (LLM-driven hosts):
+
+> "Show me the system monitor dashboard."
+> "What does my system look like right now? CPU, memory, disk?"
+> "Open the live system stats view."
 
 The model calls `get-system-info`; the iframe renders the dashboard
 and starts polling `poll-system-stats` every few seconds from inside
 the iframe (not via the model).
 
-### Direct tool call (no LLM needed)
+**Verify the wire shape** (no LLM needed):
 
 | What | How | What you should see |
 |---|---|---|
@@ -63,7 +60,9 @@ the iframe (not via the model).
 | Verify the app-only tool's visibility | In MCPJam, find `poll-system-stats` and expand `_meta.ui` | `{"visibility": ["app"]}` — the model can't see this tool by default |
 | Call the app-only tool directly | Select `poll-system-stats`, call with empty input | Tool result has live stats. In normal use the iframe drives this every few seconds. |
 
-## What to look at next
+See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, the strict Playwright gate, and connecting from VS Code / Claude Desktop / other MCP hosts.
+
+## What to Try Next
 
 - [`debug-server`](../debug-server/README.md) — rung-6 sibling, takes
   the same app-only pattern further with three tools sharing one

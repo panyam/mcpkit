@@ -4,7 +4,7 @@ Rung 5 on the [examples ladder](../README.md#reading-order--examples-ladder).
 One tool, but the input is a GLSL fragment shader program. First
 fixture targeted at WebGL-style rendering inside the App iframe.
 
-## What it shows
+## What it Shows
 
 - **GLSL as input.** `render-shadertoy` accepts a `fragmentShader`
   field (plus optional `common` and four buffer channels for
@@ -19,55 +19,42 @@ fixture targeted at WebGL-style rendering inside the App iframe.
   `s.Prop(name).Desc(...)` pattern across multiple properties — much
   shorter than the equivalent override map.
 
-## Run it
+## Or Run Live
 
-Boots the mcpkit-Go fixture (`main.go` in this folder) and opens
-[MCPJam Inspector](https://github.com/MCPJam/inspector) so you can poke
-at the protocol surface:
+### Start Server
 
 ```bash
 make demo-app EXAMPLE=shadertoy
 ```
 
-Paste `http://localhost:3101/mcp` into MCPJam's server list and connect.
-Then browse `tools/list`, `_meta.ui`, and tool-call payloads on the wire.
+Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `http://localhost:8080`. (Pass `OPEN=1` to auto-open the browser.)
 
-See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, and the strict Playwright gate.
+## Try It Out on basic-host
 
-## Prompts to try
+Open <http://localhost:8080> in your browser. Then:
 
-Connect to `ShaderToy Server`, then paste any of these:
-
-```
-Render a ShaderToy shader.
-```
+1. Pick **ShaderToy Server** from the server dropdown.
+2. Pick **render-shadertoy** from the tool dropdown, click **Call Tool**.
+3. The iframe renders the result; interact with it directly to drive subsequent tool calls (no model in the loop).
 
 <a href="screenshots/01-default-shader.png" target="_blank"><img src="screenshots/01-default-shader.png" alt="ShaderToy App: iframe shows the default UV gradient shader running in WebGL" width="50%"></a>
 
-```
-Show me a shader that displays rainbow colors that shift over time.
-```
+## Try It Out from a Host
 
-```
-Render a Mandelbrot fractal as a fragment shader.
-```
+Connect to `http://localhost:3101/mcp` from your favorite MCP host — VS Code, Claude Desktop, [MCPJam Inspector](https://github.com/MCPJam/inspector), or any spec-compliant client.
 
-<a href="screenshots/02-mandelbrot.png" target="_blank"><img src="screenshots/02-mandelbrot.png" alt="ShaderToy App: iframe shows a Mandelbrot fractal rendered from the model-supplied GLSL fragmentShader" width="50%"></a>
+**Prompts to try** (LLM-driven hosts):
 
-```
-Show me a plasma effect using sin and cos of iTime.
-```
-
-```
-Render a shader that draws concentric pulsing circles centered at the screen.
-```
-
-<a href="screenshots/03-pulsing-circles.png" target="_blank"><img src="screenshots/03-pulsing-circles.png" alt="ShaderToy App: iframe shows pulsing concentric circles animating with iTime; demonstrates the iTime / iResolution uniforms working" width="50%"></a>
+> "Render a ShaderToy shader."
+> "Show me a shader that displays rainbow colors that shift over time."
+> "Render a Mandelbrot fractal as a fragment shader."
+> "Show me a plasma effect using sin and cos of iTime."
+> "Render a shader that draws concentric pulsing circles centered at the screen."
 
 The model calls `render-shadertoy` with the generated GLSL; the
 iframe compiles and runs it on the GPU.
 
-### Direct tool call (no LLM needed)
+**Verify the wire shape** (no LLM needed):
 
 | What | How | What you should see |
 |---|---|---|
@@ -75,7 +62,9 @@ iframe compiles and runs it on the GPU.
 | Verify the multi-line default landed intact | Expand `inputSchema.properties.fragmentShader.default` | The full multi-line GLSL with commas preserved — what `InputSchemaPatch` guarantees |
 | Custom shader | Call with a `{"fragmentShader": "void mainImage(...)"}` payload | Iframe renders whatever GLSL you supplied (errors land in the iframe's console) |
 
-## What to look at next
+See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, the strict Playwright gate, and connecting from VS Code / Claude Desktop / other MCP hosts.
+
+## What to Try Next
 
 - [`threejs`](../threejs/README.md) — rung-5 sibling; also takes code
   as input, but for Three.js scene setup instead of fragment shaders.

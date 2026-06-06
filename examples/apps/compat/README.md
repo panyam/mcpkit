@@ -175,7 +175,17 @@ upstream's TS server at the wire level.
    DOCKER=1 EXAMPLE=<name> make test-apps-playwright   # visual + protocol gate
    EXAMPLE=<name> make test-apps-playwright            # native — `loads app UI` only
    ```
-5. Commit the fixture, the script arm, and the baseline PNG.
+5. Write the fixture's `README.md` from the canonical template:
+   ```bash
+   cp ../../common/TEMPLATE.md <name>/README.md
+   ```
+   Then walk top-to-bottom and replace each `{PLACEHOLDER}`. Strip the
+   HTML-comment author-guidance once you're done. The 6-section structure
+   (What it Shows → Run Pre-Recorded → Or Run Live → Try It Out on
+   basic-host → Try It Out from a Host → What to Try Next) is consistent
+   across every fixture in this folder — `basic-vanillajs/README.md` is
+   the canonical example to crib from.
+6. Commit the fixture, the script arm, the baseline PNG, and the README.
 
 ## Native vs Docker modes
 
@@ -309,8 +319,9 @@ For either `demo-app` or `demo-upstream`:
    `SERVER_PORT` (default 3101).
 4. Start the renderer:
    - `RENDERER=basic-host` (default): start basic-host on `HARNESS_PORT`
-     (default 8080) with `SERVERS` pointing at the MCP server, auto-open
-     the browser (suppress with `OPEN=0`).
+     (default 8080) with `SERVERS` pointing at the MCP server. The browser
+     is **not** auto-opened — open `http://localhost:8080` manually, or
+     pass `OPEN=1` to opt in to auto-open.
    - `RENDERER=mcpjam`: launch `npx -y @mcpjam/inspector@latest`, opens
      its own browser tab. Paste `http://localhost:3101/mcp` into the
      server list.

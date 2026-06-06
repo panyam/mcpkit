@@ -4,7 +4,7 @@ Rung 6 on the [examples ladder](../README.md#reading-order--examples-ladder).
 Three tools — a kitchen-sink debug surface for the model, plus two
 app-only helpers (refresh / log) the iframe uses internally.
 
-## What it shows
+## What it Shows
 
 - **Three tools, shared iframe.** `debug-tool` is the model-visible
   kitchen-sink for testing content-type behavior (text, image, audio,
@@ -17,54 +17,43 @@ app-only helpers (refresh / log) the iframe uses internally.
   TypeScript SDK's zod validator). With the fix in place, the field
   reflects to `{}` automatically — no override.
 
-## Run it
+## Or Run Live
 
-Boots the mcpkit-Go fixture (`main.go` in this folder) and opens
-[MCPJam Inspector](https://github.com/MCPJam/inspector) so you can poke
-at the protocol surface:
+### Start Server
 
 ```bash
 make demo-app EXAMPLE=debug-server
 ```
 
-Paste `http://localhost:3101/mcp` into MCPJam's server list and connect.
-Then browse `tools/list`, `_meta.ui`, and tool-call payloads on the wire.
+Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `http://localhost:8080`. (Pass `OPEN=1` to auto-open the browser.)
 
-See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, and the strict Playwright gate.
+## Try It Out on basic-host
 
-## Prompts to try
+Open <http://localhost:8080> in your browser. Then:
 
-Connect to `Debug MCP App Server`, then paste any of these:
-
-```
-Use the debug tool to show me text content.
-```
+1. Pick **Debug MCP App Server** from the server dropdown.
+2. Pick **debug-tool** from the tool dropdown, click **Call Tool**.
+3. The iframe renders the result; interact with it directly to drive subsequent tool calls (no model in the loop).
 
 <a href="screenshots/01-debug-text.png" target="_blank"><img src="screenshots/01-debug-text.png" alt="Debug Server App: iframe shows the kitchen-sink debug surface with content-type / multiple-blocks / structured-content / error toggles; a recent text-content response is displayed" width="50%"></a>
 
-```
-Debug tool with content type "image" and include structured content.
-```
+## Try It Out from a Host
 
-```
-Run the debug tool with mixed content blocks and a 500ms delay.
-```
+Connect to `http://localhost:3101/mcp` from your favorite MCP host — VS Code, Claude Desktop, [MCPJam Inspector](https://github.com/MCPJam/inspector), or any spec-compliant client.
 
-<a href="screenshots/02-mixed-content.png" target="_blank"><img src="screenshots/02-mixed-content.png" alt="Debug Server iframe rendering a mixed-content response (text + image + audio blocks side by side in the result panel)" width="50%"></a>
+**Prompts to try** (LLM-driven hosts):
 
-```
-Simulate an error in the debug tool.
-```
-
-```
-Send a debug call with a large input string (say 10KB of text).
-```
+> "Use the debug tool to show me text content."
+> "Debug tool with content type "image" and include structured content."
+> "Run the debug tool with mixed content blocks and a 500ms delay."
+> "Simulate an error in the debug tool."
+> "Send a debug call with a large input string (say 10KB of text)."
 
 The model calls `debug-tool` with the corresponding parameters; the
 iframe renders the result and exercises whichever content shape was
 requested.
 
-### Direct tool call (no LLM needed)
+**Verify the wire shape** (no LLM needed):
 
 | What | How | What you should see |
 |---|---|---|
@@ -74,7 +63,9 @@ requested.
 | App-only refresh | Select `debug-refresh`, call with empty input | Tool result has fresh timestamp + counter. (App-only — model won't see this in its tool list by default.) |
 | App-only log | Select `debug-log`, call with `{"type": "test", "payload": {"any": "shape"}}` | Tool result confirms logged. Note the `payload` field accepts any shape — that's the issue-548 Gap 2 fix working. |
 
-## What to look at next
+See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, the strict Playwright gate, and connecting from VS Code / Claude Desktop / other MCP hosts.
+
+## What to Try Next
 
 - [`system-monitor`](../system-monitor/README.md) — rung-6 sibling
   with two tools (one app-only) sharing the iframe.
