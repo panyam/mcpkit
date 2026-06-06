@@ -64,12 +64,12 @@ type statelessSubMap struct {
 	mu   sync.RWMutex
 	subs map[string]*statelessSubscriber
 
-	// counts holds the number of currently-open subscription streams per
-	// scope key. limiters are lazy per-scope token buckets; both are
-	// cleared when a scope drops to zero open streams so disconnected
-	// clients leave no state behind.
-	counts   map[string]int
-	limiters map[string]*rate.Limiter
+	// countsByScope holds the number of currently-open subscription
+	// streams per scope key. limitersByScope are lazy per-scope token
+	// buckets; both are cleared when a scope drops to zero open streams
+	// so disconnected clients leave no state behind.
+	countsByScope   map[string]int
+	limitersByScope map[string]*rate.Limiter
 
 	// Configured once at construction time; safe to read without the
 	// mutex. cap == 0 / rateLimit == 0 disables the respective check.
@@ -79,17 +79,6 @@ type statelessSubMap struct {
 	onReject  SubscriptionRejectFunc
 	scopeFn   StatelessSubscriptionScopeFunc
 }
-
-// ErrStatelessStreamCapExceeded indicates the requesting scope has hit
-// the per-scope concurrent-stream cap configured via
-// [WithStatelessSubscriptionCap]. Returned by tryRegister so
-// handleStatelessSubscribe can map it to the wire error.
-var ErrStatelessStreamCapExceeded = errors.New("stateless subscription stream cap exceeded")
-
-// ErrStatelessStreamRateLimited indicates the requesting scope has
-// exceeded the per-scope open-rate configured via
-// [WithStatelessSubscriptionRateLimit].
-var ErrStatelessStreamRateLimited = errors.New("stateless subscription stream rate limited")
 
 // StatelessSubscriptionScopeFunc derives a stable key from an inbound
 // HTTP request to identify the calling client for cap / rate-limit
@@ -136,14 +125,14 @@ func newStatelessSubMap(cap int, rl rate.Limit, burst int, onReject Subscription
 		scopeFn = DefaultStatelessSubscriptionScope
 	}
 	return &statelessSubMap{
-		subs:      make(map[string]*statelessSubscriber),
-		counts:    make(map[string]int),
-		limiters:  make(map[string]*rate.Limiter),
-		cap:       cap,
-		rateLimit: rl,
-		rateBurst: burst,
-		onReject:  onReject,
-		scopeFn:   scopeFn,
+		subs:            make(map[string]*statelessSubscriber),
+		countsByScope:   make(map[string]int),
+		limitersByScope: make(map[string]*rate.Limiter),
+		cap:             cap,
+		rateLimit:       rl,
+		rateBurst:       burst,
+		onReject:        onReject,
+		scopeFn:         scopeFn,
 	}
 }
 
@@ -155,7 +144,7 @@ func newStatelessSubMap(cap int, rl rate.Limit, burst int, onReject Subscription
 // the right bucket.
 func (m *statelessSubMap) tryRegister(s *statelessSubscriber, scope string) error {
 	m.mu.Lock()
-	if m.cap > 0 && m.counts[scope] >= m.cap {
+	if m.cap > 0 && m.countsByScope[scope] >= m.cap {
 		m.mu.Unlock()
 		if m.onReject != nil {
 			m.onReject(scope, "subscriptions/listen", "cap_exceeded")
@@ -163,10 +152,10 @@ func (m *statelessSubMap) tryRegister(s *statelessSubscriber, scope string) erro
 		return fmt.Errorf("%w: scope at %d/%d streams", ErrStatelessStreamCapExceeded, m.cap, m.cap)
 	}
 	if m.rateLimit > 0 {
-		lim, ok := m.limiters[scope]
+		lim, ok := m.limitersByScope[scope]
 		if !ok {
 			lim = rate.NewLimiter(m.rateLimit, m.rateBurst)
-			m.limiters[scope] = lim
+			m.limitersByScope[scope] = lim
 		}
 		if !lim.Allow() {
 			m.mu.Unlock()
@@ -178,7 +167,7 @@ func (m *statelessSubMap) tryRegister(s *statelessSubscriber, scope string) erro
 	}
 	s.scope = scope
 	m.subs[s.id] = s
-	m.counts[scope]++
+	m.countsByScope[scope]++
 	m.mu.Unlock()
 	return nil
 }
@@ -194,11 +183,11 @@ func (m *statelessSubMap) unregister(id string) {
 		return
 	}
 	delete(m.subs, id)
-	if s.scope != "" && m.counts[s.scope] > 0 {
-		m.counts[s.scope]--
-		if m.counts[s.scope] == 0 {
-			delete(m.counts, s.scope)
-			delete(m.limiters, s.scope)
+	if s.scope != "" && m.countsByScope[s.scope] > 0 {
+		m.countsByScope[s.scope]--
+		if m.countsByScope[s.scope] == 0 {
+			delete(m.countsByScope, s.scope)
+			delete(m.limitersByScope, s.scope)
 		}
 	}
 }
