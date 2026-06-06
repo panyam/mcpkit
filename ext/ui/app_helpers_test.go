@@ -26,7 +26,7 @@ func TestRegisterAppTool(t *testing.T) {
 			return core.ResourceResult{}, nil
 		},
 		Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
-		Permissions: []string{"clipboard-write"},
+		Permissions: &core.UIPermissions{ClipboardWrite: &struct{}{}},
 	})
 
 	// Verify tool was registered with _meta.ui
@@ -46,8 +46,8 @@ func TestRegisterAppTool(t *testing.T) {
 	if len(td.Meta.UI.Visibility) != 2 {
 		t.Errorf("visibility length = %d, want 2", len(td.Meta.UI.Visibility))
 	}
-	if len(td.Meta.UI.Permissions) != 1 || td.Meta.UI.Permissions[0] != "clipboard-write" {
-		t.Errorf("permissions = %v", td.Meta.UI.Permissions)
+	if td.Meta.UI.Permissions == nil || td.Meta.UI.Permissions.ClipboardWrite == nil {
+		t.Errorf("permissions: expected ClipboardWrite set, got %+v", td.Meta.UI.Permissions)
 	}
 
 	// Verify resource was registered with correct MIME type

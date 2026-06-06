@@ -34,7 +34,7 @@ func newAppTestServer() *server.Server {
 						ConnectDomains:  []string{"api.example.com"},
 						ResourceDomains: []string{"cdn.example.com"},
 					},
-					Permissions:   []string{"clipboard-write"},
+					Permissions:   &core.UIPermissions{ClipboardWrite: &struct{}{}},
 					PrefersBorder: boolPtr(true),
 					Domain:        "slyds",
 				},
@@ -70,7 +70,7 @@ func newAppTestServer() *server.Server {
 				Meta: &core.ResourceContentMeta{
 					UI: &core.UIMetadata{
 						ResourceUri: "ui://decks/view",
-						Permissions: []string{"clipboard-write"},
+						Permissions: &core.UIPermissions{ClipboardWrite: &struct{}{}},
 					},
 				},
 			}}}, nil
@@ -152,8 +152,8 @@ func TestToolsListMetaE2E(t *testing.T) {
 	if len(ui.CSP.ResourceDomains) != 1 || ui.CSP.ResourceDomains[0] != "cdn.example.com" {
 		t.Errorf("CSP.ResourceDomains = %v", ui.CSP.ResourceDomains)
 	}
-	if len(ui.Permissions) != 1 || ui.Permissions[0] != "clipboard-write" {
-		t.Errorf("Permissions = %v", ui.Permissions)
+	if ui.Permissions == nil || ui.Permissions.ClipboardWrite == nil {
+		t.Errorf("Permissions: expected ClipboardWrite set, got %+v", ui.Permissions)
 	}
 	if ui.PrefersBorder == nil || *ui.PrefersBorder != true {
 		t.Errorf("PrefersBorder = %v, want true", ui.PrefersBorder)
@@ -202,8 +202,8 @@ func TestResourcesReadMetaE2E(t *testing.T) {
 	if content.Meta.UI.ResourceUri != "ui://decks/view" {
 		t.Errorf("resourceUri = %q", content.Meta.UI.ResourceUri)
 	}
-	if len(content.Meta.UI.Permissions) != 1 || content.Meta.UI.Permissions[0] != "clipboard-write" {
-		t.Errorf("permissions = %v", content.Meta.UI.Permissions)
+	if content.Meta.UI.Permissions == nil || content.Meta.UI.Permissions.ClipboardWrite == nil {
+		t.Errorf("permissions: expected ClipboardWrite set, got %+v", content.Meta.UI.Permissions)
 	}
 
 	// Plain resource — verify _meta absent at wire level
