@@ -38,10 +38,6 @@ Open <http://localhost:8080> in your browser. Then:
 
 <a href="screenshots/01-default-budget.png" target="_blank"><img src="screenshots/01-default-budget.png" alt="Budget Allocator App: iframe shows the budget configuration with category sliders + preset chips + the analytics charts panel" width="50%"></a>
 
-<a href="screenshots/02-analytics-view.png" target="_blank"><img src="screenshots/02-analytics-view.png" alt="Analytics panel of the Budget Allocator iframe showing 24 months of historical category allocations + the stage-benchmark comparison" width="50%"></a>
-
-<a href="screenshots/03-series-a-benchmark.png" target="_blank"><img src="screenshots/03-series-a-benchmark.png" alt="Budget Allocator iframe showing benchmark comparison for Series A stage with per-category percentile bands" width="50%"></a>
-
 ## Try It Out from a Host
 
 Connect to `http://localhost:3101/mcp` from your favorite MCP host — VS Code, Claude Desktop, [MCPJam Inspector](https://github.com/MCPJam/inspector), or any spec-compliant client.
