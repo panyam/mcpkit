@@ -19,7 +19,7 @@ import (
 // Lifecycle hook firings across all three delivery modes. Spec
 // §"Server SDK Guidance" → "Subscription lifecycle hooks" L691-715.
 //
-// Acceptance per docs/EVENTS_ETA_PLAN.md:
+// Acceptance:
 //   - Hooks fire exactly once per subscription lifecycle in each mode.
 //   - Refresh of an existing webhook subscription does NOT re-fire
 //     on_subscribe.
