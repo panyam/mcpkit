@@ -137,7 +137,7 @@ func TestStatelessSubMap_UnregisterDropsLimiterOnZero(t *testing.T) {
 		t.Fatalf("register: %v", err)
 	}
 	m.mu.RLock()
-	if _, ok := m.limiters["scope-A"]; !ok {
+	if _, ok := m.limitersByScope["scope-A"]; !ok {
 		m.mu.RUnlock()
 		t.Fatal("limiter not created on first register")
 	}
@@ -146,11 +146,27 @@ func TestStatelessSubMap_UnregisterDropsLimiterOnZero(t *testing.T) {
 	m.unregister("a")
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if _, ok := m.limiters["scope-A"]; ok {
+	if _, ok := m.limitersByScope["scope-A"]; ok {
 		t.Error("limiter not dropped when scope count hit zero")
 	}
-	if _, ok := m.counts["scope-A"]; ok {
+	if _, ok := m.countsByScope["scope-A"]; ok {
 		t.Error("count entry not dropped when scope count hit zero")
+	}
+}
+
+func TestEffectiveStatelessSubCap(t *testing.T) {
+	// Zero option value picks up the default — deployers who never call
+	// WithStatelessSubscriptionCap get defense out of the box.
+	if got := effectiveStatelessSubCap(0); got != DefaultStatelessSubscriptionCap {
+		t.Errorf("effectiveStatelessSubCap(0) = %d, want DefaultStatelessSubscriptionCap (%d)", got, DefaultStatelessSubscriptionCap)
+	}
+	// Explicit negative disables the cap — registry treats 0 as unlimited.
+	if got := effectiveStatelessSubCap(-1); got != 0 {
+		t.Errorf("effectiveStatelessSubCap(-1) = %d, want 0 (unlimited)", got)
+	}
+	// Positive passes through unchanged.
+	if got := effectiveStatelessSubCap(42); got != 42 {
+		t.Errorf("effectiveStatelessSubCap(42) = %d, want 42", got)
 	}
 }
 

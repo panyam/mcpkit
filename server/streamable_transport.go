@@ -104,7 +104,7 @@ func newStreamableTransport(s *Server, cfg transportConfig) *streamableTransport
 	if cfg.statelessMode != stateless.ModeLegacyOnly {
 		t.statelessDispatcher = stateless.New(newStatelessBackend(s))
 		t.statelessSubs = newStatelessSubMap(
-			s.options.statelessSubCap,
+			effectiveStatelessSubCap(s.options.statelessSubCap),
 			s.options.statelessSubRate,
 			s.options.statelessSubBurst,
 			s.options.subscriptionReject,

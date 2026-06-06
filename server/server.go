@@ -275,6 +275,35 @@ func WithSubscriptionRejectHook(fn SubscriptionRejectFunc) Option {
 	return func(o *serverOptions) { o.subscriptionReject = fn }
 }
 
+// DefaultStatelessSubscriptionCap is the default per-scope concurrent
+// subscriptions/listen stream cap applied when the caller does not
+// override it via [WithStatelessSubscriptionCap]. Chosen to give
+// public-facing deployments out-of-the-box defense against churn — same
+// posture as [net/http.Transport.MaxIdleConns]. Pass a negative number
+// to [WithStatelessSubscriptionCap] to disable the cap entirely.
+const DefaultStatelessSubscriptionCap = 100
+
+// effectiveStatelessSubCap maps the raw option value stored in
+// serverOptions to the cap newStatelessSubMap should use. The rule
+// keeps the wire-level "0 or negative = unlimited" semantic on the
+// internal registry intact and applies the public default at the
+// option boundary:
+//
+//   - 0  (option never set): apply [DefaultStatelessSubscriptionCap].
+//   - <0 (explicit opt-out): disable the cap (pass 0 to the registry,
+//     which treats 0 as unlimited).
+//   - >0 (explicit value):   pass through.
+func effectiveStatelessSubCap(raw int) int {
+	switch {
+	case raw == 0:
+		return DefaultStatelessSubscriptionCap
+	case raw < 0:
+		return 0
+	default:
+		return raw
+	}
+}
+
 // WithStatelessSubscriptionCap sets the maximum number of concurrent
 // SEP-2575 subscriptions/listen streams the transport will accept from
 // a single scope (typically a remote host, configurable via
@@ -283,9 +312,11 @@ func WithSubscriptionRejectHook(fn SubscriptionRejectFunc) Option {
 // [core.ErrCodeSubscriptionLimitExceeded] (-32010) before the SSE
 // stream is opened. Closing a stream frees a slot for the same scope.
 //
-// Off by default (n <= 0 means unlimited). Recommended for any
-// public-facing deployment; the right starting value depends on the
-// number of distinct clients the deployment expects per scope key.
+// Defaults to [DefaultStatelessSubscriptionCap] (100) when the option
+// is not called — public-facing deployments are protected out of the
+// box. Pass n > 0 to override, or n < 0 to disable the cap entirely.
+// (n == 0 is treated as "use default" so that the zero value of
+// serverOptions picks up the default.)
 //
 // Stability: the wire surface this guards (SEP-2575
 // subscriptions/listen) is in the 2026-07-28 release candidate, not
