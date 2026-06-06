@@ -73,8 +73,8 @@ func TestToolMetaPermissions(t *testing.T) {
 	}
 
 	tool := findTool(t, tools, "show-dashboard")
-	if len(tool.Meta.UI.Permissions) != 1 || tool.Meta.UI.Permissions[0] != "clipboard-write" {
-		t.Errorf("Permissions = %v, want [clipboard-write]", tool.Meta.UI.Permissions)
+	if tool.Meta.UI.Permissions == nil || tool.Meta.UI.Permissions.ClipboardWrite == nil {
+		t.Errorf("Permissions: expected ClipboardWrite set, got %+v", tool.Meta.UI.Permissions)
 	}
 }
 

@@ -40,7 +40,7 @@ func registerConformanceApps(srv *server.Server) {
 				CSP: &core.UICSPConfig{
 					ResourceDomains: []string{"cdn.example.com"},
 				},
-				Permissions:           []string{"clipboard-write"},
+				Permissions:           &core.UIPermissions{ClipboardWrite: &struct{}{}},
 				PrefersBorder:         &border,
 				SupportedDisplayModes: []core.DisplayMode{core.DisplayModeInline, core.DisplayModeFullscreen},
 			},
@@ -147,7 +147,7 @@ func registerConformanceApps(srv *server.Server) {
 				Meta: &core.ResourceContentMeta{
 					UI: &core.UIMetadata{
 						ResourceUri: "ui://dashboard/view",
-						Permissions: []string{"clipboard-write"},
+						Permissions: &core.UIPermissions{ClipboardWrite: &struct{}{}},
 					},
 				},
 			}}}, nil
