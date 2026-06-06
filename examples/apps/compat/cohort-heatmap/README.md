@@ -4,7 +4,7 @@ Rung 4 on the [examples ladder](../README.md#reading-order--examples-ladder).
 One tool, nested retention data. The iframe renders a classic
 cohort-retention heatmap.
 
-## What it shows
+## What it Shows
 
 - **Retention cohort data.** `get-cohort-data` returns rows of
   cohorts and their retention percentages over time periods. Each
@@ -16,56 +16,50 @@ cohort-retention heatmap.
   normalizes these (PR 549) so the fixture uses idiomatic Go types
   and still passes.
 
-## Run it
+## Or Run Live
 
-Boots the mcpkit-Go fixture (`main.go` in this folder) and opens
-[MCPJam Inspector](https://github.com/MCPJam/inspector) so you can poke
-at the protocol surface:
+### Start Server
 
 ```bash
 make demo-app EXAMPLE=cohort-heatmap
 ```
 
-Paste `http://localhost:3101/mcp` into MCPJam's server list and connect.
-Then browse `tools/list`, `_meta.ui`, and tool-call payloads on the wire.
+Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `http://localhost:8080`. (Pass `OPEN=1` to auto-open the browser.)
 
-See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, and the strict Playwright gate.
+## Try It Out on basic-host
 
-## Prompts to try
+Open <http://localhost:8080> in your browser. Then:
 
-Connect to `Cohort Heatmap Server`, then paste any of these:
-
-```
-Show me a cohort retention heatmap.
-```
+1. Pick **Cohort Heatmap Server** from the server dropdown.
+2. Pick **get-cohort-data** from the tool dropdown, click **Call Tool**.
+3. The iframe renders the result; interact with it directly to drive subsequent tool calls (no model in the loop).
 
 <a href="screenshots/01-default-heatmap.png" target="_blank"><img src="screenshots/01-default-heatmap.png" alt="Cohort Heatmap App: iframe shows the full retention matrix with cohorts on one axis, time-period columns on the other, color-graded retention percentages" width="50%"></a>
 
-```
-What's my user retention by signup month?
-```
+## Try It Out from a Host
 
-```
-Display the cohort analysis dashboard.
-```
+Connect to `http://localhost:3101/mcp` from your favorite MCP host — VS Code, Claude Desktop, [MCPJam Inspector](https://github.com/MCPJam/inspector), or any spec-compliant client.
 
-```
-How is retention looking month-over-month for the last six cohorts?
-```
+**Prompts to try** (LLM-driven hosts):
 
-<a href="screenshots/02-recent-cohorts.png" target="_blank"><img src="screenshots/02-recent-cohorts.png" alt="Cohort Heatmap iframe filtered to the last six cohorts; the color gradient makes the retention dropoff visible at a glance" width="50%"></a>
+> "Show me a cohort retention heatmap."
+> "What's my user retention by signup month?"
+> "Display the cohort analysis dashboard."
+> "How is retention looking month-over-month for the last six cohorts?"
 
 The model calls `get-cohort-data`; the iframe renders the heatmap
 with cohorts on one axis, time periods on the other.
 
-### Direct tool call (no LLM needed)
+**Verify the wire shape** (no LLM needed):
 
 | What | How | What you should see |
 |---|---|---|
 | Smoke test | Select `get-cohort-data`, call with empty input | Tool result: nested cohort × period retention data in `structuredContent` |
 | Iframe renders the heatmap | Same call, scroll up | Color-graded matrix in the App iframe |
 
-## What to look at next
+See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, the strict Playwright gate, and connecting from VS Code / Claude Desktop / other MCP hosts.
+
+## What to Try Next
 
 - [`customer-segmentation`](../customer-segmentation/README.md) —
   rung-4 sibling, different analytical shape.

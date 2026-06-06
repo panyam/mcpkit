@@ -4,7 +4,7 @@ Rung 4 on the [examples ladder](../README.md#reading-order--examples-ladder).
 One tool, customer cluster data. The iframe renders cluster scatter
 plots + per-segment summaries.
 
-## What it shows
+## What it Shows
 
 - **Customer segmentation output.** `get-customer-data` returns
   cluster assignments + per-cluster feature averages + per-customer
@@ -14,56 +14,50 @@ plots + per-segment summaries.
   + sizes. Reflection of the nested Go shape produces the schema
   cleanly without override.
 
-## Run it
+## Or Run Live
 
-Boots the mcpkit-Go fixture (`main.go` in this folder) and opens
-[MCPJam Inspector](https://github.com/MCPJam/inspector) so you can poke
-at the protocol surface:
+### Start Server
 
 ```bash
 make demo-app EXAMPLE=customer-segmentation
 ```
 
-Paste `http://localhost:3101/mcp` into MCPJam's server list and connect.
-Then browse `tools/list`, `_meta.ui`, and tool-call payloads on the wire.
+Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `http://localhost:8080`. (Pass `OPEN=1` to auto-open the browser.)
 
-See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, and the strict Playwright gate.
+## Try It Out on basic-host
 
-## Prompts to try
+Open <http://localhost:8080> in your browser. Then:
 
-Connect to `Customer Segmentation Server`, then paste any of these:
-
-```
-Show me my customer segments.
-```
+1. Pick **Customer Segmentation Server** from the server dropdown.
+2. Pick **get-customer-data** from the tool dropdown, click **Call Tool**.
+3. The iframe renders the result; interact with it directly to drive subsequent tool calls (no model in the loop).
 
 <a href="screenshots/01-cluster-view.png" target="_blank"><img src="screenshots/01-cluster-view.png" alt="Customer Segmentation App: iframe shows the cluster scatter plot with color-coded segments + the per-segment summary panel on the right" width="50%"></a>
 
-```
-Cluster my customers and visualize the segments.
-```
+## Try It Out from a Host
 
-```
-Which customer segments are most valuable?
-```
+Connect to `http://localhost:3101/mcp` from your favorite MCP host — VS Code, Claude Desktop, [MCPJam Inspector](https://github.com/MCPJam/inspector), or any spec-compliant client.
 
-<a href="screenshots/02-high-value-segment.png" target="_blank"><img src="screenshots/02-high-value-segment.png" alt="Customer Segmentation iframe with the high-value segment highlighted and its feature averages shown in the summary panel" width="50%"></a>
+**Prompts to try** (LLM-driven hosts):
 
-```
-Display customer segmentation with average revenue per cluster.
-```
+> "Show me my customer segments."
+> "Cluster my customers and visualize the segments."
+> "Which customer segments are most valuable?"
+> "Display customer segmentation with average revenue per cluster."
 
 The model calls `get-customer-data`; the iframe renders the cluster
 scatter plot + per-segment summaries.
 
-### Direct tool call (no LLM needed)
+**Verify the wire shape** (no LLM needed):
 
 | What | How | What you should see |
 |---|---|---|
 | Smoke test | Select `get-customer-data`, call with empty input | Tool result: nested clusters + customer records in `structuredContent` |
 | Iframe renders the clusters | Same call, scroll up | Scatter plot + segment summary in the App iframe |
 
-## What to look at next
+See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, the strict Playwright gate, and connecting from VS Code / Claude Desktop / other MCP hosts.
+
+## What to Try Next
 
 - [`cohort-heatmap`](../cohort-heatmap/README.md) — rung-4 sibling,
   different analytical shape.

@@ -49,6 +49,8 @@ Env vars (preserved from the bash predecessors for drop-in Makefile compatibilit
   RENDERER           basic-host | mcpjam (default: basic-host)
   OPEN               1 to auto-open basic-host in a browser (basic-host
                      renderer only; MCPJam manages its own browser).
+                     Default 0 — the README flow asks the user to open
+                     localhost:8080 manually.
 
 Foreground only — Ctrl-C tears the upstream/Go server down. MCPJam
 manages its own lifecycle; when you quit MCPJam you'll need to Ctrl-C
@@ -148,7 +150,7 @@ def build_argparser() -> argparse.ArgumentParser:
     parser.add_argument("--server-port", type=int, default=None,
                         help="MCP server port (Go fixture or upstream TS). Default 3101.")
     parser.add_argument("--open", dest="open_browser", action=argparse.BooleanOptionalAction,
-                        default=None, help="Auto-open basic-host in browser. Basic-host only. Default on.")
+                        default=None, help="Auto-open basic-host in browser. Basic-host only. Default off (set OPEN=1 or --open to opt in).")
     return parser
 
 
@@ -257,7 +259,7 @@ def main() -> int:
     server_port = args.server_port or env_int("SERVER_PORT", DEFAULT_FIXTURE_PORT)
 
     if args.open_browser is None:
-        open_browser = env_str("OPEN", "1") == "1"
+        open_browser = env_str("OPEN", "0") == "1"
     else:
         open_browser = args.open_browser
 

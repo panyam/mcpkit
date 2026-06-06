@@ -2,67 +2,63 @@
 
 Rung 2 on the [examples ladder](../README.md#reading-order--examples-ladder).
 Same wire surface as [`basic-vanillajs`](../basic-vanillajs/README.md);
-the iframe is built with Vue.
+the iframe is built with Vue instead of vanilla JS.
 
-## What it shows
+## What it Shows
 
-The MCP protocol surface doesn't care how the iframe is built. Tool
-name, schema, resource URI, and `_meta.ui` shape are identical to
-basic-vanillajs — only the HTML payload differs. Demonstrates that
-mcpkit hosts can drive a Vue-based App with no special handling.
+- **Identical wire surface to basic-vanillajs.** Same tool name
+  (`get-time`), same input/output schema, same `ui://get-time/mcp-app.html`
+  resource URI, same `_meta.ui` shape. Only the HTML payload differs.
+- **Vue iframe instead of hand-rolled DOM.** The iframe HTML
+  comes from upstream's `basic-server-vue` example's build
+  output — pre-bundled Vue bundle. The mcpkit-Go fixture serves
+  it verbatim as the resource.
+- **Protocol surface is framework-agnostic.** mcpkit hosts can drive
+  any of the rung-2 fixtures with no special handling — the framework
+  choice never reaches the protocol.
 
-## Run it
+## Run Pre-Recorded
 
 > ▶ **[Play the walkthrough in your browser](https://panyam.github.io/mcpkit/walkthroughs/examples/apps/compat/basic-vue/)** — animated playback of every curl / Go call the walkthrough makes, step-by-step. No clone, no setup.
 
-Boots the mcpkit-Go fixture (`main.go` in this folder) and opens
-[MCPJam Inspector](https://github.com/MCPJam/inspector) so you can poke
-at the protocol surface:
+## Or Run Live
+
+### Start Server
 
 ```bash
 make demo-app EXAMPLE=basic-vue
 ```
 
-Paste `http://localhost:3101/mcp` into MCPJam's server list and connect.
-Then browse `tools/list`, `_meta.ui`, and tool-call payloads on the wire.
+Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `http://localhost:8080`. (Pass `OPEN=1` to auto-open the browser.)
 
-See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, and the strict Playwright gate.
+## Try It Out on basic-host
 
-## Prompts to try
+Open <http://localhost:8080> in your browser. Then:
 
-Connect to `Basic MCP App Server (Vue)`, then paste any of these:
-
-```
-What's the current server time?
-```
+1. Pick **Basic MCP App Server (Vue)** from the server dropdown.
+2. Pick **get-time** from the tool dropdown, click **Call Tool** with empty input.
+3. The iframe inlines the ISO 8601 timestamp. The App also renders a button — click it and the App calls `get-time` itself via the bridge (no model in the loop).
 
 <a href="screenshots/01-get-time.png" target="_blank"><img src="screenshots/01-get-time.png" alt="basic-vue App rendered in basic-host: Vue-built iframe showing the ISO timestamp from get-time" width="50%"></a>
 
-```
-Get the current time and tell me what day of the week that is.
-```
+## Try It Out from a Host
 
-```
-Use the get-time tool.
-```
+Connect to `http://localhost:3101/mcp` from your favorite MCP host — VS Code, Claude Desktop, [MCPJam Inspector](https://github.com/MCPJam/inspector), or any spec-compliant client.
 
-The model calls `get-time`; the Vue iframe renders the result and
-provides a button to call the tool again from the App side.
+**Prompts to try** (LLM-driven hosts):
 
-### Direct tool call (no LLM needed)
+> "What's the current server time?"
+> "Get the current time and tell me what day of the week that is."
+> "Use the get-time tool."
 
-Same as [basic-vanillajs](../basic-vanillajs/README.md#direct-tool-call-no-llm-needed)
-— select `get-time`, call with empty input, verify
-`structuredContent.time` is an ISO 8601 string.
+The model calls `get-time`; the Vue iframe renders the result and exposes a button that calls the tool again from the App side via the bridge.
 
-## What to look at next
+See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, the strict Playwright gate, and connecting from VS Code / Claude Desktop / other MCP hosts.
 
-- [`basic-vanillajs`](../basic-vanillajs/README.md) — the no-framework
-  baseline.
+## What to Try Next
+
+- [`basic-vanillajs`](../basic-vanillajs/README.md) — the no-framework baseline that proves the protocol surface is the same regardless of iframe stack.
 - Other rung-2 framework variants:
-  [`basic-preact`](../basic-preact/README.md) ·
-  [`basic-react`](../basic-react/README.md) ·
-  [`basic-solid`](../basic-solid/README.md) ·
-  [`basic-svelte`](../basic-svelte/README.md).
-- [`quickstart`](../quickstart/README.md) — same `get-time` tool, but
-  upstream's "quickstart" template (default build setup).
+  [`basic-preact`](../basic-preact/README.md) · [`basic-react`](../basic-react/README.md) · [`basic-solid`](../basic-solid/README.md) · [`basic-svelte`](../basic-svelte/README.md).
+- [`quickstart`](../quickstart/README.md) — same `get-time` tool, but upstream's "quickstart" template (default scaffolded build setup).
+- See [`main.go`](main.go) — fixture is ~60 lines.

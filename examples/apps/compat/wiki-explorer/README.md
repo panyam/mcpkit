@@ -5,7 +5,7 @@ One tool, but the App iframe renders an interactive force-directed
 Wikipedia link graph — first example where the iframe is doing real
 work, not just printing the tool result.
 
-## What it shows
+## What it Shows
 
 - **Interactive App UI.** The iframe pulls in a graph library, lays
   out nodes for the linked Wikipedia pages, and lets the user click to
@@ -22,59 +22,52 @@ work, not just printing the tool result.
   still does the heavy lifting for `page` + `links`; the patch only
   touches the field reflection can't get right.
 
-## Run it
+## Or Run Live
 
-Boots the mcpkit-Go fixture (`main.go` in this folder) and opens
-[MCPJam Inspector](https://github.com/MCPJam/inspector) so you can poke
-at the protocol surface:
+### Start Server
 
 ```bash
 make demo-app EXAMPLE=wiki-explorer
 ```
 
-Paste `http://localhost:3101/mcp` into MCPJam's server list and connect.
-Then browse `tools/list`, `_meta.ui`, and tool-call payloads on the wire.
+Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `http://localhost:8080`. (Pass `OPEN=1` to auto-open the browser.)
 
-See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, and the strict Playwright gate.
+## Try It Out on basic-host
 
-## Prompts to try
+Open <http://localhost:8080> in your browser. Then:
 
-In MCPJam Inspector or basic-host, connect to `Wiki Explorer`, then
-paste any of these into the chat:
-
-```
-Show me what the Wikipedia page for Model Context Protocol links to.
-```
+1. Pick **Wiki Explorer** from the server dropdown.
+2. Pick **get-first-degree-links** from the tool dropdown, click **Call Tool**.
+3. The iframe renders the result; interact with it directly to drive subsequent tool calls (no model in the loop).
 
 <a href="screenshots/01-mcp-graph.png" target="_blank"><img src="screenshots/01-mcp-graph.png" alt="Wiki Explorer App: force-directed graph in the iframe with the Model Context Protocol page at the center and its first-degree links spread around it" width="50%"></a>
 
-```
-Explore the link graph from https://en.wikipedia.org/wiki/Knowledge_graph
-```
+## Try It Out from a Host
 
-```
-Get first-degree links for the Wikipedia article about Transformer architecture.
-```
+Connect to `http://localhost:3101/mcp` from your favorite MCP host — VS Code, Claude Desktop, [MCPJam Inspector](https://github.com/MCPJam/inspector), or any spec-compliant client.
 
-```
-Build me a one-hop link graph starting at https://en.wikipedia.org/wiki/Model_context_protocol
-```
+**Prompts to try** (LLM-driven hosts):
 
-<a href="screenshots/02-expanded-graph.png" target="_blank"><img src="screenshots/02-expanded-graph.png" alt="Wiki Explorer App after clicking a node directly: graph has expanded to show two-hop links; demonstrates the App-side bridge call (no model in the loop)" width="50%"></a>
+> "Show me what the Wikipedia page for Model Context Protocol links to."
+> "Explore the link graph from https://en.wikipedia.org/wiki/Knowledge_graph"
+> "Get first-degree links for the Wikipedia article about Transformer architecture."
+> "Build me a one-hop link graph starting at https://en.wikipedia.org/wiki/Model_context_protocol"
 
 Any of these should make the model call `get-first-degree-links`. The
 App iframe renders the result as a force-directed graph — click a
 node directly and the App calls `get-first-degree-links` itself via
 the bridge to expand from that node (no model in the loop).
 
-### Direct tool call (no LLM needed)
+**Verify the wire shape** (no LLM needed):
 
 | What | How | What you should see |
 |---|---|---|
 | Smoke test the tool | Select `get-first-degree-links`, call with `{"url": "https://en.wikipedia.org/wiki/Model_context_protocol"}` | Result panel: `{"page": {"url":"…","title":"Model Context Protocol"}, "links": [...], "error": null}` |
 | Verify nullable on the wire | Expand the tool's `outputSchema` and find the `error` property | `{"anyOf": [{"type":"string"}, {"type":"null"}]}` — the nullable anyOf form, not `"type": "string"` |
 
-## What to look at next
+See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, the strict Playwright gate, and connecting from VS Code / Claude Desktop / other MCP hosts.
+
+## What to Try Next
 
 - Compare against [`map`](../map/README.md) (rung 5, sibling) — two
   tools instead of one, less interactive iframe.
