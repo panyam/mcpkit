@@ -143,7 +143,7 @@ Terminal 2:  make demo                                 # this walkthrough
 - **Webhook + auto-refresh** — `events/subscribe` with the typed `Subscription` + `Receiver[Data]` from `clients/go`. Includes the hardened delivery loop: dial-time SSRF guard, no-redirects, 256 KiB body cap with 413 non-retryable, Standard Webhooks signature scheme as default.
 - **Multi-subscription routing** — two subs to `discord.message` with different params; one event fans out to both, distinguished by `X-MCP-Subscription-Id` plus push-side `requestId` echo on every notification.
 - **Webhook delivery health** — `deliveryStatus` block on subscribe-refresh response after a failed delivery; suspend state machine flips Active=false after N consecutive failures and auto-Posts a `{type:terminated}` control envelope when run with `make serve-fast-suspend`.
-- **Auth posture** — `events/subscribe` requires an authenticated principal per spec; demo runs anonymously via `UnsafeAnonymousPrincipal`. Production deployments wire real OIDC and reject anonymous subscribes with `-32012`.
+- **Auth posture** — `events/subscribe` requires an authenticated principal per spec; demo runs anonymously via `UnsafeAnonymousPrincipal`. Production deployments wire real OIDC and reject anonymous subscribes with `-32012 Forbidden`.
 - **Spec validation** — empty / malformed `delivery.secret` rejected; client-supplied `id` rejected; valid `whsec_` accepted with no secret echoed.
 
 Identity-mode subscribe and Standard Webhooks header naming are exercised by the unit tests in `experimental/ext/events/` and by `discord-events`'s e2e tests; they require the server to be started with mode flags so they're documented in the README rather than driven from this walkthrough.
@@ -275,7 +275,7 @@ Use webhook delivery. `events/subscribe` registers a callback URL plus a client-
 - 256 KiB body cap (REJECT not TRUNCATE — truncation would corrupt the HMAC); 413 from the receiver is non-retryable. Spec L487.
 - 5xx retry with exponential backoff (4 attempts: 500ms → 1s → 2s → 5s cap). Standard webhook convention.
 
-**Auth posture:** `events/subscribe` requires an authenticated principal per spec §"Subscription Identity" → "Authentication required" L361. The demo runs anonymously via `events.Config.UnsafeAnonymousPrincipal="demo-user"` (logged at startup as "auth: demo (anonymous → UnsafeAnonymousPrincipal)"). Production deployments unset that field AND wire `server.WithAuth(JWTValidator)` so anonymous subscribes hit the spec-mandated `-32012 Unauthorized`. See README "Auth posture: demo escape vs real OIDC".
+**Auth posture:** `events/subscribe` requires an authenticated principal per spec §"Subscription Identity" → "Authentication required" L361. The demo runs anonymously via `events.Config.UnsafeAnonymousPrincipal="demo-user"` (logged at startup as "auth: demo (anonymous → UnsafeAnonymousPrincipal)"). Production deployments unset that field AND wire `server.WithAuth(JWTValidator)` so anonymous subscribes hit the spec-mandated `-32012 Forbidden`. See README "Auth posture: demo escape vs real OIDC".
 
 #### Reproduce on the wire
 

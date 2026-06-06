@@ -72,23 +72,26 @@ func TestPollResponse_FlatShape_Truncated(t *testing.T) {
 		"legacy cursorGap field must be gone: got %s", body)
 }
 
-// TestEventNotFound_UsesSpecCode verifies the EventNotFound error response
-// uses the spec-mandated code -32011 (ErrCodeEventNotFound), not the legacy
-// -32001 which collides with base MCP ResourceNotFound. The spec reserves
-// -32011..-32017 for events errors specifically.
+// TestNotFound_UsesSpecCodeWithKindEvent pins the wire shape for the
+// spec's reusable -32011 NotFound error: same code as the pre-2026-05-22
+// EventNotFound, but now general-purpose with a typed `data.kind`
+// discriminator. Server emits kind="event" for unknown event names and
+// (in future) kind="subscription" for missing unsubscribe targets.
 //
-// The spec's flat-response shape means EventNotFound surfaces as a
-// top-level JSON-RPC error, not an embedded per-result error from the
-// legacy partial-success model.
-func TestEventNotFound_UsesSpecCode(t *testing.T) {
+// The spec's flat-response shape means NotFound surfaces as a top-level
+// JSON-RPC error, not an embedded per-result error from the legacy
+// partial-success model.
+func TestNotFound_UsesSpecCodeWithKindEvent(t *testing.T) {
 	id := json.RawMessage(`1`)
-	resp := core.NewErrorResponse(id, ErrCodeEventNotFound, "EventNotFound")
+	resp := newNotFoundError(id, "event", "NotFound")
 	raw, err := json.Marshal(resp)
 	require.NoError(t, err)
 	body := string(raw)
 
-	assert.Contains(t, body, `"code":-32011`, "EventNotFound must use spec code -32011")
-	assert.Contains(t, body, `"message":"EventNotFound"`)
+	assert.Contains(t, body, `"code":-32011`, "NotFound must use spec code -32011")
+	assert.Contains(t, body, `"message":"NotFound"`)
+	assert.Contains(t, body, `"kind":"event"`,
+		"typed data.kind discriminator must be present so clients can branch without parsing the message")
 	assert.False(t, strings.Contains(body, `"code":-32001`),
 		"legacy -32001 code must not appear (collides with base MCP ResourceNotFound)")
 }
@@ -443,16 +446,21 @@ func TestList_NextCursorPresentWhenSet(t *testing.T) {
 		"populated NextCursor must serialize under the camelCase key; got %s", body)
 }
 
-// TestInvalidCallbackUrl_UsesSpecCode verifies the InvalidCallbackUrl error
-// uses spec code -32015, not the legacy -32005.
-func TestInvalidCallbackUrl_UsesSpecCode(t *testing.T) {
+// TestCallbackEndpointError_UsesSpecCode pins the wire shape for
+// -32015 CallbackEndpointError (renamed from InvalidCallbackUrl on
+// 2026-05-22, same code). The typed data.reason carries a value from
+// the DeliveryErrorBucket vocabulary so a client can use one switch
+// across subscribe-time validation and delivery-time failures.
+func TestCallbackEndpointError_UsesSpecCode(t *testing.T) {
 	id := json.RawMessage(`1`)
-	resp := core.NewErrorResponse(id, ErrCodeInvalidCallbackUrl, "url not allowed")
+	resp := newCallbackEndpointError(id, string(DeliveryErrorConnectionRefused), "url not allowed")
 	raw, err := json.Marshal(resp)
 	require.NoError(t, err)
 	body := string(raw)
 
 	assert.Contains(t, body, `"code":-32015`)
+	assert.Contains(t, body, `"reason":"connection_refused"`,
+		"typed data.reason must carry a DeliveryErrorBucket value")
 	assert.False(t, strings.Contains(body, `"code":-32005`),
 		"legacy -32005 code must not appear")
 }

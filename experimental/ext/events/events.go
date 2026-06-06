@@ -198,7 +198,7 @@ type Config struct {
 	//
 	// This is a deliberate spec deviation. Per spec §"Subscription
 	// Identity" → "Authentication required" L361, servers MUST reject
-	// unauthenticated webhook subscribes with -32012 Unauthorized. The
+	// unauthenticated webhook subscribes with -32012 Forbidden. The
 	// escape hatch exists so demos and unauthenticated mcpkit servers
 	// can exercise webhook delivery end-to-end without standing up an
 	// OAuth provider; it is named with the "Unsafe" prefix and produces
@@ -250,9 +250,9 @@ type Config struct {
 	// per spec §"Server SDK Guidance" → "Subscription lifecycle
 	// hooks" L705 ("Servers SHOULD enforce TooManySubscriptions
 	// before invoking on_subscribe"). If the principal is at cap,
-	// the request is rejected with -32013 TooManySubscriptions and
-	// on_subscribe never runs (no upstream resource provisioning
-	// for a rejected sub).
+	// the request is rejected with -32013 ResourceExhausted (data.
+	// limit="subscriptions") and on_subscribe never runs (no upstream
+	// resource provisioning for a rejected sub).
 	//
 	// Authors configure caps via NewQuota(WithMaxSubscriptionsPerPrincipal(name, n)...)
 	// and pass the result here. nil leaves Register to construct an
@@ -416,7 +416,7 @@ func EmitToWebhooks(webhooks *WebhookRegistry, event Event) {
 // Per-result errors used to live inside this struct (legacy partial-
 // success model). They now surface as top-level JSON-RPC errors per
 // the spec — single-sub call, single-sub response, single-sub error
-// path. See the EventNotFound branch in registerPoll.
+// path. See the NotFound branch in registerPoll.
 type pollResultWire struct {
 	Events          []Event `json:"events,omitempty"`
 	Cursor          *string `json:"cursor"`
@@ -484,7 +484,7 @@ func registerPoll(srv *server.Server, sourceMap map[string]EventSource, unsafeAn
 
 		source, ok := sourceMap[req.Name]
 		if !ok {
-			return core.NewErrorResponse(id, ErrCodeEventNotFound, "EventNotFound")
+			return newNotFoundError(id, "event", "NotFound")
 		}
 
 		// Poll-lease bookkeeping per spec §"Server SDK Guidance" →
@@ -516,7 +516,7 @@ func registerPoll(srv *server.Server, sourceMap map[string]EventSource, unsafeAn
 			// the live line).
 			if err := quota.Reserve(principal, req.Name); err != nil {
 				leases.Remove(principal, req.Name, req.Params)
-				return core.NewErrorResponse(id, ErrCodeTooManySubscriptions, err.Error())
+				return newResourceExhaustedError(id, "subscriptions", int64(quota.Cap(req.Name)), err.Error())
 			}
 			hc := newHookContext(ctx, principal, "", DeliveryModePoll)
 			if err := safeOnSubscribe(source.Def().OnSubscribe, hc, req.Params); err != nil {
@@ -526,7 +526,9 @@ func registerPoll(srv *server.Server, sourceMap map[string]EventSource, unsafeAn
 				// state.
 				leases.Remove(principal, req.Name, req.Params)
 				quota.Release(principal, req.Name)
-				return core.NewErrorResponse(id, ErrCodeTooManySubscriptions,
+				// Cap unknown at this site — author-defined refusal
+				// is not a server-side quota, so Max is omitted.
+				return newResourceExhaustedError(id, "subscriptions", 0,
 					"on_subscribe rejected: "+err.Error())
 			}
 		}
@@ -626,7 +628,7 @@ func registerPoll(srv *server.Server, sourceMap map[string]EventSource, unsafeAn
 // UnsafeAnonymousPrincipal escape hatch (events.Config field).
 //
 // Returns: (principal, ok). When ok is false, the handler MUST reject
-// the request with -32012 Unauthorized — there is neither real auth
+// the request with -32012 Forbidden — there is neither real auth
 // nor a configured anonymous fallback.
 //
 // Path-1 (real auth): claims != nil → claims.Subject. Spec-correct.
@@ -673,7 +675,7 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 				"client-supplied id is not accepted; server derives id over (principal, name, params, url) per spec — drop the id field from your subscribe request")
 		}
 		if _, ok := sourceMap[req.Name]; !ok {
-			return core.NewErrorResponse(id, ErrCodeEventNotFound, "EventNotFound")
+			return newNotFoundError(id, "event", "NotFound")
 		}
 		if req.Delivery.Mode != "webhook" {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "only webhook delivery mode is supported")
@@ -682,7 +684,13 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "delivery.url is required")
 		}
 		if err := webhooks.ValidateWebhookURL(req.Delivery.URL); err != nil {
-			return core.NewErrorResponse(id, ErrCodeInvalidCallbackUrl, err.Error())
+			// Subscribe-time URL validation rejects scheme / loopback /
+			// parse failures — none map cleanly onto the runtime
+			// DeliveryErrorBucket categories. "connection_refused" is
+			// the closest fit for "callback endpoint is not reachable
+			// from this server". Real delivery-time failures use the
+			// finer-grained bucket via the DeliveryStatus path.
+			return newCallbackEndpointError(id, string(DeliveryErrorConnectionRefused), err.Error())
 		}
 
 		// Spec: delivery.secret is REQUIRED, client-supplied, and MUST
@@ -700,12 +708,12 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 
 		// Spec §"Subscription Identity" → "Authentication required" L361:
 		// events/subscribe MUST be called with an authenticated principal;
-		// servers MUST reject unauthenticated calls with -32012. The
+		// servers MUST reject unauthenticated calls with -32012 Forbidden. The
 		// UnsafeAnonymousPrincipal escape hatch (Config field) lets demos
 		// run anonymously — see resolvePrincipal docs.
 		principal, ok := resolvePrincipal(ctx, unsafeAnon)
 		if !ok {
-			return core.NewErrorResponse(id, ErrCodeUnauthorized, "Unauthorized")
+			return newForbiddenError(id, "Forbidden")
 		}
 
 		// Spec §"Subscription Identity" → "Key composition" L363: the
@@ -745,7 +753,7 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 			// successfully Reserved) and idx.Remove (also no-op).
 			if err := quota.Reserve(principal, req.Name); err != nil {
 				webhooks.Unregister(canonical)
-				return core.NewErrorResponse(id, ErrCodeTooManySubscriptions, err.Error())
+				return newResourceExhaustedError(id, "subscriptions", int64(quota.Cap(req.Name)), err.Error())
 			}
 			source := sourceMap[req.Name]
 			def := source.Def()
@@ -755,7 +763,9 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 				// Unregister fires onRemove → quota.Release pairs
 				// with the Reserve above (one Release per Reserve).
 				webhooks.Unregister(canonical)
-				return core.NewErrorResponse(id, ErrCodeTooManySubscriptions,
+				// Cap unknown at this site — author-defined refusal
+				// is not a server-side quota, so Max is omitted.
+				return newResourceExhaustedError(id, "subscriptions", 0,
 					"on_subscribe rejected: "+err.Error())
 			}
 			// Register this webhook target in the SubscriptionIndex
@@ -867,7 +877,7 @@ func registerUnsubscribe(srv *server.Server, webhooks *WebhookRegistry, unsafeAn
 
 		principal, ok := resolvePrincipal(ctx, unsafeAnon)
 		if !ok {
-			return core.NewErrorResponse(id, ErrCodeUnauthorized, "Unauthorized")
+			return newForbiddenError(id, "Forbidden")
 		}
 
 		canonical := canonicalKey(principal, req.Delivery.URL, req.Name, req.Params)

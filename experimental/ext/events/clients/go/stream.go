@@ -14,7 +14,7 @@ package eventsclient
 //  3. Returns from the constructor once the initial
 //     notifications/events/active arrives — at that point the server has
 //     accepted the subscription and the stream is live.
-//  4. Surfaces server-side validation errors (-32011, -32012, -32017,
+//  4. Surfaces server-side validation errors (-32011, -32012, -32014,
 //     -32602) as constructor errors before the goroutine ever starts.
 //
 // Per-stream isolation comes from the per-call notify hook: each Stream
@@ -91,8 +91,8 @@ type StreamCall struct {
 // Stream opens an events/stream call and dispatches incoming notifications
 // to the typed callbacks in opts. Returns once the initial
 // notifications/events/active arrives (signaling the stream is live) or
-// the call fails immediately (e.g., -32011 EventNotFound, -32012
-// Unauthorized, -32017 DeliveryModeUnsupported).
+// the call fails immediately (e.g., -32011 NotFound, -32012
+// Forbidden, -32014 Unsupported).
 //
 // The returned *StreamCall's Stop() cancels the underlying context, ending
 // the stream — the server returns StreamEventsResult and the goroutine

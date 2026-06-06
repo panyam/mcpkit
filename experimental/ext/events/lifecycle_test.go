@@ -408,7 +408,7 @@ func TestLifecycle_Webhook_OnSubscribeError_RollsBack(t *testing.T) {
 		},
 	})
 	require.NotNil(t, resp.Error, "on_subscribe error should produce a JSON-RPC error response")
-	require.Equal(t, ErrCodeTooManySubscriptions, resp.Error.Code)
+	require.Equal(t, ErrCodeResourceExhausted, resp.Error.Code)
 
 	// Rollback assertion: registry should not retain the rejected sub.
 	if got := len(f.webhooks.Targets()); got != 0 {
@@ -496,7 +496,7 @@ func TestLifecycle_Push_OnSubscribeError_RejectsStream(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resp.Error)
-	require.Equal(t, ErrCodeTooManySubscriptions, resp.Error.Code)
+	require.Equal(t, ErrCodeResourceExhausted, resp.Error.Code)
 	// on_unsubscribe deliberately does NOT fire — we never crossed
 	// the live-subscription line. (defer is set up after the
 	// safeOnSubscribe error check.)
@@ -583,7 +583,7 @@ func TestLifecycle_Poll_OnSubscribeError_Rejects(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resp.Error, "poll on_subscribe error should surface via JSON-RPC error")
-	require.Equal(t, ErrCodeTooManySubscriptions, resp.Error.Code)
+	require.Equal(t, ErrCodeResourceExhausted, resp.Error.Code)
 }
 
 // --- Concurrency safety ---
