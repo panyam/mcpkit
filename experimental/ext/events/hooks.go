@@ -72,8 +72,11 @@ func (m DeliveryMode) String() string {
 //
 // Why not reuse core.MethodContext: that type is shaped around handler
 // invocation (carries id, request method, send-side Notify) — none of
-// which makes sense per-emit-fanout-iteration. See
-// docs/EVENTS_ETA_PLAN.md Q2.
+// which makes sense per-emit-fanout-iteration, where a hook may fire
+// once per delivered event across many subscriptions sharing the same
+// originating emit. HookContext keeps the surface to the four facts a
+// hook actually needs (Context, Principal, SubscriptionID, Mode) so it
+// can be constructed cheaply on every fanout step.
 type HookContext interface {
 	// Context returns the underlying stdlib context. Authors honor
 	// cancellation / deadlines through this when doing blocking I/O

@@ -547,7 +547,7 @@ defer c.Call("events/unsubscribe", map[string]any{
 		Note(
 			"Each delivery POST carries its own `X-MCP-Subscription-Id` header (per spec §\"Webhook Event Delivery\" L390), and on the push side every notification echoes the originating `events/stream` request id in `params.requestId`. Subscriptions are identified by the canonical tuple `(principal, delivery.url, name, params)` (spec §\"Subscription Identity\" → \"Key composition\" L363), so two subscribes with the same `(principal, url, name)` but different `params` produce different ids — and the receiver branches by header without parsing the body.",
 			"",
-			"- The library fans out one yielded event to **both** webhook targets today — there is no per-subscription `match` filter yet (that's the upcoming SDK-hooks plan; see `docs/EVENTS_ETA_PLAN.md`).",
+			"- The library fans out one yielded event to **both** webhook targets by default. Authors that want per-subscription filtering attach a `Match` (and optionally `Transform`) hook on the `EventDef` — the hook fires once per (event × subscription) on the fanout step and short-circuits delivery for non-matching subs. The discord demo doesn't wire one because params-based routing (different ids per `(name, params)` tuple) is enough for the \"two subs, same event, different params\" story.",
 			"- Push side: the same routing works via the `requestId` echo on every `notifications/events/event` payload — each `events/stream` POST gets its own JSON-RPC id, and notifications carry it in `params.requestId`.",
 		).
 		VerbatimVariants("Reproduce on the wire",
