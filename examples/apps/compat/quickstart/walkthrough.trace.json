@@ -1,0 +1,16 @@
+[
+  {
+    "kind": "step",
+    "title": "Connect to the fixture",
+    "step_id": "step-1",
+    "visit": 1,
+    "output": "    connected to Quickstart MCP App Server 1.0.0\n"
+  },
+  {
+    "kind": "step",
+    "title": "List tools",
+    "step_id": "step-2",
+    "visit": 1,
+    "output": "    {\n      \"tools\": [\n        {\n          \"name\": \"get-time\",\n          \"title\": \"Get Time\",\n          \"description\": \"Returns the current server time.\",\n          \"inputSchema\": {\n            \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n            \"properties\": {},\n            \"type\": \"object\"\n          },\n          \"execution\": {\n            \"taskSupport\": \"forbidden\"\n          },\n          \"_meta\": {\n            \"ui\": {\n              \"resourceUri\": \"ui://get-time/mcp-app.html\"\n            },\n            \"ui/resourceUri\": \"ui://get-time/mcp-app.html\"\n          }\n        }\n      ]\n    }\n"
+  }
+]
