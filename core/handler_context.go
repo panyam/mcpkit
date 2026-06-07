@@ -162,6 +162,31 @@ func (bc BaseContext) ClientCaps() *ClientCapabilities {
 	return nil
 }
 
+// Span returns the currently active mcpkit Span for this request, or a
+// no-op Span when no TracerProvider has been wired. The returned Span
+// is NEVER nil — handlers can unconditionally call SetAttribute /
+// RecordError without nil-checking.
+//
+// This is the symmetric sibling of TraceContext() above: TraceContext()
+// surfaces the W3C trace identity propagated over the wire; Span()
+// surfaces the local in-process span the trace middleware started
+// around this dispatch.
+//
+// The enrichment pattern:
+//
+//	ctx.Span().SetAttribute("mcp.auth.principal", ctx.AuthClaims().Subject)
+//
+// Prefer this when you want to decorate the existing dispatch span with
+// extra attributes — e.g., an auth middleware adding principal info, a
+// tool handler adding result-shape hints. Use a TracerProvider directly
+// (StartSpan + child span) when you want a separate finer-grained span
+// instead.
+//
+// Always cheap — a single ctx.Value lookup. Safe for concurrent use.
+func (bc BaseContext) Span() Span {
+	return SpanFromContext(bc.Context)
+}
+
 // TraceContext returns the active W3C Trace Context for this request, or
 // a zero TraceContext when none has been attached.
 //
