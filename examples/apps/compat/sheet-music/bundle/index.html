@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sheet-music — multi-line default &#43; CSP-allowlisted iframe</title>
+<link rel="stylesheet" href="./demokit-player.css">
+<style>
+body { margin: 2em auto; max-width: 900px; padding: 0 1em; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+</style>
+</head>
+<body>
+<demokit-demo>{
+  "demo": {
+    "title": "sheet-music — multi-line default + CSP-allowlisted iframe",
+    "description": "Walks the play-sheet-music round trip end-to-end as a scripted MCP client. The two distinctive things about this fixture are visible on the wire: the InputSchemaPatch default (a multi-line comma-laden ABC notation string that struct-tag reflection would have truncated) and the resource's _meta.ui.csp.connectDomains (the soundfont CDN allowlist that lets abcjs play audio). Run `make serve` in another terminal first.",
+    "actors": [
+      {
+        "id": "Host",
+        "label": "MCP Host (this client)"
+      },
+      {
+        "id": "Server",
+        "label": "mcpkit-Go fixture (make serve)"
+      }
+    ],
+    "items": [
+      {
+        "kind": "section",
+        "title": "Setup",
+        "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nAny MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam, basic-host). The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `make demo-app EXAMPLE=sheet-music` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+      },
+      {
+        "kind": "step",
+        "title": "Connect to the fixture",
+        "note": "Session establishment is a single initialize round-trip plus the notifications/initialized ack. `*client.Client.Connect()` does both behind one call; the curl form below shows the raw shape.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "POST /mcp — initialize"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "serverInfo + capabilities + Mcp-Session-Id",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "# Initialize. Mcp-Session-Id comes back in the response headers.\nSID=$(curl -si -X POST http://localhost:3101/mcp \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"curl\",\"version\":\"1\"}}}' \\\n  | awk 'tolower($1) == \"mcp-session-id:\" {gsub(/\\r/,\"\"); print $2}')\n\n# Acknowledge so the server's dispatcher unblocks.\ncurl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "tools/list — verify the multi-line default landed intact",
+        "note": "The pedagogically interesting bit isn't that play-sheet-music exists — it's `inputSchema.properties.abcNotation.default`. The fixture uses `InputSchemaPatch` (`s.Prop(\"abcNotation\").Default(defaultABCNotation)`) to land the 11-line, comma-laden ABC notation default verbatim. invopop's struct-tag parser would have truncated at the first comma. The walkthrough prints just that default field below — confirm every line is present.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "tools/list"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "tools[] including play-sheet-music",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}' \\\n  | jq -r '.result.tools[] | select(.name==\"play-sheet-music\") | .inputSchema.properties.abcNotation.default'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "tools/call play-sheet-music — round-trip the ABC notation",
+        "note": "The server-side handler is intentionally minimal — it returns a small text envelope confirming the parse. The wire-level lesson is that the full 184-char ABC notation crosses verbatim and is unmarshaled into the typed `playSheetMusicInput.ABCNotation` field. The iframe does the actual rendering + audio playback work; see step 4 for what makes that work.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "tools/call play-sheet-music { abcNotation: \u003c184 chars\u003e }"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "ToolResult.content[0].text = \"Input parsed successfully.\"",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"play-sheet-music\",\"arguments\":{\"abcNotation\":\"X:1\\nT:Twinkle, Twinkle Little Star\\nM:4/4\\nL:1/4\\nK:C\\nC C G G | A A G2 | F F E E | D D C2 |\\nG G F F | E E D2 | G G F F | E E D2 |\\nC C G G | A A G2 | F F E E | D D C2 |\"}}}' \\\n  | jq -r '.result.content[0].text'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "resources/read — the CSP allowlist that unblocks audio",
+        "note": "This walkthrough does NOT dump the HTML body — it's a build artifact mirrored verbatim from upstream. The pedagogically interesting bit is `_meta.ui.csp.connectDomains` on the resource read response. abcjs streams soundfonts from `paulrosen.github.io` when the user clicks ▶ Play; without that origin on the iframe's `connect-src` allowlist, basic-host's CSP blocks the fetch and audio silently fails. The fixture declares it on the resource _meta — same shape upstream's sheet-music-server uses, same shape every CSP-aware MCP host can read.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "resources/read { uri: ui://sheet-music/mcp-app.html }"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "Contents[0]._meta.ui.csp.connectDomains",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"resources/read\",\"params\":{\"uri\":\"ui://sheet-music/mcp-app.html\"}}' \\\n  | jq '.result.contents[0]._meta'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "section",
+        "title": "Where to look in the code",
+        "body": "- `main.go` — the InputSchemaPatch landing the default + the ResourceHandler setting `_meta.ui.csp.connectDomains`. Both are visible in single contiguous edits.\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + the [CSP connect-src contract](../sheet-music/README.md#the-csp-connect-src-contract) section explains why the resource `_meta` matters."
+      }
+    ]
+  },
+  "trace": [
+    {
+      "kind": "section",
+      "title": "Setup",
+      "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nAny MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam, basic-host). The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `make demo-app EXAMPLE=sheet-music` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+    },
+    {
+      "kind": "step",
+      "title": "Connect to the fixture",
+      "step_id": "step-1",
+      "visit": 1,
+      "output": "    connected to Sheet Music Server 1.0.0\n"
+    },
+    {
+      "kind": "step",
+      "title": "tools/list — verify the multi-line default landed intact",
+      "step_id": "step-2",
+      "visit": 1,
+      "output": "    inputSchema.properties.abcNotation.default:\n      X:1\n      T:Twinkle, Twinkle Little Star\n      M:4/4\n      L:1/4\n      K:C\n      C C G G | A A G2 | F F E E | D D C2 |\n      G G F F | E E D2 | G G F F | E E D2 |\n      C C G G | A A G2 | F F E E | D D C2 |\n"
+    },
+    {
+      "kind": "step",
+      "title": "tools/call play-sheet-music — round-trip the ABC notation",
+      "step_id": "step-3",
+      "visit": 1,
+      "output": "    server said: Input parsed successfully.\n    (sent 164-char ABC notation; round-tripped through the typed handler)\n"
+    },
+    {
+      "kind": "step",
+      "title": "resources/read — the CSP allowlist that unblocks audio",
+      "step_id": "step-4",
+      "visit": 1,
+      "output": "    _meta:\n      {\n        \"ui\": {\n          \"csp\": {\n            \"connectDomains\": [\n              \"https://paulrosen.github.io\"\n            ]\n          }\n        }\n      }\n"
+    },
+    {
+      "kind": "section",
+      "title": "Where to look in the code",
+      "body": "- `main.go` — the InputSchemaPatch landing the default + the ResourceHandler setting `_meta.ui.csp.connectDomains`. Both are visible in single contiguous edits.\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + the [CSP connect-src contract](../sheet-music/README.md#the-csp-connect-src-contract) section explains why the resource `_meta` matters."
+    }
+  ]
+}
+</demokit-demo>
+<script type="module" src="./demokit-player.js"></script>
+</body>
+</html>

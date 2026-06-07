@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/client"
@@ -29,7 +28,7 @@ import (
 // equivalent *client.Client call). Both render outside the TUI bordered
 // box for mouse-select friendliness.
 func runDemo() {
-	serverURL := serverURLFor3101()
+	serverURL := common.MCPServerURL()
 
 	demo := demokit.New("basic-preact — same App, Preact iframe").
 		Dir("basic-preact").
@@ -203,15 +202,4 @@ fmt.Printf("first 200 bytes: %.200s\n", text)`,
 
 	common.SetupRenderer(demo)
 	demo.Execute()
-}
-
-// serverURLFor3101 returns the walkthrough's target MCP server URL.
-// Defaults to localhost:3101 (the compat-fixture default port, not the
-// :8080 default common.ServerURL() uses for non-UI examples). Honors
-// $MCPKIT_SERVER_URL as an explicit override.
-func serverURLFor3101() string {
-	if u := os.Getenv(common.ServerURLEnv); u != "" {
-		return u
-	}
-	return "http://localhost:3101"
 }

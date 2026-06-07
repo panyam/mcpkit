@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/client"
@@ -20,7 +19,7 @@ import (
 //
 // TODO: replace this stub with a curated walkthrough.
 func runDemo() {
-	serverURL := serverURLFor3101()
+	serverURL := common.MCPServerURL()
 
 	demo := demokit.New("customer-segmentation walkthrough (stub)").
 		Description("TODO: describe what this walkthrough demonstrates.").
@@ -64,14 +63,4 @@ func runDemo() {
 
 	common.SetupRenderer(demo)
 	demo.Execute()
-}
-
-// serverURLFor3101 returns the walkthrough's target MCP server URL.
-// Honors $MCPKIT_SERVER_URL as an explicit override; defaults to
-// localhost:3101 (the compat-fixture port).
-func serverURLFor3101() string {
-	if u := os.Getenv(common.ServerURLEnv); u != "" {
-		return u
-	}
-	return "http://localhost:3101"
 }

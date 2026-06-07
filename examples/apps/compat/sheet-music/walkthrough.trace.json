@@ -1,0 +1,40 @@
+[
+  {
+    "kind": "section",
+    "title": "Setup",
+    "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nAny MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam, basic-host). The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `make demo-app EXAMPLE=sheet-music` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+  },
+  {
+    "kind": "step",
+    "title": "Connect to the fixture",
+    "step_id": "step-1",
+    "visit": 1,
+    "output": "    connected to Sheet Music Server 1.0.0\n"
+  },
+  {
+    "kind": "step",
+    "title": "tools/list — verify the multi-line default landed intact",
+    "step_id": "step-2",
+    "visit": 1,
+    "output": "    inputSchema.properties.abcNotation.default:\n      X:1\n      T:Twinkle, Twinkle Little Star\n      M:4/4\n      L:1/4\n      K:C\n      C C G G | A A G2 | F F E E | D D C2 |\n      G G F F | E E D2 | G G F F | E E D2 |\n      C C G G | A A G2 | F F E E | D D C2 |\n"
+  },
+  {
+    "kind": "step",
+    "title": "tools/call play-sheet-music — round-trip the ABC notation",
+    "step_id": "step-3",
+    "visit": 1,
+    "output": "    server said: Input parsed successfully.\n    (sent 164-char ABC notation; round-tripped through the typed handler)\n"
+  },
+  {
+    "kind": "step",
+    "title": "resources/read — the CSP allowlist that unblocks audio",
+    "step_id": "step-4",
+    "visit": 1,
+    "output": "    _meta:\n      {\n        \"ui\": {\n          \"csp\": {\n            \"connectDomains\": [\n              \"https://paulrosen.github.io\"\n            ]\n          }\n        }\n      }\n"
+  },
+  {
+    "kind": "section",
+    "title": "Where to look in the code",
+    "body": "- `main.go` — the InputSchemaPatch landing the default + the ResourceHandler setting `_meta.ui.csp.connectDomains`. Both are visible in single contiguous edits.\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + the [CSP connect-src contract](../sheet-music/README.md#the-csp-connect-src-contract) section explains why the resource `_meta` matters."
+  }
+]
