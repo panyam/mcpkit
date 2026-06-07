@@ -65,6 +65,7 @@ type serverOptions struct {
 	readTTLMs            *int                     // SEP-2549 resources/read default cache-freshness hint (ms); handler may override per-read
 	readCacheScope       string                   // SEP-2549 resources/read default cacheScope; handler may override per-read
 	allowLegacyOnDraft   bool                     // WithAllowLegacyOnDraft — opt-in SEP-2575 leniency on the legacy wire (off by default; strict per spec)
+	tracerProvider       core.TracerProvider      // SEP-414 P2 — WithTracerProvider; nil/Noop = trace middleware not installed
 }
 
 type httpHandlerEntry struct {
@@ -853,7 +854,34 @@ func (s *Server) dispatchWithOpts(d *Dispatcher, ctx context.Context, claims *co
 		}
 	}
 
+	// SEP-414 P2 — wrap with the trace middleware as the outermost layer so
+	// user middleware (rate limit, audit, custom auth) executes inside the
+	// span and contributes to the recorded latency. Skipped when no
+	// TracerProvider is configured or the default NoopTracerProvider is in
+	// use — zero overhead on the default path.
+	if tracingEnabled(s.options.tracerProvider) {
+		next := handler
+		mw := traceMiddleware(s.options.tracerProvider)
+		handler = func(ctx context.Context, req *core.Request) (*core.Response, error) {
+			return mw(ctx, req, next)
+		}
+	}
+
 	return handler(ctx, req)
+}
+
+// tracingEnabled reports whether the configured TracerProvider should
+// install the SEP-414 trace middleware. nil and the default
+// core.NoopTracerProvider both report false so the zero-overhead path is
+// preserved when no tracing is wired.
+func tracingEnabled(tp core.TracerProvider) bool {
+	if tp == nil {
+		return false
+	}
+	if _, isNoop := tp.(core.NoopTracerProvider); isNoop {
+		return false
+	}
+	return true
 }
 
 // newSession creates a per-session Dispatcher clone with fresh session state.
