@@ -299,9 +299,11 @@ def _render_index_html(rows: list[dict], missing: list[str]) -> str:
   .stat { padding: 1rem; background: #f9fafb; border-radius: 8px; text-align: center; }
   .stat-num { font-size: 1.75rem; font-weight: 600; color: #111827; }
   .stat-label { font-size: 0.85rem; color: #6b7280; margin-top: 0.25rem; }
-  .fixture { margin: 2rem 0 3rem; padding-top: 1.5rem; border-top: 1px solid #e5e7eb; }
+  .fixture { margin: 2rem 0 3rem; padding-top: 1.5rem; border-top: 1px solid #e5e7eb; cursor: zoom-in; }
+  .fixture:hover { background: #fafbfc; }
   .fixture-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
   .fixture h2 { margin: 0; font-size: 1.25rem; font-family: ui-monospace, monospace; }
+  .fixture-hint { font-size: 0.75rem; color: #9ca3af; }
   .fixture-tag { font-size: 0.85rem; padding: 0.2rem 0.6rem; border-radius: 4px; font-weight: 500; }
   .tag-clean { background: #dcfce7; color: #166534; }
   .tag-ignored { background: #dbeafe; color: #1e40af; }
@@ -311,6 +313,54 @@ def _render_index_html(rows: list[dict], missing: list[str]) -> str:
   .img-col .caption { text-align: center; font-size: 0.85rem; color: #6b7280; padding: 0.4rem 0 0.3rem; font-weight: 500; }
   .img-col img { width: 100%; height: auto; display: block; border-radius: 4px; }
   .missing { padding: 1rem; background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 4px; margin-top: 2rem; }
+
+  /* Zoom modal — click a fixture row to open at native pixel size with
+     horizontal scroll for side-by-side comparison. */
+  .zoom-modal {
+    display: none;
+    position: fixed; inset: 0; z-index: 1000;
+    background: rgba(17, 24, 39, 0.94);
+    overflow: auto;
+    cursor: zoom-out;
+  }
+  .zoom-modal.open { display: block; }
+  .zoom-bar {
+    position: sticky; top: 0; z-index: 2;
+    display: flex; align-items: center; gap: 1rem;
+    padding: 0.75rem 1.25rem;
+    background: rgba(17, 24, 39, 0.92);
+    color: #f3f4f6;
+    border-bottom: 1px solid #374151;
+  }
+  .zoom-bar .title { font-family: ui-monospace, monospace; font-size: 1rem; flex: 1; }
+  .zoom-bar .hint { font-size: 0.8rem; color: #9ca3af; }
+  .zoom-close {
+    background: transparent; color: #f3f4f6;
+    border: 1px solid #4b5563; border-radius: 4px;
+    padding: 0.3rem 0.75rem;
+    font-size: 0.9rem; cursor: pointer;
+  }
+  .zoom-close:hover { background: #1f2937; }
+  .zoom-stage {
+    display: flex; gap: 1rem;
+    padding: 1rem 1.25rem 2rem;
+    cursor: default;
+    /* Allow horizontal scroll by making the row wider than viewport. */
+    width: max-content;
+    min-width: 100%;
+  }
+  .zoom-col {
+    flex: 0 0 auto;
+    background: #1f2937;
+    padding: 0.5rem;
+    border-radius: 6px;
+  }
+  .zoom-col .caption {
+    color: #d1d5db; font-size: 0.85rem; font-weight: 500;
+    padding: 0.3rem 0.2rem 0.5rem;
+    text-align: center;
+  }
+  .zoom-col img { display: block; max-width: none; border-radius: 4px; }
 </style>
 </head>
 <body>
@@ -364,23 +414,109 @@ def _render_index_html(rows: list[dict], missing: list[str]) -> str:
             tag_class, tag_text = "tag-ignored", f"○ {r['ign_count']} ignored region(s)"
         else:
             tag_class, tag_text = "tag-clean", "✓ pixel-identical"
-        body.append('<div class="fixture">')
+        mc_src = f'../../../static/conformance/apps/visual-gallery/{r["mcpkit_image"]}'
+        up_src = f'../../../static/conformance/apps/visual-gallery/{r["upstream_image"]}'
+        body.append(
+            f'<div class="fixture" data-name="{r["name"]}" '
+            f'data-mc="{mc_src}" data-up="{up_src}" tabindex="0" '
+            f'role="button" aria-label="Zoom {r["name"]} baselines">'
+        )
         body.append(
             f'<div class="fixture-head"><h2>{r["name"]}</h2>'
-            f'<span class="fixture-tag {tag_class}">{tag_text}</span></div>'
+            f'<div style="display:flex;align-items:baseline;gap:0.75rem;">'
+            f'<span class="fixture-hint">click to zoom</span>'
+            f'<span class="fixture-tag {tag_class}">{tag_text}</span>'
+            f'</div></div>'
         )
         body.append('<div class="images">')
         body.append(
             f'<div class="img-col"><div class="caption">mcpkit-Go</div>'
-            f'<img src="../../../static/conformance/apps/visual-gallery/{r["mcpkit_image"]}" alt="mcpkit baseline for {r["name"]}"></div>'
+            f'<img src="{mc_src}" alt="mcpkit baseline for {r["name"]}"></div>'
         )
         body.append(
             f'<div class="img-col"><div class="caption">upstream TS</div>'
-            f'<img src="../../../static/conformance/apps/visual-gallery/{r["upstream_image"]}" alt="upstream baseline for {r["name"]}"></div>'
+            f'<img src="{up_src}" alt="upstream baseline for {r["name"]}"></div>'
         )
         body.append('</div>')
         body.append('</div>')
 
+    # Zoom modal — populated by JS when a fixture row is clicked.
+    body.append("""
+<div id="zoom-modal" class="zoom-modal" aria-hidden="true" aria-label="Zoomed baseline comparison">
+  <div class="zoom-bar">
+    <span class="title" id="zoom-title"></span>
+    <span class="hint">Scroll horizontally to see both images at native size · ESC or click background to close</span>
+    <button class="zoom-close" type="button" aria-label="Close zoom view">Close</button>
+  </div>
+  <div class="zoom-stage" id="zoom-stage">
+    <div class="zoom-col"><div class="caption">mcpkit-Go</div><img id="zoom-mc" alt=""></div>
+    <div class="zoom-col"><div class="caption">upstream TS</div><img id="zoom-up" alt=""></div>
+  </div>
+</div>
+<script>
+(function () {
+  var modal = document.getElementById('zoom-modal');
+  var titleEl = document.getElementById('zoom-title');
+  var mcImg = document.getElementById('zoom-mc');
+  var upImg = document.getElementById('zoom-up');
+  var stage = document.getElementById('zoom-stage');
+  var closeBtn = modal.querySelector('.zoom-close');
+
+  function openZoom(name, mc, up) {
+    titleEl.textContent = name;
+    mcImg.src = mc;
+    mcImg.alt = 'mcpkit baseline for ' + name;
+    upImg.src = up;
+    upImg.alt = 'upstream baseline for ' + name;
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    modal.scrollTop = 0;
+    modal.scrollLeft = 0;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeZoom() {
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    mcImg.src = '';
+    upImg.src = '';
+    document.body.style.overflow = '';
+  }
+
+  // Backdrop click closes; clicks inside the stage (the image row) don't.
+  modal.addEventListener('click', function (e) {
+    if (e.target === modal) closeZoom();
+  });
+  closeBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    closeZoom();
+  });
+  stage.addEventListener('click', function (e) { e.stopPropagation(); });
+
+  // Wire each .fixture row.
+  document.querySelectorAll('.fixture').forEach(function (row) {
+    function open() {
+      openZoom(
+        row.getAttribute('data-name'),
+        row.getAttribute('data-mc'),
+        row.getAttribute('data-up')
+      );
+    }
+    row.addEventListener('click', open);
+    row.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        open();
+      }
+    });
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && modal.classList.contains('open')) closeZoom();
+  });
+})();
+</script>
+""")
     body.append('</body></html>\n')
     return head + "\n".join(body)
 
