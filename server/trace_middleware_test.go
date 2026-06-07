@@ -440,46 +440,10 @@ func TestTraceMiddleware_UserMiddlewareRunsInsideSpan(t *testing.T) {
 	assert.True(t, spans[0].ended)
 }
 
-// TestInjectTraceContextIntoParams_RespectsExplicitMeta verifies that a
-// handler that explicitly set _meta.traceparent on its outbound message
-// is NOT overwritten by the inject wrap — explicit caller intent wins.
-func TestInjectTraceContextIntoParams_RespectsExplicitMeta(t *testing.T) {
-	tc := core.TraceContext{Traceparent: tpChild, Tracestate: "vendor=child"}
-	explicit := "00-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-1234567812345678-01"
-	in := map[string]any{
-		"_meta": map[string]any{core.MetaKeyTraceparent: explicit},
-		"data":  "x",
-	}
-
-	got := injectTraceContextIntoParams(in, tc)
-	obj, ok := got.(map[string]any)
-	require.True(t, ok)
-	meta := obj["_meta"].(map[string]any)
-	assert.Equal(t, explicit, meta[core.MetaKeyTraceparent], "explicit handler-set traceparent must win")
-	assert.Equal(t, "vendor=child", meta[core.MetaKeyTracestate], "tracestate may still be added when not explicitly set")
-}
-
-// TestInjectTraceContextIntoParams_HandlesNilAndNonObject covers the
-// edge cases the wrap must not corrupt:
-//   - nil params → fresh object with just _meta;
-//   - non-object params (positional array) → returned unchanged;
-//   - zero TraceContext → returned unchanged.
-func TestInjectTraceContextIntoParams_HandlesNilAndNonObject(t *testing.T) {
-	tc := core.TraceContext{Traceparent: tpChild}
-
-	got := injectTraceContextIntoParams(nil, tc)
-	obj, ok := got.(map[string]any)
-	require.True(t, ok)
-	meta := obj["_meta"].(map[string]any)
-	assert.Equal(t, tpChild, meta[core.MetaKeyTraceparent])
-
-	arr := []any{1, 2, 3}
-	got2 := injectTraceContextIntoParams(arr, tc)
-	assert.Equal(t, arr, got2, "non-object params must pass through unchanged")
-
-	got3 := injectTraceContextIntoParams(map[string]any{"a": 1}, core.TraceContext{})
-	assert.Equal(t, map[string]any{"a": 1}, got3, "zero TraceContext must pass through unchanged")
-}
+// Helper-level tests for InjectTraceContextIntoParams moved to
+// core/trace_test.go alongside the promoted symbol — see
+// TestInjectTraceContextIntoParams_RespectsExplicitMeta and
+// TestInjectTraceContextIntoParams_HandlesNilAndNonObject there.
 
 // TestWithTraceContextFromHTTPHeaders_Bridges directly exercises the
 // SEP-2028 helper. Covers the three branches: absent header → ctx

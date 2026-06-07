@@ -1,7 +1,7 @@
 # SEP-414: OpenTelemetry Trace Context Propagation
 
-Status: **Phases 1, 2, and 4 landed.** Client-side spans (Phase 3) and
-the polished walkthroughs (Phase 5) still to come.
+Status: **Phases 1, 2, 3, and 4 landed.** Polished walkthroughs (Phase 5)
+and the conformance suite (issue 429) still to come.
 
 This document is the wiring guide for mcpkit's OpenTelemetry surface. It
 covers what the shipped phases give you, what to expect once you wire a
@@ -134,21 +134,58 @@ See [`ext/otel/README.md`](../ext/otel/README.md) for the API reference
 and [`examples/otel/stdout/README.md`](../examples/otel/stdout/README.md)
 for the walkthrough.
 
+## What Phase 3 ships
+
+Phase 3 lands the symmetric client-side surface:
+
+- `client.WithTracerProvider(tp core.TracerProvider)` — install a
+  tracer. Default and `core.NoopTracerProvider{}` both skip the install
+  (zero overhead on the unconfigured path).
+- Outbound `Client.Call` is wrapped in a span via a `ClientMiddleware`
+  installed as the OUTERMOST entry — user middleware (auth retry,
+  header injection) runs inside the span so its latency is captured.
+  Span attributes:
+  - `mcp.method` on every span
+  - `mcp.tool.name` on `tools/call`
+  - `mcp.client.session.id` when a session exists (note `client.`
+    namespace — operators want to filter by client- vs
+    server-emitted)
+  - `mcp.error.code` + `Span.RecordError` on `*RPCError`
+- Outbound params gain `_meta.traceparent` / `_meta.tracestate`
+  derived from the active span via `core.InjectTraceContextIntoParams`
+  (promoted from the server-internal helper so both wires apply the
+  same precedence rule — explicit caller-set values win).
+- Inbound server-to-client requests
+  (`sampling/createMessage`, `elicitation/create`, `roots/list`):
+  `params._meta.traceparent` is extracted via
+  `core.ExtractTraceContextFromParams`, attached to ctx via
+  `core.WithTraceContext`, and a wrap span named after the request
+  method is emitted with the inbound trace context as parent. The
+  handler observes the inbound TC via `core.TraceContextFromContext(ctx)`
+  and can use it as a parent for its own spans.
+
+Wiring is a single line in your client bootstrap:
+
+```go
+c := client.NewClient(url, info,
+    // ...your other options...
+    client.WithTracerProvider(myTracerProvider),
+)
+```
+
+`myTracerProvider` is the same `core.TracerProvider` you'd hand the
+server side via `server.WithTracerProvider`. The Phase 4 `ext/otel/`
+adapter (PR 652) is the in-tree implementation.
+
 ## What comes next
 
 Tracked phases on [issue 312][issue]:
 
-- **P3 — client-side spans.** Outbound client calls wrap in spans and
-  inject `_meta.traceparent`; incoming server-to-client requests
-  extract the parent. Lives in `client/`.
 - **P5 — polished examples.** `examples/otel/jaeger/` +
   `examples/otel/otlp/` end-to-end walkthroughs with collector and UI
   screenshots. The minimal `examples/otel/stdout/` already covers
   smoke-verification.
 - **Conformance suite `testconf-otel`** — issue 429.
-
-P3 and P5 touch disjoint trees and can be developed in parallel on
-top of P4.
 
 ## Downstream consumers of the Phase 1 contract
 
