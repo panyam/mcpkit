@@ -193,6 +193,9 @@ So **parent-child precision lives in the adapter, not the middleware.** Under th
 > [!IMPORTANT]
 > Injection **never clobbers** a caller-set `_meta.traceparent`. `InjectTraceContextIntoParams` only writes the key when it's absent — an explicit value a handler set wins. This is why both the server and client outbound wraps share the same `core` helper.
 
+> [!WARNING]
+> **Target-shape gap.** Notice the tree has a span on the *client* (C) for the inbound reverse call but **no dedicated span on the *server*** for the outbound leg — the server only *injects* `traceparent` onto `ctx.Sample`/`Elicit`/roots, it doesn't `StartSpan` around the outbound call. So the time the handler spends **blocked waiting on the client** shows up as opaque duration *inside* span B, not as its own segment (an HTTP client library would span that wait as a `CLIENT`-kind span). Adding the server-outbound span + a `core.Span` SpanKind surface is tracked in [#664][p6-revspan]. The detached/background variant (a reverse call made after the forward request returned, injecting a now-closed span's context) resolves the same way as async tasks — a fresh linked span; see Q7.
+
 ## Q6 — Client side: what's symmetric, what's not?
 
 The design is mirror-image. Same primitives, opposite direction:
@@ -270,3 +273,4 @@ After this page you can:
 [w3c-tc]:        https://www.w3.org/TR/trace-context/
 [mcpkit-sep414]: https://github.com/panyam/mcpkit/blob/main/docs/SEP_414_OTEL.md
 [p6]:            https://github.com/panyam/mcpkit/issues/663
+[p6-revspan]:    https://github.com/panyam/mcpkit/issues/664
