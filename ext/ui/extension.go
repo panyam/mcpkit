@@ -144,6 +144,17 @@ type AppToolConfig struct {
 	// When set, RegisterAppTool registers a resource template instead of
 	// a concrete resource.
 	TemplateHandler core.TemplateHandler
+
+	// ResourceDescription is the optional human-readable description for
+	// the registered ui:// resource (the `description` field on
+	// resources/list responses). Distinct from `Description` which
+	// describes the tool. When empty, the resource is registered with
+	// no description — matches the pre-field behavior. Per
+	// conformance/RESOURCES_META_AUDIT.md, upstream's per-fixture
+	// resources/list responses include a description string ("Dashboard
+	// UI", "PDF Viewer UI", etc.); set this field to surface those for
+	// parity with upstream.
+	ResourceDescription string
 }
 
 // RegisterAppTool registers both a tool (with _meta.ui metadata) and its
@@ -205,6 +216,7 @@ func RegisterAppTool(reg ToolResourceRegistrar, cfg AppToolConfig) {
 			core.ResourceTemplate{
 				URITemplate: cfg.ResourceURI,
 				Name:        cfg.Name + " UI",
+				Description: cfg.ResourceDescription,
 				MimeType:    core.AppMIMEType,
 			},
 			cfg.TemplateHandler,
@@ -239,9 +251,10 @@ func RegisterAppTool(reg ToolResourceRegistrar, cfg AppToolConfig) {
 		tmplHandler := cfg.TemplateHandler
 		reg.RegisterResource(
 			core.ResourceDef{
-				URI:      concreteURI,
-				Name:     cfg.Name + " UI",
-				MimeType: core.AppMIMEType,
+				URI:         concreteURI,
+				Name:        cfg.Name + " UI",
+				Description: cfg.ResourceDescription,
+				MimeType:    core.AppMIMEType,
 			},
 			func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 				params := lastParams.Load()
@@ -301,9 +314,10 @@ func RegisterAppTool(reg ToolResourceRegistrar, cfg AppToolConfig) {
 	}
 	reg.RegisterResource(
 		core.ResourceDef{
-			URI:      cfg.ResourceURI,
-			Name:     cfg.Name + " UI",
-			MimeType: core.AppMIMEType,
+			URI:         cfg.ResourceURI,
+			Name:        cfg.Name + " UI",
+			Description: cfg.ResourceDescription,
+			MimeType:    core.AppMIMEType,
 		},
 		cfg.ResourceHandler,
 	)

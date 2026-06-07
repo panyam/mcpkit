@@ -105,6 +105,14 @@ type TypedAppToolConfig[In, Out any] struct {
 
 	// TemplateHandler serves HTML content for a ui:// resource template.
 	TemplateHandler core.TemplateHandler
+
+	// ResourceDescription is the human-readable description for the ui://
+	// resource registered alongside the tool (the `description` field on
+	// resources/list responses). Distinct from `Description` which describes
+	// the tool. Set this to surface per-fixture descriptions on
+	// resources/list (matches upstream's per-fixture convention; documented
+	// in conformance/RESOURCES_META_AUDIT.md).
+	ResourceDescription string
 }
 
 // RegisterTypedAppTool registers a typed tool + resource pair. It auto-derives
@@ -160,5 +168,6 @@ func RegisterTypedAppTool[In, Out any](reg ToolResourceRegistrar, cfg TypedAppTo
 		Domain:                cfg.Domain,
 		SupportedDisplayModes: cfg.SupportedDisplayModes,
 		TemplateHandler:       cfg.TemplateHandler,
+		ResourceDescription:   cfg.ResourceDescription,
 	})
 }
