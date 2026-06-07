@@ -1,0 +1,7 @@
+# Built binaries (per-module + Makefile build target output)
+event-server/event-server
+push-server/push-server
+receiver/receiver
+walkthrough/walkthrough
+tools/gen-compose/gen-compose
+bin/
