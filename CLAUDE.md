@@ -37,6 +37,7 @@ make tag-push V=vX.Y.Z # Tag root + all sub-modules and push
 | `ext/auth/` — JWT, PRM, OAuth (separate go.mod) | `ext/auth/docs/DESIGN.md` |
 | `ext/tasks/` — SEP-2663 v2 tasks extension (separate go.mod) | `ext/tasks/README.md` |
 | `ext/ui/` — MCP Apps, Bridge JS, AppHost, ServerRegistry (separate go.mod) | `docs/APPS_DESIGN.md`, `docs/APPS_HOST.md`, `docs/APPS_ONBOARDING.md` |
+| `ext/otel/` — SEP-414 OpenTelemetry adapter (separate go.mod) | `ext/otel/README.md`, `docs/SEP_414_OTEL.md` |
 | `experimental/ext/protogen/` — Proto → MCP codegen | `experimental/ext/protogen/docs/DESIGN.md` |
 | `experimental/ext/events/` — MCP Events protocol | `experimental/ext/events/README.md` |
 | `testutil/` — Test helpers | |
@@ -45,7 +46,7 @@ make tag-push V=vX.Y.Z # Tag root + all sub-modules and push
 
 ## Sub-Modules
 
-`ext/auth/`, `ext/tasks/`, `ext/ui/`, `experimental/ext/protogen/`, `docs/site/` have separate `go.mod` — `make test` does NOT cover them. Run `make tidy-all` after touching `core/` imports. `docs/site/` is the GitHub Pages renderer (issue 508); it is a tool, not a library, and is excluded from `SUB_MODS_TO_TAG`.
+`ext/auth/`, `ext/tasks/`, `ext/ui/`, `ext/otel/`, `experimental/ext/protogen/`, `docs/site/` have separate `go.mod` — `make test` does NOT cover them. Run `make tidy-all` after touching `core/` imports. `docs/site/` is the GitHub Pages renderer (issue 508); it is a tool, not a library, and is excluded from `SUB_MODS_TO_TAG`.
 
 ## Constraints
 
