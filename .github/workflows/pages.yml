@@ -38,6 +38,18 @@ jobs:
         with:
           go-version-file: docs/site/go.mod
 
+      # docs/site/Makefile's build target ends with
+      # `uv run scripts/collect_walkthroughs.py` so the walkthrough
+      # bundles ship alongside the rendered docs.  Provision uv +
+      # sync the project's Python tooling env first; matches the
+      # same pattern as test.yml's renderer-unit-tests job.
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Sync Python tooling env
+        run: uv sync
+
       - name: Build site
         working-directory: docs/site
         run: make build
