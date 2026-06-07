@@ -5,6 +5,11 @@ description = "Python tooling used by mcpkit's repo scripts (conformance gates, 
 requires-python = ">=3.9"
 dependencies = [
     "PyYAML>=6.0.0",
+    # Image processing for the apps-compat visual gallery — pixel diff +
+    # bounding-box overlays. Used only by scripts/apps_visual_gallery.py;
+    # other scripts are stdlib-only.
+    "Pillow>=10.0.0",
+    "numpy>=1.24.0",
 ]
 
 # This is NOT a published package. It exists so `uv sync` produces a
