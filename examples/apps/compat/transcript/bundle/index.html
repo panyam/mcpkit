@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>transcript walkthrough (stub)</title>
+<title>transcript — Web Speech App with Permission-Policy _meta</title>
 <link rel="stylesheet" href="./demokit-player.css">
 <style>
 body { margin: 2em auto; max-width: 900px; padding: 0 1em; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
@@ -12,8 +12,8 @@ body { margin: 2em auto; max-width: 900px; padding: 0 1em; font-family: -apple-s
 <body>
 <demokit-demo>{
   "demo": {
-    "title": "transcript walkthrough (stub)",
-    "description": "TODO: describe what this walkthrough demonstrates.",
+    "title": "transcript — Web Speech App with Permission-Policy _meta",
+    "description": "Walks the transcribe round trip end-to-end as a scripted MCP client. The distinctive thing about this fixture is visible on the wire: the resource's _meta.ui.permissions block (microphone + clipboardWrite). Without that declaration, basic-host loads the iframe with no Permission-Policy grant and the browser blocks recognition.start() silently. Run `make serve` in another terminal first.",
     "actors": [
       {
         "id": "Host",
@@ -26,9 +26,14 @@ body { margin: 2em auto; max-width: 900px; padding: 0 1em; font-family: -apple-s
     ],
     "items": [
       {
+        "kind": "section",
+        "title": "Setup",
+        "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nAny MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam, basic-host). The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `make demo-app EXAMPLE=transcript` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+      },
+      {
         "kind": "step",
         "title": "Connect to the fixture",
-        "note": "Stub — refine in walkthrough.go.",
+        "note": "Session establishment is a single initialize round-trip plus the notifications/initialized ack. `*client.Client.Connect()` does both behind one call; the curl form below shows the raw shape.",
         "arrows": [
           {
             "from": "Host",
@@ -41,12 +46,25 @@ body { margin: 2em auto; max-width: 900px; padding: 0 1em; font-family: -apple-s
             "label": "serverInfo + capabilities + Mcp-Session-Id",
             "dashed": true
           }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "# Initialize. Mcp-Session-Id comes back in the response headers.\nSID=$(curl -si -X POST http://localhost:3101/mcp \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"curl\",\"version\":\"1\"}}}' \\\n  | awk 'tolower($1) == \"mcp-session-id:\" {gsub(/\\r/,\"\"); print $2}')\n\n# Acknowledge so the server's dispatcher unblocks.\ncurl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}'",
+                "default": true
+              }
+            ]
+          }
         ]
       },
       {
         "kind": "step",
-        "title": "List tools",
-        "note": "Stub — refine in walkthrough.go.",
+        "title": "tools/list — verify transcribe + its UI resource",
+        "note": "`transcribe` has an empty input schema — the tool is the iframe-open signal, not a parameterized call. `_meta.ui.resourceUri` points at the iframe HTML the host loads.",
         "arrows": [
           {
             "from": "Host",
@@ -56,14 +74,99 @@ body { margin: 2em auto; max-width: 900px; padding: 0 1em; font-family: -apple-s
           {
             "from": "Server",
             "to": "Host",
-            "label": "tools[]",
+            "label": "tools[] including transcribe",
             "dashed": true
           }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}' \\\n  | jq '.result.tools[] | {name, _meta}'",
+                "default": true
+              }
+            ]
+          }
         ]
+      },
+      {
+        "kind": "step",
+        "title": "tools/call transcribe — the iframe-open signal",
+        "note": "The server-side handler is intentionally minimal — `transcribeReady` is a fixed string mirroring upstream's transcript-server. All the real transcription work happens in the iframe via the Web Speech API; this call just signals the host \"open my UI now.\" The iframe-side work is invisible on the wire; what's visible is the small text envelope returned synchronously.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "tools/call transcribe {}"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "ToolResult.content[0].text = `{\"status\":\"ready\",...}`",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"transcribe\",\"arguments\":{}}}' \\\n  | jq -r '.result.content[0].text'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "resources/read — the Permission-Policy block that unblocks the mic",
+        "note": "This walkthrough does NOT dump the HTML body — it's a build artifact mirrored verbatim from upstream. The pedagogically interesting bit is `_meta.ui.permissions` on the resource read response. The iframe calls `recognition.start()` (Web Speech API) and the copy-transcript button (Clipboard API); both need Permission-Policy grants on the iframe sandbox. The Go fixture declares them on the resource _meta — same shape upstream's transcript-server uses, same shape every Permission-Policy-aware MCP host can read.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "resources/read { uri: ui://transcript/mcp-app.html }"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "Contents[0]._meta.ui.permissions",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"resources/read\",\"params\":{\"uri\":\"ui://transcript/mcp-app.html\"}}' \\\n  | jq '.result.contents[0]._meta'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "section",
+        "title": "Where to look in the code",
+        "body": "- `main.go` — the ResourceHandler setting `_meta.ui.permissions`. The microphone + clipboardWrite fields are visible in a single contiguous edit.\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + the [iframe permission contract](../transcript/README.md#the-iframe-permission-contract) section explains why the resource `_meta` matters."
       }
     ]
   },
   "trace": [
+    {
+      "kind": "section",
+      "title": "Setup",
+      "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nAny MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam, basic-host). The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `make demo-app EXAMPLE=transcript` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+    },
     {
       "kind": "step",
       "title": "Connect to the fixture",
@@ -73,10 +176,29 @@ body { margin: 2em auto; max-width: 900px; padding: 0 1em; font-family: -apple-s
     },
     {
       "kind": "step",
-      "title": "List tools",
+      "title": "tools/list — verify transcribe + its UI resource",
       "step_id": "step-2",
       "visit": 1,
-      "output": "    {\n      \"tools\": [\n        {\n          \"name\": \"transcribe\",\n          \"title\": \"Transcribe Speech\",\n          \"description\": \"Opens a live speech transcription interface using the Web Speech API.\",\n          \"inputSchema\": {\n            \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n            \"properties\": {},\n            \"type\": \"object\"\n          },\n          \"execution\": {\n            \"taskSupport\": \"forbidden\"\n          },\n          \"_meta\": {\n            \"ui\": {\n              \"resourceUri\": \"ui://transcript/mcp-app.html\"\n            },\n            \"ui/resourceUri\": \"ui://transcript/mcp-app.html\"\n          }\n        }\n      ]\n    }\n"
+      "output": "    transcribe\n      _meta: {\n        \"ui\": {\n          \"resourceUri\": \"ui://transcript/mcp-app.html\"\n        },\n        \"ui/resourceUri\": \"ui://transcript/mcp-app.html\"\n      }\n"
+    },
+    {
+      "kind": "step",
+      "title": "tools/call transcribe — the iframe-open signal",
+      "step_id": "step-3",
+      "visit": 1,
+      "output": "    server said: {\"status\":\"ready\",\"message\":\"Transcription UI opened. Speak into your microphone.\"}\n"
+    },
+    {
+      "kind": "step",
+      "title": "resources/read — the Permission-Policy block that unblocks the mic",
+      "step_id": "step-4",
+      "visit": 1,
+      "output": "    _meta:\n      {\n        \"ui\": {\n          \"permissions\": {\n            \"microphone\": {},\n            \"clipboardWrite\": {}\n          }\n        }\n      }\n"
+    },
+    {
+      "kind": "section",
+      "title": "Where to look in the code",
+      "body": "- `main.go` — the ResourceHandler setting `_meta.ui.permissions`. The microphone + clipboardWrite fields are visible in a single contiguous edit.\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + the [iframe permission contract](../transcript/README.md#the-iframe-permission-contract) section explains why the resource `_meta` matters."
     }
   ]
 }
