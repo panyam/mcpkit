@@ -35,6 +35,8 @@ graph TD
     click mrtr "https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/mrtr.md"
     notifications["notifications<br/>(root)"]
     click notifications "https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/notifications.md"
+    otel["otel<br/>(root)"]
+    click otel "https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/otel.md"
     request-anatomy["request-anatomy<br/>(root)"]
     click request-anatomy "https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/request-anatomy.md"
     reverse-call["reverse-call<br/>(root)"]
@@ -78,6 +80,9 @@ graph TD
     request-anatomy --> middleware
     request-anatomy --> mrtr
     extension-mechanisms --> mrtr
+    request-anatomy --> otel
+    extension-mechanisms --> otel
+    reverse-call --> otel
     bringup --> request-anatomy
     transport-mechanics --> request-anatomy
     notifications --> request-anatomy
@@ -93,6 +98,6 @@ graph TD
 
     classDef written fill:#e8f5e9,stroke:#2e7d32,color:#000;
     classDef stub fill:#fff3e0,stroke:#e65100,color:#000;
-    class bringup,events,extension-mechanisms,mrtr,notifications,request-anatomy,reverse-call,transport-mechanics written;
+    class bringup,events,extension-mechanisms,mrtr,notifications,otel,request-anatomy,reverse-call,transport-mechanics written;
     class apps,auth,cancellation,elicitation,events-hmac,events-identity,events-ssrf,initialize,list-ttl,middleware,roots-list,sampling,session-resumption,sse-resumption,tasks stub;
 ```
