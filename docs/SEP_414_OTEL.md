@@ -1,7 +1,7 @@
 # SEP-414: OpenTelemetry Trace Context Propagation
 
-Status: **Phases 1–2 landed.** Adapter (Phase 4) and client-side spans
-(Phase 3) still to come.
+Status: **Phases 1, 2, and 4 landed.** Client-side spans (Phase 3) and
+the polished walkthroughs (Phase 5) still to come.
 
 This document is the wiring guide for mcpkit's OpenTelemetry surface. It
 covers what the shipped phases give you, what to expect once you wire a
@@ -81,24 +81,74 @@ Phase 4 `ext/otel/` adapter ships, the only options that emit spans are
 custom implementations — the in-tree `core.NoopTracerProvider`
 intentionally treats "spans" as no-ops.
 
+## What Phase 4 ships
+
+Phase 4 lands the OpenTelemetry SDK adapter as a new sub-module under
+`ext/otel/` (separate `go.mod`, mirroring `ext/auth/` / `ext/tasks/` /
+`ext/ui/`). Wire it in with one line:
+
+```go
+import (
+    sdktrace "go.opentelemetry.io/otel/sdk/trace"
+    "go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
+
+    "github.com/panyam/mcpkit/server"
+    mcpotel "github.com/panyam/mcpkit/ext/otel"
+)
+
+exp, _ := stdouttrace.New()
+otelTP := sdktrace.NewTracerProvider(sdktrace.WithBatcher(exp))
+defer otelTP.Shutdown(ctx)
+
+srv := server.NewServer(info,
+    server.WithTracerProvider(mcpotel.NewProvider(otelTP)),
+)
+```
+
+Behavior:
+
+- The adapter parses `core.TraceContext` from ctx into an OTel
+  `SpanContext` so the inbound parent flows into the SDK's standard
+  parent-tracking machinery.
+- After `StartSpan`, it formats the new span's `SpanContext` as a W3C
+  `traceparent` and re-attaches via `core.WithTraceContext`, so the
+  Phase 2 outbound `_meta` injection wraps stamp every server-to-client
+  message with the **child** span's traceparent (not the inbound
+  parent's).
+- `core.Attribute{Key, Value string}` maps to `attribute.String(...)`;
+  `RecordError(err)` emits an OTel "exception" event AND sets the span
+  status to `codes.Error`; `End()` is idempotent.
+- `WithInstrumentationName(...)` overrides the default
+  instrumentation library name (`"github.com/panyam/mcpkit/server"`).
+
+Verification:
+
+- `make test-otel` — adapter unit tests run against the real OTel SDK
+  in-memory exporter; reads back `sdktrace.ReadOnlySpan` shapes.
+- `make test-otel-example` — smoke test for `examples/otel/stdout/`
+  asserting the exporter actually prints the expected span set.
+- `go run examples/otel/stdout/...` — runnable demo, prints spans as
+  JSON on stdout. No collector required.
+
+See [`ext/otel/README.md`](../ext/otel/README.md) for the API reference
+and [`examples/otel/stdout/README.md`](../examples/otel/stdout/README.md)
+for the walkthrough.
+
 ## What comes next
 
 Tracked phases on [issue 312][issue]:
 
 - **P3 — client-side spans.** Outbound client calls wrap in spans and
   inject `_meta.traceparent`; incoming server-to-client requests
-  extract the parent.
-- **P4 — `ext/otel/` adapter.** A new sub-module (separate `go.mod`)
-  that implements `core.TracerProvider` on top of
-  `go.opentelemetry.io/otel`. Required for traces to actually flow to
-  an exporter (Jaeger, OTLP, etc.). Until this lands,
-  `NoopTracerProvider` and hand-rolled adapters are the only choices.
-- **P5 — examples.** `examples/otel/` ships a minimal end-to-end
-  walkthrough once an adapter is available.
+  extract the parent. Lives in `client/`.
+- **P5 — polished examples.** `examples/otel/jaeger/` +
+  `examples/otel/otlp/` end-to-end walkthroughs with collector and UI
+  screenshots. The minimal `examples/otel/stdout/` already covers
+  smoke-verification.
+- **Conformance suite `testconf-otel`** — issue 429.
 
-P3, P4, P5 can be developed in parallel branches on top of P2 — they
-touch disjoint trees (P3 = `client/`, P4 = a new `ext/otel/` module,
-P5 = examples).
+P3 and P5 touch disjoint trees and can be developed in parallel on
+top of P4.
 
 ## Downstream consumers of the Phase 1 contract
 

@@ -1,7 +1,7 @@
 # MCPKit Makefile
 
 # Sub-modules that get tagged alongside the root module
-SUB_MODS_TO_TAG := ext/auth ext/ui experimental/ext/protogen cmd/testclient cmd/common cmd/mcpskills examples/mcpskills-walkthrough tests/e2e tests/keycloak
+SUB_MODS_TO_TAG := ext/auth ext/otel ext/ui experimental/ext/protogen cmd/testclient cmd/common cmd/mcpskills examples/mcpskills-walkthrough tests/e2e tests/keycloak
 
 # Conformance test orchestration lives in `conformance/Makefile`.
 # Per-suite MCPCONFORMANCE_*_PATH vars are documented there.
@@ -107,6 +107,12 @@ check-apps-compat-stale: refresh-apps-compat-report ## Fail if conformance/apps/
 
 test-auth: ## Run auth sub-module tests
 	cd ext/auth && go test ./... -count=1 -timeout 30s
+
+test-otel: ## Run SEP-414 ext/otel adapter sub-module tests
+	cd ext/otel && go test ./... -count=1 -timeout 30s
+
+test-otel-example: ## Run the examples/otel/stdout smoke test
+	cd examples/otel/stdout && go test ./... -count=1 -timeout 30s
 
 test-ui: ## Run UI extension sub-module tests
 	cd ext/ui && $(MAKE) test
