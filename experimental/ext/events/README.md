@@ -136,7 +136,7 @@ type PollResult struct {
 
 ## Webhook delivery
 
-- TTL-based soft state with automatic expiry (default 60s, override via `WithWebhookTTL`)
+- TTL-based soft state with automatic expiry (default 1h within the spec envelope [5min, 24h]; override via `WithWebhookTTL`; sub-minimum TTLs for tests/demos require `WithUnsafeWebhookTTLBypass`)
 - Retry with exponential backoff on 5xx (no retry on 4xx)
 - Basic SSRF validation on callback URLs
 - Pluggable signature format (see below)
