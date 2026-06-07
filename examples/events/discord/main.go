@@ -46,7 +46,8 @@ func main() {
 func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
 	token := flag.String("token", "", "Discord bot token (omit for test mode)")
-	whTTL := flag.Duration("webhook-ttl", 0, "override webhook subscription TTL (default 60s; useful for driving the SDK refresh path in tests)")
+	whTTL := flag.Duration("webhook-ttl", 0, "override webhook subscription TTL (default 1h; library clamps to spec envelope [5m, 24h] unless -unsafe-webhook-ttl-bypass is also set)")
+	whTTLBypass := flag.Bool("unsafe-webhook-ttl-bypass", false, "disable the [5m, 24h] envelope clamp on -webhook-ttl; required for the make test-ttl walkthrough (3s TTL). Production deployments MUST NOT use this.")
 	whHeaderMode := flag.String("webhook-header-mode", "standard", "webhook header style: standard | mcp")
 	whSuspendThreshold := flag.Int("webhook-suspend-threshold", 0, "override consecutive-failures count that flips a webhook target to Active=false (default 5; lower to 1 for demoing the suspend transition without waiting 5×retry-cycles)")
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
@@ -54,6 +55,7 @@ func serve() {
 		demokit.ValueFlag("--url"),
 		demokit.ValueFlag("--token"),
 		demokit.ValueFlag("--webhook-ttl"),
+		demokit.BoolFlag("--unsafe-webhook-ttl-bypass"),
 		demokit.ValueFlag("--webhook-header-mode"),
 		demokit.ValueFlag("--webhook-suspend-threshold"),
 		demokit.ValueFlag("--addr"),
@@ -76,6 +78,9 @@ func serve() {
 	if *whTTL > 0 {
 		whOpts = append(whOpts, events.WithWebhookTTL(*whTTL))
 		log.Printf("[server] webhook TTL overridden to %s", *whTTL)
+	}
+	if *whTTLBypass {
+		whOpts = append(whOpts, events.WithUnsafeWebhookTTLBypass())
 	}
 	if *whSuspendThreshold > 0 {
 		whOpts = append(whOpts, events.WithWebhookSuspendThreshold(*whSuspendThreshold))
@@ -285,12 +290,13 @@ func hasOAuthEnv() bool {
 // UnsafeAnonymousPrincipal demo escape.
 //
 // Recognized env vars:
-//   OAUTH_ISSUER    REQUIRED. The OIDC issuer URL.
-//                   For Keycloak: http://localhost:8081/realms/<realm>
-//   OAUTH_JWKS_URL  Optional. Defaults to <issuer>/protocol/openid-connect/certs
-//                   (Keycloak convention). Override for non-Keycloak providers.
-//   OAUTH_AUDIENCE  Optional. Defaults to "mcp-events". Tokens MUST have
-//                   this audience claim to be accepted.
+//
+//	OAUTH_ISSUER    REQUIRED. The OIDC issuer URL.
+//	                For Keycloak: http://localhost:8081/realms/<realm>
+//	OAUTH_JWKS_URL  Optional. Defaults to <issuer>/protocol/openid-connect/certs
+//	                (Keycloak convention). Override for non-Keycloak providers.
+//	OAUTH_AUDIENCE  Optional. Defaults to "mcp-events". Tokens MUST have
+//	                this audience claim to be accepted.
 func tryEnableAuth() *auth.JWTValidator {
 	issuer := os.Getenv("OAUTH_ISSUER")
 	if issuer == "" {

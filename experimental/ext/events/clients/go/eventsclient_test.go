@@ -116,7 +116,9 @@ func TestSubscribe_PreservesCallerSuppliedSecret(t *testing.T) {
 // scheduled refresh) within a short test window. Validates the SDK actually
 // runs the loop and respects RefreshFactor.
 func TestSubscribe_AutoRefreshFiresWithinShortTTL(t *testing.T) {
-	c, _, _ := stack(t, events.WithWebhookTTL(2*time.Second))
+	// 2s TTL is below the spec envelope floor (5min); bypass the clamp so
+	// the test exercises the SDK refresh path on a feasible cadence.
+	c, _, _ := stack(t, events.WithWebhookTTL(2*time.Second), events.WithUnsafeWebhookTTLBypass())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -308,7 +310,9 @@ func TestReceiver_DropsOnFullChannel(t *testing.T) {
 // parent context cancellation. Without this an SDK consumer that cancels
 // its context would still see refresh traffic until Stop was called.
 func TestSubscribe_StopsOnContextCancel(t *testing.T) {
-	c, _, _ := stack(t, events.WithWebhookTTL(2*time.Second))
+	// 2s TTL is below the spec envelope floor (5min); bypass the clamp so
+	// the test exercises the SDK refresh path on a feasible cadence.
+	c, _, _ := stack(t, events.WithWebhookTTL(2*time.Second), events.WithUnsafeWebhookTTLBypass())
 
 	ctx, cancel := context.WithCancel(context.Background())
 
