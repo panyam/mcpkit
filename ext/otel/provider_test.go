@@ -279,3 +279,40 @@ func attrMap(kvs []attribute.KeyValue) map[string]string {
 	}
 	return out
 }
+
+// --- P6 active-span accessor (issue 661) ------------------------------------
+
+func TestSpanFromContext_AdapterPublishesSpan(t *testing.T) {
+	p, exp := newRecordingProvider(t)
+	ctx, started := p.StartSpan(context.Background(), "tools/call")
+	got := core.SpanFromContext(ctx)
+	require.NotNil(t, got, "SpanFromContext must never return nil")
+	assert.Same(t, started, got,
+		"core.SpanFromContext(ctx) should return the same Span the adapter just returned from StartSpan")
+
+	got.SetAttribute("mcp.auth.principal", "alice")
+	started.End()
+
+	spans := exp.GetSpans()
+	require.Len(t, spans, 1)
+	attrs := attrMap(spans[0].Attributes)
+	assert.Equal(t, "alice", attrs["mcp.auth.principal"],
+		"attribute set via SpanFromContext must land on the recorded span — proves the enrichment pattern works against a real exporter")
+}
+
+func TestSpanFromContext_NestedAdapterStartSpan_InnermostWins(t *testing.T) {
+	p, exp := newRecordingProvider(t)
+	outerCtx, outerSpan := p.StartSpan(context.Background(), "outer")
+	innerCtx, innerSpan := p.StartSpan(outerCtx, "inner")
+
+	assert.Same(t, innerSpan, core.SpanFromContext(innerCtx),
+		"inner ctx should yield the inner span")
+	assert.Same(t, outerSpan, core.SpanFromContext(outerCtx),
+		"outer ctx should still yield the outer span after inner StartSpan")
+
+	innerSpan.End()
+	outerSpan.End()
+
+	spans := exp.GetSpans()
+	require.Len(t, spans, 2)
+}

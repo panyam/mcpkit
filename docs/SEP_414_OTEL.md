@@ -226,6 +226,39 @@ The two categories map cleanly onto the contract:
   unblocks auth attributes) and **span links** on `core.Span` ([#662][p6-links];
   unblocks task lifecycle).
 
+### Active-span accessor — landed (issue 661)
+
+The first contract gap is closed: `core.SpanFromContext(ctx) core.Span`
+returns the currently-active mcpkit Span (or a no-op Span when none is
+attached). Sibling helper `core.WithActiveSpan(ctx, span) Context` is what
+TracerProvider adapters call after `StartSpan` to publish the span. The
+in-tree `NoopTracerProvider` and the `ext/otel` adapter both follow the
+pattern, so the contract holds regardless of which provider is wired.
+
+The intended use is **decorating the dispatch span**, not nesting a child:
+
+```go
+// inside a middleware or handler, no ext/otel import needed:
+span := core.SpanFromContext(ctx)
+span.SetAttribute("mcp.auth.principal", claims.Subject)
+span.SetAttribute("mcp.auth.method", "jwt")
+```
+
+Typed handler contexts gain a `Span()` accessor that delegates to
+`SpanFromContext`:
+
+```go
+func myTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+    ctx.Span().SetAttribute("mcp.tool.cache.hit", "true")
+    // ...
+}
+```
+
+The accessor never returns nil — call sites that always-decorate work
+correctly whether or not a TracerProvider is configured. Issue 658
+(`ext/auth` attributes) and any future "enrich the active span" use case
+consume this surface without crossing the `core/`-only boundary.
+
 The pattern is identical across all five: each `ext/` surface optionally
 accepts a `core.TracerProvider` and instruments its own work, depending on
 the **`core` abstraction only** — never `ext/otel`. Same composition shape
