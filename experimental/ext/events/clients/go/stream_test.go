@@ -148,4 +148,3 @@ func TestStream_RejectsInitialError(t *testing.T) {
 	})
 	require.Error(t, err, "Stream() must surface the immediate JSON-RPC error from the server")
 }
-
