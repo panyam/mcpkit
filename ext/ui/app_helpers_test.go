@@ -15,10 +15,11 @@ func TestRegisterAppTool(t *testing.T) {
 	reg := &mockRegistrar{}
 
 	RegisterAppTool(reg, AppToolConfig{
-		Name:        "build_deck",
-		Description: "Build a slide deck",
-		InputSchema: map[string]any{"type": "object"},
-		ResourceURI: "ui://decks/view",
+		Name:                "build_deck",
+		Description:         "Build a slide deck",
+		InputSchema:         map[string]any{"type": "object"},
+		ResourceURI:         "ui://decks/view",
+		ResourceDescription: "Slide deck viewer UI",
 		ToolHandler: func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("ok"), nil
 		},
@@ -60,6 +61,9 @@ func TestRegisterAppTool(t *testing.T) {
 	}
 	if rd.MimeType != core.AppMIMEType {
 		t.Errorf("resource MIME = %q, want %q", rd.MimeType, core.AppMIMEType)
+	}
+	if rd.Description != "Slide deck viewer UI" {
+		t.Errorf("resource description = %q, want %q", rd.Description, "Slide deck viewer UI")
 	}
 }
 
