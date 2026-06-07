@@ -96,7 +96,7 @@ Worst-case wall clock for a fully-failing delivery: roughly `5s + 0.5s + 5s + 1s
 
 ## TTL refresh as keepalive
 
-Webhook subscriptions are soft state. The default TTL is 60 seconds (`WithWebhookTTL` overrides). Subscribers MUST re-subscribe before the TTL expires or the registry evicts them and deliveries stop.
+Webhook subscriptions are soft state. The default TTL is 1 hour, clamped to the spec envelope **[5 min, 24 h]** at `WithWebhookTTL` registration time (out-of-envelope values are clamped and logged). Tests and demos that need sub-minimum TTLs to drive SDK refresh behavior pass `WithUnsafeWebhookTTLBypass` — production deployments MUST NOT use the bypass. Subscribers MUST re-subscribe before the TTL expires or the registry evicts them and deliveries stop.
 
 The shipped client SDKs handle this automatically:
 

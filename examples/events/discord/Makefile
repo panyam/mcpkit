@@ -48,7 +48,7 @@ test-race:
 # POSIX-only (uses lsof, xargs -r, bash trap, kill -9). On Windows, run the
 # server and the Python driver manually:
 #   1. Manually kill anything bound to TTL_PORT / TTL_HOOK_PORT
-#   2. go run . -addr :18080 -webhook-ttl 3s
+#   2. go run . -addr :18080 -webhook-ttl 3s -unsafe-webhook-ttl-bypass
 #   3. python3 test_ttl.py --mcp http://localhost:18080/mcp \
 #        --inject-url http://localhost:18080/inject --port 19999 --ttl 3 --duration 8
 TTL_PORT       ?= 18080
@@ -65,7 +65,7 @@ test-ttl:
 	@bash -c '\
 	  set -e; \
 	  go build -o /tmp/discord-events-ttl-bin . ; \
-	  /tmp/discord-events-ttl-bin --serve -addr :$(TTL_PORT) -webhook-ttl $(TTL_SECONDS)s > /tmp/discord-events-ttl.log 2>&1 & \
+	  /tmp/discord-events-ttl-bin --serve -addr :$(TTL_PORT) -webhook-ttl $(TTL_SECONDS)s -unsafe-webhook-ttl-bypass > /tmp/discord-events-ttl.log 2>&1 & \
 	  SERVER_PID=$$!; \
 	  trap "kill -9 $$SERVER_PID 2>/dev/null || true; lsof -ti :$(TTL_PORT) 2>/dev/null | xargs -r kill -9 2>/dev/null || true; rm -f /tmp/discord-events-ttl-bin" EXIT; \
 	  for i in 1 2 3 4 5 6 7 8 9 10; do \
