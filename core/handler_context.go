@@ -162,6 +162,31 @@ func (bc BaseContext) ClientCaps() *ClientCapabilities {
 	return nil
 }
 
+// TraceContext returns the active W3C Trace Context for this request, or
+// a zero TraceContext when none has been attached.
+//
+// The dispatch layer is responsible for extracting `_meta.traceparent` /
+// `_meta.tracestate` from inbound requests and attaching the result via
+// core.WithTraceContext before invoking the handler — the same plumbing
+// pattern as ProgressToken on ToolContext. Per SEP-414, both the legacy
+// wire and the stateless wire SEP-2575 use the same `_meta` carrier
+// shape, so this accessor returns the same value regardless of the wire
+// the request arrived on. Handlers SHOULD NOT branch on the wire.
+//
+// Callers consume the returned TraceContext as the parent of any spans
+// the handler starts (typically by passing ctx — which carries the same
+// value — to TracerProvider.StartSpan). Use TraceContext.IsZero to
+// detect absence.
+//
+// Until SEP-414 P2 lands (server middleware that actually extracts
+// `_meta.traceparent` on the dispatch path), this accessor returns the
+// zero value on every request — the contract is in place so downstream
+// code (events EventBus, middleware) can be written and reviewed against
+// the eventual wire.
+func (bc BaseContext) TraceContext() TraceContext {
+	return TraceContextFromContext(bc.Context)
+}
+
 // --- BaseContext methods (shared by all handler types) ---
 
 // EmitLog sends a log notification at the given severity level.
