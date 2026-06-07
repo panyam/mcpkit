@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 )
 
 // SEP-414 / W3C Trace Context — contract surface.
@@ -174,6 +175,28 @@ func InjectTraceContext(meta map[string]any, tc TraceContext) {
 	if tc.Tracestate != "" {
 		meta[MetaKeyTracestate] = tc.Tracestate
 	}
+}
+
+// ExtractTraceContextFromParams reads the W3C `traceparent` / `tracestate`
+// fields out of a JSON-RPC request's raw `params` envelope by parsing the
+// `_meta` object inside. Returns a zero TraceContext when params is nil,
+// when params is not a JSON object, when `_meta` is absent or non-object,
+// or when the traceparent value fails the same W3C validation as
+// ExtractTraceContext. Provided so server middleware can read the inbound
+// trace context without coupling to method-specific envelope structs
+// (tools/call's `name`/`arguments`, prompts/get's `name`, ...) — all of
+// them carry the same `_meta` shape per the MCP spec.
+func ExtractTraceContextFromParams(params json.RawMessage) TraceContext {
+	if len(params) == 0 {
+		return TraceContext{}
+	}
+	var envelope struct {
+		Meta map[string]any `json:"_meta"`
+	}
+	if err := json.Unmarshal(params, &envelope); err != nil {
+		return TraceContext{}
+	}
+	return ExtractTraceContext(envelope.Meta)
 }
 
 // isValidTraceparent enforces the W3C version-00 structural form:
