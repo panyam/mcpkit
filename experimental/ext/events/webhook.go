@@ -15,8 +15,33 @@ import (
 	"time"
 )
 
+// Webhook TTL spec envelope. WG guidance (Peter, 2026-06-05 in
+// #triggers-events-wg) is that webhook subscription TTLs must fall in
+// [5min, 24h]: shorter creates excessive refresh churn for a long-
+// running production receiver, longer is a soft-state leak. The
+// envelope is enforced by WithWebhookTTL at registration time —
+// out-of-range values are clamped with a logged warning. Tests / demos
+// that legitimately need a sub-minimum TTL (driving the SDK's
+// auto-refresh path on a fast cadence) opt out via
+// WithUnsafeWebhookTTLBypass(), mirroring the UnsafeAnonymousPrincipal
+// precedent.
 const (
-	defaultWebhookTTL              = 60 * time.Second // 1 minute for POC (production: longer)
+	// DefaultWebhookTTL is the soft-state expiry the registry applies to
+	// every subscription when no explicit TTL is configured. Sits inside
+	// the spec envelope.
+	DefaultWebhookTTL = 1 * time.Hour
+
+	// MinWebhookTTL is the spec envelope floor. WithWebhookTTL clamps
+	// any positive smaller value up to this floor unless
+	// WithUnsafeWebhookTTLBypass is also set.
+	MinWebhookTTL = 5 * time.Minute
+
+	// MaxWebhookTTL is the spec envelope ceiling. WithWebhookTTL clamps
+	// any larger value down to this ceiling. The bypass does not raise
+	// the ceiling — operator intent above 24h is rare enough to handle
+	// with a code change.
+	MaxWebhookTTL = 24 * time.Hour
+
 	defaultWebhookMaxBodyBytes     = 256 * 1024       // spec §"Webhook Security" → "Delivery profile" L487
 	defaultWebhookSuspendThreshold = 5                // N consecutive failures before Active=false
 	defaultWebhookSuspendWindow    = 10 * time.Minute // sliding window over which failures accumulate
@@ -50,15 +75,40 @@ func WithWebhookOnRemove(h WebhookOnRemoveHook) WebhookOption {
 	}
 }
 
-// WithWebhookTTL overrides the registry's subscription TTL. Useful for tests
-// (drive the SDK's TTL refresh behavior in seconds rather than minutes) and
-// for deployments that want longer-lived subscriptions. Pass <=0 to keep
-// the default of 60s.
+// WithWebhookTTL overrides the registry's subscription TTL within the
+// spec envelope [MinWebhookTTL, MaxWebhookTTL]. Out-of-envelope values
+// are clamped at registration time and a warning is logged via the
+// registry's logger (defaults to log.Printf). Pass <=0 to keep the
+// default of DefaultWebhookTTL.
+//
+// For tests and demos that legitimately need a sub-minimum TTL (driving
+// the SDK's auto-refresh path on a fast cadence), also pass
+// WithUnsafeWebhookTTLBypass() to disable the clamp. Production
+// deployments MUST NOT use the bypass.
 func WithWebhookTTL(ttl time.Duration) WebhookOption {
 	return func(r *WebhookRegistry) {
 		if ttl > 0 {
 			r.ttl = ttl
+			r.ttlExplicit = true
 		}
+	}
+}
+
+// WithUnsafeWebhookTTLBypass disables the [MinWebhookTTL, MaxWebhookTTL]
+// envelope clamp on WithWebhookTTL. After this option the registry
+// honors any positive TTL the operator supplied verbatim — including
+// sub-minimum values needed by SDK refresh-loop tests and the
+// discord/test-ttl walkthrough step.
+//
+// Production deployments MUST NOT use this option. Out-of-envelope TTLs
+// either burn through refresh capacity (too short) or leak soft state
+// (too long); the envelope exists for a reason. The constructor logs a
+// stark warning when the bypass is active so an accidental production
+// use shows up in logs immediately, mirroring the UnsafeAnonymousPrincipal
+// posture.
+func WithUnsafeWebhookTTLBypass() WebhookOption {
+	return func(r *WebhookRegistry) {
+		r.ttlClampBypass = true
 	}
 }
 
@@ -240,6 +290,8 @@ type WebhookRegistry struct {
 	targets              map[string]WebhookTarget // keyed by string(canonicalKey)
 	client               *http.Client
 	ttl                  time.Duration
+	ttlExplicit          bool // operator passed WithWebhookTTL (drives clamp decision)
+	ttlClampBypass       bool // WithUnsafeWebhookTTLBypass — disables clamp
 	headerMode           WebhookHeaderMode
 	allowPrivateNetworks bool          // when false (default), Dialer.Control rejects private/loopback IPs (spec §"Webhook Security" → "SSRF prevention" L464)
 	maxBodyBytes         int           // outbound POST body cap (spec §"Webhook Security" → "Delivery profile" L487); default 256 KiB
@@ -276,6 +328,37 @@ type WebhookRegistry struct {
 // is the only caller — it points the resolver at the source map so the
 // registry stays decoupled from EventDef. Safe to call after the
 // registry has been handed out; the field is mu-guarded.
+// applyTTLClamp enforces the [MinWebhookTTL, MaxWebhookTTL] envelope on
+// the TTL the operator configured via WithWebhookTTL. Called from
+// NewWebhookRegistry after all options have applied so the bypass +
+// explicit-TTL flags are known. Logs at most one clamp warning per
+// constructor invocation; the bypass logs its own stark warning so an
+// accidental production bypass is loud.
+func (r *WebhookRegistry) applyTTLClamp() {
+	if r.ttlClampBypass {
+		r.logf("[events] WARNING: WithUnsafeWebhookTTLBypass set — webhook TTL clamp DISABLED. "+
+			"Production deployments MUST NOT use this option; the [%s, %s] envelope exists for a reason.",
+			MinWebhookTTL, MaxWebhookTTL)
+		return
+	}
+	if !r.ttlExplicit {
+		// Default TTL (DefaultWebhookTTL = 1h) is in-envelope by
+		// construction; no clamp + no warning.
+		return
+	}
+	switch {
+	case r.ttl < MinWebhookTTL:
+		r.logf("[events] WARNING: WithWebhookTTL=%s is below the spec envelope floor (%s); clamping up. "+
+			"Use WithUnsafeWebhookTTLBypass for tests / demos that need a sub-minimum TTL.",
+			r.ttl, MinWebhookTTL)
+		r.ttl = MinWebhookTTL
+	case r.ttl > MaxWebhookTTL:
+		r.logf("[events] WARNING: WithWebhookTTL=%s is above the spec envelope ceiling (%s); clamping down.",
+			r.ttl, MaxWebhookTTL)
+		r.ttl = MaxWebhookTTL
+	}
+}
+
 func (r *WebhookRegistry) SetDefResolver(fn func(eventName string) EventDef) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -318,13 +401,19 @@ func (r *WebhookRegistry) fireOnRemove(t WebhookTarget) {
 }
 
 // NewWebhookRegistry creates an empty registry with the documented defaults:
-// 5-second HTTP timeout, 60-second TTL, StandardWebhooks signing,
+// 5-second HTTP timeout, DefaultWebhookTTL (1h) TTL inside the
+// [MinWebhookTTL, MaxWebhookTTL] envelope, StandardWebhooks signing,
 // SSRF-strict outbound dialing (loopback / private / link-local rejected).
 // Override via the With* options.
+//
+// When WithWebhookTTL is passed with an out-of-envelope value, the
+// constructor clamps it to the nearest envelope edge and logs a warning.
+// WithUnsafeWebhookTTLBypass disables the clamp for tests / demos —
+// see its docs for when (not) to use it.
 func NewWebhookRegistry(opts ...WebhookOption) *WebhookRegistry {
 	r := &WebhookRegistry{
 		targets:          make(map[string]WebhookTarget),
-		ttl:              defaultWebhookTTL,
+		ttl:              DefaultWebhookTTL,
 		headerMode:       StandardWebhooks,
 		maxBodyBytes:     defaultWebhookMaxBodyBytes,
 		suspendThreshold: defaultWebhookSuspendThreshold,
@@ -334,6 +423,7 @@ func NewWebhookRegistry(opts ...WebhookOption) *WebhookRegistry {
 	for _, o := range opts {
 		o(r)
 	}
+	r.applyTTLClamp()
 	// http.Client wired AFTER options apply so the Dialer.Control callback
 	// can read the resolved allowPrivateNetworks setting. Spec
 	// §"Webhook Security" → "SSRF prevention" L464.
@@ -439,7 +529,6 @@ func (r *WebhookRegistry) dialContextForTest() func(ctx context.Context, network
 func (r *WebhookRegistry) setLogfForTest(f func(format string, args ...any)) {
 	r.logf = f
 }
-
 
 // RegisterParams bundles the inputs for Register. A struct rather than
 // a positional list because EventName / Principal / Params took the
