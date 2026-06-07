@@ -371,37 +371,77 @@ func TestConcurrentAddAndList(t *testing.T) {
 	}
 }
 
-// TestListChangedCapabilityAdvertised verifies that the initialize response
-// includes listChanged: true for tools, resources, and prompts capabilities,
-// so clients know to listen for list_changed notifications.
+// TestListChangedCapabilityAdvertised verifies the initialize-response
+// capability shape. tools + resources are always advertised with
+// listChanged: true (every mcpkit server can mutate those registries at
+// runtime). prompts is only advertised when at least one prompt is
+// registered — advertising it on prompt-less servers caused systematic
+// drift against upstream's per-fixture servers in the apps/compat
+// parity audit (conformance/RESOURCES_META_AUDIT.md).
 func TestListChangedCapabilityAdvertised(t *testing.T) {
-	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
+	parseCaps := func(t *testing.T, d *Dispatcher) struct {
+		Tools     *struct {
+			ListChanged bool `json:"listChanged"`
+		} `json:"tools,omitempty"`
+		Resources *struct {
+			ListChanged bool `json:"listChanged"`
+		} `json:"resources,omitempty"`
+		Prompts *struct {
+			ListChanged bool `json:"listChanged"`
+		} `json:"prompts,omitempty"`
+	} {
+		t.Helper()
+		resp := d.Dispatch(context.Background(), &core.Request{
+			JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "initialize",
+			Params: json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+		})
+		raw, _ := core.MarshalJSON(resp.Result)
+		var result struct {
+			Capabilities struct {
+				Tools *struct {
+					ListChanged bool `json:"listChanged"`
+				} `json:"tools,omitempty"`
+				Resources *struct {
+					ListChanged bool `json:"listChanged"`
+				} `json:"resources,omitempty"`
+				Prompts *struct {
+					ListChanged bool `json:"listChanged"`
+				} `json:"prompts,omitempty"`
+			} `json:"capabilities"`
+		}
+		if err := json.Unmarshal(raw, &result); err != nil {
+			t.Fatalf("failed to parse result: %v", err)
+		}
+		return result.Capabilities
+	}
 
-	resp := d.Dispatch(context.Background(), &core.Request{
-		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "initialize",
-		Params: json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+	t.Run("no prompts registered", func(t *testing.T) {
+		d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
+		caps := parseCaps(t, d)
+		if caps.Tools == nil || !caps.Tools.ListChanged {
+			t.Error("tools.listChanged should be advertised true")
+		}
+		if caps.Resources == nil || !caps.Resources.ListChanged {
+			t.Error("resources.listChanged should be advertised true")
+		}
+		if caps.Prompts != nil {
+			t.Errorf("prompts capability should be omitted when no prompts registered, got %+v", caps.Prompts)
+		}
 	})
 
-	raw, _ := core.MarshalJSON(resp.Result)
-	var result struct {
-		Capabilities struct {
-			Tools     struct{ ListChanged bool `json:"listChanged"` } `json:"tools"`
-			Resources struct{ ListChanged bool `json:"listChanged"` } `json:"resources"`
-			Prompts   struct{ ListChanged bool `json:"listChanged"` } `json:"prompts"`
-		} `json:"capabilities"`
-	}
-	if err := json.Unmarshal(raw, &result); err != nil {
-		t.Fatalf("failed to parse result: %v", err)
-	}
-	if !result.Capabilities.Tools.ListChanged {
-		t.Error("tools.listChanged should be true")
-	}
-	if !result.Capabilities.Resources.ListChanged {
-		t.Error("resources.listChanged should be true")
-	}
-	if !result.Capabilities.Prompts.ListChanged {
-		t.Error("prompts.listChanged should be true")
-	}
+	t.Run("prompt registered", func(t *testing.T) {
+		d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
+		d.RegisterPrompt(
+			core.PromptDef{Name: "demo", Description: "a demo prompt"},
+			func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResponse, error) {
+				return core.PromptResult{}, nil
+			},
+		)
+		caps := parseCaps(t, d)
+		if caps.Prompts == nil || !caps.Prompts.ListChanged {
+			t.Errorf("prompts.listChanged should be advertised true when a prompt is registered, got %+v", caps.Prompts)
+		}
+	})
 }
 
 // assertToolCount is a helper that verifies a tools/list response contains

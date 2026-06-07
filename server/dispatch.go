@@ -448,12 +448,25 @@ func (d *Dispatcher) handleInitialize(id json.RawMessage, params json.RawMessage
 	// clients know to listen for list_changed notifications. This is always
 	// safe — it just means "I might send list_changed notifications." Servers
 	// that never mutate the registry will simply never send them.
+	//
+	// Prompts is the exception: advertise it only when at least one prompt
+	// is registered. Otherwise clients calling prompts/list see a non-empty
+	// capability advertisement but get back an empty list, which fires as
+	// drift against upstream's per-fixture servers that only declare
+	// capabilities for what they actually register. Surfaced by the
+	// apps/compat parity audit (conformance/RESOURCES_META_AUDIT.md);
+	// matches the SEP-2575 stateless backend's existing conditional pattern.
+	d.Reg.mu.RLock()
+	hasPrompts := len(d.Reg.prompts) > 0
+	d.Reg.mu.RUnlock()
 	caps := core.ServerCapabilities{
 		Tools:       &core.ToolsCap{ListChanged: true},
 		Resources:   &core.ResourcesCap{ListChanged: true, Subscribe: d.subscriptionsEnabled},
-		Prompts:     &core.PromptsCap{ListChanged: true},
 		Logging:     &struct{}{},
 		Completions: &struct{}{},
+	}
+	if hasPrompts {
+		caps.Prompts = &core.PromptsCap{ListChanged: true}
 	}
 	if d.tasksCap != nil {
 		caps.Tasks = d.tasksCap
