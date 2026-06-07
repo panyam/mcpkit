@@ -199,6 +199,66 @@ func ExtractTraceContextFromParams(params json.RawMessage) TraceContext {
 	return ExtractTraceContext(envelope.Meta)
 }
 
+// InjectTraceContextIntoParams returns a params value with `_meta.traceparent`
+// and (if non-empty) `_meta.tracestate` populated from tc. The contract:
+//
+//   - If tc is zero, params is returned unchanged.
+//   - If params is nil, a fresh map with just `_meta` is returned.
+//   - If params marshals to a JSON object, the object's `_meta` is
+//     read/created and the trace keys are added. Existing entries are
+//     preserved — explicit caller-set values win, the injection never
+//     clobbers.
+//   - If params marshals but is not a JSON object (positional array,
+//     scalar, etc.), the value is returned unchanged. The JSON-RPC spec
+//     permits non-object params; `_meta` is only defined inside objects.
+//   - If params fails to marshal, it is returned unchanged so the
+//     downstream encoder can surface the original error.
+//
+// The function decodes via json.Unmarshal into a fresh map and re-encodes
+// implicitly when the params are subsequently marshaled — it never
+// mutates a struct or map the caller may still reference.
+//
+// Used by both the SEP-414 P2 server-side outbound wraps (notifications,
+// server-to-client requests) and the P3 client-side outbound wraps
+// (Client.Call), so both wires apply the same precedence rule when the
+// caller has already set `_meta.traceparent` explicitly.
+func InjectTraceContextIntoParams(params any, tc TraceContext) any {
+	if tc.IsZero() {
+		return params
+	}
+	if params == nil {
+		meta := map[string]any{}
+		InjectTraceContext(meta, tc)
+		return map[string]any{"_meta": meta}
+	}
+	raw, err := json.Marshal(params)
+	if err != nil {
+		return params
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		// Non-object params (positional array, scalar, etc.). Leave alone.
+		return params
+	}
+	if obj == nil {
+		obj = map[string]any{}
+	}
+	meta, _ := obj["_meta"].(map[string]any)
+	if meta == nil {
+		meta = map[string]any{}
+	}
+	if _, exists := meta[MetaKeyTraceparent]; !exists {
+		meta[MetaKeyTraceparent] = tc.Traceparent
+	}
+	if tc.Tracestate != "" {
+		if _, exists := meta[MetaKeyTracestate]; !exists {
+			meta[MetaKeyTracestate] = tc.Tracestate
+		}
+	}
+	obj["_meta"] = meta
+	return obj
+}
+
 // isValidTraceparent enforces the W3C version-00 structural form:
 // `00-<32-hex-trace-id>-<16-hex-span-id>-<2-hex-flags>` with all
 // lowercase hex. Trace-id and span-id MUST NOT be all-zero (W3C

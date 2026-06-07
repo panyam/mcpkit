@@ -269,3 +269,53 @@ func TestAttribute_StructFields(t *testing.T) {
 		t.Fatalf("attribute fields not preserved")
 	}
 }
+
+func TestInjectTraceContextIntoParams_RespectsExplicitMeta(t *testing.T) {
+	tc := TraceContext{
+		Traceparent: "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-1111111111111111-01",
+		Tracestate:  "vendor=child",
+	}
+	explicit := "00-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-1234567812345678-01"
+	in := map[string]any{
+		"_meta": map[string]any{MetaKeyTraceparent: explicit},
+		"data":  "x",
+	}
+
+	got := InjectTraceContextIntoParams(in, tc)
+	obj, ok := got.(map[string]any)
+	if !ok {
+		t.Fatalf("expected map[string]any, got %T", got)
+	}
+	meta := obj["_meta"].(map[string]any)
+	if meta[MetaKeyTraceparent] != explicit {
+		t.Fatalf("explicit traceparent overwritten: got %q want %q", meta[MetaKeyTraceparent], explicit)
+	}
+	if meta[MetaKeyTracestate] != "vendor=child" {
+		t.Fatalf("tracestate not added when not explicitly set: got %q", meta[MetaKeyTracestate])
+	}
+}
+
+func TestInjectTraceContextIntoParams_HandlesNilAndNonObject(t *testing.T) {
+	tc := TraceContext{Traceparent: "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-1111111111111111-01"}
+
+	got := InjectTraceContextIntoParams(nil, tc)
+	obj, ok := got.(map[string]any)
+	if !ok {
+		t.Fatalf("nil params should yield a fresh map, got %T", got)
+	}
+	meta := obj["_meta"].(map[string]any)
+	if meta[MetaKeyTraceparent] != tc.Traceparent {
+		t.Fatalf("nil-params injection lost traceparent")
+	}
+
+	arr := []any{1, 2, 3}
+	got2 := InjectTraceContextIntoParams(arr, tc)
+	if got2interface, ok := got2.([]any); !ok || len(got2interface) != 3 {
+		t.Fatalf("non-object params must pass through unchanged, got %T %v", got2, got2)
+	}
+
+	zeroPass := InjectTraceContextIntoParams(map[string]any{"a": 1}, TraceContext{})
+	if m, ok := zeroPass.(map[string]any); !ok || m["a"] != 1 || m["_meta"] != nil {
+		t.Fatalf("zero TraceContext must pass through unchanged, got %v", zeroPass)
+	}
+}
