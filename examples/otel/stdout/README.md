@@ -1,64 +1,78 @@
 # examples/otel/stdout — SEP-414 Trace Context Propagation, exported to stdout
 
 Minimal demokit walkthrough showing how to wire OpenTelemetry tracing
-into a mcpkit server using the [`ext/otel`](../../../ext/otel/) adapter,
-with the SDK's `stdouttrace` exporter so spans land as pretty-printed
-JSON on the server's stdout — no collector infrastructure required.
+into BOTH sides of an MCP exchange using the
+[`ext/otel`](../../../ext/otel/) adapter — `server.WithTracerProvider`
+on the server (`make serve`) and `client.WithTracerProvider` on the
+walkthrough (`make demo`). Both processes use the SDK's `stdouttrace`
+exporter, so each terminal prints its own side's spans as
+pretty-printed JSON. No collector infrastructure required.
 
-The walkthrough sends a known W3C `_meta.traceparent` on a `tools/call`
-so a reader can scroll back to the server terminal and see the same
-trace ID appear as the exported span's `Parent`. That's the "yes, the
-SEP-414 wire is actually propagating" check, end-to-end, in one
-command.
+The walkthrough makes a `tools/call`; the client trace middleware
+stamps its own auto-generated `_meta.traceparent` on the outbound
+params; the server picks it up. Spans for that call appear on BOTH
+terminals with matching `TraceID` — that match proves the SEP-414
+client↔server wire is actually propagating end-to-end.
 
 ## Quick Start
 
 ```
-Terminal 1:  make serve         # OTel-instrumented server on :8080
-Terminal 2:  make demo          # demokit walkthrough (--tui for TUI)
+Terminal 1:  make serve         # OTel-instrumented server on :8080 — server-side spans dump here
+Terminal 2:  make demo          # demokit walkthrough (--tui for TUI) — client-side spans dump here
 ```
 
-Keep both terminals visible. The walkthrough drives the host side; the
-spans show up on the server side.
+Keep both terminals visible. Each side runs its own `stdouttrace`
+pipeline; spans land on whichever terminal emitted them. The host
+makes a tools/call with NO caller-supplied traceparent — the client
+trace middleware (P3) stamps its own freshly-generated traceparent on
+the outbound `_meta`, and the server (P2) picks it up as the parent.
+Match the `TraceID` across the two terminals and you've watched the
+SEP-414 wire stitch a client→server trace in real time. The TraceID
+changes on every run (no synthetic override) — that's the point: real
+production traces won't have hardcoded IDs.
 
 ## What it demonstrates
 
-- **Wiring.** `server.WithTracerProvider(mcpotel.NewProvider(otelTP))` — single line in `main.go::serve()`. Everything else is canonical `common.RunServer` boilerplate.
-- **Every dispatch emits a span.** The walkthrough's `tools/list` step shows a parent-less span; the `tools/call` step shows a span with an explicit inbound parent.
-- **In-band `_meta.traceparent` resolution.** The walkthrough sets `params._meta.traceparent` on the tools/call. The trace middleware extracts it; the adapter installs the OTel SpanContext as the new span's parent (`Remote=true`).
+- **Symmetric wiring.** `server.WithTracerProvider(...)` in `main.go::serve()` and `client.WithTracerProvider(...)` in `walkthrough.go::runDemo()`. Each line is one call against the same `ext/otel.NewProvider` adapter — the in-tree implementation of `core.TracerProvider`.
+- **Two processes, two pipelines, one trace.** Each side runs its own `stdouttrace`+`sdktrace` pipeline because they're separate OS processes. The SEP-414 `_meta.traceparent` plumbing carries trace identity across the wire so the two exporters record the *same* `TraceID`.
+- **Every dispatch emits a span on BOTH sides.** `initialize`, `notifications/initialized`, `tools/list`, `tools/call` each produce a client-side span (on the walkthrough terminal) AND a server-side span (on the serve terminal). The walkthrough surfaces matching `TraceID`s on the `tools/call` step explicitly.
+- **Client-side `_meta.traceparent` auto-injection (P3).** The walkthrough's tools/call carries no caller-supplied `_meta`. The client trace middleware starts a span, then stamps the new span's traceparent into outbound `params._meta.traceparent` via `core.InjectTraceContextIntoParams`. On the server side, the trace middleware extracts that `_meta.traceparent`; the adapter installs the OTel SpanContext as the new server-side span's parent (`Remote=true`). End result: matching TraceID across both spans, server's `Parent.SpanID` equals the client's `SpanID`.
 - **Outbound context sync.** After `StartSpan`, the adapter re-attaches the *child* span's traceparent to ctx via `core.WithTraceContext`. SEP-414 P2's outbound `_meta` injection wraps read that ctx, so every server-to-client notification or sampling request carries the new child traceparent — a downstream MCP server stitches into the same trace.
+- **Distinct instrumentation names.** The walkthrough's pipeline tags spans with `"github.com/panyam/mcpkit/client"`; the server's defaults to `"github.com/panyam/mcpkit/server"`. Observability backends group by emitting side.
 
 ## Architecture
 
 ```mermaid
 sequenceDiagram
+    participant HostStdout as walkthrough stdout
     participant H as Host (make demo)
     participant SRV as Server (make serve)
-    participant ADP as ext-otel Provider
-    participant SDK as sdktrace TracerProvider
-    participant EXP as stdouttrace exporter
+    participant ServerStdout as serve stdout
 
-    H->>SRV: tools/call echo with _meta.traceparent
-    SRV->>SRV: trace mw extracts _meta.traceparent
-    SRV->>ADP: StartSpan(ctx, tools/call, attrs)
-    ADP->>ADP: parse traceparent into SpanContext (Remote=true)
-    ADP->>SDK: tracer.Start with parent SpanContext
-    SDK-->>ADP: childCtx, otelSpan
-    ADP-->>SRV: ctx (with child TC), Span
+    Note over H: client pipeline stdouttrace then sdktrace then mcpotel
+    Note over SRV: server pipeline stdouttrace then sdktrace then mcpotel
+
+    H->>H: traceMiddleware StartSpan tools/call
+    H->>H: inject _meta.traceparent into params
+    H->>HostStdout: client span exports to walkthrough terminal
+    H->>SRV: HTTP POST tools/call with _meta.traceparent
+    SRV->>SRV: traceMiddleware extracts _meta.traceparent
+    SRV->>SRV: StartSpan tools/call with Remote parent
     SRV->>SRV: handler runs
-    SRV->>ADP: span.End
-    ADP->>SDK: otelSpan.End
-    SDK->>EXP: export ReadOnlySpan
-    EXP->>EXP: print JSON to server stdout
+    SRV->>ServerStdout: server span exports to serve terminal
+    SRV-->>H: response
+    H->>H: trace span End records error or status
+    HostStdout-->>HostStdout: TraceID matches ServerStdout TraceID
 ```
 
 ## Where to look in the code
 
-- `main.go::serve` — the wiring. Builds the OTel pipeline (stdouttrace → SDK TP), wraps with `mcpotel.NewProvider`, hands to `common.RunServer` via `server.WithTracerProvider`.
-- `main.go::newOTelPipeline` — the one-shot helper that constructs the SDK TracerProvider with the stdout exporter and returns its shutdown closure.
-- `walkthrough.go::runDemo` — the demokit script. The interesting step is "tools/call echo — with explicit inbound `_meta.traceparent`": it sets the in-band traceparent and points the reader at the server terminal's exported span.
-- `ext/otel/provider.go` (in the adapter module) — `Provider.StartSpan` is the hot-path: parses inbound `core.TraceContext` into an OTel SpanContext, calls `tracer.Start`, and re-attaches the child traceparent via `core.WithTraceContext` so SEP-414 P2's outbound `_meta` injection stamps the right ID downstream.
-- `server/trace_middleware.go` (in main mcpkit) — the SEP-414 P2 middleware that consumes the adapter. Sits outermost so user middleware runs INSIDE the recorded span.
+- `main.go::serve` — server-side wiring. Builds the OTel pipeline (stdouttrace → SDK TP), wraps with `mcpotel.NewProvider`, hands to `common.RunServer` via `server.WithTracerProvider`.
+- `main.go::newOTelPipeline` — the one-shot helper that constructs the SDK TracerProvider with the stdout exporter and returns its shutdown closure. Reused by `walkthrough.go` for the client pipeline so both sides build their pipeline identically.
+- `walkthrough.go::runDemo` — client-side wiring + the demokit script. Builds its own pipeline via the same `newOTelPipeline` helper and passes the adapter to `client.WithTracerProvider` with `WithInstrumentationName("github.com/panyam/mcpkit/client")` so observability backends group client vs server spans.
+- `client/trace_middleware.go` (in main mcpkit) — the SEP-414 P3 middleware. Outbound `Client.Call` is wrapped in a span; outbound params gain `_meta.traceparent`; inbound server-to-client requests (sampling/elicitation/roots) get wrap spans whose parent is the inbound traceparent.
+- `server/trace_middleware.go` (in main mcpkit) — the SEP-414 P2 middleware that consumes the adapter on the server side. Sits outermost so user middleware runs INSIDE the recorded span.
+- `ext/otel/provider.go` (in the adapter module) — `Provider.StartSpan` is the hot-path: parses inbound `core.TraceContext` into an OTel SpanContext, calls `tracer.Start`, and re-attaches the child traceparent via `core.WithTraceContext` so the outbound `_meta` injection stamps the right ID downstream.
 
 ## Make targets
 

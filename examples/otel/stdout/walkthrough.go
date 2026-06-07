@@ -3,26 +3,46 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
+	mcpotel "github.com/panyam/mcpkit/ext/otel"
 )
 
-// inboundTraceparent is a deterministic W3C version-00 traceparent the
-// walkthrough sends on every tools/call so a reader can scroll back to
-// the server terminal and visually confirm the inbound trace ID landed
-// as the span's Parent. The trace ID matches the W3C spec example
-// (`4bf92f3577b34da6a3ce929d0e0e4736`) for cross-document recognizability.
-const inboundTraceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+// (Previously this file defined an explicit inbound traceparent and
+// supplied it in the tools/call. Removed once the client side was
+// instrumented: SEP-414's "explicit caller-set _meta wins" rule means
+// that an externally-supplied traceparent ends up on the SERVER side
+// only, while the client emits a SEPARATE auto-generated trace — the
+// two would NOT share a TraceID and the symmetric-stitching narrative
+// would break. The auto-inject path the walkthrough now exercises
+// produces matching TraceIDs on both terminals — what the reader is
+// supposed to see.)
 
 func runDemo() {
 	serverURL := common.ServerURL()
 
+	// Stand up the walkthrough's OWN OTel pipeline so client-side spans
+	// land on this terminal's stdout via stdouttrace — symmetric with
+	// the server's pipeline in serve(). Each process gets its own
+	// TracerProvider (the two are separate OS processes; in-memory
+	// sharing isn't possible), but the SEP-414 wire propagates trace
+	// context across them so the recorded spans share a TraceID. The
+	// instrumentation name carries `mcpkit/client` so observability
+	// backends group client-emitted spans separately.
+	clientOTelTP, shutdownClientOTel, err := newOTelPipeline(os.Stdout)
+	if err != nil {
+		fmt.Printf("failed to build client-side OTel pipeline: %v\n", err)
+		return
+	}
+	defer shutdownClientOTel()
+
 	demo := demokit.New("MCP SEP-414 — OpenTelemetry Trace Context Propagation").
 		Dir("otel/stdout").
-		Description("Walks through SEP-414, which propagates W3C Trace Context through MCP using the `_meta.traceparent` / `_meta.tracestate` envelope (and, on streamable HTTP, the matching HTTP headers per SEP-2028). The server wires the new `ext/otel` adapter into `server.WithTracerProvider` so every JSON-RPC dispatch emits an OpenTelemetry span — exported as pretty-printed JSON on the server's stdout via the `stdouttrace` exporter. The walkthrough drives a real `tools/call` with a known inbound traceparent so a reader can see the inbound trace ID become the span's Parent on the server side.").
+		Description("Walks through SEP-414, which propagates W3C Trace Context through MCP using the `_meta.traceparent` / `_meta.tracestate` envelope (and, on streamable HTTP, the matching HTTP headers per SEP-2028). BOTH sides are instrumented: the server (`make serve`) wires `server.WithTracerProvider` (P2); the walkthrough (`make demo`) wires `client.WithTracerProvider` (P3). Both pipelines feed the `stdouttrace` exporter, so each terminal prints its own side's spans as pretty-printed JSON. The walkthrough drives a real `tools/call` — the client trace middleware auto-stamps a `_meta.traceparent` on the outbound params and the server picks it up. Matching `TraceID` across the two terminals is the proof that the SEP-414 wire is actually stitching client and server into a single distributed trace.").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this walkthrough)"),
 			demokit.Actor("Server", "MCP Server (make serve) — spans dump on its stdout"),
@@ -53,24 +73,33 @@ func runDemo() {
 	demo.Step("Connect to the OTel-instrumented server").
 		Arrow("Host", "Server", "POST /mcp — initialize").
 		DashedArrow("Server", "Host", "serverInfo + capabilities").
-		Note("`client.NewClient(...)` + `Connect()`. The handshake itself dispatches through the trace middleware on the server, so the *Server* terminal will print three spans during this walkthrough: `initialize`, `notifications/initialized`, and the `tools/call` from the next step. No client-side instrumentation is wired here — P3 (client-side spans) lives on a separate branch.").
+		Note("`client.NewClient(...)` + `client.WithTracerProvider(...)` + `Connect()`. Each JSON-RPC dispatch now emits TWO spans — one on each side. The initialize handshake will print `initialize` and `notifications/initialized` spans on BOTH terminals; matching them by TraceID is the visual proof that the SEP-414 wire is propagating from the very first call.").
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			c = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "otel-stdout-host", Version: "1.0"},
+				// SEP-414 P3 — client-side trace surface. Outbound
+				// Client.Call emits a span and stamps _meta.traceparent
+				// on params; inbound server-to-client requests
+				// (sampling/elicitation/roots) get wrap spans whose
+				// parent is the inbound _meta.traceparent.
+				client.WithTracerProvider(mcpotel.NewProvider(clientOTelTP,
+					mcpotel.WithInstrumentationName("github.com/panyam/mcpkit/client"),
+				)),
 			)
 			if err := c.Connect(); err != nil {
 				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
 				return nil
 			}
 			fmt.Printf("    Connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)
-			fmt.Printf("    Look at the server's stdout — you should see initialize and notifications/initialized spans already exported.\n")
+			fmt.Printf("    Watch THIS terminal: initialize and notifications/initialized client-side spans will appear below.\n")
+			fmt.Printf("    Watch the SERVER terminal: matching server-side spans land there for the same JSON-RPC requests.\n")
 			return nil
 		})
 
 	demo.Step("tools/list — every dispatch is a span").
 		Arrow("Host", "Server", "tools/list").
 		DashedArrow("Server", "Host", "tools[]").
-		Note("The trace middleware sits OUTERMOST in the dispatch chain, so *every* JSON-RPC request emits a span — not just tools/call. This step doesn't pass an inbound traceparent, so the resulting span starts a fresh trace (no Parent). Compare the Server terminal's span for this list call with the next step's span: this one has no Parent; the next one does.").
+		Note("The trace middleware sits OUTERMOST in the dispatch chain on both sides, so *every* JSON-RPC request emits a pair of spans (one per side, stitched via `_meta.traceparent`). This step is functionally identical to the next one in terms of propagation — the only difference is what attributes get set. Watch the TraceID match across terminals for this list call too.").
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			page, err := c.ListToolsPage("")
 			if err != nil {
@@ -83,27 +112,30 @@ func runDemo() {
 			return nil
 		})
 
-	demo.Step("tools/call echo — with explicit inbound _meta.traceparent").
-		Arrow("Host", "Server", "tools/call echo { _meta: { traceparent: 00-4bf9…-00f0…-01 } }").
-		DashedArrow("Server", "Host", "text result + (under the hood) child-span _meta on any outbound").
-		Note(fmt.Sprintf("The Host sends `params._meta.traceparent=%s` — the W3C-spec example trace ID, used here so the trace ID is visually recognizable. On the Server terminal, scroll to the `tools/call` span and look for two things:\n\n1. `SpanContext.TraceID` equals `4bf92f3577b34da6a3ce929d0e0e4736` — proves the inbound trace ID carried through.\n2. `Parent.SpanID` equals `00f067aa0ba902b7` and `Parent.Remote == true` — proves the middleware recognized the in-band traceparent as a remote parent.\n\nIf you instead remove the `_meta` field from the call below, the span starts a fresh trace (no Parent), matching the previous step's tools/list behavior.", inboundTraceparent)).
+	demo.Step("tools/call echo — let the client auto-inject _meta.traceparent").
+		Arrow("Host", "Server", "tools/call echo (no caller _meta; client trace mw stamps its own)").
+		DashedArrow("Server", "Host", "text result; server span's Parent matches the client SpanID").
+		Note("With both wires instrumented (PR 649 server + PR 654 client), this single tools/call produces TWO spans on TWO terminals:\n\n1. **Client side (THIS terminal).** The `Client.Call` outbound trace middleware emits a span named `tools/call` with a fresh TraceID + SpanID. Before the call hits the wire, the middleware stamps that TraceID and SpanID into `params._meta.traceparent` via `core.InjectTraceContextIntoParams` (P3, shared helper).\n2. **Server side (the SERVER terminal).** The server trace middleware extracts the stamped `_meta.traceparent` and emits its own `tools/call` span whose `SpanContext.TraceID` MATCHES the client's, and whose `Parent.SpanID` MATCHES the client span's SpanID with `Parent.Remote == true`.\n\nMatch the spans by TraceID across the two terminals — that IS the SEP-414 wire stitching client and server into a single distributed trace. The TraceID is auto-generated each run (no synthetic override), so it'll be different every time — that's the point: real production traces won't have hardcoded IDs.").
 		VerbatimVariants("Reproduce on the wire",
-			demokit.MakeVariant("curl", "bash", `curl -s -X POST http://localhost:8080/mcp \
+			demokit.MakeVariant("curl", "bash", `# When using curl directly, no client trace middleware exists, so
+# YOU supply the traceparent. Match it across terminals by inspection.
+curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' \
   -H 'Accept: text/event-stream, application/json' \
   -H "Mcp-Session-Id: $SID" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"echo","arguments":{"message":"hello"},"_meta":{"traceparent":"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}}}' | jq '.result'`).Default(),
-			demokit.MakeVariant("go", "go", `res, _ := c.Call("tools/call", map[string]any{
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"echo","arguments":{"message":"hello"}}}' | jq '.result'`).Default(),
+			demokit.MakeVariant("go", "go", `// Note: the Client must be constructed with
+// client.WithTracerProvider(mcpotel.NewProvider(...)) for the
+// auto-inject to fire. See walkthrough.go::runDemo.
+res, _ := c.Call("tools/call", map[string]any{
     "name":      "echo",
     "arguments": map[string]any{"message": "hello"},
-    "_meta":     map[string]any{"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"},
 })`),
 		).
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			res, err := c.Call("tools/call", map[string]any{
 				"name":      "echo",
 				"arguments": map[string]any{"message": "hello"},
-				"_meta":     map[string]any{"traceparent": inboundTraceparent},
 			})
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
@@ -116,11 +148,15 @@ func runDemo() {
 			}
 			pretty, _ := json.MarshalIndent(v, "    ", "  ")
 			fmt.Printf("    %s\n", string(pretty))
-			fmt.Printf("\n    Server terminal: look for a span with Name=\"tools/call\", TraceID=4bf92f3577b34da6a3ce929d0e0e4736, Parent.SpanID=00f067aa0ba902b7.\n")
+			fmt.Printf("\n    Match by TraceID:\n")
+			fmt.Printf("    - THIS terminal: client-side span Name=\"tools/call\" with a fresh TraceID + SpanID.\n")
+			fmt.Printf("    - SERVER terminal: a span with the SAME TraceID, plus Parent.SpanID == client SpanID and Parent.Remote=true.\n")
 			return nil
 		})
 
 	demo.Section("Where to look in the code",
+		"- `examples/otel/stdout/walkthrough.go::runDemo` — the client-side wiring. `mcpotel.NewProvider(clientOTelTP, WithInstrumentationName(\".../client\"))` plugged into `client.WithTracerProvider`. The pipeline uses the same `stdouttrace` exporter as the server, just pointing at this process's stdout.",
+		"- `client/trace_middleware.go` (in main mcpkit) — the SEP-414 P3 middleware that consumes the adapter on the client side. Outbound `Client.Call` is wrapped in a span; outbound params gain `_meta.traceparent` derived from the active span; inbound server-to-client requests (sampling/elicitation/roots) extract the inbound traceparent and emit a wrap span.",
 		"- `ext/otel/provider.go` — `Provider.StartSpan` is the adapter's single hot-path: parses inbound `core.TraceContext` into an OTel `SpanContext`, installs as the new span's parent, and after `tracer.Start` re-attaches the *child* span's traceparent via `core.WithTraceContext` so P2's outbound `_meta` injection stamps the right trace ID on downstream messages.",
 		"- `ext/otel/span.go` — narrows OTel's broader Span surface to mcpkit's three-method `core.Span` contract. CAS-guarded `End` prevents the SDK's noisy double-End warning.",
 		"- `ext/otel/propagation.go` — pure W3C ↔ OTel SpanContext conversions. `traceContextToSpanContext` validates structurally before installing; `spanContextToTraceContext` formats the new span back into the W3C version-00 string the wire expects.",
