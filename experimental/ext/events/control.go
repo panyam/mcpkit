@@ -58,9 +58,9 @@ type controlEnvelope struct {
 // the deliver-loop's existing exponential backoff.
 func (r *WebhookRegistry) PostGap(canonicalKey []byte, freshCursor string) {
 	r.mu.RLock()
-	target, ok := r.targets[string(canonicalKey)]
+	resp, _ := r.store.GetWebhook(context.Background(), GetWebhookRequest{CanonicalKey: canonicalKey})
 	r.mu.RUnlock()
-	if !ok {
+	if !resp.Found {
 		return
 	}
 	body, err := json.Marshal(controlEnvelope{Type: "gap", Cursor: freshCursor})
@@ -68,7 +68,7 @@ func (r *WebhookRegistry) PostGap(canonicalKey []byte, freshCursor string) {
 		r.logf("[webhook] PostGap: marshal failed: %v", err)
 		return
 	}
-	go r.deliverControl(target, "gap", body)
+	go r.deliverControl(resp.Target, "gap", body)
 }
 
 // PostTerminated delivers a {type:terminated, error:...} envelope to
@@ -83,14 +83,12 @@ func (r *WebhookRegistry) PostGap(canonicalKey []byte, freshCursor string) {
 // entry in the registry.
 func (r *WebhookRegistry) PostTerminated(canonicalKey []byte, controlErr ControlError) {
 	r.mu.Lock()
-	target, ok := r.targets[string(canonicalKey)]
-	if ok {
-		delete(r.targets, string(canonicalKey))
-	}
+	resp, _ := r.store.DeleteWebhook(context.Background(), DeleteWebhookRequest{CanonicalKey: canonicalKey})
 	r.mu.Unlock()
-	if !ok {
+	if !resp.Found {
 		return
 	}
+	target := resp.Removed
 	// PostTerminated is server-initiated subscription death;
 	// onRemove fires on actual registry deletion (per spec §"Server
 	// SDK Guidance" → "Unsubscribe timing by mode" L707). Suspend

@@ -140,6 +140,7 @@ type PollResult struct {
 - Retry with exponential backoff on 5xx (no retry on 4xx)
 - Basic SSRF validation on callback URLs
 - Pluggable signature format (see below)
+- Pluggable subscription storage via `WithWebhookStore` (default in-memory; Postgres lands in issue 630). See [`STORAGE_SEAMS.md`](STORAGE_SEAMS.md) for the convention every storage seam in this package follows.
 
 ```go
 webhooks := events.NewWebhookRegistry(
