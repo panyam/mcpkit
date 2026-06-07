@@ -287,7 +287,7 @@ const (
 // principal is part of the key.
 type WebhookRegistry struct {
 	mu                   sync.RWMutex
-	targets              map[string]WebhookTarget // keyed by string(canonicalKey)
+	store                WebhookStore // canonicalKey → WebhookTarget; default in-memory
 	client               *http.Client
 	ttl                  time.Duration
 	ttlExplicit          bool // operator passed WithWebhookTTL (drives clamp decision)
@@ -412,7 +412,7 @@ func (r *WebhookRegistry) fireOnRemove(t WebhookTarget) {
 // see its docs for when (not) to use it.
 func NewWebhookRegistry(opts ...WebhookOption) *WebhookRegistry {
 	r := &WebhookRegistry{
-		targets:          make(map[string]WebhookTarget),
+		store:            NewInMemoryWebhookStore(),
 		ttl:              DefaultWebhookTTL,
 		headerMode:       StandardWebhooks,
 		maxBodyBytes:     defaultWebhookMaxBodyBytes,
@@ -583,8 +583,9 @@ func (r *WebhookRegistry) Register(p RegisterParams) (expiresAt time.Time, isNew
 	r.mu.Lock()
 	pruned := r.pruneExpiredLocked()
 	expiresAt = time.Now().Add(r.ttl)
-	key := string(p.CanonicalKey)
-	if existing, ok := r.targets[key]; ok {
+	getResp, _ := r.store.GetWebhook(context.Background(), GetWebhookRequest{CanonicalKey: p.CanonicalKey})
+	if getResp.Found {
+		existing := getResp.Target
 		// Refresh: update expiry and secret if provided. Secret rotation
 		// per spec is allowed by supplying a new value on refresh.
 		existing.ExpiresAt = expiresAt
@@ -606,10 +607,10 @@ func (r *WebhookRegistry) Register(p RegisterParams) (expiresAt time.Time, isNew
 			existing.Status.FailedSince = nil
 			existing.failureCount = 0
 		}
-		r.targets[key] = existing
+		_, _ = r.store.SaveWebhook(context.Background(), SaveWebhookRequest{Target: existing})
 		isNew = false
 	} else {
-		r.targets[key] = WebhookTarget{
+		_, _ = r.store.SaveWebhook(context.Background(), SaveWebhookRequest{Target: WebhookTarget{
 			CanonicalKey:  p.CanonicalKey,
 			ID:            p.DerivedID,
 			URL:           p.URL,
@@ -624,7 +625,7 @@ func (r *WebhookRegistry) Register(p RegisterParams) (expiresAt time.Time, isNew
 			// repeated failures (spec §"Webhook Delivery Status"
 			// L460); a successful refresh resets it.
 			Status: DeliveryStatus{Active: true},
-		}
+		}})
 		isNew = true
 	}
 	r.mu.Unlock()
@@ -650,13 +651,10 @@ func (r *WebhookRegistry) Register(p RegisterParams) (expiresAt time.Time, isNew
 // PostTerminated.
 func (r *WebhookRegistry) Unregister(canonicalKey []byte) {
 	r.mu.Lock()
-	target, ok := r.targets[string(canonicalKey)]
-	if ok {
-		delete(r.targets, string(canonicalKey))
-	}
+	resp, _ := r.store.DeleteWebhook(context.Background(), DeleteWebhookRequest{CanonicalKey: canonicalKey})
 	r.mu.Unlock()
-	if ok {
-		r.fireOnRemove(target)
+	if resp.Found {
+		r.fireOnRemove(resp.Removed)
 	}
 }
 
@@ -673,13 +671,26 @@ func (r *WebhookRegistry) Targets() []WebhookTarget {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	now := time.Now()
-	out := make([]WebhookTarget, 0, len(r.targets))
-	for _, t := range r.targets {
+	listResp, _ := r.store.ListWebhooks(context.Background(), ListWebhooksRequest{})
+	out := make([]WebhookTarget, 0, len(listResp.Targets))
+	for _, t := range listResp.Targets {
 		if t.ExpiresAt.After(now) && t.Status.Active {
 			out = append(out, t)
 		}
 	}
 	return out
+}
+
+// lookupTarget returns the stored target for canonicalKey, or
+// (zero, false) when absent. Package-private helper used by tests
+// inside experimental/ext/events that need to inspect a specific
+// target without going through the public Targets() snapshot. NOT
+// part of the public surface.
+func (r *WebhookRegistry) lookupTarget(canonicalKey []byte) (WebhookTarget, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	resp, _ := r.store.GetWebhook(context.Background(), GetWebhookRequest{CanonicalKey: canonicalKey})
+	return resp.Target, resp.Found
 }
 
 // pruneExpiredLocked removes expired subscriptions and returns the
@@ -688,12 +699,22 @@ func (r *WebhookRegistry) Targets() []WebhookTarget {
 // → "Unsubscribe timing by mode" L707. Must hold r.mu write lock.
 func (r *WebhookRegistry) pruneExpiredLocked() []WebhookTarget {
 	now := time.Now()
+	ctx := context.Background()
+	// ListWebhooks snapshot + per-key DeleteWebhook avoids mutating
+	// the store during iteration — the in-memory impl tolerates Go map
+	// delete-during-range, but a Postgres / SQL impl wouldn't. The
+	// seam contract is the same for both backends; #630 doesn't have
+	// to special-case this path.
+	listResp, _ := r.store.ListWebhooks(ctx, ListWebhooksRequest{})
 	var removed []WebhookTarget
-	for key, t := range r.targets {
-		if t.ExpiresAt.Before(now) {
-			log.Printf("[webhook] subscription %s expired, removing", t.ID)
-			delete(r.targets, key)
-			removed = append(removed, t)
+	for _, t := range listResp.Targets {
+		if t.ExpiresAt.After(now) || t.ExpiresAt.Equal(now) {
+			continue
+		}
+		delResp, _ := r.store.DeleteWebhook(ctx, DeleteWebhookRequest{CanonicalKey: t.CanonicalKey})
+		if delResp.Found {
+			log.Printf("[webhook] subscription %s expired, removing", delResp.Removed.ID)
+			removed = append(removed, delResp.Removed)
 		}
 	}
 	return removed
@@ -712,11 +733,12 @@ func (r *WebhookRegistry) pruneExpiredLocked() []WebhookTarget {
 // targeted-emit against teardown is expected, not an error.
 func (r *WebhookRegistry) DeliverToTarget(canonicalKey []byte, event Event) bool {
 	r.mu.RLock()
-	target, ok := r.targets[string(canonicalKey)]
+	resp, _ := r.store.GetWebhook(context.Background(), GetWebhookRequest{CanonicalKey: canonicalKey})
 	r.mu.RUnlock()
-	if !ok {
+	if !resp.Found {
 		return false
 	}
+	target := resp.Target
 	if !target.Status.Active || time.Now().After(target.ExpiresAt) {
 		return false
 	}
@@ -740,9 +762,11 @@ func (r *WebhookRegistry) ExpireAll() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	past := time.Now().Add(-1 * time.Second)
-	for k, v := range r.targets {
-		v.ExpiresAt = past
-		r.targets[k] = v
+	ctx := context.Background()
+	listResp, _ := r.store.ListWebhooks(ctx, ListWebhooksRequest{})
+	for _, t := range listResp.Targets {
+		t.ExpiresAt = past
+		_, _ = r.store.SaveWebhook(ctx, SaveWebhookRequest{Target: t})
 	}
 }
 
@@ -847,17 +871,19 @@ const (
 func (r *WebhookRegistry) recordDeliverySuccess(canonicalKey []byte, at time.Time) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	t, ok := r.targets[string(canonicalKey)]
-	if !ok {
+	ctx := context.Background()
+	getResp, _ := r.store.GetWebhook(ctx, GetWebhookRequest{CanonicalKey: canonicalKey})
+	if !getResp.Found {
 		return
 	}
+	t := getResp.Target
 	atCopy := at
 	t.Status.Active = true
 	t.Status.LastDeliveryAt = &atCopy
 	t.Status.LastError = DeliveryErrorNone
 	t.Status.FailedSince = nil
 	t.failureCount = 0
-	r.targets[string(canonicalKey)] = t
+	_, _ = r.store.SaveWebhook(ctx, SaveWebhookRequest{Target: t})
 }
 
 // recordDeliveryFailure updates the target's DeliveryStatus after the
@@ -874,10 +900,12 @@ func (r *WebhookRegistry) recordDeliverySuccess(canonicalKey []byte, at time.Tim
 func (r *WebhookRegistry) recordDeliveryFailure(canonicalKey []byte, bucket DeliveryErrorBucket) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	t, ok := r.targets[string(canonicalKey)]
-	if !ok {
+	ctx := context.Background()
+	getResp, _ := r.store.GetWebhook(ctx, GetWebhookRequest{CanonicalKey: canonicalKey})
+	if !getResp.Found {
 		return
 	}
+	t := getResp.Target
 	now := time.Now()
 	t.Status.LastError = bucket
 
@@ -896,7 +924,7 @@ func (r *WebhookRegistry) recordDeliveryFailure(canonicalKey []byte, bucket Deli
 	if t.failureCount >= r.suspendThreshold {
 		t.Status.Active = false
 	}
-	r.targets[string(canonicalKey)] = t
+	_, _ = r.store.SaveWebhook(ctx, SaveWebhookRequest{Target: t})
 	// On the Active true→false transition, auto-Post a
 	// {type:terminated} envelope to the receiver as a courtesy
 	// notification (spec §"Non-event webhook bodies" L420). Uses
@@ -918,8 +946,9 @@ func (r *WebhookRegistry) recordDeliveryFailure(canonicalKey []byte, bucket Deli
 func (r *WebhookRegistry) DeliveryStatus(canonicalKey []byte) DeliveryStatus {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	if t, ok := r.targets[string(canonicalKey)]; ok {
-		return t.Status
+	resp, _ := r.store.GetWebhook(context.Background(), GetWebhookRequest{CanonicalKey: canonicalKey})
+	if resp.Found {
+		return resp.Target.Status
 	}
 	return DeliveryStatus{}
 }
