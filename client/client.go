@@ -406,6 +406,12 @@ type Client struct {
 	// Call-level middleware chain (set by WithClientMiddleware).
 	callMiddleware []ClientMiddleware
 
+	// tracerProvider drives the SEP-414 P3 client-side span emission +
+	// W3C _meta.traceparent propagation. Set via WithTracerProvider;
+	// nil and core.NoopTracerProvider both skip the install entirely
+	// (zero overhead on the unconfigured path).
+	tracerProvider core.TracerProvider
+
 	// Command transport fields (set by WithCommandTransport).
 	commandName string
 	commandArgs []string
@@ -819,6 +825,28 @@ func (c *Client) HandleServerRequest(req *core.Request) *core.Response {
 // incoming-request path AND the SEP-2322 MRTR client-side input
 // resolution route through this function.
 func (c *Client) HandleServerRequestWithContext(ctx context.Context, req *core.Request) *core.Response {
+	// SEP-414 P3 — when a non-Noop TracerProvider is configured, extract
+	// `_meta.traceparent` from the inbound request, attach it to ctx via
+	// core.WithTraceContext (so handler-internal spans treat it as the
+	// parent), and emit a wrap span named after the request method. The
+	// Noop / nil default skips all of this entirely.
+	if tracingEnabled(c.tracerProvider) {
+		var span core.Span
+		ctx, span = traceInboundDispatch(c.tracerProvider, ctx, req)
+		defer func() { span.End() }()
+		resp := c.dispatchServerRequest(ctx, req)
+		recordInboundOutcome(span, resp)
+		return resp
+	}
+	return c.dispatchServerRequest(ctx, req)
+}
+
+// dispatchServerRequest routes an incoming server-to-client JSON-RPC
+// request to the appropriate registered handler. Split out from
+// HandleServerRequestWithContext so the SEP-414 P3 wrap (trace span
+// emission) can sit around the routing without duplicating the
+// method switch.
+func (c *Client) dispatchServerRequest(ctx context.Context, req *core.Request) *core.Response {
 	switch req.Method {
 	case "sampling/createMessage":
 		if c.samplingHandler == nil {
@@ -985,24 +1013,35 @@ func (c *Client) CallContext(cc *CallContext, method string, params any) (*CallR
 
 // Call makes a JSON-RPC call and returns the parsed response.
 func (c *Client) Call(method string, params any) (*CallResult, error) {
-	// Apply client middleware chain if configured.
-	if len(c.callMiddleware) > 0 {
-		// Build the terminal handler.
-		terminal := ClientCallFunc(func(_ context.Context, method string, params any) (*CallResult, error) {
-			return c.callDirect(method, params)
-		})
-		// Wrap with middleware (reverse order: first registered = outermost).
-		handler := terminal
-		for i := len(c.callMiddleware) - 1; i >= 0; i-- {
-			next := handler
-			mw := c.callMiddleware[i]
-			handler = func(ctx context.Context, method string, params any) (*CallResult, error) {
-				return mw(ctx, method, params, next)
-			}
-		}
-		return handler(context.Background(), method, params)
+	traceEnabled := tracingEnabled(c.tracerProvider)
+	if len(c.callMiddleware) == 0 && !traceEnabled {
+		return c.callDirect(method, params)
 	}
-	return c.callDirect(method, params)
+
+	// Build the terminal handler.
+	terminal := ClientCallFunc(func(_ context.Context, method string, params any) (*CallResult, error) {
+		return c.callDirect(method, params)
+	})
+	// Wrap with user middleware (reverse order: first registered = outermost).
+	handler := terminal
+	for i := len(c.callMiddleware) - 1; i >= 0; i-- {
+		next := handler
+		mw := c.callMiddleware[i]
+		handler = func(ctx context.Context, method string, params any) (*CallResult, error) {
+			return mw(ctx, method, params, next)
+		}
+	}
+	// SEP-414 P3 — install the trace middleware as the OUTERMOST entry so
+	// user middleware (auth retry, header injection, custom logging) runs
+	// inside the span. Mirrors the server-side P2 outermost install.
+	if traceEnabled {
+		next := handler
+		mw := traceMiddleware(c, c.tracerProvider)
+		handler = func(ctx context.Context, method string, params any) (*CallResult, error) {
+			return mw(ctx, method, params, next)
+		}
+	}
+	return handler(context.Background(), method, params)
 }
 
 // callDirect is the non-middleware Call path.
