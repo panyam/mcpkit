@@ -1,5 +1,10 @@
 [
   {
+    "kind": "section",
+    "title": "Setup",
+    "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nAny MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam, basic-host). The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `make demo-app EXAMPLE=transcript` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+  },
+  {
     "kind": "step",
     "title": "Connect to the fixture",
     "step_id": "step-1",
@@ -8,9 +13,28 @@
   },
   {
     "kind": "step",
-    "title": "List tools",
+    "title": "tools/list — verify transcribe + its UI resource",
     "step_id": "step-2",
     "visit": 1,
-    "output": "    {\n      \"tools\": [\n        {\n          \"name\": \"transcribe\",\n          \"title\": \"Transcribe Speech\",\n          \"description\": \"Opens a live speech transcription interface using the Web Speech API.\",\n          \"inputSchema\": {\n            \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n            \"properties\": {},\n            \"type\": \"object\"\n          },\n          \"execution\": {\n            \"taskSupport\": \"forbidden\"\n          },\n          \"_meta\": {\n            \"ui\": {\n              \"resourceUri\": \"ui://transcript/mcp-app.html\"\n            },\n            \"ui/resourceUri\": \"ui://transcript/mcp-app.html\"\n          }\n        }\n      ]\n    }\n"
+    "output": "    transcribe\n      _meta: {\n        \"ui\": {\n          \"resourceUri\": \"ui://transcript/mcp-app.html\"\n        },\n        \"ui/resourceUri\": \"ui://transcript/mcp-app.html\"\n      }\n"
+  },
+  {
+    "kind": "step",
+    "title": "tools/call transcribe — the iframe-open signal",
+    "step_id": "step-3",
+    "visit": 1,
+    "output": "    server said: {\"status\":\"ready\",\"message\":\"Transcription UI opened. Speak into your microphone.\"}\n"
+  },
+  {
+    "kind": "step",
+    "title": "resources/read — the Permission-Policy block that unblocks the mic",
+    "step_id": "step-4",
+    "visit": 1,
+    "output": "    _meta:\n      {\n        \"ui\": {\n          \"permissions\": {\n            \"microphone\": {},\n            \"clipboardWrite\": {}\n          }\n        }\n      }\n"
+  },
+  {
+    "kind": "section",
+    "title": "Where to look in the code",
+    "body": "- `main.go` — the ResourceHandler setting `_meta.ui.permissions`. The microphone + clipboardWrite fields are visible in a single contiguous edit.\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + the [iframe permission contract](../transcript/README.md#the-iframe-permission-contract) section explains why the resource `_meta` matters."
   }
 ]

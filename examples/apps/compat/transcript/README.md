@@ -23,6 +23,10 @@ meaningful work in the iframe (rather than just rendering a value).
   See [The iframe permission contract](#the-iframe-permission-contract)
   below for the wire shape and the spec-conformance footnote.
 
+## Run Pre-Recorded
+
+> ▶ **[Play the walkthrough in your browser](https://panyam.github.io/mcpkit/walkthroughs/examples/apps/compat/transcript/)** — animated playback of every curl / Go call the walkthrough makes, step-by-step. Step 4 surfaces the distinctive thing about this fixture on the wire: `_meta.ui.permissions` declaring microphone + clipboardWrite, which is what lets basic-host pass through Permission-Policy grants to the iframe. No clone, no setup.
+
 ## Or Run Live
 
 ### Start Server

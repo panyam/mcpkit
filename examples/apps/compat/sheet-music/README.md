@@ -16,6 +16,18 @@ schema. Introduces the `InputSchemaPatch` escape hatch.
   default at the first comma. The fixture uses `InputSchemaPatch` to
   land the default verbatim via
   `s.Prop("abcNotation").Default(defaultABCNotation)`.
+- **CSP `connect-src` declaration on the resource.** First fixture
+  whose iframe fetches a runtime resource from an external origin —
+  abcjs streams soundfonts from `paulrosen.github.io` when you click
+  ▶ Play. The fixture declares that origin under the resource's
+  `_meta.ui.csp.connectDomains` so basic-host adds it to the iframe's
+  `connect-src` CSP directive. Without this, the soundfont fetch is
+  blocked and the play button silently does nothing. See
+  [The CSP connect-src contract](#the-csp-connect-src-contract) below.
+
+## Run Pre-Recorded
+
+> ▶ **[Play the walkthrough in your browser](https://panyam.github.io/mcpkit/walkthroughs/examples/apps/compat/sheet-music/)** — animated playback of every curl / Go call the walkthrough makes, step-by-step. The trace surfaces the two distinctive things about this fixture on the wire: `inputSchema.properties.abcNotation.default` landing the multi-line ABC verbatim, and `_meta.ui.csp.connectDomains` declaring the soundfont allowlist that unblocks audio. No clone, no setup.
 
 ## Or Run Live
 
@@ -67,6 +79,65 @@ play it back.
 | Verify the multi-line default landed intact | Expand `inputSchema.properties.abcNotation.default` | The full 11-line ABC notation including commas — no truncation. This is what `InputSchemaPatch` preserves. |
 
 See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, the strict Playwright gate, and connecting from VS Code / Claude Desktop / other MCP hosts.
+
+## The CSP connect-src contract
+
+abcjs renders sheet music statically with what's already in the iframe,
+but audio playback is different: clicking ▶ Play makes the library `fetch`
+soundfont samples from `https://paulrosen.github.io` (abcjs's hosted
+soundfont CDN) and decode them via WebAudio. That fetch is governed by
+the iframe sandbox's Content-Security-Policy. If the origin isn't on the
+`connect-src` allowlist, the browser blocks the fetch silently — the
+sheet music still renders, but ▶ Play does nothing.
+
+The mcpkit-Go fixture declares the origin on the resource's per-content
+`_meta.ui.csp`:
+
+```go
+return core.ResourceResult{Contents: []core.ResourceReadContent{{
+    URI:      req.URI,
+    MimeType: core.AppMIMEType,
+    Text:     html,
+    Meta: &core.ResourceContentMeta{
+        UI: &core.UIMetadata{
+            CSP: &core.UICSPConfig{
+                ConnectDomains: []string{"https://paulrosen.github.io"},
+            },
+        },
+    },
+}}}, nil
+```
+
+On the wire (`resources/read` response):
+
+```json
+"_meta": {
+  "ui": {
+    "csp": {
+      "connectDomains": ["https://paulrosen.github.io"]
+    }
+  }
+}
+```
+
+basic-host reads this and adds the origin to the iframe's `connect-src`
+directive. The soundfont fetch succeeds, the buffer decodes, and audio
+plays. This is the same family of bug as the transcript fixture's missing
+`microphone` permission ([PR 623](https://github.com/panyam/mcpkit/pull/623))
+— a one-line iframe sandbox declaration that's invisible if you only
+trust the visual render, and silent on failure.
+
+### CSP fields
+
+`core.UICSPConfig` maps to the four common CSP directives. Each accepts
+a `[]string` of origins:
+
+| Go field | CSP directive | Use case |
+|---|---|---|
+| `ConnectDomains` | `connect-src` | `fetch` / `XMLHttpRequest` / WebSocket targets (this fixture: soundfont CDN) |
+| `ResourceDomains` | `script-src` / `style-src` / `img-src` / `font-src` / `media-src` | static assets the iframe loads (CDN-hosted libs, images, fonts) |
+| `FrameDomains` | `frame-src` | nested iframes the App embeds |
+| `BaseUriDomains` | `base-uri` | `<base href>` overrides |
 
 ## What to Try Next
 
