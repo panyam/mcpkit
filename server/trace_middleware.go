@@ -174,7 +174,7 @@ func traceMiddleware(tp core.TracerProvider) Middleware {
 func traceInjectNotifyWrap(tc core.TraceContext) func(core.NotifyFunc) core.NotifyFunc {
 	return func(orig core.NotifyFunc) core.NotifyFunc {
 		return func(method string, params any) {
-			orig(method, injectTraceContextIntoParams(params, tc))
+			orig(method, core.InjectTraceContextIntoParams(params, tc))
 		}
 	}
 }
@@ -184,61 +184,9 @@ func traceInjectNotifyWrap(tc core.TraceContext) func(core.NotifyFunc) core.Noti
 func traceInjectRequestWrap(tc core.TraceContext) func(core.RequestFunc) core.RequestFunc {
 	return func(orig core.RequestFunc) core.RequestFunc {
 		return func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-			return orig(ctx, method, injectTraceContextIntoParams(params, tc))
+			return orig(ctx, method, core.InjectTraceContextIntoParams(params, tc))
 		}
 	}
-}
-
-// injectTraceContextIntoParams returns a params value with `_meta.traceparent`
-// and (if non-empty) `_meta.tracestate` populated from tc. Behavior:
-//
-//   - If params is nil, returns a fresh object with just `_meta`.
-//   - If params marshals to a JSON object, the object's `_meta` is
-//     read/created and the trace keys are added. Existing entries are
-//     preserved — explicit handler-set values win.
-//   - If params marshals but is not a JSON object (positional array,
-//     scalar, etc.), the value is returned unchanged. The JSON-RPC spec
-//     permits non-object params; `_meta` is only defined inside objects.
-//   - If params fails to marshal, it is returned unchanged so the
-//     downstream encoder can surface the original error.
-//
-// The function clones the decoded map rather than mutating any value the
-// handler may still reference.
-func injectTraceContextIntoParams(params any, tc core.TraceContext) any {
-	if tc.IsZero() {
-		return params
-	}
-	if params == nil {
-		meta := map[string]any{}
-		core.InjectTraceContext(meta, tc)
-		return map[string]any{"_meta": meta}
-	}
-	raw, err := json.Marshal(params)
-	if err != nil {
-		return params
-	}
-	var obj map[string]any
-	if err := json.Unmarshal(raw, &obj); err != nil {
-		// Non-object params (positional array, scalar, etc.). Leave alone.
-		return params
-	}
-	if obj == nil {
-		obj = map[string]any{}
-	}
-	meta, _ := obj["_meta"].(map[string]any)
-	if meta == nil {
-		meta = map[string]any{}
-	}
-	if _, exists := meta[core.MetaKeyTraceparent]; !exists {
-		meta[core.MetaKeyTraceparent] = tc.Traceparent
-	}
-	if tc.Tracestate != "" {
-		if _, exists := meta[core.MetaKeyTracestate]; !exists {
-			meta[core.MetaKeyTracestate] = tc.Tracestate
-		}
-	}
-	obj["_meta"] = meta
-	return obj
 }
 
 // parseToolCallName extracts the `name` field from a tools/call params
