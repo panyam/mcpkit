@@ -64,6 +64,47 @@ func ReplaceSessionNotifyFunc(ctx context.Context, fn NotifyFunc) context.Contex
 	return context.WithValue(ctx, sessionCtxKey, &newSC)
 }
 
+// WrapSessionNotifyFunc replaces the session's notifyFunc with the result of
+// applying wrap to the current one. Returns ctx unchanged when no session is
+// attached or wrap is nil. Provided so cross-cutting concerns (trace context
+// injection, audit logging) can wrap notify without re-implementing the
+// sessionCtx clone dance — symmetric with WrapSessionRequestFunc.
+//
+// Common usage from middleware that has the request ctx:
+//
+//	ctx = core.WrapSessionNotifyFunc(ctx, func(orig core.NotifyFunc) core.NotifyFunc {
+//	    return func(method string, params any) {
+//	        // mutate params or method, then forward
+//	        orig(method, params)
+//	    }
+//	})
+func WrapSessionNotifyFunc(ctx context.Context, wrap func(NotifyFunc) NotifyFunc) context.Context {
+	if wrap == nil {
+		return ctx
+	}
+	sc := sessionFromContext(ctx)
+	if sc == nil || sc.notify == nil {
+		return ctx
+	}
+	return ReplaceSessionNotifyFunc(ctx, wrap(sc.notify))
+}
+
+// WrapSessionRequestFunc replaces the session's requestFunc with the result of
+// applying wrap to the current one. Returns ctx unchanged when no session is
+// attached, the session has no requestFunc (e.g., transports that do not
+// support server-to-client requests), or wrap is nil. Symmetric with
+// WrapSessionNotifyFunc.
+func WrapSessionRequestFunc(ctx context.Context, wrap func(RequestFunc) RequestFunc) context.Context {
+	if wrap == nil {
+		return ctx
+	}
+	sc := sessionFromContext(ctx)
+	if sc == nil || sc.request == nil {
+		return ctx
+	}
+	return ReplaceSessionRequestFunc(ctx, wrap(sc.request))
+}
+
 // ApplySessionNotifyFilter wraps the session's current notifyFunc with a
 // filter that silently drops notifications whose method matches any entry in
 // dropMethods, forwarding everything else to the inner notifyFunc. Used by

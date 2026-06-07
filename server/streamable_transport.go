@@ -196,6 +196,15 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// SEP-2028 — bridge W3C trace context HTTP headers into ctx. The trace
+	// middleware (SEP-414 P2) uses this as a fallback when the request has
+	// no in-band `_meta.traceparent`. Done once here at the entry point
+	// so all dispatch paths (sync, SSE, batch, stateless, initialize)
+	// inherit the trace context via r.Context().
+	if r.Header.Get(httpHeaderTraceparent) != "" {
+		r = r.WithContext(withTraceContextFromHTTPHeaders(r.Context(), r.Header))
+	}
+
 	body, claims, ok := readAndAuthorize(w, r, t.server)
 	if !ok {
 		return
