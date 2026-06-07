@@ -449,10 +449,11 @@ func TestSuspend_DoesNotAutoPostTerminatedTwice(t *testing.T) {
 	require.False(t, st.Active)
 
 	// Reach into the registry directly (this is what a corrupt caller
-	// or future code path might do).
-	r.mu.RLock()
-	target, ok := r.targets[string(canonical)]
-	r.mu.RUnlock()
+	// or future code path might do). Uses the package-private
+	// lookupTarget helper since the targets map is now behind a
+	// WebhookStore seam — the test still owns mu coordination via
+	// lookupTarget's internal RLock.
+	target, ok := r.lookupTarget(canonical)
 	require.True(t, ok)
 	r.deliver(target, "evt_c", []byte(`{}`))
 
