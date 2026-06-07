@@ -259,3 +259,4 @@ After reading this page, downstream pages can assume:
 - **[Roots/list](./roots-list.md)** *(stub, leaf)* — Filesystem roots security model, the `notifications/roots/list_changed` refresh path, why this one is infrastructure-managed.
 - **[MRTR](./mrtr.md)** — The stateless-server alternative; full comparison table in Q1.
 - **[Cancellation deep-dive](./cancellation.md)** *(stub, leaf)* — How cancellation propagates from a forward call into outstanding reverse calls via the handler-context back-pointer.
+- **[Tracing (SEP-414)](./otel.md)** *(root, FAQ-style)* — outbound `_meta.traceparent` injection on a server-originated `sampling`/`elicitation`/`roots` request is what keeps a distributed trace connected across the reverse-call hop; the chained client→server→client trace in its Q5 passes straight through this machinery.
