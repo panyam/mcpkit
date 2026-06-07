@@ -214,6 +214,30 @@ Two documented **asymmetries** (deliberate scope cuts, not bugs):
 - **No SEP-2028 HTTP header on outbound client calls** — the client stamps `_meta`, not the HTTP `traceparent` header. Additive; deferred until HTTP-layer infra observability needs it.
 - **No SpanKind** — `core.Span` has no `Client`/`Server` kind surface, so the OTel SDK records every mcpkit span as `Internal` in both directions. A typed attribute / kind surface may land when a real adapter needs it.
 
+## Q7 — Where does tracing *not* reach yet, and is that a SEP-414 gap?
+
+The five phases instrumented the **dispatch spine** — so every method, including tasks / apps / auth-gated calls, already gets one inbound span and wire propagation for free. What they did *not* do is instrument the work each surface does that **escapes** or **hides inside** that single span. Before treating that as a spec hole, separate three layers:
+
+| Layer | Who owns it | Status |
+|---|---|---|
+| **Wire contract** — the `_meta` keys, format, precedence, SEP-2028 bridge | SEP-414 (normative — cross-SDK interop) | **complete** |
+| **Local span richness** — span count, names, attributes, links | the SDK (latitude; invisible to the peer) | mcpkit-completeness work |
+| **Adjacent-transport hops** — events bus, apps Bridge | mostly the SDK; the Apps Bridge *may* belong in the Apps spec | open |
+
+So **SEP-414 is not incomplete.** Span richness can't be specified because it never crosses the wire — it's quality-of-implementation. The gaps are mcpkit's to close, surface by surface (tracked in the [SEP-414 P6 umbrella][p6]):
+
+- **Auth** *(inside the span)* — JWKS / introspection / OAuth I/O wants sub-spans, and the resolved principal wants to be an attribute. Blocked on a `core` addition: there's no `SpanFromContext`, so inner code can't enrich the *active* span — only start a child or reach past the abstraction.
+- **Tasks** *(escapes the span)* — task work runs after the create span ends; polls are separate traces. The fit is **span links**, not parentage — a second `core` contract gap (`StartSpan` is parent-from-ctx only).
+- **Apps** *(boundary)* — a browser-originated trace connects to the backend only if the Bridge `postMessage` envelope relays `traceparent`. Same mechanism as the events bus, across JS↔Go. No new `core` API — `Inject`/`Extract` already work on any map.
+
+Two observations are the through-line of the whole "across surfaces" story:
+
+- The **two new propagation surfaces** (apps Bridge, events bus) need **no new contract** — `core.ExtractTraceContext` / `InjectTraceContext` operate on any `map[string]any`, transport-agnostic by design.
+- The **two enrichment surfaces** (auth, tasks) reveal the only real P1 gaps — `SpanFromContext` and span links — neither of which the spine needed, which is exactly why P1 omitted them.
+
+> [!NOTE]
+> **Branch →** [SEP-414 P6 umbrella][p6] tracks all five (auth / tasks / apps + the two `core` contract gaps), with the events bus (#642 / #629) as the sibling case.
+
 ## End-state
 
 After this page you can:
@@ -224,15 +248,17 @@ After this page you can:
 - Trace one request through the server middleware: extract → `WithTraceContext` → `StartSpan` → handler → outbound inject → `End` + outcome recording; and articulate the **inner-vs-outer** rule (outermost on both paths, for different reasons).
 - Follow a **single trace across the wire** (client A → server B → client C), and explain why parent-child precision lives in the **adapter** (the child-TC rewrite) while the Noop path still correlates coarsely.
 - State the **client/server symmetry** and the two documented asymmetries (no outbound HTTP header, no SpanKind).
+- Separate the **three layers** (wire contract / local span richness / adjacent-transport hops) and explain why "tracing doesn't reach auth/tasks/apps yet" is mcpkit-completeness work, **not** a SEP-414 spec gap.
 
 ## Next to read
 
 - **[Reverse-call mechanics](./reverse-call.md)** — the server→client requests (sampling / elicit / roots) that make outbound propagation matter; Q5's chained trace passes straight through this machinery.
 - **[Extension mechanisms](./extension-mechanisms.md)** — revisit the `_meta`-field knob now that you've seen the canonical `_meta`-field-plus-middleware extension worked end to end.
 - **[`experimental/ext/events/`](../../experimental/ext/events/README.md)** *(branch, target-shape)* — the cross-replica events `EventBus` is a **third** trace-propagation surface SEP-414's two hops don't cover: events cross replicas over Redis/Kafka, *not* the MCP wire, so the bus envelope must carry `traceparent` / `tracestate` to keep a trace connected from ingest-replica to egress-replica.
+- **[SEP-414 P6 umbrella][p6]** *(tracking issue)* — tracing across the auth / tasks / apps surfaces + the two `core` contract gaps (`SpanFromContext`, span links); see Q7.
 
 > [!WARNING]
-> **Target-shape gap (extension).** SEP-414 propagates trace context over the MCP wire only (in-band `_meta`, plus the SEP-2028 HTTP-header bridge). Cross-replica propagation over an events `EventBus` is additional surface tracked in the prod-events work, not yet shipped. It will be reconciled by addition — the `core.TracerProvider` contract on this page is already sufficient for it.
+> **Target-shape gap (extension).** SEP-414 propagates trace context over the MCP wire only (in-band `_meta`, plus the SEP-2028 HTTP-header bridge). Tracing the work each surface does beyond the dispatch span — auth sub-spans, async task links, the apps Bridge hop, the cross-replica events bus — is additive mcpkit-completeness work tracked in the [SEP-414 P6 umbrella][p6] (and #642 / #629 for events), not yet shipped. It reconciles by addition; the `core.TracerProvider` contract on this page is the foundation, with two small `core` additions (`SpanFromContext`, span links) called out in Q7.
 
 <!-- ─────────────────────────────────────────────────────────────────────────
      Spec citation links.
@@ -243,3 +269,4 @@ After this page you can:
 
 [w3c-tc]:        https://www.w3.org/TR/trace-context/
 [mcpkit-sep414]: https://github.com/panyam/mcpkit/blob/main/docs/SEP_414_OTEL.md
+[p6]:            https://github.com/panyam/mcpkit/issues/663

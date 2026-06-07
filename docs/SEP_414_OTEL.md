@@ -186,6 +186,50 @@ Tracked phases on [issue 312][issue]:
   screenshots. The minimal `examples/otel/stdout/` already covers
   smoke-verification.
 - **Conformance suite `testconf-otel`** — issue 429.
+- **P6 — tracing across surfaces.** Umbrella [issue 663][p6]. See below.
+
+## P6 — tracing across surfaces (auth / tasks / apps)
+
+P1–P5 instrumented the **dispatch spine**: every JSON-RPC method gets one
+inbound span plus W3C wire propagation, for free. P6 extends tracing into
+the work each surface does that the single dispatch span doesn't cover.
+
+**Is this a SEP-414 gap? No.** Separate three layers:
+
+| Layer | Owner | Status |
+|---|---|---|
+| Wire contract (the `_meta` keys, format, precedence, SEP-2028 bridge) | SEP-414 — normative, for cross-SDK interop | complete |
+| Local span richness (count, names, attributes, links) | the SDK — latitude; invisible to the peer | mcpkit-completeness work (P6) |
+| Adjacent-transport hops (events bus, apps Bridge) | mostly the SDK; the Apps Bridge *may* belong in the Apps spec | open |
+
+Span richness never crosses the wire, so a SEP can't (and shouldn't)
+mandate it. The one genuine spec question is the **apps Bridge**
+(`postMessage`): if cross-SDK app-tracing interop is a goal, whether
+`traceparent` rides the bridge envelope belongs in the **ext-ui / Apps
+spec**, not SEP-414.
+
+Two categories of "work the spine misses":
+
+- **(a) escapes the span** — async / out-of-band on a non-MCP transport:
+  tasks background execution ([#659][p6-tasks]), events cross-replica bus
+  ([#642][caps] / [#629][bus]).
+- **(b) inside the span, not broken out / enriched** — auth validation
+  sub-spans + principal attributes ([#658][p6-auth]).
+
+The two categories map cleanly onto the contract:
+
+- **New propagation surfaces need no new contract** — `core.ExtractTraceContext`
+  / `InjectTraceContext` already operate on any `map[string]any`, so the
+  apps Bridge ([#660][p6-apps]) and the events bus reuse them verbatim.
+- **Enrichment surfaces reveal the only two P1 gaps**, neither of which the
+  spine needed: `core.SpanFromContext` (active-span accessor, [#661][p6-spanctx];
+  unblocks auth attributes) and **span links** on `core.Span` ([#662][p6-links];
+  unblocks task lifecycle).
+
+The pattern is identical across all five: each `ext/` surface optionally
+accepts a `core.TracerProvider` and instruments its own work, depending on
+the **`core` abstraction only** — never `ext/otel`. Same composition shape
+`ext/events` uses for `core.Claims`. `Noop` / nil = zero overhead.
 
 ## Downstream consumers of the Phase 1 contract
 
@@ -202,3 +246,11 @@ Tracked phases on [issue 312][issue]:
   interface to keep the contract dep-free.
 
 [issue]: https://github.com/panyam/mcpkit/issues/312
+[p6]: https://github.com/panyam/mcpkit/issues/663
+[p6-auth]: https://github.com/panyam/mcpkit/issues/658
+[p6-tasks]: https://github.com/panyam/mcpkit/issues/659
+[p6-apps]: https://github.com/panyam/mcpkit/issues/660
+[p6-spanctx]: https://github.com/panyam/mcpkit/issues/661
+[p6-links]: https://github.com/panyam/mcpkit/issues/662
+[caps]: https://github.com/panyam/mcpkit/issues/642
+[bus]: https://github.com/panyam/mcpkit/issues/629
