@@ -178,12 +178,16 @@ else
     done
 
     echo ""
-    echo "=== tools/list parity check ==="
-    # Copy the diff script into ext-apps so Node's ESM resolver walks up into
-    # ext-apps' node_modules naturally (NODE_PATH only works for CJS; the
-    # script imports @modelcontextprotocol/sdk as ESM).
-    cp /mcpkit/scripts/apps-playwright-tools-diff.mjs "$EXT_APPS_DIR/.tools-diff.mjs"
-    if ! node "$EXT_APPS_DIR/.tools-diff.mjs" \
+    echo "=== parity check: tools/list + resources/read _meta ==="
+    # Stdlib-only Python — no third-party deps, no SDK. Speaks Streamable
+    # HTTP directly. Covers BOTH tools/list (tool meta, schemas) AND
+    # resources/read (per-content _meta, where iframe sandbox policy lives).
+    # The previous tools-only diff missed transcript permissions (PR 623)
+    # and sheet-music CSP (PR 643) — both surfaced on the resource read
+    # response, not on tool_meta. Invoked via `python3` (already on the
+    # Noble base image) rather than `uv run` to avoid a uv install step
+    # inside the container.
+    if ! python3 /mcpkit/scripts/apps_parity_diff.py \
         "mcpkit" "http://localhost:$FIXTURE_PORT/mcp" \
         "upstream" "http://localhost:$UPSTREAM_PORT/mcp"; then
         DRIFT_EXIT=$?
