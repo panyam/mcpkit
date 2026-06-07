@@ -165,6 +165,37 @@ refresh-visual-gallery: ## Regenerate the side-by-side baselines gallery (mcpkit
 	uv run scripts/apps_visual_gallery.py
 	@echo "Gallery refreshed. Commit docs/site/content/conformance/apps/visual-gallery/ + docs/site/static/conformance/apps/visual-gallery/."
 
+release-audit-apps: ## Release-time apps/compat audit umbrella — fully end-to-end: refresh ext-apps clone → docker-all (parity + visual gate) → regenerate gallery → commit + push the gallery → ghdeploy. Single command for "release-time, just do everything."
+	@echo "==> [1/5] Refreshing upstream ext-apps clone at /tmp/ext-apps..."
+	@if [ -d /tmp/ext-apps/.git ]; then \
+		(cd /tmp/ext-apps && git pull --quiet) && echo "  pulled"; \
+	else \
+		git clone --quiet https://github.com/modelcontextprotocol/ext-apps.git /tmp/ext-apps && echo "  cloned"; \
+	fi
+	@echo ""
+	@echo "==> [2/5] Running docker-all (parity diff + Playwright visual gate across 21 fixtures)..."
+	@$(MAKE) test-apps-playwright-docker-all || echo "  WARNING: docker-all failed. Continuing so drift is captured in the gallery for inspection."
+	@echo ""
+	@echo "==> [3/5] Regenerating visual gallery..."
+	@$(MAKE) refresh-visual-gallery
+	@echo ""
+	@echo "==> [4/5] Committing + pushing regenerated gallery artifacts..."
+	@if git status --porcelain docs/site/content/conformance/apps/visual-gallery/ docs/site/static/conformance/apps/visual-gallery/ 2>/dev/null | grep -q .; then \
+		git add docs/site/content/conformance/apps/visual-gallery/ docs/site/static/conformance/apps/visual-gallery/; \
+		git commit -m "refresh: visual gallery for release"; \
+		git push; \
+		echo "  committed + pushed"; \
+	else \
+		echo "  no gallery changes; nothing to commit"; \
+	fi
+	@echo ""
+	@echo "==> [5/5] Deploying docs site to gh-pages..."
+	@$(MAKE) ghdeploy
+	@echo ""
+	@echo "==> Release audit complete."
+	@echo "    Gallery: https://panyam.github.io/mcpkit/conformance/apps/visual-gallery/"
+	@echo "    (gh-pages CDN may take 1-5 min to flush)"
+
 demo-app: ## Browse a compat fixture interactively. Default: mcpkit-Go server + basic-host (no LLM needed). basic-host runs on :8080; open it manually (or pass OPEN=1 to auto-open). Override with RENDERER=mcpjam for wire inspection. Usage: make demo-app EXAMPLE=<name>.
 	EXAMPLE=$(EXAMPLE) SERVER=$${SERVER:-go} RENDERER=$${RENDERER:-basic-host} OPEN=$(OPEN) uv run scripts/apps_demo.py
 
@@ -532,5 +563,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-skills test-mcpskills build-mcpskills test-mcpskills-walkthrough test-protogen test-e2e test-experimental test-apps-playwright test-apps-playwright-docker test-apps-playwright-all test-apps-playwright-docker-all refresh-visual-gallery demo-app demo-upstream testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-elicitation testconf-skills refresh-conformance check-conformance-stale check-local-suites-stale refresh-apps-compat-report check-apps-compat-stale vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root collect-walkthroughs ghbuild ghserve ghdeploy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
+.PHONY: build test test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-skills test-mcpskills build-mcpskills test-mcpskills-walkthrough test-protogen test-e2e test-experimental test-apps-playwright test-apps-playwright-docker test-apps-playwright-all test-apps-playwright-docker-all refresh-visual-gallery release-audit-apps demo-app demo-upstream testkcl testkcl-auto testall test-report smoke testconfall testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-elicitation testconf-skills refresh-conformance check-conformance-stale check-local-suites-stale refresh-apps-compat-report check-apps-compat-stale vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root collect-walkthroughs ghbuild ghserve ghdeploy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
 .DEFAULT_GOAL := help
