@@ -13,6 +13,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -112,6 +113,93 @@ func TestNewOTelPipeline_HappyPath(t *testing.T) {
 	// panic.
 	shutdown()
 	shutdown()
+}
+
+// TestEndToEnd_BothSidesEmitSpans is the headline check for this PR.
+// Each "side" (server and client) wires its own OTel pipeline against a
+// separate InMemoryExporter — the same shape the walkthrough builds at
+// runtime, just with introspectable exporters instead of stdouttrace.
+// The test drives a real tools/call from a real *client.Client WITHOUT
+// supplying an explicit _meta.traceparent so the client trace middleware
+// stamps its own child traceparent on the wire. Asserts: (1) both
+// exporters recorded a tools/call span, (2) they share a TraceID,
+// (3) the server span's Parent.SpanID matches the client span's SpanID,
+// and (4) instrumentation scopes are correctly differentiated.
+//
+// This is the "auto-stitch" path that proves the SEP-414 wire works
+// end-to-end with no synthetic inbound override — the common case for
+// developers wiring observability into a fresh mcpkit stack.
+func TestEndToEnd_BothSidesEmitSpans(t *testing.T) {
+	serverExp := tracetest.NewInMemoryExporter()
+	serverTP := sdktrace.NewTracerProvider(sdktrace.WithSyncer(serverExp))
+	t.Cleanup(func() { _ = serverTP.Shutdown(context.Background()) })
+
+	clientExp := tracetest.NewInMemoryExporter()
+	clientTP := sdktrace.NewTracerProvider(sdktrace.WithSyncer(clientExp))
+	t.Cleanup(func() { _ = clientTP.Shutdown(context.Background()) })
+
+	srv := server.NewServer(
+		core.ServerInfo{Name: "otel-stdout-demo", Version: "0.1.0"},
+		server.WithTracerProvider(mcpotel.NewProvider(serverTP)),
+	)
+	registerEcho(srv)
+
+	ts := httptest.NewServer(srv.Handler(server.WithStreamableHTTP(true)))
+	t.Cleanup(ts.Close)
+
+	c := client.NewClient(ts.URL+"/mcp",
+		core.ClientInfo{Name: "otel-stdout-test", Version: "1.0"},
+		client.WithTracerProvider(mcpotel.NewProvider(clientTP,
+			mcpotel.WithInstrumentationName("github.com/panyam/mcpkit/client"),
+		)),
+	)
+	require.NoError(t, c.Connect())
+	t.Cleanup(func() { _ = c.Close() })
+
+	_, err := c.Call("tools/call", map[string]any{
+		"name":      "echo",
+		"arguments": map[string]any{"message": "hello"},
+	})
+	require.NoError(t, err)
+
+	clientSpan := findToolsCallSpan(clientExp.GetSpans())
+	require.NotNil(t, clientSpan, "client exporter must record a tools/call span; saw %v", spanNames(clientExp.GetSpans()))
+	serverSpan := findToolsCallSpan(serverExp.GetSpans())
+	require.NotNil(t, serverSpan, "server exporter must record a tools/call span; saw %v", spanNames(serverExp.GetSpans()))
+
+	assert.Equal(t, clientSpan.SpanContext.TraceID(), serverSpan.SpanContext.TraceID(),
+		"client and server must share a TraceID — that IS the SEP-414 propagation")
+	assert.Equal(t, clientSpan.SpanContext.SpanID(), serverSpan.Parent.SpanID(),
+		"server span Parent.SpanID must match the client SpanID — proves the client trace middleware stamped the outbound _meta.traceparent")
+	assert.True(t, serverSpan.Parent.IsRemote(),
+		"server span Parent must be Remote (came over the wire)")
+
+	clientAttrs := flattenAttrs(clientSpan)
+	assert.Equal(t, "tools/call", clientAttrs["mcp.method"])
+	assert.Equal(t, "echo", clientAttrs["mcp.tool.name"])
+
+	serverAttrs := flattenAttrs(serverSpan)
+	assert.Equal(t, "tools/call", serverAttrs["mcp.method"])
+	assert.Equal(t, "echo", serverAttrs["mcp.tool.name"])
+
+	assert.Equal(t, "github.com/panyam/mcpkit/client", clientSpan.InstrumentationScope.Name,
+		"client-side spans should be tagged with the client instrumentation library name")
+	assert.Equal(t, "github.com/panyam/mcpkit/server", serverSpan.InstrumentationScope.Name,
+		"server-side spans should keep the default instrumentation library name")
+}
+
+// Reference json.Unmarshal so the encoding/json import remains used even
+// if other helpers are removed; assertion bodies above operate on
+// structured exporter output rather than raw JSON. Lint guard only.
+var _ = json.Unmarshal
+
+func findToolsCallSpan(spans []tracetest.SpanStub) *tracetest.SpanStub {
+	for i := range spans {
+		if spans[i].Name == "tools/call" {
+			return &spans[i]
+		}
+	}
+	return nil
 }
 
 func spanNames(spans []tracetest.SpanStub) []string {
