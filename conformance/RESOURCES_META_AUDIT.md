@@ -71,20 +71,6 @@ DRIFT in initialize (serverInfo + capabilities) between mcpkit (http://localhost
        "listChanged": true
      },
 
-DRIFT in resources/list between mcpkit (http://localhost:3101/mcp) and upstream (http://localhost:3102/mcp)
-
---- mcpkit
-+++ upstream
-@@ -1,7 +1,7 @@
- [
-   {
-     "mimeType": "text/html;profile=mcp-app",
--    "name": "show-map UI",
-+    "name": "ui://cesium-map/mcp-app.html",
-     "uri": "ui://cesium-map/mcp-app.html"
-   }
- ]
-
 DRIFT in resources/read _meta between mcpkit (http://localhost:3101/mcp) and upstream (http://localhost:3102/mcp)
 
 DRIFT on ui://cesium-map/mcp-app.html:
@@ -134,20 +120,6 @@ DRIFT in initialize (serverInfo + capabilities) between mcpkit (http://localhost
      "resources": {
        "listChanged": true
      },
-
-DRIFT in resources/list between mcpkit (http://localhost:3101/mcp) and upstream (http://localhost:3102/mcp)
-
---- mcpkit
-+++ upstream
-@@ -1,7 +1,7 @@
- [
-   {
-     "mimeType": "text/html;profile=mcp-app",
--    "name": "display_pdf UI",
-+    "name": "ui://pdf-viewer/mcp-app.html",
-     "uri": "ui://pdf-viewer/mcp-app.html"
-   }
- ]
 
 DRIFT in resources/read _meta between mcpkit (http://localhost:3101/mcp) and upstream (http://localhost:3102/mcp)
 
@@ -199,20 +171,6 @@ DRIFT in initialize (serverInfo + capabilities) between mcpkit (http://localhost
      "resources": {
        "listChanged": true
      },
-
-DRIFT in resources/list between mcpkit (http://localhost:3101/mcp) and upstream (http://localhost:3102/mcp)
-
---- mcpkit
-+++ upstream
-@@ -1,7 +1,7 @@
- [
-   {
-     "mimeType": "text/html;profile=mcp-app",
--    "name": "get-time UI",
-+    "name": "ui://get-time/mcp-app.html",
-     "uri": "ui://get-time/mcp-app.html"
-   }
- ]
 ```
 
 </details>
@@ -233,20 +191,6 @@ DRIFT in initialize (serverInfo + capabilities) between mcpkit (http://localhost
      "resources": {
        "listChanged": true
      },
-
-DRIFT in resources/list between mcpkit (http://localhost:3101/mcp) and upstream (http://localhost:3102/mcp)
-
---- mcpkit
-+++ upstream
-@@ -1,7 +1,7 @@
- [
-   {
-     "mimeType": "text/html;profile=mcp-app",
--    "name": "get-time UI",
-+    "name": "ui://get-time/mcp-app.html",
-     "uri": "ui://get-time/mcp-app.html"
-   }
- ]
 ```
 
 </details>
@@ -267,20 +211,6 @@ DRIFT in initialize (serverInfo + capabilities) between mcpkit (http://localhost
      "resources": {
        "listChanged": true
      },
-
-DRIFT in resources/list between mcpkit (http://localhost:3101/mcp) and upstream (http://localhost:3102/mcp)
-
---- mcpkit
-+++ upstream
-@@ -1,7 +1,7 @@
- [
-   {
-     "mimeType": "text/html;profile=mcp-app",
--    "name": "get-time UI",
-+    "name": "ui://get-time/mcp-app.html",
-     "uri": "ui://get-time/mcp-app.html"
-   }
- ]
 ```
 
 </details>
@@ -301,20 +231,6 @@ DRIFT in initialize (serverInfo + capabilities) between mcpkit (http://localhost
      "resources": {
        "listChanged": true
      },
-
-DRIFT in resources/list between mcpkit (http://localhost:3101/mcp) and upstream (http://localhost:3102/mcp)
-
---- mcpkit
-+++ upstream
-@@ -1,7 +1,7 @@
- [
-   {
-     "mimeType": "text/html;profile=mcp-app",
--    "name": "get-time UI",
-+    "name": "ui://get-time/mcp-app.html",
-     "uri": "ui://get-time/mcp-app.html"
-   }
- ]
 ```
 
 </details>
@@ -335,20 +251,6 @@ DRIFT in initialize (serverInfo + capabilities) between mcpkit (http://localhost
      "resources": {
        "listChanged": true
      },
-
-DRIFT in resources/list between mcpkit (http://localhost:3101/mcp) and upstream (http://localhost:3102/mcp)
-
---- mcpkit
-+++ upstream
-@@ -1,7 +1,7 @@
- [
-   {
-     "mimeType": "text/html;profile=mcp-app",
--    "name": "get-time UI",
-+    "name": "ui://get-time/mcp-app.html",
-     "uri": "ui://get-time/mcp-app.html"
-   }
- ]
 ```
 
 </details>
@@ -369,20 +271,6 @@ DRIFT in initialize (serverInfo + capabilities) between mcpkit (http://localhost
      "resources": {
        "listChanged": true
      },
-
-DRIFT in resources/list between mcpkit (http://localhost:3101/mcp) and upstream (http://localhost:3102/mcp)
-
---- mcpkit
-+++ upstream
-@@ -1,7 +1,7 @@
- [
-   {
-     "mimeType": "text/html;profile=mcp-app",
--    "name": "get-time UI",
-+    "name": "ui://get-time/mcp-app.html",
-     "uri": "ui://get-time/mcp-app.html"
-   }
- ]
 ```
 
 </details>
@@ -403,20 +291,6 @@ DRIFT in initialize (serverInfo + capabilities) between mcpkit (http://localhost
      "resources": {
        "listChanged": true
      },
-
-DRIFT in resources/list between mcpkit (http://localhost:3101/mcp) and upstream (http://localhost:3102/mcp)
-
---- mcpkit
-+++ upstream
-@@ -1,7 +1,7 @@
- [
-   {
-     "mimeType": "text/html;profile=mcp-app",
--    "name": "get-time UI",
-+    "name": "ui://get-time/mcp-app.html",
-     "uri": "ui://get-time/mcp-app.html"
-   }
- ]
 ```
 
 </details>
@@ -437,21 +311,6 @@ DRIFT in initialize (serverInfo + capabilities) between mcpkit (http://localhost
      "resources": {
        "listChanged": true
      },
-
-DRIFT in resources/list between mcpkit (http://localhost:3101/mcp) and upstream (http://localhost:3102/mcp)
-
---- mcpkit
-+++ upstream
-@@ -1,7 +1,8 @@
- [
-   {
-+    "description": "Transcript UI",
-     "mimeType": "text/html;profile=mcp-app",
--    "name": "transcribe UI",
-+    "name": "ui://transcript/mcp-app.html",
-     "uri": "ui://transcript/mcp-app.html"
-   }
- ]
 ```
 
 </details>
@@ -472,21 +331,6 @@ DRIFT in initialize (serverInfo + capabilities) between mcpkit (http://localhost
      "resources": {
        "listChanged": true
      },
-
-DRIFT in resources/list between mcpkit (http://localhost:3101/mcp) and upstream (http://localhost:3102/mcp)
-
---- mcpkit
-+++ upstream
-@@ -1,7 +1,8 @@
- [
-   {
-+    "description": "Sheet Music Viewer UI",
-     "mimeType": "text/html;profile=mcp-app",
--    "name": "play-sheet-music UI",
-+    "name": "ui://sheet-music/mcp-app.html",
-     "uri": "ui://sheet-music/mcp-app.html"
-   }
- ]
 ```
 
 </details>
@@ -507,20 +351,6 @@ DRIFT in initialize (serverInfo + capabilities) between mcpkit (http://localhost
      "resources": {
        "listChanged": true
      },
-
-DRIFT in resources/list between mcpkit (http://localhost:3101/mcp) and upstream (http://localhost:3102/mcp)
-
---- mcpkit
-+++ upstream
-@@ -6,7 +6,7 @@
-   },
-   {
-     "mimeType": "text/html;profile=mcp-app",
--    "name": "get-time UI",
-+    "name": "ui://get-time/mcp-app.html",
-     "uri": "ui://get-time/mcp-app.html"
-   }
- ]
 ```
 
 </details>
@@ -541,21 +371,6 @@ DRIFT in initialize (serverInfo + capabilities) between mcpkit (http://localhost
      "resources": {
        "listChanged": true
      },
-
-DRIFT in resources/list between mcpkit (http://localhost:3101/mcp) and upstream (http://localhost:3102/mcp)
-
---- mcpkit
-+++ upstream
-@@ -1,7 +1,8 @@
- [
-   {
-+    "description": "Three.js View UI",
-     "mimeType": "text/html;profile=mcp-app",
--    "name": "show_threejs_scene UI",
-+    "name": "ui://threejs/mcp-app.html",
-     "uri": "ui://threejs/mcp-app.html"
-   }
- ]
 ```
 
 </details>
@@ -576,20 +391,6 @@ DRIFT in initialize (serverInfo + capabilities) between mcpkit (http://localhost
      "resources": {
        "listChanged": true
      },
-
-DRIFT in resources/list between mcpkit (http://localhost:3101/mcp) and upstream (http://localhost:3102/mcp)
-
---- mcpkit
-+++ upstream
-@@ -1,7 +1,7 @@
- [
-   {
-     "mimeType": "text/html;profile=mcp-app",
--    "name": "render-shadertoy UI",
-+    "name": "ui://shadertoy/mcp-app.html",
-     "uri": "ui://shadertoy/mcp-app.html"
-   }
- ]
 ```
 
 </details>
@@ -610,20 +411,6 @@ DRIFT in initialize (serverInfo + capabilities) between mcpkit (http://localhost
      "resources": {
        "listChanged": true
      },
-
-DRIFT in resources/list between mcpkit (http://localhost:3101/mcp) and upstream (http://localhost:3102/mcp)
-
---- mcpkit
-+++ upstream
-@@ -1,7 +1,7 @@
- [
-   {
-     "mimeType": "text/html;profile=mcp-app",
--    "name": "get-first-degree-links UI",
-+    "name": "ui://wiki-explorer/mcp-app.html",
-     "uri": "ui://wiki-explorer/mcp-app.html"
-   }
- ]
 ```
 
 </details>
@@ -644,21 +431,6 @@ DRIFT in initialize (serverInfo + capabilities) between mcpkit (http://localhost
      "resources": {
        "listChanged": true
      },
-
-DRIFT in resources/list between mcpkit (http://localhost:3101/mcp) and upstream (http://localhost:3102/mcp)
-
---- mcpkit
-+++ upstream
-@@ -1,7 +1,8 @@
- [
-   {
-+    "description": "Interactive Budget Allocator UI",
-     "mimeType": "text/html;profile=mcp-app",
--    "name": "get-budget-data UI",
-+    "name": "ui://budget-allocator/mcp-app.html",
-     "uri": "ui://budget-allocator/mcp-app.html"
-   }
- ]
 ```
 
 </details>
@@ -679,21 +451,6 @@ DRIFT in initialize (serverInfo + capabilities) between mcpkit (http://localhost
      "resources": {
        "listChanged": true
      },
-
-DRIFT in resources/list between mcpkit (http://localhost:3101/mcp) and upstream (http://localhost:3102/mcp)
-
---- mcpkit
-+++ upstream
-@@ -1,7 +1,8 @@
- [
-   {
-+    "description": "SaaS Scenario Modeler UI",
-     "mimeType": "text/html;profile=mcp-app",
--    "name": "get-scenario-data UI",
-+    "name": "ui://scenario-modeler/mcp-app.html",
-     "uri": "ui://scenario-modeler/mcp-app.html"
-   }
- ]
 ```
 
 </details>
@@ -714,21 +471,6 @@ DRIFT in initialize (serverInfo + capabilities) between mcpkit (http://localhost
      "resources": {
        "listChanged": true
      },
-
-DRIFT in resources/list between mcpkit (http://localhost:3101/mcp) and upstream (http://localhost:3102/mcp)
-
---- mcpkit
-+++ upstream
-@@ -1,7 +1,8 @@
- [
-   {
-+    "description": "System Monitor UI",
-     "mimeType": "text/html;profile=mcp-app",
--    "name": "get-system-info UI",
-+    "name": "ui://system-monitor/mcp-app.html",
-     "uri": "ui://system-monitor/mcp-app.html"
-   }
- ]
 ```
 
 </details>
@@ -749,20 +491,6 @@ DRIFT in initialize (serverInfo + capabilities) between mcpkit (http://localhost
      "resources": {
        "listChanged": true
      },
-
-DRIFT in resources/list between mcpkit (http://localhost:3101/mcp) and upstream (http://localhost:3102/mcp)
-
---- mcpkit
-+++ upstream
-@@ -1,7 +1,7 @@
- [
-   {
-     "mimeType": "text/html;profile=mcp-app",
--    "name": "get-cohort-data UI",
-+    "name": "ui://get-cohort-data/mcp-app.html",
-     "uri": "ui://get-cohort-data/mcp-app.html"
-   }
- ]
 ```
 
 </details>
@@ -783,21 +511,6 @@ DRIFT in initialize (serverInfo + capabilities) between mcpkit (http://localhost
      "resources": {
        "listChanged": true
      },
-
-DRIFT in resources/list between mcpkit (http://localhost:3101/mcp) and upstream (http://localhost:3102/mcp)
-
---- mcpkit
-+++ upstream
-@@ -1,7 +1,8 @@
- [
-   {
-+    "description": "Customer Segmentation Explorer UI",
-     "mimeType": "text/html;profile=mcp-app",
--    "name": "get-customer-data UI",
-+    "name": "ui://customer-segmentation/mcp-app.html",
-     "uri": "ui://customer-segmentation/mcp-app.html"
-   }
- ]
 ```
 
 </details>
@@ -818,20 +531,6 @@ DRIFT in initialize (serverInfo + capabilities) between mcpkit (http://localhost
      "resources": {
        "listChanged": true
      },
-
-DRIFT in resources/list between mcpkit (http://localhost:3101/mcp) and upstream (http://localhost:3102/mcp)
-
---- mcpkit
-+++ upstream
-@@ -1,7 +1,7 @@
- [
-   {
-     "mimeType": "text/html;profile=mcp-app",
--    "name": "debug-tool UI",
-+    "name": "ui://debug-tool/mcp-app.html",
-     "uri": "ui://debug-tool/mcp-app.html"
-   }
- ]
 ```
 
 </details>
