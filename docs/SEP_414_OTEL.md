@@ -1,10 +1,12 @@
 # SEP-414: OpenTelemetry Trace Context Propagation
 
-Status: **Phase 1 landed (contract surface only).** Wiring to come.
+Status: **Phases 1–2 landed.** Adapter (Phase 4) and client-side spans
+(Phase 3) still to come.
 
-This document is the future home of the OTel wiring guide for mcpkit.
-Today it links the contract surface that Phase 1 ships and points at the
-remaining phases tracked on [issue #312][issue].
+This document is the wiring guide for mcpkit's OpenTelemetry surface. It
+covers what the shipped phases give you, what to expect once you wire a
+real `TracerProvider`, and where the remaining work lives on
+[issue 312][issue].
 
 ## What Phase 1 ships
 
@@ -35,29 +37,68 @@ Phase 1 introduces **no behavior change**: nothing in mcpkit calls
 `_meta` trace keys. The surface exists so downstream work can be
 written and reviewed against a stable contract.
 
+## What Phase 2 ships
+
+Phase 2 wires the server-side propagation surface:
+
+- `server.WithTracerProvider(tp core.TracerProvider) Option` — install a
+  tracer. Default and `core.NoopTracerProvider{}` both skip the trace
+  middleware entirely so the zero-overhead path stays untouched.
+- An internal `traceMiddleware` wraps every JSON-RPC dispatch in an
+  inbound span, positioned OUTERMOST so user-registered middleware
+  contributes to the recorded latency. Span attributes:
+  - `mcp.method` on every span
+  - `mcp.tool.name` on `tools/call`
+  - `mcp.session.id` when a session is attached
+  - `mcp.error.code` + `Span.RecordError` on JSON-RPC errors
+  - `mcp.tool.is_error="true"` on `tools/call` results carrying `IsError`
+- Inbound trace context resolution: `params._meta.traceparent` wins
+  over the out-of-band TraceContext bridged through `context.Context`.
+  Malformed traceparent values are dropped per the W3C "MUST NOT
+  forward" rule — the span still emits with no parent.
+- The streamable HTTP transport bridges the W3C `traceparent` /
+  `tracestate` HTTP headers (SEP-2028) into `context.Context` once at
+  the POST entry point. All downstream dispatch paths (sync JSON, SSE,
+  batch, stateless, initialize) inherit the bridge.
+- Outbound `_meta.traceparent` / `_meta.tracestate` are injected on
+  every server-to-client message — notifications (logging, progress,
+  resource updates, custom) and server-to-client requests (legacy push
+  for sampling/elicitation/roots). The wrap sits OUTSIDE any
+  user-registered `NotifyInterceptor` / `RequestInterceptor`, so those
+  interceptors observe the same wire form the client receives.
+
+Wiring is a single line in your server bootstrap:
+
+```go
+srv := server.NewServer(info,
+    // ...your other options...
+    server.WithTracerProvider(myTracerProvider),
+)
+```
+
+`myTracerProvider` must implement `core.TracerProvider`. Until the
+Phase 4 `ext/otel/` adapter ships, the only options that emit spans are
+custom implementations — the in-tree `core.NoopTracerProvider`
+intentionally treats "spans" as no-ops.
+
 ## What comes next
 
-Tracked phases on [issue #312][issue]:
+Tracked phases on [issue 312][issue]:
 
-- **P2 — server-side spans.** A `traceMiddleware` in `server/` wraps
-  every dispatch in an inbound span; the streamable transport bridges
-  the HTTP `traceparent` header into `_meta` per SEP-2028; outbound
-  notifications and server-to-client requests inject the active span's
-  trace context into `_meta`.
 - **P3 — client-side spans.** Outbound client calls wrap in spans and
   inject `_meta.traceparent`; incoming server-to-client requests
   extract the parent.
 - **P4 — `ext/otel/` adapter.** A new sub-module (separate `go.mod`)
   that implements `core.TracerProvider` on top of
   `go.opentelemetry.io/otel`. Required for traces to actually flow to
-  an exporter (Jaeger, OTLP, etc.). Until this lands, the
-  `NoopTracerProvider` default means traces go nowhere.
-- **P5 — docs + examples.** This file fills out with the wiring recipe;
-  `examples/otel/` ships a minimal end-to-end walkthrough.
+  an exporter (Jaeger, OTLP, etc.). Until this lands,
+  `NoopTracerProvider` and hand-rolled adapters are the only choices.
+- **P5 — examples.** `examples/otel/` ships a minimal end-to-end
+  walkthrough once an adapter is available.
 
-The four phases can be developed in parallel branches on top of P1 —
-they touch disjoint trees (P2 = `server/`, P3 = `client/`, P4 = a new
-`ext/otel/` module, P5 = docs).
+P3, P4, P5 can be developed in parallel branches on top of P2 — they
+touch disjoint trees (P3 = `client/`, P4 = a new `ext/otel/` module,
+P5 = examples).
 
 ## Downstream consumers of the Phase 1 contract
 
