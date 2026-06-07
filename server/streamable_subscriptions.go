@@ -4,11 +4,15 @@ import (
 	"crypto/rand"
 	"encoding/base32"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"net"
 	"net/http"
 	"sync"
 
 	core "github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/server/stateless"
+	"golang.org/x/time/rate"
 )
 
 // SEP-2575 subscriptions/listen — transport-level state machine.
@@ -26,6 +30,7 @@ import (
 // rather than block the producer).
 type statelessSubscriber struct {
 	id     string
+	scope  string // populated by tryRegister; used by unregister to drop the count
 	filter stateless.SubscribeFilter
 	frames chan stateless.TaggedFrame
 	done   chan struct{}
@@ -48,25 +53,143 @@ func newSubscriptionID() string {
 // statelessSubMap is the transport's set of open subscription streams.
 // Keyed by subscriptionId. RWMutex because fanout (Broadcast path) is
 // the dominant op; register/unregister are bursty but rare.
+//
+// Cap and rate-limit state is keyed by scope (typically remote-host
+// derived) so a single client cannot exhaust the transport by churning
+// subscription streams. The legacy registry (subscriptionRegistry on
+// Server) uses sessionID for the same purpose; on the stateless wire
+// there is no session, so the scope func extracts a stable key from the
+// incoming *http.Request.
 type statelessSubMap struct {
 	mu   sync.RWMutex
 	subs map[string]*statelessSubscriber
+
+	// countsByScope holds the number of currently-open subscription
+	// streams per scope key. limitersByScope are lazy per-scope token
+	// buckets; both are cleared when a scope drops to zero open streams
+	// so disconnected clients leave no state behind.
+	countsByScope   map[string]int
+	limitersByScope map[string]*rate.Limiter
+
+	// Configured once at construction time; safe to read without the
+	// mutex. cap == 0 / rateLimit == 0 disables the respective check.
+	cap       int
+	rateLimit rate.Limit
+	rateBurst int
+	onReject  SubscriptionRejectFunc
+	scopeFn   StatelessSubscriptionScopeFunc
 }
 
-func newStatelessSubMap() *statelessSubMap {
-	return &statelessSubMap{subs: make(map[string]*statelessSubscriber)}
+// StatelessSubscriptionScopeFunc derives a stable key from an inbound
+// HTTP request to identify the calling client for cap / rate-limit
+// bookkeeping. The legacy wire uses sessionID; the stateless wire has
+// no session, so the operator picks the scoping key that makes sense
+// for their deployment (proxy-supplied client header, source IP,
+// auth-subject, etc.).
+//
+// Implementations MUST be deterministic: two requests from the same
+// client must produce the same string, and two requests from different
+// clients should not collide. An empty string is treated as a single
+// shared scope (all anonymous requests count against one bucket); pass
+// a function that returns a non-empty placeholder if that is not what
+// you want.
+type StatelessSubscriptionScopeFunc func(*http.Request) string
+
+// DefaultStatelessSubscriptionScope returns the host portion of
+// r.RemoteAddr — what the OS reports for the TCP peer — and falls back
+// to RemoteAddr verbatim if the port split fails. This is the
+// conservative default: it cannot be spoofed by a malicious client
+// (headers are not consulted), but it lumps every client behind a
+// single reverse-proxy IP into the same scope.
+//
+// For a deployment where the operator trusts a header like
+// X-Forwarded-For to identify clients, supply a custom
+// [StatelessSubscriptionScopeFunc] via
+// [WithStatelessSubscriptionScope].
+//
+// Stability: the wire surface this guards (SEP-2575
+// subscriptions/listen) is in the 2026-07-28 release candidate, not
+// Final. The cap and rate-limit mechanism is mcpkit-internal and not
+// spec-defined — if a future SEP standardizes either, callers may
+// need to migrate.
+func DefaultStatelessSubscriptionScope(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }
 
-func (m *statelessSubMap) register(s *statelessSubscriber) {
+func newStatelessSubMap(cap int, rl rate.Limit, burst int, onReject SubscriptionRejectFunc, scopeFn StatelessSubscriptionScopeFunc) *statelessSubMap {
+	if scopeFn == nil {
+		scopeFn = DefaultStatelessSubscriptionScope
+	}
+	return &statelessSubMap{
+		subs:            make(map[string]*statelessSubscriber),
+		countsByScope:   make(map[string]int),
+		limitersByScope: make(map[string]*rate.Limiter),
+		cap:             cap,
+		rateLimit:       rl,
+		rateBurst:       burst,
+		onReject:        onReject,
+		scopeFn:         scopeFn,
+	}
+}
+
+// tryRegister enforces the per-scope cap and rate limit, then registers
+// s under its subscription id. Returns [ErrStatelessStreamCapExceeded]
+// or [ErrStatelessStreamRateLimited] without registering when refused.
+// scope is the caller-supplied scope key (typically extracted from the
+// incoming HTTP request); it is recorded so unregister can decrement
+// the right bucket.
+func (m *statelessSubMap) tryRegister(s *statelessSubscriber, scope string) error {
 	m.mu.Lock()
+	if m.cap > 0 && m.countsByScope[scope] >= m.cap {
+		m.mu.Unlock()
+		if m.onReject != nil {
+			m.onReject(scope, "subscriptions/listen", "cap_exceeded")
+		}
+		return fmt.Errorf("%w: scope at %d/%d streams", ErrStatelessStreamCapExceeded, m.cap, m.cap)
+	}
+	if m.rateLimit > 0 {
+		lim, ok := m.limitersByScope[scope]
+		if !ok {
+			lim = rate.NewLimiter(m.rateLimit, m.rateBurst)
+			m.limitersByScope[scope] = lim
+		}
+		if !lim.Allow() {
+			m.mu.Unlock()
+			if m.onReject != nil {
+				m.onReject(scope, "subscriptions/listen", "rate_limited")
+			}
+			return fmt.Errorf("%w: %v opens/sec, burst %d", ErrStatelessStreamRateLimited, m.rateLimit, m.rateBurst)
+		}
+	}
+	s.scope = scope
 	m.subs[s.id] = s
+	m.countsByScope[scope]++
 	m.mu.Unlock()
+	return nil
 }
 
+// unregister removes a subscriber and decrements its scope's count. The
+// limiter for the scope is dropped once the count hits zero so an idle
+// scope leaves no state in the map.
 func (m *statelessSubMap) unregister(id string) {
 	m.mu.Lock()
+	defer m.mu.Unlock()
+	s, ok := m.subs[id]
+	if !ok {
+		return
+	}
 	delete(m.subs, id)
-	m.mu.Unlock()
+	if s.scope != "" && m.countsByScope[s.scope] > 0 {
+		m.countsByScope[s.scope]--
+		if m.countsByScope[s.scope] == 0 {
+			delete(m.countsByScope, s.scope)
+			delete(m.limitersByScope, s.scope)
+		}
+	}
 }
 
 // fanout pushes a notification onto every open subscriber whose filter
@@ -149,7 +272,19 @@ func (t *streamableTransport) handleStatelessSubscribe(w http.ResponseWriter, r 
 		frames: make(chan stateless.TaggedFrame, 16),
 		done:   make(chan struct{}),
 	}
-	t.statelessSubs.register(sub)
+	scope := t.statelessSubs.scopeFn(r)
+	if err := t.statelessSubs.tryRegister(sub, scope); err != nil {
+		reason := "cap_exceeded"
+		if errors.Is(err, ErrStatelessStreamRateLimited) {
+			reason = "rate_limited"
+		}
+		writeStatelessResponse(w, core.NewErrorResponseWithData(id,
+			core.ErrCodeSubscriptionLimitExceeded,
+			err.Error(),
+			map[string]any{"reason": reason, "scope": scope},
+		))
+		return
+	}
 	defer t.statelessSubs.unregister(subID)
 
 	// SSE response headers.

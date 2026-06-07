@@ -44,7 +44,11 @@ type serverOptions struct {
 	subscriptionCap      int         // per-session concurrent-subscription cap (0 = unlimited)
 	subscriptionRate     rate.Limit  // per-session subscribe/unsubscribe rate cap (0 = unlimited)
 	subscriptionBurst    int         // per-session burst alongside subscriptionRate (ignored when subscriptionRate == 0)
-	subscriptionReject   SubscriptionRejectFunc // optional hook fired when a subscribe is refused
+	subscriptionReject   SubscriptionRejectFunc // optional hook fired when a subscribe is refused (both wires)
+	statelessSubCap      int         // per-scope concurrent subscriptions/listen stream cap (0 = unlimited)
+	statelessSubRate     rate.Limit  // per-scope subscriptions/listen open-rate cap (0 = unlimited)
+	statelessSubBurst    int         // per-scope burst alongside statelessSubRate
+	statelessSubScope    StatelessSubscriptionScopeFunc // request → scope key (nil = DefaultStatelessSubscriptionScope)
 	errorHandler         ErrorHandler // optional out-of-band error callback
 	contentChunkMethod   string       // custom notification method for streaming content (empty = default)
 	onRootsChanged       func([]core.Root) // optional callback when client sends roots/list_changed
@@ -252,10 +256,107 @@ func WithSubscriptionRateLimit(r rate.Limit, burst int) Option {
 
 // WithSubscriptionRejectHook installs a callback fired every time a
 // resources/subscribe is refused by [WithSubscriptionCap] or
-// [WithSubscriptionRateLimit]. Operators can use it to emit metrics or
-// audit logs without changing the wire response.
+// [WithSubscriptionRateLimit], and every time a SEP-2575
+// subscriptions/listen stream is refused by
+// [WithStatelessSubscriptionCap] or [WithStatelessSubscriptionRateLimit].
+// One callback covers both wires so operators only need to wire
+// observability once.
+//
+// Argument semantics:
+//
+//   - On the legacy wire: arg1 is the sessionID, arg2 is the resource
+//     URI the client tried to subscribe to.
+//   - On the stateless wire: arg1 is the scope key returned by the
+//     configured [StatelessSubscriptionScopeFunc] (host of RemoteAddr
+//     by default), arg2 is the literal string "subscriptions/listen".
+//
+// reason is "cap_exceeded" or "rate_limited" on both wires.
 func WithSubscriptionRejectHook(fn SubscriptionRejectFunc) Option {
 	return func(o *serverOptions) { o.subscriptionReject = fn }
+}
+
+// DefaultStatelessSubscriptionCap is the default per-scope concurrent
+// subscriptions/listen stream cap applied when the caller does not
+// override it via [WithStatelessSubscriptionCap]. Chosen to give
+// public-facing deployments out-of-the-box defense against churn — same
+// posture as [net/http.Transport.MaxIdleConns]. Pass a negative number
+// to [WithStatelessSubscriptionCap] to disable the cap entirely.
+const DefaultStatelessSubscriptionCap = 100
+
+// effectiveStatelessSubCap maps the raw option value stored in
+// serverOptions to the cap newStatelessSubMap should use. The rule
+// keeps the wire-level "0 or negative = unlimited" semantic on the
+// internal registry intact and applies the public default at the
+// option boundary:
+//
+//   - 0  (option never set): apply [DefaultStatelessSubscriptionCap].
+//   - <0 (explicit opt-out): disable the cap (pass 0 to the registry,
+//     which treats 0 as unlimited).
+//   - >0 (explicit value):   pass through.
+func effectiveStatelessSubCap(raw int) int {
+	switch {
+	case raw == 0:
+		return DefaultStatelessSubscriptionCap
+	case raw < 0:
+		return 0
+	default:
+		return raw
+	}
+}
+
+// WithStatelessSubscriptionCap sets the maximum number of concurrent
+// SEP-2575 subscriptions/listen streams the transport will accept from
+// a single scope (typically a remote host, configurable via
+// [WithStatelessSubscriptionScope]). Once the scope is at the cap,
+// additional subscriptions/listen requests fail with
+// [core.ErrCodeSubscriptionLimitExceeded] (-32010) before the SSE
+// stream is opened. Closing a stream frees a slot for the same scope.
+//
+// Defaults to [DefaultStatelessSubscriptionCap] (100) when the option
+// is not called — public-facing deployments are protected out of the
+// box. Pass n > 0 to override, or n < 0 to disable the cap entirely.
+// (n == 0 is treated as "use default" so that the zero value of
+// serverOptions picks up the default.)
+//
+// Stability: the wire surface this guards (SEP-2575
+// subscriptions/listen) is in the 2026-07-28 release candidate, not
+// Final. The cap is mcpkit-internal and not spec-defined; if a future
+// SEP standardizes subscription caps, callers may need to migrate.
+// See docs/SEP_2640_STATELESS_INTERACTION.md.
+func WithStatelessSubscriptionCap(n int) Option {
+	return func(o *serverOptions) { o.statelessSubCap = n }
+}
+
+// WithStatelessSubscriptionRateLimit bounds how fast a single scope may
+// open new subscriptions/listen streams. Implemented as a per-scope
+// token bucket with refill rate r and burst b. Exceeded calls fail
+// with [core.ErrCodeSubscriptionLimitExceeded] (-32010) carrying
+// reason "rate_limited" in error.data.
+//
+// Off by default (r <= 0 means unlimited). Disconnects are not metered;
+// the cost being bounded is registration churn, not normal cleanup.
+//
+// Stability: see [WithStatelessSubscriptionCap].
+func WithStatelessSubscriptionRateLimit(r rate.Limit, burst int) Option {
+	return func(o *serverOptions) {
+		o.statelessSubRate = r
+		o.statelessSubBurst = burst
+	}
+}
+
+// WithStatelessSubscriptionScope overrides the scope-key extractor used
+// by [WithStatelessSubscriptionCap] and
+// [WithStatelessSubscriptionRateLimit]. The default
+// ([DefaultStatelessSubscriptionScope]) returns the host portion of
+// r.RemoteAddr, which is correct for deployments where every client
+// has a distinct OS-visible source IP, but lumps all clients behind a
+// shared reverse proxy into one bucket.
+//
+// Override only when the operator vouches for the proxy chain: an
+// X-Forwarded-For-aware extractor lets a malicious client spoof a scope
+// key. Document the trust assumption in the deployment.
+func WithStatelessSubscriptionScope(fn StatelessSubscriptionScopeFunc) Option {
+	return func(o *serverOptions) { o.statelessSubScope = fn }
 }
 
 // WithToolTimeout sets the maximum duration for tool execution.
