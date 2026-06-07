@@ -123,7 +123,21 @@ func serve() {
 				ResourceURI: resourceURI,
 				ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 					return core.ResourceResult{Contents: []core.ResourceReadContent{{
-						URI: req.URI, MimeType: core.AppMIMEType, Text: html,
+						URI:      req.URI,
+						MimeType: core.AppMIMEType,
+						Text:     html,
+						// abcjs streams soundfonts from paulrosen.github.io on first
+						// ▶ Play click. Without this CSP connect-src allowlist on
+						// the resource _meta, basic-host's CSP blocks the fetch and
+						// audio playback silently fails — the sheet music renders
+						// but the play button does nothing.
+						Meta: &core.ResourceContentMeta{
+							UI: &core.UIMetadata{
+								CSP: &core.UICSPConfig{
+									ConnectDomains: []string{"https://paulrosen.github.io"},
+								},
+							},
+						},
 					}}}, nil
 				},
 			})

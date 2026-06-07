@@ -2,6 +2,7 @@ package common
 
 import (
 	"os"
+	"strings"
 
 	"github.com/panyam/demokit"
 	"github.com/panyam/demokit/notebookbridge"
@@ -18,14 +19,21 @@ const DefaultServerURL = "http://localhost:8080"
 // when no --url flag is passed.
 const ServerURLEnv = "MCPKIT_SERVER_URL"
 
-// ServerURL returns the MCP server endpoint a walkthrough should connect
-// to. Precedence (highest first):
+// DefaultMCPServerURL is the default endpoint for apps/compat-style
+// MCP fixtures (one MCP server per fixture, always on :3101). MCPServerURL
+// returns this unless overridden via the env var.
+const DefaultMCPServerURL = "http://localhost:3101"
+
+// ServerURL returns the endpoint a non-UI example's walkthrough should
+// connect to. Precedence (highest first):
 //
 //  1. --url <addr> on the command line
 //  2. $MCPKIT_SERVER_URL env var
 //  3. DefaultServerURL ("http://localhost:8080")
 //
-// Examples just call common.ServerURL() — no per-example default to drift.
+// Non-UI examples (auth, tasks, file-inputs, etc.) call common.ServerURL().
+// apps/compat fixtures, which always bind :3101, call common.MCPServerURL()
+// instead.
 func ServerURL() string {
 	for i, arg := range os.Args[1:] {
 		if arg == "--url" && i+2 < len(os.Args) {
@@ -36,6 +44,27 @@ func ServerURL() string {
 		return u
 	}
 	return DefaultServerURL
+}
+
+// MCPServerURL returns the endpoint an apps/compat-style fixture's
+// walkthrough should connect to. Same env-var override as ServerURL,
+// different default port (:3101 vs :8080). Every compat fixture's
+// walkthrough.go calls this — keeps the :3101 default in one place
+// instead of duplicating a serverURLFor3101 helper per fixture.
+func MCPServerURL() string {
+	if u := os.Getenv(ServerURLEnv); u != "" {
+		return u
+	}
+	return DefaultMCPServerURL
+}
+
+// SplitLines splits a multi-line string on '\n'. Wraps the stdlib idiom
+// to keep walkthrough.go bodies focused on the demo narrative rather
+// than line-iteration mechanics — `for _, line := range common.SplitLines(s)`
+// reads cleanly in step Run() callbacks where the typical use is "print
+// each line of a multi-line value with consistent indent."
+func SplitLines(s string) []string {
+	return strings.Split(s, "\n")
 }
 
 // SetupRenderer wires the renderer matching demokit's --mode (or the
