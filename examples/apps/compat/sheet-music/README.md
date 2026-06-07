@@ -32,10 +32,17 @@ Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `h
 Open <http://localhost:8080> in your browser. Then:
 
 1. Pick **Sheet Music Server** from the server dropdown.
-2. Pick **play-sheet-music** from the tool dropdown, click **Call Tool**.
-3. The iframe renders the result; interact with it directly to drive subsequent tool calls (no model in the loop).
+2. Pick **play-sheet-music** from the tool dropdown. The **Input** field below auto-populates with the schema's default — the 11-line, multi-comma ABC notation for "Twinkle, Twinkle Little Star". The entire string landing here intact (with every embedded comma) is the whole point of this fixture: `InputSchemaPatch` bypasses invopop's comma-truncating struct-tag parser. See the second bullet under [What it Shows](#what-it-shows) above for the Go side.
 
-<a href="screenshots/01-twinkle.png" target="_blank"><img src="screenshots/01-twinkle.png" alt="Sheet Music App rendered in basic-host: iframe shows Twinkle Twinkle as rendered sheet music with a play button" width="50%"></a>
+   <a href="screenshots/01-on-page-load.png" target="_blank"><img src="screenshots/01-on-page-load.png" alt="basic-host with play-sheet-music selected: iframe still blank (no Call Tool clicked yet), Input field below pre-populated with the multi-line ABC notation default for Twinkle Twinkle Little Star" width="50%"></a>
+
+3. Click **Call Tool**. The handler returns the synchronous text content "Input parsed successfully" (visible in the Tool Result panel), and the iframe renders the ABC notation as engraved sheet music with audio playback controls at the top. Click **▶ Play** in the iframe to hear it — the audio render happens entirely client-side via abcjs.
+
+   <a href="screenshots/02-on-tool-call.png" target="_blank"><img src="screenshots/02-on-tool-call.png" alt="Sheet Music App rendered in basic-host: iframe shows Twinkle Twinkle Little Star as engraved sheet music with audio player controls at top; Tool Result panel below shows the {Input parsed successfully} response" width="50%"></a>
+
+4. Drill into the **Tool Input** panel to confirm what crossed the wire — the full 184-char ABC notation, multi-line, comma-laden, untruncated. The Tool Result alongside is the small text envelope the Go handler returned synchronously; the visual rendering is the iframe's own work driven from that input.
+
+   <a href="screenshots/03-wire-data.png" target="_blank"><img src="screenshots/03-wire-data.png" alt="Zoomed view of basic-host's Tool Input panel showing the multi-line ABC notation (X:1, T:Twinkle, Twinkle Little Star, M:4/4, etc.) and the Tool Result panel below showing the small content array with 'Input parsed successfully'" width="50%"></a>
 
 ## Try It Out from a Host
 
