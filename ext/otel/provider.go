@@ -135,5 +135,13 @@ func (p *Provider) StartSpan(ctx context.Context, name string, attrs ...core.Att
 		ctx = core.WithTraceContext(ctx, childTC)
 	}
 
-	return ctx, &Span{otel: otelSpan}
+	span := &Span{otel: otelSpan}
+	// Publish the mcpkit Span wrapper via core.WithActiveSpan so inner
+	// middleware and handler code can read it back via
+	// core.SpanFromContext (or ctx.Span() on a BaseContext) and enrich
+	// the active span with attributes — closes the P1 contract gap
+	// called out by SEP-414 P6 (issue 661).
+	ctx = core.WithActiveSpan(ctx, span)
+
+	return ctx, span
 }

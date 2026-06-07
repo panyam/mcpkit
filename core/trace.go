@@ -124,9 +124,17 @@ type Attribute struct {
 // noopSpan whose methods do nothing. Zero allocations on the hot path.
 type NoopTracerProvider struct{}
 
-// StartSpan returns ctx unchanged and a no-op Span.
+// StartSpan returns ctx (with the no-op span published via
+// WithActiveSpan so SpanFromContext returns the same span the caller
+// just got back) and a no-op Span. The WithValue overhead is one
+// pointer write per call; the noopSpan it stores is the zero-size
+// noopSpan{} singleton, so the Noop path stays allocation-equivalent
+// to the previous behavior while gaining contract symmetry with
+// non-Noop providers — callers who use SpanFromContext to enrich the
+// active span never need to branch on which provider is configured.
 func (NoopTracerProvider) StartSpan(ctx context.Context, _ string, _ ...Attribute) (context.Context, Span) {
-	return ctx, noopSpan{}
+	span := noopSpan{}
+	return WithActiveSpan(ctx, span), span
 }
 
 type noopSpan struct{}
@@ -339,4 +347,61 @@ func WithTraceContext(ctx context.Context, tc TraceContext) context.Context {
 func TraceContextFromContext(ctx context.Context) TraceContext {
 	tc, _ := ctx.Value(traceContextCtxKey{}).(TraceContext)
 	return tc
+}
+
+// --- Active span ctx plumbing (P6 contract gap — issue 661) ------------------
+
+type activeSpanCtxKey struct{}
+
+// WithActiveSpan returns a derived context carrying span as the
+// "currently active" mcpkit Span. SpanFromContext reads it back. The
+// primary caller is a TracerProvider implementation: after StartSpan
+// creates a new Span, it publishes that Span via WithActiveSpan so
+// inner middleware and handler code can later read the same Span
+// without re-importing the adapter. The in-tree NoopTracerProvider and
+// the ext/otel adapter both follow this pattern.
+//
+// Nil span is a no-op (ctx returned unchanged) so defensive call sites
+// can pass through without branching. Storing a non-nil span shadows
+// any previously-attached span on this ctx — nested StartSpan
+// calls naturally produce a stack via context.Context derivation.
+//
+// Why expose this as a public API rather than fold it into StartSpan:
+// the adapter sub-modules (ext/otel today, third-party adapters
+// tomorrow) live in different Go modules and can't reach an internal
+// helper. The contract is "after StartSpan, SpanFromContext returns
+// the same span" — each adapter enforces it by calling WithActiveSpan
+// itself.
+func WithActiveSpan(ctx context.Context, span Span) context.Context {
+	if span == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, activeSpanCtxKey{}, span)
+}
+
+// SpanFromContext returns the currently active Span carried by ctx, or
+// a no-op Span when none has been attached. The returned Span is
+// NEVER nil — callers can unconditionally call SetAttribute /
+// RecordError / End without nil-checking. The no-op Span's methods do
+// nothing and never panic, so call sites that always-decorate (e.g. an
+// auth middleware adding `mcp.auth.*` attributes) work correctly
+// regardless of whether a TracerProvider is configured.
+//
+// The enrichment pattern that this accessor unlocks:
+//
+//	span := core.SpanFromContext(ctx)
+//	span.SetAttribute("mcp.auth.principal", claims.Subject)
+//	span.SetAttribute("mcp.auth.method", "jwt")
+//
+// Use this when you want to decorate the existing dispatch span (one
+// span per request, attribute-rich) rather than nest a child span
+// (more spans, finer-grained timing). Both patterns are supported;
+// pick whichever matches the observability story you're after.
+//
+// Safe for concurrent use. Always cheap — a single ctx.Value lookup.
+func SpanFromContext(ctx context.Context) Span {
+	if span, ok := ctx.Value(activeSpanCtxKey{}).(Span); ok && span != nil {
+		return span
+	}
+	return noopSpan{}
 }

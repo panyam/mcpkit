@@ -319,3 +319,83 @@ func TestInjectTraceContextIntoParams_HandlesNilAndNonObject(t *testing.T) {
 		t.Fatalf("zero TraceContext must pass through unchanged, got %v", zeroPass)
 	}
 }
+
+// --- P6 active-span accessor (issue 661) ------------------------------------
+
+func TestSpanFromContext_EmptyCtx_ReturnsNoop(t *testing.T) {
+	span := SpanFromContext(context.Background())
+	if span == nil {
+		t.Fatalf("SpanFromContext must never return nil; got nil for empty ctx")
+	}
+	// All Span methods must be safe to call on the returned span without
+	// panicking — the no-op return is what lets call sites that always
+	// decorate the active span work even when no provider is wired.
+	span.SetAttribute("k", "v")
+	span.RecordError(errors.New("ignored"))
+	span.RecordError(nil)
+	span.End()
+	span.End()
+}
+
+func TestSpanFromContext_AfterNoopStartSpan_PublishesSpan(t *testing.T) {
+	ctx, started := NoopTracerProvider{}.StartSpan(context.Background(), "noop")
+	got := SpanFromContext(ctx)
+	if got == nil {
+		t.Fatalf("Noop.StartSpan must publish the span via WithActiveSpan")
+	}
+	if got != started {
+		t.Fatalf("SpanFromContext must return the same Span value StartSpan returned; got %T, want %T", got, started)
+	}
+}
+
+func TestSpanFromContext_SurvivesCtxDerivation(t *testing.T) {
+	tp := NoopTracerProvider{}
+	root, started := tp.StartSpan(context.Background(), "outer")
+
+	derived := context.WithValue(root, struct{}{}, "irrelevant")
+	if SpanFromContext(derived) != started {
+		t.Fatalf("active span must survive ctx.WithValue derivation")
+	}
+
+	withCancel, cancel := context.WithCancel(root)
+	defer cancel()
+	if SpanFromContext(withCancel) != started {
+		t.Fatalf("active span must survive ctx.WithCancel derivation")
+	}
+}
+
+func TestSpanFromContext_NestedStartSpan_InnermostWins(t *testing.T) {
+	tp := NoopTracerProvider{}
+	outer, outerSpan := tp.StartSpan(context.Background(), "outer")
+	inner, innerSpan := tp.StartSpan(outer, "inner")
+
+	if got := SpanFromContext(inner); got != innerSpan {
+		t.Fatalf("SpanFromContext(innerCtx) should return innerSpan; got %v want %v", got, innerSpan)
+	}
+	if got := SpanFromContext(outer); got != outerSpan {
+		t.Fatalf("SpanFromContext(outerCtx) should still return outerSpan after inner StartSpan; got %v want %v", got, outerSpan)
+	}
+}
+
+func TestWithActiveSpan_NilNoOp(t *testing.T) {
+	ctx := context.Background()
+	if WithActiveSpan(ctx, nil) != ctx {
+		t.Fatalf("WithActiveSpan(ctx, nil) must return ctx unchanged so defensive call sites don't have to branch")
+	}
+}
+
+func TestBaseContext_Span_DelegatesToSpanFromContext(t *testing.T) {
+	tp := NoopTracerProvider{}
+	ctx, started := tp.StartSpan(context.Background(), "via-base-context")
+	bc := BaseContext{Context: ctx}
+	if got := bc.Span(); got != started {
+		t.Fatalf("BaseContext.Span() should delegate to package-level SpanFromContext; got %v want %v", got, started)
+	}
+
+	bare := BaseContext{Context: context.Background()}
+	span := bare.Span()
+	if span == nil {
+		t.Fatalf("BaseContext.Span() must never return nil")
+	}
+	span.SetAttribute("k", "v") // must not panic
+}
