@@ -114,6 +114,30 @@ func NewProvider(otelTP oteltrace.TracerProvider, opts ...Option) *Provider {
 // P1's contract scopes attributes to string/string; typed attributes
 // arrive when the core surface widens.
 func (p *Provider) StartSpan(ctx context.Context, name string, attrs ...core.Attribute) (context.Context, core.Span) {
+	return p.startSpanInternal(ctx, name, nil, attrs)
+}
+
+// StartSpanLinked implements core.LinkedTracerProvider — the option-at-start
+// variant of StartSpan that attaches one or more causal Links to the new
+// span (in addition to any parent extracted from ctx). Each Link entry
+// whose TraceContext is zero or fails W3C validation is silently dropped
+// (caller does not need to pre-filter), so callers can build the slice
+// from raw inputs of varying validity. Per-link Attributes are mapped
+// through as attribute.String entries on the resulting OTel link.
+//
+// Implementation: routes the same parent-install + span-start +
+// active-span publish dance as StartSpan, with a WithLinks option
+// appended to the startOpts slice. Empty / nil links behaves identically
+// to StartSpan.
+func (p *Provider) StartSpanLinked(ctx context.Context, name string, links []core.Link, attrs ...core.Attribute) (context.Context, core.Span) {
+	return p.startSpanInternal(ctx, name, links, attrs)
+}
+
+// startSpanInternal is the shared body of StartSpan and StartSpanLinked.
+// The split exists so adding a third variant (events bus seam etc.)
+// doesn't duplicate the parent-install / WithTraceContext / WithActiveSpan
+// sequence — only the option-list construction varies.
+func (p *Provider) startSpanInternal(ctx context.Context, name string, links []core.Link, attrs []core.Attribute) (context.Context, core.Span) {
 	if parent := core.TraceContextFromContext(ctx); !parent.IsZero() {
 		if parentSC, ok := traceContextToSpanContext(parent); ok {
 			ctx = oteltrace.ContextWithSpanContext(ctx, parentSC)
@@ -127,6 +151,17 @@ func (p *Provider) StartSpan(ctx context.Context, name string, attrs ...core.Att
 			kvs = append(kvs, attribute.String(a.Key, a.Value))
 		}
 		startOpts = append(startOpts, oteltrace.WithAttributes(kvs...))
+	}
+	if len(links) > 0 {
+		otelLinks := make([]oteltrace.Link, 0, len(links))
+		for _, l := range links {
+			if otelLink, ok := linkToOTelLink(l); ok {
+				otelLinks = append(otelLinks, otelLink)
+			}
+		}
+		if len(otelLinks) > 0 {
+			startOpts = append(startOpts, oteltrace.WithLinks(otelLinks...))
+		}
 	}
 
 	ctx, otelSpan := p.tracer.Start(ctx, name, startOpts...)
@@ -144,4 +179,28 @@ func (p *Provider) StartSpan(ctx context.Context, name string, attrs ...core.Att
 	ctx = core.WithActiveSpan(ctx, span)
 
 	return ctx, span
+}
+
+// linkToOTelLink converts a core.Link into an OTel trace.Link by
+// parsing the W3C TraceContext into an OTel SpanContext (Remote=true,
+// matching the inbound-parent treatment in StartSpan) and mapping the
+// per-link Attributes through as attribute.String entries. Returns
+// (zero, false) when the TraceContext fails the same validation rules
+// core.ExtractTraceContext applies — caller drops such links silently
+// so downstream surfaces (tasks, events bus) can build link slices
+// from raw inputs.
+func linkToOTelLink(link core.Link) (oteltrace.Link, bool) {
+	sc, ok := traceContextToSpanContext(link.TraceContext)
+	if !ok {
+		return oteltrace.Link{}, false
+	}
+	out := oteltrace.Link{SpanContext: sc}
+	if len(link.Attributes) > 0 {
+		kvs := make([]attribute.KeyValue, 0, len(link.Attributes))
+		for _, a := range link.Attributes {
+			kvs = append(kvs, attribute.String(a.Key, a.Value))
+		}
+		out.Attributes = kvs
+	}
+	return out, true
 }

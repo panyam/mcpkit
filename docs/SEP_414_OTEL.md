@@ -259,6 +259,54 @@ correctly whether or not a TracerProvider is configured. Issue 658
 (`ext/auth` attributes) and any future "enrich the active span" use case
 consume this surface without crossing the `core/`-only boundary.
 
+### Span links — landed (issue 662)
+
+The second contract gap is closed: span links are now expressible
+dep-free, with the OTel-aligned shape that includes per-link
+attributes. Two entry points:
+
+```go
+// Option at start (call site knows all links upfront):
+links := []core.Link{
+    {TraceContext: tc1, Attributes: []core.Attribute{{Key: "link.kind", Value: "originated-from"}}},
+    core.LinkFromTraceContext(tc2),
+}
+ctx, span := core.StartSpanLinked(tp, ctx, "task.execute", links, attrs...)
+
+// Mid-flight (links discovered during span execution):
+span := core.SpanFromContext(ctx)
+span.AddLink(core.Link{TraceContext: tc, Attributes: ...})
+```
+
+`core.Link` mirrors the OpenTelemetry spec `Link` definition: a
+TraceContext (the upstream identity, same shape carried on the MCP
+wire via `_meta`) plus optional per-link attributes. Per-link
+attributes are how observability backends render the link UI —
+Jaeger / Tempo / Honeycomb all show `link.kind=...` semantically
+rather than as generic span attributes.
+
+**Capability widening pattern:** `core.LinkedTracerProvider` is a
+sibling of `TracerProvider` that adds the `StartSpanLinked` method;
+the `core.StartSpanLinked(tp, ...)` package-level helper type-asserts
+and falls back to plain `StartSpan` when the provider doesn't
+implement the wider interface — links silently dropped, span emitted.
+This kept the base `TracerProvider` interface unchanged so non-tracing
+test fakes and the default `NoopTracerProvider` didn't need any
+churn. The `ext/otel` adapter implements both interfaces and maps
+each `core.Link` to an OTel `trace.Link` via the existing
+`traceContextToSpanContext` helper.
+
+**Invalid links are silently dropped** — both at `StartSpanLinked`
+(filtered before passing to the OTel SDK) and at `Span.AddLink`
+(short-circuited inside the wrapper). Defensive call sites can build
+link slices from raw inputs (e.g., `core.ExtractTraceContext` outputs
+that might be zero) without pre-filtering. Calling `AddLink` after
+`End` is a no-op, matching every other Span method's contract.
+
+Unblocks issue 659 (`ext/tasks` task lifecycle linking) and the
+detached edge of issue 664 (server outbound reverse-call spans linked
+to the originating client request).
+
 The pattern is identical across all five: each `ext/` surface optionally
 accepts a `core.TracerProvider` and instruments its own work, depending on
 the **`core` abstraction only** — never `ext/otel`. Same composition shape
