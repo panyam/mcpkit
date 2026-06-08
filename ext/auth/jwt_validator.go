@@ -9,13 +9,14 @@ import (
 	"strings"
 	"time"
 
-	conc "github.com/panyam/gocurrent"
 	"github.com/golang-jwt/jwt/v5"
+	conc "github.com/panyam/gocurrent"
 	mcpcore "github.com/panyam/mcpkit/core"
 	"github.com/panyam/oneauth/apiauth"
 	oacore "github.com/panyam/oneauth/core"
 	"github.com/panyam/oneauth/keys"
 	"github.com/panyam/oneauth/utils"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 // JWTValidator validates MCP requests using JWT Bearer tokens.
@@ -117,14 +118,37 @@ type JWTConfig struct {
 	// server.WithTracerProvider. Nil (or core.NoopTracerProvider{})
 	// is the default — zero spans, zero attributes, zero allocation
 	// added to the validation path. ext/auth depends on the core
-	// abstraction only; no compile-time dependency on ext/otel.
+	// abstraction only for its own spans.
 	TracerProvider mcpcore.TracerProvider
+
+	// OneauthTracerProvider opts oneauth's internal work (JWKS
+	// HTTP fetch, refresh, signature verify, etc.) into emitting
+	// its own spans, threading them through oneauth v0.1.14's
+	// tracing surface via keys.WithTracerProvider on the
+	// JWKSKeyStore. Nil = oneauth-internal work stays opaque (the
+	// pre-v0.1.14 behavior); ext/auth's own auth.jwks_lookup span
+	// still emits if TracerProvider above is set, just without
+	// child spans showing oneauth's internal HTTP / parsing work.
+	//
+	// Pass commonotel.UnderlyingOTelTP(tp) when you want oneauth's
+	// spans to share the same OTel pipeline as the rest of the
+	// process — the typical production setup.
+	//
+	// Type is the OTel SDK's trace.TracerProvider directly (not
+	// mcpkit's core.TracerProvider) because oneauth's API takes the
+	// SDK type, and ext/auth already pulls OTel transitively
+	// through oneauth v0.1.14.
+	OneauthTracerProvider oteltrace.TracerProvider
 }
 
 // NewJWTValidator creates a JWTValidator backed by oneauth's JWT validation
 // and JWKS key discovery.
 func NewJWTValidator(cfg JWTConfig) *JWTValidator {
-	ks := keys.NewJWKSKeyStore(cfg.JWKSURL)
+	var jwksOpts []keys.JWKSOption
+	if cfg.OneauthTracerProvider != nil {
+		jwksOpts = append(jwksOpts, keys.WithTracerProvider(cfg.OneauthTracerProvider))
+	}
+	ks := keys.NewJWKSKeyStore(cfg.JWKSURL, jwksOpts...)
 
 	auth := &apiauth.APIAuth{
 		JWTIssuer:   cfg.Issuer,

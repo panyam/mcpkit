@@ -18,6 +18,8 @@ import (
 	"github.com/panyam/oneauth/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
 // fakeSpan + fakeTracerProvider mirror server/trace_middleware_test.go's
@@ -300,4 +302,61 @@ func spanNames(spans []*fakeSpan) string {
 		names = append(names, s.name)
 	}
 	return fmt.Sprintf("%v", names)
+}
+
+// TestJWTValidator_Trace_OneauthTracerProvider_EmitsOneauthSpans
+// confirms that wiring JWTConfig.OneauthTracerProvider threads
+// through to oneauth's keys.WithTracerProvider option, so
+// oneauth-internal work (JWKS HTTP fetch, key cache lookup,
+// signature verify on the keystore side) emits spans on the
+// supplied OTel pipeline. The auth.jwks_lookup span ext/auth emits
+// is mcpkit-side and gates this via TracerProvider (separate
+// field, already tested above); the assertion here is specifically
+// that oneauth-emitted span names land in the SDK exporter —
+// proves the option flowed through.
+func TestJWTValidator_Trace_OneauthTracerProvider_EmitsOneauthSpans(t *testing.T) {
+	jwksURL, issuer, token, cleanup := setupTestJWKS(t, "alice", []string{"read"})
+	defer cleanup()
+
+	exp := tracetest.NewInMemoryExporter()
+	sdkTP := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exp))
+	t.Cleanup(func() { _ = sdkTP.Shutdown(context.Background()) })
+
+	v := NewJWTValidator(JWTConfig{
+		JWKSURL:               jwksURL,
+		Issuer:                issuer,
+		Audience:              "https://mcp.test",
+		OneauthTracerProvider: sdkTP,
+	})
+
+	r := requestWithActiveSpan(token, nil)
+	require.NoError(t, v.Validate(r))
+
+	names := sdkSpanNames(exp.GetSpans())
+	require.NotEmpty(t, names,
+		"setting OneauthTracerProvider must result in at least one oneauth-emitted span in the SDK exporter; got none")
+
+	// oneauth v0.1.14 emits "oneauth.jwks.refresh", "oneauth.jwks.key_lookup",
+	// "oneauth.signature_verify", etc. We don't pin to a specific name
+	// (oneauth owns its span vocabulary and may evolve it) — assert
+	// at least one span starts with "oneauth." so a future rename
+	// internal to oneauth doesn't break this test, but a regression
+	// that disconnects the wiring still does.
+	foundOneauthSpan := false
+	for _, n := range names {
+		if strings.HasPrefix(n, "oneauth.") {
+			foundOneauthSpan = true
+			break
+		}
+	}
+	assert.True(t, foundOneauthSpan,
+		"expected at least one oneauth.* span; got %v", names)
+}
+
+func sdkSpanNames(spans tracetest.SpanStubs) []string {
+	out := make([]string, 0, len(spans))
+	for _, s := range spans {
+		out = append(out, s.Name)
+	}
+	return out
 }

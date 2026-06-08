@@ -485,7 +485,10 @@ func serve() {
 	defer env.Close()
 
 	listenURL := fmt.Sprintf("http://localhost%s", *addr)
-	validator := env.NewValidator(listenURL)
+	validator := env.NewValidator(listenURL,
+		authcommon.WithMCPTracerProvider(tp),
+		authcommon.WithOneauthTracerProvider(commonotel.UnderlyingOTelTP(tp)),
+	)
 
 	// Pre-mint tokens for the walkthrough.
 	tokRead := env.MintToken("alice", []string{"read"})
