@@ -172,7 +172,7 @@ func (e *sessionEntry) verifyPrincipal(w http.ResponseWriter, claims *core.Claim
 	if e.subject == "" {
 		return true // no auth binding
 	}
-	if claims != nil && claims.Subject == e.subject {
+	if claims != nil && core.PrincipalFor(claims) == e.subject {
 		return true // principal matches
 	}
 	http.Error(w, "forbidden: session principal mismatch", http.StatusForbidden)
@@ -553,10 +553,10 @@ func (t *streamableTransport) handleInitialize(w http.ResponseWriter, r *http.Re
 	sessionID := t.resolveSessionID(req.Params)
 	dispatcher.sessionID = sessionID
 	// Bind authenticated principal to session — prevents hijacking.
-	subject := ""
-	if claims != nil && claims.Subject != "" {
-		subject = claims.Subject
-	}
+	// Uses the encoded form (Tenant + "/" + Subject) so two realms
+	// sharing the same OAuth subject can't impersonate one another's
+	// sessions.
+	subject := core.PrincipalFor(claims)
 	entry := &sessionEntry{
 		dispatcher: dispatcher,
 		idleTimer:  conc.NewIdleTimer(t.config.sessionTimeout, func() { t.expireSession(sessionID) }),
