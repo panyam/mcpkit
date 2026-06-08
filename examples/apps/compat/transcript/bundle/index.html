@@ -156,6 +156,11 @@ body { margin: 2em auto; max-width: 900px; padding: 0 1em; font-family: -apple-s
       },
       {
         "kind": "section",
+        "title": "What the App iframe does with all this",
+        "body": "The host → iframe handoff mechanics (`tools/call` → `resources/read` → sandboxed iframe → `postMessage`) are covered once in [The basic-host bridge dance](../README.md#the-basic-host-bridge-dance). Steps 1-4 above are the floor every MCP Apps interaction starts from.\n\ntranscript's iframe sits at the **bare-minimum** end of the App-ness spectrum, but with one extra resource-level declaration that's the whole reason this fixture exists in our parity coverage. The bridge calls its App SDK makes:\n\n- `app.ontoolresult` — receives the synchronous `{status:\"ready\",...}` envelope and shows the recording controls.\n- `app.callServerTool({name: \"transcribe\"})` on button click — the iframe-opens-recording-UI signal.\n\nWhat makes this fixture different from `basic-vanillajs` isn't the bridge calls — it's the **resource `_meta`**: `_meta.ui.permissions: { microphone: {}, clipboardWrite: {} }` on step 4's response is what tells basic-host to grant the iframe Web Speech API access and clipboard write. Without that line in the fixture's ResourceHandler, the iframe loads but `recognition.start()` silently fails (no browser mic prompt). See [the iframe permission contract](../transcript/README.md#the-iframe-permission-contract) section of the README."
+      },
+      {
+        "kind": "section",
         "title": "Where to look in the code",
         "body": "- `main.go` — the ResourceHandler setting `_meta.ui.permissions`. The microphone + clipboardWrite fields are visible in a single contiguous edit.\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + the [iframe permission contract](../transcript/README.md#the-iframe-permission-contract) section explains why the resource `_meta` matters."
       }
@@ -194,6 +199,11 @@ body { margin: 2em auto; max-width: 900px; padding: 0 1em; font-family: -apple-s
       "step_id": "step-4",
       "visit": 1,
       "output": "    _meta:\n      {\n        \"ui\": {\n          \"permissions\": {\n            \"microphone\": {},\n            \"clipboardWrite\": {}\n          }\n        }\n      }\n"
+    },
+    {
+      "kind": "section",
+      "title": "What the App iframe does with all this",
+      "body": "The host → iframe handoff mechanics (`tools/call` → `resources/read` → sandboxed iframe → `postMessage`) are covered once in [The basic-host bridge dance](../README.md#the-basic-host-bridge-dance). Steps 1-4 above are the floor every MCP Apps interaction starts from.\n\ntranscript's iframe sits at the **bare-minimum** end of the App-ness spectrum, but with one extra resource-level declaration that's the whole reason this fixture exists in our parity coverage. The bridge calls its App SDK makes:\n\n- `app.ontoolresult` — receives the synchronous `{status:\"ready\",...}` envelope and shows the recording controls.\n- `app.callServerTool({name: \"transcribe\"})` on button click — the iframe-opens-recording-UI signal.\n\nWhat makes this fixture different from `basic-vanillajs` isn't the bridge calls — it's the **resource `_meta`**: `_meta.ui.permissions: { microphone: {}, clipboardWrite: {} }` on step 4's response is what tells basic-host to grant the iframe Web Speech API access and clipboard write. Without that line in the fixture's ResourceHandler, the iframe loads but `recognition.start()` silently fails (no browser mic prompt). See [the iframe permission contract](../transcript/README.md#the-iframe-permission-contract) section of the README."
     },
     {
       "kind": "section",

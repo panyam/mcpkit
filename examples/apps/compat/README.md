@@ -135,6 +135,41 @@ wire contract. See [`../FLOW.md`](../FLOW.md#production-hosts-vs-basic-host).
   here.
 - `RENDERER` — `mcpjam` (default) or `basic-host`. Picks which topology runs.
 
+## The basic-host bridge dance
+
+The protocol surface scripted hosts exercise (`initialize` → `tools/list` → `tools/call` → `resources/read`) is the *floor* of an MCP Apps interaction. When `make demo-app EXAMPLE=<fixture>` runs a fixture inside basic-host, the host does those same calls — and then a JavaScript handoff inside a sandboxed iframe takes over. Walkthroughs in this folder narrate the floor end-to-end, but each one ends with a *"What the App iframe does with all this"* section pointing here for the framework story.
+
+The handoff:
+
+1. **basic-host runs `tools/call`** on the fixture's server tool with the user's input. The same call any scripted host makes.
+2. **basic-host runs `resources/read`** on `_meta.ui.resourceUri` to fetch the iframe HTML — upstream's verbatim bundled JS+HTML.
+3. **basic-host renders the iframe** in a sandbox at `SANDBOX_PORT`, then pushes the tool result through the [mcp-app-bridge](https://github.com/modelcontextprotocol/ext-apps/blob/main/src/app-bridge.ts) `postMessage` channel.
+4. **Inside the iframe**, the App SDK's `App` instance receives the result via `app.ontoolresult` and renders the UI.
+
+That's the floor. From there an App can opt into a richer slice of the bridge API:
+
+| Bridge surface | What it does | Used by |
+|---|---|---|
+| `app.ontoolresult(result)` | Receive the server tool's result. Bare minimum every App needs. | All Apps |
+| `app.callServerTool({name, arguments})` | The iframe calls *back* to a server tool through the bridge — for refresh, filter changes, button clicks. | `quickstart` (refresh button), `cohort-heatmap` (filter dropdowns), `budget-allocator` (sliders), `map` (Cesium geocoder) |
+| `app.getHostContext()` + `app.onhostcontextchanged` | Pull host-side state (theme, safe-area insets, display mode) so the App chrome adapts. | `cohort-heatmap`, `budget-allocator`, `map` |
+| `app.registerTool(name, schema, handler)` | The iframe registers *its own* tool the model can call. The model treats it as just another tool; the host routes the invocation back through the bridge. | `budget-allocator` (5 tools), `map` (navigate-to, get-current-view), `pdf-server` (~9 interaction tools) |
+| `app.updateModelContext({content})` | Push current UI state back to the model so a next-turn LLM prompt sees what the user just did. | `budget-allocator`, `map` |
+| `app.requestDisplayMode({mode})` | Request `inline` / `fullscreen` / `pip` display mode change. | Most viewer fixtures |
+| `_meta.ui.permissions` on the resource | Declare Permission-Policy capabilities the iframe needs (`microphone`, `camera`, `clipboardWrite`, `geolocation`). | `transcript` |
+| `_meta.ui.csp.connectDomains` on the resource | Declare external origins the iframe needs to `fetch` from. | `sheet-music` (soundfont CDN), `map` (OSM tile + Nominatim geocoding + Cesium assets) |
+
+**Where each fixture sits on the App-ness spectrum:**
+
+- `quickstart` and the `basic-*` family (vanillajs / preact / react / solid / svelte / vue) — **bare minimum**: `ontoolresult` + optionally `callServerTool`. The cleanest references for what an MCP App fundamentally IS.
+- `transcript` — adds a `_meta.ui.permissions` block so the iframe can use the Web Speech API.
+- `sheet-music` — adds a `_meta.ui.csp.connectDomains` block so abcjs can load soundfonts.
+- `cohort-heatmap` / `customer-segmentation` / `scenario-modeler` — **moderate**: `getHostContext` for theming + `callServerTool` re-fetches on filter changes. No model-callable tools.
+- `budget-allocator` / `map` — **rich**: `registerTool` ×N + `updateModelContext` after every UI interaction so the model can drive the widget directly or read its current state.
+- `pdf-server` — **endgame**: per-viewUUID command queue + long-poll + server-initiated rendezvous + ~9 `registerTool` calls. The richest fixture in the suite.
+
+Each fixture's walkthrough names the specific bridge calls that fixture's iframe makes; this section is the framework story the walkthroughs link back to instead of repeating.
+
 ## Drop-in shape
 
 A compat fixture must match its upstream counterpart on three things:
