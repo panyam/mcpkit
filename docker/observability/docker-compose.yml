@@ -23,6 +23,19 @@
 # Mimir / Loki schema bump never reaches main without an explicit
 # bump here. SEP-414 P5 (issue 312 P5 / new umbrella issue 663).
 
+networks:
+  # `mcpkit` is a shared bridge network so mcpkit examples running in
+  # OTHER compose stacks (eg examples/events/whole-enchilada/) can
+  # export OTLP to this collector by container name
+  # (mcpkit-otel-collector:4317). `name: mcpkit` keeps the network's
+  # docker-side name literal — no project prefix — so cross-compose
+  # lookups resolve without surprises. Whichever stack starts first
+  # creates the network.
+  default:
+  mcpkit:
+    name: mcpkit
+    driver: bridge
+
 services:
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.114.0
@@ -35,6 +48,9 @@ services:
       - "4317:4317"   # OTLP gRPC — examples/otel/stdout/ default
       - "4318:4318"   # OTLP HTTP — alternative for curl / browser exporters
       - "8888:8888"   # Collector self-metrics (Prometheus scrape)
+    networks:
+      - default
+      - mcpkit
     depends_on:
       - tempo
       - loki

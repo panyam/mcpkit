@@ -11,6 +11,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"net/http"
@@ -19,6 +20,8 @@ import (
 	"time"
 
 	"github.com/panyam/mcpkit/core"
+	common "github.com/panyam/mcpkit/examples/common"
+	commonotel "github.com/panyam/mcpkit/examples/common/otel"
 	"github.com/panyam/mcpkit/experimental/ext/events"
 	"github.com/panyam/mcpkit/server"
 	gohttp "github.com/panyam/servicekit/http"
@@ -32,7 +35,24 @@ func main() {
 		"shared secret required on /events/<name>/inject (empty = open)")
 	tenant := flag.String("tenant", "default",
 		"tenant id stamped onto event Meta in the demo / anonymous-auth path. When OAUTH_INTROSPECTION_URL or OAUTH_ISSUER is set, the per-subscription principal carries the tenant derived from token claims and this flag becomes a label only.")
+	tel := common.RegisterTelemetryFlags(flag.CommandLine)
 	flag.Parse()
+
+	// Set up OTel TracerProvider before constructing the server so
+	// every span the server emits flows through. Exporter selector
+	// honors --exporter / EXPORTER env (auto | stdout | otlp | "").
+	// auto = best-effort OTLP with silent Noop fallback when the
+	// observability stack isn't reachable — keeps `make demo-up`
+	// working whether docker/observability is up or not.
+	tp, shutdown, err := commonotel.SetupTelemetry(context.Background(),
+		commonotel.WithExporter(*tel.Exporter),
+		commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+		commonotel.WithServiceName("whole-enchilada-event-server"),
+	)
+	if err != nil {
+		log.Fatalf("commonotel.SetupTelemetry: %v", err)
+	}
+	defer shutdown(context.Background())
 
 	chatSrc := events.NewHTTPSource[ChatMessageData](events.EventDef{
 		Name:        "chat.message",
@@ -75,6 +95,7 @@ func main() {
 	srvOpts := []server.Option{
 		server.WithSubscriptions(),
 		server.WithListen(*addr),
+		server.WithTracerProvider(tp),
 	}
 
 	// Auth posture (introspection > JWT > anonymous), matching the

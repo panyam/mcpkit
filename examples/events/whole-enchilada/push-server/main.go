@@ -14,6 +14,8 @@ import (
 	"syscall"
 	"time"
 
+	common "github.com/panyam/mcpkit/examples/common"
+	commonotel "github.com/panyam/mcpkit/examples/common/otel"
 	eventsclient "github.com/panyam/mcpkit/experimental/ext/events/clients/go"
 )
 
@@ -37,9 +39,24 @@ func main() {
 	presenceEvery := flag.Duration("presence-every", 5*time.Second, "cadence between synthetic presence transitions")
 	tenants := flag.String("tenants", envOr("PUSH_TENANTS", "tenant-a,tenant-b,tenant-c"),
 		"comma-separated tenant tags; each emitted event rotates through them in order so subscribers from one tenant only see ~1/N of events. Empty string = no tag (stage-1 single-tenant mode)")
+	tel := common.RegisterTelemetryFlags(flag.CommandLine)
 	flag.Parse()
 
 	tenantTags := splitNonEmpty(*tenants)
+
+	// OTel telemetry. See the event-server's main.go comment block for
+	// the EXPORTER selector semantics — auto mode (default) means
+	// "best-effort OTLP with silent Noop fallback" so `make demo-up`
+	// works whether docker/observability is running or not.
+	_, shutdown, err := commonotel.SetupTelemetry(context.Background(),
+		commonotel.WithExporter(*tel.Exporter),
+		commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+		commonotel.WithServiceName("whole-enchilada-push-server"),
+	)
+	if err != nil {
+		log.Fatalf("commonotel.SetupTelemetry: %v", err)
+	}
+	defer shutdown(context.Background())
 
 	pusher := eventsclient.NewPusher(*target, *bearer)
 
