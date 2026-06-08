@@ -29,7 +29,7 @@ Subsequent stages still in flight: stage-3 wires the GORM stores from PR 685 (mu
 ## Quickstart
 
 ```bash
-make demo-up           # docker compose up -d with N=1, M=1
+make demo-up           # docker compose up -d with N=1, M=1 (+ Keycloak in stage 2)
 make demo              # interactive walkthrough (TUI)
 make demo-test         # non-interactive walkthrough (CI / scripting)
 make demo-down         # tear down
@@ -44,8 +44,76 @@ make demo-up N=3 M=2   # 3 event-servers, 2 push-servers
 Local in-process tests (no Docker):
 
 ```bash
-make test              # event-server e2e tests via httptest
+make test              # event-server e2e tests — includes 8 tenant-isolation cases
 ```
+
+## Stage-2 4-terminal interactive demo
+
+Once `make demo-up` is running, open multiple terminals to see per-tenant isolation in action. Each terminal authenticates as a single tenant via Keycloak and prints what it sees:
+
+```bash
+# T1 — keep this running
+make demo-up
+
+# T2 — Tenant A poller. Browser opens for login as alice@tenant-a (alice/alice).
+TA=$(make newtoken TENANT=A)
+make poller TENANT=A TOKEN=$TA
+
+# T3 — Tenant B poller (different terminal). Login as bob@tenant-b.
+TB=$(make newtoken TENANT=B)
+make poller TENANT=B TOKEN=$TB
+
+# T4 — Tenant A webhook receiver.
+make webhook TENANT=A TOKEN=$TA
+
+# T5 — Tenant B webhook receiver.
+make webhook TENANT=B TOKEN=$TB
+
+# T6 — Inject events from the host. Only the matching tenant's terminals print.
+make inject TENANT=A EVENT=chat.message TEXT="hi from A"
+make inject TENANT=B EVENT=chat.message TEXT="hi from B"
+make inject TENANT=C EVENT=presence.changed USER=carol STATE=online
+```
+
+Default `make demo-up` also runs the push-server, which auto-rotates synthetic events across all three tenants — leave the pollers running and watch the rotation.
+
+### Revocation walkthrough (the load-bearing demo step)
+
+The introspection-based auth has *synchronously revocable* tokens — the demo's key claim that JWT can't make. From your browser:
+
+1. Open <http://localhost:8180/admin/master/console/#/tenant-a/users>, login as `admin` / `admin`.
+2. Click user `alice` → **Sessions** tab → **Sign out**.
+3. Within `OAUTH_CACHE_TTL` seconds (default 5s), Tenant A's poller + webhook terminals die with `-32012 Forbidden`.
+4. Tenant B + Tenant C terminals stay alive — revocation is per-realm, isolation holds.
+
+This is the operator-facing flow a real production admin would use; nothing in the demo "fakes" the revocation. Re-acquire a token (`make newtoken TENANT=A`) and the subscribers reconnect.
+
+## Bring your own client
+
+Two paths, depending on whether you want to use the demo's Keycloak or your own IdP:
+
+### Use the demo's Keycloak (introspection mode)
+
+1. <http://localhost:8180/admin/> (admin / admin) → realm `tenant-a` → **Clients** → **Create**.
+2. Type **OpenID Connect**, give it a client ID, enable Service Accounts / Standard Flow / Direct Access Grants as you need.
+3. **Save**, then **Credentials** tab → copy the generated secret.
+4. From your client, acquire a token against `http://localhost:8180/realms/tenant-a/protocol/openid-connect/token` using whichever OAuth flow fits your client (client_credentials, auth code, etc.).
+5. Send `Authorization: Bearer <token>` when calling `http://localhost:8080/mcp`. The event-server's `MultiRealmIntrospectionValidator` already accepts any token issued by any of the three realms — no further server-side configuration.
+
+### Bring your own IdP (JWT mode)
+
+For "I have my own Auth0 / Okta / Keycloak", flip the event-server from introspection to JWT-mode validation:
+
+```bash
+# in your shell before make demo-up
+export OAUTH_INTROSPECTION_URLS=    # explicitly clear
+export OAUTH_ISSUER=https://your-idp.example.com/realms/your-realm
+make demo-up
+```
+
+The event-server's `tryEnableAuth()` picks up `OAUTH_ISSUER` and fetches JWKS from `<issuer>/protocol/openid-connect/certs`. Tokens signed by your IdP are validated locally; no callback to your AS per request. **Trade-off:** revocation is no longer synchronously visible — tokens stay valid until they expire (the JWT-vs-introspection trade-off; see `ext/auth/introspection_validator.go` doc for context).
+
+## What stage 2 adds
 
 ## Architecture
 
