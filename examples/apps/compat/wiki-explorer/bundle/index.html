@@ -239,42 +239,42 @@ body { margin: 2em auto; max-width: 900px; padding: 0 1em; font-family: -apple-s
       "title": "Connect to the fixture",
       "step_id": "step-1",
       "visit": 1,
-      "output": "    connected to Wiki Explorer 1.0.0\n"
+      "output": "    ERROR: initialize failed: Post \"http://localhost:3101/mcp\": dial tcp [::1]:3101: connect: connection refused\n    Start the server with: make serve\n"
     },
     {
       "kind": "step",
       "title": "tools/list — verify get-first-degree-links + nullable error shape",
       "step_id": "step-2",
       "visit": 1,
-      "output": "    get-first-degree-links\n      error schema: {\n        \"anyOf\": [\n          {\n            \"type\": \"string\"\n          },\n          {\n            \"type\": \"null\"\n          }\n        ]\n      }\n"
+      "output": "    ERROR: Post \"http://localhost:3101/mcp\": dial tcp [::1]:3101: connect: connection refused\n"
     },
     {
       "kind": "step",
       "title": "tools/call get-first-degree-links {} — default Wikipedia article",
       "step_id": "step-3",
       "visit": 1,
-      "output": "    page: map[title:Model Context Protocol url:https://en.wikipedia.org/wiki/Model_Context_Protocol]\n    links: 383\n    error: \u003cnil\u003e\n    first 5 link titles: [Anthropic Artificial intelligence TypeScript Python (programming language) Java (programming language)]\n"
+      "output": "    ERROR: Post \"http://localhost:3101/mcp\": dial tcp [::1]:3101: connect: connection refused\n"
     },
     {
       "kind": "step",
       "title": "tools/call get-first-degree-links {url: \"Anthropic\"} — node expansion",
       "step_id": "step-4",
       "visit": 1,
-      "output": "    page: map[title:Anthropic url:https://en.wikipedia.org/wiki/Anthropic]\n    links: 266\n    error: \u003cnil\u003e\n"
+      "output": "    ERROR: Post \"http://localhost:3101/mcp\": dial tcp [::1]:3101: connect: connection refused\n"
     },
     {
       "kind": "step",
       "title": "tools/call get-first-degree-links {url: invalid} — error path",
       "step_id": "step-5",
       "visit": 1,
-      "output": "    isError=false (always false on the wire-error path)\n    page: map[title:https://example.com/foo url:https://example.com/foo]\n    error string: Not a valid Wikipedia URL\n"
+      "output": "    ERROR: Post \"http://localhost:3101/mcp\": dial tcp [::1]:3101: connect: connection refused\n"
     },
     {
       "kind": "step",
       "title": "resources/read on ui://wiki-explorer/mcp-app.html",
       "step_id": "step-6",
       "visit": 1,
-      "output": "    520192 bytes total; first 200:\n      \u003c!DOCTYPE html\u003e\n\u003chtml lang=\"en\"\u003e\n\u003chead\u003e\n  \u003cmeta charset=\"UTF-8\"\u003e\n  \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"\u003e\n  \u003cmeta name=\"color-scheme\" content=\"light dark\"\u003e\n  \u003ctitle\u003eWik…\n"
+      "output": "    ERROR: Post \"http://localhost:3101/mcp\": dial tcp [::1]:3101: connect: connection refused\n"
     },
     {
       "kind": "section",
