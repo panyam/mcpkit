@@ -20,18 +20,16 @@ package events
 // (per-principal, per-event-type) is the default; the other axes
 // can be added behind options later if a deployment needs them.
 //
-// Implementation note: built on golang.org/x/sync/semaphore.Weighted,
-// which is the canonical Go primitive for "at most N concurrent
-// holders of a resource." Our bookkeeping is just per-(principal,
-// event-name) instantiation of that primitive — we don't add our own
-// counter math on top.
+// Reservation-count state lives behind the QuotaStore seam — see
+// quota_store.go. The default in-memory implementation matches the
+// historical behavior; multi-replica deployments plug in Postgres
+// (#630) or Redis (#634) for cross-replica counter atomicity.
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
-
-	"golang.org/x/sync/semaphore"
 )
 
 // ErrTooManySubscriptions is returned by Quota.Reserve when the cap
@@ -69,33 +67,26 @@ func WithMaxSubscriptionsPerPrincipal(eventName string, n int) QuotaOption {
 // and enforces per-event-type caps configured via
 // WithMaxSubscriptionsPerPrincipal. Construct via NewQuota.
 //
-// Backed by golang.org/x/sync/semaphore.Weighted — one weighted
-// semaphore per (principal, eventName) tuple, sized to that event's
-// cap. Reserve = TryAcquire(1); Release = Release(1). Atomicity is
-// the semaphore's job; we just route to the right one.
-//
-// All state is in-process; counts do not persist across restart.
-// After restart a previously-suspended principal that was at cap
-// will be allowed back up to the cap again on first re-subscribe.
+// The wrapper owns the caps map (static operator config) and routes
+// dynamic reservation state through a QuotaStore (see quota_store.go).
+// The default in-memory store has no internal locking — the wrapper's
+// mu serializes calls. Multi-replica deployments plug in a shared
+// backend via WithQuotaStore.
 type Quota struct {
-	mu   sync.Mutex
-	sems map[quotaKey]*semaphore.Weighted
-	caps map[string]int
-}
-
-type quotaKey struct {
-	principal string
-	eventName string
+	mu    sync.Mutex
+	store QuotaStore
+	caps  map[string]int
 }
 
 // NewQuota constructs a quota with the given options. With no
 // WithMaxSubscriptionsPerPrincipal options, every Reserve call
 // succeeds — the quota is effectively a no-op. Authors register
-// caps explicitly per event-type.
+// caps explicitly per event-type. The default reservation-count
+// store is in-memory; override via WithQuotaStore.
 func NewQuota(opts ...QuotaOption) *Quota {
 	q := &Quota{
-		sems: make(map[quotaKey]*semaphore.Weighted),
-		caps: make(map[string]int),
+		store: NewInMemoryQuotaStore(),
+		caps:  make(map[string]int),
 	}
 	for _, o := range opts {
 		o(q)
@@ -103,37 +94,26 @@ func NewQuota(opts ...QuotaOption) *Quota {
 	return q
 }
 
-// semFor returns the per-(principal, eventName) semaphore, lazily
-// creating it on first use. Caller MUST hold q.mu.
-func (q *Quota) semForLocked(principal, eventName string) *semaphore.Weighted {
-	cap, ok := q.caps[eventName]
-	if !ok {
-		return nil
-	}
-	key := quotaKey{principal: principal, eventName: eventName}
-	sem, exists := q.sems[key]
-	if !exists {
-		sem = semaphore.NewWeighted(int64(cap))
-		q.sems[key] = sem
-	}
-	return sem
-}
-
 // Reserve attempts to claim one subscription slot for (principal,
 // eventName). Returns nil on success. Returns a wrapped
 // ErrTooManySubscriptions when the cap is exceeded.
 //
-// Event types without a configured cap always succeed (no semaphore
-// is created — keeps the map from growing for uncapped event-types).
+// Event types without a configured cap always succeed (no store call
+// is made — keeps the store from accumulating state for uncapped
+// event-types).
 func (q *Quota) Reserve(principal, eventName string) error {
 	q.mu.Lock()
-	sem := q.semForLocked(principal, eventName)
-	cap := q.caps[eventName]
-	q.mu.Unlock()
-	if sem == nil {
+	defer q.mu.Unlock()
+	cap, ok := q.caps[eventName]
+	if !ok || cap <= 0 {
 		return nil
 	}
-	if !sem.TryAcquire(1) {
+	resp, _ := q.store.ReserveQuota(context.Background(), ReserveQuotaRequest{
+		Principal: principal,
+		EventName: eventName,
+		Max:       cap,
+	})
+	if !resp.Granted {
 		return fmt.Errorf("%w: principal %q at cap %d for %q",
 			ErrTooManySubscriptions, principal, cap, eventName)
 	}
@@ -142,25 +122,32 @@ func (q *Quota) Reserve(principal, eventName string) error {
 
 // Release returns one subscription slot for (principal, eventName).
 //
-// Pair with Reserve 1:1 from the calling site. Excess Release would
-// panic (semaphore.Weighted.Release semantics). The SDK's wiring
-// pairs them by construction:
+// Pair with Reserve 1:1 from the calling site. Release-at-zero is a
+// silent no-op (the store-seam contract), so double-Release does not
+// panic — that's a more permissive semantics than the previous
+// semaphore-backed implementation, but matches Postgres /
+// Redis-backed implementations where the underlying ops are
+// idempotent. The SDK's wiring pairs Reserve/Release by construction:
+//
 //   - Webhook: Reserve in registerSubscribe after isNew; Release in
 //     the registry's onRemove hook (one fire per actual removal).
 //   - Push: Reserve before Subscribe; defer Release.
 //   - Poll: Reserve after Touch returns isNew; Release in the lease
 //     table's chained onExpire.
 //
-// Event types without a configured cap are no-ops (no semaphore
-// existed).
+// Event types without a configured cap are no-ops (no store call is
+// made).
 func (q *Quota) Release(principal, eventName string) {
 	q.mu.Lock()
-	sem := q.sems[quotaKey{principal: principal, eventName: eventName}]
-	q.mu.Unlock()
-	if sem == nil {
+	defer q.mu.Unlock()
+	cap, ok := q.caps[eventName]
+	if !ok || cap <= 0 {
 		return
 	}
-	sem.Release(1)
+	_, _ = q.store.ReleaseQuota(context.Background(), ReleaseQuotaRequest{
+		Principal: principal,
+		EventName: eventName,
+	})
 }
 
 // Cap returns the configured per-principal cap for eventName, or 0 if

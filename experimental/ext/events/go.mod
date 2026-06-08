@@ -7,7 +7,6 @@ replace github.com/panyam/mcpkit => ../../..
 require (
 	github.com/panyam/mcpkit v0.2.33
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/sync v0.20.0
 )
 
 require (
