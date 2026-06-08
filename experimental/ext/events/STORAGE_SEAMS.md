@@ -93,3 +93,11 @@ func WithWebhookStore(s WebhookStore) WebhookOption
 5. Add the seam's row to the table above in this doc.
 
 The other seams (#626, #628, #631) follow this template. Reviews check against this file.
+
+## Adjacent seams (not storage, same code conventions)
+
+| Interface | Concern | Status |
+|---|---|---|
+| `Emitter` | Output-side seam: "given an event, deliver it." Dual of `EventSource`. Default `NewLocalEmitter` matches today's single-replica behavior; multi-replica deployments compose with `NewCompositeEmitter` to add peer fanout. Receive-side cross-replica reuses the existing `HTTPSource` pattern — no new "Subscribe" API needed. | landed (629) |
+
+`Emitter` is not a storage seam (it doesn't persist anything), but follows the same `ctx`-first method shape and lives in its own file (`emitter.go`) per the same conventions. Listed here so future readers see the full set of seams in one place.
