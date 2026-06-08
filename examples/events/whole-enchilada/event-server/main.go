@@ -15,11 +15,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/experimental/ext/events"
-	"github.com/panyam/mcpkit/ext/auth"
 	"github.com/panyam/mcpkit/server"
 	gohttp "github.com/panyam/servicekit/http"
 )
@@ -39,6 +39,12 @@ func main() {
 		Description: "Synthetic chat messages fed by the push-server tier.",
 		Delivery:    []string{"push", "poll", "webhook"},
 		Meta:        map[string]any{"category": "messaging", "tenant": *tenant},
+		// Tenant-aware filter: with introspection auth wired, deliver
+		// only to subscribers whose Claims.Tenant matches the event's
+		// tenant tag. Stage-1 (no tenant tag on payload) and anonymous
+		// mode (no Claims.Tenant) both fall through to "deliver to
+		// everyone."
+		Match: tenantMatchFunc,
 	}, events.HTTPSourceConfig{
 		Bearer: *bearer,
 		YieldingOpts: []events.YieldingOption{
@@ -51,6 +57,7 @@ func main() {
 		Description: "Cursorless presence transitions fed by the push-server tier.",
 		Delivery:    []string{"push", "webhook"},
 		Meta:        map[string]any{"category": "presence", "tenant": *tenant},
+		Match:       tenantMatchFunc,
 	}, events.HTTPSourceConfig{
 		Bearer: *bearer,
 		YieldingOpts: []events.YieldingOption{
@@ -121,40 +128,56 @@ func main() {
 	}
 }
 
-// tryEnableIntrospection wires an RFC 7662 IntrospectionValidator when
-// the OAUTH_INTROSPECTION_URL env var is set, otherwise returns nil so
-// the caller falls back to the next posture in the chain. Recognized
-// env vars mirror oneauth's IntrospectionValidator fields:
+// tryEnableIntrospection wires a multi-realm IntrospectionValidator
+// when OAUTH_INTROSPECTION_URLS is set, otherwise returns nil so the
+// caller falls back to the next posture in the chain. Recognized env
+// vars:
 //
-//   OAUTH_INTROSPECTION_URL  REQUIRED. e.g. http://keycloak:8080/realms/<r>/protocol/openid-connect/token/introspect
-//   OAUTH_CLIENT_ID          REQUIRED. Resource-server client credentials.
-//   OAUTH_CLIENT_SECRET      REQUIRED.
+//   OAUTH_INTROSPECTION_URLS REQUIRED. Comma-separated list of N
+//                            introspection endpoints — one per realm
+//                            the event-server accepts tokens from. A
+//                            token is accepted if ANY listed realm's
+//                            introspection returns active=true.
+//                            Single-realm deployments pass exactly one
+//                            URL.
+//   OAUTH_CLIENT_ID          REQUIRED. Client ID used to authenticate
+//                            to every realm's introspection endpoint
+//                            via client_secret_basic. The same client
+//                            ID is registered in every realm in the
+//                            demo; production deployments may need
+//                            per-realm IDs (file an issue if needed).
+//   OAUTH_CLIENT_SECRET      REQUIRED. Same as above — shared across
+//                            realms for demo simplicity.
 //   OAUTH_CACHE_TTL          Optional duration. Default 30s. Set to 0
 //                            to disable caching (every request hits
 //                            the AS — the load-bearing knob for the
 //                            "token revocation" walkthrough step).
-func tryEnableIntrospection() *auth.IntrospectionValidator {
-	url := os.Getenv("OAUTH_INTROSPECTION_URL")
-	if url == "" {
+//
+// The previous OAUTH_INTROSPECTION_URL singular-form env var is no
+// longer recognized — single-realm deployments now pass exactly one
+// URL through OAUTH_INTROSPECTION_URLS.
+func tryEnableIntrospection() *MultiRealmIntrospectionValidator {
+	raw := os.Getenv("OAUTH_INTROSPECTION_URLS")
+	if raw == "" {
 		return nil
 	}
 	cacheTTL := 30 * time.Second
-	if raw := os.Getenv("OAUTH_CACHE_TTL"); raw != "" {
-		if d, err := time.ParseDuration(raw); err == nil {
+	if rawTTL := os.Getenv("OAUTH_CACHE_TTL"); rawTTL != "" {
+		if d, err := time.ParseDuration(rawTTL); err == nil {
 			cacheTTL = d
 		}
 	}
-	return auth.NewIntrospectionValidator(auth.IntrospectionConfig{
-		IntrospectionURL: url,
-		ClientID:         os.Getenv("OAUTH_CLIENT_ID"),
-		ClientSecret:     os.Getenv("OAUTH_CLIENT_SECRET"),
-		CacheTTL:         cacheTTL,
+	return buildMultiRealmValidator(realmConfig{
+		URLs:         strings.Split(raw, ","),
+		ClientID:     os.Getenv("OAUTH_CLIENT_ID"),
+		ClientSecret: os.Getenv("OAUTH_CLIENT_SECRET"),
+		CacheTTL:     cacheTTL,
 	})
 }
 
-// hasIntrospectionEnv reports whether OAUTH_INTROSPECTION_URL is set.
+// hasIntrospectionEnv reports whether OAUTH_INTROSPECTION_URLS is set.
 // Used to decide whether to fall back to the UnsafeAnonymousPrincipal
 // demo escape on events.Config.
 func hasIntrospectionEnv() bool {
-	return os.Getenv("OAUTH_INTROSPECTION_URL") != ""
+	return os.Getenv("OAUTH_INTROSPECTION_URLS") != ""
 }
