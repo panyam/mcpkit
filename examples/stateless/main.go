@@ -31,6 +31,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -41,6 +42,7 @@ import (
 
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
+	commonotel "github.com/panyam/mcpkit/examples/common/otel"
 	"github.com/panyam/mcpkit/server"
 	"github.com/panyam/mcpkit/server/stateless"
 )
@@ -60,7 +62,18 @@ func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
 	modeFlag := flag.String("mode", "stateless",
 		"wire mode: legacy | dual | stateless (default stateless for conformance)")
+	tel := common.RegisterTelemetryFlags(flag.CommandLine)
 	flag.CommandLine.Parse(filterArgs(os.Args[1:], "--serve"))
+
+	tp, shutdown, err := commonotel.SetupTelemetry(context.Background(),
+		commonotel.WithExporter(*tel.Exporter),
+		commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+		commonotel.WithServiceName("stateless-demo"),
+	)
+	if err != nil {
+		log.Fatalf("commonotel.SetupTelemetry: %v", err)
+	}
+	defer shutdown(context.Background())
 
 	mode, ok := stateless.ParseMode(*modeFlag)
 	if !ok {
@@ -69,9 +82,10 @@ func serve() {
 
 	log.Printf("[stateless-demo] mode=%s", mode)
 	if err := common.RunServer(common.ServerConfig{
-		Name:      "stateless-demo",
-		Addr:      *addr,
-		LogPrefix: "[stateless] ",
+		Name:           "stateless-demo",
+		Addr:           *addr,
+		LogPrefix:      "[stateless] ",
+		TracerProvider: tp,
 		Register: func(srv *server.Server) {
 			registerCartTools(srv, newCartStore())
 			registerDiagnosticTools(srv)

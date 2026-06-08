@@ -15,6 +15,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -26,6 +27,7 @@ import (
 	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
+	commonotel "github.com/panyam/mcpkit/examples/common/otel"
 	"github.com/panyam/mcpkit/server"
 )
 
@@ -41,10 +43,21 @@ func main() {
 
 func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
+	tel := common.RegisterTelemetryFlags(flag.CommandLine)
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.BoolFlag("--serve"),
 		demokit.ValueFlag("--url"),
 	))
+
+	tp, shutdown, err := commonotel.SetupTelemetry(context.Background(),
+		commonotel.WithExporter(*tel.Exporter),
+		commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+		commonotel.WithServiceName("tasks-demo"),
+	)
+	if err != nil {
+		log.Fatalf("commonotel.SetupTelemetry: %v", err)
+	}
+	defer shutdown(context.Background())
 
 	registerAll := func(srv *server.Server) { registerTasksDemoTools(srv) }
 
@@ -58,9 +71,10 @@ func serve() {
 	log.Printf("  write_haiku    — required task + sampling (asks LLM to write a haiku)")
 
 	if err := common.RunServer(common.ServerConfig{
-		Name:     "tasks-demo",
-		Addr:     *addr,
-		Register: registerAll,
+		Name:           "tasks-demo",
+		Addr:           *addr,
+		TracerProvider: tp,
+		Register:       registerAll,
 	}); err != nil {
 		log.Fatal(err)
 	}

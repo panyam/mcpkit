@@ -54,6 +54,14 @@ type ServerConfig struct {
 	// when calling ListenAndServe. Use for serve-time wiring like
 	// WithStatelessMode, WithSSE, WithEventStore, etc.
 	TransportOptions []server.TransportOption
+
+	// TracerProvider, when non-nil, wires SEP-414 trace middleware
+	// into the server via server.WithTracerProvider. Pass the result
+	// of commonotel.SetupTelemetry directly — it's already wrapped
+	// in mcpotel.NewProvider so no adapter call is needed at the
+	// example call site. A nil value (or core.NoopTracerProvider{})
+	// is the default and adds zero overhead.
+	TracerProvider core.TracerProvider
 }
 
 // RunServer wires up the canonical mcpkit-example server lifecycle:
@@ -92,6 +100,9 @@ func RunServer(cfg ServerConfig) error {
 		opts = append(opts, WithMCPLogging(cfg.Logger)...)
 	} else {
 		opts = append(opts, MCPServerOptions(cfg.Addr, cfg.LogPrefix)...)
+	}
+	if cfg.TracerProvider != nil {
+		opts = append(opts, server.WithTracerProvider(cfg.TracerProvider))
 	}
 	opts = append(opts, cfg.Options...)
 
