@@ -156,6 +156,11 @@ body { margin: 2em auto; max-width: 900px; padding: 0 1em; font-family: -apple-s
       },
       {
         "kind": "section",
+        "title": "What the App iframe does with all this",
+        "body": "The host → iframe handoff mechanics (`tools/call` → `resources/read` → sandboxed iframe → `postMessage`) are covered once in [The basic-host bridge dance](../README.md#the-basic-host-bridge-dance). Steps 1-4 above are the floor every MCP Apps interaction starts from.\n\nbasic-vanillajs's iframe sits at the **bare-minimum** end of the App-ness spectrum — same shape as `quickstart`, just hand-rolled DOM instead of a build pipeline. The bridge calls its App SDK makes:\n\n- `app.ontoolresult` — extracts `result.structuredContent.time` and inlines it into the iframe body.\n- `app.callServerTool({name: \"get-time\"})` on button click — refreshes the timestamp via the bridge.\n\nNO `app.registerTool`, NO `app.updateModelContext`, no host context awareness. The framework-variant fixtures (`basic-preact`, `basic-react`, `basic-solid`, `basic-svelte`, `basic-vue`) make the identical bridge calls — only the iframe's frontend framework changes."
+      },
+      {
+        "kind": "section",
         "title": "Where to look in the code",
         "body": "- `main.go` — fixture is ~60 lines: one typed tool, one paired UI resource, CORS for browser hosts.\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + screenshots + the centralized [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) guide."
       }
@@ -186,7 +191,7 @@ body { margin: 2em auto; max-width: 900px; padding: 0 1em; font-family: -apple-s
       "title": "tools/call get-time — capture the ISO 8601 timestamp",
       "step_id": "step-3",
       "visit": 1,
-      "output": "    structuredContent: {\n        \"time\": \"2026-06-05T22:58:20.250332Z\"\n      }\n"
+      "output": "    structuredContent: {\n        \"time\": \"2026-06-08T18:29:13.327296Z\"\n      }\n"
     },
     {
       "kind": "step",
@@ -194,6 +199,11 @@ body { margin: 2em auto; max-width: 900px; padding: 0 1em; font-family: -apple-s
       "step_id": "step-4",
       "visit": 1,
       "output": "    334526 bytes total; first 200:\n      \u003c!DOCTYPE html\u003e\n\u003chtml lang=\"en\"\u003e\n\u003chead\u003e\n  \u003cmeta charset=\"UTF-8\"\u003e\n  \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"\u003e\n  \u003cmeta name=\"color-scheme\" content=\"light dark\"\u003e\n  \u003ctitle\u003eGet…\n"
+    },
+    {
+      "kind": "section",
+      "title": "What the App iframe does with all this",
+      "body": "The host → iframe handoff mechanics (`tools/call` → `resources/read` → sandboxed iframe → `postMessage`) are covered once in [The basic-host bridge dance](../README.md#the-basic-host-bridge-dance). Steps 1-4 above are the floor every MCP Apps interaction starts from.\n\nbasic-vanillajs's iframe sits at the **bare-minimum** end of the App-ness spectrum — same shape as `quickstart`, just hand-rolled DOM instead of a build pipeline. The bridge calls its App SDK makes:\n\n- `app.ontoolresult` — extracts `result.structuredContent.time` and inlines it into the iframe body.\n- `app.callServerTool({name: \"get-time\"})` on button click — refreshes the timestamp via the bridge.\n\nNO `app.registerTool`, NO `app.updateModelContext`, no host context awareness. The framework-variant fixtures (`basic-preact`, `basic-react`, `basic-solid`, `basic-svelte`, `basic-vue`) make the identical bridge calls — only the iframe's frontend framework changes."
     },
     {
       "kind": "section",

@@ -189,6 +189,17 @@ fmt.Printf("first 200 bytes: %.200s\n", text)`,
 		return nil
 	})
 
+	demo.Section("What the App iframe does with all this",
+		"The host → iframe handoff mechanics (`tools/call` → `resources/read` → sandboxed iframe → `postMessage`) are covered once in [The basic-host bridge dance](../README.md#the-basic-host-bridge-dance). Steps 1-4 above are the floor every MCP Apps interaction starts from.",
+		"",
+		"basic-vanillajs's iframe sits at the **bare-minimum** end of the App-ness spectrum — same shape as `quickstart`, just hand-rolled DOM instead of a build pipeline. The bridge calls its App SDK makes:",
+		"",
+		"- `app.ontoolresult` — extracts `result.structuredContent.time` and inlines it into the iframe body.",
+		"- `app.callServerTool({name: \"get-time\"})` on button click — refreshes the timestamp via the bridge.",
+		"",
+		"NO `app.registerTool`, NO `app.updateModelContext`, no host context awareness. The framework-variant fixtures (`basic-preact`, `basic-react`, `basic-solid`, `basic-svelte`, `basic-vue`) make the identical bridge calls — only the iframe's frontend framework changes.",
+	)
+
 	demo.Section("Where to look in the code",
 		"- `main.go` — fixture is ~60 lines: one typed tool, one paired UI resource, CORS for browser hosts.",
 		"- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.",

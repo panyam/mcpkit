@@ -242,6 +242,17 @@ fmt.Printf("_meta: %s\n", string(raw.Contents[0].Meta))`,
 		return nil
 	})
 
+	demo.Section("What the App iframe does with all this",
+		"The host → iframe handoff mechanics (`tools/call` → `resources/read` → sandboxed iframe → `postMessage`) are covered once in [The basic-host bridge dance](../README.md#the-basic-host-bridge-dance). Steps 1-4 above are the floor every MCP Apps interaction starts from.",
+		"",
+		"sheet-music's iframe sits at the **bare-minimum** end of the App-ness spectrum, but with one extra resource-level declaration that's the whole reason this fixture exists in our parity coverage. The bridge calls its App SDK makes:",
+		"",
+		"- `app.ontoolresult` — receives the typed text content (`\"Input parsed successfully.\"`) plus the input's ABC notation, hands them to abcjs.",
+		"- `app.callServerTool({name: \"play-sheet-music\", arguments: {abcNotation}})` — when the iframe wants to re-validate notation (e.g., the user edited a piece in a future fixture). Today the demo passes the default ABC and renders.",
+		"",
+		"What makes this fixture different from `basic-vanillajs` isn't the bridge calls — it's the **resource `_meta`**: `_meta.ui.csp.connectDomains: [\"https://paulrosen.github.io\"]` on step 4's response is what unblocks abcjs streaming soundfont samples from the CDN. Without that line in the fixture's ResourceHandler, the iframe renders sheet music silently but the play button does nothing — see [the CSP connect-src contract](../sheet-music/README.md#the-csp-connect-src-contract) section of the README.",
+	)
+
 	demo.Section("Where to look in the code",
 		"- `main.go` — the InputSchemaPatch landing the default + the ResourceHandler setting `_meta.ui.csp.connectDomains`. Both are visible in single contiguous edits.",
 		"- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.",
