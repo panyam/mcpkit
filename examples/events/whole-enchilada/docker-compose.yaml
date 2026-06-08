@@ -21,6 +21,15 @@
 networks:
   whole_enchilada:
     driver: bridge
+  # mcpkit is a shared bridge network across the whole-enchilada demo
+  # AND the docker/observability LGTM stack — the otel-collector listens
+  # on it so the event-server / push-server can export OTLP to it by
+  # container name (mcpkit-otel-collector:4317). Declared with
+  # `name: mcpkit` so compose looks up the existing network by literal
+  # name (no project prefix). Whichever stack starts first creates it.
+  mcpkit:
+    name: mcpkit
+    driver: bridge
 
 services:
   nginx:
@@ -56,6 +65,13 @@ services:
       OAUTH_CLIENT_ID: mcp-event-server
       OAUTH_CLIENT_SECRET: ${OAUTH_CLIENT_SECRET:-mcpkit-demo-secret-DEMO-ONLY}
       OAUTH_CACHE_TTL: ${OAUTH_CACHE_TTL:-5s}
+      # OTel telemetry. EXPORTER=auto means "best-effort OTLP with
+      # silent Noop fallback" — works whether docker/observability is
+      # up or not. To force OTLP and fail loudly when the collector
+      # is missing, set EXPORTER=otlp in the host shell before
+      # docker compose up.
+      EXPORTER: ${EXPORTER:-auto}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-mcpkit-otel-collector:4317}
     command: ["-addr", ":8080"]
     expose:
       - "8080"
@@ -72,6 +88,7 @@ services:
         aliases:
           - event_server.whole_enchilada
           - event_server_1.whole_enchilada
+      mcpkit: {}
 
 
   push-server-1:
@@ -81,6 +98,8 @@ services:
     environment:
       EVENT_SERVER_URL: http://event_server.whole_enchilada
       EVENT_INJECT_BEARER: ${EVENT_INJECT_BEARER:-stage-1-shared-secret}
+      EXPORTER: ${EXPORTER:-auto}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-mcpkit-otel-collector:4317}
     command: ["-admin-addr", ":9091", "-chat-every", "2s", "-presence-every", "5s"]
     expose:
       - "9091"
@@ -92,6 +111,7 @@ services:
         aliases:
           - pusher.whole_enchilada
           - pusher_1.whole_enchilada
+      mcpkit: {}
 
   receiver:
     build:
