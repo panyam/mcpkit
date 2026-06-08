@@ -39,8 +39,6 @@ func runDemo() {
 	// double-parse. Use flag.Parse only on the residual args demokit
 	// returns via FilterArgs.
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
-		demokit.ValueFlag("--exporter"),
-		demokit.ValueFlag("--otlp-endpoint"),
 		demokit.ValueFlag("--url"),
 	))
 

@@ -40,10 +40,21 @@ services:
       - loki
       - mimir
 
+  # The Tempo / Loki / Mimir containers run as `user: "0:0"` (root)
+  # because the upstream images default to a non-root user (uid 10001)
+  # that has no write access to /var/<service> on first boot — so the
+  # binaries fail with "mkdir /var/<service>: permission denied" before
+  # they can lay down their storage tree. This matches what each
+  # project's own dev-mode docker-compose examples do (Loki docs:
+  # `grafana/loki/example/docker-compose-only`; Tempo docs:
+  # `grafana/tempo/example/docker-compose/local`). DO NOT copy this to
+  # a production deployment — production should use a dedicated user
+  # with proper volume ownership or named-volume initContainers.
   tempo:
     image: grafana/tempo:2.6.1
     container_name: mcpkit-tempo
     restart: unless-stopped
+    user: "0:0"
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
       - ./tempo/config.yaml:/etc/tempo.yaml:ro
@@ -54,6 +65,7 @@ services:
     image: grafana/loki:3.2.1
     container_name: mcpkit-loki
     restart: unless-stopped
+    user: "0:0"
     command: ["-config.file=/etc/loki/config.yaml"]
     volumes:
       - ./loki/config.yaml:/etc/loki/config.yaml:ro
@@ -64,6 +76,7 @@ services:
     image: grafana/mimir:2.14.0
     container_name: mcpkit-mimir
     restart: unless-stopped
+    user: "0:0"
     command: ["-config.file=/etc/mimir/config.yaml", "-target=all"]
     volumes:
       - ./mimir/config.yaml:/etc/mimir/config.yaml:ro

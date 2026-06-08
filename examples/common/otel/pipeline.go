@@ -107,9 +107,15 @@ func NewStdoutPipeline(w *os.File, serviceName string) (*sdktrace.TracerProvider
 // production deployments would supply credentials and a non-insecure
 // endpoint via the standard OTel env vars.
 //
-// Uses a batched span processor so a small burst of spans (the
-// initialize handshake + a few tools/calls) ships together; the
-// shutdown closure drains the batch before returning.
+// Uses a synchronous span processor (WithSyncer, NOT WithBatcher) so
+// every dispatched span ships immediately rather than waiting for a
+// batch to fill. Slightly slower per-span at the gRPC layer, but the
+// trade-off is the right one for a teaching example: an operator who
+// kills the demo a second after `tools/call` returns sees their
+// spans in Grafana, not an empty search result because the batch
+// processor hadn't flushed yet. Real high-throughput servers would
+// prefer WithBatcher and explicit ForceFlush + Shutdown signal
+// handling.
 func NewOTLPPipeline(endpoint, serviceName string) (*sdktrace.TracerProvider, func(), error) {
 	exp, err := otlptracegrpc.New(
 		context.Background(),
@@ -120,7 +126,7 @@ func NewOTLPPipeline(endpoint, serviceName string) (*sdktrace.TracerProvider, fu
 		return nil, nil, fmt.Errorf("otlptracegrpc.New: %w", err)
 	}
 	tp := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(exp),
+		sdktrace.WithSyncer(exp),
 		sdktrace.WithResource(ResourceFor(serviceName)),
 	)
 	shutdown := func() {
