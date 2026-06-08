@@ -19,6 +19,7 @@ import (
 	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
+	common "github.com/panyam/mcpkit/examples/common"
 	"github.com/panyam/mcpkit/experimental/ext/events"
 	eventsclient "github.com/panyam/mcpkit/experimental/ext/events/clients/go"
 )
@@ -45,6 +46,12 @@ func runDemo(serverURL, receiverURL string) {
 			demokit.Actor("Keycloak", "OAuth AS — three realms pre-imported on first start"),
 			demokit.Actor("Operator", "The person running the demo from their terminal"),
 		)
+
+	// Wire mode-dispatched renderer + the demokit/web bridge — matches
+	// every other example's walkthrough. Without this call, --tui and
+	// --mode=tui silently fall back to the plain renderer because
+	// demokit ships no renderer by default.
+	common.SetupRenderer(demo)
 
 	demo.Section("Architecture in one diagram",
 		"```",
