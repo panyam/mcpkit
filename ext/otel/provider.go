@@ -40,6 +40,13 @@ const defaultInstrumentationName = "github.com/panyam/mcpkit/server"
 // cost on the hot path.
 type Provider struct {
 	tracer oteltrace.Tracer
+	// otelTP is kept so OTelTracerProvider() can hand it back to
+	// downstream libraries that take an OTel TracerProvider directly
+	// (oneauth's keys.WithTracerProvider, future grpc / http
+	// instrumentation, etc.). Multiple consumers sharing the same
+	// underlying TP is the supported pattern — span batching and
+	// exporter pipelines live on the TP, not the Tracer.
+	otelTP oteltrace.TracerProvider
 }
 
 // Option mutates a providerConfig during NewProvider. The Option type is
@@ -92,7 +99,24 @@ func NewProvider(otelTP oteltrace.TracerProvider, opts ...Option) *Provider {
 	for _, opt := range opts {
 		opt(&cfg)
 	}
-	return &Provider{tracer: otelTP.Tracer(cfg.instrumentationName)}
+	return &Provider{
+		tracer: otelTP.Tracer(cfg.instrumentationName),
+		otelTP: otelTP,
+	}
+}
+
+// OTelTracerProvider returns the underlying OpenTelemetry TracerProvider
+// the Provider was constructed with. Used by callers that need to hand
+// the same TracerProvider to downstream libraries which take an OTel
+// TracerProvider directly — oneauth's keys.WithTracerProvider, future
+// grpc/http instrumentation, etc. — so all instrumentation in the
+// process shares one span pipeline.
+//
+// The returned value is the same pointer NewProvider was called with;
+// nil-checks on the caller side are unnecessary (NewProvider panics on
+// nil).
+func (p *Provider) OTelTracerProvider() oteltrace.TracerProvider {
+	return p.otelTP
 }
 
 // StartSpan implements core.TracerProvider. The returned context carries
