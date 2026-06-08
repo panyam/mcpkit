@@ -151,9 +151,21 @@ pair via `common.RegisterTelemetryFlags(flag.CommandLine)`, then
 calls `commonotel.SetupTelemetry(ctx, ...)` and threads the result
 into `common.ServerConfig.TracerProvider`. Default `--exporter=""`
 returns `core.NoopTracerProvider{}` (zero overhead, no spans) — an
-operator opts in per invocation with `--exporter=stdout` or
-`--exporter=otlp`. No example dumps spans to stdout unless explicitly
-asked.
+operator opts in per invocation. No example dumps spans to stdout
+unless explicitly asked.
+
+`--exporter` accepts four values:
+
+- `""` (default) — `core.NoopTracerProvider{}`. Zero overhead.
+- `stdout` — `stdouttrace` exporter writing to `os.Stdout`. Teaching
+  / demo mode.
+- `otlp` — `otlptracegrpc` exporter to `--otlp-endpoint` (default
+  `localhost:4317`). If the endpoint is unreachable, falls back to
+  Noop with a log warning.
+- `auto` — probe the OTLP endpoint; if reachable, behave like
+  `otlp`; if not, fall back to Noop **silently** (no warning). Right
+  pick for examples that may or may not have the local
+  `docker/observability/` stack running.
 
 Canonical wiring inside `serve()`:
 
