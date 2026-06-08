@@ -228,10 +228,13 @@ type WebhookTarget struct {
 	// snapshot returned by Targets()/DeliveryStatus() is consistent.
 	Status DeliveryStatus
 
-	// failureCount is the internal counter for the suspend state machine.
+	// FailureCount is the internal counter for the suspend state machine.
 	// Tracks consecutive failures within the current sliding-window run.
 	// Not surfaced on the wire; the wire-visible signal is Status.Active.
-	failureCount int
+	// Exported so external WebhookStore implementations can round-trip
+	// the value across a restart — an in-process registry never reads
+	// it across the package boundary.
+	FailureCount int
 }
 
 // DeliveryStatus is the per-target delivery-health summary surfaced on
@@ -605,7 +608,7 @@ func (r *WebhookRegistry) Register(p RegisterParams) (expiresAt time.Time, isNew
 			existing.Status.Active = true
 			existing.Status.LastError = DeliveryErrorNone
 			existing.Status.FailedSince = nil
-			existing.failureCount = 0
+			existing.FailureCount = 0
 		}
 		_, _ = r.store.SaveWebhook(context.Background(), SaveWebhookRequest{Target: existing})
 		isNew = false
@@ -882,7 +885,7 @@ func (r *WebhookRegistry) recordDeliverySuccess(canonicalKey []byte, at time.Tim
 	t.Status.LastDeliveryAt = &atCopy
 	t.Status.LastError = DeliveryErrorNone
 	t.Status.FailedSince = nil
-	t.failureCount = 0
+	t.FailureCount = 0
 	_, _ = r.store.SaveWebhook(ctx, SaveWebhookRequest{Target: t})
 }
 
@@ -911,17 +914,17 @@ func (r *WebhookRegistry) recordDeliveryFailure(canonicalKey []byte, bucket Deli
 
 	// Sliding-window failure counting. If the current run is older
 	// than the window, reset — this failure starts a fresh run.
-	// failureCount is per-target; tracked alongside the wire-visible
+	// FailureCount is per-target; tracked alongside the wire-visible
 	// DeliveryStatus fields.
 	if t.Status.FailedSince == nil || now.Sub(*t.Status.FailedSince) > r.suspendWindow {
 		startCopy := now
 		t.Status.FailedSince = &startCopy
-		t.failureCount = 1
+		t.FailureCount = 1
 	} else {
-		t.failureCount++
+		t.FailureCount++
 	}
 	wasActive := t.Status.Active
-	if t.failureCount >= r.suspendThreshold {
+	if t.FailureCount >= r.suspendThreshold {
 		t.Status.Active = false
 	}
 	_, _ = r.store.SaveWebhook(ctx, SaveWebhookRequest{Target: t})
