@@ -71,6 +71,15 @@ type JWTValidator struct {
 	// tokenCache stores validated claims keyed by SHA-256 hash of the token.
 	// Lazy eviction: expired entries are removed on access, not by background goroutine.
 	tokenCache conc.SyncMap[string, *cachedClaims]
+
+	// tp optionally instruments Validate() with sub-spans for the
+	// latency-bearing JWKS lookup AND active-span attributes
+	// (mcp.auth.method / subject / issuer / scopes / cache_hit) on
+	// the dispatch span set up by server.WithTracerProvider. Defaults
+	// to core.NoopTracerProvider{} — see ensureTP — so all the
+	// instrumentation call sites can unconditionally call StartSpan
+	// without nil-checking. Configured via JWTConfig.TracerProvider.
+	tp mcpcore.TracerProvider
 }
 
 // cachedClaims wraps claims with an expiry time for TTL-based caching.
@@ -100,6 +109,16 @@ type JWTConfig struct {
 	// AllScopes is the complete set of scopes this server supports.
 	// Included in WWW-Authenticate 401 headers for client scope selection.
 	AllScopes []string
+
+	// TracerProvider optionally enables SEP-414 instrumentation of
+	// token validation: a sub-span per JWKS key lookup plus
+	// mcp.auth.* attributes (method / subject / issuer / scopes /
+	// cache_hit) on the active dispatch span set up by
+	// server.WithTracerProvider. Nil (or core.NoopTracerProvider{})
+	// is the default — zero spans, zero attributes, zero allocation
+	// added to the validation path. ext/auth depends on the core
+	// abstraction only; no compile-time dependency on ext/otel.
+	TracerProvider mcpcore.TracerProvider
 }
 
 // NewJWTValidator creates a JWTValidator backed by oneauth's JWT validation
@@ -113,12 +132,18 @@ func NewJWTValidator(cfg JWTConfig) *JWTValidator {
 	}
 	auth.ClientKeyStore = ks
 
+	tp := cfg.TracerProvider
+	if tp == nil {
+		tp = mcpcore.NoopTracerProvider{}
+	}
+
 	return &JWTValidator{
 		auth:                auth,
 		ks:                  ks,
 		ResourceMetadataURL: cfg.ResourceMetadataURL,
 		RequiredScopes:      cfg.RequiredScopes,
 		AllScopes:           cfg.AllScopes,
+		tp:                  tp,
 	}
 }
 
@@ -126,6 +151,15 @@ func NewJWTValidator(cfg JWTConfig) *JWTValidator {
 // Extracts the Bearer token, validates signature/issuer/audience/expiry via oneauth,
 // checks required scopes, and stashes parsed claims for Claims() to read.
 func (v *JWTValidator) Validate(r *http.Request) error {
+	ctx := r.Context()
+
+	// Stamp the auth method on the active dispatch span before any
+	// branch that can early-return — even auth FAILURES should leave
+	// the span carrying "we attempted JWT validation here." Noop
+	// provider's SpanFromContext returns a no-op span, so SetAttribute
+	// is a no-op when there's no active span; no nil-check needed.
+	mcpcore.SpanFromContext(ctx).SetAttribute("mcp.auth.method", "jwt")
+
 	// Extract Bearer token
 	authHeader := r.Header.Get("Authorization")
 	const prefix = "Bearer "
@@ -141,6 +175,7 @@ func (v *JWTValidator) Validate(r *http.Request) error {
 			if time.Now().Before(cached.expiry) {
 				// Cache hit — stash claims for Claims() and return
 				v.recentClaims.Store(token, cached.claims)
+				v.stampClaimsAttrs(ctx, cached.claims, true)
 				return nil
 			}
 			// Expired — remove and fall through to full validation
@@ -151,7 +186,7 @@ func (v *JWTValidator) Validate(r *http.Request) error {
 	// Validate JWT with kid-based JWKS key lookup. We use jwt.Parse directly
 	// with a custom keyfunc because APIAuth.ValidateAccessTokenFull only supports
 	// fixed keys, not kid-based KeyStore lookup needed for JWKS.
-	parsed, err := jwt.Parse(token, v.jwksKeyFunc)
+	parsed, err := jwt.Parse(token, v.jwksKeyFuncCtx(ctx))
 	if err != nil {
 		return v.unauthorized("invalid token: " + err.Error())
 	}
@@ -244,6 +279,12 @@ func (v *JWTValidator) Validate(r *http.Request) error {
 		claims.Audience = []string{v.auth.JWTAudience}
 	}
 
+	// Stamp the resolved principal info on the active dispatch span
+	// once the claims are extracted. cache_hit=false because we just
+	// did the full crypto path; the cache-hit branch above sets it to
+	// true.
+	v.stampClaimsAttrs(ctx, claims, false)
+
 	// Cache claims by token so Claims(r) can retrieve them without re-parsing.
 	// This avoids the fragile *r = *r.WithContext(...) pattern.
 	v.recentClaims.Store(token, claims)
@@ -294,28 +335,70 @@ func (v *JWTValidator) Claims(r *http.Request) *mcpcore.Claims {
 	return nil
 }
 
-// jwksKeyFunc resolves the verification key for a JWT by looking up the kid
-// header in the JWKS key store. This enables RS256/ES256 token verification
-// via dynamically fetched JWKS keys.
-func (v *JWTValidator) jwksKeyFunc(token *jwt.Token) (any, error) {
-	kid, ok := token.Header["kid"].(string)
-	if !ok || kid == "" {
-		return nil, fmt.Errorf("missing kid header")
+// jwksKeyFuncCtx returns a jwt.Keyfunc closure that resolves the
+// verification key for a JWT by looking up the kid header in the
+// JWKS key store. The closure captures ctx so the JWKS lookup can
+// span-wrap via the configured TracerProvider — jwt-go's Keyfunc
+// signature has no ctx parameter, hence the closure.
+//
+// The auth.jwks_lookup sub-span wraps each GetKeyByKid call and
+// surfaces both cache-hit and cache-miss latency through the OTel
+// adapter — oneauth's JWKSKeyStore owns the HTTP fetch decision
+// internally, so we measure the call to the store (which is what
+// ext/auth's responsibility ends at), not the fetch itself. When
+// oneauth grows its own observability (separate ticket), the
+// store's internal HTTP work appears as a child of this span.
+func (v *JWTValidator) jwksKeyFuncCtx(ctx context.Context) jwt.Keyfunc {
+	return func(token *jwt.Token) (any, error) {
+		kid, ok := token.Header["kid"].(string)
+		if !ok || kid == "" {
+			return nil, fmt.Errorf("missing kid header")
+		}
+		spanCtx, span := v.tp.StartSpan(ctx, "auth.jwks_lookup",
+			mcpcore.Attribute{Key: "mcp.auth.jwks.kid", Value: kid},
+		)
+		rec, err := v.ks.GetKeyByKid(spanCtx, &keys.GetKeyByKidRequest{Kid: kid})
+		if err != nil {
+			span.RecordError(err)
+			span.End()
+			return nil, fmt.Errorf("key not found for kid %q: %w", kid, err)
+		}
+		span.End()
+		// oneauth 0.1.9 (#217): GetKeyByKidResponse wraps a *KeyRecord rather
+		// than inlining its fields. Access fields via Record.
+		if rec == nil || rec.Record == nil {
+			return nil, fmt.Errorf("key not found for kid %q", kid)
+		}
+		alg, _ := token.Header["alg"].(string)
+		if alg != rec.Record.Algorithm {
+			return nil, fmt.Errorf("algorithm mismatch: token has %s, key expects %s", alg, rec.Record.Algorithm)
+		}
+		return utils.DecodeVerifyKey(rec.Record.Key, rec.Record.Algorithm)
 	}
-	rec, err := v.ks.GetKeyByKid(context.Background(), &keys.GetKeyByKidRequest{Kid: kid})
-	if err != nil {
-		return nil, fmt.Errorf("key not found for kid %q: %w", kid, err)
+}
+
+// stampClaimsAttrs sets the mcp.auth.* attributes on the active
+// dispatch span carried by ctx. Called from both the cache-hit fast
+// path and the post-validation slow path. When no active span is
+// present (Noop provider), SpanFromContext returns a no-op span and
+// every SetAttribute is a no-op — single call site, no nil-check.
+//
+// cacheHit distinguishes the two callers: true from the cache-hit
+// branch, false from the post-validation branch.
+func (v *JWTValidator) stampClaimsAttrs(ctx context.Context, claims *mcpcore.Claims, cacheHit bool) {
+	span := mcpcore.SpanFromContext(ctx)
+	span.SetAttribute("mcp.auth.subject", claims.Subject)
+	if claims.Issuer != "" {
+		span.SetAttribute("mcp.auth.issuer", claims.Issuer)
 	}
-	// oneauth 0.1.9 (#217): GetKeyByKidResponse wraps a *KeyRecord rather
-	// than inlining its fields. Access fields via Record.
-	if rec == nil || rec.Record == nil {
-		return nil, fmt.Errorf("key not found for kid %q", kid)
+	if len(claims.Scopes) > 0 {
+		span.SetAttribute("mcp.auth.scopes", strings.Join(claims.Scopes, ","))
 	}
-	alg, _ := token.Header["alg"].(string)
-	if alg != rec.Record.Algorithm {
-		return nil, fmt.Errorf("algorithm mismatch: token has %s, key expects %s", alg, rec.Record.Algorithm)
+	if cacheHit {
+		span.SetAttribute("mcp.auth.cache_hit", "true")
+	} else {
+		span.SetAttribute("mcp.auth.cache_hit", "false")
 	}
-	return utils.DecodeVerifyKey(rec.Record.Key, rec.Record.Algorithm)
 }
 
 // unauthorized returns an AuthError with 401 and a WWW-Authenticate header
