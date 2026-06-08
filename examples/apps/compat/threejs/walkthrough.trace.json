@@ -1,0 +1,16 @@
+[
+  {
+    "kind": "step",
+    "title": "Connect to the fixture",
+    "step_id": "step-1",
+    "visit": 1,
+    "output": "    connected to Three.js Server 1.0.0\n"
+  },
+  {
+    "kind": "step",
+    "title": "List tools",
+    "step_id": "step-2",
+    "visit": 1,
+    "output": "    {\n      \"tools\": [\n        {\n          \"name\": \"show_threejs_scene\",\n          \"title\": \"Show Three.js Scene\",\n          \"description\": \"Render an interactive 3D scene with custom Three.js code. Supports transparent backgrounds (alpha: true) for seamless host UI integration. Available globals: THREE, OrbitControls, EffectComposer, RenderPass, UnrealBloomPass, canvas, width, height.\",\n          \"inputSchema\": {\n            \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n            \"properties\": {\n              \"code\": {\n                \"default\": \"const scene = new THREE.Scene();\\nconst camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);\\nconst renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });\\nrenderer.setSize(width, height);\\nrenderer.setClearColor(0x000000, 0); // Transparent background\\n\\nconst cube = new THREE.Mesh(\\n  new THREE.BoxGeometry(1, 1, 1),\\n  new THREE.MeshStandardMaterial({ color: 0x00ff88 })\\n);\\nscene.add(cube);\\n\\nscene.add(new THREE.DirectionalLight(0xffffff, 1));\\nscene.add(new THREE.AmbientLight(0x404040));\\n\\ncamera.position.z = 3;\\n\\nfunction animate() {\\n  requestAnimationFrame(animate);\\n  cube.rotation.x += 0.01;\\n  cube.rotation.y += 0.01;\\n  renderer.render(scene, camera);\\n}\\nanimate();\",\n                \"description\": \"JavaScript code to render the 3D scene\",\n                \"type\": \"string\"\n              },\n              \"height\": {\n                \"default\": 400,\n                \"description\": \"Height in pixels\",\n                \"exclusiveMinimum\": 0,\n                \"maximum\": 9007199254740991,\n                \"type\": \"integer\"\n              }\n            },\n            \"type\": \"object\"\n          },\n          \"outputSchema\": {\n            \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n            \"properties\": {\n              \"success\": {\n                \"type\": \"boolean\"\n              }\n            },\n            \"type\": \"object\",\n            \"required\": [\n              \"success\"\n            ]\n          },\n          \"execution\": {\n            \"taskSupport\": \"forbidden\"\n          },\n          \"_meta\": {\n            \"ui\": {\n              \"resourceUri\": \"ui://threejs/mcp-app.html\"\n            },\n            \"ui/resourceUri\": \"ui://threejs/mcp-app.html\"\n          }\n        },\n        {\n          \"name\": \"learn_threejs\",\n          \"title\": \"Learn Three.js\",\n          \"description\": \"Get documentation and examples for using the Three.js View\",\n          \"inputSchema\": {\n            \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n            \"properties\": {},\n            \"type\": \"object\"\n          },\n          \"execution\": {\n            \"taskSupport\": \"forbidden\"\n          }\n        }\n      ]\n    }\n"
+  }
+]
