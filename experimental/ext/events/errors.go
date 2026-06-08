@@ -57,6 +57,27 @@ type NotFoundData struct {
 // server is willing to expose it. Max is omitted when zero so the
 // client can distinguish "limit hit, ceiling not disclosed" from
 // "limit hit, ceiling = 0".
+//
+// Canonical wire shape for the quota-rejection path. Both demos in
+// examples/events/ (kitchen-sink, whole-enchilada) emit responses
+// matching this shape; a single client-side switch over (code, data)
+// works across both deployments. Two distinct emission paths share
+// the shape — the discriminator is whether Max is present on the wire:
+//
+//	Path             | When                                | message                                              | data.max
+//	─────────────────┼─────────────────────────────────────┼──────────────────────────────────────────────────────┼─────────────────────────────
+//	Reserve failure  | Quota counter at configured cap     | "TooManySubscriptions: principal %q at cap %d for %q" | >0 (the configured cap)
+//	on_subscribe     | Author OnSubscribe hook returned an | "on_subscribe rejected: <author err>"                | 0 → omitted on the wire via
+//	rejection        | error AFTER Reserve granted         |                                                      | omitempty (Max key absent)
+//
+// Clients that want to discriminate the two paths read `data.max`
+// presence: present → server-imposed quota with a known ceiling;
+// absent → author-imposed refusal without a disclosed ceiling. Both
+// paths return identical Code (-32013) and Limit ("subscriptions"),
+// so generic "too many subscriptions" UX can treat them uniformly.
+//
+// emission sites: experimental/ext/events/events.go (registerPoll and
+// registerSubscribe). Both call newResourceExhaustedError below.
 type ResourceExhaustedData struct {
 	Limit string `json:"limit"`
 	Max   int64  `json:"max,omitempty"`
