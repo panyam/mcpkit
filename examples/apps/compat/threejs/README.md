@@ -21,6 +21,20 @@ literally a multi-line JavaScript program.
   shape the `PropertyBuilder` doesn't expose direct methods for. The
   fixture uses `PropertyBuilder.Replace(rawSchema)` for that one
   field while patching the others normally.
+- **Self-describing for models.** `learn_threejs` returns a ~2.7KB
+  markdown reference: available globals (`THREE`, `OrbitControls`,
+  `EffectComposer`, etc.), the transparent-background convention,
+  and three ready-to-run examples (basic template, rotating cube,
+  OrbitControls sphere). A model that hasn't seen the fixture can
+  call this once and then write valid `show_threejs_scene` calls.
+- **Bundled, no CDN.** Unlike `map` (which streams CesiumJS from
+  `cesium.com` at runtime and needs `_meta.ui.csp`), threejs bundles
+  Three.js + post-processing passes directly into the iframe (~1.3MB
+  resource read, zero runtime network surface).
+
+## Run Pre-Recorded
+
+> ▶ **[Play the walkthrough in your browser](https://panyam.github.io/mcpkit/walkthroughs/examples/apps/compat/threejs/)** — animated playback of every curl / Go call the walkthrough makes, step-by-step. Includes a custom OrbitControls scene call. No clone, no setup.
 
 ## Or Run Live
 
@@ -37,8 +51,9 @@ Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `h
 Open <http://localhost:8080> in your browser. Then:
 
 1. Pick **Three.js Server** from the server dropdown.
-2. Pick **show_threejs_scene** from the tool dropdown, click **Call Tool**.
-3. The iframe renders the result; interact with it directly to drive subsequent tool calls (no model in the loop).
+2. Pick **show_threejs_scene** from the tool dropdown, click **Call Tool** with empty input — the iframe runs the server-advertised default code and renders the rotating green cube.
+3. Send your own Three.js snippet — change the `code` argument to anything that uses the available globals (`THREE`, `canvas`, `width`, `height`, `OrbitControls`, etc.). The iframe re-runs the code in its sandboxed Web Worker. Try the OrbitControls sphere example from `learn_threejs` for a draggable scene.
+4. Pick **learn_threejs**, call with empty input — get back ~2.7KB of markdown reference. Models call this to discover what's available before writing scenes.
 
 <a href="screenshots/01-default-cube.png" target="_blank"><img src="screenshots/01-default-cube.png" alt="Three.js App: iframe shows the default rotating cube rendered with the OrbitControls camera" width="50%"></a>
 
