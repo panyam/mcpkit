@@ -10,11 +10,16 @@
 package main
 
 import (
-	"strings"
 	"flag"
+	"fmt"
+	"io"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
@@ -22,6 +27,124 @@ import (
 	"github.com/panyam/mcpkit/server"
 	"github.com/panyam/servicekit/middleware"
 )
+
+// defaultWikiURL is the same article upstream defaults to. Used both in
+// the input schema's `default` and when an empty arg arrives (Go's
+// `omitempty` strips the field on the input side, so handler-level
+// fallback is needed too).
+const defaultWikiURL = "https://en.wikipedia.org/wiki/Model_Context_Protocol"
+
+// excludedWikiPrefixes mirrors upstream's EXCLUDED_PREFIXES — Wikipedia
+// namespace pages that aren't first-class article links and shouldn't
+// land in the graph view.
+var excludedWikiPrefixes = []string{
+	"Wikipedia:", "Help:", "File:", "Special:", "Talk:", "Template:",
+	"Category:", "Portal:", "Draft:", "Module:", "MediaWiki:", "User:",
+	"Main_Page",
+}
+
+// wikiHrefRe matches `<a ... href="/wiki/...">` style links in Wikipedia
+// HTML. Tolerates both quote styles and stops at #, ?, or the closing
+// quote — same shape upstream's cheerio selector extracts. Wikipedia
+// HTML is consistent enough that regex is adequate here; a stdlib
+// html parse would be heavier without behavioural gain for this case.
+var wikiHrefRe = regexp.MustCompile(`<a\b[^>]*\bhref=["'](/wiki/[^"'#?]+)["']`)
+
+// extractTitleFromURL ports upstream's extractTitleFromUrl — pulls the
+// article slug from the path and turns underscores into spaces.
+func extractTitleFromURL(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+	slug := strings.TrimPrefix(u.Path, "/wiki/")
+	decoded, err := url.PathUnescape(slug)
+	if err != nil {
+		decoded = slug
+	}
+	return strings.ReplaceAll(decoded, "_", " ")
+}
+
+// extractWikiLinks runs the regex over Wikipedia HTML, dedupes by
+// path, filters out self-links / fragments / excluded namespace prefixes,
+// and maps each path to an absolute URL + display title. Equivalent to
+// upstream's cheerio-based extractWikiLinks.
+func extractWikiLinks(pageURL *url.URL, html string) []wikiPage {
+	matches := wikiHrefRe.FindAllStringSubmatch(html, -1)
+	seen := make(map[string]bool, len(matches))
+	out := make([]wikiPage, 0, len(matches))
+	for _, m := range matches {
+		href := m[1]
+		if href == pageURL.Path {
+			continue
+		}
+		excluded := false
+		for _, p := range excludedWikiPrefixes {
+			if strings.Contains(href, p) {
+				excluded = true
+				break
+			}
+		}
+		if excluded {
+			continue
+		}
+		if seen[href] {
+			continue
+		}
+		seen[href] = true
+		abs := pageURL.Scheme + "://" + pageURL.Host + href
+		out = append(out, wikiPage{
+			URL:   abs,
+			Title: extractTitleFromURL(abs),
+		})
+	}
+	return out
+}
+
+// wikiURLRe gates the input — only http/https wikipedia.org /wiki/...
+// URLs are fetched. Matches upstream's regex byte-for-byte so error
+// messages line up.
+var wikiURLRe = regexp.MustCompile(`^https?://[a-z]+\.wikipedia\.org/wiki/`)
+
+// fetchAndExtractLinks ports upstream's main handler body — validate
+// URL shape, fetch, map 404/non-200 to a string error, regex-extract
+// the link set. Returns either (page, links, nil) or (page, [], err)
+// so the handler can wrap into wikiLinksOutput in either shape.
+func fetchAndExtractLinks(rawURL string) (wikiPage, []wikiPage, error) {
+	page := wikiPage{URL: rawURL, Title: rawURL}
+	if !wikiURLRe.MatchString(rawURL) {
+		return page, nil, fmt.Errorf("Not a valid Wikipedia URL")
+	}
+	page.Title = extractTitleFromURL(rawURL)
+	// Wikipedia returns 403 for requests with no User-Agent; the
+	// language-agnostic policy at https://meta.wikimedia.org/wiki/User-Agent_policy
+	// asks bots to identify themselves and a contact path.
+	req, err := http.NewRequest("GET", rawURL, nil)
+	if err != nil {
+		return page, nil, err
+	}
+	req.Header.Set("User-Agent", "MCP-WikiExplorer-Example/1.0 (https://github.com/modelcontextprotocol)")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return page, nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusNotFound {
+			return page, nil, fmt.Errorf("Page not found")
+		}
+		return page, nil, fmt.Errorf("Fetch failed: %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return page, nil, err
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return page, nil, err
+	}
+	return page, extractWikiLinks(u, string(body)), nil
+}
 
 type wikiInput struct {
 	URL string `json:"url,omitempty" jsonschema:"format=uri,default=https://en.wikipedia.org/wiki/Model_Context_Protocol,description=Wikipedia page URL"`
@@ -112,13 +235,23 @@ func serve() {
 					})
 				},
 				Handler: func(ctx core.ToolContext, in wikiInput) (wikiLinksOutput, error) {
-					// Visual test masks the graph (HOST_MASKS["wiki-explorer"] = ["#graph"]).
-					// Stub response — iframe renders its own layout.
-					return wikiLinksOutput{
-						Page:  wikiPage{URL: in.URL, Title: "Model Context Protocol"},
-						Links: []wikiPage{},
-						Error: nil, // serializes to JSON null
-					}, nil
+					rawURL := in.URL
+					if rawURL == "" {
+						rawURL = defaultWikiURL
+					}
+					page, links, err := fetchAndExtractLinks(rawURL)
+					if err != nil {
+						msg := err.Error()
+						// Mirror upstream's never-Go-error contract: a fetch /
+						// parse failure becomes a non-nil `error` field on the
+						// result, not an isError tool result. The model can read
+						// the string and retry; the iframe shows an empty graph.
+						return wikiLinksOutput{Page: page, Links: []wikiPage{}, Error: &msg}, nil
+					}
+					if links == nil {
+						links = []wikiPage{}
+					}
+					return wikiLinksOutput{Page: page, Links: links, Error: nil}, nil
 				},
 				ResourceURI: resourceURI,
 				ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
