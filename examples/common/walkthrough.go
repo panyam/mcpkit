@@ -52,6 +52,11 @@ func ServerURL() string {
 // walkthrough.go calls this — keeps the :3101 default in one place
 // instead of duplicating a serverURLFor3101 helper per fixture.
 func MCPServerURL() string {
+	for i, arg := range os.Args[1:] {
+		if arg == "--url" && i+2 < len(os.Args) {
+			return os.Args[i+2]
+		}
+	}
 	if u := os.Getenv(ServerURLEnv); u != "" {
 		return u
 	}
