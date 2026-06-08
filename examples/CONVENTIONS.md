@@ -225,6 +225,57 @@ Grafana.
 `defaultExporter = "stdout"` because the example's whole purpose is
 showing traces. Every other example defaults to `""`.
 
+#### Client-side wiring (walkthrough.go)
+
+Walkthroughs (runDemo) typically don't call `flag.Parse` — they rely
+on `common.ServerURL`'s ad-hoc `os.Args` scan for `--url`. The
+symmetric helper for telemetry is `common.ExporterFromArgs()`, which
+scans `os.Args` for `--exporter` / `--otlp-endpoint` and returns the
+same `*TelemetryFlags` shape `RegisterTelemetryFlags` would have
+populated. Pair it with `commonotel.SetupClientTelemetry`, which
+pre-sets the client-side instrumentation library name so spans group
+correctly in OTel-aware backends:
+
+```go
+import (
+    "context"
+    "log"
+
+    "github.com/panyam/mcpkit/client"
+    "github.com/panyam/mcpkit/examples/common"
+    commonotel "github.com/panyam/mcpkit/examples/common/otel"
+)
+
+func runDemo() {
+    serverURL := common.ServerURL()
+
+    tel := common.ExporterFromArgs()
+    tp, shutdown, err := commonotel.SetupClientTelemetry(context.Background(),
+        commonotel.WithExporter(*tel.Exporter),
+        commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+        commonotel.WithServiceName("<example-name>-host"),
+    )
+    if err != nil { log.Fatalf("commonotel.SetupClientTelemetry: %v", err) }
+    defer shutdown(context.Background())
+
+    // ... demo definition ...
+
+    c := client.NewClient(serverURL+"/mcp", info,
+        client.WithTracerProvider(tp),
+        // ... other client options ...
+    )
+}
+```
+
+Service-name convention: `<example-name>-host` for the walkthrough
+side, matching the server's `<example-name>` / `<example-name>-demo`
+so Grafana / Tempo filter-by-service distinguishes the two halves of
+each stitched trace.
+
+For walkthroughs that DO call `flag.Parse` (e.g. when they need
+example-specific flags), use `common.RegisterTelemetryFlags(flag.CommandLine)`
+instead of `ExporterFromArgs` — both populate the same struct shape.
+
 - Side endpoints (e.g. `/inject` for synthetic events) go through
   `server.WithMux(func(mux *http.ServeMux) { ... })` (in `TransportOptions`)
   — not a hand-rolled `http.Server{}`. Graceful shutdown is built into

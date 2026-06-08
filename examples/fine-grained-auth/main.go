@@ -69,6 +69,18 @@ func main() {
 func runDemo() {
 	serverURL := common.ServerURL()
 
+	tel := common.ExporterFromArgs()
+	tp, shutdown, err := commonotel.SetupClientTelemetry(context.Background(),
+		commonotel.WithExporter(*tel.Exporter),
+		commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+		commonotel.WithServiceName("fine-grained-auth-example-host"),
+	)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: commonotel.SetupClientTelemetry: %v\n", err)
+		os.Exit(1)
+	}
+	defer shutdown(context.Background())
+
 	demo := demokit.New("Fine-Grained Authorization — Scope Step-Up (UC2) + Ephemeral Credentials (UC3)").
 		Dir("fine-grained-auth").
 		Description("**EXPERIMENTAL** — Tracks SEP-2643 (Structured Authorization Denials), currently a draft. UC2 + UC3 demonstrated end-to-end against an in-process oneauth AS.").
@@ -224,6 +236,7 @@ tools, _ := readClient.ListTools() // JWKS validation passed; scope just limited
 			readClient = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "demo-host", Version: "1.0"},
 				client.WithClientBearerToken(tokRead),
+				client.WithTracerProvider(tp),
 			)
 			if err := readClient.Connect(); err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
@@ -392,6 +405,7 @@ text, err := callClient.ToolCall("update_document", map[string]any{
 			callClient = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "demo-host", Version: "1.0"},
 				client.WithClientBearerToken(tokReadCall),
+				client.WithTracerProvider(tp),
 			)
 			if err := callClient.Connect(); err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
@@ -580,6 +594,7 @@ text, err := payClient.ToolCall("initiate_payment", map[string]any{
 			payClient = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "demo-host", Version: "1.0"},
 				client.WithClientBearerToken(tokPayment),
+				client.WithTracerProvider(tp),
 			)
 			if err := payClient.Connect(); err != nil {
 				fmt.Printf("    ERROR: %v\n", err)

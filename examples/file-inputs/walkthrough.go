@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +15,7 @@ import (
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
+	commonotel "github.com/panyam/mcpkit/examples/common/otel"
 )
 
 // Walkthrough fixtures live on disk under testdata/ so readers can inspect
@@ -35,6 +38,17 @@ var fixtureREADME []byte
 
 func runDemo() {
 	serverURL := common.ServerURL()
+
+	tel := common.ExporterFromArgs()
+	tp, shutdown, err := commonotel.SetupClientTelemetry(context.Background(),
+		commonotel.WithExporter(*tel.Exporter),
+		commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+		commonotel.WithServiceName("file-inputs-host"),
+	)
+	if err != nil {
+		log.Fatalf("commonotel.SetupClientTelemetry: %v", err)
+	}
+	defer shutdown(context.Background())
 
 	demo := demokit.New("MCP File Inputs (SEP-2356) — Data URI File Arguments").
 		Dir("file-inputs").
@@ -74,6 +88,7 @@ func runDemo() {
 			c = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "file-inputs-host", Version: "1.0"},
 				client.WithFileInputs(),
+				client.WithTracerProvider(tp),
 			)
 			if err := c.Connect(); err != nil {
 				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)

@@ -206,6 +206,39 @@ func WithResourceAttr(key, value string) SetupOption {
 	}
 }
 
+// ClientInstrumentationName is the OTel instrumentation library
+// label SetupClientTelemetry stamps on client-side spans. Matches
+// the value PR 680's otel/stdout walkthrough used so client/server
+// spans group correctly in OTel-aware backends (Jaeger's "Library"
+// column, Tempo's instrumentation filter).
+const ClientInstrumentationName = "github.com/panyam/mcpkit/client"
+
+// SetupClientTelemetry is SetupTelemetry pre-configured for the
+// host (client) side of an example walkthrough. Equivalent to
+// SetupTelemetry(ctx, opts..., WithInstrumentationName(ClientInstrumentationName))
+// — the instrumentation-name preset is the only difference between
+// the server and client wirings, so this saves every walkthrough
+// from typing the magic string. Explicit
+// WithInstrumentationName(...) in opts still wins (last option
+// applied).
+//
+// Pair the returned core.TracerProvider with client.WithTracerProvider
+// at the client.NewClient call site:
+//
+//	tp, shutdown, err := commonotel.SetupClientTelemetry(ctx,
+//	    commonotel.WithExporter(tel.Exporter),
+//	    commonotel.WithOTLPEndpoint(tel.OTLPEndpoint),
+//	    commonotel.WithServiceName("my-example-host"),
+//	)
+//	defer shutdown(context.Background())
+//	c := client.NewClient(url, info, client.WithTracerProvider(tp))
+func SetupClientTelemetry(ctx context.Context, opts ...SetupOption) (core.TracerProvider, ShutdownFunc, error) {
+	all := make([]SetupOption, 0, len(opts)+1)
+	all = append(all, WithInstrumentationName(ClientInstrumentationName))
+	all = append(all, opts...)
+	return SetupTelemetry(ctx, all...)
+}
+
 // SetupTelemetry constructs a core.TracerProvider per the decision
 // matrix in the package doc. The returned ShutdownFunc must be
 // deferred so buffered spans flush before the process exits — a
