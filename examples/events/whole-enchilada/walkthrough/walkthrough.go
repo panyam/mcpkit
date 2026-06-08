@@ -60,13 +60,13 @@ func runDemo(serverURL, receiverURL string) {
 		"Run from a separate terminal in the leaf directory:",
 		"",
 		"```",
-		"make demo-up        # docker compose up -d, waits for healthchecks",
+		"make up        # docker compose up -d, waits for healthchecks",
 		"make demo           # this walkthrough (interactive TUI)",
 		"# OR:",
-		"make demo-test      # non-interactive run for CI / scripting",
+		"make test      # non-interactive run for CI / scripting",
 		"```",
 		"",
-		"`make demo-down` tears the stack down (`-v` removes named volumes).",
+		"`make down` tears the stack down (`-v` removes named volumes).",
 		"",
 		"This binary demonstrates the **events protocol mechanics** end-to-end (poll, push/SSE, webhook). The **stage-2 tenant-isolation story** is best experienced by hand — see the next section.",
 	)
@@ -76,7 +76,7 @@ func runDemo(serverURL, receiverURL string) {
 		"",
 		"```",
 		"# T1: stack up",
-		"make demo-up",
+		"make up",
 		"",
 		"# T2: tenant A poller",
 		"TA=$(make newtoken TENANT=A)         # browser opens, log in as alice@tenant-a",
@@ -105,7 +105,7 @@ func runDemo(serverURL, receiverURL string) {
 	)
 
 	demo.Section("CI regression for tenant isolation",
-		"`make demo-test` runs THIS binary end-to-end against the docker stack — it covers the protocol mechanics. The **tenant-isolation contract** is regression-tested by the event-server's e2e suite, which runs in-process with a fake token-as-tenant validator (no Docker needed):",
+		"`make test` runs THIS binary end-to-end against the docker stack — it covers the protocol mechanics. The **tenant-isolation contract** is regression-tested by the event-server's e2e suite, which runs in-process with a fake token-as-tenant validator (no Docker needed):",
 		"",
 		"```",
 		"make test     # event-server/... e2e tests, includes 8 tenant-isolation cases",
@@ -127,7 +127,7 @@ func runDemo(serverURL, receiverURL string) {
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
 			c = client.NewClient(mcpURL, core.ClientInfo{Name: "whole-enchilada-host", Version: "1.0"})
 			if err := c.Connect(); err != nil {
-				fmt.Printf("    ERROR: %v\n    Start the stack with: make demo-up\n", err)
+				fmt.Printf("    ERROR: %v\n    Start the stack with: make up\n", err)
 				return
 			}
 			fmt.Printf("    Connected to %s %s (via %s)\n", c.ServerInfo.Name, c.ServerInfo.Version, serverURL)
