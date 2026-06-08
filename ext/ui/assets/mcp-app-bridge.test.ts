@@ -1194,3 +1194,124 @@ describe("selectFile / selectFiles (SEP-2356 Phase 2.1)", () => {
     expect(result).toBe("data:text/plain;name=report.txt;base64,aGVsbG8=");
   });
 });
+
+// SEP-414 trace context relay across the Apps Bridge (issue 660). The
+// hook ships dep-free: callers wire their own browser OTel SDK by
+// passing a provider that returns the active traceparent. These tests
+// drive the relay against a synthetic provider — real browser OTel
+// integration is covered by adopter documentation, not unit tests.
+describe("trace context relay (SEP-414 P6, issue 660)", () => {
+  beforeEach(async () => {
+    autoRespondToInitialize();
+    await waitForConnect();
+  });
+
+  it("no provider set → params._meta untouched (backward-compat)", async () => {
+    (window as any).MCPApp.callTool("echo", { msg: "hi" });
+    await new Promise((r) => setTimeout(r, 10));
+    const call = sentMessages.find((m) => m.method === "tools/call");
+    expect(call).toBeDefined();
+    expect(call.params._meta).toBeUndefined();
+  });
+
+  it("provider returns traceparent → present in postMessage envelope", async () => {
+    const tp = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01";
+    (window as any).MCPApp.setTraceContextProvider(() => ({ traceparent: tp }));
+    (window as any).MCPApp.callTool("echo", { msg: "hi" });
+    await new Promise((r) => setTimeout(r, 10));
+    const call = sentMessages.find((m) => m.method === "tools/call");
+    expect(call).toBeDefined();
+    expect(call.params._meta).toBeDefined();
+    expect(call.params._meta.traceparent).toBe(tp);
+    expect(call.params.name).toBe("echo");
+    expect(call.params.arguments.msg).toBe("hi");
+  });
+
+  it("tracestate rides alongside traceparent when supplied", async () => {
+    const tp = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01";
+    const ts = "vendor=val,other=x";
+    (window as any).MCPApp.setTraceContextProvider(() => ({
+      traceparent: tp,
+      tracestate: ts,
+    }));
+    (window as any).MCPApp.callTool("echo", {});
+    await new Promise((r) => setTimeout(r, 10));
+    const call = sentMessages.find((m) => m.method === "tools/call");
+    expect(call.params._meta.traceparent).toBe(tp);
+    expect(call.params._meta.tracestate).toBe(ts);
+  });
+
+  it("provider returns null → no merge (per-call opt-out)", async () => {
+    const provider = vi.fn(() => null);
+    (window as any).MCPApp.setTraceContextProvider(provider);
+    (window as any).MCPApp.callTool("echo", { msg: "hi" });
+    await new Promise((r) => setTimeout(r, 10));
+    const call = sentMessages.find((m) => m.method === "tools/call");
+    expect(provider).toHaveBeenCalled();
+    expect(call.params._meta).toBeUndefined();
+  });
+
+  it("provider returns traceContext without traceparent → no merge", async () => {
+    (window as any).MCPApp.setTraceContextProvider(() => ({
+      tracestate: "vendor=val", // tracestate without traceparent is meaningless per W3C
+    }));
+    (window as any).MCPApp.callTool("echo", {});
+    await new Promise((r) => setTimeout(r, 10));
+    const call = sentMessages.find((m) => m.method === "tools/call");
+    expect(call.params._meta).toBeUndefined();
+  });
+
+  it("caller-set params._meta.traceparent wins (provider does not clobber)", async () => {
+    const callerTP = "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-1111111111111111-01";
+    const providerTP = "00-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-2222222222222222-01";
+    (window as any).MCPApp.setTraceContextProvider(() => ({ traceparent: providerTP }));
+    // sendMessage routes its argument as params directly (unlike callTool
+    // which wraps in {name, arguments}), so this is the natural place to
+    // exercise the caller-preserves-_meta semantic. Mirrors the Go-side
+    // core.InjectTraceContextIntoParams behavior where caller-set values
+    // on params._meta are not clobbered by the injector.
+    (window as any).MCPApp.sendMessage({
+      payload: "x",
+      _meta: { traceparent: callerTP },
+    });
+    await new Promise((r) => setTimeout(r, 10));
+    const call = sentMessages.find((m) => m.method === "ui/message");
+    expect(call.params._meta.traceparent).toBe(callerTP);
+  });
+
+  it("setTraceContextProvider(null) unregisters the hook", async () => {
+    (window as any).MCPApp.setTraceContextProvider(() => ({
+      traceparent: "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
+    }));
+    (window as any).MCPApp.setTraceContextProvider(null);
+    (window as any).MCPApp.callTool("echo", {});
+    await new Promise((r) => setTimeout(r, 10));
+    const call = sentMessages.find((m) => m.method === "tools/call");
+    expect(call.params._meta).toBeUndefined();
+  });
+
+  it("provider that throws is caught; request still sends without propagation", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    (window as any).MCPApp.setTraceContextProvider(() => {
+      throw new Error("synthetic provider failure");
+    });
+    (window as any).MCPApp.callTool("echo", { msg: "hi" });
+    await new Promise((r) => setTimeout(r, 10));
+    const call = sentMessages.find((m) => m.method === "tools/call");
+    expect(call).toBeDefined();
+    expect(call.params._meta).toBeUndefined();
+    expect(call.params.arguments.msg).toBe("hi");
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it("notify() also relays the trace context (covers notifications/*)", async () => {
+    const tp = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01";
+    (window as any).MCPApp.setTraceContextProvider(() => ({ traceparent: tp }));
+    (window as any).MCPApp.log("info", "test log");
+    await new Promise((r) => setTimeout(r, 10));
+    const note = sentMessages.find((m) => m.method === "ui/log");
+    expect(note).toBeDefined();
+    expect(note.params._meta?.traceparent).toBe(tp);
+  });
+});
