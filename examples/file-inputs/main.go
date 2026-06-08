@@ -13,6 +13,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -25,6 +26,7 @@ import (
 	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
+	commonotel "github.com/panyam/mcpkit/examples/common/otel"
 	"github.com/panyam/mcpkit/ext/ui"
 	"github.com/panyam/mcpkit/server"
 )
@@ -42,11 +44,22 @@ func main() {
 
 func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
+	tel := common.RegisterTelemetryFlags(flag.CommandLine)
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.BoolFlag("--serve"),
 		demokit.ValueFlag("--url"),
 		demokit.ValueFlag("--file"),
 	))
+
+	tp, shutdown, err := commonotel.SetupTelemetry(context.Background(),
+		commonotel.WithExporter(*tel.Exporter),
+		commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+		commonotel.WithServiceName("file-inputs-demo"),
+	)
+	if err != nil {
+		log.Fatalf("commonotel.SetupTelemetry: %v", err)
+	}
+	defer shutdown(context.Background())
 
 	// One temp dir per server run, NOT auto-cleaned — the whole point is
 	// that you can `ls` the directory and `open` the files after the
@@ -62,8 +75,9 @@ func serve() {
 	log.Printf("[file-inputs-demo] apps:  apps_upload_image, apps_analyze_documents (in-iframe pickers)")
 	log.Printf("[file-inputs-demo] uploads will be written to %s (not auto-cleaned)", uploadDir)
 	if err := common.RunServer(common.ServerConfig{
-		Name: "file-inputs-demo",
-		Addr: *addr,
+		Name:           "file-inputs-demo",
+		Addr:           *addr,
+		TracerProvider: tp,
 		Options: []server.Option{
 			// MCP Apps extension powers the in-iframe file picker apps
 			// registered in apps.go (SEP-2356 Phase 2.1).

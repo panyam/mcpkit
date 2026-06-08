@@ -94,47 +94,40 @@ func TestEndToEnd_StdoutDemoWiring(t *testing.T) {
 	assert.Equal(t, "echo", attrs["mcp.tool.name"])
 }
 
-// TestNewOTelPipeline_HappyPath isolates the pipeline helper from the
-// rest of serve(). Used as a regression guard against accidental
-// breakage in newOTelPipeline's TracerProvider construction (e.g., the
-// helper drifting away from the SDK's current constructor signature).
-func TestNewOTelPipeline_HappyPath(t *testing.T) {
-	// Pipe stdout-substitute through a temp file the test owns so the
-	// pipeline's writer doesn't pollute the test runner's terminal.
+// TestSetupTelemetry_Stdout_FromExample is a smoke-test that drives
+// the example's own wiring path: commonotel.SetupTelemetry with
+// Exporter="stdout" against a writer the test owns. Catches drift
+// between the example's flag-driven serve() / runDemo() helpers and
+// the underlying helper if the SetupOption surface changes.
+func TestSetupTelemetry_Stdout_FromExample(t *testing.T) {
 	tmp, err := os.Create(filepath.Join(t.TempDir(), "spans.json"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = tmp.Close() })
 
-	tp, shutdown, err := newOTelPipeline(tmp)
+	tp, shutdown, err := commonotel.SetupTelemetry(context.Background(),
+		commonotel.WithExporter(commonotel.ExporterStdout),
+		commonotel.WithStdoutWriter(tmp),
+		commonotel.WithServiceName(serverServiceName),
+	)
 	require.NoError(t, err)
 	require.NotNil(t, tp)
 	require.NotNil(t, shutdown)
-
-	// Shutdown is a closure over the SDK's Shutdown; calling it twice
-	// should be safe (the SDK guards internally). The test asserts no
-	// panic.
-	shutdown()
-	shutdown()
+	require.NoError(t, shutdown(context.Background()))
 }
 
-// TestNewOTLPPipeline_Constructs is the smoke check for the OTLP
-// gRPC exporter path. The OTLP exporter constructor doesn't dial
-// the endpoint until it has spans to flush, so this test runs
-// without docker — it proves the constructor compiles, wires the
-// SDK correctly, and produces a non-nil TracerProvider + shutdown
-// closure. The actual export round-trip is exercised manually via
-// `make demo-otlp` against `make -C ../../../docker up`.
-//
-// The test uses an unlikely-to-collide endpoint so the (lazy)
-// connection attempt during Shutdown doesn't accidentally hit a
-// real listener.
-func TestNewOTLPPipeline_Constructs(t *testing.T) {
-	tp, shutdown, err := commonotel.NewOTLPPipeline("127.0.0.1:65535", "otel-stdout-demo-test")
-	require.NoError(t, err)
+// TestSetupTelemetry_OTLP_DialFailure_FallsBackToNoop exercises the
+// OTLP dial-failure path through the example's helper. Uses a closed
+// port (immediately refused) to guarantee the fallback fires
+// regardless of whether anything is bound to the default endpoint.
+func TestSetupTelemetry_OTLP_DialFailure_FallsBackToNoop(t *testing.T) {
+	tp, shutdown, err := commonotel.SetupTelemetry(context.Background(),
+		commonotel.WithExporter(commonotel.ExporterOTLP),
+		commonotel.WithOTLPEndpoint("127.0.0.1:1"), // privileged, never bound from user space
+		commonotel.WithServiceName(serverServiceName),
+	)
+	require.NoError(t, err, "dial failure must NOT error — graceful Noop is the contract")
 	require.NotNil(t, tp)
-	require.NotNil(t, shutdown)
-
-	shutdown()
+	require.NoError(t, shutdown(context.Background()))
 }
 
 // TestEndToEnd_BothSidesEmitSpans is the headline check for this PR.

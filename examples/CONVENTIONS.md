@@ -132,12 +132,86 @@ func main() {
     `MCPServerOptions` and uses `WithMCPLogging(Logger)` instead, so
     callers that need custom color rules (`NewMCPLogger(prefix, extras...)`)
     keep their handle.
+  - `TracerProvider` (optional `core.TracerProvider`) — when non-nil,
+    wires `server.WithTracerProvider(cfg.TracerProvider)` into the
+    baseline. Pass the result of `commonotel.SetupTelemetry` directly
+    (it returns the mcpotel-wrapped provider). See §Telemetry wiring
+    below for the canonical helper invocation.
 
   When the serve loop diverges substantially from this shape (parallel
   webhook listeners, multiple servers in one process), fall back to
   manual `common.MCPServerOptions(*addr, "[mcp] ")` + `server.NewServer`
   + `srv.ListenAndServe(...)`. The canonical exception today is
   `examples/events/discord/` — see its `main.go` for why.
+
+### Telemetry wiring
+
+Every example exposes the same `--exporter` / `--otlp-endpoint` flag
+pair via `common.RegisterTelemetryFlags(flag.CommandLine)`, then
+calls `commonotel.SetupTelemetry(ctx, ...)` and threads the result
+into `common.ServerConfig.TracerProvider`. Default `--exporter=""`
+returns `core.NoopTracerProvider{}` (zero overhead, no spans) — an
+operator opts in per invocation with `--exporter=stdout` or
+`--exporter=otlp`. No example dumps spans to stdout unless explicitly
+asked.
+
+Canonical wiring inside `serve()`:
+
+```go
+import (
+    "context"
+    "log"
+
+    "github.com/panyam/mcpkit/examples/common"
+    commonotel "github.com/panyam/mcpkit/examples/common/otel"
+)
+
+func serve() {
+    addr := flag.String("addr", ":8080", "listen address")
+    tel := common.RegisterTelemetryFlags(flag.CommandLine)
+    flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
+        demokit.BoolFlag("--serve"),
+        demokit.ValueFlag("--url"),
+        // ... example-specific extras
+    ))
+
+    tp, shutdown, err := commonotel.SetupTelemetry(context.Background(),
+        commonotel.WithExporter(*tel.Exporter),
+        commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+        commonotel.WithServiceName("<example-name>"),
+    )
+    if err != nil {
+        log.Fatalf("commonotel.SetupTelemetry: %v", err)
+    }
+    defer shutdown(context.Background())
+
+    // ... existing setup ...
+
+    if err := common.RunServer(common.ServerConfig{
+        Name:           "<example-name>",
+        Addr:           *addr,
+        TracerProvider: tp,
+        // ... existing fields ...
+    }); err != nil {
+        log.Fatalf("ListenAndServe: %v", err)
+    }
+}
+```
+
+The `--exporter` / `--otlp-endpoint` flags pass through
+`demokit.FilterArgs` unstripped (they're not in demokit's default
+strip set), so they reach the stdlib `flag.Parse` naturally — no
+`demokit.ValueFlag(...)` registration needed.
+
+When `--exporter=otlp` is selected and the endpoint is unreachable,
+SetupTelemetry logs a warning and falls back to Noop — a dead
+`docker/observability/` stack never breaks `make demo`. Bring the
+stack up with `make -C docker up` before the OTLP path lights up in
+Grafana.
+
+`examples/otel/stdout/` is the deliberate exception: its
+`defaultExporter = "stdout"` because the example's whole purpose is
+showing traces. Every other example defaults to `""`.
 
 - Side endpoints (e.g. `/inject` for synthetic events) go through
   `server.WithMux(func(mux *http.ServeMux) { ... })` (in `TransportOptions`)
