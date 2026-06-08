@@ -507,3 +507,31 @@ MCPKit's JWTValidator supports any algorithm the JWKS key store provides (RS256,
 The validated-token cache (`JWTValidator.CacheTTL`) mitigates verification cost for repeated tokens in steady-state. But cold starts, cache misses, and high-cardinality token scenarios (many distinct users) still hit the verification path, where ES256 has a clear advantage.
 
 **Caveat**: RS256 remains the default signing algorithm in most identity providers (including Keycloak, as configured in our test realm). Switching to ES256 requires explicit authorization server configuration. Consult your IdP documentation for key generation and algorithm settings.
+
+## Tracing (SEP-414 P6, issue 658)
+
+`JWTConfig.TracerProvider` opts the validator into SEP-414 instrumentation. Nil (or `core.NoopTracerProvider{}`, the default) means zero spans, zero attributes, zero allocation added — and zero compile-time dependency on `ext/otel`; the validator codes against `core.TracerProvider` only.
+
+What's emitted when a `TracerProvider` is wired:
+
+- **`auth.jwks_lookup` sub-span** — wraps each `JWKSKeyStore.GetKeyByKid` call from `jwksKeyFuncCtx`. Carries the `mcp.auth.jwks.kid` attribute. Surfaces both cache-hit and cache-miss latency through the OTel adapter — oneauth's `JWKSKeyStore` owns the internal HTTP fetch decision, so we measure the call to the store (where `ext/auth`'s responsibility ends), not the fetch itself.
+
+- **`mcp.auth.*` attributes on the active dispatch span** (the outer span the SEP-414 P2 trace middleware started; reached via `core.SpanFromContext(r.Context())`):
+  - `mcp.auth.method = "jwt"` — set unconditionally at the top of `Validate`, even on failure paths, so a failed auth still shows up as "we attempted JWT validation here".
+  - `mcp.auth.subject` — the `sub` claim of the validated JWT.
+  - `mcp.auth.issuer` — the `iss` claim.
+  - `mcp.auth.scopes` — comma-joined granted scopes (one searchable attribute in Tempo's TraceQL; per-element indexing reserved for if/when consumers ask).
+  - `mcp.auth.cache_hit` — `"true"` on token-cache fast-path hits, `"false"` after a full validation. Both branches emit so cache effectiveness is visible without a separate metric.
+
+When no active dispatch span is present (auth running outside a traced path), `core.SpanFromContext` returns a no-op span and every `SetAttribute` is a no-op — no nil-checking required at the call site.
+
+### Documented limitation: transport-level 401 is not traced
+
+If the streamable transport rejects a request before the dispatch span starts (e.g., a malformed `Authorization` header caught at transport setup), the rejection happens **before** the SEP-414 P2 trace middleware runs, so there's no active span to decorate and no parent for an `auth.*` sub-span. That 401 is invisible in trace data today. Adding a transport-level span purely for rejected auth would change the spine semantics of "one inbound span per JSON-RPC dispatch" — deferred until a real adopter reports it as a missing signal.
+
+### What's deliberately deferred
+
+- **`auth.introspect` sub-span (RFC 7662 token introspection)** — no introspection validator exists in `ext/auth` today. Will land when that surface does.
+- **`auth.oauth_exchange` sub-span** — outbound OAuth token-exchange flow (`client_credentials.go` / `enterprise_managed.go`) is a client-side `TokenSource` path with its own instrumentation arc.
+- **Outbound `traceparent` HTTP header on the JWKS fetch** — `keys.JWKSKeyStore` (in oneauth) owns the HTTP call, so ext/auth can't inject `traceparent` without an oneauth-side option. Tracked as a separate oneauth ticket; once landed, oneauth-internal work appears as a child of the `auth.jwks_lookup` span we already emit.
+- **`scope_middleware.go` (`auth.NewToolScopeMiddleware`)** — scope enforcement is a separate concern from token validation; a follow-up ticket can decorate its decision points with `mcp.auth.scope.required` / `mcp.auth.scope.granted` attributes.
