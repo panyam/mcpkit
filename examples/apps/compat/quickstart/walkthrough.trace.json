@@ -1,5 +1,10 @@
 [
   {
+    "kind": "section",
+    "title": "Setup",
+    "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101 by default\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nPoint the walkthrough at a different host via either of:\n\n```\ngo run . --demo --url http://localhost:1234       # CLI flag\nMCPKIT_SERVER_URL=http://localhost:1234 make demo # env var\n```\n\nAny MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam, basic-host). The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser, no JS. The same protocol calls drive the iframe when you run `make demo-app EXAMPLE=quickstart` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+  },
+  {
     "kind": "step",
     "title": "Connect to the fixture",
     "step_id": "step-1",
@@ -8,9 +13,33 @@
   },
   {
     "kind": "step",
-    "title": "List tools",
+    "title": "tools/list — verify get-time + its UI resource",
     "step_id": "step-2",
     "visit": 1,
-    "output": "    {\n      \"tools\": [\n        {\n          \"name\": \"get-time\",\n          \"title\": \"Get Time\",\n          \"description\": \"Returns the current server time.\",\n          \"inputSchema\": {\n            \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n            \"properties\": {},\n            \"type\": \"object\"\n          },\n          \"execution\": {\n            \"taskSupport\": \"forbidden\"\n          },\n          \"_meta\": {\n            \"ui\": {\n              \"resourceUri\": \"ui://get-time/mcp-app.html\"\n            },\n            \"ui/resourceUri\": \"ui://get-time/mcp-app.html\"\n          }\n        }\n      ]\n    }\n"
+    "output": "    get-time\n      _meta: {\n        \"ui\": {\n          \"resourceUri\": \"ui://get-time/mcp-app.html\"\n        },\n        \"ui/resourceUri\": \"ui://get-time/mcp-app.html\"\n      }\n"
+  },
+  {
+    "kind": "step",
+    "title": "tools/call get-time — the timestamp the iframe renders",
+    "step_id": "step-3",
+    "visit": 1,
+    "output": "    content[0]: type=\"text\" text=\"2026-06-08T17:28:41.523874Z\"\n    structuredContent: \u003cnone\u003e  (quickstart returns text-only)\n"
+  },
+  {
+    "kind": "step",
+    "title": "resources/read — the iframe HTML the App ships in",
+    "step_id": "step-4",
+    "visit": 1,
+    "output": "    uri:      ui://get-time/mcp-app.html\n    mimeType: text/html;profile=mcp-app\n    bytes:    328192  (iframe HTML+JS bundle)\n    _meta:    \u003cnone\u003e  (no csp / permissions declared)\n"
+  },
+  {
+    "kind": "section",
+    "title": "What the App iframe does with all this",
+    "body": "This is the point where a Go-only scripted host hits its limit: everything from here runs in the iframe's JavaScript via the MCP Apps bridge, not over the MCP wire.\n\nWhen `make demo-app EXAMPLE=quickstart` runs this fixture inside basic-host, the host:\n\n1. Calls `tools/call get-time` exactly as step 3 above.\n2. Reads `ui://get-time/mcp-app.html` exactly as step 4 above.\n3. Renders the iframe in a sandbox, loads the JS bundle, and pushes the tool result into the iframe via the [mcp-app-bridge](https://github.com/modelcontextprotocol/ext-apps/blob/main/src/app-bridge.ts) `postMessage` channel.\n\nInside the iframe — which is what you saw in step 4's bytes — quickstart's App SDK does the **bare minimum** for an MCP App:\n\n- Sets `app.ontoolresult` to extract `result.content[0].text` and write it into the DOM as \"Server Time: \u003cISO timestamp\u003e\".\n- Wires a button click to call `app.callServerTool({name: \"get-time\", arguments: {}})` — the iframe calling BACK to the server through the bridge to fetch a fresh timestamp. This is the **simplest possible iframe-talks-to-server** pattern: no app-side tools registered, no model context push, just a button that re-runs the server tool.\n\nThat's it. Contrast with budget-allocator's iframe, which calls `app.registerTool` five times to expose `get-allocations` / `set-allocation` / `set-total-budget` / `set-company-stage` / `get-benchmark-comparison` to the model, and `app.updateModelContext` after every UI interaction. quickstart shows the FLOOR of what an MCP App can be — the bare-minimum bridge dance — which makes it the cleanest reference for understanding what differentiates an MCP App from \"just an MCP server with a UI hint.\""
+  },
+  {
+    "kind": "section",
+    "title": "Where to look in the code",
+    "body": "- `main.go` — the fixture is ~60 lines: one TypedAppTool returning a text content block, one paired UI resource, CORS for browser hosts.\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + screenshots + the [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) guide.\n- Upstream's iframe source: `/tmp/ext-apps/examples/quickstart/src/mcp-app.ts` — 26 lines of JS that show the minimum-viable bridge dance."
   }
 ]
