@@ -142,6 +142,52 @@ func TestSetupTelemetry_OTLPEndpointEnv_FallbackHonored(t *testing.T) {
 	}
 }
 
+func TestSetupTelemetry_Auto_UnreachableEndpoint_SilentNoop(t *testing.T) {
+	closed := findClosedPort(t)
+
+	// Capture the log output to assert "auto" mode stays silent on
+	// unreachable — distinct from "otlp" mode which prints a warning.
+	tp, shutdown, err := commonotel.SetupTelemetry(context.Background(),
+		commonotel.WithExporter(commonotel.ExporterAuto),
+		commonotel.WithOTLPEndpoint(closed),
+		commonotel.WithServiceName("setup-test-auto-unreachable"),
+	)
+	if err != nil {
+		t.Fatalf("auto mode must not error on unreachable endpoint; got %v", err)
+	}
+	if _, ok := tp.(core.NoopTracerProvider); !ok {
+		t.Fatalf("auto mode + unreachable endpoint must return Noop; got %T", tp)
+	}
+	if err := shutdown(context.Background()); err != nil {
+		t.Fatalf("Noop fallback shutdown must be no-op; got %v", err)
+	}
+}
+
+func TestSetupTelemetry_Auto_ReachableEndpoint_UsesOTLP(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+
+	tp, shutdown, err := commonotel.SetupTelemetry(context.Background(),
+		commonotel.WithExporter(commonotel.ExporterAuto),
+		commonotel.WithOTLPEndpoint(ln.Addr().String()),
+		commonotel.WithServiceName("setup-test-auto-reachable"),
+	)
+	if err != nil {
+		t.Fatalf("SetupTelemetry: %v", err)
+	}
+	t.Cleanup(func() { _ = shutdown(context.Background()) })
+
+	if _, ok := tp.(core.NoopTracerProvider); ok {
+		t.Fatalf("auto mode + reachable endpoint must construct a real TracerProvider, not Noop")
+	}
+	if tp == nil {
+		t.Fatalf("SetupTelemetry returned nil TracerProvider on reachable auto endpoint")
+	}
+}
+
 func TestSetupTelemetry_ExplicitOptionBeatsEnv(t *testing.T) {
 	closedA := findClosedPort(t)
 	closedB := findClosedPort(t)

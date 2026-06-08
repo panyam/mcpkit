@@ -56,7 +56,7 @@ type TelemetryFlags struct {
 // examples/CONVENTIONS.md §Telemetry wiring.
 func RegisterTelemetryFlags(fs *flag.FlagSet) *TelemetryFlags {
 	return &TelemetryFlags{
-		Exporter:     fs.String("exporter", "", "trace exporter: \"\" (off, default) | stdout | otlp"),
+		Exporter:     fs.String("exporter", "", "trace exporter: \"\" (off, default) | stdout | otlp | auto (best-effort OTLP — silent Noop fallback if unreachable)"),
 		OTLPEndpoint: fs.String("otlp-endpoint", commonotel.DefaultOTLPEndpoint, "OTLP gRPC endpoint when --exporter=otlp"),
 	}
 }

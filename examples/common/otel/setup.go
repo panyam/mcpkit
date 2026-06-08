@@ -30,9 +30,18 @@
 //	                     (default localhost:4317, matches the
 //	                     docker/observability/ stack). Honors
 //	                     OTEL_EXPORTER_OTLP_ENDPOINT as a fallback.
+//	Exporter=="auto"   → probe the OTLP endpoint; if reachable, behave
+//	                     like "otlp"; if not, silently fall back to
+//	                     Noop. The "best effort, don't complain"
+//	                     mode for examples that may or may not have
+//	                     the observability stack running. Unlike
+//	                     "otlp" mode, unreachable endpoints emit NO
+//	                     warning — auto means the operator accepted
+//	                     the maybe-on-maybe-off semantics.
 //
-// OTLP dial / construction failure → log a warning and fall back to
-// Noop. A dead observability stack should never break `make demo`.
+// OTLP dial / construction failure (explicit "otlp" mode) → log a
+// warning and fall back to Noop. A dead observability stack should
+// never break `make demo`.
 //
 // Standard OTel env vars (OTEL_SERVICE_NAME, OTEL_EXPORTER_OTLP_ENDPOINT,
 // OTEL_RESOURCE_ATTRIBUTES) are honored as fallbacks under explicit
@@ -76,6 +85,14 @@ const otlpProbeTimeout = 500 * time.Millisecond
 const (
 	ExporterStdout = "stdout"
 	ExporterOTLP   = "otlp"
+	// ExporterAuto = "best-effort OTLP". Probes the configured
+	// OTLP endpoint; if it answers, traces ship; if not, the helper
+	// silently returns Noop (no warning — the operator opted into
+	// maybe-on-maybe-off semantics). The right value for adopters
+	// who want telemetry when the local docker/observability/
+	// stack happens to be up but don't want a missing stack to be
+	// noisy.
+	ExporterAuto = "auto"
 
 	// DefaultOTLPEndpoint matches the gRPC receiver port that the
 	// docker/observability/ stack exposes. The OTel Go SDK's own
@@ -122,10 +139,12 @@ func WithServiceName(name string) SetupOption {
 	}
 }
 
-// WithExporter picks the exporter mode: "", "stdout", or "otlp".
-// Empty string → Noop (the default). Unknown values cause
-// SetupTelemetry to return an error so a typo doesn't silently turn
-// telemetry off.
+// WithExporter picks the exporter mode: "", "stdout", "otlp", or
+// "auto". Empty string → Noop (the default). "auto" probes the OTLP
+// endpoint and falls back to Noop silently if unreachable — the
+// right pick for examples that may or may not have the local
+// observability stack running. Unknown values cause SetupTelemetry
+// to return an error so a typo doesn't silently turn telemetry off.
 func WithExporter(name string) SetupOption {
 	return func(c *setupConfig) {
 		c.exporter = name
@@ -233,8 +252,30 @@ func SetupTelemetry(ctx context.Context, opts ...SetupOption) (core.TracerProvid
 		tp, shutdown := buildTracerProvider(exp, &cfg)
 		return tp, shutdown, nil
 
+	case ExporterAuto:
+		// "auto" is "otlp" with the dial-failure log silenced. The
+		// operator explicitly opted into maybe-on-maybe-off
+		// semantics, so a missing stack is not surprising — no
+		// noise. A failed OTLP exporter init (separate from dial
+		// reachability — e.g. invalid endpoint format) still logs,
+		// because that's a configuration error, not an environment
+		// state.
+		if err := probeOTLPEndpoint(cfg.otlpEndpoint); err != nil {
+			return core.NoopTracerProvider{}, noopShutdown, nil
+		}
+		exp, err := otlptracegrpc.New(ctx,
+			otlptracegrpc.WithEndpoint(cfg.otlpEndpoint),
+			otlptracegrpc.WithInsecure(),
+		)
+		if err != nil {
+			log.Printf("commonotel.SetupTelemetry (auto): OTLP exporter init failed (%v) — falling back to Noop.", err)
+			return core.NoopTracerProvider{}, noopShutdown, nil
+		}
+		tp, shutdown := buildTracerProvider(exp, &cfg)
+		return tp, shutdown, nil
+
 	default:
-		return nil, nil, fmt.Errorf("commonotel.SetupTelemetry: unknown exporter %q (expected %q, %q, or empty)", cfg.exporter, ExporterStdout, ExporterOTLP)
+		return nil, nil, fmt.Errorf("commonotel.SetupTelemetry: unknown exporter %q (expected %q, %q, %q, or empty)", cfg.exporter, ExporterStdout, ExporterOTLP, ExporterAuto)
 	}
 }
 
