@@ -4,16 +4,20 @@
 // rich nested output (templates array, default inputs, optional custom
 // projections + summary). ScenarioSummary has `breakEvenMonth: z.number().
 // nullable()` so we use OutputSchemaOverride to mirror the anyOf shape.
+// The handler now ports upstream's 5 pre-built scenario templates +
+// 12-month projection math so the iframe's "Compare to..." dropdown
+// has real options and Reset lands on real defaults rather than zeros.
 //
 // Run:  EXT_APPS_DIR=/tmp/ext-apps PORT=3101 go run .
 package main
 
 import (
-	"strings"
 	"flag"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
@@ -114,6 +118,119 @@ var scenarioSummarySchema = map[string]any{
 		},
 	},
 	"required": []string{"endingMRR", "arr", "totalRevenue", "totalProfit", "mrrGrowthPct", "avgMargin", "breakEvenMonth"},
+}
+
+// defaultInputs mirrors upstream's DEFAULT_INPUTS — what the iframe's
+// Reset button lands on. Values match upstream byte-for-byte.
+var defaultInputs = scenarioInputs{
+	StartingMRR:       50000,
+	MonthlyGrowthRate: 5,
+	MonthlyChurnRate:  3,
+	GrossMargin:       80,
+	FixedCosts:        30000,
+}
+
+// calculateProjections ports upstream's per-month MRR / gross profit /
+// net profit / cumulative-revenue formula verbatim. Net growth =
+// growth - churn, MRR compounds, gross profit applies margin, net
+// profit subtracts fixed costs.
+func calculateProjections(in scenarioInputs) []monthlyProjection {
+	netGrowthRate := (in.MonthlyGrowthRate - in.MonthlyChurnRate) / 100.0
+	out := make([]monthlyProjection, 0, 12)
+	cumulative := 0.0
+	for m := 1; m <= 12; m++ {
+		mrr := in.StartingMRR * math.Pow(1+netGrowthRate, float64(m))
+		grossProfit := mrr * (in.GrossMargin / 100.0)
+		netProfit := grossProfit - in.FixedCosts
+		cumulative += mrr
+		out = append(out, monthlyProjection{
+			Month:             float64(m),
+			MRR:               mrr,
+			GrossProfit:       grossProfit,
+			NetProfit:         netProfit,
+			CumulativeRevenue: cumulative,
+		})
+	}
+	return out
+}
+
+// calculateSummary collapses the 12 monthly projections into the summary
+// card the iframe renders bottom-right. breakEvenMonth is *float64 so it
+// can serialize as `null` when net profit never crosses zero —
+// matches upstream's `z.number().nullable()`.
+func calculateSummary(projs []monthlyProjection, in scenarioInputs) scenarioSummary {
+	ending := projs[11].MRR
+	totalRevenue := 0.0
+	totalProfit := 0.0
+	for _, p := range projs {
+		totalRevenue += p.MRR
+		totalProfit += p.NetProfit
+	}
+	mrrGrowthPct := ((ending - in.StartingMRR) / in.StartingMRR) * 100.0
+	avgMargin := 0.0
+	if totalRevenue != 0 {
+		avgMargin = (totalProfit / totalRevenue) * 100.0
+	}
+	var breakEven *float64
+	for _, p := range projs {
+		if p.NetProfit >= 0 {
+			m := p.Month
+			breakEven = &m
+			break
+		}
+	}
+	return scenarioSummary{
+		EndingMRR:      ending,
+		ARR:            ending * 12,
+		TotalRevenue:   totalRevenue,
+		TotalProfit:    totalProfit,
+		MRRGrowthPct:   mrrGrowthPct,
+		AvgMargin:      avgMargin,
+		BreakEvenMonth: breakEven,
+	}
+}
+
+// buildTemplate is the per-template constructor — calls calculate*
+// once at startup time so the templates returned to the iframe have
+// their projections + summary already baked in.
+func buildTemplate(id, name, desc, icon string, params scenarioInputs, keyInsight string) scenarioTemplate {
+	projs := calculateProjections(params)
+	return scenarioTemplate{
+		ID:          id,
+		Name:        name,
+		Description: desc,
+		Icon:        icon,
+		Parameters:  params,
+		Projections: projs,
+		Summary:     calculateSummary(projs, params),
+		KeyInsight:  keyInsight,
+	}
+}
+
+// scenarioTemplates ports upstream's SCENARIO_TEMPLATES list verbatim —
+// 5 pre-built scenarios for the iframe's "Compare to..." dropdown.
+// Parameters, icons, and key insights match upstream byte-for-byte.
+var scenarioTemplates = []scenarioTemplate{
+	buildTemplate("bootstrapped", "Bootstrapped Growth",
+		"Low burn, steady growth, path to profitability", "\U0001F331",
+		scenarioInputs{StartingMRR: 30000, MonthlyGrowthRate: 4, MonthlyChurnRate: 2, GrossMargin: 85, FixedCosts: 20000},
+		"Profitable by month 1, but slower scale"),
+	buildTemplate("vc-rocketship", "VC Rocketship",
+		"High burn, explosive growth, raise more later", "\U0001F680",
+		scenarioInputs{StartingMRR: 100000, MonthlyGrowthRate: 15, MonthlyChurnRate: 5, GrossMargin: 70, FixedCosts: 150000},
+		"Loses money early but ends at 3x MRR"),
+	buildTemplate("cash-cow", "Cash Cow",
+		"Mature product, high margin, stable revenue", "\U0001F404",
+		scenarioInputs{StartingMRR: 80000, MonthlyGrowthRate: 2, MonthlyChurnRate: 1, GrossMargin: 90, FixedCosts: 40000},
+		"Consistent profitability, low risk"),
+	buildTemplate("turnaround", "Turnaround",
+		"Fighting churn, rebuilding product-market fit", "\U0001F504",
+		scenarioInputs{StartingMRR: 60000, MonthlyGrowthRate: 6, MonthlyChurnRate: 8, GrossMargin: 75, FixedCosts: 50000},
+		"Negative net growth requires urgent action"),
+	buildTemplate("efficient-growth", "Efficient Growth",
+		"Balanced approach with sustainable economics", "⚖️",
+		scenarioInputs{StartingMRR: 50000, MonthlyGrowthRate: 8, MonthlyChurnRate: 3, GrossMargin: 80, FixedCosts: 35000},
+		"Good growth with path to profitability"),
 }
 
 var scenarioTemplateSchema = map[string]any{
@@ -217,12 +334,18 @@ func serve() {
 					},
 					"required": []string{"templates", "defaultInputs"},
 				},
-				Handler: func(ctx core.ToolContext, _ getScenarioInput) (getScenarioOutput, error) {
-					// Visual test doesn't depend on the data shape.
-					return getScenarioOutput{
-						Templates:     []scenarioTemplate{},
-						DefaultInputs: scenarioInputs{},
-					}, nil
+				Handler: func(ctx core.ToolContext, in getScenarioInput) (getScenarioOutput, error) {
+					out := getScenarioOutput{
+						Templates:     scenarioTemplates,
+						DefaultInputs: defaultInputs,
+					}
+					if in.CustomInputs != nil {
+						projs := calculateProjections(*in.CustomInputs)
+						sum := calculateSummary(projs, *in.CustomInputs)
+						out.CustomProjections = projs
+						out.CustomSummary = &sum
+					}
+					return out, nil
 				},
 				ResourceURI: resourceURI,
 				ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
