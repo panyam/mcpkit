@@ -71,6 +71,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 // otlpProbeTimeout caps how long SetupTelemetry waits on a TCP
@@ -386,6 +387,30 @@ func probeOTLPEndpoint(endpoint string) error {
 	}
 	_ = conn.Close()
 	return nil
+}
+
+// UnderlyingOTelTP extracts the OpenTelemetry TracerProvider that
+// backs a core.TracerProvider returned by SetupTelemetry. Use it to
+// hand the same OTel TP to downstream libraries that take an OTel
+// TracerProvider directly — oneauth's keys.WithTracerProvider,
+// future grpc/http instrumentation, etc. — so the whole process
+// shares one span pipeline.
+//
+// Returns nil for:
+//   - core.NoopTracerProvider{} (the EXPORTER="" path) — caller
+//     should respect this as "tracing is off" and skip wiring its
+//     own opt-in instrumentation.
+//   - Any other custom core.TracerProvider that isn't mcpotel.Provider —
+//     extension points outside the standard examples wiring.
+//
+// Defensive callers either nil-check the return or pass it straight
+// through (oneauth's options no-op cleanly on nil OTel TPs).
+func UnderlyingOTelTP(tp core.TracerProvider) oteltrace.TracerProvider {
+	p, ok := tp.(*mcpotel.Provider)
+	if !ok {
+		return nil
+	}
+	return p.OTelTracerProvider()
 }
 
 // parseResourceAttrEnv parses the OTEL_RESOURCE_ATTRIBUTES env var

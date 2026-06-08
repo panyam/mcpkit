@@ -525,6 +525,39 @@ What's emitted when a `TracerProvider` is wired:
 
 When no active dispatch span is present (auth running outside a traced path), `core.SpanFromContext` returns a no-op span and every `SetAttribute` is a no-op — no nil-checking required at the call site.
 
+### oneauth-side tracing (v0.1.14+)
+
+`JWTConfig.OneauthTracerProvider` opts oneauth's own internal work (JWKS HTTP fetch, refresh, key parsing, signature verify) into emitting spans via the OTel SDK `TracerProvider` you supply. Threads through `keys.WithTracerProvider` on the `JWKSKeyStore` constructor (oneauth v0.1.14 added the option). Nil keeps oneauth's internal work opaque — `ext/auth` still emits its own `auth.jwks_lookup` span, just without child spans showing what oneauth was doing inside.
+
+Typical wiring against the standard examples telemetry helper:
+
+```go
+tp, shutdown, err := commonotel.SetupTelemetry(ctx, ...)
+defer shutdown(ctx)
+
+validator := auth.NewJWTValidator(auth.JWTConfig{
+    JWKSURL:               jwksURL,
+    Issuer:                issuer,
+    TracerProvider:        tp,                                  // ext/auth's own spans
+    OneauthTracerProvider: commonotel.UnderlyingOTelTP(tp),     // oneauth's spans, same OTel pipeline
+})
+```
+
+`commonotel.UnderlyingOTelTP` extracts the OTel `TracerProvider` that `SetupTelemetry` constructed internally — needed because oneauth's API takes the OTel SDK type directly, not mcpkit's `core.TracerProvider` abstraction. When `tp` is the Noop provider (EXPORTER=""), `UnderlyingOTelTP` returns nil and oneauth's options no-op cleanly.
+
+End-to-end trace shape with both wired:
+
+```
+client.tools/call          (mcpkit/client)
+└─ server.tools/call       (mcpkit/server, parent via _meta.traceparent)
+   ├─ auth.jwks_lookup     (ext/auth, child of dispatch span)
+   │  └─ oneauth.jwks.refresh
+   │     └─ oneauth.jwks.key_lookup
+   └─ tool handler work
+```
+
+Tracked in panyam/oneauth#254 (closed by oneauth PR 256, released as v0.1.14).
+
 ### Documented limitation: transport-level 401 is not traced
 
 If the streamable transport rejects a request before the dispatch span starts (e.g., a malformed `Authorization` header caught at transport setup), the rejection happens **before** the SEP-414 P2 trace middleware runs, so there's no active span to decorate and no parent for an `auth.*` sub-span. That 401 is invisible in trace data today. Adding a transport-level span purely for rejected auth would change the spine semantics of "one inbound span per JSON-RPC dispatch" — deferred until a real adopter reports it as a missing signal.
