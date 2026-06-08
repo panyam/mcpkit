@@ -1,8 +1,8 @@
 # whole-enchilada — top-level Makefile orchestrating the demo stack.
 #
 # Replica counts are knobs:
-#   make demo-up                  # N=1 M=1 (committed default)
-#   make demo-up N=3 M=2          # 3 event-servers, 2 push-servers
+#   make up                  # N=1 M=1 (committed default)
+#   make up N=3 M=2          # 3 event-servers, 2 push-servers
 #
 # Hostnames (*.whole_enchilada) resolve inside the compose network out of
 # the box. To reach them from the host shell / browser, run
@@ -41,7 +41,7 @@ HOSTS_NAMES  := nginx.whole_enchilada event_server.whole_enchilada \
                 pusher.whole_enchilada pusher_1.whole_enchilada pusher_2.whole_enchilada \
                 receiver.whole_enchilada keycloak.whole_enchilada
 
-.PHONY: help gen-compose build test demo-up demo-down demo-test demo readme \
+.PHONY: help gen-compose build test up down demo demo-test readme \
         newtoken newtoken-ci poller webhook inject \
         hosts-install hosts-uninstall logs ps clean
 
@@ -63,11 +63,11 @@ build: ## Build all binaries locally (without Docker).
 test: ## In-process e2e tests (no Docker needed).
 	go -C event-server test ./... -count=1 -timeout 60s
 
-demo-up: gen-compose ## docker compose up -d, wait for healthchecks. Honors N + M.
-	docker compose up -d --build
-	@echo "stack up; nginx on http://localhost:8080 — see README for hostname routing"
+up: gen-compose ## docker compose up -d. Reuses cached images. Pass BUILD=true to force a rebuild after code changes.
+	docker compose up -d $(if $(BUILD),--build)
+	@echo "stack up$(if $(BUILD), (rebuilt)); nginx on http://localhost:8080 — see README for hostname routing"
 
-demo-down: ## docker compose down -v (removes named volumes too).
+down: ## docker compose down -v (removes named volumes too).
 	docker compose down -v
 
 demo-test: ## Run the walkthrough in non-interactive mode against the running stack.
@@ -81,7 +81,7 @@ readme: ## Regenerate WALKTHROUGH.md from walkthrough/walkthrough.go.
 
 # -------------------------------------------------------------------
 # Stage-2 client-side wrappers. The operator runs these from sibling
-# terminals while `make demo-up` keeps the docker stack running.
+# terminals while `make up` keeps the docker stack running.
 # Token flow:
 #   1. `make newtoken TENANT=A`           # interactive browser auth
 #   2. `export TA=$(make newtoken TENANT=A --silent ...)` etc.
