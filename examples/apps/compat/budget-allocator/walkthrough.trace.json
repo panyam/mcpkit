@@ -1,0 +1,45 @@
+[
+  {
+    "kind": "section",
+    "title": "Setup",
+    "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nAny MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam, basic-host). The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser, no JS. The same protocol calls drive the iframe when you run `make demo-app EXAMPLE=budget-allocator` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+  },
+  {
+    "kind": "step",
+    "title": "Connect to the fixture",
+    "step_id": "step-1",
+    "visit": 1,
+    "output": "    connected to Budget Allocator Server 1.0.0\n"
+  },
+  {
+    "kind": "step",
+    "title": "tools/list — verify get-budget-data + its UI resource",
+    "step_id": "step-2",
+    "visit": 1,
+    "output": "    get-budget-data\n      _meta: {\n        \"ui\": {\n          \"resourceUri\": \"ui://budget-allocator/mcp-app.html\"\n        },\n        \"ui/resourceUri\": \"ui://budget-allocator/mcp-app.html\"\n      }\n"
+  },
+  {
+    "kind": "step",
+    "title": "tools/call get-budget-data — the rich nested payload",
+    "step_id": "step-3",
+    "visit": 1,
+    "output": "    structuredContent shape:\n      config.categories       = 5 entries\n      config.presetBudgets    = 4 entries\n      config.defaultBudget    = 100000\n      config.currency         = USD\n      analytics.history       = 24 months\n      analytics.benchmarks    = 4 stages\n      analytics.stages        = 4 names\n      analytics.defaultStage  = Series A\n"
+  },
+  {
+    "kind": "step",
+    "title": "resources/read — the iframe HTML the App ships in",
+    "step_id": "step-4",
+    "visit": 1,
+    "output": "    uri:      ui://budget-allocator/mcp-app.html\n    mimeType: text/html;profile=mcp-app\n    bytes:    553966  (iframe HTML+JS bundle)\n    _meta:    \u003cnone\u003e  (no csp / permissions declared)\n"
+  },
+  {
+    "kind": "section",
+    "title": "What the App iframe does with all this",
+    "body": "This is the point where a Go-only scripted host hits its limit: everything from here runs in the iframe's JavaScript via the MCP Apps bridge, not over the MCP wire. A reader walking this section learns where the server-side story ends and the app-side story begins.\n\nWhen `make demo-app EXAMPLE=budget-allocator` runs this fixture inside basic-host, the host:\n\n1. Calls `tools/call get-budget-data` exactly as step 3 above.\n2. Reads `ui://budget-allocator/mcp-app.html` exactly as step 4 above.\n3. Renders the iframe in a sandbox, loads the JS bundle, and pushes the tool result into the iframe via the [mcp-app-bridge](https://github.com/modelcontextprotocol/ext-apps/blob/main/src/app-bridge.ts) `postMessage` channel.\n\nInside the iframe — which is what you saw in step 4's bytes — the App SDK then:\n\n- Receives the tool result via `app.ontoolresult` and unpacks `result.structuredContent` into the typed `BudgetDataResponse` shape. The categories / sliders / chart are bound directly to that data.\n- Registers **five app-side tools** that the model can call back through the bridge: `get-allocations`, `set-allocation`, `set-total-budget`, `set-company-stage`, `get-benchmark-comparison`. None of these are visible from a direct server-side `tools/list` (you can confirm by re-reading step 2's output) — they live in the iframe's runtime and the bridge proxies them to the host.\n- Calls `app.updateModelContext()` after every UI interaction to push the current allocation state back to the model, so a next-turn LLM prompt sees the updated budget.\n\nThe protocol surface a Go-only host sees (steps 1-4) is the *floor* of an MCP Apps interaction. The app-side bridge dance is the part that makes Budget Allocator a *widget* and not just a JSON tool result."
+  },
+  {
+    "kind": "section",
+    "title": "Where to look in the code",
+    "body": "- `main.go` — the fixture is one TypedAppTool (~100 lines plus the LCG'd historical data). The whole nested output reflects from the `budgetDataOutput` struct + maps.\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + screenshots + the [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) guide.\n- Upstream's iframe source: `/tmp/ext-apps/examples/budget-allocator-server/src/mcp-app.ts` — the JS that consumes `ontoolresult` and registers the five app-side tools. Worth a read to see the bridge dance end-to-end."
+  }
+]
