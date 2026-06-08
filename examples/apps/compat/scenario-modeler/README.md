@@ -8,12 +8,21 @@ the full `OutputSchemaOverride` is genuinely cleaner.
 
 ## What it Shows
 
-- **SaaS scenario projections.** `get-scenario-data` returns a set of
-  pre-built scenario templates (conservative growth, aggressive, etc.)
-  plus optional custom projections computed from caller-supplied
-  inputs. Templates and custom projections both produce a `summary`
-  object that has `breakEvenMonth: number | null`.
-- **Nullable at depth.** The nullable field appears as
+- **5 pre-built SaaS scenarios on the wire.** `get-scenario-data`
+  returns the templates the iframe's `Compare to...` dropdown reads
+  from — Bootstrapped Growth, VC Rocketship, Cash Cow, Turnaround,
+  Efficient Growth. Each template has its 12-month MRR / gross profit
+  / net profit projection plus a summary card pre-computed
+  server-side, so the iframe can render a comparison overlay
+  immediately without a second round trip.
+- **Optional server-side custom projection.** Pass `customInputs:
+  {startingMRR, monthlyGrowthRate, monthlyChurnRate, grossMargin,
+  fixedCosts}` and the same 12-month math runs against your numbers,
+  returning `customProjections[]` + `customSummary` next to the
+  templates. The iframe doesn't use this path — it computes the
+  user's scenario client-side — but hosts that want to drive the
+  comparison from outside the iframe can.
+- **Nullable at depth.** `breakEvenMonth: number | null` appears as
   `templates[].summary.breakEvenMonth` AND as
   `customSummary.breakEvenMonth` — same shape, two nesting paths.
   Hand-stitching that with `Patch.Replace` at deep paths is uglier
@@ -21,6 +30,15 @@ the full `OutputSchemaOverride` is genuinely cleaner.
 - **`InputSchemaPatch` for the input.** The input's `customInputs`
   field just needs a description tweak — patch is shorter than the
   old override there.
+- **`execution.taskSupport: "forbidden"`.** mcpkit declares this tool
+  sync-only via `core.ToolExecution{TaskSupport: core.TaskSupportForbidden}`
+  — visible on the wire in `tools/list`. Upstream's TS SDK doesn't
+  expose the same knob, so this is one of the few places mcpkit-Go
+  emits a spec-compliant declaration that upstream doesn't.
+
+## Run Pre-Recorded
+
+> ▶ **[Play the walkthrough in your browser](https://panyam.github.io/mcpkit/walkthroughs/examples/apps/compat/scenario-modeler/)** — animated playback of every curl / Go call the walkthrough makes, step-by-step. No clone, no setup.
 
 ## Or Run Live
 
@@ -37,8 +55,8 @@ Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `h
 Open <http://localhost:8080> in your browser. Then:
 
 1. Pick **SaaS Scenario Modeler** from the server dropdown.
-2. Pick **get-scenario-data** from the tool dropdown, click **Call Tool**.
-3. The iframe renders the result; interact with it directly to drive subsequent tool calls (no model in the loop).
+2. Pick **get-scenario-data** from the tool dropdown, click **Call Tool** with empty input.
+3. The iframe renders the SaaS Scenario Modeler. Move the parameter sliders — projections recompute live (no server round trip; the iframe re-uses the same projection math the server exposes). Pick a template from the `Compare to...` dropdown to overlay one of the 5 pre-built scenarios. `Reset` lands the sliders on the server's `defaultInputs`.
 
 <a href="screenshots/01-templates.png" target="_blank"><img src="screenshots/01-templates.png" alt="Scenario Modeler App: iframe shows the pre-built scenario templates panel (conservative / aggressive / etc.) with summary KPIs" width="50%"></a>
 

@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>scenario-modeler — SaaS projection templates over MCP Apps</title>
+<link rel="stylesheet" href="./demokit-player.css">
+<style>
+body { margin: 2em auto; max-width: 900px; padding: 0 1em; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+</style>
+</head>
+<body>
+<demokit-demo>{
+  "demo": {
+    "title": "scenario-modeler — SaaS projection templates over MCP Apps",
+    "description": "Walks the get-scenario-data round trip end-to-end as a scripted MCP client: initialize, tools/list, two tools/call shapes (default + customInputs), and resources/read on the App's iframe HTML. The fixture mirrors upstream's scenario-modeler-server example: 5 pre-built SaaS scenarios (Bootstrapped, VC Rocketship, Cash Cow, Turnaround, Efficient Growth) each with 12 months of MRR / gross profit / net profit projections plus a summary card. Run `make serve` in another terminal first.",
+    "actors": [
+      {
+        "id": "Host",
+        "label": "MCP Host (this client)"
+      },
+      {
+        "id": "Server",
+        "label": "mcpkit-Go fixture (make serve)"
+      }
+    ],
+    "items": [
+      {
+        "kind": "section",
+        "title": "Setup",
+        "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nAny MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam, basic-host). The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `make demo-app EXAMPLE=scenario-modeler` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+      },
+      {
+        "kind": "step",
+        "title": "Connect to the fixture",
+        "note": "Standard MCP initialize handshake. `*client.Client.Connect()` runs initialize + notifications/initialized + stashes the session header for every subsequent call.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "POST /mcp — initialize"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "serverInfo + capabilities + Mcp-Session-Id",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "# Initialize. Mcp-Session-Id comes back in the response headers.\nSID=$(curl -si -X POST http://localhost:3101/mcp \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"curl\",\"version\":\"1\"}}}' \\\n  | awk 'tolower($1) == \"mcp-session-id:\" {gsub(/\\r/,\"\"); print $2}')\n\n# Acknowledge so the server's dispatcher unblocks.\ncurl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "tools/list — verify get-scenario-data + _meta surfaces",
+        "note": "Two _meta-adjacent surfaces worth calling out here. (1) `_meta.ui.resourceUri` (`ui://scenario-modeler/mcp-app.html`) tags this tool as an MCP App — basic-host fetches that URI to fill the iframe. (2) `execution.taskSupport: \"forbidden\"` declares this tool is sync-only — it cannot be wrapped in an MCP Task. mcpkit-Go emits this explicitly via `core.ToolExecution{TaskSupport: core.TaskSupportForbidden}`; upstream's TS server doesn't surface the same knob, so this is a mcpkit-side declaration that's spec-compliant on the wire.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "tools/list"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "tools[] including get-scenario-data",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}' \\\n  | jq '.result.tools[] | {name, execution, _meta}'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "tools/call get-scenario-data — 5 templates + defaults",
+        "note": "This is the call the iframe issues on connect — no arguments, server returns the 5 pre-built scenarios (Bootstrapped, VC Rocketship, Cash Cow, Turnaround, Efficient Growth) plus the slider defaults. Each template has its 12-month MRR projection + summary card pre-computed server-side, so the iframe's `Compare to...` dropdown can render the comparison overlay without any extra round trip.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "tools/call get-scenario-data {}"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "structuredContent = { templates[5], defaultInputs }",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"get-scenario-data\",\"arguments\":{}}}' \\\n  | jq '.result.structuredContent | {n_templates: (.templates|length), templateNames: [.templates[]|{id,icon,name}], defaultInputs}'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "tools/call get-scenario-data {customInputs: ...} — one-off projection",
+        "note": "Optional path — the iframe can also POST a one-off scenario for server-side computation. Send the same 5 parameters the sliders model and the server returns 12 monthly projections plus a summary card (MRR, ARR, total revenue, total profit, growth %, avg margin, break-even month — `null` if profit never crosses zero). With the defaults this lands at ~$63.4K end MRR / $684K total revenue / $187K total profit — same numbers the iframe renders in its `Your Scenario` panel.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "tools/call get-scenario-data {customInputs:{...}}"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "structuredContent.customSummary + customProjections[12]",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"get-scenario-data\",\"arguments\":{\"customInputs\":{\"startingMRR\":50000,\"monthlyGrowthRate\":5,\"monthlyChurnRate\":3,\"grossMargin\":80,\"fixedCosts\":30000}}}}' \\\n  | jq '.result.structuredContent.customSummary'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "resources/read on ui://scenario-modeler/mcp-app.html",
+        "note": "Confirms the App's iframe HTML is actually served on the MCP wire. basic-host fetches the same URI once it sees `_meta.ui.resourceUri`. The bytes here should match upstream's `dist/mcp-app.html` build under `EXT_APPS_DIR=/tmp/ext-apps/examples/scenario-modeler-server/dist/`.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "resources/read { uri: ui://scenario-modeler/mcp-app.html }"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "Contents[0].Text = the iframe HTML",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"resources/read\",\"params\":{\"uri\":\"ui://scenario-modeler/mcp-app.html\"}}' \\\n  | jq -r '.result.contents[0].text' | head -c 200",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "section",
+        "title": "What the App iframe does with all this",
+        "body": "The host → iframe handoff mechanics (`tools/call` → `resources/read` → sandboxed iframe → `postMessage`) are covered once in [The basic-host bridge dance](../README.md#the-basic-host-bridge-dance). Steps 1-5 above are the floor every MCP Apps interaction starts from.\n\nscenario-modeler's iframe sits at the **moderate** end of the App-ness spectrum — one tool call on load, no app-side tools registered. The bridge calls its App SDK makes:\n\n- `app.ontoolresult` — unpacks `result.structuredContent` into `{templates, defaultInputs}` and seeds React state. The `Compare to...` dropdown reads from `templates[]`; the `Reset` button reads from `defaultInputs`.\n- `app.getHostContext()` + `app.onhostcontextchanged` — reads `safeAreaInsets` from the host and applies them as padding on the root `\u003cmain\u003e` element, so the layout respects the host's chrome / status-bar safe area.\n\nNO `app.registerTool`, NO `app.updateModelContext`, NO `app.callServerTool` after the initial load — slider changes are computed entirely client-side using the same projection math that the server exposes. Server-side projection (Step 4) is offered for hosts that want to drive the comparison from outside the iframe; the iframe itself doesn't use it. Same spectrum rung as `customer-segmentation` and `cohort-heatmap`."
+      },
+      {
+        "kind": "section",
+        "title": "Where to look in the code",
+        "body": "- `main.go` — fixture is ~370 lines. The interesting parts: ported `calculateProjections` + `calculateSummary` (`math.Pow` for compounded MRR, nullable `*float64` for `breakEvenMonth`), the 5 `buildTemplate(...)` calls that materialize `scenarioTemplates` at startup, and the `OutputSchemaOverride` block that hand-stitches the nullable `breakEvenMonth` `anyOf` shape at both template-summary and customSummary depths.\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + screenshots + the centralized [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) guide and the bridge-dance reference section."
+      }
+    ]
+  },
+  "trace": [
+    {
+      "kind": "section",
+      "title": "Setup",
+      "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nAny MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam, basic-host). The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `make demo-app EXAMPLE=scenario-modeler` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+    },
+    {
+      "kind": "step",
+      "title": "Connect to the fixture",
+      "step_id": "step-1",
+      "visit": 1,
+      "output": "    ERROR: initialize failed: Post \"http://localhost:3101/mcp\": dial tcp [::1]:3101: connect: connection refused\n    Start the server with: make serve\n"
+    },
+    {
+      "kind": "step",
+      "title": "tools/list — verify get-scenario-data + _meta surfaces",
+      "step_id": "step-2",
+      "visit": 1,
+      "output": "    ERROR: HTTP 400: missing Mcp-Session-Id header\n"
+    },
+    {
+      "kind": "step",
+      "title": "tools/call get-scenario-data — 5 templates + defaults",
+      "step_id": "step-3",
+      "visit": 1,
+      "output": "    ERROR: HTTP 400: missing Mcp-Session-Id header\n"
+    },
+    {
+      "kind": "step",
+      "title": "tools/call get-scenario-data {customInputs: ...} — one-off projection",
+      "step_id": "step-4",
+      "visit": 1,
+      "output": "    ERROR: HTTP 400: missing Mcp-Session-Id header\n"
+    },
+    {
+      "kind": "step",
+      "title": "resources/read on ui://scenario-modeler/mcp-app.html",
+      "step_id": "step-5",
+      "visit": 1,
+      "output": "    ERROR: HTTP 400: missing Mcp-Session-Id header\n"
+    },
+    {
+      "kind": "section",
+      "title": "What the App iframe does with all this",
+      "body": "The host → iframe handoff mechanics (`tools/call` → `resources/read` → sandboxed iframe → `postMessage`) are covered once in [The basic-host bridge dance](../README.md#the-basic-host-bridge-dance). Steps 1-5 above are the floor every MCP Apps interaction starts from.\n\nscenario-modeler's iframe sits at the **moderate** end of the App-ness spectrum — one tool call on load, no app-side tools registered. The bridge calls its App SDK makes:\n\n- `app.ontoolresult` — unpacks `result.structuredContent` into `{templates, defaultInputs}` and seeds React state. The `Compare to...` dropdown reads from `templates[]`; the `Reset` button reads from `defaultInputs`.\n- `app.getHostContext()` + `app.onhostcontextchanged` — reads `safeAreaInsets` from the host and applies them as padding on the root `\u003cmain\u003e` element, so the layout respects the host's chrome / status-bar safe area.\n\nNO `app.registerTool`, NO `app.updateModelContext`, NO `app.callServerTool` after the initial load — slider changes are computed entirely client-side using the same projection math that the server exposes. Server-side projection (Step 4) is offered for hosts that want to drive the comparison from outside the iframe; the iframe itself doesn't use it. Same spectrum rung as `customer-segmentation` and `cohort-heatmap`."
+    },
+    {
+      "kind": "section",
+      "title": "Where to look in the code",
+      "body": "- `main.go` — fixture is ~370 lines. The interesting parts: ported `calculateProjections` + `calculateSummary` (`math.Pow` for compounded MRR, nullable `*float64` for `breakEvenMonth`), the 5 `buildTemplate(...)` calls that materialize `scenarioTemplates` at startup, and the `OutputSchemaOverride` block that hand-stitches the nullable `breakEvenMonth` `anyOf` shape at both template-summary and customSummary depths.\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + screenshots + the centralized [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) guide and the bridge-dance reference section."
+    }
+  ]
+}
+</demokit-demo>
+<script type="module" src="./demokit-player.js"></script>
+</body>
+</html>
