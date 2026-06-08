@@ -149,6 +149,12 @@ test-experimental-events: ## Run experimental ext/events library tests
 test-experimental-events-clients-go: ## Run experimental ext/events Go client SDK tests
 	$(MAKE) -C experimental test-events-clients-go
 
+test-experimental-events-stores-gorm: ## Run experimental ext/events GORM stores (sqlite + inmemory; no Docker required)
+	$(MAKE) -C experimental test-events-stores-gorm
+
+test-experimental-events-stores-gorm-pg: ## Run experimental ext/events GORM stores against a real Postgres container (Docker)
+	$(MAKE) -C experimental test-events-stores-gorm-pg
+
 test-experimental-events-discord: ## Run experimental events Discord example tests
 	$(MAKE) -C experimental test-events-discord
 
@@ -278,8 +284,9 @@ testall: ## Run ALL tests (starts Keycloak if needed) + per-stage HTML reports
 	$(call run_stage,6,9,e2e,test-e2e) \
 	$(call run_stage,7a,9,experimental-events,test-experimental-events) \
 	$(call run_stage,7b,9,experimental-events-clients-go,test-experimental-events-clients-go) \
-	$(call run_stage,7c,9,experimental-events-discord,test-experimental-events-discord) \
-	$(call run_stage,7d,9,experimental-events-telegram,test-experimental-events-telegram) \
+	$(call run_stage,7c,9,experimental-events-stores-gorm,test-experimental-events-stores-gorm) \
+	$(call run_stage,7d,9,experimental-events-discord,test-experimental-events-discord) \
+	$(call run_stage,7e,9,experimental-events-telegram,test-experimental-events-telegram) \
 	$(call run_stage,8a,9,conformance,testconf) \
 	$(call run_stage,8b,9,auth-conformance,testconfauth) \
 	$(call run_stage,8c,9,tasks-conformance,testconf-tasks) \
