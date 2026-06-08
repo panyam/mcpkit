@@ -33,15 +33,17 @@ const liveCaptureWindow = 10 * time.Second
 func runDemo(serverURL, receiverURL string) {
 	mcpURL := serverURL + "/mcp"
 
-	demo := demokit.New("MCP Events — whole-enchilada stage 1 walkthrough").
+	demo := demokit.New("MCP Events — whole-enchilada stage 2 walkthrough").
 		Dir("events/whole-enchilada").
-		Description("Production-shape multi-tier reference: nginx fronts an event-server replica; a push-server tier injects synthetic chat + presence events; a webhook receiver demonstrates downstream delivery. Stage 1 ships with in-memory stores, single tenant, anonymous principal. Stages 2/3/4 add Keycloak, Postgres+Redis multi-replica, and an admin frontend without changing this directory shape.").
+		Description("Production-shape multi-tier reference: nginx fronts the event-server tier; a push-server tier injects synthetic chat + presence events; a Keycloak service provides three pre-configured OAuth realms (tenant-a, tenant-b, tenant-c); each tenant gets its own pollers and webhook receivers running in sibling terminals. Stage 2 ships with in-memory stores. Stage 3 plugs in Postgres + Redis multi-replica without changing this directory shape.").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this walkthrough)"),
 			demokit.Actor("Nginx", "Frontdoor reverse proxy"),
-			demokit.Actor("Server", "Event-server (single replica in stage 1)"),
+			demokit.Actor("Server", "Event-server (single replica in stage 2)"),
 			demokit.Actor("PushServer", "Push-server (synthetic chat + presence feeders)"),
 			demokit.Actor("Receiver", "Example webhook consumer"),
+			demokit.Actor("Keycloak", "OAuth AS — three realms pre-imported on first start"),
+			demokit.Actor("Operator", "The person running the demo from their terminal"),
 		)
 
 	demo.Section("Architecture in one diagram",
@@ -65,6 +67,51 @@ func runDemo(serverURL, receiverURL string) {
 		"```",
 		"",
 		"`make demo-down` tears the stack down (`-v` removes named volumes).",
+		"",
+		"This binary demonstrates the **events protocol mechanics** end-to-end (poll, push/SSE, webhook). The **stage-2 tenant-isolation story** is best experienced by hand — see the next section.",
+	)
+
+	demo.Section("Stage-2 4-terminal demo (run by hand)",
+		"The walkthrough binary you're reading runs as a single MCP host doing every protocol thing. The *operator-facing* stage-2 demo splits that work across separate terminals — one per tenant — so per-tenant isolation is visually obvious. From the leaf:",
+		"",
+		"```",
+		"# T1: stack up",
+		"make demo-up",
+		"",
+		"# T2: tenant A poller",
+		"TA=$(make newtoken TENANT=A)         # browser opens, log in as alice@tenant-a",
+		"make poller TENANT=A TOKEN=$TA       # long-running — only sees tenant-a events",
+		"",
+		"# T3: tenant B poller (in another terminal)",
+		"TB=$(make newtoken TENANT=B)",
+		"make poller TENANT=B TOKEN=$TB",
+		"",
+		"# T4: tenant A webhook receiver (in another terminal)",
+		"make webhook TENANT=A TOKEN=$TA",
+		"",
+		"# T5: tenant B webhook receiver (in another terminal)",
+		"make webhook TENANT=B TOKEN=$TB",
+		"",
+		"# T6: operator injects events from the host",
+		"make inject TENANT=A EVENT=chat.message TEXT='hi from A'",
+		"# → T2 and T4 print the event. T3 and T5 stay quiet.",
+		"make inject TENANT=B EVENT=chat.message TEXT='hi from B'",
+		"# → T3 and T5 print. T2 and T4 stay quiet.",
+		"```",
+		"",
+		"**Revocation walkthrough**: open `http://localhost:8180/admin/master/console/#/tenant-a/users` in a browser (admin / admin), click `alice` → Sessions tab → \"Sign out\". Within ~5 seconds (`OAUTH_CACHE_TTL`), T2 and T4 die with `-32012 Forbidden`. T3 and T5 keep flowing — tenant-B unaffected.",
+		"",
+		"For tenant C (carol@tenant-c) repeat the pattern. The push-server also auto-rotates events across all three tenants at its configured cadence, so leave the terminals running and watch the rotation.",
+	)
+
+	demo.Section("CI regression for tenant isolation",
+		"`make demo-test` runs THIS binary end-to-end against the docker stack — it covers the protocol mechanics. The **tenant-isolation contract** is regression-tested by the event-server's e2e suite, which runs in-process with a fake token-as-tenant validator (no Docker needed):",
+		"",
+		"```",
+		"make test     # event-server/... e2e tests, includes 8 tenant-isolation cases",
+		"```",
+		"",
+		"That suite verifies (1) tagged events deliver only to matching tenants, (2) untagged events still deliver to all, (3) interleaved cross-tenant events don't leak. The docker stack adds the Keycloak interop layer on top.",
 	)
 
 	var (
