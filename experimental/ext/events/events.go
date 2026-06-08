@@ -664,7 +664,11 @@ func registerPoll(srv *server.Server, sourceMap map[string]EventSource, unsafeAn
 // the request with -32012 Forbidden — there is neither real auth
 // nor a configured anonymous fallback.
 //
-// Path-1 (real auth): claims != nil → claims.Subject. Spec-correct.
+// Path-1 (real auth): claims != nil → core.PrincipalFor(claims), which
+// builds "<tenant>/<subject>" when the validator populated Tenant, or
+// just Subject when single-tenant. Encoding the tenant into the
+// canonical-key keeps cross-tenant isolation intact even when two
+// realms host the same OAuth subject.
 // Path-2 (demo escape): claims == nil and unsafeAnon != "" → unsafeAnon.
 //
 //	Deliberately deviates from the spec; gated by Unsafe-prefix + startup
@@ -673,7 +677,7 @@ func registerPoll(srv *server.Server, sourceMap map[string]EventSource, unsafeAn
 // Path-3 (strict): claims == nil and unsafeAnon == "" → reject. Spec-correct.
 func resolvePrincipal(ctx core.MethodContext, unsafeAnon string) (string, bool) {
 	if claims := ctx.AuthClaims(); claims != nil {
-		return claims.Subject, true
+		return core.PrincipalFor(claims), true
 	}
 	if unsafeAnon != "" {
 		return unsafeAnon, true

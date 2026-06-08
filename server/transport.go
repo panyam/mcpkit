@@ -69,7 +69,7 @@ func (e *sseSessionEntry) verifyPrincipal(w http.ResponseWriter, claims *core.Cl
 	if e.subject == "" {
 		return true
 	}
-	if claims != nil && claims.Subject == e.subject {
+	if claims != nil && core.PrincipalFor(claims) == e.subject {
 		return true
 	}
 	http.Error(w, "forbidden: session principal mismatch", http.StatusForbidden)
