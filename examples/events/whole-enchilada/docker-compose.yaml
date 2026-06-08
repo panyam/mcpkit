@@ -96,7 +96,7 @@ services:
       context: ../../..
       dockerfile: examples/events/whole-enchilada/push-server/Dockerfile
     environment:
-      EVENT_SERVER_URL: http://event_server.whole_enchilada
+      EVENT_SERVER_URL: http://event_server.whole_enchilada:8080
       EVENT_INJECT_BEARER: ${EVENT_INJECT_BEARER:-stage-1-shared-secret}
       EXPORTER: ${EXPORTER:-auto}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-mcpkit-otel-collector:4317}
