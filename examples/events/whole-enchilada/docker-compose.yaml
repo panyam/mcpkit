@@ -141,18 +141,27 @@ services:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
       KC_HTTP_RELATIVE_PATH: /
+      # Tell Keycloak its public hostname so HostnameV2Provider has a
+      # deterministic URI source. Without this, Keycloak 26 NPEs on
+      # any request that arrives without a Host header (e.g., raw-TCP
+      # healthchecks) because HostnameV2Provider.getFrontUriBuilder
+      # falls back to request.authority() which is null on HTTP/1.0
+      # probes. Setting KC_HOSTNAME makes the realm discovery URLs
+      # absolute against this value too — fine for the demo since the
+      # operator hits the admin UI at localhost:8180.
+      KC_HOSTNAME: http://localhost:8180
+      KC_HOSTNAME_STRICT: "false"
     volumes:
       - ./keycloak/realms:/opt/keycloak/data/import:ro
     ports:
       - "8180:8080"
     healthcheck:
-      # 26.x exposes a management endpoint distinct from the user endpoint;
-      # /health/ready lives on port 9000 by default. We probe the realm
-      # discovery doc on the user port instead, which is up once import
-      # completes and tells us the realm is actually usable.
+      # Probe realm-c's discovery doc — the last realm imported alphabetically,
+      # so seeing it 200-OK means all three realms are live. HTTP/1.1 with
+      # explicit Host header so HostnameV2Provider has what it needs.
       test:
         - CMD-SHELL
-        - "exec 3<>/dev/tcp/localhost/8080 && printf 'GET /realms/tenant-c/.well-known/openid-configuration HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q 'HTTP/1.[01] 200' <&3"
+        - "exec 3<>/dev/tcp/localhost/8080 && printf 'GET /realms/tenant-c/.well-known/openid-configuration HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && head -c 64 <&3 | grep -q '200 OK'"
       interval: 5s
       timeout: 5s
       retries: 30
