@@ -27,7 +27,7 @@ PASSWORD ?=
 
 KEYCLOAK_HOST    ?= http://localhost:8180
 ONEAUTH_VERSION  ?= v0.1.17
-ONEAUTH          := go run github.com/panyam/oneauth/cmd/oneauth@$(ONEAUTH_VERSION)
+ONEAUTH          := oneauth
 DEMO_CLIENT_ID   ?= mcp-events-poller
 DEMO_CLIENT_SECRET ?= mcpkit-demo-secret-DEMO-ONLY
 
