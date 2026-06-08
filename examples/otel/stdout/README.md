@@ -1,35 +1,55 @@
-# examples/otel/stdout — SEP-414 Trace Context Propagation, exported to stdout
+# examples/otel/stdout — SEP-414 Trace Context Propagation
 
 Minimal demokit walkthrough showing how to wire OpenTelemetry tracing
 into BOTH sides of an MCP exchange using the
 [`ext/otel`](../../../ext/otel/) adapter — `server.WithTracerProvider`
-on the server (`make serve`) and `client.WithTracerProvider` on the
-walkthrough (`make demo`). Both processes use the SDK's `stdouttrace`
-exporter, so each terminal prints its own side's spans as
-pretty-printed JSON. No collector infrastructure required.
+on the server and `client.WithTracerProvider` on the walkthrough. Two
+exporter modes:
+
+- **`--exporter=stdout` (default).** Both processes use the
+  `stdouttrace` exporter; each terminal prints its own side's spans
+  as pretty-printed JSON. CI-friendly: no external stack required.
+  Match TraceID across the two terminals to see SEP-414 stitching.
+
+- **`--exporter=otlp`.** Both processes ship spans via OTLP gRPC to
+  the `docker/observability/` stack (default endpoint
+  `localhost:4317`). Spans land in Grafana, indexed by `service.name`
+  (`otel-stdout-demo` for the server, `otel-stdout-host` for the
+  walkthrough). Search by either name in Grafana → Explore → Tempo to
+  see the stitched client→server trace in the UI.
 
 The walkthrough makes a `tools/call`; the client trace middleware
 stamps its own auto-generated `_meta.traceparent` on the outbound
-params; the server picks it up. Spans for that call appear on BOTH
-terminals with matching `TraceID` — that match proves the SEP-414
-client↔server wire is actually propagating end-to-end.
+params; the server picks it up as Parent. End result: matching
+TraceID on both sides regardless of exporter mode.
 
 ## Quick Start
 
+### Stdout mode — default (no infrastructure)
+
 ```
-Terminal 1:  make serve         # OTel-instrumented server on :8080 — server-side spans dump here
-Terminal 2:  make demo          # demokit walkthrough (--tui for TUI) — client-side spans dump here
+Terminal 1:  make serve         # server-side spans dump here
+Terminal 2:  make demo          # client-side spans dump here
 ```
 
-Keep both terminals visible. Each side runs its own `stdouttrace`
-pipeline; spans land on whichever terminal emitted them. The host
-makes a tools/call with NO caller-supplied traceparent — the client
-trace middleware (P3) stamps its own freshly-generated traceparent on
-the outbound `_meta`, and the server (P2) picks it up as the parent.
-Match the `TraceID` across the two terminals and you've watched the
-SEP-414 wire stitch a client→server trace in real time. The TraceID
-changes on every run (no synthetic override) — that's the point: real
-production traces won't have hardcoded IDs.
+Keep both terminals visible. Match TraceID across them to see the
+client→server stitch.
+
+### OTLP mode (Grafana UI) — pass `EXPORTER=otlp`
+
+```
+Terminal 1:  make -C ../../../docker up           # bring observability stack up
+Terminal 2:  make serve EXPORTER=otlp             # server → OTLP collector
+Terminal 3:  make demo EXPORTER=otlp              # walkthrough → OTLP collector
+Browser:     open http://localhost:3000           # Grafana → Explore → Tempo
+
+# When done:
+make -C ../../../docker down
+```
+
+In Grafana, search service `otel-stdout-host` or `otel-stdout-demo`
+in the Tempo data source — both spans for one `tools/call` appear in
+the same trace view, linked by parent-of.
 
 ## What it demonstrates
 

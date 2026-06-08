@@ -1,0 +1,53 @@
+# Mimir metric backend config — single-binary `-target=all` mode,
+# local filesystem storage. Sized for a developer laptop. A
+# production deployment would split distributor / ingester /
+# querier and back storage with S3 / GCS.
+
+target: all
+multitenancy_enabled: false
+
+server:
+  http_listen_port: 9009
+  log_level: warn
+
+common:
+  storage:
+    backend: filesystem
+    filesystem:
+      dir: /var/mimir/data
+
+blocks_storage:
+  filesystem:
+    dir: /var/mimir/blocks
+  bucket_store:
+    sync_dir: /var/mimir/tsdb-sync
+  tsdb:
+    dir: /var/mimir/tsdb
+
+ruler_storage:
+  filesystem:
+    dir: /var/mimir/rules
+
+compactor:
+  data_dir: /var/mimir/compactor
+  sharding_ring:
+    kvstore:
+      store: memberlist
+
+memberlist:
+  bind_port: 7946
+
+ingester:
+  ring:
+    replication_factor: 1
+    kvstore:
+      store: memberlist
+
+distributor:
+  ring:
+    kvstore:
+      store: memberlist
+
+store_gateway:
+  sharding_ring:
+    replication_factor: 1
