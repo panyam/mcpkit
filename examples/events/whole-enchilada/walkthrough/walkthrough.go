@@ -212,6 +212,7 @@ func runDemo(serverURL, receiverURL string) {
 		"- Keycloak realm with multi-tenant subscriptions (events/subscribe rejected if not authenticated).",
 		"- Tenant identifier flows from token claims into source/subscription scoping.",
 		"- Anonymous principal demo escape removed.",
+		"- Per-tenant quota with the canonical -32013 ResourceExhausted wire shape pinned by kitchen-sink ({limit:\"subscriptions\", max:N}; see experimental/ext/events/errors.go's ResourceExhaustedData godoc). Same shape, same two emission paths (Reserve failure vs on_subscribe rejection) — a single client switch over (code, data) works for both demos.",
 	)
 	demo.Section("What stage 3 adds",
 		"- Postgres-backed cursor / webhook / quota stores. Restart-survival for the demo.",

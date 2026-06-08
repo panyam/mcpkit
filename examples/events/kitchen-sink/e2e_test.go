@@ -359,6 +359,69 @@ func TestQuota_RejectsBeyondCapWithStructuredError(t *testing.T) {
 	assert.EqualValues(t, quotaCap, dataMap["max"], "spec quota error data should include max=cap configured")
 }
 
+// TestQuota_OnSubscribeRejection_WireShape pins the SECOND -32013
+// emission path documented in experimental/ext/events/errors.go's
+// ResourceExhaustedData godoc: when an EventDef's OnSubscribe hook
+// returns an error AFTER the Reserve granted, the response carries
+// code=-32013, limit="subscriptions", max ABSENT on the wire (the
+// server didn't impose the rejection — the author did), and a message
+// starting with "on_subscribe rejected:".
+//
+// Complements TestQuota_RejectsBeyondCapWithStructuredError above,
+// which pins the Reserve-failure path (max present, > 0).
+func TestQuota_OnSubscribeRejection_WireShape(t *testing.T) {
+	srcWithRejectingHook, _ := events.NewYieldingSource[ChatMessageData](events.EventDef{
+		Name:        "rejecting.event",
+		Description: "Source whose OnSubscribe always rejects.",
+		Delivery:    []string{"webhook"},
+		OnSubscribe: func(_ events.HookContext, _ map[string]any) error {
+			return assert.AnError
+		},
+	})
+
+	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true))
+	srv := server.NewServer(
+		core.ServerInfo{Name: "kitchen-sink-rejecting-hook-test", Version: "0.1.0"},
+		server.WithSubscriptions(),
+	)
+	events.Register(events.Config{
+		Sources:                  []events.EventSource{srcWithRejectingHook},
+		Webhooks:                 webhooks,
+		Server:                   srv,
+		UnsafeAnonymousPrincipal: "test-principal",
+	})
+
+	handler := srv.Handler(server.WithStreamableHTTP(true))
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
+	require.NoError(t, c.Connect())
+	defer c.Close()
+
+	recv := nopReceiverServer()
+	defer recv.Close()
+
+	_, err := eventsclient.Subscribe(context.Background(), c, eventsclient.SubscribeOptions{
+		EventName:   "rejecting.event",
+		CallbackURL: recv.URL,
+	})
+	require.Error(t, err, "subscribe must fail when OnSubscribe rejects")
+
+	rpc := unwrapRPC(err)
+	require.NotNil(t, rpc, "error must unwrap to *client.RPCError; got %T: %v", err, err)
+	assert.Equal(t, -32013, rpc.Code, "second emission path uses the same code as Reserve failure")
+	assert.Contains(t, rpc.Message, "on_subscribe rejected:",
+		"second emission path's message starts with %q; got %q", "on_subscribe rejected:", rpc.Message)
+
+	dataMap, ok := rpc.Data.(map[string]any)
+	require.True(t, ok, "rpc.Data should be a map, got %T", rpc.Data)
+	assert.Equal(t, "subscriptions", dataMap["limit"], "limit name is constant across emission paths")
+	_, hasMax := dataMap["max"]
+	assert.False(t, hasMax,
+		"max MUST be absent on the wire for on_subscribe-rejection path (omitempty + value 0); presence is the canonical discriminator from the Reserve-failure path")
+}
+
 func unwrapRPC(err error) *client.RPCError {
 	for err != nil {
 		if rpc, ok := err.(*client.RPCError); ok {
