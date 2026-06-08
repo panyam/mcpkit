@@ -1,31 +1,24 @@
 # MCP SEP-414 — OpenTelemetry Trace Context Propagation
 
-Walks through SEP-414, which propagates W3C Trace Context through MCP using the `_meta.traceparent` / `_meta.tracestate` envelope (and, on streamable HTTP, the matching HTTP headers per SEP-2028). BOTH sides are instrumented: the server (`make serve`) wires `server.WithTracerProvider` (P2); the walkthrough (`make demo`) wires `client.WithTracerProvider` (P3). Both pipelines feed the `stdouttrace` exporter, so each terminal prints its own side's spans as pretty-printed JSON. The walkthrough drives a real `tools/call` — the client trace middleware auto-stamps a `_meta.traceparent` on the outbound params and the server picks it up. Matching `TraceID` across the two terminals is the proof that the SEP-414 wire is actually stitching client and server into a single distributed trace.
+Walks through SEP-414 in stdout-exporter mode (no external stack required). Both sides — server (`make serve`) and walkthrough (`make demo`) — print spans as pretty JSON on their respective terminals. The looping "Explore trace shapes" step lets you A/B four distinct tool calls; matching TraceIDs across the two terminals is the SEP-414 wire stitching client and server into a single distributed trace. Run with `EXPORTER=otlp` after `make -C docker up` to ship spans to Grafana instead.
 
 ## What you'll learn
 
-- **Connect to the OTel-instrumented server** — `client.NewClient(...)` + `client.WithTracerProvider(...)` + `Connect()`. Each JSON-RPC dispatch now emits TWO spans — one on each side. The initialize handshake will print `initialize` and `notifications/initialized` spans on BOTH terminals; matching them by TraceID is the visual proof that the SEP-414 wire is propagating from the very first call.
-- **tools/list — every dispatch is a span** — The trace middleware sits OUTERMOST in the dispatch chain on both sides, so *every* JSON-RPC request emits a pair of spans (one per side, stitched via `_meta.traceparent`). This step is functionally identical to the next one in terms of propagation — the only difference is what attributes get set. Watch the TraceID match across terminals for this list call too.
-- **tools/call echo — let the client auto-inject _meta.traceparent** — With both wires instrumented (PR 649 server + PR 654 client), this single tools/call produces TWO spans on TWO terminals:
+- **Connect to the OTel-instrumented server** — `client.NewClient(...)` + `client.WithTracerProvider(...)` + `Connect()`. Each JSON-RPC dispatch emits a pair of spans — one on each side, stitched via `_meta.traceparent`. The initialize handshake produces the first pair before any tool call runs.
+- **Explore trace shapes** — Pick a tool from the menu. Each one produces a distinct trace shape on the stdout exporters:
 
 ## Flow
 
 ```mermaid
 sequenceDiagram
     participant Host as MCP Host (this walkthrough)
-    participant Server as MCP Server (make serve) — spans dump on its stdout
+    participant Server as MCP Server (make serve)
 
     Note over Host,Server: Step 1: Connect to the OTel-instrumented server
     Host->>Server: POST /mcp — initialize
     Server-->>Host: serverInfo + capabilities
 
-    Note over Host,Server: Step 2: tools/list — every dispatch is a span
-    Host->>Server: tools/list
-    Server-->>Host: tools[]
-
-    Note over Host,Server: Step 3: tools/call echo — let the client auto-inject _meta.traceparent
-    Host->>Server: tools/call echo (no caller _meta; client trace mw stamps its own)
-    Server-->>Host: text result; server span's Parent matches the client SpanID
+    Note over Host,Server: Step 2: Explore trace shapes
 ```
 
 ## Steps
@@ -39,7 +32,9 @@ Terminal 1:  make serve         # OTel-instrumented server on :8080
 Terminal 2:  make demo          # this walkthrough (--tui for the interactive TUI)
 ```
 
-Keep both terminals visible — the walkthrough surfaces what the *Host* sees on the wire (JSON-RPC results), while the OpenTelemetry spans land on the *Server* terminal's stdout via the `stdouttrace` exporter.
+Keep both terminals visible — the walkthrough surfaces what the *Host* sees on the wire (JSON-RPC results); the OpenTelemetry spans land on the *Server* terminal's stdout via the `stdouttrace` exporter. Match the TraceID across the two terminals to see the SEP-414 stitch.
+
+To send spans to a real backend instead, run with `EXPORTER=otlp` after `make -C ../../../docker up`.
 
 ### Wire format
 
@@ -52,42 +47,28 @@ On the server side, `server.WithTracerProvider(tp)` installs an outermost trace 
 
 ### Step 1: Connect to the OTel-instrumented server
 
-`client.NewClient(...)` + `client.WithTracerProvider(...)` + `Connect()`. Each JSON-RPC dispatch now emits TWO spans — one on each side. The initialize handshake will print `initialize` and `notifications/initialized` spans on BOTH terminals; matching them by TraceID is the visual proof that the SEP-414 wire is propagating from the very first call.
+`client.NewClient(...)` + `client.WithTracerProvider(...)` + `Connect()`. Each JSON-RPC dispatch emits a pair of spans — one on each side, stitched via `_meta.traceparent`. The initialize handshake produces the first pair before any tool call runs.
 
-### Step 2: tools/list — every dispatch is a span
+### Step 2: Explore trace shapes
 
-The trace middleware sits OUTERMOST in the dispatch chain on both sides, so *every* JSON-RPC request emits a pair of spans (one per side, stitched via `_meta.traceparent`). This step is functionally identical to the next one in terms of propagation — the only difference is what attributes get set. Watch the TraceID match across terminals for this list call too.
+Pick a tool from the menu. Each one produces a distinct trace shape on the stdout exporters:
 
-### Step 3: tools/call echo — let the client auto-inject _meta.traceparent
+- `echo` — baseline single span on each terminal.
+- `slow_echo` — 750ms handler sleep; the span's StartTime → EndTime is visibly long.
+- `failing_tool` — server span carries `mcp.tool.is_error="true"`.
+- `count_tool` — server emits 3 `notifications/progress`, each as its own outbound span with `_meta.traceparent` set.
+- `quit` — exit the loop.
 
-With both wires instrumented (PR 649 server + PR 654 client), this single tools/call produces TWO spans on TWO terminals:
-
-1. **Client side (THIS terminal).** The `Client.Call` outbound trace middleware emits a span named `tools/call` with a fresh TraceID + SpanID. Before the call hits the wire, the middleware stamps that TraceID and SpanID into `params._meta.traceparent` via `core.InjectTraceContextIntoParams` (P3, shared helper).
-2. **Server side (the SERVER terminal).** The server trace middleware extracts the stamped `_meta.traceparent` and emits its own `tools/call` span whose `SpanContext.TraceID` MATCHES the client's, and whose `Parent.SpanID` MATCHES the client span's SpanID with `Parent.Remote == true`.
-
-Match the spans by TraceID across the two terminals — that IS the SEP-414 wire stitching client and server into a single distributed trace. The TraceID is auto-generated each run (no synthetic override), so it'll be different every time — that's the point: real production traces won't have hardcoded IDs.
-
-#### Reproduce on the wire
-
-```bash
-# When using curl directly, no client trace middleware exists, so
-# YOU supply the traceparent. Match it across terminals by inspection.
-curl -s -X POST http://localhost:8080/mcp \
-  -H 'Content-Type: application/json' \
-  -H 'Accept: text/event-stream, application/json' \
-  -H "Mcp-Session-Id: $SID" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"echo","arguments":{"message":"hello"}}}' | jq '.result'
-```
+After each call, match the TraceID printed on this terminal against the SERVER terminal — that match IS the SEP-414 client↔server stitching.
 
 ### Where to look in the code
 
-- `examples/otel/stdout/walkthrough.go::runDemo` — the client-side wiring. `mcpotel.NewProvider(clientOTelTP, WithInstrumentationName(".../client"))` plugged into `client.WithTracerProvider`. The pipeline uses the same `stdouttrace` exporter as the server, just pointing at this process's stdout.
-- `client/trace_middleware.go` (in main mcpkit) — the SEP-414 P3 middleware that consumes the adapter on the client side. Outbound `Client.Call` is wrapped in a span; outbound params gain `_meta.traceparent` derived from the active span; inbound server-to-client requests (sampling/elicitation/roots) extract the inbound traceparent and emit a wrap span.
-- `ext/otel/provider.go` — `Provider.StartSpan` is the adapter's single hot-path: parses inbound `core.TraceContext` into an OTel `SpanContext`, installs as the new span's parent, and after `tracer.Start` re-attaches the *child* span's traceparent via `core.WithTraceContext` so P2's outbound `_meta` injection stamps the right trace ID on downstream messages.
-- `ext/otel/span.go` — narrows OTel's broader Span surface to mcpkit's three-method `core.Span` contract. CAS-guarded `End` prevents the SDK's noisy double-End warning.
-- `ext/otel/propagation.go` — pure W3C ↔ OTel SpanContext conversions. `traceContextToSpanContext` validates structurally before installing; `spanContextToTraceContext` formats the new span back into the W3C version-00 string the wire expects.
-- `server/trace_middleware.go` (in main mcpkit) — the SEP-414 P2 middleware that consumes the adapter. Sits outermost in the dispatch chain so user middleware runs INSIDE the span.
-- `examples/otel/stdout/main.go` — the wiring: `server.WithTracerProvider(mcpotel.NewProvider(otelTP))` is the one new line in `serve()`. Everything else is canonical `common.RunServer` boilerplate.
+- `examples/otel/stdout/main.go::registerDemoTools` — the four tools that drive distinct trace shapes (echo / slow_echo / failing_tool / count_tool).
+- `examples/otel/stdout/walkthrough.go::runDemo` — the client-side wiring. `mcpotel.NewProvider(clientOTelTP, WithInstrumentationName(".../client"))` plugged into `client.WithTracerProvider`.
+- `client/trace_middleware.go` (in main mcpkit) — the SEP-414 P3 middleware. Outbound `Client.Call` is wrapped in a span; outbound params gain `_meta.traceparent`; inbound server-to-client requests (sampling/elicitation/roots) extract the inbound traceparent and emit a wrap span.
+- `ext/otel/provider.go` — `Provider.StartSpan` is the adapter's hot-path: parses inbound `core.TraceContext` into an OTel `SpanContext`, installs as the new span's parent, and re-attaches the child traceparent via `core.WithTraceContext` for outbound `_meta` injection.
+- `ext/otel/tracerprovider.go` — `mcpotel.NewTracerProvider` (issue 674): one-line helper that bakes `service.name` into the SDK Resource via `WithServiceName` without examples having to import `sdk/resource` + `semconv` themselves.
+- `server/trace_middleware.go` (in main mcpkit) — the SEP-414 P2 middleware. Sits outermost in the dispatch chain so user middleware runs INSIDE the span.
 
 ## Run it
 

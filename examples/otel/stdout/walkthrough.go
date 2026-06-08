@@ -15,29 +15,22 @@ import (
 	mcpotel "github.com/panyam/mcpkit/ext/otel"
 )
 
-// (Previously this file defined an explicit inbound traceparent and
-// supplied it in the tools/call. Removed once the client side was
-// instrumented: SEP-414's "explicit caller-set _meta wins" rule means
-// that an externally-supplied traceparent ends up on the SERVER side
-// only, while the client emits a SEPARATE auto-generated trace — the
-// two would NOT share a TraceID and the symmetric-stitching narrative
-// would break. The auto-inject path the walkthrough now exercises
-// produces matching TraceIDs on both terminals — what the reader is
-// supposed to see.)
+// toolMenu is the ordered list of tools the looping "Explore trace
+// shapes" step cycles through. Each is registered on the server side
+// in registerDemoTools (see main.go) and produces a distinct trace
+// shape an operator can compare in Grafana / Tempo. The synthetic
+// "quit" entry is the exit option in interactive mode; non-
+// interactive mode drives through `toolMenu` once and exits.
+var toolMenu = []string{"echo", "slow_echo", "failing_tool", "count_tool"}
 
 func runDemo() {
 	serverURL := common.ServerURL()
 
 	// Walkthrough-side flags. Mirror serve()'s flag set so an operator
 	// can pass --exporter=otlp to both processes and watch matching
-	// TraceIDs land in Grafana (server.service.name=otel-stdout-demo,
-	// host.service.name=otel-stdout-host).
+	// TraceIDs land in Grafana.
 	exporter := flag.String("exporter", defaultExporter, "trace exporter: stdout | otlp")
 	otlpEndpoint := flag.String("otlp-endpoint", commonotel.DefaultOTLPEndpoint, "OTLP gRPC endpoint when --exporter=otlp")
-	// The walkthrough side already parses demokit flags via SetupRenderer
-	// + Execute; pulling our own values out of os.Args directly here would
-	// double-parse. Use flag.Parse only on the residual args demokit
-	// returns via FilterArgs.
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.ValueFlag("--url"),
 	))
@@ -55,29 +48,21 @@ func runDemo() {
 		log.Fatalf("failed to build client-side OTel pipeline: %v", err)
 	}
 	defer shutdownClientOTel()
-	if *exporter == commonotel.ExporterOTLP {
+	otlpMode := *exporter == commonotel.ExporterOTLP
+	if otlpMode {
 		log.Printf("[otel-stdout-host] exporter=otlp endpoint=%s service.name=%s", *otlpEndpoint, hostServiceName)
-		log.Printf("[otel-stdout-host] view in Grafana: http://localhost:3000  (search service.name=%s)", hostServiceName)
+		log.Printf("[otel-stdout-host] view your traces: %s", tempoExploreURL(hostServiceName))
 	}
 
 	demo := demokit.New("MCP SEP-414 — OpenTelemetry Trace Context Propagation").
 		Dir("otel/stdout").
-		Description("Walks through SEP-414, which propagates W3C Trace Context through MCP using the `_meta.traceparent` / `_meta.tracestate` envelope (and, on streamable HTTP, the matching HTTP headers per SEP-2028). BOTH sides are instrumented: the server (`make serve`) wires `server.WithTracerProvider` (P2); the walkthrough (`make demo`) wires `client.WithTracerProvider` (P3). Both pipelines feed the `stdouttrace` exporter, so each terminal prints its own side's spans as pretty-printed JSON. The walkthrough drives a real `tools/call` — the client trace middleware auto-stamps a `_meta.traceparent` on the outbound params and the server picks it up. Matching `TraceID` across the two terminals is the proof that the SEP-414 wire is actually stitching client and server into a single distributed trace.").
+		Description(buildDescription(otlpMode)).
 		Actors(
 			demokit.Actor("Host", "MCP Host (this walkthrough)"),
-			demokit.Actor("Server", "MCP Server (make serve) — spans dump on its stdout"),
+			demokit.Actor("Server", "MCP Server (make serve)"),
 		)
 
-	demo.Section("Setup",
-		"Start the MCP server in a separate terminal first:",
-		"",
-		"```",
-		"Terminal 1:  make serve         # OTel-instrumented server on :8080",
-		"Terminal 2:  make demo          # this walkthrough (--tui for the interactive TUI)",
-		"```",
-		"",
-		"Keep both terminals visible — the walkthrough surfaces what the *Host* sees on the wire (JSON-RPC results), while the OpenTelemetry spans land on the *Server* terminal's stdout via the `stdouttrace` exporter.",
-	)
+	demo.Section("Setup", buildSetupLines(otlpMode)...)
 
 	demo.Section("Wire format",
 		"SEP-414 carries W3C Trace Context two ways:",
@@ -93,15 +78,10 @@ func runDemo() {
 	demo.Step("Connect to the OTel-instrumented server").
 		Arrow("Host", "Server", "POST /mcp — initialize").
 		DashedArrow("Server", "Host", "serverInfo + capabilities").
-		Note("`client.NewClient(...)` + `client.WithTracerProvider(...)` + `Connect()`. Each JSON-RPC dispatch now emits TWO spans — one on each side. The initialize handshake will print `initialize` and `notifications/initialized` spans on BOTH terminals; matching them by TraceID is the visual proof that the SEP-414 wire is propagating from the very first call.").
+		Note("`client.NewClient(...)` + `client.WithTracerProvider(...)` + `Connect()`. Each JSON-RPC dispatch emits a pair of spans — one on each side, stitched via `_meta.traceparent`. The initialize handshake produces the first pair before any tool call runs.").
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			c = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "otel-stdout-host", Version: "1.0"},
-				// SEP-414 P3 — client-side trace surface. Outbound
-				// Client.Call emits a span and stamps _meta.traceparent
-				// on params; inbound server-to-client requests
-				// (sampling/elicitation/roots) get wrap spans whose
-				// parent is the inbound _meta.traceparent.
 				client.WithTracerProvider(mcpotel.NewProvider(clientOTelTP,
 					mcpotel.WithInstrumentationName("github.com/panyam/mcpkit/client"),
 				)),
@@ -111,78 +91,65 @@ func runDemo() {
 				return nil
 			}
 			fmt.Printf("    Connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)
-			fmt.Printf("    Watch THIS terminal: initialize and notifications/initialized client-side spans will appear below.\n")
-			fmt.Printf("    Watch the SERVER terminal: matching server-side spans land there for the same JSON-RPC requests.\n")
+			if otlpMode {
+				fmt.Printf("    Watch Grafana: %s\n", tempoExploreURL(hostServiceName))
+			} else {
+				fmt.Printf("    Watch BOTH terminals — matching TraceIDs prove the wire stitched the trace.\n")
+			}
 			return nil
 		})
 
-	demo.Step("tools/list — every dispatch is a span").
-		Arrow("Host", "Server", "tools/list").
-		DashedArrow("Server", "Host", "tools[]").
-		Note("The trace middleware sits OUTERMOST in the dispatch chain on both sides, so *every* JSON-RPC request emits a pair of spans (one per side, stitched via `_meta.traceparent`). This step is functionally identical to the next one in terms of propagation — the only difference is what attributes get set. Watch the TraceID match across terminals for this list call too.").
+	// One looping "Explore" step that demokit re-enters via
+	// StepResult.Next until the user picks "quit" (interactive) or the
+	// Visits counter has cycled through every tool in `toolMenu`
+	// (non-interactive). Demokit's Choice input handles the menu UX in
+	// every renderer (TUI, plain, notebook, doc).
+	demo.Step("Explore trace shapes").
+		ID("explore").
+		Input(demokit.Choice(append(toolMenu, "quit")...).
+			Named("tool", "Pick a tool to call (or `quit` to exit)").
+			WithDefault(toolMenu[0])).
+		Note(buildExploreNote(otlpMode)).
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
-			page, err := c.ListToolsPage("")
-			if err != nil {
-				fmt.Printf("    ERROR: %v\n", err)
+			tool := selectTool(ctx)
+			if tool == "" {
+				if otlpMode {
+					fmt.Printf("    Done. Final Grafana view: %s\n", tempoExploreURL(hostServiceName))
+				}
 				return nil
 			}
-			for _, tool := range page.Tools {
-				fmt.Printf("    %-10s %s\n", tool.Name, tool.Description)
+
+			dispatchTool(c, tool)
+
+			if otlpMode {
+				fmt.Printf("\n    See this trace in Grafana: %s\n", tempoExploreURL(hostServiceName))
+				fmt.Printf("    (server-side spans: %s)\n", tempoExploreURL(serverServiceName))
+			} else {
+				fmt.Printf("\n    Match the TraceID across THIS terminal and the SERVER terminal.\n")
 			}
-			return nil
+
+			return &demokit.StepResult{Next: "explore"}
 		})
 
-	demo.Step("tools/call echo — let the client auto-inject _meta.traceparent").
-		Arrow("Host", "Server", "tools/call echo (no caller _meta; client trace mw stamps its own)").
-		DashedArrow("Server", "Host", "text result; server span's Parent matches the client SpanID").
-		Note("With both wires instrumented (PR 649 server + PR 654 client), this single tools/call produces TWO spans on TWO terminals:\n\n1. **Client side (THIS terminal).** The `Client.Call` outbound trace middleware emits a span named `tools/call` with a fresh TraceID + SpanID. Before the call hits the wire, the middleware stamps that TraceID and SpanID into `params._meta.traceparent` via `core.InjectTraceContextIntoParams` (P3, shared helper).\n2. **Server side (the SERVER terminal).** The server trace middleware extracts the stamped `_meta.traceparent` and emits its own `tools/call` span whose `SpanContext.TraceID` MATCHES the client's, and whose `Parent.SpanID` MATCHES the client span's SpanID with `Parent.Remote == true`.\n\nMatch the spans by TraceID across the two terminals — that IS the SEP-414 wire stitching client and server into a single distributed trace. The TraceID is auto-generated each run (no synthetic override), so it'll be different every time — that's the point: real production traces won't have hardcoded IDs.").
-		VerbatimVariants("Reproduce on the wire",
-			demokit.MakeVariant("curl", "bash", `# When using curl directly, no client trace middleware exists, so
-# YOU supply the traceparent. Match it across terminals by inspection.
-curl -s -X POST http://localhost:8080/mcp \
-  -H 'Content-Type: application/json' \
-  -H 'Accept: text/event-stream, application/json' \
-  -H "Mcp-Session-Id: $SID" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"echo","arguments":{"message":"hello"}}}' | jq '.result'`).Default(),
-			demokit.MakeVariant("go", "go", `// Note: the Client must be constructed with
-// client.WithTracerProvider(mcpotel.NewProvider(...)) for the
-// auto-inject to fire. See walkthrough.go::runDemo.
-res, _ := c.Call("tools/call", map[string]any{
-    "name":      "echo",
-    "arguments": map[string]any{"message": "hello"},
-})`),
-		).
-		Run(func(ctx demokit.StepContext) *demokit.StepResult {
-			res, err := c.Call("tools/call", map[string]any{
-				"name":      "echo",
-				"arguments": map[string]any{"message": "hello"},
-			})
-			if err != nil {
-				fmt.Printf("    ERROR: %v\n", err)
-				return nil
-			}
-			var v any
-			if err := json.Unmarshal(res.Raw, &v); err != nil {
-				fmt.Printf("    ERROR decoding raw: %v\n", err)
-				return nil
-			}
-			pretty, _ := json.MarshalIndent(v, "    ", "  ")
-			fmt.Printf("    %s\n", string(pretty))
-			fmt.Printf("\n    Match by TraceID:\n")
-			fmt.Printf("    - THIS terminal: client-side span Name=\"tools/call\" with a fresh TraceID + SpanID.\n")
-			fmt.Printf("    - SERVER terminal: a span with the SAME TraceID, plus Parent.SpanID == client SpanID and Parent.Remote=true.\n")
-			return nil
-		})
-
-	demo.Section("Where to look in the code",
-		"- `examples/otel/stdout/walkthrough.go::runDemo` — the client-side wiring. `mcpotel.NewProvider(clientOTelTP, WithInstrumentationName(\".../client\"))` plugged into `client.WithTracerProvider`. The pipeline uses the same `stdouttrace` exporter as the server, just pointing at this process's stdout.",
-		"- `client/trace_middleware.go` (in main mcpkit) — the SEP-414 P3 middleware that consumes the adapter on the client side. Outbound `Client.Call` is wrapped in a span; outbound params gain `_meta.traceparent` derived from the active span; inbound server-to-client requests (sampling/elicitation/roots) extract the inbound traceparent and emit a wrap span.",
-		"- `ext/otel/provider.go` — `Provider.StartSpan` is the adapter's single hot-path: parses inbound `core.TraceContext` into an OTel `SpanContext`, installs as the new span's parent, and after `tracer.Start` re-attaches the *child* span's traceparent via `core.WithTraceContext` so P2's outbound `_meta` injection stamps the right trace ID on downstream messages.",
-		"- `ext/otel/span.go` — narrows OTel's broader Span surface to mcpkit's three-method `core.Span` contract. CAS-guarded `End` prevents the SDK's noisy double-End warning.",
-		"- `ext/otel/propagation.go` — pure W3C ↔ OTel SpanContext conversions. `traceContextToSpanContext` validates structurally before installing; `spanContextToTraceContext` formats the new span back into the W3C version-00 string the wire expects.",
-		"- `server/trace_middleware.go` (in main mcpkit) — the SEP-414 P2 middleware that consumes the adapter. Sits outermost in the dispatch chain so user middleware runs INSIDE the span.",
-		"- `examples/otel/stdout/main.go` — the wiring: `server.WithTracerProvider(mcpotel.NewProvider(otelTP))` is the one new line in `serve()`. Everything else is canonical `common.RunServer` boilerplate.",
-	)
+	if !otlpMode {
+		demo.Section("Where to look in the code",
+			"- `examples/otel/stdout/main.go::registerDemoTools` — the four tools that drive distinct trace shapes (echo / slow_echo / failing_tool / count_tool).",
+			"- `examples/otel/stdout/walkthrough.go::runDemo` — the client-side wiring. `mcpotel.NewProvider(clientOTelTP, WithInstrumentationName(\".../client\"))` plugged into `client.WithTracerProvider`.",
+			"- `client/trace_middleware.go` (in main mcpkit) — the SEP-414 P3 middleware. Outbound `Client.Call` is wrapped in a span; outbound params gain `_meta.traceparent`; inbound server-to-client requests (sampling/elicitation/roots) extract the inbound traceparent and emit a wrap span.",
+			"- `ext/otel/provider.go` — `Provider.StartSpan` is the adapter's hot-path: parses inbound `core.TraceContext` into an OTel `SpanContext`, installs as the new span's parent, and re-attaches the child traceparent via `core.WithTraceContext` for outbound `_meta` injection.",
+			"- `ext/otel/tracerprovider.go` — `mcpotel.NewTracerProvider` (issue 674): one-line helper that bakes `service.name` into the SDK Resource via `WithServiceName` without examples having to import `sdk/resource` + `semconv` themselves.",
+			"- `server/trace_middleware.go` (in main mcpkit) — the SEP-414 P2 middleware. Sits outermost in the dispatch chain so user middleware runs INSIDE the span.",
+		)
+	} else {
+		demo.Section("Where to view the traces",
+			"All spans this walkthrough emits land in Tempo via the OTel Collector at `localhost:4317`. Pre-filtered Grafana Explore links:",
+			"",
+			fmt.Sprintf("- **Client-side spans** (this walkthrough): %s", tempoExploreURL(hostServiceName)),
+			fmt.Sprintf("- **Server-side spans**: %s", tempoExploreURL(serverServiceName)),
+			"",
+			"Click any trace row in either view to see the full span tree, then use the \"View linked logs\" / \"View linked metrics\" buttons in the trace UI to follow the data into Loki / Mimir when those lanes light up (currently idle).",
+		)
+	}
 
 	common.SetupRenderer(demo)
 	demo.Execute()
@@ -190,4 +157,119 @@ res, _ := c.Call("tools/call", map[string]any{
 	if c != nil {
 		c.Close()
 	}
+}
+
+// buildDescription returns the top-level description that demokit
+// embeds in the rendered output, branched on the exporter mode so a
+// reader doesn't see references to the WRONG mode's setup.
+func buildDescription(otlpMode bool) string {
+	if otlpMode {
+		return "Walks through SEP-414 against the LGTM observability stack at `docker/observability/`. Both sides — server (`make serve EXPORTER=otlp`) and walkthrough (`make demo EXPORTER=otlp`) — ship spans via OTLP gRPC to the OTel Collector, which fans them out to Tempo. Grafana renders the stitched client→server trace under one TraceID per `tools/call`. Each step prints a pre-filtered Grafana Explore deep link so you can drill straight into Tempo. The looping \"Explore trace shapes\" step lets you A/B four distinct tools and compare their span shapes in Grafana."
+	}
+	return "Walks through SEP-414 in stdout-exporter mode (no external stack required). Both sides — server (`make serve`) and walkthrough (`make demo`) — print spans as pretty JSON on their respective terminals. The looping \"Explore trace shapes\" step lets you A/B four distinct tool calls; matching TraceIDs across the two terminals is the SEP-414 wire stitching client and server into a single distributed trace. Run with `EXPORTER=otlp` after `make -C docker up` to ship spans to Grafana instead."
+}
+
+// buildSetupLines returns the markdown lines for the Setup section,
+// mode-branched. OTLP mode includes the docker stack-up step and the
+// Grafana URL up-front so the reader knows where to look BEFORE the
+// steps run.
+func buildSetupLines(otlpMode bool) []string {
+	if otlpMode {
+		return []string{
+			"Bring up the LGTM observability stack and start the OTel-instrumented server:",
+			"",
+			"```",
+			"Terminal 1:  make -C ../../../docker up           # Tempo + Loki + Mimir + Grafana + OTel Collector",
+			"Terminal 2:  make serve EXPORTER=otlp             # MCP server, exports OTLP",
+			"Terminal 3:  make demo EXPORTER=otlp              # this walkthrough, exports OTLP",
+			"```",
+			"",
+			"Then open Grafana — the steps below print pre-filtered Explore deep links you can click straight into:",
+			"",
+			fmt.Sprintf("- Grafana home: http://localhost:3000"),
+			fmt.Sprintf("- Client-side traces: %s", tempoExploreURL(hostServiceName)),
+			fmt.Sprintf("- Server-side traces: %s", tempoExploreURL(serverServiceName)),
+			"",
+			"Anonymous Admin access — no Grafana login form. Time range defaults to \"Last 15 minutes\" so just-emitted traces are in scope.",
+		}
+	}
+	return []string{
+		"Start the MCP server in a separate terminal first:",
+		"",
+		"```",
+		"Terminal 1:  make serve         # OTel-instrumented server on :8080",
+		"Terminal 2:  make demo          # this walkthrough (--tui for the interactive TUI)",
+		"```",
+		"",
+		"Keep both terminals visible — the walkthrough surfaces what the *Host* sees on the wire (JSON-RPC results); the OpenTelemetry spans land on the *Server* terminal's stdout via the `stdouttrace` exporter. Match the TraceID across the two terminals to see the SEP-414 stitch.",
+		"",
+		"To send spans to a real backend instead, run with `EXPORTER=otlp` after `make -C ../../../docker up`.",
+	}
+}
+
+// buildExploreNote returns the Note shown at the looping Explore step,
+// branched to surface Grafana deep links in OTLP mode and terminal
+// match instructions in stdout mode.
+func buildExploreNote(otlpMode bool) string {
+	if otlpMode {
+		return "Pick a tool from the menu. Each one produces a distinct trace shape in Tempo:\n\n" +
+			"- `echo` — baseline single-RPC trace.\n" +
+			"- `slow_echo` — 750ms `time.Sleep` in the handler; span duration is visible in Tempo.\n" +
+			"- `failing_tool` — handler returns IsError=true; span carries `mcp.tool.is_error=\"true\"` and Grafana renders it red.\n" +
+			"- `count_tool` — handler emits 3 `notifications/progress`; the trace fan-out shows the parent `tools/call` plus 3 outbound notification spans, each carrying `_meta.traceparent` from the parent.\n" +
+			"- `quit` — exit the loop.\n\n" +
+			"After each call this step prints a pre-filtered Grafana Explore link so you can drill straight into the new trace."
+	}
+	return "Pick a tool from the menu. Each one produces a distinct trace shape on the stdout exporters:\n\n" +
+		"- `echo` — baseline single span on each terminal.\n" +
+		"- `slow_echo` — 750ms handler sleep; the span's StartTime → EndTime is visibly long.\n" +
+		"- `failing_tool` — server span carries `mcp.tool.is_error=\"true\"`.\n" +
+		"- `count_tool` — server emits 3 `notifications/progress`, each as its own outbound span with `_meta.traceparent` set.\n" +
+		"- `quit` — exit the loop.\n\n" +
+		"After each call, match the TraceID printed on this terminal against the SERVER terminal — that match IS the SEP-414 client↔server stitching."
+}
+
+// selectTool resolves which tool to dispatch on this Explore-step
+// iteration. In interactive mode it reads the user's Choice input;
+// the Sentinel "quit" returns "" so the caller stops looping. In non-
+// interactive mode it walks toolMenu by Visits, returning "" once
+// every tool has been exercised so the loop exits without manual
+// intervention.
+func selectTool(ctx demokit.StepContext) string {
+	if demokit.IsNonInteractive() {
+		if ctx.Visits > len(toolMenu) {
+			return ""
+		}
+		return toolMenu[ctx.Visits-1]
+	}
+	tool, _ := ctx.Inputs["tool"].(string)
+	if tool == "quit" {
+		return ""
+	}
+	return tool
+}
+
+// dispatchTool calls the named tool through the *client.Client. Each
+// tool's argument shape is intentionally minimal so the demo focuses
+// on the resulting trace shape rather than tool-input mechanics.
+func dispatchTool(c *client.Client, tool string) {
+	args := map[string]any{}
+	if tool == "echo" {
+		args["message"] = "hello from explore step"
+	}
+	res, err := c.Call("tools/call", map[string]any{
+		"name":      tool,
+		"arguments": args,
+	})
+	if err != nil {
+		fmt.Printf("    %s: ERROR: %v\n", tool, err)
+		return
+	}
+	var v any
+	if err := json.Unmarshal(res.Raw, &v); err != nil {
+		fmt.Printf("    %s: ERROR decoding raw: %v\n", tool, err)
+		return
+	}
+	pretty, _ := json.MarshalIndent(v, "    ", "  ")
+	fmt.Printf("    %s →\n    %s\n", tool, string(pretty))
 }

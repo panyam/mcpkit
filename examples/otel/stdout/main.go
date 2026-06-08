@@ -31,9 +31,12 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/core"
@@ -109,19 +112,35 @@ func serve() {
 			// binding that makes spans actually flow to the exporter.
 			server.WithTracerProvider(mcpotel.NewProvider(otelTP)),
 		},
-		Register: registerEcho,
+		Register: registerDemoTools,
 	}); err != nil {
 		log.Fatalf("ListenAndServe: %v", err)
 	}
 }
 
-// registerEcho installs the single demo tool. Trivially synchronous so
-// the demo focuses on the trace mechanics rather than the tool surface.
-func registerEcho(srv *server.Server) {
+// registerDemoTools installs four demo tools, each chosen to produce
+// a distinct trace shape an operator can compare in Grafana / Tempo:
+//
+//   - echo          — baseline single-RPC trace; tells you what a
+//     "normal" span looks like.
+//   - slow_echo     — sleeps 750ms in the handler; the trace's span
+//     duration shows how Tempo renders latency.
+//   - failing_tool  — returns a ToolResult with IsError=true; the
+//     span carries `mcp.tool.is_error="true"` and
+//     Grafana renders it red.
+//   - count_tool    — emits 3 `notifications/progress` via
+//     ctx.Progress(); the parent span's children
+//     include 3 outbound notification spans with
+//     matching `_meta.traceparent` (SEP-414 P2's
+//     outbound _meta injection in action).
+//
+// All four are intentionally trivial so the demo's value lives in
+// the span shape, not the tool surface.
+func registerDemoTools(srv *server.Server) {
 	srv.RegisterTool(
 		core.ToolDef{
 			Name:        "echo",
-			Description: "Returns the message argument unchanged. Trivial body — the demo is about the span the dispatch emits, not the result.",
+			Description: "Returns the message argument unchanged. Baseline span shape — single-RPC trace, no surprises.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -143,6 +162,55 @@ func registerEcho(srv *server.Server) {
 			return core.TextResult(args.Message), nil
 		},
 	)
+
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "slow_echo",
+			Description: "Sleeps 750ms then echoes. Span duration is visible in Tempo's trace view.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{},
+			},
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+			time.Sleep(750 * time.Millisecond)
+			return core.TextResult("slow_echo: slept 750ms"), nil
+		},
+	)
+
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "failing_tool",
+			Description: "Returns ToolResult{IsError: true}. Span carries mcp.tool.is_error=\"true\" — renders red in Grafana.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{},
+			},
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+			return core.ToolResult{
+				IsError: true,
+				Content: []core.Content{{Type: "text", Text: "simulated tool failure"}},
+			}, nil
+		},
+	)
+
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "count_tool",
+			Description: "Calls ctx.Progress 3 times. Parent span's notifications fan out as outbound spans with _meta.traceparent stamped.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{},
+			},
+		},
+		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+			for i := 1; i <= 3; i++ {
+				ctx.Progress(float64(i), 3, fmt.Sprintf("step %d/3", i))
+			}
+			return core.TextResult("count_tool: emitted 3 progress notifications"), nil
+		},
+	)
 }
 
 // newOTelPipeline preserves the original stdout-pipeline entrypoint
@@ -152,4 +220,23 @@ func registerEcho(srv *server.Server) {
 // change just because OTLP-mode landed via the shared helpers.
 func newOTelPipeline(w *os.File) (*sdktrace.TracerProvider, func(), error) {
 	return commonotel.NewStdoutPipeline(w, serverServiceName)
+}
+
+// tempoExploreURL builds a Grafana Explore deep link pre-filtered to
+// traces from the given service. The URL pre-loads Grafana's Explore
+// view with Tempo as the data source and a TraceQL search filtering
+// by resource.service.name, plus a "Last 15 minutes" time range so
+// the operator's just-emitted spans are in scope without manual
+// adjustment.
+//
+// Encoding follows Grafana's documented Explore URL shape: the
+// `left` query parameter is a URL-encoded JSON object specifying the
+// data source + queries + range. Grafana parses this on page load
+// and populates the UI as if the operator had constructed the query
+// by hand. Tested against Grafana 11.x; the JSON shape may shift in
+// future versions — re-validate after a major Grafana bump.
+func tempoExploreURL(serviceName string) string {
+	const left = `{"datasource":"tempo","queries":[{"refId":"A","queryType":"traceqlSearch","filters":[{"id":"service-name","tag":"service.name","operator":"=","value":"%s","scope":"resource"}]}],"range":{"from":"now-15m","to":"now"}}`
+	encoded := url.QueryEscape(fmt.Sprintf(left, serviceName))
+	return "http://localhost:3000/explore?orgId=1&left=" + encoded
 }

@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
@@ -52,7 +53,7 @@ func TestEndToEnd_StdoutDemoWiring(t *testing.T) {
 		core.ServerInfo{Name: "otel-stdout-demo", Version: "0.1.0"},
 		server.WithTracerProvider(mcpotel.NewProvider(otelTP)),
 	)
-	registerEcho(srv)
+	registerDemoTools(srv)
 
 	ts := httptest.NewServer(srv.Handler(server.WithStreamableHTTP(true)))
 	t.Cleanup(ts.Close)
@@ -163,7 +164,7 @@ func TestEndToEnd_BothSidesEmitSpans(t *testing.T) {
 		core.ServerInfo{Name: "otel-stdout-demo", Version: "0.1.0"},
 		server.WithTracerProvider(mcpotel.NewProvider(serverTP)),
 	)
-	registerEcho(srv)
+	registerDemoTools(srv)
 
 	ts := httptest.NewServer(srv.Handler(server.WithStreamableHTTP(true)))
 	t.Cleanup(ts.Close)
@@ -238,3 +239,96 @@ func flattenAttrs(s *tracetest.SpanStub) map[string]string {
 	}
 	return out
 }
+
+// TestEndToEnd_ToolMenu_AllToolsEmit drives each of the four
+// registerDemoTools tools and asserts the tool-specific span shape an
+// operator would see in Tempo. This is the regression guard for the
+// "Explore trace shapes" looping step in the walkthrough — if any
+// tool's span attribute pattern drifts, the demo's teaching value
+// drifts with it.
+func TestEndToEnd_ToolMenu_AllToolsEmit(t *testing.T) {
+	exp := tracetest.NewInMemoryExporter()
+	otelTP := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exp))
+	t.Cleanup(func() { _ = otelTP.Shutdown(context.Background()) })
+
+	srv := server.NewServer(
+		core.ServerInfo{Name: "otel-stdout-demo", Version: "0.1.0"},
+		server.WithTracerProvider(mcpotel.NewProvider(otelTP)),
+	)
+	registerDemoTools(srv)
+
+	ts := httptest.NewServer(srv.Handler(server.WithStreamableHTTP(true)))
+	t.Cleanup(ts.Close)
+
+	c := client.NewClient(ts.URL+"/mcp",
+		core.ClientInfo{Name: "otel-stdout-test", Version: "1.0"},
+	)
+	require.NoError(t, c.Connect())
+	t.Cleanup(func() { _ = c.Close() })
+
+	type expectation struct {
+		assertSpan func(t *testing.T, span *tracetest.SpanStub)
+	}
+	cases := map[string]expectation{
+		"echo": {
+			assertSpan: func(t *testing.T, span *tracetest.SpanStub) {
+				attrs := flattenAttrs(span)
+				assert.Equal(t, "echo", attrs["mcp.tool.name"])
+				assert.NotEqual(t, "true", attrs["mcp.tool.is_error"],
+					"echo is the baseline; must not be flagged as a tool error")
+			},
+		},
+		"slow_echo": {
+			assertSpan: func(t *testing.T, span *tracetest.SpanStub) {
+				attrs := flattenAttrs(span)
+				assert.Equal(t, "slow_echo", attrs["mcp.tool.name"])
+				duration := span.EndTime.Sub(span.StartTime)
+				assert.GreaterOrEqual(t, duration, 700*time.Millisecond,
+					"slow_echo should have ~750ms duration; got %s", duration)
+			},
+		},
+		"failing_tool": {
+			assertSpan: func(t *testing.T, span *tracetest.SpanStub) {
+				attrs := flattenAttrs(span)
+				assert.Equal(t, "failing_tool", attrs["mcp.tool.name"])
+				assert.Equal(t, "true", attrs["mcp.tool.is_error"],
+					"failing_tool's IsError result must surface as mcp.tool.is_error=true on the span")
+			},
+		},
+		"count_tool": {
+			assertSpan: func(t *testing.T, span *tracetest.SpanStub) {
+				attrs := flattenAttrs(span)
+				assert.Equal(t, "count_tool", attrs["mcp.tool.name"])
+			},
+		},
+	}
+
+	for _, toolName := range []string{"echo", "slow_echo", "failing_tool", "count_tool"} {
+		t.Run(toolName, func(t *testing.T) {
+			exp.Reset()
+
+			_, err := c.Call("tools/call", map[string]any{
+				"name":      toolName,
+				"arguments": map[string]any{"message": "test"},
+			})
+			require.NoError(t, err)
+
+			spans := exp.GetSpans()
+			toolSpan := findToolsCallSpan(spans)
+			require.NotNil(t, toolSpan, "tools/call span must be exported for %s; saw %v", toolName, spanNames(spans))
+			cases[toolName].assertSpan(t, toolSpan)
+		})
+	}
+
+	// count_tool's progress notifications cross the wire as
+	// `notifications/progress` messages, but those aren't dispatch-
+	// path spans on the server (notifications don't have request IDs
+	// and the trace middleware only spans request dispatches). The
+	// per-notification _meta.traceparent injection is verified by
+	// server/trace_middleware_test.go::TestTraceMiddleware_InjectsOutboundNotification_Meta
+	// — covered there, not duplicated here.
+}
+
+// Ensure the `time` package import stays meaningful for the test
+// file's slow_echo duration assertion.
+var _ = time.Millisecond

@@ -1,10 +1,22 @@
 # examples/otel/stdout — SEP-414 Trace Context Propagation
 
-Minimal demokit walkthrough showing how to wire OpenTelemetry tracing
-into BOTH sides of an MCP exchange using the
+Interactive demokit walkthrough showing how to wire OpenTelemetry
+tracing into BOTH sides of an MCP exchange using the
 [`ext/otel`](../../../ext/otel/) adapter — `server.WithTracerProvider`
-on the server and `client.WithTracerProvider` on the walkthrough. Two
-exporter modes:
+on the server and `client.WithTracerProvider` on the walkthrough.
+
+The walkthrough's "Explore trace shapes" step loops through a
+**menu of four tool calls**, each chosen to produce a distinct trace
+shape an operator can compare in their backend of choice:
+
+- `echo` — baseline single-RPC trace
+- `slow_echo` — 750ms `time.Sleep` in the handler; visible span duration
+- `failing_tool` — IsError result; span carries `mcp.tool.is_error="true"`
+- `count_tool` — emits 3 `notifications/progress`; trace fan-out shows the parent plus 3 outbound notification spans with matching `_meta.traceparent`
+
+Pick `quit` from the menu to exit the loop.
+
+Two exporter modes:
 
 - **`--exporter=stdout` (default).** Both processes use the
   `stdouttrace` exporter; each terminal prints its own side's spans
@@ -15,13 +27,8 @@ exporter modes:
   the `docker/observability/` stack (default endpoint
   `localhost:4317`). Spans land in Grafana, indexed by `service.name`
   (`otel-stdout-demo` for the server, `otel-stdout-host` for the
-  walkthrough). Search by either name in Grafana → Explore → Tempo to
-  see the stitched client→server trace in the UI.
-
-The walkthrough makes a `tools/call`; the client trace middleware
-stamps its own auto-generated `_meta.traceparent` on the outbound
-params; the server picks it up as Parent. End result: matching
-TraceID on both sides regardless of exporter mode.
+  walkthrough). Each Explore-step iteration prints a pre-filtered
+  Grafana Explore deep link so you drill straight into Tempo.
 
 ## Quick Start
 
@@ -41,15 +48,16 @@ client→server stitch.
 Terminal 1:  make -C ../../../docker up           # bring observability stack up
 Terminal 2:  make serve EXPORTER=otlp             # server → OTLP collector
 Terminal 3:  make demo EXPORTER=otlp              # walkthrough → OTLP collector
-Browser:     open http://localhost:3000           # Grafana → Explore → Tempo
+Browser:     open http://localhost:3000           # Grafana — anonymous Admin
 
 # When done:
 make -C ../../../docker down
 ```
 
-In Grafana, search service `otel-stdout-host` or `otel-stdout-demo`
-in the Tempo data source — both spans for one `tools/call` appear in
-the same trace view, linked by parent-of.
+Each iteration of the Explore step prints a pre-filtered Grafana
+Explore deep link — open it directly to see the trace you just
+emitted. Both spans for one `tools/call` (client + server) appear in
+the same trace view, linked by parent-of via `_meta.traceparent`.
 
 ## What it demonstrates
 
