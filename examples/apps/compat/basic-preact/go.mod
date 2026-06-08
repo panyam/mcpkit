@@ -82,3 +82,5 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/panyam/mcpkit/ext/otel => ../../../../ext/otel

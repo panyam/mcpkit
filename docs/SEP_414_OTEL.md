@@ -411,6 +411,72 @@ tasks, tasks-v2); PR 689 followed with the same uniform wiring across
 9 walkthroughs. Pattern documented in `examples/CONVENTIONS.md`
 §Telemetry wiring.
 
+### `ext/auth` JWT validator instrumentation — landed (issue 658; PR 694)
+
+First P6 surface child to land on the spine. `JWTConfig.TracerProvider core.TracerProvider` opts the validator into instrumentation:
+
+- `auth.jwks_lookup` sub-span wraps each `JWKSKeyStore.GetKeyByKid` call (with `mcp.auth.jwks.kid` attribute; records error on lookup failure). Surfaces both cache-hit and cache-miss latency.
+- `mcp.auth.*` attributes on the active dispatch span (via `core.SpanFromContext`): `mcp.auth.method = "jwt"` stamped early (failure paths included), `mcp.auth.subject` / `issuer` / `scopes` / `cache_hit` set after claims extraction.
+
+ext/auth depends on `core.TracerProvider` only for its own spans — no compile-time dependency on `ext/otel`. Nil and `core.NoopTracerProvider{}` both produce zero spans, zero attributes, zero allocation. Documented in `ext/auth/docs/DESIGN.md` § Tracing.
+
+### `oneauth` v0.1.17 wiring — landed (PR 699)
+
+Threads oneauth's own internal spans through ext/auth so an end-to-end auth trace shows the inside of the JWKS call too. Three layered helpers enable this without abstraction leakage:
+
+- `ext/otel.Provider.OTelTracerProvider() trace.TracerProvider` — Provider stashes the underlying OTel TP and exposes it. Use when a downstream library needs the OTel SDK type directly.
+- `examples/common/otel.UnderlyingOTelTP(tp core.TracerProvider) trace.TracerProvider` — type-asserts to `*mcpotel.Provider`; returns nil for Noop or non-mcpotel providers (oneauth's options no-op cleanly on nil).
+- `ext/auth.JWTConfig.OneauthTracerProvider trace.TracerProvider` — when set, threaded via `keys.WithTracerProvider` on the JWKSKeyStore so oneauth's internal HTTP / parsing / signature-verify work emits spans on the same OTel pipeline.
+
+End-to-end trace shape (when both `TracerProvider` AND `OneauthTracerProvider` are wired):
+
+```
+client.tools/call          (mcpkit/client)
+└─ server.tools/call       (mcpkit/server, parent via _meta.traceparent)
+   ├─ auth.jwks_lookup     (ext/auth)
+   │  └─ oneauth.jwks.refresh
+   │     └─ oneauth.jwks.key_lookup
+   └─ tool handler work
+```
+
+Tracked in panyam/oneauth#254 (closed in oneauth v0.1.14; mcpkit ext/auth on v0.1.17 after a CI fix that swept all 8 oneauth-using modules in lock-step). Adopter pattern shipped in `examples/auth/common/setup.go` via `WithMCPTracerProvider` / `WithOneauthTracerProvider` variadic options on `Env.NewValidator`. Demo wires both in `examples/auth/main.go`.
+
+### Apps Bridge trace context relay — landed (issue 660; PR 702)
+
+Bidirectional W3C trace context propagation across the iframe ↔ host postMessage boundary so a browser-side trace (browser OTel SDK / RUM / hard-coded demo traceparent) stitches with the backend tool-call span. Off by default on both sides; adopters opt in independently per side.
+
+**TS bridge (`ext/ui/assets/mcp-app-bridge.ts`):**
+
+```ts
+MCPApp.setTraceContextProvider(() => ({
+  traceparent: "00-...-...-01",
+  tracestate: "vendor=val",  // optional
+}));
+```
+
+The provider is called before every outbound `request()` / `notify()`. Result merges into `params._meta.traceparent` / `_meta.tracestate`. Caller-set `_meta` wins (provider is a fallback). Provider throws are caught and logged; the request still sends without propagation. dep-free — no OTel JS dependency.
+
+**Go AppHost (`ext/ui/app_host.go`):**
+
+```go
+host := ui.NewAppHost(c, bridge, ui.WithTracerProvider(tp))
+```
+
+`handleAppRequest` extracts inbound `params._meta.traceparent` via `core.ExtractTraceContextFromParams`, wraps the forward to the MCP server in an `apps.host.forward` span parented by the iframe's traceparent. The outbound `client.Call` preserves the iframe's `_meta.traceparent` on the wire (SEP-414 P3's caller-set-wins contract) so the server's P2 dispatch span stitches as a child.
+
+End-to-end trace shape:
+
+```
+iframe traceparent          (browser-side OTel; demo: hard-coded random)
+└─ apps.host.forward        (ext/ui AppHost)
+   └─ server tools/call     (mcpkit server, SEP-414 P2)
+      └─ tool handler work
+```
+
+Demo wiring in `examples/apps/vanilla/dice.html` (per-page-load random traceparent + `window.__MCPAPP_DEMO_TRACEPARENT__` for on-page TraceID copy). Host wiring in `examples/host/01-apphost/main.go`. Design doc: `docs/APPS_DESIGN.md` § Tracing across the Apps Bridge.
+
+**Open spec question:** the Apps Bridge is a non-MCP transport; whether the relay belongs in the Apps spec for cross-SDK interop is open. mcpkit ships the relay; upstream note filed only if working-group interest surfaces.
+
 ## Downstream consumers of the Phase 1 contract
 
 - **`experimental/ext/events/` cross-replica bus (issue #629).** The
