@@ -52,9 +52,16 @@ Open <http://localhost:8080> in your browser. Then:
 
 1. Pick **CesiumJS Map Server** from the server dropdown.
 2. Pick **show-map** from the tool dropdown, click **Call Tool** with empty input — the iframe loads CesiumJS from CDN (CSP allowlist is what makes this work) and renders the default London view.
-3. Pick **geocode**, call with `{"query": "Paris"}` — the server hits OSM Nominatim live. Then call `show-map` with the returned bounding box (e.g. `{"west": 2.22, "south": 48.81, "east": 2.47, "north": 48.91, "label": "Paris"}`) and the iframe re-frames the camera. The iframe also has its own search box that chains these two calls via the App SDK bridge (no model in the loop).
 
-<a href="screenshots/01-paris-map.png" target="_blank"><img src="screenshots/01-paris-map.png" alt="CesiumJS Map App: iframe shows the globe zoomed to Paris with the camera positioned over the city center" width="50%"></a>
+   <a href="screenshots/01-paris-map.png" target="_blank"><img src="screenshots/01-paris-map.png" alt="CesiumJS Map App rendered in basic-host: iframe shows the OSM tile map for the default London-area bounding box. show-map tool result and resource content are visible in basic-host's debug panel above the iframe." width="50%"></a>
+
+3. Call `show-map` again with a different bounding box (e.g. Golden Gate Bridge: `{"west": -122.482, "south": 37.815, "east": -122.475, "north": 37.825, "label": "Golden Gate"}`) — the iframe re-frames the camera. The same call shape is what the iframe's own search box issues via the App SDK bridge (no model in the loop).
+
+   <a href="screenshots/02-golden-gate.png" target="_blank"><img src="screenshots/02-golden-gate.png" alt="CesiumJS Map App after a second show-map call: iframe has re-framed to the Golden Gate Bridge area, demonstrating the bounding-box re-navigation flow" width="50%"></a>
+
+4. Pick **geocode**, call with `{"query": "Paris"}` — the server hits OSM Nominatim live (rate-limited to 1 req/sec). The tool result lists up to 5 real matches with coordinates and bounding boxes.
+
+   <a href="screenshots/03-geocode.png" target="_blank"><img src="screenshots/03-geocode.png" alt="basic-host debug panel showing the geocode tool input/output: 'Paris' query returned 4 real Nominatim results — Paris France (multiple forms) and Paris Texas — each with coordinates and bounding box ready to feed into show-map" width="50%"></a>
 
 ## Try It Out from a Host
 
