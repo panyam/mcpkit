@@ -90,17 +90,17 @@ readme: ## Regenerate WALKTHROUGH.md from walkthrough/walkthrough.go.
 # See README "stage 2 quickstart" for the full 4-terminal flow.
 # -------------------------------------------------------------------
 
-newtoken: ## Acquire a bearer token via Keycloak browser auth. TENANT=A|B|C.
-	@if [ -z "$(TENANT)" ]; then echo "usage: make newtoken TENANT=A|B|C"; exit 2; fi
-	$(ONEAUTH) token browser $(KEYCLOAK_HOST)/realms/$(call tenant-realm,$(TENANT)) \
+newtoken: ## Acquire a bearer token via Keycloak browser auth. TENANT=A|B|C. Prints ONLY the access token so `$(make newtoken TENANT=A)` captures cleanly.
+	@if [ -z "$(TENANT)" ]; then echo "usage: make newtoken TENANT=A|B|C" >&2; exit 2; fi
+	@$(ONEAUTH) token browser $(KEYCLOAK_HOST)/realms/$(call tenant-realm,$(TENANT)) \
 		--client-id $(DEMO_CLIENT_ID) \
 		--client-secret $(DEMO_CLIENT_SECRET) \
 		--format=access-token-only
 
 newtoken-ci: ## Acquire a bearer token via ROPC (CI / scripting). TENANT=A|B|C USER=alice PASSWORD=alice.
 	@if [ -z "$(TENANT)" ] || [ -z "$(USER)" ] || [ -z "$(PASSWORD)" ]; then \
-		echo "usage: make newtoken-ci TENANT=A|B|C USER=<user> PASSWORD=<pw>"; exit 2; fi
-	$(ONEAUTH) token password $(KEYCLOAK_HOST)/realms/$(call tenant-realm,$(TENANT)) \
+		echo "usage: make newtoken-ci TENANT=A|B|C USER=<user> PASSWORD=<pw>" >&2; exit 2; fi
+	@$(ONEAUTH) token password $(KEYCLOAK_HOST)/realms/$(call tenant-realm,$(TENANT)) \
 		--client-id $(DEMO_CLIENT_ID) \
 		--client-secret $(DEMO_CLIENT_SECRET) \
 		--user $(USER) \
