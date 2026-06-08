@@ -1,0 +1,59 @@
+[
+  {
+    "kind": "section",
+    "title": "Setup",
+    "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nAny MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam, basic-host). The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `make demo-app EXAMPLE=threejs` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+  },
+  {
+    "kind": "step",
+    "title": "Connect to the fixture",
+    "step_id": "step-1",
+    "visit": 1,
+    "output": "    connected to Three.js Server 1.0.0\n"
+  },
+  {
+    "kind": "step",
+    "title": "tools/list — show_threejs_scene + learn_threejs",
+    "step_id": "step-2",
+    "visit": 1,
+    "output": "    show_threejs_scene  hasUI=true\n      height schema: {\n        \"default\": 400,\n        \"description\": \"Height in pixels\",\n        \"exclusiveMinimum\": 0,\n        \"maximum\": 9007199254740991,\n        \"type\": \"integer\"\n      }\n    learn_threejs  hasUI=false\n"
+  },
+  {
+    "kind": "step",
+    "title": "tools/call show_threejs_scene {} — default rotating cube",
+    "step_id": "step-3",
+    "visit": 1,
+    "output": "    structuredContent: map[success:true], isError: false\n"
+  },
+  {
+    "kind": "step",
+    "title": "tools/call show_threejs_scene with custom Three.js code",
+    "step_id": "step-4",
+    "visit": 1,
+    "output": "    structuredContent: map[success:true], isError: false\n    (sent 767 bytes of Three.js code, height=500)\n"
+  },
+  {
+    "kind": "step",
+    "title": "tools/call learn_threejs — full markdown documentation",
+    "step_id": "step-5",
+    "visit": 1,
+    "output": "    2713 bytes of documentation\n    # Three.js view Documentation\n\n## Available Globals\n- `THREE` - Three.js library (r181)\n- `canvas` - Pre-created canvas element\n- `width`, `height` - Canvas dimensions in pixels\n- `OrbitControls` - Interactive camera controls\n- `EffectComposer`, `RenderPass`, `UnrealBloomPass` - Post-processing effects\n\n## Basic Template (Transparent Background)\n``…\n"
+  },
+  {
+    "kind": "step",
+    "title": "resources/read on ui://threejs/mcp-app.html",
+    "step_id": "step-6",
+    "visit": 1,
+    "output": "    1290577 bytes total; first 200:\n      \u003c!DOCTYPE html\u003e\n\u003chtml lang=\"en\"\u003e\n\u003chead\u003e\n  \u003cmeta charset=\"UTF-8\"\u003e\n  \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"\u003e\n  \u003cmeta name=\"color-scheme\" content=\"light dark\"\u003e\n  \u003ctitle\u003eThr…\n"
+  },
+  {
+    "kind": "section",
+    "title": "What the App iframe does with all this",
+    "body": "The host → iframe handoff mechanics (`tools/call` → `resources/read` → sandboxed iframe → `postMessage`) are covered once in [The basic-host bridge dance](../README.md#the-basic-host-bridge-dance). Steps 1-6 above are the floor every MCP Apps interaction starts from.\n\nthreejs's iframe sits at the **moderate** end of the App-ness spectrum. The bridge calls its App SDK makes:\n\n- `app.ontoolresult` — reads each `show_threejs_scene` call's arguments (`code` + `height`) and re-runs the JS inside a sandboxed Web Worker. The `structuredContent.success` is informational; the actual rendering side-effect happens iframe-side.\n- `app.getHostContext()` + `app.onhostcontextchanged` — applies host theme so the iframe's chrome matches basic-host's dark/light mode.\n\nNO `app.registerTool`, NO `app.updateModelContext`, NO `app.callServerTool` — the iframe is a pure renderer. The server's role reduces to: hand the iframe HTML over once, then proxy show_threejs_scene calls so the iframe sees the latest code. `learn_threejs` is the documentation channel — a model can call it once to discover the available globals and then write valid show_threejs_scene calls.\n\n**Why bundling matters.** Unlike `map` which streams CesiumJS from `cesium.com` CDN at runtime (and needs `_meta.ui.csp.connectDomains` to make it work), `threejs` bundles Three.js + all the post-processing passes into the iframe HTML at build time. The trade-off: the resource read is ~1.3MB (vs map's ~340KB), but there's zero runtime CSP / network surface to manage."
+  },
+  {
+    "kind": "section",
+    "title": "Where to look in the code",
+    "body": "- `main.go` — fixture is ~250 lines. Three interesting bits: (1) the ported `threeJSDocumentation` block (~75 lines of markdown matching upstream's `THREEJS_DOCUMENTATION` byte-for-byte); (2) `InputSchemaPatch` on `show_threejs_scene` for both `code.default` (multi-line + comma-rich, struct-tags would truncate) and `height` (explicit `Replace` for the `exclusiveMinimum`+`MAX_SAFE_INTEGER` cap); (3) the second `learn_threejs` tool registered as a plain `core.TypedTool` (no UI metadata).\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + screenshots + the centralized [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) guide and the bridge-dance reference section."
+  }
+]

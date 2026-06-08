@@ -22,6 +22,85 @@ import (
 	"github.com/panyam/servicekit/middleware"
 )
 
+// threeJSDocumentation mirrors upstream's THREEJS_DOCUMENTATION
+// byte-for-byte — the multi-page markdown reference learn_threejs
+// returns. Models call this tool to discover the available globals,
+// transparent-background pattern, and ready-to-run examples without
+// scraping a docs site.
+const threeJSDocumentation = "# Three.js view Documentation\n\n" +
+	"## Available Globals\n" +
+	"- `THREE` - Three.js library (r181)\n" +
+	"- `canvas` - Pre-created canvas element\n" +
+	"- `width`, `height` - Canvas dimensions in pixels\n" +
+	"- `OrbitControls` - Interactive camera controls\n" +
+	"- `EffectComposer`, `RenderPass`, `UnrealBloomPass` - Post-processing effects\n\n" +
+	"## Basic Template (Transparent Background)\n" +
+	"```javascript\n" +
+	"const scene = new THREE.Scene();\n" +
+	"const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);\n" +
+	"const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });\n" +
+	"renderer.setSize(width, height);\n" +
+	"renderer.setClearColor(0x000000, 0); // Transparent - blends with host UI\n\n" +
+	"// Add objects here...\n\n" +
+	"camera.position.z = 5;\n" +
+	"renderer.render(scene, camera);\n" +
+	"```\n\n" +
+	"## Transparent vs Solid Background\n" +
+	"- **Transparent (default)**: Use `alpha: true` and `setClearColor(0x000000, 0)`\n" +
+	"- **Solid color**: Use `setClearColor(0x1a1a2e)` (omit alpha param)\n\n" +
+	"## Example: Rotating Cube\n" +
+	"```javascript\n" +
+	"const scene = new THREE.Scene();\n" +
+	"const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);\n" +
+	"const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });\n" +
+	"renderer.setSize(width, height);\n" +
+	"renderer.setClearColor(0x000000, 0);\n\n" +
+	"const cube = new THREE.Mesh(\n" +
+	"  new THREE.BoxGeometry(1, 1, 1),\n" +
+	"  new THREE.MeshStandardMaterial({ color: 0x00ff88 })\n" +
+	");\n" +
+	"scene.add(cube);\n\n" +
+	"scene.add(new THREE.DirectionalLight(0xffffff, 1));\n" +
+	"scene.add(new THREE.AmbientLight(0x404040));\n\n" +
+	"camera.position.z = 3;\n\n" +
+	"function animate() {\n" +
+	"  requestAnimationFrame(animate);\n" +
+	"  cube.rotation.x += 0.01;\n" +
+	"  cube.rotation.y += 0.01;\n" +
+	"  renderer.render(scene, camera);\n" +
+	"}\n" +
+	"animate();\n" +
+	"```\n\n" +
+	"## Example: Interactive OrbitControls\n" +
+	"```javascript\n" +
+	"const scene = new THREE.Scene();\n" +
+	"const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);\n" +
+	"const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });\n" +
+	"renderer.setSize(width, height);\n" +
+	"renderer.setClearColor(0x000000, 0);\n\n" +
+	"const controls = new OrbitControls(camera, renderer.domElement);\n" +
+	"controls.enableDamping = true;\n\n" +
+	"const sphere = new THREE.Mesh(\n" +
+	"  new THREE.SphereGeometry(1, 32, 32),\n" +
+	"  new THREE.MeshStandardMaterial({ color: 0xff6b6b, roughness: 0.4 })\n" +
+	");\n" +
+	"scene.add(sphere);\n\n" +
+	"scene.add(new THREE.DirectionalLight(0xffffff, 1));\n" +
+	"scene.add(new THREE.AmbientLight(0x404040));\n\n" +
+	"camera.position.z = 4;\n\n" +
+	"function animate() {\n" +
+	"  requestAnimationFrame(animate);\n" +
+	"  controls.update();\n" +
+	"  renderer.render(scene, camera);\n" +
+	"}\n" +
+	"animate();\n" +
+	"```\n\n" +
+	"## Tips\n" +
+	"- Use `alpha: true` for transparent backgrounds that blend with host UI\n" +
+	"- Keep light intensity ≤ 1 to avoid washed-out scenes\n" +
+	"- Use `MeshStandardMaterial` for realistic lighting\n" +
+	"- For animations, use `requestAnimationFrame`\n"
+
 // defaultThreeJSCode mirrors upstream's DEFAULT_THREEJS_CODE byte-for-byte.
 const defaultThreeJSCode = `const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
@@ -150,7 +229,7 @@ func serve() {
 				"learn_threejs",
 				"Get documentation and examples for using the Three.js View",
 				func(ctx core.ToolContext, _ struct{}) (string, error) {
-					return "See https://threejs.org for documentation.", nil
+					return threeJSDocumentation, nil
 				},
 				core.WithToolExecution(&core.ToolExecution{TaskSupport: core.TaskSupportForbidden}),
 			)
