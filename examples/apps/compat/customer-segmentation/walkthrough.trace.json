@@ -1,0 +1,52 @@
+[
+  {
+    "kind": "section",
+    "title": "Setup",
+    "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nAny MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam, basic-host). The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `make demo-app EXAMPLE=customer-segmentation` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+  },
+  {
+    "kind": "step",
+    "title": "Connect to the fixture",
+    "step_id": "step-1",
+    "visit": 1,
+    "output": "    connected to Customer Segmentation Server 1.0.0\n"
+  },
+  {
+    "kind": "step",
+    "title": "tools/list — verify get-customer-data + its UI resource",
+    "step_id": "step-2",
+    "visit": 1,
+    "output": "    get-customer-data\n      _meta: {\n        \"ui\": {\n          \"resourceUri\": \"ui://customer-segmentation/mcp-app.html\"\n        },\n        \"ui/resourceUri\": \"ui://customer-segmentation/mcp-app.html\"\n      }\n"
+  },
+  {
+    "kind": "step",
+    "title": "tools/call get-customer-data — full 250-row payload",
+    "step_id": "step-3",
+    "visit": 1,
+    "output": "    customers: 250, segments: 4\n    first customer:\n      {\n        \"accountAge\": 61,\n        \"annualRevenue\": 1819322,\n        \"employeeCount\": 292,\n        \"engagementScore\": 73,\n        \"id\": \"cust-0001\",\n        \"name\": \"Nexus Wave Industries\",\n        \"nps\": 16,\n        \"segment\": \"Mid-Market\",\n        \"supportTickets\": 19\n      }\n    segments: [\n      {\n        \"color\": \"#1e40af\",\n        \"count\": 28,\n        \"name\": \"Enterprise\"\n      },\n      {\n        \"color\": \"#0d9488\",\n        \"count\": 64,\n        \"name\": \"Mid-Market\"\n      },\n      {\n        \"color\": \"#059669\",\n        \"count\": 94,\n        \"name\": \"SMB\"\n      },\n      {\n        \"color\": \"#6366f1\",\n        \"count\": 64,\n        \"name\": \"Startup\"\n      }\n    ]\n"
+  },
+  {
+    "kind": "step",
+    "title": "tools/call get-customer-data {segment: \"Enterprise\"}",
+    "step_id": "step-4",
+    "visit": 1,
+    "output": "    Enterprise-only customers: 28 (of 250 total)\n    distinct segment values in response: [Enterprise] (expect: [Enterprise])\n"
+  },
+  {
+    "kind": "step",
+    "title": "resources/read on ui://customer-segmentation/mcp-app.html",
+    "step_id": "step-5",
+    "visit": 1,
+    "output": "    548590 bytes total; first 200:\n      \u003c!DOCTYPE html\u003e\n\u003chtml lang=\"en\"\u003e\n\u003chead\u003e\n  \u003cmeta charset=\"UTF-8\"\u003e\n  \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"\u003e\n  \u003cmeta name=\"color-scheme\" content=\"light dark\"\u003e\n  \u003ctitle\u003eCus…\n"
+  },
+  {
+    "kind": "section",
+    "title": "What the App iframe does with all this",
+    "body": "The host → iframe handoff mechanics (`tools/call` → `resources/read` → sandboxed iframe → `postMessage`) are covered once in [The basic-host bridge dance](../README.md#the-basic-host-bridge-dance). Steps 1-5 above are the floor every MCP Apps interaction starts from.\n\ncustomer-segmentation's iframe sits at the **moderate** end of the App-ness spectrum — one tool call on load, then a few host-context hooks. The bridge calls its App SDK makes:\n\n- `app.callServerTool({name: \"get-customer-data\"})` once on connect — fetches the full 250-row pool and seeds Chart.js. The dropdown re-issues the same call with `{segment: ...}`.\n- `app.getHostContext()` — reads `theme`, `styles.variables`, `styles.css.fonts`, and `safeAreaInsets` from the host so the chart matches basic-host's light/dark mode and CSS variables.\n- `app.onhostcontextchanged` — same handler re-runs when the host flips theme, so Chart.js is destroyed + reinitialised to repaint with the new palette.\n\nNO `app.registerTool`, NO `app.updateModelContext`, NO `app.ontoolresult` — the iframe drives its own fetch loop instead of waiting for the host to push a tool result. Same shape as `cohort-heatmap`; one rung below the rich `budget-allocator` / `scenario-modeler` patterns that register app-side tools the host can call back into."
+  },
+  {
+    "kind": "section",
+    "title": "Where to look in the code",
+    "body": "- `main.go` — fixture is ~250 lines: typed tool, paired UI resource, plus the ported clustered-Gaussian generator (`generateCustomers` + `clusteredValue` + Box-Muller). The 250-customer pool is memoized via `sync.Once` so the scatter plot stays stable across calls within a session.\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + screenshots + the centralized [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) guide and the bridge-dance reference section."
+  }
+]
