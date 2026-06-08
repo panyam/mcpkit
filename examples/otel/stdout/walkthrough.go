@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -12,7 +13,6 @@ import (
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
 	commonotel "github.com/panyam/mcpkit/examples/common/otel"
-	mcpotel "github.com/panyam/mcpkit/ext/otel"
 )
 
 // toolMenu is the ordered list of tools the looping "Explore trace
@@ -29,7 +29,7 @@ func runDemo() {
 	// Walkthrough-side flags. Mirror serve()'s flag set so an operator
 	// can pass --exporter=otlp to both processes and watch matching
 	// TraceIDs land in Grafana.
-	exporter := flag.String("exporter", defaultExporter, "trace exporter: stdout | otlp")
+	exporter := flag.String("exporter", defaultExporter, "trace exporter: \"\" (off) | stdout (default here) | otlp")
 	otlpEndpoint := flag.String("otlp-endpoint", commonotel.DefaultOTLPEndpoint, "OTLP gRPC endpoint when --exporter=otlp")
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.ValueFlag("--url"),
@@ -43,11 +43,16 @@ func runDemo() {
 	// observability backends group client-emitted spans separately;
 	// the service.name attribute distinguishes them at the trace level
 	// in Grafana / Tempo searches.
-	clientOTelTP, shutdownClientOTel, err := commonotel.BuildPipeline(*exporter, *otlpEndpoint, hostServiceName, os.Stdout)
+	clientTP, shutdownClientOTel, err := commonotel.SetupTelemetry(context.Background(),
+		commonotel.WithExporter(*exporter),
+		commonotel.WithOTLPEndpoint(*otlpEndpoint),
+		commonotel.WithServiceName(hostServiceName),
+		commonotel.WithInstrumentationName("github.com/panyam/mcpkit/client"),
+	)
 	if err != nil {
-		log.Fatalf("failed to build client-side OTel pipeline: %v", err)
+		log.Fatalf("commonotel.SetupTelemetry: %v", err)
 	}
-	defer shutdownClientOTel()
+	defer shutdownClientOTel(context.Background())
 	otlpMode := *exporter == commonotel.ExporterOTLP
 	if otlpMode {
 		log.Printf("[otel-stdout-host] exporter=otlp endpoint=%s service.name=%s", *otlpEndpoint, hostServiceName)
@@ -82,9 +87,7 @@ func runDemo() {
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			c = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "otel-stdout-host", Version: "1.0"},
-				client.WithTracerProvider(mcpotel.NewProvider(clientOTelTP,
-					mcpotel.WithInstrumentationName("github.com/panyam/mcpkit/client"),
-				)),
+				client.WithTracerProvider(clientTP),
 			)
 			if err := c.Connect(); err != nil {
 				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)

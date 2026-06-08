@@ -35,6 +35,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -46,6 +47,7 @@ import (
 	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
+	commonotel "github.com/panyam/mcpkit/examples/common/otel"
 	tasks "github.com/panyam/mcpkit/ext/tasks"
 	"github.com/panyam/mcpkit/server"
 )
@@ -63,10 +65,21 @@ func main() {
 func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
 	signingKey := flag.String("signing-key", "mrtr-demo-signing-key", "HMAC key for requestState signing (empty = plaintext mode)")
+	tel := common.RegisterTelemetryFlags(flag.CommandLine)
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.BoolFlag("--serve"),
 		demokit.ValueFlag("--url"),
 	))
+
+	tp, shutdown, err := commonotel.SetupTelemetry(context.Background(),
+		commonotel.WithExporter(*tel.Exporter),
+		commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+		commonotel.WithServiceName("mrtr-demo"),
+	)
+	if err != nil {
+		log.Fatalf("commonotel.SetupTelemetry: %v", err)
+	}
+	defer shutdown(context.Background())
 
 	var extraOpts []server.Option
 	if *signingKey != "" {
@@ -74,9 +87,10 @@ func serve() {
 	}
 
 	if err := common.RunServer(common.ServerConfig{
-		Name:    "mrtr-demo",
-		Addr:    *addr,
-		Options: extraOpts,
+		Name:           "mrtr-demo",
+		Addr:           *addr,
+		TracerProvider: tp,
+		Options:        extraOpts,
 		Register: func(srv *server.Server) {
 			registerMRTRTools(srv)
 			// SEP-2322 + SEP-2663 composition: the registry holds at least one

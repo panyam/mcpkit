@@ -14,6 +14,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -26,8 +27,9 @@ import (
 	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
-	"github.com/panyam/mcpkit/server"
+	commonotel "github.com/panyam/mcpkit/examples/common/otel"
 	"github.com/panyam/mcpkit/ext/tasks"
+	"github.com/panyam/mcpkit/server"
 )
 
 func main() {
@@ -42,10 +44,21 @@ func main() {
 
 func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
+	tel := common.RegisterTelemetryFlags(flag.CommandLine)
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.BoolFlag("--serve"),
 		demokit.ValueFlag("--url"),
 	))
+
+	tp, shutdown, err := commonotel.SetupTelemetry(context.Background(),
+		commonotel.WithExporter(*tel.Exporter),
+		commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+		commonotel.WithServiceName("tasks-v2-demo"),
+	)
+	if err != nil {
+		log.Fatalf("commonotel.SetupTelemetry: %v", err)
+	}
+	defer shutdown(context.Background())
 
 	log.Printf("Connect: http://localhost%s/mcp", *addr)
 	log.Printf("")
@@ -59,8 +72,9 @@ func serve() {
 	log.Printf("  external_job       — required task (TaskCallbacks proxy)")
 
 	if err := common.RunServer(common.ServerConfig{
-		Name: "tasks-v2-demo",
-		Addr: *addr,
+		Name:           "tasks-v2-demo",
+		Addr:           *addr,
+		TracerProvider: tp,
 		Register: func(srv *server.Server) {
 			registerTasksV2DemoTools(srv)
 		},

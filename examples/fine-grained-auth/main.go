@@ -32,6 +32,7 @@ import (
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
+	commonotel "github.com/panyam/mcpkit/examples/common/otel"
 	"github.com/panyam/mcpkit/ext/auth"
 	"github.com/panyam/mcpkit/server"
 	"github.com/panyam/oneauth/admin"
@@ -665,10 +666,22 @@ func requestToken(b bootstrapInfo, scopes []string, authzDetails []map[string]an
 
 func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
+	tel := common.RegisterTelemetryFlags(flag.CommandLine)
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.BoolFlag("--serve"),
 		demokit.ValueFlag("--url"),
 	))
+
+	tp, shutdown, err := commonotel.SetupTelemetry(context.Background(),
+		commonotel.WithExporter(*tel.Exporter),
+		commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+		commonotel.WithServiceName("fine-grained-auth-example"),
+	)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: commonotel.SetupTelemetry: %v\n", err)
+		os.Exit(1)
+	}
+	defer shutdown(context.Background())
 
 	// Canonical 5 rules + two example-specific tints (isError on tool results,
 	// tool= on dispatch logs). Passed as variadic extras to NewMCPLogger.
@@ -728,10 +741,11 @@ func serve() {
 
 	// 3. MCP server with auth + scope-enforcement middleware.
 	if err := common.RunServer(common.ServerConfig{
-		Name:    "fine-grained-auth-example",
-		Version: "1.0.0",
-		Addr:    *addr,
-		Logger:  logger,
+		Name:           "fine-grained-auth-example",
+		Version:        "1.0.0",
+		Addr:           *addr,
+		Logger:         logger,
+		TracerProvider: tp,
 		Options: []server.Option{
 			server.WithAuth(validator),
 			server.WithMiddleware(server.ToolCallLogger(logger)),
