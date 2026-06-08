@@ -14,8 +14,16 @@ Each storage concern has its own narrow interface:
 |---|---|---|
 | `WebhookStore` | Webhook subscription CRUD (canonical key → target) | landed (627 / PR 671) |
 | `QuotaStore` | Reservation counts per (principal, eventName) | landed (626) |
-| `CursorStore` | Per-subscription persisted cursors | lands in 628 |
+| ~~`CursorStore`~~ | ~~Per-subscription persisted cursors~~ | not needed — see 628's close comment (server doesn't track per-subscription cursors; client-managed) |
 | `SubscriptionIndexStore` | Subscription-id ↔ deliver-fn lookup table | landed (631) |
+
+## Adjacent seams (not storage, same conventions)
+
+| Interface | Concern | Status |
+|---|---|---|
+| `EventBus` | Cross-replica event fanout (pub/sub primitive) | landed (629) |
+
+`EventBus` follows the same gRPC-style method shape (`(ctx, XRequest) → (XResponse, error)`) and `ctx`-first convention as the storage seams above, but it isn't storage — it's an IPC primitive. Listed here because the convention is the same; future RPC-shaped seams in this package should default to this shape.
 
 No umbrella `EventsStore` interface. The reasons:
 

@@ -265,6 +265,18 @@ type Config struct {
 	// internal no-caps Quota — every Reserve succeeds, no
 	// enforcement.
 	Quota *Quota
+
+	// EventBus is the cross-replica fanout seam. Yielded events are
+	// published to it; Register installs local subscribers for SSE
+	// broadcast and webhook delivery. nil leaves Register to construct
+	// an in-process default that matches today's single-replica
+	// behavior bit-for-bit. Multi-replica deployments plug in Redis
+	// (issue 634) or similar so events yielded on replica A reach
+	// every other replica's SSE listeners + webhook subscribers.
+	//
+	// See event_bus.go for the interface contract and the filter-on-
+	// receive design rationale.
+	EventBus EventBus
 }
 
 // Register hooks up events/list, events/poll, events/subscribe, and
@@ -280,15 +292,52 @@ func Register(cfg Config) {
 	sources := cfg.Sources
 	webhooks := cfg.Webhooks
 
+	// EventBus setup. The default in-process bus matches today's
+	// single-replica behavior bit-for-bit: yield publishes
+	// synchronously; subscribers (push + webhook) fire in
+	// registration order; yield blocks until both return.
+	bus := cfg.EventBus
+	if bus == nil {
+		bus = NewInProcessEventBus()
+	}
+
+	// Install the local push subscriber. Filter-on-receive (""
+	// matches all event names) — the receiving replica's local
+	// Match hooks filter at delivery time per the spec. SSE
+	// broadcast is a no-op when no listeners are connected, so
+	// replicas that receive events for which they hold no local
+	// streams pay only the cost of the broadcast call.
+	pushSub, _ := bus.SubscribeEvents(context.Background(), SubscribeEventsRequest{
+		OnEvent: func(_ context.Context, event Event) {
+			Emit(srv, event)
+		},
+	})
+	_ = pushSub // retained for the life of the server; never closed in this entry point
+
+	// Install the local webhook subscriber when webhooks are wired.
+	// Webhook delivery across replicas with a shared WebhookStore
+	// is currently best-effort at-least-once per replica — the
+	// dedup-across-replicas concern (publisher-owns vs lease vs
+	// hash partition) is a follow-up to this PR.
+	if webhooks != nil {
+		webhookSub, _ := bus.SubscribeEvents(context.Background(), SubscribeEventsRequest{
+			OnEvent: func(_ context.Context, event Event) {
+				EmitToWebhooks(webhooks, event)
+			},
+		})
+		_ = webhookSub
+	}
+
 	sourceMap := make(map[string]EventSource, len(sources))
 	for _, s := range sources {
 		sourceMap[s.Def().Name] = s
 		if ea, ok := s.(emitterAware); ok {
+			// Capture bus into the closure so the emit hook publishes
+			// through the seam. Local subscribers installed above
+			// run synchronously on this goroutine, preserving today's
+			// yield-blocks-on-delivery semantics.
 			ea.SetEmitHook(func(event Event) {
-				Emit(srv, event)
-				if webhooks != nil {
-					EmitToWebhooks(webhooks, event)
-				}
+				_, _ = bus.PublishEvent(context.Background(), PublishEventRequest{Event: event})
 			})
 		}
 	}
