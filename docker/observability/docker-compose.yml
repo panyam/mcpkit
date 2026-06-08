@@ -1,0 +1,89 @@
+# SEP-414 P5 observability stack — LGTM + OpenTelemetry Collector.
+#
+# Five containers receiving OTLP from mcpkit examples (or any
+# OTLP-aware client) and fanning out to a per-signal backend, all
+# unified under one Grafana UI:
+#
+#   * OpenTelemetry Collector — receives OTLP on :4317 (gRPC) and
+#     :4318 (HTTP), splits traces → Tempo, metrics → Mimir, logs →
+#     Loki.
+#   * Tempo  — trace storage. Single OTel datasource in Grafana.
+#   * Loki   — log storage. OTel logs lane (idle today; lights up
+#     when mcpkit adds log emitters).
+#   * Mimir  — Prometheus-compatible metric storage (idle today;
+#     lights up when mcpkit adds metric emitters).
+#   * Grafana — single UI at http://localhost:3000 (admin/admin).
+#     Datasources auto-provisioned for all three signals.
+#
+# Bring up:  make -C docker up
+# Tear down: make -C docker down
+# Tail logs: make -C docker logs
+#
+# Versions are pinned. Update one image at a time so a Tempo /
+# Mimir / Loki schema bump never reaches main without an explicit
+# bump here. SEP-414 P5 (issue 312 P5 / new umbrella issue 663).
+
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.114.0
+    container_name: mcpkit-otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./collector/config.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC — examples/otel/stdout/ default
+      - "4318:4318"   # OTLP HTTP — alternative for curl / browser exporters
+      - "8888:8888"   # Collector self-metrics (Prometheus scrape)
+    depends_on:
+      - tempo
+      - loki
+      - mimir
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    container_name: mcpkit-tempo
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./tempo/config.yaml:/etc/tempo.yaml:ro
+    ports:
+      - "3200:3200"   # Tempo HTTP — Grafana datasource hits this
+
+  loki:
+    image: grafana/loki:3.2.1
+    container_name: mcpkit-loki
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/config.yaml"]
+    volumes:
+      - ./loki/config.yaml:/etc/loki/config.yaml:ro
+    ports:
+      - "3100:3100"   # Loki HTTP — Grafana datasource hits this
+
+  mimir:
+    image: grafana/mimir:2.14.0
+    container_name: mcpkit-mimir
+    restart: unless-stopped
+    command: ["-config.file=/etc/mimir/config.yaml", "-target=all"]
+    volumes:
+      - ./mimir/config.yaml:/etc/mimir/config.yaml:ro
+    ports:
+      - "9009:9009"   # Mimir HTTP — Grafana datasource hits this
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    container_name: mcpkit-grafana
+    restart: unless-stopped
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+      - GF_FEATURE_TOGGLES_ENABLE=traceqlEditor
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"   # Grafana UI — http://localhost:3000
+    depends_on:
+      - tempo
+      - loki
+      - mimir
