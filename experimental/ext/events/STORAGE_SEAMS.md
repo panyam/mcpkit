@@ -15,7 +15,7 @@ Each storage concern has its own narrow interface:
 | `WebhookStore` | Webhook subscription CRUD (canonical key → target) | landed (627 / PR 671) |
 | `QuotaStore` | Reservation counts per (principal, eventName) | landed (626) |
 | `CursorStore` | Per-subscription persisted cursors | lands in 628 |
-| `SubscriptionIndex` storage seam | Subscription-id ↔ deliver-fn lookup table | lands in 631 |
+| `SubscriptionIndexStore` | Subscription-id ↔ deliver-fn lookup table | landed (631) |
 
 No umbrella `EventsStore` interface. The reasons:
 

@@ -1,6 +1,9 @@
 package events
 
-import "log"
+import (
+	"context"
+	"log"
+)
 
 // EmitToSubscription delivers an event to exactly one subscription
 // identified by sub id, bypassing the broadcast fanout.
@@ -26,17 +29,17 @@ import "log"
 // id (the lease tuple is the routing identity per Q4). Calling
 // EmitToSubscription with a poll-mode id is a no-op of the
 // "unknown subID" variety.
-func EmitToSubscription(idx *SubscriptionIndex, event Event, subID string) {
+func EmitToSubscription(idx SubscriptionIndexStore, event Event, subID string) {
 	if idx == nil {
 		log.Printf("[events] EmitToSubscription: nil index; drop subID=%q event=%q",
 			subID, event.EventID)
 		return
 	}
-	_, deliver, ok := idx.Lookup(subID)
-	if !ok {
+	resp, _ := idx.LookupSubscription(context.Background(), LookupSubscriptionRequest{SubscriptionID: subID})
+	if !resp.Found || resp.Deliver == nil {
 		log.Printf("[events] EmitToSubscription: unknown subID=%q (already unsubscribed?); drop event=%q",
 			subID, event.EventID)
 		return
 	}
-	deliver(event)
+	resp.Deliver(event)
 }

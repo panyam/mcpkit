@@ -240,11 +240,17 @@ type Config struct {
 	// routing identity).
 	//
 	// Authors that want to call EmitToSubscription should construct
-	// one via NewSubscriptionIndex and pass it here so they hold a
-	// reference to the same instance the SDK populates. nil leaves
+	// one via NewSubscriptionIndex (or NewInMemorySubscriptionIndex
+	// for the typed-as-interface form) and pass it here so they hold
+	// a reference to the same instance the SDK populates. nil leaves
 	// Register to construct an internal default — fine for servers
 	// that only do broadcast emit.
-	SubscriptionIndex *SubscriptionIndex
+	//
+	// Field type is the SubscriptionIndexStore interface so multi-
+	// replica implementations plug in directly. *SubscriptionIndex
+	// (the default in-memory struct) satisfies the interface — no
+	// caller-side change for single-process deployments.
+	SubscriptionIndex SubscriptionIndexStore
 
 	// Quota enforces per-principal-per-event-type subscription caps
 	// per spec §"Server SDK Guidance" → "Subscription lifecycle
@@ -317,7 +323,7 @@ func Register(cfg Config) {
 			// Lookup will get the unknown-id branch (clean drop)
 			// rather than calling DeliverToTarget on a registry
 			// the target was just removed from.
-			idx.Remove(t.ID)
+			_, _ = idx.RemoveSubscription(context.Background(), RemoveSubscriptionRequest{SubscriptionID: t.ID})
 			// Release the quota slot. Pairs with the Reserve in
 			// registerSubscribe — fires once per actual removal
 			// (Unregister, prune, PostTerminated; NOT suspend —
@@ -633,8 +639,10 @@ func registerPoll(srv *server.Server, sourceMap map[string]EventSource, unsafeAn
 //
 // Path-1 (real auth): claims != nil → claims.Subject. Spec-correct.
 // Path-2 (demo escape): claims == nil and unsafeAnon != "" → unsafeAnon.
-//   Deliberately deviates from the spec; gated by Unsafe-prefix + startup
-//   warning in Register.
+//
+//	Deliberately deviates from the spec; gated by Unsafe-prefix + startup
+//	warning in Register.
+//
 // Path-3 (strict): claims == nil and unsafeAnon == "" → reject. Spec-correct.
 func resolvePrincipal(ctx core.MethodContext, unsafeAnon string) (string, bool) {
 	if claims := ctx.AuthClaims(); claims != nil {
@@ -646,7 +654,7 @@ func resolvePrincipal(ctx core.MethodContext, unsafeAnon string) (string, bool) 
 	return "", false
 }
 
-func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, webhooks *WebhookRegistry, unsafeAnon string, idx *SubscriptionIndex, quota *Quota) {
+func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, webhooks *WebhookRegistry, unsafeAnon string, idx SubscriptionIndexStore, quota *Quota) {
 	srv.HandleMethod("events/subscribe", func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		var req struct {
 			// ID is parsed only to surface a helpful error if a client
@@ -774,8 +782,12 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 			// (entry from the original subscribe still routes
 			// correctly; the canonical key didn't change).
 			canonicalCopy := append([]byte(nil), canonical...)
-			idx.Add(derivedID, DeliveryModeWebhook, func(event Event) {
-				webhooks.DeliverToTarget(canonicalCopy, event)
+			_, _ = idx.AddSubscription(context.Background(), AddSubscriptionRequest{
+				SubscriptionID: derivedID,
+				Mode:           DeliveryModeWebhook,
+				Deliver: func(event Event) {
+					webhooks.DeliverToTarget(canonicalCopy, event)
+				},
 			})
 		}
 
