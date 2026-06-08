@@ -1,0 +1,80 @@
+{
+  "realm": "tenant-a",
+  "displayName": "Tenant A",
+  "enabled": true,
+  "sslRequired": "none",
+  "defaultSignatureAlgorithm": "RS256",
+  "accessTokenLifespan": 1800,
+  "ssoSessionIdleTimeout": 3600,
+  "ssoSessionMaxLifespan": 7200,
+  "clients": [
+    {
+      "clientId": "mcp-event-server",
+      "name": "MCP Event-Server (introspection client; called by the resource server when validating bearer tokens)",
+      "description": "DEMO ONLY — rotate this secret in any non-demo deployment.",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "mcpkit-demo-secret-DEMO-ONLY",
+      "serviceAccountsEnabled": true,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "defaultClientScopes": ["openid"]
+    },
+    {
+      "clientId": "mcp-events-poller",
+      "name": "MCP Events Poller (demo client used by `make poller TENANT=A`)",
+      "description": "DEMO ONLY — pre-baked secret for the demo poller. Real deployments register a unique client per consumer.",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "mcpkit-demo-secret-DEMO-ONLY",
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": true,
+      "serviceAccountsEnabled": true,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "redirectUris": ["http://localhost:*", "http://127.0.0.1:*"],
+      "webOrigins": ["*"],
+      "defaultClientScopes": ["openid", "profile", "email"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    },
+    {
+      "clientId": "mcp-events-webhook",
+      "name": "MCP Events Webhook (demo client used by `make webhook TENANT=A`)",
+      "description": "DEMO ONLY — pre-baked secret for the demo webhook receiver.",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "mcpkit-demo-secret-DEMO-ONLY",
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": true,
+      "serviceAccountsEnabled": true,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "redirectUris": ["http://localhost:*", "http://127.0.0.1:*"],
+      "webOrigins": ["*"],
+      "defaultClientScopes": ["openid", "profile", "email"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "alice",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "alice@tenant-a.example",
+      "firstName": "Alice",
+      "lastName": "Anderson",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "alice",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["default-roles-tenant-a"]
+    }
+  ]
+}
