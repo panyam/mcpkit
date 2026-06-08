@@ -1,17 +1,31 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 
 	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
+	commonotel "github.com/panyam/mcpkit/examples/common/otel"
 )
 
 func runDemo() {
 	serverURL := common.ServerURL()
+
+	tel := common.ExporterFromArgs()
+	tp, shutdown, err := commonotel.SetupClientTelemetry(context.Background(),
+		commonotel.WithExporter(*tel.Exporter),
+		commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+		commonotel.WithServiceName("list-ttl-host"),
+	)
+	if err != nil {
+		log.Fatalf("commonotel.SetupClientTelemetry: %v", err)
+	}
+	defer shutdown(context.Background())
 
 	demo := demokit.New("MCP List TTL (SEP-2549) — Cache Hints on List and Read Results").
 		Dir("list-ttl").
@@ -75,6 +89,7 @@ if err := c.Connect(); err != nil { /* server not up — run: make serve */ }`),
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			c = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "list-ttl-host", Version: "1.0"},
+				client.WithTracerProvider(tp),
 			)
 			if err := c.Connect(); err != nil {
 				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)

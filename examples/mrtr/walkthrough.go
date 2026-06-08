@@ -4,15 +4,28 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 
 	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
+	commonotel "github.com/panyam/mcpkit/examples/common/otel"
 )
 
 func runDemo() {
 	serverURL := common.ServerURL()
+
+	tel := common.ExporterFromArgs()
+	tp, shutdown, err := commonotel.SetupClientTelemetry(context.Background(),
+		commonotel.WithExporter(*tel.Exporter),
+		commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+		commonotel.WithServiceName("mrtr-demo-host"),
+	)
+	if err != nil {
+		log.Fatalf("commonotel.SetupClientTelemetry: %v", err)
+	}
+	defer shutdown(context.Background())
 
 	demo := demokit.New("MCP MRTR (SEP-2322) — Ephemeral InputRequiredResult Round-Trips").
 		Dir("mrtr").
@@ -98,6 +111,7 @@ if err := c.Connect(); err != nil { /* server not up — run: make serve */ }`),
 				client.WithRootsHandler(func(ctx context.Context) ([]core.Root, error) {
 					return []core.Root{{URI: "file:///demo/root", Name: "Demo Root"}}, nil
 				}),
+				client.WithTracerProvider(tp),
 			)
 			if err := c.Connect(); err != nil {
 				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
