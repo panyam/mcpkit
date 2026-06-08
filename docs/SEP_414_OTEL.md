@@ -307,6 +307,43 @@ Unblocks issue 659 (`ext/tasks` task lifecycle linking) and the
 detached edge of issue 664 (server outbound reverse-call spans linked
 to the originating client request).
 
+### `mcpotel.NewTracerProvider` helper — landed (issue 674)
+
+Examples and surface integrations no longer have to import
+`go.opentelemetry.io/otel/sdk/resource` + `.../semconv` just to set a
+`service.name` on their TracerProvider. `mcpotel.NewTracerProvider`
+is a thin functional-options wrapper around `sdktrace.NewTracerProvider`:
+
+```go
+otelTP := mcpotel.NewTracerProvider(exp,
+    mcpotel.WithServiceName("my-server"),
+    mcpotel.WithSyncer(),
+)
+mcpotel.NewProvider(otelTP)
+```
+
+Options today:
+
+- `mcpotel.WithServiceName(name)` — bakes the value into an OTel
+  `Resource` with `semconv.ServiceName(...)`. Empty name is a no-op
+  so defensive callers can pass through config values without
+  branching.
+- `mcpotel.WithSyncer()` — switches the default Batcher to a sync
+  span processor. Right for teaching demos and tests; production
+  servers should stay on the batched default and handle SIGTERM with
+  explicit `ForceFlush` + `Shutdown`.
+
+`NewTracerProvider(nil)` panics — silently constructing a
+TracerProvider that emits no spans loses signals without surfacing
+the misconfig. Matches `NewProvider(nil)`'s fail-fast.
+
+Future options (`WithDeploymentEnvironment`, `WithServiceVersion`,
+`WithResource(*resource.Resource)` escape hatch) compose against the
+same internal config — file when a consumer asks. The
+`examples/common/otel/` sub-package already migrated to consume this
+helper; future P6 surface examples (issues 658 / 659 / 660 / 664)
+inherit the cleanup without any extra plumbing.
+
 The pattern is identical across all five: each `ext/` surface optionally
 accepts a `core.TracerProvider` and instruments its own work, depending on
 the **`core` abstraction only** — never `ext/otel`. Same composition shape

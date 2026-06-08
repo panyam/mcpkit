@@ -1,8 +1,9 @@
 // Package otel collects the OpenTelemetry pipeline boilerplate that
 // every mcpkit example with `--exporter=stdout|otlp` support needs:
-// dispatching between exporter modes, baking a `service.name` into
-// the SDK Resource so observability backends index spans under a
-// recognizable name, and tidying up the shutdown closure on exit.
+// dispatching between exporter modes, building an SDK TracerProvider
+// with the right service.name + sync exporting via the
+// `mcpotel.NewTracerProvider` helper, and tidying up the shutdown
+// closure on exit.
 //
 // Why this lives in examples/common/otel/ rather than each example
 // re-implementing it: the helpers are surface-agnostic. The first
@@ -11,16 +12,10 @@
 // will all want the same shape when they add their own OTel wiring.
 // Centralising here avoids the copy-paste-and-drift loop.
 //
-// Why NOT in ext/otel/: the helpers compose against the OTel SDK
-// (sdk/resource, semconv, otlptracegrpc) — those are demo-side deps
-// that the ext/otel library adapter deliberately doesn't pull. The
-// adapter contracts on core.TracerProvider; this package wraps SDK
-// construction for examples.
-//
-// Issue 674 tracks an adapter-side `mcpotel.WithServiceName` helper
-// that would eliminate the ResourceFor boilerplate from this
-// package's callers. Once that ships, the *Pipeline helpers here can
-// thin down to a single line each.
+// Why NOT entirely in ext/otel/: the exporter construction is demo-
+// specific (which exporter library, stdouttrace vs otlptracegrpc).
+// ext/otel ships the TracerProvider helper (`NewTracerProvider`)
+// that this file consumes; the per-exporter construction stays here.
 package otel
 
 import (
@@ -28,11 +23,10 @@ import (
 	"fmt"
 	"os"
 
+	mcpotel "github.com/panyam/mcpkit/ext/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
-	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
 // Exporter names. These are what examples spell on the command line —
@@ -80,9 +74,10 @@ func BuildPipeline(exporter, otlpEndpoint, serviceName string, stdoutWriter *os.
 // shutdown closure flushes the exporter; defer it so buffered spans
 // land on stdout before the process exits.
 //
-// Use this in `--exporter=stdout` mode (CI-friendly: no external
-// stack required) and in tests that want to inspect span output
-// without a backend.
+// Uses sync exporting via mcpotel.WithSyncer — for stdout output,
+// every span renders as the operator watches the terminal. Batched
+// stdout would make the demo's small burst of spans clump together
+// in confusing order.
 func NewStdoutPipeline(w *os.File, serviceName string) (*sdktrace.TracerProvider, func(), error) {
 	exp, err := stdouttrace.New(
 		stdouttrace.WithWriter(w),
@@ -91,9 +86,9 @@ func NewStdoutPipeline(w *os.File, serviceName string) (*sdktrace.TracerProvider
 	if err != nil {
 		return nil, nil, fmt.Errorf("stdouttrace.New: %w", err)
 	}
-	tp := sdktrace.NewTracerProvider(
-		sdktrace.WithSyncer(exp),
-		sdktrace.WithResource(ResourceFor(serviceName)),
+	tp := mcpotel.NewTracerProvider(exp,
+		mcpotel.WithServiceName(serviceName),
+		mcpotel.WithSyncer(),
 	)
 	shutdown := func() { _ = tp.Shutdown(context.Background()) }
 	return tp, shutdown, nil
@@ -107,15 +102,12 @@ func NewStdoutPipeline(w *os.File, serviceName string) (*sdktrace.TracerProvider
 // production deployments would supply credentials and a non-insecure
 // endpoint via the standard OTel env vars.
 //
-// Uses a synchronous span processor (WithSyncer, NOT WithBatcher) so
-// every dispatched span ships immediately rather than waiting for a
-// batch to fill. Slightly slower per-span at the gRPC layer, but the
-// trade-off is the right one for a teaching example: an operator who
-// kills the demo a second after `tools/call` returns sees their
-// spans in Grafana, not an empty search result because the batch
-// processor hadn't flushed yet. Real high-throughput servers would
-// prefer WithBatcher and explicit ForceFlush + Shutdown signal
-// handling.
+// Uses sync exporting (via mcpotel.WithSyncer) so the demo doesn't
+// hit the batch-flush foot-gun where the operator's SIGTERM
+// terminates the process before the batch processor pushes its
+// queue. Real high-throughput servers should compose
+// mcpotel.NewTracerProvider directly (without WithSyncer) and handle
+// SIGTERM with explicit ForceFlush + Shutdown.
 func NewOTLPPipeline(endpoint, serviceName string) (*sdktrace.TracerProvider, func(), error) {
 	exp, err := otlptracegrpc.New(
 		context.Background(),
@@ -125,9 +117,9 @@ func NewOTLPPipeline(endpoint, serviceName string) (*sdktrace.TracerProvider, fu
 	if err != nil {
 		return nil, nil, fmt.Errorf("otlptracegrpc.New: %w", err)
 	}
-	tp := sdktrace.NewTracerProvider(
-		sdktrace.WithSyncer(exp),
-		sdktrace.WithResource(ResourceFor(serviceName)),
+	tp := mcpotel.NewTracerProvider(exp,
+		mcpotel.WithServiceName(serviceName),
+		mcpotel.WithSyncer(),
 	)
 	shutdown := func() {
 		shutdownCtx, cancel := context.WithCancel(context.Background())
@@ -135,23 +127,4 @@ func NewOTLPPipeline(endpoint, serviceName string) (*sdktrace.TracerProvider, fu
 		_ = tp.Shutdown(shutdownCtx)
 	}
 	return tp, shutdown, nil
-}
-
-// ResourceFor builds the OTel Resource carrying the given
-// `service.name`. Observability backends index telemetry by this
-// attribute — Grafana / Tempo / Jaeger / Honeycomb all search by
-// service.name as the primary axis. Without it, traces appear under
-// `unknown_service:<binary>`.
-//
-// Exposed so callers that want to compose additional attributes
-// (e.g., `service.version`, `deployment.environment`) can build their
-// own Resource off this one's base.
-//
-// Issue 674 tracks a `mcpotel.WithServiceName` adapter helper that
-// would eliminate the need to import this package solely for the
-// resource setup.
-func ResourceFor(serviceName string) *resource.Resource {
-	return resource.NewSchemaless(
-		semconv.ServiceName(serviceName),
-	)
 }
