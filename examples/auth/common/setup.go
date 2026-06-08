@@ -18,7 +18,30 @@ import (
 	"github.com/panyam/mcpkit/server"
 	"github.com/panyam/oneauth/apiauth"
 	"github.com/panyam/oneauth/testutil"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
+
+// ValidatorOption customizes the JWTConfig assembled by
+// Env.NewValidator. Used to plumb tracing providers through without
+// churning the 6 call sites that just want a default validator.
+type ValidatorOption func(*auth.JWTConfig)
+
+// WithMCPTracerProvider opts the validator into SEP-414 instrumentation
+// of its own work (auth.jwks_lookup sub-span + mcp.auth.* attributes
+// on the active dispatch span). Pair with the same TracerProvider you
+// pass to server.WithTracerProvider so the spans share a pipeline.
+func WithMCPTracerProvider(tp core.TracerProvider) ValidatorOption {
+	return func(c *auth.JWTConfig) { c.TracerProvider = tp }
+}
+
+// WithOneauthTracerProvider opts oneauth's internal JWKS work into
+// emitting its own spans (oneauth.jwks.refresh / key_lookup /
+// signature_verify / ...). Typically the result of
+// commonotel.UnderlyingOTelTP(mcpTP) so oneauth shares the same OTel
+// pipeline as mcpkit.
+func WithOneauthTracerProvider(tp oteltrace.TracerProvider) ValidatorOption {
+	return func(c *auth.JWTConfig) { c.OneauthTracerProvider = tp }
+}
 
 // UpstreamIdpIssuer is the iss claim value the fixture's AS will accept
 // on RFC 7523 §2.1 jwt-bearer assertions and RFC 8693 token-exchange
@@ -74,14 +97,20 @@ func NewEnv(scopes []string) *Env {
 
 // NewValidator creates a JWTValidator pointed at the AS's JWKS.
 // Call after the MCP server URL is known so audience can be set.
-func (e *Env) NewValidator(audience string) *auth.JWTValidator {
+// Optional ValidatorOption args plumb tracing providers through —
+// see WithMCPTracerProvider / WithOneauthTracerProvider.
+func (e *Env) NewValidator(audience string, opts ...ValidatorOption) *auth.JWTValidator {
 	e.AS.APIAuth.JWTAudience = audience
-	v := auth.NewJWTValidator(auth.JWTConfig{
+	cfg := auth.JWTConfig{
 		JWKSURL:   e.AS.JWKSURL(),
 		Issuer:    e.AS.Issuer(),
 		Audience:  audience,
 		AllScopes: e.Scopes,
-	})
+	}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	v := auth.NewJWTValidator(cfg)
 	v.Start()
 	e.Validator = v
 	return v

@@ -8,7 +8,8 @@ require (
 	github.com/panyam/mcpkit v0.2.45
 	github.com/panyam/mcpkit/examples/common v0.0.0-00010101000000-000000000000
 	github.com/panyam/mcpkit/ext/auth v0.2.36
-	github.com/panyam/oneauth v0.1.12
+	github.com/panyam/oneauth v0.1.17
+	go.opentelemetry.io/otel/trace v1.44.0
 )
 
 require (
@@ -67,7 +68,6 @@ require (
 	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.44.0 // indirect
 	go.opentelemetry.io/otel/metric v1.44.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.44.0 // indirect
-	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
 	golang.org/x/crypto v0.51.0 // indirect
 	golang.org/x/net v0.55.0 // indirect
@@ -88,3 +88,5 @@ replace (
 	github.com/panyam/mcpkit/examples/common => ../common
 	github.com/panyam/mcpkit/ext/auth => ../../ext/auth
 )
+
+replace github.com/panyam/mcpkit/ext/otel => ../../ext/otel
