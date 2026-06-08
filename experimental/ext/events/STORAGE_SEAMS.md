@@ -13,13 +13,13 @@ Each storage concern has its own narrow interface:
 | Interface | Concern | Status |
 |---|---|---|
 | `WebhookStore` | Webhook subscription CRUD (canonical key → target) | landed (627 / PR 671) |
-| `QuotaStore` | Reservation counts per (principal, eventName) | landed (626) |
-| `CursorStore` | Per-subscription persisted cursors | lands in 628 |
-| `SubscriptionIndexStore` | Subscription-id ↔ deliver-fn lookup table | landed (631) |
+| `QuotaStore` | Reservation counts per (principal, eventName) | landed (626 / PR 673) |
+| `CursorStore` | Per-subscription persisted cursors | not needed today (628 closed); the server doesn't track per-subscription cursors. Revisit when a consumer needs persisted cursor positions. |
+| `SubscriptionIndexStore` | Subscription-id ↔ deliver-fn lookup table | landed (631 / PR 675) |
 
 No umbrella `EventsStore` interface. The reasons:
 
-- **Backends pick the subset they need.** A Redis backend implements `QuotaStore` only (Redis pubsub + counters); a Postgres backend implements `WebhookStore` + `QuotaStore` + `CursorStore` (durable rows); a future Kafka backend might implement the SubscriptionIndex seam alone. An umbrella interface forces every backend to either implement everything or carry no-op methods that lie about their semantics.
+- **Backends pick the subset they need.** A Redis backend implements `QuotaStore` only (Redis pubsub + counters); the GORM backend (Postgres / SQLite) implements `WebhookStore` + `QuotaStore` — the durable rows of the registry. `SubscriptionIndexStore` is intentionally not implemented for any cross-process backend: its `Deliver func(Event)` captures per-replica state and cross-replica targeting is the `Emitter` seam's job (629). An umbrella interface would force every backend to either implement everything or carry no-op methods that lie about their semantics.
 - **Method conflicts dodge.** Different storage concerns name their primary methods the same way (`GetX` / `SaveX` / `ListX`). One umbrella interface either ends up with `GetWebhookByKey` / `GetQuotaByPrincipalEvent` / etc. (verbose) or generic `Get` / `Save` (untyped). Narrow interfaces keep the types crisp.
 - **Independent evolution.** Adding a method to `WebhookStore` doesn't ripple through unrelated backends.
 
@@ -92,7 +92,15 @@ func WithWebhookStore(s WebhookStore) WebhookOption
 4. Plumb the consumer's call sites through the interface — no direct field access to the old in-memory state.
 5. Add the seam's row to the table above in this doc.
 
-The other seams (#626, #628, #631) follow this template. Reviews check against this file.
+The other seams (626, 631) follow this template. Reviews check against this file.
+
+## Backends
+
+| Backend | Stores | Where |
+|---|---|---|
+| In-memory (default) | All seams | Each seam's own file in this directory |
+| GORM (Postgres + SQLite) | `WebhookStore`, `QuotaStore` | `stores/gorm/` (own go.mod; GORM dependency stays out of the events lib) |
+| Redis (planned) | `QuotaStore` + `Emitter` pubsub | Tracked in 634 |
 
 ## Adjacent seams (not storage, same code conventions)
 
