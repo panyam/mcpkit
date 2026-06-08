@@ -17,6 +17,24 @@ App calls via the bridge.
   reflection would truncate at the first comma; `InputSchemaPatch`
   lands the full description through `Prop("query").Desc(...)
   .Required()`.
+- **Per-content `_meta.ui.csp` for CDN-streamed iframes.** First
+  fixture whose iframe pulls a meaningful chunk of code (CesiumJS)
+  from `cesium.com` CDN at runtime, AND issues runtime XHRs to
+  `*.openstreetmap.org` (Nominatim geocoding + OSM tiles). The
+  `ResourceReadContent.Meta.UI.CSP` block carries both
+  `connectDomains` and `resourceDomains` allowlists; basic-host's
+  content-level CSP path picks them up so the CDN bundle and XHRs
+  go through. Without it the iframe loads but Cesium fails with
+  "Failed to load CesiumJS from CDN".
+- **Live OSM Nominatim round trip.** `geocode` actually hits
+  `https://nominatim.openstreetmap.org/search` — rate-limited
+  server-side to 1.1s/request (single `sync.Mutex` serialising
+  calls) per OSM's usage policy, with the required User-Agent header.
+  Bounding boxes for the top result feed straight into `show-map`.
+
+## Run Pre-Recorded
+
+> ▶ **[Play the walkthrough in your browser](https://panyam.github.io/mcpkit/walkthroughs/examples/apps/compat/map/)** — animated playback of every curl / Go call the walkthrough makes, step-by-step. Includes a real Nominatim hit and the geocode → show-map chain. No clone, no setup.
 
 ## Or Run Live
 
@@ -33,10 +51,17 @@ Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `h
 Open <http://localhost:8080> in your browser. Then:
 
 1. Pick **CesiumJS Map Server** from the server dropdown.
-2. Pick **geocode** from the tool dropdown, click **Call Tool**.
-3. The iframe renders the result; interact with it directly to drive subsequent tool calls (no model in the loop).
+2. Pick **show-map** from the tool dropdown, click **Call Tool** with empty input — the iframe loads CesiumJS from CDN (CSP allowlist is what makes this work) and renders the default London view.
 
-<a href="screenshots/01-paris-map.png" target="_blank"><img src="screenshots/01-paris-map.png" alt="CesiumJS Map App: iframe shows the globe zoomed to Paris with the camera positioned over the city center" width="50%"></a>
+   <a href="screenshots/01-paris-map.png" target="_blank"><img src="screenshots/01-paris-map.png" alt="CesiumJS Map App rendered in basic-host: iframe shows the OSM tile map for the default London-area bounding box. show-map tool result and resource content are visible in basic-host's debug panel above the iframe." width="50%"></a>
+
+3. Call `show-map` again with a different bounding box (e.g. Golden Gate Bridge: `{"west": -122.482, "south": 37.815, "east": -122.475, "north": 37.825, "label": "Golden Gate"}`) — the iframe re-frames the camera. The same call shape is what the iframe's own search box issues via the App SDK bridge (no model in the loop).
+
+   <a href="screenshots/02-golden-gate.png" target="_blank"><img src="screenshots/02-golden-gate.png" alt="CesiumJS Map App after a second show-map call: iframe has re-framed to the Golden Gate Bridge area, demonstrating the bounding-box re-navigation flow" width="50%"></a>
+
+4. Pick **geocode**, call with `{"query": "Paris"}` — the server hits OSM Nominatim live (rate-limited to 1 req/sec). The tool result lists up to 5 real matches with coordinates and bounding boxes.
+
+   <a href="screenshots/03-geocode.png" target="_blank"><img src="screenshots/03-geocode.png" alt="basic-host debug panel showing the geocode tool input/output: 'Paris' query returned 4 real Nominatim results — Paris France (multiple forms) and Paris Texas — each with coordinates and bounding box ready to feed into show-map" width="50%"></a>
 
 ## Try It Out from a Host
 

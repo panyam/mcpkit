@@ -10,11 +10,19 @@
 package main
 
 import (
-	"strings"
+	"encoding/json"
 	"flag"
+	"fmt"
+	"io"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
 
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
@@ -25,6 +33,90 @@ import (
 
 type geocodeInput struct {
 	Query string `json:"query"`
+}
+
+// nominatimResult mirrors the subset of OSM Nominatim's JSON response
+// upstream's server.ts decodes. boundingbox arrives as 4 stringified
+// floats in [south, north, west, east] order.
+type nominatimResult struct {
+	DisplayName string    `json:"display_name"`
+	Lat         string    `json:"lat"`
+	Lon         string    `json:"lon"`
+	BoundingBox [4]string `json:"boundingbox"`
+	Type        string    `json:"type"`
+	Importance  float64   `json:"importance"`
+}
+
+// nominatimRateLimit honours OSM's 1 request/sec usage policy — we
+// pad to 1.1s so a clock skew doesn't get us throttled. Single global
+// mutex + last-request timestamp matches upstream's shape.
+var (
+	nominatimMu              sync.Mutex
+	nominatimLastRequest     time.Time
+	nominatimRateLimitWindow = 1100 * time.Millisecond
+)
+
+// geocodeWithNominatim hits OSM's Nominatim search API and returns up
+// to 5 results. Throttles to 1.1s between calls. The User-Agent string
+// is required by Nominatim's policy. Ported from upstream's
+// geocodeWithNominatim() in server.ts.
+func geocodeWithNominatim(query string) ([]nominatimResult, error) {
+	nominatimMu.Lock()
+	if elapsed := time.Since(nominatimLastRequest); elapsed < nominatimRateLimitWindow {
+		time.Sleep(nominatimRateLimitWindow - elapsed)
+	}
+	nominatimLastRequest = time.Now()
+	nominatimMu.Unlock()
+
+	q := url.Values{}
+	q.Set("q", query)
+	q.Set("format", "json")
+	q.Set("limit", "5")
+	req, err := http.NewRequest("GET", "https://nominatim.openstreetmap.org/search?"+q.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "MCP-CesiumMap-Example/1.0 (https://github.com/modelcontextprotocol)")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("nominatim API error: %d %s — %s", resp.StatusCode, resp.Status, body)
+	}
+	var out []nominatimResult
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// formatGeocodeResults mirrors upstream's text formatter — the iframe
+// doesn't read this (it parses the structured response), but it shows
+// up in any tool result viewer (MCPJam Inspector, claude.ai, the
+// scripted walkthrough).
+func formatGeocodeResults(results []nominatimResult, query string) string {
+	if len(results) == 0 {
+		return fmt.Sprintf("No results found for %q", query)
+	}
+	var b strings.Builder
+	for i, r := range results {
+		lat, _ := strconv.ParseFloat(r.Lat, 64)
+		lon, _ := strconv.ParseFloat(r.Lon, 64)
+		south, _ := strconv.ParseFloat(r.BoundingBox[0], 64)
+		north, _ := strconv.ParseFloat(r.BoundingBox[1], 64)
+		west, _ := strconv.ParseFloat(r.BoundingBox[2], 64)
+		east, _ := strconv.ParseFloat(r.BoundingBox[3], 64)
+		if i > 0 {
+			b.WriteString("\n\n")
+		}
+		fmt.Fprintf(&b,
+			"%d. %s\n   Coordinates: %.6f, %.6f\n   Bounding box: W:%.4f, S:%.4f, E:%.4f, N:%.4f",
+			i+1, r.DisplayName, lat, lon, west, south, east, north)
+	}
+	return b.String()
 }
 
 type showMapInput struct {
@@ -100,7 +192,32 @@ func serve() {
 				ResourceURI: resourceURI,
 				ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
 					return core.ResourceResult{Contents: []core.ResourceReadContent{{
-						URI: req.URI, MimeType: core.AppMIMEType, Text: html,
+						URI:      req.URI,
+						MimeType: core.AppMIMEType,
+						Text:     html,
+						// CesiumJS streams its viewer bundle from cesium.com
+						// CDN and OSM tiles + Nominatim geocoding hit
+						// *.openstreetmap.org. Without this per-content CSP
+						// allowlist basic-host's default CSP blocks the
+						// fetches — the iframe loads but Cesium fails with
+						// "Failed to load CesiumJS from CDN". Mirrors
+						// upstream map-server/server.ts's cspMeta block.
+						Meta: &core.ResourceContentMeta{
+							UI: &core.UIMetadata{
+								CSP: &core.UICSPConfig{
+									ConnectDomains: []string{
+										"https://*.openstreetmap.org",
+										"https://cesium.com",
+										"https://*.cesium.com",
+									},
+									ResourceDomains: []string{
+										"https://*.openstreetmap.org",
+										"https://cesium.com",
+										"https://*.cesium.com",
+									},
+								},
+							},
+						},
 					}}}, nil
 				},
 			})
@@ -112,8 +229,12 @@ func serve() {
 			geocodeTyped := core.TypedTool[geocodeInput, string](
 				"geocode",
 				"Search for places using OpenStreetMap. Returns coordinates and bounding boxes for up to 5 matches.",
-				func(ctx core.ToolContext, _ geocodeInput) (string, error) {
-					return "No results.", nil
+				func(ctx core.ToolContext, in geocodeInput) (string, error) {
+					results, err := geocodeWithNominatim(in.Query)
+					if err != nil {
+						return "", fmt.Errorf("geocoding error: %w", err)
+					}
+					return formatGeocodeResults(results, in.Query), nil
 				},
 				core.WithToolExecution(&core.ToolExecution{TaskSupport: core.TaskSupportForbidden}),
 				core.WithInputSchemaPatch(func(s *core.SchemaBuilder) {
