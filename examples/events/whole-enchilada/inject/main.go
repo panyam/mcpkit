@@ -15,7 +15,7 @@
 //	make inject TENANT=B EVENT=presence.changed STATE=online USER=bob
 //
 // The injector POSTs to nginx's /events/<name>/inject route (default
-// localhost:8080), using the same EVENT_INJECT_BEARER shared secret
+// localhost:9090), using the same EVENT_INJECT_BEARER shared secret
 // the push-server uses in stage 1.
 package main
 
@@ -31,8 +31,8 @@ import (
 )
 
 func main() {
-	target := flag.String("target", envOr("EVENT_SERVER_URL", "http://localhost:8080"),
-		"event-server base URL (nginx frontdoor). Stage-2 compose default: localhost:8080.")
+	target := flag.String("target", envOr("EVENT_SERVER_URL", "http://localhost:9090"),
+		"event-server base URL (nginx frontdoor). Stage-2 compose default: localhost:9090.")
 	bearer := flag.String("bearer", envOr("EVENT_INJECT_BEARER", "stage-1-shared-secret"),
 		"shared secret for the /events/<name>/inject endpoint. Stage-1 default committed into the realm JSONs.")
 	tenant := flag.String("tenant", os.Getenv("TENANT"),
