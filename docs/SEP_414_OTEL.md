@@ -349,6 +349,68 @@ accepts a `core.TracerProvider` and instruments its own work, depending on
 the **`core` abstraction only** — never `ext/otel`. Same composition shape
 `ext/events` uses for `core.Claims`. `Noop` / nil = zero overhead.
 
+### `examples/common/otel.SetupTelemetry` — landed (issue 666; PR 684 + PR 689)
+
+The example layer now ships a uniform, env-gated observability
+surface so every example presents the same `--exporter` / `--otlp-endpoint`
+flag pair regardless of which SEP it demos. `examples/common/otel/setup.go`:
+
+```go
+tp, shutdown, err := commonotel.SetupTelemetry(ctx,
+    commonotel.WithExporter(*tel.Exporter),
+    commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+    commonotel.WithServiceName("my-example"),
+)
+defer shutdown(context.Background())
+common.RunServer(common.ServerConfig{TracerProvider: tp, ...})
+```
+
+The `EXPORTER` selector is four-valued:
+
+| Value | Behavior |
+|---|---|
+| `""` (default) | `core.NoopTracerProvider{}` + no-op shutdown. Zero overhead. |
+| `"stdout"` | `stdouttrace` exporter (sync). Demo / teaching mode. |
+| `"otlp"` | TCP-probe the endpoint; on success, `otlptracegrpc` exporter. On failure: Noop **with warning log**. |
+| `"auto"` | TCP-probe the endpoint; on success, `otlptracegrpc` exporter. On failure: Noop **silently** (operator opted into maybe-on-maybe-off semantics). |
+
+Three load-bearing details:
+
+- **TCP probe gates OTLP.** `otlptracegrpc.New` is lazy and returns a
+  non-nil exporter even when the endpoint refuses; without the
+  500ms TCP probe in `probeOTLPEndpoint`, the "dial-failure → Noop"
+  contract wouldn't fire (failures would surface later on first
+  Export, way past `make demo` startup).
+- **Service-name convention.** Server side uses `<example-name>`;
+  walkthrough (client) side uses `<example-name>-host`. Grafana's
+  service filter distinguishes the two halves of each stitched trace.
+- **`examples/otel/stdout/` is the documented carve-out.** Its
+  `defaultExporter = "stdout"` because the demo's whole purpose is
+  showing spans. Every other example defaults to `""`.
+
+Client-side counterpart:
+
+```go
+tel := common.ExporterFromArgs()  // os.Args scan, mirrors common.ServerURL pattern
+tp, shutdown, err := commonotel.SetupClientTelemetry(ctx,
+    commonotel.WithExporter(*tel.Exporter),
+    commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+    commonotel.WithServiceName("my-example-host"),
+)
+defer shutdown(context.Background())
+c := client.NewClient(url, info, client.WithTracerProvider(tp))
+```
+
+`SetupClientTelemetry` pre-sets
+`WithInstrumentationName("github.com/panyam/mcpkit/client")` so spans
+group correctly by library in OTel backends.
+
+PR 684 adopted across 10 example servers (auth, elicitation,
+file-inputs, fine-grained-auth, list-ttl, mrtr, skills, stateless,
+tasks, tasks-v2); PR 689 followed with the same uniform wiring across
+9 walkthroughs. Pattern documented in `examples/CONVENTIONS.md`
+§Telemetry wiring.
+
 ## Downstream consumers of the Phase 1 contract
 
 - **`experimental/ext/events/` cross-replica bus (issue #629).** The
