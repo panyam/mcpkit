@@ -12,11 +12,14 @@
 package main
 
 import (
-	"strings"
 	"flag"
+	"fmt"
 	"log"
+	"math"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/panyam/mcpkit/core"
@@ -55,6 +58,158 @@ type cohortDataOutput struct {
 	Metric       string      `json:"metric"`
 	PeriodType   string      `json:"periodType"`
 	GeneratedAt  string      `json:"generatedAt"`
+}
+
+// retentionParams shape the exponential-decay curve generateRetention
+// uses to fabricate one cohort's retention values. Ported verbatim from
+// upstream cohort-heatmap-server/server.ts's RetentionParams interface.
+type retentionParams struct {
+	BaseRetention float64
+	DecayRate     float64
+	Floor         float64
+	Noise         float64
+}
+
+// cohortParamsMap mirrors upstream's `paramsMap` keyed on the metric arg —
+// retention/revenue/active each get different curve shapes so a viewer
+// flipping the dropdown sees the heatmap visibly change. Numbers are
+// byte-for-byte the same as upstream.
+var cohortParamsMap = map[string]retentionParams{
+	"retention": {BaseRetention: 0.75, DecayRate: 0.12, Floor: 0.08, Noise: 0.04},
+	"revenue":   {BaseRetention: 0.70, DecayRate: 0.10, Floor: 0.15, Noise: 0.06},
+	"active":    {BaseRetention: 0.60, DecayRate: 0.18, Floor: 0.05, Noise: 0.05},
+}
+
+// generateRetention is the per-cell retention generator. Exponential
+// decay from BaseRetention with a per-cell uniform noise term in
+// [-Noise, +Noise], clamped to [0, 1]. Period 0 returns 1.0 (every user
+// is retained at signup). Mirrors upstream's `generateRetention()` in
+// server.ts.
+func generateRetention(period int, p retentionParams, rng *rand.Rand) float64 {
+	if period == 0 {
+		return 1.0
+	}
+	base := p.BaseRetention*math.Exp(-p.DecayRate*float64(period-1)) + p.Floor
+	variation := (rng.Float64() - 0.5) * 2 * p.Noise
+	v := base + variation
+	if v < 0 {
+		return 0
+	}
+	if v > 1 {
+		return 1
+	}
+	return v
+}
+
+// generateCohortData produces the full structured payload the iframe
+// renders into a heatmap. Ported verbatim from upstream's
+// `generateCohortData` (cohort-heatmap-server/server.ts) with one
+// deliberate Go-side change: the RNG is seeded (PCG with seed 42) so the
+// fixture's visual baseline stays stable across runs. Upstream's TS
+// version uses raw Math.random() which is non-deterministic; that's
+// fine for an interactive demo but our committed snapshot test under
+// __snapshots__/ needs a stable layout. Determinism only matters for
+// the test gate; runtime behavior is identical.
+func generateCohortData(metric, periodType string, cohortCount, maxPeriods int) cohortDataOutput {
+	rng := rand.New(rand.NewPCG(42, 42))
+
+	params, ok := cohortParamsMap[metric]
+	if !ok {
+		params = cohortParamsMap["retention"]
+	}
+
+	periods := make([]string, 0, maxPeriods)
+	periodLabels := make([]string, 0, maxPeriods)
+	for i := 0; i < maxPeriods; i++ {
+		periods = append(periods, fmt.Sprintf("M%d", i))
+		if i == 0 {
+			periodLabels = append(periodLabels, "Month 0")
+		} else {
+			periodLabels = append(periodLabels, fmt.Sprintf("Month %d", i))
+		}
+	}
+
+	now := time.Now()
+	cohorts := make([]cohortRow, 0, cohortCount)
+	for c := 0; c < cohortCount; c++ {
+		// Oldest first: cohort 0 is `cohortCount-1` months ago.
+		cohortDate := now.AddDate(0, -(cohortCount - 1 - c), 0)
+		cohortID := cohortDate.Format("2006-01")
+		cohortLabel := cohortDate.Format("Jan 2006")
+
+		// Random cohort size 1000-5000 users — same range upstream uses.
+		originalUsers := 1000 + rng.IntN(4000)
+
+		// Newer cohorts have fewer months of data — they only started
+		// existing partway through the observation window. Same shape as
+		// upstream's `periodsAvailable = cohortCount - c`.
+		periodsAvailable := cohortCount - c
+		maxP := periodsAvailable
+		if maxPeriods < maxP {
+			maxP = maxPeriods
+		}
+
+		cells := make([]cohortCell, 0, maxP)
+		previousRetention := 1.0
+		for p := 0; p < maxP; p++ {
+			retention := generateRetention(p, params, rng)
+			// Retention must be monotonically non-increasing except for a small
+			// 2pp noise tolerance — mirrors upstream's `Math.min(retention,
+			// previousRetention + 0.02)` clamp.
+			if retention > previousRetention+0.02 {
+				retention = previousRetention + 0.02
+			}
+			previousRetention = retention
+			cells = append(cells, cohortCell{
+				CohortIndex:   c,
+				PeriodIndex:   p,
+				Retention:     retention,
+				UsersRetained: int(math.Round(float64(originalUsers) * retention)),
+				UsersOriginal: originalUsers,
+			})
+		}
+
+		cohorts = append(cohorts, cohortRow{
+			CohortID:      cohortID,
+			CohortLabel:   cohortLabel,
+			OriginalUsers: originalUsers,
+			Cells:         cells,
+		})
+	}
+
+	return cohortDataOutput{
+		Cohorts:      cohorts,
+		Periods:      periods,
+		PeriodLabels: periodLabels,
+		Metric:       metric,
+		PeriodType:   periodType,
+		GeneratedAt:  time.Now().UTC().Format(time.RFC3339Nano),
+	}
+}
+
+// formatCohortSummary mirrors upstream's text-content summary so the
+// non-Apps-host view (e.g. MCPJam Inspector, raw curl) shows something
+// meaningful. The iframe ignores content[0].text and reads
+// structuredContent directly.
+func formatCohortSummary(d cohortDataOutput) string {
+	var sum float64
+	var count int
+	for _, c := range d.Cohorts {
+		for _, cell := range c.Cells {
+			if cell.PeriodIndex > 0 {
+				sum += cell.Retention
+				count++
+			}
+		}
+	}
+	avg := 0.0
+	if count > 0 {
+		avg = sum / float64(count)
+	}
+	return fmt.Sprintf(
+		"Cohort Analysis: %d cohorts, %d periods\nAverage retention: %.1f%%\nMetric: %s, Period: %s",
+		len(d.Cohorts), len(d.Periods), avg*100, d.Metric, d.PeriodType,
+	)
 }
 
 func main() {
@@ -114,17 +269,27 @@ func serve() {
 				Description: "Returns cohort retention heatmap data showing customer retention over time by signup month",
 				Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportForbidden},
 				Handler: func(ctx core.ToolContext, in cohortInput) (cohortDataOutput, error) {
-					// Visual test never asserts on the data shape — return a stub
-					// matching the declared types. Upstream's iframe generates its
-					// own demo data when the tool returns empty arrays.
-					return cohortDataOutput{
-						Cohorts:      []cohortRow{},
-						Periods:      []string{},
-						PeriodLabels: []string{},
-						Metric:       in.Metric,
-						PeriodType:   in.PeriodType,
-						GeneratedAt:  time.Now().UTC().Format(time.RFC3339Nano),
-					}, nil
+					// Struct-tag defaults shape the input SCHEMA but don't fill
+					// zero-value fields at unmarshal time — apply them here so
+					// the iframe's "no args" path gets the same response as a
+					// fully-specified call.
+					metric := in.Metric
+					if metric == "" {
+						metric = "retention"
+					}
+					periodType := in.PeriodType
+					if periodType == "" {
+						periodType = "monthly"
+					}
+					cohortCount := in.CohortCount
+					if cohortCount == 0 {
+						cohortCount = 12
+					}
+					maxPeriods := in.MaxPeriods
+					if maxPeriods == 0 {
+						maxPeriods = 12
+					}
+					return generateCohortData(metric, periodType, cohortCount, maxPeriods), nil
 				},
 				ResourceURI: resourceURI,
 				ResourceHandler: func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {

@@ -6,15 +6,31 @@ cohort-retention heatmap.
 
 ## What it Shows
 
-- **Retention cohort data.** `get-cohort-data` returns rows of
-  cohorts and their retention percentages over time periods. Each
-  row + column is a percentage; the iframe renders the matrix as a
-  color-graded heatmap.
-- **Integer-vs-number drift.** Cohort sizes are semantically integer.
-  Go's `int` reflects to `"type": "integer"` while upstream's zod
-  `z.number()` emits `"type": "number"`. The DOCKER drift comparator
-  normalizes these (PR 549) so the fixture uses idiomatic Go types
-  and still passes.
+- **12×12 retention dataset.** `get-cohort-data` returns 12 cohorts ×
+  12 period columns of structured retention data, generated server-side
+  by a seeded exponential-decay curve (`baseRetention * exp(-decayRate
+  * (period-1)) + floor + noise`). The iframe binds directly to
+  `structuredContent.cohorts` / `periods` / `periodLabels` and renders
+  the matrix as a color-graded heatmap.
+- **Enum + default input schema, reflected cleanly.** The `metric`
+  (retention / revenue / active) and `periodType` (monthly / weekly)
+  inputs use enums with defaults declared via struct tags — no
+  `InputSchemaPatch` needed. The iframe's two filter dropdowns send
+  the picked values back through `app.callServerTool` to re-fetch.
+- **Integer-vs-number drift, by design.** Cohort sizes and indices are
+  semantically integer; Go's `int` reflects to `"type": "integer"`
+  while upstream's zod `z.number()` emits `"type": "number"`. The
+  DOCKER drift comparator normalizes these (PR 549) so the fixture
+  uses idiomatic Go types and still passes the strict parity gate.
+- **Moderate bridge dance.** The iframe uses `app.callServerTool` per
+  filter change and `app.getHostContext` for theming — but no
+  `app.registerTool` and no `app.updateModelContext`. Sits between
+  `quickstart` (bare minimum) and `budget-allocator` (rich dance) on
+  the App-ness spectrum.
+
+## Run Pre-Recorded
+
+> ▶ **[Play the walkthrough in your browser](https://panyam.github.io/mcpkit/walkthroughs/examples/apps/compat/cohort-heatmap/)** — animated playback of every curl / Go call the walkthrough makes. Steps 1-4 walk the server-side surface (initialize → tools/list with the enum/default input schema highlighted → tools/call get-cohort-data showing the 12×12 payload shape → resources/read on the iframe HTML); the closing narrative section names the moderate bridge dance the iframe takes from there. No clone, no setup.
 
 ## Or Run Live
 
