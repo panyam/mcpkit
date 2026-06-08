@@ -64,6 +64,8 @@ func (s *fakeSpan) RecordError(err error) {
 	s.errs = append(s.errs, err)
 }
 
+func (s *fakeSpan) AddLink(_ core.Link) {}
+
 func (s *fakeSpan) attr(k string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()

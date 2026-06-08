@@ -399,3 +399,88 @@ func TestBaseContext_Span_DelegatesToSpanFromContext(t *testing.T) {
 	}
 	span.SetAttribute("k", "v") // must not panic
 }
+
+// --- P6 span links (issue 662) ----------------------------------------------
+
+func TestLinkFromTraceContext_OnlyTC(t *testing.T) {
+	tc := TraceContext{Traceparent: "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"}
+	link := LinkFromTraceContext(tc)
+	if link.TraceContext != tc {
+		t.Fatalf("LinkFromTraceContext should preserve TraceContext")
+	}
+	if link.Attributes != nil {
+		t.Fatalf("LinkFromTraceContext should leave Attributes nil for callers to populate explicitly")
+	}
+}
+
+func TestNoopSpan_AddLink_IsNoOp(t *testing.T) {
+	span := noopSpan{}
+	span.AddLink(Link{})
+	span.AddLink(LinkFromTraceContext(TraceContext{Traceparent: "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01"}))
+}
+
+func TestStartSpanLinked_NoopProvider_FallsBackToStartSpan(t *testing.T) {
+	tp := NoopTracerProvider{}
+	links := []Link{
+		LinkFromTraceContext(TraceContext{Traceparent: "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01"}),
+	}
+	ctx, span := StartSpanLinked(tp, context.Background(), "test", links,
+		Attribute{Key: "k", Value: "v"},
+	)
+	if span == nil {
+		t.Fatalf("helper must return non-nil span even when links are dropped")
+	}
+	if got := SpanFromContext(ctx); got == nil {
+		t.Fatalf("Noop fallback must still publish the active span")
+	}
+}
+
+func TestStartSpanLinked_NilLinks_ActsAsStartSpan(t *testing.T) {
+	tp := NoopTracerProvider{}
+	_, span := StartSpanLinked(tp, context.Background(), "test", nil)
+	if span == nil {
+		t.Fatalf("nil links slice must still return a span")
+	}
+	span.End()
+}
+
+func TestStartSpanLinked_EmptyLinks_ActsAsStartSpan(t *testing.T) {
+	tp := NoopTracerProvider{}
+	_, span := StartSpanLinked(tp, context.Background(), "test", []Link{})
+	if span == nil {
+		t.Fatalf("empty links slice must still return a span")
+	}
+}
+
+type fakeLinkedProvider struct {
+	NoopTracerProvider
+	receivedLinks []Link
+	receivedName  string
+}
+
+func (p *fakeLinkedProvider) StartSpanLinked(ctx context.Context, name string, links []Link, attrs ...Attribute) (context.Context, Span) {
+	p.receivedLinks = append([]Link(nil), links...)
+	p.receivedName = name
+	return p.StartSpan(ctx, name, attrs...)
+}
+
+func TestStartSpanLinked_LinkedProvider_RoutedToInterface(t *testing.T) {
+	tp := &fakeLinkedProvider{}
+	links := []Link{
+		LinkFromTraceContext(TraceContext{Traceparent: "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"}),
+		{TraceContext: TraceContext{Traceparent: "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01"}, Attributes: []Attribute{{Key: "link.kind", Value: "sibling"}}},
+	}
+	_, span := StartSpanLinked(tp, context.Background(), "linked-test", links)
+	if span == nil {
+		t.Fatalf("linked provider path must return non-nil span")
+	}
+	if tp.receivedName != "linked-test" {
+		t.Fatalf("StartSpanLinked must pass name through; got %q", tp.receivedName)
+	}
+	if len(tp.receivedLinks) != 2 {
+		t.Fatalf("StartSpanLinked must pass all links through; got %d, want 2", len(tp.receivedLinks))
+	}
+	if tp.receivedLinks[1].Attributes[0].Key != "link.kind" {
+		t.Fatalf("StartSpanLinked must preserve per-link attributes")
+	}
+}
