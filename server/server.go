@@ -496,17 +496,17 @@ func WithAllowedRoots(roots ...string) Option {
 }
 
 // WithAllowLegacyOnDraft is an opt-in back-compat escape hatch for the
-// SEP-2575 enforcement on DRAFT-2026-v1. When set, the legacy session
+// SEP-2575 enforcement on 2026-07-28. When set, the legacy session
 // wire (initialize + Mcp-Session-Id) is accepted on the draft protocol
 // version without enforcing the per-request _meta envelope on follow-up
 // requests.
 //
 // Default (option NOT set): the dispatcher enforces SEP-2575 strictly —
-// on DRAFT-2026-v1, every post-initialize request MUST carry
+// on 2026-07-28, every post-initialize request MUST carry
 // `params._meta.io.modelcontextprotocol/{protocolVersion, clientInfo,
 // clientCapabilities}`; missing _meta is rejected with -32602.
 //
-// Use this only if you have legacy clients pinned to DRAFT-2026-v1 that
+// Use this only if you have legacy clients pinned to 2026-07-28 that
 // haven't migrated to per-request metadata yet. New servers should leave
 // this off so non-conformant clients fail loudly.
 func WithAllowLegacyOnDraft() Option {

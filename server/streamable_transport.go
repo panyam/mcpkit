@@ -325,7 +325,7 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 	// the server rejects with HTTP 400 + JSON-RPC -32001.
 	//
 	// Gated on the session's negotiated protocol version because
-	// SEP-2243 lives in DRAFT-2026-v1 only — no dated release imposes
+	// SEP-2243 lives in 2026-07-28 only — no dated release imposes
 	// the routing-header contract today, and the SDKs every MCP client
 	// uses (official TS/Python, mcpjam, VS Code, Cursor, ...) do not
 	// emit these headers yet. Validating unconditionally would 400

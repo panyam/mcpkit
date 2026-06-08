@@ -164,7 +164,7 @@ On stateless, the envelope is required on every request:
   "params": {
     "name": "tools/call",
     "_meta": {
-      "io.modelcontextprotocol/protocolVersion":    "DRAFT-2026-v1",
+      "io.modelcontextprotocol/protocolVersion":    "2026-07-28",
       "io.modelcontextprotocol/clientInfo":         { ... },
       "io.modelcontextprotocol/clientCapabilities": {
         "elicitation": {},
@@ -552,7 +552,7 @@ tasks.Register(tasks.Config{Server: srv})  // if any tools opt into TaskSupport
     "arguments": { ... },
     "_meta": {
       // Stateless requires the full envelope on every request.
-      "io.modelcontextprotocol/protocolVersion":    "DRAFT-2026-v1",
+      "io.modelcontextprotocol/protocolVersion":    "2026-07-28",
       "io.modelcontextprotocol/clientInfo":         { ... },
       "io.modelcontextprotocol/clientCapabilities": {
         "elicitation": {},

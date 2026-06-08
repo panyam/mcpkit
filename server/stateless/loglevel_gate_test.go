@@ -39,7 +39,7 @@ func TestRequestMeta_LogLevelThreadingExposedToHandlers(t *testing.T) {
 		{
 			"absent logLevel — handler sees empty",
 			`{
-				"io.modelcontextprotocol/protocolVersion": "DRAFT-2026-v1",
+				"io.modelcontextprotocol/protocolVersion": "2026-07-28",
 				"io.modelcontextprotocol/clientInfo": {"name": "c", "version": "1"},
 				"io.modelcontextprotocol/clientCapabilities": {}
 			}`,
@@ -48,7 +48,7 @@ func TestRequestMeta_LogLevelThreadingExposedToHandlers(t *testing.T) {
 		{
 			"opt-in info — handler sees info",
 			`{
-				"io.modelcontextprotocol/protocolVersion": "DRAFT-2026-v1",
+				"io.modelcontextprotocol/protocolVersion": "2026-07-28",
 				"io.modelcontextprotocol/clientInfo": {"name": "c", "version": "1"},
 				"io.modelcontextprotocol/clientCapabilities": {},
 				"io.modelcontextprotocol/logLevel": "info"
@@ -58,7 +58,7 @@ func TestRequestMeta_LogLevelThreadingExposedToHandlers(t *testing.T) {
 		{
 			"opt-in debug — handler sees debug",
 			`{
-				"io.modelcontextprotocol/protocolVersion": "DRAFT-2026-v1",
+				"io.modelcontextprotocol/protocolVersion": "2026-07-28",
 				"io.modelcontextprotocol/clientInfo": {"name": "c", "version": "1"},
 				"io.modelcontextprotocol/clientCapabilities": {},
 				"io.modelcontextprotocol/logLevel": "debug"

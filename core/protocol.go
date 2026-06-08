@@ -133,4 +133,11 @@ const StreamableHTTPAccept = "application/json, text/event-stream"
 // of their inclusion in a dated stable. Shared by every draft-targeted SEP,
 // not specific to any one of them — see core/stateless.go for the SEP-2575
 // stateless-wire surfaces that key off this version string.
-const DraftProtocolVersion2026V1 = "DRAFT-2026-v1"
+//
+// The CONSTANT NAME labels the draft window. The VALUE is the dated wire
+// string the spec adopted in modelcontextprotocol/spec PR 331 (merged
+// 2026-06-08): the prior DRAFT placeholder was replaced with the dated
+// "2026-07-28" form, which is the literal that now appears on the wire in
+// `MCP-Protocol-Version` headers and `_meta.io.modelcontextprotocol/protocolVersion`.
+// Treat this constant as the source of truth — never hardcode either form.
+const DraftProtocolVersion2026V1 = "2026-07-28"

@@ -23,7 +23,7 @@ import (
 	server "github.com/panyam/mcpkit/server"
 )
 
-const statelessDraftVersion = "DRAFT-2026-v1"
+const statelessDraftVersion = "2026-07-28"
 
 // newStatelessTaskServer registers a server that intentionally covers the
 // scenarios the conformance fork's stateless-mode run exercises:

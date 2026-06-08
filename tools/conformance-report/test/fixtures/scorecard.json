@@ -23,14 +23,14 @@
           "passed": true,
           "checks_passed": 5,
           "checks_failed": 0,
-          "specVersions": ["2025-11-25", "DRAFT-2026-v1"]
+          "specVersions": ["2025-11-25", "2026-07-28"]
         },
         {
           "scenario": "server-mrtr-basic-2026-05-31T00-07-41-512Z",
           "passed": false,
           "checks_passed": 3,
           "checks_failed": 2,
-          "specVersions": ["DRAFT-2026-v1"]
+          "specVersions": ["2026-07-28"]
         },
         {
           "scenario": "server-tools-structured-output-2026-05-31T00-07-42-001Z",

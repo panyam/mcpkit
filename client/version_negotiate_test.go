@@ -18,12 +18,12 @@ func TestPickSupportedVersion(t *testing.T) {
 		client           []string
 		want             string
 	}{
-		{"single-match", []string{"DRAFT-2026-v1"}, []string{"DRAFT-2026-v1"}, "DRAFT-2026-v1"},
-		{"client-preference-newest-first", []string{"2024-11-05", "DRAFT-2026-v1"}, []string{"DRAFT-2026-v1", "2024-11-05"}, "DRAFT-2026-v1"},
-		{"server-only-old", []string{"2024-11-05"}, []string{"DRAFT-2026-v1"}, ""},
-		{"empty-server", []string{}, []string{"DRAFT-2026-v1"}, ""},
-		{"empty-client", []string{"DRAFT-2026-v1"}, []string{}, ""},
-		{"no-overlap", []string{"2025-03-26"}, []string{"DRAFT-2026-v1"}, ""},
+		{"single-match", []string{"2026-07-28"}, []string{"2026-07-28"}, "2026-07-28"},
+		{"client-preference-newest-first", []string{"2024-11-05", "2026-07-28"}, []string{"2026-07-28", "2024-11-05"}, "2026-07-28"},
+		{"server-only-old", []string{"2024-11-05"}, []string{"2026-07-28"}, ""},
+		{"empty-server", []string{}, []string{"2026-07-28"}, ""},
+		{"empty-client", []string{"2026-07-28"}, []string{}, ""},
+		{"no-overlap", []string{"2025-03-26"}, []string{"2026-07-28"}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := pickSupportedVersion(tc.server, tc.client); got != tc.want {
@@ -46,17 +46,17 @@ func TestIsUnsupportedVersionError(t *testing.T) {
 			"32001-with-supported-draft",
 			&rpcResponse{Error: &core.Error{
 				Code: -32001, Message: "Unsupported protocol version",
-				Data: map[string]any{"supported": []any{"DRAFT-2026-v1"}},
+				Data: map[string]any{"supported": []any{"2026-07-28"}},
 			}},
-			true, "DRAFT-2026-v1",
+			true, "2026-07-28",
 		},
 		{
 			"32004-with-supported-draft",
 			&rpcResponse{Error: &core.Error{
 				Code: -32004, Message: "UnsupportedVersion",
-				Data: map[string]any{"supported": []any{"DRAFT-2026-v1"}},
+				Data: map[string]any{"supported": []any{"2026-07-28"}},
 			}},
-			true, "DRAFT-2026-v1",
+			true, "2026-07-28",
 		},
 		{
 			"32001-header-mismatch-no-supported",
@@ -78,7 +78,7 @@ func TestIsUnsupportedVersionError(t *testing.T) {
 			"other-error-code-with-supported",
 			&rpcResponse{Error: &core.Error{
 				Code: -32603, Message: "internal error",
-				Data: map[string]any{"supported": []any{"DRAFT-2026-v1"}},
+				Data: map[string]any{"supported": []any{"2026-07-28"}},
 			}},
 			false, "",
 		},
@@ -86,9 +86,9 @@ func TestIsUnsupportedVersionError(t *testing.T) {
 			"typed-string-slice-supported",
 			&rpcResponse{Error: &core.Error{
 				Code: -32004,
-				Data: map[string]any{"supported": []string{"DRAFT-2026-v1"}},
+				Data: map[string]any{"supported": []string{"2026-07-28"}},
 			}},
-			true, "DRAFT-2026-v1",
+			true, "2026-07-28",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

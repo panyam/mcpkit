@@ -57,7 +57,7 @@ func TestDecodeRequestMeta_MissingRequiredSubfields(t *testing.T) {
 		{
 			"missing clientInfo",
 			`{
-				"io.modelcontextprotocol/protocolVersion":"DRAFT-2026-v1",
+				"io.modelcontextprotocol/protocolVersion":"2026-07-28",
 				"io.modelcontextprotocol/clientCapabilities":{}
 			}`,
 			"clientInfo",
@@ -65,7 +65,7 @@ func TestDecodeRequestMeta_MissingRequiredSubfields(t *testing.T) {
 		{
 			"missing clientCapabilities",
 			`{
-				"io.modelcontextprotocol/protocolVersion":"DRAFT-2026-v1",
+				"io.modelcontextprotocol/protocolVersion":"2026-07-28",
 				"io.modelcontextprotocol/clientInfo":{"name":"c","version":"1"}
 			}`,
 			"clientCapabilities",
@@ -129,7 +129,7 @@ func TestClientCaps_BareContext_NilSafe(t *testing.T) {
 func TestDecodeRequestMeta_ValidEnvelope(t *testing.T) {
 	params := []byte(`{
 		"_meta": {
-			"io.modelcontextprotocol/protocolVersion": "DRAFT-2026-v1",
+			"io.modelcontextprotocol/protocolVersion": "2026-07-28",
 			"io.modelcontextprotocol/clientInfo": {"name":"conformance-client","version":"1.0.0"},
 			"io.modelcontextprotocol/clientCapabilities": {"sampling": {}}
 		},
@@ -153,7 +153,7 @@ func TestDecodeRequestMeta_ValidEnvelope(t *testing.T) {
 func TestDecodeRequestMeta_LogLevelOptIn(t *testing.T) {
 	params := []byte(`{
 		"_meta": {
-			"io.modelcontextprotocol/protocolVersion": "DRAFT-2026-v1",
+			"io.modelcontextprotocol/protocolVersion": "2026-07-28",
 			"io.modelcontextprotocol/clientInfo": {"name":"c","version":"1"},
 			"io.modelcontextprotocol/clientCapabilities": {},
 			"io.modelcontextprotocol/logLevel": "info"
@@ -190,7 +190,7 @@ func TestErrorPayloadShapes(t *testing.T) {
 	// SEP-2575 conformance suite's JSON path expectations.
 	t.Run("UnsupportedProtocolVersionData", func(t *testing.T) {
 		d := UnsupportedProtocolVersionData{
-			Supported: []string{"DRAFT-2026-v1", "2025-11-25"},
+			Supported: []string{"2026-07-28", "2025-11-25"},
 			Requested: "1900-01-01",
 		}
 		b, err := json.Marshal(d)
