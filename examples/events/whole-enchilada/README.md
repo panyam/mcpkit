@@ -88,6 +88,29 @@ The introspection-based auth has *synchronously revocable* tokens — the demo's
 
 This is the operator-facing flow a real production admin would use; nothing in the demo "fakes" the revocation. Re-acquire a token (`make newtoken TENANT=A`) and the subscribers reconnect.
 
+## Observability (traces in Grafana)
+
+Both the event-server and push-server emit OTel traces via SEP-414. Bring up the shared LGTM observability stack alongside the demo and the spans land in Grafana automatically:
+
+```bash
+# T1 — observability stack (Tempo + Loki + Mimir + Grafana + OTel Collector)
+make -C ../../../docker up           # ports: Grafana :3000, OTLP :4317
+
+# T2 — whole-enchilada demo (auto-attaches to the shared `mcpkit` docker
+# network when the collector is reachable)
+make demo-up
+```
+
+The compose template sets `EXPORTER=auto`, which means **best-effort OTLP with silent Noop fallback**. Translation: `make demo-up` works whether the observability stack is up or not. When it IS up, traces land at `http://localhost:3000` → Explore → Tempo → search by service name `whole-enchilada-event-server` or `whole-enchilada-push-server`.
+
+To force OTLP and fail loudly when the collector is missing, override:
+
+```bash
+EXPORTER=otlp make demo-up
+```
+
+The shared docker network is named `mcpkit` and is created by whichever stack starts first; both composes declare it with the same literal name.
+
 ## Bring your own client
 
 Two paths, depending on whether you want to use the demo's Keycloak or your own IdP:
