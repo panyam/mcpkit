@@ -6,7 +6,7 @@ MCPKit implements the MCP Authorization specification (draft, based on OAuth 2.1
 
 ## Supported spec versions
 
-mcpkit targets the **2025-11-25 MCP Authorization spec** and the in-flight **DRAFT-2026-v1** draft. The auth-flow shapes from the **2025-03-26 spec** (rootless OAuth metadata, OAuth-endpoint root fallback when no metadata endpoints exist) are intentionally **not supported** — those shapes were removed by the spec itself in 2025-06-18, and implementing them would mean carrying deprecated code paths indefinitely for a tiny pool of servers that haven't tracked the spec for more than a year.
+mcpkit targets the **2025-11-25 MCP Authorization spec** and the in-flight **2026-07-28** draft. The auth-flow shapes from the **2025-03-26 spec** (rootless OAuth metadata, OAuth-endpoint root fallback when no metadata endpoints exist) are intentionally **not supported** — those shapes were removed by the spec itself in 2025-06-18, and implementing them would mean carrying deprecated code paths indefinitely for a tiny pool of servers that haven't tracked the spec for more than a year.
 
 Concretely:
 
@@ -15,7 +15,7 @@ Concretely:
 
 The conformance audit's two `auth/2025-03-26-*` scenarios live in `conformance/baseline.yml` as expected-failures and in `conformance/known-gaps.yaml` with this rationale + a tracking link to #451. The upstream audit report (`conformance/UPSTREAM_AUDIT.md`) still shows them as `partial`; that's correct — we don't pass them, and that's intentional.
 
-Note: this is distinct from MCP **protocol version** negotiation. mcpkit's `server.supportedProtocolVersions` includes `2024-11-05`, `2025-03-26`, `2025-11-25`, and `DRAFT-2026-v1` — clients on the older protocol version still negotiate successfully. The thing that's unsupported is the *auth-flow shape* the 2025-03-26 spec mandated, which is independent of the protocol version field.
+Note: this is distinct from MCP **protocol version** negotiation. mcpkit's `server.supportedProtocolVersions` includes `2024-11-05`, `2025-03-26`, `2025-11-25`, and `2026-07-28` — clients on the older protocol version still negotiate successfully. The thing that's unsupported is the *auth-flow shape* the 2025-03-26 spec mandated, which is independent of the protocol version field.
 
 ## Design Principles
 

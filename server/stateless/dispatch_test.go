@@ -64,7 +64,7 @@ func validMetaParams(t *testing.T) json.RawMessage {
 	t.Helper()
 	return json.RawMessage(`{
 		"_meta": {
-			"io.modelcontextprotocol/protocolVersion": "DRAFT-2026-v1",
+			"io.modelcontextprotocol/protocolVersion": "2026-07-28",
 			"io.modelcontextprotocol/clientInfo": {"name": "test-client", "version": "1"},
 			"io.modelcontextprotocol/clientCapabilities": {}
 		}
@@ -223,7 +223,7 @@ func TestDispatch_ToolsCallMissingCapReturns32003(t *testing.T) {
 		"name": "test_missing_capability",
 		"arguments": {},
 		"_meta": {
-			"io.modelcontextprotocol/protocolVersion": "DRAFT-2026-v1",
+			"io.modelcontextprotocol/protocolVersion": "2026-07-28",
 			"io.modelcontextprotocol/clientInfo": {"name": "c", "version": "1"},
 			"io.modelcontextprotocol/clientCapabilities": {}
 		}
@@ -277,7 +277,7 @@ func TestRequestMetaFromContext(t *testing.T) {
 	if got := RequestMetaFromContext(context.Background()); got != nil {
 		t.Errorf("RequestMetaFromContext(bare) = %+v, want nil", got)
 	}
-	meta := &core.RequestMeta{ProtocolVersion: "DRAFT-2026-v1"}
+	meta := &core.RequestMeta{ProtocolVersion: "2026-07-28"}
 	ctx := core.WithRequestMeta(context.Background(), meta)
 	if got := RequestMetaFromContext(ctx); got != meta {
 		t.Errorf("RequestMetaFromContext: got %+v, want %+v", got, meta)

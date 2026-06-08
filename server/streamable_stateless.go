@@ -45,7 +45,7 @@ func (t *streamableTransport) handleStatelessPost(w http.ResponseWriter, r *http
 	}
 
 	// (1b) SEP-2243 routing-header validation. The stateless wire only
-	// speaks DRAFT-2026-v1 (the version that adopted SEP-2243), so any
+	// speaks 2026-07-28 (the version that adopted SEP-2243), so any
 	// Mcp-Method / Mcp-Name a client does send MUST agree with the body.
 	// Lenient on absent headers — keeps clients that haven't adopted
 	// SEP-2243 yet working — strict on mismatched values, which is what
