@@ -507,31 +507,17 @@ func TestQuota_OnSubscribeNeverFiresWhenAtCap(t *testing.T) {
 }
 
 // countForTest exposes the per-(principal, eventName) count from a
-// Quota for assertions. The semaphore's slot count isn't directly
-// observable, so this helper uses the package-internal counts via
-// a probe Reserve+Release dance — kept here in the test file so the
-// production surface stays minimal.
-//
-// Implementation: try to fully reserve up to the cap; the count is
-// (cap - successfully-reserved). Then release everything we
-// reserved to leave the quota in its prior state.
+// Quota for assertions. Routes through the QuotaStore's CountQuota
+// directly — the seam lift in #626 made counts first-class queryable
+// state, so the previous probe-Reserve-Release dance is no longer
+// necessary. The wrapper's mu serializes with concurrent
+// Reserve/Release in the same test.
 func (q *Quota) countForTest(principal, eventName string) int {
 	q.mu.Lock()
-	cap, ok := q.caps[eventName]
-	sem := q.sems[quotaKey{principal: principal, eventName: eventName}]
-	q.mu.Unlock()
-	if !ok || sem == nil {
-		return 0
-	}
-	reserved := 0
-	for i := 0; i < cap; i++ {
-		if !sem.TryAcquire(1) {
-			break
-		}
-		reserved++
-	}
-	for i := 0; i < reserved; i++ {
-		sem.Release(1)
-	}
-	return cap - reserved
+	defer q.mu.Unlock()
+	resp, _ := q.store.CountQuota(context.Background(), CountQuotaRequest{
+		Principal: principal,
+		EventName: eventName,
+	})
+	return resp.Count
 }
