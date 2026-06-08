@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -10,10 +11,22 @@ import (
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
+	commonotel "github.com/panyam/mcpkit/examples/common/otel"
 )
 
 func runDemo() {
 	serverURL := common.ServerURL()
+
+	tel := common.ExporterFromArgs()
+	tp, shutdown, err := commonotel.SetupClientTelemetry(context.Background(),
+		commonotel.WithExporter(*tel.Exporter),
+		commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+		commonotel.WithServiceName("tasks-demo-host"),
+	)
+	if err != nil {
+		log.Fatalf("commonotel.SetupClientTelemetry: %v", err)
+	}
+	defer shutdown(context.Background())
 
 	demo := demokit.New("MCP Tasks — Async Tool Execution Lifecycle").
 		Dir("tasks").
@@ -86,6 +99,7 @@ tools, _ := c.ListTools() // each tool carries Execution.TaskSupport metadata`),
 						fmt.Fprintf(os.Stderr, "    [notif] progress: %v\n", params)
 					}
 				}),
+				client.WithTracerProvider(tp),
 			)
 			if err := c.Connect(); err != nil {
 				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
