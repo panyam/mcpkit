@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>wiki-explorer — Wikipedia link graph over MCP Apps</title>
+<link rel="stylesheet" href="./demokit-player.css">
+<style>
+body { margin: 2em auto; max-width: 900px; padding: 0 1em; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+</style>
+</head>
+<body>
+<demokit-demo>{
+  "demo": {
+    "title": "wiki-explorer — Wikipedia link graph over MCP Apps",
+    "description": "Walks the get-first-degree-links round trip end-to-end as a scripted MCP client: initialize, tools/list, three tools/call shapes (default URL, different article, invalid URL → string error path), and resources/read. The fixture mirrors upstream's wiki-explorer-server example: server-side Wikipedia HTML fetch + regex link extraction (~380 outbound links for the default MCP page), nullable `error` string in the result, force-directed graph rendered iframe-side. Run `make serve` in another terminal first.",
+    "actors": [
+      {
+        "id": "Host",
+        "label": "MCP Host (this client)"
+      },
+      {
+        "id": "Server",
+        "label": "mcpkit-Go fixture (make serve)"
+      }
+    ],
+    "items": [
+      {
+        "kind": "section",
+        "title": "Setup",
+        "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nAny MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam, basic-host). The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `make demo-app EXAMPLE=wiki-explorer` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+      },
+      {
+        "kind": "step",
+        "title": "Connect to the fixture",
+        "note": "Standard MCP initialize handshake. `*client.Client.Connect()` runs initialize + notifications/initialized + stashes the session header for every subsequent call.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "POST /mcp — initialize"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "serverInfo + capabilities + Mcp-Session-Id",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "# Initialize. Mcp-Session-Id comes back in the response headers.\nSID=$(curl -si -X POST http://localhost:3101/mcp \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"curl\",\"version\":\"1\"}}}' \\\n  | awk 'tolower($1) == \"mcp-session-id:\" {gsub(/\\r/,\"\"); print $2}')\n\n# Acknowledge so the server's dispatcher unblocks.\ncurl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "tools/list — verify get-first-degree-links + nullable error shape",
+        "note": "Two things worth calling out on the wire. (1) `_meta.ui.resourceUri` (`ui://wiki-explorer/mcp-app.html`) tags the tool as an App — basic-host fetches that URI to fill the iframe. (2) `outputSchema.properties.error` is `{anyOf: [{type:\"string\"}, {type:\"null\"}]}` — mirrors upstream's `z.string().nullable()`. mcpkit lands the nullable shape via `OutputSchemaPatch` + `PropertyBuilder.Replace(anyOf)` since `*string` reflection alone emits `\"type\": \"string\"` only.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "tools/list"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "tools[] with the get-first-degree-links output schema",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}' \\\n  | jq '.result.tools[] | {name, errorSchema: .outputSchema.properties.error}'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "tools/call get-first-degree-links {} — default Wikipedia article",
+        "note": "Live network round trip — the server fetches `https://en.wikipedia.org/wiki/Model_Context_Protocol`, regex-extracts every `\u003ca href=\"/wiki/...\"\u003e` link, filters out Wikipedia: / Help: / File: / etc. namespace pages and self-links, dedupes, and returns one node per outbound article. ~380 links for the default page. Wikipedia returns 403 without a User-Agent header per their policy; the fetcher sets one. The iframe renders these as a force-directed graph; the model can read the same list to plan further exploration.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "tools/call get-first-degree-links {}"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "structuredContent = { page, links[~380], error: null }",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"get-first-degree-links\",\"arguments\":{}}}' \\\n  | jq '.result.structuredContent | {page, link_count: (.links|length), first_5: [.links[0:5][].title], error}'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "tools/call get-first-degree-links {url: \"Anthropic\"} — node expansion",
+        "note": "Same call shape, different article. This is what the iframe issues when a user clicks a node in the graph to expand its first-degree neighbours, or types a Wikipedia URL into the App's search box. The bridge call is `app.callServerTool({name: \"get-first-degree-links\", arguments: {url: \"...\"}})`.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "tools/call get-first-degree-links {url:\"https://en.wikipedia.org/wiki/Anthropic\"}"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "structuredContent = { page: Anthropic, links[...], error: null }",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"get-first-degree-links\",\"arguments\":{\"url\":\"https://en.wikipedia.org/wiki/Anthropic\"}}}' \\\n  | jq '.result.structuredContent | {page, link_count: (.links|length), error}'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "tools/call get-first-degree-links {url: invalid} — error path",
+        "note": "Invalid URLs (non-Wikipedia hosts, 404s, network errors) land in the nullable `error` string rather than firing an isError tool result. Matches upstream's catch-block contract: the tool always succeeds on the wire; the iframe + model read `.error` to decide what to render. mcpkit's typed handler returns `(out, nil)` even on the failure path; the `Error: \u0026msg` field carries the string.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "tools/call get-first-degree-links {url:\"https://example.com/foo\"}"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "structuredContent = { page, links: [], error: \"Not a valid Wikipedia URL\" }",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{\"name\":\"get-first-degree-links\",\"arguments\":{\"url\":\"https://example.com/foo\"}}}' \\\n  | jq '.result | {isError, structuredContent: {page, error: .structuredContent.error}}'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "resources/read on ui://wiki-explorer/mcp-app.html",
+        "note": "Confirms the App's iframe HTML is served on the wire. Unlike `map` (which streams CesiumJS from a CDN at runtime and needs `_meta.ui.csp.connectDomains`), the Wikipedia fetch happens server-side — the iframe just renders the parsed graph. No CSP block needed.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "resources/read { uri: ui://wiki-explorer/mcp-app.html }"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "Contents[0].Text = the iframe HTML",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"resources/read\",\"params\":{\"uri\":\"ui://wiki-explorer/mcp-app.html\"}}' \\\n  | jq -r '.result.contents[0].text' | head -c 200",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "section",
+        "title": "What the App iframe does with all this",
+        "body": "The host → iframe handoff mechanics (`tools/call` → `resources/read` → sandboxed iframe → `postMessage`) are covered once in [The basic-host bridge dance](../README.md#the-basic-host-bridge-dance). Steps 1-6 above are the floor every MCP Apps interaction starts from.\n\nwiki-explorer's iframe sits at the **rich** end of the App-ness spectrum — it registers app-side tools the host can call back into, on top of the per-render bridge calls. The bridge calls its App SDK makes:\n\n- `app.ontoolresult` — unpacks `result.structuredContent` into `{page, links, error}` and seeds the d3-force graph. Each link becomes a node; the edge connects the source page to its first-degree neighbour.\n- `app.callServerTool({name: \"get-first-degree-links\", arguments: {url}})` — when the user clicks a node to expand its neighbours, the App issues this call directly (no model in the loop), then merges the new links into the visible graph.\n- `app.registerTool` ×4 — the iframe exposes app-side tools so a model can drive the visualisation from outside: `expandNode(url)`, `searchVisibleNodes(query)`, `getVisibleNodes()`, and a layout / view-state inspector. Each of these is a tool the bridge surfaces back through MCP-style tools/call from the host side.\n\nNO `_meta.ui.csp` needed — Wikipedia fetching happens server-side. The iframe's only network access is to the bridge."
+      },
+      {
+        "kind": "section",
+        "title": "Where to look in the code",
+        "body": "- `main.go` — fixture is ~270 lines. The interesting parts: `wikiHrefRe` regex + `extractWikiLinks` dedup/filter loop (mirrors upstream's cheerio selector + filter chain), `wikiURLRe` input gate, `fetchAndExtractLinks` net/http call with the OSM-style User-Agent (Wikipedia returns 403 without it), and the handler's never-Go-error contract that maps fetch / parse failures into the nullable `error` field.\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + screenshots + the centralized [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) guide and the bridge-dance reference section."
+      }
+    ]
+  },
+  "trace": [
+    {
+      "kind": "section",
+      "title": "Setup",
+      "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nAny MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam, basic-host). The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `make demo-app EXAMPLE=wiki-explorer` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+    },
+    {
+      "kind": "step",
+      "title": "Connect to the fixture",
+      "step_id": "step-1",
+      "visit": 1,
+      "output": "    connected to Wiki Explorer 1.0.0\n"
+    },
+    {
+      "kind": "step",
+      "title": "tools/list — verify get-first-degree-links + nullable error shape",
+      "step_id": "step-2",
+      "visit": 1,
+      "output": "    get-first-degree-links\n      error schema: {\n        \"anyOf\": [\n          {\n            \"type\": \"string\"\n          },\n          {\n            \"type\": \"null\"\n          }\n        ]\n      }\n"
+    },
+    {
+      "kind": "step",
+      "title": "tools/call get-first-degree-links {} — default Wikipedia article",
+      "step_id": "step-3",
+      "visit": 1,
+      "output": "    page: map[title:Model Context Protocol url:https://en.wikipedia.org/wiki/Model_Context_Protocol]\n    links: 383\n    error: \u003cnil\u003e\n    first 5 link titles: [Anthropic Artificial intelligence TypeScript Python (programming language) Java (programming language)]\n"
+    },
+    {
+      "kind": "step",
+      "title": "tools/call get-first-degree-links {url: \"Anthropic\"} — node expansion",
+      "step_id": "step-4",
+      "visit": 1,
+      "output": "    page: map[title:Anthropic url:https://en.wikipedia.org/wiki/Anthropic]\n    links: 266\n    error: \u003cnil\u003e\n"
+    },
+    {
+      "kind": "step",
+      "title": "tools/call get-first-degree-links {url: invalid} — error path",
+      "step_id": "step-5",
+      "visit": 1,
+      "output": "    isError=false (always false on the wire-error path)\n    page: map[title:https://example.com/foo url:https://example.com/foo]\n    error string: Not a valid Wikipedia URL\n"
+    },
+    {
+      "kind": "step",
+      "title": "resources/read on ui://wiki-explorer/mcp-app.html",
+      "step_id": "step-6",
+      "visit": 1,
+      "output": "    520192 bytes total; first 200:\n      \u003c!DOCTYPE html\u003e\n\u003chtml lang=\"en\"\u003e\n\u003chead\u003e\n  \u003cmeta charset=\"UTF-8\"\u003e\n  \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"\u003e\n  \u003cmeta name=\"color-scheme\" content=\"light dark\"\u003e\n  \u003ctitle\u003eWik…\n"
+    },
+    {
+      "kind": "section",
+      "title": "What the App iframe does with all this",
+      "body": "The host → iframe handoff mechanics (`tools/call` → `resources/read` → sandboxed iframe → `postMessage`) are covered once in [The basic-host bridge dance](../README.md#the-basic-host-bridge-dance). Steps 1-6 above are the floor every MCP Apps interaction starts from.\n\nwiki-explorer's iframe sits at the **rich** end of the App-ness spectrum — it registers app-side tools the host can call back into, on top of the per-render bridge calls. The bridge calls its App SDK makes:\n\n- `app.ontoolresult` — unpacks `result.structuredContent` into `{page, links, error}` and seeds the d3-force graph. Each link becomes a node; the edge connects the source page to its first-degree neighbour.\n- `app.callServerTool({name: \"get-first-degree-links\", arguments: {url}})` — when the user clicks a node to expand its neighbours, the App issues this call directly (no model in the loop), then merges the new links into the visible graph.\n- `app.registerTool` ×4 — the iframe exposes app-side tools so a model can drive the visualisation from outside: `expandNode(url)`, `searchVisibleNodes(query)`, `getVisibleNodes()`, and a layout / view-state inspector. Each of these is a tool the bridge surfaces back through MCP-style tools/call from the host side.\n\nNO `_meta.ui.csp` needed — Wikipedia fetching happens server-side. The iframe's only network access is to the bridge."
+    },
+    {
+      "kind": "section",
+      "title": "Where to look in the code",
+      "body": "- `main.go` — fixture is ~270 lines. The interesting parts: `wikiHrefRe` regex + `extractWikiLinks` dedup/filter loop (mirrors upstream's cheerio selector + filter chain), `wikiURLRe` input gate, `fetchAndExtractLinks` net/http call with the OSM-style User-Agent (Wikipedia returns 403 without it), and the handler's never-Go-error contract that maps fetch / parse failures into the nullable `error` field.\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + screenshots + the centralized [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) guide and the bridge-dance reference section."
+    }
+  ]
+}
+</demokit-demo>
+<script type="module" src="./demokit-player.js"></script>
+</body>
+</html>
