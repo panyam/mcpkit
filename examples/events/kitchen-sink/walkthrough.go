@@ -221,7 +221,12 @@ func runDemo() {
 	demo.Step("What stops a noisy client from subscribing 100 times?").
 		Arrow("Host", "Server", "events/subscribe ×3 (chat.message)").
 		DashedArrow("Server", "Host", "1st: id=sub_...; 2nd: id=sub_...; 3rd: error -32013").
-		Note("Quota is configured per-principal-per-event-type at events.Register time. The third subscribe under the same principal returns -32013 TooManySubscriptions with structured data {limit:\"subscriptions\", max:N} — clients can read the max to know the cap without consulting docs.").
+		Note("Quota is configured per-principal-per-event-type at events.Register time. The third subscribe under the same principal returns -32013 ResourceExhausted with structured data {limit:\"subscriptions\", max:N} — clients read the max to know the cap without consulting docs. " +
+			"Two emission paths share this shape (see experimental/ext/events/errors.go's ResourceExhaustedData godoc for the canonical table): " +
+			"(a) Reserve failure — quota counter at the configured cap; message names the cap; data.max > 0. " +
+			"(b) on_subscribe rejection — author OnSubscribe hook returned an error AFTER Reserve granted; message starts \"on_subscribe rejected:\"; data.max absent on the wire (the server didn't impose this rejection, the author did). " +
+			"Clients that want to discriminate read data.max presence; clients that just want \"too many subscriptions\" UX treat both uniformly. " +
+			"This shape is the canonical reference for whole-enchilada stages 2/3/4 (tenant-level quotas, multi-replica): same code, same data shape, same two emission paths.").
 		Run(func(_ demokit.StepContext) *demokit.StepResult {
 			if c == nil {
 				return nil
