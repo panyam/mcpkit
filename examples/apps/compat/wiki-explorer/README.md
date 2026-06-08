@@ -7,10 +7,24 @@ work, not just printing the tool result.
 
 ## What it Shows
 
+- **Real Wikipedia link graph on the wire.** `get-first-degree-links`
+  fetches the live Wikipedia HTML, regex-extracts every `/wiki/...`
+  link, filters out namespace pages (Wikipedia: / Help: / File: /
+  etc.) and self-links, dedupes, and returns one node per outbound
+  article. The default MCP page lands at ~380 outbound links;
+  Anthropic's page at ~260.
+- **User-Agent required.** Wikipedia returns 403 for requests with no
+  User-Agent string per their policy — the fetcher sets one. Same
+  pattern as `map`'s Nominatim hit.
 - **Interactive App UI.** The iframe pulls in a graph library, lays
   out nodes for the linked Wikipedia pages, and lets the user click to
   expand or query. The host doesn't know any of that — it sees one
   tool with structured output.
+- **Never-Go-error contract.** Fetch failures, 404s, non-Wikipedia
+  URLs all land in the nullable `error` field rather than firing an
+  `isError` tool result. Mirrors upstream's catch-block behaviour:
+  the tool always succeeds on the wire; the iframe + model read
+  `.error` to decide what to render.
 - **Nullable field at the wire.** The output's `error` field is
   `*string` in Go (nil-or-string). Upstream's `z.string().nullable()`
   emits `{"anyOf": [{"type":"string"}, {"type":"null"}]}` in JSON
@@ -21,6 +35,10 @@ work, not just printing the tool result.
   lines of full-override that the fixture used to ship. Reflection
   still does the heavy lifting for `page` + `links`; the patch only
   touches the field reflection can't get right.
+
+## Run Pre-Recorded
+
+> ▶ **[Play the walkthrough in your browser](https://panyam.github.io/mcpkit/walkthroughs/examples/apps/compat/wiki-explorer/)** — animated playback of every curl / Go call the walkthrough makes, step-by-step. Includes a live Wikipedia hit (~383 links for the MCP page) and the error path. No clone, no setup.
 
 ## Or Run Live
 
@@ -37,8 +55,8 @@ Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `h
 Open <http://localhost:8080> in your browser. Then:
 
 1. Pick **Wiki Explorer** from the server dropdown.
-2. Pick **get-first-degree-links** from the tool dropdown, click **Call Tool**.
-3. The iframe renders the result; interact with it directly to drive subsequent tool calls (no model in the loop).
+2. Pick **get-first-degree-links** from the tool dropdown, click **Call Tool** with empty input — the iframe renders the force-directed graph for the default Model Context Protocol article (~380 first-degree neighbours).
+3. Click a node in the graph — the App calls `get-first-degree-links` itself via the bridge to expand from that node (no model in the loop). Try the **Anthropic** node — it has ~260 outbound links of its own.
 
 <a href="screenshots/01-mcp-graph.png" target="_blank"><img src="screenshots/01-mcp-graph.png" alt="Wiki Explorer App: force-directed graph in the iframe with the Model Context Protocol page at the center and its first-degree links spread around it" width="50%"></a>
 
