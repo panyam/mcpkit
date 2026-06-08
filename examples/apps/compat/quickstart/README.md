@@ -10,10 +10,20 @@ rather than a hand-rolled minimal one.
 - **Same one-tool wire surface** as basic-vanillajs. The
   differentiator is the upstream-side build pipeline (a sensible
   default a developer would actually scaffold), not the protocol.
+- **Bare-minimum bridge dance.** The iframe's JS uses only
+  `app.ontoolresult` (render the time) and `app.callServerTool` (the
+  button re-runs `get-time` via the bridge). No `app.registerTool`,
+  no `app.updateModelContext`. The cleanest reference for what an
+  MCP App fundamentally IS at the bridge level — contrast with
+  `budget-allocator`'s 5 app-side tools.
 - **`tsx` fallback in the wrapper.** Upstream's quickstart doesn't
   ship a `dist/index.js`; the test wrapper falls back to
   `npx tsx main.ts` to run the server. That fallback lives in
   `scripts/apps-playwright-docker-inner.sh`.
+
+## Run Pre-Recorded
+
+> ▶ **[Play the walkthrough in your browser](https://panyam.github.io/mcpkit/walkthroughs/examples/apps/compat/quickstart/)** — animated playback of every curl / Go call the walkthrough makes. Steps 1-4 walk the server-side surface (initialize → tools/list → tools/call get-time → resources/read on the iframe HTML); the closing narrative section names the bridge dance the iframe takes from there: `ontoolresult` to render the time into the DOM, and a button click that calls back to the server via `callServerTool`. The floor of an MCP App. No clone, no setup.
 
 ## Or Run Live
 
