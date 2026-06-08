@@ -7,9 +7,29 @@ import (
 
 // Claims holds the authenticated identity extracted from a validated request.
 // Populated by AuthValidators that also implement ClaimsProvider.
+//
+// Subject vs Tenant: Subject is the raw OAuth subject (the token's `sub`
+// claim). Tenant is the multi-tenancy partition the subject belongs to,
+// when the validator can derive one — for Keycloak, the realm name from
+// the issuer URL. Single-tenant deployments leave Tenant empty.
+//
+// Consumers that need a string-form identity (session-binding, webhook
+// canonical-key construction, audit logs that mention "who") should call
+// the ext/auth helper auth.PrincipalFor(claims) rather than concatenating
+// Tenant + Subject themselves — the encoding rule (separator character,
+// empty-tenant fallback) lives in one place.
 type Claims struct {
-	// Subject is the authenticated principal (user ID or client ID).
+	// Subject is the authenticated principal's raw OAuth subject — the
+	// token's `sub` claim, unmodified. Use auth.PrincipalFor(claims) for
+	// a tenant-aware string identity.
 	Subject string `json:"sub"`
+
+	// Tenant is the multi-tenancy partition the subject belongs to.
+	// Empty for single-tenant deployments or validators that don't
+	// expose a tenant concept. Populated by the IntrospectionValidator
+	// from the introspection response's iss claim (Keycloak realm) and
+	// by future tenant-aware validators.
+	Tenant string `json:"tenant,omitempty"`
 
 	// Issuer identifies the authorization server that issued the token.
 	Issuer string `json:"iss"`

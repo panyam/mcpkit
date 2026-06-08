@@ -71,8 +71,14 @@ func TestIntrospectionValidator_ActiveToken_RealmFromIssuer(t *testing.T) {
 	if claims == nil {
 		t.Fatal("Claims returned nil after successful Validate")
 	}
-	if claims.Subject != "tenant-a/alice" {
-		t.Errorf("Subject = %q, want %q", claims.Subject, "tenant-a/alice")
+	if claims.Subject != "alice" {
+		t.Errorf("Subject = %q, want raw sub %q", claims.Subject, "alice")
+	}
+	if claims.Tenant != "tenant-a" {
+		t.Errorf("Tenant = %q, want %q", claims.Tenant, "tenant-a")
+	}
+	if got := mcpcore.PrincipalFor(claims); got != "tenant-a/alice" {
+		t.Errorf("PrincipalFor = %q, want %q", got, "tenant-a/alice")
 	}
 	if claims.Issuer != "https://kc.example.test/realms/tenant-a" {
 		t.Errorf("Issuer = %q", claims.Issuer)
@@ -82,12 +88,6 @@ func TestIntrospectionValidator_ActiveToken_RealmFromIssuer(t *testing.T) {
 	}
 	if len(claims.Audience) != 1 || claims.Audience[0] != "mcp-events" {
 		t.Errorf("Audience = %v", claims.Audience)
-	}
-	if claims.Extra["tenant"] != "tenant-a" {
-		t.Errorf("Extra.tenant = %v", claims.Extra["tenant"])
-	}
-	if claims.Extra["raw_sub"] != "alice" {
-		t.Errorf("Extra.raw_sub = %v", claims.Extra["raw_sub"])
 	}
 }
 
@@ -224,8 +224,14 @@ func TestIntrospectionValidator_CustomMapperOverride(t *testing.T) {
 	if claims == nil {
 		t.Fatal("Claims returned nil")
 	}
-	if claims.Subject != "org-x/alice" {
-		t.Errorf("Subject = %q, want %q", claims.Subject, "org-x/alice")
+	if claims.Subject != "alice" {
+		t.Errorf("Subject = %q, want raw sub %q", claims.Subject, "alice")
+	}
+	if claims.Tenant != "org-x" {
+		t.Errorf("Tenant = %q, want %q", claims.Tenant, "org-x")
+	}
+	if got := mcpcore.PrincipalFor(claims); got != "org-x/alice" {
+		t.Errorf("PrincipalFor = %q, want %q", got, "org-x/alice")
 	}
 }
 

@@ -27,12 +27,14 @@ import (
 //     client credentials.
 //   - The authorization server issues opaque (non-JWT) tokens.
 //
-// Tenant encoding: by default the Subject on the returned core.Claims
-// is "<realm>/<sub>" where <realm> is parsed from the introspection
-// response's iss claim (Keycloak's .../realms/<realm> URL shape) and
-// <sub> is the response's sub claim. Hook authors split these halves
-// via auth.TenantOf / auth.SubjectOf. The default is overridable per
-// IntrospectionConfig.TenantMapper.
+// Tenant encoding: the returned core.Claims carries Subject and Tenant
+// as separate typed fields. Subject is the raw OAuth sub; Tenant is the
+// realm parsed from the introspection response's iss claim (Keycloak's
+// .../realms/<realm> URL shape) when the default mapper is used, or
+// whatever the configured TenantMapper produces. Consumers that need a
+// string-form principal (session-binding, webhook canonical-key) call
+// auth.PrincipalFor(claims) — the single encoder that handles the
+// "<tenant>/<sub>" case and the "no-tenant → bare-subject" fallback.
 //
 // Usage:
 //
@@ -58,14 +60,16 @@ type IntrospectionValidator struct {
 }
 
 // TenantMapper extracts (tenant, subject) from an introspection
-// response. The validator builds Claims.Subject as tenant +
-// PrincipalTenantSeparator + subject when tenant is non-empty,
-// otherwise stamps Claims.Subject as just subject — single-tenant
-// deployments pass tenant="" and round-trip the subject directly.
+// response. The validator stamps these into the returned core.Claims
+// as Claims.Tenant and Claims.Subject respectively — both typed
+// fields, no string-encoding at this layer. Single-tenant deployments
+// return tenant="" and the validator stamps Tenant="" without further
+// processing.
 //
 // Mappers MUST NOT return subject == "" — Validate rejects the request
-// with 401 when no subject is recoverable, since events.WebhookStore
-// keys on principal and an empty principal is meaningless.
+// with 401 when no subject is recoverable, since downstream consumers
+// (events canonical-key, session-binding) require a non-empty
+// principal identity.
 //
 // The default mapper (realm-from-issuer) is sufficient for every
 // Keycloak deployment whose realm == tenant; override only when a
@@ -178,11 +182,6 @@ func (v *IntrospectionValidator) Validate(r *http.Request) error {
 		return v.unauthorized("introspection response missing subject")
 	}
 
-	principal := subject
-	if tenant != "" {
-		principal = tenant + PrincipalTenantSeparator + subject
-	}
-
 	var scopes []string
 	if result.Scope != "" {
 		scopes = strings.Fields(result.Scope)
@@ -197,22 +196,22 @@ func (v *IntrospectionValidator) Validate(r *http.Request) error {
 	}
 
 	claims := &mcpcore.Claims{
-		Subject: principal,
+		Subject: subject,
+		Tenant:  tenant,
 		Issuer:  result.Iss,
 		Scopes:  scopes,
-		Extra: map[string]any{
-			"tenant":  tenant,
-			"raw_sub": result.Sub,
-		},
 	}
 	if result.Aud != nil {
 		claims.Audience = audienceSlice(result.Aud)
 	}
-	if result.ClientID != "" {
-		claims.Extra["client_id"] = result.ClientID
-	}
-	if result.Jti != "" {
-		claims.Extra["jti"] = result.Jti
+	if result.ClientID != "" || result.Jti != "" {
+		claims.Extra = map[string]any{}
+		if result.ClientID != "" {
+			claims.Extra["client_id"] = result.ClientID
+		}
+		if result.Jti != "" {
+			claims.Extra["jti"] = result.Jti
+		}
 	}
 
 	v.recentClaims.Store(token, claims)
