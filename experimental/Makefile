@@ -3,7 +3,7 @@
 # Runs as one umbrella (`make test`) or per sub-suite. The top-level
 # repo Makefile delegates to these targets via `make -C experimental ...`,
 # and testall uses the per-suite targets to record sub-stage timing
-# (7a/7b/7c/7d) instead of a single bucket.
+# (7a/7b/7c/7d/7e) instead of a single bucket.
 #
 # Two of the sub-suites live under `examples/events/` rather than
 # `experimental/`, but they're conceptually part of the experimental
@@ -13,15 +13,21 @@
 EXPERIMENTAL_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 REPO_ROOT := $(abspath $(EXPERIMENTAL_DIR)/..)
 
-.PHONY: test test-events test-events-clients-go test-events-discord test-events-telegram help
+.PHONY: test test-events test-events-clients-go test-events-stores-gorm test-events-stores-gorm-pg test-events-discord test-events-telegram help
 
-test: test-events test-events-clients-go test-events-discord test-events-telegram ## Run all experimental POC tests
+test: test-events test-events-clients-go test-events-stores-gorm test-events-discord test-events-telegram ## Run all experimental POC tests
 
 test-events: ## Run experimental ext/events library tests
 	cd $(EXPERIMENTAL_DIR)/ext/events && go test ./... -count=1 -timeout 120s
 
 test-events-clients-go: ## Run experimental ext/events Go client SDK tests
 	cd $(EXPERIMENTAL_DIR)/ext/events/clients/go && go test ./... -count=1 -timeout 60s
+
+test-events-stores-gorm: ## Run GORM-backed Webhook + Quota stores (sqlite + inmemory; no Docker required)
+	cd $(EXPERIMENTAL_DIR)/ext/events/stores/gorm && go test ./... -count=1 -timeout 60s
+
+test-events-stores-gorm-pg: ## Run GORM stores against a real Postgres container (full matrix; needs Docker)
+	$(MAKE) -C $(EXPERIMENTAL_DIR)/ext/events/stores/gorm testpg
 
 test-events-discord: ## Run experimental events Discord example tests
 	cd $(REPO_ROOT)/examples/events/discord && go test ./... -count=1 -timeout 60s
