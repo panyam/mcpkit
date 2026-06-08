@@ -3,6 +3,7 @@ package otel
 import (
 	"sync/atomic"
 
+	core "github.com/panyam/mcpkit/core"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	oteltrace "go.opentelemetry.io/otel/trace"
@@ -59,4 +60,30 @@ func (s *Span) RecordError(err error) {
 	}
 	s.otel.RecordError(err)
 	s.otel.SetStatus(codes.Error, err.Error())
+}
+
+// AddLink attaches a causal Link to the span mid-flight. Delegates to
+// the underlying OTel SDK Span.AddLink (available since OTel Go v1.30).
+// No-op after End, matching the contract on every other Span method
+// — the OTel SDK's "AddLink must happen before the span is read"
+// guarantee is satisfied by the ended-guard here PLUS the underlying
+// SDK's own enforcement.
+//
+// Invalid Link entries (zero or malformed TraceContext) are silently
+// dropped, matching the core.Span.AddLink contract — defensive call
+// sites can build Link slices from raw inputs without pre-filtering.
+//
+// Per-link Attributes flow through as attribute.String entries on the
+// OTel link, where observability backends render them as link
+// metadata (Jaeger / Tempo / Honeycomb show these specially in their
+// link UI panels, separate from span attributes).
+func (s *Span) AddLink(link core.Link) {
+	if s.ended.Load() {
+		return
+	}
+	otelLink, ok := linkToOTelLink(link)
+	if !ok {
+		return
+	}
+	s.otel.AddLink(otelLink)
 }

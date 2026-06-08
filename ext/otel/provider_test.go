@@ -316,3 +316,102 @@ func TestSpanFromContext_NestedAdapterStartSpan_InnermostWins(t *testing.T) {
 	spans := exp.GetSpans()
 	require.Len(t, spans, 2)
 }
+
+// --- P6 span links (issue 662) ----------------------------------------------
+
+const (
+	linkTP1 = "00-4bf92f3577b34da6a3ce929d0e0e4736-1111111111111111-01"
+	linkTP2 = "00-aabbccddeeff00112233445566778899-2222222222222222-01"
+)
+
+func TestProvider_StartSpanLinked_EmitsOTelLinks(t *testing.T) {
+	p, exp := newRecordingProvider(t)
+	links := []core.Link{
+		core.LinkFromTraceContext(core.TraceContext{Traceparent: linkTP1}),
+		{
+			TraceContext: core.TraceContext{Traceparent: linkTP2},
+			Attributes:   []core.Attribute{{Key: "link.kind", Value: "sibling-task"}},
+		},
+	}
+	_, span := p.StartSpanLinked(context.Background(), "task.execute", links,
+		core.Attribute{Key: "mcp.task.id", Value: "t-123"},
+	)
+	span.End()
+
+	spans := exp.GetSpans()
+	require.Len(t, spans, 1)
+	require.Len(t, spans[0].Links, 2)
+
+	assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", spans[0].Links[0].SpanContext.TraceID().String())
+	assert.Empty(t, spans[0].Links[0].Attributes, "first link has no per-link attributes")
+
+	assert.Equal(t, "aabbccddeeff00112233445566778899", spans[0].Links[1].SpanContext.TraceID().String())
+	require.NotEmpty(t, spans[0].Links[1].Attributes)
+	assert.Equal(t, "sibling-task", spans[0].Links[1].Attributes[0].Value.AsString(),
+		"per-link Attributes must flow through to the OTel link")
+}
+
+func TestProvider_StartSpanLinked_FiltersInvalid(t *testing.T) {
+	p, exp := newRecordingProvider(t)
+	links := []core.Link{
+		{TraceContext: core.TraceContext{}},                                       // zero — dropped
+		{TraceContext: core.TraceContext{Traceparent: "not-a-valid-traceparent"}}, // malformed — dropped
+		core.LinkFromTraceContext(core.TraceContext{Traceparent: linkTP1}),        // valid — kept
+	}
+	_, span := p.StartSpanLinked(context.Background(), "filtered", links)
+	span.End()
+
+	spans := exp.GetSpans()
+	require.Len(t, spans, 1)
+	require.Len(t, spans[0].Links, 1, "invalid links must be silently dropped before the OTel call")
+	assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", spans[0].Links[0].SpanContext.TraceID().String())
+}
+
+func TestProvider_StartSpanLinked_EmptyLinks_BehavesAsStartSpan(t *testing.T) {
+	p, exp := newRecordingProvider(t)
+	_, span := p.StartSpanLinked(context.Background(), "empty-links", nil)
+	span.End()
+
+	spans := exp.GetSpans()
+	require.Len(t, spans, 1)
+	assert.Empty(t, spans[0].Links)
+}
+
+func TestProvider_SpanAddLink_LandsBeforeEnd(t *testing.T) {
+	p, exp := newRecordingProvider(t)
+	_, span := p.StartSpan(context.Background(), "addlink-test")
+
+	span.AddLink(core.Link{
+		TraceContext: core.TraceContext{Traceparent: linkTP1},
+		Attributes:   []core.Attribute{{Key: "link.kind", Value: "discovered-mid-flight"}},
+	})
+	span.End()
+
+	spans := exp.GetSpans()
+	require.Len(t, spans, 1)
+	require.Len(t, spans[0].Links, 1, "AddLink before End must land on the exported span")
+	assert.Equal(t, "discovered-mid-flight", spans[0].Links[0].Attributes[0].Value.AsString())
+}
+
+func TestProvider_SpanAddLink_AfterEnd_IsNoOp(t *testing.T) {
+	p, exp := newRecordingProvider(t)
+	_, span := p.StartSpan(context.Background(), "addlink-after-end")
+	span.End()
+	span.AddLink(core.Link{TraceContext: core.TraceContext{Traceparent: linkTP1}})
+
+	spans := exp.GetSpans()
+	require.Len(t, spans, 1)
+	assert.Empty(t, spans[0].Links, "AddLink after End must be a no-op (CAS-guarded wrapper)")
+}
+
+func TestProvider_SpanAddLink_InvalidLink_Dropped(t *testing.T) {
+	p, exp := newRecordingProvider(t)
+	_, span := p.StartSpan(context.Background(), "addlink-invalid")
+	span.AddLink(core.Link{TraceContext: core.TraceContext{}})                       // zero
+	span.AddLink(core.Link{TraceContext: core.TraceContext{Traceparent: "garbage"}}) // malformed
+	span.End()
+
+	spans := exp.GetSpans()
+	require.Len(t, spans, 1)
+	assert.Empty(t, spans[0].Links, "invalid AddLink calls must be silently dropped")
+}

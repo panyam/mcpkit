@@ -62,6 +62,63 @@ func (tc TraceContext) IsZero() bool {
 	return tc.Traceparent == "" && tc.Tracestate == ""
 }
 
+// LinkedTracerProvider extends TracerProvider with explicit support for
+// causal links at span creation. Adapters opt in by implementing this
+// interface alongside TracerProvider — callers reach it via the
+// package-level core.StartSpanLinked helper, which falls back to
+// TracerProvider.StartSpan when the configured provider does not
+// implement LinkedTracerProvider (links silently dropped).
+//
+// The capability-widening pattern (sibling interface + helper) was
+// chosen over widening the base TracerProvider interface so that
+// non-tracing-aware test fakes and the default NoopTracerProvider stay
+// unchanged. The in-tree ext/otel adapter implements both interfaces;
+// future adapters that consume an SDK with link support do the same.
+type LinkedTracerProvider interface {
+	TracerProvider
+
+	// StartSpanLinked is the option-at-start variant of StartSpan that
+	// attaches one or more causal Links to the new span (in addition
+	// to any parent extracted from ctx). Use this when the call site
+	// knows all links upfront; use TracerProvider.StartSpan + Span.AddLink
+	// when links are discovered mid-span.
+	//
+	// Implementations MUST behave identically to StartSpan for the
+	// no-links case (nil or empty links slice). Each Link entry whose
+	// TraceContext is zero or fails W3C validation is silently dropped
+	// — defensive call sites do not have to filter.
+	StartSpanLinked(ctx context.Context, name string, links []Link, attrs ...Attribute) (context.Context, Span)
+}
+
+// StartSpanLinked routes through a TracerProvider's link-aware path
+// when available, falling back to plain StartSpan otherwise. Callers
+// reach the link surface through this helper rather than type-asserting
+// the provider themselves.
+//
+// Behavior:
+//   - If tp implements LinkedTracerProvider, links are passed through
+//     verbatim (the adapter is responsible for the silent-drop rule on
+//     invalid Link entries).
+//   - Otherwise, links are silently dropped and the call degrades to
+//     tp.StartSpan(ctx, name, attrs...). Consumers that depend on
+//     link emission for *correctness* (rather than observability)
+//     should branch on tp.(LinkedTracerProvider) explicitly; the
+//     observability use case the surface targets treats links as
+//     best-effort enrichment.
+//   - nil tp panics — same contract as calling any TracerProvider
+//     method on nil.
+//
+// Why a free function instead of a method on TracerProvider: keeping
+// the base interface minimal lets test fakes and the default
+// NoopTracerProvider satisfy it without each gaining a link-aware
+// method that would always degrade to a no-op.
+func StartSpanLinked(tp TracerProvider, ctx context.Context, name string, links []Link, attrs ...Attribute) (context.Context, Span) {
+	if linked, ok := tp.(LinkedTracerProvider); ok {
+		return linked.StartSpanLinked(ctx, name, links, attrs...)
+	}
+	return tp.StartSpan(ctx, name, attrs...)
+}
+
 // TracerProvider is the minimal tracing seam mcpkit components consume.
 // It is intentionally smaller than the full go.opentelemetry.io/otel
 // `trace.TracerProvider` so the base module can stay dep-free; the
@@ -109,6 +166,28 @@ type Span interface {
 	// `exception` and the error message as the `exception.message`
 	// attribute). Passing nil is a no-op.
 	RecordError(err error)
+
+	// AddLink attaches a causal Link to the span. Mid-flight links are
+	// the right model when the work being spanned references upstream
+	// trace identities that don't fit a parent-of relationship — e.g. a
+	// poll handler discovering new upstream events while it executes, or
+	// an async task spawning a side-effect that should reference the
+	// original request but doesn't nest under it.
+	//
+	// Implementations MUST:
+	//   - Silently drop links whose TraceContext is zero or fails W3C
+	//     structural validation. Defensive call sites do not have to
+	//     filter.
+	//   - Be safe to call concurrently with SetAttribute / RecordError.
+	//   - Treat calls after End as no-ops (the underlying OTel SDK
+	//     contract is "before the span is read"; the adapter enforces
+	//     this via its post-End guard).
+	//
+	// The OTel-aligned Link type carries per-link attributes so
+	// observability backends can render the link UI semantically
+	// (`link.kind=originated-from`, `link.kind=sibling-task`, etc.) — see
+	// the Link doc comment for the shape.
+	AddLink(link Link)
 }
 
 // Attribute is a single key/value pair attached to a span. Both fields
@@ -117,6 +196,55 @@ type Span interface {
 type Attribute struct {
 	Key   string
 	Value string
+}
+
+// Link is a causal pointer from one span to another span's identity.
+// Use it when the spanned work has a "related-to" relationship with an
+// upstream span that doesn't fit a parent-child lifecycle — async task
+// execution that outlives the request that spawned it; a server
+// reverse-call (sampling/elicitation) modelled as a detached CLIENT-kind
+// span rather than a child of the inbound handler; an events-bus
+// consumer processing batched messages each linked to its emitter.
+//
+// The shape mirrors the OpenTelemetry spec's Link definition: a trace
+// identity plus optional per-link attributes that observability
+// backends use to label the link in their UI (Jaeger / Tempo /
+// Honeycomb all render `link.kind=...` semantically rather than as
+// generic span attributes). Per-link attributes are NOT span
+// attributes — they describe the *relationship*, not the span itself.
+//
+// TraceContext is the upstream identity (the same W3C traceparent /
+// tracestate pair propagated on the MCP wire via _meta). Adapters
+// silently drop links whose TraceContext is zero or fails W3C
+// validation, so call sites can build links from
+// `core.ExtractTraceContext` outputs without pre-filtering.
+type Link struct {
+	// TraceContext identifies the upstream span this link points at.
+	// A zero TraceContext indicates "no link" — adapters drop such
+	// entries silently rather than emit invalid OTel links.
+	TraceContext TraceContext
+
+	// Attributes are optional per-link metadata. Common keys:
+	//   - "link.kind" — semantic role (`originated-from`,
+	//     `sibling-task`, `spawned-by`, ...)
+	//   - "mcp.method" — the originating MCP method name when the link
+	//     points at a request-shaped span
+	//
+	// Attribute keys follow the same OTel semantic-conventions
+	// guidance as Span attributes. Empty slice / nil is valid and
+	// produces a link with no per-link attributes.
+	Attributes []Attribute
+}
+
+// LinkFromTraceContext returns a Link with only the TraceContext field
+// set (no per-link attributes). Convenience for the common case where
+// the link's role is obvious from context — e.g., `tasks/poll` spans
+// pointing at the task they surveil. When you want to disambiguate
+// multiple links on the same span (originating request vs. sibling
+// task vs. spawned child), construct the Link literal directly with
+// the Attributes field populated.
+func LinkFromTraceContext(tc TraceContext) Link {
+	return Link{TraceContext: tc}
 }
 
 // NoopTracerProvider is the default TracerProvider used when no tracing
@@ -142,6 +270,7 @@ type noopSpan struct{}
 func (noopSpan) End()                     {}
 func (noopSpan) SetAttribute(_, _ string) {}
 func (noopSpan) RecordError(_ error)      {}
+func (noopSpan) AddLink(_ Link)           {}
 
 // --- W3C Trace Context extraction / injection --------------------------------
 
