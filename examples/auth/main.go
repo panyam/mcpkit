@@ -76,6 +76,17 @@ type bootstrapInfo struct {
 func runDemo() {
 	serverURL := common.ServerURL()
 
+	tel := common.ExporterFromArgs()
+	tp, shutdown, err := commonotel.SetupClientTelemetry(context.Background(),
+		commonotel.WithExporter(*tel.Exporter),
+		commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+		commonotel.WithServiceName("auth-unified-host"),
+	)
+	if err != nil {
+		log.Fatalf("commonotel.SetupClientTelemetry: %v", err)
+	}
+	defer shutdown(context.Background())
+
 	demo := demokit.New("MCP Auth — Public Discovery + JWT + Scopes + Session Binding").
 		Dir("auth").
 		Description("Walks through auth patterns layered on a single mcpkit server: public method allowlist, JWT/JWKS validation, per-tool scope enforcement, and session hijacking prevention.").
@@ -176,6 +187,7 @@ tools, _ := c.ListTools() // succeeds without auth`),
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			c := client.NewClient(boot.MCPURL,
 				core.ClientInfo{Name: "demo-host-anon", Version: "1.0"},
+				client.WithTracerProvider(tp),
 			)
 			defer c.Close()
 			if err := c.Connect(); err != nil {
@@ -216,6 +228,7 @@ if errors.As(err, &authErr) {
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			c := client.NewClient(boot.MCPURL,
 				core.ClientInfo{Name: "demo-host-anon", Version: "1.0"},
+				client.WithTracerProvider(tp),
 			)
 			defer c.Close()
 			if err := c.Connect(); err != nil {
@@ -263,6 +276,7 @@ text, _ := readClient.ToolCall("echo", map[string]any{"message": "hello"})`),
 			readClient = client.NewClient(boot.MCPURL,
 				core.ClientInfo{Name: "demo-host-alice", Version: "1.0"},
 				client.WithClientBearerToken(boot.TokRead),
+				client.WithTracerProvider(tp),
 			)
 			if err := readClient.Connect(); err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
@@ -340,6 +354,7 @@ text, _ := readWriteClient.ToolCall("write-tool", map[string]any{"data": "hello 
 			readWriteClient = client.NewClient(boot.MCPURL,
 				core.ClientInfo{Name: "demo-host-alice-rw", Version: "1.0"},
 				client.WithClientBearerToken(boot.TokReadWrite),
+				client.WithTracerProvider(tp),
 			)
 			if err := readWriteClient.Connect(); err != nil {
 				fmt.Printf("    ERROR: %v\n", err)

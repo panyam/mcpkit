@@ -50,6 +50,18 @@ func main() {
 func runDemo() {
 	serverURL := common.ServerURL()
 
+	tel := common.ExporterFromArgs()
+	tp, shutdown, err := commonotel.SetupClientTelemetry(context.Background(),
+		commonotel.WithExporter(*tel.Exporter),
+		commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+		commonotel.WithServiceName("elicitation-example-host"),
+	)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: commonotel.SetupClientTelemetry: %v\n", err)
+		os.Exit(1)
+	}
+	defer shutdown(context.Background())
+
 	demo := demokit.New("URL Elicitation — Consent Approval Flow (UC1)").
 		Dir("elicitation").
 		Description("**EXPERIMENTAL** — Tracks SEP-2643 (Structured Authorization Denials), currently a draft. A scripted MCP host walking through the UC1 consent approval flow. Wire format may change as the SEP evolves.").
@@ -135,6 +147,7 @@ tools, _ := c.ListTools()`),
 					}
 				}),
 				client.WithGetSSEStream(),
+				client.WithTracerProvider(tp),
 			)
 			if err := c.Connect(); err != nil {
 				fmt.Printf("    ERROR: %v\n", err)

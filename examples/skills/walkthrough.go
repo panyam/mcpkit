@@ -1,17 +1,20 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
+	commonotel "github.com/panyam/mcpkit/examples/common/otel"
 	"github.com/panyam/mcpkit/ext/skills"
 )
 
@@ -26,6 +29,17 @@ const (
 
 func runDemo() {
 	serverURL := common.ServerURL()
+
+	tel := common.ExporterFromArgs()
+	tp, shutdown, err := commonotel.SetupClientTelemetry(context.Background(),
+		commonotel.WithExporter(*tel.Exporter),
+		commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+		commonotel.WithServiceName("skills-host"),
+	)
+	if err != nil {
+		log.Fatalf("commonotel.SetupClientTelemetry: %v", err)
+	}
+	defer shutdown(context.Background())
 
 	demo := demokit.New("MCP Skills Extension (SEP-2640) — Reference Walkthrough").
 		Dir("skills").
@@ -87,6 +101,7 @@ func runDemo() {
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			c = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "skills-host", Version: "1.0"},
+				client.WithTracerProvider(tp),
 			)
 			if err := c.Connect(); err != nil {
 				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
