@@ -173,8 +173,10 @@ refresh-visual-gallery: ## Regenerate the side-by-side baselines gallery (mcpkit
 
 release-audit-apps: ## Release-time apps/compat audit umbrella — fully end-to-end: refresh ext-apps clone → docker-all (parity + visual gate) → regenerate gallery → commit + push the gallery → ghdeploy. Single command for "release-time, just do everything."
 	@echo "==> [1/5] Refreshing upstream ext-apps clone at /tmp/ext-apps..."
-	@if [ -d /tmp/ext-apps/.git ]; then \
+	@if [ -f /tmp/ext-apps/.git/HEAD ]; then \
 		(cd /tmp/ext-apps && git pull --quiet) && echo "  pulled"; \
+	elif [ -e /tmp/ext-apps ]; then \
+		rm -rf /tmp/ext-apps && git clone --quiet https://github.com/modelcontextprotocol/ext-apps.git /tmp/ext-apps && echo "  re-cloned (was corrupted: missing .git/HEAD)"; \
 	else \
 		git clone --quiet https://github.com/modelcontextprotocol/ext-apps.git /tmp/ext-apps && echo "  cloned"; \
 	fi

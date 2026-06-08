@@ -272,16 +272,29 @@ def wait_for_fixture(port: int, timeout_s: int = 20) -> bool:
 
 
 def ensure_ext_apps_clone(ext_apps_dir: Path) -> None:
-    """Clone ext-apps if missing, or pull if present. Best-effort pull."""
-    if (ext_apps_dir / ".git").exists():
+    """Clone ext-apps if missing or corrupted, pull if present and valid.
+
+    A bare `.git/` existence check isn't enough: partial-clone state (a
+    `.git/` dir with `objects/`, `refs/`, etc. but no `HEAD`) passes that
+    check yet fails every subsequent git command with "fatal: not a git
+    repository". This state turns up when a previous clone/pull was
+    killed mid-operation. Verify by checking `.git/HEAD` specifically —
+    that's the first file `git` resolves — and nuke + re-clone if
+    invalid.
+    """
+    head_file = ext_apps_dir / ".git" / "HEAD"
+    if head_file.is_file():
         info(f"Updating ext-apps in {ext_apps_dir}...")
         subprocess.run(["git", "pull", "--quiet"], cwd=ext_apps_dir, check=False)
-    else:
-        info(f"Cloning ext-apps to {ext_apps_dir}...")
-        subprocess.run(
-            ["git", "clone", "--quiet", EXT_APPS_REPO, str(ext_apps_dir)],
-            check=True,
-        )
+        return
+    if ext_apps_dir.exists():
+        info(f"Removing corrupted ext-apps at {ext_apps_dir} (missing .git/HEAD)...")
+        shutil.rmtree(ext_apps_dir)
+    info(f"Cloning ext-apps to {ext_apps_dir}...")
+    subprocess.run(
+        ["git", "clone", "--quiet", EXT_APPS_REPO, str(ext_apps_dir)],
+        check=True,
+    )
 
 
 def install_upstream_deps(ext_apps_dir: Path, *, only_if_missing: bool = True) -> None:
