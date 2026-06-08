@@ -24,7 +24,7 @@ help: ## Show this help.
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / { printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
 gen-compose: ## Regenerate docker-compose.yaml + nginx/nginx.conf for N event-servers, M push-servers.
-	go -C tools/gen-compose run . -n=$(N) -m=$(M) -out=..
+	go -C tools/gen-compose run . -n=$(N) -m=$(M) -out=../..
 
 build: ## Build all four binaries locally (without Docker).
 	go -C event-server build -o ../bin/event-server ./

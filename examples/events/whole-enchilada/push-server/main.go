@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -34,24 +35,42 @@ func main() {
 		"admin HTTP listen address (/healthz + /status)")
 	chatEvery := flag.Duration("chat-every", 2*time.Second, "cadence between synthetic chat messages")
 	presenceEvery := flag.Duration("presence-every", 5*time.Second, "cadence between synthetic presence transitions")
+	tenants := flag.String("tenants", envOr("PUSH_TENANTS", "tenant-a,tenant-b,tenant-c"),
+		"comma-separated tenant tags; each emitted event rotates through them in order so subscribers from one tenant only see ~1/N of events. Empty string = no tag (stage-1 single-tenant mode)")
 	flag.Parse()
+
+	tenantTags := splitNonEmpty(*tenants)
 
 	pusher := eventsclient.NewPusher(*target, *bearer)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	log.Printf("[push-server] target=%s admin=%s chat-every=%s presence-every=%s",
-		*target, *adminAddr, *chatEvery, *presenceEvery)
+	log.Printf("[push-server] target=%s admin=%s chat-every=%s presence-every=%s tenants=%v",
+		*target, *adminAddr, *chatEvery, *presenceEvery, tenantTags)
 
 	go runAdmin(*adminAddr)
 
 	var wg sync.WaitGroup
 	wg.Add(2)
-	go func() { defer wg.Done(); runChatFeeder(ctx, pusher, *chatEvery) }()
-	go func() { defer wg.Done(); runPresenceFeeder(ctx, pusher, *presenceEvery) }()
+	go func() { defer wg.Done(); runChatFeeder(ctx, pusher, *chatEvery, tenantTags) }()
+	go func() { defer wg.Done(); runPresenceFeeder(ctx, pusher, *presenceEvery, tenantTags) }()
 	wg.Wait()
 	log.Printf("[push-server] shutdown")
+}
+
+// splitNonEmpty returns the comma-separated parts of s with whitespace
+// trimmed and empty entries dropped. Returns nil for an empty / all-
+// whitespace input — runChatFeeder and runPresenceFeeder treat nil as
+// "no tenant tag" and emit untagged events (stage-1 mode).
+func splitNonEmpty(s string) []string {
+	var out []string
+	for _, raw := range strings.Split(s, ",") {
+		if v := strings.TrimSpace(raw); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 func runAdmin(addr string) {

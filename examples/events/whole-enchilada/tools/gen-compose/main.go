@@ -33,12 +33,13 @@ var composeTmpl string
 var nginxTmpl string
 
 type tmplCtx struct {
-	N             int    // event-server replica count
-	M             int    // push-server replica count
-	InjectBearer  string // shared secret env-default
-	WebhookSecret string // receiver secret env-default
-	EventServers  []int  // 1..N
-	PushServers   []int  // 1..M
+	N                int    // event-server replica count
+	M                int    // push-server replica count
+	InjectBearer     string // shared secret env-default
+	WebhookSecret    string // receiver secret env-default
+	KCResourceSecret string // pre-baked client_secret for the mcp-event-server confidential client in both realms (DEMO ONLY — rotate in production)
+	EventServers     []int  // 1..N
+	PushServers      []int  // 1..M
 }
 
 func main() {
@@ -52,12 +53,13 @@ func main() {
 	}
 
 	ctx := tmplCtx{
-		N:             *n,
-		M:             *m,
-		InjectBearer:  "stage-1-shared-secret",
-		WebhookSecret: "whsec_demo_secret_change_me_in_production",
-		EventServers:  seq(*n),
-		PushServers:   seq(*m),
+		N:                *n,
+		M:                *m,
+		InjectBearer:     "stage-1-shared-secret",
+		WebhookSecret:    "whsec_demo_secret_change_me_in_production",
+		KCResourceSecret: "mcpkit-demo-secret-DEMO-ONLY",
+		EventServers:     seq(*n),
+		PushServers:      seq(*m),
 	}
 
 	if err := render(composeTmpl, ctx, filepath.Join(*outDir, "docker-compose.yaml")); err != nil {
