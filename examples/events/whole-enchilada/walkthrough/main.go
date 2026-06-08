@@ -15,7 +15,7 @@ func main() {
 	filtered := demokit.FilterArgs(os.Args[1:])
 	flag.CommandLine.Parse(filtered)
 
-	serverURL := flag.String("url", envOr("MCP_URL", "http://localhost:8080"),
+	serverURL := flag.String("url", envOr("MCP_URL", "http://localhost:9090"),
 		"event-server URL (default nginx frontdoor in the compose stack)")
 	receiverURL := flag.String("receiver", envOr("RECEIVER_URL", "http://localhost:9090"),
 		"receiver URL the walkthrough subscribes its webhook to")

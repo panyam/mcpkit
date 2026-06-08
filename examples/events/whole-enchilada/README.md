@@ -121,7 +121,7 @@ Two paths, depending on whether you want to use the demo's Keycloak or your own 
 2. Type **OpenID Connect**, give it a client ID, enable Service Accounts / Standard Flow / Direct Access Grants as you need.
 3. **Save**, then **Credentials** tab → copy the generated secret.
 4. From your client, acquire a token against `http://localhost:8180/realms/tenant-a/protocol/openid-connect/token` using whichever OAuth flow fits your client (client_credentials, auth code, etc.).
-5. Send `Authorization: Bearer <token>` when calling `http://localhost:8080/mcp`. The event-server's `MultiRealmIntrospectionValidator` already accepts any token issued by any of the three realms — no further server-side configuration.
+5. Send `Authorization: Bearer <token>` when calling `http://localhost:9090/mcp`. The event-server's `MultiRealmIntrospectionValidator` already accepts any token issued by any of the three realms — no further server-side configuration.
 
 ### Bring your own IdP (JWT mode)
 

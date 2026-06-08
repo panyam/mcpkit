@@ -26,7 +26,7 @@ import (
 const liveCaptureWindow = 10 * time.Second
 
 // runDemo drives the demokit walkthrough against the running compose
-// stack. Server URL defaults to http://localhost:8080 (the nginx
+// stack. Server URL defaults to http://localhost:9090 (the nginx
 // frontdoor); receiver URL defaults to http://localhost:9090 (only
 // reachable from outside the compose network when -receiver-host is
 // overridden, but the walkthrough subscribes via the in-compose name).

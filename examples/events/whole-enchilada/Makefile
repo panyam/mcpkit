@@ -66,7 +66,7 @@ unittest: ## In-process Go tests (no Docker needed; covers tenant-isolation + pr
 
 up: gen-compose ## docker compose up -d. Reuses cached images. Pass BUILD=true to force a rebuild after code changes.
 	docker compose up -d $(if $(BUILD),--build)
-	@echo "stack up$(if $(BUILD), (rebuilt)); nginx on http://localhost:8080 — see README for hostname routing"
+	@echo "stack up$(if $(BUILD), (rebuilt)); nginx on http://localhost:9090 — see README for hostname routing"
 
 down: ## docker compose down -v (removes named volumes too).
 	docker compose down -v

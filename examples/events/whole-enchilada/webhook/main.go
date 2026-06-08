@@ -7,7 +7,7 @@
 //
 // Usage:
 //
-//	webhook --server http://localhost:8080/mcp \
+//	webhook --server http://localhost:9090/mcp \
 //	        --token   $(make newtoken TENANT=A) \
 //	        --tenant  tenant-a \
 //	        --event   chat.message
@@ -45,7 +45,7 @@ import (
 )
 
 func main() {
-	server := flag.String("server", envOr("WEBHOOK_SERVER", "http://localhost:8080/mcp"),
+	server := flag.String("server", envOr("WEBHOOK_SERVER", "http://localhost:9090/mcp"),
 		"MCP endpoint URL (default: nginx frontdoor)")
 	token := flag.String("token", os.Getenv("TOKEN"),
 		"Bearer token. Acquire via `make newtoken TENANT=<X>` upstream of this binary.")
