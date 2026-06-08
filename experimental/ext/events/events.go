@@ -265,6 +265,27 @@ type Config struct {
 	// internal no-caps Quota — every Reserve succeeds, no
 	// enforcement.
 	Quota *Quota
+
+	// Emitter is the output seam: where yielded events are delivered.
+	// The default (nil) constructs NewLocalEmitter(Server, Webhooks),
+	// which broadcasts to local SSE listeners and POSTs to local
+	// webhook targets — matching today's single-replica behavior
+	// bit-for-bit.
+	//
+	// Multi-replica deployments wrap the default in a composite that
+	// also fans to peer replicas (e.g., by POSTing to peers' HTTPSource
+	// inject endpoints from PR 653, or by publishing to a Redis
+	// pubsub channel — issue 634):
+	//
+	//	cfg.Emitter = events.NewCompositeEmitter(
+	//	    events.NewLocalEmitter(srv, webhooks),
+	//	    myPeerFanoutEmitter,  // your own Emitter impl
+	//	)
+	//
+	// See emitter.go for the interface contract; the receive-side
+	// design intentionally reuses HTTPSource (no new "Subscribe"
+	// surface — the Source interface is sufficient).
+	Emitter Emitter
 }
 
 // Register hooks up events/list, events/poll, events/subscribe, and
@@ -280,15 +301,21 @@ func Register(cfg Config) {
 	sources := cfg.Sources
 	webhooks := cfg.Webhooks
 
+	emitter := cfg.Emitter
+	if emitter == nil {
+		emitter = NewLocalEmitter(srv, webhooks)
+	}
+
 	sourceMap := make(map[string]EventSource, len(sources))
 	for _, s := range sources {
 		sourceMap[s.Def().Name] = s
 		if ea, ok := s.(emitterAware); ok {
+			// Capture emitter; SetEmitHook fires synchronously after
+			// the source's internal fanout. The default LocalEmitter
+			// runs Emit + EmitToWebhooks inline, preserving today's
+			// yield-blocks-on-delivery semantics.
 			ea.SetEmitHook(func(event Event) {
-				Emit(srv, event)
-				if webhooks != nil {
-					EmitToWebhooks(webhooks, event)
-				}
+				_ = emitter.Emit(context.Background(), event)
 			})
 		}
 	}
