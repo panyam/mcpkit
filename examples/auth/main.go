@@ -14,6 +14,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -28,6 +29,7 @@ import (
 	"github.com/panyam/mcpkit/core"
 	authcommon "github.com/panyam/mcpkit/examples/auth/common"
 	"github.com/panyam/mcpkit/examples/common"
+	commonotel "github.com/panyam/mcpkit/examples/common/otel"
 	"github.com/panyam/mcpkit/ext/auth"
 	"github.com/panyam/mcpkit/server"
 )
@@ -446,10 +448,21 @@ resp, _ := http.DefaultClient.Do(req) // resp.StatusCode == 403`),
 
 func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
+	tel := common.RegisterTelemetryFlags(flag.CommandLine)
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.BoolFlag("--serve"),
 		demokit.ValueFlag("--url"),
 	))
+
+	tp, shutdown, err := commonotel.SetupTelemetry(context.Background(),
+		commonotel.WithExporter(*tel.Exporter),
+		commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+		commonotel.WithServiceName("auth-unified"),
+	)
+	if err != nil {
+		log.Fatalf("commonotel.SetupTelemetry: %v", err)
+	}
+	defer shutdown(context.Background())
 
 	logger := common.NewMCPLogger("[mcp] ")
 
@@ -489,10 +502,11 @@ func serve() {
 	log.Printf("  bob/[read write admin]:    %s", tokBob)
 
 	if err := common.RunServer(common.ServerConfig{
-		Name:    "auth-unified",
-		Version: "1.0",
-		Addr:    *addr,
-		Logger:  logger,
+		Name:           "auth-unified",
+		Version:        "1.0",
+		Addr:           *addr,
+		Logger:         logger,
+		TracerProvider: tp,
 		Options: []server.Option{
 			server.WithAuth(validator),
 			server.WithPublicMethods("initialize", "notifications/initialized", "tools/list", "prompts/list", "ping"),

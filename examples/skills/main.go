@@ -24,12 +24,14 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"os"
 	"strings"
 
 	"github.com/panyam/mcpkit/examples/common"
+	commonotel "github.com/panyam/mcpkit/examples/common/otel"
 	"github.com/panyam/mcpkit/ext/skills"
 	"github.com/panyam/mcpkit/server"
 )
@@ -50,7 +52,18 @@ func serve() {
 		"distribution mode: file (per-resource SKILL.md + supporting files) | archive (one .tar.gz per skill)")
 	skillsDir := flag.String("skills", "skills",
 		"directory of skill bundles to register (default ./skills)")
+	tel := common.RegisterTelemetryFlags(flag.CommandLine)
 	flag.CommandLine.Parse(filterArgs(os.Args[1:], "--serve"))
+
+	tp, shutdown, err := commonotel.SetupTelemetry(context.Background(),
+		commonotel.WithExporter(*tel.Exporter),
+		commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+		commonotel.WithServiceName("skills-demo"),
+	)
+	if err != nil {
+		log.Fatalf("commonotel.SetupTelemetry: %v", err)
+	}
+	defer shutdown(context.Background())
 
 	provOpts := []skills.ProviderOption{
 		skills.WithDirectory(*skillsDir),
@@ -73,9 +86,10 @@ func serve() {
 
 	log.Printf("[skills-demo] mode=%s skills=%s", *modeFlag, *skillsDir)
 	if err := common.RunServer(common.ServerConfig{
-		Name:      "skills-demo",
-		Addr:      *addr,
-		LogPrefix: "[skills] ",
+		Name:           "skills-demo",
+		Addr:           *addr,
+		LogPrefix:      "[skills] ",
+		TracerProvider: tp,
 		Register: func(srv *server.Server) {
 			provider.RegisterWith(srv)
 		},

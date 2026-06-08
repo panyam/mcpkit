@@ -30,6 +30,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -42,19 +43,23 @@ import (
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
 	commonotel "github.com/panyam/mcpkit/examples/common/otel"
-	mcpotel "github.com/panyam/mcpkit/ext/otel"
 	"github.com/panyam/mcpkit/server"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 // Service names baked into the OTel Resource on each process's
 // pipeline so Grafana can index server-emitted vs walkthrough-emitted
-// spans separately. See examples/common/otel/pipeline.go for the
-// generic boilerplate these names plug into.
+// spans separately. See examples/common/otel/setup.go for the helper
+// these names plug into.
 const (
 	serverServiceName = "otel-stdout-demo"
 	hostServiceName   = "otel-stdout-host"
-	defaultExporter   = commonotel.ExporterStdout
+
+	// defaultExporter is "stdout" here as a deliberate carve-out:
+	// the whole point of THIS example is showing traces, so a bare
+	// `go run .` with no flag should still produce visible output.
+	// Every other example defaults to "" (no telemetry) per the
+	// project-wide rule — see examples/CONVENTIONS.md §Telemetry.
+	defaultExporter = commonotel.ExporterStdout
 )
 
 func main() {
@@ -74,23 +79,26 @@ func main() {
 // mode.
 func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
-	exporter := flag.String("exporter", defaultExporter, "trace exporter: stdout | otlp")
+	exporter := flag.String("exporter", defaultExporter, "trace exporter: \"\" (off) | stdout (default here) | otlp")
 	otlpEndpoint := flag.String("otlp-endpoint", commonotel.DefaultOTLPEndpoint, "OTLP gRPC endpoint when --exporter=otlp")
 	// --exporter / --otlp-endpoint are stdlib flag.String — they
 	// MUST NOT be registered with FilterArgs, which would strip
-	// them from os.Args before flag.Parse sees them (the file-inputs
-	// pattern handles example-specific flags via a custom os.Args
-	// scan; we go the simpler stdlib route).
+	// them from os.Args before flag.Parse sees them.
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.BoolFlag("--serve"),
 		demokit.ValueFlag("--url"),
 	))
 
-	otelTP, shutdown, err := commonotel.BuildPipeline(*exporter, *otlpEndpoint, serverServiceName, os.Stdout)
+	tp, shutdown, err := commonotel.SetupTelemetry(context.Background(),
+		commonotel.WithExporter(*exporter),
+		commonotel.WithOTLPEndpoint(*otlpEndpoint),
+		commonotel.WithServiceName(serverServiceName),
+	)
 	if err != nil {
-		log.Fatalf("otel pipeline: %v", err)
+		log.Fatalf("commonotel.SetupTelemetry: %v", err)
 	}
-	defer shutdown()
+	defer shutdown(context.Background())
+
 	log.Printf("[otel-stdout-demo] exporter=%s service.name=%s", *exporter, serverServiceName)
 	if *exporter == commonotel.ExporterOTLP {
 		log.Printf("[otel-stdout-demo] OTLP gRPC endpoint: %s", *otlpEndpoint)
@@ -99,20 +107,15 @@ func serve() {
 
 	log.Printf("[otel-stdout-demo] POST /mcp")
 	log.Printf("[otel-stdout-demo] tools: echo")
-	log.Printf("[otel-stdout-demo] every dispatched request will print one span on this stdout")
+	if *exporter == commonotel.ExporterStdout {
+		log.Printf("[otel-stdout-demo] every dispatched request will print one span on this stdout")
+	}
 
 	if err := common.RunServer(common.ServerConfig{
-		Name: "otel-stdout-demo",
-		Addr: *addr,
-		Options: []server.Option{
-			// SEP-414 P2 wires this option into an outermost trace
-			// middleware that emits a span on every JSON-RPC dispatch and
-			// injects _meta.traceparent on every outbound notification +
-			// server-to-client request. The adapter (P4) is the OTel SDK
-			// binding that makes spans actually flow to the exporter.
-			server.WithTracerProvider(mcpotel.NewProvider(otelTP)),
-		},
-		Register: registerDemoTools,
+		Name:           "otel-stdout-demo",
+		Addr:           *addr,
+		TracerProvider: tp,
+		Register:       registerDemoTools,
 	}); err != nil {
 		log.Fatalf("ListenAndServe: %v", err)
 	}
@@ -211,15 +214,6 @@ func registerDemoTools(srv *server.Server) {
 			return core.TextResult("count_tool: emitted 3 progress notifications"), nil
 		},
 	)
-}
-
-// newOTelPipeline preserves the original stdout-pipeline entrypoint
-// the e2e test calls. Equivalent to commonotel.NewStdoutPipeline with
-// the server-side service name — kept as a thin wrapper so the
-// existing TestNewOTelPipeline_HappyPath signature didn't have to
-// change just because OTLP-mode landed via the shared helpers.
-func newOTelPipeline(w *os.File) (*sdktrace.TracerProvider, func(), error) {
-	return commonotel.NewStdoutPipeline(w, serverServiceName)
 }
 
 // tempoExploreURL builds a Grafana Explore deep link pre-filtered to

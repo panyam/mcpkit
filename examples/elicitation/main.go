@@ -29,6 +29,7 @@ import (
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
+	commonotel "github.com/panyam/mcpkit/examples/common/otel"
 	"github.com/panyam/mcpkit/server"
 	"github.com/panyam/servicekit/middleware"
 )
@@ -320,6 +321,7 @@ func openBrowser(url string) {
 
 func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
+	tel := common.RegisterTelemetryFlags(flag.CommandLine)
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.BoolFlag("--serve"),
 		demokit.ValueFlag("--url"),
@@ -327,6 +329,17 @@ func serve() {
 	listenURL := fmt.Sprintf("http://localhost%s", *addr)
 	consent := newConsentStore()
 	logger := common.NewMCPLogger("[mcp] ")
+
+	tp, shutdown, err := commonotel.SetupTelemetry(context.Background(),
+		commonotel.WithExporter(*tel.Exporter),
+		commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+		commonotel.WithServiceName("elicitation-example"),
+	)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: commonotel.SetupTelemetry: %v\n", err)
+		os.Exit(1)
+	}
+	defer shutdown(context.Background())
 
 	cors := middleware.CORS(nil,
 		middleware.CORSAllowMethods("GET", "POST", "DELETE", "OPTIONS"),
@@ -338,10 +351,11 @@ func serve() {
 	fmt.Printf("Tools: access_protected_resource\n")
 
 	if err := common.RunServer(common.ServerConfig{
-		Name:    "elicitation-example",
-		Version: "1.0.0",
-		Addr:    *addr,
-		Logger:  logger,
+		Name:           "elicitation-example",
+		Version:        "1.0.0",
+		Addr:           *addr,
+		Logger:         logger,
+		TracerProvider: tp,
 		Register: func(srv *server.Server) {
 			srv.RegisterTool(
 				core.ToolDef{

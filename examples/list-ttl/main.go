@@ -18,6 +18,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -27,6 +28,7 @@ import (
 	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
+	commonotel "github.com/panyam/mcpkit/examples/common/otel"
 	"github.com/panyam/mcpkit/server"
 )
 
@@ -46,10 +48,21 @@ func serve() {
 	// Negative default = unset → no ttlMs emitted on responses.
 	ttlMs := flag.Int("ttl-ms", -1, "cache TTL in milliseconds (negative = unset, 0 = immediately stale, positive = fresh for N ms)")
 	scope := flag.String("cache-scope", "", `SEP-2549 cacheScope: "public", "private", or "" to omit`)
+	tel := common.RegisterTelemetryFlags(flag.CommandLine)
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.BoolFlag("--serve"),
 		demokit.ValueFlag("--url"),
 	))
+
+	tp, shutdown, err := commonotel.SetupTelemetry(context.Background(),
+		commonotel.WithExporter(*tel.Exporter),
+		commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+		commonotel.WithServiceName("list-ttl-demo"),
+	)
+	if err != nil {
+		log.Fatalf("commonotel.SetupTelemetry: %v", err)
+	}
+	defer shutdown(context.Background())
 
 	// The same ttlMs / cacheScope applies to the four list endpoints and to
 	// resources/read — SEP-2549 added resources/read to the coverage list.
@@ -74,9 +87,10 @@ func serve() {
 	log.Printf("[list-ttl-demo] ttlMs: %s, cacheScope: %s", mode, scopeMode)
 
 	if err := common.RunServer(common.ServerConfig{
-		Name:    "list-ttl-demo",
-		Addr:    *addr,
-		Options: extraOpts,
+		Name:           "list-ttl-demo",
+		Addr:           *addr,
+		TracerProvider: tp,
+		Options:        extraOpts,
 		Register: func(srv *server.Server) {
 			srv.RegisterTool(
 				core.ToolDef{
