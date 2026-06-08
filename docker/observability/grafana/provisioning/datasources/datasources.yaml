@@ -1,0 +1,46 @@
+# Grafana datasource provisioning — auto-wires Tempo / Loki / Mimir on
+# Grafana startup so the operator never sees the "add datasource"
+# screen. Host names match the docker-compose service names.
+
+apiVersion: 1
+
+datasources:
+  - name: Tempo
+    type: tempo
+    uid: tempo
+    access: proxy
+    url: http://tempo:3200
+    isDefault: true
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: 1h
+        spanEndTimeShift: -1h
+        tags:
+          - key: service.name
+            value: service_name
+      tracesToMetrics:
+        datasourceUid: mimir
+        spanStartTimeShift: 1h
+        spanEndTimeShift: -1h
+
+  - name: Loki
+    type: loki
+    uid: loki
+    access: proxy
+    url: http://loki:3100
+    jsonData:
+      derivedFields:
+        - datasourceUid: tempo
+          matcherRegex: "traceID=(\\w+)"
+          name: TraceID
+          url: "$${__value.raw}"
+
+  - name: Mimir
+    type: prometheus
+    uid: mimir
+    access: proxy
+    url: http://mimir:9009/prometheus
+    jsonData:
+      prometheusType: Mimir
+      prometheusVersion: 2.14.0

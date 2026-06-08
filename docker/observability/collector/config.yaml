@@ -1,0 +1,70 @@
+# OpenTelemetry Collector config — receives OTLP from mcpkit examples
+# (and any other OTLP-aware emitter), splits by signal type, and
+# forwards each to its per-signal backend in the LGTM stack.
+#
+# Receivers:   OTLP gRPC (:4317) + OTLP HTTP (:4318)
+# Pipelines:   traces → Tempo, metrics → Mimir, logs → Loki
+#
+# All exporters target the in-stack service names (resolved by Docker
+# Compose's internal DNS). The batch processor is the canonical
+# "smooth bursts" buffer; resource processor attaches a default
+# `service.name` only when a signal arrives without one so the
+# Grafana UI never shows `unknown_service` (a mcpkit example that
+# follows the docs ships its own `service.name` via the OTel SDK
+# Resource — see ext/otel issue 674).
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+
+  resource:
+    attributes:
+      - key: service.name
+        value: unknown_mcpkit_example
+        action: insert  # only inserts when absent; emitter-set values win
+
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  prometheusremotewrite/mimir:
+    endpoint: http://mimir:9009/api/v1/push
+    tls:
+      insecure: true
+
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [resource, batch]
+      exporters: [otlp/tempo]
+
+    metrics:
+      receivers: [otlp]
+      processors: [resource, batch]
+      exporters: [prometheusremotewrite/mimir]
+
+    logs:
+      receivers: [otlp]
+      processors: [resource, batch]
+      exporters: [otlphttp/loki]
+
+  telemetry:
+    metrics:
+      address: 0.0.0.0:8888

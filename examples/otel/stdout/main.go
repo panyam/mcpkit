@@ -1,20 +1,35 @@
 // Example: SEP-414 — OpenTelemetry trace context propagation via the
-// ext/otel adapter with the stdouttrace exporter.
+// ext/otel adapter. Two exporter modes:
+//
+//   - --exporter=stdout (default) — spans pretty-print as JSON on the
+//     respective process stdout. CI-friendly; no external stack
+//     required. Match by TraceID across two terminals to see SEP-414
+//     stitching.
+//
+//   - --exporter=otlp — spans ship via OTLP gRPC (default endpoint
+//     localhost:4317) to the docker/observability/ stack. Open
+//     http://localhost:3000 and search by service name otel-stdout-demo
+//     (server) / otel-stdout-host (client walkthrough) to see the
+//     stitched trace in Grafana.
 //
 // Two-process architecture:
 //
-//	Terminal 1:  make serve         # MCP server on :8080 — spans dump to its stdout
-//	Terminal 2:  make demo          # demokit walkthrough (--tui for the TUI)
+//	Terminal 1:  make serve                       # stdouttrace, CI mode
+//	Terminal 2:  make demo                        # stdouttrace, CI mode
+//
+//	Terminal 1:  make serve EXPORTER=otlp         # OTLP → stack
+//	Terminal 2:  make demo EXPORTER=otlp          # OTLP → stack
+//
+// `make -C ../../../docker up` brings the stack up before either
+// EXPORTER=otlp invocation.
 //
 // The server is a real MCP server: any host (VS Code, Claude Desktop,
-// MCPJam) can connect and watch the OpenTelemetry pipeline export spans
-// as JSON on its stdout. The walkthrough scripts the host side — it
-// drives a tools/call carrying an explicit W3C `_meta.traceparent` so a
-// reader can see the inbound trace ID land on the server-emitted span.
+// MCPJam) can connect. The walkthrough scripts the host side — it
+// drives a tools/call so a reader can see both sides emit matching
+// TraceIDs.
 package main
 
 import (
-	"context"
 	"flag"
 	"log"
 	"os"
@@ -23,10 +38,20 @@ import (
 	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
+	commonotel "github.com/panyam/mcpkit/examples/common/otel"
 	mcpotel "github.com/panyam/mcpkit/ext/otel"
 	"github.com/panyam/mcpkit/server"
-	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+)
+
+// Service names baked into the OTel Resource on each process's
+// pipeline so Grafana can index server-emitted vs walkthrough-emitted
+// spans separately. See examples/common/otel/pipeline.go for the
+// generic boilerplate these names plug into.
+const (
+	serverServiceName = "otel-stdout-demo"
+	hostServiceName   = "otel-stdout-host"
+	defaultExporter   = commonotel.ExporterStdout
 )
 
 func main() {
@@ -39,22 +64,32 @@ func main() {
 	runDemo()
 }
 
-// serve boots the OpenTelemetry pipeline (stdouttrace exporter → SDK
-// TracerProvider), wraps it with the mcpkit ext/otel adapter, and starts
-// the MCP server. Every dispatched JSON-RPC request prints a span as
-// pretty-printed JSON on stdout — the demo's whole point.
+// serve boots the OpenTelemetry pipeline (per --exporter mode),
+// wraps it with the mcpkit ext/otel adapter, and starts the MCP
+// server. Each dispatched JSON-RPC request emits a span — to stdout
+// in --exporter=stdout mode, to the OTLP collector in --exporter=otlp
+// mode.
 func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
+	exporter := flag.String("exporter", defaultExporter, "trace exporter: stdout | otlp")
+	otlpEndpoint := flag.String("otlp-endpoint", commonotel.DefaultOTLPEndpoint, "OTLP gRPC endpoint when --exporter=otlp")
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.BoolFlag("--serve"),
 		demokit.ValueFlag("--url"),
+		demokit.ValueFlag("--exporter"),
+		demokit.ValueFlag("--otlp-endpoint"),
 	))
 
-	otelTP, shutdown, err := newOTelPipeline(os.Stdout)
+	otelTP, shutdown, err := commonotel.BuildPipeline(*exporter, *otlpEndpoint, serverServiceName, os.Stdout)
 	if err != nil {
 		log.Fatalf("otel pipeline: %v", err)
 	}
 	defer shutdown()
+	log.Printf("[otel-stdout-demo] exporter=%s service.name=%s", *exporter, serverServiceName)
+	if *exporter == commonotel.ExporterOTLP {
+		log.Printf("[otel-stdout-demo] OTLP gRPC endpoint: %s", *otlpEndpoint)
+		log.Printf("[otel-stdout-demo] view in Grafana: http://localhost:3000  (search service.name=%s)", serverServiceName)
+	}
 
 	log.Printf("[otel-stdout-demo] POST /mcp")
 	log.Printf("[otel-stdout-demo] tools: echo")
@@ -107,21 +142,11 @@ func registerEcho(srv *server.Server) {
 	)
 }
 
-// newOTelPipeline constructs an SDK TracerProvider that writes spans to
-// the supplied writer via the stdouttrace exporter. The returned
-// shutdown closure flushes the exporter; defer it so the buffered span
-// lands on stdout before the process exits. Errors propagate so the
-// caller decides whether to fatal — serve() does; the e2e test uses an
-// in-memory exporter directly and skips this helper.
+// newOTelPipeline preserves the original stdout-pipeline entrypoint
+// the e2e test calls. Equivalent to commonotel.NewStdoutPipeline with
+// the server-side service name — kept as a thin wrapper so the
+// existing TestNewOTelPipeline_HappyPath signature didn't have to
+// change just because OTLP-mode landed via the shared helpers.
 func newOTelPipeline(w *os.File) (*sdktrace.TracerProvider, func(), error) {
-	exp, err := stdouttrace.New(
-		stdouttrace.WithWriter(w),
-		stdouttrace.WithPrettyPrint(),
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exp))
-	shutdown := func() { _ = tp.Shutdown(context.Background()) }
-	return tp, shutdown, nil
+	return commonotel.NewStdoutPipeline(w, serverServiceName)
 }
