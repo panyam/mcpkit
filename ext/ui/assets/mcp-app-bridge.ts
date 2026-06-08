@@ -70,6 +70,29 @@ interface RequestOptions {
   timeout?: number;
 }
 
+/**
+ * Trace context returned by a TraceContextProvider — W3C Trace Context
+ * (https://www.w3.org/TR/trace-context/) fields. Both are optional; an
+ * absent traceparent disables propagation for this request.
+ */
+interface TraceContext {
+  /** W3C traceparent header value (`00-<trace-id>-<span-id>-<flags>`). */
+  traceparent?: string;
+  /** W3C tracestate header value (vendor-specific key=value pairs). */
+  tracestate?: string;
+}
+
+/**
+ * Function the bridge calls before sending each outbound request to
+ * ask "should I stamp a traceparent on this?". Return null /
+ * undefined / an empty traceparent to skip propagation.
+ *
+ * Typical adopter wiring: feed from your browser OTel SDK via
+ * `propagation.inject({}, carrier)` or extract from the active span.
+ * Demo wiring: return a fixed traceparent string.
+ */
+type TraceContextProvider = () => TraceContext | null | undefined;
+
 /** Handler for incoming tool calls from the host. */
 type CallToolHandler = (params: {
   name: string;
@@ -187,6 +210,14 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
   let _oncalltool: CallToolHandler | null = null;
   let _onlisttools: ListToolsHandler | null = null;
 
+  // Optional trace-context provider — when set, request() consults
+  // it for each outbound call and stamps params._meta.traceparent /
+  // _meta.tracestate. Caller-set values in params._meta win
+  // (preserved, never clobbered) — mirrors Go-side
+  // core.InjectTraceContextIntoParams semantics so the boundary
+  // semantics stay symmetric.
+  let _traceContextProvider: TraceContextProvider | null = null;
+
   // Tool registry for registerTool() API.
   const _registeredTools = new Map<string, RegisteredTool>();
   let _useRegistry = false;
@@ -268,12 +299,14 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
       signal = AbortSignal.timeout(options.timeout);
     }
 
+    const outboundParams = injectTraceContext(params);
+
     return new Promise((resolve, reject) => {
       const id = nextId++;
       const cleanup = () => { pending.delete(id); };
 
       pending.set(id, { resolve, reject });
-      send({ jsonrpc: "2.0", id, method, params: params || {} });
+      send({ jsonrpc: "2.0", id, method, params: outboundParams });
 
       // AbortSignal-based cancellation.
       if (signal) {
@@ -308,7 +341,64 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
       }
       return;
     }
-    send({ jsonrpc: "2.0", method, params: params || {} });
+    send({ jsonrpc: "2.0", method, params: injectTraceContext(params) });
+  }
+
+  // injectTraceContext stamps the active browser-side traceparent /
+  // tracestate onto params._meta if a TraceContextProvider is wired
+  // and returns a non-empty value. Caller-set values in
+  // params._meta.traceparent / _meta.tracestate are preserved
+  // verbatim (never clobbered) — matches Go-side
+  // core.InjectTraceContextIntoParams semantics so the boundary
+  // crossing stays bidirectionally symmetric.
+  //
+  // Params shape: only object params get the merge (matches MCP
+  // _meta convention). Non-object params (positional arrays,
+  // scalars) are returned as-is. Undefined / null params get
+  // upgraded to `{}` then merged so the relay works for tools that
+  // take no arguments.
+  function injectTraceContext(params: unknown): unknown {
+    if (!_traceContextProvider) {
+      return params === undefined ? {} : params;
+    }
+    let tc: TraceContext | null | undefined;
+    try {
+      tc = _traceContextProvider();
+    } catch (err) {
+      if (typeof console !== "undefined") {
+        console.warn("[MCPApp] traceContextProvider threw; skipping trace propagation:", err);
+      }
+      return params === undefined ? {} : params;
+    }
+    if (!tc || !tc.traceparent) {
+      return params === undefined ? {} : params;
+    }
+
+    let merged: Record<string, unknown>;
+    if (params === undefined || params === null) {
+      merged = {};
+    } else if (typeof params === "object" && !Array.isArray(params)) {
+      merged = { ...(params as Record<string, unknown>) };
+    } else {
+      // Non-object params don't get _meta; the propagation contract
+      // assumes the MCP convention. Return untouched.
+      return params;
+    }
+
+    const existingMeta = merged._meta;
+    const meta: Record<string, unknown> =
+      existingMeta && typeof existingMeta === "object" && !Array.isArray(existingMeta)
+        ? { ...(existingMeta as Record<string, unknown>) }
+        : {};
+
+    if (meta.traceparent === undefined && tc.traceparent) {
+      meta.traceparent = tc.traceparent;
+    }
+    if (meta.tracestate === undefined && tc.tracestate) {
+      meta.tracestate = tc.tracestate;
+    }
+    merged._meta = meta;
+    return merged;
   }
 
   // --- Incoming message handler --------------------------------------------
@@ -766,6 +856,39 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
     // Utility.
     isHosted(): boolean {
       return _connected;
+    },
+
+    /**
+     * Register a function the bridge calls before sending each
+     * outbound request, to stamp W3C trace context onto
+     * `params._meta.traceparent` / `_meta.tracestate`. Enables
+     * SEP-414 propagation across the iframe ↔ host postMessage
+     * boundary so a browser-side trace can stitch with the backend
+     * tool-call span emitted by the MCP server.
+     *
+     * The provider is consulted on every outbound request and
+     * notification. Return `null` / `undefined` / an object with no
+     * `traceparent` to skip propagation for that call. Throws are
+     * caught and logged; the request still sends without propagation.
+     *
+     * Caller-set values in `params._meta.traceparent` win — the
+     * provider is a fallback, never a clobber. Mirrors Go-side
+     * `core.InjectTraceContextIntoParams` semantics.
+     *
+     * Pass `null` to unregister. Setting a new provider replaces the
+     * previous one.
+     *
+     * Typical adopter wiring against OTel JS:
+     *
+     *     import { propagation, context } from "@opentelemetry/api";
+     *     MCPApp.setTraceContextProvider(() => {
+     *       const carrier: Record<string, string> = {};
+     *       propagation.inject(context.active(), carrier);
+     *       return { traceparent: carrier.traceparent, tracestate: carrier.tracestate };
+     *     });
+     */
+    setTraceContextProvider(provider: TraceContextProvider | null): void {
+      _traceContextProvider = provider;
     },
   };
 

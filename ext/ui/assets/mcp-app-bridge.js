@@ -140,6 +140,7 @@
     let _hostCapabilities = null;
     let _oncalltool = null;
     let _onlisttools = null;
+    let _traceContextProvider = null;
     const _registeredTools = /* @__PURE__ */ new Map();
     let _useRegistry = false;
     function on(event, handler) {
@@ -192,13 +193,14 @@
       if (!signal && options?.timeout) {
         signal = AbortSignal.timeout(options.timeout);
       }
+      const outboundParams = injectTraceContext(params);
       return new Promise((resolve, reject) => {
         const id = nextId++;
         const cleanup = () => {
           pending.delete(id);
         };
         pending.set(id, { resolve, reject });
-        send({ jsonrpc: "2.0", id, method, params: params || {} });
+        send({ jsonrpc: "2.0", id, method, params: outboundParams });
         if (signal) {
           if (signal.aborted) {
             cleanup();
@@ -228,7 +230,42 @@
         }
         return;
       }
-      send({ jsonrpc: "2.0", method, params: params || {} });
+      send({ jsonrpc: "2.0", method, params: injectTraceContext(params) });
+    }
+    function injectTraceContext(params) {
+      if (!_traceContextProvider) {
+        return params === void 0 ? {} : params;
+      }
+      let tc;
+      try {
+        tc = _traceContextProvider();
+      } catch (err) {
+        if (typeof console !== "undefined") {
+          console.warn("[MCPApp] traceContextProvider threw; skipping trace propagation:", err);
+        }
+        return params === void 0 ? {} : params;
+      }
+      if (!tc || !tc.traceparent) {
+        return params === void 0 ? {} : params;
+      }
+      let merged;
+      if (params === void 0 || params === null) {
+        merged = {};
+      } else if (typeof params === "object" && !Array.isArray(params)) {
+        merged = { ...params };
+      } else {
+        return params;
+      }
+      const existingMeta = merged._meta;
+      const meta = existingMeta && typeof existingMeta === "object" && !Array.isArray(existingMeta) ? { ...existingMeta } : {};
+      if (meta.traceparent === void 0 && tc.traceparent) {
+        meta.traceparent = tc.traceparent;
+      }
+      if (meta.tracestate === void 0 && tc.tracestate) {
+        meta.tracestate = tc.tracestate;
+      }
+      merged._meta = meta;
+      return merged;
     }
     function isJsonRpc(data) {
       return typeof data === "object" && data !== null && data.jsonrpc === "2.0";
@@ -595,6 +632,38 @@
       // Utility.
       isHosted() {
         return _connected;
+      },
+      /**
+       * Register a function the bridge calls before sending each
+       * outbound request, to stamp W3C trace context onto
+       * `params._meta.traceparent` / `_meta.tracestate`. Enables
+       * SEP-414 propagation across the iframe ↔ host postMessage
+       * boundary so a browser-side trace can stitch with the backend
+       * tool-call span emitted by the MCP server.
+       *
+       * The provider is consulted on every outbound request and
+       * notification. Return `null` / `undefined` / an object with no
+       * `traceparent` to skip propagation for that call. Throws are
+       * caught and logged; the request still sends without propagation.
+       *
+       * Caller-set values in `params._meta.traceparent` win — the
+       * provider is a fallback, never a clobber. Mirrors Go-side
+       * `core.InjectTraceContextIntoParams` semantics.
+       *
+       * Pass `null` to unregister. Setting a new provider replaces the
+       * previous one.
+       *
+       * Typical adopter wiring against OTel JS:
+       *
+       *     import { propagation, context } from "@opentelemetry/api";
+       *     MCPApp.setTraceContextProvider(() => {
+       *       const carrier: Record<string, string> = {};
+       *       propagation.inject(context.active(), carrier);
+       *       return { traceparent: carrier.traceparent, tracestate: carrier.tracestate };
+       *     });
+       */
+      setTraceContextProvider(provider) {
+        _traceContextProvider = provider;
       }
     };
     window.MCPApp = MCPApp;

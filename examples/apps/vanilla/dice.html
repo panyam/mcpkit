@@ -28,6 +28,31 @@
     };
     {{ .Bridge.BridgeJS }}
 
+    // --- SEP-414 trace context relay demo (issue 660) -----------------
+    // Production adopters wire this against their browser OTel SDK via
+    // propagation.inject(context.active(), carrier). For demo purposes
+    // we stamp a fixed traceparent so this iframe's traceID shows up as
+    // the parent of the apps.host.forward + server tools/call spans in
+    // Tempo when the host is configured with ui.WithTracerProvider(tp).
+    // Each page load rotates a fresh trace+span ID so demos don't reuse
+    // the same trace across reloads.
+    function randHex(n) {
+      var out = '';
+      var alphabet = '0123456789abcdef';
+      for (var i = 0; i < n; i++) {
+        out += alphabet[Math.floor(Math.random() * 16)];
+      }
+      return out;
+    }
+    var demoTraceparent = '00-' + randHex(32) + '-' + randHex(16) + '-01';
+    MCPApp.setTraceContextProvider(function () {
+      return { traceparent: demoTraceparent };
+    });
+    // Stash for the on-page indicator (rendered below) so a demo
+    // viewer can read the TraceID off the iframe and search for it
+    // in Grafana.
+    window.__MCPAPP_DEMO_TRACEPARENT__ = demoTraceparent;
+
     // --- App logic below ---
     function extractText(result) {
       if (result && result.content) {

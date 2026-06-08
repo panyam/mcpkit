@@ -68,6 +68,24 @@ interface RequestOptions {
   timeout?: number;
 }
 
+/**
+ * W3C Trace Context fields a TraceContextProvider returns.
+ * https://www.w3.org/TR/trace-context/
+ */
+interface TraceContext {
+  /** W3C traceparent header value (`00-<trace-id>-<span-id>-<flags>`). */
+  traceparent?: string;
+  /** W3C tracestate header value (vendor-specific key=value pairs). */
+  tracestate?: string;
+}
+
+/**
+ * Function the bridge calls before sending each outbound request to
+ * stamp W3C trace context onto `params._meta`. Return null /
+ * undefined / an object with no traceparent to skip propagation.
+ */
+type TraceContextProvider = () => TraceContext | null | undefined;
+
 /** Result from callTool(). */
 interface ToolCallResult {
   content?: Array<{ type: string; text?: string; [k: string]: unknown }>;
@@ -222,6 +240,17 @@ interface MCPAppBridge {
 
   /** Returns true if running inside an MCP Apps host. */
   isHosted(): boolean;
+
+  /**
+   * Register a function the bridge calls before sending each
+   * outbound request, to stamp W3C trace context onto
+   * `params._meta.traceparent` / `_meta.tracestate`. Enables
+   * SEP-414 propagation across the iframe ↔ host postMessage
+   * boundary so a browser-side trace stitches with the backend
+   * tool-call span. Pass `null` to unregister. Caller-set
+   * `params._meta.traceparent` wins (provider is a fallback).
+   */
+  setTraceContextProvider(provider: TraceContextProvider | null): void;
 }
 
 /** Handle for managing a registered app-provided tool. */
