@@ -114,7 +114,7 @@ type errPayload struct {
 	Message string `json:"message"`
 }
 
-func registerStream(srv *server.Server, sourceMap map[string]EventSource, unsafeAnon string, heartbeat time.Duration, idx *SubscriptionIndex, quota *Quota) {
+func registerStream(srv *server.Server, sourceMap map[string]EventSource, unsafeAnon string, heartbeat time.Duration, idx SubscriptionIndexStore, quota *Quota) {
 	if heartbeat <= 0 {
 		heartbeat = defaultStreamHeartbeatInterval
 	}
@@ -213,8 +213,14 @@ func registerStream(srv *server.Server, sourceMap map[string]EventSource, unsafe
 		// (spec §"Server SDK Guidance" L630). Removed on every
 		// return path so a closed stream's id can't match a stale
 		// entry.
-		idx.Add(streamSubID, DeliveryModePush, sender)
-		defer idx.Remove(streamSubID)
+		_, _ = idx.AddSubscription(ctx, AddSubscriptionRequest{
+			SubscriptionID: streamSubID,
+			Mode:           DeliveryModePush,
+			Deliver:        sender,
+		})
+		defer func() {
+			_, _ = idx.RemoveSubscription(context.Background(), RemoveSubscriptionRequest{SubscriptionID: streamSubID})
+		}()
 
 		// Send the confirmation notification. The loop below reads
 		// from evCh; active goes out via ctx.Notify before the loop
