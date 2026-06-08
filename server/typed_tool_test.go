@@ -223,7 +223,7 @@ func TestTypedTool_InvalidInput(t *testing.T) {
 		var result core.ToolResult
 		require.NoError(t, resp.ResultAs(&result))
 		assert.True(t, result.IsError, "deserialization failure should produce isError=true")
-		assert.Contains(t, result.Content[0].Text, "invalid arguments")
+		assert.Contains(t, result.Content[0].Text, "Invalid arguments")
 	}
 }
 

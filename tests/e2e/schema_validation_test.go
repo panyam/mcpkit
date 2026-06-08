@@ -4,9 +4,10 @@ package e2e_test
 // Unit tests in server/schema_validation_test.go exercise the Dispatch
 // path directly; this test exercises the full HTTP wire — Client →
 // Streamable HTTP transport → dispatcher → validator → error response —
-// and inspects the -32602 error shape over the wire.
+// and inspects the isError-tool-result shape over the wire.
 
 import (
+	"encoding/json"
 	"net/http/httptest"
 	"testing"
 
@@ -19,9 +20,11 @@ import (
 
 // TestE2E_SchemaValidationErrorOverWire verifies that a tool declared with
 // an InputSchema rejects invalid arguments at the server and returns a
-// spec-compliant -32602 Invalid Params error to the client. The error's
-// data field must carry a structured errors list that agents can parse to
-// self-correct on the next call.
+// successful JSON-RPC response carrying a tool result with isError: true.
+// Wrapping (rather than emitting -32602) matches upstream's ext-apps SDK
+// behavior so apps/compat hosts (basic-host, the iframe) can surface
+// validation failures through their normal result-rendering UI instead of
+// treating them as protocol-level faults.
 func TestE2E_SchemaValidationErrorOverWire(t *testing.T) {
 	srv := server.NewServer(core.ServerInfo{Name: "schema-e2e", Version: "1.0"})
 	srv.RegisterTool(core.ToolDef{
@@ -49,14 +52,23 @@ func TestE2E_SchemaValidationErrorOverWire(t *testing.T) {
 	require.NoError(t, c.Connect())
 	defer c.Close()
 
-	// Call with a negative value — violates minimum: 1
-	_, err := c.ToolCall("strict", map[string]any{"count": -5})
-	require.Error(t, err, "expected validation error over the wire")
+	// Call with a negative value — violates minimum: 1.
+	// Use the lower-level Call so we can inspect the raw tool result;
+	// ToolCall would unwrap the isError into a Go error and we'd lose the
+	// structured-content payload.
+	result, err := c.Call("tools/call", map[string]any{
+		"name":      "strict",
+		"arguments": map[string]any{"count": -5},
+	})
+	require.NoError(t, err, "expected isError tool result, got JSON-RPC error")
+	require.NotNil(t, result)
 
-	// The error message format from client.go is "RPC error <code>: <msg>".
-	// This locks in both the error code (-32602) and the validation message
-	// shape — the two things agents parse to decide what to do next.
-	assert.Contains(t, err.Error(), "-32602",
-		"validation errors must use -32602 per #184")
-	assert.Contains(t, err.Error(), "argument validation failed")
+	var tr core.ToolResult
+	require.NoError(t, json.Unmarshal(result.Raw, &tr))
+	assert.True(t, tr.IsError, "expected isError: true on the tool result")
+	require.NotEmpty(t, tr.Content, "expected at least one content block")
+	assert.Contains(t, tr.Content[0].Text, "Invalid arguments",
+		"text content should describe what went wrong")
+	require.NotNil(t, tr.StructuredContent,
+		"structured payload should carry the validation errors for programmatic consumers")
 }

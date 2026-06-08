@@ -122,8 +122,12 @@ func TestRegisterPromptInvalidSchemaPanics(t *testing.T) {
 }
 
 // TestToolValidateTypeMismatch verifies that an argument with the wrong
-// JSON type produces a -32602 error with a structured errors list pointing
-// at the offending field path.
+// JSON type produces a successful response carrying a tool result with
+// isError: true and a structured ValidationErrors payload pointing at the
+// offending field path. Wrapping as a tool result (rather than a -32602
+// JSON-RPC error) matches upstream's ext-apps SDK behavior so apps/compat
+// fixtures can surface validation failures through the iframe's normal
+// result-rendering UI.
 func TestToolValidateTypeMismatch(t *testing.T) {
 	srv := newSchemaTestServer(t)
 	srv.RegisterTool(core.ToolDef{
@@ -137,16 +141,25 @@ func TestToolValidateTypeMismatch(t *testing.T) {
 	}, okHandler)
 
 	resp := callTool(t, srv, "typed", map[string]any{"age": "not a number"})
-	require.NotNil(t, resp.Error, "expected validation error")
-	assert.Equal(t, core.ErrCodeInvalidParams, resp.Error.Code)
-	assert.Contains(t, resp.Error.Message, "argument validation failed")
+	require.Nil(t, resp.Error, "expected success-wrapped tool result, got JSON-RPC error: %+v", resp.Error)
+	require.NotNil(t, resp.Result)
 
-	// The error data should be a ValidationErrors struct with a path
-	// pointing at /age. Round-trip through JSON since Data is `any`.
-	raw, err := json.Marshal(resp.Error.Data)
+	var result core.ToolResult
+	raw, err := json.Marshal(resp.Result)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(raw, &result))
+	assert.True(t, result.IsError, "expected isError: true on the tool result")
+	require.NotEmpty(t, result.Content, "expected at least one content block")
+	// The human-readable text mentions the tool name + that arguments were invalid.
+	assert.Contains(t, result.Content[0].Text, "Invalid arguments")
+	assert.Contains(t, result.Content[0].Text, "typed")
+
+	// StructuredContent carries the machine-readable error list — same payload
+	// shape that used to live in error.data, just on the tool result.
+	structRaw, err := json.Marshal(result.StructuredContent)
 	require.NoError(t, err)
 	var ve server.ValidationErrors
-	require.NoError(t, json.Unmarshal(raw, &ve))
+	require.NoError(t, json.Unmarshal(structRaw, &ve))
 	require.NotEmpty(t, ve.Errors)
 	found := false
 	for _, e := range ve.Errors {
@@ -159,7 +172,8 @@ func TestToolValidateTypeMismatch(t *testing.T) {
 }
 
 // TestToolValidateMissingRequired verifies that missing required fields
-// are reported so agents know what to supply on the retry.
+// are reported via isError tool result so agents know what to supply on
+// the retry.
 func TestToolValidateMissingRequired(t *testing.T) {
 	srv := newSchemaTestServer(t)
 	srv.RegisterTool(core.ToolDef{
@@ -174,8 +188,12 @@ func TestToolValidateMissingRequired(t *testing.T) {
 	}, okHandler)
 
 	resp := callTool(t, srv, "req", map[string]any{"other": "value"})
-	require.NotNil(t, resp.Error)
-	assert.Equal(t, core.ErrCodeInvalidParams, resp.Error.Code)
+	require.Nil(t, resp.Error)
+	require.NotNil(t, resp.Result)
+	var result core.ToolResult
+	raw, _ := json.Marshal(resp.Result)
+	require.NoError(t, json.Unmarshal(raw, &result))
+	assert.True(t, result.IsError, "expected isError: true")
 }
 
 // TestToolValidateSuccess is the happy path — a valid call reaches the
@@ -389,8 +407,13 @@ func TestSchema2020_12Conformance(t *testing.T) {
 	})
 	require.Nil(t, ok.Error, "valid 2020-12 input should reach the handler")
 
-	// id must be a positive integer per $ref
+	// id must be a positive integer per $ref — validation failure surfaces
+	// as an isError tool result, not a -32602 JSON-RPC error.
 	bad := callTool(t, srv, "conform", map[string]any{"id": -5})
-	require.NotNil(t, bad.Error)
-	assert.Equal(t, core.ErrCodeInvalidParams, bad.Error.Code)
+	require.Nil(t, bad.Error)
+	require.NotNil(t, bad.Result)
+	var result core.ToolResult
+	raw, _ := json.Marshal(bad.Result)
+	require.NoError(t, json.Unmarshal(raw, &result))
+	assert.True(t, result.IsError, "expected isError: true on bad input")
 }
