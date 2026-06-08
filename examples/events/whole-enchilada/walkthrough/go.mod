@@ -12,10 +12,7 @@ replace (
 
 require (
 	github.com/panyam/demokit v0.0.29
-	github.com/panyam/mcpkit v0.2.45
 	github.com/panyam/mcpkit/examples/common v0.0.0-00010101000000-000000000000
-	github.com/panyam/mcpkit/experimental/ext/events v0.0.0
-	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.0.0
 )
 
 require (
@@ -56,6 +53,7 @@ require (
 	github.com/panyam/demokit/notebook v0.0.28 // indirect
 	github.com/panyam/gocurrent v0.1.1 // indirect
 	github.com/panyam/goutils v0.1.13 // indirect
+	github.com/panyam/mcpkit v0.2.45 // indirect
 	github.com/panyam/mcpkit/ext/otel v0.0.0-20260608053428-44b944d79f00 // indirect
 	github.com/panyam/servicekit v0.1.2 // indirect
 	github.com/panyam/templar v0.1.0 // indirect

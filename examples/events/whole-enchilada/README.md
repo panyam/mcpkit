@@ -44,8 +44,10 @@ make up N=3 M=2   # 3 event-servers, 2 push-servers
 Local in-process tests (no Docker):
 
 ```bash
-make test              # event-server e2e tests — includes 8 tenant-isolation cases
+make unittest          # event-server e2e tests — includes 8 tenant-isolation cases
 ```
+
+The `unittest` suite verifies (1) tagged events deliver only to matching tenants, (2) untagged events still deliver to all, (3) interleaved cross-tenant events don't leak — using an in-process fake `token-as-tenant` validator. `make test` (the walkthrough run against the live Docker stack) adds the Keycloak interop layer on top.
 
 ## Stage-2 4-terminal interactive demo
 

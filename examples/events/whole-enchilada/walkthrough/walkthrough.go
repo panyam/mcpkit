@@ -1,304 +1,174 @@
-// walkthrough is the demokit-driven walkthrough binary for the
-// whole-enchilada demo, stage 1. It runs against the docker-compose
-// stack (or against a locally-running event-server + receiver, see
-// the leaf README) and walks a host through every events-spec feature
-// the stage-1 server supports.
+// walkthrough is the demokit-driven narrative guide for the
+// whole-enchilada stage-2 demo. It is **pure prose** — no MCP wire
+// activity happens inside this binary. The protocol mechanics
+// (initialize, events/poll, events/stream, events/subscribe webhook)
+// are demonstrated by the per-tenant `make poller` / `make webhook`
+// binaries the operator runs in sibling terminals; this binary just
+// orchestrates what they read between actions.
 //
-// Stage 2 will add Keycloak-authenticated subscribe + tenant routing
-// callouts; stage 3 will add cross-replica cursor replay callouts;
-// stage 4 will add push survival across container restart.
+// Stage-1 ran a single MCP client inside this binary to walk the
+// protocol step-by-step. Stage-2 wires authentication into the
+// event-server (every method requires a real tenant token), and the
+// 4-terminal flow is the natural fit for showing per-tenant isolation
+// — having this binary auto-acquire a token would duplicate work the
+// operator's tenant terminals already do, so the demo is split:
+// poller / webhook drive the wire; this binary teaches.
 package main
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"time"
+	"os"
+	"strings"
 
 	"github.com/panyam/demokit"
-	"github.com/panyam/mcpkit/client"
-	"github.com/panyam/mcpkit/core"
 	common "github.com/panyam/mcpkit/examples/common"
-	"github.com/panyam/mcpkit/experimental/ext/events"
-	eventsclient "github.com/panyam/mcpkit/experimental/ext/events/clients/go"
 )
 
-const liveCaptureWindow = 10 * time.Second
+// expectedTokenEnvs is the set of bearer-token env vars the 4-terminal
+// flow consumes. The walkthrough's first Step warns the operator about
+// any that are missing — useful for catching "I forgot to run
+// newtoken before make demo" early. Three tenants × {poller, webhook}
+// = six terminals (T2..T7) with T1 being `make up` itself.
+var expectedTokenEnvs = []string{
+	"TOKEN_POLLER_TENANT_A",
+	"TOKEN_POLLER_TENANT_B",
+	"TOKEN_POLLER_TENANT_C",
+	"TOKEN_WEBHOOK_TENANT_A",
+	"TOKEN_WEBHOOK_TENANT_B",
+	"TOKEN_WEBHOOK_TENANT_C",
+}
 
 // runDemo drives the demokit walkthrough against the running compose
-// stack. Server URL defaults to http://localhost:9090 (the nginx
-// frontdoor); receiver URL defaults to http://localhost:9090 (only
-// reachable from outside the compose network when -receiver-host is
-// overridden, but the walkthrough subscribes via the in-compose name).
-func runDemo(serverURL, receiverURL string) {
-	mcpURL := serverURL + "/mcp"
-
+// stack. serverURL / receiverURL are accepted for symmetry with the
+// stage-1 signature; they are no longer used inside this binary
+// because no MCP traffic originates here.
+func runDemo(_ /*serverURL*/, _ /*receiverURL*/ string) {
 	demo := demokit.New("MCP Events — whole-enchilada stage 2 walkthrough").
 		Dir("events/whole-enchilada").
-		Description("Production-shape multi-tier reference: nginx fronts the event-server tier; a push-server tier injects synthetic chat + presence events; a Keycloak service provides three pre-configured OAuth realms (tenant-a, tenant-b, tenant-c); each tenant gets its own pollers and webhook receivers running in sibling terminals. Stage 2 ships with in-memory stores. Stage 3 plugs in Postgres + Redis multi-replica without changing this directory shape.").
+		Description("Production-shape multi-tier reference. nginx fronts the event-server tier; a push-server tier injects synthetic chat + presence events; Keycloak provides three pre-configured OAuth realms (tenant-a, tenant-b, tenant-c). This walkthrough guides you through a 4-terminal demo where each tenant gets its own poller and webhook receiver — per-tenant isolation is the headline.").
 		Actors(
-			demokit.Actor("Host", "MCP Host (this walkthrough)"),
-			demokit.Actor("Nginx", "Frontdoor reverse proxy"),
-			demokit.Actor("Server", "Event-server (single replica in stage 2)"),
+			demokit.Actor("Operator", "The person running the demo — you"),
+			demokit.Actor("Nginx", "Frontdoor reverse proxy (localhost:9090)"),
+			demokit.Actor("Server", "Event-server (introspection-mode auth wired)"),
 			demokit.Actor("PushServer", "Push-server (synthetic chat + presence feeders)"),
-			demokit.Actor("Receiver", "Example webhook consumer"),
-			demokit.Actor("Keycloak", "OAuth AS — three realms pre-imported on first start"),
-			demokit.Actor("Operator", "The person running the demo from their terminal"),
+			demokit.Actor("Keycloak", "OAuth AS — three realms pre-imported on first start (localhost:8180)"),
 		)
 
-	// Wire mode-dispatched renderer + the demokit/web bridge — matches
-	// every other example's walkthrough. Without this call, --tui and
-	// --mode=tui silently fall back to the plain renderer because
-	// demokit ships no renderer by default.
 	common.SetupRenderer(demo)
 
 	demo.Section("Architecture in one diagram",
 		"```",
-		"Host  ──[MCP / SSE]──>  Nginx  ──>  Event-server  <──[HTTP /events/<name>/inject]──  Push-server",
-		"                                          │",
-		"                                          └──[webhook POST]──>  Receiver  (example consumer)",
+		"Operator's terminals (poller, webhook, inject)",
+		"           │",
+		"           ▼",
+		"     localhost:9090",
+		"           │",
+		"        Nginx ──────────────┐",
+		"           │                │",
+		"           ▼                ▼",
+		"      Event-server     Keycloak",
+		"           ▲           (localhost:8180)",
+		"           │",
+		"      Push-server   (auto-rotates events across tenants)",
 		"```",
 		"",
-		"All four services run as separate containers in `docker-compose.yaml`. The push-server is just one example of a source manager — production deployments scale push-servers and event-servers independently, route via the same nginx, and persist into Postgres + Redis (stage 3). The receiver here is a tiny Go binary demonstrating Standard Webhooks verification; in production, **your receivers are your own apps** deployed in your own infrastructure — they are NOT part of the event-server tier.",
+		"The walkthrough binary you're reading does **not** make MCP calls. The 4-terminal flow below has you run `make poller` / `make webhook` / `make inject` in sibling windows — those are the actual MCP clients. This binary is the guide.",
 	)
 
-	demo.Section("Setup",
-		"Run from a separate terminal in the leaf directory:",
-		"",
-		"```",
-		"make up        # docker compose up -d, waits for healthchecks",
-		"make demo           # this walkthrough (interactive TUI)",
-		"# OR:",
-		"make test      # non-interactive run for CI / scripting",
-		"```",
-		"",
-		"`make down` tears the stack down (`-v` removes named volumes).",
-		"",
-		"This binary demonstrates the **events protocol mechanics** end-to-end (poll, push/SSE, webhook). The **stage-2 tenant-isolation story** is best experienced by hand — see the next section.",
-	)
+	demo.Step("Confirm your token env vars are loaded.").
+		Note(buildTokenCheckMessage())
 
-	demo.Section("Stage-2 4-terminal demo (run by hand)",
-		"The walkthrough binary you're reading runs as a single MCP host doing every protocol thing. The *operator-facing* stage-2 demo splits that work across separate terminals — one per tenant — so per-tenant isolation is visually obvious. From the leaf:",
-		"",
-		"```",
-		"# T1: stack up",
-		"make up",
-		"",
-		"# T2: tenant A poller",
-		"TA=$(make newtoken TENANT=A)         # browser opens, log in as alice@tenant-a",
-		"make poller TENANT=A TOKEN=$TA       # long-running — only sees tenant-a events",
-		"",
-		"# T3: tenant B poller (in another terminal)",
-		"TB=$(make newtoken TENANT=B)",
-		"make poller TENANT=B TOKEN=$TB",
-		"",
-		"# T4: tenant A webhook receiver (in another terminal)",
-		"make webhook TENANT=A TOKEN=$TA",
-		"",
-		"# T5: tenant B webhook receiver (in another terminal)",
-		"make webhook TENANT=B TOKEN=$TB",
-		"",
-		"# T6: operator injects events from the host",
-		"make inject TENANT=A EVENT=chat.message TEXT='hi from A'",
-		"# → T2 and T4 print the event. T3 and T5 stay quiet.",
-		"make inject TENANT=B EVENT=chat.message TEXT='hi from B'",
-		"# → T3 and T5 print. T2 and T4 stay quiet.",
-		"```",
-		"",
-		"**Revocation walkthrough**: open `http://localhost:8180/admin/master/console/#/tenant-a/users` in a browser (admin / admin), click `alice` → Sessions tab → \"Sign out\". Within ~5 seconds (`OAUTH_CACHE_TTL`), T2 and T4 die with `-32012 Forbidden`. T3 and T5 keep flowing — tenant-B unaffected.",
-		"",
-		"For tenant C (carol@tenant-c) repeat the pattern. The push-server also auto-rotates events across all three tenants at its configured cadence, so leave the terminals running and watch the rotation.",
-	)
+	demo.Step("Window A1 — start the Tenant A poller.").
+		Note("In a NEW terminal at this leaf, run:\n\n```\nmake poller TENANT=A TOKEN=$TOKEN_POLLER_TENANT_A\n```\n\nThe poller authenticates as Tenant A, polls `events/chat.message`, and prints every event it receives with the tenant tag visible. It only sees events whose tenant tag is `tenant-a`; events tagged for B or C never reach it. Leave this terminal visible — within a few seconds the push-server's synthetic chat feeder will rotate to tenant-a and you'll see events appear.")
 
-	demo.Section("CI regression for tenant isolation",
-		"`make test` runs THIS binary end-to-end against the docker stack — it covers the protocol mechanics. The **tenant-isolation contract** is regression-tested by the event-server's e2e suite, which runs in-process with a fake token-as-tenant validator (no Docker needed):",
-		"",
-		"```",
-		"make test     # event-server/... e2e tests, includes 8 tenant-isolation cases",
-		"```",
-		"",
-		"That suite verifies (1) tagged events deliver only to matching tenants, (2) untagged events still deliver to all, (3) interleaved cross-tenant events don't leak. The docker stack adds the Keycloak interop layer on top.",
-	)
+	demo.Step("Window B1 — start the Tenant B poller.").
+		Note("Same pattern, different realm:\n\n```\nmake poller TENANT=B TOKEN=$TOKEN_POLLER_TENANT_B\n```\n\nNow A1 and B1 sit side-by-side. A1 prints only tenant-a events; B1 prints only tenant-b. Same MCP server, same wire, same nginx — the realm in the bearer token is what scopes delivery.")
 
-	var (
-		c             *client.Client
-		messageCursor *string
-	)
+	demo.Step("Window C1 — start the Tenant C poller.").
+		Note("```\nmake poller TENANT=C TOKEN=$TOKEN_POLLER_TENANT_C\n```\n\nThree pollers, three tenants. As the push-server cycles through tenants, each event lights up exactly one of your three terminals — clean isolation across the wire.")
 
-	demo.Step("How do I open the conversation?").
-		Arrow("Host", "Nginx", "POST /mcp — initialize").
-		DashedArrow("Nginx", "Server", "proxy_pass").
-		DashedArrow("Server", "Host", "serverInfo + capabilities").
-		Note("Vanilla MCP initialize over Streamable HTTP, proxied transparently by nginx. The events extension declares no new capability; events/* methods are registered server-side.").
-		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
-			c = client.NewClient(mcpURL, core.ClientInfo{Name: "whole-enchilada-host", Version: "1.0"})
-			if err := c.Connect(); err != nil {
-				fmt.Printf("    ERROR: %v\n    Start the stack with: make up\n", err)
-				return
-			}
-			fmt.Printf("    Connected to %s %s (via %s)\n", c.ServerInfo.Name, c.ServerInfo.Version, serverURL)
-			return
-		})
+	demo.Step("Windows A2 / B2 / C2 — start the webhook receivers.").
+		Note("Webhook is the second delivery mode. It runs in parallel with poll; same tenant routing applies:\n\n```\n# Window A2\nmake webhook TENANT=A TOKEN=$TOKEN_WEBHOOK_TENANT_A\n\n# Window B2\nmake webhook TENANT=B TOKEN=$TOKEN_WEBHOOK_TENANT_B\n\n# Window C2\nmake webhook TENANT=C TOKEN=$TOKEN_WEBHOOK_TENANT_C\n```\n\nEach receiver registers a webhook subscription on a random local port, the event-server signs every delivery with the per-subscription HMAC secret, and the receivers verify + print. You now have six terminals: 3 pollers × 3 webhooks. An event for `tenant-a` lights up A1 and A2 only.")
 
-	demo.Step("Which events does this server publish?").
-		Arrow("Host", "Server", "events/list").
-		DashedArrow("Server", "Host", "[chat.message (cursored), presence.changed (cursorless)]").
-		Note("Two synthetic event types, fed by the push-server tier. chat.message is cursored (subscribers can replay); presence.changed is cursorless (live-only — cursor:null on the wire). Both are fed via the events.HTTPSource pattern: the push-server POSTs to /events/<name>/inject on the event-server.").
-		Run(func(_ demokit.StepContext) *demokit.StepResult {
-			if c == nil {
-				return nil
-			}
-			raw, err := c.Call("events/list", nil)
-			if err != nil {
-				fmt.Printf("    events/list error: %v\n", err)
-				return nil
-			}
-			pretty, _ := json.MarshalIndent(json.RawMessage(raw.Raw), "    ", "  ")
-			fmt.Printf("    %s\n", pretty)
-			return nil
-		})
+	demo.Step("Inject events from a 7th terminal and watch isolation in real time.").
+		Note("```\nmake inject TENANT=A EVENT=chat.message TEXT='hi from A'\n```\n\nA1 + A2 print; B1/B2/C1/C2 stay quiet.\n\n```\nmake inject TENANT=B EVENT=chat.message TEXT='hi from B'\nmake inject TENANT=C EVENT=presence.changed USER=carol STATE=online\n```\n\nB events go only to B's windows; C events only to C's. The push-server is also cycling synthetic events through all three tenants in the background, so leave the windows running and you'll see the rotation interleave with your manual injects.")
 
-	demo.Step("How do I read past chat messages? (poll)").
-		Arrow("Host", "Server", "events/poll{name:chat.message, cursor:\"0\"}").
-		DashedArrow("Server", "Host", "{events:[...], cursor:<head>, hasMore:false}").
-		Note("Single-subscription poll; events accumulated by the push-server's chat feeder since the stack started. The cursor advances on every yield.").
-		Run(func(_ demokit.StepContext) *demokit.StepResult {
-			if c == nil {
-				return nil
-			}
-			raw, err := c.Call("events/poll", map[string]any{
-				"name":   "chat.message",
-				"cursor": "0",
-				"limit":  5,
-			})
-			if err != nil {
-				fmt.Printf("    events/poll error: %v\n", err)
-				return nil
-			}
-			var pr struct {
-				Events  []json.RawMessage `json:"events"`
-				Cursor  *string           `json:"cursor"`
-				HasMore bool              `json:"hasMore"`
-			}
-			_ = json.Unmarshal(raw.Raw, &pr)
-			fmt.Printf("    got %d events; head cursor=%v hasMore=%v\n", len(pr.Events), strOr(pr.Cursor, "<nil>"), pr.HasMore)
-			messageCursor = pr.Cursor
-			return nil
-		})
-
-	demo.Step("How do I follow chat live? (push via SSE)").
-		Arrow("Host", "Server", "events/stream{name:chat.message, cursor:nil}").
-		DashedArrow("Server", "Host", "SSE: notifications/events/event ...").
-		Note("Long-lived stream. The push-server feeds new chat events into the event-server's HTTPSource every ~2s; the SSE stream surfaces each one as notifications/events/event. Heartbeats arrive on quiet sources to advance persisted cursors. Press enter (interactive) or wait 10s (test) to end capture.").
-		Run(func(sctx demokit.StepContext) *demokit.StepResult {
-			if c == nil {
-				return nil
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), liveCaptureWindow)
-			defer cancel()
-			var seen int
-			stream, err := eventsclient.Stream(ctx, c, eventsclient.StreamOptions{
-				EventName: "chat.message",
-				OnEvent: func(ev events.Event) {
-					seen++
-					fmt.Printf("    [%d] cursor=%s name=%s\n", seen, ev.CursorStr(), ev.Name)
-				},
-			})
-			if err != nil {
-				fmt.Printf("    events/stream error: %v\n", err)
-				return nil
-			}
-			defer stream.Stop()
-			<-ctx.Done()
-			fmt.Printf("    captured %d chat events in %s\n", seen, liveCaptureWindow)
-			return nil
-		})
-
-	demo.Step("How does cursorless presence look on the wire?").
-		Arrow("Host", "Server", "events/poll{name:presence.changed, cursor:\"0\"}").
-		DashedArrow("Server", "Host", "{events:[], cursor:null, hasMore:false}").
-		Note("Cursorless sources always return empty + cursor:null from poll. Subscribers can listen for live presence transitions via push or webhook, but there is no replay — that matches the underlying semantics of presence state.").
-		Run(func(_ demokit.StepContext) *demokit.StepResult {
-			if c == nil {
-				return nil
-			}
-			raw, err := c.Call("events/poll", map[string]any{
-				"name":   "presence.changed",
-				"cursor": "0",
-			})
-			if err != nil {
-				fmt.Printf("    events/poll error: %v\n", err)
-				return nil
-			}
-			pretty, _ := json.MarshalIndent(json.RawMessage(raw.Raw), "    ", "  ")
-			fmt.Printf("    %s\n", pretty)
-			return nil
-		})
-
-	demo.Step("How do I subscribe a webhook? (server pushes to my own app)").
-		Arrow("Host", "Server", "events/subscribe{name:chat.message, delivery:{type:webhook, url:..., secret:whsec_...}}").
-		DashedArrow("Server", "Host", "{id, refreshBefore, ...}").
-		Arrow("Server", "Receiver", "POST <url> + Standard Webhooks signature").
-		Note("The receiver in this demo is just an example downstream consumer — a 30-line Go program verifying Standard Webhooks signatures. In production each tenant deploys their own receivers in their own infra. The walkthrough's URL points at the in-compose receiver via the host network.").
-		Run(func(_ demokit.StepContext) *demokit.StepResult {
-			if c == nil {
-				return nil
-			}
-			sub, err := eventsclient.Subscribe(context.Background(), c, eventsclient.SubscribeOptions{
-				EventName:   "chat.message",
-				CallbackURL: receiverURL + "/webhook",
-				Cursor:      messageCursor,
-			})
-			if err != nil {
-				fmt.Printf("    subscribe error: %v\n", err)
-				return nil
-			}
-			defer sub.Stop()
-			fmt.Printf("    subscribed id=%s; waiting %s for deliveries...\n", sub.ID(), liveCaptureWindow)
-			time.Sleep(liveCaptureWindow)
-			received := pollReceiver(receiverURL)
-			fmt.Printf("    receiver captured %d delivery(ies)\n", received)
-			return nil
-		})
+	demo.Step("Revoke a token in Keycloak admin and watch the affected windows die.").
+		Note("Open `http://localhost:8180/admin/master/console/#/tenant-a/users` (admin / admin) in a browser. Click `alice` → **Sessions** tab → **Sign out**.\n\nWithin ~5 seconds (`OAUTH_CACHE_TTL`), A1 + A2 (Tenant A's poller + webhook) exit with `-32012 Forbidden`. B1/B2/C1/C2 keep flowing — revocation is per-realm; isolation holds.\n\nThis is the **load-bearing introspection demo**: revocation is synchronously visible to the resource server because the event-server's `IntrospectionValidator` calls Keycloak's `/introspect` on every request (cached for `OAUTH_CACHE_TTL`). JWT validation can't make this claim — JWT tokens stay valid until natural expiry.\n\nRe-acquire a token (`TOKEN_POLLER_TENANT_A=$(make newtoken TENANT=A)`) and restart the poller to reconnect.")
 
 	demo.Section("What stage 2 adds",
-		"- Keycloak realm with multi-tenant subscriptions (events/subscribe rejected if not authenticated).",
-		"- Tenant identifier flows from token claims into source/subscription scoping.",
-		"- Anonymous principal demo escape removed.",
-		"- Per-tenant quota with the canonical -32013 ResourceExhausted wire shape pinned by kitchen-sink ({limit:\"subscriptions\", max:N}; see experimental/ext/events/errors.go's ResourceExhaustedData godoc). Same shape, same two emission paths (Reserve failure vs on_subscribe rejection) — a single client switch over (code, data) works for both demos.",
+		"- Keycloak realm with multi-tenant subscriptions (every events/* method requires a real bearer token).",
+		"- Tenant identifier flows from token claims (`core.Claims.Tenant`) into `OnSubscribe` scoping + the canonical webhook key.",
+		"- Anonymous principal escape removed for the auth-wired path.",
+		"- Per-tenant quota with the canonical `-32013 ResourceExhausted` wire shape pinned by kitchen-sink ({limit:\"subscriptions\", max:N}; see experimental/ext/events/errors.go's ResourceExhaustedData godoc).",
 	)
 	demo.Section("What stage 3 adds",
 		"- Postgres-backed cursor / webhook / quota stores. Restart-survival for the demo.",
-		"- Redis EventBus for cross-replica fanout. event-server scaled to N=3 replicas via docker compose --scale event-server=3.",
+		"- Redis EventBus for cross-replica fanout. event-server scaled to N=3 replicas via `docker compose --scale event-server=3`.",
 		"- nginx routes round-robin; subscribers reconnect to any replica without losing delivery.",
 	)
 	demo.Section("What stage 4 adds",
 		"- M push-server replicas with admin-frontend-driven source bindings.",
 		"- Admin web UI for per-tenant caps + rate limits + webhook config.",
-		"- OTel collector + Jaeger + Grafana — trace spans hop from push-server through event-server through webhook delivery, visible end-to-end.",
 		"- Push survival walkthrough: kill an event-server replica during the live step; nginx routes new connections to a sibling; resumed cursor replays the missed window.",
 	)
 
 	demo.Execute()
 }
 
-func strOr(s *string, fallback string) string {
-	if s == nil {
-		return fallback
+// buildTokenCheckMessage scans os.Environ for the expected token env
+// vars and returns either an "all set" confirmation or a clear list
+// of missing variables with the acquisition commands. Called once per
+// run from the Note text of Step 1 so the result is captured into the
+// rendered doc — `make readme` shows operators what the check looks
+// for even if they're reading the markdown out of context.
+func buildTokenCheckMessage() string {
+	var missing []string
+	for _, name := range expectedTokenEnvs {
+		if os.Getenv(name) == "" {
+			missing = append(missing, name)
+		}
 	}
-	return *s
+
+	if len(missing) == 0 {
+		return "All six token env vars are set:\n\n```\n" +
+			strings.Join(expectedTokenEnvs, "\n") + "\n```\n\n" +
+			"Press Enter to start the 4-terminal demo."
+	}
+
+	var b strings.Builder
+	b.WriteString("**Missing token env vars** — the 4-terminal demo below needs all six. ")
+	b.WriteString("Open six terminals now and acquire tokens, then re-export them into THIS shell before continuing:\n\n```\n")
+	for _, name := range missing {
+		tenantLetter := strings.TrimPrefix(name, "TOKEN_POLLER_TENANT_")
+		tenantLetter = strings.TrimPrefix(tenantLetter, "TOKEN_WEBHOOK_TENANT_")
+		fmt.Fprintf(&b, "export %s=$(make newtoken TENANT=%s)\n", name, tenantLetter)
+	}
+	b.WriteString("```\n\n")
+	b.WriteString("Each `make newtoken` opens a browser for the realm's login page; log in as ")
+	b.WriteString("`alice@tenant-a` / `bob@tenant-b` / `carol@tenant-c` (passwords match the usernames in the demo realm JSONs).\n\n")
+	b.WriteString("If you're scripting (CI / unattended), use the ROPC variant — same envs, no browser:\n\n```\n")
+	for _, name := range missing {
+		tenantLetter := strings.TrimPrefix(name, "TOKEN_POLLER_TENANT_")
+		tenantLetter = strings.TrimPrefix(tenantLetter, "TOKEN_WEBHOOK_TENANT_")
+		user := userForTenant(tenantLetter)
+		fmt.Fprintf(&b, "export %s=$(make newtoken-ci TENANT=%s USER=%s PASSWORD=%s)\n", name, tenantLetter, user, user)
+	}
+	b.WriteString("```\n\nPress Enter once all six are exported — the walkthrough does NOT make MCP calls itself, so it will continue past this Step regardless; the subsequent Steps assume the envs exist when you copy/paste them into your terminals.")
+	return b.String()
 }
 
-// pollReceiver hits the receiver's /__received drain endpoint and
-// returns how many webhook deliveries were captured.
-func pollReceiver(receiverURL string) int {
-	resp, err := http.Get(receiverURL + "/__received")
-	if err != nil {
-		return 0
+// userForTenant maps the trailing tenant letter ("A" / "B" / "C") to
+// the pre-baked username in the realm JSON.
+func userForTenant(letter string) string {
+	switch letter {
+	case "A":
+		return "alice"
+	case "B":
+		return "bob"
+	case "C":
+		return "carol"
+	default:
+		return "alice"
 	}
-	defer resp.Body.Close()
-	var arr []json.RawMessage
-	_ = json.NewDecoder(resp.Body).Decode(&arr)
-	return len(arr)
 }

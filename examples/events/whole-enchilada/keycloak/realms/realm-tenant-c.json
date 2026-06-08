@@ -11,19 +11,21 @@
     {
       "clientId": "mcp-event-server",
       "name": "MCP Event-Server (introspection client; called by the resource server when validating bearer tokens)",
-      "description": "DEMO ONLY — rotate this secret in any non-demo deployment.",
+      "description": "DEMO ONLY \u2014 rotate this secret in any non-demo deployment.",
       "enabled": true,
       "clientAuthenticatorType": "client-secret",
       "secret": "mcpkit-demo-secret-DEMO-ONLY",
       "serviceAccountsEnabled": true,
       "publicClient": false,
       "protocol": "openid-connect",
-      "defaultClientScopes": ["openid"]
+      "defaultClientScopes": [
+        "openid"
+      ]
     },
     {
       "clientId": "mcp-events-poller",
       "name": "MCP Events Poller (demo client used by `make poller TENANT=C`)",
-      "description": "DEMO ONLY — pre-baked secret for the demo poller. Real deployments register a unique client per consumer.",
+      "description": "DEMO ONLY \u2014 pre-baked secret for the demo poller. Real deployments register a unique client per consumer.",
       "enabled": true,
       "clientAuthenticatorType": "client-secret",
       "secret": "mcpkit-demo-secret-DEMO-ONLY",
@@ -32,9 +34,18 @@
       "serviceAccountsEnabled": true,
       "publicClient": false,
       "protocol": "openid-connect",
-      "redirectUris": ["http://localhost:*", "http://127.0.0.1:*"],
-      "webOrigins": ["*"],
-      "defaultClientScopes": ["openid", "profile", "email"],
+      "redirectUris": [
+        "http://localhost:*",
+        "http://127.0.0.1:*"
+      ],
+      "webOrigins": [
+        "*"
+      ],
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email"
+      ],
       "attributes": {
         "pkce.code.challenge.method": "S256"
       }
@@ -42,7 +53,7 @@
     {
       "clientId": "mcp-events-webhook",
       "name": "MCP Events Webhook (demo client used by `make webhook TENANT=C`)",
-      "description": "DEMO ONLY — pre-baked secret for the demo webhook receiver.",
+      "description": "DEMO ONLY \u2014 pre-baked secret for the demo webhook receiver.",
       "enabled": true,
       "clientAuthenticatorType": "client-secret",
       "secret": "mcpkit-demo-secret-DEMO-ONLY",
@@ -51,9 +62,18 @@
       "serviceAccountsEnabled": true,
       "publicClient": false,
       "protocol": "openid-connect",
-      "redirectUris": ["http://localhost:*", "http://127.0.0.1:*"],
-      "webOrigins": ["*"],
-      "defaultClientScopes": ["openid", "profile", "email"],
+      "redirectUris": [
+        "http://localhost:*",
+        "http://127.0.0.1:*"
+      ],
+      "webOrigins": [
+        "*"
+      ],
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email"
+      ],
       "attributes": {
         "pkce.code.challenge.method": "S256"
       }
@@ -74,7 +94,99 @@
           "temporary": false
         }
       ],
-      "realmRoles": ["default-roles-tenant-c"]
+      "realmRoles": [
+        "default-roles-tenant-c"
+      ]
+    },
+    {
+      "username": "userc1",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "userc1@tenant-c.example",
+      "firstName": "User",
+      "lastName": "C1",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "userc1",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-tenant-c"
+      ]
+    },
+    {
+      "username": "userc2",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "userc2@tenant-c.example",
+      "firstName": "User",
+      "lastName": "C2",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "userc2",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-tenant-c"
+      ]
+    },
+    {
+      "username": "userc3",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "userc3@tenant-c.example",
+      "firstName": "User",
+      "lastName": "C3",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "userc3",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-tenant-c"
+      ]
+    },
+    {
+      "username": "userc4",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "userc4@tenant-c.example",
+      "firstName": "User",
+      "lastName": "C4",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "userc4",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-tenant-c"
+      ]
+    },
+    {
+      "username": "userc5",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "userc5@tenant-c.example",
+      "firstName": "User",
+      "lastName": "C5",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "userc5",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-tenant-c"
+      ]
     }
   ]
 }
