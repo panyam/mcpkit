@@ -16,6 +16,10 @@ without override.
 - **No override needed.** Standard struct tags get this right. Sits
   in the sweet spot of what reflection can handle.
 
+## Run Pre-Recorded
+
+> ▶ **[Play the walkthrough in your browser](https://panyam.github.io/mcpkit/walkthroughs/examples/apps/compat/budget-allocator/)** — animated playback of every curl / Go call the walkthrough makes, step-by-step. Steps 1-4 walk the server-side surface (initialize → tools/list → tools/call get-budget-data → resources/read on the iframe HTML); the final narrative section spells out the app-side bridge dance that takes over from there: `app.ontoolresult`, five tools the iframe registers via `app.registerTool`, and `app.updateModelContext` pushing UI state back to the model. The protocol surface a Go-only host sees is the *floor* of an MCP Apps interaction; the bridge dance is what makes this a *widget*. No clone, no setup.
+
 ## Or Run Live
 
 ### Start Server
