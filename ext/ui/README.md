@@ -284,3 +284,12 @@ The flat `ui/resourceUri` key alongside the nested `ui.resourceUri` is a backwar
 - **Comma-bearing defaults/descriptions in struct tags**: invopop's tag parser splits on commas; values containing commas get silently truncated. Use `InputSchemaOverride` to bypass. See issue 542 (closed by PR 545).
 - **`interface{}` / `any` field in input struct**: produces a schema the MCP SDK client-side zod validator rejects. Use `InputSchemaOverride` with an explicit empty-shape map (`{}` for the `any` field). Tracked in issue 548.
 - **Background goroutines** that outlive the tool handler: use `core.DetachForBackground(ctx)` (not `context.WithoutCancel`) — preserves the session-level push channel.
+
+## Tracing across the Apps Bridge
+
+SEP-414 P6 (issue 660) relays W3C trace context across the iframe↔host postMessage boundary so browser-side traces stitch with the backend tool-call span. Two opt-in surfaces:
+
+- **TS bridge** — `MCPApp.setTraceContextProvider(fn)` registers a provider the bridge consults before each outbound request; merges `traceparent` / `tracestate` into `params._meta`. Caller-set `_meta` wins (provider is a fallback). Wire against your browser OTel SDK via `propagation.inject(context.active(), carrier)`.
+- **Go AppHost** — `ui.WithTracerProvider(tp)` opts the forward path into emitting an `apps.host.forward` span whose parent is the inbound `_meta.traceparent` from the bridge envelope; the outbound MCP call preserves the iframe's traceparent on the wire so the server's dispatch span stitches in.
+
+See [`docs/APPS_DESIGN.md` § Tracing across the Apps Bridge](../../docs/APPS_DESIGN.md) for the design, demo wiring, and the open spec question.

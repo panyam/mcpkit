@@ -9,6 +9,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/panyam/demokit"
@@ -16,12 +17,32 @@ import (
 	"github.com/panyam/demokit/tui"
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/examples/common"
+	commonotel "github.com/panyam/mcpkit/examples/common/otel"
 	"github.com/panyam/mcpkit/examples/host/refs"
 	ui "github.com/panyam/mcpkit/ext/ui"
 	"github.com/panyam/mcpkit/server"
 )
 
 func main() {
+	// Catch-up to PR 689's client-side telemetry pattern: register a
+	// uniform --exporter / --otlp-endpoint flag pair via ExporterFromArgs
+	// (mirrors common.ServerURL's os.Args scan, matches the rest of
+	// examples). Default --exporter="" → Noop, zero overhead. ServerRegistry
+	// here doesn't expose a TracerProvider option (yet); only the client
+	// side picks up tracing — matching PR 689's "thread client.WithTracerProvider
+	// into every NewClient" shape.
+	tel := common.ExporterFromArgs()
+	tp, shutdown, err := commonotel.SetupClientTelemetry(context.Background(),
+		commonotel.WithExporter(*tel.Exporter),
+		commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+		commonotel.WithServiceName("multi-server-demo-host"),
+	)
+	if err != nil {
+		log.Fatalf("commonotel.SetupClientTelemetry: %v", err)
+	}
+	defer shutdown(context.Background())
+
 	demo := demokit.New("Multi-Server Registry").
 		Dir("02-multi-server").
 		RunPrefix("examples/host").
@@ -55,6 +76,7 @@ func main() {
 		xport := server.NewInProcessTransport(srv)
 		c := client.NewClient("memory://", core.ClientInfo{Name: "registry-demo", Version: "1.0"},
 			client.WithTransport(xport),
+			client.WithTracerProvider(tp),
 		)
 		c.Connect()
 		return c
