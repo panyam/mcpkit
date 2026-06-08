@@ -1,0 +1,20 @@
+# Grafana dashboard provisioning — empty for now. Dashboards land
+# alongside the surface-OTel work that produces the data they
+# visualize: P6 children 658 (ext/auth) / 659 (ext/tasks) /
+# 660 (ext/ui) / 664 (server reverse-call), plus the future metrics
+# / logs umbrella. Each surface PR drops its dashboards under
+# ./files/ for Grafana to pick up automatically on next restart.
+
+apiVersion: 1
+
+providers:
+  - name: mcpkit
+    orgId: 1
+    folder: ""
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/files
+      foldersFromFilesStructure: true

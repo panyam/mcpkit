@@ -22,6 +22,7 @@ import (
 
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
+	commonotel "github.com/panyam/mcpkit/examples/common/otel"
 	mcpotel "github.com/panyam/mcpkit/ext/otel"
 	"github.com/panyam/mcpkit/server"
 	"github.com/stretchr/testify/assert"
@@ -112,6 +113,26 @@ func TestNewOTelPipeline_HappyPath(t *testing.T) {
 	// should be safe (the SDK guards internally). The test asserts no
 	// panic.
 	shutdown()
+	shutdown()
+}
+
+// TestNewOTLPPipeline_Constructs is the smoke check for the OTLP
+// gRPC exporter path. The OTLP exporter constructor doesn't dial
+// the endpoint until it has spans to flush, so this test runs
+// without docker — it proves the constructor compiles, wires the
+// SDK correctly, and produces a non-nil TracerProvider + shutdown
+// closure. The actual export round-trip is exercised manually via
+// `make demo-otlp` against `make -C ../../../docker up`.
+//
+// The test uses an unlikely-to-collide endpoint so the (lazy)
+// connection attempt during Shutdown doesn't accidentally hit a
+// real listener.
+func TestNewOTLPPipeline_Constructs(t *testing.T) {
+	tp, shutdown, err := commonotel.NewOTLPPipeline("127.0.0.1:65535", "otel-stdout-demo-test")
+	require.NoError(t, err)
+	require.NotNil(t, tp)
+	require.NotNil(t, shutdown)
+
 	shutdown()
 }
 

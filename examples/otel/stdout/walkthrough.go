@@ -2,13 +2,16 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
+	commonotel "github.com/panyam/mcpkit/examples/common/otel"
 	mcpotel "github.com/panyam/mcpkit/ext/otel"
 )
 
@@ -25,20 +28,39 @@ import (
 func runDemo() {
 	serverURL := common.ServerURL()
 
-	// Stand up the walkthrough's OWN OTel pipeline so client-side spans
-	// land on this terminal's stdout via stdouttrace — symmetric with
-	// the server's pipeline in serve(). Each process gets its own
-	// TracerProvider (the two are separate OS processes; in-memory
-	// sharing isn't possible), but the SEP-414 wire propagates trace
-	// context across them so the recorded spans share a TraceID. The
-	// instrumentation name carries `mcpkit/client` so observability
-	// backends group client-emitted spans separately.
-	clientOTelTP, shutdownClientOTel, err := newOTelPipeline(os.Stdout)
+	// Walkthrough-side flags. Mirror serve()'s flag set so an operator
+	// can pass --exporter=otlp to both processes and watch matching
+	// TraceIDs land in Grafana (server.service.name=otel-stdout-demo,
+	// host.service.name=otel-stdout-host).
+	exporter := flag.String("exporter", defaultExporter, "trace exporter: stdout | otlp")
+	otlpEndpoint := flag.String("otlp-endpoint", commonotel.DefaultOTLPEndpoint, "OTLP gRPC endpoint when --exporter=otlp")
+	// The walkthrough side already parses demokit flags via SetupRenderer
+	// + Execute; pulling our own values out of os.Args directly here would
+	// double-parse. Use flag.Parse only on the residual args demokit
+	// returns via FilterArgs.
+	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
+		demokit.ValueFlag("--exporter"),
+		demokit.ValueFlag("--otlp-endpoint"),
+		demokit.ValueFlag("--url"),
+	))
+
+	// Stand up the walkthrough's OWN OTel pipeline. Each process gets
+	// its own TracerProvider (the two are separate OS processes;
+	// in-memory sharing isn't possible), but the SEP-414 wire
+	// propagates trace context across them so the recorded spans share
+	// a TraceID. The instrumentation name carries `mcpkit/client` so
+	// observability backends group client-emitted spans separately;
+	// the service.name attribute distinguishes them at the trace level
+	// in Grafana / Tempo searches.
+	clientOTelTP, shutdownClientOTel, err := commonotel.BuildPipeline(*exporter, *otlpEndpoint, hostServiceName, os.Stdout)
 	if err != nil {
-		fmt.Printf("failed to build client-side OTel pipeline: %v\n", err)
-		return
+		log.Fatalf("failed to build client-side OTel pipeline: %v", err)
 	}
 	defer shutdownClientOTel()
+	if *exporter == commonotel.ExporterOTLP {
+		log.Printf("[otel-stdout-host] exporter=otlp endpoint=%s service.name=%s", *otlpEndpoint, hostServiceName)
+		log.Printf("[otel-stdout-host] view in Grafana: http://localhost:3000  (search service.name=%s)", hostServiceName)
+	}
 
 	demo := demokit.New("MCP SEP-414 — OpenTelemetry Trace Context Propagation").
 		Dir("otel/stdout").

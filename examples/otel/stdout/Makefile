@@ -1,11 +1,13 @@
-demo: ## Run the demokit walkthrough (interactive, TUI)
-	go run . --tui
+EXPORTER ?= stdout
 
-note: ## Run the walkthrough in notebook mode (Bubble Tea cells)
-	go run . --note
+demo: ## Run the demokit walkthrough (TUI). EXPORTER=stdout|otlp (default stdout).
+	go run . --tui --exporter=$(EXPORTER)
 
-serve: ## Start the otel-stdout demo server (default :8080)
-	go run . --serve
+note: ## Run the walkthrough in notebook mode (Bubble Tea cells). EXPORTER=stdout|otlp (default stdout).
+	go run . --note --exporter=$(EXPORTER)
+
+serve: ## Start the otel-stdout demo server on :8080. EXPORTER=stdout|otlp (default stdout).
+	go run . --serve --exporter=$(EXPORTER)
 
 readme: ## Regenerate WALKTHROUGH.md from demo definitions
 	go run . --doc md > WALKTHROUGH.md

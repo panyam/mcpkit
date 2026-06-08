@@ -1,0 +1,41 @@
+# Loki log backend config — single-binary mode, local filesystem
+# storage. Sized for a developer laptop. A production deployment
+# would split distributor / ingester / querier and back storage with
+# S3 / GCS.
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  log_level: warn
+
+common:
+  path_prefix: /var/loki
+  storage:
+    filesystem:
+      chunks_directory: /var/loki/chunks
+      rules_directory: /var/loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  retention_period: 24h
+  allow_structured_metadata: true
+
+ruler:
+  storage:
+    type: local
+    local:
+      directory: /var/loki/rules
