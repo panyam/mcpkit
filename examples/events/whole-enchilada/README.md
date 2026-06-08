@@ -15,7 +15,16 @@ Host  ──[MCP / SSE]──>  Nginx  ──>  Event-server  <──[HTTP /even
 - **DNS naming convention** — every service answers a `*.whole_enchilada` hostname both inside the compose network and (with `make hosts-install`) from the host shell / browser. See "Hostname routing" below.
 - **All three delivery modes** work end-to-end: poll, push (SSE), webhook.
 - **In-memory stores** — restart wipes state. Stage 3 plugs in Postgres + Redis.
-- **Single tenant, anonymous principal** — stage 2 wires Keycloak.
+
+## What stage 2 adds
+
+- **Keycloak as the OAuth AS**, pinned to `quay.io/keycloak/keycloak:26.0`. Three realms pre-imported on first start: `tenant-a`, `tenant-b`, `tenant-c`. Admin UI at <http://localhost:8180/admin/> (`admin` / `admin`).
+- **Multi-realm introspection on the event-server.** The new `MultiRealmIntrospectionValidator` fans every bearer token out to all three realms' `/introspect` endpoints and accepts the token if any realm says active. Tenant comes from whichever realm validated, encoded as `<realm>/<sub>` into `core.Claims.Subject` (PR 692).
+- **Per-event tenant tagging.** `ChatMessageData` / `PresenceChangedData` now carry a `Tenant` field; the push-server rotates events across tenants by default. The event-server's `tenantMatchFunc` only delivers events to subscribers whose `Claims.Tenant` matches — cross-tenant isolation is enforced at delivery time.
+- **Demo-only client secrets**, pre-baked in the committed realm JSONs at `keycloak/realms/`. See `keycloak/README.md` for the bring-your-own-client recipe.
+- **Three tenants**, not two, so isolation is visually obvious: with one terminal per tenant the demo can show events for one tenant *not* showing up on the other two.
+
+Subsequent stages still in flight: stage-3 wires the GORM stores from PR 685 (multi-replica state survives restart); stage-4 polishes push survival, the WG-announcement artifact, and revocation walkthrough docs.
 
 ## Quickstart
 

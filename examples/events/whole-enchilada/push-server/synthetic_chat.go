@@ -13,7 +13,13 @@ import (
 // rotating set of senders + channels until ctx is done. The cadence
 // is configurable so the demo can show "high-volume" behavior by
 // turning it up without changing code.
-func runChatFeeder(ctx context.Context, pusher *eventsclient.Pusher, interval time.Duration) {
+//
+// tenants is a list of tenant tags to rotate through (round-robin) on
+// successive events. The stage-2 demo passes ["tenant-a", "tenant-b",
+// "tenant-c"] so subscribers from one tenant only see ~1/N events.
+// Nil / empty tenants means "no tag" — the stage-1 single-tenant
+// behavior where every subscriber sees every event.
+func runChatFeeder(ctx context.Context, pusher *eventsclient.Pusher, interval time.Duration, tenants []string) {
 	senders := []string{"alice", "bob", "carol", "dave"}
 	channels := []string{"general", "random", "alerts"}
 	templates := []string{
@@ -30,6 +36,7 @@ func runChatFeeder(ctx context.Context, pusher *eventsclient.Pusher, interval ti
 	t := time.NewTicker(interval)
 	defer t.Stop()
 
+	tenantIdx := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -40,6 +47,10 @@ func runChatFeeder(ctx context.Context, pusher *eventsclient.Pusher, interval ti
 				Sender:    senders[rng.Intn(len(senders))],
 				Text:      templates[rng.Intn(len(templates))],
 				Timestamp: ts.UTC().Format(time.RFC3339),
+			}
+			if len(tenants) > 0 {
+				msg.Tenant = tenants[tenantIdx%len(tenants)]
+				tenantIdx++
 			}
 			if err := pusher.PushNamed(ctx, "chat.message", msg); err != nil {
 				log.Printf("[push] chat.message: %v", err)
