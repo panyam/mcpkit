@@ -27,10 +27,28 @@ type AppHost struct {
 
 	ctx    context.Context
 	cancel context.CancelFunc
+
+	tp core.TracerProvider
 }
 
 // AppHostOption configures an AppHost.
 type AppHostOption func(*AppHost)
+
+// WithTracerProvider opts the AppHost into SEP-414 instrumentation of the
+// app→host forward path: when an app sends a request via the bridge
+// (MCPApp.callTool / readResource / sendMessage), AppHost extracts any
+// inbound `params._meta.traceparent` (relayed across the postMessage
+// boundary by the JS bridge's setTraceContextProvider hook) and wraps
+// the forward to the MCP server in an `apps.host.forward` span with
+// that trace context as parent.
+//
+// Nil and core.NoopTracerProvider{} both skip the install entirely —
+// zero overhead on the unconfigured path. The bridge envelope itself
+// preserves caller-set `_meta.traceparent` regardless of this option;
+// it only governs whether AppHost emits a span around the forward.
+func WithTracerProvider(tp core.TracerProvider) AppHostOption {
+	return func(h *AppHost) { h.tp = tp }
+}
 
 // NewAppHost creates an AppHost that mediates between the given MCP Client
 // (connected to a server) and AppBridge (connected to an app).
@@ -43,6 +61,9 @@ func NewAppHost(c *client.Client, bridge AppBridge, opts ...AppHostOption) *AppH
 	}
 	for _, opt := range opts {
 		opt(h)
+	}
+	if h.tp == nil {
+		h.tp = core.NoopTracerProvider{}
 	}
 	return h
 }
@@ -179,9 +200,31 @@ func (h *AppHost) RefreshAppTools(ctx context.Context) error {
 
 // handleAppRequest routes app→host JSON-RPC requests to the MCP server.
 // Called when the app uses MCPApp.callTool(), MCPApp.readResource(), etc.
+//
+// SEP-414 P6 (issue 660): when a TracerProvider is wired via
+// WithTracerProvider, the iframe-relayed `params._meta.traceparent`
+// becomes the parent of an `apps.host.forward` span around the
+// outbound MCP server call. The outbound params themselves are
+// passed through unchanged — the existing SEP-414 P3 client wrapper
+// preserves caller-set _meta.traceparent on the wire, so the trace
+// stitches end-to-end: browser → bridge → AppHost → server dispatch.
 func (h *AppHost) handleAppRequest(ctx context.Context, req *core.Request) *core.Response {
+	// Inbound trace context from the bridge envelope. When no provider
+	// was wired on the iframe side this returns zero and the span emits
+	// with no parent — same shape as auth running outside a traced
+	// dispatch.
+	tc := core.ExtractTraceContextFromParams(req.Params)
+	if !tc.IsZero() {
+		ctx = core.WithTraceContext(ctx, tc)
+	}
+	ctx, span := h.tp.StartSpan(ctx, "apps.host.forward",
+		core.Attribute{Key: "mcp.method", Value: req.Method},
+	)
+	defer span.End()
+
 	callResult, err := h.client.Call(req.Method, json.RawMessage(req.Params))
 	if err != nil {
+		span.RecordError(err)
 		return &core.Response{
 			ID:    req.ID,
 			Error: &core.Error{Code: core.ErrCodeInternal, Message: err.Error()},

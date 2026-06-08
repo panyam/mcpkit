@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/panyam/demokit"
@@ -17,12 +18,30 @@ import (
 	"github.com/panyam/demokit/tui"
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/examples/common"
+	commonotel "github.com/panyam/mcpkit/examples/common/otel"
 	"github.com/panyam/mcpkit/examples/host/refs"
 	ui "github.com/panyam/mcpkit/ext/ui"
 	"github.com/panyam/mcpkit/server"
 )
 
 func main() {
+	// SEP-414 P6 (issue 660): wire telemetry on both the client side
+	// (matches PR 689's pattern across other walkthroughs) AND the
+	// AppHost forward path (new in this PR). Default --exporter=""
+	// keeps every path on Noop — zero overhead for the typical demo
+	// run; pass --exporter=otlp to ship traces to the LGTM stack.
+	tel := common.ExporterFromArgs()
+	tp, shutdown, err := commonotel.SetupClientTelemetry(context.Background(),
+		commonotel.WithExporter(*tel.Exporter),
+		commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+		commonotel.WithServiceName("apphost-demo-host"),
+	)
+	if err != nil {
+		log.Fatalf("commonotel.SetupClientTelemetry: %v", err)
+	}
+	defer shutdown(context.Background())
+
 	demo := demokit.New("AppHost — Host-Side App Management").
 		Dir("01-apphost").
 		RunPrefix("examples/host").
@@ -80,6 +99,7 @@ func main() {
 		Run(func(_ demokit.StepContext) *demokit.StepResult {
 			xport := server.NewInProcessTransport(srv)
 			c = client.NewClient("memory://", core.ClientInfo{Name: "demo-host", Version: "1.0"},
+				client.WithTracerProvider(tp),
 				client.WithTransport(xport),
 				client.WithUIExtension(),
 			)
@@ -145,7 +165,7 @@ func main() {
 		DashedArrow("Bridge", "Host", "{tools: [app_greet, app_counter]}").
 		Note("AppHost wires up bidirectional routing and fetches the initial app tool list.").
 		Run(func(_ demokit.StepContext) *demokit.StepResult {
-			host = ui.NewAppHost(c, bridge)
+			host = ui.NewAppHost(c, bridge, ui.WithTracerProvider(tp))
 			if err := host.Start(ctx); err != nil {
 				fmt.Printf("  ERROR: %v\n", err)
 				return nil

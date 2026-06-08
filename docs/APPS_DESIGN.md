@@ -678,12 +678,65 @@ The ext-apps repo has Playwright-based e2e tests in `tests/e2e/`. These test the
 This is Phase 4 work — requires Node.js + Playwright + a basic host harness.
 
 
+## Tracing across the Apps Bridge (SEP-414 P6, issue 660)
+
+MCP Apps run an `iframe ↔ Bridge JS ↔ host ↔ server` loop. A user gesture in the iframe triggers a tool call. If the iframe has its own observability (browser OTel SDK, RUM), the trace **starts in the browser** — but without explicit propagation, the postMessage hop strips the W3C trace context and the backend tool-call span emitted by the MCP server can't stitch to its browser-side parent. Structurally this is the same "non-MCP propagation hop" as the events EventBus, just across the JS/Go boundary instead of replica/replica.
+
+mcpkit's Apps Bridge relays W3C trace context across the boundary by carrying `traceparent` / `tracestate` inside `params._meta` on the bridge envelope — the same shape SEP-414 uses on the MCP wire. The relay is **off by default** (no provider wired = no propagation, zero overhead); adopters opt in on each side independently.
+
+### Iframe side (TS bridge)
+
+`MCPApp.setTraceContextProvider(fn)` registers a function the bridge calls before sending each outbound request and notification. The function returns `{traceparent?, tracestate?}` (or null to skip). When a traceparent is supplied, it merges into `params._meta` — caller-set `_meta.traceparent` wins (the provider is a fallback, never a clobber, mirroring Go-side `core.InjectTraceContextIntoParams`).
+
+Wiring against the OTel JS SDK (typical production setup):
+
+```ts
+import { propagation, context } from "@opentelemetry/api";
+MCPApp.setTraceContextProvider(() => {
+  const carrier: Record<string, string> = {};
+  propagation.inject(context.active(), carrier);
+  return { traceparent: carrier.traceparent, tracestate: carrier.tracestate };
+});
+```
+
+Demo wiring (no OTel SDK; just to prove the relay works):
+
+```ts
+MCPApp.setTraceContextProvider(() => ({
+  traceparent: "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
+}));
+```
+
+The hook ships dep-free — mcp-app-bridge.ts pulls no OTel JS dependency. Bundle size unchanged for adopters who don't wire the hook.
+
+### Host side (Go AppHost)
+
+`ui.WithTracerProvider(tp core.TracerProvider)` on `AppHost` opts the forward path into instrumentation. When set, `handleAppRequest` extracts the bridge envelope's `params._meta.traceparent`, makes it the parent of an `apps.host.forward` span, and forwards the request to the MCP server. The outbound `client.Call` preserves the iframe's `_meta.traceparent` on the wire (SEP-414 P3's caller-set-wins contract), so the server's P2 trace middleware stitches the dispatch span as a child of the iframe's traceparent.
+
+```go
+host := ui.NewAppHost(c, bridge, ui.WithTracerProvider(tp))
+```
+
+End-to-end trace shape with both sides wired:
+
+```
+iframe-stamped traceparent      (browser OTel; the parent)
+└─ apps.host.forward             (ext/ui AppHost, this PR)
+   └─ server tools/call          (mcpkit server, SEP-414 P2)
+      └─ tool handler work
+```
+
+### Open: should the Apps spec mandate this?
+
+The Apps Bridge is a non-MCP transport. SEP-414 governs only the MCP wire. **Whether `traceparent` rides the bridge envelope as a cross-SDK interop contract belongs in the ext-ui / Apps spec, not SEP-414.** mcpkit ships the relay; if cross-SDK adopters need to interop, the Apps WG can lift this shape into the spec. Filed as a follow-up if upstream interest surfaces — for now, documented here and shipped per mcpkit's own design.
+
 ## Related Docs
 
 | Doc | What |
 |-----|------|
 | [APPS_ONBOARDING.md](APPS_ONBOARDING.md) | Step-by-step guide to ship your app as an MCP App |
 | [APPS_HOST.md](APPS_HOST.md) | AppHost, AppBridge, ServerRegistry — building custom hosts |
+| [SEP_414_OTEL.md](SEP_414_OTEL.md) | Trace context propagation across mcpkit — context for the bridge relay above |
 | `ext/ui/` README | Bridge JS API, typed app tools, embedding |
 | `examples/apps/` | Working examples: vanilla, todolist, react |
 | `tests/e2e/apps/` README | Conformance test matrix with sequence diagrams |
