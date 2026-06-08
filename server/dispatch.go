@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -553,13 +554,28 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, pa
 	}
 
 	// Validate arguments against the advertised InputSchema before invoking
-	// the handler. Failures return -32602 Invalid Params with structured
-	// error data so agents can self-correct on the next call. Skipped when
-	// the tool declared no schema or WithSchemaValidation(false) is set.
+	// the handler. Failures surface as a SUCCESSFUL JSON-RPC response
+	// carrying a tool result with isError: true and a descriptive content
+	// block. Skipped when the tool declared no schema or WithSchemaValidation(false)
+	// is set.
+	//
+	// Why a tool result instead of a -32602 JSON-RPC error: tool input is
+	// largely shaped by hosts and apps (basic-host's input form, an iframe's
+	// bridge call, an LLM's structured output). Surfacing those failures as
+	// hard JSON-RPC errors means the host treats them as protocol-level
+	// faults — basic-host renders a "MCP error -32602" banner that pre-empts
+	// the iframe's own error UI. Wrapping as `isError: true` lets the host
+	// hand the message back to the model / app for self-correction the same
+	// way a runtime handler error would. Matches upstream's TypeScript SDK
+	// behavior; verified via apps/compat parity testing against
+	// modelcontextprotocol/ext-apps.
+	//
+	// Consumers that want the prior -32602 wire shape can use
+	// WithSchemaValidation(false) and perform validation in their own
+	// handler, returning whatever response shape they need.
 	if !d.skipSchemaValidation && entry.schema != nil {
 		if ve := entry.schema.validate(envelope.Arguments); ve != nil {
-			return core.NewErrorResponseWithData(id, core.ErrCodeInvalidParams,
-				"argument validation failed", ve)
+			return core.NewResponse(id, toolValidationErrorResult(envelope.Name, ve))
 		}
 	}
 
@@ -634,6 +650,32 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, pa
 		})
 	default:
 		return core.NewResponse(id, resp)
+	}
+}
+
+// toolValidationErrorResult builds the tool result returned when a
+// tools/call request's arguments fail schema validation. The result
+// carries IsError: true plus a human-readable text content block
+// describing what went wrong, and the structured ValidationErrors
+// payload is preserved in StructuredContent so machine-readable
+// consumers (LLMs, programmatic clients) can self-correct.
+//
+// The message format leads with the canonical "Invalid arguments" hint
+// so that an agent reading the text content learns what shape of error
+// it's looking at; the structured `errors` array is the spec-recommended
+// payload for re-prompting.
+func toolValidationErrorResult(toolName string, ve *ValidationErrors) core.ToolResult {
+	var lines []string
+	lines = append(lines, fmt.Sprintf("Invalid arguments for tool %q:", toolName))
+	for _, e := range ve.Errors {
+		lines = append(lines, fmt.Sprintf("  - %s", e.Message))
+	}
+	return core.ToolResult{
+		Content: []core.Content{
+			{Type: "text", Text: strings.Join(lines, "\n")},
+		},
+		IsError:           true,
+		StructuredContent: ve,
 	}
 }
 
