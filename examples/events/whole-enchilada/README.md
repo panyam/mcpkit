@@ -28,9 +28,17 @@ Subsequent stages still in flight: stage-3 wires the GORM stores from PR 685 (mu
 
 ## Quickstart
 
+One-time setup — install the `oneauth` CLI:
+
 ```bash
-make up           # docker compose up -d with N=1, M=1 (+ Keycloak in stage 2)
-make demo              # interactive walkthrough (TUI)
+go install github.com/panyam/oneauth/cmd/oneauth@v0.1.19
+```
+
+Bring up the stack:
+
+```bash
+make up           # docker compose up -d with N=1, M=1 (+ Keycloak in stage 2). Add BUILD=true to force a fresh docker rebuild.
+make demo              # interactive walkthrough (TUI) — pure narrative; press Enter between Steps
 make test         # non-interactive walkthrough (CI / scripting)
 make down         # tear down
 ```
@@ -51,7 +59,24 @@ The `unittest` suite verifies (1) tagged events deliver only to matching tenants
 
 ## Stage-2 4-terminal interactive demo
 
-Once `make up` is running, open multiple terminals to see per-tenant isolation in action. Each terminal authenticates as a single tenant via Keycloak and prints what it sees:
+Once `make up` is running, open multiple terminals to see per-tenant isolation in action. Each terminal authenticates as a single tenant via Keycloak and prints what it sees.
+
+**Acquire all six tokens upfront in your shell** — the per-window `make poller` / `make webhook` invocations consume them as env vars:
+
+```bash
+export TOKEN_POLLER_TENANT_A=$(make newtoken TENANT=A)
+export TOKEN_POLLER_TENANT_B=$(make newtoken TENANT=B)
+export TOKEN_POLLER_TENANT_C=$(make newtoken TENANT=C)
+export TOKEN_WEBHOOK_TENANT_A=$(make newtoken TENANT=A)
+export TOKEN_WEBHOOK_TENANT_B=$(make newtoken TENANT=B)
+export TOKEN_WEBHOOK_TENANT_C=$(make newtoken TENANT=C)
+```
+
+Each `make newtoken` opens a browser to the realm's login page. Use the seeded test users: `alice` / `bob` / `carol` (passwords match usernames). The realms also ship with `user{a,b,c}{1..5}` for parameterized testing.
+
+For scripted/CI use: `make newtoken-ci TENANT=A USER=usera1 PASSWORD=usera1` (ROPC; deprecated by OAuth 2.1 but supported).
+
+Once exported, open six terminals:
 
 ```bash
 # T1 — keep this running
