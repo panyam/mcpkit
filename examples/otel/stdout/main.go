@@ -73,11 +73,14 @@ func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
 	exporter := flag.String("exporter", defaultExporter, "trace exporter: stdout | otlp")
 	otlpEndpoint := flag.String("otlp-endpoint", commonotel.DefaultOTLPEndpoint, "OTLP gRPC endpoint when --exporter=otlp")
+	// --exporter / --otlp-endpoint are stdlib flag.String — they
+	// MUST NOT be registered with FilterArgs, which would strip
+	// them from os.Args before flag.Parse sees them (the file-inputs
+	// pattern handles example-specific flags via a custom os.Args
+	// scan; we go the simpler stdlib route).
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.BoolFlag("--serve"),
 		demokit.ValueFlag("--url"),
-		demokit.ValueFlag("--exporter"),
-		demokit.ValueFlag("--otlp-endpoint"),
 	))
 
 	otelTP, shutdown, err := commonotel.BuildPipeline(*exporter, *otlpEndpoint, serverServiceName, os.Stdout)
