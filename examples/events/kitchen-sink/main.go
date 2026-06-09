@@ -153,10 +153,14 @@ func buildServer(addr string, tp core.TracerProvider) *wiredServer {
 	idx := events.NewSubscriptionIndex()
 	quota := events.NewQuota(events.WithMaxSubscriptionsPerPrincipal("chat.message", quotaCap))
 
-	srvOpts := []server.Option{
-		server.WithSubscriptions(),
-		server.WithListen(addr),
-	}
+	// Canonical baseline (WithListen + the color logger wired to both
+	// transport request logging and dispatch middleware) per
+	// examples/CONVENTIONS.md § serve-srv-listenandserve. Mirrors the
+	// discord precedent — kitchen-sink can't use `common.RunServer`
+	// because of the three goroutine feeders + custom /inject mux, but
+	// the per-option baseline still applies.
+	srvOpts := common.MCPServerOptions(addr, "[mcp] ")
+	srvOpts = append(srvOpts, server.WithSubscriptions())
 	if tp != nil {
 		srvOpts = append(srvOpts, server.WithTracerProvider(tp))
 	}
