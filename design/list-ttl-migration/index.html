@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Migrating to SEP-2549 ttlMs / cacheScope on list responses.">
+    <title>List TTL Migration · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/capabilities/">Capabilities</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Design Docs</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/capabilities/">Capabilities</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Design Docs</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-tutorial/">Tasks tutorial</a></li>
+                
+                <li><a href="/mcpkit/design/mrtr-tutorial/">MRTR tutorial</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>List TTL Migration</h1>
+        
+        <p class="lead">Migrating to SEP-2549 ttlMs / cacheScope on list responses.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/docs/LIST_TTL_MIGRATION.md"><code>docs/LIST_TTL_MIGRATION.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="list-results-ttl-migration-guide">List Results TTL Migration Guide <a class="anchor" href="#list-results-ttl-migration-guide">¶</a></h1>
+<p>This guide covers SEP-2549 (TTL for List Results), merged Final on the MCP<br />
+specification on 2026-05-15. The SEP adds two cache-control fields to result<br />
+objects, explains how mcpkit ships them, and walks through what server<br />
+authors need to know about cache scope and authorization.</p>
+<blockquote>
+<p><strong>Status:</strong> SEP-2549 is merged Final. mcpkit first shipped an implementation<br />
+of an earlier draft (commit <code>256c243</code>, 2026-04-30); the field renamed and<br />
+grew a sibling during the spec&rsquo;s final review, so the pre-merge API is a<br />
+breaking step away from what shipped here. See &ldquo;Migrating from the<br />
+pre-merge implementation&rdquo; below.</p>
+</blockquote>
+<h2 id="tldr">TL;DR <a class="anchor" href="#tldr">¶</a></h2>
+<ul>
+<li><code>ttlMs</code> (integer milliseconds) and <code>cacheScope</code> (<code>&quot;public&quot;</code> / <code>&quot;private&quot;</code>)<br />
+are added to five result types: <code>tools/list</code>, <code>prompts/list</code>,<br />
+<code>resources/list</code>, <code>resources/templates/list</code>, and <code>resources/read</code>.</li>
+<li>Set both at server registration with <code>server.WithListCacheControl(ttlMs, scope)</code><br />
+for the four list endpoints and <code>server.WithReadResourceCacheControl(ttlMs, scope)</code><br />
+for <code>resources/read</code>.</li>
+<li>A <code>resources/read</code> handler MAY override either hint per-read by setting<br />
+<code>core.ResourceResult.TTLMs</code> / <code>.CacheScope</code> on its return value.</li>
+<li>Clients read the hints off the typed envelope: <code>client.ListToolsPage</code> and<br />
+its three siblings, plus <code>client.ReadResourceFull</code>.</li>
+</ul>
+<h2 id="wire-fields">Wire fields <a class="anchor" href="#wire-fields">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Go field</th>
+<th>JSON tag</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>core.ToolsListResult</code></td>
+<td><code>TTLMs *int</code></td>
+<td><code>ttlMs,omitempty</code></td>
+<td>freshness window in ms</td>
+</tr>
+<tr>
+<td><code>core.PromptsListResult</code></td>
+<td><code>TTLMs *int</code></td>
+<td><code>ttlMs,omitempty</code></td>
+<td>freshness window in ms</td>
+</tr>
+<tr>
+<td><code>core.ResourcesListResult</code></td>
+<td><code>TTLMs *int</code></td>
+<td><code>ttlMs,omitempty</code></td>
+<td>freshness window in ms</td>
+</tr>
+<tr>
+<td><code>core.ResourceTemplatesListResult</code></td>
+<td><code>TTLMs *int</code></td>
+<td><code>ttlMs,omitempty</code></td>
+<td>freshness window in ms</td>
+</tr>
+<tr>
+<td><code>core.ResourceResult</code> (<code>resources/read</code>)</td>
+<td><code>TTLMs *int</code></td>
+<td><code>ttlMs,omitempty</code></td>
+<td>freshness window in ms</td>
+</tr>
+<tr>
+<td>all five</td>
+<td><code>CacheScope string</code></td>
+<td><code>cacheScope,omitempty</code></td>
+<td><code>&quot;public&quot;</code> or <code>&quot;private&quot;</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="ttlms-semantics"><code>ttlMs</code> semantics <a class="anchor" href="#ttlms-semantics">¶</a></h3>
+<ul>
+<li><strong>absent</strong> or <strong><code>0</code></strong> — the response is immediately stale; clients MAY<br />
+re-fetch every time the result is needed. Per the merged spec an absent<br />
+<code>ttlMs</code> is treated the same as <code>0</code>.</li>
+<li><strong><code>&gt; 0</code></strong> — the response is fresh for that many milliseconds from receipt.</li>
+<li><strong>negative</strong> — clients ignore it and treat it as <code>0</code>.</li>
+</ul>
+<p>mcpkit keeps <code>TTLMs</code> a <code>*int</code> even though absent and <code>0</code> are<br />
+client-equivalent: the pointer lets a server emit an explicit <code>&quot;ttlMs&quot;: 0</code><br />
+distinct from omitting the field. <code>core.CacheScopePublic</code> and<br />
+<code>core.CacheScopePrivate</code> are the two <code>cacheScope</code> constants.</p>
+<h3 id="cachescope-semantics"><code>cacheScope</code> semantics <a class="anchor" href="#cachescope-semantics">¶</a></h3>
+<p><code>cacheScope</code> mirrors HTTP <code>Cache-Control: public</code> vs <code>private</code>:</p>
+<ul>
+<li><strong><code>&quot;public&quot;</code></strong> — the response holds no caller-specific data; any client,<br />
+shared gateway, or caching proxy MAY store it and serve it to any user.</li>
+<li><strong><code>&quot;private&quot;</code></strong> — the response holds caller-specific data; a cache MAY be<br />
+reused only within the same authorization context and MUST NOT be shared<br />
+across access tokens.</li>
+<li><strong>absent</strong> — clients default to <code>&quot;public&quot;</code>.</li>
+</ul>
+<h2 id="server-api">Server API <a class="anchor" href="#server-api">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic">// All four list endpoints, ttlMs only:
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>srv <span style="color:#000;font-weight:bold">:=</span> server.<span style="color:#900;font-weight:bold">NewServer</span>(info, server.<span style="color:#900;font-weight:bold">WithListTTLMs</span>(<span style="color:#099">60000</span>))
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// All four list endpoints, ttlMs + cacheScope in one call:
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>srv <span style="color:#000;font-weight:bold">:=</span> server.<span style="color:#900;font-weight:bold">NewServer</span>(info,
+</span></span><span style="display:flex;"><span>    server.<span style="color:#900;font-weight:bold">WithListCacheControl</span>(<span style="color:#099">60000</span>, core.CacheScopePublic))
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// resources/read default (a read handler may override per-read):
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>srv <span style="color:#000;font-weight:bold">:=</span> server.<span style="color:#900;font-weight:bold">NewServer</span>(info,
+</span></span><span style="display:flex;"><span>    server.<span style="color:#900;font-weight:bold">WithReadResourceCacheControl</span>(<span style="color:#099">30000</span>, core.CacheScopePrivate))
+</span></span></code></pre><p>A resource or template handler sets the per-read override on its return<br />
+value; the <code>WithReadResourceCacheControl</code> default fills only the fields the<br />
+handler left unset:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>srv.<span style="color:#900;font-weight:bold">RegisterResource</span>(def, <span style="color:#000;font-weight:bold">func</span>(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, <span style="color:#458;font-weight:bold">error</span>) {
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">return</span> core.ResourceResult{
+</span></span><span style="display:flex;"><span>        Contents:   contents,
+</span></span><span style="display:flex;"><span>        TTLMs:      core.<span style="color:#900;font-weight:bold">IntPtr</span>(<span style="color:#099">5000</span>),
+</span></span><span style="display:flex;"><span>        CacheScope: core.CacheScopePrivate,
+</span></span><span style="display:flex;"><span>    }, <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>})
+</span></span></code></pre><h2 id="client-api">Client API <a class="anchor" href="#client-api">¶</a></h2>
+<p>The plain <code>client.ListTools()</code> / <code>ReadResource()</code> helpers drop the response<br />
+envelope. To read the cache hints, use the typed helpers:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>page, _ <span style="color:#000;font-weight:bold">:=</span> c.<span style="color:#900;font-weight:bold">ListToolsPage</span>(<span style="color:#d14">&#34;&#34;</span>)        <span style="color:#998;font-style:italic">// also ListPromptsPage / ListResourcesPage / ListResourceTemplatesPage
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span><span style="color:#000;font-weight:bold">if</span> page.TTLMs <span style="color:#000;font-weight:bold">!=</span> <span style="color:#000;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">&amp;&amp;</span> <span style="color:#000;font-weight:bold">*</span>page.TTLMs &gt; <span style="color:#099">0</span> {
+</span></span><span style="display:flex;"><span>    expiresAt <span style="color:#000;font-weight:bold">:=</span> time.<span style="color:#900;font-weight:bold">Now</span>().<span style="color:#900;font-weight:bold">Add</span>(time.<span style="color:#900;font-weight:bold">Duration</span>(<span style="color:#000;font-weight:bold">*</span>page.TTLMs) <span style="color:#000;font-weight:bold">*</span> time.Millisecond)
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// cache page.Tools until expiresAt; key by access token if page.CacheScope == &#34;private&#34;.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>rr, _ <span style="color:#000;font-weight:bold">:=</span> c.<span style="color:#900;font-weight:bold">ReadResourceFull</span>(<span style="color:#d14">&#34;file:///doc&#34;</span>)  <span style="color:#998;font-style:italic">// typed core.ResourceResult with TTLMs / CacheScope
+</span></span></span></code></pre><h2 id="security-implications">Security implications <a class="anchor" href="#security-implications">¶</a></h2>
+<p>The spec&rsquo;s <code>caching.mdx</code> utility doc carries a Security Considerations<br />
+section. Two obligations fall on server authors:</p>
+<ol>
+<li><strong><code>cacheScope</code> MUST reflect intended visibility.</strong> A <code>&quot;public&quot;</code> response<br />
+may be served across authorization contexts even when it came from an<br />
+authenticated endpoint — different access tokens can share the same<br />
+cache entry. Marking a per-user tool list as <code>&quot;public&quot;</code> leaks one user&rsquo;s<br />
+primitives to another. Any response whose contents differ per<br />
+authorization context MUST be <code>&quot;private&quot;</code>.</li>
+<li><strong>Per-primitive access controls are still required.</strong> <code>cacheScope</code> is a<br />
+hint to clients, not an enforcement mechanism. Servers MUST apply<br />
+appropriate per-primitive access controls on every request and MUST NOT<br />
+rely on <code>cacheScope</code> alone to prevent unauthorized access.</li>
+</ol>
+<p>Worked example:</p>
+<ul>
+<li>A single-tenant Calendar server exposes the same tool set to every<br />
+caller. Its <code>tools/list</code> response is <code>&quot;public&quot;</code>.</li>
+<li>A multi-tenant CRM filters the tool list by the caller&rsquo;s role, so<br />
+different users see different tools. Its <code>tools/list</code> response MUST be<br />
+<code>&quot;private&quot;</code>, and the server still authorizes every <code>tools/call</code>.</li>
+</ul>
+<h2 id="what-changed-during-the-spec-review-cycle">What changed during the spec review cycle <a class="anchor" href="#what-changed-during-the-spec-review-cycle">¶</a></h2>
+<p>mcpkit&rsquo;s pre-merge implementation tracked an earlier draft. The spec drifted<br />
+in three ways before merging Final:</p>
+<ul>
+<li><code>ttl</code> (integer seconds) renamed to <code>ttlMs</code> (integer milliseconds). Driven<br />
+by maintainer pushback on units-in-the-name; the SEP author applied it<br />
+2026-05-07.</li>
+<li><code>cacheScope</code> field added 2026-05-07. It was not in the original SEP.</li>
+<li><code>resources/read</code> added to the coverage list mid-cycle (it originally<br />
+covered only the four list endpoints).</li>
+</ul>
+<p>A Security Implications section landed in <code>caching.mdx</code> on 2026-05-14.</p>
+<h2 id="migrating-from-the-pre-merge-implementation">Migrating from the pre-merge implementation <a class="anchor" href="#migrating-from-the-pre-merge-implementation">¶</a></h2>
+<p>If you adopted mcpkit&rsquo;s pre-merge SEP-2549 release (roughly 2026-04-30<br />
+onward), the rename is a breaking change. It is loud — old code stops<br />
+compiling rather than silently changing units.</p>
+<table>
+<thead>
+<tr>
+<th>Pre-merge</th>
+<th>Final</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>server.WithListTTL(60)</code> (seconds)</td>
+<td><code>server.WithListTTLMs(60000)</code> (milliseconds)</td>
+</tr>
+<tr>
+<td><code>core.ToolsListResult.TTL</code> (<code>json:&quot;ttl&quot;</code>)</td>
+<td><code>.TTLMs</code> (<code>json:&quot;ttlMs&quot;</code>)</td>
+</tr>
+<tr>
+<td>three-state model (<code>nil</code> / <code>&amp;0</code> / <code>&amp;N</code>)</td>
+<td>two client behaviors: absent-or-<code>0</code> (stale) and <code>&gt; 0</code> (fresh)</td>
+</tr>
+<tr>
+<td>(no cache scope)</td>
+<td><code>CacheScope</code> field + <code>WithListCacheControl</code></td>
+</tr>
+<tr>
+<td>(no <code>resources/read</code> coverage)</td>
+<td><code>core.ResourceResult.TTLMs</code> / <code>.CacheScope</code> + <code>WithReadResourceCacheControl</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>WithListTTL</code> was removed rather than reinterpreted: a renamed <code>WithListTTL</code><br />
+that silently switched units would have turned <code>WithListTTL(60)</code> from &ldquo;60<br />
+seconds&rdquo; into &ldquo;60 milliseconds&rdquo; with no compile error. Grep your codebase<br />
+for <code>WithListTTL</code> and <code>.TTL</code> on list-result types, then multiply<br />
+second-valued arguments by 1000.</p>
+<h2 id="references">References <a class="anchor" href="#references">¶</a></h2>
+<ul>
+<li>SEP-2549 spec PR: <a href="https://github.com/modelcontextprotocol/specification/pull/2549">https://github.com/modelcontextprotocol/specification/pull/2549</a></li>
+<li>Caching utility doc: <code>docs/specification/draft/server/utilities/caching.mdx</code></li>
+<li>Example: <a href="../examples/list-ttl/"><code>examples/list-ttl/</code></a></li>
+</ul>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+</body>
+</html>

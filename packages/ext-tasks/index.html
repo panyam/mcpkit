@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="SEP-2663 v2 tasks extension — separate go.mod sub-module.">
+    <title>ext/tasks · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/capabilities/">Capabilities</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Design Docs</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/capabilities/">Capabilities</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Design Docs</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-tutorial/">Tasks tutorial</a></li>
+                
+                <li><a href="/mcpkit/design/mrtr-tutorial/">MRTR tutorial</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>ext/tasks</h1>
+        
+        <p class="lead">SEP-2663 v2 tasks extension — separate go.mod sub-module.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/ext/tasks/README.md"><code>ext/tasks/README.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="exttasks--sep-2663-tasks-extension">ext/tasks — SEP-2663 Tasks Extension <a class="anchor" href="#exttasks--sep-2663-tasks-extension">¶</a></h1>
+<p>Go module for the v2 task surface defined by <a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663">SEP-2663</a> (merged Final 2026-05-15). Provides server-directed async task execution registered as a protocol extension under <code>capabilities.extensions[&quot;io.modelcontextprotocol/tasks&quot;]</code>.</p>
+<blockquote>
+<p><strong>Looking for a guided walk-through?</strong> Read <a href="../../docs/TASKS_TUTORIAL.md"><code>docs/TASKS_TUTORIAL.md</code></a> — covers when to use tasks vs sync vs MRTR, the GoAsync sentinel + middleware peek, lifecycle, the in-task input flow (<code>TaskElicit</code> / <code>TaskSample</code>), notifications + the G6 filter, cancellation semantics, and the multi-tenancy caveat on stateless. For the sibling MRTR surface (SEP-2322 multi-round-trip requests), see <a href="../../docs/MRTR_TUTORIAL.md"><code>docs/MRTR_TUTORIAL.md</code></a>. This README is the API reference; the tutorials are the conceptual walk-throughs.</p>
+</blockquote>
+<h2 id="why-a-sub-module">Why a sub-module <a class="anchor" href="#why-a-sub-module">¶</a></h2>
+<p>SEP-2663 defines tasks as an <strong>extension</strong>, not a top-level capability. ext/tasks mirrors the same pattern <code>ext/auth</code> and <code>ext/ui</code> use: a separate <code>go.mod</code> consumed by servers that opt into the extension. v1 (the legacy <code>capabilities.tasks</code> surface) stays in <code>server/</code> as <code>RegisterTasksV1</code> and continues to ship until decommissioned.</p>
+<h2 id="quickstart">Quickstart <a class="anchor" href="#quickstart">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">import</span> (
+</span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;github.com/panyam/mcpkit/server&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;github.com/panyam/mcpkit/ext/tasks&#34;</span>
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>srv <span style="color:#000;font-weight:bold">:=</span> server.<span style="color:#900;font-weight:bold">NewServer</span>(info)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>srv.<span style="color:#900;font-weight:bold">RegisterTool</span>(
+</span></span><span style="display:flex;"><span>    core.ToolDef{
+</span></span><span style="display:flex;"><span>        Name:        <span style="color:#d14">&#34;slow_compute&#34;</span>,
+</span></span><span style="display:flex;"><span>        Description: <span style="color:#d14">&#34;...&#34;</span>,
+</span></span><span style="display:flex;"><span>        Execution:   <span style="color:#000;font-weight:bold">&amp;</span>core.ToolExecution{TaskSupport: core.TaskSupportOptional},
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">func</span>(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, <span style="color:#458;font-weight:bold">error</span>) {
+</span></span><span style="display:flex;"><span>        <span style="color:#998;font-style:italic">// Handlers whose work is genuinely async opt into the continuation
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>        <span style="color:#998;font-style:italic">// goroutine by returning core.GoAsyncResult{} — see &#34;Handler pattern&#34; below.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>        <span style="color:#000;font-weight:bold">if</span> tasks.<span style="color:#900;font-weight:bold">GetTaskContext</span>(ctx) <span style="color:#000;font-weight:bold">==</span> <span style="color:#000;font-weight:bold">nil</span> {
+</span></span><span style="display:flex;"><span>            <span style="color:#000;font-weight:bold">return</span> core.GoAsyncResult{}, <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>        <span style="color:#998;font-style:italic">// Real work runs here, with TaskContext available for TaskElicit /
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>        <span style="color:#998;font-style:italic">// TaskSample / SetStatus / progress emission under the G6 filter.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>        <span style="color:#000;font-weight:bold">return</span> core.<span style="color:#900;font-weight:bold">TextResult</span>(<span style="color:#d14">&#34;done&#34;</span>), <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>tasks.<span style="color:#900;font-weight:bold">Register</span>(tasks.Config{Server: srv})
+</span></span></code></pre><p><code>tasks.Register</code> installs the v2 middleware that intercepts <code>tools/call</code> for task-eligible tools, registers the <code>tasks/get</code> / <code>tasks/update</code> / <code>tasks/cancel</code> method handlers (all gated on the client declaring the extension), and advertises the extension in the <code>initialize</code> response.</p>
+<p><code>ToolHandler</code> returns the sealed <a href="https://github.com/panyam/mcpkit/blob/main/core/tool.go"><code>core.ToolResponse</code></a> interface; the middleware dispatches on the concrete variant — <code>ToolResult</code>, <code>InputRequiredResult</code>, <code>CreateTaskResult</code>, or <code>GoAsyncResult</code>.</p>
+<h2 id="handler-pattern">Handler pattern <a class="anchor" href="#handler-pattern">¶</a></h2>
+<p>mcpkit&rsquo;s v2 middleware runs the handler <strong>synchronously first</strong> and then dispatches on the concrete <code>ToolResponse</code> variant it returned. The handler chooses one of three shapes:</p>
+<table>
+<thead>
+<tr>
+<th>Handler returns</th>
+<th>Middleware does</th>
+<th>When to use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>core.InputRequiredResult</code> via <code>ctx.RequestInput(...)</code></td>
+<td>Passes through unchanged; no task created</td>
+<td>SEP-2322 MRTR round — gather input before deciding whether to escalate</td>
+</tr>
+<tr>
+<td><code>core.GoAsyncResult{}</code></td>
+<td>Mints a task, spawns continuation goroutine that re-invokes the handler with <code>TaskContext</code> attached, returns <code>CreateTaskResult</code></td>
+<td>Slow / blocking work, <code>TaskElicit</code> / <code>TaskSample</code> calls, progress emission that should be filtered</td>
+</tr>
+<tr>
+<td><code>core.ToolResult{...}</code> (a regular sync result)</td>
+<td>Wraps as a born-terminal task (<code>status: completed</code>, result stored, one <code>notifications/tasks</code> event fired), returns <code>CreateTaskResult</code></td>
+<td>Sync work that finishes immediately on a <code>TaskSupport=optional/required</code> tool</td>
+</tr>
+</tbody>
+</table>
+<p>The continuation goroutine re-invokes the same handler with a <code>TaskContext</code> accessible via <code>tasks.GetTaskContext(ctx)</code>. The handler typically branches on that:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">func</span> <span style="color:#900;font-weight:bold">myHandler</span>(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, <span style="color:#458;font-weight:bold">error</span>) {
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">if</span> tasks.<span style="color:#900;font-weight:bold">GetTaskContext</span>(ctx) <span style="color:#000;font-weight:bold">!=</span> <span style="color:#000;font-weight:bold">nil</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#998;font-style:italic">// Continuation: do the real work. TaskElicit / TaskSample / SetStatus
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>        <span style="color:#998;font-style:italic">// are all available; emissions are filtered per SEP-2663 G6.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>        <span style="color:#000;font-weight:bold">return</span> <span style="color:#900;font-weight:bold">doRealWork</span>(ctx, req)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// Optional MRTR phase: gather input via ctx.RequestInput first.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#998;font-style:italic">// ctx.RequestInput returns (core.InputRequiredResult, error) directly;
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#998;font-style:italic">// InputRequiredResult satisfies ToolResponse.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#000;font-weight:bold">if</span> ctx.<span style="color:#900;font-weight:bold">InputResponse</span>(<span style="color:#d14">&#34;user_name&#34;</span>) <span style="color:#000;font-weight:bold">==</span> <span style="color:#000;font-weight:bold">nil</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> ctx.<span style="color:#900;font-weight:bold">RequestInput</span>(core.InputRequests{
+</span></span><span style="display:flex;"><span>            <span style="color:#d14">&#34;user_name&#34;</span>: core.InputRequest{Method: <span style="color:#d14">&#34;elicitation/create&#34;</span>, Params: <span style="color:#000;font-weight:bold">...</span>},
+</span></span><span style="display:flex;"><span>        })
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// MRTR complete; defer the rest to the continuation goroutine.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#000;font-weight:bold">return</span> core.GoAsyncResult{}, <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><p>The <code>examples/mrtr</code> reference fixture&rsquo;s <code>test_tool_with_task</code> walks this exact pattern end-to-end (drives the matching <code>mrtr-tasks-composition</code> conformance scenario). For the full conceptual walk-through — MRTR as a stateless continuation primitive, capabilities across wires, progressToken, the G6 filter replacement table, MRTR vs push vs task-input-flow — see <a href="../../docs/MRTR_TUTORIAL.md"><code>docs/MRTR_TUTORIAL.md</code></a>.</p>
+<p><strong>G6 filter scope:</strong> the SEP-2663 G6 session-notify filter (<code>notifications/progress</code> and <code>notifications/message</code> MUST NOT be sent on tasks) is installed only on the continuation goroutine&rsquo;s <code>bgCtx</code>. A sync-returning handler runs on the unfiltered POST ctx — it is responsible for not leaking those notifications itself.</p>
+<h2 id="surface">Surface <a class="anchor" href="#surface">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Symbol</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tasks.Register(tasks.Config)</code></td>
+<td>Canonical entry point.</td>
+</tr>
+<tr>
+<td><code>tasks.Config</code></td>
+<td>Holds <code>Server</code>, <code>Store</code>, <code>DefaultTTLMs</code>, <code>DefaultPollMs</code>.</td>
+</tr>
+<tr>
+<td><code>tasks.TaskContext</code></td>
+<td>Typed-context for tool handlers running as v2 tasks. Exposes <code>TaskID()</code>, <code>ProgressToken()</code>, <code>SetStatus(status)</code>, <code>TaskElicit(req)</code>, <code>TaskSample(req)</code>.</td>
+</tr>
+<tr>
+<td><code>tasks.WithTaskContext</code> / <code>tasks.GetTaskContext</code></td>
+<td>Context wiring (mirrors core&rsquo;s typed-context pattern).</td>
+</tr>
+</tbody>
+</table>
+<p>The wire types (<code>CreateTaskResult</code>, <code>DetailedTask</code>, <code>UpdateTaskRequest</code>, <code>TaskInfoV2</code>, etc.) live in <code>core/task_v2.go</code> since they&rsquo;re consumed by both server and client.</p>
+<h2 id="relationship-to-server">Relationship to server/ <a class="anchor" href="#relationship-to-server">¶</a></h2>
+<ul>
+<li>ext/tasks <strong>uses</strong> <code>server.Server</code>, <code>server.Middleware</code>, <code>server.MethodHandler</code>, <code>server.Registry</code>, <code>server.TaskStore</code>, <code>server.NewInMemoryStore</code>. These are the generic server primitives any extension consumes.</li>
+<li>ext/tasks <strong>duplicates</strong> v2-flavoured pieces (<code>TaskContext</code>, <code>activeTask</code>, <code>generateTaskID</code>) rather than sharing with v1&rsquo;s versions in <code>server/</code>. Rationale: v1 is frozen and decommed-bound; once it retires, deletion in <code>server/</code> is total without unwinding cross-package shared types.</li>
+<li>The previous <code>RegisterTasksHybrid</code> (a single helper installing both v1 and v2 on one server) was dropped during the move. See <a href="../../docs/TASKS_V2_MIGRATION.md"><code>docs/TASKS_V2_MIGRATION.md</code></a> for the recommended two-call pattern.</li>
+</ul>
+<h2 id="where-the-conformance-suite-lives">Where the conformance suite lives <a class="anchor" href="#where-the-conformance-suite-lives">¶</a></h2>
+<p><a href="https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension/src/scenarios/server/tasks"><code>panyam/mcpconformance</code></a> on the <code>feat/tasks-mrtr-extension</code> branch. Run via <code>make testconf-tasks-v2</code> in the root repo — it spawns <code>examples/tasks-v2/tasks-v2 --serve</code> as the reference implementation fixture.</p>
+<h2 id="v1-retirement-markers">V1-RETIREMENT markers <a class="anchor" href="#v1-retirement-markers">¶</a></h2>
+<p>Code that should be reconsidered when v1 retires is tagged <code>V1-RETIREMENT:</code> in comments. <code>git grep V1-RETIREMENT</code> enumerates the cleanup list at retirement time.</p>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="AppHost lifecycle, Bridge JS, and embedding mcpkit Apps in a host application.">
+    <title>MCP Apps — Host Model · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/capabilities/">Capabilities</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Design Docs</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/capabilities/">Capabilities</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Design Docs</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-tutorial/">Tasks tutorial</a></li>
+                
+                <li><a href="/mcpkit/design/mrtr-tutorial/">MRTR tutorial</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>MCP Apps — Host Model</h1>
+        
+        <p class="lead">AppHost lifecycle, Bridge JS, and embedding mcpkit Apps in a host application.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/docs/APPS_HOST.md"><code>docs/APPS_HOST.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="mcp-apps--host-implementation-guide">MCP Apps — Host Implementation Guide <a class="anchor" href="#mcp-apps--host-implementation-guide">¶</a></h1>
+<p>Building custom MCP hosts (agent harnesses, desktop apps, custom UIs) using AppHost and ServerRegistry.</p>
+<p>See <a href="APPS_DESIGN.md">APPS_DESIGN.md</a> for the core protocol design and <a href="APPS_ONBOARDING.md">APPS_ONBOARDING.md</a> for shipping your app.</p>
+<h2 id="apphost--host-side-app-management">AppHost — Host-Side App Management <a class="anchor" href="#apphost--host-side-app-management">¶</a></h2>
+<h3 id="overview">Overview <a class="anchor" href="#overview">¶</a></h3>
+<p><code>AppHost</code> (<code>ext/ui/app_host.go</code>) wraps an MCP <code>Client</code> and an <code>AppBridge</code> to mediate between an MCP App (running in a browser iframe or in-process) and an MCP server. It enables custom host implementations — agent harnesses, desktop apps, or custom UIs — to manage app-provided tools.</p>
+<h3 id="architecture">Architecture <a class="anchor" href="#architecture">¶</a></h3>
+<pre><code>┌─────────────────┐     ┌───────────────┐     ┌──────────────┐
+│   MCP Server    │◄────│   AppHost     │────►│   MCP App    │
+│  (tools, etc.)  │     │ (mediator)    │     │ (iframe/Go)  │
+│                 │     │               │     │              │
+│ server_echo     │     │ ListAllTools  │     │ app_greet    │
+│ server_fetch    │     │ CallAppTool   │     │ app_dice     │
+└─────────────────┘     └───────────────┘     └──────────────┘
+        ▲                    │    ▲                   │
+        │                    │    │                   │
+    Client.Call         bridge.Send            bridge.SendToHost
+</code></pre>
+<h3 id="request-flows">Request Flows <a class="anchor" href="#request-flows">¶</a></h3>
+<h4 id="hostapp-calling-an-app-provided-tool">Host→App: Calling an App-Provided Tool <a class="anchor" href="#hostapp-calling-an-app-provided-tool">¶</a></h4>
+<p>The host (or LLM) discovers app tools via <code>ListAppTools()</code> and invokes them via <code>CallAppTool()</code>. The bridge forwards the JSON-RPC request to the app.</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant LLM as LLM / Agent
+    participant Host as AppHost
+    participant Bridge as AppBridge
+    participant App as MCP App
+
+    LLM-&gt;&gt;Host: ListAllTools()
+    Host-&gt;&gt;Bridge: Send(tools/list)
+    Bridge-&gt;&gt;App: tools/list
+    App--&gt;&gt;Bridge: {tools: [{name: &quot;app_greet&quot;, ...}]}
+    Bridge--&gt;&gt;Host: Response
+    Host--&gt;&gt;LLM: [server_echo, app_greet]
+
+    LLM-&gt;&gt;Host: CallAppTool(&quot;app_greet&quot;, {name: &quot;world&quot;})
+    Host-&gt;&gt;Bridge: Send(tools/call, {name: &quot;app_greet&quot;, args: ...})
+    Bridge-&gt;&gt;App: tools/call
+    App--&gt;&gt;Bridge: {content: [{type: &quot;text&quot;, text: &quot;hello world&quot;}]}
+    Bridge--&gt;&gt;Host: ToolResult
+    Host--&gt;&gt;LLM: ToolResult{content: &quot;hello world&quot;}
+</code></pre>
+<h4 id="apphost-app-calling-a-server-tool">App→Host: App Calling a Server Tool <a class="anchor" href="#apphost-app-calling-a-server-tool">¶</a></h4>
+<p>The app calls <code>MCPApp.callTool(&quot;server_tool&quot;, {...})</code>, which the bridge forwards to AppHost, which forwards to the MCP server via the Client.</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant App as MCP App
+    participant Bridge as AppBridge
+    participant Host as AppHost
+    participant Client as Client
+    participant Server as MCP Server
+
+    App-&gt;&gt;Bridge: MCPApp.callTool(&quot;server_echo&quot;, {msg: &quot;hi&quot;})
+    Bridge-&gt;&gt;Host: handleAppRequest(tools/call)
+    Host-&gt;&gt;Client: Call(&quot;tools/call&quot;, params)
+    Client-&gt;&gt;Server: JSON-RPC tools/call
+    Server--&gt;&gt;Client: ToolResult
+    Client--&gt;&gt;Host: CallResult
+    Host--&gt;&gt;Bridge: Response
+    Bridge--&gt;&gt;App: {content: [{type: &quot;text&quot;, text: &quot;server:hi&quot;}]}
+</code></pre>
+<h4 id="dynamic-tool-registration">Dynamic Tool Registration <a class="anchor" href="#dynamic-tool-registration">¶</a></h4>
+<p>When the app registers a new tool at runtime, a <code>notifications/tools/list_changed</code> notification triggers a cache refresh.</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant App as MCP App
+    participant Bridge as AppBridge
+    participant Host as AppHost
+
+    App-&gt;&gt;Bridge: registerTool(&quot;app_dice&quot;, ...)
+    Bridge-&gt;&gt;Host: notifications/tools/list_changed
+    Host-&gt;&gt;Bridge: Send(tools/list)
+    Bridge-&gt;&gt;App: tools/list
+    App--&gt;&gt;Bridge: {tools: [{name: &quot;app_greet&quot;}, {name: &quot;app_dice&quot;}]}
+    Bridge--&gt;&gt;Host: Response
+    Note over Host: Cache updated: 2 app tools
+</code></pre>
+<h3 id="appbridge-interface">AppBridge Interface <a class="anchor" href="#appbridge-interface">¶</a></h3>
+<p><code>AppBridge</code> abstracts the host↔app communication channel. The protocol is JSON-RPC 2.0, mirroring the <code>postMessage</code> protocol in <code>mcp-app-bridge.ts</code>.</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> AppBridge <span style="color:#000;font-weight:bold">interface</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">Send</span>(ctx context.Context, req <span style="color:#000;font-weight:bold">*</span>core.Request) (<span style="color:#000;font-weight:bold">*</span>core.Response, <span style="color:#458;font-weight:bold">error</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">SetRequestHandler</span>(fn <span style="color:#000;font-weight:bold">func</span>(ctx context.Context, req <span style="color:#000;font-weight:bold">*</span>core.Request) <span style="color:#000;font-weight:bold">*</span>core.Response)
+</span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">SetNotificationHandler</span>(fn <span style="color:#000;font-weight:bold">func</span>(method <span style="color:#458;font-weight:bold">string</span>, params json.RawMessage))
+</span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">Start</span>() <span style="color:#458;font-weight:bold">error</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">Close</span>() <span style="color:#458;font-weight:bold">error</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><p>Implementations:</p>
+<ul>
+<li><strong><code>InProcessAppBridge</code></strong> — for testing. Registers Go handlers that simulate app-side tools.</li>
+<li><strong>WebSocket bridge</strong> (future) — for Go hosts serving browser iframes over WebSocket.</li>
+<li><strong>Native bridge</strong> (future) — for desktop apps using webview/wails JS↔Go bindings.</li>
+</ul>
+<h3 id="usage-with-oauth-authentication">Usage with OAuth Authentication <a class="anchor" href="#usage-with-oauth-authentication">¶</a></h3>
+<p>AppHost does not own auth — the caller wires <code>ext/auth.OAuthTokenSource</code> into the Client. Auth retry (401/403) happens transparently at the Client&rsquo;s transport layer.</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic">// 1. Create OAuth token source
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>ts <span style="color:#000;font-weight:bold">:=</span> <span style="color:#000;font-weight:bold">&amp;</span>auth.OAuthTokenSource{
+</span></span><span style="display:flex;"><span>    ServerURL:   <span style="color:#d14">&#34;https://api.example.com/mcp&#34;</span>,
+</span></span><span style="display:flex;"><span>    ClientID:    <span style="color:#d14">&#34;my-host&#34;</span>,
+</span></span><span style="display:flex;"><span>    OpenBrowser: browser.Open,
+</span></span><span style="display:flex;"><span>    CredStore:   myCredStore,
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// 2. Create client with auth
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>c <span style="color:#000;font-weight:bold">:=</span> client.<span style="color:#900;font-weight:bold">NewClient</span>(url, info,
+</span></span><span style="display:flex;"><span>    client.<span style="color:#900;font-weight:bold">WithTokenSource</span>(ts),
+</span></span><span style="display:flex;"><span>    client.<span style="color:#900;font-weight:bold">WithUIExtension</span>(),
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>c.<span style="color:#900;font-weight:bold">Connect</span>()
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">defer</span> c.<span style="color:#900;font-weight:bold">Close</span>() <span style="color:#998;font-style:italic">// also closes OAuthTokenSource
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// 3. Create AppHost
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>bridge <span style="color:#000;font-weight:bold">:=</span> ui.<span style="color:#900;font-weight:bold">NewInProcessAppBridge</span>() <span style="color:#998;font-style:italic">// or WebSocketBridge for browser
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>host <span style="color:#000;font-weight:bold">:=</span> ui.<span style="color:#900;font-weight:bold">NewAppHost</span>(c, bridge)
+</span></span><span style="display:flex;"><span>host.<span style="color:#900;font-weight:bold">Start</span>(ctx)
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">defer</span> host.<span style="color:#900;font-weight:bold">Close</span>()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// 4. Use
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>tools, _ <span style="color:#000;font-weight:bold">:=</span> host.<span style="color:#900;font-weight:bold">ListAllTools</span>(ctx) <span style="color:#998;font-style:italic">// server + app tools
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>result, _ <span style="color:#000;font-weight:bold">:=</span> host.<span style="color:#900;font-weight:bold">CallAppTool</span>(ctx, <span style="color:#d14">&#34;app_greet&#34;</span>, <span style="color:#000;font-weight:bold">map</span>[<span style="color:#458;font-weight:bold">string</span>]any{<span style="color:#d14">&#34;name&#34;</span>: <span style="color:#d14">&#34;world&#34;</span>})
+</span></span></code></pre><h3 id="lifecycle">Lifecycle <a class="anchor" href="#lifecycle">¶</a></h3>
+<ol>
+<li>Create <code>Client</code> with desired auth and extensions</li>
+<li><code>Client.Connect()</code> — MCP handshake with server</li>
+<li><code>NewAppHost(client, bridge)</code> + <code>host.Start(ctx)</code> — wires bridge handlers, fetches initial tool list</li>
+<li>Use <code>ListAllTools</code>, <code>CallAppTool</code>, etc.</li>
+<li><code>host.Close()</code> — closes bridge</li>
+<li><code>client.Close()</code> — closes MCP session and auth token source</li>
+</ol>
+<h2 id="serverregistry--multi-server-aggregation">ServerRegistry — Multi-Server Aggregation <a class="anchor" href="#serverregistry--multi-server-aggregation">¶</a></h2>
+<h3 id="overview-1">Overview <a class="anchor" href="#overview-1">¶</a></h3>
+<p><code>ServerRegistry</code> (<code>ext/ui/server_registry.go</code>) manages connections to multiple MCP servers simultaneously. It aggregates tool lists across servers, routes tool calls to the correct server, and provides pluggable collision resolution for ambiguous tool names.</p>
+<h3 id="architecture-1">Architecture <a class="anchor" href="#architecture-1">¶</a></h3>
+<pre><code>┌──────────────────────────────────────────────────────────┐
+│                    ServerRegistry                        │
+│                                                          │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐     │
+│  │  &quot;weather&quot;   │  │  &quot;calendar&quot;  │  │   &quot;game&quot;    │     │
+│  │  Client      │  │  Client      │  │  Client     │     │
+│  │  (OAuth)     │  │  (Bearer)    │  │  (no auth)  │     │
+│  │             │  │             │  │  + AppHost  │     │
+│  │ get_forecast│  │ list_events │  │  new_game   │     │
+│  │ get_alerts  │  │ create_event│  │  get_board  │     │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘     │
+│         │                │                │             │
+│  ┌──────┴────────────────┴────────────────┴──────┐      │
+│  │              Tool Index                        │      │
+│  │  get_forecast → weather                        │      │
+│  │  get_alerts   → weather                        │      │
+│  │  list_events  → calendar                       │      │
+│  │  create_event → calendar                       │      │
+│  │  new_game     → game (server)                  │      │
+│  │  get_board    → game (app)                     │      │
+│  └───────────────────────────────────────────────┘      │
+│                                                          │
+│  AllTools() → [get_alerts, get_board, get_forecast, ...] │
+│  CallTool(&quot;get_forecast&quot;, args) → routes to weather      │
+│  CallToolOn(&quot;game&quot;, &quot;get_board&quot;, args) → routes to app   │
+└──────────────────────────────────────────────────────────┘
+</code></pre>
+<h3 id="request-flows-1">Request Flows <a class="anchor" href="#request-flows-1">¶</a></h3>
+<h4 id="unambiguous-tool-call--direct-routing">Unambiguous tool call — direct routing <a class="anchor" href="#unambiguous-tool-call--direct-routing">¶</a></h4>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Agent as LLM / Agent
+    participant Reg as ServerRegistry
+    participant Idx as Tool Index
+    participant Weather as Weather Server
+
+    Agent-&gt;&gt;Reg: CallTool(&quot;get_forecast&quot;, {zip: &quot;10001&quot;})
+    Reg-&gt;&gt;Idx: lookup &quot;get_forecast&quot;
+    Idx--&gt;&gt;Reg: 1 candidate: weather
+    Reg-&gt;&gt;Weather: Client.Call(tools/call)
+    Weather--&gt;&gt;Reg: ToolResult
+    Reg--&gt;&gt;Agent: ToolResult {text: &quot;Sunny, 72°F&quot;}
+</code></pre>
+<h4 id="ambiguous-tool-call--resolver-invoked">Ambiguous tool call — resolver invoked <a class="anchor" href="#ambiguous-tool-call--resolver-invoked">¶</a></h4>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Agent as LLM / Agent
+    participant Reg as ServerRegistry
+    participant Idx as Tool Index
+    participant Resolver as ToolResolver
+    participant Local as local-clock
+
+    Agent-&gt;&gt;Reg: CallTool(&quot;get_time&quot;, {timezone: &quot;local&quot;})
+    Reg-&gt;&gt;Idx: lookup &quot;get_time&quot;
+    Idx--&gt;&gt;Reg: 2 candidates: [utc-clock, local-clock]
+    Reg-&gt;&gt;Resolver: resolve(&quot;get_time&quot;, candidates, args)
+    Resolver--&gt;&gt;Reg: &quot;local-clock&quot;
+    Reg-&gt;&gt;Local: Client.Call(tools/call)
+    Local--&gt;&gt;Reg: ToolResult
+    Reg--&gt;&gt;Agent: ToolResult {text: &quot;3:45 PM PDT&quot;}
+</code></pre>
+<h4 id="collision-detection-on-add">Collision detection on Add <a class="anchor" href="#collision-detection-on-add">¶</a></h4>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Host as Host Code
+    participant Reg as ServerRegistry
+    participant Handler as CollisionHandler
+
+    Host-&gt;&gt;Reg: Add(&quot;utc-clock&quot;, client1)
+    Note over Reg: Index: get_time → [utc-clock]
+
+    Host-&gt;&gt;Reg: Add(&quot;local-clock&quot;, client2)
+    Note over Reg: Index: get_time → [utc-clock, local-clock]
+    Reg-&gt;&gt;Handler: collision(&quot;get_time&quot;, [&quot;utc-clock&quot;, &quot;local-clock&quot;])
+    Note over Handler: Log, alert, or adjust resolver
+</code></pre>
+<h3 id="usage">Usage <a class="anchor" href="#usage">¶</a></h3>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Create registry with collision handling
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>reg <span style="color:#000;font-weight:bold">:=</span> ui.<span style="color:#900;font-weight:bold">NewServerRegistry</span>(
+</span></span><span style="display:flex;"><span>    ui.<span style="color:#900;font-weight:bold">WithToolResolver</span>(<span style="color:#000;font-weight:bold">func</span>(ctx context.Context, name <span style="color:#458;font-weight:bold">string</span>,
+</span></span><span style="display:flex;"><span>        candidates []ui.RegisteredTool, args <span style="color:#000;font-weight:bold">map</span>[<span style="color:#458;font-weight:bold">string</span>]any) (<span style="color:#458;font-weight:bold">string</span>, <span style="color:#458;font-weight:bold">error</span>) {
+</span></span><span style="display:flex;"><span>        <span style="color:#998;font-style:italic">// Pick based on args, LLM context, user input, etc.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>        <span style="color:#000;font-weight:bold">return</span> candidates[<span style="color:#099">0</span>].ServerID, <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>    }),
+</span></span><span style="display:flex;"><span>    ui.<span style="color:#900;font-weight:bold">WithCollisionHandler</span>(<span style="color:#000;font-weight:bold">func</span>(name <span style="color:#458;font-weight:bold">string</span>, ids []<span style="color:#458;font-weight:bold">string</span>) {
+</span></span><span style="display:flex;"><span>        log.<span style="color:#900;font-weight:bold">Printf</span>(<span style="color:#d14">&#34;tool %q available from servers: %v&#34;</span>, name, ids)
+</span></span><span style="display:flex;"><span>    }),
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Add servers with independent auth
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>weatherClient <span style="color:#000;font-weight:bold">:=</span> client.<span style="color:#900;font-weight:bold">NewClient</span>(url1, info, client.<span style="color:#900;font-weight:bold">WithTokenSource</span>(oauthTS))
+</span></span><span style="display:flex;"><span>weatherClient.<span style="color:#900;font-weight:bold">Connect</span>()
+</span></span><span style="display:flex;"><span>reg.<span style="color:#900;font-weight:bold">Add</span>(ctx, <span style="color:#d14">&#34;weather&#34;</span>, weatherClient)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>calendarClient <span style="color:#000;font-weight:bold">:=</span> client.<span style="color:#900;font-weight:bold">NewClient</span>(url2, info, client.<span style="color:#900;font-weight:bold">WithClientBearerToken</span>(<span style="color:#d14">&#34;sk-...&#34;</span>))
+</span></span><span style="display:flex;"><span>calendarClient.<span style="color:#900;font-weight:bold">Connect</span>()
+</span></span><span style="display:flex;"><span>reg.<span style="color:#900;font-weight:bold">Add</span>(ctx, <span style="color:#d14">&#34;calendar&#34;</span>, calendarClient)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Add server with app bridge
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>bridge <span style="color:#000;font-weight:bold">:=</span> ui.<span style="color:#900;font-weight:bold">NewInProcessAppBridge</span>()
+</span></span><span style="display:flex;"><span>gameClient <span style="color:#000;font-weight:bold">:=</span> client.<span style="color:#900;font-weight:bold">NewClient</span>(url3, info)
+</span></span><span style="display:flex;"><span>gameClient.<span style="color:#900;font-weight:bold">Connect</span>()
+</span></span><span style="display:flex;"><span>reg.<span style="color:#900;font-weight:bold">AddWithBridge</span>(ctx, <span style="color:#d14">&#34;game&#34;</span>, gameClient, bridge)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Use
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>tools, _ <span style="color:#000;font-weight:bold">:=</span> reg.<span style="color:#900;font-weight:bold">AllTools</span>(ctx)                              <span style="color:#998;font-style:italic">// all tools, clean names
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>result, _ <span style="color:#000;font-weight:bold">:=</span> reg.<span style="color:#900;font-weight:bold">CallTool</span>(ctx, <span style="color:#d14">&#34;get_forecast&#34;</span>, args)       <span style="color:#998;font-style:italic">// auto-routes
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>result, _ = reg.<span style="color:#900;font-weight:bold">CallToolOn</span>(ctx, <span style="color:#d14">&#34;game&#34;</span>, <span style="color:#d14">&#34;get_board&#34;</span>, args) <span style="color:#998;font-style:italic">// explicit routing
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Cleanup
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>reg.<span style="color:#900;font-weight:bold">Close</span>()       <span style="color:#998;font-style:italic">// closes bridges
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>weatherClient.<span style="color:#900;font-weight:bold">Close</span>()  <span style="color:#998;font-style:italic">// caller owns clients
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>calendarClient.<span style="color:#900;font-weight:bold">Close</span>()
+</span></span><span style="display:flex;"><span>gameClient.<span style="color:#900;font-weight:bold">Close</span>()
+</span></span></code></pre>
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+</body>
+</html>

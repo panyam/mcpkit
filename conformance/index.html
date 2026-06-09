@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Per-SEP coverage matrix and open gaps for mcpkit.">
+    <title>Conformance Coverage · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/capabilities/">Capabilities</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Design Docs</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/capabilities/">Capabilities</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Design Docs</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-tutorial/">Tasks tutorial</a></li>
+                
+                <li><a href="/mcpkit/design/mrtr-tutorial/">MRTR tutorial</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Conformance Coverage</h1>
+        
+        <p class="lead">Per-SEP coverage matrix and open gaps for mcpkit.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/CONFORMANCE.md"><code>CONFORMANCE.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="mcp-conformance">MCP Conformance <a class="anchor" href="#mcp-conformance">¶</a></h1>
+<p>mcpkit&rsquo;s posture against the <a href="https://github.com/modelcontextprotocol/conformance">MCP conformance suite</a> and the per-SEP traceability manifest. Refreshed before each tagged release; CI keeps the rendering in sync on PRs.</p>
+<p>This file has two parts:</p>
+<ul>
+<li><strong>Overview</strong> (hand-edited, preserved across regenerations) — what the report covers, what it does <em>not</em> cover, and how to read it.</li>
+<li><strong>Generated block</strong> below the begin-marker — rebuilt from <code>npx @modelcontextprotocol/conformance tier-check --output json</code> + <code>src/seps/traceability.json</code>. Do not hand-edit; changes are overwritten by <code>scripts/refresh-conformance.sh</code>.</li>
+</ul>
+<h2 id="how-to-read-this">How to read this <a class="anchor" href="#how-to-read-this">¶</a></h2>
+<ul>
+<li><strong>Conformance Summary</strong> counts wire-level scenarios from the upstream conformance suite running against <code>cmd/testserver</code>. Aggregate pass/total at the scenario level + check-level pass/fail totals.</li>
+<li><strong>SEP Coverage</strong> is sourced from upstream&rsquo;s traceability manifest, which maps each SEP to its declared requirements. A row&rsquo;s <code>Status</code> says whether upstream has emitted a check ID for every declared requirement — <em>not</em> whether mcpkit passes them. Scenario-level pass/fail per SEP lives in <a href="conformance/UPSTREAM_AUDIT.md"><code>conformance/UPSTREAM_AUDIT.md</code></a>, which grades mcpkit against every scenario upstream currently ships.</li>
+<li><strong>Open Gaps</strong> lists failing scenarios + traceability rows with no emitted check. Tracking links and one-line context come from <a href="conformance/known-gaps.yaml"><code>conformance/known-gaps.yaml</code></a>.</li>
+</ul>
+<h2 id="what-this-report-is-not">What this report is <em>not</em> <a class="anchor" href="#what-this-report-is-not">¶</a></h2>
+<p>The renderer drops the tier-check checks that depend on live GitHub state (labels, triage SLA, P0 resolution, stable release, policy signals, spec tracking). Those are useful tier-1 signals but they change daily independent of code, which would break the CI staleness gate. To see the full <code>tier-check</code> scorecard for a point-in-time tier judgement, run <code>npx @modelcontextprotocol/conformance tier-check --repo panyam/mcpkit --output markdown</code> directly.</p>
+<h2 id="regenerate-locally">Regenerate locally <a class="anchor" href="#regenerate-locally">¶</a></h2>
+<pre><code>bash scripts/refresh-conformance.sh
+</code></pre>
+<p>Needs Node.js 22+ and a clone of <code>modelcontextprotocol/conformance</code> at <code>../conf-upstream-main</code> (override with <code>MCPCONFORMANCE_BASE_PATH=...</code>). Output is deterministic — re-running on unchanged input produces a byte-identical file.</p>
+<hr />
+<!-- begin:generated -->
+<!-- generated against upstream-conformance@25fd44323ff3fe28967b95ea8105de47f674b7d8 · protocol 2025-11-25 · regenerate via scripts/refresh-conformance.sh -->
+<h2 id="conformance-summary">Conformance Summary <a class="anchor" href="#conformance-summary">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Surface</th>
+<th align="right">Scenarios pass/total</th>
+<th align="right">Checks pass/fail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Server</td>
+<td align="right">30/30</td>
+<td align="right">42/0</td>
+</tr>
+<tr>
+<td>Client</td>
+<td align="right">0/0</td>
+<td align="right">0/0</td>
+</tr>
+</tbody>
+</table>
+<h2 id="mcpkit-local-conformance-suites">mcpkit-local Conformance Suites <a class="anchor" href="#mcpkit-local-conformance-suites">¶</a></h2>
+<p>These suites exercise SEP-specific behavior beyond what upstream&rsquo;s tier-check covers. Each is wired into <code>make testall</code> as a separate stage and may show as PASS, FAIL, INFO (informational, not gating), or SKIP. INFO typically means &ldquo;work in flight&rdquo; — see the Tracking column. The Source column links to the branch the scenarios live on; per-suite env vars and default checkout paths are listed below the table.</p>
+<table>
+<thead>
+<tr>
+<th>Suite</th>
+<th>Covers</th>
+<th align="center">Stage</th>
+<th align="center">Status</th>
+<th>Source</th>
+<th>Tracking</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>testconf-tasks-v2</code></td>
+<td>SEP-2663 Tasks v2</td>
+<td align="center">8d</td>
+<td align="center"><strong>PASS</strong></td>
+<td><a href="https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension"><code>panyam/mcpconformance@feat/tasks-mrtr-extension</code></a></td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>testconf-mrtr</code></td>
+<td>SEP-2322 MRTR</td>
+<td align="center">8e</td>
+<td align="center"><strong>PASS</strong></td>
+<td><a href="https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension"><code>panyam/mcpconformance@feat/tasks-mrtr-extension</code></a></td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>testconf-file-inputs</code></td>
+<td>SEP-2356 File inputs</td>
+<td align="center">8f</td>
+<td align="center"><strong>PASS</strong></td>
+<td><a href="https://github.com/panyam/mcpconformance/tree/pending"><code>panyam/mcpconformance@pending</code></a></td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>testconf-auth-server</code></td>
+<td>MCP authz 2025-11-25</td>
+<td align="center">8g</td>
+<td align="center"><strong>PASS</strong></td>
+<td><a href="https://github.com/panyam/mcpconformance/tree/pending"><code>panyam/mcpconformance@pending</code></a></td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>testconf-stateless</code></td>
+<td>SEP-2575 Stateless wire</td>
+<td align="center">-</td>
+<td align="center"><strong>PASS</strong><sup>1</sup></td>
+<td><a href="https://github.com/modelcontextprotocol/conformance/tree/main"><code>modelcontextprotocol/conformance@main</code></a></td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>testconf-skills</code></td>
+<td>SEP-2640 Skills</td>
+<td align="center">8h</td>
+<td align="center"><em>INFO</em><sup>2</sup></td>
+<td><a href="https://github.com/panyam/mcpconformance/tree/chore/sep-2640-yaml"><code>panyam/mcpconformance@chore/sep-2640-yaml</code></a></td>
+<td>mcpkit 567</td>
+</tr>
+</tbody>
+</table>
+<p><sup>1</sup> 25 pass / 1 known upstream-test fail (array-vs-object requiredCapabilities).<br />
+<sup>2</sup> Fixture spawns and runs cleanly. Fork-side Scenario classes blocked on WG iteration of sep-2640.yaml in panyam/mcpconformance PR 330.</p>
+<h3 id="setup--clone-the-right-worktree-per-suite">Setup — clone the right worktree per suite <a class="anchor" href="#setup--clone-the-right-worktree-per-suite">¶</a></h3>
+<p>Each suite&rsquo;s Makefile target reads <code>MCPCONFORMANCE_*_PATH</code> to find its scenario worktree. Defaults assume sibling clones of the source repo at the relative path shown. Override per-invocation when the worktree lives elsewhere.</p>
+<table>
+<thead>
+<tr>
+<th>Suite</th>
+<th>Env var</th>
+<th>Default path</th>
+<th>Clone command</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>testconf-tasks-v2</code></td>
+<td><code>MCPCONFORMANCE_TASKS_V2_PATH</code></td>
+<td><code>../conf-tasks-mrtr</code></td>
+<td><code>git clone -b feat/tasks-mrtr-extension https://github.com/panyam/mcpconformance.git ../conf-tasks-mrtr</code></td>
+</tr>
+<tr>
+<td><code>testconf-mrtr</code></td>
+<td><code>MCPCONFORMANCE_MRTR_PATH</code></td>
+<td><code>../conf-tasks-mrtr</code></td>
+<td><code>git clone -b feat/tasks-mrtr-extension https://github.com/panyam/mcpconformance.git ../conf-tasks-mrtr</code></td>
+</tr>
+<tr>
+<td><code>testconf-file-inputs</code></td>
+<td><code>MCPCONFORMANCE_FILE_INPUTS_PATH</code></td>
+<td><code>../conf-pending</code></td>
+<td><code>git clone -b pending https://github.com/panyam/mcpconformance.git ../conf-pending</code></td>
+</tr>
+<tr>
+<td><code>testconf-auth-server</code></td>
+<td><code>MCPCONFORMANCE_AUTH_PATH</code></td>
+<td><code>../conf-pending</code></td>
+<td><code>git clone -b pending https://github.com/panyam/mcpconformance.git ../conf-pending</code></td>
+</tr>
+<tr>
+<td><code>testconf-stateless</code></td>
+<td><code>MCPCONFORMANCE_STATELESS_PATH</code></td>
+<td><code>../conf-upstream-main</code></td>
+<td><code>git clone -b main https://github.com/modelcontextprotocol/conformance.git ../conf-upstream-main</code></td>
+</tr>
+<tr>
+<td><code>testconf-skills</code></td>
+<td><code>MCPCONFORMANCE_SKILLS_PATH</code></td>
+<td><code>../conf-skills</code></td>
+<td><code>git clone -b chore/sep-2640-yaml https://github.com/panyam/mcpconformance.git ../conf-skills</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="sep-coverage">SEP Coverage <a class="anchor" href="#sep-coverage">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>SEP</th>
+<th align="right">Tested reqs</th>
+<th align="right">Excluded</th>
+<th align="right">Untested</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://modelcontextprotocol.io/specification/draft/basic/authorization#application-type-and-redirect-uri-constraints">SEP-837</a></td>
+<td align="right"><a href="#sep-837-tested" title="Tested: sep-837-application-type-present.">1</a></td>
+<td align="right"><a href="#sep-837-excluded" title="2x harness cannot determine the client-under-test application c; 1x robustness requirement with no defined wire-level success cr; 1x UI/DX behavior, not protocol-observable">4</a></td>
+<td align="right">0</td>
+<td><strong>pass</strong></td>
+</tr>
+<tr>
+<td><a href="https://modelcontextprotocol.io/seps/2106-json-schema-2020-12#security-implications">SEP-2106</a></td>
+<td align="right"><a href="#sep-2106-tested" title="Tested: sep-2106-no-network-ref-deref.">1</a></td>
+<td align="right"><a href="#sep-2106-excluded" title="1x Migration/deprecation guidance for SDK maintainers; about SD; 1x Restates pre-existing schema-validation behavior and is too ; 1x Applies only when the non-default opt-in network-$ref fetch ; 1x Internal validator resource limits (max schema depth, subsch">4</a></td>
+<td align="right">0</td>
+<td><strong>pass</strong></td>
+</tr>
+<tr>
+<td><a href="https://modelcontextprotocol.io/specification/draft/server/resources#error-handling">SEP-2164</a></td>
+<td align="right"><a href="#sep-2164-tested" title="Tested: sep-2164-no-empty-contents, sep-2164-error-code.">2</a></td>
+<td align="right"><a href="#sep-2164-excluded" title="1x Client-side error handling is implementation-defined; not pr">1</a></td>
+<td align="right">0</td>
+<td><strong>pass</strong></td>
+</tr>
+<tr>
+<td><a href="https://modelcontextprotocol.io/specification/draft/basic/authorization#refresh-tokens">SEP-2207</a></td>
+<td align="right"><a href="#sep-2207-tested" title="Tested: sep-2207-client-metadata-grant-types.">1</a></td>
+<td align="right"><a href="#sep-2207-excluded" title="1x The server suite does not yet exercise the SDK server as an ; 1x Confidentiality of refresh tokens in storage is client-inter; 1x A client assuming refresh tokens will be issued is mental-">3</a></td>
+<td align="right">0</td>
+<td><strong>pass</strong></td>
+</tr>
+<tr>
+<td><a href="https://modelcontextprotocol.io/specification/draft/basic/transports#standard-mcp-request-headers">SEP-2243</a></td>
+<td align="right"><a href="#sep-2243-tested" title="Tested: sep-2243-client-includes-standard-headers, sep-2243-header-name-case-insensitive, sep-2243-server-reject-invalid-headers, +15 more.">18</a></td>
+<td align="right"><a href="#sep-2243-excluded" title="2x Intermediary requirement; conformance harness tests clients ; 1x Log output is not wire-observable.; 1x Design guidance to humans; not protocol-observable.">4</a></td>
+<td align="right"><a href="#sep-2243-untested" title="Untested: sep-2243-server-not-expect-null, sep-2243-server-reject-missing-required.">2</a></td>
+<td>partial</td>
+</tr>
+<tr>
+<td><a href="https://modelcontextprotocol.io/specification/draft/basic/transports#streamable-http">SEP-2260</a></td>
+<td align="right">0</td>
+<td align="right"><a href="#sep-2260-excluded" title="10x No longer needed this behavior is enabled by default SEP-232; 1x Semantic association (relate to) is not protocol-observabl; 1x Implementation preference for keepalive mechanism choice; no">12</a></td>
+<td align="right">0</td>
+<td><em>untested</em></td>
+</tr>
+<tr>
+<td><a href="https://modelcontextprotocol.io/specification/draft/basic/utilities/mrtr">SEP-2322</a></td>
+<td align="right"><a href="#sep-2322-tested" title="Tested: sep-2322-result-type-included, sep-2322-default-result-type-complete, sep-2322-not-on-unsupported-requests, +14 more.">17</a></td>
+<td align="right"><a href="#sep-2322-excluded" title="8x Tasks moved to an extension as of SEP-2663; no longer part o; 1x inputRequests is a JSON object; duplicate keys are collapsed; 1x Architectural migration statement; tested indirectly through; 1x Internal security posture; not observable at protocol level; 1x Internal implementation choice about encryption/signing; not; 1x Internal requestState format; not observable at protocol lev; 1x Internal enforcement policy; conformance harness cannot dete; 1x Server-internal robustness assumption; not observable at pro; 1x Duplicates integrity-protection requirements above; internal">16</a></td>
+<td align="right">0</td>
+<td><strong>pass</strong></td>
+</tr>
+<tr>
+<td><a href="https://modelcontextprotocol.io/specification/draft/basic/authorization#runtime-insufficient-scope-errors">SEP-2350</a></td>
+<td align="right"><a href="#sep-2350-tested" title="Tested: sep-2350-scope-union-on-reauth.">1</a></td>
+<td align="right"><a href="#sep-2350-excluded" title="1x All scopes required for the current operation has no harne; 1x reword of pre-existing requirement (request-&gt;operation, +RFC">2</a></td>
+<td align="right">0</td>
+<td><strong>pass</strong></td>
+</tr>
+<tr>
+<td><a href="https://modelcontextprotocol.io/specification/draft/basic/authorization#authorization-server-binding">SEP-2352</a></td>
+<td align="right"><a href="#sep-2352-tested" title="Tested: sep-2352-no-cross-as-credential-reuse, sep-2352-no-reuse-on-as-change, sep-2352-reregister-on-as-change.">3</a></td>
+<td align="right"><a href="#sep-2352-excluded" title="1x internal storage requirement; not directly observable on the; 1x internal state-keying requirement; not protocol-observable; 1x UI behavior; the negative half (do not send mismatched crede">3</a></td>
+<td align="right">0</td>
+<td><strong>pass</strong></td>
+</tr>
+<tr>
+<td><a href="https://modelcontextprotocol.io/specification/draft/basic/authorization#authorization-response-validation">SEP-2468</a></td>
+<td align="right"><a href="#sep-2468-tested" title="Tested: sep-2468-client-validate-metadata-issuer, sep-2468-client-compare-iss-supported, sep-2468-client-reject-missing-iss, +3 more.">6</a></td>
+<td align="right"><a href="#sep-2468-excluded" title="1x Targets the authorization server under test; observing iss i; 1x Conditional on the AS actually including iss in an authoriza; 1x display is UI-facing; act-on has no protocol-observable sign">3</a></td>
+<td align="right">0</td>
+<td><strong>pass</strong></td>
+</tr>
+<tr>
+<td><a href="https://modelcontextprotocol.io/specification/draft/server/utilities/caching">SEP-2549</a></td>
+<td align="right"><a href="#sep-2549-tested" title="Tested: sep-2549-tools-list-caching-hints, sep-2549-prompts-list-caching-hints, sep-2549-resources-list-caching-hints, +4 more.">7</a></td>
+<td align="right"><a href="#sep-2549-excluded" title="9x Client-side caching behavior; not observable at the protocol; 1x Client-side polling behavior; not observable at the protocol; 1x Client/cache-side behavior; not observable at the protocol l; 1x Server-side awareness requirement; implementation guidance n; 1x Server-side access control; implementation guidance not test">13</a></td>
+<td align="right">0</td>
+<td><strong>pass</strong></td>
+</tr>
+<tr>
+<td><a href="https://modelcontextprotocol.io/specification/draft/basic/lifecycle">SEP-2575</a></td>
+<td align="right"><a href="#sep-2575-tested" title="Tested: sep-2575-client-populates-meta, sep-2575-server-rejects-undeclared-capability, sep-2575-missing-capability-http-400, +19 more.">22</a></td>
+<td align="right"><a href="#sep-2575-excluded" title="6x stdio client harness not implemented — see https://github.co; 1x internal server state, not directly wire-observable; the obs; 1x not observable from a black-box harness; every harness reque; 1x treated as cancellation is internal server state; once the; 1x stop work as soon as practical is unobservable from a blac; 1x architectural guidance, observable only via subscriptionId/t; 1x client-internal demux; not observable on the wire from the h; 1x internal comparison; gracefully has no wire-observable def">13</a></td>
+<td align="right">0</td>
+<td><strong>pass</strong></td>
+</tr>
+</tbody>
+</table>
+<p><em>Numeric cells link to per-SEP detail below; hover/long-press surfaces a one-line summary. Status reflects upstream-declared requirements only — Scenario→SEP attribution is not exposed in tier-check JSON today; this column tracks &ldquo;does upstream have a check ID for this SEP requirement&rdquo;, not &ldquo;does mcpkit pass it&rdquo;. Per-SEP scenario pass/fail lives in <code>conformance/UPSTREAM_AUDIT.md</code>.</em></p>
+<h2 id="sep-detail">SEP Detail <a class="anchor" href="#sep-detail">¶</a></h2>
+<p>Per-SEP breakdown of upstream traceability — what is exercised, what is intentionally excluded, and what is declared but not yet exercised. Useful for auditing whether each exclusion still makes sense as upstream evolves. Check IDs link to their definition in the upstream SEP YAML.</p>
+<h3 id="sep-837">SEP-837 <a class="anchor" href="#sep-837">¶</a></h3>
+<p><a id="sep-837-tested"></a></p>
+<p><strong>Tested (1)</strong></p>
+<ul>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-837.yaml"><code>sep-837-application-type-present</code></a></li>
+</ul>
+<p><a id="sep-837-excluded"></a></p>
+<p><strong>Excluded (4)</strong></p>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Upstream reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Native applications (desktop applications, mobile apps, CLI tools, and locally-hosted web applications accessed via localhost) SHOULD use application_type: &ldquo;native&rdquo;.</td>
+<td>harness cannot determine the client-under-test application class (native vs web) out-of-band; only presence and value validity are wire-observable</td>
+</tr>
+<tr>
+<td>Web applications (remote browser-based applications served from a non-local host) SHOULD use application_type: &ldquo;web&rdquo;.</td>
+<td>harness cannot determine the client-under-test application class (native vs web) out-of-band; only presence and value validity are wire-observable</td>
+</tr>
+<tr>
+<td>MCP clients MUST be prepared to handle registration failures due to redirect URI constraints when authorization servers implement OIDC.</td>
+<td>robustness requirement with no defined wire-level success criterion</td>
+</tr>
+<tr>
+<td>When a registration request is rejected, clients SHOULD surface a meaningful error to the user or developer.</td>
+<td>UI/DX behavior, not protocol-observable</td>
+</tr>
+</tbody>
+</table>
+<p><a id="sep-837-untested"></a></p>
+<p><strong>Untested (0)</strong></p>
+<p><em>None.</em></p>
+<h3 id="sep-2106">SEP-2106 <a class="anchor" href="#sep-2106">¶</a></h3>
+<p><a id="sep-2106-tested"></a></p>
+<p><strong>Tested (1)</strong></p>
+<ul>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2106.yaml"><code>sep-2106-no-network-ref-deref</code></a></li>
+</ul>
+<p><a id="sep-2106-excluded"></a></p>
+<p><strong>Excluded (4)</strong></p>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Upstream reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SDK maintainers SHOULD: Document the migration in SDK release notes; Where ergonomic, provide typed helpers (e.g. generics over a tool&rsquo;s <code>outputSchema</code>) so consumers do not need to write narrowing guards by hand</td>
+<td>Migration/deprecation guidance for SDK maintainers; about SDK source code, not protocol-observable wire behavior</td>
+</tr>
+<tr>
+<td>JSON Schema validation already handles type checking, value constraints, and required field validation, and implementations MUST continue to validate all inputs and outputs against declared schemas</td>
+<td>Restates pre-existing schema-validation behavior and is too broad to attribute to a specific observable SEP-2106 check; input/output validation overlaps existing tool scenarios</td>
+</tr>
+<tr>
+<td>An opt-in mode that fetches non-local <code>$ref</code>s SHOULD enforce an allowlist of hosts (or at minimum reject loopback, link-local, and private network addresses), apply timeouts and size limits, and log dereferenced URIs</td>
+<td>Applies only when the non-default opt-in network-$ref fetch mode is enabled; not observable in default conformance runs</td>
+</tr>
+<tr>
+<td>Implementations SHOULD apply reasonable bounds — for example, a maximum schema depth, a cap on the total number of subschemas, or a per-validation time budget — to prevent a malicious tool definition from acting as a CPU DoS vector against the validator</td>
+<td>Internal validator resource limits (max schema depth, subschema cap, per-validation time budget); a defensive measure not observable on the wire</td>
+</tr>
+</tbody>
+</table>
+<p><a id="sep-2106-untested"></a></p>
+<p><strong>Untested (0)</strong></p>
+<p><em>None.</em></p>
+<h3 id="sep-2164">SEP-2164 <a class="anchor" href="#sep-2164">¶</a></h3>
+<p><a id="sep-2164-tested"></a></p>
+<p><strong>Tested (2)</strong></p>
+<ul>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2164.yaml"><code>sep-2164-no-empty-contents</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2164.yaml"><code>sep-2164-error-code</code></a></li>
+</ul>
+<p><a id="sep-2164-excluded"></a></p>
+<p><strong>Excluded (1)</strong></p>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Upstream reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>clients SHOULD also accept -32002 as a resource not found error</td>
+<td>Client-side error handling is implementation-defined; not protocol-observable</td>
+</tr>
+</tbody>
+</table>
+<p><a id="sep-2164-untested"></a></p>
+<p><strong>Untested (0)</strong></p>
+<p><em>None.</em></p>
+<h3 id="sep-2207">SEP-2207 <a class="anchor" href="#sep-2207">¶</a></h3>
+<p><a id="sep-2207-tested"></a></p>
+<p><strong>Tested (1)</strong></p>
+<ul>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2207.yaml"><code>sep-2207-client-metadata-grant-types</code></a></li>
+</ul>
+<p><a id="sep-2207-excluded"></a></p>
+<p><strong>Excluded (3)</strong></p>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Upstream reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MCP Servers (Protected Resources) SHOULD NOT include <code>offline_access</code> in <code>WWW-Authenticate</code> scope or Protected Resource Metadata <code>scopes_supported</code>, as refresh tokens are not a resource requirement</td>
+<td>The server suite does not yet exercise the SDK server as an OAuth protected resource (no Protected Resource Metadata or WWW-Authenticate probing); revisit once server-side authorization scenarios exist (<a href="https://github.com/modelcontextprotocol/conformance/issues/116">https://github.com/modelcontextprotocol/conformance/issues/116</a>)</td>
+</tr>
+<tr>
+<td>MCP Clients that desire refresh tokens MUST keep refresh tokens confidential in transit and storage as specified in OAuth 2.1 Section 4.3</td>
+<td>Confidentiality of refresh tokens in storage is client-internal state, and in-transit (TLS) confidentiality is not exercised by the harness over localhost HTTP; not protocol-observable</td>
+</tr>
+<tr>
+<td>MCP Clients that desire refresh tokens MUST NOT assume refresh tokens will be issued; the AS retains discretion</td>
+<td>A client &ldquo;assuming&rdquo; refresh tokens will be issued is mental-state; only manifests as general authorization-flow completion, which other checks already cover; not directly protocol-observable</td>
+</tr>
+</tbody>
+</table>
+<p><a id="sep-2207-untested"></a></p>
+<p><strong>Untested (0)</strong></p>
+<p><em>None.</em></p>
+<h3 id="sep-2243">SEP-2243 <a class="anchor" href="#sep-2243">¶</a></h3>
+<p><a id="sep-2243-tested"></a></p>
+<p><strong>Tested (18)</strong></p>
+<ul>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2243.yaml"><code>sep-2243-client-includes-standard-headers</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2243.yaml"><code>sep-2243-header-name-case-insensitive</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2243.yaml"><code>sep-2243-server-reject-invalid-headers</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2243.yaml"><code>sep-2243-server-reject-error-code</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2243.yaml"><code>sep-2243-client-supports-custom-headers</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2243.yaml"><code>sep-2243-client-mirrors-designated-params</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2243.yaml"><code>sep-2243-x-mcp-header-not-empty</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2243.yaml"><code>sep-2243-x-mcp-header-charset</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2243.yaml"><code>sep-2243-x-mcp-header-unique</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2243.yaml"><code>sep-2243-x-mcp-header-primitive-only</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2243.yaml"><code>sep-2243-client-reject-invalid-tool</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2243.yaml"><code>sep-2243-client-encode-values</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2243.yaml"><code>sep-2243-client-base64-unsafe</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2243.yaml"><code>sep-2243-server-decode-base64</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2243.yaml"><code>sep-2243-client-omit-null</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2243.yaml"><code>sep-2243-server-reject-invalid-param-chars</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2243.yaml"><code>sep-2243-server-validate-param-match</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2243.yaml"><code>sep-2243-server-reject-param-mismatch</code></a></li>
+</ul>
+<p><a id="sep-2243-excluded"></a></p>
+<p><strong>Excluded (4)</strong></p>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Upstream reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Clients SHOULD log a warning when rejecting a tool definition due to invalid x-mcp-header, including the tool name and the reason.</td>
+<td>Log output is not wire-observable.</td>
+</tr>
+<tr>
+<td>Server developers SHOULD NOT mark sensitive parameters (such as passwords, API keys, tokens, or PII) with x-mcp-header.</td>
+<td>Design guidance to humans; not protocol-observable.</td>
+</tr>
+<tr>
+<td>Intermediaries MUST return an appropriate HTTP error status for validation failures.</td>
+<td>Intermediary requirement; conformance harness tests clients and servers, not intermediaries.</td>
+</tr>
+<tr>
+<td>Intermediate servers that do not recognize an Mcp-Param-{Name} header MUST forward it and otherwise ignore it.</td>
+<td>Intermediary requirement; conformance harness tests clients and servers, not intermediaries.</td>
+</tr>
+</tbody>
+</table>
+<p><a id="sep-2243-untested"></a></p>
+<p><strong>Untested (2)</strong></p>
+<ul>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2243.yaml"><code>sep-2243-server-not-expect-null</code></a> — Parameter value is null or omitted: Server MUST NOT expect the header.</li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2243.yaml"><code>sep-2243-server-reject-missing-required</code></a> — Required parameter is omitted: Server MUST reject with JSON-RPC error.</li>
+</ul>
+<h3 id="sep-2260">SEP-2260 <a class="anchor" href="#sep-2260">¶</a></h3>
+<p><a id="sep-2260-tested"></a></p>
+<p><strong>Tested (0)</strong></p>
+<p><em>None.</em></p>
+<p><a id="sep-2260-excluded"></a></p>
+<p><strong>Excluded (12)</strong></p>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Upstream reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>roots/list, sampling/createMessage, and elicitation/create requests MUST NOT be sent on standalone streams.</td>
+<td>No longer needed this behavior is enabled by default SEP-2322 MRTR.</td>
+</tr>
+<tr>
+<td>Clients MUST return standard JSON-RPC errors for common failure cases: Server sends an elicitation/create request with no associated client-to-server request: -32602 (Invalid params)</td>
+<td>No longer needed this behavior is enabled by default SEP-2322 MRTR.</td>
+</tr>
+<tr>
+<td>Clients SHOULD return standard JSON-RPC errors for common failure cases: Server sends a roots/list request with no associated client-to-server request: -32602 (Invalid params)</td>
+<td>No longer needed this behavior is enabled by default SEP-2322 MRTR.</td>
+</tr>
+<tr>
+<td>Clients SHOULD return errors for common failure cases: Sampling request not associated with a client-to-server request: -32602 (Invalid params)</td>
+<td>No longer needed this behavior is enabled by default SEP-2322 MRTR.</td>
+</tr>
+<tr>
+<td>These messages MUST relate to the originating client request.</td>
+<td>Semantic association (&ldquo;relate to&rdquo;) is not protocol-observable. The harness cannot determine whether a server request conceptually relates to the client request without understanding application logic.</td>
+</tr>
+<tr>
+<td>Implementations SHOULD prefer transport-level SSE keepalive mechanisms for idle-connection maintenance.</td>
+<td>Implementation preference for keepalive mechanism choice; not observable on the wire.</td>
+</tr>
+<tr>
+<td>Servers MUST send server-to-client requests (such as roots/list, sampling/createMessage, or elicitation/create) only in association with an originating client request (e.g., during tools/call, resources/read, or prompts/get processing).</td>
+<td>No longer needed this behavior is enabled by default SEP-2322 MRTR.</td>
+</tr>
+<tr>
+<td>Standalone server-initiated requests of these types on independent communication streams (unrelated to any client request) are not supported and MUST NOT be implemented.</td>
+<td>No longer needed this behavior is enabled by default SEP-2322 MRTR.</td>
+</tr>
+<tr>
+<td>Servers MUST send sampling/createMessage requests only in association with an originating client request (e.g., during tools/call, resources/read, or prompts/get processing).</td>
+<td>No longer needed this behavior is enabled by default SEP-2322 MRTR.</td>
+</tr>
+<tr>
+<td>Standalone server-initiated sampling on independent communication streams (unrelated to any client request) is not supported and MUST NOT be implemented.</td>
+<td>No longer needed this behavior is enabled by default SEP-2322 MRTR.</td>
+</tr>
+<tr>
+<td>Servers MUST send server-to-client requests (such as roots/list, sampling/createMessage, or elicitation/create) only in association with an originating client request (e.g., during tools/call, resources/read, or prompts/get processing).</td>
+<td>No longer needed this behavior is enabled by default SEP-2322 MRTR.</td>
+</tr>
+<tr>
+<td>Standalone server-initiated requests of these types on independent communication streams (unrelated to any client request) are not supported and MUST NOT be implemented.</td>
+<td>No longer needed this behavior is enabled by default SEP-2322 MRTR.</td>
+</tr>
+</tbody>
+</table>
+<p><a id="sep-2260-untested"></a></p>
+<p><strong>Untested (0)</strong></p>
+<p><em>None.</em></p>
+<h3 id="sep-2322">SEP-2322 <a class="anchor" href="#sep-2322">¶</a></h3>
+<p><a id="sep-2322-tested"></a></p>
+<p><strong>Tested (17)</strong></p>
+<ul>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2322.yaml"><code>sep-2322-result-type-included</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2322.yaml"><code>sep-2322-default-result-type-complete</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2322.yaml"><code>sep-2322-not-on-unsupported-requests</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2322.yaml"><code>sep-2322-elicitation-incomplete</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2322.yaml"><code>sep-2322-sampling-incomplete</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2322.yaml"><code>sep-2322-list-roots-incomplete</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2322.yaml"><code>sep-2322-reject-tampered-state</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2322.yaml"><code>sep-2322-request-state-incomplete</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2322.yaml"><code>sep-2322-respect-client-capabilities</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2322.yaml"><code>sep-2322-client-request-state-echoed</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2322.yaml"><code>sep-2322-client-no-state-omitted</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2322.yaml"><code>sep-2322-client-jsonrpc-id-different</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2322.yaml"><code>sep-2322-client-parallel-isolation</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2322.yaml"><code>sep-2322-validate-input-responses</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2322.yaml"><code>sep-2322-error-on-protocol-error</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2322.yaml"><code>sep-2322-ignore-unexpected-params</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2322.yaml"><code>sep-2322-missing-response-rerequests</code></a></li>
+</ul>
+<p><a id="sep-2322-excluded"></a></p>
+<p><strong>Excluded (16)</strong></p>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Upstream reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>inputRequests keys are server assigned identifiers and MUST be unique within the scope of the request.</td>
+<td>inputRequests is a JSON object; duplicate keys are collapsed by JSON parsing before the harness can observe them, so key uniqueness is not testable at the protocol level</td>
+</tr>
+<tr>
+<td>Servers MUST send server-to-client requests (such as roots/list, sampling/createMessage, or elicitation/create) using the MRTR pattern.</td>
+<td>Architectural migration statement; tested indirectly through all MRTR scenarios</td>
+</tr>
+<tr>
+<td>servers MUST treat requestState as an attacker-controlled input</td>
+<td>Internal security posture; not observable at protocol level</td>
+</tr>
+<tr>
+<td>servers MUST protect its integrity (e.g. HMAC or AEAD)</td>
+<td>Internal implementation choice about encryption/signing; not observable at protocol level</td>
+</tr>
+<tr>
+<td>servers SHOULD include the authenticated principal, a short expiry (TTL), and an identifier for the originating request inside the integrity-protected requestState payload and verify each on receipt</td>
+<td>Internal requestState format; not observable at protocol level</td>
+</tr>
+<tr>
+<td>Servers for which a given requestState must be consumed at most once MUST enforce that invariant server-side</td>
+<td>Internal enforcement policy; conformance harness cannot determine which servers require single-use semantics</td>
+</tr>
+<tr>
+<td>Servers MUST NOT assume that clients will fulfill the inputRequests or retry the original request</td>
+<td>Server-internal robustness assumption; not observable at protocol level</td>
+</tr>
+<tr>
+<td>Servers MUST validate request state as described in the server requirements above.</td>
+<td>Duplicates integrity-protection requirements above; internal security detail</td>
+</tr>
+<tr>
+<td>Servers MUST include an inputRequests field in the tasks/result response when the task is in status input_required.</td>
+<td>Tasks moved to an extension as of SEP-2663; no longer part of core conformance</td>
+</tr>
+<tr>
+<td>inputRequests keys are server assigned identifiers and MUST be unique within the scope of a Task.</td>
+<td>Tasks moved to an extension as of SEP-2663; no longer part of core conformance</td>
+</tr>
+<tr>
+<td>When tasks/get shows status input_required, clients MUST call tasks/result to get the inputRequests and optional requestState.</td>
+<td>Tasks moved to an extension as of SEP-2663; no longer part of core conformance</td>
+</tr>
+<tr>
+<td>Clients SHOULD construct the results of those requests and call tasks/input_response with the inputResponses &amp; requestState (if present).</td>
+<td>Tasks moved to an extension as of SEP-2663; no longer part of core conformance</td>
+</tr>
+<tr>
+<td>Receivers MUST reject tasks/input_response requests for tasks that are not in input_required status with error code -32602 (Invalid params).</td>
+<td>Tasks moved to an extension as of SEP-2663; no longer part of core conformance</td>
+</tr>
+<tr>
+<td>When a receiver receives a tasks/result request for a task in working status, it MUST block the response until the task reaches a terminal status or input_required status.</td>
+<td>Tasks moved to an extension as of SEP-2663; no longer part of core conformance</td>
+</tr>
+<tr>
+<td>When a receiver receives a tasks/result request for a task in input_required status, it MUST return an InputRequiredResult containing the inputRequests that the requestor must fulfill.</td>
+<td>Tasks moved to an extension as of SEP-2663; no longer part of core conformance</td>
+</tr>
+<tr>
+<td>After sending tasks/input_response, the requestor SHOULD resume polling via tasks/get.</td>
+<td>Tasks moved to an extension as of SEP-2663; no longer part of core conformance</td>
+</tr>
+</tbody>
+</table>
+<p><a id="sep-2322-untested"></a></p>
+<p><strong>Untested (0)</strong></p>
+<p><em>None.</em></p>
+<h3 id="sep-2350">SEP-2350 <a class="anchor" href="#sep-2350">¶</a></h3>
+<p><a id="sep-2350-tested"></a></p>
+<p><strong>Tested (1)</strong></p>
+<ul>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2350.yaml"><code>sep-2350-scope-union-on-reauth</code></a></li>
+</ul>
+<p><a id="sep-2350-excluded"></a></p>
+<p><strong>Excluded (2)</strong></p>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Upstream reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Regardless of the approach chosen, servers SHOULD include all scopes required for the current operation in a single challenge.</td>
+<td>&ldquo;All scopes required for the current operation&rdquo; has no harness-observable ground truth; the challenge is the only place the server declares its requirements. Detecting the negative (incremental challenging) would need server-side auth scenarios that do not exist yet and would test the example app&rsquo;s scope config rather than SDK behavior; the spec also permits dynamic per-request scope determination, so a second challenge is not conclusively non-conformant.</td>
+</tr>
+<tr>
+<td>When responding with insufficient scope errors, servers SHOULD include the scopes needed to satisfy the current operation in the scope parameter, consistent with RFC 6750 Section 3.1.</td>
+<td>reword of pre-existing requirement (request-&gt;operation, +RFC6750 cite); no normative delta; harness already emits scope= in WWW-Authenticate</td>
+</tr>
+</tbody>
+</table>
+<p><a id="sep-2350-untested"></a></p>
+<p><strong>Untested (0)</strong></p>
+<p><em>None.</em></p>
+<h3 id="sep-2352">SEP-2352 <a class="anchor" href="#sep-2352">¶</a></h3>
+<p><a id="sep-2352-tested"></a></p>
+<p><strong>Tested (3)</strong></p>
+<ul>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2352.yaml"><code>sep-2352-no-cross-as-credential-reuse</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2352.yaml"><code>sep-2352-no-reuse-on-as-change</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2352.yaml"><code>sep-2352-reregister-on-as-change</code></a></li>
+</ul>
+<p><a id="sep-2352-excluded"></a></p>
+<p><strong>Excluded (3)</strong></p>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Upstream reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Clients MUST maintain separate registration state (client credentials, tokens) per authorization server.</td>
+<td>internal storage requirement; not directly observable on the wire</td>
+</tr>
+<tr>
+<td>Clients that use pre-registered credentials, or persist client credentials obtained via Dynamic Client Registration, MUST associate those credentials with the specific authorization server that issued them, keyed by the authorization server issuer identifier.</td>
+<td>internal state-keying requirement; not protocol-observable</td>
+</tr>
+<tr>
+<td>If the authorization server indicated by protected resource metadata no longer matches the one the credentials were registered with, clients SHOULD surface an error rather than silently attempting to use mismatched credentials.</td>
+<td>UI behavior; the negative half (do not send mismatched credentials) is covered by sep-2352-no-reuse-on-as-change</td>
+</tr>
+</tbody>
+</table>
+<p><a id="sep-2352-untested"></a></p>
+<p><strong>Untested (0)</strong></p>
+<p><em>None.</em></p>
+<h3 id="sep-2468">SEP-2468 <a class="anchor" href="#sep-2468">¶</a></h3>
+<p><a id="sep-2468-tested"></a></p>
+<p><strong>Tested (6)</strong></p>
+<ul>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2468.yaml"><code>sep-2468-client-validate-metadata-issuer</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2468.yaml"><code>sep-2468-client-compare-iss-supported</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2468.yaml"><code>sep-2468-client-reject-missing-iss</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2468.yaml"><code>sep-2468-client-compare-iss-unadvertised</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2468.yaml"><code>sep-2468-client-proceed-no-iss</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2468.yaml"><code>sep-2468-client-no-normalization</code></a></li>
+</ul>
+<p><a id="sep-2468-excluded"></a></p>
+<p><strong>Excluded (3)</strong></p>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Upstream reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MCP authorization servers SHOULD include the iss parameter in authorization responses, including error responses, as defined in RFC9207 Section 2.</td>
+<td>Targets the authorization server under test; observing iss in an authorization response requires driving an Authorization Code Grant against the AS, which the authorization-server suite does not implement yet (it only probes the metadata endpoint). (<a href="https://github.com/modelcontextprotocol/conformance/issues/208">https://github.com/modelcontextprotocol/conformance/issues/208</a>)</td>
+</tr>
+<tr>
+<td>Authorization servers that include the iss parameter MUST advertise this by setting authorization_response_iss_parameter_supported to true in their metadata (RFC9207 Section 2.3).</td>
+<td>Conditional on the AS actually including iss in an authorization response, which requires driving an Authorization Code Grant against the AS under test; the authorization-server suite does not implement that yet. (<a href="https://github.com/modelcontextprotocol/conformance/issues/208">https://github.com/modelcontextprotocol/conformance/issues/208</a>)</td>
+</tr>
+<tr>
+<td>This validation applies equally to error responses - on mismatch the client MUST NOT act on or display error, error_description, or error_uri.</td>
+<td>display is UI-facing; act-on has no protocol-observable signal beyond the existing reject-on-mismatch checks</td>
+</tr>
+</tbody>
+</table>
+<p><a id="sep-2468-untested"></a></p>
+<p><strong>Untested (0)</strong></p>
+<p><em>None.</em></p>
+<h3 id="sep-2549">SEP-2549 <a class="anchor" href="#sep-2549">¶</a></h3>
+<p><a id="sep-2549-tested"></a></p>
+<p><strong>Tested (7)</strong></p>
+<ul>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2549.yaml"><code>sep-2549-tools-list-caching-hints</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2549.yaml"><code>sep-2549-prompts-list-caching-hints</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2549.yaml"><code>sep-2549-resources-list-caching-hints</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2549.yaml"><code>sep-2549-resources-templates-list-caching-hints</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2549.yaml"><code>sep-2549-resources-read-caching-hints</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2549.yaml"><code>sep-2549-ttl-non-negative</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2549.yaml"><code>sep-2549-cache-scope-valid</code></a></li>
+</ul>
+<p><a id="sep-2549-excluded"></a></p>
+<p><strong>Excluded (13)</strong></p>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Upstream reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>If ttlMs is 0, the response SHOULD be considered immediately stale.</td>
+<td>Client-side caching behavior; not observable at the protocol level</td>
+</tr>
+<tr>
+<td>If ttlMs is positive, the client SHOULD consider the result fresh for that many milliseconds after receiving the response.</td>
+<td>Client-side caching behavior; not observable at the protocol level</td>
+</tr>
+<tr>
+<td>If ttlMs is absent, clients SHOULD assume a default of 0 (immediately stale) and rely on their own caching heuristics or notifications.</td>
+<td>Client-side caching behavior; not observable at the protocol level</td>
+</tr>
+<tr>
+<td>If ttlMs is negative, clients SHOULD ignore it and treat it as 0.</td>
+<td>Client-side caching behavior; not observable at the protocol level</td>
+</tr>
+<tr>
+<td>Once the TTL expires, the response is stale and the client SHOULD re-fetch on next access.</td>
+<td>Client-side caching behavior; not observable at the protocol level</td>
+</tr>
+<tr>
+<td>Clients SHOULD NOT treat TTL as a polling interval that triggers automatic background refetches.</td>
+<td>Client-side caching behavior; not observable at the protocol level</td>
+</tr>
+<tr>
+<td>Implementations that do choose to poll MUST apply jitter and backoff.</td>
+<td>Client-side polling behavior; not observable at the protocol level</td>
+</tr>
+<tr>
+<td>Cached responses MAY be reused for the same authorization context. Caches MUST NOT be shared across authorization contexts (e.g. a different access token requires a different cache).</td>
+<td>Client/cache-side behavior; not observable at the protocol level</td>
+</tr>
+<tr>
+<td>When a cached page expires, the client SHOULD re-fetch that page using its cursor.</td>
+<td>Client-side caching behavior; not observable at the protocol level</td>
+</tr>
+<tr>
+<td>Clients that require a consistent snapshot of the full list SHOULD re-fetch from the beginning (without a cursor).</td>
+<td>Client-side caching behavior; not observable at the protocol level</td>
+</tr>
+<tr>
+<td>If a cursor becomes invalid (e.g., the server returns an error for a previously valid cursor), the client SHOULD discard all cached pages and re-fetch from the beginning.</td>
+<td>Client-side caching behavior; not observable at the protocol level</td>
+</tr>
+<tr>
+<td>Servers MUST be aware that responses with a &ldquo;public&rdquo; cacheScope may be shared between callers even if the Result is coming from an authenticated endpoint.</td>
+<td>Server-side awareness requirement; implementation guidance not testable via protocol messages</td>
+</tr>
+<tr>
+<td>Server implementors MUST apply appropriate per-primitive access controls, and MUST NOT rely on cacheScope alone to prevent unauthorized access to primitives.</td>
+<td>Server-side access control; implementation guidance not testable via protocol messages</td>
+</tr>
+</tbody>
+</table>
+<p><a id="sep-2549-untested"></a></p>
+<p><strong>Untested (0)</strong></p>
+<p><em>None.</em></p>
+<h3 id="sep-2575">SEP-2575 <a class="anchor" href="#sep-2575">¶</a></h3>
+<p><a id="sep-2575-tested"></a></p>
+<p><strong>Tested (22)</strong></p>
+<ul>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2575.yaml"><code>sep-2575-client-populates-meta</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2575.yaml"><code>sep-2575-server-rejects-undeclared-capability</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2575.yaml"><code>sep-2575-missing-capability-http-400</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2575.yaml"><code>sep-2575-server-tags-subscription-id</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2575.yaml"><code>sep-2575-server-unsupported-version-error</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2575.yaml"><code>sep-2575-client-retry-supported-version</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2575.yaml"><code>sep-2575-server-implements-discover</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2575.yaml"><code>sep-2575-http-server-no-independent-requests-on-stream</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2575.yaml"><code>sep-2575-http-client-sends-version-header</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2575.yaml"><code>sep-2575-http-version-header-matches-meta</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2575.yaml"><code>sep-2575-http-server-header-mismatch-400</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2575.yaml"><code>sep-2575-http-server-unsupported-version-400</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2575.yaml"><code>sep-2575-http-server-method-not-found-404</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2575.yaml"><code>sep-2575-server-honors-notification-filter</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2575.yaml"><code>sep-2575-server-sends-subscription-ack</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2575.yaml"><code>sep-2575-client-declares-elicitation-capability</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2575.yaml"><code>sep-2575-client-declares-roots-capability</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2575.yaml"><code>sep-2575-client-declares-sampling-capability</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2575.yaml"><code>sep-2575-server-declares-prompts-in-discover</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2575.yaml"><code>sep-2575-server-sends-prompts-list-changed-on-subscription</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2575.yaml"><code>sep-2575-server-sends-tools-list-changed-on-subscription</code></a></li>
+<li><a href="https://github.com/modelcontextprotocol/conformance/blob/25fd44323ff3fe28967b95ea8105de47f674b7d8/src/seps/sep-2575.yaml"><code>sep-2575-server-no-log-without-loglevel</code></a></li>
+</ul>
+<p><a id="sep-2575-excluded"></a></p>
+<p><strong>Excluded (13)</strong></p>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Upstream reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A server MUST NOT treat connection or process identity as a proxy for conversation or session continuity. / Servers MUST NOT rely on prior requests over the same connection to establish context (e.g., capabilities, protocol version, client identity).</td>
+<td>internal server state, not directly wire-observable; the observable consequence (rejecting requests with incomplete _meta rather than falling back to remembered state) is covered by sep-2575-request-meta-invalid-* — see <a href="https://github.com/modelcontextprotocol/conformance/issues/296">https://github.com/modelcontextprotocol/conformance/issues/296</a></td>
+</tr>
+<tr>
+<td>Servers MUST NOT require that a client reuse the same connection to perform related operations.</td>
+<td>not observable from a black-box harness; every harness request already arrives on an independent connection — see <a href="https://github.com/modelcontextprotocol/conformance/issues/296">https://github.com/modelcontextprotocol/conformance/issues/296</a></td>
+</tr>
+<tr>
+<td>Closing the SSE response stream MUST be treated by the server as cancellation of that request.</td>
+<td>&ldquo;treated as cancellation&rdquo; is internal server state; once the stream is closed there is no channel left on which to observe the effect — see <a href="https://github.com/modelcontextprotocol/conformance/issues/296">https://github.com/modelcontextprotocol/conformance/issues/296</a></td>
+</tr>
+<tr>
+<td>The server SHOULD stop work on the cancelled request as soon as practical and MUST NOT send any further messages for it [HTTP].</td>
+<td>&ldquo;stop work as soon as practical&rdquo; is unobservable from a black-box harness, and &ldquo;no further messages&rdquo; cannot be verified once the response stream is closed — see <a href="https://github.com/modelcontextprotocol/conformance/issues/296">https://github.com/modelcontextprotocol/conformance/issues/296</a></td>
+</tr>
+<tr>
+<td>State that needs to span multiple requests (e.g., long-running tasks, application-level handles) MUST be referenced by an explicit identifier the client passes on each request.</td>
+<td>architectural guidance, observable only via subscriptionId/task-id rows already listed</td>
+</tr>
+<tr>
+<td>To distinguish notifications belonging to different concurrent subscriptions, clients MUST correlate notifications using the io.modelcontextprotocol/subscriptionId field carried in _meta.</td>
+<td>client-internal demux; not observable on the wire from the harness</td>
+</tr>
+<tr>
+<td>The client SHOULD check the acknowledged filter against what it requested and handle any unsupported types gracefully.</td>
+<td>internal comparison; &ldquo;gracefully&rdquo; has no wire-observable definition</td>
+</tr>
+<tr>
+<td>Because there is no per-request status code to drive fallback, a client that supports both eras SHOULD probe with server/discover first [stdio backward compatibility].</td>
+<td>stdio client harness not implemented — see <a href="https://github.com/modelcontextprotocol/conformance/issues/258">https://github.com/modelcontextprotocol/conformance/issues/258</a></td>
+</tr>
+<tr>
+<td>To cancel an in-flight request [on stdio], the client MUST send a notifications/cancelled notification referencing the request ID.</td>
+<td>stdio client harness not implemented — see <a href="https://github.com/modelcontextprotocol/conformance/issues/258">https://github.com/modelcontextprotocol/conformance/issues/258</a></td>
+</tr>
+<tr>
+<td>Servers SHOULD stop work on a cancelled request as soon as practical and MUST NOT send any further messages for it [stdio].</td>
+<td>stdio client harness not implemented — see <a href="https://github.com/modelcontextprotocol/conformance/issues/258">https://github.com/modelcontextprotocol/conformance/issues/258</a></td>
+</tr>
+<tr>
+<td>If the server process exits unexpectedly, the client SHOULD restart it.</td>
+<td>stdio client harness not implemented — see <a href="https://github.com/modelcontextprotocol/conformance/issues/258">https://github.com/modelcontextprotocol/conformance/issues/258</a></td>
+</tr>
+<tr>
+<td>If the server returns UnsupportedProtocolVersionError, [the stdio client] SHOULD retry using one of the advertised supportedVersions rather than falling back to initialize.</td>
+<td>stdio client harness not implemented — see <a href="https://github.com/modelcontextprotocol/conformance/issues/258">https://github.com/modelcontextprotocol/conformance/issues/258</a></td>
+</tr>
+<tr>
+<td>On stdio, if the connection is terminated and then re-established, the client MUST re-send subscriptions/listen to re-establish its subscriptions.</td>
+<td>stdio client harness not implemented — see <a href="https://github.com/modelcontextprotocol/conformance/issues/258">https://github.com/modelcontextprotocol/conformance/issues/258</a></td>
+</tr>
+</tbody>
+</table>
+<p><a id="sep-2575-untested"></a></p>
+<p><strong>Untested (0)</strong></p>
+<p><em>None.</em></p>
+<h2 id="open-gaps">Open Gaps <a class="anchor" href="#open-gaps">¶</a></h2>
+<h3 id="declared-requirements-with-no-emitted-check">Declared requirements with no emitted check <a class="anchor" href="#declared-requirements-with-no-emitted-check">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>SEP</th>
+<th>Check ID</th>
+<th>Tracking</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SEP-2243</td>
+<td><code>sep-2243-server-not-expect-null</code></td>
+<td>MCP-Name fail-closed semantics on tasks/* — covered locally by server/middleware test</td>
+</tr>
+<tr>
+<td>SEP-2243</td>
+<td><code>sep-2243-server-reject-missing-required</code></td>
+<td>MCP-Name fail-closed semantics on tasks/* — covered locally by server/middleware test</td>
+</tr>
+</tbody>
+</table>
+<!-- end:generated -->
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+</body>
+</html>
