@@ -86,4 +86,5 @@ replace (
 	github.com/panyam/mcpkit => ../..
 	github.com/panyam/mcpkit/examples/common => ../common
 	github.com/panyam/mcpkit/ext/auth => ../../ext/auth
+	github.com/panyam/mcpkit/ext/otel => ../../ext/otel
 )

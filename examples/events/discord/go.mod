@@ -8,6 +8,7 @@ replace (
 	github.com/panyam/mcpkit/experimental/ext/events => ../../../experimental/ext/events
 	github.com/panyam/mcpkit/experimental/ext/events/clients/go => ../../../experimental/ext/events/clients/go
 	github.com/panyam/mcpkit/ext/auth => ../../../ext/auth
+	github.com/panyam/mcpkit/ext/otel => ../../../ext/otel
 )
 
 require (
