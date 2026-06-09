@@ -10,7 +10,11 @@ import (
 // runChatFeeder yields a synthetic chat message every interval until
 // ctx is done, cycling across a small fixed set of channels so the
 // Match-by-channel demo has events on every channel to filter.
-func runChatFeeder(ctx context.Context, yield func(ChatMessageData) error, interval time.Duration) {
+//
+// yield takes ctx so SEP-414 trace context (when configured) flows
+// from the feeder's ctx into event.Meta.traceparent — same shape PR
+// 712 established for discord / telegram / whole-enchilada feeders.
+func runChatFeeder(ctx context.Context, yield func(context.Context, ChatMessageData) error, interval time.Duration) {
 	channels := []string{"general", "dev", "alerts"}
 	senders := []string{"alice", "bob", "carol", "dave"}
 	templates := []string{
@@ -36,7 +40,7 @@ func runChatFeeder(ctx context.Context, yield func(ChatMessageData) error, inter
 				Text:      templates[rng.Intn(len(templates))],
 				Timestamp: ts.UTC().Format(time.RFC3339),
 			}
-			if err := yield(msg); err != nil {
+			if err := yield(ctx, msg); err != nil {
 				log.Printf("[chat] yield: %v", err)
 			}
 		}
@@ -46,8 +50,8 @@ func runChatFeeder(ctx context.Context, yield func(ChatMessageData) error, inter
 // injectChat is a /inject-style helper exposed to the walkthrough so
 // the live demo can deterministically post one event of a given
 // channel rather than wait for the random feeder to land it.
-func injectChat(yield func(ChatMessageData) error, channel, sender, text string) error {
-	return yield(ChatMessageData{
+func injectChat(ctx context.Context, yield func(context.Context, ChatMessageData) error, channel, sender, text string) error {
+	return yield(ctx, ChatMessageData{
 		Channel:   channel,
 		Sender:    sender,
 		Text:      text,

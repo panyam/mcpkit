@@ -13,7 +13,11 @@ import (
 // Each alert carries a reporter username (PII) and an email-bearing
 // message body so the Transform redaction story is visible on
 // subscribers that opt in.
-func runAlertFeeder(ctx context.Context, yield func(AlertData) error, interval time.Duration) {
+//
+// yield takes ctx so SEP-414 trace context (when configured) flows
+// from the feeder's ctx into event.Meta.traceparent — same shape PR
+// 712 established for discord / telegram / whole-enchilada feeders.
+func runAlertFeeder(ctx context.Context, yield func(context.Context, AlertData) error, interval time.Duration) {
 	severities := []string{"P1", "P2", "P3"}
 	services := []string{"api-gateway", "auth-service", "payments", "search"}
 	reporters := []string{"alice", "bob", "carol"}
@@ -39,7 +43,7 @@ func runAlertFeeder(ctx context.Context, yield func(AlertData) error, interval t
 				Message:   messages[rng.Intn(len(messages))],
 				Timestamp: ts.UTC().Format(time.RFC3339),
 			}
-			if err := yield(a); err != nil {
+			if err := yield(ctx, a); err != nil {
 				log.Printf("[alert] yield: %v", err)
 			}
 		}
@@ -48,8 +52,8 @@ func runAlertFeeder(ctx context.Context, yield func(AlertData) error, interval t
 
 // injectAlert posts one specific alert event for the walkthrough's
 // deterministic Match + Transform steps.
-func injectAlert(yield func(AlertData) error, severity, service, reporter, message string) error {
-	return yield(AlertData{
+func injectAlert(ctx context.Context, yield func(context.Context, AlertData) error, severity, service, reporter, message string) error {
+	return yield(ctx, AlertData{
 		Severity:  severity,
 		Service:   service,
 		Reporter:  reporter,

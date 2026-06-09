@@ -21,6 +21,8 @@ import (
 
 	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/core"
+	common "github.com/panyam/mcpkit/examples/common"
+	commonotel "github.com/panyam/mcpkit/examples/common/otel"
 	"github.com/panyam/mcpkit/experimental/ext/events"
 	"github.com/panyam/mcpkit/server"
 	gohttp "github.com/panyam/servicekit/http"
@@ -57,15 +59,32 @@ func serve() {
 	chatEvery := flag.Duration("chat-every", defaultChatEvery, "synthetic chat feeder cadence")
 	alertEvery := flag.Duration("alert-every", defaultAlertEvery, "synthetic alert feeder cadence")
 	presenceEvery := flag.Duration("presence-every", defaultPresenceEvery, "synthetic presence feeder cadence")
+	tel := common.RegisterTelemetryFlags(flag.CommandLine)
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.BoolFlag("--serve"),
 		demokit.ValueFlag("--addr"),
 		demokit.ValueFlag("--chat-every"),
 		demokit.ValueFlag("--alert-every"),
 		demokit.ValueFlag("--presence-every"),
+		demokit.ValueFlag("--exporter"),
+		demokit.ValueFlag("--otlp-endpoint"),
 	))
 
-	wired := buildServer(*addr)
+	// SEP-414 P6 observability wiring (issue 667). Default selector
+	// ("") returns a Noop TracerProvider — zero overhead. Operators
+	// opt in via --exporter / EXPORTER env. See examples/CONVENTIONS.md
+	// § Telemetry wiring for the four-value selector matrix.
+	tp, shutdown, err := commonotel.SetupTelemetry(context.Background(),
+		commonotel.WithExporter(*tel.Exporter),
+		commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+		commonotel.WithServiceName("kitchen-sink-events"),
+	)
+	if err != nil {
+		log.Fatalf("commonotel.SetupTelemetry: %v", err)
+	}
+	defer shutdown(context.Background())
+
+	wired := buildServer(*addr, tp)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -95,9 +114,9 @@ func serve() {
 type wiredServer struct {
 	srv         *server.Server
 	chatSrc     *events.YieldingSource[ChatMessageData]
-	chatYield   func(ChatMessageData) error
+	chatYield   func(context.Context, ChatMessageData) error
 	alertSrc    *events.YieldingSource[AlertData]
-	alertYield  func(AlertData) error
+	alertYield  func(context.Context, AlertData) error
 	presenceSrc *events.YieldingSource[PresenceChangedData]
 	idx         *events.SubscriptionIndex
 	registry    *watchListRegistry
@@ -107,7 +126,11 @@ type wiredServer struct {
 // SubscriptionIndex (passed to events.Register so EmitToSubscription
 // can find subs), and the Quota cap. Returned so e2e_test.go can
 // stand up the same shape without spawning ListenAndServe.
-func buildServer(addr string) *wiredServer {
+//
+// tp opts the dispatch spine + webhook delivery path into SEP-414
+// instrumentation. Nil or core.NoopTracerProvider{} = zero overhead.
+// Tests pass nil; the serve() path passes the configured TracerProvider.
+func buildServer(addr string, tp core.TracerProvider) *wiredServer {
 	registry := newWatchListRegistry()
 
 	chatSrc, chatYield := events.NewYieldingSource[ChatMessageData](chatEventDef(), events.WithMaxSize(eventStoreCap))
@@ -120,16 +143,30 @@ func buildServer(addr string) *wiredServer {
 	// EmitToSubscription.
 	presenceSrc, _ := events.NewYieldingSource[PresenceChangedData](presenceEventDef(registry), events.WithoutCursors())
 
-	webhooks := events.NewWebhookRegistry(
+	webhookOpts := []events.WebhookOption{
 		events.WithWebhookAllowPrivateNetworks(true),
-	)
+	}
+	if tp != nil {
+		webhookOpts = append(webhookOpts, events.WithWebhookTracerProvider(tp))
+	}
+	webhooks := events.NewWebhookRegistry(webhookOpts...)
 	idx := events.NewSubscriptionIndex()
 	quota := events.NewQuota(events.WithMaxSubscriptionsPerPrincipal("chat.message", quotaCap))
 
+	// Canonical baseline (WithListen + the color logger wired to both
+	// transport request logging and dispatch middleware) per
+	// examples/CONVENTIONS.md § serve-srv-listenandserve. Mirrors the
+	// discord precedent — kitchen-sink can't use `common.RunServer`
+	// because of the three goroutine feeders + custom /inject mux, but
+	// the per-option baseline still applies.
+	srvOpts := common.MCPServerOptions(addr, "[mcp] ")
+	srvOpts = append(srvOpts, server.WithSubscriptions())
+	if tp != nil {
+		srvOpts = append(srvOpts, server.WithTracerProvider(tp))
+	}
 	srv := server.NewServer(
 		core.ServerInfo{Name: "kitchen-sink-events", Version: "0.1.0"},
-		server.WithSubscriptions(),
-		server.WithListen(addr),
+		srvOpts...,
 	)
 	registerResources(srv, chatSrc, alertSrc)
 	events.Register(events.Config{
@@ -171,14 +208,14 @@ func injectHandlerFor(w *wiredServer) http.HandlerFunc {
 				http.Error(rw, err.Error(), http.StatusBadRequest)
 				return
 			}
-			_ = injectChat(w.chatYield, body.Channel, body.Sender, body.Text)
+			_ = injectChat(r.Context(), w.chatYield, body.Channel, body.Sender, body.Text)
 		case "alert.fired":
 			var body alertBody
 			if err := decodeJSON(r, &body); err != nil {
 				http.Error(rw, err.Error(), http.StatusBadRequest)
 				return
 			}
-			_ = injectAlert(w.alertYield, body.Severity, body.Service, body.Reporter, body.Message)
+			_ = injectAlert(r.Context(), w.alertYield, body.Severity, body.Service, body.Reporter, body.Message)
 		case "presence.changed":
 			var body presenceBody
 			if err := decodeJSON(r, &body); err != nil {
