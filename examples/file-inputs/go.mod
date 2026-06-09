@@ -5,6 +5,7 @@ go 1.26.4
 replace (
 	github.com/panyam/mcpkit => ../..
 	github.com/panyam/mcpkit/examples/common => ../common
+	github.com/panyam/mcpkit/ext/otel => ../../ext/otel
 	github.com/panyam/mcpkit/ext/ui => ../../ext/ui
 )
 
