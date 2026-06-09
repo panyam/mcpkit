@@ -484,3 +484,26 @@ func TestStartSpanLinked_LinkedProvider_RoutedToInterface(t *testing.T) {
 		t.Fatalf("StartSpanLinked must preserve per-link attributes")
 	}
 }
+
+// --- P6 ext/tasks complement: WithNewRootSpan (issue 659) -------------------
+
+func TestWithNewRootSpan_DefaultCtx_NotRequested(t *testing.T) {
+	if IsNewRootSpanRequested(context.Background()) {
+		t.Fatalf("plain ctx must not be marked as new-root by default")
+	}
+}
+
+func TestWithNewRootSpan_MarkedCtx_Requested(t *testing.T) {
+	ctx := WithNewRootSpan(context.Background())
+	if !IsNewRootSpanRequested(ctx) {
+		t.Fatalf("WithNewRootSpan must set the marker so adapters can detect it")
+	}
+}
+
+func TestWithNewRootSpan_DerivedCtx_PropagatesMarker(t *testing.T) {
+	ctx := WithNewRootSpan(context.Background())
+	ctx = WithTraceContext(ctx, TraceContext{}) // simulate scrub layered on top
+	if !IsNewRootSpanRequested(ctx) {
+		t.Fatalf("marker must survive other ctx derivations layered on top — adapters read it just before StartSpan")
+	}
+}
