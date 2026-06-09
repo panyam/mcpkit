@@ -30,7 +30,7 @@ include $(CONFORMANCE_DIR)/path-defaults.mk
 # grade mcpkit against every scenario upstream currently ships.
 MCPCONFORMANCE_BASE_PATH        ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
 
-.PHONY: test testconfall testconf testconfauth \
+.PHONY: test testconf testconfauth \
         testconf-tasks testconf-tasks-v2 testconf-mrtr \
         testconf-file-inputs testconf-auth-server \
         testconf-stateless testconf-skills \
@@ -44,8 +44,6 @@ MCPCONFORMANCE_BASE_PATH        ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
 # game: contributors should have all conf-* sibling clones before pushing
 # anything that touches conformance surfaces.
 test: testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-stateless testconf-skills testconf-upstream-audit refresh-conformance ## Run all conformance suites (needs fork worktrees + conf-upstream-main)
-
-testconfall: testconf testconfauth ## Run base + auth conformance only
 
 testconf: ## Run MCP conformance test suite (requires Node.js/npx)
 	cd $(REPO_ROOT) && bash scripts/conformance-test.sh
