@@ -208,35 +208,35 @@ body { margin: 2em auto; max-width: 900px; padding: 0 1em; font-family: -apple-s
       "title": "Connect to the fixture",
       "step_id": "step-1",
       "visit": 1,
-      "output": "    ERROR: initialize failed: Post \"http://127.0.0.1:3201/mcp\": dial tcp 127.0.0.1:3201: connect: connection refused\n    Start the server with: make serve\n"
+      "output": "    connected to ShaderToy Server 1.0.0\n"
     },
     {
       "kind": "step",
       "title": "tools/list — 6-field input surface + multi-line GLSL default",
       "step_id": "step-2",
       "visit": 1,
-      "output": "    ERROR: Post \"http://127.0.0.1:3201/mcp\": dial tcp 127.0.0.1:3201: connect: connection refused\n"
+      "output": "    render-shadertoy\n      fields: [bufferA bufferB bufferC bufferD common fragmentShader]\n      fragmentShader default (preview): void mainImage(out vec4 fragColor, in vec2 fragCoord) {\n    vec2 uv = fragCoord / iResolution.xy;\n    fragColor = vec4(uv, 0.5 + 0.5*sin(iTime), 1.0);\n}\n"
     },
     {
       "kind": "step",
       "title": "tools/call render-shadertoy {} — default uv-ramp shader",
       "step_id": "step-3",
       "visit": 1,
-      "output": "    ERROR: Post \"http://127.0.0.1:3201/mcp\": dial tcp 127.0.0.1:3201: connect: connection refused\n"
+      "output": "    isError=false, text=\"Shader rendered successfully\"\n"
     },
     {
       "kind": "step",
       "title": "tools/call render-shadertoy with custom GLSL",
       "step_id": "step-4",
       "visit": 1,
-      "output": "    ERROR: Post \"http://127.0.0.1:3201/mcp\": dial tcp 127.0.0.1:3201: connect: connection refused\n"
+      "output": "    isError=false, text=\"Shader rendered successfully\"\n    (sent 457 bytes of custom GLSL; iframe re-compiled + re-rendered)\n"
     },
     {
       "kind": "step",
       "title": "resources/read on ui://shadertoy/mcp-app.html",
       "step_id": "step-5",
       "visit": 1,
-      "output": "    ERROR: Post \"http://127.0.0.1:3201/mcp\": dial tcp 127.0.0.1:3201: connect: connection refused\n"
+      "output": "    342431 bytes; first 200:\n      \u003c!DOCTYPE html\u003e\n\u003chtml lang=\"en\"\u003e\n\u003chead\u003e\n  \u003cmeta charset=\"UTF-8\"\u003e\n  \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"\u003e\n  \u003cmeta name=\"color-scheme\" content=\"light dark\"\u003e\n  \u003ctitle\u003eSha…\n"
     },
     {
       "kind": "section",
