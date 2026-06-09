@@ -884,7 +884,13 @@ func (t *streamableTransport) handleBatchPost(w http.ResponseWriter, r *http.Req
 // independent — a deployment running in dual mode delivers the same
 // notification to legacy-session GET SSE clients AND stateless listen
 // clients in one Broadcast call.
-func (t *streamableTransport) broadcast(method string, params any) {
+//
+// ctx is accepted for SEP-414 trace context propagation but currently
+// unused inside the loop — Server.Broadcast injects `_meta.traceparent`
+// onto params before fan-out. The parameter exists so per-session
+// concerns (audit, span emission inside the transport) can compose
+// without re-widening the signature.
+func (t *streamableTransport) broadcast(_ context.Context, method string, params any) {
 	t.sessions.Range(func(_ string, entry *sessionEntry) bool {
 		d := entry.dispatcher
 		if fn := d.getNotifyFunc(); fn != nil {

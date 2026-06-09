@@ -37,7 +37,7 @@ func TestBroadcastSingleSession(t *testing.T) {
 	srv.registerTransportSessions(
 		func(id string) bool { return false },
 		func() {},
-		func(method string, params any) {
+		func(_ context.Context, method string, params any) {
 			if fn := d.getNotifyFunc(); fn != nil {
 				fn(method, params)
 			}
@@ -83,7 +83,7 @@ func TestBroadcastMultipleSessions(t *testing.T) {
 		srv.registerTransportSessions(
 			func(sid string) bool { return false },
 			func() {},
-			func(method string, params any) {
+			func(_ context.Context, method string, params any) {
 				if fn := d.getNotifyFunc(); fn != nil {
 					fn(method, params)
 				}
@@ -128,7 +128,7 @@ func TestBroadcastSkipsNilNotifyFunc(t *testing.T) {
 	srv.registerTransportSessions(
 		func(id string) bool { return false },
 		func() {},
-		func(method string, params any) {
+		func(_ context.Context, method string, params any) {
 			for _, d := range []*Dispatcher{dNil, dOk} {
 				if fn := d.getNotifyFunc(); fn != nil {
 					fn(method, params)
@@ -174,7 +174,7 @@ func TestBroadcastDoesNotRequireSubscription(t *testing.T) {
 	srv.registerTransportSessions(
 		func(id string) bool { return false },
 		func() {},
-		func(method string, params any) {
+		func(_ context.Context, method string, params any) {
 			if fn := d.getNotifyFunc(); fn != nil {
 				fn(method, params)
 			}
@@ -206,7 +206,7 @@ func TestBroadcastWithParams(t *testing.T) {
 	srv.registerTransportSessions(
 		func(id string) bool { return false },
 		func() {},
-		func(method string, params any) {
+		func(_ context.Context, method string, params any) {
 			if fn := d.getNotifyFunc(); fn != nil {
 				fn(method, params)
 			}
@@ -225,5 +225,141 @@ func TestBroadcastWithParams(t *testing.T) {
 	}
 	if m["reason"] != "updated" {
 		t.Errorf("params[reason] = %v, want updated", m["reason"])
+	}
+}
+
+// --- SEP-414 trace context injection on Broadcast (issue 715) ---
+
+const (
+	testBroadcastTraceparent = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
+	testBroadcastTracestate  = "vendor=val"
+)
+
+// captureBroadcastParams wires a single test session whose notifyFunc
+// records the params handed in. Returns the dispatcher (for stale
+// references in the caller) and a pointer to the captured params.
+func captureBroadcastParams(t *testing.T, srv *Server) (*Dispatcher, *any) {
+	t.Helper()
+	d := srv.newSession()
+	d.sessionID = "trace-test"
+	var captured any
+	d.SetNotifyFunc(func(_ string, params any) {
+		captured = params
+	})
+	srv.registerTransportSessions(
+		func(id string) bool { return false },
+		func() {},
+		func(_ context.Context, method string, params any) {
+			if fn := d.getNotifyFunc(); fn != nil {
+				fn(method, params)
+			}
+		},
+	)
+	return d, &captured
+}
+
+// TestBroadcast_InjectsTraceContextFromCtx is the core acceptance for
+// issue 715: when Broadcast is called with ctx carrying a non-zero
+// core.TraceContext (the shape `events.Emit` threads through after PR
+// 712/714), the SSE-pushed notification params carry `_meta.traceparent`
+// so downstream subscribers' spans stitch into the originating trace.
+func TestBroadcast_InjectsTraceContextFromCtx(t *testing.T) {
+	srv := NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
+	_, captured := captureBroadcastParams(t, srv)
+
+	tc := core.TraceContext{
+		Traceparent: testBroadcastTraceparent,
+		Tracestate:  testBroadcastTracestate,
+	}
+	ctx := core.WithTraceContext(context.Background(), tc)
+	srv.Broadcast(ctx, "notifications/events/event", map[string]any{"name": "demo"})
+
+	m, ok := (*captured).(map[string]any)
+	if !ok {
+		t.Fatalf("params type = %T, want map[string]any", *captured)
+	}
+	meta, ok := m["_meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("_meta = %v, want map[string]any (Broadcast must inject when ctx carries a non-zero TraceContext)", m["_meta"])
+	}
+	if got := meta[core.MetaKeyTraceparent]; got != testBroadcastTraceparent {
+		t.Errorf("_meta.traceparent = %v, want %q", got, testBroadcastTraceparent)
+	}
+	if got := meta[core.MetaKeyTracestate]; got != testBroadcastTracestate {
+		t.Errorf("_meta.tracestate = %v, want %q", got, testBroadcastTracestate)
+	}
+}
+
+// TestBroadcast_NoTraceContext_LeavesParamsUntouched pins the
+// zero-overhead path: a plain context.Background() (no trace context
+// attached) MUST NOT mutate params or synthesize an empty _meta. This
+// is the regression guard against accidental empty-_meta injection
+// that would change every broadcast's wire shape even when tracing
+// isn't wired.
+func TestBroadcast_NoTraceContext_LeavesParamsUntouched(t *testing.T) {
+	srv := NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
+	_, captured := captureBroadcastParams(t, srv)
+
+	original := map[string]any{"uri": "test://doc"}
+	srv.Broadcast(context.Background(), "notifications/resources/updated", original)
+
+	m, ok := (*captured).(map[string]any)
+	if !ok {
+		t.Fatalf("params type = %T, want map[string]any (untouched pass-through)", *captured)
+	}
+	if _, present := m["_meta"]; present {
+		t.Errorf("_meta MUST NOT be created when ctx carries no TraceContext; got %v", m["_meta"])
+	}
+	if m["uri"] != "test://doc" {
+		t.Errorf("original keys MUST survive untouched; got %v", m)
+	}
+}
+
+// TestBroadcast_CallerSetMetaTraceparent_Wins pins that an explicit
+// caller-set `_meta.traceparent` on params is preserved when ctx also
+// carries a TraceContext — delegates to core.InjectTraceContextIntoParams's
+// caller-set-wins contract, which the events bus relay (PR 712) also
+// relies on.
+func TestBroadcast_CallerSetMetaTraceparent_Wins(t *testing.T) {
+	srv := NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
+	_, captured := captureBroadcastParams(t, srv)
+
+	callerTraceparent := "00-11111111111111111111111111111111-2222222222222222-01"
+	params := map[string]any{
+		"name": "demo",
+		"_meta": map[string]any{
+			core.MetaKeyTraceparent: callerTraceparent,
+		},
+	}
+	tc := core.TraceContext{Traceparent: testBroadcastTraceparent}
+	ctx := core.WithTraceContext(context.Background(), tc)
+	srv.Broadcast(ctx, "notifications/events/event", params)
+
+	m := (*captured).(map[string]any)
+	meta := m["_meta"].(map[string]any)
+	if got := meta[core.MetaKeyTraceparent]; got != callerTraceparent {
+		t.Errorf("_meta.traceparent = %v, want caller-set %q (ctx-derived must not clobber)", got, callerTraceparent)
+	}
+}
+
+// TestBroadcast_NonObjectParams_LeavesUntouched pins the JSON-RPC
+// non-object params escape hatch: positional arrays / scalars carry no
+// `_meta` envelope per the JSON-RPC spec, so the injection helper
+// returns the params unchanged. Broadcast surfaces the same behavior.
+func TestBroadcast_NonObjectParams_LeavesUntouched(t *testing.T) {
+	srv := NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
+	_, captured := captureBroadcastParams(t, srv)
+
+	positional := []any{"arg1", 42}
+	tc := core.TraceContext{Traceparent: testBroadcastTraceparent}
+	ctx := core.WithTraceContext(context.Background(), tc)
+	srv.Broadcast(ctx, "notifications/events/event", positional)
+
+	got, ok := (*captured).([]any)
+	if !ok {
+		t.Fatalf("params type = %T, want []any (non-object MUST pass through untouched)", *captured)
+	}
+	if len(got) != 2 || got[0] != "arg1" || got[1] != 42 {
+		t.Errorf("non-object params mutated: got %v", got)
 	}
 }
