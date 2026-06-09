@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -224,6 +225,28 @@ func WithWebhookAllowPrivateNetworks(allow bool) WebhookOption {
 	}
 }
 
+// WithWebhookTracerProvider opts the registry into SEP-414
+// instrumentation of the outbound HTTP delivery path. When set,
+// every retry-loop attempt is wrapped in an `events.webhook.deliver`
+// span (parent: the trace context resolved from ctx or event.Meta
+// at Deliver time) with attributes:
+//
+//	webhook.target.id           — derived id (X-MCP-Subscription-Id)
+//	webhook.url                 — receiver URL
+//	mcp.event.name              — event type the delivery is for
+//	http.method                 — always "POST"
+//	http.response.status_code   — last attempt's status (success or last failure)
+//	webhook.retry.attempts      — number of attempts made
+//
+// On final retry-exhausted, RecordError fires with the categorical
+// failure bucket. Nil or core.NoopTracerProvider{} (the default)
+// skips the wrap — zero overhead unconfigured. SEP-414 P6.
+func WithWebhookTracerProvider(tp core.TracerProvider) WebhookOption {
+	return func(r *WebhookRegistry) {
+		r.tp = tp
+	}
+}
+
 // WebhookTarget is a registered outbound webhook callback with TTL-based expiry.
 //
 // The CanonicalKey is the spec's identity tuple bytes
@@ -366,6 +389,15 @@ type WebhookRegistry struct {
 	// Set under mu, read under mu.RLock.
 	defResolver func(eventName string) EventDef
 
+	// tp opts the deliver goroutine into emitting an
+	// `events.webhook.deliver` span around each outbound HTTP POST
+	// (the full retry loop is one span; per-attempt counts land on
+	// span attributes). Configured via WithWebhookTracerProvider.
+	// Defaults to core.NoopTracerProvider{} after the constructor
+	// so call sites can unconditionally StartSpan without nil-
+	// checking. SEP-414 P6 (issue 683 follow-up).
+	tp core.TracerProvider
+
 	// logf is the logging hook used by deliver paths. Defaults to log.Printf;
 	// tests override via setLogfForTest to capture failures (including SSRF
 	// dial-time rejections) for assertions.
@@ -449,6 +481,11 @@ func (r *WebhookRegistry) fireOnRemove(t WebhookTarget) {
 	}
 }
 
+// noopTP is the package's canonical Noop TracerProvider used when
+// WithWebhookTracerProvider is not supplied. Stored as a package
+// var rather than allocated on each NewWebhookRegistry call.
+var noopTP core.TracerProvider = core.NoopTracerProvider{}
+
 // NewWebhookRegistry creates an empty registry with the documented defaults:
 // 5-second HTTP timeout, DefaultWebhookTTL (1h) TTL inside the
 // [MinWebhookTTL, MaxWebhookTTL] envelope, StandardWebhooks signing,
@@ -471,6 +508,9 @@ func NewWebhookRegistry(opts ...WebhookOption) *WebhookRegistry {
 	}
 	for _, o := range opts {
 		o(r)
+	}
+	if r.tp == nil {
+		r.tp = noopTP
 	}
 	r.applyTTLClamp()
 	// http.Client wired AFTER options apply so the Dialer.Control callback
@@ -816,7 +856,7 @@ func (r *WebhookRegistry) DeliverToTarget(ctx context.Context, canonicalKey []by
 		return false
 	}
 	tc := traceContextForDelivery(ctx, event)
-	go r.deliver(target, event.EventID, body, tc)
+	go r.deliver(target, event.EventID, event.Name, body, tc)
 	return true
 }
 
@@ -921,7 +961,7 @@ func (r *WebhookRegistry) Deliver(ctx context.Context, event Event) {
 		// outside the loop so each target's delivery span lifetime
 		// is independent). See SEP-414 P6 (issue 683).
 		tc := traceContextForDelivery(ctx, delivered)
-		go r.deliver(t, delivered.EventID, body, tc)
+		go r.deliver(t, delivered.EventID, delivered.Name, body, tc)
 	}
 }
 
@@ -1064,7 +1104,36 @@ func classifyTransportError(err error) DeliveryErrorBucket {
 // the `traceparent` (and `tracestate` if present) HTTP headers are
 // stamped on every retry attempt so the receiver can stitch in.
 // SEP-414 P6 (issue 683).
-func (r *WebhookRegistry) deliver(target WebhookTarget, eventID string, body []byte, tc core.TraceContext) {
+//
+// eventName is included as the `mcp.event.name` attribute on the
+// emitted span when WithWebhookTracerProvider is configured.
+func (r *WebhookRegistry) deliver(target WebhookTarget, eventID, eventName string, body []byte, tc core.TraceContext) {
+	// SEP-414 P6 follow-up: span around the entire retry loop with
+	// per-attempt counts on the span attributes. Parent comes from
+	// the resolved tc (replica A's yield ctx ⇒ event.Meta ⇒ tc).
+	// Noop default = zero overhead unconfigured.
+	spanCtx := context.Background()
+	if !tc.IsZero() {
+		spanCtx = core.WithTraceContext(spanCtx, tc)
+	}
+	spanCtx, span := r.tp.StartSpan(spanCtx, "events.webhook.deliver",
+		core.Attribute{Key: "webhook.target.id", Value: target.ID},
+		core.Attribute{Key: "webhook.url", Value: target.URL},
+		core.Attribute{Key: "mcp.event.name", Value: eventName},
+		core.Attribute{Key: "http.method", Value: "POST"},
+	)
+	defer span.End()
+	_ = spanCtx
+	var (
+		finalStatus int
+		attempts    int
+	)
+	defer func() {
+		span.SetAttribute("webhook.retry.attempts", strconv.Itoa(attempts))
+		if finalStatus > 0 {
+			span.SetAttribute("http.response.status_code", strconv.Itoa(finalStatus))
+		}
+	}()
 	backoff := initialBackoff
 	// Tracks the last per-attempt failure bucket. Recorded onto
 	// deliveryStatus only after all retries are exhausted (i.e., this
@@ -1074,6 +1143,7 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, eventID string, body []b
 	lastErrBucket := DeliveryErrorNone
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
+		attempts = attempt + 1
 		if attempt > 0 {
 			r.logf("[webhook] retry %d/%d for %s (backoff %v)", attempt, maxRetries, target.URL, backoff)
 			time.Sleep(backoff)
@@ -1121,6 +1191,7 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, eventID string, body []b
 			lastErrBucket = classifyTransportError(err)
 			continue // retry
 		}
+		finalStatus = resp.StatusCode
 		resp.Body.Close()
 
 		if resp.StatusCode < 300 {
@@ -1154,6 +1225,7 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, eventID string, body []b
 	}
 	r.logf("[webhook] delivery to %s failed after %d retries, giving up", target.URL, maxRetries)
 	r.recordDeliveryFailure(target.CanonicalKey, lastErrBucket)
+	span.RecordError(fmt.Errorf("webhook delivery exhausted retries: %s", lastErrBucket))
 }
 
 // ValidateWebhookURL is a fail-fast subscribe-time check on a webhook

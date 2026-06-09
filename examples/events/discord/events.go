@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+
 	"github.com/panyam/mcpkit/experimental/ext/events"
 )
 
@@ -14,14 +16,14 @@ import (
 // mention_count are app-defined classifications that don't fit
 // `data` — exactly what `_meta` is for. Receivers see them under the
 // spec-canonical `_meta` key.
-func newDiscordSource() (*events.YieldingSource[DiscordEventData], func(DiscordEventData) error) {
+func newDiscordSource() (*events.YieldingSource[DiscordEventData], func(context.Context, DiscordEventData) error) {
 	src, yield := events.NewYieldingSource[DiscordEventData](events.EventDef{
 		Name:        "discord.message",
 		Description: "Fires when a message is sent in a Discord channel the bot can see",
 		Delivery:    []string{"push", "poll", "webhook"},
 		Meta:        map[string]any{"category": "messaging"},
 	}, events.WithMaxSize(1000))
-	src.SetMetaFunc(func(d DiscordEventData) map[string]any {
+	src.SetMetaFunc(func(_ context.Context, d DiscordEventData) map[string]any {
 		channelType := "guild"
 		if d.GuildID == "" {
 			channelType = "dm"
@@ -39,7 +41,7 @@ func newDiscordSource() (*events.YieldingSource[DiscordEventData], func(DiscordE
 // buffering and events emit with `cursor: null` on the wire. Push and webhook
 // delivery still work; poll always returns empty (subscribers can't replay
 // missed indicators, which matches the semantics of the underlying state).
-func newDiscordTypingSource() (*events.YieldingSource[DiscordTypingData], func(DiscordTypingData) error) {
+func newDiscordTypingSource() (*events.YieldingSource[DiscordTypingData], func(context.Context, DiscordTypingData) error) {
 	return events.NewYieldingSource[DiscordTypingData](events.EventDef{
 		Name:        "discord.typing",
 		Description: "Fires when a user starts typing in a Discord channel",

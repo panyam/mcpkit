@@ -11,6 +11,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -154,7 +155,7 @@ func serve() {
 						msg.Sender = "injected"
 					}
 					now := time.Now()
-					_ = yield(TelegramEventData{
+					_ = yield(r.Context(), TelegramEventData{
 						ChatID:    strconv.FormatInt(msg.ChatID, 10),
 						User:      msg.Sender,
 						Text:      msg.Text,
@@ -175,7 +176,7 @@ func serve() {
 					if msg.User == "" {
 						msg.User = "injected-typing"
 					}
-					_ = yieldTyping(newTelegramTypingEvent(msg.ChatID, msg.User, time.Now()))
+					_ = yieldTyping(r.Context(), newTelegramTypingEvent(msg.ChatID, msg.User, time.Now()))
 
 				default:
 					http.Error(w, fmt.Sprintf("unknown event %q (want telegram.message or telegram.typing)", eventName), http.StatusBadRequest)
@@ -199,7 +200,7 @@ func serve() {
 
 // startTelegramPolling uses long-polling to receive updates from Telegram and
 // yields each text message as a TelegramEventData event.
-func startTelegramPolling(bot *tgbotapi.BotAPI, yield func(TelegramEventData) error) {
+func startTelegramPolling(bot *tgbotapi.BotAPI, yield func(context.Context, TelegramEventData) error) {
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 
@@ -211,7 +212,7 @@ func startTelegramPolling(bot *tgbotapi.BotAPI, yield func(TelegramEventData) er
 			continue
 		}
 		ev := makeTelegramEvent(update.Message)
-		if err := yield(ev); err != nil {
+		if err := yield(context.Background(), ev); err != nil {
 			log.Printf("[telegram] yield failed: %v", err)
 			continue
 		}
