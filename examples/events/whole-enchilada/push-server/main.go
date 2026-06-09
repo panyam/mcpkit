@@ -19,7 +19,7 @@ import (
 	eventsclient "github.com/panyam/mcpkit/experimental/ext/events/clients/go"
 )
 
-// pushed counters surface via the admin HTTP port so `pusher.whole_enchilada`
+// pushed counters surface via the admin HTTP port so `pusher.whole-enchilada`
 // answers something useful from the network — a tiny status view of how many
 // events each feeder has pushed and the last push outcome.
 var (
@@ -29,7 +29,7 @@ var (
 )
 
 func main() {
-	target := flag.String("target", envOr("EVENT_SERVER_URL", "http://event_server.whole_enchilada"),
+	target := flag.String("target", envOr("EVENT_SERVER_URL", "http://event-server.whole-enchilada"),
 		"event-server URL to push events into")
 	bearer := flag.String("bearer", os.Getenv("EVENT_INJECT_BEARER"),
 		"shared secret matching the event-server's HTTPSourceConfig.Bearer")

@@ -6,13 +6,13 @@
 # DNS convention (resolves inside the compose network AND from the host
 # when /etc/hosts is populated via `make hosts-install`):
 #
-#   nginx.whole_enchilada            — frontdoor (port 80)
-#   event_server.whole_enchilada     — round-robin to all event-server replicas
-#   event_server_<i>.whole_enchilada — direct pin to replica i (1..N)
-#   pusher.whole_enchilada           — round-robin to all push-server replicas
-#   pusher_<i>.whole_enchilada       — direct pin to replica i (1..M)
-#   receiver.whole_enchilada         — example webhook consumer
-#   keycloak.whole_enchilada         — Keycloak AS (two realms: tenant-a + tenant-b)
+#   nginx.whole-enchilada            — frontdoor (port 80)
+#   event-server.whole-enchilada     — round-robin to all event-server replicas
+#   event-server-<i>.whole-enchilada — direct pin to replica i (1..N)
+#   pusher.whole-enchilada           — round-robin to all push-server replicas
+#   pusher-<i>.whole-enchilada       — direct pin to replica i (1..M)
+#   receiver.whole-enchilada         — example webhook consumer
+#   keycloak.whole-enchilada         — Keycloak AS (two realms: tenant-a + tenant-b)
 #
 # Ports exposed to host:
 #   9090  → nginx (MCP / SSE) — moved off 8080 to avoid conflicting with
@@ -20,7 +20,7 @@
 #   8180  → Keycloak admin UI + token endpoints
 
 networks:
-  whole_enchilada:
+  whole-enchilada:
     driver: bridge
   # mcpkit is a shared bridge network across the whole-enchilada demo
   # AND the docker/observability LGTM stack — the otel-collector listens
@@ -40,9 +40,9 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     networks:
-      whole_enchilada:
+      whole-enchilada:
         aliases:
-          - nginx.whole_enchilada
+          - nginx.whole-enchilada
     depends_on:
 {{range .EventServers}}      - event-server-{{.}}
 {{end}}{{range .PushServers}}      - push-server-{{.}}
@@ -62,7 +62,7 @@ services:
       # introspection endpoint returns active=true. Shared client_id /
       # client_secret across all realms (DEMO ONLY — production would
       # register a distinct client per realm).
-      OAUTH_INTROSPECTION_URLS: http://keycloak.whole_enchilada:8080/realms/tenant-a/protocol/openid-connect/token/introspect,http://keycloak.whole_enchilada:8080/realms/tenant-b/protocol/openid-connect/token/introspect,http://keycloak.whole_enchilada:8080/realms/tenant-c/protocol/openid-connect/token/introspect
+      OAUTH_INTROSPECTION_URLS: http://keycloak.whole-enchilada:8080/realms/tenant-a/protocol/openid-connect/token/introspect,http://keycloak.whole-enchilada:8080/realms/tenant-b/protocol/openid-connect/token/introspect,http://keycloak.whole-enchilada:8080/realms/tenant-c/protocol/openid-connect/token/introspect
       OAUTH_CLIENT_ID: mcp-event-server
       OAUTH_CLIENT_SECRET: ${OAUTH_CLIENT_SECRET:-{{$.KCResourceSecret}}}
       OAUTH_CACHE_TTL: ${OAUTH_CACHE_TTL:-5s}
@@ -93,10 +93,10 @@ services:
       keycloak:
         condition: service_healthy
     networks:
-      whole_enchilada:
+      whole-enchilada:
         aliases:
-          - event_server.whole_enchilada
-          - event_server_{{.}}.whole_enchilada
+          - event-server.whole-enchilada
+          - event-server-{{.}}.whole-enchilada
       mcpkit: {}
 {{end}}
 {{range .PushServers}}
@@ -105,7 +105,7 @@ services:
       context: ../../..
       dockerfile: examples/events/whole-enchilada/push-server/Dockerfile
     environment:
-      EVENT_SERVER_URL: http://event_server.whole_enchilada:8080
+      EVENT_SERVER_URL: http://event-server.whole-enchilada:8080
       EVENT_INJECT_BEARER: ${EVENT_INJECT_BEARER:-{{$.InjectBearer}}}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-mcpkit-otel-collector:4317}
     command: ["-admin-addr", ":9091", "-chat-every", "2s", "-presence-every", "5s", "--exporter=${EXPORTER:-auto}", "--otlp-endpoint=${OTEL_EXPORTER_OTLP_ENDPOINT:-mcpkit-otel-collector:4317}"]
@@ -115,10 +115,10 @@ services:
 {{range $.EventServers}}      event-server-{{.}}:
         condition: service_healthy
 {{end}}    networks:
-      whole_enchilada:
+      whole-enchilada:
         aliases:
-          - pusher.whole_enchilada
-          - pusher_{{.}}.whole_enchilada
+          - pusher.whole-enchilada
+          - pusher-{{.}}.whole-enchilada
       mcpkit: {}
 {{end}}
   receiver:
@@ -131,9 +131,9 @@ services:
     expose:
       - "9090"
     networks:
-      whole_enchilada:
+      whole-enchilada:
         aliases:
-          - receiver.whole_enchilada
+          - receiver.whole-enchilada
 
   # -------------------------------------------------------------------
   # Stage 2 — Keycloak as the OAuth AS. Two realms (tenant-a + tenant-b)
@@ -175,9 +175,9 @@ services:
       retries: 30
       start_period: 30s
     networks:
-      whole_enchilada:
+      whole-enchilada:
         aliases:
-          - keycloak.whole_enchilada
+          - keycloak.whole-enchilada
 
   # One-shot sidecar that flips the BUILT-IN master realm's sslRequired
   # to NONE. The tenant-{a,b,c} realm JSONs we import already set
@@ -203,9 +203,9 @@ services:
         && echo "[keycloak-init] master realm sslRequired=NONE"
     restart: "no"
     networks:
-      whole_enchilada:
+      whole-enchilada:
         aliases:
-          - keycloak_init.whole_enchilada
+          - keycloak-init.whole-enchilada
 
   # -------------------------------------------------------------------
   # Stage 3 — Postgres + Redis (commented)
@@ -213,16 +213,16 @@ services:
   # postgres:
   #   image: postgres:16-alpine
   #   networks:
-  #     whole_enchilada:
+  #     whole-enchilada:
   #       aliases:
-  #         - postgres.whole_enchilada
+  #         - postgres.whole-enchilada
   #
   # redis:
   #   image: redis:7-alpine
   #   networks:
-  #     whole_enchilada:
+  #     whole-enchilada:
   #       aliases:
-  #         - redis.whole_enchilada
+  #         - redis.whole-enchilada
 
   # -------------------------------------------------------------------
   # Stage 4 — Admin frontend + OTel + observability stack (commented)
@@ -230,41 +230,41 @@ services:
   # admin:
   #   build: ./admin
   #   networks:
-  #     whole_enchilada:
+  #     whole-enchilada:
   #       aliases:
-  #         - admin.whole_enchilada
+  #         - admin.whole-enchilada
   #
   # otel-collector:
   #   image: otel/opentelemetry-collector-contrib:0.96.0
   #   networks:
-  #     whole_enchilada:
+  #     whole-enchilada:
   #       aliases:
-  #         - otel.whole_enchilada
+  #         - otel.whole-enchilada
   #
   # jaeger:
   #   image: jaegertracing/all-in-one:1.57
   #   networks:
-  #     whole_enchilada:
+  #     whole-enchilada:
   #       aliases:
-  #         - jaeger.whole_enchilada
+  #         - jaeger.whole-enchilada
   #
   # grafana:
   #   image: grafana/grafana:11.0.0
   #   networks:
-  #     whole_enchilada:
+  #     whole-enchilada:
   #       aliases:
-  #         - grafana.whole_enchilada
+  #         - grafana.whole-enchilada
   #
   # loki:
   #   image: grafana/loki:3.0.0
   #   networks:
-  #     whole_enchilada:
+  #     whole-enchilada:
   #       aliases:
-  #         - loki.whole_enchilada
+  #         - loki.whole-enchilada
   #
   # mimir:
   #   image: grafana/mimir:2.12.0
   #   networks:
-  #     whole_enchilada:
+  #     whole-enchilada:
   #       aliases:
-  #         - mimir.whole_enchilada
+  #         - mimir.whole-enchilada

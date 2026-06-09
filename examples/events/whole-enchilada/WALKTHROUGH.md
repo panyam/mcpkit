@@ -158,7 +158,7 @@ Within `OAUTH_CACHE_TTL` (~5s), the event-server's next /introspect call for A1'
 
 **(2) Webhook — OIDC Back-Channel Logout (~immediate):**
 
-Keycloak ALSO POSTs a signed `logout_token` JWT to the URL the realm has registered as `backchannel_logout_uri` on the `mcp-events-poller` client — `http://event_server.whole_enchilada:8080/backchannel-logout/tenant-a`. The event-server's `ext/auth.BackChannelLogoutHandler` validates the JWT (signature via JWKS, iss/aud/exp/iat, jti replay guard) and fires a registered listener that calls `webhooks.TerminateBySession(sid, ...)`. Matching webhook subscriptions receive a `{type:terminated, error:{-32012, ...}}` envelope via Standard Webhooks signature headers and are dropped from the registry. A2's receiver logs the terminated envelope.
+Keycloak ALSO POSTs a signed `logout_token` JWT to the URL the realm has registered as `backchannel_logout_uri` on the `mcp-events-poller` client — `http://event-server.whole-enchilada:8080/backchannel-logout/tenant-a`. The event-server's `ext/auth.BackChannelLogoutHandler` validates the JWT (signature via JWKS, iss/aud/exp/iat, jti replay guard) and fires a registered listener that calls `webhooks.TerminateBySession(sid, ...)`. Matching webhook subscriptions receive a `{type:terminated, error:{-32012, ...}}` envelope via Standard Webhooks signature headers and are dropped from the registry. A2's receiver logs the terminated envelope.
 
 B1/B2/C1/C2 keep flowing — revocation is per-realm; isolation holds.
 

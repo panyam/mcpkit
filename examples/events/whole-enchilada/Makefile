@@ -5,7 +5,7 @@
 #   make up N=3 M=2               # 3 event-servers, 2 push-servers
 #   make up BUILD=true            # force a fresh docker image build
 #
-# Hostnames (*.whole_enchilada) resolve inside the compose network out of
+# Hostnames (*.whole-enchilada) resolve inside the compose network out of
 # the box. To reach them from the host shell / browser, run
 # `make hosts-install` once; `make hosts-uninstall` reverses it.
 
@@ -37,10 +37,10 @@ DEMO_CLIENT_SECRET ?= mcpkit-demo-secret-DEMO-ONLY
 tenant-realm = $(if $(filter tenant-%,$(1)),$(1),tenant-$(shell echo "$(1)" | tr A-Z a-z))
 
 HOSTS_MARKER := # whole-enchilada hostnames — managed by make hosts-install
-HOSTS_NAMES  := nginx.whole_enchilada event_server.whole_enchilada \
-                event_server_1.whole_enchilada event_server_2.whole_enchilada event_server_3.whole_enchilada \
-                pusher.whole_enchilada pusher_1.whole_enchilada pusher_2.whole_enchilada \
-                receiver.whole_enchilada keycloak.whole_enchilada
+HOSTS_NAMES  := nginx.whole-enchilada event-server.whole-enchilada \
+                event-server-1.whole-enchilada event-server-2.whole-enchilada event-server-3.whole-enchilada \
+                pusher.whole-enchilada pusher-1.whole-enchilada pusher-2.whole-enchilada \
+                receiver.whole-enchilada keycloak.whole-enchilada
 
 .PHONY: help gen-compose build unittest up down test demo readme \
         newtoken newtoken-ci poller webhook inject \
@@ -156,7 +156,7 @@ clean: ## Remove built binaries.
 
 # Host /etc/hosts management — uses a marker comment so the edit is
 # idempotent and reversible. Requires sudo.
-hosts-install: ## Append *.whole_enchilada hostnames to /etc/hosts (idempotent).
+hosts-install: ## Append *.whole-enchilada hostnames to /etc/hosts (idempotent).
 	@if grep -q "whole-enchilada hostnames" /etc/hosts; then \
 		echo "[hosts] already installed; run hosts-uninstall first to refresh"; \
 	else \
