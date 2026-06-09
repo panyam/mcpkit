@@ -8,6 +8,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	mcpcore "github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/experimental/ext/events"
 )
 
@@ -137,7 +138,17 @@ func (s *Subscriber) Run(ctx context.Context) error {
 				s.opts.Logger("redisstore: decode failed on channel %q: %v", msg.Channel, err)
 				continue
 			}
-			if err := s.deliver(ctx, event); err != nil {
+			// SEP-414 trace context propagation: stitch the
+			// per-message ctx to the publisher-side span when the
+			// event.Meta carried one. ExtractTraceContext returns a
+			// zero TraceContext when Meta is absent / malformed; in
+			// that case msgCtx equals ctx (no derivation happens
+			// because WithTraceContext on a zero TC is a no-op).
+			msgCtx := ctx
+			if tc := mcpcore.ExtractTraceContext(event.Meta); !tc.IsZero() {
+				msgCtx = mcpcore.WithTraceContext(ctx, tc)
+			}
+			if err := s.deliver(msgCtx, event); err != nil {
 				s.opts.Logger("redisstore: deliver failed for event %q: %v", event.Name, err)
 				// Per the Emitter contract, errors are reported but
 				// do not halt further fanout. Same applies here —

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	mcpcore "github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/experimental/ext/events"
 )
 
@@ -39,7 +40,16 @@ func NewPublisher(opts Options) (*Publisher, error) {
 // PUBLISH (Redis returns the receiver count, zero is fine) is NOT an
 // error — late subscribers missing messages is the documented
 // at-most-once contract.
+//
+// SEP-414 trace context propagation: if ctx carries a TraceContext
+// (set by core.WithTraceContext or the server's trace middleware),
+// Emit stamps the W3C `traceparent` / `tracestate` keys onto
+// event.Meta so the subscriber side can stitch its delivery span to
+// the publisher's span via core.ExtractTraceContext. Caller-set
+// values on event.Meta win — explicit traceparent on the event is
+// never clobbered (mirrors core.InjectTraceContextIntoParams).
 func (p *Publisher) Emit(ctx context.Context, event events.Event) error {
+	event.Meta = injectTraceContext(ctx, event.Meta)
 	body, err := p.opts.Codec.Encode(event)
 	if err != nil {
 		return fmt.Errorf("redisstore: encode failed: %w", err)
@@ -49,6 +59,30 @@ func (p *Publisher) Emit(ctx context.Context, event events.Event) error {
 		return fmt.Errorf("redisstore: PUBLISH %s failed: %w", channel, err)
 	}
 	return nil
+}
+
+// injectTraceContext returns a Meta map that carries the inbound
+// ctx's TraceContext under the W3C bare-name keys. Returns the input
+// Meta unchanged when ctx has no TraceContext or when Meta already
+// carries an explicit traceparent (caller-set wins).
+//
+// Always returns a freshly-allocated map when injection happens, so
+// the caller's Event.Meta is never mutated through aliasing — events
+// are passed by value but Meta is a reference type.
+func injectTraceContext(ctx context.Context, meta map[string]any) map[string]any {
+	tc := mcpcore.TraceContextFromContext(ctx)
+	if tc.IsZero() {
+		return meta
+	}
+	if _, callerSet := meta[mcpcore.MetaKeyTraceparent]; callerSet {
+		return meta
+	}
+	cp := make(map[string]any, len(meta)+2)
+	for k, v := range meta {
+		cp[k] = v
+	}
+	mcpcore.InjectTraceContext(cp, tc)
+	return cp
 }
 
 // Compile-time check that *Publisher satisfies events.Emitter — if
