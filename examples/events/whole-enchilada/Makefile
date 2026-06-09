@@ -68,8 +68,8 @@ up: gen-compose ## docker compose up -d. Reuses cached images. Pass BUILD=true t
 	docker compose up -d $(if $(BUILD),--build)
 	@echo "stack up$(if $(BUILD), (rebuilt)); nginx on http://localhost:9090 — see README for hostname routing"
 
-down: ## docker compose down -v (removes named volumes too).
-	docker compose down -v
+down: ## docker compose down — preserves Postgres + Redis bind-mount data under ./data/. Run `make clean` to wipe.
+	docker compose down
 
 test: ## Run the walkthrough in non-interactive mode against the running docker stack.
 	go -C walkthrough run . --non-interactive
@@ -151,8 +151,9 @@ logs: ## Tail logs from all services.
 ps: ## docker compose ps.
 	docker compose ps
 
-clean: ## Remove built binaries.
-	rm -rf bin/
+clean: ## docker compose down -v + remove Postgres/Redis bind-mount data + built binaries (full reset).
+	docker compose down -v 2>/dev/null || true
+	rm -rf bin/ data/
 
 # Host /etc/hosts management — uses a marker comment so the edit is
 # idempotent and reversible. Requires sudo.
