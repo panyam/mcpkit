@@ -6,6 +6,8 @@ replace github.com/panyam/mcpkit => ../..
 
 replace github.com/panyam/mcpkit/examples/common => ../common
 
+replace github.com/panyam/mcpkit/ext/otel => ../../ext/otel
+
 replace github.com/panyam/mcpkit/ext/tasks => ../../ext/tasks
 
 require (

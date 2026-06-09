@@ -8,6 +8,8 @@ replace github.com/panyam/mcpkit/ext/skills => ../../ext/skills
 
 replace github.com/panyam/mcpkit/examples/common => ../common
 
+replace github.com/panyam/mcpkit/ext/otel => ../../ext/otel
+
 require (
 	github.com/panyam/demokit v0.0.29
 	github.com/panyam/mcpkit v0.2.45
