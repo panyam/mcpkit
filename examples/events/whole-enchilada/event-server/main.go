@@ -91,6 +91,11 @@ func main() {
 		// resolves to private IPs); production-default SSRF guard would
 		// reject. Production stages will wire a real allowlist.
 		events.WithWebhookAllowPrivateNetworks(true),
+		// SEP-414 P6 follow-up: emit events.webhook.deliver spans
+		// around each outbound POST so Peter's demo shows the full
+		// chain (client tools/call → server dispatch → webhook
+		// delivery) as one row in Tempo.
+		events.WithWebhookTracerProvider(tp),
 	)
 
 	srvOpts := []server.Option{

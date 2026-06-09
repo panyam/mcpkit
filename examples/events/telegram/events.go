@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+
 	"github.com/panyam/mcpkit/experimental/ext/events"
 )
 
@@ -8,7 +10,7 @@ import (
 // events. The library owns the in-memory ring buffer; the resource handlers
 // read typed payloads back via source.Recent / source.ByCursor — single
 // source of truth, no duplication, no resource-side unmarshaling.
-func newTelegramSource() (*events.YieldingSource[TelegramEventData], func(TelegramEventData) error) {
+func newTelegramSource() (*events.YieldingSource[TelegramEventData], func(context.Context, TelegramEventData) error) {
 	return events.NewYieldingSource[TelegramEventData](events.EventDef{
 		Name:        "telegram.message",
 		Description: "Fires when a message is received by the Telegram bot",
@@ -20,7 +22,7 @@ func newTelegramSource() (*events.YieldingSource[TelegramEventData], func(Telegr
 // telegram.typing events. Typing indicators are ephemeral — the source skips
 // buffering and events emit with `cursor: null` on the wire. Push and webhook
 // delivery still work; poll always returns empty.
-func newTelegramTypingSource() (*events.YieldingSource[TelegramTypingData], func(TelegramTypingData) error) {
+func newTelegramTypingSource() (*events.YieldingSource[TelegramTypingData], func(context.Context, TelegramTypingData) error) {
 	return events.NewYieldingSource[TelegramTypingData](events.EventDef{
 		Name:        "telegram.typing",
 		Description: "Fires when a user starts typing in a Telegram chat",

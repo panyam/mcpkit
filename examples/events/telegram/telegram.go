@@ -5,6 +5,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -69,7 +70,7 @@ func newTelegramTypingEvent(chatID int64, user string, ts time.Time) TelegramTyp
 
 // handleTelegramWebhook processes a Telegram Bot API webhook POST and yields
 // the resulting event. Returns true if an event was published.
-func handleTelegramWebhook(yield func(TelegramEventData) error, r *http.Request) bool {
+func handleTelegramWebhook(yield func(context.Context, TelegramEventData) error, r *http.Request) bool {
 	var update tgbotapi.Update
 	if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
 		log.Printf("[telegram] failed to decode webhook: %v", err)
@@ -78,7 +79,7 @@ func handleTelegramWebhook(yield func(TelegramEventData) error, r *http.Request)
 	if update.Message == nil || update.Message.Text == "" {
 		return false
 	}
-	if err := yield(makeTelegramEvent(update.Message)); err != nil {
+	if err := yield(r.Context(), makeTelegramEvent(update.Message)); err != nil {
 		log.Printf("[telegram] yield failed: %v", err)
 		return false
 	}

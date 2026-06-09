@@ -11,6 +11,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -104,7 +105,7 @@ func serve() {
 			if m.Author.ID == s.State.User.ID {
 				return // ignore own messages
 			}
-			_ = yield(newDiscordEvent(m.GuildID, m.ChannelID, m.Author.Username, m.Content, time.Now()))
+			_ = yield(context.Background(), newDiscordEvent(m.GuildID, m.ChannelID, m.Author.Username, m.Content, time.Now()))
 			// The yield above already broadcasts push + webhook via the
 			// library's fanout hook. The resource notification stays explicit
 			// because the events library doesn't know about MCP resources.
@@ -125,7 +126,7 @@ func serve() {
 					username = member.User.Username
 				}
 			}
-			_ = yieldTyping(newDiscordTypingEvent(ts.GuildID, ts.ChannelID, username, time.Unix(int64(ts.Timestamp), 0)))
+			_ = yieldTyping(context.Background(), newDiscordTypingEvent(ts.GuildID, ts.ChannelID, username, time.Unix(int64(ts.Timestamp), 0)))
 		})
 
 		dg.Identify.Intents = discordgo.IntentsGuildMessages |
@@ -236,7 +237,7 @@ func serve() {
 			if msg.Sender == "" {
 				msg.Sender = "injected"
 			}
-			_ = yield(newDiscordEvent(msg.GuildID, msg.ChannelID, msg.Sender, msg.Text, time.Now()))
+			_ = yield(r.Context(), newDiscordEvent(msg.GuildID, msg.ChannelID, msg.Sender, msg.Text, time.Now()))
 			srv.NotifyResourceUpdated("discord://messages/recent")
 
 		case "discord.typing":
@@ -252,7 +253,7 @@ func serve() {
 			if msg.User == "" {
 				msg.User = "injected-typing"
 			}
-			_ = yieldTyping(newDiscordTypingEvent(msg.GuildID, msg.ChannelID, msg.User, time.Now()))
+			_ = yieldTyping(r.Context(), newDiscordTypingEvent(msg.GuildID, msg.ChannelID, msg.User, time.Now()))
 
 		default:
 			http.Error(w, fmt.Sprintf("unknown event %q (want discord.message or discord.typing)", eventName), http.StatusBadRequest)
