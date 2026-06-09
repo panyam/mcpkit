@@ -23,6 +23,7 @@ import (
 	common "github.com/panyam/mcpkit/examples/common"
 	commonotel "github.com/panyam/mcpkit/examples/common/otel"
 	"github.com/panyam/mcpkit/experimental/ext/events"
+	extauth "github.com/panyam/mcpkit/ext/auth"
 	"github.com/panyam/mcpkit/server"
 	gohttp "github.com/panyam/servicekit/http"
 )
@@ -128,8 +129,20 @@ func main() {
 	}
 	events.Register(cfg)
 
+	// Back-Channel Logout receivers — one handler per realm, each
+	// mounted at /backchannel-logout/<realm>. When Keycloak revokes a
+	// session, it POSTs a signed logout_token to the URL we register
+	// on the realm's mcp-events-poller client. Each handler's
+	// listener calls webhooks.TerminateBySession so matching
+	// subscriptions get {type:terminated} envelopes. See mcpkit issue
+	// 709 for the full design.
+	bclHandlers := buildBCLHandlers(webhooks)
+
 	log.Printf("[event-server] tenant=%s auth=%s listening on %s", *tenant, authPosture, *addr)
 	log.Printf("[event-server] inject endpoints: %s, %s", chatSrc.InjectPath(), presenceSrc.InjectPath())
+	for path := range bclHandlers {
+		log.Printf("[event-server] BCL receiver mounted: %s", path)
+	}
 
 	if err := srv.ListenAndServe(
 		server.WithStreamableHTTP(true),
@@ -143,10 +156,88 @@ func main() {
 				w.WriteHeader(http.StatusOK)
 				_, _ = w.Write([]byte("ok"))
 			})
+			for path, h := range bclHandlers {
+				mux.Handle(path, h)
+			}
 		}),
 	); err != nil {
 		log.Fatalf("ListenAndServe: %v", err)
 	}
+}
+
+// buildBCLHandlers wires one BackChannelLogoutHandler per realm
+// derived from OAUTH_INTROSPECTION_URLS, with the listener routed to
+// webhooks.TerminateBySession. Returns map[mountPath]handler — empty
+// when introspection isn't configured (no Keycloak, no BCL).
+//
+// Required env vars (in addition to the introspection-mode envs):
+//
+//	OAUTH_ISSUER_BASE   Public-facing scheme://host:port of the AS,
+//	                    matching what appears in token iss claims.
+//	                    The full per-realm issuer is computed as
+//	                    OAUTH_ISSUER_BASE + "/realms/" + <realm>.
+//	                    Defaults to http://localhost:8180 (the demo's
+//	                    Keycloak hostname).
+//
+// Audience for every realm's handler defaults to OAUTH_CLIENT_ID
+// (mcp-event-server) — the same client_id that authenticates the
+// introspection call. Keycloak emits BCL logout_tokens with aud =
+// the client_id whose backchannel_logout_uri was hit, which matches.
+func buildBCLHandlers(webhooks *events.WebhookRegistry) map[string]*extauth.BackChannelLogoutHandler {
+	raw := os.Getenv("OAUTH_INTROSPECTION_URLS")
+	if raw == "" {
+		return nil
+	}
+	issuerBase := os.Getenv("OAUTH_ISSUER_BASE")
+	if issuerBase == "" {
+		issuerBase = "http://localhost:8180"
+	}
+	audience := os.Getenv("OAUTH_CLIENT_ID")
+	if audience == "" {
+		return nil
+	}
+	out := make(map[string]*extauth.BackChannelLogoutHandler)
+	for _, introspectURL := range strings.Split(raw, ",") {
+		introspectURL = strings.TrimSpace(introspectURL)
+		realm := realmFromKeycloakURL(introspectURL)
+		if realm == "" {
+			continue
+		}
+		// Derive JWKS URL from the introspection URL (same realm,
+		// just swap the protocol suffix).
+		jwksURL := strings.Replace(introspectURL, "/token/introspect", "/certs", 1)
+		h, err := extauth.NewBackChannelLogoutHandler(extauth.BackChannelLogoutConfig{
+			Issuer:   issuerBase + "/realms/" + realm,
+			Audience: audience,
+			JWKSURL:  jwksURL,
+		})
+		if err != nil {
+			log.Printf("[event-server] BCL handler for %s skipped: %v", realm, err)
+			continue
+		}
+		// Capture realm for the log line — listeners run synchronously
+		// inside the BCL POST handler so log emission is in the same
+		// span as the AS-initiated request.
+		realmCopy := realm
+		h.RegisterListener(func(_ context.Context, sub, sid string) {
+			killed := webhooks.TerminateBySession(sid, events.ControlError{
+				Code:    -32012,
+				Message: "session revoked by authorization server",
+			})
+			if killed == 0 && sub != "" {
+				// Fall back to subject-scoped termination when the
+				// logout_token only carried sub (no sid).
+				killed = webhooks.TerminateBySubject(sub, events.ControlError{
+					Code:    -32012,
+					Message: "subject revoked by authorization server",
+				})
+			}
+			log.Printf("[event-server] BCL fire: realm=%s sub=%s sid=%s killed=%d",
+				realmCopy, sub, sid, killed)
+		})
+		out["/backchannel-logout/"+realm] = h
+	}
+	return out
 }
 
 // tryEnableIntrospection wires an iss-routing IntrospectionValidator
