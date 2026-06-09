@@ -149,18 +149,20 @@ func main() {
 	}
 }
 
-// tryEnableIntrospection wires a multi-realm IntrospectionValidator
+// tryEnableIntrospection wires an iss-routing IntrospectionValidator
 // when OAUTH_INTROSPECTION_URLS is set, otherwise returns nil so the
 // caller falls back to the next posture in the chain. Recognized env
 // vars:
 //
 //   OAUTH_INTROSPECTION_URLS REQUIRED. Comma-separated list of N
-//                            introspection endpoints — one per realm
-//                            the event-server accepts tokens from. A
-//                            token is accepted if ANY listed realm's
-//                            introspection returns active=true.
-//                            Single-realm deployments pass exactly one
-//                            URL.
+//                            Keycloak introspection endpoints — one
+//                            per realm the event-server accepts
+//                            tokens from. Each URL's
+//                            /realms/<realm>/ segment is parsed as
+//                            the routing key; the inbound JWT's iss
+//                            picks which child to delegate to.
+//                            Single-realm deployments pass exactly
+//                            one URL.
 //   OAUTH_CLIENT_ID          REQUIRED. Client ID used to authenticate
 //                            to every realm's introspection endpoint
 //                            via client_secret_basic. The same client
@@ -177,7 +179,7 @@ func main() {
 // The previous OAUTH_INTROSPECTION_URL singular-form env var is no
 // longer recognized — single-realm deployments now pass exactly one
 // URL through OAUTH_INTROSPECTION_URLS.
-func tryEnableIntrospection() *MultiRealmIntrospectionValidator {
+func tryEnableIntrospection() *IssRoutingIntrospectionValidator {
 	raw := os.Getenv("OAUTH_INTROSPECTION_URLS")
 	if raw == "" {
 		return nil
@@ -188,7 +190,7 @@ func tryEnableIntrospection() *MultiRealmIntrospectionValidator {
 			cacheTTL = d
 		}
 	}
-	return buildMultiRealmValidator(realmConfig{
+	return buildIssRoutingValidator(realmConfig{
 		URLs:         strings.Split(raw, ","),
 		ClientID:     os.Getenv("OAUTH_CLIENT_ID"),
 		ClientSecret: os.Getenv("OAUTH_CLIENT_SECRET"),
