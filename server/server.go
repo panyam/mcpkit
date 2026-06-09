@@ -25,7 +25,7 @@ type Server struct {
 	mu                sync.Mutex
 	sessionClosers      []sessionCloser
 	allSessionClosers   []func()
-	sessionBroadcasters []func(method string, params any)
+	sessionBroadcasters []func(ctx context.Context, method string, params any)
 	subRegistry         *subscriptionRegistry // nil when subscriptions not enabled
 }
 
@@ -940,30 +940,43 @@ func (s *Server) CloseAllSessions() {
 // Streamable HTTP transports). In-process transports manage their own
 // notification delivery via WithNotificationHandler.
 //
-// ctx threads through SEP-414 trace context for downstream
-// instrumentation — currently consumed by callers (e.g., events.Emit
-// for outbound _meta.traceparent injection on notification params).
-// The underlying session broadcasters don't take ctx today; that
-// plumbing slots in without churning callers when it's added.
+// ctx threads through SEP-414 trace context. When ctx carries a non-zero
+// core.TraceContext, the inbound traceparent / tracestate are injected
+// into the notification params under `_meta` before fan-out, so SSE
+// subscribers see the same trace identity the originating yield ran
+// under. Existing caller-set `_meta.traceparent` on params wins
+// (delegates to core.InjectTraceContextIntoParams's contract).
+//
+// The injection happens once at the Server level rather than per
+// transport because the per-session notifyFunc the transport
+// dispatchers expose is the BASE notifyFunc — the per-request
+// trace_middleware wrap (`core.WrapSessionNotifyFunc`) targets
+// `sc.notify` on a per-request SessionCtx, which broadcast doesn't
+// run inside. Injecting once at the call site keeps tracing concerns
+// out of the transport-level broadcast loops.
 //
 // Example:
 //
 //	// After registering a new tool at runtime:
 //	srv.Broadcast(ctx, "notifications/tools/list_changed", nil)
-func (s *Server) Broadcast(_ context.Context, method string, params any) {
+func (s *Server) Broadcast(ctx context.Context, method string, params any) {
+	if tc := core.TraceContextFromContext(ctx); !tc.IsZero() {
+		params = core.InjectTraceContextIntoParams(params, tc)
+	}
+
 	s.mu.Lock()
-	broadcasters := make([]func(string, any), len(s.sessionBroadcasters))
+	broadcasters := make([]func(context.Context, string, any), len(s.sessionBroadcasters))
 	copy(broadcasters, s.sessionBroadcasters)
 	s.mu.Unlock()
 
 	for _, bc := range broadcasters {
-		bc(method, params)
+		bc(ctx, method, params)
 	}
 }
 
 // registerTransportSessions registers a transport's session management callbacks.
 // Called by transports during Handler() creation.
-func (s *Server) registerTransportSessions(closeOne sessionCloser, closeAll func(), broadcast func(method string, params any)) {
+func (s *Server) registerTransportSessions(closeOne sessionCloser, closeAll func(), broadcast func(ctx context.Context, method string, params any)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.sessionClosers = append(s.sessionClosers, closeOne)
