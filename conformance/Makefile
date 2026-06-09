@@ -100,8 +100,8 @@ testconf-stateless: ## Run SEP-2575 stateless conformance — drives examples/st
 	PID=$$!; \
 	for i in 1 2 3 4 5 6 7 8 9 10; do \
 		curl -sf -X POST -H "Content-Type: application/json" \
-			-d '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"DRAFT-2026-v1","io.modelcontextprotocol/clientInfo":{"name":"poll","version":"1"},"io.modelcontextprotocol/clientCapabilities":{}}}}' \
-			-H "MCP-Protocol-Version: DRAFT-2026-v1" \
+			-d '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"poll","version":"1"},"io.modelcontextprotocol/clientCapabilities":{}}}}' \
+			-H "MCP-Protocol-Version: 2026-07-28" \
 			http://localhost:18100/mcp > /dev/null 2>&1 && break; \
 		sleep 0.3; \
 	done; \
