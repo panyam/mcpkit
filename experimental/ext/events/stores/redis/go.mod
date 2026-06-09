@@ -8,6 +8,7 @@ replace github.com/panyam/mcpkit/experimental/ext/events => ../..
 
 require (
 	github.com/alicebob/miniredis/v2 v2.38.0
+	github.com/panyam/mcpkit v0.2.33
 	github.com/panyam/mcpkit/experimental/ext/events v0.0.0-00010101000000-000000000000
 	github.com/redis/go-redis/v9 v9.7.0
 	github.com/stretchr/testify v1.11.1
@@ -24,7 +25,6 @@ require (
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/panyam/gocurrent v0.1.1 // indirect
 	github.com/panyam/goutils v0.1.8 // indirect
-	github.com/panyam/mcpkit v0.2.33 // indirect
 	github.com/panyam/servicekit v0.1.2 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
