@@ -116,7 +116,7 @@ func TestStream_TwoConcurrentStreamsIsolated(t *testing.T) {
 
 	// Yield only on source A. Stream A should see one event notif; stream
 	// B should see none.
-	require.NoError(t, yieldA(fakePayload{Msg: "for-A-only"}))
+	require.NoError(t, yieldA(context.Background(), fakePayload{Msg: "for-A-only"}))
 
 	// Wait briefly for notification propagation, then drain whatever
 	// arrived. We assert: every events/event has requestId=100 (stream A).
@@ -167,7 +167,7 @@ func TestStream_TwoConcurrentStreamsSameSourceBothReceive(t *testing.T) {
 	expectNotif(t, st.notifs, "notifications/events/active", time.Second)
 	expectNotif(t, st.notifs, "notifications/events/active", time.Second)
 
-	require.NoError(t, yield(fakePayload{Msg: "broadcast"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "broadcast"}))
 
 	deadline := time.After(time.Second)
 	var sawX, sawY bool

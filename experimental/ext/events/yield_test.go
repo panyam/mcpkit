@@ -33,13 +33,13 @@ func TestYieldingSource_AutoDerivesPayloadSchema(t *testing.T) {
 	assert.NotNil(t, src.Def().PayloadSchema, "schema should be auto-derived from generic param")
 }
 
-// TestYieldingSource_YieldAppearsOnPoll verifies the round-trip: yield(data)
+// TestYieldingSource_YieldAppearsOnPoll verifies the round-trip: yield(context.Background(), data)
 // stores the event so a subsequent Poll surfaces it. Core spec contract:
 // push-style production with pull-style consumption.
 func TestYieldingSource_YieldAppearsOnPoll(t *testing.T) {
 	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"})
-	require.NoError(t, yield(fakePayload{Msg: "hello"}))
-	require.NoError(t, yield(fakePayload{Msg: "world"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "hello"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "world"}))
 
 	pr := src.Poll("", 10)
 	require.Len(t, pr.Events, 2)
@@ -58,11 +58,11 @@ func TestYieldingSource_YieldAppearsOnPoll(t *testing.T) {
 // semantics. Without this clients would receive duplicates on every poll.
 func TestYieldingSource_PollHonorsCursor(t *testing.T) {
 	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"})
-	require.NoError(t, yield(fakePayload{Msg: "a"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "a"}))
 	c1 := src.Poll("", 10).Events[0].CursorStr()
 
-	require.NoError(t, yield(fakePayload{Msg: "b"}))
-	require.NoError(t, yield(fakePayload{Msg: "c"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "b"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "c"}))
 
 	pr := src.Poll(c1, 10)
 	require.Len(t, pr.Events, 2)
@@ -74,7 +74,7 @@ func TestYieldingSource_PollHonorsCursor(t *testing.T) {
 func TestYieldingSource_PollRespectsLimit(t *testing.T) {
 	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"})
 	for i := 0; i < 5; i++ {
-		require.NoError(t, yield(fakePayload{Msg: "x"}))
+		require.NoError(t, yield(context.Background(), fakePayload{Msg: "x"}))
 	}
 	pr := src.Poll("", 2)
 	assert.Len(t, pr.Events, 2)
@@ -86,12 +86,12 @@ func TestYieldingSource_PollRespectsLimit(t *testing.T) {
 // truncated signal — clients SHOULD treat it as a possible gap.
 func TestYieldingSource_EvictionAndTruncated(t *testing.T) {
 	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"}, WithMaxSize(3))
-	require.NoError(t, yield(fakePayload{Msg: "1"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "1"}))
 	c1 := src.Poll("", 10).Events[0].CursorStr()
-	require.NoError(t, yield(fakePayload{Msg: "2"}))
-	require.NoError(t, yield(fakePayload{Msg: "3"}))
-	require.NoError(t, yield(fakePayload{Msg: "4"})) // evicts c1
-	require.NoError(t, yield(fakePayload{Msg: "5"})) // evicts second
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "2"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "3"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "4"})) // evicts c1
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "5"})) // evicts second
 
 	assert.Equal(t, 3, src.Len(), "buffer stays bounded at WithMaxSize")
 
@@ -106,7 +106,7 @@ func TestYieldingSource_EvictionAndTruncated(t *testing.T) {
 // re-polling the same tail.
 func TestYieldingSource_PollReportsLatestCursorWhenNoNewEvents(t *testing.T) {
 	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"})
-	require.NoError(t, yield(fakePayload{Msg: "a"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "a"}))
 	first := src.Poll("", 10)
 	headCursor := first.Cursor
 
@@ -126,16 +126,16 @@ func TestYieldingSource_FanoutHookFiresOncePerYield(t *testing.T) {
 	var mu sync.Mutex
 	var seen []Event
 
-	src.SetEmitHook(func(e Event) {
+	src.SetEmitHook(func(ctx context.Context, e Event) {
 		atomic.AddInt32(&fired, 1)
 		mu.Lock()
 		seen = append(seen, e)
 		mu.Unlock()
 	})
 
-	require.NoError(t, yield(fakePayload{Msg: "one"}))
-	require.NoError(t, yield(fakePayload{Msg: "two"}))
-	require.NoError(t, yield(fakePayload{Msg: "three"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "one"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "two"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "three"}))
 
 	assert.Equal(t, int32(3), atomic.LoadInt32(&fired))
 	mu.Lock()
@@ -149,7 +149,7 @@ func TestYieldingSource_FanoutHookFiresOncePerYield(t *testing.T) {
 // constructed before Register wires fanout. Events still land in the buffer.
 func TestYieldingSource_NoFanoutBeforeRegister(t *testing.T) {
 	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"})
-	require.NoError(t, yield(fakePayload{Msg: "early"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "early"}))
 	pr := src.Poll("", 10)
 	assert.Len(t, pr.Events, 1)
 }
@@ -161,7 +161,7 @@ func TestYieldingSource_NoFanoutBeforeRegister(t *testing.T) {
 func TestYieldingSource_RecentReturnsTypedTail(t *testing.T) {
 	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"})
 	for _, msg := range []string{"a", "b", "c", "d", "e"} {
-		require.NoError(t, yield(fakePayload{Msg: msg}))
+		require.NoError(t, yield(context.Background(), fakePayload{Msg: msg}))
 	}
 
 	got := src.Recent(3)
@@ -175,7 +175,7 @@ func TestYieldingSource_RecentReturnsTypedTail(t *testing.T) {
 // the buffer holds returns everything available rather than panicking.
 func TestYieldingSource_RecentClampsToBufferSize(t *testing.T) {
 	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"})
-	require.NoError(t, yield(fakePayload{Msg: "only"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "only"}))
 
 	got := src.Recent(50)
 	assert.Len(t, got, 1)
@@ -185,7 +185,7 @@ func TestYieldingSource_RecentClampsToBufferSize(t *testing.T) {
 // the entire buffer — guards against accidental "give me everything" calls.
 func TestYieldingSource_RecentEmptyOnZero(t *testing.T) {
 	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"})
-	require.NoError(t, yield(fakePayload{Msg: "x"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "x"}))
 	assert.Nil(t, src.Recent(0))
 	assert.Nil(t, src.Recent(-1))
 }
@@ -195,8 +195,8 @@ func TestYieldingSource_RecentEmptyOnZero(t *testing.T) {
 // per-event URIs use this.
 func TestYieldingSource_ByCursorFindsTypedPayload(t *testing.T) {
 	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"})
-	require.NoError(t, yield(fakePayload{Msg: "first"}))
-	require.NoError(t, yield(fakePayload{Msg: "second"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "first"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "second"}))
 
 	first := src.Poll("", 10).Events[0]
 	got, ok := src.ByCursor(first.CursorStr())
@@ -208,7 +208,7 @@ func TestYieldingSource_ByCursorFindsTypedPayload(t *testing.T) {
 // returns (zero, false). Caller must check ok before using the value.
 func TestYieldingSource_ByCursorMissingReturnsZero(t *testing.T) {
 	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"})
-	require.NoError(t, yield(fakePayload{Msg: "x"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "x"}))
 
 	got, ok := src.ByCursor("nonexistent-cursor")
 	assert.False(t, ok)
@@ -229,7 +229,7 @@ func TestYieldingSource_DefaultsMaxSize(t *testing.T) {
 	assert.Equal(t, defaultYieldingMaxSize, s3.maxSize, "WithMaxSize(-5) keeps default")
 }
 
-// TestYieldingSource_ConcurrentYields verifies concurrent yield() calls are
+// TestYieldingSource_ConcurrentYields verifies concurrent yield(context.Background()) calls are
 // safe and all events land in the buffer. Exercises the source under
 // contention.
 func TestYieldingSource_ConcurrentYields(t *testing.T) {
@@ -241,7 +241,7 @@ func TestYieldingSource_ConcurrentYields(t *testing.T) {
 	for i := 0; i < n; i++ {
 		go func() {
 			defer wg.Done()
-			_ = yield(fakePayload{Msg: "x"})
+			_ = yield(context.Background(), fakePayload{Msg: "x"})
 		}()
 	}
 	wg.Wait()
@@ -258,10 +258,10 @@ func TestYieldingSource_ConcurrentYields(t *testing.T) {
 // wire_shape_test.go).
 func TestYieldingSource_MetaFunc(t *testing.T) {
 	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"})
-	src.SetMetaFunc(func(d fakePayload) map[string]any {
+	src.SetMetaFunc(func(ctx context.Context, d fakePayload) map[string]any {
 		return map[string]any{"length": len(d.Msg)}
 	})
-	require.NoError(t, yield(fakePayload{Msg: "hello"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "hello"}))
 
 	pr := src.Poll("", 10)
 	require.Len(t, pr.Events, 1)
@@ -275,8 +275,8 @@ func TestYieldingSource_MetaFunc(t *testing.T) {
 // event, defeating the bytes-on-wire-free common case.
 func TestYieldingSource_MetaFuncReturningNilOmits(t *testing.T) {
 	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"})
-	src.SetMetaFunc(func(d fakePayload) map[string]any { return nil })
-	require.NoError(t, yield(fakePayload{Msg: "x"}))
+	src.SetMetaFunc(func(ctx context.Context, d fakePayload) map[string]any { return nil })
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "x"}))
 
 	pr := src.Poll("", 10)
 	require.Len(t, pr.Events, 1)
@@ -304,8 +304,8 @@ func TestYieldingSource_SubscribeReceivesYieldedEvents(t *testing.T) {
 	ch, _ := src.Subscribe(ctx, SubscribeOpts{})
 	require.NotNil(t, ch, "Subscribe must return a non-nil channel")
 
-	require.NoError(t, yield(fakePayload{Msg: "alpha"}))
-	require.NoError(t, yield(fakePayload{Msg: "beta"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "alpha"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "beta"}))
 
 	first := readSubscriberEvent(t, ch, time.Second)
 	assert.False(t, first.Truncated)
@@ -334,7 +334,7 @@ func TestYieldingSource_MultipleSubscribersAllReceive(t *testing.T) {
 	subB, _ := src.Subscribe(ctx, SubscribeOpts{})
 	subC, _ := src.Subscribe(ctx, SubscribeOpts{})
 
-	require.NoError(t, yield(fakePayload{Msg: "x"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "x"}))
 
 	for name, ch := range map[string]<-chan SubscriberEvent{"A": subA, "B": subB, "C": subC} {
 		ev := readSubscriberEvent(t, ch, time.Second)
@@ -361,7 +361,7 @@ func TestYieldingSource_SubscribeCleanupOnContextCancel(t *testing.T) {
 	}, time.Second, 10*time.Millisecond, "ctx cancel must release the subscriber slot")
 
 	// Yield after cancel must not panic on the closed chan.
-	require.NoError(t, yield(fakePayload{Msg: "post-cancel"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "post-cancel"}))
 }
 
 // TestYieldingSource_SubscribeDropsOnSlowConsumer verifies the bounded
@@ -381,9 +381,9 @@ func TestYieldingSource_SubscribeDropsOnSlowConsumer(t *testing.T) {
 	ch, _ := src.Subscribe(ctx, SubscribeOpts{})
 
 	// Fill the buffer (cap=1) and then keep yielding without draining.
-	require.NoError(t, yield(fakePayload{Msg: "a"}))
-	require.NoError(t, yield(fakePayload{Msg: "b"})) // dropped — buffer full
-	require.NoError(t, yield(fakePayload{Msg: "c"})) // dropped
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "a"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "b"})) // dropped — buffer full
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "c"})) // dropped
 
 	// Drain the queued event — was buffered before any drop.
 	first := readSubscriberEvent(t, ch, time.Second)
@@ -394,14 +394,14 @@ func TestYieldingSource_SubscribeDropsOnSlowConsumer(t *testing.T) {
 
 	// Recovery yield: the dropped events surface as Truncated=true on
 	// this next event.
-	require.NoError(t, yield(fakePayload{Msg: "d"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "d"}))
 	recovered := readSubscriberEvent(t, ch, time.Second)
 	assert.True(t, recovered.Truncated, "next event after a drop must carry Truncated=true")
 	require.NoError(t, json.Unmarshal(recovered.Event.Data, &d))
 	assert.Equal(t, "d", d.Msg, "the carrying event is the recovery yield, not a re-emission")
 
 	// And the flag clears after one successful flagged delivery.
-	require.NoError(t, yield(fakePayload{Msg: "e"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "e"}))
 	clear := readSubscriberEvent(t, ch, time.Second)
 	assert.False(t, clear.Truncated, "Truncated flag must clear after one delivery")
 }
@@ -505,7 +505,7 @@ func TestYieldingSource_YieldsAfterTerminatedAreNoOp(t *testing.T) {
 	// events flow. We can't observe "no event flowed" via the closed
 	// chan, but we CAN verify the calls don't panic and don't return
 	// errors.
-	assert.NoError(t, yield(fakePayload{Msg: "ghost"}))
+	assert.NoError(t, yield(context.Background(), fakePayload{Msg: "ghost"}))
 	assert.NoError(t, src.YieldError(EventDeliveryError{Code: 0, Message: "ghost-err"}))
 	assert.NoError(t, src.YieldTerminated(EventDeliveryError{Code: 0, Message: "ghost-term"}))
 

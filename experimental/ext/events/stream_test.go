@@ -25,7 +25,7 @@ type streamTestStack struct {
 	srv       *server.Server
 	transport *server.InProcessTransport
 	source    *YieldingSource[fakePayload]
-	yield     func(fakePayload) error
+	yield     func(context.Context, fakePayload) error
 	notifs    chan capturedNotif
 }
 
@@ -233,7 +233,7 @@ func TestStream_EventNotificationCarriesRequestId(t *testing.T) {
 	// Drain the initial active notification.
 	expectNotif(t, st.notifs, "notifications/events/active", time.Second)
 
-	require.NoError(t, st.yield(fakePayload{Msg: "hello"}))
+	require.NoError(t, st.yield(context.Background(), fakePayload{Msg: "hello"}))
 	n := expectNotif(t, st.notifs, "notifications/events/event", time.Second)
 
 	var p map[string]any

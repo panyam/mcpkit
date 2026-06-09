@@ -79,12 +79,12 @@ type localEmitter struct {
 	webhooks *WebhookRegistry
 }
 
-func (e *localEmitter) Emit(_ context.Context, event Event) error {
+func (e *localEmitter) Emit(ctx context.Context, event Event) error {
 	if e.srv != nil {
-		Emit(e.srv, event)
+		Emit(ctx, e.srv, event)
 	}
 	if e.webhooks != nil {
-		EmitToWebhooks(e.webhooks, event)
+		EmitToWebhooks(ctx, e.webhooks, event)
 	}
 	return nil
 }

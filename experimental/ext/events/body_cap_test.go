@@ -1,6 +1,7 @@
 package events
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -46,7 +47,7 @@ func TestDelivery_OversizedEventNotPosted(t *testing.T) {
 	// Build a payload that, when JSON-marshaled with the envelope,
 	// exceeds 1 KiB. 2 KiB of "A" inside Data is enough.
 	bigData, _ := json.Marshal(map[string]string{"text": strings.Repeat("A", 2048)})
-	r.Deliver(Event{
+	r.Deliver(context.Background(), Event{
 		EventID:   "evt_oversize",
 		Name:      "fake.event",
 		Timestamp: time.Now().Format(time.RFC3339),
@@ -76,7 +77,7 @@ func TestDelivery_OversizedEventLogged(t *testing.T) {
 	r.Register(RegisterParams{CanonicalKey: []byte("k"), DerivedID: "sub_test", URL: srv.URL, Secret: "whsec_secret", MaxAgeSeconds: 0})
 
 	bigData, _ := json.Marshal(map[string]string{"text": strings.Repeat("B", 2048)})
-	r.Deliver(Event{
+	r.Deliver(context.Background(), Event{
 		EventID:   "evt_oversize_logged",
 		Name:      "fake.event",
 		Timestamp: time.Now().Format(time.RFC3339),
@@ -112,7 +113,7 @@ func TestDelivery_413NotRetried(t *testing.T) {
 	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true))
 	r.Register(RegisterParams{CanonicalKey: []byte("k"), DerivedID: "sub_test", URL: srv.URL, Secret: "whsec_secret", MaxAgeSeconds: 0})
 
-	r.Deliver(MakeEvent("fake.event", "evt_413", "1", time.Now(),
+	r.Deliver(context.Background(), MakeEvent("fake.event", "evt_413", "1", time.Now(),
 		map[string]string{"text": "tiny"}))
 
 	// Generous wait — if 413 were retried with backoff, we'd see 4 attempts

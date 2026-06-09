@@ -96,7 +96,7 @@ func TestMatchTransform_Push_MatchFiltersSubscribers(t *testing.T) {
 	chLow, _ := src.Subscribe(ctx, SubscribeOpts{Principal: "bob", Params: map[string]any{"severity": "low"}})
 	chAll, _ := src.Subscribe(ctx, SubscribeOpts{Principal: "carol", Params: nil})
 
-	require.NoError(t, yield(sevPayload{Severity: "high", Reporter: "alice@x"}))
+	require.NoError(t, yield(context.Background(), sevPayload{Severity: "high", Reporter: "alice@x"}))
 
 	// chHigh + chAll should see it; chLow should not.
 	expectEvent := func(label string, ch <-chan SubscriberEvent, want bool) {
@@ -131,7 +131,7 @@ func TestMatchTransform_Push_TransformShapesPerSubscriber(t *testing.T) {
 	chRedact, _ := src.Subscribe(ctx, SubscribeOpts{Params: map[string]any{"redact_pii": true}})
 	chRaw, _ := src.Subscribe(ctx, SubscribeOpts{Params: map[string]any{"redact_pii": false}})
 
-	require.NoError(t, yield(sevPayload{Severity: "high", Reporter: "alice@x"}))
+	require.NoError(t, yield(context.Background(), sevPayload{Severity: "high", Reporter: "alice@x"}))
 
 	pickPayload := func(ch <-chan SubscriberEvent) sevPayload {
 		t.Helper()
@@ -166,7 +166,7 @@ func TestMatchTransform_Push_NilHooksAreNoop(t *testing.T) {
 	defer cancel()
 	ch, _ := src.Subscribe(ctx, SubscribeOpts{Params: map[string]any{"severity": "low"}})
 
-	require.NoError(t, yield(sevPayload{Severity: "high", Reporter: "alice@x"}))
+	require.NoError(t, yield(context.Background(), sevPayload{Severity: "high", Reporter: "alice@x"}))
 
 	select {
 	case se := <-ch:
@@ -198,7 +198,7 @@ func TestMatchTransform_Push_PanicSafe(t *testing.T) {
 	defer cancel()
 	ch, _ := src.Subscribe(ctx, SubscribeOpts{Params: map[string]any{"severity": "high"}})
 
-	require.NoError(t, yield(sevPayload{Severity: "high", Reporter: "alice@x"}))
+	require.NoError(t, yield(context.Background(), sevPayload{Severity: "high", Reporter: "alice@x"}))
 
 	// Match panic → safeMatch returns false → subscriber does not
 	// receive. The fanout itself MUST NOT crash.
@@ -280,7 +280,7 @@ func TestMatchTransform_Webhook_MatchAndTransformPerTarget(t *testing.T) {
 	// C: match high, redact → receives body with empty Reporter
 	subscribe(rC.URL, map[string]any{"severity": "high", "redact_pii": true}, 'c')
 
-	require.NoError(t, yield(sevPayload{Severity: "high", Reporter: "alice@x"}))
+	require.NoError(t, yield(context.Background(), sevPayload{Severity: "high", Reporter: "alice@x"}))
 
 	// Async deliver — wait briefly for all three (or just the
 	// expected two) to land.
@@ -379,7 +379,7 @@ func TestMatchTransform_Webhook_FiltersByEventName(t *testing.T) {
 	require.Nil(t, resp.Error)
 
 	// Yield from src.a — should NOT deliver to src.b's webhook.
-	require.NoError(t, yieldA(sevPayload{Severity: "high"}))
+	require.NoError(t, yieldA(context.Background(), sevPayload{Severity: "high"}))
 
 	time.Sleep(150 * time.Millisecond)
 	if got := hits.Load(); got != 0 {
@@ -408,8 +408,8 @@ func TestMatchTransform_Poll_AppliesPerCall(t *testing.T) {
 	finishInitHandshake(t, srv)
 
 	// Pre-populate two events of differing severity.
-	require.NoError(t, yield(sevPayload{Severity: "high", Reporter: "h@x"}))
-	require.NoError(t, yield(sevPayload{Severity: "low", Reporter: "l@x"}))
+	require.NoError(t, yield(context.Background(), sevPayload{Severity: "high", Reporter: "h@x"}))
+	require.NoError(t, yield(context.Background(), sevPayload{Severity: "low", Reporter: "l@x"}))
 
 	pollAndDecode := func(params map[string]any) []sevPayload {
 		t.Helper()
@@ -512,7 +512,7 @@ func TestMatchTransform_CrossModeParity(t *testing.T) {
 	require.Nil(t, resp.Error)
 
 	// Yield matches.
-	require.NoError(t, yield(sevPayload{Severity: "high", Reporter: "h@x"}))
+	require.NoError(t, yield(context.Background(), sevPayload{Severity: "high", Reporter: "h@x"}))
 
 	// Push delivery
 	var pushPayload sevPayload

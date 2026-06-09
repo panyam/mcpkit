@@ -316,3 +316,35 @@ Based on Peter Alexander's design sketch (triggers-events-wg PR #1). Notable cho
 | **`events/stream`** | Deferred — push uses `Server.Broadcast` for now |
 | **Typed contexts** | Handlers receive `core.MethodContext` (EmitLog, AuthClaims, etc.) |
 | **Yield-style SDK** | `YieldingSource` (Casey + Peter, WG PR #1 line 609) — non-normative SDK ergonomic |
+
+## Tracing across the events bus (SEP-414 P6, issue 683)
+
+W3C Trace Context propagates across every gate in the event lifecycle so a yield on replica A and a downstream webhook delivery (or a poll-side replay on replica B) appear in Tempo as one stitched trace.
+
+**Four gates, three carriers, one consistent rule.** The carriers are picked per gate by what's available at that boundary:
+
+| Gate | Carrier | Where |
+|---|---|---|
+| 1. `yield(ctx, data)` | `event.Meta.traceparent` (persistent) + `ctx` (in-process) | `YieldingSource.yield` stamps `Meta` from `ctx`; emit hook receives the same `ctx` |
+| 2. emit hook → `Emitter.Emit(ctx, event)` | `ctx` | `Register` passes the hook's `ctx` straight to the configured Emitter |
+| 3. `WebhookRegistry.Deliver(ctx, event)` → outbound HTTP | HTTP `traceparent` header | `deliver()` extracts from `ctx` (preferred) or `event.Meta` (fallback for replayed events), stamps the header before `client.Do` |
+| 4. `HTTPSource.serveInject` (receiving replica) | inbound HTTP header → `ctx` → `event.Meta` | The handler reads the `traceparent` header, builds `core.TraceContext`, attaches via `core.WithTraceContext`, and calls `s.yield(ctx, data)` — closes the round-trip |
+
+**Caller-preserves rule.** If `SetMetaFunc` pre-stamps `event.Meta.traceparent`, the yield-time auto-injection is skipped — matches the same caller-wins semantic used by `core.InjectTraceContextIntoParams` (server outbound `_meta`) and the TS-side Apps Bridge relay (PR 702). The rule is uniform across every trace-context carrier in mcpkit.
+
+**Why three carriers, not one?** `ctx` is gone the moment a goroutine exits or an HTTP request crosses the wire. `event.Meta` survives JSON serialization, persistence, and replay. HTTP headers survive the network hop. Each carrier is appropriate to its gate; together they keep the trace ID intact across every transition.
+
+**End-to-end demo shape** (multi-replica, with webhook fanout to a peer):
+
+```
+yield(ctx, data) on replica A
+└─ event.Meta.traceparent stamped
+   └─ emit hook (ctx) → LocalEmitter → WebhookRegistry.Deliver(ctx, event)
+      └─ HTTP POST to replica B with `traceparent` header
+         └─ replica B HTTPSource.serveInject reads header
+            └─ yield(ctx, data) on replica B
+               └─ event.Meta.traceparent stamped again (same trace ID)
+                  └─ downstream subscribers / webhooks continue the chain
+```
+
+A single TraceID stitches all of this in Grafana / Tempo.
