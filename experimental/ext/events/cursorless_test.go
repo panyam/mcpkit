@@ -1,6 +1,7 @@
 package events
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -65,9 +66,9 @@ func TestYieldingSource_WithoutCursorsEmitsNilCursor(t *testing.T) {
 	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"}, WithoutCursors())
 
 	var captured Event
-	src.SetEmitHook(func(e Event) { captured = e })
+	src.SetEmitHook(func(ctx context.Context, e Event) { captured = e })
 
-	require.NoError(t, yield(fakePayload{Msg: "x"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "x"}))
 	assert.False(t, captured.HasCursor(),
 		"cursorless source must emit events with nil cursor")
 }
@@ -77,8 +78,8 @@ func TestYieldingSource_WithoutCursorsEmitsNilCursor(t *testing.T) {
 // memory and signals to operators that replay isn't supported.
 func TestYieldingSource_WithoutCursorsDoesNotBuffer(t *testing.T) {
 	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"}, WithoutCursors())
-	require.NoError(t, yield(fakePayload{Msg: "a"}))
-	require.NoError(t, yield(fakePayload{Msg: "b"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "a"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "b"}))
 
 	assert.Equal(t, 0, src.Len(), "cursorless source must not buffer")
 	assert.Empty(t, src.Recent(50), "Recent on cursorless source must be empty")
@@ -92,7 +93,7 @@ func TestYieldingSource_WithoutCursorsDoesNotBuffer(t *testing.T) {
 func TestYieldingSource_WithoutCursorsPollIsAlwaysEmpty(t *testing.T) {
 	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"}, WithoutCursors())
 	for i := 0; i < 3; i++ {
-		require.NoError(t, yield(fakePayload{Msg: "x"}))
+		require.NoError(t, yield(context.Background(), fakePayload{Msg: "x"}))
 	}
 
 	pr := src.Poll("", 100)
@@ -105,7 +106,7 @@ func TestYieldingSource_WithoutCursorsPollIsAlwaysEmpty(t *testing.T) {
 // `cursor: null` should resolve to a real value or stay null.
 func TestYieldingSource_WithoutCursorsLatestIsEmpty(t *testing.T) {
 	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"}, WithoutCursors())
-	require.NoError(t, yield(fakePayload{Msg: "x"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "x"}))
 	assert.Equal(t, "", src.Latest())
 }
 
@@ -127,8 +128,8 @@ func TestYieldingSource_DefIsCursorless(t *testing.T) {
 func TestYieldingSource_LatestReturnsHeadCursor(t *testing.T) {
 	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"})
 	assert.Equal(t, "", src.Latest(), "empty source has no head")
-	require.NoError(t, yield(fakePayload{Msg: "a"}))
-	require.NoError(t, yield(fakePayload{Msg: "b"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "a"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "b"}))
 	assert.NotEmpty(t, src.Latest())
 	assert.Equal(t, "2", src.Latest(), "memory store assigns monotonic int cursors starting at 1")
 }

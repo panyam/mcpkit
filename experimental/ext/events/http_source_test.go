@@ -1,6 +1,7 @@
 package events_test
 
 import (
+	"context"
 	"bytes"
 	"net/http"
 	"net/http/httptest"
@@ -142,7 +143,7 @@ func TestHTTPSource_YieldingOptionsForwarded(t *testing.T) {
 func TestHTTPSource_InProcessYieldEquivalentToHTTP(t *testing.T) {
 	src, srv := newChatHTTPSource(t, events.HTTPSourceConfig{})
 
-	require.NoError(t, src.Yield(chatMsg{Sender: "alice", Text: "in-proc"}))
+	require.NoError(t, src.Yield(context.Background(), chatMsg{Sender: "alice", Text: "in-proc"}))
 
 	resp := postInject(t, srv, "", `{"sender":"bob","text":"via-http"}`)
 	resp.Body.Close()

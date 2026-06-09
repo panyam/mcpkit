@@ -13,7 +13,36 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/panyam/mcpkit/core"
 )
+
+// HTTP header names for the W3C Trace Context propagation that
+// Deliver / DeliverToTarget stamp on every outbound POST when a
+// trace context is available — SEP-414 P6 (issue 683). Bare W3C
+// names; not under any io.modelcontextprotocol/ namespace.
+const (
+	traceparentHTTPHeader = "traceparent"
+	tracestateHTTPHeader  = "tracestate"
+)
+
+// traceContextForDelivery resolves the trace context to stamp on an
+// outbound webhook POST. Precedence:
+//  1. ctx (passed in from the in-process call chain — Register's
+//     emit hook, EmitToWebhooks helper, etc.)
+//  2. event.Meta (the persistent carrier — caller pre-stamped via
+//     YieldingSource.SetMetaFunc or the yield-time auto-injection)
+//
+// Returns a zero TraceContext when no source has one — the caller
+// skips setting the HTTP headers in that case, preserving "no
+// propagation when none was intended" for backward-compat with
+// pre-SEP-414 receivers.
+func traceContextForDelivery(ctx context.Context, event Event) core.TraceContext {
+	if tc := core.TraceContextFromContext(ctx); !tc.IsZero() {
+		return tc
+	}
+	return core.ExtractTraceContext(event.Meta)
+}
 
 // Webhook TTL spec envelope. WG guidance (Peter, 2026-06-05 in
 // #triggers-events-wg) is that webhook subscription TTLs must fall in
@@ -734,7 +763,11 @@ func (r *WebhookRegistry) pruneExpiredLocked() []WebhookTarget {
 // (unregistered between the index lookup and this call, suspended,
 // or expired). Caller treats this as a normal drop — racing
 // targeted-emit against teardown is expected, not an error.
-func (r *WebhookRegistry) DeliverToTarget(canonicalKey []byte, event Event) bool {
+//
+// ctx threads through to r.deliver so the outbound HTTP POST carries
+// the W3C `traceparent` header — SEP-414 P6 propagation across the
+// cross-process events bus boundary (issue 683).
+func (r *WebhookRegistry) DeliverToTarget(ctx context.Context, canonicalKey []byte, event Event) bool {
 	r.mu.RLock()
 	resp, _ := r.store.GetWebhook(context.Background(), GetWebhookRequest{CanonicalKey: canonicalKey})
 	r.mu.RUnlock()
@@ -756,7 +789,8 @@ func (r *WebhookRegistry) DeliverToTarget(canonicalKey []byte, event Event) bool
 			event.EventID, len(body), r.maxBodyBytes, target.ID)
 		return false
 	}
-	go r.deliver(target, event.EventID, body)
+	tc := traceContextForDelivery(ctx, event)
+	go r.deliver(target, event.EventID, body, tc)
 	return true
 }
 
@@ -792,7 +826,7 @@ func (r *WebhookRegistry) ExpireAll() {
 // haven't installed a resolver (TypedSource authors hand-emitting)
 // get a passthrough — Match=nil delivers to all matching-name targets,
 // Transform=nil reuses the original body.
-func (r *WebhookRegistry) Deliver(event Event) {
+func (r *WebhookRegistry) Deliver(ctx context.Context, event Event) {
 	targets := r.Targets()
 	if len(targets) == 0 {
 		return
@@ -856,7 +890,12 @@ func (r *WebhookRegistry) Deliver(event Event) {
 			}
 			body = b
 		}
-		go r.deliver(t, delivered.EventID, body)
+		// Resolve the per-target trace context off the outer ctx /
+		// event.Meta (we resolve once per target rather than once
+		// outside the loop so each target's delivery span lifetime
+		// is independent). See SEP-414 P6 (issue 683).
+		tc := traceContextForDelivery(ctx, delivered)
+		go r.deliver(t, delivered.EventID, body, tc)
 	}
 }
 
@@ -994,7 +1033,12 @@ func classifyTransportError(err error) DeliveryErrorBucket {
 // eventID is the event's identifier; used as webhook-id (stable across
 // retries so the receiver's dedup works). Spec: SHOULD retry with
 // exponential backoff.
-func (r *WebhookRegistry) deliver(target WebhookTarget, eventID string, body []byte) {
+//
+// tc is the W3C trace context resolved at Deliver-time; when non-zero
+// the `traceparent` (and `tracestate` if present) HTTP headers are
+// stamped on every retry attempt so the receiver can stitch in.
+// SEP-414 P6 (issue 683).
+func (r *WebhookRegistry) deliver(target WebhookTarget, eventID string, body []byte, tc core.TraceContext) {
 	backoff := initialBackoff
 	// Tracks the last per-attempt failure bucket. Recorded onto
 	// deliveryStatus only after all retries are exhausted (i.e., this
@@ -1033,6 +1077,12 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, eventID string, body []b
 			return // not retryable
 		}
 		signed.applyHeaders(req)
+		if !tc.IsZero() {
+			req.Header.Set(traceparentHTTPHeader, tc.Traceparent)
+			if tc.Tracestate != "" {
+				req.Header.Set(tracestateHTTPHeader, tc.Tracestate)
+			}
+		}
 
 		resp, err := r.client.Do(req)
 		if err != nil {
