@@ -432,6 +432,16 @@ upkcl: ## Start Keycloak container for interop tests (skips if already healthy)
 			$(KC_IMAGE) start-dev --import-realm \
 			--log-level=INFO,org.keycloak.events:DEBUG; \
 		echo "Keycloak starting on port $(KC_PORT)... (realm import takes ~30s)"; \
+		echo "Waiting for realm import to land before flipping master sslRequired..."; \
+		for i in $$(seq 1 60); do \
+			curl -sf http://localhost:$(KC_PORT)/realms/$(KC_REALM) > /dev/null 2>&1 && break; \
+			sleep 1; \
+		done; \
+		echo "Flipping master realm sslRequired=NONE so the test admin-token grant works over HTTP..."; \
+		docker exec $(KC_CONTAINER) /opt/keycloak/bin/kcadm.sh config credentials \
+			--server http://localhost:8080 --realm master --user admin --password admin >/dev/null 2>&1 && \
+		docker exec $(KC_CONTAINER) /opt/keycloak/bin/kcadm.sh update realms/master -s sslRequired=NONE >/dev/null && \
+		echo "[upkcl] master sslRequired=NONE (the bcl_test admin-cli password grant requires it)"; \
 		echo "Run 'make kcllogs' to watch startup, 'make testkcl' when ready"; \
 	fi
 
