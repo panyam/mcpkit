@@ -35,19 +35,23 @@ DEMO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # pipes the string into the iTerm2 session as if typed.
 cmd_for() {
   # ${tenant,,} is bash 4+; macOS ships bash 3.2, so route through tr.
-  local tenant=$1 verb=$2 lower user
+  # Pollers use index 1 (userX1), webhooks use index 2 (userX2) — keeps
+  # the two clients per tenant under distinct Keycloak sessions so the
+  # Sessions UI shows a clean 6-row table (3 tenants × 2 users) instead
+  # of 3 rows × 2 sessions per user.
+  local tenant=$1 verb=$2 idx=$3 lower user
   lower=$(printf '%s' "$tenant" | tr '[:upper:]' '[:lower:]')
-  user="user${lower}1"
+  user="user${lower}${idx}"
   printf "cd %q && make %s TENANT=%s USERNAME=%s PASSWORD=%s" \
     "$DEMO_DIR" "$verb" "$tenant" "$user" "$user"
 }
 
-POLL_A=$(cmd_for A poller)
-POLL_B=$(cmd_for B poller)
-POLL_C=$(cmd_for C poller)
-WEB_A=$(cmd_for A webhook)
-WEB_B=$(cmd_for B webhook)
-WEB_C=$(cmd_for C webhook)
+POLL_A=$(cmd_for A poller 1)
+POLL_B=$(cmd_for B poller 1)
+POLL_C=$(cmd_for C poller 1)
+WEB_A=$(cmd_for A webhook 2)
+WEB_B=$(cmd_for B webhook 2)
+WEB_C=$(cmd_for C webhook 2)
 
 # AppleScript split semantics (iTerm2):
 #   - "split vertically"   → vertical divider, new pane to the RIGHT
