@@ -242,7 +242,7 @@
 </tr>
 <tr>
 <td><code>tasks.Config</code></td>
-<td>Holds <code>Server</code>, <code>Store</code>, <code>DefaultTTLMs</code>, <code>DefaultPollMs</code>.</td>
+<td>Holds <code>Server</code>, <code>Store</code>, <code>DefaultTTLMs</code>, <code>DefaultPollMs</code>, <code>TracerProvider</code>.</td>
 </tr>
 <tr>
 <td><code>tasks.TaskContext</code></td>
@@ -254,6 +254,18 @@
 </tr>
 </tbody>
 </table>
+<h2 id="tracing-sep-414-p6--issue-659">Tracing (SEP-414 P6 — issue 659) <a class="anchor" href="#tracing-sep-414-p6--issue-659">¶</a></h2>
+<p>Optional. Set <code>Config.TracerProvider</code> to opt the runtime into span-link instrumentation of the async task lifecycle:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>tasks.<span style="color:#900;font-weight:bold">Register</span>(tasks.Config{
+</span></span><span style="display:flex;"><span>    Server:         srv,
+</span></span><span style="display:flex;"><span>    TracerProvider: mcpotel.<span style="color:#900;font-weight:bold">NewProvider</span>(otelTP), <span style="color:#998;font-style:italic">// or any core.TracerProvider
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>})
+</span></span></code></pre><p>What gets emitted:</p>
+<ul>
+<li><strong><code>task.execute</code> span on the GoAsync path</strong> — a NEW root trace (not a child of the create span — the work outlives the <code>tools/call</code> dispatch span) carrying a <code>Link</code> back to the originating <code>tools/call</code> create span. Attributes: <code>mcp.task.id</code> (at start), <code>mcp.task.status</code> (stamped at End from the final stored status — <code>completed</code> / <code>failed</code> / <code>cancelled</code> / <code>input_required</code>). <code>RecordError</code> fires on protocol-level failures (mwErr, resp.Error, unexpected result shape, panic recover); handler-returned errors map to <code>completed</code> with <code>IsError=true</code> per SEP-2663 semantics.</li>
+<li><strong><code>AddLink</code> on each <code>tasks/get</code> / <code>tasks/update</code> / <code>tasks/cancel</code> dispatch span</strong> — points back to the originating create span so a backend can pivot from any poll into the whole lifecycle.</li>
+</ul>
+<p>Nil or <code>core.NoopTracerProvider{}</code> (the default) skips the install — zero overhead, zero allocation. ext/tasks depends on <code>core</code> only; no compile-time dep on ext/otel. The contract details (<code>core.WithNewRootSpan</code>, <code>core.LinkedTracerProvider</code>, <code>core.Link</code>) live in <code>docs/SEP_414_OTEL.md</code> § Span links and § New-root-span marker.</p>
 <p>The wire types (<code>CreateTaskResult</code>, <code>DetailedTask</code>, <code>UpdateTaskRequest</code>, <code>TaskInfoV2</code>, etc.) live in <code>core/task_v2.go</code> since they&rsquo;re consumed by both server and client.</p>
 <h2 id="relationship-to-server">Relationship to server/ <a class="anchor" href="#relationship-to-server">¶</a></h2>
 <ul>
