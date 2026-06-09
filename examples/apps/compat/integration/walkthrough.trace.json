@@ -9,35 +9,35 @@
     "title": "Connect to the fixture",
     "step_id": "step-1",
     "visit": 1,
-    "output": "    ERROR: initialize failed: Post \"http://127.0.0.1:3204/mcp\": dial tcp 127.0.0.1:3204: connect: connection refused\n    Start the server with: make serve\n"
+    "output": "    connected to Integration Test Server 1.0.0\n"
   },
   {
     "kind": "step",
     "title": "tools/list + resources/list — surfaces side-by-side",
     "step_id": "step-2",
     "visit": 1,
-    "output": "    ERROR: Post \"http://127.0.0.1:3204/mcp\": dial tcp 127.0.0.1:3204: connect: connection refused\n"
+    "output": "    tool: get-time  _meta=map[ui:map[resourceUri:ui://get-time/mcp-app.html] ui/resourceUri:ui://get-time/mcp-app.html]\n    resource: ui://get-time/mcp-app.html  (get-time UI, text/html;profile=mcp-app)\n    resource: resource:///sample-report.txt  (resource:///sample-report.txt, text/plain)\n"
   },
   {
     "kind": "step",
     "title": "tools/call get-time — RFC 3339 nano timestamp",
     "step_id": "step-3",
     "visit": 1,
-    "output": "    ERROR: Post \"http://127.0.0.1:3204/mcp\": dial tcp 127.0.0.1:3204: connect: connection refused\n"
+    "output": "    structuredContent: {\n      \"time\": \"2026-06-09T01:42:47.19397Z\"\n    }\n"
   },
   {
     "kind": "step",
     "title": "resources/read on resource:///sample-report.txt — ResourceLink content",
     "step_id": "step-4",
     "visit": 1,
-    "output": "    ERROR: Post \"http://127.0.0.1:3204/mcp\": dial tcp 127.0.0.1:3204: connect: connection refused\n"
+    "output": "    Integration Test Server — Sample Report\nGenerated: 2026-06-09T01:42:47.787222Z\n\nThis file was downloaded via MCP ResourceLink.\nThe host resolved it by calling resources/read on the server.\n"
   },
   {
     "kind": "step",
     "title": "resources/read on ui://get-time/mcp-app.html — the App iframe",
     "step_id": "step-5",
     "visit": 1,
-    "output": "    ERROR: Post \"http://127.0.0.1:3204/mcp\": dial tcp 127.0.0.1:3204: connect: connection refused\n"
+    "output": "    531181 bytes; first 200:\n      \u003c!DOCTYPE html\u003e\n\u003chtml lang=\"en\"\u003e\n\u003chead\u003e\n  \u003cmeta charset=\"UTF-8\"\u003e\n  \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"\u003e\n  \u003cmeta name=\"color-scheme\" content=\"light dark\"\u003e\n  \u003ctitle\u003eGet…\n"
   },
   {
     "kind": "section",
