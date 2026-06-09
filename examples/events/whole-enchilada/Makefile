@@ -106,6 +106,7 @@ newtoken-ci: ## Acquire a bearer token via ROPC (CI / scripting). TENANT=A|B|C U
 		--user $(USER) \
 		--password $(PASSWORD) \
 		--format=access-token-only
+	@echo
 
 poller: ## Long-running poll subscriber. TENANT=A|B|C TOKEN=<bearer>.
 	@if [ -z "$(TOKEN)" ]; then echo "usage: make poller TENANT=A|B|C TOKEN=<bearer>"; exit 2; fi
