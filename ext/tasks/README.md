@@ -86,9 +86,27 @@ The `examples/mrtr` reference fixture's `test_tool_with_task` walks this exact p
 | Symbol | Purpose |
 |---|---|
 | `tasks.Register(tasks.Config)` | Canonical entry point. |
-| `tasks.Config` | Holds `Server`, `Store`, `DefaultTTLMs`, `DefaultPollMs`. |
+| `tasks.Config` | Holds `Server`, `Store`, `DefaultTTLMs`, `DefaultPollMs`, `TracerProvider`. |
 | `tasks.TaskContext` | Typed-context for tool handlers running as v2 tasks. Exposes `TaskID()`, `ProgressToken()`, `SetStatus(status)`, `TaskElicit(req)`, `TaskSample(req)`. |
 | `tasks.WithTaskContext` / `tasks.GetTaskContext` | Context wiring (mirrors core's typed-context pattern). |
+
+## Tracing (SEP-414 P6 — issue 659)
+
+Optional. Set `Config.TracerProvider` to opt the runtime into span-link instrumentation of the async task lifecycle:
+
+```go
+tasks.Register(tasks.Config{
+    Server:         srv,
+    TracerProvider: mcpotel.NewProvider(otelTP), // or any core.TracerProvider
+})
+```
+
+What gets emitted:
+
+- **`task.execute` span on the GoAsync path** — a NEW root trace (not a child of the create span — the work outlives the `tools/call` dispatch span) carrying a `Link` back to the originating `tools/call` create span. Attributes: `mcp.task.id` (at start), `mcp.task.status` (stamped at End from the final stored status — `completed` / `failed` / `cancelled` / `input_required`). `RecordError` fires on protocol-level failures (mwErr, resp.Error, unexpected result shape, panic recover); handler-returned errors map to `completed` with `IsError=true` per SEP-2663 semantics.
+- **`AddLink` on each `tasks/get` / `tasks/update` / `tasks/cancel` dispatch span** — points back to the originating create span so a backend can pivot from any poll into the whole lifecycle.
+
+Nil or `core.NoopTracerProvider{}` (the default) skips the install — zero overhead, zero allocation. ext/tasks depends on `core` only; no compile-time dep on ext/otel. The contract details (`core.WithNewRootSpan`, `core.LinkedTracerProvider`, `core.Link`) live in `docs/SEP_414_OTEL.md` § Span links and § New-root-span marker.
 
 The wire types (`CreateTaskResult`, `DetailedTask`, `UpdateTaskRequest`, `TaskInfoV2`, etc.) live in `core/task_v2.go` since they're consumed by both server and client.
 
