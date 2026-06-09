@@ -57,7 +57,7 @@ smoke: ## Run smoke tests (starts test servers, tests both transports via curl)
 # Conformance shims — actual logic lives in conformance/Makefile.
 
 testconfall: ## Run base + auth conformance only (delegates to conformance/Makefile)
-	$(MAKE) -C conformance testconfall
+	$(MAKE) -C conformance test
 
 testconf: ## Run MCP conformance test suite (delegates to conformance/Makefile)
 	$(MAKE) -C conformance testconf
