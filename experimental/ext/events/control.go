@@ -103,6 +103,70 @@ func (r *WebhookRegistry) PostTerminated(canonicalKey []byte, controlErr Control
 	go r.deliverControl(target, "terminated", body)
 }
 
+// TerminateBySession fires {type:terminated} envelopes to every
+// subscription whose stored SessionID matches sid, removes those
+// subscriptions from the registry, and fires onRemove per match.
+// Returns the count of subscriptions terminated.
+//
+// Spec §"Authorization" L783-795 designates this exact shape — when
+// the AS revokes a session, the server SHOULD terminate every
+// subscription that the session authorized. The trigger comes from an
+// OIDC Back-Channel Logout 1.0 receiver (ext/auth.BackChannelLogoutHandler);
+// this method is the events-lib side of the wire-up. See issue 709.
+//
+// Implementation: O(N) scan of the webhook store today — the demo and
+// most current deployments have N small enough that a secondary index
+// would be premature. When N gets large enough to matter the same
+// method body can call a future store.ListBySessionID hook on the
+// WebhookStore interface without changing the public API.
+//
+// sid == "" is a no-op (anonymous subscriptions can't carry a session
+// to revoke).
+func (r *WebhookRegistry) TerminateBySession(sid string, controlErr ControlError) int {
+	if sid == "" {
+		return 0
+	}
+	r.mu.RLock()
+	listResp, _ := r.store.ListWebhooks(context.Background(), ListWebhooksRequest{})
+	r.mu.RUnlock()
+
+	var killed int
+	for _, t := range listResp.Targets {
+		if t.SessionID != sid {
+			continue
+		}
+		r.PostTerminated(t.CanonicalKey, controlErr)
+		killed++
+	}
+	return killed
+}
+
+// TerminateBySubject is the broader sibling of TerminateBySession —
+// fires {type:terminated} envelopes to every subscription whose stored
+// Subject matches sub. Used when the BCL logout_token carries only
+// `sub` (the spec allows AS to omit `sid` when the revocation applies
+// to all of the subject's sessions). sub == "" is a no-op.
+//
+// O(N) scan, same caveats as TerminateBySession.
+func (r *WebhookRegistry) TerminateBySubject(sub string, controlErr ControlError) int {
+	if sub == "" {
+		return 0
+	}
+	r.mu.RLock()
+	listResp, _ := r.store.ListWebhooks(context.Background(), ListWebhooksRequest{})
+	r.mu.RUnlock()
+
+	var killed int
+	for _, t := range listResp.Targets {
+		if t.Subject != sub {
+			continue
+		}
+		r.PostTerminated(t.CanonicalKey, controlErr)
+		killed++
+	}
+	return killed
+}
+
 // postTerminatedSilent POSTs a {type:terminated} envelope to a target
 // WITHOUT removing it from the registry. Distinct from the public
 // PostTerminated which removes — the suspend transition (per spec

@@ -290,11 +290,17 @@ func (v *JWTValidator) Validate(r *http.Request) error {
 		}
 	}
 
+	// SessionID — OIDC `sid` claim (issue 709). Empty when absent
+	// (legacy issuers, non-OIDC tokens). Consumed by BCL fan-out to
+	// match a revoked session to subscriptions / streams keyed on it.
+	sid, _ := mapClaims["sid"].(string)
+
 	// Build claims
 	claims := &mcpcore.Claims{
-		Subject: userID,
-		Scopes:  scopes,
-		Extra:   customClaims,
+		Subject:   userID,
+		SessionID: sid,
+		Scopes:    scopes,
+		Extra:     customClaims,
 	}
 	if v.auth.JWTIssuer != "" {
 		claims.Issuer = v.auth.JWTIssuer

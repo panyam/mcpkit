@@ -24,6 +24,20 @@ type Claims struct {
 	// a tenant-aware string identity.
 	Subject string `json:"sub"`
 
+	// SessionID is the OIDC `sid` claim (RFC 8417 / OIDC core § 2),
+	// when present. Populated by validators that can extract it from
+	// the token — JWTValidator reads `sid` directly from MapClaims;
+	// IntrospectionValidator pulls it from the bearer JWT payload
+	// without re-verifying (introspection already vouched). Empty
+	// when the token carries no sid (legacy issuers, opaque tokens,
+	// non-OIDC ASes).
+	//
+	// Consumed by Back-Channel Logout fan-out (panyam/mcpkit issue
+	// 709) so a single AS-revoked session can be matched against
+	// any application-level state keyed on it (webhook subscriptions,
+	// long-running streams, cached lookups).
+	SessionID string `json:"sid,omitempty"`
+
 	// Tenant is the multi-tenancy partition the subject belongs to.
 	// Empty for single-tenant deployments or validators that don't
 	// expose a tenant concept. Populated by the IntrospectionValidator

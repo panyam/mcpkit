@@ -755,6 +755,17 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 			return newForbiddenError(id, "Forbidden")
 		}
 
+		// Capture raw subject + session-id off the claims so the BCL
+		// fan-out (issue 709) can match a revoked session against this
+		// subscription later. Principal stays the canonical-key input
+		// (it's "<tenant>/<subject>"); Subject/SessionID are the AS-
+		// derived metadata, stored separately.
+		var subSubject, subSessionID string
+		if claims := ctx.AuthClaims(); claims != nil {
+			subSubject = claims.Subject
+			subSessionID = claims.SessionID
+		}
+
 		// Spec §"Subscription Identity" → "Key composition" L363: the
 		// subscription is identified by (principal, delivery.url, name,
 		// params). Two subscribes producing identical canonical bytes
@@ -772,6 +783,8 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 			MaxAgeSeconds: req.MaxAge,
 			EventName:     req.Name,
 			Principal:     principal,
+			Subject:       subSubject,
+			SessionID:     subSessionID,
 			Params:        req.Params,
 		})
 
