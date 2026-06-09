@@ -1,11 +1,14 @@
 package events
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/panyam/mcpkit/core"
 )
 
 // HTTPSource is the third source pattern (sibling to YieldingSource and
@@ -35,7 +38,7 @@ import (
 // available on *HTTPSource[Data] without explicit delegation.
 type HTTPSource[Data any] struct {
 	*YieldingSource[Data]
-	yield func(Data) error
+	yield func(context.Context, Data) error
 	cfg   HTTPSourceConfig
 }
 
@@ -98,7 +101,11 @@ func NewHTTPSource[Data any](def EventDef, cfg HTTPSourceConfig) *HTTPSource[Dat
 // holds the *HTTPSource directly can emit events without going through
 // HTTP. Useful for tests and for hybrid demos that mix in-process feeds
 // with HTTP-fed feeds against the same source.
-func (s *HTTPSource[Data]) Yield(data Data) error { return s.yield(data) }
+//
+// ctx threads the W3C trace context through into the underlying
+// yield (and onward through emit hook → webhook delivery's
+// outbound HTTP traceparent header) — SEP-414 P6 (issue 683).
+func (s *HTTPSource[Data]) Yield(ctx context.Context, data Data) error { return s.yield(ctx, data) }
 
 // InjectPath returns the URL path the Handler is mounted at. Defaults
 // to "/events/<def.Name>/inject" unless overridden in HTTPSourceConfig.
@@ -162,7 +169,23 @@ func (s *HTTPSource[Data]) serveInject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.yield(data); err != nil {
+	// SEP-414 P6 (issue 683): extract W3C trace context from the
+	// inbound HTTP headers and attach to ctx so the underlying yield
+	// stamps it onto event.Meta + flows it through the emit hook to
+	// any downstream emitter. Closes the round-trip with the
+	// outbound traceparent header webhook delivery sets — replica A
+	// yields with ctx → webhook out → replica B's serveInject in →
+	// yield with the same trace ID.
+	ctx := r.Context()
+	if tp := r.Header.Get(traceparentHTTPHeader); tp != "" {
+		tc := core.TraceContext{
+			Traceparent: tp,
+			Tracestate:  r.Header.Get(tracestateHTTPHeader),
+		}
+		ctx = core.WithTraceContext(ctx, tc)
+	}
+
+	if err := s.yield(ctx, data); err != nil {
 		http.Error(w, "yield failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}

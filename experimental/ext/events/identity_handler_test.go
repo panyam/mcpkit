@@ -239,7 +239,7 @@ func TestDelivery_EmitsXMCPSubscriptionIDHeader(t *testing.T) {
 	// Direct Deliver bypasses the JSON-RPC handler — what we want to
 	// inspect is the registry's outbound HTTP shape, not the subscribe
 	// flow (covered by other tests).
-	webhooks.Deliver(Event{EventID: "evt_1", Name: "fake.event", Data: json.RawMessage(`{}`)})
+	webhooks.Deliver(context.Background(), Event{EventID: "evt_1", Name: "fake.event", Data: json.RawMessage(`{}`)})
 
 	select {
 	case got := <-gotHeader:
