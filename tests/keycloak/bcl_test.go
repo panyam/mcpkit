@@ -254,13 +254,34 @@ func decodeLogoutToken(t *testing.T, body []byte) map[string]any {
 	require.NoError(t, err, "BCL body should be form-encoded")
 	tok := form.Get("logout_token")
 	require.NotEmpty(t, tok, "BCL POST should carry a logout_token form value (got %q)", string(body))
+	return decodeJWTPayload(t, tok)
+}
+
+// decodeJWTPayload base64-decodes a JWT's middle segment (payload)
+// without verifying the signature and returns the claim map. Used by
+// the BCL probes to compare a captured logout_token's `sid` against
+// the access_token they expect it to derive from.
+func decodeJWTPayload(t *testing.T, tok string) map[string]any {
+	t.Helper()
 	parts := strings.Split(tok, ".")
-	require.Len(t, parts, 3, "logout_token must be a 3-part JWT")
+	require.Len(t, parts, 3, "JWT must have 3 parts; got %d", len(parts))
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
 	require.NoError(t, err)
 	claims := map[string]any{}
 	require.NoError(t, json.Unmarshal(payload, &claims))
 	return claims
+}
+
+// sidOf returns the `sid` claim from an access_token's payload, used
+// as the per-session identifier for fence-post comparisons. Keycloak
+// stamps `sid` on every access_token issued from a session-creating
+// grant (password, browser, etc.).
+func sidOf(t *testing.T, accessToken string) string {
+	t.Helper()
+	claims := decodeJWTPayload(t, accessToken)
+	sid, _ := claims["sid"].(string)
+	require.NotEmpty(t, sid, "access_token must carry a sid claim (session-creating grant required)")
+	return sid
 }
 
 // assertLogoutTokenShape asserts the spec-mandated claim set per
@@ -341,15 +362,45 @@ func expectedRealmIssuer() string {
 // registered backchannel_logout_uris in one shot). Treat this test
 // as a regression pin — if a future Keycloak version flips it to
 // fire BCL, we want to notice and adapt.
+//
+// Fence-post pattern: a bare timeout-based "did anything POST in 2s?"
+// check would pass by luck if Keycloak fired the BCL at 2.1s. Instead
+// we follow logout-all with a known-fires path on a SEPARATE session
+// (user2 via password grant + DELETE that session). When the
+// fence-post BCL arrives, we KNOW Keycloak has finished processing
+// both operations and assert exactly one BCL was captured, with the
+// sid of the fence-post session — not the logout-all batch.
 func TestKeycloak_BCL_DoesNotFireOnRealmLogoutAll(t *testing.T) {
 	cap, adminTok, _, _ := setupBCLProbe(t)
+
+	// Path under test — should NOT fire BCL.
 	status := kcAdminDo(t, adminTok, http.MethodPost,
 		fmt.Sprintf("/admin/realms/%s/logout-all", realmName))
 	require.True(t, status >= 200 && status < 300, "logout-all returned %d", status)
 
-	got := cap.waitFor(t, 2*time.Second)
-	hits, _, _ := cap.snapshot()
-	assert.False(t, got, "Keycloak (current behavior) does NOT fire BCL on /admin/realms/%s/logout-all; got %d POSTs", realmName, hits)
+	// Fence post — create a fresh session on user2, then trigger a
+	// path we KNOW fires BCL. The captured POST's sid identifies
+	// which session produced it.
+	env := NewMCPTestEnv(t)
+	tok2 := getPasswordTokenForUser(t, env.OIDC.TokenEndpoint, testUsername2, testPassword2)
+	fenceSid := sidOf(t, tok2.AccessToken)
+	user2ID := kcUserID(t, adminTok, realmName, testUsername2)
+	sess2ID := kcUserSessionID(t, adminTok, realmName, user2ID)
+	require.NotEmpty(t, sess2ID)
+	status = kcAdminDo(t, adminTok, http.MethodDelete,
+		fmt.Sprintf("/admin/realms/%s/sessions/%s", realmName, sess2ID))
+	require.True(t, status >= 200 && status < 300, "fence-post session delete returned %d", status)
+
+	require.Eventually(t, func() bool {
+		hits, _, _ := cap.snapshot()
+		return hits >= 1
+	}, 5*time.Second, 50*time.Millisecond, "fence-post BCL must arrive")
+
+	hits, bodies, _ := cap.snapshot()
+	require.Equal(t, 1, hits, "exactly one BCL expected: the fence post, NOT logout-all")
+	gotSid, _ := decodeLogoutToken(t, bodies[0])["sid"].(string)
+	assert.Equal(t, fenceSid, gotSid,
+		"BCL must be from the fence-post session — logout-all must not have fired its own BCL")
 }
 
 // TestKeycloak_BCL_FiresOnUserLogout fires
@@ -422,23 +473,27 @@ func TestKeycloak_BCL_FiresOnOIDCLogoutWithRefresh(t *testing.T) {
 // shouldn't fire). The test is a regression pin: if Keycloak ever
 // changes this, we want to notice.
 //
+// Fence-post pattern (same as DoesNotFireOnRealmLogoutAll): after
+// /revoke we trigger a known-fires path on a SEPARATE user2 session
+// and assert exactly one BCL POST arrives — the fence-post one. A
+// bare 2-second-timeout would pass by luck if Keycloak processed
+// /revoke + fired BCL at 2.1s; comparing sids closes that gap.
+//
 // Practically: applications that need backchannel-logout on
 // token-revoke should use the OIDC end-session endpoint
 // (TestKeycloak_BCL_FiresOnOIDCLogoutWithRefresh) instead.
 func TestKeycloak_BCL_DoesNotFireOnTokenRevoke(t *testing.T) {
-	skipIfKeycloakNotRunning(t)
-	adminTok := kcAdminToken(t)
-	cap := newBCLCapture(t)
-	kcSetClientBCLURL(t, adminTok, realmName, confidentialClientID, cap.urlForKeycloak())
+	cap, adminTok, _, _ := setupBCLProbe(t)
 
 	env := NewMCPTestEnv(t)
-	tok := getPasswordTokenForUser(t, env.OIDC.TokenEndpoint, testUsername, testPassword)
-	require.NotEmpty(t, tok.RefreshToken)
+	tok1 := getPasswordTokenForUser(t, env.OIDC.TokenEndpoint, testUsername, testPassword)
+	require.NotEmpty(t, tok1.RefreshToken)
 
+	// Path under test — should NOT fire BCL.
 	body := url.Values{
 		"client_id":       {confidentialClientID},
 		"client_secret":   {confidentialClientSecret},
-		"token":           {tok.RefreshToken},
+		"token":           {tok1.RefreshToken},
 		"token_type_hint": {"refresh_token"},
 	}.Encode()
 	req, _ := http.NewRequest(http.MethodPost,
@@ -451,7 +506,24 @@ func TestKeycloak_BCL_DoesNotFireOnTokenRevoke(t *testing.T) {
 	require.True(t, resp.StatusCode >= 200 && resp.StatusCode < 300,
 		"RFC 7009 revoke returned %d", resp.StatusCode)
 
-	got := cap.waitFor(t, 2*time.Second)
-	hits, _, _ := cap.snapshot()
-	assert.False(t, got, "Keycloak (current behavior) does NOT fire BCL on RFC 7009 /revoke; got %d POSTs", hits)
+	// Fence post — fresh user2 session + DELETE that session.
+	tok2 := getPasswordTokenForUser(t, env.OIDC.TokenEndpoint, testUsername2, testPassword2)
+	fenceSid := sidOf(t, tok2.AccessToken)
+	user2ID := kcUserID(t, adminTok, realmName, testUsername2)
+	sess2ID := kcUserSessionID(t, adminTok, realmName, user2ID)
+	require.NotEmpty(t, sess2ID)
+	status := kcAdminDo(t, adminTok, http.MethodDelete,
+		fmt.Sprintf("/admin/realms/%s/sessions/%s", realmName, sess2ID))
+	require.True(t, status >= 200 && status < 300, "fence-post session delete returned %d", status)
+
+	require.Eventually(t, func() bool {
+		hits, _, _ := cap.snapshot()
+		return hits >= 1
+	}, 5*time.Second, 50*time.Millisecond, "fence-post BCL must arrive")
+
+	hits, bodies, _ := cap.snapshot()
+	require.Equal(t, 1, hits, "exactly one BCL expected: the fence post, NOT /revoke")
+	gotSid, _ := decodeLogoutToken(t, bodies[0])["sid"].(string)
+	assert.Equal(t, fenceSid, gotSid,
+		"BCL must be from the fence-post session — /revoke must not have fired its own BCL")
 }
