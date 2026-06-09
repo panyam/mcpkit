@@ -9,42 +9,42 @@
     "title": "Connect to the fixture",
     "step_id": "step-1",
     "visit": 1,
-    "output": "    ERROR: initialize failed: Post \"http://127.0.0.1:3203/mcp\": dial tcp 127.0.0.1:3203: connect: connection refused\n    Start the server with: make serve\n"
+    "output": "    connected to Debug MCP App Server 1.0.0\n"
   },
   {
     "kind": "step",
     "title": "tools/list — three tools, two visibility shapes",
     "step_id": "step-2",
     "visit": 1,
-    "output": "    ERROR: Post \"http://127.0.0.1:3203/mcp\": dial tcp 127.0.0.1:3203: connect: connection refused\n"
+    "output": "    debug-tool\n      _meta: {\n        \"ui\": {\n          \"resourceUri\": \"ui://debug-tool/mcp-app.html\"\n        },\n        \"ui/resourceUri\": \"ui://debug-tool/mcp-app.html\"\n      }\n    debug-refresh\n      _meta: {\n        \"ui\": {\n          \"resourceUri\": \"ui://debug-tool/mcp-app.html\",\n          \"visibility\": [\n            \"app\"\n          ]\n        },\n        \"ui/resourceUri\": \"ui://debug-tool/mcp-app.html\"\n      }\n    debug-log\n      _meta: {\n        \"ui\": {\n          \"resourceUri\": \"ui://debug-tool/mcp-app.html\",\n          \"visibility\": [\n            \"app\"\n          ]\n        },\n        \"ui/resourceUri\": \"ui://debug-tool/mcp-app.html\"\n      }\n"
   },
   {
     "kind": "step",
     "title": "tools/call debug-tool {} — default contentType text",
     "step_id": "step-3",
     "visit": 1,
-    "output": "    ERROR: Post \"http://127.0.0.1:3203/mcp\": dial tcp 127.0.0.1:3203: connect: connection refused\n"
+    "output": "    structuredContent: {\n      \"config\": {\n        \"contentType\": \"\"\n      },\n      \"counter\": 6,\n      \"timestamp\": \"2026-06-09T01:39:24.415775Z\"\n    }\n"
   },
   {
     "kind": "step",
     "title": "tools/call debug-tool with largeInput + delayMs",
     "step_id": "step-4",
     "visit": 1,
-    "output": "    ERROR: Post \"http://127.0.0.1:3203/mcp\": dial tcp 127.0.0.1:3203: connect: connection refused\n"
+    "output": "    structuredContent: {\n      \"config\": {\n        \"contentType\": \"text\"\n      },\n      \"counter\": 7,\n      \"largeInputLength\": 11,\n      \"timestamp\": \"2026-06-09T01:39:25.087342Z\"\n    }\n"
   },
   {
     "kind": "step",
     "title": "tools/call debug-refresh {} — App-only polling tool",
     "step_id": "step-5",
     "visit": 1,
-    "output": "    ERROR: Post \"http://127.0.0.1:3203/mcp\": dial tcp 127.0.0.1:3203: connect: connection refused\n"
+    "output": "    structuredContent: {\n      \"counter\": 7,\n      \"timestamp\": \"2026-06-09T01:39:25.80589Z\"\n    }\n"
   },
   {
     "kind": "step",
     "title": "tools/call debug-log {type, payload} — App-only event log",
     "step_id": "step-6",
     "visit": 1,
-    "output": "    ERROR: Post \"http://127.0.0.1:3203/mcp\": dial tcp 127.0.0.1:3203: connect: connection refused\n"
+    "output": "    structuredContent: {\n      \"logFile\": \"/tmp/mcp-apps-debug-server.log\",\n      \"logged\": true\n    }\n"
   },
   {
     "kind": "section",
