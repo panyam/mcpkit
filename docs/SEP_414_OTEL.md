@@ -303,9 +303,42 @@ link slices from raw inputs (e.g., `core.ExtractTraceContext` outputs
 that might be zero) without pre-filtering. Calling `AddLink` after
 `End` is a no-op, matching every other Span method's contract.
 
-Unblocks issue 659 (`ext/tasks` task lifecycle linking) and the
-detached edge of issue 664 (server outbound reverse-call spans linked
-to the originating client request).
+Unblocks issue 659 (`ext/tasks` task lifecycle linking — landed in
+PR 719) and the detached edge of issue 664 (server outbound
+reverse-call spans linked to the originating client request).
+
+### New-root-span marker — landed (issue 659; PR 719)
+
+Third small contract helper, added alongside the `ext/tasks` consumer
+work: `core.WithNewRootSpan(ctx) Context` and
+`core.IsNewRootSpanRequested(ctx) bool`. Marks ctx so the next
+TracerProvider.StartSpan / StartSpanLinked call produces a span with
+no parent — even when ctx carries an inherited parent (a
+`core.TraceContext` attached upstream, or the adapter's own internal
+span context, e.g. the OTel `trace.SpanContext` installed by a
+previous StartSpan).
+
+The motivation is async surfaces whose spanned work conceptually
+outlives the originating request: a long-running `task.execute`
+nested under a few-ms create span renders as a multi-hour child of an
+already-ended parent in observability backends. Pair with
+`StartSpanLinked` plus a `Link` back to the originating span so the
+lifecycle stays navigable across the boundary:
+
+```go
+bgCtx = core.WithNewRootSpan(bgCtx)
+bgCtx, span := core.StartSpanLinked(tp, bgCtx, "task.execute",
+    []core.Link{core.LinkFromTraceContext(originatingTC)},
+    core.Attribute{Key: "mcp.task.id", Value: taskID},
+)
+```
+
+The `ext/otel` adapter honors the marker by stripping any OTel span
+context already on ctx before calling `tracer.Start`. Adapters that
+don't honor the marker (or `NoopTracerProvider`) silently ignore it —
+the spawned span starts under whatever parent ctx happened to carry,
+which degrades to the same trace tree the unmarked path would
+produce. Best-effort by design.
 
 ### `mcpotel.NewTracerProvider` helper — landed (issue 674)
 
@@ -509,6 +542,47 @@ yield(ctx, data) on replica A
 ```
 
 Demo wiring lives in `examples/events/whole-enchilada/event-server/main.go` (`events.WithWebhookTracerProvider(tp)` threaded against the existing `commonotel.SetupTelemetry` TP). Adopter sweep (PR 714) updated `examples/events/discord` and `examples/events/telegram` to the new `yield(ctx, ...)` / `SetMetaFunc(ctx, ...)` signatures. Cross-replica peer-fanout Emitter (Redis pubsub) tracked on panyam/mcpkit#634 + panyam/mcpkit#639 with concrete design comments added.
+
+### `ext/tasks` task lifecycle spans — landed (issue 659; PR 719)
+
+Final P6 surface child. A `tools/call` that creates a task spawns a background goroutine whose work outlives the create span — parent-child doesn't fit, so the tasks runtime uses **span links** instead. The dispatch span for the `tools/call` ends in a few ms; `task.execute` runs as a NEW root trace (potentially for hours) with a Link back to the create span. Every later `tasks/get` / `tasks/update` / `tasks/cancel` dispatch span gets an `AddLink` back to the same create span so a backend can pivot from any poll into the whole lifecycle.
+
+**Wiring:** `tasks.Config.TracerProvider core.TracerProvider`. Nil or `core.NoopTracerProvider{}` (the default) skips the install — zero overhead, no spans, no allocation. ext/tasks depends on the core abstraction only; no compile-time dep on ext/otel.
+
+```go
+tasks.Register(tasks.Config{
+    Server:         srv,
+    TracerProvider: mcpotel.NewProvider(otelTP),
+})
+```
+
+**Span shape:**
+
+| Span | Lifecycle | Parent | Links | Attributes |
+|---|---|---|---|---|
+| `tools/call` (dispatch) | request scope | inbound `_meta.traceparent` | — | SEP-414 P2 dispatch attrs |
+| `task.execute` | goroutine lifetime | **none** (new root via `WithNewRootSpan`) | → `tools/call` create span | `mcp.task.id`, `mcp.task.status` (stamped at End) |
+| `tasks/get` / `tasks/update` / `tasks/cancel` | request scope | inbound `_meta.traceparent` | → `tools/call` create span (AddLink) | SEP-414 P2 dispatch attrs |
+
+**Status stamping:** the goroutine's defer reads the final status from the store and stamps `mcp.task.status` (`completed` / `failed` / `cancelled` / `input_required`) on the span, then `End`s. SEP-2663 semantics: handler-returned errors (`(nil, err)`) map to `completed` with `IsError=true` on the inner `ToolResult` — `RecordError` on the span is reserved for protocol-level failures (mwErr, resp.Error, unexpected result shape, panic recover).
+
+**Sync-as-completed path is deliberately silent.** `wrapSyncAsCompletedTask` (a sync-returning handler under `TaskSupport=optional/required`) runs inside the create span — emitting a zero-duration `task.execute` for the wire-uniformity wrapper would be noise. Only the GoAsync path (the work that actually escapes the request span) gets `task.execute`.
+
+**Lifetime of `originTC`** (the runtime map that stashes the create-span TraceContext per taskID): outlives the `activeTask` entry. Polls landing on a terminal task still get the AddLink back to the create span. Matches the existing pattern for `taskErrors` / `creatorToolForTask`.
+
+End-to-end trace shape:
+
+```
+tools/call (dispatch)                         (mcpkit/server, SEP-414 P2)
+└─ [link] task.execute  ────────────────►     (root trace, ext/tasks goroutine, mcp.task.id, mcp.task.status)
+                                              (tool handler work runs inside task.execute)
+
+tasks/get (dispatch, link → original tools/call create span)
+tasks/update (dispatch, link → original tools/call create span)
+tasks/cancel (dispatch, link → original tools/call create span)
+```
+
+End-to-end materialization is proven by `ext/otel/provider_test.go`'s coverage of the `WithNewRootSpan` scrub + `StartSpanLinked` + `AddLink` paths against a real OTel SDK exporter. `ext/tasks/trace_test.go` uses a recording fake `core.TracerProvider` + `core.LinkedTracerProvider` to prove ext/tasks calls the contract correctly without dragging ext/otel into its module graph.
 
 ## Downstream consumers of the Phase 1 contract
 
