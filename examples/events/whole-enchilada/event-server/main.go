@@ -132,6 +132,16 @@ func main() {
 		// anonymous subscribes are rejected per the events spec.
 		cfg.UnsafeAnonymousPrincipal = "demo-principal"
 	}
+
+	// Redis backend (issues 634 + 718): when REDIS_ADDR is set, swap
+	// the in-memory QuotaStore + LocalEmitter defaults for Redis-backed
+	// counterparts. This is the load-bearing change for the
+	// multi-replica push-survival demo — without it, each replica
+	// would maintain its own subscription counts + only fan out events
+	// locally, breaking the cross-replica story.
+	redisBackend := configureRedisBackend(&cfg, srv, webhooks)
+	defer redisBackend.shutdown()
+
 	events.Register(cfg)
 
 	// Back-Channel Logout receivers — one handler per realm, each
