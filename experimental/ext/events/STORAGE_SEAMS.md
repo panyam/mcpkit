@@ -100,7 +100,7 @@ The other seams (626, 631) follow this template. Reviews check against this file
 |---|---|---|
 | In-memory (default) | All seams | Each seam's own file in this directory |
 | GORM (Postgres + SQLite) | `WebhookStore`, `QuotaStore` | `stores/gorm/` (own go.mod; GORM dependency stays out of the events lib) |
-| Redis (planned) | `QuotaStore` + `Emitter` pubsub | Tracked in 634 |
+| Redis | `Emitter` pubsub (`stores/redis/`) | Issue 634 — `Emitter` landed; `QuotaStore` deferred to a separate follow-up |
 
 ## Adjacent seams (not storage, same code conventions)
 
