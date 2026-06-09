@@ -20,12 +20,12 @@ import (
 // ordered newest-first. During initialization the server picks the client's requested
 // version if it appears in this list; otherwise it rejects with the full list.
 //
-// "DRAFT-2026-v1" is the in-flight 2026 protocol revision that carries the SEP-2663
+// "2026-07-28" is the in-flight 2026 protocol revision that carries the SEP-2663
 // tasks extension, SEP-2575 stateless capability override, and SEP-2322 MRTR base
 // types. Accepting it lets draft-aware conformance suites (panyam/mcpconformance
 // feat/tasks-mrtr-extension, upstream PR 262) complete the initialize handshake
 // without forcing them to lie about which version they speak.
-var supportedProtocolVersions = []string{"DRAFT-2026-v1", "2025-11-25", "2025-03-26", "2024-11-05"}
+var supportedProtocolVersions = []string{core.DraftProtocolVersion2026V1, "2025-11-25", "2025-03-26", "2024-11-05"}
 
 // ErrCodeCancelled is the JSON-RPC error code for a cancelled request.
 const ErrCodeCancelled = -32800
@@ -136,7 +136,7 @@ type Dispatcher struct {
 	readCacheScope string
 
 	// allowLegacyOnDraft is an opt-in back-compat escape hatch: when true,
-	// the legacy initialize+session wire is accepted on DRAFT-2026-v1 without
+	// the legacy initialize+session wire is accepted on 2026-07-28 without
 	// per-request _meta enforcement. Default false — SEP-2575 (Accepted)
 	// removes the initialize handshake on draft and mandates per-request
 	// `params._meta.io.modelcontextprotocol/{protocolVersion,clientInfo,
@@ -358,12 +358,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) *core.Resp
 			return core.NewErrorResponse(id, core.ErrCodeInvalidRequest, "server not initialized")
 		}
 
-		// SEP-2575 (Accepted): on DRAFT-2026-v1, the initialize handshake is
+		// SEP-2575 (Accepted): on 2026-07-28, the initialize handshake is
 		// removed; every request MUST carry the per-request _meta envelope
 		// (params._meta.io.modelcontextprotocol/{protocolVersion, clientInfo,
 		// clientCapabilities}). We retain initialize+session as a back-compat
 		// entry point so clients pinned to older versions still negotiate, but
-		// once the negotiated version is DRAFT-2026-v1 every follow-up request
+		// once the negotiated version is 2026-07-28 every follow-up request
 		// must carry _meta or the server MUST reject with -32602 InvalidParams.
 		// allowLegacyOnDraft (WithAllowLegacyOnDraft) is an opt-in escape
 		// hatch for server authors who want to be forgiving — off by default.

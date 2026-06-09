@@ -15,7 +15,7 @@ import (
 // release picks up the requirement (and the official SDKs ship clients
 // that emit Mcp-Method / Mcp-Name).
 var sep2243EnforcedVersions = map[string]bool{
-	"DRAFT-2026-v1": true,
+	core.DraftProtocolVersion2026V1: true,
 }
 
 // isSEP2243EnforcedVersion reports whether the session's negotiated
