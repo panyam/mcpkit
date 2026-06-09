@@ -152,7 +152,7 @@ func TestSubscriptionStream_SubscriptionIdOnAllFrames(t *testing.T) {
 	// Cleaner than fighting the SSE buffer here.
 	go func() {
 		time.Sleep(150 * time.Millisecond)
-		s.Broadcast("notifications/tools/list_changed", nil)
+		s.Broadcast(context.Background(), "notifications/tools/list_changed", nil)
 	}()
 
 	frames := readSSEFrames(t, resp, 2, 3*time.Second)
@@ -204,7 +204,7 @@ func TestSubscriptionStream_FilterHonored(t *testing.T) {
 	}
 
 	// Broadcast a tools event the filter does NOT permit.
-	s.Broadcast("notifications/tools/list_changed", nil)
+	s.Broadcast(context.Background(), "notifications/tools/list_changed", nil)
 
 	// Read with a short deadline — nothing should arrive.
 	leaked := readSSEFrames(t, resp, 1, 600*time.Millisecond)
@@ -243,7 +243,7 @@ func TestSubscriptionStream_DisconnectUnregisters(t *testing.T) {
 	// fail — proves cleanup unwound the registration.
 	done := make(chan struct{})
 	go func() {
-		s.Broadcast("notifications/tools/list_changed", nil)
+		s.Broadcast(context.Background(), "notifications/tools/list_changed", nil)
 		close(done)
 	}()
 	select {
@@ -271,7 +271,7 @@ func TestSubscriptionStream_PromptsListChangedDeliversToPromptsFilter(t *testing
 
 	go func() {
 		time.Sleep(150 * time.Millisecond)
-		s.Broadcast("notifications/prompts/list_changed", nil)
+		s.Broadcast(context.Background(), "notifications/prompts/list_changed", nil)
 	}()
 
 	frames := readSSEFrames(t, resp, 2, 3*time.Second)

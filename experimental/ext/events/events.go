@@ -427,13 +427,13 @@ func Register(cfg Config) {
 // Emit broadcasts an event to all connected SSE clients via Server.Broadcast.
 // This is the push delivery path.
 //
-// ctx threads through for SEP-414 trace propagation. Server.Broadcast
-// doesn't take ctx today (the SSE push path is its own concern); the
-// param is accepted for signature symmetry with EmitToWebhooks and so
-// future Broadcast(ctx, ...) plumbing slots in without churning every
-// caller.
-func Emit(_ context.Context, srv *server.Server, event Event) {
-	srv.Broadcast("notifications/events/event", event)
+// ctx threads through to Server.Broadcast for SEP-414 trace
+// propagation. The notification payload itself is the Event envelope;
+// session-side outbound _meta.traceparent injection happens via the
+// existing SEP-414 P2 NotifyInterceptor wraps the server installs
+// when WithTracerProvider is configured.
+func Emit(ctx context.Context, srv *server.Server, event Event) {
+	srv.Broadcast(ctx, "notifications/events/event", event)
 }
 
 // EmitToWebhooks delivers an event to all registered webhooks. ctx is
