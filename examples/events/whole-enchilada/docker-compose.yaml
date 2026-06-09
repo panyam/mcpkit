@@ -86,6 +86,12 @@ services:
       # without it, each replica maintains its own subscription
       # counts and fans out only locally.
       REDIS_ADDR: ${REDIS_ADDR:-redis.whole-enchilada:6379}
+      # Postgres backend (issue 639). When POSTGRES_DSN is set,
+      # event-server's configurePostgresBackend swaps the in-memory
+      # WebhookStore default for the gorm-backed Postgres impl —
+      # webhook subscriptions survive replica restarts and live in a
+      # single source of truth across replicas.
+      POSTGRES_DSN: ${POSTGRES_DSN:-postgres://postgres:postgres@postgres.whole-enchilada:5432/events?sslmode=disable}
     # `--exporter=auto` means best-effort OTLP with Noop fallback when
     # the collector is unreachable. common.RegisterTelemetryFlags
     # doesn't read EXPORTER from env, so we wire it via the CLI flag;
@@ -102,6 +108,8 @@ services:
       keycloak:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     networks:
       whole-enchilada:
@@ -230,10 +238,14 @@ services:
   #
   # Redis — shared backend for the events lib's QuotaStore (atomic
   # counters; issue 718) AND Emitter pubsub (cross-replica fanout;
-  # issue 634). Tag-pinned 7-alpine; in-memory only (no AOF / RDB) —
-  # counters resetting on restart is acceptable per #407.
+  # issue 634). Tag-pinned 7-alpine. AOF persistence enabled so quota
+  # counters survive container restarts; data lives in a HOST bind
+  # mount at ./data/redis/ so it survives `docker compose down -v` and
+  # is visible/backup-able from the host filesystem. Run `make clean`
+  # to actually drop the data.
   redis:
     image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--dir", "/data"]
     expose:
       - "6379"
     healthcheck:
@@ -241,10 +253,43 @@ services:
       interval: 3s
       timeout: 1s
       retries: 10
+    volumes:
+      - ./data/redis:/data
     networks:
       whole-enchilada:
         aliases:
           - redis.whole-enchilada
+
+  # Postgres — shared backend for the events lib's gorm-backed
+  # WebhookStore (issue 639). Pinned to 18-alpine (current stable).
+  # Host bind mount at ./data/postgres/ — webhook subscriptions
+  # survive ANY teardown short of `make clean` (or manual `rm -rf
+  # data/postgres/`). Default credentials (postgres/postgres) match
+  # the demo-only posture of the Keycloak DEMO-ONLY client secret;
+  # production overrides via POSTGRES_DSN on event-server.
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: events
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d events"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+    # Postgres 18+ recommends mounting at /var/lib/postgresql (parent
+    # of the version-pinned data dir) so pg_upgrade --link works across
+    # major-version bumps. See
+    # https://github.com/docker-library/postgres/issues/37
+    volumes:
+      - ./data/postgres:/var/lib/postgresql
+    networks:
+      whole-enchilada:
+        aliases:
+          - postgres.whole-enchilada
 
   # -------------------------------------------------------------------
   # Stage 4 — Admin frontend + OTel + observability stack (commented)

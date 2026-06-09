@@ -6,6 +6,7 @@ replace (
 	github.com/panyam/mcpkit => ../../../..
 	github.com/panyam/mcpkit/examples/common => ../../../common
 	github.com/panyam/mcpkit/experimental/ext/events => ../../../../experimental/ext/events
+	github.com/panyam/mcpkit/experimental/ext/events/stores/gorm => ../../../../experimental/ext/events/stores/gorm
 	github.com/panyam/mcpkit/experimental/ext/events/stores/redis => ../../../../experimental/ext/events/stores/redis
 	github.com/panyam/mcpkit/ext/auth => ../../../../ext/auth
 	github.com/panyam/mcpkit/ext/otel => ../../../../ext/otel
@@ -16,11 +17,14 @@ require (
 	github.com/panyam/mcpkit/examples/common v0.0.0-20260608213911-f3a385b77e36
 	github.com/panyam/mcpkit/experimental/ext/events v0.0.0
 	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.0.0-00010101000000-000000000000
+	github.com/panyam/mcpkit/experimental/ext/events/stores/gorm v0.0.0-00010101000000-000000000000
 	github.com/panyam/mcpkit/experimental/ext/events/stores/redis v0.0.0-00010101000000-000000000000
 	github.com/panyam/mcpkit/ext/auth v0.0.0-00010101000000-000000000000
 	github.com/panyam/servicekit v0.1.2
 	github.com/redis/go-redis/v9 v9.20.0
 	github.com/stretchr/testify v1.11.1
+	gorm.io/driver/postgres v1.6.0
+	gorm.io/gorm v1.31.1
 )
 
 require (
@@ -53,6 +57,12 @@ require (
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/pgx/v5 v5.6.0 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
+	github.com/jinzhu/inflection v1.0.0 // indirect
+	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
