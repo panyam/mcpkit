@@ -1,0 +1,59 @@
+[
+  {
+    "kind": "section",
+    "title": "Setup",
+    "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nAny MCP host can connect to the running server. The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `make demo-app EXAMPLE=debug-server` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+  },
+  {
+    "kind": "step",
+    "title": "Connect to the fixture",
+    "step_id": "step-1",
+    "visit": 1,
+    "output": "    ERROR: initialize failed: Post \"http://127.0.0.1:3203/mcp\": dial tcp 127.0.0.1:3203: connect: connection refused\n    Start the server with: make serve\n"
+  },
+  {
+    "kind": "step",
+    "title": "tools/list — three tools, two visibility shapes",
+    "step_id": "step-2",
+    "visit": 1,
+    "output": "    ERROR: Post \"http://127.0.0.1:3203/mcp\": dial tcp 127.0.0.1:3203: connect: connection refused\n"
+  },
+  {
+    "kind": "step",
+    "title": "tools/call debug-tool {} — default contentType text",
+    "step_id": "step-3",
+    "visit": 1,
+    "output": "    ERROR: Post \"http://127.0.0.1:3203/mcp\": dial tcp 127.0.0.1:3203: connect: connection refused\n"
+  },
+  {
+    "kind": "step",
+    "title": "tools/call debug-tool with largeInput + delayMs",
+    "step_id": "step-4",
+    "visit": 1,
+    "output": "    ERROR: Post \"http://127.0.0.1:3203/mcp\": dial tcp 127.0.0.1:3203: connect: connection refused\n"
+  },
+  {
+    "kind": "step",
+    "title": "tools/call debug-refresh {} — App-only polling tool",
+    "step_id": "step-5",
+    "visit": 1,
+    "output": "    ERROR: Post \"http://127.0.0.1:3203/mcp\": dial tcp 127.0.0.1:3203: connect: connection refused\n"
+  },
+  {
+    "kind": "step",
+    "title": "tools/call debug-log {type, payload} — App-only event log",
+    "step_id": "step-6",
+    "visit": 1,
+    "output": "    ERROR: Post \"http://127.0.0.1:3203/mcp\": dial tcp 127.0.0.1:3203: connect: connection refused\n"
+  },
+  {
+    "kind": "section",
+    "title": "What the App iframe does with all this",
+    "body": "The host → iframe handoff mechanics (`tools/call` → `resources/read` → sandboxed iframe → `postMessage`) are covered once in [The basic-host bridge dance](../README.md#the-basic-host-bridge-dance). Steps 1-6 above are the floor every MCP Apps interaction starts from.\n\ndebug-server's iframe sits at the **rich** end of the App-ness spectrum — three tools sharing one iframe, two of them App-only. The bridge calls its App SDK makes:\n\n- `app.ontoolresult` for `debug-tool` — renders each variation the model picks (text / image / audio / resource / resourceLink / mixed content blocks; isError simulation; delay).\n- `app.callServerTool({name: \"debug-refresh\"})` on a polling cadence — checks for new debug-tool calls since the last refresh. Same App-only-tool pattern as `system-monitor`'s `poll-system-stats`.\n- `app.callServerTool({name: \"debug-log\", arguments: {type, payload}})` on iframe interactions — writes events to the shared log file for off-iframe inspection.\n- `app.getHostContext()` + `app.onhostcontextchanged` — applies host theme to the debug panel.\n\nNO `app.registerTool`, NO `app.updateModelContext`. This is the most-tool-heavy fixture short of `pdf-server` and `wiki-explorer`."
+  },
+  {
+    "kind": "section",
+    "title": "Where to look in the code",
+    "body": "- `main.go` — fixture is ~200 lines. Three interesting bits: (1) `debug-tool` uses `ui.RegisterTypedAppTool` with the kitchen-sink input/output struct; (2) `debug-refresh` + `debug-log` drop down to `core.TypedTool` + `core.WithToolMeta(\u0026core.ToolMeta{UI: {ResourceUri, Visibility: [\"app\"]}})` to land App-only tools that share the same iframe (the `RegisterTypedAppTool` helper would double-register the UI resource); (3) `debug-log`'s `Payload any` field reflects to `{}` thanks to the issue 548 Gap 2 schema fix — same shape upstream's `z.unknown()` produces, no `InputSchemaOverride` needed.\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + screenshots + the centralized [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) guide and the bridge-dance reference section."
+  }
+]

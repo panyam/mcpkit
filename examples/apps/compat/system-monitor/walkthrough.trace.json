@@ -1,0 +1,52 @@
+[
+  {
+    "kind": "section",
+    "title": "Setup",
+    "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nAny MCP host can connect to the running server. The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `make demo-app EXAMPLE=system-monitor` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+  },
+  {
+    "kind": "step",
+    "title": "Connect to the fixture",
+    "step_id": "step-1",
+    "visit": 1,
+    "output": "    ERROR: initialize failed: Post \"http://127.0.0.1:3202/mcp\": dial tcp 127.0.0.1:3202: connect: connection refused\n    Start the server with: make serve\n"
+  },
+  {
+    "kind": "step",
+    "title": "tools/list — App tool + App-only tool side-by-side",
+    "step_id": "step-2",
+    "visit": 1,
+    "output": "    ERROR: Post \"http://127.0.0.1:3202/mcp\": dial tcp 127.0.0.1:3202: connect: connection refused\n"
+  },
+  {
+    "kind": "step",
+    "title": "tools/call get-system-info {} — static system info",
+    "step_id": "step-3",
+    "visit": 1,
+    "output": "    ERROR: Post \"http://127.0.0.1:3202/mcp\": dial tcp 127.0.0.1:3202: connect: connection refused\n"
+  },
+  {
+    "kind": "step",
+    "title": "tools/call poll-system-stats {} — dynamic sample",
+    "step_id": "step-4",
+    "visit": 1,
+    "output": "    ERROR: Post \"http://127.0.0.1:3202/mcp\": dial tcp 127.0.0.1:3202: connect: connection refused\n"
+  },
+  {
+    "kind": "step",
+    "title": "resources/read on ui://system-monitor/mcp-app.html",
+    "step_id": "step-5",
+    "visit": 1,
+    "output": "    ERROR: Post \"http://127.0.0.1:3202/mcp\": dial tcp 127.0.0.1:3202: connect: connection refused\n"
+  },
+  {
+    "kind": "section",
+    "title": "What the App iframe does with all this",
+    "body": "The host → iframe handoff mechanics (`tools/call` → `resources/read` → sandboxed iframe → `postMessage`) are covered once in [The basic-host bridge dance](../README.md#the-basic-host-bridge-dance). Steps 1-5 above are the floor every MCP Apps interaction starts from.\n\nsystem-monitor's iframe sits at the **moderate** end of the App-ness spectrum. The bridge calls its App SDK makes:\n\n- `app.ontoolresult` for `get-system-info` — seeds the metadata header on first connect.\n- `app.callServerTool({name: \"poll-system-stats\"})` every ~1s — drives the live CPU + memory charts. This is the App-only tool from step 2; the model never sees it.\n- `app.getHostContext()` + `app.onhostcontextchanged` — applies host theme to the charts.\n\nNO `app.registerTool`, NO `app.updateModelContext`. Same spectrum rung as `customer-segmentation` / `cohort-heatmap` / `scenario-modeler`, with the additional twist of the App-only polling tool."
+  },
+  {
+    "kind": "section",
+    "title": "Where to look in the code",
+    "body": "- `main.go` — fixture is ~210 lines. The interesting bit: tool 2 (`poll-system-stats`) drops out of `ui.RegisterTypedAppTool` (which insists on a paired UI resource) into `core.TypedTool` + `srv.RegisterTool` with `core.WithToolMeta(\u0026core.ToolMeta{UI: {Visibility: [\"app\"]}})`. Documents the framework gap: ext/ui could expose a \"typed tool with metadata only\" helper for this shape.\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + screenshots + the centralized [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) guide and the bridge-dance reference section."
+  }
+]

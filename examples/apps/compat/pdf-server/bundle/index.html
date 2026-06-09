@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pdf-server — 9-tool surface, command queue, long-poll</title>
+<link rel="stylesheet" href="./demokit-player.css">
+<style>
+body { margin: 2em auto; max-width: 900px; padding: 0 1em; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+</style>
+</head>
+<body>
+<demokit-demo>{
+  "demo": {
+    "title": "pdf-server — 9-tool surface, command queue, long-poll",
+    "description": "Walks the most complex fixture in the compat suite: 9 tools wired through a per-viewUUID command queue, long-poll endpoint, and viewer rendezvous. The scripted walkthrough exercises the non-blocking paths (list_pdfs, display_pdf, read_pdf_bytes); the narrative section explains the interact / poll_pdf_commands / submit_* rendezvous that drives the iframe in basic-host. Run `make serve` in another terminal first.",
+    "actors": [
+      {
+        "id": "Host",
+        "label": "MCP Host (this client)"
+      },
+      {
+        "id": "Server",
+        "label": "mcpkit-Go fixture (make serve)"
+      }
+    ],
+    "items": [
+      {
+        "kind": "section",
+        "title": "Setup",
+        "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nAny MCP host can connect to the running server. The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser, no PDF viewer. The same calls drive the iframe when you run `make demo-app EXAMPLE=pdf-server` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+      },
+      {
+        "kind": "step",
+        "title": "Connect to the fixture",
+        "note": "Standard MCP initialize handshake.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "POST /mcp — initialize"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "serverInfo + capabilities + Mcp-Session-Id",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "SID=$(curl -si -X POST http://localhost:3101/mcp \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"curl\",\"version\":\"1\"}}}' \\\n  | awk 'tolower($1) == \"mcp-session-id:\" {gsub(/\\r/,\"\"); print $2}')\n\ncurl -s -X POST http://localhost:3101/mcp -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "tools/list — 9-tool surface",
+        "note": "Two roles on this surface. The 4 model-visible tools (`list_pdfs`, `display_pdf`, `save_pdf`, plus `interact` once a PDF is displayed) are how the model drives the viewer. The 5 App-only tools (`read_pdf_bytes`, `poll_pdf_commands`, `submit_page_data`, `submit_save_data`, `submit_viewer_state`) carry `_meta.ui.visibility=[\"app\"]` — they're the iframe's side of the rendezvous. `display_pdf` carries `_meta.ui.resourceUri` (`ui://pdf-viewer/mcp-app.html`) — its result spawns the iframe.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "tools/list"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "tools[9]",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}' \\\n  | jq '.result.tools[] | {name, ui: ._meta.ui}'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "tools/call list_pdfs {} — PDF inventory",
+        "note": "Discovery surface — what PDFs can `display_pdf` open. The mcpkit fixture ships an empty allowlist by default (no `--allow-file` / `--allow-dir` CLI flags); upstream's same defaults. The text content (`\"Any remote PDF accessible via HTTPS can also be loaded dynamically\"`) tells the model it can pass arbitrary HTTPS URLs without an allowlist entry.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "tools/call list_pdfs {}"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "structuredContent = { localFiles: [], allowedDirectories: [] }",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"list_pdfs\",\"arguments\":{}}}' \\\n  | jq '.result | {text: .content[0].text, structuredContent}'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "tools/call display_pdf {url: \"arxiv 1706.03762\"}",
+        "note": "Mints a fresh viewUUID and registers a per-UUID command queue + waiter. The result carries `_meta.ui.resourceUri` (the iframe HTML) AND extra `_meta.ui.viewUUID` / `_meta.ui.interactEnabled` / `_meta.ui.writable` — strings the upstream-bound Playwright tests substring-check for. basic-host fetches the resourceUri, opens the iframe, then the iframe long-polls `poll_pdf_commands` to receive interact commands keyed on this viewUUID.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "tools/call display_pdf {url: \"https://arxiv.org/pdf/1706.03762\"}"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "structuredContent = { viewUUID, url, initialPage, totalBytes } + _meta.ui {resourceUri, viewUUID, interactEnabled, writable}",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"display_pdf\",\"arguments\":{\"url\":\"https://arxiv.org/pdf/1706.03762\"}}}' \\\n  | jq '.result | {structuredContent, meta: ._meta}'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "resources/read on ui://pdf-viewer/mcp-app.html",
+        "note": "Sanity-check the App's iframe is served on the wire. No CSP — the iframe pulls PDF bytes through `read_pdf_bytes` (server-side proxy) rather than fetching them directly from arxiv. The proxy approach lets the fixture support local files / range requests / size caps without exposing the iframe's CSP to every PDF host.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "resources/read { uri: ui://pdf-viewer/mcp-app.html }"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "Contents[0].Text = the iframe HTML",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"resources/read\",\"params\":{\"uri\":\"ui://pdf-viewer/mcp-app.html\"}}' \\\n  | jq -r '.result.contents[0].text' | head -c 200",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "section",
+        "title": "What's NOT in this walkthrough — the interact rendezvous",
+        "body": "The 5 App-only tools (`read_pdf_bytes`, `poll_pdf_commands`, `submit_page_data`, `submit_save_data`, `submit_viewer_state`) plus `interact` drive a per-viewUUID command queue with long-poll + rendezvous semantics. A scripted client like this walkthrough can't run them without an iframe on the other side — the long-poll waits would block indefinitely (or time out). What happens in basic-host:\n\n1. **Model calls `interact {viewUUID, action: \"navigate\", page: 5}`.** Server enqueues a `navigate` command on `viewUUID`'s queue and creates a Waiter for the response — the tool call blocks server-side.\n2. **Iframe's `poll_pdf_commands {viewUUID}` long-poll unblocks** with the new command, applies it (jumps to page 5), and computes the page's text content.\n3. **Iframe calls `submit_page_data {viewUUID, page: 5, text: ...}`** — that submission resolves the Waiter from step 1, and the model's `interact` call finally returns with the page text in its content.\n\nSame shape for `interact {action: \"add_annotations\", ...}` (rendezvous via `submit_save_data`), `interact {action: \"get_viewer_state\"}` (rendezvous via `submit_viewer_state`), and `read_pdf_bytes` (proxy-fetch with HTTP Range requests, max 512KB per chunk, base64-encoded bytes in the result). All implementations live in `queue.go` (per-UUID `hub` + waiter map) and `tools.go` (dispatch + content unwrap).\n\nRun the upstream Playwright suite end-to-end via `make test-apps-playwright EXAMPLE=pdf-server` to see all the variations exercised against a real iframe."
+      },
+      {
+        "kind": "section",
+        "title": "What the App iframe does with all this",
+        "body": "The host → iframe handoff mechanics (`tools/call` → `resources/read` → sandboxed iframe → `postMessage`) are covered once in [The basic-host bridge dance](../README.md#the-basic-host-bridge-dance). Steps 1-5 above are the floor every MCP Apps interaction starts from.\n\npdf-server's iframe sits at the **endgame** end of the App-ness spectrum — the deepest bridge surface of any fixture in the compat suite. The bridge calls its App SDK makes:\n\n- `app.ontoolresult` for `display_pdf` — reads viewUUID from `_meta.ui`, starts the PDF.js viewer.\n- `app.callServerTool({name: \"read_pdf_bytes\", arguments: {url, offset, byteCount}})` — chunks the PDF in via HTTP Range, max 512KB per call.\n- `app.callServerTool({name: \"poll_pdf_commands\", arguments: {viewUUID}})` — long-poll loop. Receives commands enqueued by `interact` calls; applies them via PDF.js APIs; submits responses via the matching `submit_*` tool.\n- `app.callServerTool({name: \"submit_page_data\" / \"submit_save_data\" / \"submit_viewer_state\"})` — closes each rendezvous so the model's `interact` call unblocks with results.\n- `app.getHostContext()` + `app.onhostcontextchanged` — applies host theme + safeAreaInsets to the viewer chrome.\n\nNO `app.registerTool` — the App doesn't expose app-side tools back to the host. The iframe is a stateful PDF.js runtime that the App SDK wraps through the rendezvous machinery."
+      },
+      {
+        "kind": "section",
+        "title": "Where to look in the code",
+        "body": "- `main.go` (~100 lines) — top-level wiring. Hand-off to `registerAllTools` in `tools.go` and the `hub` in `queue.go`.\n- `tools.go` (~890 lines) — all 9 tool registrations + interact action dispatcher. Worth reading top-to-bottom to see how the `interact` action enum maps onto the queue commands.\n- `queue.go` — per-viewUUID command queue + long-poll waiter + the submit_* rendezvous. The shape that makes the model's `interact` block translate into the iframe's `poll_pdf_commands` unblock translate into the iframe's `submit_*` translate into the model's `interact` return.\n- `bytes.go` — HTTP range proxy for `read_pdf_bytes` (allows local file paths via `--allow-file` / `--allow-dir` flags; remote HTTPS by default).\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + screenshots + the centralized [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) guide and the bridge-dance reference section."
+      }
+    ]
+  },
+  "trace": [
+    {
+      "kind": "section",
+      "title": "Setup",
+      "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nAny MCP host can connect to the running server. The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser, no PDF viewer. The same calls drive the iframe when you run `make demo-app EXAMPLE=pdf-server` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+    },
+    {
+      "kind": "step",
+      "title": "Connect to the fixture",
+      "step_id": "step-1",
+      "visit": 1,
+      "output": "    connected to PDF Server 2.0.0\n"
+    },
+    {
+      "kind": "step",
+      "title": "tools/list — 9-tool surface",
+      "step_id": "step-2",
+      "visit": 1,
+      "output": "    9 tools registered:\n      display_pdf             model+app  (carries resourceUri)\n      interact                model+app\n      list_pdfs               model+app\n      poll_pdf_commands       app-only\n      read_pdf_bytes          app-only\n      save_pdf                app-only\n      submit_page_data        app-only\n      submit_save_data        app-only\n      submit_viewer_state     app-only\n"
+    },
+    {
+      "kind": "step",
+      "title": "tools/call list_pdfs {} — PDF inventory",
+      "step_id": "step-3",
+      "visit": 1,
+      "output": "    text: \"Any remote PDF accessible via HTTPS can also be loaded dynamically.\"\n    structuredContent: {\n      \"allowedDirectories\": [],\n      \"localFiles\": [],\n      \"truncated\": false\n    }\n"
+    },
+    {
+      "kind": "step",
+      "title": "tools/call display_pdf {url: \"arxiv 1706.03762\"}",
+      "step_id": "step-4",
+      "visit": 1,
+      "output": "    structuredContent: {\n      \"initialPage\": 1,\n      \"totalBytes\": 2215244,\n      \"url\": \"https://arxiv.org/pdf/1706.03762\",\n      \"viewUUID\": \"0479a1e5-f344-45d4-bc36-eb4e0dd46cbe\"\n    }\n    _meta: {\n      \"interactEnabled\": true,\n      \"viewUUID\": \"0479a1e5-f344-45d4-bc36-eb4e0dd46cbe\",\n      \"writable\": false\n    }\n"
+    },
+    {
+      "kind": "step",
+      "title": "resources/read on ui://pdf-viewer/mcp-app.html",
+      "step_id": "step-5",
+      "visit": 1,
+      "output": "    4422430 bytes; first 200:\n      \u003c!doctype html\u003e\n\u003chtml lang=\"en\"\u003e\n  \u003chead\u003e\n    \u003cmeta charset=\"UTF-8\" /\u003e\n    \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" /\u003e\n    \u003ctitle\u003ePDF Viewer\u003c/title\u003e\n    \u003cscript type=\"modu…\n"
+    },
+    {
+      "kind": "section",
+      "title": "What's NOT in this walkthrough — the interact rendezvous",
+      "body": "The 5 App-only tools (`read_pdf_bytes`, `poll_pdf_commands`, `submit_page_data`, `submit_save_data`, `submit_viewer_state`) plus `interact` drive a per-viewUUID command queue with long-poll + rendezvous semantics. A scripted client like this walkthrough can't run them without an iframe on the other side — the long-poll waits would block indefinitely (or time out). What happens in basic-host:\n\n1. **Model calls `interact {viewUUID, action: \"navigate\", page: 5}`.** Server enqueues a `navigate` command on `viewUUID`'s queue and creates a Waiter for the response — the tool call blocks server-side.\n2. **Iframe's `poll_pdf_commands {viewUUID}` long-poll unblocks** with the new command, applies it (jumps to page 5), and computes the page's text content.\n3. **Iframe calls `submit_page_data {viewUUID, page: 5, text: ...}`** — that submission resolves the Waiter from step 1, and the model's `interact` call finally returns with the page text in its content.\n\nSame shape for `interact {action: \"add_annotations\", ...}` (rendezvous via `submit_save_data`), `interact {action: \"get_viewer_state\"}` (rendezvous via `submit_viewer_state`), and `read_pdf_bytes` (proxy-fetch with HTTP Range requests, max 512KB per chunk, base64-encoded bytes in the result). All implementations live in `queue.go` (per-UUID `hub` + waiter map) and `tools.go` (dispatch + content unwrap).\n\nRun the upstream Playwright suite end-to-end via `make test-apps-playwright EXAMPLE=pdf-server` to see all the variations exercised against a real iframe."
+    },
+    {
+      "kind": "section",
+      "title": "What the App iframe does with all this",
+      "body": "The host → iframe handoff mechanics (`tools/call` → `resources/read` → sandboxed iframe → `postMessage`) are covered once in [The basic-host bridge dance](../README.md#the-basic-host-bridge-dance). Steps 1-5 above are the floor every MCP Apps interaction starts from.\n\npdf-server's iframe sits at the **endgame** end of the App-ness spectrum — the deepest bridge surface of any fixture in the compat suite. The bridge calls its App SDK makes:\n\n- `app.ontoolresult` for `display_pdf` — reads viewUUID from `_meta.ui`, starts the PDF.js viewer.\n- `app.callServerTool({name: \"read_pdf_bytes\", arguments: {url, offset, byteCount}})` — chunks the PDF in via HTTP Range, max 512KB per call.\n- `app.callServerTool({name: \"poll_pdf_commands\", arguments: {viewUUID}})` — long-poll loop. Receives commands enqueued by `interact` calls; applies them via PDF.js APIs; submits responses via the matching `submit_*` tool.\n- `app.callServerTool({name: \"submit_page_data\" / \"submit_save_data\" / \"submit_viewer_state\"})` — closes each rendezvous so the model's `interact` call unblocks with results.\n- `app.getHostContext()` + `app.onhostcontextchanged` — applies host theme + safeAreaInsets to the viewer chrome.\n\nNO `app.registerTool` — the App doesn't expose app-side tools back to the host. The iframe is a stateful PDF.js runtime that the App SDK wraps through the rendezvous machinery."
+    },
+    {
+      "kind": "section",
+      "title": "Where to look in the code",
+      "body": "- `main.go` (~100 lines) — top-level wiring. Hand-off to `registerAllTools` in `tools.go` and the `hub` in `queue.go`.\n- `tools.go` (~890 lines) — all 9 tool registrations + interact action dispatcher. Worth reading top-to-bottom to see how the `interact` action enum maps onto the queue commands.\n- `queue.go` — per-viewUUID command queue + long-poll waiter + the submit_* rendezvous. The shape that makes the model's `interact` block translate into the iframe's `poll_pdf_commands` unblock translate into the iframe's `submit_*` translate into the model's `interact` return.\n- `bytes.go` — HTTP range proxy for `read_pdf_bytes` (allows local file paths via `--allow-file` / `--allow-dir` flags; remote HTTPS by default).\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + screenshots + the centralized [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) guide and the bridge-dance reference section."
+    }
+  ]
+}
+</demokit-demo>
+<script type="module" src="./demokit-player.js"></script>
+</body>
+</html>

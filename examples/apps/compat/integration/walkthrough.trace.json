@@ -1,0 +1,52 @@
+[
+  {
+    "kind": "section",
+    "title": "Setup",
+    "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nAny MCP host can connect to the running server. The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `make demo-app EXAMPLE=integration` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+  },
+  {
+    "kind": "step",
+    "title": "Connect to the fixture",
+    "step_id": "step-1",
+    "visit": 1,
+    "output": "    ERROR: initialize failed: Post \"http://127.0.0.1:3204/mcp\": dial tcp 127.0.0.1:3204: connect: connection refused\n    Start the server with: make serve\n"
+  },
+  {
+    "kind": "step",
+    "title": "tools/list + resources/list — surfaces side-by-side",
+    "step_id": "step-2",
+    "visit": 1,
+    "output": "    ERROR: Post \"http://127.0.0.1:3204/mcp\": dial tcp 127.0.0.1:3204: connect: connection refused\n"
+  },
+  {
+    "kind": "step",
+    "title": "tools/call get-time — RFC 3339 nano timestamp",
+    "step_id": "step-3",
+    "visit": 1,
+    "output": "    ERROR: Post \"http://127.0.0.1:3204/mcp\": dial tcp 127.0.0.1:3204: connect: connection refused\n"
+  },
+  {
+    "kind": "step",
+    "title": "resources/read on resource:///sample-report.txt — ResourceLink content",
+    "step_id": "step-4",
+    "visit": 1,
+    "output": "    ERROR: Post \"http://127.0.0.1:3204/mcp\": dial tcp 127.0.0.1:3204: connect: connection refused\n"
+  },
+  {
+    "kind": "step",
+    "title": "resources/read on ui://get-time/mcp-app.html — the App iframe",
+    "step_id": "step-5",
+    "visit": 1,
+    "output": "    ERROR: Post \"http://127.0.0.1:3204/mcp\": dial tcp 127.0.0.1:3204: connect: connection refused\n"
+  },
+  {
+    "kind": "section",
+    "title": "What the App iframe does with all this",
+    "body": "The host → iframe handoff mechanics (`tools/call` → `resources/read` → sandboxed iframe → `postMessage`) are covered once in [The basic-host bridge dance](../README.md#the-basic-host-bridge-dance). Steps 1-5 above are the floor every MCP Apps interaction starts from.\n\nintegration's iframe sits at the **rich** end of the App-ness spectrum — it exercises the full broad-surface bridge for upstream's three interaction-test cases. The bridge calls its App SDK makes:\n\n- `app.ontoolresult` for `get-time` — surfaces the timestamp.\n- `app.sendMessage` / `app.sendLog` — fire-and-forget bridge calls upstream's tests gate on. mcpkit's role here is bridge-relay only; the messages don't reach the server.\n- `app.requestDisplayMode` — opens / closes fullscreen.\n- `ui/download-file` — resolves `resource:///sample-report.txt` through `resources/read` (step 4) and hands the bytes to the host's download UI.\n\nMost of the App-ness here is bridge-resident, not server-resident. This fixture's job is to make sure the SDK plumbing flows end-to-end."
+  },
+  {
+    "kind": "section",
+    "title": "Where to look in the code",
+    "body": "- `main.go` — fixture is ~130 lines. Two registrations: `ui.RegisterTypedAppTool` for `get-time` (paired with the App iframe), and a plain `srv.RegisterResource` for the `resource:///sample-report.txt` downloadable text — note the resource is intentionally NOT paired with the iframe (it's served alongside, not via the same `_meta.ui.resourceUri` mechanism).\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + screenshots + the centralized [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) guide and the bridge-dance reference section."
+  }
+]

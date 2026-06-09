@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>system-monitor — App-only polling tool &#43; visibility flag</title>
+<link rel="stylesheet" href="./demokit-player.css">
+<style>
+body { margin: 2em auto; max-width: 900px; padding: 0 1em; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+</style>
+</head>
+<body>
+<demokit-demo>{
+  "demo": {
+    "title": "system-monitor — App-only polling tool + visibility flag",
+    "description": "Walks the get-system-info + poll-system-stats round trip end-to-end as a scripted MCP client. Two tools side-by-side: one is a model-visible App tool, the other is App-only (visible to the iframe but hidden from model `tools/list` when filtered by visibility). First example of the `_meta.ui.visibility` framework knob on the wire. Run `make serve` in another terminal first.",
+    "actors": [
+      {
+        "id": "Host",
+        "label": "MCP Host (this client)"
+      },
+      {
+        "id": "Server",
+        "label": "mcpkit-Go fixture (make serve)"
+      }
+    ],
+    "items": [
+      {
+        "kind": "section",
+        "title": "Setup",
+        "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nAny MCP host can connect to the running server. The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `make demo-app EXAMPLE=system-monitor` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+      },
+      {
+        "kind": "step",
+        "title": "Connect to the fixture",
+        "note": "Standard MCP initialize handshake. `*client.Client.Connect()` runs initialize + notifications/initialized + stashes the session header for every subsequent call.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "POST /mcp — initialize"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "serverInfo + capabilities + Mcp-Session-Id",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "SID=$(curl -si -X POST http://localhost:3101/mcp \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"curl\",\"version\":\"1\"}}}' \\\n  | awk 'tolower($1) == \"mcp-session-id:\" {gsub(/\\r/,\"\"); print $2}')\n\ncurl -s -X POST http://localhost:3101/mcp -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "tools/list — App tool + App-only tool side-by-side",
+        "note": "Two distinct shapes side-by-side. `get-system-info` is a standard App tool — `_meta.ui.resourceUri` points at the iframe HTML, no visibility filter (model + App both see it). `poll-system-stats` carries `_meta.ui.visibility = [\"app\"]` and NO `resourceUri` — it's still on tools/list (the App registers it as a server tool it can call via the bridge) but a host that filters by visibility would hide it from the model's planning surface. mcpkit lands the App-only shape via `core.WithToolMeta(\u0026core.ToolMeta{UI: {Visibility: [\"app\"]}})` on the typed handler since the `ui.RegisterTypedAppTool` helper insists on a paired UI resource.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "tools/list"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "tools[] = [get-system-info, poll-system-stats]",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}' \\\n  | jq '.result.tools[] | {name, ui_meta: ._meta.ui}'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "tools/call get-system-info {} — static system info",
+        "note": "Static information the iframe seeds its header / metadata panel with on first load. Hostname comes from `os.Hostname()`; platform / arch from `runtime.GOOS` / `runtime.GOARCH`; CPU count from `runtime.NumCPU()`. Total memory is a placeholder — visual test doesn't depend on its accuracy, and Go has no stdlib hook for it without cgo.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "tools/call get-system-info {}"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "structuredContent = { hostname, platform, arch, cpu, memory }",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"get-system-info\",\"arguments\":{}}}' \\\n  | jq '.result.structuredContent'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "tools/call poll-system-stats {} — dynamic sample",
+        "note": "Dynamic metrics the iframe polls every ~1s to drive the live CPU + memory charts. `cpu.cores[]` is one entry per logical core (`{idle, total}` timer ticks — upstream's shape from Node's `os.cpus()`). mcpkit ships a stub shape (right length, zero values) since Go's stdlib doesn't expose per-core CPU time without cgo. Visual test masks the charts; real consumers can swap in a `gopsutil` backend if they need real numbers.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "tools/call poll-system-stats {}"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "structuredContent = { cpu.cores[N], memory, uptime, timestamp }",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"poll-system-stats\",\"arguments\":{}}}' \\\n  | jq '.result.structuredContent | {core_count: (.cpu.cores | length), memory, uptime, timestamp}'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "resources/read on ui://system-monitor/mcp-app.html",
+        "note": "Sanity-check the iframe HTML is on the wire. No CSP — the iframe runs the charts entirely in JavaScript and never talks to anything outside the MCP bridge.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "resources/read { uri: ui://system-monitor/mcp-app.html }"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "Contents[0].Text = the iframe HTML",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"resources/read\",\"params\":{\"uri\":\"ui://system-monitor/mcp-app.html\"}}' \\\n  | jq -r '.result.contents[0].text' | head -c 200",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "section",
+        "title": "What the App iframe does with all this",
+        "body": "The host → iframe handoff mechanics (`tools/call` → `resources/read` → sandboxed iframe → `postMessage`) are covered once in [The basic-host bridge dance](../README.md#the-basic-host-bridge-dance). Steps 1-5 above are the floor every MCP Apps interaction starts from.\n\nsystem-monitor's iframe sits at the **moderate** end of the App-ness spectrum. The bridge calls its App SDK makes:\n\n- `app.ontoolresult` for `get-system-info` — seeds the metadata header on first connect.\n- `app.callServerTool({name: \"poll-system-stats\"})` every ~1s — drives the live CPU + memory charts. This is the App-only tool from step 2; the model never sees it.\n- `app.getHostContext()` + `app.onhostcontextchanged` — applies host theme to the charts.\n\nNO `app.registerTool`, NO `app.updateModelContext`. Same spectrum rung as `customer-segmentation` / `cohort-heatmap` / `scenario-modeler`, with the additional twist of the App-only polling tool."
+      },
+      {
+        "kind": "section",
+        "title": "Where to look in the code",
+        "body": "- `main.go` — fixture is ~210 lines. The interesting bit: tool 2 (`poll-system-stats`) drops out of `ui.RegisterTypedAppTool` (which insists on a paired UI resource) into `core.TypedTool` + `srv.RegisterTool` with `core.WithToolMeta(\u0026core.ToolMeta{UI: {Visibility: [\"app\"]}})`. Documents the framework gap: ext/ui could expose a \"typed tool with metadata only\" helper for this shape.\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + screenshots + the centralized [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) guide and the bridge-dance reference section."
+      }
+    ]
+  },
+  "trace": [
+    {
+      "kind": "section",
+      "title": "Setup",
+      "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nAny MCP host can connect to the running server. The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `make demo-app EXAMPLE=system-monitor` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+    },
+    {
+      "kind": "step",
+      "title": "Connect to the fixture",
+      "step_id": "step-1",
+      "visit": 1,
+      "output": "    ERROR: initialize failed: Post \"http://127.0.0.1:3202/mcp\": dial tcp 127.0.0.1:3202: connect: connection refused\n    Start the server with: make serve\n"
+    },
+    {
+      "kind": "step",
+      "title": "tools/list — App tool + App-only tool side-by-side",
+      "step_id": "step-2",
+      "visit": 1,
+      "output": "    ERROR: Post \"http://127.0.0.1:3202/mcp\": dial tcp 127.0.0.1:3202: connect: connection refused\n"
+    },
+    {
+      "kind": "step",
+      "title": "tools/call get-system-info {} — static system info",
+      "step_id": "step-3",
+      "visit": 1,
+      "output": "    ERROR: Post \"http://127.0.0.1:3202/mcp\": dial tcp 127.0.0.1:3202: connect: connection refused\n"
+    },
+    {
+      "kind": "step",
+      "title": "tools/call poll-system-stats {} — dynamic sample",
+      "step_id": "step-4",
+      "visit": 1,
+      "output": "    ERROR: Post \"http://127.0.0.1:3202/mcp\": dial tcp 127.0.0.1:3202: connect: connection refused\n"
+    },
+    {
+      "kind": "step",
+      "title": "resources/read on ui://system-monitor/mcp-app.html",
+      "step_id": "step-5",
+      "visit": 1,
+      "output": "    ERROR: Post \"http://127.0.0.1:3202/mcp\": dial tcp 127.0.0.1:3202: connect: connection refused\n"
+    },
+    {
+      "kind": "section",
+      "title": "What the App iframe does with all this",
+      "body": "The host → iframe handoff mechanics (`tools/call` → `resources/read` → sandboxed iframe → `postMessage`) are covered once in [The basic-host bridge dance](../README.md#the-basic-host-bridge-dance). Steps 1-5 above are the floor every MCP Apps interaction starts from.\n\nsystem-monitor's iframe sits at the **moderate** end of the App-ness spectrum. The bridge calls its App SDK makes:\n\n- `app.ontoolresult` for `get-system-info` — seeds the metadata header on first connect.\n- `app.callServerTool({name: \"poll-system-stats\"})` every ~1s — drives the live CPU + memory charts. This is the App-only tool from step 2; the model never sees it.\n- `app.getHostContext()` + `app.onhostcontextchanged` — applies host theme to the charts.\n\nNO `app.registerTool`, NO `app.updateModelContext`. Same spectrum rung as `customer-segmentation` / `cohort-heatmap` / `scenario-modeler`, with the additional twist of the App-only polling tool."
+    },
+    {
+      "kind": "section",
+      "title": "Where to look in the code",
+      "body": "- `main.go` — fixture is ~210 lines. The interesting bit: tool 2 (`poll-system-stats`) drops out of `ui.RegisterTypedAppTool` (which insists on a paired UI resource) into `core.TypedTool` + `srv.RegisterTool` with `core.WithToolMeta(\u0026core.ToolMeta{UI: {Visibility: [\"app\"]}})`. Documents the framework gap: ext/ui could expose a \"typed tool with metadata only\" helper for this shape.\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + screenshots + the centralized [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) guide and the bridge-dance reference section."
+    }
+  ]
+}
+</demokit-demo>
+<script type="module" src="./demokit-player.js"></script>
+</body>
+</html>

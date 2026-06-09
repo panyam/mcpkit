@@ -21,6 +21,10 @@ Message, Send Log, Open Link).
   triggers host callback`, `Open Link button triggers host
   callback`). Highest pass count of any compat fixture in DOCKER mode.
 
+## Run Pre-Recorded
+
+> ▶ **[Play the walkthrough in your browser](https://panyam.github.io/mcpkit/walkthroughs/examples/apps/compat/integration/)** — animated playback of every curl / Go call the walkthrough makes, step-by-step. Includes the `resource:///sample-report.txt` download (the ResourceLink + ui/download-file path) alongside the get-time tool. No clone, no setup.
+
 ## Or Run Live
 
 ### Start Server
