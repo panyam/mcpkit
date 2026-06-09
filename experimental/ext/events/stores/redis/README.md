@@ -14,31 +14,41 @@ import (
 )
 
 cli := redis.NewClient(&redis.Options{Addr: "redis:6379"})
-
 opts := redisstore.Options{Client: cli}
 
-// Outbound: compose Redis publisher with the local emitter.
-local := events.NewLocalEmitter(srv, webhooks)
+// Outbound: Redis publisher is the SOLE sink. The subscriber loop
+// below delivers to local on every replica — including this one —
+// so events yielded here still reach this replica's SSE listeners
+// and webhook targets via the round-trip through Redis.
 pub, _ := redisstore.NewPublisher(opts)
-cfg.Emitter = events.NewCompositeEmitter(local, pub)
+cfg.Emitter = pub
 
-// Inbound: subscriber delivers to LOCAL only — NOT cfg.Emitter (see below).
-sub, _ := redisstore.NewSubscriber(opts, func(ctx context.Context, e events.Event) error {
-    return local.Emit(ctx, e)
-})
+// Inbound: subscriber delivers to local. The publishing replica
+// participates equally; even a single-replica deployment round-trips
+// each event through Redis.
+local := events.NewLocalEmitter(srv, webhooks)
+sub, _ := redisstore.NewSubscriber(opts, local.Emit)
 sub.Subscribe(ctx, "chat.message", "presence.changed")
 go sub.Run(ctx)
 ```
 
+## Why Redis-only outbound (Pattern B)
+
+This shape — `cfg.Emitter = pub` (not a composite with local) — is what we call **Pattern B**: a single PUBLISH per yielded event; the subscriber loop is the sole local-delivery path on every replica.
+
+The obvious alternative — `cfg.Emitter = events.NewCompositeEmitter(local, pub)` — feels simpler ("compose local with redis fanout") but **double-delivers events on the publishing replica**. That replica's composite fires local (1× delivery) AND publishes; then its own subscriber receives the PUBLISH back and delivers local again (2× delivery for the same event).
+
+Pattern A is only safe when the application carries a publisher-id tag on each event and the subscriber filters out messages it published. That plumbing is real work; defer until you actually need it. Default to Pattern B; the round-trip-through-Redis latency is a few milliseconds and the wiring stays symmetric across N=1 and N≥2 deployments.
+
 ## Anti-loop pattern
 
-A naive setup that wires the publisher into the same emitter the subscriber feeds will infinitely re-publish every event:
+A naive setup that wires the subscriber's `deliverFn` to `cfg.Emitter` (instead of `local.Emit`) will infinitely re-publish every event:
 
 ```
 publisher → Redis → subscriber → publisher (LOOP)
 ```
 
-The pattern above avoids this by handing the subscriber the **local** emitter, not the composite:
+The Pattern B example above avoids this by handing the subscriber the **local** emitter — never `cfg.Emitter`:
 
 ```
 publisher → Redis → subscriber → local (terminal sink)

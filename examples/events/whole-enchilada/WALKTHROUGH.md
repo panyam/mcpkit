@@ -10,6 +10,7 @@ Production-shape multi-tier reference. nginx fronts the event-server tier; a pus
 - **Window C1 — start the Tenant C poller.** — ```
 - **Windows A2 / B2 / C2 — start the webhook receivers.** — Webhook is the second delivery mode. It runs in parallel with poll; same tenant routing applies:
 - **Inject events from a 7th terminal and watch isolation in real time.** — ```
+- **Scale to N=2 event-server replicas and prove push-survival via Redis fanout.** — The stack ships a Redis service that backs the events lib's QuotaStore + Emitter (see [issues 634 + 718](https://github.com/panyam/mcpkit/issues/634)). With one replica it's a glorified counter store; the payoff is multi-replica.
 - **Revoke a token in Keycloak admin and watch the affected windows die.** — Open `http://localhost:8180/admin/master/console/#/tenant-a/users` (admin / admin) in a browser. Click `alice` → **Sessions** tab → **Sign out**.
 
 ## Flow
@@ -34,7 +35,9 @@ sequenceDiagram
 
     Note over Operator,Keycloak: Step 6: Inject events from a 7th terminal and watch isolation in real time.
 
-    Note over Operator,Keycloak: Step 7: Revoke a token in Keycloak admin and watch the affected windows die.
+    Note over Operator,Keycloak: Step 7: Scale to N=2 event-server replicas and prove push-survival via Redis fanout.
+
+    Note over Operator,Keycloak: Step 8: Revoke a token in Keycloak admin and watch the affected windows die.
 ```
 
 ## Steps
@@ -146,7 +149,43 @@ make inject TENANT=C EVENT=presence.changed USER=carol STATE=online
 
 B events go only to B's windows; C events only to C's. The push-server is also cycling synthetic events through all three tenants in the background, so leave the windows running and you'll see the rotation interleave with your manual injects.
 
-### Step 7: Revoke a token in Keycloak admin and watch the affected windows die.
+### Step 7: Scale to N=2 event-server replicas and prove push-survival via Redis fanout.
+
+The stack ships a Redis service that backs the events lib's QuotaStore + Emitter (see [issues 634 + 718](https://github.com/panyam/mcpkit/issues/634)). With one replica it's a glorified counter store; the payoff is multi-replica.
+
+Boot two replicas:
+
+```
+make up N=2 BUILD=true
+```
+
+nginx round-robins MCP connections across both `event-server-1` and `event-server-2`. Every event a push-server injects ends up as one PUBLISH on Redis; BOTH replicas SUBSCRIBE and deliver locally to the SSE listeners + webhook targets they own.
+
+Watch the fanout live in a sibling window:
+
+```
+docker exec -it whole-enchilada-redis-1 redis-cli MONITOR | grep mcpkit.events
+```
+
+You'll see one `"publish" "mcpkit.events.chat.message" {...}` per injected event regardless of which replica nginx routed the inject to.
+
+Now kill replica 1 mid-stream:
+
+```
+docker compose -f docker-compose.yaml kill event-server-1
+```
+
+nginx routes new MCP connections to event-server-2; existing webhook subscriptions that were already registered against event-server-1 die with their replica, but new subscribes (and re-subscribes after `make poller`/`make webhook` restart) land on event-server-2 transparently. The push-server keeps injecting; event-server-2 keeps PUBLISHing on Redis; A2 / B2 / C2 keep receiving deliveries.
+
+Scale back when done:
+
+```
+make up
+```
+
+The N=2→N=1 step-down is graceful — `docker compose up -d --scale event-server-1=1` removes the extra replica without disturbing the survivor.
+
+### Step 8: Revoke a token in Keycloak admin and watch the affected windows die.
 
 Open `http://localhost:8180/admin/master/console/#/tenant-a/users` (admin / admin) in a browser. Click `alice` → **Sessions** tab → **Sign out**.
 
