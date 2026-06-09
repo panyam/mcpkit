@@ -41,6 +41,10 @@ patterns compound.
   extension-namespaced keys spread at the top level of the meta
   object.
 
+## Run Pre-Recorded
+
+> ▶ **[Play the walkthrough in your browser](https://panyam.github.io/mcpkit/walkthroughs/examples/apps/compat/pdf-server/)** — animated playback of every curl / Go call the walkthrough makes, step-by-step. Covers the 9-tool surface inventory, list_pdfs, and a live display_pdf call (mints a real viewUUID against arxiv 1706.03762). The interact / poll / submit_* rendezvous is explained in narrative (it needs a real iframe to drive). No clone, no setup.
+
 ## Or Run Live
 
 ### Start Server

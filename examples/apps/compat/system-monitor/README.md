@@ -18,6 +18,10 @@ iframe polls from inside via the bridge. First fixture introducing
   `get-system-info`) and references the same URI from
   `poll-system-stats` without re-registering.
 
+## Run Pre-Recorded
+
+> ▶ **[Play the walkthrough in your browser](https://panyam.github.io/mcpkit/walkthroughs/examples/apps/compat/system-monitor/)** — animated playback of every curl / Go call the walkthrough makes, step-by-step. Includes both tool calls and a side-by-side look at `_meta.ui.visibility = ["app"]` on the polling tool. No clone, no setup.
+
 ## Or Run Live
 
 ### Start Server

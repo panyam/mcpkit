@@ -1,0 +1,52 @@
+[
+  {
+    "kind": "section",
+    "title": "Setup",
+    "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nAny MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam, basic-host). The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `make demo-app EXAMPLE=shadertoy` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+  },
+  {
+    "kind": "step",
+    "title": "Connect to the fixture",
+    "step_id": "step-1",
+    "visit": 1,
+    "output": "    ERROR: initialize failed: Post \"http://127.0.0.1:3201/mcp\": dial tcp 127.0.0.1:3201: connect: connection refused\n    Start the server with: make serve\n"
+  },
+  {
+    "kind": "step",
+    "title": "tools/list — 6-field input surface + multi-line GLSL default",
+    "step_id": "step-2",
+    "visit": 1,
+    "output": "    ERROR: Post \"http://127.0.0.1:3201/mcp\": dial tcp 127.0.0.1:3201: connect: connection refused\n"
+  },
+  {
+    "kind": "step",
+    "title": "tools/call render-shadertoy {} — default uv-ramp shader",
+    "step_id": "step-3",
+    "visit": 1,
+    "output": "    ERROR: Post \"http://127.0.0.1:3201/mcp\": dial tcp 127.0.0.1:3201: connect: connection refused\n"
+  },
+  {
+    "kind": "step",
+    "title": "tools/call render-shadertoy with custom GLSL",
+    "step_id": "step-4",
+    "visit": 1,
+    "output": "    ERROR: Post \"http://127.0.0.1:3201/mcp\": dial tcp 127.0.0.1:3201: connect: connection refused\n"
+  },
+  {
+    "kind": "step",
+    "title": "resources/read on ui://shadertoy/mcp-app.html",
+    "step_id": "step-5",
+    "visit": 1,
+    "output": "    ERROR: Post \"http://127.0.0.1:3201/mcp\": dial tcp 127.0.0.1:3201: connect: connection refused\n"
+  },
+  {
+    "kind": "section",
+    "title": "What the App iframe does with all this",
+    "body": "The host → iframe handoff mechanics (`tools/call` → `resources/read` → sandboxed iframe → `postMessage`) are covered once in [The basic-host bridge dance](../README.md#the-basic-host-bridge-dance). Steps 1-5 above are the floor every MCP Apps interaction starts from.\n\nshadertoy's iframe sits at the **moderate** end of the App-ness spectrum. The bridge calls its App SDK makes:\n\n- `app.ontoolresult` — reads each `render-shadertoy` call's arguments (`fragmentShader` + optional `common` / `bufferA`-`D`), recompiles the shader, and resumes the WebGL2 render loop. The tool result's text content (`\"Shader rendered successfully\"`) is informational; the actual rendering side-effect lives in the GL context.\n- `app.getHostContext()` + `app.onhostcontextchanged` — applies host theme + safeAreaInsets to the iframe chrome.\n\nNO `app.registerTool`, NO `app.callServerTool` after the initial load. The iframe is a pure renderer: server passes shader text, iframe runs it. Same spectrum rung as `threejs` (code-as-input → bundled WebGL renderer)."
+  },
+  {
+    "kind": "section",
+    "title": "Where to look in the code",
+    "body": "- `main.go` — fixture is ~180 lines. Two interesting bits: (1) `defaultFragmentShader` (the multi-line GLSL boilerplate ShaderToy users expect — preserved verbatim through `Prop(\"fragmentShader\").Default(...)` since struct-tags would truncate at the first comma); (2) the rich `toolDescription` constant (ported byte-for-byte from upstream's `TOOL_DESCRIPTION` — encodes ShaderToy conventions, available uniforms, mouse-interaction protocol, multi-pass buffer wiring — so models know what to write without scraping a docs site).\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + screenshots + the centralized [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) guide and the bridge-dance reference section."
+  }
+]

@@ -17,6 +17,10 @@ app-only helpers (refresh / log) the iframe uses internally.
   TypeScript SDK's zod validator). With the fix in place, the field
   reflects to `{}` automatically — no override.
 
+## Run Pre-Recorded
+
+> ▶ **[Play the walkthrough in your browser](https://panyam.github.io/mcpkit/walkthroughs/examples/apps/compat/debug-server/)** — animated playback of every curl / Go call the walkthrough makes, step-by-step. Exercises all three tools (debug-tool kitchen sink, debug-refresh polling, debug-log event log) including the App-only visibility flag on the latter two. No clone, no setup.
+
 ## Or Run Live
 
 ### Start Server

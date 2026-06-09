@@ -19,6 +19,10 @@ fixture targeted at WebGL-style rendering inside the App iframe.
   `s.Prop(name).Desc(...)` pattern across multiple properties — much
   shorter than the equivalent override map.
 
+## Run Pre-Recorded
+
+> ▶ **[Play the walkthrough in your browser](https://panyam.github.io/mcpkit/walkthroughs/examples/apps/compat/shadertoy/)** — animated playback of every curl / Go call the walkthrough makes, step-by-step. Includes a custom GLSL shader call (radial wave + iMouse highlight) on top of the default uv-ramp. No clone, no setup.
+
 ## Or Run Live
 
 ### Start Server
