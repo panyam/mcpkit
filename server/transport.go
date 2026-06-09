@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -488,7 +489,13 @@ func (t *sseTransport) closeAllSessions() {
 
 // broadcast sends a notification to all active SSE sessions.
 // Sessions with nil notifyFunc are skipped safely.
-func (t *sseTransport) broadcast(method string, params any) {
+//
+// ctx is accepted for SEP-414 trace context propagation but currently
+// unused inside the loop — Server.Broadcast injects `_meta.traceparent`
+// onto params before fan-out. The parameter exists so per-session
+// concerns (audit, span emission inside the transport) can compose
+// without re-widening the signature.
+func (t *sseTransport) broadcast(_ context.Context, method string, params any) {
 	t.sessions.Range(func(_ string, entry *sseSessionEntry) bool {
 		if fn := entry.dispatcher.getNotifyFunc(); fn != nil {
 			fn(method, params)

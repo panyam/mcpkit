@@ -36,7 +36,7 @@ func testDynamicServer() (*Server, func() []string) {
 	srv.registerTransportSessions(
 		func(id string) bool { return false },
 		func() {},
-		func(method string, params any) {
+		func(_ context.Context, method string, params any) {
 			if fn := d.getNotifyFunc(); fn != nil {
 				fn(method, params)
 			}
