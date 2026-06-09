@@ -108,13 +108,23 @@ newtoken-ci: ## Acquire a bearer token via ROPC (CI / scripting). TENANT=A|B|C U
 		--format=access-token-only
 	@echo
 
-poller: ## Long-running poll subscriber. TENANT=A|B|C TOKEN=<bearer>.
-	@if [ -z "$(TOKEN)" ]; then echo "usage: make poller TENANT=A|B|C TOKEN=<bearer>"; exit 2; fi
-	go -C poller run . --tenant $(call tenant-realm,$(TENANT)) --token $(TOKEN) --event $(EVENT)
+poller: ## Long-running poll subscriber. TENANT=A|B|C plus either TOKEN=<bearer> or USERNAME=<u> PASSWORD=<p>.
+	@if [ -z "$(TOKEN)" ] && { [ -z "$(USERNAME)" ] || [ -z "$(PASSWORD)" ]; }; then \
+		echo "usage: make poller TENANT=A|B|C [TOKEN=<bearer> | USERNAME=<u> PASSWORD=<p>]" >&2; exit 2; fi
+	go -C poller run . --tenant $(call tenant-realm,$(TENANT)) \
+		$(if $(TOKEN),--token $(TOKEN)) \
+		$(if $(USERNAME),--username $(USERNAME)) \
+		$(if $(PASSWORD),--password $(PASSWORD)) \
+		--event $(EVENT)
 
-webhook: ## Long-running webhook subscriber. TENANT=A|B|C TOKEN=<bearer>.
-	@if [ -z "$(TOKEN)" ]; then echo "usage: make webhook TENANT=A|B|C TOKEN=<bearer>"; exit 2; fi
-	go -C webhook run . --tenant $(call tenant-realm,$(TENANT)) --token $(TOKEN) --event $(EVENT)
+webhook: ## Long-running webhook subscriber. TENANT=A|B|C plus either TOKEN=<bearer> or USERNAME=<u> PASSWORD=<p>.
+	@if [ -z "$(TOKEN)" ] && { [ -z "$(USERNAME)" ] || [ -z "$(PASSWORD)" ]; }; then \
+		echo "usage: make webhook TENANT=A|B|C [TOKEN=<bearer> | USERNAME=<u> PASSWORD=<p>]" >&2; exit 2; fi
+	go -C webhook run . --tenant $(call tenant-realm,$(TENANT)) \
+		$(if $(TOKEN),--token $(TOKEN)) \
+		$(if $(USERNAME),--username $(USERNAME)) \
+		$(if $(PASSWORD),--password $(PASSWORD)) \
+		--event $(EVENT)
 
 inject: ## Inject one event from the host. TENANT=A|B|C [EVENT=chat.message] [TEXT="..."].
 	@if [ -z "$(TENANT)" ]; then echo "usage: make inject TENANT=A|B|C [EVENT=<name>] [TEXT='...']"; exit 2; fi
