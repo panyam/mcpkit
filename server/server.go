@@ -545,7 +545,7 @@ func NewServer(info core.ServerInfo, opts ...Option) *Server {
 	// Wire registry change notifications to Server.Broadcast so that
 	// dynamic adds/removes automatically notify all connected sessions.
 	s.dispatcher.Reg.OnChange = func(method string) {
-		s.Broadcast(method, nil)
+		s.Broadcast(context.Background(), method, nil)
 	}
 	// Wire roots configuration
 	if s.options.onRootsChanged != nil {
@@ -940,11 +940,17 @@ func (s *Server) CloseAllSessions() {
 // Streamable HTTP transports). In-process transports manage their own
 // notification delivery via WithNotificationHandler.
 //
+// ctx threads through SEP-414 trace context for downstream
+// instrumentation — currently consumed by callers (e.g., events.Emit
+// for outbound _meta.traceparent injection on notification params).
+// The underlying session broadcasters don't take ctx today; that
+// plumbing slots in without churning callers when it's added.
+//
 // Example:
 //
 //	// After registering a new tool at runtime:
-//	srv.Broadcast("notifications/tools/list_changed", nil)
-func (s *Server) Broadcast(method string, params any) {
+//	srv.Broadcast(ctx, "notifications/tools/list_changed", nil)
+func (s *Server) Broadcast(_ context.Context, method string, params any) {
 	s.mu.Lock()
 	broadcasters := make([]func(string, any), len(s.sessionBroadcasters))
 	copy(broadcasters, s.sessionBroadcasters)

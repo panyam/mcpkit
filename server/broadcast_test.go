@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"sync"
 	"testing"
 
@@ -43,7 +44,7 @@ func TestBroadcastSingleSession(t *testing.T) {
 		},
 	)
 
-	srv.Broadcast("notifications/tools/list_changed", nil)
+	srv.Broadcast(context.Background(), "notifications/tools/list_changed", nil)
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -90,7 +91,7 @@ func TestBroadcastMultipleSessions(t *testing.T) {
 		)
 	}
 
-	srv.Broadcast("notifications/prompts/list_changed", nil)
+	srv.Broadcast(context.Background(), "notifications/prompts/list_changed", nil)
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -137,7 +138,7 @@ func TestBroadcastSkipsNilNotifyFunc(t *testing.T) {
 	)
 
 	// Must not panic
-	srv.Broadcast("notifications/tools/list_changed", nil)
+	srv.Broadcast(context.Background(), "notifications/tools/list_changed", nil)
 
 	if !received {
 		t.Error("ok-session did not receive notification")
@@ -150,7 +151,7 @@ func TestBroadcastSkipsNilNotifyFunc(t *testing.T) {
 func TestBroadcastNoSessions(t *testing.T) {
 	srv := NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
 	// No sessions registered — must not panic
-	srv.Broadcast("notifications/tools/list_changed", nil)
+	srv.Broadcast(context.Background(), "notifications/tools/list_changed", nil)
 }
 
 // TestBroadcastDoesNotRequireSubscription verifies the key difference between
@@ -181,7 +182,7 @@ func TestBroadcastDoesNotRequireSubscription(t *testing.T) {
 	)
 
 	// Do NOT subscribe — Broadcast should still deliver
-	srv.Broadcast("notifications/resources/list_changed", nil)
+	srv.Broadcast(context.Background(), "notifications/resources/list_changed", nil)
 
 	if !received {
 		t.Error("session did not receive broadcast despite not subscribing")
@@ -213,7 +214,7 @@ func TestBroadcastWithParams(t *testing.T) {
 	)
 
 	payload := map[string]any{"uri": "test://doc", "reason": "updated"}
-	srv.Broadcast("notifications/resources/updated", payload)
+	srv.Broadcast(context.Background(), "notifications/resources/updated", payload)
 
 	m, ok := capturedParams.(map[string]any)
 	if !ok {

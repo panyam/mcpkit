@@ -363,7 +363,7 @@ func TestLifecycle_Webhook_SuspendDoesNotFireOnUnsubscribe(t *testing.T) {
 	// deletion → onRemove must not fire.
 	target := f.webhooks.Targets()[0]
 	for i := 0; i < threshold; i++ {
-		f.webhooks.deliver(target, "evt_"+string(rune('a'+i)), []byte(`{}`), core.TraceContext{})
+		f.webhooks.deliver(target, "evt_"+string(rune('a'+i)), "", []byte(`{}`), core.TraceContext{})
 	}
 
 	st := f.webhooks.DeliveryStatus(target.CanonicalKey)
