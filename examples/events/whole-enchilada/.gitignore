@@ -5,3 +5,12 @@ receiver/receiver
 walkthrough/walkthrough
 tools/gen-compose/gen-compose
 bin/
+# go-build artifacts from running `make build` or `go build` in the leaf binaries
+poller/poller
+webhook/webhook
+event-server/event-server
+push-server/push-server
+receiver/receiver
+inject/inject
+walkthrough/walkthrough
+bin/
