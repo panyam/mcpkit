@@ -204,8 +204,17 @@ func WithoutCursors() YieldingOption {
 //	    Server:   srv,
 //	})
 //
-//	go alertWatcher(func(a AlertData) { _ = yield(a) })
-func NewYieldingSource[Data any](def EventDef, opts ...YieldingOption) (*YieldingSource[Data], func(Data) error) {
+//	go alertWatcher(func(ctx context.Context, a AlertData) { _ = yield(ctx, a) })
+//
+// The returned yield closure takes a ctx so the W3C trace context
+// carried on it (`core.TraceContext`) is stamped onto `event.Meta`
+// at yield time. Cross-process consumers (webhook delivery,
+// HTTPSource inject) read the persistent traceparent from `Meta`;
+// in-process consumers (the emit hook, subscribers) get ctx
+// directly. Caller-set `event.Meta.traceparent` via `SetMetaFunc`
+// is preserved — the auto-stamp is a fallback. See SEP-414 P6
+// (issue 683).
+func NewYieldingSource[Data any](def EventDef, opts ...YieldingOption) (*YieldingSource[Data], func(context.Context, Data) error) {
 	cfg := &yieldingConfig{maxSize: defaultYieldingMaxSize, subscriberBuf: defaultSubscriberBufferSize}
 	for _, o := range opts {
 		o(cfg)
@@ -224,8 +233,8 @@ func NewYieldingSource[Data any](def EventDef, opts ...YieldingOption) (*Yieldin
 		cursorless:    cfg.cursorless,
 		subscriberBuf: cfg.subscriberBuf,
 	}
-	yield := func(data Data) error {
-		return s.yield(data)
+	yield := func(ctx context.Context, data Data) error {
+		return s.yield(ctx, data)
 	}
 	return s, yield
 }
@@ -234,8 +243,13 @@ func NewYieldingSource[Data any](def EventDef, opts ...YieldingOption) (*Yieldin
 // install a fanout hook (push + webhook). Register type-asserts this and
 // wires the hook. EventSources that don't implement it (e.g., TypedSource)
 // are responsible for their own fanout via Emit / EmitToWebhooks.
+//
+// The hook signature takes ctx so the W3C trace context carried by
+// the yield call flows through to the Emitter (and onward to the
+// outbound webhook delivery's HTTP `traceparent` header) without
+// going through an Event.Meta round-trip on every hop.
 type emitterAware interface {
-	SetEmitHook(func(Event))
+	SetEmitHook(func(context.Context, Event))
 }
 
 // yieldedEntry holds the typed payload alongside its wire-format Event.
@@ -262,8 +276,8 @@ type YieldingSource[Data any] struct {
 
 	mu          sync.RWMutex
 	entries     []yieldedEntry[Data]
-	emitHook    func(Event)
-	metaFunc    func(Data) map[string]any
+	emitHook    func(context.Context, Event)
+	metaFunc    func(context.Context, Data) map[string]any
 	subscribers []*subscriberSlot
 	terminated  bool // one-shot YieldTerminated has fired; subsequent yields are no-ops
 }
@@ -279,7 +293,7 @@ func (s *YieldingSource[Data]) Def() EventDef { return s.def }
 // Set on a separate method (not via NewYieldingSource opts) because
 // the mapper is type-parameterized over Data, which doesn't compose
 // cleanly with the option-function pattern.
-func (s *YieldingSource[Data]) SetMetaFunc(f func(Data) map[string]any) {
+func (s *YieldingSource[Data]) SetMetaFunc(f func(context.Context, Data) map[string]any) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.metaFunc = f
@@ -538,13 +552,13 @@ func (s *YieldingSource[Data]) Len() int {
 
 // SetEmitHook is called by Register to install the push + webhook fanout
 // hook. User code should not normally call this directly.
-func (s *YieldingSource[Data]) SetEmitHook(hook func(Event)) {
+func (s *YieldingSource[Data]) SetEmitHook(hook func(context.Context, Event)) {
 	s.mu.Lock()
 	s.emitHook = hook
 	s.mu.Unlock()
 }
 
-func (s *YieldingSource[Data]) yield(data Data) error {
+func (s *YieldingSource[Data]) yield(ctx context.Context, data Data) error {
 	// One-shot terminated check. Sources that have signaled terminal
 	// can't deliver new events to subscribers (chans are closed).
 	// Returning nil rather than error so callers wrapping yield in
@@ -577,8 +591,23 @@ func (s *YieldingSource[Data]) yield(data Data) error {
 
 	s.mu.Lock()
 	if s.metaFunc != nil {
-		if m := s.metaFunc(data); len(m) > 0 {
+		if m := s.metaFunc(ctx, data); len(m) > 0 {
 			event.Meta = m
+		}
+	}
+	// SEP-414 P6 (issue 683): stamp the ctx's W3C trace context onto
+	// event.Meta so cross-process consumers (webhook HTTP delivery,
+	// HTTPSource inject) can read it from the event itself without
+	// the hop-by-hop ctx chain. metaFunc-set traceparent wins —
+	// matches the caller-preserves semantic used by
+	// core.InjectTraceContextIntoParams (server outbound _meta) and
+	// the TS-side Apps Bridge relay (PR 702).
+	if tc := core.TraceContextFromContext(ctx); !tc.IsZero() {
+		if event.Meta == nil {
+			event.Meta = map[string]any{}
+		}
+		if _, has := event.Meta[core.MetaKeyTraceparent]; !has {
+			core.InjectTraceContext(event.Meta, tc)
 		}
 	}
 	if !s.cursorless {
@@ -608,7 +637,7 @@ func (s *YieldingSource[Data]) yield(data Data) error {
 	}
 
 	if hook != nil {
-		hook(event)
+		hook(ctx, event)
 	}
 	return nil
 }

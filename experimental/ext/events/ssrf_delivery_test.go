@@ -100,7 +100,7 @@ func TestDelivery_RejectsLoopbackAtDialTime(t *testing.T) {
 	r := ssrfTestRegistry(false, logCap) // allowPrivate=false → loopback BLOCKED
 
 	r.Register(RegisterParams{CanonicalKey: []byte("k"), DerivedID: "sub_test", URL: srv.URL, Secret: "whsec_secret", MaxAgeSeconds: 0})
-	r.Deliver(MakeEvent("fake.event", "evt_1", "1", time.Now(),
+	r.Deliver(context.Background(), MakeEvent("fake.event", "evt_1", "1", time.Now(),
 		map[string]string{"text": "hi"}))
 
 	// Give the deliver goroutine a moment to fail.
@@ -125,7 +125,7 @@ func TestDelivery_AllowsLoopbackWithEscape(t *testing.T) {
 
 	r := ssrfTestRegistry(true, nil) // allowPrivate=true → demo mode
 	r.Register(RegisterParams{CanonicalKey: []byte("k"), DerivedID: "sub_test", URL: srv.URL, Secret: "whsec_secret", MaxAgeSeconds: 0})
-	r.Deliver(MakeEvent("fake.event", "evt_1", "1", time.Now(),
+	r.Deliver(context.Background(), MakeEvent("fake.event", "evt_1", "1", time.Now(),
 		map[string]string{"text": "hi"}))
 
 	require.Eventually(t, func() bool { return hits.Load() == 1 },
@@ -226,7 +226,7 @@ func TestDelivery_DoesNotFollowRedirects(t *testing.T) {
 	// not the SSRF dial guard.
 	r := ssrfTestRegistry(true, nil)
 	r.Register(RegisterParams{CanonicalKey: []byte("k"), DerivedID: "sub_test", URL: srv.URL, Secret: "whsec_secret", MaxAgeSeconds: 0})
-	r.Deliver(MakeEvent("fake.event", "evt_1", "1", time.Now(),
+	r.Deliver(context.Background(), MakeEvent("fake.event", "evt_1", "1", time.Now(),
 		map[string]string{"text": "hi"}))
 
 	// Wait long enough for the deliver loop to retry-and-fail (3xx

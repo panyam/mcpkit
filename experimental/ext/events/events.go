@@ -314,8 +314,8 @@ func Register(cfg Config) {
 			// the source's internal fanout. The default LocalEmitter
 			// runs Emit + EmitToWebhooks inline, preserving today's
 			// yield-blocks-on-delivery semantics.
-			ea.SetEmitHook(func(event Event) {
-				_ = emitter.Emit(context.Background(), event)
+			ea.SetEmitHook(func(ctx context.Context, event Event) {
+				_ = emitter.Emit(ctx, event)
 			})
 		}
 	}
@@ -426,13 +426,21 @@ func Register(cfg Config) {
 
 // Emit broadcasts an event to all connected SSE clients via Server.Broadcast.
 // This is the push delivery path.
-func Emit(srv *server.Server, event Event) {
+//
+// ctx threads through for SEP-414 trace propagation. Server.Broadcast
+// doesn't take ctx today (the SSE push path is its own concern); the
+// param is accepted for signature symmetry with EmitToWebhooks and so
+// future Broadcast(ctx, ...) plumbing slots in without churning every
+// caller.
+func Emit(_ context.Context, srv *server.Server, event Event) {
 	srv.Broadcast("notifications/events/event", event)
 }
 
-// EmitToWebhooks delivers an event to all registered webhooks.
-func EmitToWebhooks(webhooks *WebhookRegistry, event Event) {
-	webhooks.Deliver(event)
+// EmitToWebhooks delivers an event to all registered webhooks. ctx is
+// threaded through to WebhookRegistry.Deliver so the outbound HTTP
+// POST carries the W3C traceparent header (SEP-414 P6, issue 683).
+func EmitToWebhooks(ctx context.Context, webhooks *WebhookRegistry, event Event) {
+	webhooks.Deliver(ctx, event)
 }
 
 // --- Protocol method implementations ---
@@ -830,7 +838,7 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 				SubscriptionID: derivedID,
 				Mode:           DeliveryModeWebhook,
 				Deliver: func(event Event) {
-					webhooks.DeliverToTarget(canonicalCopy, event)
+					webhooks.DeliverToTarget(ctx, canonicalCopy, event)
 				},
 			})
 		}

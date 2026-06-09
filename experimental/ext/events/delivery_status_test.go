@@ -116,7 +116,7 @@ func TestDeliveryStatus_AfterSuccessPopulatesLastDeliveryAt(t *testing.T) {
 	require.Nil(t, dispatchSubscribe(t, srv, params).Error)
 
 	// Drive one successful delivery.
-	webhooks.Deliver(MakeEvent("fake.event", "evt_1", "1", time.Now(), map[string]string{"k": "v"}))
+	webhooks.Deliver(context.Background(), MakeEvent("fake.event", "evt_1", "1", time.Now(), map[string]string{"k": "v"}))
 	require.Eventually(t, func() bool { return hits.Load() >= 1 },
 		2*time.Second, 20*time.Millisecond, "delivery should have landed")
 
@@ -156,7 +156,7 @@ func TestDeliveryStatus_LastErrorIsCategorical(t *testing.T) {
 	}
 	require.Nil(t, dispatchSubscribe(t, srv, params).Error)
 
-	webhooks.Deliver(MakeEvent("fake.event", "evt_fail", "1", time.Now(), map[string]string{"k": "v"}))
+	webhooks.Deliver(context.Background(), MakeEvent("fake.event", "evt_fail", "1", time.Now(), map[string]string{"k": "v"}))
 	// Wait long enough for the deliver loop to retry-and-fail (3 retries
 	// with backoff 0.5s + 1s + 2s = ~3.5s total).
 	time.Sleep(4 * time.Second)
@@ -211,7 +211,7 @@ func TestSuspend_AfterThresholdConsecutiveFailures(t *testing.T) {
 	// Drive `threshold` consecutive failed deliveries (each deliver()
 	// internally retries; we count whole-call outcomes, not retries).
 	for i := 0; i < threshold; i++ {
-		r.deliver(r.Targets()[0], "evt_"+string(rune('a'+i)), []byte(`{}`))
+		r.deliver(r.Targets()[0], "evt_"+string(rune('a'+i)), []byte(`{}`), core.TraceContext{})
 	}
 
 	st := r.DeliveryStatus(canonical)
@@ -245,13 +245,13 @@ func TestSuspend_FailuresOutsideWindowDontAccumulate(t *testing.T) {
 	// 2 failures, then sleep past the window, then 2 more.
 	// First-failure-time should reset on the post-sleep failures, so
 	// total counted-toward-current-run = 2 < threshold = 3 → still Active.
-	r.deliver(r.Targets()[0], "evt_1", []byte(`{}`))
-	r.deliver(r.Targets()[0], "evt_2", []byte(`{}`))
+	r.deliver(r.Targets()[0], "evt_1", []byte(`{}`), core.TraceContext{})
+	r.deliver(r.Targets()[0], "evt_2", []byte(`{}`), core.TraceContext{})
 
 	time.Sleep(300 * time.Millisecond) // > 200ms window
 
-	r.deliver(r.Targets()[0], "evt_3", []byte(`{}`))
-	r.deliver(r.Targets()[0], "evt_4", []byte(`{}`))
+	r.deliver(r.Targets()[0], "evt_3", []byte(`{}`), core.TraceContext{})
+	r.deliver(r.Targets()[0], "evt_4", []byte(`{}`), core.TraceContext{})
 
 	st := r.DeliveryStatus(canonical)
 	assert.True(t, st.Active,
@@ -281,8 +281,8 @@ func TestSuspend_SuccessfulRefreshReactivates(t *testing.T) {
 	r.Register(RegisterParams{CanonicalKey: canonical, DerivedID: "sub_react", URL: receiver.URL, Secret: "whsec_secret", MaxAgeSeconds: 0})
 
 	// Drive 2 consecutive failures → suspended.
-	r.deliver(r.Targets()[0], "evt_a", []byte(`{}`))
-	r.deliver(r.Targets()[0], "evt_b", []byte(`{}`))
+	r.deliver(r.Targets()[0], "evt_a", []byte(`{}`), core.TraceContext{})
+	r.deliver(r.Targets()[0], "evt_b", []byte(`{}`), core.TraceContext{})
 	require.False(t, r.DeliveryStatus(canonical).Active, "precondition: target should be suspended")
 
 	// Refresh — same canonical tuple, idempotent re-Register.
@@ -333,15 +333,15 @@ func TestSuspend_SuspendedTargetSkippedInDeliver(t *testing.T) {
 	r.Register(RegisterParams{CanonicalKey: canonical, DerivedID: "sub_skip", URL: receiver.URL, Secret: "whsec_secret", MaxAgeSeconds: 0})
 
 	// Drive 2 failures → suspended.
-	r.deliver(r.Targets()[0], "evt_a", []byte(`{}`))
-	r.deliver(r.Targets()[0], "evt_b", []byte(`{}`))
+	r.deliver(r.Targets()[0], "evt_a", []byte(`{}`), core.TraceContext{})
+	r.deliver(r.Targets()[0], "evt_b", []byte(`{}`), core.TraceContext{})
 	require.False(t, r.DeliveryStatus(canonical).Active)
 
 	// Note hits up to here so we measure only what happens AFTER suspension.
 	hitsBeforeSuspendYield := eventHits.Load()
 
 	// Yield via Deliver — suspended target should be skipped.
-	r.Deliver(MakeEvent("fake.event", "evt_post_suspend", "1", time.Now(), map[string]string{"k": "v"}))
+	r.Deliver(context.Background(), MakeEvent("fake.event", "evt_post_suspend", "1", time.Now(), map[string]string{"k": "v"}))
 	time.Sleep(200 * time.Millisecond)
 
 	assert.Equal(t, hitsBeforeSuspendYield, eventHits.Load(),
@@ -391,8 +391,8 @@ func TestSuspend_AutoPostsTerminatedEnvelopeOnSuspension(t *testing.T) {
 	r.Register(RegisterParams{CanonicalKey: canonical, DerivedID: "sub_at", URL: receiver.URL, Secret: "whsec_secret", MaxAgeSeconds: 0})
 
 	// Drive 2 failures → suspend transition fires.
-	r.deliver(r.Targets()[0], "evt_a", []byte(`{}`))
-	r.deliver(r.Targets()[0], "evt_b", []byte(`{}`))
+	r.deliver(r.Targets()[0], "evt_a", []byte(`{}`), core.TraceContext{})
+	r.deliver(r.Targets()[0], "evt_b", []byte(`{}`), core.TraceContext{})
 
 	require.Eventually(t, func() bool {
 		return sawTerminated.Load() == 1
@@ -437,8 +437,8 @@ func TestSuspend_DoesNotAutoPostTerminatedTwice(t *testing.T) {
 	r.Register(RegisterParams{CanonicalKey: canonical, DerivedID: "sub_idem", URL: receiver.URL, Secret: "whsec_secret", MaxAgeSeconds: 0})
 
 	// Suspend.
-	r.deliver(r.Targets()[0], "evt_a", []byte(`{}`))
-	r.deliver(r.Targets()[0], "evt_b", []byte(`{}`))
+	r.deliver(r.Targets()[0], "evt_a", []byte(`{}`), core.TraceContext{})
+	r.deliver(r.Targets()[0], "evt_b", []byte(`{}`), core.TraceContext{})
 	require.Eventually(t, func() bool { return sawTerminated.Load() == 1 },
 		2*time.Second, 20*time.Millisecond)
 
@@ -455,7 +455,7 @@ func TestSuspend_DoesNotAutoPostTerminatedTwice(t *testing.T) {
 	// lookupTarget's internal RLock.
 	target, ok := r.lookupTarget(canonical)
 	require.True(t, ok)
-	r.deliver(target, "evt_c", []byte(`{}`))
+	r.deliver(target, "evt_c", []byte(`{}`), core.TraceContext{})
 
 	// Wait long enough that any auto-Post would have happened.
 	time.Sleep(500 * time.Millisecond)
@@ -480,7 +480,7 @@ func TestDeliveryStatus_LastErrorBucketsForConnectionRefused(t *testing.T) {
 	}
 	require.Nil(t, dispatchSubscribe(t, srv, params).Error)
 
-	webhooks.Deliver(MakeEvent("fake.event", "evt_refused", "1", time.Now(), map[string]string{"k": "v"}))
+	webhooks.Deliver(context.Background(), MakeEvent("fake.event", "evt_refused", "1", time.Now(), map[string]string{"k": "v"}))
 	time.Sleep(4 * time.Second) // 3 retries with backoff
 
 	result := dispatchSubscribeForStatus(t, srv, deadURL, params["delivery"].(map[string]any)["secret"].(string))

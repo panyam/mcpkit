@@ -149,8 +149,8 @@ func TestRegister_DefaultEmitterIsLocalEmitter(t *testing.T) {
 		UnsafeAnonymousPrincipal: "test-principal",
 	})
 
-	require.NoError(t, yield(map[string]any{"k": "v"}))
-	require.NoError(t, yield(map[string]any{"k": "v"}))
+	require.NoError(t, yield(context.Background(), map[string]any{"k": "v"}))
+	require.NoError(t, yield(context.Background(), map[string]any{"k": "v"}))
 
 	assert.Equal(t, int32(2), spy.count.Load(),
 		"configured Emitter must receive every yielded event")
