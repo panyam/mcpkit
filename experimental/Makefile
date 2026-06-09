@@ -29,6 +29,12 @@ test-events-stores-gorm: ## Run GORM-backed Webhook + Quota stores (sqlite + inm
 test-events-stores-gorm-pg: ## Run GORM stores against a real Postgres container (full matrix; needs Docker)
 	$(MAKE) -C $(EXPERIMENTAL_DIR)/ext/events/stores/gorm testpg
 
+test-events-stores-redis: ## Run Redis pubsub Emitter sub-module (miniredis; no Docker required)
+	cd $(EXPERIMENTAL_DIR)/ext/events/stores/redis && go test ./... -count=1 -timeout 60s
+
+test-events-stores-redis-real: ## Run the Redis pubsub Emitter against a real Redis container (Docker)
+	$(MAKE) -C $(EXPERIMENTAL_DIR)/ext/events/stores/redis testredis
+
 test-events-discord: ## Run experimental events Discord example tests
 	cd $(REPO_ROOT)/examples/events/discord && go test ./... -count=1 -timeout 60s
 
