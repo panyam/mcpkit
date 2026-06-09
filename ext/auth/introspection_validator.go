@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -195,11 +197,21 @@ func (v *IntrospectionValidator) Validate(r *http.Request) error {
 		}
 	}
 
+	// SessionID — oneauth's IntrospectionResult doesn't surface the OIDC
+	// `sid` claim today, and adding a field there is a parallel
+	// upstream change. For now we decode the bearer JWT payload (no
+	// signature verification — introspection just vouched for the same
+	// token; we're only reading metadata) and pull `sid` out. Empty
+	// when the token isn't a JWT or carries no sid. Consumed by BCL
+	// fan-out (issue 709).
+	sid := sidFromBearerJWT(token)
+
 	claims := &mcpcore.Claims{
-		Subject: subject,
-		Tenant:  tenant,
-		Issuer:  result.Iss,
-		Scopes:  scopes,
+		Subject:   subject,
+		Tenant:    tenant,
+		Issuer:    result.Iss,
+		SessionID: sid,
+		Scopes:    scopes,
 	}
 	if result.Aud != nil {
 		claims.Audience = audienceSlice(result.Aud)
@@ -301,6 +313,31 @@ func audienceSlice(aud any) []string {
 	default:
 		return nil
 	}
+}
+
+// sidFromBearerJWT decodes the OIDC `sid` claim from a JWT-shaped
+// bearer token without verifying the signature. Caller MUST have
+// already verified the token through another path (introspection,
+// in our case) before invoking this — this helper is metadata-only.
+// Returns "" when the token isn't a JWT (3 dot-separated parts), the
+// payload isn't decodable base64url, the payload isn't a JSON object,
+// or the object carries no `sid` field.
+func sidFromBearerJWT(token string) string {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return ""
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return ""
+	}
+	var c struct {
+		Sid string `json:"sid"`
+	}
+	if err := json.Unmarshal(payload, &c); err != nil {
+		return ""
+	}
+	return c.Sid
 }
 
 // containsAllScopes returns true iff every required scope is present

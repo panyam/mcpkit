@@ -66,6 +66,11 @@ services:
       OAUTH_CLIENT_ID: mcp-event-server
       OAUTH_CLIENT_SECRET: ${OAUTH_CLIENT_SECRET:-{{$.KCResourceSecret}}}
       OAUTH_CACHE_TTL: ${OAUTH_CACHE_TTL:-5s}
+      # OAUTH_ISSUER_BASE is the PUBLIC scheme://host:port that
+      # appears in token iss claims — same value KC_HOSTNAME is set
+      # to on the keycloak service below. The BCL receiver expects
+      # iss = OAUTH_ISSUER_BASE + "/realms/" + <realm> exactly.
+      OAUTH_ISSUER_BASE: http://localhost:8180
       # OTel telemetry. EXPORTER=auto means "best-effort OTLP with
       # silent Noop fallback" — works whether docker/observability is
       # up or not. To force OTLP and fail loudly when the collector
