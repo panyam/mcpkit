@@ -24,6 +24,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -111,7 +112,11 @@ func main() {
 			log.Printf("%s shutdown", prefix)
 			return
 		case <-ticker.C:
-			cur := pollOnce(c, *eventName, cursor, prefix)
+			cur, authDead := pollOnce(c, *eventName, cursor, prefix)
+			if authDead {
+				log.Printf("%s token invalidated by AS (401) — exiting", prefix)
+				return
+			}
 			if cur != nil {
 				cursor = *cur
 			}
@@ -120,16 +125,35 @@ func main() {
 }
 
 // pollOnce sends a single events/poll, prints every returned event,
-// and returns the next cursor (or nil to keep the current one when
-// the call fails — transient failures shouldn't stall the loop).
-func pollOnce(c *client.Client, eventName, cursor, prefix string) *string {
+// and returns the next cursor (nil to keep the current one when the
+// call fails transiently — transient failures shouldn't stall the
+// loop). The second return is authDead=true ONLY for HTTP 401, which
+// the demo treats as terminal: the operator just revoked the
+// session, the token is dead for the rest of its lifespan, and
+// silently retrying would just spam the AS. The walkthrough's
+// "revoke a session → watch the poller die" beat depends on this.
+func pollOnce(c *client.Client, eventName, cursor, prefix string) (next *string, authDead bool) {
 	res, err := c.Call("events/poll", map[string]any{
 		"name":   eventName,
 		"cursor": cursor,
 	})
 	if err != nil {
+		// 401 surfaces as ClientAuthError on the auth-retry path
+		// (most common, this is what the bearer-token flow uses); the
+		// plain transport path produces HTTPStatusError instead.
+		// Either one with StatusCode 401 means the session was
+		// revoked and there's no way to recover without re-login —
+		// exit so the iterm pane goes quiet.
+		var authErr *client.ClientAuthError
+		if errors.As(err, &authErr) && authErr.StatusCode == http.StatusUnauthorized {
+			return nil, true
+		}
+		var httpErr *client.HTTPStatusError
+		if errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusUnauthorized {
+			return nil, true
+		}
 		fmt.Fprintf(os.Stderr, "%s poll error: %v\n", prefix, err)
-		return nil
+		return nil, false
 	}
 	var pr struct {
 		Events  []events.Event `json:"events"`
@@ -138,12 +162,12 @@ func pollOnce(c *client.Client, eventName, cursor, prefix string) *string {
 	}
 	if err := json.Unmarshal(res.Raw, &pr); err != nil {
 		fmt.Fprintf(os.Stderr, "%s decode error: %v\n", prefix, err)
-		return nil
+		return nil, false
 	}
 	for _, ev := range pr.Events {
 		printEvent(prefix, ev)
 	}
-	return pr.Cursor
+	return pr.Cursor, false
 }
 
 // printEvent renders a delivered event to stdout — one line per event,
