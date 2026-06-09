@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/examples/events/discord
 
-go 1.26.3
+go 1.26.4
 
 replace (
 	github.com/panyam/mcpkit => ../../..

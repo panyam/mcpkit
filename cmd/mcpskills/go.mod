@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/cmd/mcpskills
 
-go 1.26.3
+go 1.26.4
 
 require (
 	github.com/panyam/mcpkit v0.2.45
