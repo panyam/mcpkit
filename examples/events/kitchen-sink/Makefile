@@ -1,13 +1,23 @@
-ADDR ?= http://localhost:8080
-MCP  := $(ADDR)/mcp
+ADDR     ?= http://localhost:8080
+MCP      := $(ADDR)/mcp
 
-.PHONY: help serve demo demo-test note readme build test test-race clean
+# SEP-414 P6 observability selector (issue 667). See examples/CONVENTIONS.md
+# § Telemetry wiring for the four-value matrix ("" = Noop / stdout / otlp /
+# auto). Pair `EXPORTER=otlp` or `EXPORTER=auto` with the docker/observability
+# LGTM stack to land spans in Tempo under service `kitchen-sink-events`.
+# Default is "" — zero overhead, no SDK pulled.
+EXPORTER ?=
+
+.PHONY: help serve serve-otlp demo demo-test note readme build test test-race clean
 
 help: ## Show this help.
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / { printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
-serve: ## Start the kitchen-sink server standalone.
-	go run . --serve -addr :8080
+serve: ## Start the kitchen-sink server standalone. Pass EXPORTER=stdout|otlp|auto to opt into spans.
+	go run . --serve -addr :8080 --exporter=$(EXPORTER)
+
+serve-otlp: ## Start with EXPORTER=auto (probes docker/observability stack; silent Noop fallback if unreachable).
+	go run . --serve -addr :8080 --exporter=auto
 
 demo: ## Run the demokit walkthrough (interactive TUI). Server must be up via `make serve` in another terminal.
 	go run . --tui
