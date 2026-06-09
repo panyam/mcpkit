@@ -80,6 +80,8 @@ replace github.com/panyam/mcpkit => ../..
 
 replace github.com/panyam/mcpkit/examples/common => ../common
 
+replace github.com/panyam/mcpkit/ext/otel => ../../ext/otel
+
 replace github.com/panyam/mcpkit/cmd/common => ../../cmd/common
 
 replace github.com/panyam/mcpkit/ext/skills => ../../ext/skills
