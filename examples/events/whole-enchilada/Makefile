@@ -129,6 +129,14 @@ webhook: ## Long-running webhook subscriber. TENANT=A|B|C plus either TOKEN=<bea
 iterm: ## macOS+iTerm2 only — open a 2x3 grid: row1 = pollers A/B/C, row2 = webhooks A/B/C.
 	@bash ./iterm-6up.sh
 
+clear_all_tokens: ## Sign out every USER session in all 3 tenant realms (keeps mcp-event-server client creds intact).
+	@docker exec whole-enchilada-keycloak-1 /opt/keycloak/bin/kcadm.sh config credentials \
+		--server http://keycloak:8080 --realm master --user admin --password admin >/dev/null
+	@for realm in tenant-a tenant-b tenant-c; do \
+		docker exec whole-enchilada-keycloak-1 /opt/keycloak/bin/kcadm.sh create logout-all -r $$realm >/dev/null && \
+		echo "[clear_all_tokens] $$realm: all user sessions signed out"; \
+	done
+
 inject: ## Inject one event from the host. TENANT=A|B|C [EVENT=chat.message] [TEXT="..."].
 	@if [ -z "$(TENANT)" ]; then echo "usage: make inject TENANT=A|B|C [EVENT=<name>] [TEXT='...']"; exit 2; fi
 	go -C inject run . --tenant $(call tenant-realm,$(TENANT)) --event $(EVENT) --text $(call shellquote,$(TEXT))
