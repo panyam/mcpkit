@@ -77,6 +77,15 @@ services:
       # is missing, set EXPORTER=otlp in the host shell before
       # docker compose up.
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-mcpkit-otel-collector:4317}
+      # Redis backend (issues 634 + 718). When REDIS_ADDR is set,
+      # event-server's configureRedisBackend swaps the in-memory
+      # QuotaStore + LocalEmitter defaults for Redis-backed
+      # counterparts (Pattern B: Publisher is the sole outbound sink;
+      # Subscriber delivers to LOCAL on every replica). This is what
+      # makes the multi-replica push-survival demo actually work —
+      # without it, each replica maintains its own subscription
+      # counts and fans out only locally.
+      REDIS_ADDR: ${REDIS_ADDR:-redis.whole-enchilada:6379}
     # `--exporter=auto` means best-effort OTLP with Noop fallback when
     # the collector is unreachable. common.RegisterTelemetryFlags
     # doesn't read EXPORTER from env, so we wire it via the CLI flag;
@@ -91,6 +100,8 @@ services:
       retries: 5
     depends_on:
       keycloak:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       whole-enchilada:
@@ -217,12 +228,23 @@ services:
   #       aliases:
   #         - postgres.whole-enchilada
   #
-  # redis:
-  #   image: redis:7-alpine
-  #   networks:
-  #     whole-enchilada:
-  #       aliases:
-  #         - redis.whole-enchilada
+  # Redis — shared backend for the events lib's QuotaStore (atomic
+  # counters; issue 718) AND Emitter pubsub (cross-replica fanout;
+  # issue 634). Tag-pinned 7-alpine; in-memory only (no AOF / RDB) —
+  # counters resetting on restart is acceptable per #407.
+  redis:
+    image: redis:7-alpine
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 1s
+      retries: 10
+    networks:
+      whole-enchilada:
+        aliases:
+          - redis.whole-enchilada
 
   # -------------------------------------------------------------------
   # Stage 4 — Admin frontend + OTel + observability stack (commented)
