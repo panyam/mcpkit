@@ -87,6 +87,27 @@ Trace context propagates across the Redis pubsub hop end-to-end:
 
 Caller-set precedence: if you explicitly stamped `_meta.traceparent` on an event before calling `Emit`, that value wins — the publisher will NOT overwrite it. Mirrors `core.InjectTraceContextIntoParams`'s "caller-set wins" rule for MCP wire calls.
 
+## Quota
+
+`NewQuotaStore(opts)` returns an `events.QuotaStore` backed by Redis atomic counters. Per-tuple key: `<ChannelPrefix>.quota.<principal>.<eventName>`.
+
+```go
+qs, _ := redisstore.NewQuotaStore(opts)
+cfg.Quota = events.NewQuota(qs, events.WithMaxSubscriptionsPerPrincipal("chat.message", 5))
+```
+
+**Atomic primitives.** `ReserveQuota` and `ReleaseQuota` each run a Lua script server-side via `EVALSHA` (with `EVAL` fallback on `NOSCRIPT`). One round trip per call; the check + increment + EXPIRE on Reserve, and decrement + delete-if-zero on Release, all happen atomically on the Redis side. Concurrent `Reserve`s on the same key under high contention never over-grant.
+
+**Sliding TTL** (`Options.QuotaTTL`, default `1h`). Every successful `Reserve` refreshes the counter's TTL — active counters never expire under load. A counter that's been leaked (caller crashed before `Release`) drops after `QuotaTTL` of inactivity. Set `QuotaTTL` shorter for faster leak recovery, longer for safer tolerance of slow Reserve→Release loops.
+
+**Release semantics.** `Release` at zero is a silent no-op (matches the in-memory store's contract — `double-Release` shouldn't underflow). When `Release` brings the counter to zero, the script deletes the key so `redis-cli KEYS` doesn't show drifted zero rows.
+
+**Out of scope for v1:**
+
+- Cluster-aware key sharding (hash-tag co-location)
+- Sliding-window quotas (this is fixed-bucket — same as the in-memory + GORM defaults)
+- Cross-tenant aggregate quotas
+
 ### Redis-client-level spans (opt-in)
 
 The pubsub-level trace propagation above stitches publisher → subscriber across the Redis hop. To also see per-`PUBLISH` and per-`SUBSCRIBE` spans on the Redis client itself (latency to Redis, command parsing, etc.), wire `redisotel.InstrumentTracing` on the client BEFORE handing it to `Options.Client`:

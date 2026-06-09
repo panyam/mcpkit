@@ -2,6 +2,7 @@ package redisstore
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 
@@ -12,6 +13,15 @@ import (
 // channels are organized. Per-event channel name is
 // "<prefix>.<event.Name>" — see channelFor.
 const DefaultChannelPrefix = "mcpkit.events"
+
+// DefaultQuotaTTL is the default leak-survival window for
+// QuotaStore-managed counter keys. Long enough that a legitimate
+// slow Reserve → Release loop never trips it; short enough that a
+// leaked Reserve (caller crashed before releasing) drops within a
+// typical operator shift. Sliding — every Reserve refreshes the
+// TTL on the counter key, so active counters never expire under
+// load.
+const DefaultQuotaTTL = time.Hour
 
 // Options bundles configuration for both Publisher and Subscriber.
 // Client is required; everything else has a working default.
@@ -39,6 +49,15 @@ type Options struct {
 	// failure, etc.). Default: a no-op logger. Wire log.Printf or a
 	// structured logger when debugging multi-replica setups.
 	Logger func(format string, args ...any)
+
+	// QuotaTTL is the sliding-window TTL the QuotaStore applies to
+	// each counter key on every Reserve. Default DefaultQuotaTTL (1
+	// hour). A leaked Reserve (caller crashed before Release) drops
+	// after this many seconds of inactivity; active counters never
+	// expire under load because EXPIRE is refreshed on every Reserve.
+	// Set to 0 to use the default; negative values are invalid and
+	// will produce an error from NewQuotaStore.
+	QuotaTTL time.Duration
 }
 
 // withDefaults returns a copy of opts with zero-valued fields filled
@@ -55,7 +74,18 @@ func (o Options) withDefaults() Options {
 	if o.Logger == nil {
 		o.Logger = func(string, ...any) {}
 	}
+	if o.QuotaTTL == 0 {
+		o.QuotaTTL = DefaultQuotaTTL
+	}
 	return o
+}
+
+// quotaKeyFor returns the Redis key holding the counter for the given
+// (principal, eventName). Lives under "<ChannelPrefix>.quota.<...>"
+// so the events lib's logical namespace stays consistent across
+// pubsub channels and quota keys.
+func (o Options) quotaKeyFor(principal, eventName string) string {
+	return o.ChannelPrefix + ".quota." + principal + "." + eventName
 }
 
 // channelFor returns the Redis channel name an event with the given
