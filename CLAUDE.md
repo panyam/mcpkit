@@ -22,7 +22,9 @@ make testconf-skills   # SEP-2640 — fork @ MCPCONFORMANCE_SKILLS_PATH; drives 
 make testconf-upstream-audit # Audit mcpkit against modelcontextprotocol/conformance@main → conformance/UPSTREAM_AUDIT.md (informational scenario-level pass/fail; runs in the conformance umbrella but exits 0 by design)
 make refresh-conformance # Regenerate CONFORMANCE.md from upstream tier-check + traceability (issue #498). Driver: scripts/refresh-conformance.sh, renderer: tools/conformance-report.
 make check-conformance-stale # CI gate — refresh + git diff --exit-code CONFORMANCE.md (issue #498). Wired into .github/workflows/test.yml on every PR.
-make testall           # Everything (9 stages, 18 sub-stages) + Keycloak + HTML report
+make testall           # Everything (9 stages, 21 sub-stages) + Keycloak + HTML report
+                       # stage 5a/5b cover ext/otel + examples/otel/stdout (issue 634 wiring)
+                       # stage 7d covers experimental/ext/events/stores/redis (issue 634 wiring)
 make audit             # govulncheck + gosec + gitleaks + race
 make tag-push V=vX.Y.Z # Tag root + all sub-modules and push
 ```
