@@ -477,6 +477,39 @@ Demo wiring in `examples/apps/vanilla/dice.html` (per-page-load random tracepare
 
 **Open spec question:** the Apps Bridge is a non-MCP transport; whether the relay belongs in the Apps spec for cross-SDK interop is open. mcpkit ships the relay; upstream note filed only if working-group interest surfaces.
 
+### Events bus trace context relay — landed (issue 683; PR 712 + PR 714)
+
+W3C Trace Context propagates across every gate in the events lifecycle so a yield on replica A and a downstream webhook delivery (or a poll-side replay on replica B) appear in Tempo as one stitched trace. Sister to the Apps Bridge relay — same "non-MCP propagation hop" pattern across a different boundary topology.
+
+**Four gates, three carriers, one consistent rule.** Each gate picks the carrier appropriate to its boundary:
+
+| Gate | Carrier | Where |
+|---|---|---|
+| 1. `yield(ctx, data)` | `event.Meta.traceparent` (persistent) + `ctx` (in-process) | `YieldingSource.yield` stamps `Meta` from `ctx`; emit hook receives the same `ctx` |
+| 2. emit hook → `Emitter.Emit(ctx, event)` | `ctx` | `Register` passes the hook's `ctx` straight to the configured Emitter |
+| 3. `WebhookRegistry.Deliver(ctx, event)` → outbound HTTP | HTTP `traceparent` header | `deliver()` extracts from `ctx` (preferred) or `event.Meta` (fallback for replayed events), stamps the header before `client.Do` |
+| 4. `HTTPSource.serveInject` (receiving replica) | inbound HTTP header → `ctx` → `event.Meta` | Handler reads the `traceparent` header, builds `core.TraceContext`, attaches via `core.WithTraceContext`, calls `s.yield(ctx, data)` — closes the round-trip |
+
+**Caller-preserves rule.** If `SetMetaFunc` pre-stamps `event.Meta.traceparent`, the yield-time auto-injection is skipped — uniform with `core.InjectTraceContextIntoParams` and the TS-side Apps Bridge relay.
+
+**`events.webhook.deliver` span (PR 714).** `WebhookRegistry.WithWebhookTracerProvider(tp)` opts the registry into emitting a span around each retry loop. Attributes: `webhook.target.id`, `webhook.url`, `mcp.event.name`, `http.method`, `http.response.status_code`, `webhook.retry.attempts`. `RecordError` fires on retries-exhausted with the categorical bucket. Nil = Noop, zero overhead. **Live-verified** against the LGTM stack: span landed with all attributes set, 4 attempts counted, `STATUS_CODE_ERROR` on the failure path, duration matched the 0.5s + 1s + 2s backoff schedule exactly.
+
+**`Server.Broadcast(ctx, ...)` (PR 714).** Signature widened to accept ctx so `events.Emit` can thread the trace context through the SSE push path. Underlying session broadcasters don't consume ctx yet — that plumbing is tracked separately on panyam/mcpkit#715. The events module already passes the trace context via `event.Meta` regardless, so push subscribers see it on the wire today; the ticket is about SSE-side span emission, not propagation.
+
+End-to-end trace shape (multi-replica with webhook fanout):
+
+```
+yield(ctx, data) on replica A
+└─ event.Meta.traceparent stamped
+   └─ emit hook (ctx) → LocalEmitter → WebhookRegistry.Deliver(ctx, event)
+      └─ events.webhook.deliver span (PR 714)
+         └─ HTTP POST to replica B with traceparent header
+            └─ replica B HTTPSource.serveInject reads header
+               └─ yield(ctx, data) on replica B (same TraceID)
+```
+
+Demo wiring lives in `examples/events/whole-enchilada/event-server/main.go` (`events.WithWebhookTracerProvider(tp)` threaded against the existing `commonotel.SetupTelemetry` TP). Adopter sweep (PR 714) updated `examples/events/discord` and `examples/events/telegram` to the new `yield(ctx, ...)` / `SetMetaFunc(ctx, ...)` signatures. Cross-replica peer-fanout Emitter (Redis pubsub) tracked on panyam/mcpkit#634 + panyam/mcpkit#639 with concrete design comments added.
+
 ## Downstream consumers of the Phase 1 contract
 
 - **`experimental/ext/events/` cross-replica bus (issue #629).** The
