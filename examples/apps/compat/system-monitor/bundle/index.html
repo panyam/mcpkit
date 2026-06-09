@@ -208,35 +208,35 @@ body { margin: 2em auto; max-width: 900px; padding: 0 1em; font-family: -apple-s
       "title": "Connect to the fixture",
       "step_id": "step-1",
       "visit": 1,
-      "output": "    ERROR: initialize failed: Post \"http://127.0.0.1:3202/mcp\": dial tcp 127.0.0.1:3202: connect: connection refused\n    Start the server with: make serve\n"
+      "output": "    connected to System Monitor Server 1.0.0\n"
     },
     {
       "kind": "step",
       "title": "tools/list — App tool + App-only tool side-by-side",
       "step_id": "step-2",
       "visit": 1,
-      "output": "    ERROR: Post \"http://127.0.0.1:3202/mcp\": dial tcp 127.0.0.1:3202: connect: connection refused\n"
+      "output": "    get-system-info\n      _meta: {\n        \"ui\": {\n          \"resourceUri\": \"ui://system-monitor/mcp-app.html\"\n        },\n        \"ui/resourceUri\": \"ui://system-monitor/mcp-app.html\"\n      }\n    poll-system-stats\n      _meta: {\n        \"ui\": {\n          \"visibility\": [\n            \"app\"\n          ]\n        }\n      }\n"
     },
     {
       "kind": "step",
       "title": "tools/call get-system-info {} — static system info",
       "step_id": "step-3",
       "visit": 1,
-      "output": "    ERROR: Post \"http://127.0.0.1:3202/mcp\": dial tcp 127.0.0.1:3202: connect: connection refused\n"
+      "output": "    structuredContent: {\n      \"arch\": \"arm64\",\n      \"cpu\": {\n        \"count\": 14,\n        \"model\": \"Unknown\"\n      },\n      \"hostname\": \"GMMACANCNC93M93\",\n      \"memory\": {\n        \"totalBytes\": 0\n      },\n      \"platform\": \"darwin arm64\"\n    }\n"
     },
     {
       "kind": "step",
       "title": "tools/call poll-system-stats {} — dynamic sample",
       "step_id": "step-4",
       "visit": 1,
-      "output": "    ERROR: Post \"http://127.0.0.1:3202/mcp\": dial tcp 127.0.0.1:3202: connect: connection refused\n"
+      "output": "    cores: 14\n    memory: map[freeBytes:0 usedBytes:0 usedPercent:0]\n    uptime: map[seconds:0]\n    timestamp: 2026-06-09T01:55:28.291141Z\n"
     },
     {
       "kind": "step",
       "title": "resources/read on ui://system-monitor/mcp-app.html",
       "step_id": "step-5",
       "visit": 1,
-      "output": "    ERROR: Post \"http://127.0.0.1:3202/mcp\": dial tcp 127.0.0.1:3202: connect: connection refused\n"
+      "output": "    545093 bytes; first 200:\n      \u003c!DOCTYPE html\u003e\n\u003chtml lang=\"en\"\u003e\n\u003chead\u003e\n  \u003cmeta charset=\"UTF-8\"\u003e\n  \u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"\u003e\n  \u003cmeta name=\"color-scheme\" content=\"light dark\"\u003e\n  \u003ctitle\u003eSys…\n"
     },
     {
       "kind": "section",
