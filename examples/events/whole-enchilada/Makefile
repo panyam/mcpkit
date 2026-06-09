@@ -126,6 +126,9 @@ webhook: ## Long-running webhook subscriber. TENANT=A|B|C plus either TOKEN=<bea
 		$(if $(PASSWORD),--password $(PASSWORD)) \
 		--event $(EVENT)
 
+iterm: ## macOS+iTerm2 only — open a 2x3 grid: row1 = pollers A/B/C, row2 = webhooks A/B/C.
+	@bash ./iterm-6up.sh
+
 inject: ## Inject one event from the host. TENANT=A|B|C [EVENT=chat.message] [TEXT="..."].
 	@if [ -z "$(TENANT)" ]; then echo "usage: make inject TENANT=A|B|C [EVENT=<name>] [TEXT='...']"; exit 2; fi
 	go -C inject run . --tenant $(call tenant-realm,$(TENANT)) --event $(EVENT) --text $(call shellquote,$(TEXT))
