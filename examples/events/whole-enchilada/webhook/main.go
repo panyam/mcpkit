@@ -32,6 +32,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -49,8 +50,18 @@ func main() {
 		"MCP endpoint URL (default: nginx frontdoor)")
 	token := flag.String("token", os.Getenv("TOKEN"),
 		"Bearer token. Acquire via `make newtoken TENANT=<X>` upstream of this binary.")
+	username := flag.String("username", os.Getenv("USERNAME"),
+		"OAuth username for ROPC token acquisition. Alternative to --token — pair with --password. Tenant comes from --tenant.")
+	password := flag.String("password", os.Getenv("PASSWORD"),
+		"OAuth password for ROPC token acquisition. Alternative to --token — pair with --username.")
+	keycloakURL := flag.String("keycloak-url", envOr("KEYCLOAK_URL", "http://localhost:8180"),
+		"Keycloak base URL for ROPC token acquisition (only consulted when --username/--password are set).")
+	clientID := flag.String("client-id", envOr("OAUTH_CLIENT_ID", "mcp-events-poller"),
+		"OAuth client ID used to authenticate the ROPC token request.")
+	clientSecret := flag.String("client-secret", envOr("OAUTH_CLIENT_SECRET", "mcpkit-demo-secret-DEMO-ONLY"),
+		"OAuth client secret used to authenticate the ROPC token request.")
 	tenantLabel := flag.String("tenant", os.Getenv("TENANT"),
-		"Display label for log prefix only; does NOT change auth.")
+		"Realm name. Used as a log-prefix display label, AND — when --username/--password are set — as the Keycloak realm to acquire the token from.")
 	eventName := flag.String("event", envOr("WEBHOOK_EVENT", "chat.message"),
 		"Event source name to subscribe to.")
 	listenAddr := flag.String("listen", envOr("WEBHOOK_LISTEN", "127.0.0.1:0"),
@@ -59,8 +70,18 @@ func main() {
 		"Public URL the event-server uses to call this listener. Defaults to http://<listen-addr>. Override when the event-server runs in Docker and needs host.docker.internal or a tunneled URL.")
 	flag.Parse()
 
+	if *token == "" && *username != "" && *password != "" {
+		acquired, err := acquireTokenROPC(*keycloakURL, *tenantLabel, *clientID, *clientSecret, *username, *password)
+		if err != nil {
+			log.Fatalf("[webhook] ROPC token acquisition failed: %v", err)
+		}
+		*token = acquired
+		log.Printf("[webhook] acquired bearer token via ROPC (user=%s realm=%s)", *username, *tenantLabel)
+	}
+
 	if *token == "" {
-		log.Fatal("[webhook] --token is required. Run `make newtoken TENANT=<X>` first.")
+		log.Fatal("[webhook] need either --token (or TOKEN=) OR --username + --password (or USERNAME= + PASSWORD=). " +
+			"Run `make newtoken TENANT=<X>` to acquire one.")
 	}
 
 	prefix := "[webhook"
@@ -212,6 +233,44 @@ func abs64(x int64) int64 {
 		return -x
 	}
 	return x
+}
+
+// acquireTokenROPC obtains a bearer access token from Keycloak via
+// OAuth 2.0 Resource Owner Password Credentials (RFC 6749 §4.3) for
+// the given realm. ROPC is deprecated by OAuth 2.1; we keep this path
+// for the demo's CI / one-liner usage where browser login is
+// impractical. Matches the behavior of `make newtoken-ci`.
+func acquireTokenROPC(keycloakURL, realm, clientID, clientSecret, username, password string) (string, error) {
+	if realm == "" {
+		return "", fmt.Errorf("--tenant is required when using --username/--password")
+	}
+	endpoint := strings.TrimRight(keycloakURL, "/") + "/realms/" + realm + "/protocol/openid-connect/token"
+	form := url.Values{
+		"grant_type":    {"password"},
+		"client_id":     {clientID},
+		"client_secret": {clientSecret},
+		"username":      {username},
+		"password":      {password},
+	}
+	resp, err := http.PostForm(endpoint, form)
+	if err != nil {
+		return "", fmt.Errorf("POST %s: %w", endpoint, err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("token endpoint returned %d: %s", resp.StatusCode, string(body))
+	}
+	var t struct {
+		AccessToken string `json:"access_token"`
+	}
+	if err := json.Unmarshal(body, &t); err != nil {
+		return "", fmt.Errorf("token response decode failed: %w", err)
+	}
+	if t.AccessToken == "" {
+		return "", fmt.Errorf("token response missing access_token")
+	}
+	return t.AccessToken, nil
 }
 
 func envOr(key, fallback string) string {
