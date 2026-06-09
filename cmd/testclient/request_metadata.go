@@ -5,7 +5,7 @@ package main
 //
 // The scenario's mock server is a bare HTTP server — no MCP initialize
 // handshake — but it DOES handle `server/discover` (returning a
-// DRAFT-2026-v1 supported version), which means a stateless-wire mcpkit
+// 2026-07-28 supported version), which means a stateless-wire mcpkit
 // client connects cleanly. After connect, every subsequent POST carries
 // the SEP-2575 `_meta` envelope (protocolVersion, clientInfo,
 // clientCapabilities) and the `MCP-Protocol-Version` header — exactly

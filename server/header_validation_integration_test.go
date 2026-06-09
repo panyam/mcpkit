@@ -14,7 +14,7 @@ import (
 // testStreamableServerAllowLegacyOnDraft builds a streamable server
 // configured with WithAllowLegacyOnDraft so the SEP-2243 routing-header
 // integration tests can drive the legacy initialize+session wire on
-// DRAFT-2026-v1 without tripping the strict SEP-2575 _meta enforcement.
+// 2026-07-28 without tripping the strict SEP-2575 _meta enforcement.
 // These tests precisely cover the back-compat path the new option
 // preserves; everywhere else the default (strict, off) applies.
 func testStreamableServerAllowLegacyOnDraft() *httptest.Server {
@@ -45,7 +45,7 @@ func testStreamableServerAllowLegacyOnDraft() *httptest.Server {
 }
 
 // initDraftSession bootstraps a Streamable HTTP session that negotiated
-// the DRAFT-2026-v1 protocol version, so subsequent POSTs go through
+// the 2026-07-28 protocol version, so subsequent POSTs go through
 // the SEP-2243 routing-header gate.
 func initDraftSession(t *testing.T, url string) string {
 	t.Helper()
@@ -53,7 +53,7 @@ func initDraftSession(t *testing.T, url string) string {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
-		Params:  json.RawMessage(`{"protocolVersion":"DRAFT-2026-v1","capabilities":{},"clientInfo":{"name":"draft-test","version":"1.0"}}`),
+		Params:  json.RawMessage(`{"protocolVersion":"2026-07-28","capabilities":{},"clientInfo":{"name":"draft-test","version":"1.0"}}`),
 	})
 	if err != nil {
 		t.Fatalf("initialize POST failed: %v", err)

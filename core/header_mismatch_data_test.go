@@ -86,15 +86,15 @@ func TestHeaderMismatchData_DecodeWithoutExtras(t *testing.T) {
 	wire := []byte(`{
 		"reason":   "MCP-Protocol-Version header value does not match request body",
 		"header":   "MCP-Protocol-Version",
-		"expected": "DRAFT-2026-v1",
+		"expected": "2026-07-28",
 		"received": "v999.0.0"
 	}`)
 	var d HeaderMismatchData
 	if err := json.Unmarshal(wire, &d); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if d.Expected != "DRAFT-2026-v1" {
-		t.Errorf("Expected = %q, want DRAFT-2026-v1", d.Expected)
+	if d.Expected != "2026-07-28" {
+		t.Errorf("Expected = %q, want 2026-07-28", d.Expected)
 	}
 	if d.Extra != nil {
 		t.Errorf("Extra populated when wire carried no extras: %+v", d.Extra)

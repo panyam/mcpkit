@@ -11,7 +11,7 @@ import (
 // Wire shape:
 //
 //	{
-//	  "supportedVersions": ["DRAFT-2026-v1"],
+//	  "supportedVersions": ["2026-07-28"],
 //	  "capabilities":      { ...ServerCapabilities... },
 //	  "serverInfo":        { "name": "...", "version": "..." }
 //	}
