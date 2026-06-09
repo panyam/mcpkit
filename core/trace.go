@@ -508,6 +508,51 @@ func WithActiveSpan(ctx context.Context, span Span) context.Context {
 	return context.WithValue(ctx, activeSpanCtxKey{}, span)
 }
 
+// --- New-root-span signaling (P6 ext/tasks contract complement — issue 659) --
+
+type newRootSpanCtxKey struct{}
+
+// WithNewRootSpan marks ctx so that the next TracerProvider.StartSpan /
+// StartSpanLinked call produces a span with no parent — even when ctx
+// carries an inherited parent (a core.TraceContext attached upstream,
+// or the adapter's own internal span context, e.g. the OTel
+// trace.SpanContext installed by a previous StartSpan).
+//
+// Use this when spawning work that conceptually outlives the
+// originating request — async tasks, events-bus producers — so the new
+// span shows up as a root trace rather than as a long-running child
+// nested under a short request span. Pair with StartSpanLinked plus a
+// Link back to the originating span so the lifecycle stays navigable
+// across the boundary.
+//
+// The marker is read by the TracerProvider adapter via
+// IsNewRootSpanRequested. Adapters that don't honor the marker (or the
+// NoopTracerProvider) silently ignore it — the spawned span starts
+// under whatever parent ctx happened to carry, which degrades to the
+// same trace tree the unmarked path would produce. Best-effort by
+// design: callers don't have to branch on adapter capability.
+//
+// The marker is one-shot in spirit (it signals the upcoming StartSpan)
+// but is NOT auto-consumed — any nested StartSpan call on the returned
+// ctx would also see the marker. In practice this doesn't matter
+// because the adapter's StartSpan publishes a fresh span context (and
+// a fresh core.TraceContext) on the returned ctx, so nested calls
+// naturally derive from the new root. Callers that want to defensively
+// gate further reads can branch on IsNewRootSpanRequested themselves.
+func WithNewRootSpan(ctx context.Context) context.Context {
+	return context.WithValue(ctx, newRootSpanCtxKey{}, true)
+}
+
+// IsNewRootSpanRequested reports whether ctx was marked by
+// WithNewRootSpan. TracerProvider adapter implementations read this to
+// decide whether to strip any inherited parent before starting the
+// new span. End-user code should not need to call this — use
+// WithNewRootSpan at the call site and let the adapter do the rest.
+func IsNewRootSpanRequested(ctx context.Context) bool {
+	v, _ := ctx.Value(newRootSpanCtxKey{}).(bool)
+	return v
+}
+
 // SpanFromContext returns the currently active Span carried by ctx, or
 // a no-op Span when none has been attached. The returned Span is
 // NEVER nil — callers can unconditionally call SetAttribute /

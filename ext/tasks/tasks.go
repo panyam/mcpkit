@@ -27,6 +27,29 @@ type Config struct {
 	// DefaultPollMs is the suggested poll interval in milliseconds,
 	// returned to clients in CreateTaskResult as pollIntervalMs. Default: 1000 (1 second).
 	DefaultPollMs int
+
+	// TracerProvider opts the runtime into SEP-414 P6 instrumentation of
+	// the async task lifecycle (issue 659). When set, spawnGoAsyncTask
+	// emits a `task.execute` span as a NEW root trace (so the long-running
+	// task work doesn't render as a multi-hour child under a few-ms create
+	// span) carrying a Link back to the originating tools/call create
+	// span. Each tasks/get / tasks/update / tasks/cancel dispatch span
+	// additionally Adds a Link to the originating create span so a backend
+	// can pivot from any poll into the whole task lifecycle.
+	//
+	// Span attributes:
+	//   - `mcp.task.id`     — task identifier
+	//   - `mcp.task.status` — final status stamped at End (completed /
+	//                         failed / cancelled / input_required)
+	//
+	// On the failure paths (handler error, protocol error, panic recover)
+	// the span also gets RecordError so observability backends count it
+	// as an error trace and surface the underlying message.
+	//
+	// Nil or core.NoopTracerProvider{} (the default) skips the install —
+	// zero allocation, no spans emitted. ext/tasks depends on the core
+	// abstraction only; no compile-time dep on ext/otel.
+	TracerProvider core.TracerProvider
 }
 
 func (c *Config) defaults() {
@@ -39,6 +62,9 @@ func (c *Config) defaults() {
 	if c.DefaultPollMs <= 0 {
 		c.DefaultPollMs = 1000
 	}
+	if c.TracerProvider == nil {
+		c.TracerProvider = core.NoopTracerProvider{}
+	}
 }
 
 // v2TaskRuntime holds per-registration state for v2 tasks, shared between
@@ -47,6 +73,11 @@ type v2TaskRuntime struct {
 	store    server.TaskStore
 	registry *server.Registry
 
+	// tp is the optional SEP-414 P6 TracerProvider (issue 659). Defaulted
+	// to core.NoopTracerProvider{} by Config.defaults() so call sites can
+	// unconditionally StartSpanLinked / StartSpan without nil-checking.
+	tp core.TracerProvider
+
 	mu sync.Mutex
 	active   map[string]*activeTask
 	// taskErrors stores protocol-level errors (TaskError) for failed tasks.
@@ -54,15 +85,24 @@ type v2TaskRuntime struct {
 	taskErrors map[string]*core.TaskError
 	// creatorToolForTask maps taskID → tool name for callback dispatch.
 	creatorToolForTask map[string]string
+	// originTC stashes the originating tools/call create-span's trace
+	// context per task. Survives terminal transition (the entry is NOT
+	// cleared in unregister) so polls landing on a finished task still
+	// AddLink back to the original create span. Matches the lifetime of
+	// taskErrors / creatorToolForTask — same coarse "outlives the
+	// goroutine" bucket of post-terminal lookups.
+	originTC map[string]core.TraceContext
 }
 
 func newV2TaskRuntime(cfg Config) *v2TaskRuntime {
 	return &v2TaskRuntime{
 		store:              cfg.Store,
 		registry:           cfg.Server.Registry(),
+		tp:                 cfg.TracerProvider,
 		active:             make(map[string]*activeTask),
 		taskErrors:         make(map[string]*core.TaskError),
 		creatorToolForTask: make(map[string]string),
+		originTC:           make(map[string]core.TraceContext),
 	}
 }
 
@@ -89,6 +129,26 @@ func (rt *v2TaskRuntime) getTaskError(taskID string) *core.TaskError {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
 	return rt.taskErrors[taskID]
+}
+
+// setOrigin records the originating tools/call create-span's trace
+// identity for taskID. Called once from spawnGoAsyncTask BEFORE the
+// background goroutine starts, so the goroutine and any later
+// tasks/get / tasks/update / tasks/cancel handler can reach it.
+func (rt *v2TaskRuntime) setOrigin(taskID string, tc core.TraceContext) {
+	rt.mu.Lock()
+	rt.originTC[taskID] = tc
+	rt.mu.Unlock()
+}
+
+// getOrigin returns the originating create-span trace context for
+// taskID, or a zero TraceContext when the task was never recorded
+// (sync-as-completed path, unknown ID, or pre-tracing-install task).
+// Adapters silently drop zero links so callers don't have to pre-filter.
+func (rt *v2TaskRuntime) getOrigin(taskID string) core.TraceContext {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	return rt.originTC[taskID]
 }
 
 func (rt *v2TaskRuntime) cancelTask(taskID string) {
@@ -518,9 +578,36 @@ func spawnGoAsyncTask(
 		return core.NewErrorResponse(req.ID, -32603, "failed to create task: "+err.Error()), nil
 	}
 
+	// Capture the originating tools/call dispatch span identity BEFORE
+	// the goroutine spawns — ctx still carries the create span as its
+	// active trace context. Stash on the runtime so the goroutine
+	// (task.execute) and any later tasks/get / update / cancel handler
+	// can build a Link back to it. A zero originTC is fine: adapters
+	// silently drop zero-traceparent links downstream.
+	originTC := core.TraceContextFromContext(ctx)
+	rt.setOrigin(taskID, originTC)
+
 	go func() {
 		bgCtx := core.DetachForBackground(ctx)
 		bgCtx, cancelFunc := context.WithCancel(bgCtx)
+
+		// SEP-414 P6 (issue 659): task.execute is a NEW root trace
+		// linked back to the create span, NOT a child. The work runs
+		// long after the create span ends — nesting it would render as
+		// a multi-hour child under a few-ms parent in observability
+		// backends. WithNewRootSpan tells the adapter to scrub any
+		// inherited parent (the create span's OTel span context
+		// preserved by context.WithoutCancel inside DetachForBackground)
+		// before StartSpanLinked. The link keeps the lifecycle
+		// navigable across the boundary.
+		bgCtx = core.WithNewRootSpan(bgCtx)
+		var links []core.Link
+		if !originTC.IsZero() {
+			links = []core.Link{core.LinkFromTraceContext(originTC)}
+		}
+		bgCtx, taskSpan := core.StartSpanLinked(rt.tp, bgCtx, "task.execute", links,
+			core.Attribute{Key: "mcp.task.id", Value: taskID},
+		)
 
 		// SEP-2663 input-request flow: each v2 task gets its own inputState.
 		// TaskContext.TaskElicit / TaskSample stash pending requests here;
@@ -557,7 +644,18 @@ func spawnGoAsyncTask(
 				rt.setTaskError(taskID, te)
 				store.StoreTerminalResult(taskID, sessionID, core.TaskFailed, core.ErrorResult(msg), msg)
 				notifyV2TaskStatus(bgCtx, rt, store, taskID, sessionID)
+				taskSpan.RecordError(fmt.Errorf("%s", msg))
 			}
+			// Stamp final status from whatever the store ended up with —
+			// covers every terminal path (completed / failed / cancelled)
+			// without the defer having to know which branch ran. Then End
+			// once. Safe even when the goroutine exits before any store
+			// transition (the task stays Working in the store; we record
+			// that and downstream backends see the abandoned span).
+			if info, ok := store.Get(taskID, sessionID); ok {
+				taskSpan.SetAttribute("mcp.task.status", string(info.Status))
+			}
+			taskSpan.End()
 		}()
 
 		resp, mwErr := next(bgCtx, req)
@@ -566,6 +664,7 @@ func spawnGoAsyncTask(
 			rt.setTaskError(taskID, te)
 			store.StoreTerminalResult(taskID, sessionID, core.TaskFailed, core.ErrorResult(mwErr.Error()), mwErr.Error())
 			notifyV2TaskStatus(bgCtx, rt, store, taskID, sessionID)
+			taskSpan.RecordError(mwErr)
 			return
 		}
 		if resp.Error != nil {
@@ -573,6 +672,7 @@ func spawnGoAsyncTask(
 			rt.setTaskError(taskID, te)
 			store.StoreTerminalResult(taskID, sessionID, core.TaskFailed, core.ErrorResult(resp.Error.Message), resp.Error.Message)
 			notifyV2TaskStatus(bgCtx, rt, store, taskID, sessionID)
+			taskSpan.RecordError(fmt.Errorf("%s", resp.Error.Message))
 			return
 		}
 
@@ -588,6 +688,7 @@ func spawnGoAsyncTask(
 			rt.setTaskError(taskID, te)
 			store.StoreTerminalResult(taskID, sessionID, core.TaskFailed, core.ErrorResult(msg), msg)
 			notifyV2TaskStatus(bgCtx, rt, store, taskID, sessionID)
+			taskSpan.RecordError(fmt.Errorf("%s", msg))
 			return
 		}
 
@@ -679,6 +780,13 @@ func makeV2GetHandler(rt *v2TaskRuntime) server.MethodHandler {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 		}
 
+		// SEP-414 P6: link this dispatch span back to the originating
+		// tools/call create span so a backend can pivot from any poll
+		// into the task's whole lifecycle. SpanFromContext returns the
+		// dispatch span when TracerProvider is configured, a no-op span
+		// otherwise; AddLink with a zero origin is silently dropped.
+		core.SpanFromContext(ctx).AddLink(core.LinkFromTraceContext(rt.getOrigin(p.TaskID)))
+
 		sid := ctx.SessionID()
 		info, ok := rt.store.Get(p.TaskID, sid)
 		if !ok {
@@ -752,6 +860,10 @@ func makeV2UpdateHandler(rt *v2TaskRuntime) server.MethodHandler {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "missing taskId")
 		}
 
+		// SEP-414 P6: link dispatch span back to the create span. See
+		// makeV2GetHandler for the rationale.
+		core.SpanFromContext(ctx).AddLink(core.LinkFromTraceContext(rt.getOrigin(p.TaskID)))
+
 		sid := ctx.SessionID()
 		info, ok := rt.store.Get(p.TaskID, sid)
 		if !ok {
@@ -782,6 +894,10 @@ func makeV2CancelHandler(rt *v2TaskRuntime) server.MethodHandler {
 		if err := json.Unmarshal(params, &p); err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 		}
+
+		// SEP-414 P6: link dispatch span back to the create span. See
+		// makeV2GetHandler for the rationale.
+		core.SpanFromContext(ctx).AddLink(core.LinkFromTraceContext(rt.getOrigin(p.TaskID)))
 
 		// SEP-2663 cancel is idempotent — if the task is already terminal,
 		// return the same empty ack as on an active task so clients don't
