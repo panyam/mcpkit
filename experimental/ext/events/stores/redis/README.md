@@ -78,6 +78,32 @@ Wire-format is `Codec`-pluggable. Default is `JSONCodec` (`encoding/json` over t
 
 The `Codec` interface lives in this sub-module for now. When a second cross-process backend (Kafka, NATS) wants the same shape, we promote it to the parent package.
 
+## Trace context propagation (SEP-414)
+
+Trace context propagates across the Redis pubsub hop end-to-end:
+
+- `Publisher.Emit(ctx, event)` reads the W3C `TraceContext` off `ctx` via `core.TraceContextFromContext` and stamps `traceparent` + `tracestate` onto `event.Meta` under the bare-name keys (matching the wire convention for every other mcpkit transport).
+- `Subscriber` extracts the same keys off each received `event.Meta` via `core.ExtractTraceContext` and derives a per-message `ctx` via `core.WithTraceContext`. The `DeliverFunc` receives that child `ctx`, so any span it opens parents to the publisher-side span automatically.
+
+Caller-set precedence: if you explicitly stamped `_meta.traceparent` on an event before calling `Emit`, that value wins — the publisher will NOT overwrite it. Mirrors `core.InjectTraceContextIntoParams`'s "caller-set wins" rule for MCP wire calls.
+
+### Redis-client-level spans (opt-in)
+
+The pubsub-level trace propagation above stitches publisher → subscriber across the Redis hop. To also see per-`PUBLISH` and per-`SUBSCRIBE` spans on the Redis client itself (latency to Redis, command parsing, etc.), wire `redisotel.InstrumentTracing` on the client BEFORE handing it to `Options.Client`:
+
+```go
+import (
+    "github.com/redis/go-redis/v9"
+    "github.com/redis/go-redis/extra/redisotel/v9"
+)
+
+cli := redis.NewClient(&redis.Options{Addr: "redis:6379"})
+_ = redisotel.InstrumentTracing(cli)  // emits redis.publish / redis.subscribe spans
+opts := redisstore.Options{Client: cli}
+```
+
+This is a deliberate opt-in — `Options` doesn't take a `TracerProvider` because OTel SDK wiring is the user's choice, and pinning a specific OTel pipeline inside this sub-module would couple it to one observability stack.
+
 ## Testing
 
 ```
