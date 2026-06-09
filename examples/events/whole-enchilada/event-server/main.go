@@ -86,7 +86,14 @@ func main() {
 		},
 	})
 
-	webhooks := events.NewWebhookRegistry(
+	// Postgres backend (issue 639): when POSTGRES_DSN is set, swap the
+	// in-memory WebhookStore default for the gorm-backed Postgres impl
+	// so webhook subscriptions survive event-server restarts and live
+	// in a single source of truth across replicas.
+	pgBackend := configurePostgresBackend()
+	defer pgBackend.shutdown()
+
+	webhookOpts := []events.WebhookOption{
 		// Stage-1 escape: demo receivers run on loopback (compose network
 		// resolves to private IPs); production-default SSRF guard would
 		// reject. Production stages will wire a real allowlist.
@@ -96,7 +103,11 @@ func main() {
 		// chain (client tools/call → server dispatch → webhook
 		// delivery) as one row in Tempo.
 		events.WithWebhookTracerProvider(tp),
-	)
+	}
+	if ws := pgBackend.webhookStore(); ws != nil {
+		webhookOpts = append(webhookOpts, events.WithWebhookStore(ws))
+	}
+	webhooks := events.NewWebhookRegistry(webhookOpts...)
 
 	srvOpts := []server.Option{
 		server.WithSubscriptions(),
