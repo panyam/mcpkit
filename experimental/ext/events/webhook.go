@@ -222,6 +222,23 @@ type WebhookTarget struct {
 	Principal string         // resolved subscription principal (used by HookContext)
 	Params    map[string]any // canonicalized subscription params (passed to hooks)
 
+	// Subject is the raw OAuth `sub` claim — same value the
+	// IntrospectionValidator / JWTValidator stamped on
+	// core.Claims.Subject at subscribe time. Stored alongside Principal
+	// so BCL fan-out (issue 709) can match a revoked session by `sub`
+	// when the AS only carried that side of the (sub, sid) tuple.
+	// Empty for UnsafeAnonymousPrincipal subscriptions.
+	Subject string
+
+	// SessionID is the OIDC `sid` claim — same value the validators
+	// stamped on core.Claims.SessionID at subscribe time. Stored on
+	// the target so BCL fan-out can drop exactly the subscriptions
+	// tied to a revoked session in O(N) over the webhook store
+	// without consulting the AS again. Empty when the token carried
+	// no sid (legacy issuers / non-OIDC tokens / anonymous demo
+	// escape).
+	SessionID string
+
 	// Status is per-target delivery health, surfaced on subscribe refresh
 	// response per spec §"Webhook Delivery Status" L425-460.
 	// Mutated only via *WebhookRegistry methods under r.mu so the
@@ -552,6 +569,13 @@ type RegisterParams struct {
 	EventName string
 	Principal string
 	Params    map[string]any
+
+	// Subject / SessionID — copies of claims.Subject / claims.SessionID
+	// stamped on the target so BCL fan-out can match a revoked session
+	// against this subscription without re-introspecting. See
+	// WebhookTarget for the longer rationale (issue 709).
+	Subject   string
+	SessionID string
 }
 
 // Register adds or refreshes a webhook subscription keyed on the spec's
@@ -622,6 +646,8 @@ func (r *WebhookRegistry) Register(p RegisterParams) (expiresAt time.Time, isNew
 			MaxAgeSeconds: p.MaxAgeSeconds,
 			EventName:     p.EventName,
 			Principal:     p.Principal,
+			Subject:       p.Subject,
+			SessionID:     p.SessionID,
 			Params:        p.Params,
 			// Active defaults to true on first registration. The
 			// suspend state machine flips this to false after

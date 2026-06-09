@@ -150,9 +150,19 @@ B events go only to B's windows; C events only to C's. The push-server is also c
 
 Open `http://localhost:8180/admin/master/console/#/tenant-a/users` (admin / admin) in a browser. Click `alice` → **Sessions** tab → **Sign out**.
 
-Within ~5 seconds (`OAUTH_CACHE_TTL`), A1 + A2 (Tenant A's poller + webhook) exit with `-32012 Forbidden`. B1/B2/C1/C2 keep flowing — revocation is per-realm; isolation holds.
+Two distinct revocation paths fire from this one click:
 
-This is the **load-bearing introspection demo**: revocation is synchronously visible to the resource server because the event-server's `IntrospectionValidator` calls Keycloak's `/introspect` on every request (cached for `OAUTH_CACHE_TTL`). JWT validation can't make this claim — JWT tokens stay valid until natural expiry.
+**(1) Poller — introspection cache eviction (~5s):**
+
+Within `OAUTH_CACHE_TTL` (~5s), the event-server's next /introspect call for A1's bearer returns `active=false`. A1 exits with a logged `token invalidated by AS (401) — exiting` line.
+
+**(2) Webhook — OIDC Back-Channel Logout (~immediate):**
+
+Keycloak ALSO POSTs a signed `logout_token` JWT to the URL the realm has registered as `backchannel_logout_uri` on the `mcp-events-poller` client — `http://event_server.whole_enchilada:8080/backchannel-logout/tenant-a`. The event-server's `ext/auth.BackChannelLogoutHandler` validates the JWT (signature via JWKS, iss/aud/exp/iat, jti replay guard) and fires a registered listener that calls `webhooks.TerminateBySession(sid, ...)`. Matching webhook subscriptions receive a `{type:terminated, error:{-32012, ...}}` envelope via Standard Webhooks signature headers and are dropped from the registry. A2's receiver logs the terminated envelope.
+
+B1/B2/C1/C2 keep flowing — revocation is per-realm; isolation holds.
+
+To see the BCL POST land, tail the event-server logs in a sibling window: `docker compose -f docker-compose.yaml logs -f event-server-1 | grep BCL` — the `BCL fire: realm=tenant-a sub=... sid=... killed=N` line marks each revocation event.
 
 Re-acquire a token (`TOKEN_POLLER_TENANT_A=$(make newtoken TENANT=A)`) and restart the poller to reconnect.
 
