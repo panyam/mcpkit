@@ -162,7 +162,16 @@ func (p *Provider) StartSpanLinked(ctx context.Context, name string, links []cor
 // doesn't duplicate the parent-install / WithTraceContext / WithActiveSpan
 // sequence — only the option-list construction varies.
 func (p *Provider) startSpanInternal(ctx context.Context, name string, links []core.Link, attrs []core.Attribute) (context.Context, core.Span) {
-	if parent := core.TraceContextFromContext(ctx); !parent.IsZero() {
+	// Honor core.WithNewRootSpan first (issue 659). When the caller has
+	// asked for a new root, strip any OTel parent already on ctx so the
+	// SDK's tracer.Start doesn't silently re-parent the new span under
+	// the inherited span context. Skip the core.TraceContext-based
+	// parent install entirely in this branch — the marker's whole point
+	// is to suppress inheritance, even when an upstream layer wrote a
+	// non-zero TraceContext.
+	if core.IsNewRootSpanRequested(ctx) {
+		ctx = oteltrace.ContextWithSpanContext(ctx, oteltrace.SpanContext{})
+	} else if parent := core.TraceContextFromContext(ctx); !parent.IsZero() {
 		if parentSC, ok := traceContextToSpanContext(parent); ok {
 			ctx = oteltrace.ContextWithSpanContext(ctx, parentSC)
 		}

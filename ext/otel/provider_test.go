@@ -415,3 +415,109 @@ func TestProvider_SpanAddLink_InvalidLink_Dropped(t *testing.T) {
 	require.Len(t, spans, 1)
 	assert.Empty(t, spans[0].Links, "invalid AddLink calls must be silently dropped")
 }
+
+// --- P6 ext/tasks complement: WithNewRootSpan (issue 659) -------------------
+
+// When ctx carries an inbound trace context, StartSpan parents the new
+// span under it (default behavior, regression-guards the existing
+// adapter contract).
+func TestStartSpan_InheritsParentFromTraceContext(t *testing.T) {
+	p, exp := newRecordingProvider(t)
+	parentTC := core.TraceContext{Traceparent: linkTP1}
+	ctx := core.WithTraceContext(context.Background(), parentTC)
+
+	_, span := p.StartSpan(ctx, "child")
+	span.End()
+
+	spans := exp.GetSpans()
+	require.Len(t, spans, 1)
+	assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", spans[0].SpanContext.TraceID().String(),
+		"child span must share the inbound trace ID — the adapter's default parent-inheritance path")
+}
+
+// When ctx is marked via core.WithNewRootSpan, the adapter MUST strip
+// any inherited parent (both the core.TraceContext and any latent OTel
+// span context already installed) so the new span emits as a fresh
+// root trace. This is the ext/otel-side enabler for the ext/tasks
+// task.execute root + link pattern (issue 659).
+func TestStartSpan_NewRootSpan_DetachesFromCoreTraceContext(t *testing.T) {
+	p, exp := newRecordingProvider(t)
+	parentTC := core.TraceContext{Traceparent: linkTP1}
+	ctx := core.WithTraceContext(context.Background(), parentTC)
+	ctx = core.WithNewRootSpan(ctx)
+
+	_, span := p.StartSpan(ctx, "task.execute")
+	span.End()
+
+	spans := exp.GetSpans()
+	require.Len(t, spans, 1)
+	assert.NotEqual(t, "4bf92f3577b34da6a3ce929d0e0e4736", spans[0].SpanContext.TraceID().String(),
+		"WithNewRootSpan must scrub the inherited core.TraceContext so the new span emits its own root trace ID")
+	assert.False(t, spans[0].Parent.IsValid(),
+		"new-root span must have no parent SpanContext — observability backends render it as a top-level trace")
+}
+
+// When ctx already carries an OTel parent installed by an earlier
+// StartSpan, WithNewRootSpan must strip THAT too — not just the
+// core.TraceContext. This is the exact shape goroutine bgCtx ends up
+// in after core.DetachForBackground (context.WithoutCancel preserves
+// every value, including the OTel span context, so a subsequent
+// StartSpan would otherwise silently re-parent under the dispatch
+// span).
+func TestStartSpan_NewRootSpan_DetachesFromOTelParent(t *testing.T) {
+	p, exp := newRecordingProvider(t)
+	parentCtx, parentSpan := p.StartSpan(context.Background(), "create")
+	parentTraceID := parentSpan.(*mcpotel.Span)
+	_ = parentTraceID
+	defer parentSpan.End()
+
+	rootCtx := core.WithNewRootSpan(parentCtx)
+	_, rootSpan := p.StartSpan(rootCtx, "task.execute")
+	rootSpan.End()
+
+	spans := exp.GetSpans()
+	require.Len(t, spans, 1, "only the inner span has ended; outer parent stays open")
+	assert.False(t, spans[0].Parent.IsValid(),
+		"new-root span must not inherit OTel parent installed by the outer StartSpan")
+}
+
+// Sanity check: marking a brand-new ctx as new-root is a no-op
+// (nothing to scrub) and produces the same root-trace shape as a
+// plain StartSpan on context.Background. Adapters that silently honor
+// the marker on already-rootless ctx are correct.
+func TestStartSpan_NewRootSpan_PlainCtx_StillProducesRoot(t *testing.T) {
+	p, exp := newRecordingProvider(t)
+	ctx := core.WithNewRootSpan(context.Background())
+
+	_, span := p.StartSpan(ctx, "root-from-empty")
+	span.End()
+
+	spans := exp.GetSpans()
+	require.Len(t, spans, 1)
+	assert.False(t, spans[0].Parent.IsValid(),
+		"new-root on plain ctx must produce a root span")
+}
+
+// The new-root marker composes with StartSpanLinked: the result is a
+// root span (no parent inherited) carrying the supplied links. This is
+// the exact shape ext/tasks uses for task.execute.
+func TestStartSpanLinked_NewRootSpan_EmitsRootWithLinks(t *testing.T) {
+	p, exp := newRecordingProvider(t)
+	parentTC := core.TraceContext{Traceparent: linkTP1}
+	ctx := core.WithTraceContext(context.Background(), parentTC)
+	ctx = core.WithNewRootSpan(ctx)
+
+	links := []core.Link{core.LinkFromTraceContext(parentTC)}
+	_, span := p.StartSpanLinked(ctx, "task.execute", links,
+		core.Attribute{Key: "mcp.task.id", Value: "t-root"},
+	)
+	span.End()
+
+	spans := exp.GetSpans()
+	require.Len(t, spans, 1)
+	assert.False(t, spans[0].Parent.IsValid(),
+		"task.execute must be a root, not a child of the create span")
+	require.Len(t, spans[0].Links, 1, "the link to the create span MUST survive the root-strip")
+	assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", spans[0].Links[0].SpanContext.TraceID().String(),
+		"link still points at the originating trace identity")
+}
