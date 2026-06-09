@@ -2,17 +2,17 @@
 // nginx/nginx.conf from embedded templates for arbitrary replica
 // counts of the event-server tier (-n) and the push-server tier (-m).
 //
-// The output mirrors the *.whole_enchilada DNS naming convention:
+// The output mirrors the *.whole-enchilada DNS naming convention:
 //
-//	event_server.whole_enchilada    — round-robin pool of all N event-server replicas
-//	event_server_<i>.whole_enchilada — direct pin to replica i (1..N)
-//	pusher.whole_enchilada           — round-robin pool of all M push-server replicas
-//	pusher_<i>.whole_enchilada       — direct pin to replica i (1..M)
-//	receiver.whole_enchilada         — example webhook consumer
+//	event-server.whole-enchilada    — round-robin pool of all N event-server replicas
+//	event-server-<i>.whole-enchilada — direct pin to replica i (1..N)
+//	pusher.whole-enchilada           — round-robin pool of all M push-server replicas
+//	pusher-<i>.whole-enchilada       — direct pin to replica i (1..M)
+//	receiver.whole-enchilada         — example webhook consumer
 //
-// Stages 2+ enrich the same convention with admin.whole_enchilada,
-// keycloak.whole_enchilada, grafana.whole_enchilada, loki.whole_enchilada,
-// mimir.whole_enchilada, etc. The same template adds those blocks
+// Stages 2+ enrich the same convention with admin.whole-enchilada,
+// keycloak.whole-enchilada, grafana.whole-enchilada, loki.whole-enchilada,
+// mimir.whole-enchilada, etc. The same template adds those blocks
 // behind feature flags when later stages land.
 package main
 

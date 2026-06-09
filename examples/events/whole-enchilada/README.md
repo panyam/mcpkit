@@ -12,7 +12,7 @@ Host  ──[MCP / SSE]──>  Nginx  ──>  Event-server  <──[HTTP /even
 
 - **Compose graph** (`docker-compose.yaml`) with nginx + N event-server replicas + M push-server replicas + one example receiver, plus commented-out blocks for stages 2/3/4 (Keycloak, Postgres, Redis, admin frontend, OTel + Grafana / Loki / Mimir).
 - **Templated** — `make gen-compose N=<n> M=<m>` regenerates the compose YAML and nginx config for arbitrary replica counts.
-- **DNS naming convention** — every service answers a `*.whole_enchilada` hostname both inside the compose network and (with `make hosts-install`) from the host shell / browser. See "Hostname routing" below.
+- **DNS naming convention** — every service answers a `*.whole-enchilada` hostname both inside the compose network and (with `make hosts-install`) from the host shell / browser. See "Hostname routing" below.
 - **All three delivery modes** work end-to-end: poll, push (SSE), webhook.
 - **In-memory stores** — restart wipes state. Stage 3 plugs in Postgres + Redis.
 
@@ -178,7 +178,7 @@ The event-server's `tryEnableAuth()` picks up `OAUTH_ISSUER` and fetches JWKS fr
 
 ### How events flow
 
-1. `push-server` calls `eventsclient.Pusher.PushNamed("chat.message", data)` against `http://event_server.whole_enchilada/events/chat.message/inject`.
+1. `push-server` calls `eventsclient.Pusher.PushNamed("chat.message", data)` against `http://event-server.whole-enchilada/events/chat.message/inject`.
 2. `event-server`'s `events.HTTPSource[ChatMessageData]` handler decodes and yields into the library's `YieldingSource`.
 3. The library fans out: push subscribers receive the event via SSE on `events/stream`, webhook subscribers get an HTTP POST with a Standard Webhooks signature, poll subscribers see it on their next `events/poll`.
 4. The `receiver` verifies the signature and logs the payload.
@@ -197,30 +197,30 @@ The event-server's `tryEnableAuth()` picks up `OAUTH_ISSUER` and fetches JWKS fr
 
 ## Hostname routing
 
-Every service answers a `<role>.whole_enchilada` hostname via Docker network aliases (inside the compose network) and nginx server-name routing (from the host).
+Every service answers a `<role>.whole-enchilada` hostname via Docker network aliases (inside the compose network) and nginx server-name routing (from the host).
 
 | Hostname | Resolves to |
 |---|---|
-| `nginx.whole_enchilada` | nginx frontdoor (port 80) |
-| `event_server.whole_enchilada` | Round-robins across all N event-server replicas |
-| `event_server_1.whole_enchilada`, `event_server_2.whole_enchilada`, … | Specific replica (regex-routed by nginx) |
-| `pusher.whole_enchilada` | Round-robins across all M push-server admin ports |
-| `pusher_1.whole_enchilada`, `pusher_2.whole_enchilada`, … | Specific push-server (admin port) |
-| `receiver.whole_enchilada` | Example webhook consumer |
+| `nginx.whole-enchilada` | nginx frontdoor (port 80) |
+| `event-server.whole-enchilada` | Round-robins across all N event-server replicas |
+| `event-server-1.whole-enchilada`, `event-server-2.whole-enchilada`, … | Specific replica (regex-routed by nginx) |
+| `pusher.whole-enchilada` | Round-robins across all M push-server admin ports |
+| `pusher-1.whole-enchilada`, `pusher-2.whole-enchilada`, … | Specific push-server (admin port) |
+| `receiver.whole-enchilada` | Example webhook consumer |
 
 **From the host shell**, install the `/etc/hosts` entries once:
 
 ```bash
-make hosts-install        # appends 127.0.0.1 nginx.whole_enchilada ... (needs sudo)
+make hosts-install        # appends 127.0.0.1 nginx.whole-enchilada ... (needs sudo)
 make hosts-uninstall      # removes them
 ```
 
 After that:
 
 ```bash
-curl http://event_server.whole_enchilada/mcp                    # any replica
-curl http://event_server_2.whole_enchilada/healthz              # specifically replica 2
-curl http://pusher.whole_enchilada/status                       # any push-server's admin
+curl http://event-server.whole-enchilada/mcp                    # any replica
+curl http://event-server-2.whole-enchilada/healthz              # specifically replica 2
+curl http://pusher.whole-enchilada/status                       # any push-server's admin
 ```
 
 **From inside a container**, the same names just work — Docker's embedded DNS resolves the network aliases.
@@ -233,7 +233,7 @@ curl http://pusher.whole_enchilada/status                       # any push-serve
 | 3 | Postgres-backed Cursor/Webhook/Quota stores. Redis EventBus. Cross-replica fanout (verified by killing a replica mid-stream). | #639 |
 | 4 | Admin frontend. M push-servers driven by admin-configured source bindings. OTel collector + Jaeger + Grafana + Loki + Mimir. Push survival walkthrough. | #638 |
 
-The directory layout and the `*.whole_enchilada` naming convention are forward-compatible — later stages add services without restructuring.
+The directory layout and the `*.whole-enchilada` naming convention are forward-compatible — later stages add services without restructuring.
 
 ## Layout
 
