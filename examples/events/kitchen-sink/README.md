@@ -13,6 +13,31 @@ make demo-test        # OR: non-interactive (for CI / scripting)
 make readme           # regenerate WALKTHROUGH.md
 ```
 
+## Tracing (optional, SEP-414 P6 — issue 667)
+
+The server is wired to opt into OpenTelemetry trace emission via the `--exporter` flag (or `EXPORTER` env var). Four values, matching every other mcpkit example — see [`examples/CONVENTIONS.md`](../../CONVENTIONS.md) § Telemetry wiring for the full matrix.
+
+```bash
+# Default — Noop TracerProvider, zero overhead, no spans.
+make serve
+
+# Print every span to stdout (teaching / debugging mode).
+EXPORTER=stdout make serve
+
+# Hand spans to the docker/observability LGTM stack.
+# Bring it up first: (cd ../../../docker/observability && docker compose up -d)
+# Then either:
+make serve-otlp                          # equivalent to EXPORTER=auto — silent fallback if stack isn't up
+EXPORTER=otlp make serve                 # warns on dial failure
+```
+
+When the LGTM stack is up, open Grafana → Tempo → service `kitchen-sink-events`. Spans you'll see:
+
+- **One dispatch span per JSON-RPC method** (subscribe / unsubscribe / poll / list / etc.) — from the SEP-414 P2 server middleware.
+- **`events.webhook.deliver` spans** around each outbound webhook POST (when a webhook subscriber is registered) — from `events.WithWebhookTracerProvider`.
+
+Per-subscription `Match` / `Transform` spans on the fanout hot path are NOT emitted today — that's a hot-path concern (fanout runs every 2s × N subscribers) needing sampling design. Tracked as a follow-up; see [issue 667](https://github.com/panyam/mcpkit/issues/667) for the design options.
+
 ## What it demonstrates
 
 Each bullet maps to a walkthrough step:

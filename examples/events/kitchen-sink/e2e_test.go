@@ -19,7 +19,7 @@ import (
 
 func newTestStack(t *testing.T) (*httptest.Server, *wiredServer) {
 	t.Helper()
-	w := buildServer(":0")
+	w := buildServer(":0", nil)
 	handler := w.srv.Handler(server.WithStreamableHTTP(true))
 	ts := httptest.NewServer(handler)
 	t.Cleanup(ts.Close)
@@ -73,9 +73,9 @@ func TestMatch_ChannelFiltering_RoutesOnlyMatchingEventsToEachSub(t *testing.T) 
 	require.NoError(t, err)
 	defer streamB.Stop()
 
-	require.NoError(t, injectChat(w.chatYield, "general", "alice", "hi general"))
-	require.NoError(t, injectChat(w.chatYield, "dev", "bob", "hi dev"))
-	require.NoError(t, injectChat(w.chatYield, "alerts", "carol", "irrelevant"))
+	require.NoError(t, injectChat(context.Background(), w.chatYield, "general", "alice", "hi general"))
+	require.NoError(t, injectChat(context.Background(), w.chatYield, "dev", "bob", "hi dev"))
+	require.NoError(t, injectChat(context.Background(), w.chatYield, "alerts", "carol", "irrelevant"))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -126,7 +126,7 @@ func TestTransform_RedactsPII_OnlyForOptedInSubscriber(t *testing.T) {
 	require.NoError(t, err)
 	defer streamRedact.Stop()
 
-	require.NoError(t, injectAlert(w.alertYield, "P1", "api-gateway", "alice",
+	require.NoError(t, injectAlert(context.Background(), w.alertYield, "P1", "api-gateway", "alice",
 		"latency spike — page alice@example.com"))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -163,8 +163,8 @@ func TestMatch_FiltersBeforeTransform(t *testing.T) {
 	require.NoError(t, err)
 	defer stream.Stop()
 
-	require.NoError(t, injectAlert(w.alertYield, "P2", "api-gateway", "alice", "p2 noise"))
-	require.NoError(t, injectAlert(w.alertYield, "P1", "api-gateway", "alice", "p1 match"))
+	require.NoError(t, injectAlert(context.Background(), w.alertYield, "P2", "api-gateway", "alice", "p2 noise"))
+	require.NoError(t, injectAlert(context.Background(), w.alertYield, "P1", "api-gateway", "alice", "p1 match"))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
