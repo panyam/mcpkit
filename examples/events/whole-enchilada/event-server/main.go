@@ -109,11 +109,17 @@ func main() {
 	}
 	webhooks := events.NewWebhookRegistry(webhookOpts...)
 
-	srvOpts := []server.Option{
+	// Canonical baseline (WithListen + the color logger wired to both
+	// transport request logging and dispatch middleware) per
+	// examples/CONVENTIONS.md § serve-srv-listenandserve. Matches the
+	// discord precedent — event-server can't use `common.RunServer`
+	// because of the per-realm BCL handler wiring + custom mux + Postgres
+	// backend lifecycle, but the per-option baseline still applies.
+	srvOpts := common.MCPServerOptions(*addr, "[mcp] ")
+	srvOpts = append(srvOpts,
 		server.WithSubscriptions(),
-		server.WithListen(*addr),
 		server.WithTracerProvider(tp),
-	}
+	)
 
 	// Auth posture (introspection > JWT > anonymous), matching the
 	// discord / telegram demo pattern. Introspection wins when both
