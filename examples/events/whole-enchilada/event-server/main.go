@@ -55,6 +55,20 @@ func main() {
 	}
 	defer shutdown(context.Background())
 
+	// Postgres backend constructed up front so the event-source builders
+	// below can pass events.WithEventBufferStore(...) through their
+	// YieldingOpts. When POSTGRES_DSN is empty the helper returns a
+	// zero handle and bufferStore() returns nil — sources fall back to
+	// the in-memory ring default.
+	pgBackend := configurePostgresBackend()
+	defer pgBackend.shutdown()
+
+	chatYieldOpts := []events.YieldingOption{events.WithMaxSize(1000)}
+	if bs := pgBackend.eventBufferStore(); bs != nil {
+		chatYieldOpts = append(chatYieldOpts, events.WithEventBufferStore(bs))
+		log.Printf("[event-server] chat.message buffer: Postgres-backed (cross-replica poll consistency, issue 727)")
+	}
+
 	chatSrc := events.NewHTTPSource[ChatMessageData](events.EventDef{
 		Name:        "chat.message",
 		Description: "Synthetic chat messages fed by the push-server tier.",
@@ -67,10 +81,8 @@ func main() {
 		// everyone."
 		Match: tenantMatchFunc,
 	}, events.HTTPSourceConfig{
-		Bearer: *bearer,
-		YieldingOpts: []events.YieldingOption{
-			events.WithMaxSize(1000),
-		},
+		Bearer:       *bearer,
+		YieldingOpts: chatYieldOpts,
 	})
 
 	presenceSrc := events.NewHTTPSource[PresenceChangedData](events.EventDef{
@@ -82,16 +94,10 @@ func main() {
 	}, events.HTTPSourceConfig{
 		Bearer: *bearer,
 		YieldingOpts: []events.YieldingOption{
+			// Cursorless: no buffer store needed; presence never replays.
 			events.WithoutCursors(),
 		},
 	})
-
-	// Postgres backend (issue 639): when POSTGRES_DSN is set, swap the
-	// in-memory WebhookStore default for the gorm-backed Postgres impl
-	// so webhook subscriptions survive event-server restarts and live
-	// in a single source of truth across replicas.
-	pgBackend := configurePostgresBackend()
-	defer pgBackend.shutdown()
 
 	webhookOpts := []events.WebhookOption{
 		// Stage-1 escape: demo receivers run on loopback (compose network
