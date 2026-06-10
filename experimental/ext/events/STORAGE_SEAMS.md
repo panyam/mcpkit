@@ -16,6 +16,7 @@ Each storage concern has its own narrow interface:
 | `QuotaStore` | Reservation counts per (principal, eventName) | landed (626 / PR 673) |
 | `CursorStore` | Per-subscription persisted cursors | not needed today (628 closed); the server doesn't track per-subscription cursors. Revisit when a consumer needs persisted cursor positions. |
 | `SubscriptionIndexStore` | Subscription-id ↔ deliver-fn lookup table | landed (631 / PR 675) |
+| `EventBufferStore` | YieldingSource poll-buffer (per-source events ring) | landed in-memory; gorm Postgres impl follow-up (727) |
 
 No umbrella `EventsStore` interface. The reasons:
 
