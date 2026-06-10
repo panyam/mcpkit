@@ -11,6 +11,7 @@ Production-shape multi-tier reference. nginx fronts the event-server tier; a pus
 - **Windows A2 / B2 / C2 — start the webhook receivers.** — Webhook is the second delivery mode. It runs in parallel with poll; same tenant routing applies:
 - **Inject events from a 7th terminal and watch isolation in real time.** — ```
 - **Scale to N=2 event-server replicas and prove push-survival via Redis fanout.** — The stack ships a Redis service that backs the events lib's QuotaStore + Emitter (see [issues 634 + 718](https://github.com/panyam/mcpkit/issues/634)). With one replica it's a glorified counter store; the payoff is multi-replica.
+- **Trip the per-tenant subscription cap and prove it's enforced globally across replicas.** — The event-server is configured with `EVENTS_QUOTA_CAPS=chat.message=3` in compose. That caps each principal to **3** simultaneous `chat.message` subscriptions, enforced by the Redis-backed QuotaStore (PR 720 + PR 721) — atomic INCR-with-cap-check in a Lua script, so concurrent Reserves from different replicas can't both win.
 - **Revoke a token in Keycloak admin and watch the affected windows die.** — Open `http://localhost:8180/admin/master/console/#/tenant-a/users` (admin / admin) in a browser. Click `alice` → **Sessions** tab → **Sign out**.
 
 ## Flow
@@ -37,7 +38,9 @@ sequenceDiagram
 
     Note over Operator,Keycloak: Step 7: Scale to N=2 event-server replicas and prove push-survival via Redis fanout.
 
-    Note over Operator,Keycloak: Step 8: Revoke a token in Keycloak admin and watch the affected windows die.
+    Note over Operator,Keycloak: Step 8: Trip the per-tenant subscription cap and prove it's enforced globally across replicas.
+
+    Note over Operator,Keycloak: Step 9: Revoke a token in Keycloak admin and watch the affected windows die.
 ```
 
 ## Steps
@@ -185,7 +188,36 @@ make up
 
 The N=2→N=1 step-down is graceful — `docker compose up -d --scale event-server-1=1` removes the extra replica without disturbing the survivor.
 
-### Step 8: Revoke a token in Keycloak admin and watch the affected windows die.
+### Step 8: Trip the per-tenant subscription cap and prove it's enforced globally across replicas.
+
+The event-server is configured with `EVENTS_QUOTA_CAPS=chat.message=3` in compose. That caps each principal to **3** simultaneous `chat.message` subscriptions, enforced by the Redis-backed QuotaStore (PR 720 + PR 721) — atomic INCR-with-cap-check in a Lua script, so concurrent Reserves from different replicas can't both win.
+
+The demonstration: open **four** sibling terminals, each running a webhook for the same user. The 4th lands a `-32013 ResourceExhausted` with the SEP-defined envelope `{limit:"subscriptions", max:3}`.
+
+```
+# windows A1 / A2 / A3
+make webhook TENANT=A USERNAME=usera1 PASSWORD=usera1
+make webhook TENANT=A USERNAME=usera1 PASSWORD=usera1
+make webhook TENANT=A USERNAME=usera1 PASSWORD=usera1
+
+# window A4 — the cap is tripped
+make webhook TENANT=A USERNAME=usera1 PASSWORD=usera1
+# ↑ exits with: -32013 ResourceExhausted limit=subscriptions max=3
+```
+
+**Cross-replica enforcement** is the load-bearing claim — the cap holds even when subscribes land on different event-server replicas via nginx round-robin. Boot N=2 (see the previous Step), then run the 4 webhook commands; the 4th rejects regardless of which replica it lands on. Without the Redis QuotaStore, each replica would have its own in-memory counter starting at 0; the 4th would land on a fresh replica and grant a 4th subscription.
+
+Watch the cap counter directly in Redis if you want to be sure:
+
+```
+docker exec -it whole-enchilada-redis-1 redis-cli
+  KEYS mcpkit.events.quota*       # one key per (principal, eventName) tuple
+  GET mcpkit.events.quota.tenant-a/<sub>.chat.message
+```
+
+The key contains the live count; `EXPIRE` on it slides forward with every Reserve, so a leaked subscription (caller crashed before unsubscribe) drops after `OAUTH_CACHE_TTL` of inactivity (default 1h). Kill any of A1/A2/A3 and the count decrements (or you'll see it released on TTL expiry); a fresh A4 then succeeds.
+
+### Step 9: Revoke a token in Keycloak admin and watch the affected windows die.
 
 Open `http://localhost:8180/admin/master/console/#/tenant-a/users` (admin / admin) in a browser. Click `alice` → **Sessions** tab → **Sign out**.
 

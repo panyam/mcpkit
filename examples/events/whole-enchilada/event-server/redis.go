@@ -14,6 +14,37 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// parseQuotaCaps decodes the EVENTS_QUOTA_CAPS env shape into a
+// per-event cap map. Format:
+//
+//	EVENTS_QUOTA_CAPS=chat.message=3,presence.changed=10
+//
+// Whitespace around tokens is tolerated. Entries with missing /
+// non-positive integer values are silently dropped — bad config
+// should never crash the event-server at boot. The empty string
+// produces an empty map (no caps applied; every Reserve succeeds).
+func parseQuotaCaps(raw string) map[string]int {
+	out := map[string]int{}
+	for _, kv := range strings.Split(raw, ",") {
+		kv = strings.TrimSpace(kv)
+		if kv == "" {
+			continue
+		}
+		eq := strings.IndexByte(kv, '=')
+		if eq <= 0 {
+			continue
+		}
+		name := strings.TrimSpace(kv[:eq])
+		nRaw := strings.TrimSpace(kv[eq+1:])
+		n, err := strconv.Atoi(nRaw)
+		if err != nil || n <= 0 || name == "" {
+			continue
+		}
+		out[name] = n
+	}
+	return out
+}
+
 // redisBackend bundles the Redis-backed events plumbing so main.go
 // can wire it via one call site + one defer. The shutdown method
 // cancels the Subscriber goroutine and closes the Redis client.
@@ -109,15 +140,22 @@ func configureRedisBackend(cfg *events.Config, srv *server.Server, webhooks *eve
 		QuotaTTL:      quotaTTL,
 	}
 
-	// Quota — Redis-backed atomic counters. Caps stay the same as
-	// the in-memory default would have been (none — the demo doesn't
-	// configure per-event-type caps today). When caps are added, they
-	// go through WithMaxSubscriptionsPerPrincipal alongside this call.
+	// Quota — Redis-backed atomic counters with per-event-type caps
+	// parsed out of EVENTS_QUOTA_CAPS (see parseQuotaCaps). The default
+	// in compose.tmpl is "chat.message=3" — small enough that the
+	// walkthrough's "subscribe 4 times, watch the 4th get -32013" beat
+	// is easy to drive by hand. Empty / unset env => no caps (every
+	// Reserve succeeds; matches the pre-cap demo behavior).
 	qs, err := redisstore.NewQuotaStore(opts)
 	if err != nil {
 		log.Fatalf("redisstore.NewQuotaStore: %v", err)
 	}
-	cfg.Quota = events.NewQuota(events.WithQuotaStore(qs))
+	quotaOpts := []events.QuotaOption{events.WithQuotaStore(qs)}
+	for eventName, max := range parseQuotaCaps(os.Getenv("EVENTS_QUOTA_CAPS")) {
+		quotaOpts = append(quotaOpts, events.WithMaxSubscriptionsPerPrincipal(eventName, max))
+		log.Printf("[event-server] quota cap: %s = %d subscriptions/principal", eventName, max)
+	}
+	cfg.Quota = events.NewQuota(quotaOpts...)
 
 	// Emitter — Redis-only outbound (Pattern B; see the doc comment
 	// above). The receive side below delivers locally.
