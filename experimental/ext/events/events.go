@@ -286,6 +286,40 @@ type Config struct {
 	// design intentionally reuses HTTPSource (no new "Subscribe"
 	// surface — the Source interface is sufficient).
 	Emitter Emitter
+
+	// TracerProvider opts the events surface into SEP-414 P6 fanout
+	// instrumentation (issue 724). When set, Register installs it on
+	// every Source that implements the TracerProviderInstaller
+	// interface (notably YieldingSource), so each yield emits one
+	// `events.fanout` span carrying the per-yield fanout shape
+	// (subscriber count, dropped-by-match count, delivered count,
+	// transforms-applied count) — one span per event, regardless of
+	// subscriber count.
+	//
+	// The fanout span is parented by the yield ctx so it stitches into
+	// the originating request trace (when yield runs inside a request
+	// handler) or starts a fresh trace (when yield runs from a
+	// background feeder with no inbound trace context). Sources that
+	// don't implement TracerProviderInstaller are silently skipped —
+	// TypedSource authors that want fanout spans should call
+	// SetTracerProvider on their source directly.
+	//
+	// Nil or core.NoopTracerProvider{} (the default) skips the install
+	// entirely — zero overhead, no spans emitted. ext/auth-style
+	// composition pattern: events depends on `core.TracerProvider`
+	// only, no compile-time dep on ext/otel.
+	TracerProvider core.TracerProvider
+}
+
+// TracerProviderInstaller is implemented by EventSources that accept a
+// post-construction TracerProvider injection from events.Register. The
+// in-tree YieldingSource implements it; TypedSource authors that want
+// fanout span emission can implement it identically. Sources that
+// don't implement it are silently skipped during install — no error,
+// no warning, the surface degrades to "no fanout spans for this
+// source."
+type TracerProviderInstaller interface {
+	SetTracerProvider(tp core.TracerProvider)
 }
 
 // Register hooks up events/list, events/poll, events/subscribe, and
@@ -317,6 +351,16 @@ func Register(cfg Config) {
 			ea.SetEmitHook(func(ctx context.Context, event Event) {
 				_ = emitter.Emit(ctx, event)
 			})
+		}
+		// SEP-414 P6 (issue 724): propagate Config.TracerProvider to
+		// every source that opts in via TracerProviderInstaller so the
+		// `events.fanout` span emission lights up uniformly across the
+		// registered set. nil TracerProvider is fine — SetTracerProvider
+		// resets to Noop, matching the unconfigured default.
+		if cfg.TracerProvider != nil {
+			if installer, ok := s.(TracerProviderInstaller); ok {
+				installer.SetTracerProvider(cfg.TracerProvider)
+			}
 		}
 	}
 
