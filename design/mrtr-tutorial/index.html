@@ -773,6 +773,9 @@
 <li><a href="https://github.com/panyam/mcpkit/issues/452">Issue 452</a> — stateless wire MRTR support follow-up.</li>
 <li><a href="https://github.com/panyam/mcpkit/issues/485">Issue 485</a> — multi-tenant isolation for stateless task store follow-up.</li>
 </ul>
+<h2 id="tracing-across-mrtr-rounds">Tracing across MRTR rounds <a class="anchor" href="#tracing-across-mrtr-rounds">¶</a></h2>
+<p><code>CallToolWithInputs</code> automatically stitches multi-round traces when the client has a <code>TracerProvider</code> configured. Round 1&rsquo;s outbound traceparent is captured and stamped onto rounds 2+ as <code>_meta.io.modelcontextprotocol/tracelink</code>; the server&rsquo;s trace middleware reads the link and calls <code>AddLink</code> on the round-N dispatch span. Star semantic — every round 2+ links to round 1, not the previous round.</p>
+<p>See <a href="SEP_414_OTEL.md"><code>docs/SEP_414_OTEL.md</code></a> § <strong>MRTR multi-round trace stitching</strong> for the full wire-shape design, considered alternatives, and the end-to-end correctness test. The <code>examples/mrtr/</code> walkthrough has a beat showing the stitched trace in Grafana.</p>
 
 
     </div>
