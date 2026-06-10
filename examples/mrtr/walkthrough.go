@@ -258,6 +258,11 @@ res, _ := client.CallToolWithInputs(context.Background(), c,
 			return
 		})
 
+	demo.Step("Tracing: rounds 2+ link back to round 1 (SEP-414 P6)").
+		Note("`CallToolWithInputs` captures round 1's outbound traceparent and stamps it onto round 2+ as `_meta.io.modelcontextprotocol/tracelink` (SEP-414 P6 / issue 682). The server's trace middleware reads the link and calls `AddLink` on the round-N dispatch span, stitching the logical operation across separate W3C traces. **Star semantic** — every round 2+ links to round 1, not the previous round, so Tempo / Jaeger / Honeycomb show round 1 as the anchor regardless of how deep the loop goes.").
+		Note("To see the stitched trace, bring up the LGTM observability stack alongside the demo: `(cd ../../docker/observability && docker compose up -d)` then `EXPORTER=auto make serve` here. Open Grafana → Tempo → service `mrtr-demo`. Click any round-2/3 dispatch span's Link entry — one click navigates to round 1's trace tree, looking at the original input-required handoff that the final ToolResult resolved from.").
+		Note("Without this PR the same operation produced N unrelated traces — operators looking at round N had no way to navigate to round 1. The vendor-namespaced `_meta.io.modelcontextprotocol/tracelink` field is mcpkit-specific today; upstream WG standardization of a bare cross-SDK name is a future-discussion item.")
+
 	demo.Section("Where to look in the code",
 		"- Server dispatch: `server/dispatch.go` (handleToolsCall reshapes InputRequired into the wire envelope; merges accumulated answers from `requestState`)",
 		"- Server runtime: `server/mrtr.go` (`mrtrRuntime` — sign / verify / mint requestState tokens; `WithRequestStateSigning(key, ttl)` shared with SEP-2663 Tasks)",
