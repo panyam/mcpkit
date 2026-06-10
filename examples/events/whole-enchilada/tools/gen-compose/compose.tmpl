@@ -92,6 +92,18 @@ services:
       # webhook subscriptions survive replica restarts and live in a
       # single source of truth across replicas.
       POSTGRES_DSN: ${POSTGRES_DSN:-postgres://postgres:postgres@postgres.whole-enchilada:5432/events?sslmode=disable}
+      # Per-event-type subscription caps. Format:
+      # EVENTS_QUOTA_CAPS=<eventName>=<int>[,<eventName>=<int>...]
+      # When set, event-server constructs Quota with
+      # WithMaxSubscriptionsPerPrincipal(name, n) per entry. Cross-
+      # replica enforcement comes from the Redis-backed QuotaStore
+      # (issue 718); a 4th subscribe for the same principal lands on
+      # any replica → -32013 ResourceExhausted with the
+      # {limit:"subscriptions", max:N} envelope.
+      # Default chat.message=3 is small enough for the walkthrough's
+      # "subscribe 4 times, watch the 4th fail" beat to be driven by
+      # hand in sibling terminals.
+      EVENTS_QUOTA_CAPS: ${EVENTS_QUOTA_CAPS:-chat.message=3}
     # `--exporter=auto` means best-effort OTLP with Noop fallback when
     # the collector is unreachable. common.RegisterTelemetryFlags
     # doesn't read EXPORTER from env, so we wire it via the CLI flag;
