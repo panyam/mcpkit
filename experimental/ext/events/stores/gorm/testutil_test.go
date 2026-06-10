@@ -16,9 +16,10 @@ import (
 // run the same assertion body against every available backend without
 // duplicating the matrix at every test site.
 type backend struct {
-	name           string
+	name            string
 	newWebhookStore func(t *testing.T) events.WebhookStore
 	newQuotaStore   func(t *testing.T) events.QuotaStore
+	newBufferStore  func(t *testing.T) events.EventBufferStore
 }
 
 // backends returns the list of backends to test against this run. The
@@ -33,11 +34,17 @@ func backends(t *testing.T) []backend {
 			name:            "inmemory",
 			newWebhookStore: func(_ *testing.T) events.WebhookStore { return events.NewInMemoryWebhookStore() },
 			newQuotaStore:   func(_ *testing.T) events.QuotaStore { return events.NewInMemoryQuotaStore() },
+			newBufferStore: func(_ *testing.T) events.EventBufferStore {
+				// 0 = unbounded for in-memory parity with the gorm
+				// store's "no max-size hint, only TTL-bound" semantic.
+				return events.NewInMemoryEventBufferStore(0)
+			},
 		},
 		{
 			name:            "sqlite",
 			newWebhookStore: func(t *testing.T) events.WebhookStore { return newWebhookStoreFromDB(t, openSQLite(t)) },
 			newQuotaStore:   func(t *testing.T) events.QuotaStore { return newQuotaStoreFromDB(t, openSQLite(t)) },
+			newBufferStore:  func(t *testing.T) events.EventBufferStore { return newBufferStoreFromDB(t, openSQLite(t)) },
 		},
 	}
 	if pgDSN := postgresDSN(); pgDSN != "" {
@@ -45,9 +52,19 @@ func backends(t *testing.T) []backend {
 			name:            "postgres",
 			newWebhookStore: func(t *testing.T) events.WebhookStore { return newWebhookStoreFromDB(t, openPostgres(t, pgDSN)) },
 			newQuotaStore:   func(t *testing.T) events.QuotaStore { return newQuotaStoreFromDB(t, openPostgres(t, pgDSN)) },
+			newBufferStore:  func(t *testing.T) events.EventBufferStore { return newBufferStoreFromDB(t, openPostgres(t, pgDSN)) },
 		})
 	}
 	return out
+}
+
+func newBufferStoreFromDB(t *testing.T, db *gorm.DB) events.EventBufferStore {
+	t.Helper()
+	s, err := NewEventBufferStore(db)
+	if err != nil {
+		t.Fatalf("NewEventBufferStore: %v", err)
+	}
+	return s
 }
 
 // openSQLite opens a fresh in-process SQLite database. Each call gets

@@ -11,6 +11,8 @@ Production-shape multi-tier reference. nginx fronts the event-server tier; a pus
 - **Windows A2 / B2 / C2 — start the webhook receivers.** — Webhook is the second delivery mode. It runs in parallel with poll; same tenant routing applies:
 - **Inject events from a 7th terminal and watch isolation in real time.** — ```
 - **Scale to N=2 event-server replicas and prove push-survival via Redis fanout.** — The stack ships a Redis service that backs the events lib's QuotaStore + Emitter (see [issues 634 + 718](https://github.com/panyam/mcpkit/issues/634)). With one replica it's a glorified counter store; the payoff is multi-replica.
+- **Subscribe via one replica, poll via another — cursor advances correctly across replicas.** — With Postgres-backed `EventBufferStore` (PR 729 + PR 731, issue 727), the event buffer that backs `events/poll` lives in one shared place. Every replica reads the same source of truth, so a poll-mode client that gets nginx-routed to a different replica between polls still sees the right events at the right cursor.
+- **Wait past the buffer TTL — stale cursor returns `truncated:true` on any replica.** — The compose template ships with `POSTGRES_BUFFER_TTL=10m` so this beat is observable without an hour of patience. Production deployments use the default `1h` (or longer per `WithBufferTTL`).
 - **Trip the per-tenant subscription cap and prove it's enforced globally across replicas.** — The event-server is configured with `EVENTS_QUOTA_CAPS=chat.message=3` in compose. That caps each principal to **3** simultaneous `chat.message` subscriptions, enforced by the Redis-backed QuotaStore (PR 720 + PR 721) — atomic INCR-with-cap-check in a Lua script, so concurrent Reserves from different replicas can't both win.
 - **Revoke a token in Keycloak admin and watch the affected windows die.** — Open `http://localhost:8180/admin/master/console/#/tenant-a/users` (admin / admin) in a browser. Click `alice` → **Sessions** tab → **Sign out**.
 
@@ -38,9 +40,13 @@ sequenceDiagram
 
     Note over Operator,Keycloak: Step 7: Scale to N=2 event-server replicas and prove push-survival via Redis fanout.
 
-    Note over Operator,Keycloak: Step 8: Trip the per-tenant subscription cap and prove it's enforced globally across replicas.
+    Note over Operator,Keycloak: Step 8: Subscribe via one replica, poll via another — cursor advances correctly across replicas.
 
-    Note over Operator,Keycloak: Step 9: Revoke a token in Keycloak admin and watch the affected windows die.
+    Note over Operator,Keycloak: Step 9: Wait past the buffer TTL — stale cursor returns `truncated:true` on any replica.
+
+    Note over Operator,Keycloak: Step 10: Trip the per-tenant subscription cap and prove it's enforced globally across replicas.
+
+    Note over Operator,Keycloak: Step 11: Revoke a token in Keycloak admin and watch the affected windows die.
 ```
 
 ## Steps
@@ -188,7 +194,63 @@ make up
 
 The N=2→N=1 step-down is graceful — `docker compose up -d --scale event-server-1=1` removes the extra replica without disturbing the survivor.
 
-### Step 8: Trip the per-tenant subscription cap and prove it's enforced globally across replicas.
+### Step 8: Subscribe via one replica, poll via another — cursor advances correctly across replicas.
+
+With Postgres-backed `EventBufferStore` (PR 729 + PR 731, issue 727), the event buffer that backs `events/poll` lives in one shared place. Every replica reads the same source of truth, so a poll-mode client that gets nginx-routed to a different replica between polls still sees the right events at the right cursor.
+
+Start a poller in window 1:
+
+```
+make poller TENANT=A USERNAME=usera1 PASSWORD=usera1
+```
+
+The push-server is firing chat.message events through whichever replica nginx picks; the poller logs cursor=N for each event. Now kill the poller (Ctrl+C), capture the last cursor it printed, and restart it with `--start-cursor=<cursor>`:
+
+```
+make poller TENANT=A USERNAME=usera1 PASSWORD=usera1 -- --start-cursor=<N>
+```
+
+nginx may route this restart to the OTHER event-server replica. The poll-side handler reads from the shared Postgres buffer, returns events strictly after `<N>`, and the poller resumes without gap.
+
+Watch the Postgres buffer fill up in a sibling window:
+
+```
+docker exec -it whole-enchilada-postgres-1 psql -U postgres -d events \
+  -c "SELECT source_name, count(*), min(cursor), max(cursor) FROM event_buffer GROUP BY source_name;"
+```
+
+You'll see `chat.message` accumulating; cursorless sources (`presence.changed`) do not store anything — they never replay.
+
+### Step 9: Wait past the buffer TTL — stale cursor returns `truncated:true` on any replica.
+
+The compose template ships with `POSTGRES_BUFFER_TTL=10m` so this beat is observable without an hour of patience. Production deployments use the default `1h` (or longer per `WithBufferTTL`).
+
+Start a poller, let it record some cursors, then stop it:
+
+```
+make poller TENANT=A USERNAME=usera1 PASSWORD=usera1
+# … events flow, last printed cursor: 42 …
+# Ctrl+C
+```
+
+Wait 11 minutes. The background eviction sweeper (`EventBufferEvictionSweeper`, fires every 60s) deletes rows where `expires_at < NOW()`. Confirm via psql:
+
+```
+docker exec whole-enchilada-postgres-1 psql -U postgres -d events \
+  -c "SELECT source_name, min(cursor), count(*) FROM event_buffer GROUP BY source_name;"
+```
+
+The `min(cursor)` will have advanced past 42 — your old cursor is gone. Now restart the poller with `--start-cursor=42`:
+
+```
+make poller TENANT=A USERNAME=usera1 PASSWORD=usera1 -- --start-cursor=42
+```
+
+The poll handler reads from Postgres, sees `42` is older than `min(cursor)`, and returns `{events:[…], cursor:<latest>, truncated:true}`. The poller treats `truncated:true` as the spec-defined replay-failure signal — drops cursor 42, resyncs from `cursor: latest`, and continues. The dropped 11-minute window is genuinely gone; that's the bargain of bounded-buffer replay.
+
+Same behavior regardless of which replica nginx routes to — both consult the same Postgres source of truth.
+
+### Step 10: Trip the per-tenant subscription cap and prove it's enforced globally across replicas.
 
 The event-server is configured with `EVENTS_QUOTA_CAPS=chat.message=3` in compose. That caps each principal to **3** simultaneous `chat.message` subscriptions, enforced by the Redis-backed QuotaStore (PR 720 + PR 721) — atomic INCR-with-cap-check in a Lua script, so concurrent Reserves from different replicas can't both win.
 
@@ -217,7 +279,7 @@ docker exec -it whole-enchilada-redis-1 redis-cli
 
 The key contains the live count; `EXPIRE` on it slides forward with every Reserve, so a leaked subscription (caller crashed before unsubscribe) drops after `OAUTH_CACHE_TTL` of inactivity (default 1h). Kill any of A1/A2/A3 and the count decrements (or you'll see it released on TTL expiry); a fresh A4 then succeeds.
 
-### Step 9: Revoke a token in Keycloak admin and watch the affected windows die.
+### Step 11: Revoke a token in Keycloak admin and watch the affected windows die.
 
 Open `http://localhost:8180/admin/master/console/#/tenant-a/users` (admin / admin) in a browser. Click `alice` → **Sessions** tab → **Sign out**.
 
