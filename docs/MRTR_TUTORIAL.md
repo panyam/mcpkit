@@ -597,3 +597,9 @@ tasks.Register(tasks.Config{Server: srv})  // if any tools opt into TaskSupport
 - [panyam/mcpconformance](https://github.com/panyam/mcpconformance), branch `feat/tasks-mrtr-extension` — SEP-2322 + SEP-2663 conformance scenarios.
 - [Issue 452](https://github.com/panyam/mcpkit/issues/452) — stateless wire MRTR support follow-up.
 - [Issue 485](https://github.com/panyam/mcpkit/issues/485) — multi-tenant isolation for stateless task store follow-up.
+
+## Tracing across MRTR rounds
+
+`CallToolWithInputs` automatically stitches multi-round traces when the client has a `TracerProvider` configured. Round 1's outbound traceparent is captured and stamped onto rounds 2+ as `_meta.io.modelcontextprotocol/tracelink`; the server's trace middleware reads the link and calls `AddLink` on the round-N dispatch span. Star semantic — every round 2+ links to round 1, not the previous round.
+
+See [`docs/SEP_414_OTEL.md`](SEP_414_OTEL.md) § **MRTR multi-round trace stitching** for the full wire-shape design, considered alternatives, and the end-to-end correctness test. The `examples/mrtr/` walkthrough has a beat showing the stitched trace in Grafana.

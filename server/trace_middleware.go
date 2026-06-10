@@ -151,6 +151,17 @@ func traceMiddleware(tp core.TracerProvider) Middleware {
 		ctx, span := tp.StartSpan(ctx, spanName, attrs...)
 		defer span.End()
 
+		// SEP-414 P6 (issue 682): if the inbound request carries a
+		// `_meta.io.modelcontextprotocol/tracelink`, attach it as an OTel
+		// Link on the new dispatch span. Used by SEP-2322 MRTR rounds 2+
+		// so the round-N dispatch span links back to round-1's,
+		// stitching the logical operation across separate W3C traces.
+		// Zero / malformed tracelink is silently dropped — AddLink on
+		// the noop / invalid path is a no-op (CAS-guarded wrapper).
+		if linkTC := core.ExtractTraceLinkFromParams(req.Params); !linkTC.IsZero() {
+			span.AddLink(core.LinkFromTraceContext(linkTC))
+		}
+
 		// Adapters may update the trace context in ctx during StartSpan
 		// to reflect the newly-created child span. Re-read so outbound
 		// _meta carries the child traceparent when available; falls
