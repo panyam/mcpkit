@@ -543,6 +543,55 @@ yield(ctx, data) on replica A
 
 Demo wiring lives in `examples/events/whole-enchilada/event-server/main.go` (`events.WithWebhookTracerProvider(tp)` threaded against the existing `commonotel.SetupTelemetry` TP). Adopter sweep (PR 714) updated `examples/events/discord` and `examples/events/telegram` to the new `yield(ctx, ...)` / `SetMetaFunc(ctx, ...)` signatures. Cross-replica peer-fanout Emitter (Redis pubsub) tracked on panyam/mcpkit#634 + panyam/mcpkit#639 with concrete design comments added.
 
+### Events fanout span emission — landed (issue 724; PR 730)
+
+Companion to the bus-relay work above. While 683/712/714 handled *propagation* (trace context flowing across the lifecycle gates), 724 handles *emission* on the per-yield fanout itself. Adopters opt in via `events.Config.TracerProvider core.TracerProvider` — Register threads it onto every Source implementing the new `TracerProviderInstaller` interface (`YieldingSource` does; TypedSource authors can implement it identically).
+
+```go
+events.Register(events.Config{
+    Server:         srv,
+    Sources:        []events.EventSource{chatSrc, alertSrc},
+    Webhooks:       webhooks,
+    TracerProvider: tp, // ← new in PR 730
+})
+```
+
+**Span shape**: one `events.fanout` span per emitted event (NOT per subscriber), parented by the yield ctx. Attributes:
+
+| Attribute | Meaning |
+|---|---|
+| `mcp.event.name` | the EventDef.Name |
+| `mcp.event.id` | the assigned EventID (cross-referencing) |
+| `events.subscribers.total` | snapshot subscriber count at fanout time |
+| `events.subscribers.delivered` | count that passed Match |
+| `events.subscribers.dropped_by_match` | count where Match returned false |
+| `events.transforms.applied` | count where Transform actually modified the event |
+
+**Design call locked in**: one span per yield, NOT per subscriber. Option (a) from the original issue body (`events.match` / `events.transform` per Match/Transform invocation) was deliberately NOT shipped — would scale linearly with subs × events and need sampling design. The aggregate counts are the diagnosable shape; operators see "this yield went to 10 subs, 7 dropped by Match" without span-volume risk. If per-subscriber detail ever becomes load-bearing, option (a) can land as a separate opt-in on the same TracerProvider seam.
+
+**Two load-bearing optimizations** on the hot path:
+
+- **Zero-subscriber guard.** `len(subs) == 0` skips span emission entirely. Idle sources (feeders with no subscribers registered yet) are dominant — emitting empty fanout spans every feeder tick would flood Tempo with noise.
+- **Noop short-circuit.** `tp.(core.NoopTracerProvider)` type-assertion avoids the StartSpan call entirely on the unconfigured path. Per-yield cost on the unconfigured path is one type-assertion.
+
+**NOT in scope** (deferred to future PRs if anyone asks): webhook-side Match/Transform attributes on the existing `events.webhook.deliver` span (PR 714); poll-side Match/Transform aggregate attributes on the events/poll dispatch span. Both are covered by existing spans; decorating with more attributes is drive-by.
+
+**Test pattern**: reuses the `fakeTP` recording machinery from `webhook_span_test.go` so the assertion style stays consistent across event-surface span tests. Tests cover attribute shape, drop-by-Match, transforms-applied, zero-subscriber skip, parent stitching, Noop overhead, and the Register install path.
+
+End-to-end trace shape:
+
+```
+tools/call (dispatch, SEP-414 P2)
+└─ events.fanout (PR 730 — one span per yield, parented here)
+   ├─ events.subscribers.total = 10
+   ├─ events.subscribers.delivered = 3
+   ├─ events.subscribers.dropped_by_match = 7
+   └─ events.transforms.applied = 3
+   └─ events.webhook.deliver (PR 714 — per webhook target, sibling span via existing seam)
+```
+
+Doc: `experimental/ext/events/README.md` § Tracing across the events bus + `examples/events/kitchen-sink/README.md` § Tracing.
+
 ### `ext/tasks` task lifecycle spans — landed (issue 659; PR 719)
 
 Final P6 surface child. A `tools/call` that creates a task spawns a background goroutine whose work outlives the create span — parent-child doesn't fit, so the tasks runtime uses **span links** instead. The dispatch span for the `tools/call` ends in a few ms; `task.execute` runs as a NEW root trace (potentially for hours) with a Link back to the create span. Every later `tasks/get` / `tasks/update` / `tasks/cancel` dispatch span gets an `AddLink` back to the same create span so a backend can pivot from any poll into the whole lifecycle.
