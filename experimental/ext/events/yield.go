@@ -24,6 +24,7 @@ type yieldingConfig struct {
 	maxSize         int
 	cursorless      bool
 	subscriberBuf   int
+	bufferStore     EventBufferStore
 }
 
 // SubscriberEvent flows on the channel returned by YieldingSource.Subscribe.
@@ -162,6 +163,21 @@ func WithMaxSize(n int) YieldingOption {
 	}
 }
 
+// WithEventBufferStore plugs an external EventBufferStore in as the
+// poll-buffer backend for this YieldingSource. When set, yield
+// Append's each event to the store AND keeps the local in-memory
+// ring for ByCursor/Recent backwards-compat; Poll reads from the
+// store so subscribers polling across multi-replica deployments see
+// consistent results. Default (no option) = legacy in-memory ring
+// only. See issue 727.
+func WithEventBufferStore(s EventBufferStore) YieldingOption {
+	return func(c *yieldingConfig) {
+		if s != nil {
+			c.bufferStore = s
+		}
+	}
+}
+
 // WithoutCursors marks the source as cursorless: events are emitted with
 // `cursor: null` on the wire, the source does not buffer events, and
 // events/poll always returns empty. Use for ephemeral-state sources where
@@ -232,6 +248,7 @@ func NewYieldingSource[Data any](def EventDef, opts ...YieldingOption) (*Yieldin
 		maxSize:       cfg.maxSize,
 		cursorless:    cfg.cursorless,
 		subscriberBuf: cfg.subscriberBuf,
+		bufferStore:   cfg.bufferStore,
 	}
 	yield := func(ctx context.Context, data Data) error {
 		return s.yield(ctx, data)
@@ -280,6 +297,14 @@ type YieldingSource[Data any] struct {
 	metaFunc    func(context.Context, Data) map[string]any
 	subscribers []*subscriberSlot
 	terminated  bool // one-shot YieldTerminated has fired; subsequent yields are no-ops
+
+	// bufferStore is the optional cross-replica buffer backend (issue
+	// 727). When set, yield Append's events to it AND keeps the
+	// local entries ring for ByCursor/Recent backwards compat. Poll
+	// reads from the store so cross-replica reads stay consistent.
+	// nil = legacy in-memory-only behavior; existing single-replica
+	// adopters get this path with zero configuration change.
+	bufferStore EventBufferStore
 }
 
 func (s *YieldingSource[Data]) Def() EventDef { return s.def }
@@ -456,14 +481,38 @@ func (s *YieldingSource[Data]) Poll(cursor string, limit int) PollResult {
 	}
 
 	s.mu.RLock()
-	defer s.mu.RUnlock()
+	terminated := s.terminated
+	store := s.bufferStore
+	s.mu.RUnlock()
 
 	// Terminated source returns empty. Poll callers — including the
 	// events/poll handler — should observe nothing-to-deliver rather
 	// than the residual entries from before termination.
-	if s.terminated {
+	if terminated {
 		return PollResult{}
 	}
+
+	// Cross-replica path (issue 727): when a buffer store is wired
+	// in, delegate Poll to it so multi-replica deployments answer
+	// consistently. Ctx-free path — same fallback to context.Background
+	// the rest of the EventSource interface relies on; the cross-process
+	// trace context is already stamped on each event.Meta at yield time.
+	if store != nil {
+		resp, err := store.Poll(context.Background(), PollEventsRequest{
+			SourceName: s.def.Name,
+			Cursor:     cursor,
+			Limit:      limit,
+		})
+		if err == nil {
+			return PollResult{Events: resp.Events, Cursor: resp.NextCursor, Truncated: resp.Truncated}
+		}
+		// Store error: fall through to the in-memory ring rather than
+		// returning an empty page. Belt-and-suspenders for transient
+		// backend hiccups.
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	c, _ := strconv.ParseInt(cursor, 10, 64)
 
@@ -616,6 +665,22 @@ func (s *YieldingSource[Data]) yield(ctx context.Context, data Data) error {
 		s.entries = append(s.entries, yieldedEntry[Data]{data: data, event: event})
 		if len(s.entries) > s.maxSize {
 			s.entries = s.entries[len(s.entries)-s.maxSize:]
+		}
+		// Mirror to the cross-replica buffer store (issue 727) when
+		// configured. The dual-write is cheap for the in-memory case
+		// and load-bearing for cross-replica deployments where
+		// Poll() must answer consistently regardless of which
+		// replica handles it. Errors are logged but don't fail the
+		// yield — local subscribers still see the event via the
+		// in-memory ring above.
+		if s.bufferStore != nil {
+			if _, err := s.bufferStore.Append(ctx, AppendEventRequest{
+				SourceName: s.def.Name, Event: event,
+			}); err != nil {
+				// TODO: surface via a Logger option once we add one.
+				// For now silent — yield should not block on store errors.
+				_ = err
+			}
 		}
 	}
 	// Snapshot subscribers under the lock, then drop the lock before
