@@ -1013,6 +1013,20 @@ func (c *Client) CallContext(cc *CallContext, method string, params any) (*CallR
 
 // Call makes a JSON-RPC call and returns the parsed response.
 func (c *Client) Call(method string, params any) (*CallResult, error) {
+	return c.callImpl(context.Background(), method, params)
+}
+
+// callImpl is the ctx-aware body of Call. Extracted so package-private
+// callers (notably CallToolWithInputs for the SEP-414 P6 / issue 682
+// MRTR tracelink capture) can thread a ctx carrying
+// core.WithCapturedTraceContext through the middleware chain. The
+// trace middleware reads the captured-trace-context holder off ctx
+// and writes the outbound TraceContext into it, letting the caller
+// learn the round's identity for cross-round linking.
+//
+// Public Call() preserves the existing ctx-free signature by passing
+// context.Background() — no behavior change for non-MRTR callers.
+func (c *Client) callImpl(ctx context.Context, method string, params any) (*CallResult, error) {
 	traceEnabled := tracingEnabled(c.tracerProvider)
 	if len(c.callMiddleware) == 0 && !traceEnabled {
 		return c.callDirect(method, params)
@@ -1041,7 +1055,7 @@ func (c *Client) Call(method string, params any) (*CallResult, error) {
 			return mw(ctx, method, params, next)
 		}
 	}
-	return handler(context.Background(), method, params)
+	return handler(ctx, method, params)
 }
 
 // callDirect is the non-middleware Call path.

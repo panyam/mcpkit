@@ -107,6 +107,17 @@ func traceMiddleware(c *Client, tp core.TracerProvider) ClientMiddleware {
 		defer span.End()
 
 		outbound := core.TraceContextFromContext(ctx)
+		// SEP-414 P6 (issue 682): publish the outbound identity into the
+		// captured-trace-context holder when one is present on ctx. MRTR's
+		// CallToolWithInputs reads it back after round 1 to stamp round-2+
+		// requests' `_meta.io.modelcontextprotocol/tracelink`. The holder
+		// is goroutine-private (caller allocates fresh per call) so this
+		// write is safe and lock-free.
+		if !outbound.IsZero() {
+			if holder := core.CapturedTraceContextHolder(ctx); holder != nil {
+				*holder = outbound
+			}
+		}
 		injected := params
 		if !outbound.IsZero() {
 			injected = core.InjectTraceContextIntoParams(params, outbound)
