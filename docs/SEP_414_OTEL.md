@@ -633,6 +633,42 @@ tasks/cancel (dispatch, link → original tools/call create span)
 
 End-to-end materialization is proven by `ext/otel/provider_test.go`'s coverage of the `WithNewRootSpan` scrub + `StartSpanLinked` + `AddLink` paths against a real OTel SDK exporter. `ext/tasks/trace_test.go` uses a recording fake `core.TracerProvider` + `core.LinkedTracerProvider` to prove ext/tasks calls the contract correctly without dragging ext/otel into its module graph.
 
+### MRTR multi-round trace stitching — landed (issue 682; PR forthcoming)
+
+SEP-2322 MRTR splits one logical operation across N JSON-RPC dispatches (round 1: server returns `InputRequiredResult` → client gathers input → round 2: client retries with `inputResponses`). Each round's `tools/call` mints its own span on each side, so without intervention an MRTR operation produces N unrelated traces — an operator looking at the final ToolResult's trace cannot navigate to the input-gathering work that produced it.
+
+This is fundamental once stateless (SEP-2575) replaces stateful as the default wire — stateful's `ctx.Sample` / `ctx.Elicit` are deprecated per SEP-2577 and will go away in v0.4. MRTR becomes the canonical input-gathering pattern; the trace story has to follow.
+
+**Wire shape**: rounds 2+ carry the round-1 traceparent in a new `_meta.io.modelcontextprotocol/tracelink` field. The server's trace middleware reads it and calls `core.SpanFromContext(ctx).AddLink(...)` on the round-N dispatch span, stitching the operation across separate W3C traces.
+
+```
+Round 1:                              Round 2 (and beyond):
+client.Call("tools/call", args)       client.Call("tools/call", args+inputResponses)
+  ↓                                     ↓
+_meta: {                              _meta: {
+  traceparent: T1                       traceparent: T2,
+}                                       io.modelcontextprotocol/tracelink: T1,  ← NEW (issue 682)
+                                      }
+  ↓                                     ↓
+server span (TraceID T1)              server span (TraceID T2)
+                                        AddLink → T1  ← server stitches the operation
+```
+
+**Star semantic** — rounds 2, 3, 4… all link back to round 1, NOT the immediately-previous round. Backends show round 1 as the anchor regardless of how deep the MRTR loop goes. One click navigates from any round to the originating request.
+
+**Vendor-namespaced field**: `_meta.io.modelcontextprotocol/tracelink` (not bare `_meta.tracelink`) because W3C doesn't define a `tracelink` field — bare names are reserved for W3C-defined keys. mcpkit-specific until upstream WG agrees on a cross-SDK shape.
+
+**Client-side identity capture**: `CallToolWithInputs` uses the new `core.WithCapturedTraceContext` ctx-holder primitive. The client trace middleware writes round-1's outbound TraceContext into the holder; `CallToolWithInputs` snapshots it and stamps it onto every subsequent round's params via `core.InjectTraceLinkIntoParams`. Tracestate is intentionally NOT part of the link payload — link is identity-only, not full propagation context. `Client.callImpl(ctx, ...)` (a ctx-aware refactor of `Client.Call`) is what threads the holder through the middleware chain; `Client.Call` itself stays ctx-free for back-compat by passing `context.Background()`.
+
+**Considered alternatives**:
+
+- **Embed traceparent in `requestState`** — works, but `requestState` was designed as opaque from the client's perspective. Baking tracing semantics into it muddies the contract.
+- **Continue an outer span across rounds on the client side** — simpler (no wire change), but the outer span's duration would include user-paced gather-input time, which can be minutes. Distorts span duration semantics. Rejected.
+
+**Spec engagement TBD**: this lands as mcpkit-internal first; the field name + semantic could be a candidate for upstream MCP WG standardization for cross-SDK interop. See the PR description for the working-group post draft.
+
+End-to-end correctness proof: `ext/otel/mrtr_tracelink_e2e_test.go` drives a real `CallToolWithInputs` against a real OTel-SDK-backed server + client, then asserts the recorded round-2 server span has an OTel Link whose TraceID matches round-1's.
+
 ## Downstream consumers of the Phase 1 contract
 
 - **`experimental/ext/events/` cross-replica bus (issue #629).** The

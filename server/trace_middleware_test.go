@@ -38,6 +38,7 @@ type fakeSpan struct {
 	errs   []error
 	ended  bool
 	parent core.TraceContext // captured from ctx at StartSpan
+	links  []core.Link        // recorded via AddLink — tests assert MRTR tracelink stitching
 }
 
 func (s *fakeSpan) End() {
@@ -64,7 +65,23 @@ func (s *fakeSpan) RecordError(err error) {
 	s.errs = append(s.errs, err)
 }
 
-func (s *fakeSpan) AddLink(_ core.Link) {}
+func (s *fakeSpan) AddLink(l core.Link) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.links = append(s.links, l)
+}
+
+func (s *fakeSpan) linkCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.links)
+}
+
+func (s *fakeSpan) linkAt(i int) core.Link {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.links[i]
+}
 
 func (s *fakeSpan) attr(k string) string {
 	s.mu.Lock()
@@ -565,4 +582,72 @@ func (r *respRecorder) statusCode() int {
 		return http.StatusOK
 	}
 	return r.status
+}
+
+// --- SEP-414 P6 MRTR tracelink (issue 682) ---
+
+const tpMRTRLink = "00-deadbeefcafebabe0123456789abcdef-fedcba9876543210-01"
+
+// TestTraceMiddleware_ReadsTracelink_AddsLinkToDispatchSpan pins the
+// server-side half of MRTR trace stitching: when an inbound tools/call
+// carries `_meta.io.modelcontextprotocol/tracelink`, the dispatch span
+// receives an AddLink call carrying that TraceContext. The link makes
+// round-2+ server spans navigable back to round-1 in Tempo / Grafana.
+func TestTraceMiddleware_ReadsTracelink_AddsLinkToDispatchSpan(t *testing.T) {
+	tp := &fakeTracerProvider{}
+	srv := newInitializedServer(t, WithTracerProvider(tp))
+	srv.RegisterTool(core.ToolDef{Name: "echo"}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+		return core.TextResult("ok"), nil
+	})
+
+	params := `{"name":"echo","_meta":{"traceparent":"` + tpInbound + `","io.modelcontextprotocol/tracelink":"` + tpMRTRLink + `"}}`
+	_, err := dispatchToolsCall(t, srv, context.Background(), params, nil, nil)
+	require.NoError(t, err)
+
+	spans := tp.snapshot()
+	require.Len(t, spans, 1)
+	require.Equal(t, 1, spans[0].linkCount(), "dispatch span MUST receive AddLink when tracelink is present")
+	link := spans[0].linkAt(0)
+	assert.Equal(t, tpMRTRLink, link.TraceContext.Traceparent,
+		"AddLink's TraceContext.Traceparent MUST match the inbound tracelink (anchor of star semantic)")
+}
+
+// TestTraceMiddleware_NoTracelink_NoAddLink pins the zero-overhead
+// path: tools/call without tracelink emits a span with NO AddLink
+// calls. Critical for the dominant non-MRTR path — every regular
+// tools/call MUST NOT incur a spurious link.
+func TestTraceMiddleware_NoTracelink_NoAddLink(t *testing.T) {
+	tp := &fakeTracerProvider{}
+	srv := newInitializedServer(t, WithTracerProvider(tp))
+	srv.RegisterTool(core.ToolDef{Name: "echo"}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+		return core.TextResult("ok"), nil
+	})
+
+	params := `{"name":"echo","_meta":{"traceparent":"` + tpInbound + `"}}`
+	_, err := dispatchToolsCall(t, srv, context.Background(), params, nil, nil)
+	require.NoError(t, err)
+
+	spans := tp.snapshot()
+	require.Len(t, spans, 1)
+	assert.Equal(t, 0, spans[0].linkCount(), "non-MRTR tools/call MUST NOT trigger AddLink")
+}
+
+// TestTraceMiddleware_MalformedTracelink_DroppedSilently pins the
+// defensive contract: a malformed tracelink (e.g., garbage string)
+// must NOT crash dispatch and MUST NOT produce a link. Same W3C
+// validation rules ExtractTraceContext applies — silent drop.
+func TestTraceMiddleware_MalformedTracelink_DroppedSilently(t *testing.T) {
+	tp := &fakeTracerProvider{}
+	srv := newInitializedServer(t, WithTracerProvider(tp))
+	srv.RegisterTool(core.ToolDef{Name: "echo"}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+		return core.TextResult("ok"), nil
+	})
+
+	params := `{"name":"echo","_meta":{"io.modelcontextprotocol/tracelink":"not-a-valid-traceparent"}}`
+	_, err := dispatchToolsCall(t, srv, context.Background(), params, nil, nil)
+	require.NoError(t, err)
+
+	spans := tp.snapshot()
+	require.Len(t, spans, 1)
+	assert.Equal(t, 0, spans[0].linkCount(), "malformed tracelink MUST be silently dropped — no AddLink")
 }
