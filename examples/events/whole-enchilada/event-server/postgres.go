@@ -27,12 +27,15 @@ import (
 // for the multi-replica stage-3 walkthrough where one replica goes
 // away mid-stream and another picks up its subscriptions.
 type postgresBackend struct {
-	db    *gorm.DB
-	store events.WebhookStore
+	db          *gorm.DB
+	store       events.WebhookStore
+	bufferStore events.EventBufferStore
+	sweeper     *gormstore.EventBufferEvictionSweeper
+	sweeperStop context.CancelFunc
+	sweeperDone chan struct{}
 }
 
-// webhookStore returns the Postgres-backed WebhookStore for use in
-// events.NewWebhookRegistry(events.WithWebhookStore(...)), or nil when
+// webhookStore returns the Postgres-backed WebhookStore, or nil when
 // POSTGRES_DSN was empty. Callers should check for nil before applying
 // the option.
 func (p *postgresBackend) webhookStore() events.WebhookStore {
@@ -42,12 +45,29 @@ func (p *postgresBackend) webhookStore() events.WebhookStore {
 	return p.store
 }
 
+// eventBufferStore returns the Postgres-backed EventBufferStore for use
+// in events.WithEventBufferStore(...) on YieldingSource construction.
+// nil when POSTGRES_DSN was empty (sources fall back to the in-memory
+// ring default — single-replica behavior).
+func (p *postgresBackend) eventBufferStore() events.EventBufferStore {
+	if p == nil {
+		return nil
+	}
+	return p.bufferStore
+}
+
 func (p *postgresBackend) shutdown() {
-	if p == nil || p.db == nil {
+	if p == nil {
 		return
 	}
-	if sqlDB, err := p.db.DB(); err == nil {
-		_ = sqlDB.Close()
+	if p.sweeperStop != nil {
+		p.sweeperStop()
+		<-p.sweeperDone
+	}
+	if p.db != nil {
+		if sqlDB, err := p.db.DB(); err == nil {
+			_ = sqlDB.Close()
+		}
 	}
 }
 
@@ -87,10 +107,44 @@ func configurePostgresBackend() *postgresBackend {
 		log.Fatalf("gormstore.NewWebhookStore: %v", err)
 	}
 
-	log.Printf("[event-server] Postgres backend active: WebhookStore via gormstore (DSN host=%s)",
+	// Event buffer store (issue 727) — backs YieldingSource's poll
+	// buffer with Postgres so multi-replica deployments answer Poll
+	// consistently. TTL is parsed from POSTGRES_BUFFER_TTL (Go
+	// duration, e.g., "10m"); falls back to the gorm sub-module's
+	// default (1h).
+	bufferOpts := []gormstore.Option{}
+	if rawTTL := strings.TrimSpace(os.Getenv("POSTGRES_BUFFER_TTL")); rawTTL != "" {
+		if ttl, err := time.ParseDuration(rawTTL); err == nil && ttl > 0 {
+			bufferOpts = append(bufferOpts, gormstore.WithBufferTTL(ttl))
+		}
+	}
+	bufferStore, err := gormstore.NewEventBufferStore(db, bufferOpts...)
+	if err != nil {
+		log.Fatalf("gormstore.NewEventBufferStore: %v", err)
+	}
+
+	// Background eviction sweeper — fires every 60s; logs evictions.
+	// One per replica; the DELETE is idempotent so races between
+	// replicas don't matter.
+	sweeper := gormstore.NewEventBufferEvictionSweeper(db, 60*time.Second)
+	sweeperCtx, sweeperStop := context.WithCancel(context.Background())
+	sweeperDone := make(chan struct{})
+	go func() {
+		defer close(sweeperDone)
+		_ = sweeper.Run(sweeperCtx)
+	}()
+
+	log.Printf("[event-server] Postgres backend active: WebhookStore + EventBufferStore via gormstore (DSN host=%s)",
 		hostFromDSN(dsn))
 
-	return &postgresBackend{db: db, store: store}
+	return &postgresBackend{
+		db:          db,
+		store:       store,
+		bufferStore: bufferStore,
+		sweeper:     sweeper,
+		sweeperStop: sweeperStop,
+		sweeperDone: sweeperDone,
+	}
 }
 
 // openWithRetry retries gorm.Open until the database accepts a Ping or
