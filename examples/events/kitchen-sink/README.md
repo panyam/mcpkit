@@ -34,9 +34,10 @@ EXPORTER=otlp make serve                 # warns on dial failure
 When the LGTM stack is up, open Grafana → Tempo → service `kitchen-sink-events`. Spans you'll see:
 
 - **One dispatch span per JSON-RPC method** (subscribe / unsubscribe / poll / list / etc.) — from the SEP-414 P2 server middleware.
+- **`events.fanout` span per yield** — one span per emitted event (skipped when no subscribers), carrying the per-yield fanout shape on its attributes (`events.subscribers.total`, `events.subscribers.delivered`, `events.subscribers.dropped_by_match`, `events.transforms.applied`) plus `mcp.event.name` + `mcp.event.id` for cross-referencing. Parented by the yield ctx so the span stitches into the originating request trace when one exists. Issue 724.
 - **`events.webhook.deliver` spans** around each outbound webhook POST (when a webhook subscriber is registered) — from `events.WithWebhookTracerProvider`.
 
-Per-subscription `Match` / `Transform` spans on the fanout hot path are NOT emitted today — that's a hot-path concern (fanout runs every 2s × N subscribers) needing sampling design. Tracked as a follow-up; see [issue 667](https://github.com/panyam/mcpkit/issues/667) for the design options.
+Per-subscriber `events.match` / `events.transform` spans (one per Match / Transform invocation, not one per yield) are deliberately NOT emitted — they'd scale linearly with subscribers × events and need sampling design. The aggregate counts on `events.fanout` cover the diagnosable shape ("this yield fanned out to 10 subscribers, 7 dropped by Match"); the per-subscriber detail is filed as a future-design open question if anyone asks.
 
 ## What it demonstrates
 

@@ -176,6 +176,12 @@ func buildServer(addr string, tp core.TracerProvider) *wiredServer {
 		SubscriptionIndex:        idx,
 		Quota:                    quota,
 		UnsafeAnonymousPrincipal: "demo-principal",
+		// SEP-414 P6 (issue 724): emit one `events.fanout` span per
+		// yield carrying the per-yield fanout shape. Register threads
+		// this onto every Source that implements
+		// TracerProviderInstaller (YieldingSource does). Nil = Noop;
+		// zero overhead in the default unconfigured path.
+		TracerProvider: tp,
 	})
 	return &wiredServer{
 		srv: srv, chatSrc: chatSrc, chatYield: chatYield,

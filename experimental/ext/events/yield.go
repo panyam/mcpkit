@@ -249,6 +249,7 @@ func NewYieldingSource[Data any](def EventDef, opts ...YieldingOption) (*Yieldin
 		cursorless:    cfg.cursorless,
 		subscriberBuf: cfg.subscriberBuf,
 		bufferStore:   cfg.bufferStore,
+		tp:            core.NoopTracerProvider{},
 	}
 	yield := func(ctx context.Context, data Data) error {
 		return s.yield(ctx, data)
@@ -305,6 +306,19 @@ type YieldingSource[Data any] struct {
 	// nil = legacy in-memory-only behavior; existing single-replica
 	// adopters get this path with zero configuration change.
 	bufferStore EventBufferStore
+
+	// tp opts the source into SEP-414 P6 fanout instrumentation (issue
+	// 724). When set, every yield wraps the per-subscriber fanout loop
+	// in one `events.fanout` span carrying counts (subscribers.total,
+	// delivered, dropped_by_match, transforms.applied) — one span per
+	// event, regardless of subscriber count. Parented by the yield ctx
+	// so the span stitches into the originating request trace when
+	// yield runs inside a request handler. Defaulted to
+	// core.NoopTracerProvider{} so call sites can unconditionally call
+	// StartSpan without nil-checking. events.Register installs the
+	// configured Config.TracerProvider via SetTracerProvider after
+	// construction.
+	tp core.TracerProvider
 }
 
 func (s *YieldingSource[Data]) Def() EventDef { return s.def }
@@ -322,6 +336,25 @@ func (s *YieldingSource[Data]) SetMetaFunc(f func(context.Context, Data) map[str
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.metaFunc = f
+}
+
+// SetTracerProvider installs the TracerProvider the source uses to emit
+// the per-yield `events.fanout` span (issue 724). Called by
+// events.Register when Config.TracerProvider is set, so user code
+// rarely calls this directly — wire the TP on the Config struct
+// instead. Nil tp resets to the Noop default; the unconfigured path
+// stays zero-overhead.
+//
+// Safe to call concurrently with yield(); the field is mu-guarded and
+// yield reads it under mu.Lock before snapshotting subscribers.
+func (s *YieldingSource[Data]) SetTracerProvider(tp core.TracerProvider) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if tp == nil {
+		s.tp = core.NoopTracerProvider{}
+		return
+	}
+	s.tp = tp
 }
 
 // YieldError emits a transient-failure signal to all live subscribers.
@@ -695,17 +728,62 @@ func (s *YieldingSource[Data]) yield(ctx context.Context, data Data) error {
 	hook := s.emitHook
 	matchFn := s.def.Match
 	transformFn := s.def.Transform
+	tp := s.tp
 	s.mu.Unlock()
 
-	for _, sub := range subs {
-		s.deliverEventToSlot(sub, event, matchFn, transformFn)
+	// SEP-414 P6 (issue 724): emit one `events.fanout` span per yield
+	// when the source is opted into instrumentation AND has at least one
+	// subscriber. Zero-subscriber emission is the dominant idle state
+	// for sources that have no subscribers registered yet — skipping the
+	// span there keeps Tempo from drowning in empty fanout spans every
+	// feeder tick. Parented by the yield ctx so the span stitches into
+	// the originating request trace (when present) or starts a fresh
+	// trace (when yield runs from a background feeder).
+	var fanoutSpan core.Span = noopFanoutSpan{}
+	if len(subs) > 0 {
+		if _, recording := tp.(core.NoopTracerProvider); !recording {
+			_, fanoutSpan = tp.StartSpan(ctx, "events.fanout",
+				core.Attribute{Key: "mcp.event.name", Value: event.Name},
+				core.Attribute{Key: "mcp.event.id", Value: event.EventID},
+			)
+			defer fanoutSpan.End()
+		}
 	}
+
+	var total, delivered, dropped, transformed int
+	for _, sub := range subs {
+		total++
+		matched, transformedThis := s.deliverEventToSlot(sub, event, matchFn, transformFn)
+		if !matched {
+			dropped++
+			continue
+		}
+		delivered++
+		if transformedThis {
+			transformed++
+		}
+	}
+	fanoutSpan.SetAttribute("events.subscribers.total", strconv.Itoa(total))
+	fanoutSpan.SetAttribute("events.subscribers.delivered", strconv.Itoa(delivered))
+	fanoutSpan.SetAttribute("events.subscribers.dropped_by_match", strconv.Itoa(dropped))
+	fanoutSpan.SetAttribute("events.transforms.applied", strconv.Itoa(transformed))
 
 	if hook != nil {
 		hook(ctx, event)
 	}
 	return nil
 }
+
+// noopFanoutSpan is the zero-overhead path when fanout instrumentation
+// is off (no TracerProvider configured, or zero subscribers). Avoids
+// the NoopTracerProvider.StartSpan call entirely so the dominant
+// idle-source case takes the minimum number of branches.
+type noopFanoutSpan struct{}
+
+func (noopFanoutSpan) End()                     {}
+func (noopFanoutSpan) SetAttribute(_, _ string) {}
+func (noopFanoutSpan) RecordError(_ error)      {}
+func (noopFanoutSpan) AddLink(_ core.Link)      {}
 
 // deliverEventToSlot applies the EventDef's Match / Transform for one
 // subscriber and sends the resulting event onto its channel. Extracted
@@ -724,11 +802,18 @@ func (s *YieldingSource[Data]) yield(ctx context.Context, data Data) error {
 //     and the non-blocking + drop-with-Truncated semantics; same
 //     codepath as the targeted-deliver closure used by
 //     EmitToSubscription (spec §"Server SDK Guidance" L630).
-func (s *YieldingSource[Data]) deliverEventToSlot(sub *subscriberSlot, event Event, matchFn MatchFunc, transformFn TransformFunc) {
+// deliverEventToSlot returns (matched, transformed) so yield()'s fanout
+// span can stamp accurate counts. matched=false means Match returned
+// false (the subscriber was filtered out before delivery); transformed
+// signals safeTransform actually modified the event (the
+// passthrough/no-op transform case returns false). Caller increments
+// counters accordingly.
+func (s *YieldingSource[Data]) deliverEventToSlot(sub *subscriberSlot, event Event, matchFn MatchFunc, transformFn TransformFunc) (matched, transformed bool) {
 	hc := newHookContext(context.Background(), sub.principal, sub.subscriptionID, DeliveryModePush)
 	if !safeMatch(matchFn, hc, event, sub.params) {
-		return
+		return false, false
 	}
-	delivered, _ := safeTransform(transformFn, hc, event, sub.params)
+	delivered, modified := safeTransform(transformFn, hc, event, sub.params)
 	sub.deliverEvent(delivered)
+	return true, modified
 }
