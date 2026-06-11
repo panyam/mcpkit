@@ -45,9 +45,18 @@ reference — pass `--exporter=otlp` to its `serve` or `demo` target.
   MCP `notifications/message` is a separate, client-visible
   surface and continues to work independently.
 
-- **Metrics** (Mimir lane) — empty. mcpkit has no metric emitters
-  today. Lights up when the metrics umbrella (separate work, no
-  umbrella issue yet) ships.
+- **Metrics** (Mimir lane) — wired via `commonotel.SetupMetrics`
+  (issue 668 metrics half, pairs with the `core.MeterProvider` seam
+  added in issue 7). Examples that adopt it emit four canonical
+  instruments — `mcp.tool.calls`, `mcp.jsonrpc.errors`,
+  `mcp.tool.duration` (ms), `mcp.sessions.active` — through the OTel
+  meter adapter → OTLP → Collector → Mimir. Exemplars are stamped
+  by default so Grafana panels link directly to the matching trace
+  in Tempo. `examples/otel/stdout/` is the reference adopter and
+  ships its starter dashboard at
+  [`/d/otel-stdout`](http://localhost:3000/d/otel-stdout) (per-example
+  UID convention — see `examples/CONVENTIONS.md` § Per-example
+  Grafana dashboards).
 
 Shipping the full LGTM stack now means no rework when the empty lanes
 fill in. The trade-off is ~6 YAML config files to maintain vs the
