@@ -27,6 +27,18 @@ type Server struct {
 	allSessionClosers   []func()
 	sessionBroadcasters []func(ctx context.Context, method string, params any)
 	subRegistry         *subscriptionRegistry // nil when subscriptions not enabled
+
+	// metricsMiddleware wraps every dispatched JSON-RPC request when a
+	// non-Noop MeterProvider was installed via WithMeterProvider. nil =
+	// metrics disabled (zero-overhead path). Constructed once at NewServer
+	// so instrument creation does not run on every dispatch.
+	metricsMiddleware Middleware
+
+	// sessionsActive is the Int64UpDownCounter used by the streamable
+	// transport to track the "currently connected sessions" gauge. nil
+	// when metrics are disabled — transports gate on nil-check before
+	// calling Add. Constructed alongside metricsMiddleware.
+	sessionsActive core.Int64UpDownCounter
 }
 
 type serverOptions struct {
@@ -66,6 +78,7 @@ type serverOptions struct {
 	readCacheScope       string                   // SEP-2549 resources/read default cacheScope; handler may override per-read
 	allowLegacyOnDraft   bool                     // WithAllowLegacyOnDraft — opt-in SEP-2575 leniency on the legacy wire (off by default; strict per spec)
 	tracerProvider       core.TracerProvider      // SEP-414 P2 — WithTracerProvider; nil/Noop = trace middleware not installed
+	meterProvider        core.MeterProvider       // issue 7 — WithMeterProvider; nil/Noop = metrics middleware not installed
 }
 
 type httpHandlerEntry struct {
@@ -565,6 +578,15 @@ func NewServer(info core.ServerInfo, opts ...Option) *Server {
 	s.dispatcher.listCacheScope = s.options.listCacheScope
 	s.dispatcher.readTTLMs = s.options.readTTLMs
 	s.dispatcher.readCacheScope = s.options.readCacheScope
+	// issue 7 — install metrics middleware (and the sessions-active
+	// up-down counter for the streamable transport) when a non-Noop
+	// MeterProvider is configured. Zero-overhead when nil / Noop —
+	// the dispatch loop's `if s.metricsMiddleware != nil` branch
+	// short-circuits before any instrument lookup.
+	if metricsEnabled(s.options.meterProvider) {
+		s.metricsMiddleware = newMetricsMiddleware(s.options.meterProvider)
+		s.sessionsActive = newSessionsActiveCounter(s.options.meterProvider)
+	}
 	// Initialize subscription support if enabled
 	if s.options.subscriptionsEnabled {
 		s.subRegistry = &subscriptionRegistry{
@@ -859,6 +881,19 @@ func (s *Server) dispatchWithOpts(d *Dispatcher, ctx context.Context, claims *co
 	// span and contributes to the recorded latency. Skipped when no
 	// TracerProvider is configured or the default NoopTracerProvider is in
 	// use — zero overhead on the default path.
+	//
+	// The metrics middleware (issue 7) sits one layer INSIDE the trace
+	// middleware so its mcp.tool.duration histogram observation excludes
+	// the trace span-creation overhead and matches the latency a caller
+	// would actually attribute to the handler. The trace span still wraps
+	// the whole pipeline so metrics-induced overhead is visible in Tempo.
+	if s.metricsMiddleware != nil {
+		next := handler
+		mw := s.metricsMiddleware
+		handler = func(ctx context.Context, req *core.Request) (*core.Response, error) {
+			return mw(ctx, req, next)
+		}
+	}
 	if tracingEnabled(s.options.tracerProvider) {
 		next := handler
 		mw := traceMiddleware(s.options.tracerProvider)
