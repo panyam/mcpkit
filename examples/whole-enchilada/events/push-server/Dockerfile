@@ -1,7 +1,7 @@
 FROM golang:1.26-alpine AS build
 WORKDIR /src
 COPY . .
-WORKDIR /src/examples/events/whole-enchilada/push-server
+WORKDIR /src/examples/whole-enchilada/events/push-server
 RUN go build -o /out/push-server ./
 
 FROM alpine:3.20

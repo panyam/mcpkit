@@ -17,7 +17,7 @@ This is a **separate Go module**. The events library does not import GORM — de
 
 Validated in CI (`make testpg` runs the full matrix):
 
-- **Postgres** — production target for the [whole-enchilada demo](../../../../../examples/events/whole-enchilada/).
+- **Postgres** — production target for the [whole-enchilada demo](../../../../../examples/whole-enchilada/events/).
 - **SQLite** — no-Docker default for fast local tests. CGO-based via `gorm.io/driver/sqlite`.
 
 MySQL is untested. The generated SQL for `ReserveQuota` uses `SELECT FOR UPDATE` row locks which work on Postgres and MySQL but are a no-op on SQLite (the whole transaction serializes by default). Anyone wanting MySQL today should run the conformance suite themselves to verify behavioral parity before relying on it.

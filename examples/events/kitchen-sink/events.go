@@ -9,7 +9,7 @@
 // differentiator the per-subscription model enables actually earns
 // its keep on the wire.
 //
-// Companion: examples/events/whole-enchilada/ — production-shape
+// Companion: examples/whole-enchilada/events/ — production-shape
 // multi-tier reference for the deploy axis (same protocol features,
 // different scaling story).
 package main

@@ -1,7 +1,7 @@
 FROM golang:1.26-alpine AS build
 WORKDIR /src
 COPY . .
-WORKDIR /src/examples/events/whole-enchilada/receiver
+WORKDIR /src/examples/whole-enchilada/events/receiver
 RUN go build -o /out/receiver ./
 
 FROM alpine:3.20
