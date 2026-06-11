@@ -1,6 +1,6 @@
 # `HTTPSource` — events over HTTP from a remote source manager
 
-`HTTPSource` is the third source pattern in `experimental/ext/events/`, sibling to `YieldingSource` and `TypedSource`. Use it when upstream-integration concerns belong in a **separate process** from MCP serving — for example the push-server tier in `examples/events/whole-enchilada/`, where Discord WebSocket lifecycle + OAuth refresh lives away from the MCP server that fans out to subscribers.
+`HTTPSource` is the third source pattern in `experimental/ext/events/`, sibling to `YieldingSource` and `TypedSource`. Use it when upstream-integration concerns belong in a **separate process** from MCP serving — for example the push-server tier in `examples/whole-enchilada/events/`, where Discord WebSocket lifecycle + OAuth refresh lives away from the MCP server that fans out to subscribers.
 
 The wire is intentionally simple: JSON-encoded payloads POSTed to `{baseURL}/events/{eventName}/inject` with an optional `Authorization: Bearer <secret>` header. The event-server's `HTTPSource.Handler()` decodes, yields into a library-owned `YieldingSource`, and the rest of the library (push fanout, webhook delivery, `events/poll`, `events/list`) drives it the same way as any in-process source.
 

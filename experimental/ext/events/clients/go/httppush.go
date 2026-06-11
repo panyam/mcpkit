@@ -13,7 +13,7 @@ import (
 
 // Pusher is the client-side counterpart to events.HTTPSource. Use it from
 // a source-manager process (e.g., the push-server tier in
-// examples/events/whole-enchilada) to push typed events into a remote
+// examples/whole-enchilada/events) to push typed events into a remote
 // mcpkit Events server over HTTP.
 //
 // The wire is intentionally simple: a JSON-encoded payload POSTed to

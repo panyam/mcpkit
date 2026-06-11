@@ -22,7 +22,7 @@ import (
 // Use HTTPSource when upstream-integration concerns (Discord WebSocket
 // lifecycle, OAuth refresh, polling external APIs) belong in a separate
 // process from MCP serving — the canonical example is the push-server
-// tier in examples/events/whole-enchilada/. The discord and telegram
+// tier in examples/whole-enchilada/events/. The discord and telegram
 // demos use the simpler in-process YieldingSource because their source
 // integration runs inside the MCP server process.
 //

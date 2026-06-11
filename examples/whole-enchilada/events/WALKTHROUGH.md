@@ -321,11 +321,11 @@ Re-acquire a token (`TOKEN_POLLER_TENANT_A=$(make newtoken TENANT=A)`) and resta
 ## Run it
 
 ```bash
-go run ./examples/events/whole-enchilada/
+go run ./examples/whole-enchilada/events/
 ```
 
 Pass `--non-interactive` to skip pauses:
 
 ```bash
-go run ./examples/events/whole-enchilada/ --non-interactive
+go run ./examples/whole-enchilada/events/ --non-interactive
 ```
