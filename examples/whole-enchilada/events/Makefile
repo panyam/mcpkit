@@ -15,7 +15,7 @@
 # of the box. To reach them from the host shell / browser, run
 # `make hosts-install` once; `make hosts-uninstall` reverses it.
 
-N ?= 1
+N ?= 3
 
 # Stage-2: per-tenant subscriber binaries are invoked as
 #   make poller   TENANT=A TOKEN=$T
@@ -40,8 +40,9 @@ DEMO_CLIENT_SECRET ?= mcpkit-demo-secret-DEMO-ONLY
 # own projects. `make up` here brings backends up first (with --wait
 # so Keycloak is healthy before event-server tries to introspect);
 # observability is optional and managed by the operator separately
-# via `make -C docker up STACK=observability`.
-BACKENDS_COMPOSE := ../../../docker/backends/docker-compose.yml
+# via `cd ../../../docker/observability && make up`.
+BACKENDS_COMPOSE      := ../../../docker/backends/docker-compose.yml
+OBSERVABILITY_COMPOSE := ../../../docker/observability/docker-compose.yml
 
 # tenant-realm derives a lowercase realm name from TENANT. Pass
 # TENANT=A → tenant-a; TENANT=tenant-x → tenant-x (preserves
@@ -53,9 +54,9 @@ HOSTS_NAMES  := nginx.whole-enchilada event-server.whole-enchilada \
                 event-server-1.whole-enchilada event-server-2.whole-enchilada event-server-3.whole-enchilada \
                 receiver.whole-enchilada
 
-.PHONY: help gen-compose build unittest up down infra-up infra-down test demo readme \
+.PHONY: help gen-compose build unittest up down infraup infradown test demo readme predemo \
         newtoken newtoken-ci poller webhook inject drive-chat drive-presence \
-        add-discord rm-source list-sources \
+        add-discord rm-source list-sources alllogs \
         hosts-install hosts-uninstall logs ps clean clean-backends
 
 help: ## Show this help.
@@ -77,21 +78,39 @@ build: ## Build all binaries locally (without Docker). push-server stays a refer
 unittest: ## In-process Go tests (no Docker needed; covers tenant-isolation + protocol contracts).
 	go -C event-server test ./... -count=1 -timeout 60s
 
-infra-up: ## Bring up shared backends (keycloak + postgres + redis). Waits for healthchecks.
+infraup: ## Bring up shared backends (keycloak + postgres + redis). Waits for healthchecks.
 	docker compose -f $(BACKENDS_COMPOSE) up -d --wait
 
-infra-down: ## Tear down shared backends. WARNING: other examples sharing this infra will lose connectivity.
+infradown: ## Tear down shared backends. WARNING: other examples sharing this infra will lose connectivity.
 	docker compose -f $(BACKENDS_COMPOSE) down
 
-up: gen-compose infra-up ## Bring up backends then events. Reuses cached images. Pass BUILD=true to force a rebuild after code changes.
+up: gen-compose infraup ## Bring up backends then events. Reuses cached images. Pass BUILD=true to force a rebuild after code changes.
 	docker compose up -d $(if $(BUILD),--build)
 	@echo "stack up$(if $(BUILD), (rebuilt)); nginx on http://localhost:9090 — see README for hostname routing"
 
-down: ## docker compose down — tears down the events services only. Backends keep running (shared infra). Use `make infra-down` to stop them too.
+down: ## docker compose down — tears down the events services only. Backends keep running (shared infra). Use `make infradown` to stop them too.
 	docker compose down
 
 test: ## Run the walkthrough in non-interactive mode against the running docker stack.
 	go -C walkthrough run . --non-interactive
+
+predemo: gen-compose ## Clean slate: tear down + restart backends, observability, AND the events stack, clear tokens, open Keycloak + Grafana. Run BEFORE walking through the demo.
+	@echo "[predemo] tearing down events + backends + observability (idempotent)..."
+	-@docker compose down 2>/dev/null
+	-@docker compose -f $(BACKENDS_COMPOSE) down 2>/dev/null
+	-@docker compose -f $(OBSERVABILITY_COMPOSE) down 2>/dev/null
+	@echo "[predemo] starting backends + observability fresh..."
+	docker compose -f $(BACKENDS_COMPOSE) up -d --wait
+	docker compose -f $(OBSERVABILITY_COMPOSE) up -d --wait
+	@echo "[predemo] clearing all Keycloak user sessions..."
+	@$(MAKE) clear_all_tokens
+	@echo "[predemo] starting events stack fresh..."
+	docker compose up -d $(if $(BUILD),--build)
+	@echo "[predemo] opening Keycloak admin + Grafana in browser..."
+	@open http://localhost:8180 2>/dev/null || xdg-open http://localhost:8180 2>/dev/null || echo "  → http://localhost:8180 (admin/admin)"
+	@open http://localhost:3000 2>/dev/null || xdg-open http://localhost:3000 2>/dev/null || echo "  → http://localhost:3000"
+	@echo ""
+	@echo "[predemo] ready. Walkthrough is now self-driving — open the windows and run commands as you go."
 
 demo: ## Run the walkthrough interactively against the running stack.
 	go -C walkthrough run . --tui
@@ -195,6 +214,9 @@ list-sources: ## List sources known to a replica. REPLICAS=<idx>.
 
 iterm: ## macOS+iTerm2 only — open a 2x3 grid: row1 = pollers A/B/C, row2 = webhooks A/B/C.
 	@bash ./iterm-6up.sh
+
+alllogs: ## macOS+iTerm2 only — open one iTerm window with 3 vertically-stacked panes tailing backends / observability / events logs.
+	@bash ./iterm-logs.sh
 
 clear_all_tokens: ## Sign out every USER session in all 3 tenant realms (keeps mcp-event-server client creds intact).
 	@docker exec mcpkit-keycloak /opt/keycloak/bin/kcadm.sh config credentials \

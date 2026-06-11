@@ -7,9 +7,9 @@
 # their network aliases (`keycloak`, `postgres`, `redis`) on the
 # `mcpkit` network — no `-f` chaining required across composes.
 #
-# Bring up:  make -C docker up STACK=backends
-# Tear down: make -C docker down STACK=backends
-# Tail logs: make -C docker logs STACK=backends
+# Bring up:  cd docker/backends && make up
+# Tear down: cd docker/backends && make down
+# Tail logs: cd docker/backends && make logs
 #
 # Host ports exposed:
 #   8180 → Keycloak admin UI + token endpoints (http://localhost:8180)
@@ -22,7 +22,7 @@
 #
 # Versions are pinned. The realm JSONs under ./keycloak/realms/ are
 # imported once at first Keycloak boot; subsequent changes need either
-# `make -C docker down STACK=backends && rm -rf data/` (full reset) or
+# `cd docker/backends && make down && rm -rf data/` (full reset) or
 # the kcadm.sh path for in-place updates.
 
 networks:
@@ -115,7 +115,7 @@ services:
   # state (events: gorm-backed WebhookStore + EventBufferStore;
   # future: tasks v2 store, etc.). Pinned to 18-alpine. Host bind
   # mount at ./data/postgres/ — survives any teardown short of
-  # `make -C docker down STACK=backends -v` or manual `rm -rf data/`.
+  # `cd docker/backends && make down -v` or manual `rm -rf data/`.
   # Default credentials (postgres/postgres) match the demo-only
   # posture; production overrides via DSN env on each consumer.
   # -------------------------------------------------------------------

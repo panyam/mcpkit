@@ -94,8 +94,8 @@ func runDemo(_ /*serverURL*/, _ /*receiverURL*/ string) {
 	demo.Step("Manually inject from a sibling terminal — watch isolation in real time.").
 		Note("A's inject lights up A1 + A2 only; B's lights up B1 + B2 only.\n\n```\nmake inject TENANT=A EVENT=chat.message TEXT='hi from A'\nmake inject TENANT=B EVENT=chat.message TEXT='hi from B'\nmake inject TENANT=C EVENT=presence.changed USER=carol STATE=online\n```")
 
-	demo.Step("Scale to N=2 — kill a replica mid-stream, others keep delivering.").
-		Note("Watch the Redis MONITOR in a sibling window — events keep PUBLISHing through the survivor.\n\n```\nmake up N=2 BUILD=true\ndocker exec -it mcpkit-redis redis-cli MONITOR | grep mcpkit.events\ndocker compose kill event-server-1\nmake up\n```")
+	demo.Step("Kill a replica mid-stream — survivors keep delivering.").
+		Note("Stack defaults to N=3. Kill replica 1; nginx round-robins to 2 + 3; Redis fan-out keeps every subscriber fed.\n\n```\ndocker exec -it mcpkit-redis redis-cli MONITOR | grep mcpkit.events    # in a sibling window\ndocker compose kill event-server-1\ndocker compose start event-server-1                                      # bring it back when done\n```")
 
 	demo.Step("Cross-replica cursor — poll resumes on a different replica.").
 		Note("Restart the poller with the last cursor; events resume gap-free even when nginx routes it elsewhere.\n\n```\nmake poller TENANT=A USERNAME=usera1 PASSWORD=usera1\n# Ctrl+C, note the last cursor printed\nmake poller TENANT=A USERNAME=usera1 PASSWORD=usera1 -- --start-cursor=<N>\n```")
@@ -109,17 +109,17 @@ func runDemo(_ /*serverURL*/, _ /*receiverURL*/ string) {
 	demo.Step("Window D — subscribe to the topology stream.").
 		Note("Silent until a source is added / removed.\n\n```\nmake poller EVENT=events.topology TENANT=A TOKEN=$TOKEN_POLLER_TENANT_A\n```")
 
-	demo.Step("Window E — add a real Discord source on replicas 1 and 2.").
-		Note("Requires `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_IDS` exported. Window D prints `source.added`; replicas 1 + 2 open Discord WebSocket sessions.\n\n```\nmake add-discord TOKEN=$DISCORD_BOT_TOKEN CHANNELS=$DISCORD_CHANNEL_IDS REPLICAS=1,2 TENANTS=tenant-a,tenant-c\n```")
+	demo.Step("Window E — add a real Discord source on replicas 1 and 3 only.").
+		Note("Requires `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_IDS` exported. Window D prints `source.added`; replicas 1 + 3 open Discord WebSocket sessions. Replica 2 is deliberately skipped to make the per-replica divergence demo-able.\n\n```\nmake add-discord TOKEN=$DISCORD_BOT_TOKEN CHANNELS=$DISCORD_CHANNEL_IDS REPLICAS=1,3 TENANTS=tenant-a,tenant-c\n```")
 
 	demo.Step("Window G — poll discord.message as Tenant A.").
-		Note("Sees real Discord traffic tagged for tenant-a. Subscribers on replicas 3 / 4 ALSO see them (Redis pubsub fans cross-replica).\n\n```\nmake poller EVENT=discord.message TENANT=A TOKEN=$TOKEN_POLLER_TENANT_A\n```")
+		Note("Sees real Discord traffic tagged for tenant-a. Subscribers on replica 2 (where Discord is NOT registered) ALSO see them — Redis pubsub fans cross-replica.\n\n```\nmake poller EVENT=discord.message TENANT=A TOKEN=$TOKEN_POLLER_TENANT_A\n```")
 
 	demo.Step("Compare per-replica source views.").
-		Note("Replica 1 lists `discord.message`; replica 3 does not. Adapter configs are per-replica state — the topology stream is what unifies them.\n\n```\nmake list-sources REPLICAS=1\nmake list-sources REPLICAS=3\n```")
+		Note("Replicas 1 + 3 list `discord.message`; replica 2 does not. Adapter configs are per-replica state — the topology stream is what unifies them.\n\n```\nmake list-sources REPLICAS=1\nmake list-sources REPLICAS=2\nmake list-sources REPLICAS=3\n```")
 
 	demo.Step("Remove the Discord source.").
-		Note("Window D prints `source.removed`; the discord.message poller terminates with NotFound on its next cycle.\n\n```\nmake rm-source SOURCE=discord.message REPLICAS=1,2\n```")
+		Note("Window D prints `source.removed`; the discord.message poller terminates with NotFound on its next cycle.\n\n```\nmake rm-source SOURCE=discord.message REPLICAS=1,3\n```")
 
 	demo.Step("Revoke a token in Keycloak admin — affected windows die, others keep flowing.").
 		Note("Open `http://localhost:8180/admin/master/console/#/tenant-a/users` (admin / admin), click `alice` → **Sessions** → **Sign out**. Within ~5s A1 (poller) exits with `token invalidated`; A2 (webhook) gets a `{type:terminated}` envelope via BCL. B and C are untouched.\n\n```\ndocker compose logs -f event-server-1 | grep BCL    # see the back-channel logout fire\n```")

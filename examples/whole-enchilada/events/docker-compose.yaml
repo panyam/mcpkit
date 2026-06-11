@@ -9,8 +9,8 @@
 # ./docker/ and bridges via the literal `mcpkit` docker network.
 # Bring them up first:
 #
-#   make -C ../../../docker up STACK=backends
-#   make -C ../../../docker up STACK=observability    # optional
+#   cd ../../../docker/backends && make up
+#   cd ../../../docker/observability && make up    # optional
 #
 # `make up` here chains those automatically.
 #
@@ -67,6 +67,8 @@ services:
           - nginx.whole-enchilada
     depends_on:
       - event-server-1
+      - event-server-2
+      - event-server-3
       - receiver
 
 
@@ -157,6 +159,184 @@ services:
         aliases:
           - event-server.whole-enchilada
           - event-server-1.whole-enchilada
+      mcpkit: {}
+
+  event-server-2:
+    build:
+      context: ../../..
+      dockerfile: examples/whole-enchilada/events/event-server/Dockerfile
+    environment:
+      EVENT_INJECT_BEARER: ${EVENT_INJECT_BEARER:-stage-1-shared-secret}
+      # Stage-2: introspection-mode auth. The event-server's
+      # tryEnableIntrospection reads OAUTH_INTROSPECTION_URLS as a
+      # comma-separated list of N introspection endpoints and wires a
+      # MultiIntrospectionValidator that accepts a token if ANY realm's
+      # introspection endpoint returns active=true. Shared client_id /
+      # client_secret across all realms (DEMO ONLY — production would
+      # register a distinct client per realm).
+      OAUTH_INTROSPECTION_URLS: http://keycloak:8080/realms/tenant-a/protocol/openid-connect/token/introspect,http://keycloak:8080/realms/tenant-b/protocol/openid-connect/token/introspect,http://keycloak:8080/realms/tenant-c/protocol/openid-connect/token/introspect
+      OAUTH_CLIENT_ID: mcp-event-server
+      OAUTH_CLIENT_SECRET: ${OAUTH_CLIENT_SECRET:-mcpkit-demo-secret-DEMO-ONLY}
+      OAUTH_CACHE_TTL: ${OAUTH_CACHE_TTL:-5s}
+      # OAUTH_ISSUER_BASE is the PUBLIC scheme://host:port that
+      # appears in token iss claims — same value KC_HOSTNAME is set
+      # to on the keycloak service in docker/backends. The BCL
+      # receiver expects iss = OAUTH_ISSUER_BASE + "/realms/" + <realm>
+      # exactly.
+      OAUTH_ISSUER_BASE: http://localhost:8180
+      # OTel telemetry. EXPORTER=auto means "best-effort OTLP with
+      # silent Noop fallback" — works whether docker/observability is
+      # up or not. To force OTLP and fail loudly when the collector
+      # is missing, set EXPORTER=otlp in the host shell before
+      # docker compose up.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-mcpkit-otel-collector:4317}
+      # Redis backend (issues 634 + 718). When REDIS_ADDR is set,
+      # event-server's configureRedisBackend swaps the in-memory
+      # QuotaStore + LocalEmitter defaults for Redis-backed
+      # counterparts (Pattern B: Publisher is the sole outbound sink;
+      # Subscriber delivers to LOCAL on every replica). This is what
+      # makes the multi-replica push-survival demo actually work —
+      # without it, each replica maintains its own subscription
+      # counts and fans out only locally. Resolves to docker/backends
+      # via the shared mcpkit network.
+      REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
+      # Postgres backend (issue 639). When POSTGRES_DSN is set,
+      # event-server's configurePostgresBackend swaps the in-memory
+      # WebhookStore default for the gorm-backed Postgres impl —
+      # webhook subscriptions survive replica restarts and live in a
+      # single source of truth across replicas. Resolves to
+      # docker/backends via the shared mcpkit network.
+      POSTGRES_DSN: ${POSTGRES_DSN:-postgres://postgres:postgres@postgres:5432/events?sslmode=disable}
+      # Per-event-type subscription caps. Format:
+      # EVENTS_QUOTA_CAPS=<eventName>=<int>[,<eventName>=<int>...]
+      # When set, event-server constructs Quota with
+      # WithMaxSubscriptionsPerPrincipal(name, n) per entry. Cross-
+      # replica enforcement comes from the Redis-backed QuotaStore
+      # (issue 718); a 4th subscribe for the same principal lands on
+      # any replica → -32013 ResourceExhausted with the
+      # {limit:"subscriptions", max:N} envelope.
+      # Default chat.message=3 is small enough for the walkthrough's
+      # "subscribe 4 times, watch the 4th fail" beat to be driven by
+      # hand in sibling terminals.
+      EVENTS_QUOTA_CAPS: ${EVENTS_QUOTA_CAPS:-chat.message=3}
+      # POSTGRES_BUFFER_TTL — retention window for Postgres-backed
+      # EventBufferStore rows (issue 727). The background sweeper drops
+      # rows past expires_at every 60s; clients polling for an evicted
+      # cursor get truncated:true back. 10m for the demo so the
+      # "stale cursor truncates" walkthrough beat doesn't need an hour
+      # of patience.
+      POSTGRES_BUFFER_TTL: ${POSTGRES_BUFFER_TTL:-10m}
+    # `--exporter=auto` means best-effort OTLP with Noop fallback when
+    # the collector is unreachable. common.RegisterTelemetryFlags
+    # doesn't read EXPORTER from env, so we wire it via the CLI flag;
+    # operators override with `EXPORTER=otlp make up` for fail-loud.
+    command: ["-addr", ":8080", "--exporter=${EXPORTER:-auto}", "--otlp-endpoint=${OTEL_EXPORTER_OTLP_ENDPOINT:-mcpkit-otel-collector:4317}"]
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+    # No cross-compose depends_on for keycloak / postgres / redis —
+    # those live in docker/backends/ as a separate compose project.
+    # `make up` brings backends up first; once running, the Go client
+    # retry loops inside event-server tolerate brief unavailability
+    # during boot.
+    networks:
+      whole-enchilada:
+        aliases:
+          - event-server.whole-enchilada
+          - event-server-2.whole-enchilada
+      mcpkit: {}
+
+  event-server-3:
+    build:
+      context: ../../..
+      dockerfile: examples/whole-enchilada/events/event-server/Dockerfile
+    environment:
+      EVENT_INJECT_BEARER: ${EVENT_INJECT_BEARER:-stage-1-shared-secret}
+      # Stage-2: introspection-mode auth. The event-server's
+      # tryEnableIntrospection reads OAUTH_INTROSPECTION_URLS as a
+      # comma-separated list of N introspection endpoints and wires a
+      # MultiIntrospectionValidator that accepts a token if ANY realm's
+      # introspection endpoint returns active=true. Shared client_id /
+      # client_secret across all realms (DEMO ONLY — production would
+      # register a distinct client per realm).
+      OAUTH_INTROSPECTION_URLS: http://keycloak:8080/realms/tenant-a/protocol/openid-connect/token/introspect,http://keycloak:8080/realms/tenant-b/protocol/openid-connect/token/introspect,http://keycloak:8080/realms/tenant-c/protocol/openid-connect/token/introspect
+      OAUTH_CLIENT_ID: mcp-event-server
+      OAUTH_CLIENT_SECRET: ${OAUTH_CLIENT_SECRET:-mcpkit-demo-secret-DEMO-ONLY}
+      OAUTH_CACHE_TTL: ${OAUTH_CACHE_TTL:-5s}
+      # OAUTH_ISSUER_BASE is the PUBLIC scheme://host:port that
+      # appears in token iss claims — same value KC_HOSTNAME is set
+      # to on the keycloak service in docker/backends. The BCL
+      # receiver expects iss = OAUTH_ISSUER_BASE + "/realms/" + <realm>
+      # exactly.
+      OAUTH_ISSUER_BASE: http://localhost:8180
+      # OTel telemetry. EXPORTER=auto means "best-effort OTLP with
+      # silent Noop fallback" — works whether docker/observability is
+      # up or not. To force OTLP and fail loudly when the collector
+      # is missing, set EXPORTER=otlp in the host shell before
+      # docker compose up.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-mcpkit-otel-collector:4317}
+      # Redis backend (issues 634 + 718). When REDIS_ADDR is set,
+      # event-server's configureRedisBackend swaps the in-memory
+      # QuotaStore + LocalEmitter defaults for Redis-backed
+      # counterparts (Pattern B: Publisher is the sole outbound sink;
+      # Subscriber delivers to LOCAL on every replica). This is what
+      # makes the multi-replica push-survival demo actually work —
+      # without it, each replica maintains its own subscription
+      # counts and fans out only locally. Resolves to docker/backends
+      # via the shared mcpkit network.
+      REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
+      # Postgres backend (issue 639). When POSTGRES_DSN is set,
+      # event-server's configurePostgresBackend swaps the in-memory
+      # WebhookStore default for the gorm-backed Postgres impl —
+      # webhook subscriptions survive replica restarts and live in a
+      # single source of truth across replicas. Resolves to
+      # docker/backends via the shared mcpkit network.
+      POSTGRES_DSN: ${POSTGRES_DSN:-postgres://postgres:postgres@postgres:5432/events?sslmode=disable}
+      # Per-event-type subscription caps. Format:
+      # EVENTS_QUOTA_CAPS=<eventName>=<int>[,<eventName>=<int>...]
+      # When set, event-server constructs Quota with
+      # WithMaxSubscriptionsPerPrincipal(name, n) per entry. Cross-
+      # replica enforcement comes from the Redis-backed QuotaStore
+      # (issue 718); a 4th subscribe for the same principal lands on
+      # any replica → -32013 ResourceExhausted with the
+      # {limit:"subscriptions", max:N} envelope.
+      # Default chat.message=3 is small enough for the walkthrough's
+      # "subscribe 4 times, watch the 4th fail" beat to be driven by
+      # hand in sibling terminals.
+      EVENTS_QUOTA_CAPS: ${EVENTS_QUOTA_CAPS:-chat.message=3}
+      # POSTGRES_BUFFER_TTL — retention window for Postgres-backed
+      # EventBufferStore rows (issue 727). The background sweeper drops
+      # rows past expires_at every 60s; clients polling for an evicted
+      # cursor get truncated:true back. 10m for the demo so the
+      # "stale cursor truncates" walkthrough beat doesn't need an hour
+      # of patience.
+      POSTGRES_BUFFER_TTL: ${POSTGRES_BUFFER_TTL:-10m}
+    # `--exporter=auto` means best-effort OTLP with Noop fallback when
+    # the collector is unreachable. common.RegisterTelemetryFlags
+    # doesn't read EXPORTER from env, so we wire it via the CLI flag;
+    # operators override with `EXPORTER=otlp make up` for fail-loud.
+    command: ["-addr", ":8080", "--exporter=${EXPORTER:-auto}", "--otlp-endpoint=${OTEL_EXPORTER_OTLP_ENDPOINT:-mcpkit-otel-collector:4317}"]
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+    # No cross-compose depends_on for keycloak / postgres / redis —
+    # those live in docker/backends/ as a separate compose project.
+    # `make up` brings backends up first; once running, the Go client
+    # retry loops inside event-server tolerate brief unavailability
+    # during boot.
+    networks:
+      whole-enchilada:
+        aliases:
+          - event-server.whole-enchilada
+          - event-server-3.whole-enchilada
       mcpkit: {}
 
   receiver:

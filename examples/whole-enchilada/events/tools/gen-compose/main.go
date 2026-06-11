@@ -47,7 +47,7 @@ type tmplCtx struct {
 }
 
 func main() {
-	n := flag.Int("n", 1, "event-server replica count (>=1)")
+	n := flag.Int("n", 3, "event-server replica count (>=1)")
 	outDir := flag.String("out", ".", "leaf directory (whole-enchilada root) to render into")
 	flag.Parse()
 
