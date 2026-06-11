@@ -46,7 +46,7 @@ make down         # tear down
 Scale replicas:
 
 ```bash
-make up N=3 M=2   # 3 event-servers, 2 push-servers
+make up N=3   # 3 event-server replicas (synthetic producers are operator-run via `make drive-chat` / `make drive-presence`)
 ```
 
 Local in-process tests (no Docker):
@@ -102,7 +102,7 @@ make inject TENANT=B EVENT=chat.message TEXT="hi from B"
 make inject TENANT=C EVENT=presence.changed USER=carol STATE=online
 ```
 
-Default `make up` also runs the push-server, which auto-rotates synthetic events across all three tenants — leave the pollers running and watch the rotation.
+`make up` brings the stack up silent — no events flow until you run `make drive-chat` (and / or `make drive-presence`) in sibling windows. The drivers rotate tenant tags round-robin across A/B/C; leave the pollers running and watch each tenant's window light up in turn. Tune the cadence with `EVERY=200ms` (high-volume mode) or restrict to one tenant with `TENANTS=tenant-a`.
 
 ### Revocation walkthrough (the load-bearing demo step)
 

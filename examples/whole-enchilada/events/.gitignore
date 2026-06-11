@@ -15,4 +15,5 @@ push-server/push-server
 receiver/receiver
 inject/inject
 walkthrough/walkthrough
+drivers/synth/synth
 bin/
