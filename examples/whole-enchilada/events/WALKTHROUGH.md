@@ -11,14 +11,14 @@ Production-shape multi-tier reference. nginx fronts the event-server tier; Keycl
 - **Window C1 — Tenant C poller.** — Three terminals, three tenants — clean isolation on the wire.
 - **Windows A2 / B2 / C2 — webhook receivers.** — Second delivery mode, same tenant scoping. An event for `tenant-a` lights up A1 and A2 only.
 - **Manually inject from a sibling terminal — watch isolation in real time.** — A's inject lights up A1 + A2 only; B's lights up B1 + B2 only.
-- **Scale to N=2 — kill a replica mid-stream, others keep delivering.** — Watch the Redis MONITOR in a sibling window — events keep PUBLISHing through the survivor.
+- **Kill a replica mid-stream — survivors keep delivering.** — Stack defaults to N=3. Kill replica 1; nginx round-robins to 2 + 3; Redis fan-out keeps every subscriber fed.
 - **Cross-replica cursor — poll resumes on a different replica.** — Restart the poller with the last cursor; events resume gap-free even when nginx routes it elsewhere.
 - **Buffer TTL — stale cursor returns `truncated:true`.** — Wait past `POSTGRES_BUFFER_TTL=10m`, restart with the old cursor — poller resyncs from `latest`.
 - **Trip the subscription cap — 4th subscribe rejects.** — Three webhook subscriptions for the same user succeed; the 4th gets `-32013 ResourceExhausted`.
 - **Window D — subscribe to the topology stream.** — Silent until a source is added / removed.
-- **Window E — add a real Discord source on replicas 1 and 2.** — Requires `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_IDS` exported. Window D prints `source.added`; replicas 1 + 2 open Discord WebSocket sessions.
-- **Window G — poll discord.message as Tenant A.** — Sees real Discord traffic tagged for tenant-a. Subscribers on replicas 3 / 4 ALSO see them (Redis pubsub fans cross-replica).
-- **Compare per-replica source views.** — Replica 1 lists `discord.message`; replica 3 does not. Adapter configs are per-replica state — the topology stream is what unifies them.
+- **Window E — add a real Discord source on replicas 1 and 3 only.** — Requires `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_IDS` exported. Window D prints `source.added`; replicas 1 + 3 open Discord WebSocket sessions. Replica 2 is deliberately skipped to make the per-replica divergence demo-able.
+- **Window G — poll discord.message as Tenant A.** — Sees real Discord traffic tagged for tenant-a. Subscribers on replica 2 (where Discord is NOT registered) ALSO see them — Redis pubsub fans cross-replica.
+- **Compare per-replica source views.** — Replicas 1 + 3 list `discord.message`; replica 2 does not. Adapter configs are per-replica state — the topology stream is what unifies them.
 - **Remove the Discord source.** — Window D prints `source.removed`; the discord.message poller terminates with NotFound on its next cycle.
 - **Revoke a token in Keycloak admin — affected windows die, others keep flowing.** — Open `http://localhost:8180/admin/master/console/#/tenant-a/users` (admin / admin), click `alice` → **Sessions** → **Sign out**. Within ~5s A1 (poller) exits with `token invalidated`; A2 (webhook) gets a `{type:terminated}` envelope via BCL. B and C are untouched.
 
@@ -46,7 +46,7 @@ sequenceDiagram
 
     Note over Operator,Keycloak: Step 7: Manually inject from a sibling terminal — watch isolation in real time.
 
-    Note over Operator,Keycloak: Step 8: Scale to N=2 — kill a replica mid-stream, others keep delivering.
+    Note over Operator,Keycloak: Step 8: Kill a replica mid-stream — survivors keep delivering.
 
     Note over Operator,Keycloak: Step 9: Cross-replica cursor — poll resumes on a different replica.
 
@@ -56,7 +56,7 @@ sequenceDiagram
 
     Note over Operator,Keycloak: Step 12: Window D — subscribe to the topology stream.
 
-    Note over Operator,Keycloak: Step 13: Window E — add a real Discord source on replicas 1 and 2.
+    Note over Operator,Keycloak: Step 13: Window E — add a real Discord source on replicas 1 and 3 only.
 
     Note over Operator,Keycloak: Step 14: Window G — poll discord.message as Tenant A.
 
@@ -166,15 +166,14 @@ make inject TENANT=B EVENT=chat.message TEXT='hi from B'
 make inject TENANT=C EVENT=presence.changed USER=carol STATE=online
 ```
 
-### Step 8: Scale to N=2 — kill a replica mid-stream, others keep delivering.
+### Step 8: Kill a replica mid-stream — survivors keep delivering.
 
-Watch the Redis MONITOR in a sibling window — events keep PUBLISHing through the survivor.
+Stack defaults to N=3. Kill replica 1; nginx round-robins to 2 + 3; Redis fan-out keeps every subscriber fed.
 
 ```
-make up N=2 BUILD=true
-docker exec -it mcpkit-redis redis-cli MONITOR | grep mcpkit.events
+docker exec -it mcpkit-redis redis-cli MONITOR | grep mcpkit.events    # in a sibling window
 docker compose kill event-server-1
-make up
+docker compose start event-server-1                                      # bring it back when done
 ```
 
 ### Step 9: Cross-replica cursor — poll resumes on a different replica.
@@ -212,17 +211,17 @@ Silent until a source is added / removed.
 make poller EVENT=events.topology TENANT=A TOKEN=$TOKEN_POLLER_TENANT_A
 ```
 
-### Step 13: Window E — add a real Discord source on replicas 1 and 2.
+### Step 13: Window E — add a real Discord source on replicas 1 and 3 only.
 
-Requires `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_IDS` exported. Window D prints `source.added`; replicas 1 + 2 open Discord WebSocket sessions.
+Requires `DISCORD_BOT_TOKEN` + `DISCORD_CHANNEL_IDS` exported. Window D prints `source.added`; replicas 1 + 3 open Discord WebSocket sessions. Replica 2 is deliberately skipped to make the per-replica divergence demo-able.
 
 ```
-make add-discord TOKEN=$DISCORD_BOT_TOKEN CHANNELS=$DISCORD_CHANNEL_IDS REPLICAS=1,2 TENANTS=tenant-a,tenant-c
+make add-discord TOKEN=$DISCORD_BOT_TOKEN CHANNELS=$DISCORD_CHANNEL_IDS REPLICAS=1,3 TENANTS=tenant-a,tenant-c
 ```
 
 ### Step 14: Window G — poll discord.message as Tenant A.
 
-Sees real Discord traffic tagged for tenant-a. Subscribers on replicas 3 / 4 ALSO see them (Redis pubsub fans cross-replica).
+Sees real Discord traffic tagged for tenant-a. Subscribers on replica 2 (where Discord is NOT registered) ALSO see them — Redis pubsub fans cross-replica.
 
 ```
 make poller EVENT=discord.message TENANT=A TOKEN=$TOKEN_POLLER_TENANT_A
@@ -230,10 +229,11 @@ make poller EVENT=discord.message TENANT=A TOKEN=$TOKEN_POLLER_TENANT_A
 
 ### Step 15: Compare per-replica source views.
 
-Replica 1 lists `discord.message`; replica 3 does not. Adapter configs are per-replica state — the topology stream is what unifies them.
+Replicas 1 + 3 list `discord.message`; replica 2 does not. Adapter configs are per-replica state — the topology stream is what unifies them.
 
 ```
 make list-sources REPLICAS=1
+make list-sources REPLICAS=2
 make list-sources REPLICAS=3
 ```
 
@@ -242,7 +242,7 @@ make list-sources REPLICAS=3
 Window D prints `source.removed`; the discord.message poller terminates with NotFound on its next cycle.
 
 ```
-make rm-source SOURCE=discord.message REPLICAS=1,2
+make rm-source SOURCE=discord.message REPLICAS=1,3
 ```
 
 ### Step 17: Revoke a token in Keycloak admin — affected windows die, others keep flowing.

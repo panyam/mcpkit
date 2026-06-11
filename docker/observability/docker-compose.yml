@@ -15,9 +15,9 @@
 #   * Grafana — single UI at http://localhost:3000 (admin/admin).
 #     Datasources auto-provisioned for all three signals.
 #
-# Bring up:  make -C docker up
-# Tear down: make -C docker down
-# Tail logs: make -C docker logs
+# Bring up:  cd docker/observability && make up
+# Tear down: cd docker/observability && make down
+# Tail logs: cd docker/observability && make logs
 #
 # Versions are pinned. Update one image at a time so a Tempo /
 # Mimir / Loki schema bump never reaches main without an explicit

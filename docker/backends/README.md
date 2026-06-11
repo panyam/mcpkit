@@ -16,9 +16,9 @@ Postgres and Redis are NOT host-port-mapped — they're reachable from any conta
 ## Quick start
 
 ```
-make -C docker up STACK=backends    # bring the stack up
+cd docker/backends && make up       # bring the stack up
 open http://localhost:8180          # Keycloak admin UI (admin/admin)
-make -C docker down STACK=backends  # tear it down
+cd docker/backends && make down     # tear it down
 ```
 
 ## Reaching these from an example
@@ -51,7 +51,7 @@ The Keycloak instance imports three tenant realms at first boot from [`keycloak/
 - Client `mcp-events-poller` is registered in each realm with the shared demo secret `mcpkit-demo-secret-DEMO-ONLY` (demo-only — production registers a distinct client per realm).
 - Issuer base is `http://localhost:8180` — tokens carry `iss: http://localhost:8180/realms/<realm>`. Examples that validate `iss` must use the same base.
 
-To add a realm for a new example, drop a `realm-<name>.json` into `keycloak/realms/` and `make -C docker down STACK=backends && make -C docker up STACK=backends` to re-import. In-place realm edits go through `kcadm.sh` (see the `keycloak-init` sidecar for the pattern).
+To add a realm for a new example, drop a `realm-<name>.json` into `keycloak/realms/` and `cd docker/backends && make down && make up` to re-import. In-place realm edits go through `kcadm.sh` (see the `keycloak-init` sidecar for the pattern).
 
 ## Production note
 

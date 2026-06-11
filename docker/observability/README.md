@@ -17,9 +17,9 @@ unified under one Grafana UI.
 ## Quick start
 
 ```
-make -C docker up                 # bring the stack up
-open http://localhost:3000        # Grafana — anonymous Admin, no login
-make -C docker down               # tear it down
+cd docker/observability && make up    # bring the stack up
+open http://localhost:3000            # Grafana — anonymous Admin, no login
+cd docker/observability && make down  # tear it down
 ```
 
 To point a mcpkit example at the stack, configure its OTel SDK to
