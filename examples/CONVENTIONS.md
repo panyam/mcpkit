@@ -276,6 +276,66 @@ For walkthroughs that DO call `flag.Parse` (e.g. when they need
 example-specific flags), use `common.RegisterTelemetryFlags(flag.CommandLine)`
 instead of `ExporterFromArgs` — both populate the same struct shape.
 
+#### Metrics wiring (issue 668)
+
+The same `--exporter` / `--otlp-endpoint` flag pair drives an optional
+`commonotel.SetupMetrics(...)` call. When set, the dispatch path
+emits the four canonical MCP server instruments through the issue 7
+`core.MeterProvider` seam: `mcp.tool.calls`, `mcp.jsonrpc.errors`,
+`mcp.tool.duration` (ms), `mcp.sessions.active`. Modes mirror
+`SetupTelemetry`:
+
+- `""` (default) — `core.NoopMeterProvider{}`. Zero overhead.
+- `stdout` — `stdoutmetric` exporter wrapped in a 5s periodic reader.
+- `otlp` — `otlpmetricgrpc` exporter to `--otlp-endpoint`. Dial-failure
+  falls back to Noop with a warning.
+- `auto` — same as `otlp` but silent on dial-failure.
+
+Canonical wiring inside `serve()` (extends the trace + logs setup):
+
+```go
+meterProvider, metricsShutdown, err := commonotel.SetupMetrics(context.Background(),
+    commonotel.WithExporter(*tel.Exporter),
+    commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+    commonotel.WithServiceName("<example-name>"),
+)
+if err != nil { log.Fatalf("commonotel.SetupMetrics: %v", err) }
+defer metricsShutdown(context.Background())
+
+common.RunServer(common.ServerConfig{
+    // ...
+    TracerProvider: tp,
+    MeterProvider:  meterProvider,
+})
+```
+
+Exemplars are wired by default: the ext/otel meter adapter forwards
+ctx unchanged, and the OTel SDK stamps the active span's identity
+onto each measurement. Grafana renders these as clickable dots that
+pivot to the matching trace in Tempo.
+
+#### Per-example Grafana dashboards (issue 668)
+
+Each example that wires `SetupMetrics` SHOULD ship a starter dashboard
+under `docker/observability/grafana/provisioning/dashboards/files/<example-name>/overview.json`
+following this convention:
+
+- **UID equals the example name** (`"uid": "<example-name>"`) — gives
+  the dashboard a stable Grafana permalink at
+  `http://localhost:3000/d/<example-name>` that operators can bookmark.
+- **Folder structure** — Grafana's provisioning auto-creates a folder
+  named after the directory (`foldersFromFilesStructure: true` in
+  `dashboards.yaml`), so dashboards group cleanly in the UI.
+- **`$service` variable** scoped to `<example-name>.*` — covers both
+  the server (`<example-name>`) and walkthrough host
+  (`<example-name>-host`) service names.
+- **`$tool` variable** lets the operator pin a single tool across
+  every panel — useful when chasing one misbehaving tool.
+
+`examples/otel/stdout/` ships the reference dashboard; later examples
+can copy + rename the UID. See [`docker/observability/`](../docker/observability/README.md)
+for the LGTM stack the dashboards consume.
+
 #### Logs wiring (issue 668)
 
 The same `--exporter` / `--otlp-endpoint` flag pair drives an optional

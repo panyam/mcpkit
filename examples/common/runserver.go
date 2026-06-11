@@ -62,6 +62,17 @@ type ServerConfig struct {
 	// example call site. A nil value (or core.NoopTracerProvider{})
 	// is the default and adds zero overhead.
 	TracerProvider core.TracerProvider
+
+	// MeterProvider, when non-nil, wires the issue 7 metrics
+	// middleware into the server via server.WithMeterProvider so the
+	// dispatch path emits the canonical MCP server metrics
+	// (mcp.tool.calls / mcp.jsonrpc.errors / mcp.tool.duration /
+	// mcp.sessions.active). Pass the result of commonotel.SetupMetrics
+	// directly — it's already wrapped in mcpotel.NewMeterProvider so
+	// no adapter call is needed at the example call site. A nil value
+	// (or core.NoopMeterProvider{}) is the default and adds zero
+	// overhead.
+	MeterProvider core.MeterProvider
 }
 
 // RunServer wires up the canonical mcpkit-example server lifecycle:
@@ -103,6 +114,9 @@ func RunServer(cfg ServerConfig) error {
 	}
 	if cfg.TracerProvider != nil {
 		opts = append(opts, server.WithTracerProvider(cfg.TracerProvider))
+	}
+	if cfg.MeterProvider != nil {
+		opts = append(opts, server.WithMeterProvider(cfg.MeterProvider))
 	}
 	opts = append(opts, cfg.Options...)
 
