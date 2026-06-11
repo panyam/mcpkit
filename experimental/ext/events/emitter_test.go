@@ -152,6 +152,11 @@ func TestRegister_DefaultEmitterIsLocalEmitter(t *testing.T) {
 	require.NoError(t, yield(context.Background(), map[string]any{"k": "v"}))
 	require.NoError(t, yield(context.Background(), map[string]any{"k": "v"}))
 
-	assert.Equal(t, int32(2), spy.count.Load(),
-		"configured Emitter must receive every yielded event")
+	// Expected: 2 user yields + 1 topology source.added yield from
+	// Register routing the test source through AddSource (which yields
+	// on events.topology after success). The topology yield's whole
+	// purpose is to be observable via the same fanout path as any
+	// other event, so reaching the configured Emitter is correct.
+	assert.Equal(t, int32(3), spy.count.Load(),
+		"configured Emitter must receive every yielded event including topology")
 }

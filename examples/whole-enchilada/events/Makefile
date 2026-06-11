@@ -55,6 +55,7 @@ HOSTS_NAMES  := nginx.whole-enchilada event-server.whole-enchilada \
 
 .PHONY: help gen-compose build unittest up down infra-up infra-down test demo readme \
         newtoken newtoken-ci poller webhook inject drive-chat drive-presence \
+        add-discord rm-source list-sources \
         hosts-install hosts-uninstall logs ps clean clean-backends
 
 help: ## Show this help.
@@ -70,6 +71,7 @@ build: ## Build all binaries locally (without Docker). push-server stays a refer
 	go -C webhook build -o ../bin/webhook ./
 	go -C inject build -o ../bin/inject ./
 	go -C drivers/synth build -o ../../bin/synth ./
+	go -C evctl build -o ../bin/evctl ./
 	go -C walkthrough build -o ../bin/walkthrough ./
 
 unittest: ## In-process Go tests (no Docker needed; covers tenant-isolation + protocol contracts).
@@ -157,6 +159,39 @@ drive-chat: ## Synthetic chat.message producer. EVERY=2s (default), TENANTS=tena
 
 drive-presence: ## Synthetic presence.changed producer. EVERY=5s (default), TENANTS=tenant-a,tenant-b,tenant-c.
 	go -C drivers/synth run . --event presence.changed --tenants $(TENANTS) $(if $(EVERY),--every $(EVERY))
+
+# -------------------------------------------------------------------
+# Dynamic-source admin — operator-runnable, talks to per-replica admin
+# endpoints under /admin/replicas/{idx}/ on the nginx frontdoor. Lets
+# the operator add / remove real Discord sources on specific event-
+# server replicas at runtime, dropping the "subscribe-first, fire-
+# producers-from-window-A" arc with REAL upstreams.
+#
+# Variables (set inline or via env):
+#   TOKEN     Discord bot token (required for add-discord)
+#   CHANNELS  comma-separated Discord channel IDs (required for add-discord)
+#   REPLICAS  comma-separated replica indices (e.g. 1,4). Required for add/rm.
+#   NAME      EventDef.Name override (default discord.message)
+#   SOURCE    Source name to remove (rm-source).
+# -------------------------------------------------------------------
+
+REPLICAS ?= 1
+NAME     ?= discord.message
+
+add-discord: ## Register a real Discord source on specified replicas. TOKEN=... CHANNELS=A,B REPLICAS=1,4 [TENANTS=a,c] [NAME=discord.message].
+	@if [ -z "$(TOKEN)" ] || [ -z "$(CHANNELS)" ] || [ -z "$(REPLICAS)" ]; then \
+		echo "usage: make add-discord TOKEN=<bot-token> CHANNELS=<id,id> REPLICAS=<idx,idx> [TENANTS=<a,c>] [NAME=<source>]" >&2; exit 2; fi
+	go -C evctl run . sources add discord \
+		--token=$(TOKEN) --channels=$(CHANNELS) --tenants=$(TENANTS) \
+		--replicas=$(REPLICAS) --name=$(NAME)
+
+rm-source: ## Remove a runtime-added source. SOURCE=<name> REPLICAS=<idx,idx>.
+	@if [ -z "$(SOURCE)" ] || [ -z "$(REPLICAS)" ]; then \
+		echo "usage: make rm-source SOURCE=<name> REPLICAS=<idx,idx>" >&2; exit 2; fi
+	go -C evctl run . sources rm $(SOURCE) --replicas=$(REPLICAS)
+
+list-sources: ## List sources known to a replica. REPLICAS=<idx>.
+	go -C evctl run . sources list --replicas=$(REPLICAS)
 
 iterm: ## macOS+iTerm2 only — open a 2x3 grid: row1 = pollers A/B/C, row2 = webhooks A/B/C.
 	@bash ./iterm-6up.sh

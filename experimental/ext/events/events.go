@@ -323,16 +323,20 @@ type TracerProviderInstaller interface {
 }
 
 // Register hooks up events/list, events/poll, events/subscribe, and
-// events/unsubscribe as custom JSON-RPC methods on the server.
+// events/unsubscribe as custom JSON-RPC methods on the server, and
+// returns a *Registry that can be used to AddSource / RemoveSource at
+// runtime.
 //
 // For sources that implement emitterAware (notably YieldingSource), Register
 // installs a fanout hook so each yielded event is automatically broadcast
 // via push and POSTed to webhook subscribers — the source author writes
 // no fanout code. Sources that don't implement emitterAware (TypedSource)
 // remain responsible for calling Emit / EmitToWebhooks themselves.
-func Register(cfg Config) {
+//
+// Backward compatibility: the returned *Registry is purely additive.
+// Callers that ignore the return value see no behavior change.
+func Register(cfg Config) *Registry {
 	srv := cfg.Server
-	sources := cfg.Sources
 	webhooks := cfg.Webhooks
 
 	emitter := cfg.Emitter
@@ -340,27 +344,15 @@ func Register(cfg Config) {
 		emitter = NewLocalEmitter(srv, webhooks)
 	}
 
-	sourceMap := make(map[string]EventSource, len(sources))
-	for _, s := range sources {
-		sourceMap[s.Def().Name] = s
-		if ea, ok := s.(emitterAware); ok {
-			// Capture emitter; SetEmitHook fires synchronously after
-			// the source's internal fanout. The default LocalEmitter
-			// runs Emit + EmitToWebhooks inline, preserving today's
-			// yield-blocks-on-delivery semantics.
-			ea.SetEmitHook(func(ctx context.Context, event Event) {
-				_ = emitter.Emit(ctx, event)
-			})
-		}
-		// SEP-414 P6 (issue 724): propagate Config.TracerProvider to
-		// every source that opts in via TracerProviderInstaller so the
-		// `events.fanout` span emission lights up uniformly across the
-		// registered set. nil TracerProvider is fine — SetTracerProvider
-		// resets to Noop, matching the unconfigured default.
-		if cfg.TracerProvider != nil {
-			if installer, ok := s.(TracerProviderInstaller); ok {
-				installer.SetTracerProvider(cfg.TracerProvider)
-			}
+	reg := newRegistry(srv, webhooks, emitter, cfg.TracerProvider)
+	for _, s := range cfg.Sources {
+		// Register's initial set goes through AddSource so the per-
+		// source wiring (emit hook + TracerProvider) is identical to
+		// runtime adds. A duplicate name from cfg.Sources is an
+		// author bug — log + drop the duplicate rather than silently
+		// overwrite (which the pre-Registry code did).
+		if err := reg.AddSource(s); err != nil {
+			log.Printf("[events] Register: dropping source %q: %v", s.Def().Name, err)
 		}
 	}
 
@@ -402,7 +394,7 @@ func Register(cfg Config) {
 			// Status" L460). Safe for uncapped event-types
 			// (no-op).
 			quota.Release(t.Principal, t.EventName)
-			source, ok := sourceMap[t.EventName]
+			source, ok := reg.Source(t.EventName)
 			if !ok {
 				return
 			}
@@ -410,10 +402,11 @@ func Register(cfg Config) {
 			safeOnUnsubscribe(source.Def().OnUnsubscribe, hc, t.Params)
 		})
 		// Let Deliver look up Match / Transform per event name
-		// (spec §"Server SDK Guidance" L623-629) without leaking
-		// sourceMap onto WebhookRegistry.
+		// (spec §"Server SDK Guidance" L623-629) without leaking the
+		// source registry onto WebhookRegistry. Lookup is per-Deliver
+		// so runtime-added sources are immediately discoverable.
 		webhooks.SetDefResolver(func(eventName string) EventDef {
-			source, ok := sourceMap[eventName]
+			source, ok := reg.Source(eventName)
 			if !ok {
 				return EventDef{}
 			}
@@ -431,7 +424,7 @@ func Register(cfg Config) {
 		// registerPoll on isNew. Fires once per actual lease
 		// expiry (the sweeper drives this).
 		quota.Release(principal, eventName)
-		source, ok := sourceMap[eventName]
+		source, ok := reg.Source(eventName)
 		if !ok {
 			return
 		}
@@ -453,11 +446,11 @@ func Register(cfg Config) {
 	}
 	leases.mu.Unlock()
 
-	registerList(srv, sources)
-	registerPoll(srv, sourceMap, cfg.UnsafeAnonymousPrincipal, leases, quota)
-	registerStream(srv, sourceMap, cfg.UnsafeAnonymousPrincipal, cfg.StreamHeartbeatInterval, idx, quota)
+	registerList(srv, reg)
+	registerPoll(srv, reg, cfg.UnsafeAnonymousPrincipal, leases, quota)
+	registerStream(srv, reg, cfg.UnsafeAnonymousPrincipal, cfg.StreamHeartbeatInterval, idx, quota)
 	if webhooks != nil {
-		registerSubscribe(srv, sourceMap, webhooks, cfg.UnsafeAnonymousPrincipal, idx, quota)
+		registerSubscribe(srv, reg, webhooks, cfg.UnsafeAnonymousPrincipal, idx, quota)
 		registerUnsubscribe(srv, webhooks, cfg.UnsafeAnonymousPrincipal)
 	}
 	if cfg.UnsafeAnonymousPrincipal != "" {
@@ -466,6 +459,7 @@ func Register(cfg Config) {
 			"(MUST reject unauthenticated). Use only for demos / development.",
 			cfg.UnsafeAnonymousPrincipal)
 	}
+	return reg
 }
 
 // Emit broadcasts an event to all connected SSE clients via Server.Broadcast.
@@ -522,17 +516,21 @@ type listResultWire struct {
 	NextCursor string     `json:"nextCursor,omitempty"`
 }
 
-func registerList(srv *server.Server, sources []EventSource) {
+func registerList(srv *server.Server, reg *Registry) {
 	srv.HandleMethod("events/list", func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
-		defs := make([]EventDef, 0, len(sources))
-		for _, s := range sources {
+		// Snapshot the registry on every call so runtime-added sources
+		// appear on the next events/list without re-registering the
+		// handler.
+		current := reg.snapshot()
+		defs := make([]EventDef, 0, len(current))
+		for _, s := range current {
 			defs = append(defs, s.Def())
 		}
 		return core.NewResponse(id, listResultWire{Events: defs})
 	})
 }
 
-func registerPoll(srv *server.Server, sourceMap map[string]EventSource, unsafeAnon string, leases *PollLeaseTable, quota *Quota) {
+func registerPoll(srv *server.Server, reg *Registry, unsafeAnon string, leases *PollLeaseTable, quota *Quota) {
 	srv.HandleMethod("events/poll", func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		// Spec §"Poll-Based Delivery" → "Request: events/poll"
 		// L139-149: flat top-level shape — no subscriptions[]
@@ -567,7 +565,7 @@ func registerPoll(srv *server.Server, sourceMap map[string]EventSource, unsafeAn
 			req.MaxEvents = 50
 		}
 
-		source, ok := sourceMap[req.Name]
+		source, ok := reg.Source(req.Name)
 		if !ok {
 			return newNotFoundError(id, "event", "NotFound")
 		}
@@ -737,7 +735,7 @@ func resolvePrincipal(ctx core.MethodContext, unsafeAnon string) (string, bool) 
 	return "", false
 }
 
-func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, webhooks *WebhookRegistry, unsafeAnon string, idx SubscriptionIndexStore, quota *Quota) {
+func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegistry, unsafeAnon string, idx SubscriptionIndexStore, quota *Quota) {
 	srv.HandleMethod("events/subscribe", func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		var req struct {
 			// ID is parsed only to surface a helpful error if a client
@@ -765,7 +763,7 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
 				"client-supplied id is not accepted; server derives id over (principal, name, params, url) per spec — drop the id field from your subscribe request")
 		}
-		if _, ok := sourceMap[req.Name]; !ok {
+		if _, ok := reg.Source(req.Name); !ok {
 			return newNotFoundError(id, "event", "NotFound")
 		}
 		if req.Delivery.Mode != "webhook" {
@@ -859,7 +857,7 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 				webhooks.Unregister(canonical)
 				return newResourceExhaustedError(id, "subscriptions", int64(quota.Cap(req.Name)), err.Error())
 			}
-			source := sourceMap[req.Name]
+			source, _ := reg.Source(req.Name)
 			def := source.Def()
 			hc := newHookContext(ctx, principal, derivedID, DeliveryModeWebhook)
 			if err := safeOnSubscribe(def.OnSubscribe, hc, req.Params); err != nil {
@@ -890,7 +888,7 @@ func registerSubscribe(srv *server.Server, sourceMap map[string]EventSource, web
 		// Resolve `cursor: null` to the source's current head ("from now")
 		// for cursored sources. Cursorless sources always serialize as null.
 		// An explicit non-null client cursor passes through unchanged.
-		source := sourceMap[req.Name] // already validated above
+		source, _ := reg.Source(req.Name) // already validated above
 		cursorless := source.Def().Cursorless
 		var wireCursor *string
 		if cursorless {
