@@ -33,9 +33,15 @@ import (
 // header keys to title-case, but http.Header.Get is case-insensitive, so
 // these constants serve as documentation of the spec name and a single
 // edit point if a future version renames them.
+//
+// `Baggage` is W3C Baggage (a separate W3C standard from W3C Trace
+// Context — both ride together for convenience, but they're configured
+// independently per SEP-2028's "Predefined Groups" section). mcpkit
+// propagates baggage symmetrically to traceparent/tracestate.
 const (
 	httpHeaderTraceparent = "Traceparent"
 	httpHeaderTracestate  = "Tracestate"
+	httpHeaderBaggage     = "Baggage"
 )
 
 // withTraceContextFromHTTPHeaders bridges the W3C `traceparent` /
@@ -62,6 +68,26 @@ func withTraceContextFromHTTPHeaders(ctx context.Context, h http.Header) context
 		return ctx
 	}
 	return core.WithTraceContext(ctx, tc)
+}
+
+// withBaggageFromHTTPHeaders bridges the W3C `Baggage` HTTP header
+// into ctx via core.WithBaggage. Returns ctx unchanged when the
+// header is absent or fails structural validation (control chars,
+// oversized — see core.ExtractBaggage).
+//
+// Sibling to withTraceContextFromHTTPHeaders. Same precedence rule:
+// the trace middleware consults this only when inbound
+// `params._meta.baggage` is absent — in-band wins.
+func withBaggageFromHTTPHeaders(ctx context.Context, h http.Header) context.Context {
+	bv := h.Get(httpHeaderBaggage)
+	if bv == "" {
+		return ctx
+	}
+	b := core.ExtractBaggage(map[string]any{core.MetaKeyBaggage: bv})
+	if b.IsZero() {
+		return ctx
+	}
+	return core.WithBaggage(ctx, b)
 }
 
 // WithTracerProvider registers a core.TracerProvider that wraps every
@@ -131,6 +157,18 @@ func traceMiddleware(tp core.TracerProvider) Middleware {
 		}
 		ctx = core.WithTraceContext(ctx, tc)
 
+		// W3C Baggage propagation runs symmetrically to trace
+		// context: in-band `_meta.baggage` wins over the HTTP
+		// `Baggage` header that the transport bridged into ctx. The
+		// two are independent W3C standards (SEP-2028 § Predefined
+		// Groups), so an absent baggage value does not affect the
+		// trace context resolution.
+		bg := core.ExtractBaggageFromParams(req.Params)
+		if bg.IsZero() {
+			bg = core.BaggageFromContext(ctx)
+		}
+		ctx = core.WithBaggage(ctx, bg)
+
 		attrs := make([]core.Attribute, 0, 3)
 		if req.Method != "" {
 			attrs = append(attrs, core.Attribute{Key: "mcp.method", Value: req.Method})
@@ -151,14 +189,26 @@ func traceMiddleware(tp core.TracerProvider) Middleware {
 		ctx, span := tp.StartSpan(ctx, spanName, attrs...)
 		defer span.End()
 
+		// SEP-414 P6 (issue 682): if the inbound request carries a
+		// `_meta.io.modelcontextprotocol/tracelink`, attach it as an OTel
+		// Link on the new dispatch span. Used by SEP-2322 MRTR rounds 2+
+		// so the round-N dispatch span links back to round-1's,
+		// stitching the logical operation across separate W3C traces.
+		// Zero / malformed tracelink is silently dropped — AddLink on
+		// the noop / invalid path is a no-op (CAS-guarded wrapper).
+		if linkTC := core.ExtractTraceLinkFromParams(req.Params); !linkTC.IsZero() {
+			span.AddLink(core.LinkFromTraceContext(linkTC))
+		}
+
 		// Adapters may update the trace context in ctx during StartSpan
 		// to reflect the newly-created child span. Re-read so outbound
 		// _meta carries the child traceparent when available; falls
 		// back to the inbound TraceContext otherwise.
 		outbound := core.TraceContextFromContext(ctx)
-		if !outbound.IsZero() {
-			ctx = core.WrapSessionNotifyFunc(ctx, traceInjectNotifyWrap(outbound))
-			ctx = core.WrapSessionRequestFunc(ctx, traceInjectRequestWrap(outbound))
+		outboundBaggage := core.BaggageFromContext(ctx)
+		if !outbound.IsZero() || !outboundBaggage.IsZero() {
+			ctx = core.WrapSessionNotifyFunc(ctx, traceInjectNotifyWrap(outbound, outboundBaggage))
+			ctx = core.WrapSessionRequestFunc(ctx, traceInjectRequestWrap(outbound, outboundBaggage))
 		}
 
 		resp, err := next(ctx, req)
@@ -167,24 +217,30 @@ func traceMiddleware(tp core.TracerProvider) Middleware {
 	}
 }
 
-// traceInjectNotifyWrap returns a NotifyFunc wrapper that injects tc into
-// outbound `_meta.traceparent` / `_meta.tracestate` before forwarding to
-// the next NotifyFunc in the chain. Existing `_meta.traceparent` set
-// explicitly by the handler wins — the wrap never clobbers.
-func traceInjectNotifyWrap(tc core.TraceContext) func(core.NotifyFunc) core.NotifyFunc {
+// traceInjectNotifyWrap returns a NotifyFunc wrapper that injects tc
+// and bg into outbound `_meta.traceparent` / `_meta.tracestate` /
+// `_meta.baggage` before forwarding to the next NotifyFunc in the
+// chain. Existing `_meta.*` values set explicitly by the handler win —
+// the wrap never clobbers.
+func traceInjectNotifyWrap(tc core.TraceContext, bg core.Baggage) func(core.NotifyFunc) core.NotifyFunc {
 	return func(orig core.NotifyFunc) core.NotifyFunc {
 		return func(method string, params any) {
-			orig(method, core.InjectTraceContextIntoParams(params, tc))
+			params = core.InjectTraceContextIntoParams(params, tc)
+			params = core.InjectBaggageIntoParams(params, bg)
+			orig(method, params)
 		}
 	}
 }
 
-// traceInjectRequestWrap returns a RequestFunc wrapper that injects tc into
-// outbound server-to-client request params. Sibling to traceInjectNotifyWrap.
-func traceInjectRequestWrap(tc core.TraceContext) func(core.RequestFunc) core.RequestFunc {
+// traceInjectRequestWrap returns a RequestFunc wrapper that injects tc
+// and bg into outbound server-to-client request params. Sibling to
+// traceInjectNotifyWrap.
+func traceInjectRequestWrap(tc core.TraceContext, bg core.Baggage) func(core.RequestFunc) core.RequestFunc {
 	return func(orig core.RequestFunc) core.RequestFunc {
 		return func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-			return orig(ctx, method, core.InjectTraceContextIntoParams(params, tc))
+			params = core.InjectTraceContextIntoParams(params, tc)
+			params = core.InjectBaggageIntoParams(params, bg)
+			return orig(ctx, method, params)
 		}
 	}
 }

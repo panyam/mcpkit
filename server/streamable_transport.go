@@ -155,6 +155,7 @@ func (t *streamableTransport) expireSession(id string) {
 	if t.config.eventStore != nil {
 		t.config.eventStore.Trim(id)
 	}
+	t.server.RecordSessionDelta(context.Background(), -1)
 	log.Printf("mcpkit: session %s expired after %s idle", id, entry.timeout)
 	t.server.notifySessionExpire(id, fmt.Errorf("idle timeout (%s)", entry.timeout))
 }
@@ -203,6 +204,12 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 	// inherit the trace context via r.Context().
 	if r.Header.Get(httpHeaderTraceparent) != "" {
 		r = r.WithContext(withTraceContextFromHTTPHeaders(r.Context(), r.Header))
+	}
+	// W3C Baggage propagation runs symmetrically — a separate W3C
+	// standard, but it rides the same HTTP-header → ctx bridge so
+	// handlers can read it via `core.BaggageFromContext`.
+	if r.Header.Get(httpHeaderBaggage) != "" {
+		r = r.WithContext(withBaggageFromHTTPHeaders(r.Context(), r.Header))
 	}
 
 	body, claims, ok := readAndAuthorize(w, r, t.server)
@@ -564,6 +571,7 @@ func (t *streamableTransport) handleInitialize(w http.ResponseWriter, r *http.Re
 		subject:    subject,
 	}
 	t.sessions.Store(sessionID, entry)
+	t.server.RecordSessionDelta(r.Context(), +1)
 
 	w.Header().Set(mcpSessionIDHeader, sessionID)
 
@@ -766,6 +774,7 @@ func (t *streamableTransport) handleDelete(w http.ResponseWriter, r *http.Reques
 	if t.config.eventStore != nil {
 		t.config.eventStore.Trim(sessionID)
 	}
+	t.server.RecordSessionDelta(r.Context(), -1)
 
 	w.WriteHeader(http.StatusOK)
 }
@@ -779,16 +788,19 @@ func (t *streamableTransport) closeSession(id string) bool {
 		if t.config.eventStore != nil {
 			t.config.eventStore.Trim(id)
 		}
+		t.server.RecordSessionDelta(context.Background(), -1)
 	}
 	return ok
 }
 
 // closeAllSessions terminates all active sessions.
 func (t *streamableTransport) closeAllSessions() {
+	ctx := context.Background()
 	t.sessions.Range(func(key string, entry *sessionEntry) bool {
 		entry.idleTimer.Stop()
 		entry.dispatcher.Close()
 		t.sessions.Delete(key)
+		t.server.RecordSessionDelta(ctx, -1)
 		return true
 	})
 }

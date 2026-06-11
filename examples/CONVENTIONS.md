@@ -276,6 +276,120 @@ For walkthroughs that DO call `flag.Parse` (e.g. when they need
 example-specific flags), use `common.RegisterTelemetryFlags(flag.CommandLine)`
 instead of `ExporterFromArgs` — both populate the same struct shape.
 
+#### Metrics wiring (issue 668)
+
+The same `--exporter` / `--otlp-endpoint` flag pair drives an optional
+`commonotel.SetupMetrics(...)` call. When set, the dispatch path
+emits the four canonical MCP server instruments through the issue 7
+`core.MeterProvider` seam: `mcp.tool.calls`, `mcp.jsonrpc.errors`,
+`mcp.tool.duration` (ms), `mcp.sessions.active`. Modes mirror
+`SetupTelemetry`:
+
+- `""` (default) — `core.NoopMeterProvider{}`. Zero overhead.
+- `stdout` — `stdoutmetric` exporter wrapped in a 5s periodic reader.
+- `otlp` — `otlpmetricgrpc` exporter to `--otlp-endpoint`. Dial-failure
+  falls back to Noop with a warning.
+- `auto` — same as `otlp` but silent on dial-failure.
+
+Canonical wiring inside `serve()` (extends the trace + logs setup):
+
+```go
+meterProvider, metricsShutdown, err := commonotel.SetupMetrics(context.Background(),
+    commonotel.WithExporter(*tel.Exporter),
+    commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+    commonotel.WithServiceName("<example-name>"),
+)
+if err != nil { log.Fatalf("commonotel.SetupMetrics: %v", err) }
+defer metricsShutdown(context.Background())
+
+common.RunServer(common.ServerConfig{
+    // ...
+    TracerProvider: tp,
+    MeterProvider:  meterProvider,
+})
+```
+
+Exemplars are wired by default: the ext/otel meter adapter forwards
+ctx unchanged, and the OTel SDK stamps the active span's identity
+onto each measurement. Grafana renders these as clickable dots that
+pivot to the matching trace in Tempo.
+
+#### Grafana dashboards (issue 668)
+
+**Canonical first.** The bundled [`mcpkit — overview`](http://localhost:3000/d/mcpkit-overview)
+dashboard (stable permalink `/d/mcpkit-overview`) works for ANY example
+that emits the four canonical instruments — pick the example from the
+`$service` dropdown, the rest of the panels rescope automatically.
+The four canonical instruments + the `tool` / `code` attributes are
+the shared contract, so no per-example wiring is needed to see
+metrics on day one.
+
+**Per-example dashboards are an escape hatch**, NOT the default.
+Reach for one only when an example surfaces metrics the canonical
+dashboard can't express — e.g., `ext/tasks` task-lifecycle panels,
+`events` replica fanout, `apps` iframe-bridge latency. Most examples
+will never need one.
+
+When an example DOES need its own dashboard, the convention is:
+
+- Drop the JSON at `docker/observability/grafana/provisioning/dashboards/files/<example>/overview.json`.
+- Set `"uid": "<example>"` so the dashboard is reachable at
+  `/d/<example>` (Grafana-native stable URL).
+- Grafana's `foldersFromFilesStructure: true` provisioning option
+  auto-creates a folder named `<example>` in the UI from the
+  directory name.
+- Scope the `$service` variable to `<example>.*` so it covers the
+  server (`<example>`) plus the walkthrough host (`<example>-host`).
+
+A scaling story (Make-driven template + manifest generator) is
+tracked on issue 737 — fires when more than one example needs a
+specialized dashboard. Today, per-example dashboards are
+hand-checked-in copies (fine for 0-3 of them).
+
+See [`docker/observability/`](../docker/observability/README.md) for
+the LGTM stack the dashboards consume.
+
+#### Logs wiring (issue 668)
+
+The same `--exporter` / `--otlp-endpoint` flag pair drives an optional
+`commonotel.SetupLogs(...)` call. When set, log records emitted via
+`slog.*Context(ctx, ...)` ship to the configured OTLP endpoint and
+carry `trace_id` / `span_id` stamped by the otelslog bridge — the
+Loki↔Tempo pivot in Grafana. Modes mirror `SetupTelemetry`:
+
+- `""` (default) — `slog.Default()`. No OTLP side, no SDK pulled.
+- `stdout` — `stdoutlog` exporter → otelslog bridge. JSON records on
+  the configured writer (default `os.Stdout`).
+- `otlp` — `otlploggrpc` exporter → otelslog bridge. Dial-failure
+  falls back to `slog.Default()` with a warning.
+- `auto` — same as `otlp` but silent on dial-failure.
+
+Canonical wiring inside `serve()` (extends the trace setup above):
+
+```go
+logsLogger, logsShutdown, err := commonotel.SetupLogs(context.Background(),
+    commonotel.WithExporter(*tel.Exporter),
+    commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+    commonotel.WithServiceName("<example-name>"),
+)
+if err != nil { log.Fatalf("commonotel.SetupLogs: %v", err) }
+defer logsShutdown(context.Background())
+slog.SetDefault(logsLogger)
+```
+
+Tool handlers then log via `slog.InfoContext(ctx, "msg", "k", "v")`
+— **always pass ctx**, otherwise the bridge can't read the active
+span and Grafana shows the log line without a trace pivot.
+
+`commonotel.SetupClientLogs(...)` is the walkthrough-side sibling
+(pre-sets `ClientInstrumentationName`).
+
+> **Coexistence with MCP `notifications/message`**: server-side
+> observability (this helper) and client-visible MCP logs
+> (`core.MCPLogHandler`) emit through distinct slog handlers and
+> don't interfere. A server can compose both via `slogmulti` or
+> two separate `*slog.Logger` instances.
+
 - Side endpoints (e.g. `/inject` for synthetic events) go through
   `server.WithMux(func(mux *http.ServeMux) { ... })` (in `TransportOptions`)
   — not a hand-rolled `http.Server{}`. Graceful shutdown is built into

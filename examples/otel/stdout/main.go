@@ -34,6 +34,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/url"
 	"os"
 	"strings"
@@ -99,6 +100,39 @@ func serve() {
 	}
 	defer shutdown(context.Background())
 
+	// Issue 668 (logs half): wire the otelslog bridge so handler-emitted
+	// slog records ship to OTLP alongside the trace pipeline. The
+	// bridge stamps trace_id + span_id on every record automatically
+	// when the handler logs via slog.*Context — Grafana's Loki
+	// datasource (docker/observability/grafana/) renders those as
+	// clickable pivots back to Tempo.
+	logsLogger, logsShutdown, err := commonotel.SetupLogs(context.Background(),
+		commonotel.WithExporter(*exporter),
+		commonotel.WithOTLPEndpoint(*otlpEndpoint),
+		commonotel.WithServiceName(serverServiceName),
+	)
+	if err != nil {
+		log.Fatalf("commonotel.SetupLogs: %v", err)
+	}
+	defer logsShutdown(context.Background())
+	slog.SetDefault(logsLogger)
+
+	// Issue 668 (metrics half): wire the MeterProvider so the dispatch
+	// path emits mcp.tool.calls / mcp.tool.duration / mcp.jsonrpc.errors
+	// / mcp.sessions.active. The ext/otel adapter forwards ctx so every
+	// measurement carries an exemplar pointing at the active span —
+	// Grafana renders metric panels with clickable dots that jump to
+	// the matching trace in Tempo.
+	meterProvider, metricsShutdown, err := commonotel.SetupMetrics(context.Background(),
+		commonotel.WithExporter(*exporter),
+		commonotel.WithOTLPEndpoint(*otlpEndpoint),
+		commonotel.WithServiceName(serverServiceName),
+	)
+	if err != nil {
+		log.Fatalf("commonotel.SetupMetrics: %v", err)
+	}
+	defer metricsShutdown(context.Background())
+
 	log.Printf("[otel-stdout-demo] exporter=%s service.name=%s", *exporter, serverServiceName)
 	if *exporter == commonotel.ExporterOTLP {
 		log.Printf("[otel-stdout-demo] OTLP gRPC endpoint: %s", *otlpEndpoint)
@@ -115,6 +149,7 @@ func serve() {
 		Name:           "otel-stdout-demo",
 		Addr:           *addr,
 		TracerProvider: tp,
+		MeterProvider:  meterProvider,
 		Register:       registerDemoTools,
 	}); err != nil {
 		log.Fatalf("ListenAndServe: %v", err)
@@ -162,6 +197,13 @@ func registerDemoTools(srv *server.Server) {
 			if args.Message == "" {
 				args.Message = "ok"
 			}
+			// Demonstration of issue 668's log↔trace pivot: the
+			// otelslog bridge reads the active span via ctx and
+			// stamps trace_id + span_id onto this record. Open the
+			// Loki panel in Grafana, click the resulting log line's
+			// `traceID` field — Grafana jumps to the matching Tempo
+			// trace and renders this dispatch span as the root.
+			slog.InfoContext(ctx, "echo tool invoked", "message", args.Message)
 			return core.TextResult(args.Message), nil
 		},
 	)

@@ -34,13 +34,30 @@ reference — pass `--exporter=otlp` to its `serve` or `demo` target.
   name in Grafana → Explore → Tempo. SEP-414 P1–P5 surfaces (server,
   client, dispatch spine) are already instrumented.
 
-- **Logs** (Loki lane) — empty. mcpkit emits logs through the MCP
-  `notifications/message` surface, not OTel logs. Lights up when /
-  if the OTel-logs surface lands.
+- **Logs** (Loki lane) — wired via `commonotel.SetupLogs` (issue
+  668). Examples that adopt it ship `slog.*Context` records through
+  the otelslog bridge → OTLP → Collector → Loki, with `trace_id` /
+  `span_id` stamped automatically when the handler passes ctx.
+  Grafana's Loki datasource (auto-provisioned with a `traceID`
+  derived field) renders these as clickable pivots back to Tempo.
+  `examples/otel/stdout/` is the reference adopter; the metrics
+  half of issue 668 (Mimir lane) is the next adoption to land.
+  MCP `notifications/message` is a separate, client-visible
+  surface and continues to work independently.
 
-- **Metrics** (Mimir lane) — empty. mcpkit has no metric emitters
-  today. Lights up when the metrics umbrella (separate work, no
-  umbrella issue yet) ships.
+- **Metrics** (Mimir lane) — wired via `commonotel.SetupMetrics`
+  (issue 668 metrics half, pairs with the `core.MeterProvider` seam
+  added in issue 7). Examples that adopt it emit four canonical
+  instruments — `mcp.tool.calls`, `mcp.jsonrpc.errors`,
+  `mcp.tool.duration` (ms), `mcp.sessions.active` — through the OTel
+  meter adapter → OTLP → Collector → Mimir. Exemplars are stamped
+  by default so Grafana panels link directly to the matching trace
+  in Tempo. The bundled
+  [`mcpkit — overview`](http://localhost:3000/d/mcpkit-overview)
+  dashboard works for ANY example: pick the example from the
+  `$service` dropdown. Per-example dashboards are an escape hatch
+  for genuinely-bespoke metrics — see `examples/CONVENTIONS.md`
+  § Grafana dashboards.
 
 Shipping the full LGTM stack now means no rework when the empty lanes
 fill in. The trade-off is ~6 YAML config files to maintain vs the

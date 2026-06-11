@@ -1,0 +1,513 @@
+{
+  "uid": "mcpkit-overview",
+  "title": "mcpkit — overview",
+  "tags": ["mcpkit", "overview"],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "liveNow": false,
+  "weekStart": "",
+  "timezone": "browser",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "refresh": "10s",
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "mimir"
+        },
+        "label": "Service",
+        "query": "label_values(mcp_tool_calls_total, service_name)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "tool",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "mimir"
+        },
+        "label": "Tool",
+        "query": "label_values(mcp_tool_calls_total{service_name=~\"$service\"}, tool)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 100,
+      "type": "row",
+      "title": "Status — is anything on fire?",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+    },
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Errors / min",
+      "description": "JSON-RPC error rate. Tool-level isError results are NOT counted — those are successful JSON-RPC responses per spec. Green at 0, yellow when any error fires, red on sustained failure.",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "mimir" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "60 * sum(rate(mcp_jsonrpc_errors_total{service_name=~\"$service\"}[5m]))",
+          "legendFormat": "errors/min",
+          "datasource": { "type": "prometheus", "uid": "mimir" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.01 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Active sessions",
+      "description": "Current count of live streamable HTTP sessions. Stateless wire has no sessions, so a stateless-only example flatlines at 0 (correct).",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "mimir" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(mcp_sessions_active{service_name=~\"$service\"})",
+          "legendFormat": "active",
+          "datasource": { "type": "prometheus", "uid": "mimir" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 100 },
+              { "color": "red", "value": 500 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Calls / min",
+      "description": "tools/call dispatch rate over the last 5m. Sparkline shows the trend in the current dashboard window.",
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "mimir" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "60 * sum(rate(mcp_tool_calls_total{service_name=~\"$service\",tool=~\"$tool\"}[5m]))",
+          "legendFormat": "calls/min",
+          "datasource": { "type": "prometheus", "uid": "mimir" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1,
+          "color": { "mode": "fixed", "fixedColor": "blue" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "p95 latency",
+      "description": "95th-percentile tool execution time, across all tools (or pinned to $tool). Yellow at 250ms, red at 1s — tune to your SLO.",
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "mimir" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum(rate(mcp_tool_duration_milliseconds_bucket{service_name=~\"$service\",tool=~\"$tool\"}[5m])) by (le))",
+          "legendFormat": "p95",
+          "datasource": { "type": "prometheus", "uid": "mimir" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "decimals": 1,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 250 },
+              { "color": "red", "value": 1000 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center"
+      }
+    },
+    {
+      "id": 200,
+      "type": "row",
+      "title": "Workload mix — where is the work going?",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 }
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Tools — calls, p95, error rate",
+      "description": "Top tools by call rate. Operator scans one row to see the dominant tool, whether it's the slow one, and whether it's the source of errors.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 7 },
+      "datasource": { "type": "prometheus", "uid": "mimir" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "60 * sum(rate(mcp_tool_calls_total{service_name=~\"$service\",tool=~\"$tool\"}[5m])) by (tool)",
+          "legendFormat": "{{tool}}",
+          "format": "table",
+          "instant": true,
+          "datasource": { "type": "prometheus", "uid": "mimir" }
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum(rate(mcp_tool_duration_milliseconds_bucket{service_name=~\"$service\",tool=~\"$tool\"}[5m])) by (le, tool))",
+          "legendFormat": "{{tool}}",
+          "format": "table",
+          "instant": true,
+          "datasource": { "type": "prometheus", "uid": "mimir" }
+        }
+      ],
+      "transformations": [
+        { "id": "merge", "options": {} },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true, "__name__": true, "service_name": true, "instance": true, "job": true },
+            "renameByName": {
+              "tool": "tool",
+              "Value #A": "calls/min",
+              "Value #B": "p95 (ms)"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "align": "auto", "filterable": true }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "p95 (ms)" }, "properties": [{ "id": "unit", "value": "ms" }, { "id": "decimals", "value": 1 }] },
+          { "matcher": { "id": "byName", "options": "calls/min" }, "properties": [{ "id": "decimals", "value": 1 }] }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "footer": { "show": false, "reducer": ["sum"], "fields": "" }
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Tool call rate, by tool (stacked)",
+      "description": "Per-tool dispatch rate over time. Stack shows total throughput; individual bands show workload mix shifts.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 7 },
+      "datasource": { "type": "prometheus", "uid": "mimir" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(mcp_tool_calls_total{service_name=~\"$service\",tool=~\"$tool\"}[1m])) by (tool)",
+          "legendFormat": "{{tool}}",
+          "datasource": { "type": "prometheus", "uid": "mimir" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 25,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "mode": "normal", "group": "A" }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 300,
+      "type": "row",
+      "title": "Latency drill-down — where is p99 living?",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Tool duration p50 / p95 / p99 (exemplars on)",
+      "description": "Latency percentile bands across all tools (or pinned to $tool). The exemplar dots are clickable — they jump to the matching trace in Tempo, closing the metric → trace loop.",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "mimir" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum(rate(mcp_tool_duration_milliseconds_bucket{service_name=~\"$service\",tool=~\"$tool\"}[5m])) by (le))",
+          "legendFormat": "p50",
+          "exemplar": true,
+          "datasource": { "type": "prometheus", "uid": "mimir" }
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum(rate(mcp_tool_duration_milliseconds_bucket{service_name=~\"$service\",tool=~\"$tool\"}[5m])) by (le))",
+          "legendFormat": "p95",
+          "exemplar": true,
+          "datasource": { "type": "prometheus", "uid": "mimir" }
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.99, sum(rate(mcp_tool_duration_milliseconds_bucket{service_name=~\"$service\",tool=~\"$tool\"}[5m])) by (le))",
+          "legendFormat": "p99",
+          "exemplar": true,
+          "datasource": { "type": "prometheus", "uid": "mimir" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "p95 by tool — which tool moves the needle",
+      "description": "Per-tool p95. Splits the global p95 above so the operator sees which tool is dragging the percentile up.",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "mimir" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum(rate(mcp_tool_duration_milliseconds_bucket{service_name=~\"$service\",tool=~\"$tool\"}[5m])) by (le, tool))",
+          "legendFormat": "{{tool}}",
+          "datasource": { "type": "prometheus", "uid": "mimir" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 400,
+      "type": "row",
+      "title": "Reliability — what is failing?",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 25 }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Errors by JSON-RPC code (stacked)",
+      "description": "-32601 method-not-found, -32602 invalid-params, -32603 internal-error (mcpkit maps transport-level errors here), -32000..-32099 server-defined.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 26 },
+      "datasource": { "type": "prometheus", "uid": "mimir" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(mcp_jsonrpc_errors_total{service_name=~\"$service\"}[1m])) by (code)",
+          "legendFormat": "{{code}}",
+          "datasource": { "type": "prometheus", "uid": "mimir" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 25,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "mode": "normal", "group": "A" }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 10,
+      "type": "logs",
+      "title": "Recent server logs ($service, warn+)",
+      "description": "Warn / error log lines from Loki. The `traceID` derived field on the Loki datasource auto-links each line to the matching trace in Tempo.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 26 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service_name=~\"$service\"} |~ \"(?i)warn|error\"",
+          "datasource": { "type": "loki", "uid": "loki" }
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      }
+    },
+    {
+      "id": 500,
+      "type": "row",
+      "title": "Trace pivot — jump to Tempo",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 34 }
+    },
+    {
+      "id": 11,
+      "type": "traces",
+      "title": "Recent traces ($service) — click a trace ID for the full waterfall",
+      "description": "Tempo search panel scoped to this dashboard's $service. Use the panel's search controls to filter by error status, duration, span name, etc.",
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 35 },
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "traceqlSearch",
+          "filters": [
+            {
+              "id": "service-name",
+              "tag": "service.name",
+              "operator": "=~",
+              "value": "$service",
+              "scope": "resource"
+            }
+          ],
+          "limit": 20,
+          "datasource": { "type": "tempo", "uid": "tempo" }
+        }
+      ],
+      "options": {}
+    }
+  ]
+}

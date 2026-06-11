@@ -38,6 +38,7 @@ type fakeSpan struct {
 	errs   []error
 	ended  bool
 	parent core.TraceContext // captured from ctx at StartSpan
+	links  []core.Link        // recorded via AddLink — tests assert MRTR tracelink stitching
 }
 
 func (s *fakeSpan) End() {
@@ -64,7 +65,23 @@ func (s *fakeSpan) RecordError(err error) {
 	s.errs = append(s.errs, err)
 }
 
-func (s *fakeSpan) AddLink(_ core.Link) {}
+func (s *fakeSpan) AddLink(l core.Link) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.links = append(s.links, l)
+}
+
+func (s *fakeSpan) linkCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.links)
+}
+
+func (s *fakeSpan) linkAt(i int) core.Link {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.links[i]
+}
 
 func (s *fakeSpan) attr(k string) string {
 	s.mu.Lock()
@@ -565,4 +582,189 @@ func (r *respRecorder) statusCode() int {
 		return http.StatusOK
 	}
 	return r.status
+}
+
+// --- SEP-414 P6 MRTR tracelink (issue 682) ---
+
+const tpMRTRLink = "00-deadbeefcafebabe0123456789abcdef-fedcba9876543210-01"
+
+// TestTraceMiddleware_ReadsTracelink_AddsLinkToDispatchSpan pins the
+// server-side half of MRTR trace stitching: when an inbound tools/call
+// carries `_meta.io.modelcontextprotocol/tracelink`, the dispatch span
+// receives an AddLink call carrying that TraceContext. The link makes
+// round-2+ server spans navigable back to round-1 in Tempo / Grafana.
+func TestTraceMiddleware_ReadsTracelink_AddsLinkToDispatchSpan(t *testing.T) {
+	tp := &fakeTracerProvider{}
+	srv := newInitializedServer(t, WithTracerProvider(tp))
+	srv.RegisterTool(core.ToolDef{Name: "echo"}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+		return core.TextResult("ok"), nil
+	})
+
+	params := `{"name":"echo","_meta":{"traceparent":"` + tpInbound + `","io.modelcontextprotocol/tracelink":"` + tpMRTRLink + `"}}`
+	_, err := dispatchToolsCall(t, srv, context.Background(), params, nil, nil)
+	require.NoError(t, err)
+
+	spans := tp.snapshot()
+	require.Len(t, spans, 1)
+	require.Equal(t, 1, spans[0].linkCount(), "dispatch span MUST receive AddLink when tracelink is present")
+	link := spans[0].linkAt(0)
+	assert.Equal(t, tpMRTRLink, link.TraceContext.Traceparent,
+		"AddLink's TraceContext.Traceparent MUST match the inbound tracelink (anchor of star semantic)")
+}
+
+// TestTraceMiddleware_NoTracelink_NoAddLink pins the zero-overhead
+// path: tools/call without tracelink emits a span with NO AddLink
+// calls. Critical for the dominant non-MRTR path — every regular
+// tools/call MUST NOT incur a spurious link.
+func TestTraceMiddleware_NoTracelink_NoAddLink(t *testing.T) {
+	tp := &fakeTracerProvider{}
+	srv := newInitializedServer(t, WithTracerProvider(tp))
+	srv.RegisterTool(core.ToolDef{Name: "echo"}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+		return core.TextResult("ok"), nil
+	})
+
+	params := `{"name":"echo","_meta":{"traceparent":"` + tpInbound + `"}}`
+	_, err := dispatchToolsCall(t, srv, context.Background(), params, nil, nil)
+	require.NoError(t, err)
+
+	spans := tp.snapshot()
+	require.Len(t, spans, 1)
+	assert.Equal(t, 0, spans[0].linkCount(), "non-MRTR tools/call MUST NOT trigger AddLink")
+}
+
+// TestTraceMiddleware_MalformedTracelink_DroppedSilently pins the
+// defensive contract: a malformed tracelink (e.g., garbage string)
+// must NOT crash dispatch and MUST NOT produce a link. Same W3C
+// validation rules ExtractTraceContext applies — silent drop.
+func TestTraceMiddleware_MalformedTracelink_DroppedSilently(t *testing.T) {
+	tp := &fakeTracerProvider{}
+	srv := newInitializedServer(t, WithTracerProvider(tp))
+	srv.RegisterTool(core.ToolDef{Name: "echo"}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+		return core.TextResult("ok"), nil
+	})
+
+	params := `{"name":"echo","_meta":{"io.modelcontextprotocol/tracelink":"not-a-valid-traceparent"}}`
+	_, err := dispatchToolsCall(t, srv, context.Background(), params, nil, nil)
+	require.NoError(t, err)
+
+	spans := tp.snapshot()
+	require.Len(t, spans, 1)
+	assert.Equal(t, 0, spans[0].linkCount(), "malformed tracelink MUST be silently dropped — no AddLink")
+}
+
+// --- W3C Baggage propagation (sibling to trace context) -----------------
+
+// TestTraceMiddleware_ExtractsBaggageFromMeta pins the inbound contract:
+// `_meta.baggage` from the wire ends up on ctx where handlers can read
+// it via core.BaggageFromContext.
+func TestTraceMiddleware_ExtractsBaggageFromMeta(t *testing.T) {
+	tp := &fakeTracerProvider{}
+	srv := newInitializedServer(t, WithTracerProvider(tp))
+
+	var observed core.Baggage
+	srv.RegisterTool(core.ToolDef{Name: "peek"}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+		observed = ctx.Baggage()
+		return core.TextResult("ok"), nil
+	})
+
+	params := `{"name":"peek","_meta":{"baggage":"userId=alice,tenant=acme"}}`
+	_, err := dispatchToolsCall(t, srv, context.Background(), params, nil, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, core.Baggage("userId=alice,tenant=acme"), observed,
+		"handler MUST observe inbound _meta.baggage via ctx.Baggage()")
+}
+
+// TestTraceMiddleware_InjectsBaggageOnOutboundNotify pins the outbound
+// contract: when the inbound request carries baggage, every outbound
+// notification (server-to-client) emitted by the handler carries the
+// same `_meta.baggage` value.
+func TestTraceMiddleware_InjectsBaggageOnOutboundNotify(t *testing.T) {
+	tp := &fakeTracerProvider{}
+	srv := newInitializedServer(t, WithTracerProvider(tp))
+	srv.RegisterTool(core.ToolDef{Name: "emit"}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+		ctx.Notify("notifications/test", map[string]any{"hello": "world"})
+		return core.TextResult("ok"), nil
+	})
+
+	var captured []map[string]any
+	notify := core.NotifyFunc(func(method string, params any) {
+		raw, _ := json.Marshal(params)
+		var obj map[string]any
+		_ = json.Unmarshal(raw, &obj)
+		captured = append(captured, obj)
+	})
+
+	params := `{"name":"emit","_meta":{"traceparent":"` + tpInbound + `","baggage":"userId=alice"}}`
+	_, err := dispatchToolsCall(t, srv, context.Background(), params, notify, nil)
+	require.NoError(t, err)
+
+	require.Len(t, captured, 1)
+	meta, ok := captured[0]["_meta"].(map[string]any)
+	require.True(t, ok, "outbound notification MUST carry _meta")
+	assert.Equal(t, "userId=alice", meta[core.MetaKeyBaggage],
+		"outbound notification _meta.baggage MUST mirror inbound")
+}
+
+// TestTraceMiddleware_BaggageHTTPHeaderBridge pins the SEP-2028
+// inbound bridge for baggage: the HTTP `Baggage` header on a real
+// POST lands on ctx alongside the trace context.
+func TestTraceMiddleware_BaggageHTTPHeaderBridge(t *testing.T) {
+	tp := &fakeTracerProvider{}
+	srv := NewServer(core.ServerInfo{Name: "baggage-http", Version: "1.0"},
+		WithTracerProvider(tp))
+
+	var observed core.Baggage
+	srv.RegisterTool(core.ToolDef{Name: "peek"}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+		observed = ctx.Baggage()
+		return core.TextResult("ok"), nil
+	})
+
+	handler := srv.Handler(WithStreamableHTTP(true), WithStateless(true))
+
+	body := strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"peek"}}`)
+	r, err := http.NewRequest(http.MethodPost, "/mcp", body)
+	require.NoError(t, err)
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Accept", "application/json, text/event-stream")
+	r.Header.Set(httpHeaderBaggage, "userId=carol,tenant=widgets")
+
+	w := newRespRecorder()
+	handler.ServeHTTP(w, r)
+
+	require.Equal(t, http.StatusOK, w.statusCode())
+	assert.Equal(t, core.Baggage("userId=carol,tenant=widgets"), observed,
+		"HTTP Baggage header MUST bridge into ctx.Baggage()")
+}
+
+// TestTraceMiddleware_InBandBaggageWinsOverHTTP pins the precedence
+// rule: when both `_meta.baggage` and the HTTP `Baggage` header are
+// present, the in-band value wins (mirror of the trace-context
+// resolution rule).
+func TestTraceMiddleware_InBandBaggageWinsOverHTTP(t *testing.T) {
+	tp := &fakeTracerProvider{}
+	srv := NewServer(core.ServerInfo{Name: "baggage-precedence", Version: "1.0"},
+		WithTracerProvider(tp))
+
+	var observed core.Baggage
+	srv.RegisterTool(core.ToolDef{Name: "peek"}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+		observed = ctx.Baggage()
+		return core.TextResult("ok"), nil
+	})
+
+	handler := srv.Handler(WithStreamableHTTP(true), WithStateless(true))
+
+	body := strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"peek","_meta":{"baggage":"from=meta"}}}`)
+	r, err := http.NewRequest(http.MethodPost, "/mcp", body)
+	require.NoError(t, err)
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Accept", "application/json, text/event-stream")
+	r.Header.Set(httpHeaderBaggage, "from=header")
+
+	w := newRespRecorder()
+	handler.ServeHTTP(w, r)
+
+	require.Equal(t, http.StatusOK, w.statusCode())
+	assert.Equal(t, core.Baggage("from=meta"), observed,
+		"in-band _meta.baggage MUST win over HTTP Baggage header")
 }

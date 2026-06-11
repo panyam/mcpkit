@@ -507,3 +507,111 @@ func TestWithNewRootSpan_DerivedCtx_PropagatesMarker(t *testing.T) {
 		t.Fatalf("marker must survive other ctx derivations layered on top — adapters read it just before StartSpan")
 	}
 }
+
+// --- P6 MRTR tracelink (issue 682) ------------------------------------------
+
+const (
+	mrtrLinkTraceparent1 = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+	mrtrLinkTraceparent2 = "00-aabbccddeeff00112233445566778899-1122334455667788-01"
+)
+
+func TestExtractTraceLinkFromParams_ReadsValidLink(t *testing.T) {
+	raw := []byte(`{"name":"x","_meta":{"io.modelcontextprotocol/tracelink":"` + mrtrLinkTraceparent1 + `"}}`)
+	got := ExtractTraceLinkFromParams(raw)
+	if got.Traceparent != mrtrLinkTraceparent1 {
+		t.Errorf("Traceparent = %q, want %q", got.Traceparent, mrtrLinkTraceparent1)
+	}
+	if got.Tracestate != "" {
+		t.Errorf("Tracestate must be empty — link payload is identity-only, not full propagation context; got %q", got.Tracestate)
+	}
+}
+
+func TestExtractTraceLinkFromParams_MissingKey_ReturnsZero(t *testing.T) {
+	raw := []byte(`{"name":"x","_meta":{"traceparent":"` + mrtrLinkTraceparent1 + `"}}`)
+	if got := ExtractTraceLinkFromParams(raw); !got.IsZero() {
+		t.Errorf("missing tracelink key must yield zero; got %+v", got)
+	}
+}
+
+func TestExtractTraceLinkFromParams_MalformedTraceparent_ReturnsZero(t *testing.T) {
+	raw := []byte(`{"_meta":{"io.modelcontextprotocol/tracelink":"not-a-traceparent"}}`)
+	if got := ExtractTraceLinkFromParams(raw); !got.IsZero() {
+		t.Errorf("malformed tracelink must be silently dropped; got %+v", got)
+	}
+}
+
+func TestExtractTraceLinkFromParams_NilParams_ReturnsZero(t *testing.T) {
+	if got := ExtractTraceLinkFromParams(nil); !got.IsZero() {
+		t.Errorf("nil params must yield zero TraceContext; got %+v", got)
+	}
+}
+
+func TestInjectTraceLinkIntoParams_StampsKey(t *testing.T) {
+	tc := TraceContext{Traceparent: mrtrLinkTraceparent1}
+	params := map[string]any{"name": "x"}
+	out := InjectTraceLinkIntoParams(params, tc).(map[string]any)
+	meta := out["_meta"].(map[string]any)
+	if meta[MetaKeyTraceLink] != mrtrLinkTraceparent1 {
+		t.Errorf("_meta.io.modelcontextprotocol/tracelink = %v, want %q", meta[MetaKeyTraceLink], mrtrLinkTraceparent1)
+	}
+}
+
+func TestInjectTraceLinkIntoParams_ZeroTC_LeavesParamsUntouched(t *testing.T) {
+	params := map[string]any{"name": "x"}
+	out := InjectTraceLinkIntoParams(params, TraceContext{})
+	if _, exists := out.(map[string]any)["_meta"]; exists {
+		t.Errorf("zero TC must not synthesize an empty _meta envelope; got %+v", out)
+	}
+}
+
+func TestInjectTraceLinkIntoParams_CallerSetWins(t *testing.T) {
+	params := map[string]any{
+		"_meta": map[string]any{MetaKeyTraceLink: mrtrLinkTraceparent1},
+	}
+	tc := TraceContext{Traceparent: mrtrLinkTraceparent2}
+	out := InjectTraceLinkIntoParams(params, tc).(map[string]any)
+	meta := out["_meta"].(map[string]any)
+	if meta[MetaKeyTraceLink] != mrtrLinkTraceparent1 {
+		t.Errorf("caller-set tracelink must win; got %v, want caller value %q", meta[MetaKeyTraceLink], mrtrLinkTraceparent1)
+	}
+}
+
+func TestInjectTraceLinkIntoParams_NonObjectParams_LeavesUntouched(t *testing.T) {
+	positional := []any{"arg1", 42}
+	tc := TraceContext{Traceparent: mrtrLinkTraceparent1}
+	out := InjectTraceLinkIntoParams(positional, tc)
+	if _, ok := out.([]any); !ok {
+		t.Errorf("non-object params must pass through untouched; got %T", out)
+	}
+}
+
+func TestInjectTraceLinkIntoParams_NilParams_SynthesizesMeta(t *testing.T) {
+	tc := TraceContext{Traceparent: mrtrLinkTraceparent1}
+	out := InjectTraceLinkIntoParams(nil, tc).(map[string]any)
+	meta := out["_meta"].(map[string]any)
+	if meta[MetaKeyTraceLink] != mrtrLinkTraceparent1 {
+		t.Errorf("nil-params path must synthesize _meta with tracelink; got %+v", out)
+	}
+}
+
+func TestWithCapturedTraceContext_HolderRoundtrip(t *testing.T) {
+	ctx, holder := WithCapturedTraceContext(context.Background())
+	if holder == nil {
+		t.Fatalf("WithCapturedTraceContext must return non-nil holder")
+	}
+	got := CapturedTraceContextHolder(ctx)
+	if got != holder {
+		t.Fatalf("CapturedTraceContextHolder must return the same holder WithCapturedTraceContext placed on ctx")
+	}
+	// Simulate the middleware-side write.
+	*got = TraceContext{Traceparent: mrtrLinkTraceparent1}
+	if holder.Traceparent != mrtrLinkTraceparent1 {
+		t.Errorf("write through CapturedTraceContextHolder pointer must reflect on the WithCapturedTraceContext return; got %+v", *holder)
+	}
+}
+
+func TestCapturedTraceContextHolder_AbsentCtx_ReturnsNil(t *testing.T) {
+	if got := CapturedTraceContextHolder(context.Background()); got != nil {
+		t.Fatalf("absent holder must return nil so middleware can no-op-skip the write; got %+v", got)
+	}
+}
