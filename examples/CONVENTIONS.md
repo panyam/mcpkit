@@ -314,27 +314,40 @@ ctx unchanged, and the OTel SDK stamps the active span's identity
 onto each measurement. Grafana renders these as clickable dots that
 pivot to the matching trace in Tempo.
 
-#### Per-example Grafana dashboards (issue 668)
+#### Grafana dashboards (issue 668)
 
-Each example that wires `SetupMetrics` SHOULD ship a starter dashboard
-under `docker/observability/grafana/provisioning/dashboards/files/<example-name>/overview.json`
-following this convention:
+**Canonical first.** The bundled [`mcpkit — overview`](http://localhost:3000/d/mcpkit-overview)
+dashboard (stable permalink `/d/mcpkit-overview`) works for ANY example
+that emits the four canonical instruments — pick the example from the
+`$service` dropdown, the rest of the panels rescope automatically.
+The four canonical instruments + the `tool` / `code` attributes are
+the shared contract, so no per-example wiring is needed to see
+metrics on day one.
 
-- **UID equals the example name** (`"uid": "<example-name>"`) — gives
-  the dashboard a stable Grafana permalink at
-  `http://localhost:3000/d/<example-name>` that operators can bookmark.
-- **Folder structure** — Grafana's provisioning auto-creates a folder
-  named after the directory (`foldersFromFilesStructure: true` in
-  `dashboards.yaml`), so dashboards group cleanly in the UI.
-- **`$service` variable** scoped to `<example-name>.*` — covers both
-  the server (`<example-name>`) and walkthrough host
-  (`<example-name>-host`) service names.
-- **`$tool` variable** lets the operator pin a single tool across
-  every panel — useful when chasing one misbehaving tool.
+**Per-example dashboards are an escape hatch**, NOT the default.
+Reach for one only when an example surfaces metrics the canonical
+dashboard can't express — e.g., `ext/tasks` task-lifecycle panels,
+`events` replica fanout, `apps` iframe-bridge latency. Most examples
+will never need one.
 
-`examples/otel/stdout/` ships the reference dashboard; later examples
-can copy + rename the UID. See [`docker/observability/`](../docker/observability/README.md)
-for the LGTM stack the dashboards consume.
+When an example DOES need its own dashboard, the convention is:
+
+- Drop the JSON at `docker/observability/grafana/provisioning/dashboards/files/<example>/overview.json`.
+- Set `"uid": "<example>"` so the dashboard is reachable at
+  `/d/<example>` (Grafana-native stable URL).
+- Grafana's `foldersFromFilesStructure: true` provisioning option
+  auto-creates a folder named `<example>` in the UI from the
+  directory name.
+- Scope the `$service` variable to `<example>.*` so it covers the
+  server (`<example>`) plus the walkthrough host (`<example>-host`).
+
+A scaling story (Make-driven template + manifest generator) is
+tracked on issue 737 — fires when more than one example needs a
+specialized dashboard. Today, per-example dashboards are
+hand-checked-in copies (fine for 0-3 of them).
+
+See [`docker/observability/`](../docker/observability/README.md) for
+the LGTM stack the dashboards consume.
 
 #### Logs wiring (issue 668)
 
