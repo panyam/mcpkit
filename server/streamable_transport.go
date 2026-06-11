@@ -155,6 +155,7 @@ func (t *streamableTransport) expireSession(id string) {
 	if t.config.eventStore != nil {
 		t.config.eventStore.Trim(id)
 	}
+	t.server.RecordSessionDelta(context.Background(), -1)
 	log.Printf("mcpkit: session %s expired after %s idle", id, entry.timeout)
 	t.server.notifySessionExpire(id, fmt.Errorf("idle timeout (%s)", entry.timeout))
 }
@@ -564,6 +565,7 @@ func (t *streamableTransport) handleInitialize(w http.ResponseWriter, r *http.Re
 		subject:    subject,
 	}
 	t.sessions.Store(sessionID, entry)
+	t.server.RecordSessionDelta(r.Context(), +1)
 
 	w.Header().Set(mcpSessionIDHeader, sessionID)
 
@@ -766,6 +768,7 @@ func (t *streamableTransport) handleDelete(w http.ResponseWriter, r *http.Reques
 	if t.config.eventStore != nil {
 		t.config.eventStore.Trim(sessionID)
 	}
+	t.server.RecordSessionDelta(r.Context(), -1)
 
 	w.WriteHeader(http.StatusOK)
 }
@@ -779,16 +782,19 @@ func (t *streamableTransport) closeSession(id string) bool {
 		if t.config.eventStore != nil {
 			t.config.eventStore.Trim(id)
 		}
+		t.server.RecordSessionDelta(context.Background(), -1)
 	}
 	return ok
 }
 
 // closeAllSessions terminates all active sessions.
 func (t *streamableTransport) closeAllSessions() {
+	ctx := context.Background()
 	t.sessions.Range(func(key string, entry *sessionEntry) bool {
 		entry.idleTimer.Stop()
 		entry.dispatcher.Close()
 		t.sessions.Delete(key)
+		t.server.RecordSessionDelta(ctx, -1)
 		return true
 	})
 }
