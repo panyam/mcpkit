@@ -1,0 +1,171 @@
+# Shared backend services for mcpkit examples — Keycloak (identity),
+# Postgres (relational state), Redis (cache + pub/sub).
+#
+# Sibling to docker/observability/ in shape: own compose project, joined
+# to running examples via the shared `mcpkit` bridge network. Any
+# example that wants auth + persistence references these services by
+# their network aliases (`keycloak`, `postgres`, `redis`) on the
+# `mcpkit` network — no `-f` chaining required across composes.
+#
+# Bring up:  make -C docker up STACK=backends
+# Tear down: make -C docker down STACK=backends
+# Tail logs: make -C docker logs STACK=backends
+#
+# Host ports exposed:
+#   8180 → Keycloak admin UI + token endpoints (http://localhost:8180)
+#
+# Postgres + Redis are NOT host-port-mapped by default — they're
+# internal-only to the mcpkit network. An example that wants direct
+# host access (e.g., for psql / redis-cli debugging) can either
+# `docker exec` into the container or add a `ports:` block in a local
+# override.
+#
+# Versions are pinned. The realm JSONs under ./keycloak/realms/ are
+# imported once at first Keycloak boot; subsequent changes need either
+# `make -C docker down STACK=backends && rm -rf data/` (full reset) or
+# the kcadm.sh path for in-place updates.
+
+networks:
+  # `mcpkit` is the literal-name shared bridge so other compose stacks
+  # (examples/whole-enchilada/events/, docker/observability/, etc.)
+  # resolve these container names without project prefixes. Whichever
+  # stack starts first creates the network.
+  mcpkit:
+    name: mcpkit
+    driver: bridge
+
+services:
+  # -------------------------------------------------------------------
+  # Keycloak — OAuth AS for examples that demonstrate authentication
+  # and multi-tenancy. Three realms (tenant-a, tenant-b, tenant-c)
+  # imported at first boot from ./keycloak/realms/*.json. The admin
+  # UI at localhost:8180 is the operator-facing surface for revocation
+  # walkthroughs and realm inspection.
+  # -------------------------------------------------------------------
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: mcpkit-keycloak
+    restart: unless-stopped
+    command: ["start-dev", "--http-port=8080", "--import-realm"]
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HTTP_RELATIVE_PATH: /
+      # Tell Keycloak its public hostname so HostnameV2Provider has a
+      # deterministic URI source. Without this, Keycloak 26 NPEs on
+      # any request that arrives without a Host header (e.g., raw-TCP
+      # healthchecks) because HostnameV2Provider.getFrontUriBuilder
+      # falls back to request.authority() which is null on HTTP/1.0
+      # probes. Tokens issued at http://localhost:8180 will carry
+      # `iss: http://localhost:8180/realms/<realm>` — examples that
+      # validate `iss` must use this same base.
+      KC_HOSTNAME: http://localhost:8180
+      KC_HOSTNAME_STRICT: "false"
+    volumes:
+      - ./keycloak/realms:/opt/keycloak/data/import:ro
+    ports:
+      - "8180:8080"
+    healthcheck:
+      # Probe tenant-c's discovery doc — the last realm imported alphabetically,
+      # so a 200 here means all three realms are live. HTTP/1.1 with an
+      # explicit Host header so HostnameV2Provider has what it needs.
+      test:
+        - CMD-SHELL
+        - "exec 3<>/dev/tcp/localhost/8080 && printf 'GET /realms/tenant-c/.well-known/openid-configuration HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && head -c 64 <&3 | grep -q '200 OK'"
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks:
+      mcpkit:
+        aliases:
+          - keycloak
+
+  # One-shot sidecar that flips the BUILT-IN master realm's sslRequired
+  # to NONE. The tenant-{a,b,c} realm JSONs we import already set
+  # sslRequired=none, but the master realm (which backs /admin/console
+  # for revocation walkthroughs) is created by Keycloak itself and
+  # can't be overridden via realm-import — kcadm.sh is the only
+  # documented path. Without this, hitting http://localhost:8180/ in
+  # some browsers force-upgrades to HTTPS or shows "HTTPS required" on
+  # certain admin routes. Runs once after keycloak is healthy, then
+  # exits.
+  keycloak-init:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: mcpkit-keycloak-init
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - >
+        /opt/keycloak/bin/kcadm.sh config credentials
+        --server http://keycloak:8080
+        --realm master --user admin --password admin
+        && /opt/keycloak/bin/kcadm.sh update realms/master -s sslRequired=NONE
+        && echo "[keycloak-init] master realm sslRequired=NONE"
+    restart: "no"
+    networks:
+      mcpkit:
+        aliases:
+          - keycloak-init
+
+  # -------------------------------------------------------------------
+  # Postgres — shared relational backend for examples that need durable
+  # state (events: gorm-backed WebhookStore + EventBufferStore;
+  # future: tasks v2 store, etc.). Pinned to 18-alpine. Host bind
+  # mount at ./data/postgres/ — survives any teardown short of
+  # `make -C docker down STACK=backends -v` or manual `rm -rf data/`.
+  # Default credentials (postgres/postgres) match the demo-only
+  # posture; production overrides via DSN env on each consumer.
+  # -------------------------------------------------------------------
+  postgres:
+    image: postgres:18-alpine
+    container_name: mcpkit-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: events
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d events"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+    # Postgres 18+ recommends mounting at /var/lib/postgresql (parent
+    # of the version-pinned data dir) so pg_upgrade --link works across
+    # major-version bumps. See
+    # https://github.com/docker-library/postgres/issues/37
+    volumes:
+      - ./data/postgres:/var/lib/postgresql
+    networks:
+      mcpkit:
+        aliases:
+          - postgres
+
+  # -------------------------------------------------------------------
+  # Redis — shared cache + pub/sub backend. Used by the events lib for
+  # atomic QuotaStore counters (issue 718) and Emitter pubsub fanout
+  # (issue 634). AOF persistence enabled so demo state survives
+  # restarts. Host bind mount at ./data/redis/.
+  # -------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: mcpkit-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--dir", "/data"]
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 1s
+      retries: 10
+    volumes:
+      - ./data/redis:/data
+    networks:
+      mcpkit:
+        aliases:
+          - redis
