@@ -188,6 +188,29 @@ Tracked phases on [issue 312][issue]:
 - **Conformance suite `testconf-otel`** — issue 429.
 - **P6 — tracing across surfaces.** Umbrella [issue 663][p6]. See below.
 
+## Adjacent: W3C Baggage propagation + HTTP forward helper (issue 739)
+
+W3C **Baggage** is a separate W3C standard from W3C Trace Context
+(`traceparent` / `tracestate`) that propagates arbitrary `key=value`
+pairs alongside trace identity — operators typically use it for
+tenant_id, user_id, feature flags, A/B-test buckets. mcpkit
+propagates it symmetrically to the trace context surface so handlers
+can `ctx.Baggage()` and stamp it onto outbound work without
+re-implementing the W3C parsing rules.
+
+`core.HTTPForwardTransport(base http.RoundTripper)` wraps an
+`http.Client`'s `Transport` so a tool handler's downstream HTTP
+calls automatically carry the active `traceparent` / `tracestate` /
+`baggage` headers. This closes the end-to-end observability loop for
+handlers that call third-party APIs — without it, the trace stops at
+the MCP boundary and resumes on the downstream side as a fresh
+trace.
+
+These features ship independently of upstream **SEP-2028** (which
+adds a configurable `headerGroups` API on top of this same
+foundation). Tracking the upstream spec on issue 739; the W3C
+standards themselves are stable and ship today.
+
 ## Adjacent: metrics seam (issue 7)
 
 The `core.MeterProvider` seam mirrors the SEP-414 `core.TracerProvider`
