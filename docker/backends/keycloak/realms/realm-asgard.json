@@ -1,6 +1,6 @@
 {
-  "realm": "tenant-b",
-  "displayName": "Tenant B",
+  "realm": "asgard",
+  "displayName": "Asgard",
   "enabled": true,
   "sslRequired": "none",
   "defaultSignatureAlgorithm": "RS256",
@@ -24,7 +24,7 @@
     },
     {
       "clientId": "mcp-events-poller",
-      "name": "MCP Events Poller (demo client used by `make poller TENANT=B`)",
+      "name": "MCP Events Poller (demo client used by `make poller TENANT=A`)",
       "description": "DEMO ONLY \u2014 pre-baked secret for the demo poller. Real deployments register a unique client per consumer.",
       "enabled": true,
       "clientAuthenticatorType": "client-secret",
@@ -48,7 +48,7 @@
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "backchannel.logout.url": "http://event-server.whole-enchilada:8080/backchannel-logout/tenant-b",
+        "backchannel.logout.url": "http://event-server.whole-enchilada:8080/backchannel-logout/asgard",
         "backchannel.logout.session.required": "true",
         "backchannel.logout.revoke.offline.tokens": "false"
       },
@@ -72,7 +72,7 @@
     },
     {
       "clientId": "mcp-events-webhook",
-      "name": "MCP Events Webhook (demo client used by `make webhook TENANT=B`)",
+      "name": "MCP Events Webhook (demo client used by `make webhook TENANT=A`)",
       "description": "DEMO ONLY \u2014 pre-baked secret for the demo webhook receiver.",
       "enabled": true,
       "clientAuthenticatorType": "client-secret",
@@ -101,111 +101,165 @@
   ],
   "users": [
     {
-      "username": "bob",
+      "username": "alice",
       "enabled": true,
       "emailVerified": true,
-      "email": "bob@tenant-b.example",
-      "firstName": "Bob",
-      "lastName": "Beckett",
+      "email": "alice@asgard.example",
+      "firstName": "Alice",
+      "lastName": "Anderson",
       "credentials": [
         {
           "type": "password",
-          "value": "bob",
+          "value": "alice",
           "temporary": false
         }
       ],
       "realmRoles": [
-        "default-roles-tenant-b"
+        "default-roles-asgard"
       ]
     },
     {
-      "username": "userb1",
+      "username": "usera1",
       "enabled": true,
       "emailVerified": true,
-      "email": "userb1@tenant-b.example",
+      "email": "usera1@asgard.example",
       "firstName": "User",
-      "lastName": "B1",
+      "lastName": "A1",
       "credentials": [
         {
           "type": "password",
-          "value": "userb1",
+          "value": "usera1",
           "temporary": false
         }
       ],
       "realmRoles": [
-        "default-roles-tenant-b"
+        "default-roles-asgard"
       ]
     },
     {
-      "username": "userb2",
+      "username": "usera2",
       "enabled": true,
       "emailVerified": true,
-      "email": "userb2@tenant-b.example",
+      "email": "usera2@asgard.example",
       "firstName": "User",
-      "lastName": "B2",
+      "lastName": "A2",
       "credentials": [
         {
           "type": "password",
-          "value": "userb2",
+          "value": "usera2",
           "temporary": false
         }
       ],
       "realmRoles": [
-        "default-roles-tenant-b"
+        "default-roles-asgard"
       ]
     },
     {
-      "username": "userb3",
+      "username": "usera3",
       "enabled": true,
       "emailVerified": true,
-      "email": "userb3@tenant-b.example",
+      "email": "usera3@asgard.example",
       "firstName": "User",
-      "lastName": "B3",
+      "lastName": "A3",
       "credentials": [
         {
           "type": "password",
-          "value": "userb3",
+          "value": "usera3",
           "temporary": false
         }
       ],
       "realmRoles": [
-        "default-roles-tenant-b"
+        "default-roles-asgard"
       ]
     },
     {
-      "username": "userb4",
+      "username": "usera4",
       "enabled": true,
       "emailVerified": true,
-      "email": "userb4@tenant-b.example",
+      "email": "usera4@asgard.example",
       "firstName": "User",
-      "lastName": "B4",
+      "lastName": "A4",
       "credentials": [
         {
           "type": "password",
-          "value": "userb4",
+          "value": "usera4",
           "temporary": false
         }
       ],
       "realmRoles": [
-        "default-roles-tenant-b"
+        "default-roles-asgard"
       ]
     },
     {
-      "username": "userb5",
+      "username": "usera5",
       "enabled": true,
       "emailVerified": true,
-      "email": "userb5@tenant-b.example",
+      "email": "usera5@asgard.example",
       "firstName": "User",
-      "lastName": "B5",
+      "lastName": "A5",
       "credentials": [
         {
           "type": "password",
-          "value": "userb5",
+          "value": "usera5",
           "temporary": false
         }
       ],
       "realmRoles": [
-        "default-roles-tenant-b"
+        "default-roles-asgard"
+      ]
+    },
+    {
+      "username": "anand",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "anand@asgard.example",
+      "firstName": "Anand",
+      "lastName": "Sharma",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "anand",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-asgard"
+      ]
+    },
+    {
+      "username": "aarti",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "aarti@asgard.example",
+      "firstName": "Aarti",
+      "lastName": "Iyer",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "aarti",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-asgard"
+      ]
+    },
+    {
+      "username": "alex",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "alex@asgard.example",
+      "firstName": "Alex",
+      "lastName": "Reyes",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "alex",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-asgard"
       ]
     }
   ]

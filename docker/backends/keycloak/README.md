@@ -6,11 +6,11 @@ This directory holds the Keycloak realm-export JSONs that `docker compose up` im
 
 | Realm | Test user | Password | Default access-token lifespan |
 |---|---|---|---|
-| `tenant-a` | `alice` | `alice` | 30 min |
-| `tenant-b` | `bob` | `bob` | 30 min |
-| `tenant-c` | `carol` | `carol` | 30 min |
+| `asgard` | `alice` | `alice` | 30 min |
+| `babylon` | `bob` | `bob` | 30 min |
+| `camelot` | `carol` | `carol` | 30 min |
 
-Three realms make the isolation story tangible: with one terminal per tenant active, an event injected into Tenant B's stream visibly *stays quiet* on Tenants A and C's terminals. The multi-realm validator on the event-server fans out to all three introspection endpoints; adding a fourth realm is a JSON drop-in + one URL added to `OAUTH_INTROSPECTION_URLS`.
+Three realms make the isolation story tangible: with one terminal per tenant active, an event injected into Babylon's stream visibly *stays quiet* on Tenants A and C's terminals. The multi-realm validator on the event-server fans out to all three introspection endpoints; adding a fourth realm is a JSON drop-in + one URL added to `OAUTH_INTROSPECTION_URLS`.
 
 Each realm contains three confidential OAuth clients:
 
@@ -36,7 +36,7 @@ Within `OAUTH_CACHE_TTL` seconds (default 5s), the event-server's introspection 
 
 If you want to point your own MCP client at the demo's Keycloak:
 
-1. Open <http://localhost:8180/admin/> → realm-switcher → `tenant-a` (or `tenant-b`).
+1. Open <http://localhost:8180/admin/> → realm-switcher → `asgard` (or `babylon`).
 2. **Clients** → **Create client**.
 3. Set client type to OpenID Connect, client ID to whatever you want.
 4. Enable **Service Accounts**, **Standard Flow**, **Direct Access Grants** as needed.

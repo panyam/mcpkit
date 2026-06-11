@@ -13,14 +13,14 @@
 // Usage:
 //
 //	synth --event chat.message --every 2s
-//	synth --event presence.changed --every 5s --tenants tenant-a
+//	synth --event presence.changed --every 5s --tenants asgard
 //
 // Or via the leaf Makefile wrappers:
 //
 //	make drive-chat                 # --event chat.message --every 2s
 //	make drive-presence             # --event presence.changed --every 5s
 //	make drive-chat EVERY=200ms     # high-volume mode
-//	make drive-chat TENANTS=tenant-a   # single-tenant only
+//	make drive-chat TENANTS=asgard   # single-tenant only
 //
 // New event types: drop a new vocab into vocabs.go, register it in the
 // vocab map, no new binary needed.
@@ -51,7 +51,7 @@ func main() {
 		"shared secret matching the events compose's EVENT_INJECT_BEARER default.")
 	every := flag.Duration("every", 0,
 		"cadence between synthetic events. Defaults to the vocab's recommended rate when zero.")
-	tenants := flag.String("tenants", envOr("DRIVE_TENANTS", "tenant-a,tenant-b,tenant-c"),
+	tenants := flag.String("tenants", envOr("DRIVE_TENANTS", "asgard,babylon,camelot"),
 		"comma-separated tenant tags; each event rotates through them in order. Empty = no tag.")
 	flag.Parse()
 

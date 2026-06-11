@@ -85,7 +85,7 @@ services:
       # introspection endpoint returns active=true. Shared client_id /
       # client_secret across all realms (DEMO ONLY — production would
       # register a distinct client per realm).
-      OAUTH_INTROSPECTION_URLS: http://keycloak:8080/realms/tenant-a/protocol/openid-connect/token/introspect,http://keycloak:8080/realms/tenant-b/protocol/openid-connect/token/introspect,http://keycloak:8080/realms/tenant-c/protocol/openid-connect/token/introspect
+      OAUTH_INTROSPECTION_URLS: http://keycloak:8080/realms/asgard/protocol/openid-connect/token/introspect,http://keycloak:8080/realms/babylon/protocol/openid-connect/token/introspect,http://keycloak:8080/realms/camelot/protocol/openid-connect/token/introspect
       OAUTH_CLIENT_ID: mcp-event-server
       OAUTH_CLIENT_SECRET: ${OAUTH_CLIENT_SECRET:-mcpkit-demo-secret-DEMO-ONLY}
       OAUTH_CACHE_TTL: ${OAUTH_CACHE_TTL:-5s}
@@ -174,7 +174,7 @@ services:
       # introspection endpoint returns active=true. Shared client_id /
       # client_secret across all realms (DEMO ONLY — production would
       # register a distinct client per realm).
-      OAUTH_INTROSPECTION_URLS: http://keycloak:8080/realms/tenant-a/protocol/openid-connect/token/introspect,http://keycloak:8080/realms/tenant-b/protocol/openid-connect/token/introspect,http://keycloak:8080/realms/tenant-c/protocol/openid-connect/token/introspect
+      OAUTH_INTROSPECTION_URLS: http://keycloak:8080/realms/asgard/protocol/openid-connect/token/introspect,http://keycloak:8080/realms/babylon/protocol/openid-connect/token/introspect,http://keycloak:8080/realms/camelot/protocol/openid-connect/token/introspect
       OAUTH_CLIENT_ID: mcp-event-server
       OAUTH_CLIENT_SECRET: ${OAUTH_CLIENT_SECRET:-mcpkit-demo-secret-DEMO-ONLY}
       OAUTH_CACHE_TTL: ${OAUTH_CACHE_TTL:-5s}
@@ -263,7 +263,7 @@ services:
       # introspection endpoint returns active=true. Shared client_id /
       # client_secret across all realms (DEMO ONLY — production would
       # register a distinct client per realm).
-      OAUTH_INTROSPECTION_URLS: http://keycloak:8080/realms/tenant-a/protocol/openid-connect/token/introspect,http://keycloak:8080/realms/tenant-b/protocol/openid-connect/token/introspect,http://keycloak:8080/realms/tenant-c/protocol/openid-connect/token/introspect
+      OAUTH_INTROSPECTION_URLS: http://keycloak:8080/realms/asgard/protocol/openid-connect/token/introspect,http://keycloak:8080/realms/babylon/protocol/openid-connect/token/introspect,http://keycloak:8080/realms/camelot/protocol/openid-connect/token/introspect
       OAUTH_CLIENT_ID: mcp-event-server
       OAUTH_CLIENT_SECRET: ${OAUTH_CLIENT_SECRET:-mcpkit-demo-secret-DEMO-ONLY}
       OAUTH_CACHE_TTL: ${OAUTH_CACHE_TTL:-5s}

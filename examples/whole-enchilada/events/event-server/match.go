@@ -1,9 +1,9 @@
-// match.go holds the tenant-aware MatchFunc shared by every EventDef
+// match.go holds the asgardware MatchFunc shared by every EventDef
 // the event-server registers. The function reads the event's tenant
 // tag from the JSON payload (Data.tenant) and compares it against the
 // subscriber's tenant from claims (HookContext.Principal()'s tenant
-// prefix). An event tagged for "tenant-a" delivers only to
-// subscriptions whose Claims.Tenant == "tenant-a"; an untagged event
+// prefix). An event tagged for "asgard" delivers only to
+// subscriptions whose Claims.Tenant == "asgard"; an untagged event
 // (the stage-1 path) delivers to all subscribers.
 //
 // This MatchFunc is intentionally event-server-local. The events
