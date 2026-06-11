@@ -1,16 +1,21 @@
-# whole-enchilada — top-level Makefile orchestrating the demo stack.
+# whole-enchilada / events — top-level Makefile orchestrating the demo
+# stack.
 #
-# Replica counts are knobs:
-#   make up                       # N=1 M=1 (committed default)
-#   make up N=3 M=2               # 3 event-servers, 2 push-servers
+# Knobs:
+#   make up                       # N=1 event-server replica (committed default)
+#   make up N=3                   # 3 event-server replicas
 #   make up BUILD=true            # force a fresh docker image build
 #
-# Hostnames (*.whole-enchilada) resolve inside the compose network out of
-# the box. To reach them from the host shell / browser, run
+# Synthetic producers (chat / presence) are operator-runnable from the
+# host via `make drive-chat` and `make drive-presence` — the stack
+# comes up silent and stays that way until you fire a driver. This is
+# the "subscribe-first, fire-producers-from-window-A" demo arc.
+#
+# Hostnames (*.whole-enchilada) resolve inside the compose network out
+# of the box. To reach them from the host shell / browser, run
 # `make hosts-install` once; `make hosts-uninstall` reverses it.
 
 N ?= 1
-M ?= 1
 
 # Stage-2: per-tenant subscriber binaries are invoked as
 #   make poller   TENANT=A TOKEN=$T
@@ -46,26 +51,25 @@ tenant-realm = $(if $(filter tenant-%,$(1)),$(1),tenant-$(shell echo "$(1)" | tr
 HOSTS_MARKER := # whole-enchilada hostnames — managed by make hosts-install
 HOSTS_NAMES  := nginx.whole-enchilada event-server.whole-enchilada \
                 event-server-1.whole-enchilada event-server-2.whole-enchilada event-server-3.whole-enchilada \
-                pusher.whole-enchilada pusher-1.whole-enchilada pusher-2.whole-enchilada \
                 receiver.whole-enchilada
 
 .PHONY: help gen-compose build unittest up down infra-up infra-down test demo readme \
-        newtoken newtoken-ci poller webhook inject \
+        newtoken newtoken-ci poller webhook inject drive-chat drive-presence \
         hosts-install hosts-uninstall logs ps clean clean-backends
 
 help: ## Show this help.
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / { printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
-gen-compose: ## Regenerate docker-compose.yaml + nginx/nginx.conf for N event-servers, M push-servers.
-	go -C tools/gen-compose run . -n=$(N) -m=$(M) -out=../..
+gen-compose: ## Regenerate docker-compose.yaml + nginx/nginx.conf for N event-servers.
+	go -C tools/gen-compose run . -n=$(N) -out=../..
 
-build: ## Build all binaries locally (without Docker).
+build: ## Build all binaries locally (without Docker). push-server stays a reference for the production-shape HTTPSource pattern (run via `go -C push-server run .`).
 	go -C event-server build -o ../bin/event-server ./
-	go -C push-server build -o ../bin/push-server ./
 	go -C receiver build -o ../bin/receiver ./
 	go -C poller build -o ../bin/poller ./
 	go -C webhook build -o ../bin/webhook ./
 	go -C inject build -o ../bin/inject ./
+	go -C drivers/synth build -o ../../bin/synth ./
 	go -C walkthrough build -o ../bin/walkthrough ./
 
 unittest: ## In-process Go tests (no Docker needed; covers tenant-isolation + protocol contracts).
@@ -138,6 +142,21 @@ webhook: ## Long-running webhook subscriber. TENANT=A|B|C plus either TOKEN=<bea
 		$(if $(USERNAME),--username $(USERNAME)) \
 		$(if $(PASSWORD),--password $(PASSWORD)) \
 		--event $(EVENT)
+
+# Drivers — operator-runnable synthetic producers. Stack starts silent;
+# fire these in sibling terminals to start producing events. drive-chat
+# and drive-presence are thin wrappers around one synth binary that
+# picks a per-event vocabulary via --event. EVERY tunes the cadence;
+# TENANTS rotates round-robin across the comma-separated list (default:
+# all three).
+EVERY    ?=
+TENANTS  ?= tenant-a,tenant-b,tenant-c
+
+drive-chat: ## Synthetic chat.message producer. EVERY=2s (default), TENANTS=tenant-a,tenant-b,tenant-c.
+	go -C drivers/synth run . --event chat.message --tenants $(TENANTS) $(if $(EVERY),--every $(EVERY))
+
+drive-presence: ## Synthetic presence.changed producer. EVERY=5s (default), TENANTS=tenant-a,tenant-b,tenant-c.
+	go -C drivers/synth run . --event presence.changed --tenants $(TENANTS) $(if $(EVERY),--every $(EVERY))
 
 iterm: ## macOS+iTerm2 only — open a 2x3 grid: row1 = pollers A/B/C, row2 = webhooks A/B/C.
 	@bash ./iterm-6up.sh

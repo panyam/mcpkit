@@ -1,10 +1,11 @@
 # MCP Events — whole-enchilada stage 2 walkthrough
 
-Production-shape multi-tier reference. nginx fronts the event-server tier; a push-server tier injects synthetic chat + presence events; Keycloak provides three pre-configured OAuth realms (tenant-a, tenant-b, tenant-c). This walkthrough guides you through a 4-terminal demo where each tenant gets its own poller and webhook receiver — per-tenant isolation is the headline.
+Production-shape multi-tier reference. nginx fronts the event-server tier; Keycloak provides three pre-configured OAuth realms (tenant-a, tenant-b, tenant-c). The stack comes up silent — operator-runnable synthetic drivers (`make drive-chat`, `make drive-presence`) start producing events from sibling terminals. This walkthrough guides you through a multi-terminal demo where each tenant gets its own poller and webhook receiver — per-tenant isolation is the headline.
 
 ## What you'll learn
 
 - **Confirm your token env vars are loaded.** — **Missing token env vars** — the 4-terminal demo below needs all six. Open six terminals now and acquire tokens, then re-export them into THIS shell before continuing:
+- **Start the synthetic chat driver in a sibling window.** — The stack comes up silent — no events flow until an operator-run driver starts producing. In a NEW terminal at this leaf, run:
 - **Window A1 — start the Tenant A poller.** — In a NEW terminal at this leaf, run:
 - **Window B1 — start the Tenant B poller.** — Same pattern, different realm:
 - **Window C1 — start the Tenant C poller.** — ```
@@ -23,30 +24,32 @@ sequenceDiagram
     participant Operator as The person running the demo — you
     participant Nginx as Frontdoor reverse proxy (localhost:9090)
     participant Server as Event-server (introspection-mode auth wired)
-    participant PushServer as Push-server (synthetic chat + presence feeders)
+    participant Drivers as Operator-runnable synthetic producers (`make drive-chat`, `make drive-presence`)
     participant Keycloak as OAuth AS — three realms pre-imported on first start (localhost:8180)
 
     Note over Operator,Keycloak: Step 1: Confirm your token env vars are loaded.
 
-    Note over Operator,Keycloak: Step 2: Window A1 — start the Tenant A poller.
+    Note over Operator,Keycloak: Step 2: Start the synthetic chat driver in a sibling window.
 
-    Note over Operator,Keycloak: Step 3: Window B1 — start the Tenant B poller.
+    Note over Operator,Keycloak: Step 3: Window A1 — start the Tenant A poller.
 
-    Note over Operator,Keycloak: Step 4: Window C1 — start the Tenant C poller.
+    Note over Operator,Keycloak: Step 4: Window B1 — start the Tenant B poller.
 
-    Note over Operator,Keycloak: Step 5: Windows A2 / B2 / C2 — start the webhook receivers.
+    Note over Operator,Keycloak: Step 5: Window C1 — start the Tenant C poller.
 
-    Note over Operator,Keycloak: Step 6: Inject events from a 7th terminal and watch isolation in real time.
+    Note over Operator,Keycloak: Step 6: Windows A2 / B2 / C2 — start the webhook receivers.
 
-    Note over Operator,Keycloak: Step 7: Scale to N=2 event-server replicas and prove push-survival via Redis fanout.
+    Note over Operator,Keycloak: Step 7: Inject events from a 7th terminal and watch isolation in real time.
 
-    Note over Operator,Keycloak: Step 8: Subscribe via one replica, poll via another — cursor advances correctly across replicas.
+    Note over Operator,Keycloak: Step 8: Scale to N=2 event-server replicas and prove push-survival via Redis fanout.
 
-    Note over Operator,Keycloak: Step 9: Wait past the buffer TTL — stale cursor returns `truncated:true` on any replica.
+    Note over Operator,Keycloak: Step 9: Subscribe via one replica, poll via another — cursor advances correctly across replicas.
 
-    Note over Operator,Keycloak: Step 10: Trip the per-tenant subscription cap and prove it's enforced globally across replicas.
+    Note over Operator,Keycloak: Step 10: Wait past the buffer TTL — stale cursor returns `truncated:true` on any replica.
 
-    Note over Operator,Keycloak: Step 11: Revoke a token in Keycloak admin and watch the affected windows die.
+    Note over Operator,Keycloak: Step 11: Trip the per-tenant subscription cap and prove it's enforced globally across replicas.
+
+    Note over Operator,Keycloak: Step 12: Revoke a token in Keycloak admin and watch the affected windows die.
 ```
 
 ## Steps
@@ -54,7 +57,7 @@ sequenceDiagram
 ### Architecture in one diagram
 
 ```
-Operator's terminals (poller, webhook, inject)
+Operator's terminals (poller, webhook, inject, drive-chat, drive-presence)
            │
            ▼
      localhost:9090
@@ -63,12 +66,10 @@ Operator's terminals (poller, webhook, inject)
            │                │
            ▼                ▼
       Event-server     Keycloak
-           ▲           (localhost:8180)
-           │
-      Push-server   (auto-rotates events across tenants)
+                       (localhost:8180)
 ```
 
-The walkthrough binary you're reading does **not** make MCP calls. The 4-terminal flow below has you run `make poller` / `make webhook` / `make inject` in sibling windows — those are the actual MCP clients. This binary is the guide.
+The walkthrough binary you're reading does **not** make MCP calls. The flow below has you run `make poller` / `make webhook` / `make inject` / `make drive-chat` / `make drive-presence` in sibling windows — those are the actual MCP clients + producers. This binary is the guide.
 
 ### Step 1: Confirm your token env vars are loaded.
 
@@ -98,7 +99,19 @@ export TOKEN_WEBHOOK_TENANT_C=$(make newtoken-ci TENANT=C USER=carol PASSWORD=ca
 
 Press Enter once all six are exported — the walkthrough does NOT make MCP calls itself, so it will continue past this Step regardless; the subsequent Steps assume the envs exist when you copy/paste them into your terminals.
 
-### Step 2: Window A1 — start the Tenant A poller.
+### Step 2: Start the synthetic chat driver in a sibling window.
+
+The stack comes up silent — no events flow until an operator-run driver starts producing. In a NEW terminal at this leaf, run:
+
+```
+make drive-chat
+```
+
+This fires synthetic `chat.message` events every 2s, rotating tenant tags across `tenant-a` / `tenant-b` / `tenant-c` round-robin. The driver POSTs to nginx → event-server's HTTPSource inject endpoint using the shared `EVENT_INJECT_BEARER`. Leave it running — the subscribers you start next will see events arrive in real time.
+
+Knobs: `make drive-chat EVERY=200ms` for high-volume, `make drive-chat TENANTS=tenant-a` for single-tenant only. Sibling: `make drive-presence` produces `presence.changed` events independently.
+
+### Step 3: Window A1 — start the Tenant A poller.
 
 In a NEW terminal at this leaf, run:
 
@@ -106,9 +119,9 @@ In a NEW terminal at this leaf, run:
 make poller TENANT=A TOKEN=$TOKEN_POLLER_TENANT_A
 ```
 
-The poller authenticates as Tenant A, polls `events/chat.message`, and prints every event it receives with the tenant tag visible. It only sees events whose tenant tag is `tenant-a`; events tagged for B or C never reach it. Leave this terminal visible — within a few seconds the push-server's synthetic chat feeder will rotate to tenant-a and you'll see events appear.
+The poller authenticates as Tenant A, polls `events/chat.message`, and prints every event it receives with the tenant tag visible. It only sees events whose tenant tag is `tenant-a`; events tagged for B or C never reach it. Leave this terminal visible — within a few seconds the chat driver's next tenant-a rotation will land and you'll see events appear.
 
-### Step 3: Window B1 — start the Tenant B poller.
+### Step 4: Window B1 — start the Tenant B poller.
 
 Same pattern, different realm:
 
@@ -118,15 +131,15 @@ make poller TENANT=B TOKEN=$TOKEN_POLLER_TENANT_B
 
 Now A1 and B1 sit side-by-side. A1 prints only tenant-a events; B1 prints only tenant-b. Same MCP server, same wire, same nginx — the realm in the bearer token is what scopes delivery.
 
-### Step 4: Window C1 — start the Tenant C poller.
+### Step 5: Window C1 — start the Tenant C poller.
 
 ```
 make poller TENANT=C TOKEN=$TOKEN_POLLER_TENANT_C
 ```
 
-Three pollers, three tenants. As the push-server cycles through tenants, each event lights up exactly one of your three terminals — clean isolation across the wire.
+Three pollers, three tenants. As the chat driver cycles through tenants, each event lights up exactly one of your three terminals — clean isolation across the wire.
 
-### Step 5: Windows A2 / B2 / C2 — start the webhook receivers.
+### Step 6: Windows A2 / B2 / C2 — start the webhook receivers.
 
 Webhook is the second delivery mode. It runs in parallel with poll; same tenant routing applies:
 
@@ -143,7 +156,7 @@ make webhook TENANT=C TOKEN=$TOKEN_WEBHOOK_TENANT_C
 
 Each receiver registers a webhook subscription on a random local port, the event-server signs every delivery with the per-subscription HMAC secret, and the receivers verify + print. You now have six terminals: 3 pollers × 3 webhooks. An event for `tenant-a` lights up A1 and A2 only.
 
-### Step 6: Inject events from a 7th terminal and watch isolation in real time.
+### Step 7: Inject events from a 7th terminal and watch isolation in real time.
 
 ```
 make inject TENANT=A EVENT=chat.message TEXT='hi from A'
@@ -156,9 +169,9 @@ make inject TENANT=B EVENT=chat.message TEXT='hi from B'
 make inject TENANT=C EVENT=presence.changed USER=carol STATE=online
 ```
 
-B events go only to B's windows; C events only to C's. The push-server is also cycling synthetic events through all three tenants in the background, so leave the windows running and you'll see the rotation interleave with your manual injects.
+B events go only to B's windows; C events only to C's. The chat driver is also cycling synthetic events through all three tenants in the background, so leave the windows running and you'll see the rotation interleave with your manual injects.
 
-### Step 7: Scale to N=2 event-server replicas and prove push-survival via Redis fanout.
+### Step 8: Scale to N=2 event-server replicas and prove push-survival via Redis fanout.
 
 The stack ships a Redis service that backs the events lib's QuotaStore + Emitter (see [issues 634 + 718](https://github.com/panyam/mcpkit/issues/634)). With one replica it's a glorified counter store; the payoff is multi-replica.
 
@@ -168,12 +181,12 @@ Boot two replicas:
 make up N=2 BUILD=true
 ```
 
-nginx round-robins MCP connections across both `event-server-1` and `event-server-2`. Every event a push-server injects ends up as one PUBLISH on Redis; BOTH replicas SUBSCRIBE and deliver locally to the SSE listeners + webhook targets they own.
+nginx round-robins MCP connections across both `event-server-1` and `event-server-2`. Every event the chat driver injects ends up as one PUBLISH on Redis; BOTH replicas SUBSCRIBE and deliver locally to the SSE listeners + webhook targets they own.
 
 Watch the fanout live in a sibling window:
 
 ```
-docker exec -it whole-enchilada-redis-1 redis-cli MONITOR | grep mcpkit.events
+docker exec -it mcpkit-redis redis-cli MONITOR | grep mcpkit.events
 ```
 
 You'll see one `"publish" "mcpkit.events.chat.message" {...}` per injected event regardless of which replica nginx routed the inject to.
@@ -184,7 +197,7 @@ Now kill replica 1 mid-stream:
 docker compose -f docker-compose.yaml kill event-server-1
 ```
 
-nginx routes new MCP connections to event-server-2; existing webhook subscriptions that were already registered against event-server-1 die with their replica, but new subscribes (and re-subscribes after `make poller`/`make webhook` restart) land on event-server-2 transparently. The push-server keeps injecting; event-server-2 keeps PUBLISHing on Redis; A2 / B2 / C2 keep receiving deliveries.
+nginx routes new MCP connections to event-server-2; existing webhook subscriptions that were already registered against event-server-1 die with their replica, but new subscribes (and re-subscribes after `make poller`/`make webhook` restart) land on event-server-2 transparently. The chat driver keeps injecting; event-server-2 keeps PUBLISHing on Redis; A2 / B2 / C2 keep receiving deliveries.
 
 Scale back when done:
 
@@ -194,7 +207,7 @@ make up
 
 The N=2→N=1 step-down is graceful — `docker compose up -d --scale event-server-1=1` removes the extra replica without disturbing the survivor.
 
-### Step 8: Subscribe via one replica, poll via another — cursor advances correctly across replicas.
+### Step 9: Subscribe via one replica, poll via another — cursor advances correctly across replicas.
 
 With Postgres-backed `EventBufferStore` (PR 729 + PR 731, issue 727), the event buffer that backs `events/poll` lives in one shared place. Every replica reads the same source of truth, so a poll-mode client that gets nginx-routed to a different replica between polls still sees the right events at the right cursor.
 
@@ -204,7 +217,7 @@ Start a poller in window 1:
 make poller TENANT=A USERNAME=usera1 PASSWORD=usera1
 ```
 
-The push-server is firing chat.message events through whichever replica nginx picks; the poller logs cursor=N for each event. Now kill the poller (Ctrl+C), capture the last cursor it printed, and restart it with `--start-cursor=<cursor>`:
+The chat driver is firing chat.message events through whichever replica nginx picks; the poller logs cursor=N for each event. Now kill the poller (Ctrl+C), capture the last cursor it printed, and restart it with `--start-cursor=<cursor>`:
 
 ```
 make poller TENANT=A USERNAME=usera1 PASSWORD=usera1 -- --start-cursor=<N>
@@ -215,13 +228,13 @@ nginx may route this restart to the OTHER event-server replica. The poll-side ha
 Watch the Postgres buffer fill up in a sibling window:
 
 ```
-docker exec -it whole-enchilada-postgres-1 psql -U postgres -d events \
+docker exec -it mcpkit-postgres psql -U postgres -d events \
   -c "SELECT source_name, count(*), min(cursor), max(cursor) FROM event_buffer GROUP BY source_name;"
 ```
 
 You'll see `chat.message` accumulating; cursorless sources (`presence.changed`) do not store anything — they never replay.
 
-### Step 9: Wait past the buffer TTL — stale cursor returns `truncated:true` on any replica.
+### Step 10: Wait past the buffer TTL — stale cursor returns `truncated:true` on any replica.
 
 The compose template ships with `POSTGRES_BUFFER_TTL=10m` so this beat is observable without an hour of patience. Production deployments use the default `1h` (or longer per `WithBufferTTL`).
 
@@ -236,7 +249,7 @@ make poller TENANT=A USERNAME=usera1 PASSWORD=usera1
 Wait 11 minutes. The background eviction sweeper (`EventBufferEvictionSweeper`, fires every 60s) deletes rows where `expires_at < NOW()`. Confirm via psql:
 
 ```
-docker exec whole-enchilada-postgres-1 psql -U postgres -d events \
+docker exec mcpkit-postgres psql -U postgres -d events \
   -c "SELECT source_name, min(cursor), count(*) FROM event_buffer GROUP BY source_name;"
 ```
 
@@ -250,7 +263,7 @@ The poll handler reads from Postgres, sees `42` is older than `min(cursor)`, and
 
 Same behavior regardless of which replica nginx routes to — both consult the same Postgres source of truth.
 
-### Step 10: Trip the per-tenant subscription cap and prove it's enforced globally across replicas.
+### Step 11: Trip the per-tenant subscription cap and prove it's enforced globally across replicas.
 
 The event-server is configured with `EVENTS_QUOTA_CAPS=chat.message=3` in compose. That caps each principal to **3** simultaneous `chat.message` subscriptions, enforced by the Redis-backed QuotaStore (PR 720 + PR 721) — atomic INCR-with-cap-check in a Lua script, so concurrent Reserves from different replicas can't both win.
 
@@ -272,14 +285,14 @@ make webhook TENANT=A USERNAME=usera1 PASSWORD=usera1
 Watch the cap counter directly in Redis if you want to be sure:
 
 ```
-docker exec -it whole-enchilada-redis-1 redis-cli
+docker exec -it mcpkit-redis redis-cli
   KEYS mcpkit.events.quota*       # one key per (principal, eventName) tuple
   GET mcpkit.events.quota.tenant-a/<sub>.chat.message
 ```
 
 The key contains the live count; `EXPIRE` on it slides forward with every Reserve, so a leaked subscription (caller crashed before unsubscribe) drops after `OAUTH_CACHE_TTL` of inactivity (default 1h). Kill any of A1/A2/A3 and the count decrements (or you'll see it released on TTL expiry); a fresh A4 then succeeds.
 
-### Step 11: Revoke a token in Keycloak admin and watch the affected windows die.
+### Step 12: Revoke a token in Keycloak admin and watch the affected windows die.
 
 Open `http://localhost:8180/admin/master/console/#/tenant-a/users` (admin / admin) in a browser. Click `alice` → **Sessions** tab → **Sign out**.
 
@@ -321,11 +334,11 @@ Re-acquire a token (`TOKEN_POLLER_TENANT_A=$(make newtoken TENANT=A)`) and resta
 ## Run it
 
 ```bash
-go run ./examples/whole-enchilada/events/
+go run ./examples/events/whole-enchilada/
 ```
 
 Pass `--non-interactive` to skip pauses:
 
 ```bash
-go run ./examples/whole-enchilada/events/ --non-interactive
+go run ./examples/events/whole-enchilada/ --non-interactive
 ```
