@@ -31,6 +31,13 @@ ONEAUTH          := oneauth
 DEMO_CLIENT_ID   ?= mcp-events-poller
 DEMO_CLIENT_SECRET ?= mcpkit-demo-secret-DEMO-ONLY
 
+# Shared infra composes live under ../../../docker/ and run as their
+# own projects. `make up` here brings backends up first (with --wait
+# so Keycloak is healthy before event-server tries to introspect);
+# observability is optional and managed by the operator separately
+# via `make -C docker up STACK=observability`.
+BACKENDS_COMPOSE := ../../../docker/backends/docker-compose.yml
+
 # tenant-realm derives a lowercase realm name from TENANT. Pass
 # TENANT=A → tenant-a; TENANT=tenant-x → tenant-x (preserves
 # already-prefixed names).
@@ -40,11 +47,11 @@ HOSTS_MARKER := # whole-enchilada hostnames — managed by make hosts-install
 HOSTS_NAMES  := nginx.whole-enchilada event-server.whole-enchilada \
                 event-server-1.whole-enchilada event-server-2.whole-enchilada event-server-3.whole-enchilada \
                 pusher.whole-enchilada pusher-1.whole-enchilada pusher-2.whole-enchilada \
-                receiver.whole-enchilada keycloak.whole-enchilada
+                receiver.whole-enchilada
 
-.PHONY: help gen-compose build unittest up down test demo readme \
+.PHONY: help gen-compose build unittest up down infra-up infra-down test demo readme \
         newtoken newtoken-ci poller webhook inject \
-        hosts-install hosts-uninstall logs ps clean
+        hosts-install hosts-uninstall logs ps clean clean-backends
 
 help: ## Show this help.
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / { printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -64,11 +71,17 @@ build: ## Build all binaries locally (without Docker).
 unittest: ## In-process Go tests (no Docker needed; covers tenant-isolation + protocol contracts).
 	go -C event-server test ./... -count=1 -timeout 60s
 
-up: gen-compose ## docker compose up -d. Reuses cached images. Pass BUILD=true to force a rebuild after code changes.
+infra-up: ## Bring up shared backends (keycloak + postgres + redis). Waits for healthchecks.
+	docker compose -f $(BACKENDS_COMPOSE) up -d --wait
+
+infra-down: ## Tear down shared backends. WARNING: other examples sharing this infra will lose connectivity.
+	docker compose -f $(BACKENDS_COMPOSE) down
+
+up: gen-compose infra-up ## Bring up backends then events. Reuses cached images. Pass BUILD=true to force a rebuild after code changes.
 	docker compose up -d $(if $(BUILD),--build)
 	@echo "stack up$(if $(BUILD), (rebuilt)); nginx on http://localhost:9090 — see README for hostname routing"
 
-down: ## docker compose down — preserves Postgres + Redis bind-mount data under ./data/. Run `make clean` to wipe.
+down: ## docker compose down — tears down the events services only. Backends keep running (shared infra). Use `make infra-down` to stop them too.
 	docker compose down
 
 test: ## Run the walkthrough in non-interactive mode against the running docker stack.
@@ -130,10 +143,10 @@ iterm: ## macOS+iTerm2 only — open a 2x3 grid: row1 = pollers A/B/C, row2 = we
 	@bash ./iterm-6up.sh
 
 clear_all_tokens: ## Sign out every USER session in all 3 tenant realms (keeps mcp-event-server client creds intact).
-	@docker exec whole-enchilada-keycloak-1 /opt/keycloak/bin/kcadm.sh config credentials \
+	@docker exec mcpkit-keycloak /opt/keycloak/bin/kcadm.sh config credentials \
 		--server http://keycloak:8080 --realm master --user admin --password admin >/dev/null
 	@for realm in tenant-a tenant-b tenant-c; do \
-		docker exec whole-enchilada-keycloak-1 /opt/keycloak/bin/kcadm.sh create logout-all -r $$realm >/dev/null && \
+		docker exec mcpkit-keycloak /opt/keycloak/bin/kcadm.sh create logout-all -r $$realm >/dev/null && \
 		echo "[clear_all_tokens] $$realm: all user sessions signed out"; \
 	done
 
@@ -151,9 +164,13 @@ logs: ## Tail logs from all services.
 ps: ## docker compose ps.
 	docker compose ps
 
-clean: ## docker compose down -v + remove Postgres/Redis bind-mount data + built binaries (full reset).
+clean: ## docker compose down -v on the events stack + remove built binaries. Backends data is preserved — use `make clean-backends` for a full reset.
 	docker compose down -v 2>/dev/null || true
-	rm -rf bin/ data/
+	rm -rf bin/
+
+clean-backends: ## Tear down backends AND wipe their persisted data (postgres + redis bind mounts). Use after schema changes or when starting fresh.
+	docker compose -f $(BACKENDS_COMPOSE) down -v 2>/dev/null || true
+	rm -rf ../../../docker/backends/data/
 
 # Host /etc/hosts management — uses a marker comment so the edit is
 # idempotent and reversible. Requires sudo.

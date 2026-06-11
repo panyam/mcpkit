@@ -10,10 +10,12 @@
 //	pusher-<i>.whole-enchilada       — direct pin to replica i (1..M)
 //	receiver.whole-enchilada         — example webhook consumer
 //
-// Stages 2+ enrich the same convention with admin.whole-enchilada,
-// keycloak.whole-enchilada, grafana.whole-enchilada, loki.whole-enchilada,
-// mimir.whole-enchilada, etc. The same template adds those blocks
-// behind feature flags when later stages land.
+// Stages 2+ enrich the same convention with admin.whole-enchilada and
+// related aliases. Shared backends (keycloak, postgres, redis) and the
+// observability stack (grafana, loki, tempo, mimir, otel-collector)
+// live in sibling composes under docker/ and are reached by bare
+// container names on the shared `mcpkit` network — they don't get
+// `.whole-enchilada` aliases.
 package main
 
 import (
