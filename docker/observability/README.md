@@ -52,11 +52,12 @@ reference — pass `--exporter=otlp` to its `serve` or `demo` target.
   `mcp.tool.duration` (ms), `mcp.sessions.active` — through the OTel
   meter adapter → OTLP → Collector → Mimir. Exemplars are stamped
   by default so Grafana panels link directly to the matching trace
-  in Tempo. `examples/otel/stdout/` is the reference adopter and
-  ships its starter dashboard at
-  [`/d/otel-stdout`](http://localhost:3000/d/otel-stdout) (per-example
-  UID convention — see `examples/CONVENTIONS.md` § Per-example
-  Grafana dashboards).
+  in Tempo. The bundled
+  [`mcpkit — overview`](http://localhost:3000/d/mcpkit-overview)
+  dashboard works for ANY example: pick the example from the
+  `$service` dropdown. Per-example dashboards are an escape hatch
+  for genuinely-bespoke metrics — see `examples/CONVENTIONS.md`
+  § Grafana dashboards.
 
 Shipping the full LGTM stack now means no rework when the empty lanes
 fill in. The trade-off is ~6 YAML config files to maintain vs the

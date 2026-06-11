@@ -1,7 +1,7 @@
 {
-  "uid": "otel-stdout",
-  "title": "otel-stdout — overview",
-  "tags": ["mcpkit", "example:otel-stdout"],
+  "uid": "mcpkit-overview",
+  "title": "mcpkit — overview",
+  "tags": ["mcpkit", "overview"],
   "schemaVersion": 39,
   "version": 1,
   "editable": true,
@@ -28,11 +28,11 @@
           "uid": "mimir"
         },
         "label": "Service",
-        "query": "label_values(mcp_tool_calls_total{service_name=~\"otel-stdout.*\"}, service_name)",
+        "query": "label_values(mcp_tool_calls_total, service_name)",
         "refresh": 2,
         "includeAll": true,
         "multi": true,
-        "allValue": "otel-stdout.*",
+        "allValue": ".*",
         "current": {
           "selected": false,
           "text": "All",
