@@ -188,6 +188,21 @@ Tracked phases on [issue 312][issue]:
 - **Conformance suite `testconf-otel`** — issue 429.
 - **P6 — tracing across surfaces.** Umbrella [issue 663][p6]. See below.
 
+## Adjacent: metrics seam (issue 7)
+
+The `core.MeterProvider` seam mirrors the SEP-414 `core.TracerProvider`
+shape for metrics. Metrics don't cross the wire, so no SEP — but the
+library still needs a dependency-free seam so the base module can emit
+measurements without dragging the OTel metrics SDK in. Wire it via
+`server.WithMeterProvider`; the OTel adapter lives at
+`mcpotel.NewMeterProvider(otelMP)`. Canonical instruments emitted from
+the server dispatch path (`mcp.tool.calls`, `mcp.jsonrpc.errors`,
+`mcp.tool.duration`, `mcp.sessions.active`) share the same attribute
+vocabulary as the SEP-414 spans, and exemplars are wired by default so
+Grafana's metric → trace pivot works without per-call configuration.
+See `ext/otel/README.md` § Metrics for the wiring snippet and
+`server/metrics_middleware.go` for the dispatch-side instrumentation.
+
 ## P6 — tracing across surfaces (auth / tasks / apps)
 
 P1–P5 instrumented the **dispatch spine**: every JSON-RPC method gets one
