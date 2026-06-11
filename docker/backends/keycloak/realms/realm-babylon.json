@@ -1,6 +1,6 @@
 {
-  "realm": "tenant-c",
-  "displayName": "Tenant C",
+  "realm": "babylon",
+  "displayName": "Babylon",
   "enabled": true,
   "sslRequired": "none",
   "defaultSignatureAlgorithm": "RS256",
@@ -24,7 +24,7 @@
     },
     {
       "clientId": "mcp-events-poller",
-      "name": "MCP Events Poller (demo client used by `make poller TENANT=C`)",
+      "name": "MCP Events Poller (demo client used by `make poller TENANT=B`)",
       "description": "DEMO ONLY \u2014 pre-baked secret for the demo poller. Real deployments register a unique client per consumer.",
       "enabled": true,
       "clientAuthenticatorType": "client-secret",
@@ -48,7 +48,7 @@
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "backchannel.logout.url": "http://event-server.whole-enchilada:8080/backchannel-logout/tenant-c",
+        "backchannel.logout.url": "http://event-server.whole-enchilada:8080/backchannel-logout/babylon",
         "backchannel.logout.session.required": "true",
         "backchannel.logout.revoke.offline.tokens": "false"
       },
@@ -72,7 +72,7 @@
     },
     {
       "clientId": "mcp-events-webhook",
-      "name": "MCP Events Webhook (demo client used by `make webhook TENANT=C`)",
+      "name": "MCP Events Webhook (demo client used by `make webhook TENANT=B`)",
       "description": "DEMO ONLY \u2014 pre-baked secret for the demo webhook receiver.",
       "enabled": true,
       "clientAuthenticatorType": "client-secret",
@@ -101,111 +101,165 @@
   ],
   "users": [
     {
-      "username": "carol",
+      "username": "bob",
       "enabled": true,
       "emailVerified": true,
-      "email": "carol@tenant-c.example",
-      "firstName": "Carol",
-      "lastName": "Cohen",
+      "email": "bob@babylon.example",
+      "firstName": "Bob",
+      "lastName": "Beckett",
       "credentials": [
         {
           "type": "password",
-          "value": "carol",
+          "value": "bob",
           "temporary": false
         }
       ],
       "realmRoles": [
-        "default-roles-tenant-c"
+        "default-roles-babylon"
       ]
     },
     {
-      "username": "userc1",
+      "username": "userb1",
       "enabled": true,
       "emailVerified": true,
-      "email": "userc1@tenant-c.example",
+      "email": "userb1@babylon.example",
       "firstName": "User",
-      "lastName": "C1",
+      "lastName": "B1",
       "credentials": [
         {
           "type": "password",
-          "value": "userc1",
+          "value": "userb1",
           "temporary": false
         }
       ],
       "realmRoles": [
-        "default-roles-tenant-c"
+        "default-roles-babylon"
       ]
     },
     {
-      "username": "userc2",
+      "username": "userb2",
       "enabled": true,
       "emailVerified": true,
-      "email": "userc2@tenant-c.example",
+      "email": "userb2@babylon.example",
       "firstName": "User",
-      "lastName": "C2",
+      "lastName": "B2",
       "credentials": [
         {
           "type": "password",
-          "value": "userc2",
+          "value": "userb2",
           "temporary": false
         }
       ],
       "realmRoles": [
-        "default-roles-tenant-c"
+        "default-roles-babylon"
       ]
     },
     {
-      "username": "userc3",
+      "username": "userb3",
       "enabled": true,
       "emailVerified": true,
-      "email": "userc3@tenant-c.example",
+      "email": "userb3@babylon.example",
       "firstName": "User",
-      "lastName": "C3",
+      "lastName": "B3",
       "credentials": [
         {
           "type": "password",
-          "value": "userc3",
+          "value": "userb3",
           "temporary": false
         }
       ],
       "realmRoles": [
-        "default-roles-tenant-c"
+        "default-roles-babylon"
       ]
     },
     {
-      "username": "userc4",
+      "username": "userb4",
       "enabled": true,
       "emailVerified": true,
-      "email": "userc4@tenant-c.example",
+      "email": "userb4@babylon.example",
       "firstName": "User",
-      "lastName": "C4",
+      "lastName": "B4",
       "credentials": [
         {
           "type": "password",
-          "value": "userc4",
+          "value": "userb4",
           "temporary": false
         }
       ],
       "realmRoles": [
-        "default-roles-tenant-c"
+        "default-roles-babylon"
       ]
     },
     {
-      "username": "userc5",
+      "username": "userb5",
       "enabled": true,
       "emailVerified": true,
-      "email": "userc5@tenant-c.example",
+      "email": "userb5@babylon.example",
       "firstName": "User",
-      "lastName": "C5",
+      "lastName": "B5",
       "credentials": [
         {
           "type": "password",
-          "value": "userc5",
+          "value": "userb5",
           "temporary": false
         }
       ],
       "realmRoles": [
-        "default-roles-tenant-c"
+        "default-roles-babylon"
+      ]
+    },
+    {
+      "username": "bharath",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "bharath@babylon.example",
+      "firstName": "Bharath",
+      "lastName": "Krishnan",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "bharath",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-babylon"
+      ]
+    },
+    {
+      "username": "bhavna",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "bhavna@babylon.example",
+      "firstName": "Bhavna",
+      "lastName": "Joshi",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "bhavna",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-babylon"
+      ]
+    },
+    {
+      "username": "brenda",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "brenda@babylon.example",
+      "firstName": "Brenda",
+      "lastName": "Larsen",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "brenda",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-babylon"
       ]
     }
   ]

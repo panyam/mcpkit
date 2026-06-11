@@ -7,7 +7,7 @@
 //
 // Usage:
 //
-//	inject --tenant tenant-a --event chat.message --text "hello A"
+//	inject --tenant asgard --event chat.message --text "hello A"
 //
 // Or via the Makefile wrapper at the demo's leaf:
 //
@@ -49,7 +49,7 @@ func main() {
 	flag.Parse()
 
 	if *tenant == "" {
-		log.Fatal("[inject] --tenant is required (one of tenant-a, tenant-b, tenant-c, or whatever realm a custom client lives in).")
+		log.Fatal("[inject] --tenant is required (one of asgard, babylon, camelot, or whatever realm a custom client lives in).")
 	}
 
 	payload := buildPayload(*eventName, *tenant, *channel, *sender, *text, *user, *state)

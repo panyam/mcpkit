@@ -49,7 +49,7 @@ func extractTestTenant(r *http.Request) string {
 }
 
 // buildTenantTestStack mirrors buildTestStack but wires the
-// fakeTenantValidator AND the tenant-aware MatchFunc onto every
+// fakeTenantValidator AND the asgardware MatchFunc onto every
 // EventDef so subscribers' Claims.Tenant gates delivery.
 func buildTenantTestStack(t *testing.T) (*httptest.Server, *events.HTTPSource[ChatMessageData], *events.HTTPSource[PresenceChangedData], *events.WebhookRegistry) {
 	t.Helper()
@@ -113,10 +113,10 @@ func TestTenantMatchFunc_TableDriven(t *testing.T) {
 		payload   any
 		want      bool
 	}{
-		{"untagged event delivers to anyone", "tenant-a/alice", ChatMessageData{Sender: "x"}, true},
-		{"matched tenant delivers", "tenant-a/alice", ChatMessageData{Tenant: "tenant-a", Sender: "x"}, true},
-		{"mismatched tenant drops", "tenant-a/alice", ChatMessageData{Tenant: "tenant-b", Sender: "x"}, false},
-		{"empty subscriber tenant + tagged event drops", "alice", ChatMessageData{Tenant: "tenant-a", Sender: "x"}, false},
+		{"untagged event delivers to anyone", "asgard/alice", ChatMessageData{Sender: "x"}, true},
+		{"matched tenant delivers", "asgard/alice", ChatMessageData{Tenant: "asgard", Sender: "x"}, true},
+		{"mismatched tenant drops", "asgard/alice", ChatMessageData{Tenant: "babylon", Sender: "x"}, false},
+		{"empty subscriber tenant + tagged event drops", "alice", ChatMessageData{Tenant: "asgard", Sender: "x"}, false},
 		{"empty subscriber tenant + untagged event delivers", "alice", ChatMessageData{Sender: "x"}, true},
 	}
 	for _, tc := range cases {
@@ -143,13 +143,13 @@ func (f *fakeHookContext) SubscriptionID() string    { return "" }
 func (f *fakeHookContext) Mode() events.DeliveryMode { return events.DeliveryModePush }
 
 // TestE2E_TenantIsolation_Poll asserts the core stage-2 contract: a
-// poll subscriber from tenant-a only sees events tagged for tenant-a;
-// the same poll from tenant-b sees only tenant-b events. End-to-end
+// poll subscriber from asgard only sees events tagged for asgard;
+// the same poll from babylon sees only babylon events. End-to-end
 // through the MCP wire, not just the MatchFunc in isolation.
 func TestE2E_TenantIsolation_Poll(t *testing.T) {
 	ts, _, _, _ := buildTenantTestStack(t)
-	cA := connectClientAsTenant(t, ts, "tenant-a")
-	cB := connectClientAsTenant(t, ts, "tenant-b")
+	cA := connectClientAsTenant(t, ts, "asgard")
+	cB := connectClientAsTenant(t, ts, "babylon")
 
 	pusher := eventsclient.NewPusher(ts.URL, "")
 	ctx := context.Background()
@@ -157,13 +157,13 @@ func TestE2E_TenantIsolation_Poll(t *testing.T) {
 	// Push three events with rotating tenant tags. Subscribers from
 	// each tenant should see exactly one event after polling.
 	require.NoError(t, pusher.PushNamed(ctx, "chat.message", ChatMessageData{
-		Tenant: "tenant-a", Channel: "general", Sender: "alice", Text: "hello A",
+		Tenant: "asgard", Channel: "general", Sender: "alice", Text: "hello A",
 	}))
 	require.NoError(t, pusher.PushNamed(ctx, "chat.message", ChatMessageData{
-		Tenant: "tenant-b", Channel: "general", Sender: "bob", Text: "hello B",
+		Tenant: "babylon", Channel: "general", Sender: "bob", Text: "hello B",
 	}))
 	require.NoError(t, pusher.PushNamed(ctx, "chat.message", ChatMessageData{
-		Tenant: "tenant-c", Channel: "general", Sender: "carol", Text: "hello C",
+		Tenant: "camelot", Channel: "general", Sender: "carol", Text: "hello C",
 	}))
 
 	pollAs := func(c *client.Client) []events.Event {
@@ -175,17 +175,17 @@ func TestE2E_TenantIsolation_Poll(t *testing.T) {
 	}
 
 	eventsA := pollAs(cA)
-	require.Len(t, eventsA, 1, "tenant-a must see exactly one event (the tenant-a-tagged one)")
+	require.Len(t, eventsA, 1, "asgard must see exactly one event (the asgard-tagged one)")
 	var dataA ChatMessageData
 	require.NoError(t, json.Unmarshal(eventsA[0].Data, &dataA))
-	assert.Equal(t, "tenant-a", dataA.Tenant)
+	assert.Equal(t, "asgard", dataA.Tenant)
 	assert.Equal(t, "hello A", dataA.Text)
 
 	eventsB := pollAs(cB)
-	require.Len(t, eventsB, 1, "tenant-b must see exactly one event (the tenant-b-tagged one)")
+	require.Len(t, eventsB, 1, "babylon must see exactly one event (the babylon-tagged one)")
 	var dataB ChatMessageData
 	require.NoError(t, json.Unmarshal(eventsB[0].Data, &dataB))
-	assert.Equal(t, "tenant-b", dataB.Tenant)
+	assert.Equal(t, "babylon", dataB.Tenant)
 }
 
 // TestE2E_TenantIsolation_UntaggedEventReachesAll asserts that events
@@ -194,8 +194,8 @@ func TestE2E_TenantIsolation_Poll(t *testing.T) {
 // This preserves backwards compatibility with single-tenant deployments.
 func TestE2E_TenantIsolation_UntaggedEventReachesAll(t *testing.T) {
 	ts, _, _, _ := buildTenantTestStack(t)
-	cA := connectClientAsTenant(t, ts, "tenant-a")
-	cB := connectClientAsTenant(t, ts, "tenant-b")
+	cA := connectClientAsTenant(t, ts, "asgard")
+	cB := connectClientAsTenant(t, ts, "babylon")
 
 	pusher := eventsclient.NewPusher(ts.URL, "")
 	require.NoError(t, pusher.PushNamed(context.Background(), "chat.message", ChatMessageData{
@@ -210,8 +210,8 @@ func TestE2E_TenantIsolation_UntaggedEventReachesAll(t *testing.T) {
 		return pr.Events
 	}
 
-	require.Len(t, pollAs(cA), 1, "untagged event must reach tenant-a")
-	require.Len(t, pollAs(cB), 1, "untagged event must reach tenant-b")
+	require.Len(t, pollAs(cA), 1, "untagged event must reach asgard")
+	require.Len(t, pollAs(cB), 1, "untagged event must reach babylon")
 }
 
 // TestE2E_TenantIsolation_CrossTenantPollDoesNotLeak runs the two
@@ -221,8 +221,8 @@ func TestE2E_TenantIsolation_UntaggedEventReachesAll(t *testing.T) {
 // announcement will cite.
 func TestE2E_TenantIsolation_CrossTenantPollDoesNotLeak(t *testing.T) {
 	ts, _, _, _ := buildTenantTestStack(t)
-	cA := connectClientAsTenant(t, ts, "tenant-a")
-	cB := connectClientAsTenant(t, ts, "tenant-b")
+	cA := connectClientAsTenant(t, ts, "asgard")
+	cB := connectClientAsTenant(t, ts, "babylon")
 
 	pusher := eventsclient.NewPusher(ts.URL, "")
 	ctx := context.Background()
@@ -230,10 +230,10 @@ func TestE2E_TenantIsolation_CrossTenantPollDoesNotLeak(t *testing.T) {
 	// 6 events: 3 for A, 3 for B, interleaved.
 	for i := 0; i < 3; i++ {
 		require.NoError(t, pusher.PushNamed(ctx, "chat.message", ChatMessageData{
-			Tenant: "tenant-a", Channel: "g", Sender: "alice", Text: "A",
+			Tenant: "asgard", Channel: "g", Sender: "alice", Text: "A",
 		}))
 		require.NoError(t, pusher.PushNamed(ctx, "chat.message", ChatMessageData{
-			Tenant: "tenant-b", Channel: "g", Sender: "bob", Text: "B",
+			Tenant: "babylon", Channel: "g", Sender: "bob", Text: "B",
 		}))
 	}
 
@@ -246,18 +246,18 @@ func TestE2E_TenantIsolation_CrossTenantPollDoesNotLeak(t *testing.T) {
 	}
 
 	eventsA := pollAs(cA)
-	require.Len(t, eventsA, 3, "tenant-a sees only its 3 events")
+	require.Len(t, eventsA, 3, "asgard sees only its 3 events")
 	for i, ev := range eventsA {
 		var data ChatMessageData
 		require.NoError(t, json.Unmarshal(ev.Data, &data))
-		assert.Equal(t, "tenant-a", data.Tenant, "event %d tenant", i)
+		assert.Equal(t, "asgard", data.Tenant, "event %d tenant", i)
 	}
 
 	eventsB := pollAs(cB)
-	require.Len(t, eventsB, 3, "tenant-b sees only its 3 events")
+	require.Len(t, eventsB, 3, "babylon sees only its 3 events")
 	for i, ev := range eventsB {
 		var data ChatMessageData
 		require.NoError(t, json.Unmarshal(ev.Data, &data))
-		assert.Equal(t, "tenant-b", data.Tenant, "event %d tenant", i)
+		assert.Equal(t, "babylon", data.Tenant, "event %d tenant", i)
 	}
 }

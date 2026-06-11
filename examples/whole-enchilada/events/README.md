@@ -18,7 +18,7 @@ Host  ──[MCP / SSE]──>  Nginx  ──>  Event-server  <──[HTTP /even
 
 ## What stage 2 adds
 
-- **Keycloak as the OAuth AS**, pinned to `quay.io/keycloak/keycloak:26.0`. Three realms pre-imported on first start: `tenant-a`, `tenant-b`, `tenant-c`. Admin UI at <http://localhost:8180/admin/> (`admin` / `admin`).
+- **Keycloak as the OAuth AS**, pinned to `quay.io/keycloak/keycloak:26.0`. Three realms pre-imported on first start: `asgard`, `babylon`, `camelot`. Admin UI at <http://localhost:8180/admin/> (`admin` / `admin`).
 - **Multi-realm introspection on the event-server.** The new `MultiRealmIntrospectionValidator` fans every bearer token out to all three realms' `/introspect` endpoints and accepts the token if any realm says active. Tenant comes from whichever realm validated, encoded as `<realm>/<sub>` into `core.Claims.Subject` (PR 692).
 - **Per-event tenant tagging.** `ChatMessageData` / `PresenceChangedData` now carry a `Tenant` field; the push-server rotates events across tenants by default. The event-server's `tenantMatchFunc` only delivers events to subscribers whose `Claims.Tenant` matches — cross-tenant isolation is enforced at delivery time.
 - **Demo-only client secrets**, pre-baked in the committed realm JSONs at `keycloak/realms/`. See `keycloak/README.md` for the bring-your-own-client recipe.
@@ -82,18 +82,18 @@ Once exported, open six terminals:
 # T1 — keep this running
 make up
 
-# T2 — Tenant A poller. Browser opens for login as alice@tenant-a (alice/alice).
+# T2 — Asgard poller. Browser opens for login as alice@asgard (alice/alice).
 TA=$(make newtoken TENANT=A)
 make poller TENANT=A TOKEN=$TA
 
-# T3 — Tenant B poller (different terminal). Login as bob@tenant-b.
+# T3 — Babylon poller (different terminal). Login as bob@babylon.
 TB=$(make newtoken TENANT=B)
 make poller TENANT=B TOKEN=$TB
 
-# T4 — Tenant A webhook receiver.
+# T4 — Asgard webhook receiver.
 make webhook TENANT=A TOKEN=$TA
 
-# T5 — Tenant B webhook receiver.
+# T5 — Babylon webhook receiver.
 make webhook TENANT=B TOKEN=$TB
 
 # T6 — Inject events from the host. Only the matching tenant's terminals print.
@@ -102,16 +102,16 @@ make inject TENANT=B EVENT=chat.message TEXT="hi from B"
 make inject TENANT=C EVENT=presence.changed USER=carol STATE=online
 ```
 
-`make up` brings the stack up silent — no events flow until you run `make drive-chat` (and / or `make drive-presence`) in sibling windows. The drivers rotate tenant tags round-robin across A/B/C; leave the pollers running and watch each tenant's window light up in turn. Tune the cadence with `EVERY=200ms` (high-volume mode) or restrict to one tenant with `TENANTS=tenant-a`.
+`make up` brings the stack up silent — no events flow until you run `make drive-chat` (and / or `make drive-presence`) in sibling windows. The drivers rotate tenant tags round-robin across A/B/C; leave the pollers running and watch each tenant's window light up in turn. Tune the cadence with `EVERY=200ms` (high-volume mode) or restrict to one tenant with `TENANTS=asgard`.
 
 ### Revocation walkthrough (the load-bearing demo step)
 
 The introspection-based auth has *synchronously revocable* tokens — the demo's key claim that JWT can't make. From your browser:
 
-1. Open <http://localhost:8180/admin/master/console/#/tenant-a/users>, login as `admin` / `admin`.
+1. Open <http://localhost:8180/admin/master/console/#/asgard/users>, login as `admin` / `admin`.
 2. Click user `alice` → **Sessions** tab → **Sign out**.
-3. Within `OAUTH_CACHE_TTL` seconds (default 5s), Tenant A's poller + webhook terminals die with `-32012 Forbidden`.
-4. Tenant B + Tenant C terminals stay alive — revocation is per-realm, isolation holds.
+3. Within `OAUTH_CACHE_TTL` seconds (default 5s), Asgard's poller + webhook terminals die with `-32012 Forbidden`.
+4. Babylon + Camelot terminals stay alive — revocation is per-realm, isolation holds.
 
 This is the operator-facing flow a real production admin would use; nothing in the demo "fakes" the revocation. Re-acquire a token (`make newtoken TENANT=A`) and the subscribers reconnect.
 
@@ -144,10 +144,10 @@ Two paths, depending on whether you want to use the demo's Keycloak or your own 
 
 ### Use the demo's Keycloak (introspection mode)
 
-1. <http://localhost:8180/admin/> (admin / admin) → realm `tenant-a` → **Clients** → **Create**.
+1. <http://localhost:8180/admin/> (admin / admin) → realm `asgard` → **Clients** → **Create**.
 2. Type **OpenID Connect**, give it a client ID, enable Service Accounts / Standard Flow / Direct Access Grants as you need.
 3. **Save**, then **Credentials** tab → copy the generated secret.
-4. From your client, acquire a token against `http://localhost:8180/realms/tenant-a/protocol/openid-connect/token` using whichever OAuth flow fits your client (client_credentials, auth code, etc.).
+4. From your client, acquire a token against `http://localhost:8180/realms/asgard/protocol/openid-connect/token` using whichever OAuth flow fits your client (client_credentials, auth code, etc.).
 5. Send `Authorization: Bearer <token>` when calling `http://localhost:9090/mcp`. The event-server's `MultiRealmIntrospectionValidator` already accepts any token issued by any of the three realms — no further server-side configuration.
 
 ### Bring your own IdP (JWT mode)

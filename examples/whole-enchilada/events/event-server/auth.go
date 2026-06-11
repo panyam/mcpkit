@@ -204,8 +204,8 @@ func realmFromJWT(token string) (string, error) {
 
 // realmFromKeycloakURL extracts the realm name from any Keycloak URL
 // that contains a /realms/<realm>/... segment — equally usable for
-// introspection endpoints (.../realms/tenant-a/protocol/.../introspect)
-// and bare issuer URLs (.../realms/tenant-a). Returns "" when the URL
+// introspection endpoints (.../realms/asgard/protocol/.../introspect)
+// and bare issuer URLs (.../realms/asgard). Returns "" when the URL
 // has no /realms/ segment.
 func realmFromKeycloakURL(rawURL string) string {
 	const marker = "/realms/"

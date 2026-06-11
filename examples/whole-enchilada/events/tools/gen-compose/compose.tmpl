@@ -9,8 +9,8 @@
 # ./docker/ and bridges via the literal `mcpkit` docker network.
 # Bring them up first:
 #
-#   make -C ../../../docker up STACK=backends
-#   make -C ../../../docker up STACK=observability    # optional
+#   cd ../../../docker/backends && make up
+#   cd ../../../docker/observability && make up    # optional
 #
 # `make up` here chains those automatically.
 #
@@ -83,7 +83,7 @@ services:
       # introspection endpoint returns active=true. Shared client_id /
       # client_secret across all realms (DEMO ONLY — production would
       # register a distinct client per realm).
-      OAUTH_INTROSPECTION_URLS: http://keycloak:8080/realms/tenant-a/protocol/openid-connect/token/introspect,http://keycloak:8080/realms/tenant-b/protocol/openid-connect/token/introspect,http://keycloak:8080/realms/tenant-c/protocol/openid-connect/token/introspect
+      OAUTH_INTROSPECTION_URLS: http://keycloak:8080/realms/asgard/protocol/openid-connect/token/introspect,http://keycloak:8080/realms/babylon/protocol/openid-connect/token/introspect,http://keycloak:8080/realms/camelot/protocol/openid-connect/token/introspect
       OAUTH_CLIENT_ID: mcp-event-server
       OAUTH_CLIENT_SECRET: ${OAUTH_CLIENT_SECRET:-{{$.KCResourceSecret}}}
       OAUTH_CACHE_TTL: ${OAUTH_CACHE_TTL:-5s}

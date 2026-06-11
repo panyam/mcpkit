@@ -9,7 +9,7 @@
 //
 //	webhook --server http://localhost:9090/mcp \
 //	        --token   $(make newtoken TENANT=A) \
-//	        --tenant  tenant-a \
+//	        --tenant  asgard \
 //	        --event   chat.message
 //
 // Or via the Makefile wrapper at the demo's leaf:

@@ -1,6 +1,6 @@
 {
-  "realm": "tenant-a",
-  "displayName": "Tenant A",
+  "realm": "camelot",
+  "displayName": "Camelot",
   "enabled": true,
   "sslRequired": "none",
   "defaultSignatureAlgorithm": "RS256",
@@ -24,7 +24,7 @@
     },
     {
       "clientId": "mcp-events-poller",
-      "name": "MCP Events Poller (demo client used by `make poller TENANT=A`)",
+      "name": "MCP Events Poller (demo client used by `make poller TENANT=C`)",
       "description": "DEMO ONLY \u2014 pre-baked secret for the demo poller. Real deployments register a unique client per consumer.",
       "enabled": true,
       "clientAuthenticatorType": "client-secret",
@@ -48,7 +48,7 @@
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "backchannel.logout.url": "http://event-server.whole-enchilada:8080/backchannel-logout/tenant-a",
+        "backchannel.logout.url": "http://event-server.whole-enchilada:8080/backchannel-logout/camelot",
         "backchannel.logout.session.required": "true",
         "backchannel.logout.revoke.offline.tokens": "false"
       },
@@ -72,7 +72,7 @@
     },
     {
       "clientId": "mcp-events-webhook",
-      "name": "MCP Events Webhook (demo client used by `make webhook TENANT=A`)",
+      "name": "MCP Events Webhook (demo client used by `make webhook TENANT=C`)",
       "description": "DEMO ONLY \u2014 pre-baked secret for the demo webhook receiver.",
       "enabled": true,
       "clientAuthenticatorType": "client-secret",
@@ -101,111 +101,165 @@
   ],
   "users": [
     {
-      "username": "alice",
+      "username": "carol",
       "enabled": true,
       "emailVerified": true,
-      "email": "alice@tenant-a.example",
-      "firstName": "Alice",
-      "lastName": "Anderson",
+      "email": "carol@camelot.example",
+      "firstName": "Carol",
+      "lastName": "Cohen",
       "credentials": [
         {
           "type": "password",
-          "value": "alice",
+          "value": "carol",
           "temporary": false
         }
       ],
       "realmRoles": [
-        "default-roles-tenant-a"
+        "default-roles-camelot"
       ]
     },
     {
-      "username": "usera1",
+      "username": "userc1",
       "enabled": true,
       "emailVerified": true,
-      "email": "usera1@tenant-a.example",
+      "email": "userc1@camelot.example",
       "firstName": "User",
-      "lastName": "A1",
+      "lastName": "C1",
       "credentials": [
         {
           "type": "password",
-          "value": "usera1",
+          "value": "userc1",
           "temporary": false
         }
       ],
       "realmRoles": [
-        "default-roles-tenant-a"
+        "default-roles-camelot"
       ]
     },
     {
-      "username": "usera2",
+      "username": "userc2",
       "enabled": true,
       "emailVerified": true,
-      "email": "usera2@tenant-a.example",
+      "email": "userc2@camelot.example",
       "firstName": "User",
-      "lastName": "A2",
+      "lastName": "C2",
       "credentials": [
         {
           "type": "password",
-          "value": "usera2",
+          "value": "userc2",
           "temporary": false
         }
       ],
       "realmRoles": [
-        "default-roles-tenant-a"
+        "default-roles-camelot"
       ]
     },
     {
-      "username": "usera3",
+      "username": "userc3",
       "enabled": true,
       "emailVerified": true,
-      "email": "usera3@tenant-a.example",
+      "email": "userc3@camelot.example",
       "firstName": "User",
-      "lastName": "A3",
+      "lastName": "C3",
       "credentials": [
         {
           "type": "password",
-          "value": "usera3",
+          "value": "userc3",
           "temporary": false
         }
       ],
       "realmRoles": [
-        "default-roles-tenant-a"
+        "default-roles-camelot"
       ]
     },
     {
-      "username": "usera4",
+      "username": "userc4",
       "enabled": true,
       "emailVerified": true,
-      "email": "usera4@tenant-a.example",
+      "email": "userc4@camelot.example",
       "firstName": "User",
-      "lastName": "A4",
+      "lastName": "C4",
       "credentials": [
         {
           "type": "password",
-          "value": "usera4",
+          "value": "userc4",
           "temporary": false
         }
       ],
       "realmRoles": [
-        "default-roles-tenant-a"
+        "default-roles-camelot"
       ]
     },
     {
-      "username": "usera5",
+      "username": "userc5",
       "enabled": true,
       "emailVerified": true,
-      "email": "usera5@tenant-a.example",
+      "email": "userc5@camelot.example",
       "firstName": "User",
-      "lastName": "A5",
+      "lastName": "C5",
       "credentials": [
         {
           "type": "password",
-          "value": "usera5",
+          "value": "userc5",
           "temporary": false
         }
       ],
       "realmRoles": [
-        "default-roles-tenant-a"
+        "default-roles-camelot"
+      ]
+    },
+    {
+      "username": "chandan",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "chandan@camelot.example",
+      "firstName": "Chandan",
+      "lastName": "Reddy",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "chandan",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-camelot"
+      ]
+    },
+    {
+      "username": "charu",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "charu@camelot.example",
+      "firstName": "Charu",
+      "lastName": "Banerjee",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "charu",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-camelot"
+      ]
+    },
+    {
+      "username": "charlie",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "charlie@camelot.example",
+      "firstName": "Charlie",
+      "lastName": "Diaz",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "charlie",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-camelot"
       ]
     }
   ]

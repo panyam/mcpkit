@@ -89,7 +89,7 @@ func cmdAdd(args []string) {
 	target := fs.String("target", envOr("EVCTL_TARGET", "http://localhost:9090"), "nginx frontdoor URL")
 	token := fs.String("token", os.Getenv("DISCORD_BOT_TOKEN"), "Discord bot token (or DISCORD_BOT_TOKEN env)")
 	channels := fs.String("channels", "", "comma-separated Discord channel IDs")
-	tenants := fs.String("tenants", "tenant-a,tenant-b,tenant-c", "comma-separated tenant tags (round-robin)")
+	tenants := fs.String("tenants", "asgard,babylon,camelot", "comma-separated tenant tags (round-robin)")
 	replicas := fs.String("replicas", "", "comma-separated replica indices (REQUIRED)")
 	name := fs.String("name", "discord.message", "EventDef name to register the source under")
 	_ = fs.Parse(args[1:])

@@ -15,8 +15,8 @@ import (
 // turning it up without changing code.
 //
 // tenants is a list of tenant tags to rotate through (round-robin) on
-// successive events. The stage-2 demo passes ["tenant-a", "tenant-b",
-// "tenant-c"] so subscribers from one tenant only see ~1/N events.
+// successive events. The stage-2 demo passes ["asgard", "babylon",
+// "camelot"] so subscribers from one tenant only see ~1/N events.
 // Nil / empty tenants means "no tag" — the stage-1 single-tenant
 // behavior where every subscriber sees every event.
 func runChatFeeder(ctx context.Context, pusher *eventsclient.Pusher, interval time.Duration, tenants []string) {

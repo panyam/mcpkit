@@ -22,7 +22,7 @@ N ?= 3
 #   make webhook  TENANT=A TOKEN=$T
 #   make inject   TENANT=A EVENT=chat.message TEXT="hi"
 # TENANT accepts A / B / C (case-insensitive) or a literal realm name
-# (e.g. tenant-a, my-custom-realm). The token comes from `make newtoken`.
+# (e.g. asgard, my-custom-realm). The token comes from `make newtoken`.
 TENANT  ?=
 TOKEN   ?= $(shell echo $$TOKEN)
 EVENT   ?= chat.message
@@ -44,10 +44,10 @@ DEMO_CLIENT_SECRET ?= mcpkit-demo-secret-DEMO-ONLY
 BACKENDS_COMPOSE      := ../../../docker/backends/docker-compose.yml
 OBSERVABILITY_COMPOSE := ../../../docker/observability/docker-compose.yml
 
-# tenant-realm derives a lowercase realm name from TENANT. Pass
-# TENANT=A → tenant-a; TENANT=tenant-x → tenant-x (preserves
-# already-prefixed names).
-tenant-realm = $(if $(filter tenant-%,$(1)),$(1),tenant-$(shell echo "$(1)" | tr A-Z a-z))
+# tenant-realm maps a shorthand TENANT letter to the canonical realm
+# name. A → asgard, B → babylon, C → camelot. Pass a literal realm
+# name (or any custom realm) and it's preserved unchanged.
+tenant-realm = $(strip $(if $(filter A a,$(1)),asgard,$(if $(filter B b,$(1)),babylon,$(if $(filter C c,$(1)),camelot,$(1)))))
 
 HOSTS_MARKER := # whole-enchilada hostnames — managed by make hosts-install
 HOSTS_NAMES  := nginx.whole-enchilada event-server.whole-enchilada \
@@ -146,22 +146,20 @@ newtoken-ci: ## Acquire a bearer token via ROPC (CI / scripting). TENANT=A|B|C U
 		--format=access-token-only
 	@echo
 
-poller: ## Long-running poll subscriber. TENANT=A|B|C plus either TOKEN=<bearer> or USERNAME=<u> PASSWORD=<p>.
-	@if [ -z "$(TOKEN)" ] && { [ -z "$(USERNAME)" ] || [ -z "$(PASSWORD)" ]; }; then \
-		echo "usage: make poller TENANT=A|B|C [TOKEN=<bearer> | USERNAME=<u> PASSWORD=<p>]" >&2; exit 2; fi
+poller: ## Long-running poll subscriber. TENANT=A|B|C plus either TOKEN=<bearer> or USERNAME=<u> [PASSWORD=<p>; defaults to USERNAME].
+	@if [ -z "$(TOKEN)" ] && [ -z "$(USERNAME)" ]; then \
+		echo "usage: make poller TENANT=A|B|C [TOKEN=<bearer> | USERNAME=<u> [PASSWORD=<p>]]" >&2; exit 2; fi
 	go -C poller run . --tenant $(call tenant-realm,$(TENANT)) \
 		$(if $(TOKEN),--token $(TOKEN)) \
-		$(if $(USERNAME),--username $(USERNAME)) \
-		$(if $(PASSWORD),--password $(PASSWORD)) \
+		$(if $(USERNAME),--username $(USERNAME) --password $(if $(PASSWORD),$(PASSWORD),$(USERNAME))) \
 		--event $(EVENT)
 
-webhook: ## Long-running webhook subscriber. TENANT=A|B|C plus either TOKEN=<bearer> or USERNAME=<u> PASSWORD=<p>.
-	@if [ -z "$(TOKEN)" ] && { [ -z "$(USERNAME)" ] || [ -z "$(PASSWORD)" ]; }; then \
-		echo "usage: make webhook TENANT=A|B|C [TOKEN=<bearer> | USERNAME=<u> PASSWORD=<p>]" >&2; exit 2; fi
+webhook: ## Long-running webhook subscriber. TENANT=A|B|C plus either TOKEN=<bearer> or USERNAME=<u> [PASSWORD=<p>; defaults to USERNAME].
+	@if [ -z "$(TOKEN)" ] && [ -z "$(USERNAME)" ]; then \
+		echo "usage: make webhook TENANT=A|B|C [TOKEN=<bearer> | USERNAME=<u> [PASSWORD=<p>]]" >&2; exit 2; fi
 	go -C webhook run . --tenant $(call tenant-realm,$(TENANT)) \
 		$(if $(TOKEN),--token $(TOKEN)) \
-		$(if $(USERNAME),--username $(USERNAME)) \
-		$(if $(PASSWORD),--password $(PASSWORD)) \
+		$(if $(USERNAME),--username $(USERNAME) --password $(if $(PASSWORD),$(PASSWORD),$(USERNAME))) \
 		--event $(EVENT)
 
 # Drivers — operator-runnable synthetic producers. Stack starts silent;
@@ -171,12 +169,12 @@ webhook: ## Long-running webhook subscriber. TENANT=A|B|C plus either TOKEN=<bea
 # TENANTS rotates round-robin across the comma-separated list (default:
 # all three).
 EVERY    ?=
-TENANTS  ?= tenant-a,tenant-b,tenant-c
+TENANTS  ?= asgard,babylon,camelot
 
-drive-chat: ## Synthetic chat.message producer. EVERY=2s (default), TENANTS=tenant-a,tenant-b,tenant-c.
+drive-chat: ## Synthetic chat.message producer. EVERY=2s (default), TENANTS=asgard,babylon,camelot.
 	go -C drivers/synth run . --event chat.message --tenants $(TENANTS) $(if $(EVERY),--every $(EVERY))
 
-drive-presence: ## Synthetic presence.changed producer. EVERY=5s (default), TENANTS=tenant-a,tenant-b,tenant-c.
+drive-presence: ## Synthetic presence.changed producer. EVERY=5s (default), TENANTS=asgard,babylon,camelot.
 	go -C drivers/synth run . --event presence.changed --tenants $(TENANTS) $(if $(EVERY),--every $(EVERY))
 
 # -------------------------------------------------------------------
@@ -221,7 +219,7 @@ alllogs: ## macOS+iTerm2 only — open one iTerm window with 3 vertically-stacke
 clear_all_tokens: ## Sign out every USER session in all 3 tenant realms (keeps mcp-event-server client creds intact).
 	@docker exec mcpkit-keycloak /opt/keycloak/bin/kcadm.sh config credentials \
 		--server http://keycloak:8080 --realm master --user admin --password admin >/dev/null
-	@for realm in tenant-a tenant-b tenant-c; do \
+	@for realm in asgard babylon camelot; do \
 		docker exec mcpkit-keycloak /opt/keycloak/bin/kcadm.sh create logout-all -r $$realm >/dev/null && \
 		echo "[clear_all_tokens] $$realm: all user sessions signed out"; \
 	done

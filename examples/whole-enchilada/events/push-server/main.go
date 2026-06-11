@@ -37,7 +37,7 @@ func main() {
 		"admin HTTP listen address (/healthz + /status)")
 	chatEvery := flag.Duration("chat-every", 2*time.Second, "cadence between synthetic chat messages")
 	presenceEvery := flag.Duration("presence-every", 5*time.Second, "cadence between synthetic presence transitions")
-	tenants := flag.String("tenants", envOr("PUSH_TENANTS", "tenant-a,tenant-b,tenant-c"),
+	tenants := flag.String("tenants", envOr("PUSH_TENANTS", "asgard,babylon,camelot"),
 		"comma-separated tenant tags; each emitted event rotates through them in order so subscribers from one tenant only see ~1/N of events. Empty string = no tag (stage-1 single-tenant mode)")
 	tel := common.RegisterTelemetryFlags(flag.CommandLine)
 	flag.Parse()
