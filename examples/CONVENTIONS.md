@@ -276,6 +276,47 @@ For walkthroughs that DO call `flag.Parse` (e.g. when they need
 example-specific flags), use `common.RegisterTelemetryFlags(flag.CommandLine)`
 instead of `ExporterFromArgs` — both populate the same struct shape.
 
+#### Logs wiring (issue 668)
+
+The same `--exporter` / `--otlp-endpoint` flag pair drives an optional
+`commonotel.SetupLogs(...)` call. When set, log records emitted via
+`slog.*Context(ctx, ...)` ship to the configured OTLP endpoint and
+carry `trace_id` / `span_id` stamped by the otelslog bridge — the
+Loki↔Tempo pivot in Grafana. Modes mirror `SetupTelemetry`:
+
+- `""` (default) — `slog.Default()`. No OTLP side, no SDK pulled.
+- `stdout` — `stdoutlog` exporter → otelslog bridge. JSON records on
+  the configured writer (default `os.Stdout`).
+- `otlp` — `otlploggrpc` exporter → otelslog bridge. Dial-failure
+  falls back to `slog.Default()` with a warning.
+- `auto` — same as `otlp` but silent on dial-failure.
+
+Canonical wiring inside `serve()` (extends the trace setup above):
+
+```go
+logsLogger, logsShutdown, err := commonotel.SetupLogs(context.Background(),
+    commonotel.WithExporter(*tel.Exporter),
+    commonotel.WithOTLPEndpoint(*tel.OTLPEndpoint),
+    commonotel.WithServiceName("<example-name>"),
+)
+if err != nil { log.Fatalf("commonotel.SetupLogs: %v", err) }
+defer logsShutdown(context.Background())
+slog.SetDefault(logsLogger)
+```
+
+Tool handlers then log via `slog.InfoContext(ctx, "msg", "k", "v")`
+— **always pass ctx**, otherwise the bridge can't read the active
+span and Grafana shows the log line without a trace pivot.
+
+`commonotel.SetupClientLogs(...)` is the walkthrough-side sibling
+(pre-sets `ClientInstrumentationName`).
+
+> **Coexistence with MCP `notifications/message`**: server-side
+> observability (this helper) and client-visible MCP logs
+> (`core.MCPLogHandler`) emit through distinct slog handlers and
+> don't interfere. A server can compose both via `slogmulti` or
+> two separate `*slog.Logger` instances.
+
 - Side endpoints (e.g. `/inject` for synthetic events) go through
   `server.WithMux(func(mux *http.ServeMux) { ... })` (in `TransportOptions`)
   — not a hand-rolled `http.Server{}`. Graceful shutdown is built into
