@@ -44,17 +44,17 @@ services:
         aliases:
           - nginx.whole-enchilada
     depends_on:
-{{range .EventServers}}      - event-server-{{.}}
-{{end}}{{range .PushServers}}      - push-server-{{.}}
-{{end}}      - receiver
+      - event-server-1
+      - push-server-1
+      - receiver
 
-{{range .EventServers}}
-  event-server-{{.}}:
+
+  event-server-1:
     build:
       context: ../../..
-      dockerfile: examples/events/whole-enchilada/event-server/Dockerfile
+      dockerfile: examples/whole-enchilada/events/event-server/Dockerfile
     environment:
-      EVENT_INJECT_BEARER: ${EVENT_INJECT_BEARER:-{{$.InjectBearer}}}
+      EVENT_INJECT_BEARER: ${EVENT_INJECT_BEARER:-stage-1-shared-secret}
       # Stage-2: introspection-mode auth. The event-server's
       # tryEnableIntrospection reads OAUTH_INTROSPECTION_URLS as a
       # comma-separated list of N introspection endpoints and wires a
@@ -64,7 +64,7 @@ services:
       # register a distinct client per realm).
       OAUTH_INTROSPECTION_URLS: http://keycloak.whole-enchilada:8080/realms/tenant-a/protocol/openid-connect/token/introspect,http://keycloak.whole-enchilada:8080/realms/tenant-b/protocol/openid-connect/token/introspect,http://keycloak.whole-enchilada:8080/realms/tenant-c/protocol/openid-connect/token/introspect
       OAUTH_CLIENT_ID: mcp-event-server
-      OAUTH_CLIENT_SECRET: ${OAUTH_CLIENT_SECRET:-{{$.KCResourceSecret}}}
+      OAUTH_CLIENT_SECRET: ${OAUTH_CLIENT_SECRET:-mcpkit-demo-secret-DEMO-ONLY}
       OAUTH_CACHE_TTL: ${OAUTH_CACHE_TTL:-5s}
       # OAUTH_ISSUER_BASE is the PUBLIC scheme://host:port that
       # appears in token iss claims — same value KC_HOSTNAME is set
@@ -134,38 +134,38 @@ services:
       whole-enchilada:
         aliases:
           - event-server.whole-enchilada
-          - event-server-{{.}}.whole-enchilada
+          - event-server-1.whole-enchilada
       mcpkit: {}
-{{end}}
-{{range .PushServers}}
-  push-server-{{.}}:
+
+
+  push-server-1:
     build:
       context: ../../..
-      dockerfile: examples/events/whole-enchilada/push-server/Dockerfile
+      dockerfile: examples/whole-enchilada/events/push-server/Dockerfile
     environment:
       EVENT_SERVER_URL: http://event-server.whole-enchilada:8080
-      EVENT_INJECT_BEARER: ${EVENT_INJECT_BEARER:-{{$.InjectBearer}}}
+      EVENT_INJECT_BEARER: ${EVENT_INJECT_BEARER:-stage-1-shared-secret}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-mcpkit-otel-collector:4317}
     command: ["-admin-addr", ":9091", "-chat-every", "2s", "-presence-every", "5s", "--exporter=${EXPORTER:-auto}", "--otlp-endpoint=${OTEL_EXPORTER_OTLP_ENDPOINT:-mcpkit-otel-collector:4317}"]
     expose:
       - "9091"
     depends_on:
-{{range $.EventServers}}      event-server-{{.}}:
+      event-server-1:
         condition: service_healthy
-{{end}}    networks:
+    networks:
       whole-enchilada:
         aliases:
           - pusher.whole-enchilada
-          - pusher-{{.}}.whole-enchilada
+          - pusher-1.whole-enchilada
       mcpkit: {}
-{{end}}
+
   receiver:
     build:
       context: ../../..
-      dockerfile: examples/events/whole-enchilada/receiver/Dockerfile
+      dockerfile: examples/whole-enchilada/events/receiver/Dockerfile
     environment:
-      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-{{.WebhookSecret}}}
-    command: ["-addr", ":9090", "-secret", "${WEBHOOK_SECRET:-{{.WebhookSecret}}}"]
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-whsec_demo_secret_change_me_in_production}
+    command: ["-addr", ":9090", "-secret", "${WEBHOOK_SECRET:-whsec_demo_secret_change_me_in_production}"]
     expose:
       - "9090"
     networks:

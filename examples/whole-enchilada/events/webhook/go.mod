@@ -1,15 +1,16 @@
-module github.com/panyam/mcpkit/examples/events/whole-enchilada/poller
+module github.com/panyam/mcpkit/examples/whole-enchilada/events/webhook
 
 go 1.26.4
 
 replace (
 	github.com/panyam/mcpkit => ../../../..
 	github.com/panyam/mcpkit/experimental/ext/events => ../../../../experimental/ext/events
+	github.com/panyam/mcpkit/experimental/ext/events/clients/go => ../../../../experimental/ext/events/clients/go
 )
 
 require (
 	github.com/panyam/mcpkit v0.2.45
-	github.com/panyam/mcpkit/experimental/ext/events v0.0.0-00010101000000-000000000000
+	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.0.0-00010101000000-000000000000
 )
 
 require (
@@ -21,6 +22,7 @@ require (
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/panyam/gocurrent v0.1.1 // indirect
 	github.com/panyam/goutils v0.1.8 // indirect
+	github.com/panyam/mcpkit/experimental/ext/events v0.0.0 // indirect
 	github.com/panyam/servicekit v0.1.2 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect

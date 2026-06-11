@@ -1,4 +1,4 @@
-module github.com/panyam/mcpkit/examples/events/whole-enchilada/walkthrough
+module github.com/panyam/mcpkit/examples/whole-enchilada/events/walkthrough
 
 go 1.26.4
 

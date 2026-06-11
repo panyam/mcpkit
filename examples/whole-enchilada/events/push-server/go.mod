@@ -1,4 +1,4 @@
-module github.com/panyam/mcpkit/examples/events/whole-enchilada/event-server
+module github.com/panyam/mcpkit/examples/whole-enchilada/events/push-server
 
 go 1.26.4
 
@@ -6,25 +6,13 @@ replace (
 	github.com/panyam/mcpkit => ../../../..
 	github.com/panyam/mcpkit/examples/common => ../../../common
 	github.com/panyam/mcpkit/experimental/ext/events => ../../../../experimental/ext/events
-	github.com/panyam/mcpkit/experimental/ext/events/stores/gorm => ../../../../experimental/ext/events/stores/gorm
-	github.com/panyam/mcpkit/experimental/ext/events/stores/redis => ../../../../experimental/ext/events/stores/redis
-	github.com/panyam/mcpkit/ext/auth => ../../../../ext/auth
+	github.com/panyam/mcpkit/experimental/ext/events/clients/go => ../../../../experimental/ext/events/clients/go
 	github.com/panyam/mcpkit/ext/otel => ../../../../ext/otel
 )
 
 require (
-	github.com/panyam/mcpkit v0.2.45
-	github.com/panyam/mcpkit/examples/common v0.0.0-20260608213911-f3a385b77e36
-	github.com/panyam/mcpkit/experimental/ext/events v0.0.0
-	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.0.0-00010101000000-000000000000
-	github.com/panyam/mcpkit/experimental/ext/events/stores/gorm v0.0.0-00010101000000-000000000000
-	github.com/panyam/mcpkit/experimental/ext/events/stores/redis v0.0.0-00010101000000-000000000000
-	github.com/panyam/mcpkit/ext/auth v0.0.0-00010101000000-000000000000
-	github.com/panyam/servicekit v0.1.2
-	github.com/redis/go-redis/v9 v9.20.0
-	github.com/stretchr/testify v1.11.1
-	gorm.io/driver/postgres v1.6.0
-	gorm.io/gorm v1.31.1
+	github.com/panyam/mcpkit/examples/common v0.0.0-00010101000000-000000000000
+	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.0.0
 )
 
 require (
@@ -49,20 +37,12 @@ require (
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
-	github.com/fernet/fernet-go v0.0.0-20240119011108-303da6aec611 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/golang-jwt/jwt/v5 v5.2.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
-	github.com/jackc/pgpassfile v1.0.0 // indirect
-	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgx/v5 v5.6.0 // indirect
-	github.com/jackc/puddle/v2 v2.2.2 // indirect
-	github.com/jinzhu/inflection v1.0.0 // indirect
-	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
@@ -75,12 +55,15 @@ require (
 	github.com/panyam/demokit/notebook v0.0.28 // indirect
 	github.com/panyam/gocurrent v0.1.1 // indirect
 	github.com/panyam/goutils v0.1.13 // indirect
+	github.com/panyam/mcpkit v0.2.45 // indirect
+	github.com/panyam/mcpkit/experimental/ext/events v0.0.0 // indirect
 	github.com/panyam/mcpkit/ext/otel v0.0.0-20260608053428-44b944d79f00 // indirect
-	github.com/panyam/oneauth v0.1.20 // indirect
+	github.com/panyam/servicekit v0.1.2 // indirect
 	github.com/panyam/templar v0.1.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
+	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
@@ -102,10 +85,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.44.0 // indirect
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
-	go.uber.org/atomic v1.11.0 // indirect
-	golang.org/x/crypto v0.51.0 // indirect
 	golang.org/x/net v0.55.0 // indirect
-	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.45.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
@@ -116,5 +96,3 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/panyam/mcpkit/experimental/ext/events/clients/go => ../../../../experimental/ext/events/clients/go
