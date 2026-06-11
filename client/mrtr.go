@@ -73,8 +73,25 @@ func CallToolWithInputs(ctx context.Context, c *Client, name string, args any, h
 		opt(&cfg)
 	}
 
-	// First call: bare tools/call with no inputResponses.
-	resp, err := c.Call("tools/call", map[string]any{
+	// SEP-414 P6 (issue 682): capture round 1's outbound traceparent so
+	// every subsequent round can stamp it as
+	// `_meta.io.modelcontextprotocol/tracelink`. Server-side trace
+	// middleware reads the link and AddLink's the round-2+ dispatch span
+	// back to round-1's, stitching the logical operation across separate
+	// W3C traces. Star semantic — every round 2+ links to round 1, not
+	// the immediately-previous round, so backends show round 1 as the
+	// anchor regardless of how deep the loop goes.
+	//
+	// Holder remains zero when tracing isn't configured (Noop path) — the
+	// per-round Inject is a no-op in that case, so this costs at most
+	// one ctx.Value allocation on the unconfigured path.
+	ctx, capturedTC := core.WithCapturedTraceContext(ctx)
+
+	// First call: bare tools/call with no inputResponses. Use callImpl
+	// so the captured-trace-context ctx (above) actually reaches the
+	// trace middleware — Client.Call uses context.Background() and
+	// would drop our holder.
+	resp, err := c.callImpl(ctx, "tools/call", map[string]any{
 		"name":      name,
 		"arguments": args,
 	})
@@ -85,6 +102,10 @@ func CallToolWithInputs(ctx context.Context, c *Client, name string, args any, h
 	if err != nil {
 		return nil, err
 	}
+	// Snapshot the round-1 identity (if any) before the holder gets
+	// overwritten by round-2's middleware. Subsequent rounds all link
+	// to this anchor, not to the immediately-previous round.
+	round1TC := *capturedTC
 
 	for round := 0; res.IsInputRequired(); round++ {
 		if round >= cfg.maxRounds {
@@ -110,7 +131,14 @@ func CallToolWithInputs(ctx context.Context, c *Client, name string, args any, h
 		if res.InputRequired.RequestState != "" {
 			params["requestState"] = res.InputRequired.RequestState
 		}
-		resp, err := c.Call("tools/call", params)
+		// Stamp the round-1 tracelink onto round-2+ params so the
+		// server dispatch span AddLinks back to round 1. Zero-TC is a
+		// no-op so the unconfigured path stays clean.
+		var callParams any = params
+		if !round1TC.IsZero() {
+			callParams = core.InjectTraceLinkIntoParams(params, round1TC)
+		}
+		resp, err := c.callImpl(ctx, "tools/call", callParams)
 		if err != nil {
 			return nil, err
 		}

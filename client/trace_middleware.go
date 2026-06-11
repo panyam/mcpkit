@@ -107,9 +107,28 @@ func traceMiddleware(c *Client, tp core.TracerProvider) ClientMiddleware {
 		defer span.End()
 
 		outbound := core.TraceContextFromContext(ctx)
+		// SEP-414 P6 (issue 682): publish the outbound identity into the
+		// captured-trace-context holder when one is present on ctx. MRTR's
+		// CallToolWithInputs reads it back after round 1 to stamp round-2+
+		// requests' `_meta.io.modelcontextprotocol/tracelink`. The holder
+		// is goroutine-private (caller allocates fresh per call) so this
+		// write is safe and lock-free.
+		if !outbound.IsZero() {
+			if holder := core.CapturedTraceContextHolder(ctx); holder != nil {
+				*holder = outbound
+			}
+		}
 		injected := params
 		if !outbound.IsZero() {
-			injected = core.InjectTraceContextIntoParams(params, outbound)
+			injected = core.InjectTraceContextIntoParams(injected, outbound)
+		}
+		// W3C Baggage rides alongside the trace context. Read the
+		// active baggage from ctx and stamp `_meta.baggage` on the
+		// outbound params; caller-set values win (InjectBaggageIntoParams
+		// honors the same precedence as the trace-context inject).
+		outboundBaggage := core.BaggageFromContext(ctx)
+		if !outboundBaggage.IsZero() {
+			injected = core.InjectBaggageIntoParams(injected, outboundBaggage)
 		}
 
 		res, err := next(ctx, method, injected)
@@ -132,6 +151,11 @@ func traceMiddleware(c *Client, tp core.TracerProvider) ClientMiddleware {
 func traceInboundDispatch(tp core.TracerProvider, ctx context.Context, req *core.Request) (context.Context, core.Span) {
 	tc := core.ExtractTraceContextFromParams(req.Params)
 	ctx = core.WithTraceContext(ctx, tc)
+	// W3C Baggage on inbound server-to-client requests follows the
+	// same shape: read once from `_meta.baggage`, attach via ctx so
+	// the handler can see it via core.BaggageFromContext.
+	bg := core.ExtractBaggageFromParams(req.Params)
+	ctx = core.WithBaggage(ctx, bg)
 	attrs := []core.Attribute{
 		{Key: "mcp.method", Value: req.Method},
 	}

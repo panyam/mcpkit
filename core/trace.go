@@ -34,6 +34,21 @@ import (
 const (
 	MetaKeyTraceparent = "traceparent"
 	MetaKeyTracestate  = "tracestate"
+
+	// MetaKeyTraceLink carries the W3C `traceparent` of a logically-related
+	// upstream span that should be attached as an OTel Link to the
+	// receiving dispatch span. Used by SEP-2322 MRTR multi-round-trip
+	// requests (issue 682) so round-2's server dispatch span links back
+	// to round-1's, stitching the logical operation across separate
+	// W3C traces.
+	//
+	// Vendor-namespaced because W3C doesn't define a `tracelink` field;
+	// bare names are reserved for W3C-defined keys (see MetaKeyTraceparent).
+	// The mcpkit-side convention is fixed; upstream MCP WG standardization
+	// of a bare cross-SDK name is a future-discussion item — when (if)
+	// that lands, this constant gets a sibling under the new name, with
+	// adapters reading both during the transition window.
+	MetaKeyTraceLink = "io.modelcontextprotocol/tracelink"
 )
 
 // TraceContext is the propagated W3C Trace Context for a single MCP
@@ -396,6 +411,88 @@ func InjectTraceContextIntoParams(params any, tc TraceContext) any {
 	return obj
 }
 
+// ExtractTraceLinkFromParams reads `_meta.io.modelcontextprotocol/tracelink`
+// from a JSON-RPC request's raw `params` envelope, returning the carried
+// W3C traceparent as a TraceContext (Tracestate is intentionally NOT
+// part of the link payload — a link is identity-only, not a full
+// propagation context). Returns a zero TraceContext when params is nil /
+// non-object / missing the key, or when the value fails W3C
+// structural validation (same rules ExtractTraceContext applies).
+//
+// Used by the server's SEP-414 P2 trace middleware to detect MRTR
+// round-2+ requests and Add an OTel Link from the new dispatch span
+// back to the originating round-1 span — see SEP-414 P6 / issue 682.
+//
+// Defensive: never panics on malformed input.
+func ExtractTraceLinkFromParams(params json.RawMessage) TraceContext {
+	if len(params) == 0 {
+		return TraceContext{}
+	}
+	var envelope struct {
+		Meta map[string]any `json:"_meta"`
+	}
+	if err := json.Unmarshal(params, &envelope); err != nil {
+		return TraceContext{}
+	}
+	if envelope.Meta == nil {
+		return TraceContext{}
+	}
+	tp, _ := envelope.Meta[MetaKeyTraceLink].(string)
+	if !isValidTraceparent(tp) {
+		return TraceContext{}
+	}
+	return TraceContext{Traceparent: tp}
+}
+
+// InjectTraceLinkIntoParams returns a params value with
+// `_meta.io.modelcontextprotocol/tracelink` populated from tc.
+// Contract mirrors InjectTraceContextIntoParams:
+//
+//   - If tc is zero, params is returned unchanged.
+//   - If params is nil, a fresh map with just `_meta` is returned.
+//   - If params marshals to a JSON object, `_meta` is read/created and
+//     the tracelink key is set. Existing entries are preserved (the
+//     injection never clobbers — explicit caller-set values win).
+//   - If params marshals but is not a JSON object (positional array,
+//     scalar, etc.), the value is returned unchanged.
+//
+// Tracestate is intentionally NOT injected — the tracelink field carries
+// link IDENTITY only, not a full propagation context. Backends use the
+// link's traceparent to navigate; tracestate vendor data isn't relevant
+// to the link relationship.
+//
+// Used by the SEP-2322 MRTR client loop (CallToolWithInputs) on rounds
+// 2+ to stamp the round-1 traceparent so the server dispatch span can
+// AddLink back to it. SEP-414 P6 / issue 682.
+func InjectTraceLinkIntoParams(params any, tc TraceContext) any {
+	if tc.IsZero() {
+		return params
+	}
+	if params == nil {
+		return map[string]any{"_meta": map[string]any{MetaKeyTraceLink: tc.Traceparent}}
+	}
+	raw, err := json.Marshal(params)
+	if err != nil {
+		return params
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return params
+	}
+	if obj == nil {
+		obj = map[string]any{}
+	}
+	meta, _ := obj["_meta"].(map[string]any)
+	if meta == nil {
+		meta = map[string]any{}
+	}
+	if _, exists := meta[MetaKeyTraceLink]; !exists {
+		meta[MetaKeyTraceLink] = tc.Traceparent
+	}
+	obj["_meta"] = meta
+	return obj
+}
+
 // isValidTraceparent enforces the W3C version-00 structural form:
 // `00-<32-hex-trace-id>-<16-hex-span-id>-<2-hex-flags>` with all
 // lowercase hex. Trace-id and span-id MUST NOT be all-zero (W3C
@@ -578,4 +675,53 @@ func SpanFromContext(ctx context.Context) Span {
 		return span
 	}
 	return noopSpan{}
+}
+
+// --- Captured trace-context plumbing (P6 / issue 682) -----------------------
+
+type capturedTraceContextCtxKey struct{}
+
+// WithCapturedTraceContext returns a derived context carrying a holder
+// the TracerProvider adapter (or trace middleware) writes the call's
+// outbound TraceContext into. Used by callers that need to learn what
+// identity their outbound call ended up emitting under, without
+// changing the Call / Notify return shape.
+//
+// Primary consumer: SEP-2322 MRTR's CallToolWithInputs (issue 682).
+// Round 1's tools/call goes through the client trace middleware, which
+// writes the round-1 span's identity into the holder. CallToolWithInputs
+// reads the holder, captures round-1's traceparent, and on subsequent
+// rounds stamps it as `_meta.io.modelcontextprotocol/tracelink` so the
+// server dispatch span can AddLink back to it. Star-link semantic —
+// every round 2+ links to round 1, not the previous round.
+//
+// The holder is goroutine-private (each WithCapturedTraceContext call
+// allocates a fresh holder). The middleware writes to the holder at
+// most once per call (after StartSpan resolves the outbound identity).
+// Reading the holder after the call completes is safe — no concurrent
+// writes once the call has returned.
+//
+// Zero overhead unconfigured: when neither the middleware nor the caller
+// reads the holder, this is a single ctx.WithValue allocation per call
+// site that opts in. Holder pointers are NOT propagated by
+// context.WithoutCancel / detach — the holder is scoped to the active
+// request's ctx tree.
+func WithCapturedTraceContext(ctx context.Context) (context.Context, *TraceContext) {
+	holder := &TraceContext{}
+	return context.WithValue(ctx, capturedTraceContextCtxKey{}, holder), holder
+}
+
+// CapturedTraceContextHolder returns the holder a previous
+// WithCapturedTraceContext placed on ctx, or nil if none. TracerProvider
+// adapters and trace middleware call this immediately after StartSpan
+// resolves the outbound TraceContext and (if non-nil holder) write the
+// new identity into *holder.
+//
+// Defensive: nil-holder is silently the no-op path — callers writing
+// into the holder check non-nil first. Reading by the requester after
+// the call completes always returns the holder they constructed via
+// WithCapturedTraceContext — no nil-check needed on that side.
+func CapturedTraceContextHolder(ctx context.Context) *TraceContext {
+	holder, _ := ctx.Value(capturedTraceContextCtxKey{}).(*TraceContext)
+	return holder
 }
