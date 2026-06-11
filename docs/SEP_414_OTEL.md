@@ -541,7 +541,7 @@ yield(ctx, data) on replica A
                └─ yield(ctx, data) on replica B (same TraceID)
 ```
 
-Demo wiring lives in `examples/events/whole-enchilada/event-server/main.go` (`events.WithWebhookTracerProvider(tp)` threaded against the existing `commonotel.SetupTelemetry` TP). Adopter sweep (PR 714) updated `examples/events/discord` and `examples/events/telegram` to the new `yield(ctx, ...)` / `SetMetaFunc(ctx, ...)` signatures. Cross-replica peer-fanout Emitter (Redis pubsub) tracked on panyam/mcpkit#634 + panyam/mcpkit#639 with concrete design comments added.
+Demo wiring lives in `examples/whole-enchilada/events/event-server/main.go` (`events.WithWebhookTracerProvider(tp)` threaded against the existing `commonotel.SetupTelemetry` TP). Adopter sweep (PR 714) updated `examples/events/discord` and `examples/events/telegram` to the new `yield(ctx, ...)` / `SetMetaFunc(ctx, ...)` signatures. Cross-replica peer-fanout Emitter (Redis pubsub) tracked on panyam/mcpkit#634 + panyam/mcpkit#639 with concrete design comments added.
 
 ### Events fanout span emission — landed (issue 724; PR 730)
 

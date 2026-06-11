@@ -25,7 +25,7 @@
 
 networks:
   # `mcpkit` is a shared bridge network so mcpkit examples running in
-  # OTHER compose stacks (eg examples/events/whole-enchilada/) can
+  # OTHER compose stacks (eg examples/whole-enchilada/events/) can
   # export OTLP to this collector by container name
   # (mcpkit-otel-collector:4317). `name: mcpkit` keeps the network's
   # docker-side name literal — no project prefix — so cross-compose

@@ -37,7 +37,7 @@ func runDemo() {
 
 	demo := demokit.New("MCP Events — kitchen-sink (per-subscription showcase)").
 		Dir("events/kitchen-sink").
-		Description("Single-process showcase of the per-subscription delivery surface added by the η work. Three event sources fan out to several distinct subscribers per source with different params, so the spec's per-subscription Match / Transform / OnSubscribe + EmitToSubscription model is actually visible on the wire instead of being theoretical. Companion to examples/events/whole-enchilada/ which exercises the deploy axis.").
+		Description("Single-process showcase of the per-subscription delivery surface added by the η work. Three event sources fan out to several distinct subscribers per source with different params, so the spec's per-subscription Match / Transform / OnSubscribe + EmitToSubscription model is actually visible on the wire instead of being theoretical. Companion to examples/whole-enchilada/events/ which exercises the deploy axis.").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this walkthrough)"),
 			demokit.Actor("Server", "MCP Events server (make serve)"),
@@ -257,7 +257,7 @@ func runDemo() {
 		"- **EventDef hook fields** — `experimental/ext/events/events.go` (`EventDef.Match` / `Transform` / `OnSubscribe` / `OnUnsubscribe`).",
 		"- **Targeted emit** — `experimental/ext/events/emit_targeted.go`.",
 		"- **Quota wire shape** — `experimental/ext/events/quota.go`.",
-		"- **Companion demos** — `examples/events/discord/` (one source, real bot), `examples/events/telegram/` (one source, real bot), `examples/events/whole-enchilada/` (multi-tier deploy, synthetic upstreams).",
+		"- **Companion demos** — `examples/events/discord/` (one source, real bot), `examples/events/telegram/` (one source, real bot), `examples/whole-enchilada/events/` (multi-tier deploy, synthetic upstreams).",
 	)
 
 	demo.Execute()
