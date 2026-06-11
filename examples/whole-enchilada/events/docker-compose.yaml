@@ -4,10 +4,10 @@
 # whole-enchilada / events — production-shape MCP Events demo, stage 2.
 #
 # This compose owns ONLY the events-specific services (nginx, event-
-# server replicas, push-server replicas, webhook receiver). The shared
-# infra (Keycloak, Postgres, Redis, LGTM observability) lives in
-# sibling composes under ./docker/ and bridges via the literal
-# `mcpkit` docker network. Bring them up first:
+# server replicas, webhook receiver). The shared infra (Keycloak,
+# Postgres, Redis, LGTM observability) lives in sibling composes under
+# ./docker/ and bridges via the literal `mcpkit` docker network.
+# Bring them up first:
 #
 #   make -C ../../../docker up STACK=backends
 #   make -C ../../../docker up STACK=observability    # optional
@@ -20,9 +20,15 @@
 #   nginx.whole-enchilada            — frontdoor (port 80)
 #   event-server.whole-enchilada     — round-robin to all event-server replicas
 #   event-server-<i>.whole-enchilada — direct pin to replica i (1..N)
-#   pusher.whole-enchilada           — round-robin to all push-server replicas
-#   pusher-<i>.whole-enchilada       — direct pin to replica i (1..M)
 #   receiver.whole-enchilada         — example webhook consumer
+#
+# Synthetic producers (chat / presence) ran in an in-compose push-server
+# tier in earlier revisions; they're now operator-runnable host drivers
+# under drivers/synth/ (one binary, vocab selected via --event). `make
+# drive-chat` and `make drive-presence` from sibling terminals start
+# them — stack comes up silent until the operator fires a driver.
+# push-server source code stays in push-server/ as a reference for the
+# production-shape HTTPSource pattern.
 #
 # Shared infra (on the `mcpkit` network — bare aliases):
 #
@@ -61,7 +67,6 @@ services:
           - nginx.whole-enchilada
     depends_on:
       - event-server-1
-      - push-server-1
       - receiver
 
 
@@ -152,28 +157,6 @@ services:
         aliases:
           - event-server.whole-enchilada
           - event-server-1.whole-enchilada
-      mcpkit: {}
-
-
-  push-server-1:
-    build:
-      context: ../../..
-      dockerfile: examples/whole-enchilada/events/push-server/Dockerfile
-    environment:
-      EVENT_SERVER_URL: http://event-server.whole-enchilada:8080
-      EVENT_INJECT_BEARER: ${EVENT_INJECT_BEARER:-stage-1-shared-secret}
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-mcpkit-otel-collector:4317}
-    command: ["-admin-addr", ":9091", "-chat-every", "2s", "-presence-every", "5s", "--exporter=${EXPORTER:-auto}", "--otlp-endpoint=${OTEL_EXPORTER_OTLP_ENDPOINT:-mcpkit-otel-collector:4317}"]
-    expose:
-      - "9091"
-    depends_on:
-      event-server-1:
-        condition: service_healthy
-    networks:
-      whole-enchilada:
-        aliases:
-          - pusher.whole-enchilada
-          - pusher-1.whole-enchilada
       mcpkit: {}
 
   receiver:
