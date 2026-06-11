@@ -205,6 +205,12 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 	if r.Header.Get(httpHeaderTraceparent) != "" {
 		r = r.WithContext(withTraceContextFromHTTPHeaders(r.Context(), r.Header))
 	}
+	// W3C Baggage propagation runs symmetrically — a separate W3C
+	// standard, but it rides the same HTTP-header → ctx bridge so
+	// handlers can read it via `core.BaggageFromContext`.
+	if r.Header.Get(httpHeaderBaggage) != "" {
+		r = r.WithContext(withBaggageFromHTTPHeaders(r.Context(), r.Header))
+	}
 
 	body, claims, ok := readAndAuthorize(w, r, t.server)
 	if !ok {
