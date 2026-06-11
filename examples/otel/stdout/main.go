@@ -117,6 +117,22 @@ func serve() {
 	defer logsShutdown(context.Background())
 	slog.SetDefault(logsLogger)
 
+	// Issue 668 (metrics half): wire the MeterProvider so the dispatch
+	// path emits mcp.tool.calls / mcp.tool.duration / mcp.jsonrpc.errors
+	// / mcp.sessions.active. The ext/otel adapter forwards ctx so every
+	// measurement carries an exemplar pointing at the active span —
+	// Grafana renders metric panels with clickable dots that jump to
+	// the matching trace in Tempo.
+	meterProvider, metricsShutdown, err := commonotel.SetupMetrics(context.Background(),
+		commonotel.WithExporter(*exporter),
+		commonotel.WithOTLPEndpoint(*otlpEndpoint),
+		commonotel.WithServiceName(serverServiceName),
+	)
+	if err != nil {
+		log.Fatalf("commonotel.SetupMetrics: %v", err)
+	}
+	defer metricsShutdown(context.Background())
+
 	log.Printf("[otel-stdout-demo] exporter=%s service.name=%s", *exporter, serverServiceName)
 	if *exporter == commonotel.ExporterOTLP {
 		log.Printf("[otel-stdout-demo] OTLP gRPC endpoint: %s", *otlpEndpoint)
@@ -133,6 +149,7 @@ func serve() {
 		Name:           "otel-stdout-demo",
 		Addr:           *addr,
 		TracerProvider: tp,
+		MeterProvider:  meterProvider,
 		Register:       registerDemoTools,
 	}); err != nil {
 		log.Fatalf("ListenAndServe: %v", err)
