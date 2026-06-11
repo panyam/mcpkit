@@ -120,7 +120,15 @@ func traceMiddleware(c *Client, tp core.TracerProvider) ClientMiddleware {
 		}
 		injected := params
 		if !outbound.IsZero() {
-			injected = core.InjectTraceContextIntoParams(params, outbound)
+			injected = core.InjectTraceContextIntoParams(injected, outbound)
+		}
+		// W3C Baggage rides alongside the trace context. Read the
+		// active baggage from ctx and stamp `_meta.baggage` on the
+		// outbound params; caller-set values win (InjectBaggageIntoParams
+		// honors the same precedence as the trace-context inject).
+		outboundBaggage := core.BaggageFromContext(ctx)
+		if !outboundBaggage.IsZero() {
+			injected = core.InjectBaggageIntoParams(injected, outboundBaggage)
 		}
 
 		res, err := next(ctx, method, injected)
@@ -143,6 +151,11 @@ func traceMiddleware(c *Client, tp core.TracerProvider) ClientMiddleware {
 func traceInboundDispatch(tp core.TracerProvider, ctx context.Context, req *core.Request) (context.Context, core.Span) {
 	tc := core.ExtractTraceContextFromParams(req.Params)
 	ctx = core.WithTraceContext(ctx, tc)
+	// W3C Baggage on inbound server-to-client requests follows the
+	// same shape: read once from `_meta.baggage`, attach via ctx so
+	// the handler can see it via core.BaggageFromContext.
+	bg := core.ExtractBaggageFromParams(req.Params)
+	ctx = core.WithBaggage(ctx, bg)
 	attrs := []core.Attribute{
 		{Key: "mcp.method", Value: req.Method},
 	}

@@ -651,3 +651,120 @@ func TestTraceMiddleware_MalformedTracelink_DroppedSilently(t *testing.T) {
 	require.Len(t, spans, 1)
 	assert.Equal(t, 0, spans[0].linkCount(), "malformed tracelink MUST be silently dropped — no AddLink")
 }
+
+// --- W3C Baggage propagation (sibling to trace context) -----------------
+
+// TestTraceMiddleware_ExtractsBaggageFromMeta pins the inbound contract:
+// `_meta.baggage` from the wire ends up on ctx where handlers can read
+// it via core.BaggageFromContext.
+func TestTraceMiddleware_ExtractsBaggageFromMeta(t *testing.T) {
+	tp := &fakeTracerProvider{}
+	srv := newInitializedServer(t, WithTracerProvider(tp))
+
+	var observed core.Baggage
+	srv.RegisterTool(core.ToolDef{Name: "peek"}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+		observed = ctx.Baggage()
+		return core.TextResult("ok"), nil
+	})
+
+	params := `{"name":"peek","_meta":{"baggage":"userId=alice,tenant=acme"}}`
+	_, err := dispatchToolsCall(t, srv, context.Background(), params, nil, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, core.Baggage("userId=alice,tenant=acme"), observed,
+		"handler MUST observe inbound _meta.baggage via ctx.Baggage()")
+}
+
+// TestTraceMiddleware_InjectsBaggageOnOutboundNotify pins the outbound
+// contract: when the inbound request carries baggage, every outbound
+// notification (server-to-client) emitted by the handler carries the
+// same `_meta.baggage` value.
+func TestTraceMiddleware_InjectsBaggageOnOutboundNotify(t *testing.T) {
+	tp := &fakeTracerProvider{}
+	srv := newInitializedServer(t, WithTracerProvider(tp))
+	srv.RegisterTool(core.ToolDef{Name: "emit"}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+		ctx.Notify("notifications/test", map[string]any{"hello": "world"})
+		return core.TextResult("ok"), nil
+	})
+
+	var captured []map[string]any
+	notify := core.NotifyFunc(func(method string, params any) {
+		raw, _ := json.Marshal(params)
+		var obj map[string]any
+		_ = json.Unmarshal(raw, &obj)
+		captured = append(captured, obj)
+	})
+
+	params := `{"name":"emit","_meta":{"traceparent":"` + tpInbound + `","baggage":"userId=alice"}}`
+	_, err := dispatchToolsCall(t, srv, context.Background(), params, notify, nil)
+	require.NoError(t, err)
+
+	require.Len(t, captured, 1)
+	meta, ok := captured[0]["_meta"].(map[string]any)
+	require.True(t, ok, "outbound notification MUST carry _meta")
+	assert.Equal(t, "userId=alice", meta[core.MetaKeyBaggage],
+		"outbound notification _meta.baggage MUST mirror inbound")
+}
+
+// TestTraceMiddleware_BaggageHTTPHeaderBridge pins the SEP-2028
+// inbound bridge for baggage: the HTTP `Baggage` header on a real
+// POST lands on ctx alongside the trace context.
+func TestTraceMiddleware_BaggageHTTPHeaderBridge(t *testing.T) {
+	tp := &fakeTracerProvider{}
+	srv := NewServer(core.ServerInfo{Name: "baggage-http", Version: "1.0"},
+		WithTracerProvider(tp))
+
+	var observed core.Baggage
+	srv.RegisterTool(core.ToolDef{Name: "peek"}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+		observed = ctx.Baggage()
+		return core.TextResult("ok"), nil
+	})
+
+	handler := srv.Handler(WithStreamableHTTP(true), WithStateless(true))
+
+	body := strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"peek"}}`)
+	r, err := http.NewRequest(http.MethodPost, "/mcp", body)
+	require.NoError(t, err)
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Accept", "application/json, text/event-stream")
+	r.Header.Set(httpHeaderBaggage, "userId=carol,tenant=widgets")
+
+	w := newRespRecorder()
+	handler.ServeHTTP(w, r)
+
+	require.Equal(t, http.StatusOK, w.statusCode())
+	assert.Equal(t, core.Baggage("userId=carol,tenant=widgets"), observed,
+		"HTTP Baggage header MUST bridge into ctx.Baggage()")
+}
+
+// TestTraceMiddleware_InBandBaggageWinsOverHTTP pins the precedence
+// rule: when both `_meta.baggage` and the HTTP `Baggage` header are
+// present, the in-band value wins (mirror of the trace-context
+// resolution rule).
+func TestTraceMiddleware_InBandBaggageWinsOverHTTP(t *testing.T) {
+	tp := &fakeTracerProvider{}
+	srv := NewServer(core.ServerInfo{Name: "baggage-precedence", Version: "1.0"},
+		WithTracerProvider(tp))
+
+	var observed core.Baggage
+	srv.RegisterTool(core.ToolDef{Name: "peek"}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+		observed = ctx.Baggage()
+		return core.TextResult("ok"), nil
+	})
+
+	handler := srv.Handler(WithStreamableHTTP(true), WithStateless(true))
+
+	body := strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"peek","_meta":{"baggage":"from=meta"}}}`)
+	r, err := http.NewRequest(http.MethodPost, "/mcp", body)
+	require.NoError(t, err)
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Accept", "application/json, text/event-stream")
+	r.Header.Set(httpHeaderBaggage, "from=header")
+
+	w := newRespRecorder()
+	handler.ServeHTTP(w, r)
+
+	require.Equal(t, http.StatusOK, w.statusCode())
+	assert.Equal(t, core.Baggage("from=meta"), observed,
+		"in-band _meta.baggage MUST win over HTTP Baggage header")
+}

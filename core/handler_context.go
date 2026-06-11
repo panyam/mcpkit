@@ -212,6 +212,30 @@ func (bc BaseContext) TraceContext() TraceContext {
 	return TraceContextFromContext(bc.Context)
 }
 
+// Baggage returns the active W3C Baggage list for this request, or a
+// zero Baggage when none has been attached. Symmetric to TraceContext()
+// — same dispatch-layer plumbing extracts `_meta.baggage` from the
+// inbound request and attaches it via core.WithBaggage before the
+// handler runs.
+//
+// W3C Baggage is a separate W3C standard from W3C Trace Context (they
+// can version independently — see SEP-2028 § Predefined Groups), but
+// they're commonly propagated together. Use this accessor to read
+// arbitrary key=value pairs the upstream caller chose to propagate
+// (e.g. tenant_id, user_id, feature flags).
+//
+// The value is opaque to mcpkit core — the comma-separated W3C list
+// format is parsed by adapters (the OTel propagator already implements
+// the W3C parsing rules). Use Baggage.IsZero to detect absence.
+//
+// Stamped onto outbound MCP messages alongside the trace context by
+// the server's trace middleware, and onto outbound HTTP calls via
+// core.HTTPForwardTransport when handlers compose it into their
+// http.Client.
+func (bc BaseContext) Baggage() Baggage {
+	return BaggageFromContext(bc.Context)
+}
+
 // --- BaseContext methods (shared by all handler types) ---
 
 // EmitLog sends a log notification at the given severity level.
