@@ -79,6 +79,67 @@ and the surface is unchanged — the adapter consumes an
 |---|---|
 | `mcpotel.WithInstrumentationName(name string)` | Override the OTel instrumentation library name (default: `"github.com/panyam/mcpkit/server"`). |
 
+## Metrics (issue 7)
+
+`mcpotel.NewMeterProvider(otelMP)` is the sibling to `NewProvider` for
+the `core.MeterProvider` seam. Wire it via `server.WithMeterProvider`
+and the dispatch path will emit the canonical MCP server metrics:
+
+```go
+import (
+    sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+    "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
+
+    "github.com/panyam/mcpkit/core"
+    "github.com/panyam/mcpkit/server"
+    mcpotel "github.com/panyam/mcpkit/ext/otel"
+)
+
+exp, err := otlpmetricgrpc.New(ctx)
+if err != nil { /* handle */ }
+otelMP := sdkmetric.NewMeterProvider(
+    sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exp)),
+)
+defer otelMP.Shutdown(ctx)
+
+srv := server.NewServer(
+    core.ServerInfo{Name: "my-server", Version: "0.1.0"},
+    server.WithTracerProvider(mcpotel.NewProvider(otelTP)),
+    server.WithMeterProvider(mcpotel.NewMeterProvider(otelMP)),
+)
+```
+
+Canonical instruments emitted from `server/metrics_middleware.go`:
+
+| Metric | Type | Unit | Labels | Meaning |
+|---|---|---|---|---|
+| `mcp.tool.calls` | int64 counter | `1` | `tool` | Every `tools/call` dispatch. |
+| `mcp.jsonrpc.errors` | int64 counter | `1` | `code` | Every JSON-RPC error response. |
+| `mcp.tool.duration` | float64 histogram | `ms` | `tool` | Handler-attributable tool latency. |
+| `mcp.sessions.active` | int64 up-down counter | `1` | — | Currently active streamable HTTP sessions. |
+
+### Exemplars (default-on)
+
+Every measurement forwards the active context to the underlying OTel
+instrument. The OTel SDK's default exemplar filter
+(`AlwaysOnSampleParent`) reads the active span via the same ctx
+accessor `core.SpanFromContext` consumes and stamps an exemplar on
+the measurement — Grafana + Mimir render clickable dots that pivot
+to the matching Tempo trace, closing the metric ↔ trace loop the
+SEP-414 work opened.
+
+| Option | Effect |
+|---|---|
+| `mcpotel.WithMeterInstrumentationName(name string)` | Override the OTel instrumentation library name for the meter scope (default: `"github.com/panyam/mcpkit/server"`). |
+
+### Coexistence with traces
+
+`MeterProvider` and `Provider` are independent objects backed by
+distinct OTel SDK providers (`MeterProvider` and `TracerProvider`).
+Typical wiring uses a single OTel resource (service.name,
+deployment.environment, ...) across both so Grafana's pivot finds
+both halves of the same service.
+
 ## Verification
 
 ```
