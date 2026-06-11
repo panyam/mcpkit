@@ -1,0 +1,4 @@
+# Host bind-mount data for Postgres + Redis. Survives `make -C docker
+# down STACK=backends`; deleted only by an explicit `rm -rf data/` or
+# `down -v`.
+data/

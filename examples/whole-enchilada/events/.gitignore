@@ -5,9 +5,8 @@ receiver/receiver
 walkthrough/walkthrough
 tools/gen-compose/gen-compose
 bin/
-# host bind-mount data for the stage-3 backends (Postgres + Redis AOF).
-# Survives `make down`; `make clean` wipes.
-data/
+# Postgres + Redis bind-mount data moved to docker/backends/data/ as
+# part of the backends extraction (PR 2). See docker/backends/.gitignore.
 # go-build artifacts from running `make build` or `go build` in the leaf binaries
 poller/poller
 webhook/webhook
