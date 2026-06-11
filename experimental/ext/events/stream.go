@@ -114,7 +114,7 @@ type errPayload struct {
 	Message string `json:"message"`
 }
 
-func registerStream(srv *server.Server, sourceMap map[string]EventSource, unsafeAnon string, heartbeat time.Duration, idx SubscriptionIndexStore, quota *Quota) {
+func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartbeat time.Duration, idx SubscriptionIndexStore, quota *Quota) {
 	if heartbeat <= 0 {
 		heartbeat = defaultStreamHeartbeatInterval
 	}
@@ -130,7 +130,7 @@ func registerStream(srv *server.Server, sourceMap map[string]EventSource, unsafe
 		if err := json.Unmarshal(params, &req); err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 		}
-		source, ok := sourceMap[req.Name]
+		source, ok := reg.Source(req.Name)
 		if !ok {
 			return newNotFoundError(id, "event", "NotFound")
 		}
