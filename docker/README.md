@@ -1,35 +1,30 @@
 # docker/
 
 Local docker-compose stacks for mcpkit development. Each subdirectory
-is one independent stack. Today there is one:
+is one independent stack with its own `Makefile`; `cd` into the one
+you want and run `make up`:
 
 - [`observability/`](./observability/) — OpenTelemetry Collector +
   Tempo + Loki + Mimir + Grafana. Receives OTLP from any mcpkit
   example with `--exporter=otlp` (or any OTLP-aware emitter) and
   unifies traces / logs / metrics under a single Grafana UI at
   `http://localhost:3000`.
+- [`backends/`](./backends/) — Keycloak (identity), Postgres
+  (relational state), Redis (cache + pub/sub). Shared across any
+  example that needs auth + persistence.
+
+The stacks are independent — bring up whichever subset an example
+needs.
 
 ## Quick start
 
 ```
-cd docker
-make up      # bring up the default stack (observability)
-make ps      # confirm containers are running
-make logs    # tail logs (Ctrl-C to exit)
-make down    # tear everything down
+cd docker/observability && make up    # OTel + Tempo + Loki + Mimir + Grafana
+cd docker/backends      && make up    # Keycloak + Postgres + Redis
 ```
 
-The target names (`up` / `down` / `logs` / `build` / `ps` / `config`)
-stay short while there is one stack. When a second stack lands, the
-plan is to rename to `obs-up` / `obs-down` / etc. and add the sibling
-target set — small transition cost, avoids over-engineering
-namespacing upfront.
-
-To target a non-default stack, pass `STACK=`:
-
-```
-make STACK=observability up
-```
+Each stack exposes the same target set: `up` / `down` / `logs` /
+`build` / `ps` / `config`. The default goal is `up`.
 
 ## Adding a new stack
 
@@ -37,11 +32,11 @@ make STACK=observability up
 2. Mount any config files from `docker/<name>/<service>/...` (one
    subdirectory per service is the convention; see
    `observability/collector/`, `observability/tempo/`, etc.).
-3. Add a `docker/<name>/README.md` describing what the stack does +
+3. Add a `docker/<name>/Makefile` mirroring the `up` / `down` /
+   `logs` / `build` / `ps` / `config` target set (copy from
+   `observability/Makefile`).
+4. Add a `docker/<name>/README.md` describing what the stack does +
    ports + datasource credentials.
-4. If renaming the top-level targets to namespaced form is appropriate
-   (two or more stacks now in tree), update `docker/Makefile`
-   accordingly.
 
 ## Conventions
 

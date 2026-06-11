@@ -218,8 +218,8 @@ strip set), so they reach the stdlib `flag.Parse` naturally — no
 When `--exporter=otlp` is selected and the endpoint is unreachable,
 SetupTelemetry logs a warning and falls back to Noop — a dead
 `docker/observability/` stack never breaks `make demo`. Bring the
-stack up with `make -C docker up` before the OTLP path lights up in
-Grafana.
+stack up with `cd docker/observability && make up` before the OTLP
+path lights up in Grafana.
 
 `examples/otel/stdout/` is the deliberate exception: its
 `defaultExporter = "stdout"` because the example's whole purpose is
