@@ -165,7 +165,15 @@ func main() {
 	redisBackend := configureRedisBackend(&cfg, srv, webhooks)
 	defer redisBackend.shutdown()
 
-	events.Register(cfg)
+	reg := events.Register(cfg)
+
+	// Dynamic-source admin API (issue TBD): operator-runnable evctl CLI
+	// targets per-replica endpoints under /admin/sources/* and uses the
+	// Registry returned above to AddSource / RemoveSource on the fly.
+	// No auth — demo only; nginx scopes the /admin/* path-prefix to the
+	// addressed replica's container by index.
+	sources := newSourceAdmin(reg)
+	defer sources.shutdown()
 
 	// Back-Channel Logout receivers — one handler per realm, each
 	// mounted at /backchannel-logout/<realm>. When Keycloak revokes a
@@ -197,6 +205,11 @@ func main() {
 			for path, h := range bclHandlers {
 				mux.Handle(path, h)
 			}
+			// Dynamic-source admin API. Mounted on every replica; the
+			// nginx /admin/replicas/{idx}/ route is what picks the
+			// destination — see nginx.conf.
+			mux.Handle("/admin/sources", sources.Handler())
+			mux.Handle("/admin/sources/", sources.Handler())
 		}),
 	); err != nil {
 		log.Fatalf("ListenAndServe: %v", err)

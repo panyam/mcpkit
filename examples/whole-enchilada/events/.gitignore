@@ -17,3 +17,4 @@ inject/inject
 walkthrough/walkthrough
 drivers/synth/synth
 bin/
+evctl/evctl
