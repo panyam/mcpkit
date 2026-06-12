@@ -76,6 +76,15 @@ services:
     build:
       context: ../../..
       dockerfile: examples/whole-enchilada/events/event-server/Dockerfile
+    # Lets the event-server reach webhook receivers running on the
+    # host (e.g. `make webhook` opens a listener on the operator's
+    # 127.0.0.1:<dynamic-port>). Docker Desktop on macOS/Windows
+    # auto-maps host.docker.internal; Linux needs the explicit
+    # host-gateway entry. The webhook binary rewrites its callback
+    # URL from 127.0.0.1 → host.docker.internal so this entry is
+    # what makes that URL resolvable from inside the container.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       # Stamped on every HTTP response (X-Replica header) and every
       # outbound webhook POST so the multi-replica walkthrough beat
@@ -174,6 +183,15 @@ services:
     build:
       context: ../../..
       dockerfile: examples/whole-enchilada/events/event-server/Dockerfile
+    # Lets the event-server reach webhook receivers running on the
+    # host (e.g. `make webhook` opens a listener on the operator's
+    # 127.0.0.1:<dynamic-port>). Docker Desktop on macOS/Windows
+    # auto-maps host.docker.internal; Linux needs the explicit
+    # host-gateway entry. The webhook binary rewrites its callback
+    # URL from 127.0.0.1 → host.docker.internal so this entry is
+    # what makes that URL resolvable from inside the container.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       # Stamped on every HTTP response (X-Replica header) and every
       # outbound webhook POST so the multi-replica walkthrough beat
@@ -272,6 +290,15 @@ services:
     build:
       context: ../../..
       dockerfile: examples/whole-enchilada/events/event-server/Dockerfile
+    # Lets the event-server reach webhook receivers running on the
+    # host (e.g. `make webhook` opens a listener on the operator's
+    # 127.0.0.1:<dynamic-port>). Docker Desktop on macOS/Windows
+    # auto-maps host.docker.internal; Linux needs the explicit
+    # host-gateway entry. The webhook binary rewrites its callback
+    # URL from 127.0.0.1 → host.docker.internal so this entry is
+    # what makes that URL resolvable from inside the container.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       # Stamped on every HTTP response (X-Replica header) and every
       # outbound webhook POST so the multi-replica walkthrough beat
