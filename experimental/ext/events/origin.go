@@ -23,6 +23,8 @@
 // startup is the common case).
 package events
 
+import "context"
+
 // OriginMetaKey is the Event.Meta key under which Pattern B publishers
 // stamp their per-instance origin marker. Subscribers that observe a
 // matching value on incoming events drop them — they originated on
@@ -75,4 +77,21 @@ func StampOriginIDOnMeta(meta map[string]any, originID string) map[string]any {
 	}
 	cp[OriginMetaKey] = originID
 	return cp
+}
+
+// LocalDeliverer is implemented by EventSources that support replaying a
+// fully-formed event through their LOCAL subscriber slots without firing
+// the configured Emitter hook. Pattern B cross-replica relays
+// (Subscribers on the receiving replica) call LocalDeliver per received
+// event so each slot's Match / Transform runs the same as for a local
+// yield — tenant scoping and other per-subscription filters stay
+// authoritative, and the publish loop doesn't re-fire.
+//
+// YieldingSource implements this interface (see yield.go). TypedSource
+// authors who want cross-replica push delivery should implement it on
+// the same pattern. Sources that don't implement it are skipped on
+// cross-replica receive — webhook delivery still happens on the origin
+// replica via the yield-side Emitter chain, just not push.
+type LocalDeliverer interface {
+	LocalDeliver(ctx context.Context, event Event)
 }

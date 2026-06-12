@@ -26,8 +26,6 @@ type Server struct {
 	sessionClosers      []sessionCloser
 	allSessionClosers   []func()
 	sessionBroadcasters []func(ctx context.Context, method string, params any)
-	broadcastTargets    []*broadcastTargetEntry // see RegisterBroadcastTarget
-	nextBroadcastID     uint64
 	subRegistry         *subscriptionRegistry // nil when subscriptions not enabled
 
 	// metricsMiddleware wraps every dispatched JSON-RPC request when a
@@ -1004,81 +1002,10 @@ func (s *Server) Broadcast(ctx context.Context, method string, params any) {
 	s.mu.Lock()
 	broadcasters := make([]func(context.Context, string, any), len(s.sessionBroadcasters))
 	copy(broadcasters, s.sessionBroadcasters)
-	targets := make([]*broadcastTargetEntry, len(s.broadcastTargets))
-	copy(targets, s.broadcastTargets)
 	s.mu.Unlock()
 
 	for _, bc := range broadcasters {
 		bc(ctx, method, params)
-	}
-	// Deliver to handler-installed broadcast targets (e.g. open stateless
-	// POST-as-SSE NotifyFuncs registered by events/stream). Each target
-	// self-filters via its accept callback.
-	for _, t := range targets {
-		if t.accept != nil && !t.accept(method, params) {
-			continue
-		}
-		t.notify(method, params)
-	}
-}
-
-// broadcastTargetEntry is a registered Broadcast destination outside the
-// per-transport session machinery. Used by long-lived push-shaped
-// handlers (events/stream over stateless wire, future SEPs) to receive
-// Server.Broadcast calls even though they have no legacy session.
-type broadcastTargetEntry struct {
-	id     uint64
-	notify core.NotifyFunc
-	accept func(method string, params any) bool
-}
-
-// RegisterBroadcastTarget installs a NotifyFunc that Server.Broadcast
-// will deliver to alongside legacy session-attached SSE listeners.
-//
-// Use case: push-shaped handlers on the SEP-2575 stateless wire that
-// open the POST response as their SSE channel — there's no session, so
-// the transport's session broadcaster doesn't know about them. The
-// handler registers its ctx.Notify here at admission, defers the
-// returned deregister at exit.
-//
-// The optional accept callback gates per-target delivery — return false
-// to drop a given (method, params) pair. Useful for filtering by event
-// name (e.g. events/stream only wants notifications/events/event whose
-// payload matches its subscription's source). A nil accept accepts
-// every broadcast.
-//
-// The deregister func is idempotent. Always call it (defer) so the
-// target slot is released when the handler returns.
-//
-// Concurrency: notify and accept may be invoked from any goroutine that
-// calls Server.Broadcast. Implementations must be safe to call
-// concurrently with other code reading the same connection state.
-func (s *Server) RegisterBroadcastTarget(notify core.NotifyFunc, accept func(method string, params any) bool) (deregister func()) {
-	if notify == nil {
-		return func() {}
-	}
-	s.mu.Lock()
-	s.nextBroadcastID++
-	entry := &broadcastTargetEntry{
-		id:     s.nextBroadcastID,
-		notify: notify,
-		accept: accept,
-	}
-	s.broadcastTargets = append(s.broadcastTargets, entry)
-	s.mu.Unlock()
-
-	var once sync.Once
-	return func() {
-		once.Do(func() {
-			s.mu.Lock()
-			defer s.mu.Unlock()
-			for i, e := range s.broadcastTargets {
-				if e.id == entry.id {
-					s.broadcastTargets = append(s.broadcastTargets[:i], s.broadcastTargets[i+1:]...)
-					return
-				}
-			}
-		})
 	}
 }
 

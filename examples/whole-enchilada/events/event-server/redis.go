@@ -57,6 +57,22 @@ type redisBackend struct {
 	sub    *redisstore.Subscriber
 	cancel context.CancelFunc
 	done   chan struct{}
+	// registry is populated by the caller AFTER events.Register returns
+	// — the Subscriber's deliver closure dereferences this to look up
+	// the source for LocalDeliver routing. nil until SetRegistry runs;
+	// receives that arrive before then are dropped (acceptable: yields
+	// can't happen yet because the source handlers aren't installed).
+	registry *events.Registry
+}
+
+// SetRegistry hands the post-Register events.Registry to the
+// Subscriber's deliver closure so it can look up sources and route
+// LocalDeliver. Idempotent — only the first call has effect.
+func (r *redisBackend) SetRegistry(reg *events.Registry) {
+	if r == nil || r.registry != nil {
+		return
+	}
+	r.registry = reg
 }
 
 // shutdown is safe to call on a zero redisBackend (no-op when
@@ -176,16 +192,36 @@ func configureRedisBackend(cfg *events.Config, srv *server.Server, webhooks *eve
 		pub,
 	)
 
-	// Receive-side: Redis Subscriber dispatches every cross-replica
-	// event to Server.Broadcast, which fans out to registered broadcast
-	// targets (the events/stream handler's RegisterBroadcastTarget
-	// entry — see ext/events/stream.go). Self-publishes are dropped
-	// inside the Subscriber via SkipOriginID before reaching this
-	// callback, so the origin replica's local fanout (yield's for-loop
-	// + this replica's webhook delivery) fires exactly once.
+	// Receive-side: Redis Subscriber routes each cross-replica event
+	// into the LOCAL YieldingSource's per-slot fanout via LocalDeliver.
+	// That runs the same Match / Transform path a same-replica yield
+	// would, so per-subscription tenant scoping stays authoritative —
+	// the broadcast shortcut bypassed Match and let asgard events reach
+	// babylon streamers. Self-publishes are dropped inside the
+	// Subscriber via SkipOriginID before reaching this callback, so
+	// the origin replica's local fanout fires exactly once.
 	opts.SkipOriginID = pub.OriginID()
+	// rb pre-allocated so the deliver closure can read rb.registry,
+	// which the caller sets via SetRegistry AFTER events.Register
+	// returns (the registry doesn't exist yet at this point).
+	rb := &redisBackend{cli: cli}
 	deliver := func(ctx context.Context, event events.Event) error {
-		events.Emit(ctx, srv, event)
+		if rb.registry == nil {
+			return nil
+		}
+		src, ok := rb.registry.Source(event.Name)
+		if !ok {
+			return nil
+		}
+		ld, ok := src.(events.LocalDeliverer)
+		if !ok {
+			// Sources that don't support LocalDeliver (TypedSource
+			// today) silently skip cross-replica push delivery. Their
+			// webhook subscribers still receive events via the origin
+			// replica's EmitToWebhooks; only push misses out.
+			return nil
+		}
+		ld.LocalDeliver(ctx, event)
 		return nil
 	}
 	sub, err := redisstore.NewSubscriber(opts, deliver)
@@ -224,5 +260,8 @@ func configureRedisBackend(cfg *events.Config, srv *server.Server, webhooks *eve
 	log.Printf("[event-server] Redis backend active: addr=%s prefix=%s quotaTTL=%s",
 		addr, effPrefix, effTTL)
 
-	return &redisBackend{cli: cli, sub: sub, cancel: cancel, done: done}
+	rb.sub = sub
+	rb.cancel = cancel
+	rb.done = done
+	return rb
 }

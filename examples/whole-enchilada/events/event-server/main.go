@@ -204,6 +204,12 @@ func main() {
 	defer redisBackend.shutdown()
 
 	reg := events.Register(cfg)
+	// Hand the registry to the Redis Subscriber's deliver closure so
+	// cross-replica events can look up the local YieldingSource and
+	// fan out via LocalDeliver. Pre-Register receipts (vanishingly
+	// rare — would need a Redis publish to land before this line runs)
+	// are silently dropped by the closure.
+	redisBackend.SetRegistry(reg)
 
 	// Dynamic-source admin API (issue TBD): operator-runnable evctl CLI
 	// targets per-replica endpoints under /admin/sources/* and uses the
