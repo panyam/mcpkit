@@ -59,16 +59,14 @@ type Options struct {
 	// will produce an error from NewQuotaStore.
 	QuotaTTL time.Duration
 
-	// SkipOriginID — Subscriber-side: messages whose
-	// events.OriginMetaKey carries this value are dropped without
-	// invoking the deliverFn. Wire it to the colocated
-	// Publisher.OriginID() so a replica's own publishes don't double
-	// fire its local handlers (Pattern B requirement; see
-	// ../../origin.go). Empty (default) = deliver every received
-	// message, including self-publishes — appropriate for deployments
-	// where the Subscriber is on a different process than every
-	// Publisher.
-	SkipOriginID string
+	// skipOriginID is Bus-internal: when non-empty, Subscriber drops
+	// messages whose origin marker matches this value. Wired by Bus
+	// to its colocated Publisher's marker so a replica's own
+	// publishes don't double-fire its local handlers. Direct users
+	// of Publisher / Subscriber (without Bus) get raw messages with
+	// no self-publish dedup — that's intentional; the recommended
+	// path is Bus.
+	skipOriginID string
 }
 
 // withDefaults returns a copy of opts with zero-valued fields filled

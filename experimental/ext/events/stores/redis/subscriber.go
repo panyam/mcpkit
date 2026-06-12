@@ -138,21 +138,22 @@ func (s *Subscriber) Run(ctx context.Context) error {
 				s.opts.Logger("redisstore: decode failed on channel %q: %v", msg.Channel, err)
 				continue
 			}
-			// Self-publish guard (Pattern B): drop messages that
-			// originated on the colocated Publisher so the local
-			// fanout (yield's for-loop + any in-process handlers)
-			// fires exactly once. Empty SkipOriginID disables the
-			// guard — deliveries still arrive but the caller is
-			// responsible for not double-firing.
-			if s.opts.SkipOriginID != "" {
-				if events.OriginIDFromMeta(event.Meta) == s.opts.SkipOriginID {
+			// Self-publish guard (Pattern B): drop messages whose
+			// origin marker matches Bus's configured skip value so
+			// the colocated Publisher's own publishes don't
+			// double-fire the local fanout (yield's for-loop already
+			// handled them in-process). Empty skipOriginID disables
+			// the guard — direct Subscriber adopters get raw
+			// messages; the recommended path is Bus.
+			if s.opts.skipOriginID != "" {
+				if originIDFromMeta(event.Meta) == s.opts.skipOriginID {
 					continue
 				}
 			}
 			// Strip the origin marker on every received message,
 			// matched or not, so downstream consumers never see the
 			// redisstore-internal plumbing on event.Meta.
-			event.Meta = events.StripOriginIDFromMeta(event.Meta)
+			event.Meta = stripOriginIDFromMeta(event.Meta)
 			// SEP-414 trace context propagation: stitch the
 			// per-message ctx to the publisher-side span when the
 			// event.Meta carried one. ExtractTraceContext returns a

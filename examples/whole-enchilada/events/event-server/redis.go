@@ -54,20 +54,20 @@ func parseQuotaCaps(raw string) map[string]int {
 // events lib uses its in-memory defaults.
 type redisBackend struct {
 	cli    *redis.Client
-	sub    *redisstore.Subscriber
+	bus    *redisstore.Bus
 	cancel context.CancelFunc
 	done   chan struct{}
 	// registry is populated by the caller AFTER events.Register returns
-	// — the Subscriber's deliver closure dereferences this to look up
-	// the source for LocalDeliver routing. nil until SetRegistry runs;
-	// receives that arrive before then are dropped (acceptable: yields
-	// can't happen yet because the source handlers aren't installed).
+	// — the router closure dereferences this to look up the source for
+	// ReceiveRelay routing. nil until SetRegistry runs; receives that
+	// arrive before then are dropped (acceptable: yields can't happen
+	// yet because the source handlers aren't installed).
 	registry *events.Registry
 }
 
-// SetRegistry hands the post-Register events.Registry to the
-// Subscriber's deliver closure so it can look up sources and route
-// LocalDeliver. Idempotent — only the first call has effect.
+// SetRegistry hands the post-Register events.Registry to the router so
+// it can look up sources on cross-replica receives. Idempotent — only
+// the first call has effect.
 func (r *redisBackend) SetRegistry(reg *events.Registry) {
 	if r == nil || r.registry != nil {
 		return
@@ -82,8 +82,8 @@ func (r *redisBackend) shutdown() {
 		return
 	}
 	r.cancel()
-	if r.sub != nil {
-		_ = r.sub.Close()
+	if r.bus != nil {
+		_ = r.bus.Close()
 	}
 	if r.done != nil {
 		<-r.done
@@ -173,76 +173,50 @@ func configureRedisBackend(cfg *events.Config, srv *server.Server, webhooks *eve
 	}
 	cfg.Quota = events.NewQuota(quotaOpts...)
 
-	// Publisher — outbound Pattern B leg. Per-Publisher origin ID lets
-	// the colocated Subscriber drop self-publishes so a replica's own
-	// yields don't double-fire through the Redis round-trip.
-	pub, err := redisstore.NewPublisher(opts)
+	// rb pre-allocated so the router closure (below) can read
+	// rb.registry, which the caller sets via SetRegistry AFTER
+	// events.Register returns (the registry doesn't exist yet at this
+	// point).
+	rb := &redisBackend{cli: cli}
+
+	// Pattern B Bus — bundles outbound Publisher + inbound Subscriber
+	// with self-publish dedup hidden inside (origin marker handling is
+	// transport-internal; see stores/redis/origin.go). The router
+	// adapter dispatches each received event to the matching
+	// YieldingSource on this replica so per-slot Match / Transform
+	// runs the same as for a same-replica yield — tenant scoping etc.
+	// stay authoritative.
+	router := &registryRouter{rb: rb}
+	bus, err := redisstore.NewBus(opts, router)
 	if err != nil {
-		log.Fatalf("redisstore.NewPublisher: %v", err)
+		log.Fatalf("redisstore.NewBus: %v", err)
 	}
 
 	// Yield-side emitter: deliver locally to webhooks (origin replica
 	// fires webhook POSTs exactly once globally per yielded event) AND
-	// publish to Redis for cross-replica relay. Stream subscribers on
+	// publish via Bus for cross-replica relay. Stream subscribers on
 	// this replica receive via the source's subscriber-slot channel —
 	// NOT via Server.Broadcast — so we don't need a Broadcast call on
 	// the yield path here.
 	cfg.Emitter = events.NewCompositeEmitter(
 		events.NewLocalEmitter(srv, webhooks),
-		pub,
+		bus,
 	)
-
-	// Receive-side: Redis Subscriber routes each cross-replica event
-	// into the LOCAL YieldingSource's per-slot fanout via LocalDeliver.
-	// That runs the same Match / Transform path a same-replica yield
-	// would, so per-subscription tenant scoping stays authoritative —
-	// the broadcast shortcut bypassed Match and let asgard events reach
-	// babylon streamers. Self-publishes are dropped inside the
-	// Subscriber via SkipOriginID before reaching this callback, so
-	// the origin replica's local fanout fires exactly once.
-	opts.SkipOriginID = pub.OriginID()
-	// rb pre-allocated so the deliver closure can read rb.registry,
-	// which the caller sets via SetRegistry AFTER events.Register
-	// returns (the registry doesn't exist yet at this point).
-	rb := &redisBackend{cli: cli}
-	deliver := func(ctx context.Context, event events.Event) error {
-		if rb.registry == nil {
-			return nil
-		}
-		src, ok := rb.registry.Source(event.Name)
-		if !ok {
-			return nil
-		}
-		ld, ok := src.(events.LocalDeliverer)
-		if !ok {
-			// Sources that don't support LocalDeliver (TypedSource
-			// today) silently skip cross-replica push delivery. Their
-			// webhook subscribers still receive events via the origin
-			// replica's EmitToWebhooks; only push misses out.
-			return nil
-		}
-		ld.LocalDeliver(ctx, event)
-		return nil
-	}
-	sub, err := redisstore.NewSubscriber(opts, deliver)
-	if err != nil {
-		log.Fatalf("redisstore.NewSubscriber: %v", err)
-	}
 
 	subCtx, cancel := context.WithCancel(context.Background())
 	// Subscribe to the channels this demo's event sources actually
 	// emit. Future event types added to chatSrc / presenceSrc must
 	// be appended here too (or this whole list moved to a single
 	// source-of-truth registry).
-	if err := sub.Subscribe(subCtx, "chat.message", "presence.changed"); err != nil {
+	if err := bus.Subscribe(subCtx, "chat.message", "presence.changed"); err != nil {
 		cancel()
-		log.Fatalf("redisstore Subscribe: %v", err)
+		log.Fatalf("redisstore Bus Subscribe: %v", err)
 	}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		if err := sub.Run(subCtx); err != nil {
-			log.Printf("[event-server] redis subscriber exited: %v", err)
+		if err := bus.Run(subCtx); err != nil {
+			log.Printf("[event-server] redis bus exited: %v", err)
 		}
 	}()
 
@@ -260,8 +234,42 @@ func configureRedisBackend(cfg *events.Config, srv *server.Server, webhooks *eve
 	log.Printf("[event-server] Redis backend active: addr=%s prefix=%s quotaTTL=%s",
 		addr, effPrefix, effTTL)
 
-	rb.sub = sub
+	rb.bus = bus
 	rb.cancel = cancel
 	rb.done = done
 	return rb
+}
+
+// registryRouter implements server.NotificationRelayReceiver by looking
+// up the destination YieldingSource on the registry and forwarding to
+// its own ReceiveRelay. The lookup runs on every cross-replica event
+// because rb.registry only becomes available AFTER events.Register
+// returns (the registry doesn't exist at configureRedisBackend time).
+// Events that arrive before SetRegistry has been called are silently
+// dropped — vanishingly rare and harmless (no source can yield yet).
+type registryRouter struct {
+	rb *redisBackend
+}
+
+func (r *registryRouter) ReceiveRelay(ctx context.Context, method string, params any) {
+	if r.rb.registry == nil {
+		return
+	}
+	ev, ok := params.(events.Event)
+	if !ok {
+		return
+	}
+	src, ok := r.rb.registry.Source(ev.Name)
+	if !ok {
+		return
+	}
+	nrr, ok := src.(server.NotificationRelayReceiver)
+	if !ok {
+		// Sources that don't implement NotificationRelayReceiver
+		// (TypedSource today) silently skip cross-replica push
+		// delivery. Their webhook subscribers still receive events via
+		// the origin replica's EmitToWebhooks; only push misses out.
+		return
+	}
+	nrr.ReceiveRelay(ctx, method, params)
 }
