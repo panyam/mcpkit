@@ -144,19 +144,26 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 			return newForbiddenError(id, "Forbidden")
 		}
 
-		// SEP-2575 stateless wire has no session and no GET SSE — the
-		// active / event / heartbeat frames an open events/stream would
-		// emit have nowhere to land, and every ctx.Notify silently
-		// no-ops. Fail fast with the same -32014 shape the
-		// source-lacks-push branch uses below so clients fall back to
-		// events/poll via one decision rule. Scoped to the stateless
-		// wire specifically — legacy callers without an attached notify
-		// (e.g., a session whose GET SSE has not opened yet, or test
-		// fixtures that call srv.Dispatch directly) keep the historical
-		// silent-drop behavior.
-		if core.IsStatelessWire(ctx.Context) {
+		// SEP-2575 stateless wire admission: events/stream emits active /
+		// event / heartbeat frames via ctx.Notify, so the request needs
+		// a live push channel for its lifetime. PR 754 enabled
+		// response-as-SSE for the stateless wire — a POST that carries
+		// Accept: text/event-stream gets a NotifyFunc threaded onto ctx
+		// via WithStatelessNotifyFunc and CanNotify returns true; a POST
+		// with plain JSON Accept does not, so ctx.Notify would silently
+		// no-op.
+		//
+		// Fail fast with the same -32014 shape the source-lacks-push
+		// branch uses below so clients pick events/poll via one
+		// decision rule.
+		//
+		// Scoped to the stateless wire specifically — legacy callers
+		// without an attached notify (e.g., a session whose GET SSE has
+		// not opened yet, or test fixtures that call srv.Dispatch
+		// directly) keep the historical silent-drop behavior.
+		if core.IsStatelessWire(ctx.Context) && !ctx.CanNotify() {
 			return newUnsupportedError(id, "deliveryMode", "push",
-				"Unsupported: stateless wire does not support push delivery")
+				"Unsupported: stateless wire does not support push delivery without text/event-stream Accept")
 		}
 
 		// Sources that don't expose a Subscribe channel (TypedSource today)

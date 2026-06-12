@@ -75,6 +75,13 @@ services:
       context: ../../..
       dockerfile: examples/whole-enchilada/events/event-server/Dockerfile
     environment:
+      # Stamped on every HTTP response (X-Replica header) and every
+      # outbound webhook POST so the multi-replica walkthrough beat
+      # can show round-robin rotation + which replica fanned out each
+      # webhook. Falls back to os.Hostname() if unset, but compose's
+      # default short-hash hostname isn't operator-readable — set
+      # explicitly per replica.
+      REPLICA_NAME: event-server-{{.}}
       EVENT_INJECT_BEARER: ${EVENT_INJECT_BEARER:-{{$.InjectBearer}}}
       # Stage-2: introspection-mode auth. The event-server's
       # tryEnableIntrospection reads OAUTH_INTROSPECTION_URLS as a

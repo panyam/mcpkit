@@ -1,18 +1,13 @@
 // walkthrough is the demokit-driven narrative guide for the
-// whole-enchilada stage-2 demo. It is **pure prose** — no MCP wire
-// activity happens inside this binary. The protocol mechanics
-// (initialize, events/poll, events/stream, events/subscribe webhook)
-// are demonstrated by the per-tenant `make poller` / `make webhook`
-// binaries the operator runs in sibling terminals; this binary just
-// orchestrates what they read between actions.
+// whole-enchilada stage-2 demo. Pure narrative for every step EXCEPT
+// the replica-rotation beat (Phase 4) where the binary makes a small
+// number of events/list calls to surface the X-Replica response header
+// rotating across nginx-round-robin'd replicas.
 //
-// Stage-1 ran a single MCP client inside this binary to walk the
-// protocol step-by-step. Stage-2 wires authentication into the
-// event-server (every method requires a real tenant token), and the
-// 4-terminal flow is the natural fit for showing per-tenant isolation
-// — having this binary auto-acquire a token would duplicate work the
-// operator's tenant terminals already do, so the demo is split:
-// poller / webhook drive the wire; this binary teaches.
+// The protocol mechanics (initialize, events/stream, events/subscribe
+// webhook) are demonstrated by the per-tenant `make streamer` /
+// `make webhook` binaries the operator runs in sibling terminals;
+// this binary just orchestrates what they read between actions.
 package main
 
 import (
@@ -21,21 +16,14 @@ import (
 	common "github.com/panyam/mcpkit/examples/common"
 )
 
-// expectedTokenEnvs is the set of bearer-token env vars the 4-terminal
-// Token pre-acquisition env vars were removed when the walkthrough
-// flipped to on-demand acquisition — each `make poller` / `make webhook`
-// step now passes USERNAME / PASSWORD directly and the binary does its
-// own ROPC login. `make predemo` clears stale Keycloak sessions so the
-// first per-step login starts clean.
-
 // runDemo drives the demokit walkthrough against the running compose
 // stack. serverURL / receiverURL are accepted for symmetry with the
-// stage-1 signature; they are no longer used inside this binary
-// because no MCP traffic originates here.
-func runDemo(_ /*serverURL*/, _ /*receiverURL*/ string) {
+// stage-1 signature; serverURL is consumed by the in-binary
+// replica-rotation step (Phase 4). receiverURL is currently unused.
+func runDemo(serverURL, _ /*receiverURL*/ string) {
 	demo := demokit.New("MCP Events — whole-enchilada stage 2 walkthrough").
 		Dir("events/whole-enchilada").
-		Description("Production-shape multi-tier reference. nginx fronts the event-server tier; Keycloak provides three pre-configured OAuth realms (asgard, babylon, camelot). The stack comes up silent — operator-runnable synthetic drivers (make drive-chat, make drive-presence) start producing events from sibling terminals. This walkthrough guides you through a multi-terminal demo where each tenant gets its own poller and webhook receiver — per-tenant isolation is the headline.").
+		Description("Production-shape multi-tier reference. nginx fronts the event-server tier; Keycloak provides three pre-configured OAuth realms (asgard, babylon, camelot). The stack comes up silent — operator-runnable synthetic drivers (make drive-chat, make drive-presence) start producing events from sibling terminals. This walkthrough guides you through a multi-terminal demo where each tenant gets its own streaming push subscriber and webhook receiver — per-tenant isolation is the headline.").
 		Actors(
 			demokit.Actor("Operator", "The person running the demo — you"),
 			demokit.Actor("Nginx", "Frontdoor reverse proxy (localhost:9090)"),
@@ -45,10 +33,6 @@ func runDemo(_ /*serverURL*/, _ /*receiverURL*/ string) {
 		)
 
 	common.SetupRenderer(demo)
-	// Bump TUI box width — default is 80% of terminal capped at 120
-	// chars, which wraps mid-bullet for this demo's per-step content.
-	// Re-creating the TUI renderer overrides the one common.SetupRenderer
-	// installed; web bundling registered by SetupRenderer is unaffected.
 	if demokit.Mode() == "tui" {
 		r := tui.New().WithBorderStyle(demokit.BorderHorizontalOnly)
 		r.MaxWidth = 200
@@ -59,82 +43,72 @@ func runDemo(_ /*serverURL*/, _ /*receiverURL*/ string) {
 	demo.Section("Before you start",
 		"Run 'make predemo' once first — it gives you a clean Keycloak slate, brings up the backends + observability + events stacks fresh, and opens the Keycloak admin (localhost:8180) and Grafana (localhost:3000) in your browser. Optionally run 'make alllogs' for a single iTerm window with 3 panes tailing each stack's logs.",
 		"",
-		"The walkthrough binary you're reading does not make MCP calls. Each Step tells you which window to open and exactly what command to run; the actual protocol traffic happens in those operator-run binaries.",
+		"This walkthrough mostly orchestrates what you read between actions — only Phase 4's replica-rotation beat makes MCP calls from inside this binary. Each Step that requires terminal work tells you which window to open and what command to run; the actual protocol traffic happens in those operator-run binaries.",
 		"",
 		"Window plan — at peak you'll have these open:",
 		"",
-		"  - A1-Poll, B1-Poll, C1-Poll       — tenant poll subscribers (alice / bob / carol). First used in steps 1 / 2 / 3.",
-		"  - A2-Webhook, B2-Webhook, C2-Webhook — tenant webhook subscribers (anand / bhavna / chandan). First used in steps 4 / 5 / 6.",
-		"  - Admin                            — one-shot commands (inject, evctl, docker exec, psql). First used in step 7.",
-		"  - Chat-Driver                      — synth producer (continuous flow for the kill-replica beat). First used in step 8.",
-		"  - Monitor                          — Redis MONITOR. First used in step 8.",
-		"  - Topology                         — events.topology meta-source subscriber. First used in step 12.",
-		"  - Discord-Poll                     — discord.message poller. First used in step 14.",
-		"  - Browser                          — Keycloak admin UI for revocation. First used in step 17.",
+		"  - A1-Stream, B1-Stream, C1-Stream     — tenant streaming push subscribers (alice / bob / carol; SEP-2575 response-as-SSE). First used in step 1.",
+		"  - A2-Webhook, B2-Webhook, C2-Webhook   — tenant webhook receivers (anand / bhavna / chandan). First used in step 1.",
+		"  - Admin                                — one-shot commands (inject, evctl, docker exec, psql). First used in step 2.",
+		"  - Chat-Driver                          — synth producer (continuous flow for the kill-replica beat). First used in step 3.",
+		"  - Monitor                              — Redis MONITOR. First used in step 3.",
+		"  - Topology                             — events.topology meta-source subscriber. First used in step 8.",
+		"  - Discord-Poll                         — discord.message poller. First used in step 10.",
+		"  - Browser                              — Keycloak admin UI for revocation. First used in step 13.",
 	)
 
 	// -----------------------------------------------------------------
-	// Phase 1 — Per-tenant isolation on pollers.
+	// Phase 1 — Six silent subscribers across two push surfaces and
+	// three tenants. Stream is the headline push surface — lowest
+	// latency, server-paced, response-as-SSE on the SEP-2575 stateless
+	// wire. Webhook is the second push surface — durable HTTP fan-out
+	// with HMAC-signed envelopes.
 	// -----------------------------------------------------------------
 
-	demo.Section("Phase 1 — Set up the poll-mode subscriber matrix",
-		"Three poll-mode subscribers, one per realm. Each will sit silent until Phase 3 fires the first events — that's intentional; we're proving the path with a single deliberate inject rather than ambient noise.",
+	demo.Section("Phase 1 — Set up the subscriber matrix (six silent windows)",
+		"Six push subscribers: three streaming (alice/bob/carol) and three webhook receivers (anand/bhavna/chandan). All six sit silent until Phase 2 fires the first events — proving the path with a single deliberate inject rather than ambient noise. Poll mode is still available via `make poller` for ad-hoc operator use, but it isn't part of the headline narrative — the push surfaces are.",
 	)
 
-	demo.Step("A1-Poll — Asgard poller (alice).").
-		Note("- Demonstrates: per-tenant delivery scoping (realm-in-bearer is what gates delivery).\n- Expected: window sits silent until Phase 3. Once events flow, prints chat.message events tagged for asgard; babylon / camelot events never reach this window.").
-		VerbatimVariants("Run this",
-			demokit.MakeVariant("shell", "bash", `make poller TENANT=A USERNAME=alice`).Default(),
-		)
+	demo.Step("Open six terminals and run these.").
+		Note(
+			"- Demonstrates: per-tenant delivery scoping (realm-in-bearer gates delivery) on both push surfaces.",
+			"- A1/B1/C1 are streaming push on the SEP-2575 stateless wire — open POST + response-as-SSE, nginx round-robins every replica freely. Lowest delivery latency.",
+			"- A2/B2/C2 are HTTP webhook receivers — HMAC-signed POSTs, retry-on-failure, durable delivery records.",
+			"- Expected: all six windows sit silent. Once Phase 2 fires, each asgard event lights up A1+A2; babylon events light up B1+B2; camelot events light up C1+C2. No cross-tenant leakage on any surface.",
+		).
+		VerbatimVariants("Open six terminal windows and run one of these in each",
+			demokit.MakeVariant("shell", "bash", `# A1-Stream — Asgard streaming subscriber (alice)
+make streamer TENANT=A USERNAME=alice
 
-	demo.Step("B1-Poll — Babylon poller (bob).").
-		Note("- Demonstrates: the scoping claim holds across a second tenant.\n- Expected: sits silent for now; will print only babylon events once Phase 3 fires.").
-		VerbatimVariants("Run this",
-			demokit.MakeVariant("shell", "bash", `make poller TENANT=B USERNAME=bob`).Default(),
-		)
+# B1-Stream — Babylon streaming subscriber (bob)
+make streamer TENANT=B USERNAME=bob
 
-	demo.Step("C1-Poll — Camelot poller (carol).").
-		Note("- Demonstrates: clean three-way isolation on the wire.\n- Expected: sits silent for now; once Phase 3 fires, each event lights up exactly one of A1 / B1 / C1 — never two at once.").
-		VerbatimVariants("Run this",
-			demokit.MakeVariant("shell", "bash", `make poller TENANT=C USERNAME=carol`).Default(),
-		)
+# C1-Stream — Camelot streaming subscriber (carol)
+make streamer TENANT=C USERNAME=carol
 
-	// -----------------------------------------------------------------
-	// Phase 2 — Same isolation on webhook mode.
-	// -----------------------------------------------------------------
+# A2-Webhook — Asgard webhook receiver (anand)
+make webhook TENANT=A USERNAME=anand
 
-	demo.Section("Phase 2 — Add webhook-mode subscribers (still silent)",
-		"Webhook is the second delivery surface. Distinct users per role (anand / bhavna / chandan) keep Keycloak sessions clean and avoid bumping into the subscription cap demo later. These also stay silent until Phase 3.",
-	)
+# B2-Webhook — Babylon webhook receiver (bhavna)
+make webhook TENANT=B USERNAME=bhavna
 
-	demo.Step("A2-Webhook — Asgard webhook receiver (anand).").
-		Note("- Demonstrates: push-based webhook delivery surface (sibling to poll mode).\n- Expected: sits silent for now; once Phase 3 fires, logs an HMAC-verified delivery for every asgard chat.message — same event also lights up A1 via poll mode.").
-		VerbatimVariants("Run this",
-			demokit.MakeVariant("shell", "bash", `make webhook TENANT=A USERNAME=anand`).Default(),
-		)
-
-	demo.Step("B2-Webhook — Babylon webhook receiver (bhavna).").
-		Note("- Demonstrates: webhook scoping for a second tenant.\n- Expected: sits silent for now; once Phase 3 fires, receives only babylon events; never sees asgard or camelot deliveries.").
-		VerbatimVariants("Run this",
-			demokit.MakeVariant("shell", "bash", `make webhook TENANT=B USERNAME=bhavna`).Default(),
-		)
-
-	demo.Step("C2-Webhook — Camelot webhook receiver (chandan).").
-		Note("- Demonstrates: completes the 3×2 matrix (3 tenants × {poll, webhook}).\n- Expected: sits silent for now; once Phase 3 fires, every chat.message lights up exactly TWO windows (one poll + one webhook), both for the same tenant.").
-		VerbatimVariants("Run this",
-			demokit.MakeVariant("shell", "bash", `make webhook TENANT=C USERNAME=chandan`).Default(),
+# C2-Webhook — Camelot webhook receiver (chandan)
+make webhook TENANT=C USERNAME=chandan`).Default(),
 		)
 
 	// -----------------------------------------------------------------
-	// Phase 3 — First events: manual injects validate tenant tag scoping.
+	// Phase 2 — First events: manual injects validate tenant tag scoping.
 	// -----------------------------------------------------------------
 
-	demo.Section("Phase 3 — First events: manual inject validates the path",
+	demo.Section("Phase 2 — First events: manual inject validates the path",
 		"Subscribers are up and silent. Now fire one event per tenant and watch which windows light up — this proves the per-event tenant tag is the authoritative scope (not the producer or the connection).",
 	)
 
 	demo.Step("Admin — inject one event per tenant.").
-		Note("- Demonstrates: per-event tenant tag is the authoritative delivery scope; same inject endpoint can target any tenant.\n- Expected: A's inject lights up A1+A2 only (asgard windows); B's lights up B1+B2 only; C's (presence.changed) lights up C1+C2 only. No cross-tenant leakage.").
+		Note(
+			"- Demonstrates: per-event tenant tag is the authoritative delivery scope; same inject endpoint can target any tenant.",
+			"- Expected: A's inject lights up A1+A2 (asgard stream + webhook); B's lights up B1+B2; C's (presence.changed) lights up C1+C2. No cross-tenant leakage on any surface.",
+		).
 		VerbatimVariants("Run these in turn",
 			demokit.MakeVariant("shell", "bash", `make inject TENANT=A EVENT=chat.message TEXT='hi from Asgard'
 make inject TENANT=B EVENT=chat.message TEXT='hi from Babylon'
@@ -142,15 +116,19 @@ make inject TENANT=C EVENT=presence.changed USER=carol STATE=online`).Default(),
 		)
 
 	// -----------------------------------------------------------------
-	// Phase 4 — Multi-replica resilience.
+	// Phase 3 — Multi-replica resilience.
 	// -----------------------------------------------------------------
 
-	demo.Section("Phase 4 — Multi-replica resilience",
-		"Stack is N=3 by default. Redis Publisher/Subscriber fans every yielded event to every replica's local delivery loop, so killing a replica mid-stream doesn't drop subscriber state on the survivors. This step needs continuous traffic to make the 'mid-stream' claim observable, so we fire up the chat driver as part of the setup.",
+	demo.Section("Phase 3 — Multi-replica resilience",
+		"Stack is N=3 by default. Redis Publisher/Subscriber fans every yielded event to every replica's local delivery loop, so killing a replica mid-stream doesn't drop subscriber state on the survivors.",
 	)
 
 	demo.Step("Chat-Driver + Monitor + Admin — kill a replica mid-stream.").
-		Note("- Demonstrates: Redis pub/sub fan-out keeps deliveries flowing through surviving replicas; nginx round-robin routes new connections to the survivors.\n- Expected: Once make drive-chat runs, A1/B1/C1/A2/B2/C2 all start ticking through their tenant's events. Redis MONITOR shows publish mcpkit.events.chat.message ... on every event. After killing replica 1, subscriber windows keep printing without gaps. Start replica 1 again when done; leave drive-chat running for the rest of the demo (Phases 5-6 need the stream).").
+		Note(
+			"- Demonstrates: Redis pub/sub fan-out keeps deliveries flowing through surviving replicas; nginx round-robin routes new connections to the survivors. Every event-server replica stamps X-Replica on its HTTP responses AND on every outbound webhook POST, so the round-robin spray is visible directly in the streamer windows' 'served by event-server-N' log lines AND in the webhook receiver's replica= field.",
+			"- The stream subscriber is the most telling check — SEP-2575 stateless wire means its open POST connection lands on ONE specific replica. Killing that replica forces a reconnection; the stream client transparently resumes against a survivor, and the next 'served by' log line shows the new X-Replica value.",
+			"- Expected: Once make drive-chat runs, A1/B1/C1/A2/B2/C2 all start ticking through their tenant's events. Redis MONITOR shows publish mcpkit.events.chat.message ... on every event. Webhook receiver logs show replica= rotating across event-server-1/2/3. After killing replica 1, webhook windows keep printing without gaps; the stream window whose connection was bound to replica 1 briefly reconnects (operator may see a terminated frame then a fresh subscribe) and resumes delivery on a surviving replica. Start replica 1 again when done; leave drive-chat running for the rest of the demo.",
+		).
 		VerbatimVariants("Three windows: Chat-Driver, Monitor, Admin",
 			demokit.MakeVariant("shell", "bash", `# Chat-Driver window — leave running for rest of demo:
 make drive-chat
@@ -164,15 +142,38 @@ docker compose start event-server-1`).Default(),
 		)
 
 	// -----------------------------------------------------------------
-	// Phase 5 — Cursor durability.
+	// Phase 4 — Replica-rotation poll (binary-driven).
+	// The walkthrough binary itself fires N events/list calls against
+	// the nginx frontdoor, logging X-Replica per response. Demonstrates
+	// the multi-replica + nginx-round-robin contract directly: data
+	// response is identical (every replica reads from the same
+	// in-process source registry), but the serving replica varies.
+	// -----------------------------------------------------------------
+
+	demo.Section("Phase 4 — Replica-rotation poll: same data, any replica",
+		"With Phase 3 still running (drive-chat + N=3 replicas), this walkthrough binary itself fires a handful of events/list calls in a row against the nginx frontdoor. Each call lands on whichever replica nginx round-robins to; we log the X-Replica response header per call and compare response shapes — same source list, different replica.",
+	)
+
+	demo.Step("Walkthrough — fire events/list × N, log X-Replica rotation.").
+		Note(
+			"- Demonstrates: replica-agnostic read path. nginx round-robin spreads calls across event-server-1/2/3; every replica answers from the same in-process source registry, so the response is byte-identical content-wise.",
+			"- Expected: prints one line per call: 'call k served by event-server-N — events=M'. Over ~6 calls you'll see at least two distinct X-Replica values (nginx round-robin); the event count M is identical across all calls.",
+		).
+		Run(runListRotation(serverURL))
+
+	// -----------------------------------------------------------------
+	// Phase 5 — Cursor durability (operator-driven, ad-hoc poller).
 	// -----------------------------------------------------------------
 
 	demo.Section("Phase 5 — Cursor durability",
-		"Postgres-backed event buffer is the single source of truth across replicas. Poll-mode subscribers can stop, restart on a different replica, and resume gap-free.",
+		"Postgres-backed event buffer is the single source of truth across replicas. A poll-mode subscriber can stop, restart on a different replica, and resume gap-free. We use the make poller binary ad-hoc for this beat — it's the right surface for showing cursor restart.",
 	)
 
-	demo.Step("A1-Poll — restart with the last cursor; resume gap-free.").
-		Note("- Demonstrates: cross-replica cursor durability (any replica reads the same Postgres buffer).\n- Expected: after Ctrl+C, restart with --start-cursor=<N> and the poller resumes exactly where it left off, even if nginx routes the new connection to a different replica.").
+	demo.Step("Ad-hoc Poller — restart with the last cursor; resume gap-free.").
+		Note(
+			"- Demonstrates: cross-replica cursor durability (any replica reads the same Postgres buffer).",
+			"- Expected: after Ctrl+C, restart with --start-cursor=<N> and the poller resumes exactly where it left off, even if nginx routes the new connection to a different replica.",
+		).
 		VerbatimVariants("Stop, note the cursor, restart",
 			demokit.MakeVariant("shell", "bash", `make poller TENANT=A USERNAME=alice
 # Ctrl+C — note the last cursor printed (call it N)
@@ -180,7 +181,10 @@ make poller TENANT=A USERNAME=alice -- --start-cursor=<N>`).Default(),
 		)
 
 	demo.Step("Admin — observe buffer TTL truncation.").
-		Note("- Demonstrates: bounded replay (POSTGRES_BUFFER_TTL=10m in the compose); stale cursor → server returns truncated:true and client resyncs from latest.\n- Expected: after waiting past the TTL, restarting the poller with the old cursor produces a truncated:true response visible in the poller logs; it then continues from latest.").
+		Note(
+			"- Demonstrates: bounded replay (POSTGRES_BUFFER_TTL=10m in the compose); stale cursor → server returns truncated:true and client resyncs from latest.",
+			"- Expected: after waiting past the TTL, restarting the poller with the old cursor produces a truncated:true response visible in the poller logs; it then continues from latest.",
+		).
 		VerbatimVariants("Run this in Admin",
 			demokit.MakeVariant("shell", "bash", `docker exec mcpkit-postgres psql -U postgres -d events \
   -c "SELECT source_name, min(cursor), count(*) FROM event_buffer GROUP BY source_name;"`).Default(),
@@ -195,7 +199,10 @@ make poller TENANT=A USERNAME=alice -- --start-cursor=<N>`).Default(),
 	)
 
 	demo.Step("Aarti × 4 — trip the subscription cap.").
-		Note("- Demonstrates: cap is enforced GLOBALLY (Redis Lua-atomic INCR-with-check) — replica-locality of subscribes doesn't help bypass it.\n- Expected: first three windows print steady delivery; the fourth exits immediately with -32013 ResourceExhausted limit=subscriptions max=3. We use aarti (not alice/anand) so the existing subscriptions from Phases 2-3 don't already count toward her cap.").
+		Note(
+			"- Demonstrates: cap is enforced GLOBALLY (Redis Lua-atomic INCR-with-check) — replica-locality of subscribes doesn't help bypass it.",
+			"- Expected: first three windows print steady delivery; the fourth exits immediately with -32013 ResourceExhausted limit=subscriptions max=3. We use aarti (not alice/anand) so the subscriptions from Phase 1 don't already count toward her cap.",
+		).
 		VerbatimVariants("Run in four sibling windows; the 4th rejects",
 			demokit.MakeVariant("shell", "bash", `make webhook TENANT=A USERNAME=aarti   # window 1 — succeeds
 make webhook TENANT=A USERNAME=aarti   # window 2 — succeeds
@@ -212,25 +219,37 @@ make webhook TENANT=A USERNAME=aarti   # window 4 — rejects with -32013`).Defa
 	)
 
 	demo.Step("Topology — subscribe to the topology stream (alex).").
-		Note("- Demonstrates: events.topology is a normal source — any client can subscribe to it.\n- Expected: window sits silent right now (no sources have been added since boot). Will print source.added / source.removed events the moment Phase 8 fires them.").
+		Note(
+			"- Demonstrates: events.topology is a normal source — any client can subscribe to it.",
+			"- Expected: window sits silent right now (no sources have been added since boot). Will print source.added / source.removed events the moment the next step fires them.",
+		).
 		VerbatimVariants("Run this",
 			demokit.MakeVariant("shell", "bash", `make poller EVENT=events.topology TENANT=A USERNAME=alex`).Default(),
 		)
 
 	demo.Step("Admin — add a real Discord source on replicas 1 and 3 only.").
-		Note("- Demonstrates: operator-controlled source topology (replicas 1+3 own the Discord WebSocket; replica 2 deliberately skipped to expose per-replica divergence).\n- Expected: evctl prints per-replica responses showing the source was registered on 1 and 3 only. Topology window immediately prints {\"type\":\"source.added\",\"name\":\"discord.message\",...}.").
+		Note(
+			"- Demonstrates: operator-controlled source topology (replicas 1+3 own the Discord WebSocket; replica 2 deliberately skipped to expose per-replica divergence).",
+			"- Expected: evctl prints per-replica responses showing the source was registered on 1 and 3 only. Topology window immediately prints {\"type\":\"source.added\",\"name\":\"discord.message\",...}.",
+		).
 		VerbatimVariants("Requires DISCORD_BOT_TOKEN + DISCORD_CHANNEL_IDS exported",
 			demokit.MakeVariant("shell", "bash", `make add-discord TOKEN=$DISCORD_BOT_TOKEN CHANNELS=$DISCORD_CHANNEL_IDS REPLICAS=1,3 TENANTS=asgard,camelot`).Default(),
 		)
 
 	demo.Step("Discord-Poll — subscribe to discord.message as Asgard (alice).").
-		Note("- Demonstrates: dynamic source events flow through the same SSE + tenant scoping; subscribers on replica 2 (no Discord adapter) still receive events via Redis pubsub.\n- Expected: real Discord messages from the configured channels arrive, tagged for asgard. Send a test message in Discord; it shows here within ~1s.").
+		Note(
+			"- Demonstrates: dynamic source events flow through the same SSE + tenant scoping; subscribers on replica 2 (no Discord adapter) still receive events via Redis pubsub.",
+			"- Expected: real Discord messages from the configured channels arrive, tagged for asgard. Send a test message in Discord; it shows here within ~1s.",
+		).
 		VerbatimVariants("Run this",
 			demokit.MakeVariant("shell", "bash", `make poller EVENT=discord.message TENANT=A USERNAME=alice`).Default(),
 		)
 
 	demo.Step("Admin — compare per-replica source views.").
-		Note("- Demonstrates: adapter configs are per-replica state (no cross-replica gossip); the topology stream is what unifies the view.\n- Expected: replica 1 and replica 3 list discord.message with config metadata; replica 2 does NOT.").
+		Note(
+			"- Demonstrates: adapter configs are per-replica state (no cross-replica gossip); the topology stream is what unifies the view.",
+			"- Expected: replica 1 and replica 3 list discord.message with config metadata; replica 2 does NOT.",
+		).
 		VerbatimVariants("Run these in turn",
 			demokit.MakeVariant("shell", "bash", `make list-sources REPLICAS=1   # includes discord.message
 make list-sources REPLICAS=2   # does NOT include discord.message
@@ -238,7 +257,10 @@ make list-sources REPLICAS=3   # includes discord.message`).Default(),
 		)
 
 	demo.Step("Admin — remove the Discord source.").
-		Note("- Demonstrates: evctl sources rm tears down both registry membership AND the upstream Discord WebSocket session.\n- Expected: topology window prints {\"type\":\"source.removed\",\"name\":\"discord.message\",...}. The Discord-Poll window terminates with NotFound on its next poll cycle.").
+		Note(
+			"- Demonstrates: evctl sources rm tears down both registry membership AND the upstream Discord WebSocket session.",
+			"- Expected: topology window prints {\"type\":\"source.removed\",\"name\":\"discord.message\",...}. The Discord-Poll window terminates with NotFound on its next poll cycle.",
+		).
 		VerbatimVariants("Run this",
 			demokit.MakeVariant("shell", "bash", `make rm-source SOURCE=discord.message REPLICAS=1,3`).Default(),
 		)
@@ -248,11 +270,14 @@ make list-sources REPLICAS=3   # includes discord.message`).Default(),
 	// -----------------------------------------------------------------
 
 	demo.Section("Phase 8 — Token revocation kills only affected subscribers",
-		"One Keycloak admin click fires TWO distinct revocation paths: introspection-cache eviction for poll-mode subscribers (~5s) and OIDC Back-Channel Logout for webhook subscribers (immediate).",
+		"One Keycloak admin click fires TWO distinct revocation paths: introspection-cache eviction for stream-mode subscribers (~5s) and OIDC Back-Channel Logout for webhook subscribers (immediate).",
 	)
 
 	demo.Step("Browser + Admin — sign alice out in Keycloak admin and watch the asgard windows die.").
-		Note("- Demonstrates: synchronously revocable bearer tokens — the demo's headline win over plain JWT.\n- Expected: within ~5s, A1-Poll exits with token invalidated by AS (401). A2-Webhook receives a {type:terminated} envelope on its webhook stream and disconnects. B and C windows are entirely untouched — revocation is per-realm.").
+		Note(
+			"- Demonstrates: synchronously revocable bearer tokens — the demo's headline win over plain JWT. Revocation fires across both push surfaces uniformly.",
+			"- Expected: within ~5s, A1-Stream receives a terminal frame on its open POST response and exits (the request-scoped principal claims drop out from under the dispatcher). A2-Webhook receives a {type:terminated} envelope on its webhook stream and disconnects. B and C windows are entirely untouched — revocation is per-realm.",
+		).
 		VerbatimVariants("Open the browser, then tail logs in Admin",
 			demokit.MakeVariant("shell", "bash", `# Browser:
 #   http://localhost:8180/admin/master/console/#/asgard/users
@@ -263,9 +288,8 @@ docker compose logs -f event-server-1 | grep BCL`).Default(),
 		)
 
 	demo.Section("That's the demo",
-		"You've now seen: producer/consumer split, per-tenant scoping on both delivery modes, cross-replica fan-out and resilience, durable cursors with bounded replay, globally-enforced subscription quotas, runtime source topology with the SDK's self-aware meta-stream, and synchronous token revocation. Everything is operator-runnable from sibling terminals — `make predemo` re-runs the prep at any time.",
+		"You've now seen: producer/consumer split, per-tenant scoping on both push surfaces, cross-replica fan-out and resilience, replica-agnostic read path, durable cursors with bounded replay, globally-enforced subscription quotas, runtime source topology with the SDK's self-aware meta-stream, and synchronous token revocation. Everything is operator-runnable from sibling terminals — `make predemo` re-runs the prep at any time.",
 	)
 
 	demo.Execute()
 }
-

@@ -387,6 +387,25 @@ func (bc BaseContext) Notify(method string, params any) bool {
 	return false
 }
 
+// CanNotify reports whether a notify channel is currently attached.
+// Same resolution order as Notify — true means a subsequent Notify call
+// will deliver, false means it will silently drop.
+//
+// Use this in long-lived push-shaped handlers (events/stream, future
+// server-initiated streams) to fail fast at admission rather than
+// running a heartbeat loop whose ctx.Notify calls no-op. On the legacy
+// wire CanNotify==true once a session-bound notify is attached (GET SSE
+// open, or POST-SSE wrapping the dispatch). On the stateless wire
+// CanNotify==true exactly when the POST request carried
+// Accept: text/event-stream and the transport opened the response-as-SSE
+// path.
+func (bc BaseContext) CanNotify() bool {
+	if bc.sc != nil && bc.sc.notify != nil {
+		return true
+	}
+	return statelessNotifyFuncFromContext(bc.Context) != nil
+}
+
 // AuthClaims returns the authenticated identity, or nil if unavailable.
 //
 // Coalesces the two wire sources:
