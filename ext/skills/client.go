@@ -1,12 +1,14 @@
 package skills
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
@@ -14,32 +16,56 @@ import (
 
 // Client wraps a *client.Client with SEP-2640 host-workflow helpers:
 // capability detection, discovery index fetch, manifest and supporting
-// file reads, digest verification.
+// file reads, digest verification, and SEP-414 P7 (#748) activation
+// telemetry.
 //
-// The wrapper holds no state of its own beyond the underlying client
-// pointer. Methods are safe for concurrent use to the same degree
-// *client.Client is.
+// The wrapper holds the underlying client pointer plus optional
+// telemetry plumbing (TracerProvider + activation hook). Methods are
+// safe for concurrent use to the same degree *client.Client is.
 //
 // Typical host workflow:
 //
 //	mcp := client.NewClient(serverURL, info)
 //	mcp.Connect()
-//	sc := skills.NewClient(mcp)
+//	sc := skills.NewClient(mcp,
+//	    skills.WithTracerProvider(tp),
+//	    skills.WithActivationHook(myMetrics.RecordSkillActivation),
+//	)
 //	if !sc.SupportsSkills() { return }
 //	idx, err := sc.ListSkills(ctx)
 //	for _, entry := range idx.Skills {
 //	    result, err := sc.ReadAndVerify(ctx, entry.URL, entry.Digest)
 //	    // result.DigestVerified is true on match; ErrDigestMismatch otherwise
 //	}
+//	// At the point in the agent loop where the skill enters model context:
+//	sc.Activate(ctx, "skill://pdf-processing/SKILL.md",
+//	    skills.WithReason("agent_decided"))
 type Client struct {
 	mcp *client.Client
+	cfg clientConfig
 }
 
 // NewClient builds a SEP-2640 host helper over the given mcpkit client.
 // The underlying client must already be Connect()ed for any read method
 // to succeed.
-func NewClient(mcp *client.Client) *Client {
-	return &Client{mcp: mcp}
+//
+// Options configure SEP-414 P7 (#748) telemetry plumbing:
+//
+//   - WithTracerProvider — span emission around read methods + Activate
+//   - WithActivationHook — non-OTel telemetry callback fired from Activate
+//
+// With no options, the helper behaves identically to the pre-P7 shape:
+// zero overhead, no spans, no hook calls. NoopTracerProvider is the
+// default — call sites do not nil-check.
+func NewClient(mcp *client.Client, opts ...Option) *Client {
+	cfg := clientConfig{tp: core.NoopTracerProvider{}}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	if cfg.tp == nil {
+		cfg.tp = core.NoopTracerProvider{}
+	}
+	return &Client{mcp: mcp, cfg: cfg}
 }
 
 // SupportsSkills reports whether the connected server advertises the
@@ -61,18 +87,33 @@ func (c *Client) SupportsSkills() bool {
 // empty Index (with the Schema field unset) and no error so callers
 // can treat absent indexes the same as empty ones. Other read errors
 // (transport, malformed JSON) propagate.
-func (c *Client) ListSkills() (Index, error) {
+//
+// ctx parents the SEP-414 P7 (#748) `skills.list` span when a
+// TracerProvider is installed. On success the span carries
+// `mcp.skill.count`. ctx is not threaded to the underlying client
+// (the legacy ReadResource API is ctx-free); it only governs span
+// parentage.
+func (c *Client) ListSkills(ctx context.Context) (Index, error) {
+	_, span := c.cfg.tp.StartSpan(ctx, "skills.list",
+		core.Attribute{Key: "mcp.skill.uri", Value: IndexURI},
+	)
+	defer span.End()
+
 	body, err := c.mcp.ReadResource(IndexURI)
 	if err != nil {
 		if isNotFoundErr(err) {
+			span.SetAttribute("mcp.skill.index_absent", "true")
 			return Index{}, nil
 		}
+		span.RecordError(err)
 		return Index{}, fmt.Errorf("skills: read %s: %w", IndexURI, err)
 	}
 	var idx Index
 	if err := json.Unmarshal([]byte(body), &idx); err != nil {
+		span.RecordError(err)
 		return Index{}, fmt.Errorf("skills: parse %s: %w", IndexURI, err)
 	}
+	span.SetAttribute("mcp.skill.count", fmt.Sprintf("%d", len(idx.Skills)))
 	return idx, nil
 }
 
@@ -84,12 +125,28 @@ func (c *Client) ListSkills() (Index, error) {
 // Returns text bytes when the resource is text-typed; base64-decoded
 // blob bytes when the resource is binary-typed (e.g., archive entries
 // served in archive mode).
-func (c *Client) ReadSkillURI(uri string) ([]byte, error) {
+//
+// ctx parents the SEP-414 P7 (#748) `skills.read` span when a
+// TracerProvider is installed. ctx is not threaded to the underlying
+// client (the legacy ReadResourceFull API is ctx-free); it only
+// governs span parentage.
+func (c *Client) ReadSkillURI(ctx context.Context, uri string) ([]byte, error) {
+	_, span := c.cfg.tp.StartSpan(ctx, "skills.read",
+		core.Attribute{Key: "mcp.skill.uri", Value: uri},
+	)
+	defer span.End()
+
 	result, err := c.mcp.ReadResourceFull(uri)
 	if err != nil {
+		span.RecordError(err)
 		return nil, fmt.Errorf("skills: read %s: %w", uri, err)
 	}
-	return extractBytes(result.Contents, uri)
+	bytes, err := extractBytes(result.Contents, uri)
+	if err != nil {
+		span.RecordError(err)
+		return nil, err
+	}
+	return bytes, nil
 }
 
 // SkillManifest holds a parsed SKILL.md plus the raw bytes the server
@@ -109,21 +166,41 @@ type SkillManifest struct {
 //
 // Validates that uri is a manifest URI (ends in /SKILL.md). For non-
 // manifest URIs use ReadSkillURI.
-func (c *Client) ReadSkillManifest(uri string) (*SkillManifest, error) {
+//
+// ctx parents the SEP-414 P7 (#748) `skills.read_manifest` span when a
+// TracerProvider is installed. On success the span carries
+// mcp.skill.path and mcp.skill.name in addition to mcp.skill.uri.
+func (c *Client) ReadSkillManifest(ctx context.Context, uri string) (*SkillManifest, error) {
+	ctx, span := c.cfg.tp.StartSpan(ctx, "skills.read_manifest",
+		core.Attribute{Key: "mcp.skill.uri", Value: uri},
+	)
+	defer span.End()
+
 	parts, err := ParseURI(uri)
 	if err != nil {
+		span.RecordError(err)
 		return nil, fmt.Errorf("skills: %s: %w", uri, err)
 	}
 	if !parts.IsManifest {
-		return nil, fmt.Errorf("%w: %q", ErrNotManifestURI, uri)
+		err := fmt.Errorf("%w: %q", ErrNotManifestURI, uri)
+		span.RecordError(err)
+		return nil, err
 	}
-	raw, err := c.ReadSkillURI(uri)
+	if path := strings.Join(parts.SkillPath, "/"); path != "" {
+		span.SetAttribute("mcp.skill.path", path)
+	}
+	raw, err := c.ReadSkillURI(ctx, uri)
 	if err != nil {
+		// inner span on c.ReadSkillURI already recorded the error
 		return nil, err
 	}
 	fm, body, err := ParseFrontmatter(raw)
 	if err != nil {
+		span.RecordError(err)
 		return nil, fmt.Errorf("skills: parse frontmatter for %s: %w", uri, err)
+	}
+	if fm.Name != "" {
+		span.SetAttribute("mcp.skill.name", fm.Name)
 	}
 	return &SkillManifest{
 		URI:         uri,
@@ -138,8 +215,11 @@ func (c *Client) ReadSkillManifest(uri string) (*SkillManifest, error) {
 // inside a SKILL.md body (e.g., "references/GUIDE.md") per SEP-2640's
 // filesystem-style resolution.
 //
-// Returns the same byte semantics as ReadSkillURI.
-func (c *Client) ReadSkillFile(manifest *SkillManifest, relPath string) ([]byte, error) {
+// Returns the same byte semantics as ReadSkillURI. The inner
+// ReadSkillURI call emits the SEP-414 P7 (#748) `skills.read` span;
+// ReadSkillFile itself adds no wrapping span (it's a thin URI
+// resolver + delegated read).
+func (c *Client) ReadSkillFile(ctx context.Context, manifest *SkillManifest, relPath string) ([]byte, error) {
 	if manifest == nil {
 		return nil, fmt.Errorf("skills: ReadSkillFile: nil manifest")
 	}
@@ -151,7 +231,7 @@ func (c *Client) ReadSkillFile(manifest *SkillManifest, relPath string) ([]byte,
 	if err != nil {
 		return nil, fmt.Errorf("skills: resolve %q against %s: %w", relPath, manifest.URI, err)
 	}
-	return c.ReadSkillURI(resolved.String())
+	return c.ReadSkillURI(ctx, resolved.String())
 }
 
 // ReadResult is the typed return from ReadAndVerify. Bytes carries the
@@ -175,22 +255,106 @@ type ReadResult struct {
 // like ReadSkillURI and returns DigestVerified=false. This is a
 // convenience for hosts that have a URI but no catalogued digest
 // (server instructions, user-supplied URIs).
-func (c *Client) ReadAndVerify(uri, expectedDigest string) (*ReadResult, error) {
-	body, err := c.ReadSkillURI(uri)
+//
+// ctx parents the SEP-414 P7 (#748) `skills.read_and_verify` span when
+// a TracerProvider is installed. The span carries mcp.skill.uri,
+// mcp.skill.expected_digest, and (on a non-error return)
+// mcp.skill.digest_verified.
+func (c *Client) ReadAndVerify(ctx context.Context, uri, expectedDigest string) (*ReadResult, error) {
+	ctx, span := c.cfg.tp.StartSpan(ctx, "skills.read_and_verify",
+		core.Attribute{Key: "mcp.skill.uri", Value: uri},
+		core.Attribute{Key: "mcp.skill.expected_digest", Value: expectedDigest},
+	)
+	defer span.End()
+
+	body, err := c.ReadSkillURI(ctx, uri)
 	if err != nil {
+		// inner span on ReadSkillURI already recorded the error
 		return nil, err
 	}
 	result := &ReadResult{URI: uri, Bytes: body}
 	if expectedDigest == "" {
+		span.SetAttribute("mcp.skill.digest_verified", "false")
 		return result, nil
 	}
 	sum := sha256.Sum256(body)
 	got := "sha256:" + hex.EncodeToString(sum[:])
 	if !strings.EqualFold(got, expectedDigest) {
-		return nil, fmt.Errorf("%w: want %s, got %s", ErrDigestMismatch, expectedDigest, got)
+		mismatchErr := fmt.Errorf("%w: want %s, got %s", ErrDigestMismatch, expectedDigest, got)
+		span.RecordError(mismatchErr)
+		return nil, mismatchErr
 	}
+	span.SetAttribute("mcp.skill.digest_verified", "true")
 	result.DigestVerified = true
 	return result, nil
+}
+
+// Activate signals SEP-414 P7 (#748) that the host just put the skill
+// at uri into the model context. It is a PURE SDK-side telemetry emit
+// point — no MCP wire traffic, no spec contract. The activation may
+// follow a cached manifest read, a freshly-loaded skill, or any other
+// path the agent loop chose; mcpkit's wire surface cannot otherwise
+// observe the use because cached skills activate invisibly.
+//
+// Side effects:
+//
+//   - When a TracerProvider is installed, emits an instant
+//     `skills.activate` span (Start+End back-to-back — activation is
+//     point-in-time, not a duration). Span attributes:
+//     mcp.skill.uri, mcp.skill.path (when uri is a manifest URI),
+//     mcp.skill.activation.reason (when WithReason is supplied).
+//   - When an activation hook is installed (WithActivationHook), calls
+//     it synchronously with the same ActivationEvent that is returned.
+//
+// The returned ActivationEvent is a structured pull-style emit
+// duplicate of what the span / hook saw, suitable for non-OTel
+// telemetry the caller wants to feed independently. Both telemetry
+// sinks see the same Timestamp.
+//
+// uri is not validated — Activate accepts any string the host wants to
+// report (manifest URI, sub-file URI, even an opaque identifier the
+// host minted for an in-process bundle). When uri parses as a SEP-2640
+// manifest URI, mcp.skill.path is emitted as well.
+//
+// ctx parents the span. A canceled ctx does not block the activation —
+// activation telemetry MUST NOT depend on context liveness because the
+// agent loop reports activations after the originating handler ctx may
+// have ended.
+func (c *Client) Activate(ctx context.Context, uri string, opts ...ActivateOption) ActivationEvent {
+	cfg := activateConfig{}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
+	event := ActivationEvent{
+		URI:       uri,
+		Reason:    cfg.reason,
+		Timestamp: time.Now(),
+	}
+
+	attrs := []core.Attribute{
+		{Key: "mcp.skill.uri", Value: uri},
+	}
+	if parts, err := ParseURI(uri); err == nil && len(parts.SkillPath) > 0 {
+		attrs = append(attrs, core.Attribute{
+			Key:   "mcp.skill.path",
+			Value: strings.Join(parts.SkillPath, "/"),
+		})
+	}
+	if cfg.reason != "" {
+		attrs = append(attrs, core.Attribute{
+			Key:   "mcp.skill.activation.reason",
+			Value: cfg.reason,
+		})
+	}
+
+	_, span := c.cfg.tp.StartSpan(ctx, "skills.activate", attrs...)
+	span.End()
+
+	if c.cfg.activationHook != nil {
+		c.cfg.activationHook(ctx, event)
+	}
+	return event
 }
 
 // ReadResourceTool surfaces the SEP-2640 Implementation Guidelines

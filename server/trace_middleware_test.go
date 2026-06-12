@@ -313,6 +313,88 @@ func TestTraceMiddleware_SetsCoreAttributes(t *testing.T) {
 	assert.Equal(t, "echo", spans[0].attr("mcp.tool.name"))
 }
 
+// dispatchResourcesRead builds a resources/read request envelope and
+// routes it through dispatchWithNotifyAndRequest. Sibling to
+// dispatchToolsCall, used by the SEP-414 P7 (#748) tests below.
+func dispatchResourcesRead(t *testing.T, srv *Server, ctx context.Context, params string) (*core.Response, error) {
+	t.Helper()
+	req := &core.Request{
+		ID:     json.RawMessage(`1`),
+		Method: "resources/read",
+		Params: json.RawMessage(params),
+	}
+	return srv.dispatchWithNotifyAndRequest(srv.dispatcher, ctx, nil, nil, nil, req)
+}
+
+// TestTraceMiddleware_EmitsSkillAttrsOnManifestRead is the SEP-414 P7
+// happy path: a resources/read targeting `skill://acme/billing/refunds/
+// SKILL.md` emits mcp.resource.uri, mcp.skill.uri, mcp.skill.path, and
+// mcp.skill.file so server-side dashboards can chart fetch volume per
+// skill. Dispatch returns an "unknown resource" error because the
+// resource isn't registered, but the span attrs were stamped before the
+// inner handler ran.
+func TestTraceMiddleware_EmitsSkillAttrsOnManifestRead(t *testing.T) {
+	tp := &fakeTracerProvider{}
+	srv := newInitializedServer(t, WithTracerProvider(tp))
+
+	const uri = "skill://acme/billing/refunds/SKILL.md"
+	params := `{"uri":"` + uri + `"}`
+	_, err := dispatchResourcesRead(t, srv, context.Background(), params)
+	require.NoError(t, err)
+
+	spans := tp.snapshot()
+	require.Len(t, spans, 1)
+	assert.Equal(t, "resources/read", spans[0].attr("mcp.method"))
+	assert.Equal(t, uri, spans[0].attr("mcp.resource.uri"))
+	assert.Equal(t, uri, spans[0].attr("mcp.skill.uri"))
+	assert.Equal(t, "acme/billing/refunds", spans[0].attr("mcp.skill.path"))
+	assert.Equal(t, "SKILL.md", spans[0].attr("mcp.skill.file"))
+}
+
+// TestTraceMiddleware_EmitsResourceURI_NonSkillRead pins the contract
+// boundary: mcp.resource.uri is emitted for ANY resources/read, but the
+// skill-specific attrs (mcp.skill.*) stay absent when the URI does not
+// use the skill:// scheme.
+func TestTraceMiddleware_EmitsResourceURI_NonSkillRead(t *testing.T) {
+	tp := &fakeTracerProvider{}
+	srv := newInitializedServer(t, WithTracerProvider(tp))
+
+	const uri = "file:///etc/motd"
+	params := `{"uri":"` + uri + `"}`
+	_, err := dispatchResourcesRead(t, srv, context.Background(), params)
+	require.NoError(t, err)
+
+	spans := tp.snapshot()
+	require.Len(t, spans, 1)
+	assert.Equal(t, uri, spans[0].attr("mcp.resource.uri"))
+	assert.Empty(t, spans[0].attr("mcp.skill.uri"))
+	assert.Empty(t, spans[0].attr("mcp.skill.path"))
+	assert.Empty(t, spans[0].attr("mcp.skill.file"))
+}
+
+// TestTraceMiddleware_NonManifestSkillURI_EmitsURIOnly verifies that a
+// non-manifest skill URI (e.g., a supporting file like references/
+// FORMS.md) gets mcp.skill.uri but NOT mcp.skill.path / mcp.skill.file —
+// SEP-2640 documents that the skill/file boundary cannot be recovered
+// from the URI alone for non-manifest reads. Span attrs follow the
+// strict parser's behavior.
+func TestTraceMiddleware_NonManifestSkillURI_EmitsURIOnly(t *testing.T) {
+	tp := &fakeTracerProvider{}
+	srv := newInitializedServer(t, WithTracerProvider(tp))
+
+	const uri = "skill://pdf-processing/references/FORMS.md"
+	params := `{"uri":"` + uri + `"}`
+	_, err := dispatchResourcesRead(t, srv, context.Background(), params)
+	require.NoError(t, err)
+
+	spans := tp.snapshot()
+	require.Len(t, spans, 1)
+	assert.Equal(t, uri, spans[0].attr("mcp.resource.uri"))
+	assert.Equal(t, uri, spans[0].attr("mcp.skill.uri"))
+	assert.Empty(t, spans[0].attr("mcp.skill.path"))
+	assert.Empty(t, spans[0].attr("mcp.skill.file"))
+}
+
 // TestTraceMiddleware_RPCError_RecordsErrorAndCode verifies that a
 // JSON-RPC error response sets mcp.error.code and calls RecordError with
 // the error message. Routes through the tools/call "unknown tool" path

@@ -43,50 +43,26 @@ func runDemo() {
 
 	demo := demokit.New("MCP Skills Extension (SEP-2640) — Reference Walkthrough").
 		Dir("skills").
-		Description("Walks through SEP-2640, which serves Agent Skills over MCP using the existing Resources primitive. Each file in a skill directory is exposed as a `skill://` resource, the server declares the `io.modelcontextprotocol/skills` capability in `initialize`, and the well-known `skill://index.json` resource enumerates concrete skills with SHA-256 digests. mcpkit's `ext/skills.SkillProvider` walks an `io/fs.FS` once at construction and registers each file with the configured Provider.").
+		Description("SEP-2640 serves Agent Skills over MCP's Resources primitive: each file under a skill directory is a `skill://` URI; `skill://index.json` enumerates them with SHA-256 digests.").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this client)"),
 			demokit.Actor("Server", "MCP Server (make serve, file mode by default)"),
 		)
 
 	demo.Section("Setup",
-		"Start the MCP server in a separate terminal first:",
-		"",
 		"```",
-		"Terminal 1:  make serve         # skills server on :8080 in file mode",
-		"Terminal 2:  make demo          # this walkthrough (--tui for the interactive TUI)",
+		"Terminal 1:  make serve         # default (file mode, :8080)",
+		"             make serve-archive # one .tar.gz per skill",
+		"Terminal 2:  make demo          # this walkthrough (--tui interactive)",
 		"```",
-		"",
-		"The default fixture under `skills/` walks three SEP-2640 examples: a single-segment skill (`git-workflow`), a single-segment skill with supporting files (`pdf-processing`), and a nested-prefix skill (`acme/billing/refunds`).",
-		"",
-		"Two alternative server modes flip the wire shape:",
-		"",
-		"```",
-		"make serve-archive   # publishes each skill as one .tar.gz resource",
-		"make serve-zip       # publishes each skill as one .zip resource",
-		"```",
-		"",
-		"In archive mode `resources/list` returns one URI per skill (e.g. `skill://pdf-processing.tar.gz`) instead of N URIs per file. The post-unpack virtual namespace hosts observe is identical either way — that's the SEP's whole-skill atomic-delivery story.",
-		"",
-		"Optional: `make fetch-docx` clones the [`anthropics/skills`](https://github.com/anthropics/skills) repo and stages the `docx` skill into the `skills/` fixture directory before you start the server. It's a multi-file real-world skill that exercises the supporting-file paths beyond the toy fixtures.",
 	)
 
-	demo.Section("The skill:// URI scheme",
-		"SEP-2640 defines `skill://<skill-path>/<file-path>` where `<skill-path>` is a `/`-separated path locating the skill directory and `<file-path>` is the file within it. The final segment of `<skill-path>` MUST equal the skill's `name` frontmatter field. Prefix segments (anything before that final segment) are an optional server-chosen organizational namespace.",
-		"",
-		"Examples from the SEP table that this walkthrough exercises:",
-		"",
-		"| Skill path             | File                  | URI                                              |",
-		"| ---------------------- | --------------------- | ------------------------------------------------ |",
-		"| `git-workflow`         | `SKILL.md`            | `skill://git-workflow/SKILL.md`                  |",
-		"| `pdf-processing`       | `references/FORMS.md` | `skill://pdf-processing/references/FORMS.md`     |",
-		"| `acme/billing/refunds` | `SKILL.md`            | `skill://acme/billing/refunds/SKILL.md`          |",
-		"",
-		"The `acme/billing/refunds` shape demonstrates the prefix-segment behavior: `acme/billing` is the prefix and `refunds` is the skill name. The walkthrough reads files from each shape to confirm the routing is uniform.",
+	demo.Section("URI shape",
+		"`skill://<path>/<file>`. Final path segment = the skill's frontmatter `name`. Prefix segments (e.g. `acme/billing/`) are an optional server-chosen namespace. Walkthrough exercises `git-workflow`, `pdf-processing`, and `acme/billing/refunds`.",
 	)
 
 	demo.Section("Capability declaration",
-		"Per SEP-2640's Capability Declaration section, a server advertises `io.modelcontextprotocol/skills` under `capabilities.extensions` in its `initialize` response. The value is the empty object `{}` — never an array. mcpkit's `ext/skills.SkillsExtension{}` plus `Provider.RegisterWith(srv)` handles this automatically; nothing else to wire on the server side.",
+		"Server advertises `io.modelcontextprotocol/skills` under `capabilities.extensions` (always `{}`, never an array). `Provider.RegisterWith(srv)` wires it automatically.",
 	)
 
 	var (
@@ -137,8 +113,8 @@ func runDemo() {
 			return nil
 		})
 
-	demo.Section("The discovery index",
-		"`skill://index.json` is the well-known enumeration resource. It's optional in the SEP (servers MAY decline to expose it) but mcpkit auto-registers it unless `WithoutIndex()` is supplied. The index has a fixed JSON shape: a `$schema` URI pinning the index version and a `skills[]` array where each entry has `type` (`skill-md` or `archive`), `description`, `url`, `name`, and `digest`.",
+	demo.Section("Discovery index",
+		"`skill://index.json` enumerates skills with `{$schema, skills:[{type, name, description, url, digest}]}`. Optional in the SEP; mcpkit auto-registers unless `WithoutIndex()`.",
 	)
 
 	var indexBody []byte
@@ -174,8 +150,8 @@ func runDemo() {
 			return nil
 		})
 
-	demo.Section("The digest contract",
-		"Per SEP-2640's Integrity and Verification section, each `skill-md` and `archive` entry carries a `sha256:{64-lowercase-hex}` digest computed over the artifact's raw bytes. For `skill-md` entries the artifact is the SKILL.md file itself; for `archive` entries it's the packed archive bytes. Hosts MUST verify retrieved content against this digest before using it. The walkthrough does exactly that for the `git-workflow` skill.",
+	demo.Section("Digest contract",
+		"Each entry carries `sha256:{64hex}` over the raw artifact bytes (SKILL.md for skill-md, packed archive for archive). Hosts MUST verify before use.",
 	)
 
 	demo.Step("Verify digest by re-fetching SKILL.md and recomputing SHA-256").
@@ -226,7 +202,7 @@ func runDemo() {
 		})
 
 	demo.Section("Reading skill files",
-		"Once a host has loaded a SKILL.md, the skill's body may reference supporting files via relative paths. mcpkit's `ext/skills.ResolveRelative(skillRoot, ref)` resolves these against the skill's root URI per SEP-2640's Reading section (filesystem-style resolution, escapes via `..` rejected). The walkthrough exercises both forms: the manifest, and a supporting file deep in the skill tree.",
+		"Manifest body may reference supporting files via relative paths. `skills.ResolveRelative(skillRoot, ref)` resolves them filesystem-style; `..` escapes are rejected.",
 	)
 
 	demo.Step("Read the pdf-processing SKILL.md").
@@ -297,15 +273,41 @@ func runDemo() {
 			return nil
 		})
 
+	demo.Section("SEP-414 P7 — Skills observability",
+		"Fetch ≠ activation. Server `resources/read` spans now carry `mcp.skill.*` attrs (#748). Client `ext/skills.Client` emits `skills.read*` spans + `Activate(ctx, uri)` for post-cache use the wire can't see (SDK-only — no spec change).",
+	)
+
+	demo.Step("Wrap reads in skills.NewClient(...) and call Client.Activate").
+		Arrow("Host", "Server", "resources/read via sc.ReadAndVerify (span: skills.read_and_verify)").
+		DashedArrow("Server", "Host", "bytes + digest match").
+		Note("Activate is intra-process — no wire traffic. Run with `make serve EXPORTER=stdout` + `make demo EXPORTER=stdout` to see spans.").
+		Run(func(ctx demokit.StepContext) *demokit.StepResult {
+			if c == nil {
+				return nil
+			}
+			activations := 0
+			sc := skills.NewClient(c,
+				skills.WithTracerProvider(tp),
+				skills.WithActivationHook(func(_ context.Context, ev skills.ActivationEvent) {
+					activations++
+					fmt.Printf("    activation hook: uri=%s reason=%q ts=%s\n",
+						ev.URI, ev.Reason, ev.Timestamp.Format("15:04:05.000"))
+				}),
+			)
+			if _, err := sc.ReadAndVerify(context.Background(), uriPDFManifest, ""); err != nil {
+				fmt.Printf("    SKIP ReadAndVerify: %v (server may be in archive mode)\n", err)
+				return nil
+			}
+			fmt.Printf("    sc.ReadAndVerify emitted skills.read_and_verify span\n")
+			ev := sc.Activate(context.Background(), uriPDFManifest,
+				skills.WithReason("walkthrough_demonstration"))
+			fmt.Printf("    sc.Activate returned ActivationEvent{URI=%s, Reason=%q}\n", ev.URI, ev.Reason)
+			fmt.Printf("    %d hook invocation(s)\n", activations)
+			return nil
+		})
+
 	demo.Section("Wrap-up",
-		"The host has now:",
-		"",
-		"- Negotiated the skills extension via the standard `initialize` handshake.",
-		"- Enumerated every skill the server publishes by reading `skill://index.json` once.",
-		"- Verified one artifact's bytes against its SHA-256 digest, satisfying the SEP MUST.",
-		"- Read SKILL.md plus supporting files across single-segment and nested-prefix skill paths.",
-		"",
-		"To switch the same walkthrough into archive mode, restart the server with `make serve-archive`. The host code stays exactly the same; the wire-level shape switches to one `.tar.gz` resource per skill, and the digest in the index covers the packed archive bytes instead of the SKILL.md alone.",
+		"Negotiated extension, enumerated index, verified one digest, read manifest + supporting files across single-segment and nested-prefix paths, emitted skill-shape spans + an activation event. `make serve-archive` flips the wire to one `.tar.gz` per skill — host code unchanged.",
 	)
 
 	_ = serverInfo
