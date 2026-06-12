@@ -79,6 +79,7 @@ type serverOptions struct {
 	allowLegacyOnDraft   bool                     // WithAllowLegacyOnDraft — opt-in SEP-2575 leniency on the legacy wire (off by default; strict per spec)
 	tracerProvider       core.TracerProvider      // SEP-414 P2 — WithTracerProvider; nil/Noop = trace middleware not installed
 	meterProvider        core.MeterProvider       // issue 7 — WithMeterProvider; nil/Noop = metrics middleware not installed
+	broadcastRelay       BroadcastRelay           // issue 755 — WithBroadcastRelay; nil = no cross-replica broadcast (Broadcast fires local only)
 }
 
 type httpHandlerEntry struct {
@@ -998,7 +999,34 @@ func (s *Server) Broadcast(ctx context.Context, method string, params any) {
 	if tc := core.TraceContextFromContext(ctx); !tc.IsZero() {
 		params = core.InjectTraceContextIntoParams(params, tc)
 	}
+	s.mu.Lock()
+	relay := s.options.broadcastRelay
+	s.mu.Unlock()
+	if relay != nil {
+		relay.PublishBroadcast(ctx, method, params)
+	}
+	s.BroadcastToSessions(ctx, method, params)
+}
 
+// BroadcastToSessions delivers a notification to every locally-connected
+// client via the per-transport session broadcasters. UNLIKE Broadcast,
+// BroadcastToSessions does NOT invoke the installed BroadcastRelay —
+// it's the local-only path Pattern B receivers call after dropping
+// self-publishes, so they don't re-publish through the relay and loop.
+//
+// External callers should normally use Broadcast (which fires the
+// relay + local). BroadcastToSessions is the entry point for relay
+// receive callbacks (server.CapabilityBroadcastReceiver and equivalent
+// adapters) and tests that want to verify session fan-out independently
+// of the relay path.
+//
+// Trace context injection: BroadcastToSessions does NOT re-inject
+// _meta.traceparent — the relay receive path is responsible for
+// surfacing the upstream trace context onto ctx, and the params
+// envelope already carries any caller-set _meta. Re-injecting here
+// would double-stamp on the local-fanout-only path called from
+// Broadcast above.
+func (s *Server) BroadcastToSessions(ctx context.Context, method string, params any) {
 	s.mu.Lock()
 	broadcasters := make([]func(context.Context, string, any), len(s.sessionBroadcasters))
 	copy(broadcasters, s.sessionBroadcasters)
