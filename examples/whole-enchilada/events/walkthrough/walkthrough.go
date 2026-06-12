@@ -17,6 +17,7 @@ package main
 
 import (
 	"github.com/panyam/demokit"
+	"github.com/panyam/demokit/tui"
 	common "github.com/panyam/mcpkit/examples/common"
 )
 
@@ -44,6 +45,16 @@ func runDemo(_ /*serverURL*/, _ /*receiverURL*/ string) {
 		)
 
 	common.SetupRenderer(demo)
+	// Bump TUI box width — default is 80% of terminal capped at 120
+	// chars, which wraps mid-bullet for this demo's per-step content.
+	// Re-creating the TUI renderer overrides the one common.SetupRenderer
+	// installed; web bundling registered by SetupRenderer is unaffected.
+	if demokit.Mode() == "tui" {
+		r := tui.New().WithBorderStyle(demokit.BorderHorizontalOnly)
+		r.MaxWidth = 200
+		r.Fraction = 0.95
+		demo.WithRenderer(r)
+	}
 
 	demo.Section("Before you start",
 		"Run 'make predemo' once first — it gives you a clean Keycloak slate, brings up the backends + observability + events stacks fresh, and opens the Keycloak admin (localhost:8180) and Grafana (localhost:3000) in your browser. Optionally run 'make alllogs' for a single iTerm window with 3 panes tailing each stack's logs.",
