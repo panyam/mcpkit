@@ -125,18 +125,22 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) *core.Resp
 		return d.handlePromptsGet(ctx, id, req.Params)
 	case "completion/complete":
 		return d.handleCompletionComplete(ctx, id, req.Params)
-	case "tasks/get", "tasks/update", "tasks/cancel":
-		// SEP-2663 tasks extension methods. Routing goes through the
-		// backend's middleware-aware path so:
+	default:
+		// Any other method (custom JSON-RPC verbs registered via
+		// Server.HandleMethod — events/poll, events/list,
+		// events/subscribe, tasks/get|update|cancel, future SEPs,
+		// caller-defined endpoints) goes through the backend's
+		// middleware-aware path so:
 		//   - extension capability gating (handler emits -32003 if the
 		//     per-request _meta.io.modelcontextprotocol/clientCapabilities
 		//     omits the extension declaration), and
-		//   - any server-level middleware (auth, logging, future extensions)
+		//   - any server-level middleware (auth, logging, tracing)
 		//     applies on the stateless wire too.
 		//
-		// Backends without middleware support (test fakes) fall through
-		// to -32601 below — which mirrors the legacy "method not found"
-		// for the same scenario.
+		// Backends without middleware support (test fakes) return
+		// ok=false here — which surfaces as -32601 "method not found"
+		// below, mirroring the legacy dispatcher's behavior for the
+		// same scenario.
 		out := &core.Request{
 			JSONRPC: "2.0",
 			ID:      id,
@@ -146,9 +150,6 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) *core.Resp
 		if resp, ok := d.Backend.InvokeWithMiddleware(ctx, out); ok {
 			return resp
 		}
-		return core.NewErrorResponse(id, core.ErrCodeMethodNotFound,
-			"method not found: "+req.Method)
-	default:
 		return core.NewErrorResponse(id, core.ErrCodeMethodNotFound,
 			"method not found: "+req.Method)
 	}
