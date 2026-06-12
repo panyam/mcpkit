@@ -2,7 +2,7 @@
 # iterm-6up.sh — open iTerm2 with a 2×3 grid of subscriber sessions
 # against the running whole-enchilada stack.
 #
-#   row 1 (top):    poller  A | poller  B | poller  C
+#   row 1 (top):    streamer  A | streamer  B | streamer  C
 #   row 2 (bottom): webhook A | webhook B | webhook C
 #
 # Each pane runs `make <verb> TENANT=<X> USERNAME=user<x>1 PASSWORD=user<x>1`,
@@ -33,25 +33,24 @@ DEMO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Build one `cd && make <verb> ...` command per pane. printf %q quotes
 # the path so a directory with spaces still works when the AppleScript
 # pipes the string into the iTerm2 session as if typed.
+#
+# User identities match the walkthrough's Phase 1 matrix: alice/bob/carol
+# stream, anand/bhavna/chandan webhook. Six distinct users → six Keycloak
+# sessions in the realm Sessions UI, which is what the demo narrates.
+# The Makefile defaults PASSWORD to USERNAME when omitted, so we only
+# pass USERNAME.
 cmd_for() {
-  # ${tenant,,} is bash 4+; macOS ships bash 3.2, so route through tr.
-  # Pollers use index 1 (userX1), webhooks use index 2 (userX2) — keeps
-  # the two clients per tenant under distinct Keycloak sessions so the
-  # Sessions UI shows a clean 6-row table (3 tenants × 2 users) instead
-  # of 3 rows × 2 sessions per user.
-  local tenant=$1 verb=$2 idx=$3 lower user
-  lower=$(printf '%s' "$tenant" | tr '[:upper:]' '[:lower:]')
-  user="user${lower}${idx}"
-  printf "cd %q && make %s TENANT=%s USERNAME=%s PASSWORD=%s" \
-    "$DEMO_DIR" "$verb" "$tenant" "$user" "$user"
+  local tenant=$1 verb=$2 user=$3
+  printf "cd %q && make %s TENANT=%s USERNAME=%s" \
+    "$DEMO_DIR" "$verb" "$tenant" "$user"
 }
 
-POLL_A=$(cmd_for A poller 1)
-POLL_B=$(cmd_for B poller 1)
-POLL_C=$(cmd_for C poller 1)
-WEB_A=$(cmd_for A webhook 2)
-WEB_B=$(cmd_for B webhook 2)
-WEB_C=$(cmd_for C webhook 2)
+STREAM_A=$(cmd_for A streamer alice)
+STREAM_B=$(cmd_for B streamer bob)
+STREAM_C=$(cmd_for C streamer carol)
+WEBHOOK_A=$(cmd_for A webhook anand)
+WEBHOOK_B=$(cmd_for B webhook bhavna)
+WEBHOOK_C=$(cmd_for C webhook chandan)
 
 # AppleScript split semantics (iTerm2):
 #   - "split vertically"   → vertical divider, new pane to the RIGHT
@@ -66,26 +65,26 @@ tell application "iTerm"
     tell current window
         set pollA to current session
         tell pollA
-            write text "$POLL_A"
+            write text "$STREAM_A"
             set pollB to (split vertically with default profile)
         end tell
         tell pollB
-            write text "$POLL_B"
+            write text "$STREAM_B"
             set pollC to (split vertically with default profile)
         end tell
-        tell pollC to write text "$POLL_C"
+        tell pollC to write text "$STREAM_C"
         tell pollA
             set webA to (split horizontally with default profile)
         end tell
-        tell webA to write text "$WEB_A"
+        tell webA to write text "$WEBHOOK_A"
         tell pollB
             set webB to (split horizontally with default profile)
         end tell
-        tell webB to write text "$WEB_B"
+        tell webB to write text "$WEBHOOK_B"
         tell pollC
             set webC to (split horizontally with default profile)
         end tell
-        tell webC to write text "$WEB_C"
+        tell webC to write text "$WEBHOOK_C"
     end tell
 end tell
 APPLESCRIPT

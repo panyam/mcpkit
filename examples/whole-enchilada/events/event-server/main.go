@@ -30,6 +30,36 @@ import (
 
 const eventStoreCap = 1000
 
+// replicaHeaderMiddleware sets X-Replica on every HTTP response so the
+// poller, the streamer's SSE-style subscription, and any admin call all
+// surface the serving replica. The header is set BEFORE delegating to
+// the inner handler so SSE long-lived bodies — which flush response
+// headers on the first write — carry it from the very first event.
+func replicaHeaderMiddleware(replica string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-Replica", replica)
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// resolveReplicaName picks the value stamped on the X-Replica header for
+// every HTTP response and outbound webhook POST. Demo-visible identity
+// for the multi-replica walkthrough beat — operators watch the value
+// rotate as nginx round-robins requests across event-server-{1..N}.
+// REPLICA_NAME (compose-injected per service) wins; os.Hostname() is the
+// local-run fallback.
+func resolveReplicaName() string {
+	if name := os.Getenv("REPLICA_NAME"); name != "" {
+		return name
+	}
+	if h, err := os.Hostname(); err == nil && h != "" {
+		return h
+	}
+	return "unknown"
+}
+
 func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	bearer := flag.String("inject-bearer", os.Getenv("EVENT_INJECT_BEARER"),
@@ -38,6 +68,8 @@ func main() {
 		"tenant id stamped onto event Meta in the demo / anonymous-auth path. When OAUTH_INTROSPECTION_URL or OAUTH_ISSUER is set, the per-subscription principal carries the tenant derived from token claims and this flag becomes a label only.")
 	tel := common.RegisterTelemetryFlags(flag.CommandLine)
 	flag.Parse()
+
+	replicaName := resolveReplicaName()
 
 	// Set up OTel TracerProvider before constructing the server so
 	// every span the server emits flows through. Exporter selector
@@ -109,6 +141,12 @@ func main() {
 		// chain (client tools/call → server dispatch → webhook
 		// delivery) as one row in Tempo.
 		events.WithWebhookTracerProvider(tp),
+		// Stamp the sending replica on every outbound delivery so the
+		// receiver's log shows which replica fanned this event out.
+		// With the Redis-backed registry + Pattern B publisher, fanout
+		// can land on any replica — the header makes the spray
+		// visible.
+		events.WithWebhookExtraHeaders(map[string]string{"X-Replica": replicaName}),
 	}
 	if ws := pgBackend.webhookStore(); ws != nil {
 		webhookOpts = append(webhookOpts, events.WithWebhookStore(ws))
@@ -166,6 +204,12 @@ func main() {
 	defer redisBackend.shutdown()
 
 	reg := events.Register(cfg)
+	// Hand the registry to the Redis Subscriber's deliver closure so
+	// cross-replica events can look up the local YieldingSource and
+	// fan out via LocalDeliver. Pre-Register receipts (vanishingly
+	// rare — would need a Redis publish to land before this line runs)
+	// are silently dropped by the closure.
+	redisBackend.SetRegistry(reg)
 
 	// Dynamic-source admin API (issue TBD): operator-runnable evctl CLI
 	// targets per-replica endpoints under /admin/sources/* and uses the
@@ -194,6 +238,10 @@ func main() {
 		server.WithStreamableHTTP(true),
 		server.WithSSE(true),
 		server.WithEventStore(gohttp.NewMemoryEventStore(eventStoreCap)),
+		// X-Replica on every HTTP response — poll calls show round-robin
+		// rotation, the streamer's persistent SSE 200 stamps which
+		// replica it's bound to, and reconnects make the value flip live.
+		server.WithHandlerWrap(replicaHeaderMiddleware(replicaName)),
 		server.WithMux(func(mux *http.ServeMux) {
 			// HTTPSource inject endpoints alongside MCP at /mcp.
 			mux.Handle(chatSrc.InjectPath(), chatSrc.Handler())

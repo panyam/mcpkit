@@ -415,6 +415,38 @@ func (s *YieldingSource[Data]) YieldTerminated(err EventDeliveryError) error {
 	return nil
 }
 
+// LocalDeliver runs the per-subscriber fanout loop for a fully-formed
+// event without re-buffering, without firing the configured Emitter
+// hook, and without going through the yield path's serial mutex hold.
+//
+// Use case: Pattern B Subscribers (Redis pubsub, future Kafka/NATS
+// transports) call LocalDeliver on every received cross-replica event
+// so each LOCAL subscriber slot's Match / Transform runs the same as
+// for a same-replica yield. Without this path, cross-replica events
+// would either skip Match/Transform (broadcast shortcut → tenant
+// scoping leaks) or re-fire the Emitter hook (publish-loop).
+//
+// The event is taken as-is — cursor, EventID, timestamp, Meta all
+// come from the originating replica's yield. Don't synthesize a new
+// cursor here; cross-replica subscribers MUST see the same cursor a
+// same-replica subscriber sees, otherwise events/poll resume math
+// breaks.
+//
+// Concurrency: safe to call from any goroutine (e.g. the Pattern B
+// Subscriber's receive goroutine). Snapshots the subscriber slice
+// under s.mu so concurrent Subscribe / cleanup races don't observe
+// closed channels.
+func (s *YieldingSource[Data]) LocalDeliver(_ context.Context, event Event) {
+	s.mu.Lock()
+	subs := append([]*subscriberSlot(nil), s.subscribers...)
+	matchFn := s.def.Match
+	transformFn := s.def.Transform
+	s.mu.Unlock()
+	for _, sub := range subs {
+		_, _ = s.deliverEventToSlot(sub, event, matchFn, transformFn)
+	}
+}
+
 // fanoutLocked sends a SubscriberEvent to every live subscriber.
 // Caller MUST hold s.mu (write lock) so the close-on-cleanup goroutine
 // in Subscribe doesn't race with our sends.

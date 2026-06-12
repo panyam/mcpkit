@@ -74,7 +74,23 @@ services:
     build:
       context: ../../..
       dockerfile: examples/whole-enchilada/events/event-server/Dockerfile
+    # Lets the event-server reach webhook receivers running on the
+    # host (e.g. `make webhook` opens a listener on the operator's
+    # 127.0.0.1:<dynamic-port>). Docker Desktop on macOS/Windows
+    # auto-maps host.docker.internal; Linux needs the explicit
+    # host-gateway entry. The webhook binary rewrites its callback
+    # URL from 127.0.0.1 → host.docker.internal so this entry is
+    # what makes that URL resolvable from inside the container.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
+      # Stamped on every HTTP response (X-Replica header) and every
+      # outbound webhook POST so the multi-replica walkthrough beat
+      # can show round-robin rotation + which replica fanned out each
+      # webhook. Falls back to os.Hostname() if unset, but compose's
+      # default short-hash hostname isn't operator-readable — set
+      # explicitly per replica.
+      REPLICA_NAME: event-server-{{.}}
       EVENT_INJECT_BEARER: ${EVENT_INJECT_BEARER:-{{$.InjectBearer}}}
       # Stage-2: introspection-mode auth. The event-server's
       # tryEnableIntrospection reads OAUTH_INTROSPECTION_URLS as a
@@ -124,10 +140,12 @@ services:
       # (issue 718); a 4th subscribe for the same principal lands on
       # any replica → -32013 ResourceExhausted with the
       # {limit:"subscriptions", max:N} envelope.
-      # Default chat.message=3 is small enough for the walkthrough's
-      # "subscribe 4 times, watch the 4th fail" beat to be driven by
-      # hand in sibling terminals.
-      EVENTS_QUOTA_CAPS: ${EVENTS_QUOTA_CAPS:-chat.message=3}
+      # Default chat.message=10 gives operating headroom for normal
+      # demo play (3 streamers + 3 webhooks + some accumulated Ctrl+C
+      # remnants stay well under cap). The Phase 6 walkthrough beat
+      # overrides this down to 3 via EVENTS_QUOTA_CAPS=chat.message=3
+      # for its "subscribe 4 times, watch the 4th fail" demonstration.
+      EVENTS_QUOTA_CAPS: ${EVENTS_QUOTA_CAPS:-chat.message=10}
       # POSTGRES_BUFFER_TTL — retention window for Postgres-backed
       # EventBufferStore rows (issue 727). The background sweeper drops
       # rows past expires_at every 60s; clients polling for an evicted
