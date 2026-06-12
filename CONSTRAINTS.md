@@ -58,4 +58,24 @@ Escape hatch for cross-extension e2e tests: put the test in a separate top-level
 
 If a future SEP explicitly cross-cuts two extensions, document the SEP reference in the importing module's README so the coupling is auditable.
 
-**Verify:** `bash -c 'for m in ext/*/go.mod experimental/ext/*/go.mod; do owner=$(dirname "$m" | xargs basename); m_=$(grep -E "^[[:space:]]+github\.com/panyam/mcpkit/(ext|experimental/ext)/" "$m" | grep -vE "github\.com/panyam/mcpkit/(ext|experimental/ext)/$owner([[:space:]/]|$)"); if [ -n "$m_" ]; then echo "VIOLATION: $m"; echo "$m_"; fi; done'` — must print nothing. Matches indented `require` lines (skipping module-declaration lines) and excludes the module's own path.
+A cross-extension reference is a violation **only** when the referenced module is neither the importing module itself nor an ancestor of it. Nested intra-extension submodules (e.g., `experimental/ext/events/stores/redis` depending on its parent `experimental/ext/events`) are intentional and allowed.
+
+**Verify:** the script below catches `require`/`replace` lines pointing at another extension after subtracting (a) the module's own path and (b) any ancestor of it. It walks every `go.mod` under `ext/` and `experimental/ext/`, including nested submodules. Must print nothing.
+
+```bash
+bash -c '
+for m in $(find ext experimental/ext -name go.mod); do
+  mod=$(grep -E "^module " "$m" | awk "{print \$2}")
+  refs=$(grep -E "github\.com/panyam/mcpkit/(ext|experimental/ext)/" "$m" \
+    | grep -vE "^module " \
+    | grep -oE "github\.com/panyam/mcpkit/(ext|experimental/ext)/[a-zA-Z0-9_/-]+" \
+    | sort -u)
+  for ref in $refs; do
+    case "$mod" in
+      "$ref"|"$ref"/*) continue;;
+    esac
+    echo "VIOLATION $m: $ref"
+  done
+done
+'
+```
