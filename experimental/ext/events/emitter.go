@@ -44,15 +44,24 @@ type Emitter interface {
 	Emit(ctx context.Context, event Event) error
 }
 
-// NewLocalEmitter returns the default in-process emitter: broadcasts
-// to local SSE listeners via Server.Broadcast AND delivers to local
-// webhook targets via WebhookRegistry.Deliver. Either srv or webhooks
-// may be nil; a nil component is skipped. This matches the historical
-// emit-hook body that ran inline in Register before the seam landed.
+// NewLocalEmitter returns the default in-process emitter: delivers to
+// local webhook targets via WebhookRegistry.Deliver. The srv argument
+// is accepted for API compatibility but no longer carries any behavior
+// — local stream subscribers receive yielded events through the
+// per-source subscriber-slot channel registered by their handler
+// (events/stream calls source.Subscribe), not through Server.Broadcast.
 //
-// Multi-replica deployments wrap this in a composite with additional
-// targets (a peer-fanout emitter that POSTs to sibling replicas'
-// HTTPSource inject endpoints, a Redis pubsub emitter, etc.).
+// Cross-replica delivery is a separate concern: pair the receiving
+// side with an explicit call to events.Emit when bridging a different
+// transport (Redis pubsub Subscriber, peer HTTPSource inject, etc.)
+// so the cross-replica path fires Server.Broadcast EXACTLY once per
+// cross-replica handoff. Server.Broadcast now routes to handler-
+// registered broadcast targets (server.RegisterBroadcastTarget), which
+// is how events/stream subscribers on the stateless wire receive
+// cross-replica events.
+//
+// nil webhooks is a permitted no-op for tests / sources that have no
+// webhook surface.
 func NewLocalEmitter(srv *server.Server, webhooks *WebhookRegistry) Emitter {
 	return &localEmitter{srv: srv, webhooks: webhooks}
 }
@@ -80,9 +89,6 @@ type localEmitter struct {
 }
 
 func (e *localEmitter) Emit(ctx context.Context, event Event) error {
-	if e.srv != nil {
-		Emit(ctx, e.srv, event)
-	}
 	if e.webhooks != nil {
 		EmitToWebhooks(ctx, e.webhooks, event)
 	}

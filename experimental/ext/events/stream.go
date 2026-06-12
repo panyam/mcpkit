@@ -244,6 +244,37 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 			_, _ = idx.RemoveSubscription(context.Background(), RemoveSubscriptionRequest{SubscriptionID: streamSubID})
 		}()
 
+		// Cross-replica relay (issue: stream subscribers on the
+		// stateless wire are invisible to Server.Broadcast otherwise).
+		// Register the request's NotifyFunc as a global broadcast
+		// target — when a colocated Subscriber (e.g. Pattern B over
+		// Redis) receives an event yielded on a different replica and
+		// calls srv.Broadcast(..., event), it iterates this target and
+		// frames the notification down the open POST response.
+		//
+		// Accept filter restricts deliveries to notifications/events/event
+		// AND the subscription's source name, so the same client opening
+		// streams for source A and source B doesn't get cross-talk.
+		// Other notification methods (notifications/events/active,
+		// /terminated, /heartbeat, /truncated) are produced by THIS
+		// handler's own ctx.Notify path, not by Broadcast — admitting
+		// them here would duplicate.
+		streamName := req.Name
+		notifyFn := core.NotifyFunc(func(method string, params any) {
+			ctx.Notify(method, params)
+		})
+		acceptFn := func(method string, params any) bool {
+			if method != "notifications/events/event" {
+				return false
+			}
+			if ev, ok := params.(Event); ok {
+				return ev.Name == streamName
+			}
+			return false
+		}
+		deregisterBroadcast := srv.RegisterBroadcastTarget(notifyFn, acceptFn)
+		defer deregisterBroadcast()
+
 		// Send the confirmation notification. The loop below reads
 		// from evCh; active goes out via ctx.Notify before the loop
 		// starts, so any events queued on evCh between Subscribe and
