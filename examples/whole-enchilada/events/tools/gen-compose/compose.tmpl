@@ -131,10 +131,12 @@ services:
       # (issue 718); a 4th subscribe for the same principal lands on
       # any replica → -32013 ResourceExhausted with the
       # {limit:"subscriptions", max:N} envelope.
-      # Default chat.message=3 is small enough for the walkthrough's
-      # "subscribe 4 times, watch the 4th fail" beat to be driven by
-      # hand in sibling terminals.
-      EVENTS_QUOTA_CAPS: ${EVENTS_QUOTA_CAPS:-chat.message=3}
+      # Default chat.message=10 gives operating headroom for normal
+      # demo play (3 streamers + 3 webhooks + some accumulated Ctrl+C
+      # remnants stay well under cap). The Phase 6 walkthrough beat
+      # overrides this down to 3 via EVENTS_QUOTA_CAPS=chat.message=3
+      # for its "subscribe 4 times, watch the 4th fail" demonstration.
+      EVENTS_QUOTA_CAPS: ${EVENTS_QUOTA_CAPS:-chat.message=10}
       # POSTGRES_BUFFER_TTL — retention window for Postgres-backed
       # EventBufferStore rows (issue 727). The background sweeper drops
       # rows past expires_at every 60s; clients polling for an evicted

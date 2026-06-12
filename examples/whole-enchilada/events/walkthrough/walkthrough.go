@@ -195,19 +195,26 @@ make poller TENANT=A USERNAME=alice -- --start-cursor=<N>`).Default(),
 	// -----------------------------------------------------------------
 
 	demo.Section("Phase 6 — Subscription quota enforcement",
-		"`EVENTS_QUOTA_CAPS=chat.message=3` is wired in compose. The Redis-backed QuotaStore enforces this per-principal globally — the 4th subscribe rejects even when it lands on a different replica.",
+		"Compose ships `EVENTS_QUOTA_CAPS=chat.message=10` as the default (room for normal multi-window play without tripping). The Redis-backed QuotaStore enforces this per-principal globally — the cap+1'th subscribe rejects even when it lands on a different replica. For a tight demonstration this step overrides the cap down to 3 for the duration of the beat.",
 	)
 
-	demo.Step("Aarti × 4 — trip the subscription cap.").
+	demo.Step("Aarti × 4 — trip a tightened subscription cap.").
 		Note(
 			"- Demonstrates: cap is enforced GLOBALLY (Redis Lua-atomic INCR-with-check) — replica-locality of subscribes doesn't help bypass it.",
 			"- Expected: first three windows print steady delivery; the fourth exits immediately with -32013 ResourceExhausted limit=subscriptions max=3. We use aarti (not alice/anand) so the subscriptions from Phase 1 don't already count toward her cap.",
 		).
-		VerbatimVariants("Run in four sibling windows; the 4th rejects",
-			demokit.MakeVariant("shell", "bash", `make webhook TENANT=A USERNAME=aarti   # window 1 — succeeds
+		VerbatimVariants("Tighten the cap first, then run in four sibling windows; the 4th rejects",
+			demokit.MakeVariant("shell", "bash", `# Lower the cap to 3 for this beat, restart the event-server tier:
+EVENTS_QUOTA_CAPS=chat.message=3 docker compose up -d event-server-1 event-server-2 event-server-3
+make clear-all   # clear stale aarti subs from any prior runs
+
+make webhook TENANT=A USERNAME=aarti   # window 1 — succeeds
 make webhook TENANT=A USERNAME=aarti   # window 2 — succeeds
 make webhook TENANT=A USERNAME=aarti   # window 3 — succeeds (at cap)
-make webhook TENANT=A USERNAME=aarti   # window 4 — rejects with -32013`).Default(),
+make webhook TENANT=A USERNAME=aarti   # window 4 — rejects with -32013
+
+# Restore the looser default afterwards:
+docker compose up -d event-server-1 event-server-2 event-server-3`).Default(),
 		)
 
 	// -----------------------------------------------------------------
