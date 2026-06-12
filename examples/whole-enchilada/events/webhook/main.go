@@ -99,7 +99,23 @@ func main() {
 
 	callbackURL := *publicURL
 	if callbackURL == "" {
-		callbackURL = "http://" + listener.Addr().String()
+		// The event-server in this demo runs inside Docker. From the
+		// container's POV, 127.0.0.1 is the container's loopback —
+		// NOT the host's — so a callback URL like
+		// http://127.0.0.1:<port> can never reach this binary
+		// running on the host. Rewrite the host portion to
+		// host.docker.internal (Docker Desktop auto-maps on
+		// macOS/Windows; Linux needs extra_hosts:
+		// host.docker.internal:host-gateway in compose). The
+		// listener still binds to 127.0.0.1 so external machines
+		// can't hit it.
+		addr := listener.Addr().String()
+		host, port, splitErr := net.SplitHostPort(addr)
+		if splitErr == nil && (host == "127.0.0.1" || host == "::1" || host == "0.0.0.0" || host == "" || host == "[::]") {
+			callbackURL = "http://host.docker.internal:" + port
+		} else {
+			callbackURL = "http://" + addr
+		}
 	}
 	log.Printf("%s listening on %s — webhook deliveries go to %s/webhook", prefix, listener.Addr(), callbackURL)
 
