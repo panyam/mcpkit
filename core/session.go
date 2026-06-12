@@ -92,6 +92,15 @@ const (
 	// claims ride on ctx directly. BaseContext.AuthClaims coalesces the
 	// two so handlers do not special-case the wire.
 	statelessClaimsCtxKey
+	// statelessNotifyCtxKey carries the request-scoped NotifyFunc the
+	// stateless transport installs when a POST request carries
+	// Accept: text/event-stream. The handler's ctx.Notify(...) writes
+	// notification frames down the open POST response stream. Legacy
+	// wire's POST-as-SSE path (handlePostSSE) and GET SSE path both
+	// stash the notify func on the sessionCtx; this is the stateless
+	// equivalent — BaseContext.Notify coalesces the two so events/stream
+	// (and any other streaming handler) works identically on either wire.
+	statelessNotifyCtxKey
 )
 
 // ContextWithSession returns a context carrying the session's notification state,
@@ -231,6 +240,37 @@ func WithStatelessClaims(ctx context.Context, claims *Claims) context.Context {
 func statelessClaimsFromContext(ctx context.Context) *Claims {
 	claims, _ := ctx.Value(statelessClaimsCtxKey).(*Claims)
 	return claims
+}
+
+// WithStatelessNotifyFunc threads a NotifyFunc onto ctx for the SEP-2575
+// stateless dispatch path. The stateless transport calls this when a
+// POST request carries Accept: text/event-stream — the handler's
+// ctx.Notify(...) writes notification frames down the open POST
+// response stream (response-as-SSE).
+//
+// On the legacy wire the notify channel lives on the sessionCtx (set
+// when a GET SSE stream attaches, or when handlePostSSE wraps the
+// dispatch). BaseContext.Notify coalesces the two sources so the
+// events/stream handler (and any other streaming endpoint) does not
+// special-case the wire.
+//
+// Returns ctx unchanged when fn is nil so callers can drop the
+// nil-check at the call site.
+func WithStatelessNotifyFunc(ctx context.Context, fn NotifyFunc) context.Context {
+	if fn == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, statelessNotifyCtxKey, fn)
+}
+
+// statelessNotifyFuncFromContext returns the NotifyFunc attached by the
+// SEP-2575 stateless transport for the SSE response path, or nil if
+// absent. Internal — handlers should call BaseContext.Notify, which
+// falls back to this source when no session-attached notify func is
+// present.
+func statelessNotifyFuncFromContext(ctx context.Context) NotifyFunc {
+	fn, _ := ctx.Value(statelessNotifyCtxKey).(NotifyFunc)
+	return fn
 }
 
 // ClientSupportsExtension checks whether the connected client declared support

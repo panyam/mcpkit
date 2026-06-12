@@ -363,12 +363,28 @@ func stripFileInputKeywordsRaw(raw json.RawMessage) json.RawMessage {
 
 // Notify sends an arbitrary server-to-client JSON-RPC notification.
 // Returns false if no notification sender is available.
+//
+// Resolution order:
+//
+//  1. Legacy wire: sessionCtx-attached notify func (set by the GET SSE
+//     stream or by handlePostSSE for a POST that opted into SSE
+//     streaming).
+//  2. Stateless wire: ctx-attached NotifyFunc threaded by
+//     WithStatelessNotifyFunc when the stateless transport handles a
+//     POST with Accept: text/event-stream (response-as-SSE).
+//
+// Returns false when neither source is present — for example, a
+// stateless POST that did NOT request SSE has no channel to push to.
 func (bc BaseContext) Notify(method string, params any) bool {
-	if bc.sc == nil || bc.sc.notify == nil {
-		return false
+	if bc.sc != nil && bc.sc.notify != nil {
+		bc.sc.notify(method, params)
+		return true
 	}
-	bc.sc.notify(method, params)
-	return true
+	if fn := statelessNotifyFuncFromContext(bc.Context); fn != nil {
+		fn(method, params)
+		return true
+	}
+	return false
 }
 
 // AuthClaims returns the authenticated identity, or nil if unavailable.

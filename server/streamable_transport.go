@@ -273,6 +273,16 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 				t.handleStatelessSubscribe(w, r, &req)
 				return
 			}
+			// Issue #753: a stateless POST that accepts SSE opens the
+			// response itself as the SSE channel — handler's ctx.Notify
+			// frames flow down the response stream, terminal *core.Response
+			// is the final SSE event before close. Matches the legacy
+			// handlePostSSE shape; needed for events/stream and any other
+			// streaming-shaped custom method to work on the stateless wire.
+			if shouldStreamSSE(r.Header.Get("Accept"), &req) {
+				t.handleStatelessPostSSE(w, r, claims, &req)
+				return
+			}
 			t.handleStatelessPost(w, r, claims, &req)
 			return
 		}
