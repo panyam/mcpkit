@@ -174,6 +174,36 @@ func WithModifyRequest(fn func(*http.Request)) ClientOption {
 	return func(c *Client) { c.modifyRequest = fn }
 }
 
+// WithInspectResponse sets a callback that is invoked with every HTTP
+// response the transport receives. Mirror of WithModifyRequest for the
+// inbound direction.
+//
+// Use it to observe response headers and status — the callback must NOT
+// read or close the response body, which the transport owns. Typical
+// uses: surfacing custom deployment headers, capturing rate-limit hints,
+// reading tracing IDs the server stamps on responses.
+//
+// Fires on every HTTP response the transport's http.Client returns,
+// including pre-retry 401/403 responses that DoWithAuthRetry will retry
+// and any non-2xx final response. Only network-level errors (no response
+// received) skip the callback.
+//
+// Only applies to HTTP transports (Streamable HTTP, SSE); ignored for
+// stdio and in-process transports.
+//
+// Example (logging an arbitrary deployment header):
+//
+//	c := client.NewClient(url, info,
+//	    client.WithInspectResponse(func(resp *http.Response) {
+//	        if v := resp.Header.Get("X-Some-Deployment-Header"); v != "" {
+//	            log.Printf("response header: %s", v)
+//	        }
+//	    }),
+//	)
+func WithInspectResponse(fn func(*http.Response)) ClientOption {
+	return func(c *Client) { c.inspectResponse = fn }
+}
+
 // WithContentChunkHandler sets a callback for streaming tool content chunks.
 // The callback is invoked for each content chunk notification received during
 // tool execution (method matching the server's configured content chunk method,
@@ -403,6 +433,11 @@ type Client struct {
 	// ModifyRequest hook for outgoing HTTP requests (set by WithModifyRequest).
 	modifyRequest func(*http.Request)
 
+	// InspectResponse hook fired on every HTTP response the transport
+	// receives (set by WithInspectResponse). Headers/status only — must
+	// NOT touch the body, which the transport owns.
+	inspectResponse func(*http.Response)
+
 	// Call-level middleware chain (set by WithClientMiddleware).
 	callMiddleware []ClientMiddleware
 
@@ -549,6 +584,7 @@ func (c *Client) doConnect() error {
 			st.client = c
 			st.serverReqHandler = c.HandleServerRequest
 			st.modifyReq = c.modifyRequest
+			st.inspectResp = c.inspectResponse
 			if c.needsNotifyAdapter() {
 				st.notifyHandler = c.makeNotifyAdapter()
 			}
@@ -559,6 +595,7 @@ func (c *Client) doConnect() error {
 			st.serverReqHandler = c.HandleServerRequest
 			st.enableGetSSE = c.enableGetSSE
 			st.modifyReq = c.modifyRequest
+			st.inspectResp = c.inspectResponse
 			if c.needsNotifyAdapter() {
 				st.notifyHandler = c.makeNotifyAdapter()
 			}
@@ -1580,10 +1617,25 @@ type streamableClientTransport struct {
 
 	// ModifyRequest hook called inside buildReq before auth is applied.
 	modifyReq func(*http.Request)
+
+	// InspectResp fires on every HTTP response from httpClient.Do.
+	// Headers/status only — must not touch the body.
+	inspectResp func(*http.Response)
 }
 
 func newStreamableClientTransport(url string, ts core.TokenSource) *streamableClientTransport {
 	return &streamableClientTransport{url: url, httpClient: http.DefaultClient, tokenSource: ts}
+}
+
+// do wraps httpClient.Do with the inspect-response hook so every Do
+// call site doesn't need a per-site nil-check. Always returns the same
+// (resp, err) pair the underlying client returns.
+func (t *streamableClientTransport) do(req *http.Request) (*http.Response, error) {
+	resp, err := t.httpClient.Do(req)
+	if err == nil && t.inspectResp != nil {
+		t.inspectResp(resp)
+	}
+	return resp, err
 }
 
 func (t *streamableClientTransport) connect() error       { return nil }
@@ -1632,7 +1684,7 @@ func (t *streamableClientTransport) openGetSSEStream() {
 		return req, nil
 	}
 
-	resp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
+	resp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.do)
 	if err != nil {
 		cancel()
 		return // non-fatal: client works in POST-only mode
@@ -1785,7 +1837,7 @@ func (t *streamableClientTransport) callWithContext(method string, data []byte, 
 		return req, nil
 	}
 
-	resp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
+	resp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.do)
 	if err != nil {
 		return nil, err
 	}
@@ -1938,7 +1990,7 @@ func (t *streamableClientTransport) resumeViaGET(lastEventID string, retryMs int
 		return req, nil
 	}
 
-	resp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
+	resp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.do)
 	if err != nil {
 		return nil, fmt.Errorf("SEP-1699 resume GET: %w", err)
 	}
@@ -1993,7 +2045,7 @@ func (t *streamableClientTransport) postResponse(resp *core.Response) {
 		}
 		return req, nil
 	}
-	httpResp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
+	httpResp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.do)
 	if err != nil {
 		return
 	}
@@ -2020,7 +2072,7 @@ func (t *streamableClientTransport) notify(method string, data []byte) error {
 		return req, nil
 	}
 
-	resp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
+	resp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.do)
 	if err != nil {
 		return err
 	}
@@ -2065,10 +2117,24 @@ type sseClientTransport struct {
 
 	// ModifyRequest hook called inside buildReq before auth is applied.
 	modifyReq func(*http.Request)
+
+	// InspectResp fires on every HTTP response from httpClient.Do.
+	// Headers/status only — must not touch the body.
+	inspectResp func(*http.Response)
 }
 
 func newSSEClientTransport(sseURL string, ts core.TokenSource) *sseClientTransport {
 	return &sseClientTransport{sseURL: sseURL, httpClient: http.DefaultClient, tokenSource: ts}
+}
+
+// do wraps httpClient.Do with the inspect-response hook so every Do
+// call site doesn't need a per-site nil-check.
+func (t *sseClientTransport) do(req *http.Request) (*http.Response, error) {
+	resp, err := t.httpClient.Do(req)
+	if err == nil && t.inspectResp != nil {
+		t.inspectResp(resp)
+	}
+	return resp, err
 }
 
 func (t *sseClientTransport) connect() error {
@@ -2100,7 +2166,7 @@ func (t *sseClientTransport) connect() error {
 		return req, nil
 	}
 
-	resp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
+	resp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.do)
 	if err != nil {
 		return fmt.Errorf("GET %s: %w", t.sseURL, err)
 	}
@@ -2234,7 +2300,7 @@ func (t *sseClientTransport) postResponse(resp *core.Response) {
 		}
 		return req, nil
 	}
-	httpResp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
+	httpResp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.do)
 	if err != nil {
 		return
 	}
@@ -2303,7 +2369,7 @@ func (t *sseClientTransport) call(_ string, data []byte) (*rpcResponse, error) {
 		return req, nil
 	}
 
-	resp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
+	resp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.do)
 	if err != nil {
 		return nil, fmt.Errorf("POST %s: %w", t.postURL, err)
 	}
@@ -2352,7 +2418,7 @@ func (t *sseClientTransport) notify(_ string, data []byte) error {
 		return req, nil
 	}
 
-	resp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.httpClient.Do)
+	resp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.do)
 	if err != nil {
 		return fmt.Errorf("POST %s: %w", t.postURL, err)
 	}

@@ -117,7 +117,11 @@ func (r *receiver) handleWebhook(w http.ResponseWriter, req *http.Request) {
 		Body:       json.RawMessage(body),
 	})
 	r.mu.Unlock()
-	log.Printf("[receiver] accepted webhook-id=%s body=%s", id, string(body))
+	replica := req.Header.Get("X-Replica")
+	if replica == "" {
+		replica = "?"
+	}
+	log.Printf("[receiver] accepted webhook-id=%s replica=%s body=%s", id, replica, string(body))
 	w.WriteHeader(http.StatusOK)
 }
 

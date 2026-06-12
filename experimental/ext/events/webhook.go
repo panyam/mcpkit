@@ -225,6 +225,31 @@ func WithWebhookAllowPrivateNetworks(allow bool) WebhookOption {
 	}
 }
 
+// WithWebhookExtraHeaders adds caller-supplied headers to every outbound
+// delivery POST. The map is set on the request BEFORE the signature /
+// X-MCP-Subscription-Id / traceparent / tracestate headers, so any caller
+// key that collides with a spec-mandated header is overwritten by the
+// library — extra headers can never weaken the delivery contract.
+//
+// Use cases: tagging deliveries with deployment metadata the receiver
+// wants to see (replica identity, region, tenant), or adding an auth /
+// trust header for a receiver behind a proxy. The headers apply uniformly
+// to every target — per-target headers stay on WebhookTarget.
+//
+// Passing nil or an empty map is a no-op. Header names are sent as-is;
+// the caller is responsible for using canonical forms.
+func WithWebhookExtraHeaders(headers map[string]string) WebhookOption {
+	return func(r *WebhookRegistry) {
+		if len(headers) == 0 {
+			return
+		}
+		r.extraHeaders = make(map[string]string, len(headers))
+		for k, v := range headers {
+			r.extraHeaders[k] = v
+		}
+	}
+}
+
 // WithWebhookTracerProvider opts the registry into SEP-414
 // instrumentation of the outbound HTTP delivery path. When set,
 // every retry-loop attempt is wrapped in an `events.webhook.deliver`
@@ -366,6 +391,7 @@ type WebhookRegistry struct {
 	ttlClampBypass       bool // WithUnsafeWebhookTTLBypass — disables clamp
 	headerMode           WebhookHeaderMode
 	allowPrivateNetworks bool          // when false (default), Dialer.Control rejects private/loopback IPs (spec §"Webhook Security" → "SSRF prevention" L464)
+	extraHeaders         map[string]string // caller-supplied headers (WithWebhookExtraHeaders); applied BEFORE signature/MCP/trace headers so spec-mandated keys always win
 	maxBodyBytes         int           // outbound POST body cap (spec §"Webhook Security" → "Delivery profile" L487); default 256 KiB
 	suspendThreshold     int           // consecutive failures → Active=false (spec §"Webhook Delivery Status" L460); default 5
 	suspendWindow        time.Duration // sliding window over which failures accumulate; default 10min
@@ -1171,6 +1197,9 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, eventID, eventName strin
 		if err != nil {
 			r.logf("[webhook] failed to create request for %s: %v", target.URL, err)
 			return // not retryable
+		}
+		for k, v := range r.extraHeaders {
+			req.Header.Set(k, v)
 		}
 		signed.applyHeaders(req)
 		if !tc.IsZero() {
