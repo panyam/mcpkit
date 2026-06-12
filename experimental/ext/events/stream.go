@@ -244,36 +244,14 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 			_, _ = idx.RemoveSubscription(context.Background(), RemoveSubscriptionRequest{SubscriptionID: streamSubID})
 		}()
 
-		// Cross-replica relay (issue: stream subscribers on the
-		// stateless wire are invisible to Server.Broadcast otherwise).
-		// Register the request's NotifyFunc as a global broadcast
-		// target — when a colocated Subscriber (e.g. Pattern B over
-		// Redis) receives an event yielded on a different replica and
-		// calls srv.Broadcast(..., event), it iterates this target and
-		// frames the notification down the open POST response.
-		//
-		// Accept filter restricts deliveries to notifications/events/event
-		// AND the subscription's source name, so the same client opening
-		// streams for source A and source B doesn't get cross-talk.
-		// Other notification methods (notifications/events/active,
-		// /terminated, /heartbeat, /truncated) are produced by THIS
-		// handler's own ctx.Notify path, not by Broadcast — admitting
-		// them here would duplicate.
-		streamName := req.Name
-		notifyFn := core.NotifyFunc(func(method string, params any) {
-			ctx.Notify(method, params)
-		})
-		acceptFn := func(method string, params any) bool {
-			if method != "notifications/events/event" {
-				return false
-			}
-			if ev, ok := params.(Event); ok {
-				return ev.Name == streamName
-			}
-			return false
-		}
-		deregisterBroadcast := srv.RegisterBroadcastTarget(notifyFn, acceptFn)
-		defer deregisterBroadcast()
+		// Cross-replica delivery for this stream subscriber happens via
+		// the source's subscriber-slot system, NOT via Server.Broadcast.
+		// Pattern B Subscribers (e.g. the redisstore Subscriber wired
+		// up in the whole-enchilada demo) call source.LocalDeliver on
+		// receive, which runs the same per-slot Match / Transform
+		// fanout this slot's local yields go through. The slot we
+		// registered above (via sub.Subscribe) is what fires for both
+		// origin-replica yields and cross-replica relays.
 
 		// Send the confirmation notification. The loop below reads
 		// from evCh; active goes out via ctx.Notify before the loop
