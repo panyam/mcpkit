@@ -9,6 +9,7 @@ bin/
 # part of the backends extraction (PR 2). See docker/backends/.gitignore.
 # go-build artifacts from running `make build` or `go build` in the leaf binaries
 poller/poller
+streamer/streamer
 webhook/webhook
 event-server/event-server
 push-server/push-server

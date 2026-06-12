@@ -57,6 +57,22 @@ type redisBackend struct {
 	sub    *redisstore.Subscriber
 	cancel context.CancelFunc
 	done   chan struct{}
+	// registry is populated by the caller AFTER events.Register returns
+	// — the Subscriber's deliver closure dereferences this to look up
+	// the source for LocalDeliver routing. nil until SetRegistry runs;
+	// receives that arrive before then are dropped (acceptable: yields
+	// can't happen yet because the source handlers aren't installed).
+	registry *events.Registry
+}
+
+// SetRegistry hands the post-Register events.Registry to the
+// Subscriber's deliver closure so it can look up sources and route
+// LocalDeliver. Idempotent — only the first call has effect.
+func (r *redisBackend) SetRegistry(reg *events.Registry) {
+	if r == nil || r.registry != nil {
+		return
+	}
+	r.registry = reg
 }
 
 // shutdown is safe to call on a zero redisBackend (no-op when
@@ -157,23 +173,58 @@ func configureRedisBackend(cfg *events.Config, srv *server.Server, webhooks *eve
 	}
 	cfg.Quota = events.NewQuota(quotaOpts...)
 
-	// Emitter — Redis-only outbound (Pattern B; see the doc comment
-	// above). The receive side below delivers locally.
+	// Publisher — outbound Pattern B leg. Per-Publisher origin ID lets
+	// the colocated Subscriber drop self-publishes so a replica's own
+	// yields don't double-fire through the Redis round-trip.
 	pub, err := redisstore.NewPublisher(opts)
 	if err != nil {
 		log.Fatalf("redisstore.NewPublisher: %v", err)
 	}
-	cfg.Emitter = pub
 
-	// Subscriber — receives PUBLISHed events from Redis and delivers
-	// each to the LOCAL emitter, which broadcasts to SSE listeners and
-	// POSTs to webhook targets on this replica. On a single-replica
-	// stack this round-trips locally through Redis (small latency tax;
-	// keeps the wiring symmetric across N=1 and N>=2). On a
-	// multi-replica stack every replica including the publisher
-	// participates equally.
-	local := events.NewLocalEmitter(srv, webhooks)
-	sub, err := redisstore.NewSubscriber(opts, local.Emit)
+	// Yield-side emitter: deliver locally to webhooks (origin replica
+	// fires webhook POSTs exactly once globally per yielded event) AND
+	// publish to Redis for cross-replica relay. Stream subscribers on
+	// this replica receive via the source's subscriber-slot channel —
+	// NOT via Server.Broadcast — so we don't need a Broadcast call on
+	// the yield path here.
+	cfg.Emitter = events.NewCompositeEmitter(
+		events.NewLocalEmitter(srv, webhooks),
+		pub,
+	)
+
+	// Receive-side: Redis Subscriber routes each cross-replica event
+	// into the LOCAL YieldingSource's per-slot fanout via LocalDeliver.
+	// That runs the same Match / Transform path a same-replica yield
+	// would, so per-subscription tenant scoping stays authoritative —
+	// the broadcast shortcut bypassed Match and let asgard events reach
+	// babylon streamers. Self-publishes are dropped inside the
+	// Subscriber via SkipOriginID before reaching this callback, so
+	// the origin replica's local fanout fires exactly once.
+	opts.SkipOriginID = pub.OriginID()
+	// rb pre-allocated so the deliver closure can read rb.registry,
+	// which the caller sets via SetRegistry AFTER events.Register
+	// returns (the registry doesn't exist yet at this point).
+	rb := &redisBackend{cli: cli}
+	deliver := func(ctx context.Context, event events.Event) error {
+		if rb.registry == nil {
+			return nil
+		}
+		src, ok := rb.registry.Source(event.Name)
+		if !ok {
+			return nil
+		}
+		ld, ok := src.(events.LocalDeliverer)
+		if !ok {
+			// Sources that don't support LocalDeliver (TypedSource
+			// today) silently skip cross-replica push delivery. Their
+			// webhook subscribers still receive events via the origin
+			// replica's EmitToWebhooks; only push misses out.
+			return nil
+		}
+		ld.LocalDeliver(ctx, event)
+		return nil
+	}
+	sub, err := redisstore.NewSubscriber(opts, deliver)
 	if err != nil {
 		log.Fatalf("redisstore.NewSubscriber: %v", err)
 	}
@@ -209,5 +260,8 @@ func configureRedisBackend(cfg *events.Config, srv *server.Server, webhooks *eve
 	log.Printf("[event-server] Redis backend active: addr=%s prefix=%s quotaTTL=%s",
 		addr, effPrefix, effTTL)
 
-	return &redisBackend{cli: cli, sub: sub, cancel: cancel, done: done}
+	rb.sub = sub
+	rb.cancel = cancel
+	rb.done = done
+	return rb
 }

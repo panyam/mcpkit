@@ -34,6 +34,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -85,6 +86,14 @@ func main() {
 	}
 	prefix += "]"
 
+	// Last-seen X-Replica response header. The event-server stamps this
+	// per HTTP response (demo-only deployment metadata, not part of the
+	// MCP spec). With nginx round-robin + stateless wire, each poll can
+	// land on a different replica; we log the value on every change so
+	// the operator visibly sees rotation in the terminal log.
+	var lastReplica atomic.Value
+	lastReplica.Store("")
+
 	c := client.NewClient(*server, core.ClientInfo{
 		Name:    "whole-enchilada-poller",
 		Version: "0.1.0",
@@ -96,6 +105,17 @@ func main() {
 		// receiving replica's in-memory map; cross-replica continuity
 		// would need the not-yet-implemented shared session store).
 		client.WithClientMode(client.ClientModeStateless),
+		client.WithInspectResponse(func(resp *http.Response) {
+			r := resp.Header.Get("X-Replica")
+			if r == "" {
+				return
+			}
+			prev, _ := lastReplica.Load().(string)
+			if r != prev {
+				lastReplica.Store(r)
+				log.Printf("%s served by %s", prefix, r)
+			}
+		}),
 	)
 	if err := c.Connect(); err != nil {
 		log.Fatalf("%s connect failed: %v", prefix, err)

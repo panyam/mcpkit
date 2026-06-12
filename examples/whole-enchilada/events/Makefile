@@ -55,9 +55,9 @@ HOSTS_NAMES  := nginx.whole-enchilada event-server.whole-enchilada \
                 receiver.whole-enchilada
 
 .PHONY: help gen-compose build unittest up down infraup infradown test demo readme predemo \
-        newtoken newtoken-ci poller webhook inject drive-chat drive-presence \
+        newtoken newtoken-ci poller streamer webhook inject drive-chat drive-presence \
         add-discord rm-source list-sources alllogs \
-        hosts-install hosts-uninstall logs ps clean clean-backends
+        hosts-install hosts-uninstall logs ps clean clean-backends clear_all_tokens clear-all
 
 help: ## Show this help.
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / { printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -70,6 +70,7 @@ build: ## Build all binaries locally (without Docker). push-server stays a refer
 	go -C receiver build -o ../bin/receiver ./
 	go -C poller build -o ../bin/poller ./
 	go -C webhook build -o ../bin/webhook ./
+	go -C streamer build -o ../bin/streamer ./
 	go -C inject build -o ../bin/inject ./
 	go -C drivers/synth build -o ../../bin/synth ./
 	go -C evctl build -o ../bin/evctl ./
@@ -162,6 +163,14 @@ webhook: ## Long-running webhook subscriber. TENANT=A|B|C plus either TOKEN=<bea
 		$(if $(USERNAME),--username $(USERNAME) --password $(if $(PASSWORD),$(PASSWORD),$(USERNAME))) \
 		--event $(EVENT)
 
+streamer: ## Long-running events/stream subscriber over the stateless wire (push delivery). TENANT=A|B|C plus either TOKEN=<bearer> or USERNAME=<u> [PASSWORD=<p>; defaults to USERNAME].
+	@if [ -z "$(TOKEN)" ] && [ -z "$(USERNAME)" ]; then \
+		echo "usage: make streamer TENANT=A|B|C [TOKEN=<bearer> | USERNAME=<u> [PASSWORD=<p>]]" >&2; exit 2; fi
+	go -C streamer run . --tenant $(call tenant-realm,$(TENANT)) \
+		$(if $(TOKEN),--token $(TOKEN)) \
+		$(if $(USERNAME),--username $(USERNAME) --password $(if $(PASSWORD),$(PASSWORD),$(USERNAME))) \
+		--event $(EVENT)
+
 # Drivers — operator-runnable synthetic producers. Stack starts silent;
 # fire these in sibling terminals to start producing events. drive-chat
 # and drive-presence are thin wrappers around one synth binary that
@@ -223,6 +232,13 @@ clear_all_tokens: ## Sign out every USER session in all 3 tenant realms (keeps m
 		docker exec mcpkit-keycloak /opt/keycloak/bin/kcadm.sh create logout-all -r $$realm >/dev/null && \
 		echo "[clear_all_tokens] $$realm: all user sessions signed out"; \
 	done
+
+clear-all: clear_all_tokens ## Quick clean slate without a full predemo: sign out Keycloak sessions + delete Redis quota keys + truncate webhooks. Survivors of Ctrl+C from prior demo runs (counters/subs that didn't release cleanly) get wiped so the cap=3 quota resets and stale callback URLs disappear. Heavier hammer if needed: stop the stack and `rm -rf ../../../docker/backends/data/redis`.
+	@deleted=$$(docker exec mcpkit-redis sh -c 'redis-cli --scan --pattern "mcpkit.events.quota.*" | xargs -r redis-cli DEL' 2>/dev/null || echo 0); \
+		echo "[clear-all] redis quota keys deleted: $$deleted"
+	@docker exec mcpkit-postgres psql -U postgres -d events -c "TRUNCATE TABLE webhooks" >/dev/null 2>&1 && \
+		echo "[clear-all] webhooks table truncated" || \
+		echo "[clear-all] webhooks table not present yet (no subs ever created) — skip"
 
 inject: ## Inject one event from the host. TENANT=A|B|C [EVENT=chat.message] [TEXT="..."].
 	@if [ -z "$(TENANT)" ]; then echo "usage: make inject TENANT=A|B|C [EVENT=<name>] [TEXT='...']"; exit 2; fi
