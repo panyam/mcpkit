@@ -20,12 +20,11 @@ import (
 // tracking. Emit is safe for concurrent use because the underlying
 // *redis.Client is safe for concurrent use.
 //
-// Each Publisher instance has a process-unique OriginID that Emit
-// stamps onto event.Meta[events.OriginMetaKey] (see ../../origin.go for
-// the shared seam). A co-located Subscriber configured with the same
-// value via Options.SkipOriginID drops those messages — the standard
-// Pattern B requirement so a replica's own publishes don't re-fire its
-// local fanout (yield-side already handled that in-process).
+// Each Publisher instance has a process-unique origin marker (see
+// origin.go). The marker is stamped on every published event so a
+// colocated Subscriber wired through Bus can drop self-publishes. The
+// marker is stripped from event.Meta on the receive side before
+// deliverFn fires — adopters never see it.
 type Publisher struct {
 	opts     Options
 	originID string
@@ -35,9 +34,11 @@ type Publisher struct {
 // (typically composed with events.NewLocalEmitter — see the package doc's
 // anti-loop pattern), broadcasts every yielded event to Redis.
 //
-// A 16-byte random origin ID is generated at construction time. Use
-// (*Publisher).OriginID() to wire it into the co-located Subscriber's
-// Options.SkipOriginID.
+// A 16-byte random origin marker is generated at construction time and
+// stamped on every published event. Adopters that want self-publish
+// dedup against a colocated Subscriber should use Bus, which wires
+// both ends with the marker known internally — Publisher's marker is
+// not exposed.
 //
 // Returns an error when Options.Client is nil — every other field has
 // a working default.
@@ -55,11 +56,6 @@ func NewPublisher(opts Options) (*Publisher, error) {
 	}, nil
 }
 
-// OriginID returns this Publisher's process-unique origin marker. Wire
-// it into the co-located Subscriber's Options.SkipOriginID so its
-// receive path drops events this publisher emitted.
-func (p *Publisher) OriginID() string { return p.originID }
-
 // Emit encodes the event via Options.Codec and PUBLISHes it to the
 // per-event-name channel. Returns the codec error on Encode failure
 // or the redis error on PUBLISH failure. A nil-but-no-subscribers
@@ -76,7 +72,7 @@ func (p *Publisher) OriginID() string { return p.originID }
 // never clobbered (mirrors core.InjectTraceContextIntoParams).
 func (p *Publisher) Emit(ctx context.Context, event events.Event) error {
 	event.Meta = injectTraceContext(ctx, event.Meta)
-	event.Meta = events.StampOriginIDOnMeta(event.Meta, p.originID)
+	event.Meta = stampOriginIDOnMeta(event.Meta, p.originID)
 	body, err := p.opts.Codec.Encode(event)
 	if err != nil {
 		return fmt.Errorf("redisstore: encode failed: %w", err)
