@@ -144,6 +144,21 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 			return newForbiddenError(id, "Forbidden")
 		}
 
+		// SEP-2575 stateless wire has no session and no GET SSE — the
+		// active / event / heartbeat frames an open events/stream would
+		// emit have nowhere to land, and every ctx.Notify silently
+		// no-ops. Fail fast with the same -32014 shape the
+		// source-lacks-push branch uses below so clients fall back to
+		// events/poll via one decision rule. Scoped to the stateless
+		// wire specifically — legacy callers without an attached notify
+		// (e.g., a session whose GET SSE has not opened yet, or test
+		// fixtures that call srv.Dispatch directly) keep the historical
+		// silent-drop behavior.
+		if core.IsStatelessWire(ctx.Context) {
+			return newUnsupportedError(id, "deliveryMode", "push",
+				"Unsupported: stateless wire does not support push delivery")
+		}
+
 		// Sources that don't expose a Subscribe channel (TypedSource today)
 		// can't be served via push. Spec lists -32014 Unsupported among
 		// events/stream's immediate errors at L267.
