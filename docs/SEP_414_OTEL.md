@@ -707,6 +707,49 @@ server span (TraceID T1)              server span (TraceID T2)
 
 End-to-end correctness proof: `ext/otel/mrtr_tracelink_e2e_test.go` drives a real `CallToolWithInputs` against a real OTel-SDK-backed server + client, then asserts the recorded round-2 server span has an OTel Link whose TraceID matches round-1's.
 
+### Skills observability — landed (issue 748; PR forthcoming)
+
+Tool calls have natural telemetry: every `tools/call` is one wire event → one server-side dispatch span. Skills (SEP-2640) don't — the host fetches a manifest once via `resources/read`, caches it client-side, then **activates** it N times invisibly. Without intervention, post-cache activation is unobservable to either side.
+
+Issue 748 closes the gap in two layers.
+
+**Layer 1 — server dispatch span enrichment.** `server/trace_middleware.go` now stamps the `resources/read` span with `mcp.resource.uri` (always, for any URI) plus `mcp.skill.uri` / `mcp.skill.path` / `mcp.skill.file` when the URI uses the `skill://` scheme. Mirrors the existing `tools/call → mcp.tool.name` pattern. Server-side dashboards can now chart fetch volume + error rate per skill.
+
+`mcp.skill.path` and `mcp.skill.file` only populate for SEP-2640 **manifest URIs** (terminal `/SKILL.md`) where the path/file boundary is unambiguous from the URI alone. Non-manifest URIs (e.g. `skill://pdf-processing/references/FORMS.md`) surface as `mcp.skill.uri` only — SEP-2640 documents that the boundary in those cases requires external knowledge from the discovery index or a prior manifest read.
+
+**Layer 2 — client-side `ext/skills.Client` instrumentation.** `NewClient(mcp, opts...)` is variadic; new `WithTracerProvider(tp)` option wraps the read-path methods in spans:
+
+| Method | Span name | Attributes |
+|---|---|---|
+| `ListSkills` | `skills.list` | `mcp.skill.uri` (index URI), `mcp.skill.count` on success |
+| `ReadSkillURI` | `skills.read` | `mcp.skill.uri` |
+| `ReadSkillManifest` | `skills.read_manifest` | `mcp.skill.uri`, `mcp.skill.path`, `mcp.skill.name` |
+| `ReadAndVerify` | `skills.read_and_verify` | `mcp.skill.uri`, `mcp.skill.expected_digest`, `mcp.skill.digest_verified` |
+
+Stitching is automatic: the client read span runs inside ctx that already carries `_meta.traceparent` from the existing W3C trace context propagation (PR 644 / PR 649 / PR 652), so the server-side dispatch span (now enriched per Layer 1) lands as a child of the client wrapping span in the same trace.
+
+**The activation hook — purely SDK-side, no wire change.** `Client.Activate(ctx, uri, opts...) ActivationEvent` is the answer to the "skill used" telemetry the wire can't capture. Hosts call it at the point in the agent loop where the skill enters model context. Side effects:
+
+- Emits an instant `skills.activate` span (Start + End back-to-back — activation is point-in-time, not a duration) carrying `mcp.skill.uri`, `mcp.skill.path` (when the URI parses as a manifest URI), and `mcp.skill.activation.reason` when `WithReason(...)` is supplied.
+- Invokes the optional `WithActivationHook(fn)` callback synchronously, so non-OTel hosts can feed their own telemetry pipeline (structured logging, internal counters, alternate tracing) without configuring a TracerProvider.
+- Returns the `ActivationEvent{URI, Reason, Timestamp}` to the caller for pull-style stamping.
+
+`Activate` accepts any string URI — it never blocks dispatch or validates input. Designed for the agent-loop case where the URI may be a manifest URI, a sub-file URI, or even an opaque identifier the host minted for an in-process bundle.
+
+**Considered alternatives**:
+
+- **Wire-level `notifications/...skills/activated`** — a cross-process notification carrying `{uri, digest, reason, _meta.traceparent}` so the server can record activation events from connected clients. Tractable but cross-cuts SEP-2640 spec territory and requires WG engagement before minting the method name. Tracked as issue 749 — a separable opt-in extension on `ext/skills` that can ride atop `Client.Activate` without breaking callers when (if) the upstream method name lands.
+- **Provider-side activation telemetry** — N/A. The provider handles resource reads; activation is a client/host concept.
+- **Activation counter on the issue 735 MeterProvider seam** — useful follow-up. The TracerProvider half ships in 748; counter wiring can land cleanly in a small follow-up PR.
+
+Coverage:
+
+- `server/trace_middleware_test.go` — three tests pin Layer 1: skill manifest URI emits all four attrs; non-skill URI emits `mcp.resource.uri` only; non-manifest skill URI emits `mcp.skill.uri` only.
+- `ext/skills/client_trace_test.go` — eight tests pin Layer 2: each wrapped method emits the right span + attrs; `Activate` fires hook + span; `Activate` omits the reason attr when not supplied; hook fires independently of tracer install; zero-overhead path (no `WithTracerProvider`) emits no observable spans.
+- End-to-end trace context propagation across `resources/read` is the same code path the MRTR e2e already exercises for `tools/call` (`_meta.traceparent` injection in dispatch is method-agnostic). A skills-specific real-SDK e2e is deliberately omitted — it would require either inverting the `ext/otel`-doesn't-import-`ext/skills` layering or adding the real OTel SDK as a test-only dep on `ext/skills`.
+
+**Runnable demo**: `examples/skills/walkthrough.go` exercises the wrap span + Activate path with the `--exporter=stdout` (or `--exporter=otlp`) flag pair. Run with `make serve EXPORTER=stdout` + `make demo EXPORTER=stdout`.
+
 ## Downstream consumers of the Phase 1 contract
 
 - **`experimental/ext/events/` cross-replica bus (issue #629).** The

@@ -70,7 +70,7 @@ Examples:
 				return renderText(out, painter, report)
 			}
 
-			idx, err := sc.ListSkills()
+			idx, err := sc.ListSkills(cmd.Context())
 			if err != nil {
 				return fmt.Errorf("ListSkills: %w", err)
 			}
@@ -85,7 +85,7 @@ Examples:
 					Digest:      e.Digest,
 					Description: e.Description,
 				}
-				result, verifyErr := sc.ReadAndVerify(e.URL, e.Digest)
+				result, verifyErr := sc.ReadAndVerify(cmd.Context(), e.URL, e.Digest)
 				switch {
 				case verifyErr == nil && result.DigestVerified:
 					t := true

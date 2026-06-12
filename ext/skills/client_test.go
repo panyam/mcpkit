@@ -1,6 +1,7 @@
 package skills_test
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -39,6 +40,31 @@ func connectSkillsClient(t *testing.T, dir string, opts ...skills.ProviderOption
 	return skills.NewClient(c), c
 }
 
+// connectSkillsClientWithClientOpts is the sibling of
+// connectSkillsClient that wires SEP-414 P7 (#748) Client options
+// (WithTracerProvider, WithActivationHook, ...) instead of provider
+// options. Used by client_trace_test.go.
+func connectSkillsClientWithClientOpts(t *testing.T, dir string, clientOpts ...skills.Option) (*skills.Client, *client.Client) {
+	t.Helper()
+	srv := server.NewServer(core.ServerInfo{Name: "skills-client-test", Version: "0.0.1"})
+	p, err := skills.NewProvider(skills.WithDirectory(dir))
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	p.RegisterWith(srv)
+
+	handler := srv.Handler(server.WithStreamableHTTP(true))
+	ts := httptest.NewServer(handler)
+	t.Cleanup(ts.Close)
+
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "skills-client-test", Version: "0.0.1"})
+	if err := c.Connect(); err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { c.Close() })
+	return skills.NewClient(c, clientOpts...), c
+}
+
 func TestClient_SupportsSkills_DeclaredServer(t *testing.T) {
 	sc, _ := connectSkillsClient(t, "testdata/valid")
 	if !sc.SupportsSkills() {
@@ -66,7 +92,7 @@ func TestClient_SupportsSkills_PlainServer(t *testing.T) {
 
 func TestClient_ListSkills_Populated(t *testing.T) {
 	sc, _ := connectSkillsClient(t, "testdata/valid")
-	idx, err := sc.ListSkills()
+	idx, err := sc.ListSkills(context.Background())
 	if err != nil {
 		t.Fatalf("ListSkills: %v", err)
 	}
@@ -80,7 +106,7 @@ func TestClient_ListSkills_Populated(t *testing.T) {
 
 func TestClient_ListSkills_Absent(t *testing.T) {
 	sc, _ := connectSkillsClient(t, "testdata/valid", skills.WithoutIndex())
-	idx, err := sc.ListSkills()
+	idx, err := sc.ListSkills(context.Background())
 	if err != nil {
 		t.Fatalf("ListSkills should tolerate missing index, got: %v", err)
 	}
@@ -91,7 +117,7 @@ func TestClient_ListSkills_Absent(t *testing.T) {
 
 func TestClient_Index_Lookup_Hit(t *testing.T) {
 	sc, _ := connectSkillsClient(t, "testdata/valid")
-	idx, err := sc.ListSkills()
+	idx, err := sc.ListSkills(context.Background())
 	if err != nil {
 		t.Fatalf("ListSkills: %v", err)
 	}
@@ -106,7 +132,7 @@ func TestClient_Index_Lookup_Hit(t *testing.T) {
 
 func TestClient_Index_Lookup_Miss(t *testing.T) {
 	sc, _ := connectSkillsClient(t, "testdata/valid")
-	idx, err := sc.ListSkills()
+	idx, err := sc.ListSkills(context.Background())
 	if err != nil {
 		t.Fatalf("ListSkills: %v", err)
 	}
@@ -121,7 +147,7 @@ func TestClient_Index_Lookup_Miss(t *testing.T) {
 
 func TestClient_ReadSkillURI(t *testing.T) {
 	sc, _ := connectSkillsClient(t, "testdata/valid")
-	body, err := sc.ReadSkillURI("skill://git-workflow/SKILL.md")
+	body, err := sc.ReadSkillURI(context.Background(), "skill://git-workflow/SKILL.md")
 	if err != nil {
 		t.Fatalf("ReadSkillURI: %v", err)
 	}
@@ -132,7 +158,7 @@ func TestClient_ReadSkillURI(t *testing.T) {
 
 func TestClient_ReadSkillManifest(t *testing.T) {
 	sc, _ := connectSkillsClient(t, "testdata/valid")
-	m, err := sc.ReadSkillManifest("skill://pdf-processing/SKILL.md")
+	m, err := sc.ReadSkillManifest(context.Background(), "skill://pdf-processing/SKILL.md")
 	if err != nil {
 		t.Fatalf("ReadSkillManifest: %v", err)
 	}
@@ -152,7 +178,7 @@ func TestClient_ReadSkillManifest(t *testing.T) {
 
 func TestClient_ReadSkillManifest_RejectsNonManifestURI(t *testing.T) {
 	sc, _ := connectSkillsClient(t, "testdata/valid")
-	_, err := sc.ReadSkillManifest("skill://pdf-processing/references/FORMS.md")
+	_, err := sc.ReadSkillManifest(context.Background(), "skill://pdf-processing/references/FORMS.md")
 	if !errors.Is(err, skills.ErrNotManifestURI) {
 		t.Errorf("err = %v, want ErrNotManifestURI", err)
 	}
@@ -160,11 +186,11 @@ func TestClient_ReadSkillManifest_RejectsNonManifestURI(t *testing.T) {
 
 func TestClient_ReadSkillFile(t *testing.T) {
 	sc, _ := connectSkillsClient(t, "testdata/valid")
-	m, err := sc.ReadSkillManifest("skill://pdf-processing/SKILL.md")
+	m, err := sc.ReadSkillManifest(context.Background(), "skill://pdf-processing/SKILL.md")
 	if err != nil {
 		t.Fatalf("ReadSkillManifest: %v", err)
 	}
-	body, err := sc.ReadSkillFile(m, "references/FORMS.md")
+	body, err := sc.ReadSkillFile(context.Background(), m, "references/FORMS.md")
 	if err != nil {
 		t.Fatalf("ReadSkillFile: %v", err)
 	}
@@ -175,7 +201,7 @@ func TestClient_ReadSkillFile(t *testing.T) {
 
 func TestClient_ReadAndVerify_Match(t *testing.T) {
 	sc, _ := connectSkillsClient(t, "testdata/valid")
-	idx, err := sc.ListSkills()
+	idx, err := sc.ListSkills(context.Background())
 	if err != nil {
 		t.Fatalf("ListSkills: %v", err)
 	}
@@ -183,7 +209,7 @@ func TestClient_ReadAndVerify_Match(t *testing.T) {
 	if !ok {
 		t.Fatal("git-workflow not in index")
 	}
-	result, err := sc.ReadAndVerify(entry.URL, entry.Digest)
+	result, err := sc.ReadAndVerify(context.Background(), entry.URL, entry.Digest)
 	if err != nil {
 		t.Fatalf("ReadAndVerify match: %v", err)
 	}
@@ -198,6 +224,7 @@ func TestClient_ReadAndVerify_Match(t *testing.T) {
 func TestClient_ReadAndVerify_Mismatch(t *testing.T) {
 	sc, _ := connectSkillsClient(t, "testdata/valid")
 	_, err := sc.ReadAndVerify(
+		context.Background(),
 		"skill://git-workflow/SKILL.md",
 		"sha256:"+strings.Repeat("0", 64), // deliberately wrong
 	)
@@ -208,7 +235,7 @@ func TestClient_ReadAndVerify_Mismatch(t *testing.T) {
 
 func TestClient_ReadAndVerify_EmptyDigestDisables(t *testing.T) {
 	sc, _ := connectSkillsClient(t, "testdata/valid")
-	result, err := sc.ReadAndVerify("skill://git-workflow/SKILL.md", "")
+	result, err := sc.ReadAndVerify(context.Background(), "skill://git-workflow/SKILL.md", "")
 	if err != nil {
 		t.Fatalf("ReadAndVerify empty digest: %v", err)
 	}
@@ -222,7 +249,7 @@ func TestClient_ReadAndVerify_EmptyDigestDisables(t *testing.T) {
 
 func TestClient_RoundTrip_CatalogVerify(t *testing.T) {
 	sc, _ := connectSkillsClient(t, "testdata/valid")
-	idx, err := sc.ListSkills()
+	idx, err := sc.ListSkills(context.Background())
 	if err != nil {
 		t.Fatalf("ListSkills: %v", err)
 	}
@@ -231,7 +258,7 @@ func TestClient_RoundTrip_CatalogVerify(t *testing.T) {
 		if e.Type != skills.SkillTypeSkillMD {
 			continue
 		}
-		result, err := sc.ReadAndVerify(e.URL, e.Digest)
+		result, err := sc.ReadAndVerify(context.Background(), e.URL, e.Digest)
 		if err != nil {
 			t.Errorf("ReadAndVerify %s: %v", e.URL, err)
 			continue
