@@ -233,11 +233,12 @@ clear_all_tokens: ## Sign out every USER session in all 3 tenant realms (keeps m
 		echo "[clear_all_tokens] $$realm: all user sessions signed out"; \
 	done
 
-clear-all: clear_all_tokens ## Quick clean slate without a full predemo: sign out Keycloak sessions + truncate quota_counters + truncate webhooks. Survivors of Ctrl+C from prior demo runs (counters/subs that didn't release cleanly) get wiped so the cap=3 quota resets and stale callback URLs disappear.
-	@docker exec mcpkit-postgres psql -U postgres -d events -c "TRUNCATE TABLE quota_counters" >/dev/null && \
-		echo "[clear-all] quota_counters truncated"
-	@docker exec mcpkit-postgres psql -U postgres -d events -c "TRUNCATE TABLE webhooks" >/dev/null && \
-		echo "[clear-all] webhooks truncated"
+clear-all: clear_all_tokens ## Quick clean slate without a full predemo: sign out Keycloak sessions + delete Redis quota keys + truncate webhooks. Survivors of Ctrl+C from prior demo runs (counters/subs that didn't release cleanly) get wiped so the cap=3 quota resets and stale callback URLs disappear. Heavier hammer if needed: stop the stack and `rm -rf ../../../docker/backends/data/redis`.
+	@deleted=$$(docker exec mcpkit-redis sh -c 'redis-cli --scan --pattern "mcpkit.events.quota.*" | xargs -r redis-cli DEL' 2>/dev/null || echo 0); \
+		echo "[clear-all] redis quota keys deleted: $$deleted"
+	@docker exec mcpkit-postgres psql -U postgres -d events -c "TRUNCATE TABLE webhooks" >/dev/null 2>&1 && \
+		echo "[clear-all] webhooks table truncated" || \
+		echo "[clear-all] webhooks table not present yet (no subs ever created) — skip"
 
 inject: ## Inject one event from the host. TENANT=A|B|C [EVENT=chat.message] [TEXT="..."].
 	@if [ -z "$(TENANT)" ]; then echo "usage: make inject TENANT=A|B|C [EVENT=<name>] [TEXT='...']"; exit 2; fi
