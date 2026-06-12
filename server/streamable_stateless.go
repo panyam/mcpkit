@@ -61,9 +61,12 @@ func (t *streamableTransport) handleStatelessPost(w http.ResponseWriter, r *http
 
 	// (2) Dispatch. ResponseHeaderCollector lets handlers stage
 	// transport-level headers (SEP-2243 Mcp-Name etc.) the same way
-	// the legacy path does.
+	// the legacy path does. WithStatelessClaims threads the
+	// CheckAuth-produced principal onto ctx so handlers reach it via
+	// ctx.AuthClaims() — legacy parity, where claims live on the
+	// sessionCtx that the stateless wire deliberately does not create.
 	ctx := core.WithResponseHeaderCollector(r.Context())
-	_ = claims // claims are used by extension middleware downstream; placeholder for now
+	ctx = core.WithStatelessClaims(ctx, claims)
 	resp := t.statelessDispatcher.Dispatch(ctx, req)
 
 	if resp == nil {

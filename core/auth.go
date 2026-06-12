@@ -80,11 +80,10 @@ type ClaimsProvider interface {
 //	    // ...
 //	}
 func AuthClaims(ctx context.Context) *Claims {
-	sc := sessionFromContext(ctx)
-	if sc == nil {
-		return nil
+	if sc := sessionFromContext(ctx); sc != nil && sc.claims != nil {
+		return sc.claims
 	}
-	return sc.claims
+	return statelessClaimsFromContext(ctx)
 }
 
 // HasScope checks if the context's authenticated claims include the given scope.

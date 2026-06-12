@@ -86,6 +86,12 @@ const (
 	// dispatcher. Lives in core (not server/stateless) so handlers can read
 	// it via ctx.ClientCaps() without an import cycle.
 	requestMetaCtxKey
+	// statelessClaimsCtxKey carries the authenticated claims threaded by
+	// the SEP-2575 stateless transport. Legacy wire stashes claims on the
+	// sessionCtx via ContextWithSession; stateless wire has no session, so
+	// claims ride on ctx directly. BaseContext.AuthClaims coalesces the
+	// two so handlers do not special-case the wire.
+	statelessClaimsCtxKey
 )
 
 // ContextWithSession returns a context carrying the session's notification state,
@@ -183,6 +189,48 @@ func WithRequestMeta(ctx context.Context, meta *RequestMeta) context.Context {
 func RequestMetaFromContext(ctx context.Context) *RequestMeta {
 	meta, _ := ctx.Value(requestMetaCtxKey).(*RequestMeta)
 	return meta
+}
+
+// IsStatelessWire reports whether the current request arrived over the
+// SEP-2575 stateless wire. Returns true exactly when the stateless
+// dispatcher attached a per-request _meta envelope to ctx via
+// WithRequestMeta.
+//
+// Push-shaped handlers (events/stream, future server-initiated streams)
+// use this to fail fast with the spec-shape -32014 Unsupported when push
+// is structurally impossible on the wire — the stateless dispatch path
+// has no session and no GET SSE channel to deliver notifications onto.
+// Non-stateless paths whose notify channel is merely temporarily absent
+// (legacy session before a GET SSE is opened, test fixtures) keep the
+// historical silent-drop behavior so callers can attach a channel
+// later or assert on non-push side effects.
+func IsStatelessWire(ctx context.Context) bool {
+	return RequestMetaFromContext(ctx) != nil
+}
+
+// WithStatelessClaims threads the authenticated claims into ctx for the
+// SEP-2575 stateless dispatch path. Symmetric to WithRequestMeta — the
+// stateless transport calls this after CheckAuth produces the claims so
+// handlers can read them via ctx.AuthClaims().
+//
+// On the legacy wire claims live on the session (see ContextWithSession);
+// BaseContext.AuthClaims coalesces the two sources so handlers do not
+// special-case the wire. Returns ctx unchanged when claims is nil so
+// callers can drop the nil-check at the call site.
+func WithStatelessClaims(ctx context.Context, claims *Claims) context.Context {
+	if claims == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, statelessClaimsCtxKey, claims)
+}
+
+// statelessClaimsFromContext returns the claims attached by the SEP-2575
+// stateless transport, or nil if absent. Internal — handlers should read
+// via BaseContext.AuthClaims which coalesces the legacy and stateless
+// sources.
+func statelessClaimsFromContext(ctx context.Context) *Claims {
+	claims, _ := ctx.Value(statelessClaimsCtxKey).(*Claims)
+	return claims
 }
 
 // ClientSupportsExtension checks whether the connected client declared support

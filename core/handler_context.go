@@ -372,11 +372,20 @@ func (bc BaseContext) Notify(method string, params any) bool {
 }
 
 // AuthClaims returns the authenticated identity, or nil if unavailable.
+//
+// Coalesces the two wire sources:
+//   - Legacy wire: claims stashed on the sessionCtx during initialize and
+//     threaded via ContextWithSession.
+//   - Stateless wire (SEP-2575): no session — claims threaded by the
+//     stateless transport via WithStatelessClaims after CheckAuth.
+//
+// Handlers do not special-case the wire; the accessor returns the
+// authenticated principal from whichever source populated it.
 func (bc BaseContext) AuthClaims() *Claims {
-	if bc.sc == nil {
-		return nil
+	if bc.sc != nil && bc.sc.claims != nil {
+		return bc.sc.claims
 	}
-	return bc.sc.claims
+	return statelessClaimsFromContext(bc.Context)
 }
 
 // HasScope checks if the authenticated claims include the given scope.
