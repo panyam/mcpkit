@@ -181,6 +181,28 @@ func traceMiddleware(tp core.TracerProvider) Middleware {
 				attrs = append(attrs, core.Attribute{Key: "mcp.tool.name", Value: name})
 			}
 		}
+		if req.Method == "resources/read" {
+			if uri := parseResourceReadURI(req.Params); uri != "" {
+				attrs = append(attrs, core.Attribute{Key: "mcp.resource.uri", Value: uri})
+				// SEP-414 P7 (issue 748): when the read targets a
+				// `skill://` URI, also emit skill-shaped attributes so
+				// server-side dashboards can chart fetch volume per
+				// skill. `mcp.skill.path` and `mcp.skill.file` only
+				// populate for SEP-2640 manifest URIs (terminal
+				// `/SKILL.md`) where the path/file boundary is
+				// unambiguous from the URI alone; non-manifest URIs
+				// surface as `mcp.skill.uri` only.
+				if path, file, ok := decomposeSkillURI(uri); ok {
+					attrs = append(attrs, core.Attribute{Key: "mcp.skill.uri", Value: uri})
+					if path != "" {
+						attrs = append(attrs, core.Attribute{Key: "mcp.skill.path", Value: path})
+					}
+					if file != "" {
+						attrs = append(attrs, core.Attribute{Key: "mcp.skill.file", Value: file})
+					}
+				}
+			}
+		}
 
 		spanName := req.Method
 		if spanName == "" {
@@ -259,6 +281,51 @@ func parseToolCallName(params json.RawMessage) string {
 		return ""
 	}
 	return envelope.Name
+}
+
+// parseResourceReadURI extracts the `uri` field from a resources/read
+// params envelope. Returns "" on decode failure — best-effort attribute
+// enrichment never blocks dispatch (mirrors parseToolCallName).
+func parseResourceReadURI(params json.RawMessage) string {
+	if len(params) == 0 {
+		return ""
+	}
+	var envelope struct {
+		URI string `json:"uri"`
+	}
+	if err := json.Unmarshal(params, &envelope); err != nil {
+		return ""
+	}
+	return envelope.URI
+}
+
+// decomposeSkillURI splits a `skill://` URI into its skill-path / file-path
+// components for span-attribute purposes. The returned `ok` is true when
+// the URI uses the `skill://` scheme; path/file are populated only for
+// SEP-2640 manifest URIs (terminal `/SKILL.md`) because the path/file
+// boundary in non-manifest URIs is ambiguous from the URI alone — the
+// SEP frames it as a host-workflow concern resolved via the discovery
+// index or a prior manifest read (see ext/skills.URIParts doc).
+//
+// This is intentionally a minimal in-package parser rather than an
+// import of ext/skills.ParseURI: `server/` is in the root module and
+// ext/skills is a separate go.mod, so taking the dep would invert the
+// layering. Attribute emission tolerates URIs the strict parser would
+// reject — that is the right tradeoff for best-effort telemetry.
+func decomposeSkillURI(uri string) (skillPath, filePath string, ok bool) {
+	const scheme = "skill://"
+	if len(uri) <= len(scheme) || uri[:len(scheme)] != scheme {
+		return "", "", false
+	}
+	body := uri[len(scheme):]
+	const manifestSuffix = "/SKILL.md"
+	if len(body) > len(manifestSuffix) && body[len(body)-len(manifestSuffix):] == manifestSuffix {
+		return body[:len(body)-len(manifestSuffix)], "SKILL.md", true
+	}
+	if body == "SKILL.md" {
+		return "", "SKILL.md", true
+	}
+	return "", "", true
 }
 
 // recordSpanOutcome stamps error / tool-error attributes on the span before

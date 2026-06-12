@@ -42,3 +42,20 @@ Don't use package-level `var` for mutable state that should be per-instance (e.g
 Scope mutable state to the struct/instance created during registration. E.g., the `Register()` function should create a struct that both middleware and handlers close over.
 
 **Verify:** `grep -rn 'var.*sync.Map\|var.*make(map' --include='*.go' | grep -v '_test.go' | grep -v 'func '` — package-level mutable maps should not exist.
+
+## C4: No cross-extension dependencies unless SEP-mandated
+
+Modules under `ext/` and `experimental/ext/` MUST NOT import each other (runtime OR test) unless the coupling is explicitly mandated by an SEP. Extensions are independent surfaces; each consumes only `core/` abstractions (e.g., `core.TracerProvider`, `core.Claims`).
+
+The rule prevents two failure modes:
+
+- **Hidden coupling cascade**: a single test-only import (e.g., `ext/otel` importing `ext/skills` for an e2e) silently inverts the layering. The adapter that other extensions consume now depends on one of those extensions, and version bumps become entangled.
+- **Drive-by interop expectations**: when extension A imports extension B, the API of B is implicitly stabilized for A's benefit, even though no SEP says they must interoperate. Future B-only refactors break A.
+
+Real-world example: `ext/otel` is the OTel SDK adapter implementing `core.TracerProvider`. Every extension that wants real spans imports it. If `ext/otel` were to import `ext/skills` (e.g., to ship an e2e test that exercises both), the layering inverts — `ext/skills` can no longer evolve without considering `ext/otel`'s test surface, and the adapter's go.sum drags in skills-specific deps.
+
+Escape hatch for cross-extension e2e tests: put the test in a separate top-level module (e.g., `tests/<ext-a>_<ext-b>_e2e/`) that imports both. Keeps the cross-cut isolated from either extension's go.mod.
+
+If a future SEP explicitly cross-cuts two extensions, document the SEP reference in the importing module's README so the coupling is auditable.
+
+**Verify:** `bash -c 'for m in ext/*/go.mod experimental/ext/*/go.mod; do owner=$(dirname "$m" | xargs basename); m_=$(grep -E "^[[:space:]]+github\.com/panyam/mcpkit/(ext|experimental/ext)/" "$m" | grep -vE "github\.com/panyam/mcpkit/(ext|experimental/ext)/$owner([[:space:]/]|$)"); if [ -n "$m_" ]; then echo "VIOLATION: $m"; echo "$m_"; fi; done'` — must print nothing. Matches indented `require` lines (skipping module-declaration lines) and excludes the module's own path.
