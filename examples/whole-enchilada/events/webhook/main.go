@@ -106,7 +106,12 @@ func main() {
 	c := client.NewClient(*server, core.ClientInfo{
 		Name:    "whole-enchilada-webhook",
 		Version: "0.1.0",
-	}, client.WithClientBearerToken(*token))
+	},
+		client.WithClientBearerToken(*token),
+		// SEP-2575 stateless wire — same as poller. Lets nginx round-
+		// robin freely across replicas for N>1.
+		client.WithClientMode(client.ClientModeStateless),
+	)
 	if err := c.Connect(); err != nil {
 		log.Fatalf("%s connect failed: %v", prefix, err)
 	}

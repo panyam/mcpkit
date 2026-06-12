@@ -88,7 +88,15 @@ func main() {
 	c := client.NewClient(*server, core.ClientInfo{
 		Name:    "whole-enchilada-poller",
 		Version: "0.1.0",
-	}, client.WithClientBearerToken(*token))
+	},
+		client.WithClientBearerToken(*token),
+		// SEP-2575 stateless wire — every poll is self-contained, so
+		// nginx can round-robin across replicas freely. Required for
+		// the N>1 demo posture (legacy wire keeps session state in the
+		// receiving replica's in-memory map; cross-replica continuity
+		// would need the not-yet-implemented shared session store).
+		client.WithClientMode(client.ClientModeStateless),
+	)
 	if err := c.Connect(); err != nil {
 		log.Fatalf("%s connect failed: %v", prefix, err)
 	}
