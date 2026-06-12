@@ -13,6 +13,7 @@ replace (
 )
 
 require (
+	github.com/bwmarrin/discordgo v0.29.0
 	github.com/panyam/mcpkit v0.2.45
 	github.com/panyam/mcpkit/examples/common v0.0.0-20260608213911-f3a385b77e36
 	github.com/panyam/mcpkit/experimental/ext/events v0.0.0
@@ -33,7 +34,6 @@ require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
-	github.com/bwmarrin/discordgo v0.29.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/charmbracelet/bubbles v1.0.0 // indirect
