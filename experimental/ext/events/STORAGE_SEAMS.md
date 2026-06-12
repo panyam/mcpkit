@@ -101,12 +101,40 @@ The other seams (626, 631) follow this template. Reviews check against this file
 |---|---|---|
 | In-memory (default) | All seams | Each seam's own file in this directory |
 | GORM (Postgres + SQLite) | `WebhookStore`, `QuotaStore` | `stores/gorm/` (own go.mod; GORM dependency stays out of the events lib) |
-| Redis | `Emitter` pubsub + `QuotaStore` atomic counters (`stores/redis/`) | Issue 634 (Emitter) + issue 718 (QuotaStore) |
+| Redis | `Bus` (Pattern B Emitter + Subscriber) + `QuotaStore` atomic counters | `stores/redis/`; issue 634 (Emitter), 718 (QuotaStore), 755 (Bus) |
 
 ## Adjacent seams (not storage, same code conventions)
 
 | Interface | Concern | Status |
 |---|---|---|
-| `Emitter` | Output-side seam: "given an event, deliver it." Dual of `EventSource`. Default `NewLocalEmitter` matches today's single-replica behavior; multi-replica deployments compose with `NewCompositeEmitter` to add peer fanout. Receive-side cross-replica reuses the existing `HTTPSource` pattern — no new "Subscribe" API needed. | landed (629) |
+| `Emitter` | Output-side seam: "given an event, deliver it." Dual of `EventSource`. Default `NewLocalEmitter` matches today's single-replica behavior; multi-replica deployments use a transport-specific `Bus` (see Pattern B below) as `cfg.Emitter`. | landed (629) |
+| `server.NotificationRelayReceiver` | Routing seam for cross-replica notification delivery. Transport adapters call `ReceiveRelay(ctx, method, params)` on every received notification destined for this replica. Implementations are domain-specific: `server.CapabilityBroadcastReceiver` forwards to `Server.Broadcast` for catalog notifications (tools/list_changed etc.); `events.YieldingSource` routes via per-slot fanout so per-subscription `EventDef.Match` runs. | landed (755) |
 
-`Emitter` is not a storage seam (it doesn't persist anything), but follows the same `ctx`-first method shape and lives in its own file (`emitter.go`) per the same conventions. Listed here so future readers see the full set of seams in one place.
+`Emitter` and `NotificationRelayReceiver` are not storage seams (they don't persist anything), but follow the same `ctx`-first method shape and live in their own files per the same conventions. Listed here so future readers see the full set of seams in one place.
+
+## Pattern B transports — Bus convention
+
+Multi-replica deployments need a way for notifications emitted on replica K to reach the connected clients on replicas K′. The recommended wiring is Pattern B: each replica runs a paired publisher + subscriber against a shared pub/sub transport (Redis today; Kafka / NATS / SNS as adopters land them).
+
+Every Pattern B transport adapter exposes a `Bus` constructor with this shape:
+
+```go
+bus, err := <transport>.NewBus(opts, receiver)
+// bus implements events.Emitter — wire as cfg.Emitter
+// bus.Subscribe(ctx, ...) declares which event channels to listen on
+// bus.Run(ctx) runs the receive loop
+// bus.Close() tears down
+```
+
+The `Bus` bundles three concerns behind one constructor:
+
+1. **events.Emitter satisfaction** — the publisher leg is wired as `cfg.Emitter` so yields publish outward.
+2. **Receive-side routing** — the subscriber leg invokes the caller-supplied `server.NotificationRelayReceiver` on every received notification.
+3. **Self-publish dedup** — the bundled implementation generates a per-instance origin marker, stamps it on outgoing notifications, and drops incoming notifications carrying its own marker before invoking the receiver. Adopters never see the marker; it's transport-internal.
+
+The `redisstore.Bus` (stores/redis/bus.go) is the reference implementation. New transports follow the same shape:
+
+- `NewBus(opts, receiver)` is the canonical constructor; opts are transport-specific (`redis.Options` for Redis, broker config for Kafka, etc.).
+- `events.Emitter` is the canonical publish API — every transport's `Bus` satisfies it.
+- Lifecycle (`Subscribe` / `Run` / `Close`) varies by transport (Redis pubsub uses channel names; Kafka uses topic + consumer-group); convention is that subscriber state lives in the same `Bus` struct.
+- Origin markers stay transport-private. If a future Pattern B work item lands a shared marker convention across transports, lift to a shared file under `stores/`; until then, each adapter manages its own.
