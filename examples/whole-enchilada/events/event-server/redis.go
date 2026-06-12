@@ -157,23 +157,38 @@ func configureRedisBackend(cfg *events.Config, srv *server.Server, webhooks *eve
 	}
 	cfg.Quota = events.NewQuota(quotaOpts...)
 
-	// Emitter — Redis-only outbound (Pattern B; see the doc comment
-	// above). The receive side below delivers locally.
+	// Publisher — outbound Pattern B leg. Per-Publisher origin ID lets
+	// the colocated Subscriber drop self-publishes so a replica's own
+	// yields don't double-fire through the Redis round-trip.
 	pub, err := redisstore.NewPublisher(opts)
 	if err != nil {
 		log.Fatalf("redisstore.NewPublisher: %v", err)
 	}
-	cfg.Emitter = pub
 
-	// Subscriber — receives PUBLISHed events from Redis and delivers
-	// each to the LOCAL emitter, which broadcasts to SSE listeners and
-	// POSTs to webhook targets on this replica. On a single-replica
-	// stack this round-trips locally through Redis (small latency tax;
-	// keeps the wiring symmetric across N=1 and N>=2). On a
-	// multi-replica stack every replica including the publisher
-	// participates equally.
-	local := events.NewLocalEmitter(srv, webhooks)
-	sub, err := redisstore.NewSubscriber(opts, local.Emit)
+	// Yield-side emitter: deliver locally to webhooks (origin replica
+	// fires webhook POSTs exactly once globally per yielded event) AND
+	// publish to Redis for cross-replica relay. Stream subscribers on
+	// this replica receive via the source's subscriber-slot channel —
+	// NOT via Server.Broadcast — so we don't need a Broadcast call on
+	// the yield path here.
+	cfg.Emitter = events.NewCompositeEmitter(
+		events.NewLocalEmitter(srv, webhooks),
+		pub,
+	)
+
+	// Receive-side: Redis Subscriber dispatches every cross-replica
+	// event to Server.Broadcast, which fans out to registered broadcast
+	// targets (the events/stream handler's RegisterBroadcastTarget
+	// entry — see ext/events/stream.go). Self-publishes are dropped
+	// inside the Subscriber via SkipOriginID before reaching this
+	// callback, so the origin replica's local fanout (yield's for-loop
+	// + this replica's webhook delivery) fires exactly once.
+	opts.SkipOriginID = pub.OriginID()
+	deliver := func(ctx context.Context, event events.Event) error {
+		events.Emit(ctx, srv, event)
+		return nil
+	}
+	sub, err := redisstore.NewSubscriber(opts, deliver)
 	if err != nil {
 		log.Fatalf("redisstore.NewSubscriber: %v", err)
 	}
