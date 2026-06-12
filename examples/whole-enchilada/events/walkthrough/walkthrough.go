@@ -34,34 +34,32 @@ import (
 func runDemo(_ /*serverURL*/, _ /*receiverURL*/ string) {
 	demo := demokit.New("MCP Events — whole-enchilada stage 2 walkthrough").
 		Dir("events/whole-enchilada").
-		Description("Production-shape multi-tier reference. nginx fronts the event-server tier; Keycloak provides three pre-configured OAuth realms (asgard, babylon, camelot). The stack comes up silent — operator-runnable synthetic drivers (`make drive-chat`, `make drive-presence`) start producing events from sibling terminals. This walkthrough guides you through a multi-terminal demo where each tenant gets its own poller and webhook receiver — per-tenant isolation is the headline.").
+		Description("Production-shape multi-tier reference. nginx fronts the event-server tier; Keycloak provides three pre-configured OAuth realms (asgard, babylon, camelot). The stack comes up silent — operator-runnable synthetic drivers (make drive-chat, make drive-presence) start producing events from sibling terminals. This walkthrough guides you through a multi-terminal demo where each tenant gets its own poller and webhook receiver — per-tenant isolation is the headline.").
 		Actors(
 			demokit.Actor("Operator", "The person running the demo — you"),
 			demokit.Actor("Nginx", "Frontdoor reverse proxy (localhost:9090)"),
 			demokit.Actor("Server", "Event-server (introspection-mode auth wired)"),
-			demokit.Actor("Drivers", "Operator-runnable synthetic producers (`make drive-chat`, `make drive-presence`)"),
+			demokit.Actor("Drivers", "Operator-runnable synthetic producers (make drive-chat, make drive-presence)"),
 			demokit.Actor("Keycloak", "OAuth AS — three realms pre-imported on first start (localhost:8180)"),
 		)
 
 	common.SetupRenderer(demo)
 
 	demo.Section("Before you start",
-		"Run `make predemo` once first — it gives you a clean Keycloak slate, brings up the backends + observability + events stacks fresh, and opens the Keycloak admin (`localhost:8180`) and Grafana (`localhost:3000`) in your browser. Optionally run `make alllogs` for a single iTerm window with 3 panes tailing each stack's logs.",
+		"Run 'make predemo' once first — it gives you a clean Keycloak slate, brings up the backends + observability + events stacks fresh, and opens the Keycloak admin (localhost:8180) and Grafana (localhost:3000) in your browser. Optionally run 'make alllogs' for a single iTerm window with 3 panes tailing each stack's logs.",
 		"",
 		"The walkthrough binary you're reading does not make MCP calls. Each Step tells you which window to open and exactly what command to run; the actual protocol traffic happens in those operator-run binaries.",
 		"",
 		"Window plan — at peak you'll have these open:",
 		"",
-		"| Label | Role | First step |",
-		"|---|---|---|",
-		"| A1-Poll, B1-Poll, C1-Poll | tenant poll subscribers (alice / bob / carol) | 1 / 2 / 3 |",
-		"| A2-Webhook, B2-Webhook, C2-Webhook | tenant webhook subscribers (anand / bhavna / chandan) | 4 / 5 / 6 |",
-		"| Admin | one-shot commands (inject, evctl, docker exec, psql) | 7 |",
-		"| Chat-Driver | synth producer (continuous flow for kill-replica beat) | 8 |",
-		"| Monitor | Redis MONITOR | 8 |",
-		"| Topology | events.topology meta-source subscriber | 12 |",
-		"| Discord-Poll | discord.message poller | 14 |",
-		"| Browser | Keycloak admin UI for revocation | 17 |",
+		"  - A1-Poll, B1-Poll, C1-Poll       — tenant poll subscribers (alice / bob / carol). First used in steps 1 / 2 / 3.",
+		"  - A2-Webhook, B2-Webhook, C2-Webhook — tenant webhook subscribers (anand / bhavna / chandan). First used in steps 4 / 5 / 6.",
+		"  - Admin                            — one-shot commands (inject, evctl, docker exec, psql). First used in step 7.",
+		"  - Chat-Driver                      — synth producer (continuous flow for the kill-replica beat). First used in step 8.",
+		"  - Monitor                          — Redis MONITOR. First used in step 8.",
+		"  - Topology                         — events.topology meta-source subscriber. First used in step 12.",
+		"  - Discord-Poll                     — discord.message poller. First used in step 14.",
+		"  - Browser                          — Keycloak admin UI for revocation. First used in step 17.",
 	)
 
 	// -----------------------------------------------------------------
