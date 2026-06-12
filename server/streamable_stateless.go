@@ -2,7 +2,9 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"sync"
 
 	core "github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/server/stateless"
@@ -96,6 +98,118 @@ func peekMetaProtocolVersion(params json.RawMessage) string {
 		return ""
 	}
 	return probe.Meta.ProtocolVersion
+}
+
+// handleStatelessPostSSE is the SEP-2575 dispatch path for a single
+// JSON-RPC request whose Accept header asked for text/event-stream
+// (issue #753). The POST response itself becomes the SSE channel:
+// handler-emitted notifications via ctx.Notify(...) are framed as
+// SSE events on the open response stream; the handler's terminal
+// *core.Response is the final SSE event before the server closes
+// the connection.
+//
+// Mirrors the legacy handlePostSSE shape — same lazy-headers + flusher
+// + serialized writes + closed-after-handler-return safety — but
+// simpler because the stateless wire has no event store to replay,
+// no session ID to namespace event IDs under, no server-to-client
+// request channel (sampling/elicitation are not available on the
+// stateless wire by SEP-2575 spec), and no retry hint to forward to a
+// long-lived GET stream.
+//
+// Notifications get framed via WithStatelessNotifyFunc on ctx so
+// BaseContext.Notify resolves them through the stateless fallback
+// branch. The events/stream handler — and any other streaming-shaped
+// custom method registered via Server.HandleMethod — works
+// identically on either wire.
+func (t *streamableTransport) handleStatelessPostSSE(w http.ResponseWriter, r *http.Request, claims *core.Claims, req *core.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		// Fallback to synchronous JSON for the rare ResponseWriter
+		// that doesn't support flushing — same defensive shape as
+		// the legacy path.
+		t.handleStatelessPost(w, r, claims, req)
+		return
+	}
+
+	dispatchCtx := core.WithResponseHeaderCollector(r.Context())
+	dispatchCtx = core.WithStatelessClaims(dispatchCtx, claims)
+
+	// SSE headers are set lazily on first write so a dispatch-time
+	// error response (-32001 header mismatch, -32004 unsupported
+	// protocol version, -32601 method not found from the bare default
+	// branch) can still be surfaced as a normal JSON-RPC response over
+	// HTTP 200 (the legacy path stages an HTTP-level auth error
+	// instead; stateless has no such transport-error path).
+	var mu sync.Mutex
+	var closed bool
+	var sseStarted bool
+	writeSSE := func(data []byte) {
+		mu.Lock()
+		defer mu.Unlock()
+		if closed {
+			return
+		}
+		if !sseStarted {
+			applyStagedResponseHeaders(w, dispatchCtx)
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("Cache-Control", "no-cache")
+			w.Header().Set("Connection", "keep-alive")
+			w.Header().Set("X-Accel-Buffering", "no")
+			sseStarted = true
+		}
+		fmt.Fprintf(w, "event: message\ndata: %s\n\n", data)
+		flusher.Flush()
+	}
+
+	requestNotify := core.NotifyFunc(func(method string, params any) {
+		raw, err := core.MarshalNotification(method, params)
+		if err != nil {
+			return
+		}
+		writeSSE(raw)
+	})
+	dispatchCtx = core.WithStatelessNotifyFunc(dispatchCtx, requestNotify)
+
+	// Header / _meta version cross-check (mirrored from handleStatelessPost).
+	if hdrVer := r.Header.Get(mcpProtocolVersionHeader); hdrVer != "" {
+		metaVer := peekMetaProtocolVersion(req.Params)
+		if mismatchResp := statelessVersionMismatch(req.ID, hdrVer, metaVer); mismatchResp != nil {
+			writeHeaderMismatch(w, mismatchResp)
+			return
+		}
+	}
+
+	// SEP-2243 routing-header validation (mirrored from handleStatelessPost).
+	if r.Header.Get(core.McpMethodHeader) != "" {
+		if errResp := validateRoutingHeaders(req, r.Header); errResp != nil {
+			writeHeaderMismatch(w, errResp)
+			return
+		}
+	}
+
+	resp := t.statelessDispatcher.Dispatch(dispatchCtx, req)
+
+	// Terminal frame. resp is normally non-nil for SSE-eligible requests
+	// (notifications return 202 from handleStatelessPost and never reach
+	// here — shouldStreamSSE short-circuits on IsNotification first).
+	// Belt-and-suspenders nil-check matches handlePostSSE.
+	if resp != nil {
+		if sseStarted {
+			raw, _ := marshalJSON(resp)
+			writeSSE(raw)
+		} else {
+			// Dispatcher returned an error before the handler emitted
+			// any notification — surface as a normal JSON response.
+			// Stateless-wire HTTP status mapping (HTTPStatusForCode)
+			// still applies.
+			applyStagedResponseHeaders(w, dispatchCtx)
+			writeStatelessResponse(w, resp)
+		}
+	}
+
+	mu.Lock()
+	closed = true
+	mu.Unlock()
 }
 
 // writeStatelessResponse marshals a JSON-RPC response and writes it
