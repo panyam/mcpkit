@@ -36,6 +36,9 @@ package server
 
 import (
 	"context"
+	"sync"
+
+	"github.com/panyam/mcpkit/core"
 )
 
 // BroadcastRelay is the publish side of a Pattern B transport for
@@ -137,4 +140,110 @@ func NewCapabilityBroadcastReceiver(srv *Server) *CapabilityBroadcastReceiver {
 // the broadcast fan-out on this replica.
 func (r *CapabilityBroadcastReceiver) ReceiveRelay(_ context.Context, method string, params any) {
 	r.srv.BroadcastToSessions(context.Background(), method, params)
+}
+
+// ResourcesUpdatedReceiver is the reference NotificationRelayReceiver
+// for the subscription-shaped notifications/resources/updated. On
+// ReceiveRelay it extracts the URI from the payload and dispatches via
+// Server.NotifyResourceUpdatedLocal — fires every locally-subscribed
+// session whose subscribe(URI) matches, WITHOUT re-publishing via the
+// BroadcastRelay (which would loop).
+//
+// Each replica's subscriptionRegistry independently filters by its
+// own per-URI subscriber set; clients subscribed via THIS replica's
+// session hear the cross-replica notification, clients on other
+// replicas hear it via THEIR own ResourcesUpdatedReceiver instance.
+type ResourcesUpdatedReceiver struct {
+	srv *Server
+}
+
+// NewResourcesUpdatedReceiver constructs a ResourcesUpdatedReceiver
+// wired to srv. The Server's existing subscriptionRegistry handles
+// per-URI subscriber lookup; this receiver just adapts the cross-
+// replica notification shape into that local call.
+func NewResourcesUpdatedReceiver(srv *Server) *ResourcesUpdatedReceiver {
+	return &ResourcesUpdatedReceiver{srv: srv}
+}
+
+// ReceiveRelay implements NotificationRelayReceiver. Expects params to
+// be a core.ResourceUpdatedNotification (the type
+// subscriptionRegistry.notify publishes) — also accepts
+// map[string]any with a "uri" field for transports that decoded
+// generically. Unknown shapes are silently dropped.
+func (r *ResourcesUpdatedReceiver) ReceiveRelay(_ context.Context, method string, params any) {
+	if method != "notifications/resources/updated" {
+		return
+	}
+	uri := uriFromUpdatedParams(params)
+	if uri == "" {
+		return
+	}
+	r.srv.NotifyResourceUpdatedLocal(uri)
+}
+
+// uriFromUpdatedParams pulls the URI out of whichever shape the
+// transport handed us. core.ResourceUpdatedNotification is the
+// authoritative type produced by the publish side; receivers that
+// decode the wire payload generically end up with map[string]any.
+// We accept both shapes so adopters writing custom transports don't
+// have to know the typed shape.
+func uriFromUpdatedParams(params any) string {
+	switch v := params.(type) {
+	case core.ResourceUpdatedNotification:
+		return v.URI
+	case map[string]any:
+		s, _ := v["uri"].(string)
+		return s
+	}
+	return ""
+}
+
+// MultiplexRelayReceiver routes received notifications by method name
+// to per-method NotificationRelayReceivers. Adopters configure one
+// MultiplexRelayReceiver as the BroadcastRelay's receiver, registering
+// per-method handlers (CapabilityBroadcastReceiver for catalog
+// notifications, ResourcesUpdatedReceiver for subscription-shaped
+// resources/updated, etc.). Methods without a registered handler are
+// dropped silently — appropriate for shared Pattern B transports where
+// not every replica subscribes to every method.
+//
+// Concurrency: Handle and ReceiveRelay are safe for concurrent use.
+// Routing decisions snapshot the dispatch table under a read lock so
+// in-flight notifications don't race with late registrations.
+type MultiplexRelayReceiver struct {
+	mu       sync.RWMutex
+	handlers map[string]NotificationRelayReceiver
+}
+
+// NewMultiplexRelayReceiver constructs an empty multiplexer. Register
+// per-method handlers via Handle before installing the multiplexer on
+// a BroadcastRelay's receiver slot.
+func NewMultiplexRelayReceiver() *MultiplexRelayReceiver {
+	return &MultiplexRelayReceiver{handlers: map[string]NotificationRelayReceiver{}}
+}
+
+// Handle registers receiver as the handler for the given method.
+// Returns the multiplexer for chaining. A subsequent Handle call for
+// the same method replaces the previous handler.
+func (m *MultiplexRelayReceiver) Handle(method string, receiver NotificationRelayReceiver) *MultiplexRelayReceiver {
+	if receiver == nil {
+		return m
+	}
+	m.mu.Lock()
+	m.handlers[method] = receiver
+	m.mu.Unlock()
+	return m
+}
+
+// ReceiveRelay implements NotificationRelayReceiver. Looks up the
+// per-method handler and forwards. Unknown methods are silently
+// dropped.
+func (m *MultiplexRelayReceiver) ReceiveRelay(ctx context.Context, method string, params any) {
+	m.mu.RLock()
+	h := m.handlers[method]
+	m.mu.RUnlock()
+	if h == nil {
+		return
+	}
+	h.ReceiveRelay(ctx, method, params)
 }
