@@ -107,12 +107,13 @@ make webhook TENANT=C USERNAME=chandan`).Default(),
 	demo.Step("Admin — inject one event per tenant.").
 		Note(
 			"- Demonstrates: per-event tenant tag is the authoritative delivery scope; same inject endpoint can target any tenant.",
-			"- Expected: A's inject lights up A1+A2 (asgard stream + webhook); B's lights up B1+B2; C's (presence.changed) lights up C1+C2. No cross-tenant leakage on any surface.",
+			"- Expected: A's inject lights up A1+A2 (asgard stream + webhook); B's lights up B1+B2; C's lights up C1+C2. No cross-tenant leakage on any surface.",
+			"- All six Phase 1 windows subscribed to chat.message specifically (the events SDK takes one source name per subscription; no wildcard), so we use the same event type for every inject and watch the per-tenant scoping decide who sees it.",
 		).
 		VerbatimVariants("Run these in turn",
 			demokit.MakeVariant("shell", "bash", `make inject TENANT=A EVENT=chat.message TEXT='hi from Asgard'
 make inject TENANT=B EVENT=chat.message TEXT='hi from Babylon'
-make inject TENANT=C EVENT=presence.changed USER=carol STATE=online`).Default(),
+make inject TENANT=C EVENT=chat.message TEXT='hi from Camelot'`).Default(),
 		)
 
 	// -----------------------------------------------------------------
