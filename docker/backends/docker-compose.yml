@@ -37,7 +37,7 @@ networks:
 services:
   # -------------------------------------------------------------------
   # Keycloak — OAuth AS for examples that demonstrate authentication
-  # and multi-tenancy. Three realms (tenant-a, tenant-b, tenant-c)
+  # and multi-tenancy. Three realms (asgard, babylon, camelot)
   # imported at first boot from ./keycloak/realms/*.json. The admin
   # UI at localhost:8180 is the operator-facing surface for revocation
   # walkthroughs and realm inspection.
@@ -66,12 +66,12 @@ services:
     ports:
       - "8180:8080"
     healthcheck:
-      # Probe tenant-c's discovery doc — the last realm imported alphabetically,
+      # Probe camelot's discovery doc — the last realm imported alphabetically,
       # so a 200 here means all three realms are live. HTTP/1.1 with an
       # explicit Host header so HostnameV2Provider has what it needs.
       test:
         - CMD-SHELL
-        - "exec 3<>/dev/tcp/localhost/8080 && printf 'GET /realms/tenant-c/.well-known/openid-configuration HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && head -c 64 <&3 | grep -q '200 OK'"
+        - "exec 3<>/dev/tcp/localhost/8080 && printf 'GET /realms/camelot/.well-known/openid-configuration HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && head -c 64 <&3 | grep -q '200 OK'"
       interval: 5s
       timeout: 5s
       retries: 30
@@ -82,7 +82,7 @@ services:
           - keycloak
 
   # One-shot sidecar that flips the BUILT-IN master realm's sslRequired
-  # to NONE. The tenant-{a,b,c} realm JSONs we import already set
+  # to NONE. The asgard / babylon / camelot realm JSONs we import already set
   # sslRequired=none, but the master realm (which backs /admin/console
   # for revocation walkthroughs) is created by Keycloak itself and
   # can't be overridden via realm-import — kcadm.sh is the only
