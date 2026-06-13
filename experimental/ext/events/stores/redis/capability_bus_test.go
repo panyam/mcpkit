@@ -30,7 +30,7 @@ func newTestRedis(t *testing.T) *redis.Client {
 	return cli
 }
 
-// recordingReceiver captures every ReceiveRelay call so the test can
+// recordingReceiver captures every Receive call so the test can
 // assert what reached the bus's receiver side.
 type recordingReceiver struct {
 	mu      sync.Mutex
@@ -42,7 +42,7 @@ type recordedFrame struct {
 	params json.RawMessage
 }
 
-func (r *recordingReceiver) ReceiveRelay(_ context.Context, method string, params any) {
+func (r *recordingReceiver) Receive(_ context.Context, method string, params any) {
 	raw, _ := params.(json.RawMessage)
 	r.mu.Lock()
 	r.frames = append(r.frames, recordedFrame{method: method, params: raw})
@@ -100,7 +100,7 @@ func TestCapabilityBus_RoundTrip_TwoReplicas(t *testing.T) {
 	// both subscribe loops register before we publish.
 	time.Sleep(50 * time.Millisecond)
 
-	busA.PublishBroadcast(ctx, "notifications/tools/list_changed", nil)
+	busA.Publish(ctx, "notifications/tools/list_changed", nil)
 
 	// busB's receiver must see exactly one frame (the cross-replica
 	// publish from A). busA's receiver must see ZERO frames (the
@@ -126,35 +126,35 @@ func TestCapabilityBus_SelfPublishDeduped(t *testing.T) {
 	go bus.Run(ctx)
 	time.Sleep(50 * time.Millisecond)
 
-	bus.PublishBroadcast(ctx, "notifications/tools/list_changed", nil)
+	bus.Publish(ctx, "notifications/tools/list_changed", nil)
 	time.Sleep(100 * time.Millisecond) // let any erroneous delivery fire
 
 	assert.Empty(t, recv.snapshot(), "single-bus publish must dedup via origin marker")
 }
 
-// TestCapabilityBus_WithBroadcastRelay_EndToEnd verifies the full
+// TestCapabilityBus_WithNotificationRelay_EndToEnd verifies the full
 // integration: two Servers, each with a CapabilityBus wired via
-// WithBroadcastRelay. Calling Server.Broadcast on one replica
+// WithNotificationRelay. Calling Server.Broadcast on one replica
 // triggers the other replica's BroadcastToSessions via the relay.
 //
 // We build the receiver + bus first using a placeholder srv, then
-// construct the real srv with WithBroadcastRelay pointing at the
+// construct the real srv with WithNotificationRelay pointing at the
 // bus, then swap the receiver's srv pointer to the real one via
-// SwapServer. This dance is needed because BroadcastRelay must be
+// SwapServer. This dance is needed because NotificationRelay must be
 // installed at NewServer time but the receiver references its srv
 // for BroadcastToSessions calls.
-func TestCapabilityBus_WithBroadcastRelay_EndToEnd(t *testing.T) {
+func TestCapabilityBus_WithNotificationRelay_EndToEnd(t *testing.T) {
 	cli := newTestRedis(t)
 	opts := redisstore.CapabilityBusOptions{Client: cli}
 
 	buildReplica := func(name string) (*server.Server, *recordingReceiver, *redisstore.CapabilityBus) {
 		// Wrap CapabilityBroadcastReceiver with a recording adapter
-		// so we can verify ReceiveRelay fires.
+		// so we can verify Receive fires.
 		recv := &recordingReceiver{}
 		bus, err := redisstore.NewCapabilityBus(opts, recv)
 		require.NoError(t, err)
 		srv := server.NewServer(core.ServerInfo{Name: name, Version: "0.0.1"},
-			server.WithBroadcastRelay(bus),
+			server.WithNotificationRelay(bus),
 		)
 		return srv, recv, bus
 	}
@@ -185,7 +185,7 @@ func TestCapabilityBus_WithBroadcastRelay_EndToEnd(t *testing.T) {
 	assert.Empty(t, recvA.snapshot(), "origin replica must drop self-publish at the bus layer")
 
 	// Sanity: the srv refs are non-nil so the type checker confirms
-	// WithBroadcastRelay installed the relay onto the server.
+	// WithNotificationRelay installed the relay onto the server.
 	_ = srvA
 	_ = srvB
 }
