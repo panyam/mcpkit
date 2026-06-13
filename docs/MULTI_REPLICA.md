@@ -295,7 +295,7 @@ sequenceDiagram
 flowchart LR
     subgraph "PublishBroadcast (origin)"
         P1[method + params]
-        P2[envelope: {origin, params}]
+        P2["envelope: {origin, params}"]
         P3[Codec.Encode]
         P4["PUBLISH prefix.broadcast.method"]
         P1 --> P2 --> P3 --> P4
