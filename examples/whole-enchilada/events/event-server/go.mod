@@ -10,6 +10,7 @@ replace (
 	github.com/panyam/mcpkit/experimental/ext/events/stores/redis => ../../../../experimental/ext/events/stores/redis
 	github.com/panyam/mcpkit/ext/auth => ../../../../ext/auth
 	github.com/panyam/mcpkit/ext/otel => ../../../../ext/otel
+	github.com/panyam/mcpkit/stores/redis => ../../../../stores/redis
 )
 
 require (
@@ -19,7 +20,7 @@ require (
 	github.com/panyam/mcpkit/experimental/ext/events v0.0.0
 	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.0.0-00010101000000-000000000000
 	github.com/panyam/mcpkit/experimental/ext/events/stores/gorm v0.0.0-00010101000000-000000000000
-	github.com/panyam/mcpkit/experimental/ext/events/stores/redis v0.0.0-00010101000000-000000000000
+	github.com/panyam/mcpkit/experimental/ext/events/stores/redis v0.0.0-20260613221610-63a4e4058337
 	github.com/panyam/mcpkit/ext/auth v0.0.0-00010101000000-000000000000
 	github.com/panyam/servicekit v0.1.2
 	github.com/redis/go-redis/v9 v9.20.0
@@ -77,6 +78,7 @@ require (
 	github.com/panyam/gocurrent v0.1.1 // indirect
 	github.com/panyam/goutils v0.1.13 // indirect
 	github.com/panyam/mcpkit/ext/otel v0.0.0-20260608053428-44b944d79f00 // indirect
+	github.com/panyam/mcpkit/stores/redis v0.0.0-00010101000000-000000000000 // indirect
 	github.com/panyam/oneauth v0.1.20 // indirect
 	github.com/panyam/templar v0.1.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect

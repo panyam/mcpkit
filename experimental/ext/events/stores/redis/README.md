@@ -1,15 +1,14 @@
-# redisstore — Redis pubsub transport for `experimental/ext/events` + capability-shaped notifications
+# redisstore — Redis pubsub Bus for the events SDK
 
-Cross-replica fanout for MCP server-pushed notifications via Redis pubsub. Provides two Bus types:
+Events-typed Pattern B transport. `Bus` implements `events.Emitter` and routes received events through a `server.NotificationRelayReceiver` (typically `events.YieldingSource` or an adapter wrapping a registry).
 
-- **`redisstore.Bus`** — events-typed Pattern B transport. Implements `events.Emitter`; routes received events through a `server.NotificationRelayReceiver` (typically `events.YieldingSource` or an adapter wrapping a registry).
-- **`redisstore.CapabilityBus`** — `(method, params)`-typed Pattern B transport. Implements `server.NotificationRelay`; carries capability-shaped notifications (`tools/list_changed`, `resources/list_changed`, `prompts/list_changed`) and the subscription-shaped `resources/updated` via a `server.NotificationRouter`.
+Companion capability/subscription-shaped transport (`CapabilityBus` for `tools/list_changed`, `resources/list_changed`, `prompts/list_changed`, `resources/updated`) lives at the root `stores/redis/` module — it's not events-specific. See [`../../../../stores/redis/README.md`](../../../../stores/redis/README.md).
 
-Both Buses hide origin-marker self-publish dedup internally. Adopters wire `NewBus(opts, receiver)` (or `NewCapabilityBus`) and the round-trip is automatic.
+Both Buses hide origin-marker self-publish dedup internally. Adopters wire `NewBus(opts, receiver)` and the round-trip is automatic.
 
-Implements issues 634 (events) + 755 (capability + sub-shaped). See [`STORAGE_SEAMS.md`](../../STORAGE_SEAMS.md) for how this fits in the broader backend story; see [`../../../../docs/MULTI_REPLICA.md`](../../../../docs/MULTI_REPLICA.md) for the full multi-replica architecture, per-surface flows, and adopter recipes.
+Implements issue 634. See [`STORAGE_SEAMS.md`](../../STORAGE_SEAMS.md) for the broader backend story; see [`../../../../docs/MULTI_REPLICA.md`](../../../../docs/MULTI_REPLICA.md) for the full multi-replica architecture, per-surface flows, and adopter recipes.
 
-## Usage — events Bus
+## Usage
 
 ```go
 import (
@@ -30,32 +29,11 @@ cfg.Emitter = bus
 events.Register(cfg)
 ```
 
-## Usage — capability + subscription-shaped Bus
+For custom codecs (non-JSON wire format), call `bus.WithCodec(codec)` after construction. The Codec is parameterized over `events.Event` and lives in root `stores/redis/` as `Codec[T any]` — the events SDK re-exports it as `redisstore.Codec` and `redisstore.JSONCodec` for convenience.
 
-```go
-import (
-    "github.com/panyam/mcpkit/server"
-    redisstore "github.com/panyam/mcpkit/experimental/ext/events/stores/redis"
-)
+## Capability + subscription-shaped notifications
 
-mux := server.NewNotificationRouter().
-    Handle("notifications/tools/list_changed",     server.NewCapabilityBroadcastReceiver(srv)).
-    Handle("notifications/resources/list_changed", server.NewCapabilityBroadcastReceiver(srv)).
-    Handle("notifications/prompts/list_changed",   server.NewCapabilityBroadcastReceiver(srv)).
-    Handle("notifications/resources/updated",      server.NewResourcesUpdatedReceiver(srv))
-
-bus, _ := redisstore.NewCapabilityBus(redisstore.CapabilityBusOptions{Client: cli}, mux)
-defer bus.Close()
-_ = bus.Subscribe(ctx,
-    "notifications/tools/list_changed",
-    "notifications/resources/list_changed",
-    "notifications/prompts/list_changed",
-    "notifications/resources/updated",
-)
-go bus.Run(ctx)
-
-srv := server.NewServer(info, server.WithNotificationRelay(bus))
-```
+If your server also needs `tools/list_changed`, `resources/list_changed`, `prompts/list_changed`, or `resources/updated` to fan across replicas, configure a separate `CapabilityBus` from the root `stores/redis/` module. See that package's README + `docs/MULTI_REPLICA.md` § Mixed for a complete recipe.
 
 ## Why Redis-only outbound (Pattern B)
 

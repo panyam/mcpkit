@@ -789,7 +789,7 @@ When your server emits only catalog-mutation notifications and you don't use `re
 ```go
 import (
     "github.com/panyam/mcpkit/server"
-    redisstore "github.com/panyam/mcpkit/experimental/ext/events/stores/redis"
+    redisstore "github.com/panyam/mcpkit/stores/redis"
 )
 
 bus, err := redisstore.NewCapabilityBus(
@@ -834,9 +834,15 @@ events.Register(cfg)
 
 ### Mixed — all 5 surfaces
 
-When your server uses both catalog notifications AND `resources/updated` AND events. Wire one `redisstore.CapabilityBus` + `NotificationRouter` for the server-side notifications, and a separate `redisstore.Bus` for events (events have a different wire format):
+When your server uses both catalog notifications AND `resources/updated` AND events. CapabilityBus (root `stores/redis/`) handles capability + subscription-shaped notifications via one `NotificationRouter`. Events get their own Bus (events SDK `experimental/ext/events/stores/redis/`) because the wire format is events-typed:
 
 ```go
+import (
+    "github.com/panyam/mcpkit/server"
+    rootredis "github.com/panyam/mcpkit/stores/redis"
+    eventsredis "github.com/panyam/mcpkit/experimental/ext/events/stores/redis"
+)
+
 // Server-side capability + subscription-shaped (3 list_changed + resources/updated)
 mux := server.NewNotificationRouter().
     Handle("notifications/tools/list_changed",     server.NewCapabilityBroadcastReceiver(srv)).
@@ -844,7 +850,7 @@ mux := server.NewNotificationRouter().
     Handle("notifications/prompts/list_changed",   server.NewCapabilityBroadcastReceiver(srv)).
     Handle("notifications/resources/updated",      server.NewResourcesUpdatedReceiver(srv))
 
-capBus, _ := redisstore.NewCapabilityBus(opts, mux)
+capBus, _ := rootredis.NewCapabilityBus(rootredis.CapabilityBusOptions{Client: cli}, mux)
 defer capBus.Close()
 _ = capBus.Subscribe(ctx,
     "notifications/tools/list_changed",
@@ -855,7 +861,7 @@ _ = capBus.Subscribe(ctx,
 go capBus.Run(ctx)
 
 // Events (separate Bus, separate wire format)
-eventsBus, _ := redisstore.NewBus(opts, mySource)
+eventsBus, _ := eventsredis.NewBus(eventsredis.Options{Client: cli}, mySource)
 defer eventsBus.Close()
 _ = eventsBus.Subscribe(ctx, "chat.message")
 go eventsBus.Run(ctx)
@@ -958,8 +964,8 @@ Same recursion guard. Custom subscription-shaped receivers call `notifyLocal` (v
 | `Server.Broadcast` / `BroadcastToSessions` | `server/server.go` |
 | `subscriptionRegistry.notify` / `notifyLocal` | `server/server.go` |
 | `WithNotificationRelay` option | `server/relay.go` |
-| `redisstore.CapabilityBus` | `experimental/ext/events/stores/redis/capability_bus.go` |
-| `redisstore.Bus` (events) | `experimental/ext/events/stores/redis/bus.go` |
+| `redisstore.CapabilityBus` | `stores/redis/capability_bus.go` |
+| `redisstore.Bus` (events SDK) | `experimental/ext/events/stores/redis/bus.go` |
 | `memorystore.Bus` + `Hub` | `experimental/ext/events/stores/memory/bus.go` |
 | `YieldingSource.LocalDeliver` / `Receive` | `experimental/ext/events/yield.go` |
 
@@ -973,4 +979,4 @@ Pattern B's contracts are covered by `-race`-clean tests at every layer. Referen
 | In-memory broadcast harness | `server/relay_inmemory_test.go` (5 tests: split semantics, fan-out, self-publish dedup, no-relay backwards compat, N×T matrix) |
 | Wiring for 5 surfaces | `server/listchanged_relay_test.go` (3 tests covering all 4 list_changed paths + resources/updated end-to-end) |
 | Events multi-replica | `experimental/ext/events/stores/memory/multi_replica_test.go` (5 tests: tenant scoping, self-publish dedup, N×T×M matrix, leave-mid-flight, high concurrency stress) |
-| Redis CapabilityBus round-trip | `experimental/ext/events/stores/redis/capability_bus_test.go` (3 tests: cross-replica round-trip, single-bus self-dedup, full WithNotificationRelay end-to-end via miniredis) |
+| Redis CapabilityBus round-trip | `stores/redis/capability_bus_test.go` (3 tests: cross-replica round-trip, single-bus self-dedup, full WithNotificationRelay end-to-end via miniredis) |

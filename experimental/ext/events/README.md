@@ -308,7 +308,7 @@ For private-cloud / WAF-fronted deployments, see [`DEPLOYMENT.md`](DEPLOYMENT.md
 
 `notifications/events/event` is one of five server-pushed notification surfaces that silently break at N>1 (multiple server replicas) without explicit Pattern B wiring. The events SDK's `YieldingSource` implements `server.NotificationRelayReceiver` so the receive side of Pattern B routes through its slot system on every replica — per-slot `EventDef.Match` runs the same as for a local yield, preserving tenant scoping and per-subscription filters.
 
-The full architecture (Pattern B, `redisstore.Bus` / `redisstore.CapabilityBus`, the `NotificationRouter` recipe, per-surface end-to-end flows) lives in [`docs/MULTI_REPLICA.md`](../../../docs/MULTI_REPLICA.md). The configuration recipe for events specifically:
+The full architecture (Pattern B, `redisstore.Bus` for events, `redisstore.CapabilityBus` for capability + sub-shaped notifications, the `NotificationRouter` recipe, per-surface end-to-end flows) lives in [`docs/MULTI_REPLICA.md`](../../../docs/MULTI_REPLICA.md). The configuration recipe for events specifically:
 
 ```go
 import (
