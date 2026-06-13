@@ -7,8 +7,8 @@
 //
 // CapabilityBus is to capability-shaped notifications what Bus is to
 // events. Adopters wire one and:
-//   1. Install it on the Server via server.WithBroadcastRelay(bus).
-//      Server.Broadcast then fires PublishBroadcast on every call
+//   1. Install it on the Server via server.WithNotificationRelay(bus).
+//      Server.Broadcast then fires Publish on every call
 //      before running BroadcastToSessions locally — every replica's
 //      clients hear the notification.
 //   2. Call Subscribe + Run to start the receive side. On every
@@ -49,11 +49,11 @@ import (
 const CapabilityBusChannelInfix = "broadcast"
 
 // CapabilityBus is the Pattern B implementation for capability-shaped
-// notifications. Satisfies server.BroadcastRelay on the publish side
+// notifications. Satisfies server.NotificationRelay on the publish side
 // and wires a subscriber loop that drives server.BroadcastToSessions
 // on every cross-replica receive.
 //
-// Concurrency: PublishBroadcast is safe for concurrent calls.
+// Concurrency: Publish is safe for concurrent calls.
 // Subscribe / Run / Close should be called from a single goroutine
 // (typical pattern: Subscribe once with the method names you care
 // about, Run in a goroutine, Close on shutdown).
@@ -69,7 +69,7 @@ type CapabilityBus struct {
 	closed      bool
 }
 
-// capabilityEnvelope is the wire shape PublishBroadcast emits.
+// capabilityEnvelope is the wire shape Publish emits.
 // Receive side decodes back to (originID, params) so the origin
 // filter and the receiver dispatch both have what they need.
 type capabilityEnvelope struct {
@@ -123,13 +123,13 @@ func NewCapabilityBus(opts CapabilityBusOptions, receiver server.NotificationRel
 	}, nil
 }
 
-// PublishBroadcast implements server.BroadcastRelay. Encodes the
+// Publish implements server.NotificationRelay. Encodes the
 // notification into a capabilityEnvelope tagged with this bus's
 // origin marker and PUBLISHes on the per-method channel. Errors are
 // logged via opts.Logger (set on the underlying client's Options if
 // available) but not returned — Server.Broadcast is fire-and-forget
 // for the relay leg.
-func (b *CapabilityBus) PublishBroadcast(ctx context.Context, method string, params any) {
+func (b *CapabilityBus) Publish(ctx context.Context, method string, params any) {
 	body, err := encodeCapabilityEnvelope(b.originID, params)
 	if err != nil {
 		// Best-effort — adopters that care about publish reliability
@@ -210,7 +210,7 @@ func (b *CapabilityBus) Run(ctx context.Context) error {
 				continue
 			}
 			method := b.methodFor(msg.Channel)
-			b.receiver.ReceiveRelay(ctx, method, params)
+			b.receiver.Receive(ctx, method, params)
 		}
 	}
 }
@@ -267,5 +267,5 @@ func decodeCapabilityEnvelope(body []byte) (string, json.RawMessage, error) {
 	return env.Origin, env.Params, nil
 }
 
-// Compile-time check: CapabilityBus satisfies server.BroadcastRelay.
-var _ server.BroadcastRelay = (*CapabilityBus)(nil)
+// Compile-time check: CapabilityBus satisfies server.NotificationRelay.
+var _ server.NotificationRelay = (*CapabilityBus)(nil)

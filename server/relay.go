@@ -41,36 +41,36 @@ import (
 	"github.com/panyam/mcpkit/core"
 )
 
-// BroadcastRelay is the publish side of a Pattern B transport for
+// NotificationRelay is the publish side of a Pattern B transport for
 // capability-shaped notifications (notifications/tools/list_changed,
 // notifications/resources/list_changed, etc.). Adopters install one
-// via WithBroadcastRelay; Server.Broadcast then fires
-// PublishBroadcast(ctx, method, params) before the local
+// via WithNotificationRelay; Server.Broadcast then fires
+// Publish(ctx, method, params) before the local
 // BroadcastToSessions fan-out so the same notification reaches every
 // connected client across every replica.
 //
-// PublishBroadcast is fire-and-forget — Server.Broadcast does not
-// surface errors. Implementations log internally if a publish fails;
-// the local BroadcastToSessions fan-out still runs regardless.
+// Publish is fire-and-forget — Server.Broadcast does not surface
+// errors. Implementations log internally if a publish fails; the
+// local BroadcastToSessions fan-out still runs regardless.
 //
-// Concurrency: PublishBroadcast may be invoked from any goroutine that
-// calls Server.Broadcast (handlers, registry.OnChange, etc.).
-// Implementations must be safe for concurrent calls.
+// Concurrency: Publish may be invoked from any goroutine that calls
+// Server.Broadcast (handlers, registry.OnChange, etc.). Implementations
+// must be safe for concurrent calls.
 //
 // The receive-side wiring (a separate subscriber loop calling
 // Server.BroadcastToSessions on cross-replica receives) is the
 // transport adapter's responsibility. The reference Redis
 // implementation is redisstore.CapabilityBus, which satisfies
-// BroadcastRelay on the publish side AND drives BroadcastToSessions
+// NotificationRelay on the publish side AND drives BroadcastToSessions
 // on the subscribe side via a NotificationRelayReceiver wired
 // internally.
-type BroadcastRelay interface {
-	PublishBroadcast(ctx context.Context, method string, params any)
+type NotificationRelay interface {
+	Publish(ctx context.Context, method string, params any)
 }
 
 // NotificationRelayReceiver is the callback shape mcpkit expects from
 // a Pattern B transport's subscriber side. The transport adapter calls
-// ReceiveRelay once per cross-replica notification destined for this
+// Receive once per cross-replica notification destined for this
 // replica (i.e. after the transport's own self-publish filtering).
 //
 // Implementations are domain-specific:
@@ -78,22 +78,22 @@ type BroadcastRelay interface {
 //     catalog-mutation notifications.
 //   - events.YieldingSource routes via per-slot fanout so per-
 //     subscription Match / Transform run.
-//   - A future ResourcesUpdatedRouter (PR B) routes via the per-URI
-//     subscription set with prefix match.
+//   - ResourcesUpdatedReceiver routes via the per-URI subscription
+//     set with prefix match.
 //
-// Concurrency: ReceiveRelay may be invoked from any goroutine
-// (typically the transport's receive loop). Implementations must be
-// safe for concurrent calls.
+// Concurrency: Receive may be invoked from any goroutine (typically
+// the transport's receive loop). Implementations must be safe for
+// concurrent calls.
 type NotificationRelayReceiver interface {
-	ReceiveRelay(ctx context.Context, method string, params any)
+	Receive(ctx context.Context, method string, params any)
 }
 
-// WithBroadcastRelay installs a BroadcastRelay onto the Server.
-// Server.Broadcast then fires PublishBroadcast on the relay before
-// running BroadcastToSessions locally — every capability-shaped
-// notification (tools/list_changed, resources/list_changed,
-// prompts/list_changed, application-level broadcasts) reaches
-// connected clients across every replica in the deployment.
+// WithNotificationRelay installs a NotificationRelay onto the Server.
+// Server.Broadcast then fires Publish on the relay before running
+// BroadcastToSessions locally — every capability-shaped notification
+// (tools/list_changed, resources/list_changed, prompts/list_changed,
+// application-level broadcasts) reaches connected clients across every
+// replica in the deployment.
 //
 // Pair with a transport adapter's subscribe-side wiring that calls
 // Server.BroadcastToSessions on cross-replica receives (the reference
@@ -101,9 +101,9 @@ type NotificationRelayReceiver interface {
 //
 // Pass nil to disable the relay (default) — Server.Broadcast then
 // fires local-only, matching pre-Pattern-B behavior.
-func WithBroadcastRelay(relay BroadcastRelay) Option {
+func WithNotificationRelay(relay NotificationRelay) Option {
 	return func(o *serverOptions) {
-		o.broadcastRelay = relay
+		o.notificationRelay = relay
 	}
 }
 
@@ -113,7 +113,7 @@ func WithBroadcastRelay(relay BroadcastRelay) Option {
 // notification with the same shape (no per-subscription filter; every
 // connected client with the capability sees it).
 //
-// On ReceiveRelay it forwards to Server.Broadcast, which the
+// On Receive it forwards to Server.Broadcast, which the
 // per-transport session machinery fans out to every connected client
 // on this replica.
 type CapabilityBroadcastReceiver struct {
@@ -122,32 +122,32 @@ type CapabilityBroadcastReceiver struct {
 
 // NewCapabilityBroadcastReceiver constructs a CapabilityBroadcastReceiver
 // wired to srv. The transport adapter handles self-publish dedup
-// internally before invoking ReceiveRelay — adopters don't pass an
+// internally before invoking Receive — adopters don't pass an
 // origin marker here.
 func NewCapabilityBroadcastReceiver(srv *Server) *CapabilityBroadcastReceiver {
 	return &CapabilityBroadcastReceiver{srv: srv}
 }
 
-// ReceiveRelay implements NotificationRelayReceiver. Forwards to
+// Receive implements NotificationRelayReceiver. Forwards to
 // Server.BroadcastToSessions (NOT Server.Broadcast) with a background
 // context — calling Broadcast here would re-fire the installed
-// BroadcastRelay and loop indefinitely through the Pattern B
+// NotificationRelay and loop indefinitely through the Pattern B
 // transport. BroadcastToSessions delivers to local sessions only,
 // which is what the relay receive path needs.
 //
 // The relay is fire-and-forget at the notification level; the
 // transport's ctx cancellation belongs to the transport loop, not to
 // the broadcast fan-out on this replica.
-func (r *CapabilityBroadcastReceiver) ReceiveRelay(_ context.Context, method string, params any) {
+func (r *CapabilityBroadcastReceiver) Receive(_ context.Context, method string, params any) {
 	r.srv.BroadcastToSessions(context.Background(), method, params)
 }
 
 // ResourcesUpdatedReceiver is the reference NotificationRelayReceiver
 // for the subscription-shaped notifications/resources/updated. On
-// ReceiveRelay it extracts the URI from the payload and dispatches via
+// Receive it extracts the URI from the payload and dispatches via
 // Server.NotifyResourceUpdatedLocal — fires every locally-subscribed
 // session whose subscribe(URI) matches, WITHOUT re-publishing via the
-// BroadcastRelay (which would loop).
+// NotificationRelay (which would loop).
 //
 // Each replica's subscriptionRegistry independently filters by its
 // own per-URI subscriber set; clients subscribed via THIS replica's
@@ -165,12 +165,12 @@ func NewResourcesUpdatedReceiver(srv *Server) *ResourcesUpdatedReceiver {
 	return &ResourcesUpdatedReceiver{srv: srv}
 }
 
-// ReceiveRelay implements NotificationRelayReceiver. Expects params to
-// be a core.ResourceUpdatedNotification (the type
+// Receive implements NotificationRelayReceiver. Expects params to be a
+// core.ResourceUpdatedNotification (the type
 // subscriptionRegistry.notify publishes) — also accepts
 // map[string]any with a "uri" field for transports that decoded
 // generically. Unknown shapes are silently dropped.
-func (r *ResourcesUpdatedReceiver) ReceiveRelay(_ context.Context, method string, params any) {
+func (r *ResourcesUpdatedReceiver) Receive(_ context.Context, method string, params any) {
 	if method != "notifications/resources/updated" {
 		return
 	}
@@ -198,34 +198,34 @@ func uriFromUpdatedParams(params any) string {
 	return ""
 }
 
-// MultiplexRelayReceiver routes received notifications by method name
-// to per-method NotificationRelayReceivers. Adopters configure one
-// MultiplexRelayReceiver as the BroadcastRelay's receiver, registering
+// NotificationRouter routes received notifications by method name to
+// per-method NotificationRelayReceivers. Adopters configure one
+// NotificationRouter as the NotificationRelay's receiver, registering
 // per-method handlers (CapabilityBroadcastReceiver for catalog
 // notifications, ResourcesUpdatedReceiver for subscription-shaped
 // resources/updated, etc.). Methods without a registered handler are
 // dropped silently — appropriate for shared Pattern B transports where
 // not every replica subscribes to every method.
 //
-// Concurrency: Handle and ReceiveRelay are safe for concurrent use.
-// Routing decisions snapshot the dispatch table under a read lock so
-// in-flight notifications don't race with late registrations.
-type MultiplexRelayReceiver struct {
+// Concurrency: Handle and Receive are safe for concurrent use. Routing
+// decisions snapshot the dispatch table under a read lock so in-flight
+// notifications don't race with late registrations.
+type NotificationRouter struct {
 	mu       sync.RWMutex
 	handlers map[string]NotificationRelayReceiver
 }
 
-// NewMultiplexRelayReceiver constructs an empty multiplexer. Register
-// per-method handlers via Handle before installing the multiplexer on
-// a BroadcastRelay's receiver slot.
-func NewMultiplexRelayReceiver() *MultiplexRelayReceiver {
-	return &MultiplexRelayReceiver{handlers: map[string]NotificationRelayReceiver{}}
+// NewNotificationRouter constructs an empty router. Register
+// per-method handlers via Handle before installing the router on a
+// NotificationRelay's receiver slot.
+func NewNotificationRouter() *NotificationRouter {
+	return &NotificationRouter{handlers: map[string]NotificationRelayReceiver{}}
 }
 
 // Handle registers receiver as the handler for the given method.
-// Returns the multiplexer for chaining. A subsequent Handle call for
-// the same method replaces the previous handler.
-func (m *MultiplexRelayReceiver) Handle(method string, receiver NotificationRelayReceiver) *MultiplexRelayReceiver {
+// Returns the router for chaining. A subsequent Handle call for the
+// same method replaces the previous handler.
+func (m *NotificationRouter) Handle(method string, receiver NotificationRelayReceiver) *NotificationRouter {
 	if receiver == nil {
 		return m
 	}
@@ -235,15 +235,14 @@ func (m *MultiplexRelayReceiver) Handle(method string, receiver NotificationRela
 	return m
 }
 
-// ReceiveRelay implements NotificationRelayReceiver. Looks up the
-// per-method handler and forwards. Unknown methods are silently
-// dropped.
-func (m *MultiplexRelayReceiver) ReceiveRelay(ctx context.Context, method string, params any) {
+// Receive implements NotificationRelayReceiver. Looks up the per-method
+// handler and forwards. Unknown methods are silently dropped.
+func (m *NotificationRouter) Receive(ctx context.Context, method string, params any) {
 	m.mu.RLock()
 	h := m.handlers[method]
 	m.mu.RUnlock()
 	if h == nil {
 		return
 	}
-	h.ReceiveRelay(ctx, method, params)
+	h.Receive(ctx, method, params)
 }

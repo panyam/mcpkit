@@ -415,7 +415,7 @@ func (s *YieldingSource[Data]) YieldTerminated(err EventDeliveryError) error {
 	return nil
 }
 
-// ReceiveRelay implements server.NotificationRelayReceiver — the
+// Receive implements server.NotificationRelayReceiver — the
 // routing seam Pattern B transports (redisstore.Bus and equivalents)
 // call on every cross-replica event received by this replica. Routes
 // to LocalDeliver after type-asserting params to Event; silently no-ops
@@ -425,7 +425,7 @@ func (s *YieldingSource[Data]) YieldTerminated(err EventDeliveryError) error {
 // Adopters writing a custom receiver to look up sources by event name
 // can wrap a Registry; this method assumes the receiver IS the source
 // and the caller has already routed by event.Name.
-func (s *YieldingSource[Data]) ReceiveRelay(ctx context.Context, method string, params any) {
+func (s *YieldingSource[Data]) Receive(ctx context.Context, method string, params any) {
 	if method != "notifications/events/event" {
 		return
 	}

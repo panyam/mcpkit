@@ -11,14 +11,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// memRelayBus is an in-memory BroadcastRelay that also provides the
+// memRelayBus is an in-memory NotificationRelay that also provides the
 // receive side of Pattern B — every Publish fans out to every
 // registered subscriber on a background goroutine. Self-publish dedup
 // runs via per-replica origin marker. Used only by tests; never wired
 // into production code.
 //
 // Wire shape: each replica registers a NotificationRelayReceiver and
-// gets a unique origin ID. PublishBroadcast tags the message with the
+// gets a unique origin ID. Publish tags the message with the
 // publisher's origin and enqueues to every subscriber. Subscribers
 // drop messages whose origin matches their own (self-publish).
 type memRelayBus struct {
@@ -43,11 +43,11 @@ type memRelayFrame struct {
 func newMemRelayBus() *memRelayBus { return &memRelayBus{} }
 
 // attachReplica registers a receiver on the bus and returns a publish
-// handle that PublishBroadcast tags with this replica's origin. Wire
-// the returned handle through WithBroadcastRelay so the same replica's
+// handle that Publish tags with this replica's origin. Wire
+// the returned handle through WithNotificationRelay so the same replica's
 // outbound publishes carry the origin its inbound subscriber will
 // drop.
-func (b *memRelayBus) attachReplica(t *testing.T, receiver NotificationRelayReceiver) BroadcastRelay {
+func (b *memRelayBus) attachReplica(t *testing.T, receiver NotificationRelayReceiver) NotificationRelay {
 	t.Helper()
 	b.mu.Lock()
 	b.nextID++
@@ -76,7 +76,7 @@ func (s *memRelaySubscriber) run() {
 		if f.origin == s.originID {
 			continue
 		}
-		s.receiver.ReceiveRelay(context.Background(), f.method, f.params)
+		s.receiver.Receive(context.Background(), f.method, f.params)
 	}
 }
 
@@ -94,7 +94,7 @@ type memRelayPublisher struct {
 	originID string
 }
 
-func (p *memRelayPublisher) PublishBroadcast(_ context.Context, method string, params any) {
+func (p *memRelayPublisher) Publish(_ context.Context, method string, params any) {
 	p.bus.mu.Lock()
 	subs := make([]*memRelaySubscriber, len(p.bus.subscribers))
 	copy(subs, p.bus.subscribers)
@@ -158,7 +158,7 @@ func newCaptureCluster(t *testing.T, m int) *captureCluster {
 			},
 		})
 		srv := NewServer(core.ServerInfo{Name: "cluster-replica", Version: "0.0.1"},
-			WithBroadcastRelay(relay),
+			WithNotificationRelay(relay),
 		)
 		// Wire the receiver to its server now that the server exists.
 		receiver.srv = srv
@@ -189,11 +189,11 @@ type recordingReceiver struct {
 	onFire func(method string, params any)
 }
 
-func (r *recordingReceiver) ReceiveRelay(ctx context.Context, method string, params any) {
+func (r *recordingReceiver) Receive(ctx context.Context, method string, params any) {
 	if r.onFire != nil {
 		r.onFire(method, params)
 	}
-	r.recv.ReceiveRelay(ctx, method, params)
+	r.recv.Receive(ctx, method, params)
 }
 
 // waitForFrameCount polls until the replica has accumulated count
@@ -221,7 +221,7 @@ func TestBroadcastToSessions_ExcludesRelay(t *testing.T) {
 	srv := cluster.replicas[0].srv
 
 	// BroadcastToSessions should fire LOCAL session broadcasters only.
-	// The relay's PublishBroadcast must NOT be called.
+	// The relay's Publish must NOT be called.
 	srv.BroadcastToSessions(context.Background(), "notifications/tools/list_changed", nil)
 
 	cluster.replicas[0].waitForFrameCount(t, 1, time.Second)
@@ -229,7 +229,7 @@ func TestBroadcastToSessions_ExcludesRelay(t *testing.T) {
 }
 
 // TestBroadcast_FiresRelayThenLocal verifies the public Broadcast does
-// BOTH: relay PublishBroadcast (cross-replica), then BroadcastToSessions
+// BOTH: relay Publish (cross-replica), then BroadcastToSessions
 // (local). Other replicas receive via relay → BroadcastToSessions, so
 // every replica's captured frames go up.
 func TestBroadcast_FiresRelayThenLocal(t *testing.T) {
@@ -291,12 +291,12 @@ func TestBroadcast_NoRelayInstalled(t *testing.T) {
 	assert.Len(t, captured, 1)
 }
 
-// TestBroadcastRelay_NTopicsMConsumers is the N producers × T topics
+// TestNotificationRelay_NTopicsMConsumers is the N producers × T topics
 // × M consumers harness exercising the full multi-replica matrix.
 // Every replica publishes every topic once; every replica's session
 // broadcaster should receive every published topic exactly once
 // (origin replica via local fanout; other replicas via relay).
-func TestBroadcastRelay_NTopicsMConsumers(t *testing.T) {
+func TestNotificationRelay_NTopicsMConsumers(t *testing.T) {
 	const m = 3 // replicas
 	cluster := newCaptureCluster(t, m)
 	topics := []string{
