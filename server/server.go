@@ -591,13 +591,14 @@ func NewServer(info core.ServerInfo, opts ...Option) *Server {
 	// Initialize subscription support if enabled
 	if s.options.subscriptionsEnabled {
 		s.subRegistry = &subscriptionRegistry{
-			subscribers: make(map[string]map[string]*Dispatcher),
-			counts:      make(map[string]int),
-			limiters:    make(map[string]*rate.Limiter),
-			cap:         s.options.subscriptionCap,
-			rateLimit:   s.options.subscriptionRate,
-			rateBurst:   s.options.subscriptionBurst,
-			onReject:    s.options.subscriptionReject,
+			subscribers:    make(map[string]map[string]*Dispatcher),
+			counts:         make(map[string]int),
+			limiters:       make(map[string]*rate.Limiter),
+			cap:            s.options.subscriptionCap,
+			rateLimit:      s.options.subscriptionRate,
+			rateBurst:      s.options.subscriptionBurst,
+			onReject:       s.options.subscriptionReject,
+			broadcastRelay: s.options.broadcastRelay,
 		}
 		s.dispatcher.subscriptionsEnabled = true
 		s.dispatcher.subManager = s.subRegistry
@@ -1521,6 +1522,15 @@ type subscriptionRegistry struct {
 	rateLimit rate.Limit
 	rateBurst int
 	onReject  SubscriptionRejectFunc
+
+	// broadcastRelay is the Server's configured Pattern B publisher
+	// for cross-replica fan-out. notify() publishes
+	// notifications/resources/updated through this on top of
+	// notifyLocal() so subscribers on other replicas hear the
+	// notification too. nil = local-only behavior (no relay
+	// installed). Wired by NewServer from s.options.broadcastRelay
+	// after both the registry and the option are read.
+	broadcastRelay BroadcastRelay
 }
 
 // ErrSubscriptionCapExceeded indicates the calling session has hit
@@ -1621,10 +1631,15 @@ func (r *subscriptionRegistry) unsubscribeAll(sessionID string) {
 	delete(r.limiters, sessionID)
 }
 
-// notify sends a notifications/resources/updated to all sessions subscribed to the URI.
-// Copies the dispatcher list under read lock, then calls notifyFunc outside the lock
-// to avoid holding the lock during potentially slow I/O.
-func (r *subscriptionRegistry) notify(uri string) {
+// notifyLocal sends a notifications/resources/updated to all LOCAL
+// sessions subscribed to the URI. Used by the cross-replica receive
+// path (server.ResourcesUpdatedReceiver.ReceiveRelay) to deliver
+// without re-publishing through the BroadcastRelay.
+//
+// Copies the dispatcher list under read lock, then calls notifyFunc
+// outside the lock to avoid holding the lock during potentially slow
+// I/O.
+func (r *subscriptionRegistry) notifyLocal(uri string) {
 	r.mu.RLock()
 	subs := r.subscribers[uri]
 	dispatchers := make([]*Dispatcher, 0, len(subs))
@@ -1641,12 +1656,37 @@ func (r *subscriptionRegistry) notify(uri string) {
 	}
 }
 
+// notify fires notifyLocal AND publishes via the Server's installed
+// BroadcastRelay so cross-replica subscribers on other replicas
+// receive the same notification. The publish encodes the URI in
+// params so receiving replicas can route by URI on their own
+// subscriptionRegistry.
+//
+// Without a relay installed the call is local-only (same as the
+// pre-Pattern-B behavior).
+func (r *subscriptionRegistry) notify(uri string) {
+	r.notifyLocal(uri)
+	if r.broadcastRelay != nil {
+		r.broadcastRelay.PublishBroadcast(
+			context.Background(),
+			"notifications/resources/updated",
+			core.ResourceUpdatedNotification{URI: uri},
+		)
+	}
+}
+
 // NotifyResourceUpdated sends a notifications/resources/updated notification to
 // all clients that have subscribed to the given resource URI. This is the
 // application-facing API for triggering resource change notifications.
 //
 // Safe to call from any goroutine. No-op if subscriptions are not enabled or
 // no clients are subscribed to the URI.
+//
+// When a BroadcastRelay is installed via WithBroadcastRelay, the
+// notification reaches subscribers on every replica — the receive
+// side (typically a server.ResourcesUpdatedReceiver wired into a
+// MultiplexRelayReceiver) calls notifyLocal on each replica's own
+// subscriptionRegistry.
 //
 // Example:
 //
@@ -1655,5 +1695,18 @@ func (r *subscriptionRegistry) notify(uri string) {
 func (s *Server) NotifyResourceUpdated(uri string) {
 	if s.subRegistry != nil {
 		s.subRegistry.notify(uri)
+	}
+}
+
+// NotifyResourceUpdatedLocal sends a notifications/resources/updated
+// notification to LOCAL subscribers only — does NOT publish via the
+// installed BroadcastRelay. Used by ResourcesUpdatedReceiver.ReceiveRelay
+// to deliver a cross-replica-received notification without
+// re-publishing.
+//
+// External callers should normally use NotifyResourceUpdated.
+func (s *Server) NotifyResourceUpdatedLocal(uri string) {
+	if s.subRegistry != nil {
+		s.subRegistry.notifyLocal(uri)
 	}
 }
