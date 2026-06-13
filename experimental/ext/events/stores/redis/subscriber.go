@@ -31,6 +31,7 @@ type DeliverFunc func(ctx context.Context, event events.Event) error
 // releases the underlying *redis.PubSub.
 type Subscriber struct {
 	opts    Options
+	codec   Codec
 	deliver DeliverFunc
 
 	mu       sync.Mutex
@@ -43,6 +44,9 @@ type Subscriber struct {
 // callback. Returns an error when Options.Client or deliver is nil.
 // The returned Subscriber holds no Redis-side state until the first
 // Subscribe call.
+//
+// Uses JSONCodec by default. Adopters wanting a different wire
+// format call (*Subscriber).WithCodec before Run.
 func NewSubscriber(opts Options, deliver DeliverFunc) (*Subscriber, error) {
 	if opts.Client == nil {
 		return nil, errors.New("redisstore.NewSubscriber: Options.Client is required")
@@ -51,10 +55,20 @@ func NewSubscriber(opts Options, deliver DeliverFunc) (*Subscriber, error) {
 		return nil, errors.New("redisstore.NewSubscriber: deliver is required")
 	}
 	return &Subscriber{
-		opts:     opts.withDefaults(),
+		opts:     opts.WithDefaults(),
+		codec:    JSONCodec{},
 		deliver:  deliver,
 		channels: make(map[string]struct{}),
 	}, nil
+}
+
+// WithCodec swaps the wire codec. Must be called before Run.
+// Returns the Subscriber for chaining.
+func (s *Subscriber) WithCodec(c Codec) *Subscriber {
+	if c != nil {
+		s.codec = c
+	}
+	return s
 }
 
 // Subscribe adds one or more event-name channels to the Subscriber's
@@ -72,7 +86,7 @@ func (s *Subscriber) Subscribe(ctx context.Context, eventNames ...string) error 
 	}
 	var fresh []string
 	for _, name := range eventNames {
-		ch := s.opts.channelFor(name)
+		ch := s.opts.ChannelFor(name)
 		if _, exists := s.channels[ch]; exists {
 			continue
 		}
@@ -133,7 +147,7 @@ func (s *Subscriber) Run(ctx context.Context) error {
 				// Close concurrently. Treat as clean shutdown.
 				return nil
 			}
-			event, err := s.opts.Codec.Decode([]byte(msg.Payload))
+			event, err := s.codec.Decode([]byte(msg.Payload))
 			if err != nil {
 				s.opts.Logger("redisstore: decode failed on channel %q: %v", msg.Channel, err)
 				continue
@@ -145,8 +159,8 @@ func (s *Subscriber) Run(ctx context.Context) error {
 			// handled them in-process). Empty skipOriginID disables
 			// the guard — direct Subscriber adopters get raw
 			// messages; the recommended path is Bus.
-			if s.opts.skipOriginID != "" {
-				if originIDFromMeta(event.Meta) == s.opts.skipOriginID {
+			if s.opts.SkipOriginID != "" {
+				if originIDFromMeta(event.Meta) == s.opts.SkipOriginID {
 					continue
 				}
 			}

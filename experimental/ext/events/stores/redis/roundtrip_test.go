@@ -197,13 +197,22 @@ func (*codecMismatchErr) Error() string { return "fakeCodec: not a FAKE-prefixed
 // the configured codec; the JSONCodec default is NOT silently
 // substituted.
 func TestCodecSwap_RoundTripsThroughCustomCodec(t *testing.T) {
-	opts := Options{Client: newTestClient(t), Codec: fakeCodec{}}
+	opts := Options{Client: newTestClient(t)}
 	cap := &captureDeliver{}
-	_, stop := startSubscriber(t, opts, cap, "chat.message")
-	defer stop()
+	sub, err := NewSubscriber(opts, cap.fn())
+	require.NoError(t, err)
+	sub.WithCodec(fakeCodec{})
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	require.NoError(t, sub.Subscribe(ctx, "chat.message"))
+	done := make(chan struct{})
+	go func() { _ = sub.Run(ctx); close(done) }()
+	defer func() { _ = sub.Close(); <-done }()
+	time.Sleep(50 * time.Millisecond)
 
 	pub, err := NewPublisher(opts)
 	require.NoError(t, err)
+	pub.WithCodec(fakeCodec{})
 	want := sample("chat.message", "tagged")
 	require.NoError(t, pub.Emit(t.Context(), want))
 

@@ -8,27 +8,16 @@ import (
 	"time"
 
 	core "github.com/panyam/mcpkit/core"
-	redisstore "github.com/panyam/mcpkit/experimental/ext/events/stores/redis"
 	"github.com/panyam/mcpkit/server"
-	"github.com/redis/go-redis/v9"
+	redisstore "github.com/panyam/mcpkit/stores/redis"
+	"github.com/panyam/mcpkit/stores/redis/redistest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/alicebob/miniredis/v2"
 )
 
-// newTestRedis returns a shared miniredis-backed *redis.Client for
-// these tests. Mirrors stores/redis's internal newTestClient helper
-// (which is package-private to redisstore).
-func newTestRedis(t *testing.T) *redis.Client {
-	t.Helper()
-	mr, err := miniredis.Run()
-	require.NoError(t, err)
-	t.Cleanup(mr.Close)
-	cli := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	t.Cleanup(func() { _ = cli.Close() })
-	return cli
-}
+// newTestRedis aliases redistest.NewClient so the existing call sites
+// don't need to rewire.
+var newTestRedis = redistest.NewClient
 
 // recordingReceiver captures every Receive call so the test can
 // assert what reached the bus's receiver side.
