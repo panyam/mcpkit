@@ -83,7 +83,7 @@ func NewQuotaStore(opts Options) (*QuotaStore, error) {
 	if opts.QuotaTTL < 0 {
 		return nil, fmt.Errorf("redisstore.NewQuotaStore: Options.QuotaTTL must be >= 0; got %s", opts.QuotaTTL)
 	}
-	return &QuotaStore{opts: opts.withDefaults()}, nil
+	return &QuotaStore{opts: eventsDefaults(opts)}, nil
 }
 
 // ReserveQuota claims one slot for (Principal, EventName) only if
@@ -97,7 +97,7 @@ func NewQuotaStore(opts Options) (*QuotaStore, error) {
 // connection drop, NOSCRIPT mid-script-cache transition) surface as
 // the second return.
 func (s *QuotaStore) ReserveQuota(ctx context.Context, req events.ReserveQuotaRequest) (events.ReserveQuotaResponse, error) {
-	key := s.opts.quotaKeyFor(req.Principal, req.EventName)
+	key := s.opts.QuotaKeyFor(req.Principal, req.EventName)
 	ttlSecs := int(s.opts.QuotaTTL.Seconds())
 	raw, err := reserveScript.Run(ctx, s.opts.Client, []string{key}, req.Max, ttlSecs).Result()
 	if err != nil {
@@ -121,7 +121,7 @@ func (s *QuotaStore) ReserveQuota(ctx context.Context, req events.ReserveQuotaRe
 // is a silent no-op — matches the in-memory store's contract so
 // double-release doesn't underflow.
 func (s *QuotaStore) ReleaseQuota(ctx context.Context, req events.ReleaseQuotaRequest) (events.ReleaseQuotaResponse, error) {
-	key := s.opts.quotaKeyFor(req.Principal, req.EventName)
+	key := s.opts.QuotaKeyFor(req.Principal, req.EventName)
 	if _, err := releaseScript.Run(ctx, s.opts.Client, []string{key}).Result(); err != nil {
 		return events.ReleaseQuotaResponse{}, fmt.Errorf("redisstore: ReleaseQuota EVAL failed: %w", err)
 	}
@@ -134,7 +134,7 @@ func (s *QuotaStore) ReleaseQuota(ctx context.Context, req events.ReleaseQuotaRe
 // return; Redis's "key does not exist" is NOT an error — it's
 // just Count=0.
 func (s *QuotaStore) CountQuota(ctx context.Context, req events.CountQuotaRequest) (events.CountQuotaResponse, error) {
-	key := s.opts.quotaKeyFor(req.Principal, req.EventName)
+	key := s.opts.QuotaKeyFor(req.Principal, req.EventName)
 	v, err := s.opts.Client.Get(ctx, key).Int()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {

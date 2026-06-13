@@ -73,7 +73,7 @@ func NewBus(opts Options, receiver server.NotificationRelayReceiver) (*Bus, erro
 	// Bus wires its own subscriber against the publisher's origin
 	// marker so self-publishes are dropped at the transport layer
 	// before the receiver sees them.
-	opts.skipOriginID = pub.originID
+	opts.SkipOriginID = pub.originID
 	sub, err := NewSubscriber(opts, func(ctx context.Context, event events.Event) error {
 		receiver.Receive(ctx, EventMethodName, event)
 		return nil

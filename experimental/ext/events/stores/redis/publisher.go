@@ -9,6 +9,7 @@ import (
 
 	mcpcore "github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/experimental/ext/events"
+	rootredis "github.com/panyam/mcpkit/stores/redis"
 )
 
 // Publisher implements events.Emitter by PUBLISHing each event onto a
@@ -26,7 +27,8 @@ import (
 // marker is stripped from event.Meta on the receive side before
 // deliverFn fires — adopters never see it.
 type Publisher struct {
-	opts     Options
+	opts     rootredis.Options
+	codec    Codec
 	originID string
 }
 
@@ -51,9 +53,20 @@ func NewPublisher(opts Options) (*Publisher, error) {
 		return nil, fmt.Errorf("redisstore: origin id: %w", err)
 	}
 	return &Publisher{
-		opts:     opts.withDefaults(),
+		opts:     eventsDefaults(opts),
+		codec:    JSONCodec{},
 		originID: hex.EncodeToString(idBuf[:]),
 	}, nil
+}
+
+// WithCodec swaps the wire codec. Adopters wanting a non-JSON wire
+// format (protobuf, msgpack) implement Codec and pass it here before
+// calling Emit. Returns the Publisher for chaining.
+func (p *Publisher) WithCodec(c Codec) *Publisher {
+	if c != nil {
+		p.codec = c
+	}
+	return p
 }
 
 // Emit encodes the event via Options.Codec and PUBLISHes it to the
@@ -73,11 +86,11 @@ func NewPublisher(opts Options) (*Publisher, error) {
 func (p *Publisher) Emit(ctx context.Context, event events.Event) error {
 	event.Meta = injectTraceContext(ctx, event.Meta)
 	event.Meta = stampOriginIDOnMeta(event.Meta, p.originID)
-	body, err := p.opts.Codec.Encode(event)
+	body, err := p.codec.Encode(event)
 	if err != nil {
 		return fmt.Errorf("redisstore: encode failed: %w", err)
 	}
-	channel := p.opts.channelFor(event.Name)
+	channel := p.opts.ChannelFor(event.Name)
 	if err := p.opts.Client.Publish(ctx, channel, body).Err(); err != nil {
 		return fmt.Errorf("redisstore: PUBLISH %s failed: %w", channel, err)
 	}
