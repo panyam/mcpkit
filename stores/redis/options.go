@@ -17,11 +17,17 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// DefaultChannelPrefix is the default namespace under which Redis
-// channel names are organized. The events Bus uses
-// "<prefix>.<event.Name>" per-event-name channels; CapabilityBus
-// uses "<prefix>.broadcast.<method>" per-method channels.
-const DefaultChannelPrefix = "mcpkit.events"
+// DefaultChannelPrefix is the project-wide neutral namespace under
+// which root mcpkit Redis primitives (CapabilityBus today) organize
+// their channel names — "<prefix>.broadcast.<method>" / etc.
+//
+// The events SDK's Bus uses its own events-scoped default
+// (experimental/ext/events/stores/redis.EventsChannelPrefix =
+// "mcpkit.events") so adopters' existing deployments keep their
+// per-event-name channels under the same "mcpkit.events.*" pattern.
+// Adopters who want a different prefix set Options.ChannelPrefix
+// explicitly.
+const DefaultChannelPrefix = "mcpkit"
 
 // DefaultQuotaTTL is the default leak-survival window for
 // QuotaStore-managed counter keys. Long enough that a legitimate

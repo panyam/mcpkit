@@ -53,7 +53,7 @@ func NewPublisher(opts Options) (*Publisher, error) {
 		return nil, fmt.Errorf("redisstore: origin id: %w", err)
 	}
 	return &Publisher{
-		opts:     opts.WithDefaults(),
+		opts:     eventsDefaults(opts),
 		codec:    JSONCodec{},
 		originID: hex.EncodeToString(idBuf[:]),
 	}, nil

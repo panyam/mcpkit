@@ -222,10 +222,14 @@ func configureRedisBackend(cfg *events.Config, srv *server.Server, webhooks *eve
 
 	// Surface the resolved (post-default) values so an operator
 	// inspecting logs sees the same prefix/TTL the store actually
-	// applied, not the bare struct fields.
+	// applied, not the bare struct fields. The events SDK Bus
+	// defaults the prefix to redisstore.EventsChannelPrefix
+	// ("mcpkit.events") when opts.ChannelPrefix is empty —
+	// distinct from the neutral rootredis.DefaultChannelPrefix
+	// ("mcpkit") that CapabilityBus would inherit.
 	effPrefix := opts.ChannelPrefix
 	if effPrefix == "" {
-		effPrefix = redisstore.DefaultChannelPrefix
+		effPrefix = redisstore.EventsChannelPrefix
 	}
 	effTTL := opts.QuotaTTL
 	if effTTL == 0 {
