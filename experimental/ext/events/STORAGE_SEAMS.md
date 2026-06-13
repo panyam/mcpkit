@@ -101,7 +101,7 @@ The other seams (626, 631) follow this template. Reviews check against this file
 |---|---|---|
 | In-memory (default) | All seams | Each seam's own file in this directory |
 | GORM (Postgres + SQLite) | `WebhookStore`, `QuotaStore` | `stores/gorm/` (own go.mod; GORM dependency stays out of the events lib) |
-| Redis | `Bus` (Pattern B Emitter + Subscriber) + `QuotaStore` atomic counters | `stores/redis/`; issue 634 (Emitter), 718 (QuotaStore), 755 (Bus) |
+| Redis (events SDK Bus + QuotaStore) | `Bus` (Pattern B events.Emitter + Subscriber) + `QuotaStore` atomic counters | `experimental/ext/events/stores/redis/`; issues 634 (Emitter), 718 (QuotaStore), 755 (Bus). Shared `Options` + `Codec` + `redistest` + capability-shaped `CapabilityBus` live in root `stores/redis/` (issue 770). |
 
 ## Adjacent seams (not storage, same code conventions)
 
