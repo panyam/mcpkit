@@ -1,10 +1,15 @@
-# redisstore — Redis pubsub Emitter for `experimental/ext/events`
+# redisstore — Redis pubsub transport for `experimental/ext/events` + capability-shaped notifications
 
-Cross-replica fanout for the MCP Events extension via Redis pubsub. Plugs into the [`Emitter` seam](../../emitter.go) (issue 629) — the parent package's output-side interface — so multi-replica deployments can wrap the existing single-replica behavior with peer fanout without changing application code.
+Cross-replica fanout for MCP server-pushed notifications via Redis pubsub. Provides two Bus types:
 
-Implements issue 634. See [`STORAGE_SEAMS.md`](../../STORAGE_SEAMS.md) for how this fits in the broader backend story.
+- **`redisstore.Bus`** — events-typed Pattern B transport. Implements `events.Emitter`; routes received events through a `server.NotificationRelayReceiver` (typically `events.YieldingSource` or an adapter wrapping a registry).
+- **`redisstore.CapabilityBus`** — `(method, params)`-typed Pattern B transport. Implements `server.BroadcastRelay`; carries capability-shaped notifications (`tools/list_changed`, `resources/list_changed`, `prompts/list_changed`) and the subscription-shaped `resources/updated` via a `server.MultiplexRelayReceiver`.
 
-## Usage
+Both Buses hide origin-marker self-publish dedup internally. Adopters wire `NewBus(opts, receiver)` (or `NewCapabilityBus`) and the round-trip is automatic.
+
+Implements issues 634 (events) + 755 (capability + sub-shaped). See [`STORAGE_SEAMS.md`](../../STORAGE_SEAMS.md) for how this fits in the broader backend story; see [`../../../../docs/MULTI_REPLICA.md`](../../../../docs/MULTI_REPLICA.md) for the full multi-replica architecture, per-surface flows, and adopter recipes.
+
+## Usage — events Bus
 
 ```go
 import (
@@ -16,20 +21,40 @@ import (
 cli := redis.NewClient(&redis.Options{Addr: "redis:6379"})
 opts := redisstore.Options{Client: cli}
 
-// Outbound: Redis publisher is the SOLE sink. The subscriber loop
-// below delivers to local on every replica — including this one —
-// so events yielded here still reach this replica's SSE listeners
-// and webhook targets via the round-trip through Redis.
-pub, _ := redisstore.NewPublisher(opts)
-cfg.Emitter = pub
+bus, _ := redisstore.NewBus(opts, mySource)   // mySource is the NotificationRelayReceiver
+defer bus.Close()
+_ = bus.Subscribe(ctx, "chat.message", "presence.changed")
+go bus.Run(ctx)
 
-// Inbound: subscriber delivers to local. The publishing replica
-// participates equally; even a single-replica deployment round-trips
-// each event through Redis.
-local := events.NewLocalEmitter(srv, webhooks)
-sub, _ := redisstore.NewSubscriber(opts, local.Emit)
-sub.Subscribe(ctx, "chat.message", "presence.changed")
-go sub.Run(ctx)
+cfg.Emitter = bus
+events.Register(cfg)
+```
+
+## Usage — capability + subscription-shaped Bus
+
+```go
+import (
+    "github.com/panyam/mcpkit/server"
+    redisstore "github.com/panyam/mcpkit/experimental/ext/events/stores/redis"
+)
+
+mux := server.NewMultiplexRelayReceiver().
+    Handle("notifications/tools/list_changed",     server.NewCapabilityBroadcastReceiver(srv)).
+    Handle("notifications/resources/list_changed", server.NewCapabilityBroadcastReceiver(srv)).
+    Handle("notifications/prompts/list_changed",   server.NewCapabilityBroadcastReceiver(srv)).
+    Handle("notifications/resources/updated",      server.NewResourcesUpdatedReceiver(srv))
+
+bus, _ := redisstore.NewCapabilityBus(redisstore.CapabilityBusOptions{Client: cli}, mux)
+defer bus.Close()
+_ = bus.Subscribe(ctx,
+    "notifications/tools/list_changed",
+    "notifications/resources/list_changed",
+    "notifications/prompts/list_changed",
+    "notifications/resources/updated",
+)
+go bus.Run(ctx)
+
+srv := server.NewServer(info, server.WithBroadcastRelay(bus))
 ```
 
 ## Why Redis-only outbound (Pattern B)

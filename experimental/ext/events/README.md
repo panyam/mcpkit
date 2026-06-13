@@ -304,6 +304,29 @@ for ev := range recv.Events() {
 
 For private-cloud / WAF-fronted deployments, see [`DEPLOYMENT.md`](DEPLOYMENT.md) — covers egress patterns, WAF allowlist guidance, SSRF guards, retry/backoff timing for proxy tuning, and TTL refresh as keepalive.
 
+## Multi-replica deployments
+
+`notifications/events/event` is one of five server-pushed notification surfaces that silently break at N>1 (multiple server replicas) without explicit Pattern B wiring. The events SDK's `YieldingSource` implements `server.NotificationRelayReceiver` so the receive side of Pattern B routes through its slot system on every replica — per-slot `EventDef.Match` runs the same as for a local yield, preserving tenant scoping and per-subscription filters.
+
+The full architecture (Pattern B, `redisstore.Bus` / `redisstore.CapabilityBus`, the `MultiplexRelayReceiver` recipe, per-surface end-to-end flows) lives in [`docs/MULTI_REPLICA.md`](../../../docs/MULTI_REPLICA.md). The configuration recipe for events specifically:
+
+```go
+import (
+    "github.com/panyam/mcpkit/experimental/ext/events"
+    redisstore "github.com/panyam/mcpkit/experimental/ext/events/stores/redis"
+)
+
+eventsBus, _ := redisstore.NewBus(opts, mySource)   // mySource is the receiver
+defer eventsBus.Close()
+_ = eventsBus.Subscribe(ctx, "chat.message", "presence.changed")
+go eventsBus.Run(ctx)
+
+cfg.Emitter = eventsBus
+events.Register(cfg)
+```
+
+Project-wide constraint that flags this: `CONSTRAINTS.md` § C5.
+
 ## Spec alignment
 
 Based on Peter Alexander's design sketch (triggers-events-wg PR #1). Notable choices:

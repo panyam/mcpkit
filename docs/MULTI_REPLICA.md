@@ -665,7 +665,7 @@ events.Register(cfg)
 
 ### Mixed — all 5 surfaces
 
-When your server uses both catalog notifications AND `resources/updated` AND events. Wire one `CapabilityBus` + `MultiplexRelayReceiver` for the server-side notifications, and a separate `events.Bus` for events (events have a different wire format):
+When your server uses both catalog notifications AND `resources/updated` AND events. Wire one `redisstore.CapabilityBus` + `MultiplexRelayReceiver` for the server-side notifications, and a separate `redisstore.Bus` for events (events have a different wire format):
 
 ```go
 // Server-side capability + subscription-shaped (3 list_changed + resources/updated)
@@ -800,7 +800,7 @@ Pattern B's contracts are covered by `-race`-clean tests at every layer. Referen
 
 | Layer | Tests |
 |---|---|
-| Server-level primitives | `server/relay_test.go` (16 tests covering `CapabilityBroadcastReceiver`, `ResourcesUpdatedReceiver`, `MultiplexRelayReceiver`, subscriptionRegistry split) |
+| Server-level primitives | `server/relay_test.go` (15 tests covering `CapabilityBroadcastReceiver`, `ResourcesUpdatedReceiver`, `MultiplexRelayReceiver`, subscriptionRegistry split) |
 | In-memory broadcast harness | `server/relay_inmemory_test.go` (5 tests: split semantics, fan-out, self-publish dedup, no-relay backwards compat, N×T matrix) |
 | Wiring for 5 surfaces | `server/listchanged_relay_test.go` (3 tests covering all 4 list_changed paths + resources/updated end-to-end) |
 | Events multi-replica | `experimental/ext/events/stores/memory/multi_replica_test.go` (5 tests: tenant scoping, self-publish dedup, N×T×M matrix, leave-mid-flight, high concurrency stress) |
