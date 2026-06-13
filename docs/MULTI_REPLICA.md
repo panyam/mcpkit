@@ -330,7 +330,7 @@ flowchart LR
     subgraph "Run loop (every replica)"
         S1[receive message]
         S2[Codec.Decode events.Event]
-        S3{event.Meta[origin] == self?}
+        S3{"event.Meta[origin] == self?"}
         S4[drop]
         S5["strip origin marker from Meta"]
         S6["receiver.ReceiveRelay(method, event)"]
