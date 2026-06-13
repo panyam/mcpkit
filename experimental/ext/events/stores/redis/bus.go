@@ -33,7 +33,7 @@ import (
 )
 
 // EventMethodName is the JSON-RPC method name redisstore.Bus uses when
-// invoking server.NotificationRelayReceiver.ReceiveRelay for events
+// invoking server.NotificationRelayReceiver.Receive for events
 // delivered via this transport. Exposed so adopters writing custom
 // receivers can switch on it without hard-coding the string.
 const EventMethodName = "notifications/events/event"
@@ -57,7 +57,7 @@ type Bus struct {
 // opts.Client is nil or the underlying Publisher / Subscriber
 // constructors fail.
 //
-// The receiver's ReceiveRelay is called with method = EventMethodName
+// The receiver's Receive is called with method = EventMethodName
 // and params = the decoded events.Event. Receivers implementing
 // domain-specific routing (events.YieldingSource via a thin adapter,
 // future ResourcesUpdatedRouter, etc.) type-assert params to their
@@ -75,7 +75,7 @@ func NewBus(opts Options, receiver server.NotificationRelayReceiver) (*Bus, erro
 	// before the receiver sees them.
 	opts.skipOriginID = pub.originID
 	sub, err := NewSubscriber(opts, func(ctx context.Context, event events.Event) error {
-		receiver.ReceiveRelay(ctx, EventMethodName, event)
+		receiver.Receive(ctx, EventMethodName, event)
 		return nil
 	})
 	if err != nil {

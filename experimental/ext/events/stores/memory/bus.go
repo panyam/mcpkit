@@ -201,7 +201,7 @@ func (b *Bus) Run(ctx context.Context) error {
 			if !subscribed {
 				continue
 			}
-			b.receiver.ReceiveRelay(ctx, EventMethodName, f.event)
+			b.receiver.Receive(ctx, EventMethodName, f.event)
 		}
 	}
 }

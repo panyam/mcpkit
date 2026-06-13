@@ -11,11 +11,11 @@ import (
 
 // TestListChanged_RelayFansAcrossReplicas verifies the four
 // list_changed notifications (tools, resources, prompts) wired
-// through Registry → Server.Broadcast → BroadcastRelay reach
+// through Registry → Server.Broadcast → NotificationRelay reach
 // sessions on every replica.
 //
 // Setup: 3 replicas wired to a shared memRelayBus (the in-memory
-// BroadcastRelay from relay_inmemory_test.go). Mutate the registry
+// NotificationRelay from relay_inmemory_test.go). Mutate the registry
 // on replica 0; assert all 3 replicas' captured frames recorded the
 // notification.
 //
@@ -66,7 +66,7 @@ func TestListChanged_RelayFansAcrossReplicas(t *testing.T) {
 
 			// All 3 replicas should see the notification — replica 0
 			// via its local BroadcastToSessions, replicas 1 + 2 via
-			// the relay → ReceiveRelay → BroadcastToSessions path.
+			// the relay → Receive → BroadcastToSessions path.
 			for _, r := range cluster.replicas {
 				r.waitForFrameCount(t, 1, time.Second)
 				frames := r.frames()
@@ -109,7 +109,7 @@ func TestListChanged_OnlyOneNotifyPerMutation(t *testing.T) {
 func TestResourcesUpdated_RelayFansAcrossReplicas(t *testing.T) {
 	// Build a custom cluster — captureCluster wires its receivers to
 	// CapabilityBroadcastReceiver; for resources/updated we need
-	// ResourcesUpdatedReceiver wrapped in a MultiplexRelayReceiver.
+	// ResourcesUpdatedReceiver wrapped in a NotificationRouter.
 	bus := newMemRelayBus()
 	type rep struct {
 		idx  int
@@ -124,11 +124,11 @@ func TestResourcesUpdated_RelayFansAcrossReplicas(t *testing.T) {
 		// the server reference.
 		var r rep
 		r.idx = i
-		mux := NewMultiplexRelayReceiver()
+		mux := NewNotificationRouter()
 		relay := bus.attachReplica(t, mux)
 		srv := NewServer(core.ServerInfo{Name: "rep", Version: "0.0.1"},
 			WithSubscriptions(),
-			WithBroadcastRelay(relay),
+			WithNotificationRelay(relay),
 		)
 		mux.Handle("notifications/resources/updated", NewResourcesUpdatedReceiver(srv))
 		r.srv = srv

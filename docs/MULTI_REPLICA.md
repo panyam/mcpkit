@@ -35,12 +35,12 @@ flowchart LR
     subgraph Replica K
         K_Trigger["Notification trigger<br/>(Registry.OnChange,<br/>NotifyResourceUpdated,<br/>YieldingSource.yield)"]
         K_Local["Local delivery<br/>(BroadcastToSessions,<br/>notifyLocal, slot fanout)"]
-        K_Publish["BroadcastRelay /<br/>events.Emitter"]
+        K_Publish["NotificationRelay /<br/>events.Emitter"]
         K_Clients["Local clients"]
     end
     subgraph Replica K'
         Kp_Receive["Bus subscriber<br/>(drops self-publishes)"]
-        Kp_Receiver["NotificationRelayReceiver<br/>(Multiplex by method)"]
+        Kp_Receiver["NotificationRelayReceiver<br/>(NotificationRouter by method)"]
         Kp_Local["Local delivery<br/>(BroadcastToSessions,<br/>notifyLocal, slot fanout)"]
         Kp_Clients["Local clients"]
     end
@@ -93,33 +93,33 @@ Surfaces and their per-replica filters:
 
 ```mermaid
 classDiagram
-    class BroadcastRelay {
+    class NotificationRelay {
         <<interface>>
-        +PublishBroadcast(ctx, method, params)
+        +Publish(ctx, method, params)
     }
     class NotificationRelayReceiver {
         <<interface>>
-        +ReceiveRelay(ctx, method, params)
+        +Receive(ctx, method, params)
     }
     class CapabilityBroadcastReceiver {
         -srv: *Server
-        +ReceiveRelay() calls srv.BroadcastToSessions
+        +Receive() calls srv.BroadcastToSessions
     }
     class ResourcesUpdatedReceiver {
         -srv: *Server
-        +ReceiveRelay() calls srv.NotifyResourceUpdatedLocal
+        +Receive() calls srv.NotifyResourceUpdatedLocal
     }
-    class MultiplexRelayReceiver {
+    class NotificationRouter {
         -handlers: map[method]Receiver
         +Handle(method, receiver)
-        +ReceiveRelay() routes by method
+        +Receive() routes by method
     }
     class YieldingSource {
-        +ReceiveRelay() calls LocalDeliver (per-slot Match)
+        +Receive() calls LocalDeliver (per-slot Match)
     }
     NotificationRelayReceiver <|.. CapabilityBroadcastReceiver
     NotificationRelayReceiver <|.. ResourcesUpdatedReceiver
-    NotificationRelayReceiver <|.. MultiplexRelayReceiver
+    NotificationRelayReceiver <|.. NotificationRouter
     NotificationRelayReceiver <|.. YieldingSource
 ```
 
@@ -128,7 +128,7 @@ classDiagram
 ```mermaid
 classDiagram
     class CapabilityBus {
-        +PublishBroadcast() PUBLISH to Redis
+        +Publish() PUBLISH to Redis
         +Subscribe(methods...)
         +Run(ctx) receive loop
         +Close()
@@ -144,7 +144,7 @@ classDiagram
         +Subscribe(eventNames...)
         +Run(ctx) receive loop
     }
-    BroadcastRelay <|.. CapabilityBus
+    NotificationRelay <|.. CapabilityBus
     Emitter <|.. EventsBus
     Emitter <|.. MemoryBus
     note for CapabilityBus "redisstore.CapabilityBus<br/>capability-shaped + sub-shaped<br/>over per-method channels"
@@ -159,8 +159,8 @@ classDiagram
 ```mermaid
 flowchart TB
     Broadcast["Server.Broadcast(ctx, method, params)"]
-    HasRelay{Has<br/>BroadcastRelay?}
-    Publish["relay.PublishBroadcast(ctx, method, params)"]
+    HasRelay{Has<br/>NotificationRelay?}
+    Publish["relay.Publish(ctx, method, params)"]
     BroadcastToSessions["Server.BroadcastToSessions"]
     Sessions["Local session broadcasters"]
 
@@ -170,28 +170,28 @@ flowchart TB
     BroadcastToSessions --> Sessions
 ```
 
-`Broadcast` always fires `BroadcastToSessions`. The relay's `PublishBroadcast` runs ALSO when a relay is installed. There's no else branch — local fan-out is universal.
+`Broadcast` always fires `BroadcastToSessions`. The relay's `Publish` runs ALSO when a relay is installed. There's no else branch — local fan-out is universal.
 
 `BroadcastToSessions` is the **local-only** path. The receive side of Pattern B calls this (NOT `Broadcast`) so a cross-replica relay receive doesn't re-publish through the relay and loop.
 
-### `BroadcastRelay` — publish side
+### `NotificationRelay` — publish side
 
 ```mermaid
 sequenceDiagram
     participant H as Handler
     participant S as Server
-    participant R as BroadcastRelay
+    participant R as NotificationRelay
     participant T as Transport
 
     H->>S: Broadcast(method, params)
-    S->>R: PublishBroadcast(method, params)
+    S->>R: Publish(method, params)
     R->>T: encode + send
     Note over R,T: Origin marker stamped<br/>inside transport adapter
     S->>S: BroadcastToSessions(method, params)
     Note right of S: local delivery happens regardless<br/>of relay errors (fire-and-forget)
 ```
 
-`BroadcastRelay` is fire-and-forget — errors are not surfaced. Transports log internally if a publish fails; local fan-out still runs.
+`NotificationRelay` is fire-and-forget — errors are not surfaced. Transports log internally if a publish fails; local fan-out still runs.
 
 ### `NotificationRelayReceiver` — receive side
 
@@ -202,20 +202,20 @@ sequenceDiagram
     participant Local as Local delivery
 
     Note over T: Decode message,<br/>check origin marker,<br/>drop if self-publish
-    T->>Recv: ReceiveRelay(method, params)
+    T->>Recv: Receive(method, params)
     Recv->>Local: domain-specific routing<br/>(BroadcastToSessions / notifyLocal / LocalDeliver)
 ```
 
 The receiver is the **routing decision** for cross-replica notifications. The transport handles dedup; the receiver decides what to do with each message destined for this replica.
 
-### `MultiplexRelayReceiver` — per-method dispatch
+### `NotificationRouter` — per-method dispatch
 
 ```mermaid
 flowchart TB
-    Receive["ReceiveRelay(ctx, method, params)"]
+    Receive["Receive(ctx, method, params)"]
     Lookup{handlers<br/>contains<br/>method?}
     Drop["drop silently"]
-    Forward["handler.ReceiveRelay(ctx, method, params)"]
+    Forward["handler.Receive(ctx, method, params)"]
 
     Receive --> Lookup
     Lookup -->|no| Drop
@@ -225,7 +225,7 @@ flowchart TB
 Multiplexer adopters wire one Bus + one multiplexer + multiple per-method receivers:
 
 ```go
-mux := server.NewMultiplexRelayReceiver().
+mux := server.NewNotificationRouter().
     Handle("notifications/tools/list_changed",        server.NewCapabilityBroadcastReceiver(srv)).
     Handle("notifications/resources/list_changed",    server.NewCapabilityBroadcastReceiver(srv)).
     Handle("notifications/prompts/list_changed",      server.NewCapabilityBroadcastReceiver(srv)).
@@ -242,7 +242,7 @@ sequenceDiagram
     participant Srv as Server
     participant Sess as Local sessions
 
-    Bus->>Recv: ReceiveRelay(method, params)
+    Bus->>Recv: Receive(method, params)
     Recv->>Srv: BroadcastToSessions(method, params)
     Srv->>Sess: notify(method, params)
     Note over Recv,Srv: BroadcastToSessions, NOT Broadcast<br/>(would loop through the relay)
@@ -258,7 +258,7 @@ sequenceDiagram
     participant Reg as subscriptionRegistry
     participant Sub as Subscribed sessions
 
-    Bus->>Recv: ReceiveRelay("notifications/resources/updated", params)
+    Bus->>Recv: Receive("notifications/resources/updated", params)
     Note right of Recv: extract URI from params<br/>(typed or map shape)
     Recv->>Srv: NotifyResourceUpdatedLocal(uri)
     Srv->>Reg: notifyLocal(uri)
@@ -266,7 +266,7 @@ sequenceDiagram
     Note over Reg,Sub: notifyLocal does NOT re-publish<br/>via the relay (no loop)
 ```
 
-### `YieldingSource.ReceiveRelay` — subscription-shaped routing for events
+### `YieldingSource.Receive` — subscription-shaped routing for events
 
 ```mermaid
 sequenceDiagram
@@ -274,7 +274,7 @@ sequenceDiagram
     participant Src as YieldingSource
     participant Slots as Local subscriber slots
 
-    Bus->>Src: ReceiveRelay("notifications/events/event", event)
+    Bus->>Src: Receive("notifications/events/event", event)
     Note right of Src: params.(Event) type-assert<br/>defensive guard
     Src->>Src: LocalDeliver(ctx, event)
     loop for each slot
@@ -287,13 +287,13 @@ sequenceDiagram
     end
 ```
 
-`YieldingSource.ReceiveRelay` is a thin adapter; `LocalDeliver` is the work — runs the per-slot fanout loop without firing the configured `Emitter` (so no re-publish).
+`YieldingSource.Receive` is a thin adapter; `LocalDeliver` is the work — runs the per-slot fanout loop without firing the configured `Emitter` (so no re-publish).
 
 ### `redisstore.CapabilityBus` — capability-shaped Pattern B
 
 ```mermaid
 flowchart LR
-    subgraph "PublishBroadcast (origin)"
+    subgraph "Publish (origin)"
         P1[method + params]
         P2["envelope: {origin, params}"]
         P3[Codec.Encode]
@@ -306,7 +306,7 @@ flowchart LR
         S2[Codec.Decode envelope]
         S3{origin == self?}
         S4[drop]
-        S5[receiver.ReceiveRelay]
+        S5[receiver.Receive]
         S1 --> S2 --> S3
         S3 -->|yes| S4
         S3 -->|no| S5
@@ -333,7 +333,7 @@ flowchart LR
         S3{"event.Meta[origin] == self?"}
         S4[drop]
         S5["strip origin marker from Meta"]
-        S6["receiver.ReceiveRelay(method, event)"]
+        S6["receiver.Receive(method, event)"]
         S1 --> S2 --> S3
         S3 -->|yes| S4
         S3 -->|no| S5 --> S6
@@ -348,11 +348,11 @@ Wire format: per-event-name channel `<ChannelPrefix>.<event.Name>`. Payload is t
 flowchart LR
     subgraph Bus_A
         Emit_A[Emit] --> Pub_A[hub.publish]
-        Run_A[Run loop] --> Recv_A[ReceiveRelay]
+        Run_A[Run loop] --> Recv_A[Receive]
     end
     subgraph Bus_B
         Emit_B[Emit] --> Pub_B[hub.publish]
-        Run_B[Run loop] --> Recv_B[ReceiveRelay]
+        Run_B[Run loop] --> Recv_B[Receive]
     end
     Hub[(memorystore.Hub<br/>shared chan-based bus)]
     Pub_A --> Hub
@@ -377,21 +377,21 @@ sequenceDiagram
     participant Bus as CapabilityBus (K1)
     participant Redis as Redis pubsub
     participant Bus2 as CapabilityBus (K2)
-    participant Mux as MultiplexRelayReceiver (K2)
+    participant Mux as NotificationRouter (K2)
     participant Cap as CapabilityBroadcastReceiver (K2)
     participant Srv2 as Server (K2)
     participant Cli2 as Client on K2
 
     App->>Reg: AddTool(...)
     Reg->>Srv: OnChange("notifications/tools/list_changed")
-    Srv->>Bus: PublishBroadcast(method, nil)
+    Srv->>Bus: Publish(method, nil)
     Bus->>Redis: PUBLISH (envelope with K1 origin)
     Srv->>Srv: BroadcastToSessions (K1 local clients hear)
 
     Redis->>Bus2: deliver message
     Note over Bus2: origin == K2's marker? no — proceed
-    Bus2->>Mux: ReceiveRelay(method, nil)
-    Mux->>Cap: handlers["...list_changed"].ReceiveRelay
+    Bus2->>Mux: Receive(method, nil)
+    Mux->>Cap: handlers["...list_changed"].Receive
     Cap->>Srv2: BroadcastToSessions(method, nil)
     Srv2->>Cli2: notify("notifications/tools/list_changed", nil)
 ```
@@ -409,7 +409,7 @@ sequenceDiagram
     participant Bus as CapabilityBus (K1)
     participant Redis as Redis pubsub
     participant Bus2 as CapabilityBus (K2)
-    participant Mux as MultiplexRelayReceiver (K2)
+    participant Mux as NotificationRouter (K2)
     participant Rur as ResourcesUpdatedReceiver (K2)
     participant Srv2 as Server (K2)
     participant SubReg2 as subscriptionRegistry (K2)
@@ -418,12 +418,12 @@ sequenceDiagram
     App->>Srv: NotifyResourceUpdated("file:///x")
     Srv->>SubReg: notify("file:///x")
     SubReg->>SubReg: notifyLocal("file:///x")<br/>(K1 local subscribers hear)
-    SubReg->>Bus: PublishBroadcast(method, ResourceUpdatedNotification{URI:"file:///x"})
+    SubReg->>Bus: Publish(method, ResourceUpdatedNotification{URI:"file:///x"})
     Bus->>Redis: PUBLISH (envelope with K1 origin)
 
     Redis->>Bus2: deliver message
-    Bus2->>Mux: ReceiveRelay(method, params)
-    Mux->>Rur: handlers["resources/updated"].ReceiveRelay
+    Bus2->>Mux: Receive(method, params)
+    Mux->>Rur: handlers["resources/updated"].Receive
     Rur->>Rur: extract URI from params
     Rur->>Srv2: NotifyResourceUpdatedLocal("file:///x")
     Srv2->>SubReg2: notifyLocal("file:///x")
@@ -453,7 +453,7 @@ sequenceDiagram
 
     Redis->>Bus2: deliver message
     Note over Bus2: origin == K2's marker? no — proceed<br/>strip origin marker from Meta
-    Bus2->>Src2: ReceiveRelay("notifications/events/event", event)
+    Bus2->>Src2: Receive("notifications/events/event", event)
     Src2->>Src2: LocalDeliver(ctx, event)
     loop for each K2 slot
         Src2->>Slots2: EventDef.Match(slot, event)?
@@ -473,7 +473,7 @@ The per-surface sequence diagrams above show the high-level flow. Below are the 
 
 ### Life of `notifications/tools/list_changed` (capability-shaped, N=3)
 
-Setup: replica K1 has `WithBroadcastRelay(busK1)` installed; replica K2 has `WithBroadcastRelay(busK2)`. Both Buses subscribed to `notifications/tools/list_changed`. A client `cliK2` is connected to K2 via Streamable HTTP. App code on K1 calls `srv.RegisterTool`.
+Setup: replica K1 has `WithNotificationRelay(busK1)` installed; replica K2 has `WithNotificationRelay(busK2)`. Both Buses subscribed to `notifications/tools/list_changed`. A client `cliK2` is connected to K2 via Streamable HTTP. App code on K1 calls `srv.RegisterTool`.
 
 ```
 [K1]  app: srv.RegisterTool(def, handler)                                 server.go:649
@@ -485,8 +485,8 @@ Setup: replica K1 has `WithBroadcastRelay(busK1)` installed; replica K2 has `Wit
                 (closure installed in NewServer wires OnChange →)
                 s.Broadcast(ctx, "notifications/tools/list_changed", nil)  server.go:562
                   if relay != nil:
-                    relay.PublishBroadcast(ctx, method, nil)               server.go:1007
-                      ──> redisstore.CapabilityBus.PublishBroadcast        capability_bus.go:129
+                    relay.Publish(ctx, method, nil)               server.go:1007
+                      ──> redisstore.CapabilityBus.Publish        capability_bus.go:132
                             encodeCapabilityEnvelope(b.originID, params)   capability_bus.go:225
                               json.Marshal({"origin": "<K1>", "params": null})
                             b.client.Publish(ctx, channel, body)           ──> Redis
@@ -505,16 +505,16 @@ Setup: replica K1 has `WithBroadcastRelay(busK1)` installed; replica K2 has `Wit
 
 [Redis]   PUBLISH "mcpkit.events.broadcast.notifications/tools/list_changed" → fanout to all SUBSCRIBE'd clients
 
-[K2]  redisstore.CapabilityBus.Run goroutine reading pubsub channel       capability_bus.go:170
+[K2]  redisstore.CapabilityBus.Run goroutine reading pubsub channel       capability_bus.go:175
         decodeCapabilityEnvelope(msg.Payload)                              capability_bus.go:241
           json.Unmarshal → envelope{origin: "<K1>", params: nil}
-        if envelope.origin == b.originID (== "<K2>"): drop  ── NOT self    capability_bus.go:184
-        receiver.ReceiveRelay(ctx, method, nil)                            capability_bus.go:188
-          ──> MultiplexRelayReceiver.ReceiveRelay                          relay.go:282
+        if envelope.origin == b.originID (== "<K2>"): drop  ── NOT self    capability_bus.go:209
+        receiver.Receive(ctx, method, nil)                            capability_bus.go:188
+          ──> NotificationRouter.Receive                          relay.go:240
                 h := handlers["notifications/tools/list_changed"]
-                h.ReceiveRelay(ctx, method, nil)
-                  ──> CapabilityBroadcastReceiver.ReceiveRelay             relay.go:138
-                        srv.BroadcastToSessions(ctx, method, nil)          relay.go:144
+                h.Receive(ctx, method, nil)
+                  ──> CapabilityBroadcastReceiver.Receive             relay.go:141
+                        srv.BroadcastToSessions(ctx, method, nil)          relay.go:142
                           ── NOTE: BroadcastToSessions, NOT Broadcast
                           ── (otherwise would re-fire relay and loop)
                         for bc in s.sessionBroadcasters:
@@ -536,10 +536,10 @@ Key landmarks:
 |---|---|---|
 | `r.notify` → `OnChange` → `s.Broadcast` | Registry mutation triggers Broadcast | `server.go:562` (wired in `NewServer`) |
 | `s.Broadcast` forks publish + local | Single call, two paths | `server.go:1007`, `:1009` |
-| `relay.PublishBroadcast` | Outbound transport hop | `capability_bus.go:129` |
-| Self-publish drop on receive | `envelope.origin == b.originID` | `capability_bus.go:184` |
-| Receiver routes by method | `MultiplexRelayReceiver.handlers[method]` | `relay.go:282` |
-| Final hop: receiver → `BroadcastToSessions` | **Not** `Broadcast` (recursion guard) | `relay.go:144` |
+| `relay.Publish` | Outbound transport hop | `capability_bus.go:132` |
+| Self-publish drop on receive | `envelope.origin == b.originID` | `capability_bus.go:209` |
+| Receiver routes by method | `NotificationRouter.handlers[method]` | `relay.go:240` |
+| Final hop: receiver → `BroadcastToSessions` | **Not** `Broadcast` (recursion guard) | `relay.go:142` |
 
 ### Life of `notifications/events/event` (subscription-shaped, N=3, tenant scoping)
 
@@ -578,9 +578,9 @@ Setup: 3 replicas wired with a `redisstore.Bus` per replica (separate from the c
           ── K1's marker is "<K1>", envelope's origin is "<K3>" → proceed
         event.Meta = stripOriginIDFromMeta(event.Meta)                     subscriber.go:156
         s.deliver(msgCtx, event)
-          ──> Bus's wrapper that calls receiver.ReceiveRelay               bus.go:78
-                receiver.ReceiveRelay(ctx, "notifications/events/event", event)
-                  ──> chatSrc.ReceiveRelay  (YieldingSource[payload])       yield.go:454
+          ──> Bus's wrapper that calls receiver.Receive               bus.go:78
+                receiver.Receive(ctx, "notifications/events/event", event)
+                  ──> chatSrc.Receive  (YieldingSource[payload])       yield.go:454
                         if method != "notifications/events/event": return
                         ev, ok := params.(Event)
                         if !ok: return
@@ -608,7 +608,7 @@ Setup: 3 replicas wired with a `redisstore.Bus` per replica (separate from the c
         Codec.Decode(msg.Payload) → event (origin "<K3>")
         skipOriginID is "<K2>" → proceed
         strip origin marker
-        receiver.ReceiveRelay → chatSrc.ReceiveRelay → s.LocalDeliver
+        receiver.Receive → chatSrc.Receive → s.LocalDeliver
           for sub in subs:
             ── sub.principal = "babylon" (bob's claims)
             ── matched := tenantMatch(ctx, event, ...)
@@ -629,7 +629,7 @@ Key landmarks:
 | Origin marker stamped onto `event.Meta` | Self-publish dedup mechanism | `origin.go:55` |
 | Self-publish drop on receive (origin == self) | Origin replica's own Subscriber drops | `subscriber.go:147` |
 | Strip origin marker | Adopters never see it | `subscriber.go:156` |
-| `chatSrc.ReceiveRelay` → `LocalDeliver` | Cross-replica → local fanout entry | `yield.go:454, :476` |
+| `chatSrc.Receive` → `LocalDeliver` | Cross-replica → local fanout entry | `yield.go:454, :476` |
 | `LocalDeliver` for-loop on local slots | per-slot Match runs HERE (receiving replica) too | `yield.go:439` (mirror of origin's path) |
 | `tenantMatch` per slot | The filter that drops babylon for asgard event | adopter's `EventDef.Match` |
 | Stream handler reads slot channel + `ctx.Notify` | SSE frame to client | `stream.go:331, :404` |
@@ -676,7 +676,7 @@ sequenceDiagram
     Src3->>Bus3: Emit(ctx, event)
     Bus3->>Redis: PUBLISH
     Redis->>Bus1: deliver
-    Bus1->>Src1: ReceiveRelay → LocalDeliver
+    Bus1->>Src1: Receive → LocalDeliver
     Src1->>Cli1: deliver (Match passes)
 ```
 
@@ -720,12 +720,12 @@ sequenceDiagram
     Bus3->>Redis: PUBLISH
     par K1 receives
         Redis->>Bus1: deliver
-        Bus1->>SrcA: ReceiveRelay → LocalDeliver
+        Bus1->>SrcA: Receive → LocalDeliver
         Note over SrcA: per-slot Match: principal="asgard"<br/>vs payload.tenant="asgard" → MATCH
         SrcA->>SrcA: deliver to asgard streamer
     and K2 receives
         Redis->>Bus2: deliver
-        Bus2->>SrcB: ReceiveRelay → LocalDeliver
+        Bus2->>SrcB: Receive → LocalDeliver
         Note over SrcB: per-slot Match: principal="babylon"<br/>vs payload.tenant="asgard" → DROP
     end
 ```
@@ -809,7 +809,7 @@ _ = bus.Subscribe(ctx,
 go bus.Run(ctx)
 
 // Now srv.Broadcast / Registry.OnChange notifications fan across replicas.
-srv := server.NewServer(info, server.WithBroadcastRelay(bus))
+srv := server.NewServer(info, server.WithNotificationRelay(bus))
 ```
 
 ### Events SDK only (events/event)
@@ -834,11 +834,11 @@ events.Register(cfg)
 
 ### Mixed — all 5 surfaces
 
-When your server uses both catalog notifications AND `resources/updated` AND events. Wire one `redisstore.CapabilityBus` + `MultiplexRelayReceiver` for the server-side notifications, and a separate `redisstore.Bus` for events (events have a different wire format):
+When your server uses both catalog notifications AND `resources/updated` AND events. Wire one `redisstore.CapabilityBus` + `NotificationRouter` for the server-side notifications, and a separate `redisstore.Bus` for events (events have a different wire format):
 
 ```go
 // Server-side capability + subscription-shaped (3 list_changed + resources/updated)
-mux := server.NewMultiplexRelayReceiver().
+mux := server.NewNotificationRouter().
     Handle("notifications/tools/list_changed",     server.NewCapabilityBroadcastReceiver(srv)).
     Handle("notifications/resources/list_changed", server.NewCapabilityBroadcastReceiver(srv)).
     Handle("notifications/prompts/list_changed",   server.NewCapabilityBroadcastReceiver(srv)).
@@ -861,7 +861,7 @@ _ = eventsBus.Subscribe(ctx, "chat.message")
 go eventsBus.Run(ctx)
 cfg.Emitter = eventsBus
 
-srv := server.NewServer(info, server.WithBroadcastRelay(capBus))
+srv := server.NewServer(info, server.WithNotificationRelay(capBus))
 events.Register(cfg)
 ```
 
@@ -870,10 +870,10 @@ events.Register(cfg)
 For Kafka / NATS / SNS adopters writing their own transport:
 
 ```go
-// Implement server.BroadcastRelay for the publish side:
+// Implement server.NotificationRelay for the publish side:
 type MyKafkaBus struct{ ... }
 
-func (b *MyKafkaBus) PublishBroadcast(ctx context.Context, method string, params any) {
+func (b *MyKafkaBus) Publish(ctx context.Context, method string, params any) {
     // 1. Encode (method, params) into your wire format with origin marker
     // 2. Publish to Kafka topic
     // 3. Errors are fire-and-forget — log internally
@@ -884,7 +884,7 @@ func (b *MyKafkaBus) Run(ctx context.Context) error {
     for msg := range b.consumer.Consume(ctx) {
         // 1. Decode message
         // 2. Check origin marker — drop if matches b.originID
-        // 3. b.receiver.ReceiveRelay(ctx, method, params)
+        // 3. b.receiver.Receive(ctx, method, params)
     }
 }
 ```
@@ -903,7 +903,7 @@ For most adopters this is fine: list_changed notifications are advisory; the nex
 
 ### Not at-least-once
 
-Redis pubsub does NOT persist messages. A replica that's offline when a publish happens misses the message permanently. If your application semantics require at-least-once delivery (e.g., billing events), use a persistent transport (Redis Streams, Kafka with consumer groups) — the `BroadcastRelay` + `NotificationRelayReceiver` shapes accommodate either, but the reference `redisstore.CapabilityBus` uses pubsub specifically.
+Redis pubsub does NOT persist messages. A replica that's offline when a publish happens misses the message permanently. If your application semantics require at-least-once delivery (e.g., billing events), use a persistent transport (Redis Streams, Kafka with consumer groups) — the `NotificationRelay` + `NotificationRelayReceiver` shapes accommodate either, but the reference `redisstore.CapabilityBus` uses pubsub specifically.
 
 For events, the `EventBufferStore` + `events/poll` path gives at-least-once for clients that opt in.
 
@@ -933,7 +933,7 @@ Two-method API on `Server`:
 | Method | Fires relay? | Fires local sessions? | Who calls it? |
 |---|---|---|---|
 | `Broadcast` | yes (if installed) | yes | application code, `Registry.OnChange` |
-| `BroadcastToSessions` | no | yes | `CapabilityBroadcastReceiver.ReceiveRelay` (the receive side of Pattern B) |
+| `BroadcastToSessions` | no | yes | `CapabilityBroadcastReceiver.Receive` (the receive side of Pattern B) |
 
 The split exists to break the recursion that would happen if the receive side called `Broadcast` (which would re-publish via the relay → receive again → publish again → loop). If you're writing a custom capability-shaped receiver, you MUST call `BroadcastToSessions`, not `Broadcast`.
 
@@ -942,7 +942,7 @@ Symmetric split exists on `subscriptionRegistry`:
 | Method | Fires relay? | Fires local subscribers? | Who calls it? |
 |---|---|---|---|
 | `notify` | yes (if installed) | yes (via `notifyLocal`) | `Server.NotifyResourceUpdated`, internal callers |
-| `notifyLocal` | no | yes | `ResourcesUpdatedReceiver.ReceiveRelay`, `Server.NotifyResourceUpdatedLocal` |
+| `notifyLocal` | no | yes | `ResourcesUpdatedReceiver.Receive`, `Server.NotifyResourceUpdatedLocal` |
 
 Same recursion guard. Custom subscription-shaped receivers call `notifyLocal` (via `Server.NotifyResourceUpdatedLocal`), not `notify`.
 
@@ -950,18 +950,18 @@ Same recursion guard. Custom subscription-shaped receivers call `notifyLocal` (v
 
 | Concept | File |
 |---|---|
-| `BroadcastRelay` interface | `server/relay.go` |
+| `NotificationRelay` interface | `server/relay.go` |
 | `NotificationRelayReceiver` interface | `server/relay.go` |
 | `CapabilityBroadcastReceiver` | `server/relay.go` |
 | `ResourcesUpdatedReceiver` | `server/relay.go` |
-| `MultiplexRelayReceiver` | `server/relay.go` |
+| `NotificationRouter` | `server/relay.go` |
 | `Server.Broadcast` / `BroadcastToSessions` | `server/server.go` |
 | `subscriptionRegistry.notify` / `notifyLocal` | `server/server.go` |
-| `WithBroadcastRelay` option | `server/relay.go` |
+| `WithNotificationRelay` option | `server/relay.go` |
 | `redisstore.CapabilityBus` | `experimental/ext/events/stores/redis/capability_bus.go` |
 | `redisstore.Bus` (events) | `experimental/ext/events/stores/redis/bus.go` |
 | `memorystore.Bus` + `Hub` | `experimental/ext/events/stores/memory/bus.go` |
-| `YieldingSource.LocalDeliver` / `ReceiveRelay` | `experimental/ext/events/yield.go` |
+| `YieldingSource.LocalDeliver` / `Receive` | `experimental/ext/events/yield.go` |
 
 ## Test coverage
 
@@ -969,8 +969,8 @@ Pattern B's contracts are covered by `-race`-clean tests at every layer. Referen
 
 | Layer | Tests |
 |---|---|
-| Server-level primitives | `server/relay_test.go` (15 tests covering `CapabilityBroadcastReceiver`, `ResourcesUpdatedReceiver`, `MultiplexRelayReceiver`, subscriptionRegistry split) |
+| Server-level primitives | `server/relay_test.go` (15 tests covering `CapabilityBroadcastReceiver`, `ResourcesUpdatedReceiver`, `NotificationRouter`, subscriptionRegistry split) |
 | In-memory broadcast harness | `server/relay_inmemory_test.go` (5 tests: split semantics, fan-out, self-publish dedup, no-relay backwards compat, N×T matrix) |
 | Wiring for 5 surfaces | `server/listchanged_relay_test.go` (3 tests covering all 4 list_changed paths + resources/updated end-to-end) |
 | Events multi-replica | `experimental/ext/events/stores/memory/multi_replica_test.go` (5 tests: tenant scoping, self-publish dedup, N×T×M matrix, leave-mid-flight, high concurrency stress) |
-| Redis CapabilityBus round-trip | `experimental/ext/events/stores/redis/capability_bus_test.go` (3 tests: cross-replica round-trip, single-bus self-dedup, full WithBroadcastRelay end-to-end via miniredis) |
+| Redis CapabilityBus round-trip | `experimental/ext/events/stores/redis/capability_bus_test.go` (3 tests: cross-replica round-trip, single-bus self-dedup, full WithNotificationRelay end-to-end via miniredis) |
