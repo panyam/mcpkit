@@ -3,7 +3,7 @@
 Cross-replica fanout for MCP server-pushed notifications via Redis pubsub. Provides two Bus types:
 
 - **`redisstore.Bus`** — events-typed Pattern B transport. Implements `events.Emitter`; routes received events through a `server.NotificationRelayReceiver` (typically `events.YieldingSource` or an adapter wrapping a registry).
-- **`redisstore.CapabilityBus`** — `(method, params)`-typed Pattern B transport. Implements `server.BroadcastRelay`; carries capability-shaped notifications (`tools/list_changed`, `resources/list_changed`, `prompts/list_changed`) and the subscription-shaped `resources/updated` via a `server.MultiplexRelayReceiver`.
+- **`redisstore.CapabilityBus`** — `(method, params)`-typed Pattern B transport. Implements `server.NotificationRelay`; carries capability-shaped notifications (`tools/list_changed`, `resources/list_changed`, `prompts/list_changed`) and the subscription-shaped `resources/updated` via a `server.NotificationRouter`.
 
 Both Buses hide origin-marker self-publish dedup internally. Adopters wire `NewBus(opts, receiver)` (or `NewCapabilityBus`) and the round-trip is automatic.
 
@@ -38,7 +38,7 @@ import (
     redisstore "github.com/panyam/mcpkit/experimental/ext/events/stores/redis"
 )
 
-mux := server.NewMultiplexRelayReceiver().
+mux := server.NewNotificationRouter().
     Handle("notifications/tools/list_changed",     server.NewCapabilityBroadcastReceiver(srv)).
     Handle("notifications/resources/list_changed", server.NewCapabilityBroadcastReceiver(srv)).
     Handle("notifications/prompts/list_changed",   server.NewCapabilityBroadcastReceiver(srv)).
@@ -54,7 +54,7 @@ _ = bus.Subscribe(ctx,
 )
 go bus.Run(ctx)
 
-srv := server.NewServer(info, server.WithBroadcastRelay(bus))
+srv := server.NewServer(info, server.WithNotificationRelay(bus))
 ```
 
 ## Why Redis-only outbound (Pattern B)

@@ -79,7 +79,7 @@ type serverOptions struct {
 	allowLegacyOnDraft   bool                     // WithAllowLegacyOnDraft — opt-in SEP-2575 leniency on the legacy wire (off by default; strict per spec)
 	tracerProvider       core.TracerProvider      // SEP-414 P2 — WithTracerProvider; nil/Noop = trace middleware not installed
 	meterProvider        core.MeterProvider       // issue 7 — WithMeterProvider; nil/Noop = metrics middleware not installed
-	broadcastRelay       BroadcastRelay           // issue 755 — WithBroadcastRelay; nil = no cross-replica broadcast (Broadcast fires local only)
+	notificationRelay       NotificationRelay           // issue 755 — WithNotificationRelay; nil = no cross-replica broadcast (Broadcast fires local only)
 }
 
 type httpHandlerEntry struct {
@@ -598,7 +598,7 @@ func NewServer(info core.ServerInfo, opts ...Option) *Server {
 			rateLimit:      s.options.subscriptionRate,
 			rateBurst:      s.options.subscriptionBurst,
 			onReject:       s.options.subscriptionReject,
-			broadcastRelay: s.options.broadcastRelay,
+			notificationRelay: s.options.notificationRelay,
 		}
 		s.dispatcher.subscriptionsEnabled = true
 		s.dispatcher.subManager = s.subRegistry
@@ -1001,17 +1001,17 @@ func (s *Server) Broadcast(ctx context.Context, method string, params any) {
 		params = core.InjectTraceContextIntoParams(params, tc)
 	}
 	s.mu.Lock()
-	relay := s.options.broadcastRelay
+	relay := s.options.notificationRelay
 	s.mu.Unlock()
 	if relay != nil {
-		relay.PublishBroadcast(ctx, method, params)
+		relay.Publish(ctx, method, params)
 	}
 	s.BroadcastToSessions(ctx, method, params)
 }
 
 // BroadcastToSessions delivers a notification to every locally-connected
 // client via the per-transport session broadcasters. UNLIKE Broadcast,
-// BroadcastToSessions does NOT invoke the installed BroadcastRelay —
+// BroadcastToSessions does NOT invoke the installed NotificationRelay —
 // it's the local-only path Pattern B receivers call after dropping
 // self-publishes, so they don't re-publish through the relay and loop.
 //
@@ -1523,14 +1523,14 @@ type subscriptionRegistry struct {
 	rateBurst int
 	onReject  SubscriptionRejectFunc
 
-	// broadcastRelay is the Server's configured Pattern B publisher
+	// notificationRelay is the Server's configured Pattern B publisher
 	// for cross-replica fan-out. notify() publishes
 	// notifications/resources/updated through this on top of
 	// notifyLocal() so subscribers on other replicas hear the
 	// notification too. nil = local-only behavior (no relay
-	// installed). Wired by NewServer from s.options.broadcastRelay
+	// installed). Wired by NewServer from s.options.notificationRelay
 	// after both the registry and the option are read.
-	broadcastRelay BroadcastRelay
+	notificationRelay NotificationRelay
 }
 
 // ErrSubscriptionCapExceeded indicates the calling session has hit
@@ -1633,8 +1633,8 @@ func (r *subscriptionRegistry) unsubscribeAll(sessionID string) {
 
 // notifyLocal sends a notifications/resources/updated to all LOCAL
 // sessions subscribed to the URI. Used by the cross-replica receive
-// path (server.ResourcesUpdatedReceiver.ReceiveRelay) to deliver
-// without re-publishing through the BroadcastRelay.
+// path (server.ResourcesUpdatedReceiver.Receive) to deliver
+// without re-publishing through the NotificationRelay.
 //
 // Copies the dispatcher list under read lock, then calls notifyFunc
 // outside the lock to avoid holding the lock during potentially slow
@@ -1657,7 +1657,7 @@ func (r *subscriptionRegistry) notifyLocal(uri string) {
 }
 
 // notify fires notifyLocal AND publishes via the Server's installed
-// BroadcastRelay so cross-replica subscribers on other replicas
+// NotificationRelay so cross-replica subscribers on other replicas
 // receive the same notification. The publish encodes the URI in
 // params so receiving replicas can route by URI on their own
 // subscriptionRegistry.
@@ -1666,8 +1666,8 @@ func (r *subscriptionRegistry) notifyLocal(uri string) {
 // pre-Pattern-B behavior).
 func (r *subscriptionRegistry) notify(uri string) {
 	r.notifyLocal(uri)
-	if r.broadcastRelay != nil {
-		r.broadcastRelay.PublishBroadcast(
+	if r.notificationRelay != nil {
+		r.notificationRelay.Publish(
 			context.Background(),
 			"notifications/resources/updated",
 			core.ResourceUpdatedNotification{URI: uri},
@@ -1682,10 +1682,10 @@ func (r *subscriptionRegistry) notify(uri string) {
 // Safe to call from any goroutine. No-op if subscriptions are not enabled or
 // no clients are subscribed to the URI.
 //
-// When a BroadcastRelay is installed via WithBroadcastRelay, the
+// When a NotificationRelay is installed via WithNotificationRelay, the
 // notification reaches subscribers on every replica — the receive
 // side (typically a server.ResourcesUpdatedReceiver wired into a
-// MultiplexRelayReceiver) calls notifyLocal on each replica's own
+// NotificationRouter) calls notifyLocal on each replica's own
 // subscriptionRegistry.
 //
 // Example:
@@ -1700,7 +1700,7 @@ func (s *Server) NotifyResourceUpdated(uri string) {
 
 // NotifyResourceUpdatedLocal sends a notifications/resources/updated
 // notification to LOCAL subscribers only — does NOT publish via the
-// installed BroadcastRelay. Used by ResourcesUpdatedReceiver.ReceiveRelay
+// installed NotificationRelay. Used by ResourcesUpdatedReceiver.Receive
 // to deliver a cross-replica-received notification without
 // re-publishing.
 //

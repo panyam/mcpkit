@@ -50,7 +50,7 @@ func TestCapabilityBroadcastReceiver_ForwardsToBroadcast(t *testing.T) {
 	srv, cap := newServerWithCapture(t)
 
 	recv := NewCapabilityBroadcastReceiver(srv)
-	recv.ReceiveRelay(context.Background(), "notifications/tools/list_changed", nil)
+	recv.Receive(context.Background(), "notifications/tools/list_changed", nil)
 
 	frames := cap.frame()
 	require.Len(t, frames, 1)
@@ -62,7 +62,7 @@ func TestCapabilityBroadcastReceiver_ForwardsParams(t *testing.T) {
 
 	recv := NewCapabilityBroadcastReceiver(srv)
 	params := map[string]any{"uri": "file:///foo"}
-	recv.ReceiveRelay(context.Background(), "notifications/resources/updated", params)
+	recv.Receive(context.Background(), "notifications/resources/updated", params)
 
 	frames := cap.frame()
 	require.Len(t, frames, 1)
@@ -80,7 +80,7 @@ func TestCapabilityBroadcastReceiver_ConcurrentReceivesAreSafe(t *testing.T) {
 	for i := 0; i < n; i++ {
 		go func() {
 			defer wg.Done()
-			recv.ReceiveRelay(context.Background(), "notifications/tools/list_changed", nil)
+			recv.Receive(context.Background(), "notifications/tools/list_changed", nil)
 		}()
 	}
 	wg.Wait()
@@ -93,7 +93,7 @@ func TestCapabilityBroadcastReceiver_ConcurrentReceivesAreSafe(t *testing.T) {
 // to build if the interface drifts.
 func TestNotificationRelayReceiver_Conformance(t *testing.T) {
 	var _ NotificationRelayReceiver = (*CapabilityBroadcastReceiver)(nil)
-	var _ NotificationRelayReceiver = (*MultiplexRelayReceiver)(nil)
+	var _ NotificationRelayReceiver = (*NotificationRouter)(nil)
 	var _ NotificationRelayReceiver = (*ResourcesUpdatedReceiver)(nil)
 }
 
@@ -122,7 +122,7 @@ func TestResourcesUpdatedReceiver_RoutesToLocalSubscribers(t *testing.T) {
 	require.NoError(t, srv.subRegistry.subscribe("sess-A", d, "file:///foo"))
 
 	recv := NewResourcesUpdatedReceiver(srv)
-	recv.ReceiveRelay(context.Background(),
+	recv.Receive(context.Background(),
 		"notifications/resources/updated",
 		core.ResourceUpdatedNotification{URI: "file:///foo"},
 	)
@@ -153,7 +153,7 @@ func TestResourcesUpdatedReceiver_AcceptsMapShape(t *testing.T) {
 	require.NoError(t, srv.subRegistry.subscribe("sess-A", d, "file:///bar"))
 
 	recv := NewResourcesUpdatedReceiver(srv)
-	recv.ReceiveRelay(context.Background(),
+	recv.Receive(context.Background(),
 		"notifications/resources/updated",
 		map[string]any{"uri": "file:///bar"},
 	)
@@ -168,7 +168,7 @@ func TestResourcesUpdatedReceiver_DropsWrongMethod(t *testing.T) {
 	recv := NewResourcesUpdatedReceiver(srv)
 
 	// Should not panic, should not crash.
-	recv.ReceiveRelay(context.Background(), "notifications/tools/list_changed", nil)
+	recv.Receive(context.Background(), "notifications/tools/list_changed", nil)
 }
 
 func TestResourcesUpdatedReceiver_DropsMissingURI(t *testing.T) {
@@ -176,11 +176,11 @@ func TestResourcesUpdatedReceiver_DropsMissingURI(t *testing.T) {
 	recv := NewResourcesUpdatedReceiver(srv)
 
 	// Params shape doesn't carry a URI — must not fire any subscribers.
-	recv.ReceiveRelay(context.Background(),
+	recv.Receive(context.Background(),
 		"notifications/resources/updated",
 		map[string]any{"unrelated": "value"},
 	)
-	recv.ReceiveRelay(context.Background(),
+	recv.Receive(context.Background(),
 		"notifications/resources/updated",
 		core.ResourceUpdatedNotification{URI: ""},
 	)
@@ -188,13 +188,13 @@ func TestResourcesUpdatedReceiver_DropsMissingURI(t *testing.T) {
 
 // TestSubscriptionRegistry_NotifyPublishesViaRelay verifies that
 // notify() fires BOTH the local subscribers AND the installed
-// BroadcastRelay. notifyLocal() (the receiver's entry point) must NOT
+// NotificationRelay. notifyLocal() (the receiver's entry point) must NOT
 // re-publish — that would loop through the transport.
 func TestSubscriptionRegistry_NotifyPublishesViaRelay(t *testing.T) {
-	relay := &recordingHandler{} // BroadcastRelay = NotificationRelayReceiver with same shape
+	relay := &recordingHandler{} // NotificationRelay = NotificationRelayReceiver with same shape
 	srv := NewServer(core.ServerInfo{Name: "sub-relay", Version: "0.0.1"},
 		WithSubscriptions(),
-		WithBroadcastRelay(broadcastRelayFromHandler{recordingHandler: relay}),
+		WithNotificationRelay(broadcastRelayFromHandler{recordingHandler: relay}),
 	)
 
 	d := srv.newSession()
@@ -228,7 +228,7 @@ func TestSubscriptionRegistry_NotifyLocalSkipsRelay(t *testing.T) {
 	relay := &recordingHandler{}
 	srv := NewServer(core.ServerInfo{Name: "sub-local", Version: "0.0.1"},
 		WithSubscriptions(),
-		WithBroadcastRelay(broadcastRelayFromHandler{recordingHandler: relay}),
+		WithNotificationRelay(broadcastRelayFromHandler{recordingHandler: relay}),
 	)
 
 	d := srv.newSession()
@@ -253,24 +253,24 @@ func TestSubscriptionRegistry_NotifyLocalSkipsRelay(t *testing.T) {
 }
 
 // broadcastRelayFromHandler adapts recordingHandler (a
-// NotificationRelayReceiver) into a BroadcastRelay so tests can install
-// it via WithBroadcastRelay and assert on publish frames.
+// NotificationRelayReceiver) into a NotificationRelay so tests can install
+// it via WithNotificationRelay and assert on publish frames.
 type broadcastRelayFromHandler struct {
 	*recordingHandler
 }
 
-func (b broadcastRelayFromHandler) PublishBroadcast(ctx context.Context, method string, params any) {
-	b.recordingHandler.ReceiveRelay(ctx, method, params)
+func (b broadcastRelayFromHandler) Publish(ctx context.Context, method string, params any) {
+	b.recordingHandler.Receive(ctx, method, params)
 }
 
-// --- MultiplexRelayReceiver ----------------------------------------
+// --- NotificationRouter ----------------------------------------
 
 type recordingHandler struct {
 	mu     sync.Mutex
 	frames []captureFrame
 }
 
-func (r *recordingHandler) ReceiveRelay(_ context.Context, method string, params any) {
+func (r *recordingHandler) Receive(_ context.Context, method string, params any) {
 	r.mu.Lock()
 	r.frames = append(r.frames, captureFrame{method: method, params: params})
 	r.mu.Unlock()
@@ -284,53 +284,53 @@ func (r *recordingHandler) snapshot() []captureFrame {
 	return out
 }
 
-func TestMultiplexRelayReceiver_RoutesByMethod(t *testing.T) {
-	mux := NewMultiplexRelayReceiver()
+func TestNotificationRouter_RoutesByMethod(t *testing.T) {
+	mux := NewNotificationRouter()
 	tools := &recordingHandler{}
 	resources := &recordingHandler{}
 	mux.Handle("notifications/tools/list_changed", tools)
 	mux.Handle("notifications/resources/list_changed", resources)
 
-	mux.ReceiveRelay(context.Background(), "notifications/tools/list_changed", nil)
-	mux.ReceiveRelay(context.Background(), "notifications/resources/list_changed", nil)
-	mux.ReceiveRelay(context.Background(), "notifications/resources/list_changed", nil)
+	mux.Receive(context.Background(), "notifications/tools/list_changed", nil)
+	mux.Receive(context.Background(), "notifications/resources/list_changed", nil)
+	mux.Receive(context.Background(), "notifications/resources/list_changed", nil)
 
 	assert.Len(t, tools.snapshot(), 1)
 	assert.Len(t, resources.snapshot(), 2)
 }
 
-func TestMultiplexRelayReceiver_UnknownMethodDropped(t *testing.T) {
-	mux := NewMultiplexRelayReceiver()
+func TestNotificationRouter_UnknownMethodDropped(t *testing.T) {
+	mux := NewNotificationRouter()
 	tools := &recordingHandler{}
 	mux.Handle("notifications/tools/list_changed", tools)
 
-	mux.ReceiveRelay(context.Background(), "notifications/some/unknown", nil)
+	mux.Receive(context.Background(), "notifications/some/unknown", nil)
 
 	assert.Empty(t, tools.snapshot(), "unknown methods must not fall through to any handler")
 }
 
-func TestMultiplexRelayReceiver_HandleReplacesExisting(t *testing.T) {
-	mux := NewMultiplexRelayReceiver()
+func TestNotificationRouter_HandleReplacesExisting(t *testing.T) {
+	mux := NewNotificationRouter()
 	first := &recordingHandler{}
 	second := &recordingHandler{}
 	mux.Handle("notifications/tools/list_changed", first)
 	mux.Handle("notifications/tools/list_changed", second)
 
-	mux.ReceiveRelay(context.Background(), "notifications/tools/list_changed", nil)
+	mux.Receive(context.Background(), "notifications/tools/list_changed", nil)
 
 	assert.Empty(t, first.snapshot(), "first handler must be replaced")
 	assert.Len(t, second.snapshot(), 1)
 }
 
-func TestMultiplexRelayReceiver_HandleNilIsNoOp(t *testing.T) {
-	mux := NewMultiplexRelayReceiver()
+func TestNotificationRouter_HandleNilIsNoOp(t *testing.T) {
+	mux := NewNotificationRouter()
 	mux.Handle("notifications/tools/list_changed", nil)
-	mux.ReceiveRelay(context.Background(), "notifications/tools/list_changed", nil)
+	mux.Receive(context.Background(), "notifications/tools/list_changed", nil)
 	// No panic, no handler fired — nothing to assert beyond "didn't crash".
 }
 
-func TestMultiplexRelayReceiver_ConcurrentRegisterAndDispatch(t *testing.T) {
-	mux := NewMultiplexRelayReceiver()
+func TestNotificationRouter_ConcurrentRegisterAndDispatch(t *testing.T) {
+	mux := NewNotificationRouter()
 	handler := &recordingHandler{}
 	mux.Handle("notifications/tools/list_changed", handler)
 
@@ -345,7 +345,7 @@ func TestMultiplexRelayReceiver_ConcurrentRegisterAndDispatch(t *testing.T) {
 		}()
 		go func() {
 			defer wg.Done()
-			mux.ReceiveRelay(context.Background(), "notifications/tools/list_changed", nil)
+			mux.Receive(context.Background(), "notifications/tools/list_changed", nil)
 		}()
 	}
 	wg.Wait()

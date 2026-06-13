@@ -108,7 +108,7 @@ The other seams (626, 631) follow this template. Reviews check against this file
 | Interface | Concern | Status |
 |---|---|---|
 | `Emitter` | Output-side seam: "given an event, deliver it." Dual of `EventSource`. Default `NewLocalEmitter` matches today's single-replica behavior; multi-replica deployments use a transport-specific `Bus` (see Pattern B below) as `cfg.Emitter`. | landed (629) |
-| `server.NotificationRelayReceiver` | Routing seam for cross-replica notification delivery. Transport adapters call `ReceiveRelay(ctx, method, params)` on every received notification destined for this replica. Implementations are domain-specific: `server.CapabilityBroadcastReceiver` forwards to `Server.Broadcast` for catalog notifications (tools/list_changed etc.); `events.YieldingSource` routes via per-slot fanout so per-subscription `EventDef.Match` runs. | landed (755) |
+| `server.NotificationRelayReceiver` | Routing seam for cross-replica notification delivery. Transport adapters call `Receive(ctx, method, params)` on every received notification destined for this replica. Implementations are domain-specific: `server.CapabilityBroadcastReceiver` forwards to `Server.Broadcast` for catalog notifications (tools/list_changed etc.); `events.YieldingSource` routes via per-slot fanout so per-subscription `EventDef.Match` runs. | landed (755) |
 
 `Emitter` and `NotificationRelayReceiver` are not storage seams (they don't persist anything), but follow the same `ctx`-first method shape and live in their own files per the same conventions. Listed here so future readers see the full set of seams in one place.
 

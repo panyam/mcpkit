@@ -59,7 +59,7 @@ type redisBackend struct {
 	done   chan struct{}
 	// registry is populated by the caller AFTER events.Register returns
 	// — the router closure dereferences this to look up the source for
-	// ReceiveRelay routing. nil until SetRegistry runs; receives that
+	// Receive routing. nil until SetRegistry runs; receives that
 	// arrive before then are dropped (acceptable: yields can't happen
 	// yet because the source handlers aren't installed).
 	registry *events.Registry
@@ -242,7 +242,7 @@ func configureRedisBackend(cfg *events.Config, srv *server.Server, webhooks *eve
 
 // registryRouter implements server.NotificationRelayReceiver by looking
 // up the destination YieldingSource on the registry and forwarding to
-// its own ReceiveRelay. The lookup runs on every cross-replica event
+// its own Receive. The lookup runs on every cross-replica event
 // because rb.registry only becomes available AFTER events.Register
 // returns (the registry doesn't exist at configureRedisBackend time).
 // Events that arrive before SetRegistry has been called are silently
@@ -251,7 +251,7 @@ type registryRouter struct {
 	rb *redisBackend
 }
 
-func (r *registryRouter) ReceiveRelay(ctx context.Context, method string, params any) {
+func (r *registryRouter) Receive(ctx context.Context, method string, params any) {
 	if r.rb.registry == nil {
 		return
 	}
@@ -271,5 +271,5 @@ func (r *registryRouter) ReceiveRelay(ctx context.Context, method string, params
 		// the origin replica's EmitToWebhooks; only push misses out.
 		return
 	}
-	nrr.ReceiveRelay(ctx, method, params)
+	nrr.Receive(ctx, method, params)
 }
