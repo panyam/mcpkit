@@ -79,3 +79,23 @@ for m in $(find ext experimental/ext -name go.mod); do
 done
 '
 ```
+
+## C5: Multi-replica notification delivery requires explicit Pattern B wiring
+
+At N>1 (multiple server replicas), five notification surfaces silently break without explicit cross-replica relay wiring. Sessions connected to one replica miss notifications emitted on another:
+
+- `notifications/tools/list_changed`
+- `notifications/resources/list_changed`
+- `notifications/prompts/list_changed`
+- `notifications/resources/updated`
+- `notifications/events/event`
+
+Adopters deploying mcpkit at N>1 MUST either:
+
+1. **Configure a `BroadcastRelay`** for capability + subscription-shaped notifications (`server.WithBroadcastRelay(redisstore.NewCapabilityBus(...))`) AND a `redisstore.Bus` for events. The reference wiring is in `docs/MULTI_REPLICA.md` § Configuration recipes.
+2. **Use sticky sessions** so each client only ever hits one replica. The notifications stay broken cross-replica but a single client's experience is consistent.
+3. **Document the limitation** if they use neither — adopters should not silently ship a broken setup expecting the notifications to work.
+
+The full architecture (Pattern B, BroadcastRelay seam, NotificationRelayReceiver routing, per-surface end-to-end flows, scenario walkthroughs) is in `docs/MULTI_REPLICA.md`. Issue 755 tracks the work.
+
+**Verify:** there is no automated check today — the constraint is documented to prevent silent breakage, not enforced at build time. Adopters running N>1 should verify their wiring matches one of the recipes in `docs/MULTI_REPLICA.md` § Configuration recipes.
