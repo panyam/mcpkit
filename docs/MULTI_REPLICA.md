@@ -503,7 +503,7 @@ Setup: replica K1 has `WithNotificationRelay(busK1)` installed; replica K2 has `
                                           ── write to SSE response stream
                                           ──> (K1 clients, if any, receive here)
 
-[Redis]   PUBLISH "mcpkit.events.broadcast.notifications/tools/list_changed" → fanout to all SUBSCRIBE'd clients
+[Redis]   PUBLISH "mcpkit.broadcast.notifications/tools/list_changed" → fanout to all SUBSCRIBE'd clients
 
 [K2]  redisstore.CapabilityBus.Run goroutine reading pubsub channel       capability_bus.go:175
         decodeCapabilityEnvelope(msg.Payload)                              capability_bus.go:241

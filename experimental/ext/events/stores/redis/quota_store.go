@@ -83,7 +83,7 @@ func NewQuotaStore(opts Options) (*QuotaStore, error) {
 	if opts.QuotaTTL < 0 {
 		return nil, fmt.Errorf("redisstore.NewQuotaStore: Options.QuotaTTL must be >= 0; got %s", opts.QuotaTTL)
 	}
-	return &QuotaStore{opts: opts.WithDefaults()}, nil
+	return &QuotaStore{opts: eventsDefaults(opts)}, nil
 }
 
 // ReserveQuota claims one slot for (Principal, EventName) only if

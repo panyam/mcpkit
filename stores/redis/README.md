@@ -11,7 +11,7 @@ What lives here:
 | `CapabilityBusOptions` | Minimal config for `CapabilityBus` (Client + ChannelPrefix). |
 | `Codec[T any]` | Generic wire-format seam. Implementations encode/decode any T. |
 | `JSONCodec[T any]` | Default JSON-over-the-wire implementation. |
-| `DefaultChannelPrefix`, `DefaultQuotaTTL` | Shared defaults applied via `Options.WithDefaults()`. |
+| `DefaultChannelPrefix` (`"mcpkit"`), `DefaultQuotaTTL` | Shared defaults applied via `Options.WithDefaults()`. The events SDK overrides `DefaultChannelPrefix` with its own `EventsChannelPrefix` (`"mcpkit.events"`) for back-compat of its existing channel naming; CapabilityBus and other root primitives use the neutral `"mcpkit"` namespace. |
 | `redistest.NewClient(t)` | Miniredis-backed test client constructor. Importable from any module's `*_test.go`. |
 
 What does NOT live here:

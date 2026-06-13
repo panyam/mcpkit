@@ -83,7 +83,7 @@ One channel per event name, prefix-namespaced:
 <ChannelPrefix>.<event.Name>
 ```
 
-Default `ChannelPrefix` is `mcpkit.events`. Override in `Options.ChannelPrefix` if multiple isolated demo stacks share one Redis cluster.
+Default `ChannelPrefix` is `EventsChannelPrefix` (`"mcpkit.events"`) — distinct from the root `stores/redis` neutral default (`"mcpkit"`). Override `Options.ChannelPrefix` if multiple isolated stacks share one Redis cluster.
 
 ## Codec
 

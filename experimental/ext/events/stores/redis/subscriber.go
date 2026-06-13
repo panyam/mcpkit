@@ -55,7 +55,7 @@ func NewSubscriber(opts Options, deliver DeliverFunc) (*Subscriber, error) {
 		return nil, errors.New("redisstore.NewSubscriber: deliver is required")
 	}
 	return &Subscriber{
-		opts:     opts.WithDefaults(),
+		opts:     eventsDefaults(opts),
 		codec:    JSONCodec{},
 		deliver:  deliver,
 		channels: make(map[string]struct{}),
