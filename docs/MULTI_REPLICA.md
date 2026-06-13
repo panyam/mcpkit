@@ -467,6 +467,175 @@ sequenceDiagram
 
 Per-slot `Match` runs on every replica that holds a matching subscriber. The transport sprays to all replicas; each replica filters its own slots independently.
 
+## Life of a notification — function-by-function
+
+The per-surface sequence diagrams above show the high-level flow. Below are the literal callstacks adopters and reviewers can correlate against the code. Read top-down; each indent level is one function call into a callee.
+
+### Life of `notifications/tools/list_changed` (capability-shaped, N=3)
+
+Setup: replica K1 has `WithBroadcastRelay(busK1)` installed; replica K2 has `WithBroadcastRelay(busK2)`. Both Buses subscribed to `notifications/tools/list_changed`. A client `cliK2` is connected to K2 via Streamable HTTP. App code on K1 calls `srv.RegisterTool`.
+
+```
+[K1]  app: srv.RegisterTool(def, handler)                                 server.go:649
+        s.dispatcher.RegisterTool(def, handler)                            dispatch.go:298
+          s.dispatcher.Reg.AddTool(def, handler)                           registry.go:105
+            r.tools[name] = entry  (state mutation)                        registry.go:112
+            r.notify("notifications/tools/list_changed")                   registry.go:117
+              r.OnChange("notifications/tools/list_changed")               registry.go:55
+                (closure installed in NewServer wires OnChange →)
+                s.Broadcast(ctx, "notifications/tools/list_changed", nil)  server.go:562
+                  if relay != nil:
+                    relay.PublishBroadcast(ctx, method, nil)               server.go:1007
+                      ──> redisstore.CapabilityBus.PublishBroadcast        capability_bus.go:129
+                            encodeCapabilityEnvelope(b.originID, params)   capability_bus.go:225
+                              json.Marshal({"origin": "<K1>", "params": null})
+                            b.client.Publish(ctx, channel, body)           ──> Redis
+                  s.BroadcastToSessions(ctx, method, nil)                  server.go:1009
+                    for bc in s.sessionBroadcasters:
+                      bc(ctx, method, nil)                                 server.go:1036
+                        ──> streamableTransport.broadcast                  streamable_transport.go:915
+                              t.sessions.Range(...):
+                                for each connected K1 session:
+                                  fn := d.getNotifyFunc()
+                                  fn(method, nil)
+                                    ──> session SSE writer
+                                          ── frame as JSON-RPC notification
+                                          ── write to SSE response stream
+                                          ──> (K1 clients, if any, receive here)
+
+[Redis]   PUBLISH "mcpkit.events.broadcast.notifications/tools/list_changed" → fanout to all SUBSCRIBE'd clients
+
+[K2]  redisstore.CapabilityBus.Run goroutine reading pubsub channel       capability_bus.go:170
+        decodeCapabilityEnvelope(msg.Payload)                              capability_bus.go:241
+          json.Unmarshal → envelope{origin: "<K1>", params: nil}
+        if envelope.origin == b.originID (== "<K2>"): drop  ── NOT self    capability_bus.go:184
+        receiver.ReceiveRelay(ctx, method, nil)                            capability_bus.go:188
+          ──> MultiplexRelayReceiver.ReceiveRelay                          relay.go:282
+                h := handlers["notifications/tools/list_changed"]
+                h.ReceiveRelay(ctx, method, nil)
+                  ──> CapabilityBroadcastReceiver.ReceiveRelay             relay.go:138
+                        srv.BroadcastToSessions(ctx, method, nil)          relay.go:144
+                          ── NOTE: BroadcastToSessions, NOT Broadcast
+                          ── (otherwise would re-fire relay and loop)
+                        for bc in s.sessionBroadcasters:
+                          bc(ctx, method, nil)
+                            ──> streamableTransport.broadcast              streamable_transport.go:915
+                                  for each connected K2 session (incl. cliK2):
+                                    fn := d.getNotifyFunc()
+                                    fn(method, nil)
+                                      ──> session SSE writer
+                                            ── frame as JSON-RPC notification
+                                            ── write to SSE response stream
+
+[K2]  cliK2.transport reads SSE frame ──> client-side notification handler fires
+```
+
+Key landmarks:
+
+| Step | What it does | Where |
+|---|---|---|
+| `r.notify` → `OnChange` → `s.Broadcast` | Registry mutation triggers Broadcast | `server.go:562` (wired in `NewServer`) |
+| `s.Broadcast` forks publish + local | Single call, two paths | `server.go:1007`, `:1009` |
+| `relay.PublishBroadcast` | Outbound transport hop | `capability_bus.go:129` |
+| Self-publish drop on receive | `envelope.origin == b.originID` | `capability_bus.go:184` |
+| Receiver routes by method | `MultiplexRelayReceiver.handlers[method]` | `relay.go:282` |
+| Final hop: receiver → `BroadcastToSessions` | **Not** `Broadcast` (recursion guard) | `relay.go:144` |
+
+### Life of `notifications/events/event` (subscription-shaped, N=3, tenant scoping)
+
+Setup: 3 replicas wired with a `redisstore.Bus` per replica (separate from the capability bus). A YieldingSource for `chat.message` registered on each replica with `EventDef.Match = tenantMatch`. Stream subscriber `alice@asgard` is on K1; `bob@babylon` is on K2; the inject hits K3. The asgard event must reach K1's alice but NOT K2's bob, even though both are subscribed to `chat.message`.
+
+```
+[K3]  app: yield(ctx, payload{tenant: "asgard", text: "hi"})               yield.go:632
+        build Event{Name:"chat.message", Data: json, Cursor: N, EventID: ...}
+        s.mu.Lock()
+        s.entries = append(...)  (in-memory ring)                          yield.go:696
+        if s.bufferStore != nil:
+          s.bufferStore.Append(...)  (Postgres EventBufferStore)            yield.go:710
+        subs := snapshot(s.subscribers)                                    yield.go:727
+        hook := s.emitHook  (← cfg.Emitter.Emit, installed by events.Register)
+        matchFn := s.def.Match  (tenantMatch)
+        s.mu.Unlock()
+
+        for sub in subs:                                                   yield.go:754
+          s.deliverEventToSlot(sub, event, matchFn, transformFn)           yield.go:756
+            matched := matchFn(HookContext{Principal: sub.principal}, event, sub.params)
+            ── K3 happens to have NO stream subscribers; for-loop is empty
+            (if it had any, matched ones would receive via slot.ch)
+
+        hook(ctx, event)                                                   yield.go:772
+          ──> redisstore.Bus.Emit(ctx, event)                              bus.go:90
+                p.opts.Codec.Encode(event)
+                  event.Meta = stampOriginIDOnMeta(event.Meta, "<K3>")     origin.go:55
+                  body = json.Marshal(event)
+                p.opts.Client.Publish(ctx, "mcpkit.events.chat.message", body)  ──> Redis
+
+[Redis]   PUBLISH "mcpkit.events.chat.message" → fanout to K1, K2, K3 subscribers
+
+[K1]  redisstore.Subscriber.Run goroutine reading pubsub channel           subscriber.go:107
+        Codec.Decode(msg.Payload) → event
+        if originIDFromMeta(event.Meta) == s.opts.skipOriginID:  drop      subscriber.go:147
+          ── K1's marker is "<K1>", envelope's origin is "<K3>" → proceed
+        event.Meta = stripOriginIDFromMeta(event.Meta)                     subscriber.go:156
+        s.deliver(msgCtx, event)
+          ──> Bus's wrapper that calls receiver.ReceiveRelay               bus.go:78
+                receiver.ReceiveRelay(ctx, "notifications/events/event", event)
+                  ──> chatSrc.ReceiveRelay  (YieldingSource[payload])       yield.go:454
+                        if method != "notifications/events/event": return
+                        ev, ok := params.(Event)
+                        if !ok: return
+                        s.LocalDeliver(ctx, event)                          yield.go:476
+                          subs := snapshot(s.subscribers)                   yield.go:439
+                          matchFn := s.def.Match
+                          s.mu.Unlock()
+                          for sub in subs:
+                            s.deliverEventToSlot(sub, event, matchFn, transformFn)
+                              ── sub.principal = "asgard" (alice's claims)
+                              ── matched := tenantMatch(ctx, event, ...)
+                                   ↳ payload.tenant ("asgard") == ctx.Principal() ("asgard") → TRUE
+                              ── matched: write to sub.ch (slot.deliverEvent)
+
+[K1]  events/stream handler's reader goroutine                            stream.go:331
+        select { case se := <-evCh: ...
+        framePushed := wireSubscriberEvent(se, slotState)
+        ctx.Notify("notifications/events/event", payload)                  stream.go:404
+          ──> stream POST response writer
+                ── frame as JSON-RPC notification with requestId + cursor
+                ── write SSE event to alice's open POST response stream
+                ──> alice's stream client receives the event
+
+[K2]  redisstore.Subscriber.Run goroutine reading pubsub channel           subscriber.go:107
+        Codec.Decode(msg.Payload) → event (origin "<K3>")
+        skipOriginID is "<K2>" → proceed
+        strip origin marker
+        receiver.ReceiveRelay → chatSrc.ReceiveRelay → s.LocalDeliver
+          for sub in subs:
+            ── sub.principal = "babylon" (bob's claims)
+            ── matched := tenantMatch(ctx, event, ...)
+                 ↳ payload.tenant ("asgard") != ctx.Principal() ("babylon") → FALSE
+            ── matched=false: drop (no delivery to bob's slot)
+
+[K2]  events/stream handler for bob: select sees no incoming on evCh — silent
+        ── bob NEVER hears the asgard event ─ tenant scoping holds
+```
+
+Key landmarks:
+
+| Step | What it does | Where |
+|---|---|---|
+| `yield` builds Event + buffer append | Origin replica's local fanout | `yield.go:632, :696, :710` |
+| `yield` for-loop on local slots | per-slot Match runs HERE (origin replica) | `yield.go:754, :756` |
+| `hook(ctx, event)` = `cfg.Emitter.Emit` | Publish to transport | `yield.go:772` |
+| Origin marker stamped onto `event.Meta` | Self-publish dedup mechanism | `origin.go:55` |
+| Self-publish drop on receive (origin == self) | Origin replica's own Subscriber drops | `subscriber.go:147` |
+| Strip origin marker | Adopters never see it | `subscriber.go:156` |
+| `chatSrc.ReceiveRelay` → `LocalDeliver` | Cross-replica → local fanout entry | `yield.go:454, :476` |
+| `LocalDeliver` for-loop on local slots | per-slot Match runs HERE (receiving replica) too | `yield.go:439` (mirror of origin's path) |
+| `tenantMatch` per slot | The filter that drops babylon for asgard event | adopter's `EventDef.Match` |
+| Stream handler reads slot channel + `ctx.Notify` | SSE frame to client | `stream.go:331, :404` |
+
+The key insight from this trace: **`EventDef.Match` runs once per slot on EVERY replica that holds a matching slot.** The transport just sprays; each replica's `LocalDeliver` independently filters. There's no central routing decision and no cross-replica subscription registry — each replica owns its own subscriber state and applies its own filter.
+
 ## Scenario walkthroughs
 
 ### Single-replica yield (N=1, no relay)
