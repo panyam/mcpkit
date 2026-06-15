@@ -20,7 +20,7 @@ func mkTarget(canonicalKey []byte, principal, eventName string) events.WebhookTa
 		MaxAgeSeconds: 60,
 		EventName:     eventName,
 		Principal:     principal,
-		Params:        map[string]any{"channel": "general", "n": float64(7)},
+		Arguments:     map[string]any{"channel": "general", "n": float64(7)},
 		Status: events.DeliveryStatus{
 			Active:    true,
 			LastError: events.DeliveryErrorNone,
@@ -57,7 +57,7 @@ func TestWebhookStore_GetSaveDeleteCount(t *testing.T) {
 			assert.Equal(t, target.ID, getResp.Target.ID)
 			assert.Equal(t, target.URL, getResp.Target.URL)
 			assert.Equal(t, target.Principal, getResp.Target.Principal)
-			assert.Equal(t, target.Params["channel"], getResp.Target.Params["channel"])
+			assert.Equal(t, target.Arguments["channel"], getResp.Target.Arguments["channel"])
 			assert.True(t, target.ExpiresAt.Equal(getResp.Target.ExpiresAt))
 
 			// Update via Save overwrites; FailureCount round-trips

@@ -65,9 +65,9 @@ func TestYieldFanout_DroppedByMatch(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	chHigh, _ := src.Subscribe(ctx, SubscribeOpts{Params: map[string]any{"severity": "high"}})
-	chLow, _ := src.Subscribe(ctx, SubscribeOpts{Params: map[string]any{"severity": "low"}})
-	chMed, _ := src.Subscribe(ctx, SubscribeOpts{Params: map[string]any{"severity": "medium"}})
+	chHigh, _ := src.Subscribe(ctx, SubscribeOpts{Arguments: map[string]any{"severity": "high"}})
+	chLow, _ := src.Subscribe(ctx, SubscribeOpts{Arguments: map[string]any{"severity": "low"}})
+	chMed, _ := src.Subscribe(ctx, SubscribeOpts{Arguments: map[string]any{"severity": "medium"}})
 
 	require.NoError(t, yield(context.Background(), sevPayload{Severity: "high"}))
 	drainSubscribers(chHigh, chLow, chMed)
@@ -91,8 +91,8 @@ func TestYieldFanout_TransformsApplied(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	chRedact, _ := src.Subscribe(ctx, SubscribeOpts{Params: map[string]any{"redact_pii": true}})
-	chRaw, _ := src.Subscribe(ctx, SubscribeOpts{Params: map[string]any{"redact_pii": false}})
+	chRedact, _ := src.Subscribe(ctx, SubscribeOpts{Arguments: map[string]any{"redact_pii": true}})
+	chRaw, _ := src.Subscribe(ctx, SubscribeOpts{Arguments: map[string]any{"redact_pii": false}})
 
 	require.NoError(t, yield(context.Background(), sevPayload{Severity: "high", Reporter: "alice@x"}))
 	drainSubscribers(chRedact, chRaw)

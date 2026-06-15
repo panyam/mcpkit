@@ -77,6 +77,18 @@ const (
 	defaultWebhookSuspendWindow    = 10 * time.Minute // sliding window over which failures accumulate
 )
 
+// DefaultWebhookAckTimeout is the per-delivery ack timeout the registry
+// applies to both the http.Client and the underlying net.Dialer. Aligned
+// with spec PR1 commit b506e347 (§"Webhook Event Delivery" →
+// "Acknowledgement semantics"): "a timeout on the order of 5 seconds is
+// common." Endpoints SHOULD durably accept, ack fast, and process async
+// so this stays sufficient.
+//
+// Not currently exposed as a WithWebhookAckTimeout option — every
+// deployment we know of is happy with 5s. Add an option when a concrete
+// need surfaces.
+const DefaultWebhookAckTimeout = 5 * time.Second
+
 // WebhookOption configures a WebhookRegistry at construction time.
 type WebhookOption func(*WebhookRegistry)
 
@@ -281,14 +293,14 @@ func WithWebhookTracerProvider(tp core.TracerProvider) WebhookOption {
 // as the X-MCP-Subscription-Id header on every delivery POST per
 // §"Webhook Event Delivery" L390.
 //
-// EventName, Principal, Params: copies of the identity components
+// EventName, Principal, Arguments: copies of the identity components
 // stored separately so OnRemove hooks (and Match / Transform on
-// fanout) can construct a HookContext + params payload per spec
+// fanout) can construct a HookContext + arguments payload per spec
 // §"Server SDK Guidance" L623-629 without re-parsing canonical
 // bytes. Redundant with CanonicalKey; cheap to store, and the
 // registry already owns the only writer.
 type WebhookTarget struct {
-	CanonicalKey  []byte    // canonical bytes of (principal, url, name, params)
+	CanonicalKey  []byte    // canonical bytes of (principal, url, name, arguments)
 	ID            string    // server-derived routing handle (sub_<base64-of-16-bytes>)
 	URL           string    // delivery callback URL
 	Secret        string    // client-supplied HMAC signing secret (whsec_...)
@@ -297,7 +309,7 @@ type WebhookTarget struct {
 
 	EventName string         // event-type name (used by Match / Transform / OnRemove lookup)
 	Principal string         // resolved subscription principal (used by HookContext)
-	Params    map[string]any // canonicalized subscription params (passed to hooks)
+	Arguments map[string]any // canonicalized subscription arguments — spec PR1 commit 082166f0 renamed from "params" to match tools/call (passed to hooks)
 
 	// Subject is the raw OAuth `sub` claim — same value the
 	// IntrospectionValidator / JWTValidator stamped on
@@ -346,11 +358,22 @@ type WebhookTarget struct {
 // nil when never successfully delivered. FailedSince is set on the
 // first failure of a current failure run; nil when the last attempt
 // succeeded. Both timestamps serialize to ISO-8601 (RFC3339).
+//
+// Throttled + RetryAfterMs surface ACTIVE rate-limiting (spec PR1 commit
+// 21be9c31 — `deliveryStatus` gains throttled + retryAfterMs). They are
+// distinct from failure-driven suspension (Active=false): a throttled
+// subscription is healthy but the server is deliberately delaying or
+// coalescing deliveries, so a client should not read reduced traffic
+// as a broken endpoint. Both are advisory and OPTIONAL — servers that
+// do not rate-limit outbound deliveries never set them, and the
+// projector omits the fields entirely in that case.
 type DeliveryStatus struct {
 	Active         bool
 	LastDeliveryAt *time.Time
 	LastError      DeliveryErrorBucket
 	FailedSince    *time.Time
+	Throttled      bool
+	RetryAfterMs   *int64
 }
 
 // DeliveryErrorBucket is the spec's categorical lastError set per
@@ -548,7 +571,7 @@ func NewWebhookRegistry(opts ...WebhookOption) *WebhookRegistry {
 	// bypass the dial-time SSRF guard via Go's redirect chain. Per
 	// spec same paragraph L464.
 	r.client = &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout: DefaultWebhookAckTimeout,
 		Transport: &http.Transport{
 			DialContext: r.dialContext(),
 		},
@@ -572,7 +595,7 @@ func NewWebhookRegistry(opts ...WebhookOption) *WebhookRegistry {
 // connect syscall will use.
 func (r *WebhookRegistry) dialContext() func(ctx context.Context, network, addr string) (net.Conn, error) {
 	dialer := &net.Dialer{
-		Timeout: 5 * time.Second,
+		Timeout: DefaultWebhookAckTimeout,
 		Control: func(network, address string, _ syscall.RawConn) error {
 			if r.allowPrivateNetworks {
 				return nil
@@ -655,15 +678,18 @@ type RegisterParams struct {
 	Secret        string
 	MaxAgeSeconds int
 
-	// EventName / Principal / Params: copies of the identity
+	// EventName / Principal / Arguments: copies of the identity
 	// components the registry stores so OnRemove hooks have full
 	// HookContext + payload available (per spec §"Server SDK
 	// Guidance" → "Subscription lifecycle hooks" L691) without
 	// re-parsing canonical bytes. Fed by the same canonical-tuple
 	// inputs the caller already used to compute CanonicalKey.
+	//
+	// Arguments was renamed from Params to track spec PR1 commit
+	// 082166f0 (inner subscription field → tools/call shape).
 	EventName string
 	Principal string
-	Params    map[string]any
+	Arguments map[string]any
 
 	// Subject / SessionID — copies of claims.Subject / claims.SessionID
 	// stamped on the target so BCL fan-out can match a revoked session
@@ -743,7 +769,7 @@ func (r *WebhookRegistry) Register(p RegisterParams) (expiresAt time.Time, isNew
 			Principal:     p.Principal,
 			Subject:       p.Subject,
 			SessionID:     p.SessionID,
-			Params:        p.Params,
+			Arguments:     p.Arguments,
 			// Active defaults to true on first registration. The
 			// suspend state machine flips this to false after
 			// repeated failures (spec §"Webhook Delivery Status"
@@ -962,10 +988,10 @@ func (r *WebhookRegistry) Deliver(ctx context.Context, event Event) {
 		}
 
 		hc := newHookContext(context.Background(), t.Principal, t.ID, DeliveryModeWebhook)
-		if !safeMatch(def.Match, hc, event, t.Params) {
+		if !safeMatch(def.Match, hc, event, t.Arguments) {
 			continue
 		}
-		delivered, modified := safeTransform(def.Transform, hc, event, t.Params)
+		delivered, modified := safeTransform(def.Transform, hc, event, t.Arguments)
 
 		body := originalBody
 		if modified {
@@ -1237,6 +1263,19 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, eventID, eventName strin
 			// Security" → "SSRF prevention" L464). Re-trying won't
 			// change the response; treat as terminal.
 			r.recordDeliveryFailure(target.CanonicalKey, DeliveryError3xxRedirect)
+			return
+		case resp.StatusCode == http.StatusGone:
+			// Spec PR1 commit 905ade36 (§"Webhook Event Delivery" →
+			// "Delivery model"): a receiver that intentionally rejects
+			// a delivery and does not want it retried responds 410
+			// Gone; the server MUST treat 410 as non-retryable for
+			// THIS delivery (like 413) WITHOUT affecting the
+			// subscription itself. So we abandon this attempt without
+			// calling recordDeliveryFailure — DeliveryStatus.Active
+			// stays true, FailedSince is untouched, and the next
+			// event delivers normally. The receiver said "skip THIS
+			// one," not "I'm broken."
+			r.logf("[webhook] delivery to %s abandoned per receiver 410 Gone (subscription unaffected)", target.URL)
 			return
 		case resp.StatusCode == http.StatusRequestEntityTooLarge:
 			// Spec §"Webhook Security" → "Delivery profile" L487:

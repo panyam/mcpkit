@@ -177,7 +177,7 @@ func TestLifecycle_Webhook_SubscribeUnsubscribe_FiresHooksOnce(t *testing.T) {
 
 	subParams := map[string]any{
 		"name":   "lifecycle.test",
-		"params": map[string]any{"sev": "high"},
+		"arguments": map[string]any{"sev": "high"},
 		"delivery": map[string]any{
 			"mode":   "webhook",
 			"url":    receiver.URL,
@@ -205,7 +205,7 @@ func TestLifecycle_Webhook_SubscribeUnsubscribe_FiresHooksOnce(t *testing.T) {
 
 	unsubParams := map[string]any{
 		"name":     "lifecycle.test",
-		"params":   map[string]any{"sev": "high"},
+		"arguments":   map[string]any{"sev": "high"},
 		"delivery": map[string]any{"url": receiver.URL},
 	}
 	resp = f.dispatch("events/unsubscribe", unsubParams)
@@ -230,7 +230,7 @@ func TestLifecycle_Webhook_RefreshDoesNotReFireOnSubscribe(t *testing.T) {
 
 	subParams := map[string]any{
 		"name":   "lifecycle.test",
-		"params": map[string]any{"sev": "high"},
+		"arguments": map[string]any{"sev": "high"},
 		"delivery": map[string]any{
 			"mode":   "webhook",
 			"url":    receiver.URL,
@@ -264,7 +264,7 @@ func TestLifecycle_Webhook_TTLPruneFiresOnUnsubscribe(t *testing.T) {
 
 	subParams := map[string]any{
 		"name":   "lifecycle.test",
-		"params": map[string]any{"sev": "high"},
+		"arguments": map[string]any{"sev": "high"},
 		"delivery": map[string]any{
 			"mode":   "webhook",
 			"url":    receiver.URL,
@@ -278,7 +278,7 @@ func TestLifecycle_Webhook_TTLPruneFiresOnUnsubscribe(t *testing.T) {
 	f.webhooks.ExpireAll()
 	resp = f.dispatch("events/subscribe", map[string]any{
 		"name": "lifecycle.test",
-		"params": map[string]any{"sev": "low"}, // distinct → new sub, triggers prune
+		"arguments": map[string]any{"sev": "low"}, // distinct → new sub, triggers prune
 		"delivery": map[string]any{
 			"mode":   "webhook",
 			"url":    receiver.URL,
@@ -304,7 +304,7 @@ func TestLifecycle_Webhook_PostTerminatedFiresOnUnsubscribe(t *testing.T) {
 
 	subParams := map[string]any{
 		"name":   "lifecycle.test",
-		"params": map[string]any{"sev": "high"},
+		"arguments": map[string]any{"sev": "high"},
 		"delivery": map[string]any{
 			"mode":   "webhook",
 			"url":    receiver.URL,
@@ -346,7 +346,7 @@ func TestLifecycle_Webhook_SuspendDoesNotFireOnUnsubscribe(t *testing.T) {
 
 	subParams := map[string]any{
 		"name":   "lifecycle.test",
-		"params": map[string]any{"sev": "high"},
+		"arguments": map[string]any{"sev": "high"},
 		"delivery": map[string]any{
 			"mode":   "webhook",
 			"url":    failingReceiver.URL,
@@ -400,7 +400,7 @@ func TestLifecycle_Webhook_OnSubscribeError_RollsBack(t *testing.T) {
 
 	resp := f.dispatch("events/subscribe", map[string]any{
 		"name":   "lifecycle.test",
-		"params": map[string]any{"sev": "high"},
+		"arguments": map[string]any{"sev": "high"},
 		"delivery": map[string]any{
 			"mode":   "webhook",
 			"url":    receiver.URL,
@@ -435,7 +435,7 @@ func TestLifecycle_Push_OpenCloseFiresHooksOnce(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	rawReq, err := json.Marshal(map[string]any{
 		"name":   "lifecycle.test",
-		"params": map[string]any{"sev": "high"},
+		"arguments": map[string]any{"sev": "high"},
 	})
 	require.NoError(t, err)
 
@@ -485,7 +485,7 @@ func TestLifecycle_Push_OnSubscribeError_RejectsStream(t *testing.T) {
 
 	rawReq, err := json.Marshal(map[string]any{
 		"name":   "lifecycle.test",
-		"params": map[string]any{"sev": "high"},
+		"arguments": map[string]any{"sev": "high"},
 	})
 	require.NoError(t, err)
 	resp, err := f.srv.Dispatch(context.Background(), &core.Request{
@@ -571,7 +571,7 @@ func TestLifecycle_Poll_OnSubscribeError_Rejects(t *testing.T) {
 
 	body := map[string]any{
 		"name":   "lifecycle.test",
-		"params": map[string]any{"sev": "high"},
+		"arguments": map[string]any{"sev": "high"},
 	}
 	raw, err := json.Marshal(body)
 	require.NoError(t, err)
@@ -603,7 +603,7 @@ func TestLifecycle_Webhook_ConcurrentSubscribe_FiresOnce(t *testing.T) {
 
 	subParams := map[string]any{
 		"name":   "lifecycle.test",
-		"params": map[string]any{"sev": "high"},
+		"arguments": map[string]any{"sev": "high"},
 		"delivery": map[string]any{
 			"mode":   "webhook",
 			"url":    receiver.URL,
