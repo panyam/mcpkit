@@ -79,10 +79,10 @@ The picking rule:
 Per [spec §"Subscription Identity"][spec-subscription-identity], a webhook subscription is identified by the **canonical tuple**:
 
 ```
-(principal, delivery.url, name, params)
+(principal, delivery.url, name, arguments)
 ```
 
-where `principal` is the authenticated subject (`claims.Subject`), `delivery.url` is the callback URL, `name` is the event-type name, and `params` is the canonical-JSON encoding of the subscription params object (sorted keys for stability). The server derives a routing handle:
+where `principal` is the authenticated subject (`claims.Subject`), `delivery.url` is the callback URL, `name` is the event-type name, and `arguments` is the canonical-JSON encoding of the subscription arguments object (sorted keys for stability). The server derives a routing handle:
 
 ```
 id = "sub_" + base64(SHA256(canonical)[:16])     // experimental/ext/events/identity.go
@@ -106,7 +106,7 @@ Two subscribes with **identical** canonical bytes → same subscription, TTL ref
 // Call 1
 {"method": "events/subscribe", "params": {
   "name": "discord.message",
-  "params": {"channel": "alerts"},
+  "arguments": {"channel": "alerts"},
   "delivery": {"mode": "webhook", "url": "https://hook.example/recv", "secret": "whsec_AAAA..."}
 }}
 // → response.id = "sub_xR9vK..."
@@ -116,13 +116,13 @@ Two subscribes with **identical** canonical bytes → same subscription, TTL ref
 // → response.id = "sub_xR9vK..."   ← same id, refreshed expiry
 ```
 
-Two subscribes with **different params** (or different url, name, or principal) → distinct subscriptions:
+Two subscribes with **different arguments** (or different url, name, or principal) → distinct subscriptions:
 
 ```jsonc
-// Call 3 — params differ
+// Call 3 — arguments differ
 {"method": "events/subscribe", "params": {
   "name": "discord.message",
-  "params": {"channel": "general"},        // ← different
+  "arguments": {"channel": "general"},     // ← different
   "delivery": {"mode": "webhook", "url": "https://hook.example/recv", "secret": "whsec_BBBB..."}
 }}
 // → response.id = "sub_zP4cM..."   ← different id

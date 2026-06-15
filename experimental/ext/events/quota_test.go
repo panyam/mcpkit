@@ -128,7 +128,7 @@ func TestQuota_Webhook_RejectsThirdSubscribe(t *testing.T) {
 		t.Helper()
 		body := map[string]any{
 			"name":   "alert.fired",
-			"params": map[string]any{"variant": urlVariant},
+			"arguments": map[string]any{"variant": urlVariant},
 			"delivery": map[string]any{
 				"mode":   "webhook",
 				"url":    receiver.URL + "/" + urlVariant,
@@ -251,7 +251,7 @@ func TestQuota_Webhook_TTLPruneReleases(t *testing.T) {
 	subscribe := func(variant string) *core.Response {
 		body, _ := json.Marshal(map[string]any{
 			"name":   "alert.fired",
-			"params": map[string]any{"variant": variant},
+			"arguments": map[string]any{"variant": variant},
 			"delivery": map[string]any{
 				"mode":   "webhook",
 				"url":    receiver.URL + "/" + variant,
@@ -414,7 +414,7 @@ func TestQuota_Poll_RejectsOverCap(t *testing.T) {
 	poll := func(variant string) *core.Response {
 		body, _ := json.Marshal(map[string]any{
 			"name":   "alert.fired",
-			"params": map[string]any{"variant": variant},
+			"arguments": map[string]any{"variant": variant},
 		})
 		resp, err := srv.Dispatch(context.Background(), &core.Request{
 			JSONRPC: "2.0", ID: json.RawMessage(`1`),
@@ -485,7 +485,7 @@ func TestQuota_OnSubscribeNeverFiresWhenAtCap(t *testing.T) {
 	subscribe := func(variant string) *core.Response {
 		body, _ := json.Marshal(map[string]any{
 			"name":   "alert.fired",
-			"params": map[string]any{"variant": variant},
+			"arguments": map[string]any{"variant": variant},
 			"delivery": map[string]any{
 				"mode":   "webhook",
 				"url":    receiver.URL + "/" + variant,

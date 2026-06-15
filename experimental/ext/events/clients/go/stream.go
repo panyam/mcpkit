@@ -48,12 +48,15 @@ type StreamOptions struct {
 	// is dropped on the wire.
 	MaxAge time.Duration
 
-	// Params is the per-subscription parameter bag the server's EventDef
+	// Arguments is the per-subscription parameter bag the server's EventDef
 	// hooks (Match / Transform / OnSubscribe / OnUnsubscribe) consume.
 	// Nil or empty means "default match all, no transform, no per-sub
 	// provisioning." See experimental/ext/events/hooks.go for the
 	// HookContext shape.
-	Params map[string]any
+	//
+	// Renamed from Params to track spec PR1 commit 082166f0 (inner
+	// subscription field → tools/call shape).
+	Arguments map[string]any
 
 	// OnEvent fires for every notifications/events/event (the payload
 	// frame). Receives the spec EventOccurrence shape (events.Event);
@@ -186,8 +189,8 @@ func Stream(parent context.Context, sess *client.Client, opts StreamOptions) (*S
 	if opts.MaxAge > 0 {
 		params["maxAge"] = int(opts.MaxAge / time.Second)
 	}
-	if len(opts.Params) > 0 {
-		params["params"] = opts.Params
+	if len(opts.Arguments) > 0 {
+		params["arguments"] = opts.Arguments
 	}
 
 	// Issue the call in a goroutine. CallContext blocks until the server

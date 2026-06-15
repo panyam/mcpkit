@@ -122,10 +122,10 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 		// Spec L249-267: validate before opening the stream. Errors here
 		// produce an immediate JSON-RPC error response and no stream.
 		var req struct {
-			Name   string         `json:"name"`
-			Params map[string]any `json:"params,omitempty"`
-			Cursor *string        `json:"cursor"`
-			MaxAge int            `json:"maxAge,omitempty"`
+			Name      string         `json:"name"`
+			Arguments map[string]any `json:"arguments,omitempty"` // spec PR1 commit 082166f0: renamed from params to match tools/call
+			Cursor    *string        `json:"cursor"`
+			MaxAge    int            `json:"maxAge,omitempty"`
 		}
 		if err := json.Unmarshal(params, &req); err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
@@ -227,7 +227,7 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 		evCh, sender := sub.Subscribe(ctx, SubscribeOpts{
 			Principal:      principal,
 			SubscriptionID: streamSubID,
-			Params:         req.Params,
+			Arguments:      req.Arguments,
 		})
 
 		// Register this stream's sender in the SubscriptionIndex so
@@ -268,7 +268,7 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 		// live and would receive events); on_unsubscribe fires on
 		// every return path via defer.
 		hc := newHookContext(ctx, principal, streamSubID, DeliveryModePush)
-		if err := safeOnSubscribe(def.OnSubscribe, hc, req.Params); err != nil {
+		if err := safeOnSubscribe(def.OnSubscribe, hc, req.Arguments); err != nil {
 			// Author rejected provisioning; close out the stream
 			// before any delivery happens. Returning an error here
 			// produces a JSON-RPC error response per the spec's
@@ -278,7 +278,7 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 			return newResourceExhaustedError(id, "subscriptions", 0,
 				"on_subscribe rejected: "+err.Error())
 		}
-		defer safeOnUnsubscribe(def.OnUnsubscribe, hc, req.Params)
+		defer safeOnUnsubscribe(def.OnUnsubscribe, hc, req.Arguments)
 
 		ticker := time.NewTicker(heartbeat)
 		defer ticker.Stop()

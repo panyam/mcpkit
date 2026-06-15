@@ -272,7 +272,7 @@ func openStream(c *client.Client, eventName string, params map[string]any) (*eve
 	ch := make(chan events.Event, 8)
 	stream, err := eventsclient.Stream(context.Background(), c, eventsclient.StreamOptions{
 		EventName: eventName,
-		Params:    params,
+		Arguments: params,
 		OnEvent:   func(ev events.Event) { ch <- ev },
 	})
 	if err != nil {

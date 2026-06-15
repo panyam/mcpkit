@@ -45,12 +45,15 @@ type SubscribeOptions struct {
 	// expired the subscription) and a fresh subscribe succeeded.
 	OnRecover func()
 
-	// Params is the per-subscription parameter bag the server's EventDef
+	// Arguments is the per-subscription parameter bag the server's EventDef
 	// hooks (Match / Transform / OnSubscribe / OnUnsubscribe) consume.
 	// Nil or empty means "default match all, no transform, no per-sub
 	// provisioning." See experimental/ext/events/hooks.go for the
 	// HookContext shape.
-	Params map[string]any
+	//
+	// Renamed from Params to track spec PR1 commit 082166f0 (inner
+	// subscription field → tools/call shape).
+	Arguments map[string]any
 
 	// MaxAge is the per-subscription replay floor sent on every subscribe
 	// per spec §"Cursor Lifecycle" → "Bounding replay with maxAge" L529.
@@ -190,8 +193,8 @@ func (s *Subscription) subscribe() error {
 	if s.opts.MaxAge > 0 {
 		params["maxAge"] = int(s.opts.MaxAge / time.Second)
 	}
-	if len(s.opts.Params) > 0 {
-		params["params"] = s.opts.Params
+	if len(s.opts.Arguments) > 0 {
+		params["arguments"] = s.opts.Arguments
 	}
 
 	resp, err := s.sess.Call("events/subscribe", params)
