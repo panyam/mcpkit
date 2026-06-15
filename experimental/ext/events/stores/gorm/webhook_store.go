@@ -33,15 +33,12 @@ type webhookRow struct {
 	MaxAgeSeconds int            `gorm:"not null"`
 	EventName     string         `gorm:"not null;index:idx_webhooks_principal_event"`
 	Principal     string         `gorm:"not null;index:idx_webhooks_principal_event"`
-	Arguments     map[string]any `gorm:"serializer:json"` // column renamed from params: spec PR1 commit 082166f0 — operators with existing rows: ALTER TABLE webhooks RENAME COLUMN params TO arguments;
+	Arguments     map[string]any `gorm:"serializer:json"` // column renamed from params: spec PR1 commit 082166f0
 	// DeliveryStatus flattened — kept queryable, ordering preserved with
 	// the events.DeliveryStatus struct definition.
 	//
 	// StatusThrottled + StatusRetryAfterMs added with spec PR1 commit
-	// 21be9c31 (deliveryStatus throttled + retryAfterMs). Operators
-	// migrating an existing webhooks table need ALTER TABLE webhooks
-	// ADD COLUMN status_throttled BOOLEAN NOT NULL DEFAULT FALSE,
-	// ADD COLUMN status_retry_after_ms BIGINT.
+	// 21be9c31 (deliveryStatus throttled + retryAfterMs).
 	StatusActive         bool `gorm:"not null"`
 	StatusLastDeliveryAt *time.Time
 	StatusLastError      string `gorm:"not null"`
