@@ -114,7 +114,13 @@ A server granting no-expiry accepts the spec's durability obligations:
 - verification status MUST be persisted alongside the subscription (a persisted sub resumes delivery without a re-subscribe handshake);
 - TTL expiry no longer GCs orphans — the server MAY drop after sustained delivery failure (failure-based GC) and SHOULD attempt a `terminated` envelope when it does.
 
-The library wires the in-process pieces: prune loop skips no-expiry targets, `WebhookStore` round-trips the nil `ExpiresAt` sentinel, and the response emits `refreshBefore: null`. The deployment-side durability of the store backend is the operator's choice. Failure-based GC + persisted verification status are tracked as follow-up work (issue 764).
+The library wires the in-process pieces: prune loop skips no-expiry targets, `WebhookStore` round-trips the nil `ExpiresAt` sentinel, and the response emits `refreshBefore: null`.
+
+**Failure-based GC.** Each delivery failure anchors a `FailingContinuouslySince` timestamp on the subscription (distinct from the existing `FailedSince` which is reset by the sliding suspend window — the GC anchor is **never** reset by quiet periods, only by a successful delivery). When a no-expiry subscription has been continuously failing for longer than `DefaultNoExpiryFailureGCWindow` (72 hours by default; tune via `WithNoExpiryFailureGCWindow(d time.Duration)`), the registry drops the subscription and POSTs a `terminated` envelope to the receiver as a courtesy notification. The drop fires through the same `PostTerminated` path as `events/unsubscribe` so on-remove hooks run and downstream stores release their per-subscription state. Finite-TTL subscriptions also accumulate `FailingContinuouslySince` for diagnostic purposes but are exempt from the GC trigger — their backstop remains TTL expiry.
+
+**Construction-time validation.** Calling `WithAllowInfiniteWebhookTTL()` without also passing `WithWebhookStore(persistent)` triggers a stark warning at registry construction. No-expiry subscriptions held in the default in-memory store violate the spec's "persist across restarts" obligation — the warning points operators at the GORM-backed implementation as the supported choice. Dev/test setups can ignore it; production deployments must replace the default store.
+
+**Persisted verification status** is the one remaining piece of the spec's no-expiry obligation list still pending — tracked under issue 490 (PostVerification rewrite covering all four verification paths). The current ext/events impl is verification-stub-only; once #490 lands, the stub becomes a real persisted field.
 
 ### Refresh loop
 
