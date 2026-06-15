@@ -16,7 +16,7 @@ func newTestTarget(keyByte byte) WebhookTarget {
 		ID:           "sub_test_" + string([]byte{keyByte}),
 		URL:          "http://example.test/sink",
 		Secret:       "whsec_test_secret_xxxxxxxxxxxxxxxxxxxx",
-		ExpiresAt:    time.Now().Add(time.Hour),
+		ExpiresAt:    ptrTime(time.Now().Add(time.Hour)),
 		EventName:    "test.event",
 		Status:       DeliveryStatus{Active: true},
 	}
@@ -34,7 +34,8 @@ func TestInMemoryWebhookStore_SaveThenGetRoundTrip(t *testing.T) {
 	assert.Equal(t, want.ID, resp.Target.ID)
 	assert.Equal(t, want.URL, resp.Target.URL)
 	assert.Equal(t, want.Secret, resp.Target.Secret)
-	assert.WithinDuration(t, want.ExpiresAt, resp.Target.ExpiresAt, time.Millisecond)
+	require.NotNil(t, resp.Target.ExpiresAt)
+	assert.WithinDuration(t, *want.ExpiresAt, *resp.Target.ExpiresAt, time.Millisecond)
 }
 
 func TestInMemoryWebhookStore_DeleteSemantics(t *testing.T) {

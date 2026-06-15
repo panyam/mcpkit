@@ -28,9 +28,12 @@ type webhookRow struct {
 	// Secret is stored as-is; the store relies on disk-level encryption
 	// rather than column-level encryption (pgcrypto is documented as
 	// future hardening in README.md).
-	Secret        string         `gorm:"not null"`
-	ExpiresAt     time.Time      `gorm:"not null"`
-	MaxAgeSeconds int            `gorm:"not null"`
+	Secret string `gorm:"not null"`
+	// ExpiresAt is nullable: NULL means no-expiry per spec PR1 commit
+	// 99f3589c §"Subscription TTL". The events package's
+	// WebhookTarget.ExpiresAt mirrors this with *time.Time.
+	ExpiresAt     *time.Time
+	MaxAgeSeconds int `gorm:"not null"`
 	EventName     string         `gorm:"not null;index:idx_webhooks_principal_event"`
 	Principal     string         `gorm:"not null;index:idx_webhooks_principal_event"`
 	Arguments     map[string]any `gorm:"serializer:json"` // column renamed from params: spec PR1 commit 082166f0

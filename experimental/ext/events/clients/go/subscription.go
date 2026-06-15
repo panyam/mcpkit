@@ -60,19 +60,49 @@ type SubscribeOptions struct {
 	// Zero means no floor (server defaults to "no maxAge"). Resolution is
 	// seconds; sub-second precision is dropped on the wire.
 	MaxAge time.Duration
+
+	// TTLMs is the client's suggested subscription lifetime in
+	// milliseconds (spec PR1 commit 99f3589c §"Subscription TTL").
+	// - nil: omit from the wire — server picks its default
+	// - non-nil: emit on the wire as a JSON number — server SHOULD
+	//   grant ≤ this value (with one exception: clamp UP to server min)
+	//
+	// To request a no-expiry subscription, leave TTLMs nil and set
+	// NoExpiry=true instead. The SDK emits `ttlMs: null` and reads
+	// `refreshBefore: null` from the response.
+	TTLMs *int64
+
+	// NoExpiry, when true, asks the server for a subscription that
+	// never expires (spec PR1 commit 99f3589c). The SDK emits
+	// `ttlMs: null` on the wire. If the server grants it
+	// (refreshBefore: null), the auto-refresh loop drops to an
+	// occasional health-check cadence rather than the
+	// refresh-before-expiry rhythm. If the server is unwilling to
+	// grant no-expiry (operator did not set WithAllowInfiniteWebhookTTL),
+	// the response carries a finite refreshBefore and the SDK
+	// transparently falls back to normal refresh behavior — no client
+	// re-work needed.
+	//
+	// Takes precedence over TTLMs: if both are set, TTLMs is ignored.
+	NoExpiry bool
 }
 
 // Subscription manages an events/subscribe lifecycle with automatic TTL
 // refresh. Construct via Subscribe; stop via Stop or by cancelling the
 // parent context.
 type Subscription struct {
-	mu            sync.RWMutex
-	sess          *client.Client
-	opts          SubscribeOptions
-	id            string
-	secret        string
-	cursor        *string
-	refreshBefore time.Time
+	mu     sync.RWMutex
+	sess   *client.Client
+	opts   SubscribeOptions
+	id     string
+	secret string
+	cursor *string
+	// refreshBefore is nil when the server granted a no-expiry
+	// subscription (spec PR1 commit 99f3589c — response carries
+	// `refreshBefore: null`). The refresh loop drops to an occasional
+	// health-check cadence in that case rather than the
+	// refresh-before-expiry rhythm.
+	refreshBefore *time.Time
 	stop          chan struct{}
 	stopped       chan struct{}
 }
@@ -148,10 +178,18 @@ func (s *Subscription) Cursor() *string {
 
 // RefreshBefore returns the timestamp by which the next refresh must
 // land. Refreshes are scheduled at RefreshFactor * (RefreshBefore - now).
-func (s *Subscription) RefreshBefore() time.Time {
+// Returns nil when the server granted a no-expiry subscription (spec PR1
+// commit 99f3589c) — there is no per-refresh deadline; the SDK refreshes
+// at the configured no-expiry cadence for cursor advancement +
+// deliveryStatus observation.
+func (s *Subscription) RefreshBefore() *time.Time {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.refreshBefore
+	if s.refreshBefore == nil {
+		return nil
+	}
+	t := *s.refreshBefore
+	return &t
 }
 
 // Stop ends the refresh loop. Does not unsubscribe — call sess.Call
@@ -196,6 +234,15 @@ func (s *Subscription) subscribe() error {
 	if len(s.opts.Arguments) > 0 {
 		params["arguments"] = s.opts.Arguments
 	}
+	// ttlMs wire emission (spec PR1 commit 99f3589c). NoExpiry wins
+	// over a numeric TTLMs because the spec's null path is more
+	// specific than any finite suggestion.
+	switch {
+	case s.opts.NoExpiry:
+		params["ttlMs"] = nil // explicit JSON null
+	case s.opts.TTLMs != nil:
+		params["ttlMs"] = *s.opts.TTLMs
+	}
 
 	resp, err := s.sess.Call("events/subscribe", params)
 	if err != nil {
@@ -203,19 +250,24 @@ func (s *Subscription) subscribe() error {
 	}
 
 	// Per spec the response no longer carries `secret` — the SDK
-	// already knows the value it supplied (s.opts.Secret).
+	// already knows the value it supplied (s.opts.Secret). RefreshBefore
+	// is *string because JSON `null` is the server's "no expiry" signal.
 	var result struct {
 		ID            string  `json:"id"`
 		Cursor        *string `json:"cursor"`
-		RefreshBefore string  `json:"refreshBefore"`
+		RefreshBefore *string `json:"refreshBefore"`
 	}
 	if err := unmarshalResult(resp.Raw, &result); err != nil {
 		return fmt.Errorf("decode subscribe response: %w", err)
 	}
 
-	rb, err := time.Parse(time.RFC3339, result.RefreshBefore)
-	if err != nil {
-		return fmt.Errorf("parse refreshBefore %q: %w", result.RefreshBefore, err)
+	var rb *time.Time
+	if result.RefreshBefore != nil {
+		parsed, err := time.Parse(time.RFC3339, *result.RefreshBefore)
+		if err != nil {
+			return fmt.Errorf("parse refreshBefore %q: %w", *result.RefreshBefore, err)
+		}
+		rb = &parsed
 	}
 
 	s.mu.Lock()
@@ -272,13 +324,26 @@ func (s *Subscription) refreshLoop(parent context.Context) {
 	}
 }
 
+// noExpiryRefreshCadence is the SDK's default re-subscribe interval
+// when the server granted a no-expiry subscription. The spec (PR1
+// commit 99f3589c) says: "Even with no expiry, clients SHOULD still
+// re-call events/subscribe occasionally" for cursor advancement,
+// deliveryStatus observation, and reactivation. One hour matches the
+// finite default TTL ceiling, so a noop-refresh of a no-expiry sub
+// does not stand out from a finite-TTL refresh in operator metrics.
+const noExpiryRefreshCadence = 1 * time.Hour
+
 // nextRefreshDelay returns how long to wait before the next refresh.
-// Bounded by [1s, RefreshFactor * (RefreshBefore - now)].
+// For finite grants: bounded by [1s, RefreshFactor * (RefreshBefore - now)].
+// For no-expiry grants (refreshBefore nil): fixed at noExpiryRefreshCadence.
 func (s *Subscription) nextRefreshDelay() time.Duration {
 	s.mu.RLock()
 	rb := s.refreshBefore
 	s.mu.RUnlock()
-	remaining := time.Until(rb)
+	if rb == nil {
+		return noExpiryRefreshCadence
+	}
+	remaining := time.Until(*rb)
 	if remaining <= 0 {
 		return 1 * time.Second
 	}

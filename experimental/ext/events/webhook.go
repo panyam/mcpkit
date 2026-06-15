@@ -154,6 +154,114 @@ func WithUnsafeWebhookTTLBypass() WebhookOption {
 	}
 }
 
+// WithAllowInfiniteWebhookTTL gates the events/subscribe handler's
+// acceptance of `ttlMs: null` requests. Per spec PR1 commit 99f3589c
+// §"Subscription TTL": a client suggesting `ttlMs: null` is asking for
+// a no-expiry subscription, and the server's grant of `refreshBefore:
+// null` is the acceptance signal. Default is OFF — handlers translate
+// `ttlMs: null` into the server's default TTL grant ("A server
+// unwilling to grant it simply returns a finite refreshBefore, which
+// the client treats like any other grant").
+//
+// A server opting in accepts the spec's durability obligations:
+//
+//   - the client is not expected to refresh or unsubscribe, ever — the
+//     server keeps the subscription alive
+//   - subscriptions MUST persist across server restarts (no refresh
+//     cycle to recover them otherwise)
+//   - persisted verification status MUST travel with the subscription
+//     (no later handshake to re-verify the endpoint)
+//   - TTL expiry no longer garbage-collects orphans — the server MAY
+//     drop after sustained delivery failure (failure-based GC) and
+//     SHOULD attempt a `terminated` envelope when it does
+//
+// mcpkit's library wires up the in-process side (prune loop skips
+// no-expiry, the WebhookStore seam preserves them, and the response
+// emits `refreshBefore: null`); the deployment-side durability of the
+// store backend, the failure-based GC, and the persisted-verification
+// pieces are operator obligations the option signals consent to. The
+// failure-based GC + verification persistence are tracked under
+// follow-up issue 764.
+func WithAllowInfiniteWebhookTTL() WebhookOption {
+	return func(r *WebhookRegistry) {
+		r.allowInfiniteWebhookTTL = true
+	}
+}
+
+// AllowsInfiniteWebhookTTL reports whether the registry has been opted
+// into accepting `ttlMs: null` requests via WithAllowInfiniteWebhookTTL.
+// The events/subscribe handler reads this to gate its acceptance path;
+// callers using the registry directly do not need to consult it
+// (RegisterParams.NoExpiry bypasses the policy gate by construction —
+// hand-built callers are presumed to know what they're doing).
+func (r *WebhookRegistry) AllowsInfiniteWebhookTTL() bool {
+	return r.allowInfiniteWebhookTTL
+}
+
+// NegotiateExpiry computes the granted ExpiresAt from a client-supplied
+// ttlMs suggestion per spec PR1 commit 99f3589c §"Subscription TTL".
+// Returns (noExpiry=true, expiresAt=nil) when the client suggested
+// `ttlMs: null` AND the registry was opted into infinite TTL via
+// WithAllowInfiniteWebhookTTL. Otherwise returns (false, finite time)
+// — absent / null-without-opt-in / numeric all collapse to a finite
+// grant under the registry's clamp envelope.
+//
+// Per spec there is no rejection path for TTL values: clamping is
+// self-announcing on the wire. A negative or unparseable ttlMs is
+// treated identically to "absent" — the server picks its default.
+//
+// The clamp envelope is [MinWebhookTTL, MaxWebhookTTL], with the same
+// WithUnsafeWebhookTTLBypass escape that disables the registry-default
+// clamp at construction (so tests/demos that legitimately need
+// sub-minimum TTLs can request them via ttlMs without the floor
+// silently kicking in).
+//
+// rawTTLMs is the un-decoded `ttlMs` field from the events/subscribe
+// request body. The handler passes it through as json.RawMessage to
+// preserve the absent/null/value tristate that Go's *int64 collapses.
+func (r *WebhookRegistry) NegotiateExpiry(rawTTLMs json.RawMessage) (noExpiry bool, expiresAt *time.Time) {
+	// Absent → server default
+	if len(rawTTLMs) == 0 {
+		t := time.Now().Add(r.ttl)
+		return false, &t
+	}
+
+	trimmed := bytes.TrimSpace(rawTTLMs)
+
+	// Explicit null → client requests no-expiry
+	if bytes.Equal(trimmed, []byte("null")) {
+		if r.allowInfiniteWebhookTTL {
+			return true, nil
+		}
+		// Server unwilling to grant no-expiry → finite default. Spec:
+		// "A server unwilling to grant it simply returns a finite
+		// refreshBefore, which the client treats like any other grant."
+		t := time.Now().Add(r.ttl)
+		return false, &t
+	}
+
+	// Numeric ms — parse and clamp
+	var ms int64
+	if err := json.Unmarshal(trimmed, &ms); err != nil || ms < 0 {
+		t := time.Now().Add(r.ttl)
+		return false, &t
+	}
+	requested := time.Duration(ms) * time.Millisecond
+
+	// Apply envelope clamp unless bypass is active (matches the
+	// registry-default clamp policy at construction time).
+	if !r.ttlClampBypass {
+		if requested < MinWebhookTTL {
+			requested = MinWebhookTTL // clamp UP — spec's "one sanctioned exception"
+		}
+		if requested > MaxWebhookTTL {
+			requested = MaxWebhookTTL // clamp DOWN — server choice, ≤ suggestion
+		}
+	}
+	t := time.Now().Add(requested)
+	return false, &t
+}
+
 // WithWebhookHeaderMode selects the header / signature wire format used for
 // outbound deliveries. Defaults to StandardWebhooks (per upstream WG PR#1
 // line 434, comment r3167245184). See WebhookHeaderMode for the available
@@ -300,12 +408,17 @@ func WithWebhookTracerProvider(tp core.TracerProvider) WebhookOption {
 // bytes. Redundant with CanonicalKey; cheap to store, and the
 // registry already owns the only writer.
 type WebhookTarget struct {
-	CanonicalKey  []byte    // canonical bytes of (principal, url, name, arguments)
-	ID            string    // server-derived routing handle (sub_<base64-of-16-bytes>)
-	URL           string    // delivery callback URL
-	Secret        string    // client-supplied HMAC signing secret (whsec_...)
-	ExpiresAt     time.Time // soft-state TTL expiry
-	MaxAgeSeconds int       // per-spec replay floor (§"Cursor Lifecycle" L529); 0 = no floor
+	CanonicalKey []byte // canonical bytes of (principal, url, name, arguments)
+	ID           string // server-derived routing handle (sub_<base64-of-16-bytes>)
+	URL          string // delivery callback URL
+	Secret       string // client-supplied HMAC signing secret (whsec_...)
+	// ExpiresAt is the soft-state TTL expiry. nil means no expiry — the
+	// subscription persists until events/unsubscribe or server-initiated
+	// termination per spec PR1 commit 99f3589c §"Subscription TTL". The
+	// prune loop and DeliverToTarget MUST guard the nil case; a missing
+	// guard would silently drop no-expiry subs on the first sweep.
+	ExpiresAt     *time.Time
+	MaxAgeSeconds int // per-spec replay floor (§"Cursor Lifecycle" L529); 0 = no floor
 
 	EventName string         // event-type name (used by Match / Transform / OnRemove lookup)
 	Principal string         // resolved subscription principal (used by HookContext)
@@ -408,11 +521,12 @@ const (
 type WebhookRegistry struct {
 	mu                   sync.RWMutex
 	store                WebhookStore // canonicalKey → WebhookTarget; default in-memory
-	client               *http.Client
-	ttl                  time.Duration
-	ttlExplicit          bool // operator passed WithWebhookTTL (drives clamp decision)
-	ttlClampBypass       bool // WithUnsafeWebhookTTLBypass — disables clamp
-	headerMode           WebhookHeaderMode
+	client                  *http.Client
+	ttl                     time.Duration
+	ttlExplicit             bool // operator passed WithWebhookTTL (drives clamp decision)
+	ttlClampBypass          bool // WithUnsafeWebhookTTLBypass — disables clamp
+	allowInfiniteWebhookTTL bool // WithAllowInfiniteWebhookTTL — gates ttlMs:null acceptance in events/subscribe handler (spec PR1 commit 99f3589c §"Subscription TTL")
+	headerMode              WebhookHeaderMode
 	allowPrivateNetworks bool          // when false (default), Dialer.Control rejects private/loopback IPs (spec §"Webhook Security" → "SSRF prevention" L464)
 	extraHeaders         map[string]string // caller-supplied headers (WithWebhookExtraHeaders); applied BEFORE signature/MCP/trace headers so spec-mandated keys always win
 	maxBodyBytes         int           // outbound POST body cap (spec §"Webhook Security" → "Delivery profile" L487); default 256 KiB
@@ -697,6 +811,27 @@ type RegisterParams struct {
 	// WebhookTarget for the longer rationale (issue 709).
 	Subject   string
 	SessionID string
+
+	// NoExpiry, when true, registers the subscription with no TTL
+	// backstop. WebhookTarget.ExpiresAt becomes nil, the prune loop
+	// skips it, and the events/subscribe handler emits
+	// refreshBefore: null on the response. Spec PR1 commit 99f3589c
+	// §"Subscription TTL": this maps to a `ttlMs: null` client
+	// suggestion that the server has chosen to grant.
+	//
+	// Callers using the registry directly (tests, low-level hand-built
+	// integrations) can set this freely; the events/subscribe handler
+	// gates the path behind WithAllowInfiniteWebhookTTL() because
+	// granting no-expiry shifts durability obligations onto the server.
+	NoExpiry bool
+
+	// ExpiresAtOverride, when non-nil and NoExpiry is false, overrides
+	// the registry's r.ttl-based computation. The events/subscribe
+	// handler uses this to inject a per-request TTL derived from the
+	// client's ttlMs suggestion (clamped to the registry's envelope).
+	// Nil + NoExpiry false reverts to the registry's default — preserves
+	// the pre-#760 behavior for unchanged callers.
+	ExpiresAtOverride *time.Time
 }
 
 // Register adds or refreshes a webhook subscription keyed on the spec's
@@ -704,7 +839,10 @@ type RegisterParams struct {
 // Two calls with the same CanonicalKey refer to the same subscription
 // — second call refreshes TTL + replaces secret.
 //
-// Returns (expiresAt, isNew). isNew is true on first registration
+// Returns (expiresAt, isNew). expiresAt is nil when the registration
+// is no-expiry (RegisterParams.NoExpiry true) — the caller's response
+// emitter then sends `refreshBefore: null` per spec PR1 commit
+// 99f3589c §"Subscription TTL". isNew is true on first registration
 // (caller fires safeOnSubscribe per spec §"Server SDK Guidance" L691)
 // and false on refresh — refresh ≠ subscribe, so on_subscribe MUST
 // NOT re-fire. Caller resolves the distinction; the registry just
@@ -727,15 +865,30 @@ type RegisterParams struct {
 // target fires the onRemove hooks — TTL expiry counts as an
 // unsubscribe (spec §"Server SDK Guidance" → "Unsubscribe timing by
 // mode" L707).
-func (r *WebhookRegistry) Register(p RegisterParams) (expiresAt time.Time, isNew bool) {
+func (r *WebhookRegistry) Register(p RegisterParams) (expiresAt *time.Time, isNew bool) {
 	r.mu.Lock()
 	pruned := r.pruneExpiredLocked()
-	expiresAt = time.Now().Add(r.ttl)
+	// Negotiated expiry per spec PR1 commit 99f3589c §"Subscription
+	// TTL". Precedence: NoExpiry > ExpiresAtOverride > registry default.
+	switch {
+	case p.NoExpiry:
+		expiresAt = nil
+	case p.ExpiresAtOverride != nil:
+		expiresAt = p.ExpiresAtOverride
+	default:
+		fallback := time.Now().Add(r.ttl)
+		expiresAt = &fallback
+	}
 	getResp, _ := r.store.GetWebhook(context.Background(), GetWebhookRequest{CanonicalKey: p.CanonicalKey})
 	if getResp.Found {
 		existing := getResp.Target
 		// Refresh: update expiry and secret if provided. Secret rotation
-		// per spec is allowed by supplying a new value on refresh.
+		// per spec is allowed by supplying a new value on refresh. The
+		// new ExpiresAt replaces the prior value verbatim — a refresh
+		// converting finite → no-expiry (or vice versa) is what spec
+		// PR1 commit 99f3589c's Table allows ("a client can lengthen
+		// or shorten its refresh cadence, or convert a no-expiry
+		// subscription back to a finite one").
 		existing.ExpiresAt = expiresAt
 		if p.Secret != "" {
 			existing.Secret = p.Secret
@@ -824,7 +977,12 @@ func (r *WebhookRegistry) Targets() []WebhookTarget {
 	listResp, _ := r.store.ListWebhooks(context.Background(), ListWebhooksRequest{})
 	out := make([]WebhookTarget, 0, len(listResp.Targets))
 	for _, t := range listResp.Targets {
-		if t.ExpiresAt.After(now) && t.Status.Active {
+		if !t.Status.Active {
+			continue
+		}
+		// nil ExpiresAt = no-expiry, always live. Finite must be in
+		// the future.
+		if t.ExpiresAt == nil || t.ExpiresAt.After(now) {
 			out = append(out, t)
 		}
 	}
@@ -858,7 +1016,15 @@ func (r *WebhookRegistry) pruneExpiredLocked() []WebhookTarget {
 	listResp, _ := r.store.ListWebhooks(ctx, ListWebhooksRequest{})
 	var removed []WebhookTarget
 	for _, t := range listResp.Targets {
-		if t.ExpiresAt.After(now) || t.ExpiresAt.Equal(now) {
+		// No-expiry targets have nil ExpiresAt — they are explicitly
+		// exempted from TTL-based GC per spec PR1 commit 99f3589c
+		// §"Subscription TTL": "TTL expiry no longer garbage-collects
+		// orphans or dead endpoints." Their cleanup is failure-based
+		// GC, tracked under follow-up issue 764.
+		if t.ExpiresAt == nil {
+			continue
+		}
+		if (*t.ExpiresAt).After(now) || (*t.ExpiresAt).Equal(now) {
 			continue
 		}
 		delResp, _ := r.store.DeleteWebhook(ctx, DeleteWebhookRequest{CanonicalKey: t.CanonicalKey})
@@ -893,7 +1059,13 @@ func (r *WebhookRegistry) DeliverToTarget(ctx context.Context, canonicalKey []by
 		return false
 	}
 	target := resp.Target
-	if !target.Status.Active || time.Now().After(target.ExpiresAt) {
+	if !target.Status.Active {
+		return false
+	}
+	// nil ExpiresAt = no-expiry subscription, always live (spec PR1
+	// commit 99f3589c §"Subscription TTL"). Only finite expiry can
+	// disqualify a target from delivery.
+	if target.ExpiresAt != nil && time.Now().After(*target.ExpiresAt) {
 		return false
 	}
 
@@ -913,6 +1085,11 @@ func (r *WebhookRegistry) DeliverToTarget(ctx context.Context, canonicalKey []by
 }
 
 // ExpireAll forcibly expires all subscriptions (test helper).
+//
+// No-expiry targets (ExpiresAt nil) are stamped with a past time so
+// they're swept too — the spec's "TTL expiry no longer GCs" exemption
+// is a runtime-prune contract, not a "tests can't force a clean state"
+// rule. Tests calling this expect a real clean slate.
 func (r *WebhookRegistry) ExpireAll() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -920,7 +1097,7 @@ func (r *WebhookRegistry) ExpireAll() {
 	ctx := context.Background()
 	listResp, _ := r.store.ListWebhooks(ctx, ListWebhooksRequest{})
 	for _, t := range listResp.Targets {
-		t.ExpiresAt = past
+		t.ExpiresAt = &past
 		_, _ = r.store.SaveWebhook(ctx, SaveWebhookRequest{Target: t})
 	}
 }

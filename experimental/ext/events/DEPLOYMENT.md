@@ -94,22 +94,42 @@ Worst-case wall clock for a fully-failing delivery: roughly `5s + 0.5s + 5s + 1s
 - Returning **HTTP 4xx** stops retries. Use 4xx for "I will never accept this" (bad signature, malformed payload). Use 5xx for "try again" (transient infrastructure issue).
 - Returning **HTTP 2xx fast** matters more than the body — the body is ignored. A WAF that buffers responses can hold up the delivery loop briefly but won't cause re-delivery if the upstream returned 2xx.
 
-## TTL refresh as keepalive
+## TTL negotiation and refresh
 
-Webhook subscriptions are soft state. The default TTL is 1 hour, clamped to the spec envelope **[5 min, 24 h]** at `WithWebhookTTL` registration time (out-of-envelope values are clamped and logged). Tests and demos that need sub-minimum TTLs to drive SDK refresh behavior pass `WithUnsafeWebhookTTLBypass` — production deployments MUST NOT use the bypass. Subscribers MUST re-subscribe before the TTL expires or the registry evicts them and deliveries stop.
+Per spec PR1 commit `99f3589c` §"Subscription TTL", the wire shape is a client-suggested TTL the server grants or clamps:
 
-The shipped client SDKs handle this automatically:
+- Request: `ttlMs` is optional and tristate. Absent → server picks. Numeric → suggested ms. Explicit `null` → request no-expiry.
+- Response: `refreshBefore` is always present and nullable. An ISO 8601 string is a finite grant; JSON `null` is a no-expiry grant.
 
-- **Go** (`experimental/ext/events/clients/go`): `Subscription` runs a background loop that re-calls `events/subscribe` at `RefreshFactor × TTL` (default 0.5).
-- **Python** (`experimental/ext/events/clients/python/events_client.py`): `WebhookSubscription` does the same.
+mcpkit's default TTL is 1 hour, clamped to the spec envelope **[5 min, 24 h]** at `WithWebhookTTL` registration time. Client suggestions outside the envelope are clamped UP to the floor (the spec's "one sanctioned exception") or DOWN to the ceiling. Tests and demos that need sub-minimum TTLs to drive SDK refresh behavior pass `WithUnsafeWebhookTTLBypass` — production deployments MUST NOT use the bypass. Per spec there is no rejection path for TTL values: clamping is self-announcing on the wire, so a client reading the granted `refreshBefore` just learns what was actually granted.
 
-Both helpers handle the boundary race: if a refresh hits the registry just after the TTL expired (subscription not found), they immediately re-subscribe and fire the `OnRecover` callback.
+### No-expiry subscriptions
+
+`WithAllowInfiniteWebhookTTL()` opts the registry into accepting `ttlMs: null` requests and returning `refreshBefore: null`. Default is OFF — without the option, `ttlMs: null` collapses to the server-default finite grant, which the client treats like any other finite refresh-before.
+
+A server granting no-expiry accepts the spec's durability obligations:
+
+- subscriptions persist until `events/unsubscribe` or server-initiated termination;
+- subscriptions MUST persist across restarts (no refresh cycle to recover them otherwise — use a durable `WebhookStore` backend like Postgres);
+- verification status MUST be persisted alongside the subscription (a persisted sub resumes delivery without a re-subscribe handshake);
+- TTL expiry no longer GCs orphans — the server MAY drop after sustained delivery failure (failure-based GC) and SHOULD attempt a `terminated` envelope when it does.
+
+The library wires the in-process pieces: prune loop skips no-expiry targets, `WebhookStore` round-trips the nil `ExpiresAt` sentinel, and the response emits `refreshBefore: null`. The deployment-side durability of the store backend is the operator's choice. Failure-based GC + persisted verification status are tracked as follow-up work (issue 764).
+
+### Refresh loop
+
+The shipped client SDKs handle TTL refresh automatically:
+
+- **Go** (`experimental/ext/events/clients/go`): `Subscription` runs a background loop that re-calls `events/subscribe` at `RefreshFactor × (refreshBefore - now)` (default factor 0.5). For no-expiry grants the loop drops to a 1-hour health-check cadence (per spec: "Even with no expiry, clients SHOULD still re-call events/subscribe occasionally" for cursor advancement, `deliveryStatus` observation, and reactivation).
+- **Python** (`experimental/ext/events/clients/python/events_client.py`): `WebhookSubscription` does the same finite-TTL refresh; no-expiry support is pending.
+
+Both Go helpers handle the boundary race: if a refresh hits the registry just after the TTL expired (subscription not found), they immediately re-subscribe and fire the `OnRecover` callback.
 
 **Operational implications:**
 
 - The refresh traffic is `events/subscribe` calls on the MCP wire, **not** webhook traffic. Stateful firewalls between the subscriber and the MCP server need to allow that.
-- If the network between the subscriber and the MCP server flaps, the refresh won't land and the registry will GC the subscription. A new `events/subscribe` once connectivity returns is the recovery path; expect a small gap in deliveries.
-- Sizing: 60 s default TTL × 0.5 refresh factor = one refresh call per subscription per 30 s. With 10K active subscriptions this is ~333 r/s of subscribe traffic — small but not zero.
+- If the network between the subscriber and the MCP server flaps, the refresh won't land and (for finite-TTL subs) the registry will GC the subscription. A new `events/subscribe` once connectivity returns is the recovery path; expect a small gap in deliveries. No-expiry subscriptions survive the flap because the registry doesn't GC them on TTL.
+- Sizing: 1 hour default TTL × 0.5 refresh factor = one refresh call per subscription per 30 min. No-expiry subscriptions drop to one health-check per hour. With 10K active finite subscriptions this is ~5 r/s of subscribe traffic; with 10K no-expiry subs it's ~3 r/s.
 
 ## Webhook secret considerations
 

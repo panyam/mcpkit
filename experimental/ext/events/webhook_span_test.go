@@ -213,7 +213,7 @@ func registerTestTarget(t *testing.T, wh *WebhookRegistry, receiverURL string) {
 		EventName: "fake.event",
 		URL:       receiverURL,
 		Secret:    generateSecret(),
-		ExpiresAt: time.Now().Add(time.Hour),
+		ExpiresAt: ptrTime(time.Now().Add(time.Hour)),
 		Status:    DeliveryStatus{Active: true},
 	}
 	target.CanonicalKey = canonicalKey("test-principal", receiverURL, "fake.event", nil)
