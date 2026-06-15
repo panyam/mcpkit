@@ -82,3 +82,4 @@ examples/apps/compat/*/.test-results/
 # apps/compat docker-mode cross-compiled fixture binaries — host-side
 # scratch only, the docker run mounts them into the container.
 .tmp-fixture-linux-amd64-*
+/discord_tracking
