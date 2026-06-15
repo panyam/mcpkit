@@ -27,7 +27,7 @@ import (
 //
 // The cursorless typing source is registered alongside discord.message so
 // cursor-shape tests can exercise both modes against the same server.
-func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.YieldingSource[DiscordEventData], func(DiscordEventData) error, *events.WebhookRegistry) {
+func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.YieldingSource[DiscordEventData], func(context.Context, DiscordEventData) error, *events.WebhookRegistry) {
 	// Tests subscribe to httptest URLs (127.0.0.1:N); bypass the
 	// production-default SSRF dial guard (spec §"Webhook Security"
 	// → "SSRF prevention" L464).
@@ -54,7 +54,7 @@ func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.Yie
 
 // buildTestStackWithTyping returns the same wired server but exposes the
 // cursorless typing yield function too. Used by the cursorless e2e tests.
-func buildTestStackWithTyping(whOpts ...events.WebhookOption) (*server.Server, func(DiscordEventData) error, func(DiscordTypingData) error, *events.WebhookRegistry) {
+func buildTestStackWithTyping(whOpts ...events.WebhookOption) (*server.Server, func(context.Context, DiscordEventData) error, func(context.Context, DiscordTypingData) error, *events.WebhookRegistry) {
 	// Tests subscribe to httptest URLs (127.0.0.1:N); bypass the
 	// production-default SSRF dial guard (spec §"Webhook Security"
 	// → "SSRF prevention" L464).
@@ -106,8 +106,8 @@ func TestE2EPollDelivery(t *testing.T) {
 	srv, _, yield, _ := buildTestStack()
 	c, _ := connectClient(t, srv)
 
-	require.NoError(t, yield(newDiscordEvent("guild-1", "channel-1", "alice", "hello", time.Now())))
-	require.NoError(t, yield(newDiscordEvent("guild-1", "channel-1", "bob", "world", time.Now())))
+	require.NoError(t, yield(context.Background(), newDiscordEvent("guild-1", "channel-1", "alice", "hello", time.Now())))
+	require.NoError(t, yield(context.Background(), newDiscordEvent("guild-1", "channel-1", "bob", "world", time.Now())))
 
 	// Flat events/poll request shape per spec §"Poll-Based Delivery"
 	// → "Request: events/poll" L139-149.
@@ -157,7 +157,7 @@ func TestE2EStreamDelivery(t *testing.T) {
 	require.NoError(t, err, "Stream open should succeed against the discord demo stack")
 	defer stream.Stop()
 
-	require.NoError(t, yield(newDiscordEvent("g1", "c1", "alice", "stream-test", time.Now())))
+	require.NoError(t, yield(context.Background(), newDiscordEvent("g1", "c1", "alice", "stream-test", time.Now())))
 
 	select {
 	case ev := <-got:
@@ -291,7 +291,7 @@ func TestE2EStreamCursorless(t *testing.T) {
 	require.NoError(t, err)
 	defer stream.Stop()
 
-	require.NoError(t, yieldTyping(DiscordTypingData{
+	require.NoError(t, yieldTyping(context.Background(), DiscordTypingData{
 		GuildID: "g", ChannelID: "c", User: "alice",
 		StartedAt: time.Now().Format(time.RFC3339),
 	}))
@@ -330,7 +330,7 @@ func TestE2EPushDelivery(t *testing.T) {
 	defer c.Close()
 
 	time.Sleep(200 * time.Millisecond)
-	require.NoError(t, yield(newDiscordEvent("g", "c", "alice", "push test", time.Now())))
+	require.NoError(t, yield(context.Background(), newDiscordEvent("g", "c", "alice", "push test", time.Now())))
 	time.Sleep(500 * time.Millisecond)
 
 	mu.Lock()
@@ -394,7 +394,7 @@ func TestE2EWebhookDelivery(t *testing.T) {
 	assignedSecret = clientSecret
 	mu.Unlock()
 
-	require.NoError(t, yield(newDiscordEvent("g", "c", "bob", "webhook test", time.Now())))
+	require.NoError(t, yield(context.Background(), newDiscordEvent("g", "c", "bob", "webhook test", time.Now())))
 	time.Sleep(500 * time.Millisecond)
 
 	mu.Lock()
@@ -447,7 +447,7 @@ func TestE2EResourceRead(t *testing.T) {
 	srv, _, yield, _ := buildTestStack()
 	c, _ := connectClient(t, srv)
 
-	require.NoError(t, yield(newDiscordEvent("g", "c", "alice", "resource test", time.Now())))
+	require.NoError(t, yield(context.Background(), newDiscordEvent("g", "c", "alice", "resource test", time.Now())))
 
 	text, err := c.ReadResource("discord://messages/recent")
 	require.NoError(t, err)
@@ -506,7 +506,7 @@ func TestE2EWebhookDelivery_StandardHeaders(t *testing.T) {
 	assignedSecret = clientSecret
 	mu.Unlock()
 
-	require.NoError(t, yield(newDiscordEvent("g", "c", "alice", "standard-headers test", time.Now())))
+	require.NoError(t, yield(context.Background(), newDiscordEvent("g", "c", "alice", "standard-headers test", time.Now())))
 	time.Sleep(500 * time.Millisecond)
 
 	mu.Lock()
@@ -559,7 +559,7 @@ func TestE2EWebhookDelivery_MCPHeadersOptIn(t *testing.T) {
 	assignedSecret = clientSecret
 	mu.Unlock()
 
-	require.NoError(t, yield(newDiscordEvent("g", "c", "alice", "mcp-headers test", time.Now())))
+	require.NoError(t, yield(context.Background(), newDiscordEvent("g", "c", "alice", "mcp-headers test", time.Now())))
 	time.Sleep(500 * time.Millisecond)
 
 	mu.Lock()
@@ -599,7 +599,7 @@ func TestE2ECursorlessPushDelivery(t *testing.T) {
 	defer c.Close()
 
 	time.Sleep(200 * time.Millisecond)
-	require.NoError(t, yieldTyping(newDiscordTypingEvent("g", "c", "alice", time.Now())))
+	require.NoError(t, yieldTyping(context.Background(), newDiscordTypingEvent("g", "c", "alice", time.Now())))
 	time.Sleep(500 * time.Millisecond)
 
 	mu.Lock()
@@ -651,7 +651,7 @@ func TestE2ECursorlessWebhookDelivery(t *testing.T) {
 	mu.Unlock()
 	_ = assignedSecret
 
-	require.NoError(t, yieldTyping(newDiscordTypingEvent("g", "c", "alice", time.Now())))
+	require.NoError(t, yieldTyping(context.Background(), newDiscordTypingEvent("g", "c", "alice", time.Now())))
 	time.Sleep(500 * time.Millisecond)
 
 	mu.Lock()
@@ -670,7 +670,7 @@ func TestE2ECursorlessPollAlwaysEmpty(t *testing.T) {
 	c, _ := connectClient(t, srv)
 
 	for i := 0; i < 3; i++ {
-		require.NoError(t, yieldTyping(newDiscordTypingEvent("g", "c", "alice", time.Now())))
+		require.NoError(t, yieldTyping(context.Background(), newDiscordTypingEvent("g", "c", "alice", time.Now())))
 	}
 
 	result, err := c.Call("events/poll", map[string]any{
@@ -693,8 +693,8 @@ func TestE2ESubscribeCursorNullOnCursoredSourceReturnsLatest(t *testing.T) {
 	srv, source, yield, _ := buildTestStack()
 	c, _ := connectClient(t, srv)
 
-	require.NoError(t, yield(newDiscordEvent("g", "c", "a", "first", time.Now())))
-	require.NoError(t, yield(newDiscordEvent("g", "c", "b", "second", time.Now())))
+	require.NoError(t, yield(context.Background(), newDiscordEvent("g", "c", "a", "first", time.Now())))
+	require.NoError(t, yield(context.Background(), newDiscordEvent("g", "c", "b", "second", time.Now())))
 	expected := source.Latest()
 	require.NotEmpty(t, expected, "precondition: source has a head cursor")
 
@@ -744,8 +744,8 @@ func TestE2EResourceByCursor(t *testing.T) {
 	srv, _, yield, _ := buildTestStack()
 	c, _ := connectClient(t, srv)
 
-	require.NoError(t, yield(newDiscordEvent("g", "c", "alice", "first", time.Now())))
-	require.NoError(t, yield(newDiscordEvent("g", "c", "bob", "second", time.Now())))
+	require.NoError(t, yield(context.Background(), newDiscordEvent("g", "c", "alice", "first", time.Now())))
+	require.NoError(t, yield(context.Background(), newDiscordEvent("g", "c", "bob", "second", time.Now())))
 
 	// Cursors are assigned monotonically by NewMemoryStore — first event = "1".
 	text, err := c.ReadResource("discord://message/1")

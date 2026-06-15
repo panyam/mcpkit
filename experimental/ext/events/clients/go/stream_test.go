@@ -18,7 +18,7 @@ import (
 // streamStack is a stream-test variant of stack() that lets the test set
 // the server-side StreamHeartbeatInterval (so tests can observe heartbeats
 // quickly without waiting 30s).
-func streamStack(t *testing.T, heartbeat time.Duration) (*client.Client, func(fakePayload) error) {
+func streamStack(t *testing.T, heartbeat time.Duration) (*client.Client, func(context.Context, fakePayload) error) {
 	t.Helper()
 	src, yield := events.NewYieldingSource[fakePayload](events.EventDef{
 		Name:        "fake.event",
@@ -69,7 +69,7 @@ func TestStream_DeliversEventsViaCallback(t *testing.T) {
 	require.NoError(t, err)
 	defer stream.Stop()
 
-	require.NoError(t, yield(fakePayload{Msg: "alpha"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "alpha"}))
 
 	select {
 	case ev := <-got:
