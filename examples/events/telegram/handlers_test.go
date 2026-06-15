@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -25,10 +26,10 @@ import (
 
 // preloadedSource constructs a YieldingSource pre-populated with n test
 // messages — the test fixture replacement for the old newTestStore helper.
-func preloadedSource(n int) (*events.YieldingSource[TelegramEventData], func(TelegramEventData) error) {
+func preloadedSource(n int) (*events.YieldingSource[TelegramEventData], func(context.Context, TelegramEventData) error) {
 	source, yield := newTelegramSource()
 	for i := 1; i <= n; i++ {
-		_ = yield(TelegramEventData{
+		_ = yield(context.Background(), TelegramEventData{
 			ChatID:    "100",
 			MessageID: strconv.Itoa(i),
 			User:      "testuser",
@@ -219,7 +220,7 @@ func TestWebhookHMACSignature_MCPHeaders(t *testing.T) {
 
 	event := events.MakeEvent("telegram.message", "evt_1", "1", time.Now(),
 		map[string]string{"text": "hello"})
-	webhooks.Deliver(event)
+	webhooks.Deliver(context.Background(), event)
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -356,7 +357,7 @@ func TestWebhookRetryOnServerError(t *testing.T) {
 
 	event := events.MakeEvent("telegram.message", "evt_retry", "1", time.Now(),
 		map[string]string{"text": "retry me"})
-	webhooks.Deliver(event)
+	webhooks.Deliver(context.Background(), event)
 
 	time.Sleep(3 * time.Second)
 
@@ -384,7 +385,7 @@ func TestWebhookNoRetryOn4xx(t *testing.T) {
 
 	event := events.MakeEvent("telegram.message", "evt_4xx", "1", time.Now(),
 		map[string]string{"text": "no retry"})
-	webhooks.Deliver(event)
+	webhooks.Deliver(context.Background(), event)
 
 	time.Sleep(500 * time.Millisecond)
 
