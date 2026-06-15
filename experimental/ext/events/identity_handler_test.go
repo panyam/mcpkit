@@ -30,12 +30,19 @@ import (
 //   - "" → strict (§"Subscription Identity" → "Authentication required" L361)
 //   - non-empty → escape hatch (events.Config.UnsafeAnonymousPrincipal docs)
 func buildAuthGateStack(t *testing.T, unsafeAnon string) (*server.Server, *WebhookRegistry) {
+	return buildAuthGateStackWithOpts(t, unsafeAnon)
+}
+
+// buildAuthGateStackWithOpts variant lets a test pass extra WebhookOptions
+// (e.g., WithAllowInfiniteWebhookTTL for ttlMs negotiation tests).
+// SSRF private-network allowance is forced on regardless — every test
+// here subscribes to httptest URLs (127.0.0.1:N) and would fail the
+// production dial guard otherwise.
+func buildAuthGateStackWithOpts(t *testing.T, unsafeAnon string, extra ...WebhookOption) (*server.Server, *WebhookRegistry) {
 	t.Helper()
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
-	// Tests subscribe to httptest URLs (127.0.0.1:N) — bypass the
-	// production-default SSRF dial guard (spec §"Webhook Security"
-	// → "SSRF prevention" L464).
-	webhooks := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true))
+	opts := append([]WebhookOption{WithWebhookAllowPrivateNetworks(true)}, extra...)
+	webhooks := NewWebhookRegistry(opts...)
 	Register(Config{
 		Sources:                  []EventSource{fakeSecretValidationSource{}},
 		Webhooks:                 webhooks,

@@ -755,6 +755,18 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 			} `json:"delivery"`
 			Cursor *string `json:"cursor"`
 			MaxAge int     `json:"maxAge,omitempty"` // spec §"Cursor Lifecycle" L529; seconds, 0 = no floor
+			// TTLMs is the client's suggested subscription lifetime
+			// (spec PR1 commit 99f3589c §"Subscription TTL"). Tristate:
+			// absent (server default), `null` (request no-expiry), or
+			// a non-negative integer (suggest N ms). Decoded as
+			// json.RawMessage because Go's *int64 collapses absent
+			// and null both to nil; the handler passes it through to
+			// WebhookRegistry.NegotiateExpiry which preserves the
+			// distinction. Recommended grant range is minutes up to
+			// ~1 day (spec PR1 commit 6967f2ba) — beyond that, prefer
+			// an explicit `ttlMs: null` no-expiry over a long finite
+			// TTL.
+			TTLMs json.RawMessage `json:"ttlMs"`
 		}
 		if err := json.Unmarshal(params, &req); err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
@@ -825,17 +837,20 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 		canonical := canonicalKey(principal, req.Delivery.URL, req.Name, req.Arguments)
 		derivedID := deriveSubscriptionID(canonical)
 
+		noExpiry, expiresOverride := webhooks.NegotiateExpiry(req.TTLMs)
 		expiresAt, isNew := webhooks.Register(RegisterParams{
-			CanonicalKey:  canonical,
-			DerivedID:     derivedID,
-			URL:           req.Delivery.URL,
-			Secret:        req.Delivery.Secret,
-			MaxAgeSeconds: req.MaxAge,
-			EventName:     req.Name,
-			Principal:     principal,
-			Subject:       subSubject,
-			SessionID:     subSessionID,
-			Arguments:     req.Arguments,
+			CanonicalKey:      canonical,
+			DerivedID:         derivedID,
+			URL:               req.Delivery.URL,
+			Secret:            req.Delivery.Secret,
+			MaxAgeSeconds:     req.MaxAge,
+			EventName:         req.Name,
+			Principal:         principal,
+			Subject:           subSubject,
+			SessionID:         subSessionID,
+			Arguments:         req.Arguments,
+			NoExpiry:          noExpiry,
+			ExpiresAtOverride: expiresOverride,
 		})
 
 		// On first registration only, enforce the quota then fire
@@ -910,10 +925,20 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 		// X-MCP-Subscription-Id header value on delivery POSTs (per
 		// §"Webhook Event Delivery" L390). Knowing the id grants no
 		// operations on the subscription (L378).
+		// refreshBefore is always present per spec PR1 commit 99f3589c
+		// §"Subscription TTL". Nullable: a finite grant serializes as
+		// an RFC3339 string; a no-expiry grant (nil expiresAt) serializes
+		// as JSON null. The map[string]any entry MUST stay present in
+		// the no-expiry case — omitting the field would falsely look
+		// like an absent grant to a strict client.
+		var refreshBefore any
+		if expiresAt != nil {
+			refreshBefore = expiresAt.Format(time.RFC3339)
+		}
 		respBody := map[string]any{
 			"id":            derivedID,
 			"cursor":        wireCursor,
-			"refreshBefore": expiresAt.Format(time.RFC3339),
+			"refreshBefore": refreshBefore,
 		}
 		// Include deliveryStatus on refresh response when the target
 		// has prior delivery attempts (spec §"Webhook Delivery

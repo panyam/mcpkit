@@ -10,13 +10,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func ptr[T any](v T) *T { return &v }
+
 func mkTarget(canonicalKey []byte, principal, eventName string) events.WebhookTarget {
 	return events.WebhookTarget{
 		CanonicalKey:  canonicalKey,
 		ID:            "sub_" + principal + "_" + eventName,
 		URL:           "https://example.test/webhook",
 		Secret:        "whsec_test",
-		ExpiresAt:     time.Date(2026, 6, 8, 12, 0, 0, 0, time.UTC),
+		ExpiresAt:     ptr(time.Date(2026, 6, 8, 12, 0, 0, 0, time.UTC)),
 		MaxAgeSeconds: 60,
 		EventName:     eventName,
 		Principal:     principal,
@@ -58,7 +60,8 @@ func TestWebhookStore_GetSaveDeleteCount(t *testing.T) {
 			assert.Equal(t, target.URL, getResp.Target.URL)
 			assert.Equal(t, target.Principal, getResp.Target.Principal)
 			assert.Equal(t, target.Arguments["channel"], getResp.Target.Arguments["channel"])
-			assert.True(t, target.ExpiresAt.Equal(getResp.Target.ExpiresAt))
+			require.NotNil(t, getResp.Target.ExpiresAt, "expected finite ExpiresAt in round-trip")
+			assert.True(t, target.ExpiresAt.Equal(*getResp.Target.ExpiresAt))
 
 			// Update via Save overwrites; FailureCount round-trips
 			target.FailureCount = 3
@@ -119,6 +122,37 @@ func TestWebhookStore_ListReturnsSnapshot(t *testing.T) {
 			countResp, err := store.CountWebhooks(ctx, events.CountWebhooksRequest{})
 			require.NoError(t, err)
 			assert.Equal(t, len(ids), countResp.Count)
+		})
+	}
+}
+
+// TestWebhookStore_NoExpiryRoundTrip verifies that a target with nil
+// ExpiresAt (no-expiry per spec PR1 commit 99f3589c §"Subscription
+// TTL") survives a Save → Get round-trip without the nullable column
+// silently rehydrating as the zero time.Time. Operators relying on
+// failure-based GC for no-expiry subs need the nil sentinel preserved
+// across persistence — a zero-time rehydrate would look like "expired
+// 0001-01-01" to the prune loop guard.
+func TestWebhookStore_NoExpiryRoundTrip(t *testing.T) {
+	for _, bk := range backends(t) {
+		bk := bk
+		t.Run(bk.name, func(t *testing.T) {
+			store := bk.newWebhookStore(t)
+			ctx := context.Background()
+
+			key := []byte("no-expiry-key")
+			target := mkTarget(key, "alice", "fake.event")
+			target.ID = "sub_noexpiry"
+			target.ExpiresAt = nil
+
+			_, err := store.SaveWebhook(ctx, events.SaveWebhookRequest{Target: target})
+			require.NoError(t, err)
+
+			getResp, err := store.GetWebhook(ctx, events.GetWebhookRequest{CanonicalKey: key})
+			require.NoError(t, err)
+			require.True(t, getResp.Found)
+			assert.Nil(t, getResp.Target.ExpiresAt,
+				"no-expiry target MUST round-trip with ExpiresAt nil; got %v", getResp.Target.ExpiresAt)
 		})
 	}
 }
