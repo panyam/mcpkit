@@ -959,12 +959,15 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 // Wire shape:
 //
 //	{
-//	  "active":         bool,
-//	  "lastDeliveryAt": "RFC3339" (omitted if nil),
-//	  "lastError":      "categorical" (omitted if empty),
-//	  "failedSince":    "RFC3339" (omitted if nil),
-//	  "throttled":      bool       (omitted if false — spec PR1 commit 21be9c31),
-//	  "retryAfterMs":   int        (omitted if nil — spec PR1 commit 21be9c31)
+//	  "active":                    bool,
+//	  "lastDeliveryAt":            "RFC3339" (omitted if nil),
+//	  "lastError":                 "categorical" (omitted if empty),
+//	  "failedSince":               "RFC3339" (omitted if nil),
+//	  "throttled":                 bool       (omitted if false — spec PR1 commit 21be9c31),
+//	  "retryAfterMs":              int        (omitted if nil — spec PR1 commit 21be9c31),
+//	  "failingContinuouslySince":  "RFC3339" (omitted if nil — diagnostic, drives
+//	                                          no-expiry failure-GC per spec PR1
+//	                                          commit 99f3589c §"Subscription TTL")
 //	}
 func deliveryStatusForResponse(s DeliveryStatus) (map[string]any, bool) {
 	// "Nothing to report" = no successes AND no failures AND not throttled.
@@ -990,6 +993,9 @@ func deliveryStatusForResponse(s DeliveryStatus) (map[string]any, bool) {
 	}
 	if s.RetryAfterMs != nil {
 		out["retryAfterMs"] = *s.RetryAfterMs
+	}
+	if s.FailingContinuouslySince != nil {
+		out["failingContinuouslySince"] = s.FailingContinuouslySince.Format(time.RFC3339)
 	}
 	return out, true
 }

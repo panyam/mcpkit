@@ -77,6 +77,18 @@ const (
 	defaultWebhookSuspendWindow    = 10 * time.Minute // sliding window over which failures accumulate
 )
 
+// DefaultNoExpiryFailureGCWindow is how long a no-expiry subscription
+// may remain in FailingContinuouslySince state (no successful delivery
+// since the first failure of the current run) before the failure-based
+// GC drops it and posts a `terminated` envelope per spec PR1 commit
+// 99f3589c §"Subscription TTL".
+//
+// 72 hours by default — long enough to ride out a long-weekend
+// receiver outage without losing the subscription; short enough that
+// genuinely abandoned receivers get GC'd. Tune via
+// WithNoExpiryFailureGCWindow.
+const DefaultNoExpiryFailureGCWindow = 72 * time.Hour
+
 // DefaultWebhookAckTimeout is the per-delivery ack timeout the registry
 // applies to both the http.Client and the underlying net.Dialer. Aligned
 // with spec PR1 commit b506e347 (§"Webhook Event Delivery" →
@@ -185,6 +197,33 @@ func WithUnsafeWebhookTTLBypass() WebhookOption {
 func WithAllowInfiniteWebhookTTL() WebhookOption {
 	return func(r *WebhookRegistry) {
 		r.allowInfiniteWebhookTTL = true
+	}
+}
+
+// WithNoExpiryFailureGCWindow overrides how long a no-expiry subscription
+// may remain continuously failing before the failure-based GC drops it
+// (spec PR1 commit 99f3589c §"Subscription TTL": "the server MAY drop
+// it after sustained delivery failure"). Default is
+// DefaultNoExpiryFailureGCWindow (72h).
+//
+// Only applies to no-expiry subscriptions (target.ExpiresAt == nil).
+// Finite-TTL subscriptions are unaffected — their backstop remains
+// TTL expiry. Pass <=0 to keep the default.
+//
+// Tuning: shorter windows reclaim resources faster from abandoned
+// receivers but risk dropping a no-expiry subscription whose receiver
+// is offline for a long maintenance window. Longer windows tolerate
+// more receiver downtime at the cost of holding the canonical-key
+// slot + the delivery retry traffic. The GC clock is anchored on
+// DeliveryStatus.FailingContinuouslySince, which is set on first
+// failure since the last success (or first ever) and cleared by any
+// successful delivery — so a single delivery that lands resets the
+// clock.
+func WithNoExpiryFailureGCWindow(d time.Duration) WebhookOption {
+	return func(r *WebhookRegistry) {
+		if d > 0 {
+			r.noExpiryFailureGCWindow = d
+		}
 	}
 }
 
@@ -487,6 +526,21 @@ type DeliveryStatus struct {
 	FailedSince    *time.Time
 	Throttled      bool
 	RetryAfterMs   *int64
+
+	// FailingContinuouslySince anchors the failure-based GC clock for
+	// no-expiry subscriptions (spec PR1 commit 99f3589c §"Subscription
+	// TTL" — "the server MAY drop it after sustained delivery failure").
+	// Distinct from FailedSince: this field is NEVER reset by the
+	// sliding suspendWindow, only by a successful delivery. Set on the
+	// first failure since the last success (or first ever); cleared by
+	// recordDeliverySuccess. The failure-GC trigger in
+	// recordDeliveryFailure fires when (target is no-expiry) AND
+	// (now - *FailingContinuouslySince > r.noExpiryFailureGCWindow).
+	//
+	// Finite-TTL subscriptions get the same field maintained, but the
+	// GC path is gated on ExpiresAt being nil so they're never dropped
+	// by this mechanism — their backstop remains TTL expiry.
+	FailingContinuouslySince *time.Time
 }
 
 // DeliveryErrorBucket is the spec's categorical lastError set per
@@ -526,6 +580,11 @@ type WebhookRegistry struct {
 	ttlExplicit             bool // operator passed WithWebhookTTL (drives clamp decision)
 	ttlClampBypass          bool // WithUnsafeWebhookTTLBypass — disables clamp
 	allowInfiniteWebhookTTL bool // WithAllowInfiniteWebhookTTL — gates ttlMs:null acceptance in events/subscribe handler (spec PR1 commit 99f3589c §"Subscription TTL")
+	// noExpiryFailureGCWindow is how long a no-expiry subscription
+	// may remain FailingContinuouslySince a previous success before
+	// the failure-GC drops it (spec PR1 commit 99f3589c §"Subscription
+	// TTL"). Default is 72h; tune via WithNoExpiryFailureGCWindow.
+	noExpiryFailureGCWindow time.Duration
 	headerMode              WebhookHeaderMode
 	allowPrivateNetworks bool          // when false (default), Dialer.Control rejects private/loopback IPs (spec §"Webhook Security" → "SSRF prevention" L464)
 	extraHeaders         map[string]string // caller-supplied headers (WithWebhookExtraHeaders); applied BEFORE signature/MCP/trace headers so spec-mandated keys always win
@@ -609,6 +668,33 @@ func (r *WebhookRegistry) SetDefResolver(fn func(eventName string) EventDef) {
 	r.defResolver = fn
 }
 
+// warnIfInfiniteTTLWithDefaultStore logs a stark warning when the
+// operator enabled WithAllowInfiniteWebhookTTL but did NOT replace
+// the default in-memory WebhookStore. That combination is
+// semantically broken: no-expiry subscriptions are promised to
+// outlive everything except an explicit events/unsubscribe, but the
+// in-memory store loses them on the first restart. Per spec PR1
+// commit 99f3589c §"Subscription TTL", a server granting no-expiry
+// MUST persist subscriptions across restarts.
+//
+// We warn rather than reject because dev / test setups may
+// legitimately opt in without persistent storage (the durability
+// contract is observable in metrics and operator practice, not
+// load-bearing for happy-path correctness).
+func (r *WebhookRegistry) warnIfInfiniteTTLWithDefaultStore() {
+	if !r.allowInfiniteWebhookTTL {
+		return
+	}
+	if _, isInMemory := r.store.(*inMemoryWebhookStore); !isInMemory {
+		return
+	}
+	r.logf("[events] WARNING: WithAllowInfiniteWebhookTTL is set but the WebhookStore is the default in-memory implementation. " +
+		"No-expiry subscriptions will be LOST on the next restart, which violates spec PR1 commit 99f3589c §\"Subscription TTL\" " +
+		"(\"the server MUST persist no-expiry subscriptions across restarts\"). " +
+		"Production deployments MUST pass WithWebhookStore(persistentStore) — the GORM-backed Postgres/SQLite implementation " +
+		"in experimental/ext/events/stores/gorm is the supported choice.")
+}
+
 // AddOnRemoveHook registers a callback that fires when a target is
 // actually removed from the registry. Equivalent to WithWebhookOnRemove
 // but callable after construction — used by events.Register to install
@@ -661,13 +747,14 @@ var noopTP core.TracerProvider = core.NoopTracerProvider{}
 // see its docs for when (not) to use it.
 func NewWebhookRegistry(opts ...WebhookOption) *WebhookRegistry {
 	r := &WebhookRegistry{
-		store:            NewInMemoryWebhookStore(),
-		ttl:              DefaultWebhookTTL,
-		headerMode:       StandardWebhooks,
-		maxBodyBytes:     defaultWebhookMaxBodyBytes,
-		suspendThreshold: defaultWebhookSuspendThreshold,
-		suspendWindow:    defaultWebhookSuspendWindow,
-		logf:             log.Printf,
+		store:                   NewInMemoryWebhookStore(),
+		ttl:                     DefaultWebhookTTL,
+		headerMode:              StandardWebhooks,
+		maxBodyBytes:             defaultWebhookMaxBodyBytes,
+		suspendThreshold:         defaultWebhookSuspendThreshold,
+		suspendWindow:            defaultWebhookSuspendWindow,
+		noExpiryFailureGCWindow:  DefaultNoExpiryFailureGCWindow,
+		logf:                     log.Printf,
 	}
 	for _, o := range opts {
 		o(r)
@@ -676,6 +763,7 @@ func NewWebhookRegistry(opts ...WebhookOption) *WebhookRegistry {
 		r.tp = noopTP
 	}
 	r.applyTTLClamp()
+	r.warnIfInfiniteTTLWithDefaultStore()
 	// http.Client wired AFTER options apply so the Dialer.Control callback
 	// can read the resolved allowPrivateNetworks setting. Spec
 	// §"Webhook Security" → "SSRF prevention" L464.
@@ -1219,6 +1307,10 @@ func (r *WebhookRegistry) recordDeliverySuccess(canonicalKey []byte, at time.Tim
 	t.Status.LastDeliveryAt = &atCopy
 	t.Status.LastError = DeliveryErrorNone
 	t.Status.FailedSince = nil
+	// A successful delivery clears the failure-GC clock. The next
+	// failure starts a fresh continuous-failure run; the GC threshold
+	// resets to the full window.
+	t.Status.FailingContinuouslySince = nil
 	t.FailureCount = 0
 	_, _ = r.store.SaveWebhook(ctx, SaveWebhookRequest{Target: t})
 }
@@ -1234,12 +1326,21 @@ func (r *WebhookRegistry) recordDeliverySuccess(canonicalKey []byte, at time.Tim
 // is older than suspendWindow, reset the run (this failure starts a
 // new run). Otherwise, count consecutive failures within the run; on
 // hitting suspendThreshold, flip Active=false.
+//
+// Failure-GC rule (spec PR1 commit 99f3589c §"Subscription TTL"): on
+// every failure, also track FailingContinuouslySince — a "true" first-
+// failure-since-last-success anchor that is NEVER reset by the sliding
+// suspend window. For no-expiry subscriptions (target.ExpiresAt == nil)
+// past r.noExpiryFailureGCWindow of continuous failure, drop the
+// subscription entirely and POST a `terminated` envelope. Finite-TTL
+// subs maintain the field but the GC path skips them — their backstop
+// remains TTL expiry.
 func (r *WebhookRegistry) recordDeliveryFailure(canonicalKey []byte, bucket DeliveryErrorBucket) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	ctx := context.Background()
 	getResp, _ := r.store.GetWebhook(ctx, GetWebhookRequest{CanonicalKey: canonicalKey})
 	if !getResp.Found {
+		r.mu.Unlock()
 		return
 	}
 	t := getResp.Target
@@ -1257,23 +1358,52 @@ func (r *WebhookRegistry) recordDeliveryFailure(canonicalKey []byte, bucket Deli
 	} else {
 		t.FailureCount++
 	}
+	// FailingContinuouslySince anchors the failure-GC clock. Set only
+	// when nil — successive failures during a continuous run preserve
+	// the original first-failure timestamp.
+	if t.Status.FailingContinuouslySince == nil {
+		startCopy := now
+		t.Status.FailingContinuouslySince = &startCopy
+	}
 	wasActive := t.Status.Active
 	if t.FailureCount >= r.suspendThreshold {
 		t.Status.Active = false
 	}
-	_, _ = r.store.SaveWebhook(ctx, SaveWebhookRequest{Target: t})
-	// On the Active true→false transition, auto-Post a
-	// {type:terminated} envelope to the receiver as a courtesy
-	// notification (spec §"Non-event webhook bodies" L420). Uses
-	// postTerminatedSilent so the target stays in the registry
-	// (Active=false observable; reactivate via refresh per
-	// §"Webhook Delivery Status" L460). Snapshot the target struct
-	// before releasing the lock — the async deliverControl needs
-	// URL/Secret/ID outside the lock.
-	if wasActive && !t.Status.Active {
+
+	// Decide failure-GC before saving — if we're about to drop, skip
+	// the Save (PostTerminated does its own DeleteWebhook). Otherwise
+	// persist the updated Status. Capture all the post-lock actions
+	// here so we can fire them after the Unlock.
+	noExpiryGCFire := t.ExpiresAt == nil &&
+		t.Status.FailingContinuouslySince != nil &&
+		now.Sub(*t.Status.FailingContinuouslySince) > r.noExpiryFailureGCWindow
+	suspendTransitionFire := wasActive && !t.Status.Active && !noExpiryGCFire
+
+	if !noExpiryGCFire {
+		_, _ = r.store.SaveWebhook(ctx, SaveWebhookRequest{Target: t})
+	}
+	r.mu.Unlock()
+
+	// Suspend transition (existing semantics): receiver gets a
+	// `terminated` envelope but the target stays in the registry as
+	// paused (Active=false observable; reactivate via refresh per
+	// §"Webhook Delivery Status" L460). Skipped when the failure-GC
+	// path is firing too — the GC drop supersedes a same-call suspend.
+	if suspendTransitionFire {
 		r.postTerminatedSilent(t, ControlError{
 			Code:    -32603,
 			Message: "subscription suspended after repeated delivery failures: " + string(bucket),
+		})
+	}
+
+	// Failure-GC drop (new for no-expiry subs): delete the
+	// subscription + post a `terminated` envelope per spec PR1 commit
+	// 99f3589c §"Subscription TTL". Distinguishable message from the
+	// suspend-transition envelope so receivers can branch.
+	if noExpiryGCFire {
+		r.PostTerminated(t.CanonicalKey, ControlError{
+			Code:    -32603,
+			Message: "no-expiry subscription dropped after sustained delivery failure: " + string(bucket),
 		})
 	}
 }

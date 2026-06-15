@@ -42,12 +42,15 @@ type webhookRow struct {
 	//
 	// StatusThrottled + StatusRetryAfterMs added with spec PR1 commit
 	// 21be9c31 (deliveryStatus throttled + retryAfterMs).
-	StatusActive         bool `gorm:"not null"`
-	StatusLastDeliveryAt *time.Time
-	StatusLastError      string `gorm:"not null"`
-	StatusFailedSince    *time.Time
-	StatusThrottled      bool `gorm:"not null"`
-	StatusRetryAfterMs   *int64
+	// StatusFailingContinuouslySince added for the failure-GC anchor
+	// (spec PR1 commit 99f3589c §"Subscription TTL").
+	StatusActive                    bool `gorm:"not null"`
+	StatusLastDeliveryAt            *time.Time
+	StatusLastError                 string `gorm:"not null"`
+	StatusFailedSince               *time.Time
+	StatusThrottled                 bool `gorm:"not null"`
+	StatusRetryAfterMs              *int64
+	StatusFailingContinuouslySince  *time.Time
 	// FailureCount mirrors events.WebhookTarget.FailureCount — the
 	// suspend-state-machine counter that lets restarts preserve
 	// per-target delivery health. Was unexported on the events struct
@@ -69,13 +72,14 @@ func rowFromTarget(t events.WebhookTarget) webhookRow {
 		EventName:            t.EventName,
 		Principal:            t.Principal,
 		Arguments:            t.Arguments,
-		StatusActive:         t.Status.Active,
-		StatusLastDeliveryAt: t.Status.LastDeliveryAt,
-		StatusLastError:      string(t.Status.LastError),
-		StatusFailedSince:    t.Status.FailedSince,
-		StatusThrottled:      t.Status.Throttled,
-		StatusRetryAfterMs:   t.Status.RetryAfterMs,
-		FailureCount:         t.FailureCount,
+		StatusActive:                    t.Status.Active,
+		StatusLastDeliveryAt:            t.Status.LastDeliveryAt,
+		StatusLastError:                 string(t.Status.LastError),
+		StatusFailedSince:               t.Status.FailedSince,
+		StatusThrottled:                 t.Status.Throttled,
+		StatusRetryAfterMs:              t.Status.RetryAfterMs,
+		StatusFailingContinuouslySince:  t.Status.FailingContinuouslySince,
+		FailureCount:                    t.FailureCount,
 	}
 }
 
@@ -91,12 +95,13 @@ func targetFromRow(r webhookRow) events.WebhookTarget {
 		Principal:     r.Principal,
 		Arguments:     r.Arguments,
 		Status: events.DeliveryStatus{
-			Active:         r.StatusActive,
-			LastDeliveryAt: r.StatusLastDeliveryAt,
-			LastError:      events.DeliveryErrorBucket(r.StatusLastError),
-			FailedSince:    r.StatusFailedSince,
-			Throttled:      r.StatusThrottled,
-			RetryAfterMs:   r.StatusRetryAfterMs,
+			Active:                    r.StatusActive,
+			LastDeliveryAt:            r.StatusLastDeliveryAt,
+			LastError:                 events.DeliveryErrorBucket(r.StatusLastError),
+			FailedSince:               r.StatusFailedSince,
+			Throttled:                 r.StatusThrottled,
+			RetryAfterMs:              r.StatusRetryAfterMs,
+			FailingContinuouslySince:  r.StatusFailingContinuouslySince,
 		},
 		FailureCount: r.FailureCount,
 	}
