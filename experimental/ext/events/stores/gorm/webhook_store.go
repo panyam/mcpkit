@@ -33,13 +33,21 @@ type webhookRow struct {
 	MaxAgeSeconds int            `gorm:"not null"`
 	EventName     string         `gorm:"not null;index:idx_webhooks_principal_event"`
 	Principal     string         `gorm:"not null;index:idx_webhooks_principal_event"`
-	Params        map[string]any `gorm:"serializer:json"`
+	Arguments     map[string]any `gorm:"serializer:json"` // column renamed from params: spec PR1 commit 082166f0 — operators with existing rows: ALTER TABLE webhooks RENAME COLUMN params TO arguments;
 	// DeliveryStatus flattened — kept queryable, ordering preserved with
 	// the events.DeliveryStatus struct definition.
+	//
+	// StatusThrottled + StatusRetryAfterMs added with spec PR1 commit
+	// 21be9c31 (deliveryStatus throttled + retryAfterMs). Operators
+	// migrating an existing webhooks table need ALTER TABLE webhooks
+	// ADD COLUMN status_throttled BOOLEAN NOT NULL DEFAULT FALSE,
+	// ADD COLUMN status_retry_after_ms BIGINT.
 	StatusActive         bool `gorm:"not null"`
 	StatusLastDeliveryAt *time.Time
 	StatusLastError      string `gorm:"not null"`
 	StatusFailedSince    *time.Time
+	StatusThrottled      bool `gorm:"not null"`
+	StatusRetryAfterMs   *int64
 	// FailureCount mirrors events.WebhookTarget.FailureCount — the
 	// suspend-state-machine counter that lets restarts preserve
 	// per-target delivery health. Was unexported on the events struct
@@ -60,11 +68,13 @@ func rowFromTarget(t events.WebhookTarget) webhookRow {
 		MaxAgeSeconds:        t.MaxAgeSeconds,
 		EventName:            t.EventName,
 		Principal:            t.Principal,
-		Params:               t.Params,
+		Arguments:            t.Arguments,
 		StatusActive:         t.Status.Active,
 		StatusLastDeliveryAt: t.Status.LastDeliveryAt,
 		StatusLastError:      string(t.Status.LastError),
 		StatusFailedSince:    t.Status.FailedSince,
+		StatusThrottled:      t.Status.Throttled,
+		StatusRetryAfterMs:   t.Status.RetryAfterMs,
 		FailureCount:         t.FailureCount,
 	}
 }
@@ -79,12 +89,14 @@ func targetFromRow(r webhookRow) events.WebhookTarget {
 		MaxAgeSeconds: r.MaxAgeSeconds,
 		EventName:     r.EventName,
 		Principal:     r.Principal,
-		Params:        r.Params,
+		Arguments:     r.Arguments,
 		Status: events.DeliveryStatus{
 			Active:         r.StatusActive,
 			LastDeliveryAt: r.StatusLastDeliveryAt,
 			LastError:      events.DeliveryErrorBucket(r.StatusLastError),
 			FailedSince:    r.StatusFailedSince,
+			Throttled:      r.StatusThrottled,
+			RetryAfterMs:   r.StatusRetryAfterMs,
 		},
 		FailureCount: r.FailureCount,
 	}

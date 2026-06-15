@@ -59,7 +59,7 @@ func TestMatch_ChannelFiltering_RoutesOnlyMatchingEventsToEachSub(t *testing.T) 
 
 	streamA, err := eventsclient.Stream(context.Background(), clientA, eventsclient.StreamOptions{
 		EventName: "chat.message",
-		Params:    map[string]any{"channel": "general"},
+		Arguments: map[string]any{"channel": "general"},
 		OnEvent:   func(ev events.Event) { chA <- ev },
 	})
 	require.NoError(t, err)
@@ -67,7 +67,7 @@ func TestMatch_ChannelFiltering_RoutesOnlyMatchingEventsToEachSub(t *testing.T) 
 
 	streamB, err := eventsclient.Stream(context.Background(), clientB, eventsclient.StreamOptions{
 		EventName: "chat.message",
-		Params:    map[string]any{"channel": "dev"},
+		Arguments: map[string]any{"channel": "dev"},
 		OnEvent:   func(ev events.Event) { chB <- ev },
 	})
 	require.NoError(t, err)
@@ -112,7 +112,7 @@ func TestTransform_RedactsPII_OnlyForOptedInSubscriber(t *testing.T) {
 
 	streamPlain, err := eventsclient.Stream(context.Background(), clientPlain, eventsclient.StreamOptions{
 		EventName: "alert.fired",
-		Params:    map[string]any{"severity": "P1", "redact_pii": false},
+		Arguments: map[string]any{"severity": "P1", "redact_pii": false},
 		OnEvent:   func(ev events.Event) { chPlain <- ev },
 	})
 	require.NoError(t, err)
@@ -120,7 +120,7 @@ func TestTransform_RedactsPII_OnlyForOptedInSubscriber(t *testing.T) {
 
 	streamRedact, err := eventsclient.Stream(context.Background(), clientRedact, eventsclient.StreamOptions{
 		EventName: "alert.fired",
-		Params:    map[string]any{"severity": "P1", "redact_pii": true},
+		Arguments: map[string]any{"severity": "P1", "redact_pii": true},
 		OnEvent:   func(ev events.Event) { chRedact <- ev },
 	})
 	require.NoError(t, err)
@@ -157,7 +157,7 @@ func TestMatch_FiltersBeforeTransform(t *testing.T) {
 	ch := make(chan events.Event, 4)
 	stream, err := eventsclient.Stream(context.Background(), c, eventsclient.StreamOptions{
 		EventName: "alert.fired",
-		Params:    map[string]any{"severity": "P1", "redact_pii": true},
+		Arguments: map[string]any{"severity": "P1", "redact_pii": true},
 		OnEvent:   func(ev events.Event) { ch <- ev },
 	})
 	require.NoError(t, err)
@@ -181,7 +181,7 @@ func TestOnSubscribe_RegistersWatchList(t *testing.T) {
 
 	stream, err := eventsclient.Stream(context.Background(), c, eventsclient.StreamOptions{
 		EventName: "presence.changed",
-		Params:    map[string]any{"watch_users": []any{"alice", "bob"}},
+		Arguments: map[string]any{"watch_users": []any{"alice", "bob"}},
 		OnEvent:   func(_ events.Event) {},
 	})
 	require.NoError(t, err)
@@ -216,7 +216,7 @@ func TestEmitToSubscription_RoutesOnlyToWatchingSubscriptions(t *testing.T) {
 
 	streamE, err := eventsclient.Stream(context.Background(), clientE, eventsclient.StreamOptions{
 		EventName: "presence.changed",
-		Params:    map[string]any{"watch_users": []any{"alice"}},
+		Arguments: map[string]any{"watch_users": []any{"alice"}},
 		OnEvent:   func(ev events.Event) { chE <- ev },
 	})
 	require.NoError(t, err)
@@ -224,7 +224,7 @@ func TestEmitToSubscription_RoutesOnlyToWatchingSubscriptions(t *testing.T) {
 
 	streamF, err := eventsclient.Stream(context.Background(), clientF, eventsclient.StreamOptions{
 		EventName: "presence.changed",
-		Params:    map[string]any{"watch_users": []any{"bob"}},
+		Arguments: map[string]any{"watch_users": []any{"bob"}},
 		OnEvent:   func(ev events.Event) { chF <- ev },
 	})
 	require.NoError(t, err)
@@ -279,7 +279,7 @@ func TestOnUnsubscribe_ClearsWatchList(t *testing.T) {
 
 	stream, err := eventsclient.Stream(context.Background(), c, eventsclient.StreamOptions{
 		EventName: "presence.changed",
-		Params:    map[string]any{"watch_users": []any{"alice"}},
+		Arguments: map[string]any{"watch_users": []any{"alice"}},
 		OnEvent:   func(_ events.Event) {},
 	})
 	require.NoError(t, err)

@@ -93,9 +93,9 @@ func TestMatchTransform_Push_MatchFiltersSubscribers(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	chHigh, _ := src.Subscribe(ctx, SubscribeOpts{Principal: "alice", Params: map[string]any{"severity": "high"}})
-	chLow, _ := src.Subscribe(ctx, SubscribeOpts{Principal: "bob", Params: map[string]any{"severity": "low"}})
-	chAll, _ := src.Subscribe(ctx, SubscribeOpts{Principal: "carol", Params: nil})
+	chHigh, _ := src.Subscribe(ctx, SubscribeOpts{Principal: "alice", Arguments: map[string]any{"severity": "high"}})
+	chLow, _ := src.Subscribe(ctx, SubscribeOpts{Principal: "bob", Arguments: map[string]any{"severity": "low"}})
+	chAll, _ := src.Subscribe(ctx, SubscribeOpts{Principal: "carol", Arguments: nil})
 
 	require.NoError(t, yield(context.Background(), sevPayload{Severity: "high", Reporter: "alice@x"}))
 
@@ -129,8 +129,8 @@ func TestMatchTransform_Push_TransformShapesPerSubscriber(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	chRedact, _ := src.Subscribe(ctx, SubscribeOpts{Params: map[string]any{"redact_pii": true}})
-	chRaw, _ := src.Subscribe(ctx, SubscribeOpts{Params: map[string]any{"redact_pii": false}})
+	chRedact, _ := src.Subscribe(ctx, SubscribeOpts{Arguments: map[string]any{"redact_pii": true}})
+	chRaw, _ := src.Subscribe(ctx, SubscribeOpts{Arguments: map[string]any{"redact_pii": false}})
 
 	require.NoError(t, yield(context.Background(), sevPayload{Severity: "high", Reporter: "alice@x"}))
 
@@ -165,7 +165,7 @@ func TestMatchTransform_Push_NilHooksAreNoop(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ch, _ := src.Subscribe(ctx, SubscribeOpts{Params: map[string]any{"severity": "low"}})
+	ch, _ := src.Subscribe(ctx, SubscribeOpts{Arguments: map[string]any{"severity": "low"}})
 
 	require.NoError(t, yield(context.Background(), sevPayload{Severity: "high", Reporter: "alice@x"}))
 
@@ -197,7 +197,7 @@ func TestMatchTransform_Push_PanicSafe(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ch, _ := src.Subscribe(ctx, SubscribeOpts{Params: map[string]any{"severity": "high"}})
+	ch, _ := src.Subscribe(ctx, SubscribeOpts{Arguments: map[string]any{"severity": "high"}})
 
 	require.NoError(t, yield(context.Background(), sevPayload{Severity: "high", Reporter: "alice@x"}))
 
@@ -258,8 +258,8 @@ func TestMatchTransform_Webhook_MatchAndTransformPerTarget(t *testing.T) {
 	subscribe := func(url string, params map[string]any, secretLetter byte) {
 		t.Helper()
 		body := map[string]any{
-			"name":   "alert.fired",
-			"params": params,
+			"name":      "alert.fired",
+			"arguments": params,
 			"delivery": map[string]any{
 				"mode":   "webhook",
 				"url":    url,
@@ -414,7 +414,7 @@ func TestMatchTransform_Poll_AppliesPerCall(t *testing.T) {
 
 	pollAndDecode := func(params map[string]any) []sevPayload {
 		t.Helper()
-		body := map[string]any{"name": "alert.fired", "params": params, "cursor": "0"}
+		body := map[string]any{"name": "alert.fired", "arguments": params, "cursor": "0"}
 		raw, _ := json.Marshal(body)
 		resp, err := srv.Dispatch(context.Background(), &core.Request{
 			JSONRPC: "2.0", ID: json.RawMessage(`1`),
@@ -485,7 +485,7 @@ func TestMatchTransform_CrossModeParity(t *testing.T) {
 	// the full events/stream flow.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	pushCh, _ := src.Subscribe(ctx, SubscribeOpts{Principal: "alice", Params: matchParams})
+	pushCh, _ := src.Subscribe(ctx, SubscribeOpts{Principal: "alice", Arguments: matchParams})
 
 	// Webhook
 	var (
@@ -501,8 +501,8 @@ func TestMatchTransform_CrossModeParity(t *testing.T) {
 	}))
 	defer receiver.Close()
 	subBody, _ := json.Marshal(map[string]any{
-		"name":   "alert.fired",
-		"params": matchParams,
+		"name":      "alert.fired",
+		"arguments": matchParams,
 		"delivery": map[string]any{
 			"mode":   "webhook",
 			"url":    receiver.URL,
@@ -544,7 +544,7 @@ func TestMatchTransform_CrossModeParity(t *testing.T) {
 
 	// Poll delivery
 	pollBody, _ := json.Marshal(map[string]any{
-		"name": "alert.fired", "params": matchParams, "cursor": "0",
+		"name": "alert.fired", "arguments": matchParams, "cursor": "0",
 	})
 	resp, err = srv.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`2`),

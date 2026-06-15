@@ -73,7 +73,7 @@ type EventDeliveryError struct {
 // set when a yield is dropped because the chan is full; the next successful
 // send delivers a Truncated marker before the event itself.
 //
-// principal / subscriptionID / params: per-subscriber identity
+// principal / subscriptionID / arguments: per-subscriber identity
 // captured at Subscribe time so the per-yield fanout can build a
 // HookContext + apply the EventDef's Match / Transform per subscriber
 // per spec §"Server SDK Guidance" L623-629.
@@ -81,7 +81,7 @@ type subscriberSlot struct {
 	ch               chan SubscriberEvent
 	principal        string
 	subscriptionID   string
-	params           map[string]any
+	arguments        map[string]any
 	pendingTruncated atomic.Bool
 	// closeOnce gates the chan close so YieldTerminated and the
 	// Subscribe cleanup goroutine can both attempt close without
@@ -102,11 +102,14 @@ type SubscribeOpts struct {
 	// (per-stream for push). Surfaced on HookContext.SubscriptionID()
 	// during fanout. Empty for callers that don't have one.
 	SubscriptionID string
-	// Params is the subscribe-time parameter map. Surfaced as the
-	// `params` argument to Match / Transform so authors can implement
-	// "deliver only when params.severity matches event.data.severity"
+	// Arguments is the subscribe-time parameter map. Surfaced as the
+	// `arguments` argument to Match / Transform so authors can implement
+	// "deliver only when arguments.severity matches event.data.severity"
 	// per spec L633-644.
-	Params map[string]any
+	//
+	// Renamed from Params to track spec PR1 commit 082166f0 (inner
+	// subscription field → tools/call shape).
+	Arguments map[string]any
 }
 
 // closeChan idempotently closes the slot's channel. Safe to call from
@@ -493,7 +496,7 @@ func (s *YieldingSource[Data]) fanoutLocked(se SubscriberEvent) {
 // select-on-closed returns the zero value).
 //
 // SubscribeOpts carries per-subscriber identity (Principal,
-// SubscriptionID, Params) onto the slot so fanout can build a
+// SubscriptionID, Arguments) onto the slot so fanout can build a
 // HookContext and apply the EventDef's Match / Transform (spec
 // §"Server SDK Guidance" L623-629) per subscriber. Pass the zero
 // value for hook-less callers; the safe wrappers tolerate empty
@@ -518,7 +521,7 @@ func (s *YieldingSource[Data]) Subscribe(ctx context.Context, opts SubscribeOpts
 		ch:             make(chan SubscriberEvent, s.subscriberBuf),
 		principal:      opts.Principal,
 		subscriptionID: opts.SubscriptionID,
-		params:         opts.Params,
+		arguments:      opts.Arguments,
 	}
 	s.mu.Lock()
 	s.subscribers = append(s.subscribers, slot)
@@ -863,10 +866,10 @@ func (noopFanoutSpan) AddLink(_ core.Link)      {}
 // counters accordingly.
 func (s *YieldingSource[Data]) deliverEventToSlot(sub *subscriberSlot, event Event, matchFn MatchFunc, transformFn TransformFunc) (matched, transformed bool) {
 	hc := newHookContext(context.Background(), sub.principal, sub.subscriptionID, DeliveryModePush)
-	if !safeMatch(matchFn, hc, event, sub.params) {
+	if !safeMatch(matchFn, hc, event, sub.arguments) {
 		return false, false
 	}
-	delivered, modified := safeTransform(transformFn, hc, event, sub.params)
+	delivered, modified := safeTransform(transformFn, hc, event, sub.arguments)
 	sub.deliverEvent(delivered)
 	return true, modified
 }

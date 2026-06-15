@@ -399,7 +399,7 @@ func Register(cfg Config) *Registry {
 				return
 			}
 			hc := newHookContext(context.Background(), t.Principal, t.ID, DeliveryModeWebhook)
-			safeOnUnsubscribe(source.Def().OnUnsubscribe, hc, t.Params)
+			safeOnUnsubscribe(source.Def().OnUnsubscribe, hc, t.Arguments)
 		})
 		// Let Deliver look up Match / Transform per event name
 		// (spec §"Server SDK Guidance" L623-629) without leaking the
@@ -538,7 +538,7 @@ func registerPoll(srv *server.Server, reg *Registry, unsafeAnon string, leases *
 		// "Bounding replay with maxAge" L529.
 		var req struct {
 			Name      string         `json:"name"`
-			Params    map[string]any `json:"params,omitempty"`
+			Arguments map[string]any `json:"arguments,omitempty"` // spec PR1 commit 082166f0: renamed from params to match tools/call
 			Cursor    *string        `json:"cursor"`
 			MaxEvents int            `json:"maxEvents,omitempty"`
 			MaxAge    int            `json:"maxAge,omitempty"` // seconds; 0 = no floor
@@ -588,7 +588,7 @@ func registerPoll(srv *server.Server, reg *Registry, unsafeAnon string, leases *
 		// Register) handles the unsubscribe side from the background
 		// sweep goroutine.
 		principal, _ := resolvePrincipal(ctx, unsafeAnon)
-		if leases.Touch(principal, req.Name, req.Params) {
+		if leases.Touch(principal, req.Name, req.Arguments) {
 			// Enforce quota BEFORE on_subscribe per spec §"Server
 			// SDK Guidance" → "Subscription lifecycle hooks" L705.
 			// Touch already created the lease; if Reserve fails,
@@ -598,16 +598,16 @@ func registerPoll(srv *server.Server, reg *Registry, unsafeAnon string, leases *
 			// OnExpire (no on_unsubscribe — the sub never crossed
 			// the live line).
 			if err := quota.Reserve(principal, req.Name); err != nil {
-				leases.Remove(principal, req.Name, req.Params)
+				leases.Remove(principal, req.Name, req.Arguments)
 				return newResourceExhaustedError(id, "subscriptions", int64(quota.Cap(req.Name)), err.Error())
 			}
 			hc := newHookContext(ctx, principal, "", DeliveryModePoll)
-			if err := safeOnSubscribe(source.Def().OnSubscribe, hc, req.Params); err != nil {
+			if err := safeOnSubscribe(source.Def().OnSubscribe, hc, req.Arguments); err != nil {
 				// on_subscribe rejected: roll back both the lease
 				// and the quota slot — the subscription never
 				// became live, so neither side should retain
 				// state.
-				leases.Remove(principal, req.Name, req.Params)
+				leases.Remove(principal, req.Name, req.Arguments)
 				quota.Release(principal, req.Name)
 				// Cap unknown at this site — author-defined refusal
 				// is not a server-side quota, so Max is omitted.
@@ -649,10 +649,10 @@ func registerPoll(srv *server.Server, reg *Registry, unsafeAnon string, leases *
 			hc := newHookContext(ctx, principal, "", DeliveryModePoll)
 			kept := make([]Event, 0, len(events))
 			for _, e := range events {
-				if !safeMatch(def.Match, hc, e, req.Params) {
+				if !safeMatch(def.Match, hc, e, req.Arguments) {
 					continue
 				}
-				delivered, _ := safeTransform(def.Transform, hc, e, req.Params)
+				delivered, _ := safeTransform(def.Transform, hc, e, req.Arguments)
 				kept = append(kept, delivered)
 			}
 			events = kept
@@ -745,10 +745,10 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 			// for, where it delivers, and who asked." Rejecting a
 			// client-supplied id at the wire level makes old SDKs
 			// fail loudly instead of silently mis-keying.
-			ID       string         `json:"id"`
-			Name     string         `json:"name"`
-			Params   map[string]any `json:"params,omitempty"`
-			Delivery struct {
+			ID        string         `json:"id"`
+			Name      string         `json:"name"`
+			Arguments map[string]any `json:"arguments,omitempty"` // spec PR1 commit 082166f0: renamed from params to match tools/call
+			Delivery  struct {
 				Mode   string `json:"mode"`
 				URL    string `json:"url"`
 				Secret string `json:"secret,omitempty"`
@@ -822,7 +822,7 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 		// refer to the same subscription (idempotent refresh). Different
 		// principals → distinct subscriptions (cross-tenant isolation
 		// L378).
-		canonical := canonicalKey(principal, req.Delivery.URL, req.Name, req.Params)
+		canonical := canonicalKey(principal, req.Delivery.URL, req.Name, req.Arguments)
 		derivedID := deriveSubscriptionID(canonical)
 
 		expiresAt, isNew := webhooks.Register(RegisterParams{
@@ -835,7 +835,7 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 			Principal:     principal,
 			Subject:       subSubject,
 			SessionID:     subSessionID,
-			Params:        req.Params,
+			Arguments:     req.Arguments,
 		})
 
 		// On first registration only, enforce the quota then fire
@@ -860,7 +860,7 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 			source, _ := reg.Source(req.Name)
 			def := source.Def()
 			hc := newHookContext(ctx, principal, derivedID, DeliveryModeWebhook)
-			if err := safeOnSubscribe(def.OnSubscribe, hc, req.Params); err != nil {
+			if err := safeOnSubscribe(def.OnSubscribe, hc, req.Arguments); err != nil {
 				// on_subscribe rejected: roll back the registration.
 				// Unregister fires onRemove → quota.Release pairs
 				// with the Reserve above (one Release per Reserve).
@@ -937,11 +937,15 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 //	  "active":         bool,
 //	  "lastDeliveryAt": "RFC3339" (omitted if nil),
 //	  "lastError":      "categorical" (omitted if empty),
-//	  "failedSince":    "RFC3339" (omitted if nil)
+//	  "failedSince":    "RFC3339" (omitted if nil),
+//	  "throttled":      bool       (omitted if false — spec PR1 commit 21be9c31),
+//	  "retryAfterMs":   int        (omitted if nil — spec PR1 commit 21be9c31)
 //	}
 func deliveryStatusForResponse(s DeliveryStatus) (map[string]any, bool) {
-	// "Nothing to report" = no successes AND no failures.
-	if s.LastDeliveryAt == nil && s.LastError == DeliveryErrorNone && s.FailedSince == nil {
+	// "Nothing to report" = no successes AND no failures AND not throttled.
+	// Throttled is a valid signal even when no delivery has happened yet
+	// (e.g., the server rate-limits before the first attempt lands).
+	if s.LastDeliveryAt == nil && s.LastError == DeliveryErrorNone && s.FailedSince == nil && !s.Throttled {
 		return nil, false
 	}
 	out := map[string]any{
@@ -956,6 +960,12 @@ func deliveryStatusForResponse(s DeliveryStatus) (map[string]any, bool) {
 	if s.FailedSince != nil {
 		out["failedSince"] = s.FailedSince.Format(time.RFC3339)
 	}
+	if s.Throttled {
+		out["throttled"] = true
+	}
+	if s.RetryAfterMs != nil {
+		out["retryAfterMs"] = *s.RetryAfterMs
+	}
 	return out, true
 }
 
@@ -965,9 +975,9 @@ func registerUnsubscribe(srv *server.Server, webhooks *WebhookRegistry, unsafeAn
 		// same canonical tuple as subscribe — (principal, name, params,
 		// delivery.url). The derived id is NOT accepted as input.
 		var req struct {
-			Name     string         `json:"name"`
-			Params   map[string]any `json:"params,omitempty"`
-			Delivery *struct {
+			Name      string         `json:"name"`
+			Arguments map[string]any `json:"arguments,omitempty"` // spec PR1 commit 082166f0: renamed from params to match tools/call
+			Delivery  *struct {
 				URL string `json:"url"`
 			} `json:"delivery,omitempty"`
 		}
@@ -986,7 +996,7 @@ func registerUnsubscribe(srv *server.Server, webhooks *WebhookRegistry, unsafeAn
 			return newForbiddenError(id, "Forbidden")
 		}
 
-		canonical := canonicalKey(principal, req.Delivery.URL, req.Name, req.Params)
+		canonical := canonicalKey(principal, req.Delivery.URL, req.Name, req.Arguments)
 		webhooks.Unregister(canonical)
 		return core.NewResponse(id, map[string]any{})
 	})

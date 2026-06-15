@@ -377,7 +377,7 @@ func dispatchPoll(t *testing.T, srv *server.Server, name string, params map[stri
 	t.Helper()
 	body := map[string]any{"name": name}
 	if params != nil {
-		body["params"] = params
+		body["arguments"] = params
 	}
 	raw, err := json.Marshal(body)
 	require.NoError(t, err)
