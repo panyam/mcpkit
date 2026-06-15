@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -487,11 +488,15 @@ func TestMatchTransform_CrossModeParity(t *testing.T) {
 	pushCh, _ := src.Subscribe(ctx, SubscribeOpts{Principal: "alice", Params: matchParams})
 
 	// Webhook
-	var whBody []byte
+	var (
+		whMu   sync.Mutex
+		whBody []byte
+	)
 	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		buf := make([]byte, r.ContentLength)
-		_, _ = r.Body.Read(buf)
-		whBody = buf
+		body, _ := io.ReadAll(r.Body)
+		whMu.Lock()
+		whBody = body
+		whMu.Unlock()
 		w.WriteHeader(200)
 	}))
 	defer receiver.Close()
@@ -524,15 +529,18 @@ func TestMatchTransform_CrossModeParity(t *testing.T) {
 	}
 
 	// Webhook delivery — async; wait
-	deadline := time.Now().Add(500 * time.Millisecond)
-	for time.Now().Before(deadline) && len(whBody) == 0 {
-		time.Sleep(10 * time.Millisecond)
-	}
-	require.NotEmpty(t, whBody, "webhook receiver got no body")
+	require.Eventually(t, func() bool {
+		whMu.Lock()
+		defer whMu.Unlock()
+		return len(whBody) > 0
+	}, 500*time.Millisecond, 10*time.Millisecond, "webhook receiver got no body")
+	whMu.Lock()
+	bodyCopy := append([]byte(nil), whBody...)
+	whMu.Unlock()
 	var whEnv struct {
 		Data sevPayload `json:"data"`
 	}
-	require.NoError(t, json.Unmarshal(whBody, &whEnv))
+	require.NoError(t, json.Unmarshal(bodyCopy, &whEnv))
 
 	// Poll delivery
 	pollBody, _ := json.Marshal(map[string]any{
