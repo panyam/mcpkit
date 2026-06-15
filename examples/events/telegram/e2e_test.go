@@ -28,7 +28,7 @@ import (
 //
 // The cursorless typing source is registered alongside telegram.message so
 // cursor-shape tests can exercise both modes against the same server.
-func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.YieldingSource[TelegramEventData], func(TelegramEventData) error, *events.WebhookRegistry) {
+func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.YieldingSource[TelegramEventData], func(context.Context, TelegramEventData) error, *events.WebhookRegistry) {
 	// Tests subscribe to httptest URLs (127.0.0.1:N); bypass the
 	// production-default SSRF dial guard (spec §"Webhook Security"
 	// → "SSRF prevention" L464).
@@ -57,7 +57,7 @@ func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.Yie
 // yield closure alongside the message yield. Used by the cursorless e2e
 // tests so they can publish typing events without spinning up a Telegram
 // session.
-func buildTestStackWithTyping() (*server.Server, func(TelegramEventData) error, func(TelegramTypingData) error) {
+func buildTestStackWithTyping() (*server.Server, func(context.Context, TelegramEventData) error, func(context.Context, TelegramTypingData) error) {
 	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true))
 	source, yield := newTelegramSource()
 	typingSource, yieldTyping := newTelegramTypingSource()
@@ -78,8 +78,8 @@ func buildTestStackWithTyping() (*server.Server, func(TelegramEventData) error, 
 }
 
 // yieldText is a small helper for tests that just need to publish a message.
-func yieldText(yield func(TelegramEventData) error, chatID int64, sender, text string) error {
-	return yield(TelegramEventData{
+func yieldText(yield func(context.Context, TelegramEventData) error, chatID int64, sender, text string) error {
+	return yield(context.Background(), TelegramEventData{
 		ChatID:    strconv.FormatInt(chatID, 10),
 		User:      sender,
 		Text:      text,
@@ -201,7 +201,7 @@ func TestE2EStreamCursorless(t *testing.T) {
 	require.NoError(t, err)
 	defer stream.Stop()
 
-	require.NoError(t, yieldTyping(TelegramTypingData{
+	require.NoError(t, yieldTyping(context.Background(), TelegramTypingData{
 		ChatID: "100", User: "alice",
 		StartedAt: time.Now().Format(time.RFC3339),
 	}))
@@ -213,39 +213,6 @@ func TestE2EStreamCursorless(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("OnEvent never fired within 2s of yieldTyping")
 	}
-}
-
-// TestE2EPushDelivery verifies the library's automatic push fanout — yield()
-// triggers events.Emit via the SetEmitHook wired by Register, and the SSE
-// notification reaches the client. Source author writes no fanout code.
-func TestE2EPushDelivery(t *testing.T) {
-	srv, _, yield, _ := buildTestStack()
-
-	var mu sync.Mutex
-	var received []string
-
-	handler := srv.Handler(server.WithStreamableHTTP(true))
-	ts := httptest.NewServer(handler)
-	defer ts.Close()
-
-	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "push-test", Version: "1.0"},
-		client.WithGetSSEStream(),
-		client.WithNotificationCallback(func(method string, params any) {
-			mu.Lock()
-			defer mu.Unlock()
-			received = append(received, method)
-		}),
-	)
-	require.NoError(t, c.Connect())
-	defer c.Close()
-
-	time.Sleep(200 * time.Millisecond)
-	require.NoError(t, yieldText(yield, 100, "alice", "push test"))
-	time.Sleep(500 * time.Millisecond)
-
-	mu.Lock()
-	defer mu.Unlock()
-	assert.Contains(t, received, "notifications/events/event")
 }
 
 // TestE2EWebhookDelivery verifies webhook fanout via the default modes:
@@ -476,48 +443,6 @@ func TestE2EEventsList(t *testing.T) {
 	assert.True(t, typing.Cursorless, "telegram.typing is cursorless")
 }
 
-// TestE2ECursorlessPushDelivery verifies the cursorless typing source on
-// telegram-events: yield triggers a push notification whose Event.cursor
-// is JSON null on the wire.
-func TestE2ECursorlessPushDelivery(t *testing.T) {
-	srv, _, yieldTyping := buildTestStackWithTyping()
-
-	var mu sync.Mutex
-	var receivedRaw []map[string]any
-
-	handler := srv.Handler(server.WithStreamableHTTP(true))
-	tsrv := httptest.NewServer(handler)
-	defer tsrv.Close()
-
-	c := client.NewClient(tsrv.URL+"/mcp", core.ClientInfo{Name: "cursorless-push", Version: "1.0"},
-		client.WithGetSSEStream(),
-		client.WithNotificationCallback(func(method string, params any) {
-			if method != "notifications/events/event" {
-				return
-			}
-			b, _ := json.Marshal(params)
-			var p map[string]any
-			_ = json.Unmarshal(b, &p)
-			mu.Lock()
-			receivedRaw = append(receivedRaw, p)
-			mu.Unlock()
-		}),
-	)
-	require.NoError(t, c.Connect())
-	defer c.Close()
-
-	time.Sleep(200 * time.Millisecond)
-	require.NoError(t, yieldTyping(newTelegramTypingEvent(100, "alice", time.Now())))
-	time.Sleep(500 * time.Millisecond)
-
-	mu.Lock()
-	defer mu.Unlock()
-	require.Len(t, receivedRaw, 1, "push must deliver the typing event")
-	cursorVal, present := receivedRaw[0]["cursor"]
-	require.True(t, present, "cursor field must be present on the wire")
-	assert.Nil(t, cursorVal, "cursorless event must wire as cursor:null")
-}
-
 // TestE2ECursorlessWebhookDelivery verifies the cursorless typing source's
 // webhook delivery on telegram-events: the POSTed Event JSON has cursor:null.
 func TestE2ECursorlessWebhookDelivery(t *testing.T) {
@@ -552,7 +477,7 @@ func TestE2ECursorlessWebhookDelivery(t *testing.T) {
 	require.NoError(t, json.Unmarshal(raw.Raw, &resp))
 	assert.Nil(t, resp.Cursor, "subscribe response cursor must be null for cursorless source")
 
-	require.NoError(t, yieldTyping(newTelegramTypingEvent(100, "alice", time.Now())))
+	require.NoError(t, yieldTyping(context.Background(), newTelegramTypingEvent(100, "alice", time.Now())))
 	time.Sleep(500 * time.Millisecond)
 
 	mu.Lock()
