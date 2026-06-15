@@ -27,7 +27,7 @@ type fakePayload struct {
 // stack wires a server with one cursored fake.* event source, returns the
 // connected MCP client + the yield closure for the source. Optional
 // WebhookOptions configure the registry for mode-specific tests.
-func stack(t *testing.T, whOpts ...events.WebhookOption) (*client.Client, func(fakePayload) error, *events.WebhookRegistry) {
+func stack(t *testing.T, whOpts ...events.WebhookOption) (*client.Client, func(context.Context, fakePayload) error, *events.WebhookRegistry) {
 	t.Helper()
 
 	// SDK tests subscribe to httptest URLs (127.0.0.1:N). Prepend
@@ -175,7 +175,7 @@ func TestReceiver_DeliversTypedEvents(t *testing.T) {
 	defer sub.Stop()
 	recv.SetSecret(sub.Secret())
 
-	require.NoError(t, yield(fakePayload{Msg: "hello"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "hello"}))
 
 	select {
 	case ev := <-recv.Events():
@@ -211,7 +211,7 @@ func TestReceiver_RejectsBadSignature(t *testing.T) {
 	defer sub.Stop()
 	// deliberately do NOT call recv.SetSecret(sub.Secret())
 
-	require.NoError(t, yield(fakePayload{Msg: "should-be-rejected"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "should-be-rejected"}))
 
 	select {
 	case ev := <-recv.Events():
@@ -244,7 +244,7 @@ func TestReceiver_AcceptsStandardWebhooksHeaders(t *testing.T) {
 	defer sub.Stop()
 	recv.SetSecret(sub.Secret())
 
-	require.NoError(t, yield(fakePayload{Msg: "via-standard-webhooks"}))
+	require.NoError(t, yield(context.Background(), fakePayload{Msg: "via-standard-webhooks"}))
 
 	select {
 	case ev := <-recv.Events():
@@ -297,7 +297,7 @@ func TestReceiver_DropsOnFullChannel(t *testing.T) {
 	recv.SetSecret(sub.Secret())
 
 	for i := 0; i < 80; i++ {
-		_ = yield(fakePayload{Msg: "x"})
+		_ = yield(context.Background(), fakePayload{Msg: "x"})
 	}
 	time.Sleep(500 * time.Millisecond)
 
