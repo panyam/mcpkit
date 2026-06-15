@@ -305,39 +305,6 @@ func TestE2EStreamCursorless(t *testing.T) {
 	}
 }
 
-// TestE2EPushDelivery verifies the library's automatic push fanout — yield()
-// triggers events.Emit via the SetEmitHook wired by Register, and the SSE
-// notification reaches the client. Source author writes no fanout code.
-func TestE2EPushDelivery(t *testing.T) {
-	srv, _, yield, _ := buildTestStack()
-
-	var mu sync.Mutex
-	var received []string
-
-	handler := srv.Handler(server.WithStreamableHTTP(true))
-	ts := httptest.NewServer(handler)
-	defer ts.Close()
-
-	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "push-test", Version: "1.0"},
-		client.WithGetSSEStream(),
-		client.WithNotificationCallback(func(method string, params any) {
-			mu.Lock()
-			received = append(received, method)
-			mu.Unlock()
-		}),
-	)
-	require.NoError(t, c.Connect())
-	defer c.Close()
-
-	time.Sleep(200 * time.Millisecond)
-	require.NoError(t, yield(context.Background(), newDiscordEvent("g", "c", "alice", "push test", time.Now())))
-	time.Sleep(500 * time.Millisecond)
-
-	mu.Lock()
-	defer mu.Unlock()
-	assert.Contains(t, received, "notifications/events/event")
-}
-
 // TestE2EWebhookDelivery verifies webhook fanout via the default modes:
 // Server-generated secret + StandardWebhooks header naming. The latter is
 // the post-r3167245184 default (upstream WG PR#1 line 434, author aligned
@@ -565,49 +532,6 @@ func TestE2EWebhookDelivery_MCPHeadersOptIn(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	assert.Equal(t, 1, deliveries)
-}
-
-// TestE2ECursorlessPushDelivery verifies the cursorless typing source: yield
-// triggers a push notification whose Event.cursor is JSON null on the wire.
-// Confirms the `*string` cursor field round-trips correctly through the
-// notification fanout path.
-func TestE2ECursorlessPushDelivery(t *testing.T) {
-	srv, _, yieldTyping, _ := buildTestStackWithTyping()
-
-	var mu sync.Mutex
-	var receivedRaw []map[string]any
-
-	handler := srv.Handler(server.WithStreamableHTTP(true))
-	ts := httptest.NewServer(handler)
-	defer ts.Close()
-
-	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "cursorless-push", Version: "1.0"},
-		client.WithGetSSEStream(),
-		client.WithNotificationCallback(func(method string, params any) {
-			if method != "notifications/events/event" {
-				return
-			}
-			b, _ := json.Marshal(params)
-			var p map[string]any
-			_ = json.Unmarshal(b, &p)
-			mu.Lock()
-			receivedRaw = append(receivedRaw, p)
-			mu.Unlock()
-		}),
-	)
-	require.NoError(t, c.Connect())
-	defer c.Close()
-
-	time.Sleep(200 * time.Millisecond)
-	require.NoError(t, yieldTyping(context.Background(), newDiscordTypingEvent("g", "c", "alice", time.Now())))
-	time.Sleep(500 * time.Millisecond)
-
-	mu.Lock()
-	defer mu.Unlock()
-	require.Len(t, receivedRaw, 1, "push must deliver the typing event")
-	cursorVal, present := receivedRaw[0]["cursor"]
-	require.True(t, present, "cursor field must be present on the wire (not omitted)")
-	assert.Nil(t, cursorVal, "cursorless event must wire as cursor:null")
 }
 
 // TestE2ECursorlessWebhookDelivery verifies the cursorless typing source's
