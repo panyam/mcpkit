@@ -28,6 +28,13 @@ const (
 	uriIndex               = skills.IndexURI
 )
 
+// previewHeadTailLines bounds the head and the tail of every previewBody
+// output independently — the function prints up to this many lines from
+// the start of the body, an elision marker, and up to this many from the
+// end. Bodies of (2*previewHeadTailLines) or fewer lines print whole.
+// Tune here if the audience needs more or less context per read.
+const previewHeadTailLines = 10
+
 func runDemo() {
 	serverURL := common.ServerURL()
 
@@ -80,7 +87,7 @@ func runDemo() {
 		Input(demokit.Choice("adaptive", "stateless", "legacy").
 			Named("wire", "Wire mode (adaptive probes stateless first, falls back to legacy)").
 			WithDefault("adaptive")).
-		Note("`adaptive` (default): probe `server/discover`, fall back to `initialize` on `-32601`. `stateless`: force `server/discover`, error if the server can't answer. `legacy`: skip the probe, go straight to `initialize`.").
+		Note("Adaptive (default) probes server/discover and falls back to the initialize handshake on -32601. Stateless forces server/discover and errors if the server cannot answer. Legacy skips the probe and goes straight to initialize.").
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			choice, _ := ctx.Inputs["wire"].(string)
 			switch choice {
@@ -96,9 +103,33 @@ func runDemo() {
 		})
 
 	demo.Step("Connect to the skills server").
-		Arrow("Host", "Server", "POST /mcp — `server/discover` (stateless) OR `initialize` (legacy)").
+		Arrow("Host", "Server", "POST /mcp — server/discover (stateless) OR initialize (legacy)").
 		DashedArrow("Server", "Host", "serverInfo + capabilities (with extensions.skills)").
-		Note("`client.NewClient(..., client.WithClientMode(mode))` then `Connect()`. Inspect `c.UsingStatelessWire()` after the call to see which wire engaged.").
+		Note("Construct the client with the chosen wire mode, then connect. After the call returns, inspect the new accessor to see which wire engaged. The curl chain below uses the legacy wire and mints a session id reused by every subsequent step; the stateless wire skips that — each call posts directly to /mcp with no Mcp-Session-Id header.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# Legacy wire: initialize handshake mints the session id for downstream steps.
+SID=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":"i","method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"skills-host","version":"1.0"},"capabilities":{}}}' \
+  -D - -o /dev/null | grep -i 'mcp-session-id' | awk '{print $2}' | tr -d '\r\n')
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
+echo "SID=$SID"
+
+# Stateless wire alternative — no session id, just probe server/discover:
+#   curl -s -X POST http://localhost:8080/mcp \
+#     -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+#     -d '{"jsonrpc":"2.0","id":"d","method":"server/discover","params":{}}' | jq '.result'`).Default(),
+			demokit.MakeVariant("go", "go", `c := client.NewClient(serverURL+"/mcp",
+    core.ClientInfo{Name: "skills-host", Version: "1.0"},
+    client.WithClientMode(wireMode), // adaptive | stateless | legacy
+)
+if err := c.Connect(); err != nil { /* server not up — run: make serve */ }
+stateless := c.UsingStatelessWire()
+supports  := c.ServerSupportsExtension(skills.ExtensionID)`),
+		).
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			c = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "skills-host", Version: "1.0"},
@@ -123,7 +154,17 @@ func runDemo() {
 	demo.Step("resources/list returns every cataloged skill URI").
 		Arrow("Host", "Server", "resources/list").
 		DashedArrow("Server", "Host", "resources[] including skill://index.json + each SKILL.md").
-		Note("In file mode the list has N entries per skill (one for SKILL.md, one for each supporting file) plus the index. In archive mode it's one entry per skill plus the index.").
+		Note("In file mode the list has N entries per skill (one for SKILL.md, one per supporting file) plus the index. In archive mode it's one entry per skill plus the index.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"resources/list"}' | jq '.result.resources[] | "\(.uri)  [\(.mimeType)]"'`).Default(),
+			demokit.MakeVariant("go", "go", `defs, err := c.ListResources()
+for _, d := range defs {
+    fmt.Printf("%s    [%s]\n", d.URI, d.MimeType)
+}`),
+		).
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			if c == nil {
 				return nil
@@ -149,7 +190,20 @@ func runDemo() {
 	demo.Step("Read skill://index.json").
 		Arrow("Host", "Server", "resources/read uri=skill://index.json").
 		DashedArrow("Server", "Host", "{ $schema, skills: [...] }").
-		Note("The Indexer caches the result with TTL + per-skill mtime invalidation. Repeated reads return the same bytes until something in a SKILL.md actually changes.").
+		Note("The Indexer caches the result with a TTL and per-skill mtime invalidation. Repeated reads return the same bytes until something in a SKILL.md actually changes. The file is not on disk — mcpkit generates it from the live provider catalog on each cache miss.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"resources/read","params":{"uri":"skill://index.json"}}' \
+  | jq -r '.result.contents[0].text' | jq '.'`).Default(),
+			demokit.MakeVariant("go", "go", `body, _ := c.ReadResource(skills.IndexURI)
+var idx skills.Index
+json.Unmarshal([]byte(body), &idx)
+for _, e := range idx.Skills {
+    fmt.Printf("[%s] %s digest=%s…\n", e.Type, e.Name, e.Digest[:14])
+}`),
+		).
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			if c == nil {
 				return nil
@@ -184,7 +238,25 @@ func runDemo() {
 	demo.Step("Verify digest by re-fetching SKILL.md and recomputing SHA-256").
 		Arrow("Host", "Server", "resources/read uri=skill://git-workflow/SKILL.md").
 		DashedArrow("Server", "Host", "text/markdown body").
-		Note("Treat the response bytes as the artifact, hash them, and compare against the digest field from the index. A mismatch indicates corruption or tampering and per the SEP the host MUST NOT use the content.").
+		Note("Treat the response bytes as the artifact, hash them, compare against the digest field from the index. A mismatch indicates corruption or tampering, and per the SEP the host MUST NOT use the content.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# Re-read the SKILL.md, recompute sha256, compare against the index entry's digest.
+WANT=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":3,"method":"resources/read","params":{"uri":"skill://index.json"}}' \
+  | jq -r '.result.contents[0].text' \
+  | jq -r '.skills[] | select(.url=="skill://git-workflow/SKILL.md") | .digest')
+GOT="sha256:$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":4,"method":"resources/read","params":{"uri":"skill://git-workflow/SKILL.md"}}' \
+  | jq -r '.result.contents[0].text' | shasum -a 256 | awk '{print $1}')"
+[ "$WANT" = "$GOT" ] && echo "verified" || echo "MISMATCH"`).Default(),
+			demokit.MakeVariant("go", "go", `result, _ := c.ReadResourceFull("skill://git-workflow/SKILL.md")
+raw := []byte(result.Contents[0].Text)
+sum := sha256.Sum256(raw)
+got := "sha256:" + hex.EncodeToString(sum[:])
+// compare got against e.Digest from skill://index.json — host MUST NOT use mismatched content`),
+		).
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			if c == nil || len(indexBody) == 0 {
 				return nil
@@ -235,7 +307,16 @@ func runDemo() {
 	demo.Step("Read the pdf-processing SKILL.md").
 		Arrow("Host", "Server", "resources/read uri=skill://pdf-processing/SKILL.md").
 		DashedArrow("Server", "Host", "text/markdown body").
-		Note("This skill's frontmatter has `version` and `tags` Extra fields. mcpkit surfaces those under `ResourceDef.Annotations` keyed by `io.modelcontextprotocol.skills/`.").
+		Note("This skill's frontmatter carries version and tags Extra fields. mcpkit surfaces those under ResourceDef.Annotations keyed by the io.modelcontextprotocol.skills/ reverse-domain prefix.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":5,"method":"resources/read","params":{"uri":"skill://pdf-processing/SKILL.md"}}' \
+  | jq -r '.result.contents[0].text'`).Default(),
+			demokit.MakeVariant("go", "go", `body, _ := c.ReadResource("skill://pdf-processing/SKILL.md")
+fmt.Println(body)`),
+		).
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			if c == nil {
 				return nil
@@ -245,14 +326,24 @@ func runDemo() {
 				fmt.Printf("    SKIP: %v (server may be in archive mode)\n", err)
 				return nil
 			}
-			previewBody(body, 6)
+			previewBody(body)
 			return nil
 		})
 
 	demo.Step("Read a supporting file via skill:// (references/FORMS.md)").
 		Arrow("Host", "Server", "resources/read uri=skill://pdf-processing/references/FORMS.md").
 		DashedArrow("Server", "Host", "text/markdown body").
-		Note("Relative reference `references/FORMS.md` from within pdf-processing/SKILL.md resolves to this full URI via `skills.ResolveRelative(skillRoot, \"references/FORMS.md\")`.").
+		Note("Relative reference resolution: references/FORMS.md from inside pdf-processing/SKILL.md resolves to this full URI via the SDK helper that walks the skill root.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":6,"method":"resources/read","params":{"uri":"skill://pdf-processing/references/FORMS.md"}}' \
+  | jq -r '.result.contents[0].text'`).Default(),
+			demokit.MakeVariant("go", "go", `root, _ := skills.ParseURI("skill://pdf-processing/SKILL.md")
+target, _ := skills.ResolveRelative(root, "references/FORMS.md")
+body, _ := c.ReadResource(target.String())`),
+		).
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			if c == nil {
 				return nil
@@ -262,14 +353,22 @@ func runDemo() {
 				fmt.Printf("    SKIP: %v\n", err)
 				return nil
 			}
-			previewBody(body, 6)
+			previewBody(body)
 			return nil
 		})
 
 	demo.Step("Read a nested-prefix skill (acme/billing/refunds)").
 		Arrow("Host", "Server", "resources/read uri=skill://acme/billing/refunds/SKILL.md").
 		DashedArrow("Server", "Host", "text/markdown body").
-		Note("Demonstrates that the prefix-segment routing works end-to-end. The skill's `name` is `refunds`; the prefix `acme/billing/` is server-chosen.").
+		Note("Demonstrates that the prefix-segment routing works end-to-end. The skill name is refunds; the acme/billing/ prefix is server-chosen and is opaque to the skill's own frontmatter.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":7,"method":"resources/read","params":{"uri":"skill://acme/billing/refunds/SKILL.md"}}' \
+  | jq -r '.result.contents[0].text'`).Default(),
+			demokit.MakeVariant("go", "go", `body, _ := c.ReadResource("skill://acme/billing/refunds/SKILL.md")`),
+		).
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			if c == nil {
 				return nil
@@ -279,14 +378,22 @@ func runDemo() {
 				fmt.Printf("    SKIP: %v\n", err)
 				return nil
 			}
-			previewBody(body, 6)
+			previewBody(body)
 			return nil
 		})
 
 	demo.Step("Read a supporting file in the nested skill (templates/email.md)").
 		Arrow("Host", "Server", "resources/read uri=skill://acme/billing/refunds/templates/email.md").
 		DashedArrow("Server", "Host", "text/markdown body").
-		Note("Same relative-reference resolution: `templates/email.md` from refunds/SKILL.md.").
+		Note("Same relative-reference resolution as the pdf-processing example, this time across a multi-segment prefix.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":8,"method":"resources/read","params":{"uri":"skill://acme/billing/refunds/templates/email.md"}}' \
+  | jq -r '.result.contents[0].text'`).Default(),
+			demokit.MakeVariant("go", "go", `body, _ := c.ReadResource("skill://acme/billing/refunds/templates/email.md")`),
+		).
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			if c == nil {
 				return nil
@@ -296,7 +403,7 @@ func runDemo() {
 				fmt.Printf("    SKIP: %v\n", err)
 				return nil
 			}
-			previewBody(body, 6)
+			previewBody(body)
 			return nil
 		})
 
@@ -309,7 +416,31 @@ func runDemo() {
 		DashedArrow("Server", "Host", "2 files + 1 subdirectory (`regional`, inode/directory)").
 		Arrow("Host", "Server", "resources/directory/read uri=skill://acme/billing/refunds/templates/regional").
 		DashedArrow("Server", "Host", "1 file (eu.md)").
-		Note("Subdirectories surface with `mimeType: \"inode/directory\"`; client descends by issuing a second call. SDK wrapper: `Client.ReadDirectory(ctx, uri)`.").
+		Note("Subdirectories surface with mimeType inode/directory; the client descends by issuing a second call. The SDK wraps this into a single call; the curl below shows both round trips explicitly.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# Level 1: list the templates/ subtree of the refunds skill.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":9,"method":"resources/directory/read","params":{"uri":"skill://acme/billing/refunds/templates"}}' \
+  | jq '.result.resources[] | {uri, mimeType}'
+
+# Level 2: descend into the regional/ subdirectory the first call returned.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":10,"method":"resources/directory/read","params":{"uri":"skill://acme/billing/refunds/templates/regional"}}' \
+  | jq '.result.resources[] | {uri, mimeType}'`).Default(),
+			demokit.MakeVariant("go", "go", `sc := skills.NewClient(c, skills.WithTracerProvider(tp))
+result, _ := sc.ReadDirectory(ctx, "skill://acme/billing/refunds/templates")
+for _, r := range result.Resources {
+    if r.MimeType == skills.MimeTypeDirectory {
+        sub, _ := sc.ReadDirectory(ctx, r.URI)
+        // recurse over sub.Resources
+        _ = sub
+    }
+}`),
+		).
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			if c == nil {
 				return nil
@@ -411,16 +542,25 @@ func marker(mimeType string) string {
 	return "file"
 }
 
-// previewBody prints up to n lines of the body for the walkthrough output.
-// Skill bodies are short so this is enough to confirm the round trip without
-// flooding the terminal.
-func previewBody(body string, n int) {
+// previewBody prints the body of a read with head-and-tail bracketing
+// governed by previewHeadTailLines. Head-and-tail reads better than a
+// single window because the audience sees both the frontmatter shape
+// and the body's closing structure — useful when SKILL.md instructions
+// reference both a top-of-file metadata block and a bottom-of-file
+// closing section.
+func previewBody(body string) {
 	lines := strings.Split(body, "\n")
-	for i, line := range lines {
-		if i >= n {
-			fmt.Printf("    … (%d more lines)\n", len(lines)-n)
-			return
+	if len(lines) <= 2*previewHeadTailLines {
+		for _, line := range lines {
+			fmt.Printf("    %s\n", line)
 		}
+		return
+	}
+	for _, line := range lines[:previewHeadTailLines] {
+		fmt.Printf("    %s\n", line)
+	}
+	fmt.Printf("    … (%d more lines)\n", len(lines)-2*previewHeadTailLines)
+	for _, line := range lines[len(lines)-previewHeadTailLines:] {
 		fmt.Printf("    %s\n", line)
 	}
 }
