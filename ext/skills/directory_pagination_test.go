@@ -63,6 +63,37 @@ func TestPaginateDirectoryRead_MalformedCursorDefaultsToStart(t *testing.T) {
 	}
 }
 
+// TestPaginateDirectoryRead_ZeroPageSizeReturnsAll pins the production
+// defaultDirectoryReadPageSize = 0 contract: a non-positive pageSize
+// means "return everything from the cursor offset forward in one page,
+// no nextCursor." Matches server/pagination.go::paginate. Without this
+// short-circuit the production default would silently truncate every
+// response to an empty page.
+func TestPaginateDirectoryRead_ZeroPageSizeReturnsAll(t *testing.T) {
+	items := []core.ResourceDef{{URI: "a"}, {URI: "b"}, {URI: "c"}}
+	page, next := paginateDirectoryRead(items, "", 0)
+	if got := urisOf(page); !equalSlices(got, []string{"a", "b", "c"}) {
+		t.Errorf("page = %v, want [a b c]", got)
+	}
+	if next != "" {
+		t.Errorf("NextCursor = %q, want empty", next)
+	}
+}
+
+// TestPaginateDirectoryRead_NegativePageSizeReturnsAll keeps the
+// boundary tight: any non-positive value short-circuits to "all,"
+// not just literal 0.
+func TestPaginateDirectoryRead_NegativePageSizeReturnsAll(t *testing.T) {
+	items := []core.ResourceDef{{URI: "a"}, {URI: "b"}}
+	page, next := paginateDirectoryRead(items, "", -1)
+	if got := urisOf(page); !equalSlices(got, []string{"a", "b"}) {
+		t.Errorf("page = %v, want [a b]", got)
+	}
+	if next != "" {
+		t.Errorf("NextCursor = %q, want empty", next)
+	}
+}
+
 func urisOf(rs []core.ResourceDef) []string {
 	out := make([]string, len(rs))
 	for i, r := range rs {
