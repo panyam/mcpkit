@@ -87,7 +87,7 @@ c := client.NewClient(serverURL+"/mcp",
     }),
 )
 if err := c.Connect(); err != nil { panic(err) }
-tools, _ := c.ListTools() // each tool carries Execution.TaskSupport metadata`),
+tools, _ := c.ListTools(ctx.Ctx) // each tool carries Execution.TaskSupport metadata`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			c = client.NewClient(serverURL+"/mcp",
@@ -107,7 +107,7 @@ tools, _ := c.ListTools() // each tool carries Execution.TaskSupport metadata`),
 			}
 			fmt.Printf("    Connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)
 
-			tools, _ := c.ListTools()
+			tools, _ := c.ListTools(ctx.Ctx)
 			fmt.Printf("\n    Tools (with task support metadata):\n")
 			for _, t := range tools {
 				support := "forbidden"

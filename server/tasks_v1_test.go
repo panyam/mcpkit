@@ -373,7 +373,7 @@ func TestToolExecutionFieldInToolsList(t *testing.T) {
 	defer close(unblock)
 	c := connectClient(t, srv)
 
-	tools, err := c.ListTools()
+	tools, err := c.ListTools(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}

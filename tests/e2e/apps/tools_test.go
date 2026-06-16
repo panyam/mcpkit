@@ -12,7 +12,7 @@ import (
 func TestToolMetaResourceUri(t *testing.T) {
 	c := setupConformanceClient(t)
 
-	tools, err := c.ListTools()
+	tools, err := c.ListTools(t.Context())
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
 	}
@@ -32,7 +32,7 @@ func TestToolMetaResourceUri(t *testing.T) {
 func TestToolMetaVisibilityDefaults(t *testing.T) {
 	c := setupConformanceClient(t)
 
-	modelTools, err := c.ListToolsForModel()
+	modelTools, err := c.ListToolsForModel(t.Context())
 	if err != nil {
 		t.Fatalf("ListToolsForModel: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestToolMetaVisibilityDefaults(t *testing.T) {
 func TestToolMetaCSP(t *testing.T) {
 	c := setupConformanceClient(t)
 
-	tools, err := c.ListTools()
+	tools, err := c.ListTools(t.Context())
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestToolMetaCSP(t *testing.T) {
 func TestToolMetaPermissions(t *testing.T) {
 	c := setupConformanceClient(t)
 
-	tools, err := c.ListTools()
+	tools, err := c.ListTools(t.Context())
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestToolMetaPermissions(t *testing.T) {
 func TestToolMetaPrefersBorder(t *testing.T) {
 	c := setupConformanceClient(t)
 
-	tools, err := c.ListTools()
+	tools, err := c.ListTools(t.Context())
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
 	}

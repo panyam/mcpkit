@@ -260,6 +260,25 @@ func WithClientKeepalive(interval time.Duration, maxFailures int) ClientOption {
 	}
 }
 
+// WithMaxListPages overrides the per-client cap on auto-iterating list
+// helpers. The cap applies uniformly to the Tools / Resources /
+// ResourceTemplates / Prompts iterators and to the zero-arg legacy
+// helpers (ListTools etc.) which drain those iterators internally.
+//
+// When the iterator would issue page N+1 and N >= cap, it yields
+// ErrListPaginationOverrun and stops. The items already yielded are
+// safe to consume; what is uncertain is whether more pages legitimately
+// existed beyond the cap or the server was wedged.
+//
+// Pass 0 to disable the check entirely (unbounded iteration). The
+// default is 1000 pages, comfortably above any realistic MCP catalog
+// at the standard 100-items-per-page rate.
+func WithMaxListPages(n int) ClientOption {
+	return func(c *Client) {
+		c.maxListPages = n
+	}
+}
+
 // WithExtension advertises support for an extension during the initialize
 // handshake. The extension ID and capability are included in the client's
 // capabilities.extensions map, allowing the server to detect client support
@@ -480,7 +499,23 @@ type Client struct {
 	// every request, writes only on retry, so RWMutex is the right shape.
 	negotiatedVersion   string
 	negotiatedVersionMu sync.RWMutex
+
+	// maxListPages caps the page count the paginating list iterators
+	// (Tools / Resources / ResourceTemplates / Prompts) will follow
+	// before yielding ErrListPaginationOverrun. The zero-arg legacy
+	// helpers (ListTools etc.) inherit the same cap because they drain
+	// the matching iterator internally. 0 disables the check.
+	// Configured via WithMaxListPages; default seeded in NewClient.
+	maxListPages int
 }
+
+// defaultMaxListPages is the safety cap on auto-iterating list helpers
+// when the caller has not configured one via WithMaxListPages. At the
+// default page size of 100 items, 1000 pages = 100k items — well above
+// any realistic MCP catalog. A buggy server emitting an unbounded
+// nextCursor surfaces as ErrListPaginationOverrun rather than an
+// infinite loop.
+const defaultMaxListPages = 1000
 
 // NewClient creates a new MCP client targeting the given server URL.
 // By default uses Streamable HTTP. Use WithSSEClient() for SSE transport.
@@ -494,6 +529,7 @@ func NewClient(url string, info core.ClientInfo, opts ...ClientOption) *Client {
 		// option (if passed) clobbers via the loop below.
 		mode:              ResolveClientMode(),
 		negotiatedVersion: core.DraftProtocolVersion2026V1,
+		maxListPages:      defaultMaxListPages,
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -1332,33 +1368,33 @@ func (c *Client) UnsubscribeResource(uri string) error {
 	return err
 }
 
-// ListTools returns all registered tool definitions. As a side effect it
-// caches each tool's full ToolDef (including inputSchema) keyed by name —
-// ToolCall consults this cache to detect SEP-2243 x-mcp-header annotations
-// without a second round-trip.
+// ListTools returns every registered tool definition the server exposes.
+// Auto-iterates tools/list across every page the server advertises via
+// nextCursor; capped at WithMaxListPages (default 1000) — a server
+// emitting an unbounded cursor surfaces as ErrListPaginationOverrun
+// rather than an infinite loop.
+//
+// As a side effect, caches each valid tool's full ToolDef (including
+// inputSchema) keyed by name — ToolCall consults this cache to detect
+// SEP-2243 x-mcp-header annotations without a second round-trip. The
+// cache replace happens once, after every page has been drained, so
+// concurrent lookupToolSchema readers never observe a partial cache.
 //
 // Tools whose inputSchema fails SEP-2243 x-mcp-header validation (empty
 // values, non-primitive types, name charset, case-insensitive duplicates)
 // are silently filtered out. Spec: "Client MUST keep valid tools while
 // excluding invalid ones." The cache and the returned slice are kept
 // consistent — invalid tools never become callable through this client.
-func (c *Client) ListTools() ([]core.ToolDef, error) {
-	result, err := c.Call("tools/list", nil)
-	if err != nil {
-		return nil, err
-	}
-	var resp struct {
-		Tools []core.ToolDef `json:"tools"`
-	}
-	if err := result.Unmarshal(&resp); err != nil {
-		return nil, err
-	}
-	valid := make([]core.ToolDef, 0, len(resp.Tools))
-	for _, t := range resp.Tools {
-		if err := validateMcpParamHeaders(t.InputSchema); err != nil {
+func (c *Client) ListTools(ctx context.Context) ([]core.ToolDef, error) {
+	var valid []core.ToolDef
+	for tool, err := range c.Tools(ctx) {
+		if err != nil {
+			return nil, err
+		}
+		if vErr := validateMcpParamHeaders(tool.InputSchema); vErr != nil {
 			continue
 		}
-		valid = append(valid, t)
+		valid = append(valid, tool)
 	}
 	c.cacheToolSchemas(valid)
 	return valid, nil
@@ -1391,8 +1427,8 @@ func (c *Client) lookupToolSchema(name string) (core.ToolDef, bool) {
 // that are only visible to apps (visibility: ["app"]). Tools with no visibility
 // set (nil/empty) are included — the default means visible to both model and app.
 // This is a client-side convenience; the server always returns all tools.
-func (c *Client) ListToolsForModel() ([]core.ToolDef, error) {
-	tools, err := c.ListTools()
+func (c *Client) ListToolsForModel(ctx context.Context) ([]core.ToolDef, error) {
+	tools, err := c.ListTools(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1468,34 +1504,37 @@ func (c *Client) ServerSupportsUI() bool {
 	return c.ServerSupportsExtension(core.UIExtensionID)
 }
 
-// ListResources returns all registered static resources.
-func (c *Client) ListResources() ([]core.ResourceDef, error) {
-	result, err := c.Call("resources/list", nil)
-	if err != nil {
-		return nil, err
+// ListResources returns every registered static resource the server
+// exposes. Auto-iterates resources/list across every page the server
+// advertises via nextCursor; capped at WithMaxListPages (default 1000)
+// — a server emitting an unbounded cursor surfaces as
+// ErrListPaginationOverrun rather than an infinite loop.
+//
+// Discards the per-page envelope (TTLMs / CacheScope). Use
+// ListResourcesPage(cursor) when you need the SEP-2549 cache hints.
+func (c *Client) ListResources(ctx context.Context) ([]core.ResourceDef, error) {
+	var out []core.ResourceDef
+	for r, err := range c.Resources(ctx) {
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
 	}
-	var resp struct {
-		Resources []core.ResourceDef `json:"resources"`
-	}
-	if err := result.Unmarshal(&resp); err != nil {
-		return nil, err
-	}
-	return resp.Resources, nil
+	return out, nil
 }
 
-// ListResourceTemplates returns all registered resource templates.
-func (c *Client) ListResourceTemplates() ([]core.ResourceTemplate, error) {
-	result, err := c.Call("resources/templates/list", nil)
-	if err != nil {
-		return nil, err
+// ListResourceTemplates returns every registered resource template the
+// server exposes. Same auto-iteration + cap contract as ListResources;
+// see WithMaxListPages and ErrListPaginationOverrun.
+func (c *Client) ListResourceTemplates(ctx context.Context) ([]core.ResourceTemplate, error) {
+	var out []core.ResourceTemplate
+	for t, err := range c.ResourceTemplates(ctx) {
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, t)
 	}
-	var resp struct {
-		ResourceTemplates []core.ResourceTemplate `json:"resourceTemplates"`
-	}
-	if err := result.Unmarshal(&resp); err != nil {
-		return nil, err
-	}
-	return resp.ResourceTemplates, nil
+	return out, nil
 }
 
 // SetLogLevel sets the server's minimum log level for this session via
@@ -1506,19 +1545,18 @@ func (c *Client) SetLogLevel(level string) error {
 	return err
 }
 
-// ListPrompts returns all registered prompt definitions.
-func (c *Client) ListPrompts() ([]core.PromptDef, error) {
-	result, err := c.Call("prompts/list", nil)
-	if err != nil {
-		return nil, err
+// ListPrompts returns every registered prompt definition the server
+// exposes. Same auto-iteration + cap contract as ListResources; see
+// WithMaxListPages and ErrListPaginationOverrun.
+func (c *Client) ListPrompts(ctx context.Context) ([]core.PromptDef, error) {
+	var out []core.PromptDef
+	for p, err := range c.Prompts(ctx) {
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, p)
 	}
-	var resp struct {
-		Prompts []core.PromptDef `json:"prompts"`
-	}
-	if err := result.Unmarshal(&resp); err != nil {
-		return nil, err
-	}
-	return resp.Prompts, nil
+	return out, nil
 }
 
 // --- Internal ---

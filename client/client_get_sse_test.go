@@ -268,7 +268,7 @@ func TestGetSSEStream_NotOpenedWhenDisabled(t *testing.T) {
 	defer c.Close()
 
 	// Client should still work for normal operations
-	tools, err := c.ListTools()
+	tools, err := c.ListTools(t.Context())
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
 	}
@@ -337,7 +337,7 @@ func TestGetSSEStream_ReconnectionReopens(t *testing.T) {
 	c.SetURL(ts2.URL + "/mcp")
 
 	// Make a call that will trigger reconnection (old server is dead)
-	_, err := c.ListTools()
+	_, err := c.ListTools(t.Context())
 	if err != nil {
 		t.Fatalf("ListTools after reconnect: %v", err)
 	}

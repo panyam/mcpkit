@@ -223,7 +223,7 @@ func TestProvider_RegisterWith_IndexExposed(t *testing.T) {
 	srv, ts, c := boot(t, "testdata/valid")
 	_ = ts
 
-	defs, err := c.ListResources()
+	defs, err := c.ListResources(t.Context())
 	if err != nil {
 		t.Fatalf("ListResources: %v", err)
 	}
@@ -278,7 +278,7 @@ func TestProvider_WithoutIndex(t *testing.T) {
 	}
 	t.Cleanup(func() { c.Close() })
 
-	defs, err := c.ListResources()
+	defs, err := c.ListResources(t.Context())
 	if err != nil {
 		t.Fatalf("ListResources: %v", err)
 	}
