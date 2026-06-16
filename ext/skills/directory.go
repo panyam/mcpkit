@@ -12,11 +12,17 @@ import (
 	"github.com/panyam/mcpkit/core"
 )
 
-// defaultDirectoryReadPageSize matches the page size server/dispatch.go
-// uses for resources/list. Kept local rather than imported because the
-// upstream helper is package-private and one-line duplication beats a
-// promotion to the public surface for a single off-package consumer.
-const defaultDirectoryReadPageSize = 100
+// defaultDirectoryReadPageSize matches mcpkit's server-wide
+// defaultPageSize (0 = "return everything in one page, no cursor"). The
+// client-side cap added in #790 (Client.WithMaxListPages, default 1000)
+// handles the unbounded-server runaway case, so the server-side page
+// size doesn't need to enforce a ceiling here.
+//
+// Servers that need true paging on resources/directory/read can opt in
+// via a future WithDirectoryReadPageSize provider option — file when a
+// real deployment needs it. The paginateDirectoryRead helper below
+// already does the right thing for any positive override.
+const defaultDirectoryReadPageSize = 0
 
 // handleDirectoryRead serves SEP-2640's resources/directory/read method.
 //
@@ -192,10 +198,20 @@ func (p *Provider) enumerateDirectory(skill *skillEntry, relPath, parentURI stri
 // the cursor offset, plus the next-cursor string (empty when the page
 // includes the tail). Cursor encoding is a base-10 offset; opaque to
 // callers per the resources/list contract.
+//
+// A pageSize of zero or negative means "return every item from the
+// cursor offset forward in one page, no nextCursor" — matches the
+// behavior of server/pagination.go::paginate and the production
+// defaultDirectoryReadPageSize of 0 set above. Without this
+// short-circuit the production default would silently truncate every
+// response to an empty page.
 func paginateDirectoryRead(items []core.ResourceDef, cursor string, pageSize int) ([]core.ResourceDef, string) {
 	start := parseDirectoryReadCursor(cursor)
 	if start > len(items) {
 		start = len(items)
+	}
+	if pageSize <= 0 {
+		return items[start:], ""
 	}
 	end := start + pageSize
 	if end >= len(items) {
