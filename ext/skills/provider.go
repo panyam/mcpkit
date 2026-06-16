@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/server"
@@ -37,6 +38,12 @@ type Provider struct {
 	version   uint64
 	srv       *server.Server
 	indexer   *Indexer
+
+	notifyMu      sync.Mutex
+	pendingPaths  map[string]PathChangeEntry
+	flushTimer    *time.Timer
+	lastBroadcast time.Time
+	closed        bool
 }
 
 type skillEntry struct {
@@ -311,50 +318,210 @@ func (p *Provider) Version() uint64 {
 	return p.version
 }
 
-// NotifyChanged is the Applier entry point: pass the relative fs.FS
-// paths that changed and the Provider bumps its version counter,
-// invalidates the Indexer cache (so the next skill://index.json read
-// rebuilds), and — if RegisterWith has bound a server — broadcasts a
-// notifications/resources/list_changed event to subscribed sessions on
-// the stateful wire.
+// NotifyChanged is the simple Applier entry point: every path in the
+// argument list is treated as ChangeActionModified with the call-time
+// timestamp. Sugar over NotifyChangedEvents for Detectors that only
+// know "this path is dirty"; Detectors with richer signals (fsnotify
+// distinguishing CREATE / WRITE / REMOVE, webhooks carrying mtime)
+// should call NotifyChangedEvents directly.
 //
-// For #795 scope the paths argument is advisory only — any call (with
-// any path list, empty included) bumps the global counter once and
-// invalidates the whole index cache. Issues #796 (sub-indexes) and
-// #798 (per-artifact pack cache) will refine this to per-path
-// invalidation via a dependency DAG, keying off the same NotifyChanged
-// entry point so detector implementations don't change.
-//
-// Stateless wire honesty: this call alone cannot push to stateless
-// clients (no persistent channel exists by construction). Stateless
-// clients learn of changes by polling skill://index.json and observing
-// the _meta.io.modelcontextprotocol.skills/version field bump.
-//
-// Safe to call before RegisterWith (the broadcast is a no-op) and from
-// any goroutine.
+// See NotifyChangedEvents for coalesce / throttle / dedup semantics
+// and dual-wire delivery behavior.
 func (p *Provider) NotifyChanged(paths ...string) error {
+	events := make([]PathChange, len(paths))
+	for i, ph := range paths {
+		events[i] = PathChange{Path: ph}
+	}
+	return p.NotifyChangedEvents(events...)
+}
+
+// NotifyChangedEvents is the typed Applier entry point. The Provider
+// bumps its version counter, invalidates the Indexer cache so the
+// next skill://index.json read rebuilds, accumulates the events into a
+// deduplicated pending set, and — subject to the coalesce window and
+// throttle interval — broadcasts a notifications/resources/list_changed
+// event to subscribed sessions on the stateful wire.
+//
+// # Dedup semantics
+//
+// Pending paths are keyed by Path; multiple events for the same path
+// within a coalesce window collapse to one entry under latest-wins
+// rules (action, timestamp, and digest from the most recent event
+// supersede earlier ones). Five NotifyChangedEvents calls naming the
+// same path produce one entry in the broadcast payload.
+//
+// # Flow control
+//
+// WithCoalesceWindow(d): when set, NotifyChangedEvents schedules a
+// trailing-edge flush at now+d (resetting the timer on each call).
+// When d is zero, every call flushes immediately.
+//
+// WithMinBroadcastInterval(d): when set, a flush arriving within d of
+// the last broadcast defers to last+d so subscribers never see two
+// broadcasts closer than d apart.
+//
+// The version counter bump and index cache invalidation happen
+// immediately on every call regardless of coalesce/throttle — only
+// the broadcast is deferred. Polling stateless clients see the bumped
+// _meta version on the next index read without waiting for the
+// coalesce window.
+//
+// # Dual-wire
+//
+// Broadcast targets the stateful/streamable-HTTP wire. Stateless
+// clients (SEP-2575) have no persistent push channel; they detect
+// changes by polling skill://index.json and observing
+// _meta.io.modelcontextprotocol.skills/version.
+//
+// # Lifecycle
+//
+// Safe to call before RegisterWith (the broadcast is a no-op until a
+// server is bound) and from any goroutine. After Close(), version and
+// index invalidation still fire but broadcasts are suppressed.
+func (p *Provider) NotifyChangedEvents(events ...PathChange) error {
+	now := time.Now()
+
 	p.versionMu.Lock()
 	p.version++
 	srv := p.srv
 	idx := p.indexer
 	p.versionMu.Unlock()
 
+	p.notifyMu.Lock()
+	if p.closed {
+		p.notifyMu.Unlock()
+		if idx != nil {
+			idx.Invalidate()
+		}
+		return nil
+	}
+	if p.pendingPaths == nil {
+		p.pendingPaths = make(map[string]PathChangeEntry, len(events))
+	}
+	for _, ev := range events {
+		if ev.Path == "" {
+			continue
+		}
+		entry := PathChangeEntry{
+			Action:    ev.Action,
+			Timestamp: ev.Timestamp,
+			Digest:    ev.Digest,
+		}
+		if entry.Action == "" {
+			entry.Action = ChangeActionModified
+		}
+		if entry.Timestamp.IsZero() {
+			entry.Timestamp = now
+		}
+		p.pendingPaths[ev.Path] = entry
+	}
+	coalesce := p.cfg.coalesceWindow
+	p.notifyMu.Unlock()
+
 	if idx != nil {
 		idx.Invalidate()
 	}
-	if srv != nil {
-		srv.Broadcast(context.Background(), "notifications/resources/list_changed", nil)
+	if srv == nil {
+		return nil
 	}
+
+	if coalesce <= 0 {
+		p.flush()
+		return nil
+	}
+	p.notifyMu.Lock()
+	p.scheduleFlushLocked(coalesce)
+	p.notifyMu.Unlock()
 	return nil
 }
 
-// Refresh is sugar for NotifyChanged() with no paths — signals "the
-// underlying content changed in some way; recompute everything." Use
-// from adopter-driven hot-reload hooks (webhook handler, build
+// Refresh signals "something in the underlying content changed but I
+// don't know what." Bumps the version counter, invalidates the index
+// cache, and (subject to coalesce + throttle) broadcasts an empty-paths
+// notifications/resources/list_changed event. Subscribers seeing an
+// empty Paths map should re-read everything; the Version bump remains
+// the load-bearing identity.
+//
+// Use from adopter-driven hot-reload hooks (webhook handler, build
 // pipeline, manual sweep) when the caller doesn't have a precise
-// changed-path list.
+// changed-path list. Detectors that do have a path list should call
+// NotifyChanged / NotifyChangedEvents instead so subscribers get the
+// richer payload.
 func (p *Provider) Refresh() error {
-	return p.NotifyChanged()
+	return p.NotifyChangedEvents()
+}
+
+// Close stops any pending broadcast timer and prevents future
+// broadcasts. Idempotent. After Close, the version counter still
+// bumps on NotifyChanged calls and the index cache still invalidates
+// (polling clients continue to see fresh state), but the stateful-wire
+// broadcast goroutine is dormant. Tests and adopters that own the
+// Provider's lifecycle should call Close on shutdown.
+func (p *Provider) Close() error {
+	p.notifyMu.Lock()
+	defer p.notifyMu.Unlock()
+	if p.flushTimer != nil {
+		p.flushTimer.Stop()
+		p.flushTimer = nil
+	}
+	p.closed = true
+	return nil
+}
+
+// scheduleFlushLocked sets or resets the flush timer to fire after d.
+// Caller must hold p.notifyMu.
+func (p *Provider) scheduleFlushLocked(d time.Duration) {
+	if p.flushTimer != nil {
+		p.flushTimer.Reset(d)
+		return
+	}
+	p.flushTimer = time.AfterFunc(d, p.flush)
+}
+
+// flush snapshots the pending path set and broadcasts
+// notifications/resources/list_changed with the typed PathsChangedPayload
+// under params._meta[MetaKeyPathsChanged]. Honors WithMinBroadcastInterval
+// by deferring to last+interval when the previous broadcast was too
+// recent.
+func (p *Provider) flush() {
+	p.notifyMu.Lock()
+	if p.closed {
+		p.notifyMu.Unlock()
+		return
+	}
+	now := time.Now()
+	if p.cfg.minBroadcastInterval > 0 {
+		elapsed := now.Sub(p.lastBroadcast)
+		if !p.lastBroadcast.IsZero() && elapsed < p.cfg.minBroadcastInterval {
+			p.scheduleFlushLocked(p.cfg.minBroadcastInterval - elapsed)
+			p.notifyMu.Unlock()
+			return
+		}
+	}
+	pending := p.pendingPaths
+	p.pendingPaths = nil
+	p.lastBroadcast = now
+	srv := p.srv
+	p.notifyMu.Unlock()
+
+	if srv == nil {
+		return
+	}
+
+	p.versionMu.RLock()
+	version := p.version
+	p.versionMu.RUnlock()
+
+	payload := PathsChangedPayload{
+		Paths:   pending,
+		Version: version,
+	}
+	params := map[string]any{
+		"_meta": map[string]any{
+			MetaKeyPathsChanged: payload,
+		},
+	}
+	srv.Broadcast(context.Background(), "notifications/resources/list_changed", params)
 }
 
 // skillURIValidationMiddleware short-circuits resources/read and

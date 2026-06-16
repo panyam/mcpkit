@@ -19,6 +19,8 @@ type providerConfig struct {
 	indexCacheTTL        time.Duration
 	archiveMode          ArchiveFormat
 	archiveMaxBytes      int64
+	coalesceWindow       time.Duration
+	minBroadcastInterval time.Duration
 }
 
 // WithFS supplies the io/fs.FS that the Provider walks for skills. The
@@ -114,6 +116,44 @@ func WithArchiveMode(format ArchiveFormat) ProviderOption {
 func WithArchiveMaxBytes(n int64) ProviderOption {
 	return func(c *providerConfig) {
 		c.archiveMaxBytes = n
+	}
+}
+
+// WithCoalesceWindow groups NotifyChanged calls that land within d of
+// each other into a single version bump + broadcast. Trailing-edge: the
+// timer resets on each call, so a sustained burst defers the flush
+// until the burst settles. Set to 0 (default) to disable coalescing —
+// every NotifyChanged call flushes immediately (subject to throttle).
+//
+// Within the window, paths are accumulated into a deduplicated set;
+// five NotifyChanged calls naming the same path produce one entry, one
+// version bump, and one broadcast. The set is reserved for the
+// per-path dependency DAG that lands with #796 (sub-indexes) and #798
+// (pack cache); today it serves only as the dedup key.
+//
+// Recommended: 100ms–500ms for fsnotify-style Detectors (editor saves
+// typically fire 3–5 events in <50ms); 0 for explicit-call Detectors
+// like admin endpoints where each call is intentional and unique.
+func WithCoalesceWindow(d time.Duration) ProviderOption {
+	return func(c *providerConfig) {
+		c.coalesceWindow = d
+	}
+}
+
+// WithMinBroadcastInterval enforces a minimum gap between consecutive
+// broadcasts. A flush arriving within d of the last broadcast queues a
+// single trailing broadcast at last+d. Set to 0 (default) to disable
+// throttling.
+//
+// Composes with WithCoalesceWindow: coalesce runs first (group events
+// into one broadcast intent); throttle enforces the minimum-interval
+// contract on the actual broadcast. The version counter and the index
+// cache invalidation still fire on the coalesce boundary so polling
+// stateless clients see changes promptly — only the stateful-wire
+// notification rate is throttled.
+func WithMinBroadcastInterval(d time.Duration) ProviderOption {
+	return func(c *providerConfig) {
+		c.minBroadcastInterval = d
 	}
 }
 
