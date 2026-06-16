@@ -33,11 +33,13 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"strings"
 
 	"github.com/panyam/demokit"
+	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
 	commonotel "github.com/panyam/mcpkit/examples/common/otel"
 	"github.com/panyam/mcpkit/ext/skills"
@@ -104,9 +106,37 @@ func serve() {
 		TracerProvider: tp,
 		Register: func(srv *server.Server) {
 			provider.RegisterWith(srv)
+			registerRefreshTool(srv, provider)
 		},
 	}); err != nil {
 		log.Fatalf("ListenAndServe: %v", err)
 	}
+}
+
+// refreshInput is the empty-args envelope for the _demo/refresh tool.
+// Kept as a named struct (rather than an inline struct{}) so the
+// derived JSON Schema carries a stable title.
+type refreshInput struct{}
+
+// registerRefreshTool exposes a "_demo/refresh" tool that calls
+// Provider.Refresh — the same hook a real adopter would wire to a
+// webhook, build-pipeline event, or admin endpoint. The walkthrough
+// step demonstrating issue #795's invalidation flow calls this tool
+// between two skill://index.json reads to prove the
+// _meta.io.modelcontextprotocol.skills/version field bumps. The
+// underscore-prefixed name signals it is a demo affordance, not part
+// of the SEP-2640 surface — production servers should expose Refresh
+// through whatever control plane fits their deployment.
+func registerRefreshTool(srv *server.Server, provider *skills.Provider) {
+	tool := core.TextTool[refreshInput]("_demo/refresh",
+		"Demo-only: calls skills.Provider.Refresh() to bump the index version and broadcast notifications/resources/list_changed.",
+		func(ctx core.ToolContext, _ refreshInput) (string, error) {
+			if err := provider.Refresh(); err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("refreshed — provider version now %d", provider.Version()), nil
+		},
+	)
+	srv.RegisterTool(tool.ToolDef, tool.Handler)
 }
 
