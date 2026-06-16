@@ -14,7 +14,9 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"strings"
+	"time"
 
 	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/client"
@@ -573,6 +575,89 @@ fmt.Printf("before=%d after=%d\n", uint64(before), uint64(after))`),
 			return nil
 		})
 
+	demo.Section("fsnotify-driven invalidation (issue #800)",
+		"The previous step called `Provider.Refresh()` synchronously via the demo tool. Real deployments wire a Detector — fsnotify, webhook, or admin endpoint — that observes file changes and calls into the Applier on its own. `make serve` with `--watch` enables `skills.WithFSWatcher` + a 200ms coalesce window. Edit any file under `skills/` in another terminal and the server emits one `notifications/resources/list_changed` per logical change.",
+	)
+
+	demo.Step("Observe an fsnotify-driven broadcast").
+		Arrow("Detector", "Server", "fsnotify Write event on skills/git-workflow/SKILL.md").
+		Arrow("Server", "Server", "Provider.NotifyChangedEvents (mapped from fsnotify.Op)").
+		DashedArrow("Server", "Host", "notifications/resources/list_changed (after 200ms coalesce)").
+		Note("In `--non-interactive` mode this step synthesizes the edit (writes the same SKILL.md back to itself) and restores the original content; the actual broadcast still fires. In interactive mode it prompts you to edit a SKILL.md in a side terminal — the notification arrives as soon as your editor flushes the save.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("server", "bash", `# In one terminal:
+make serve  # opt-in fsnotify:
+            # (edit Makefile to add --watch to the serve target, or run directly:)
+            # go run . --serve --watch
+
+# In another terminal: subscribe + listen.
+SID=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":"i","method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"watcher","version":"1.0"},"capabilities":{}}}' \
+  -D - -o /dev/null | grep -i 'mcp-session-id' | awk '{print $2}' | tr -d '\r\n')
+curl -s -N http://localhost:8080/mcp -H "Mcp-Session-Id: $SID" -H 'Accept: text/event-stream' &
+
+# Edit a SKILL.md and watch the SSE stream emit list_changed within 200ms.
+echo "---" >> skills/git-workflow/SKILL.md`).Default(),
+			demokit.MakeVariant("go", "go", `// Server-side wiring (already done in main.go when --watch is set):
+provider, _ := skills.NewProvider(
+    skills.WithDirectory("skills"),
+    skills.WithFSWatcher(skills.WithFSWatcherErrorHandler(func(err error) {
+        log.Printf("fsnotify: %v", err)
+    })),
+    skills.WithCoalesceWindow(200 * time.Millisecond),
+)
+provider.RegisterWith(srv)
+defer provider.Shutdown(context.Background()) // graceful drain on signal
+
+// The fsnotify goroutine maps Create/Write/Remove events to
+// ChangeAction and calls Provider.NotifyChangedEvents internally —
+// adopters don't touch the Detector directly. They opt in via the
+// Provider option and receive the same notifications/resources/list_changed
+// the synchronous Refresh call would produce.`),
+		).
+		Run(func(ctx demokit.StepContext) *demokit.StepResult {
+			if c == nil {
+				return nil
+			}
+			before := readIndexVersion(c)
+			fmt.Printf("    before edit: version = %d\n", before)
+
+			target := "skills/git-workflow/SKILL.md"
+			original, err := os.ReadFile(target)
+			if err != nil {
+				fmt.Printf("    SKIP: cannot read %s: %v (server may be in --bundle=archive mode or running from a different cwd)\n", target, err)
+				return nil
+			}
+			if isInteractive() {
+				fmt.Printf("    Edit %s in another terminal and save. Waiting up to 10s for a broadcast…\n", target)
+			} else {
+				fmt.Printf("    Synthesizing an edit to %s (non-interactive mode)…\n", target)
+				edited := append(append([]byte{}, original...), []byte("\n<!-- demo edit -->\n")...)
+				if err := os.WriteFile(target, edited, 0o644); err != nil {
+					fmt.Printf("    ERROR writing %s: %v\n", target, err)
+					return nil
+				}
+				defer func() {
+					if err := os.WriteFile(target, original, 0o644); err != nil {
+						fmt.Printf("    WARNING failed to restore %s: %v\n", target, err)
+					}
+				}()
+			}
+
+			deadline := time.Now().Add(10 * time.Second)
+			for time.Now().Before(deadline) {
+				time.Sleep(300 * time.Millisecond)
+				after := readIndexVersion(c)
+				if after > before {
+					fmt.Printf("    after edit: version = %d (bump observed via fsnotify; coalesced into one broadcast)\n", after)
+					return nil
+				}
+			}
+			fmt.Printf("    WARNING: no version bump observed within 10s — server may have been started without --watch\n")
+			return nil
+		})
+
 	demo.Section("SEP-2640 directoryRead — scoped subtree navigation",
 		"SEP commit `2e04c48d` (2026-06-09) added `resources/directory/read` for listing a directory's direct children without enumerating the server's entire resource space. Capability-gated via `io.modelcontextprotocol/skills.directoryRead`. mcpkit's Provider auto-supports it (#781).",
 	)
@@ -800,6 +885,21 @@ func marker(mimeType string) string {
 		return "dir/"
 	}
 	return "file"
+}
+
+// isInteractive returns false when demokit's --non-interactive flag
+// is present on the command line. The fsnotify walkthrough step
+// synthesizes an edit + revert in non-interactive mode so CI runs
+// drive the end-to-end path without operator action; interactive
+// mode prompts the operator to make a real edit so the live demo
+// feels live.
+func isInteractive() bool {
+	for _, arg := range os.Args[1:] {
+		if arg == "--non-interactive" {
+			return false
+		}
+	}
+	return true
 }
 
 // readIndexVersion fetches skill://index.json and returns the
