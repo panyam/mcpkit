@@ -155,13 +155,16 @@ poller: ## Long-running poll subscriber. TENANT=A|B|C plus either TOKEN=<bearer>
 		$(if $(USERNAME),--username $(USERNAME) --password $(if $(PASSWORD),$(PASSWORD),$(USERNAME))) \
 		--event $(EVENT)
 
-webhook: ## Long-running webhook subscriber. TENANT=A|B|C plus either TOKEN=<bearer> or USERNAME=<u> [PASSWORD=<p>; defaults to USERNAME].
+webhook: ## Long-running webhook subscriber. TENANT=A|B|C plus either TOKEN=<bearer> or USERNAME=<u> [PASSWORD=<p>; defaults to USERNAME]. Demo knobs: TTL_MS=<int|null> REPLY_STATUS=<int> EXIT_AFTER=<int>.
 	@if [ -z "$(TOKEN)" ] && [ -z "$(USERNAME)" ]; then \
-		echo "usage: make webhook TENANT=A|B|C [TOKEN=<bearer> | USERNAME=<u> [PASSWORD=<p>]]" >&2; exit 2; fi
+		echo "usage: make webhook TENANT=A|B|C [TOKEN=<bearer> | USERNAME=<u> [PASSWORD=<p>]] [TTL_MS=<int|null>] [REPLY_STATUS=<int>] [EXIT_AFTER=<int>]" >&2; exit 2; fi
 	go -C webhook run . --tenant $(call tenant-realm,$(TENANT)) \
 		$(if $(TOKEN),--token $(TOKEN)) \
 		$(if $(USERNAME),--username $(USERNAME) --password $(if $(PASSWORD),$(PASSWORD),$(USERNAME))) \
-		--event $(EVENT)
+		--event $(EVENT) \
+		$(if $(TTL_MS),--ttl-ms $(TTL_MS)) \
+		$(if $(REPLY_STATUS),--reply-status $(REPLY_STATUS)) \
+		$(if $(EXIT_AFTER),--exit-after $(EXIT_AFTER))
 
 streamer: ## Long-running events/stream subscriber over the stateless wire (push delivery). TENANT=A|B|C plus either TOKEN=<bearer> or USERNAME=<u> [PASSWORD=<p>; defaults to USERNAME].
 	@if [ -z "$(TOKEN)" ] && [ -z "$(USERNAME)" ]; then \
@@ -253,6 +256,19 @@ logs: ## Tail logs from all services.
 
 ps: ## docker compose ps.
 	docker compose ps
+
+# Demo helpers for the TTL / no-expiry / failure-GC walkthrough beats
+# (PRs 778, 779, 783). Each is a one-liner pointed at the running
+# compose stack — no surprises.
+
+psql-webhooks: ## Print the webhooks table from Postgres — used by the no-expiry restart-survival beat to confirm rows survive a `make restart-event-servers`.
+	docker compose -f $(BACKENDS_COMPOSE) exec -T postgres \
+		psql -U postgres -d events \
+		-c "SELECT id, principal, url, expires_at, status_failing_continuously_since FROM webhooks ORDER BY principal;"
+
+restart-event-servers: ## Rolling-restart the event-server replicas. Used by the no-expiry restart-survival beat — finite subs and no-expiry subs both survive (rows stay in Postgres), proving the GORM-backed WebhookStore is the durability backbone.
+	docker compose restart event-server-1 event-server-2 event-server-3
+	docker compose up -d --wait event-server-1 event-server-2 event-server-3
 
 clean: ## docker compose down -v on the events stack + remove built binaries. Backends data is preserved — use `make clean-backends` for a full reset.
 	docker compose down -v 2>/dev/null || true
