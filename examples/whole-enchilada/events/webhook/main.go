@@ -37,6 +37,8 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -68,6 +70,25 @@ func main() {
 		"Local listen address. Default 127.0.0.1:0 picks a free port and reports the URL.")
 	publicURL := flag.String("public-url", os.Getenv("WEBHOOK_PUBLIC_URL"),
 		"Public URL the event-server uses to call this listener. Defaults to http://<listen-addr>. Override when the event-server runs in Docker and needs host.docker.internal or a tunneled URL.")
+	// ttlMs: tristate via string so absent / null / numeric are
+	// distinguishable on the wire (spec PR1 commit 99f3589c
+	// §"Subscription TTL"). Empty = absent (server picks default),
+	// "null" = no-expiry request, "<int>" = suggested ms.
+	ttlMsFlag := flag.String("ttl-ms", os.Getenv("TTL_MS"),
+		`Client-suggested subscription TTL in ms (spec PR1 commit 99f3589c §"Subscription TTL"). Empty = absent (server picks). "null" = request no-expiry (server returns refreshBefore:null when WithAllowInfiniteWebhookTTL is enabled — see EVENTS_ALLOW_INFINITE_TTL on the event-server side). "<int>" = suggested ms. Demo flavor table: 900000 (15m, granted as-is), 30000 (30s, clamped UP to MinWebhookTTL=5min), null (no-expiry).`)
+	// reply-status: the HTTP status the local receiver returns after
+	// verifying the signature. Demonstrates server-side response
+	// branching (2xx ack vs 410 abandon vs 5xx retry-then-suspend).
+	replyStatus := flag.Int("reply-status", envOrInt("REPLY_STATUS", 200),
+		"HTTP status returned by the local receiver after verifying each delivery. 200 (default) = ack, the happy path. 410 = abandon THIS delivery without affecting the subscription (PR 778 / spec PR1 commit 905ade36). 500 = treat as transient failure, server retries 3× then suspends. Other values pass through unchanged for ad-hoc exploration.")
+	// exit-after: terminate the receiver process after N deliveries.
+	// Composes with TTL_MS=null to demonstrate the failure-based GC
+	// end-to-end (PR 783) — once the listener is gone, the server's
+	// deliveries fail with connection-refused, the failure run
+	// accumulates, and past EVENTS_NO_EXPIRY_GC_WINDOW the no-expiry
+	// sub is dropped + a `terminated` envelope is posted.
+	exitAfter := flag.Int("exit-after", envOrInt("EXIT_AFTER", 0),
+		"Exit the process after N successfully-received deliveries. 0 (default) = run until Ctrl+C. Combined with TTL_MS=null this exercises the no-expiry failure-based GC path end-to-end: deliveries fail with connection_refused after exit, failure run accumulates, past EVENTS_NO_EXPIRY_GC_WINDOW (set on the event-server) the registry drops the sub and POSTs a `terminated` envelope.")
 	flag.Parse()
 
 	if *token == "" && *username != "" && *password != "" {
@@ -133,17 +154,59 @@ func main() {
 	}
 	defer func() { _ = c.Close() }()
 
-	sub, err := eventsclient.Subscribe(context.Background(), c, eventsclient.SubscribeOptions{
+	subOpts := eventsclient.SubscribeOptions{
 		EventName:   *eventName,
 		CallbackURL: callbackURL + "/webhook",
-	})
+	}
+	// Wire the --ttl-ms tristate into the SDK options. "null" sets
+	// NoExpiry; a positive int sets TTLMs; empty leaves both unset so
+	// the SDK omits the ttlMs key entirely.
+	switch *ttlMsFlag {
+	case "":
+		// absent — server picks default
+	case "null":
+		subOpts.NoExpiry = true
+		log.Printf("%s ttlMs=null — requesting no-expiry subscription", prefix)
+	default:
+		n, err := strconv.ParseInt(*ttlMsFlag, 10, 64)
+		if err != nil {
+			log.Fatalf("%s --ttl-ms must be empty, \"null\", or an integer; got %q: %v", prefix, *ttlMsFlag, err)
+		}
+		subOpts.TTLMs = &n
+		log.Printf("%s ttlMs=%d — client-suggested TTL in ms", prefix, n)
+	}
+
+	sub, err := eventsclient.Subscribe(context.Background(), c, subOpts)
 	if err != nil {
 		log.Fatalf("%s subscribe failed: %v", prefix, err)
 	}
 	defer sub.Stop()
-	log.Printf("%s subscribed sub_id=%s — events route to %s/webhook", prefix, sub.ID(), callbackURL)
+	// Surface the server-granted refreshBefore so the demo operator
+	// can see clamp / null / as-suggested directly in this window's
+	// log stream — primary readout for the TTL negotiation beat.
+	if rb := sub.RefreshBefore(); rb != nil {
+		log.Printf("%s subscribed sub_id=%s refreshBefore=%s — events route to %s/webhook",
+			prefix, sub.ID(), rb.Format(time.RFC3339), callbackURL)
+	} else {
+		log.Printf("%s subscribed sub_id=%s refreshBefore=null (no-expiry granted) — events route to %s/webhook",
+			prefix, sub.ID(), callbackURL)
+	}
 
-	receiver := &deliveryReceiver{secret: sub.Secret(), prefix: prefix}
+	receiver := &deliveryReceiver{
+		secret:      sub.Secret(),
+		prefix:      prefix,
+		replyStatus: *replyStatus,
+	}
+	// EXIT_AFTER closes shutdown so the main select loop unwinds.
+	// We make it a function call to avoid a data race between the
+	// receiver writing to a channel and the select reading; the
+	// channel is closed exactly once via sync.Once.
+	shutdown := make(chan struct{})
+	if *exitAfter > 0 {
+		log.Printf("%s exit-after=%d — process will exit after %d successfully-received deliveries", prefix, *exitAfter, *exitAfter)
+		receiver.exitAfter = *exitAfter
+		receiver.exitSignal = shutdown
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/webhook", receiver.handle)
 
@@ -163,6 +226,8 @@ func main() {
 	select {
 	case <-ctx.Done():
 		log.Printf("%s shutdown", prefix)
+	case <-shutdown:
+		log.Printf("%s exit-after reached — process exiting; next delivery will fail with connection_refused", prefix)
 	case err := <-serverErr:
 		log.Printf("%s server error: %v", prefix, err)
 	}
@@ -172,9 +237,24 @@ func main() {
 // deliveryReceiver verifies and prints each webhook POST. Reuses the
 // Standard Webhooks signature scheme the events lib emits — the same
 // verification any production receiver would do.
+//
+// replyStatus / exitAfter / exitSignal are demo-flavor knobs (see the
+// --reply-status / --exit-after flags) — they let the same binary
+// simulate happy-path delivery, deliberate per-delivery abandon
+// (410 Gone), transient failure (5xx), or full process death after N
+// deliveries. The server-side response branching IS the demo.
 type deliveryReceiver struct {
-	secret string
-	prefix string
+	secret      string
+	prefix      string
+	replyStatus int
+	// exitAfter > 0 enables the EXIT_AFTER beat: after this many
+	// successfully-received deliveries the receiver closes
+	// exitSignal exactly once, causing main's select to unwind and
+	// the process to exit. delivered counts since process start.
+	exitAfter  int
+	exitSignal chan struct{}
+	exitOnce   sync.Once
+	delivered  atomic.Int64
 }
 
 const standardWebhooksMaxSkewSeconds = 5 * 60
@@ -219,14 +299,39 @@ func (r *deliveryReceiver) handle(w http.ResponseWriter, req *http.Request) {
 	}
 	_ = json.Unmarshal(body, &tagged)
 
-	fmt.Printf("%s %s tenant=%-10s id=%s body=%s\n",
+	// Return the configured reply status (default 200). Demo modes:
+	//   200 — happy path; server records delivery success
+	//   410 — abandon-THIS-delivery; server logs "abandoned per
+	//         receiver 410 Gone (subscription unaffected)" + sub
+	//         stays Active=true (PR 778 / spec PR1 commit 905ade36)
+	//   5xx — transient failure; server retries 3× then suspends
+	//         (refresh reactivates per spec §"Webhook Delivery Status")
+	status := r.replyStatus
+	if status == 0 {
+		status = http.StatusOK
+	}
+	fmt.Printf("%s %s tenant=%-10s id=%s reply=%d body=%s\n",
 		time.Now().Format("15:04:05"),
 		r.prefix,
 		tagged.Tenant,
 		id,
+		status,
 		string(body),
 	)
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(status)
+
+	// EXIT_AFTER counts ONLY successfully-received deliveries — a
+	// non-2xx reply still increments because the receiver actually
+	// SAW the delivery; the choice to fail it is the demo's point.
+	if r.exitAfter > 0 && r.exitSignal != nil {
+		seen := r.delivered.Add(1)
+		if int(seen) >= r.exitAfter {
+			r.exitOnce.Do(func() {
+				log.Printf("%s exit-after target reached after %d deliveries", r.prefix, seen)
+				close(r.exitSignal)
+			})
+		}
+	}
 }
 
 func verifySignature(secret, id, ts string, body []byte, signature string) bool {
@@ -299,4 +404,16 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func envOrInt(key string, fallback int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return fallback
+	}
+	return n
 }

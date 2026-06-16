@@ -219,6 +219,95 @@ docker compose up -d event-server-1 event-server-2 event-server-3`).Default(),
 		)
 
 	// -----------------------------------------------------------------
+	// Phase 6b — TTL negotiation matrix + receiver-behavior matrix
+	// (PRs 778, 779, 783). All three knobs orthogonal on the same
+	// `make webhook` target — TTL_MS shapes what we ask for /
+	// what we get; REPLY_STATUS shapes how the server reacts to
+	// each delivery; EXIT_AFTER shapes whether the receiver lives.
+	// -----------------------------------------------------------------
+
+	demo.Section("Phase 6b — TTL negotiation and receiver-behavior matrix",
+		"The just-merged spec-alignment work (PRs 778, 779, 783) introduces three orthogonal subscription knobs the operator can mix and match on `make webhook`. TTL_MS shapes the client-side suggestion to the server (absent / int / null per spec PR1 commit 99f3589c). REPLY_STATUS shapes what the receiver returns per delivery (200 default / 410 abandon / 5xx retry-then-suspend). EXIT_AFTER shapes whether the receiver lives long enough for the server's failure-based GC to fire on a no-expiry sub. This phase walks the matrix one knob at a time, ending with the capstone combo.",
+	)
+
+	demo.Step("TTL matrix — three tenants suggest different ttlMs values, observe the granted refreshBefore.").
+		Note(
+			"- Demonstrates: server clamps client suggestions to the [MinWebhookTTL, MaxWebhookTTL] envelope; the 'one sanctioned exception' (clamp UP to the floor) is observable in window A; window B's in-envelope suggestion lands verbatim; window C's `null` request yields `refreshBefore: null` because the demo's event-server is started with EVENTS_ALLOW_INFINITE_TTL=true.",
+			"- Expected: A's window logs `refreshBefore=<now+~5min>` (clamped UP); B's logs `refreshBefore=<now+~15min>` (granted as-is); C's logs `refreshBefore=null (no-expiry granted)`.",
+		).
+		VerbatimVariants("Open three sibling webhook windows, one per tenant",
+			demokit.MakeVariant("shell", "bash", `# Sub-floor suggestion → clamped UP to MinWebhookTTL (5 minutes).
+make webhook TENANT=A USERNAME=anand TTL_MS=30000
+
+# In-envelope suggestion → granted as-is (15 minutes).
+make webhook TENANT=B USERNAME=bhavna TTL_MS=900000
+
+# null → no-expiry, refreshBefore:null on the wire (event-server has EVENTS_ALLOW_INFINITE_TTL=true).
+make webhook TENANT=C USERNAME=chandan TTL_MS=null`).Default(),
+		)
+
+	demo.Step("Receiver-behavior matrix — same `make webhook` target, different reply status.").
+		Note(
+			"- Demonstrates: server's per-delivery response branching: 410 abandons THIS delivery without affecting the subscription (PR 778 / spec PR1 commit 905ade36); 500 triggers the retry loop + the suspend transition past threshold.",
+			"- Expected: 410 window logs the verification + receives the inject, server-side logs (`make logs | grep webhook`) show `abandoned per receiver 410 Gone (subscription unaffected)`; the next inject in the same tenant lands on a separate (default-200) window normally. 500 window: server retries 3× with backoff, then logs the suspend transition + posts a `terminated` envelope; the sub stays in the registry as paused, observable via `make psql-webhooks`.",
+		).
+		VerbatimVariants("Open two sibling windows, then fire injects from Admin",
+			demokit.MakeVariant("shell", "bash", `# Window 1: receiver abandons each delivery with 410.
+make webhook TENANT=A USERNAME=aarti REPLY_STATUS=410
+
+# Window 2: receiver fails with 500 — server retries then suspends.
+make webhook TENANT=A USERNAME=ananya REPLY_STATUS=500
+
+# Admin window — inject one event per receiver type:
+make inject TENANT=A EVENT=chat.message TEXT='aarti gets 410, sub unaffected'
+make inject TENANT=A EVENT=chat.message TEXT='ananya gets 500, retried then suspended'
+
+# Then inspect the registry:
+make psql-webhooks`).Default(),
+		)
+
+	demo.Step("No-expiry restart-survival — restart the event-server tier, confirm the no-expiry sub stays.").
+		Note(
+			"- Demonstrates: GORM-backed WebhookStore is the durability backbone — both finite-TTL and no-expiry subs survive a rolling restart of the event-server tier because their rows persist in Postgres (PR 779 made ExpiresAt nullable; the row survives regardless).",
+			"- Expected: the chandan window's no-expiry sub appears in `make psql-webhooks` before AND after the restart, with `expires_at IS NULL`. A post-restart inject still lands on chandan's window. Finite-TTL subs survive the restart too — the meaningful contrast surfaces only when the CLIENT stops refreshing (which the no-expiry sub never needs to do).",
+		).
+		VerbatimVariants("With Phase 6b TTL window C still running, do this in Admin",
+			demokit.MakeVariant("shell", "bash", `# Before the restart — confirm chandan's no-expiry row exists.
+make psql-webhooks
+
+# Rolling restart of all three event-server replicas.
+make restart-event-servers
+
+# After the restart — same row, same expires_at IS NULL.
+make psql-webhooks
+
+# Inject one event — chandan's no-expiry window still receives it.
+make inject TENANT=C EVENT=chat.message TEXT='hi after restart'`).Default(),
+		)
+
+	demo.Step("Failure-based GC capstone — no-expiry subscriber dies after 3 deliveries; server drops the sub.").
+		Note(
+			"- Demonstrates: the full failure-based GC end-to-end (PR 783). EXIT_AFTER=3 kills the receiver after 3 deliveries → next inject fails with connection_refused → server's `FailingContinuouslySince` anchors → past `EVENTS_NO_EXPIRY_GC_WINDOW=2m` (set on the event-server) the registry drops the no-expiry sub + POSTs a `terminated` envelope.",
+			"- Expected: the receiver window receives 3 events then exits with the log line `exit-after target reached`. Next inject lands in the server logs as a delivery retry; after ~2 minutes of continuous failure, `make psql-webhooks` no longer shows chandan's no-expiry row. The failing-continuously-since column would be visible mid-flight if you queried during the failure run.",
+		).
+		VerbatimVariants("Run in a fresh window — the receiver self-terminates",
+			demokit.MakeVariant("shell", "bash", `# No-expiry sub that intentionally dies after 3 events.
+make webhook TENANT=C USERNAME=chandan TTL_MS=null EXIT_AFTER=3
+
+# In another window, fire 3 events to trip EXIT_AFTER, then a 4th to start the failure run:
+make inject TENANT=C EVENT=chat.message TEXT='1 — delivers'
+make inject TENANT=C EVENT=chat.message TEXT='2 — delivers'
+make inject TENANT=C EVENT=chat.message TEXT='3 — delivers, then receiver exits'
+make inject TENANT=C EVENT=chat.message TEXT='4 — first failure of the run'
+
+# Watch the registry. Within ~2m the no-expiry sub vanishes:
+watch -n 30 make psql-webhooks
+
+# Server logs show the eventual drop:
+make logs | grep -E "no-expiry subscription dropped|FailingContinuouslySince"`).Default(),
+		)
+
+	// -----------------------------------------------------------------
 	// Phase 7 — Dynamic source topology (PULL pattern).
 	// -----------------------------------------------------------------
 
