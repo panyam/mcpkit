@@ -11,6 +11,7 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/server"
@@ -31,6 +32,11 @@ type Provider struct {
 	skills    []*skillEntry
 	resources []*resourceEntry
 	byURI     map[string]*resourceEntry
+
+	versionMu sync.RWMutex
+	version   uint64
+	srv       *server.Server
+	indexer   *Indexer
 }
 
 type skillEntry struct {
@@ -262,6 +268,10 @@ func (p *Provider) Resources() []core.ResourceDef {
 // WithoutIndex to suppress registration entirely (when, for example,
 // the caller wants to construct and register a custom Indexer).
 func (p *Provider) RegisterWith(srv *server.Server) {
+	p.versionMu.Lock()
+	p.srv = srv
+	p.versionMu.Unlock()
+
 	sort.SliceStable(p.resources, func(i, j int) bool {
 		return p.resources[i].URI < p.resources[j].URI
 	})
@@ -277,9 +287,74 @@ func (p *Provider) RegisterWith(srv *server.Server) {
 		if p.cfg.indexCacheTTL > 0 {
 			opts = append(opts, WithIndexerCacheTTL(p.cfg.indexCacheTTL))
 		}
-		NewIndexer(p, opts...).RegisterWith(srv)
+		idx := NewIndexer(p, opts...)
+		p.versionMu.Lock()
+		p.indexer = idx
+		p.versionMu.Unlock()
+		idx.RegisterWith(srv)
 	}
 	srv.UseMiddleware(skillURIValidationMiddleware)
+}
+
+// Version returns the Provider's monotonic invalidation counter. The
+// counter starts at zero and increments on every NotifyChanged /
+// Refresh call. Consumers use Version() to drive cache freshness — the
+// Indexer compares the counter at cache-build time against the current
+// value and rebuilds on mismatch.
+//
+// Forward-compatible with the per-artifact counters proposed in #798:
+// when those land, the global counter remains as the ceiling that any
+// per-artifact counter increments alongside.
+func (p *Provider) Version() uint64 {
+	p.versionMu.RLock()
+	defer p.versionMu.RUnlock()
+	return p.version
+}
+
+// NotifyChanged is the Applier entry point: pass the relative fs.FS
+// paths that changed and the Provider bumps its version counter,
+// invalidates the Indexer cache (so the next skill://index.json read
+// rebuilds), and — if RegisterWith has bound a server — broadcasts a
+// notifications/resources/list_changed event to subscribed sessions on
+// the stateful wire.
+//
+// For #795 scope the paths argument is advisory only — any call (with
+// any path list, empty included) bumps the global counter once and
+// invalidates the whole index cache. Issues #796 (sub-indexes) and
+// #798 (per-artifact pack cache) will refine this to per-path
+// invalidation via a dependency DAG, keying off the same NotifyChanged
+// entry point so detector implementations don't change.
+//
+// Stateless wire honesty: this call alone cannot push to stateless
+// clients (no persistent channel exists by construction). Stateless
+// clients learn of changes by polling skill://index.json and observing
+// the _meta.io.modelcontextprotocol.skills/version field bump.
+//
+// Safe to call before RegisterWith (the broadcast is a no-op) and from
+// any goroutine.
+func (p *Provider) NotifyChanged(paths ...string) error {
+	p.versionMu.Lock()
+	p.version++
+	srv := p.srv
+	idx := p.indexer
+	p.versionMu.Unlock()
+
+	if idx != nil {
+		idx.Invalidate()
+	}
+	if srv != nil {
+		srv.Broadcast(context.Background(), "notifications/resources/list_changed", nil)
+	}
+	return nil
+}
+
+// Refresh is sugar for NotifyChanged() with no paths — signals "the
+// underlying content changed in some way; recompute everything." Use
+// from adopter-driven hot-reload hooks (webhook handler, build
+// pipeline, manual sweep) when the caller doesn't have a precise
+// changed-path list.
+func (p *Provider) Refresh() error {
+	return p.NotifyChanged()
 }
 
 // skillURIValidationMiddleware short-circuits resources/read and
