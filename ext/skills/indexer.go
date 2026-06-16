@@ -48,6 +48,7 @@ type cacheEntry struct {
 	index   Index
 	builtAt time.Time
 	mtimes  map[string]time.Time // skill dir path → SKILL.md mtime at build time
+	version uint64               // Provider.Version() at the time this entry was built
 	// noMtime is true when any skill's SKILL.md reported zero ModTime at
 	// build time. While noMtime is true the cache falls back to TTL-only
 	// invalidation; mtime comparison is skipped.
@@ -113,21 +114,47 @@ func (i *Indexer) Index() (Index, error) {
 		return i.cached.index, nil
 	}
 
+	version := i.provider.Version()
 	idx, mtimes, noMtime, err := i.build()
 	if err != nil {
 		return Index{}, err
 	}
+	if idx.Meta == nil {
+		idx.Meta = map[string]any{}
+	}
+	idx.Meta[MetaPrefix+"version"] = version
 	i.cached = &cacheEntry{
 		index:   idx,
 		builtAt: time.Now(),
 		mtimes:  mtimes,
+		version: version,
 		noMtime: noMtime,
 	}
 	return idx, nil
 }
 
+// Invalidate marks the cached index entry stale so the next Index()
+// call rebuilds. Provider.NotifyChanged calls this when the version
+// counter bumps; tests can use it to drive cache regeneration
+// deterministically without waiting for TTL or mtime changes.
+//
+// Safe to call before any cache has been built (no-op) and from any
+// goroutine.
+func (i *Indexer) Invalidate() {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.cached = nil
+}
+
 func (i *Indexer) isFresh() bool {
 	if i.cached == nil {
+		return false
+	}
+	// Version is the explicit invalidation signal — any NotifyChanged
+	// call bumps it past the cached value, so a mismatch trumps the
+	// TTL / mtime paths below. The two slower checks remain as fallback
+	// invalidation drivers for adopters who never call NotifyChanged.
+	if i.provider.Version() != i.cached.version {
 		return false
 	}
 	if i.cfg.ttl > 0 && time.Since(i.cached.builtAt) > i.cfg.ttl {

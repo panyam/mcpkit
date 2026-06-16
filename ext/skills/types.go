@@ -78,9 +78,18 @@ func (e IndexEntry) Validate() error {
 }
 
 // Index is the document served at the well-known IndexURI.
+//
+// Meta carries opt-in extension metadata under the `_meta` key per the
+// MCP convention. Keys are reverse-domain-namespaced
+// (io.modelcontextprotocol.skills/...) so they will not collide with
+// any field the SEP may add in the future. mcpkit populates
+// "io.modelcontextprotocol.skills/version" with Provider.Version() at
+// index build time; stateless clients poll the index and observe this
+// field bumping when content changes (issue #795).
 type Index struct {
-	Schema string       `json:"$schema"`
-	Skills []IndexEntry `json:"skills"`
+	Schema string         `json:"$schema"`
+	Skills []IndexEntry   `json:"skills"`
+	Meta   map[string]any `json:"_meta,omitempty"`
 }
 
 // NewIndex returns an Index pre-populated with the schema URI defined by

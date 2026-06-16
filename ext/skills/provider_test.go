@@ -1,13 +1,18 @@
 package skills_test
 
 import (
+	"encoding/json"
 	"errors"
+	"maps"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
@@ -374,6 +379,202 @@ func TestProvider_RejectsTraversalURIs(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestProvider_VersionStartsZero(t *testing.T) {
+	p, err := skills.NewProvider(skills.WithDirectory("testdata/valid"))
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	if got := p.Version(); got != 0 {
+		t.Errorf("Version() = %d, want 0 on a freshly constructed Provider", got)
+	}
+}
+
+func TestProvider_NotifyChanged_BumpsVersion(t *testing.T) {
+	p, err := skills.NewProvider(skills.WithDirectory("testdata/valid"))
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	if err := p.NotifyChanged("git-workflow/SKILL.md"); err != nil {
+		t.Fatalf("NotifyChanged: %v", err)
+	}
+	if got := p.Version(); got != 1 {
+		t.Errorf("Version() = %d after one NotifyChanged, want 1", got)
+	}
+	if err := p.NotifyChanged(); err != nil {
+		t.Fatalf("NotifyChanged (no paths): %v", err)
+	}
+	if got := p.Version(); got != 2 {
+		t.Errorf("Version() = %d after two NotifyChanged calls, want 2", got)
+	}
+}
+
+func TestProvider_Refresh_BumpsVersion(t *testing.T) {
+	p, err := skills.NewProvider(skills.WithDirectory("testdata/valid"))
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	if err := p.Refresh(); err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+	if got := p.Version(); got != 1 {
+		t.Errorf("Version() = %d after Refresh, want 1", got)
+	}
+}
+
+func TestProvider_NotifyChanged_InvalidatesIndexCache(t *testing.T) {
+	srv := server.NewServer(core.ServerInfo{Name: "skills-test", Version: "0.0.1"})
+
+	p, err := skills.NewProvider(skills.WithDirectory("testdata/valid"))
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	p.RegisterWith(srv)
+
+	handler := srv.Handler(server.WithStreamableHTTP(true))
+	ts := httptest.NewServer(handler)
+	t.Cleanup(ts.Close)
+
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "skills-test-client", Version: "0.0.1"})
+	if err := c.Connect(); err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { c.Close() })
+
+	first, err := c.ReadResource(skills.IndexURI)
+	if err != nil {
+		t.Fatalf("ReadResource initial: %v", err)
+	}
+	v0 := indexVersion(t, first)
+	if v0 != 0 {
+		t.Errorf("initial index version = %d, want 0", v0)
+	}
+
+	if err := p.Refresh(); err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+
+	second, err := c.ReadResource(skills.IndexURI)
+	if err != nil {
+		t.Fatalf("ReadResource after Refresh: %v", err)
+	}
+	v1 := indexVersion(t, second)
+	if v1 != 1 {
+		t.Errorf("post-Refresh index version = %d, want 1", v1)
+	}
+}
+
+func TestIndex_VersionUnderMeta(t *testing.T) {
+	srv := server.NewServer(core.ServerInfo{Name: "skills-test", Version: "0.0.1"})
+
+	p, err := skills.NewProvider(skills.WithDirectory("testdata/valid"))
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	p.RegisterWith(srv)
+
+	handler := srv.Handler(server.WithStreamableHTTP(true))
+	ts := httptest.NewServer(handler)
+	t.Cleanup(ts.Close)
+
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "skills-test-client", Version: "0.0.1"})
+	if err := c.Connect(); err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { c.Close() })
+
+	body, err := c.ReadResource(skills.IndexURI)
+	if err != nil {
+		t.Fatalf("ReadResource: %v", err)
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(body), &raw); err != nil {
+		t.Fatalf("unmarshal index: %v", err)
+	}
+	meta, ok := raw["_meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("_meta missing or wrong type: %T (full body: %s)", raw["_meta"], body)
+	}
+	const wantKey = "io.modelcontextprotocol.skills/version"
+	v, ok := meta[wantKey]
+	if !ok {
+		t.Fatalf("_meta does not carry %q (keys: %v)", wantKey, slices.Sorted(maps.Keys(meta)))
+	}
+	// JSON numbers unmarshal as float64 — accept any numeric type.
+	if _, ok := v.(float64); !ok {
+		t.Errorf("_meta[%q] = %v (type %T), want numeric", wantKey, v, v)
+	}
+}
+
+func TestProvider_NotifyChanged_BroadcastsListChanged(t *testing.T) {
+	srv := server.NewServer(core.ServerInfo{Name: "skills-test", Version: "0.0.1"})
+
+	p, err := skills.NewProvider(skills.WithDirectory("testdata/valid"))
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	p.RegisterWith(srv)
+
+	handler := srv.Handler(server.WithStreamableHTTP(true))
+	ts := httptest.NewServer(handler)
+	t.Cleanup(ts.Close)
+
+	var got atomic.Int32
+	gotMethod := make(chan string, 4)
+	c := client.NewClient(ts.URL+"/mcp",
+		core.ClientInfo{Name: "skills-test-client", Version: "0.0.1"},
+		client.WithGetSSEStream(),
+		client.WithNotificationCallback(func(method string, params any) {
+			if method == "notifications/resources/list_changed" {
+				got.Add(1)
+				select {
+				case gotMethod <- method:
+				default:
+				}
+			}
+		}),
+	)
+	if err := c.Connect(); err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { c.Close() })
+
+	// Give the background GET SSE stream a beat to attach before bumping;
+	// without this the broadcast can race past an unsubscribed session.
+	time.Sleep(100 * time.Millisecond)
+
+	if err := p.Refresh(); err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+
+	select {
+	case <-gotMethod:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("did not receive notifications/resources/list_changed within deadline (got count=%d)", got.Load())
+	}
+}
+
+func indexVersion(t *testing.T, body string) uint64 {
+	t.Helper()
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(body), &raw); err != nil {
+		t.Fatalf("unmarshal index: %v", err)
+	}
+	meta, _ := raw["_meta"].(map[string]any)
+	if meta == nil {
+		return 0
+	}
+	v, ok := meta["io.modelcontextprotocol.skills/version"]
+	if !ok {
+		return 0
+	}
+	f, ok := v.(float64)
+	if !ok {
+		t.Fatalf("version field has unexpected type %T", v)
+	}
+	return uint64(f)
 }
 
 func urisOf(defs []core.ResourceDef) []string {

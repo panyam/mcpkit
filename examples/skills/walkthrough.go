@@ -495,6 +495,84 @@ body, _ := c.ReadResource(target.String())`),
 			return nil
 		})
 
+	demo.Section("Push-based invalidation (issue #795)",
+		"`skill://index.json` carries `_meta.io.modelcontextprotocol.skills/version` — a monotonic counter the server bumps whenever skill content changes. Stateful clients also receive `notifications/resources/list_changed` when the bump happens. Stateless clients (no persistent push channel) detect the change by polling the index and observing the field. Detectors that drive the bump (fsnotify, webhook, manual sweep) are pluggable; this walkthrough uses a demo-only `_demo/refresh` tool that calls `Provider.Refresh()` directly.",
+	)
+
+	demo.Step("Read the version, refresh, observe it bump").
+		Arrow("Host", "Server", "resources/read uri=skill://index.json (capture _meta version)").
+		Arrow("Host", "Server", "tools/call name=_demo/refresh (server calls Provider.Refresh())").
+		DashedArrow("Server", "Host", "notifications/resources/list_changed (stateful wire only)").
+		Arrow("Host", "Server", "resources/read uri=skill://index.json (observe version bumped)").
+		Note("The version field lives under `_meta` with the reverse-domain key `io.modelcontextprotocol.skills/version`, matching mcpkit's existing convention for extension metadata. The dual-wire story: subscribed stateful clients get the push notification; stateless clients see the same change by re-reading and comparing the version.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# Read once, capture version.
+V1=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":20,"method":"resources/read","params":{"uri":"skill://index.json"}}' \
+  | jq -r '.result.contents[0].text' \
+  | jq -r '._meta["io.modelcontextprotocol.skills/version"]')
+
+# Refresh.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":21,"method":"tools/call","params":{"name":"_demo/refresh","arguments":{}}}' \
+  | jq -r '.result.content[0].text'
+
+# Read again, observe bump.
+V2=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":22,"method":"resources/read","params":{"uri":"skill://index.json"}}' \
+  | jq -r '.result.contents[0].text' \
+  | jq -r '._meta["io.modelcontextprotocol.skills/version"]')
+
+echo "before=$V1 after=$V2"`).Default(),
+			demokit.MakeVariant("go", "go", `// Read once, capture version.
+body, _ := c.ReadResource(skills.IndexURI)
+var idx struct {
+    Meta map[string]any ` + "`" + `json:"_meta"` + "`" + `
+}
+json.Unmarshal([]byte(body), &idx)
+before, _ := idx.Meta["io.modelcontextprotocol.skills/version"].(float64)
+
+// Trigger Refresh via the demo tool. Production deployments would call
+// Provider.Refresh() directly from their own admin endpoint / webhook
+// handler / fsnotify goroutine (see follow-up tickets #799 + the
+// pushdown-to-templar issue).
+c.CallTool("_demo/refresh", map[string]any{})
+
+// Read again, observe bump.
+body, _ = c.ReadResource(skills.IndexURI)
+json.Unmarshal([]byte(body), &idx)
+after, _ := idx.Meta["io.modelcontextprotocol.skills/version"].(float64)
+fmt.Printf("before=%d after=%d\n", uint64(before), uint64(after))`),
+		).
+		Run(func(ctx demokit.StepContext) *demokit.StepResult {
+			if c == nil {
+				return nil
+			}
+			before := readIndexVersion(c)
+			fmt.Printf("    before refresh: version = %d\n", before)
+
+			if _, err := c.ToolCall("_demo/refresh", map[string]any{}); err != nil {
+				fmt.Printf("    ERROR calling _demo/refresh: %v\n", err)
+				return nil
+			}
+			fmt.Printf("    called _demo/refresh — server bumped Provider.Version()\n")
+
+			after := readIndexVersion(c)
+			fmt.Printf("    after refresh:  version = %d\n", after)
+			if after > before {
+				fmt.Printf("    version bumped by %d — stateful subscribers also received notifications/resources/list_changed\n", after-before)
+			} else {
+				fmt.Printf("    WARNING: version did not advance (%d → %d)\n", before, after)
+			}
+			return nil
+		})
+
 	demo.Section("SEP-2640 directoryRead — scoped subtree navigation",
 		"SEP commit `2e04c48d` (2026-06-09) added `resources/directory/read` for listing a directory's direct children without enumerating the server's entire resource space. Capability-gated via `io.modelcontextprotocol/skills.directoryRead`. mcpkit's Provider auto-supports it (#781).",
 	)
@@ -722,6 +800,32 @@ func marker(mimeType string) string {
 		return "dir/"
 	}
 	return "file"
+}
+
+// readIndexVersion fetches skill://index.json and returns the
+// _meta.io.modelcontextprotocol.skills/version counter (issue #795).
+// Returns 0 when the field is absent — the field is opt-in metadata,
+// not a SEP requirement, so older / non-mcpkit servers will lack it.
+func readIndexVersion(c *client.Client) uint64 {
+	body, err := c.ReadResource(skills.IndexURI)
+	if err != nil {
+		return 0
+	}
+	var idx struct {
+		Meta map[string]any `json:"_meta"`
+	}
+	if err := json.Unmarshal([]byte(body), &idx); err != nil {
+		return 0
+	}
+	v, ok := idx.Meta["io.modelcontextprotocol.skills/version"]
+	if !ok {
+		return 0
+	}
+	f, ok := v.(float64)
+	if !ok {
+		return 0
+	}
+	return uint64(f)
 }
 
 // modeInfo captures the distribution shape detected from the server's
