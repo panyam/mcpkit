@@ -69,16 +69,41 @@ func runDemo() {
 	var (
 		c          *client.Client
 		serverInfo any
+		wireMode   = client.ClientModeAdaptive
 	)
 
+	demo.Section("Wire mode (SEP-2575 dual-wire)",
+		"mcpkit's server defaults to `ModeDual` — every URL serves both the legacy `initialize` handshake and the SEP-2575 `server/discover` probe. Pick which wire the client should use; the rest of the walkthrough works identically either way.",
+	)
+
+	demo.Step("Choose the client wire mode").
+		Input(demokit.Choice("adaptive", "stateless", "legacy").
+			Named("wire", "Wire mode (adaptive probes stateless first, falls back to legacy)").
+			WithDefault("adaptive")).
+		Note("`adaptive` (default): probe `server/discover`, fall back to `initialize` on `-32601`. `stateless`: force `server/discover`, error if the server can't answer. `legacy`: skip the probe, go straight to `initialize`.").
+		Run(func(ctx demokit.StepContext) *demokit.StepResult {
+			choice, _ := ctx.Inputs["wire"].(string)
+			switch choice {
+			case "stateless":
+				wireMode = client.ClientModeStateless
+			case "legacy":
+				wireMode = client.ClientModeLegacyOnly
+			default:
+				wireMode = client.ClientModeAdaptive
+			}
+			fmt.Printf("    Selected: %s — client.WithClientMode(%s)\n", choice, wireMode)
+			return nil
+		})
+
 	demo.Step("Connect to the skills server").
-		Arrow("Host", "Server", "POST /mcp — initialize").
-		DashedArrow("Server", "Host", "serverInfo + capabilities (with extensions.skills = {})").
-		Note("`client.NewClient(...)` + `Connect()`. The server side wired the extension automatically via `Provider.RegisterWith`.").
+		Arrow("Host", "Server", "POST /mcp — `server/discover` (stateless) OR `initialize` (legacy)").
+		DashedArrow("Server", "Host", "serverInfo + capabilities (with extensions.skills)").
+		Note("`client.NewClient(..., client.WithClientMode(mode))` then `Connect()`. Inspect `c.UsingStatelessWire()` after the call to see which wire engaged.").
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			c = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "skills-host", Version: "1.0"},
 				client.WithTracerProvider(tp),
+				client.WithClientMode(wireMode),
 			)
 			if err := c.Connect(); err != nil {
 				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
@@ -86,6 +111,7 @@ func runDemo() {
 			}
 			serverInfo = c.ServerInfo
 			fmt.Printf("    Connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)
+			fmt.Printf("    Wire: %s\n", wireLabel(c.UsingStatelessWire()))
 			if c.ServerSupportsExtension(skills.ExtensionID) {
 				fmt.Printf("    Server advertises %q under capabilities.extensions\n", skills.ExtensionID)
 			} else {
@@ -361,6 +387,17 @@ func runDemo() {
 	_ = serverInfo
 	common.SetupRenderer(demo)
 	demo.Execute()
+}
+
+// wireLabel returns a human-readable wire-mode name for the walkthrough
+// output. Picks between the SEP-2575 stateless wire (server/discover at
+// connect, response-as-SSE for notifications) and the legacy wire
+// (initialize handshake, SSE notification stream).
+func wireLabel(stateless bool) string {
+	if stateless {
+		return "SEP-2575 stateless (server/discover)"
+	}
+	return "legacy (initialize handshake)"
 }
 
 // marker returns a one-glyph indicator for a directory listing entry based
