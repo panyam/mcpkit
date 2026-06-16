@@ -478,6 +478,7 @@ func (d *Dispatcher) handleInitialize(id json.RawMessage, params json.RawMessage
 			exts[id] = core.ExtensionCapability{
 				SpecVersion: ext.SpecVersion,
 				Stability:   string(ext.Stability),
+				Config:      ext.Config,
 			}
 		}
 		caps.Extensions = exts

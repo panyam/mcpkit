@@ -1427,6 +1427,27 @@ func (c *Client) ServerSupportsExtension(id string) bool {
 	return ok
 }
 
+// ServerExtensionCapability returns the cached ExtensionCapability the
+// server advertised for id during initialize, or false when the server
+// did not declare the extension.
+//
+// Use this to inspect extension-specific Config settings (e.g., the
+// SEP-2640 directoryRead flag). The returned capability is decoded from
+// the raw JSON captured at initialize time and reflects whatever the
+// server emitted on the wire; callers should treat unknown Config keys
+// permissively.
+func (c *Client) ServerExtensionCapability(id string) (core.ExtensionCapability, bool) {
+	raw, ok := c.serverExtensions[id]
+	if !ok {
+		return core.ExtensionCapability{}, false
+	}
+	var cap core.ExtensionCapability
+	if err := json.Unmarshal(raw, &cap); err != nil {
+		return core.ExtensionCapability{}, false
+	}
+	return cap, true
+}
+
 // ServerSupportsUI checks whether the server advertised MCP Apps
 // (io.modelcontextprotocol/ui) support. Convenience wrapper around
 // ServerSupportsExtension.
