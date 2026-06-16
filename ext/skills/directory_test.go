@@ -124,6 +124,36 @@ func TestDirectoryRead_NestedDirectoryURI(t *testing.T) {
 	}
 }
 
+// TestDirectoryRead_RejectsParentTraversal pins the security boundary:
+// a URI whose tail is `..` must not silently resolve to the parent of
+// the matched skill. Without the segment guard in resolveDirectoryURI,
+// path.Join("acme/billing/refunds", "..") would cleanly collapse to
+// "acme/billing" and enumerate the sibling tree — exactly the surface
+// the directoryRead capability is meant to keep scoped.
+func TestDirectoryRead_RejectsParentTraversal(t *testing.T) {
+	_, _, c := boot(t, "testdata/valid")
+	assertCallError(t, callDirectoryReadErr(c, "skill://acme/billing/refunds/..", ""), "invalid path segment")
+}
+
+// TestDirectoryRead_RejectsDotSegment rejects `.` segments for symmetry
+// with `..` — both are spec-silent at the URI level but semantically
+// ambiguous for a "directory inside the skill" lookup. Easier to reject
+// than to define disposal semantics.
+func TestDirectoryRead_RejectsDotSegment(t *testing.T) {
+	_, _, c := boot(t, "testdata/valid")
+	assertCallError(t, callDirectoryReadErr(c, "skill://acme/billing/refunds/.", ""), "invalid path segment")
+}
+
+// TestDirectoryRead_RejectsDeepTraversal asserts the guard fires even
+// when the cleaned path would resolve far outside the skill tree (e.g.,
+// /etc/passwd via successive `..` segments). The check is per-segment,
+// so this is the same code path as the single-`..` case — included as
+// a documented attack pattern.
+func TestDirectoryRead_RejectsDeepTraversal(t *testing.T) {
+	_, _, c := boot(t, "testdata/valid")
+	assertCallError(t, callDirectoryReadErr(c, "skill://acme/billing/refunds/../../../etc/passwd", ""), "invalid path segment")
+}
+
 // TestDirectoryRead_StableOrdering verifies the result is URI-sorted so
 // pagination cursors are deterministic across calls.
 func TestDirectoryRead_StableOrdering(t *testing.T) {

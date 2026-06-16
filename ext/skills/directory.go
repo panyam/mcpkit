@@ -101,6 +101,21 @@ func (p *Provider) resolveDirectoryURI(uri string) (*skillEntry, string, error) 
 	// best.dirPath is the FS root for the skill; segs[bestLen:] is the
 	// in-skill path.
 	relSegs := segs[bestLen:]
+
+	// Reject path-traversal segments BEFORE joining. ParseURI does not
+	// forbid "." or ".." segments at the URI level (the SEP is silent on
+	// them) and a naive path.Join would let
+	// `skill://acme/billing/refunds/..` cleanly resolve to
+	// `acme/billing`, enumerating the parent tree — exactly the surface
+	// the directoryRead capability is meant to scope away. The
+	// containment check in enumerateDirectory is defense-in-depth; this
+	// is the load-bearing guard.
+	for _, s := range relSegs {
+		if s == ".." || s == "." || strings.ContainsAny(s, `/\`) {
+			return nil, "", fmt.Errorf("skills: %q contains an invalid path segment %q", uri, s)
+		}
+	}
+
 	relPath := strings.Join(relSegs, "/")
 	return best, relPath, nil
 }
@@ -116,6 +131,17 @@ func (p *Provider) enumerateDirectory(skill *skillEntry, relPath, parentURI stri
 	if relPath != "" {
 		fsRoot = path.Join(skill.dirPath, relPath)
 	}
+
+	// Defense in depth: even with the segment guard in resolveDirectoryURI,
+	// confirm the post-Clean path still names skill.dirPath or a descendant
+	// before touching the FS. Future changes to splitURIPath or the
+	// segment guard surface here as a typed error instead of a silent
+	// out-of-scope enumeration.
+	cleaned := path.Clean(fsRoot)
+	if cleaned != skill.dirPath && !strings.HasPrefix(cleaned, skill.dirPath+"/") {
+		return nil, fmt.Errorf("skills: %q resolves outside the skill subtree", parentURI)
+	}
+
 	// Verify the target is a directory before reading. fs.Stat surfaces
 	// fs.ErrNotExist for unknown paths, which we want to surface as
 	// "no such directory."
