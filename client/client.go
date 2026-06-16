@@ -1427,6 +1427,19 @@ func (c *Client) ServerSupportsExtension(id string) bool {
 	return ok
 }
 
+// UsingStatelessWire reports whether Connect() landed on the SEP-2575
+// stateless wire (server/discover) rather than the legacy initialize
+// handshake. Always false before Connect(). True when the client was
+// constructed with WithClientMode(ClientModeStateless), or when
+// ClientModeAdaptive's probe succeeded against a server that speaks
+// server/discover.
+//
+// Use to display which wire a session is on (walkthroughs, debug
+// tools) or to gate behavior that only makes sense on one wire.
+func (c *Client) UsingStatelessWire() bool {
+	return c.useStatelessWire
+}
+
 // ServerExtensionCapability returns the cached ExtensionCapability the
 // server advertised for id during initialize, or false when the server
 // did not declare the extension.

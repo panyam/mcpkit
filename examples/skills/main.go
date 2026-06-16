@@ -30,6 +30,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/examples/common"
 	commonotel "github.com/panyam/mcpkit/examples/common/otel"
 	"github.com/panyam/mcpkit/ext/skills"
@@ -53,7 +54,11 @@ func serve() {
 	skillsDir := flag.String("skills", "skills",
 		"directory of skill bundles to register (default ./skills)")
 	tel := common.RegisterTelemetryFlags(flag.CommandLine)
-	flag.CommandLine.Parse(filterArgs(os.Args[1:], "--serve"))
+	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
+		demokit.BoolFlag("--serve"),  // dual-mode dispatch; override demokit's value-form default
+		demokit.ValueFlag("--url"),   // walkthrough-side flag; strip from serve args
+		demokit.ValueFlag("--wire"),  // walkthrough-side flag; strip from serve args
+	))
 
 	tp, shutdown, err := commonotel.SetupTelemetry(context.Background(),
 		commonotel.WithExporter(*tel.Exporter),
@@ -98,19 +103,3 @@ func serve() {
 	}
 }
 
-// filterArgs drops dispatch-style flags like --serve before handing
-// the remaining args to flag.Parse.
-func filterArgs(args []string, drop ...string) []string {
-	dropSet := make(map[string]struct{}, len(drop))
-	for _, d := range drop {
-		dropSet[d] = struct{}{}
-	}
-	out := make([]string, 0, len(args))
-	for _, a := range args {
-		if _, hit := dropSet[a]; hit {
-			continue
-		}
-		out = append(out, a)
-	}
-	return out
-}
