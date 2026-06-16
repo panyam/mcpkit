@@ -126,22 +126,24 @@ func TestDirectoryRead_NestedDirectoryURI(t *testing.T) {
 
 // TestDirectoryRead_RejectsParentTraversal pins the security boundary:
 // a URI whose tail is `..` must not silently resolve to the parent of
-// the matched skill. Without the segment guard in resolveDirectoryURI,
-// path.Join("acme/billing/refunds", "..") would cleanly collapse to
-// "acme/billing" and enumerate the sibling tree — exactly the surface
-// the directoryRead capability is meant to keep scoped.
+// the matched skill. The Provider's URI-validation middleware intercepts
+// dot-segments at parse time, so the rejection surfaces as an invalid
+// skill URI ErrPathTraversal — sibling enumeration via
+// path.Join("acme/billing/refunds", "..") never reaches the directory
+// handler.
 func TestDirectoryRead_RejectsParentTraversal(t *testing.T) {
 	_, _, c := boot(t, "testdata/valid")
-	assertCallError(t, callDirectoryReadErr(c, "skill://acme/billing/refunds/..", ""), "invalid path segment")
+	assertCallError(t, callDirectoryReadErr(c, "skill://acme/billing/refunds/..", ""), "traversal segment")
 }
 
 // TestDirectoryRead_RejectsDotSegment rejects `.` segments for symmetry
 // with `..` — both are spec-silent at the URI level but semantically
 // ambiguous for a "directory inside the skill" lookup. Easier to reject
-// than to define disposal semantics.
+// than to define disposal semantics. Same middleware gate as the
+// parent-traversal case.
 func TestDirectoryRead_RejectsDotSegment(t *testing.T) {
 	_, _, c := boot(t, "testdata/valid")
-	assertCallError(t, callDirectoryReadErr(c, "skill://acme/billing/refunds/.", ""), "invalid path segment")
+	assertCallError(t, callDirectoryReadErr(c, "skill://acme/billing/refunds/.", ""), "traversal segment")
 }
 
 // TestDirectoryRead_RejectsDeepTraversal asserts the guard fires even
@@ -151,7 +153,7 @@ func TestDirectoryRead_RejectsDotSegment(t *testing.T) {
 // a documented attack pattern.
 func TestDirectoryRead_RejectsDeepTraversal(t *testing.T) {
 	_, _, c := boot(t, "testdata/valid")
-	assertCallError(t, callDirectoryReadErr(c, "skill://acme/billing/refunds/../../../etc/passwd", ""), "invalid path segment")
+	assertCallError(t, callDirectoryReadErr(c, "skill://acme/billing/refunds/../../../etc/passwd", ""), "traversal segment")
 }
 
 // TestDirectoryRead_StableOrdering verifies the result is URI-sorted so

@@ -155,6 +155,12 @@ func TestParseURI_Errors(t *testing.T) {
 		{"double hyphen", "skill://re--funds/SKILL.md", skills.ErrInvalidSkillName},
 		{"underscore", "skill://my_skill/SKILL.md", skills.ErrInvalidSkillName},
 		{"only manifest", "skill://SKILL.md", skills.ErrEmptySkillPath},
+		{"dot segment authority", "skill://./SKILL.md", skills.ErrPathTraversal},
+		{"dotdot segment authority", "skill://../SKILL.md", skills.ErrPathTraversal},
+		{"dotdot mid path", "skill://pdf-processing/../../../etc/passwd", skills.ErrPathTraversal},
+		{"dotdot trailing", "skill://pdf-processing/..", skills.ErrPathTraversal},
+		{"dot mid path", "skill://pdf-processing/./SKILL.md", skills.ErrPathTraversal},
+		{"percent-encoded dotdot", "skill://pdf-processing/%2E%2E/SKILL.md", skills.ErrPathTraversal},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

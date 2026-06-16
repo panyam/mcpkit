@@ -6,10 +6,10 @@ serve: ## Start the skills-demo server in file mode (default :8080)
 	go run . --serve
 
 serve-archive: ## Start the server in archive mode (.tar.gz per skill)
-	go run . --serve --mode=archive
+	go run . --serve --bundle=archive
 
 serve-zip: ## Start the server in archive mode (.zip per skill)
-	go run . --serve --mode=zip
+	go run . --serve --bundle=zip
 
 run: ## Run the walkthrough in interactive TUI mode (paginated, key-driven).
 	go run .

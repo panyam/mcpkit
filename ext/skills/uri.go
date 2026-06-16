@@ -64,6 +64,14 @@ type URIParts struct {
 
 // ParseURI parses a skill:// URI into a URIParts.
 //
+// Rejects any "." or ".." path segment with ErrPathTraversal — SEP-2640
+// skill names use [a-z0-9-] only, so dot-segments cannot appear in a
+// well-formed URI and their presence indicates a malformed or traversal
+// probe. Production servers SHOULD validate inbound resources/read URIs
+// against this parser before registry lookup so that traversal attempts
+// produce a precise InvalidParams error instead of a generic
+// "unknown resource" miss.
+//
 // Validation rules:
 //   - Scheme must be exactly "skill" (ErrInvalidScheme otherwise).
 //   - At least one path segment is required (ErrEmptySkillPath).
@@ -137,12 +145,21 @@ func ParseURI(s string) (URIParts, error) {
 // RFC 3986 places the first <skill-path> segment in the authority component
 // when the URI has the "skill://" form; the remainder lives in the path.
 // Both contribute to the SEP-2640 skill path.
+//
+// Decoded segments are checked against ErrPathTraversal: "." and ".."
+// are rejected even though they are syntactically valid path components,
+// because SEP-2640 skill paths use [a-z0-9-] and dot-segments cannot
+// appear legitimately. Rejecting at parse time prevents the registry
+// miss path from masking traversal probes as ordinary typos.
 func splitURIPath(u *url.URL) ([]string, error) {
 	var segs []string
 	if u.Host != "" {
 		host, err := url.PathUnescape(u.Host)
 		if err != nil {
 			return nil, fmt.Errorf("%w: invalid host: %v", ErrInvalidScheme, err)
+		}
+		if host == "." || host == ".." {
+			return nil, fmt.Errorf("%w: at authority", ErrPathTraversal)
 		}
 		segs = append(segs, host)
 	}
@@ -164,6 +181,9 @@ func splitURIPath(u *url.URL) ([]string, error) {
 		decoded, err := url.PathUnescape(seg)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrInvalidScheme, err)
+		}
+		if decoded == "." || decoded == ".." {
+			return nil, fmt.Errorf("%w: %q at index %d", ErrPathTraversal, decoded, len(segs))
 		}
 		segs = append(segs, decoded)
 	}
