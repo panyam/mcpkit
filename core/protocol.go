@@ -119,9 +119,16 @@ type InitializeResult struct {
 
 // ExtensionCapability describes a server extension's metadata in the
 // initialize response capabilities.
+//
+// Config carries extension-specific settings. SEP-2640 (Skills) uses it
+// for the directoryRead flag added in commit 2e04c48d on 2026-06-09;
+// other extensions define their own shape under their own reverse-domain
+// ID. Absent or empty when the extension declares no settings (the
+// wire-level value is then the bare empty object {}).
 type ExtensionCapability struct {
-	SpecVersion string `json:"specVersion"`
-	Stability   string `json:"stability"`
+	SpecVersion string         `json:"specVersion"`
+	Stability   string         `json:"stability"`
+	Config      map[string]any `json:"config,omitempty"`
 }
 
 // StreamableHTTPAccept is the Accept header value for Streamable HTTP requests.

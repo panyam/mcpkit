@@ -46,6 +46,15 @@ var (
 	// section, hosts MUST NOT use unverified content; surfacing this as
 	// a typed error makes the contract explicit at the call site.
 	ErrDigestMismatch = errors.New("skills: digest mismatch — content MUST NOT be used")
+
+	// ErrDirectoryReadNotSupported is returned by Client.ReadDirectory
+	// when the connected server has not advertised the
+	// io.modelcontextprotocol/skills.directoryRead capability. SEP-2640
+	// commit 2e04c48d's normative wording: clients MUST NOT call
+	// resources/directory/read against a server that has not declared
+	// directoryRead: true. Returning a typed error from the pre-call
+	// guard keeps the contract explicit at the call site.
+	ErrDirectoryReadNotSupported = errors.New("skills: server does not advertise the directoryRead capability")
 )
 
 // Index validation errors.

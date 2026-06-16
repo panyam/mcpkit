@@ -80,6 +80,24 @@ func (c *Client) SupportsSkills() bool {
 	return c.mcp.ServerSupportsExtension(ExtensionID)
 }
 
+// SupportsDirectoryRead reports whether the connected server advertised
+// the SEP-2640 directoryRead capability (added by SEP commit 2e04c48d
+// on 2026-06-09) inside the io.modelcontextprotocol/skills extension.
+// Per the SEP's normative wording, clients MUST NOT call
+// resources/directory/read against a server that has not declared
+// directoryRead: true. ReadDirectory's pre-call guard uses this check.
+//
+// The signal is read from the cached initialize/discover response; this
+// method does not issue a network call.
+func (c *Client) SupportsDirectoryRead() bool {
+	cap, ok := c.mcp.ServerExtensionCapability(ExtensionID)
+	if !ok {
+		return false
+	}
+	v, _ := cap.Config[CapabilityDirectoryRead].(bool)
+	return v
+}
+
 // ListSkills reads skill://index.json and returns the parsed Index.
 //
 // SEP-2640 makes the index OPTIONAL: a server MAY decline to expose
@@ -147,6 +165,67 @@ func (c *Client) ReadSkillURI(ctx context.Context, uri string) ([]byte, error) {
 		return nil, err
 	}
 	return bytes, nil
+}
+
+// ReadDirectoryOption tunes a single ReadDirectory call.
+type ReadDirectoryOption func(*readDirectoryConfig)
+
+type readDirectoryConfig struct {
+	cursor string
+}
+
+// WithDirectoryCursor sets the pagination cursor for the call. Pass the
+// NextCursor returned by a prior ReadDirectory result to fetch the next
+// page. Empty cursor (the default) requests the first page.
+func WithDirectoryCursor(cursor string) ReadDirectoryOption {
+	return func(c *readDirectoryConfig) { c.cursor = cursor }
+}
+
+// ReadDirectory issues a SEP-2640 resources/directory/read call for uri
+// and returns the directory's direct children.
+//
+// Per the SEP (commit 2e04c48d, 2026-06-09): files carry their ordinary
+// resource metadata; subdirectories carry MimeTypeDirectory and a URI
+// without trailing slash. Clients descend by calling ReadDirectory again
+// on a child directory.
+//
+// Pre-call guard: SupportsDirectoryRead must return true on the
+// underlying connection, otherwise ReadDirectory returns
+// ErrDirectoryReadNotSupported without issuing a network call. This
+// matches the SEP's normative "Clients MUST NOT call" wording.
+//
+// ctx parents the SEP-414 P7 (#748) `skills.read_directory` span when a
+// TracerProvider is installed. On success the span carries
+// mcp.skill.uri and mcp.skill.entries (count of returned ResourceDefs).
+func (c *Client) ReadDirectory(ctx context.Context, uri string, opts ...ReadDirectoryOption) (DirectoryReadResult, error) {
+	var cfg readDirectoryConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
+	_, span := c.cfg.tp.StartSpan(ctx, "skills.read_directory",
+		core.Attribute{Key: "mcp.skill.uri", Value: uri},
+	)
+	defer span.End()
+
+	if !c.SupportsDirectoryRead() {
+		span.RecordError(ErrDirectoryReadNotSupported)
+		return DirectoryReadResult{}, ErrDirectoryReadNotSupported
+	}
+
+	params := DirectoryReadRequest{URI: uri, Cursor: cfg.cursor}
+	result, err := c.mcp.Call(MethodResourcesDirectoryRead, params)
+	if err != nil {
+		span.RecordError(err)
+		return DirectoryReadResult{}, fmt.Errorf("skills: %s %s: %w", MethodResourcesDirectoryRead, uri, err)
+	}
+	var out DirectoryReadResult
+	if err := result.Unmarshal(&out); err != nil {
+		span.RecordError(err)
+		return DirectoryReadResult{}, fmt.Errorf("skills: decode %s response: %w", MethodResourcesDirectoryRead, err)
+	}
+	span.SetAttribute("mcp.skill.entries", fmt.Sprintf("%d", len(out.Resources)))
+	return out, nil
 }
 
 // SkillManifest holds a parsed SKILL.md plus the raw bytes the server

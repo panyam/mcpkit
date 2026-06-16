@@ -1,6 +1,10 @@
 package skills
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/panyam/mcpkit/core"
+)
 
 // SkillType is the discriminator for an entry in skill://index.json.
 type SkillType string
@@ -177,5 +181,30 @@ func MetadataFromFrontmatter(fm Frontmatter, sourceURI string) Metadata {
 		Extra:       fm.Extra,
 		SourceURI:   sourceURI,
 	}
+}
+
+// DirectoryReadRequest is the typed params shape for the SEP-2640
+// resources/directory/read method.
+//
+// Cursor mirrors the resources/list pagination contract: empty on the
+// first request, then the NextCursor returned by the prior response.
+type DirectoryReadRequest struct {
+	URI    string `json:"uri"`
+	Cursor string `json:"cursor,omitempty"`
+}
+
+// DirectoryReadResult is the typed result shape for the SEP-2640
+// resources/directory/read method.
+//
+// Resources are the directory's direct children — files carry their
+// ordinary resource metadata; subdirectories carry MimeTypeDirectory and
+// a URI without trailing slash. The listing is not recursive: clients
+// descend by calling the method again on a child directory.
+//
+// NextCursor follows the resources/list contract: present and non-empty
+// when more entries remain, omitted when the listing is complete.
+type DirectoryReadResult struct {
+	Resources  []core.ResourceDef `json:"resources"`
+	NextCursor string             `json:"nextCursor,omitempty"`
 }
 
