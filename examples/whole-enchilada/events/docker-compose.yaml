@@ -148,6 +148,21 @@ services:
       # overrides this down to 3 via EVENTS_QUOTA_CAPS=chat.message=3
       # for its "subscribe 4 times, watch the 4th fail" demonstration.
       EVENTS_QUOTA_CAPS: ${EVENTS_QUOTA_CAPS:-chat.message=10}
+      # EVENTS_ALLOW_INFINITE_TTL=true opts the registry into accepting
+      # `ttlMs: null` requests + returning `refreshBefore: null` (PR 779,
+      # spec PR1 commit 99f3589c §"Subscription TTL"). Default ON in
+      # this demo so the TTL-negotiation + no-expiry walkthrough beats
+      # work out of the box. Production deployments leave this OFF
+      # unless they've also wired a durable WebhookStore (we have —
+      # POSTGRES_DSN above) AND accepted the failure-based GC obligations.
+      EVENTS_ALLOW_INFINITE_TTL: ${EVENTS_ALLOW_INFINITE_TTL:-true}
+      # EVENTS_NO_EXPIRY_GC_WINDOW tightens the failure-based GC clock
+      # for no-expiry subscriptions (PR 783). Library default is 72h
+      # (DefaultNoExpiryFailureGCWindow) — invisible in a 30-min demo;
+      # 2m makes the end-to-end "subscriber dies, server drops the no-
+      # expiry sub after sustained delivery failure" beat observable.
+      # Production deployments leave this at the default (or longer).
+      EVENTS_NO_EXPIRY_GC_WINDOW: ${EVENTS_NO_EXPIRY_GC_WINDOW:-2m}
       # POSTGRES_BUFFER_TTL — retention window for Postgres-backed
       # EventBufferStore rows (issue 727). The background sweeper drops
       # rows past expires_at every 60s; clients polling for an evicted
@@ -255,6 +270,21 @@ services:
       # overrides this down to 3 via EVENTS_QUOTA_CAPS=chat.message=3
       # for its "subscribe 4 times, watch the 4th fail" demonstration.
       EVENTS_QUOTA_CAPS: ${EVENTS_QUOTA_CAPS:-chat.message=10}
+      # EVENTS_ALLOW_INFINITE_TTL=true opts the registry into accepting
+      # `ttlMs: null` requests + returning `refreshBefore: null` (PR 779,
+      # spec PR1 commit 99f3589c §"Subscription TTL"). Default ON in
+      # this demo so the TTL-negotiation + no-expiry walkthrough beats
+      # work out of the box. Production deployments leave this OFF
+      # unless they've also wired a durable WebhookStore (we have —
+      # POSTGRES_DSN above) AND accepted the failure-based GC obligations.
+      EVENTS_ALLOW_INFINITE_TTL: ${EVENTS_ALLOW_INFINITE_TTL:-true}
+      # EVENTS_NO_EXPIRY_GC_WINDOW tightens the failure-based GC clock
+      # for no-expiry subscriptions (PR 783). Library default is 72h
+      # (DefaultNoExpiryFailureGCWindow) — invisible in a 30-min demo;
+      # 2m makes the end-to-end "subscriber dies, server drops the no-
+      # expiry sub after sustained delivery failure" beat observable.
+      # Production deployments leave this at the default (or longer).
+      EVENTS_NO_EXPIRY_GC_WINDOW: ${EVENTS_NO_EXPIRY_GC_WINDOW:-2m}
       # POSTGRES_BUFFER_TTL — retention window for Postgres-backed
       # EventBufferStore rows (issue 727). The background sweeper drops
       # rows past expires_at every 60s; clients polling for an evicted
@@ -362,6 +392,21 @@ services:
       # overrides this down to 3 via EVENTS_QUOTA_CAPS=chat.message=3
       # for its "subscribe 4 times, watch the 4th fail" demonstration.
       EVENTS_QUOTA_CAPS: ${EVENTS_QUOTA_CAPS:-chat.message=10}
+      # EVENTS_ALLOW_INFINITE_TTL=true opts the registry into accepting
+      # `ttlMs: null` requests + returning `refreshBefore: null` (PR 779,
+      # spec PR1 commit 99f3589c §"Subscription TTL"). Default ON in
+      # this demo so the TTL-negotiation + no-expiry walkthrough beats
+      # work out of the box. Production deployments leave this OFF
+      # unless they've also wired a durable WebhookStore (we have —
+      # POSTGRES_DSN above) AND accepted the failure-based GC obligations.
+      EVENTS_ALLOW_INFINITE_TTL: ${EVENTS_ALLOW_INFINITE_TTL:-true}
+      # EVENTS_NO_EXPIRY_GC_WINDOW tightens the failure-based GC clock
+      # for no-expiry subscriptions (PR 783). Library default is 72h
+      # (DefaultNoExpiryFailureGCWindow) — invisible in a 30-min demo;
+      # 2m makes the end-to-end "subscriber dies, server drops the no-
+      # expiry sub after sustained delivery failure" beat observable.
+      # Production deployments leave this at the default (or longer).
+      EVENTS_NO_EXPIRY_GC_WINDOW: ${EVENTS_NO_EXPIRY_GC_WINDOW:-2m}
       # POSTGRES_BUFFER_TTL — retention window for Postgres-backed
       # EventBufferStore rows (issue 727). The background sweeper drops
       # rows past expires_at every 60s; clients polling for an evicted

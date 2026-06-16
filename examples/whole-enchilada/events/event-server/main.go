@@ -151,6 +151,25 @@ func main() {
 	if ws := pgBackend.webhookStore(); ws != nil {
 		webhookOpts = append(webhookOpts, events.WithWebhookStore(ws))
 	}
+	// EVENTS_ALLOW_INFINITE_TTL=true opts the demo into accepting
+	// ttlMs:null requests + returning refreshBefore:null (PR 779, spec
+	// PR1 commit 99f3589c §"Subscription TTL"). Operator-visible in
+	// the compose env; default off in production deployments.
+	if os.Getenv("EVENTS_ALLOW_INFINITE_TTL") == "true" {
+		webhookOpts = append(webhookOpts, events.WithAllowInfiniteWebhookTTL())
+	}
+	// EVENTS_NO_EXPIRY_GC_WINDOW=<duration> tightens the failure-based
+	// GC window for no-expiry subs (PR 783). Library default is 72h
+	// (DefaultNoExpiryFailureGCWindow) which is invisible in a demo
+	// run; compose env sets ~2m so the GC drop is observable
+	// end-to-end.
+	if raw := os.Getenv("EVENTS_NO_EXPIRY_GC_WINDOW"); raw != "" {
+		if d, err := time.ParseDuration(raw); err == nil {
+			webhookOpts = append(webhookOpts, events.WithNoExpiryFailureGCWindow(d))
+		} else {
+			log.Printf("[event-server] WARNING: EVENTS_NO_EXPIRY_GC_WINDOW=%q is not a valid duration; ignoring", raw)
+		}
+	}
 	webhooks := events.NewWebhookRegistry(webhookOpts...)
 
 	// Canonical baseline (WithListen + the color logger wired to both
