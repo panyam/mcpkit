@@ -27,6 +27,30 @@ func TestSkillsExtension_Metadata(t *testing.T) {
 	}
 }
 
+// TestSkillsExtension_DirectoryReadConfig confirms the SEP-2640
+// directoryRead flag (added by commit 2e04c48d on 2026-06-09) emits on
+// the wire when set. The bare SkillsExtension{} keeps Config nil so
+// servers that wire the extension directly without an attached
+// directory handler don't accidentally advertise a method they don't
+// actually serve.
+func TestSkillsExtension_DirectoryReadConfig(t *testing.T) {
+	// Default: no Config.
+	defaultExt := skills.SkillsExtension{}.Extension()
+	if defaultExt.Config != nil {
+		t.Errorf("default SkillsExtension Config = %v, want nil", defaultExt.Config)
+	}
+
+	// Opted-in: Config carries directoryRead: true.
+	onExt := skills.SkillsExtension{DirectoryRead: true}.Extension()
+	v, ok := onExt.Config[skills.CapabilityDirectoryRead].(bool)
+	if !ok {
+		t.Fatalf("Config[%q] missing or wrong type; Config=%v", skills.CapabilityDirectoryRead, onExt.Config)
+	}
+	if !v {
+		t.Errorf("Config[%q] = false, want true", skills.CapabilityDirectoryRead)
+	}
+}
+
 func TestSkillsExtension_AppearsInInitialize(t *testing.T) {
 	_, _, c := boot(t, "testdata/valid")
 	if !c.ServerSupportsExtension(skills.ExtensionID) {

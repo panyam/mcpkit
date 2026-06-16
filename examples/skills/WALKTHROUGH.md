@@ -120,17 +120,25 @@ Demonstrates that the prefix-segment routing works end-to-end. The skill's `name
 
 Same relative-reference resolution: `templates/email.md` from refunds/SKILL.md.
 
+### SEP-2640 directoryRead — scoped subtree navigation
+
+SEP commit `2e04c48d` (2026-06-09) added `resources/directory/read` for listing a directory's direct children without enumerating the server's entire resource space. Capability-gated via `io.modelcontextprotocol/skills.directoryRead`. mcpkit's Provider auto-supports it (#781).
+
+### Step 9: List a directory inside a skill and recurse into a subdirectory
+
+Subdirectories surface with `mimeType: "inode/directory"`; client descends by issuing a second call. SDK wrapper: `Client.ReadDirectory(ctx, uri)`. The walkthrough hand-rolls a one-level recursion for clarity — the SDK does not ship a `WalkDirectory` helper (file an issue if you need one).
+
 ### SEP-414 P7 — Skills observability
 
 Fetch ≠ activation. Server `resources/read` spans now carry `mcp.skill.*` attrs (#748). Client `ext/skills.Client` emits `skills.read*` spans + `Activate(ctx, uri)` for post-cache use the wire can't see (SDK-only — no spec change).
 
-### Step 9: Wrap reads in skills.NewClient(...) and call Client.Activate
+### Step 10: Wrap reads in skills.NewClient(...) and call Client.Activate
 
 Activate is intra-process — no wire traffic. Run with `make serve EXPORTER=stdout` + `make demo EXPORTER=stdout` to see spans.
 
 ### Wrap-up
 
-Negotiated extension, enumerated index, verified one digest, read manifest + supporting files across single-segment and nested-prefix paths, emitted skill-shape spans + an activation event. `make serve-archive` flips the wire to one `.tar.gz` per skill — host code unchanged.
+Negotiated extension, enumerated index, verified one digest, read manifest + supporting files across single-segment and nested-prefix paths, navigated a directory subtree via the SEP-2640 `directoryRead` capability, emitted skill-shape spans + an activation event. `make serve-archive` flips the wire to one `.tar.gz` per skill — host code unchanged.
 
 ## Run it
 

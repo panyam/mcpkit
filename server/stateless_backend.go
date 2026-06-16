@@ -76,6 +76,7 @@ func (b *statelessBackend) Capabilities() core.ServerCapabilities {
 			caps.Extensions[id] = core.ExtensionCapability{
 				SpecVersion: e.SpecVersion,
 				Stability:   string(e.Stability),
+				Config:      e.Config,
 			}
 		}
 	}
