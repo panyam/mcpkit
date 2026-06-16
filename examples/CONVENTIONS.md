@@ -485,6 +485,45 @@ shape across examples. Examples that want to surface a custom status or
 jump to a specific next step return a non-nil `*demokit.StepResult` (see
 `demokit/result.go`).
 
+### Notes are prose; call shapes go in Verbatim
+
+`Note(...)` is the step's prose explanation, rendered as wrapped
+paragraphs in the TUI box and the plain renderer. Inline backticks render
+as literal backticks inside the bordered box — they do not become syntax
+highlighting. When the audience needs to see an actual call shape, a
+multi-line snippet, or a shell command, attach a `Verbatim(label,
+content)` (or `VerbatimLang` / `Shell` / `VerbatimVariants`) block. The
+verbatim renders outside the wrapped prose, preserves character-exact
+formatting, and gets copy support in the TUI.
+
+The rule is about *shapes*, not identifiers. A method or type name
+mentioned in passing (e.g., "the Provider", "Connect") reads fine
+without backticks. The thing to lift is anything that resembles code you
+could copy and run.
+
+Bad — call shape rendered as backtick-bracketed prose:
+
+```go
+.Note("`client.NewClient(..., client.WithClientMode(mode))` then `Connect()`. Inspect `c.UsingStatelessWire()` after the call.").
+```
+
+Good — prose explains intent, Verbatim carries the shape:
+
+```go
+.Note("Construct the client with the chosen wire mode, then connect. Inspect the new accessor after the call to see which wire engaged.").
+Verbatim("Go", `c := client.NewClient(serverURL+"/mcp", info,
+    client.WithClientMode(wireMode),
+)
+c.Connect()
+wire := c.UsingStatelessWire()`).
+```
+
+Shell commands take the same shape via the `Shell(content)` shorthand —
+`Shell` is `VerbatimLang("", "bash", content)` and is the right pick for
+copy-pasteable `make` / `curl` / `bash` invocations. The
+`VerbatimVariants("Reproduce on the wire", ...)` block below is a
+specialized form for steps that issue an MCP call.
+
 ### Verbatim variants — "Reproduce on the wire"
 
 Every step that makes an MCP call attaches a `VerbatimVariants("Reproduce on
