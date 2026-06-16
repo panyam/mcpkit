@@ -331,6 +331,51 @@ func TestProvider_Integration(t *testing.T) {
 	}
 }
 
+func TestProvider_RejectsTraversalURIs(t *testing.T) {
+	srv := server.NewServer(core.ServerInfo{Name: "skills-test", Version: "0.0.1"})
+
+	p, err := skills.NewProvider(skills.WithDirectory("testdata/valid"))
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	p.RegisterWith(srv)
+
+	handler := srv.Handler(server.WithStreamableHTTP(true))
+	ts := httptest.NewServer(handler)
+	t.Cleanup(ts.Close)
+
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "skills-test-client", Version: "0.0.1"})
+	if err := c.Connect(); err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { c.Close() })
+
+	cases := []string{
+		"skill://pdf-processing/../../../etc/passwd",
+		"skill://pdf-processing/..",
+		"skill://pdf-processing/./SKILL.md",
+		"skill://pdf-processing/%2E%2E/SKILL.md",
+	}
+	for _, uri := range cases {
+		t.Run(uri, func(t *testing.T) {
+			_, err := c.ReadResource(uri)
+			if err == nil {
+				t.Fatalf("ReadResource(%q) succeeded; want InvalidParams traversal error", uri)
+			}
+			msg := err.Error()
+			if !strings.Contains(msg, "invalid skill URI") {
+				t.Errorf("error message %q missing 'invalid skill URI' prefix", msg)
+			}
+			if !strings.Contains(msg, "traversal") {
+				t.Errorf("error message %q missing 'traversal' marker", msg)
+			}
+			if strings.Contains(msg, "unknown resource") {
+				t.Errorf("error message %q still surfaces as 'unknown resource' — middleware did not intercept", msg)
+			}
+		})
+	}
+}
+
 func urisOf(defs []core.ResourceDef) []string {
 	out := make([]string, len(defs))
 	for i, d := range defs {

@@ -33,6 +33,15 @@ var (
 	// resolved file path would escape the skill's root using "..".
 	ErrRelativeEscapesSkill = errors.New("skills: relative reference escapes skill root")
 
+	// ErrPathTraversal is returned by ParseURI when a URI contains a "."
+	// or ".." segment. SEP-2640 skill paths use [a-z0-9-] segments only,
+	// so dot-segments cannot appear legitimately — their presence
+	// indicates either a malformed URI or an attempted traversal probe.
+	// The strict rejection at parse time keeps the registry-miss path
+	// (HTTP 200 + "unknown resource") from masking traversal-shaped
+	// requests as ordinary typos in audit logs.
+	ErrPathTraversal = errors.New("skills: URI contains traversal segment (. or ..)")
+
 	// ErrNotManifestURI is returned when an operation requires a manifest
 	// URI (ending in /SKILL.md) but received a different shape.
 	ErrNotManifestURI = errors.New("skills: not a SKILL.md URI")

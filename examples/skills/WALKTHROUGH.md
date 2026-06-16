@@ -8,13 +8,15 @@ SEP-2640 serves Agent Skills over MCP's Resources primitive: each file under a s
 - **Connect to the skills server** — Construct the client with the chosen wire mode, then connect. After the call returns, inspect the new accessor to see which wire engaged. The curl chain below uses the legacy wire and mints a session id reused by every subsequent step; the stateless wire skips that — each call posts directly to /mcp with no Mcp-Session-Id header.
 - **resources/list returns every cataloged skill URI** — In file mode the list has N entries per skill (one for SKILL.md, one per supporting file) plus the index. In archive mode it's one entry per skill plus the index.
 - **Read skill://index.json** — The Indexer caches the result with a TTL and per-skill mtime invalidation. Repeated reads return the same bytes until something in a SKILL.md actually changes. The file is not on disk — mcpkit generates it from the live provider catalog on each cache miss.
-- **Verify digest by re-fetching SKILL.md and recomputing SHA-256** — Treat the response bytes as the artifact, hash them, compare against the digest field from the index. A mismatch indicates corruption or tampering, and per the SEP the host MUST NOT use the content.
+- **Detect server distribution mode from the index** — In file mode every entry's type is skill-md; the host fetches SKILL.md plus any supporting files individually. In archive mode every entry's type is archive and the URL ends in .tar.gz or .zip; the host fetches one resource per skill and unpacks it in-process. The current Provider is per-mode (no mixing), so the first archive entry sighted in the index is enough to decide.
+- **Verify digest by re-fetching git-workflow's canonical artifact** — Treat the response bytes as the artifact, hash them, compare against the digest field from the index. The artifact is the SKILL.md in file mode and the packed archive in archive mode — the verify ritual is the same either way. A mismatch indicates corruption or tampering, and per the SEP the host MUST NOT use the content.
 - **Read the pdf-processing SKILL.md** — This skill's frontmatter carries version and tags Extra fields. mcpkit surfaces those under ResourceDef.Annotations keyed by the io.modelcontextprotocol.skills/ reverse-domain prefix.
 - **Read a supporting file via skill:// (references/FORMS.md)** — Relative reference resolution: references/FORMS.md from inside pdf-processing/SKILL.md resolves to this full URI via the SDK helper that walks the skill root.
 - **Read a nested-prefix skill (acme/billing/refunds)** — Demonstrates that the prefix-segment routing works end-to-end. The skill name is refunds; the acme/billing/ prefix is server-chosen and is opaque to the skill's own frontmatter.
 - **Read a supporting file in the nested skill (templates/email.md)** — Same relative-reference resolution as the pdf-processing example, this time across a multi-segment prefix.
 - **List a directory inside a skill and recurse into a subdirectory** — Subdirectories surface with mimeType inode/directory; the client descends by issuing a second call. The SDK wraps this into a single call; the curl below shows both round trips explicitly.
 - **Wrap reads in skills.NewClient(...) and call Client.Activate** — Activate is intra-process — no wire traffic. Run with `make serve EXPORTER=stdout` + `make demo EXPORTER=stdout` to see spans.
+- **Read pdf-processing archive, verify digest, unpack, list recovered files** — Only meaningful in archive mode. In file mode the step prints the detected mode and exits — see the per-file read steps above for the equivalent file-mode story.
 
 ## Flow
 
@@ -37,35 +39,41 @@ sequenceDiagram
     Host->>Server: resources/read uri=skill://index.json
     Server-->>Host: { $schema, skills: [...] }
 
-    Note over Host,Server: Step 5: Verify digest by re-fetching SKILL.md and recomputing SHA-256
-    Host->>Server: resources/read uri=skill://git-workflow/SKILL.md
-    Server-->>Host: text/markdown body
+    Note over Host,Server: Step 5: Detect server distribution mode from the index
 
-    Note over Host,Server: Step 6: Read the pdf-processing SKILL.md
+    Note over Host,Server: Step 6: Verify digest by re-fetching git-workflow's canonical artifact
+    Host->>Server: resources/read uri=skill://git-workflow{/SKILL.md | .tar.gz | .zip}
+    Server-->>Host: text/markdown body (file mode) OR archive bytes (archive mode)
+
+    Note over Host,Server: Step 7: Read the pdf-processing SKILL.md
     Host->>Server: resources/read uri=skill://pdf-processing/SKILL.md
     Server-->>Host: text/markdown body
 
-    Note over Host,Server: Step 7: Read a supporting file via skill:// (references/FORMS.md)
+    Note over Host,Server: Step 8: Read a supporting file via skill:// (references/FORMS.md)
     Host->>Server: resources/read uri=skill://pdf-processing/references/FORMS.md
     Server-->>Host: text/markdown body
 
-    Note over Host,Server: Step 8: Read a nested-prefix skill (acme/billing/refunds)
+    Note over Host,Server: Step 9: Read a nested-prefix skill (acme/billing/refunds)
     Host->>Server: resources/read uri=skill://acme/billing/refunds/SKILL.md
     Server-->>Host: text/markdown body
 
-    Note over Host,Server: Step 9: Read a supporting file in the nested skill (templates/email.md)
+    Note over Host,Server: Step 10: Read a supporting file in the nested skill (templates/email.md)
     Host->>Server: resources/read uri=skill://acme/billing/refunds/templates/email.md
     Server-->>Host: text/markdown body
 
-    Note over Host,Server: Step 10: List a directory inside a skill and recurse into a subdirectory
+    Note over Host,Server: Step 11: List a directory inside a skill and recurse into a subdirectory
     Host->>Server: resources/directory/read uri=skill://acme/billing/refunds/templates
     Server-->>Host: 2 files + 1 subdirectory (`regional`, inode/directory)
     Host->>Server: resources/directory/read uri=skill://acme/billing/refunds/templates/regional
     Server-->>Host: 1 file (eu.md)
 
-    Note over Host,Server: Step 11: Wrap reads in skills.NewClient(...) and call Client.Activate
+    Note over Host,Server: Step 12: Wrap reads in skills.NewClient(...) and call Client.Activate
     Host->>Server: resources/read via sc.ReadAndVerify (span: skills.read_and_verify)
     Server-->>Host: bytes + digest match
+
+    Note over Host,Server: Step 13: Read pdf-processing archive, verify digest, unpack, list recovered files
+    Host->>Server: resources/read uri=skill://pdf-processing.tar.gz (or .zip)
+    Server-->>Host: application/gzip OR application/zip blob
 ```
 
 ## Steps
@@ -75,8 +83,10 @@ sequenceDiagram
 ```
 Terminal 1:  make serve         # default (file mode, :8080)
              make serve-archive # one .tar.gz per skill
+             make serve-zip     # one .zip per skill
 Terminal 2:  make demo          # this walkthrough (--tui interactive)
 ```
+This walkthrough auto-detects which of the three distribution modes the server is serving. The mode-aware section near the bottom shows the archive read-and-unpack flow; the file-mode read steps in the middle SKIP cleanly when archive mode is in effect (and vice versa).
 
 ### URI shape
 
@@ -149,18 +159,38 @@ curl -s -X POST http://localhost:8080/mcp \
   | jq -r '.result.contents[0].text' | jq '.'
 ```
 
-### Digest contract
+### Distribution mode
 
-Each entry carries `sha256:{64hex}` over the raw artifact bytes (SKILL.md for skill-md, packed archive for archive). Hosts MUST verify before use.
+SEP-2640 lets a server publish each skill as either individual files (`type:skill-md`) or one packed archive per skill (`type:archive` with `.tar.gz` / `.zip` suffix). The shape is visible on the index entries — the walkthrough sniffs it once and threads the result through the rest of the steps so the file-mode and archive-mode narratives stay tidy.
 
-### Step 5: Verify digest by re-fetching SKILL.md and recomputing SHA-256
+### Step 5: Detect server distribution mode from the index
 
-Treat the response bytes as the artifact, hash them, compare against the digest field from the index. A mismatch indicates corruption or tampering, and per the SEP the host MUST NOT use the content.
+In file mode every entry's type is skill-md; the host fetches SKILL.md plus any supporting files individually. In archive mode every entry's type is archive and the URL ends in .tar.gz or .zip; the host fetches one resource per skill and unpacks it in-process. The current Provider is per-mode (no mixing), so the first archive entry sighted in the index is enough to decide.
 
 #### Reproduce on the wire
 
 ```bash
-# Re-read the SKILL.md, recompute sha256, compare against the index entry's digest.
+# Distinct types appearing in the index — "skill-md" or "archive".
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":11,"method":"resources/read","params":{"uri":"skill://index.json"}}' \
+  | jq -r '.result.contents[0].text' \
+  | jq -r '[.skills[].type] | unique | join(",")'
+```
+
+### Digest contract
+
+Each entry carries `sha256:{64hex}` over the raw artifact bytes (SKILL.md for skill-md, packed archive for archive). Hosts MUST verify before use.
+
+### Step 6: Verify digest by re-fetching git-workflow's canonical artifact
+
+Treat the response bytes as the artifact, hash them, compare against the digest field from the index. The artifact is the SKILL.md in file mode and the packed archive in archive mode — the verify ritual is the same either way. A mismatch indicates corruption or tampering, and per the SEP the host MUST NOT use the content.
+
+#### Reproduce on the wire
+
+```bash
+# File mode — re-read SKILL.md, recompute sha256, compare against the index entry's digest.
 WANT=$(curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
   -d '{"jsonrpc":"2.0","id":3,"method":"resources/read","params":{"uri":"skill://index.json"}}' \
@@ -171,13 +201,17 @@ GOT="sha256:$(curl -s -X POST http://localhost:8080/mcp \
   -d '{"jsonrpc":"2.0","id":4,"method":"resources/read","params":{"uri":"skill://git-workflow/SKILL.md"}}' \
   | jq -r '.result.contents[0].text' | shasum -a 256 | awk '{print $1}')"
 [ "$WANT" = "$GOT" ] && echo "verified" || echo "MISMATCH"
+
+# Archive mode — swap the URI; the body is base64-encoded under .contents[0].blob.
+#   uri=skill://git-workflow.tar.gz     # or skill://git-workflow.zip
+#   jq -r '.result.contents[0].blob' | base64 -d | shasum -a 256
 ```
 
 ### Reading skill files
 
 Manifest body may reference supporting files via relative paths. `skills.ResolveRelative(skillRoot, ref)` resolves them filesystem-style; `..` escapes are rejected.
 
-### Step 6: Read the pdf-processing SKILL.md
+### Step 7: Read the pdf-processing SKILL.md
 
 This skill's frontmatter carries version and tags Extra fields. mcpkit surfaces those under ResourceDef.Annotations keyed by the io.modelcontextprotocol.skills/ reverse-domain prefix.
 
@@ -191,7 +225,7 @@ curl -s -X POST http://localhost:8080/mcp \
   | jq -r '.result.contents[0].text'
 ```
 
-### Step 7: Read a supporting file via skill:// (references/FORMS.md)
+### Step 8: Read a supporting file via skill:// (references/FORMS.md)
 
 Relative reference resolution: references/FORMS.md from inside pdf-processing/SKILL.md resolves to this full URI via the SDK helper that walks the skill root.
 
@@ -205,7 +239,7 @@ curl -s -X POST http://localhost:8080/mcp \
   | jq -r '.result.contents[0].text'
 ```
 
-### Step 8: Read a nested-prefix skill (acme/billing/refunds)
+### Step 9: Read a nested-prefix skill (acme/billing/refunds)
 
 Demonstrates that the prefix-segment routing works end-to-end. The skill name is refunds; the acme/billing/ prefix is server-chosen and is opaque to the skill's own frontmatter.
 
@@ -219,7 +253,7 @@ curl -s -X POST http://localhost:8080/mcp \
   | jq -r '.result.contents[0].text'
 ```
 
-### Step 9: Read a supporting file in the nested skill (templates/email.md)
+### Step 10: Read a supporting file in the nested skill (templates/email.md)
 
 Same relative-reference resolution as the pdf-processing example, this time across a multi-segment prefix.
 
@@ -237,7 +271,7 @@ curl -s -X POST http://localhost:8080/mcp \
 
 SEP commit `2e04c48d` (2026-06-09) added `resources/directory/read` for listing a directory's direct children without enumerating the server's entire resource space. Capability-gated via `io.modelcontextprotocol/skills.directoryRead`. mcpkit's Provider auto-supports it (#781).
 
-### Step 10: List a directory inside a skill and recurse into a subdirectory
+### Step 11: List a directory inside a skill and recurse into a subdirectory
 
 Subdirectories surface with mimeType inode/directory; the client descends by issuing a second call. The SDK wraps this into a single call; the curl below shows both round trips explicitly.
 
@@ -263,13 +297,36 @@ curl -s -X POST http://localhost:8080/mcp \
 
 Fetch ≠ activation. Server `resources/read` spans now carry `mcp.skill.*` attrs (#748). Client `ext/skills.Client` emits `skills.read*` spans + `Activate(ctx, uri)` for post-cache use the wire can't see (SDK-only — no spec change).
 
-### Step 11: Wrap reads in skills.NewClient(...) and call Client.Activate
+### Step 12: Wrap reads in skills.NewClient(...) and call Client.Activate
 
 Activate is intra-process — no wire traffic. Run with `make serve EXPORTER=stdout` + `make demo EXPORTER=stdout` to see spans.
 
+### Archive mode — atomic delivery + in-process unpack
+
+In archive mode every skill is delivered as a single `.tar.gz` or `.zip` resource. The host hashes the archive bytes against the index digest, then unpacks in-memory to recover the post-unpack virtual namespace — same files the file-mode wire would have served piecemeal. Demonstrates pdf-processing (multi-file skill) because the unpacked listing actually shows something.
+
+### Step 13: Read pdf-processing archive, verify digest, unpack, list recovered files
+
+Only meaningful in archive mode. In file mode the step prints the detected mode and exits — see the per-file read steps above for the equivalent file-mode story.
+
+#### Reproduce on the wire
+
+```bash
+# Fetch the archive blob (base64-encoded under .contents[0].blob in archive mode).
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":12,"method":"resources/read","params":{"uri":"skill://pdf-processing.tar.gz"}}' \
+  | jq -r '.result.contents[0].blob' | base64 -d > /tmp/pdf.tgz
+
+# Verify and list:
+shasum -a 256 /tmp/pdf.tgz                 # compare against index entry digest
+tar -tzf /tmp/pdf.tgz                      # recovered file tree
+```
+
 ### Wrap-up
 
-Negotiated extension, enumerated index, verified one digest, read manifest + supporting files across single-segment and nested-prefix paths, emitted skill-shape spans + an activation event. `make serve-archive` flips the wire to one `.tar.gz` per skill — host code unchanged.
+Negotiated extension, enumerated index, sniffed the distribution mode, verified one digest against the canonical artifact (SKILL.md in file mode, packed archive in archive mode), and exercised the mode-specific read flow. The same client code paths served both — only the URI shape and the post-fetch unpack step differ.
 
 ## Run it
 

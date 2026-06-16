@@ -14,13 +14,20 @@
 //
 // Run modes:
 //
-//	go run . --serve                    # file mode on :8080
-//	go run . --serve --mode=archive     # archive mode on :8080
-//	go run . --serve --addr=:9090       # different port
-//	go run .                            # walkthrough (against --url, default localhost:8080)
-//	go run . --tui                      # walkthrough in interactive TUI
-//	go run . --note                     # walkthrough in notebook mode
-//	go run . --doc=md                   # regenerate WALKTHROUGH.md
+//	go run . --serve                      # file mode on :8080
+//	go run . --serve --bundle=archive     # one .tar.gz per skill
+//	go run . --serve --bundle=zip         # one .zip per skill
+//	go run . --serve --addr=:9090         # different port
+//	go run .                              # walkthrough (against --url, default localhost:8080)
+//	go run . --tui                        # walkthrough in interactive TUI
+//	go run . --note                       # walkthrough in notebook mode
+//	go run . --doc=md                     # regenerate WALKTHROUGH.md
+//
+// The --bundle name is deliberate: demokit's FilterArgs reserves the
+// bare --mode flag for its own renderer selection (tui / plain /
+// notebook). Naming the example's distribution flag --mode silently
+// strips it before flag.Parse, leaving the server in file mode no
+// matter what the operator passed.
 package main
 
 import (
@@ -49,8 +56,8 @@ func main() {
 
 func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
-	modeFlag := flag.String("mode", "file",
-		"distribution mode: file (per-resource SKILL.md + supporting files) | archive (one .tar.gz per skill)")
+	modeFlag := flag.String("bundle", "file",
+		"distribution shape: file (per-resource SKILL.md + supporting files) | archive (one .tar.gz per skill) | zip (one .zip per skill)")
 	skillsDir := flag.String("skills", "skills",
 		"directory of skill bundles to register (default ./skills)")
 	tel := common.RegisterTelemetryFlags(flag.CommandLine)
@@ -81,7 +88,7 @@ func serve() {
 	case "zip":
 		provOpts = append(provOpts, skills.WithArchiveMode(skills.ArchiveFormatZip))
 	default:
-		log.Fatalf("invalid --mode: %q (want file|archive|zip)", *modeFlag)
+		log.Fatalf("invalid --bundle: %q (want file|archive|zip)", *modeFlag)
 	}
 
 	provider, err := skills.NewProvider(provOpts...)

@@ -1,12 +1,18 @@
 package main
 
 import (
+	"archive/tar"
+	"archive/zip"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"strings"
 
@@ -61,8 +67,10 @@ func runDemo() {
 		"```",
 		"Terminal 1:  make serve         # default (file mode, :8080)",
 		"             make serve-archive # one .tar.gz per skill",
+		"             make serve-zip     # one .zip per skill",
 		"Terminal 2:  make demo          # this walkthrough (--tui interactive)",
 		"```",
+		"This walkthrough auto-detects which of the three distribution modes the server is serving. The mode-aware section near the bottom shows the archive read-and-unpack flow; the file-mode read steps in the middle SKIP cleanly when archive mode is in effect (and vice versa).",
 	)
 
 	demo.Section("URI shape",
@@ -185,7 +193,10 @@ for _, d := range defs {
 		"`skill://index.json` enumerates skills with `{$schema, skills:[{type, name, description, url, digest}]}`. Optional in the SEP; mcpkit auto-registers unless `WithoutIndex()`.",
 	)
 
-	var indexBody []byte
+	var (
+		indexBody []byte
+		detected  modeInfo
+	)
 
 	demo.Step("Read skill://index.json").
 		Arrow("Host", "Server", "resources/read uri=skill://index.json").
@@ -231,16 +242,61 @@ for _, e := range idx.Skills {
 			return nil
 		})
 
+	demo.Section("Distribution mode",
+		"SEP-2640 lets a server publish each skill as either individual files (`type:skill-md`) or one packed archive per skill (`type:archive` with `.tar.gz` / `.zip` suffix). The shape is visible on the index entries — the walkthrough sniffs it once and threads the result through the rest of the steps so the file-mode and archive-mode narratives stay tidy.",
+	)
+
+	demo.Step("Detect server distribution mode from the index").
+		Note("In file mode every entry's type is skill-md; the host fetches SKILL.md plus any supporting files individually. In archive mode every entry's type is archive and the URL ends in .tar.gz or .zip; the host fetches one resource per skill and unpacks it in-process. The current Provider is per-mode (no mixing), so the first archive entry sighted in the index is enough to decide.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("jq", "bash", `# Distinct types appearing in the index — "skill-md" or "archive".
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":11,"method":"resources/read","params":{"uri":"skill://index.json"}}' \
+  | jq -r '.result.contents[0].text' \
+  | jq -r '[.skills[].type] | unique | join(",")'`).Default(),
+			demokit.MakeVariant("go", "go", `var idx skills.Index
+json.Unmarshal(indexBody, &idx)
+for _, e := range idx.Skills {
+    if e.Type == skills.SkillTypeArchive {
+        f := skills.DetectArchiveFormat(e.URL, nil) // .tar.gz or .zip
+        // archive mode — fetch one resource per skill, unpack in-memory
+        _ = f
+        break
+    }
+}`),
+		).
+		Run(func(ctx demokit.StepContext) *demokit.StepResult {
+			if c == nil || len(indexBody) == 0 {
+				return nil
+			}
+			var idx skills.Index
+			if err := json.Unmarshal(indexBody, &idx); err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				return nil
+			}
+			detected = detectMode(idx)
+			if detected.archive {
+				fmt.Printf("    Detected mode: archive (%s)\n", detected.suffix)
+				fmt.Printf("    Each skill is one packed resource — see the Archive mode section below for read + verify + unpack.\n")
+			} else {
+				fmt.Printf("    Detected mode: file\n")
+				fmt.Printf("    Each skill is a tree of individual resources — the per-file reads below exercise that path.\n")
+			}
+			return nil
+		})
+
 	demo.Section("Digest contract",
 		"Each entry carries `sha256:{64hex}` over the raw artifact bytes (SKILL.md for skill-md, packed archive for archive). Hosts MUST verify before use.",
 	)
 
-	demo.Step("Verify digest by re-fetching SKILL.md and recomputing SHA-256").
-		Arrow("Host", "Server", "resources/read uri=skill://git-workflow/SKILL.md").
-		DashedArrow("Server", "Host", "text/markdown body").
-		Note("Treat the response bytes as the artifact, hash them, compare against the digest field from the index. A mismatch indicates corruption or tampering, and per the SEP the host MUST NOT use the content.").
+	demo.Step("Verify digest by re-fetching git-workflow's canonical artifact").
+		Arrow("Host", "Server", "resources/read uri=skill://git-workflow{/SKILL.md | .tar.gz | .zip}").
+		DashedArrow("Server", "Host", "text/markdown body (file mode) OR archive bytes (archive mode)").
+		Note("Treat the response bytes as the artifact, hash them, compare against the digest field from the index. The artifact is the SKILL.md in file mode and the packed archive in archive mode — the verify ritual is the same either way. A mismatch indicates corruption or tampering, and per the SEP the host MUST NOT use the content.").
 		VerbatimVariants("Reproduce on the wire",
-			demokit.MakeVariant("curl", "bash", `# Re-read the SKILL.md, recompute sha256, compare against the index entry's digest.
+			demokit.MakeVariant("curl", "bash", `# File mode — re-read SKILL.md, recompute sha256, compare against the index entry's digest.
 WANT=$(curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
   -d '{"jsonrpc":"2.0","id":3,"method":"resources/read","params":{"uri":"skill://index.json"}}' \
@@ -250,9 +306,20 @@ GOT="sha256:$(curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
   -d '{"jsonrpc":"2.0","id":4,"method":"resources/read","params":{"uri":"skill://git-workflow/SKILL.md"}}' \
   | jq -r '.result.contents[0].text' | shasum -a 256 | awk '{print $1}')"
-[ "$WANT" = "$GOT" ] && echo "verified" || echo "MISMATCH"`).Default(),
-			demokit.MakeVariant("go", "go", `result, _ := c.ReadResourceFull("skill://git-workflow/SKILL.md")
+[ "$WANT" = "$GOT" ] && echo "verified" || echo "MISMATCH"
+
+# Archive mode — swap the URI; the body is base64-encoded under .contents[0].blob.
+#   uri=skill://git-workflow.tar.gz     # or skill://git-workflow.zip
+#   jq -r '.result.contents[0].blob' | base64 -d | shasum -a 256`).Default(),
+			demokit.MakeVariant("go", "go", `target := uriGitWorkflow                 // file mode default
+if detected.archive {
+    target = "skill://git-workflow" + detected.suffix
+}
+result, _ := c.ReadResourceFull(target)
 raw := []byte(result.Contents[0].Text)
+if raw == nil {                          // archive mode returns base64 blob
+    raw, _ = base64.StdEncoding.DecodeString(result.Contents[0].Blob)
+}
 sum := sha256.Sum256(raw)
 got := "sha256:" + hex.EncodeToString(sum[:])
 // compare got against e.Digest from skill://index.json — host MUST NOT use mismatched content`),
@@ -265,18 +332,22 @@ got := "sha256:" + hex.EncodeToString(sum[:])
 			if err := json.Unmarshal(indexBody, &idx); err != nil {
 				return nil
 			}
+			target := uriGitWorkflow
+			if detected.archive {
+				target = "skill://git-workflow" + detected.suffix
+			}
 			var want string
 			for _, e := range idx.Skills {
-				if e.URL == uriGitWorkflow {
+				if e.URL == target {
 					want = e.Digest
 					break
 				}
 			}
 			if want == "" {
-				fmt.Printf("    git-workflow not found in index (server may be in archive mode)\n")
+				fmt.Printf("    %s not found in index\n", target)
 				return nil
 			}
-			result, err := c.ReadResourceFull(uriGitWorkflow)
+			result, err := c.ReadResourceFull(target)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return nil
@@ -290,6 +361,7 @@ got := "sha256:" + hex.EncodeToString(sum[:])
 			}
 			sum := sha256.Sum256(raw)
 			got := "sha256:" + hex.EncodeToString(sum[:])
+			fmt.Printf("    artifact: %s (%d bytes)\n", target, len(raw))
 			fmt.Printf("    want %s\n", want)
 			fmt.Printf("    got  %s\n", got)
 			if got == want {
@@ -321,9 +393,13 @@ fmt.Println(body)`),
 			if c == nil {
 				return nil
 			}
+			if detected.archive {
+				fmt.Printf("    Detected archive mode — per-file SKILL.md reads are unavailable; see the Archive mode section below.\n")
+				return nil
+			}
 			body, err := c.ReadResource(uriPDFManifest)
 			if err != nil {
-				fmt.Printf("    SKIP: %v (server may be in archive mode)\n", err)
+				fmt.Printf("    ERROR: %v\n", err)
 				return nil
 			}
 			previewBody(body)
@@ -348,9 +424,13 @@ body, _ := c.ReadResource(target.String())`),
 			if c == nil {
 				return nil
 			}
+			if detected.archive {
+				fmt.Printf("    Detected archive mode — supporting files surface only after unpack; see the Archive mode section below.\n")
+				return nil
+			}
 			body, err := c.ReadResource(uriPDFRef)
 			if err != nil {
-				fmt.Printf("    SKIP: %v\n", err)
+				fmt.Printf("    ERROR: %v\n", err)
 				return nil
 			}
 			previewBody(body)
@@ -373,9 +453,13 @@ body, _ := c.ReadResource(target.String())`),
 			if c == nil {
 				return nil
 			}
+			if detected.archive {
+				fmt.Printf("    Detected archive mode — nested-prefix skills become skill://acme/billing/refunds%s; see the Archive mode section below.\n", detected.suffix)
+				return nil
+			}
 			body, err := c.ReadResource(uriRefundsManifest)
 			if err != nil {
-				fmt.Printf("    SKIP: %v\n", err)
+				fmt.Printf("    ERROR: %v\n", err)
 				return nil
 			}
 			previewBody(body)
@@ -398,9 +482,13 @@ body, _ := c.ReadResource(target.String())`),
 			if c == nil {
 				return nil
 			}
+			if detected.archive {
+				fmt.Printf("    Detected archive mode — supporting files surface only after unpack; see the Archive mode section below.\n")
+				return nil
+			}
 			body, err := c.ReadResource(uriRefundsEmail)
 			if err != nil {
-				fmt.Printf("    SKIP: %v\n", err)
+				fmt.Printf("    ERROR: %v\n", err)
 				return nil
 			}
 			previewBody(body)
@@ -443,6 +531,10 @@ for _, r := range result.Resources {
 		).
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			if c == nil {
+				return nil
+			}
+			if detected.archive {
+				fmt.Printf("    Detected archive mode — directoryRead lists per-file resources, which archive mode does not publish. The unpacked archive (see below) recovers the same shape.\n")
 				return nil
 			}
 			sc := skills.NewClient(c, skills.WithTracerProvider(tp))
@@ -499,20 +591,110 @@ for _, r := range result.Resources {
 						ev.URI, ev.Reason, ev.Timestamp.Format("15:04:05.000"))
 				}),
 			)
-			if _, err := sc.ReadAndVerify(context.Background(), uriPDFManifest, ""); err != nil {
-				fmt.Printf("    SKIP ReadAndVerify: %v (server may be in archive mode)\n", err)
+			target := uriPDFManifest
+			if detected.archive {
+				target = "skill://pdf-processing" + detected.suffix
+			}
+			if _, err := sc.ReadAndVerify(context.Background(), target, ""); err != nil {
+				fmt.Printf("    ERROR ReadAndVerify(%s): %v\n", target, err)
 				return nil
 			}
-			fmt.Printf("    sc.ReadAndVerify emitted skills.read_and_verify span\n")
-			ev := sc.Activate(context.Background(), uriPDFManifest,
+			fmt.Printf("    sc.ReadAndVerify(%s) emitted skills.read_and_verify span\n", target)
+			ev := sc.Activate(context.Background(), target,
 				skills.WithReason("walkthrough_demonstration"))
 			fmt.Printf("    sc.Activate returned ActivationEvent{URI=%s, Reason=%q}\n", ev.URI, ev.Reason)
 			fmt.Printf("    %d hook invocation(s)\n", activations)
 			return nil
 		})
 
+	demo.Section("Archive mode — atomic delivery + in-process unpack",
+		"In archive mode every skill is delivered as a single `.tar.gz` or `.zip` resource. The host hashes the archive bytes against the index digest, then unpacks in-memory to recover the post-unpack virtual namespace — same files the file-mode wire would have served piecemeal. Demonstrates pdf-processing (multi-file skill) because the unpacked listing actually shows something.",
+	)
+
+	demo.Step("Read pdf-processing archive, verify digest, unpack, list recovered files").
+		Arrow("Host", "Server", "resources/read uri=skill://pdf-processing.tar.gz (or .zip)").
+		DashedArrow("Server", "Host", "application/gzip OR application/zip blob").
+		Note("Only meaningful in archive mode. In file mode the step prints the detected mode and exits — see the per-file read steps above for the equivalent file-mode story.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# Fetch the archive blob (base64-encoded under .contents[0].blob in archive mode).
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":12,"method":"resources/read","params":{"uri":"skill://pdf-processing.tar.gz"}}' \
+  | jq -r '.result.contents[0].blob' | base64 -d > /tmp/pdf.tgz
+
+# Verify and list:
+shasum -a 256 /tmp/pdf.tgz                 # compare against index entry digest
+tar -tzf /tmp/pdf.tgz                      # recovered file tree`).Default(),
+			demokit.MakeVariant("go", "go", `result, _ := c.ReadResourceFull("skill://pdf-processing" + detected.suffix)
+raw, _ := base64.StdEncoding.DecodeString(result.Contents[0].Blob)
+// hash raw, compare against index digest
+files, _ := unpackArchive(detected.format, raw)
+for _, f := range files {
+    fmt.Printf("%s (%d bytes)\n", f.Name, len(f.Bytes))
+}`),
+		).
+		Run(func(ctx demokit.StepContext) *demokit.StepResult {
+			if c == nil || len(indexBody) == 0 {
+				return nil
+			}
+			if !detected.archive {
+				fmt.Printf("    Detected file mode — archive-mode flow is gated; see the per-file read steps above for the equivalent file-mode story.\n")
+				return nil
+			}
+			var idx skills.Index
+			if err := json.Unmarshal(indexBody, &idx); err != nil {
+				return nil
+			}
+			target := "skill://pdf-processing" + detected.suffix
+			var want string
+			for _, e := range idx.Skills {
+				if e.URL == target {
+					want = e.Digest
+					break
+				}
+			}
+			result, err := c.ReadResourceFull(target)
+			if err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				return nil
+			}
+			raw, err := base64.StdEncoding.DecodeString(result.Contents[0].Blob)
+			if err != nil {
+				fmt.Printf("    ERROR: archive body did not arrive as base64 blob: %v\n", err)
+				return nil
+			}
+			sum := sha256.Sum256(raw)
+			got := "sha256:" + hex.EncodeToString(sum[:])
+			fmt.Printf("    archive: %s (%d bytes)\n", target, len(raw))
+			fmt.Printf("    want %s\n", want)
+			fmt.Printf("    got  %s\n", got)
+			if got != want {
+				fmt.Printf("    DIGEST MISMATCH — content MUST NOT be used per the SEP\n")
+				return nil
+			}
+			fmt.Printf("    digest matches — unpacking via stdlib (%s)…\n", detected.format.String())
+			files, err := unpackArchive(detected.format, raw)
+			if err != nil {
+				fmt.Printf("    ERROR: unpack failed: %v\n", err)
+				return nil
+			}
+			fmt.Printf("    recovered %d files:\n", len(files))
+			for _, f := range files {
+				fmt.Printf("      %-32s %d bytes\n", f.Name, len(f.Bytes))
+			}
+			for _, f := range files {
+				if strings.HasSuffix(f.Name, "SKILL.md") {
+					fmt.Printf("    SKILL.md preview from the unpacked archive:\n")
+					previewBody(string(f.Bytes))
+					break
+				}
+			}
+			return nil
+		})
+
 	demo.Section("Wrap-up",
-		"Negotiated extension, enumerated index, verified one digest, read manifest + supporting files across single-segment and nested-prefix paths, emitted skill-shape spans + an activation event. `make serve-archive` flips the wire to one `.tar.gz` per skill — host code unchanged.",
+		"Negotiated extension, enumerated index, sniffed the distribution mode, verified one digest against the canonical artifact (SKILL.md in file mode, packed archive in archive mode), and exercised the mode-specific read flow. The same client code paths served both — only the URI shape and the post-fetch unpack step differ.",
 	)
 
 	_ = serverInfo
@@ -540,6 +722,103 @@ func marker(mimeType string) string {
 		return "dir/"
 	}
 	return "file"
+}
+
+// modeInfo captures the distribution shape detected from the server's
+// skill://index.json. It controls which steps below take the file-mode
+// path (per-file SKILL.md reads) vs the archive-mode path (one archive
+// per skill, unpacked in-process to recover the same files).
+type modeInfo struct {
+	archive bool
+	format  skills.ArchiveFormat
+	suffix  string
+}
+
+// detectMode scans a parsed Index for the first archive-typed entry and
+// returns the implied distribution mode. Provider.WithArchiveMode is
+// per-Provider in this revision, so a mixed index is impossible today
+// and the first archive sighting decides for the whole index.
+func detectMode(idx skills.Index) modeInfo {
+	for _, e := range idx.Skills {
+		if e.Type != skills.SkillTypeArchive {
+			continue
+		}
+		f := skills.DetectArchiveFormat(e.URL, nil)
+		return modeInfo{
+			archive: true,
+			format:  f,
+			suffix:  f.Suffix(),
+		}
+	}
+	return modeInfo{}
+}
+
+// archiveMember is one regular file recovered from an unpacked archive.
+// Name is the entry path as it appeared inside the archive (no leading
+// slash; relative to the archive root). Bytes is the unpacked content.
+type archiveMember struct {
+	Name  string
+	Bytes []byte
+}
+
+// unpackArchive decodes raw archive bytes into the list of recovered
+// regular files using nothing but the stdlib. The walkthrough calls
+// this after the SHA-256 digest has been verified against the index
+// entry — production hosts SHOULD also enforce an unpacked-size cap
+// (see skills.DefaultArchiveMaxBytes); omitted here because the demo
+// fixtures are tiny and the focus is the verify-then-unpack shape.
+func unpackArchive(format skills.ArchiveFormat, raw []byte) ([]archiveMember, error) {
+	switch format {
+	case skills.ArchiveFormatTarGz:
+		gz, err := gzip.NewReader(bytes.NewReader(raw))
+		if err != nil {
+			return nil, err
+		}
+		defer gz.Close()
+		tr := tar.NewReader(gz)
+		var out []archiveMember
+		for {
+			h, err := tr.Next()
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			if err != nil {
+				return nil, err
+			}
+			if h.Typeflag != tar.TypeReg {
+				continue
+			}
+			data, err := io.ReadAll(tr)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, archiveMember{Name: h.Name, Bytes: data})
+		}
+		return out, nil
+	case skills.ArchiveFormatZip:
+		zr, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
+		if err != nil {
+			return nil, err
+		}
+		var out []archiveMember
+		for _, f := range zr.File {
+			if f.FileInfo().IsDir() {
+				continue
+			}
+			rc, err := f.Open()
+			if err != nil {
+				return nil, err
+			}
+			data, err := io.ReadAll(rc)
+			rc.Close()
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, archiveMember{Name: f.Name, Bytes: data})
+		}
+		return out, nil
+	}
+	return nil, fmt.Errorf("unknown archive format: %v", format)
 }
 
 // previewBody prints the body of a read with head-and-tail bracketing
