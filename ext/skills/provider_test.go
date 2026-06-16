@@ -1,13 +1,19 @@
 package skills_test
 
 import (
+	"encoding/json"
 	"errors"
+	"maps"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
@@ -374,6 +380,510 @@ func TestProvider_RejectsTraversalURIs(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestProvider_VersionStartsZero(t *testing.T) {
+	p, err := skills.NewProvider(skills.WithDirectory("testdata/valid"))
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	if got := p.Version(); got != 0 {
+		t.Errorf("Version() = %d, want 0 on a freshly constructed Provider", got)
+	}
+}
+
+func TestProvider_NotifyChanged_BumpsVersion(t *testing.T) {
+	p, err := skills.NewProvider(skills.WithDirectory("testdata/valid"))
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	if err := p.NotifyChanged("git-workflow/SKILL.md"); err != nil {
+		t.Fatalf("NotifyChanged: %v", err)
+	}
+	if got := p.Version(); got != 1 {
+		t.Errorf("Version() = %d after one NotifyChanged, want 1", got)
+	}
+	if err := p.NotifyChanged(); err != nil {
+		t.Fatalf("NotifyChanged (no paths): %v", err)
+	}
+	if got := p.Version(); got != 2 {
+		t.Errorf("Version() = %d after two NotifyChanged calls, want 2", got)
+	}
+}
+
+func TestProvider_Refresh_BumpsVersion(t *testing.T) {
+	p, err := skills.NewProvider(skills.WithDirectory("testdata/valid"))
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	if err := p.Refresh(); err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+	if got := p.Version(); got != 1 {
+		t.Errorf("Version() = %d after Refresh, want 1", got)
+	}
+}
+
+func TestProvider_NotifyChanged_InvalidatesIndexCache(t *testing.T) {
+	srv := server.NewServer(core.ServerInfo{Name: "skills-test", Version: "0.0.1"})
+
+	p, err := skills.NewProvider(skills.WithDirectory("testdata/valid"))
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	p.RegisterWith(srv)
+
+	handler := srv.Handler(server.WithStreamableHTTP(true))
+	ts := httptest.NewServer(handler)
+	t.Cleanup(ts.Close)
+
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "skills-test-client", Version: "0.0.1"})
+	if err := c.Connect(); err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { c.Close() })
+
+	first, err := c.ReadResource(skills.IndexURI)
+	if err != nil {
+		t.Fatalf("ReadResource initial: %v", err)
+	}
+	v0 := indexVersion(t, first)
+	if v0 != 0 {
+		t.Errorf("initial index version = %d, want 0", v0)
+	}
+
+	if err := p.Refresh(); err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+
+	second, err := c.ReadResource(skills.IndexURI)
+	if err != nil {
+		t.Fatalf("ReadResource after Refresh: %v", err)
+	}
+	v1 := indexVersion(t, second)
+	if v1 != 1 {
+		t.Errorf("post-Refresh index version = %d, want 1", v1)
+	}
+}
+
+func TestIndex_VersionUnderMeta(t *testing.T) {
+	srv := server.NewServer(core.ServerInfo{Name: "skills-test", Version: "0.0.1"})
+
+	p, err := skills.NewProvider(skills.WithDirectory("testdata/valid"))
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	p.RegisterWith(srv)
+
+	handler := srv.Handler(server.WithStreamableHTTP(true))
+	ts := httptest.NewServer(handler)
+	t.Cleanup(ts.Close)
+
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "skills-test-client", Version: "0.0.1"})
+	if err := c.Connect(); err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { c.Close() })
+
+	body, err := c.ReadResource(skills.IndexURI)
+	if err != nil {
+		t.Fatalf("ReadResource: %v", err)
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(body), &raw); err != nil {
+		t.Fatalf("unmarshal index: %v", err)
+	}
+	meta, ok := raw["_meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("_meta missing or wrong type: %T (full body: %s)", raw["_meta"], body)
+	}
+	const wantKey = "io.modelcontextprotocol.skills/version"
+	v, ok := meta[wantKey]
+	if !ok {
+		t.Fatalf("_meta does not carry %q (keys: %v)", wantKey, slices.Sorted(maps.Keys(meta)))
+	}
+	// JSON numbers unmarshal as float64 — accept any numeric type.
+	if _, ok := v.(float64); !ok {
+		t.Errorf("_meta[%q] = %v (type %T), want numeric", wantKey, v, v)
+	}
+}
+
+func TestProvider_NotifyChanged_BroadcastsListChanged(t *testing.T) {
+	srv := server.NewServer(core.ServerInfo{Name: "skills-test", Version: "0.0.1"})
+
+	p, err := skills.NewProvider(skills.WithDirectory("testdata/valid"))
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	p.RegisterWith(srv)
+
+	handler := srv.Handler(server.WithStreamableHTTP(true))
+	ts := httptest.NewServer(handler)
+	t.Cleanup(ts.Close)
+
+	var got atomic.Int32
+	gotMethod := make(chan string, 4)
+	c := client.NewClient(ts.URL+"/mcp",
+		core.ClientInfo{Name: "skills-test-client", Version: "0.0.1"},
+		client.WithGetSSEStream(),
+		client.WithNotificationCallback(func(method string, params any) {
+			if method == "notifications/resources/list_changed" {
+				got.Add(1)
+				select {
+				case gotMethod <- method:
+				default:
+				}
+			}
+		}),
+	)
+	if err := c.Connect(); err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { c.Close() })
+
+	// Give the background GET SSE stream a beat to attach before bumping;
+	// without this the broadcast can race past an unsubscribed session.
+	time.Sleep(100 * time.Millisecond)
+
+	if err := p.Refresh(); err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+
+	select {
+	case <-gotMethod:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("did not receive notifications/resources/list_changed within deadline (got count=%d)", got.Load())
+	}
+}
+
+func TestProvider_NotifyChangedEvents_PayloadShape(t *testing.T) {
+	srv, c, p := bootBroadcastTest(t)
+
+	payloads := make(chan skills.PathsChangedPayload, 4)
+	listenForPayloads(t, c, payloads)
+
+	now := time.Now()
+	if err := p.NotifyChangedEvents(
+		skills.PathChange{Path: "git-workflow/SKILL.md", Action: skills.ChangeActionModified, Timestamp: now, Digest: "sha256:abc"},
+		skills.PathChange{Path: "new-skill/SKILL.md", Action: skills.ChangeActionCreated, Timestamp: now},
+		skills.PathChange{Path: "gone-skill/SKILL.md", Action: skills.ChangeActionDeleted, Timestamp: now},
+	); err != nil {
+		t.Fatalf("NotifyChangedEvents: %v", err)
+	}
+
+	select {
+	case payload := <-payloads:
+		if got := len(payload.Paths); got != 3 {
+			t.Fatalf("payload.Paths = %d entries, want 3 (%+v)", got, payload.Paths)
+		}
+		mod := payload.Paths["git-workflow/SKILL.md"]
+		if mod.Action != skills.ChangeActionModified {
+			t.Errorf("git-workflow action = %q, want %q", mod.Action, skills.ChangeActionModified)
+		}
+		if mod.Digest != "sha256:abc" {
+			t.Errorf("git-workflow digest = %q, want sha256:abc", mod.Digest)
+		}
+		created := payload.Paths["new-skill/SKILL.md"]
+		if created.Action != skills.ChangeActionCreated {
+			t.Errorf("new-skill action = %q, want %q", created.Action, skills.ChangeActionCreated)
+		}
+		deleted := payload.Paths["gone-skill/SKILL.md"]
+		if deleted.Action != skills.ChangeActionDeleted {
+			t.Errorf("gone-skill action = %q, want %q", deleted.Action, skills.ChangeActionDeleted)
+		}
+		if payload.Version == 0 {
+			t.Errorf("payload.Version = 0, want positive")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatalf("no payload received within deadline")
+	}
+	_ = srv
+}
+
+func TestProvider_NotifyChanged_DedupesByPath(t *testing.T) {
+	srv, c, p := bootBroadcastTest(t, skills.WithCoalesceWindow(150*time.Millisecond))
+
+	payloads := make(chan skills.PathsChangedPayload, 4)
+	listenForPayloads(t, c, payloads)
+
+	for i := 0; i < 5; i++ {
+		if err := p.NotifyChanged("foo/SKILL.md"); err != nil {
+			t.Fatalf("NotifyChanged: %v", err)
+		}
+	}
+
+	select {
+	case payload := <-payloads:
+		if got := len(payload.Paths); got != 1 {
+			t.Errorf("after 5 dup NotifyChanged calls, payload.Paths = %d entries, want 1 (%+v)", got, payload.Paths)
+		}
+		if _, ok := payload.Paths["foo/SKILL.md"]; !ok {
+			t.Errorf("payload missing foo/SKILL.md (paths: %v)", payload.Paths)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatalf("no payload received within deadline")
+	}
+
+	select {
+	case extra := <-payloads:
+		t.Errorf("got unexpected second broadcast: %+v", extra)
+	case <-time.After(250 * time.Millisecond):
+	}
+	_ = srv
+}
+
+func TestProvider_LatestWinsForRepeatedPath(t *testing.T) {
+	srv, c, p := bootBroadcastTest(t, skills.WithCoalesceWindow(150*time.Millisecond))
+
+	payloads := make(chan skills.PathsChangedPayload, 4)
+	listenForPayloads(t, c, payloads)
+
+	if err := p.NotifyChangedEvents(skills.PathChange{Path: "foo/SKILL.md", Action: skills.ChangeActionCreated}); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.NotifyChangedEvents(skills.PathChange{Path: "foo/SKILL.md", Action: skills.ChangeActionModified}); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.NotifyChangedEvents(skills.PathChange{Path: "foo/SKILL.md", Action: skills.ChangeActionDeleted, Digest: "sha256:latest"}); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case payload := <-payloads:
+		entry, ok := payload.Paths["foo/SKILL.md"]
+		if !ok {
+			t.Fatalf("foo/SKILL.md missing from payload (%v)", payload.Paths)
+		}
+		if entry.Action != skills.ChangeActionDeleted {
+			t.Errorf("action = %q, want %q (latest-wins)", entry.Action, skills.ChangeActionDeleted)
+		}
+		if entry.Digest != "sha256:latest" {
+			t.Errorf("digest = %q, want sha256:latest", entry.Digest)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatalf("no payload received within deadline")
+	}
+	_ = srv
+}
+
+func TestProvider_Coalesce_BatchesIntoOneBroadcast(t *testing.T) {
+	srv, c, p := bootBroadcastTest(t, skills.WithCoalesceWindow(200*time.Millisecond))
+
+	count := atomic.Int32{}
+	c.RegisterNotificationOnList(func() { count.Add(1) }, t)
+
+	for i := 0; i < 10; i++ {
+		if err := p.NotifyChanged("path-" + string(rune('a'+i))); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(15 * time.Millisecond)
+	}
+
+	time.Sleep(450 * time.Millisecond)
+	if got := count.Load(); got != 1 {
+		t.Errorf("after 10 NotifyChanged within coalesce window, got %d broadcasts, want 1", got)
+	}
+	_ = srv
+}
+
+func TestProvider_Throttle_DefersWithinInterval(t *testing.T) {
+	srv, c, p := bootBroadcastTest(t,
+		skills.WithCoalesceWindow(50*time.Millisecond),
+		skills.WithMinBroadcastInterval(400*time.Millisecond),
+	)
+
+	count := atomic.Int32{}
+	c.RegisterNotificationOnList(func() { count.Add(1) }, t)
+
+	if err := p.NotifyChanged("first"); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(150 * time.Millisecond) // coalesce fires, broadcast #1
+	if err := p.NotifyChanged("second"); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(150 * time.Millisecond) // coalesce fires, throttle kicks in; broadcast #2 deferred
+	if got := count.Load(); got != 1 {
+		t.Errorf("inside throttle window: got %d broadcasts, want 1", got)
+	}
+	time.Sleep(400 * time.Millisecond) // throttle window elapses; broadcast #2 lands
+	if got := count.Load(); got != 2 {
+		t.Errorf("after throttle window: got %d broadcasts, want 2", got)
+	}
+	_ = srv
+}
+
+func TestProvider_Close_StopsPendingFlush(t *testing.T) {
+	srv, c, p := bootBroadcastTest(t, skills.WithCoalesceWindow(200*time.Millisecond))
+
+	count := atomic.Int32{}
+	c.RegisterNotificationOnList(func() { count.Add(1) }, t)
+
+	if err := p.NotifyChanged("foo"); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	time.Sleep(400 * time.Millisecond)
+	if got := count.Load(); got != 0 {
+		t.Errorf("after Close before coalesce timer fires, got %d broadcasts, want 0", got)
+	}
+	_ = srv
+}
+
+func TestDecodeListChangedNotification_RoundTrip(t *testing.T) {
+	// Construct a wire-shaped params object and decode it back.
+	params := map[string]any{
+		"_meta": map[string]any{
+			skills.MetaKeyPathsChanged: map[string]any{
+				"paths": map[string]any{
+					"foo/SKILL.md": map[string]any{
+						"action":    "deleted",
+						"timestamp": "2026-06-16T12:00:00Z",
+						"digest":    "sha256:abc",
+					},
+				},
+				"version": 42,
+			},
+		},
+	}
+	payload, ok := skills.DecodeListChangedNotification(params)
+	if !ok {
+		t.Fatalf("DecodeListChangedNotification(...) = ok=false; want true")
+	}
+	if payload.Version != 42 {
+		t.Errorf("Version = %d, want 42", payload.Version)
+	}
+	entry, ok := payload.Paths["foo/SKILL.md"]
+	if !ok {
+		t.Fatalf("paths missing foo/SKILL.md (%v)", payload.Paths)
+	}
+	if entry.Action != skills.ChangeActionDeleted {
+		t.Errorf("action = %q, want %q", entry.Action, skills.ChangeActionDeleted)
+	}
+	if entry.Digest != "sha256:abc" {
+		t.Errorf("digest = %q, want sha256:abc", entry.Digest)
+	}
+}
+
+func TestDecodeListChangedNotification_BareList(t *testing.T) {
+	if _, ok := skills.DecodeListChangedNotification(nil); ok {
+		t.Errorf("nil params: ok=true; want false")
+	}
+	if _, ok := skills.DecodeListChangedNotification(map[string]any{}); ok {
+		t.Errorf("empty params: ok=true; want false")
+	}
+	if _, ok := skills.DecodeListChangedNotification(map[string]any{"_meta": map[string]any{"unrelated": 1}}); ok {
+		t.Errorf("_meta without paths-changed key: ok=true; want false")
+	}
+}
+
+// bootBroadcastTest spins up a Provider + Server + connected client
+// ready for broadcast-style tests. Returns the server (for keeping
+// alive), client (for callback registration), and provider (for
+// driving NotifyChanged). Cleanups are registered against t.
+func bootBroadcastTest(t *testing.T, providerOpts ...skills.ProviderOption) (*server.Server, *clientWithCallbacks, *skills.Provider) {
+	t.Helper()
+	srv := server.NewServer(core.ServerInfo{Name: "skills-test", Version: "0.0.1"})
+
+	opts := append([]skills.ProviderOption{skills.WithDirectory("testdata/valid")}, providerOpts...)
+	p, err := skills.NewProvider(opts...)
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	p.RegisterWith(srv)
+	t.Cleanup(func() { p.Close() })
+
+	handler := srv.Handler(server.WithStreamableHTTP(true))
+	ts := httptest.NewServer(handler)
+	t.Cleanup(ts.Close)
+
+	wrapper := &clientWithCallbacks{}
+	c := client.NewClient(ts.URL+"/mcp",
+		core.ClientInfo{Name: "skills-test-client", Version: "0.0.1"},
+		client.WithGetSSEStream(),
+		client.WithNotificationCallback(wrapper.onNotify),
+	)
+	wrapper.Client = c
+	if err := c.Connect(); err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { c.Close() })
+
+	// Give the background GET SSE stream a beat to attach.
+	time.Sleep(100 * time.Millisecond)
+	return srv, wrapper, p
+}
+
+// clientWithCallbacks lets each test register its own list_changed
+// observer without colliding with bootBroadcastTest's shared callback.
+type clientWithCallbacks struct {
+	*client.Client
+	mu       sync.Mutex
+	onListed []func()
+	onParams []func(params any)
+}
+
+func (cwc *clientWithCallbacks) onNotify(method string, params any) {
+	if method != "notifications/resources/list_changed" {
+		return
+	}
+	cwc.mu.Lock()
+	listed := append([]func(){}, cwc.onListed...)
+	withParams := append([]func(any){}, cwc.onParams...)
+	cwc.mu.Unlock()
+	for _, fn := range listed {
+		fn()
+	}
+	for _, fn := range withParams {
+		fn(params)
+	}
+}
+
+func (cwc *clientWithCallbacks) RegisterNotificationOnList(fn func(), t *testing.T) {
+	t.Helper()
+	cwc.mu.Lock()
+	cwc.onListed = append(cwc.onListed, fn)
+	cwc.mu.Unlock()
+}
+
+func listenForPayloads(t *testing.T, cwc *clientWithCallbacks, ch chan<- skills.PathsChangedPayload) {
+	t.Helper()
+	cwc.mu.Lock()
+	cwc.onParams = append(cwc.onParams, func(params any) {
+		payload, ok := skills.DecodeListChangedNotification(params)
+		if !ok {
+			return
+		}
+		select {
+		case ch <- payload:
+		default:
+		}
+	})
+	cwc.mu.Unlock()
+}
+
+func indexVersion(t *testing.T, body string) uint64 {
+	t.Helper()
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(body), &raw); err != nil {
+		t.Fatalf("unmarshal index: %v", err)
+	}
+	meta, _ := raw["_meta"].(map[string]any)
+	if meta == nil {
+		return 0
+	}
+	v, ok := meta["io.modelcontextprotocol.skills/version"]
+	if !ok {
+		return 0
+	}
+	f, ok := v.(float64)
+	if !ok {
+		t.Fatalf("version field has unexpected type %T", v)
+	}
+	return uint64(f)
 }
 
 func urisOf(defs []core.ResourceDef) []string {
