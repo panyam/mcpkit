@@ -90,6 +90,19 @@ var (
 	// ErrNestedSkill is returned by NewProvider when a SKILL.md is found
 	// inside an existing skill's subtree. SEP-2640 forbids skill nesting.
 	ErrNestedSkill = errors.New("skills: nested skill")
+
+	// ErrFSWatcherMissingHostRoot is returned by NewProvider when
+	// WithFSWatcher is supplied alongside WithFS (which does not
+	// populate the hostRoot path). Watcher-based change detection
+	// requires a real filesystem; use WithDirectory or arrange your
+	// own Detector to call NotifyChangedEvents manually.
+	ErrFSWatcherMissingHostRoot = errors.New("skills: WithFSWatcher requires WithDirectory (hostRoot not set)")
+
+	// ErrFSWatcherSetupFailed is returned by NewProvider when the
+	// underlying fsnotify.NewWatcher call or the initial directory
+	// walk fails in a way that prevents any watching from happening.
+	// Wraps the underlying error.
+	ErrFSWatcherSetupFailed = errors.New("skills: fsnotify watcher setup failed")
 )
 
 // Frontmatter parsing errors.

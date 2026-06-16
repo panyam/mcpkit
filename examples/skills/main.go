@@ -37,6 +37,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/panyam/demokit"
 	"github.com/panyam/mcpkit/core"
@@ -62,6 +63,8 @@ func serve() {
 		"distribution shape: file (per-resource SKILL.md + supporting files) | archive (one .tar.gz per skill) | zip (one .zip per skill)")
 	skillsDir := flag.String("skills", "skills",
 		"directory of skill bundles to register (default ./skills)")
+	watch := flag.Bool("watch", false,
+		"enable fsnotify-driven push invalidation (skills.WithFSWatcher); pairs with coalesce window to suppress editor-save bursts")
 	tel := common.RegisterTelemetryFlags(flag.CommandLine)
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.BoolFlag("--serve"),  // dual-mode dispatch; override demokit's value-form default
@@ -82,6 +85,14 @@ func serve() {
 	provOpts := []skills.ProviderOption{
 		skills.WithDirectory(*skillsDir),
 	}
+	if *watch {
+		provOpts = append(provOpts,
+			skills.WithFSWatcher(skills.WithFSWatcherErrorHandler(func(err error) {
+				log.Printf("[skills] fsnotify: %v", err)
+			})),
+			skills.WithCoalesceWindow(200*time.Millisecond),
+		)
+	}
 	switch strings.ToLower(*modeFlag) {
 	case "file":
 		// default
@@ -98,7 +109,7 @@ func serve() {
 		log.Fatalf("skills.NewProvider: %v", err)
 	}
 
-	log.Printf("[skills-demo] mode=%s skills=%s", *modeFlag, *skillsDir)
+	log.Printf("[skills-demo] mode=%s skills=%s watch=%v", *modeFlag, *skillsDir, *watch)
 	if err := common.RunServer(common.ServerConfig{
 		Name:           "skills-demo",
 		Addr:           *addr,
