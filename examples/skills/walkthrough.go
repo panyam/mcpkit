@@ -19,12 +19,13 @@ import (
 )
 
 const (
-	uriGitWorkflow    = "skill://git-workflow/SKILL.md"
-	uriPDFManifest    = "skill://pdf-processing/SKILL.md"
-	uriPDFRef         = "skill://pdf-processing/references/FORMS.md"
-	uriRefundsManifest = "skill://acme/billing/refunds/SKILL.md"
-	uriRefundsEmail    = "skill://acme/billing/refunds/templates/email.md"
-	uriIndex           = skills.IndexURI
+	uriGitWorkflow         = "skill://git-workflow/SKILL.md"
+	uriPDFManifest         = "skill://pdf-processing/SKILL.md"
+	uriPDFRef              = "skill://pdf-processing/references/FORMS.md"
+	uriRefundsManifest     = "skill://acme/billing/refunds/SKILL.md"
+	uriRefundsEmail        = "skill://acme/billing/refunds/templates/email.md"
+	uriRefundsTemplatesDir = "skill://acme/billing/refunds/templates"
+	uriIndex               = skills.IndexURI
 )
 
 func runDemo() {
@@ -273,6 +274,53 @@ func runDemo() {
 			return nil
 		})
 
+	demo.Section("SEP-2640 directoryRead — scoped subtree navigation",
+		"SEP commit `2e04c48d` (2026-06-09) added `resources/directory/read` for listing a directory's direct children without enumerating the server's entire resource space. Capability-gated via `io.modelcontextprotocol/skills.directoryRead`. mcpkit's Provider auto-supports it (#781).",
+	)
+
+	demo.Step("List a directory inside a skill and recurse into a subdirectory").
+		Arrow("Host", "Server", "resources/directory/read uri=skill://acme/billing/refunds/templates").
+		DashedArrow("Server", "Host", "2 files + 1 subdirectory (`regional`, inode/directory)").
+		Arrow("Host", "Server", "resources/directory/read uri=skill://acme/billing/refunds/templates/regional").
+		DashedArrow("Server", "Host", "1 file (eu.md)").
+		Note("Subdirectories surface with `mimeType: \"inode/directory\"`; client descends by issuing a second call. SDK wrapper: `Client.ReadDirectory(ctx, uri)`.").
+		Run(func(ctx demokit.StepContext) *demokit.StepResult {
+			if c == nil {
+				return nil
+			}
+			sc := skills.NewClient(c, skills.WithTracerProvider(tp))
+			if !sc.SupportsDirectoryRead() {
+				fmt.Printf("    SKIP: server does not advertise directoryRead\n")
+				return nil
+			}
+			// First listing: the templates/ subtree.
+			result, err := sc.ReadDirectory(context.Background(), uriRefundsTemplatesDir)
+			if err != nil {
+				fmt.Printf("    SKIP: %v\n", err)
+				return nil
+			}
+			fmt.Printf("    ReadDirectory(%s):\n", uriRefundsTemplatesDir)
+			for _, r := range result.Resources {
+				fmt.Printf("      %-12s %s\n", marker(r.MimeType), r.URI)
+			}
+			// Hand-rolled recursion: descend into any subdirectory we see.
+			for _, r := range result.Resources {
+				if r.MimeType != skills.MimeTypeDirectory {
+					continue
+				}
+				sub, err := sc.ReadDirectory(context.Background(), r.URI)
+				if err != nil {
+					fmt.Printf("    SKIP %s: %v\n", r.URI, err)
+					continue
+				}
+				fmt.Printf("    ReadDirectory(%s):\n", r.URI)
+				for _, e := range sub.Resources {
+					fmt.Printf("      %-12s %s\n", marker(e.MimeType), e.URI)
+				}
+			}
+			return nil
+		})
+
 	demo.Section("SEP-414 P7 — Skills observability",
 		"Fetch ≠ activation. Server `resources/read` spans now carry `mcp.skill.*` attrs (#748). Client `ext/skills.Client` emits `skills.read*` spans + `Activate(ctx, uri)` for post-cache use the wire can't see (SDK-only — no spec change).",
 	)
@@ -313,6 +361,17 @@ func runDemo() {
 	_ = serverInfo
 	common.SetupRenderer(demo)
 	demo.Execute()
+}
+
+// marker returns a one-glyph indicator for a directory listing entry based
+// on its MIME type. "dir/" for SEP-2640 inode/directory entries, "file" for
+// everything else. Aligns the walkthrough table without depending on a
+// terminal capability lib.
+func marker(mimeType string) string {
+	if mimeType == skills.MimeTypeDirectory {
+		return "dir/"
+	}
+	return "file"
 }
 
 // previewBody prints up to n lines of the body for the walkthrough output.

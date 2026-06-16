@@ -247,6 +247,13 @@ func (p *Provider) Resources() []core.ResourceDef {
 // server.WithExtension call on the same SkillsExtension causes no
 // double-emit.
 //
+// Unless WithoutDirectoryRead was supplied to NewProvider, RegisterWith
+// also installs the SEP-2640 resources/directory/read handler (added by
+// SEP commit 2e04c48d) and emits {"directoryRead": true} inside the
+// extension's capability Config. The Provider walks its underlying
+// fs.FS at request time to enumerate the requested directory's direct
+// children.
+//
 // Unless WithoutIndex was supplied to NewProvider, RegisterWith also
 // constructs an internal Indexer and registers skill://index.json on
 // srv. Use WithIndexCacheTTL to tune the index's cache freshness or
@@ -259,7 +266,10 @@ func (p *Provider) RegisterWith(srv *server.Server) {
 	for _, r := range p.resources {
 		srv.RegisterResource(p.defFor(r), p.makeHandler(r))
 	}
-	srv.RegisterExtension(SkillsExtension{})
+	srv.RegisterExtension(SkillsExtension{DirectoryRead: !p.cfg.suppressDirectoryRead})
+	if !p.cfg.suppressDirectoryRead {
+		srv.HandleMethod(MethodResourcesDirectoryRead, p.handleDirectoryRead)
+	}
 	if !p.cfg.suppressIndex {
 		var opts []IndexerOption
 		if p.cfg.indexCacheTTL > 0 {

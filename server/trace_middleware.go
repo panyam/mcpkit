@@ -181,17 +181,19 @@ func traceMiddleware(tp core.TracerProvider) Middleware {
 				attrs = append(attrs, core.Attribute{Key: "mcp.tool.name", Value: name})
 			}
 		}
-		if req.Method == "resources/read" {
+		// SEP-414 P7 (issue 748): both resources/read and SEP-2640's
+		// resources/directory/read (added in SEP commit 2e04c48d on
+		// 2026-06-09 — issue 781) carry a `uri` field worth surfacing as
+		// `mcp.resource.uri`; skill:// URIs additionally emit
+		// `mcp.skill.*` attributes so dashboards can chart fetch and
+		// navigation volume per skill. `mcp.skill.path` and
+		// `mcp.skill.file` only populate for SEP-2640 manifest URIs
+		// (terminal `/SKILL.md`) where the path/file boundary is
+		// unambiguous from the URI alone; non-manifest URIs surface as
+		// `mcp.skill.uri` only.
+		if req.Method == "resources/read" || req.Method == "resources/directory/read" {
 			if uri := parseResourceReadURI(req.Params); uri != "" {
 				attrs = append(attrs, core.Attribute{Key: "mcp.resource.uri", Value: uri})
-				// SEP-414 P7 (issue 748): when the read targets a
-				// `skill://` URI, also emit skill-shaped attributes so
-				// server-side dashboards can chart fetch volume per
-				// skill. `mcp.skill.path` and `mcp.skill.file` only
-				// populate for SEP-2640 manifest URIs (terminal
-				// `/SKILL.md`) where the path/file boundary is
-				// unambiguous from the URI alone; non-manifest URIs
-				// surface as `mcp.skill.uri` only.
 				if path, file, ok := decomposeSkillURI(uri); ok {
 					attrs = append(attrs, core.Attribute{Key: "mcp.skill.uri", Value: uri})
 					if path != "" {

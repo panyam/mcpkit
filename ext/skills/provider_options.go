@@ -10,14 +10,15 @@ import (
 type ProviderOption func(*providerConfig)
 
 type providerConfig struct {
-	fsys             fs.FS
-	root             string
-	uriPrefix        []string
-	metaPrefix       string
-	suppressIndex    bool
-	indexCacheTTL    time.Duration
-	archiveMode      ArchiveFormat
-	archiveMaxBytes  int64
+	fsys                 fs.FS
+	root                 string
+	uriPrefix            []string
+	metaPrefix           string
+	suppressIndex        bool
+	suppressDirectoryRead bool
+	indexCacheTTL        time.Duration
+	archiveMode          ArchiveFormat
+	archiveMaxBytes      int64
 }
 
 // WithFS supplies the io/fs.FS that the Provider walks for skills. The
@@ -113,5 +114,20 @@ func WithArchiveMode(format ArchiveFormat) ProviderOption {
 func WithArchiveMaxBytes(n int64) ProviderOption {
 	return func(c *providerConfig) {
 		c.archiveMaxBytes = n
+	}
+}
+
+// WithoutDirectoryRead suppresses registration of the SEP-2640
+// resources/directory/read method when the Provider's RegisterWith is
+// called. The default is ON because a Provider can always enumerate
+// directories from its underlying fs.FS at trivial cost.
+//
+// Suppress when the caller wants the discovery index without the
+// directory-navigation surface (e.g., to stay on the pre-2e04c48d SEP
+// shape during a transition window, or to gate the capability behind a
+// feature flag the application owns).
+func WithoutDirectoryRead() ProviderOption {
+	return func(c *providerConfig) {
+		c.suppressDirectoryRead = true
 	}
 }

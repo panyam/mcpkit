@@ -56,3 +56,14 @@ const ArchiveTarGz = ".tar.gz"
 
 // ArchiveZip is the file suffix for zip archive entries.
 const ArchiveZip = ".zip"
+
+// MethodResourcesDirectoryRead is the JSON-RPC method name SEP-2640 added
+// in commit 2e04c48d (2026-06-09) for scoped directory listing inside a
+// resource subtree. Capability-gated via SkillsExtension.DirectoryRead.
+const MethodResourcesDirectoryRead = "resources/directory/read"
+
+// MimeTypeDirectory is the value SEP-2640 reserves for resources that
+// represent directories. Listed entries with this MIME type are intended
+// to be navigated with another resources/directory/read call rather than
+// fetched with resources/read.
+const MimeTypeDirectory = "inode/directory"
