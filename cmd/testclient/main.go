@@ -90,7 +90,7 @@ func main() {
 
 	if err := noAuthClient.Connect(); err == nil {
 		// Connected without auth — verify session works
-		tools, err := noAuthClient.ListTools()
+		tools, err := noAuthClient.ListTools(context.Background())
 		if err == nil {
 			switch {
 			case len(ctx.ToolCalls) > 0:
@@ -154,7 +154,7 @@ func main() {
 	// The client transport handles 401 (token refresh) and 403 (scope step-up
 	// via OAuthTokenSource.TokenForScopes) automatically.
 	log.Println("Step 4: Verifying session with tools/list...")
-	tools, err := c.ListTools()
+	tools, err := c.ListTools(context.Background())
 	if err != nil {
 		log.Printf("tools/list: %v (non-fatal)", err)
 	} else {

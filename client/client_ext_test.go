@@ -219,7 +219,7 @@ func TestClientListToolsForModel(t *testing.T) {
 	c, _ := setupUIStreamableClient(t)
 
 	// ListTools returns ALL tools (unfiltered)
-	allTools, err := c.ListTools()
+	allTools, err := c.ListTools(t.Context())
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
 	}
@@ -228,7 +228,7 @@ func TestClientListToolsForModel(t *testing.T) {
 	}
 
 	// ListToolsForModel excludes app-only tools
-	modelTools, err := c.ListToolsForModel()
+	modelTools, err := c.ListToolsForModel(t.Context())
 	if err != nil {
 		t.Fatalf("ListToolsForModel: %v", err)
 	}

@@ -152,7 +152,7 @@ func (h *AppHost) CallAppTool(ctx context.Context, name string, args map[string]
 // ListAllTools returns tools from both the MCP server and the app, suitable
 // for presenting to an LLM. Server tools come first, then app tools.
 func (h *AppHost) ListAllTools(ctx context.Context) ([]core.ToolDef, error) {
-	serverTools, err := h.client.ListTools()
+	serverTools, err := h.client.ListTools(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list server tools: %w", err)
 	}

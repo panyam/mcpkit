@@ -96,7 +96,7 @@ func main() {
 		Arrow("Client", "Srv", "initialize").
 		DashedArrow("Srv", "Client", "capabilities, serverInfo").
 		Note("The client connects without HTTP — using InProcessTransport for direct dispatch.").
-		Run(func(_ demokit.StepContext) *demokit.StepResult {
+		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			xport := server.NewInProcessTransport(srv)
 			c = client.NewClient("memory://", core.ClientInfo{Name: "demo-host", Version: "1.0"},
 				client.WithTracerProvider(tp),
@@ -109,7 +109,7 @@ func main() {
 			}
 			fmt.Printf("  Connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)
 
-			tools, _ := c.ListTools()
+			tools, _ := c.ListTools(ctx.Ctx)
 			fmt.Printf("  Server tools: ")
 			for i, t := range tools {
 				if i > 0 {

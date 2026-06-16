@@ -114,7 +114,7 @@ func TestListTools(t *testing.T) {
 	require.NoError(t, c.Connect())
 	defer c.Close()
 
-	tools, err := c.ListTools()
+	tools, err := c.ListTools(t.Context())
 	require.NoError(t, err)
 
 	var names []string

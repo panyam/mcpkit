@@ -10,7 +10,7 @@ import (
 func TestListToolsIncludesAll(t *testing.T) {
 	c := setupConformanceClient(t)
 
-	tools, err := c.ListTools()
+	tools, err := c.ListTools(t.Context())
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
 	}
@@ -34,7 +34,7 @@ func TestListToolsIncludesAll(t *testing.T) {
 func TestListToolsForModelFilters(t *testing.T) {
 	c := setupConformanceClient(t)
 
-	modelTools, err := c.ListToolsForModel()
+	modelTools, err := c.ListToolsForModel(t.Context())
 	if err != nil {
 		t.Fatalf("ListToolsForModel: %v", err)
 	}
