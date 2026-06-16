@@ -1,7 +1,9 @@
 package skills
 
 import (
+	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -277,6 +279,50 @@ func (p *Provider) RegisterWith(srv *server.Server) {
 		}
 		NewIndexer(p, opts...).RegisterWith(srv)
 	}
+	srv.UseMiddleware(skillURIValidationMiddleware)
+}
+
+// skillURIValidationMiddleware short-circuits resources/read and
+// resources/directory/read requests whose uri is shaped like a skill://
+// URI but fails ParseURI — most importantly URIs that smuggle in dot
+// segments (".", ".."). Without this gate, traversal probes fall
+// through to the registry's exact-match lookup and surface as the
+// generic "unknown resource" InvalidParams response, indistinguishable
+// from a typo. With the gate, traversal probes return InvalidParams
+// with an explicit ErrPathTraversal-derived message, so audit logs and
+// host clients can act on the signal.
+//
+// Pass-through cases (next is invoked unchanged):
+//   - any method other than resources/read or resources/directory/read
+//   - resources/read of a non-skill:// URI (the server may host
+//     additional resource schemes alongside Skills)
+//   - params that don't parse as the read envelope (the dispatcher's
+//     own error path handles that — duplicating here would compete)
+//
+// Registered outermost in Provider.RegisterWith because middleware is
+// append-only and runs in registration order; placing the validator
+// last keeps it innermost-but-still-before-routing, which is the right
+// position for input shaping.
+func skillURIValidationMiddleware(ctx context.Context, req *core.Request, next server.MiddlewareFunc) (*core.Response, error) {
+	switch req.Method {
+	case "resources/read", MethodResourcesDirectoryRead:
+	default:
+		return next(ctx, req)
+	}
+	var envelope struct {
+		URI string `json:"uri"`
+	}
+	if err := json.Unmarshal(req.Params, &envelope); err != nil {
+		return next(ctx, req)
+	}
+	if !strings.HasPrefix(envelope.URI, Scheme+"://") {
+		return next(ctx, req)
+	}
+	if _, err := ParseURI(envelope.URI); err != nil {
+		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
+			fmt.Sprintf("invalid skill URI %q: %v", envelope.URI, err)), nil
+	}
+	return next(ctx, req)
 }
 
 func (p *Provider) defFor(r *resourceEntry) core.ResourceDef {
