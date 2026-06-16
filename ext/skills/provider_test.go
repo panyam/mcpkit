@@ -289,7 +289,7 @@ func TestProvider_Integration(t *testing.T) {
 	t.Cleanup(func() { c.Close() })
 
 	// resources/list returns every cataloged URI.
-	defs, err := c.ListResources()
+	defs, err := c.ListResources(t.Context())
 	if err != nil {
 		t.Fatalf("ListResources: %v", err)
 	}

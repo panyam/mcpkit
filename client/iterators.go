@@ -2,10 +2,26 @@ package client
 
 import (
 	"context"
+	"errors"
 	"iter"
 
 	core "github.com/panyam/mcpkit/core"
 )
+
+// ErrListPaginationOverrun is yielded by every paginated list iterator and
+// returned by every zero-arg list helper (ListTools, ListResources,
+// ListResourceTemplates, ListPrompts) when the per-client max page count
+// is exceeded.
+//
+// The default cap is 1000 pages; configure via WithMaxListPages. A cap of
+// 0 disables the check (unbounded iteration — at your own risk).
+//
+// This signals a likely-buggy server emitting an unbounded nextCursor, not
+// a transient transport error. Callers should NOT retry blindly. The pages
+// already yielded before the cap fired are safe to consume; what is
+// uncertain is whether more pages legitimately existed beyond the cap or
+// the server was wedged.
+var ErrListPaginationOverrun = errors.New("client: list pagination exceeded max pages")
 
 // Tools returns an iterator that yields all tool definitions, automatically
 // paginating through multiple pages if the server uses cursor-based pagination.
@@ -74,16 +90,18 @@ func (c *Client) Prompts(ctx context.Context) iter.Seq2[core.PromptDef, error] {
 //
 // The Tools/Resources/Prompts/ResourceTemplates iterators above are
 // item-by-item — they discard the per-page envelope (NextCursor, TTLMs,
-// CacheScope) once items have been yielded. The pre-existing zero-arg
-// helpers (ListTools/ListResources/ListPrompts/ListResourceTemplates on
-// client.go) likewise drop the envelope. Callers that need the SEP-2549
-// ttlMs / cacheScope hints to drive client-side caching should use the
-// `ListXPage(cursor)` helpers below: each fetches ONE page and returns
-// the typed result intact.
+// CacheScope) once items have been yielded. The zero-arg legacy helpers
+// (ListTools/ListResources/ListPrompts/ListResourceTemplates on
+// client.go) auto-iterate across pages and discard the envelope
+// likewise — they return the fully materialized slice. Callers that
+// need the SEP-2549 ttlMs / cacheScope hints to drive client-side
+// caching should use the `ListXPage(cursor)` helpers below: each
+// fetches ONE page and returns the typed result intact.
 //
-// Pagination cursor handling is the caller's responsibility — pass
-// empty string for the first page; pass the previous response's
-// NextCursor for subsequent pages; loop until NextCursor is empty.
+// Pagination cursor handling for the ListXPage helpers is the caller's
+// responsibility — pass empty string for the first page; pass the
+// previous response's NextCursor for subsequent pages; loop until
+// NextCursor is empty.
 
 // ListToolsPage fetches one page of tools/list and returns the typed
 // result including the SEP-2549 ttlMs / cacheScope hints and pagination
@@ -149,15 +167,25 @@ func callListPage(c *Client, method, cursor string, out any) error {
 }
 
 // paginate is a generic helper that produces an iterator over paginated
-// MCP list results. It calls the given method with an optional cursor param,
-// extracts items and nextCursor from the response, and yields each item.
-// Stops when nextCursor is empty or the context is cancelled.
+// MCP list results. It calls the given method with an optional cursor
+// param, extracts items and nextCursor from the response, and yields
+// each item. Stops when nextCursor is empty, the context is cancelled,
+// or the per-client max page count (c.maxListPages, configured via
+// WithMaxListPages) would be exceeded — the latter yields a typed
+// ErrListPaginationOverrun before returning.
 func paginate[T any](ctx context.Context, c *Client, method string,
 	extract func(*CallResult) ([]T, string, error),
 ) iter.Seq2[T, error] {
 	return func(yield func(T, error) bool) {
 		var cursor string
+		pageCount := 0
 		for {
+			if c.maxListPages > 0 && pageCount >= c.maxListPages {
+				var zero T
+				yield(zero, ErrListPaginationOverrun)
+				return
+			}
+
 			// Build params with optional cursor.
 			var params any
 			if cursor != "" {
@@ -170,6 +198,7 @@ func paginate[T any](ctx context.Context, c *Client, method string,
 				yield(zero, err)
 				return
 			}
+			pageCount++
 
 			items, nextCursor, err := extract(result)
 			if err != nil {

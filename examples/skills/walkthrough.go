@@ -169,7 +169,7 @@ for _, d := range defs {
 			if c == nil {
 				return nil
 			}
-			defs, err := c.ListResources()
+			defs, err := c.ListResources(ctx.Ctx)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return nil

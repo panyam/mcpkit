@@ -182,7 +182,7 @@ c := client.NewClient(boot.MCPURL,
 )
 defer c.Close()
 c.Connect()
-tools, _ := c.ListTools() // succeeds without auth`),
+tools, _ := c.ListTools(ctx.Ctx) // succeeds without auth`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			c := client.NewClient(boot.MCPURL,
@@ -194,7 +194,7 @@ tools, _ := c.ListTools() // succeeds without auth`),
 				fmt.Printf("    ERROR: %v\n", err)
 				return
 			}
-			tools, err := c.ListTools()
+			tools, err := c.ListTools(ctx.Ctx)
 			if err != nil {
 				fmt.Printf("    UNEXPECTED: %v\n", err)
 				return

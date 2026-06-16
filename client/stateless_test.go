@@ -350,7 +350,7 @@ func TestClient_StatelessWire_SendsMetaAndHeader(t *testing.T) {
 	if err := c.Connect(); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
-	if _, err := c.ListTools(); err != nil {
+	if _, err := c.ListTools(t.Context()); err != nil {
 		t.Fatalf("ListTools: %v", err)
 	}
 
@@ -422,7 +422,7 @@ func TestClient_4xxJSONRPCErrorParsed(t *testing.T) {
 	if err := c.Connect(); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
-	_, err := c.ListTools()
+	_, err := c.ListTools(t.Context())
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

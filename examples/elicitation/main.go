@@ -127,7 +127,7 @@ c := client.NewClient(serverURL+"/mcp",
     client.WithGetSSEStream(),
 )
 if err := c.Connect(); err != nil { /* server not up — run: make serve */ }
-tools, _ := c.ListTools()`),
+tools, _ := c.ListTools(ctx.Ctx)`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			fmt.Printf("    Connecting to %s ...\n", serverURL)
@@ -157,7 +157,7 @@ tools, _ := c.ListTools()`),
 			fmt.Printf("    Connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)
 			fmt.Printf("    SSE notification stream active\n\n")
 
-			tools, _ := c.ListTools()
+			tools, _ := c.ListTools(ctx.Ctx)
 			fmt.Printf("    Tools:\n")
 			for _, t := range tools {
 				fmt.Printf("      - %s: %s\n", t.Name, t.Description)

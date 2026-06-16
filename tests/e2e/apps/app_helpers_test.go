@@ -51,7 +51,7 @@ func TestRegisterAppToolE2E(t *testing.T) {
 	t.Cleanup(func() { c.Close() })
 
 	// Verify tool has _meta.ui
-	tools, err := c.ListTools()
+	tools, err := c.ListTools(t.Context())
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
 	}

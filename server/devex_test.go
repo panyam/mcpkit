@@ -206,7 +206,7 @@ func TestInMemoryTransport_ListTools(t *testing.T) {
 	require.NoError(t, c.Connect())
 	defer c.Close()
 
-	tools, err := c.ListTools()
+	tools, err := c.ListTools(t.Context())
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, len(tools), 2, "should have echo + fail tools")
 }

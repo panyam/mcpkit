@@ -114,7 +114,7 @@ func setupClient(t *testing.T) *client.Client {
 func TestToolsListMetaE2E(t *testing.T) {
 	c := setupClient(t)
 
-	tools, err := c.ListTools()
+	tools, err := c.ListTools(t.Context())
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
 	}

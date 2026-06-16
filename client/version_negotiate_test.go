@@ -150,7 +150,7 @@ func TestRawCallRetryOnUnsupportedVersion(t *testing.T) {
 	}
 	defer c.Close()
 
-	if _, err := c.ListTools(); err != nil {
+	if _, err := c.ListTools(t.Context()); err != nil {
 		t.Fatalf("ListTools after retry: %v", err)
 	}
 

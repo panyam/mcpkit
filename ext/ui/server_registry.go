@@ -310,7 +310,7 @@ func (r *ServerRegistry) rebuildIndex() {
 		if entry.client == nil {
 			continue
 		}
-		tools, err := entry.client.ListTools()
+		tools, err := entry.client.ListTools(context.Background())
 		if err == nil {
 			for _, td := range tools {
 				rt := RegisteredTool{ToolDef: td, ServerID: entry.id, Source: "server"}

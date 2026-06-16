@@ -215,7 +215,7 @@ func TestClientReadResourceTemplate(t *testing.T) {
 // definitions with correct names across all transports.
 func TestClientListTools(t *testing.T) {
 	forAllTransports(t, func(t *testing.T, c *client.Client) {
-		tools, err := c.ListTools()
+		tools, err := c.ListTools(t.Context())
 		if err != nil {
 			t.Fatalf("ListTools: %v", err)
 		}
@@ -233,7 +233,7 @@ func TestClientListTools(t *testing.T) {
 // across all transports.
 func TestClientListResources(t *testing.T) {
 	forAllTransports(t, func(t *testing.T, c *client.Client) {
-		resources, err := c.ListResources()
+		resources, err := c.ListResources(t.Context())
 		if err != nil {
 			t.Fatalf("ListResources: %v", err)
 		}
@@ -251,7 +251,7 @@ func TestClientListResources(t *testing.T) {
 // definitions across all transports.
 func TestClientListResourceTemplates(t *testing.T) {
 	forAllTransports(t, func(t *testing.T, c *client.Client) {
-		templates, err := c.ListResourceTemplates()
+		templates, err := c.ListResourceTemplates(t.Context())
 		if err != nil {
 			t.Fatalf("ListResourceTemplates: %v", err)
 		}
@@ -267,7 +267,7 @@ func TestClientListResourceTemplates(t *testing.T) {
 // the plumbing works end-to-end regardless of transport serialization.
 func TestClientListToolsMeta(t *testing.T) {
 	forAllTransports(t, func(t *testing.T, c *client.Client) {
-		tools, err := c.ListTools()
+		tools, err := c.ListTools(t.Context())
 		if err != nil {
 			t.Fatalf("ListTools: %v", err)
 		}
@@ -428,7 +428,7 @@ func TestSSEClientReadResourceTemplate(t *testing.T) {
 // TestSSEClientListTools verifies tool discovery over SSE transport.
 func TestSSEClientListTools(t *testing.T) {
 	c, _ := setupSSEClient(t)
-	tools, err := c.ListTools()
+	tools, err := c.ListTools(t.Context())
 	if err != nil {
 		t.Fatalf("SSE ListTools: %v", err)
 	}
@@ -600,7 +600,7 @@ func newExtraSchemaServer() *server.Server {
 // be changed from `any` to a typed struct that drops unknown fields.
 func TestClientListToolsExtraSchemaFields(t *testing.T) {
 	runTest := func(t *testing.T, c *client.Client) {
-		tools, err := c.ListTools()
+		tools, err := c.ListTools(t.Context())
 		if err != nil {
 			t.Fatalf("ListTools: %v", err)
 		}
