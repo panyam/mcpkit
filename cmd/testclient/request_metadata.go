@@ -24,6 +24,8 @@ package main
 // mask the audit row.
 
 import (
+	"context"
+
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 )
@@ -43,7 +45,7 @@ func driveRequestMetadata(serverURL string) error {
 	// are per-request and all emit on the first non-discover call. We
 	// pick tools/list because the mock server returns a generic
 	// {tools: []} response for it; tools/call would also work.
-	if _, err := c.ListTools(); err != nil {
+	if _, err := c.ListTools(context.Background()); err != nil {
 		// Non-fatal — the scenario's first response is a synthetic 400
 		// with `Unsupported protocol version` to grade the retry path,
 		// which mcpkit's client doesn't yet implement (tracked as a

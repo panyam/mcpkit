@@ -69,7 +69,7 @@ func (tc *TestClient) ReadResource(uri string) string {
 // ListTools returns all registered tools. Calls t.Fatal on error.
 func (tc *TestClient) ListTools() []core.ToolDef {
 	tc.t.Helper()
-	tools, err := tc.Client.ListTools()
+	tools, err := tc.Client.ListTools(tc.t.Context())
 	if err != nil {
 		tc.t.Fatalf("ListTools: %v", err)
 	}
@@ -79,7 +79,7 @@ func (tc *TestClient) ListTools() []core.ToolDef {
 // ListResources returns all registered static resources. Calls t.Fatal on error.
 func (tc *TestClient) ListResources() []core.ResourceDef {
 	tc.t.Helper()
-	resources, err := tc.Client.ListResources()
+	resources, err := tc.Client.ListResources(tc.t.Context())
 	if err != nil {
 		tc.t.Fatalf("ListResources: %v", err)
 	}
@@ -89,7 +89,7 @@ func (tc *TestClient) ListResources() []core.ResourceDef {
 // ListResourceTemplates returns all registered resource templates. Calls t.Fatal on error.
 func (tc *TestClient) ListResourceTemplates() []core.ResourceTemplate {
 	tc.t.Helper()
-	templates, err := tc.Client.ListResourceTemplates()
+	templates, err := tc.Client.ListResourceTemplates(tc.t.Context())
 	if err != nil {
 		tc.t.Fatalf("ListResourceTemplates: %v", err)
 	}

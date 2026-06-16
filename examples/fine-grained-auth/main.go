@@ -229,7 +229,7 @@ readClient = client.NewClient(serverURL+"/mcp",
     client.WithClientBearerToken(tokRead),
 )
 readClient.Connect()
-tools, _ := readClient.ListTools() // JWKS validation passed; scope just limited.`),
+tools, _ := readClient.ListTools(ctx.Ctx) // JWKS validation passed; scope just limited.`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			fmt.Printf("    Connecting to %s ...\n", serverURL)
@@ -244,7 +244,7 @@ tools, _ := readClient.ListTools() // JWKS validation passed; scope just limited
 			}
 			fmt.Printf("    Connected to %s %s\n\n", readClient.ServerInfo.Name, readClient.ServerInfo.Version)
 
-			tools, _ := readClient.ListTools()
+			tools, _ := readClient.ListTools(ctx.Ctx)
 			fmt.Printf("    Tools:\n")
 			for _, t := range tools {
 				fmt.Printf("      - %s: %s\n", t.Name, t.Description)
