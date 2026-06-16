@@ -1,3 +1,7 @@
+
+demo: ## Run the demokit walkthrough (text, non-interactive). Server must be up via `make serve` in another terminal.
+	go run . --tui
+
 serve: ## Start the skills-demo server in file mode (default :8080)
 	go run . --serve
 
@@ -7,11 +11,8 @@ serve-archive: ## Start the server in archive mode (.tar.gz per skill)
 serve-zip: ## Start the server in archive mode (.zip per skill)
 	go run . --serve --mode=zip
 
-demo: ## Run the demokit walkthrough (text, non-interactive). Server must be up via `make serve` in another terminal.
+run: ## Run the walkthrough in interactive TUI mode (paginated, key-driven).
 	go run .
-
-tui: ## Run the walkthrough in interactive TUI mode (paginated, key-driven).
-	go run . --tui
 
 note: ## Run the walkthrough in notebook mode (Bubble Tea cells).
 	go run . --note
