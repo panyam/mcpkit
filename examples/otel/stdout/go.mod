@@ -3,7 +3,7 @@ module github.com/panyam/mcpkit/examples/otel/stdout
 go 1.26.4
 
 require (
-	github.com/panyam/demokit v0.0.29
+	github.com/panyam/demokit v0.0.30
 	github.com/panyam/mcpkit v0.2.45
 	github.com/panyam/mcpkit/examples/common v0.0.0-00010101000000-000000000000
 	github.com/panyam/mcpkit/ext/otel v0.0.0-20260608053428-44b944d79f00

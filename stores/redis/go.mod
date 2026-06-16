@@ -7,8 +7,6 @@ replace github.com/panyam/mcpkit => ../..
 require (
 	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/panyam/mcpkit v0.2.33
-	github.com/panyam/mcpkit/experimental/ext/events v0.0.0-20260613221610-63a4e4058337
-	github.com/panyam/mcpkit/experimental/ext/events/stores/redis v0.0.0-20260613221610-63a4e4058337
 	github.com/redis/go-redis/v9 v9.7.0
 	github.com/stretchr/testify v1.11.1
 )
@@ -21,6 +19,7 @@ require (
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
+	github.com/kr/text v0.2.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/panyam/gocurrent v0.1.1 // indirect
 	github.com/panyam/goutils v0.1.8 // indirect
