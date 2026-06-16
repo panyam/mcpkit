@@ -10,6 +10,7 @@ github.com/buger/jsonparser v1.1.1 h1:2PnMjfWD7wBILjqQbt530v576A/cAbQvEW9gGIpYMU
 github.com/buger/jsonparser v1.1.1/go.mod h1:6RYKKt7H4d4+iWqouImQ9R2FZql3VbhNgx27UK13J/0=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
+github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f h1:lO4WD4F/rVNCu3HqELle0jiPLLBs70cWOduZpkS1E78=
@@ -37,10 +38,6 @@ github.com/panyam/gocurrent v0.1.1 h1:UFFCkAxYNdGL4RuUCYBneWCS0jIlquIpvgvDcezega
 github.com/panyam/gocurrent v0.1.1/go.mod h1:jIIhcNfNnnIe2JXH8aY2+ba+/5G1fzwCWoZXdcMNw6o=
 github.com/panyam/goutils v0.1.8 h1:5UscYTP892k54+Nyb01tKGGwZxczZ5k7BC+c0nXmcoc=
 github.com/panyam/goutils v0.1.8/go.mod h1:ntucs8GJOHQ0LmlRGRjeup3aDC2t7xPMudrRwUHrJNM=
-github.com/panyam/mcpkit/experimental/ext/events v0.0.0-20260613221610-63a4e4058337 h1:jp07nG+aO9D1toXodAJ0nUQIplcRYuqT3hy70+siSjk=
-github.com/panyam/mcpkit/experimental/ext/events v0.0.0-20260613221610-63a4e4058337/go.mod h1:j+lyYmhQfUADJFMlSPPg32zuTttX2RIwOmiqsVzlJOE=
-github.com/panyam/mcpkit/experimental/ext/events/stores/redis v0.0.0-20260613221610-63a4e4058337 h1:8k0Z9bk+45v8hEi3qa5Ad71frmv/tluCqjdKPUjKuO8=
-github.com/panyam/mcpkit/experimental/ext/events/stores/redis v0.0.0-20260613221610-63a4e4058337/go.mod h1:VRPvxwe9MqZZB8Gr4RArnezK8Va7QBLlPTMGkoiPXCM=
 github.com/panyam/servicekit v0.1.2 h1:2IfSVhgjQonUM6lkqVH6dm0QA700UsJSbASE95lWj+Y=
 github.com/panyam/servicekit v0.1.2/go.mod h1:wk/9hY9Vgl83WuYJt7n4NYPvV6nbxnZwpKpNRIAPoR8=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=

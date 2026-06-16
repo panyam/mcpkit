@@ -11,7 +11,7 @@ replace (
 )
 
 require (
-	github.com/panyam/demokit v0.0.29
+	github.com/panyam/demokit v0.0.30
 	github.com/panyam/mcpkit v0.2.45
 	github.com/panyam/mcpkit/examples/common v0.0.0-00010101000000-000000000000
 )
