@@ -44,6 +44,9 @@ type Provider struct {
 	flushTimer    *time.Timer
 	lastBroadcast time.Time
 	closed        bool
+	draining      bool
+
+	watcher *fsWatcher
 }
 
 type skillEntry struct {
@@ -94,6 +97,16 @@ func NewProvider(opts ...ProviderOption) (*Provider, error) {
 	p := &Provider{cfg: cfg, byURI: map[string]*resourceEntry{}}
 	if err := p.walk(); err != nil {
 		return nil, err
+	}
+	if cfg.fsWatcherEnabled {
+		if cfg.hostRoot == "" {
+			return nil, ErrFSWatcherMissingHostRoot
+		}
+		w, err := newFSWatcher(cfg.hostRoot, cfg.fsWatcherIgnore, cfg.fsWatcherErrHandler)
+		if err != nil {
+			return nil, err
+		}
+		p.watcher = w
 	}
 	return p, nil
 }
@@ -301,6 +314,10 @@ func (p *Provider) RegisterWith(srv *server.Server) {
 		idx.RegisterWith(srv)
 	}
 	srv.UseMiddleware(skillURIValidationMiddleware)
+
+	if p.watcher != nil {
+		p.watcher.start(p)
+	}
 }
 
 // Version returns the Provider's monotonic invalidation counter. The
@@ -388,7 +405,7 @@ func (p *Provider) NotifyChangedEvents(events ...PathChange) error {
 	p.versionMu.Unlock()
 
 	p.notifyMu.Lock()
-	if p.closed {
+	if p.closed || p.draining {
 		p.notifyMu.Unlock()
 		if idx != nil {
 			idx.Invalidate()
@@ -451,21 +468,75 @@ func (p *Provider) Refresh() error {
 	return p.NotifyChangedEvents()
 }
 
-// Close stops any pending broadcast timer and prevents future
-// broadcasts. Idempotent. After Close, the version counter still
-// bumps on NotifyChanged calls and the index cache still invalidates
-// (polling clients continue to see fresh state), but the stateful-wire
-// broadcast goroutine is dormant. Tests and adopters that own the
-// Provider's lifecycle should call Close on shutdown.
+// Close stops any pending broadcast timer, stops the fsnotify Detector
+// goroutine (when WithFSWatcher is in effect) abruptly, and prevents
+// future broadcasts. Idempotent. After Close, the version counter
+// still bumps on NotifyChanged calls and the index cache still
+// invalidates (polling clients continue to see fresh state), but the
+// stateful-wire broadcast goroutine is dormant and any buffered
+// fsnotify events are dropped.
+//
+// Adopters wanting to drain in-flight events through one final flush
+// before stopping should use Shutdown(ctx) instead — Close is
+// process-exit semantics, Shutdown is the graceful path.
 func (p *Provider) Close() error {
 	p.notifyMu.Lock()
-	defer p.notifyMu.Unlock()
 	if p.flushTimer != nil {
 		p.flushTimer.Stop()
 		p.flushTimer = nil
 	}
 	p.closed = true
+	p.draining = true
+	watcher := p.watcher
+	p.notifyMu.Unlock()
+	if watcher != nil {
+		_ = watcher.close()
+	}
 	return nil
+}
+
+// Shutdown is the graceful counterpart to Close: when WithFSWatcher
+// is in effect, signals the Detector goroutine to drain any events
+// already buffered in fsnotify's channel through one final
+// NotifyChangedEvents call before exiting; runs a final flush so the
+// accumulated PathChanges land in one last broadcast; then closes
+// timers and the watcher.
+//
+// Waits for the goroutine to exit or for ctx to cancel, whichever
+// fires first. On ctx cancellation the watcher is still closed
+// cleanly but ctx.Err() is returned so the caller knows the drain
+// did not complete.
+//
+// Idempotent. Calling Shutdown after Close (or vice versa) is a no-op
+// returning nil. Process-restart-friendly: typical use is
+// signal-handler →  ctx, cancel := context.WithTimeout(ctx, 5*time.Second);
+// defer cancel(); provider.Shutdown(ctx).
+func (p *Provider) Shutdown(ctx context.Context) error {
+	p.notifyMu.Lock()
+	if p.closed && !p.draining {
+		p.notifyMu.Unlock()
+		return nil
+	}
+	p.draining = true
+	watcher := p.watcher
+	p.notifyMu.Unlock()
+
+	var werr error
+	if watcher != nil {
+		werr = watcher.shutdown(ctx)
+	}
+
+	p.flush()
+
+	p.notifyMu.Lock()
+	if p.flushTimer != nil {
+		p.flushTimer.Stop()
+		p.flushTimer = nil
+	}
+	p.closed = true
+	p.notifyMu.Unlock()
+
+	return werr
 }
 
 // scheduleFlushLocked sets or resets the flush timer to fire after d.

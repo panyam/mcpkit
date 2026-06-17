@@ -12,6 +12,7 @@ type ProviderOption func(*providerConfig)
 type providerConfig struct {
 	fsys                 fs.FS
 	root                 string
+	hostRoot             string // host filesystem path; populated by WithDirectory, empty for WithFS
 	uriPrefix            []string
 	metaPrefix           string
 	suppressIndex        bool
@@ -21,6 +22,9 @@ type providerConfig struct {
 	archiveMaxBytes      int64
 	coalesceWindow       time.Duration
 	minBroadcastInterval time.Duration
+	fsWatcherEnabled     bool
+	fsWatcherIgnore      []string
+	fsWatcherErrHandler  func(error)
 }
 
 // WithFS supplies the io/fs.FS that the Provider walks for skills. The
@@ -38,10 +42,18 @@ func WithFS(fsys fs.FS) ProviderOption {
 // WithDirectory is sugar for WithFS(os.DirFS(path)). It exists for the
 // common local-directory case so callers do not have to spell out the
 // os.DirFS wrap.
+//
+// Additionally captures path as providerConfig.hostRoot so WithFSWatcher
+// can locate the underlying filesystem for fsnotify. Relative paths are
+// fine — the watcher resolves to absolute at startup. Callers using
+// WithFS instead must arrange their own change-detection (the watcher
+// has no fs.FS-only path; non-os filesystems like embed.FS aren't
+// watchable by construction).
 func WithDirectory(path string) ProviderOption {
 	return func(c *providerConfig) {
 		c.fsys = os.DirFS(path)
 		c.root = "."
+		c.hostRoot = path
 	}
 }
 
@@ -154,6 +166,82 @@ func WithCoalesceWindow(d time.Duration) ProviderOption {
 func WithMinBroadcastInterval(d time.Duration) ProviderOption {
 	return func(c *providerConfig) {
 		c.minBroadcastInterval = d
+	}
+}
+
+// WatcherOption tunes the fsnotify-driven Detector that WithFSWatcher
+// installs. Options are applied to providerConfig at NewProvider time.
+type WatcherOption func(*providerConfig)
+
+// WithFSWatcher enables an fsnotify-driven Detector that watches the
+// Provider's hostRoot (populated by WithDirectory) and feeds change
+// events into Provider.NotifyChangedEvents.
+//
+// Requires WithDirectory — fs.FS implementations like embed.FS and
+// skills.ArchiveFS are read-only by construction and have no host
+// path to watch; NewProvider returns ErrFSWatcherMissingHostRoot when
+// WithFSWatcher is set against such a Provider.
+//
+// Lifecycle:
+//   - NewProvider creates the fsnotify.Watcher and walks the host
+//     directory tree to register watches. Errors on individual
+//     watcher.Add calls (permission denied on a subdir, etc.) are
+//     surfaced via the error handler set by WithFSWatcherErrorHandler
+//     and skipped — one unreadable subdir does not fail construction.
+//   - RegisterWith starts the dispatch goroutine that reads
+//     watcher.Events / watcher.Errors and forwards into the Applier.
+//   - Close stops the goroutine abruptly.
+//   - Shutdown(ctx) drains buffered events through one final flush
+//     before stopping (graceful path).
+//
+// Recursive watching is handled by re-walking on directory-create
+// events; directory removals prune the watch set. Ignore patterns
+// from WithFSWatcherIgnore are applied to both the initial walk and
+// runtime additions.
+//
+// The Detector emits no events for the initial catalog — the state
+// at construction IS the baseline. Bursts of fsnotify events (editor
+// saves typically fire 3-5 events in <50ms) collapse naturally
+// through the Applier's WithCoalesceWindow.
+func WithFSWatcher(opts ...WatcherOption) ProviderOption {
+	return func(c *providerConfig) {
+		c.fsWatcherEnabled = true
+		for _, opt := range opts {
+			opt(c)
+		}
+	}
+}
+
+// WithFSWatcherIgnore appends path-fragment patterns to skip during
+// the fsnotify Detector's directory walk. Any directory whose path
+// (relative to hostRoot) contains one of the patterns as a path
+// segment is not watched, and events for files inside it are
+// suppressed.
+//
+// Default ignore set (always applied): ".git", "node_modules",
+// ".DS_Store". Custom patterns supplement the defaults; pass an empty
+// slice to keep only the defaults.
+//
+// Examples that match: ".git", "node_modules", "vendor".
+// Examples that don't: "*.tmp" (no glob support today; file a follow-up
+// if needed).
+func WithFSWatcherIgnore(patterns ...string) WatcherOption {
+	return func(c *providerConfig) {
+		c.fsWatcherIgnore = append(c.fsWatcherIgnore, patterns...)
+	}
+}
+
+// WithFSWatcherErrorHandler routes runtime fsnotify errors (buffer
+// overflows on Linux, channel-level errors, per-subdir watcher.Add
+// failures during the initial walk) to fn. fn is called from the
+// watcher goroutine; implementations MUST NOT block (use a buffered
+// channel + drain goroutine if heavy logging is required).
+//
+// Default is nil: errors are silently dropped. Production deployments
+// SHOULD wire this to their logger / metrics surface.
+func WithFSWatcherErrorHandler(fn func(error)) WatcherOption {
+	return func(c *providerConfig) {
+		c.fsWatcherErrHandler = fn
 	}
 }
 
