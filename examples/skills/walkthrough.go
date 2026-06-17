@@ -497,6 +497,98 @@ body, _ := c.ReadResource(target.String())`),
 			return nil
 		})
 
+	demo.Section("Cross-source reads (issues #797 + #808)",
+		"`make serve` composes multiple sources into one catalog via `fsutil.NewMountFS`: bundled local skills at the FS root + an `archived/` sub-mount (a `.tar.gz` packed from one bundled skill, auto-wrapped by frontmatter name) + a `github/` sub-mount (fetched from anthropics/skills). The previous read steps exercised the local layer. These two steps probe the sub-mounts so the cross-source story is visible in the demo, not just in resource counts. Both steps gracefully skip when running against `--source=dir` (no sub-mounts present).",
+	)
+
+	demo.Step("Read a skill via the archive sub-mount (proves auto-wrap end-to-end)").
+		Arrow("Host", "Server", "resources/read uri=skill://archived/git-workflow/SKILL.md").
+		DashedArrow("Server", "Host", "text/markdown body (same content as skill://git-workflow/SKILL.md)").
+		Note("`make serve` packs the bundled `git-workflow` skill into a tempfile tar.gz and mounts it under the `archived/` sub-mount. `OpenArchive` auto-wraps the archive's root-level SKILL.md under `git-workflow/` (matching the frontmatter name), so the served URI is `skill://archived/git-workflow/SKILL.md`. Bytes match the local copy — same skill, different transport. Recompute the digest if you want to verify.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":15,"method":"resources/read","params":{"uri":"skill://archived/git-workflow/SKILL.md"}}' \
+  | jq -r '.result.contents[0].text'`).Default(),
+			demokit.MakeVariant("go", "go", `body, _ := c.ReadResource("skill://archived/git-workflow/SKILL.md")
+fmt.Println(body)`),
+		).
+		Run(func(ctx demokit.StepContext) *demokit.StepResult {
+			if c == nil {
+				return nil
+			}
+			body, err := c.ReadResource("skill://archived/git-workflow/SKILL.md")
+			if err != nil {
+				fmt.Printf("    SKIP: %v (run with `make serve` for the multi-source demo)\n", err)
+				return nil
+			}
+			fmt.Printf("    served via archived/ sub-mount (auto-wrapped by frontmatter name):\n")
+			previewBody(body)
+			return nil
+		})
+
+	demo.Step("Discover and read a skill via the github sub-mount").
+		Arrow("Host", "Server", "resources/list (filter for skill://github/...)").
+		Arrow("Host", "Server", "resources/read uri=<first github URI>").
+		DashedArrow("Server", "Host", "content fetched from anthropics/skills at server boot").
+		Note("Robust against changes in the upstream repo: instead of hardcoding a github URI, we enumerate `resources/list`, pick the first entry under the `github/` prefix, and read it. Proves the entire FetchGitHubArchive → MountFS sub-mount → resources/read chain — server reaches out to GitHub at boot, the bytes flow through the same MCP wire as everything else.").
+		VerbatimVariants("Reproduce on the wire",
+			demokit.MakeVariant("curl", "bash", `# Find the first github URI in the catalog.
+GH=$(curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d '{"jsonrpc":"2.0","id":16,"method":"resources/list"}' \
+  | jq -r '.result.resources[].uri' | grep '^skill://github/' | head -1)
+echo "$GH"
+# Read it.
+curl -s -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H "Mcp-Session-Id: $SID" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":17,\"method\":\"resources/read\",\"params\":{\"uri\":\"$GH\"}}" \
+  | jq -r '.result.contents[0].text' | head -20`).Default(),
+			demokit.MakeVariant("go", "go", `defs, _ := c.ListResources(ctx)
+var githubURI string
+for _, d := range defs {
+    if strings.HasPrefix(d.URI, "skill://github/") {
+        githubURI = d.URI
+        break
+    }
+}
+body, _ := c.ReadResource(githubURI)
+fmt.Println(body)`),
+		).
+		Run(func(ctx demokit.StepContext) *demokit.StepResult {
+			if c == nil {
+				return nil
+			}
+			defs, err := c.ListResources(ctx.Ctx)
+			if err != nil {
+				fmt.Printf("    ERROR listing resources: %v\n", err)
+				return nil
+			}
+			var githubURI string
+			for _, d := range defs {
+				if strings.HasPrefix(d.URI, "skill://github/") {
+					githubURI = d.URI
+					break
+				}
+			}
+			if githubURI == "" {
+				fmt.Printf("    SKIP: no skill://github/... resources in the catalog (run with `make serve` and ensure network is available)\n")
+				return nil
+			}
+			fmt.Printf("    discovered: %s\n", githubURI)
+			body, err := c.ReadResource(githubURI)
+			if err != nil {
+				fmt.Printf("    ERROR reading %s: %v\n", githubURI, err)
+				return nil
+			}
+			fmt.Printf("    served via github/ sub-mount (fetched at server boot):\n")
+			previewBody(body)
+			return nil
+		})
+
 	demo.Section("Push-based invalidation (issue #795)",
 		"`skill://index.json` carries `_meta.io.modelcontextprotocol.skills/version` — a monotonic counter the server bumps whenever skill content changes. Stateful clients also receive `notifications/resources/list_changed` when the bump happens. Stateless clients (no persistent push channel) detect the change by polling the index and observing the field. Detectors that drive the bump (fsnotify, webhook, manual sweep) are pluggable; this walkthrough uses a demo-only `_demo/refresh` tool that calls `Provider.Refresh()` directly.",
 	)
