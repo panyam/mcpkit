@@ -135,7 +135,7 @@ func autoWrapByFrontmatter(raw SourceFS, source string) (SourceFS, error) {
 		raw.Close()
 		return nil, fmt.Errorf("skills: archive %q root SKILL.md missing frontmatter name", source)
 	}
-	wrapped, err := fsutil.NewLayered(fsutil.Layer{Prefix: fm.Name, FSys: raw, Closer: raw})
+	wrapped, err := fsutil.NewMountFS(fsutil.Mount{Path: fm.Name, FSys: raw, Closer: raw})
 	if err != nil {
 		raw.Close()
 		return nil, err
@@ -158,22 +158,23 @@ func autoWrapByFrontmatter(raw SourceFS, source string) (SourceFS, error) {
 //     "pdf-processing/" at its root) contributes both directly.
 //
 // Two archives contributing the same root-level entry name error at
-// construction (via fsutil.NewFlat's collision check) — operators
-// see ambiguity immediately rather than silently losing data.
+// construction (via fsutil.NewMountFS's root-collision check) —
+// operators see ambiguity immediately rather than silently losing
+// data.
 //
 // Non-archive files in dir are skipped. Subdirectories are not
 // recursed into; for nested layouts compose multiple OpenArchivesDir
-// calls via fsutil.NewLayered with explicit prefixes.
+// calls via fsutil.NewMountFS with explicit Mount Paths.
 func OpenArchivesDir(dir string) (SourceFS, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("skills: read archives dir %q: %w", dir, err)
 	}
-	var layers []fsutil.Layer
+	var mounts []fsutil.Mount
 	cleanup := func() {
-		for _, l := range layers {
-			if l.Closer != nil {
-				l.Closer.Close()
+		for _, m := range mounts {
+			if m.Closer != nil {
+				m.Closer.Close()
 			}
 		}
 	}
@@ -192,12 +193,14 @@ func OpenArchivesDir(dir string) (SourceFS, error) {
 			cleanup()
 			return nil, fmt.Errorf("skills: open archive %q in dir: %w", path, err)
 		}
-		layers = append(layers, fsutil.Layer{FSys: inner, Closer: inner})
+		// Empty Path = root mount. Multiple root mounts → flat-merge
+		// with collision detection at construction time.
+		mounts = append(mounts, fsutil.Mount{FSys: inner, Closer: inner})
 	}
-	if len(layers) == 0 {
+	if len(mounts) == 0 {
 		return nil, fmt.Errorf("skills: archives dir %q has no recognized archives", dir)
 	}
-	merged, err := fsutil.NewFlat(layers...)
+	merged, err := fsutil.NewMountFS(mounts...)
 	if err != nil {
 		cleanup()
 		return nil, fmt.Errorf("%w: %v", ErrArchivesDirCollision, err)
