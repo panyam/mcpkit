@@ -11,13 +11,26 @@ import "context"
 // RFC 2397 data URIs and pass them as the property's string value.
 const FileInputSchemaKey = "x-mcp-file"
 
+// FileInputTransferMode names a mechanism for delivering a file value to
+// the server. The spec defines two modes: "inline" (the value is an RFC
+// 2397 data URI carrying the bytes) and "upload" (the client uses
+// files/prepareUpload from SEP-2631 and provides the returned file URI).
+// mcpkit currently supports inline only.
+type FileInputTransferMode string
+
+const (
+	FileInputTransferModeInline FileInputTransferMode = "inline"
+	FileInputTransferModeUpload FileInputTransferMode = "upload"
+)
+
 // FileInputDescriptor is the value of the x-mcp-file schema extension
 // keyword (SEP-2356). It tells the client which file types the server
-// will accept and the maximum decoded size in bytes.
+// will accept, the maximum decoded size in bytes, and which transfer
+// modes are permitted.
 //
-// Both fields are optional. An empty descriptor (`{}`) means "any file,
-// any size" — the server still has to validate the payload at the
-// transport boundary.
+// All fields are optional. An empty descriptor (`{}`) means "any file,
+// any size, any supported transfer mode" — the server still has to
+// validate the payload at the transport boundary.
 type FileInputDescriptor struct {
 	// Accept is the list of accepted MIME patterns or file extensions.
 	// Each entry is one of:
@@ -31,6 +44,11 @@ type FileInputDescriptor struct {
 	// MaxSize is the maximum size in bytes of the decoded file payload.
 	// nil means no server-declared limit (the client may still impose its own).
 	MaxSize *int `json:"maxSize,omitempty"`
+
+	// TransferModes restricts which delivery mechanisms the client may use
+	// for the file value. nil or empty means any supported mode is allowed.
+	// When set, the client MUST use one of the listed modes.
+	TransferModes []FileInputTransferMode `json:"transferModes,omitempty"`
 }
 
 // HasFileInputs reports whether the connected client declared the SEP-2356
@@ -173,6 +191,22 @@ func descriptorFromMap(m map[string]any) *FileInputDescriptor {
 		desc.MaxSize = &v
 	case *int:
 		desc.MaxSize = n
+	}
+	switch modes := m["transferModes"].(type) {
+	case []any:
+		desc.TransferModes = make([]FileInputTransferMode, 0, len(modes))
+		for _, mode := range modes {
+			if s, ok := mode.(string); ok {
+				desc.TransferModes = append(desc.TransferModes, FileInputTransferMode(s))
+			}
+		}
+	case []string:
+		desc.TransferModes = make([]FileInputTransferMode, 0, len(modes))
+		for _, s := range modes {
+			desc.TransferModes = append(desc.TransferModes, FileInputTransferMode(s))
+		}
+	case []FileInputTransferMode:
+		desc.TransferModes = append([]FileInputTransferMode(nil), modes...)
 	}
 	return &desc
 }
