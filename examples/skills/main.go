@@ -68,6 +68,8 @@ func serve() {
 		"path for --source=archive or --source=archives-dir")
 	sourceGithub := flag.String("source-github", "",
 		"github spec for --source=github, format owner/repo[@ref][:subdir] (ref defaults to main; subdir is optional)")
+	sourceExtra := flag.String("extra", "",
+		"comma-separated ad-hoc sub-mounts for --source=multi, format prefix:./path (e.g. science:./scienceskills,math:./mathskills)")
 	tel := common.RegisterTelemetryFlags(flag.CommandLine)
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.BoolFlag("--serve"),  // dual-mode dispatch; override demokit's value-form default
@@ -85,7 +87,11 @@ func serve() {
 	}
 	defer shutdown(context.Background())
 
-	srcOpt, sourceLabel, cleanup, err := buildSourceOption(*sourceFlag, *skillsDir, *sourcePath, *sourceGithub)
+	extras, err := parseExtraMounts(*sourceExtra)
+	if err != nil {
+		log.Fatalf("--extra: %v", err)
+	}
+	srcOpt, sourceLabel, cleanup, err := buildSourceOption(*sourceFlag, *skillsDir, *sourcePath, *sourceGithub, extras)
 	if err != nil {
 		log.Fatalf("source: %v", err)
 	}
