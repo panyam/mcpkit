@@ -138,6 +138,9 @@ func TestDetectArchiveFormat(t *testing.T) {
 		{"", []byte{0x50, 0x4B, 0x03, 0x04}, skills.ArchiveFormatZip},
 		{"foo.txt", []byte("plain text"), skills.ArchiveFormatUnknown},
 		{"", nil, skills.ArchiveFormatUnknown},
+		{"foo.tar.bz2", nil, skills.ArchiveFormatTarBz2},
+		{"", []byte{'B', 'Z', 'h', '9'}, skills.ArchiveFormatTarBz2},
+		{"", []byte{'B', 'Z', 'h', '0'}, skills.ArchiveFormatUnknown}, // invalid block-size digit
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -146,6 +149,13 @@ func TestDetectArchiveFormat(t *testing.T) {
 				t.Errorf("DetectArchiveFormat(%q, %v) = %v, want %v", tc.name, tc.buf, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestPackSkill_RejectsTarBz2(t *testing.T) {
+	_, err := skills.PackSkill(os.DirFS("testdata/valid"), "git-workflow", skills.ArchiveFormatTarBz2)
+	if !errors.Is(err, skills.ErrArchiveUnsupportedForPack) {
+		t.Errorf("PackSkill(TarBz2) = %v, want ErrArchiveUnsupportedForPack", err)
 	}
 }
 

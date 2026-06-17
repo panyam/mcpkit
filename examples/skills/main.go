@@ -62,6 +62,12 @@ func serve() {
 		"distribution shape: file (per-resource SKILL.md + supporting files) | archive (one .tar.gz per skill) | zip (one .zip per skill)")
 	skillsDir := flag.String("skills", "skills",
 		"directory of skill bundles to register (default ./skills)")
+	sourceFlag := flag.String("source", "dir",
+		"where to load skills from: dir (default; uses --skills) | archive (single .tar.gz/.zip/.tar.bz2 file) | archives-dir (folder of archives) | github (owner/repo[@ref][:subdir])")
+	sourcePath := flag.String("source-path", "",
+		"path for --source=archive or --source=archives-dir")
+	sourceGithub := flag.String("source-github", "",
+		"github spec for --source=github, format owner/repo[@ref][:subdir] (ref defaults to main; subdir is optional)")
 	tel := common.RegisterTelemetryFlags(flag.CommandLine)
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.BoolFlag("--serve"),  // dual-mode dispatch; override demokit's value-form default
@@ -79,9 +85,14 @@ func serve() {
 	}
 	defer shutdown(context.Background())
 
-	provOpts := []skills.ProviderOption{
-		skills.WithDirectory(*skillsDir),
+	srcOpt, sourceLabel, cleanup, err := buildSourceOption(*sourceFlag, *skillsDir, *sourcePath, *sourceGithub)
+	if err != nil {
+		log.Fatalf("source: %v", err)
 	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+	provOpts := []skills.ProviderOption{srcOpt}
 	switch strings.ToLower(*modeFlag) {
 	case "file":
 		// default
@@ -98,7 +109,7 @@ func serve() {
 		log.Fatalf("skills.NewProvider: %v", err)
 	}
 
-	log.Printf("[skills-demo] mode=%s skills=%s", *modeFlag, *skillsDir)
+	log.Printf("[skills-demo] mode=%s source=%s", *modeFlag, sourceLabel)
 	if err := common.RunServer(common.ServerConfig{
 		Name:           "skills-demo",
 		Addr:           *addr,
