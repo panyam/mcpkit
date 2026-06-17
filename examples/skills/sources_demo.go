@@ -29,10 +29,10 @@ import (
 //   - "archives-dir": skills.OpenArchivesDir(sourcePath) → WithFS
 //   - "github": skills.FetchGitHubArchive(...) → WithFS, spec format
 //     "owner/repo[@ref][:subdir]" (ref defaults to "main")
-//   - "multi": layered local + archive + github into one fs.FS via
-//     fsutil.NewLayered, demonstrating the full source-adapter
-//     composition story in one server run
-func buildSourceOption(mode, skillsDir, sourcePath, githubSpec string) (skills.ProviderOption, string, func(), error) {
+//   - "multi": local at FS root + archive + github sub-mounts via
+//     fsutil.NewMountFS. Operators add ad-hoc sub-mounts via the
+//     --extra prefix:./path[,prefix:./path...] flag.
+func buildSourceOption(mode, skillsDir, sourcePath, githubSpec string, extras []extraMount) (skills.ProviderOption, string, func(), error) {
 	switch strings.ToLower(mode) {
 	case "", "dir":
 		return skills.WithDirectory(skillsDir), fmt.Sprintf("dir=%s", skillsDir), nil, nil
@@ -74,21 +74,28 @@ func buildSourceOption(mode, skillsDir, sourcePath, githubSpec string) (skills.P
 		}
 		return skills.WithFS(src), fmt.Sprintf("github=%s/%s@%s subdir=%s", owner, repo, ref, subdir), func() { src.Close() }, nil
 	case "multi":
-		return buildMultiSource(skillsDir)
+		return buildMultiSource(skillsDir, extras)
 	}
 	return nil, "", nil, fmt.Errorf("invalid --source: %q (want dir|archive|archives-dir|github|multi)", mode)
 }
 
-// buildMultiSource layers three demo sources into one Provider:
-//   - "local/": the bundled skills directory (always present)
-//   - "archived/": a single archive packed from one bundled skill
-//   - "github/": fetched from anthropics/skills (best-effort; soft-fail
-//     on network errors so the demo still runs offline)
+// buildMultiSource composes three demo sources into one Provider via
+// fsutil.NewMountFS:
+//   - bundled local skills mounted at the FS root (no Path) so they
+//     resolve at skill://<skill-name>/... (matches the walkthrough's
+//     hardcoded URIs)
+//   - "archived/" sub-mount: a single archive packed from one bundled
+//     skill, exercising the archive-file source
+//   - "github/" sub-mount: fetched from anthropics/skills (best-effort;
+//     soft-fail on network errors so the demo still runs offline)
 //
-// Demonstrates that fsutil.NewLayered composes any fs.FS — local +
-// archive + remote — into one catalog the Provider walks unchanged.
-func buildMultiSource(skillsDir string) (skills.ProviderOption, string, func(), error) {
-	var layers []fsutil.Layer
+// Per-source layers (--extra prefix:path) are appended as additional
+// sub-mounts under their declared prefixes.
+//
+// Demonstrates that MountFS composes any fs.FS — local + archive +
+// remote — into one catalog the Provider walks unchanged.
+func buildMultiSource(skillsDir string, extras []extraMount) (skills.ProviderOption, string, func(), error) {
+	var mounts []fsutil.Mount
 	var closers []io.Closer
 	cleanup := func() {
 		for _, c := range closers {
@@ -96,56 +103,83 @@ func buildMultiSource(skillsDir string) (skills.ProviderOption, string, func(), 
 		}
 	}
 
-	// Layer 1: local bundled skills.
-	layers = append(layers, fsutil.Layer{Prefix: "local", FSys: os.DirFS(skillsDir)})
+	// Root mount: bundled local skills. Empty Path = mounted at FS
+	// root so URIs surface as skill://<skill-name>/SKILL.md.
+	mounts = append(mounts, fsutil.Mount{FSys: os.DirFS(skillsDir)})
+	labels := []string{"local"}
 
-	// Layer 2: pack one skill into a tempfile archive and serve that
-	// to exercise the archive-file source. Removed when cleanup runs.
+	// Sub-mount: archived/. Best-effort.
 	archivePath, err := stageDemoArchive(skillsDir, "git-workflow")
 	if err != nil {
-		log.Printf("[skills-demo] multi: skipping archive layer: %v", err)
+		log.Printf("[skills-demo] multi: skipping archive sub-mount: %v", err)
 	} else {
 		closers = append(closers, removeOnClose{path: archivePath})
 		arc, err := skills.OpenArchive(archivePath)
 		if err != nil {
-			log.Printf("[skills-demo] multi: open archive layer: %v", err)
+			log.Printf("[skills-demo] multi: open archive sub-mount: %v", err)
 		} else {
-			closers = append(closers, arc)
-			layers = append(layers, fsutil.Layer{Prefix: "archived", FSys: arc, Closer: arc})
+			mounts = append(mounts, fsutil.Mount{Path: "archived", FSys: arc, Closer: arc})
+			labels = append(labels, "archived")
 		}
 	}
 
-	// Layer 3: GitHub-fetched (best-effort).
+	// Sub-mount: github/. Best-effort.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	gh, err := skills.FetchGitHubArchive(ctx, "anthropics", "skills", "main",
 		skills.WithGitHubSubdir("skills"))
 	if err != nil {
-		log.Printf("[skills-demo] multi: skipping github layer: %v", err)
+		log.Printf("[skills-demo] multi: skipping github sub-mount: %v", err)
 	} else {
-		closers = append(closers, gh)
-		layers = append(layers, fsutil.Layer{Prefix: "github", FSys: gh, Closer: gh})
+		mounts = append(mounts, fsutil.Mount{Path: "github", FSys: gh, Closer: gh})
+		labels = append(labels, "github")
 	}
 
-	if len(layers) == 0 {
-		cleanup()
-		return nil, "", nil, fmt.Errorf("multi: no sources loaded")
+	// Operator-declared extras (--extra prefix:./path).
+	for _, ex := range extras {
+		mounts = append(mounts, fsutil.Mount{Path: ex.prefix, FSys: os.DirFS(ex.path)})
+		labels = append(labels, ex.prefix+"="+ex.path)
 	}
 
-	composed, err := fsutil.NewLayered(layers...)
+	composed, err := fsutil.NewMountFS(mounts...)
 	if err != nil {
 		cleanup()
 		return nil, "", nil, err
 	}
-	// Compose every layer's closer through the LayeredFS lifecycle.
+	// Compose every mount's closer through the MountFS lifecycle.
 	closers = []io.Closer{composed}
 
-	prefixes := make([]string, 0, len(layers))
-	for _, l := range layers {
-		prefixes = append(prefixes, l.Prefix)
-	}
-	label := fmt.Sprintf("multi=[%s]", strings.Join(prefixes, ","))
+	label := fmt.Sprintf("multi=[%s]", strings.Join(labels, ","))
 	return skills.WithFS(composed), label, cleanup, nil
+}
+
+// extraMount is one --extra prefix:./path declaration.
+type extraMount struct {
+	prefix string
+	path   string
+}
+
+// parseExtraMounts accepts comma-separated prefix:path pairs (e.g.
+// "science:./scienceskills,math:./mathskills") and returns the parsed
+// list. Empty input returns nil. Whitespace around tokens is trimmed.
+func parseExtraMounts(spec string) ([]extraMount, error) {
+	spec = strings.TrimSpace(spec)
+	if spec == "" {
+		return nil, nil
+	}
+	var out []extraMount
+	for _, tok := range strings.Split(spec, ",") {
+		tok = strings.TrimSpace(tok)
+		if tok == "" {
+			continue
+		}
+		i := strings.Index(tok, ":")
+		if i < 1 || i == len(tok)-1 {
+			return nil, fmt.Errorf("invalid --extra token %q: want prefix:./path", tok)
+		}
+		out = append(out, extraMount{prefix: tok[:i], path: tok[i+1:]})
+	}
+	return out, nil
 }
 
 // stageDemoArchive packs one bundled skill via PackSkill into a
