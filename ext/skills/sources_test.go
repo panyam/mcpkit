@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,8 +16,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/panyam/mcpkit/client"
+	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/ext/skills"
 	"github.com/panyam/mcpkit/ext/skills/fsutil"
+	"github.com/panyam/mcpkit/server"
 )
 
 func TestOpenArchive_TarGz_AutoWrapsByFrontmatterName(t *testing.T) {
@@ -289,6 +293,59 @@ func TestFetchGitHubArchive_AutoSubsTopLevel(t *testing.T) {
 	// test covers the auto-Sub mechanism via the building blocks.
 }
 
+// --- Cross-source resource-read tests (multi-source MountFS) ---
+//
+// These drive the full path: MountFS composition → Provider → MCP
+// resources/read over httptest. Three sources are layered:
+//   - "local" at the MountFS root (bundled testdata)
+//   - "archived" sub-mount (a PackSkill output, auto-wrapped)
+//   - "github" sub-mount (httptest-served tarball mimicking github's
+//     <repo>-<ref>/skills/... layout)
+// Each test reads a SKILL.md from one source and asserts the
+// frontmatter name in the body matches expectations.
+
+func TestMultiSource_LocalRootResolves(t *testing.T) {
+	c, ts := bootMultiSourceServer(t)
+	defer ts.Close()
+	defer c.Close()
+
+	body, err := c.ReadResource("skill://pdf-processing/SKILL.md")
+	if err != nil {
+		t.Fatalf("read local root URI: %v", err)
+	}
+	if !strings.Contains(body, "name: pdf-processing") {
+		t.Errorf("local root SKILL.md missing expected frontmatter: %q", body)
+	}
+}
+
+func TestMultiSource_ArchivedSubMountResolves(t *testing.T) {
+	c, ts := bootMultiSourceServer(t)
+	defer ts.Close()
+	defer c.Close()
+
+	body, err := c.ReadResource("skill://archived/git-workflow/SKILL.md")
+	if err != nil {
+		t.Fatalf("read archived sub-mount URI: %v", err)
+	}
+	if !strings.Contains(body, "name: git-workflow") {
+		t.Errorf("archived SKILL.md missing expected frontmatter: %q", body)
+	}
+}
+
+func TestMultiSource_GithubSubMountResolves(t *testing.T) {
+	c, ts := bootMultiSourceServer(t)
+	defer ts.Close()
+	defer c.Close()
+
+	body, err := c.ReadResource("skill://github/web-scraper/SKILL.md")
+	if err != nil {
+		t.Fatalf("read github sub-mount URI: %v", err)
+	}
+	if !strings.Contains(body, "name: web-scraper") {
+		t.Errorf("github SKILL.md missing expected frontmatter: %q", body)
+	}
+}
+
 // --- Auto-wrap × prefix resolution matrix ---
 //
 // The four input shapes that matter for Provider integration:
@@ -462,6 +519,93 @@ func TestOpenArchivesDir_RejectsCollision(t *testing.T) {
 	}
 }
 
+// bootMultiSourceServer constructs a 3-source MountFS (local at root,
+// archived sub-mount, github sub-mount served from a httptest fixture)
+// and returns a connected client + the underlying httptest.Server for
+// the github layer (cleanup via Close on both).
+//
+// The github layer is httptest-served to keep the test hermetic (no
+// real network), but goes through the real FetchGitHubArchive code
+// path by hand-constructing a FetchArchive against the test server's
+// URL — the URL-construction side of FetchGitHubArchive is exercised
+// separately in TestFetchGitHubArchive_AutoSubsTopLevel.
+func bootMultiSourceServer(t *testing.T) (*client.Client, *httptest.Server) {
+	t.Helper()
+	srv := server.NewServer(core.ServerInfo{Name: "skills-multi-test", Version: "0.0.1"})
+
+	// Local layer: bundled testdata/valid.
+	localFS := os.DirFS("testdata/valid")
+
+	// Archive layer: pack git-workflow into a tar.gz, open via OpenArchive
+	// (auto-wraps under "git-workflow/").
+	archivePath := writeTempArchive(t, mustPackSkill(t, "testdata/valid", "git-workflow", skills.ArchiveFormatTarGz), ".tar.gz")
+	archiveFS, err := skills.OpenArchive(archivePath)
+	if err != nil {
+		t.Fatalf("OpenArchive: %v", err)
+	}
+
+	// Github layer: build a tarball mimicking github's <repo>-<ref>/
+	// top-level dir layout, served via httptest. FetchArchive against
+	// this URL exercises the same fetch + auto-Sub code path
+	// FetchGitHubArchive uses internally.
+	githubFixture := buildGitHubFixture(t, "skills-main", map[string]string{
+		"web-scraper/SKILL.md": "---\nname: web-scraper\ndescription: Scrape stuff\n---\n",
+	})
+	ghServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/gzip")
+		w.Write(githubFixture)
+	}))
+	rawGH, err := skills.FetchArchive(context.Background(), ghServer.URL+"/foo.tar.gz")
+	if err != nil {
+		ghServer.Close()
+		t.Fatalf("FetchArchive github fixture: %v", err)
+	}
+	githubFS, err := fs.Sub(rawGH, "skills-main")
+	if err != nil {
+		ghServer.Close()
+		t.Fatalf("fs.Sub github fixture: %v", err)
+	}
+	// Wrap fs.Sub'd FS in a SourceFS with a closer that closes the parent.
+	githubSource := &subSourceFS{FS: githubFS, closer: rawGH}
+
+	composed, err := fsutil.NewMountFS(
+		fsutil.Mount{FSys: localFS},                                                    // root
+		fsutil.Mount{Path: "archived", FSys: archiveFS, Closer: archiveFS},
+		fsutil.Mount{Path: "github", FSys: githubSource, Closer: githubSource},
+	)
+	if err != nil {
+		t.Fatalf("NewMountFS: %v", err)
+	}
+	t.Cleanup(func() { composed.Close() })
+
+	p, err := skills.NewProvider(skills.WithFS(composed))
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	p.RegisterWith(srv)
+
+	handler := srv.Handler(server.WithStreamableHTTP(true))
+	ts := httptest.NewServer(handler)
+
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "multi-test", Version: "0.0.1"})
+	if err := c.Connect(); err != nil {
+		ts.Close()
+		ghServer.Close()
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { ghServer.Close() })
+	return c, ts
+}
+
+// subSourceFS pairs an fs.Sub'd fs.FS with an explicit closer for
+// SourceFS conformance.
+type subSourceFS struct {
+	fs.FS
+	closer io.Closer
+}
+
+func (s *subSourceFS) Close() error { return s.closer.Close() }
+
 // --- test helpers ---
 
 func assertFilePresent(t *testing.T, fsys skills.SourceFS, name string) {
@@ -502,11 +646,11 @@ func assertProviderServes(t *testing.T, fsys skills.SourceFS, wantURIs []string)
 	}
 }
 
-// fsutilLayer wraps a SourceFS under a single prefix layer for the
+// fsutilLayer wraps a SourceFS under a single sub-mount Path for the
 // "what happens under a prefix" tests. Returns a SourceFS so callers
 // can defer Close uniformly.
 func fsutilLayer(prefix string, inner skills.SourceFS) (skills.SourceFS, error) {
-	return fsutil.NewLayered(fsutil.Layer{Prefix: prefix, FSys: inner, Closer: inner})
+	return fsutil.NewMountFS(fsutil.Mount{Path: prefix, FSys: inner, Closer: inner})
 }
 
 // buildTarGzFixture constructs a tar.gz where the supplied entries
