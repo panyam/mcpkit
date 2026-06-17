@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"bytes"
+	"compress/bzip2"
 	"compress/gzip"
 	"errors"
 	"fmt"
@@ -29,27 +30,41 @@ const (
 	ArchiveFormatTarGz
 	// ArchiveFormatZip is the zip format.
 	ArchiveFormatZip
+	// ArchiveFormatTarBz2 is the bzip2-compressed tar format. Read-only:
+	// ext/skills consumes .tar.bz2 archives via NewArchiveFS / OpenArchive
+	// but PackSkill rejects it because bzip2 compression is slow and
+	// rarely justified for skill-sized payloads. Adopters that need to
+	// produce tar.bz2 should do so externally (e.g., system tar) and pass
+	// the bytes to NewArchiveFS.
+	ArchiveFormatTarBz2
 )
 
 // Suffix returns the URL/file-name suffix that identifies the format
-// (".tar.gz" or ".zip"). Returns the empty string for ArchiveFormatUnknown.
+// (".tar.gz", ".zip", or ".tar.bz2"). Returns the empty string for
+// ArchiveFormatUnknown.
 func (f ArchiveFormat) Suffix() string {
 	switch f {
 	case ArchiveFormatTarGz:
 		return ArchiveTarGz
 	case ArchiveFormatZip:
 		return ArchiveZip
+	case ArchiveFormatTarBz2:
+		return ArchiveTarBz2
 	}
 	return ""
 }
 
-// MimeType returns the SEP-2640 MIME type for the format.
+// MimeType returns the MIME type for the format. tar.bz2 uses
+// application/x-bzip2 (the de facto convention; the SEP only formally
+// names tar.gz and zip).
 func (f ArchiveFormat) MimeType() string {
 	switch f {
 	case ArchiveFormatTarGz:
 		return "application/gzip"
 	case ArchiveFormatZip:
 		return "application/zip"
+	case ArchiveFormatTarBz2:
+		return "application/x-bzip2"
 	}
 	return ""
 }
@@ -61,6 +76,8 @@ func (f ArchiveFormat) String() string {
 		return "tar.gz"
 	case ArchiveFormatZip:
 		return "zip"
+	case ArchiveFormatTarBz2:
+		return "tar.bz2"
 	}
 	return "unknown"
 }
@@ -95,6 +112,32 @@ var (
 	// ErrArchiveUnknownFormat is returned when neither the supplied
 	// format nor the inferred magic bytes identify a supported format.
 	ErrArchiveUnknownFormat = errors.New("skills: unknown archive format")
+
+	// ErrArchiveUnsupportedForPack is returned by PackSkill when the
+	// requested format is supported for reading but not for writing.
+	// Currently fires for ArchiveFormatTarBz2 — bzip2 compression is slow
+	// and rarely justified for skill-sized payloads; adopters that need
+	// to produce tar.bz2 should do so externally (system tar, a CI step,
+	// etc.) and pass the bytes to NewArchiveFS for read-side use.
+	ErrArchiveUnsupportedForPack = errors.New("skills: archive format is read-only (not supported by PackSkill)")
+
+	// ErrArchiveDownloadFailed is returned by FetchArchive when the
+	// HTTP fetch fails — non-2xx status, transport error, etc. Wraps
+	// the underlying cause.
+	ErrArchiveDownloadFailed = errors.New("skills: archive download failed")
+
+	// ErrArchiveExceedsMaxBytes is returned by FetchArchive when the
+	// response body exceeds the configured WithHTTPMaxBytes cap (or the
+	// default DefaultArchiveMaxBytes). The stream is cut off as soon as
+	// the cap is crossed; no partial archive is returned.
+	ErrArchiveExceedsMaxBytes = errors.New("skills: archive exceeds max bytes cap")
+
+	// ErrArchivesDirCollision is returned by OpenArchivesDir when the
+	// WithFlatLayer option is set and two archives in the directory
+	// would map files to the same path. Layered mode (the default)
+	// scopes each archive under its basename, so collisions are
+	// impossible there.
+	ErrArchivesDirCollision = errors.New("skills: archives-dir flat-layer collision")
 )
 
 // DetectArchiveFormat infers an ArchiveFormat from a URL or filename
@@ -111,6 +154,8 @@ func DetectArchiveFormat(name string, peek []byte) ArchiveFormat {
 		return ArchiveFormatTarGz
 	case strings.HasSuffix(name, ArchiveZip):
 		return ArchiveFormatZip
+	case strings.HasSuffix(name, ArchiveTarBz2):
+		return ArchiveFormatTarBz2
 	}
 	if len(peek) >= 4 {
 		if peek[0] == 0x1F && peek[1] == 0x8B {
@@ -118,6 +163,10 @@ func DetectArchiveFormat(name string, peek []byte) ArchiveFormat {
 		}
 		if peek[0] == 0x50 && peek[1] == 0x4B && peek[2] == 0x03 && peek[3] == 0x04 {
 			return ArchiveFormatZip
+		}
+		// bzip2 magic: "BZh" + ASCII block-size digit ('1'..'9').
+		if peek[0] == 'B' && peek[1] == 'Z' && peek[2] == 'h' && peek[3] >= '1' && peek[3] <= '9' {
+			return ArchiveFormatTarBz2
 		}
 	}
 	return ArchiveFormatUnknown
@@ -156,6 +205,8 @@ func PackSkill(fsys fs.FS, skillDir string, format ArchiveFormat) ([]byte, error
 		if err := writeZip(&buf, fsys, skillDir, files); err != nil {
 			return nil, err
 		}
+	case ArchiveFormatTarBz2:
+		return nil, fmt.Errorf("%w: %s", ErrArchiveUnsupportedForPack, format)
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrArchiveUnknownFormat, format)
 	}
@@ -337,6 +388,8 @@ func UnpackBytes(data []byte, format ArchiveFormat, maxBytes int64) ([]UnpackedE
 		return unpackTarGz(data, maxBytes)
 	case ArchiveFormatZip:
 		return unpackZip(data, maxBytes)
+	case ArchiveFormatTarBz2:
+		return unpackTarBz2(data, maxBytes)
 	}
 	return nil, fmt.Errorf("%w", ErrArchiveUnknownFormat)
 }
@@ -347,10 +400,23 @@ func unpackTarGz(data []byte, maxBytes int64) ([]UnpackedEntry, error) {
 		return nil, fmt.Errorf("skills: gunzip: %w", err)
 	}
 	defer gz.Close()
+	return unpackTarStream(gz, maxBytes)
+}
 
+func unpackTarBz2(data []byte, maxBytes int64) ([]UnpackedEntry, error) {
+	// compress/bzip2 (stdlib) only ships a reader — sufficient for our
+	// read-only support. PackSkill rejects ArchiveFormatTarBz2 to keep
+	// the asymmetry honest.
+	return unpackTarStream(bzip2.NewReader(bytes.NewReader(data)), maxBytes)
+}
+
+// unpackTarStream walks any tar reader regardless of compression layer.
+// Shared between unpackTarGz and unpackTarBz2 so format-specific
+// behavior stays at the decompressor seam.
+func unpackTarStream(r io.Reader, maxBytes int64) ([]UnpackedEntry, error) {
 	var entries []UnpackedEntry
 	var total int64
-	tr := tar.NewReader(gz)
+	tr := tar.NewReader(r)
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
