@@ -65,6 +65,14 @@ func serve() {
 		"directory of skill bundles to register (default ./skills)")
 	watch := flag.Bool("watch", false,
 		"enable fsnotify-driven push invalidation (skills.WithFSWatcher); pairs with coalesce window to suppress editor-save bursts")
+	sourceFlag := flag.String("source", "dir",
+		"where to load skills from: dir (default; uses --skills) | archive (single .tar.gz/.zip/.tar.bz2 file) | archives-dir (folder of archives) | github (owner/repo[@ref][:subdir])")
+	sourcePath := flag.String("source-path", "",
+		"path for --source=archive or --source=archives-dir")
+	sourceGithub := flag.String("source-github", "",
+		"github spec for --source=github, format owner/repo[@ref][:subdir] (ref defaults to main; subdir is optional)")
+	sourceExtra := flag.String("extra", "",
+		"comma-separated ad-hoc sub-mounts for --source=multi, format prefix:./path (e.g. science:./scienceskills,math:./mathskills)")
 	tel := common.RegisterTelemetryFlags(flag.CommandLine)
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.BoolFlag("--serve"),  // dual-mode dispatch; override demokit's value-form default
@@ -82,9 +90,18 @@ func serve() {
 	}
 	defer shutdown(context.Background())
 
-	provOpts := []skills.ProviderOption{
-		skills.WithDirectory(*skillsDir),
+	extras, err := parseExtraMounts(*sourceExtra)
+	if err != nil {
+		log.Fatalf("--extra: %v", err)
 	}
+	srcOpt, sourceLabel, cleanup, err := buildSourceOption(*sourceFlag, *skillsDir, *sourcePath, *sourceGithub, extras)
+	if err != nil {
+		log.Fatalf("source: %v", err)
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+	provOpts := []skills.ProviderOption{srcOpt}
 	if *watch {
 		provOpts = append(provOpts,
 			skills.WithFSWatcher(skills.WithFSWatcherErrorHandler(func(err error) {
@@ -109,7 +126,7 @@ func serve() {
 		log.Fatalf("skills.NewProvider: %v", err)
 	}
 
-	log.Printf("[skills-demo] mode=%s skills=%s watch=%v", *modeFlag, *skillsDir, *watch)
+	log.Printf("[skills-demo] mode=%s source=%s watch=%v", *modeFlag, sourceLabel, *watch)
 	if err := common.RunServer(common.ServerConfig{
 		Name:           "skills-demo",
 		Addr:           *addr,
