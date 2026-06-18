@@ -12,21 +12,23 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	conc "github.com/panyam/gocurrent"
 	mcpcore "github.com/panyam/mcpkit/core"
-	"github.com/panyam/oneauth/apiauth"
 	oacore "github.com/panyam/oneauth/core"
 	"github.com/panyam/oneauth/keys"
 	"github.com/panyam/oneauth/utils"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
-// JWTValidator validates MCP requests using JWT Bearer tokens.
-// It implements mcpcore.AuthValidator and mcpmcpcore.ClaimsProvider by wrapping
-// oneauth's APIMiddleware for JWKS-based JWT signature verification, and
-// APIAuth for issuer/audience/scope checks.
+// JWTValidator validates MCP requests using JWT Bearer tokens. It
+// resolves verification keys from a JWKS endpoint by kid and applies
+// issuer / audience / scope checks before stamping the claims on the
+// active dispatch span.
 //
-// Uses APIMiddleware (not APIAuth.ValidateAccessTokenFull) because the middleware
-// supports kid-based key lookup from a KeyStore (including JWKSKeyStore), while
-// APIAuth's jwtKeyFunc only supports fixed symmetric/asymmetric keys.
+// We resolve keys + verify the JWT directly here (rather than going
+// through oneauth's TokenValidator) because the validation surface
+// MCP wants is narrow and kid-based: a single JWKS, a fixed expected
+// issuer + audience, and the scope-array vs space-delimited-string
+// fallback Keycloak emits. The oneauth dependency stays scoped to
+// the JWKS key store + utility helpers.
 //
 // Usage:
 //
@@ -38,8 +40,9 @@ import (
 //	})
 //	srv := mcpcore.NewServer(info, core.WithAuth(validator))
 type JWTValidator struct {
-	auth *apiauth.APIAuth
-	ks   *keys.JWKSKeyStore
+	issuer   string
+	audience string
+	ks       *keys.JWKSKeyStore
 
 	// ResourceMetadataURL is included in WWW-Authenticate headers on 401 responses.
 	ResourceMetadataURL string
@@ -150,19 +153,14 @@ func NewJWTValidator(cfg JWTConfig) *JWTValidator {
 	}
 	ks := keys.NewJWKSKeyStore(cfg.JWKSURL, jwksOpts...)
 
-	auth := &apiauth.APIAuth{
-		JWTIssuer:   cfg.Issuer,
-		JWTAudience: cfg.Audience,
-	}
-	auth.ClientKeyStore = ks
-
 	tp := cfg.TracerProvider
 	if tp == nil {
 		tp = mcpcore.NoopTracerProvider{}
 	}
 
 	return &JWTValidator{
-		auth:                auth,
+		issuer:              cfg.Issuer,
+		audience:            cfg.Audience,
 		ks:                  ks,
 		ResourceMetadataURL: cfg.ResourceMetadataURL,
 		RequiredScopes:      cfg.RequiredScopes,
@@ -224,28 +222,28 @@ func (v *JWTValidator) Validate(r *http.Request) error {
 	}
 
 	// Verify issuer
-	if v.auth.JWTIssuer != "" {
-		if iss, _ := mapClaims["iss"].(string); iss != v.auth.JWTIssuer {
+	if v.issuer != "" {
+		if iss, _ := mapClaims["iss"].(string); iss != v.issuer {
 			return v.unauthorized("invalid issuer")
 		}
 	}
 
 	// Verify audience (RFC 8707 resource indicator)
-	if v.auth.JWTAudience != "" {
+	if v.audience != "" {
 		audOK := false
 		switch aud := mapClaims["aud"].(type) {
 		case string:
-			audOK = aud == v.auth.JWTAudience
+			audOK = aud == v.audience
 		case []any:
 			for _, a := range aud {
-				if s, ok := a.(string); ok && s == v.auth.JWTAudience {
+				if s, ok := a.(string); ok && s == v.audience {
 					audOK = true
 					break
 				}
 			}
 		}
 		if !audOK {
-			return v.unauthorized(fmt.Sprintf("invalid audience: expected %q", v.auth.JWTAudience))
+			return v.unauthorized(fmt.Sprintf("invalid audience: expected %q", v.audience))
 		}
 	}
 
@@ -302,11 +300,11 @@ func (v *JWTValidator) Validate(r *http.Request) error {
 		Scopes:    scopes,
 		Extra:     customClaims,
 	}
-	if v.auth.JWTIssuer != "" {
-		claims.Issuer = v.auth.JWTIssuer
+	if v.issuer != "" {
+		claims.Issuer = v.issuer
 	}
-	if v.auth.JWTAudience != "" {
-		claims.Audience = []string{v.auth.JWTAudience}
+	if v.audience != "" {
+		claims.Audience = []string{v.audience}
 	}
 
 	// Stamp the resolved principal info on the active dispatch span

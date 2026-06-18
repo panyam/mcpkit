@@ -55,6 +55,13 @@ type Env struct {
 	Validator *auth.JWTValidator
 	Scopes    []string
 
+	// audience is the `aud` claim value examples want minted into
+	// their tokens. It is also what the AS validator + issuer read on
+	// every mint / validate via the AudienceFunc closure handed to
+	// testutil. Set once by NewValidator before any tokens are minted
+	// — the call sites are synchronous so plain field access is safe.
+	audience string
+
 	// upstreamKey is the RSA private key for the synthetic
 	// UpstreamIdpIssuer the fixture trusts. Used by MintUpstreamAssertion
 	// to sign assertions for the conformance suite's RFC 7523 / RFC 8693
@@ -63,7 +70,9 @@ type Env struct {
 }
 
 // NewEnv creates an in-process authorization server with JWKS + token endpoint.
-// Call SetAudience(url) after the MCP server starts to bind tokens to the server URL.
+// Call NewValidator(audience, ...) after the MCP server starts to bind
+// tokens to the server URL — the AS reads the audience on every mint
+// + validate via the AudienceFunc closure plumbed below.
 //
 // The fixture advertises RFC 9207 (iss parameter) and the RFC 7523 §2.1
 // jwt-bearer + RFC 8693 token-exchange grants by default — this is what
@@ -80,9 +89,11 @@ func NewEnv(scopes []string) *Env {
 		log.Fatal(err)
 	}
 
+	env := &Env{Scopes: scopes, upstreamKey: upstreamKey}
 	as, err := testutil.NewAuthServer(
 		testutil.WithScopes(scopes),
 		testutil.WithIssParameterSupported(true),
+		testutil.WithAudienceFunc(env.getAudience),
 		testutil.WithTrustedAssertionIssuers([]apiauth.TrustedAssertionIssuer{{
 			Issuer:             UpstreamIdpIssuer,
 			PublicKey:          &upstreamKey.PublicKey,
@@ -92,7 +103,15 @@ func NewEnv(scopes []string) *Env {
 	if err != nil {
 		log.Fatal(err)
 	}
-	return &Env{AS: as, Scopes: scopes, upstreamKey: upstreamKey}
+	env.AS = as
+	return env
+}
+
+// getAudience is the closure handed to testutil.WithAudienceFunc. The
+// AS validator + issuer call it on every mint and every validation.
+// Returns "" until NewValidator binds the audience.
+func (e *Env) getAudience() string {
+	return e.audience
 }
 
 // NewValidator creates a JWTValidator pointed at the AS's JWKS.
@@ -100,7 +119,7 @@ func NewEnv(scopes []string) *Env {
 // Optional ValidatorOption args plumb tracing providers through —
 // see WithMCPTracerProvider / WithOneauthTracerProvider.
 func (e *Env) NewValidator(audience string, opts ...ValidatorOption) *auth.JWTValidator {
-	e.AS.APIAuth.JWTAudience = audience
+	e.audience = audience
 	cfg := auth.JWTConfig{
 		JWKSURL:   e.AS.JWKSURL(),
 		Issuer:    e.AS.Issuer(),
@@ -141,7 +160,7 @@ func (e *Env) MintUpstreamAssertion(subject string) string {
 	claims := jwt.MapClaims{
 		"iss": UpstreamIdpIssuer,
 		"sub": subject,
-		"aud": e.AS.APIAuth.JWTAudience,
+		"aud": e.audience,
 		"iat": now.Unix(),
 		"exp": now.Add(5 * time.Minute).Unix(),
 	}
@@ -159,8 +178,8 @@ func (e *Env) MintToken(subject string, scopes []string) string {
 	claims := jwt.MapClaims{
 		"sub": subject,
 	}
-	if e.AS.APIAuth.JWTAudience != "" {
-		claims["aud"] = e.AS.APIAuth.JWTAudience
+	if e.audience != "" {
+		claims["aud"] = e.audience
 	}
 	if len(scopes) > 0 {
 		claims["scope"] = strings.Join(scopes, " ")
@@ -183,8 +202,8 @@ func (e *Env) MintExpiredToken(subject string, scopes []string) string {
 		"iat": now.Add(-2 * time.Hour).Unix(),
 		"exp": now.Add(-1 * time.Hour).Unix(),
 	}
-	if e.AS.APIAuth.JWTAudience != "" {
-		claims["aud"] = e.AS.APIAuth.JWTAudience
+	if e.audience != "" {
+		claims["aud"] = e.audience
 	}
 	if len(scopes) > 0 {
 		claims["scope"] = strings.Join(scopes, " ")
@@ -224,8 +243,8 @@ func (e *Env) MintWrongIssuerToken(subject string, scopes []string) string {
 		"sub": subject,
 		"iss": "https://wrong-issuer.example.invalid",
 	}
-	if e.AS.APIAuth.JWTAudience != "" {
-		claims["aud"] = e.AS.APIAuth.JWTAudience
+	if e.audience != "" {
+		claims["aud"] = e.audience
 	}
 	if len(scopes) > 0 {
 		claims["scope"] = strings.Join(scopes, " ")

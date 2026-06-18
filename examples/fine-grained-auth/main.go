@@ -838,14 +838,10 @@ func startInProcessAS() (*inProcessAS, error) {
 		return nil, fmt.Errorf("register AS key: %w", err)
 	}
 
-	// AS components.
+	// AS components. OneAuth's token issuer snapshots the `iss` URL at
+	// construction time, so we postpone building it until httptest has
+	// assigned the server URL (mirrors testutil.NewTestAuthServer).
 	registrar := admin.NewAppRegistrar(ks, admin.NewNoAuth())
-	apiAuth := &apiauth.APIAuth{
-		JWTSigningAlg:  "RS256",
-		JWTSigningKey:  privKey,
-		JWTVerifyKey:   &privKey.PublicKey,
-		ClientKeyStore: ks,
-	}
 	jwksHandler := &keys.JWKSHandler{KeyStore: ks}
 
 	// metadataMu guards lazy initialization of asMetadataHandler with the AS
@@ -854,7 +850,6 @@ func startInProcessAS() (*inProcessAS, error) {
 
 	mux := http.NewServeMux()
 	mux.Handle("/apps/", registrar.Handler())
-	mux.HandleFunc("POST /token", apiAuth.ServeHTTP)
 	mux.Handle("GET /.well-known/jwks.json", jwksHandler)
 	mux.HandleFunc("GET /.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
 		if asMetadataHandler == nil {
@@ -865,7 +860,15 @@ func startInProcessAS() (*inProcessAS, error) {
 	})
 
 	ts := httptest.NewServer(mux)
-	apiAuth.JWTIssuer = ts.URL
+
+	oa := apiauth.NewOneAuth(apiauth.OneAuthConfig{
+		KeyStore:   ks,
+		SigningKey: privKey,
+		VerifyKey:  &privKey.PublicKey,
+		SigningAlg: "RS256",
+		Issuer:     ts.URL,
+	})
+	mux.Handle("POST /token", apiauth.NewTokenEndpointHandler(oa))
 
 	asMetadataHandler = apiauth.NewASMetadataHandler(&apiauth.ASServerMetadata{
 		Issuer:                             ts.URL,
