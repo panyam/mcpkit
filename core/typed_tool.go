@@ -96,6 +96,7 @@ func TypedTool[In, Out any](name, desc string,
 		Meta:           cfg.meta,
 		Timeout:        cfg.timeout,
 		RequiredScopes: cfg.requiredScopes,
+		AcceptedScopes: cfg.acceptedScopes,
 		Execution:      cfg.toolExecution,
 	}
 
@@ -139,6 +140,7 @@ type typedToolConfig struct {
 	meta                 *ToolMeta
 	timeout              time.Duration
 	requiredScopes       []string
+	acceptedScopes       []string
 	inputSchemaOverride  any
 	outputSchemaOverride any
 	inputSchemaPatch     func(*SchemaBuilder)
