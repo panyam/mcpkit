@@ -33,10 +33,9 @@ type toolScopeConfig struct {
 // set on every challenge instead of accumulating it. The classic broken
 // behavior is "client sees insufficient_scope=docs:write, re-requests a token
 // for ONLY docs:write, loses the docs:read it already had." Union-on-challenge
-// defends against that by re-stating the granted set every time. The upstream
-// TypeScript SDK PR modelcontextprotocol/typescript-sdk#1657 exists to fix
-// the same bug client-side; this option is the server-side counterpart for
-// deployments that can't wait for every client to upgrade.
+// defends against that by re-stating the granted set every time. this option is
+// the server-side counterpart for deployments that can't wait for every client
+// to upgrade.
 //
 // When to leave off: mcpkit's own clients accumulate scopes correctly (the
 // OAuthTokenSource.TokenForScopes contract enforces it), so mcpkit-on-mcpkit
