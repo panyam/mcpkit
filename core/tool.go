@@ -57,6 +57,23 @@ type ToolDef struct {
 	// Empty/nil means no per-tool scope check; the tool is callable by any
 	// authenticated client (subject to global server.WithRequiredScopes).
 	RequiredScopes []string `json:"-"`
+
+	// AcceptedScopes is an opt-in OR escape hatch on top of RequiredScopes'
+	// AND semantics. When non-empty, the scope middleware passes the gate if
+	// the caller's token includes ANY scope in AcceptedScopes — supporting
+	// hierarchies where a parent scope like `repo` satisfies a tool nominally
+	// requiring `repo:read`. Nil or an explicitly empty slice falls back to
+	// the AND-on-RequiredScopes default (the two-state is deliberate so
+	// allocating `[]string{}` cannot silently disable enforcement).
+	//
+	// Gate-only contract: AcceptedScopes participates in the satisfaction
+	// check but NEVER appears in the 403 WWW-Authenticate challenge. Re-auth
+	// guidance stays least-privilege — the challenge advertises RequiredScopes
+	// alone so clients don't escalate by requesting tolerated alternatives.
+	// Aligns with the upstream TypeScript SDK PR modelcontextprotocol/typescript-sdk#1624.
+	//
+	// Not serialized to clients.
+	AcceptedScopes []string `json:"-"`
 }
 
 // ToolsListResult is the typed result for tools/list responses.

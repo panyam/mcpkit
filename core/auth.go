@@ -101,6 +101,19 @@ func HasScope(ctx context.Context, scope string) bool {
 	return false
 }
 
+// GetScopes returns the scope set granted to the authenticated caller, or nil
+// when no claims are attached to ctx. Consistent with HasScope, absent claims
+// and present-but-empty scopes both yield nil — callers that need to
+// distinguish "unauthenticated" from "authenticated but no scopes" must reach
+// for AuthClaims directly.
+func GetScopes(ctx context.Context) []string {
+	claims := AuthClaims(ctx)
+	if claims == nil {
+		return nil
+	}
+	return claims.Scopes
+}
+
 // AuthValidator validates an HTTP request and returns claims on success.
 type AuthValidator interface {
 	Validate(r *http.Request) error
