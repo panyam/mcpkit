@@ -10,6 +10,7 @@
 package e2e_test
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -21,9 +22,37 @@ import (
 // testScopes are the scopes supported by the test MCP server.
 var testScopes = []string{"tools:read", "tools:call", "admin:write"}
 
+// audienceHolder owns the late-bound audience value the AS's
+// validator + issuer read on every mint / validate. The MCP server
+// URL is only known after buildMCPServer runs, so the AS is built
+// once with a closure (audienceHolder.get) and the value is filled
+// in once the URL is allocated. This is the canonical pattern oneauth
+// docs/MIGRATION.md "Late-binding the audience" describes; testutil's
+// WithAudienceFunc option plumbs the closure to OneAuthConfig.
+type audienceHolder struct {
+	mu  sync.Mutex
+	val string
+}
+
+func (a *audienceHolder) get() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.val
+}
+
+func (a *audienceHolder) set(v string) {
+	a.mu.Lock()
+	a.val = v
+	a.mu.Unlock()
+}
+
 // TestEnv holds an in-process oneauth authorization server and an mcpkit MCP
 // server wired together via JWKS. Create one per test via NewTestEnv.
 type TestEnv struct {
+	// audVar backs the AudienceFunc the AS reads on every mint /
+	// validate. Populated after the MCP server URL is known.
+	audVar *audienceHolder
+
 	// AS is the oneauth test authorization server (JWKS, token endpoint, AS metadata).
 	AS *testutil.TestAuthServer
 
@@ -43,19 +72,22 @@ type TestEnv struct {
 func NewTestEnv(t *testing.T) *TestEnv {
 	t.Helper()
 
-	env := &TestEnv{}
+	env := &TestEnv{audVar: &audienceHolder{}}
 
-	// Step 1: Start auth server. Audience is set after MCP server starts.
+	// Step 1: Start auth server. The audience closure returns "" until
+	// the MCP server URL is allocated; tokens minted before that point
+	// (none in practice) would have no aud claim, which is correct.
 	env.AS = testutil.NewTestAuthServer(t,
 		testutil.WithScopes(testScopes),
+		testutil.WithAudienceFunc(env.audVar.get),
 	)
 
 	// Step 2: Start MCP server (uses AS's JWKS URL for JWT validation)
 	env.buildMCPServer(t)
 
-	// Step 3: Now set the audience on the auth server so minted tokens
-	// include the MCP server URL as the "aud" claim.
-	env.AS.APIAuth.JWTAudience = env.MCPServerURL
+	// Step 3: Bind the audience to the MCP server URL. The AS issuer +
+	// validator pick this up on every subsequent mint / validate.
+	env.audVar.set(env.MCPServerURL)
 
 	return env
 }
@@ -64,10 +96,13 @@ func NewTestEnv(t *testing.T) *TestEnv {
 // with WithPublicMethods configured on the MCP server.
 func NewTestEnvWithPublicMethods(t *testing.T, methods ...string) *TestEnv {
 	t.Helper()
-	env := &TestEnv{}
-	env.AS = testutil.NewTestAuthServer(t, testutil.WithScopes(testScopes))
+	env := &TestEnv{audVar: &audienceHolder{}}
+	env.AS = testutil.NewTestAuthServer(t,
+		testutil.WithScopes(testScopes),
+		testutil.WithAudienceFunc(env.audVar.get),
+	)
 	env.buildMCPServerWithOpts(t, server.WithPublicMethods(methods...))
-	env.AS.APIAuth.JWTAudience = env.MCPServerURL
+	env.audVar.set(env.MCPServerURL)
 	return env
 }
 
