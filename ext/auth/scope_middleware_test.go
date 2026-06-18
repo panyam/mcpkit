@@ -341,7 +341,7 @@ func TestToolScopeMiddleware_IncludeGrantedScopesOffByDefault(t *testing.T) {
 // opt-in path: when WithIncludeGrantedScopes(true) is set, the 403 challenge
 // advertises the union of (caller's already-held scopes ∪ tool's required
 // scopes). This defends against non-mcpkit clients that overwrite granted
-// scopes on every challenge (mirrors typescript-sdk PR 1657's workaround).
+// scopes on every challenge.
 func TestToolScopeMiddleware_IncludeGrantedScopesUnionsInChallenge(t *testing.T) {
 	lookup := fakeLookup{tools: map[string]core.ToolDef{
 		"update_doc": {Name: "update_doc", RequiredScopes: []string{"docs:write"}},
