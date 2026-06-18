@@ -198,3 +198,204 @@ func TestToolScopeMiddleware_AllRequiredScopesChecked(t *testing.T) {
 			strings.Contains(authErr.WWWAuthenticate, "admin"),
 		"WWW-Authenticate must list all required scopes; got %q", authErr.WWWAuthenticate)
 }
+
+// TestToolScopeMiddleware_AcceptedScopesHierarchyPasses verifies that when
+// AcceptedScopes is set, the gate passes if the caller holds ANY scope in
+// AcceptedScopes — even when RequiredScopes would otherwise demand a more
+// specific scope. Use case: a `repo` scope satisfies a tool that nominally
+// requires `repo:read`.
+func TestToolScopeMiddleware_AcceptedScopesHierarchyPasses(t *testing.T) {
+	lookup := fakeLookup{tools: map[string]core.ToolDef{
+		"read_repo": {
+			Name:           "read_repo",
+			RequiredScopes: []string{"repo:read"},
+			AcceptedScopes: []string{"repo:read", "repo"},
+		},
+	}}
+
+	mw := auth.NewToolScopeMiddleware(lookup)
+	called := false
+	next := server.MiddlewareFunc(func(ctx context.Context, req *core.Request) (*core.Response, error) {
+		called = true
+		return core.NewResponse(req.ID, "ok"), nil
+	})
+
+	// Token has the hierarchy parent `repo`, not the specific `repo:read`.
+	ctx := withClaims(context.Background(), "repo")
+	req := &core.Request{
+		ID:     json.RawMessage(`1`),
+		Method: "tools/call",
+		Params: json.RawMessage(`{"name":"read_repo"}`),
+	}
+
+	_, err := mw(ctx, req, next)
+	require.NoError(t, err)
+	assert.True(t, called, "hierarchy parent `repo` must satisfy AcceptedScopes gate")
+}
+
+// TestToolScopeMiddleware_AcceptedScopesEmptyFallsBackToAND verifies that
+// AcceptedScopes is two-state: only non-empty turns on the OR semantics. An
+// explicit empty slice (vs nil) behaves identically to nil — the gate falls
+// back to the AND-on-RequiredScopes default. This prevents a footgun where
+// allocating `[]string{}` would silently disable the scope check.
+func TestToolScopeMiddleware_AcceptedScopesEmptyFallsBackToAND(t *testing.T) {
+	lookup := fakeLookup{tools: map[string]core.ToolDef{
+		"update_doc": {
+			Name:           "update_doc",
+			RequiredScopes: []string{"docs:write"},
+			AcceptedScopes: []string{},
+		},
+	}}
+
+	mw := auth.NewToolScopeMiddleware(lookup)
+	next := server.MiddlewareFunc(func(ctx context.Context, req *core.Request) (*core.Response, error) {
+		return core.NewResponse(req.ID, "ok"), nil
+	})
+
+	// Token missing docs:write — empty AcceptedScopes must NOT bypass the check.
+	ctx := withClaims(context.Background(), "docs:read")
+	req := &core.Request{
+		ID:     json.RawMessage(`1`),
+		Method: "tools/call",
+		Params: json.RawMessage(`{"name":"update_doc"}`),
+	}
+
+	_, err := mw(ctx, req, next)
+	require.Error(t, err, "empty AcceptedScopes must fall back to AND, not bypass the gate")
+	var authErr *core.AuthError
+	require.True(t, errors.As(err, &authErr))
+	assert.Equal(t, http.StatusForbidden, authErr.Code)
+}
+
+// TestToolScopeMiddleware_AcceptedScopesDeniedAdvertisesRequiredOnly captures
+// the gate-only contract: AcceptedScopes participates in the satisfaction
+// check but NEVER appears in the WWW-Authenticate challenge. Re-auth guidance
+// stays least-privilege — the client is told to request RequiredScopes, not
+// the broader tolerated set.
+func TestToolScopeMiddleware_AcceptedScopesDeniedAdvertisesRequiredOnly(t *testing.T) {
+	lookup := fakeLookup{tools: map[string]core.ToolDef{
+		"read_repo": {
+			Name:           "read_repo",
+			RequiredScopes: []string{"repo:read"},
+			AcceptedScopes: []string{"repo:read", "repo", "admin"},
+		},
+	}}
+
+	mw := auth.NewToolScopeMiddleware(lookup)
+	next := server.MiddlewareFunc(func(ctx context.Context, req *core.Request) (*core.Response, error) {
+		return nil, nil
+	})
+
+	// Token has neither required nor any accepted scope.
+	ctx := withClaims(context.Background(), "unrelated")
+	req := &core.Request{
+		ID:     json.RawMessage(`1`),
+		Method: "tools/call",
+		Params: json.RawMessage(`{"name":"read_repo"}`),
+	}
+
+	_, err := mw(ctx, req, next)
+	require.Error(t, err)
+	var authErr *core.AuthError
+	require.True(t, errors.As(err, &authErr))
+	assert.Contains(t, authErr.WWWAuthenticate, `scope="repo:read"`,
+		"challenge must advertise RequiredScopes only")
+	assert.NotContains(t, authErr.WWWAuthenticate, "admin",
+		"accepted-but-tolerated scopes must NOT leak into the challenge (gate-only contract)")
+	assert.NotContains(t, authErr.WWWAuthenticate, `scope="repo:read repo`,
+		"accepted hierarchy parents must NOT leak into the challenge")
+}
+
+// TestToolScopeMiddleware_IncludeGrantedScopesOffByDefault verifies that the
+// existing 403 challenge shape is unchanged when the new option is not passed.
+// Together with the other unmodified tests above, this is the back-compat gate
+// for callers who haven't opted in.
+func TestToolScopeMiddleware_IncludeGrantedScopesOffByDefault(t *testing.T) {
+	lookup := fakeLookup{tools: map[string]core.ToolDef{
+		"update_doc": {Name: "update_doc", RequiredScopes: []string{"docs:write"}},
+	}}
+
+	mw := auth.NewToolScopeMiddleware(lookup) // no options
+	next := server.MiddlewareFunc(func(ctx context.Context, req *core.Request) (*core.Response, error) {
+		return nil, nil
+	})
+
+	ctx := withClaims(context.Background(), "docs:read") // partial token
+	req := &core.Request{
+		ID:     json.RawMessage(`1`),
+		Method: "tools/call",
+		Params: json.RawMessage(`{"name":"update_doc"}`),
+	}
+
+	_, err := mw(ctx, req, next)
+	require.Error(t, err)
+	var authErr *core.AuthError
+	require.True(t, errors.As(err, &authErr))
+	assert.Contains(t, authErr.WWWAuthenticate, `scope="docs:write"`,
+		"default behavior: challenge advertises RequiredScopes only")
+	assert.NotContains(t, authErr.WWWAuthenticate, "docs:read",
+		"granted scopes must NOT appear in the challenge without opt-in")
+}
+
+// TestToolScopeMiddleware_IncludeGrantedScopesUnionsInChallenge verifies the
+// opt-in path: when WithIncludeGrantedScopes(true) is set, the 403 challenge
+// advertises the union of (caller's already-held scopes ∪ tool's required
+// scopes). This defends against non-mcpkit clients that overwrite granted
+// scopes on every challenge (mirrors typescript-sdk PR 1657's workaround).
+func TestToolScopeMiddleware_IncludeGrantedScopesUnionsInChallenge(t *testing.T) {
+	lookup := fakeLookup{tools: map[string]core.ToolDef{
+		"update_doc": {Name: "update_doc", RequiredScopes: []string{"docs:write"}},
+	}}
+
+	mw := auth.NewToolScopeMiddleware(lookup, auth.WithIncludeGrantedScopes(true))
+	next := server.MiddlewareFunc(func(ctx context.Context, req *core.Request) (*core.Response, error) {
+		return nil, nil
+	})
+
+	ctx := withClaims(context.Background(), "docs:read")
+	req := &core.Request{
+		ID:     json.RawMessage(`1`),
+		Method: "tools/call",
+		Params: json.RawMessage(`{"name":"update_doc"}`),
+	}
+
+	_, err := mw(ctx, req, next)
+	require.Error(t, err)
+	var authErr *core.AuthError
+	require.True(t, errors.As(err, &authErr))
+	assert.Contains(t, authErr.WWWAuthenticate, "docs:read",
+		"opt-in: granted scope must appear in the challenge")
+	assert.Contains(t, authErr.WWWAuthenticate, "docs:write",
+		"opt-in: required scope still appears in the challenge")
+}
+
+// TestToolScopeMiddleware_IncludeGrantedScopesEmptyGrantedSameAsOff verifies
+// the degenerate path: when WithIncludeGrantedScopes(true) but the caller
+// holds no scopes, the union collapses to RequiredScopes alone — identical
+// to the default-off behavior. Useful because the opt-in is set per-server,
+// not per-request; servers with the flag on still see unauthenticated-ish
+// calls (valid token, zero scopes).
+func TestToolScopeMiddleware_IncludeGrantedScopesEmptyGrantedSameAsOff(t *testing.T) {
+	lookup := fakeLookup{tools: map[string]core.ToolDef{
+		"update_doc": {Name: "update_doc", RequiredScopes: []string{"docs:write"}},
+	}}
+
+	mw := auth.NewToolScopeMiddleware(lookup, auth.WithIncludeGrantedScopes(true))
+	next := server.MiddlewareFunc(func(ctx context.Context, req *core.Request) (*core.Response, error) {
+		return nil, nil
+	})
+
+	ctx := withClaims(context.Background()) // no scopes
+	req := &core.Request{
+		ID:     json.RawMessage(`1`),
+		Method: "tools/call",
+		Params: json.RawMessage(`{"name":"update_doc"}`),
+	}
+
+	_, err := mw(ctx, req, next)
+	require.Error(t, err)
+	var authErr *core.AuthError
+	require.True(t, errors.As(err, &authErr))
+	assert.Contains(t, authErr.WWWAuthenticate, `scope="docs:write"`,
+		"empty granted: challenge advertises RequiredScopes only (degenerate union)")
+}
