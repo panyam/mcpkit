@@ -1,0 +1,253 @@
+/* demokit-player styles. BEM-ish class names; no shadow DOM so host
+   themes can override via CSS variables. Hosts can set:
+
+     --demokit-bg, --demokit-fg, --demokit-muted, --demokit-accent,
+     --demokit-border, --demokit-error, --demokit-warning,
+     --demokit-info, --demokit-mono
+
+   on a parent element to retheme the player.
+
+   The widget is layout-agnostic: it claims width: 100% and grows
+   in height to fit its feed. Wrap it in an iframe or a sized
+   container if you need a fixed viewport.
+*/
+
+.demokit-player {
+  --demokit-bg: #ffffff;
+  --demokit-fg: #1f2328;
+  --demokit-muted: #57606a;
+  --demokit-accent: #0969da;
+  --demokit-border: #d0d7de;
+  --demokit-error: #cf222e;
+  --demokit-warning: #9a6700;
+  --demokit-info: #0969da;
+  --demokit-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  display: block;
+  width: 100%;
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  color: var(--demokit-fg);
+  background: var(--demokit-bg);
+  border: 1px solid var(--demokit-border);
+  border-radius: 6px;
+  overflow: hidden;
+  outline: none;
+}
+
+.demokit-player:focus {
+  box-shadow: 0 0 0 2px var(--demokit-accent);
+}
+
+.demokit-player__header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--demokit-border);
+}
+
+.demokit-player__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.demokit-player__description {
+  margin: 4px 0 0;
+  color: var(--demokit-muted);
+  font-size: 13px;
+}
+
+.demokit-player__feed {
+  padding: 16px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.demokit-player__controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--demokit-border);
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.demokit-player__btn {
+  font: inherit;
+  padding: 4px 10px;
+  border: 1px solid var(--demokit-border);
+  background: var(--demokit-bg);
+  color: var(--demokit-fg);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.demokit-player__btn:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.demokit-player__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.demokit-player__counter {
+  margin-left: auto;
+  color: var(--demokit-muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+.demokit-player__error {
+  padding: 12px;
+  border-left: 4px solid var(--demokit-error);
+  color: var(--demokit-error);
+  background: rgba(207, 34, 46, 0.06);
+  border-radius: 4px;
+}
+
+/* --- Per-entry blocks --- */
+
+.demokit-section,
+.demokit-step {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--demokit-border);
+  border-radius: 6px;
+  background: var(--demokit-bg);
+}
+
+.demokit-section__title,
+.demokit-step__title {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.demokit-step__visit {
+  color: var(--demokit-muted);
+  font-weight: 400;
+}
+
+.demokit-section__body {
+  margin: 0;
+  color: var(--demokit-muted);
+  white-space: pre-wrap;
+}
+
+.demokit-step__note {
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  border-left: 3px solid var(--demokit-border);
+  color: var(--demokit-muted);
+  font-style: italic;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.demokit-step__refs {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--demokit-muted);
+}
+.demokit-step__refs a {
+  color: var(--demokit-accent);
+}
+
+.demokit-step__inputs {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 12px;
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  font-family: var(--demokit-mono);
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 4px;
+}
+.demokit-step__inputs dt {
+  color: var(--demokit-muted);
+}
+.demokit-step__inputs dd {
+  margin: 0;
+}
+
+.demokit-step__output {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 4px;
+  font-family: var(--demokit-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+.demokit-step__verbatim-label {
+  margin: 8px 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--demokit-muted);
+}
+.demokit-step__verbatim {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 4px;
+  font-family: var(--demokit-mono);
+  font-size: 12px;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.demokit-step__status {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.demokit-step__jump {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--demokit-muted);
+  font-family: var(--demokit-mono);
+}
+
+/* Status colors — match ResultStatus const ordering: 0 success, 1 error, 2 warning, 3 info */
+.demokit-step--status-1 {
+  border-left: 4px solid var(--demokit-error);
+}
+.demokit-step--status-1 .demokit-step__status {
+  background: rgba(207, 34, 46, 0.08);
+  color: var(--demokit-error);
+}
+.demokit-step--status-2 {
+  border-left: 4px solid var(--demokit-warning);
+}
+.demokit-step--status-2 .demokit-step__status {
+  background: rgba(154, 103, 0, 0.08);
+  color: var(--demokit-warning);
+}
+.demokit-step--status-3 {
+  border-left: 4px solid var(--demokit-info);
+}
+.demokit-step--status-3 .demokit-step__status {
+  background: rgba(9, 105, 218, 0.08);
+  color: var(--demokit-info);
+}
+
+@media (prefers-color-scheme: dark) {
+  .demokit-player {
+    --demokit-bg: #0d1117;
+    --demokit-fg: #e6edf3;
+    --demokit-muted: #8b949e;
+    --demokit-accent: #58a6ff;
+    --demokit-border: #30363d;
+  }
+  .demokit-player__btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .demokit-step__note,
+  .demokit-step__inputs,
+  .demokit-step__output {
+    background: rgba(255, 255, 255, 0.03);
+  }
+}

@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>quickstart — minimum-viable MCP App with the bare-minimum bridge dance</title>
+<link rel="stylesheet" href="./demokit-player.css">
+<style>
+body { margin: 2em auto; max-width: 900px; padding: 0 1em; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+</style>
+</head>
+<body>
+<demokit-demo>{
+  "demo": {
+    "title": "quickstart — minimum-viable MCP App with the bare-minimum bridge dance",
+    "description": "Walks the get-time round trip end-to-end as a scripted MCP client. quickstart is the simplest fixture in apps/compat — one tool, one resource, text content only — but its iframe also uses the bare-minimum bridge surface (ontoolresult + callServerTool), making it the cleanest fixture for understanding what an MCP App fundamentally IS. The final narrative section spells out the bridge dance a Go-only host can't directly drive. Run `make serve` in another terminal first.",
+    "actors": [
+      {
+        "id": "Host",
+        "label": "MCP Host (this client)"
+      },
+      {
+        "id": "Server",
+        "label": "mcpkit-Go fixture (make serve)"
+      }
+    ],
+    "items": [
+      {
+        "kind": "section",
+        "title": "Setup",
+        "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101 by default\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nPoint the walkthrough at a different host via either of:\n\n```\ngo run . --demo --url http://localhost:1234       # CLI flag\nMCPKIT_SERVER_URL=http://localhost:1234 make demo # env var\n```\n\nAny MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam, basic-host). The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser, no JS. The same protocol calls drive the iframe when you run `make demo-app EXAMPLE=quickstart` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+      },
+      {
+        "kind": "step",
+        "title": "Connect to the fixture",
+        "note": "Session establishment is a single initialize round-trip plus the notifications/initialized ack. `*client.Client.Connect()` does both behind one call; the curl form below shows the raw shape.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "POST /mcp — initialize"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "serverInfo + capabilities + Mcp-Session-Id",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "# Initialize. Mcp-Session-Id comes back in the response headers.\nSID=$(curl -si -X POST http://localhost:3101/mcp \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"curl\",\"version\":\"1\"}}}' \\\n  | awk 'tolower($1) == \"mcp-session-id:\" {gsub(/\\r/,\"\"); print $2}')\n\n# Acknowledge so the server's dispatcher unblocks.\ncurl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "tools/list — verify get-time + its UI resource",
+        "note": "`get-time` is the single server-side tool. The pedagogically interesting bit isn't the tool name — it's `_meta.ui.resourceUri` (`ui://get-time/mcp-app.html`). That URI is the signal to an MCP Apps host: \"render this tool's result inside the iframe served from that resource.\" A non-Apps host would just see a JSON tool result; an Apps host wires it into a sandboxed iframe.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "tools/list"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "tools[] including get-time",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}' \\\n  | jq '.result.tools[] | {name, _meta}'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "tools/call get-time — the timestamp the iframe renders",
+        "note": "The handler returns a single text content block — the current server time formatted as ISO 8601. No structuredContent on this fixture; the iframe reads the timestamp directly from `result.content[0].text`. This same content shape is what the iframe receives via `app.ontoolresult`; see the final section.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "tools/call get-time {}"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "ToolResult.content[0].text = \"2026-…Z\"",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"get-time\",\"arguments\":{}}}' \\\n  | jq '.result.content[0]'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "step",
+        "title": "resources/read — the iframe HTML the App ships in",
+        "note": "Pulls the iframe HTML the App loads inside. The walkthrough reports just the byte count (the body is upstream's verbatim bundled JS+HTML; not interesting to dump on the wire) plus whatever `_meta` the resource carries. quickstart's `_meta` is bare — compare to sheet-music's `_meta.ui.csp.connectDomains` and transcript's `_meta.ui.permissions.microphone` to see how richer fixtures use the per-content `_meta` slot.",
+        "arrows": [
+          {
+            "from": "Host",
+            "to": "Server",
+            "label": "resources/read { uri: ui://get-time/mcp-app.html }"
+          },
+          {
+            "from": "Server",
+            "to": "Host",
+            "label": "Contents[0].text + Contents[0]._meta",
+            "dashed": true
+          }
+        ],
+        "verbatim": [
+          {
+            "label": "Reproduce on the wire",
+            "variants": [
+              {
+                "label": "curl",
+                "lang": "bash",
+                "content": "curl -s -X POST http://localhost:3101/mcp \\\n  -H \"Mcp-Session-Id: $SID\" \\\n  -H 'Content-Type: application/json' \\\n  -H 'Accept: text/event-stream, application/json' \\\n  -d '{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"resources/read\",\"params\":{\"uri\":\"ui://get-time/mcp-app.html\"}}' \\\n  | jq '.result.contents[0] | { mimeType, bytes: (.text | length), _meta }'",
+                "default": true
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "kind": "section",
+        "title": "What the App iframe does with all this",
+        "body": "The host → iframe handoff mechanics (`tools/call` → `resources/read` → sandboxed iframe → `postMessage`) are covered once in [The basic-host bridge dance](../README.md#the-basic-host-bridge-dance). Steps 1-4 above are the floor every MCP Apps interaction starts from.\n\nquickstart's iframe sits at the **bare-minimum** end of the App-ness spectrum — the cleanest reference for what differentiates an MCP App from \"just an MCP server with a UI hint.\" The bridge calls its App SDK makes:\n\n- `app.ontoolresult` — extracts `result.content[0].text` and writes it into the DOM as \"Server Time: \u003cISO timestamp\u003e\".\n- `app.callServerTool({name: \"get-time\"})` on button click — the iframe calling *back* to the server to refresh. The simplest possible iframe-talks-to-server pattern.\n\nThat's it. NO `app.registerTool` (no model-callable tools), NO `app.updateModelContext` (no model-context pushback), no `getHostContext` theming. Compare with `cohort-heatmap` (adds host context + filter-driven re-fetches) and `budget-allocator` (full rich dance: 5 registered tools + model context updates)."
+      },
+      {
+        "kind": "section",
+        "title": "Where to look in the code",
+        "body": "- `main.go` — the fixture is ~60 lines: one TypedAppTool returning a text content block, one paired UI resource, CORS for browser hosts.\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + screenshots + the [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) guide.\n- Upstream's iframe source: `/tmp/ext-apps/examples/quickstart/src/mcp-app.ts` — 26 lines of JS that show the minimum-viable bridge dance."
+      }
+    ]
+  },
+  "trace": [
+    {
+      "kind": "section",
+      "title": "Setup",
+      "body": "Start the MCP server in a separate terminal first:\n\n```\nTerminal 1:  make serve         # mcpkit-Go fixture on :3101 by default\nTerminal 2:  make demo          # this walkthrough (--tui for interactive TUI)\n```\n\nPoint the walkthrough at a different host via either of:\n\n```\ngo run . --demo --url http://localhost:1234       # CLI flag\nMCPKIT_SERVER_URL=http://localhost:1234 make demo # env var\n```\n\nAny MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam, basic-host). The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser, no JS. The same protocol calls drive the iframe when you run `make demo-app EXAMPLE=quickstart` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture))."
+    },
+    {
+      "kind": "step",
+      "title": "Connect to the fixture",
+      "step_id": "step-1",
+      "visit": 1,
+      "output": "    connected to Quickstart MCP App Server 1.0.0\n"
+    },
+    {
+      "kind": "step",
+      "title": "tools/list — verify get-time + its UI resource",
+      "step_id": "step-2",
+      "visit": 1,
+      "output": "    get-time\n      _meta: {\n        \"ui\": {\n          \"resourceUri\": \"ui://get-time/mcp-app.html\"\n        },\n        \"ui/resourceUri\": \"ui://get-time/mcp-app.html\"\n      }\n"
+    },
+    {
+      "kind": "step",
+      "title": "tools/call get-time — the timestamp the iframe renders",
+      "step_id": "step-3",
+      "visit": 1,
+      "output": "    content[0]: type=\"text\" text=\"2026-06-08T18:08:22.592917Z\"\n    structuredContent: \u003cnone\u003e  (quickstart returns text-only)\n"
+    },
+    {
+      "kind": "step",
+      "title": "resources/read — the iframe HTML the App ships in",
+      "step_id": "step-4",
+      "visit": 1,
+      "output": "    uri:      ui://get-time/mcp-app.html\n    mimeType: text/html;profile=mcp-app\n    bytes:    328192  (iframe HTML+JS bundle)\n    _meta:    \u003cnone\u003e  (no csp / permissions declared)\n"
+    },
+    {
+      "kind": "section",
+      "title": "What the App iframe does with all this",
+      "body": "The host → iframe handoff mechanics (`tools/call` → `resources/read` → sandboxed iframe → `postMessage`) are covered once in [The basic-host bridge dance](../README.md#the-basic-host-bridge-dance). Steps 1-4 above are the floor every MCP Apps interaction starts from.\n\nquickstart's iframe sits at the **bare-minimum** end of the App-ness spectrum — the cleanest reference for what differentiates an MCP App from \"just an MCP server with a UI hint.\" The bridge calls its App SDK makes:\n\n- `app.ontoolresult` — extracts `result.content[0].text` and writes it into the DOM as \"Server Time: \u003cISO timestamp\u003e\".\n- `app.callServerTool({name: \"get-time\"})` on button click — the iframe calling *back* to the server to refresh. The simplest possible iframe-talks-to-server pattern.\n\nThat's it. NO `app.registerTool` (no model-callable tools), NO `app.updateModelContext` (no model-context pushback), no `getHostContext` theming. Compare with `cohort-heatmap` (adds host context + filter-driven re-fetches) and `budget-allocator` (full rich dance: 5 registered tools + model context updates)."
+    },
+    {
+      "kind": "section",
+      "title": "Where to look in the code",
+      "body": "- `main.go` — the fixture is ~60 lines: one TypedAppTool returning a text content block, one paired UI resource, CORS for browser hosts.\n- `walkthrough.go` — this file. Each step's curl + Go recipe is the canonical wire reproduction.\n- `../README.md` — narrative + screenshots + the [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) guide.\n- Upstream's iframe source: `/tmp/ext-apps/examples/quickstart/src/mcp-app.ts` — 26 lines of JS that show the minimum-viable bridge dance."
+    }
+  ]
+}
+</demokit-demo>
+<script type="module" src="./demokit-player.js"></script>
+</body>
+</html>

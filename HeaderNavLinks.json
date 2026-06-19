@@ -1,0 +1,43 @@
+[
+  {
+    "name": "Conformance",
+    "url": "conformance/",
+    "children": [
+      { "name": "Coverage matrix", "url": "conformance/" },
+      { "name": "Upstream audit",  "url": "conformance/upstream-audit/" },
+      { "name": "Fixture audit",   "url": "conformance/fixture-audit/" },
+      { "name": "Apps compat",     "url": "conformance/apps/compat/" }
+    ]
+  },
+  {
+    "name": "Capabilities",
+    "url": "capabilities/"
+  },
+  {
+    "name": "Packages",
+    "url": "packages/core/",
+    "children": [
+      { "name": "core",      "url": "packages/core/" },
+      { "name": "server",    "url": "packages/server/" },
+      { "name": "client",    "url": "packages/client/" },
+      { "name": "ext/auth",  "url": "packages/ext-auth/" },
+      { "name": "ext/tasks", "url": "packages/ext-tasks/" },
+      { "name": "ext/ui",    "url": "packages/ext-ui/" }
+    ]
+  },
+  {
+    "name": "Design Docs",
+    "url": "design/apps/",
+    "children": [
+      { "name": "MCP Apps — design",        "url": "design/apps/" },
+      { "name": "MCP Apps — host model",    "url": "design/apps-host/" },
+      { "name": "MCP Apps — onboarding",    "url": "design/apps-onboarding/" },
+      { "name": "Tasks v2 migration",       "url": "design/tasks-v2-migration/" },
+      { "name": "Tasks tutorial",           "url": "design/tasks-tutorial/" },
+      { "name": "MRTR tutorial",            "url": "design/mrtr-tutorial/" },
+      { "name": "SEP-2567 handles",         "url": "design/sep-2567-handles/" },
+      { "name": "SEP-2577 deprecations",    "url": "design/sep-2577-deprecations/" },
+      { "name": "List TTL migration",       "url": "design/list-ttl-migration/" }
+    ]
+  }
+]
